@@ -1,0 +1,11 @@
+[package]
+name = "xue"
+version = "0.1.0"
+edition = "2021"
+description = "Xue v1 bundle parser and frame decoder"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+crc32fast = "1"
+ruzstd = "0.8"
+serde_json = "1"

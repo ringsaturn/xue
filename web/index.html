@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#08131C" />
+    <meta name="description" data-i18n-content="metaDescription" content="NOAA GFS 与 ECMWF 全球未来 120 小时气温、降水、风场与太阳辐射预报" />
+    <title>GFS / ECMWF Temperature and Precipitation</title>
+  </head>
+  <body data-variable="prate">
+    <main class="app-shell">
+      <div id="map" data-i18n-aria="mapAria" aria-label="全球气温与降水预报地图"></div>
+      <div class="atmosphere" aria-hidden="true"></div>
+
+      <details class="station-panel" open>
+        <summary>
+          <span class="status-dot" aria-hidden="true"></span>
+          <span id="variable-code">GFS / PRATE SFC</span>
+        </summary>
+        <div class="station-content">
+          <div class="model-switch" role="group" data-i18n-aria="modelSwitchAria" aria-label="预报模式">
+            <button type="button" data-model="gfs" aria-pressed="true">
+              <span>GFS</span><small>NOAA 0.25°</small>
+            </button>
+            <button type="button" data-model="sflux" aria-pressed="false">
+              <span>GFS</span><small>SFLUX 13KM</small>
+            </button>
+            <button type="button" data-model="ecmwf" aria-pressed="false">
+              <span>ECMWF</span><small>IFS 0.25°</small>
+            </button>
+          </div>
+          <div class="variable-switch" role="group" data-i18n-aria="variableSwitchAria" aria-label="气象变量">
+            <button type="button" data-variable="tmp2m" aria-pressed="false">
+              <span>TEMP</span><small data-i18n="varTemp">气温</small>
+            </button>
+            <button type="button" data-variable="prate" aria-pressed="true">
+              <span>PRECIP</span><small data-i18n="varPrecip">降水</small>
+            </button>
+            <button type="button" data-variable="wind10m" aria-pressed="false" hidden>
+              <span>WIND</span><small data-i18n="varWind">风场</small>
+            </button>
+            <button type="button" data-variable="dswrf" aria-pressed="false" hidden>
+              <span>SOLAR</span><small data-i18n="varSolar">辐射</small>
+            </button>
+          </div>
+          <p class="eyebrow" id="model-eyebrow">NOAA / GFS (0.25°)</p>
+          <h1 id="variable-title">Precipitation<br />Rate</h1>
+          <dl>
+            <div>
+              <dt data-i18n="runCycle">模式周期</dt>
+              <dd id="run-time" data-i18n="awaitingData">等待数据</dd>
+            </div>
+            <div>
+              <dt data-i18n="validTimeLabel">当前有效时间</dt>
+              <dd id="valid-time">--</dd>
+            </div>
+          </dl>
+        </div>
+      </details>
+
+      <aside id="data-card" class="data-card" data-i18n-aria="statsAria" aria-label="详细统计信息">
+        <button id="stats-close" class="stats-close" type="button" data-i18n-aria="statsCloseAria" aria-label="关闭详细统计信息">×</button>
+        <div class="data-card-heading">
+          <div>
+            <span id="data-card-index" class="data-card-index">121F</span>
+            <h2 id="data-card-title">Precipitation buffer</h2>
+          </div>
+          <output id="preload-percent">0%</output>
+        </div>
+        <div class="data-card-metrics">
+          <div>
+            <span data-i18n="bufferedFrames">缓存帧</span>
+            <output id="preload-frames">0 / 121</output>
+          </div>
+          <div>
+            <span data-i18n="downloadedBytes">数据量</span>
+            <output id="preload-bytes">0 B</output>
+          </div>
+          <div>
+            <span data-i18n="formatLabel">格式</span>
+            <output id="preload-format">--</output>
+          </div>
+        </div>
+        <div
+          id="preload-segments"
+          class="preload-segments"
+          role="progressbar"
+          data-i18n-aria="preloadProgressAria"
+          aria-label="预报数据预加载进度"
+          aria-valuemin="0"
+          aria-valuemax="121"
+          aria-valuenow="0"
+        ></div>
+        <dl id="stats-grid" class="stats-grid">
+          <div><dt data-i18n="statDataset">数据集</dt><dd id="stat-dataset">--</dd></div>
+          <div><dt data-i18n="statGrid">网格</dt><dd id="stat-grid">--</dd></div>
+          <div><dt data-i18n="statFrameCache">帧缓存</dt><dd id="stat-cache-bytes">--</dd></div>
+          <div><dt data-i18n="statDecodeTime">解码耗时</dt><dd id="stat-decode">--</dd></div>
+          <div><dt data-i18n="statDecodeRate">解码速率</dt><dd id="stat-decode-rate">--</dd></div>
+          <div><dt data-i18n="statViewport">视口采样</dt><dd id="stat-viewport">--</dd></div>
+          <div><dt data-i18n="statConnection">网络连接</dt><dd id="stat-connection">--</dd></div>
+        </dl>
+        <div class="stat-graph-wrap" aria-hidden="true">
+          <canvas id="stat-graph"></canvas>
+        </div>
+        <p id="preload-state" class="preload-state" role="status" aria-live="polite" data-i18n="awaitingManifest">等待数据舱单</p>
+      </aside>
+
+      <aside id="legend" class="legend" data-i18n-aria="legendPrateAria" aria-label="降水强度色标">
+        <span id="legend-unit" class="legend-unit">mm/h</span>
+        <div class="legend-bar" aria-hidden="true"></div>
+        <div id="legend-labels" class="legend-labels">
+          <span>128</span><span>40</span><span>20</span><span>5</span><span>1</span><span>0</span>
+        </div>
+      </aside>
+
+      <section id="timeline-panel" class="timeline-panel" data-i18n-aria="timelineAria" aria-label="预报时间控制">
+        <div class="timeline-heading">
+          <div class="timeline-primary">
+            <button id="play-button" class="transport-button" type="button" data-i18n-aria="playAnimation" aria-label="播放动画" disabled>
+              <span class="transport-icon" aria-hidden="true"></span>
+              <span id="play-label" class="transport-label">PLAY</span>
+            </button>
+            <div class="forecast-readout">
+              <span class="control-label">FORECAST HOUR</span>
+              <output id="forecast-hour" for="frame-slider">F---</output>
+            </div>
+          </div>
+          <div class="timeline-meta">
+            <div id="load-status" class="load-status" role="status" aria-live="polite" data-i18n="readingManifest">正在读取清单</div>
+            <button id="timeline-toggle" class="timeline-toggle" type="button" aria-expanded="false" data-i18n-aria="expandTimeline" aria-label="展开时间轴详情">
+              <span class="timeline-toggle-icon" aria-hidden="true"></span>
+            </button>
+          </div>
+        </div>
+        <div class="track-wrap">
+          <output id="frame-tooltip" class="frame-tooltip" for="frame-slider">F000 · --</output>
+          <input
+            id="frame-slider"
+            type="range"
+            min="0"
+            max="120"
+            step="1"
+            value="0"
+            disabled
+            data-i18n-aria="forecastHourAria"
+            aria-label="预报时次"
+          />
+          <div id="tick-marks" class="tick-marks" aria-hidden="true"></div>
+        </div>
+        <div class="track-ends" aria-hidden="true"><span>NOW</span><span id="track-horizon">+120H</span></div>
+        <div id="forecast-days" class="forecast-days" data-i18n-aria="forecastDaysAria" aria-label="五日预报分段"></div>
+      </section>
+
+      <div id="context-menu" class="context-menu" role="menu" data-i18n-aria="mapMenuAria" aria-label="地图选项" hidden>
+        <button id="stats-menu-toggle" type="button" role="menuitemcheckbox" aria-checked="false" data-i18n="menuStats">详细统计信息</button>
+        <button id="copy-debug" type="button" role="menuitem" data-i18n="menuCopyDebug">复制调试信息</button>
+      </div>
+
+      <div id="error-panel" class="error-panel" role="alert" hidden>
+        <strong data-i18n="errorTitle">数据无法显示</strong>
+        <p id="error-message"></p>
+        <button id="retry-button" type="button" data-i18n="retry">重新读取</button>
+      </div>
+
+      <footer class="source-note">
+        <!-- The toggle leads the line: the phone layout ellipsis-clips the
+             footer's tail, which must never swallow an interactive control. -->
+        <button id="lang-toggle" class="lang-toggle" type="button" data-i18n="langToggle">ENGLISH</button>
+        <span>•</span>
+        DATA <a href="https://registry.opendata.aws/noaa-gfs-bdp-pds/" target="_blank" rel="noreferrer">NOAA GFS</a>
+        · CONTAINS MODIFIED <a href="https://www.ecmwf.int/en/forecasts/datasets/open-data" target="_blank" rel="noreferrer">ECMWF OPEN DATA</a>
+        (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">CC BY 4.0</a>)
+        <span>•</span>
+        BASEMAP <a href="https://protomaps.com" target="_blank" rel="noreferrer">PROTOMAPS</a>
+        © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OPENSTREETMAP</a>
+      </footer>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

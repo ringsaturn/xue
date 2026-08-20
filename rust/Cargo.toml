@@ -1,0 +1,9 @@
+[workspace]
+resolver = "2"
+members = ["xue", "xue-wasm"]
+
+[profile.release]
+lto = true
+opt-level = "s"
+codegen-units = 1
+panic = "abort"

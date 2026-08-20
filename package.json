@@ -1,0 +1,28 @@
+{
+  "name": "xue-web",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --config vite.config.ts",
+    "build": "tsc --noEmit && vite build --config vite.config.ts",
+    "preview": "vite preview --config vite.config.ts",
+    "test:web": "vitest run",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "@fontsource/barlow-condensed": "^5.2.7",
+    "@fontsource/ibm-plex-mono": "^5.2.6",
+    "@protomaps/basemaps": "^5.7.2",
+    "maplibre-gl": "^5.6.2"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.54.2",
+    "@types/geojson": "^7946.0.16",
+    "@types/node": "^24.2.1",
+    "jsdom": "^26.1.0",
+    "typescript": "^5.8.3",
+    "vite": "^7.1.1",
+    "vitest": "^3.2.4"
+  }
+}

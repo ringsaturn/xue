@@ -1,0 +1,1197 @@
+:root {
+  color-scheme: dark;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #eaf4f6;
+  background: #08131c;
+  font-synthesis: none;
+  --deep-sea: #08131c;
+  --panel: #102330;
+  --text: #eaf4f6;
+  --muted: #8ca6b2;
+  --accent: #54d6c7;
+  --accent-rgb: 84, 214, 199;
+  --warning: #ffc857;
+  --hairline: rgba(140, 166, 178, 0.28);
+}
+
+body[data-variable="prate"] {
+  --accent: #6bb8ff;
+  --accent-rgb: 107, 184, 255;
+}
+
+body[data-variable="wind10m"] {
+  --accent: #8fd66b;
+  --accent-rgb: 143, 214, 107;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+.app-shell,
+#map {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+.app-shell {
+  position: relative;
+  isolation: isolate;
+  background: var(--deep-sea);
+}
+
+/* Mobile browsers collapse their toolbars while scrolling; dvh keeps the
+   bottom panels glued to the visible edge instead of hiding behind them. */
+@supports (height: 100dvh) {
+  .app-shell {
+    height: 100dvh;
+  }
+}
+
+body.is-data-loading #map {
+  filter: saturate(0.8) brightness(0.9);
+}
+
+#map {
+  position: absolute;
+  inset: 0;
+  transition: filter 180ms ease;
+}
+
+.atmosphere {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  background: repeating-linear-gradient(0deg, rgba(234, 244, 246, 0.018) 0 1px, transparent 1px 5px);
+}
+
+.station-panel,
+.data-card,
+.timeline-panel,
+.legend,
+.error-panel,
+.source-note {
+  position: absolute;
+  z-index: 2;
+}
+
+.station-panel {
+  top: 22px;
+  left: 22px;
+  width: min(330px, calc(100vw - 44px));
+  padding: 0;
+  background: linear-gradient(135deg, rgba(16, 35, 48, 0.97), rgba(9, 26, 37, 0.9));
+  border: 1px solid var(--hairline);
+  clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 18px, 100% 100%, 0 100%);
+  backdrop-filter: blur(16px);
+}
+
+/* The buffer card doubles as YouTube-style "stats for nerds": it shows on its
+   own only while data loads (or on error); the map's right-click menu pins it
+   with the extended stats grid and a close button (body.stats-visible). */
+.data-card {
+  top: 22px;
+  right: 124px;
+  display: none;
+  width: 270px;
+  padding: 15px 16px 13px;
+  background: linear-gradient(145deg, rgba(9, 26, 37, 0.94), rgba(16, 35, 48, 0.9));
+  border: 1px solid var(--hairline);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%);
+  backdrop-filter: blur(14px);
+  transition: border-color 180ms ease;
+}
+
+body.is-data-loading .data-card,
+body.stats-visible .data-card,
+.data-card.is-error {
+  display: block;
+}
+
+.stats-close {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  display: none;
+  padding: 2px 6px;
+  background: none;
+  border: 0;
+  color: var(--muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.stats-close:hover,
+.stats-close:focus-visible {
+  color: var(--text);
+}
+
+.stats-grid {
+  display: none;
+  gap: 0;
+  margin-top: 9px;
+}
+
+body.stats-visible .stats-close {
+  display: block;
+}
+
+body.stats-visible .stats-grid {
+  display: grid;
+}
+
+/* Rolling decode-activity graph, the YouTube network-activity analog: the
+   download is one-shot, but decode work streams for as long as playback
+   prefetches planes. */
+.stat-graph-wrap {
+  display: none;
+  margin-top: 9px;
+  border-top: 1px solid rgba(140, 166, 178, 0.14);
+  padding-top: 7px;
+}
+
+body.stats-visible .stat-graph-wrap {
+  display: block;
+}
+
+#stat-graph {
+  display: block;
+  width: 100%;
+  height: 54px;
+  background: rgba(140, 166, 178, 0.06);
+}
+
+.stats-grid div {
+  grid-template-columns: 74px 1fr;
+  padding: 5px 0 4px;
+  border-top: 1px solid rgba(140, 166, 178, 0.14);
+}
+
+.stats-grid div:first-child {
+  border-top: 0;
+}
+
+.stats-grid dt,
+.stats-grid dd {
+  font-size: 10px;
+}
+
+.stats-grid dt {
+  letter-spacing: 0.09em;
+}
+
+.context-menu {
+  position: fixed;
+  z-index: 6;
+  min-width: 190px;
+  padding: 5px;
+  background: linear-gradient(145deg, rgba(9, 26, 37, 0.97), rgba(16, 35, 48, 0.95));
+  border: 1px solid var(--hairline);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+}
+
+.context-menu button {
+  display: block;
+  width: 100%;
+  padding: 8px 12px 8px 8px;
+  background: none;
+  border: 0;
+  color: var(--text);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-align: left;
+  cursor: pointer;
+}
+
+.context-menu button::before {
+  content: "";
+  display: inline-block;
+  width: 16px;
+}
+
+.context-menu button[aria-checked="true"]::before {
+  content: "✓";
+  color: var(--accent);
+}
+
+.context-menu button:hover,
+.context-menu button:focus-visible {
+  background: rgba(var(--accent-rgb), 0.14);
+  outline: none;
+}
+
+.data-card.is-complete {
+  border-color: rgba(var(--accent-rgb), 0.55);
+}
+
+.data-card.is-error {
+  border-color: rgba(255, 200, 87, 0.78);
+}
+
+.data-card-heading,
+.data-card-heading > div,
+.data-card-metrics,
+.data-card-metrics > div {
+  display: flex;
+  align-items: baseline;
+}
+
+.data-card-heading {
+  justify-content: space-between;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.data-card-heading > div {
+  gap: 8px;
+}
+
+.data-card-index {
+  color: var(--accent);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 8px;
+  letter-spacing: 0.08em;
+}
+
+.data-card h2 {
+  margin: 0;
+  color: var(--text);
+  font-family: "Barlow Condensed", sans-serif;
+  font-size: 18px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+#preload-percent {
+  color: var(--accent);
+  font-family: "Barlow Condensed", sans-serif;
+  font-size: 25px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.data-card.is-error #preload-percent {
+  color: var(--warning);
+}
+
+.data-card-metrics {
+  gap: 14px;
+  padding: 10px 0 9px;
+}
+
+.data-card-metrics > div {
+  flex-direction: column;
+  gap: 3px;
+  min-width: 64px;
+}
+
+.data-card-metrics span,
+.preload-state {
+  color: var(--muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 8px;
+  letter-spacing: 0.09em;
+}
+
+.data-card-metrics output {
+  color: var(--text);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+}
+
+.preload-segments {
+  display: grid;
+  grid-template-columns: repeat(var(--frame-count, 121), minmax(0, 1fr));
+  gap: 1px;
+  height: 12px;
+}
+
+.preload-segments i {
+  display: block;
+  background: rgba(140, 166, 178, 0.16);
+  border-top: 1px solid rgba(140, 166, 178, 0.25);
+  transition: background-color 160ms ease, box-shadow 160ms ease;
+}
+
+.preload-segments i.is-loaded {
+  background: var(--accent);
+  border-top-color: rgba(234, 244, 246, 0.48);
+  box-shadow: 0 0 8px rgba(var(--accent-rgb), 0.34);
+}
+
+.data-card.is-error .preload-segments i.is-loaded {
+  background: var(--warning);
+  box-shadow: 0 0 8px rgba(255, 200, 87, 0.3);
+}
+
+.preload-state {
+  margin: 8px 0 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.data-card.is-complete .preload-state {
+  color: var(--accent);
+}
+
+.data-card.is-error .preload-state {
+  color: var(--warning);
+}
+
+.station-panel summary {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 12px 16px;
+  color: var(--muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+  letter-spacing: 0.09em;
+  cursor: pointer;
+  list-style: none;
+  border-bottom: 1px solid transparent;
+}
+
+.station-panel summary::-webkit-details-marker {
+  display: none;
+}
+
+.station-panel[open] summary {
+  border-bottom-color: var(--hairline);
+}
+
+.status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 14px rgba(var(--accent-rgb), 0.75);
+}
+
+.station-content {
+  padding: 21px 22px 23px;
+}
+
+.model-switch,
+.variable-switch {
+  display: grid;
+  /* Two or three buttons (the wind button appears only when the run ships a
+     wind bundle) share the row evenly. */
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 6px;
+  margin-bottom: 18px;
+}
+
+/* The model row sits tight above the variable row — one control stack. */
+.model-switch {
+  margin-bottom: 6px;
+}
+
+.model-switch button[hidden],
+.variable-switch button[hidden] {
+  display: none;
+}
+
+.model-switch button,
+.variable-switch button {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  /* The small label may outgrow the button (the English UI's "Precipitation"
+     vs the two-character Chinese gloss): keep the pair apart and let the
+     small wrap onto its own line instead of colliding with the code. */
+  flex-wrap: wrap;
+  column-gap: 8px;
+  row-gap: 2px;
+  min-height: 34px;
+  padding: 8px 9px;
+  color: var(--muted);
+  background: rgba(8, 19, 28, 0.42);
+  border: 1px solid var(--hairline);
+  cursor: pointer;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+}
+
+.model-switch button small,
+.variable-switch button small {
+  font-size: 8px;
+  letter-spacing: 0.04em;
+}
+
+/* Model buttons carry a longer agency/resolution detail than the variable
+   buttons, so they stack it on a second line instead of wrapping mid-text. */
+.model-switch button {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+}
+
+.model-switch button small {
+  white-space: nowrap;
+  opacity: 0.75;
+}
+
+.model-switch button[aria-pressed="true"],
+.variable-switch button[aria-pressed="true"] {
+  color: var(--deep-sea);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.model-switch button:focus-visible,
+.variable-switch button:focus-visible {
+  outline: 1px solid var(--text);
+  outline-offset: 2px;
+}
+
+.model-switch button:disabled,
+.variable-switch button:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.eyebrow,
+.control-label {
+  margin: 0;
+  color: var(--accent);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+}
+
+h1 {
+  margin: 6px 0 23px;
+  font-family: "Barlow Condensed", sans-serif;
+  font-size: clamp(42px, 5vw, 58px);
+  font-weight: 500;
+  line-height: 0.82;
+  letter-spacing: -0.025em;
+  text-transform: uppercase;
+}
+
+dl {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+}
+
+dl div {
+  display: grid;
+  grid-template-columns: 86px 1fr;
+  align-items: baseline;
+  border-top: 1px solid var(--hairline);
+  padding-top: 9px;
+}
+
+dt,
+dd {
+  margin: 0;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+}
+
+dt {
+  color: var(--muted);
+}
+
+dd {
+  color: var(--text);
+  text-align: right;
+}
+
+.legend {
+  top: 50%;
+  right: 25px;
+  display: grid;
+  grid-template: auto 218px / 18px 11px 30px;
+  gap: 8px 7px;
+  transform: translateY(-58%);
+  font-family: "Barlow Condensed", sans-serif;
+  filter: drop-shadow(0 2px 7px rgba(0, 0, 0, 0.45));
+}
+
+.legend-unit {
+  grid-column: 1 / -1;
+  color: var(--text);
+  font-size: 14px;
+  text-align: center;
+}
+
+.legend-bar {
+  grid-column: 2;
+  grid-row: 2;
+  background: linear-gradient(to bottom, #701441, #b32037, #e65530, #fd9942, #fed976, #eeefb3, #b5e2ae, #6fc9b7, #419bc9, #3767be, #312f95, #271959);
+  border: 1px solid rgba(234, 244, 246, 0.42);
+}
+
+body[data-variable="prate"] .legend-bar {
+  background: linear-gradient(to bottom, #300e54, #76258a, #9b2e85, #cd3d62, #f57048, #ffbe4b, #d5e165, #6fdb9e, #5ad2c8, #60badb, rgba(64, 131, 183, 0.25));
+}
+
+/* Matches WIND_SPEED_STOPS in palettes.ts, 40 m/s at the top. */
+body[data-variable="wind10m"] .legend-bar {
+  background: linear-gradient(to bottom, #8137a8, #aa3385, #d43c57, #ee7042, #eba74a, #bfcd5c, #5cbe8c, #529dbf, #6e7cc3);
+}
+
+.legend-labels {
+  grid-column: 3;
+  grid-row: 2;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1;
+}
+
+.timeline-panel {
+  right: 22px;
+  bottom: 43px;
+  left: 22px;
+  min-height: 166px;
+  padding: 18px 22px 15px;
+  background: rgba(16, 35, 48, 0.95);
+  border: 1px solid var(--hairline);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 16px), calc(100% - 16px) 100%, 0 100%);
+  backdrop-filter: blur(18px);
+}
+
+.timeline-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  min-height: 30px;
+  margin-bottom: 14px;
+}
+
+.timeline-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.timeline-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  color: var(--muted);
+  background: rgba(8, 19, 28, 0.48);
+  border: 1px solid var(--hairline);
+  cursor: pointer;
+}
+
+.timeline-toggle:hover {
+  color: var(--accent);
+  border-color: rgba(var(--accent-rgb), 0.55);
+}
+
+.timeline-toggle:focus-visible {
+  outline: 1px solid var(--text);
+  outline-offset: 2px;
+}
+
+.timeline-toggle-icon {
+  width: 8px;
+  height: 8px;
+  border-right: 1px solid currentColor;
+  border-bottom: 1px solid currentColor;
+  transform: rotate(45deg) translate(-1px, -1px);
+  transition: transform 160ms ease;
+}
+
+/* Collapsed: chevron points up (expand). */
+body.timeline-collapsed .timeline-toggle-icon {
+  transform: rotate(225deg) translate(-1px, -1px);
+}
+
+/* Collapsed timeline keeps play + slider but gives the bottom of the map
+   back: the five-day strip goes away and the bar narrows to the center. */
+body.timeline-collapsed .timeline-panel {
+  right: 50%;
+  left: auto;
+  width: min(620px, calc(100vw - 44px));
+  min-height: 0;
+  padding: 12px 18px 10px;
+  transform: translateX(50%);
+}
+
+body.timeline-collapsed .timeline-heading {
+  min-height: 0;
+  margin-bottom: 8px;
+}
+
+body.timeline-collapsed .forecast-days,
+body.timeline-collapsed .track-ends {
+  display: none;
+}
+
+.timeline-primary,
+.forecast-readout {
+  display: flex;
+  align-items: baseline;
+  gap: 13px;
+}
+
+.timeline-primary {
+  align-items: center;
+  gap: 16px;
+}
+
+.transport-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-width: 78px;
+  height: 32px;
+  padding: 0 11px;
+  color: var(--accent);
+  background: rgba(8, 19, 28, 0.48);
+  border: 1px solid rgba(var(--accent-rgb), 0.55);
+  cursor: pointer;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+}
+
+.transport-button:hover,
+.transport-button.is-playing {
+  color: var(--deep-sea);
+  background: var(--accent);
+}
+
+.transport-button:focus-visible {
+  outline: 1px solid var(--text);
+  outline-offset: 3px;
+}
+
+.transport-button:disabled {
+  color: var(--muted);
+  background: rgba(8, 19, 28, 0.25);
+  border-color: var(--hairline);
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.transport-icon {
+  width: 0;
+  height: 0;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  border-left: 8px solid currentColor;
+}
+
+.transport-button.is-playing .transport-icon {
+  width: 8px;
+  height: 10px;
+  border: 0;
+  background: linear-gradient(90deg, currentColor 0 3px, transparent 3px 5px, currentColor 5px 8px);
+}
+
+#forecast-hour {
+  color: var(--text);
+  font-family: "Barlow Condensed", sans-serif;
+  font-size: 25px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.load-status {
+  color: var(--accent);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10px;
+}
+
+.load-status::before {
+  content: "";
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin-right: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  vertical-align: 1px;
+}
+
+.load-status.is-loading::before {
+  animation: pulse 0.9s ease-in-out infinite alternate;
+}
+
+.load-status.is-error {
+  color: var(--warning);
+}
+
+.track-wrap {
+  position: relative;
+  height: 26px;
+}
+
+.frame-tooltip {
+  position: absolute;
+  top: -2px;
+  left: clamp(48px, var(--frame-progress, 0%), calc(100% - 48px));
+  z-index: 4;
+  min-width: 90px;
+  padding: 4px 6px;
+  transform: translate(-50%, -100%);
+  color: var(--deep-sea);
+  background: var(--accent);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 8px;
+  letter-spacing: 0.03em;
+  line-height: 1;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.timeline-panel.is-scrubbing .frame-tooltip,
+.track-wrap:focus-within .frame-tooltip {
+  opacity: 1;
+}
+
+#frame-slider {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  width: 100%;
+  height: 22px;
+  margin: 0;
+  cursor: ew-resize;
+  appearance: none;
+  background: transparent;
+}
+
+#frame-slider:disabled {
+  cursor: wait;
+}
+
+#frame-slider::-webkit-slider-runnable-track {
+  height: 2px;
+  background: var(--hairline);
+}
+
+#frame-slider::-moz-range-track {
+  height: 2px;
+  background: var(--hairline);
+}
+
+#frame-slider::-webkit-slider-thumb {
+  width: 17px;
+  height: 17px;
+  margin-top: -8px;
+  border: 4px solid var(--panel);
+  border-radius: 50%;
+  appearance: none;
+  background: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent), 0 0 17px rgba(var(--accent-rgb), 0.5);
+}
+
+#frame-slider::-moz-range-thumb {
+  width: 10px;
+  height: 10px;
+  border: 4px solid var(--panel);
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent), 0 0 17px rgba(var(--accent-rgb), 0.5);
+}
+
+#frame-slider:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 7px;
+}
+
+.tick-marks {
+  position: absolute;
+  top: 9px;
+  right: 7px;
+  left: 7px;
+  display: flex;
+  justify-content: space-between;
+  height: 12px;
+  pointer-events: none;
+}
+
+.tick-marks i {
+  display: block;
+  width: 1px;
+  height: 4px;
+  background: rgba(140, 166, 178, 0.25);
+}
+
+.tick-marks i.major {
+  height: 11px;
+  background: rgba(140, 166, 178, 0.58);
+}
+
+.tick-marks i.is-active {
+  background: var(--accent);
+}
+
+.track-ends {
+  display: flex;
+  justify-content: space-between;
+  color: var(--muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 9px;
+  letter-spacing: 0.12em;
+}
+
+.forecast-days {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  margin-top: 7px;
+  border-top: 1px solid var(--hairline);
+  border-right: 1px solid var(--hairline);
+}
+
+.forecast-day {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 1px 8px;
+  min-width: 0;
+  padding: 5px 8px 4px;
+  color: var(--muted);
+  background: rgba(8, 19, 28, 0.22);
+  border-left: 1px solid var(--hairline);
+  font-family: "IBM Plex Mono", monospace;
+  transition: color 120ms linear, background-color 120ms linear;
+}
+
+.forecast-day b,
+.forecast-day small,
+.forecast-day time {
+  font-size: 8px;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+}
+
+.forecast-day small {
+  justify-self: end;
+}
+
+.forecast-day time {
+  grid-column: 1 / -1;
+  color: rgba(234, 244, 246, 0.72);
+}
+
+.forecast-day.is-active {
+  color: var(--accent);
+  background: rgba(var(--accent-rgb), 0.1);
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
+.error-panel {
+  top: 50%;
+  left: 50%;
+  width: min(430px, calc(100vw - 36px));
+  padding: 20px;
+  transform: translate(-50%, -60%);
+  background: rgba(16, 35, 48, 0.98);
+  border: 1px solid var(--warning);
+}
+
+.error-panel[hidden] {
+  display: none;
+}
+
+.error-panel strong {
+  color: var(--warning);
+  font-family: "Barlow Condensed", sans-serif;
+  font-size: 22px;
+  text-transform: uppercase;
+}
+
+.error-panel p {
+  color: var(--text);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+  line-height: 1.7;
+}
+
+.error-panel button {
+  padding: 8px 13px;
+  color: var(--deep-sea);
+  background: var(--warning);
+  border: 0;
+  cursor: pointer;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+}
+
+.source-note {
+  right: 24px;
+  bottom: 18px;
+  color: var(--muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 8px;
+  letter-spacing: 0.06em;
+}
+
+.source-note a {
+  color: var(--text);
+  text-decoration: none;
+}
+
+.source-note a:hover,
+.source-note a:focus-visible {
+  text-decoration: underline;
+}
+
+/* Language toggle, styled as one more footer link (names the language it
+   switches to). Padding widens the touch target beyond the 8px type. */
+.lang-toggle {
+  padding: 4px 2px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+}
+
+.lang-toggle:hover,
+.lang-toggle:focus-visible {
+  text-decoration: underline;
+}
+
+.maplibregl-ctrl-top-right {
+  top: 16px;
+  right: 75px;
+}
+
+.maplibregl-ctrl-group {
+  background: rgba(16, 35, 48, 0.88) !important;
+  border: 1px solid var(--hairline);
+  border-radius: 0;
+}
+
+.maplibregl-ctrl-group button + button {
+  border-top-color: var(--hairline);
+}
+
+.maplibregl-ctrl button .maplibregl-ctrl-icon {
+  filter: invert(1);
+}
+
+@keyframes pulse {
+  from { opacity: 0.25; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
+@media (max-width: 720px) {
+  /* Pinch gestures replace the +/- control; every saved pixel goes to the map. */
+  .maplibregl-ctrl-top-right {
+    display: none;
+  }
+
+  /* The buffer card collapses to a slim loading strip and, once the bundle is
+     resident, fades out entirely (errors stay pinned). */
+  .data-card {
+    top: calc(10px + env(safe-area-inset-top));
+    right: 10px;
+    left: 10px;
+    width: auto;
+    padding: 8px 12px 9px;
+  }
+
+  body:not(.stats-visible) .data-card.is-complete:not(.is-error) {
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 400ms ease 1.6s, visibility 0s linear 2s;
+  }
+
+  .data-card-heading {
+    align-items: center;
+    padding-bottom: 0;
+    border-bottom: 0;
+  }
+
+  .data-card h2 {
+    font-size: 14px;
+  }
+
+  #preload-percent {
+    font-size: 18px;
+  }
+
+  .data-card-metrics,
+  .preload-state {
+    display: none;
+  }
+
+  /* Stats mode keeps the full readout even on phones (opened by long-press). */
+  body.stats-visible .data-card-metrics {
+    display: flex;
+  }
+
+  body.stats-visible .preload-state {
+    display: block;
+  }
+
+  .preload-segments {
+    height: 6px;
+    margin-top: 7px;
+    gap: 0;
+  }
+
+  .legend {
+    top: calc(84px + env(safe-area-inset-top));
+    right: 10px;
+    transform: none;
+    grid-template: 14px 120px / 14px 8px 22px;
+  }
+
+  .legend-labels {
+    font-size: 11px;
+  }
+
+  /* The station panel starts collapsed on phones (main.ts) and docks right
+     above the timeline as a single summary bar. */
+  .station-panel {
+    top: auto;
+    right: 10px;
+    bottom: calc(150px + env(safe-area-inset-bottom));
+    left: 10px;
+    width: auto;
+  }
+
+  .station-panel summary {
+    padding: 10px 13px;
+  }
+
+  /* Open state stays lean: the summary bar already names the layer, so the
+     big title goes and metadata compresses to one line per row. */
+  .station-content {
+    display: grid;
+    gap: 10px;
+    padding: 12px 13px;
+  }
+
+  .model-switch,
+  .variable-switch {
+    margin-bottom: 0;
+  }
+
+  .eyebrow,
+  h1 {
+    display: none;
+  }
+
+  dl {
+    gap: 5px;
+  }
+
+  dl div {
+    grid-template-columns: auto 1fr;
+    gap: 12px;
+    padding-top: 5px;
+  }
+
+  .timeline-panel {
+    right: 10px;
+    bottom: calc(24px + env(safe-area-inset-bottom));
+    left: 10px;
+    min-height: 0;
+    padding: 10px 12px 8px;
+  }
+
+  .timeline-heading {
+    min-height: 0;
+    margin-bottom: 6px;
+  }
+
+  .timeline-primary {
+    gap: 10px;
+  }
+
+  .transport-button {
+    min-width: 34px;
+    width: 34px;
+    height: 30px;
+    padding: 0;
+  }
+
+  .transport-label {
+    display: none;
+  }
+
+  #forecast-hour {
+    font-size: 21px;
+  }
+
+  .forecast-days {
+    margin-top: 5px;
+  }
+
+  .forecast-day {
+    display: flex;
+    justify-content: space-between;
+    gap: 0 3px;
+    padding: 4px 5px 3px;
+  }
+
+  .forecast-day time {
+    display: none;
+  }
+
+  .source-note {
+    right: 12px;
+    bottom: calc(7px + env(safe-area-inset-bottom));
+    max-width: calc(100vw - 24px);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .error-panel {
+    transform: translate(-50%, -85%);
+  }
+
+  /* Phones keep the collapsed bar full-width (centering saves nothing there)
+     and the docked station summary slides down with the shorter timeline. */
+  body.timeline-collapsed .timeline-panel {
+    right: 10px;
+    left: 10px;
+    width: auto;
+    padding: 8px 12px;
+    transform: none;
+  }
+
+  body.timeline-collapsed .station-panel {
+    bottom: calc(110px + env(safe-area-inset-bottom));
+  }
+}
