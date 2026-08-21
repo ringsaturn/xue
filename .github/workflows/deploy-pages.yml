@@ -1,0 +1,87 @@
+name: deploy pages
+
+# Publish the static shell (dist-deploy/) to the Cloudflare Pages project
+# whenever frontend-relevant code lands on main. Forecast data is not touched
+# here — the scheduled publish-* workflows own R2. Keeping the shell deploy
+# automatic also preserves the ordering contract: when the manifest schema
+# widens, the new shell must be live before data in the new schema is
+# published, and deploy-on-push makes the shell lead the data by construction.
+#
+# Credentials: CLOUDFLARE_API_TOKEN is a Cloudflare API token with
+# "Cloudflare Pages: Edit" on the account (wrangler reads the env var
+# directly; the R2 S3 key pair used by publish.yml cannot deploy Pages).
+# CLOUDFLARE_ACCOUNT_ID is the same repository secret publish.yml uses.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - web/**
+      - rust/**
+      - package.json
+      - package-lock.json
+      - tsconfig.json
+      - vite.config.ts
+      - wrangler.jsonc
+      - Makefile
+      - .github/workflows/deploy-pages.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One deploy at a time; a newer push supersedes an in-flight one (Pages
+# deploys are atomic, so cancelling mid-upload never leaves a broken site).
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+env:
+  # wasm-pack is not on the runner image; pin the release we install.
+  WASM_PACK_VERSION: v0.13.1
+
+jobs:
+  deploy:
+    name: deploy
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+
+      - name: Install wasm-pack
+        run: |
+          curl -sSfL "https://github.com/rustwasm/wasm-pack/releases/download/${WASM_PACK_VERSION}/wasm-pack-${WASM_PACK_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
+            | tar xz -C "${RUNNER_TEMP}"
+          sudo install "${RUNNER_TEMP}/wasm-pack-${WASM_PACK_VERSION}-x86_64-unknown-linux-musl/wasm-pack" /usr/local/bin/wasm-pack
+          wasm-pack --version
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      # web/src/wasm/ is generated and gitignored; the frontend does not
+      # typecheck or build without it.
+      - name: Build WASM decoder
+        run: make wasm
+
+      # `vite build --mode deploy` points VITE_DATA_BASE_URL at the public R2
+      # bucket (web/.env.deploy) and dist-deploy/ carries only the shell.
+      - name: Build deploy shell
+        run: make deploy-build
+
+      - name: Deploy to Cloudflare Pages
+        run: make deploy-pages
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
