@@ -1,0 +1,57 @@
+name: publish ecmwf
+
+# ECMWF IFS open data (oper, 0.25°), 3-hourly out to F120. The pipeline lives
+# in the reusable publish.yml; this file only owns the schedule and the manual
+# knobs.
+
+on:
+  schedule:
+    # Only the 00z and 12z cycles reach F120 in the open data 0.25° oper
+    # series (06z and 18z stop at 90 h), and dissemination completes about
+    # seven hours after the cycle. `--run latest` walks back over the cycle
+    # grid anyway, so a short cycle is skipped rather than half-published.
+    - cron: "30 8,20 * * *"
+  workflow_dispatch:
+    inputs:
+      run:
+        description: "Cycle to publish: latest or YYYYMMDDHH"
+        type: string
+        default: latest
+      profile:
+        description: "Quantization/compression profile"
+        type: choice
+        options: [balanced, quality, compact]
+        default: balanced
+      keep:
+        description: "Published runs to keep on R2 (1 = live run only)"
+        type: string
+        default: "1"
+      force:
+        description: "Rebuild even when R2 already serves this run"
+        type: boolean
+        default: false
+      dry_run:
+        description: "Build and report what pruning would delete, but write nothing to R2"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-ecmwf
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    # Scheduled runs on forks would publish into a bucket they cannot reach.
+    if: github.event_name != 'schedule' || github.repository == 'ringsaturn/xue'
+    uses: ./.github/workflows/publish.yml
+    with:
+      model: ecmwf
+      run: ${{ inputs.run || 'latest' }}
+      profile: ${{ inputs.profile || 'balanced' }}
+      keep: ${{ inputs.keep || '1' }}
+      force: ${{ inputs.force || false }}
+      dry_run: ${{ inputs.dry_run || false }}
+    secrets: inherit

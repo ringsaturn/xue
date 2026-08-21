@@ -7,11 +7,32 @@ PROFILE ?= balanced
 # Forecast source: gfs (NOAA 0.25°, hourly), ecmwf (IFS open data, 3-hourly),
 # or sflux (GFS surface flux, native ~13 km, hourly, adds the dswrf layer).
 MODEL ?= gfs
-# Each model has its own mutable live pointer; GFS uses the bare
-# latest.json, the other models use latest-<model>.json.
+# Published runs of one model to keep on R2 (`make prune-r2`). One means the
+# live run only: the bucket carries no history.
+KEEP ?= 1
+# `--dryrun` to preview an upload or a prune.
+DRY_RUN ?=
+# Each model has its own mutable live pointer; GFS uses the bare latest.json,
+# the other models use latest-<model>.json.
 LATEST_FILE = $(if $(filter gfs,$(MODEL)),latest.json,latest-$(MODEL).json)
 
-.PHONY: check install wasm test test-rust test-e2e bench bench-video bench-lossy mvp serve format-pdf deploy-build upload-r2 deploy-pages deploy clean
+# R2 is S3-compatible, so the dataset bucket is managed with the AWS CLI
+# rather than anything of ours. Needs an R2 API token's key pair in
+# AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY and the account id in
+# CLOUDFLARE_ACCOUNT_ID (it is the endpoint host).
+R2_BUCKET ?= dataset
+R2_PREFIX ?= xue
+R2_ENDPOINT ?= https://$(CLOUDFLARE_ACCOUNT_ID).r2.cloudflarestorage.com
+AWS ?= aws
+S3 = $(AWS) s3 --endpoint-url $(R2_ENDPOINT)
+# R2 has no regions, and AWS CLI v2's default checksum headers are not
+# accepted by every S3-compatible backend.
+AWS_DEFAULT_REGION ?= auto
+AWS_REQUEST_CHECKSUM_CALCULATION ?= when_required
+AWS_RESPONSE_CHECKSUM_VALIDATION ?= when_required
+export AWS_DEFAULT_REGION AWS_REQUEST_CHECKSUM_CALCULATION AWS_RESPONSE_CHECKSUM_VALIDATION
+
+.PHONY: check install wasm test test-rust test-e2e bench bench-video bench-lossy mvp serve format-pdf deploy-build upload-r2 prune-r2 live-run deploy-pages deploy clean
 
 check:
 	$(PYTHON) scripts/check_dependencies.py
@@ -81,38 +102,58 @@ deploy-build:
 
 # Upload one run to the public R2 dataset bucket that deploy builds read from
 # (web/.env.deploy -> VITE_DATA_BASE_URL): the per-variable .xue bundles
-# (full and .half.xue resolution tiers), posters, the optional per-variable
-# WebCodecs video artifacts (.h264 + index) and their debug .m3u8, plus the
-# run's immutable manifest. All run assets are uploaded
-# with immutable cache metadata (they are ?v=<crc32>-addressed); the mutable
-# latest.json live pointer goes last — uploading it is what takes the run live.
+# (full and .half.xue resolution tiers), posters, the optional WebCodecs
+# video artifacts, and the run's manifest. Run assets are immutable (clients
+# address them as ?v=<crc32>); the mutable per-model live pointer is copied
+# afterwards, and uploading it is what takes the run live.
+# Pass a concrete RUN=YYYYMMDDHH.
 upload-r2:
-	@for f in web/public/data/$(MODEL).$(RUN)/*.xue web/public/data/$(MODEL).$(RUN)/*.poster.bin web/public/data/$(MODEL).$(RUN)/*.h264 web/public/data/$(MODEL).$(RUN)/*.h264.index.json web/public/data/$(MODEL).$(RUN)/*.m3u8 web/public/data/$(MODEL).$(RUN)/manifest.json; do \
-		[ -e "$$f" ] || continue; \
-		name=$$(basename $$f); \
-		case "$$name" in \
-			*.json) ct="application/json";; \
-			*.m3u8) ct="application/vnd.apple.mpegurl";; \
-			*) ct="application/octet-stream";; \
-		esac; \
-		echo "Uploading $(MODEL).$(RUN)/$$name to R2..."; \
-		npx wrangler r2 object put dataset/xue/$(MODEL).$(RUN)/$$name --file $$f --remote \
-			--content-type $$ct --cache-control "public, max-age=31536000, immutable" || exit 1; \
+	@set -e; dir=web/public/data/$(MODEL).$(RUN); \
+	[ -d "$$dir" ] || { echo "no built run at $$dir, pass RUN=YYYYMMDDHH"; exit 1; }; \
+	pointer_run=$$(jq -r .run web/public/data/$(LATEST_FILE)); \
+	[ "$$pointer_run" = "$(RUN)" ] || { \
+		echo "$(LATEST_FILE) names run $$pointer_run, not $(RUN) — a later build rewrote it;"; \
+		echo "rebuild run $(RUN) (or upload run $$pointer_run) so the pointer matches the assets"; \
+		exit 1; }; \
+	$(S3) sync $$dir s3://$(R2_BUCKET)/$(R2_PREFIX)/$(MODEL).$(RUN)/ --no-progress $(DRY_RUN) \
+		--cache-control "public, max-age=31536000, immutable"; \
+	echo "Uploading $(LATEST_FILE) (takes $(MODEL) run $(RUN) live)..."; \
+	$(S3) cp web/public/data/$(LATEST_FILE) s3://$(R2_BUCKET)/$(R2_PREFIX)/$(LATEST_FILE) --no-progress $(DRY_RUN) \
+		--content-type application/json --cache-control "no-cache"
+
+# Delete every published run of one model except the newest KEEP and the one
+# the live pointer names, so a new run retires the one it replaces. Listing
+# the bucket also catches leftovers from an interrupted upload.
+# DRY_RUN=--dryrun previews the deletions.
+prune-r2:
+	@set -e; \
+	live=$$($(MAKE) -s --no-print-directory live-run MODEL=$(MODEL)); \
+	[ -n "$$live" ] || { echo "no live pointer for $(MODEL), refusing to prune"; exit 1; }; \
+	echo "live $(MODEL) run: $$live"; \
+	listing=$$($(S3) ls s3://$(R2_BUCKET)/$(R2_PREFIX)/) \
+		|| { echo "listing the bucket failed, refusing to prune"; exit 1; }; \
+	for run in $$(printf '%s\n' "$$listing" | awk '/ PRE /{print $$2}' \
+		| sed 's:/$$::' | grep "^$(MODEL)\." | sort -r | tail -n +$$(($(KEEP) + 1))); do \
+		if [ "$$run" != "$(MODEL).$$live" ]; then \
+			echo "Deleting $$run..."; \
+			$(S3) rm s3://$(R2_BUCKET)/$(R2_PREFIX)/$$run/ --recursive --only-show-errors $(DRY_RUN); \
+		fi; \
 	done
-	@echo "Uploading $(LATEST_FILE) to R2 (takes $(MODEL) run $(RUN) live)..."
-	@npx wrangler r2 object put dataset/xue/$(LATEST_FILE) --file web/public/data/$(LATEST_FILE) --remote \
-		--content-type application/json --cache-control "no-cache" || exit 1
+
+# Print the run the live pointer names, or nothing when there is no pointer.
+live-run:
+	@$(S3) cp s3://$(R2_BUCKET)/$(R2_PREFIX)/$(LATEST_FILE) - --only-show-errors | jq -r .run || true
 
 # Publish dist-deploy/ (built via deploy-build) to the Cloudflare Pages project.
 deploy-pages:
 	npx wrangler pages deploy --branch main dist-deploy
 
-# Full deploy: publish the static shell first, then push this run's data (and
-# the live pointer) to R2. Frontend-first ordering matters when the manifest
-# schema widens (e.g. the optional wind10m bundle): the
-# new shell accepts old manifests, but an old cached shell rejects new ones.
-# For a data-only refresh, `make upload-r2` alone is enough.
-deploy: deploy-build deploy-pages upload-r2
+# Deploy the static shell. Data publishing is separate — the scheduled
+# workflows own it, and a manual push is `make upload-r2 RUN=YYYYMMDDHH`.
+# When the manifest schema widens (e.g. the optional wind10m bundle), deploy
+# the shell before publishing data in the new schema: the new shell accepts
+# old manifests, but an old cached shell rejects new ones.
+deploy: deploy-build deploy-pages
 
 clean:
 	@echo "Generated data is retained for reuse. Remove dist manually if required."
