@@ -12,15 +12,18 @@ implementations, held byte-identical by cross-language golden tests.
 ## Design Summary
 
 The format targets a product that animates a complete global forecast
-(hourly or 3-hourly steps out to 120 hours) with continuous playback and
-fast timeline scrubbing. Per-frame tile pyramids are larger under that
-access pattern: for one GFS run, per-frame raster PMTiles for two
-variables measured 3,205.87 MB, against 137.73 MB of source GRIB. Xue
-instead stores each variable as quantized single-byte planes on the native
-grid — projection and coloring happen later, on the GPU — with bounded
-temporal prediction and per-plane Zstandard compression. The same two
-variables fit in roughly 65–71 MB per run depending on profile, every frame is
-individually addressable, and the index makes HTTP-range streaming
+(steps of one to six hours out to 240 hours, changing step partway through
+the range) with continuous playback and fast timeline scrubbing. Per-frame
+tile pyramids are larger under that access pattern: for one 121-frame GFS
+run, per-frame raster PMTiles for two variables measured 3,205.87 MB,
+against 137.73 MB of source GRIB. Xue instead stores each variable as
+quantized single-byte planes on the native grid — projection and coloring
+happen later, on the GPU — with bounded temporal prediction and per-plane
+Zstandard compression. The same two variables fit in roughly 65–71 MB for
+that run depending on profile, and grow roughly linearly with frame count
+(coarser-step frames span larger inter-frame differences, so their
+residuals compress slightly worse). Every
+frame is individually addressable, and the index makes HTTP-range streaming
 possible: a client can fetch only the structural prefix (a few KB) and then
 range-request one temporal group at a time.
 
@@ -30,11 +33,19 @@ Key decisions:
   single-channel plane that uploads directly to a WebGL2 `R8` texture.
   Codebooks are visualization-oriented (0.25 °C temperature error budget, a
   logarithmic precipitation codebook that preserves light-rain resolution).
+- **An axis that may change step.** No source publishes one cadence all
+  the way to 240 hours: GFS is hourly to f120 and three-hourly beyond,
+  ECMWF three-hourly to 144 hours and six-hourly beyond. A uniform series
+  declares a step; a series that changes step lists its forecast hours
+  outright, so the axis is always exact rather than approximated by a
+  single step.
 - **Bounded temporal groups.** Smooth fields (temperature, wind, solar
   radiation) use six-frame groups with a middle RAW anchor and one-byte
-  residuals, capping random access at two plane decodes. Precipitation
-  fields move with weather systems, and temporal differencing increases
-  their compressed size; every precipitation plane is independent RAW.
+  residuals, capping random access at two plane decodes. Groups are formed
+  inside a segment of constant step, so no group straddles a change of
+  cadence. Precipitation fields move with weather systems, and temporal
+  differencing increases their compressed size; every precipitation plane
+  is independent RAW.
 - **One independent Zstandard frame per plane** for direct indexing,
   sequential reads, and localized failure isolation.
 - **Strict parsing.** All offsets and lengths are validated with checked
@@ -163,6 +174,86 @@ A bundle may declare more than one variable; the two 10 m wind components
 ship together in one two-variable `wind10m.xue` bundle. Every variable's
 quantization block must be one of the codebook types below.
 
+#### Metadata Schema Version
+
+`schemaVersion` is the lowest metadata schema a reader must implement to
+parse the file. It versions the metadata JSON only; the container layout is
+versioned by the FixedHeader `version` field, which stays 1 for every
+schema version below.
+
+| `schemaVersion` | Introduces | `time` shape |
+|---:|---|---|
+| 1 | — | uniform axis, `stepHours` |
+| 2 | Explicitly listed forecast hours | mixed-step axis, `hours` |
+
+An encoder must emit the lowest version that can express the file, so a
+uniform series is always schemaVersion 1 and never carries `hours`.
+Decoders enforce both sides of that rule: they must reject a schema
+version they do not implement, and must also reject a declared version
+higher than the lowest the metadata needs (see Error Handling). Rejecting
+unknown versions is what makes a version-1-only decoder reject a
+mixed-cadence bundle outright instead of silently misreading its axis;
+rejecting overdeclared versions gives any given axis exactly one valid
+encoding. Every already published uniform bundle stays valid and
+byte-identical under both rules.
+
+*Schema version 2 is specified here ahead of its implementation: the
+reference encoder and decoders currently emit and accept version 1 only.
+Because deployed decoders reject it by design, a schemaVersion-2-capable
+frontend must be deployed before the first mixed-cadence run is
+published.*
+
+#### Time Axis
+
+`firstForecastHour` and `frameCount` are always present. Exactly one of
+`stepHours` and `hours` must accompany them:
+
+- **`stepHours`** — the axis is uniform, and frame `i` is at forecast hour
+  `firstForecastHour + i * stepHours`. Requires schemaVersion 1 or higher.
+- **`hours`** — the axis changes step and is listed outright. Requires
+  schemaVersion 2.
+
+A miniature mixed axis, hourly then three-hourly:
+
+```json
+"time": {
+  "firstForecastHour": 0,
+  "frameCount": 6,
+  "hours": [0, 1, 2, 3, 6, 9]
+}
+```
+
+The production GFS 240-hour axis is the same shape at full length: the
+161-element list `0, 1, …, 119, 120, 123, 126, …, 237, 240`.
+
+An `hours` array must have exactly `frameCount` elements, must be strictly
+increasing, must begin with `firstForecastHour`, and every element must be
+in `[0, 65534]` — the `forecastHour` field is a u16 and 65535 is the
+`dependencyHour` sentinel. The same upper bound applies to a uniform
+axis's last hour, `firstForecastHour + (frameCount − 1) × stepHours`. An
+`hours` array whose steps are all equal is invalid — a uniform axis has
+exactly one encoding, `stepHours` — which also rules out arrays of fewer
+than three elements, since any shorter axis is trivially uniform.
+Declaring both `stepHours` and `hours`, or neither, makes the file
+invalid.
+
+A **segment** is a maximal run of frames with a constant step. For frames
+`h[0] < h[1] < … < h[n-1]` with steps `d[i] = h[i+1] - h[i]`, a segment
+boundary falls between `h[i]` and `h[i+1]` exactly where `d[i] != d[i-1]`
+— equivalently, the last frame of the old cadence closes the earlier
+segment and the first frame of the new cadence opens the next. A uniform
+axis is one segment. The GFS 240-hour axis is two: 121 hourly frames f000–f120,
+then 40 three-hourly frames f123–f240.
+
+Segments are derived, never stored. They matter twice: they bound temporal
+grouping (see Temporal Prediction), and they are where the physical meaning
+of a derived field changes — past a step increase, a precipitation rate
+obtained by de-accumulating or de-averaging its source records is a mean
+over a longer window, so the field is smoother and its peaks lower on the
+far side of the boundary. That is a property of the source data, not of
+this container, but a renderer that labels units should not claim the two
+segments are the same measurement.
+
 The encoder rotates longitude columns so the first column is `-180`,
 preserving north-to-south row order. Grids that natively start at
 Greenwich (the GFS surface-flux Gaussian grid) are rolled by the encoder
@@ -172,16 +263,23 @@ grid coordinates, and samples this layout directly.
 
 `model` and `product` identify the source dataset. Registered pairs:
 
-| `model` | `product` | Grid | Step | Notes |
+| `model` | `product` | Grid | Steps published | Notes |
 |---|---|---|---|---|
-| `GFS` | `pgrb2.0p25` | 1440 × 721, 0.25° | 1 h | All series include the analysis frame (f000) |
-| `ECMWF` | `ifs-0p25` | 1440 × 721, 0.25° | 3 h | `prate` is de-accumulated from the run-total `tp`, so its series has no analysis frame and starts at `firstForecastHour: 3` |
-| `GFS-SFLUX` | `sfluxgrb` | 3072 × 1536 Gaussian, ~13 km | 1 h | `prate` is de-averaged from window-cumulative records and starts at `firstForecastHour: 1`; the only source shipping `dswrf` |
+| `GFS` | `pgrb2.0p25` | 1440 × 721, 0.25° | 1 h to f120, 3 h to f240 | All series include the analysis frame (f000). `prate` is an instantaneous rate at every step |
+| `ECMWF` | `ifs-0p25` | 1440 × 721, 0.25° | 3 h to 144 h, 6 h to 240 h | `prate` is de-accumulated from the run-total `tp`, so its series has no analysis frame and starts at `firstForecastHour: 3` |
+| `GFS-SFLUX` | `sfluxgrb` | 3072 × 1536 Gaussian, ~13 km | 1 h to f120, 3 h to f240 | `prate` is de-averaged from window-cumulative records and starts at `firstForecastHour: 1`; the only source shipping `dswrf` |
 
-Time axes may therefore differ between bundles of one run. The container
-layout is identical for every model — only the metadata identity, the grid,
-and the time axis differ. Readers must derive the frame list from `time`
-and the grid from `grid`, never from the model name.
+How far a run is published is a pipeline choice, not a format constraint;
+the steps above are what each source makes available. A series that stops
+at 120 hours is uniform and stays schemaVersion 1, while a series that runs
+to 240 hours crosses a step change on every one of these sources and is
+therefore schemaVersion 2.
+
+Time axes may therefore differ between bundles of one run, in both step and
+extent. The container layout is identical for every model — only the
+metadata identity, the grid, and the time axis differ. Readers must derive
+the frame list from `time` and the grid from `grid`, never from the model
+name, and must not assume two bundles of one run share an axis.
 
 ### IndexHeader
 
@@ -232,7 +330,7 @@ Predictor enum:
 |---:|---|---|
 | 0 | RAW | Decompressed payload is the complete quantized plane |
 | 1 | ANCHOR | Payload is a residual relative to dependencyHour |
-| 2 | PREVIOUS | Payload is a residual relative to the previous forecast time |
+| 2 | PREVIOUS | Payload is a residual relative to the preceding frame on this variable's time axis |
 | 3 | ZERO | No payload, output a zero-filled plane, reserved for local block formats |
 
 Flags:
@@ -263,8 +361,16 @@ validates predictor reconstruction.
 - RAW decompresses directly to the quantized plane.
 - ANCHOR decompresses to a one-byte residual, then adds the dependency
   plane.
-- PREVIOUS decompresses to a one-byte residual, then adds the previous
-  plane.
+- PREVIOUS decompresses to a one-byte residual, then adds the plane of the
+  preceding frame on the time axis: `hours[i - 1]`, or
+  `forecastHour - stepHours` on a uniform axis. It is not
+  `forecastHour - 1` — on any axis whose step is not one hour, that plane
+  does not exist. A PREVIOUS entry on the first frame of the axis is
+  invalid, and every PREVIOUS entry must carry exactly that preceding hour
+  in `dependencyHour` — like ANCHOR, the dependency is explicit in the
+  index, never the sentinel, never left to be derived, so the same file
+  has only one encoding. (No reference bundle uses PREVIOUS; the reference
+  encoder emits only RAW and ANCHOR.)
 - The decoder must reject a frame when length, checksum, or dependency
   validation fails.
 - The decoder must not allocate an output larger than `width × height` or
@@ -359,16 +465,33 @@ fallback for out-of-range differences.
 Per-variable rules in v1:
 
 - **Linear-codebook fields (`tmp2m`, `ugrd10m`, `vgrd10m`, `dswrf`)** are
-  smooth enough for temporal prediction. The timeline splits into groups of
-  6 frames. Within each group of `n` frames, the frame at zero-based index
-  `floor(n / 2)` is the anchor: it uses predictor RAW, and every other
-  frame in the group uses ANCHOR residuals against it. A trailing
+  smooth enough for temporal prediction. Each segment of the time axis
+  splits independently into groups of 6 frames, so a group never spans a
+  change of step. Within each group of `n` frames, the frame at zero-based
+  index `floor(n / 2)` is the anchor: it uses predictor RAW, and every
+  other frame in the group uses ANCHOR residuals against it. A trailing
   single-frame group is its own anchor and uses RAW. Random access to any
   frame therefore costs at most two plane decodes (anchor + target).
+  `groupId` counts groups sequentially across the whole variable and does
+  not restart at a segment boundary.
 - **Precipitation (`prate`)** uses independent RAW planes for every
   forecast time, with `groupId` mirroring `forecastHour`. Precipitation
   regions move with weather systems; fixed-grid differencing creates both
   entering and leaving edges and measurably increases compressed size.
+
+Grouping per segment rather than across the whole timeline keeps every
+ANCHOR residual a difference between frames one step apart. A group
+straddling the GFS 120-hour transition would difference frames three hours
+apart against an anchor chosen among frames one hour apart — still
+lossless, since residuals wrap modulo 256, but a larger residual and a
+worse-compressing one. Splitting costs at most one extra RAW anchor per
+segment boundary per variable.
+
+Segment-aligned grouping is an encoder rule, not a decode-time invariant.
+A decoder validates the dependency structure recorded in the index (see
+Error Handling) and never needs to derive segments to decode or to
+validate; a group that did straddle a boundary would still reconstruct
+exactly and is not rejected.
 
 The current global grids have no bitmap and all points are valid. Xue v1
 requires complete input planes; a future missing-data implementation should
@@ -412,8 +535,11 @@ temporal continuity is represented by residuals instead.
 The format needs no side files to stream. The structural prefix
 `[0, dataOffset)` — header, metadata, index, optional dictionary, a few KB
 in production — validates exactly like a whole file minus the byte-content
-checks past the prefix. A streaming reader then range-fetches payload spans
-on demand; the per-group contiguity above means the bytes for one frame form
+checks past the prefix. An explicit `hours` array costs roughly five bytes
+per frame, under 1 KB for a 240-hour axis, so the prefix stays small enough
+to fetch in one range request. A streaming reader then range-fetches
+payload spans on demand; the per-group contiguity above means the bytes for
+one frame form
 one or two contiguous spans. Integrity comes from the per-plane CRC-32 and
 the Zstandard frame checksums, so a whole-file checksum is only meaningful
 for full downloads.
@@ -422,7 +548,8 @@ for full downloads.
 
 A decoder must reject:
 
-- Unknown major versions.
+- Unknown container versions, and metadata `schemaVersion` values the
+  decoder does not implement.
 - Nonzero reserved fields in a known version.
 - Unknown predictor, compression, variableId, or flags values.
 - ZSTD_DICT entries when `dictionaryLength` is 0.
@@ -430,10 +557,23 @@ A decoder must reject:
 - Overlapping payload ranges (ZERO entries may have zero length).
 - Unindexed gaps between sections or payloads, and nonzero padding bytes.
 - Duplicate `(variableId, forecastHour)` pairs.
-- An incomplete forecast-hour sequence for any declared variable (the
-  expected sequence derives from the metadata `time` block).
+- A `time` block declaring both `stepHours` and `hours`, or neither; an
+  `hours` array in a schemaVersion 1 file; an `hours` array that is not
+  strictly increasing, whose length differs from `frameCount`, whose first
+  element differs from `firstForecastHour`, whose steps are all equal, or
+  that contains an hour above 65534; a uniform axis whose last hour
+  `firstForecastHour + (frameCount − 1) × stepHours` exceeds 65534.
+- A declared `schemaVersion` higher than the lowest able to express the
+  metadata — for the versions defined so far, a schemaVersion 2 file that
+  declares `stepHours`.
+- An incomplete forecast-hour sequence for any declared variable. The
+  expected sequence is `hours` when present, and
+  `firstForecastHour + i * stepHours` otherwise; a decoder must never
+  reconstruct it arithmetically when `hours` is present.
 - ANCHOR or PREVIOUS dependencies that leave the variable or temporal
-  group, cyclic dependencies, or chains deeper than the group length.
+  group, cyclic dependencies, or chains deeper than the group length; a
+  PREVIOUS entry whose `dependencyHour` is not exactly the preceding frame
+  on the axis (the 65535 sentinel included).
 - Any integer computation that would overflow (use checked arithmetic).
 - A plane whose CRC-32 or Zstandard checksum fails.
 
