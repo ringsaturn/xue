@@ -11,7 +11,7 @@ MODEL ?= gfs
 # latest.json, the other models use latest-<model>.json.
 LATEST_FILE = $(if $(filter gfs,$(MODEL)),latest.json,latest-$(MODEL).json)
 
-.PHONY: check install wasm test test-rust test-e2e bench bench-video bench-lossy mvp serve deploy-build upload-r2 deploy-pages deploy clean
+.PHONY: check install wasm test test-rust test-e2e bench bench-video bench-lossy mvp serve format-pdf deploy-build upload-r2 deploy-pages deploy clean
 
 check:
 	$(PYTHON) scripts/check_dependencies.py
@@ -65,6 +65,13 @@ serve:
 # The manifest lives on R2 next to the bundles
 # (uploaded by `make upload-r2`), so Pages only needs deploying when the code
 # changes — publishing a new run is an R2-only operation.
+# Typeset the normative format spec as docs/format.pdf.
+# Needs pandoc and a TeX Live with xetex; on Debian/Ubuntu:
+#   apt-get install pandoc texlive-xetex texlive-fonts-recommended \
+#     texlive-latex-recommended lmodern
+format-pdf:
+	scripts/build_format_pdf.sh
+
 deploy-build:
 	npm run build -- --mode deploy
 	rm -rf dist-deploy
