@@ -76,6 +76,8 @@ byte-identical.
 - eccodes (`grib_set`, ECMWF source only: open data is CCSDS/AEC-packed
   and is repacked to `grid_simple` at fetch time so any GDAL build can
   read it)
+- AWS CLI v2 and `jq` (publishing only: the R2 bucket is managed over its
+  S3 API)
 
 `make check` verifies versions and required commands. The NOAA and ECMWF
 public S3 buckets need no AWS credentials.
@@ -140,6 +142,33 @@ accepts `gfs` / `ecmwf` (alias `ifs`) / `sflux`; `type` also accepts
 aliases like `tmp2m` / `prate` / `wind10m` / `solar`; both are
 case-insensitive. The address bar stays in sync when switching, and
 unrecognized values fall back to defaults.
+
+## Publishing
+
+The live site is a static shell on Cloudflare Pages; forecast data lives on
+a public R2 bucket (`dataset.ringsaturn.me/xue/`), because bundles exceed
+the Pages 25 MB per-file limit. The bucket is managed over R2's S3 API with
+the AWS CLI:
+
+```sh
+make upload-r2 MODEL=gfs RUN=2026081600   # run assets, then the live pointer
+make prune-r2  MODEL=gfs                  # delete the runs it superseded
+```
+
+Credentials are an R2 API token's key pair in `AWS_ACCESS_KEY_ID` /
+`AWS_SECRET_ACCESS_KEY`, plus `CLOUDFLARE_ACCOUNT_ID` for the endpoint.
+
+GitHub Actions runs the whole loop on a schedule — one workflow per source
+([`publish-gfs.yml`](.github/workflows/publish-gfs.yml),
+[`publish-sflux.yml`](.github/workflows/publish-sflux.yml),
+[`publish-ecmwf.yml`](.github/workflows/publish-ecmwf.yml)), all calling the
+reusable [`publish.yml`](.github/workflows/publish.yml) — using the
+`R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `CLOUDFLARE_ACCOUNT_ID`
+repository secrets. The bucket keeps only the live run per source. Each
+workflow also takes a manual dispatch with a dry-run switch.
+
+The Pages shell is deployed separately (`make deploy`) and only needs
+redeploying when frontend code changes.
 
 ## Testing
 

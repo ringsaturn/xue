@@ -1,0 +1,247 @@
+name: publish run
+
+# Reusable publishing pipeline, one call per source. Callers
+# (publish-gfs.yml, publish-sflux.yml, publish-ecmwf.yml) own the schedule
+# and the manual dispatch; this file owns the work:
+#
+#   resolve the newest complete cycle -> skip if R2 already serves it ->
+#   fetch GRIB -> pack .xue bundles -> upload run assets -> flip the live
+#   pointer -> delete the runs it superseded.
+#
+# The bucket is managed over R2's S3 API with the AWS CLI (`make upload-r2`,
+# `make prune-r2`), so the credentials are an R2 API token's key pair —
+# R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY repository secrets, with
+# CLOUDFLARE_ACCOUNT_ID naming the endpoint host. The static Pages shell is
+# not touched here — it only needs redeploying (`make deploy`) when frontend
+# code changes.
+
+on:
+  workflow_call:
+    inputs:
+      model:
+        description: "Forecast source: gfs, sflux or ecmwf"
+        required: true
+        type: string
+      run:
+        description: "Cycle to publish: latest or YYYYMMDDHH"
+        type: string
+        default: latest
+      profile:
+        description: "Quantization/compression profile"
+        type: string
+        default: balanced
+      keep:
+        description: >-
+          Published runs of this source to keep on R2. One, the default,
+          leaves only the run that just went live: the bucket carries no
+          history.
+        type: string
+        default: "1"
+      force:
+        description: "Rebuild even when R2 already serves this run"
+        type: boolean
+        default: false
+      dry_run:
+        description: "Build and report what pruning would delete, but write nothing to R2"
+        type: boolean
+        default: false
+      free_disk_space:
+        description: >-
+          Sweep the runner's preinstalled toolchains before building. Costs a
+          few minutes, so it is on only for sources whose GRIB input and
+          intermediate planes outgrow the hosted runner's free space.
+        type: boolean
+        default: false
+    secrets:
+      R2_ACCESS_KEY_ID:
+        required: true
+      R2_SECRET_ACCESS_KEY:
+        required: true
+      CLOUDFLARE_ACCOUNT_ID:
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: ${{ inputs.model }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    env:
+      MODEL: ${{ inputs.model }}
+      RUN_INPUT: ${{ inputs.run }}
+      PROFILE: ${{ inputs.profile }}
+      KEEP: ${{ inputs.keep }}
+      FORCE: ${{ inputs.force }}
+      DRY_RUN: ${{ inputs.dry_run && '--dryrun' || '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # The AWS CLI is preinstalled on the runner; R2 is its S3 endpoint.
+      # The credentials are deliberately step-scoped (here and on the make
+      # steps that talk to R2) rather than job env, so third-party actions
+      # never see them. The listing proves they actually work before the
+      # multi-hour build starts, instead of failing at the upload step.
+      - name: Check R2 credentials
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+          AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+        run: |
+          for name in CLOUDFLARE_ACCOUNT_ID AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY; do
+            [ -n "${!name}" ] || { echo "::error::$name is empty; set the R2 repository secrets"; exit 1; }
+          done
+          aws --version
+          aws s3 ls "s3://dataset/xue/" --region auto \
+            --endpoint-url "https://${CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com" > /dev/null \
+            || { echo "::error::R2 credentials failed a test listing of the dataset bucket"; exit 1; }
+
+      - name: Validate inputs
+        run: |
+          set -euo pipefail
+          case "$MODEL" in
+            gfs|sflux|ecmwf) ;;
+            *) echo "::error::unknown source: $MODEL"; exit 1 ;;
+          esac
+          case "$PROFILE" in
+            balanced|quality|compact) ;;
+            *) echo "::error::unknown profile: $PROFILE"; exit 1 ;;
+          esac
+          printf '%s' "$RUN_INPUT" | grep -Eq '^(latest|[0-9]{10})$' \
+            || { echo "::error::run must be latest or YYYYMMDDHH"; exit 1; }
+          printf '%s' "$KEEP" | grep -Eq '^[1-9][0-9]*$' \
+            || { echo "::error::keep must be a positive integer"; exit 1; }
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          # 3.14 compresses planes in-process through the stdlib zstd module;
+          # older interpreters shell out per plane and build far slower.
+          python-version: "3.14"
+
+      - name: Sync Python environment
+        run: uv sync
+
+      # Skip the build when R2 already serves the newest available cycle —
+      # the schedule fires on a fixed clock, but a source can be late or a
+      # cycle can be published twice. A dry run never skips: its whole point
+      # is to exercise the pipeline and preview the writes.
+      - name: Resolve the run to publish
+        id: target
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: |
+          set -euo pipefail
+          run=$(uv run python -c "from xue.fetch import resolve_run; print(resolve_run('${RUN_INPUT}', hours=120, model='${MODEL}').id)")
+          live=$(make -s live-run MODEL="$MODEL" || true)
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+          if [ "$run" = "$live" ] && [ "$FORCE" != "true" ] && [ -z "$DRY_RUN" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "R2 already serves $MODEL run $run, nothing to publish." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "Publishing $MODEL run $run (live: ${live:-none})." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # A native-resolution run's GRIB input plus its intermediate planes
+      # outgrow the free space a hosted runner ships with.
+      - name: Free disk space
+        if: ${{ steps.target.outputs.skip != 'true' && inputs.free_disk_space }}
+        # v1.3.1, pinned by SHA: this third-party action must never see a
+        # credentialed environment, and a branch ref could change under us.
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be
+        with:
+          # The tool cache holds the Python and Node installed above.
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
+
+      - name: Report free disk
+        if: steps.target.outputs.skip != 'true'
+        run: df -h /
+
+      - name: Install GDAL, zstd and ffmpeg
+        if: steps.target.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          packages="gdal-bin zstd ffmpeg"
+          # ECMWF open data is CCSDS packed; xue repacks it with eccodes at
+          # fetch time because GDAL builds usually lack libaec.
+          if [ "$MODEL" = "ecmwf" ]; then
+            packages="$packages libeccodes-tools"
+          fi
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends $packages
+          gdalinfo --version
+
+      - name: Build ${{ inputs.model }} bundles
+        if: steps.target.outputs.skip != 'true'
+        env:
+          RUN: ${{ steps.target.outputs.run }}
+        run: |
+          set -euo pipefail
+          uv run python -m xue -v build-bin \
+            --model "$MODEL" --run "$RUN" --hours 120 --profile "$PROFILE" \
+            > build-report.json
+          {
+            echo "### $MODEL $RUN"
+            echo
+            echo '```json'
+            jq '{model, profile, byteLength, bundles: [.bundles[].variable]}' build-report.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # `aws s3 sync` for the run assets (immutable, ?v=<crc32>-addressed),
+      # then the mutable per-model live pointer, which takes the run live.
+      - name: Upload the run to R2
+        if: steps.target.outputs.skip != 'true'
+        env:
+          RUN: ${{ steps.target.outputs.run }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: make upload-r2 MODEL="$MODEL" RUN="$RUN" DRY_RUN="$DRY_RUN"
+
+      - name: Delete superseded runs
+        if: steps.target.outputs.skip != 'true'
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: make prune-r2 MODEL="$MODEL" KEEP="$KEEP" DRY_RUN="$DRY_RUN"
+
+      # The pointer is served with no-cache, so the edge revalidates it; a
+      # mismatch here means the flip has not propagated rather than failed,
+      # so it warns instead of failing an otherwise complete publish.
+      - name: Verify the live pointer
+        if: ${{ steps.target.outputs.skip != 'true' && !inputs.dry_run }}
+        env:
+          RUN: ${{ steps.target.outputs.run }}
+        run: |
+          set -uo pipefail
+          latest="latest.json"
+          [ "$MODEL" = "gfs" ] || latest="latest-${MODEL}.json"
+          url="https://dataset.ringsaturn.me/xue/${latest}"
+          published=$(curl -fsSL "$url" | jq -r '.run' || true)
+          if [ "$published" = "$RUN" ]; then
+            echo "$url serves run $published." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::$url serves '${published:-nothing}', expected $RUN"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() && steps.target.outputs.skip != 'true' }}
+        with:
+          name: publish-report-${{ inputs.model }}
+          path: build-report.json
+          retention-days: 14
+          if-no-files-found: ignore

@@ -1,0 +1,60 @@
+name: publish sflux
+
+# GFS surface flux on the native ~13 km Gaussian grid (3072 × 1536), hourly,
+# with the extra dswrf layer. Same cycles as GFS 0.25°, but roughly 4.5× the
+# points per frame, so it builds slower and needs more runner disk. The
+# pipeline lives in the reusable publish.yml.
+
+on:
+  schedule:
+    # Half an hour behind publish-gfs.yml: the sflux files come from the same
+    # cycles, and staggering keeps the two builds off NOAA's bucket (and the
+    # runner pool) at the same moment.
+    - cron: "50 5,11,17,23 * * *"
+  workflow_dispatch:
+    inputs:
+      run:
+        description: "Cycle to publish: latest or YYYYMMDDHH"
+        type: string
+        default: latest
+      profile:
+        description: "Quantization/compression profile"
+        type: choice
+        options: [balanced, quality, compact]
+        default: balanced
+      keep:
+        description: "Published runs to keep on R2 (1 = live run only)"
+        type: string
+        default: "1"
+      force:
+        description: "Rebuild even when R2 already serves this run"
+        type: boolean
+        default: false
+      dry_run:
+        description: "Build and report what pruning would delete, but write nothing to R2"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-sflux
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    # Scheduled runs on forks would publish into a bucket they cannot reach.
+    if: github.event_name != 'schedule' || github.repository == 'ringsaturn/xue'
+    uses: ./.github/workflows/publish.yml
+    with:
+      model: sflux
+      run: ${{ inputs.run || 'latest' }}
+      profile: ${{ inputs.profile || 'balanced' }}
+      keep: ${{ inputs.keep || '1' }}
+      force: ${{ inputs.force || false }}
+      dry_run: ${{ inputs.dry_run || false }}
+      # 3072 × 1536 × 121 frames of GRIB and intermediate planes do not fit
+      # beside the runner's preinstalled toolchains.
+      free_disk_space: true
+    secrets: inherit

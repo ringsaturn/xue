@@ -1,0 +1,58 @@
+name: publish gfs
+
+# NOAA GFS 0.25° (pgrb2.0p25), hourly out to F120 — the default dataset,
+# published from all four daily cycles. The whole pipeline lives in the
+# reusable publish.yml; this file only owns the schedule and the manual knobs.
+
+on:
+  schedule:
+    # Cycles run at 00/06/12/18 UTC and the F120 file lands roughly four to
+    # five hours later.
+    - cron: "20 5,11,17,23 * * *"
+  workflow_dispatch:
+    inputs:
+      run:
+        description: "Cycle to publish: latest or YYYYMMDDHH"
+        type: string
+        default: latest
+      profile:
+        description: "Quantization/compression profile"
+        type: choice
+        options: [balanced, quality, compact]
+        default: balanced
+      keep:
+        description: "Published runs to keep on R2 (1 = live run only)"
+        type: string
+        default: "1"
+      force:
+        description: "Rebuild even when R2 already serves this run"
+        type: boolean
+        default: false
+      dry_run:
+        description: "Build and report what pruning would delete, but write nothing to R2"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# One GFS publish at a time — the live pointer is the dataset's only mutable
+# object and a half-finished run must never race the pointer flip. The other
+# sources have their own groups and publish independently.
+concurrency:
+  group: publish-gfs
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    # Scheduled runs on forks would publish into a bucket they cannot reach.
+    if: github.event_name != 'schedule' || github.repository == 'ringsaturn/xue'
+    uses: ./.github/workflows/publish.yml
+    with:
+      model: gfs
+      run: ${{ inputs.run || 'latest' }}
+      profile: ${{ inputs.profile || 'balanced' }}
+      keep: ${{ inputs.keep || '1' }}
+      force: ${{ inputs.force || false }}
+      dry_run: ${{ inputs.dry_run || false }}
+    secrets: inherit
