@@ -1,0 +1,187 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # wasm-pack is not on the runner image; pin the release we install.
+  WASM_PACK_VERSION: v0.13.1
+
+jobs:
+  python:
+    name: python ${{ matrix.python-version }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.12 is the floor from pyproject.toml; 3.14 exercises the
+        # in-process stdlib zstd path in xue/zstdcli.py.
+        python-version: ["3.12", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+
+      # The encoder shells out to GDAL and (below 3.14) the zstd CLI.
+      - name: Install GDAL and zstd
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends gdal-bin zstd
+          gdalinfo --version
+          zstd --version
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          python-version: ${{ matrix.python-version }}
+
+      - name: Sync Python environment
+        run: uv sync
+
+      - name: Run Python tests
+        run: uv run python -m unittest discover -s tests -p 'test_*.py' -v
+
+  rust:
+    name: rust
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      # tests/prepare_bin_fixture.py encodes the cropped GRIB fixture with the
+      # Python encoder; the Rust decoder must reproduce it byte for byte.
+      - name: Install GDAL and zstd
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends gdal-bin zstd
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          python-version: "3.12"
+
+      - name: Sync Python environment
+        run: uv sync
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+
+      - name: Run Rust tests
+        run: make test-rust
+
+  web:
+    name: web
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+
+      - name: Install wasm-pack
+        run: |
+          curl -sSfL "https://github.com/rustwasm/wasm-pack/releases/download/${WASM_PACK_VERSION}/wasm-pack-${WASM_PACK_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
+            | tar xz -C "${RUNNER_TEMP}"
+          sudo install "${RUNNER_TEMP}/wasm-pack-${WASM_PACK_VERSION}-x86_64-unknown-linux-musl/wasm-pack" /usr/local/bin/wasm-pack
+          wasm-pack --version
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      # web/src/wasm/ is generated and gitignored; the frontend does not
+      # typecheck or build without it.
+      - name: Build WASM decoder
+        run: make wasm
+
+      - name: Run web unit tests
+        run: npm run test:web
+
+      # `npm run build` runs `tsc --noEmit` before vite build.
+      - name: Typecheck and build frontend
+        run: npm run build
+
+  e2e:
+    name: e2e
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # tests/prepare_web_fixture.py builds the synthetic bundles; it needs
+      # numpy and (below 3.14) the zstd CLI, but no GDAL.
+      - name: Install zstd
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends zstd
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          python-version: "3.12"
+
+      - name: Sync Python environment
+        run: uv sync
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+
+      - name: Install wasm-pack
+        run: |
+          curl -sSfL "https://github.com/rustwasm/wasm-pack/releases/download/${WASM_PACK_VERSION}/wasm-pack-${WASM_PACK_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
+            | tar xz -C "${RUNNER_TEMP}"
+          sudo install "${RUNNER_TEMP}/wasm-pack-${WASM_PACK_VERSION}-x86_64-unknown-linux-musl/wasm-pack" /usr/local/bin/wasm-pack
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Build WASM decoder
+        run: make wasm
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      # The Playwright global setup runs tests/prepare_web_fixture.py with
+      # .venv/bin/python, which `uv sync` created above.
+      - name: Run end-to-end tests
+        run: make test-e2e
+
+      # playwright-report/ is the HTML report, test-results/ carries the
+      # retain-on-failure traces.
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+          if-no-files-found: ignore

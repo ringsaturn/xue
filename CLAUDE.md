@@ -42,7 +42,7 @@ cd rust && cargo test                                      # Rust only — run t
 wasm-pack test --headless --chrome rust/xue-wasm        # decoder in a real browser
 ```
 
-Cross-language golden tests: `tests/prepare_bin_fixture.py` encodes the cropped GRIB fixture with the Python encoder and writes golden planes; Rust tests must decode byte-identically. Playwright global setup builds synthetic tiny bundles (`tests/prepare_web_fixture.py`). Everything generated lands in ignored directories; fixture provenance is in `tests/fixtures/README.md`. There are no linters configured; `npm run build` runs `tsc --noEmit`.
+Cross-language golden tests: `tests/prepare_bin_fixture.py` encodes the cropped GRIB fixture with the Python encoder and writes golden planes; Rust tests must decode byte-identically. Playwright global setup builds synthetic tiny bundles (`tests/prepare_web_fixture.py`). Everything generated lands in ignored directories; fixture provenance is in `tests/fixtures/README.md`. There are no linters configured; `npm run build` runs `tsc --noEmit`. CI (`.github/workflows/test.yml`) runs the same suites on push to `main` and on pull requests, split into four jobs — Python (3.12 and 3.14, the latter covering the stdlib zstd path), Rust golden tests, web unit tests plus the typechecked frontend build, and Playwright e2e.
 
 Benchmarks: `make bench` (compression modes), `make bench-video` (lossless H.264 path), `make bench-lossy` (lossy tier ladder with scientific-metric acceptance).
 

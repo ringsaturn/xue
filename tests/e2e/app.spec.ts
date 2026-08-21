@@ -439,16 +439,20 @@ test("reduced motion disables autostart and keeps keyboard scrubbing", async ({ 
 });
 
 test("range-capable server streams on demand and never downloads the full body", async ({ page }) => {
-  test.slow(); // full residency needs one playback loop under windowed prefetch
+  // Full residency needs several playback loops, and the mobile emulation
+  // takes the longest: ~53 s measured on a CI-class runner. Budget well past
+  // that (test.slow()'s 90 s left no room) so only a real stall fails.
+  test.setTimeout(180_000);
   const counters: RangeCounters = { ranged: 0, full: 0 };
   await routeManifest(page);
   await routeBundleWithRanges(page, counters);
   await page.goto("/");
   // Streaming mode: the page becomes interactive on the structural prefix.
   // With windowed prefetch the bundle only becomes fully resident as
-  // playback sweeps the timeline, so residency takes roughly one full loop.
+  // playback sweeps the timeline, so residency takes roughly one full loop —
+  // and more than one whenever a group's range fetch misses its window pass.
   await expect(page.getByRole("slider", { name: "Forecast hour" })).toBeEnabled({ timeout: 20_000 });
-  await expect(page.locator("#preload-state")).toHaveText("Bundle fully buffered", { timeout: 30_000 });
+  await expect(page.locator("#preload-state")).toHaveText("Bundle fully buffered", { timeout: 120_000 });
   await expect(page.locator("#preload-percent")).toHaveText("100%");
   await expect(page.locator("#preload-format")).toHaveText("Xue");
   expect(counters.ranged).toBeGreaterThan(1);

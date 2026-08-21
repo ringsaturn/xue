@@ -1,5 +1,7 @@
 # 雪 / Xue
 
+[![test](https://github.com/ringsaturn/xue/actions/workflows/test.yml/badge.svg)](https://github.com/ringsaturn/xue/actions/workflows/test.yml)
+
 > Xue (雪, pronounced /ɕɥɛ/, roughly "shweh"), Chinese for snow.
 
 Xue packs global weather forecasts — 2 m temperature, precipitation rate,
