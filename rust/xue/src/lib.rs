@@ -145,9 +145,77 @@ struct Metadata {
     json: String,
     plane_length: u32,
     frame_count: u32,
-    first_hour: u16,
-    step_hours: u16,
+    /// The materialized forecast-hour axis, ascending. Uniform axes
+    /// (schemaVersion 1, `stepHours`) are expanded; mixed-step axes
+    /// (schemaVersion 2, `hours`) are taken as listed.
+    hours: Vec<u16>,
     variable_ids: Vec<u8>,
+}
+
+/// The frame list from the metadata `time` block. Exactly one of `stepHours`
+/// (uniform, schemaVersion 1) and `hours` (mixed-step, schemaVersion 2) must
+/// be present, and the declared schema version must be the lowest able to
+/// express the axis — every axis has exactly one valid encoding.
+fn parse_time_axis(
+    time: &serde_json::Map<String, serde_json::Value>,
+    schema_version: u64,
+    frame_count: u64,
+    first_hour: u64,
+) -> Result<Vec<u16>, DecodeError> {
+    let step_hours = time.get("stepHours");
+    let listed_hours = time.get("hours");
+    match (step_hours, listed_hours) {
+        (Some(_), Some(_)) | (None, None) => {
+            Err(err("metadata time must declare exactly one of stepHours and hours"))
+        }
+        (Some(step), None) => {
+            if schema_version != 1 {
+                return Err(err("a uniform time axis must declare schemaVersion 1"));
+            }
+            let step = step
+                .as_u64()
+                .filter(|&step| step > 0 && step <= u16::MAX as u64)
+                .ok_or_else(|| err("metadata stepHours is invalid"))?;
+            let last_hour = first_hour
+                .checked_add((frame_count - 1).checked_mul(step).ok_or_else(|| err("hour overflow"))?)
+                .ok_or_else(|| err("hour overflow"))?;
+            if last_hour > u16::MAX as u64 - 1 {
+                return Err(err("forecast hours exceed the u16 range"));
+            }
+            Ok((0..frame_count).map(|frame| (first_hour + frame * step) as u16).collect())
+        }
+        (None, Some(listed)) => {
+            if schema_version != 2 {
+                return Err(err("an explicit hours axis requires schemaVersion 2"));
+            }
+            let listed = listed.as_array().ok_or_else(|| err("metadata hours axis is invalid"))?;
+            if listed.len() as u64 != frame_count {
+                return Err(err("metadata hours axis is invalid"));
+            }
+            let mut hours = Vec::with_capacity(listed.len());
+            for value in listed {
+                let hour = value
+                    .as_u64()
+                    .filter(|&hour| hour <= u16::MAX as u64 - 1)
+                    .ok_or_else(|| err("metadata hours axis is invalid"))?;
+                if let Some(&previous) = hours.last() {
+                    if hour as u16 <= previous {
+                        return Err(err("metadata hours axis must be strictly increasing"));
+                    }
+                }
+                hours.push(hour as u16);
+            }
+            if hours[0] as u64 != first_hour {
+                return Err(err("metadata hours axis must begin with firstForecastHour"));
+            }
+            let mut steps = hours.windows(2).map(|pair| pair[1] - pair[0]);
+            let first_step = steps.next();
+            if steps.all(|step| Some(step) == first_step) {
+                return Err(err("a uniform hours axis must be encoded as stepHours"));
+            }
+            Ok(hours)
+        }
+    }
 }
 
 fn parse_metadata(raw: &[u8]) -> Result<Metadata, DecodeError> {
@@ -155,9 +223,10 @@ fn parse_metadata(raw: &[u8]) -> Result<Metadata, DecodeError> {
     let value: serde_json::Value =
         serde_json::from_str(text).map_err(|_| err("metadata is not valid JSON"))?;
     let object = value.as_object().ok_or_else(|| err("metadata must be a JSON object"))?;
-    if object.get("schemaVersion").and_then(|v| v.as_u64()) != Some(1) {
-        return Err(err("metadata schemaVersion must be 1"));
-    }
+    let schema_version = match object.get("schemaVersion").and_then(|v| v.as_u64()) {
+        Some(version @ (1 | 2)) => version,
+        _ => return Err(err("unsupported metadata schemaVersion")),
+    };
     let grid = object
         .get("grid")
         .and_then(|v| v.as_object())
@@ -185,11 +254,7 @@ fn parse_metadata(raw: &[u8]) -> Result<Metadata, DecodeError> {
         .and_then(|v| v.as_u64())
         .filter(|&hour| hour <= u16::MAX as u64)
         .ok_or_else(|| err("metadata firstForecastHour is invalid"))?;
-    let step_hours = time
-        .get("stepHours")
-        .and_then(|v| v.as_u64())
-        .filter(|&step| step > 0 && step <= u16::MAX as u64)
-        .ok_or_else(|| err("metadata stepHours is invalid"))?;
+    let hours = parse_time_axis(time, schema_version, frame_count, first_hour)?;
     let variables = object
         .get("variables")
         .and_then(|v| v.as_array())
@@ -212,18 +277,11 @@ fn parse_metadata(raw: &[u8]) -> Result<Metadata, DecodeError> {
     if variable_ids.is_empty() {
         return Err(err("metadata must declare at least one variable"));
     }
-    let last_hour = first_hour
-        .checked_add((frame_count - 1).checked_mul(step_hours).ok_or_else(|| err("hour overflow"))?)
-        .ok_or_else(|| err("hour overflow"))?;
-    if last_hour > u16::MAX as u64 - 1 {
-        return Err(err("forecast hours exceed the u16 range"));
-    }
     Ok(Metadata {
         json: text.to_owned(),
         plane_length: plane_length as u32,
         frame_count: frame_count as u32,
-        first_hour: first_hour as u16,
-        step_hours: step_hours as u16,
+        hours,
         variable_ids,
     })
 }
@@ -424,11 +482,10 @@ fn parse_structure(data: &[u8], mode: ParseMode) -> Result<Structure, DecodeErro
         );
     }
 
-    // Hour coverage per variable.
+    // Hour coverage per variable, against the materialized axis.
     for &variable_id in &metadata.variable_ids {
-        for frame in 0..metadata.frame_count {
-            let hour = metadata.first_hour as u64 + frame as u64 * metadata.step_hours as u64;
-            let request = FrameRequest { variable_id, forecast_hour: hour as u16 };
+        for &hour in &metadata.hours {
+            let request = FrameRequest { variable_id, forecast_hour: hour };
             if !entry_map.contains_key(&request) {
                 return Err(err("a variable does not cover every forecast hour"));
             }
@@ -464,15 +521,23 @@ fn parse_structure(data: &[u8], mode: ParseMode) -> Result<Structure, DecodeErro
                 let dependency_hour = if entry.predictor == Predictor::Anchor {
                     entry.dependency_hour
                 } else {
-                    if entry.dependency_hour != NO_DEPENDENCY
-                        && entry.dependency_hour + 1 != entry.forecast_hour
-                    {
-                        return Err(err("PREVIOUS entry dependencyHour must reference the previous forecast time"));
+                    // PREVIOUS references the preceding frame on the time
+                    // axis, carried explicitly in dependencyHour (never the
+                    // sentinel, never forecastHour - 1 by arithmetic).
+                    let position = metadata
+                        .hours
+                        .binary_search(&entry.forecast_hour)
+                        .map_err(|_| err("PREVIOUS entry is not on the time axis"))?;
+                    if position == 0 {
+                        return Err(err("PREVIOUS entry has no preceding frame on the time axis"));
                     }
-                    entry
-                        .forecast_hour
-                        .checked_sub(1)
-                        .ok_or_else(|| err("PREVIOUS entry has no previous forecast time"))?
+                    let preceding = metadata.hours[position - 1];
+                    if entry.dependency_hour != preceding {
+                        return Err(err(
+                            "PREVIOUS entry dependencyHour must reference the preceding frame on the time axis",
+                        ));
+                    }
+                    preceding
                 };
                 let request = FrameRequest {
                     variable_id: entry.variable_id,
@@ -509,9 +574,10 @@ impl Structure {
     }
 
     fn dependency_of(entry: &PlaneEntry) -> Option<u16> {
+        // ANCHOR and PREVIOUS both carry their dependency explicitly;
+        // parse_structure has pinned PREVIOUS to the preceding axis frame.
         match entry.predictor {
-            Predictor::Anchor => Some(entry.dependency_hour),
-            Predictor::Previous => entry.forecast_hour.checked_sub(1),
+            Predictor::Anchor | Predictor::Previous => Some(entry.dependency_hour),
             _ => None,
         }
     }
@@ -836,5 +902,61 @@ impl StreamingBundle {
 
     pub fn decode_frame(&mut self, request: FrameRequest) -> Result<&[u8], DecodeError> {
         self.core.decode_frame(request)
+    }
+}
+
+#[cfg(test)]
+mod time_axis_tests {
+    use super::parse_time_axis;
+
+    fn time(json: &str) -> serde_json::Map<String, serde_json::Value> {
+        serde_json::from_str::<serde_json::Value>(json)
+            .unwrap()
+            .as_object()
+            .unwrap()
+            .clone()
+    }
+
+    #[test]
+    fn uniform_axis_expands_under_schema_version_1() {
+        let hours = parse_time_axis(&time(r#"{"stepHours": 3}"#), 1, 4, 6).expect("uniform axis");
+        assert_eq!(hours, vec![6, 9, 12, 15]);
+    }
+
+    #[test]
+    fn mixed_axis_is_taken_as_listed_under_schema_version_2() {
+        let hours =
+            parse_time_axis(&time(r#"{"hours": [0, 1, 2, 3, 6, 9]}"#), 2, 6, 0).expect("mixed axis");
+        assert_eq!(hours, vec![0, 1, 2, 3, 6, 9]);
+    }
+
+    #[test]
+    fn every_axis_has_exactly_one_encoding() {
+        // Both fields, or neither.
+        assert!(parse_time_axis(&time(r#"{"stepHours": 1, "hours": [0, 1, 3]}"#), 2, 3, 0).is_err());
+        assert!(parse_time_axis(&time(r#"{}"#), 1, 3, 0).is_err());
+        // Overdeclared: a uniform axis must stay schemaVersion 1.
+        assert!(parse_time_axis(&time(r#"{"stepHours": 1}"#), 2, 3, 0).is_err());
+        // An hours axis requires schemaVersion 2.
+        assert!(parse_time_axis(&time(r#"{"hours": [0, 1, 3]}"#), 1, 3, 0).is_err());
+        // A uniform hours array must be encoded as stepHours.
+        assert!(parse_time_axis(&time(r#"{"hours": [0, 3, 6]}"#), 2, 3, 0).is_err());
+    }
+
+    #[test]
+    fn invalid_hours_axes_rejected() {
+        // Not strictly increasing, wrong length, wrong first element.
+        assert!(parse_time_axis(&time(r#"{"hours": [0, 1, 1, 3]}"#), 2, 4, 0).is_err());
+        assert!(parse_time_axis(&time(r#"{"hours": [0, 1, 3]}"#), 2, 4, 0).is_err());
+        assert!(parse_time_axis(&time(r#"{"hours": [1, 2, 4]}"#), 2, 3, 0).is_err());
+        // 65535 is the dependencyHour sentinel; 65534 is the last valid hour.
+        assert!(parse_time_axis(&time(r#"{"hours": [0, 1, 65535]}"#), 2, 3, 0).is_err());
+        assert!(parse_time_axis(&time(r#"{"hours": [0, 1, 65534]}"#), 2, 3, 0).is_ok());
+    }
+
+    #[test]
+    fn uniform_axis_u16_bound_enforced() {
+        assert!(parse_time_axis(&time(r#"{"stepHours": 1}"#), 1, 2, 65534).is_err());
+        assert!(parse_time_axis(&time(r#"{"stepHours": 1}"#), 1, 1, 65534).is_ok());
     }
 }

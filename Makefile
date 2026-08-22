@@ -1,7 +1,7 @@
 PYTHON ?= $(shell test -x .venv/bin/python && echo .venv/bin/python || echo python3)
 # RUN ?= 2026081506
 RUN ?= latest
-HOURS ?= 120
+HOURS ?= 240
 FORCE ?=
 PROFILE ?= balanced
 # Forecast source: gfs (NOAA 0.25°, hourly), ecmwf (IFS open data, 3-hourly),

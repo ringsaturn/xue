@@ -137,7 +137,7 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
         run: |
           set -euo pipefail
-          run=$(uv run python -c "from xue.fetch import resolve_run; print(resolve_run('${RUN_INPUT}', hours=120, model='${MODEL}').id)")
+          run=$(uv run python -c "from xue.fetch import resolve_run; print(resolve_run('${RUN_INPUT}', hours=240, model='${MODEL}').id)")
           live=$(make -s live-run MODEL="$MODEL" || true)
           echo "run=$run" >> "$GITHUB_OUTPUT"
           if [ "$run" = "$live" ] && [ "$FORCE" != "true" ] && [ -z "$DRY_RUN" ]; then
@@ -190,7 +190,7 @@ jobs:
         run: |
           set -euo pipefail
           uv run python -m xue -v build-bin \
-            --model "$MODEL" --run "$RUN" --hours 120 --profile "$PROFILE" \
+            --model "$MODEL" --run "$RUN" --hours 240 --profile "$PROFILE" \
             > build-report.json
           {
             echo "### $MODEL $RUN"

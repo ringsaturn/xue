@@ -26,10 +26,32 @@ def decode_residual(residual: np.ndarray, base: np.ndarray) -> np.ndarray:
     return (residual.astype(np.uint8) + base.astype(np.uint8)).astype(np.uint8)
 
 
-def group_forecast_hours(hours: list[int], group_length: int = GROUP_LENGTH) -> list[list[int]]:
+def split_segments(hours: list[int]) -> list[list[int]]:
+    """Maximal runs of constant step (docs/format.md "segment"): a boundary
+    falls between two frames exactly where the step changes, so a uniform
+    axis is one segment and the GFS 240-hour axis is two."""
     if hours != sorted(hours) or len(set(hours)) != len(hours):
         raise ConversionError("forecast hours must be unique and ascending")
-    return [hours[start : start + group_length] for start in range(0, len(hours), group_length)]
+    segments = [[hours[0]]]
+    step: int | None = None
+    for previous, current in zip(hours, hours[1:]):
+        if step is not None and current - previous != step:
+            segments.append([current])
+        else:
+            segments[-1].append(current)
+        step = current - previous
+    return segments
+
+
+def group_forecast_hours(hours: list[int], group_length: int = GROUP_LENGTH) -> list[list[int]]:
+    """Temporal groups, formed inside segments of constant step so no group
+    straddles a change of cadence (an ANCHOR residual is then always a
+    difference between frames one step apart)."""
+    return [
+        segment[start : start + group_length]
+        for segment in split_segments(hours)
+        for start in range(0, len(segment), group_length)
+    ]
 
 
 def anchor_hour(group: list[int]) -> int:

@@ -1,12 +1,12 @@
 name: publish gfs
 
-# NOAA GFS 0.25° (pgrb2.0p25), hourly out to F120 — the default dataset,
-# published from all four daily cycles. The whole pipeline lives in the
-# reusable publish.yml; this file only owns the schedule and the manual knobs.
+# NOAA GFS 0.25° (pgrb2.0p25), hourly to F120 and 3-hourly to F240 — the
+# default dataset, published from all four daily cycles. The whole pipeline
+# lives in the reusable publish.yml; this file only owns the schedule and the manual knobs.
 
 on:
   schedule:
-    # Cycles run at 00/06/12/18 UTC and the F120 file lands roughly four to
+    # Cycles run at 00/06/12/18 UTC and the F240 file lands roughly four to
     # five hours later.
     - cron: "20 5,11,17,23 * * *"
   workflow_dispatch:

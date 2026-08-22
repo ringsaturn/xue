@@ -1,9 +1,9 @@
 name: publish sflux
 
-# GFS surface flux on the native ~13 km Gaussian grid (3072 × 1536), hourly,
-# with the extra dswrf layer. Same cycles as GFS 0.25°, but roughly 4.5× the
-# points per frame, so it builds slower and needs more runner disk. The
-# pipeline lives in the reusable publish.yml.
+# GFS surface flux on the native ~13 km Gaussian grid (3072 × 1536), hourly
+# to F120 and 3-hourly to F240, with the extra dswrf layer. Same cycles as
+# GFS 0.25°, but roughly 4.5× the points per frame, so it builds slower and
+# needs more runner disk. The pipeline lives in the reusable publish.yml.
 
 on:
   schedule:

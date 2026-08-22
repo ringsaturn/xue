@@ -287,8 +287,9 @@ class Bundle:
             raise BundleError("metadata is not valid UTF-8 JSON") from exc
         if not isinstance(metadata, dict):
             raise BundleError("metadata must be a JSON object")
-        if metadata.get("schemaVersion") != 1:
-            raise BundleError("metadata schemaVersion must be 1")
+        schema_version = metadata.get("schemaVersion")
+        if schema_version not in (1, 2):
+            raise BundleError("unsupported metadata schemaVersion")
         grid = metadata.get("grid")
         time_info = metadata.get("time")
         variables = metadata.get("variables")
@@ -301,16 +302,14 @@ class Bundle:
             raise BundleError("metadata grid exceeds the plane safety limit")
         frame_count = time_info.get("frameCount")
         first_hour = time_info.get("firstForecastHour")
-        step_hours = time_info.get("stepHours")
         if (
             not isinstance(frame_count, int)
             or not isinstance(first_hour, int)
-            or not isinstance(step_hours, int)
             or frame_count <= 0
             or first_hour < 0
-            or step_hours <= 0
         ):
             raise BundleError("metadata time description is invalid")
+        forecast_hours = self._parse_time_axis(time_info, schema_version, frame_count, first_hour)
         variable_ids: dict[int, str] = {}
         for variable in variables:
             if not isinstance(variable, dict):
@@ -330,8 +329,45 @@ class Bundle:
         self.height = height
         self.plane_length = width * height
         self.frame_count = frame_count
-        self.forecast_hours = [first_hour + index * step_hours for index in range(frame_count)]
+        self.forecast_hours = forecast_hours
+        self._hour_index = {hour: index for index, hour in enumerate(forecast_hours)}
         self.variable_ids = variable_ids
+
+    @staticmethod
+    def _parse_time_axis(
+        time_info: dict[str, Any], schema_version: int, frame_count: int, first_hour: int
+    ) -> list[int]:
+        """The frame list from the ``time`` block. Exactly one of ``stepHours``
+        (a uniform axis, schemaVersion 1) and ``hours`` (a mixed-step axis
+        listed outright, schemaVersion 2) must be present, and the declared
+        schema version must be the lowest able to express the axis — every
+        axis has exactly one valid encoding (docs/format.md)."""
+        step_hours = time_info.get("stepHours")
+        listed_hours = time_info.get("hours")
+        if (step_hours is None) == (listed_hours is None):
+            raise BundleError("metadata time must declare exactly one of stepHours and hours")
+        if step_hours is not None:
+            if schema_version != 1:
+                raise BundleError("a uniform time axis must declare schemaVersion 1")
+            if not isinstance(step_hours, int) or step_hours <= 0:
+                raise BundleError("metadata stepHours is invalid")
+            if first_hour + (frame_count - 1) * step_hours >= NO_DEPENDENCY:
+                raise BundleError("forecast hours exceed the u16 range")
+            return [first_hour + index * step_hours for index in range(frame_count)]
+        if schema_version != 2:
+            raise BundleError("an explicit hours axis requires schemaVersion 2")
+        if (
+            not isinstance(listed_hours, list)
+            or len(listed_hours) != frame_count
+            or not all(isinstance(hour, int) for hour in listed_hours)
+            or listed_hours[0] != first_hour
+            or any(after <= before for before, after in zip(listed_hours, listed_hours[1:]))
+            or listed_hours[-1] >= NO_DEPENDENCY
+        ):
+            raise BundleError("metadata hours axis is invalid")
+        if len({after - before for before, after in zip(listed_hours, listed_hours[1:])}) < 2:
+            raise BundleError("a uniform hours axis must be encoded as stepHours")
+        return list(listed_hours)
 
     def _parse_index(self) -> None:
         if self.index_length < INDEX_HEADER_SIZE:
@@ -416,9 +452,14 @@ class Bundle:
             if entry.predictor == PREDICTOR_ANCHOR:
                 dependency_hour = entry.dependency_hour
             else:
-                dependency_hour = entry.forecast_hour - 1
-                if entry.dependency_hour not in (NO_DEPENDENCY, dependency_hour):
-                    raise BundleError("PREVIOUS entry dependencyHour must reference the previous forecast time")
+                # PREVIOUS references the preceding frame on the time axis,
+                # carried explicitly in dependencyHour (never the sentinel).
+                index = self._hour_index.get(entry.forecast_hour)
+                if index is None or index == 0:
+                    raise BundleError("PREVIOUS entry has no preceding frame on the time axis")
+                dependency_hour = self.forecast_hours[index - 1]
+                if entry.dependency_hour != dependency_hour:
+                    raise BundleError("PREVIOUS entry dependencyHour must reference the preceding frame on the time axis")
             dependency = self.entry_map.get((entry.variable_id, dependency_hour))
             if dependency is None:
                 raise BundleError("entry depends on a plane that does not exist")
@@ -428,10 +469,10 @@ class Bundle:
             self._dependency_chain(key)
 
     def _dependency_hour(self, entry: PlaneEntry) -> int | None:
-        if entry.predictor == PREDICTOR_ANCHOR:
+        # ANCHOR and PREVIOUS both carry their dependency explicitly;
+        # _validate_entries has pinned PREVIOUS to the preceding axis frame.
+        if entry.predictor in (PREDICTOR_ANCHOR, PREDICTOR_PREVIOUS):
             return entry.dependency_hour
-        if entry.predictor == PREDICTOR_PREVIOUS:
-            return entry.forecast_hour - 1
         return None
 
     def _dependency_chain(self, key: tuple[int, int]) -> list[PlaneEntry]:

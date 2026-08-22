@@ -290,7 +290,7 @@ test("wind variable activates the particle layer session", async ({ page }, test
   await expect(page.locator("#frame-tooltip")).toContainText("F001");
 });
 
-test("switching to ECMWF loads its own run on a 3-hourly timeline", async ({ page }, testInfo) => {
+test("switching to ECMWF loads its own run on a mixed-cadence 240-hour timeline", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop", "desktop interaction coverage");
   await page.emulateMedia({ reducedMotion: "reduce" });
   await routeManifest(page);
@@ -302,21 +302,26 @@ test("switching to ECMWF loads its own run on a 3-hourly timeline", async ({ pag
   await waitForReady(page);
   await expect(page).toHaveURL(/model=ecmwf/);
   await expect(page.locator("#variable-code")).toContainText("ECMWF");
-  // The de-accumulated prate has no analysis frame: 3..120 every 3 hours =
-  // 40 frames starting at F003; the horizon is still +120H.
+  // The mixed axis (schemaVersion 2 bundles): 3-hourly to 144 hours, then
+  // 6-hourly to 240. The de-accumulated prate has no analysis frame:
+  // 49 + 16 - 1 = 64 frames starting at F003; the horizon reads +240H.
   const slider = page.getByRole("slider", { name: "Forecast hour" });
-  await expect(slider).toHaveAttribute("max", "39");
+  await expect(slider).toHaveAttribute("max", "63");
   await expect(page.locator("#forecast-hour")).toHaveText("F003");
-  await expect(page.locator("#track-horizon")).toHaveText("+120H");
+  await expect(page.locator("#track-horizon")).toHaveText("+240H");
   await slider.focus();
   await page.keyboard.press("ArrowRight");
   await expect(page.locator("#frame-tooltip")).toContainText("F006");
-  // Temperature keeps its analysis frame: 41 frames from F000, and the
+  // Temperature keeps its analysis frame: 65 frames from F000, and the
   // playhead stays on the same forecast hour across the axis change.
   await page.getByRole("button", { name: "TEMP 2M" }).click();
   await expect(page.locator("body")).toHaveAttribute("data-variable", "tmp2m");
-  await expect(slider).toHaveAttribute("max", "40");
+  await expect(slider).toHaveAttribute("max", "64");
   await expect(page.locator("#forecast-hour")).toHaveText("F006");
+  // The 6-hourly tail past the cadence change scrubs like any other frame.
+  await slider.focus();
+  await page.keyboard.press("End");
+  await expect(page.locator("#forecast-hour")).toHaveText("F240");
   // And back: GFS re-tunes to its own hourly axis.
   await page.getByRole("button", { name: "GFS NOAA 0.25°" }).click();
   await waitForReady(page);

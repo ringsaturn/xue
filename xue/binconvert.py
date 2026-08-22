@@ -23,7 +23,7 @@ from typing import Any
 import numpy as np
 
 from . import binformat, grib2, temporal, zstdcli
-from .errors import ConversionError
+from .errors import ConversionError, DownloadError
 from .gdal import (
     discover_inputs,
     inspect_grib,
@@ -219,22 +219,25 @@ def deaverage_precipitation(
     previous_average: np.ndarray | None,
     previous_hour: int | None,
     window_hours: int,
-    step_hours: int,
 ) -> np.ndarray:
     """Mean rate (mm/h) over the step ending at ``hour``, from GFS
     window-cumulative average rates (kg/m^2 s, sflux ``PRATE ave``).
 
     Each frame is scaled to mm accumulated since its window start and
     differenced against the previous frame of the same window; the window's
-    first frame (no ``previous_average``) differences against zero."""
+    first frame (no ``previous_average``) differences against zero. The rate
+    divisor is the interval the difference spans, so a mixed-step axis (three
+    hours between frames past f120) needs no external step argument."""
     window_start = average_window_start(hour, window_hours)
     accumulated_mm = current_average * 3600.0 * (hour - window_start)
     previous_mm = np.zeros_like(accumulated_mm)
+    interval_start = window_start
     if previous_average is not None and previous_hour is not None:
-        if not window_start < previous_hour <= hour:
+        if not window_start < previous_hour < hour:
             raise ConversionError("previous averaged frame is outside the current averaging window")
         previous_mm = previous_average * 3600.0 * (previous_hour - window_start)
-    return deaccumulate_precipitation(accumulated_mm, previous_mm, step_hours)
+        interval_start = previous_hour
+    return deaccumulate_precipitation(accumulated_mm, previous_mm, hour - interval_start)
 
 
 def _extract_plane(frame: GribFrame, grid: GridInfo, work: Path) -> np.ndarray:
@@ -396,6 +399,18 @@ def _entry(
     )
 
 
+def _time_metadata(hours: list[int]) -> tuple[int, dict[str, Any]]:
+    """The metadata ``time`` block and the schema version it requires: the
+    lowest able to express the axis (docs/format.md) — a uniform axis is
+    always schemaVersion 1 with ``stepHours``, a mixed-step axis is
+    schemaVersion 2 with its forecast hours listed outright."""
+    steps = sorted({after - before for before, after in zip(hours, hours[1:])})
+    if len(steps) <= 1:
+        step = steps[0] if steps else 1
+        return 1, {"firstForecastHour": hours[0], "stepHours": step, "frameCount": len(hours)}
+    return 2, {"firstForecastHour": hours[0], "frameCount": len(hours), "hours": list(hours)}
+
+
 def build_metadata(
     run_time: datetime,
     hours: list[int],
@@ -407,14 +422,14 @@ def build_metadata(
     product: str = "pgrb2.0p25",
 ) -> dict[str, Any]:
     codebooks = PROFILES[profile]
-    step = hours[1] - hours[0] if len(hours) > 1 else 1
+    schema_version, time_block = _time_metadata(hours)
     return {
-        "schemaVersion": 1,
+        "schemaVersion": schema_version,
         "model": model,
         "product": product,
         "runTime": iso_z(run_time),
         "profile": profile,
-        "time": {"firstForecastHour": hours[0], "stepHours": step, "frameCount": len(hours)},
+        "time": time_block,
         "grid": grid.metadata(),
         "variables": [
             {
@@ -457,7 +472,6 @@ def _quantize_file(
     work: Path,
     codebooks: dict[str, TemperatureCodebook | PrecipitationCodebook],
     previous_precipitation: tuple[int, Future] | None = None,
-    step_hours: int = 1,
     average_window_hours: int = 6,
     own_precipitation: Future | None = None,
 ) -> tuple[int, dict[str, np.ndarray], list[PlaneStats]]:
@@ -489,8 +503,11 @@ def _quantize_file(
         previous_plane = previous_future.result()
     if raw_precipitation_id == "tp":
         # ECMWF: replace the run-total accumulation (already mm) with the
-        # mean rate over the step that ends at this frame (mm/h).
-        values["prate"] = deaccumulate_precipitation(values.pop("tp"), previous_plane, step_hours)
+        # mean rate over the step that ends at this frame (mm/h). The step is
+        # the actual distance to the previous frame — six hours past the
+        # 144-hour cadence change, three before it.
+        step = hour - previous_hour if previous_hour is not None else 1
+        values["prate"] = deaccumulate_precipitation(values.pop("tp"), previous_plane, step)
     elif raw_precipitation_id == "prate_ave":
         # sflux: PRATE is the window-cumulative mean rate (kg/m^2 s); derive
         # the per-step rate against the previous frame of the same averaging
@@ -501,7 +518,6 @@ def _quantize_file(
             previous_plane,
             previous_hour,
             average_window_hours,
-            step_hours,
         )
     codes: dict[str, np.ndarray] = {}
     stats: list[PlaneStats] = []
@@ -709,7 +725,6 @@ def convert_bin(
     if profile not in PROFILES:
         raise ConversionError(f"unknown profile: {profile}")
     source = source_spec(model)
-    step = source.step_hours
     zstd_version = zstdcli.zstd_version()
     paths = discover_inputs(input_path)
     codebooks = PROFILES[profile]
@@ -737,10 +752,25 @@ def convert_bin(
     variable_ids = input_scalar_ids + (WIND_COMPONENT_IDS if wind_available else ())
     per_file = _prepare_frames_all(paths, variable_ids, source.optional_at_analysis, reference_frames)
     hours = [frames["tmp2m"].forecast_hour for frames in per_file]
-    if len(hours) > 1 and hours != list(range(hours[0], hours[0] + step * len(hours), step)):
-        raise ConversionError(f"forecast hours must be a complete sequence at a {step}-hour step")
-    if require_complete and hours != list(range(0, expected_hours + 1, step)):
-        raise ConversionError(f"complete build requires forecast hours 0 through {expected_hours} every {step} hours")
+    # The input hours must be a contiguous run of the source's published
+    # axis (hourly to f120, three-hourly beyond, on GFS), so no frame is
+    # missing and every step matches the cadence the source publishes.
+    try:
+        axis = source.forecast_hours(hours[-1])
+    except DownloadError as exc:
+        raise ConversionError(str(exc)) from exc
+    if hours != [hour for hour in axis if hour >= hours[0]]:
+        raise ConversionError(f"forecast hours must be a contiguous run of the {source.manifest_model} axis")
+    if require_complete:
+        try:
+            expected_axis = source.forecast_hours(expected_hours)
+        except DownloadError as exc:
+            raise ConversionError(str(exc)) from exc
+        if hours != expected_axis:
+            raise ConversionError(
+                f"complete build requires forecast hours 0 through {expected_hours} on the "
+                f"{source.manifest_model} axis"
+            )
     run_time = per_file[0]["tmp2m"].run_time.astimezone(UTC)
 
     grid = _grid_info(paths[0])
@@ -790,7 +820,7 @@ def convert_bin(
         with ThreadPoolExecutor(max_workers=_EXTRACT_WORKERS) as executor:
             results = executor.map(
                 lambda item: _quantize_file(
-                    item[0], grid, work, codebooks, item[1], step, source.average_window_hours, item[2]
+                    item[0], grid, work, codebooks, item[1], source.average_window_hours, item[2]
                 ),
                 sharing_plan(),
             )

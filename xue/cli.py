@@ -24,7 +24,13 @@ def forecast_hours(value: str) -> int:
 
 def _common_run_arguments(parser: argparse.ArgumentParser, *, force_help: str) -> None:
     parser.add_argument("--run", default="latest", help="latest or a UTC cycle in YYYYMMDDHH format")
-    parser.add_argument("--hours", type=forecast_hours, default=120, help="last forecast hour, inclusive")
+    parser.add_argument(
+        "--hours",
+        type=forecast_hours,
+        default=240,
+        help="last forecast hour, inclusive; must lie on the model's published axis "
+        "(e.g. GFS: hourly to 120, then 3-hourly to 240)",
+    )
     parser.add_argument("--force", action="store_true", help=force_help)
 
 
@@ -124,8 +130,6 @@ def main(argv: list[str] | None = None) -> int:
         elif arguments.command == "verify-bin":
             print(json.dumps(verify_bin(arguments.bundle), indent=2))
         elif arguments.command == "build-bin":
-            if arguments.hours != 120:
-                raise XueError("the forecast manifest requires --hours 120")
             source = source_spec(arguments.model)
             run = resolve_run(arguments.run, hours=arguments.hours, model=arguments.model)
             run_directory = f"{source.id}.{run.id}"

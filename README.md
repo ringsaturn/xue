@@ -8,7 +8,7 @@
 > Xue (雪, pronounced /ɕɥɛ/, roughly "shweh"), Chinese for snow.
 
 Xue packs global weather forecasts — 2 m temperature, precipitation rate,
-10 m wind, and solar radiation, out to 120 hours — into a custom
+10 m wind, and solar radiation, out to 240 hours — into a custom
 per-variable spatiotemporal binary format (`.xue`), and renders them in the
 browser with a static MapLibre page: a Rust WebAssembly worker decodes
 frames on demand, a custom WebGL2 layer does inverse Web Mercator
@@ -16,11 +16,14 @@ projection and palette lookup entirely on the GPU, and the 10 m wind
 renders through a GPU particle layer.
 
 Live demo: <https://xue.ringsaturn.me>. The control in the top-left
-corner switches between three sources: NOAA GFS 0.25° (hourly, 121
-frames), GFS surface flux on its native ~13 km Gaussian grid (hourly, with
-a solar-radiation layer), and ECMWF IFS open data 0.25° (3-hourly, 41
-frames). The three sources share the same format, the same decoder, and the
-same rendering pipeline.
+corner switches between three sources: NOAA GFS 0.25° (hourly to F120,
+3-hourly to F240 — 161 frames), GFS surface flux on its native ~13 km
+Gaussian grid (same cadence as GFS, with a solar-radiation layer), and
+ECMWF IFS open data 0.25° (3-hourly to 144 h, 6-hourly to F240 — 65
+frames). No source publishes one cadence all the way out, so these
+mixed-step time axes are listed outright in the bundle metadata (schema
+version 2 in [`docs/format.md`](docs/format.md)). The three sources share
+the same format, the same decoder, and the same rendering pipeline.
 
 ## Format rationale
 
@@ -99,14 +102,14 @@ make serve
 Or step by step (`--model gfs|ecmwf|sflux`, default `gfs`):
 
 ```sh
-python -m xue fetch --run latest --hours 120
+python -m xue fetch --run latest --hours 240
 python -m xue convert-bin data/raw/gfs.YYYYMMDDHH \
   --output web/public/data/gfs.YYYYMMDDHH \
   --manifest web/public/data/manifest.json
 python -m xue verify-bin web/public/data/gfs.YYYYMMDDHH/tmp2m.xue
-python -m xue build-bin --run latest --hours 120
-python -m xue build-bin --model ecmwf --run latest --hours 120
-python -m xue build-bin --model sflux --run latest --hours 120
+python -m xue build-bin --run latest --hours 240
+python -m xue build-bin --model ecmwf --run latest --hours 240
+python -m xue build-bin --model sflux --run latest --hours 240
 ```
 
 Each model publishes as an independent dataset: GFS runs land in
@@ -116,12 +119,14 @@ Each model publishes as an independent dataset: GFS runs land in
 precipitation-rate field, so the converter differences the run-total
 accumulation `tp` between consecutive frames into an interval-mean rate
 (mm/h); the analysis frame has no preceding interval, so the ECMWF
-precipitation series starts at F003 (40 frames) while other variables keep
-F000 (41 frames); the page's timeline follows the active variable. The
+precipitation series starts at F003 (64 frames) while other variables keep
+F000 (65 frames); the page's timeline follows the active variable. The
 sflux source uses the native ~13 km Gaussian grid (3072 × 1536), derives
 precipitation from window-cumulative mean-rate records (also without F000,
-120 frames from F001), and additionally publishes the `dswrf` layer
-(instantaneous surface downward shortwave radiation, W/m²).
+160 frames from F001), and additionally publishes the `dswrf` layer
+(instantaneous surface downward shortwave radiation, W/m²). `--hours` may
+be any hour on the model's published axis, so shorter uniform builds
+(e.g. `--hours 120`) still work and stay metadata schema version 1.
 
 `build-bin` writes one `.xue` per scalar variable (plus a half-resolution
 `.half.xue` rendition, a first-frame poster, and a per-variable lossless

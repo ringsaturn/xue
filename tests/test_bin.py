@@ -178,18 +178,50 @@ class TemporalTests(unittest.TestCase):
         self.assertEqual(temporal.anchor_hour(groups[0]), 3)
         self.assertEqual(temporal.anchor_hour(groups[-1]), 120)
 
+    def test_segment_split(self) -> None:
+        self.assertEqual(temporal.split_segments([0]), [[0]])
+        self.assertEqual(temporal.split_segments([0, 3]), [[0, 3]])
+        self.assertEqual(temporal.split_segments([0, 1, 2, 3, 6, 9]), [[0, 1, 2, 3], [6, 9]])
+        # The GFS 240-hour axis: 121 hourly frames, then 40 three-hourly.
+        axis = list(range(121)) + list(range(123, 241, 3))
+        segments = temporal.split_segments(axis)
+        self.assertEqual([len(segment) for segment in segments], [121, 40])
+        self.assertEqual(segments[1][0], 123)
+        self.assertEqual(segments[1][-1], 240)
+
+    def test_grouping_never_straddles_a_segment_boundary(self) -> None:
+        axis = list(range(121)) + list(range(123, 241, 3))
+        groups = temporal.group_forecast_hours(axis)
+        # 21 groups for the hourly segment (20x6 + 1), 7 for the three-hourly
+        # (6x6 + 4); every group's internal step is constant.
+        self.assertEqual(len(groups), 28)
+        self.assertEqual(groups[20], [120])
+        self.assertEqual(groups[21], [123, 126, 129, 132, 135, 138])
+        self.assertEqual(groups[-1], [231, 234, 237, 240])
+        for group in groups:
+            steps = {after - before for before, after in zip(group, group[1:])}
+            self.assertLessEqual(len(steps), 1, group)
+        self.assertEqual([hour for group in groups for hour in group], axis)
+
     def test_length_mismatch_rejected(self) -> None:
         with self.assertRaises(ConversionError):
             temporal.encode_residual(np.zeros(3, dtype=np.uint8), np.zeros(4, dtype=np.uint8))
 
 
-def synthetic_metadata(frame_count: int = 2, width: int = 4, height: int = 3) -> dict:
+def synthetic_metadata(
+    frame_count: int = 2,
+    width: int = 4,
+    height: int = 3,
+    *,
+    time: dict | None = None,
+    schema_version: int = 1,
+) -> dict:
     return {
-        "schemaVersion": 1,
+        "schemaVersion": schema_version,
         "model": "GFS",
         "product": "pgrb2.0p25",
         "runTime": "2026-08-15T06:00:00Z",
-        "time": {"firstForecastHour": 0, "stepHours": 1, "frameCount": frame_count},
+        "time": time or {"firstForecastHour": 0, "stepHours": 1, "frameCount": frame_count},
         "grid": {
             "width": width,
             "height": height,
@@ -457,6 +489,193 @@ class BinFormatTests(unittest.TestCase):
         write_bundle(self.path, synthetic_metadata(frame_count=1), [PlanePayload(entry, payload)])
         bundle = binformat.read_bundle(self.path)
         self.assertEqual(bundle.decode_plane(1, 0).tolist(), plane.tolist())
+
+
+def mixed_axis_metadata(hours: list[int], **kwargs) -> dict:
+    return synthetic_metadata(
+        time={"firstForecastHour": hours[0], "frameCount": len(hours), "hours": list(hours)},
+        schema_version=2,
+        **kwargs,
+    )
+
+
+class SchemaV2Tests(unittest.TestCase):
+    """Mixed-step time axes (metadata schemaVersion 2, docs/format.md)."""
+
+    HOURS = [0, 1, 2, 3, 6, 9]
+
+    def setUp(self) -> None:
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.path = Path(self.directory.name) / "bundle.xue"
+
+    def _planes(self) -> dict[int, np.ndarray]:
+        return {hour: (np.arange(12) + hour).astype(np.uint8) for hour in self.HOURS}
+
+    def _write(self, metadata: dict, previous_dependency: dict[int, int] | None = None) -> dict[int, np.ndarray]:
+        """One RAW anchor per segment-aligned group, ANCHOR residuals inside
+        (or PREVIOUS entries where ``previous_dependency`` maps an hour to its
+        declared dependencyHour). The anchor is each group's first frame —
+        the encoder's floor(n/2) pick is not a decode-time invariant, and a
+        leading anchor lets a later frame carry PREVIOUS inside its group."""
+        planes = self._planes()
+        payloads: list[PlanePayload] = []
+        for group_id, group in enumerate(temporal.group_forecast_hours(self.HOURS)):
+            anchor = group[0]
+            for hour in group:
+                plane = planes[hour]
+                if hour == anchor:
+                    payload = zstdcli.compress(plane.tobytes())
+                    payloads.append(PlanePayload(raw_entry(hour, plane, payload, group_id=group_id), payload))
+                    continue
+                if previous_dependency and hour in previous_dependency:
+                    predictor = PREDICTOR_PREVIOUS
+                    dependency = previous_dependency[hour]
+                    base_hour = self.HOURS[self.HOURS.index(hour) - 1]
+                else:
+                    predictor = PREDICTOR_ANCHOR
+                    dependency = base_hour = anchor
+                residual = temporal.encode_residual(plane, planes[base_hour])
+                payload = zstdcli.compress(residual.tobytes())
+                entry = PlaneEntry(
+                    variable_id=1,
+                    predictor=predictor,
+                    compression=COMPRESSION_ZSTD,
+                    flags=binformat.FLAG_ZSTD_CHECKSUM,
+                    forecast_hour=hour,
+                    dependency_hour=dependency,
+                    group_id=group_id,
+                    compressed_length=len(payload),
+                    data_offset=0,
+                    decoded_length=plane.size,
+                    crc32=crc32_plane(plane),
+                    minimum_code=int(plane.min()),
+                    maximum_code=int(plane.max()),
+                )
+                payloads.append(PlanePayload(entry, payload))
+        write_bundle(self.path, metadata, payloads)
+        return planes
+
+    def test_mixed_axis_round_trip(self) -> None:
+        planes = self._write(mixed_axis_metadata(self.HOURS))
+        bundle = binformat.read_bundle(self.path)
+        self.assertEqual(bundle.forecast_hours, self.HOURS)
+        for hour, plane in planes.items():
+            self.assertEqual(bundle.decode_plane(1, hour).tolist(), plane.tolist())
+        bundle.verify_all()
+
+    def test_previous_predictor_uses_the_axis_not_hour_minus_one(self) -> None:
+        # The frame preceding f009 is f006 on this axis; a PREVIOUS entry must
+        # carry exactly that hour.
+        planes = self._write(mixed_axis_metadata(self.HOURS), previous_dependency={9: 6})
+        bundle = binformat.read_bundle(self.path)
+        self.assertEqual(bundle.decode_plane(1, 9).tolist(), planes[9].tolist())
+
+    def test_previous_predictor_sentinel_rejected(self) -> None:
+        self._write(mixed_axis_metadata(self.HOURS), previous_dependency={9: NO_DEPENDENCY})
+        with self.assertRaises(BundleError):
+            binformat.read_bundle(self.path)
+
+    def test_previous_predictor_wrong_dependency_rejected(self) -> None:
+        # forecastHour - 1 (f008) is not on the axis: the old uniform-axis
+        # interpretation must be rejected, not silently derived.
+        self._write(mixed_axis_metadata(self.HOURS), previous_dependency={9: 8})
+        with self.assertRaises(BundleError):
+            binformat.read_bundle(self.path)
+
+    def _reject(self, metadata: dict) -> None:
+        with self.assertRaises(BundleError):
+            self._write(metadata)
+            binformat.read_bundle(self.path)
+
+    def test_axis_validation(self) -> None:
+        hours = self.HOURS
+        base = mixed_axis_metadata(hours)
+        # Declaring both stepHours and hours, or neither.
+        both = json.loads(json.dumps(base))
+        both["time"]["stepHours"] = 1
+        self._reject(both)
+        neither = json.loads(json.dumps(base))
+        del neither["time"]["hours"]
+        self._reject(neither)
+        # hours in a schemaVersion 1 file.
+        v1_hours = json.loads(json.dumps(base))
+        v1_hours["schemaVersion"] = 1
+        self._reject(v1_hours)
+        # Overdeclared: schemaVersion 2 with a uniform stepHours axis.
+        overdeclared = synthetic_metadata(frame_count=len(hours), schema_version=2)
+        overdeclared["time"]["frameCount"] = len(hours)
+        self._reject(overdeclared)
+        # A uniform hours array has exactly one encoding: stepHours.
+        self._reject(mixed_axis_metadata([0, 1, 2, 3, 4, 5]))
+        # Not strictly increasing, wrong length, wrong first element.
+        self._reject(mixed_axis_metadata([0, 1, 1, 3, 6, 9]))
+        wrong_count = mixed_axis_metadata(hours)
+        wrong_count["time"]["frameCount"] = len(hours) - 1
+        self._reject(wrong_count)
+        wrong_first = mixed_axis_metadata(hours)
+        wrong_first["time"]["firstForecastHour"] = 1
+        self._reject(wrong_first)
+        # Hours above the u16 payload range (65535 is the sentinel).
+        self._reject(mixed_axis_metadata([0, 1, 2, 3, 6, 65535]))
+
+    def test_uniform_axis_u16_bound(self) -> None:
+        metadata = synthetic_metadata(frame_count=2)
+        metadata["time"] = {"firstForecastHour": 65534, "stepHours": 1, "frameCount": 2}
+        plane = np.arange(12, dtype=np.uint8)
+        payload = zstdcli.compress(plane.tobytes())
+        with self.assertRaises(BundleError):
+            write_bundle(self.path, metadata, [PlanePayload(raw_entry(0, plane, payload), payload)])
+            binformat.read_bundle(self.path)
+
+
+class SourceAxisTests(unittest.TestCase):
+    def test_gfs_axis(self) -> None:
+        from xue.sources import source_spec
+
+        spec = source_spec("gfs")
+        self.assertEqual(spec.forecast_hours(0), [0])
+        self.assertEqual(spec.forecast_hours(120), list(range(121)))
+        axis = spec.forecast_hours(240)
+        self.assertEqual(len(axis), 161)
+        self.assertEqual(axis[:121], list(range(121)))
+        self.assertEqual(axis[121:], list(range(123, 241, 3)))
+
+    def test_ecmwf_axis(self) -> None:
+        from xue.errors import DownloadError
+        from xue.sources import source_spec
+
+        spec = source_spec("ecmwf")
+        self.assertEqual(spec.forecast_hours(120), list(range(0, 121, 3)))
+        axis = spec.forecast_hours(240)
+        self.assertEqual(axis, list(range(0, 145, 3)) + list(range(150, 241, 6)))
+        for off_axis in (1, 121, 147, 241, 300):
+            with self.assertRaises(DownloadError):
+                spec.forecast_hours(off_axis)
+
+    def test_sflux_matches_gfs(self) -> None:
+        from xue.sources import source_spec
+
+        self.assertEqual(source_spec("sflux").forecast_hours(240), source_spec("gfs").forecast_hours(240))
+
+
+class TimeMetadataTests(unittest.TestCase):
+    def test_uniform_axis_stays_schema_version_1(self) -> None:
+        from xue.binconvert import _time_metadata
+
+        self.assertEqual(
+            _time_metadata(list(range(0, 121, 3))),
+            (1, {"firstForecastHour": 0, "stepHours": 3, "frameCount": 41}),
+        )
+        self.assertEqual(_time_metadata([7]), (1, {"firstForecastHour": 7, "stepHours": 1, "frameCount": 1}))
+
+    def test_mixed_axis_lists_hours_under_schema_version_2(self) -> None:
+        from xue.binconvert import _time_metadata
+
+        axis = list(range(121)) + list(range(123, 241, 3))
+        version, time = _time_metadata(axis)
+        self.assertEqual(version, 2)
+        self.assertEqual(time, {"firstForecastHour": 0, "frameCount": 161, "hours": axis})
 
 
 def video_descriptor() -> dict:

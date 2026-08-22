@@ -111,7 +111,8 @@ export interface ForecastManifest {
   model: string;
   product: string;
   runTime: string;
-  forecastHours: 120;
+  /** Last forecast hour of the run (120-hour and 240-hour runs both exist). */
+  forecastHours: number;
   bundles: VariableBundleDescriptor[];
 }
 
@@ -213,7 +214,14 @@ export function validateManifest(input: unknown, expectedModel?: ForecastModelId
   const modelInfo = modelForManifestString(value.model);
   if (!modelInfo || value.product !== modelInfo.product) throw new Error("unsupported manifest product");
   if (expectedModel !== undefined && modelInfo.id !== expectedModel) throw new Error("manifest model does not match the request");
-  if (value.forecastHours !== 120) throw new Error("forecast range must be 120 hours");
+  if (
+    typeof value.forecastHours !== "number" ||
+    !Number.isInteger(value.forecastHours) ||
+    value.forecastHours <= 0 ||
+    value.forecastHours > 384
+  ) {
+    throw new Error("invalid manifest forecast range");
+  }
   timestamp(value.runTime, "runTime");
 
   if (!Array.isArray(value.bundles) || value.bundles.length === 0) throw new Error("manifest has no bundle list");
@@ -377,24 +385,90 @@ export interface BundleVariable {
   quantization: LinearQuantization | LogQuantization;
 }
 
+/** The bundle time axis. Exactly one of `stepHours` (uniform, metadata
+ * schemaVersion 1) and `hours` (mixed-step, listed outright, schemaVersion 2)
+ * is present — no source publishes one cadence all the way to 240 hours, so
+ * a 240-hour run always carries `hours` (docs/format.md). */
+export interface BundleTimeAxis {
+  firstForecastHour: number;
+  frameCount: number;
+  stepHours?: number;
+  hours?: number[];
+}
+
 export interface BundleMetadata {
-  schemaVersion: 1;
+  schemaVersion: 1 | 2;
   model: string;
   runTime: string;
-  time: { firstForecastHour: number; stepHours: number; frameCount: number };
+  time: BundleTimeAxis;
   grid: { width: number; height: number };
   variables: BundleVariable[];
 }
 
-export function parseBundleMetadata(json: string): BundleMetadata {
-  const value = object(JSON.parse(json));
-  if (value.schemaVersion !== 1) throw new Error("unsupported bundle metadata schema version");
-  const time = object(value.time);
-  const grid = object(value.grid);
+/** The materialized forecast-hour list of a bundle time axis. */
+export function timeAxisHours(time: BundleTimeAxis): number[] {
+  if (time.hours) return time.hours;
+  const step = time.stepHours ?? 1;
+  return Array.from({ length: time.frameCount }, (_, index) => time.firstForecastHour + index * step);
+}
+
+/** True when two time axes describe the same frame list. */
+export function sameTimeAxis(a: BundleTimeAxis, b: BundleTimeAxis): boolean {
+  if (a === b) return true;
+  const hoursA = timeAxisHours(a);
+  const hoursB = timeAxisHours(b);
+  return hoursA.length === hoursB.length && hoursA.every((hour, index) => hour === hoursB[index]);
+}
+
+function validateTimeAxis(time: Record<string, unknown>, schemaVersion: number): void {
   const frameCount = time.frameCount;
   if (typeof frameCount !== "number" || !Number.isInteger(frameCount) || frameCount <= 0) {
     throw new Error("invalid bundle time axis");
   }
+  const firstForecastHour = time.firstForecastHour;
+  if (typeof firstForecastHour !== "number" || !Number.isInteger(firstForecastHour) || firstForecastHour < 0) {
+    throw new Error("invalid bundle time axis");
+  }
+  const stepHours = time.stepHours;
+  const hours = time.hours;
+  // Exactly one encoding per axis: uniform axes declare stepHours under
+  // schemaVersion 1, mixed-step axes list their hours under schemaVersion 2.
+  if ((stepHours === undefined) === (hours === undefined)) throw new Error("invalid bundle time axis");
+  if (stepHours !== undefined) {
+    if (schemaVersion !== 1) throw new Error("a uniform time axis must declare schema version 1");
+    if (typeof stepHours !== "number" || !Number.isInteger(stepHours) || stepHours <= 0) {
+      throw new Error("invalid bundle time axis");
+    }
+    return;
+  }
+  if (schemaVersion !== 2) throw new Error("an explicit hours axis requires schema version 2");
+  if (
+    !Array.isArray(hours) ||
+    hours.length !== frameCount ||
+    hours[0] !== firstForecastHour ||
+    hours.some(
+      (hour, index) =>
+        typeof hour !== "number" ||
+        !Number.isInteger(hour) ||
+        hour > 65534 ||
+        (index > 0 && hour <= (hours[index - 1] as number)),
+    )
+  ) {
+    throw new Error("invalid bundle time axis");
+  }
+  const steps = new Set<number>();
+  for (let index = 1; index < hours.length; index += 1) steps.add((hours[index] as number) - (hours[index - 1] as number));
+  if (steps.size < 2) throw new Error("a uniform hours axis must be encoded as stepHours");
+}
+
+export function parseBundleMetadata(json: string): BundleMetadata {
+  const value = object(JSON.parse(json));
+  if (value.schemaVersion !== 1 && value.schemaVersion !== 2) {
+    throw new Error("unsupported bundle metadata schema version");
+  }
+  const time = object(value.time);
+  const grid = object(value.grid);
+  validateTimeAxis(time, value.schemaVersion);
   if (typeof grid.width !== "number" || typeof grid.height !== "number") {
     throw new Error("invalid bundle grid");
   }

@@ -48,6 +48,72 @@ fn golden_decode_matches_python_reference() {
     }
 }
 
+/// The synthetic mixed-step axis of the schemaVersion 2 fixture
+/// (tests/prepare_bin_fixture.py MIXED_HOURS): hourly, then three-hourly.
+fn mixed_hours() -> Vec<u16> {
+    (0..=12).chain((15..=36).step_by(3)).collect()
+}
+
+#[test]
+fn golden_mixed_axis_decode_matches_python_reference() {
+    let bytes = variable_fixture_bytes("mixed");
+    let mut bundle = Bundle::open(&bytes).expect("mixed-axis fixture must parse");
+    let metadata: serde_json::Value =
+        serde_json::from_str(bundle.metadata_json()).expect("metadata JSON");
+    assert_eq!(metadata["schemaVersion"], 2);
+    assert!(metadata["time"].get("stepHours").is_none());
+    assert_eq!(
+        metadata["time"]["hours"].as_array().map(Vec::len),
+        Some(mixed_hours().len())
+    );
+
+    for hour in mixed_hours() {
+        let expected_path = fixture_dir().join(format!("expected.mixed.f{hour:03}.bin"));
+        let expected = std::fs::read(&expected_path).unwrap_or_else(|_| {
+            panic!("missing expected plane {expected_path:?}; regenerate the fixture")
+        });
+        let plane = bundle
+            .decode_frame(FrameRequest { variable_id: 1, forecast_hour: hour })
+            .expect("decode");
+        assert_eq!(plane, expected.as_slice(), "mixed f{hour:03}");
+    }
+}
+
+/// A schemaVersion-1-only decoder must reject a mixed-cadence bundle; ours
+/// must reject the same bundle re-labelled as schemaVersion 1 (an `hours`
+/// axis requires schemaVersion 2), keeping one valid encoding per axis.
+#[test]
+fn mixed_axis_relabelled_as_v1_rejected() {
+    let bytes = variable_fixture_bytes("mixed");
+    let metadata_offset = u64::from_le_bytes(bytes[24..32].try_into().unwrap()) as usize;
+    let metadata_length = u64::from_le_bytes(bytes[32..40].try_into().unwrap()) as usize;
+    let json = std::str::from_utf8(&bytes[metadata_offset..metadata_offset + metadata_length]).unwrap();
+    let needle = "\"schemaVersion\":2";
+    let position = metadata_offset + json.find(needle).expect("schemaVersion in metadata");
+    let mut mutated = bytes.clone();
+    mutated[position + needle.len() - 1] = b'1';
+    assert!(Bundle::open(&mutated).is_err());
+}
+
+#[test]
+fn streaming_mixed_axis_matches_full_decode() {
+    let bytes = variable_fixture_bytes("mixed");
+    let data_offset = data_offset_of(&bytes);
+    let mut full = Bundle::open(&bytes).expect("full bundle parses");
+    let mut streaming = StreamingBundle::open_prefix(&bytes[..data_offset]).expect("prefix parses");
+    for hour in mixed_hours() {
+        let request = FrameRequest { variable_id: 1, forecast_hour: hour };
+        if let Some((start, end)) = streaming.missing_group_span(request).expect("span") {
+            streaming
+                .insert_range(start, &bytes[start as usize..end as usize])
+                .expect("insert");
+        }
+        let expected = full.decode_frame(request).expect("full decode").to_vec();
+        let plane = streaming.decode_frame(request).expect("streaming decode");
+        assert_eq!(plane, expected.as_slice(), "mixed f{hour:03}");
+    }
+}
+
 #[test]
 fn truncated_file_rejected() {
     let bytes = fixture_bytes();

@@ -197,11 +197,10 @@ rejecting overdeclared versions gives any given axis exactly one valid
 encoding. Every already published uniform bundle stays valid and
 byte-identical under both rules.
 
-*Schema version 2 is specified here ahead of its implementation: the
-reference encoder and decoders currently emit and accept version 1 only.
-Because deployed decoders reject it by design, a schemaVersion-2-capable
-frontend must be deployed before the first mixed-cadence run is
-published.*
+*Schema version 2 is implemented by the reference encoder and both
+decoders. Because version-1-only decoders reject it by design, the
+schemaVersion-2-capable frontend must be deployed before the first
+mixed-cadence run is published.*
 
 #### Time Axis
 

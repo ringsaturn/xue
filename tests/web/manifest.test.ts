@@ -1,7 +1,15 @@
 import { describe, expect, it } from "vitest";
 
 import { CRC32_INITIAL, crc32Hex, crc32Of, crc32Update } from "../../web/src/crc32";
-import { hasBundle, hasWindBundle, parseBundleMetadata, pickBundleVariant, validateManifest } from "../../web/src/manifest";
+import {
+  hasBundle,
+  hasWindBundle,
+  parseBundleMetadata,
+  pickBundleVariant,
+  sameTimeAxis,
+  timeAxisHours,
+  validateManifest,
+} from "../../web/src/manifest";
 import { buildPalette, buildWindSpeedPalette, decodeLinear, decodeLog } from "../../web/src/palettes";
 import type { BundleVariable, LogQuantization, VariantDescriptor } from "../../web/src/manifest";
 
@@ -189,8 +197,13 @@ describe("validateManifest", () => {
     expect(() => validateManifest(badCrc)).toThrow("crc32");
   });
 
-  it("rejects a wrong forecast range", () => {
-    expect(() => validateManifest({ ...manifestFixture(), forecastHours: 24 })).toThrow("120");
+  it("accepts any sane forecast range and rejects broken ones", () => {
+    // 120-hour and 240-hour runs coexist (the horizon is a pipeline choice).
+    expect(validateManifest({ ...manifestFixture(), forecastHours: 240 }).forecastHours).toBe(240);
+    expect(validateManifest({ ...manifestFixture(), forecastHours: 24 }).forecastHours).toBe(24);
+    for (const broken of [0, -24, 1.5, 385, "120", undefined]) {
+      expect(() => validateManifest({ ...manifestFixture(), forecastHours: broken })).toThrow("range");
+    }
   });
 
   it("accepts variants and rejects broken variant descriptors", () => {
@@ -283,11 +296,72 @@ describe("parseBundleMetadata", () => {
     expect(parsed.time.frameCount).toBe(121);
   });
 
+  const mixedHours = [0, 1, 2, 3, 6, 9];
+  const mixedMetadata = {
+    ...metadata,
+    schemaVersion: 2,
+    time: { firstForecastHour: 0, frameCount: mixedHours.length, hours: mixedHours },
+  };
+
+  it("accepts a schemaVersion 2 mixed-step axis", () => {
+    const parsed = parseBundleMetadata(JSON.stringify(mixedMetadata));
+    expect(parsed.time.hours).toEqual(mixedHours);
+    expect(timeAxisHours(parsed.time)).toEqual(mixedHours);
+  });
+
+  it("materializes uniform axes from stepHours", () => {
+    const parsed = parseBundleMetadata(JSON.stringify(metadata));
+    const hours = timeAxisHours(parsed.time);
+    expect(hours).toHaveLength(121);
+    expect(hours[0]).toBe(0);
+    expect(hours[120]).toBe(120);
+  });
+
+  it("compares axes by frame list", () => {
+    const uniform = parseBundleMetadata(JSON.stringify(metadata)).time;
+    const mixed = parseBundleMetadata(JSON.stringify(mixedMetadata)).time;
+    expect(sameTimeAxis(uniform, { ...uniform })).toBe(true);
+    expect(sameTimeAxis(uniform, mixed)).toBe(false);
+  });
+
   it("rejects unsupported schema versions and broken time axes", () => {
-    expect(() => parseBundleMetadata(JSON.stringify({ ...metadata, schemaVersion: 2 }))).toThrow();
+    expect(() => parseBundleMetadata(JSON.stringify({ ...metadata, schemaVersion: 3 }))).toThrow();
     expect(() =>
       parseBundleMetadata(JSON.stringify({ ...metadata, time: { frameCount: 0 } })),
     ).toThrow();
+    // Every axis has exactly one encoding: a uniform stepHours axis must not
+    // declare schemaVersion 2, an hours axis must not declare schemaVersion 1.
+    expect(() => parseBundleMetadata(JSON.stringify({ ...metadata, schemaVersion: 2 }))).toThrow();
+    expect(() => parseBundleMetadata(JSON.stringify({ ...mixedMetadata, schemaVersion: 1 }))).toThrow();
+    // Declaring both stepHours and hours, or neither.
+    expect(() =>
+      parseBundleMetadata(
+        JSON.stringify({ ...mixedMetadata, time: { ...mixedMetadata.time, stepHours: 1 } }),
+      ),
+    ).toThrow();
+    expect(() =>
+      parseBundleMetadata(
+        JSON.stringify({ ...mixedMetadata, time: { firstForecastHour: 0, frameCount: 6 } }),
+      ),
+    ).toThrow();
+    // A uniform hours array, a non-increasing axis, a length mismatch, a
+    // wrong first element, and an hour beyond the u16 payload range.
+    for (const hours of [
+      [0, 1, 2, 3, 4, 5],
+      [0, 1, 1, 3, 6, 9],
+      [0, 1, 2, 3, 6],
+      [1, 2, 3, 4, 6, 9],
+      [0, 1, 2, 3, 6, 65535],
+    ]) {
+      expect(() =>
+        parseBundleMetadata(
+          JSON.stringify({
+            ...mixedMetadata,
+            time: { firstForecastHour: hours[0] === 1 ? 0 : hours[0], frameCount: 6, hours },
+          }),
+        ),
+      ).toThrow();
+    }
   });
 });
 

@@ -231,13 +231,15 @@ async function initStream(message: InitStreamMessage): Promise<void> {
   postProgress();
 
   const metadata = JSON.parse(session.metadataJson()) as {
-    time: { firstForecastHour: number; stepHours: number; frameCount: number };
+    time: { firstForecastHour: number; stepHours?: number; frameCount: number; hours?: number[] };
     variables: { numericId: number }[];
   };
   bundleNumericIds = metadata.variables.map((variable) => variable.numericId);
-  allHours = Array.from(
+  // Mixed-step axes (schemaVersion 2) list their hours outright; uniform
+  // axes are expanded from stepHours. WASM has already validated the axis.
+  allHours = metadata.time.hours ?? Array.from(
     { length: metadata.time.frameCount },
-    (_, index) => metadata.time.firstForecastHour + index * metadata.time.stepHours,
+    (_, index) => metadata.time.firstForecastHour + index * (metadata.time.stepHours ?? 1),
   );
   residentAnnounced = false;
   // A prefetch-window message may have arrived before init finished.

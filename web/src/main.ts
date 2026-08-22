@@ -19,6 +19,8 @@ import {
   hasBundle,
   parseBundleMetadata,
   pickBundleVariant,
+  sameTimeAxis,
+  timeAxisHours,
   WIND_COMPONENT_IDS,
   type BundleMetadata,
   type BundleVariable,
@@ -43,7 +45,9 @@ import {
 applyStaticMessages();
 
 const FRAME_INTERVAL_MS = 1000 / 12;
-const FRAME_COUNT = 121;
+/** Pre-manifest placeholder frame count: the GFS 240-hour axis
+ * (121 hourly frames, then 40 three-hourly). */
+const FRAME_COUNT = 161;
 /** How often the latest.json live pointer is re-checked for a new run. */
 const LATEST_POLL_MS = 5 * 60_000;
 
@@ -429,9 +433,44 @@ function frameCount(): number {
   return metadata?.time.frameCount ?? FRAME_COUNT;
 }
 
-function frameHour(index: number): number {
+// The active session's materialized forecast-hour axis. Mixed-step axes
+// (240-hour runs: hourly then 3-hourly on GFS) make index<->hour conversions
+// table lookups, so both are memoized on the time-block identity.
+let frameHoursSource: BundleMetadata["time"] | null = null;
+let frameHoursCache: number[] = [];
+let frameIndexCache = new Map<number, number>();
+
+function frameHours(): number[] {
   const time = metadata?.time;
-  return time ? time.firstForecastHour + index * time.stepHours : index;
+  if (!time) return [];
+  if (time !== frameHoursSource) {
+    frameHoursSource = time;
+    frameHoursCache = timeAxisHours(time);
+    frameIndexCache = new Map(frameHoursCache.map((hour, index) => [hour, index]));
+  }
+  return frameHoursCache;
+}
+
+function frameHour(index: number): number {
+  const hours = frameHours();
+  return hours.length ? (hours[index] ?? index) : index;
+}
+
+/** Frame index of an exact forecast hour on the active axis, or -1. */
+function frameIndexForHour(hour: number): number {
+  frameHours();
+  return metadata ? (frameIndexCache.get(hour) ?? -1) : hour;
+}
+
+/** The frame whose forecast hour is nearest to `hour` (ties go earlier). */
+function nearestFrameIndex(hour: number): number {
+  const hours = frameHours();
+  if (hours.length === 0) return 0;
+  let best = 0;
+  for (let index = 1; index < hours.length; index += 1) {
+    if (Math.abs(hours[index]! - hour) < Math.abs(hours[best]! - hour)) best = index;
+  }
+  return best;
 }
 
 function frameValidTime(index: number): number {
@@ -655,7 +694,7 @@ function debugInfoText(): string {
     `variable: ${session ? `${session.id} (${session.variable.unit})` : "--"}`,
     `format: ${session?.format ?? "--"}`,
     `grid: ${session ? `${session.metadata.grid.width} × ${session.metadata.grid.height}` : "--"}`,
-    `time: ${time ? `${time.frameCount}F · first ${time.firstForecastHour}h · step ${time.stepHours}h` : "--"}`,
+    `time: ${time ? `${time.frameCount}F · first ${time.firstForecastHour}h · ${time.stepHours !== undefined ? `step ${time.stepHours}h` : "mixed step"}` : "--"}`,
     `frame: ${activeFrameIndex === null ? "--" : `F${String(frameHour(activeFrameIndex)).padStart(3, "0")}`}`,
     `planes: ${cachedFrameCount()} / ${frameCount()} · ${formatBytes(planeCacheBytes)} / ${formatBytes(planeCacheBudgetBytes())}`,
     `network: ${session ? `${formatBytes(session.bytes)} / ${formatBytes(session.totalBytes)}${session.resident ? " · resident" : session.streaming ? " · streaming" : ""}` : "--"}`,
@@ -995,8 +1034,8 @@ function handleDecodedFrame(message: {
   }
   // Display only the newest requested target; stale decodes stay cached.
   if (desiredKey === key && activeVariable && layer) {
-    const index = (message.forecastHour - (metadata?.time.firstForecastHour ?? 0)) /
-      (metadata?.time.stepHours ?? 1);
+    const index = frameIndexForHour(message.forecastHour);
+    if (index < 0) return;
     const shown = trySelectFrame(index);
     // A stalled playhead resumes here, off the decode completion, so restart
     // the cadence too: without this the next rAF tick sees a long-expired
@@ -1023,14 +1062,20 @@ function buildTicks(total: number): void {
 /** Frame index of one forecast day boundary (24, 48, ... hours out), or null
  * when the model's step does not land a frame exactly on it. */
 function dayFrameIndex(day: number): number | null {
-  const time = metadata?.time ?? { firstForecastHour: 0, stepHours: 1, frameCount: FRAME_COUNT };
-  const index = (day * 24 - time.firstForecastHour) / time.stepHours;
-  return Number.isInteger(index) && index < time.frameCount ? index : null;
+  if (!metadata) return day * 24 < FRAME_COUNT ? day * 24 : null;
+  const index = frameIndexForHour(day * 24);
+  return index >= 0 ? index : null;
+}
+
+/** Whole forecast days the active axis reaches (5 on a 120-hour run, 10 on
+ * a 240-hour one). */
+function forecastDayCount(): number {
+  return Math.floor(frameHour(frameCount() - 1) / 24);
 }
 
 function buildForecastDays(): void {
   forecastDays.replaceChildren();
-  for (let day = 1; day <= 5; day += 1) {
+  for (let day = 1; day <= forecastDayCount(); day += 1) {
     const index = dayFrameIndex(day);
     if (index === null) continue;
     const segment = document.createElement("span");
@@ -1050,7 +1095,8 @@ function buildForecastDays(): void {
 }
 
 function updateForecastDay(frameIndex: number): void {
-  const selectedDay = Math.min(4, Math.max(0, Math.ceil(frameHour(frameIndex) / 24) - 1));
+  const lastDay = Math.max(0, forecastDays.children.length - 1);
+  const selectedDay = Math.min(lastDay, Math.max(0, Math.ceil(frameHour(frameIndex) / 24) - 1));
   [...forecastDays.children].forEach((segment, index) => {
     const active = index === selectedDay;
     segment.classList.toggle("is-active", active);
@@ -1080,7 +1126,7 @@ function updateVariablePresentation(session: VariableSession): void {
   updateModelPresentation();
   variableCode.textContent = `${model.label} / ${ui.code}`;
   dataCardTitle.textContent = ui.bufferTitle;
-  document.title = `${ui.title.join(" ")} · ${model.label} 120H`;
+  document.title = `${ui.title.join(" ")} · ${model.label} ${frameHour(frameCount() - 1)}H`;
   variableTitle.replaceChildren();
   ui.title.forEach((line, index) => {
     if (index > 0) variableTitle.append(document.createElement("br"));
@@ -1451,24 +1497,17 @@ async function showPoster(variableId: ForecastBundleId, sequence: number): Promi
  * playhead is remapped to the nearest frame of the same forecast hour. */
 function syncTimeline(session: VariableSession): void {
   const previous = metadata?.time ?? null;
+  const previousHours = previous ? timeAxisHours(previous) : null;
   metadata = session.metadata;
   const time = metadata.time;
-  if (
-    previous &&
-    previous.frameCount === time.frameCount &&
-    previous.firstForecastHour === time.firstForecastHour &&
-    previous.stepHours === time.stepHours
-  ) {
+  if (previous && sameTimeAxis(previous, time)) {
     return;
   }
   const previousIndex = activeFrameIndex ?? Number(slider.value);
-  const hour = previous
-    ? previous.firstForecastHour + previousIndex * previous.stepHours
+  const hour = previousHours
+    ? (previousHours[Math.min(previousIndex, previousHours.length - 1)] ?? time.firstForecastHour)
     : time.firstForecastHour;
-  const index = Math.max(
-    0,
-    Math.min(time.frameCount - 1, Math.round((hour - time.firstForecastHour) / time.stepHours)),
-  );
+  const index = nearestFrameIndex(hour);
   slider.max = String(time.frameCount - 1);
   slider.value = String(index);
   activeFrameIndex = null;

@@ -110,23 +110,35 @@ class DeaverageTests(unittest.TestCase):
     def test_window_first_frame_is_its_own_interval(self) -> None:
         # f007 opens the 6-12 window: its 1-hour average IS the hourly rate.
         average = np.array([0.001, 0.0])
-        rate = deaverage_precipitation(average, 7, None, None, 6, 1)
+        rate = deaverage_precipitation(average, 7, None, None, 6)
         np.testing.assert_allclose(rate, average * 3600.0)
 
     def test_inside_window_differences_cumulative_averages(self) -> None:
         # f008 averages 6-8h; the 7-8h hourly rate is 2*ave8 - 1*ave7.
         ave7 = np.array([0.001])
         ave8 = np.array([0.0015])
-        rate = deaverage_precipitation(ave8, 8, ave7, 7, 6, 1)
+        rate = deaverage_precipitation(ave8, 8, ave7, 7, 6)
         np.testing.assert_allclose(rate, (2 * ave8 - ave7) * 3600.0)
 
     def test_packing_noise_clamps_to_zero(self) -> None:
-        rate = deaverage_precipitation(np.array([0.001]), 6, np.array([0.00125]), 5, 6, 1)
+        rate = deaverage_precipitation(np.array([0.001]), 6, np.array([0.00125]), 5, 6)
         np.testing.assert_allclose(rate, [0.0])
 
     def test_previous_frame_outside_window_rejected(self) -> None:
         with self.assertRaises(ConversionError):
-            deaverage_precipitation(np.array([0.001]), 7, np.array([0.001]), 6, 6, 1)
+            deaverage_precipitation(np.array([0.001]), 7, np.array([0.001]), 6, 6)
+
+    def test_three_hourly_steps_past_f120(self) -> None:
+        # Past f120 the sflux axis is three-hourly, so a window holds two
+        # frames. f123 opens the 120-126 window: its 3-hour average IS the
+        # mean rate. f126 spans 123-126: (6*ave126 - 3*ave123) / 3.
+        ave123 = np.array([0.001])
+        np.testing.assert_allclose(
+            deaverage_precipitation(ave123, 123, None, None, 6), ave123 * 3600.0
+        )
+        ave126 = np.array([0.0015])
+        rate = deaverage_precipitation(ave126, 126, ave123, 123, 6)
+        np.testing.assert_allclose(rate, (6 * ave126 - 3 * ave123) / 3 * 3600.0)
 
 
 class LongitudeNormalizationTests(unittest.TestCase):

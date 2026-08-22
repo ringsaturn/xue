@@ -44,8 +44,8 @@ export const htmlLang = locale === "zh" ? "zh-CN" : "en";
 
 const MESSAGES = {
   metaDescription: {
-    zh: "NOAA GFS 与 ECMWF 全球未来 120 小时气温、降水、风场与太阳辐射预报",
-    en: "NOAA GFS and ECMWF global 120-hour forecasts of temperature, precipitation, wind and solar radiation",
+    zh: "NOAA GFS 与 ECMWF 全球未来 240 小时气温、降水、风场与太阳辐射预报",
+    en: "NOAA GFS and ECMWF global 240-hour forecasts of temperature, precipitation, wind and solar radiation",
   },
   mapAria: { zh: "全球气温与降水预报地图", en: "Global temperature and precipitation forecast map" },
   modelSwitchAria: { zh: "预报模式", en: "Forecast model" },
@@ -83,7 +83,7 @@ const MESSAGES = {
   expandTimeline: { zh: "展开时间轴详情", en: "Expand timeline details" },
   collapseTimeline: { zh: "收起时间轴详情", en: "Collapse timeline details" },
   forecastHourAria: { zh: "预报时次", en: "Forecast hour" },
-  forecastDaysAria: { zh: "五日预报分段", en: "Five-day forecast segments" },
+  forecastDaysAria: { zh: "逐日预报分段", en: "Daily forecast segments" },
   mapMenuAria: { zh: "地图选项", en: "Map options" },
   menuStats: { zh: "详细统计信息", en: "Stats for nerds" },
   menuCopyDebug: { zh: "复制调试信息", en: "Copy debug info" },

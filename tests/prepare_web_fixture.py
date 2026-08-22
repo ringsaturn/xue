@@ -33,9 +33,11 @@ WEB_FIXTURE_ROOT = REPOSITORY_ROOT / "tests" / "fixtures" / "generated" / "web"
 RUN_TIME = datetime(2026, 8, 15, 6, tzinfo=UTC)
 WIDTH, HEIGHT = 144, 73
 HOURS = list(range(121))
-# The ECMWF fixture models the IFS open data series: 3-hourly steps.
+# The ECMWF fixture models the full IFS open data series: 3-hourly to 144
+# hours, 6-hourly to 240 — a mixed-step axis, so its bundles carry metadata
+# schemaVersion 2 and exercise the explicit-hours path end to end.
 ECMWF_RUN_TIME = datetime(2026, 8, 15, 0, tzinfo=UTC)
-ECMWF_HOURS = list(range(0, 121, 3))
+ECMWF_HOURS = list(range(0, 145, 3)) + list(range(150, 241, 6))
 # The sflux fixture models the GFS surface flux series: hourly, with the
 # de-averaged prate starting at the first real step and the dswrf layer.
 SFLUX_RUN_TIME = datetime(2026, 8, 15, 6, tzinfo=UTC)
@@ -264,9 +266,10 @@ def prepare_web_fixture() -> Path:
 
 
 def _prepare_ecmwf_fixture(grid: GridInfo, level: int) -> None:
-    """A second, independent model dataset: ECMWF identity, 3-hourly time
-    axis, scalar bundles only (wind, posters, and variants are optional per
-    the manifest contract, so the smallest valid dataset skips them)."""
+    """A second, independent model dataset: ECMWF identity, mixed-step
+    240-hour time axis (metadata schemaVersion 2), scalar bundles only
+    (wind, posters, and variants are optional per the manifest contract, so
+    the smallest valid dataset skips them)."""
     ecmwf_root = WEB_FIXTURE_ROOT / "ecmwf"
     ecmwf_root.mkdir(parents=True, exist_ok=True)
     bundles = []
@@ -297,7 +300,9 @@ def _prepare_ecmwf_fixture(grid: GridInfo, level: int) -> None:
                 "crc32": f"{zlib.crc32(data) & 0xFFFFFFFF:08x}",
             }
         )
-    manifest = build_bin_manifest(ECMWF_RUN_TIME, bundles=bundles, model="ECMWF", product="ifs-0p25")
+    manifest = build_bin_manifest(
+        ECMWF_RUN_TIME, bundles=bundles, expected_hours=ECMWF_HOURS[-1], model="ECMWF", product="ifs-0p25"
+    )
     manifest_bytes = (json.dumps(manifest, indent=2) + "\n").encode("utf-8")
     (ecmwf_root / "manifest.json").write_bytes(manifest_bytes)
     pointer = build_latest_pointer(

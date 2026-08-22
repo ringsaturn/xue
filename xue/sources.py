@@ -28,8 +28,12 @@ class SourceSpec:
     latest_filename: str
     """Per-model mutable live pointer at the data root. GFS uses the bare
     ``latest.json``; the other models use ``latest-<model>.json``."""
-    step_hours: int
-    """Uniform forecast step of the published series we consume."""
+    steps: tuple[tuple[int, int], ...]
+    """The published time axis as ``(last_hour, step_hours)`` segments: the
+    series runs at ``step_hours`` up to and including ``last_hour``, then the
+    next segment takes over. No source publishes one cadence all the way to
+    240 hours, so an axis that crosses a segment boundary is mixed-step and
+    its bundles carry metadata schemaVersion 2 (docs/format.md)."""
     input_variable_ids: tuple[str, ...]
     """Variables fetched from the source, in GRIB assembly order."""
     accumulated_precipitation: bool
@@ -56,6 +60,25 @@ class SourceSpec:
     takes a few parallel streams happily, while ECMWF's open data bucket
     answers bursts with 503 Slow Down and stays at 1."""
 
+    def forecast_hours(self, last_hour: int) -> list[int]:
+        """The published axis from the analysis through ``last_hour``.
+
+        ``last_hour`` must itself lie on the axis — a cap that lands between
+        steps (or beyond the published range) has no complete final frame to
+        fetch and is rejected outright."""
+        hours = [0]
+        for boundary, step in self.steps:
+            while hours[-1] < min(boundary, last_hour):
+                hours.append(hours[-1] + step)
+            if hours[-1] >= last_hour:
+                break
+        if hours[-1] != last_hour:
+            published = ", then ".join(f"{step}-hourly to f{boundary:03d}" for boundary, step in self.steps)
+            raise DownloadError(
+                f"forecast hour {last_hour} is not on the {self.manifest_model} axis ({published})"
+            )
+        return hours
+
 
 SOURCES: dict[str, SourceSpec] = {
     "gfs": SourceSpec(
@@ -63,7 +86,8 @@ SOURCES: dict[str, SourceSpec] = {
         manifest_model="GFS",
         product="pgrb2.0p25",
         latest_filename="latest.json",
-        step_hours=1,
+        # Hourly through f120, then three-hourly through f240.
+        steps=((120, 1), (240, 3)),
         input_variable_ids=("tmp2m", "prate", "ugrd10m", "vgrd10m"),
         accumulated_precipitation=False,
     ),
@@ -72,7 +96,8 @@ SOURCES: dict[str, SourceSpec] = {
         manifest_model="ECMWF",
         product="ifs-0p25",
         latest_filename="latest-ecmwf.json",
-        step_hours=3,
+        # Three-hourly through 144 hours, then six-hourly through 240.
+        steps=((144, 3), (240, 6)),
         input_variable_ids=("tmp2m", "tp", "ugrd10m", "vgrd10m"),
         accumulated_precipitation=True,
         fetch_concurrency=1,
@@ -87,7 +112,8 @@ SOURCES: dict[str, SourceSpec] = {
         manifest_model="GFS-SFLUX",
         product="sfluxgrb",
         latest_filename="latest-sflux.json",
-        step_hours=1,
+        # Same cadence as pgrb2: hourly through f120, three-hourly to f240.
+        steps=((120, 1), (240, 3)),
         input_variable_ids=("tmp2m", "prate_ave", "ugrd10m", "vgrd10m", "dswrf"),
         accumulated_precipitation=False,
         averaged_precipitation=True,

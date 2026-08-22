@@ -238,7 +238,11 @@ def resolve_run(
     exists: Callable[[str], bool] = remote_exists,
     model: str = "gfs",
 ) -> GfsRun:
-    label = source_spec(model).manifest_model
+    spec = source_spec(model)
+    label = spec.manifest_model
+    # Validate the horizon against the model's published axis up front, so an
+    # off-axis --hours fails with the axis description instead of a 404.
+    spec.forecast_hours(hours)
     if value != "latest":
         run = parse_run(value)
         if not _run_is_complete(run, hours, model, exists):
@@ -434,7 +438,7 @@ def fetch_run(
     ECMWF retries a failed frame in place so completed frames remain reusable."""
     spec = source_spec(model)
     destination = raw_root / f"{spec.id}.{run.id}"
-    forecast_hours = list(range(0, hours + 1, spec.step_hours))
+    forecast_hours = spec.forecast_hours(hours)
     if spec.fetch_concurrency <= 1:
         paths: list[Path] = []
         frame_attempts = ECMWF_FRAME_ATTEMPTS if model == "ecmwf" else 1
