@@ -148,7 +148,7 @@ export function t(key: MessageKey, params?: Record<string, string | number>): st
 
 /** Rewrites every element carrying data-i18n / data-i18n-aria / data-i18n-content
  * from the dictionary, and stamps <html lang> and the meta description. The
- * markup ships the Chinese copy as its pre-JS fallback. */
+ * markup ships the English copy as its pre-JS fallback. */
 export function applyStaticMessages(): void {
   document.documentElement.lang = htmlLang;
   for (const element of document.querySelectorAll<HTMLElement>("[data-i18n]")) {

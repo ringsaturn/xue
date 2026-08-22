@@ -1,15 +1,15 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#08131C" />
-    <meta name="description" data-i18n-content="metaDescription" content="NOAA GFS 与 ECMWF 全球未来 120 小时气温、降水、风场与太阳辐射预报" />
+    <meta name="description" data-i18n-content="metaDescription" content="NOAA GFS and ECMWF global 120-hour forecasts of temperature, precipitation, wind and solar radiation" />
     <title>GFS / ECMWF Temperature and Precipitation</title>
   </head>
   <body data-variable="prate">
     <main class="app-shell">
-      <div id="map" data-i18n-aria="mapAria" aria-label="全球气温与降水预报地图"></div>
+      <div id="map" data-i18n-aria="mapAria" aria-label="Global temperature and precipitation forecast map"></div>
       <div class="atmosphere" aria-hidden="true"></div>
 
       <details class="station-panel" open>
@@ -18,7 +18,7 @@
           <span id="variable-code">GFS / PRATE SFC</span>
         </summary>
         <div class="station-content">
-          <div class="model-switch" role="group" data-i18n-aria="modelSwitchAria" aria-label="预报模式">
+          <div class="model-switch" role="group" data-i18n-aria="modelSwitchAria" aria-label="Forecast model">
             <button type="button" data-model="gfs" aria-pressed="true">
               <span>GFS</span><small>NOAA 0.25°</small>
             </button>
@@ -29,37 +29,37 @@
               <span>ECMWF</span><small>IFS 0.25°</small>
             </button>
           </div>
-          <div class="variable-switch" role="group" data-i18n-aria="variableSwitchAria" aria-label="气象变量">
+          <div class="variable-switch" role="group" data-i18n-aria="variableSwitchAria" aria-label="Weather variable">
             <button type="button" data-variable="tmp2m" aria-pressed="false">
-              <span>TEMP</span><small data-i18n="varTemp">气温</small>
+              <span>TEMP</span><small data-i18n="varTemp">2M</small>
             </button>
             <button type="button" data-variable="prate" aria-pressed="true">
-              <span>PRECIP</span><small data-i18n="varPrecip">降水</small>
+              <span>PRECIP</span><small data-i18n="varPrecip">RATE</small>
             </button>
             <button type="button" data-variable="wind10m" aria-pressed="false" hidden>
-              <span>WIND</span><small data-i18n="varWind">风场</small>
+              <span>WIND</span><small data-i18n="varWind">10M</small>
             </button>
             <button type="button" data-variable="dswrf" aria-pressed="false" hidden>
-              <span>SOLAR</span><small data-i18n="varSolar">辐射</small>
+              <span>SOLAR</span><small data-i18n="varSolar">FLUX</small>
             </button>
           </div>
           <p class="eyebrow" id="model-eyebrow">NOAA / GFS (0.25°)</p>
           <h1 id="variable-title">Precipitation<br />Rate</h1>
           <dl>
             <div>
-              <dt data-i18n="runCycle">模式周期</dt>
-              <dd id="run-time" data-i18n="awaitingData">等待数据</dd>
+              <dt data-i18n="runCycle">Model run</dt>
+              <dd id="run-time" data-i18n="awaitingData">Awaiting data</dd>
             </div>
             <div>
-              <dt data-i18n="validTimeLabel">当前有效时间</dt>
+              <dt data-i18n="validTimeLabel">Valid time</dt>
               <dd id="valid-time">--</dd>
             </div>
           </dl>
         </div>
       </details>
 
-      <aside id="data-card" class="data-card" data-i18n-aria="statsAria" aria-label="详细统计信息">
-        <button id="stats-close" class="stats-close" type="button" data-i18n-aria="statsCloseAria" aria-label="关闭详细统计信息">×</button>
+      <aside id="data-card" class="data-card" data-i18n-aria="statsAria" aria-label="Stats for nerds">
+        <button id="stats-close" class="stats-close" type="button" data-i18n-aria="statsCloseAria" aria-label="Close stats">×</button>
         <div class="data-card-heading">
           <div>
             <span id="data-card-index" class="data-card-index">121F</span>
@@ -69,15 +69,15 @@
         </div>
         <div class="data-card-metrics">
           <div>
-            <span data-i18n="bufferedFrames">缓存帧</span>
+            <span data-i18n="bufferedFrames">Buffered</span>
             <output id="preload-frames">0 / 121</output>
           </div>
           <div>
-            <span data-i18n="downloadedBytes">数据量</span>
+            <span data-i18n="downloadedBytes">Downloaded</span>
             <output id="preload-bytes">0 B</output>
           </div>
           <div>
-            <span data-i18n="formatLabel">格式</span>
+            <span data-i18n="formatLabel">Format</span>
             <output id="preload-format">--</output>
           </div>
         </div>
@@ -86,27 +86,27 @@
           class="preload-segments"
           role="progressbar"
           data-i18n-aria="preloadProgressAria"
-          aria-label="预报数据预加载进度"
+          aria-label="Forecast data preload progress"
           aria-valuemin="0"
           aria-valuemax="121"
           aria-valuenow="0"
         ></div>
         <dl id="stats-grid" class="stats-grid">
-          <div><dt data-i18n="statDataset">数据集</dt><dd id="stat-dataset">--</dd></div>
-          <div><dt data-i18n="statGrid">网格</dt><dd id="stat-grid">--</dd></div>
-          <div><dt data-i18n="statFrameCache">帧缓存</dt><dd id="stat-cache-bytes">--</dd></div>
-          <div><dt data-i18n="statDecodeTime">解码耗时</dt><dd id="stat-decode">--</dd></div>
-          <div><dt data-i18n="statDecodeRate">解码速率</dt><dd id="stat-decode-rate">--</dd></div>
-          <div><dt data-i18n="statViewport">视口采样</dt><dd id="stat-viewport">--</dd></div>
-          <div><dt data-i18n="statConnection">网络连接</dt><dd id="stat-connection">--</dd></div>
+          <div><dt data-i18n="statDataset">Dataset</dt><dd id="stat-dataset">--</dd></div>
+          <div><dt data-i18n="statGrid">Grid</dt><dd id="stat-grid">--</dd></div>
+          <div><dt data-i18n="statFrameCache">Frame cache</dt><dd id="stat-cache-bytes">--</dd></div>
+          <div><dt data-i18n="statDecodeTime">Decode time</dt><dd id="stat-decode">--</dd></div>
+          <div><dt data-i18n="statDecodeRate">Decode rate</dt><dd id="stat-decode-rate">--</dd></div>
+          <div><dt data-i18n="statViewport">Viewport sampling</dt><dd id="stat-viewport">--</dd></div>
+          <div><dt data-i18n="statConnection">Connection</dt><dd id="stat-connection">--</dd></div>
         </dl>
         <div class="stat-graph-wrap" aria-hidden="true">
           <canvas id="stat-graph"></canvas>
         </div>
-        <p id="preload-state" class="preload-state" role="status" aria-live="polite" data-i18n="awaitingManifest">等待数据舱单</p>
+        <p id="preload-state" class="preload-state" role="status" aria-live="polite" data-i18n="awaitingManifest">Awaiting manifest</p>
       </aside>
 
-      <aside id="legend" class="legend" data-i18n-aria="legendPrateAria" aria-label="降水强度色标">
+      <aside id="legend" class="legend" data-i18n-aria="legendPrateAria" aria-label="Precipitation rate color scale">
         <span id="legend-unit" class="legend-unit">mm/h</span>
         <div class="legend-bar" aria-hidden="true"></div>
         <div id="legend-labels" class="legend-labels">
@@ -114,10 +114,10 @@
         </div>
       </aside>
 
-      <section id="timeline-panel" class="timeline-panel" data-i18n-aria="timelineAria" aria-label="预报时间控制">
+      <section id="timeline-panel" class="timeline-panel" data-i18n-aria="timelineAria" aria-label="Forecast time controls">
         <div class="timeline-heading">
           <div class="timeline-primary">
-            <button id="play-button" class="transport-button" type="button" data-i18n-aria="playAnimation" aria-label="播放动画" disabled>
+            <button id="play-button" class="transport-button" type="button" data-i18n-aria="playAnimation" aria-label="Play animation" disabled>
               <span class="transport-icon" aria-hidden="true"></span>
               <span id="play-label" class="transport-label">PLAY</span>
             </button>
@@ -127,8 +127,8 @@
             </div>
           </div>
           <div class="timeline-meta">
-            <div id="load-status" class="load-status" role="status" aria-live="polite" data-i18n="readingManifest">正在读取清单</div>
-            <button id="timeline-toggle" class="timeline-toggle" type="button" aria-expanded="false" data-i18n-aria="expandTimeline" aria-label="展开时间轴详情">
+            <div id="load-status" class="load-status" role="status" aria-live="polite" data-i18n="readingManifest">Loading manifest</div>
+            <button id="timeline-toggle" class="timeline-toggle" type="button" aria-expanded="false" data-i18n-aria="expandTimeline" aria-label="Expand timeline details">
               <span class="timeline-toggle-icon" aria-hidden="true"></span>
             </button>
           </div>
@@ -144,29 +144,29 @@
             value="0"
             disabled
             data-i18n-aria="forecastHourAria"
-            aria-label="预报时次"
+            aria-label="Forecast hour"
           />
           <div id="tick-marks" class="tick-marks" aria-hidden="true"></div>
         </div>
         <div class="track-ends" aria-hidden="true"><span>NOW</span><span id="track-horizon">+120H</span></div>
-        <div id="forecast-days" class="forecast-days" data-i18n-aria="forecastDaysAria" aria-label="五日预报分段"></div>
+        <div id="forecast-days" class="forecast-days" data-i18n-aria="forecastDaysAria" aria-label="Five-day forecast segments"></div>
       </section>
 
-      <div id="context-menu" class="context-menu" role="menu" data-i18n-aria="mapMenuAria" aria-label="地图选项" hidden>
-        <button id="stats-menu-toggle" type="button" role="menuitemcheckbox" aria-checked="false" data-i18n="menuStats">详细统计信息</button>
-        <button id="copy-debug" type="button" role="menuitem" data-i18n="menuCopyDebug">复制调试信息</button>
+      <div id="context-menu" class="context-menu" role="menu" data-i18n-aria="mapMenuAria" aria-label="Map options" hidden>
+        <button id="stats-menu-toggle" type="button" role="menuitemcheckbox" aria-checked="false" data-i18n="menuStats">Stats for nerds</button>
+        <button id="copy-debug" type="button" role="menuitem" data-i18n="menuCopyDebug">Copy debug info</button>
       </div>
 
       <div id="error-panel" class="error-panel" role="alert" hidden>
-        <strong data-i18n="errorTitle">数据无法显示</strong>
+        <strong data-i18n="errorTitle">Data unavailable</strong>
         <p id="error-message"></p>
-        <button id="retry-button" type="button" data-i18n="retry">重新读取</button>
+        <button id="retry-button" type="button" data-i18n="retry">Retry</button>
       </div>
 
       <footer class="source-note">
         <!-- The toggle leads the line: the phone layout ellipsis-clips the
              footer's tail, which must never swallow an interactive control. -->
-        <button id="lang-toggle" class="lang-toggle" type="button" data-i18n="langToggle">ENGLISH</button>
+        <button id="lang-toggle" class="lang-toggle" type="button" data-i18n="langToggle">中文</button>
         <span>•</span>
         <a href="https://github.com/ringsaturn/xue" target="_blank" rel="noreferrer">GITHUB</a>
         <span>•</span>
