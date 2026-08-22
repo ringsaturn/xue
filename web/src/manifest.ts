@@ -20,13 +20,13 @@ export interface ForecastModelInfo {
 
 export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
   gfs: { id: "gfs", label: "GFS", product: "pgrb2.0p25", latestFilename: "latest.json" },
-  ecmwf: { id: "ecmwf", label: "ECMWF", product: "ifs-0p25", latestFilename: "latest-ecmwf.json" },
   // GFS surface flux on the native ~13 km grid; the
   // only source that ships the dswrf solar-radiation bundle.
   sflux: { id: "sflux", label: "GFS-SFLUX", product: "sfluxgrb", latestFilename: "latest-sflux.json" },
+  ecmwf: { id: "ecmwf", label: "ECMWF", product: "ifs-0p25", latestFilename: "latest-ecmwf.json" },
 };
 
-export const FORECAST_MODEL_IDS: readonly ForecastModelId[] = ["gfs", "ecmwf", "sflux"];
+export const FORECAST_MODEL_IDS: readonly ForecastModelId[] = ["gfs", "sflux", "ecmwf"];
 
 function modelForManifestString(model: unknown): ForecastModelInfo | null {
   for (const info of Object.values(FORECAST_MODELS)) {

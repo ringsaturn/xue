@@ -1,6 +1,9 @@
 # 雪 / Xue
 
 [![test](https://github.com/ringsaturn/xue/actions/workflows/test.yml/badge.svg)](https://github.com/ringsaturn/xue/actions/workflows/test.yml)
+[![GFS/0p25 run](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest.json&query=%24.run&label=GFS/0p25&color=0b7cbd&cacheSeconds=600)](https://dataset.ringsaturn.me/xue/latest.json)
+[![GFS/SFLUX run](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-sflux.json&query=%24.run&label=GFS/SFLUX&color=2b6cb0&cacheSeconds=600)](https://dataset.ringsaturn.me/xue/latest-sflux.json)
+[![ECMWF/IFS 0p25 run](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-ecmwf.json&query=%24.run&label=ECMWF/IFS%200p25&color=1f6f8b&cacheSeconds=600)](https://dataset.ringsaturn.me/xue/latest-ecmwf.json)
 
 > Xue (雪, pronounced /ɕɥɛ/, roughly "shweh"), Chinese for snow.
 
@@ -14,9 +17,9 @@ renders through a GPU particle layer.
 
 Live demo: <https://xue.ringsaturn.me>. The control in the top-left
 corner switches between three sources: NOAA GFS 0.25° (hourly, 121
-frames), ECMWF IFS open data 0.25° (3-hourly, 41 frames), and GFS surface
-flux on its native ~13 km Gaussian grid (hourly, with a solar-radiation
-layer). The three sources share the same format, the same decoder, and the
+frames), GFS surface flux on its native ~13 km Gaussian grid (hourly, with
+a solar-radiation layer), and ECMWF IFS open data 0.25° (3-hourly, 41
+frames). The three sources share the same format, the same decoder, and the
 same rendering pipeline.
 
 ## Format rationale
