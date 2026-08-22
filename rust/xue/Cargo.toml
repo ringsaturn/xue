@@ -4,6 +4,14 @@ version = "0.1.0"
 edition = "2021"
 description = "Xue v1 bundle parser and frame decoder"
 license = "MIT OR Apache-2.0"
+readme = "README.md"
+repository = "https://github.com/ringsaturn/xue"
+keywords = ["weather", "forecast", "meteorology", "decoder"]
+categories = ["science", "compression", "parser-implementations"]
+# The golden tests decode fixtures that tests/prepare_bin_fixture.py (at the
+# repo root) generates with the Python encoder — they cannot run from the
+# packaged crate.
+exclude = ["tests/"]
 
 [dependencies]
 crc32fast = "1"
