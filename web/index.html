@@ -6,6 +6,30 @@
     <meta name="theme-color" content="#08131C" />
     <meta name="description" data-i18n-content="metaDescription" content="NOAA GFS and ECMWF global 120-hour forecasts of temperature, precipitation, wind and solar radiation" />
     <title>GFS / ECMWF Temperature and Precipitation</title>
+
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <!-- Social cards are scraped from the static markup, before the i18n pass
+         runs, so they stay in English like the pre-JS fallback copy. The
+         og:image URL must be absolute — relative hrefs are not resolved by
+         every scraper — so it names the deploy origin, not the ./ base. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Xue" />
+    <meta property="og:url" content="https://xue.ringsaturn.me/" />
+    <meta property="og:title" content="GFS / ECMWF Temperature and Precipitation" />
+    <meta property="og:description" content="NOAA GFS and ECMWF global 120-hour forecasts of temperature, precipitation, wind and solar radiation" />
+    <meta property="og:image" content="https://xue.ringsaturn.me/og-image.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Animated GFS SFLUX precipitation rate over the East Pacific and North America" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="GFS / ECMWF Temperature and Precipitation" />
+    <meta name="twitter:description" content="NOAA GFS and ECMWF global 120-hour forecasts of temperature, precipitation, wind and solar radiation" />
+    <meta name="twitter:image" content="https://xue.ringsaturn.me/og-image.jpg" />
+    <meta name="twitter:image:alt" content="Animated GFS SFLUX precipitation rate over the East Pacific and North America" />
   </head>
   <body data-variable="prate">
     <main class="app-shell">

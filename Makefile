@@ -93,12 +93,13 @@ serve:
 format-pdf:
 	scripts/build_format_pdf.sh
 
+# Everything vite emits except data/ — the shell, its hashed assets, and the
+# favicon / social-card images the <head> links by root-absolute path.
 deploy-build:
 	npm run build -- --mode deploy
 	rm -rf dist-deploy
 	mkdir -p dist-deploy
-	cp dist/index.html dist-deploy/index.html
-	cp -R dist/assets dist-deploy/assets
+	rsync -a --exclude 'data/' dist/ dist-deploy/
 
 # Upload one run to the public R2 dataset bucket that deploy builds read from
 # (web/.env.deploy -> VITE_DATA_BASE_URL): the per-variable .xue bundles
