@@ -1,9 +1,21 @@
 name: test
 
+# Prose-only changes cannot break any suite, so they skip the whole
+# workflow. Everything else — including a one-line frontend or encoder
+# edit — still runs all four jobs. (The two lists are duplicated because
+# the Actions parser does not support YAML anchors.)
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - "**.md"
+      - docs/**
+      - LICENSE-*
   pull_request:
+    paths-ignore:
+      - "**.md"
+      - docs/**
+      - LICENSE-*
   workflow_dispatch:
 
 permissions:
