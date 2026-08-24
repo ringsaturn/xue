@@ -11,6 +11,9 @@ on:
     # seven hours after the cycle. `--run latest` walks back over the cycle
     # grid anyway, so a short cycle is skipped rather than half-published.
     - cron: "30 8,20 * * *"
+    # A second idempotent pass recovers from a temporary upstream outage.
+    # publish.yml exits early when the first pass already made the run live.
+    - cron: "30 9,21 * * *"
   workflow_dispatch:
     inputs:
       run:

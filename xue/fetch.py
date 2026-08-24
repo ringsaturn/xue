@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import logging
 import os
+import random
 import re
+import threading
 import time
 import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
+from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Callable
 
@@ -27,9 +30,28 @@ LOG = logging.getLogger(__name__)
 BASE_URL = os.environ.get(
     "XUE_GFS_BASE_URL", "https://storage.googleapis.com/global-forecast-system"
 )
-ECMWF_BASE_URL = "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com"
+ECMWF_BASE_URLS = tuple(
+    url.strip().rstrip("/")
+    for url in os.environ.get(
+        "XUE_ECMWF_BASE_URLS",
+        ",".join(
+            (
+                "https://storage.googleapis.com/ecmwf-open-data",
+                "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com",
+                "https://data.ecmwf.int/forecasts",
+            )
+        ),
+    ).split(",")
+    if url.strip()
+)
+if not ECMWF_BASE_URLS:
+    raise ValueError("XUE_ECMWF_BASE_URLS must contain at least one URL")
+ECMWF_REQUEST_INTERVAL = float(os.environ.get("XUE_ECMWF_REQUEST_INTERVAL", "0.75"))
+ECMWF_FRAME_ATTEMPTS = 3
 CONTENT_RANGE_RE = re.compile(r"^bytes (\d+)-(\d+)/(\d+|\*)$")
 USER_AGENT = "xue/0.1 (+https://registry.opendata.aws/noaa-gfs-bdp-pds/)"
+_ECMWF_PACING_LOCK = threading.Lock()
+_ECMWF_NEXT_REQUEST_AT = 0.0
 
 
 def floor_to_cycle(now: datetime) -> datetime:
@@ -59,11 +81,13 @@ def sflux_object_url(run: GfsRun, forecast_hour: int) -> str:
     return f"{BASE_URL}/gfs.{run.date}/{run.cycle}/atmos/{filename}"
 
 
-def ecmwf_object_url(run: GfsRun, forecast_hour: int) -> str:
-    """ECMWF open data on AWS: ``{date}/{HH}z/ifs/0p25/oper/…`` with an
-    unpadded ``-{h}h-`` step in the object name."""
+def ecmwf_object_url(
+    run: GfsRun, forecast_hour: int, *, base_url: str | None = None
+) -> str:
+    """ECMWF open data with an unpadded ``-{h}h-`` step in the object name."""
     filename = f"{run.date}{run.cycle}0000-{forecast_hour}h-oper-fc.grib2"
-    return f"{ECMWF_BASE_URL}/{run.date}/{run.cycle}z/ifs/0p25/oper/{filename}"
+    base = (base_url or ECMWF_BASE_URLS[0]).rstrip("/")
+    return f"{base}/{run.date}/{run.cycle}z/ifs/0p25/oper/{filename}"
 
 
 def model_object_url(run: GfsRun, forecast_hour: int, model: str) -> str:
@@ -74,23 +98,73 @@ def model_object_url(run: GfsRun, forecast_hour: int, model: str) -> str:
     return object_url(run, forecast_hour)
 
 
+def _is_ecmwf_url(url: str) -> bool:
+    return any(url == base or url.startswith(base + "/") for base in ECMWF_BASE_URLS)
+
+
+def _pace_ecmwf_request(url: str) -> None:
+    global _ECMWF_NEXT_REQUEST_AT
+    if not _is_ecmwf_url(url) or ECMWF_REQUEST_INTERVAL <= 0:
+        return
+    with _ECMWF_PACING_LOCK:
+        now = time.monotonic()
+        delay = max(0.0, _ECMWF_NEXT_REQUEST_AT - now)
+        if delay:
+            time.sleep(delay)
+        _ECMWF_NEXT_REQUEST_AT = time.monotonic() + ECMWF_REQUEST_INTERVAL
+
+
+def _retry_after_seconds(error: Exception) -> float | None:
+    if not isinstance(error, urllib.error.HTTPError):
+        return None
+    value = error.headers.get("Retry-After") if error.headers else None
+    if not value:
+        return None
+    try:
+        return max(0.0, float(value))
+    except ValueError:
+        try:
+            retry_at = parsedate_to_datetime(value)
+            if retry_at.tzinfo is None:
+                retry_at = retry_at.replace(tzinfo=UTC)
+            return max(0.0, (retry_at - datetime.now(UTC)).total_seconds())
+        except (TypeError, ValueError, OverflowError):
+            return None
+
+
+def _http_error_code(error: BaseException) -> int | None:
+    current: BaseException | None = error
+    while current is not None:
+        if isinstance(current, urllib.error.HTTPError):
+            return current.code
+        current = current.__cause__
+    return None
+
+
 def _request(
     url: str,
     *,
     method: str = "GET",
     headers: dict[str, str] | None = None,
-    # Six attempts with 0.5 s doubling backoff (~15 s of waiting in total):
-    # ECMWF's open data bucket answers bursts with 503 Slow Down, and three
-    # quick retries give up long before it calms down.
-    attempts: int = 6,
+    attempts: int | None = None,
     timeout: float = 30,
+    max_elapsed: float | None = None,
     opener: Callable[..., object] = urllib.request.urlopen,
 ) -> object:
+    is_ecmwf = _is_ecmwf_url(url)
+    attempts = attempts or (4 if is_ecmwf else 6)
+    max_elapsed = max_elapsed or (180 if is_ecmwf else 60)
+    base_delay = 10.0 if is_ecmwf else 0.5
+    max_delay = 60.0 if is_ecmwf else 8.0
     request_headers = {"User-Agent": USER_AGENT, **(headers or {})}
     request = urllib.request.Request(url, method=method, headers=request_headers)
     last_error: Exception | None = None
+    started = time.monotonic()
     for attempt in range(attempts):
+        if attempt and time.monotonic() - started >= max_elapsed:
+            break
         try:
+            _pace_ecmwf_request(url)
             return opener(request, timeout=timeout)
         except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, OSError) as exc:
             last_error = exc
@@ -104,19 +178,55 @@ def _request(
             }
             if not retryable or attempt + 1 == attempts:
                 break
-            delay = 0.5 * (2**attempt)
-            LOG.warning("request failed, retrying in %.1fs: %s", delay, url)
+            retry_after = _retry_after_seconds(exc)
+            delay_cap = min(max_delay, base_delay * (2**attempt))
+            delay = retry_after if retry_after is not None else random.uniform(0, delay_cap)
+            remaining = max_elapsed - (time.monotonic() - started)
+            if remaining <= 0:
+                break
+            delay = min(delay, remaining)
+            LOG.warning("request failed (%s), retrying in %.1fs: %s", exc, delay, url)
             time.sleep(delay)
     raise DownloadError(f"request failed for {url}: {last_error}") from last_error
 
 
 def remote_exists(url: str) -> bool:
     try:
-        response = _request(url, method="HEAD", attempts=2, timeout=15)
+        response = _request(url, method="HEAD", timeout=15)
         with response:
             return getattr(response, "status", None) == 200
-    except DownloadError:
-        return False
+    except DownloadError as exc:
+        if _http_error_code(exc) == 404:
+            return False
+        raise
+
+
+def _run_is_complete(
+    run: GfsRun,
+    hours: int,
+    model: str,
+    exists: Callable[[str], bool],
+) -> bool:
+    if model != "ecmwf":
+        return exists(model_object_url(run, 0, model)) and exists(
+            model_object_url(run, hours, model)
+        )
+
+    transient_error: DownloadError | None = None
+    for base_url in ECMWF_BASE_URLS:
+        try:
+            if exists(ecmwf_object_url(run, 0, base_url=base_url)) and exists(
+                ecmwf_object_url(run, hours, base_url=base_url)
+            ):
+                return True
+        except DownloadError as exc:
+            transient_error = exc
+            LOG.warning("could not probe ECMWF mirror %s: %s", base_url, exc)
+    if transient_error is not None:
+        raise DownloadError(
+            f"could not establish whether ECMWF run {run.id} is complete"
+        ) from transient_error
+    return False
 
 
 def resolve_run(
@@ -131,15 +241,18 @@ def resolve_run(
     label = source_spec(model).manifest_model
     if value != "latest":
         run = parse_run(value)
-        if not exists(model_object_url(run, 0, model)) or not exists(model_object_url(run, hours, model)):
+        if not _run_is_complete(run, hours, model, exists):
             raise DownloadError(f"{label} run {run.id} is incomplete for f000 through f{hours:03d}")
         return run
 
     candidate = floor_to_cycle(now or datetime.now(UTC))
     for _ in range(max_cycles):
         run = GfsRun(candidate)
+        if model == "ecmwf" and hours > 90 and run.cycle in {"06", "18"}:
+            candidate -= timedelta(hours=6)
+            continue
         LOG.info("checking %s run %s", label, run.id)
-        if exists(model_object_url(run, 0, model)) and exists(model_object_url(run, hours, model)):
+        if _run_is_complete(run, hours, model, exists):
             return run
         candidate -= timedelta(hours=6)
     raise DownloadError(f"could not find a complete {label} cycle in the last {max_cycles} runs")
@@ -224,13 +337,29 @@ def _download_noaa_payload(run: GfsRun, forecast_hour: int, spec: SourceSpec) ->
 
 
 def _download_ecmwf_payload(run: GfsRun, forecast_hour: int, spec: SourceSpec) -> bytes:
-    url = ecmwf_object_url(run, forecast_hour)
-    index_text = fetch_text(url.removesuffix(".grib2") + ".index")
-    byte_ranges = [
-        ecmwf_field_byte_range(index_text, VARIABLES[variable_id].ecmwf_param)
-        for variable_id in spec.input_variable_ids
-    ]
-    return b"".join(fetch_range(url, byte_range) for byte_range in byte_ranges)
+    errors: list[str] = []
+    for base_url in ECMWF_BASE_URLS:
+        url = ecmwf_object_url(run, forecast_hour, base_url=base_url)
+        try:
+            index_text = fetch_text(url.removesuffix(".grib2") + ".index")
+            byte_ranges = [
+                ecmwf_field_byte_range(index_text, VARIABLES[variable_id].ecmwf_param)
+                for variable_id in spec.input_variable_ids
+            ]
+            # Index offsets are scoped to a particular replica. Restart the
+            # whole frame on the next mirror if any range request fails.
+            return b"".join(fetch_range(url, byte_range) for byte_range in byte_ranges)
+        except DownloadError as exc:
+            errors.append(f"{base_url}: {exc}")
+            LOG.warning(
+                "ECMWF mirror failed for f%03d, switching source: %s",
+                forecast_hour,
+                base_url,
+            )
+    raise DownloadError(
+        f"all ECMWF mirrors failed for run {run.id} f{forecast_hour:03d}: "
+        + "; ".join(errors)
+    )
 
 
 def fetch_frame(
@@ -301,13 +430,32 @@ def fetch_run(
 ) -> list[Path]:
     """Fetch every frame of a run, ``spec.fetch_concurrency`` frames at a
     time (each frame is several fresh HTTPS round-trips, so a sequential
-    fetch is latency-bound, not bandwidth-bound). Results keep frame order;
-    the first failure propagates."""
+    fetch is latency-bound, not bandwidth-bound). Results keep frame order.
+    ECMWF retries a failed frame in place so completed frames remain reusable."""
     spec = source_spec(model)
     destination = raw_root / f"{spec.id}.{run.id}"
     forecast_hours = list(range(0, hours + 1, spec.step_hours))
     if spec.fetch_concurrency <= 1:
-        return [fetch_frame(run, hour, destination, force=force, model=model) for hour in forecast_hours]
+        paths: list[Path] = []
+        frame_attempts = ECMWF_FRAME_ATTEMPTS if model == "ecmwf" else 1
+        for hour in forecast_hours:
+            for attempt in range(frame_attempts):
+                try:
+                    paths.append(fetch_frame(run, hour, destination, force=force, model=model))
+                    break
+                except DownloadError as exc:
+                    if attempt + 1 == frame_attempts:
+                        raise
+                    delay_cap = min(180.0, 60.0 * (2**attempt))
+                    delay = random.uniform(60.0, delay_cap)
+                    LOG.warning(
+                        "ECMWF frame f%03d failed (%s), retrying in %.1fs",
+                        hour,
+                        exc,
+                        delay,
+                    )
+                    time.sleep(delay)
+        return paths
     with ThreadPoolExecutor(max_workers=spec.fetch_concurrency) as executor:
         return list(
             executor.map(
