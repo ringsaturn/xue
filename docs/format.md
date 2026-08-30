@@ -260,6 +260,29 @@ into the same `-180`-first layout, so every published grid shares it. A
 renderer applies inverse Web Mercator, converts longitude and latitude to
 grid coordinates, and samples this layout directly.
 
+#### Regional Grids
+
+A grid need not cover the world. The `grid` block already says exactly what
+a file covers, and a regional file is an ordinary file whose origin and
+extent name a window rather than the globe — the container, the index, and
+every codebook are unchanged. The reference pipeline publishes such files
+for its historical showcase cases, cut out of a global run.
+
+Two rules follow for readers, and both are properties a global grid
+satisfies trivially:
+
+- `wrapLongitude` is true only when `width x longitudeStep` is 360 degrees.
+  A reader must take the horizontal wrap from this field, not from the
+  model: sampling filters may wrap across the antimeridian only when it is
+  true, and must clamp otherwise.
+- The grid coordinate of a longitude is
+  `(longitude - firstLongitude) mod 360 / longitudeStep`. Taking the offset
+  modulo 360 is what keeps a window that crosses the antimeridian
+  contiguous — such a window declares a `firstLongitude` near +180 and runs
+  past it. Coordinates outside `[0, width)` or `[0, height)` are outside the
+  file; a renderer must draw nothing there rather than clamp, which would
+  smear the border across the map.
+
 `model` and `product` identify the source dataset. Registered pairs:
 
 | `model` | `product` | Grid | Steps published | Notes |

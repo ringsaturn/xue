@@ -151,6 +151,33 @@ aliases like `tmp2m` / `prate` / `wind10m` / `solar`; both are
 case-insensitive. The address bar stays in sync when switching, and
 unrecognized values fall back to defaults.
 
+## Historical showcase
+
+Besides the live feed, the site publishes **cases**: past forecast runs
+cropped to the region and hours of one weather event. They are listed at
+`/showcase.html` and played back by the ordinary viewer at `/?case=<id>`,
+which pins the case's dataset and run and frames the map on its region.
+
+A case is defined by a small checked-in JSON file
+(`showcase/cases/<id>.json`) naming the model, run, forecast range, bounding
+box, and the subset of variables the event is about:
+
+```sh
+make showcase-check                      # validate every definition
+make showcase CASE=zhengzhou-2021        # fetch, crop, encode, index
+make upload-r2-showcase                  # publish cases + the catalog
+```
+
+Cropping happens in the encoder (`--bbox` equivalents `crop_grid` /
+`convert_bin(bbox=...)`): the window is rounded outward to whole grid cells
+and may cross the antimeridian, and the resulting file is an ordinary `.xue`
+whose `grid` block names a window instead of the globe. That keeps a case to
+a few megabytes, so cases stay published permanently while runs are pruned.
+
+Archive depth limits which events are possible: NOAA GFS and sflux reach
+back to about 2021-01, ECMWF open data to about 2024-02. See
+[`showcase/README.md`](showcase/README.md) for the authoring guide.
+
 ## Publishing
 
 The live site is a static shell on Cloudflare Pages; forecast data lives on
@@ -161,7 +188,11 @@ the AWS CLI:
 ```sh
 make upload-r2 MODEL=gfs RUN=2026081600   # run assets, then the live pointer
 make prune-r2  MODEL=gfs                  # delete the runs it superseded
+make upload-r2-showcase                   # showcase cases, then the catalog
 ```
+
+Pruning only ever considers `<model>.<run>/` directories, so showcase cases
+are never swept up by it.
 
 Credentials are an R2 API token's key pair in `AWS_ACCESS_KEY_ID` /
 `AWS_SECRET_ACCESS_KEY`, plus `CLOUDFLARE_ACCOUNT_ID` for the endpoint.

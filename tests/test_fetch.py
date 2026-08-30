@@ -20,8 +20,10 @@ from xue.fetch import (
     fetch_run,
     floor_to_cycle,
     object_url,
+    parse_run,
     remote_exists,
     resolve_run,
+    sflux_object_url,
 )
 from xue.idx import ByteRange
 from xue.model import GfsRun
@@ -199,6 +201,17 @@ class FetchTests(unittest.TestCase):
         self.assertEqual(run.id, "2026081500")
         self.assertTrue(object_url(run, 120).endswith("gfs.t00z.pgrb2.0p25.f120"))
         self.assertGreaterEqual(len(calls), 3)
+
+    def test_archived_runs_use_the_layout_of_their_day(self) -> None:
+        # NOAA moved the per-cycle files under atmos/ on 2021-03-23; the
+        # archived cycles before it, which the showcase cases reach into,
+        # keep them directly under the cycle.
+        modern = parse_run("2021032300")
+        legacy = parse_run("2021032218")
+        self.assertIn("/00/atmos/gfs.t00z.pgrb2.0p25.f006", object_url(modern, 6))
+        self.assertIn("/18/gfs.t18z.pgrb2.0p25.f006", object_url(legacy, 6))
+        self.assertNotIn("atmos", object_url(legacy, 6))
+        self.assertIn("/18/gfs.t18z.sfluxgrbf006.grib2", sflux_object_url(legacy, 6))
 
     def test_http_range_requires_and_reads_206(self) -> None:
         server = ThreadingHTTPServer(("127.0.0.1", 0), _RangeHandler)

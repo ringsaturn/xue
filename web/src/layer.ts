@@ -36,6 +36,10 @@ uniform vec2 u_first;
 uniform vec2 u_step;
 uniform vec2 u_size;
 uniform float u_mix;
+// 1.0 when the grid's columns cover the full 360 degrees. A regional grid
+// (a showcase case) covers only part of the world, and every longitude
+// outside it has no data to show.
+uniform float u_wrap;
 out vec4 out_color;
 const float PI = 3.141592653589793;
 
@@ -85,8 +89,16 @@ float sampleCode(sampler2D data, vec2 uv) {
 void main() {
   float longitude = fract(v_mercator.x) * 360.0 - 180.0;
   float latitude = 90.0 - (360.0 / PI) * atan(exp((v_mercator.y * 2.0 - 1.0) * PI));
-  float u = ((longitude - u_first.x) / u_step.x + 0.5) / u_size.x;
+  // Degrees east of the grid origin, wrapped into [0, 360): a global grid
+  // indexes from -180 as before, and a regional window that crosses the
+  // antimeridian stays contiguous instead of splitting in two.
+  float delta = mod(longitude - u_first.x, 360.0);
+  float u = (delta / u_step.x + 0.5) / u_size.x;
   float v = ((latitude - u_first.y) / u_step.y + 0.5) / u_size.y;
+  // Outside the grid there is no data. The pole-to-pole production grids
+  // never leave the vertical range, so only a cropped grid is ever clipped;
+  // without this the edge texels would smear across the whole map.
+  if (v < 0.0 || v > 1.0 || (u_wrap < 0.5 && (u < 0.0 || u > 1.0))) discard;
   float code = sampleCode(u_data, vec2(u, v));
   if (u_mix > 0.0) {
     code = mix(code, sampleCode(u_data_b, vec2(u, v)), u_mix);
@@ -118,6 +130,9 @@ export class ForecastLayer implements CustomLayerInterface {
   private firstLatitude = 90;
   private longitudeStep = 0.25;
   private latitudeStep = -0.25;
+  /** Whether the columns cover the full 360 degrees. Drives both the
+   * horizontal texture wrap mode and the shader's out-of-grid clip. */
+  private wraps = true;
   private hasFrame = false;
   /** Hidden while the wind particle layer owns the screen. */
   private visible = true;
@@ -130,13 +145,14 @@ export class ForecastLayer implements CustomLayerInterface {
   constructor(private readonly onUnsupported: (message: string) => void) {}
 
   configureGrid(metadata: BundleMetadata): void {
-    const grid = metadata.grid as Record<string, number>;
-    this.width = grid.width ?? 0;
-    this.height = grid.height ?? 0;
-    this.firstLongitude = grid.firstLongitude ?? -180;
-    this.firstLatitude = grid.firstLatitude ?? 90;
-    this.longitudeStep = grid.longitudeStep ?? 0.25;
-    this.latitudeStep = grid.latitudeStep ?? -0.25;
+    const grid = metadata.grid as Record<string, number | boolean>;
+    this.width = (grid.width as number) ?? 0;
+    this.height = (grid.height as number) ?? 0;
+    this.firstLongitude = (grid.firstLongitude as number) ?? -180;
+    this.firstLatitude = (grid.firstLatitude as number) ?? 90;
+    this.longitudeStep = (grid.longitudeStep as number) ?? 0.25;
+    this.latitudeStep = (grid.latitudeStep as number) ?? -0.25;
+    this.wraps = (grid.wrapLongitude as boolean) ?? Math.abs(this.width * this.longitudeStep - 360) < 1e-6;
     this.hasFrame = false;
     // Texture dimensions changed; every plane must be re-uploaded.
     this.uploadedPlanes = [null, null];
@@ -171,7 +187,7 @@ export class ForecastLayer implements CustomLayerInterface {
       throw new Error(`program link failed: ${gl.getProgramInfoLog(program) ?? "unknown"}`);
     }
     this.program = program;
-    for (const name of ["u_matrix", "u_data", "u_data_b", "u_palette", "u_first", "u_step", "u_size", "u_mix"]) {
+    for (const name of ["u_matrix", "u_data", "u_data_b", "u_palette", "u_first", "u_step", "u_size", "u_mix", "u_wrap"]) {
       this.uniforms[name] = gl.getUniformLocation(program, name);
     }
 
@@ -210,8 +226,10 @@ export class ForecastLayer implements CustomLayerInterface {
     gl.bindTexture(gl.TEXTURE_2D, texture);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    // 1440 columns cover the full 360 degrees, so REPEAT blends across the
-    // antimeridian; rows end exactly at the poles, so T clamps.
+    // A global grid's columns cover the full 360 degrees, so REPEAT blends
+    // across the antimeridian; a cropped grid's do not, and uploadPlane
+    // switches S to CLAMP_TO_EDGE for it. Rows end at the poles either way,
+    // so T always clamps.
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     return texture;
@@ -272,6 +290,7 @@ export class ForecastLayer implements CustomLayerInterface {
   private uploadPlane(gl: WebGL2RenderingContext, slot: 0 | 1, plane: Uint8Array): void {
     if (this.uploadedPlanes[slot] === plane) return;
     gl.bindTexture(gl.TEXTURE_2D, this.dataTextures![slot]!);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, this.wraps ? gl.REPEAT : gl.CLAMP_TO_EDGE);
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, this.width, this.height, 0, gl.RED, gl.UNSIGNED_BYTE, plane);
     this.uploadedPlanes[slot] = plane;
@@ -289,6 +308,7 @@ export class ForecastLayer implements CustomLayerInterface {
     gl.uniform2f(this.uniforms.u_step!, this.longitudeStep, this.latitudeStep);
     gl.uniform2f(this.uniforms.u_size!, this.width, this.height);
     gl.uniform1f(this.uniforms.u_mix!, this.uploadedPlanes[1] ? this.mixWeight : 0);
+    gl.uniform1f(this.uniforms.u_wrap!, this.wraps ? 1 : 0);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.dataTextures[0]!);
     gl.uniform1i(this.uniforms.u_data!, 0);

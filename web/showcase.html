@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#08131C" />
+    <meta name="description" data-i18n-content="showcaseMetaDescription" content="Replays of past weather events: cropped forecast datasets for typhoons, rainstorms, heatwaves and more" />
+    <title>Showcase Cases · Xue</title>
+
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <!-- Social cards are scraped from the static markup, before the i18n
+         pass runs, so they stay in English like the pre-JS fallback copy. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Xue" />
+    <meta property="og:url" content="https://xue.ringsaturn.me/showcase.html" />
+    <meta property="og:title" content="Showcase Cases · Xue" />
+    <meta property="og:description" content="Replays of past weather events: cropped forecast datasets for typhoons, rainstorms, heatwaves and more" />
+    <meta property="og:image" content="https://xue.ringsaturn.me/og-image.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Showcase Cases · Xue" />
+    <meta name="twitter:description" content="Replays of past weather events: cropped forecast datasets for typhoons, rainstorms, heatwaves and more" />
+    <meta name="twitter:image" content="https://xue.ringsaturn.me/og-image.jpg" />
+  </head>
+  <body class="showcase-page" data-variable="prate">
+    <main class="showcase-shell">
+      <header class="showcase-header">
+        <p class="eyebrow" data-i18n="showcaseTitle">Showcase cases</p>
+        <h1 data-i18n="showcaseHeading">Weather events, replayed</h1>
+        <p class="showcase-intro" data-i18n="showcaseIntro">
+          Each case is a slice of one past forecast run — the same encoder, cropped to the region and
+          hours the event happened in.
+        </p>
+      </header>
+
+      <p id="showcase-status" class="showcase-status" role="status" aria-live="polite" data-i18n="showcaseLoading">
+        Loading case catalog
+      </p>
+
+      <ul id="showcase-list" class="showcase-list" data-i18n-aria="showcaseListAria" aria-label="Showcase case list"></ul>
+
+      <footer class="source-note">
+        <button id="lang-toggle" class="lang-toggle" type="button" data-i18n="langToggle">中文</button>
+        <span>•</span>
+        <a href="./" data-i18n="showcaseHome">Live forecast →</a>
+        <span>•</span>
+        <a href="https://github.com/ringsaturn/xue" target="_blank" rel="noreferrer">GITHUB</a>
+        <span>•</span>
+        DATA <a href="https://registry.opendata.aws/noaa-gfs-bdp-pds/" target="_blank" rel="noreferrer">NOAA GFS</a>
+        · CONTAINS MODIFIED <a href="https://www.ecmwf.int/en/forecasts/datasets/open-data" target="_blank" rel="noreferrer">ECMWF OPEN DATA</a>
+        (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">CC BY 4.0</a>)
+      </footer>
+    </main>
+    <script type="module" src="/src/showcase.ts"></script>
+  </body>
+</html>

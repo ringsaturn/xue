@@ -70,15 +70,25 @@ def parse_run(value: str) -> GfsRun:
         raise DownloadError(str(exc)) from exc
 
 
+# NOAA moved the per-cycle files into an ``atmos/`` subdirectory with this
+# run; the archived cycles before it (the bucket reaches back to about
+# 2021-01) keep them directly under the cycle, so historical showcase cases
+# built from old runs need the flat layout.
+ATMOS_SUBDIRECTORY_FROM = "2021032300"
+
+
+def _noaa_cycle_prefix(run: GfsRun) -> str:
+    subdirectory = "atmos/" if run.id >= ATMOS_SUBDIRECTORY_FROM else ""
+    return f"{BASE_URL}/gfs.{run.date}/{run.cycle}/{subdirectory}"
+
+
 def object_url(run: GfsRun, forecast_hour: int) -> str:
-    filename = f"gfs.t{run.cycle}z.pgrb2.0p25.f{forecast_hour:03d}"
-    return f"{BASE_URL}/gfs.{run.date}/{run.cycle}/atmos/{filename}"
+    return f"{_noaa_cycle_prefix(run)}gfs.t{run.cycle}z.pgrb2.0p25.f{forecast_hour:03d}"
 
 
 def sflux_object_url(run: GfsRun, forecast_hour: int) -> str:
     """GFS surface flux files, published next to pgrb2 in the same bucket."""
-    filename = f"gfs.t{run.cycle}z.sfluxgrbf{forecast_hour:03d}.grib2"
-    return f"{BASE_URL}/gfs.{run.date}/{run.cycle}/atmos/{filename}"
+    return f"{_noaa_cycle_prefix(run)}gfs.t{run.cycle}z.sfluxgrbf{forecast_hour:03d}.grib2"
 
 
 def ecmwf_object_url(
@@ -312,19 +322,23 @@ def _atomic_write(path: Path, payload: bytes) -> None:
     temporary.replace(path)
 
 
-def _frame_variable_ids(spec: SourceSpec, forecast_hour: int) -> tuple[str, ...]:
+def _frame_variable_ids(
+    spec: SourceSpec, forecast_hour: int, input_ids: tuple[str, ...] | None = None
+) -> tuple[str, ...]:
     """Input variables one frame of this source actually carries — the
-    analysis file can lack some (sflux has no PRATE record at f000)."""
+    analysis file can lack some (sflux has no PRATE record at f000).
+
+    ``input_ids`` narrows the download to the variables a build needs, which
+    is what lets a showcase case fetch only its own fields."""
+    wanted = spec.input_variable_ids if input_ids is None else input_ids
     if forecast_hour == 0:
-        return tuple(
-            variable_id
-            for variable_id in spec.input_variable_ids
-            if variable_id not in spec.optional_at_analysis
-        )
-    return spec.input_variable_ids
+        return tuple(variable_id for variable_id in wanted if variable_id not in spec.optional_at_analysis)
+    return tuple(wanted)
 
 
-def _download_noaa_payload(run: GfsRun, forecast_hour: int, spec: SourceSpec) -> bytes:
+def _download_noaa_payload(
+    run: GfsRun, forecast_hour: int, spec: SourceSpec, input_ids: tuple[str, ...] | None = None
+) -> bytes:
     url = model_object_url(run, forecast_hour, spec.id)
     index_text = fetch_text(url + ".idx")
     byte_ranges = [
@@ -334,13 +348,16 @@ def _download_noaa_payload(run: GfsRun, forecast_hour: int, spec: SourceSpec) ->
             excluded_phrases=variable.excluded_index_phrases,
         )
         for variable in (
-            VARIABLES[variable_id] for variable_id in _frame_variable_ids(spec, forecast_hour)
+            VARIABLES[variable_id]
+            for variable_id in _frame_variable_ids(spec, forecast_hour, input_ids)
         )
     ]
     return b"".join(fetch_range(url, byte_range) for byte_range in byte_ranges)
 
 
-def _download_ecmwf_payload(run: GfsRun, forecast_hour: int, spec: SourceSpec) -> bytes:
+def _download_ecmwf_payload(
+    run: GfsRun, forecast_hour: int, spec: SourceSpec, input_ids: tuple[str, ...] | None = None
+) -> bytes:
     errors: list[str] = []
     for base_url in ECMWF_BASE_URLS:
         url = ecmwf_object_url(run, forecast_hour, base_url=base_url)
@@ -348,7 +365,7 @@ def _download_ecmwf_payload(run: GfsRun, forecast_hour: int, spec: SourceSpec) -
             index_text = fetch_text(url.removesuffix(".grib2") + ".index")
             byte_ranges = [
                 ecmwf_field_byte_range(index_text, VARIABLES[variable_id].ecmwf_param)
-                for variable_id in spec.input_variable_ids
+                for variable_id in _frame_variable_ids(spec, forecast_hour, input_ids)
             ]
             # Index offsets are scoped to a particular replica. Restart the
             # whole frame on the next mirror if any range request fails.
@@ -373,12 +390,13 @@ def fetch_frame(
     *,
     force: bool = False,
     model: str = "gfs",
+    input_ids: tuple[str, ...] | None = None,
 ) -> Path:
     from .eccodescli import repack_grid_simple
     from .gdal import inspect_grib
 
     spec = source_spec(model)
-    frame_variable_ids = _frame_variable_ids(spec, forecast_hour)
+    frame_variable_ids = _frame_variable_ids(spec, forecast_hour, input_ids)
     output = destination / f"{spec.id}.{run.id}.f{forecast_hour:03d}.grib2"
     if output.exists() and not force:
         try:
@@ -395,9 +413,9 @@ def fetch_frame(
     LOG.info("downloading GRIB %s", output)
     url = model_object_url(run, forecast_hour, model)
     if spec.id == "ecmwf":
-        payload = _download_ecmwf_payload(run, forecast_hour, spec)
+        payload = _download_ecmwf_payload(run, forecast_hour, spec, input_ids)
     else:
-        payload = _download_noaa_payload(run, forecast_hour, spec)
+        payload = _download_noaa_payload(run, forecast_hour, spec, input_ids)
     if spec.id == "ecmwf":
         # Open data messages are CCSDS/AEC packed (DRS 5.42); repack to
         # grid_simple so any GDAL build can read the stored file.
@@ -431,6 +449,7 @@ def fetch_run(
     *,
     force: bool = False,
     model: str = "gfs",
+    input_ids: tuple[str, ...] | None = None,
 ) -> list[Path]:
     """Fetch every frame of a run, ``spec.fetch_concurrency`` frames at a
     time (each frame is several fresh HTTPS round-trips, so a sequential
@@ -445,7 +464,9 @@ def fetch_run(
         for hour in forecast_hours:
             for attempt in range(frame_attempts):
                 try:
-                    paths.append(fetch_frame(run, hour, destination, force=force, model=model))
+                    paths.append(
+                        fetch_frame(run, hour, destination, force=force, model=model, input_ids=input_ids)
+                    )
                     break
                 except DownloadError as exc:
                     if attempt + 1 == frame_attempts:
@@ -463,6 +484,9 @@ def fetch_run(
     with ThreadPoolExecutor(max_workers=spec.fetch_concurrency) as executor:
         return list(
             executor.map(
-                lambda hour: fetch_frame(run, hour, destination, force=force, model=model), forecast_hours
+                lambda hour: fetch_frame(
+                    run, hour, destination, force=force, model=model, input_ids=input_ids
+                ),
+                forecast_hours,
             )
         )

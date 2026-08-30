@@ -208,7 +208,18 @@ function validateVideoDescriptor(input: unknown, paths: Set<string>): VideoBundl
   return video as unknown as VideoBundleDescriptor;
 }
 
-export function validateManifest(input: unknown, expectedModel?: ForecastModelId): ForecastManifest {
+export interface ManifestValidationOptions {
+  /** Whether the manifest must ship the core tmp2m and prate pair. True for
+   * a live run, which always covers every core variable; false for a
+   * showcase case, which ships only the bundles its event is about. */
+  requireCoreVariables?: boolean;
+}
+
+export function validateManifest(
+  input: unknown,
+  expectedModel?: ForecastModelId,
+  options: ManifestValidationOptions = {},
+): ForecastManifest {
   const value = object(input);
   if (value.schemaVersion !== 5) throw new Error("unsupported manifest schema version");
   const modelInfo = modelForManifestString(value.model);
@@ -264,8 +275,10 @@ export function validateManifest(input: unknown, expectedModel?: ForecastModelId
     }
     variables.push(bundle.variable);
   }
-  for (const id of FORECAST_VARIABLE_IDS) {
-    if (!variables.includes(id)) throw new Error(`manifest has no bundle for variable ${id}`);
+  if (options.requireCoreVariables ?? true) {
+    for (const id of FORECAST_VARIABLE_IDS) {
+      if (!variables.includes(id)) throw new Error(`manifest has no bundle for variable ${id}`);
+    }
   }
   if (new Set(variables).size !== variables.length) throw new Error("manifest contains duplicate variable bundles");
   return value as unknown as ForecastManifest;

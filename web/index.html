@@ -40,6 +40,9 @@
         <summary>
           <span class="status-dot" aria-hidden="true"></span>
           <span id="variable-code">GFS / PRATE SFC</span>
+          <!-- Case name on the always-visible summary line: on phones the
+               panel below it starts collapsed. -->
+          <span id="case-chip" class="case-chip" hidden></span>
         </summary>
         <div class="station-content">
           <div class="model-switch" role="group" data-i18n-aria="modelSwitchAria" aria-label="Forecast model">
@@ -66,6 +69,14 @@
             <button type="button" data-variable="dswrf" aria-pressed="false" hidden>
               <span>SOLAR</span><small data-i18n="varSolar">FLUX</small>
             </button>
+          </div>
+          <!-- Shown only for ?case=<id>: which historical event is on
+               screen, and the way back to the list. -->
+          <div class="case-banner" id="case-banner" hidden>
+            <a class="case-back" href="./showcase.html" data-i18n="showcaseBack">All cases</a>
+            <h2 id="case-title"></h2>
+            <p id="case-summary"></p>
+            <p class="case-region" id="case-region"></p>
           </div>
           <p class="eyebrow" id="model-eyebrow">NOAA / GFS (0.25°)</p>
           <h1 id="variable-title">Precipitation<br />Rate</h1>
@@ -191,6 +202,8 @@
         <!-- The toggle leads the line: the phone layout ellipsis-clips the
              footer's tail, which must never swallow an interactive control. -->
         <button id="lang-toggle" class="lang-toggle" type="button" data-i18n="langToggle">中文</button>
+        <span>•</span>
+        <a href="./showcase.html" data-i18n="showcaseLink">CASES</a>
         <span>•</span>
         <a href="https://github.com/ringsaturn/xue" target="_blank" rel="noreferrer">GITHUB</a>
         <span>•</span>

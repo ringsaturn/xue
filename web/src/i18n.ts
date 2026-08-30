@@ -132,6 +132,36 @@ const MESSAGES = {
   bundleRunMismatch: { zh: "数据包运行周期与清单不一致", en: "Bundle run cycle does not match the manifest" },
   bundleMissingVariable: { zh: "数据包缺少变量 {id}", en: "Bundle is missing variable {id}" },
   manifestMissingBundle: { zh: "清单缺少变量 {id} 的数据包", en: "Manifest has no bundle for variable {id}" },
+
+  // Historical showcase: the list page and the viewer's case banner. The
+  // footer link keeps the footer's code-word style in English.
+  showcaseLink: { zh: "历史个例", en: "CASES" },
+  showcaseBack: { zh: "← 全部个例", en: "← All cases" },
+  showcaseHome: { zh: "实时预报 →", en: "Live forecast →" },
+  showcaseTitle: { zh: "历史个例", en: "Showcase cases" },
+  showcaseHeading: { zh: "天气过程回放", en: "Weather events, replayed" },
+  showcaseIntro: {
+    zh: "每个个例都是一次历史预报的切片:同一套编码管线,裁切到事件所在的区域和时段。",
+    en: "Each case is a slice of one past forecast run — the same encoder, cropped to the region and hours the event happened in.",
+  },
+  showcaseMetaDescription: {
+    zh: "历史天气过程的预报回放:台风、暴雨、热浪等个例的裁切数据集",
+    en: "Replays of past weather events: cropped forecast datasets for typhoons, rainstorms, heatwaves and more",
+  },
+  showcaseLoading: { zh: "正在读取个例目录", en: "Loading case catalog" },
+  showcaseEmpty: { zh: "暂无历史个例", en: "No cases published yet" },
+  showcaseLoadFailed: { zh: "个例目录加载失败:{message}", en: "Case catalog failed to load: {message}" },
+  showcaseCaseMissing: { zh: "找不到历史个例 {id}", en: "No showcase case named {id}" },
+  showcaseEventLabel: { zh: "过程时间", en: "Event" },
+  showcaseRunLabel: { zh: "起报", en: "Run" },
+  showcaseRangeLabel: { zh: "时效", en: "Range" },
+  showcaseRegionLabel: { zh: "区域", en: "Region" },
+  showcaseGridLabel: { zh: "网格", en: "Grid" },
+  showcaseSizeLabel: { zh: "数据量", en: "Size" },
+  showcaseVariablesLabel: { zh: "变量", en: "Fields" },
+  showcaseHours: { zh: "{count} 小时", en: "{count} h" },
+  showcaseCaseAria: { zh: "打开个例 {title}", en: "Open case {title}" },
+  showcaseListAria: { zh: "历史个例列表", en: "Showcase case list" },
 } as const;
 
 export type MessageKey = keyof typeof MESSAGES;

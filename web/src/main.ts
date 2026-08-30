@@ -8,7 +8,7 @@ import { layers as basemapLayers, namedFlavor } from "@protomaps/basemaps";
 import maplibregl from "maplibre-gl";
 
 import { CRC32_INITIAL, crc32Hex, crc32Update } from "./crc32";
-import { applyStaticMessages, basemapLang, t, toggleLocale } from "./i18n";
+import { applyStaticMessages, basemapLang, locale, t, toggleLocale } from "./i18n";
 import { ForecastLayer } from "./layer";
 import {
   FORECAST_BUNDLE_IDS,
@@ -30,9 +30,23 @@ import {
   type VideoBundleDescriptor,
 } from "./manifest";
 import { buildPalette } from "./palettes";
-import { parseModelFromSearch, parseVariableFromSearch, searchForVariable } from "./urlstate";
+import {
+  DEFAULT_VARIABLE,
+  parseCaseFromSearch,
+  parseModelFromSearch,
+  parseVariableFromSearch,
+  searchForCaseVariable,
+  searchForVariable,
+} from "./urlstate";
 import { WindParticleLayer } from "./particles";
 import { fetchPoster, isPosterSupported } from "./poster";
+import {
+  caseCameraLimits,
+  fetchCaseManifest,
+  fetchCatalog,
+  localizedText,
+  type ShowcaseCase,
+} from "./showcase-catalog";
 import {
   createVideoDecodeChannel,
   isWebCodecsSupported,
@@ -234,6 +248,11 @@ const timelinePanel = required<HTMLElement>("timeline-panel");
 const variableButtons = [...document.querySelectorAll<HTMLButtonElement>("button[data-variable]")];
 const modelButtons = [...document.querySelectorAll<HTMLButtonElement>("button[data-model]")];
 const modelEyebrow = required<HTMLElement>("model-eyebrow");
+const caseBanner = required<HTMLElement>("case-banner");
+const caseChip = required<HTMLElement>("case-chip");
+const caseTitle = required<HTMLElement>("case-title");
+const caseSummary = required<HTMLElement>("case-summary");
+const caseRegion = required<HTMLElement>("case-region");
 
 const MODEL_EYEBROW: Record<ForecastModelId, string> = {
   gfs: "NOAA / GFS (0.25°)",
@@ -338,7 +357,19 @@ let displayedReal: ForecastBundleId | null = null;
 /** Shareable URL entry (e.g. /?model=ecmwf&type=wind) picks the initial model
  * and layer; a missing or unrecognized param falls back to the default. */
 let selectedModelId: ForecastModelId = parseModelFromSearch(window.location.search);
-let selectedVariableId: ForecastBundleId = parseVariableFromSearch(window.location.search) ?? "prate";
+/** Layer the URL asked for, or null when it named none — which is what lets
+ * a showcase case's own default win over the app-wide one. */
+const requestedVariableId: ForecastBundleId | null = parseVariableFromSearch(window.location.search);
+let selectedVariableId: ForecastBundleId = requestedVariableId ?? DEFAULT_VARIABLE;
+/** Showcase case named by `?case=<id>`: a past run cropped to one weather
+ * event. A case pins its own dataset and run, so while one is open the model
+ * switch is hidden, the live pointer is never read, and the new-run poll is
+ * off — everything below the manifest is the ordinary viewer. */
+const requestedCaseId: string | null = parseCaseFromSearch(window.location.search);
+let activeCase: ShowcaseCase | null = null;
+/** A case's own default layer applies on the first load only; after that the
+ * viewer keeps whatever the visitor picked, even across a retry. */
+let caseDefaultApplied = false;
 let activeSession: VariableSession | null = null;
 let activeVariable: BundleVariable | null = null;
 let activeFrameIndex: number | null = null;
@@ -1144,10 +1175,51 @@ function updateVariablePresentation(session: VariableSession): void {
   }
 }
 
+/** Hold the camera to a case's own region. A case is the whole dataset, so
+ * zooming out past the point where it fills the viewport only adds empty map,
+ * and panning off it leaves nothing to look at. Both limits depend on the
+ * viewport, so a resize recomputes them — without moving the camera, because
+ * mobile browsers fire resize every time their toolbar slides. */
+function applyCaseCamera(showcaseCase: ShowcaseCase, recenter: boolean): void {
+  const canvas = map.getCanvas();
+  // Drop the standing limits first: they would otherwise constrain the very
+  // camera the new ones are measured from.
+  map.setMaxBounds(null);
+  map.setMinZoom(0);
+  const limits = caseCameraLimits(showcaseCase.bbox, {
+    width: canvas.clientWidth,
+    height: canvas.clientHeight,
+  });
+  if (recenter) map.jumpTo({ center: limits.center, zoom: limits.minZoom });
+  map.setMinZoom(limits.minZoom);
+  map.setMaxBounds(limits.bounds);
+}
+
+/** Fill the showcase banner: which event this is, and the way back to the
+ * list. The run itself is already on the station panel's "model run" line. */
+function updateCasePresentation(showcaseCase: ShowcaseCase): void {
+  const title = localizedText(showcaseCase.title, locale);
+  caseChip.textContent = title;
+  caseChip.hidden = false;
+  caseTitle.textContent = title;
+  caseSummary.textContent = localizedText(showcaseCase.summary, locale);
+  const [west, south, east, north] = showcaseCase.bbox;
+  caseRegion.textContent = `${formatDegrees(north, "NS")} ${formatDegrees(west, "EW")} → ${formatDegrees(south, "NS")} ${formatDegrees(east, "EW")}`;
+  caseBanner.hidden = false;
+}
+
+/** A bbox corner, in the compact form the instrument panel uses. */
+function formatDegrees(value: number, axis: "NS" | "EW"): string {
+  const hemisphere = axis === "NS" ? (value >= 0 ? "N" : "S") : (value >= 0 ? "E" : "W");
+  return `${Math.abs(value).toFixed(Math.abs(value) % 1 === 0 ? 0 : 1)}°${hemisphere}`;
+}
+
 /** Keep the address bar shareable: reflect the on-screen model and variable
  * into the query string (replaceState — switches are not history entries). */
 function syncUrl(variableId: ForecastBundleId): void {
-  const search = searchForVariable(variableId, window.location.search, selectedModelId);
+  const search = activeCase
+    ? searchForCaseVariable(variableId, window.location.search, activeCase.id)
+    : searchForVariable(variableId, window.location.search, selectedModelId);
   if (search === window.location.search) return;
   window.history.replaceState(null, "", `${window.location.pathname}${search}${window.location.hash}`);
 }
@@ -1630,25 +1702,55 @@ async function initialize(): Promise<void> {
   runTime.textContent = t("awaitingData");
 
   try {
-    // The mutable live pointer names the current run; the run manifest
-    // and everything below it are immutable and cached via ?v=<crc32>.
-    // Each model has its own pointer, so the selected model picks the feed.
-    const loaded = await fetchManifest(dataBaseUrl(), selectedModelId);
-    if (sequence !== initializeSequence) return;
-    manifest = loaded.manifest;
-    manifestUrl = loaded.manifestUrl;
-    currentRun = loaded.latest.run;
-    runTime.textContent = formatDate(loaded.manifest.runTime);
+    // Two ways in, one manifest contract. The live feed reads the mutable
+    // pointer for the current run; a showcase case reads the mutable catalog
+    // for its fixed historical one. Either way the manifest and everything
+    // below it are immutable and cached via ?v=<crc32>.
+    let loadedManifest: ForecastManifest;
+    if (requestedCaseId !== null) {
+      const catalog = await fetchCatalog(dataBaseUrl());
+      if (sequence !== initializeSequence) return;
+      const found = catalog.cases.find((item) => item.id === requestedCaseId);
+      if (!found) throw new Error(t("showcaseCaseMissing", { id: requestedCaseId }));
+      activeCase = found;
+      selectedModelId = found.modelId;
+      // The case names the layer its event is about — a heat dome opens on
+      // temperature, not on the app's usual precipitation. Only an explicit
+      // ?type= overrides it.
+      if (!caseDefaultApplied && requestedVariableId === null) selectedVariableId = found.defaultVariable;
+      caseDefaultApplied = true;
+      document.body.classList.add("is-showcase");
+      updateCasePresentation(found);
+      // Frame the event before any byte lands, so the first painted plane
+      // arrives on the region it belongs to rather than on the world view.
+      applyCaseCamera(found, true);
+      const loadedCase = await fetchCaseManifest(dataBaseUrl(), found);
+      if (sequence !== initializeSequence) return;
+      loadedManifest = loadedCase.manifest;
+      manifestUrl = loadedCase.manifestUrl;
+      currentRun = found.run;
+    } else {
+      const loaded = await fetchManifest(dataBaseUrl(), selectedModelId);
+      if (sequence !== initializeSequence) return;
+      loadedManifest = loaded.manifest;
+      manifestUrl = loaded.manifestUrl;
+      currentRun = loaded.latest.run;
+    }
+    manifest = loadedManifest;
+    runTime.textContent = formatDate(loadedManifest.runTime);
 
-    // Optional bundles are per run: wind10m everywhere, dswrf on the
-    // sflux source only — each button appears only when the manifest
-    // actually ships its bundle.
-    for (const optionalId of ["dswrf", "wind10m"] as const) {
-      const available = hasBundle(loaded.manifest, optionalId);
-      for (const button of variableButtons) {
-        if (button.dataset.variable === optionalId) button.hidden = !available;
-      }
-      if (!available && selectedVariableId === optionalId) selectedVariableId = "prate";
+    // Each variable button appears only when the manifest actually ships its
+    // bundle. On the live feed that is wind10m everywhere and dswrf on the
+    // sflux source; a showcase case additionally ships only the variables
+    // its event is about, so the core pair can be missing too.
+    for (const button of variableButtons) {
+      const bundleId = button.dataset.variable as ForecastBundleId | undefined;
+      if (!bundleId || !FORECAST_BUNDLE_IDS.includes(bundleId)) continue;
+      button.hidden = !hasBundle(loadedManifest, bundleId);
+    }
+    if (!hasBundle(loadedManifest, selectedVariableId)) {
+      // A case names its own default; a live run always carries the core pair.
+      selectedVariableId = activeCase?.defaultVariable ?? DEFAULT_VARIABLE;
     }
 
     // Paint the poster while the bundle opens (never blocks the load).
@@ -1712,7 +1814,7 @@ for (const button of modelButtons) {
   button.addEventListener("click", () => {
     const modelId = button.dataset.model;
     if (!modelId || !FORECAST_MODEL_IDS.includes(modelId as ForecastModelId)) return;
-    if (modelId === selectedModelId || switchingVariable) return;
+    if (activeCase || modelId === selectedModelId || switchingVariable) return;
     // A model is a separate dataset (own pointer, own run, own time axis), so
     // switching tears the whole session state down and re-tunes, keeping the
     // currently selected variable.
@@ -1761,7 +1863,8 @@ playButton.addEventListener("click", () => {
 /** Poll the live pointer; a changed run id re-initializes onto the new
  * run ("排播型电视直播" — the client tunes itself to the newest broadcast). */
 async function checkForNewRun(): Promise<void> {
-  if (!currentRun || document.hidden || switchingVariable) return;
+  // A case is a fixed historical run; there is no newer one to move to.
+  if (activeCase || !currentRun || document.hidden || switchingVariable) return;
   try {
     const model = selectedModelId;
     const latest = await fetchLatestPointer(dataBaseUrl(), model);
@@ -1776,6 +1879,11 @@ document.addEventListener("visibilitychange", () => {
   if (document.hidden) stopPlayback();
   else void checkForNewRun();
 });
+// A narrower window fits less of the case, so its limits move with it.
+map.on("resize", () => {
+  if (activeCase) applyCaseCamera(activeCase, false);
+});
+
 reducedMotion.addEventListener("change", () => {
   if (reducedMotion.matches) stopPlayback();
   if (windLayer) windLayer.animate = !reducedMotion.matches;

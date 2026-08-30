@@ -9,6 +9,7 @@ from pathlib import Path
 from .binconvert import convert_bin, verify_bin
 from .errors import XueError
 from .fetch import fetch_run, resolve_run
+from .showcase import build_case, load_cases, write_catalog
 from .sources import SOURCES, source_spec
 
 
@@ -100,6 +101,43 @@ def parser() -> argparse.ArgumentParser:
         action="store_true",
         help="do not build the half-resolution .half.xue variant bundles",
     )
+
+    showcase_parser = commands.add_parser(
+        "showcase",
+        help="build the historical showcase cases (past runs cropped to one weather event)",
+    )
+    showcase_commands = showcase_parser.add_subparsers(dest="showcase_command", required=True)
+
+    showcase_build = showcase_commands.add_parser("build", help="fetch, crop and encode one or more cases")
+    showcase_build.add_argument(
+        "cases",
+        nargs="*",
+        help="case ids to build; every definition in --cases-dir when omitted",
+    )
+    showcase_build.add_argument("--cases-dir", type=Path, default=Path("showcase/cases"))
+    showcase_build.add_argument("--output-dir", type=Path, default=Path("web/public/data"))
+    showcase_build.add_argument("--raw-dir", type=Path, default=Path("data/raw"))
+    showcase_build.add_argument("--work-dir", type=Path, default=Path("data/work"))
+    showcase_build.add_argument("--force", action="store_true", help="replace an existing case manifest")
+    showcase_build.add_argument(
+        "--force-download",
+        action="store_true",
+        help="download GRIB files again even when valid local files exist",
+    )
+    showcase_build.add_argument(
+        "--skip-catalog",
+        action="store_true",
+        help="do not rewrite showcase.json after building",
+    )
+
+    showcase_catalog = showcase_commands.add_parser(
+        "catalog", help="rewrite showcase.json from the cases already built on disk"
+    )
+    showcase_catalog.add_argument("--output-dir", type=Path, default=Path("web/public/data"))
+
+    showcase_check = showcase_commands.add_parser("check", help="validate the case definitions without building")
+    showcase_check.add_argument("cases", nargs="*")
+    showcase_check.add_argument("--cases-dir", type=Path, default=Path("showcase/cases"))
     return root
 
 
@@ -129,6 +167,27 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(report, indent=2))
         elif arguments.command == "verify-bin":
             print(json.dumps(verify_bin(arguments.bundle), indent=2))
+        elif arguments.command == "showcase":
+            if arguments.showcase_command == "catalog":
+                print(write_catalog(arguments.output_dir))
+            elif arguments.showcase_command == "check":
+                for spec in load_cases(arguments.cases_dir, tuple(arguments.cases)):
+                    print(f"{spec.id}: {spec.model} {spec.run} f000-f{spec.hours:03d} {list(spec.variables)}")
+            else:
+                entries = [
+                    build_case(
+                        spec,
+                        output_root=arguments.output_dir,
+                        raw_root=arguments.raw_dir,
+                        work_root=arguments.work_dir,
+                        force=arguments.force,
+                        force_download=arguments.force_download,
+                    )
+                    for spec in load_cases(arguments.cases_dir, tuple(arguments.cases))
+                ]
+                if not arguments.skip_catalog:
+                    write_catalog(arguments.output_dir)
+                print(json.dumps(entries, indent=2, ensure_ascii=False))
         elif arguments.command == "build-bin":
             source = source_spec(arguments.model)
             run = resolve_run(arguments.run, hours=arguments.hours, model=arguments.model)

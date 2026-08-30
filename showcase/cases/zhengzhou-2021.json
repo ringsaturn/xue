@@ -1,0 +1,20 @@
+{
+  "id": "zhengzhou-2021",
+  "title": {
+    "zh": "郑州「7·20」特大暴雨",
+    "en": "Zhengzhou 7·20 rainstorm"
+  },
+  "summary": {
+    "zh": "2021 年 7 月 20 日，河南郑州出现极端强降水，郑州国家站单小时雨量达 201.9 毫米。此处是灾害发生前两天 GFS 00Z 起报的 120 小时降水率与 10 米风场。",
+    "en": "On 20 July 2021 extreme rainfall hit Zhengzhou, Henan, where the national station recorded 201.9 mm in a single hour. This is the GFS 00Z run from two days earlier, 120 hours of precipitation rate and 10 m wind."
+  },
+  "model": "gfs",
+  "run": "2021071800",
+  "hours": 120,
+  "bbox": [105.0, 28.0, 122.0, 42.0],
+  "variables": ["prate", "wind10m"],
+  "defaultVariable": "prate",
+  "eventTime": "2021-07-20T08:00:00Z",
+  "tags": ["rainstorm", "asia"],
+  "credit": "NOAA GFS"
+}

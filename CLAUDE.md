@@ -8,7 +8,7 @@ Pipeline that packs global forecasts (2 m temperature `tmp2m`, precipitation rat
 
 - **Python encoder** (`xue/`): fetch → convert → quantize → temporal residuals → zstd → container. GDAL and ffmpeg are invoked as CLI subprocesses (`gdal.py`, `ffmpegcli.py`) — no binary Python dependencies. zstd (`zstdcli.py`) uses the stdlib `compression.zstd` in-process on Python ≥ 3.14 (per-plane subprocess overhead was the build bottleneck) with a zstd-CLI fallback for older interpreters; bundles are written and read-back-verified concurrently through one shared machine-sized pool. Band discovery reads GRIB2 section 0/1/4 headers directly (`grib2.py`, ~1 ms/file vs ~1 s/file for `gdalinfo -json`); one real gdalinfo pass per run doubles as the wind-availability probe and a cross-check of the header index, and any parse failure or disagreement falls the run back to full gdalinfo inspection.
 - **Rust decoder** (`rust/xue` core crate; `rust/xue-wasm` bindings). `make wasm` builds it into `web/src/wasm/` (gitignored generated output consumed by the frontend).
-- **TypeScript frontend** (`web/src/`): `main.ts` orchestrates; `manifest.ts` resolves the mutable `latest.json` live pointer → per-run `manifest.json` and picks a resolution tier (`pickBundleVariant`); `worker.ts` owns WASM decode, a byte-budgeted plane cache, and windowed prefetch; `layer.ts` is the MapLibre custom layer with two-texture blend playback; `particles.ts` is the wind GPU particle layer (u/v interleaved into one RG8 texture, ping-pong state/trail textures, speed palette); `poster.ts` decodes fast-first-frame posters via `DecompressionStream`; `webcodecs.ts` is the alternate H.264 path (any variable; used only when the stream is not larger than the `.xue`); `i18n.ts` is the zh/en UI dictionary (locale = `?lang=` param > persisted footer-toggle choice > `navigator.language`, fixed per page load; the Protomaps basemap label language follows it; thrown Error diagnostics stay English in both locales).
+- **TypeScript frontend** (`web/src/`): `main.ts` orchestrates; `manifest.ts` resolves the mutable `latest.json` live pointer → per-run `manifest.json` and picks a resolution tier (`pickBundleVariant`); `worker.ts` owns WASM decode, a byte-budgeted plane cache, and windowed prefetch; `layer.ts` is the MapLibre custom layer with two-texture blend playback; `particles.ts` is the wind GPU particle layer (u/v interleaved into one RG8 texture, ping-pong state/trail textures, speed palette); `poster.ts` decodes fast-first-frame posters via `DecompressionStream`; `webcodecs.ts` is the alternate H.264 path (any variable; used only when the stream is not larger than the `.xue`); `i18n.ts` is the zh/en UI dictionary (locale = `?lang=` param > persisted footer-toggle choice > `navigator.language`, fixed per page load; the Protomaps basemap label language follows it; thrown Error diagnostics stay English in both locales); `showcase.ts` + `showcase.html` are the second page (the historical case list) and `showcase-catalog.ts` is the catalog it and `main.ts` share. Vite builds both HTML entries (`build.rollupOptions.input`).
 
 The format spec is `docs/format.md` (normative — update it if the format changes). The README is `README.md` (English).
 
@@ -46,11 +46,56 @@ Cross-language golden tests: `tests/prepare_bin_fixture.py` encodes the cropped 
 
 Benchmarks: `make bench` (compression modes), `make bench-video` (lossless H.264 path), `make bench-lossy` (lossy tier ladder with scientific-metric acceptance).
 
+## Historical showcase
+
+Alongside the live feed there is a second dataset: **cases** — one past run
+each, cropped to the region and hours of a single weather event (typhoon
+landfall, a rainstorm, a heat dome). Cases are permanent; nothing prunes them.
+Authoring guide and archive coverage: `showcase/README.md`.
+
+- Definitions are checked in at `showcase/cases/<id>.json` (id, locale-keyed
+  title/summary, model, run, hours, bbox, variable subset). `xue/showcase.py`
+  validates them, drives the build, and writes the catalog; `make showcase
+  CASE=<id>` / `make showcase-check` / `make upload-r2-showcase` are the entry
+  points.
+- The encoder gained exactly two knobs for this: `convert_bin(bbox=...)`, which
+  runs `crop_grid()` to cut a whole-cell window out of every plane after the
+  −180-first roll (`GridInfo.crop`, wrapping across the antimeridian), and
+  `convert_bin(bundle_ids=...)`, which restricts both the download and the
+  published bundles. A restricted manifest is not required to carry the core
+  tmp2m/prate pair (`require_core_variables=False`, both in `xue/manifest.py`
+  and `validateManifest` on the web side).
+- Delivery mirrors the live feed's two layers: the mutable `showcase.json`
+  catalog at the data root plays the part `latest.json` plays for a run, and
+  each `showcase/<id>/manifest.json` and its bundles are immutable and
+  `?v=<crc32>`-addressed. A `case.json` sidecar per case is what the catalog is
+  collected from, so rebuilding one case never touches the others.
+- The viewer is the same page: `/?case=<id>` swaps the manifest source, pins the
+  model, hides the model switch, turns off new-run polling, and opens on the
+  case's own `defaultVariable` (an explicit `?type=` still wins). Everything
+  below the manifest — worker, plane cache, layers, timeline — is unchanged.
+- A case is the whole dataset, so the camera is held to it: `caseCameraLimits()`
+  (pure geometry over `mercator.ts`) gives the zoom at which the region fills
+  the viewport and the world rect visible there, applied as `setMinZoom` +
+  `setMaxBounds`. Both depend on the viewport, so `map.on("resize")` recomputes
+  them — without moving the camera, since mobile toolbars fire resize constantly.
+- Regional grids made the renderers grid-aware: `layer.ts` and `particles.ts`
+  index longitude modulo 360 from the grid origin (so an antimeridian window
+  stays contiguous), discard fragments outside the grid, clamp the horizontal
+  texture wrap when the grid is not global, and respawn particles inside the
+  grid's own footprint (`spawnRectangle`).
+- Cases skip the half-resolution ladder and the H.264 companion — at a few
+  megabytes neither can save anything.
+- Archives reach back to about 2021-01 for GFS/sflux (NOAA moved the files under
+  `atmos/` on 2021-03-23, and `fetch.py` picks the layout by run id) and about
+  2024-02 for ECMWF open data.
+
 ## Deploy model
 
 Cloudflare Pages project `project-xue` (custom domain https://xue.ringsaturn.me) serves only the static shell (`dist-deploy/`, built with `vite build --mode deploy` which sets `VITE_DATA_BASE_URL` from `web/.env.deploy`). All forecast data lives on the public R2 bucket (`dataset.ringsaturn.me/xue/`) because bundles exceed the Pages 25 MB file limit.
 
 - R2 is managed over its S3 API with the AWS CLI, entirely from the Makefile — no publishing code of ours. `make upload-r2 MODEL=... RUN=<cycle>` is `aws s3 sync` of the run directory (immutable cache metadata, `?v=<crc32>`-addressed) followed by `aws s3 cp` of the mutable per-model pointer (`latest.json` for GFS, `latest-<model>.json` otherwise), which is the go-live switch. `make live-run MODEL=...` prints the run the pointer names. Endpoint is `https://$(CLOUDFLARE_ACCOUNT_ID).r2.cloudflarestorage.com`; credentials are an R2 API token key pair in `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`. The Makefile exports `AWS_DEFAULT_REGION=auto` and the `when_required` checksum settings that S3-compatible backends need.
+- `make upload-r2-showcase` syncs `web/public/data/showcase/` (immutable) and then copies the mutable `showcase.json`, which is the go-live switch for the case list. Pruning never touches it: `make prune-r2` only considers directories matching `^<model>\.`.
 - `make prune-r2 MODEL=...` lists the bucket, keeps the newest `KEEP` run directories of that model (default 1 — the live run only; the bucket carries no history) and `aws s3 rm --recursive`s the rest. The run the live pointer names is never deleted, and pruning off a real listing also sweeps leftovers from an interrupted upload. `DRY_RUN=--dryrun` previews.
 - Scheduled publishing is one workflow per source — `publish-gfs.yml` (`20 5,11,17,23` UTC), `publish-sflux.yml` (`50 5,11,17,23`, frees the runner's preinstalled toolchains first — native-grid runs are ~4.5× the size), `publish-ecmwf.yml` (`30 8,20`; only ECMWF 00z/12z reach F120 in the open data oper series) — all keeping one run each — each with its own concurrency group and manual dispatch (run, profile, keep, force, dry-run). They all call the reusable `publish.yml` (`workflow_call`), which owns the whole loop: resolve the newest complete cycle → skip if R2 already serves it → build → upload → prune → verify the pointer. Credentials are the `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `CLOUDFLARE_ACCOUNT_ID` repository secrets, passed down with `secrets: inherit`.
 - The Pages shell only needs deploying when frontend code changes. `deploy-pages.yml` does it automatically on pushes to `main` that touch frontend-relevant paths (also manual dispatch), building the WASM decoder + `make deploy-build` and deploying with `make deploy-pages`; it authenticates with the `CLOUDFLARE_API_TOKEN` repository secret (a Cloudflare API token with Pages Edit — wrangler reads the env var, and the R2 S3 key pair can't deploy Pages). Locally, `make deploy` (= `deploy-build` + `deploy-pages`) still works via the wrangler OAuth login.

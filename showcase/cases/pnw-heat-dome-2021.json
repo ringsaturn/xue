@@ -1,0 +1,32 @@
+{
+  "id": "pnw-heat-dome-2021",
+  "title": {
+    "zh": "2021 北美西部热穹顶",
+    "en": "2021 Western North America heat dome"
+  },
+  "summary": {
+    "zh": "2021 年 6 月底,一个异常强盛的高压脊笼罩北美西部,俄勒冈、华盛顿两州与不列颠哥伦比亚省接连刷新高温纪录。此处是 6 月 26 日 00Z 起报的 48 小时气温、降水与 10 米风场,覆盖热浪建立、气温连日抬升的阶段,范围从东太平洋横跨落基山直到大平原西缘。脊下地面风很弱,风场看的是海岸入流与山地环流,不是急流。",
+    "en": "In late June 2021 an exceptionally strong ridge settled over western North America, and Oregon, Washington and British Columbia broke heat records on successive days. This is the 26 June 00Z run — 48 hours of temperature, precipitation and 10 m wind covering the ridge's build-up, from the eastern Pacific across the Rockies to the western Plains. Surface wind under a ridge is light, so the wind layer shows coastal inflow and terrain circulations rather than a jet."
+  },
+  "model": "gfs",
+  "run": "2021062600",
+  "hours": 48,
+  "bbox": [
+    -142.0,
+    32.0,
+    -96.0,
+    60.0
+  ],
+  "variables": [
+    "tmp2m",
+    "prate",
+    "wind10m"
+  ],
+  "defaultVariable": "tmp2m",
+  "eventTime": "2021-06-27T23:00:00Z",
+  "tags": [
+    "heatwave",
+    "north-america"
+  ],
+  "credit": "NOAA GFS"
+}

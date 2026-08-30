@@ -4,6 +4,7 @@ import { t } from "./i18n";
 import { extractMatrix } from "./layer";
 import type { BundleMetadata, LinearQuantization } from "./manifest";
 import { WIND_COMPONENT_IDS, type BundleVariable } from "./manifest";
+import { mercatorY } from "./mercator";
 import { buildWindSpeedPalette, WIND_SPEED_MAX } from "./palettes";
 
 /**
@@ -92,14 +93,28 @@ float latitudeOf(vec2 pos) {
   return 90.0 - (360.0 / PI) * atan(exp((pos.y * 2.0 - 1.0) * PI));
 }
 
-vec2 windAt(vec2 pos) {
+// Grid coordinates of a world position. The longitude offset wraps into
+// [0, 360) so a global grid indexes from -180 as before and a regional
+// window that crosses the antimeridian stays contiguous.
+vec2 gridUv(vec2 pos) {
   float longitude = fract(pos.x) * 360.0 - 180.0;
   float latitude = latitudeOf(pos);
-  vec2 uv = vec2(
-    ((longitude - u_first.x) / u_step.x + 0.5) / u_size.x,
+  return vec2(
+    (mod(longitude - u_first.x, 360.0) / u_step.x + 0.5) / u_size.x,
     ((latitude - u_first.y) / u_step.y + 0.5) / u_size.y
   );
-  vec2 code = texture(u_wind, uv).rg;
+}
+
+// A regional grid (a showcase case) has no wind outside its window; a
+// particle that drifts out has to be respawned rather than pushed by the
+// clamped edge texel forever.
+bool inGrid(vec2 uv) {
+  if (uv.y < 0.0 || uv.y > 1.0) return false;
+  return u_wrap > 0.5 || (uv.x >= 0.0 && uv.x <= 1.0);
+}
+
+vec2 windAt(vec2 pos) {
+  vec2 code = texture(u_wind, gridUv(pos)).rg;
   return u_wind_offset + code * 255.0 * u_wind_scale;
 }`;
 
@@ -113,6 +128,10 @@ uniform vec2 u_wind_scale;
 uniform vec2 u_first;
 uniform vec2 u_step;
 uniform vec2 u_size;
+uniform float u_wrap;
+// Respawn rectangle in world Mercator units: (x, y, width, height) of the
+// grid's own footprint, so particles are seeded where there is data.
+uniform vec4 u_spawn;
 uniform float u_rand_seed;
 uniform float u_speed_factor;
 uniform float u_elapsed;
@@ -140,10 +159,17 @@ void main() {
   vec2 offset = vec2(wind.x, -wind.y) * (u_speed_factor * u_elapsed / (${EARTH_CIRCUMFERENCE_M.toFixed(1)} * distortion));
   pos = vec2(fract(pos.x + offset.x + 1.0), clamp(pos.y + offset.y, 0.0, 1.0));
 
-  // Randomly respawn: a base rate plus a speed-scaled bump.
+  // Randomly respawn: a base rate plus a speed-scaled bump, and always once
+  // the particle has left the grid.
   vec2 seed = (pos + v_tex_pos) * u_rand_seed;
-  float drop = step(1.0 - u_drop_rate - speed_t * u_drop_rate_bump, rand(seed));
-  vec2 random_pos = vec2(rand(seed + 1.3), rand(seed + 2.1));
+  float drop = max(
+    step(1.0 - u_drop_rate - speed_t * u_drop_rate_bump, rand(seed)),
+    inGrid(gridUv(pos)) ? 0.0 : 1.0
+  );
+  vec2 random_pos = vec2(
+    fract(u_spawn.x + rand(seed + 1.3) * u_spawn.z),
+    u_spawn.y + rand(seed + 2.1) * u_spawn.w
+  );
   pos = mix(pos, random_pos, drop);
 
   out_color = vec4(fract(pos * 255.0), floor(pos * 255.0) / 255.0);
@@ -159,6 +185,7 @@ uniform vec2 u_wind_scale;
 uniform vec2 u_first;
 uniform vec2 u_step;
 uniform vec2 u_size;
+uniform float u_wrap;
 uniform float u_particles_res;
 uniform float u_point_size;
 uniform float u_world_offset;
@@ -195,6 +222,27 @@ interface ProgramInfo {
 
 function isLinear(quantization: BundleVariable["quantization"]): quantization is LinearQuantization {
   return quantization.type === "linear";
+}
+
+/** The grid's own footprint in world Mercator units, (x, y, width, height) —
+ * where the update shader respawns particles. A global grid returns the whole
+ * world square; a regional one returns just its window, with the x origin
+ * wrapped into [0, 1) so a window crossing the antimeridian still works (the
+ * shader takes `fract` of the seeded x). */
+export function spawnRectangle(
+  firstLongitude: number,
+  firstLatitude: number,
+  longitudeStep: number,
+  latitudeStep: number,
+  width: number,
+  height: number,
+  wraps: boolean,
+): [number, number, number, number] {
+  const north = mercatorY(firstLatitude);
+  const south = mercatorY(firstLatitude + (height - 1) * latitudeStep);
+  if (wraps) return [0, north, 1, south - north];
+  const x = (((firstLongitude + 180) / 360) % 1 + 1) % 1;
+  return [x, north, ((width - 1) * longitudeStep) / 360, south - north];
 }
 
 export class WindParticleLayer implements CustomLayerInterface {
@@ -239,6 +287,8 @@ export class WindParticleLayer implements CustomLayerInterface {
   private longitudeStep = 0.25;
   private latitudeStep = -0.25;
   private wraps = true;
+  /** Respawn rectangle in world Mercator units, (x, y, width, height). */
+  private spawn: [number, number, number, number] = [0, 0, 1, 1];
   private windOffset: [number, number] = [0, 0];
   private windScale: [number, number] = [0, 0];
 
@@ -275,6 +325,15 @@ export class WindParticleLayer implements CustomLayerInterface {
     this.longitudeStep = (grid.longitudeStep as number) ?? 0.25;
     this.latitudeStep = (grid.latitudeStep as number) ?? -0.25;
     this.wraps = (grid.wrapLongitude as boolean) ?? Math.abs(this.width * this.longitudeStep - 360) < 1e-6;
+    this.spawn = spawnRectangle(
+      this.firstLongitude,
+      this.firstLatitude,
+      this.longitudeStep,
+      this.latitudeStep,
+      this.width,
+      this.height,
+      this.wraps,
+    );
     const [u, v] = WIND_COMPONENT_IDS.map((id) => metadata.variables.find((item) => item.id === id));
     if (!u || !v || !isLinear(u.quantization) || !isLinear(v.quantization)) {
       throw new Error("wind bundle is missing linear-quantized u/v components");
@@ -318,11 +377,11 @@ export class WindParticleLayer implements CustomLayerInterface {
     map.on("move", this.requestTrailClear);
 
     this.updateProgram = this.createProgram(gl, QUAD_VERTEX_SHADER, UPDATE_FRAGMENT_SHADER, [
-      "u_particles", "u_wind", "u_wind_offset", "u_wind_scale", "u_first", "u_step", "u_size",
+      "u_particles", "u_wind", "u_wind_offset", "u_wind_scale", "u_first", "u_step", "u_size", "u_wrap", "u_spawn",
       "u_rand_seed", "u_speed_factor", "u_elapsed", "u_drop_rate", "u_drop_rate_bump", "u_max_speed",
     ]);
     this.drawProgram = this.createProgram(gl, DRAW_VERTEX_SHADER, DRAW_FRAGMENT_SHADER, [
-      "u_particles", "u_wind", "u_wind_offset", "u_wind_scale", "u_first", "u_step", "u_size",
+      "u_particles", "u_wind", "u_wind_offset", "u_wind_scale", "u_first", "u_step", "u_size", "u_wrap",
       "u_particles_res", "u_point_size", "u_world_offset", "u_matrix", "u_max_speed", "u_palette",
     ]);
     this.fadeProgram = this.createProgram(gl, QUAD_VERTEX_SHADER, FADE_FRAGMENT_SHADER, ["u_screen", "u_fade"]);
@@ -495,6 +554,10 @@ export class WindParticleLayer implements CustomLayerInterface {
     gl.uniform2f(info.uniforms.u_first!, this.firstLongitude, this.firstLatitude);
     gl.uniform2f(info.uniforms.u_step!, this.longitudeStep, this.latitudeStep);
     gl.uniform2f(info.uniforms.u_size!, this.width, this.height);
+    gl.uniform1f(info.uniforms.u_wrap!, this.wraps ? 1 : 0);
+    if (info.uniforms.u_spawn) {
+      gl.uniform4f(info.uniforms.u_spawn, this.spawn[0], this.spawn[1], this.spawn[2], this.spawn[3]);
+    }
     gl.uniform1f(info.uniforms.u_max_speed!, WIND_SPEED_MAX);
   }
 

@@ -4,6 +4,7 @@ import json
 import re
 import shutil
 import subprocess
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -311,7 +312,21 @@ def inspect_grib(path: Path, variable_id: str = "tmp2m") -> GribFrame:
     return inspect_grib_multi(path, (variable_id,))[variable_id]
 
 
-def discover_inputs(input_path: Path) -> list[Path]:
+def discover_inputs(input_path: Path | Sequence[Path]) -> list[Path]:
+    """The GRIB files a conversion reads: one file, every file in a
+    directory, or exactly the files given.
+
+    The explicit list matters when a directory holds more frames than the
+    build wants — a showcase case whose forecast range shrank still has the
+    longer run's frames cached beside it."""
+    if not isinstance(input_path, Path):
+        files = sorted(input_path)
+        if not files:
+            raise ConversionError("no GRIB files given")
+        missing = [path for path in files if not path.is_file()]
+        if missing:
+            raise ConversionError(f"input does not exist: {missing[0]}")
+        return files
     if input_path.is_file():
         return [input_path]
     if not input_path.is_dir():

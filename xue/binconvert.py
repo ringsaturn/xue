@@ -14,6 +14,7 @@ import math
 import os
 import tempfile
 import zlib
+from collections.abc import Sequence
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
@@ -36,7 +37,7 @@ from .gdal import (
 from .manifest import build_bin_manifest, build_latest_pointer, iso_z, write_bin_manifest, write_latest_pointer
 from .model import GribFrame
 from .quantize import PROFILES, PrecipitationCodebook, TemperatureCodebook
-from .sources import source_spec
+from .sources import SourceSpec, source_spec
 from .videoconvert import build_debug_playlist, encode_variable_video
 
 LOG = logging.getLogger(__name__)
@@ -72,6 +73,31 @@ _BUNDLE_WRITERS = 4
 
 
 @dataclass(frozen=True)
+class CropWindow:
+    """A rectangular window cut out of every extracted plane, indexed in the
+    -180-first layout the column roll produces.
+
+    ``column_start`` may run past the source's last column: a window crossing
+    the antimeridian continues from column 0, so columns are always taken
+    modulo ``source_width``. Rows never wrap — the grid ends at the poles."""
+
+    source_width: int
+    source_height: int
+    row_start: int
+    column_start: int
+    width: int
+    height: int
+
+    def take(self, plane: np.ndarray) -> np.ndarray:
+        """The window of one (source_height, source_width) plane."""
+        rows = plane[self.row_start : self.row_start + self.height]
+        end = self.column_start + self.width
+        if end <= self.source_width:
+            return rows[:, self.column_start : end]
+        return rows[:, np.arange(self.column_start, end) % self.source_width]
+
+
+@dataclass(frozen=True)
 class GridInfo:
     width: int
     height: int
@@ -83,10 +109,22 @@ class GridInfo:
     """Columns every extracted plane is rolled right by, so grids GDAL leaves
     starting at Greenwich (the sflux Gaussian grid) come out in the same
     -180-first layout as every other source. 0 for grids GDAL already rotates."""
+    crop: CropWindow | None = None
+    """Regional window applied after the roll (showcase cases). When set,
+    every field above describes the *cropped* planes, and the window carries
+    the source dimensions gdal_translate actually extracts. Never serialized:
+    the cropped origin and extent already say where the data is."""
 
     @property
     def wraps(self) -> bool:
         return abs(self.width * self.longitude_step - 360.0) < 1e-6
+
+    @property
+    def source_shape(self) -> tuple[int, int]:
+        """(height, width) of the plane gdal_translate extracts."""
+        if self.crop is None:
+            return self.height, self.width
+        return self.crop.source_height, self.crop.source_width
 
     def decimated(self) -> GridInfo:
         """The grid produced by keeping every second row and column (rows and
@@ -124,6 +162,26 @@ class PlaneStats:
     max_abs_error: float
     clamped_points: int
     overflow_points: int
+
+
+# Every source names its precipitation input differently (GFS prate, ECMWF
+# tp, sflux prate_ave), so a bundle's inputs are resolved off the source's own
+# input list rather than hard-coded per model.
+PRECIPITATION_INPUT_IDS = ("prate", "tp", "prate_ave")
+
+
+def bundle_input_ids(source: SourceSpec, bundle_id: str) -> tuple[str, ...]:
+    """The source input variables one published bundle is built from."""
+    if bundle_id == WIND_BUNDLE_ID:
+        return WIND_COMPONENT_IDS
+    if bundle_id == "prate":
+        return (next(vid for vid in source.input_variable_ids if vid in PRECIPITATION_INPUT_IDS),)
+    return (bundle_id,)
+
+
+def published_bundle_ids(source: SourceSpec) -> tuple[str, ...]:
+    """Every bundle a source can publish, in manifest order."""
+    return source.bundle_scalar_ids + (WIND_BUNDLE_ID,)
 
 
 def _grid_info(path: Path) -> GridInfo:
@@ -169,6 +227,74 @@ def _normalize_longitudes(grid: GridInfo) -> GridInfo:
         grid,
         first_longitude=grid.first_longitude + pivot * grid.longitude_step - 360.0,
         column_roll=roll,
+    )
+
+
+def crop_grid(grid: GridInfo, bbox: tuple[float, float, float, float]) -> GridInfo:
+    """Restrict a grid to the smallest whole-cell window covering ``bbox``.
+
+    ``bbox`` is ``(west, south, east, north)`` in degrees. The window keeps
+    the cell whose center sits at or before each lower edge and the one at or
+    after each upper edge, so the cropped planes always cover the requested
+    box outright. On a wrapping source grid ``west > east`` crosses the
+    antimeridian; the returned origin is renormalized into [-180, 180) and the
+    window, not the metadata, carries the wrap.
+    """
+    if grid.crop is not None:
+        raise ConversionError("a grid can only be cropped once")
+    west, south, east, north = (float(value) for value in bbox)
+    if not -90.0 <= south < north <= 90.0:
+        raise ConversionError(f"bbox latitudes must satisfy -90 <= south < north <= 90: {bbox}")
+    if not (-360.0 <= west <= 360.0 and -360.0 <= east <= 360.0):
+        raise ConversionError(f"bbox longitudes must be within [-360, 360]: {bbox}")
+    if east < west and not grid.wraps:
+        raise ConversionError("only a wrapping grid can be cropped across the antimeridian")
+    span = (east - west) % 360.0
+    if span == 0.0:
+        if east < west or not grid.wraps:
+            raise ConversionError(f"bbox must have a positive longitude span: {bbox}")
+        span = 360.0
+
+    offset = (west - grid.first_longitude) % 360.0 if grid.wraps else west - grid.first_longitude
+    column_start = math.floor(offset / grid.longitude_step + 1e-9)
+    column_end = math.ceil((offset + span) / grid.longitude_step - 1e-9)
+    if grid.wraps:
+        width = min(column_end - column_start + 1, grid.width)
+        if width >= grid.width:
+            column_start, width = 0, grid.width
+        column_start %= grid.width
+    else:
+        column_start = max(column_start, 0)
+        column_end = min(column_end, grid.width - 1)
+        width = column_end - column_start + 1
+    if width <= 0:
+        raise ConversionError(f"bbox does not overlap the source grid: {bbox}")
+
+    row_start = max(math.floor((north - grid.first_latitude) / grid.latitude_step + 1e-9), 0)
+    row_end = min(math.ceil((south - grid.first_latitude) / grid.latitude_step - 1e-9), grid.height - 1)
+    height = row_end - row_start + 1
+    if height <= 0:
+        raise ConversionError(f"bbox does not overlap the source grid: {bbox}")
+
+    first_longitude = grid.first_longitude + column_start * grid.longitude_step
+    if width < grid.width:
+        first_longitude = (first_longitude + 180.0) % 360.0 - 180.0
+    return GridInfo(
+        width=width,
+        height=height,
+        first_longitude=round(first_longitude, 10),
+        first_latitude=round(grid.first_latitude + row_start * grid.latitude_step, 10),
+        longitude_step=grid.longitude_step,
+        latitude_step=grid.latitude_step,
+        column_roll=grid.column_roll,
+        crop=CropWindow(
+            source_width=grid.width,
+            source_height=grid.height,
+            row_start=row_start,
+            column_start=column_start,
+            width=width,
+            height=height,
+        ),
     )
 
 
@@ -259,14 +385,18 @@ def _extract_planes(frames: dict[str, GribFrame], grid: GridInfo, work: Path) ->
     command += ["-of", "ENVI", "-ot", "Float64", "-co", "INTERLEAVE=BSQ", str(source), str(raw)]
     run_command(command, description=f"extract {', '.join(order)} f{hour:03d}")
     values = np.fromfile(raw, dtype="<f8")
-    plane_size = grid.width * grid.height
+    source_height, source_width = grid.source_shape
+    plane_size = source_width * source_height
     if values.size != plane_size * len(order):
         raise ConversionError(f"extracted plane size mismatch for {source}")
     planes: dict[str, np.ndarray] = {}
     for index, variable_id in enumerate(order):
-        plane = values[index * plane_size : (index + 1) * plane_size].copy()
+        plane = values[index * plane_size : (index + 1) * plane_size].copy().reshape(source_height, source_width)
         if grid.column_roll:
-            plane = np.roll(plane.reshape(grid.height, grid.width), grid.column_roll, axis=1).ravel()
+            plane = np.roll(plane, grid.column_roll, axis=1)
+        if grid.crop is not None:
+            plane = np.ascontiguousarray(grid.crop.take(plane))
+        plane = plane.ravel()
         if not np.isfinite(plane).all():
             raise ConversionError(f"Xue v1 requires complete planes, found non-finite values in {source}")
         planes[variable_id] = _convert_units(frames[variable_id], plane)
@@ -695,7 +825,7 @@ def _bundle_manifest_entry(
 
 
 def convert_bin(
-    input_path: Path,
+    input_path: Path | Sequence[Path],
     output_dir: Path,
     *,
     profile: str = "quality",
@@ -710,6 +840,8 @@ def convert_bin(
     skip_video: bool = False,
     skip_variants: bool = False,
     model: str = "gfs",
+    bbox: tuple[float, float, float, float] | None = None,
+    bundle_ids: tuple[str, ...] | None = None,
 ) -> dict[str, Any]:
     """Convert a GRIB run into per-variable Xue bundles.
 
@@ -721,10 +853,22 @@ def convert_bin(
     statistics. When ``latest_path`` and ``run_id`` are given, also
     (re)writes the mutable ``latest.json`` live pointer aimed at the freshly
     written manifest.
+
+    ``bbox`` (west, south, east, north, degrees) crops every plane to a
+    region, and ``bundle_ids`` restricts which bundles are built — the two
+    knobs the historical showcase cases use to ship a small slice of a past
+    run. A restricted build's manifest carries only the bundles it was asked
+    for, so it is not required to hold the core tmp2m and prate pair.
     """
     if profile not in PROFILES:
         raise ConversionError(f"unknown profile: {profile}")
     source = source_spec(model)
+    if bundle_ids is not None:
+        unsupported = [bundle_id for bundle_id in bundle_ids if bundle_id not in published_bundle_ids(source)]
+        if unsupported or not bundle_ids:
+            raise ConversionError(
+                f"{source.manifest_model} publishes {list(published_bundle_ids(source))}, not {list(bundle_ids)}"
+            )
     zstd_version = zstdcli.zstd_version()
     paths = discover_inputs(input_path)
     codebooks = PROFILES[profile]
@@ -734,24 +878,46 @@ def convert_bin(
     # download set, and the cropped test fixtures, still build cleanly) and
     # serves as the per-run cross-check reference for the GRIB2 header index
     # used on every file.
+    # A restricted build inspects only the inputs it asked for: a case that
+    # ships temperature alone must not fail on a file that carries no
+    # precipitation record, because it never downloaded one.
+    inspect_ids = source.input_variable_ids
+    if bundle_ids is not None:
+        needed = {input_id for bundle_id in bundle_ids for input_id in bundle_input_ids(source, bundle_id)}
+        inspect_ids = tuple(variable_id for variable_id in inspect_ids if variable_id in needed)
     reference_frames = inspect_grib_multi(
         paths[0],
-        source.input_variable_ids,
+        inspect_ids,
         optional_ids=source.optional_at_analysis + WIND_COMPONENT_IDS,
     )
-    wind_available = all(variable_id in reference_frames for variable_id in WIND_COMPONENT_IDS)
-    if not wind_available:
+    wind_requested = bundle_ids is None or WIND_BUNDLE_ID in bundle_ids
+    wind_available = wind_requested and all(variable_id in reference_frames for variable_id in WIND_COMPONENT_IDS)
+    if wind_requested and not wind_available:
         LOG.warning("building without the wind10m bundle, 10 m wind components are not in %s", paths[0])
 
     # The variables read from the GRIB inputs; ECMWF carries the accumulated
     # tp instead of a rate and sflux the window-averaged prate_ave, which
     # _quantize_file de-accumulates / de-averages into prate.
     input_scalar_ids = tuple(
-        variable_id for variable_id in source.input_variable_ids if variable_id not in WIND_COMPONENT_IDS
+        variable_id for variable_id in inspect_ids if variable_id not in WIND_COMPONENT_IDS
     )
-    variable_ids = input_scalar_ids + (WIND_COMPONENT_IDS if wind_available else ())
+    # The first variable is the run's reference: every file is keyed by its
+    # forecast hour, so it must be one no file can lack. Stable-sorting the
+    # analysis-optional inputs (sflux prate_ave) to the back is enough unless
+    # nothing else was asked for.
+    variable_ids = tuple(
+        sorted(
+            input_scalar_ids + (WIND_COMPONENT_IDS if wind_available else ()),
+            key=lambda variable_id: variable_id in source.optional_at_analysis,
+        )
+    )
+    if not variable_ids or variable_ids[0] in source.optional_at_analysis:
+        raise ConversionError(
+            f"a {source.manifest_model} build needs at least one variable present in every file, "
+            f"including the analysis; {list(variable_ids)} is not enough"
+        )
     per_file = _prepare_frames_all(paths, variable_ids, source.optional_at_analysis, reference_frames)
-    hours = [frames["tmp2m"].forecast_hour for frames in per_file]
+    hours = [frames[variable_ids[0]].forecast_hour for frames in per_file]
     # The input hours must be a contiguous run of the source's published
     # axis (hourly to f120, three-hourly beyond, on GFS), so no frame is
     # missing and every step matches the cadence the source publishes.
@@ -771,12 +937,22 @@ def convert_bin(
                 f"complete build requires forecast hours 0 through {expected_hours} on the "
                 f"{source.manifest_model} axis"
             )
-    run_time = per_file[0]["tmp2m"].run_time.astimezone(UTC)
+    run_time = per_file[0][variable_ids[0]].run_time.astimezone(UTC)
 
     grid = _grid_info(paths[0])
     if require_complete and (grid.width, grid.height) != source.production_grid:
         raise ConversionError(
             f"production build requires a {source.production_grid[0]}x{source.production_grid[1]} grid"
+        )
+    if bbox is not None:
+        grid = crop_grid(grid, bbox)
+        LOG.info(
+            "cropped to %dx%d from %.4f,%.4f (%s)",
+            grid.width,
+            grid.height,
+            grid.first_longitude,
+            grid.first_latitude,
+            ",".join(f"{value:g}" for value in bbox),
         )
 
     stats: list[PlaneStats] = []
@@ -832,6 +1008,10 @@ def convert_bin(
     # The encoded (bundle) variables — the raw tp / prate_ave inputs have
     # already been derived into prate by this point.
     scalar_variable_ids = source.bundle_scalar_ids
+    if bundle_ids is not None:
+        scalar_variable_ids = tuple(
+            variable_id for variable_id in scalar_variable_ids if variable_id in bundle_ids
+        )
     encoded_variable_ids = scalar_variable_ids + (WIND_COMPONENT_IDS if wind_available else ())
 
     # Per-variable time axes. On derived-precipitation sources (ECMWF
@@ -841,7 +1021,11 @@ def convert_bin(
     # variant, poster, video) carries its own shorter axis. All other
     # variables keep the full run axis.
     variable_hours: dict[str, list[int]] = {variable_id: hours for variable_id in encoded_variable_ids}
-    if (source.accumulated_precipitation or source.averaged_precipitation) and len(hours) > 1:
+    if (
+        "prate" in encoded_variable_ids
+        and (source.accumulated_precipitation or source.averaged_precipitation)
+        and len(hours) > 1
+    ):
         variable_hours["prate"] = hours[1:]
 
     # Optional per-variable WebCodecs video artifacts.
@@ -985,6 +1169,7 @@ def convert_bin(
     report = {
         "outputDir": str(output_dir),
         "model": source.manifest_model,
+        "grid": grid.metadata(),
         "profile": profile,
         "zstdLevel": zstd_level,
         "zstdVersion": ".".join(map(str, zstd_version)),
@@ -1030,8 +1215,15 @@ def convert_bin(
             expected_hours=hours[-1] if len(hours) > 1 else expected_hours,
             model=source.manifest_model,
             product=source.product,
+            require_core_variables=bundle_ids is None,
         )
-        write_bin_manifest(manifest_path, payload, force=force, expected_hours=hours[-1] if len(hours) > 1 else expected_hours)
+        write_bin_manifest(
+            manifest_path,
+            payload,
+            force=force,
+            expected_hours=hours[-1] if len(hours) > 1 else expected_hours,
+            require_core_variables=bundle_ids is None,
+        )
         LOG.info("wrote manifest %s", manifest_path)
         if latest_path is not None and run_id is not None:
             manifest_bytes = manifest_path.read_bytes()

@@ -1,0 +1,20 @@
+{
+  "id": "doksuri-2023",
+  "title": {
+    "zh": "2023 台风杜苏芮登陆福建",
+    "en": "Typhoon Doksuri (2023) landfall"
+  },
+  "summary": {
+    "zh": "台风杜苏芮于 2023 年 7 月 28 日上午在福建晋江沿海登陆，其残余环流随后给华北带来创纪录降水。此处是 7 月 26 日 00Z 起报的 GFS 原生 13 公里地面通量场，降水率与 10 米风场。",
+    "en": "Typhoon Doksuri made landfall near Jinjiang, Fujian on the morning of 28 July 2023; its remnants later brought record rainfall to northern China. This is the 26 July 00Z run on the native 13 km GFS surface-flux grid, precipitation rate and 10 m wind."
+  },
+  "model": "sflux",
+  "run": "2023072600",
+  "hours": 120,
+  "bbox": [112.0, 15.0, 132.0, 32.0],
+  "variables": ["prate", "wind10m"],
+  "defaultVariable": "prate",
+  "eventTime": "2023-07-28T01:00:00Z",
+  "tags": ["typhoon", "asia"],
+  "credit": "NOAA GFS SFLUX"
+}

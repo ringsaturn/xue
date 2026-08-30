@@ -32,7 +32,7 @@ AWS_REQUEST_CHECKSUM_CALCULATION ?= when_required
 AWS_RESPONSE_CHECKSUM_VALIDATION ?= when_required
 export AWS_DEFAULT_REGION AWS_REQUEST_CHECKSUM_CALCULATION AWS_RESPONSE_CHECKSUM_VALIDATION
 
-.PHONY: check install wasm test test-rust test-e2e bench bench-video bench-lossy mvp serve format-pdf deploy-build upload-r2 prune-r2 live-run deploy-pages deploy clean
+.PHONY: check install wasm test test-rust test-e2e bench bench-video bench-lossy mvp serve format-pdf deploy-build upload-r2 prune-r2 live-run deploy-pages deploy showcase showcase-check upload-r2-showcase clean
 
 check:
 	$(PYTHON) scripts/check_dependencies.py
@@ -120,6 +120,33 @@ upload-r2:
 		--cache-control "public, max-age=31536000, immutable"; \
 	echo "Uploading $(LATEST_FILE) (takes $(MODEL) run $(RUN) live)..."; \
 	$(S3) cp web/public/data/$(LATEST_FILE) s3://$(R2_BUCKET)/$(R2_PREFIX)/$(LATEST_FILE) --no-progress $(DRY_RUN) \
+		--content-type application/json --cache-control "no-cache"
+
+# Historical showcase cases: past runs cropped to one weather event, defined
+# in showcase/cases/*.json and built into web/public/data/showcase/. Pass
+# CASE=<id> (or a space-separated list) to build only some; the whole set is
+# a lot of archived GRIB to pull, so building one at a time is the norm.
+# Unlike a run, a case is permanent — nothing prunes it.
+# CASES_DIR=showcase/cases-local points at scratch definitions kept out of
+# the curated, checked-in set.
+CASES_DIR ?= showcase/cases
+
+showcase:
+	$(PYTHON) -m xue showcase build --cases-dir $(CASES_DIR) $(FORCE) $(CASE)
+
+showcase-check:
+	$(PYTHON) -m xue showcase check --cases-dir $(CASES_DIR) $(CASE)
+
+# Push the built cases and the catalog to R2. Cases are immutable and
+# ?v=<crc32>-addressed like run assets; showcase.json is the mutable index and
+# is copied last, which is what makes a new case visible.
+upload-r2-showcase:
+	@set -e; \
+	[ -d web/public/data/showcase ] || { echo "no built cases at web/public/data/showcase"; exit 1; }; \
+	$(S3) sync web/public/data/showcase s3://$(R2_BUCKET)/$(R2_PREFIX)/showcase/ --no-progress $(DRY_RUN) \
+		--cache-control "public, max-age=31536000, immutable"; \
+	echo "Uploading showcase.json (publishes the case list)..."; \
+	$(S3) cp web/public/data/showcase.json s3://$(R2_BUCKET)/$(R2_PREFIX)/showcase.json --no-progress $(DRY_RUN) \
 		--content-type application/json --cache-control "no-cache"
 
 # Delete every published run of one model except the newest KEEP and the one

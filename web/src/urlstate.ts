@@ -4,6 +4,11 @@ import { FORECAST_MODELS, type ForecastBundleId, type ForecastModelId } from "./
  * serve — a bad link falls back rather than erroring). */
 export const DEFAULT_MODEL: ForecastModelId = "gfs";
 
+/** Layer shown when the URL names none, and the one the app falls back to
+ * when a dataset does not ship the requested layer. Every live run carries
+ * the core tmp2m/prate pair, so this is always available there. */
+export const DEFAULT_VARIABLE: ForecastBundleId = "prate";
+
 /** Canonical `type` value written into shared URLs, per bundle. */
 const CANONICAL_TYPE: Record<ForecastBundleId, string> = {
   tmp2m: "temp",
@@ -48,6 +53,14 @@ export function parseModelFromSearch(search: string): ForecastModelId {
   return MODEL_ALIASES[model.toLowerCase()] ?? DEFAULT_MODEL;
 }
 
+/** Showcase case requested by the page URL, or null for the live feed. A
+ * case pins its own model and run, so `model` is ignored while one is open. */
+export function parseCaseFromSearch(search: string): string | null {
+  const id = new URLSearchParams(search).get("case");
+  if (id === null || !/^[a-z0-9-]+$/.test(id)) return null;
+  return id;
+}
+
 /** Variable requested by the page URL, or null when the URL names none (or
  * names a type this app does not serve — a bad link falls back to the
  * default rather than erroring). */
@@ -69,6 +82,17 @@ export function searchForVariable(
 ): string {
   const params = new URLSearchParams(search);
   params.set("model", FORECAST_MODELS[modelId].id);
+  params.set("type", CANONICAL_TYPE[variableId]);
+  return `?${params.toString()}`;
+}
+
+/** Query string advertising a showcase case and variable. The case names its
+ * own dataset, so any `model` param is dropped rather than left to contradict
+ * it. Returned with the leading "?". */
+export function searchForCaseVariable(variableId: ForecastBundleId, search: string, caseId: string): string {
+  const params = new URLSearchParams(search);
+  params.delete("model");
+  params.set("case", caseId);
   params.set("type", CANONICAL_TYPE[variableId]);
   return `?${params.toString()}`;
 }

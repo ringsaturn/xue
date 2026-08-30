@@ -16,6 +16,11 @@ web/public/data/manifest.json
 web/public/data/latest.json
 web/public/data/latest-ecmwf.json
 web/public/data/latest-sflux.json
+web/public/data/showcase/
+# Scratch case definitions for local development; the curated set is
+# showcase/cases/ and is checked in.
+showcase/cases-local/
+web/public/data/showcase.json
 playwright-report/
 test-results/
 tests/fixtures/generated/

@@ -60,6 +60,7 @@ def build_bin_manifest(
     expected_hours: int = 120,
     model: str = "GFS",
     product: str = "pgrb2.0p25",
+    require_core_variables: bool = True,
 ) -> dict[str, Any]:
     """Build a schema v5 manifest describing one .xue bundle per variable.
 
@@ -89,7 +90,7 @@ def build_bin_manifest(
             for bundle in bundles
         ],
     }
-    validate_bin_manifest(payload, expected_hours=expected_hours)
+    validate_bin_manifest(payload, expected_hours=expected_hours, require_core_variables=require_core_variables)
     return payload
 
 
@@ -188,7 +189,18 @@ def _validate_video_descriptor(video: object, variable: str, paths: set[str]) ->
         raise ManifestError(f"manifest bundle video metadataJson is not valid JSON for {variable}") from exc
 
 
-def validate_bin_manifest(payload: dict[str, Any], *, expected_hours: int = 120) -> None:
+def validate_bin_manifest(
+    payload: dict[str, Any],
+    *,
+    expected_hours: int = 120,
+    require_core_variables: bool = True,
+) -> None:
+    """Validate a schema v5 manifest.
+
+    ``require_core_variables`` is what separates a full run from a showcase
+    case: a run covering the whole globe always publishes the core tmp2m and
+    prate pair, while a case ships only the bundles its event needs.
+    """
     if payload.get("schemaVersion") != 5:
         raise ManifestError("manifest schemaVersion must be 5")
     model = payload.get("model")
@@ -238,9 +250,10 @@ def validate_bin_manifest(payload: dict[str, Any], *, expected_hours: int = 120)
         variables.append(variable)
     if variables != [item for item in BIN_BUNDLE_VARIABLES if item in variables]:
         raise ManifestError(f"manifest bundles must be unique and ordered as {list(BIN_BUNDLE_VARIABLES)}")
-    for required in REQUIRED_BIN_BUNDLE_VARIABLES:
-        if required not in variables:
-            raise ManifestError(f"manifest is missing the required {required} bundle")
+    if require_core_variables:
+        for required in REQUIRED_BIN_BUNDLE_VARIABLES:
+            if required not in variables:
+                raise ManifestError(f"manifest is missing the required {required} bundle")
 
 
 def write_bin_manifest(
@@ -249,8 +262,11 @@ def write_bin_manifest(
     *,
     force: bool = False,
     expected_hours: int = 120,
+    require_core_variables: bool = True,
 ) -> None:
-    validate_bin_manifest(payload, expected_hours=expected_hours)
+    validate_bin_manifest(
+        payload, expected_hours=expected_hours, require_core_variables=require_core_variables
+    )
     _write_json_atomic(path, payload, force=force)
 
 

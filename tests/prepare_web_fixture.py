@@ -25,7 +25,7 @@ from xue.binconvert import (
     build_metadata,
     encode_poster,
 )
-from xue.manifest import build_bin_manifest, build_latest_pointer
+from xue.manifest import build_bin_manifest, build_latest_pointer, iso_z
 from xue.quantize import QUALITY_FLUX, QUALITY_PRECIPITATION, QUALITY_TEMPERATURE, QUALITY_WIND
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -41,6 +41,13 @@ ECMWF_HOURS = list(range(0, 145, 3)) + list(range(150, 241, 6))
 # The sflux fixture models the GFS surface flux series: hourly, with the
 # de-averaged prate starting at the first real step and the dswrf layer.
 SFLUX_RUN_TIME = datetime(2026, 8, 15, 6, tzinfo=UTC)
+# The showcase fixture models one historical case: a regional grid over the
+# western Pacific, a short axis, and only the variables the event is about.
+SHOWCASE_RUN_TIME = datetime(2024, 9, 3, 0, tzinfo=UTC)
+SHOWCASE_HOURS = list(range(25))
+SHOWCASE_GRID = GridInfo(
+    width=40, height=30, first_longitude=110.0, first_latitude=35.0, longitude_step=0.5, latitude_step=-0.5
+)
 
 
 def _temperature_plane(hour: int) -> np.ndarray:
@@ -262,6 +269,7 @@ def prepare_web_fixture() -> Path:
 
     _prepare_ecmwf_fixture(grid, level)
     _prepare_sflux_fixture(grid, level)
+    _prepare_showcase_fixture(level)
     return WEB_FIXTURE_ROOT
 
 
@@ -361,6 +369,116 @@ def _prepare_sflux_fixture(grid: GridInfo, level: int) -> None:
         product="sfluxgrb",
     )
     (WEB_FIXTURE_ROOT / "latest-sflux.json").write_text(json.dumps(pointer, indent=2) + "\n", encoding="utf-8")
+
+
+def _showcase_temperature_plane(hour: int) -> np.ndarray:
+    """A warm ridge strengthening over the window's north-east corner."""
+    longitude = SHOWCASE_GRID.first_longitude + np.arange(SHOWCASE_GRID.width) * SHOWCASE_GRID.longitude_step
+    latitude = SHOWCASE_GRID.first_latitude + np.arange(SHOWCASE_GRID.height) * SHOWCASE_GRID.latitude_step
+    lon_grid, lat_grid = np.meshgrid(longitude, latitude)
+    values = 26.0 + 0.35 * (lat_grid - 20.0) + 0.2 * hour * np.cos(np.radians(lon_grid - 120.0))
+    return QUALITY_TEMPERATURE.quantize(values.ravel())
+
+
+def _showcase_precipitation_plane(hour: int) -> np.ndarray:
+    """A cyclone-shaped rain field drifting north-west across the window."""
+    longitude = SHOWCASE_GRID.first_longitude + np.arange(SHOWCASE_GRID.width) * SHOWCASE_GRID.longitude_step
+    latitude = SHOWCASE_GRID.first_latitude + np.arange(SHOWCASE_GRID.height) * SHOWCASE_GRID.latitude_step
+    lon_grid, lat_grid = np.meshgrid(longitude, latitude)
+    center = (126.0 - hour * 0.35, 22.0 + hour * 0.18)
+    radius = np.hypot(lon_grid - center[0], lat_grid - center[1])
+    values = np.where(radius < 6.0, 24.0 * np.exp(-(radius**2) / 4.0), 0.0)
+    return QUALITY_PRECIPITATION.quantize(values.ravel())
+
+
+def _prepare_showcase_fixture(level: int) -> None:
+    """One historical showcase case: a regional (non-wrapping) grid, a single
+    variable, and the mutable showcase.json catalog that names it. This is the
+    only fixture whose grid does not cover the world, so it is what exercises
+    the renderers' out-of-grid clipping."""
+    case_root = WEB_FIXTURE_ROOT / "showcase" / "demo-typhoon"
+    case_root.mkdir(parents=True, exist_ok=True)
+    bundles = []
+    for variable_id, builder in (("tmp2m", _showcase_temperature_plane), ("prate", _showcase_precipitation_plane)):
+        planes_by_hour = {hour: builder(hour) for hour in SHOWCASE_HOURS}
+        payloads = [
+            binformat.PlanePayload(replace(entry, compressed_length=len(compressed)), compressed)
+            for entry, raw in _variable_payloads(variable_id, SHOWCASE_HOURS, planes_by_hour)
+            for compressed in (zstdcli.compress(raw, level=level),)
+        ]
+        metadata = build_metadata(
+            SHOWCASE_RUN_TIME, SHOWCASE_HOURS, SHOWCASE_GRID, "quality", (variable_id,)
+        )
+        bundle_path = case_root / f"{variable_id}.xue"
+        binformat.write_bundle(bundle_path, metadata, payloads)
+        binformat.read_bundle(bundle_path).verify_all()
+        data = bundle_path.read_bytes()
+
+        poster_payload, poster_grid = encode_poster(planes_by_hour[SHOWCASE_HOURS[0]], SHOWCASE_GRID)
+        (case_root / f"{variable_id}.poster.bin").write_bytes(poster_payload)
+        bundles.append(
+            {
+                "variable": variable_id,
+                "path": f"{variable_id}.xue",
+                "byteLength": len(data),
+                "crc32": f"{zlib.crc32(data) & 0xFFFFFFFF:08x}",
+                "poster": {
+                    "path": f"{variable_id}.poster.bin",
+                    "width": poster_grid.width,
+                    "height": poster_grid.height,
+                    "byteLength": len(poster_payload),
+                    "crc32": f"{zlib.crc32(poster_payload) & 0xFFFFFFFF:08x}",
+                    "metadataJson": json.dumps(
+                        build_metadata(
+                            SHOWCASE_RUN_TIME, SHOWCASE_HOURS, poster_grid, "quality", (variable_id,)
+                        )
+                    ),
+                },
+            }
+        )
+    data_length = sum(bundle["byteLength"] for bundle in bundles)
+
+    manifest = build_bin_manifest(
+        SHOWCASE_RUN_TIME,
+        bundles=bundles,
+        expected_hours=SHOWCASE_HOURS[-1],
+        require_core_variables=False,
+    )
+    manifest_bytes = (json.dumps(manifest, indent=2) + "\n").encode("utf-8")
+    (case_root / "manifest.json").write_bytes(manifest_bytes)
+
+    east = SHOWCASE_GRID.first_longitude + (SHOWCASE_GRID.width - 1) * SHOWCASE_GRID.longitude_step
+    south = SHOWCASE_GRID.first_latitude + (SHOWCASE_GRID.height - 1) * SHOWCASE_GRID.latitude_step
+    catalog = {
+        "schemaVersion": 1,
+        "generatedAt": "2026-08-30T00:00:00Z",
+        "cases": [
+            {
+                "id": "demo-typhoon",
+                "title": {"zh": "演示台风个例", "en": "Demo typhoon case"},
+                "summary": {"zh": "端到端测试用的合成个例。", "en": "A synthetic case for end-to-end tests."},
+                "modelId": "gfs",
+                "model": "GFS",
+                "product": "pgrb2.0p25",
+                "run": SHOWCASE_RUN_TIME.strftime("%Y%m%d%H"),
+                "runTime": iso_z(SHOWCASE_RUN_TIME),
+                "forecastHours": SHOWCASE_HOURS[-1],
+                "bbox": [SHOWCASE_GRID.first_longitude, south, east, SHOWCASE_GRID.first_latitude],
+                "dataBbox": [SHOWCASE_GRID.first_longitude, south, east, SHOWCASE_GRID.first_latitude],
+                "grid": {"width": SHOWCASE_GRID.width, "height": SHOWCASE_GRID.height},
+                "variables": ["tmp2m", "prate"],
+                "defaultVariable": "tmp2m",
+                "manifestPath": "showcase/demo-typhoon/manifest.json",
+                "manifestCrc32": f"{zlib.crc32(manifest_bytes) & 0xFFFFFFFF:08x}",
+                "byteLength": data_length,
+                "eventTime": "2024-09-06T00:00:00Z",
+                "tags": ["typhoon"],
+            }
+        ],
+    }
+    (WEB_FIXTURE_ROOT / "showcase.json").write_text(
+        json.dumps(catalog, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
 
 
 if __name__ == "__main__":
