@@ -4,99 +4,164 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Pipeline that packs global forecasts (2 m temperature `tmp2m`, precipitation rate `prate`, 10 m wind `ugrd10m`/`vgrd10m`, solar radiation `dswrf` on sflux only, f000–f240 on a mixed-step axis) into a custom per-variable spatiotemporal binary format (Xue, `.xue`), plus a static MapLibre page that decodes it with a Rust WASM worker and renders via a custom WebGL2 layer (inverse Web Mercator + palette lookup done in the shader). Three sources share the whole pipeline (`--model gfs|ecmwf|sflux`, registry in `sources.py`): NOAA GFS 0.25° (hourly to f120, 3-hourly to f240 — 161 frames), ECMWF IFS open data (3-hourly to 144 h, 6-hourly to f240 — 65 frames; CCSDS-packed GRIB repacked via eccodes `grib_set` at fetch time because GDAL builds often lack libaec, and prate derived by de-accumulating `tp`), and GFS sflux on the native ~13 km Gaussian grid (same cadence as GFS; planes rolled to the −180-first layout at extract time; prate de-averaged from window-cumulative `PRATE ave` records, so its axis starts at f001; adds the `dswrf` bundle). Each model is an independent dataset: `gfs.<run>/` + `latest.json`, `ecmwf.<run>/` + `latest-ecmwf.json`, `sflux.<run>/` + `latest-sflux.json`. The wind pair ships as one two-variable `wind10m.xue` bundle (optional in inputs and manifest, like `dswrf`) and renders through a GPU particle layer. Three languages, one format:
+Xue packs global weather forecast runs into a custom per-variable binary
+container (`.xue`) and plays them back in a static browser page. Three
+implementations of one format live here and must stay in agreement:
 
-- **Python encoder** (`xue/`): fetch → convert → quantize → temporal residuals → zstd → container. GDAL and ffmpeg are invoked as CLI subprocesses (`gdal.py`, `ffmpegcli.py`) — no binary Python dependencies. zstd (`zstdcli.py`) uses the stdlib `compression.zstd` in-process on Python ≥ 3.14 (per-plane subprocess overhead was the build bottleneck) with a zstd-CLI fallback for older interpreters; bundles are written and read-back-verified concurrently through one shared machine-sized pool. Band discovery reads GRIB2 section 0/1/4 headers directly (`grib2.py`, ~1 ms/file vs ~1 s/file for `gdalinfo -json`); one real gdalinfo pass per run doubles as the wind-availability probe and a cross-check of the header index, and any parse failure or disagreement falls the run back to full gdalinfo inspection.
-- **Rust decoder** (`rust/xue` core crate; `rust/xue-wasm` bindings). `make wasm` builds it into `web/src/wasm/` (gitignored generated output consumed by the frontend).
-- **TypeScript frontend** (`web/src/`): `main.ts` orchestrates; `manifest.ts` resolves the mutable `latest.json` live pointer → per-run `manifest.json` and picks a resolution tier (`pickBundleVariant`); `worker.ts` owns WASM decode, a byte-budgeted plane cache, and windowed prefetch; `layer.ts` is the MapLibre custom layer with two-texture blend playback; `particles.ts` is the wind GPU particle layer (u/v interleaved into one RG8 texture, ping-pong state/trail textures, speed palette); `poster.ts` decodes fast-first-frame posters via `DecompressionStream`; `webcodecs.ts` is the alternate H.264 path (any variable; used only when the stream is not larger than the `.xue`); `i18n.ts` is the zh/en UI dictionary (locale = `?lang=` param > persisted footer-toggle choice > `navigator.language`, fixed per page load; the Protomaps basemap label language follows it; thrown Error diagnostics stay English in both locales); `showcase.ts` + `showcase.html` are the second page (the historical case list) and `showcase-catalog.ts` is the catalog it and `main.ts` share. Vite builds both HTML entries (`build.rollupOptions.input`).
+- **Python encoder** — `xue/` (fetch → GDAL extract → quantize → temporal
+  residuals → zstd → container → manifest).
+- **Rust decoder** — `rust/xue` (core crate) and `rust/xue-wasm`
+  (wasm-bindgen bindings, built into `web/src/wasm/`).
+- **TypeScript frontend** — `web/src/` (manifest resolution, decode worker,
+  WebGL2 layers, playback).
 
-The format spec is `docs/format.md` (normative — update it if the format changes). The README is `README.md` (English).
+`docs/format.md` is the normative spec. `README.md` covers usage and
+publishing; `showcase/README.md` covers authoring historical cases.
 
 ## Commands
 
-`make check` verifies external tools: Python ≥3.12 (use `uv sync` → `.venv`), GDAL ≥3.8 with GRIB driver, zstd CLI, Node ≥22, Rust + `wasm-pack`.
-
-Build and run:
-
 ```sh
-make mvp                 # fetch latest run, build .xue bundles + manifest, build frontend
-make mvp RUN=2026081600 HOURS=120 PROFILE=balanced FORCE=--force
-make mvp MODEL=ecmwf     # same, from ECMWF IFS open data (needs eccodes grib_set)
-make serve               # vite preview of dist/
-npm run dev              # dev server (reads web/public/data/ directly)
-make wasm                # rebuild WASM decoder after Rust changes
+make check                       # verify GDAL / zstd / node / wasm-pack versions
+make wasm                        # build the WASM decoder into web/src/wasm/ (generated, gitignored)
+make mvp [MODEL=gfs|ecmwf|sflux] # check + install + wasm + build a run + vite build
+make serve                       # vite preview on 127.0.0.1
+npm run dev                      # vite dev server
+
+make test                        # rust + python + web unit tests
+make test-rust                   # regenerates the golden fixture, then cargo test
+make test-e2e                    # playwright (needs `npx playwright install chromium`)
+npm run build                    # tsc --noEmit && vite build
 ```
 
-CLI equivalents: `python -m xue {fetch,convert-bin,verify-bin,build-bin}` (see README for arguments). Re-writing an existing manifest requires `--force`.
-
-Tests:
+Single tests:
 
 ```sh
-make test                # Rust + Python + vitest (runs prepare_bin_fixture.py for you)
-make test-e2e            # Playwright (once: npx playwright install chromium)
-python -m unittest tests.test_bin -v                       # one Python module
-python -m unittest tests.test_bin.ClassName.test_name -v   # one test
-npx vitest run tests/web/manifest.test.ts                  # one web unit test
-npx playwright test -g "pattern"                           # one e2e test
-cd rust && cargo test                                      # Rust only — run tests/prepare_bin_fixture.py first
-wasm-pack test --headless --chrome rust/xue-wasm        # decoder in a real browser
+.venv/bin/python -m unittest tests.test_bin -v
+.venv/bin/python -m unittest tests.test_bin.SomeCase.test_method
+cd rust && cargo test -p xue golden
+npx vitest run tests/web/manifest.test.ts
+npx playwright test tests/e2e/app.spec.ts -g "scrub"
+wasm-pack test --headless --chrome rust/xue-wasm   # decoder in a real browser
 ```
 
-Cross-language golden tests: `tests/prepare_bin_fixture.py` encodes the cropped GRIB fixture with the Python encoder and writes golden planes; Rust tests must decode byte-identically. Playwright global setup builds synthetic tiny bundles (`tests/prepare_web_fixture.py`). Everything generated lands in ignored directories; fixture provenance is in `tests/fixtures/README.md`. There are no linters configured; `npm run build` runs `tsc --noEmit`. CI (`.github/workflows/test.yml`) runs the same suites on push to `main` and on pull requests, split into four jobs — Python (3.12 and 3.14, the latter covering the stdlib zstd path), Rust golden tests, web unit tests plus the typechecked frontend build, and Playwright e2e; prose-only changes (`**.md`, `docs/`, licences) skip the workflow entirely.
+Use `.venv/bin/python` (created by `uv sync`); the Makefile's `PYTHON`
+variable picks it automatically, but direct invocations must not rely on the
+system interpreter.
 
-Benchmarks: `make bench` (compression modes), `make bench-video` (lossless H.264 path), `make bench-lossy` (lossy tier ladder with scientific-metric acceptance).
+`web/src/wasm/` is generated and gitignored — the frontend will not typecheck
+or build until `make wasm` has run.
 
-## Historical showcase
+## Architecture
 
-Alongside the live feed there is a second dataset: **cases** — one past run
-each, cropped to the region and hours of a single weather event (typhoon
-landfall, a rainstorm, a heat dome). Cases are permanent; nothing prunes them.
-Authoring guide and archive coverage: `showcase/README.md`.
+### Delivery contract (touches all three implementations)
 
-- Definitions are checked in at `showcase/cases/<id>.json` (id, locale-keyed
-  title/summary, model, run, hours, bbox, variable subset). `xue/showcase.py`
-  validates them, drives the build, and writes the catalog; `make showcase
-  CASE=<id>` / `make showcase-check` / `make upload-r2-showcase` are the entry
-  points.
-- The encoder gained exactly two knobs for this: `convert_bin(bbox=...)`, which
-  runs `crop_grid()` to cut a whole-cell window out of every plane after the
-  −180-first roll (`GridInfo.crop`, wrapping across the antimeridian), and
-  `convert_bin(bundle_ids=...)`, which restricts both the download and the
-  published bundles. A restricted manifest is not required to carry the core
-  tmp2m/prate pair (`require_core_variables=False`, both in `xue/manifest.py`
-  and `validateManifest` on the web side).
-- Delivery mirrors the live feed's two layers: the mutable `showcase.json`
-  catalog at the data root plays the part `latest.json` plays for a run, and
-  each `showcase/<id>/manifest.json` and its bundles are immutable and
-  `?v=<crc32>`-addressed. A `case.json` sidecar per case is what the catalog is
-  collected from, so rebuilding one case never touches the others.
-- The viewer is the same page: `/?case=<id>` swaps the manifest source, pins the
-  model, hides the model switch, turns off new-run polling, and opens on the
-  case's own `defaultVariable` (an explicit `?type=` still wins). Everything
-  below the manifest — worker, plane cache, layers, timeline — is unchanged.
-- A case is the whole dataset, so the camera is held to it: `caseCameraLimits()`
-  (pure geometry over `mercator.ts`) gives the zoom at which the region fills
-  the viewport and the world rect visible there, applied as `setMinZoom` +
-  `setMaxBounds`. Both depend on the viewport, so `map.on("resize")` recomputes
-  them — without moving the camera, since mobile toolbars fire resize constantly.
-- Regional grids made the renderers grid-aware: `layer.ts` and `particles.ts`
-  index longitude modulo 360 from the grid origin (so an antimeridian window
-  stays contiguous), discard fragments outside the grid, clamp the horizontal
-  texture wrap when the grid is not global, and respawn particles inside the
-  grid's own footprint (`spawnRectangle`).
-- Cases skip the half-resolution ladder and the H.264 companion — at a few
-  megabytes neither can save anything.
-- Archives reach back to about 2021-01 for GFS/sflux (NOAA moved the files under
-  `atmos/` on 2021-03-23, and `fetch.py` picks the layout by run id) and about
-  2024-02 for ECMWF open data.
+Two layers, both versioned:
 
-## Deploy model
+- The only **mutable** object per model is a tiny live pointer at the data
+  root (`latest.json` for GFS, `latest-<model>.json` otherwise, pointer schema
+  v1). Uploading it is what takes a run live.
+- Everything it names — the run's `manifest.json` (schema v5) and every
+  artifact — is **immutable**, addressed with `?v=<crc32>` cache busting, and
+  lives under `<model>.<run>/`.
 
-Cloudflare Pages project `project-xue` (custom domain https://xue.ringsaturn.me) serves only the static shell (`dist-deploy/`, built with `vite build --mode deploy` which sets `VITE_DATA_BASE_URL` from `web/.env.deploy`). All forecast data lives on the public R2 bucket (`dataset.ringsaturn.me/xue/`) because bundles exceed the Pages 25 MB file limit.
+Manifest paths are resolved relative to the manifest URL, so a run directory
+can be served from either the site origin or the R2 bucket
+(`VITE_DATA_BASE_URL`, see `web/.env.deploy`).
 
-- R2 is managed over its S3 API with the AWS CLI, entirely from the Makefile — no publishing code of ours. `make upload-r2 MODEL=... RUN=<cycle>` is `aws s3 sync` of the run directory (immutable cache metadata, `?v=<crc32>`-addressed) followed by `aws s3 cp` of the mutable per-model pointer (`latest.json` for GFS, `latest-<model>.json` otherwise), which is the go-live switch. `make live-run MODEL=...` prints the run the pointer names. Endpoint is `https://$(CLOUDFLARE_ACCOUNT_ID).r2.cloudflarestorage.com`; credentials are an R2 API token key pair in `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`. The Makefile exports `AWS_DEFAULT_REGION=auto` and the `when_required` checksum settings that S3-compatible backends need.
-- `make upload-r2-showcase` syncs `web/public/data/showcase/` (immutable) and then copies the mutable `showcase.json`, which is the go-live switch for the case list. Pruning never touches it: `make prune-r2` only considers directories matching `^<model>\.`.
-- `make prune-r2 MODEL=...` lists the bucket, keeps the newest `KEEP` run directories of that model (default 1 — the live run only; the bucket carries no history) and `aws s3 rm --recursive`s the rest. The run the live pointer names is never deleted, and pruning off a real listing also sweeps leftovers from an interrupted upload. `DRY_RUN=--dryrun` previews.
-- Scheduled publishing is one workflow per source — `publish-gfs.yml` (`20 5,11,17,23` UTC), `publish-sflux.yml` (`50 5,11,17,23`, frees the runner's preinstalled toolchains first — native-grid runs are ~4.5× the size), `publish-ecmwf.yml` (`30 8,20`; only ECMWF 00z/12z reach F120 in the open data oper series) — all keeping one run each — each with its own concurrency group and manual dispatch (run, profile, keep, force, dry-run). They all call the reusable `publish.yml` (`workflow_call`), which owns the whole loop: resolve the newest complete cycle → skip if R2 already serves it → build → upload → prune → verify the pointer. Credentials are the `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `CLOUDFLARE_ACCOUNT_ID` repository secrets, passed down with `secrets: inherit`.
-- The Pages shell only needs deploying when frontend code changes. `deploy-pages.yml` does it automatically on pushes to `main` that touch frontend-relevant paths (also manual dispatch), building the WASM decoder + `make deploy-build` and deploying with `make deploy-pages`; it authenticates with the `CLOUDFLARE_API_TOKEN` repository secret (a Cloudflare API token with Pages Edit — wrangler reads the env var, and the R2 S3 key pair can't deploy Pages). Locally, `make deploy` (= `deploy-build` + `deploy-pages`) still works via the wrangler OAuth login.
-- The wrangler OAuth token cannot manage DNS or zone Cache Rules — those are Dashboard-manual (noted in the Makefile).
+Manifest schema changes are a two-sided deploy: the new shell accepts old
+manifests, but an old cached shell rejects new ones — **deploy the Pages shell
+before publishing data in a widened schema**.
+
+### Bundle metadata schema versions
+
+Inside a `.xue` file, `schemaVersion` describes the *time axis only*: v1 is a
+uniform axis declaring `stepHours`; v2 lists forecast `hours` outright,
+required whenever the axis changes cadence (GFS/sflux go 3-hourly after f120,
+ECMWF 6-hourly after f144). Encoder (`xue/binconvert.py::_time_metadata`),
+Python reader (`xue/binformat.py::_parse_time_axis`), Rust
+(`rust/xue/src/lib.rs`) and `web/src/manifest.ts::timeAxisHours` must agree.
+Do not conflate this with the manifest's schema v5 or the pointer's v1.
+
+### Encoder pipeline (`xue/`)
+
+- `sources.py` — the per-model registry (`SourceSpec`): where GRIB comes from,
+  the published time axis as `(last_hour, step)` segments, which input
+  variables are fetched, which bundles are published, the production grid, and
+  fetch concurrency. **Adding or changing a model starts here**, and the
+  frontend mirror is `FORECAST_MODELS` in `web/src/manifest.ts`.
+- `variables.py` — per-variable GRIB identification (element, `.idx` phrase,
+  GRIB2 discipline/category/number/level, ECMWF param) plus the value range
+  the codebook is built from. Some entries are *input-only*: ECMWF `tp`
+  de-accumulates into `prate`, sflux `prate_ave` de-averages into `prate`;
+  neither reaches a bundle.
+- `fetch.py` → `idx.py` / `grib2.py` — byte-range fetches of exact GRIB
+  records; ECMWF open data is CCSDS-packed and is repacked to `grid_simple`
+  with `grib_set` at fetch time.
+- `binconvert.py` — the whole conversion: grid discovery, cropping
+  (`crop_grid`, showcase cases), unit conversion, de-accumulation /
+  de-averaging, quantization, temporal grouping, bundle writing, half-res
+  variants, posters, H.264 companions, manifest entries.
+- `quantize.py` / `temporal.py` / `binformat.py` — the format itself:
+  codebooks, modulo-256 residual prediction, container read/write.
+- `manifest.py` — manifest and live-pointer construction *and validation*;
+  both are validated on write.
+- `showcase.py` — case definitions → cropped bundles → `showcase.json`.
+
+External tools are invoked as CLI subprocesses (`gdal.py`, `zstdcli.py`,
+`ffmpegcli.py`, `eccodescli.py`) rather than added as binary Python
+dependencies; NumPy is the only runtime dependency. The exception is zstd,
+which runs in-process via the stdlib `compression.zstd` on Python ≥ 3.14
+(subprocess overhead dominated bundle writing) and falls back to the CLI
+below that — the two are interchangeable on decode but not byte-identical on
+encode.
+
+Errors that are the user's to fix subclass `XueError` (`xue/errors.py`); the
+CLI turns them into `error: …` and exit code 2. Anything else is a bug.
+
+### Decoder and frontend
+
+`rust/xue/src/lib.rs` exposes `Bundle` (whole file in memory) and
+`StreamingBundle` (structural prefix only, payload bytes fed in as range
+responses arrive) over shared validation and decode code. All arithmetic on
+file values is checked, and nothing is allocated from a file value before
+validation.
+
+`web/src/worker.ts` owns the WASM decoder and speaks one message protocol
+(`booted` → `init`/`init-stream` → `ready`, then `decode` → `frame`) in both
+full and streaming modes. `web/src/webcodecs.ts` implements the same protocol
+over a native `VideoDecoder` for the H.264 companion artifacts, so `main.ts`
+holds either one in the same field without branching. Prefetch in both is
+windowed: the main thread sends `prefetch-window` with the hours just ahead of
+the playhead plus a concurrency cap.
+
+`main.ts` (large, deliberately central) picks the delivery path per session:
+WebCodecs if supported and a video artifact exists, otherwise streaming if a
+range probe succeeds, otherwise a whole-bundle download; and picks a
+resolution tier via `pickBundleVariant` from the viewport and connection.
+`layer.ts` renders one quantized R8 plane with inverse Web Mercator and a
+palette lookup in the fragment shader, blending two frames via `u_mix` (never
+animate raster opacity). `particles.ts` renders 10 m wind. `playback.ts` holds
+the frame-rate ladder and the per-frame dwell that keeps a mixed-step axis
+moving at one apparent speed.
+
+## Conventions
+
+- Locale is `zh`/`en` via `web/src/i18n.ts`, fixed per page load. Only
+  human-facing copy is translated; thrown `Error` messages, worker messages
+  and diagnostics stay English in both locales.
+- URL state (`?model=`, `?type=`, `?case=`, `?lang=`) is parsed in
+  `urlstate.ts`; unrecognized values fall back to defaults rather than error.
+- The Python encoder and Rust decoder are held byte-identical by golden tests
+  (`rust/xue/tests/golden.rs`) against fixtures built by
+  `tests/prepare_bin_fixture.py`. A format change means changing the spec, both
+  implementations, and the fixtures together.
+- Playwright fixtures are synthetic and built by
+  `tests/prepare_web_fixture.py` from Playwright's global setup — no network,
+  no GDAL.
+- Generated and fetched data (`data/raw/`, `data/work/`, `dist/`,
+  `dist-deploy/`, `web/public/data/<model>.<run>/`, `web/src/wasm/`,
+  `tests/fixtures/generated/`) is gitignored; never commit it.
+- `plans/` is a local symlink to private design notes, excluded via
+  `.git/info/exclude`. It may be absent.
+- Commit subjects are lowercase and imperative, optionally prefixed with a
+  scope (`ci:`, `web:`, `docs:`, `fix:`).
