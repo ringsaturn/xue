@@ -31,6 +31,15 @@ import {
 } from "./manifest";
 import { buildPalette } from "./palettes";
 import {
+  DEFAULT_FPS,
+  defaultFpsForLoop,
+  frameDwellScales,
+  loopDwellUnits,
+  nextFps,
+  parseStoredFps,
+  type PlaybackFps,
+} from "./playback";
+import {
   DEFAULT_VARIABLE,
   parseCaseFromSearch,
   parseModelFromSearch,
@@ -58,7 +67,21 @@ import {
 // Rewrite the static shell into the detected locale before anything renders.
 applyStaticMessages();
 
-const FRAME_INTERVAL_MS = 1000 / 12;
+/** Playback pacing (the ladder and the per-frame dwell live in playback.ts).
+ * The rate is user-adjustable from the transport's speed button because a
+ * dataset's loop length varies by two orders of magnitude: a 240-hour run is
+ * 161 frames, a showcase case can be a couple of dozen. */
+let playbackFps: PlaybackFps = DEFAULT_FPS;
+/** Wall-clock time one shortest-step frame holds. */
+let frameIntervalMs = 1000 / playbackFps;
+/** The hold in force for the frame on screen — the interval scaled by that
+ * frame's own forecast step. The blend sweep divides by it, so it is tracked
+ * rather than recomputed. */
+let currentHoldMs = frameIntervalMs;
+/** Set once the viewer picks a speed: from then on their choice outranks the
+ * per-dataset default, here and on later visits. */
+let playbackFpsChosen = false;
+const PLAYBACK_FPS_KEY = "xue-playback-fps";
 /** Pre-manifest placeholder frame count: the GFS 240-hour axis
  * (121 hourly frames, then 40 three-hourly). */
 const FRAME_COUNT = 161;
@@ -98,7 +121,11 @@ function planeCacheBudgetBytes(): number {
   return (constrainedConnection() ? 24 : 64) * 1024 * 1024;
 }
 function prefetchWindowFrames(): number {
-  return constrainedConnection() ? 4 : 10;
+  // The window is runway in time, not in frames: faster playback burns
+  // through the same number of frames sooner, so it needs proportionally
+  // more of them resident ahead of the playhead.
+  const base = constrainedConnection() ? 4 : 10;
+  return Math.max(3, Math.round((base * playbackFps) / DEFAULT_FPS));
 }
 function prefetchConcurrency(): number {
   return constrainedConnection() ? 1 : 3;
@@ -213,6 +240,8 @@ const errorMessage = required<HTMLElement>("error-message");
 const retryButton = required<HTMLButtonElement>("retry-button");
 const playButton = required<HTMLButtonElement>("play-button");
 const playLabel = required<HTMLElement>("play-label");
+const speedButton = required<HTMLButtonElement>("speed-button");
+const speedLabel = required<HTMLElement>("speed-label");
 const dataCard = required<HTMLElement>("data-card");
 const dataCardIndex = required<HTMLElement>("data-card-index");
 const dataCardTitle = required<HTMLElement>("data-card-title");
@@ -469,6 +498,7 @@ function frameCount(): number {
 // table lookups, so both are memoized on the time-block identity.
 let frameHoursSource: BundleMetadata["time"] | null = null;
 let frameHoursCache: number[] = [];
+let frameScalesCache: number[] = [];
 let frameIndexCache = new Map<number, number>();
 
 function frameHours(): number[] {
@@ -477,9 +507,24 @@ function frameHours(): number[] {
   if (time !== frameHoursSource) {
     frameHoursSource = time;
     frameHoursCache = timeAxisHours(time);
+    frameScalesCache = frameDwellScales(frameHoursCache);
     frameIndexCache = new Map(frameHoursCache.map((hour, index) => [hour, index]));
   }
   return frameHoursCache;
+}
+
+/** Wall-clock hold for the frame at `index`: the selected rate paces the
+ * axis's shortest step, and a longer step holds proportionally longer so
+ * forecast time keeps one apparent speed across the mixed-step tail. */
+function frameHoldMs(index: number): number {
+  frameHours();
+  return frameIntervalMs * (frameScalesCache[index] ?? 1);
+}
+
+/** The loop's length in frame intervals — 161 GFS frames cost 240 of them. */
+function loopUnits(): number {
+  frameHours();
+  return loopDwellUnits(frameScalesCache);
 }
 
 function frameHour(index: number): number {
@@ -726,7 +771,7 @@ function debugInfoText(): string {
     `format: ${session?.format ?? "--"}`,
     `grid: ${session ? `${session.metadata.grid.width} × ${session.metadata.grid.height}` : "--"}`,
     `time: ${time ? `${time.frameCount}F · first ${time.firstForecastHour}h · ${time.stepHours !== undefined ? `step ${time.stepHours}h` : "mixed step"}` : "--"}`,
-    `frame: ${activeFrameIndex === null ? "--" : `F${String(frameHour(activeFrameIndex)).padStart(3, "0")}`}`,
+    `frame: ${activeFrameIndex === null ? "--" : `F${String(frameHour(activeFrameIndex)).padStart(3, "0")}`} · ${playbackFps} fps`,
     `planes: ${cachedFrameCount()} / ${frameCount()} · ${formatBytes(planeCacheBytes)} / ${formatBytes(planeCacheBudgetBytes())}`,
     `network: ${session ? `${formatBytes(session.bytes)} / ${formatBytes(session.totalBytes)}${session.resident ? " · resident" : session.streaming ? " · streaming" : ""}` : "--"}`,
     `decode: ${lastDecodeMs === null ? "--" : `${lastDecodeMs.toFixed(1)} ms`} · ${formatBytes(decodeRateBytesPerSec())}/s`,
@@ -815,6 +860,30 @@ function updateTransport(): void {
   playLabel.textContent = playing ? "PAUSE" : "PLAY";
 }
 
+/** (Re)start the frame cadence on the frame now on screen, holding it for its
+ * own forecast step. */
+function restartCadence(index: number): void {
+  currentHoldMs = frameHoldMs(index);
+  nextFrameAt = performance.now() + currentHoldMs;
+}
+
+/** Adopt a playback rate: relabel the button and re-base the cadence so the
+ * change lands on the next frame rather than after the interval the old rate
+ * already scheduled. `remember` marks it as the viewer's own choice. */
+function setPlaybackFps(fps: PlaybackFps, remember: boolean): void {
+  playbackFps = fps;
+  frameIntervalMs = 1000 / fps;
+  speedLabel.textContent = `${fps} FPS`;
+  if (playing) restartCadence(activeFrameIndex ?? Number(slider.value));
+  if (!remember) return;
+  playbackFpsChosen = true;
+  try {
+    localStorage.setItem(PLAYBACK_FPS_KEY, String(fps));
+  } catch {
+    // Preference just won't persist.
+  }
+}
+
 function stopPlayback(): void {
   playing = false;
   if (playbackFrame !== null) {
@@ -839,13 +908,15 @@ function advancePlayback(timestamp: number): void {
       : (activeFrameIndex + 1) % frameCount();
     const shown = trySelectFrame(next);
     if (shown) {
-      // Under one interval late is normal rAF quantization: keep the fixed
-      // cadence so playback averages exactly 12 fps. Later than that was a
-      // decode/network stall — re-base so the following frame waits a full
-      // interval instead of landing at a leftover fraction of one.
-      nextFrameAt = timestamp - nextFrameAt < FRAME_INTERVAL_MS
-        ? nextFrameAt + FRAME_INTERVAL_MS
-        : timestamp + FRAME_INTERVAL_MS;
+      // Under one hold late is normal rAF quantization: keep the fixed
+      // cadence so playback averages exactly the selected rate. Later than
+      // that was a decode/network stall — re-base so the following frame
+      // waits its whole hold instead of a leftover fraction of one.
+      const elapsedHold = currentHoldMs;
+      currentHoldMs = frameHoldMs(next);
+      nextFrameAt = timestamp - nextFrameAt < elapsedHold
+        ? nextFrameAt + currentHoldMs
+        : timestamp + currentHoldMs;
     }
     // When the frame is still decoding, hold the current image; the decode
     // completion will pull playback forward without touching opacity.
@@ -855,7 +926,7 @@ function advancePlayback(timestamp: number): void {
   playbackFrame = window.requestAnimationFrame(advancePlayback);
 }
 
-/** Between 12 fps frame steps, sweep the shader blend weight toward the
+/** Between frame steps, sweep the shader blend weight toward the
  * next frame's plane so playback reads as continuous motion. Skipped across
  * the loop seam (last -> first frame is a restart, not a transition) and
  * whenever either plane is not decoded yet — the current image just holds. */
@@ -870,7 +941,7 @@ function blendTowardNext(timestamp: number): void {
   const current = planeCache.get(cacheKey(activeVariable.numericId, frameHour(activeFrameIndex)));
   const upcoming = planeCache.get(cacheKey(activeVariable.numericId, frameHour(next)));
   if (!current || !upcoming) return;
-  const weight = 1 - (nextFrameAt - timestamp) / FRAME_INTERVAL_MS;
+  const weight = 1 - (nextFrameAt - timestamp) / currentHoldMs;
   ensureSessionGrid();
   layer.setBlend(current.plane, upcoming.plane, weight);
 }
@@ -879,7 +950,7 @@ function startPlayback(): void {
   if (!activeVariable || slider.disabled || playing || !ready) return;
   hideError();
   playing = true;
-  nextFrameAt = performance.now() + FRAME_INTERVAL_MS;
+  restartCadence(activeFrameIndex ?? Number(slider.value));
   updateTransport();
   playbackFrame = window.requestAnimationFrame(advancePlayback);
 }
@@ -1072,7 +1143,7 @@ function handleDecodedFrame(message: {
     // the cadence too: without this the next rAF tick sees a long-expired
     // deadline and steps again immediately — the fast half of the visible
     // fast/slow playback jitter.
-    if (shown && playing) nextFrameAt = performance.now() + FRAME_INTERVAL_MS;
+    if (shown && playing) restartCadence(index);
   }
 }
 
@@ -1575,6 +1646,9 @@ function syncTimeline(session: VariableSession): void {
   if (previous && sameTimeAxis(previous, time)) {
     return;
   }
+  // Short axes play too fast at the default rate; the opening speed follows
+  // the loop's real length until the viewer overrides it.
+  if (!playbackFpsChosen) setPlaybackFps(defaultFpsForLoop(loopUnits()), false);
   const previousIndex = activeFrameIndex ?? Number(slider.value);
   const hour = previousHours
     ? (previousHours[Math.min(previousIndex, previousHours.length - 1)] ?? time.firstForecastHour)
@@ -1691,6 +1765,7 @@ async function initialize(): Promise<void> {
   slider.value = "0";
   slider.disabled = true;
   playButton.disabled = true;
+  speedButton.disabled = true;
   setVariableButtonsDisabled(true);
   document.body.classList.add("is-data-loading");
   dataCard.setAttribute("aria-busy", "true");
@@ -1773,6 +1848,7 @@ async function initialize(): Promise<void> {
     loadStatus.className = "load-status";
     slider.disabled = false;
     playButton.disabled = false;
+    speedButton.disabled = false;
     setVariableButtonsDisabled(false);
     if (!reducedMotion.matches) startPlayback();
   } catch (error) {
@@ -1860,6 +1936,9 @@ playButton.addEventListener("click", () => {
   if (playing) stopPlayback();
   else startPlayback();
 });
+// One button cycling the ladder: at four rungs a menu would cost more taps
+// than it saves, and the label always reads the rate in force.
+speedButton.addEventListener("click", () => setPlaybackFps(nextFps(playbackFps), true));
 /** Poll the live pointer; a changed run id re-initializes onto the new
  * run ("排播型电视直播" — the client tunes itself to the newest broadcast). */
 async function checkForNewRun(): Promise<void> {
@@ -1888,6 +1967,15 @@ reducedMotion.addEventListener("change", () => {
   if (reducedMotion.matches) stopPlayback();
   if (windLayer) windLayer.animate = !reducedMotion.matches;
 });
+
+// A chosen playback rate sticks across visits; without one each dataset
+// opens at the speed its loop length calls for.
+try {
+  const stored = parseStoredFps(localStorage.getItem(PLAYBACK_FPS_KEY));
+  if (stored !== null) setPlaybackFps(stored, true);
+} catch {
+  // Storage can be unavailable (privacy modes); the default rate applies.
+}
 
 // Stats visibility sticks across visits, like the timeline expansion.
 try {

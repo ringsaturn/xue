@@ -79,6 +79,9 @@ const MESSAGES = {
   timelineAria: { zh: "预报时间控制", en: "Forecast time controls" },
   playAnimation: { zh: "播放动画", en: "Play animation" },
   pauseAnimation: { zh: "暂停动画", en: "Pause animation" },
+  /** The speed button reads "12 FPS" in both locales (an instrument value,
+   * like the forecast hour); only its accessible name is translated. */
+  playbackSpeed: { zh: "播放速度", en: "Playback speed" },
   readingManifest: { zh: "正在读取清单", en: "Loading manifest" },
   expandTimeline: { zh: "展开时间轴详情", en: "Expand timeline details" },
   collapseTimeline: { zh: "收起时间轴详情", en: "Collapse timeline details" },

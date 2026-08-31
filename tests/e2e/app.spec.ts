@@ -427,6 +427,67 @@ test("animation starts automatically, advances, and can pause", async ({ page })
   await expect(slider).toHaveValue(pausedAt);
 });
 
+test("the speed button cycles the frame rate and remembers the choice", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await routeManifest(page);
+  await routeBundle(page);
+  await page.goto("/");
+  await waitForReady(page);
+  // 121 frames loop for ten seconds at the default rate — no step-down.
+  const speed = page.getByRole("button", { name: "Playback speed" });
+  await expect(speed).toHaveText("12 FPS");
+  await speed.click();
+  await expect(speed).toHaveText("24 FPS");
+  await speed.click();
+  await expect(speed).toHaveText("3 FPS");
+
+  // A chosen rate outranks the per-dataset default on the next visit.
+  await page.reload();
+  await waitForReady(page);
+  await expect(speed).toHaveText("3 FPS");
+});
+
+test("a mixed-cadence axis holds its longer steps longer", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop", "timing-sensitive, one project is enough");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await routeManifest(page);
+  await routeBundle(page);
+  await page.goto("/");
+  await waitForReady(page);
+  // ECMWF temperature: 65 frames, 3-hourly to F144 then 6-hourly to F240.
+  await page.getByRole("button", { name: "ECMWF IFS 0.25°" }).click();
+  await waitForReady(page);
+  await page.getByRole("button", { name: "TEMP 2M" }).click();
+  const slider = page.getByRole("slider", { name: "Forecast hour" });
+  await expect(slider).toHaveAttribute("max", "64");
+
+  // The slowest rung keeps decode well ahead of playback, so what the clock
+  // measures is the pacing and nothing else.
+  const speed = page.getByRole("button", { name: "Playback speed" });
+  for (let click = 0; click < 4 && (await speed.innerText()).trim() !== "3 FPS"; click += 1) {
+    await speed.click();
+  }
+  await expect(speed).toHaveText("3 FPS");
+  const play = page.getByRole("button", { name: "Play animation" });
+  const pause = page.getByRole("button", { name: "Pause animation" });
+
+  async function framesAdvancedFrom(index: number): Promise<number> {
+    await slider.fill(String(index));
+    await play.click();
+    await page.waitForTimeout(2_400);
+    await pause.click();
+    return Number(await slider.inputValue()) - index;
+  }
+
+  // 2.4 s buys ~7 three-hourly frames at the head, but only ~3-4 of the
+  // six-hourly ones in the tail (index 49 is F150).
+  const head = await framesAdvancedFrom(0);
+  const tail = await framesAdvancedFrom(49);
+  expect(head).toBeGreaterThanOrEqual(6);
+  expect(tail).toBeLessThanOrEqual(4);
+  expect(tail).toBeLessThan(head);
+});
+
 test("reduced motion disables autostart and keeps keyboard scrubbing", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await routeManifest(page);

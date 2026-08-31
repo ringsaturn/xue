@@ -112,6 +112,16 @@ test("?case=<id> plays the case back in the ordinary viewer", async ({ page }) =
   await expect(page.locator("#forecast-hour")).toHaveText("F000");
 });
 
+test("a short case axis opens at a slower frame rate", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await routeShowcase(page);
+  await page.goto("/?case=demo-typhoon");
+  await expect(page.getByRole("slider", { name: "Forecast hour" })).toBeEnabled({ timeout: 20_000 });
+  // 25 frames flash past in two seconds at 12 fps, so the case opens a rung
+  // down — a four-second loop.
+  await expect(page.getByRole("button", { name: "Playback speed" })).toHaveText("6 FPS");
+});
+
 test("an explicit ?type= overrides the case's own default layer", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await routeShowcase(page);

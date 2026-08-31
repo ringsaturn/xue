@@ -696,6 +696,17 @@ body.timeline-collapsed .track-ends {
   opacity: 0.65;
 }
 
+/* The speed button's value is its whole content, so it stays visible where
+   the play button drops its label (phones) and sizes to the text. */
+.speed-button {
+  min-width: 66px;
+  gap: 0;
+}
+
+.speed-value {
+  font-variant-numeric: tabular-nums;
+}
+
 .transport-icon {
   width: 0;
   height: 0;
@@ -1146,6 +1157,18 @@ body.timeline-collapsed .track-ends {
   }
 
   .transport-label {
+    display: none;
+  }
+
+  .speed-button {
+    min-width: 58px;
+    width: auto;
+    padding: 0 7px;
+  }
+
+  /* The speed button costs the heading row its slack: drop the readout's
+     caption, since F000 sitting on the slider needs no label. */
+  .forecast-readout .control-label {
     display: none;
   }
 
