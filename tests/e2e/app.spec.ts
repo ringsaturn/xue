@@ -471,21 +471,39 @@ test("a mixed-cadence axis holds its longer steps longer", async ({ page }, test
   const play = page.getByRole("button", { name: "Play animation" });
   const pause = page.getByRole("button", { name: "Pause animation" });
 
+  // The window is closed by the page's own clock, not by a round-tripped
+  // pause.click(): on a loaded machine that click lands well after the
+  // timeout, and every millisecond of its lateness would be counted as
+  // playback progress. Pausing still happens, just after the measurement.
   async function framesAdvancedFrom(index: number): Promise<number> {
     await slider.fill(String(index));
     await play.click();
-    await page.waitForTimeout(2_400);
+    const advanced = await page.evaluate(
+      ([start, windowMs]) =>
+        new Promise<number>((resolve) => {
+          const control = document.querySelector("input[type=range]") as HTMLInputElement;
+          window.setTimeout(() => resolve(Number(control.value) - start), windowMs);
+        }),
+      [index, 2_400] as const,
+    );
     await pause.click();
-    return Number(await slider.inputValue()) - index;
+    return advanced;
   }
 
-  // 2.4 s buys ~7 three-hourly frames at the head, but only ~3-4 of the
-  // six-hourly ones in the tail (index 49 is F150).
+  // 2.4 s at 3 fps buys ~7 three-hourly frames at the head; the tail's steps
+  // are twice as long (index 49 is F150), so it must advance at about half
+  // the rate. The assertion is that ratio rather than absolute counts: how
+  // many frames actually land depends on how fast the machine decodes and
+  // paints, but the pacing between the two segments does not.
   const head = await framesAdvancedFrom(0);
   const tail = await framesAdvancedFrom(49);
-  expect(head).toBeGreaterThanOrEqual(6);
-  expect(tail).toBeLessThanOrEqual(4);
-  expect(tail).toBeLessThan(head);
+  // Printed so a failure on a machine this cannot be reproduced on says
+  // which half broke: a head that also crawls is a slow runner, a tail that
+  // keeps pace with the head is the dwell not being applied at all.
+  console.log(`dwell: head=${head} tail=${tail}`);
+  expect(head).toBeGreaterThanOrEqual(4);
+  expect(tail).toBeGreaterThan(0);
+  expect(tail * 1.5).toBeLessThanOrEqual(head);
 });
 
 test("reduced motion disables autostart and keeps keyboard scrubbing", async ({ page }) => {
