@@ -147,20 +147,28 @@ existing manifest requires `--force` (`make mvp FORCE=--force`).
 The page supports shareable URLs per model and layer:
 `/?model=gfs&type=wind`, `/?model=ecmwf&type=temp`, and so on. `model`
 accepts `gfs` / `ecmwf` (alias `ifs`) / `sflux`; `type` also accepts
-aliases like `tmp2m` / `prate` / `wind10m` / `solar`; both are
+aliases like `tmp2m` / `prate` / `wind10m` / `solar` / `radar`; both are
 case-insensitive. The address bar stays in sync when switching, and
 unrecognized values fall back to defaults.
 
 ## Historical showcase
 
-Besides the live feed, the site publishes **cases**: past forecast runs
-cropped to the region and hours of one weather event. They are listed at
+Besides the live feed, the site publishes **cases**: one past weather event
+each, cropped to the region and hours it is about. They are listed at
 `/showcase.html` and played back by the ordinary viewer at `/?case=<id>`,
 which pins the case's dataset and run and frames the map on its region.
 
+Most cases are archived forecast runs. A case can also be a series of
+observations: the `radar` source is the CMA level-3 radar mosaic (composite
+reflectivity, `cref`), which has no live feed and no scheduled job — it
+reaches the site only as a case someone builds from a local NetCDF file. Its
+frames come every six minutes rather than every hour, which the bundle time
+axis carries exactly (`unitSeconds`, see [`docs/format.md`](docs/format.md));
+a 212-hour case at that cadence is 2096 frames.
+
 A case is defined by a small checked-in JSON file
-(`showcase/cases/<id>.json`) naming the model, run, forecast range, bounding
-box, and the subset of variables the event is about:
+(`showcase/cases/<id>.json`) naming the model, the run (or dataset file),
+the range, bounding box, and the subset of variables the event is about:
 
 ```sh
 make showcase-check                      # validate every definition
@@ -174,9 +182,11 @@ and may cross the antimeridian, and the resulting file is an ordinary `.xue`
 whose `grid` block names a window instead of the globe. That keeps a case to
 a few megabytes, so cases stay published permanently while runs are pruned.
 
-Archive depth limits which events are possible: NOAA GFS and sflux reach
-back to about 2021-01, ECMWF open data to about 2024-02. See
-[`showcase/README.md`](showcase/README.md) for the authoring guide.
+Archive depth limits which forecast events are possible: NOAA GFS and sflux
+reach back to about 2021-01, ECMWF open data to about 2024-02. Radar cases
+depend on having the decoded file locally
+(`XUE_OBSERVATION_ROOT`). See [`showcase/README.md`](showcase/README.md) for
+the authoring guide.
 
 ## Publishing
 

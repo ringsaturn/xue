@@ -33,12 +33,13 @@ Key decisions:
   single-channel plane that uploads directly to a WebGL2 `R8` texture.
   Codebooks are visualization-oriented (0.25 °C temperature error budget, a
   logarithmic precipitation codebook that preserves light-rain resolution).
-- **An axis that may change step.** No source publishes one cadence all
-  the way to 240 hours: GFS is hourly to f120 and three-hourly beyond,
-  ECMWF three-hourly to 144 hours and six-hourly beyond. A uniform series
-  declares a step; a series that changes step lists its forecast hours
-  outright, so the axis is always exact rather than approximated by a
-  single step.
+- **An axis that names its own unit and may change step.** No source
+  publishes one cadence all the way to 240 hours: GFS is hourly to f120 and
+  three-hourly beyond, ECMWF three-hourly to 144 hours and six-hourly
+  beyond. And not every dataset is hourly at all — the radar mosaic
+  publishes every six minutes. The axis therefore declares the seconds one
+  step unit is worth and either a uniform step or its offsets outright, so
+  it is always exact rather than approximated.
 - **Bounded temporal groups.** Smooth fields (temperature, wind, solar
   radiation) use six-frame groups with a middle RAW anchor and one-byte
   residuals, capping random access at two plane decodes. Groups are formed
@@ -130,13 +131,14 @@ Example (a single-variable GFS temperature bundle):
 
 ```json
 {
-  "schemaVersion": 1,
+  "schemaVersion": 3,
   "model": "GFS",
   "product": "pgrb2.0p25",
   "runTime": "2026-08-15T06:00:00Z",
   "time": {
-    "firstForecastHour": 0,
-    "stepHours": 1,
+    "unitSeconds": 3600,
+    "firstFrameOffset": 0,
+    "frameStep": 1,
     "frameCount": 121
   },
   "grid": {
@@ -157,6 +159,14 @@ Example (a single-variable GFS temperature bundle):
       "id": "tmp2m",
       "label": "2 meter temperature",
       "unit": "°C",
+      "parameter": {
+        "discipline": 0,
+        "parameterCategory": 0,
+        "parameterNumber": 0,
+        "typeOfFirstFixedSurface": 103,
+        "scaleFactorOfFirstFixedSurface": 0,
+        "scaledValueOfFirstFixedSurface": 2
+      },
       "quantization": {
         "type": "linear",
         "offset": -60.0,
@@ -181,60 +191,136 @@ parse the file. It versions the metadata JSON only; the container layout is
 versioned by the FixedHeader `version` field, which stays 1 for every
 schema version below.
 
-| `schemaVersion` | Introduces | `time` shape |
+| `schemaVersion` | Introduces | Recognized by |
 |---:|---|---|
-| 1 | — | uniform axis, `stepHours` |
-| 2 | Explicitly listed forecast hours | mixed-step axis, `hours` |
+| 1 | — | a uniform whole-hour `time` axis declaring `stepHours` |
+| 2 | Explicitly listed forecast hours | a whole-hour `time` axis listing `hours` |
+| 3 | Per-variable GRIB2 identity, and a time axis in units it names | a `parameter` block on every variable, and a `time` block declaring `unitSeconds` |
 
-An encoder must emit the lowest version that can express the file, so a
-uniform series is always schemaVersion 1 and never carries `hours`.
-Decoders enforce both sides of that rule: they must reject a schema
-version they do not implement, and must also reject a declared version
-higher than the lowest the metadata needs (see Error Handling). Rejecting
-unknown versions is what makes a version-1-only decoder reject a
-mixed-cadence bundle outright instead of silently misreading its axis;
-rejecting overdeclared versions gives any given axis exactly one valid
-encoding. Every already published uniform bundle stays valid and
-byte-identical under both rules.
+An encoder must emit the lowest version that can express the file: the
+highest version any single feature of the metadata requires, and no higher.
+For the versions defined so far that is 3 when the variables carry
+`parameter`, otherwise 2 when the axis lists `hours`, otherwise 1. A
+schemaVersion 3 file with a uniform axis is still version 3 — the parameter
+block, not the axis, sets its floor — and a `parameter` block is invalid
+below version 3.
 
-*Schema version 2 is implemented by the reference encoder and both
-decoders. Because version-1-only decoders reject it by design, the
-schemaVersion-2-capable frontend must be deployed before the first
-mixed-cadence run is published.*
+Decoders enforce both sides of that rule: they must reject a schema version
+they do not implement, and must also reject a declared version higher than
+the lowest the metadata needs (see Error Handling). Rejecting unknown
+versions is what makes an older decoder reject a file it would otherwise
+misread — silently ignoring an unknown `parameter` block, or misreading a
+mixed-cadence axis — instead of guessing; rejecting overdeclared versions
+gives any given metadata exactly one valid encoding. Every already published
+bundle stays valid and byte-identical under both rules.
+
+*Schema version 3 is what the reference encoder writes; versions 1 and 2
+remain readable and are still published by nothing. Because older decoders
+reject a version they do not implement, the schemaVersion-3-capable frontend
+must be deployed before the first version 3 run is published.*
+
+#### Variable Identity
+
+From schemaVersion 3, every variable declares what it *is* in GRIB2's own
+terms, so a reader can recognize a field without matching on `id` strings.
+The block is required on every variable of a version 3 file and invalid
+below it.
+
+| Field | GRIB2 origin | Rule |
+|---|---|---|
+| `discipline` | Section 0, octet 7 | 0–255 |
+| `parameterCategory` | Section 4, code table 4.1 | 0–255 |
+| `parameterNumber` | Section 4, code table 4.2 | 0–255 |
+| `typeOfFirstFixedSurface` | Section 4, code table 4.5 | 0–255 |
+| `scaleFactorOfFirstFixedSurface` | Section 4 | −127…127, or `null` |
+| `scaledValueOfFirstFixedSurface` | Section 4 | 0…4294967294, or `null` |
+| `typeOfStatisticalProcessing` | Section 4, code table 4.10 | 0–255, optional |
+
+The surface value is `scaledValueOfFirstFixedSurface × 10^−scaleFactorOfFirstFixedSurface`
+in that surface's own unit. A surface that carries no value — "entire
+atmosphere" (type 10), or a source that encodes the value as missing —
+writes **both** halves as `null`, which is how GRIB2 encodes it; one half
+alone describes nothing and is invalid. Both keys are always present.
+
+`typeOfStatisticalProcessing` is absent for an instantaneous field and
+present when the values are a statistic over the step. It is what
+distinguishes a `prate` bundle whose source carried an instantaneous rate
+(GFS pgrb2) from one derived by de-accumulating or de-averaging (ECMWF,
+GFS sflux), which are otherwise the same parameter.
+
+No other keys are allowed; a version 3 decoder must reject an unknown one,
+so any later addition is a new schema version. GRIB2's local-use ranges
+(parameter numbers and surface types 192–254) need no special treatment
+here — a local number is an ordinary number, and two of the variables below
+already use one.
+
+Registered variable identities:
+
+| `id` | Parameter | Surface | Notes |
+|---|---|---|---|
+| `tmp2m` | 0 / 0 / 0 | 103, 2 m | |
+| `prate` | 0 / 1 / 7 | 1, 0 | `typeOfStatisticalProcessing: 0` when derived (ECMWF, sflux) |
+| `ugrd10m` | 0 / 2 / 2 | 103, 10 m | |
+| `vgrd10m` | 0 / 2 / 3 | 103, 10 m | |
+| `dswrf` | 0 / 4 / 192 | 1, 0 | NCEP local parameter |
+| `cref` | 0 / 16 / 5 | 10, no value | Composite reflectivity, entire atmosphere |
 
 #### Time Axis
 
-`firstForecastHour` and `frameCount` are always present. Exactly one of
-`stepHours` and `hours` must accompany them:
+The axis is a list of integer **frame offsets** from `runTime`, each worth
+`unitSeconds` seconds. The frame at offset `o` is valid at
+`runTime + o × unitSeconds`, and `o` is exactly what the index's
+`frameOffset` field carries.
 
-- **`stepHours`** — the axis is uniform, and frame `i` is at forecast hour
-  `firstForecastHour + i * stepHours`. Requires schemaVersion 1 or higher.
-- **`hours`** — the axis changes step and is listed outright. Requires
-  schemaVersion 2.
+From schemaVersion 3 the block is:
+
+- **`unitSeconds`** — seconds per offset unit. It must be a whole divisor of
+  3600, and it must be the **coarsest** unit that expresses every offset
+  exactly, so an axis has one encoding rather than one per divisor of its
+  step. Formally, `gcd(3600 / unitSeconds, offset₀, offset₁, …)` must be 1.
+  Every forecast source is hourly and declares 3600, which leaves its
+  offsets equal to its forecast hours; the radar mosaic publishes every six
+  minutes and declares 360.
+- **`firstFrameOffset`** and **`frameCount`** — always present.
+- Exactly one of **`frameStep`** (the axis is uniform, and frame `i` is at
+  `firstFrameOffset + i × frameStep`) and **`frameOffsets`** (the axis does
+  not hold one step throughout and is listed outright). A forecast run lists
+  its offsets because the source changes cadence partway; an observation
+  series lists them because the archive has gaps where a publication was
+  missed.
+
+No other field may appear in the block.
 
 A miniature mixed axis, hourly then three-hourly:
 
 ```json
 "time": {
-  "firstForecastHour": 0,
+  "unitSeconds": 3600,
+  "firstFrameOffset": 0,
   "frameCount": 6,
-  "hours": [0, 1, 2, 3, 6, 9]
+  "frameOffsets": [0, 1, 2, 3, 6, 9]
 }
 ```
 
 The production GFS 240-hour axis is the same shape at full length: the
 161-element list `0, 1, …, 119, 120, 123, 126, …, 237, 240`.
 
-An `hours` array must have exactly `frameCount` elements, must be strictly
-increasing, must begin with `firstForecastHour`, and every element must be
-in `[0, 65534]` — the `forecastHour` field is a u16 and 65535 is the
-`dependencyHour` sentinel. The same upper bound applies to a uniform
-axis's last hour, `firstForecastHour + (frameCount − 1) × stepHours`. An
-`hours` array whose steps are all equal is invalid — a uniform axis has
-exactly one encoding, `stepHours` — which also rules out arrays of fewer
-than three elements, since any shorter axis is trivially uniform.
-Declaring both `stepHours` and `hours`, or neither, makes the file
-invalid.
+A `frameOffsets` array must have exactly `frameCount` elements, must be
+strictly increasing, must begin with `firstFrameOffset`, and every element
+must be in `[0, 65534]` — the `frameOffset` field is a u16 and 65535 is the
+`dependencyOffset` sentinel. The same upper bound applies to a uniform
+axis's last offset, `firstFrameOffset + (frameCount − 1) × frameStep`. A
+`frameOffsets` array whose steps are all equal is invalid — a uniform axis
+has exactly one encoding, `frameStep` — which also rules out arrays of fewer
+than three elements, since any shorter axis is trivially uniform. Declaring
+both `frameStep` and `frameOffsets`, or neither, makes the file invalid.
+
+**Schema versions 1 and 2** describe the same thing in whole hours only:
+`firstForecastHour` plus one of `stepHours` (uniform, version 1) and `hours`
+(listed, version 2), with `unitSeconds` implicitly 3600. Those files remain
+valid and are read unchanged. The two shapes never mix: a version 1 or 2
+block carrying any version 3 field, or a version 3 block carrying any of the
+hour-named fields, is invalid.
 
 A **segment** is a maximal run of frames with a constant step. For frames
 `h[0] < h[1] < … < h[n-1]` with steps `d[i] = h[i+1] - h[i]`, a segment
@@ -288,14 +374,21 @@ satisfies trivially:
 | `model` | `product` | Grid | Steps published | Notes |
 |---|---|---|---|---|
 | `GFS` | `pgrb2.0p25` | 1440 × 721, 0.25° | 1 h to f120, 3 h to f240 | All series include the analysis frame (f000). `prate` is an instantaneous rate at every step |
-| `ECMWF` | `ifs-0p25` | 1440 × 721, 0.25° | 3 h to 144 h, 6 h to 240 h | `prate` is de-accumulated from the run-total `tp`, so its series has no analysis frame and starts at `firstForecastHour: 3` |
-| `GFS-SFLUX` | `sfluxgrb` | 3072 × 1536 Gaussian, ~13 km | 1 h to f120, 3 h to f240 | `prate` is de-averaged from window-cumulative records and starts at `firstForecastHour: 1`; the only source shipping `dswrf` |
+| `ECMWF` | `ifs-0p25` | 1440 × 721, 0.25° | 3 h to 144 h, 6 h to 240 h | `prate` is de-accumulated from the run-total `tp`, so its series has no analysis frame and starts at `firstFrameOffset: 3` |
+| `GFS-SFLUX` | `sfluxgrb` | 3072 × 1536 Gaussian, ~13 km | 1 h to f120, 3 h to f240 | `prate` is de-averaged from window-cumulative records and starts at `firstFrameOffset: 1`; the only source shipping `dswrf` |
+| `CMA-RADAR` | `l3-mst-cref` | tile grid, 360/(256·2^z) degrees | 6 min, as published | Observations, not a forecast: `runTime` is the first observation and offsets count from it. The only source shipping `cref`, and the only one whose `unitSeconds` is not 3600; the axis lists its offsets wherever a publication was missed |
 
 How far a run is published is a pipeline choice, not a format constraint;
-the steps above are what each source makes available. A series that stops
-at 120 hours is uniform and stays schemaVersion 1, while a series that runs
-to 240 hours crosses a step change on every one of these sources and is
-therefore schemaVersion 2.
+the steps above are what each source makes available. A uniform series
+declares a `frameStep`, while a series that runs to 240 hours crosses a step
+change on every forecast source above and therefore lists its `hours`; an
+observation series lists them wherever the archive has a gap.
+
+Not every source is a forecast. `CMA-RADAR` is a series of observed
+analyses, and the container describes it with no change: `runTime` is the
+first observation in the series and each frame's `frameOffset` counts
+six-minute units from it. A reader that labels the axis should take that
+from the dataset identity rather than assume every file is a forecast.
 
 Time axes may therefore differ between bundles of one run, in both step and
 extent. The container layout is identical for every model — only the
@@ -315,7 +408,7 @@ name, and must not assume two bundles of one run share an axis.
 
 ### PlaneEntry
 
-Index entries are sorted by `(variableId, forecastHour)`. Each entry is 40
+Index entries are sorted by `(variableId, frameOffset)`. Each entry is 40
 bytes:
 
 | Offset | Length | Type | Field | Rule |
@@ -324,9 +417,9 @@ bytes:
 | 1 | 1 | u8 | predictor | See enum below |
 | 2 | 1 | u8 | compression | 0 NONE, 1 ZSTD, 2 ZSTD_DICT |
 | 3 | 1 | u8 | flags | See flags below |
-| 4 | 2 | u16 | forecastHour | Forecast hour of this plane |
-| 6 | 2 | u16 | dependencyHour | 65535 when no dependency exists |
-| 8 | 2 | u16 | groupId | Temporal group ID; equals forecastHour for RAW-only series |
+| 4 | 2 | u16 | frameOffset | This plane's offset on the metadata time axis |
+| 6 | 2 | u16 | dependencyOffset | 65535 when no dependency exists |
+| 8 | 2 | u16 | groupId | Temporal group ID; equals frameOffset for RAW-only series |
 | 10 | 2 | u16 | reserved0 | Must be 0 |
 | 12 | 4 | u32 | compressedLength | Payload byte count |
 | 16 | 8 | u64 | dataOffset | Absolute payload offset |
@@ -345,13 +438,14 @@ Registered `variableId` values:
 | 3 | `ugrd10m` | 10 m wind, U component |
 | 4 | `vgrd10m` | 10 m wind, V component |
 | 5 | `dswrf` | Surface downward shortwave radiation flux, instantaneous |
+| 6 | `cref` | Radar composite reflectivity over the entire atmosphere |
 
 Predictor enum:
 
 | Value | Name | Meaning |
 |---:|---|---|
 | 0 | RAW | Decompressed payload is the complete quantized plane |
-| 1 | ANCHOR | Payload is a residual relative to dependencyHour |
+| 1 | ANCHOR | Payload is a residual relative to dependencyOffset |
 | 2 | PREVIOUS | Payload is a residual relative to the preceding frame on this variable's time axis |
 | 3 | ZERO | No payload, output a zero-filled plane, reserved for local block formats |
 
@@ -384,15 +478,15 @@ validates predictor reconstruction.
 - ANCHOR decompresses to a one-byte residual, then adds the dependency
   plane.
 - PREVIOUS decompresses to a one-byte residual, then adds the plane of the
-  preceding frame on the time axis: `hours[i - 1]`, or
-  `forecastHour - stepHours` on a uniform axis. It is not
-  `forecastHour - 1` — on any axis whose step is not one hour, that plane
-  does not exist. A PREVIOUS entry on the first frame of the axis is
-  invalid, and every PREVIOUS entry must carry exactly that preceding hour
-  in `dependencyHour` — like ANCHOR, the dependency is explicit in the
-  index, never the sentinel, never left to be derived, so the same file
-  has only one encoding. (No reference bundle uses PREVIOUS; the reference
-  encoder emits only RAW and ANCHOR.)
+  preceding frame on the time axis: `frameOffsets[i - 1]`, or
+  `frameOffset - frameStep` on a uniform axis. It is not `frameOffset - 1` —
+  on any axis whose step is not one unit, that plane does not exist. A
+  PREVIOUS entry on the first frame of the axis is invalid, and every
+  PREVIOUS entry must carry exactly that preceding offset in
+  `dependencyOffset` — like ANCHOR, the dependency is explicit in the index,
+  never the sentinel, never left to be derived, so the same file has only
+  one encoding. (No reference bundle uses PREVIOUS; the reference encoder
+  emits only RAW and ANCHOR.)
 - The decoder must reject a frame when length, checksum, or dependency
   validation fails.
 - The decoder must not allocate an output larger than `width × height` or
@@ -419,9 +513,18 @@ same values unless noted):
 | `tmp2m` | −60 °C | 0.5 | 220 | 255 | 0.25 °C |
 | `ugrd10m` / `vgrd10m` | −63.5 m/s | 0.5 | 254 | 255 | 0.25 m/s |
 | `dswrf` | 0 W/m² | 5 | 254 | 255 | 2.5 W/m² |
+| `cref` | 0 dBZ | 0.5 | 160 | 255 | 0.25 dB |
 
 The `compact` profile doubles each `scale` (temperature 1.0 → maximumCode
-110, wind 1.0 → 127, dswrf 10 → 127).
+110, wind 1.0 → 127, dswrf 10 → 127, cref 1.0 → 80).
+
+`cref` code 0 is both "no echo" and "outside the radar network's coverage".
+A ground mosaic is a regional product on a rectangular grid, and this
+container carries no bitmap, so the bottom of the codebook is what a
+renderer paints as nothing. It is deliberately an ordinary in-range code
+rather than a reserved one: a renderer that interpolates codes before its
+palette lookup would otherwise colour the gap between a reserved code and
+its neighbour with a class the data never reached.
 
 Values outside the range clamp to the range ends before quantization.
 
@@ -497,7 +600,7 @@ Per-variable rules in v1:
   `groupId` counts groups sequentially across the whole variable and does
   not restart at a segment boundary.
 - **Precipitation (`prate`)** uses independent RAW planes for every
-  forecast time, with `groupId` mirroring `forecastHour`. Precipitation
+  frame, with `groupId` mirroring `frameOffset`. Precipitation
   regions move with weather systems; fixed-grid differencing creates both
   entering and leaving edges and measurably increases compressed size.
 
@@ -515,8 +618,11 @@ Error Handling) and never needs to derive segments to decode or to
 validate; a group that did straddle a boundary would still reconstruct
 exactly and is not rejected.
 
-The current global grids have no bitmap and all points are valid. Xue v1
-requires complete input planes; a future missing-data implementation should
+Xue v1 requires complete input planes: every point of every plane carries a
+code. The forecast grids satisfy that outright, and a source whose product
+does not cover its whole grid (the radar mosaic) resolves it before
+quantization by mapping absent points to the bottom of the variable's
+codebook — a value, not a gap. A future missing-data implementation should
 add a separate bitmap so residual bytes never conflict with the nodata
 code.
 
@@ -539,7 +645,7 @@ precipitation f001 RAW
 ...
 ```
 
-The anchor's actual forecast hour remains in the index; sequential playback
+The anchor's actual frame offset remains in the index; sequential playback
 does not depend on physical payload order. Keeping a temporal group's
 payloads contiguous means one HTTP range request fetches one decodable
 group.
@@ -578,23 +684,32 @@ A decoder must reject:
 - Entries overlapping the header, metadata, index, or dictionary.
 - Overlapping payload ranges (ZERO entries may have zero length).
 - Unindexed gaps between sections or payloads, and nonzero padding bytes.
-- Duplicate `(variableId, forecastHour)` pairs.
-- A `time` block declaring both `stepHours` and `hours`, or neither; an
-  `hours` array in a schemaVersion 1 file; an `hours` array that is not
-  strictly increasing, whose length differs from `frameCount`, whose first
-  element differs from `firstForecastHour`, whose steps are all equal, or
-  that contains an hour above 65534; a uniform axis whose last hour
-  `firstForecastHour + (frameCount − 1) × stepHours` exceeds 65534.
-- A declared `schemaVersion` higher than the lowest able to express the
-  metadata — for the versions defined so far, a schemaVersion 2 file that
-  declares `stepHours`.
-- An incomplete forecast-hour sequence for any declared variable. The
-  expected sequence is `hours` when present, and
-  `firstForecastHour + i * stepHours` otherwise; a decoder must never
-  reconstruct it arithmetically when `hours` is present.
+- Duplicate `(variableId, frameOffset)` pairs.
+- A `time` block declaring both `frameStep` and `frameOffsets`, or neither;
+  a `frameOffsets` array that is not strictly increasing, whose length
+  differs from `frameCount`, whose first element differs from
+  `firstFrameOffset`, whose steps are all equal, or that contains an offset
+  above 65534; a uniform axis whose last offset
+  `firstFrameOffset + (frameCount − 1) × frameStep` exceeds 65534; a
+  `unitSeconds` that is not a whole divisor of 3600 or is finer than the
+  offsets need; a field the time block does not define; a version 1 or 2
+  block carrying a version 3 field, or the reverse. The same rules apply to
+  a version 1 or 2 axis under its own field names.
+- A `parameter` block in a file below schemaVersion 3, or a variable
+  without one in a schemaVersion 3 file; a parameter code outside 0–255;
+  a fixed surface with exactly one of its scale factor and scaled value
+  `null`; a key the block does not define.
+- A declared `schemaVersion` other than the lowest able to express the
+  metadata — a schemaVersion 2 file that declares `stepHours`, or a
+  schemaVersion 1 or 2 file whose variables carry `parameter` or whose time
+  block names a unit.
+- An incomplete frame sequence for any declared variable. The expected
+  sequence is `frameOffsets` when present, and
+  `firstFrameOffset + i * frameStep` otherwise; a decoder must never
+  reconstruct it arithmetically when `frameOffsets` is present.
 - ANCHOR or PREVIOUS dependencies that leave the variable or temporal
   group, cyclic dependencies, or chains deeper than the group length; a
-  PREVIOUS entry whose `dependencyHour` is not exactly the preceding frame
+  PREVIOUS entry whose `dependencyOffset` is not exactly the preceding frame
   on the axis (the 65535 sentinel included).
 - Any integer computation that would overflow (use checked arithmetic).
 - A plane whose CRC-32 or Zstandard checksum fails.
@@ -603,7 +718,7 @@ A decoder must reject:
 
 These conventions sit outside the container but are what the reference
 pipeline produces: one file per variable per run (`tmp2m.xue`,
-`prate.xue`, `dswrf.xue`), the two-variable `wind10m.xue`, and
+`prate.xue`, `dswrf.xue`, `cref.xue`), the two-variable `wind10m.xue`, and
 half-resolution renditions named `<variable>.half.xue` — structurally
 identical bundles whose metadata declares the decimated grid. A run
 directory also carries a `manifest.json` describing every bundle (path,

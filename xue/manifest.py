@@ -13,8 +13,9 @@ from .sources import MODEL_PRODUCTS
 # Schema v5 bundle registry, in manifest order. The wind bundle packs both
 # 10 m components into one two-variable .xue and is optional so
 # runs built from wind-less inputs (and older manifests) stay valid; dswrf
-# is optional because only the sflux source carries it.
-BIN_BUNDLE_VARIABLES = ("tmp2m", "prate", "dswrf", "wind10m")
+# is optional because only the sflux source carries it, and cref because
+# only the radar observation archive does.
+BIN_BUNDLE_VARIABLES = ("tmp2m", "prate", "dswrf", "cref", "wind10m")
 REQUIRED_BIN_BUNDLE_VARIABLES = ("tmp2m", "prate")
 
 
@@ -205,7 +206,7 @@ def validate_bin_manifest(
         raise ManifestError("manifest schemaVersion must be 5")
     model = payload.get("model")
     if model not in MODEL_PRODUCTS or payload.get("product") != MODEL_PRODUCTS[model]:
-        raise ManifestError("manifest model and product must identify a registered forecast dataset")
+        raise ManifestError("manifest model and product must identify a registered dataset")
     if payload.get("forecastHours") != expected_hours:
         raise ManifestError(f"manifest forecastHours must be {expected_hours}")
     _parse_time(payload.get("runTime"), "runTime")

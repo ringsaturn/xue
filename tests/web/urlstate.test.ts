@@ -28,6 +28,11 @@ describe("parseVariableFromSearch", () => {
     expect(parseVariableFromSearch("?model=sflux&type=solar")).toBe("dswrf");
     expect(parseVariableFromSearch("?type=radiation")).toBe("dswrf");
     expect(parseVariableFromSearch("?type=DSWRF")).toBe("dswrf");
+    // cref ships only on showcase cases, which pin their own dataset, so the
+    // type alias has to resolve without a model param.
+    expect(parseVariableFromSearch("?type=radar")).toBe("cref");
+    expect(parseVariableFromSearch("?type=CREF")).toBe("cref");
+    expect(parseVariableFromSearch("?type=reflectivity")).toBe("cref");
   });
 
   it("falls back to null on unknown model, unknown type, or no params", () => {

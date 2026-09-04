@@ -15,9 +15,9 @@ FIXTURE_GRIB = REPOSITORY_ROOT / "tests" / "fixtures" / "gfs.2026081406.f000.cro
 GENERATED_ROOT = REPOSITORY_ROOT / "tests" / "fixtures" / "generated"
 WORK_ROOT = REPOSITORY_ROOT / "tests" / "fixtures" / "work"
 
-# A miniature GFS-shaped mixed-step axis (schemaVersion 2): hourly frames,
-# then a three-hourly tail — enough frames for full and partial temporal
-# groups on both sides of the cadence change.
+# A miniature GFS-shaped mixed-step axis: hourly frames, then a three-hourly
+# tail — enough frames for full and partial temporal groups on both sides of
+# the cadence change.
 MIXED_HOURS = list(range(13)) + list(range(15, 37, 3))
 MIXED_GRID = GridInfo(
     width=16,
@@ -36,11 +36,13 @@ def _mixed_plane(hour: int) -> np.ndarray:
 
 def prepare_mixed_axis_fixture() -> None:
     """Encode a synthetic mixed-axis bundle through the real encoder path
-    (segment-aligned grouping, schemaVersion 2 metadata) plus golden planes,
-    so the Rust decoder's Schema v2 support is held byte-identical too."""
+    (segment-aligned grouping, an explicitly listed ``hours`` axis) plus
+    golden planes, so the Rust decoder's handling of both is held
+    byte-identical too."""
     planes = {hour: _mixed_plane(hour) for hour in MIXED_HOURS}
     metadata = build_metadata(datetime(2026, 8, 14, 6, tzinfo=UTC), MIXED_HOURS, MIXED_GRID, "quality", ("tmp2m",))
-    assert metadata["schemaVersion"] == 2
+    assert metadata["schemaVersion"] == 3
+    assert "frameOffsets" in metadata["time"]
     payloads = []
     for entry, raw in _variable_payloads("tmp2m", MIXED_HOURS, planes):
         compressed = zstdcli.compress(raw)
@@ -62,7 +64,7 @@ def prepare_bin_fixture() -> Path:
     for name in source_spec("gfs").bundle_scalar_ids:
         bundle = binformat.read_bundle(GENERATED_ROOT / f"{name}.xue")
         for numeric_id in sorted(bundle.variable_ids):
-            for hour in bundle.forecast_hours:
+            for hour in bundle.frame_offsets:
                 plane = bundle.decode_plane(numeric_id, hour)
                 expected = GENERATED_ROOT / f"expected.{name}.f{hour:03d}.bin"
                 expected.write_bytes(plane.tobytes())

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import numpy as np
 
@@ -11,6 +13,7 @@ from xue.binconvert import GridInfo, bundle_input_ids, crop_grid, published_bund
 from xue.errors import ConversionError, ManifestError
 from xue.manifest import build_bin_manifest, validate_bin_manifest
 from xue.showcase import (
+    OBSERVATION_ROOT_ENV,
     ShowcaseError,
     _grid_extent,
     build_catalog_entry,
@@ -23,6 +26,21 @@ from xue.sources import source_spec
 
 PRODUCTION_GRID = GridInfo(1440, 721, -180.0, 90.0, 0.25, -0.25)
 CASES_DIRECTORY = Path(__file__).resolve().parent.parent / "showcase" / "cases"
+
+
+def observation_payload(**overrides: object) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "id": "demo-observation",
+        "title": {"zh": "示例", "en": "Demo"},
+        "summary": {"zh": "示例说明", "en": "Demo summary"},
+        "model": "radar",
+        "dataset": "event/series.nc",
+        "hours": 24,
+        "bbox": [105.0, 14.0, 130.0, 34.0],
+        "variables": ["cref"],
+    }
+    payload.update(overrides)
+    return payload
 
 
 def case_payload(**overrides: object) -> dict[str, object]:
@@ -132,6 +150,9 @@ class BundleInputsTest(unittest.TestCase):
         self.assertIn("dswrf", published_bundle_ids(source_spec("sflux")))
         self.assertNotIn("dswrf", published_bundle_ids(source_spec("gfs")))
 
+    def test_a_source_without_wind_publishes_no_wind_bundle(self) -> None:
+        self.assertEqual(published_bundle_ids(source_spec("radar")), ("cref",))
+
 
 class CaseDefinitionTest(unittest.TestCase):
     def test_parses_a_complete_definition(self) -> None:
@@ -167,6 +188,37 @@ class CaseDefinitionTest(unittest.TestCase):
         with self.assertRaises(ShowcaseError):
             parse_case(case_payload(model="sflux", variables=["prate"], defaultVariable="prate"))
         parse_case(case_payload(model="sflux", variables=["prate", "wind10m"], defaultVariable="prate"))
+
+    def test_parses_an_observation_definition(self) -> None:
+        spec = parse_case(observation_payload())
+        self.assertEqual(spec.model, "radar")
+        self.assertEqual(spec.variables, ("cref",))
+        # No cycle to fetch: the dataset file says when the series starts.
+        self.assertEqual(spec.run, "")
+        self.assertEqual(spec.dataset_path.name, "series.nc")
+
+    def test_observation_dataset_resolves_against_the_configured_root(self) -> None:
+        spec = parse_case(observation_payload(dataset="event/series.nc"))
+        with mock.patch.dict(os.environ, {OBSERVATION_ROOT_ENV: "/data/radar"}):
+            self.assertEqual(spec.dataset_path, Path("/data/radar/event/series.nc"))
+        absolute = parse_case(observation_payload(dataset="/elsewhere/series.nc"))
+        with mock.patch.dict(os.environ, {OBSERVATION_ROOT_ENV: "/data/radar"}):
+            self.assertEqual(absolute.dataset_path, Path("/elsewhere/series.nc"))
+
+    def test_run_and_dataset_belong_to_different_kinds_of_case(self) -> None:
+        with self.assertRaises(ShowcaseError):
+            parse_case(observation_payload(run="2026082516"))
+        with self.assertRaises(ShowcaseError):
+            parse_case(observation_payload(dataset=""))
+        with self.assertRaises(ShowcaseError):
+            parse_case(case_payload(dataset="series.nc"))
+
+    def test_an_observation_case_has_no_published_axis_to_land_on(self) -> None:
+        # 125 is off every forecast axis; an observation series has none, so
+        # any positive hour is a legal declaration until the file is read.
+        parse_case(observation_payload(hours=125))
+        with self.assertRaises(ShowcaseError):
+            parse_case(observation_payload(hours=0))
 
     def test_definition_file_must_be_named_after_its_id(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

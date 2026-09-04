@@ -35,14 +35,19 @@ def _common_run_arguments(parser: argparse.ArgumentParser, *, force_help: str) -
     parser.add_argument("--force", action="store_true", help=force_help)
 
 
-def _model_argument(parser: argparse.ArgumentParser) -> None:
+def _model_argument(parser: argparse.ArgumentParser, *, live_only: bool = True) -> None:
+    """The --model choice. Fetching and live runs are for forecast sources
+    only; conversion also takes an observation source, whose input is one
+    local NetCDF file rather than a fetched cycle."""
+    choices = tuple(name for name, source in SOURCES.items() if source.live or not live_only)
     parser.add_argument(
         "--model",
-        choices=tuple(SOURCES),
+        choices=choices,
         default="gfs",
         help=(
-            "forecast source: NOAA GFS 0.25 degree (hourly), ECMWF IFS open data "
+            "data source: NOAA GFS 0.25 degree (hourly), ECMWF IFS open data "
             "(3-hourly), or GFS surface flux on the native ~13 km grid (hourly, adds dswrf)"
+            + ("" if live_only else "; radar is the CMA mosaic, read from a local NetCDF file")
         ),
     )
 
@@ -57,14 +62,21 @@ def parser() -> argparse.ArgumentParser:
     _model_argument(fetch)
     fetch.add_argument("--raw-dir", type=Path, default=Path("data/raw"))
 
-    convert_bin_parser = commands.add_parser("convert-bin", help="convert a GRIB run into per-variable Xue bundles")
+    convert_bin_parser = commands.add_parser(
+        "convert-bin", help="convert a GRIB run (or one observation NetCDF file) into per-variable Xue bundles"
+    )
     convert_bin_parser.add_argument("input", type=Path)
-    _model_argument(convert_bin_parser)
+    _model_argument(convert_bin_parser, live_only=False)
     convert_bin_parser.add_argument("--output", type=Path, required=True, help="output directory for per-variable .xue files")
     convert_bin_parser.add_argument("--profile", choices=("quality", "compact", "balanced"), default="quality")
     convert_bin_parser.add_argument("--work-dir", type=Path, default=Path("data/work"))
     convert_bin_parser.add_argument("--manifest", type=Path, help="write a schema v3 manifest.json to this path")
     convert_bin_parser.add_argument("--force", action="store_true", help="replace an existing manifest")
+    convert_bin_parser.add_argument(
+        "--hours",
+        type=forecast_hours,
+        help="observation sources only: last hour of the series to include, counted from its first frame",
+    )
     convert_bin_parser.add_argument(
         "--skip-video",
         action="store_true",
@@ -163,6 +175,7 @@ def main(argv: list[str] | None = None) -> int:
                 skip_video=arguments.skip_video,
                 skip_variants=arguments.skip_variants,
                 model=arguments.model,
+                last_hour=arguments.hours,
             )
             print(json.dumps(report, indent=2))
         elif arguments.command == "verify-bin":
@@ -172,7 +185,8 @@ def main(argv: list[str] | None = None) -> int:
                 print(write_catalog(arguments.output_dir))
             elif arguments.showcase_command == "check":
                 for spec in load_cases(arguments.cases_dir, tuple(arguments.cases)):
-                    print(f"{spec.id}: {spec.model} {spec.run} f000-f{spec.hours:03d} {list(spec.variables)}")
+                    origin = spec.run or str(spec.dataset_path)
+                    print(f"{spec.id}: {spec.model} {origin} f000-f{spec.hours:03d} {list(spec.variables)}")
             else:
                 entries = [
                     build_case(

@@ -61,6 +61,34 @@ const SOLAR_STOPS: Stop[] = [
   [1270, 255, 253, 210, 255],
 ];
 
+// Radar composite reflectivity, in the dBZ classes a Chinese (and US) radar
+// mosaic is read in: cyan and blue drizzle, green light rain, yellow through
+// red for the convective core, magenta and violet for hail-sized echoes.
+// The classes are interpolated rather than stepped because the shader
+// reconstructs the code field bicubically and blends two frames before the
+// lookup — hard class edges would shimmer as codes cross them. Alpha rises
+// from nothing at 0 dBZ, which is both "no echo" and "outside radar
+// coverage": a mosaic covers only the land its network watches, and the
+// codebook has no separate value for the difference.
+const REFLECTIVITY_STOPS: Stop[] = [
+  [0, 0, 236, 236, 0],
+  [5, 0, 236, 236, 70],
+  [10, 1, 160, 246, 130],
+  [15, 0, 80, 236, 185],
+  [20, 0, 216, 96, 220],
+  [25, 0, 200, 0, 235],
+  [30, 0, 144, 0, 245],
+  [35, 255, 255, 0, 255],
+  [40, 231, 192, 0, 255],
+  [45, 255, 144, 0, 255],
+  [50, 255, 0, 0, 255],
+  [55, 214, 0, 0, 255],
+  [60, 192, 0, 0, 255],
+  [65, 255, 0, 240, 255],
+  [70, 150, 0, 180, 255],
+  [80, 240, 233, 255, 255],
+];
+
 // Wind speed ramp for the GPU particle layer: the
 // familiar blue -> teal -> green -> yellow -> orange -> red -> violet
 // progression (earth.nullschool / Windy convention). Values are m/s.
@@ -127,9 +155,10 @@ export function buildWindSpeedPalette(): Uint8Array {
 }
 
 /** Color stops for one variable's physical values. Linear fields default to
- * the temperature ramp; dswrf carries its own solar ramp. */
+ * the temperature ramp; dswrf and cref carry their own. */
 function stopsFor(variable: BundleVariable): Stop[] {
   if (variable.id === "dswrf") return SOLAR_STOPS;
+  if (variable.id === "cref") return REFLECTIVITY_STOPS;
   return TEMPERATURE_STOPS;
 }
 

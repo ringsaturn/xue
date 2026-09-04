@@ -14,6 +14,7 @@ const CANONICAL_TYPE: Record<ForecastBundleId, string> = {
   tmp2m: "temp",
   prate: "precip",
   dswrf: "solar",
+  cref: "radar",
   wind10m: "wind",
 };
 
@@ -34,6 +35,9 @@ const TYPE_ALIASES: Record<string, ForecastBundleId> = {
   solar: "dswrf",
   radiation: "dswrf",
   dswrf: "dswrf",
+  radar: "cref",
+  reflectivity: "cref",
+  cref: "cref",
 };
 
 /** Accepted spellings for each model. Matching is case-insensitive. */

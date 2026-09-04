@@ -549,6 +549,11 @@ body[data-variable="prate"] .legend-bar {
   background: linear-gradient(to bottom, #300e54, #76258a, #9b2e85, #cd3d62, #f57048, #ffbe4b, #d5e165, #6fdb9e, #5ad2c8, #60badb, rgba(64, 131, 183, 0.25));
 }
 
+/* Matches REFLECTIVITY_STOPS in palettes.ts, 75 dBZ at the top. */
+body[data-variable="cref"] .legend-bar {
+  background: linear-gradient(to bottom, #7800b4, #ff00f0, #c00000, #ff0000, #ff9000, #ffff00, #009000, #00d860, #0050ec, #01a0f6, rgba(0, 236, 236, 0.25));
+}
+
 /* Matches WIND_SPEED_STOPS in palettes.ts, 40 m/s at the top. */
 body[data-variable="wind10m"] .legend-bar {
   background: linear-gradient(to bottom, #8137a8, #aa3385, #d43c57, #ee7042, #eba74a, #bfcd5c, #5cbe8c, #529dbf, #6e7cc3);

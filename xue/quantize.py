@@ -128,6 +128,17 @@ COMPACT_WIND = TemperatureCodebook(minimum=-63.5, maximum=63.5, step=1.0, name="
 # the 5 W/m² step uses the full 0..254 code space.
 QUALITY_FLUX = TemperatureCodebook(minimum=0.0, maximum=1270.0, step=5.0, name="dswrf")
 COMPACT_FLUX = TemperatureCodebook(minimum=0.0, maximum=1270.0, step=10.0, name="dswrf")
+# Radar composite reflectivity: 0-80 dBZ covers every echo a ground mosaic
+# reports (the strongest hail cores reach the mid-70s) and the 0.5 dB step is
+# finer than the 5 dB classes a reflectivity palette draws. Code 0 is both
+# "no echo" and "no radar coverage": a mosaic is a regional product on a
+# rectangular grid, and the format carries no bitmap, so the bottom of the
+# range is what a renderer paints as nothing. It is deliberately an ordinary
+# linear code, not a reserved one — the shader interpolates codes before the
+# palette lookup, and a reserved code between neighbours would colour the gap
+# with a class the data never reached.
+QUALITY_REFLECTIVITY = TemperatureCodebook(minimum=0.0, maximum=80.0, step=0.5, name="cref")
+COMPACT_REFLECTIVITY = TemperatureCodebook(minimum=0.0, maximum=80.0, step=1.0, name="cref")
 
 PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
     "quality": {
@@ -136,6 +147,7 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
         "ugrd10m": QUALITY_WIND,
         "vgrd10m": QUALITY_WIND,
         "dswrf": QUALITY_FLUX,
+        "cref": QUALITY_REFLECTIVITY,
     },
     "compact": {
         "tmp2m": COMPACT_TEMPERATURE,
@@ -143,6 +155,7 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
         "ugrd10m": COMPACT_WIND,
         "vgrd10m": COMPACT_WIND,
         "dswrf": COMPACT_FLUX,
+        "cref": COMPACT_REFLECTIVITY,
     },
     # Production default since 2026-08-17: temperature keeps the 0.5°C step
     # (0.25°C error budget, shared with the H.264 video artifact), while
@@ -155,5 +168,6 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
         "ugrd10m": QUALITY_WIND,
         "vgrd10m": QUALITY_WIND,
         "dswrf": QUALITY_FLUX,
+        "cref": QUALITY_REFLECTIVITY,
     },
 }

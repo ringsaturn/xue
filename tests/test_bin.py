@@ -259,8 +259,8 @@ def raw_entry(hour: int, plane: np.ndarray, payload: bytes, *, group_id: int = 0
         predictor=PREDICTOR_RAW,
         compression=COMPRESSION_ZSTD,
         flags=binformat.FLAG_ZSTD_CHECKSUM,
-        forecast_hour=hour,
-        dependency_hour=NO_DEPENDENCY,
+        frame_offset=hour,
+        dependency_offset=NO_DEPENDENCY,
         group_id=group_id,
         compressed_length=len(payload),
         data_offset=0,
@@ -282,8 +282,8 @@ def build_synthetic(path: Path) -> tuple[np.ndarray, np.ndarray]:
         predictor=PREDICTOR_ANCHOR,
         compression=COMPRESSION_ZSTD,
         flags=binformat.FLAG_ZSTD_CHECKSUM,
-        forecast_hour=1,
-        dependency_hour=0,
+        frame_offset=1,
+        dependency_offset=0,
         group_id=0,
         compressed_length=len(payload1),
         data_offset=0,
@@ -450,8 +450,8 @@ class BinFormatTests(unittest.TestCase):
             predictor=PREDICTOR_PREVIOUS,
             compression=COMPRESSION_ZSTD,
             flags=binformat.FLAG_ZSTD_CHECKSUM,
-            forecast_hour=1,
-            dependency_hour=0,
+            frame_offset=1,
+            dependency_offset=0,
             group_id=0,
             compressed_length=len(payload1),
             data_offset=0,
@@ -476,8 +476,8 @@ class BinFormatTests(unittest.TestCase):
             predictor=PREDICTOR_RAW,
             compression=COMPRESSION_NONE,
             flags=0,
-            forecast_hour=0,
-            dependency_hour=NO_DEPENDENCY,
+            frame_offset=0,
+            dependency_offset=NO_DEPENDENCY,
             group_id=0,
             compressed_length=len(payload),
             data_offset=0,
@@ -515,7 +515,7 @@ class SchemaV2Tests(unittest.TestCase):
     def _write(self, metadata: dict, previous_dependency: dict[int, int] | None = None) -> dict[int, np.ndarray]:
         """One RAW anchor per segment-aligned group, ANCHOR residuals inside
         (or PREVIOUS entries where ``previous_dependency`` maps an hour to its
-        declared dependencyHour). The anchor is each group's first frame —
+        declared dependencyOffset). The anchor is each group's first frame —
         the encoder's floor(n/2) pick is not a decode-time invariant, and a
         leading anchor lets a later frame carry PREVIOUS inside its group."""
         planes = self._planes()
@@ -542,8 +542,8 @@ class SchemaV2Tests(unittest.TestCase):
                     predictor=predictor,
                     compression=COMPRESSION_ZSTD,
                     flags=binformat.FLAG_ZSTD_CHECKSUM,
-                    forecast_hour=hour,
-                    dependency_hour=dependency,
+                    frame_offset=hour,
+                    dependency_offset=dependency,
                     group_id=group_id,
                     compressed_length=len(payload),
                     data_offset=0,
@@ -559,7 +559,7 @@ class SchemaV2Tests(unittest.TestCase):
     def test_mixed_axis_round_trip(self) -> None:
         planes = self._write(mixed_axis_metadata(self.HOURS))
         bundle = binformat.read_bundle(self.path)
-        self.assertEqual(bundle.forecast_hours, self.HOURS)
+        self.assertEqual(bundle.frame_offsets, self.HOURS)
         for hour, plane in planes.items():
             self.assertEqual(bundle.decode_plane(1, hour).tolist(), plane.tolist())
         bundle.verify_all()
@@ -577,7 +577,7 @@ class SchemaV2Tests(unittest.TestCase):
             binformat.read_bundle(self.path)
 
     def test_previous_predictor_wrong_dependency_rejected(self) -> None:
-        # forecastHour - 1 (f008) is not on the axis: the old uniform-axis
+        # frameOffset - 1 (f008) is not on the axis: the old uniform-axis
         # interpretation must be rejected, not silently derived.
         self._write(mixed_axis_metadata(self.HOURS), previous_dependency={9: 8})
         with self.assertRaises(BundleError):
@@ -660,22 +660,159 @@ class SourceAxisTests(unittest.TestCase):
 
 
 class TimeMetadataTests(unittest.TestCase):
-    def test_uniform_axis_stays_schema_version_1(self) -> None:
+    def test_uniform_axis_declares_a_frame_step(self) -> None:
         from xue.binconvert import _time_metadata
 
         self.assertEqual(
-            _time_metadata(list(range(0, 121, 3))),
-            (1, {"firstForecastHour": 0, "stepHours": 3, "frameCount": 41}),
+            _time_metadata(list(range(0, 121, 3)), 3600),
+            {"unitSeconds": 3600, "firstFrameOffset": 0, "frameCount": 41, "frameStep": 3},
         )
-        self.assertEqual(_time_metadata([7]), (1, {"firstForecastHour": 7, "stepHours": 1, "frameCount": 1}))
+        self.assertEqual(
+            _time_metadata([7], 3600),
+            {"unitSeconds": 3600, "firstFrameOffset": 7, "frameCount": 1, "frameStep": 1},
+        )
 
-    def test_mixed_axis_lists_hours_under_schema_version_2(self) -> None:
+    def test_mixed_axis_lists_its_offsets(self) -> None:
         from xue.binconvert import _time_metadata
 
         axis = list(range(121)) + list(range(123, 241, 3))
-        version, time = _time_metadata(axis)
-        self.assertEqual(version, 2)
-        self.assertEqual(time, {"firstForecastHour": 0, "frameCount": 161, "hours": axis})
+        self.assertEqual(
+            _time_metadata(axis, 3600),
+            {"unitSeconds": 3600, "firstFrameOffset": 0, "frameCount": 161, "frameOffsets": axis},
+        )
+
+    def test_observation_axis_lists_its_gaps(self) -> None:
+        """A missed publication is an ordinary step change, so the axis lists
+        its offsets outright rather than pretending to a cadence it does not have."""
+        from xue.binconvert import _time_metadata
+
+        axis = [0, 1, 2, 5, 6, 7]
+        self.assertEqual(
+            _time_metadata(axis, 360),
+            {"unitSeconds": 360, "firstFrameOffset": 0, "frameCount": 6, "frameOffsets": axis},
+        )
+
+    def test_the_axis_unit_is_the_coarsest_that_fits(self) -> None:
+        """An hour for every forecast source, so their offsets stay their
+        forecast hours; finer only when the data is."""
+        from xue.binconvert import axis_unit_seconds, lead_hours
+
+        self.assertEqual(axis_unit_seconds([0, 3600, 7200]), 3600)
+        self.assertEqual(axis_unit_seconds([0, 10800, 21600]), 3600)
+        self.assertEqual(axis_unit_seconds([0]), 3600)
+        self.assertEqual(axis_unit_seconds([0, 360, 720, 1440]), 360)
+        self.assertEqual(axis_unit_seconds([0, 1800, 3600]), 1800)
+        # The manifest's coarse reach rounds up to a whole hour.
+        self.assertEqual(lead_hours(2120, 360), 212)
+        self.assertEqual(lead_hours(2121, 360), 213)
+        self.assertEqual(lead_hours(240, 3600), 240)
+
+
+class ParameterMetadataTests(unittest.TestCase):
+    """Schema v3: every variable carries its GRIB2 identity (docs/format.md)."""
+
+    def setUp(self) -> None:
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.path = Path(self.directory.name) / "parameter.xue"
+
+    def _metadata(self) -> dict:
+        from xue.binconvert import build_metadata, GridInfo
+
+        grid = GridInfo(width=4, height=3, first_longitude=-180.0, first_latitude=90.0,
+                        longitude_step=0.25, latitude_step=-0.25)
+        return build_metadata(datetime(2026, 8, 15, 6, tzinfo=UTC), [0, 1], grid, "quality", ("tmp2m",))
+
+    def _write(self, metadata: dict) -> None:
+        plane = np.zeros(12, dtype=np.uint8)
+        payload = zstdcli.compress(plane.tobytes())
+        binformat.write_bundle(
+            self.path,
+            metadata,
+            [
+                binformat.PlanePayload(entry=raw_entry(hour, plane, payload, group_id=hour), payload=payload)
+                for hour in (0, 1)
+            ],
+        )
+
+    def _reject(self, metadata: dict) -> None:
+        self._write(metadata)
+        with self.assertRaises(BundleError):
+            binformat.read_bundle(self.path)
+
+    def test_encoder_emits_the_grib2_identity(self) -> None:
+        metadata = self._metadata()
+        self.assertEqual(metadata["schemaVersion"], 3)
+        self.assertEqual(
+            metadata["variables"][0]["parameter"],
+            {
+                "discipline": 0,
+                "parameterCategory": 0,
+                "parameterNumber": 0,
+                "typeOfFirstFixedSurface": 103,
+                "scaleFactorOfFirstFixedSurface": 0,
+                "scaledValueOfFirstFixedSurface": 2,
+            },
+        )
+        self._write(metadata)
+        self.assertEqual(binformat.read_bundle(self.path).variable_ids, {1: "tmp2m"})
+
+    def test_derived_rate_declares_its_statistical_process(self) -> None:
+        """ECMWF and sflux publish prate as a mean over the step, not the
+        instantaneous field GFS carries under the same parameter."""
+        from xue.binconvert import build_metadata, GridInfo
+        from xue.sources import source_spec
+
+        grid = GridInfo(width=4, height=3, first_longitude=-180.0, first_latitude=90.0,
+                        longitude_step=0.25, latitude_step=-0.25)
+        for model, expected in (("gfs", None), ("ecmwf", 0), ("sflux", 0)):
+            metadata = build_metadata(
+                datetime(2026, 8, 15, 6, tzinfo=UTC), [3, 6], grid, "quality", ("prate",),
+                source=source_spec(model),
+            )
+            parameter = metadata["variables"][0]["parameter"]
+            self.assertEqual(parameter["parameterCategory"], 1)
+            self.assertEqual(parameter["parameterNumber"], 7)
+            self.assertEqual(parameter.get("typeOfStatisticalProcessing"), expected, model)
+
+    def test_entire_atmosphere_surface_carries_no_value(self) -> None:
+        from xue.variables import variable_spec
+
+        parameter = variable_spec("cref").parameter_metadata()
+        self.assertEqual(parameter["typeOfFirstFixedSurface"], 10)
+        self.assertIsNone(parameter["scaleFactorOfFirstFixedSurface"])
+        self.assertIsNone(parameter["scaledValueOfFirstFixedSurface"])
+
+    def test_version_3_requires_a_parameter_block(self) -> None:
+        metadata = self._metadata()
+        del metadata["variables"][0]["parameter"]
+        self._reject(metadata)
+
+    def test_parameter_block_requires_version_3(self) -> None:
+        metadata = self._metadata()
+        metadata["schemaVersion"] = 1
+        self._reject(metadata)
+
+    def test_declared_version_is_the_lowest_that_expresses_the_metadata(self) -> None:
+        # A v3 file whose axis needs nothing beyond stepHours is still v3:
+        # the parameter block, not the axis, sets the floor.
+        metadata = self._metadata()
+        self.assertIn("frameStep", metadata["time"])
+        metadata["schemaVersion"] = 2
+        self._reject(metadata)
+
+    def test_invalid_parameter_blocks_rejected(self) -> None:
+        for mutate in (
+            lambda block: block.update(parameterNumber=256),
+            lambda block: block.update(discipline="0"),
+            lambda block: block.update(scaledValueOfFirstFixedSurface=None),
+            lambda block: block.pop("scaleFactorOfFirstFixedSurface"),
+            lambda block: block.update(typeOfStatisticalProcessing=-1),
+            lambda block: block.update(levelValue=2),
+        ):
+            metadata = self._metadata()
+            mutate(metadata["variables"][0]["parameter"])
+            self._reject(metadata)
 
 
 def video_descriptor() -> dict:

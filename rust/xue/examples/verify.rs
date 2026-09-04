@@ -12,18 +12,14 @@ fn main() {
     let mut bundle = Bundle::open(&bytes).expect("bundle must validate");
     println!("opened {} bytes in {:?}", bytes.len(), open_start.elapsed());
 
-    let metadata: serde_json::Value = serde_json::from_str(bundle.metadata_json()).unwrap();
-    let first = metadata["time"]["firstForecastHour"].as_u64().unwrap() as u16;
-    let step = metadata["time"]["stepHours"].as_u64().unwrap() as u16;
-    let count = metadata["time"]["frameCount"].as_u64().unwrap() as u16;
+    let offsets = bundle.frame_offsets().to_vec();
 
     let mut timings_ms: Vec<f64> = Vec::new();
     for &variable_id in bundle.variable_ids().to_vec().iter() {
-        for frame in 0..count {
-            let hour = first + frame * step;
+        for &frame_offset in &offsets {
             let start = Instant::now();
             let plane = bundle
-                .decode_frame(FrameRequest { variable_id, forecast_hour: hour })
+                .decode_frame(FrameRequest { variable_id, frame_offset })
                 .expect("decode");
             let elapsed = start.elapsed().as_secs_f64() * 1000.0;
             timings_ms.push(elapsed);

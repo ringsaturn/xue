@@ -1,9 +1,13 @@
-"""Per-model source registry: where a model's GRIB comes from and how its
+"""Per-model source registry: where a model's data comes from and how its
 run directory, manifest identity, and time axis are named.
 
 The models share one output contract: whatever the source, the bundles carry
 the same data variable ids (tmp2m, prate, ugrd10m/vgrd10m, and on sflux also
 dswrf) so the decoder and frontend never care which model produced them.
+Not every source is a forecast: an ``observation`` source (the CMA radar
+mosaic) is a local file holding a series of observed analyses, with no cycle
+to fetch, no live pointer, and an axis that is whatever times the file
+carries.
 ECMWF has no native rate field; its accumulated ``tp`` input is de-accumulated
 into prate by the converter. GFS sflux has only interval-averaged PRATE (the
 averaging window resets every 6 hours); the converter de-averages consecutive
@@ -25,9 +29,11 @@ class SourceSpec:
     """The manifest and bundle-metadata ``model`` string."""
     product: str
     """The manifest ``product`` string."""
-    latest_filename: str
+    latest_filename: str | None
     """Per-model mutable live pointer at the data root. GFS uses the bare
-    ``latest.json``; the other models use ``latest-<model>.json``."""
+    ``latest.json``; the other models use ``latest-<model>.json``. None for a
+    source with no live feed — an observation dataset arrives as whole files
+    after the fact, so there is no cycle to point at."""
     steps: tuple[tuple[int, int], ...]
     """The published time axis as ``(last_hour, step_hours)`` segments: the
     series runs at ``step_hours`` up to and including ``last_hour``, then the
@@ -59,6 +65,17 @@ class SourceSpec:
     round-trips, so sequential fetching is latency-bound; NOAA's bucket
     takes a few parallel streams happily, while ECMWF's open data bucket
     answers bursts with 503 Slow Down and stays at 1."""
+    observation: bool = False
+    """True for a source that is not a forecast at all: one local file
+    holding a series of observed analyses, read through
+    :mod:`xue.observation` instead of fetched frame by frame. Its axis is
+    whatever times the file carries — including gaps where a publication was
+    missed — so it has no published cadence to validate against."""
+
+    @property
+    def live(self) -> bool:
+        """Whether the source has a live feed to fetch and point at."""
+        return self.latest_filename is not None
 
     def forecast_hours(self, last_hour: int) -> list[int]:
         """The published axis from the analysis through ``last_hour``.
@@ -66,6 +83,8 @@ class SourceSpec:
         ``last_hour`` must itself lie on the axis — a cap that lands between
         steps (or beyond the published range) has no complete final frame to
         fetch and is rejected outright."""
+        if self.observation:
+            raise DownloadError(f"{self.manifest_model} is an observation source and publishes no forecast axis")
         hours = [0]
         for boundary, step in self.steps:
             while hours[-1] < min(boundary, last_hour):
@@ -120,6 +139,26 @@ SOURCES: dict[str, SourceSpec] = {
         optional_at_analysis=("prate_ave",),
         bundle_scalar_ids=("tmp2m", "prate", "dswrf"),
         production_grid=(3072, 1536),
+    ),
+    # CMA weather radar level-3 mosaic composite reflectivity, decoded from
+    # the published BIN tiles into a NetCDF series by the radar-l3-mst
+    # tool. An observation source: one local file per event rather than a
+    # cycle on a bucket, no live pointer, and no cron job — the archive is
+    # not (yet) a dependable operational feed, so it reaches Xue only as
+    # showcase cases someone builds by hand.
+    "radar": SourceSpec(
+        id="radar",
+        manifest_model="CMA-RADAR",
+        product="l3-mst-cref",
+        latest_filename=None,
+        steps=(),
+        input_variable_ids=("cref",),
+        accumulated_precipitation=False,
+        bundle_scalar_ids=("cref",),
+        # Tile-grid dependent: the file says what it covers, and nothing here
+        # is ever built with require_complete.
+        production_grid=(0, 0),
+        observation=True,
     ),
 }
 

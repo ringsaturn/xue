@@ -2,11 +2,13 @@ import { t } from "./i18n";
 
 export type ForecastVariableId = "tmp2m" | "prate";
 
-/** Forecast models this app can tune to. Each model is its own dataset: its
- * own mutable live pointer at the data root, its own immutable run
- * directories, and its own manifest identity. GFS uses the bare
- * ``latest.json``; the other models use ``latest-<model>.json``. */
-export type ForecastModelId = "gfs" | "ecmwf" | "sflux";
+/** Datasets this app can tune to. Each is its own dataset: its own
+ * immutable run directories and its own manifest identity, and — when it has
+ * a live feed — its own mutable live pointer at the data root. GFS uses the
+ * bare ``latest.json``; the other live models use ``latest-<model>.json``.
+ * The radar mosaic has no live feed at all: it is an observation archive
+ * that reaches the app only as showcase cases. */
+export type ForecastModelId = "gfs" | "ecmwf" | "sflux" | "radar";
 
 export interface ForecastModelInfo {
   id: ForecastModelId;
@@ -14,8 +16,14 @@ export interface ForecastModelInfo {
   label: string;
   /** The manifest/pointer ``product`` string. */
   product: string;
-  /** Mutable live pointer filename at the data root. */
-  latestFilename: string;
+  /** Mutable live pointer filename at the data root, absent for a dataset
+   * with no live feed. */
+  latestFilename?: string;
+  /** True when the dataset is observations rather than a forecast. It has no
+   * run cycle and no lead time — its `runTime` is when the series starts and
+   * a frame's offset is time elapsed since — so the viewer labels it as
+   * such (mirrors `SourceSpec.observation` in xue/sources.py). */
+  observation?: boolean;
 }
 
 export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
@@ -24,8 +32,17 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
   // only source that ships the dswrf solar-radiation bundle.
   sflux: { id: "sflux", label: "GFS-SFLUX", product: "sfluxgrb", latestFilename: "latest-sflux.json" },
   ecmwf: { id: "ecmwf", label: "ECMWF", product: "ifs-0p25", latestFilename: "latest-ecmwf.json" },
+  // CMA weather radar level-3 mosaic composite reflectivity: observations,
+  // not a forecast, and published only as showcase cases.
+  radar: { id: "radar", label: "CMA-RADAR", product: "l3-mst-cref", observation: true },
 };
 
+/** True when a dataset is observations, not a forecast. */
+export function isObservationModel(model: ForecastModelId): boolean {
+  return FORECAST_MODELS[model].observation === true;
+}
+
+/** The live feeds, in model-switch order. The radar archive is not one. */
 export const FORECAST_MODEL_IDS: readonly ForecastModelId[] = ["gfs", "sflux", "ecmwf"];
 
 function modelForManifestString(model: unknown): ForecastModelInfo | null {
@@ -35,18 +52,18 @@ function modelForManifestString(model: unknown): ForecastModelInfo | null {
   return null;
 }
 
-/** Bundle-level ids the manifest can carry. The scalar variables are
- * mandatory; the two-variable wind bundle and the
- * dswrf solar-radiation bundle (sflux only) are
- * optional so pre-existing runs keep validating. */
-export type ForecastBundleId = ForecastVariableId | "dswrf" | "wind10m";
+/** Bundle-level ids the manifest can carry. On a live run the scalar
+ * variables are mandatory; the two-variable wind bundle, the dswrf
+ * solar-radiation bundle (sflux only) and the cref radar bundle (the radar
+ * archive only) are optional so pre-existing runs keep validating. */
+export type ForecastBundleId = ForecastVariableId | "dswrf" | "cref" | "wind10m";
 
 /** Data-level variable ids that can appear inside bundle metadata; the wind
  * bundle carries both 10 m components on one time axis. */
-export type DataVariableId = ForecastVariableId | "dswrf" | "ugrd10m" | "vgrd10m";
+export type DataVariableId = ForecastVariableId | "dswrf" | "cref" | "ugrd10m" | "vgrd10m";
 
 export const FORECAST_VARIABLE_IDS: readonly ForecastVariableId[] = ["tmp2m", "prate"];
-export const FORECAST_BUNDLE_IDS: readonly ForecastBundleId[] = ["tmp2m", "prate", "dswrf", "wind10m"];
+export const FORECAST_BUNDLE_IDS: readonly ForecastBundleId[] = ["tmp2m", "prate", "dswrf", "cref", "wind10m"];
 export const WIND_COMPONENT_IDS: readonly DataVariableId[] = ["ugrd10m", "vgrd10m"];
 
 export interface VideoBundleDescriptor {
@@ -344,7 +361,9 @@ export function validateLatestPointer(input: unknown, expectedModel?: ForecastMo
 }
 
 export async function fetchLatestPointer(baseUrl: string, model: ForecastModelId = "gfs"): Promise<LatestPointer> {
-  const url = new URL(`${baseUrl}${FORECAST_MODELS[model].latestFilename}`, document.baseURI);
+  const latestFilename = FORECAST_MODELS[model].latestFilename;
+  if (latestFilename === undefined) throw new Error(`${model} has no live feed`);
+  const url = new URL(`${baseUrl}${latestFilename}`, document.baseURI);
   const response = await fetch(url, { cache: "no-cache" });
   if (!response.ok) throw new Error(t("pointerRequestFailed", { status: response.status }));
   return validateLatestPointer(await response.json(), model);
@@ -390,27 +409,58 @@ export interface LogQuantization {
   nodataCode: number;
 }
 
+/** What a variable *is*, in GRIB2's own terms: the parameter triple and the
+ * fixed surface it sits on, plus the statistical process a derived field
+ * carries. Introduced by bundle metadata schemaVersion 3; absent below.
+ * A surface with no value (entire atmosphere) writes both halves of the
+ * value as null, the way GRIB2 writes them missing. */
+export interface BundleParameter {
+  discipline: number;
+  parameterCategory: number;
+  parameterNumber: number;
+  typeOfFirstFixedSurface: number;
+  scaleFactorOfFirstFixedSurface: number | null;
+  scaledValueOfFirstFixedSurface: number | null;
+  /** Code table 4.10; absent for an instantaneous field. */
+  typeOfStatisticalProcessing?: number;
+}
+
 export interface BundleVariable {
   numericId: number;
   id: DataVariableId;
   label: string;
   unit: string;
+  /** Present from schemaVersion 3 onwards. */
+  parameter?: BundleParameter;
   quantization: LinearQuantization | LogQuantization;
 }
 
-/** The bundle time axis. Exactly one of `stepHours` (uniform, metadata
- * schemaVersion 1) and `hours` (mixed-step, listed outright, schemaVersion 2)
- * is present — no source publishes one cadence all the way to 240 hours, so
- * a 240-hour run always carries `hours` (docs/format.md). */
+/** The bundle time axis.
+ *
+ * Metadata schemaVersion 3 states it in units it names: `unitSeconds` (an
+ * hour for every forecast source, six minutes for the radar mosaic) plus
+ * offsets in that unit, exactly one of `frameStep` (uniform) and
+ * `frameOffsets` (listed outright). Versions 1 and 2 used a whole-hour axis
+ * with `firstForecastHour` plus `stepHours` or `hours`; both shapes are
+ * still read, and `axisUnitSeconds`/`frameOffsets` normalize them
+ * (docs/format.md). */
 export interface BundleTimeAxis {
-  firstForecastHour: number;
   frameCount: number;
+  /** Schema v3. */
+  unitSeconds?: number;
+  firstFrameOffset?: number;
+  frameStep?: number;
+  frameOffsets?: number[];
+  /** Schema v1 and v2. */
+  firstForecastHour?: number;
   stepHours?: number;
   hours?: number[];
 }
 
+export const HOUR_SECONDS = 3600;
+
 export interface BundleMetadata {
-  schemaVersion: 1 | 2;
+  schemaVersion: 1 | 2 | 3;
   model: string;
   runTime: string;
   time: BundleTimeAxis;
@@ -418,25 +468,43 @@ export interface BundleMetadata {
   variables: BundleVariable[];
 }
 
-/** The materialized forecast-hour list of a bundle time axis. */
-export function timeAxisHours(time: BundleTimeAxis): number[] {
-  if (time.hours) return time.hours;
-  const step = time.stepHours ?? 1;
-  return Array.from({ length: time.frameCount }, (_, index) => time.firstForecastHour + index * step);
+/** Seconds per axis unit. A v1/v2 axis is always whole hours. */
+export function axisUnitSeconds(time: BundleTimeAxis): number {
+  return time.unitSeconds ?? HOUR_SECONDS;
 }
 
-/** True when two time axes describe the same frame list. */
+/** The materialized frame-offset list of a bundle time axis. Multiply by
+ * `axisUnitSeconds` for seconds from the run time. */
+export function frameOffsets(time: BundleTimeAxis): number[] {
+  if (time.frameOffsets) return time.frameOffsets;
+  if (time.hours) return time.hours;
+  const first = time.firstFrameOffset ?? time.firstForecastHour ?? 0;
+  const step = time.frameStep ?? time.stepHours ?? 1;
+  return Array.from({ length: time.frameCount }, (_, index) => first + index * step);
+}
+
+/** True when two time axes describe the same frames at the same instants. */
 export function sameTimeAxis(a: BundleTimeAxis, b: BundleTimeAxis): boolean {
   if (a === b) return true;
-  const hoursA = timeAxisHours(a);
-  const hoursB = timeAxisHours(b);
-  return hoursA.length === hoursB.length && hoursA.every((hour, index) => hour === hoursB[index]);
+  if (axisUnitSeconds(a) !== axisUnitSeconds(b)) return false;
+  const offsetsA = frameOffsets(a);
+  const offsetsB = frameOffsets(b);
+  return offsetsA.length === offsetsB.length && offsetsA.every((offset, index) => offset === offsetsB[index]);
 }
 
-function validateTimeAxis(time: Record<string, unknown>, schemaVersion: number): void {
+const V3_TIME_FIELDS = ["unitSeconds", "firstFrameOffset", "frameStep", "frameOffsets"] as const;
+
+/** The lowest schema version able to express a time axis: 1 for a uniform
+ * whole-hour axis declaring `stepHours`, 2 for one listing its `hours`, and 3
+ * for the unit-neutral block. */
+function validateTimeAxis(time: Record<string, unknown>, schemaVersion: number): 1 | 2 | 3 {
   const frameCount = time.frameCount;
   if (typeof frameCount !== "number" || !Number.isInteger(frameCount) || frameCount <= 0) {
     throw new Error("invalid bundle time axis");
+  }
+  if (schemaVersion >= 3) return validateOffsetAxis(time, frameCount);
+  if (V3_TIME_FIELDS.some((field) => field in time)) {
+    throw new Error("a unit-neutral time axis requires schema version 3");
   }
   const firstForecastHour = time.firstForecastHour;
   if (typeof firstForecastHour !== "number" || !Number.isInteger(firstForecastHour) || firstForecastHour < 0) {
@@ -444,17 +512,15 @@ function validateTimeAxis(time: Record<string, unknown>, schemaVersion: number):
   }
   const stepHours = time.stepHours;
   const hours = time.hours;
-  // Exactly one encoding per axis: uniform axes declare stepHours under
-  // schemaVersion 1, mixed-step axes list their hours under schemaVersion 2.
+  // Exactly one encoding per axis: a uniform axis declares stepHours, an
+  // axis that changes step lists its hours outright.
   if ((stepHours === undefined) === (hours === undefined)) throw new Error("invalid bundle time axis");
   if (stepHours !== undefined) {
-    if (schemaVersion !== 1) throw new Error("a uniform time axis must declare schema version 1");
     if (typeof stepHours !== "number" || !Number.isInteger(stepHours) || stepHours <= 0) {
       throw new Error("invalid bundle time axis");
     }
-    return;
+    return 1;
   }
-  if (schemaVersion !== 2) throw new Error("an explicit hours axis requires schema version 2");
   if (
     !Array.isArray(hours) ||
     hours.length !== frameCount ||
@@ -469,33 +535,162 @@ function validateTimeAxis(time: Record<string, unknown>, schemaVersion: number):
   ) {
     throw new Error("invalid bundle time axis");
   }
+  checkListedSteps(hours as number[]);
+  return 2;
+}
+
+function checkListedSteps(listed: number[]): void {
   const steps = new Set<number>();
-  for (let index = 1; index < hours.length; index += 1) steps.add((hours[index] as number) - (hours[index - 1] as number));
-  if (steps.size < 2) throw new Error("a uniform hours axis must be encoded as stepHours");
+  for (let index = 1; index < listed.length; index += 1) steps.add(listed[index]! - listed[index - 1]!);
+  if (steps.size < 2) throw new Error("a uniform axis must be encoded as a step");
+}
+
+function gcd(a: number, b: number): number {
+  return b === 0 ? a : gcd(b, a % b);
+}
+
+/** The schemaVersion 3 time block: offsets on a declared unit. */
+function validateOffsetAxis(time: Record<string, unknown>, frameCount: number): 3 {
+  for (const key of Object.keys(time)) {
+    if (key !== "frameCount" && !V3_TIME_FIELDS.includes(key as (typeof V3_TIME_FIELDS)[number])) {
+      throw new Error("bundle time block has an unknown field");
+    }
+  }
+  const unitSeconds = time.unitSeconds;
+  if (
+    typeof unitSeconds !== "number" ||
+    !Number.isInteger(unitSeconds) ||
+    unitSeconds < 1 ||
+    unitSeconds > HOUR_SECONDS ||
+    HOUR_SECONDS % unitSeconds !== 0
+  ) {
+    throw new Error("bundle unitSeconds must be a whole divisor of 3600");
+  }
+  const first = time.firstFrameOffset;
+  if (typeof first !== "number" || !Number.isInteger(first) || first < 0) {
+    throw new Error("invalid bundle firstFrameOffset");
+  }
+  const frameStep = time.frameStep;
+  const listed = time.frameOffsets;
+  if ((frameStep === undefined) === (listed === undefined)) throw new Error("invalid bundle time axis");
+  let offsets: number[];
+  if (frameStep !== undefined) {
+    if (typeof frameStep !== "number" || !Number.isInteger(frameStep) || frameStep <= 0) {
+      throw new Error("invalid bundle frameStep");
+    }
+    if (first + (frameCount - 1) * frameStep > 65534) throw new Error("frame offsets exceed the u16 range");
+    offsets = Array.from({ length: frameCount }, (_, index) => first + index * frameStep);
+  } else {
+    if (
+      !Array.isArray(listed) ||
+      listed.length !== frameCount ||
+      listed[0] !== first ||
+      listed.some(
+        (offset, index) =>
+          typeof offset !== "number" ||
+          !Number.isInteger(offset) ||
+          offset > 65534 ||
+          (index > 0 && offset <= (listed[index - 1] as number)),
+      )
+    ) {
+      throw new Error("invalid bundle time axis");
+    }
+    checkListedSteps(listed as number[]);
+    offsets = listed as number[];
+  }
+  // The unit is the coarsest one that expresses every offset exactly, so an
+  // axis has one encoding rather than one per divisor of its step.
+  if (offsets.reduce((divisor, offset) => gcd(divisor, offset), HOUR_SECONDS / unitSeconds) !== 1) {
+    throw new Error("bundle unitSeconds is finer than the axis needs");
+  }
+  return 3;
+}
+
+const PARAMETER_CODE_FIELDS = [
+  "discipline",
+  "parameterCategory",
+  "parameterNumber",
+  "typeOfFirstFixedSurface",
+] as const;
+// Present but nullable: a surface with no value writes both halves as null,
+// and only a derived field carries a statistical process at all.
+const PARAMETER_NULLABLE_FIELDS = [
+  "scaleFactorOfFirstFixedSurface",
+  "scaledValueOfFirstFixedSurface",
+  "typeOfStatisticalProcessing",
+] as const;
+
+/** Validate a variable's GRIB2 identity block, which schemaVersion 3
+ * introduces: required at version 3, forbidden below. */
+function validateParameter(parameter: unknown, schemaVersion: number): void {
+  if (schemaVersion < 3) {
+    if (parameter !== undefined) throw new Error("a GRIB2 parameter block requires schema version 3");
+    return;
+  }
+  if (typeof parameter !== "object" || parameter === null || Array.isArray(parameter)) {
+    throw new Error("schema version 3 requires a parameter block on every variable");
+  }
+  const block = parameter as Record<string, unknown>;
+  const known = new Set<string>([...PARAMETER_CODE_FIELDS, ...PARAMETER_NULLABLE_FIELDS]);
+  for (const key of Object.keys(block)) {
+    if (!known.has(key)) throw new Error("bundle parameter block has an unknown field");
+  }
+  for (const field of PARAMETER_CODE_FIELDS) {
+    const code = block[field];
+    if (typeof code !== "number" || !Number.isInteger(code) || code < 0 || code > 255) {
+      throw new Error(`invalid bundle parameter ${field}`);
+    }
+  }
+  if (!("scaleFactorOfFirstFixedSurface" in block) || !("scaledValueOfFirstFixedSurface" in block)) {
+    throw new Error("bundle parameter fixed surface value is incomplete");
+  }
+  const scaleFactor = block.scaleFactorOfFirstFixedSurface;
+  const scaledValue = block.scaledValueOfFirstFixedSurface;
+  // GRIB2 encodes a surface with no value by writing both as missing.
+  if ((scaleFactor === null) !== (scaledValue === null)) {
+    throw new Error("bundle parameter fixed surface must be wholly present or wholly null");
+  }
+  if (scaleFactor !== null && (!Number.isInteger(scaleFactor) || !Number.isInteger(scaledValue))) {
+    throw new Error("invalid bundle parameter fixed surface value");
+  }
+  const statistical = block.typeOfStatisticalProcessing;
+  if (statistical !== undefined && (!Number.isInteger(statistical) || (statistical as number) < 0)) {
+    throw new Error("invalid bundle parameter typeOfStatisticalProcessing");
+  }
 }
 
 export function parseBundleMetadata(json: string): BundleMetadata {
   const value = object(JSON.parse(json));
-  if (value.schemaVersion !== 1 && value.schemaVersion !== 2) {
+  const schemaVersion = value.schemaVersion;
+  if (schemaVersion !== 1 && schemaVersion !== 2 && schemaVersion !== 3) {
     throw new Error("unsupported bundle metadata schema version");
   }
   const time = object(value.time);
   const grid = object(value.grid);
-  validateTimeAxis(time, value.schemaVersion);
+  const axisVersion = validateTimeAxis(time, schemaVersion);
   if (typeof grid.width !== "number" || typeof grid.height !== "number") {
     throw new Error("invalid bundle grid");
   }
   const variables = value.variables;
   if (!Array.isArray(variables) || variables.length === 0) throw new Error("bundle metadata has no variables");
+  let parameters = 0;
   for (const item of variables) {
     const variable = object(item);
     if (typeof variable.numericId !== "number" || typeof variable.id !== "string") {
       throw new Error("invalid bundle variable descriptor");
     }
+    validateParameter(variable.parameter, schemaVersion);
+    if (variable.parameter !== undefined) parameters += 1;
     const quantization = object(variable.quantization);
     if (quantization.type !== "linear" && quantization.type !== "log1p") {
       throw new Error("unsupported bundle quantization");
     }
+  }
+  // Every axis and every variable set has exactly one valid encoding: the
+  // declared version must be the lowest able to express both.
+  const requiredVersion = Math.max(axisVersion, parameters > 0 ? 3 : 1);
+  if (schemaVersion !== requiredVersion) {
+    throw new Error(`bundle metadata must declare schema version ${requiredVersion}`);
   }
   return value as unknown as BundleMetadata;
 }

@@ -69,6 +69,9 @@
             <button type="button" data-variable="dswrf" aria-pressed="false" hidden>
               <span>SOLAR</span><small data-i18n="varSolar">FLUX</small>
             </button>
+            <button type="button" data-variable="cref" aria-pressed="false" hidden>
+              <span>RADAR</span><small data-i18n="varRadar">CREF</small>
+            </button>
           </div>
           <!-- Shown only for ?case=<id>: which historical event is on
                screen, and the way back to the list. -->
@@ -82,11 +85,11 @@
           <h1 id="variable-title">Precipitation<br />Rate</h1>
           <dl>
             <div>
-              <dt data-i18n="runCycle">Model run</dt>
+              <dt id="run-time-label" data-i18n="runCycle">Model run</dt>
               <dd id="run-time" data-i18n="awaitingData">Awaiting data</dd>
             </div>
             <div>
-              <dt data-i18n="validTimeLabel">Valid time</dt>
+              <dt id="valid-time-label" data-i18n="validTimeLabel">Valid time</dt>
               <dd id="valid-time">--</dd>
             </div>
           </dl>
@@ -160,7 +163,7 @@
               <span id="speed-label" class="speed-value">12 FPS</span>
             </button>
             <div class="forecast-readout">
-              <span class="control-label">FORECAST HOUR</span>
+              <span id="lead-label" class="control-label">FORECAST HOUR</span>
               <output id="forecast-hour" for="frame-slider">F---</output>
             </div>
           </div>
@@ -213,6 +216,7 @@
         DATA <a href="https://registry.opendata.aws/noaa-gfs-bdp-pds/" target="_blank" rel="noreferrer">NOAA GFS</a>
         · CONTAINS MODIFIED <a href="https://www.ecmwf.int/en/forecasts/datasets/open-data" target="_blank" rel="noreferrer">ECMWF OPEN DATA</a>
         (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">CC BY 4.0</a>)
+        · RADAR <a href="https://data.cma.cn" target="_blank" rel="noreferrer">CMA</a>
         <span>•</span>
         BASEMAP <a href="https://protomaps.com" target="_blank" rel="noreferrer">PROTOMAPS</a>
         © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OPENSTREETMAP</a>

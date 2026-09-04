@@ -9,6 +9,7 @@ against the Rust implementation.
 from __future__ import annotations
 
 import json
+import math
 import os
 import struct
 import zlib
@@ -44,6 +45,31 @@ COMPRESSIONS = {COMPRESSION_NONE, COMPRESSION_ZSTD, COMPRESSION_ZSTD_DICT}
 
 FLAG_ZSTD_CHECKSUM = 0x01
 
+HOUR_SECONDS = 3600
+"""The coarsest time-axis unit, and the only one schema versions 1 and 2 can
+describe. A schemaVersion 3 axis names its own unit, which must divide it."""
+
+# The schemaVersion 3 time block. Versions 1 and 2 use firstForecastHour with
+# stepHours or hours instead; mixing the two shapes is invalid.
+_V3_TIME_FIELDS = frozenset({"unitSeconds", "firstFrameOffset", "frameStep", "frameOffsets"})
+
+# Schema v3 variable identity: the GRIB2 parameter triple and fixed surface
+# every variable declares, plus the optional statistical process (code table
+# 4.10) a derived field carries.
+_PARAMETER_FIELDS = frozenset(
+    {"discipline", "parameterCategory", "parameterNumber", "typeOfFirstFixedSurface"}
+)
+# Present but nullable: a fixed surface with no value writes both halves as
+# null the way GRIB2 writes them missing, and only a derived field carries a
+# statistical process at all.
+_PARAMETER_NULLABLE_FIELDS = frozenset(
+    {
+        "scaleFactorOfFirstFixedSurface",
+        "scaledValueOfFirstFixedSurface",
+        "typeOfStatisticalProcessing",
+    }
+)
+
 _HEADER_STRUCT = struct.Struct("<8sHHIQQQQQQQQ")
 _INDEX_HEADER_STRUCT = struct.Struct("<4sHHII")
 _ENTRY_STRUCT = struct.Struct("<BBBBHHHHIQIIBB6s")
@@ -63,8 +89,8 @@ class PlaneEntry:
     predictor: int
     compression: int
     flags: int
-    forecast_hour: int
-    dependency_hour: int
+    frame_offset: int
+    dependency_offset: int
     group_id: int
     compressed_length: int
     data_offset: int
@@ -79,8 +105,8 @@ class PlaneEntry:
             self.predictor,
             self.compression,
             self.flags,
-            self.forecast_hour,
-            self.dependency_hour,
+            self.frame_offset,
+            self.dependency_offset,
             self.group_id,
             0,
             self.compressed_length,
@@ -104,8 +130,8 @@ class PlaneEntry:
             predictor=fields[1],
             compression=fields[2],
             flags=fields[3],
-            forecast_hour=fields[4],
-            dependency_hour=fields[5],
+            frame_offset=fields[4],
+            dependency_offset=fields[5],
             group_id=fields[6],
             compressed_length=fields[8],
             data_offset=fields[9],
@@ -152,9 +178,9 @@ def write_bundle(
         cursor += len(plane.payload)
     file_size = align8(cursor)
 
-    entries_sorted = sorted(entries, key=lambda entry: (entry.variable_id, entry.forecast_hour))
-    if len({(entry.variable_id, entry.forecast_hour) for entry in entries_sorted}) != len(entries_sorted):
-        raise BundleError("duplicate (variableId, forecastHour) entries")
+    entries_sorted = sorted(entries, key=lambda entry: (entry.variable_id, entry.frame_offset))
+    if len({(entry.variable_id, entry.frame_offset) for entry in entries_sorted}) != len(entries_sorted):
+        raise BundleError("duplicate (variableId, frameOffset) entries")
 
     header = _HEADER_STRUCT.pack(
         MAGIC,
@@ -288,7 +314,7 @@ class Bundle:
         if not isinstance(metadata, dict):
             raise BundleError("metadata must be a JSON object")
         schema_version = metadata.get("schemaVersion")
-        if schema_version not in (1, 2):
+        if schema_version not in (1, 2, 3):
             raise BundleError("unsupported metadata schemaVersion")
         grid = metadata.get("grid")
         time_info = metadata.get("time")
@@ -301,16 +327,11 @@ class Bundle:
         if width * height > 64 * 1024 * 1024:
             raise BundleError("metadata grid exceeds the plane safety limit")
         frame_count = time_info.get("frameCount")
-        first_hour = time_info.get("firstForecastHour")
-        if (
-            not isinstance(frame_count, int)
-            or not isinstance(first_hour, int)
-            or frame_count <= 0
-            or first_hour < 0
-        ):
+        if not isinstance(frame_count, int) or frame_count <= 0:
             raise BundleError("metadata time description is invalid")
-        forecast_hours = self._parse_time_axis(time_info, schema_version, frame_count, first_hour)
+        unit_seconds, frame_offsets, axis_version = self._parse_time_axis(time_info, frame_count, schema_version)
         variable_ids: dict[int, str] = {}
+        parameters = 0
         for variable in variables:
             if not isinstance(variable, dict):
                 raise BundleError("metadata variable must be an object")
@@ -320,54 +341,154 @@ class Bundle:
                 raise BundleError("metadata variable numericId or id is invalid")
             if numeric_id in variable_ids:
                 raise BundleError("metadata contains duplicate variable numericId values")
+            self._parse_parameter(variable.get("parameter"), schema_version)
+            parameters += "parameter" in variable
             variable_ids[numeric_id] = name
         if not variable_ids:
             raise BundleError("metadata must declare at least one variable")
+        # Every axis and every variable set has exactly one valid encoding:
+        # the declared version must be the lowest able to express both.
+        required_version = max(axis_version, 3 if parameters else 1)
+        if schema_version != required_version:
+            raise BundleError(f"metadata must declare schemaVersion {required_version}")
 
         self.metadata = metadata
         self.width = width
         self.height = height
         self.plane_length = width * height
         self.frame_count = frame_count
-        self.forecast_hours = forecast_hours
-        self._hour_index = {hour: index for index, hour in enumerate(forecast_hours)}
+        self.unit_seconds = unit_seconds
+        self.frame_offsets = frame_offsets
+        self._offset_index = {hour: index for index, hour in enumerate(frame_offsets)}
         self.variable_ids = variable_ids
 
     @staticmethod
+    def _parse_parameter(parameter: Any, schema_version: int) -> None:
+        """Validate a variable's GRIB2 identity block.
+
+        The block is what schemaVersion 3 introduces, so it must be present
+        in a version 3 file and absent below — the declared version is always
+        the lowest able to express the metadata (docs/format.md)."""
+        if schema_version < 3:
+            if parameter is not None:
+                raise BundleError("a GRIB2 parameter block requires schemaVersion 3")
+            return
+        if not isinstance(parameter, dict):
+            raise BundleError("schemaVersion 3 requires a parameter block on every variable")
+        unknown = set(parameter) - _PARAMETER_FIELDS - _PARAMETER_NULLABLE_FIELDS
+        if unknown:
+            raise BundleError(f"unknown parameter fields: {', '.join(sorted(unknown))}")
+        for field in _PARAMETER_FIELDS:
+            value = parameter.get(field)
+            if not isinstance(value, int) or isinstance(value, bool) or not 0 <= value <= 255:
+                raise BundleError(f"parameter {field} is invalid")
+        scale_factor = parameter.get("scaleFactorOfFirstFixedSurface", ...)
+        scaled_value = parameter.get("scaledValueOfFirstFixedSurface", ...)
+        if scale_factor is ... or scaled_value is ...:
+            raise BundleError("parameter fixed surface value is incomplete")
+        if (scale_factor is None) != (scaled_value is None):
+            # GRIB2 encodes a surface with no value by writing both as
+            # missing; one of the two alone describes nothing.
+            raise BundleError("parameter fixed surface scale factor and value must both be present or both null")
+        if scale_factor is not None and (
+            not isinstance(scale_factor, int)
+            or isinstance(scale_factor, bool)
+            or not -127 <= scale_factor <= 127
+            or not isinstance(scaled_value, int)
+            or isinstance(scaled_value, bool)
+            or not 0 <= scaled_value <= 0xFFFFFFFE
+        ):
+            raise BundleError("parameter fixed surface value is invalid")
+        statistical = parameter.get("typeOfStatisticalProcessing")
+        if statistical is not None and (
+            not isinstance(statistical, int) or isinstance(statistical, bool) or not 0 <= statistical <= 255
+        ):
+            raise BundleError("parameter typeOfStatisticalProcessing is invalid")
+
+    @classmethod
     def _parse_time_axis(
-        time_info: dict[str, Any], schema_version: int, frame_count: int, first_hour: int
-    ) -> list[int]:
-        """The frame list from the ``time`` block. Exactly one of ``stepHours``
-        (a uniform axis, schemaVersion 1) and ``hours`` (a mixed-step axis
-        listed outright, schemaVersion 2) must be present, and the declared
-        schema version must be the lowest able to express the axis — every
-        axis has exactly one valid encoding (docs/format.md)."""
+        cls, time_info: dict[str, Any], frame_count: int, schema_version: int
+    ) -> tuple[int, list[int], int]:
+        """The axis unit, the frame offsets, and the lowest schema version
+        able to express them.
+
+        Schema versions 1 and 2 describe a whole-hour axis with
+        ``firstForecastHour`` plus one of ``stepHours`` (uniform, version 1)
+        and ``hours`` (listed outright, version 2). Version 3 replaces the
+        block with a unit-neutral one — ``unitSeconds`` plus offsets in that
+        unit — so a series finer than an hour (the six-minute radar mosaic)
+        has an exact axis (docs/format.md)."""
+        if schema_version >= 3:
+            return cls._parse_offset_axis(time_info, frame_count)
+        if _V3_TIME_FIELDS & set(time_info):
+            raise BundleError("a unit-neutral time axis requires schemaVersion 3")
+        first_hour = time_info.get("firstForecastHour")
+        if not isinstance(first_hour, int) or isinstance(first_hour, bool) or first_hour < 0:
+            raise BundleError("metadata time description is invalid")
         step_hours = time_info.get("stepHours")
         listed_hours = time_info.get("hours")
         if (step_hours is None) == (listed_hours is None):
             raise BundleError("metadata time must declare exactly one of stepHours and hours")
         if step_hours is not None:
-            if schema_version != 1:
-                raise BundleError("a uniform time axis must declare schemaVersion 1")
             if not isinstance(step_hours, int) or step_hours <= 0:
                 raise BundleError("metadata stepHours is invalid")
             if first_hour + (frame_count - 1) * step_hours >= NO_DEPENDENCY:
                 raise BundleError("forecast hours exceed the u16 range")
-            return [first_hour + index * step_hours for index in range(frame_count)]
-        if schema_version != 2:
-            raise BundleError("an explicit hours axis requires schemaVersion 2")
+            return HOUR_SECONDS, [first_hour + index * step_hours for index in range(frame_count)], 1
+        cls._check_listed_offsets(listed_hours, frame_count, first_hour)
+        return HOUR_SECONDS, list(listed_hours), 2
+
+    @classmethod
+    def _parse_offset_axis(cls, time_info: dict[str, Any], frame_count: int) -> tuple[int, list[int], int]:
+        """The schemaVersion 3 time block: offsets on a declared unit."""
+        unknown = set(time_info) - _V3_TIME_FIELDS - {"frameCount"}
+        if unknown:
+            raise BundleError(f"unknown time fields: {', '.join(sorted(unknown))}")
+        unit_seconds = time_info.get("unitSeconds")
         if (
-            not isinstance(listed_hours, list)
-            or len(listed_hours) != frame_count
-            or not all(isinstance(hour, int) for hour in listed_hours)
-            or listed_hours[0] != first_hour
-            or any(after <= before for before, after in zip(listed_hours, listed_hours[1:]))
-            or listed_hours[-1] >= NO_DEPENDENCY
+            not isinstance(unit_seconds, int)
+            or isinstance(unit_seconds, bool)
+            or not 1 <= unit_seconds <= HOUR_SECONDS
+            or HOUR_SECONDS % unit_seconds
         ):
-            raise BundleError("metadata hours axis is invalid")
-        if len({after - before for before, after in zip(listed_hours, listed_hours[1:])}) < 2:
-            raise BundleError("a uniform hours axis must be encoded as stepHours")
-        return list(listed_hours)
+            raise BundleError("metadata unitSeconds must be a whole divisor of 3600")
+        first_offset = time_info.get("firstFrameOffset")
+        if not isinstance(first_offset, int) or isinstance(first_offset, bool) or first_offset < 0:
+            raise BundleError("metadata firstFrameOffset is invalid")
+        frame_step = time_info.get("frameStep")
+        listed = time_info.get("frameOffsets")
+        if (frame_step is None) == (listed is None):
+            raise BundleError("metadata time must declare exactly one of frameStep and frameOffsets")
+        if frame_step is not None:
+            if not isinstance(frame_step, int) or isinstance(frame_step, bool) or frame_step <= 0:
+                raise BundleError("metadata frameStep is invalid")
+            if first_offset + (frame_count - 1) * frame_step >= NO_DEPENDENCY:
+                raise BundleError("frame offsets exceed the u16 range")
+            offsets = [first_offset + index * frame_step for index in range(frame_count)]
+        else:
+            cls._check_listed_offsets(listed, frame_count, first_offset, uniform_message="frameStep")
+            offsets = list(listed)
+        # The unit is the coarsest one that expresses every offset exactly, so
+        # an axis has one encoding rather than one per divisor of its step.
+        if math.gcd(HOUR_SECONDS // unit_seconds, *offsets) != 1:
+            raise BundleError("metadata unitSeconds is finer than the axis needs")
+        return unit_seconds, offsets, 3
+
+    @staticmethod
+    def _check_listed_offsets(
+        listed: Any, frame_count: int, first: int, *, uniform_message: str = "stepHours"
+    ) -> None:
+        if (
+            not isinstance(listed, list)
+            or len(listed) != frame_count
+            or not all(isinstance(value, int) and not isinstance(value, bool) for value in listed)
+            or listed[0] != first
+            or any(after <= before for before, after in zip(listed, listed[1:]))
+            or listed[-1] >= NO_DEPENDENCY
+        ):
+            raise BundleError("metadata listed time axis is invalid")
+        if len({after - before for before, after in zip(listed, listed[1:])}) < 2:
+            raise BundleError(f"a uniform axis must be encoded as {uniform_message}")
 
     def _parse_index(self) -> None:
         if self.index_length < INDEX_HEADER_SIZE:
@@ -393,17 +514,17 @@ class Bundle:
             start = self.index_offset + INDEX_HEADER_SIZE + position * ENTRY_SIZE
             entries.append(PlaneEntry.unpack(self.data[start : start + ENTRY_SIZE]))
         self.entries = entries
-        self.entry_map = {(entry.variable_id, entry.forecast_hour): entry for entry in entries}
+        self.entry_map = {(entry.variable_id, entry.frame_offset): entry for entry in entries}
 
     def _validate_entries(self) -> None:
         if len(self.entry_map) != len(self.entries):
-            raise BundleError("duplicate (variableId, forecastHour) index entries")
-        ordering = [(entry.variable_id, entry.forecast_hour) for entry in self.entries]
+            raise BundleError("duplicate (variableId, frameOffset) index entries")
+        ordering = [(entry.variable_id, entry.frame_offset) for entry in self.entries]
         if ordering != sorted(ordering):
-            raise BundleError("index entries must be sorted by (variableId, forecastHour)")
+            raise BundleError("index entries must be sorted by (variableId, frameOffset)")
         for variable_id in self.variable_ids:
             hours = sorted(hour for vid, hour in self.entry_map if vid == variable_id)
-            if hours != self.forecast_hours:
+            if hours != self.frame_offsets:
                 raise BundleError(f"variable {variable_id} does not cover every forecast hour")
 
         occupied: list[tuple[int, int, PlaneEntry]] = []
@@ -446,21 +567,21 @@ class Bundle:
         # Dependency validation: same variable, same group, acyclic.
         for entry in self.entries:
             if entry.predictor in (PREDICTOR_RAW, PREDICTOR_ZERO):
-                if entry.dependency_hour != NO_DEPENDENCY:
-                    raise BundleError("RAW and ZERO entries must have dependencyHour 65535")
+                if entry.dependency_offset != NO_DEPENDENCY:
+                    raise BundleError("RAW and ZERO entries must have dependencyOffset 65535")
                 continue
             if entry.predictor == PREDICTOR_ANCHOR:
-                dependency_hour = entry.dependency_hour
+                dependency_offset = entry.dependency_offset
             else:
                 # PREVIOUS references the preceding frame on the time axis,
-                # carried explicitly in dependencyHour (never the sentinel).
-                index = self._hour_index.get(entry.forecast_hour)
+                # carried explicitly in dependencyOffset (never the sentinel).
+                index = self._offset_index.get(entry.frame_offset)
                 if index is None or index == 0:
                     raise BundleError("PREVIOUS entry has no preceding frame on the time axis")
-                dependency_hour = self.forecast_hours[index - 1]
-                if entry.dependency_hour != dependency_hour:
-                    raise BundleError("PREVIOUS entry dependencyHour must reference the preceding frame on the time axis")
-            dependency = self.entry_map.get((entry.variable_id, dependency_hour))
+                dependency_offset = self.frame_offsets[index - 1]
+                if entry.dependency_offset != dependency_offset:
+                    raise BundleError("PREVIOUS entry dependencyOffset must reference the preceding frame on the time axis")
+            dependency = self.entry_map.get((entry.variable_id, dependency_offset))
             if dependency is None:
                 raise BundleError("entry depends on a plane that does not exist")
             if dependency.group_id != entry.group_id:
@@ -468,11 +589,11 @@ class Bundle:
         for key in self.entry_map:
             self._dependency_chain(key)
 
-    def _dependency_hour(self, entry: PlaneEntry) -> int | None:
+    def _dependency_offset(self, entry: PlaneEntry) -> int | None:
         # ANCHOR and PREVIOUS both carry their dependency explicitly;
         # _validate_entries has pinned PREVIOUS to the preceding axis frame.
         if entry.predictor in (PREDICTOR_ANCHOR, PREDICTOR_PREVIOUS):
-            return entry.dependency_hour
+            return entry.dependency_offset
         return None
 
     def _dependency_chain(self, key: tuple[int, int]) -> list[PlaneEntry]:
@@ -487,7 +608,7 @@ class Bundle:
             if entry is None:
                 raise BundleError("dependency chain references a missing plane")
             chain.append(entry)
-            dependency = self._dependency_hour(entry)
+            dependency = self._dependency_offset(entry)
             current = None if dependency is None else (entry.variable_id, dependency)
         return chain
 
@@ -505,14 +626,14 @@ class Bundle:
             raise BundleError("entry checksum flag does not match the Zstandard frame")
         return zstdcli.decompress(raw, expected_length=entry.decoded_length)
 
-    def decode_plane(self, variable_id: int, forecast_hour: int) -> np.ndarray:
-        key = (variable_id, forecast_hour)
+    def decode_plane(self, variable_id: int, frame_offset: int) -> np.ndarray:
+        key = (variable_id, frame_offset)
         cached = self._cache.get(key)
         if cached is not None:
             return cached
         entry = self.entry_map.get(key)
         if entry is None:
-            raise BundleError(f"no plane for variable {variable_id} hour {forecast_hour}")
+            raise BundleError(f"no plane for variable {variable_id} hour {frame_offset}")
         if entry.predictor == PREDICTOR_ZERO:
             plane = np.zeros(self.plane_length, dtype=np.uint8)
         else:
@@ -520,14 +641,14 @@ class Bundle:
             if entry.predictor == PREDICTOR_RAW:
                 plane = payload
             else:
-                dependency_hour = self._dependency_hour(entry)
-                assert dependency_hour is not None
-                base = self.decode_plane(variable_id, dependency_hour)
+                dependency_offset = self._dependency_offset(entry)
+                assert dependency_offset is not None
+                base = self.decode_plane(variable_id, dependency_offset)
                 plane = (payload + base).astype(np.uint8)
         if crc32_plane(plane) != entry.crc32:
-            raise BundleError(f"plane CRC32 mismatch for variable {variable_id} hour {forecast_hour}")
+            raise BundleError(f"plane CRC32 mismatch for variable {variable_id} hour {frame_offset}")
         if int(plane.min()) != entry.minimum_code or int(plane.max()) != entry.maximum_code:
-            raise BundleError(f"plane code range mismatch for variable {variable_id} hour {forecast_hour}")
+            raise BundleError(f"plane code range mismatch for variable {variable_id} hour {frame_offset}")
         self._cache[key] = plane
         return plane
 

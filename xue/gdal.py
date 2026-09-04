@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from .errors import ConversionError
-from .model import GribFrame
+from .model import SourceFrame
 from .variables import variable_spec
 
 
@@ -250,7 +250,7 @@ def _band_matches(variable_id: str, metadata: dict[str, str], description: str) 
     raise ConversionError(f"unsupported variable: {variable_id}")
 
 
-def _frame_from_band(path: Path, variable_id: str, band_number: int, metadata: dict[str, str]) -> GribFrame:
+def _frame_from_band(path: Path, variable_id: str, band_number: int, metadata: dict[str, str]) -> SourceFrame:
     unit_value = metadata.get("GRIB_UNIT") or metadata.get("GRIB_COMMENT", "").rsplit("[", 1)[-1].rstrip("]")
     unit = normalize_unit(unit_value) if variable_id == "tmp2m" else unit_value.strip().strip("[]")
     raster_expression(variable_id, unit)
@@ -267,7 +267,7 @@ def _frame_from_band(path: Path, variable_id: str, band_number: int, metadata: d
     delta = (valid_time - run_time).total_seconds()
     if delta < 0 or delta % 3600:
         raise ConversionError(f"forecast time is not a non-negative whole hour in {path}")
-    return GribFrame(path, band_number, variable_id, run_time, valid_time, int(delta // 3600), unit)
+    return SourceFrame(path, band_number, variable_id, run_time, valid_time, int(delta), unit)
 
 
 def inspect_grib_multi(
@@ -275,7 +275,7 @@ def inspect_grib_multi(
     variable_ids: tuple[str, ...],
     *,
     optional_ids: tuple[str, ...] = (),
-) -> dict[str, GribFrame]:
+) -> dict[str, SourceFrame]:
     """Locate every requested variable in one gdalinfo pass over the file.
 
     Variables in ``optional_ids`` may be absent (they are simply omitted from
@@ -288,7 +288,7 @@ def inspect_grib_multi(
         info = json.loads(result.stdout)
     except json.JSONDecodeError as exc:
         raise ConversionError(f"GDAL returned invalid JSON for {path}") from exc
-    frames: dict[str, GribFrame] = {}
+    frames: dict[str, SourceFrame] = {}
     for variable_id in variable_ids:
         spec = variable_spec(variable_id)
         matches: list[tuple[int, dict[str, str]]] = []
@@ -308,7 +308,7 @@ def inspect_grib_multi(
     return frames
 
 
-def inspect_grib(path: Path, variable_id: str = "tmp2m") -> GribFrame:
+def inspect_grib(path: Path, variable_id: str = "tmp2m") -> SourceFrame:
     return inspect_grib_multi(path, (variable_id,))[variable_id]
 
 

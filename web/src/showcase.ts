@@ -4,7 +4,7 @@ import "@fontsource/ibm-plex-mono/400.css";
 import "./style.css";
 
 import { applyStaticMessages, locale, t, toggleLocale } from "./i18n";
-import { parseBundleMetadata, type ForecastBundleId, type PosterDescriptor } from "./manifest";
+import { isObservationModel, parseBundleMetadata, type ForecastBundleId, type PosterDescriptor } from "./manifest";
 import { buildPalette } from "./palettes";
 import { fetchPoster, isPosterSupported } from "./poster";
 import { fetchCaseManifest, fetchCatalog, localizedText, type ShowcaseCase } from "./showcase-catalog";
@@ -35,6 +35,7 @@ const VARIABLE_CODE: Record<ForecastBundleId, string> = {
   tmp2m: "TEMP",
   prate: "PRECIP",
   dswrf: "SOLAR",
+  cref: "RADAR",
   wind10m: "WIND",
 };
 
@@ -102,10 +103,16 @@ function buildCard(showcaseCase: ShowcaseCase): { item: HTMLLIElement; canvas: H
 
   const facts = document.createElement("dl");
   facts.className = "showcase-facts";
+  // Observations have no run cycle and no lead time: the run line is where
+  // the series starts, and the range is how long it runs.
+  const observations = isObservationModel(showcaseCase.modelId);
   if (showcaseCase.eventTime) facts.append(definition(t("showcaseEventLabel"), formatDate(showcaseCase.eventTime)));
   facts.append(
-    definition(t("showcaseRunLabel"), formatDate(showcaseCase.runTime)),
-    definition(t("showcaseRangeLabel"), t("showcaseHours", { count: showcaseCase.forecastHours })),
+    definition(t(observations ? "showcaseSeriesLabel" : "showcaseRunLabel"), formatDate(showcaseCase.runTime)),
+    definition(
+      t(observations ? "showcaseSpanLabel" : "showcaseRangeLabel"),
+      t("showcaseHours", { count: showcaseCase.forecastHours }),
+    ),
     definition(t("showcaseRegionLabel"), regionLabel(showcaseCase), true),
     definition(t("showcaseGridLabel"), `${showcaseCase.grid.width}×${showcaseCase.grid.height}`),
     definition(t("showcaseSizeLabel"), formatBytes(showcaseCase.byteLength)),

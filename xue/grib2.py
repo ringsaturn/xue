@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import BinaryIO
 
 from .errors import ConversionError
-from .model import GribFrame
+from .model import SourceFrame
 from .variables import VariableSpec, variable_spec
 
 # Code table 4.4 (indicator of unit of time range) for the units our
@@ -189,7 +189,7 @@ def inspect_grib_fast(
     variable_ids: tuple[str, ...],
     *,
     optional_ids: tuple[str, ...] = (),
-) -> dict[str, GribFrame]:
+) -> dict[str, SourceFrame]:
     """Locate every requested variable from the GRIB2 headers alone.
 
     Mirrors :func:`xue.gdal.inspect_grib_multi`: variables in ``optional_ids``
@@ -199,7 +199,7 @@ def inspect_grib_fast(
     if not path.is_file():
         raise ConversionError(f"GRIB input does not exist: {path}")
     messages = index_messages(path)
-    frames: dict[str, GribFrame] = {}
+    frames: dict[str, SourceFrame] = {}
     for variable_id in variable_ids:
         spec = variable_spec(variable_id)
         matches = [message for message in messages if _matches(spec, message)]
@@ -213,13 +213,13 @@ def inspect_grib_fast(
         delta = (message.valid_time - message.reference_time).total_seconds()
         if delta < 0 or delta % 3600:
             raise ConversionError(f"forecast time is not a non-negative whole hour in {path}")
-        frames[variable_id] = GribFrame(
+        frames[variable_id] = SourceFrame(
             path,
             message.band,
             variable_id,
             message.reference_time,
             message.valid_time,
-            int(delta // 3600),
+            int(delta),
             spec.gdal_unit,
         )
     return frames

@@ -18,12 +18,19 @@ forever — the NOAA bucket holds GFS and sflux from about 2021-01 (with a
 directory-layout change in 2021-03, see :data:`xue.fetch.ATMOS_SUBDIRECTORY_FROM`)
 and the ECMWF open data mirrors from about 2024-02. A case naming a run
 older than its source published simply fails to fetch.
+
+A case on an observation source (the CMA radar mosaic) is the same object
+built from a different input: it names a local ``dataset`` file instead of a
+``run`` to fetch, and its axis is whatever times that file carries. Nothing
+fetches it, so such a case is only rebuildable by someone who has the
+dataset; the built output is an ordinary case like any other.
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import os
 import zlib
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -34,7 +41,7 @@ from .binconvert import bundle_input_ids, convert_bin, published_bundle_ids
 from .errors import DownloadError, ManifestError, XueError
 from .fetch import fetch_run, parse_run
 from .manifest import iso_z, validate_bin_manifest
-from .sources import source_spec
+from .sources import SourceSpec, source_spec
 
 LOG = logging.getLogger(__name__)
 
@@ -52,6 +59,16 @@ CASE_SIDECAR = "case.json"
 LOCALES = ("zh", "en")
 """Locales every human-facing case string must provide, matching the UI."""
 
+OBSERVATION_ROOT_ENV = "XUE_OBSERVATION_ROOT"
+"""Environment variable holding the root an observation case's ``dataset``
+path is resolved against."""
+
+DEFAULT_OBSERVATION_ROOT = Path("../radar-l3-mst/data")
+"""Where observation datasets live by default: the sibling checkout of the
+tool that produces them, relative to the working directory. These files are
+not published anywhere, so an observation case is only rebuildable by someone
+who has them."""
+
 _ID_CHARACTERS = set("abcdefghijklmnopqrstuvwxyz0123456789-")
 
 
@@ -68,7 +85,14 @@ class CaseSpec:
     summary: dict[str, str]
     model: str
     run: str
+    """The archived cycle to fetch, empty on an observation case — the
+    dataset file says when its series starts."""
+    dataset: str
+    """Observation cases only: the NetCDF file holding the series, resolved
+    against :data:`OBSERVATION_ROOT_ENV` (default
+    :data:`DEFAULT_OBSERVATION_ROOT`) when it is not absolute."""
     hours: int
+    """Last hour of the case's axis, counted from its first frame."""
     bbox: tuple[float, float, float, float]
     variables: tuple[str, ...]
     default_variable: str
@@ -80,6 +104,21 @@ class CaseSpec:
     @property
     def output_subdirectory(self) -> str:
         return f"{SHOWCASE_DIRECTORY}/{self.id}"
+
+    @property
+    def source(self) -> SourceSpec:
+        return source_spec(self.model)
+
+    @property
+    def dataset_path(self) -> Path:
+        """The observation file this case is built from."""
+        if not self.dataset:
+            raise ShowcaseError(f"case {self.id} names no observation dataset")
+        path = Path(self.dataset).expanduser()
+        if path.is_absolute():
+            return path
+        root = Path(os.environ.get(OBSERVATION_ROOT_ENV, DEFAULT_OBSERVATION_ROOT)).expanduser()
+        return root / path
 
 
 def _localized(value: object, label: str, case_id: str) -> dict[str, str]:
@@ -101,18 +140,31 @@ def parse_case(payload: dict[str, Any], *, source_name: str = "<case>") -> CaseS
         raise ShowcaseError(f"case {case_id}: model must be a string")
     source = source_spec(model)
 
-    run = payload.get("run")
-    if not isinstance(run, str):
-        raise ShowcaseError(f"case {case_id}: run must be a UTC cycle in YYYYMMDDHH format")
-    parse_run(run)
+    # A forecast case names an archived cycle to fetch; an observation case
+    # names the local file that already holds its series, and its start time
+    # comes out of that file rather than out of the definition.
+    run = payload.get("run", "")
+    dataset = payload.get("dataset", "")
+    if source.observation:
+        if run:
+            raise ShowcaseError(f"case {case_id}: an observation case has no run to name")
+        if not isinstance(dataset, str) or not dataset:
+            raise ShowcaseError(f"case {case_id}: dataset must name the observation file to build from")
+    else:
+        if dataset:
+            raise ShowcaseError(f"case {case_id}: only an observation case is built from a dataset file")
+        if not isinstance(run, str) or not run:
+            raise ShowcaseError(f"case {case_id}: run must be a UTC cycle in YYYYMMDDHH format")
+        parse_run(run)
 
     hours = payload.get("hours")
-    if not isinstance(hours, int) or isinstance(hours, bool):
-        raise ShowcaseError(f"case {case_id}: hours must be an integer forecast hour")
-    try:
-        source.forecast_hours(hours)
-    except DownloadError as exc:
-        raise ShowcaseError(f"case {case_id}: {exc}") from exc
+    if not isinstance(hours, int) or isinstance(hours, bool) or hours <= 0:
+        raise ShowcaseError(f"case {case_id}: hours must be a positive integer forecast hour")
+    if not source.observation:
+        try:
+            source.forecast_hours(hours)
+        except DownloadError as exc:
+            raise ShowcaseError(f"case {case_id}: {exc}") from exc
 
     bbox = payload.get("bbox")
     if not isinstance(bbox, list) or len(bbox) != 4 or not all(isinstance(value, (int, float)) for value in bbox):
@@ -169,6 +221,7 @@ def parse_case(payload: dict[str, Any], *, source_name: str = "<case>") -> CaseS
         summary=_localized(payload.get("summary"), "summary", case_id),
         model=model,
         run=run,
+        dataset=dataset,
         hours=hours,
         bbox=(float(bbox[0]), float(bbox[1]), float(bbox[2]), float(bbox[3])),
         variables=ordered,
@@ -234,28 +287,44 @@ def build_case(
     force: bool = False,
     force_download: bool = False,
 ) -> dict[str, Any]:
-    """Fetch, crop and encode one case, and write its manifest and sidecar.
+    """Fetch (or open), crop and encode one case, and write its manifest and
+    sidecar.
 
     Only the case's own variables are downloaded, and into a per-case raw
-    directory so a partial record set never shadows a full run's cache.
+    directory so a partial record set never shadows a full run's cache. An
+    observation case downloads nothing: its input is the local dataset file
+    the definition names.
     """
-    source = source_spec(spec.model)
-    run = parse_run(spec.run)
-    input_ids = tuple(
-        dict.fromkeys(
-            input_id for bundle_id in spec.variables for input_id in bundle_input_ids(source, bundle_id)
+    source = spec.source
+    if source.observation:
+        inputs: Path | list[Path] = spec.dataset_path
+        if not inputs.is_file():
+            raise ShowcaseError(
+                f"case {spec.id}: observation dataset not found at {inputs}; "
+                f"set {OBSERVATION_ROOT_ENV} to where it lives"
+            )
+        LOG.info("reading %s observation series %s", source.manifest_model, inputs)
+    else:
+        run = parse_run(spec.run)
+        input_ids = tuple(
+            dict.fromkeys(
+                input_id for bundle_id in spec.variables for input_id in bundle_input_ids(source, bundle_id)
+            )
         )
-    )
-    case_raw_root = raw_root / SHOWCASE_DIRECTORY / spec.id
-    LOG.info("fetching %s run %s f000-f%03d (%s)", source.manifest_model, spec.run, spec.hours, ", ".join(input_ids))
-    # Exactly the case's own frames: the raw directory can hold more, left
-    # behind by an earlier build of the same case with a longer range.
-    paths = fetch_run(run, spec.hours, case_raw_root, force=force_download, model=spec.model, input_ids=input_ids)
+        case_raw_root = raw_root / SHOWCASE_DIRECTORY / spec.id
+        LOG.info(
+            "fetching %s run %s f000-f%03d (%s)", source.manifest_model, spec.run, spec.hours, ", ".join(input_ids)
+        )
+        # Exactly the case's own frames: the raw directory can hold more, left
+        # behind by an earlier build of the same case with a longer range.
+        inputs = fetch_run(
+            run, spec.hours, case_raw_root, force=force_download, model=spec.model, input_ids=input_ids
+        )
 
     output_dir = output_root / spec.output_subdirectory
     manifest_path = output_dir / "manifest.json"
     report = convert_bin(
-        paths,
+        inputs,
         output_dir,
         profile=spec.profile,
         work_root=work_root,
@@ -270,12 +339,17 @@ def build_case(
         model=spec.model,
         bbox=spec.bbox,
         bundle_ids=spec.variables,
+        last_hour=spec.hours if source.observation else None,
     )
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     entry = build_catalog_entry(spec, manifest, manifest_path.read_bytes(), report)
     (output_dir / CASE_SIDECAR).write_text(json.dumps(entry, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     LOG.info("built case %s (%d bundles, %.2f MB)", spec.id, len(manifest["bundles"]), report["byteLength"] / 1e6)
     return entry
+
+
+def _run_id(run_time: str) -> str:
+    return datetime.fromisoformat(run_time.replace("Z", "+00:00")).astimezone(UTC).strftime("%Y%m%d%H")
 
 
 def build_catalog_entry(
@@ -292,7 +366,9 @@ def build_catalog_entry(
         "modelId": spec.model,
         "model": manifest["model"],
         "product": manifest["product"],
-        "run": spec.run,
+        # An observation case names no cycle, so its run id is the hour its
+        # series starts — the same YYYYMMDDHH shape a forecast cycle has.
+        "run": spec.run or _run_id(manifest["runTime"]),
         "runTime": manifest["runTime"],
         "forecastHours": manifest["forecastHours"],
         "bbox": [round(value, 6) for value in spec.bbox],

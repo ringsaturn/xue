@@ -19,8 +19,11 @@ import {
   hasBundle,
   parseBundleMetadata,
   pickBundleVariant,
+  axisUnitSeconds,
+  frameOffsets,
+  HOUR_SECONDS,
+  isObservationModel,
   sameTimeAxis,
-  timeAxisHours,
   WIND_COMPONENT_IDS,
   type BundleMetadata,
   type BundleVariable,
@@ -155,6 +158,13 @@ const VARIABLE_UI = {
     label: t("varLabelDswrf"),
     legend: ["1200", "900", "600", "300", "100", "0"],
   },
+  cref: {
+    code: "CREF EATM",
+    title: ["Composite", "Reflectivity"],
+    bufferTitle: "Reflectivity buffer",
+    label: t("varLabelCref"),
+    legend: ["75", "60", "45", "30", "15", "0"],
+  },
   wind10m: {
     code: "WIND 10M",
     title: ["Surface", "Wind"],
@@ -172,6 +182,9 @@ const BASEMAP_THEME = {
   tmp2m: { ocean: "#0b1826", land: "#182c3d" },
   prate: { ocean: "#16344a", land: "#28495f" },
   dswrf: { ocean: "#0d1b2b", land: "#1c3242" },
+  // Radar echoes are small and bright; the base stays dark enough for a
+  // 5 dBZ edge to read against it.
+  cref: { ocean: "#0c1a26", land: "#1a2f3d" },
   wind10m: { ocean: "#0e2131", land: "#1d3849" },
 } as const satisfies Record<ForecastBundleId, { ocean: string; land: string }>;
 
@@ -232,7 +245,10 @@ map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-ri
 const slider = required<HTMLInputElement>("frame-slider");
 const runTime = required<HTMLElement>("run-time");
 const validTime = required<HTMLElement>("valid-time");
-const forecastHour = required<HTMLOutputElement>("forecast-hour");
+const forecastLead = required<HTMLOutputElement>("forecast-hour");
+const leadLabel = required<HTMLElement>("lead-label");
+const runTimeLabel = required<HTMLElement>("run-time-label");
+const validTimeLabel = required<HTMLElement>("valid-time-label");
 const loadStatus = required<HTMLElement>("load-status");
 const tickMarks = required<HTMLElement>("tick-marks");
 const errorPanel = required<HTMLElement>("error-panel");
@@ -287,6 +303,7 @@ const MODEL_EYEBROW: Record<ForecastModelId, string> = {
   gfs: "NOAA / GFS (0.25°)",
   ecmwf: "ECMWF / IFS (0.25°)",
   sflux: "NOAA / GFS SFLUX (13 KM)",
+  radar: "CMA / RADAR MOSAIC (L3 MST)",
 };
 
 // On phone-sized viewports the station panel starts collapsed — expanded it
@@ -493,65 +510,112 @@ function frameCount(): number {
   return metadata?.time.frameCount ?? FRAME_COUNT;
 }
 
-// The active session's materialized forecast-hour axis. Mixed-step axes
-// (240-hour runs: hourly then 3-hourly on GFS) make index<->hour conversions
-// table lookups, so both are memoized on the time-block identity.
-let frameHoursSource: BundleMetadata["time"] | null = null;
-let frameHoursCache: number[] = [];
+// The active session's materialized frame-offset axis. Non-uniform axes
+// (240-hour runs go 3-hourly past f120; the radar mosaic has gaps) make
+// index<->offset conversions table lookups, so both are memoized on the
+// time-block identity, along with the seconds one offset unit is worth.
+let frameOffsetsSource: BundleMetadata["time"] | null = null;
+let frameOffsetsCache: number[] = [];
+let frameUnitSeconds = HOUR_SECONDS;
 let frameScalesCache: number[] = [];
 let frameIndexCache = new Map<number, number>();
 
-function frameHours(): number[] {
+function frameAxis(): number[] {
   const time = metadata?.time;
   if (!time) return [];
-  if (time !== frameHoursSource) {
-    frameHoursSource = time;
-    frameHoursCache = timeAxisHours(time);
-    frameScalesCache = frameDwellScales(frameHoursCache);
-    frameIndexCache = new Map(frameHoursCache.map((hour, index) => [hour, index]));
+  if (time !== frameOffsetsSource) {
+    frameOffsetsSource = time;
+    frameOffsetsCache = frameOffsets(time);
+    frameUnitSeconds = axisUnitSeconds(time);
+    frameScalesCache = frameDwellScales(frameOffsetsCache);
+    frameIndexCache = new Map(frameOffsetsCache.map((offset, index) => [offset, index]));
   }
-  return frameHoursCache;
+  return frameOffsetsCache;
 }
 
 /** Wall-clock hold for the frame at `index`: the selected rate paces the
  * axis's shortest step, and a longer step holds proportionally longer so
  * forecast time keeps one apparent speed across the mixed-step tail. */
 function frameHoldMs(index: number): number {
-  frameHours();
+  frameAxis();
   return frameIntervalMs * (frameScalesCache[index] ?? 1);
 }
 
 /** The loop's length in frame intervals — 161 GFS frames cost 240 of them. */
 function loopUnits(): number {
-  frameHours();
+  frameAxis();
   return loopDwellUnits(frameScalesCache);
 }
 
-function frameHour(index: number): number {
-  const hours = frameHours();
-  return hours.length ? (hours[index] ?? index) : index;
+const DAY_SECONDS = 24 * HOUR_SECONDS;
+
+/** Whether the dataset on screen is observations rather than a forecast.
+ * A radar mosaic has no run cycle and no lead time: its runTime is when the
+ * series starts, each frame is an observation, and the timeline reads as
+ * time elapsed rather than forecast hour. */
+function showingObservations(): boolean {
+  return isObservationModel(activeCase ? activeCase.modelId : selectedModelId);
 }
 
-/** Frame index of an exact forecast hour on the active axis, or -1. */
-function frameIndexForHour(hour: number): number {
-  frameHours();
-  return metadata ? (frameIndexCache.get(hour) ?? -1) : hour;
+/** Retitle the timeline and station panel for the kind of dataset on screen.
+ * The instrument-panel control label stays English in both locales, like
+ * every other one. */
+function applyDatasetWording(): void {
+  const observations = showingObservations();
+  leadLabel.textContent = observations ? "TIME ELAPSED" : "FORECAST HOUR";
+  runTimeLabel.textContent = t(observations ? "seriesStart" : "runCycle");
+  validTimeLabel.textContent = t(observations ? "observationTimeLabel" : "validTimeLabel");
+  slider.setAttribute("aria-label", t(observations ? "elapsedAria" : "forecastHourAria"));
+  forecastDays.setAttribute("aria-label", t(observations ? "observationDaysAria" : "forecastDaysAria"));
 }
 
-/** The frame whose forecast hour is nearest to `hour` (ties go earlier). */
-function nearestFrameIndex(hour: number): number {
-  const hours = frameHours();
-  if (hours.length === 0) return 0;
+/** The frame's key on its bundle's axis — what the index and the decoders
+ * address a plane by. */
+function frameOffset(index: number): number {
+  const offsets = frameAxis();
+  return offsets.length ? (offsets[index] ?? index) : index;
+}
+
+/** Seconds from the run time to the frame at `index`. */
+function frameLeadSeconds(index: number): number {
+  frameAxis();
+  return frameOffset(index) * frameUnitSeconds;
+}
+
+/** Frame index of an exact offset on the active axis, or -1. */
+function frameIndexForOffset(offset: number): number {
+  frameAxis();
+  return metadata ? (frameIndexCache.get(offset) ?? -1) : offset;
+}
+
+/** The frame whose lead time is nearest to `seconds` (ties go earlier). */
+function nearestFrameIndex(seconds: number): number {
+  const offsets = frameAxis();
+  if (offsets.length === 0) return 0;
   let best = 0;
-  for (let index = 1; index < hours.length; index += 1) {
-    if (Math.abs(hours[index]! - hour) < Math.abs(hours[best]! - hour)) best = index;
+  for (let index = 1; index < offsets.length; index += 1) {
+    if (Math.abs(frameLeadSeconds(index) - seconds) < Math.abs(frameLeadSeconds(best) - seconds)) best = index;
   }
   return best;
 }
 
 function frameValidTime(index: number): number {
   const base = metadata ? Date.parse(metadata.runTime) : 0;
-  return base + frameHour(index) * 3_600_000;
+  return base + frameLeadSeconds(index) * 1000;
+}
+
+/** The lead-time readout. A forecast reads as the forecast hour it has
+ * always been ("F058"); observations read as time elapsed from the start of
+ * the series ("T+058"). A sub-hourly axis carries the minutes too
+ * ("T+058:06"), because on the radar mosaic ten frames share an hour. */
+function formatLead(index: number): string {
+  const seconds = frameLeadSeconds(index);
+  const hours = Math.floor(seconds / HOUR_SECONDS);
+  const label = `${showingObservations() ? "T+" : "F"}${String(hours).padStart(3, "0")}`;
+  const minutes = Math.floor((seconds % HOUR_SECONDS) / 60);
+  return minutes === 0 && frameUnitSeconds >= HOUR_SECONDS
+    ? label
+    : `${label}:${String(minutes).padStart(2, "0")}`;
 }
 
 function cacheKey(variableId: number, hour: number): string {
@@ -771,7 +835,7 @@ function debugInfoText(): string {
     `format: ${session?.format ?? "--"}`,
     `grid: ${session ? `${session.metadata.grid.width} × ${session.metadata.grid.height}` : "--"}`,
     `time: ${time ? `${time.frameCount}F · first ${time.firstForecastHour}h · ${time.stepHours !== undefined ? `step ${time.stepHours}h` : "mixed step"}` : "--"}`,
-    `frame: ${activeFrameIndex === null ? "--" : `F${String(frameHour(activeFrameIndex)).padStart(3, "0")}`} · ${playbackFps} fps`,
+    `frame: ${activeFrameIndex === null ? "--" : formatLead(activeFrameIndex)} · ${playbackFps} fps`,
     `planes: ${cachedFrameCount()} / ${frameCount()} · ${formatBytes(planeCacheBytes)} / ${formatBytes(planeCacheBudgetBytes())}`,
     `network: ${session ? `${formatBytes(session.bytes)} / ${formatBytes(session.totalBytes)}${session.resident ? " · resident" : session.streaming ? " · streaming" : ""}` : "--"}`,
     `decode: ${lastDecodeMs === null ? "--" : `${lastDecodeMs.toFixed(1)} ms`} · ${formatBytes(decodeRateBytesPerSec())}/s`,
@@ -938,8 +1002,8 @@ function blendTowardNext(timestamp: number): void {
   if (activeSession.id === "wind10m") return;
   const next = activeFrameIndex + 1;
   if (next >= frameCount()) return;
-  const current = planeCache.get(cacheKey(activeVariable.numericId, frameHour(activeFrameIndex)));
-  const upcoming = planeCache.get(cacheKey(activeVariable.numericId, frameHour(next)));
+  const current = planeCache.get(cacheKey(activeVariable.numericId, frameOffset(activeFrameIndex)));
+  const upcoming = planeCache.get(cacheKey(activeVariable.numericId, frameOffset(next)));
   if (!current || !upcoming) return;
   const weight = 1 - (nextFrameAt - timestamp) / currentHoldMs;
   ensureSessionGrid();
@@ -956,13 +1020,13 @@ function startPlayback(): void {
 }
 
 function updateFrameReadout(index: number): void {
-  const hour = frameHour(index);
+  const lead = formatLead(index);
   const valid = frameValidTime(index);
   slider.value = String(index);
-  slider.setAttribute("aria-valuetext", `F${String(hour).padStart(3, "0")}, ${formatDate(valid)}`);
-  forecastHour.value = `F${String(hour).padStart(3, "0")}`;
+  slider.setAttribute("aria-valuetext", `${lead}, ${formatDate(valid)}`);
+  forecastLead.value = lead;
   validTime.textContent = formatDate(valid);
-  frameTooltip.value = `F${String(hour).padStart(3, "0")} · ${formatCompactDate(valid)}`;
+  frameTooltip.value = `${lead} · ${formatCompactDate(valid)}`;
   frameTooltip.style.setProperty("--frame-progress", `${(index / Math.max(1, frameCount() - 1)) * 100}%`);
   updateTicks(index);
   updateForecastDay(index);
@@ -994,7 +1058,7 @@ function sendPrefetchWindow(index: number): void {
   const total = frameCount();
   const hours: number[] = [];
   for (let step = 0; step <= prefetchWindowFrames(); step += 1) {
-    hours.push(frameHour((index + step) % total));
+    hours.push(frameOffset((index + step) % total));
   }
   const key = `${session.id}:${hours[0]}`;
   if (key === lastPrefetchWindow) return;
@@ -1007,7 +1071,7 @@ function sendPrefetchWindow(index: number): void {
 function trySelectFrame(index: number): boolean {
   const session = activeSession;
   if (!session || !layer) return false;
-  const hour = frameHour(index);
+  const hour = frameOffset(index);
   updateFrameReadout(index);
   sendPrefetchWindow(index);
   const keys = session.variables.map((variable) => cacheKey(variable.numericId, hour));
@@ -1050,7 +1114,7 @@ const PLAYBACK_DECODE_AHEAD = 3;
 function prefetchNext(index: number): void {
   if (!activeSession || !playing) return;
   for (let step = 1; step <= PLAYBACK_DECODE_AHEAD; step += 1) {
-    const hour = frameHour((index + step) % frameCount());
+    const hour = frameOffset((index + step) % frameCount());
     for (const variable of activeSession.variables) {
       const key = cacheKey(variable.numericId, hour);
       if (!planeCache.has(key)) requestDecode(variable.numericId, hour);
@@ -1077,7 +1141,7 @@ function requestDecode(variableId: number, hour: number): void {
     requestId,
     generation,
     variableId,
-    forecastHour: hour,
+    frameOffset: hour,
   });
 }
 
@@ -1085,12 +1149,12 @@ function handleDecodedFrame(message: {
   /** Absent on cache-warm-up frames the video path decodes alongside a target. */
   requestId?: number;
   variableId: number;
-  forecastHour: number;
+  frameOffset: number;
   decodeMs: number;
   buffer: ArrayBuffer;
 }): void {
   if (typeof message.requestId === "number") inflight.delete(message.requestId);
-  const key = cacheKey(message.variableId, message.forecastHour);
+  const key = cacheKey(message.variableId, message.frameOffset);
   const previous = planeCache.get(key);
   if (previous) planeCacheBytes -= previous.plane.byteLength;
   const plane = new Uint8Array(message.buffer);
@@ -1104,7 +1168,7 @@ function handleDecodedFrame(message: {
   const displayedKeys = new Set<string>();
   if (activeSession && activeFrameIndex !== null) {
     for (const variable of activeSession.variables) {
-      displayedKeys.add(cacheKey(variable.numericId, frameHour(activeFrameIndex)));
+      displayedKeys.add(cacheKey(variable.numericId, frameOffset(activeFrameIndex)));
     }
   }
   while (planeCacheBytes > planeCacheBudgetBytes() && planeCache.size > 2) {
@@ -1136,7 +1200,7 @@ function handleDecodedFrame(message: {
   }
   // Display only the newest requested target; stale decodes stay cached.
   if (desiredKey === key && activeVariable && layer) {
-    const index = frameIndexForHour(message.forecastHour);
+    const index = frameIndexForOffset(message.frameOffset);
     if (index < 0) return;
     const shown = trySelectFrame(index);
     // A stalled playhead resumes here, off the decode completion, so restart
@@ -1156,7 +1220,7 @@ function buildTicks(total: number): void {
   for (let index = 0; index < total; index += 1) {
     const tick = document.createElement("i");
     // Major tick on every day boundary, whatever the model's frame step.
-    tick.className = frameHour(index) % 24 === 0 ? "major" : "";
+    tick.className = frameLeadSeconds(index) % DAY_SECONDS === 0 ? "major" : "";
     tickMarks.append(tick);
   }
 }
@@ -1165,14 +1229,14 @@ function buildTicks(total: number): void {
  * when the model's step does not land a frame exactly on it. */
 function dayFrameIndex(day: number): number | null {
   if (!metadata) return day * 24 < FRAME_COUNT ? day * 24 : null;
-  const index = frameIndexForHour(day * 24);
+  const index = frameIndexForOffset((day * DAY_SECONDS) / frameUnitSeconds);
   return index >= 0 ? index : null;
 }
 
 /** Whole forecast days the active axis reaches (5 on a 120-hour run, 10 on
  * a 240-hour one). */
 function forecastDayCount(): number {
-  return Math.floor(frameHour(frameCount() - 1) / 24);
+  return Math.floor(frameLeadSeconds(frameCount() - 1) / DAY_SECONDS);
 }
 
 function buildForecastDays(): void {
@@ -1198,7 +1262,10 @@ function buildForecastDays(): void {
 
 function updateForecastDay(frameIndex: number): void {
   const lastDay = Math.max(0, forecastDays.children.length - 1);
-  const selectedDay = Math.min(lastDay, Math.max(0, Math.ceil(frameHour(frameIndex) / 24) - 1));
+  const selectedDay = Math.min(
+    lastDay,
+    Math.max(0, Math.ceil(frameLeadSeconds(frameIndex) / DAY_SECONDS) - 1),
+  );
   [...forecastDays.children].forEach((segment, index) => {
     const active = index === selectedDay;
     segment.classList.toggle("is-active", active);
@@ -1228,7 +1295,7 @@ function updateVariablePresentation(session: VariableSession): void {
   updateModelPresentation();
   variableCode.textContent = `${model.label} / ${ui.code}`;
   dataCardTitle.textContent = ui.bufferTitle;
-  document.title = `${ui.title.join(" ")} · ${model.label} ${frameHour(frameCount() - 1)}H`;
+  document.title = `${ui.title.join(" ")} · ${model.label} ${Math.round(frameLeadSeconds(frameCount() - 1) / HOUR_SECONDS)}H`;
   variableTitle.replaceChildren();
   ui.title.forEach((line, index) => {
     if (index > 0) variableTitle.append(document.createElement("br"));
@@ -1640,7 +1707,9 @@ async function showPoster(variableId: ForecastBundleId, sequence: number): Promi
  * playhead is remapped to the nearest frame of the same forecast hour. */
 function syncTimeline(session: VariableSession): void {
   const previous = metadata?.time ?? null;
-  const previousHours = previous ? timeAxisHours(previous) : null;
+  const previousLead = previous
+    ? frameOffsets(previous).map((offset) => offset * axisUnitSeconds(previous))
+    : null;
   metadata = session.metadata;
   const time = metadata.time;
   if (previous && sameTimeAxis(previous, time)) {
@@ -1650,14 +1719,15 @@ function syncTimeline(session: VariableSession): void {
   // the loop's real length until the viewer overrides it.
   if (!playbackFpsChosen) setPlaybackFps(defaultFpsForLoop(loopUnits()), false);
   const previousIndex = activeFrameIndex ?? Number(slider.value);
-  const hour = previousHours
-    ? (previousHours[Math.min(previousIndex, previousHours.length - 1)] ?? time.firstForecastHour)
-    : time.firstForecastHour;
-  const index = nearestFrameIndex(hour);
+  const firstLead = frameOffsets(time)[0]! * axisUnitSeconds(time);
+  const lead = previousLead
+    ? (previousLead[Math.min(previousIndex, previousLead.length - 1)] ?? firstLead)
+    : firstLead;
+  const index = nearestFrameIndex(lead);
   slider.max = String(time.frameCount - 1);
   slider.value = String(index);
   activeFrameIndex = null;
-  trackHorizon.textContent = `+${frameHour(time.frameCount - 1)}H`;
+  trackHorizon.textContent = `+${Math.round((frameOffsets(time).at(-1)! * axisUnitSeconds(time)) / HOUR_SECONDS)}H`;
   buildTicks(time.frameCount);
   buildForecastDays();
   dataCardIndex.textContent = `${time.frameCount}F`;
@@ -1812,6 +1882,9 @@ async function initialize(): Promise<void> {
       currentRun = loaded.latest.run;
     }
     manifest = loadedManifest;
+    // The dataset is settled here (a case pins its own), so the timeline can
+    // be titled for what it actually shows.
+    applyDatasetWording();
     runTime.textContent = formatDate(loadedManifest.runTime);
 
     // Each variable button appears only when the manifest actually ships its

@@ -1,9 +1,14 @@
-"""Build Xue v1 bundles from GFS GRIB2 input.
+"""Build Xue v1 bundles from gridded input.
 
 Each variable is packaged into its own single-variable ``.xue`` file so the
 frontend can download exactly the fields it needs. Extraction runs one
 ``gdalinfo`` and one multi-band ``gdal_translate`` per input file, in parallel
 across files.
+
+A forecast source arrives as one GRIB2 file per forecast hour; an observation
+source (:mod:`xue.observation`) as one NetCDF file whose bands are the time
+axis. Everything past frame discovery — crop, quantize, temporal grouping,
+container write, manifest — is the same for both.
 """
 
 from __future__ import annotations
@@ -34,23 +39,34 @@ from .gdal import (
     require_command,
     run_command,
 )
-from .manifest import build_bin_manifest, build_latest_pointer, iso_z, write_bin_manifest, write_latest_pointer
-from .model import GribFrame
+from .manifest import (
+    REQUIRED_BIN_BUNDLE_VARIABLES,
+    build_bin_manifest,
+    build_latest_pointer,
+    iso_z,
+    write_bin_manifest,
+    write_latest_pointer,
+)
+from .model import GRIB_PLANE_SOURCE, PlaneSource, SourceFrame
+from .observation import inspect_observation
 from .quantize import PROFILES, PrecipitationCodebook, TemperatureCodebook
 from .sources import SourceSpec, source_spec
+from .variables import VARIABLES, variable_spec
 from .videoconvert import build_debug_playlist, encode_variable_video
 
 LOG = logging.getLogger(__name__)
 
-VARIABLE_NUMERIC_IDS = {"tmp2m": 1, "prate": 2, "ugrd10m": 3, "vgrd10m": 4, "dswrf": 5}
-VARIABLE_LABELS = {
-    "tmp2m": "2 meter temperature",
-    "prate": "Precipitation rate",
-    "ugrd10m": "10 meter U wind component",
-    "vgrd10m": "10 meter V wind component",
-    "dswrf": "Downward shortwave radiation flux",
+METADATA_SCHEMA_VERSION = 3
+"""Bundle metadata schema this encoder writes: every variable descriptor
+carries its GRIB2 parameter identity (docs/format.md). Earlier versions
+remain readable; nothing new is written at them."""
+
+# The container's registered variableId values, straight off the variable
+# registry — an input-only variable (ECMWF tp, sflux prate_ave) has none
+# because it never reaches a bundle.
+VARIABLE_NUMERIC_IDS = {
+    variable_id: spec.numeric_id for variable_id, spec in VARIABLES.items() if spec.numeric_id is not None
 }
-VARIABLE_UNITS = {"tmp2m": "°C", "prate": "mm/h", "ugrd10m": "m/s", "vgrd10m": "m/s", "dswrf": "W/m²"}
 
 # Scalar variables ship one single-variable bundle each (with poster + video
 # artifacts); which scalars a source publishes is the source's business
@@ -158,7 +174,7 @@ class GridInfo:
 @dataclass
 class PlaneStats:
     variable_id: str
-    forecast_hour: int
+    lead_seconds: int
     max_abs_error: float
     clamped_points: int
     overflow_points: int
@@ -179,9 +195,15 @@ def bundle_input_ids(source: SourceSpec, bundle_id: str) -> tuple[str, ...]:
     return (bundle_id,)
 
 
+def series_lead_seconds(frames: dict[str, SourceFrame]) -> int:
+    """The lead time one file's frames all share, in seconds from the run."""
+    return next(iter(frames.values())).lead_seconds
+
+
 def published_bundle_ids(source: SourceSpec) -> tuple[str, ...]:
     """Every bundle a source can publish, in manifest order."""
-    return source.bundle_scalar_ids + (WIND_BUNDLE_ID,)
+    wind = all(variable_id in source.input_variable_ids for variable_id in WIND_COMPONENT_IDS)
+    return source.bundle_scalar_ids + ((WIND_BUNDLE_ID,) if wind else ())
 
 
 def _grid_info(path: Path) -> GridInfo:
@@ -298,7 +320,7 @@ def crop_grid(grid: GridInfo, bbox: tuple[float, float, float, float]) -> GridIn
     )
 
 
-def _convert_units(frame: GribFrame, values: np.ndarray) -> np.ndarray:
+def _convert_units(frame: SourceFrame, values: np.ndarray) -> np.ndarray:
     if frame.variable_id == "tmp2m":
         unit = normalize_unit(frame.unit)
         if unit == "K":
@@ -366,20 +388,27 @@ def deaverage_precipitation(
     return deaccumulate_precipitation(accumulated_mm, previous_mm, hour - interval_start)
 
 
-def _extract_plane(frame: GribFrame, grid: GridInfo, work: Path) -> np.ndarray:
+def _extract_plane(frame: SourceFrame, grid: GridInfo, work: Path) -> np.ndarray:
     """Extract one GRIB band as a float64 plane in physical units. The
     converter itself extracts whole files via :func:`_extract_planes`; this
     single-band form is kept for the bench scripts."""
     return _extract_planes({frame.variable_id: frame}, grid, work)[frame.variable_id]
 
 
-def _extract_planes(frames: dict[str, GribFrame], grid: GridInfo, work: Path) -> dict[str, np.ndarray]:
+def _extract_planes(
+    frames: dict[str, SourceFrame],
+    grid: GridInfo,
+    work: Path,
+    plane_source: PlaneSource = GRIB_PLANE_SOURCE,
+) -> dict[str, np.ndarray]:
     """Extract every requested band of one file in a single gdal_translate."""
     order = list(frames)
     source = frames[order[0]].path
-    hour = frames[order[0]].forecast_hour
+    hour = frames[order[0]].lead_seconds
     raw = work / f"planes.f{hour:03d}.{os.getpid()}.{'-'.join(order)}.bin"
     command = [require_command("gdal_translate"), "-q"]
+    if plane_source.unscale:
+        command.append("-unscale")
     for variable_id in order:
         command += ["-b", str(frames[variable_id].band)]
     command += ["-of", "ENVI", "-ot", "Float64", "-co", "INTERLEAVE=BSQ", str(source), str(raw)]
@@ -396,30 +425,30 @@ def _extract_planes(frames: dict[str, GribFrame], grid: GridInfo, work: Path) ->
             plane = np.roll(plane, grid.column_roll, axis=1)
         if grid.crop is not None:
             plane = np.ascontiguousarray(grid.crop.take(plane))
-        plane = plane.ravel()
+        plane = plane_source.apply_fill(plane.ravel())
         if not np.isfinite(plane).all():
             raise ConversionError(f"Xue v1 requires complete planes, found non-finite values in {source}")
         planes[variable_id] = _convert_units(frames[variable_id], plane)
     return planes
 
 
-def _prepare_frames(paths: list[Path], variable_id: str) -> list[GribFrame]:
-    frames = sorted((inspect_grib(path, variable_id) for path in paths), key=lambda frame: frame.forecast_hour)
+def _prepare_frames(paths: list[Path], variable_id: str) -> list[SourceFrame]:
+    frames = sorted((inspect_grib(path, variable_id) for path in paths), key=lambda frame: frame.lead_seconds)
     _check_frames(frames, variable_id)
     return frames
 
 
-def _check_frames(frames: list[GribFrame], variable_id: str) -> None:
-    hours = [frame.forecast_hour for frame in frames]
-    if len(set(hours)) != len(hours):
-        raise ConversionError(f"duplicate forecast hours for {variable_id}")
+def _check_frames(frames: list[SourceFrame], variable_id: str) -> None:
+    leads = [frame.lead_seconds for frame in frames]
+    if len(set(leads)) != len(leads):
+        raise ConversionError(f"duplicate lead times for {variable_id}")
     if len({frame.run_time for frame in frames}) != 1:
         raise ConversionError(f"input files contain multiple GFS run times for {variable_id}")
 
 
 def _check_reference_frames(
-    fast_frames: dict[str, GribFrame],
-    reference_frames: dict[str, GribFrame],
+    fast_frames: dict[str, SourceFrame],
+    reference_frames: dict[str, SourceFrame],
     variable_ids: tuple[str, ...],
 ) -> None:
     """Raise if the GRIB2 header index disagrees with gdalinfo on the
@@ -439,7 +468,7 @@ def _check_reference_frames(
             fast.band != reference.band
             or fast.run_time != reference.run_time
             or fast.valid_time != reference.valid_time
-            or fast.forecast_hour != reference.forecast_hour
+            or fast.lead_seconds != reference.lead_seconds
             or raster_expression(variable_id, fast.unit) != raster_expression(variable_id, reference.unit)
         ):
             raise ConversionError(
@@ -452,8 +481,8 @@ def _prepare_frames_all(
     paths: list[Path],
     variable_ids: tuple[str, ...],
     optional_at_analysis: tuple[str, ...] = (),
-    reference_frames: dict[str, GribFrame] | None = None,
-) -> list[dict[str, GribFrame]]:
+    reference_frames: dict[str, SourceFrame] | None = None,
+) -> list[dict[str, SourceFrame]]:
     """Inspect every file once for all variables, in parallel across files.
 
     Variables in ``optional_at_analysis`` may be absent from the f000 file
@@ -479,17 +508,19 @@ def _prepare_frames_all(
                 )
             )
     for frames in per_file:
-        hours = {frame.forecast_hour for frame in frames.values()}
-        if len(hours) != 1:
-            raise ConversionError(f"variables disagree on the forecast hour in {frames[variable_ids[0]].path}")
-    per_file.sort(key=lambda frames: frames[variable_ids[0]].forecast_hour)
+        leads = {frame.lead_seconds for frame in frames.values()}
+        if len(leads) != 1:
+            raise ConversionError(f"variables disagree on the lead time in {frames[variable_ids[0]].path}")
+    per_file.sort(key=lambda frames: frames[variable_ids[0]].lead_seconds)
     for variable_id in variable_ids:
         for frames in per_file:
             if variable_id in frames:
                 continue
-            hour = frames[variable_ids[0]].forecast_hour
-            if variable_id not in optional_at_analysis or hour != 0:
-                raise ConversionError(f"missing {variable_id} record at forecast hour {hour}")
+            lead = frames[variable_ids[0]].lead_seconds
+            if variable_id not in optional_at_analysis or lead != 0:
+                raise ConversionError(
+                    f"missing {variable_id} record at forecast hour {lead // binformat.HOUR_SECONDS}"
+                )
         _check_frames([frames[variable_id] for frames in per_file if variable_id in frames], variable_id)
     return per_file
 
@@ -506,8 +537,8 @@ def _linear_stats(values: np.ndarray, codes: np.ndarray, codebook: TemperatureCo
 def _entry(
     variable_id: str,
     predictor: int,
-    forecast_hour: int,
-    dependency_hour: int,
+    frame_offset: int,
+    dependency_offset: int,
     group_id: int,
     plane: np.ndarray,
     payload_length: int,
@@ -517,8 +548,8 @@ def _entry(
         predictor=predictor,
         compression=binformat.COMPRESSION_ZSTD,
         flags=binformat.FLAG_ZSTD_CHECKSUM,
-        forecast_hour=forecast_hour,
-        dependency_hour=dependency_hour,
+        frame_offset=frame_offset,
+        dependency_offset=dependency_offset,
         group_id=group_id,
         compressed_length=payload_length,
         data_offset=0,
@@ -529,48 +560,82 @@ def _entry(
     )
 
 
-def _time_metadata(hours: list[int]) -> tuple[int, dict[str, Any]]:
-    """The metadata ``time`` block and the schema version it requires: the
-    lowest able to express the axis (docs/format.md) — a uniform axis is
-    always schemaVersion 1 with ``stepHours``, a mixed-step axis is
-    schemaVersion 2 with its forecast hours listed outright."""
-    steps = sorted({after - before for before, after in zip(hours, hours[1:])})
+def axis_unit_seconds(lead_seconds: Sequence[int]) -> int:
+    """The coarsest unit that expresses every frame's lead time exactly.
+
+    An hour for every forecast source, and whatever the file carries for an
+    observation series — six minutes for the radar mosaic. Capping at an hour
+    keeps a whole-hour axis indexed by its forecast hours, exactly as before
+    (docs/format.md)."""
+    return math.gcd(binformat.HOUR_SECONDS, *lead_seconds)
+
+
+def lead_hours(offset: int, unit_seconds: int) -> int:
+    """``offset`` as a whole number of hours, rounded up — how far a run
+    reaches, for the manifest's coarse ``forecastHours``."""
+    return -(-offset * unit_seconds // binformat.HOUR_SECONDS)
+
+
+def _time_metadata(offsets: list[int], unit_seconds: int) -> dict[str, Any]:
+    """The metadata ``time`` block: offsets on a declared unit, uniform ones
+    declaring a ``frameStep`` and the rest listing their offsets outright
+    (docs/format.md). A forecast run lists them because its source changes
+    cadence partway; an observation series lists them wherever a publication
+    was missed."""
+    steps = {after - before for before, after in zip(offsets, offsets[1:])}
+    block: dict[str, Any] = {
+        "unitSeconds": unit_seconds,
+        "firstFrameOffset": offsets[0],
+        "frameCount": len(offsets),
+    }
     if len(steps) <= 1:
-        step = steps[0] if steps else 1
-        return 1, {"firstForecastHour": hours[0], "stepHours": step, "frameCount": len(hours)}
-    return 2, {"firstForecastHour": hours[0], "frameCount": len(hours), "hours": list(hours)}
+        block["frameStep"] = steps.pop() if steps else 1
+    else:
+        block["frameOffsets"] = list(offsets)
+    return block
+
+
+def _variable_metadata(variable_id: str, source: SourceSpec, profile: str) -> dict[str, Any]:
+    """One schema v3 variable descriptor: what the field is (GRIB2 parameter
+    and fixed surface), what its values mean, and how they are quantized."""
+    spec = variable_spec(variable_id)
+    parameter = spec.parameter_metadata()
+    if variable_id == "prate" and (source.accumulated_precipitation or source.averaged_precipitation):
+        # The published rate is the mean over the step, derived from the
+        # source's run-total accumulation (ECMWF) or window average (sflux) —
+        # a statistic over the interval, not the instantaneous field GFS
+        # pgrb2 carries under the same parameter.
+        parameter["typeOfStatisticalProcessing"] = 0
+    return {
+        "numericId": spec.numeric_id,
+        "id": variable_id,
+        "label": spec.label,
+        "unit": spec.output_unit,
+        "parameter": parameter,
+        "quantization": PROFILES[profile][variable_id].metadata(),
+    }
 
 
 def build_metadata(
     run_time: datetime,
-    hours: list[int],
+    offsets: list[int],
     grid: GridInfo,
     profile: str,
     variable_ids: tuple[str, ...] = ("tmp2m", "prate"),
     *,
-    model: str = "GFS",
-    product: str = "pgrb2.0p25",
+    source: SourceSpec | None = None,
+    unit_seconds: int = binformat.HOUR_SECONDS,
 ) -> dict[str, Any]:
-    codebooks = PROFILES[profile]
-    schema_version, time_block = _time_metadata(hours)
+    resolved = source or source_spec("gfs")
     return {
-        "schemaVersion": schema_version,
-        "model": model,
-        "product": product,
+        "schemaVersion": METADATA_SCHEMA_VERSION,
+        "model": resolved.manifest_model,
+        "product": resolved.product,
         "runTime": iso_z(run_time),
         "profile": profile,
-        "time": time_block,
+        "time": _time_metadata(offsets, unit_seconds),
         "grid": grid.metadata(),
-        "variables": [
-            {
-                "numericId": VARIABLE_NUMERIC_IDS[variable_id],
-                "id": variable_id,
-                "label": VARIABLE_LABELS[variable_id],
-                "unit": VARIABLE_UNITS[variable_id],
-                "quantization": codebooks[variable_id].metadata(),
-            }
-            for variable_id in variable_ids
-        ],
+        "variables": [_variable_metadata(variable_id, resolved, profile) for variable_id in variable_ids],
     }
 
 
@@ -597,13 +662,14 @@ def decode_poster(payload: bytes, width: int, height: int) -> np.ndarray:
 
 
 def _quantize_file(
-    frames: dict[str, GribFrame],
+    frames: dict[str, SourceFrame],
     grid: GridInfo,
     work: Path,
     codebooks: dict[str, TemperatureCodebook | PrecipitationCodebook],
     previous_precipitation: tuple[int, Future] | None = None,
     average_window_hours: int = 6,
     own_precipitation: Future | None = None,
+    plane_source: PlaneSource = GRIB_PLANE_SOURCE,
 ) -> tuple[int, dict[str, np.ndarray], list[PlaneStats]]:
     """Extract and quantize every variable of one file; runs on a worker thread.
 
@@ -615,9 +681,12 @@ def _quantize_file(
     The pool runs files in submission (hour) order, so the awaited predecessor
     is always already running or done. Shared planes are never mutated.
     """
-    hour = next(iter(frames.values())).forecast_hour
+    lead = next(iter(frames.values())).lead_seconds
+    # The precipitation derivations below are GRIB-only, and every GRIB record
+    # is a whole hour out, so they can work in hours.
+    hour = lead // binformat.HOUR_SECONDS
     try:
-        values = _extract_planes(frames, grid, work)
+        values = _extract_planes(frames, grid, work, plane_source)
     except BaseException as exc:
         # Unblock the successor waiting on this worker's plane.
         if own_precipitation is not None:
@@ -661,63 +730,63 @@ def _quantize_file(
             overflow = int(np.count_nonzero(plane_codes == codebook.overflow_code))
             stats.append(PlaneStats(variable_id, hour, 0.0, 0, overflow))
         codes[variable_id] = plane_codes
-    return hour, codes, stats
+    return lead, codes, stats
 
 
 def _variable_payloads(
     variable_id: str,
-    hours: list[int],
-    planes_by_hour: dict[int, np.ndarray],
+    offsets: list[int],
+    planes_by_offset: dict[int, np.ndarray],
 ) -> list[tuple[binformat.PlaneEntry, bytes]]:
     """Uncompressed plane payloads for one variable at one resolution.
 
     Linear-codebook fields (temperature and the wind components) use six-frame
-    groups with a middle RAW anchor and ANCHOR residuals; precipitation stays
-    independent RAW planes with groupId mirroring forecastHour. The same
-    scheme applies to every resolution tier, so full
+    groups with a middle RAW anchor and ANCHOR residuals; precipitation and
+    radar reflectivity stay independent RAW planes with groupId mirroring the
+    frame offset. The same scheme applies to every resolution tier, so full
     and half bundles stay structurally alike.
     """
     payloads: list[tuple[binformat.PlaneEntry, bytes]] = []
     if variable_id in GROUPED_VARIABLE_IDS:
-        for group_id, group in enumerate(temporal.group_forecast_hours(hours)):
+        for group_id, group in enumerate(temporal.group_forecast_hours(offsets)):
             anchor = temporal.anchor_hour(group)
-            anchor_plane = planes_by_hour[anchor]
-            for hour in [anchor, *[hour for hour in group if hour != anchor]]:
-                plane = planes_by_hour[hour]
-                if hour == anchor:
+            anchor_plane = planes_by_offset[anchor]
+            for offset in [anchor, *[offset for offset in group if offset != anchor]]:
+                plane = planes_by_offset[offset]
+                if offset == anchor:
                     payloads.append(
-                        (_entry(variable_id, binformat.PREDICTOR_RAW, hour, binformat.NO_DEPENDENCY, group_id, plane, 0), plane.tobytes())
+                        (_entry(variable_id, binformat.PREDICTOR_RAW, offset, binformat.NO_DEPENDENCY, group_id, plane, 0), plane.tobytes())
                     )
                 else:
                     residual = temporal.encode_residual(plane, anchor_plane)
                     payloads.append(
-                        (_entry(variable_id, binformat.PREDICTOR_ANCHOR, hour, anchor, group_id, plane, 0), residual.tobytes())
+                        (_entry(variable_id, binformat.PREDICTOR_ANCHOR, offset, anchor, group_id, plane, 0), residual.tobytes())
                     )
     else:
-        for hour in hours:
-            plane = planes_by_hour[hour]
+        for offset in offsets:
+            plane = planes_by_offset[offset]
             payloads.append(
-                (_entry(variable_id, binformat.PREDICTOR_RAW, hour, binformat.NO_DEPENDENCY, hour, plane, 0), plane.tobytes())
+                (_entry(variable_id, binformat.PREDICTOR_RAW, offset, binformat.NO_DEPENDENCY, offset, plane, 0), plane.tobytes())
             )
     return payloads
 
 
 def _wind_bundle_payloads(
-    hours: list[int],
-    planes_by_hour: dict[int, dict[str, np.ndarray]],
+    offsets: list[int],
+    planes_by_offset: dict[int, dict[str, np.ndarray]],
 ) -> list[tuple[binformat.PlaneEntry, bytes]]:
     """Payloads of the two-variable wind bundle, physically interleaved per
     temporal group (u group, then the same v group) so streaming a wind frame
     touches two adjacent byte spans."""
     per_component = {
         variable_id: _variable_payloads(
-            variable_id, hours, {hour: planes_by_hour[hour][variable_id] for hour in hours}
+            variable_id, offsets, {offset: planes_by_offset[offset][variable_id] for offset in offsets}
         )
         for variable_id in WIND_COMPONENT_IDS
     }
     payloads: list[tuple[binformat.PlaneEntry, bytes]] = []
     cursor = 0
-    for group in temporal.group_forecast_hours(hours):
+    for group in temporal.group_forecast_hours(offsets):
         for variable_id in WIND_COMPONENT_IDS:
             payloads.extend(per_component[variable_id][cursor : cursor + len(group)])
         cursor += len(group)
@@ -842,6 +911,7 @@ def convert_bin(
     model: str = "gfs",
     bbox: tuple[float, float, float, float] | None = None,
     bundle_ids: tuple[str, ...] | None = None,
+    last_hour: int | None = None,
 ) -> dict[str, Any]:
     """Convert a GRIB run into per-variable Xue bundles.
 
@@ -859,6 +929,8 @@ def convert_bin(
     knobs the historical showcase cases use to ship a small slice of a past
     run. A restricted build's manifest carries only the bundles it was asked
     for, so it is not required to hold the core tmp2m and prate pair.
+    ``last_hour`` trims an observation source's series to a leading window;
+    a forecast run is already exactly the frames that were fetched.
     """
     if profile not in PROFILES:
         raise ConversionError(f"unknown profile: {profile}")
@@ -870,76 +942,119 @@ def convert_bin(
                 f"{source.manifest_model} publishes {list(published_bundle_ids(source))}, not {list(bundle_ids)}"
             )
     zstd_version = zstdcli.zstd_version()
-    paths = discover_inputs(input_path)
     codebooks = PROFILES[profile]
 
-    # One real gdalinfo pass over the first file: it probes wind availability
-    # (wind is optional so runs fetched before the wind components joined the
-    # download set, and the cropped test fixtures, still build cleanly) and
-    # serves as the per-run cross-check reference for the GRIB2 header index
-    # used on every file.
-    # A restricted build inspects only the inputs it asked for: a case that
-    # ships temperature alone must not fail on a file that carries no
-    # precipitation record, because it never downloaded one.
-    inspect_ids = source.input_variable_ids
-    if bundle_ids is not None:
-        needed = {input_id for bundle_id in bundle_ids for input_id in bundle_input_ids(source, bundle_id)}
-        inspect_ids = tuple(variable_id for variable_id in inspect_ids if variable_id in needed)
-    reference_frames = inspect_grib_multi(
-        paths[0],
-        inspect_ids,
-        optional_ids=source.optional_at_analysis + WIND_COMPONENT_IDS,
-    )
-    wind_requested = bundle_ids is None or WIND_BUNDLE_ID in bundle_ids
-    wind_available = wind_requested and all(variable_id in reference_frames for variable_id in WIND_COMPONENT_IDS)
-    if wind_requested and not wind_available:
-        LOG.warning("building without the wind10m bundle, 10 m wind components are not in %s", paths[0])
+    if source.observation:
+        # An observation source is one local file holding the whole series,
+        # one band per time (xue/observation.py). There are no records to
+        # match, no wind pair, and no published cadence to validate the axis
+        # against — the file's own times are the axis, gaps included.
+        if not isinstance(input_path, Path):
+            raise ConversionError(f"a {source.manifest_model} build takes exactly one NetCDF file")
+        if require_complete:
+            raise ConversionError(f"{source.manifest_model} has no complete run to require")
+        series = inspect_observation(input_path, source)
+        # ``last_hour`` trims the series to a leading window of the file, and
+        # the frame it stops on must exist — a case's declared range is never
+        # silently shortened.
+        per_file = series.frames
+        if last_hour is not None:
+            cutoff = last_hour * binformat.HOUR_SECONDS
+            per_file = [frames for frames in per_file if series_lead_seconds(frames) <= cutoff]
+            if not per_file or series_lead_seconds(per_file[-1]) != cutoff:
+                raise ConversionError(
+                    f"{input_path} has no frame exactly at hour {last_hour}; its series ends at "
+                    f"hour {series_lead_seconds(series.frames[-1]) / binformat.HOUR_SECONDS:g}"
+                )
+        variable_ids = source.input_variable_ids
+        wind_available = False
+        grid_path = series.dataset
+        plane_source = series.plane_source
+    else:
+        paths = discover_inputs(input_path)
+        # One real gdalinfo pass over the first file: it probes wind availability
+        # (wind is optional so runs fetched before the wind components joined the
+        # download set, and the cropped test fixtures, still build cleanly) and
+        # serves as the per-run cross-check reference for the GRIB2 header index
+        # used on every file.
+        # A restricted build inspects only the inputs it asked for: a case that
+        # ships temperature alone must not fail on a file that carries no
+        # precipitation record, because it never downloaded one.
+        inspect_ids = source.input_variable_ids
+        if bundle_ids is not None:
+            needed = {input_id for bundle_id in bundle_ids for input_id in bundle_input_ids(source, bundle_id)}
+            inspect_ids = tuple(variable_id for variable_id in inspect_ids if variable_id in needed)
+        reference_frames = inspect_grib_multi(
+            paths[0],
+            inspect_ids,
+            optional_ids=source.optional_at_analysis + WIND_COMPONENT_IDS,
+        )
+        wind_requested = bundle_ids is None or WIND_BUNDLE_ID in bundle_ids
+        wind_available = wind_requested and all(
+            variable_id in reference_frames for variable_id in WIND_COMPONENT_IDS
+        )
+        if wind_requested and not wind_available:
+            LOG.warning("building without the wind10m bundle, 10 m wind components are not in %s", paths[0])
 
-    # The variables read from the GRIB inputs; ECMWF carries the accumulated
-    # tp instead of a rate and sflux the window-averaged prate_ave, which
-    # _quantize_file de-accumulates / de-averages into prate.
-    input_scalar_ids = tuple(
-        variable_id for variable_id in inspect_ids if variable_id not in WIND_COMPONENT_IDS
-    )
-    # The first variable is the run's reference: every file is keyed by its
-    # forecast hour, so it must be one no file can lack. Stable-sorting the
-    # analysis-optional inputs (sflux prate_ave) to the back is enough unless
-    # nothing else was asked for.
-    variable_ids = tuple(
-        sorted(
-            input_scalar_ids + (WIND_COMPONENT_IDS if wind_available else ()),
-            key=lambda variable_id: variable_id in source.optional_at_analysis,
+        # The variables read from the GRIB inputs; ECMWF carries the accumulated
+        # tp instead of a rate and sflux the window-averaged prate_ave, which
+        # _quantize_file de-accumulates / de-averages into prate.
+        input_scalar_ids = tuple(
+            variable_id for variable_id in inspect_ids if variable_id not in WIND_COMPONENT_IDS
         )
-    )
-    if not variable_ids or variable_ids[0] in source.optional_at_analysis:
+        # The first variable is the run's reference: every file is keyed by its
+        # forecast hour, so it must be one no file can lack. Stable-sorting the
+        # analysis-optional inputs (sflux prate_ave) to the back is enough unless
+        # nothing else was asked for.
+        variable_ids = tuple(
+            sorted(
+                input_scalar_ids + (WIND_COMPONENT_IDS if wind_available else ()),
+                key=lambda variable_id: variable_id in source.optional_at_analysis,
+            )
+        )
+        if not variable_ids or variable_ids[0] in source.optional_at_analysis:
+            raise ConversionError(
+                f"a {source.manifest_model} build needs at least one variable present in every file, "
+                f"including the analysis; {list(variable_ids)} is not enough"
+            )
+        per_file = _prepare_frames_all(paths, variable_ids, source.optional_at_analysis, reference_frames)
+        grid_path = paths[0]
+        plane_source = GRIB_PLANE_SOURCE
+
+    # The bundle's time axis: the coarsest unit that expresses every frame
+    # exactly, and each frame's offset in it. An hour for every forecast
+    # source, so their offsets are their forecast hours as before.
+    lead_seconds = [frames[variable_ids[0]].lead_seconds for frames in per_file]
+    unit_seconds = axis_unit_seconds(lead_seconds)
+    offsets = [seconds // unit_seconds for seconds in lead_seconds]
+    if offsets[-1] >= binformat.NO_DEPENDENCY:
         raise ConversionError(
-            f"a {source.manifest_model} build needs at least one variable present in every file, "
-            f"including the analysis; {list(variable_ids)} is not enough"
+            f"the axis needs {offsets[-1]} steps of {unit_seconds} s, past the u16 frame offset range"
         )
-    per_file = _prepare_frames_all(paths, variable_ids, source.optional_at_analysis, reference_frames)
-    hours = [frames[variable_ids[0]].forecast_hour for frames in per_file]
-    # The input hours must be a contiguous run of the source's published
-    # axis (hourly to f120, three-hourly beyond, on GFS), so no frame is
-    # missing and every step matches the cadence the source publishes.
-    try:
-        axis = source.forecast_hours(hours[-1])
-    except DownloadError as exc:
-        raise ConversionError(str(exc)) from exc
-    if hours != [hour for hour in axis if hour >= hours[0]]:
-        raise ConversionError(f"forecast hours must be a contiguous run of the {source.manifest_model} axis")
-    if require_complete:
+    if not source.observation:
+        # The input hours must be a contiguous run of the source's published
+        # axis (hourly to f120, three-hourly beyond, on GFS), so no frame is
+        # missing and every step matches the cadence the source publishes.
+        hours = offsets
         try:
-            expected_axis = source.forecast_hours(expected_hours)
+            axis = source.forecast_hours(hours[-1])
         except DownloadError as exc:
             raise ConversionError(str(exc)) from exc
-        if hours != expected_axis:
-            raise ConversionError(
-                f"complete build requires forecast hours 0 through {expected_hours} on the "
-                f"{source.manifest_model} axis"
-            )
+        if hours != [hour for hour in axis if hour >= hours[0]]:
+            raise ConversionError(f"forecast hours must be a contiguous run of the {source.manifest_model} axis")
+        if require_complete:
+            try:
+                expected_axis = source.forecast_hours(expected_hours)
+            except DownloadError as exc:
+                raise ConversionError(str(exc)) from exc
+            if hours != expected_axis:
+                raise ConversionError(
+                    f"complete build requires forecast hours 0 through {expected_hours} on the "
+                    f"{source.manifest_model} axis"
+                )
     run_time = per_file[0][variable_ids[0]].run_time.astimezone(UTC)
 
-    grid = _grid_info(paths[0])
+    grid = _grid_info(grid_path)
     if require_complete and (grid.width, grid.height) != source.production_grid:
         raise ConversionError(
             f"production build requires a {source.production_grid[0]}x{source.production_grid[1]} grid"
@@ -956,7 +1071,7 @@ def convert_bin(
         )
 
     stats: list[PlaneStats] = []
-    codes_by_hour: dict[int, dict[str, np.ndarray]] = {}
+    codes_by_offset: dict[int, dict[str, np.ndarray]] = {}
 
     work_parent = work_root or output_dir
     work_parent.mkdir(parents=True, exist_ok=True)
@@ -980,14 +1095,19 @@ def convert_bin(
                 frame = frames.get(raw_precipitation_id) if raw_precipitation_id else None
                 previous: tuple[int, Future] | None = None
                 if previous_future is not None and frame is not None:
-                    previous = (per_file[index - 1][raw_precipitation_id].forecast_hour, previous_future)
+                    previous = (
+                        per_file[index - 1][raw_precipitation_id].lead_seconds // binformat.HOUR_SECONDS,
+                        previous_future,
+                    )
                 own: Future | None = None
                 if frame is not None and index + 1 < len(per_file):
                     successor = per_file[index + 1].get(raw_precipitation_id)
                     if successor is not None and (
                         raw_precipitation_id == "tp"
-                        or average_window_start(successor.forecast_hour, source.average_window_hours)
-                        < frame.forecast_hour
+                        or average_window_start(
+                            successor.lead_seconds // binformat.HOUR_SECONDS, source.average_window_hours
+                        )
+                        < frame.lead_seconds // binformat.HOUR_SECONDS
                     ):
                         own = Future()
                 previous_future = own
@@ -996,14 +1116,14 @@ def convert_bin(
         with ThreadPoolExecutor(max_workers=_EXTRACT_WORKERS) as executor:
             results = executor.map(
                 lambda item: _quantize_file(
-                    item[0], grid, work, codebooks, item[1], source.average_window_hours, item[2]
+                    item[0], grid, work, codebooks, item[1], source.average_window_hours, item[2], plane_source
                 ),
                 sharing_plan(),
             )
-            for hour, codes, file_stats in results:
-                codes_by_hour[hour] = codes
+            for lead, codes, file_stats in results:
+                codes_by_offset[lead // unit_seconds] = codes
                 stats.extend(file_stats)
-    LOG.info("quantized %d planes", sum(len(codes) for codes in codes_by_hour.values()))
+    LOG.info("quantized %d planes", sum(len(codes) for codes in codes_by_offset.values()))
 
     # The encoded (bundle) variables — the raw tp / prate_ave inputs have
     # already been derived into prate by this point.
@@ -1020,13 +1140,13 @@ def convert_bin(
     # series starts at the first real step and every prate artifact (bundle,
     # variant, poster, video) carries its own shorter axis. All other
     # variables keep the full run axis.
-    variable_hours: dict[str, list[int]] = {variable_id: hours for variable_id in encoded_variable_ids}
+    variable_offsets: dict[str, list[int]] = {variable_id: offsets for variable_id in encoded_variable_ids}
     if (
         "prate" in encoded_variable_ids
         and (source.accumulated_precipitation or source.averaged_precipitation)
-        and len(hours) > 1
+        and len(offsets) > 1
     ):
-        variable_hours["prate"] = hours[1:]
+        variable_offsets["prate"] = offsets[1:]
 
     # Optional per-variable WebCodecs video artifacts.
     # Best-effort: a missing ffmpeg or an encode failure just skips that
@@ -1036,7 +1156,7 @@ def convert_bin(
         for variable_id in scalar_variable_ids:
             try:
                 video_artifact = encode_variable_video(
-                    codes_by_hour, variable_hours[variable_id], variable_id, width=grid.width, height=grid.height
+                    codes_by_offset, variable_offsets[variable_id], variable_id, width=grid.width, height=grid.height
                 )
             except ConversionError as exc:
                 LOG.warning("skipping %s video artifact: %s", variable_id, exc)
@@ -1054,7 +1174,7 @@ def convert_bin(
             # Same shape as the metadata embedded in the .xue, scoped to this
             # variable: the frontend needs grid/time/quantization to configure
             # the WebGL layer and palette regardless of which decode path it uses.
-            video_metadata = build_metadata(run_time, variable_hours[variable_id], grid, profile, (variable_id,), model=source.manifest_model, product=source.product)
+            video_metadata = build_metadata(run_time, variable_offsets[variable_id], grid, profile, (variable_id,), source=source, unit_seconds=unit_seconds)
             video_reports[variable_id] = {
                 "variable": variable_id,
                 "streamPath": str(stream_path),
@@ -1076,7 +1196,7 @@ def convert_bin(
     output_dir.mkdir(parents=True, exist_ok=True)
     poster_reports: dict[str, dict[str, Any]] = {}
     for variable_id in scalar_variable_ids:
-        payload, poster_grid = encode_poster(codes_by_hour[variable_hours[variable_id][0]][variable_id], grid)
+        payload, poster_grid = encode_poster(codes_by_offset[variable_offsets[variable_id][0]][variable_id], grid)
         poster_path = output_dir / f"{variable_id}.poster.bin"
         poster_path.write_bytes(payload)
         poster_reports[variable_id] = {
@@ -1085,7 +1205,7 @@ def convert_bin(
             "height": poster_grid.height,
             "byteLength": len(payload),
             "crc32": f"{zlib.crc32(payload) & 0xFFFFFFFF:08x}",
-            "metadataJson": json.dumps(build_metadata(run_time, variable_hours[variable_id], poster_grid, profile, (variable_id,), model=source.manifest_model, product=source.product)),
+            "metadataJson": json.dumps(build_metadata(run_time, variable_offsets[variable_id], poster_grid, profile, (variable_id,), source=source, unit_seconds=unit_seconds)),
         }
         LOG.info("wrote %s (%.1f KB)", poster_path, len(payload) / 1e3)
 
@@ -1103,12 +1223,12 @@ def convert_bin(
     half_grid = grid.decimated()
     # Iterate the codes actually present per hour: derived prate has no
     # analysis-frame plane on ECMWF/sflux.
-    half_codes_by_hour = {
-        hour: {
+    half_codes_by_offset = {
+        offset: {
             variable_id: _decimate_codes(codes, grid)
-            for variable_id, codes in codes_by_hour[hour].items()
+            for variable_id, codes in codes_by_offset[offset].items()
         }
-        for hour in hours
+        for offset in offsets
     } if not skip_variants else {}
 
     with ThreadPoolExecutor(max_workers=os.cpu_count() or 4) as compressor, ThreadPoolExecutor(
@@ -1122,23 +1242,23 @@ def convert_bin(
             codes: dict[int, dict[str, np.ndarray]],
         ) -> Future:
             wind = bundle_id == WIND_BUNDLE_ID
-            bundle_hours = hours if wind else variable_hours[bundle_id]
+            bundle_offsets = offsets if wind else variable_offsets[bundle_id]
             metadata = build_metadata(
                 run_time,
-                bundle_hours,
+                bundle_offsets,
                 bundle_grid,
                 profile,
                 WIND_COMPONENT_IDS if wind else (bundle_id,),
-                model=source.manifest_model,
-                product=source.product,
+                source=source,
+                unit_seconds=unit_seconds,
             )
 
             def job() -> dict[str, Any]:
                 if wind:
-                    payloads = _wind_bundle_payloads(bundle_hours, codes)
+                    payloads = _wind_bundle_payloads(bundle_offsets, codes)
                 else:
                     payloads = _variable_payloads(
-                        bundle_id, bundle_hours, {hour: codes[hour][bundle_id] for hour in bundle_hours}
+                        bundle_id, bundle_offsets, {hour: codes[hour][bundle_id] for hour in bundle_offsets}
                     )
                 report = _write_variable_bundle(
                     bundle_id, output_dir / f"{bundle_id}{suffix}.xue", metadata, payloads, zstd_level, compressor
@@ -1146,7 +1266,7 @@ def convert_bin(
                 if suffix:
                     report["width"] = bundle_grid.width
                     report["height"] = bundle_grid.height
-                    report["bandwidth"] = _playback_bandwidth(report["byteLength"], len(bundle_hours))
+                    report["bandwidth"] = _playback_bandwidth(report["byteLength"], len(bundle_offsets))
                 return report
 
             return writers.submit(job)
@@ -1155,9 +1275,9 @@ def convert_bin(
         # once; reports keep the scalars-then-wind order regardless.
         submit_order = ((WIND_BUNDLE_ID,) if wind_available else ()) + scalar_variable_ids
         report_order = scalar_variable_ids + ((WIND_BUNDLE_ID,) if wind_available else ())
-        full_futures = {bundle_id: submit_bundle(bundle_id, "", grid, codes_by_hour) for bundle_id in submit_order}
+        full_futures = {bundle_id: submit_bundle(bundle_id, "", grid, codes_by_offset) for bundle_id in submit_order}
         half_futures = (
-            {bundle_id: submit_bundle(bundle_id, ".half", half_grid, half_codes_by_hour) for bundle_id in submit_order}
+            {bundle_id: submit_bundle(bundle_id, ".half", half_grid, half_codes_by_offset) for bundle_id in submit_order}
             if not skip_variants
             else {}
         )
@@ -1200,6 +1320,13 @@ def convert_bin(
             raise ConversionError(f"{variable_id} quantization error exceeds half a step")
 
     if manifest_path is not None:
+        # The core tmp2m/prate pair is what a complete forecast run must
+        # publish. A restricted build ships only the bundles it was asked
+        # for, and a source that publishes neither (the radar archive) can
+        # never satisfy the rule at all.
+        require_core = bundle_ids is None and all(
+            variable_id in published_bundle_ids(source) for variable_id in REQUIRED_BIN_BUNDLE_VARIABLES
+        )
         payload = build_bin_manifest(
             run_time,
             bundles=[
@@ -1212,17 +1339,17 @@ def convert_bin(
                 )
                 for bundle in bundle_reports
             ],
-            expected_hours=hours[-1] if len(hours) > 1 else expected_hours,
+            expected_hours=lead_hours(offsets[-1], unit_seconds) if len(offsets) > 1 else expected_hours,
             model=source.manifest_model,
             product=source.product,
-            require_core_variables=bundle_ids is None,
+            require_core_variables=require_core,
         )
         write_bin_manifest(
             manifest_path,
             payload,
             force=force,
-            expected_hours=hours[-1] if len(hours) > 1 else expected_hours,
-            require_core_variables=bundle_ids is None,
+            expected_hours=lead_hours(offsets[-1], unit_seconds) if len(offsets) > 1 else expected_hours,
+            require_core_variables=require_core,
         )
         LOG.info("wrote manifest %s", manifest_path)
         if latest_path is not None and run_id is not None:

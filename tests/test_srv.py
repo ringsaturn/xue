@@ -302,7 +302,7 @@ class WindBundleTests(unittest.TestCase):
         # Each component covers every hour exactly once, with the same
         # anchor+residual structure as the temperature groups.
         for numeric_id, component in ((3, "ugrd10m"), (4, "vgrd10m")):
-            hours = sorted(entry.forecast_hour for entry, _payload in payloads if entry.variable_id == numeric_id)
+            hours = sorted(entry.frame_offset for entry, _payload in payloads if entry.variable_id == numeric_id)
             self.assertEqual(hours, self.HOURS)
         reference = [entry.predictor for entry, _payload in _variable_payloads("tmp2m", self.HOURS, {
             hour: planes["ugrd10m"] for hour, planes in self._planes().items()

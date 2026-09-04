@@ -25,6 +25,14 @@ pub const NO_DEPENDENCY: u16 = 0xFFFF;
 pub const FLAG_ZSTD_CHECKSUM: u8 = 0x01;
 /// Safety limit for one decoded plane: 64M points.
 pub const MAX_PLANE_LENGTH: u64 = 64 * 1024 * 1024;
+/// The coarsest time-axis unit, and the only one schema versions 1 and 2 can
+/// describe. A schemaVersion 3 axis names its own unit, which must divide it.
+pub const HOUR_SECONDS: u32 = 3600;
+
+/// The schemaVersion 3 time block. Versions 1 and 2 use firstForecastHour
+/// with stepHours or hours instead; mixing the two shapes is invalid.
+const V3_TIME_FIELDS: [&str; 4] =
+    ["unitSeconds", "firstFrameOffset", "frameStep", "frameOffsets"];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DecodeError(pub String);
@@ -85,8 +93,8 @@ pub struct PlaneEntry {
     pub predictor: Predictor,
     pub compression: Compression,
     pub flags: u8,
-    pub forecast_hour: u16,
-    pub dependency_hour: u16,
+    pub frame_offset: u16,
+    pub dependency_offset: u16,
     pub group_id: u16,
     pub compressed_length: u32,
     pub data_offset: u64,
@@ -99,7 +107,7 @@ pub struct PlaneEntry {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct FrameRequest {
     pub variable_id: u8,
-    pub forecast_hour: u16,
+    pub frame_offset: u16,
 }
 
 fn read_u16(data: &[u8], offset: usize) -> u16 {
@@ -145,23 +153,40 @@ struct Metadata {
     json: String,
     plane_length: u32,
     frame_count: u32,
-    /// The materialized forecast-hour axis, ascending. Uniform axes
-    /// (schemaVersion 1, `stepHours`) are expanded; mixed-step axes
-    /// (schemaVersion 2, `hours`) are taken as listed.
-    hours: Vec<u16>,
+    /// Seconds per axis unit: an hour for every forecast source, finer for a
+    /// sub-hourly observation series.
+    unit_seconds: u32,
+    /// The materialized frame-offset axis, ascending. Uniform axes are
+    /// expanded from their step; axes that list their offsets outright are
+    /// taken as listed.
+    offsets: Vec<u16>,
     variable_ids: Vec<u8>,
 }
 
-/// The frame list from the metadata `time` block. Exactly one of `stepHours`
-/// (uniform, schemaVersion 1) and `hours` (mixed-step, schemaVersion 2) must
-/// be present, and the declared schema version must be the lowest able to
-/// express the axis — every axis has exactly one valid encoding.
+/// The frame offsets from the metadata `time` block, the axis unit in
+/// seconds, and the lowest schema version able to express them.
+///
+/// Schema versions 1 and 2 describe a whole-hour axis with
+/// `firstForecastHour` plus one of `stepHours` (uniform, version 1) and
+/// `hours` (listed outright, version 2). Version 3 replaces the block with a
+/// unit-neutral one — `unitSeconds` plus offsets in that unit — so a series
+/// finer than an hour has an exact axis.
 fn parse_time_axis(
     time: &serde_json::Map<String, serde_json::Value>,
-    schema_version: u64,
     frame_count: u64,
-    first_hour: u64,
-) -> Result<Vec<u16>, DecodeError> {
+    schema_version: u64,
+) -> Result<(u32, Vec<u16>, u64), DecodeError> {
+    if schema_version >= 3 {
+        return parse_offset_axis(time, frame_count);
+    }
+    if V3_TIME_FIELDS.iter().any(|field| time.contains_key(*field)) {
+        return Err(err("a unit-neutral time axis requires schemaVersion 3"));
+    }
+    let first_hour = time
+        .get("firstForecastHour")
+        .and_then(|v| v.as_u64())
+        .filter(|&hour| hour <= u16::MAX as u64)
+        .ok_or_else(|| err("metadata firstForecastHour is invalid"))?;
     let step_hours = time.get("stepHours");
     let listed_hours = time.get("hours");
     match (step_hours, listed_hours) {
@@ -169,53 +194,187 @@ fn parse_time_axis(
             Err(err("metadata time must declare exactly one of stepHours and hours"))
         }
         (Some(step), None) => {
-            if schema_version != 1 {
-                return Err(err("a uniform time axis must declare schemaVersion 1"));
-            }
             let step = step
                 .as_u64()
                 .filter(|&step| step > 0 && step <= u16::MAX as u64)
                 .ok_or_else(|| err("metadata stepHours is invalid"))?;
-            let last_hour = first_hour
-                .checked_add((frame_count - 1).checked_mul(step).ok_or_else(|| err("hour overflow"))?)
-                .ok_or_else(|| err("hour overflow"))?;
-            if last_hour > u16::MAX as u64 - 1 {
-                return Err(err("forecast hours exceed the u16 range"));
-            }
-            Ok((0..frame_count).map(|frame| (first_hour + frame * step) as u16).collect())
+            Ok((HOUR_SECONDS, uniform_offsets(first_hour, step, frame_count)?, 1))
         }
-        (None, Some(listed)) => {
-            if schema_version != 2 {
-                return Err(err("an explicit hours axis requires schemaVersion 2"));
-            }
-            let listed = listed.as_array().ok_or_else(|| err("metadata hours axis is invalid"))?;
-            if listed.len() as u64 != frame_count {
-                return Err(err("metadata hours axis is invalid"));
-            }
-            let mut hours = Vec::with_capacity(listed.len());
-            for value in listed {
-                let hour = value
-                    .as_u64()
-                    .filter(|&hour| hour <= u16::MAX as u64 - 1)
-                    .ok_or_else(|| err("metadata hours axis is invalid"))?;
-                if let Some(&previous) = hours.last() {
-                    if hour as u16 <= previous {
-                        return Err(err("metadata hours axis must be strictly increasing"));
-                    }
-                }
-                hours.push(hour as u16);
-            }
-            if hours[0] as u64 != first_hour {
-                return Err(err("metadata hours axis must begin with firstForecastHour"));
-            }
-            let mut steps = hours.windows(2).map(|pair| pair[1] - pair[0]);
-            let first_step = steps.next();
-            if steps.all(|step| Some(step) == first_step) {
-                return Err(err("a uniform hours axis must be encoded as stepHours"));
-            }
-            Ok(hours)
+        (None, Some(listed)) => Ok((HOUR_SECONDS, listed_offsets(listed, frame_count, first_hour)?, 2)),
+    }
+}
+
+/// The schemaVersion 3 time block: offsets on a declared unit.
+fn parse_offset_axis(
+    time: &serde_json::Map<String, serde_json::Value>,
+    frame_count: u64,
+) -> Result<(u32, Vec<u16>, u64), DecodeError> {
+    for key in time.keys() {
+        if key != "frameCount" && !V3_TIME_FIELDS.contains(&key.as_str()) {
+            return Err(err("metadata time block has an unknown field"));
         }
     }
+    let unit_seconds = time
+        .get("unitSeconds")
+        .and_then(|v| v.as_u64())
+        .filter(|&unit| unit >= 1 && unit <= HOUR_SECONDS as u64 && HOUR_SECONDS as u64 % unit == 0)
+        .ok_or_else(|| err("metadata unitSeconds must be a whole divisor of 3600"))?
+        as u32;
+    let first_offset = time
+        .get("firstFrameOffset")
+        .and_then(|v| v.as_u64())
+        .filter(|&offset| offset <= u16::MAX as u64)
+        .ok_or_else(|| err("metadata firstFrameOffset is invalid"))?;
+    let frame_step = time.get("frameStep");
+    let listed = time.get("frameOffsets");
+    let offsets = match (frame_step, listed) {
+        (Some(_), Some(_)) | (None, None) => {
+            return Err(err("metadata time must declare exactly one of frameStep and frameOffsets"))
+        }
+        (Some(step), None) => {
+            let step = step
+                .as_u64()
+                .filter(|&step| step > 0 && step <= u16::MAX as u64)
+                .ok_or_else(|| err("metadata frameStep is invalid"))?;
+            uniform_offsets(first_offset, step, frame_count)?
+        }
+        (None, Some(listed)) => listed_offsets(listed, frame_count, first_offset)?,
+    };
+    // The unit is the coarsest one that expresses every offset exactly, so an
+    // axis has one encoding rather than one per divisor of its step.
+    let mut divisor = HOUR_SECONDS / unit_seconds;
+    for &offset in &offsets {
+        divisor = gcd(divisor, offset as u32);
+    }
+    if divisor != 1 {
+        return Err(err("metadata unitSeconds is finer than the axis needs"));
+    }
+    Ok((unit_seconds, offsets, 3))
+}
+
+fn gcd(a: u32, b: u32) -> u32 {
+    if b == 0 { a } else { gcd(b, a % b) }
+}
+
+fn uniform_offsets(first: u64, step: u64, frame_count: u64) -> Result<Vec<u16>, DecodeError> {
+    let last = first
+        .checked_add((frame_count - 1).checked_mul(step).ok_or_else(|| err("offset overflow"))?)
+        .ok_or_else(|| err("offset overflow"))?;
+    if last > u16::MAX as u64 - 1 {
+        return Err(err("frame offsets exceed the u16 range"));
+    }
+    Ok((0..frame_count).map(|frame| (first + frame * step) as u16).collect())
+}
+
+fn listed_offsets(
+    listed: &serde_json::Value,
+    frame_count: u64,
+    first: u64,
+) -> Result<Vec<u16>, DecodeError> {
+    let listed = listed.as_array().ok_or_else(|| err("metadata listed time axis is invalid"))?;
+    if listed.len() as u64 != frame_count {
+        return Err(err("metadata listed time axis is invalid"));
+    }
+    let mut offsets = Vec::with_capacity(listed.len());
+    for value in listed {
+        let offset = value
+            .as_u64()
+            .filter(|&offset| offset <= u16::MAX as u64 - 1)
+            .ok_or_else(|| err("metadata listed time axis is invalid"))?;
+        if let Some(&previous) = offsets.last() {
+            if offset as u16 <= previous {
+                return Err(err("metadata listed time axis must be strictly increasing"));
+            }
+        }
+        offsets.push(offset as u16);
+    }
+    if offsets[0] as u64 != first {
+        return Err(err("metadata listed time axis must begin with the declared first offset"));
+    }
+    let mut steps = offsets.windows(2).map(|pair| pair[1] - pair[0]);
+    let first_step = steps.next();
+    if steps.all(|step| Some(step) == first_step) {
+        return Err(err("a uniform axis must be encoded as a step"));
+    }
+    Ok(offsets)
+}
+
+/// Schema v3 variable identity: the GRIB2 parameter triple and fixed surface
+/// every variable declares, plus the optional statistical process (code table
+/// 4.10) a derived field carries.
+const PARAMETER_CODE_FIELDS: [&str; 4] = [
+    "discipline",
+    "parameterCategory",
+    "parameterNumber",
+    "typeOfFirstFixedSurface",
+];
+const PARAMETER_NULLABLE_FIELDS: [&str; 3] = [
+    "scaleFactorOfFirstFixedSurface",
+    "scaledValueOfFirstFixedSurface",
+    "typeOfStatisticalProcessing",
+];
+
+/// Validate a variable's GRIB2 identity block. The block is what
+/// schemaVersion 3 introduces, so it must be present in a version 3 file and
+/// absent below — the declared version is always the lowest able to express
+/// the metadata (docs/format.md).
+fn parse_parameter(
+    parameter: Option<&serde_json::Value>,
+    schema_version: u64,
+) -> Result<(), DecodeError> {
+    if schema_version < 3 {
+        return match parameter {
+            None => Ok(()),
+            Some(_) => Err(err("a GRIB2 parameter block requires schemaVersion 3")),
+        };
+    }
+    let parameter = parameter
+        .and_then(|value| value.as_object())
+        .ok_or_else(|| err("schemaVersion 3 requires a parameter block on every variable"))?;
+    for key in parameter.keys() {
+        if !PARAMETER_CODE_FIELDS.contains(&key.as_str())
+            && !PARAMETER_NULLABLE_FIELDS.contains(&key.as_str())
+        {
+            return Err(err("metadata parameter block has an unknown field"));
+        }
+    }
+    for field in PARAMETER_CODE_FIELDS {
+        parameter
+            .get(field)
+            .and_then(|value| value.as_u64())
+            .filter(|&code| code <= 255)
+            .ok_or_else(|| err("metadata parameter code is invalid"))?;
+    }
+    let scale_factor = parameter
+        .get("scaleFactorOfFirstFixedSurface")
+        .ok_or_else(|| err("metadata parameter fixed surface value is incomplete"))?;
+    let scaled_value = parameter
+        .get("scaledValueOfFirstFixedSurface")
+        .ok_or_else(|| err("metadata parameter fixed surface value is incomplete"))?;
+    // GRIB2 encodes a surface with no value by writing both as missing; one
+    // of the two alone describes nothing.
+    if scale_factor.is_null() != scaled_value.is_null() {
+        return Err(err("metadata parameter fixed surface must be wholly present or wholly null"));
+    }
+    if !scale_factor.is_null() {
+        scale_factor
+            .as_i64()
+            .filter(|&factor| (-127..=127).contains(&factor))
+            .ok_or_else(|| err("metadata parameter scaleFactorOfFirstFixedSurface is invalid"))?;
+        scaled_value
+            .as_u64()
+            .filter(|&value| value <= 0xFFFF_FFFE)
+            .ok_or_else(|| err("metadata parameter scaledValueOfFirstFixedSurface is invalid"))?;
+    }
+    if let Some(statistical) = parameter.get("typeOfStatisticalProcessing") {
+        if !statistical.is_null() {
+            statistical
+                .as_u64()
+                .filter(|&code| code <= 255)
+                .ok_or_else(|| err("metadata parameter typeOfStatisticalProcessing is invalid"))?;
+        }
+    }
+    Ok(())
 }
 
 fn parse_metadata(raw: &[u8]) -> Result<Metadata, DecodeError> {
@@ -224,7 +383,7 @@ fn parse_metadata(raw: &[u8]) -> Result<Metadata, DecodeError> {
         serde_json::from_str(text).map_err(|_| err("metadata is not valid JSON"))?;
     let object = value.as_object().ok_or_else(|| err("metadata must be a JSON object"))?;
     let schema_version = match object.get("schemaVersion").and_then(|v| v.as_u64()) {
-        Some(version @ (1 | 2)) => version,
+        Some(version @ (1 | 2 | 3)) => version,
         _ => return Err(err("unsupported metadata schemaVersion")),
     };
     let grid = object
@@ -249,17 +408,13 @@ fn parse_metadata(raw: &[u8]) -> Result<Metadata, DecodeError> {
         .and_then(|v| v.as_u64())
         .filter(|&count| count > 0 && count <= u16::MAX as u64)
         .ok_or_else(|| err("metadata frameCount is invalid"))?;
-    let first_hour = time
-        .get("firstForecastHour")
-        .and_then(|v| v.as_u64())
-        .filter(|&hour| hour <= u16::MAX as u64)
-        .ok_or_else(|| err("metadata firstForecastHour is invalid"))?;
-    let hours = parse_time_axis(time, schema_version, frame_count, first_hour)?;
+    let (unit_seconds, offsets, axis_version) = parse_time_axis(time, frame_count, schema_version)?;
     let variables = object
         .get("variables")
         .and_then(|v| v.as_array())
         .ok_or_else(|| err("metadata variables missing"))?;
     let mut variable_ids = Vec::new();
+    let mut parameters = 0usize;
     for variable in variables {
         let numeric = variable
             .get("numericId")
@@ -272,16 +427,26 @@ fn parse_metadata(raw: &[u8]) -> Result<Metadata, DecodeError> {
         if variable_ids.contains(&(numeric as u8)) {
             return Err(err("duplicate variable numericId"));
         }
+        let parameter = variable.get("parameter");
+        parse_parameter(parameter, schema_version)?;
+        parameters += usize::from(parameter.is_some());
         variable_ids.push(numeric as u8);
     }
     if variable_ids.is_empty() {
         return Err(err("metadata must declare at least one variable"));
     }
+    // Every axis and every variable set has exactly one valid encoding: the
+    // declared version must be the lowest able to express both.
+    let required_version = axis_version.max(if parameters > 0 { 3 } else { 1 });
+    if schema_version != required_version {
+        return Err(err("metadata declares a schemaVersion other than the lowest it needs"));
+    }
     Ok(Metadata {
         json: text.to_owned(),
         plane_length: plane_length as u32,
         frame_count: frame_count as u32,
-        hours,
+        unit_seconds,
+        offsets,
         variable_ids,
     })
 }
@@ -423,8 +588,8 @@ fn parse_structure(data: &[u8], mode: ParseMode) -> Result<Structure, DecodeErro
             predictor: Predictor::parse(raw[1])?,
             compression: Compression::parse(raw[2])?,
             flags: raw[3],
-            forecast_hour: read_u16(raw, 4),
-            dependency_hour: read_u16(raw, 6),
+            frame_offset: read_u16(raw, 4),
+            dependency_offset: read_u16(raw, 6),
             group_id: read_u16(raw, 8),
             compressed_length: read_u32(raw, 12),
             data_offset: read_u64(raw, 16),
@@ -440,10 +605,10 @@ fn parse_structure(data: &[u8], mode: ParseMode) -> Result<Structure, DecodeErro
     let mut previous_key: Option<(u8, u16)> = None;
     let mut occupied: Vec<(u64, u64)> = Vec::new();
     for (position, entry) in entries.iter().enumerate() {
-        let key = (entry.variable_id, entry.forecast_hour);
+        let key = (entry.variable_id, entry.frame_offset);
         if let Some(previous) = previous_key {
             if key <= previous {
-                return Err(err("index entries must be sorted and unique by (variableId, forecastHour)"));
+                return Err(err("index entries must be sorted and unique by (variableId, frameOffset)"));
             }
         }
         previous_key = Some(key);
@@ -477,17 +642,17 @@ fn parse_structure(data: &[u8], mode: ParseMode) -> Result<Structure, DecodeErro
             occupied.push((entry.data_offset, entry.compressed_length as u64));
         }
         entry_map.insert(
-            FrameRequest { variable_id: entry.variable_id, forecast_hour: entry.forecast_hour },
+            FrameRequest { variable_id: entry.variable_id, frame_offset: entry.frame_offset },
             position,
         );
     }
 
-    // Hour coverage per variable, against the materialized axis.
+    // Frame coverage per variable, against the materialized axis.
     for &variable_id in &metadata.variable_ids {
-        for &hour in &metadata.hours {
-            let request = FrameRequest { variable_id, forecast_hour: hour };
+        for &offset in &metadata.offsets {
+            let request = FrameRequest { variable_id, frame_offset: offset };
             if !entry_map.contains_key(&request) {
-                return Err(err("a variable does not cover every forecast hour"));
+                return Err(err("a variable does not cover every frame of the axis"));
             }
         }
     }
@@ -513,35 +678,35 @@ fn parse_structure(data: &[u8], mode: ParseMode) -> Result<Structure, DecodeErro
     for entry in &entries {
         match entry.predictor {
             Predictor::Raw | Predictor::Zero => {
-                if entry.dependency_hour != NO_DEPENDENCY {
-                    return Err(err("RAW and ZERO entries must have dependencyHour 65535"));
+                if entry.dependency_offset != NO_DEPENDENCY {
+                    return Err(err("RAW and ZERO entries must have dependencyOffset 65535"));
                 }
             }
             Predictor::Anchor | Predictor::Previous => {
-                let dependency_hour = if entry.predictor == Predictor::Anchor {
-                    entry.dependency_hour
+                let dependency_offset = if entry.predictor == Predictor::Anchor {
+                    entry.dependency_offset
                 } else {
                     // PREVIOUS references the preceding frame on the time
-                    // axis, carried explicitly in dependencyHour (never the
-                    // sentinel, never forecastHour - 1 by arithmetic).
+                    // axis, carried explicitly in dependencyOffset (never the
+                    // sentinel, never frameOffset - 1 by arithmetic).
                     let position = metadata
-                        .hours
-                        .binary_search(&entry.forecast_hour)
+                        .offsets
+                        .binary_search(&entry.frame_offset)
                         .map_err(|_| err("PREVIOUS entry is not on the time axis"))?;
                     if position == 0 {
                         return Err(err("PREVIOUS entry has no preceding frame on the time axis"));
                     }
-                    let preceding = metadata.hours[position - 1];
-                    if entry.dependency_hour != preceding {
+                    let preceding = metadata.offsets[position - 1];
+                    if entry.dependency_offset != preceding {
                         return Err(err(
-                            "PREVIOUS entry dependencyHour must reference the preceding frame on the time axis",
+                            "PREVIOUS entry dependencyOffset must reference the preceding frame on the time axis",
                         ));
                     }
                     preceding
                 };
                 let request = FrameRequest {
                     variable_id: entry.variable_id,
-                    forecast_hour: dependency_hour,
+                    frame_offset: dependency_offset,
                 };
                 let dependency = entry_map
                     .get(&request)
@@ -559,7 +724,7 @@ fn parse_structure(data: &[u8], mode: ParseMode) -> Result<Structure, DecodeErro
     for entry in &structure.entries {
         structure.dependency_chain(FrameRequest {
             variable_id: entry.variable_id,
-            forecast_hour: entry.forecast_hour,
+            frame_offset: entry.frame_offset,
         })?;
     }
     Ok(structure)
@@ -577,7 +742,7 @@ impl Structure {
         // ANCHOR and PREVIOUS both carry their dependency explicitly;
         // parse_structure has pinned PREVIOUS to the preceding axis frame.
         match entry.predictor {
-            Predictor::Anchor | Predictor::Previous => Some(entry.dependency_hour),
+            Predictor::Anchor | Predictor::Previous => Some(entry.dependency_offset),
             _ => None,
         }
     }
@@ -591,7 +756,7 @@ impl Structure {
             match Self::dependency_of(entry) {
                 None => return Ok(chain),
                 Some(hour) => {
-                    let next = FrameRequest { variable_id: current.variable_id, forecast_hour: hour };
+                    let next = FrameRequest { variable_id: current.variable_id, frame_offset: hour };
                     if chain.contains(&next) || chain.len() > self.metadata.frame_count as usize {
                         return Err(err("cyclic or too-deep dependency chain"));
                     }
@@ -678,7 +843,7 @@ impl Core {
         if crc32fast::hash(&plane) != entry.crc32 {
             return Err(err(format!(
                 "plane CRC32 mismatch for variable {} hour {}",
-                entry.variable_id, entry.forecast_hour
+                entry.variable_id, entry.frame_offset
             )));
         }
         let (minimum, maximum) = plane
@@ -767,6 +932,18 @@ impl Bundle {
         &self.core.structure.metadata.variable_ids
     }
 
+    /// Seconds per axis unit: a frame's valid time is
+    /// `runTime + frameOffset * unitSeconds`.
+    pub fn unit_seconds(&self) -> u32 {
+        self.core.structure.metadata.unit_seconds
+    }
+
+    /// The materialized frame-offset axis, ascending — the keys every plane
+    /// of every variable is addressed by.
+    pub fn frame_offsets(&self) -> &[u16] {
+        &self.core.structure.metadata.offsets
+    }
+
     pub fn clear_cache(&mut self) {
         self.core.anchor_cache.clear();
     }
@@ -819,6 +996,18 @@ impl StreamingBundle {
 
     pub fn variable_ids(&self) -> &[u8] {
         &self.core.structure.metadata.variable_ids
+    }
+
+    /// Seconds per axis unit: a frame's valid time is
+    /// `runTime + frameOffset * unitSeconds`.
+    pub fn unit_seconds(&self) -> u32 {
+        self.core.structure.metadata.unit_seconds
+    }
+
+    /// The materialized frame-offset axis, ascending — the keys every plane
+    /// of every variable is addressed by.
+    pub fn frame_offsets(&self) -> &[u16] {
+        &self.core.structure.metadata.offsets
     }
 
     pub fn clear_cache(&mut self) {
@@ -918,45 +1107,171 @@ mod time_axis_tests {
     }
 
     #[test]
-    fn uniform_axis_expands_under_schema_version_1() {
-        let hours = parse_time_axis(&time(r#"{"stepHours": 3}"#), 1, 4, 6).expect("uniform axis");
-        assert_eq!(hours, vec![6, 9, 12, 15]);
+    fn legacy_hour_axes_still_parse() {
+        // Schema versions 1 and 2 describe a whole-hour axis; their offsets
+        // are the forecast hours themselves.
+        let (unit, offsets, version) =
+            parse_time_axis(&time(r#"{"firstForecastHour": 6, "stepHours": 3}"#), 4, 1).expect("uniform");
+        assert_eq!((unit, offsets, version), (3600, vec![6, 9, 12, 15], 1));
+        let (unit, offsets, version) = parse_time_axis(
+            &time(r#"{"firstForecastHour": 0, "hours": [0, 1, 2, 3, 6, 9]}"#),
+            6,
+            2,
+        )
+        .expect("listed");
+        assert_eq!((unit, offsets, version), (3600, vec![0, 1, 2, 3, 6, 9], 2));
     }
 
     #[test]
-    fn mixed_axis_is_taken_as_listed_under_schema_version_2() {
-        let hours =
-            parse_time_axis(&time(r#"{"hours": [0, 1, 2, 3, 6, 9]}"#), 2, 6, 0).expect("mixed axis");
-        assert_eq!(hours, vec![0, 1, 2, 3, 6, 9]);
+    fn version_3_carries_its_own_unit() {
+        let (unit, offsets, version) = parse_time_axis(
+            &time(r#"{"unitSeconds": 360, "firstFrameOffset": 0, "frameStep": 1}"#),
+            4,
+            3,
+        )
+        .expect("six-minute axis");
+        assert_eq!((unit, offsets, version), (360, vec![0, 1, 2, 3], 3));
+        let (unit, offsets, _) = parse_time_axis(
+            &time(r#"{"unitSeconds": 360, "firstFrameOffset": 0, "frameOffsets": [0, 1, 2, 4]}"#),
+            4,
+            3,
+        )
+        .expect("gapped six-minute axis");
+        assert_eq!((unit, offsets), (360, vec![0, 1, 2, 4]));
+    }
+
+    #[test]
+    fn the_two_time_block_shapes_never_mix() {
+        // A version 3 block in a version 2 file, and the reverse.
+        assert!(parse_time_axis(&time(r#"{"unitSeconds": 3600, "firstFrameOffset": 0, "frameStep": 1}"#), 3, 2).is_err());
+        assert!(parse_time_axis(&time(r#"{"firstForecastHour": 0, "stepHours": 1}"#), 3, 3).is_err());
     }
 
     #[test]
     fn every_axis_has_exactly_one_encoding() {
         // Both fields, or neither.
-        assert!(parse_time_axis(&time(r#"{"stepHours": 1, "hours": [0, 1, 3]}"#), 2, 3, 0).is_err());
-        assert!(parse_time_axis(&time(r#"{}"#), 1, 3, 0).is_err());
-        // Overdeclared: a uniform axis must stay schemaVersion 1.
-        assert!(parse_time_axis(&time(r#"{"stepHours": 1}"#), 2, 3, 0).is_err());
-        // An hours axis requires schemaVersion 2.
-        assert!(parse_time_axis(&time(r#"{"hours": [0, 1, 3]}"#), 1, 3, 0).is_err());
-        // A uniform hours array must be encoded as stepHours.
-        assert!(parse_time_axis(&time(r#"{"hours": [0, 3, 6]}"#), 2, 3, 0).is_err());
+        assert!(parse_time_axis(
+            &time(r#"{"unitSeconds": 3600, "firstFrameOffset": 0, "frameStep": 1, "frameOffsets": [0, 1, 3]}"#),
+            3,
+            3
+        )
+        .is_err());
+        assert!(parse_time_axis(&time(r#"{"unitSeconds": 3600, "firstFrameOffset": 0}"#), 3, 3).is_err());
+        // A uniform offset list must be encoded as a step.
+        assert!(parse_time_axis(
+            &time(r#"{"unitSeconds": 3600, "firstFrameOffset": 0, "frameOffsets": [0, 3, 6]}"#),
+            3,
+            3
+        )
+        .is_err());
+        // The unit must be the coarsest one the axis needs: an hourly series
+        // cannot declare itself six-minute.
+        assert!(parse_time_axis(
+            &time(r#"{"unitSeconds": 360, "firstFrameOffset": 0, "frameStep": 10}"#),
+            3,
+            3
+        )
+        .is_err());
+        // ...and the unit must divide an hour.
+        assert!(parse_time_axis(
+            &time(r#"{"unitSeconds": 7, "firstFrameOffset": 0, "frameStep": 1}"#),
+            3,
+            3
+        )
+        .is_err());
     }
 
     #[test]
-    fn invalid_hours_axes_rejected() {
+    fn invalid_offset_axes_rejected() {
         // Not strictly increasing, wrong length, wrong first element.
-        assert!(parse_time_axis(&time(r#"{"hours": [0, 1, 1, 3]}"#), 2, 4, 0).is_err());
-        assert!(parse_time_axis(&time(r#"{"hours": [0, 1, 3]}"#), 2, 4, 0).is_err());
-        assert!(parse_time_axis(&time(r#"{"hours": [1, 2, 4]}"#), 2, 3, 0).is_err());
-        // 65535 is the dependencyHour sentinel; 65534 is the last valid hour.
-        assert!(parse_time_axis(&time(r#"{"hours": [0, 1, 65535]}"#), 2, 3, 0).is_err());
-        assert!(parse_time_axis(&time(r#"{"hours": [0, 1, 65534]}"#), 2, 3, 0).is_ok());
+        for json in [
+            r#"{"unitSeconds": 3600, "firstFrameOffset": 0, "frameOffsets": [0, 1, 1, 3]}"#,
+            r#"{"unitSeconds": 3600, "firstFrameOffset": 0, "frameOffsets": [0, 1, 3]}"#,
+            r#"{"unitSeconds": 3600, "firstFrameOffset": 0, "frameOffsets": [1, 2, 4]}"#,
+            // 65535 is the dependencyOffset sentinel.
+            r#"{"unitSeconds": 3600, "firstFrameOffset": 0, "frameOffsets": [0, 1, 65535]}"#,
+            // A field the block does not define.
+            r#"{"unitSeconds": 3600, "firstFrameOffset": 0, "frameStep": 1, "hours": [0, 1, 2]}"#,
+        ] {
+            assert!(parse_time_axis(&time(json), 4, 3).is_err(), "{json}");
+        }
+        assert!(parse_time_axis(
+            &time(r#"{"unitSeconds": 3600, "firstFrameOffset": 0, "frameOffsets": [0, 1, 65534]}"#),
+            3,
+            3
+        )
+        .is_ok());
     }
 
     #[test]
     fn uniform_axis_u16_bound_enforced() {
-        assert!(parse_time_axis(&time(r#"{"stepHours": 1}"#), 1, 2, 65534).is_err());
-        assert!(parse_time_axis(&time(r#"{"stepHours": 1}"#), 1, 1, 65534).is_ok());
+        assert!(parse_time_axis(&time(r#"{"unitSeconds": 3600, "firstFrameOffset": 65534, "frameStep": 1}"#), 2, 3).is_err());
+        assert!(parse_time_axis(&time(r#"{"unitSeconds": 3600, "firstFrameOffset": 65534, "frameStep": 1}"#), 1, 3).is_ok());
+    }
+}
+
+#[cfg(test)]
+mod parameter_tests {
+    use super::parse_parameter;
+
+    fn parameter(json: &str) -> serde_json::Value {
+        serde_json::from_str(json).unwrap()
+    }
+
+    const TMP2M: &str = r#"{
+        "discipline": 0,
+        "parameterCategory": 0,
+        "parameterNumber": 0,
+        "typeOfFirstFixedSurface": 103,
+        "scaleFactorOfFirstFixedSurface": 0,
+        "scaledValueOfFirstFixedSurface": 2
+    }"#;
+
+    #[test]
+    fn version_3_requires_the_block_and_below_forbids_it() {
+        assert!(parse_parameter(Some(&parameter(TMP2M)), 3).is_ok());
+        assert!(parse_parameter(None, 3).is_err());
+        assert!(parse_parameter(None, 1).is_ok());
+        assert!(parse_parameter(None, 2).is_ok());
+        assert!(parse_parameter(Some(&parameter(TMP2M)), 2).is_err());
+    }
+
+    #[test]
+    fn a_surface_without_a_value_writes_both_halves_null() {
+        let entire_atmosphere = parameter(
+            r#"{"discipline": 0, "parameterCategory": 16, "parameterNumber": 5,
+                "typeOfFirstFixedSurface": 10,
+                "scaleFactorOfFirstFixedSurface": null,
+                "scaledValueOfFirstFixedSurface": null}"#,
+        );
+        assert!(parse_parameter(Some(&entire_atmosphere), 3).is_ok());
+        let half = parameter(
+            r#"{"discipline": 0, "parameterCategory": 16, "parameterNumber": 5,
+                "typeOfFirstFixedSurface": 10,
+                "scaleFactorOfFirstFixedSurface": 0,
+                "scaledValueOfFirstFixedSurface": null}"#,
+        );
+        assert!(parse_parameter(Some(&half), 3).is_err());
+    }
+
+    #[test]
+    fn invalid_blocks_rejected() {
+        for json in [
+            // Out of the u8 code range, wrong type, missing half of the surface,
+            // and a field the schema does not define.
+            r#"{"discipline": 256, "parameterCategory": 0, "parameterNumber": 0,
+                "typeOfFirstFixedSurface": 1, "scaleFactorOfFirstFixedSurface": null,
+                "scaledValueOfFirstFixedSurface": null}"#,
+            r#"{"discipline": "0", "parameterCategory": 0, "parameterNumber": 0,
+                "typeOfFirstFixedSurface": 1, "scaleFactorOfFirstFixedSurface": null,
+                "scaledValueOfFirstFixedSurface": null}"#,
+            r#"{"discipline": 0, "parameterCategory": 0, "parameterNumber": 0,
+                "typeOfFirstFixedSurface": 1, "scaleFactorOfFirstFixedSurface": null}"#,
+            r#"{"discipline": 0, "parameterCategory": 0, "parameterNumber": 0,
+                "typeOfFirstFixedSurface": 1, "scaleFactorOfFirstFixedSurface": null,
+                "scaledValueOfFirstFixedSurface": null, "levelValue": 2}"#,
+        ] {
+            assert!(parse_parameter(Some(&parameter(json)), 3).is_err(), "{json}");
+        }
     }
 }

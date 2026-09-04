@@ -11,9 +11,9 @@
  *   and fetches the structural prefix (header + metadata + index) itself via
  *   an HTTP range request, then range-fetches each temporal group's payload
  *   bytes on demand. Background prefetch is windowed:
- *   the main thread sends `prefetch-window` messages naming the forecast
- *   hours just ahead of the playhead plus a concurrency cap, and the worker
- *   keeps at most that many group fetches in flight for hours inside the
+ *   the main thread sends `prefetch-window` messages naming the frame
+ *   offsets just ahead of the playhead plus a concurrency cap, and the worker
+ *   keeps at most that many group fetches in flight for frames inside the
  *   window — beyond the window it stays idle. Fetches triggered by a decode
  *   always run first. `progress` messages report resident bytes, and a final
  *   `resident` message fires once every group is local. A non-206 response
@@ -25,6 +25,7 @@
  * may send buffers back for reuse through the `recycle` message.
  */
 
+import { frameOffsets, type BundleTimeAxis } from "./manifest";
 import wasmInit, { WasmBundle, WasmStreamingBundle } from "./wasm/xue";
 import wasmUrl from "./wasm/xue_bg.wasm?url";
 
@@ -47,7 +48,7 @@ interface DecodeMessage {
   requestId: number;
   generation: number;
   variableId: number;
-  forecastHour: number;
+  frameOffset: number;
 }
 
 interface RecycleMessage {
@@ -61,7 +62,7 @@ interface ClearMessage {
 
 interface PrefetchWindowMessage {
   type: "prefetch-window";
-  /** Forecast hours to keep resident, in fetch-priority order. */
+  /** Frame offsets to keep resident, in fetch-priority order. */
   hours: number[];
   /** Maximum concurrent background range fetches. */
   concurrency: number;
@@ -88,9 +89,9 @@ let decodeFetchCount = 0;
 const recycled: ArrayBuffer[] = [];
 
 /** Windowed prefetch state (see module docs). */
-let windowHours: number[] = [];
+let windowOffsets: number[] = [];
 let windowConcurrency = 0;
-let allHours: number[] = [];
+let allOffsets: number[] = [];
 /** Every variable in the bundle; the wind bundle carries two. */
 let bundleNumericIds: number[] = [];
 let residentAnnounced = false;
@@ -173,7 +174,7 @@ function pumpPrefetch(): void {
   if (decodeFetchCount > 0) return;
   if (prefetchFailures >= PREFETCH_RETRIES) return; // wait for the next window update
   let missing = false;
-  for (const hour of windowHours) {
+  for (const hour of windowOffsets) {
     for (const numericId of bundleNumericIds) {
       if (spanFetches.size >= windowConcurrency) return;
       const span = session.missingGroupSpan(numericId, hour);
@@ -193,7 +194,7 @@ function pumpPrefetch(): void {
   }
   if (!missing && spanFetches.size === 0 && !residentAnnounced) {
     if (
-      allHours.every((hour) => bundleNumericIds.every((numericId) => !session.missingGroupSpan(numericId, hour)))
+      allOffsets.every((hour) => bundleNumericIds.every((numericId) => !session.missingGroupSpan(numericId, hour)))
     ) {
       residentAnnounced = true;
       post({ type: "resident", variableKey });
@@ -231,16 +232,13 @@ async function initStream(message: InitStreamMessage): Promise<void> {
   postProgress();
 
   const metadata = JSON.parse(session.metadataJson()) as {
-    time: { firstForecastHour: number; stepHours?: number; frameCount: number; hours?: number[] };
+    time: BundleTimeAxis;
     variables: { numericId: number }[];
   };
   bundleNumericIds = metadata.variables.map((variable) => variable.numericId);
-  // Mixed-step axes (schemaVersion 2) list their hours outright; uniform
-  // axes are expanded from stepHours. WASM has already validated the axis.
-  allHours = metadata.time.hours ?? Array.from(
-    { length: metadata.time.frameCount },
-    (_, index) => metadata.time.firstForecastHour + index * (metadata.time.stepHours ?? 1),
-  );
+  // Non-uniform axes list their offsets outright; uniform ones are expanded
+  // from their step. WASM has already validated the axis.
+  allOffsets = frameOffsets(metadata.time);
   residentAnnounced = false;
   // A prefetch-window message may have arrived before init finished.
   pumpPrefetch();
@@ -249,9 +247,9 @@ async function initStream(message: InitStreamMessage): Promise<void> {
 async function decodeStreaming(message: DecodeMessage): Promise<Uint8Array> {
   const session = streaming;
   if (!session) throw new Error("bundle is not initialized");
-  const span = session.missingGroupSpan(message.variableId, message.forecastHour);
+  const span = session.missingGroupSpan(message.variableId, message.frameOffset);
   if (span) await ensureSpan(span[0]!, span[1]!, true);
-  return session.decodeFrame(message.variableId, message.forecastHour);
+  return session.decodeFrame(message.variableId, message.frameOffset);
 }
 
 self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
@@ -280,7 +278,7 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       if (!bundle && !streaming) throw new Error("bundle is not initialized");
       const started = performance.now();
       const plane = bundle
-        ? bundle.decodeFrame(message.variableId, message.forecastHour)
+        ? bundle.decodeFrame(message.variableId, message.frameOffset)
         : await decodeStreaming(message);
       let buffer = recycled.pop();
       if (!buffer || buffer.byteLength !== plane.byteLength) buffer = new ArrayBuffer(plane.byteLength);
@@ -291,7 +289,7 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
           requestId: message.requestId,
           generation: message.generation,
           variableId: message.variableId,
-          forecastHour: message.forecastHour,
+          frameOffset: message.frameOffset,
           decodeMs: performance.now() - started,
           buffer,
         },
@@ -304,7 +302,7 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       return;
     }
     if (message.type === "prefetch-window") {
-      windowHours = message.hours;
+      windowOffsets = message.hours;
       windowConcurrency = message.concurrency;
       prefetchFailures = 0;
       pumpPrefetch();

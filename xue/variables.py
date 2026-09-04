@@ -1,3 +1,20 @@
+"""The variable registry: what a field is, in GRIB2's own terms.
+
+Every variable — whether it arrives as a GRIB2 record or, like the radar
+composite reflectivity, out of a NetCDF observation file — is identified the
+way GRIB2 identifies a field: a parameter triple (discipline, category,
+number) and a fixed surface (type plus an optional value). That identity is
+both what the fetchers match records on and what a bundle's metadata carries
+from schema version 3 onwards (docs/format.md), so there is one description
+of a variable rather than one per pipeline stage.
+
+The parameter numbers 192-254 in every category, and the surface types
+192-254, are GRIB2's local-use ranges: ``dswrf`` (0/4/192) and ECMWF ``tp``
+(0/1/193) already live there. Nothing here needs a locally *defined*
+parameter of our own, but the format reserves no separate space for one —
+a local number is an ordinary number.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -7,10 +24,16 @@ from dataclasses import dataclass
 class VariableSpec:
     id: str
     label: str
+    """English label carried in bundle metadata."""
     output_unit: str
+    """Unit of the values a bundle's codebook quantizes, carried in metadata."""
     value_range: tuple[int, int]
-    grib_element: str
-    index_field: str
+    numeric_id: int | None = None
+    """The container's registered ``variableId`` (docs/format.md), or None for
+    an input-only variable that never reaches a bundle (ECMWF ``tp``, sflux
+    ``prate_ave``)."""
+    grib_element: str = ""
+    index_field: str = ""
     excluded_index_phrases: tuple[str, ...] = ()
     ecmwf_param: str = ""
     """The ``param`` value in ECMWF open data .index lines, empty when the
@@ -19,9 +42,13 @@ class VariableSpec:
     grib2_category: int = -1
     grib2_number: int = -1
     grib2_level_type: int = -1
+    """Code table 4.5 type of first fixed surface (1 ground/water surface,
+    10 entire atmosphere, 103 height above ground)."""
     grib2_level_value: float | None = None
-    """First fixed surface value; None accepts any (ECMWF encodes tp's
-    surface value as missing)."""
+    """First fixed surface value in that surface's own unit; None when the
+    surface carries none — GRIB2 encodes that as a missing scale factor and
+    value, which is both what "entire atmosphere" means and what ECMWF writes
+    for ``tp``, so matching on None also accepts any."""
     grib2_statistical: int | None = None
     """Code table 4.10 statistical process required of the record (0 average,
     1 accumulation); None requires an instantaneous product."""
@@ -30,13 +57,45 @@ class VariableSpec:
     temperatures to Celsius); carried by header-indexed frames and
     cross-checked against a real gdalinfo pass once per run."""
 
+    def parameter_metadata(self) -> dict[str, object]:
+        """The variable's GRIB2 identity, as a schema v3 metadata block.
+
+        A fixed surface with no value is written as GRIB2 encodes it: a
+        missing scale factor and scaled value, ``null`` in JSON. Every value
+        this pipeline publishes is a whole number of the surface's own unit,
+        so the scale factor is always 0."""
+        block: dict[str, object] = {
+            "discipline": self.grib2_discipline,
+            "parameterCategory": self.grib2_category,
+            "parameterNumber": self.grib2_number,
+            "typeOfFirstFixedSurface": self.grib2_level_type,
+            "scaleFactorOfFirstFixedSurface": None,
+            "scaledValueOfFirstFixedSurface": None,
+        }
+        if self.grib2_level_value is not None:
+            scale_factor, scaled_value = _scaled_surface_value(self.grib2_level_value)
+            block["scaleFactorOfFirstFixedSurface"] = scale_factor
+            block["scaledValueOfFirstFixedSurface"] = scaled_value
+        return block
+
+
+def _scaled_surface_value(value: float) -> tuple[int, int]:
+    """``(scaleFactor, scaledValue)`` with ``value = scaledValue * 10**-scaleFactor``,
+    using the smallest scale factor that represents the value exactly."""
+    for scale_factor in range(0, 7):
+        scaled = value * 10**scale_factor
+        if abs(scaled - round(scaled)) < 1e-9:
+            return scale_factor, round(scaled)
+    raise ValueError(f"fixed surface value is not representable: {value}")
+
 
 VARIABLES: dict[str, VariableSpec] = {
     "tmp2m": VariableSpec(
         id="tmp2m",
-        label="2 米气温",
+        label="2 meter temperature",
         output_unit="°C",
         value_range=(-60, 50),
+        numeric_id=1,
         grib_element="TMP",
         index_field=":TMP:2 m above ground:",
         ecmwf_param="2t",
@@ -48,9 +107,10 @@ VARIABLES: dict[str, VariableSpec] = {
     ),
     "prate": VariableSpec(
         id="prate",
-        label="降水强度",
+        label="Precipitation rate",
         output_unit="mm/h",
         value_range=(0, 50),
+        numeric_id=2,
         grib_element="PRATE",
         index_field=":PRATE:surface:",
         excluded_index_phrases=("ave fcst",),
@@ -66,7 +126,7 @@ VARIABLES: dict[str, VariableSpec] = {
     # itself never reaches a bundle.
     "tp": VariableSpec(
         id="tp",
-        label="累计降水量",
+        label="Total precipitation",
         output_unit="m",
         value_range=(0, 1),
         grib_element="unknown",
@@ -84,7 +144,7 @@ VARIABLES: dict[str, VariableSpec] = {
     # prate and prate_ave itself never reaches a bundle.
     "prate_ave": VariableSpec(
         id="prate_ave",
-        label="窗口平均降水率",
+        label="Window-averaged precipitation rate",
         output_unit="kg/m^2s",
         value_range=(0, 1),
         grib_element="PRATE",
@@ -100,9 +160,10 @@ VARIABLES: dict[str, VariableSpec] = {
     # solar-radiation layer of the sflux source.
     "dswrf": VariableSpec(
         id="dswrf",
-        label="太阳辐射",
+        label="Downward shortwave radiation flux",
         output_unit="W/m²",
         value_range=(0, 1270),
+        numeric_id=5,
         grib_element="DSWRF",
         index_field=":DSWRF:surface:",
         excluded_index_phrases=("ave fcst",),
@@ -116,9 +177,10 @@ VARIABLES: dict[str, VariableSpec] = {
     # two-variable wind10m bundle and rendered by the GPU particle layer.
     "ugrd10m": VariableSpec(
         id="ugrd10m",
-        label="10 米风 U 分量",
+        label="10 meter U wind component",
         output_unit="m/s",
         value_range=(-64, 64),
+        numeric_id=3,
         grib_element="UGRD",
         index_field=":UGRD:10 m above ground:",
         ecmwf_param="10u",
@@ -130,9 +192,10 @@ VARIABLES: dict[str, VariableSpec] = {
     ),
     "vgrd10m": VariableSpec(
         id="vgrd10m",
-        label="10 米风 V 分量",
+        label="10 meter V wind component",
         output_unit="m/s",
         value_range=(-64, 64),
+        numeric_id=4,
         grib_element="VGRD",
         index_field=":VGRD:10 m above ground:",
         ecmwf_param="10v",
@@ -141,6 +204,21 @@ VARIABLES: dict[str, VariableSpec] = {
         grib2_level_type=103,
         grib2_level_value=10.0,
         gdal_unit="m/s",
+    ),
+    # Radar composite reflectivity: the column maximum of the equivalent
+    # reflectivity factor, so its fixed surface is the entire atmosphere
+    # (code table 4.5 value 10, which carries no surface value). The only
+    # variable not fetched from GRIB — it arrives as a NetCDF observation
+    # series (xue/observation.py), so the record-matching fields are empty.
+    "cref": VariableSpec(
+        id="cref",
+        label="Composite radar reflectivity",
+        output_unit="dBZ",
+        value_range=(0, 80),
+        numeric_id=6,
+        grib2_category=16,
+        grib2_number=5,
+        grib2_level_type=10,
     ),
 }
 

@@ -62,7 +62,7 @@ class InspectGribFastTests(unittest.TestCase):
             self.assertEqual(fast_frame.band, reference_frame.band)
             self.assertEqual(fast_frame.run_time, reference_frame.run_time)
             self.assertEqual(fast_frame.valid_time, reference_frame.valid_time)
-            self.assertEqual(fast_frame.forecast_hour, reference_frame.forecast_hour)
+            self.assertEqual(fast_frame.lead_seconds, reference_frame.lead_seconds)
             self.assertEqual(
                 raster_expression(variable_id, fast_frame.unit),
                 raster_expression(variable_id, reference_frame.unit),

@@ -74,24 +74,45 @@ before publishing data in a widened schema**.
 
 ### Bundle metadata schema versions
 
-Inside a `.xue` file, `schemaVersion` describes the *time axis only*: v1 is a
-uniform axis declaring `stepHours`; v2 lists forecast `hours` outright,
-required whenever the axis changes cadence (GFS/sflux go 3-hourly after f120,
-ECMWF 6-hourly after f144). Encoder (`xue/binconvert.py::_time_metadata`),
-Python reader (`xue/binformat.py::_parse_time_axis`), Rust
-(`rust/xue/src/lib.rs`) and `web/src/manifest.ts::timeAxisHours` must agree.
-Do not conflate this with the manifest's schema v5 or the pointer's v1.
+Inside a `.xue` file, `schemaVersion` is the lowest version a reader must
+implement. v1 and v2 are the legacy whole-hour axes (`firstForecastHour`
+with `stepHours` or `hours`) that published runs still carry. **v3** — what
+the encoder writes now — changes two things: every variable declares its
+GRIB2 `parameter` block (discipline / category / number plus the fixed
+surface), and the time axis becomes unit-neutral (`unitSeconds` +
+`firstFrameOffset` + `frameStep` | `frameOffsets`), so a sub-hourly series
+has an exact axis. `unitSeconds` is 3600 for every forecast source, which
+leaves their offsets equal to their forecast hours; the radar mosaic
+declares 360. It must be the coarsest unit that fits, and a decoder rejects
+both an unimplemented version and an overdeclared one, so each file has
+exactly one valid encoding.
+
+Within the container a plane's key is a **frame offset**, not a forecast
+hour: `PlaneEntry.frameOffset`, the worker protocol's `frameOffset`, and
+`SourceFrame.lead_seconds` upstream of the axis derivation.
+
+Encoder (`xue/binconvert.py::build_metadata`), Python reader
+(`xue/binformat.py::_parse_metadata`), Rust (`rust/xue/src/lib.rs`) and
+`web/src/manifest.ts::parseBundleMetadata` must agree. Do not conflate this
+with the manifest's schema v5 or the pointer's v1. Like a manifest widening,
+a metadata version bump is a two-sided deploy: **ship the Pages shell before
+publishing data at the new version.**
 
 ### Encoder pipeline (`xue/`)
 
-- `sources.py` — the per-model registry (`SourceSpec`): where GRIB comes from,
-  the published time axis as `(last_hour, step)` segments, which input
+- `sources.py` — the per-model registry (`SourceSpec`): where the data comes
+  from, the published time axis as `(last_hour, step)` segments, which input
   variables are fetched, which bundles are published, the production grid, and
   fetch concurrency. **Adding or changing a model starts here**, and the
-  frontend mirror is `FORECAST_MODELS` in `web/src/manifest.ts`.
-- `variables.py` — per-variable GRIB identification (element, `.idx` phrase,
-  GRIB2 discipline/category/number/level, ECMWF param) plus the value range
-  the codebook is built from. Some entries are *input-only*: ECMWF `tp`
+  frontend mirror is `FORECAST_MODELS` in `web/src/manifest.ts`. A source with
+  `observation=True` (`radar`) is not a forecast at all: no live pointer, no
+  cron job, no fetch — one local NetCDF file per event, read by
+  `observation.py`, with whatever time axis the file carries.
+- `variables.py` — the variable registry, in GRIB2's own terms: the parameter
+  triple, the fixed surface, the container's `numericId`, the metadata label
+  and unit, plus the GRIB matching hints (element, `.idx` phrase, ECMWF
+  param). One entry per variable feeds both record matching and the schema v3
+  metadata block. Some entries are *input-only* (no `numeric_id`): ECMWF `tp`
   de-accumulates into `prate`, sflux `prate_ave` de-averages into `prate`;
   neither reaches a bundle.
 - `fetch.py` → `idx.py` / `grib2.py` — byte-range fetches of exact GRIB
@@ -105,7 +126,12 @@ Do not conflate this with the manifest's schema v5 or the pointer's v1.
   codebooks, modulo-256 residual prediction, container read/write.
 - `manifest.py` — manifest and live-pointer construction *and validation*;
   both are validated on write.
-- `showcase.py` — case definitions → cropped bundles → `showcase.json`.
+- `observation.py` — the NetCDF ingest: one `gdalinfo` pass turns a file's
+  bands into the same `SourceFrame` list the GRIB inspectors return, plus the
+  `PlaneSource` saying to unscale the values and what its fill value means.
+- `showcase.py` — case definitions → cropped bundles → `showcase.json`. An
+  observation case names a local `dataset` file instead of a `run` to fetch
+  (`XUE_OBSERVATION_ROOT`).
 
 External tools are invoked as CLI subprocesses (`gdal.py`, `zstdcli.py`,
 `ffmpegcli.py`, `eccodescli.py`) rather than added as binary Python
@@ -149,6 +175,11 @@ moving at one apparent speed.
 - Locale is `zh`/`en` via `web/src/i18n.ts`, fixed per page load. Only
   human-facing copy is translated; thrown `Error` messages, worker messages
   and diagnostics stay English in both locales.
+- Timeline copy follows the *kind* of dataset, not the locale:
+  `isObservationModel` (the frontend mirror of `SourceSpec.observation`)
+  swaps "FORECAST HOUR"/`F058`/模式周期/有效时间 for
+  "TIME ELAPSED"/`T+058:24`/观测起点/观测时间, on the viewer and on the
+  showcase cards. Observations have no run cycle and no lead time.
 - URL state (`?model=`, `?type=`, `?case=`, `?lang=`) is parsed in
   `urlstate.ts`; unrecognized values fall back to defaults rather than error.
 - The Python encoder and Rust decoder are held byte-identical by golden tests

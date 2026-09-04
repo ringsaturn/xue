@@ -17,8 +17,9 @@ const MIN_LOOP_SECONDS = 4;
 
 /** How long each frame holds, relative to the frame rate's own interval.
  *
- * Forecast axes are mixed-step — GFS and sflux turn 3-hourly after f120,
- * ECMWF 6-hourly after f144 — so a constant frame rate makes forecast time
+ * Axes are not evenly spaced — GFS and sflux turn 3-hourly after f120,
+ * ECMWF 6-hourly after f144, and an observation series skips the slots its
+ * archive never published — so a constant frame rate makes forecast time
  * lurch to triple speed halfway through the loop. Pacing the selected rate on
  * the axis's shortest step and holding longer steps proportionally longer
  * keeps the weather moving at one apparent speed from f000 to f240.
@@ -27,14 +28,14 @@ const MIN_LOOP_SECONDS = 4;
  * blend between it and the next frame renders); the last frame inherits the
  * step leading into it, since the loop seam is a restart, not a transition.
  * A uniform axis yields all ones, i.e. exactly the selected frame rate. */
-export function frameDwellScales(hours: readonly number[]): number[] {
-  if (hours.length === 0) return [];
-  const steps = hours.map((hour, index) =>
-    index + 1 < hours.length ? (hours[index + 1] ?? hour) - hour : 0,
+export function frameDwellScales(offsets: readonly number[]): number[] {
+  if (offsets.length === 0) return [];
+  const steps = offsets.map((offset, index) =>
+    index + 1 < offsets.length ? (offsets[index + 1] ?? offset) - offset : 0,
   );
   if (steps.length > 1) steps[steps.length - 1] = steps[steps.length - 2] ?? 0;
   const positive = steps.filter((step) => step > 0);
-  // A degenerate axis (one frame, or repeated hours) simply plays flat.
+  // A degenerate axis (one frame, or repeated offsets) simply plays flat.
   if (positive.length === 0) return steps.map(() => 1);
   const base = Math.min(...positive);
   return steps.map((step) => (step > 0 ? step / base : 1));

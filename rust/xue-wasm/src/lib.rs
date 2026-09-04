@@ -34,9 +34,9 @@ impl WasmBundle {
     }
 
     #[wasm_bindgen(js_name = decodeFrame)]
-    pub fn decode_frame(&mut self, variable_id: u8, forecast_hour: u16) -> Result<Vec<u8>, JsError> {
+    pub fn decode_frame(&mut self, variable_id: u8, frame_offset: u16) -> Result<Vec<u8>, JsError> {
         self.inner
-            .decode_frame(FrameRequest { variable_id, forecast_hour })
+            .decode_frame(FrameRequest { variable_id, frame_offset })
             .map(|plane| plane.to_vec())
             .map_err(|error| JsError::new(&error.0))
     }
@@ -100,10 +100,10 @@ impl WasmStreamingBundle {
     pub fn missing_group_span(
         &self,
         variable_id: u8,
-        forecast_hour: u16,
+        frame_offset: u16,
     ) -> Result<Option<Box<[f64]>>, JsError> {
         self.inner
-            .missing_group_span(FrameRequest { variable_id, forecast_hour })
+            .missing_group_span(FrameRequest { variable_id, frame_offset })
             .map(|span| span.map(|(start, end)| vec![start as f64, end as f64].into_boxed_slice()))
             .map_err(|error| JsError::new(&error.0))
     }
@@ -116,9 +116,9 @@ impl WasmStreamingBundle {
     }
 
     #[wasm_bindgen(js_name = decodeFrame)]
-    pub fn decode_frame(&mut self, variable_id: u8, forecast_hour: u16) -> Result<Vec<u8>, JsError> {
+    pub fn decode_frame(&mut self, variable_id: u8, frame_offset: u16) -> Result<Vec<u8>, JsError> {
         self.inner
-            .decode_frame(FrameRequest { variable_id, forecast_hour })
+            .decode_frame(FrameRequest { variable_id, frame_offset })
             .map(|plane| plane.to_vec())
             .map_err(|error| JsError::new(&error.0))
     }

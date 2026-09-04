@@ -1,0 +1,20 @@
+{
+  "id": "shadel-2026",
+  "title": {
+    "zh": "台风「沙德尔」雷达全程",
+    "en": "Typhoon Shadel on radar"
+  },
+  "summary": {
+    "zh": "2026 年第 18 号台风「沙德尔」的雷达组合反射率全过程，原生 6 分钟档，北京时 8 月 26 日 00 时至 9 月 3 日 20 时，共 2096 帧，其中 25 个时次原始档案缺发布。8 月 28 日 08:05 以 12 级（35 m/s，975 hPa）首次登陆浙江台州玉环坎门，深入内陆后于 8 月 30 日停止编号；残余涡旋南下，9 月 1 日凌晨在南海重新加强为热带风暴级，9 月 2 日掠过粤东沿海，9 月 3 日 06:30 以 9 级（23 m/s，985 hPa）第三次登陆福建漳州漳浦古雷。数据为中国气象局雷达三级拼图组合反射率（RADAR_L3_MST_CREF），非预报产品。",
+    "en": "Composite radar reflectivity through the life of Typhoon Shadel (2026 no. 18), at the source six-minute cadence from 00 CST on 26 August to 20 CST on 3 September — 2096 frames, with 25 slots missing from the archive. It first came ashore at Kanmen, Yuhuan, Zhejiang at 08:05 CST on 28 August at 35 m/s and 975 hPa, and was discontinued over land on 30 August. Its remnant circulation moved south, re-intensified to tropical storm strength over the South China Sea early on 1 September, grazed the eastern Guangdong coast on 2 September, and made a third landfall at Gulei, Zhangpu, Fujian at 06:30 CST on 3 September at 23 m/s and 985 hPa. The data is the China Meteorological Administration level-3 radar mosaic (RADAR_L3_MST_CREF) — observations, not a forecast."
+  },
+  "model": "radar",
+  "dataset": "typhoon_shadel/shadel_full_nation_6min_z5.nc",
+  "hours": 212,
+  "bbox": [105.0, 14.0, 130.0, 34.0],
+  "variables": ["cref"],
+  "defaultVariable": "cref",
+  "eventTime": "2026-08-28T00:05:00Z",
+  "tags": ["typhoon", "radar", "asia"],
+  "credit": "CMA RADAR_L3_MST_CREF"
+}

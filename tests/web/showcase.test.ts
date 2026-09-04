@@ -47,6 +47,29 @@ describe("showcase catalog", () => {
     expect(catalog.cases[0]!.defaultVariable).toBe("prate");
   });
 
+  it("accepts an observation case", () => {
+    // The radar archive is a dataset like any other in the catalog; it just
+    // has no live feed behind it.
+    const catalog = validateCatalog(
+      catalogFixture([
+        caseFixture({
+          id: "shadel-2026",
+          modelId: "radar",
+          model: "CMA-RADAR",
+          product: "l3-mst-cref",
+          run: "2026082516",
+          runTime: "2026-08-25T16:00:00Z",
+          forecastHours: 212,
+          variables: ["cref"],
+          defaultVariable: "cref",
+          manifestPath: "showcase/shadel-2026/manifest.json",
+        }),
+      ]),
+    );
+    expect(catalog.cases[0]!.modelId).toBe("radar");
+    expect(catalog.cases[0]!.variables).toEqual(["cref"]);
+  });
+
   it("rejects a manifest path outside the case's own directory", () => {
     expect(() =>
       validateCatalog(catalogFixture([caseFixture({ manifestPath: "showcase/other/manifest.json" })])),

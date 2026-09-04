@@ -27,6 +27,7 @@ from xue.binconvert import (
 )
 from xue.manifest import build_bin_manifest, build_latest_pointer, iso_z
 from xue.quantize import QUALITY_FLUX, QUALITY_PRECIPITATION, QUALITY_TEMPERATURE, QUALITY_WIND
+from xue.sources import source_spec
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 WEB_FIXTURE_ROOT = REPOSITORY_ROOT / "tests" / "fixtures" / "generated" / "web"
@@ -34,8 +35,8 @@ RUN_TIME = datetime(2026, 8, 15, 6, tzinfo=UTC)
 WIDTH, HEIGHT = 144, 73
 HOURS = list(range(121))
 # The ECMWF fixture models the full IFS open data series: 3-hourly to 144
-# hours, 6-hourly to 240 — a mixed-step axis, so its bundles carry metadata
-# schemaVersion 2 and exercise the explicit-hours path end to end.
+# hours, 6-hourly to 240 — a mixed-step axis, so its bundles list their hours
+# outright and exercise the explicit-hours path end to end.
 ECMWF_RUN_TIME = datetime(2026, 8, 15, 0, tzinfo=UTC)
 ECMWF_HOURS = list(range(0, 145, 3)) + list(range(150, 241, 6))
 # The sflux fixture models the GFS surface flux series: hourly, with the
@@ -93,8 +94,8 @@ def _entry(variable_id: int, predictor: int, hour: int, dependency: int, group: 
         predictor=predictor,
         compression=binformat.COMPRESSION_ZSTD,
         flags=binformat.FLAG_ZSTD_CHECKSUM,
-        forecast_hour=hour,
-        dependency_hour=dependency,
+        frame_offset=hour,
+        dependency_offset=dependency,
         group_id=group,
         compressed_length=len(payload),
         data_offset=0,
@@ -275,7 +276,7 @@ def prepare_web_fixture() -> Path:
 
 def _prepare_ecmwf_fixture(grid: GridInfo, level: int) -> None:
     """A second, independent model dataset: ECMWF identity, mixed-step
-    240-hour time axis (metadata schemaVersion 2), scalar bundles only
+    240-hour time axis (an explicitly listed ``hours`` axis), scalar bundles only
     (wind, posters, and variants are optional per the manifest contract, so
     the smallest valid dataset skips them)."""
     ecmwf_root = WEB_FIXTURE_ROOT / "ecmwf"
@@ -294,7 +295,7 @@ def _prepare_ecmwf_fixture(grid: GridInfo, level: int) -> None:
             for compressed in (zstdcli.compress(raw, level=level),)
         ]
         metadata = build_metadata(
-            ECMWF_RUN_TIME, bundle_hours, grid, "quality", (variable_id,), model="ECMWF", product="ifs-0p25"
+            ECMWF_RUN_TIME, bundle_hours, grid, "quality", (variable_id,), source=source_spec("ecmwf")
         )
         bundle_path = ecmwf_root / f"{variable_id}.xue"
         binformat.write_bundle(bundle_path, metadata, payloads)
@@ -343,7 +344,7 @@ def _prepare_sflux_fixture(grid: GridInfo, level: int) -> None:
             for compressed in (zstdcli.compress(raw, level=level),)
         ]
         metadata = build_metadata(
-            SFLUX_RUN_TIME, bundle_hours, grid, "quality", (variable_id,), model="GFS-SFLUX", product="sfluxgrb"
+            SFLUX_RUN_TIME, bundle_hours, grid, "quality", (variable_id,), source=source_spec("sflux")
         )
         bundle_path = sflux_root / f"{variable_id}.xue"
         binformat.write_bundle(bundle_path, metadata, payloads)

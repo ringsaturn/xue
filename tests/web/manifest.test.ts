@@ -2,12 +2,16 @@ import { describe, expect, it } from "vitest";
 
 import { CRC32_INITIAL, crc32Hex, crc32Of, crc32Update } from "../../web/src/crc32";
 import {
+  axisUnitSeconds,
+  FORECAST_MODEL_IDS,
+  FORECAST_MODELS,
+  frameOffsets,
   hasBundle,
   hasWindBundle,
+  isObservationModel,
   parseBundleMetadata,
   pickBundleVariant,
   sameTimeAxis,
-  timeAxisHours,
   validateManifest,
 } from "../../web/src/manifest";
 import { buildPalette, buildWindSpeedPalette, decodeLinear, decodeLog } from "../../web/src/palettes";
@@ -265,6 +269,21 @@ describe("crc32", () => {
   });
 });
 
+describe("dataset kinds", () => {
+  it("marks the radar archive as observations and the forecasts as forecasts", () => {
+    // Mirrors SourceSpec.observation in xue/sources.py; the viewer titles its
+    // timeline off this (run cycle and lead time vs. series start and elapsed).
+    expect(isObservationModel("radar")).toBe(true);
+    for (const model of FORECAST_MODEL_IDS) expect(isObservationModel(model)).toBe(false);
+  });
+
+  it("keeps the radar archive out of the live-feed list", () => {
+    // It has no live pointer, so nothing may try to fetch one.
+    expect(FORECAST_MODEL_IDS).not.toContain("radar");
+    expect(FORECAST_MODELS.radar.latestFilename).toBeUndefined();
+  });
+});
+
 describe("parseBundleMetadata", () => {
   const metadata = {
     schemaVersion: 1,
@@ -303,18 +322,83 @@ describe("parseBundleMetadata", () => {
     time: { firstForecastHour: 0, frameCount: mixedHours.length, hours: mixedHours },
   };
 
-  it("accepts a schemaVersion 2 mixed-step axis", () => {
-    const parsed = parseBundleMetadata(JSON.stringify(mixedMetadata));
-    expect(parsed.time.hours).toEqual(mixedHours);
-    expect(timeAxisHours(parsed.time)).toEqual(mixedHours);
+  const parameter = {
+    discipline: 0,
+    parameterCategory: 0,
+    parameterNumber: 0,
+    typeOfFirstFixedSurface: 103,
+    scaleFactorOfFirstFixedSurface: 0,
+    scaledValueOfFirstFixedSurface: 2,
+  };
+  const v3Metadata = {
+    ...metadata,
+    schemaVersion: 3,
+    time: { unitSeconds: 3600, firstFrameOffset: 0, frameCount: 121, frameStep: 1 },
+    variables: [{ ...metadata.variables[0], parameter }],
+  };
+
+  it("still reads the schemaVersion 1 and 2 whole-hour axes", () => {
+    // Published runs carry these; their offsets are their forecast hours.
+    const mixed = parseBundleMetadata(JSON.stringify(mixedMetadata));
+    expect(frameOffsets(mixed.time)).toEqual(mixedHours);
+    expect(axisUnitSeconds(mixed.time)).toBe(3600);
+    const uniform = parseBundleMetadata(JSON.stringify(metadata));
+    const offsets = frameOffsets(uniform.time);
+    expect(offsets).toHaveLength(121);
+    expect(offsets[0]).toBe(0);
+    expect(offsets[120]).toBe(120);
+    expect(axisUnitSeconds(uniform.time)).toBe(3600);
   });
 
-  it("materializes uniform axes from stepHours", () => {
-    const parsed = parseBundleMetadata(JSON.stringify(metadata));
-    const hours = timeAxisHours(parsed.time);
-    expect(hours).toHaveLength(121);
-    expect(hours[0]).toBe(0);
-    expect(hours[120]).toBe(120);
+  it("reads a sub-hourly schemaVersion 3 axis", () => {
+    // The radar mosaic publishes every six minutes, with gaps where a slot
+    // was never published.
+    const sixMinute = {
+      ...v3Metadata,
+      time: { unitSeconds: 360, firstFrameOffset: 0, frameCount: 4, frameOffsets: [0, 1, 2, 4] },
+    };
+    const parsed = parseBundleMetadata(JSON.stringify(sixMinute));
+    expect(axisUnitSeconds(parsed.time)).toBe(360);
+    expect(frameOffsets(parsed.time)).toEqual([0, 1, 2, 4]);
+    expect(sameTimeAxis(parsed.time, metadata.time as never)).toBe(false);
+  });
+
+  it("rejects a unit finer or coarser than the axis needs", () => {
+    // An hourly series cannot call itself six-minute...
+    expect(() =>
+      parseBundleMetadata(
+        JSON.stringify({
+          ...v3Metadata,
+          time: { unitSeconds: 360, firstFrameOffset: 0, frameCount: 3, frameStep: 10 },
+        }),
+      ),
+    ).toThrow();
+    // ...and the unit must divide an hour.
+    expect(() =>
+      parseBundleMetadata(
+        JSON.stringify({
+          ...v3Metadata,
+          time: { unitSeconds: 7, firstFrameOffset: 0, frameCount: 3, frameStep: 1 },
+        }),
+      ),
+    ).toThrow();
+  });
+
+  it("keeps the two time-block shapes apart", () => {
+    // A v3 block below version 3, and the v1/v2 keys inside a v3 file.
+    expect(() =>
+      parseBundleMetadata(
+        JSON.stringify({
+          ...metadata,
+          time: { unitSeconds: 3600, firstFrameOffset: 0, frameCount: 3, frameStep: 1 },
+        }),
+      ),
+    ).toThrow();
+    expect(() =>
+      parseBundleMetadata(
+        JSON.stringify({ ...v3Metadata, time: { firstForecastHour: 0, stepHours: 1, frameCount: 3 } }),
+      ),
+    ).toThrow();
   });
 
   it("compares axes by frame list", () => {
@@ -324,8 +408,68 @@ describe("parseBundleMetadata", () => {
     expect(sameTimeAxis(uniform, mixed)).toBe(false);
   });
 
+  it("accepts a schemaVersion 3 GRIB2 parameter block", () => {
+    const parsed = parseBundleMetadata(JSON.stringify(v3Metadata));
+    expect(parsed.variables[0]!.parameter?.typeOfFirstFixedSurface).toBe(103);
+    // A surface with no value writes both halves null, as GRIB2 does.
+    const entireAtmosphere = {
+      ...v3Metadata,
+      variables: [
+        {
+          ...v3Metadata.variables[0],
+          id: "cref",
+          parameter: {
+            discipline: 0,
+            parameterCategory: 16,
+            parameterNumber: 5,
+            typeOfFirstFixedSurface: 10,
+            scaleFactorOfFirstFixedSurface: null,
+            scaledValueOfFirstFixedSurface: null,
+          },
+        },
+      ],
+    };
+    expect(parseBundleMetadata(JSON.stringify(entireAtmosphere)).schemaVersion).toBe(3);
+  });
+
+  it("ties the parameter block to schema version 3", () => {
+    // Required at 3, forbidden below, and the version is the lowest able to
+    // express the metadata — a v3 file with a uniform axis is still v3.
+    expect(() =>
+      parseBundleMetadata(JSON.stringify({ ...v3Metadata, variables: metadata.variables })),
+    ).toThrow();
+    expect(() => parseBundleMetadata(JSON.stringify({ ...v3Metadata, schemaVersion: 1 }))).toThrow();
+    expect(() => parseBundleMetadata(JSON.stringify({ ...v3Metadata, schemaVersion: 2 }))).toThrow();
+    const mixedV3 = {
+      ...v3Metadata,
+      time: { unitSeconds: 3600, firstFrameOffset: 0, frameCount: mixedHours.length, frameOffsets: mixedHours },
+    };
+    expect(parseBundleMetadata(JSON.stringify(mixedV3)).schemaVersion).toBe(3);
+  });
+
+  it("rejects malformed parameter blocks", () => {
+    for (const broken of [
+      { ...parameter, parameterNumber: 256 },
+      { ...parameter, discipline: "0" },
+      { ...parameter, scaledValueOfFirstFixedSurface: null },
+      { ...parameter, levelValue: 2 },
+    ]) {
+      expect(() =>
+        parseBundleMetadata(
+          JSON.stringify({ ...v3Metadata, variables: [{ ...metadata.variables[0], parameter: broken }] }),
+        ),
+      ).toThrow();
+    }
+    const { scaleFactorOfFirstFixedSurface: _dropped, ...incomplete } = parameter;
+    expect(() =>
+      parseBundleMetadata(
+        JSON.stringify({ ...v3Metadata, variables: [{ ...metadata.variables[0], parameter: incomplete }] }),
+      ),
+    ).toThrow();
+  });
+
   it("rejects unsupported schema versions and broken time axes", () => {
-    expect(() => parseBundleMetadata(JSON.stringify({ ...metadata, schemaVersion: 3 }))).toThrow();
+    expect(() => parseBundleMetadata(JSON.stringify({ ...metadata, schemaVersion: 4 }))).toThrow();
     expect(() =>
       parseBundleMetadata(JSON.stringify({ ...metadata, time: { frameCount: 0 } })),
     ).toThrow();

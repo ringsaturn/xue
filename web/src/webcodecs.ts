@@ -24,7 +24,7 @@
  * 33.9ms for a full 6-frame decode) that a dedicated Worker isn't needed.
  */
 
-import { parseBundleMetadata, timeAxisHours } from "./manifest";
+import { frameOffsets, parseBundleMetadata } from "./manifest";
 
 export interface DecodeChannel {
   postMessage(message: unknown, transfer?: Transferable[]): void;
@@ -128,9 +128,9 @@ class VideoDecodeChannel implements DecodeChannel {
   onerror: ((event: ErrorEvent) => void) | null = null;
 
   private readonly config: DecoderConfig;
-  /** Forecast hour per frame index; mixed-step axes are non-uniform. */
-  private readonly hours: number[];
-  private readonly frameIndexByHour: Map<number, number>;
+  /** Frame offset per frame index; non-uniform axes are not evenly spaced. */
+  private readonly offsets: number[];
+  private readonly frameIndexByOffset: Map<number, number>;
   /** Encoded bytes per frame; fully populated in buffer mode, filled by
    * range fetches in url mode. */
   private readonly chunks: (Uint8Array | undefined)[];
@@ -154,8 +154,8 @@ class VideoDecodeChannel implements DecodeChannel {
       avc: { format: "annexb" },
     };
     const metadata = parseBundleMetadata(options.metadataJson);
-    this.hours = timeAxisHours(metadata.time);
-    this.frameIndexByHour = new Map(this.hours.map((hour, index) => [hour, index]));
+    this.offsets = frameOffsets(metadata.time);
+    this.frameIndexByOffset = new Map(this.offsets.map((offset, index) => [offset, index]));
     this.chunks = new Array<Uint8Array | undefined>(options.frames.length);
     if (options.source.kind === "buffer") {
       const bytes = new Uint8Array(options.source.buffer);
@@ -177,7 +177,7 @@ class VideoDecodeChannel implements DecodeChannel {
       requestId?: number;
       generation?: number;
       variableId?: number;
-      forecastHour?: number;
+      frameOffset?: number;
       hours?: number[];
       concurrency?: number;
     };
@@ -195,7 +195,7 @@ class VideoDecodeChannel implements DecodeChannel {
       return;
     }
     if (request.type === "prefetch-window") {
-      this.windowIndices = (request.hours ?? []).map((hour) => this.frameIndexByHour.get(hour) ?? -1);
+      this.windowIndices = (request.hours ?? []).map((hour) => this.frameIndexByOffset.get(hour) ?? -1);
       this.windowConcurrency = request.concurrency ?? 0;
       this.prefetchFailures = 0;
       this.pumpPrefetch();
@@ -297,11 +297,11 @@ class VideoDecodeChannel implements DecodeChannel {
     requestId?: number;
     generation?: number;
     variableId?: number;
-    forecastHour?: number;
+    frameOffset?: number;
   }): Promise<void> {
     const { frames, width, height } = this.options;
-    const hour = request.forecastHour ?? 0;
-    const target = this.frameIndexByHour.get(hour) ?? -1;
+    const hour = request.frameOffset ?? 0;
+    const target = this.frameIndexByOffset.get(hour) ?? -1;
     if (target < 0 || target >= frames.length) {
       this.emit({ type: "error", requestId: request.requestId, message: `target frame ${target} outside the index` });
       return;
@@ -351,7 +351,7 @@ class VideoDecodeChannel implements DecodeChannel {
               requestId: index === target ? request.requestId : undefined,
               generation: request.generation,
               variableId: request.variableId,
-              forecastHour: this.hours[index] ?? -1,
+              frameOffset: this.offsets[index] ?? -1,
               decodeMs: performance.now() - started,
               buffer: plane.buffer,
             });
