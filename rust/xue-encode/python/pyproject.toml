@@ -1,0 +1,20 @@
+[build-system]
+requires = ["maturin>=1.7,<2"]
+build-backend = "maturin"
+
+[project]
+name = "xue-encode-py"
+description = "Python bindings for the experimental native Xue encoder"
+requires-python = ">=3.11"
+license = { text = "MIT OR Apache-2.0" }
+classifiers = ["Programming Language :: Rust"]
+dynamic = ["version"]
+
+[tool.maturin]
+# The crate lives in a workspace whose root is the encoder itself.
+manifest-path = "Cargo.toml"
+module-name = "xue_encode_py"
+# GDAL, zlib and libzstd are linked from the system; the wheel is the Rust
+# code only. It is therefore not portable off this machine, which is fine for
+# an experiment run beside the Python encoder it is compared against.
+skip-auditwheel = true

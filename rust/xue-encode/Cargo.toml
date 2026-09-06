@@ -1,0 +1,67 @@
+# Experimental native encoder. Its own workspace: the root rust/ workspace is
+# tuned for the wasm decoder (opt-level "s", panic = "abort"), and neither
+# setting suits a native CLI or a Python extension module.
+[workspace]
+resolver = "2"
+members = [".", "python"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/ringsaturn/xue"
+
+[workspace.dependencies]
+anyhow = "1"
+crc32fast = "1"
+# The poster payload must match the Python encoder byte for byte, and
+# `zlib.compress(level=9)` there is stock zlib. The `zlib-rs` backend is a port
+# of zlib-ng, whose deflate output differs slightly, so this links libz itself.
+flate2 = { version = "1", default-features = false, features = ["zlib"] }
+gdal-sys = { version = "0.12", features = ["bindgen"] }
+# Header index only: the encoder never decodes GRIB payloads through grib-rs
+# (GDAL does that, in the layout the published grid expects), so none of the
+# unpacking backends — OpenJPEG, PNG, libaec — or the PROJ grid-point support
+# are needed, and each of them builds a C library from source.
+grib = { version = "0.18", default-features = false }
+libc = "0.2"
+rayon = "1"
+serde_json = { version = "1", features = ["preserve_order"] }
+time = { version = "0.3", features = ["formatting", "macros", "parsing"] }
+zstd = "0.14"
+
+[package]
+name = "xue-encode"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Experimental native encoder for the Xue v1 bundle format"
+
+[lib]
+name = "xue_encode"
+path = "src/lib.rs"
+
+[[bin]]
+name = "xue-encode"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+crc32fast.workspace = true
+flate2.workspace = true
+gdal-sys.workspace = true
+grib.workspace = true
+libc.workspace = true
+rayon.workspace = true
+serde_json.workspace = true
+time.workspace = true
+zstd.workspace = true
+# The decoder crate is the read-back verifier, exactly as the Python encoder
+# verifies every bundle it writes with its own reference reader.
+xue = { path = "../xue" }
+regex = "1.13.1"
+serde = { version = "1.0.229", features = ["derive"] }
+
+[profile.release]
+opt-level = 3

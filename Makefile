@@ -32,7 +32,7 @@ AWS_REQUEST_CHECKSUM_CALCULATION ?= when_required
 AWS_RESPONSE_CHECKSUM_VALIDATION ?= when_required
 export AWS_DEFAULT_REGION AWS_REQUEST_CHECKSUM_CALCULATION AWS_RESPONSE_CHECKSUM_VALIDATION
 
-.PHONY: check install wasm test test-rust test-e2e bench bench-video bench-lossy mvp serve format-pdf deploy-build upload-r2 prune-r2 live-run deploy-pages deploy showcase showcase-check upload-r2-showcase clean
+.PHONY: check install wasm test test-rust test-e2e encoder-rust encoder-rust-test encoder-rust-wheel bench bench-video bench-lossy mvp serve format-pdf deploy-build upload-r2 prune-r2 live-run deploy-pages deploy showcase showcase-check upload-r2-showcase clean
 
 check:
 	$(PYTHON) scripts/check_dependencies.py
@@ -53,6 +53,27 @@ test-rust:
 
 test-e2e:
 	npm run test:e2e
+
+# The experimental native encoder (rust/xue-encode). Its own workspace, and it
+# links GDAL, so it needs pkg-config pointed at the GDAL install and libclang
+# for gdal-sys' bindgen. Not part of `make test`: the pipeline it reimplements
+# is the Python one, which stays the reference.
+ENCODER_RUST = cd rust/xue-encode && PKG_CONFIG_PATH="$$(gdal-config --prefix)/lib/pkgconfig"
+
+encoder-rust:
+	$(ENCODER_RUST) cargo build --release -p xue-encode
+
+# Regenerates the Python-encoded fixture first: the golden test demands the
+# exact bytes the reference encoder wrote for it.
+encoder-rust-test:
+	$(PYTHON) tests/prepare_bin_fixture.py
+	$(ENCODER_RUST) cargo test --release
+
+# maturin is only needed to produce a .whl; `cargo build -p xue-encode-py`
+# builds the same module as a cdylib.
+encoder-rust-wheel:
+	cd rust/xue-encode/python && PKG_CONFIG_PATH="$$(gdal-config --prefix)/lib/pkgconfig" \
+	    uvx maturin@1.9 build --release --out ../../../data/work/wheels
 
 bench:
 	$(PYTHON) scripts/bench_bin.py data/raw/gfs.$(RUN) --output data/work/bench_bin.json

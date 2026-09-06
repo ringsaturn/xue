@@ -26,6 +26,7 @@ test-results/
 tests/fixtures/generated/
 tests/fixtures/work/
 rust/target/
+rust/xue-encode/target/
 web/src/wasm/
 *.egg-info/
 docs/format.pdf

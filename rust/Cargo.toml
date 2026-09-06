@@ -1,6 +1,9 @@
 [workspace]
 resolver = "2"
 members = ["xue", "xue-wasm"]
+# Experimental native encoder: its own workspace, so this one keeps the
+# wasm-tuned release profile below.
+exclude = ["xue-encode"]
 
 [profile.release]
 lto = true
