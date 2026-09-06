@@ -16,7 +16,7 @@ use std::collections::HashMap;
 use std::ffi::{CStr, CString};
 use std::path::Path;
 use std::ptr;
-use std::sync::Once;
+use std::sync::{Mutex, MutexGuard, Once};
 
 use gdal_sys::{
     CPLErr, CPLGetLastErrorMsg, GDALAccess, GDALAllRegister, GDALClose, GDALDataType,
@@ -29,6 +29,28 @@ use gdal_sys::{
 use crate::errors::{EncodeError, Result};
 
 static REGISTER: Once = Once::new();
+
+/// Serializes access to GDAL's netCDF driver.
+///
+/// libnetcdf and the HDF5 library under it are not thread-safe, and GDAL does
+/// not lock for them: opening and reading one file from several threads at
+/// once fails with "netCDF chunk fetch failed: NetCDF: HDF error". The Python
+/// encoder never met this because every extraction was its own
+/// `gdal_translate` process. GRIB reads are unaffected and stay parallel.
+static NETCDF: Mutex<()> = Mutex::new(());
+
+/// Whether a GDAL connection string names a dataset that must be read under
+/// [`netcdf_guard`]. NetCDF subdatasets are spelled `NETCDF:"<file>":<var>`.
+pub fn needs_serial_access(name: &Path) -> bool {
+    name.to_string_lossy().starts_with("NETCDF:")
+}
+
+/// Hold this for as long as a netCDF dataset is open and being read.
+pub fn netcdf_guard() -> MutexGuard<'static, ()> {
+    // A poisoned lock only means some other worker failed mid-read; the driver
+    // itself is no worse off, and the error has already been reported.
+    NETCDF.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+}
 
 fn register() {
     REGISTER.call_once(|| unsafe { GDALAllRegister() });

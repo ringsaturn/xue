@@ -26,7 +26,7 @@ bands through GDAL's C API skips all of it.
 | compression | `compression.zstd` / `zstd` CLI | `zstd` crate (`ZSTD_compress2`) |
 | poster deflate | `zlib.compress(level=9)` | `flate2` on libz |
 | read-back verify | `xue/binformat.py` reference reader | the `xue` decoder crate — the same code the browser runs |
-| H.264 companions | `ffmpeg` subprocess | *not built* (optional artifacts; the frontend falls back to `.xue`) |
+| H.264 companions | `ffmpeg` subprocess | *not built* — scaffolding for comparing compression strategies, not part of what this experiment measures |
 
 `gdal-sys` is used rather than the high-level `gdal` crate because, as of
 `gdal` 0.19, the safe wrapper does not compile against GDAL 3.13 — its
@@ -105,7 +105,24 @@ so `zstd_compress` here calls `ZSTD_compress2` one-shot as well.
 
 ## Not covered
 
-Fetching (`xue fetch`), the showcase driver, `build-bin`, `verify-bin` and the
-H.264 companion artifacts stay in Python. The observation (NetCDF) path is
-implemented but has not been diffed against the Python encoder — there is no
-radar fixture in the repository.
+Fetching (`xue fetch`), the showcase driver, `build-bin` and `verify-bin` stay
+in Python, as do the H.264 companions — those exist to compare compression
+strategies against the container, which is not what this experiment measures.
+
+## Verified against
+
+Every source, on real runs, with every artifact compared byte for byte:
+
+| Source | What it exercises |
+|---|---|
+| GFS | the plain path, plus the two-variable wind bundle |
+| ECMWF | de-accumulating `tp`, and the shorter prate axis that follows |
+| GFS-SFLUX | de-averaging `prate_ave`, the Gaussian grid, the -180 column roll, `dswrf` |
+| GFS, cropped | `--bbox` with `--bundles`, and `manifest.json` |
+| CMA-RADAR | the NetCDF observation path: unscaling, the fill value, a `unitSeconds: 360` axis listing its offsets around archive gaps, `--hours` |
+
+One thing the reference never had to handle showed up here: GDAL's netCDF
+driver is not thread-safe, and reading one file from several threads fails with
+`netCDF chunk fetch failed: NetCDF: HDF error`. Every extraction was its own
+`gdal_translate` process in Python, so it never met this. `gdalio::netcdf_guard`
+serializes those reads; GRIB stays parallel.

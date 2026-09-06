@@ -19,7 +19,7 @@ use crate::binformat::{
     NO_DEPENDENCY, PREDICTOR_ANCHOR, PREDICTOR_RAW,
 };
 use crate::errors::{EncodeError, Result};
-use crate::gdalio::Dataset;
+use crate::gdalio::{needs_serial_access, netcdf_guard, Dataset};
 use crate::grid::{crop_grid, normalize_longitudes, GridInfo};
 use crate::gribindex::inspect_grib_fast;
 use crate::inspect::{inspect_grib_multi, normalize_unit, raster_expression, SUPPORTED_EXTENSIONS};
@@ -344,6 +344,9 @@ fn extract_planes(
     plane_source: &PlaneSource,
 ) -> Result<Vec<(String, Vec<f64>)>> {
     let source = &frames[0].1.path;
+    // The netCDF driver is not thread-safe; the guard is held for the whole
+    // extraction, open included, and is a no-op for every GRIB source.
+    let _serial = needs_serial_access(source).then(netcdf_guard);
     let dataset = Dataset::open(source)?;
     let (source_height, source_width) = grid.source_shape();
     if dataset.size() != (source_width, source_height) {
