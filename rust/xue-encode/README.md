@@ -65,19 +65,102 @@ returns, and `quantize` / `encode_residual` / `decimate` / `encode_poster`
 take and return NumPy arrays so individual stages can be A/B-tested against
 `xue/quantize.py` and `xue/temporal.py` without running a whole build.
 
-```sh
-make encoder-rust-wheel     # builds a wheel with maturin (needs uv)
-```
-
-maturin is only needed to produce a `.whl`. `cargo build --release -p
-xue-encode-py` produces the same module as a `cdylib`; copying
-`target/release/libxue_encode_py.dylib` to `xue_encode_py.so` on the Python
-path is enough to import it.
-
 ```python
 import xue_encode_py
 report = xue_encode_py.convert_bin(["data/raw/gfs.2026082006"], "out/", model="gfs")
 ```
+
+### Installing
+
+The wheels are **not on PyPI**. Each carries its own GDAL, the encoder is
+pinned to the library versions its byte-identity comparison was run against,
+and it is a research artifact rather than something to depend on. They ride on
+GitHub release assets instead, behind a PEP 503 index:
+
+```sh
+pip install xue-encode-py \
+  --index-url https://ringsaturn.github.io/xue/simple/ \
+  --extra-index-url https://pypi.org/simple
+```
+
+```toml
+# pyproject.toml, for uv
+[[tool.uv.index]]
+name = "xue-encoder"
+url = "https://ringsaturn.github.io/xue/simple"
+explicit = true
+
+[tool.uv.sources]
+xue-encode-py = { index = "xue-encoder" }
+```
+
+### Building a wheel
+
+```sh
+make encoder-wheel          # minimal GDAL, then the wheel, then repair it
+```
+
+`scripts/build-gdal-minimal.sh` builds libaec, HDF5, netCDF, PROJ and GDAL from
+source into `build/gdal-minimal`, and `scripts/build-wheel.sh` stages GDAL's
+and PROJ's data directories plus every licence text into the package, runs
+maturin, and lets `delocate` (macOS) or `auditwheel` (Linux) move the shared
+libraries in. zlib and sqlite3 come from the platform and are not bundled.
+
+The wheel is `abi3-py311`: one per platform, not one per Python minor version.
+
+### Why a bundled GDAL, and why a minimal one
+
+The wheel has to carry GDAL, because the GRIB driver will not read a band
+without GDAL's own data directory — with `GDAL_DATA` unset it reports
+`Cannot find grib2_center.csv` and then matches zero records, so record
+matching fails outright rather than degrading.
+
+A distribution GDAL is the wrong thing to carry. A package-manager build pulls
+a 318 MB closure of 227 shared libraries — Arrow, TileDB, OpenBLAS, libicu,
+x265 — of which the encoder uses none. It also drags in Poppler (GPL-2/3),
+x265 (GPL-2), libde265 (LGPL-3), libspatialite and mariadb-connector-c
+(LGPL), whose obligations a redistributed binary would have to answer for.
+
+Built here with the GRIB and netCDF drivers and nothing else, the whole
+closure is seven libraries:
+
+| | |
+|---:|---|
+| 16.4 MB | libgdal |
+| 4.2 MB | libproj |
+| 3.9 MB | libhdf5 |
+| 1.2 MB | libnetcdf |
+| | libhdf5_hl, libaec, libsz |
+
+plus 10.2 MB of `proj.db` and 3 MB of GDAL's data tables — **a 12 MB wheel**.
+zlib, sqlite3, libSystem and libc++ come from the platform.
+
+Everything bundled is permissive and allows binary redistribution with
+attribution: GDAL and PROJ (MIT), HDF5 and libaec (BSD), netCDF (MIT-style),
+and zlib and sqlite3 from the platform. Several ask explicitly for their
+notice to travel with a binary, so the wheel carries them in
+`xue_encode_py/licenses/`.
+
+### Three things that make the build brittle
+
+Each is commented where it happens, and each was found the hard way:
+
+* **Enumerating the codecs to disable does not work.** GDAL probes several
+  through pkg-config, which has its own search path; a machine with Homebrew
+  ends up linking libjxl and Brotli into a build with no driver able to use
+  them, and — because those were built for a newer macOS — the wheel comes out
+  tagged `macosx_26_0` instead of `macosx_11_0`. `GDAL_USE_EXTERNAL_LIBS=OFF`
+  plus the two dependencies by name is the reliable form.
+* **CMake will compile against one copy of a library and link another.** With
+  Homebrew's HDF5 2.1 headers ahead of the 1.14 built here, netCDF built
+  cleanly and then failed at run time on every netCDF-4 file with
+  `H5Pset_libver_bounds(): high bound is not valid` — an enum value that only
+  exists in the newer library. `CMAKE_IGNORE_PREFIX_PATH` keeps the prefix and
+  the platform SDK the only things in scope.
+* **`delocate` cannot vendor what it cannot resolve.** The extension links
+  libgdal by its `@rpath` install name, so the build passes
+  `-C link-arg=-Wl,-rpath,<prefix>/lib`; delocate strips the rpath again once
+  the libraries are copied in.
 
 ## Equivalence
 

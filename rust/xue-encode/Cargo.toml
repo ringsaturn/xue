@@ -38,6 +38,8 @@ license.workspace = true
 repository.workspace = true
 description = "Experimental native encoder for the Xue v1 bundle format"
 
+build = "build.rs"
+
 [lib]
 name = "xue_encode"
 path = "src/lib.rs"

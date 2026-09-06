@@ -6,6 +6,8 @@ license.workspace = true
 repository.workspace = true
 description = "Python bindings for the experimental native Xue encoder"
 
+build = "build.rs"
+
 [lib]
 name = "xue_encode_py"
 crate-type = ["cdylib", "rlib"]
@@ -14,5 +16,7 @@ path = "src/lib.rs"
 [dependencies]
 xue-encode = { path = ".." }
 numpy = "0.29"
-pyo3 = { version = "0.29", features = ["extension-module"] }
+# abi3: one wheel per platform rather than one per Python minor version. The
+# wheel carries a bundled GDAL, so the difference is roughly 20 MB against 80.
+pyo3 = { version = "0.29", features = ["extension-module", "abi3-py311"] }
 serde_json = { workspace = true }

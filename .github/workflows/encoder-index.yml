@@ -1,0 +1,59 @@
+name: encoder index
+
+# Publishes a PEP 503 simple index over the encoder wheels attached to
+# encoder-v* releases, so `pip install xue-encode-py --index-url ...` works
+# without the package ever reaching PyPI (the arrangement ringsaturn/tzfpy
+# uses for its own overflow wheels).
+#
+# The index holds links only, never wheels: the assets stay on the release.
+# GitHub Pages here is unrelated to the viewer, which deploys to Cloudflare
+# Pages from deploy-pages.yml.
+
+on:
+  release:
+    types: [published, edited, deleted]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    # A release of the crate (v*) is not a release of the encoder, and only the
+    # latter changes the index.
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.release.tag_name, 'encoder-v')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the index
+        run: python3 scripts/build_encoder_index.py --repository "${GITHUB_REPOSITORY}" --output site
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Verify the index carries no wheels
+        run: |
+          set -euo pipefail
+          if find site -type f -name '*.whl' | grep -q .; then
+            echo "the index must link to release assets, not carry them" >&2
+            exit 1
+          fi
+          test -f site/simple/xue-encode-py/index.html
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - id: deploy
+        uses: actions/deploy-pages@v4

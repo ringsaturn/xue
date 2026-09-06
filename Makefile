@@ -32,7 +32,7 @@ AWS_REQUEST_CHECKSUM_CALCULATION ?= when_required
 AWS_RESPONSE_CHECKSUM_VALIDATION ?= when_required
 export AWS_DEFAULT_REGION AWS_REQUEST_CHECKSUM_CALCULATION AWS_RESPONSE_CHECKSUM_VALIDATION
 
-.PHONY: check install wasm test test-rust test-e2e encoder-rust encoder-rust-test encoder-rust-wheel bench bench-video bench-lossy mvp serve format-pdf deploy-build upload-r2 prune-r2 live-run deploy-pages deploy showcase showcase-check upload-r2-showcase clean
+.PHONY: check install wasm test test-rust test-e2e encoder-rust encoder-rust-test encoder-rust-wheel encoder-wheel bench bench-video bench-lossy mvp serve format-pdf deploy-build upload-r2 prune-r2 live-run deploy-pages deploy showcase showcase-check upload-r2-showcase clean
 
 check:
 	$(PYTHON) scripts/check_dependencies.py
@@ -69,8 +69,15 @@ encoder-rust-test:
 	$(PYTHON) tests/prepare_bin_fixture.py
 	$(ENCODER_RUST) cargo test --release
 
-# maturin is only needed to produce a .whl; `cargo build -p xue-encode-py`
-# builds the same module as a cdylib.
+# A self-contained wheel: builds a minimal GDAL (GRIB and netCDF drivers only)
+# from source on first run, then bundles it, GDAL's and PROJ's data
+# directories, and every licence text alongside the extension module.
+encoder-wheel:
+	cd rust/xue-encode && ./scripts/build-wheel.sh
+
+# The same module linked against whatever GDAL the machine has — no bundling,
+# no data directories, not portable. Enough for A/B tests beside the Python
+# encoder, which is what most of this crate's use is.
 encoder-rust-wheel:
 	cd rust/xue-encode/python && PKG_CONFIG_PATH="$$(gdal-config --prefix)/lib/pkgconfig" \
 	    uvx maturin@1.9 build --release --out ../../../data/work/wheels
