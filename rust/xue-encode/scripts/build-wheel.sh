@@ -44,23 +44,29 @@ ls "$PACKAGE/licenses" | sed 's/^/    /'
 echo "==> building the wheel"
 mkdir -p "$OUTPUT"
 rm -f "$OUTPUT"/*.whl
+# maturin builds into a staging directory and the repair step writes the final
+# wheel into $OUTPUT. Keeping them apart matters: repairing can change the
+# platform tag — a library built for a newer OS than the deployment target
+# drags it up — and then the unrepaired wheel would sit beside the repaired one
+# under a different name.
+STAGING="$(mktemp -d)"
+trap 'rm -rf "$STAGING"' EXIT
 cd "$HERE/python"
 # build.rs adds the LC_RPATH that lets delocate resolve libgdal and vendor it.
-PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig" uvx maturin@1.9 build --release --out "$OUTPUT"
+PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig" uvx maturin@1.9 build --release --out "$STAGING"
 
-wheel="$(ls "$OUTPUT"/*.whl)"
-echo "==> vendoring the shared libraries into $(basename "$wheel")"
+staged="$(ls "$STAGING"/*.whl)"
+echo "==> vendoring the shared libraries into $(basename "$staged")"
 case "$(uname -s)" in
   Darwin)
     # delocate follows the install names out of the extension module and
     # rewrites them to @loader_path, so the wheel needs no DYLD_ variables.
-    DYLD_LIBRARY_PATH="$PREFIX/lib" uvx --from delocate delocate-wheel \
-      --require-archs "$(uname -m)" --wheel-dir "$OUTPUT" "$wheel"
+    uvx --from delocate delocate-wheel \
+      --require-archs "$(uname -m)" --wheel-dir "$OUTPUT" "$staged"
     ;;
   Linux)
-    LD_LIBRARY_PATH="$PREFIX/lib" uvx --from auditwheel auditwheel repair \
-      --plat "${AUDITWHEEL_PLAT:-manylinux_2_28_$(uname -m)}" --wheel-dir "$OUTPUT" "$wheel"
-    rm -f "$wheel"
+    uvx --from auditwheel auditwheel repair \
+      --plat "${AUDITWHEEL_PLAT:-manylinux_2_34_$(uname -m)}" --wheel-dir "$OUTPUT" "$staged"
     ;;
   *) echo "unsupported platform: $(uname -s)" >&2; exit 1 ;;
 esac
