@@ -9,7 +9,7 @@
 
 use serde_json::{json, Map, Value};
 
-use crate::errors::{EncodeError, Result};
+use crate::encode::errors::{EncodeError, Result};
 
 #[derive(Debug, Clone, Copy)]
 pub struct VariableSpec {

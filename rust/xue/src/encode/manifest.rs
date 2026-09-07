@@ -14,9 +14,9 @@ use std::path::Path;
 use serde_json::{json, Map, Value};
 use time::OffsetDateTime;
 
-use crate::binformat::write_atomic;
-use crate::errors::{EncodeError, Result};
-use crate::metadata::iso_z;
+use crate::encode::binformat::write_atomic;
+use crate::encode::errors::{EncodeError, Result};
+use crate::encode::metadata::iso_z;
 
 /// Schema v5 bundle registry, in manifest order.
 pub const BIN_BUNDLE_VARIABLES: &[&str] = &["tmp2m", "prate", "dswrf", "cref", "wind10m"];

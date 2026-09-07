@@ -15,12 +15,17 @@ implementations of one format live here and must stay in agreement:
 - **TypeScript frontend** — `web/src/` (manifest resolution, decode worker,
   WebGL2 layers, playback).
 
-Beside them, and *not* part of the delivery contract: **`rust/xue-encode`**, an
-experimental native port of `convert-bin` (its own cargo workspace, plus a
-PyO3 wrapper under `rust/xue-encode/python`). It links GDAL, grib-rs and zstd
-in process instead of shelling out, and is held to the Python encoder by
-byte-for-byte identical output — see `rust/xue-encode/README.md`. The Python
-encoder stays the reference; a format change goes there first.
+Beside them, and *not* part of the delivery contract: an experimental native
+port of `convert-bin` at `rust/xue/src/encode/`, behind the `xue` crate's
+off-by-default `encoder` feature, plus a PyO3 wrapper at `rust/xue-encode-py/`.
+It links GDAL, grib-rs and zstd in process instead of shelling out, and is held
+to the Python encoder by byte-for-byte identical output — see `docs/encoder.md`.
+The Python encoder stays the reference; a format change goes there first.
+
+The feature is off by default because it links GDAL and the decoder does not,
+and the two are separated by cargo profile as well: `release` stays tuned for
+the wasm decoder, `encoder` inherits it at `opt-level = 3`. Profiles live in
+`rust/Cargo.toml` because Cargo reads them from the workspace root only.
 
 `docs/format.md` is the normative spec. `README.md` covers usage and
 publishing; `showcase/README.md` covers authoring historical cases.
@@ -37,8 +42,9 @@ npm run dev                      # vite dev server
 make test                        # rust + python + web unit tests
 make test-rust                   # regenerates the golden fixture, then cargo test
 make test-e2e                    # playwright (needs `npx playwright install chromium`)
-make encoder-rust                # build the experimental native encoder (rust/xue-encode)
+make encoder-rust                # build the experimental native encoder (needs GDAL + libclang)
 make encoder-rust-test           # its unit tests plus the byte-identity golden test
+make encoder-wheel               # a self-contained wheel carrying a minimal GDAL
 npm run build                    # tsc --noEmit && vite build
 ```
 

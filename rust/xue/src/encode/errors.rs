@@ -44,12 +44,3 @@ impl fmt::Display for EncodeError {
 impl std::error::Error for EncodeError {}
 
 pub type Result<T> = std::result::Result<T, EncodeError>;
-
-/// `Err(EncodeError::Conversion(format!(...)))`, the shape most of this crate
-/// needs.
-#[macro_export]
-macro_rules! conversion_error {
-    ($($argument:tt)*) => {
-        $crate::errors::EncodeError::Conversion(format!($($argument)*))
-    };
-}

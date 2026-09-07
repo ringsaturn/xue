@@ -29,9 +29,9 @@ import urllib.request
 from pathlib import Path
 
 PACKAGE = "xue-encode-py"
-# Encoder releases are tagged apart from the crate's own v* tags, which the
-# release-crate workflow owns.
-TAG_PREFIX = "encoder-v"
+# The encoder ships inside the xue crate, so its wheels ride the crate's own
+# release tags.
+TAG_PREFIX = "v"
 API = "https://api.github.com"
 
 

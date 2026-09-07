@@ -17,11 +17,11 @@ use std::path::{Path, PathBuf};
 
 use time::{Duration, OffsetDateTime};
 
-use crate::errors::{EncodeError, Result};
-use crate::gdalio::Dataset;
-use crate::model::{PlaneSource, SourceFrame};
-use crate::sources::SourceSpec;
-use crate::variables::variable_spec;
+use crate::encode::errors::{EncodeError, Result};
+use crate::encode::gdalio::Dataset;
+use crate::encode::model::{PlaneSource, SourceFrame};
+use crate::encode::sources::SourceSpec;
+use crate::encode::variables::variable_spec;
 
 pub const NETCDF_EXTENSIONS: &[&str] = &["nc", "nc4", "cdf"];
 

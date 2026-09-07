@@ -8,7 +8,7 @@
 
 use serde_json::{json, Map, Value};
 
-use crate::errors::{EncodeError, Result};
+use crate::encode::errors::{EncodeError, Result};
 
 /// Linear uint8 codebook. Not temperature-specific: it quantizes any linear
 /// field; the wind components reuse it with a symmetric m/s range.

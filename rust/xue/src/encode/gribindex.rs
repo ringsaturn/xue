@@ -15,9 +15,9 @@ use std::path::Path;
 use grib::{Code, ForecastTime};
 use time::{Date, Duration, Month, OffsetDateTime, Time, UtcOffset};
 
-use crate::errors::{EncodeError, Result};
-use crate::model::SourceFrame;
-use crate::variables::{variable_spec, VariableSpec};
+use crate::encode::errors::{EncodeError, Result};
+use crate::encode::model::SourceFrame;
+use crate::encode::variables::{variable_spec, VariableSpec};
 
 /// Product definition templates whose octets 10-34 share the 4.0 layout and
 /// that we know how to time-stamp. 4.8 adds the statistical interval.
@@ -217,7 +217,7 @@ fn matches(spec: &VariableSpec, message: &MessageInfo) -> bool {
 
 /// Locate every requested variable from the GRIB2 headers alone.
 ///
-/// Mirrors [`crate::inspect::inspect_grib_multi`]: variables in `optional_ids`
+/// Mirrors [`crate::encode::inspect::inspect_grib_multi`]: variables in `optional_ids`
 /// may be absent, more than one match is an error. Units are the fixed
 /// GDAL-normalized strings from the variable table, validated against a real
 /// GDAL pass once per run by the converter.

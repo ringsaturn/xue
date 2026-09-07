@@ -7,7 +7,7 @@
 //! series of observed analyses, with no cycle to fetch and an axis that is
 //! whatever times the file carries.
 
-use crate::errors::{EncodeError, Result};
+use crate::encode::errors::{EncodeError, Result};
 
 #[derive(Debug, Clone, Copy)]
 pub struct SourceSpec {

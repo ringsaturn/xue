@@ -1,19 +1,23 @@
 //! Unit tests for the pure stages, plus a golden test that encodes the shared
 //! GRIB fixture and demands the same bytes the Python encoder wrote.
+//!
+//! The whole file compiles away without the feature: a decode-only build has
+//! neither the encoder nor its dependencies.
+#![cfg(feature = "encoder")]
 
 use std::path::PathBuf;
 
-use xue_encode::binformat::align8;
-use xue_encode::convert::{
+use xue::encode::binformat::align8;
+use xue::encode::convert::{
     average_window_start, convert_bin, deaccumulate_precipitation, deaverage_precipitation,
     ConvertOptions,
 };
-use xue_encode::grid::{crop_grid, GridInfo};
-use xue_encode::metadata::{axis_unit_seconds, build_metadata, lead_hours};
-use xue_encode::poster::{decode_poster, encode_poster};
-use xue_encode::quantize::codebook;
-use xue_encode::sources::source_spec;
-use xue_encode::temporal::{anchor_hour, encode_residual, group_forecast_hours, split_segments};
+use xue::encode::grid::{crop_grid, GridInfo};
+use xue::encode::metadata::{axis_unit_seconds, build_metadata, lead_hours};
+use xue::encode::poster::{decode_poster, encode_poster};
+use xue::encode::quantize::codebook;
+use xue::encode::sources::source_spec;
+use xue::encode::temporal::{anchor_hour, encode_residual, group_forecast_hours, split_segments};
 
 fn repository_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")

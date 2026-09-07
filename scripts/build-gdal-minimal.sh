@@ -15,7 +15,7 @@
 # macOS SDK, which every target already has; they are not bundled.
 set -euo pipefail
 
-PREFIX="${1:-$(cd "$(dirname "$0")/.." && pwd)/build/gdal-minimal}"
+PREFIX="${1:-$(cd "$(dirname "$0")/.." && pwd)/data/work/gdal-minimal}"
 # Sources sit beside the prefix, not inside it: CI caches the prefix, and the
 # unpacked trees are an order of magnitude larger than what they install.
 # build-wheel.sh reads the licence texts back out of here.

@@ -26,7 +26,7 @@ use gdal_sys::{
     GDALRasterIO,
 };
 
-use crate::errors::{EncodeError, Result};
+use crate::encode::errors::{EncodeError, Result};
 
 static REGISTER: Once = Once::new();
 

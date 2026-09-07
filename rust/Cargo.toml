@@ -1,12 +1,29 @@
 [workspace]
 resolver = "2"
-members = ["xue", "xue-wasm"]
-# Experimental native encoder: its own workspace, so this one keeps the
-# wasm-tuned release profile below.
-exclude = ["xue-encode"]
+members = ["xue", "xue-wasm", "xue-encode-py"]
 
+# Cargo reads profiles from the workspace root only — one in a member manifest
+# is ignored with a warning — so the two builds this repository produces are
+# separated by profile rather than by workspace.
+#
+# `release` is tuned for the wasm decoder, which is downloaded by every visitor.
+# `panic = "abort"` is deliberately absent: wasm32-unknown-unknown already
+# declares `"panic-strategy": "abort"` in its target spec, so setting it bought
+# exactly zero bytes (measured), while it would have turned any panic in the
+# Python extension module into an interpreter abort instead of an exception.
 [profile.release]
 lto = true
 opt-level = "s"
 codegen-units = 1
-panic = "abort"
+
+# The encoder is CPU-bound and native; `opt-level = "s"` costs it about 13% on
+# a full GFS run. A package override cannot express this — overrides are per
+# package, not per build, and the decoder is compiled into both — but a named
+# profile can, because a profile is chosen per build invocation.
+#
+#   cargo build --profile encoder --features encoder
+#   maturin build --profile encoder
+[profile.encoder]
+inherits = "release"
+opt-level = 3
+codegen-units = 16

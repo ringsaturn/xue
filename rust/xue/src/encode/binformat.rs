@@ -8,7 +8,7 @@ use std::fs;
 use std::io::Write;
 use std::path::Path;
 
-use crate::errors::{EncodeError, Result};
+use crate::encode::errors::{EncodeError, Result};
 
 pub const MAGIC: &[u8; 8] = b"XUE\0\0\0\0\0";
 pub const VERSION: u16 = 1;
