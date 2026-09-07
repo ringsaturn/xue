@@ -175,13 +175,14 @@ dependencies; NumPy is the only runtime dependency. Two exceptions:
   on encode.
 - **`gdalinfo`** has a second source. `gdal.dataset_info` is the one entry
   point for it, and reads through the `xuepy` wheel's linked GDAL
-  (`xue.gdal_info`) when the build converts natively, the subprocess
-  otherwise — the choice follows `XUE_ENCODER`, so a run never mixes two
-  GDAL installs. That is what lets the scheduled `publish-*` workflows
-  install no GDAL at all: extraction was already in the wheel, and
-  inspection was the last caller left. `tests/test_gdalinfo.py` diffs the
-  two sources field by field. Extraction (`gdal_translate`) has no such
-  fallback, so the reference pipeline still needs a system GDAL.
+  (`xue.gdal_info`, hence the `xuepy>=0.4` floor) when the build converts
+  natively, the subprocess otherwise — the choice follows `XUE_ENCODER`, so
+  a run never mixes two GDAL installs. That is what lets the scheduled
+  `publish-*` workflows install **no GDAL at all**: extraction was already
+  in the wheel, and inspection was the last caller left.
+  `tests/test_gdalinfo.py` diffs the two sources field by field. Extraction
+  (`gdal_translate`) has no such fallback, so the reference pipeline
+  (`XUE_ENCODER=python`) still needs a system GDAL.
 
 Errors that are the user's to fix subclass `XueError` (`xuebuild/errors.py`); the
 CLI turns them into `error: …` and exit code 2. Anything else is a bug.

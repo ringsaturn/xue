@@ -19,7 +19,13 @@ dependencies = [
     # The native encoder, built from rust/xue-py in this repository. A build
     # runs through it by default; XUE_ENCODER=python falls back to the
     # subprocess pipeline, which is the reference implementation.
-    "xuepy>=0.3,<0.4",
+    #
+    # 0.4 is the floor because `xue.gdal_info` arrived there, and
+    # `xuebuild.gdal.dataset_info` uses it to inspect inputs through the
+    # wheel's own GDAL. Below it a build still works but needs a system
+    # `gdalinfo` on PATH, which the scheduled publish workflows no longer
+    # install.
+    "xuepy>=0.4,<0.5",
 ]
 
 [project.scripts]
