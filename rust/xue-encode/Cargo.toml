@@ -37,6 +37,14 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Experimental native encoder for the Xue v1 bundle format"
+keywords = ["weather", "forecast", "meteorology", "gdal", "grib"]
+categories = ["science", "compression", "encoding"]
+readme = "README.md"
+# The golden test encodes fixtures the Python encoder generates at the
+# repository root, so it cannot run from the packaged crate — the same reason
+# the decoder crate excludes its own tests. build/ is the GDAL prefix the
+# scripts create, and python/ is a separate package.
+exclude = ["tests/", "build/", "python/"]
 
 build = "build.rs"
 
@@ -60,8 +68,9 @@ serde_json.workspace = true
 time.workspace = true
 zstd.workspace = true
 # The decoder crate is the read-back verifier, exactly as the Python encoder
-# verifies every bundle it writes with its own reference reader.
-xue = { path = "../xue" }
+# verifies every bundle it writes with its own reference reader. The version is
+# what a published build resolves against; the path is what a checkout uses.
+xue = { path = "../xue", version = "0.2" }
 regex = "1.13.1"
 serde = { version = "1.0.229", features = ["derive"] }
 

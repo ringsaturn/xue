@@ -33,7 +33,21 @@ bands through GDAL's C API skips all of it.
 `GDALDataType` and `GDALRasterIOExtraArg` changed shape. The surface needed
 here is a dozen stable C functions (`src/gdalio.rs`).
 
-## Building
+## Installing the crate
+
+```toml
+[dependencies]
+xue-encode = "0.1"
+```
+
+Like any GDAL binding it needs a system GDAL at build time, and `gdal-sys`
+generates its bindings with `bindgen`, so libclang too. `cargo build` picks
+GDAL up through `pkg-config`.
+
+The crate and the decoder crate version independently and release on separate
+tags — `encoder-v*` here, `v*` for `xue`.
+
+## Building from this repository
 
 GDAL must be discoverable through `pkg-config`, and `gdal-sys` generates its
 bindings with `bindgen`, so libclang must be present too:

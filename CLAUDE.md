@@ -20,7 +20,10 @@ experimental native port of `convert-bin` (its own cargo workspace, plus a
 PyO3 wrapper under `rust/xue-encode/python`). It links GDAL, grib-rs and zstd
 in process instead of shelling out, and is held to the Python encoder by
 byte-for-byte identical output — see `rust/xue-encode/README.md`. The Python
-encoder stays the reference; a format change goes there first.
+encoder stays the reference; a format change goes there first. It publishes as
+the `xue-encode` crate plus a wheel carrying its own minimal GDAL, both on
+`encoder-v*` tags (the decoder crate's `v*` tags are separate, and the two
+version independently).
 
 `docs/format.md` is the normative spec. `README.md` covers usage and
 publishing; `showcase/README.md` covers authoring historical cases.

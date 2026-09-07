@@ -5,6 +5,8 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Python bindings for the experimental native Xue encoder"
+# Distributed as a wheel through the project's own index, never to crates.io.
+publish = false
 
 build = "build.rs"
 
@@ -14,7 +16,7 @@ crate-type = ["cdylib", "rlib"]
 path = "src/lib.rs"
 
 [dependencies]
-xue-encode = { path = ".." }
+xue-encode = { path = "..", version = "0.1" }
 numpy = "0.29"
 # abi3: one wheel per platform rather than one per Python minor version. The
 # wheel carries a bundled GDAL, so the difference is roughly 20 MB against 80.
