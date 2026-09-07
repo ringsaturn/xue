@@ -11,10 +11,12 @@ wrong.
 So these tests diff the two sources field by field over a real GRIB fixture,
 and check that the selection follows `XUE_ENCODER` so a run never mixes them.
 
-The comparison cases skip when the wheel is not installed or `gdalinfo` is not
-on PATH; the selection cases run regardless, because that logic is what
-decides whether a scheduled build quietly needs a system GDAL it was not
-given.
+The comparison cases skip unless both sources are actually present — which
+means a wheel new enough to carry `gdal_info`, not merely one installed: the
+published wheel can lag this working tree, and CI sits in exactly that state
+between a version bump and its release. The selection cases run either way,
+because that logic is what decides whether a build quietly needs a system
+GDAL it was not given.
 """
 
 from __future__ import annotations
@@ -37,9 +39,20 @@ FIXTURE_GRIB = REPOSITORY_ROOT / "tests" / "fixtures" / "gfs.2026081406.f000.cro
 # here promises those, so nothing here compares them.
 BAND_KEYS = ("band", "description", "unit", "scale", "offset", "noDataValue")
 
+
+def wheel_can_inspect() -> bool:
+    """Whether the resolved wheel is new enough to inspect.
+
+    Not the same question as `native.available()`. A wheel predating
+    `gdal_info` still converts, so it is "available", but inspection falls
+    back to the CLI — which is the state CI sits in whenever the pin admits a
+    published wheel older than the working tree.
+    """
+    return native.available() and hasattr(native.require(), "gdal_info")
+
+
 requires_native_info = unittest.skipUnless(
-    hasattr(native.require(), "gdal_info") if native.available() else False,
-    "the installed xuepy wheel has no gdal_info",
+    wheel_can_inspect(), "the installed xuepy wheel has no gdal_info"
 )
 requires_cli = unittest.skipUnless(
     shutil.which("gdalinfo") is not None, "gdalinfo is not on PATH"
@@ -129,18 +142,34 @@ class TheSourceFollowsTheEncoderSelection(unittest.TestCase):
     """
 
     def test_python_always_shells_out(self) -> None:
+        # True whatever is installed: the reference pipeline needs a system
+        # GDAL for gdal_translate, so it reads its metadata from the same one.
         with mock.patch.dict(os.environ, {"XUE_ENCODER": "python"}):
             self.assertIsNone(gdal._native_gdal_info())
 
-    @unittest.skipUnless(native.available(), "xuepy is not installed")
+    @requires_native_info
     def test_native_uses_the_wheel(self) -> None:
         with mock.patch.dict(os.environ, {"XUE_ENCODER": "native"}):
             self.assertIsNotNone(gdal._native_gdal_info())
 
-    def test_auto_follows_whether_the_wheel_is_installed(self) -> None:
+    def test_auto_follows_what_the_wheel_can_do(self) -> None:
+        # Whether the wheel can *inspect*, not merely whether it is
+        # installed: a wheel older than gdal_info converts natively and still
+        # inspects through the CLI.
         with mock.patch.dict(os.environ, {"XUE_ENCODER": "auto"}):
             selected = gdal._native_gdal_info()
-        self.assertEqual(selected is not None, native.available())
+        self.assertEqual(selected is not None, wheel_can_inspect())
+
+    @unittest.skipUnless(
+        native.available() and not wheel_can_inspect(),
+        "needs an installed wheel that predates gdal_info",
+    )
+    def test_an_older_wheel_falls_back_rather_than_failing(self) -> None:
+        # The published wheel can lag the working tree, and the build must
+        # still run — through the CLI, with publish.yml installing gdal-bin
+        # because it asks the same question this does.
+        with mock.patch.dict(os.environ, {"XUE_ENCODER": "native"}):
+            self.assertIsNone(gdal._native_gdal_info())
 
     def test_native_without_the_wheel_fails_at_the_first_inspection(self) -> None:
         # Rather than after fetching a whole run: the fetch path inspects
