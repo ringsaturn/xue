@@ -44,23 +44,34 @@ ls "$PACKAGE/licenses" | sed 's/^/    /'
 echo "==> building the wheel"
 mkdir -p "$OUTPUT"
 rm -f "$OUTPUT"/*.whl
+# maturin builds into a staging directory and the repair step writes the final
+# wheel into $OUTPUT. Keeping them apart matters: repairing can change the
+# platform tag — a library built for a newer OS than the deployment target
+# drags it up — and then the unrepaired wheel would sit beside the repaired one
+# under a different name.
+STAGING="$(mktemp -d)"
+trap 'rm -rf "$STAGING"' EXIT
 cd "$HERE/python"
 # build.rs adds the LC_RPATH that lets delocate resolve libgdal and vendor it.
-PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig" uvx maturin@1.9 build --release --out "$OUTPUT"
+PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig" uvx maturin@1.9 build --release --out "$STAGING"
 
-wheel="$(ls "$OUTPUT"/*.whl)"
-echo "==> vendoring the shared libraries into $(basename "$wheel")"
+staged="$(ls "$STAGING"/*.whl)"
+echo "==> vendoring the shared libraries into $(basename "$staged")"
 case "$(uname -s)" in
   Darwin)
     # delocate follows the install names out of the extension module and
     # rewrites them to @loader_path, so the wheel needs no DYLD_ variables.
-    DYLD_LIBRARY_PATH="$PREFIX/lib" uvx --from delocate delocate-wheel \
-      --require-archs "$(uname -m)" --wheel-dir "$OUTPUT" "$wheel"
+    uvx --from delocate delocate-wheel \
+      --require-archs "$(uname -m)" --wheel-dir "$OUTPUT" "$staged"
     ;;
   Linux)
-    LD_LIBRARY_PATH="$PREFIX/lib" uvx --from auditwheel auditwheel repair \
-      --plat "${AUDITWHEEL_PLAT:-manylinux_2_28_$(uname -m)}" --wheel-dir "$OUTPUT" "$wheel"
-    rm -f "$wheel"
+    # No --plat: auditwheel picks the lowest policy the binaries actually
+    # satisfy, which is the glibc of whatever built them. Naming a lower one
+    # only makes it refuse, since the symbols are already there. The wheel
+    # therefore carries the builder's glibc floor — on ubuntu-24.04 that is
+    # manylinux_2_39, which is fine for this project's own CI. Building inside
+    # a manylinux_2_28 container is what a widely installable wheel would need.
+    uvx --from auditwheel auditwheel repair --wheel-dir "$OUTPUT" "$staged"
     ;;
   *) echo "unsupported platform: $(uname -s)" >&2; exit 1 ;;
 esac
