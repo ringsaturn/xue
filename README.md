@@ -52,15 +52,22 @@ range-requests only the container header and the temporal groups it
 actually needs, prefetching around the playhead into a byte-budgeted
 cache. Adjacent frames blend on the GPU during playback.
 
-The format is specified in [`docs/format.md`](docs/format.md). Three
+The format is specified in [`docs/format.md`](docs/format.md). Four
 implementations share it:
 
-- **Python encoder** (`xue/`): fetch → convert → quantize → temporal
+- **Python encoder** (`xuebuild/`): fetch → convert → quantize → temporal
   residuals → zstd → container. GDAL and ffmpeg are invoked as CLI
   subprocesses — no binary Python dependencies. zstd runs through the
   standard library's `compression.zstd` on Python ≥ 3.14 (per-plane
   subprocess overhead dominated the build otherwise) and falls back to
-  the zstd CLI on older interpreters.
+  the zstd CLI on older interpreters. This is the reference: a format
+  change lands here first.
+- **Native encoder** (`rust/xue/src/encode/`, shipped as the `xuepy`
+  wheel): the same conversion with GDAL, grib-rs and zstd linked in
+  instead of shelled out. A build runs through it by default and it is
+  held to the reference by byte-for-byte identical output — bundles,
+  posters, variants, H.264 companions, manifest and live pointer. See
+  [`docs/encoder.md`](docs/encoder.md).
 - **Rust decoder** (`rust/xue` core crate, `rust/xue-wasm` bindings),
   built into the frontend via `make wasm`.
 - **TypeScript frontend** (`web/src/`): manifest resolution with
@@ -73,7 +80,7 @@ byte-identical.
 
 ## Requirements
 
-- Python ≥ 3.12 (NumPy; `uv sync` creates `.venv`)
+- Python ≥ 3.12 (NumPy and the `xuepy` wheel; `uv sync` creates `.venv`)
 - GDAL ≥ 3.8 with the GRIB driver
 - zstd ≥ 1.5 (bundled with Python ≥ 3.14; the zstd CLI is required only
   on older interpreters)
@@ -111,6 +118,12 @@ python -m xuebuild build-bin --run latest --hours 240
 python -m xuebuild build-bin --model ecmwf --run latest --hours 240
 python -m xuebuild build-bin --model sflux --run latest --hours 240
 ```
+
+`XUE_ENCODER` picks which encoder converts: `auto` (the default — the
+`xuepy` wheel when it is installed), `native` (require it, and fail if it
+is missing), or `python` (the subprocess pipeline, which is the
+reference). `make check` reports which one a build would take. The two
+produce identical bytes, so the choice is only ever about speed.
 
 Each model publishes as an independent dataset: GFS runs land in
 `gfs.<run>/` and go live via `latest.json` at the data root, ECMWF in

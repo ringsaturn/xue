@@ -1,4 +1,4 @@
-//! Per-model source registry — the port of `xue/sources.py`.
+//! Per-model source registry — the port of `xuebuild/sources.py`.
 //!
 //! The models share one output contract: whatever the source, the bundles
 //! carry the same data variable ids, so the decoder and frontend never care

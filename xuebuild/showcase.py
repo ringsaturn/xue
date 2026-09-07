@@ -37,7 +37,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from .binconvert import bundle_input_ids, convert_bin, published_bundle_ids
+from .binconvert import bundle_input_ids, published_bundle_ids
+from .encoder import convert_bin
 from .errors import DownloadError, ManifestError, XueError
 from .fetch import fetch_run, parse_run
 from .manifest import iso_z, validate_bin_manifest

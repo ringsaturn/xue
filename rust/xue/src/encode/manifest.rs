@@ -1,4 +1,4 @@
-//! The public manifest and the live pointer — the port of `xue/manifest.py`'s
+//! The public manifest and the live pointer — the port of `xuebuild/manifest.py`'s
 //! builders.
 //!
 //! Two layers, both versioned: the only mutable object per model is a tiny

@@ -42,11 +42,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # The encoder shells out to GDAL and (below 3.14) the zstd CLI.
-      - name: Install GDAL and zstd
+      # The reference encoder shells out to GDAL and (below 3.14) the zstd
+      # CLI. ffmpeg is what makes tests/test_native.py compare real H.264
+      # companions instead of skipping them on both sides.
+      - name: Install GDAL, zstd and ffmpeg
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends gdal-bin zstd
+          sudo apt-get install -y --no-install-recommends gdal-bin zstd ffmpeg
           gdalinfo --version
           zstd --version
 

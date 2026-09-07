@@ -14,7 +14,13 @@ readme = "README.md"
 requires-python = ">=3.12"
 license = "MIT OR Apache-2.0"
 license-files = ["LICENSE-MIT", "LICENSE-APACHE"]
-dependencies = ["numpy>=2.0"]
+dependencies = [
+    "numpy>=2.0",
+    # The native encoder, built from rust/xue-py in this repository. A build
+    # runs through it by default; XUE_ENCODER=python falls back to the
+    # subprocess pipeline, which is the reference implementation.
+    "xuepy>=0.3,<0.4",
+]
 
 [project.scripts]
 # The command keeps its name; only the module behind it moved.

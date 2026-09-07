@@ -1,4 +1,4 @@
-//! Build Xue v1 bundles from gridded input — the port of `xue/binconvert.py`.
+//! Build Xue v1 bundles from gridded input — the port of `xuebuild/binconvert.py`.
 //!
 //! Each variable is packaged into its own single-variable `.xue` file so the
 //! frontend can download exactly the fields it needs. A forecast source

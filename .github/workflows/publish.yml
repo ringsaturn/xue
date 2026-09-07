@@ -75,6 +75,11 @@ jobs:
       KEEP: ${{ inputs.keep }}
       FORCE: ${{ inputs.force }}
       DRY_RUN: ${{ inputs.dry_run && '--dryrun' || '' }}
+      # Convert through the native encoder (the xuepy wheel, a dependency of
+      # xuebuild). Insisting rather than letting it fall back: a run that
+      # quietly took the subprocess pipeline would take hours longer and look
+      # identical in the logs.
+      XUE_ENCODER: native
     steps:
       - uses: actions/checkout@v4
 
@@ -137,7 +142,7 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
         run: |
           set -euo pipefail
-          run=$(uv run python -c "from xue.fetch import resolve_run; print(resolve_run('${RUN_INPUT}', hours=240, model='${MODEL}').id)")
+          run=$(uv run python -c "from xuebuild.fetch import resolve_run; print(resolve_run('${RUN_INPUT}', hours=240, model='${MODEL}').id)")
           live=$(make -s live-run MODEL="$MODEL" || true)
           echo "run=$run" >> "$GITHUB_OUTPUT"
           if [ "$run" = "$live" ] && [ "$FORCE" != "true" ] && [ -z "$DRY_RUN" ]; then

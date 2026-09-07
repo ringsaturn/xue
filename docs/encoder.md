@@ -1,12 +1,13 @@
-# The experimental native encoder
+# The native encoder
 
-The production encoder is Python (`xuebuild/`), driving GDAL, zstd and ffmpeg as
+`xuebuild/` is the reference encoder: Python driving GDAL, zstd and ffmpeg as
 CLI subprocesses. `rust/xue/src/encode/` is the same `convert-bin` pipeline
 written in Rust with those tools linked in process, behind the `xue` crate's
-off-by-default `encoder` feature.
+off-by-default `encoder` feature, and published as the `xuepy` wheel.
 
-It is an experiment, not a replacement: the Python encoder remains the
-reference, and this one is held to it by **byte-for-byte identical output**.
+A build converts through it by default. It is not a fork of the format: the
+Python encoder remains the reference — a format change lands there first — and
+this one is held to it by **byte-for-byte identical output**.
 
 ## Why
 
@@ -23,11 +24,11 @@ bands through GDAL's C API skips all of it.
 |---|---|---|
 | grid + band metadata | `gdalinfo -json` subprocess | `gdal-sys` (georust) in process |
 | plane extraction | `gdal_translate` → ENVI → `np.fromfile` | `GDALRasterIO` into a `Vec<f64>` |
-| GRIB2 record index | hand-rolled section walker (`xue/grib2.py`) | [grib-rs](https://github.com/noritada/grib-rs) |
+| GRIB2 record index | hand-rolled section walker (`xuebuild/grib2.py`) | [grib-rs](https://github.com/noritada/grib-rs) |
 | compression | `compression.zstd` / `zstd` CLI | `zstd` crate (`ZSTD_compress2`) |
 | poster deflate | `zlib.compress(level=9)` | `flate2` on libz |
-| read-back verify | `xue/binformat.py` reference reader | the `xue` decoder crate — the same code the browser runs |
-| H.264 companions | `ffmpeg` subprocess | *not built* — scaffolding for comparing compression strategies, not part of what this experiment measures |
+| read-back verify | `xuebuild/binformat.py` reference reader | the `xue` decoder crate — the same code the browser runs |
+| H.264 companions | `ffmpeg` subprocess | *not built here* — `xuebuild/native.py` encodes them afterwards from the bundles this wrote |
 
 `gdal-sys` is used rather than the high-level `gdal` crate because, as of
 `gdal` 0.19, the safe wrapper does not compile against GDAL 3.13 — its
@@ -56,7 +57,43 @@ xue-encode convert-bin --help
 ```
 
 The flags mirror `python -m xuebuild convert-bin`. `--skip-video` is accepted and
-ignored, since no video is built either way.
+ignored, since this binary builds no video either way — see *In the build
+pipeline* below for the path that does.
+
+## In the build pipeline
+
+`xuebuild` depends on the `xuepy` wheel and converts through it by default.
+`xuebuild/encoder.py` is the dispatch and `XUE_ENCODER` overrides it:
+
+| `XUE_ENCODER` | |
+|---|---|
+| `auto` (default) | the native encoder when the wheel imports, the Python pipeline otherwise |
+| `native` | require the wheel; fail loudly if it is missing |
+| `python` | the reference pipeline, whatever is installed |
+
+`make check` reports which one a build would take. The scheduled `publish-*`
+workflows pin `native`, because a run that quietly fell back would take hours
+longer and look identical in the logs.
+
+Two things the native encoder does not write, and `xuebuild/native.py`
+supplies around it:
+
+* **The H.264 companions.** The codes are read back out of the bundles the
+  native encoder just wrote — with the decoder the same wheel carries — and
+  handed to the existing `xuebuild/videoconvert.py`. Nothing is re-extracted
+  and nothing is quantized twice; the planes fed to ffmpeg are the container's
+  own bytes by construction. Still best-effort: a missing ffmpeg drops the
+  artifact and leaves the `.xue` as the universal fallback, exactly as in the
+  reference.
+* **The live pointer.** It carries the manifest's CRC32, and folding the video
+  descriptors in changes the manifest, so the native encoder is asked for the
+  manifest alone and the pointer is written afterwards, from the finished
+  bytes.
+
+`tests/test_native.py` is what holds the two together: one build through each
+encoder into identically shaped directories, then every artifact compared byte
+for byte — bundles, half-resolution variants, posters, H.264 streams and their
+indexes and playlists, `manifest.json`, and the live pointer.
 
 ## Python bindings
 
@@ -187,6 +224,12 @@ Two places needed deliberate bug-compatibility to reach that:
 * **`flate2` links stock libz, not `zlib-rs`.** `zlib-rs` is a port of zlib-ng,
   whose deflate output differs slightly from the zlib CPython uses, which would
   change every poster payload.
+* **The manifest's embedded metadata strings are `json.dumps` at its
+  defaults.** A bundle stores its metadata compact and in raw UTF-8; the
+  `metadataJson` a manifest carries for a poster or a video is the same object
+  written with a space after every separator *and* every non-ASCII character
+  escaped, so the degree sign in the temperature unit reaches the manifest as
+  `\u00b0`. `to_spaced_json` does both.
 
 Compression is the third place they could drift: the Python encoder calls
 `compression.zstd.compress`, a one-shot compress that records the pledged
@@ -197,8 +240,9 @@ so `zstd_compress` here calls `ZSTD_compress2` one-shot as well.
 ## Not covered
 
 Fetching (`xue fetch`), the showcase driver, `build-bin` and `verify-bin` stay
-in Python, as do the H.264 companions — those exist to compare compression
-strategies against the container, which is not what this experiment measures.
+in Python, as does the H.264 encode itself — the native side writes the
+bundles those companions are derived from, and `xuebuild/native.py` does the
+rest.
 
 ## Verified against
 

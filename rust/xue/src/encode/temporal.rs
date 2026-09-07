@@ -1,5 +1,5 @@
 //! Xue v1 temporal grouping and residual coding — the port of
-//! `xue/temporal.py`.
+//! `xuebuild/temporal.py`.
 //!
 //! Residuals are one-byte modulo-256 wrapping differences. Wrapping
 //! subtraction and addition are lossless for every byte pair, so there is no

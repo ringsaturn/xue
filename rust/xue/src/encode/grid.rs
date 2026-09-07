@@ -1,5 +1,5 @@
 //! Grid discovery, the -180-first column roll, and regional cropping — the
-//! grid half of `xue/binconvert.py`.
+//! grid half of `xuebuild/binconvert.py`.
 
 use serde_json::{json, Map, Value};
 

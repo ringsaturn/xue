@@ -1,4 +1,4 @@
-//! Xue v1 quantization codebooks — the port of `xue/quantize.py`.
+//! Xue v1 quantization codebooks — the port of `xuebuild/quantize.py`.
 //!
 //! All rounding is round-half-up: `round(x) = floor(x + 0.5)`. Every rounded
 //! quantity here is non-negative, so this equals round-half-away-from-zero.

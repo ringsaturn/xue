@@ -1,4 +1,4 @@
-//! Xue v1 container serialization — the port of `xue/binformat.py`'s writer.
+//! Xue v1 container serialization — the port of `xuebuild/binformat.py`'s writer.
 //!
 //! `docs/format.md` is the normative spec; this module produces complete
 //! files. Reading back is the decoder crate's job (`xue`), which is exactly

@@ -1,5 +1,5 @@
 //! Gridded observation series: a NetCDF file as a run of Xue frames — the port
-//! of `xue/observation.py`.
+//! of `xuebuild/observation.py`.
 //!
 //! A forecast source is a cycle on a bucket, fetched one record per forecast
 //! hour. An observation source is the opposite shape: one local file that

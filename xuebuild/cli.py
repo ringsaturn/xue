@@ -6,7 +6,8 @@ import logging
 import sys
 from pathlib import Path
 
-from .binconvert import convert_bin, verify_bin
+from .binconvert import verify_bin
+from .encoder import convert_bin
 from .errors import XueError
 from .fetch import fetch_run, resolve_run
 from .showcase import build_case, load_cases, write_catalog

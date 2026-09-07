@@ -8,7 +8,7 @@ deleted - the printed numbers are the only output.
 
 Requires the GDAL CLI tools and the pmtiles CLI, plus the source run:
 
-    python -m xue fetch --run 2026081506
+    python -m xuebuild fetch --run 2026081506
     python scripts/pmtiles_size_assessment/measure.py        # 6-hour sample
     python scripts/pmtiles_size_assessment/measure.py --all  # exact total
 """
@@ -89,7 +89,7 @@ def main() -> int:
     if missing:
         raise SystemExit(
             f"missing GRIB2 files under {RAW}: {', '.join(missing)}\n"
-            "fetch them first: python -m xue fetch --run 2026081506"
+            "fetch them first: python -m xuebuild fetch --run 2026081506"
         )
     source_bytes = sum(path.stat().st_size for path in RAW.glob("*.grib2"))
 

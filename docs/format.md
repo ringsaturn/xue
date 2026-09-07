@@ -5,8 +5,8 @@ This document is the normative specification of the Xue v1 container
 forecast run of one gridded weather field into a single indexed file that a
 browser can decode frame by frame.
 
-The Python encoder (`xue/binformat.py`, `xue/quantize.py`,
-`xue/temporal.py`) and the Rust decoder (`rust/xue`) are the two reference
+The Python encoder (`xuebuild/binformat.py`, `xuebuild/quantize.py`,
+`xuebuild/temporal.py`) and the Rust decoder (`rust/xue`) are the two reference
 implementations, held byte-identical by cross-language golden tests.
 
 ## Design Summary
@@ -725,4 +725,4 @@ directory also carries a `manifest.json` describing every bundle (path,
 byte length, whole-file CRC-32, resolution variants, optional poster and
 H.264 companion artifacts); the manifest and a tiny mutable `latest.json`
 pointer are delivery concerns defined by the reference implementations
-(`xue/manifest.py`, `web/src/manifest.ts`), not by this container spec.
+(`xuebuild/manifest.py`, `web/src/manifest.ts`), not by this container spec.

@@ -129,12 +129,13 @@ pub fn build_metadata(
 }
 
 /// Serialize a value the way Python's `json.dumps` does *by default*: one line,
-/// but with a space after every separator.
+/// a space after every separator, and every non-ASCII character escaped.
 ///
-/// The bundles embed their metadata with compact separators, and the encoder
-/// matches that with plain `serde_json::to_string`. The `metadataJson` strings
-/// the manifest carries for posters and videos are the one place the reference
-/// leaves `json.dumps` at its defaults, so they need the spaced form.
+/// The bundles embed their metadata with compact separators and raw UTF-8, and
+/// the encoder matches that with plain `serde_json::to_string`. The
+/// `metadataJson` strings the manifest carries for posters and videos are the
+/// one place the reference leaves `json.dumps` at its defaults, so they need
+/// both the spaced form and `ensure_ascii`.
 pub fn to_spaced_json(value: &Value) -> String {
     let mut output = Vec::new();
     let mut serializer =
@@ -167,5 +168,32 @@ impl serde_json::ser::Formatter for SpacedFormatter {
         writer: &mut W,
     ) -> std::io::Result<()> {
         writer.write_all(b": ")
+    }
+
+    /// `ensure_ascii`: every character outside ASCII becomes a `\uXXXX`
+    /// escape, in lowercase hex, an astral one as its UTF-16 surrogate pair.
+    /// The degree sign in the temperature unit is the one that shows up in
+    /// practice, and the manifest is compared byte for byte.
+    fn write_string_fragment<W: ?Sized + std::io::Write>(
+        &mut self,
+        writer: &mut W,
+        fragment: &str,
+    ) -> std::io::Result<()> {
+        if fragment.is_ascii() {
+            return writer.write_all(fragment.as_bytes());
+        }
+        let mut start = 0;
+        for (index, character) in fragment.char_indices() {
+            if character.is_ascii() {
+                continue;
+            }
+            writer.write_all(&fragment.as_bytes()[start..index])?;
+            start = index + character.len_utf8();
+            let mut units = [0u16; 2];
+            for unit in character.encode_utf16(&mut units) {
+                write!(writer, "\\u{unit:04x}")?;
+            }
+        }
+        writer.write_all(&fragment.as_bytes()[start..])
     }
 }

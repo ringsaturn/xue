@@ -7,7 +7,7 @@
 The fixture was created from the downloaded record with:
 
 ```sh
-python -m xue fetch --run 2026081406 --hours 0
+python -m xuebuild fetch --run 2026081406 --hours 0
 gdal_translate -srcwin 1192 208 80 80 -of GRIB \
   data/raw/gfs.2026081406/gfs.2026081406.f000.grib2 \
   tests/fixtures/gfs.2026081406.f000.crop.grib2

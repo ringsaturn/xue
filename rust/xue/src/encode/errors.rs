@@ -1,6 +1,6 @@
 //! The pipeline's user-actionable error type.
 //!
-//! Mirrors `xue/errors.py`: everything a user can fix (a bad GRIB file, a
+//! Mirrors `xuebuild/errors.py`: everything a user can fix (a bad GRIB file, a
 //! missing record, an axis that is not on the model's cadence) is an
 //! `EncodeError`, which the CLI turns into `error: …` and exit code 2.
 //! Anything else is a bug and panics or bubbles up as `anyhow::Error`.

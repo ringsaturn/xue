@@ -1,4 +1,4 @@
-//! The shapes shared by every input path — the port of `xue/model.py`.
+//! The shapes shared by every input path — the port of `xuebuild/model.py`.
 
 use std::path::PathBuf;
 

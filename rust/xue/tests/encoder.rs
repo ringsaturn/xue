@@ -13,7 +13,7 @@ use xue::encode::convert::{
     ConvertOptions,
 };
 use xue::encode::grid::{crop_grid, GridInfo};
-use xue::encode::metadata::{axis_unit_seconds, build_metadata, lead_hours};
+use xue::encode::metadata::{axis_unit_seconds, build_metadata, lead_hours, to_spaced_json};
 use xue::encode::poster::{decode_poster, encode_poster};
 use xue::encode::quantize::codebook;
 use xue::encode::sources::source_spec;
@@ -349,4 +349,25 @@ fn golden_encode_matches_the_python_reference() {
             "{name} differs from the Python encoder's output"
         );
     }
+}
+
+// -- manifest metadata strings -----------------------------------------------
+
+#[test]
+fn spaced_json_matches_python_json_dumps_defaults() {
+    // The manifest's poster and video descriptors carry a variable's metadata
+    // as a string written by `json.dumps` with nothing overridden: a space
+    // after every separator, and every non-ASCII character escaped. The degree
+    // sign in the temperature unit is the one that occurs in practice.
+    let value = serde_json::json!({
+        "unit": "°C",
+        "labels": ["雪", "\u{1f300}"],
+        "quoted": "a \"b\"\n",
+        "plain": 1,
+    });
+    assert_eq!(
+        to_spaced_json(&value),
+        "{\"unit\": \"\\u00b0C\", \"labels\": [\"\\u96ea\", \"\\ud83c\\udf00\"], \
+         \"quoted\": \"a \\\"b\\\"\\n\", \"plain\": 1}"
+    );
 }

@@ -81,7 +81,24 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "numpy" },
+    { name = "xuepy" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "numpy", specifier = ">=2.0" }]
+requires-dist = [
+    { name = "numpy", specifier = ">=2.0" },
+    { name = "xuepy", specifier = ">=0.3,<0.4" },
+]
+
+[[package]]
+name = "xuepy"
+version = "0.3.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/63/fe/b5036c8cc111398423601cea0b3ecd6829847b460437fae66275662a694b/xuepy-0.3.0-cp311-abi3-macosx_11_0_arm64.whl", hash = "sha256:5d6c3a46077d27e967547b3726772bbdacfdeea45c8bfbb7a5b43db5b769db9e", size = 12563746, upload-time = "2026-09-07T07:15:32.756Z" },
+    { url = "https://files.pythonhosted.org/packages/d5/77/2b143f588dcb77681c4ce7d4e620bc663a13d863dc7ba71f05359030866f/xuepy-0.3.0-cp311-abi3-manylinux_2_39_aarch64.whl", hash = "sha256:a9f6e54d683bf7f3fdd7dd4cffbed608e232bdc412138a5464fbf54291e6bea3", size = 16219776, upload-time = "2026-09-07T07:15:35.196Z" },
+    { url = "https://files.pythonhosted.org/packages/25/10/b4c6307f92b2bd3cf3b366af7c57f20d7b24aecc1286818f2282cfa53e82/xuepy-0.3.0-cp311-abi3-manylinux_2_39_x86_64.whl", hash = "sha256:15ed89133da075079cd9f692249620036fd94cd134465995221d663fadc1d466", size = 17247067, upload-time = "2026-09-07T07:15:37.877Z" },
+]

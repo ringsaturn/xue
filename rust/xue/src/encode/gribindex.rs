@@ -1,5 +1,5 @@
 //! GRIB2 record discovery through [grib-rs](https://github.com/noritada/grib-rs)
-//! — the port of `xue/grib2.py`.
+//! — the port of `xuebuild/grib2.py`.
 //!
 //! Reads only the identification and product-definition sections of every
 //! message, which is what locates each variable's band number and its

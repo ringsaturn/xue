@@ -4,12 +4,12 @@
 //! The encoder is exposed at two levels, both thin:
 //!
 //! * [`convert_bin`] runs the whole native conversion and hands back the same
-//!   report dictionary `xue.binconvert.convert_bin` returns, so a build can be
+//!   report dictionary `xuebuild.binconvert.convert_bin` returns, so a build can be
 //!   driven from the existing Python tooling.
 //! * The array helpers (`quantize`, `encode_residual`, `decimate`,
 //!   `encode_poster`) take and return NumPy arrays through `rust-numpy`, so
-//!   individual stages can be A/B-tested against `xue/quantize.py` and
-//!   `xue/temporal.py` without running a whole build.
+//!   individual stages can be A/B-tested against `xuebuild/quantize.py` and
+//!   `xuebuild/temporal.py` without running a whole build.
 //!
 //! Errors surface as `RuntimeError` carrying the encoder's own message, the
 //! same text the Python CLI prints after `error: `.
@@ -188,7 +188,7 @@ impl Bundle {
 
 /// Convert gridded input into per-variable Xue bundles.
 ///
-/// Mirrors `xue.binconvert.convert_bin`, minus the video artifacts. Returns
+/// Mirrors `xuebuild.binconvert.convert_bin`, minus the video artifacts. Returns
 /// the build report as a dictionary.
 #[pyfunction]
 #[pyo3(signature = (
@@ -263,7 +263,7 @@ fn convert_bin(
 
 /// Quantize one plane of physical values with a registered codebook.
 ///
-/// The NumPy counterpart of `xue.quantize.PROFILES[profile][variable_id]`.
+/// The NumPy counterpart of `xuebuild.quantize.PROFILES[profile][variable_id]`.
 #[pyfunction]
 fn quantize<'py>(
     python: Python<'py>,

@@ -61,6 +61,23 @@ def main() -> int:
         print("missing: numpy (run `uv sync` and use .venv/bin/python)", file=sys.stderr)
         failed = True
 
+    # Which encoder a build will run through. The native one is the default
+    # and the reason the GDAL and zstd command-line tools above stop being hot
+    # paths; without it the build still works, one subprocess per plane.
+    try:
+        from xuebuild import encoder, native
+
+        if encoder.resolve() == "native":
+            print(f"ok: native encoder ({native.DISTRIBUTION} {native.version() or 'dev'})")
+        else:
+            print(
+                f"optional: {native.DISTRIBUTION} not in use, converting with the "
+                f"subprocess pipeline ({encoder.SELECTION_VARIABLE}={encoder.selection()})",
+                file=sys.stderr,
+            )
+    except Exception as exc:  # a broken wheel must not hide the rest of the report
+        print(f"warning: could not resolve the encoder: {exc}", file=sys.stderr)
+
     # ffmpeg is optional: it only builds the WebCodecs temperature video
     # artifact, and its absence just skips that artifact rather than failing
     # the build (see xue/videoconvert.py).

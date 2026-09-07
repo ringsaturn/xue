@@ -16,13 +16,27 @@ implementations of one format live here and must stay in agreement:
 - **TypeScript frontend** — `web/src/` (manifest resolution, decode worker,
   WebGL2 layers, playback).
 
-Beside them, and *not* part of the delivery contract: an experimental native
-port of `convert-bin` at `rust/xue/src/encode/`, behind the `xue` crate's
-off-by-default `encoder` feature, plus a PyO3 wrapper at `rust/xue-py/`
-(distribution `xuepy`, imported as `xue`, carrying the decoder too).
-It links GDAL, grib-rs and zstd in process instead of shelling out, and is held
-to the Python encoder by byte-for-byte identical output — see `docs/encoder.md`.
-The Python encoder stays the reference; a format change goes there first.
+Beside them, a native port of `convert-bin` at `rust/xue/src/encode/`, behind
+the `xue` crate's off-by-default `encoder` feature, plus a PyO3 wrapper at
+`rust/xue-py/` (distribution `xuepy`, imported as `xue`, carrying the decoder
+too). It links GDAL, grib-rs and zstd in process instead of shelling out, and
+is held to the Python encoder by byte-for-byte identical output — see
+`docs/encoder.md`.
+
+`xuebuild` depends on the `xuepy` wheel and converts through it by default:
+`xuebuild/encoder.py` dispatches, `XUE_ENCODER` (`auto` | `native` | `python`)
+overrides, and the scheduled `publish-*` workflows pin `native` so a silent
+fall back to the slow path cannot happen unnoticed. The native encoder writes
+no video and no live pointer, so `xuebuild/native.py` supplies both: it reads
+the codes back out of the bundles it just wrote (with the decoder the same
+wheel carries), hands them to the existing ffmpeg encoder, folds the
+descriptors into the manifest and only then writes the pointer, whose CRC32
+covers the finished manifest. `tests/test_native.py` is what holds the two
+encoders together end to end — every artifact of one build compared byte for
+byte against the other.
+
+The Python encoder stays the reference; a format change goes there first, and
+the native side follows it.
 
 The feature is off by default because it links GDAL and the decoder does not,
 and the two are separated by cargo profile as well: `release` stays tuned for
@@ -41,10 +55,10 @@ make mvp [MODEL=gfs|ecmwf|sflux] # check + install + wasm + build a run + vite b
 make serve                       # vite preview on 127.0.0.1
 npm run dev                      # vite dev server
 
-make test                        # rust + python + web unit tests
+make test                        # rust + python + web unit tests (incl. encoder parity)
 make test-rust                   # regenerates the golden fixture, then cargo test
 make test-e2e                    # playwright (needs `npx playwright install chromium`)
-make encoder-rust                # build the experimental native encoder (needs GDAL + libclang)
+make encoder-rust                # build the native encoder from source (needs GDAL + libclang)
 make encoder-rust-test           # its unit tests plus the byte-identity golden test
 make encoder-wheel               # a self-contained wheel carrying a minimal GDAL
 npm run build                    # tsc --noEmit && vite build
@@ -108,14 +122,14 @@ Within the container a plane's key is a **frame offset**, not a forecast
 hour: `PlaneEntry.frameOffset`, the worker protocol's `frameOffset`, and
 `SourceFrame.lead_seconds` upstream of the axis derivation.
 
-Encoder (`xue/binconvert.py::build_metadata`), Python reader
-(`xue/binformat.py::_parse_metadata`), Rust (`rust/xue/src/lib.rs`) and
+Encoder (`xuebuild/binconvert.py::build_metadata`), Python reader
+(`xuebuild/binformat.py::_parse_metadata`), Rust (`rust/xue/src/lib.rs`) and
 `web/src/manifest.ts::parseBundleMetadata` must agree. Do not conflate this
 with the manifest's schema v5 or the pointer's v1. Like a manifest widening,
 a metadata version bump is a two-sided deploy: **ship the Pages shell before
 publishing data at the new version.**
 
-### Encoder pipeline (`xue/`)
+### Encoder pipeline (`xuebuild/`)
 
 - `sources.py` — the per-model registry (`SourceSpec`): where the data comes
   from, the published time axis as `(last_hour, step)` segments, which input
@@ -158,7 +172,7 @@ which runs in-process via the stdlib `compression.zstd` on Python ≥ 3.14
 below that — the two are interchangeable on decode but not byte-identical on
 encode.
 
-Errors that are the user's to fix subclass `XueError` (`xue/errors.py`); the
+Errors that are the user's to fix subclass `XueError` (`xuebuild/errors.py`); the
 CLI turns them into `error: …` and exit code 2. Anything else is a bug.
 
 ### Decoder and frontend

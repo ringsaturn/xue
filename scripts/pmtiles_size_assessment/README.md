@@ -24,7 +24,7 @@ Run it (needs the GDAL CLI tools and the
 [pmtiles CLI](https://github.com/protomaps/go-pmtiles)):
 
 ```sh
-python -m xue fetch --run 2026081506
+python -m xuebuild fetch --run 2026081506
 python scripts/pmtiles_size_assessment/measure.py        # 6-hour sample, extrapolated
 python scripts/pmtiles_size_assessment/measure.py --all  # exact 242-file total
 ```

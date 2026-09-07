@@ -21,7 +21,7 @@
 //! It is behind the off-by-default `encoder` feature: it links GDAL, which the
 //! decoder does not, and nothing that only decodes should have to find a GDAL
 //! to build. `docs/format.md` is the normative spec for everything written
-//! here, and `xue/binconvert.py` is the reference the outputs are diffed
+//! here, and `xuebuild/binconvert.py` is the reference the outputs are diffed
 //! against.
 
 pub mod binformat;

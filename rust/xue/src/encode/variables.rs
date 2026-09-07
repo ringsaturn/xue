@@ -1,5 +1,5 @@
 //! The variable registry, in GRIB2's own terms — the port of
-//! `xue/variables.py`.
+//! `xuebuild/variables.py`.
 //!
 //! Every variable is identified the way GRIB2 identifies a field: a parameter
 //! triple (discipline, category, number) and a fixed surface. That identity is

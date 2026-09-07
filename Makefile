@@ -57,13 +57,13 @@ test-rust:
 test-e2e:
 	npm run test:e2e
 
-# The experimental native encoder, behind the xue crate's off-by-default
-# `encoder` feature. It links GDAL, so it needs pkg-config pointed at the GDAL
-# install and libclang for gdal-sys' bindgen. The `encoder` cargo profile is
-# what keeps it at opt-level 3 while the wasm decoder keeps the size-tuned
-# release profile — see the comments in rust/Cargo.toml. Not part of
-# `make test`: the pipeline it reimplements is the Python one, which stays the
-# reference.
+# The native encoder, behind the xue crate's off-by-default `encoder` feature.
+# It links GDAL, so it needs pkg-config pointed at the GDAL install and
+# libclang for gdal-sys' bindgen. The `encoder` cargo profile is what keeps it
+# at opt-level 3 while the wasm decoder keeps the size-tuned release profile —
+# see the comments in rust/Cargo.toml. Not part of `make test`, which needs no
+# GDAL headers: what `make test` does cover is the encoder's *output*, through
+# the installed xuepy wheel (tests/test_native.py).
 ENCODER = cd rust && PKG_CONFIG_PATH="$$(gdal-config --prefix)/lib/pkgconfig" cargo
 ENCODER_ARGS = --profile encoder --features encoder
 

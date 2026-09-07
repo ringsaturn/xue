@@ -1,5 +1,5 @@
 //! Record discovery through GDAL's own band metadata — the port of
-//! `xue/gdal.py`'s `inspect_grib_multi`.
+//! `xuebuild/gdal.py`'s `inspect_grib_multi`.
 //!
 //! This is the reference matcher: the converter runs it once per run on the
 //! first file, both to probe wind availability and to cross-check the much
