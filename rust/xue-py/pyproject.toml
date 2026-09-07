@@ -1,0 +1,43 @@
+[build-system]
+requires = ["maturin>=1.7,<2"]
+build-backend = "maturin"
+
+[project]
+name = "xuepy"
+description = "Xue (雪) weather bundles: decoder, and an experimental native encoder"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT OR Apache-2.0"
+authors = [{ name = "Han Xiao" }]
+keywords = ["weather", "forecast", "meteorology", "grib", "gdal"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Topic :: Scientific/Engineering :: Atmospheric Science",
+]
+dependencies = ["numpy>=1.24"]
+dynamic = ["version"]
+
+[project.urls]
+Homepage = "https://github.com/ringsaturn/xue"
+Documentation = "https://github.com/ringsaturn/xue/blob/main/docs/encoder.md"
+Source = "https://github.com/ringsaturn/xue"
+
+[tool.maturin]
+# The crate lives in a workspace whose root is the encoder itself.
+manifest-path = "Cargo.toml"
+# Mixed layout: pysrc/ holds the Python package, which points GDAL and PROJ at
+# their bundled data directories before importing the extension.
+python-source = "pysrc"
+module-name = "xue._native"
+# scripts/build-wheel.sh stages these into the package before building, and
+# repairs the wheel afterwards so the dylibs travel with it.
+include = [
+    { path = "pysrc/xue/gdal-data/**/*", format = "wheel" },
+    { path = "pysrc/xue/proj-data/**/*", format = "wheel" },
+    { path = "pysrc/xue/licenses/**/*", format = "wheel" },
+]
+# The bundled libraries are added by delocate/auditwheel afterwards, not by
+# maturin, so its own vendoring check has nothing to find.
+skip-auditwheel = true

@@ -12,8 +12,47 @@ categories = ["science", "compression", "parser-implementations"]
 # repo root) generates with the Python encoder — they cannot run from the
 # packaged crate.
 exclude = ["tests/"]
+build = "build.rs"
+
+[features]
+default = []
+# The experimental native encoder (src/encode). Off by default: it links GDAL,
+# which the decoder does not, and nothing that only decodes — the wasm binding
+# and the browser above it — should have to find a GDAL to build.
+encoder = [
+    "dep:flate2",
+    "dep:gdal-sys",
+    "dep:grib",
+    "dep:libc",
+    "dep:rayon",
+    "dep:regex",
+    "dep:serde",
+    "dep:time",
+    "dep:zstd",
+    # Bundle metadata must come out byte-identical to the Python encoder's,
+    # which means key insertion order has to survive.
+    "serde_json/preserve_order",
+]
+
+[[bin]]
+name = "xue-encode"
+path = "src/bin/xue-encode.rs"
+required-features = ["encoder"]
 
 [dependencies]
 crc32fast = "1"
 ruzstd = "0.8"
 serde_json = "1"
+
+# Encoder-only, every one optional so a decode-only build resolves none of them.
+flate2 = { version = "1", default-features = false, features = ["zlib"], optional = true }
+gdal-sys = { version = "0.12", features = ["bindgen"], optional = true }
+grib = { version = "0.18", default-features = false, optional = true }
+libc = { version = "0.2", optional = true }
+rayon = { version = "1", optional = true }
+# Only for the Serialize trait: the metadata writer drives serde_json with a
+# custom formatter, to reproduce the spacing Python's json.dumps defaults to.
+serde = { version = "1", optional = true }
+regex = { version = "1", optional = true }
+time = { version = "0.3", features = ["formatting", "macros", "parsing"], optional = true }
+zstd = { version = "0.14", optional = true }

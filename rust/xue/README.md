@@ -6,8 +6,9 @@ single-byte planes, temporal residual prediction, zstd) for streaming
 playback in the browser.
 
 This crate is the decoding half of the [Xue
-project](https://github.com/ringsaturn/xue); the encoder is the Python
-pipeline in the same repository, and the normative format specification is
+project](https://github.com/ringsaturn/xue); the production encoder is the
+Python pipeline in the same repository, and the normative format specification
+is
 [`docs/format.md`](https://github.com/ringsaturn/xue/blob/main/docs/format.md).
 Every integer computation on untrusted input uses checked arithmetic, and no
 allocation is sized from a file value before it is validated against the
@@ -48,3 +49,12 @@ published to crates.io.
 ## License
 
 MIT OR Apache-2.0.
+
+## The `encoder` feature
+
+Off by default, and not part of what this crate is for. It enables an
+experimental native encoder that links GDAL and writes `.xue` bundles
+byte-identically to the Python reference pipeline — see
+[`docs/encoder.md`](https://github.com/ringsaturn/xue/blob/main/docs/encoder.md).
+Enabling it requires a system GDAL and libclang at build time. A decode-only
+build resolves none of its dependencies and needs neither.

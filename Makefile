@@ -32,7 +32,7 @@ AWS_REQUEST_CHECKSUM_CALCULATION ?= when_required
 AWS_RESPONSE_CHECKSUM_VALIDATION ?= when_required
 export AWS_DEFAULT_REGION AWS_REQUEST_CHECKSUM_CALCULATION AWS_RESPONSE_CHECKSUM_VALIDATION
 
-.PHONY: check install wasm test test-rust test-e2e encoder-rust encoder-rust-test encoder-rust-wheel encoder-wheel bench bench-video bench-lossy mvp serve format-pdf deploy-build upload-r2 prune-r2 live-run deploy-pages deploy showcase showcase-check upload-r2-showcase clean
+.PHONY: check install wasm test test-rust test-e2e encoder-rust encoder-rust-test encoder-wheel bench bench-video bench-lossy mvp serve format-pdf deploy-build upload-r2 prune-r2 live-run deploy-pages deploy showcase showcase-check upload-r2-showcase clean
 
 check:
 	$(PYTHON) scripts/check_dependencies.py
@@ -47,40 +47,40 @@ test: test-rust
 	$(PYTHON) -m unittest discover -s tests -p 'test_*.py' -v
 	npm run test:web
 
+# The decoder and the wasm binding. `xue-py` is excluded because it enables the
+# xue crate's `encoder` feature, which links GDAL — a decode-only check must
+# not need one. `make encoder-rust-test` is where the encoder is tested.
 test-rust:
 	$(PYTHON) tests/prepare_bin_fixture.py
-	cd rust && cargo test
+	cd rust && cargo test --workspace --exclude xue-py
 
 test-e2e:
 	npm run test:e2e
 
-# The experimental native encoder (rust/xue-encode). Its own workspace, and it
-# links GDAL, so it needs pkg-config pointed at the GDAL install and libclang
-# for gdal-sys' bindgen. Not part of `make test`: the pipeline it reimplements
-# is the Python one, which stays the reference.
-ENCODER_RUST = cd rust/xue-encode && PKG_CONFIG_PATH="$$(gdal-config --prefix)/lib/pkgconfig"
+# The experimental native encoder, behind the xue crate's off-by-default
+# `encoder` feature. It links GDAL, so it needs pkg-config pointed at the GDAL
+# install and libclang for gdal-sys' bindgen. The `encoder` cargo profile is
+# what keeps it at opt-level 3 while the wasm decoder keeps the size-tuned
+# release profile — see the comments in rust/Cargo.toml. Not part of
+# `make test`: the pipeline it reimplements is the Python one, which stays the
+# reference.
+ENCODER = cd rust && PKG_CONFIG_PATH="$$(gdal-config --prefix)/lib/pkgconfig" cargo
+ENCODER_ARGS = --profile encoder --features encoder
 
 encoder-rust:
-	$(ENCODER_RUST) cargo build --release -p xue-encode
+	$(ENCODER) build $(ENCODER_ARGS) --bin xue-encode
 
 # Regenerates the Python-encoded fixture first: the golden test demands the
 # exact bytes the reference encoder wrote for it.
 encoder-rust-test:
 	$(PYTHON) tests/prepare_bin_fixture.py
-	$(ENCODER_RUST) cargo test --release
+	$(ENCODER) test -p xue $(ENCODER_ARGS)
 
 # A self-contained wheel: builds a minimal GDAL (GRIB and netCDF drivers only)
 # from source on first run, then bundles it, GDAL's and PROJ's data
 # directories, and every licence text alongside the extension module.
 encoder-wheel:
-	cd rust/xue-encode && ./scripts/build-wheel.sh
-
-# The same module linked against whatever GDAL the machine has — no bundling,
-# no data directories, not portable. Enough for A/B tests beside the Python
-# encoder, which is what most of this crate's use is.
-encoder-rust-wheel:
-	cd rust/xue-encode/python && PKG_CONFIG_PATH="$$(gdal-config --prefix)/lib/pkgconfig" \
-	    uvx maturin@1.9 build --release --out ../../../data/work/wheels
+	./scripts/build-encoder-wheel.sh
 
 bench:
 	$(PYTHON) scripts/bench_bin.py data/raw/gfs.$(RUN) --output data/work/bench_bin.json
@@ -104,7 +104,7 @@ spike-webcodecs:
 # MODEL=ecmwf builds the ECMWF IFS open data feed instead of GFS;
 # MODEL=sflux builds the native-resolution GFS surface flux feed.
 mvp: check install wasm
-	$(PYTHON) -m xue build-bin --model $(MODEL) --run $(RUN) --hours $(HOURS) --profile $(PROFILE) $(FORCE)
+	$(PYTHON) -m xuebuild build-bin --model $(MODEL) --run $(RUN) --hours $(HOURS) --profile $(PROFILE) $(FORCE)
 	npm run build
 
 serve:
@@ -160,10 +160,10 @@ upload-r2:
 CASES_DIR ?= showcase/cases
 
 showcase:
-	$(PYTHON) -m xue showcase build --cases-dir $(CASES_DIR) $(FORCE) $(CASE)
+	$(PYTHON) -m xuebuild showcase build --cases-dir $(CASES_DIR) $(FORCE) $(CASE)
 
 showcase-check:
-	$(PYTHON) -m xue showcase check --cases-dir $(CASES_DIR) $(CASE)
+	$(PYTHON) -m xuebuild showcase check --cases-dir $(CASES_DIR) $(CASE)
 
 # Push the built cases and the catalog to R2. Cases are immutable and
 # ?v=<crc32>-addressed like run assets; showcase.json is the mutable index and

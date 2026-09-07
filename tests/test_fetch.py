@@ -10,8 +10,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from xue.errors import DownloadError
-from xue.fetch import (
+from xuebuild.errors import DownloadError
+from xuebuild.fetch import (
     _download_ecmwf_payload,
     _request,
     ecmwf_object_url,
@@ -25,9 +25,9 @@ from xue.fetch import (
     resolve_run,
     sflux_object_url,
 )
-from xue.idx import ByteRange
-from xue.model import GfsRun
-from xue.sources import source_spec
+from xuebuild.idx import ByteRange
+from xuebuild.model import GfsRun
+from xuebuild.sources import source_spec
 
 
 class _RangeHandler(BaseHTTPRequestHandler):
@@ -56,9 +56,9 @@ class FetchTests(unittest.TestCase):
             existing.write_bytes(b"existing GRIB")
 
             with (
-                patch("xue.gdal.inspect_grib") as inspect_grib,
-                patch("xue.fetch.fetch_text") as fetch_text,
-                patch("xue.fetch.fetch_range") as fetch_range,
+                patch("xuebuild.gdal.inspect_grib") as inspect_grib,
+                patch("xuebuild.fetch.fetch_text") as fetch_text,
+                patch("xuebuild.fetch.fetch_range") as fetch_range,
             ):
                 result = fetch_frame(run, 0, destination)
 
@@ -111,8 +111,8 @@ class FetchTests(unittest.TestCase):
         )
         response = object()
         with (
-            patch("xue.fetch.ECMWF_REQUEST_INTERVAL", 0),
-            patch("xue.fetch.time.sleep") as sleep,
+            patch("xuebuild.fetch.ECMWF_REQUEST_INTERVAL", 0),
+            patch("xuebuild.fetch.time.sleep") as sleep,
         ):
             result = _request(
                 "https://storage.googleapis.com/ecmwf-open-data/file",
@@ -130,9 +130,9 @@ class FetchTests(unittest.TestCase):
             error.__cause__ = http_error
             return error
 
-        with patch("xue.fetch._request", side_effect=failure(404)):
+        with patch("xuebuild.fetch._request", side_effect=failure(404)):
             self.assertFalse(remote_exists("https://example.test/missing"))
-        with patch("xue.fetch._request", side_effect=failure(503)):
+        with patch("xuebuild.fetch._request", side_effect=failure(503)):
             with self.assertRaises(DownloadError):
                 remote_exists("https://example.test/throttled")
 
@@ -152,9 +152,9 @@ class FetchTests(unittest.TestCase):
             return b"x"
 
         with (
-            patch("xue.fetch.fetch_text", side_effect=fetch_text),
-            patch("xue.fetch.fetch_range", side_effect=fetch_range),
-            patch("xue.fetch.ecmwf_field_byte_range", return_value=ByteRange(0, 0)),
+            patch("xuebuild.fetch.fetch_text", side_effect=fetch_text),
+            patch("xuebuild.fetch.fetch_range", side_effect=fetch_range),
+            patch("xuebuild.fetch.ecmwf_field_byte_range", return_value=ByteRange(0, 0)),
         ):
             payload = _download_ecmwf_payload(run, 0, source_spec("ecmwf"))
 
@@ -178,9 +178,9 @@ class FetchTests(unittest.TestCase):
             return destination / f"ecmwf.{run.id}.f{hour:03d}.grib2"
 
         with (
-            patch("xue.fetch.fetch_frame", side_effect=fetch),
-            patch("xue.fetch.random.uniform", return_value=60),
-            patch("xue.fetch.time.sleep") as sleep,
+            patch("xuebuild.fetch.fetch_frame", side_effect=fetch),
+            patch("xuebuild.fetch.random.uniform", return_value=60),
+            patch("xuebuild.fetch.time.sleep") as sleep,
         ):
             paths = fetch_run(run, 3, Path("raw"), model="ecmwf")
 

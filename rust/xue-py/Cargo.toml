@@ -1,0 +1,24 @@
+[package]
+name = "xue-py"
+# Tracks the xue crate: one tag releases both.
+version = "0.2.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/ringsaturn/xue"
+description = "Python bindings for the Xue decoder and the experimental native encoder"
+# Distributed as a wheel through the project's own index, never to crates.io.
+publish = false
+build = "build.rs"
+
+[lib]
+name = "xue_py"
+crate-type = ["cdylib", "rlib"]
+path = "src/lib.rs"
+
+[dependencies]
+xue = { path = "../xue", features = ["encoder"] }
+numpy = "0.29"
+# abi3: one wheel per platform rather than one per Python minor version. The
+# wheel carries a bundled GDAL, so the difference is roughly 20 MB against 80.
+pyo3 = { version = "0.29", features = ["extension-module", "abi3-py311"] }
+serde_json = { version = "1", features = ["preserve_order"] }

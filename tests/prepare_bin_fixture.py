@@ -6,9 +6,9 @@ from pathlib import Path
 
 import numpy as np
 
-from xue import binformat, zstdcli
-from xue.binconvert import GridInfo, _variable_payloads, build_metadata, convert_bin
-from xue.sources import source_spec
+from xuebuild import binformat, zstdcli
+from xuebuild.binconvert import GridInfo, _variable_payloads, build_metadata, convert_bin
+from xuebuild.sources import source_spec
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 FIXTURE_GRIB = REPOSITORY_ROOT / "tests" / "fixtures" / "gfs.2026081406.f000.crop.grib2"

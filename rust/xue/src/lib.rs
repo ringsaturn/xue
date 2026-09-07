@@ -34,6 +34,11 @@ pub const HOUR_SECONDS: u32 = 3600;
 const V3_TIME_FIELDS: [&str; 4] =
     ["unitSeconds", "firstFrameOffset", "frameStep", "frameOffsets"];
 
+// The experimental native encoder, behind an off-by-default feature because it
+// links GDAL. Everything below this line is the decoder, which links nothing.
+#[cfg(feature = "encoder")]
+pub mod encode;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DecodeError(pub String);
 

@@ -1,0 +1,187 @@
+name: release-xuepy
+
+# Builds the xuepy wheels — the Rust decoder and the experimental native
+# encoder through PyO3, each carrying its own minimal GDAL — and publishes them
+# to PyPI and to the GitHub release.
+#
+# They ride the xue crate's own v* tags: release-crate.yml publishes the crate
+# and creates the release, and this attaches the wheels to it once they are
+# built.
+#
+# No sdist is published. Building from source needs GDAL, libclang and cmake,
+# so an sdist would turn "no wheel for your platform" from a clear error into a
+# confusing build failure.
+#
+# The Linux wheels are manylinux_2_39: auditwheel tags them with the glibc of
+# the runner that built them, and naming an older policy only makes it refuse.
+# Building inside a manylinux_2_28 container is what broader coverage needs.
+# macOS is arm64 only.
+#
+# PyPI authentication is Trusted Publishing (GitHub OIDC, no stored token):
+# the project's publishing settings must list this repository with workflow
+# filename `release-xuepy.yml`. PyPI accepts a pending publisher for a project
+# that does not exist yet, so this can be configured before the first release.
+#
+# A manual dispatch builds and uploads the wheels as workflow artifacts only,
+# touching neither PyPI nor a release.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Cheap, and it runs before twenty minutes of GDAL builds: the wheel version
+  # comes from the crate manifest, so a tag that disagrees with it would
+  # publish under the wrong number.
+  version:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          set -euo pipefail
+          version="$(cargo metadata --manifest-path rust/xue-py/Cargo.toml --no-deps --format-version 1 \
+            | jq -r '.packages[] | select(.name == "xue-py") | .version')"
+          if [ "v${version}" != "${GITHUB_REF_NAME}" ]; then
+            echo "tag ${GITHUB_REF_NAME} does not match xue-py version ${version}" >&2
+            exit 1
+          fi
+
+  build:
+    name: ${{ matrix.runner }}
+    # `always()` so a manual dispatch, where the version job is skipped, still
+    # builds; a real failure still stops it.
+    needs: version
+    if: always() && needs.version.result != 'failure'
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # No macos-13: the Intel macOS runners are scarce enough that a job
+        # can sit queued past the point of being useful, and every platform
+        # here builds GDAL from source. Add it back when an x86_64 macOS wheel
+        # is actually wanted.
+        runner: [macos-15, ubuntu-24.04, ubuntu-24.04-arm]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: astral-sh/setup-uv@v5
+
+      # PROJ needs sqlite3 and the repair step needs patchelf; macOS gets both
+      # equivalents from the SDK and from delocate.
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            cmake libsqlite3-dev sqlite3 zlib1g-dev patchelf
+
+      # GDAL, PROJ, HDF5 and netCDF are built from source and take the bulk of
+      # the job. The key is the build script itself: it pins every version, so
+      # a change to it is exactly when the prefix must be rebuilt.
+      - name: Cache the minimal GDAL prefix
+        uses: actions/cache@v4
+        with:
+          path: data/work/gdal-minimal
+          key: gdal-minimal-${{ matrix.runner }}-${{ hashFiles('scripts/build-gdal-minimal.sh') }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+
+      - name: Build the wheel
+        run: ./scripts/build-encoder-wheel.sh "${GITHUB_WORKSPACE}/wheels"
+
+      # The wheel bundles its own GDAL, and the whole point of bundling it is
+      # that the module finds it with nothing set in the environment. Encode
+      # the repository's GRIB fixture and decode the result back, which needs
+      # GDAL, its data directory, and both halves of the extension.
+      - name: Smoke-test the wheel
+        run: |
+          set -euo pipefail
+          uv venv --python 3.12 /tmp/smoke
+          VIRTUAL_ENV=/tmp/smoke uv pip install numpy "$(ls "${GITHUB_WORKSPACE}"/wheels/*.whl)"
+          /tmp/smoke/bin/python - <<'PY'
+          import numpy, xue
+
+          codes = xue.quantize("quality", "tmp2m", numpy.array([-60.0, -59.75, 0.0, 50.0]))
+          assert list(codes) == [0, 1, 120, 220], list(codes)
+
+          xue.convert_bin(["tests/fixtures/gfs.2026081406.f000.crop.grib2"], "/tmp/smoke-out",
+                          model="gfs", skip_variants=True)
+          bundle = xue.Bundle.open("/tmp/smoke-out/tmp2m.xue")
+          plane = bundle.decode(1, 0)
+          assert plane.dtype == numpy.uint8, plane.dtype
+          assert plane.size == bundle.plane_length, (plane.size, bundle.plane_length)
+          print(f"wheel encoded and decoded {bundle!r}")
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.runner }}
+          path: wheels/*.whl
+          if-no-files-found: error
+
+  publish:
+    name: publish to PyPI
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    environment:
+      name: pypi
+      url: https://pypi.org/p/xuepy
+    permissions:
+      id-token: write # mint the PyPI OIDC token
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: wheels-*
+          merge-multiple: true
+          path: dist
+      - uses: pypa/gh-action-pypi-publish@release/v1
+
+  release:
+    name: attach to the release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: wheels-*
+          merge-multiple: true
+          path: wheels
+      # release-crate.yml owns the release for this tag; it publishes the crate
+      # first and creates the release last, while this job spends ten minutes
+      # building GDAL, so the release is normally already there. Wait rather
+      # than assume, and upload rather than create, so neither job depends on
+      # the other's timing.
+      - name: Attach the wheels to the release
+        run: |
+          set -euo pipefail
+          ls -lh wheels
+          for attempt in $(seq 1 30); do
+            if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+              gh release upload "${GITHUB_REF_NAME}" wheels/*.whl --clobber
+              exit 0
+            fi
+            echo "release ${GITHUB_REF_NAME} not published yet (attempt ${attempt}/30)"
+            sleep 20
+          done
+          echo "release ${GITHUB_REF_NAME} never appeared; is release-crate.yml failing?" >&2
+          exit 1
+        env:
+          GH_TOKEN: ${{ github.token }}
