@@ -9,12 +9,12 @@
 use serde_json::{json, Map, Value};
 use time::OffsetDateTime;
 
-use crate::binformat::HOUR_SECONDS;
-use crate::errors::Result;
-use crate::grid::GridInfo;
-use crate::quantize::codebook;
-use crate::sources::SourceSpec;
-use crate::variables::variable_spec;
+use crate::encode::binformat::HOUR_SECONDS;
+use crate::encode::errors::Result;
+use crate::encode::grid::GridInfo;
+use crate::encode::quantize::codebook;
+use crate::encode::sources::SourceSpec;
+use crate::encode::variables::variable_spec;
 
 /// Bundle metadata schema this encoder writes: every variable descriptor
 /// carries its GRIB2 parameter identity. Earlier versions remain readable;

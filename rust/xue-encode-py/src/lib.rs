@@ -20,13 +20,13 @@ use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
-use xue_encode::convert::{convert_bin as native_convert, ConvertOptions};
-use xue_encode::grid::GridInfo;
-use xue_encode::poster::encode_poster as native_encode_poster;
-use xue_encode::quantize::codebook;
-use xue_encode::temporal::encode_residual as native_encode_residual;
+use xue::encode::convert::{convert_bin as native_convert, ConvertOptions};
+use xue::encode::grid::GridInfo;
+use xue::encode::poster::encode_poster as native_encode_poster;
+use xue::encode::quantize::codebook;
+use xue::encode::temporal::encode_residual as native_encode_residual;
 
-fn to_py_error(error: xue_encode::EncodeError) -> PyErr {
+fn to_py_error(error: xue::encode::EncodeError) -> PyErr {
     PyRuntimeError::new_err(error.to_string())
 }
 

@@ -26,11 +26,9 @@ test-results/
 tests/fixtures/generated/
 tests/fixtures/work/
 rust/target/
-rust/xue-encode/target/
-rust/xue-encode/build/
-rust/xue-encode/python/pysrc/xue_encode_py/gdal-data/
-rust/xue-encode/python/pysrc/xue_encode_py/proj-data/
-rust/xue-encode/python/pysrc/xue_encode_py/licenses/
+rust/xue-encode-py/pysrc/xue_encode_py/gdal-data/
+rust/xue-encode-py/pysrc/xue_encode_py/proj-data/
+rust/xue-encode-py/pysrc/xue_encode_py/licenses/
 web/src/wasm/
 *.egg-info/
 docs/format.pdf

@@ -3,7 +3,7 @@
 //! Each variable is packaged into its own single-variable `.xue` file so the
 //! frontend can download exactly the fields it needs. A forecast source
 //! arrives as one GRIB2 file per forecast hour; an observation source
-//! ([`crate::observation`]) as one NetCDF file whose bands are the time axis.
+//! ([`crate::encode::observation`]) as one NetCDF file whose bands are the time axis.
 //! Everything past frame discovery — crop, quantize, temporal grouping,
 //! container write, manifest — is the same for both.
 
@@ -14,25 +14,25 @@ use std::sync::{Arc, Condvar, Mutex};
 use serde_json::{json, Map, Value};
 use time::OffsetDateTime;
 
-use crate::binformat::{
+use crate::encode::binformat::{
     self, PlaneEntry, PlanePayload, COMPRESSION_ZSTD, FLAG_ZSTD_CHECKSUM, HOUR_SECONDS,
     NO_DEPENDENCY, PREDICTOR_ANCHOR, PREDICTOR_RAW,
 };
-use crate::errors::{EncodeError, Result};
-use crate::gdalio::{needs_serial_access, netcdf_guard, Dataset};
-use crate::grid::{crop_grid, normalize_longitudes, GridInfo};
-use crate::gribindex::inspect_grib_fast;
-use crate::inspect::{inspect_grib_multi, normalize_unit, raster_expression, SUPPORTED_EXTENSIONS};
-use crate::manifest::{build_bin_manifest, build_latest_pointer, serialize_json, write_json};
-use crate::metadata::{axis_unit_seconds, build_metadata, lead_hours, to_spaced_json};
-use crate::model::{PlaneSource, SourceFrame};
-use crate::observation::inspect_observation;
-use crate::parallel::for_each_ordered;
-use crate::poster::encode_poster;
-use crate::quantize::{codebook, Codebook};
-use crate::sources::{source_spec, SourceSpec};
-use crate::temporal::{anchor_hour, encode_residual, group_forecast_hours};
-use crate::variables::numeric_id;
+use crate::encode::errors::{EncodeError, Result};
+use crate::encode::gdalio::{needs_serial_access, netcdf_guard, Dataset};
+use crate::encode::grid::{crop_grid, normalize_longitudes, GridInfo};
+use crate::encode::gribindex::inspect_grib_fast;
+use crate::encode::inspect::{inspect_grib_multi, normalize_unit, raster_expression, SUPPORTED_EXTENSIONS};
+use crate::encode::manifest::{build_bin_manifest, build_latest_pointer, serialize_json, write_json};
+use crate::encode::metadata::{axis_unit_seconds, build_metadata, lead_hours, to_spaced_json};
+use crate::encode::model::{PlaneSource, SourceFrame};
+use crate::encode::observation::inspect_observation;
+use crate::encode::parallel::for_each_ordered;
+use crate::encode::poster::encode_poster;
+use crate::encode::quantize::{codebook, Codebook};
+use crate::encode::sources::{source_spec, SourceSpec};
+use crate::encode::temporal::{anchor_hour, encode_residual, group_forecast_hours};
+use crate::encode::variables::numeric_id;
 
 /// Scalar variables ship one single-variable bundle each; the two wind
 /// components ship together in one two-variable bundle for the GPU particle
@@ -789,13 +789,13 @@ fn error_name(code: usize) -> &'static str {
 
 /// Decode every plane of a freshly written bundle with the decoder crate.
 fn verify_bundle_bytes(bytes: &[u8]) -> Result<()> {
-    let mut bundle = xue::Bundle::open(bytes)
+    let mut bundle = crate::Bundle::open(bytes)
         .map_err(|error| EncodeError::bundle(format!("read-back parse failed: {}", error.0)))?;
     let variables: Vec<u8> = bundle.variable_ids().to_vec();
     let offsets: Vec<u16> = bundle.frame_offsets().to_vec();
     for variable_id in variables {
         for frame_offset in &offsets {
-            match bundle.decode_frame(xue::FrameRequest {
+            match bundle.decode_frame(crate::FrameRequest {
                 variable_id,
                 frame_offset: *frame_offset,
             }) {
@@ -839,7 +839,7 @@ pub fn convert_bin(
     options: &ConvertOptions,
 ) -> Result<Value> {
     let source = source_spec(&options.model)?;
-    if !crate::quantize::PROFILES.contains(&options.profile.as_str()) {
+    if !crate::encode::quantize::PROFILES.contains(&options.profile.as_str()) {
         return Err(EncodeError::conversion(format!(
             "unknown profile: {}",
             options.profile
@@ -1345,7 +1345,7 @@ pub fn convert_bin(
         // publish. A restricted build ships only the bundles it was asked for,
         // and a source that publishes neither can never satisfy the rule.
         let require_core = options.bundle_ids.is_none()
-            && crate::manifest::REQUIRED_BIN_BUNDLE_VARIABLES
+            && crate::encode::manifest::REQUIRED_BIN_BUNDLE_VARIABLES
                 .iter()
                 .all(|id| published.contains(id));
         let manifest_dir = manifest_path.parent().unwrap_or(Path::new("."));

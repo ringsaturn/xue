@@ -6,8 +6,8 @@ use std::io::Write;
 use flate2::write::ZlibEncoder;
 use flate2::Compression;
 
-use crate::errors::{EncodeError, Result};
-use crate::grid::GridInfo;
+use crate::encode::errors::{EncodeError, Result};
+use crate::encode::grid::GridInfo;
 
 /// Encode one quantized plane as a small first-frame poster.
 ///

@@ -1,8 +1,8 @@
 //! An experimental native encoder for the Xue v1 bundle format.
 //!
-//! The production encoder is Python (`xue/`), orchestrating GDAL, zstd and
-//! ffmpeg as CLI subprocesses. This crate is the same pipeline in Rust with
-//! the external tools linked in process instead:
+//! The production encoder is Python (`xue/` at the repository root),
+//! orchestrating GDAL, zstd and ffmpeg as CLI subprocesses. This module is the
+//! same pipeline in Rust with the external tools linked in process instead:
 //!
 //! * **GDAL** through `gdal-sys` (georust) replaces `gdalinfo -json` and
 //!   `gdal_translate -of ENVI` — a production GFS run wrote and re-read
@@ -11,15 +11,18 @@
 //! * **grib-rs** replaces the hand-rolled GRIB2 header index that locates each
 //!   variable's band.
 //! * **zstd** is linked rather than piped through the CLI.
-//! * The **`xue` decoder crate** is the read-back verifier, so every bundle
-//!   this encoder writes is decoded by the same code the browser runs.
+//! * The decoder in this same crate is the read-back verifier, so every bundle
+//!   the encoder writes is decoded by the code the browser runs.
 //!
 //! Scope is `convert-bin`: gridded input to bundles, half-resolution variants,
 //! posters and the manifest. Fetching, the showcase driver and the optional
 //! H.264 companion artifacts stay in Python.
 //!
-//! `docs/format.md` is the normative spec for everything written here, and
-//! `xue/binconvert.py` is the reference the outputs are diffed against.
+//! It is behind the off-by-default `encoder` feature: it links GDAL, which the
+//! decoder does not, and nothing that only decodes should have to find a GDAL
+//! to build. `docs/format.md` is the normative spec for everything written
+//! here, and `xue/binconvert.py` is the reference the outputs are diffed
+//! against.
 
 pub mod binformat;
 pub mod convert;

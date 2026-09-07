@@ -1,8 +1,9 @@
-# xue-encode — experimental native encoder
+# The experimental native encoder
 
 The production encoder is Python (`xue/`), driving GDAL, zstd and ffmpeg as
-CLI subprocesses. This crate is the same `convert-bin` pipeline written in
-Rust with those tools linked in process.
+CLI subprocesses. `rust/xue/src/encode/` is the same `convert-bin` pipeline
+written in Rust with those tools linked in process, behind the `xue` crate's
+off-by-default `encoder` feature.
 
 It is an experiment, not a replacement: the Python encoder remains the
 reference, and this one is held to it by **byte-for-byte identical output**.
@@ -59,7 +60,7 @@ ignored, since no video is built either way.
 
 ## Python bindings
 
-`python/` is a thin PyO3 + `rust-numpy` wrapper: `convert_bin` runs the whole
+`rust/xue-encode-py/` is a thin PyO3 + `rust-numpy` wrapper: `convert_bin` runs the whole
 native conversion and returns the same report dictionary the Python encoder
 returns, and `quantize` / `encode_residual` / `decimate` / `encode_poster`
 take and return NumPy arrays so individual stages can be A/B-tested against
@@ -101,7 +102,7 @@ make encoder-wheel          # minimal GDAL, then the wheel, then repair it
 ```
 
 `scripts/build-gdal-minimal.sh` builds libaec, HDF5, netCDF, PROJ and GDAL from
-source into `build/gdal-minimal`, and `scripts/build-wheel.sh` stages GDAL's
+source into `build/gdal-minimal`, and `scripts/build-encoder-wheel.sh` stages GDAL's
 and PROJ's data directories plus every licence text into the package, runs
 maturin, and lets `delocate` (macOS) or `auditwheel` (Linux) move the shared
 libraries in. zlib and sqlite3 come from the platform and are not bundled.
@@ -211,5 +212,5 @@ Every source, on real runs, with every artifact compared byte for byte:
 One thing the reference never had to handle showed up here: GDAL's netCDF
 driver is not thread-safe, and reading one file from several threads fails with
 `netCDF chunk fetch failed: NetCDF: HDF error`. Every extraction was its own
-`gdal_translate` process in Python, so it never met this. `gdalio::netcdf_guard`
+`gdal_translate` process in Python, so it never met this. `encode::gdalio::netcdf_guard`
 serializes those reads; GRIB stays parallel.

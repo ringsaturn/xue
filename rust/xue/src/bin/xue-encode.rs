@@ -6,8 +6,8 @@
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use xue_encode::convert::{convert_bin, ConvertOptions};
-use xue_encode::errors::EncodeError;
+use xue::encode::convert::{convert_bin, ConvertOptions};
+use xue::encode::errors::EncodeError;
 
 const USAGE: &str = "\
 usage: xue-encode convert-bin <input>... --output <dir> [options]

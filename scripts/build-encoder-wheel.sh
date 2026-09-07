@@ -14,14 +14,14 @@
 #   ./scripts/build-wheel.sh [output-dir]
 set -euo pipefail
 
-HERE="$(cd "$(dirname "$0")/.." && pwd)"
-OUTPUT="${1:-$HERE/build/wheels}"
-PREFIX="$HERE/build/gdal-minimal"
-PACKAGE="$HERE/python/pysrc/xue_encode_py"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+OUTPUT="${1:-$ROOT/data/work/wheels}"
+PREFIX="$ROOT/data/work/gdal-minimal"
+PACKAGE="$ROOT/rust/xue-encode-py/pysrc/xue_encode_py"
 
 if [ ! -f "$PREFIX/lib/pkgconfig/gdal.pc" ]; then
   echo "==> no minimal GDAL yet, building it"
-  "$HERE/scripts/build-gdal-minimal.sh" "$PREFIX"
+  "$ROOT/scripts/build-gdal-minimal.sh" "$PREFIX"
 fi
 
 echo "==> staging GDAL and PROJ data into the package"
@@ -37,8 +37,8 @@ echo "==> collecting licence texts"
 # enough; every bundled library is permissive but asks for its notice to
 # travel with a binary redistribution.
 cp "$PREFIX"/share/licenses/* "$PACKAGE/licenses/"
-cp "$HERE/../../LICENSE-MIT" "$PACKAGE/licenses/xue.LICENSE-MIT"
-cp "$HERE/../../LICENSE-APACHE" "$PACKAGE/licenses/xue.LICENSE-APACHE"
+cp "$ROOT/LICENSE-MIT" "$PACKAGE/licenses/xue.LICENSE-MIT"
+cp "$ROOT/LICENSE-APACHE" "$PACKAGE/licenses/xue.LICENSE-APACHE"
 ls "$PACKAGE/licenses" | sed 's/^/    /'
 
 echo "==> building the wheel"
@@ -51,9 +51,9 @@ rm -f "$OUTPUT"/*.whl
 # under a different name.
 STAGING="$(mktemp -d)"
 trap 'rm -rf "$STAGING"' EXIT
-cd "$HERE/python"
+cd "$ROOT/rust/xue-encode-py"
 # build.rs adds the LC_RPATH that lets delocate resolve libgdal and vendor it.
-PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig" uvx maturin@1.9 build --release --out "$STAGING"
+PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig" uvx maturin@1.9 build --profile encoder --out "$STAGING"
 
 staged="$(ls "$STAGING"/*.whl)"
 echo "==> vendoring the shared libraries into $(basename "$staged")"

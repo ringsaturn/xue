@@ -23,9 +23,7 @@ concurrency:
 
 jobs:
   publish:
-    # A release of the crate (v*) is not a release of the encoder, and only the
-    # latter changes the index.
-    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.release.tag_name, 'encoder-v')
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.release.tag_name, 'v')
     runs-on: ubuntu-24.04
     permissions:
       contents: read

@@ -5,7 +5,7 @@
 //! subtraction and addition are lossless for every byte pair, so there is no
 //! residual range check, no signed interpretation, and no RAW fallback.
 
-use crate::errors::{EncodeError, Result};
+use crate::encode::errors::{EncodeError, Result};
 
 pub const GROUP_LENGTH: usize = 6;
 

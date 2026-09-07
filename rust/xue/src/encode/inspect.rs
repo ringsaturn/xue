@@ -12,10 +12,10 @@ use std::sync::LazyLock;
 use regex::Regex;
 use time::OffsetDateTime;
 
-use crate::errors::{EncodeError, Result};
-use crate::gdalio::{BandInfo, Dataset};
-use crate::model::SourceFrame;
-use crate::variables::variable_spec;
+use crate::encode::errors::{EncodeError, Result};
+use crate::encode::gdalio::{BandInfo, Dataset};
+use crate::encode::model::SourceFrame;
+use crate::encode::variables::variable_spec;
 
 static HEIGHT_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i)(?:^|[^0-9])2(?:\.0+)?\s*m(?:eter)?s?\s+above\s+ground").expect("valid regex")

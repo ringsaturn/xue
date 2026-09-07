@@ -1,5 +1,4 @@
-// Give every binary this crate produces an rpath to the GDAL it was linked
-// against.
+// Give a binary an rpath to the GDAL it was linked against.
 //
 // `gdal-sys` resolves GDAL through pkg-config, which is fine for a system
 // install but not for the private prefix `scripts/build-gdal-minimal.sh`
@@ -9,12 +8,12 @@
 // The Python extension module gets the same rpath, which is what lets
 // `delocate` (macOS) and `auditwheel` (Linux) resolve the dependency and
 // vendor it into the wheel; both strip the rpath afterwards.
-
-use std::process::Command;
-
-fn main() {
+//
+// Included by two build scripts rather than being one, because a build
+// script's link arguments do not propagate to a dependent crate.
+fn emit_gdal_rpath() {
     println!("cargo:rerun-if-env-changed=PKG_CONFIG_PATH");
-    let Ok(output) = Command::new("pkg-config")
+    let Ok(output) = std::process::Command::new("pkg-config")
         .args(["--variable=libdir", "gdal"])
         .output()
     else {

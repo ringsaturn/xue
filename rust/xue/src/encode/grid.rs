@@ -3,7 +3,7 @@
 
 use serde_json::{json, Map, Value};
 
-use crate::errors::{EncodeError, Result};
+use crate::encode::errors::{EncodeError, Result};
 
 /// A rectangular window cut out of every extracted plane, indexed in the
 /// -180-first layout the column roll produces.
