@@ -1,0 +1,113 @@
+name: encoder wheels
+
+# Builds the experimental native encoder's wheels and attaches them to a
+# GitHub release. They are deliberately not published to PyPI: each wheel
+# carries its own GDAL, the encoder is pinned to the library versions its
+# byte-identity comparison was run against, and it is a research artifact
+# rather than something anyone should take a dependency on. The
+# encoder-index workflow turns the release assets into an installable index.
+#
+# Tagged apart from the crate's v* tags, which release-crate.yml owns:
+#   git tag encoder-v0.1.0 && git push origin encoder-v0.1.0
+#
+# A manual dispatch builds and uploads the wheels as workflow artifacts only,
+# without creating or touching a release.
+
+on:
+  push:
+    tags: ["encoder-v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.runner }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-15, macos-13, ubuntu-24.04, ubuntu-24.04-arm]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: astral-sh/setup-uv@v5
+
+      # PROJ needs sqlite3 and the repair step needs patchelf; macOS gets both
+      # equivalents from the SDK and from delocate.
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            cmake libsqlite3-dev sqlite3 zlib1g-dev patchelf
+
+      # GDAL, PROJ, HDF5 and netCDF are built from source and take the bulk of
+      # the job. The key is the build script itself: it pins every version, so
+      # a change to it is exactly when the prefix must be rebuilt.
+      - name: Cache the minimal GDAL prefix
+        uses: actions/cache@v4
+        with:
+          path: rust/xue-encode/build/gdal-minimal
+          key: gdal-minimal-${{ matrix.runner }}-${{ hashFiles('rust/xue-encode/scripts/build-gdal-minimal.sh') }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust/xue-encode
+
+      - name: Build the wheel
+        run: ./scripts/build-wheel.sh "${GITHUB_WORKSPACE}/wheels"
+        working-directory: rust/xue-encode
+
+      # The wheel bundles its own GDAL, so the only thing worth proving here is
+      # that it finds it: import the module and run one stage against a known
+      # answer.
+      - name: Smoke-test the wheel
+        run: |
+          set -euo pipefail
+          uv venv --python 3.12 /tmp/smoke
+          VIRTUAL_ENV=/tmp/smoke uv pip install numpy "$(ls "${GITHUB_WORKSPACE}"/wheels/*.whl)"
+          /tmp/smoke/bin/python - <<'PY'
+          import numpy, xue_encode_py
+          codes = xue_encode_py.quantize("quality", "tmp2m", numpy.array([-60.0, -59.75, 0.0, 50.0]))
+          assert list(codes) == [0, 1, 120, 220], list(codes)
+          print("wheel imports and quantizes correctly")
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.runner }}
+          path: wheels/*.whl
+          if-no-files-found: error
+
+  release:
+    name: attach to the release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/encoder-v')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: wheels-*
+          merge-multiple: true
+          path: wheels
+      - name: Publish the release
+        run: |
+          set -euo pipefail
+          ls -lh wheels
+          gh release create "${GITHUB_REF_NAME}" wheels/*.whl \
+            --title "${GITHUB_REF_NAME}" \
+            --notes "Experimental native encoder wheels. Each carries its own minimal GDAL (GRIB and netCDF drivers only); see rust/xue-encode/README.md. Install through the index at https://ringsaturn.github.io/xue/simple/." \
+            --verify-tag
+        env:
+          GH_TOKEN: ${{ github.token }}

@@ -15,6 +15,13 @@ implementations of one format live here and must stay in agreement:
 - **TypeScript frontend** — `web/src/` (manifest resolution, decode worker,
   WebGL2 layers, playback).
 
+Beside them, and *not* part of the delivery contract: **`rust/xue-encode`**, an
+experimental native port of `convert-bin` (its own cargo workspace, plus a
+PyO3 wrapper under `rust/xue-encode/python`). It links GDAL, grib-rs and zstd
+in process instead of shelling out, and is held to the Python encoder by
+byte-for-byte identical output — see `rust/xue-encode/README.md`. The Python
+encoder stays the reference; a format change goes there first.
+
 `docs/format.md` is the normative spec. `README.md` covers usage and
 publishing; `showcase/README.md` covers authoring historical cases.
 
@@ -30,6 +37,8 @@ npm run dev                      # vite dev server
 make test                        # rust + python + web unit tests
 make test-rust                   # regenerates the golden fixture, then cargo test
 make test-e2e                    # playwright (needs `npx playwright install chromium`)
+make encoder-rust                # build the experimental native encoder (rust/xue-encode)
+make encoder-rust-test           # its unit tests plus the byte-identity golden test
 npm run build                    # tsc --noEmit && vite build
 ```
 
