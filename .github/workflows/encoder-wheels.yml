@@ -32,7 +32,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner: [macos-15, macos-13, ubuntu-24.04, ubuntu-24.04-arm]
+        # No macos-13: the Intel macOS runners are scarce enough that a job
+        # can sit queued past the point of being useful, and every platform
+        # here builds GDAL from source. Add it back when an x86_64 macOS wheel
+        # is actually wanted.
+        runner: [macos-15, ubuntu-24.04, ubuntu-24.04-arm]
     steps:
       - uses: actions/checkout@v4
 
