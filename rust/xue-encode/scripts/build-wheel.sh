@@ -65,8 +65,13 @@ case "$(uname -s)" in
       --require-archs "$(uname -m)" --wheel-dir "$OUTPUT" "$staged"
     ;;
   Linux)
-    uvx --from auditwheel auditwheel repair \
-      --plat "${AUDITWHEEL_PLAT:-manylinux_2_34_$(uname -m)}" --wheel-dir "$OUTPUT" "$staged"
+    # No --plat: auditwheel picks the lowest policy the binaries actually
+    # satisfy, which is the glibc of whatever built them. Naming a lower one
+    # only makes it refuse, since the symbols are already there. The wheel
+    # therefore carries the builder's glibc floor — on ubuntu-24.04 that is
+    # manylinux_2_39, which is fine for this project's own CI. Building inside
+    # a manylinux_2_28 container is what a widely installable wheel would need.
+    uvx --from auditwheel auditwheel repair --wheel-dir "$OUTPUT" "$staged"
     ;;
   *) echo "unsupported platform: $(uname -s)" >&2; exit 1 ;;
 esac

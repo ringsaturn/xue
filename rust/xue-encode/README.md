@@ -108,6 +108,10 @@ libraries in. zlib and sqlite3 come from the platform and are not bundled.
 
 The wheel is `abi3-py311`: one per platform, not one per Python minor version.
 
+The Linux wheel carries the glibc floor of whatever built it — `manylinux_2_39`
+from an ubuntu-24.04 runner. That is enough for this project's own CI; a widely
+installable wheel would have to be built inside a `manylinux_2_28` container.
+
 ### Why a bundled GDAL, and why a minimal one
 
 The wheel has to carry GDAL, because the GRIB driver will not read a band
