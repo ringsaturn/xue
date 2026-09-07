@@ -1,4 +1,4 @@
-name: encoder wheels
+name: release-xuepy
 
 # Builds the xuepy wheels — the Rust decoder and the experimental native
 # encoder through PyO3, each carrying its own minimal GDAL — and publishes them
@@ -19,7 +19,7 @@ name: encoder wheels
 #
 # PyPI authentication is Trusted Publishing (GitHub OIDC, no stored token):
 # the project's publishing settings must list this repository with workflow
-# filename `encoder-wheels.yml`. PyPI accepts a pending publisher for a project
+# filename `release-xuepy.yml`. PyPI accepts a pending publisher for a project
 # that does not exist yet, so this can be configured before the first release.
 #
 # A manual dispatch builds and uploads the wheels as workflow artifacts only,
