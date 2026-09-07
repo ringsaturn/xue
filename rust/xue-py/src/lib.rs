@@ -1,6 +1,7 @@
-//! Python bindings for the experimental native encoder.
+//! Python bindings for the Xue decoder and the experimental native encoder.
 //!
-//! Two levels are exposed, both thin:
+//! The decoder is [`Bundle`], the same reader the browser runs through wasm.
+//! The encoder is exposed at two levels, both thin:
 //!
 //! * [`convert_bin`] runs the whole native conversion and hands back the same
 //!   report dictionary `xue.binconvert.convert_bin` returns, so a build can be
@@ -16,7 +17,7 @@
 use std::path::PathBuf;
 
 use numpy::{PyArray1, PyReadonlyArray1, ToPyArray};
-use pyo3::exceptions::PyRuntimeError;
+use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
@@ -64,6 +65,125 @@ fn to_python(python: Python<'_>, value: &serde_json::Value) -> PyResult<Py<PyAny
             mapping.into_any().unbind()
         }
     })
+}
+
+/// A complete `.xue` file, opened and validated.
+///
+/// The same reader the browser runs through wasm, so a bundle that decodes
+/// here decodes there. Every plane comes back as a `uint8` NumPy array of
+/// `width * height` quantized codes — what the shader uploads to an R8
+/// texture — which the metadata's `quantization` block turns back into
+/// physical values.
+///
+/// The file is held in memory. Reading a 75 MB wind bundle to decode one
+/// frame works, but the streaming reader in the Rust crate is what a client
+/// that only wants a few frames should use.
+#[pyclass]
+struct Bundle {
+    inner: xue::Bundle,
+}
+
+#[pymethods]
+impl Bundle {
+    /// Open a bundle from its bytes, validating the whole structure.
+    #[new]
+    fn new(data: &[u8]) -> PyResult<Self> {
+        xue::Bundle::open(data)
+            .map(|inner| Self { inner })
+            .map_err(|error| PyValueError::new_err(error.0))
+    }
+
+    /// Open a bundle from a path.
+    #[staticmethod]
+    fn open(path: PathBuf) -> PyResult<Self> {
+        let data = std::fs::read(&path)?;
+        Self::new(&data)
+    }
+
+    /// The metadata block, parsed. `docs/format.md` is the normative
+    /// description of what is in it.
+    #[getter]
+    fn metadata(&self, python: Python<'_>) -> PyResult<Py<PyAny>> {
+        let value: serde_json::Value = serde_json::from_str(self.inner.metadata_json())
+            .map_err(|error| PyValueError::new_err(error.to_string()))?;
+        to_python(python, &value)
+    }
+
+    /// The metadata block as it is stored, without a parse.
+    #[getter]
+    fn metadata_json(&self) -> &str {
+        self.inner.metadata_json()
+    }
+
+    /// The container's registered variable ids present in this bundle: 1
+    /// tmp2m, 2 prate, 3/4 the wind components, 5 dswrf, 6 cref.
+    #[getter]
+    fn variable_ids(&self) -> Vec<u8> {
+        self.inner.variable_ids().to_vec()
+    }
+
+    /// Every frame offset on the bundle's time axis, in order. An offset is
+    /// worth `unit_seconds` seconds from the run time — for every forecast
+    /// source that makes it the forecast hour.
+    #[getter]
+    fn frame_offsets(&self) -> Vec<u16> {
+        self.inner.frame_offsets().to_vec()
+    }
+
+    /// Seconds one frame offset is worth. 3600 for every forecast source; the
+    /// radar mosaic publishes every six minutes and says 360.
+    #[getter]
+    fn unit_seconds(&self) -> u32 {
+        self.inner.unit_seconds()
+    }
+
+    #[getter]
+    fn frame_count(&self) -> u32 {
+        self.inner.frame_count()
+    }
+
+    /// Points per plane, `grid.width * grid.height`.
+    #[getter]
+    fn plane_length(&self) -> usize {
+        self.inner.plane_length()
+    }
+
+    /// Decode one plane to its quantized codes.
+    ///
+    /// Reconstruction follows the predictor recorded in the index — a RAW
+    /// plane, or a residual added to its anchor — and the result is checked
+    /// against the CRC-32 the encoder wrote, so a corrupt file raises rather
+    /// than returning wrong numbers.
+    fn decode<'py>(
+        &mut self,
+        python: Python<'py>,
+        variable_id: u8,
+        frame_offset: u16,
+    ) -> PyResult<Bound<'py, PyArray1<u8>>> {
+        let plane = self
+            .inner
+            .decode_frame(xue::FrameRequest {
+                variable_id,
+                frame_offset,
+            })
+            .map_err(|error| PyValueError::new_err(error.0))?;
+        Ok(plane.to_pyarray(python))
+    }
+
+    /// Drop the decoded-plane cache. Decoding walks a temporal group, so the
+    /// reader keeps the anchor it just reconstructed; this releases it.
+    fn clear_cache(&mut self) {
+        self.inner.clear_cache();
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "<xue.Bundle {} variable(s), {} frames of {} points>",
+            self.inner.variable_ids().len(),
+            self.inner.frame_count(),
+            self.inner.plane_length()
+        )
+    }
 }
 
 /// Convert gridded input into per-variable Xue bundles.
@@ -206,8 +326,9 @@ fn encode_poster<'py>(
 }
 
 #[pymodule]
-fn xue_encode_py(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add("__doc__", "Experimental native Xue encoder")?;
+fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add("__doc__", "Xue bundle decoder and experimental native encoder")?;
+    module.add_class::<Bundle>()?;
     module.add_function(wrap_pyfunction!(convert_bin, module)?)?;
     module.add_function(wrap_pyfunction!(quantize, module)?)?;
     module.add_function(wrap_pyfunction!(encode_residual, module)?)?;

@@ -11,8 +11,8 @@ from pathlib import Path
 
 import numpy as np
 
-from xue import binformat, temporal, zstdcli
-from xue.binformat import (
+from xuebuild import binformat, temporal, zstdcli
+from xuebuild.binformat import (
     COMPRESSION_NONE,
     COMPRESSION_ZSTD,
     COMPRESSION_ZSTD_DICT,
@@ -27,9 +27,9 @@ from xue.binformat import (
     crc32_plane,
     write_bundle,
 )
-from xue.errors import BundleError, ConversionError, ManifestError
-from xue.manifest import build_bin_manifest, validate_bin_manifest
-from xue.quantize import (
+from xuebuild.errors import BundleError, ConversionError, ManifestError
+from xuebuild.manifest import build_bin_manifest, validate_bin_manifest
+from xuebuild.quantize import (
     COMPACT_PRECIPITATION,
     COMPACT_TEMPERATURE,
     QUALITY_PRECIPITATION,
@@ -128,7 +128,7 @@ class PrecipitationQuantizeTests(unittest.TestCase):
         self.assertEqual(codes.tolist(), [0, 1, 125, 126])
 
     def test_balanced_profile_mixes_quality_temperature_with_compact_precipitation(self) -> None:
-        from xue.quantize import PROFILES
+        from xuebuild.quantize import PROFILES
 
         self.assertIs(PROFILES["balanced"]["tmp2m"], QUALITY_TEMPERATURE)
         self.assertIs(PROFILES["balanced"]["prate"], COMPACT_PRECIPITATION)
@@ -138,7 +138,7 @@ class WindCodebookTests(unittest.TestCase):
     """Symmetric linear codebooks for the 10 m wind."""
 
     def test_symmetric_range_and_round_trip(self) -> None:
-        from xue.quantize import COMPACT_WIND, QUALITY_WIND
+        from xuebuild.quantize import COMPACT_WIND, QUALITY_WIND
 
         self.assertEqual(QUALITY_WIND.maximum_code, 254)
         self.assertEqual(COMPACT_WIND.maximum_code, 127)
@@ -154,7 +154,7 @@ class WindCodebookTests(unittest.TestCase):
         self.assertEqual(QUALITY_WIND.decode(QUALITY_WIND.quantize(np.array([0.0])))[0], 0.0)
 
     def test_every_profile_covers_both_components(self) -> None:
-        from xue.quantize import PROFILES
+        from xuebuild.quantize import PROFILES
 
         for name, profile in PROFILES.items():
             for component in ("ugrd10m", "vgrd10m"):
@@ -631,7 +631,7 @@ class SchemaV2Tests(unittest.TestCase):
 
 class SourceAxisTests(unittest.TestCase):
     def test_gfs_axis(self) -> None:
-        from xue.sources import source_spec
+        from xuebuild.sources import source_spec
 
         spec = source_spec("gfs")
         self.assertEqual(spec.forecast_hours(0), [0])
@@ -642,8 +642,8 @@ class SourceAxisTests(unittest.TestCase):
         self.assertEqual(axis[121:], list(range(123, 241, 3)))
 
     def test_ecmwf_axis(self) -> None:
-        from xue.errors import DownloadError
-        from xue.sources import source_spec
+        from xuebuild.errors import DownloadError
+        from xuebuild.sources import source_spec
 
         spec = source_spec("ecmwf")
         self.assertEqual(spec.forecast_hours(120), list(range(0, 121, 3)))
@@ -654,14 +654,14 @@ class SourceAxisTests(unittest.TestCase):
                 spec.forecast_hours(off_axis)
 
     def test_sflux_matches_gfs(self) -> None:
-        from xue.sources import source_spec
+        from xuebuild.sources import source_spec
 
         self.assertEqual(source_spec("sflux").forecast_hours(240), source_spec("gfs").forecast_hours(240))
 
 
 class TimeMetadataTests(unittest.TestCase):
     def test_uniform_axis_declares_a_frame_step(self) -> None:
-        from xue.binconvert import _time_metadata
+        from xuebuild.binconvert import _time_metadata
 
         self.assertEqual(
             _time_metadata(list(range(0, 121, 3)), 3600),
@@ -673,7 +673,7 @@ class TimeMetadataTests(unittest.TestCase):
         )
 
     def test_mixed_axis_lists_its_offsets(self) -> None:
-        from xue.binconvert import _time_metadata
+        from xuebuild.binconvert import _time_metadata
 
         axis = list(range(121)) + list(range(123, 241, 3))
         self.assertEqual(
@@ -684,7 +684,7 @@ class TimeMetadataTests(unittest.TestCase):
     def test_observation_axis_lists_its_gaps(self) -> None:
         """A missed publication is an ordinary step change, so the axis lists
         its offsets outright rather than pretending to a cadence it does not have."""
-        from xue.binconvert import _time_metadata
+        from xuebuild.binconvert import _time_metadata
 
         axis = [0, 1, 2, 5, 6, 7]
         self.assertEqual(
@@ -695,7 +695,7 @@ class TimeMetadataTests(unittest.TestCase):
     def test_the_axis_unit_is_the_coarsest_that_fits(self) -> None:
         """An hour for every forecast source, so their offsets stay their
         forecast hours; finer only when the data is."""
-        from xue.binconvert import axis_unit_seconds, lead_hours
+        from xuebuild.binconvert import axis_unit_seconds, lead_hours
 
         self.assertEqual(axis_unit_seconds([0, 3600, 7200]), 3600)
         self.assertEqual(axis_unit_seconds([0, 10800, 21600]), 3600)
@@ -717,7 +717,7 @@ class ParameterMetadataTests(unittest.TestCase):
         self.path = Path(self.directory.name) / "parameter.xue"
 
     def _metadata(self) -> dict:
-        from xue.binconvert import build_metadata, GridInfo
+        from xuebuild.binconvert import build_metadata, GridInfo
 
         grid = GridInfo(width=4, height=3, first_longitude=-180.0, first_latitude=90.0,
                         longitude_step=0.25, latitude_step=-0.25)
@@ -760,8 +760,8 @@ class ParameterMetadataTests(unittest.TestCase):
     def test_derived_rate_declares_its_statistical_process(self) -> None:
         """ECMWF and sflux publish prate as a mean over the step, not the
         instantaneous field GFS carries under the same parameter."""
-        from xue.binconvert import build_metadata, GridInfo
-        from xue.sources import source_spec
+        from xuebuild.binconvert import build_metadata, GridInfo
+        from xuebuild.sources import source_spec
 
         grid = GridInfo(width=4, height=3, first_longitude=-180.0, first_latitude=90.0,
                         longitude_step=0.25, latitude_step=-0.25)
@@ -776,7 +776,7 @@ class ParameterMetadataTests(unittest.TestCase):
             self.assertEqual(parameter.get("typeOfStatisticalProcessing"), expected, model)
 
     def test_entire_atmosphere_surface_carries_no_value(self) -> None:
-        from xue.variables import variable_spec
+        from xuebuild.variables import variable_spec
 
         parameter = variable_spec("cref").parameter_metadata()
         self.assertEqual(parameter["typeOfFirstFixedSurface"], 10)
@@ -857,7 +857,7 @@ def manifest_bundles() -> list[dict]:
 
 class DeaccumulationTests(unittest.TestCase):
     def test_rate_from_accumulations(self) -> None:
-        from xue.binconvert import deaccumulate_precipitation
+        from xuebuild.binconvert import deaccumulate_precipitation
 
         previous = np.array([0.0, 3.0, 6.0])
         current = np.array([3.0, 3.0, 5.5])  # last point dips: packing noise
@@ -865,7 +865,7 @@ class DeaccumulationTests(unittest.TestCase):
         np.testing.assert_allclose(rate, [1.0, 0.0, 0.0])
 
     def test_first_frame_has_zero_rate(self) -> None:
-        from xue.binconvert import deaccumulate_precipitation
+        from xuebuild.binconvert import deaccumulate_precipitation
 
         rate = deaccumulate_precipitation(np.array([1.0, 2.0]), None, 3)
         np.testing.assert_allclose(rate, [0.0, 0.0])

@@ -1,7 +1,7 @@
 name: encoder index
 
 # Publishes a PEP 503 simple index over the encoder wheels attached to
-# encoder-v* releases, so `pip install xue-encode-py --index-url ...` works
+# v* releases, so `pip install xuepy --index-url ...` works
 # without the package ever reaching PyPI (the arrangement ringsaturn/tzfpy
 # uses for its own overflow wheels).
 #
@@ -47,7 +47,7 @@ jobs:
             echo "the index must link to release assets, not carry them" >&2
             exit 1
           fi
-          test -f site/simple/xue-encode-py/index.html
+          test -f site/simple/xuepy/index.html
 
       - uses: actions/upload-pages-artifact@v3
         with:

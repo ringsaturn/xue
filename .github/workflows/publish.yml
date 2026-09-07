@@ -189,7 +189,7 @@ jobs:
           RUN: ${{ steps.target.outputs.run }}
         run: |
           set -euo pipefail
-          uv run python -m xue -v build-bin \
+          uv run python -m xuebuild -v build-bin \
             --model "$MODEL" --run "$RUN" --hours 240 --profile "$PROFILE" \
             > build-report.json
           {

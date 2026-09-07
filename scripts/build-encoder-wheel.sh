@@ -17,7 +17,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUTPUT="${1:-$ROOT/data/work/wheels}"
 PREFIX="$ROOT/data/work/gdal-minimal"
-PACKAGE="$ROOT/rust/xue-encode-py/pysrc/xue_encode_py"
+PACKAGE="$ROOT/rust/xue-py/pysrc/xue"
 
 if [ ! -f "$PREFIX/lib/pkgconfig/gdal.pc" ]; then
   echo "==> no minimal GDAL yet, building it"
@@ -51,7 +51,7 @@ rm -f "$OUTPUT"/*.whl
 # under a different name.
 STAGING="$(mktemp -d)"
 trap 'rm -rf "$STAGING"' EXIT
-cd "$ROOT/rust/xue-encode-py"
+cd "$ROOT/rust/xue-py"
 # build.rs adds the LC_RPATH that lets delocate resolve libgdal and vendor it.
 PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig" uvx maturin@1.9 build --profile encoder --out "$STAGING"
 

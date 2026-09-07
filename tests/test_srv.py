@@ -13,7 +13,7 @@ from pathlib import Path
 
 import numpy as np
 
-from xue.binconvert import (
+from xuebuild.binconvert import (
     WIND_COMPONENT_IDS,
     GridInfo,
     _decimate_codes,
@@ -24,14 +24,14 @@ from xue.binconvert import (
     decode_poster,
     encode_poster,
 )
-from xue.errors import ManifestError
-from xue.manifest import (
+from xuebuild.errors import ManifestError
+from xuebuild.manifest import (
     build_latest_pointer,
     validate_bin_manifest,
     validate_latest_pointer,
     write_latest_pointer,
 )
-from xue.videoconvert import build_debug_playlist
+from xuebuild.videoconvert import build_debug_playlist
 
 
 class LatestPointerTests(unittest.TestCase):
@@ -311,7 +311,7 @@ class WindBundleTests(unittest.TestCase):
         self.assertEqual(u_predictors, reference)
 
     def test_two_variable_bundle_round_trips(self) -> None:
-        from xue import binformat, zstdcli
+        from xuebuild import binformat, zstdcli
         from dataclasses import replace
 
         planes = self._planes()

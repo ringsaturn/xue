@@ -9,10 +9,10 @@ from unittest import mock
 
 import numpy as np
 
-from xue.binconvert import GridInfo, bundle_input_ids, crop_grid, published_bundle_ids
-from xue.errors import ConversionError, ManifestError
-from xue.manifest import build_bin_manifest, validate_bin_manifest
-from xue.showcase import (
+from xuebuild.binconvert import GridInfo, bundle_input_ids, crop_grid, published_bundle_ids
+from xuebuild.errors import ConversionError, ManifestError
+from xuebuild.manifest import build_bin_manifest, validate_bin_manifest
+from xuebuild.showcase import (
     OBSERVATION_ROOT_ENV,
     ShowcaseError,
     _grid_extent,
@@ -22,7 +22,7 @@ from xue.showcase import (
     parse_case,
     validate_catalog_entry,
 )
-from xue.sources import source_spec
+from xuebuild.sources import source_spec
 
 PRODUCTION_GRID = GridInfo(1440, 721, -180.0, 90.0, 0.25, -0.25)
 CASES_DIRECTORY = Path(__file__).resolve().parent.parent / "showcase" / "cases"

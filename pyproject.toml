@@ -3,9 +3,9 @@ requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "xuepy"
+name = "xuebuild"
 version = "0.1.0"
-description = "Xue (雪) encoder: pack global weather forecasts into browser-ready spatiotemporal bundles"
+description = "Xue (雪) build pipeline: fetch weather runs and pack them into browser-ready spatiotemporal bundles"
 readme = "README.md"
 requires-python = ">=3.12"
 license = "MIT OR Apache-2.0"
@@ -13,10 +13,11 @@ license-files = ["LICENSE-MIT", "LICENSE-APACHE"]
 dependencies = ["numpy>=2.0"]
 
 [project.scripts]
-xue = "xue.cli:main"
+# The command keeps its name; only the module behind it moved.
+xue = "xuebuild.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["xue*"]
+include = ["xuebuild*"]
 
 [tool.setuptools.package-data]
-xue = ["palette.txt", "precipitation_palette.txt"]
+xuebuild = ["palette.txt", "precipitation_palette.txt"]

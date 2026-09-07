@@ -1,7 +1,7 @@
 import unittest
 
-from xue.errors import ConversionError
-from xue.gdal import celsius_expression, normalize_unit, precipitation_expression
+from xuebuild.errors import ConversionError
+from xuebuild.gdal import celsius_expression, normalize_unit, precipitation_expression
 
 
 class GdalTests(unittest.TestCase):

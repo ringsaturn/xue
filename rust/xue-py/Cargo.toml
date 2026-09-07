@@ -1,16 +1,16 @@
 [package]
-name = "xue-encode-py"
+name = "xue-py"
 version = "0.1.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/ringsaturn/xue"
-description = "Python bindings for the experimental native Xue encoder"
+description = "Python bindings for the Xue decoder and the experimental native encoder"
 # Distributed as a wheel through the project's own index, never to crates.io.
 publish = false
 build = "build.rs"
 
 [lib]
-name = "xue_encode_py"
+name = "xue_py"
 crate-type = ["cdylib", "rlib"]
 path = "src/lib.rs"
 

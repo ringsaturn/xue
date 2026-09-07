@@ -1,7 +1,7 @@
 import unittest
 
-from xue.errors import DownloadError
-from xue.idx import ecmwf_field_byte_range, field_byte_range, parse_index, target_byte_range
+from xuebuild.errors import DownloadError
+from xuebuild.idx import ecmwf_field_byte_range, field_byte_range, parse_index, target_byte_range
 
 
 INDEX = """1:0:d=2026081406:PRMSL:mean sea level:anl:

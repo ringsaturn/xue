@@ -3,8 +3,8 @@ requires = ["maturin>=1.7,<2"]
 build-backend = "maturin"
 
 [project]
-name = "xue-encode-py"
-description = "Python bindings for the experimental native Xue encoder"
+name = "xuepy"
+description = "Xue (雪) bundle decoder and experimental native encoder, natively"
 requires-python = ">=3.11"
 license = { text = "MIT OR Apache-2.0" }
 classifiers = [
@@ -20,13 +20,13 @@ manifest-path = "Cargo.toml"
 # Mixed layout: pysrc/ holds the Python package, which points GDAL and PROJ at
 # their bundled data directories before importing the extension.
 python-source = "pysrc"
-module-name = "xue_encode_py.xue_encode_py"
+module-name = "xue._native"
 # scripts/build-wheel.sh stages these into the package before building, and
 # repairs the wheel afterwards so the dylibs travel with it.
 include = [
-    { path = "pysrc/xue_encode_py/gdal-data/**/*", format = "wheel" },
-    { path = "pysrc/xue_encode_py/proj-data/**/*", format = "wheel" },
-    { path = "pysrc/xue_encode_py/licenses/**/*", format = "wheel" },
+    { path = "pysrc/xue/gdal-data/**/*", format = "wheel" },
+    { path = "pysrc/xue/proj-data/**/*", format = "wheel" },
+    { path = "pysrc/xue/licenses/**/*", format = "wheel" },
 ]
 # The bundled libraries are added by delocate/auditwheel afterwards, not by
 # maturin, so its own vendoring check has nothing to find.

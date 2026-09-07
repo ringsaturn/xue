@@ -1,4 +1,8 @@
-"""Experimental native encoder for the Xue v1 bundle format.
+"""Xue (雪) bundles, natively.
+
+Two halves of the same crate: the decoder that the browser runs through wasm,
+and the experimental native encoder that writes bundles byte-identically to
+the Python reference pipeline (`xuebuild`, in the same repository).
 
 The wheel carries its own minimal GDAL — GRIB and netCDF drivers only — with
 GDAL's and PROJ's data directories alongside it. Both libraries look those up
@@ -24,7 +28,8 @@ for _variable, _directory in (("GDAL_DATA", "gdal-data"), ("PROJ_DATA", "proj-da
 if "PROJ_DATA" in _os.environ:
     _os.environ.setdefault("PROJ_LIB", _os.environ["PROJ_DATA"])
 
-from .xue_encode_py import (  # noqa: E402  (must follow the data-path setup)
+from ._native import (  # noqa: E402  (must follow the data-path setup)
+    Bundle,
     convert_bin,
     decimate,
     encode_poster,
@@ -33,6 +38,7 @@ from .xue_encode_py import (  # noqa: E402  (must follow the data-path setup)
 )
 
 __all__ = [
+    "Bundle",
     "convert_bin",
     "decimate",
     "encode_poster",

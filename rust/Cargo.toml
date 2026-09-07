@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["xue", "xue-wasm", "xue-encode-py"]
+members = ["xue", "xue-wasm", "xue-py"]
 
 # Cargo reads profiles from the workspace root only — one in a member manifest
 # is ignored with a warning — so the two builds this repository produces are

@@ -12,22 +12,22 @@ from unittest.mock import patch
 
 import numpy as np
 
-from xue.binconvert import (
+from xuebuild.binconvert import (
     GridInfo,
     VARIABLE_NUMERIC_IDS,
     _normalize_longitudes,
     average_window_start,
     deaverage_precipitation,
 )
-from xue.errors import ConversionError, DownloadError, ManifestError
-from xue.fetch import fetch_frame, resolve_run, sflux_object_url
-from xue.gdal import averaged_precipitation_expression, flux_expression, raster_expression
-from xue.idx import field_byte_range
-from xue.manifest import build_bin_manifest, validate_bin_manifest
-from xue.model import GfsRun
-from xue.quantize import PROFILES, TemperatureCodebook
-from xue.sources import source_spec
-from xue.variables import variable_spec
+from xuebuild.errors import ConversionError, DownloadError, ManifestError
+from xuebuild.fetch import fetch_frame, resolve_run, sflux_object_url
+from xuebuild.gdal import averaged_precipitation_expression, flux_expression, raster_expression
+from xuebuild.idx import field_byte_range
+from xuebuild.manifest import build_bin_manifest, validate_bin_manifest
+from xuebuild.model import GfsRun
+from xuebuild.quantize import PROFILES, TemperatureCodebook
+from xuebuild.sources import source_spec
+from xuebuild.variables import variable_spec
 
 
 SFLUX_F003_IDX = "\n".join(
@@ -48,7 +48,7 @@ SFLUX_F003_IDX = "\n".join(
 class SfluxFetchTests(unittest.TestCase):
     def test_object_url_and_resolution(self) -> None:
         run = GfsRun(datetime(2026, 8, 15, 6, tzinfo=UTC))
-        from xue.fetch import BASE_URL
+        from xuebuild.fetch import BASE_URL
 
         self.assertEqual(
             sflux_object_url(run, 0),
@@ -85,7 +85,7 @@ class SfluxFetchTests(unittest.TestCase):
             (destination / "sflux.2026081506.f000.grib2").write_bytes(b"existing GRIB")
             (destination / "sflux.2026081506.f003.grib2").write_bytes(b"existing GRIB")
 
-            with patch("xue.gdal.inspect_grib") as inspect_grib:
+            with patch("xuebuild.gdal.inspect_grib") as inspect_grib:
                 fetch_frame(run, 0, destination, model="sflux")
                 analysis_ids = [call.args[1] for call in inspect_grib.call_args_list]
                 inspect_grib.reset_mock()

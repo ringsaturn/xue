@@ -1,6 +1,6 @@
 # The experimental native encoder
 
-The production encoder is Python (`xue/`), driving GDAL, zstd and ffmpeg as
+The production encoder is Python (`xuebuild/`), driving GDAL, zstd and ffmpeg as
 CLI subprocesses. `rust/xue/src/encode/` is the same `convert-bin` pipeline
 written in Rust with those tools linked in process, behind the `xue` crate's
 off-by-default `encoder` feature.
@@ -55,20 +55,35 @@ xue-encode convert-bin cases/ --model gfs --output out/ \
 xue-encode convert-bin --help
 ```
 
-The flags mirror `python -m xue convert-bin`. `--skip-video` is accepted and
+The flags mirror `python -m xuebuild convert-bin`. `--skip-video` is accepted and
 ignored, since no video is built either way.
 
 ## Python bindings
 
-`rust/xue-encode-py/` is a thin PyO3 + `rust-numpy` wrapper: `convert_bin` runs the whole
-native conversion and returns the same report dictionary the Python encoder
-returns, and `quantize` / `encode_residual` / `decimate` / `encode_poster`
-take and return NumPy arrays so individual stages can be A/B-tested against
-`xue/quantize.py` and `xue/temporal.py` without running a whole build.
+`rust/xue-py/` is a thin PyO3 + `rust-numpy` wrapper, published as the `xuepy`
+distribution and imported as `xue`. It carries both halves of the crate.
+
+The decoder is `Bundle` — the same reader the browser runs through wasm, so a
+bundle that decodes here decodes there. Planes come back as `uint8` NumPy
+arrays of quantized codes:
 
 ```python
-import xue_encode_py
-report = xue_encode_py.convert_bin(["data/raw/gfs.2026082006"], "out/", model="gfs")
+import xue
+
+bundle = xue.Bundle.open("web/public/data/gfs.2026082006/tmp2m.xue")
+plane = bundle.decode(variable_id=1, frame_offset=24)   # uint8, width * height
+codebook = bundle.metadata["variables"][0]["quantization"]
+celsius = codebook["offset"] + plane * codebook["scale"]
+```
+
+The encoder is `convert_bin`, which runs the whole native conversion and
+returns the same report dictionary the Python pipeline returns, plus
+`quantize` / `encode_residual` / `decimate` / `encode_poster`, which take and
+return NumPy arrays so individual stages can be A/B-tested against
+`xuebuild/quantize.py` and `xuebuild/temporal.py` without running a build:
+
+```python
+report = xue.convert_bin(["data/raw/gfs.2026082006"], "out/", model="gfs")
 ```
 
 ### Installing
@@ -79,7 +94,7 @@ and it is a research artifact rather than something to depend on. They ride on
 GitHub release assets instead, behind a PEP 503 index:
 
 ```sh
-pip install xue-encode-py \
+pip install xuepy \
   --index-url https://ringsaturn.github.io/xue/simple/ \
   --extra-index-url https://pypi.org/simple
 ```
@@ -92,7 +107,7 @@ url = "https://ringsaturn.github.io/xue/simple"
 explicit = true
 
 [tool.uv.sources]
-xue-encode-py = { index = "xue-encoder" }
+xuepy = { index = "xue-encoder" }
 ```
 
 ### Building a wheel
@@ -144,7 +159,7 @@ Everything bundled is permissive and allows binary redistribution with
 attribution: GDAL and PROJ (MIT), HDF5 and libaec (BSD), netCDF (MIT-style),
 and zlib and sqlite3 from the platform. Several ask explicitly for their
 notice to travel with a binary, so the wheel carries them in
-`xue_encode_py/licenses/`.
+`xue/licenses/`.
 
 ### Three things that make the build brittle
 

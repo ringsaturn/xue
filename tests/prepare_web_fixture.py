@@ -14,8 +14,8 @@ from pathlib import Path
 
 import numpy as np
 
-from xue import binformat, temporal, zstdcli
-from xue.binconvert import (
+from xuebuild import binformat, temporal, zstdcli
+from xuebuild.binconvert import (
     GridInfo,
     WIND_COMPONENT_IDS,
     _decimate_codes,
@@ -25,9 +25,9 @@ from xue.binconvert import (
     build_metadata,
     encode_poster,
 )
-from xue.manifest import build_bin_manifest, build_latest_pointer, iso_z
-from xue.quantize import QUALITY_FLUX, QUALITY_PRECIPITATION, QUALITY_TEMPERATURE, QUALITY_WIND
-from xue.sources import source_spec
+from xuebuild.manifest import build_bin_manifest, build_latest_pointer, iso_z
+from xuebuild.quantize import QUALITY_FLUX, QUALITY_PRECIPITATION, QUALITY_TEMPERATURE, QUALITY_WIND
+from xuebuild.sources import source_spec
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 WEB_FIXTURE_ROOT = REPOSITORY_ROOT / "tests" / "fixtures" / "generated" / "web"

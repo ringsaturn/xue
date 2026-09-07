@@ -70,19 +70,28 @@ jobs:
       - name: Build the wheel
         run: ./scripts/build-encoder-wheel.sh "${GITHUB_WORKSPACE}/wheels"
 
-      # The wheel bundles its own GDAL, so the only thing worth proving here is
-      # that it finds it: import the module and run one stage against a known
-      # answer.
+      # The wheel bundles its own GDAL, and the whole point of bundling it is
+      # that the module finds it with nothing set in the environment. Encode
+      # the repository's GRIB fixture and decode the result back, which needs
+      # GDAL, its data directory, and both halves of the extension.
       - name: Smoke-test the wheel
         run: |
           set -euo pipefail
           uv venv --python 3.12 /tmp/smoke
           VIRTUAL_ENV=/tmp/smoke uv pip install numpy "$(ls "${GITHUB_WORKSPACE}"/wheels/*.whl)"
           /tmp/smoke/bin/python - <<'PY'
-          import numpy, xue_encode_py
-          codes = xue_encode_py.quantize("quality", "tmp2m", numpy.array([-60.0, -59.75, 0.0, 50.0]))
+          import numpy, xue
+
+          codes = xue.quantize("quality", "tmp2m", numpy.array([-60.0, -59.75, 0.0, 50.0]))
           assert list(codes) == [0, 1, 120, 220], list(codes)
-          print("wheel imports and quantizes correctly")
+
+          xue.convert_bin(["tests/fixtures/gfs.2026081406.f000.crop.grib2"], "/tmp/smoke-out",
+                          model="gfs", skip_variants=True)
+          bundle = xue.Bundle.open("/tmp/smoke-out/tmp2m.xue")
+          plane = bundle.decode(1, 0)
+          assert plane.dtype == numpy.uint8, plane.dtype
+          assert plane.size == bundle.plane_length, (plane.size, bundle.plane_length)
+          print(f"wheel encoded and decoded {bundle!r}")
           PY
 
       - uses: actions/upload-artifact@v4

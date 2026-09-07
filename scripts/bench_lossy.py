@@ -44,9 +44,9 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from xue.binconvert import _extract_plane, _grid_info, _prepare_frames  # noqa: E402
-from xue.gdal import discover_inputs  # noqa: E402
-from xue.quantize import PROFILES, PrecipitationCodebook, TemperatureCodebook  # noqa: E402
+from xuebuild.binconvert import _extract_plane, _grid_info, _prepare_frames  # noqa: E402
+from xuebuild.gdal import discover_inputs  # noqa: E402
+from xuebuild.quantize import PROFILES, PrecipitationCodebook, TemperatureCodebook  # noqa: E402
 
 # Mobile target: a few tens of KB per frame.
 SIZE_TARGET_KB_PER_FRAME = 64.0

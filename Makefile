@@ -101,7 +101,7 @@ spike-webcodecs:
 # MODEL=ecmwf builds the ECMWF IFS open data feed instead of GFS;
 # MODEL=sflux builds the native-resolution GFS surface flux feed.
 mvp: check install wasm
-	$(PYTHON) -m xue build-bin --model $(MODEL) --run $(RUN) --hours $(HOURS) --profile $(PROFILE) $(FORCE)
+	$(PYTHON) -m xuebuild build-bin --model $(MODEL) --run $(RUN) --hours $(HOURS) --profile $(PROFILE) $(FORCE)
 	npm run build
 
 serve:
@@ -157,10 +157,10 @@ upload-r2:
 CASES_DIR ?= showcase/cases
 
 showcase:
-	$(PYTHON) -m xue showcase build --cases-dir $(CASES_DIR) $(FORCE) $(CASE)
+	$(PYTHON) -m xuebuild showcase build --cases-dir $(CASES_DIR) $(FORCE) $(CASE)
 
 showcase-check:
-	$(PYTHON) -m xue showcase check --cases-dir $(CASES_DIR) $(CASE)
+	$(PYTHON) -m xuebuild showcase check --cases-dir $(CASES_DIR) $(CASE)
 
 # Push the built cases and the catalog to R2. Cases are immutable and
 # ?v=<crc32>-addressed like run assets; showcase.json is the mutable index and

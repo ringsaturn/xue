@@ -8,8 +8,9 @@ Xue packs global weather forecast runs into a custom per-variable binary
 container (`.xue`) and plays them back in a static browser page. Three
 implementations of one format live here and must stay in agreement:
 
-- **Python encoder** — `xue/` (fetch → GDAL extract → quantize → temporal
-  residuals → zstd → container → manifest).
+- **Python encoder** — `xuebuild/` (fetch → GDAL extract → quantize → temporal
+  residuals → zstd → container → manifest). The name is deliberate: this is
+  the build pipeline, and `xue` on the Python side is the native binding.
 - **Rust decoder** — `rust/xue` (core crate) and `rust/xue-wasm`
   (wasm-bindgen bindings, built into `web/src/wasm/`).
 - **TypeScript frontend** — `web/src/` (manifest resolution, decode worker,
@@ -17,7 +18,8 @@ implementations of one format live here and must stay in agreement:
 
 Beside them, and *not* part of the delivery contract: an experimental native
 port of `convert-bin` at `rust/xue/src/encode/`, behind the `xue` crate's
-off-by-default `encoder` feature, plus a PyO3 wrapper at `rust/xue-encode-py/`.
+off-by-default `encoder` feature, plus a PyO3 wrapper at `rust/xue-py/`
+(distribution `xuepy`, imported as `xue`, carrying the decoder too).
 It links GDAL, grib-rs and zstd in process instead of shelling out, and is held
 to the Python encoder by byte-for-byte identical output — see `docs/encoder.md`.
 The Python encoder stays the reference; a format change goes there first.

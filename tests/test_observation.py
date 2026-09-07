@@ -15,10 +15,10 @@ from unittest import mock
 
 import numpy as np
 
-from xue import observation
-from xue.errors import ConversionError
-from xue.model import PlaneSource
-from xue.sources import source_spec
+from xuebuild import observation
+from xuebuild.errors import ConversionError
+from xuebuild.model import PlaneSource
+from xuebuild.sources import source_spec
 
 RADAR = source_spec("radar")
 EPOCH_2026_08_25_16Z = 1787673600

@@ -7,10 +7,10 @@ import unittest
 from datetime import UTC, datetime
 from pathlib import Path
 
-from xue import grib2
-from xue.errors import ConversionError
-from xue.gdal import inspect_grib_multi, raster_expression
-from xue.variables import variable_spec
+from xuebuild import grib2
+from xuebuild.errors import ConversionError
+from xuebuild.gdal import inspect_grib_multi, raster_expression
+from xuebuild.variables import variable_spec
 
 FIXTURE = Path(__file__).parent / "fixtures" / "gfs.2026081406.f000.crop.grib2"
 

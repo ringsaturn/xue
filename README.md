@@ -102,14 +102,14 @@ make serve
 Or step by step (`--model gfs|ecmwf|sflux`, default `gfs`):
 
 ```sh
-python -m xue fetch --run latest --hours 240
-python -m xue convert-bin data/raw/gfs.YYYYMMDDHH \
+python -m xuebuild fetch --run latest --hours 240
+python -m xuebuild convert-bin data/raw/gfs.YYYYMMDDHH \
   --output web/public/data/gfs.YYYYMMDDHH \
   --manifest web/public/data/manifest.json
-python -m xue verify-bin web/public/data/gfs.YYYYMMDDHH/tmp2m.xue
-python -m xue build-bin --run latest --hours 240
-python -m xue build-bin --model ecmwf --run latest --hours 240
-python -m xue build-bin --model sflux --run latest --hours 240
+python -m xuebuild verify-bin web/public/data/gfs.YYYYMMDDHH/tmp2m.xue
+python -m xuebuild build-bin --run latest --hours 240
+python -m xuebuild build-bin --model ecmwf --run latest --hours 240
+python -m xuebuild build-bin --model sflux --run latest --hours 240
 ```
 
 Each model publishes as an independent dataset: GFS runs land in

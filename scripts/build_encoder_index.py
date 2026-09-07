@@ -28,7 +28,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-PACKAGE = "xue-encode-py"
+PACKAGE = "xuepy"
 # The encoder ships inside the xue crate, so its wheels ride the crate's own
 # release tags.
 TAG_PREFIX = "v"
