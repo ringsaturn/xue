@@ -232,6 +232,80 @@ impl Drop for Dataset {
 // pool does.
 unsafe impl Send for Dataset {}
 
+/// The subset of `gdalinfo -json` that `xuebuild` actually reads, from the
+/// linked GDAL rather than the CLI.
+///
+/// `xuebuild/gdal.py` uses this to inspect GRIB and netCDF inputs without a
+/// system `gdalinfo` on PATH — a scheduled build converting through the
+/// native encoder then needs no system GDAL at all. Only the keys the Python
+/// side consumes are emitted; this is deliberately not a general
+/// reimplementation of `gdalinfo`, and the fields are pinned by
+/// `tests/test_gdalinfo.py`, which diffs them against the real CLI.
+///
+/// A dataset with no geotransform simply omits the key, the way `gdalinfo`
+/// does; the caller decides whether that is fatal.
+pub fn info_json(name: &Path) -> Result<serde_json::Value> {
+    let _serial = needs_serial_access(name).then(netcdf_guard);
+    let dataset = Dataset::open(name)?;
+    let (width, height) = dataset.size();
+
+    let mut info = serde_json::Map::new();
+    info.insert("size".into(), serde_json::json!([width, height]));
+    if let Ok(transform) = dataset.geo_transform() {
+        info.insert("geoTransform".into(), serde_json::json!(transform));
+    }
+    info.insert(
+        "metadata".into(),
+        serde_json::json!({ "": metadata_object(&dataset.metadata("")) }),
+    );
+
+    let mut bands = Vec::with_capacity(dataset.band_count());
+    for band in dataset.bands()? {
+        let mut entry = serde_json::Map::new();
+        entry.insert("band".into(), serde_json::json!(band.number));
+        entry.insert("description".into(), serde_json::json!(band.description));
+        // gdalinfo omits unit when the band declares none, scale and offset
+        // at their identity values, and noDataValue when there is no fill.
+        // The Python readers default all four, so matching the omissions
+        // keeps the two sources indistinguishable rather than merely
+        // equivalent — which is what tests/test_gdalinfo.py asserts.
+        if !band.unit.is_empty() {
+            entry.insert("unit".into(), serde_json::json!(band.unit));
+        }
+        if band.scale != 1.0 {
+            entry.insert("scale".into(), serde_json::json!(band.scale));
+        }
+        if band.offset != 0.0 {
+            entry.insert("offset".into(), serde_json::json!(band.offset));
+        }
+        if let Some(nodata) = band.nodata {
+            entry.insert("noDataValue".into(), serde_json::json!(nodata));
+        }
+        entry.insert(
+            "metadata".into(),
+            serde_json::json!({ "": metadata_object(&band.metadata) }),
+        );
+        bands.push(serde_json::Value::Object(entry));
+    }
+    info.insert("bands".into(), serde_json::Value::Array(bands));
+    Ok(serde_json::Value::Object(info))
+}
+
+/// A metadata domain as a JSON object with its keys in GDAL's own order.
+///
+/// `HashMap` iteration order is arbitrary, and the metadata block ends up in
+/// a report a human reads and a test diffs, so it is sorted rather than left
+/// to vary run to run.
+fn metadata_object(items: &HashMap<String, String>) -> serde_json::Value {
+    let mut keys: Vec<&String> = items.keys().collect();
+    keys.sort();
+    let mut object = serde_json::Map::with_capacity(keys.len());
+    for key in keys {
+        object.insert(key.clone(), serde_json::json!(items[key]));
+    }
+    serde_json::Value::Object(object)
+}
+
 fn string_list(list: *mut *mut std::ffi::c_char) -> HashMap<String, String> {
     let mut items = HashMap::new();
     if list.is_null() {

@@ -22,6 +22,7 @@ use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
 use xue::encode::convert::{convert_bin as native_convert, ConvertOptions};
+use xue::encode::gdalio::info_json;
 use xue::encode::grid::GridInfo;
 use xue::encode::poster::encode_poster as native_encode_poster;
 use xue::encode::quantize::codebook;
@@ -309,6 +310,24 @@ fn decimate<'py>(
     Ok(half.to_pyarray(python))
 }
 
+/// The subset of `gdalinfo -json` that `xuebuild` reads, from the GDAL linked
+/// into this wheel.
+///
+/// `name` is a GDAL connection string, not necessarily a filesystem path:
+/// the observation path passes `NETCDF:"file.nc":cref`.
+///
+/// This exists so a build that converts through the native encoder needs no
+/// system GDAL at all — the inspection pass that used to shell out to
+/// `gdalinfo` was the last thing that did. Only the keys `xuebuild` consumes
+/// are reported: `size`, `geoTransform`, dataset `metadata`, and per-band
+/// `band`, `description`, `unit`, `scale`, `offset`, `noDataValue` and
+/// `metadata`.
+#[pyfunction]
+fn gdal_info(python: Python<'_>, name: PathBuf) -> PyResult<Py<PyAny>> {
+    let info = info_json(&name).map_err(to_py_error)?;
+    to_python(python, &info)
+}
+
 /// Encode one quantized plane as a first-frame poster; returns
 /// `(payload, width, height)`.
 #[pyfunction]
@@ -334,5 +353,6 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(encode_residual, module)?)?;
     module.add_function(wrap_pyfunction!(decimate, module)?)?;
     module.add_function(wrap_pyfunction!(encode_poster, module)?)?;
+    module.add_function(wrap_pyfunction!(gdal_info, module)?)?;
     Ok(())
 }

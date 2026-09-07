@@ -158,7 +158,7 @@ publishing data at the new version.**
   codebooks, modulo-256 residual prediction, container read/write.
 - `manifest.py` — manifest and live-pointer construction *and validation*;
   both are validated on write.
-- `observation.py` — the NetCDF ingest: one `gdalinfo` pass turns a file's
+- `observation.py` — the NetCDF ingest: one `dataset_info` pass turns a file's
   bands into the same `SourceFrame` list the GRIB inspectors return, plus the
   `PlaneSource` saying to unscale the values and what its fill value means.
 - `showcase.py` — case definitions → cropped bundles → `showcase.json`. An
@@ -167,11 +167,21 @@ publishing data at the new version.**
 
 External tools are invoked as CLI subprocesses (`gdal.py`, `zstdcli.py`,
 `ffmpegcli.py`, `eccodescli.py`) rather than added as binary Python
-dependencies; NumPy is the only runtime dependency. The exception is zstd,
-which runs in-process via the stdlib `compression.zstd` on Python ≥ 3.14
-(subprocess overhead dominated bundle writing) and falls back to the CLI
-below that — the two are interchangeable on decode but not byte-identical on
-encode.
+dependencies; NumPy is the only runtime dependency. Two exceptions:
+
+- **zstd** runs in-process via the stdlib `compression.zstd` on Python ≥ 3.14
+  (subprocess overhead dominated bundle writing) and falls back to the CLI
+  below that — the two are interchangeable on decode but not byte-identical
+  on encode.
+- **`gdalinfo`** has a second source. `gdal.dataset_info` is the one entry
+  point for it, and reads through the `xuepy` wheel's linked GDAL
+  (`xue.gdal_info`) when the build converts natively, the subprocess
+  otherwise — the choice follows `XUE_ENCODER`, so a run never mixes two
+  GDAL installs. That is what lets the scheduled `publish-*` workflows
+  install no GDAL at all: extraction was already in the wheel, and
+  inspection was the last caller left. `tests/test_gdalinfo.py` diffs the
+  two sources field by field. Extraction (`gdal_translate`) has no such
+  fallback, so the reference pipeline still needs a system GDAL.
 
 Errors that are the user's to fix subclass `XueError` (`xuebuild/errors.py`); the
 CLI turns them into `error: …` and exit code 2. Anything else is a bug.

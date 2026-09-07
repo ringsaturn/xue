@@ -174,19 +174,37 @@ jobs:
         if: steps.target.outputs.skip != 'true'
         run: df -h /
 
-      - name: Install GDAL, zstd and ffmpeg
+      # This job converts through the native encoder (XUE_ENCODER is pinned to
+      # `native` above), and the xuepy wheel carries its own GDAL — for
+      # extraction, and since `xue.gdal_info` exists, for the inspection pass
+      # that used to shell out to `gdalinfo` as well. So no system GDAL is
+      # installed unless the resolved wheel is too old to inspect, which is
+      # asked rather than assumed: the dependency pin admits any 0.3.x, and a
+      # silently missing `gdalinfo` would fail this build at its first
+      # downloaded file. `gdal_translate` has no such fallback, but nothing
+      # here reaches it — `XUE_ENCODER=native` fails loudly rather than
+      # dropping to the reference pipeline.
+      #
+      # ffmpeg encodes the H.264 companions, which stay on the Python side.
+      # zstd is only reached below Python 3.14, and this job pins 3.14.
+      - name: Install ffmpeg, and GDAL only if the wheel cannot inspect
         if: steps.target.outputs.skip != 'true'
         run: |
           set -euo pipefail
-          packages="gdal-bin zstd ffmpeg"
+          packages="ffmpeg"
           # ECMWF open data is CCSDS packed; xue repacks it with eccodes at
           # fetch time because GDAL builds usually lack libaec.
           if [ "$MODEL" = "ecmwf" ]; then
             packages="$packages libeccodes-tools"
           fi
+          if uv run python -c "import xue, sys; sys.exit(0 if hasattr(xue, 'gdal_info') else 1)"; then
+            echo "xuepy inspects through its own GDAL; installing no system GDAL."
+          else
+            echo "::notice::the resolved xuepy has no gdal_info; installing gdal-bin for the inspection pass"
+            packages="$packages gdal-bin"
+          fi
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends $packages
-          gdalinfo --version
 
       - name: Build ${{ inputs.model }} bundles
         if: steps.target.outputs.skip != 'true'

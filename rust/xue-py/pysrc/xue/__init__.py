@@ -34,6 +34,7 @@ from ._native import (  # noqa: E402  (must follow the data-path setup)
     decimate,
     encode_poster,
     encode_residual,
+    gdal_info,
     quantize,
 )
 
@@ -43,5 +44,6 @@ __all__ = [
     "decimate",
     "encode_poster",
     "encode_residual",
+    "gdal_info",
     "quantize",
 ]

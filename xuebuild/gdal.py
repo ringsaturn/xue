@@ -36,6 +36,57 @@ def run_command(arguments: list[str], *, description: str) -> subprocess.Complet
         raise ConversionError(f"{description} failed: {details or f'exit status {exc.returncode}'}") from exc
 
 
+def _native_gdal_info() -> Any:
+    """The `xuepy` wheel's `gdal_info`, or None when this build must shell out.
+
+    The wheel carries its own GDAL, so a build converting through the native
+    encoder can inspect its inputs without a system `gdalinfo` on PATH — the
+    inspection pass was the last thing in the fetch-and-convert path that
+    needed one. Which source a build uses follows `XUE_ENCODER`, so a run
+    never mixes two GDAL builds: `python` shells out (it needs a system GDAL
+    for `gdal_translate` regardless), `native` insists on the wheel, and
+    `auto` takes the wheel when it is installed.
+
+    A wheel predating `gdal_info` falls back to the CLI rather than failing:
+    the two are held to the same output by `tests/test_gdalinfo.py`.
+    """
+    # Imported here, not at module scope: `encoder` imports `binconvert`,
+    # which imports this module.
+    from .encoder import selection  # noqa: PLC0415
+    from . import native  # noqa: PLC0415
+
+    requested = selection()
+    if requested == "python":
+        return None
+    if requested == "native":
+        # Fail at the first inspection rather than after fetching a whole run.
+        return getattr(native.require(), "gdal_info", None)
+    if not native.available():
+        return None
+    return getattr(native.require(), "gdal_info", None)
+
+
+def dataset_info(name: str | Path, *, description: str) -> dict[str, Any]:
+    """What `gdalinfo -json` reports for one dataset, as a dictionary.
+
+    `name` is a GDAL connection string rather than necessarily a path: the
+    observation ingest passes `NETCDF:"file.nc":cref`.
+    """
+    native_info = _native_gdal_info()
+    if native_info is not None:
+        try:
+            return native_info(str(name))
+        except Exception as exc:
+            raise ConversionError(f"{description} failed: {exc}") from exc
+    result = run_command(
+        [require_command("gdalinfo"), "-json", str(name)], description=description
+    )
+    try:
+        return json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        raise ConversionError(f"GDAL returned invalid JSON for {name}") from exc
+
+
 def _metadata(band: dict[str, Any]) -> dict[str, str]:
     domains = band.get("metadata", {})
     if not isinstance(domains, dict):
@@ -283,11 +334,7 @@ def inspect_grib_multi(
     """
     if not path.is_file():
         raise ConversionError(f"GRIB input does not exist: {path}")
-    result = run_command([require_command("gdalinfo"), "-json", str(path)], description=f"inspect {path}")
-    try:
-        info = json.loads(result.stdout)
-    except json.JSONDecodeError as exc:
-        raise ConversionError(f"GDAL returned invalid JSON for {path}") from exc
+    info = dataset_info(path, description=f"inspect {path}")
     frames: dict[str, SourceFrame] = {}
     for variable_id in variable_ids:
         spec = variable_spec(variable_id)

@@ -22,7 +22,7 @@ bands through GDAL's C API skips all of it.
 
 | Stage | Python | Here |
 |---|---|---|
-| grid + band metadata | `gdalinfo -json` subprocess | `gdal-sys` (georust) in process |
+| grid + band metadata | `gdalinfo -json` subprocess | `gdal-sys` (georust) in process, and exported back to Python as `xue.gdal_info` so `xuebuild` can inspect without a system GDAL |
 | plane extraction | `gdal_translate` → ENVI → `np.fromfile` | `GDALRasterIO` into a `Vec<f64>` |
 | GRIB2 record index | hand-rolled section walker (`xuebuild/grib2.py`) | [grib-rs](https://github.com/noritada/grib-rs) |
 | compression | `compression.zstd` / `zstd` CLI | `zstd` crate (`ZSTD_compress2`) |

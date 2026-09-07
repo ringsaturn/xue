@@ -32,6 +32,7 @@ from . import binformat, grib2, temporal, zstdcli
 from .errors import ConversionError, DownloadError
 from .gdal import (
     discover_inputs,
+    dataset_info,
     inspect_grib,
     inspect_grib_multi,
     normalize_unit,
@@ -207,8 +208,7 @@ def published_bundle_ids(source: SourceSpec) -> tuple[str, ...]:
 
 
 def _grid_info(path: Path) -> GridInfo:
-    result = run_command([require_command("gdalinfo"), "-json", str(path)], description=f"inspect grid of {path}")
-    info = json.loads(result.stdout)
+    info = dataset_info(path, description=f"inspect grid of {path}")
     width, height = (int(value) for value in info["size"])
     transform = info["geoTransform"]
     if transform[2] or transform[4]:

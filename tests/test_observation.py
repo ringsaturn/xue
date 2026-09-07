@@ -53,12 +53,13 @@ def gdalinfo(hours: list[int], **band_overrides: object) -> str:
 
 class InspectObservationTest(unittest.TestCase):
     def _inspect(self, stdout: str, path: Path = Path("radar.nc")) -> observation.ObservationSeries:
+        # inspect_observation reads its dataset through gdal.dataset_info,
+        # which is the gdalinfo CLI or the wheel's linked GDAL depending on
+        # the build; the fixtures below are what either one reports.
         with (
             mock.patch.object(Path, "is_file", return_value=True),
-            mock.patch.object(observation, "require_command", return_value="gdalinfo"),
-            mock.patch.object(observation, "run_command") as run,
+            mock.patch.object(observation, "dataset_info", return_value=json.loads(stdout)),
         ):
-            run.return_value = mock.Mock(stdout=stdout)
             return observation.inspect_observation(path, RADAR)
 
     def test_bands_become_frames_keyed_by_lead_time(self) -> None:

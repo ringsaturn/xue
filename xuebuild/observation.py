@@ -27,7 +27,6 @@ series' ``runTime``.
 
 from __future__ import annotations
 
-import json
 import logging
 import re
 from dataclasses import dataclass
@@ -36,7 +35,7 @@ from pathlib import Path
 from typing import Any
 
 from .errors import ConversionError
-from .gdal import require_command, run_command
+from .gdal import dataset_info
 from .model import PlaneSource, SourceFrame
 from .sources import SourceSpec
 from .variables import variable_spec
@@ -117,13 +116,7 @@ def inspect_observation(path: Path, source: SourceSpec) -> ObservationSeries:
         raise ConversionError(f"observation input must be a NetCDF file: {path}")
 
     dataset = netcdf_dataset(path, variable_id)
-    result = run_command(
-        [require_command("gdalinfo"), "-json", str(dataset)], description=f"inspect {dataset}"
-    )
-    try:
-        info = json.loads(result.stdout)
-    except json.JSONDecodeError as exc:
-        raise ConversionError(f"GDAL returned invalid JSON for {dataset}") from exc
+    info = dataset_info(dataset, description=f"inspect {dataset}")
 
     epoch, scale = _reference_time(str(info.get("metadata", {}).get("", {}).get("time#units", "")), path)
     bands = info.get("bands", [])
