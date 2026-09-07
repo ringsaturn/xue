@@ -90,6 +90,16 @@ jobs:
         with:
           workspaces: rust
 
+      # A decode-only build must stay pure Rust. The wasm jobs prove this
+      # indirectly by building the decoder for a target GDAL cannot link;
+      # this asserts it by name, so a dependency that stops being optional
+      # fails here instead of showing up as a mystery wasm build error.
+      - name: Assert the decoder pulls in no encoder dependencies
+        working-directory: rust
+        run: |
+          ! cargo tree -p xue --edges normal \
+            | grep -E 'gdal|grib|zstd-sys|rayon|regex|libc'
+
       - name: Run Rust tests
         run: make test-rust
 

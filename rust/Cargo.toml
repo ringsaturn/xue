@@ -2,6 +2,13 @@
 resolver = "2"
 members = ["xue", "xue-wasm", "xue-py"]
 
+# xue-py hard-enables `xue/encoder`, so leaving it in the default set made a
+# bare `cargo build` or `cargo test` in this directory demand a system GDAL
+# and libclang — for the decoder, which links neither. It stays a member (so
+# `cargo build -p xue-py` and maturin still resolve it) but out of the default
+# set, which is what makes the decode-only path the one you get by default.
+default-members = ["xue", "xue-wasm"]
+
 # Cargo reads profiles from the workspace root only — one in a member manifest
 # is ignored with a warning — so the two builds this repository produces are
 # separated by profile rather than by workspace.

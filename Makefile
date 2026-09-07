@@ -47,12 +47,13 @@ test: test-rust
 	$(PYTHON) -m unittest discover -s tests -p 'test_*.py' -v
 	npm run test:web
 
-# The decoder and the wasm binding. `xue-py` is excluded because it enables the
-# xue crate's `encoder` feature, which links GDAL — a decode-only check must
-# not need one. `make encoder-rust-test` is where the encoder is tested.
+# The decoder and the wasm binding — the workspace's default members, which
+# leave out `xue-py` because it enables the xue crate's `encoder` feature and
+# so links GDAL. A decode-only check must not need one; `make encoder-rust-test`
+# is where the encoder is tested.
 test-rust:
 	$(PYTHON) tests/prepare_bin_fixture.py
-	cd rust && cargo test --workspace --exclude xue-py
+	cd rust && cargo test
 
 test-e2e:
 	npm run test:e2e

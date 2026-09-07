@@ -30,13 +30,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let bytes = std::fs::read("tmp2m.xue")?;
     let mut bundle = Bundle::open(&bytes)?;
 
-    // Physical-value scale/offset, grid shape, and forecast axis live in
-    // the embedded metadata JSON; variable ids are also listed directly.
+    // Physical-value scale/offset, grid shape, and time axis live in the
+    // embedded metadata JSON; variable ids and the frame-offset axis are
+    // also listed directly.
     let variable_id = bundle.variable_ids()[0];
     println!("{}", bundle.metadata_json());
 
     // One quantized plane, plane_length() bytes, row-major on the grid.
-    let plane = bundle.decode_frame(FrameRequest { variable_id, forecast_hour: 0 })?;
+    let plane = bundle.decode_frame(FrameRequest { variable_id, frame_offset: 0 })?;
     assert_eq!(plane.len(), bundle.plane_length());
     Ok(())
 }
@@ -57,4 +58,7 @@ experimental native encoder that links GDAL and writes `.xue` bundles
 byte-identically to the Python reference pipeline — see
 [`docs/encoder.md`](https://github.com/ringsaturn/xue/blob/main/docs/encoder.md).
 Enabling it requires a system GDAL and libclang at build time. A decode-only
-build resolves none of its dependencies and needs neither.
+build resolves none of its dependencies and needs neither: `cargo add xue`
+pulls in `crc32fast`, `ruzstd` and `serde_json` and nothing else, with no C
+toolchain involved. That is also why the crate builds for
+`wasm32-unknown-unknown`.
