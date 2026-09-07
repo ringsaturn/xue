@@ -6,6 +6,10 @@ build-backend = "setuptools.build_meta"
 name = "xuebuild"
 version = "0.1.0"
 description = "Xue (雪) build pipeline: fetch weather runs and pack them into browser-ready spatiotemporal bundles"
+# Not a library. This is how this project builds its own site, it is installed
+# from a checkout, and the classifier makes PyPI refuse it outright so it
+# cannot be uploaded by accident. The Rust binding is what publishes, as xuepy.
+classifiers = ["Private :: Do Not Upload"]
 readme = "README.md"
 requires-python = ">=3.12"
 license = "MIT OR Apache-2.0"

@@ -1,18 +1,29 @@
 name: encoder wheels
 
-# Builds the experimental native encoder's wheels and attaches them to a
-# GitHub release. They are deliberately not published to PyPI: each wheel
-# carries its own GDAL, the encoder is pinned to the library versions its
-# byte-identity comparison was run against, and it is a research artifact
-# rather than something anyone should take a dependency on.
+# Builds the xuepy wheels — the Rust decoder and the experimental native
+# encoder through PyO3, each carrying its own minimal GDAL — and publishes them
+# to PyPI and to the GitHub release.
 #
-# The encoder ships inside the xue crate, so the wheels ride the crate's own
-# v* tags: release-crate.yml publishes the crate and creates the release, and
-# this attaches the wheels to it once they are built. encoder-index.yml then
-# serves a PEP 503 index over the release assets.
+# They ride the xue crate's own v* tags: release-crate.yml publishes the crate
+# and creates the release, and this attaches the wheels to it once they are
+# built.
+#
+# No sdist is published. Building from source needs GDAL, libclang and cmake,
+# so an sdist would turn "no wheel for your platform" from a clear error into a
+# confusing build failure.
+#
+# The Linux wheels are manylinux_2_39: auditwheel tags them with the glibc of
+# the runner that built them, and naming an older policy only makes it refuse.
+# Building inside a manylinux_2_28 container is what broader coverage needs.
+# macOS is arm64 only.
+#
+# PyPI authentication is Trusted Publishing (GitHub OIDC, no stored token):
+# the project's publishing settings must list this repository with workflow
+# filename `encoder-wheels.yml`. PyPI accepts a pending publisher for a project
+# that does not exist yet, so this can be configured before the first release.
 #
 # A manual dispatch builds and uploads the wheels as workflow artifacts only,
-# without touching a release.
+# touching neither PyPI nor a release.
 
 on:
   push:
@@ -27,8 +38,29 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Cheap, and it runs before twenty minutes of GDAL builds: the wheel version
+  # comes from the crate manifest, so a tag that disagrees with it would
+  # publish under the wrong number.
+  version:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          set -euo pipefail
+          version="$(cargo metadata --manifest-path rust/xue-py/Cargo.toml --no-deps --format-version 1 \
+            | jq -r '.packages[] | select(.name == "xue-py") | .version')"
+          if [ "v${version}" != "${GITHUB_REF_NAME}" ]; then
+            echo "tag ${GITHUB_REF_NAME} does not match xue-py version ${version}" >&2
+            exit 1
+          fi
+
   build:
     name: ${{ matrix.runner }}
+    # `always()` so a manual dispatch, where the version job is skipped, still
+    # builds; a real failure still stops it.
+    needs: version
+    if: always() && needs.version.result != 'failure'
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -99,6 +131,24 @@ jobs:
           name: wheels-${{ matrix.runner }}
           path: wheels/*.whl
           if-no-files-found: error
+
+  publish:
+    name: publish to PyPI
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    environment:
+      name: pypi
+      url: https://pypi.org/p/xuepy
+    permissions:
+      id-token: write # mint the PyPI OIDC token
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: wheels-*
+          merge-multiple: true
+          path: dist
+      - uses: pypa/gh-action-pypi-publish@release/v1
 
   release:
     name: attach to the release

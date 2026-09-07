@@ -88,27 +88,15 @@ report = xue.convert_bin(["data/raw/gfs.2026082006"], "out/", model="gfs")
 
 ### Installing
 
-The wheels are **not on PyPI**. Each carries its own GDAL, the encoder is
-pinned to the library versions its byte-identity comparison was run against,
-and it is a research artifact rather than something to depend on. They ride on
-GitHub release assets instead, behind a PEP 503 index:
-
 ```sh
-pip install xuepy \
-  --index-url https://ringsaturn.github.io/xue/simple/ \
-  --extra-index-url https://pypi.org/simple
+pip install xuepy
 ```
 
-```toml
-# pyproject.toml, for uv
-[[tool.uv.index]]
-name = "xue-encoder"
-url = "https://ringsaturn.github.io/xue/simple"
-explicit = true
-
-[tool.uv.sources]
-xuepy = { index = "xue-encoder" }
-```
+The wheel carries its own GDAL, so nothing else has to be installed and no
+environment variable has to be set. Linux wheels are `manylinux_2_39` — they
+are tagged with the glibc of the runner that built them, which means Ubuntu
+24.04 and later, Debian 13 and later; broader coverage would mean building
+inside a `manylinux_2_28` container. macOS is arm64 only.
 
 ### Building a wheel
 

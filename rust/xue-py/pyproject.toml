@@ -4,15 +4,25 @@ build-backend = "maturin"
 
 [project]
 name = "xuepy"
-description = "Xue (雪) bundle decoder and experimental native encoder, natively"
+description = "Xue (雪) weather bundles: decoder, and an experimental native encoder"
+readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "MIT OR Apache-2.0" }
+license = "MIT OR Apache-2.0"
+authors = [{ name = "Han Xiao" }]
+keywords = ["weather", "forecast", "meteorology", "grib", "gdal"]
 classifiers = [
+    "Development Status :: 3 - Alpha",
     "Programming Language :: Rust",
-    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: Implementation :: CPython",
     "Topic :: Scientific/Engineering :: Atmospheric Science",
 ]
+dependencies = ["numpy>=1.24"]
 dynamic = ["version"]
+
+[project.urls]
+Homepage = "https://github.com/ringsaturn/xue"
+Documentation = "https://github.com/ringsaturn/xue/blob/main/docs/encoder.md"
+Source = "https://github.com/ringsaturn/xue"
 
 [tool.maturin]
 # The crate lives in a workspace whose root is the encoder itself.
