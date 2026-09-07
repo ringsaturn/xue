@@ -15,6 +15,7 @@ use crate::encode::grid::GridInfo;
 use crate::encode::quantize::codebook;
 use crate::encode::sources::SourceSpec;
 use crate::encode::variables::variable_spec;
+use crate::format::gcd;
 
 /// Bundle metadata schema this encoder writes: every variable descriptor
 /// carries its GRIB2 parameter identity. Earlier versions remain readable;
@@ -37,15 +38,9 @@ pub fn iso_z(value: OffsetDateTime) -> String {
 /// observation series — six minutes for the radar mosaic. Capping at an hour
 /// keeps a whole-hour axis indexed by its forecast hours.
 pub fn axis_unit_seconds(lead_seconds: &[i64]) -> i64 {
-    lead_seconds.iter().fold(HOUR_SECONDS, |unit, lead| gcd(unit, *lead))
-}
-
-fn gcd(left: i64, right: i64) -> i64 {
-    let (mut left, mut right) = (left.abs(), right.abs());
-    while right != 0 {
-        (left, right) = (right, left % right);
-    }
-    left
+    lead_seconds.iter().fold(HOUR_SECONDS, |unit, lead| {
+        gcd(unit as u64, lead.unsigned_abs()) as i64
+    })
 }
 
 /// `offset` as a whole number of hours, rounded up — how far a run reaches,

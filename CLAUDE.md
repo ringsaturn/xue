@@ -123,7 +123,8 @@ hour: `PlaneEntry.frameOffset`, the worker protocol's `frameOffset`, and
 `SourceFrame.lead_seconds` upstream of the axis derivation.
 
 Encoder (`xuebuild/binconvert.py::build_metadata`), Python reader
-(`xuebuild/binformat.py::_parse_metadata`), Rust (`rust/xue/src/lib.rs`) and
+(`xuebuild/binformat.py::_parse_metadata`), Rust
+(`rust/xue/src/decode/metadata.rs`) and
 `web/src/manifest.ts::parseBundleMetadata` must agree. Do not conflate this
 with the manifest's schema v5 or the pointer's v1. Like a manifest widening,
 a metadata version bump is a two-sided deploy: **ship the Pages shell before
@@ -177,11 +178,22 @@ CLI turns them into `error: …` and exit code 2. Anything else is a bug.
 
 ### Decoder and frontend
 
-`rust/xue/src/lib.rs` exposes `Bundle` (whole file in memory) and
+`rust/xue/src/decode/` exposes `Bundle` (whole file in memory) and
 `StreamingBundle` (structural prefix only, payload bytes fed in as range
-responses arrive) over shared validation and decode code. All arithmetic on
+responses arrive) over shared validation and decode code, in four layers:
+`metadata.rs` (grid, time axis, variable set), `structure.rs` (header
+geometry, index, dependency chains), `core.rs` (payload residency and
+residual replay) and `bundle.rs` (the two public readers). All arithmetic on
 file values is checked, and nothing is allocated from a file value before
 validation.
+
+Under both directions sits `rust/xue/src/format.rs`: the container's byte
+layout and nothing else — the constants, the `Predictor`/`Compression` enums,
+and a `pack`/`unpack` pair for `FixedHeader`, `IndexHeader` and `PlaneEntry`.
+The decoder unpacks through it and the native encoder packs through it, so a
+field cannot drift between them; it validates only what a field's own
+encoding demands and never allocates from a file value. Everything semantic
+stays above it.
 
 `web/src/worker.ts` owns the WASM decoder and speaks one message protocol
 (`booted` → `init`/`init-stream` → `ready`, then `decode` → `frame`) in both

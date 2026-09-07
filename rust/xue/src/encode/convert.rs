@@ -14,10 +14,8 @@ use std::sync::{Arc, Condvar, Mutex};
 use serde_json::{json, Map, Value};
 use time::OffsetDateTime;
 
-use crate::encode::binformat::{
-    self, PlaneEntry, PlanePayload, COMPRESSION_ZSTD, FLAG_ZSTD_CHECKSUM, HOUR_SECONDS,
-    NO_DEPENDENCY, PREDICTOR_ANCHOR, PREDICTOR_RAW,
-};
+use crate::encode::binformat::{self, PlanePayload, HOUR_SECONDS};
+use crate::format::{Compression, PlaneEntry, Predictor, FLAG_ZSTD_CHECKSUM, NO_DEPENDENCY};
 use crate::encode::errors::{EncodeError, Result};
 use crate::encode::gdalio::{needs_serial_access, netcdf_guard, Dataset};
 use crate::encode::grid::{crop_grid, normalize_longitudes, GridInfo};
@@ -552,7 +550,7 @@ fn quantize_file(
 
 fn entry(
     variable_id: &str,
-    predictor: u8,
+    predictor: Predictor,
     frame_offset: i64,
     dependency_offset: u16,
     group_id: u16,
@@ -561,7 +559,7 @@ fn entry(
     Ok(PlaneEntry {
         variable_id: numeric_id(variable_id)?,
         predictor,
-        compression: COMPRESSION_ZSTD,
+        compression: Compression::Zstd,
         flags: FLAG_ZSTD_CHECKSUM,
         frame_offset: frame_offset as u16,
         dependency_offset,
@@ -597,7 +595,7 @@ fn variable_payloads(
                 let plane = planes[&offset];
                 if offset == anchor {
                     payloads.push((
-                        entry(variable_id, PREDICTOR_RAW, offset, NO_DEPENDENCY, group_id, plane)?,
+                        entry(variable_id, Predictor::Raw, offset, NO_DEPENDENCY, group_id, plane)?,
                         plane.to_vec(),
                     ));
                 } else {
@@ -605,7 +603,7 @@ fn variable_payloads(
                     payloads.push((
                         entry(
                             variable_id,
-                            PREDICTOR_ANCHOR,
+                            Predictor::Anchor,
                             offset,
                             anchor as u16,
                             group_id,
@@ -622,7 +620,7 @@ fn variable_payloads(
             payloads.push((
                 entry(
                     variable_id,
-                    PREDICTOR_RAW,
+                    Predictor::Raw,
                     *offset,
                     NO_DEPENDENCY,
                     *offset as u16,
