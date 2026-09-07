@@ -6,9 +6,13 @@ these tests check: same bundles, same posters, same variants, same H.264
 companions, same manifest, same live pointer — byte for byte, from the same
 GRIB fixture, in one run each.
 
-The parity cases skip when the `xuepy` wheel is not installed. Everything
-about which encoder gets picked is checked regardless, because that logic is
-what decides whether a scheduled build silently falls back.
+The parity cases skip when the `xuepy` wheel is not installed, and when the
+reference encoder is compressing through the zstd CLI — below Python 3.14 it
+streams through a pipe, which is a different frame from the one-shot compress
+the native encoder does, so identical bytes are not on offer there. Everything
+that does not depend on the compressor is checked regardless, including which
+encoder gets picked, because that logic is what decides whether a scheduled
+build silently falls back.
 """
 
 from __future__ import annotations
@@ -22,7 +26,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from xuebuild import binconvert, encoder, native
+from xuebuild import binconvert, encoder, native, zstdcli
 from xuebuild.errors import ConversionError
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -31,6 +35,28 @@ FIXTURE_GRIB = REPOSITORY_ROOT / "tests" / "fixtures" / "gfs.2026081406.f000.cro
 requires_native = unittest.skipUnless(
     native.available(), f"{native.DISTRIBUTION} is not installed"
 )
+
+
+def require_comparable_compression(
+    case: unittest.TestCase, reference: dict, subject: dict
+) -> None:
+    """Skip unless both encoders compressed the same way.
+
+    Everything downstream of a compressed payload — the bundles, their CRC32s,
+    the manifest that records them, the pointer that CRCs the manifest — is
+    only comparable when the two ran the same libzstd the same way.
+    """
+    if not zstdcli.compresses_in_process():
+        case.skipTest(
+            "the reference encoder is compressing through the zstd CLI "
+            "(Python < 3.14), which streams rather than one-shot: the frames "
+            "decode the same but the bytes cannot match"
+        )
+    if reference["zstdVersion"] != subject["zstdVersion"]:
+        case.skipTest(
+            f"libzstd differs: the reference has {reference['zstdVersion']}, "
+            f"{native.DISTRIBUTION} carries {subject['zstdVersion']}"
+        )
 
 
 def _selection(value: str):
@@ -95,17 +121,17 @@ class NativeParityTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.root = Path(tempfile.mkdtemp(prefix="xue-native-parity-"))
-        cls.reference = cls._build(binconvert, "reference")
-        cls.subject = cls._build(native, "subject")
+        cls.reference, cls.reference_report = cls._build(binconvert, "reference")
+        cls.subject, cls.subject_report = cls._build(native, "subject")
 
     @classmethod
     def tearDownClass(cls) -> None:
         shutil.rmtree(cls.root, ignore_errors=True)
 
     @classmethod
-    def _build(cls, implementation, name: str) -> Path:
+    def _build(cls, implementation, name: str) -> tuple[Path, dict]:
         run_directory = cls.root / name / "gfs.2026081406"
-        implementation.convert_bin(
+        report = implementation.convert_bin(
             FIXTURE_GRIB,
             run_directory,
             work_root=cls.root / f"{name}-work",
@@ -114,7 +140,7 @@ class NativeParityTests(unittest.TestCase):
             run_id="2026081406",
             model="gfs",
         )
-        return cls.root / name
+        return cls.root / name, report
 
     def test_the_same_files_are_written(self) -> None:
         self.assertEqual(
@@ -123,6 +149,7 @@ class NativeParityTests(unittest.TestCase):
         )
 
     def test_every_artifact_is_byte_identical(self) -> None:
+        require_comparable_compression(self, self.reference_report, self.subject_report)
         for path in sorted(self.reference.rglob("*")):
             if path.is_dir():
                 continue
@@ -169,12 +196,17 @@ class NativeReportTests(unittest.TestCase):
         self.assertEqual(list((self.root / "subject").glob("*.h264")), [])
 
     def test_the_measured_quantization_error_agrees(self) -> None:
-        for key in ("byteLength", "temperatureClampedPoints", "precipitationOverflowPoints"):
+        """Quantization happens before compression, so this holds everywhere."""
+        for key in ("temperatureClampedPoints", "precipitationOverflowPoints"):
             with self.subTest(key=key):
                 self.assertEqual(self.reference[key], self.subject[key])
         self.assertAlmostEqual(
             self.reference["temperatureMaxAbsError"], self.subject["temperatureMaxAbsError"], places=6
         )
+
+    def test_the_bundles_come_out_the_same_size(self) -> None:
+        require_comparable_compression(self, self.reference, self.subject)
+        self.assertEqual(self.reference["byteLength"], self.subject["byteLength"])
 
 
 @requires_native
@@ -185,17 +217,17 @@ class NativeRestrictedBuildTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.root = Path(tempfile.mkdtemp(prefix="xue-native-case-"))
         cls.bbox = (119.0, 30.0, 125.0, 36.0)
-        cls.reference = cls._build(binconvert, "reference")
-        cls.subject = cls._build(native, "subject")
+        cls.reference, cls.reference_report = cls._build(binconvert, "reference")
+        cls.subject, cls.subject_report = cls._build(native, "subject")
 
     @classmethod
     def tearDownClass(cls) -> None:
         shutil.rmtree(cls.root, ignore_errors=True)
 
     @classmethod
-    def _build(cls, implementation, name: str) -> Path:
+    def _build(cls, implementation, name: str) -> tuple[Path, dict]:
         directory = cls.root / name
-        implementation.convert_bin(
+        report = implementation.convert_bin(
             FIXTURE_GRIB,
             directory,
             work_root=cls.root / f"{name}-work",
@@ -206,13 +238,14 @@ class NativeRestrictedBuildTests(unittest.TestCase):
             skip_video=True,
             skip_variants=True,
         )
-        return directory
+        return directory, report
 
     def test_only_the_requested_bundle_is_published(self) -> None:
         manifest = json.loads((self.subject / "manifest.json").read_text(encoding="utf-8"))
         self.assertEqual([bundle["variable"] for bundle in manifest["bundles"]], ["tmp2m"])
 
     def test_the_cropped_build_is_byte_identical(self) -> None:
+        require_comparable_compression(self, self.reference_report, self.subject_report)
         for path in sorted(self.reference.rglob("*")):
             if path.is_dir():
                 continue

@@ -237,6 +237,13 @@ source size in the frame header. The streaming encoder does not, and picks
 different window parameters — about 5 % larger payloads and different bytes —
 so `zstd_compress` here calls `ZSTD_compress2` one-shot as well.
 
+That last one puts a floor under the comparison: `compression.zstd` is Python
+3.14+, and below it the reference falls back to piping planes through the zstd
+CLI, which streams. Those frames decode identically and are a few per cent
+larger, so a build on 3.12 is perfectly valid — it just is not the same bytes,
+and `tests/test_native.py` skips its byte comparisons there rather than
+pretending otherwise. The published runs are built on 3.14.
+
 ## Not covered
 
 Fetching (`xue fetch`), the showcase driver, `build-bin` and `verify-bin` stay

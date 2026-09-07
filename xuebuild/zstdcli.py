@@ -33,6 +33,19 @@ _MEMORY_LIMIT = 134217728
 _WINDOW_LOG_MAX = 27
 
 
+def compresses_in_process() -> bool:
+    """Whether compression runs inside the interpreter rather than through the
+    zstd CLI.
+
+    The two engines are interchangeable on decode but not byte-identical on
+    encode: the CLI reads a pipe, so it streams, records no pledged source size
+    in the frame header and picks a different window — payloads come out a few
+    per cent larger. Anything that compares encoded bytes across engines has to
+    know which one it got.
+    """
+    return _stdlib_zstd is not None
+
+
 def require_zstd() -> str:
     resolved = shutil.which("zstd")
     if not resolved:
