@@ -14,7 +14,7 @@
 //! The crate is arranged as the format in the middle and the two directions
 //! around it:
 //!
-//! * [`format`] — the container's byte layout, and nothing else: the
+//! * [`mod@format`] — the container's byte layout, and nothing else: the
 //!   constants, the enums, and the pack/unpack pair for each structure. Both
 //!   directions go through it, so a field cannot drift between them.
 //! * [`decode`] — reading, re-exported here. Links nothing, compiles to wasm.
