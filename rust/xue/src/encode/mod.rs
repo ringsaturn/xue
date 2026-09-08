@@ -24,23 +24,29 @@
 //! here, and `xuebuild/binconvert.py` is the reference the outputs are diffed
 //! against.
 
-pub mod binformat;
+// Only what something outside this crate actually links against is public:
+// `xue-py` imports convert, gdalio, grid, poster, quantize and temporal, and
+// the xue-encode binary — a separate crate against the lib, not part of it —
+// adds errors. The rest is pipeline interior, crate-private so it stays free
+// to move; what used to be tested through `tests/encoder.rs` is tested from
+// inside those modules instead.
+pub(crate) mod binformat;
 pub mod convert;
 pub mod errors;
 pub mod gdalio;
 pub mod grid;
-pub mod gribindex;
-pub mod inspect;
-pub mod manifest;
-pub mod metadata;
-pub mod model;
-pub mod observation;
-pub mod parallel;
+pub(crate) mod gribindex;
+pub(crate) mod inspect;
+pub(crate) mod manifest;
+pub(crate) mod metadata;
+pub(crate) mod model;
+pub(crate) mod observation;
+pub(crate) mod parallel;
 pub mod poster;
 pub mod quantize;
-pub mod sources;
+pub(crate) mod sources;
 pub mod temporal;
-pub mod variables;
+pub(crate) mod variables;
 
 pub use convert::{convert_bin, ConvertOptions};
 pub use errors::{EncodeError, Result};

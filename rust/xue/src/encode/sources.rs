@@ -163,3 +163,22 @@ pub fn source_spec(model: &str) -> Result<&'static SourceSpec> {
         .find(|source| source.id == model)
         .ok_or_else(|| EncodeError::conversion(format!("unsupported model: {model}")))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::source_spec;
+
+    #[test]
+    fn a_cap_must_land_on_the_published_axis() {
+        let gfs = source_spec("gfs").expect("gfs");
+        assert_eq!(gfs.forecast_hours(3).expect("axis"), vec![0, 1, 2, 3]);
+        let long = gfs.forecast_hours(240).expect("axis");
+        assert_eq!(long.len(), 161);
+        assert_eq!(long[120], 120);
+        assert_eq!(long[121], 123);
+        // 121 is past the hourly segment and off the three-hourly one.
+        assert!(gfs.forecast_hours(121).is_err());
+        // An observation source publishes no forecast axis at all.
+        assert!(source_spec("radar").expect("radar").forecast_hours(1).is_err());
+    }
+}

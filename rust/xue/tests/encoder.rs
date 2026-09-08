@@ -7,16 +7,13 @@
 
 use std::path::PathBuf;
 
-use xue::encode::binformat::align8;
 use xue::encode::convert::{
     average_window_start, convert_bin, deaccumulate_precipitation, deaverage_precipitation,
     ConvertOptions,
 };
 use xue::encode::grid::{crop_grid, GridInfo};
-use xue::encode::metadata::{axis_unit_seconds, build_metadata, lead_hours, to_spaced_json};
 use xue::encode::poster::{decode_poster, encode_poster};
 use xue::encode::quantize::codebook;
-use xue::encode::sources::source_spec;
 use xue::encode::temporal::{anchor_hour, encode_residual, group_forecast_hours, split_segments};
 
 fn repository_root() -> PathBuf {
@@ -124,18 +121,6 @@ fn ascending_unique_offsets_are_required() {
     assert!(split_segments(&[2, 1]).is_err());
 }
 
-// -- the time axis -----------------------------------------------------------
-
-#[test]
-fn the_axis_unit_is_the_coarsest_that_fits() {
-    assert_eq!(axis_unit_seconds(&[0, 3600, 7200]), 3600);
-    // The radar mosaic publishes every six minutes.
-    assert_eq!(axis_unit_seconds(&[0, 360, 720, 1440]), 360);
-    assert_eq!(lead_hours(2, 3600), 2);
-    // A partial hour rounds up: the manifest's forecastHours is coarse.
-    assert_eq!(lead_hours(11, 360), 2);
-}
-
 // -- the grid ----------------------------------------------------------------
 
 fn global_grid() -> GridInfo {
@@ -226,15 +211,7 @@ fn deaveraging_differences_within_the_window() {
     assert!(deaverage_precipitation(&[0.0], 7, Some(&[0.0]), Some(6), 6).is_err());
 }
 
-// -- container and poster ----------------------------------------------------
-
-#[test]
-fn alignment_rounds_up_to_eight() {
-    assert_eq!(align8(0), 0);
-    assert_eq!(align8(1), 8);
-    assert_eq!(align8(8), 8);
-    assert_eq!(align8(81), 88);
-}
+// -- posters ----------------------------------------------------------------
 
 #[test]
 fn posters_round_trip() {
@@ -250,62 +227,6 @@ fn posters_round_trip() {
         }
     }
     assert_eq!(decoded, expected);
-}
-
-// -- metadata ----------------------------------------------------------------
-
-#[test]
-fn metadata_is_schema_version_three_and_compact() {
-    let source = source_spec("gfs").expect("gfs");
-    let grid = GridInfo::new(16, 8, -180.0, 90.0, 22.5, -22.5);
-    let run_time = time::macros::datetime!(2026-08-14 06:00:00 UTC);
-    let uniform = build_metadata(run_time, &[0, 1, 2], &grid, "quality", &["tmp2m"], source, 3600)
-        .expect("metadata");
-    let text = serde_json::to_string(&uniform).expect("json");
-    assert!(text.starts_with(r#"{"schemaVersion":3,"model":"GFS","product":"pgrb2.0p25""#));
-    assert!(text.contains(r#""time":{"unitSeconds":3600,"firstFrameOffset":0,"frameCount":3,"frameStep":1}"#));
-    assert!(text.contains(r#""parameter":{"discipline":0,"parameterCategory":0,"parameterNumber":0,"typeOfFirstFixedSurface":103,"scaleFactorOfFirstFixedSurface":0,"scaledValueOfFirstFixedSurface":2}"#));
-
-    // A mixed-cadence axis lists its offsets rather than declaring a step.
-    let mixed = build_metadata(run_time, &[0, 1, 2, 5], &grid, "quality", &["tmp2m"], source, 3600)
-        .expect("metadata");
-    let text = serde_json::to_string(&mixed).expect("json");
-    assert!(text.contains(r#""frameOffsets":[0,1,2,5]"#));
-    assert!(!text.contains("frameStep"));
-}
-
-#[test]
-fn a_derived_rate_declares_its_statistical_process() {
-    let grid = GridInfo::new(16, 8, -180.0, 90.0, 22.5, -22.5);
-    let run_time = time::macros::datetime!(2026-08-14 06:00:00 UTC);
-    for (model, expected) in [("gfs", false), ("ecmwf", true), ("sflux", true)] {
-        let source = source_spec(model).expect("source");
-        let metadata =
-            build_metadata(run_time, &[3], &grid, "quality", &["prate"], source, 3600)
-                .expect("metadata");
-        let text = serde_json::to_string(&metadata).expect("json");
-        assert_eq!(
-            text.contains(r#""typeOfStatisticalProcessing":0"#),
-            expected,
-            "{model}"
-        );
-    }
-}
-
-// -- the published axis ------------------------------------------------------
-
-#[test]
-fn a_cap_must_land_on_the_published_axis() {
-    let gfs = source_spec("gfs").expect("gfs");
-    assert_eq!(gfs.forecast_hours(3).expect("axis"), vec![0, 1, 2, 3]);
-    let long = gfs.forecast_hours(240).expect("axis");
-    assert_eq!(long.len(), 161);
-    assert_eq!(long[120], 120);
-    assert_eq!(long[121], 123);
-    // 121 is past the hourly segment and off the three-hourly one.
-    assert!(gfs.forecast_hours(121).is_err());
-    // An observation source publishes no forecast axis at all.
-    assert!(source_spec("radar").expect("radar").forecast_hours(1).is_err());
 }
 
 // -- the golden encode -------------------------------------------------------
@@ -349,25 +270,4 @@ fn golden_encode_matches_the_python_reference() {
             "{name} differs from the Python encoder's output"
         );
     }
-}
-
-// -- manifest metadata strings -----------------------------------------------
-
-#[test]
-fn spaced_json_matches_python_json_dumps_defaults() {
-    // The manifest's poster and video descriptors carry a variable's metadata
-    // as a string written by `json.dumps` with nothing overridden: a space
-    // after every separator, and every non-ASCII character escaped. The degree
-    // sign in the temperature unit is the one that occurs in practice.
-    let value = serde_json::json!({
-        "unit": "°C",
-        "labels": ["雪", "\u{1f300}"],
-        "quoted": "a \"b\"\n",
-        "plain": 1,
-    });
-    assert_eq!(
-        to_spaced_json(&value),
-        "{\"unit\": \"\\u00b0C\", \"labels\": [\"\\u96ea\", \"\\ud83c\\udf00\"], \
-         \"quoted\": \"a \\\"b\\\"\\n\", \"plain\": 1}"
-    );
 }

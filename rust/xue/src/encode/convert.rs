@@ -3,7 +3,7 @@
 //! Each variable is packaged into its own single-variable `.xue` file so the
 //! frontend can download exactly the fields it needs. A forecast source
 //! arrives as one GRIB2 file per forecast hour; an observation source
-//! ([`crate::encode::observation`]) as one NetCDF file whose bands are the time axis.
+//! (`observation.rs`) as one NetCDF file whose bands are the time axis.
 //! Everything past frame discovery — crop, quantize, temporal grouping,
 //! container write, manifest — is the same for both.
 

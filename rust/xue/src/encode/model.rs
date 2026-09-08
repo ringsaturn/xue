@@ -10,6 +10,9 @@ use time::OffsetDateTime;
 pub struct SourceFrame {
     pub path: PathBuf,
     pub band: usize,
+    /// Mirrors `xuebuild/model.py`; the pipeline keys frames by id in its
+    /// own maps rather than reading it back off the frame.
+    #[allow(dead_code)]
     pub variable_id: String,
     pub run_time: OffsetDateTime,
     pub valid_time: OffsetDateTime,

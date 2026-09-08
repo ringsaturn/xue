@@ -128,3 +128,16 @@ pub fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
     fs::rename(temporary, path)
         .map_err(|error| EncodeError::bundle(format!("cannot publish {path:?}: {error}")))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::align8;
+
+    #[test]
+    fn alignment_rounds_up_to_eight() {
+        assert_eq!(align8(0), 0);
+        assert_eq!(align8(1), 8);
+        assert_eq!(align8(8), 8);
+        assert_eq!(align8(81), 88);
+    }
+}
