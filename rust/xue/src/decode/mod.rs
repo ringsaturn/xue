@@ -9,7 +9,7 @@
 
 mod bundle;
 mod core;
-mod metadata;
+pub(crate) mod metadata;
 mod structure;
 
 pub use bundle::{Bundle, StreamingBundle};

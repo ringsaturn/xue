@@ -38,6 +38,7 @@ pub mod observation;
 pub mod parallel;
 pub mod poster;
 pub mod quantize;
+pub mod quantized;
 pub mod sources;
 pub mod temporal;
 pub mod variables;

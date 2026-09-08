@@ -53,6 +53,35 @@ report = xue.convert_bin(["data/raw/gfs.2026082006"], "out/", model="gfs")
 The stages are also exposed on their own — `quantize`, `encode_residual`,
 `decimate`, `encode_poster` — taking and returning NumPy arrays.
 
+## Custom converters (unreleased)
+
+`write_quantized_bundle` accepts one variable's quantized planes as
+`(frame_offset, path)` pairs. Each path contains exactly `grid.width *
+grid.height` bytes in the metadata's row order. Ingestion, units and
+codebooks belong to the caller; Xue handles temporal prediction, Zstandard
+checksums, index entries and atomic publication with memory bounded by the
+plane size. Input files are never removed. The metadata JSON is validated
+by the decoder and stored verbatim, so existing schema 1 consumers need no
+format migration.
+
+```python
+import json
+import xue
+
+size = xue.write_quantized_bundle(
+    "tmp2m.xue", json.dumps(metadata),
+    [(hour, f"planes/{hour}.u8") for hour in metadata["time"]["forecastHours"]],
+    grouped=True, zstd_level=15,
+)
+xue.Bundle.open("tmp2m.xue").verify()
+```
+
+The frames must cover the metadata axis exactly, with no duplicate offsets.
+Set `grouped=False` for independent RAW frames. A conversion error raises
+`RuntimeError`, removes the temporary output and preserves an existing
+destination. `Bundle.verify()` checks every decoded plane's checksum and
+CRC and clears its cache between frames.
+
 ## What is in the wheel
 
 Its own minimal GDAL: the GRIB and netCDF drivers and nothing else, with

@@ -36,6 +36,7 @@ from ._native import (  # noqa: E402  (must follow the data-path setup)
     encode_residual,
     gdal_info,
     quantize,
+    write_quantized_bundle,
 )
 
 __all__ = [
@@ -46,4 +47,5 @@ __all__ = [
     "encode_residual",
     "gdal_info",
     "quantize",
+    "write_quantized_bundle",
 ]

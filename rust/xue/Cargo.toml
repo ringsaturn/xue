@@ -28,6 +28,7 @@ encoder = [
     "dep:regex",
     "dep:serde",
     "dep:time",
+    "dep:tempfile",
     "dep:zstd",
     # Bundle metadata must come out byte-identical to the Python encoder's,
     # which means key insertion order has to survive.
@@ -55,4 +56,5 @@ rayon = { version = "1", optional = true }
 serde = { version = "1", optional = true }
 regex = { version = "1", optional = true }
 time = { version = "0.3", features = ["formatting", "macros", "parsing"], optional = true }
+tempfile = { version = "3", optional = true }
 zstd = { version = "0.14", optional = true }

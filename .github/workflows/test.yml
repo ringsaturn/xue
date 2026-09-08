@@ -63,6 +63,32 @@ jobs:
       - name: Run Python tests
         run: uv run python -m unittest discover -s tests -p 'test_*.py' -v
 
+  native-api:
+    name: native Python API
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install native build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libgdal-dev libclang-dev cmake pkg-config
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+      - name: Build the binding from this checkout
+        run: |
+          uv venv
+          uv pip install --python .venv/bin/python numpy
+          VIRTUAL_ENV="$PWD/.venv" uvx maturin develop --manifest-path rust/xue-py/Cargo.toml
+      - name: Test native writer and Python contract
+        run: |
+          cargo test --manifest-path rust/Cargo.toml -p xue --features encoder --lib
+          .venv/bin/python -m unittest discover -s rust/xue-py/tests -v
+
   rust:
     name: rust
     runs-on: ubuntu-24.04

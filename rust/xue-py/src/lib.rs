@@ -177,6 +177,24 @@ impl Bundle {
         self.inner.clear_cache();
     }
 
+    /// Decode every plane and validate its checksum and reconstructed CRC.
+    /// The cache is cleared between frames to bound verification memory.
+    fn verify(&mut self, python: Python<'_>) -> PyResult<()> {
+        python.detach(|| {
+            let variables = self.inner.variable_ids().to_vec();
+            let offsets = self.inner.frame_offsets().to_vec();
+            for variable_id in variables {
+                for &frame_offset in &offsets {
+                    let result = self.inner.decode_frame(xue::FrameRequest { variable_id, frame_offset })
+                        .map(|_| ());
+                    self.inner.clear_cache();
+                    result?;
+                }
+            }
+            Ok::<(), xue::DecodeError>(())
+        }).map_err(|error| PyValueError::new_err(error.0))
+    }
+
     fn __repr__(&self) -> String {
         format!(
             "<xue.Bundle {} variable(s), {} frames of {} points>",
@@ -279,6 +297,30 @@ fn quantize<'py>(
     Ok(codes.to_pyarray(python))
 }
 
+/// Write one variable from quantized uint8 files without loading the whole run.
+///
+/// `frames` is a sequence of `(frame_offset, path)` pairs covering exactly the
+/// metadata time axis. `metadata_json` must describe one variable and is stored
+/// verbatim. Set `grouped=False` for independently compressed RAW frames.
+/// Returns the file size in bytes. Input files are never modified; the output
+/// is atomically replaced only after successful encoding and validation.
+#[pyfunction]
+#[pyo3(signature = (path, metadata_json, frames, *, grouped=true, zstd_level=15))]
+fn write_quantized_bundle(
+    python: Python<'_>,
+    path: PathBuf,
+    metadata_json: String,
+    frames: Vec<(u16, PathBuf)>,
+    grouped: bool,
+    zstd_level: i32,
+) -> PyResult<u64> {
+    python.detach(|| {
+        xue::encode::quantized::write_quantized_bundle(
+            &path, &metadata_json, &frames, grouped, zstd_level,
+        )
+    }).map_err(to_py_error)
+}
+
 /// One-byte modulo-256 wrapping residual, the container's only predictor
 /// arithmetic.
 #[pyfunction]
@@ -354,5 +396,6 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(decimate, module)?)?;
     module.add_function(wrap_pyfunction!(encode_poster, module)?)?;
     module.add_function(wrap_pyfunction!(gdal_info, module)?)?;
+    module.add_function(wrap_pyfunction!(write_quantized_bundle, module)?)?;
     Ok(())
 }

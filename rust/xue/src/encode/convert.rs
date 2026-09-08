@@ -758,7 +758,7 @@ fn compress_all(
     })
 }
 
-fn zstd_compress(payload: &[u8], level: i32) -> Result<Vec<u8>> {
+pub(super) fn zstd_compress(payload: &[u8], level: i32) -> Result<Vec<u8>> {
     // One-shot `ZSTD_compress2` with an explicit checksum, which is what the
     // Python encoder's `compression.zstd.compress` calls. The streaming
     // encoder would produce a frame without the pledged source size and pick
