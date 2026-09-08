@@ -1,3 +1,7 @@
+// docs.rs passes --cfg docsrs (see Cargo.toml), which is the only build
+// where `doc(cfg(...))` is available — it is a nightly rustdoc feature.
+#![cfg_attr(docsrs, feature(doc_cfg))]
+
 //! Xue v1 bundle parser and frame decoder.
 //!
 //! The binary contract is defined in `docs/format.md` and mirrored by the
@@ -18,12 +22,12 @@
 //!   constants, the enums, and the pack/unpack pair for each structure. Both
 //!   directions go through it, so a field cannot drift between them.
 //! * [`decode`] — reading, re-exported here. Links nothing, compiles to wasm.
-//! * [`encode`] — the native encoder, behind the off-by-default `encoder`
-//!   feature because it links GDAL.
+//! * `encode` — the native encoder, behind the off-by-default `encoder`
+//!   feature because it links GDAL. Not a link: on a decode-only build
+//!   the module does not exist, so linking it would dangle there.
 
 pub mod format;
-
-mod decode;
+pub mod decode;
 
 pub use decode::{Bundle, StreamingBundle};
 pub use format::{
@@ -35,4 +39,5 @@ pub use format::{
 // The experimental native encoder, behind an off-by-default feature because it
 // links GDAL. Everything else in this crate is the decoder, which links nothing.
 #[cfg(feature = "encoder")]
+#[cfg_attr(docsrs, doc(cfg(feature = "encoder")))]
 pub mod encode;

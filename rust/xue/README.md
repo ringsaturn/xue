@@ -62,3 +62,8 @@ build resolves none of its dependencies and needs neither: `cargo add xue`
 pulls in `crc32fast`, `ruzstd` and `serde_json` and nothing else, with no C
 toolchain involved. That is also why the crate builds for
 `wasm32-unknown-unknown`.
+
+The rendered docs cover it: `[package.metadata.docs.rs]` asks docs.rs for
+`--all-features`, and gdal-sys' `DOCS_RS` branch supplies prebuilt bindings
+so the feature documents without a system GDAL. <https://ringsaturn.github.io/xue/>
+is the same thing built from `main`, ahead of the next release.

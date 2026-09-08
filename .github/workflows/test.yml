@@ -103,6 +103,19 @@ jobs:
       - name: Run Rust tests
         run: make test-rust
 
+      # A broken or private intra-doc link is how a module silently drops out
+      # of the rendered page — docs.rs publishes the gap without failing.
+      # --all-features is what [package.metadata.docs.rs] asks docs.rs for, and
+      # DOCS_RS is gdal-sys' own escape hatch for exactly this case: prebuilt
+      # bindings, no pkg-config and no headers, so this job still needs no
+      # libgdal-dev.
+      - name: Check the documentation builds clean
+        working-directory: rust
+        run: cargo doc -p xue --no-deps --all-features
+        env:
+          DOCS_RS: "1"
+          RUSTDOCFLAGS: -D warnings
+
   web:
     name: web
     runs-on: ubuntu-24.04

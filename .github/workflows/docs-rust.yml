@@ -1,0 +1,84 @@
+name: docs-rust
+
+# Publishes the rust/xue API documentation for `main` to GitHub Pages.
+#
+# docs.rs is the canonical destination and, since [package.metadata.docs.rs]
+# asks it for --all-features, it renders the encoder too — but only for
+# released versions. This is the preview of what is on main ahead of the next
+# release, which is where the native encoder actually moves.
+#
+# It reproduces the docs.rs invocation rather than inventing its own: nightly
+# with --cfg docsrs so `doc(cfg(...))` renders the feature badges, and DOCS_RS
+# set so gdal-sys takes its prebuilt-bindings branch instead of looking for
+# pkg-config and headers. That is why this job installs no GDAL at all.
+#
+# Warnings are not denied here — test.yml does that on stable, and a preview
+# that follows nightly should not turn main red over a new rustdoc lint.
+#
+# Separate surface from the Cloudflare Pages site deploy-pages.yml publishes:
+# that one is the viewer, this one is the API reference.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - rust/**
+      - .github/workflows/docs-rust.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# GitHub Pages allows one in-flight deployment; queue rather than cancel so a
+# started deploy is never left half-applied.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@nightly
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+
+      - name: Build documentation
+        run: cargo doc -p xue --no-deps --all-features
+        working-directory: rust
+        env:
+          DOCS_RS: "1"
+          RUSTDOCFLAGS: --cfg docsrs
+
+      # cargo only writes target/doc/index.html when it documented a single
+      # root, and --all-features adds the xue-encode binary as a second one.
+      - name: Add root redirect
+        run: |
+          cat > rust/target/doc/index.html <<'HTML'
+          <!doctype html>
+          <meta charset="utf-8">
+          <title>xue</title>
+          <meta http-equiv="refresh" content="0; url=xue/index.html">
+          <a href="xue/index.html">xue</a>
+          HTML
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: rust/target/doc
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

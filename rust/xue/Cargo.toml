@@ -14,6 +14,16 @@ categories = ["science", "compression", "parser-implementations"]
 exclude = ["tests/"]
 build = "build.rs"
 
+# Document the native encoder too, even though it is off by default and
+# links GDAL that docs.rs has no headers for: gdal-sys takes a DOCS_RS
+# branch that copies prebuilt bindings and never runs pkg-config or
+# bindgen, rustdoc does not link, and this crate's own rpath probe already
+# fails soft when pkg-config finds no gdal. Without this, docs.rs would
+# publish the decoder alone.
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
 [features]
 default = []
 # The experimental native encoder (src/encode). Off by default: it links GDAL,
