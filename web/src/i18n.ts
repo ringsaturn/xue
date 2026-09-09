@@ -144,6 +144,16 @@ const MESSAGES = {
   bundleMissingVariable: { zh: "数据包缺少变量 {id}", en: "Bundle is missing variable {id}" },
   manifestMissingBundle: { zh: "清单缺少变量 {id} 的数据包", en: "Manifest has no bundle for variable {id}" },
 
+  // The point probe: click the map to read one grid cell across the axis.
+  // Its heading ("POINT") and every number stay English, like the rest of
+  // the instrument panel; only the prose below the chart is translated.
+  probeAria: { zh: "点位数据序列", en: "Point data series" },
+  probeHint: { zh: "播放或拖动时间轴补全序列", en: "Play or scrub to fill the series" },
+  probeComplete: { zh: "序列已完整", en: "Series complete" },
+  probeOutside: { zh: "该点在本数据集网格之外", en: "Outside this dataset's grid" },
+  probeNoData: { zh: "此帧无数据", en: "No data at this frame" },
+  probeAwaiting: { zh: "等待该帧解码", en: "Waiting for this frame" },
+
   // Historical showcase: the list page and the viewer's case banner. The
   // footer link keeps the footer's code-word style in English.
   showcaseLink: { zh: "历史个例", en: "CASES" },

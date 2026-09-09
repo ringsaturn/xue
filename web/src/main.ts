@@ -56,6 +56,12 @@ import {
   searchForVariable,
 } from "./urlstate";
 import { WindParticleLayer } from "./particles";
+import {
+  ProbeSeries,
+  probeSeriesValues,
+  probeWindDirection,
+  type ProbeValue,
+} from "./probe";
 import { fetchPoster, isPosterSupported } from "./poster";
 import {
   caseCameraLimits,
@@ -882,6 +888,274 @@ function showContextMenu(x: number, y: number): void {
   contextMenu.style.top = `${Math.max(8, Math.min(y, window.innerHeight - rect.height - 8))}px`;
 }
 
+// The point probe: a click pins one grid cell and reads it across the whole
+// time axis. It never fetches anything of its own — every plane the app
+// decodes for the screen contributes its sample, so the series fills in as
+// playback or a scrub walks the axis, and an undecoded frame is just a gap.
+// That keeps the probe honest under windowed streaming, where only the frames
+// around the playhead are ever local.
+let probe: ProbeSeries | null = null;
+let probePopup: maplibregl.Popup | null = null;
+let probeRenderFrame: number | null = null;
+
+const probePanel = buildProbePanel();
+
+function buildProbePanel() {
+  const root = document.createElement("div");
+  root.className = "probe-panel";
+  root.id = "probe-panel";
+  root.setAttribute("aria-label", t("probeAria"));
+  const head = document.createElement("div");
+  head.className = "probe-head";
+  const code = document.createElement("span");
+  code.className = "probe-code";
+  code.id = "probe-code";
+  const coords = document.createElement("span");
+  coords.className = "probe-coords";
+  coords.id = "probe-coords";
+  head.append(code, coords);
+  const value = document.createElement("output");
+  value.className = "probe-value";
+  value.id = "probe-value";
+  const meta = document.createElement("div");
+  meta.className = "probe-meta";
+  meta.id = "probe-meta";
+  const canvas = document.createElement("canvas");
+  canvas.className = "probe-chart";
+  canvas.setAttribute("aria-hidden", "true");
+  const footer = document.createElement("p");
+  footer.className = "probe-footer";
+  const count = document.createElement("span");
+  count.className = "probe-count";
+  count.id = "probe-count";
+  const hint = document.createElement("span");
+  hint.id = "probe-hint";
+  footer.append(count, hint);
+  root.append(head, value, meta, canvas, footer);
+  return { root, code, coords, value, meta, canvas, count, hint };
+}
+
+/** A probed coordinate, at the precision a grid cell center needs. */
+function formatProbeDegrees(value: number, axis: "NS" | "EW"): string {
+  const hemisphere = axis === "NS" ? (value >= 0 ? "N" : "S") : (value >= 0 ? "E" : "W");
+  return `${Math.abs(value).toFixed(2)}°${hemisphere}`;
+}
+
+/** Decimals worth showing for a value: a linear codebook resolves exactly as
+ * far as its step, and the logarithmic one resolves light rain much more
+ * finely than heavy. */
+function formatProbeValue(variable: BundleVariable, value: number): string {
+  if (variable.quantization.type === "linear") {
+    const step = variable.quantization.scale;
+    return value.toFixed(step >= 1 ? 0 : step >= 0.1 ? 1 : 2);
+  }
+  return value.toFixed(value >= 100 ? 0 : value >= 10 ? 1 : 2);
+}
+
+/** Pin a point and open its panel. Before a session exists there is no grid
+ * to sample against, so a click is simply ignored. */
+function setProbe(longitude: number, latitude: number): void {
+  if (!activeSession) return;
+  probe = new ProbeSeries(longitude, latitude);
+  seedProbeFromCache();
+  if (!probePopup) {
+    probePopup = new maplibregl.Popup({
+      closeButton: true,
+      closeOnClick: false,
+      closeOnMove: false,
+      maxWidth: "none",
+      className: "probe-popup",
+      offset: 10,
+    }).setDOMContent(probePanel.root);
+    probePopup.on("close", () => {
+      probe = null;
+    });
+  }
+  probePopup.setLngLat([longitude, latitude]).addTo(map);
+  renderProbe();
+}
+
+function closeProbe(): void {
+  probe = null;
+  probePopup?.remove();
+}
+
+/** Take the samples the frame cache already holds — a point pinned mid-run
+ * starts with whatever playback has decoded so far, not an empty chart. */
+function seedProbeFromCache(): void {
+  if (!probe) return;
+  for (const [key, frame] of planeCache) {
+    const [variableText, offsetText] = key.split(":");
+    const variableId = Number(variableText);
+    const session = sessionsByNumericId.get(variableId);
+    if (!session) continue;
+    probe.sample(session.metadata, variableId, Number(offsetText), frame.plane);
+  }
+}
+
+/** Coalesce the redraws that decode completions and frame steps both trigger
+ * into one per animation frame. */
+function scheduleProbeRender(): void {
+  if (!probe || probeRenderFrame !== null) return;
+  probeRenderFrame = window.requestAnimationFrame(() => {
+    probeRenderFrame = null;
+    renderProbe();
+  });
+}
+
+function renderProbe(): void {
+  const series = probe;
+  if (!series) return;
+  const session = activeSession;
+  if (!session) {
+    // Between datasets (a model switch, a new run) there is nothing to read:
+    // blank the panel rather than leave the previous dataset's numbers up.
+    probePanel.value.value = "--";
+    probePanel.meta.textContent = t("probeAwaiting");
+    probePanel.count.textContent = "";
+    probePanel.hint.textContent = "";
+    probePanel.canvas.getContext("2d")?.clearRect(0, 0, probePanel.canvas.width, probePanel.canvas.height);
+    return;
+  }
+  const variable = session.variable;
+  const cell = series.cellFor(session.metadata);
+  probePanel.code.textContent = VARIABLE_UI[session.id].code;
+  const point = cell ?? { longitude: series.longitude, latitude: series.latitude };
+  probePanel.coords.textContent =
+    `${formatProbeDegrees(point.latitude, "NS")} ${formatProbeDegrees(point.longitude, "EW")}`;
+
+  const index = activeFrameIndex ?? Number(slider.value);
+  const offsets = frameAxis();
+  const values = cell ? probeSeriesValues(series, session.variables, offsets) : [];
+  const current = values[index];
+
+  if (!cell) {
+    probePanel.value.value = "--";
+    probePanel.meta.textContent = t("probeOutside");
+  } else {
+    probePanel.value.value =
+      typeof current === "number" ? `${formatProbeValue(variable, current)} ${variable.unit}` : "--";
+    const lead = `${formatLead(index)} · ${formatCompactDate(frameValidTime(index))}`;
+    if (current === undefined) probePanel.meta.textContent = `${lead} · ${t("probeAwaiting")}`;
+    else if (current === null) probePanel.meta.textContent = `${lead} · ${t("probeNoData")}`;
+    else {
+      // Wind's series is the speed; the direction only means anything for the
+      // frame on screen, so it rides the lead-time line.
+      const direction = session.id === "wind10m"
+        ? probeWindDirection(series, session.variables, frameOffset(index))
+        : null;
+      probePanel.meta.textContent = direction === null
+        ? lead
+        : `${lead} · ${String(Math.round(direction)).padStart(3, "0")}°`;
+    }
+  }
+
+  const sampled = values.reduce<number>((total, value) => total + (value === undefined ? 0 : 1), 0);
+  probePanel.count.textContent = cell ? `${sampled} / ${offsets.length}` : "";
+  probePanel.hint.textContent = !cell ? "" : sampled >= offsets.length ? t("probeComplete") : t("probeHint");
+  drawProbeChart(values, index, variable);
+}
+
+/** The series as a sparkline: sampled frames joined, gaps left open, the
+ * playhead marked. Values are quantized, so the ladder in a flat stretch is
+ * the codebook's own step, not noise. */
+function drawProbeChart(values: ProbeValue[], selected: number, variable: BundleVariable): void {
+  const canvas = probePanel.canvas;
+  const context = canvas.getContext("2d");
+  if (!context) return;
+  const width = canvas.clientWidth;
+  const height = canvas.clientHeight;
+  if (width === 0 || height === 0) return;
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  if (canvas.width !== Math.round(width * dpr) || canvas.height !== Math.round(height * dpr)) {
+    canvas.width = Math.round(width * dpr);
+    canvas.height = Math.round(height * dpr);
+  }
+  context.setTransform(dpr, 0, 0, dpr, 0, 0);
+  context.clearRect(0, 0, width, height);
+
+  const styles = getComputedStyle(document.body);
+  const accent = styles.getPropertyValue("--accent").trim() || "#54d6c7";
+  const mutedColor = styles.getPropertyValue("--muted").trim() || "#8ca6b2";
+  context.font = "8px 'IBM Plex Mono', monospace";
+  context.textBaseline = "middle";
+
+  // A left gutter carries the value range, so the plot never runs under it.
+  const gutter = 30;
+  const top = 6;
+  const bottom = height - 6;
+  const plotWidth = Math.max(1, width - gutter);
+  let lowest = Infinity;
+  let highest = -Infinity;
+  for (const value of values) {
+    if (typeof value !== "number") continue;
+    lowest = Math.min(lowest, value);
+    highest = Math.max(highest, value);
+  }
+  if (lowest === Infinity) {
+    context.fillStyle = mutedColor;
+    context.textAlign = "center";
+    context.fillText("--", width / 2, height / 2);
+    return;
+  }
+  // A series that never moves (dry precipitation, a still night) still gets a
+  // line, centered rather than divided by a zero range.
+  const flat = highest - lowest < 1e-9;
+  const span = flat ? 1 : highest - lowest;
+  const base = flat ? lowest - 0.5 : lowest;
+
+  const x = (index: number): number =>
+    gutter + (values.length > 1 ? (index / (values.length - 1)) * plotWidth : plotWidth / 2);
+  const y = (value: number): number => bottom - ((value - base) / span) * (bottom - top);
+
+  context.strokeStyle = mutedColor;
+  context.globalAlpha = 0.22;
+  context.lineWidth = 1;
+  for (const edge of [top, bottom]) {
+    context.beginPath();
+    context.moveTo(gutter, edge + 0.5);
+    context.lineTo(width, edge + 0.5);
+    context.stroke();
+  }
+
+  // The playhead sits under the series so the line stays readable across it.
+  context.globalAlpha = 0.5;
+  context.beginPath();
+  context.moveTo(Math.round(x(selected)) + 0.5, top);
+  context.lineTo(Math.round(x(selected)) + 0.5, bottom);
+  context.stroke();
+  context.globalAlpha = 1;
+
+  context.strokeStyle = accent;
+  context.lineWidth = 1.5;
+  context.lineJoin = "round";
+  context.beginPath();
+  let drawing = false;
+  for (const [index, value] of values.entries()) {
+    if (typeof value !== "number") {
+      drawing = false;
+      continue;
+    }
+    if (drawing) context.lineTo(x(index), y(value));
+    else context.moveTo(x(index), y(value));
+    drawing = true;
+  }
+  context.stroke();
+
+  const current = values[selected];
+  if (typeof current === "number") {
+    context.fillStyle = accent;
+    context.beginPath();
+    context.arc(x(selected), y(current), 2.5, 0, 2 * Math.PI);
+    context.fill();
+  }
+
+  context.fillStyle = mutedColor;
+  context.textAlign = "right";
+  context.fillText(formatProbeValue(variable, highest), gutter - 5, top);
+  if (!flat) context.fillText(formatProbeValue(variable, lowest), gutter - 5, bottom);
+}
+
 function markBundleResident(): void {
   document.body.classList.remove("is-data-loading");
   dataCard.setAttribute("aria-busy", "false");
@@ -1041,6 +1315,7 @@ function updateFrameReadout(index: number): void {
   frameTooltip.style.setProperty("--frame-progress", `${(index / Math.max(1, frameCount() - 1)) * 100}%`);
   updateTicks(index);
   updateForecastDay(index);
+  scheduleProbeRender();
 }
 
 /** Reconfigure the layer for the active session's own bundle grid (poster
@@ -1173,6 +1448,12 @@ function handleDecodedFrame(message: {
   planeCacheBytes += plane.byteLength;
   lastDecodeMs = message.decodeMs;
   recordDecodeEvent(plane.byteLength, message.decodeMs);
+  // The probe reads its cell here, before the eviction below can recycle this
+  // plane back into the worker: one byte is kept, never the plane.
+  const probeOwner = sessionsByNumericId.get(message.variableId);
+  if (probe && probeOwner && probe.sample(probeOwner.metadata, message.variableId, message.frameOffset, plane)) {
+    scheduleProbeRender();
+  }
   // Evict by byte budget, oldest first; never evict the just-inserted
   // frame or the ones on screen (the blend path may still sample them; wind
   // keeps a u/v pair displayed).
@@ -1772,6 +2053,12 @@ function applyVariable(session: VariableSession): void {
   refreshDataCard(session);
   const index = activeFrameIndex ?? Number(slider.value);
   trySelectFrame(index);
+  // The other variable has its own codebook, unit and grid, and its own
+  // samples in the frame cache.
+  if (probe) {
+    seedProbeFromCache();
+    scheduleProbeRender();
+  }
 }
 
 async function activateVariable(variableId: ForecastBundleId): Promise<void> {
@@ -1824,6 +2111,8 @@ async function initialize(): Promise<void> {
   inflight.clear();
   planeCache.clear();
   planeCacheBytes = 0;
+  probe?.clear();
+  scheduleProbeRender();
   lastDecodeMs = null;
   decodeEvents.length = 0;
   lastPrefetchWindow = "";
@@ -1996,11 +2285,20 @@ required<HTMLButtonElement>("lang-toggle").addEventListener("click", toggleLocal
 map.on("contextmenu", (event) => {
   showContextMenu(event.originalEvent.clientX, event.originalEvent.clientY);
 });
+// A left click pins the point probe. MapLibre fires this only for a real
+// click on the map (a drag that ends on the canvas does not), and never for
+// clicks on the panels above it.
+map.on("click", (event) => {
+  hideContextMenu();
+  setProbe(event.lngLat.lng, event.lngLat.lat);
+});
 window.addEventListener("pointerdown", (event) => {
   if (!contextMenu.hidden && !contextMenu.contains(event.target as Node)) hideContextMenu();
 });
 window.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") hideContextMenu();
+  if (event.key !== "Escape") return;
+  hideContextMenu();
+  closeProbe();
 });
 window.addEventListener("blur", hideContextMenu);
 map.on("movestart", hideContextMenu);

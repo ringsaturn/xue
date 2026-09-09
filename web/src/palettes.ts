@@ -162,17 +162,24 @@ function stopsFor(variable: BundleVariable): Stop[] {
   return TEMPERATURE_STOPS;
 }
 
+/** One code in a variable's own codebook, or null for the reserved codes
+ * (no data, and anything past the codebook's maximum). */
+export function decodeValue(variable: BundleVariable, code: number): number | null {
+  return variable.quantization.type === "linear"
+    ? decodeLinear(variable.quantization, code)
+    : decodeLog(variable.quantization, code);
+}
+
 /** Build the 256x1 RGBA palette texture for one variable's code space. */
 export function buildPalette(variable: BundleVariable): Uint8Array {
   const palette = new Uint8Array(256 * 4);
   for (let code = 0; code < 256; code += 1) {
     let color: [number, number, number, number] = [0, 0, 0, 0];
-    if (variable.quantization.type === "linear") {
-      const value = decodeLinear(variable.quantization, code);
-      if (value !== null) color = interpolate(stopsFor(variable), value);
-    } else {
-      const value = decodeLog(variable.quantization, code);
-      if (value !== null && value > 0) color = interpolate(PRECIPITATION_STOPS, value);
+    const value = decodeValue(variable, code);
+    if (value !== null) {
+      // A logarithmic codebook's zero code is dry, and dry is not painted.
+      if (variable.quantization.type === "linear") color = interpolate(stopsFor(variable), value);
+      else if (value > 0) color = interpolate(PRECIPITATION_STOPS, value);
     }
     palette.set(color, code * 4);
   }

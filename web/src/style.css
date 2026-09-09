@@ -235,6 +235,119 @@ body.stats-visible .stat-graph-wrap {
   outline: none;
 }
 
+/* The point probe: a MapLibre popup wearing the instrument-panel skin. It is
+   anchored to the clicked point, so the panel itself says which cell it
+   reads, and the popup machinery handles placement and the close button. */
+.probe-popup .maplibregl-popup-content {
+  padding: 0;
+  background: none;
+  box-shadow: none;
+}
+
+.probe-popup .maplibregl-popup-close-button {
+  top: 2px;
+  right: 4px;
+  z-index: 1;
+  padding: 0 4px;
+  color: var(--muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 15px;
+  line-height: 1.2;
+}
+
+.probe-popup .maplibregl-popup-close-button:hover,
+.probe-popup .maplibregl-popup-close-button:focus-visible {
+  background: none;
+  color: var(--text);
+  outline: none;
+}
+
+/* MapLibre colors one border of the tip per anchor; each side needs the
+   panel's own background or the arrow disappears. */
+.probe-popup.maplibregl-popup-anchor-top .maplibregl-popup-tip,
+.probe-popup.maplibregl-popup-anchor-top-left .maplibregl-popup-tip,
+.probe-popup.maplibregl-popup-anchor-top-right .maplibregl-popup-tip {
+  border-bottom-color: rgba(9, 26, 37, 0.96);
+}
+
+.probe-popup.maplibregl-popup-anchor-bottom .maplibregl-popup-tip,
+.probe-popup.maplibregl-popup-anchor-bottom-left .maplibregl-popup-tip,
+.probe-popup.maplibregl-popup-anchor-bottom-right .maplibregl-popup-tip {
+  border-top-color: rgba(9, 26, 37, 0.96);
+}
+
+.probe-popup.maplibregl-popup-anchor-left .maplibregl-popup-tip {
+  border-right-color: rgba(9, 26, 37, 0.96);
+}
+
+.probe-popup.maplibregl-popup-anchor-right .maplibregl-popup-tip {
+  border-left-color: rgba(9, 26, 37, 0.96);
+}
+
+.probe-panel {
+  width: 246px;
+  padding: 9px 11px 8px;
+  background: linear-gradient(145deg, rgba(9, 26, 37, 0.96), rgba(16, 35, 48, 0.94));
+  border: 1px solid var(--hairline);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+  color: var(--text);
+}
+
+.probe-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding-right: 16px;
+  color: var(--muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 9px;
+  letter-spacing: 0.09em;
+}
+
+.probe-code {
+  color: var(--accent);
+}
+
+.probe-value {
+  display: block;
+  margin-top: 4px;
+  font-family: "Barlow Condensed", sans-serif;
+  font-size: 27px;
+  font-weight: 600;
+  line-height: 1.05;
+  letter-spacing: 0.01em;
+}
+
+.probe-meta {
+  color: var(--muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+
+.probe-chart {
+  display: block;
+  width: 100%;
+  height: 64px;
+  margin-top: 6px;
+}
+
+.probe-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.probe-count {
+  font-family: "IBM Plex Mono", monospace;
+  letter-spacing: 0.04em;
+}
+
 .data-card.is-complete {
   border-color: rgba(var(--accent-rgb), 0.55);
 }

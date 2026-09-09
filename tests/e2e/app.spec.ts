@@ -581,6 +581,36 @@ test("?lang=zh renders the Chinese UI and the footer toggle switches back", asyn
   await expect(toggle).toHaveText("中文");
 });
 
+test("clicking the map pins a point and fills its series while scrubbing", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop", "desktop interaction coverage");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await routeManifest(page);
+  await routeBundle(page);
+  await page.goto("/");
+  await waitForReady(page);
+  const panel = page.locator("#probe-panel");
+  await expect(panel).toBeHidden();
+  await page.locator("#map").click({ position: { x: 620, y: 300 } });
+  await expect(panel).toBeVisible();
+  // The probe names the variable it reads and the grid cell it reads it at.
+  await expect(page.locator("#probe-code")).toHaveText("PRATE SFC");
+  await expect(page.locator("#probe-coords")).toContainText("°");
+  await expect(page.locator("#probe-value")).toContainText("mm/h");
+  // Nothing is fetched for the probe: the series holds only the frames the
+  // viewer has already decoded, and grows as the playhead moves.
+  const count = page.locator("#probe-count");
+  await expect(count).toContainText("/ 121");
+  const pinned = Number((await count.textContent())!.split("/")[0]!.trim());
+  const slider = page.getByRole("slider", { name: "Forecast hour" });
+  await slider.focus();
+  for (let step = 0; step < 3; step += 1) await page.keyboard.press("ArrowRight");
+  await expect(slider).toHaveValue("3");
+  await expect(count).toHaveText(new RegExp(`^${pinned + 3} / 121$`));
+  // Escape retires the panel.
+  await page.keyboard.press("Escape");
+  await expect(panel).toBeHidden();
+});
+
 test("rapid scrubbing settles on the final slider value", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await routeManifest(page);
