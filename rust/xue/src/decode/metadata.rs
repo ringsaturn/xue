@@ -16,6 +16,8 @@ const V3_TIME_FIELDS: [&str; 4] =
 
 pub(crate) struct Metadata {
     pub(crate) json: String,
+    pub(crate) width: u32,
+    pub(crate) height: u32,
     pub(crate) plane_length: u32,
     pub(crate) frame_count: u32,
     /// Seconds per axis unit: an hour for every forecast source, finer for a
@@ -304,6 +306,8 @@ pub(crate) fn parse_metadata(raw: &[u8]) -> Result<Metadata, DecodeError> {
     }
     Ok(Metadata {
         json: text.to_owned(),
+        width: width as u32,
+        height: height as u32,
         plane_length: plane_length as u32,
         frame_count: frame_count as u32,
         unit_seconds,

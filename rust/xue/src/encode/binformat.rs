@@ -73,6 +73,7 @@ pub fn write_bundle(path: &Path, metadata_json: &str, planes: &[PlanePayload]) -
     }
 
     let header = FixedHeader {
+        version: format::VERSION,
         file_size,
         metadata_offset,
         metadata_length: metadata_bytes.len() as u64,

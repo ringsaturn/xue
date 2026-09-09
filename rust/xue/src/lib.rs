@@ -2,13 +2,19 @@
 // where `doc(cfg(...))` is available — it is a nightly rustdoc feature.
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
-//! Xue v1 bundle parser and frame decoder.
+//! Xue bundle parser and frame decoder.
 //!
 //! The binary contract is defined in `docs/format.md` and mirrored by the
 //! Python reference implementation in `xuebuild/binformat.py`. Every
 //! integer computation on untrusted input uses checked arithmetic, and no
 //! allocation is sized from a file value before it is validated against the
 //! metadata grid and the file length.
+//!
+//! Both container versions are read. In v1 a payload is one whole plane of
+//! one frame; in v2 it is a chunk — one spatial tile of one temporal group
+//! for one variable — which is what lets a reader fetch only the tiles a
+//! viewport covers ([`Bundle::decode_frame_tiles`]) and read one cell's
+//! whole series at one chunk per group ([`Bundle::decode_series`]).
 //!
 //! Two readers share the same structural validation and decode logic:
 //! [`Bundle`] opens a complete file, while [`StreamingBundle`] opens only the
@@ -31,9 +37,12 @@ pub mod decode;
 
 pub use decode::{Bundle, StreamingBundle};
 pub use format::{
-    align8, Compression, DecodeError, FixedHeader, FrameRequest, IndexHeader, PlaneEntry,
-    Predictor, ENTRY_SIZE, FLAG_ZSTD_CHECKSUM, HEADER_SIZE, HOUR_SECONDS, INDEX_HEADER_SIZE,
-    INDEX_MAGIC, INDEX_VERSION, MAGIC, MAX_PLANE_LENGTH, NO_DEPENDENCY, VERSION,
+    align8, ChunkEntry, Compression, DecodeError, FixedHeader, FrameRequest, GroupEntry,
+    IndexHeader, IndexHeaderV2, PlaneEntry, Predictor, TileGeometry, TileRect, VariableEntry,
+    CHUNK_ENTRY_SIZE, ENTRY_SIZE, FLAG_ZSTD_CHECKSUM, GROUP_ENTRY_SIZE, HEADER_SIZE, HOUR_SECONDS,
+    INDEX_HEADER_SIZE, INDEX_HEADER_SIZE_V2, INDEX_MAGIC, INDEX_MAGIC_V2, INDEX_VERSION,
+    INDEX_VERSION_V2, MAGIC, MAX_PLANE_LENGTH, NO_DEPENDENCY, VARIABLE_ENTRY_SIZE, VERSION,
+    VERSION_V2,
 };
 
 // The experimental native encoder, behind an off-by-default feature because it

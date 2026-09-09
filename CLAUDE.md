@@ -103,6 +103,30 @@ Manifest schema changes are a two-sided deploy: the new shell accepts old
 manifests, but an old cached shell rejects new ones — **deploy the Pages shell
 before publishing data in a widened schema**.
 
+### Container versions
+
+Distinct from the metadata schema below: `FixedHeader.version` says what a
+*payload* is. **v1** is plane-major — one payload is one whole plane of one
+frame, indexed by `IDX1` + `PlaneEntry`, with a middle RAW anchor per
+temporal group. **v2** is tiled — one payload is a **chunk**: one spatial
+tile of one temporal group for one variable, indexed by `IDX2` plus three
+compact tables (variables with their predictor, groups partitioning the
+axis, and one 8-byte entry per chunk whose offset is a prefix sum rather
+than a stored field). Physical order is group → tile (row-major) → variable,
+which keeps a whole group one contiguous range (so a global view fetches
+exactly what v1 fetched), a viewport's tile row another, and one cell's
+whole series at one chunk per group. Tiling is a storage property: the
+metadata JSON, codebooks and residual arithmetic are unchanged, and the
+geometry appears only in the binary index. `docs/format.md` §"Container v2"
+is normative.
+
+Status: the format layer, the Python reference writer/reader and the Rust
+decoder handle both versions; the conversion pipeline (`binconvert.py`, the
+native encoder, the frontend) still produces and consumes v1, and switching
+it over is the remaining work. A decoder must always keep reading v1 —
+published runs and showcase cases carry those bytes and are never rebuilt. Like a manifest widening, the switch is a two-sided
+deploy: **ship the Pages shell before publishing v2 data.**
+
 ### Bundle metadata schema versions
 
 Inside a `.xue` file, `schemaVersion` is the lowest version a reader must
