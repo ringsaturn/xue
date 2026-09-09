@@ -5,7 +5,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import "./style.css";
 
 import { layers as basemapLayers, namedFlavor } from "@protomaps/basemaps";
-import { Map as MaplibreMap, NavigationControl, setWorkerUrl, type MapOptions } from "maplibre-gl";
+import { Map as MaplibreMap, NavigationControl, Popup, setWorkerUrl, type MapOptions } from "maplibre-gl";
 // maplibre-gl 6 resolves its worker from `import.meta.url`, which points at
 // the bundle rather than the package once Vite has processed it. `?worker&url`
 // emits a self-contained worker chunk (the dist worker imports a sibling
@@ -895,7 +895,7 @@ function showContextMenu(x: number, y: number): void {
 // That keeps the probe honest under windowed streaming, where only the frames
 // around the playhead are ever local.
 let probe: ProbeSeries | null = null;
-let probePopup: maplibregl.Popup | null = null;
+let probePopup: Popup | null = null;
 let probeRenderFrame: number | null = null;
 
 const probePanel = buildProbePanel();
@@ -959,7 +959,7 @@ function setProbe(longitude: number, latitude: number): void {
   probe = new ProbeSeries(longitude, latitude);
   seedProbeFromCache();
   if (!probePopup) {
-    probePopup = new maplibregl.Popup({
+    probePopup = new Popup({
       closeButton: true,
       closeOnClick: false,
       closeOnMove: false,
