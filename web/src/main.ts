@@ -5,7 +5,12 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import "./style.css";
 
 import { layers as basemapLayers, namedFlavor } from "@protomaps/basemaps";
-import maplibregl from "maplibre-gl";
+import { Map as MaplibreMap, NavigationControl, setWorkerUrl, type MapOptions } from "maplibre-gl";
+// maplibre-gl 6 resolves its worker from `import.meta.url`, which points at
+// the bundle rather than the package once Vite has processed it. `?worker&url`
+// emits a self-contained worker chunk (the dist worker imports a sibling
+// module, so a plain `?url` copy would fail on its first import).
+import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 
 import { CRC32_INITIAL, crc32Hex, crc32Update } from "./crc32";
 import { applyStaticMessages, basemapLang, locale, t, toggleLocale } from "./i18n";
@@ -206,7 +211,11 @@ function applyBasemapTheme(): void {
 const FORECAST_ANCHOR_LAYER = "boundaries_country";
 const PROTOMAPS_KEY = "249bb192fefe0a77";
 
-function buildBasemapStyle(): maplibregl.StyleSpecification {
+// maplibre-gl 6 no longer re-exports the style-spec types; take the style
+// object's type from the map options that consume it.
+type BasemapStyle = Exclude<MapOptions["style"], string | undefined>;
+
+function buildBasemapStyle(): BasemapStyle {
   const theme = currentBasemapTheme();
   const flavor = { ...namedFlavor("dark"), background: theme.ocean, water: theme.ocean, earth: theme.land };
   return {
@@ -231,7 +240,9 @@ function buildBasemapStyle(): maplibregl.StyleSpecification {
   };
 }
 
-const map = new maplibregl.Map({
+setWorkerUrl(maplibreWorkerUrl);
+
+const map = new MaplibreMap({
   container: "map",
   center: [128, 28],
   zoom: 1.65,
@@ -240,7 +251,7 @@ const map = new maplibregl.Map({
   attributionControl: false,
   style: buildBasemapStyle(),
 });
-map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+map.addControl(new NavigationControl({ showCompass: false }), "top-right");
 
 const slider = required<HTMLInputElement>("frame-slider");
 const runTime = required<HTMLElement>("run-time");
