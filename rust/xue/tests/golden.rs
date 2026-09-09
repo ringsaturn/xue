@@ -1,8 +1,12 @@
 //! Cross-language golden tests: Python encodes the cropped GRIB fixture,
 //! Rust must decode it byte-for-byte identically to the Python reference.
 //!
-//! Generate the fixture first:
+//! Two corpora. The generated one is container v2, what the encoders write
+//! now; regenerate it first:
 //!     .venv/bin/python tests/prepare_bin_fixture.py
+//! The frozen one in `tests/fixtures/v1/` is committed container v1 — no
+//! encoder produces it any more, and the decoder must read it forever
+//! because published runs carry those bytes. See that directory's README.
 
 use xue::{Bundle, FrameRequest, StreamingBundle, TileRect};
 use std::path::PathBuf;
@@ -22,6 +26,18 @@ fn variable_fixture_bytes(name: &str) -> Vec<u8> {
 
 fn fixture_bytes() -> Vec<u8> {
     variable_fixture_bytes("tmp2m")
+}
+
+fn v1_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/v1")
+}
+
+/// One file from the frozen container v1 corpus. These bytes are committed,
+/// so unlike the generated fixtures they never need regenerating — and if
+/// one stops decoding, v1 reading is broken.
+fn v1_fixture_bytes(name: &str) -> Vec<u8> {
+    let path = v1_dir().join(format!("{name}.xue"));
+    std::fs::read(&path).unwrap_or_else(|_| panic!("missing frozen v1 fixture {path:?}"))
 }
 
 #[test]
@@ -59,7 +75,7 @@ fn mixed_hours() -> Vec<u16> {
 
 #[test]
 fn golden_mixed_axis_decode_matches_python_reference() {
-    let bytes = variable_fixture_bytes("mixed");
+    let bytes = v1_fixture_bytes("mixed");
     let mut bundle = Bundle::open(&bytes).expect("mixed-axis fixture must parse");
     let metadata: serde_json::Value =
         serde_json::from_str(bundle.metadata_json()).expect("metadata JSON");
@@ -72,7 +88,7 @@ fn golden_mixed_axis_decode_matches_python_reference() {
     );
 
     for hour in mixed_hours() {
-        let expected_path = fixture_dir().join(format!("expected.mixed.f{hour:03}.bin"));
+        let expected_path = v1_dir().join(format!("expected.mixed.f{hour:03}.bin"));
         let expected = std::fs::read(&expected_path).unwrap_or_else(|_| {
             panic!("missing expected plane {expected_path:?}; regenerate the fixture")
         });
@@ -88,7 +104,7 @@ fn golden_mixed_axis_decode_matches_python_reference() {
 /// metadata does not need, keeping exactly one valid encoding per file.
 #[test]
 fn relabelled_schema_version_rejected() {
-    let bytes = variable_fixture_bytes("mixed");
+    let bytes = v1_fixture_bytes("mixed");
     let metadata_offset = u64::from_le_bytes(bytes[24..32].try_into().unwrap()) as usize;
     let metadata_length = u64::from_le_bytes(bytes[32..40].try_into().unwrap()) as usize;
     let json = std::str::from_utf8(&bytes[metadata_offset..metadata_offset + metadata_length]).unwrap();
@@ -103,7 +119,7 @@ fn relabelled_schema_version_rejected() {
 
 #[test]
 fn streaming_mixed_axis_matches_full_decode() {
-    let bytes = variable_fixture_bytes("mixed");
+    let bytes = v1_fixture_bytes("mixed");
     let data_offset = data_offset_of(&bytes);
     let mut full = Bundle::open(&bytes).expect("full bundle parses");
     let mut streaming = StreamingBundle::open_prefix(&bytes[..data_offset]).expect("prefix parses");
@@ -481,4 +497,65 @@ fn tiled_corrupt_chunk_fails_decode() {
             assert!(failed, "a flipped payload byte must be caught");
         }
     }
+}
+
+// -- the frozen container v1 corpus -------------------------------------------
+
+/// Nothing writes v1 any more, so round-tripping cannot prove the decoder
+/// still reads it. These committed bytes can: a v1 file and the planes it
+/// decoded to, frozen together, so the pair stays self-consistent whatever
+/// later changes do to newly encoded data.
+///
+/// If this fails, v1 reading is broken — and published runs and showcase
+/// cases on R2 are v1 and are never rebuilt.
+#[test]
+fn frozen_v1_corpus_still_decodes() {
+    for (name, variable_id, hours) in [
+        ("tmp2m", 1u8, vec![0u16]),
+        ("prate", 2, vec![0]),
+        ("mixed", 1, mixed_hours()),
+    ] {
+        let bytes = v1_fixture_bytes(name);
+        // The one thing that must be true of every file here.
+        assert_eq!(u16::from_le_bytes(bytes[8..10].try_into().unwrap()), 1, "{name} is container v1");
+        let mut bundle = Bundle::open(&bytes).unwrap_or_else(|error| {
+            panic!("frozen v1 fixture {name} no longer parses: {error}")
+        });
+        assert!(bundle.tile_geometry().is_none(), "{name} is plane-major, not tiled");
+        assert!(bundle.decode_series(variable_id, 0, 0).is_err(), "v1 has no cheap series");
+        for hour in hours {
+            let stem = if name == "mixed" { "mixed".to_string() } else { name.to_string() };
+            let expected_path = v1_dir().join(format!("expected.{stem}.f{hour:03}.bin"));
+            let expected = std::fs::read(&expected_path)
+                .unwrap_or_else(|_| panic!("missing frozen plane {expected_path:?}"));
+            let plane = bundle
+                .decode_frame(FrameRequest { variable_id, frame_offset: hour })
+                .unwrap_or_else(|error| panic!("frozen v1 {name} f{hour:03} no longer decodes: {error}"));
+            assert_eq!(plane, expected.as_slice(), "frozen v1 {name} f{hour:03}");
+        }
+    }
+}
+
+/// The generated corpus is the other side of the same coin: it must be v2,
+/// or the encoder quietly regressed to the layout we just left.
+#[test]
+fn the_generated_corpus_is_container_v2() {
+    for name in ["tmp2m", "prate", "tmp2m.half", "tiled"] {
+        let bytes = variable_fixture_bytes(name);
+        assert_eq!(
+            u16::from_le_bytes(bytes[8..10].try_into().unwrap()),
+            2,
+            "{name} must be container v2"
+        );
+    }
+    // The half-resolution variant halves the tile, so tile n covers the same
+    // ground in both tiers and a viewport keeps its rectangle across a switch.
+    let full = Bundle::open(&variable_fixture_bytes("tmp2m")).expect("full tier");
+    let half = Bundle::open(&variable_fixture_bytes("tmp2m.half")).expect("half tier");
+    let (full_geometry, half_geometry) =
+        (full.tile_geometry().expect("tiles"), half.tile_geometry().expect("tiles"));
+    assert_eq!(half_geometry.tile_width, full_geometry.tile_width.div_ceil(2));
+    assert_eq!(half_geometry.tile_height, full_geometry.tile_height.div_ceil(2));
+    assert_eq!(half_geometry.columns(), full_geometry.columns());
+    assert_eq!(half_geometry.rows(), full_geometry.rows());
 }

@@ -199,7 +199,7 @@ dependencies; NumPy is the only runtime dependency. Two exceptions:
   on encode.
 - **`gdalinfo`** has a second source. `gdal.dataset_info` is the one entry
   point for it, and reads through the `xuepy` wheel's linked GDAL
-  (`xue.gdal_info`, hence the `xuepy>=0.4` floor) when the build converts
+  (`xue.gdal_info`, one reason for the `xuepy>=0.5` floor) when the build converts
   natively, the subprocess otherwise — the choice follows `XUE_ENCODER`, so
   a run never mixes two GDAL installs. That is what lets the scheduled
   `publish-*` workflows install **no GDAL at all**: extraction was already

@@ -60,6 +60,20 @@ class SourceSpec:
     order (the wind pair always ships as the combined wind10m bundle)."""
     production_grid: tuple[int, int] = (1440, 721)
     """Grid a complete (``require_complete``) build must arrive on."""
+    tile: tuple[int, int] = (48, 52)
+    """Container v2 tile size as ``(width, height)`` in grid cells.
+
+    48 x 52 cuts the 0.25-degree global grid into 30 x 14 = 420 tiles of
+    about 12 x 13 degrees: small enough that one cell's whole series costs
+    ~100 KB rather than the megabytes a coarser tile would, and large enough
+    that every published variable still compresses at or below what the
+    plane-major container achieved. The last row is clipped (721 = 13 x 52 +
+    45), which the format allows precisely because no tidy power of two
+    divides 721. A half-resolution variant halves it (``ceil``), so a tile
+    with the same number covers the same ground in both tiers.
+
+    Changing this is a data format change, not a runtime knob: the golden
+    fixtures and the encoder-parity test are regenerated with it."""
     fetch_concurrency: int = 4
     """Frames fetched in parallel. Each frame costs several fresh HTTPS
     round-trips, so sequential fetching is latency-bound; NOAA's bucket
@@ -139,6 +153,10 @@ SOURCES: dict[str, SourceSpec] = {
         optional_at_analysis=("prate_ave",),
         bundle_scalar_ids=("tmp2m", "prate", "dswrf"),
         production_grid=(3072, 1536),
+        # 3072 x 1536 divides exactly into 32 x 16 = 512 tiles with no
+        # clipped edge, at about the same 11-degree ground scale as the
+        # 0p25 grid's 48 x 52.
+        tile=(96, 96),
     ),
     # CMA weather radar level-3 mosaic composite reflectivity, decoded from
     # the published BIN tiles into a NetCDF series by the radar-l3-mst
@@ -158,6 +176,10 @@ SOURCES: dict[str, SourceSpec] = {
         # Tile-grid dependent: the file says what it covers, and nothing here
         # is ever built with require_complete.
         production_grid=(0, 0),
+        # The mosaic arrives on a 256 * 2^z tile grid, which any power of two
+        # divides; 64 keeps a chunk in the same tens-of-KB range as the
+        # forecast sources whatever z the event carries.
+        tile=(64, 64),
         observation=True,
     ),
 }

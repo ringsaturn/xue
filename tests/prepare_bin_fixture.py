@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 
 from xuebuild import binformat, temporal, zstdcli
-from xuebuild.binconvert import GridInfo, _variable_payloads, build_metadata, convert_bin
+from xuebuild.binconvert import GridInfo, build_metadata, convert_bin
 from xuebuild.sources import source_spec
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -17,42 +17,8 @@ WORK_ROOT = REPOSITORY_ROOT / "tests" / "fixtures" / "work"
 
 # A miniature GFS-shaped mixed-step axis: hourly frames, then a three-hourly
 # tail — enough frames for full and partial temporal groups on both sides of
-# the cadence change.
+# the cadence change, and a trailing short group.
 MIXED_HOURS = list(range(13)) + list(range(15, 37, 3))
-MIXED_GRID = GridInfo(
-    width=16,
-    height=8,
-    first_longitude=-180.0,
-    first_latitude=90.0,
-    longitude_step=22.5,
-    latitude_step=-22.5,
-)
-
-
-def _mixed_plane(hour: int) -> np.ndarray:
-    points = MIXED_GRID.width * MIXED_GRID.height
-    return ((np.arange(points, dtype=np.uint16) * 3 + hour * 7) % 251).astype(np.uint8)
-
-
-def prepare_mixed_axis_fixture() -> None:
-    """Encode a synthetic mixed-axis bundle through the real encoder path
-    (segment-aligned grouping, an explicitly listed ``hours`` axis) plus
-    golden planes, so the Rust decoder's handling of both is held
-    byte-identical too."""
-    planes = {hour: _mixed_plane(hour) for hour in MIXED_HOURS}
-    metadata = build_metadata(datetime(2026, 8, 14, 6, tzinfo=UTC), MIXED_HOURS, MIXED_GRID, "quality", ("tmp2m",))
-    assert metadata["schemaVersion"] == 3
-    assert "frameOffsets" in metadata["time"]
-    payloads = []
-    for entry, raw in _variable_payloads("tmp2m", MIXED_HOURS, planes):
-        compressed = zstdcli.compress(raw)
-        payloads.append(binformat.PlanePayload(replace(entry, compressed_length=len(compressed)), compressed))
-    binformat.write_bundle(GENERATED_ROOT / "mixed.xue", metadata, payloads)
-    bundle = binformat.read_bundle(GENERATED_ROOT / "mixed.xue")
-    bundle.verify_all()
-    for hour in MIXED_HOURS:
-        plane = bundle.decode_plane(1, hour)
-        (GENERATED_ROOT / f"expected.mixed.f{hour:03d}.bin").write_bytes(plane.tobytes())
 
 
 # A grid no tile size divides: 17 x 9 cells cut into 5 x 4 tiles leaves a
@@ -131,7 +97,6 @@ def prepare_bin_fixture() -> Path:
                 plane = bundle.decode_plane(numeric_id, hour)
                 expected = GENERATED_ROOT / f"expected.{name}.f{hour:03d}.bin"
                 expected.write_bytes(plane.tobytes())
-    prepare_mixed_axis_fixture()
     prepare_tiled_fixture()
     return GENERATED_ROOT
 

@@ -14,8 +14,8 @@ use std::sync::{Arc, Condvar, Mutex};
 use serde_json::{json, Map, Value};
 use time::OffsetDateTime;
 
-use crate::encode::binformat::{self, PlanePayload, HOUR_SECONDS};
-use crate::format::{Compression, PlaneEntry, Predictor, FLAG_ZSTD_CHECKSUM, NO_DEPENDENCY};
+use crate::encode::binformat::{self, ChunkPayload, ChunkTables, HOUR_SECONDS};
+use crate::format::{ChunkEntry, Predictor, TileGeometry, VariableEntry, NO_DEPENDENCY};
 use crate::encode::errors::{EncodeError, Result};
 use crate::encode::gdalio::{needs_serial_access, netcdf_guard, Dataset};
 use crate::encode::grid::{crop_grid, normalize_longitudes, GridInfo};
@@ -29,7 +29,7 @@ use crate::encode::parallel::for_each_ordered;
 use crate::encode::poster::encode_poster;
 use crate::encode::quantize::{codebook, Codebook};
 use crate::encode::sources::{source_spec, SourceSpec};
-use crate::encode::temporal::{anchor_hour, encode_residual, group_forecast_hours};
+use crate::encode::temporal::build_chunks;
 use crate::encode::variables::numeric_id;
 
 /// Scalar variables ship one single-variable bundle each; the two wind
@@ -39,7 +39,12 @@ pub const WIND_COMPONENT_IDS: [&str; 2] = ["ugrd10m", "vgrd10m"];
 pub const WIND_BUNDLE_ID: &str = "wind10m";
 /// Linear-codebook fields are smooth enough for the six-frame ANCHOR groups;
 /// precipitation stays independent RAW planes.
-const GROUPED_VARIABLE_IDS: [&str; 4] = ["tmp2m", "ugrd10m", "vgrd10m", "dswrf"];
+/// Precipitation and radar reflectivity move with weather systems, so
+/// temporal differencing makes them larger, not smaller: their chunks stack
+/// the codes RAW. Every linear-codebook field chains against the previous
+/// frame inside its chunk. Mirrors `RAW_VARIABLE_IDS` in
+/// `xuebuild/binconvert.py`.
+const RAW_VARIABLE_IDS: [&str; 2] = ["prate", "cref"];
 /// Every source names its precipitation input differently.
 const PRECIPITATION_INPUT_IDS: [&str; 3] = ["prate", "tp", "prate_ave"];
 /// The raw precipitation inputs a frame differences against its predecessor.
@@ -548,124 +553,81 @@ fn quantize_file(
 
 // -- payload assembly --------------------------------------------------------
 
-fn entry(
-    variable_id: &str,
-    predictor: Predictor,
-    frame_offset: i64,
-    dependency_offset: u16,
-    group_id: u16,
-    plane: &[u8],
-) -> Result<PlaneEntry> {
-    Ok(PlaneEntry {
-        variable_id: numeric_id(variable_id)?,
-        predictor,
-        compression: Compression::Zstd,
-        flags: FLAG_ZSTD_CHECKSUM,
-        frame_offset: frame_offset as u16,
-        dependency_offset,
-        group_id,
-        compressed_length: 0,
-        data_offset: 0,
-        decoded_length: plane.len() as u32,
-        crc32: binformat::crc32_plane(plane),
-        minimum_code: plane.iter().copied().min().unwrap_or(0),
-        maximum_code: plane.iter().copied().max().unwrap_or(0),
-    })
-}
 
-/// Uncompressed plane payloads for one variable at one resolution.
+/// The tile size one bundle is cut with.
 ///
-/// Linear-codebook fields use six-frame groups with a middle RAW anchor and
-/// ANCHOR residuals; precipitation and radar reflectivity stay independent RAW
-/// planes with groupId mirroring the frame offset.
-fn variable_payloads(
-    variable_id: &str,
-    offsets: &[i64],
-    planes: &BTreeMap<i64, &Vec<u8>>,
-) -> Result<Vec<(PlaneEntry, Vec<u8>)>> {
-    let mut payloads = Vec::with_capacity(offsets.len());
-    if GROUPED_VARIABLE_IDS.contains(&variable_id) {
-        for (group_id, group) in group_forecast_hours(offsets)?.iter().enumerate() {
-            let anchor = anchor_hour(group)?;
-            let anchor_plane = planes[&anchor];
-            let group_id = group_id as u16;
-            let ordered = std::iter::once(anchor)
-                .chain(group.iter().copied().filter(|offset| *offset != anchor));
-            for offset in ordered {
-                let plane = planes[&offset];
-                if offset == anchor {
-                    payloads.push((
-                        entry(variable_id, Predictor::Raw, offset, NO_DEPENDENCY, group_id, plane)?,
-                        plane.to_vec(),
-                    ));
-                } else {
-                    let residual = encode_residual(plane, anchor_plane)?;
-                    payloads.push((
-                        entry(
-                            variable_id,
-                            Predictor::Anchor,
-                            offset,
-                            anchor as u16,
-                            group_id,
-                            plane,
-                        )?,
-                        residual,
-                    ));
-                }
-            }
-        }
+/// A half-resolution variant halves the source tile, so tile number n covers
+/// the same ground in both tiers and a viewport keeps its tile rectangle
+/// across a tier switch. Either size is then clamped to the grid, because the
+/// format requires `1 <= tile <= grid` so that a single-tile file states its
+/// grid size exactly — and a regional crop is routinely smaller than the
+/// source's tile (a six-degree showcase window is 24 x 24 cells against the
+/// 0.25-degree grid's 48 x 52 tile). Clamping makes such a file one tile,
+/// which is the right answer: there is nothing left to subdivide.
+///
+/// Mirrors `_bundle_tile` in `xuebuild/binconvert.py`.
+fn bundle_tile(tile: (usize, usize), grid: &GridInfo, half: bool) -> (usize, usize) {
+    let tile = if half {
+        (tile.0.div_ceil(2), tile.1.div_ceil(2))
     } else {
-        for offset in offsets {
-            let plane = planes[offset];
-            payloads.push((
-                entry(
-                    variable_id,
-                    Predictor::Raw,
-                    *offset,
-                    NO_DEPENDENCY,
-                    *offset as u16,
-                    plane,
-                )?,
-                plane.to_vec(),
-            ));
-        }
-    }
-    Ok(payloads)
+        tile
+    };
+    (tile.0.min(grid.width), tile.1.min(grid.height))
 }
 
-/// Payloads of the two-variable wind bundle, physically interleaved per
-/// temporal group (u group, then the same v group) so streaming a wind frame
-/// touches two adjacent byte spans.
-fn wind_bundle_payloads(
+/// The v2 index tables and uncompressed chunks of one bundle.
+///
+/// Every variable of a bundle shares the file's one axis and therefore its
+/// temporal groups, and the chunks come out in the physical order the spec
+/// fixes — group, then tile row-major, then variable. That order is what puts
+/// the two components of the wind bundle next to each other inside a tile, so
+/// one range request still covers a wind frame while a viewport's tile row
+/// and a cell's series each stay one narrow span.
+fn bundle_chunks(
+    variable_ids: &[&str],
     offsets: &[i64],
     codes: &BTreeMap<i64, Vec<(String, Vec<u8>)>>,
-) -> Result<Vec<(PlaneEntry, Vec<u8>)>> {
-    let mut per_component = Vec::new();
-    for variable_id in WIND_COMPONENT_IDS {
-        let planes: BTreeMap<i64, &Vec<u8>> = offsets
-            .iter()
-            .map(|offset| {
-                let plane = codes[offset]
-                    .iter()
-                    .find(|(name, _)| name == variable_id)
-                    .map(|(_, plane)| plane)
-                    .ok_or_else(|| {
-                        EncodeError::conversion(format!("missing {variable_id} plane"))
-                    })?;
-                Ok((*offset, plane))
+    geometry: &TileGeometry,
+) -> Result<ChunkTables> {
+    let mut variables: Vec<VariableEntry> = variable_ids
+        .iter()
+        .map(|variable_id| {
+            Ok(VariableEntry {
+                variable_id: numeric_id(variable_id)?,
+                predictor: if RAW_VARIABLE_IDS.contains(variable_id) {
+                    Predictor::Raw
+                } else {
+                    Predictor::Previous
+                },
             })
-            .collect::<Result<_>>()?;
-        per_component.push(variable_payloads(variable_id, offsets, &planes)?);
-    }
-    let mut payloads = Vec::new();
-    let mut cursor = 0usize;
-    for group in group_forecast_hours(offsets)? {
-        for component in &per_component {
-            payloads.extend_from_slice(&component[cursor..cursor + group.len()]);
-        }
-        cursor += group.len();
-    }
-    Ok(payloads)
+        })
+        .collect::<Result<_>>()?;
+    variables.sort_by_key(|variable| variable.variable_id);
+
+    // Numeric id back to the name the code planes are keyed by.
+    let names: BTreeMap<u8, &str> = variable_ids
+        .iter()
+        .map(|variable_id| Ok((numeric_id(variable_id)?, *variable_id)))
+        .collect::<Result<_>>()?;
+    let plane = |offset: i64, variable_id: u8| -> Result<&[u8]> {
+        let name = names[&variable_id];
+        codes
+            .get(&offset)
+            .and_then(|planes| planes.iter().find(|(id, _)| id == name))
+            .map(|(_, plane)| plane.as_slice())
+            .ok_or_else(|| {
+                EncodeError::conversion(format!("missing {name} plane at offset {offset}"))
+            })
+    };
+    let (groups, raw) = build_chunks(offsets, &variables, &plane, geometry)?;
+    Ok(ChunkTables {
+        variables,
+        groups,
+        chunks: raw
+            .into_iter()
+            .map(|(entry, payload)| ChunkPayload { entry, payload })
+            .collect(),
+    })
 }
 
 /// Half-resolution copy of one quantized plane (rows/columns 0, 2, 4, …),
@@ -698,18 +660,21 @@ fn write_variable_bundle(
     variable_id: &str,
     output: &Path,
     metadata: &Value,
-    raw_payloads: Vec<(PlaneEntry, Vec<u8>)>,
+    geometry: &TileGeometry,
+    tables: ChunkTables,
+    frame_count: u32,
     zstd_level: i32,
     options: &ConvertOptions,
 ) -> Result<Value> {
     log!(
         options,
-        "compressing {} {variable_id} payloads at zstd level {zstd_level}",
-        raw_payloads.len()
+        "compressing {} {variable_id} chunks at zstd level {zstd_level}",
+        tables.chunks.len()
     );
-    let compressed: Vec<PlanePayload> = compress_all(raw_payloads, zstd_level, options)?;
+    let tables = compress_all(tables, zstd_level, options)?;
     let metadata_json = serde_json::to_string(metadata).expect("serializable metadata");
-    let bundle_bytes = binformat::write_bundle(output, &metadata_json, &compressed)?;
+    let bundle_bytes =
+        binformat::write_bundle_v2(output, &metadata_json, geometry, &tables, frame_count)?;
     log!(
         options,
         "wrote {} ({:.2} MB)",
@@ -717,14 +682,14 @@ fn write_variable_bundle(
         bundle_bytes.len() as f64 / 1e6
     );
 
-    // Read the complete file back and decode every plane before publishing
-    // stats — the same acceptance gate the Python encoder applies, run through
-    // the production decoder crate.
+    // Read the complete file back and reconstruct every chunk before
+    // publishing stats — the same acceptance gate the Python encoder applies,
+    // run through the production decoder crate.
     verify_bundle_bytes(&bundle_bytes)?;
     log!(
         options,
-        "verified {} {variable_id} planes by full read-back decode",
-        compressed.len()
+        "verified {} {variable_id} chunks by full read-back decode",
+        tables.chunks.len()
     );
 
     let mut report = Map::new();
@@ -736,26 +701,33 @@ fn write_variable_bundle(
 }
 
 fn compress_all(
-    raw_payloads: Vec<(PlaneEntry, Vec<u8>)>,
+    tables: ChunkTables,
     zstd_level: i32,
     options: &ConvertOptions,
-) -> Result<Vec<PlanePayload>> {
+) -> Result<ChunkTables> {
     use rayon::prelude::*;
 
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(options.compress_workers.max(1))
         .build()
         .map_err(|error| EncodeError::conversion(format!("cannot start zstd pool: {error}")))?;
-    pool.install(|| {
-        raw_payloads
+    let ChunkTables { variables, groups, chunks } = tables;
+    let chunks = pool.install(|| {
+        chunks
             .into_par_iter()
-            .map(|(mut entry, raw)| {
-                let payload = zstd_compress(&raw, zstd_level)?;
-                entry.compressed_length = payload.len() as u32;
-                Ok(PlanePayload { entry, payload })
+            .map(|chunk| {
+                let payload = zstd_compress(&chunk.payload, zstd_level)?;
+                Ok(ChunkPayload {
+                    entry: ChunkEntry {
+                        compressed_length: payload.len() as u32,
+                        crc32: chunk.entry.crc32,
+                    },
+                    payload,
+                })
             })
-            .collect()
-    })
+            .collect::<Result<Vec<_>>>()
+    })?;
+    Ok(ChunkTables { variables, groups, chunks })
 }
 
 fn zstd_compress(payload: &[u8], level: i32) -> Result<Vec<u8>> {
@@ -1213,32 +1185,28 @@ pub fn convert_bin(
                 source,
                 unit_seconds,
             )?;
-            let payloads = if wind {
-                wind_bundle_payloads(&bundle_offsets, codes)?
+            let tile = bundle_tile(source.tile, &bundle_grid, !suffix.is_empty());
+            let geometry = TileGeometry::new(
+                bundle_grid.width as u32,
+                bundle_grid.height as u32,
+                tile.0 as u32,
+                tile.1 as u32,
+            )
+            .map_err(|error| EncodeError::conversion(error.0))?;
+            let variable_ids: Vec<&str> = if wind {
+                WIND_COMPONENT_IDS.to_vec()
             } else {
-                let planes: BTreeMap<i64, &Vec<u8>> = bundle_offsets
-                    .iter()
-                    .map(|offset| {
-                        let plane = codes[offset]
-                            .iter()
-                            .find(|(name, _)| name == bundle_id)
-                            .map(|(_, plane)| plane)
-                            .ok_or_else(|| {
-                                EncodeError::conversion(format!(
-                                    "missing {bundle_id} plane at offset {offset}"
-                                ))
-                            })?;
-                        Ok((*offset, plane))
-                    })
-                    .collect::<Result<_>>()?;
-                variable_payloads(bundle_id, &bundle_offsets, &planes)?
+                vec![bundle_id]
             };
+            let tables = bundle_chunks(&variable_ids, &bundle_offsets, codes, &geometry)?;
             let output = output_dir.join(format!("{bundle_id}{suffix}.xue"));
             let mut report = write_variable_bundle(
                 bundle_id,
                 &output,
                 &metadata,
-                payloads,
+                &geometry,
+                tables,
+                bundle_offsets.len() as u32,
                 options.zstd_level,
                 options,
             )?;

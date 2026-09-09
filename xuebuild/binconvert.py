@@ -76,9 +76,11 @@ VARIABLE_NUMERIC_IDS = {
 # layer.
 WIND_COMPONENT_IDS = ("ugrd10m", "vgrd10m")
 WIND_BUNDLE_ID = "wind10m"
-# Linear-codebook fields are smooth enough for the six-frame ANCHOR groups;
-# precipitation stays independent RAW planes.
-GROUPED_VARIABLE_IDS = {"tmp2m", "ugrd10m", "vgrd10m", "dswrf"}
+# Precipitation and radar reflectivity move with weather systems, so temporal
+# differencing makes them larger, not smaller: their chunks stack the codes
+# RAW. Every linear-codebook field is smooth enough to chain against the
+# previous frame inside its chunk.
+RAW_VARIABLE_IDS = {"prate", "cref"}
 
 # gdal_translate decodes GRIB packing on the CPU: one worker per core.
 _EXTRACT_WORKERS = min(16, os.cpu_count() or 4)
@@ -534,32 +536,6 @@ def _linear_stats(values: np.ndarray, codes: np.ndarray, codebook: TemperatureCo
     return max_error, clamped
 
 
-def _entry(
-    variable_id: str,
-    predictor: int,
-    frame_offset: int,
-    dependency_offset: int,
-    group_id: int,
-    plane: np.ndarray,
-    payload_length: int,
-) -> binformat.PlaneEntry:
-    return binformat.PlaneEntry(
-        variable_id=VARIABLE_NUMERIC_IDS[variable_id],
-        predictor=predictor,
-        compression=binformat.COMPRESSION_ZSTD,
-        flags=binformat.FLAG_ZSTD_CHECKSUM,
-        frame_offset=frame_offset,
-        dependency_offset=dependency_offset,
-        group_id=group_id,
-        compressed_length=payload_length,
-        data_offset=0,
-        decoded_length=plane.size,
-        crc32=binformat.crc32_plane(plane),
-        minimum_code=int(plane.min()),
-        maximum_code=int(plane.max()),
-    )
-
-
 def axis_unit_seconds(lead_seconds: Sequence[int]) -> int:
     """The coarsest unit that expresses every frame's lead time exactly.
 
@@ -733,64 +709,55 @@ def _quantize_file(
     return lead, codes, stats
 
 
-def _variable_payloads(
-    variable_id: str,
-    offsets: list[int],
-    planes_by_offset: dict[int, np.ndarray],
-) -> list[tuple[binformat.PlaneEntry, bytes]]:
-    """Uncompressed plane payloads for one variable at one resolution.
+def _bundle_tile(tile: tuple[int, int], grid: GridInfo, *, half: bool) -> tuple[int, int]:
+    """The tile size one bundle is cut with.
 
-    Linear-codebook fields (temperature and the wind components) use six-frame
-    groups with a middle RAW anchor and ANCHOR residuals; precipitation and
-    radar reflectivity stay independent RAW planes with groupId mirroring the
-    frame offset. The same scheme applies to every resolution tier, so full
-    and half bundles stay structurally alike.
+    A half-resolution variant halves the source tile, so tile number n covers
+    the same ground in both tiers and a viewport keeps its tile rectangle
+    across a tier switch. Either size is then clamped to the grid, because the
+    format requires ``1 <= tile <= grid`` so that a single-tile file states its
+    grid size exactly — and a regional crop is routinely smaller than the
+    source's tile (a six-degree showcase window is 24 x 24 cells against the
+    0.25-degree grid's 48 x 52 tile). Clamping makes such a file one tile,
+    which is the right answer: there is nothing left to subdivide.
     """
-    payloads: list[tuple[binformat.PlaneEntry, bytes]] = []
-    if variable_id in GROUPED_VARIABLE_IDS:
-        for group_id, group in enumerate(temporal.group_forecast_hours(offsets)):
-            anchor = temporal.anchor_hour(group)
-            anchor_plane = planes_by_offset[anchor]
-            for offset in [anchor, *[offset for offset in group if offset != anchor]]:
-                plane = planes_by_offset[offset]
-                if offset == anchor:
-                    payloads.append(
-                        (_entry(variable_id, binformat.PREDICTOR_RAW, offset, binformat.NO_DEPENDENCY, group_id, plane, 0), plane.tobytes())
-                    )
-                else:
-                    residual = temporal.encode_residual(plane, anchor_plane)
-                    payloads.append(
-                        (_entry(variable_id, binformat.PREDICTOR_ANCHOR, offset, anchor, group_id, plane, 0), residual.tobytes())
-                    )
-    else:
-        for offset in offsets:
-            plane = planes_by_offset[offset]
-            payloads.append(
-                (_entry(variable_id, binformat.PREDICTOR_RAW, offset, binformat.NO_DEPENDENCY, offset, plane, 0), plane.tobytes())
-            )
-    return payloads
+    if half:
+        tile = ((tile[0] + 1) // 2, (tile[1] + 1) // 2)
+    return min(tile[0], grid.width), min(tile[1], grid.height)
 
 
-def _wind_bundle_payloads(
+def _bundle_chunks(
+    variable_ids: tuple[str, ...],
     offsets: list[int],
-    planes_by_offset: dict[int, dict[str, np.ndarray]],
-) -> list[tuple[binformat.PlaneEntry, bytes]]:
-    """Payloads of the two-variable wind bundle, physically interleaved per
-    temporal group (u group, then the same v group) so streaming a wind frame
-    touches two adjacent byte spans."""
-    per_component = {
-        variable_id: _variable_payloads(
-            variable_id, offsets, {offset: planes_by_offset[offset][variable_id] for offset in offsets}
+    codes: dict[int, dict[str, np.ndarray]],
+    tiles: binformat.TileGeometry,
+) -> tuple[
+    list[binformat.VariableEntry],
+    list[binformat.GroupEntry],
+    list[tuple[binformat.ChunkEntry, np.ndarray]],
+]:
+    """The v2 index tables and uncompressed chunks of one bundle.
+
+    Every variable of a bundle shares the file's one axis and therefore its
+    temporal groups, and the chunks come back in the physical order the spec
+    fixes — group, then tile row-major, then variable. That order is what
+    makes the two components of the wind bundle adjacent within a tile, so a
+    single range request still covers a wind frame, while a viewport's tile
+    row and a cell's series each stay one narrow span.
+    """
+    predictors = {
+        VARIABLE_NUMERIC_IDS[variable_id]: (
+            binformat.PREDICTOR_RAW
+            if variable_id in RAW_VARIABLE_IDS
+            else binformat.PREDICTOR_PREVIOUS
         )
-        for variable_id in WIND_COMPONENT_IDS
+        for variable_id in variable_ids
     }
-    payloads: list[tuple[binformat.PlaneEntry, bytes]] = []
-    cursor = 0
-    for group in temporal.group_forecast_hours(offsets):
-        for variable_id in WIND_COMPONENT_IDS:
-            payloads.extend(per_component[variable_id][cursor : cursor + len(group)])
-        cursor += len(group)
-    return payloads
+    planes = {
+        offset: {VARIABLE_NUMERIC_IDS[variable_id]: codes[offset][variable_id] for variable_id in variable_ids}
+        for offset in offsets
+    }
+    return temporal.build_chunks(offsets, planes, tiles, predictors)
 
 
 def _decimate_codes(codes: np.ndarray, grid: GridInfo) -> np.ndarray:
@@ -809,28 +776,43 @@ def _write_variable_bundle(
     variable_id: str,
     output: Path,
     metadata: dict[str, Any],
-    raw_payloads: list[tuple[binformat.PlaneEntry, bytes]],
+    tile: tuple[int, int],
+    tables: tuple[
+        list[binformat.VariableEntry],
+        list[binformat.GroupEntry],
+        list[tuple[binformat.ChunkEntry, np.ndarray]],
+    ],
     zstd_level: int,
     compressor: ThreadPoolExecutor,
 ) -> dict[str, Any]:
     """Compress, write, and read-back-verify one bundle. ``compressor`` is
     shared between concurrently written bundles so the total zstd load stays
     bounded by one machine-sized pool."""
-    LOG.info("compressing %d %s payloads at zstd level %d", len(raw_payloads), variable_id, zstd_level)
+    variables, groups, raw_chunks = tables
+    LOG.info("compressing %d %s chunks at zstd level %d", len(raw_chunks), variable_id, zstd_level)
     compressed = list(
-        compressor.map(lambda payload: zstdcli.compress(payload[1], level=zstd_level), raw_payloads)
+        compressor.map(lambda chunk: zstdcli.compress(chunk[1].tobytes(), level=zstd_level), raw_chunks)
     )
-    planes_out = [
-        binformat.PlanePayload(entry=replace(entry, compressed_length=len(payload)), payload=payload)
-        for (entry, _raw), payload in zip(raw_payloads, compressed)
+    chunks = [
+        binformat.ChunkPayload(entry=replace(entry, compressed_length=len(payload)), payload=payload)
+        for (entry, _stored), payload in zip(raw_chunks, compressed)
     ]
-    binformat.write_bundle(output, metadata, planes_out)
+    binformat.write_bundle_v2(
+        output,
+        metadata,
+        tile_width=tile[0],
+        tile_height=tile[1],
+        variables=variables,
+        groups=groups,
+        chunks=chunks,
+    )
     LOG.info("wrote %s (%.2f MB)", output, output.stat().st_size / 1e6)
 
-    # Read the complete file back and decode every plane before publishing stats.
+    # Read the complete file back and reconstruct every chunk before
+    # publishing stats.
     bundle = binformat.read_bundle(output)
     bundle.verify_all(executor=compressor)
-    LOG.info("verified %d %s planes by full read-back decode", len(bundle.entries), variable_id)
+    LOG.info("verified %d %s chunks by full read-back decode", len(bundle.chunks), variable_id)
 
     bundle_bytes = output.read_bytes()
     return {
@@ -1253,15 +1235,20 @@ def convert_bin(
                 unit_seconds=unit_seconds,
             )
 
+            bundle_variable_ids = WIND_COMPONENT_IDS if wind else (bundle_id,)
+            tile = _bundle_tile(source.tile, bundle_grid, half=bool(suffix))
+            tiles = binformat.TileGeometry(bundle_grid.width, bundle_grid.height, *tile)
+
             def job() -> dict[str, Any]:
-                if wind:
-                    payloads = _wind_bundle_payloads(bundle_offsets, codes)
-                else:
-                    payloads = _variable_payloads(
-                        bundle_id, bundle_offsets, {hour: codes[hour][bundle_id] for hour in bundle_offsets}
-                    )
+                tables = _bundle_chunks(bundle_variable_ids, bundle_offsets, codes, tiles)
                 report = _write_variable_bundle(
-                    bundle_id, output_dir / f"{bundle_id}{suffix}.xue", metadata, payloads, zstd_level, compressor
+                    bundle_id,
+                    output_dir / f"{bundle_id}{suffix}.xue",
+                    metadata,
+                    tile,
+                    tables,
+                    zstd_level,
+                    compressor,
                 )
                 if suffix:
                     report["width"] = bundle_grid.width

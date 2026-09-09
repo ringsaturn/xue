@@ -9,13 +9,13 @@ Two container versions exist, and they differ in exactly one thing: what a
 payload *is*.
 
 - **v1** is plane-major — one payload is one whole plane of one frame.
-  Sections marked *(v1)* below describe it. Every decoder must keep reading
-  it: published runs and showcase cases carry those bytes and are never
-  rebuilt.
+  Sections marked *(v1)* below describe it. Nothing writes it any more, and
+  every decoder must keep reading it: published runs and showcase cases carry
+  those bytes and are never rebuilt.
 - **v2** is tiled — one payload is a **chunk**: one spatial tile of one
   temporal group for one variable, so a reader can fetch just the region it
-  is showing and read one cell's whole series cheaply. It is specified in
-  *[Container v2](#container-v2)*.
+  is showing and read one cell's whole series cheaply. It is what both
+  encoders write, and it is specified in *[Container v2](#container-v2)*.
 
 Everything else is shared and is specified once: the fixed header, the
 metadata JSON and its schema versions, the quantization codebooks, and the
@@ -1003,6 +1003,13 @@ Normative for byte identity between the two encoders:
   `(ceil(tileWidth / 2), ceil(tileHeight / 2))`, so a tile with the same
   number covers the same ground in both tiers. A regional (cropped) file
   tiles its own grid from its own origin with the source's tile size.
+- **The tile is then clamped to the grid**: `min(tileWidth, width)` and
+  `min(tileHeight, height)`. The format requires `1 <= tile <= grid` so that
+  a single-tile file states its grid size exactly, and a regional crop is
+  routinely smaller than its source's tile — a six-degree showcase window is
+  24 x 24 cells against the 0.25-degree grid's 48 x 52. Clamping makes such a
+  file one tile, which is the right answer: there is nothing left to
+  subdivide.
 - Compression is ZSTD at the production level with the content checksum; no
   dictionary.
 

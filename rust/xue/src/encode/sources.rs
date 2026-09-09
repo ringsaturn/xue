@@ -38,6 +38,10 @@ pub struct SourceSpec {
     pub bundle_scalar_ids: &'static [&'static str],
     /// Grid a complete (`require_complete`) build must arrive on.
     pub production_grid: (usize, usize),
+    /// Container v2 tile size as `(width, height)` in grid cells. Mirrors
+    /// `SourceSpec.tile` in `xuebuild/sources.py`; the two tables must agree
+    /// or the encoders stop being byte-identical.
+    pub tile: (usize, usize),
     /// True for a source that is not a forecast at all: one local file holding
     /// a series of observed analyses, read through `observation.rs`.
     pub observation: bool,
@@ -101,6 +105,7 @@ pub const SOURCES: &[SourceSpec] = &[
         optional_at_analysis: &[],
         bundle_scalar_ids: &["tmp2m", "prate"],
         production_grid: (1440, 721),
+        tile: (48, 52),
         observation: false,
     },
     SourceSpec {
@@ -117,6 +122,7 @@ pub const SOURCES: &[SourceSpec] = &[
         optional_at_analysis: &[],
         bundle_scalar_ids: &["tmp2m", "prate"],
         production_grid: (1440, 721),
+        tile: (48, 52),
         observation: false,
     },
     // GFS surface flux files on the native ~13 km T1534 Gaussian grid. Adds
@@ -134,6 +140,7 @@ pub const SOURCES: &[SourceSpec] = &[
         optional_at_analysis: &["prate_ave"],
         bundle_scalar_ids: &["tmp2m", "prate", "dswrf"],
         production_grid: (3072, 1536),
+        tile: (96, 96),
         observation: false,
     },
     // CMA weather radar level-3 mosaic composite reflectivity: an observation
@@ -153,6 +160,7 @@ pub const SOURCES: &[SourceSpec] = &[
         // Tile-grid dependent: the file says what it covers, and nothing here
         // is ever built with require_complete.
         production_grid: (0, 0),
+        tile: (64, 64),
         observation: true,
     },
 ];

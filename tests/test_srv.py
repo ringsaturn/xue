@@ -13,13 +13,14 @@ from pathlib import Path
 
 import numpy as np
 
+from xuebuild import binformat
+
 from xuebuild.binconvert import (
     WIND_COMPONENT_IDS,
     GridInfo,
+    _bundle_chunks,
     _decimate_codes,
     _playback_bandwidth,
-    _variable_payloads,
-    _wind_bundle_payloads,
     build_metadata,
     decode_poster,
     encode_poster,
@@ -191,18 +192,30 @@ class ResolutionLadderTests(unittest.TestCase):
         np.testing.assert_array_equal(half, expected)
         self.assertTrue(half.flags["C_CONTIGUOUS"])
 
-    def test_variable_payloads_share_temporal_structure_across_tiers(self) -> None:
+    def test_chunks_share_temporal_structure_across_tiers(self) -> None:
+        """Both tiers group the axis the same way and cut the same number of
+        tiles, so a viewport keeps its tile rectangle across a tier switch."""
         hours = list(range(13))
-        full = {hour: np.full(70, hour, dtype=np.uint8) for hour in hours}
-        half = {hour: np.full(20, hour, dtype=np.uint8) for hour in hours}
-        for planes in (full, half):
-            temperature = _variable_payloads("tmp2m", hours, planes)
-            self.assertEqual(len(temperature), len(hours))
-            anchors = [entry for entry, _payload in temperature if entry.predictor == 0]
-            self.assertEqual(len(anchors), 3)  # groups 0-5, 6-11, 12
-            precipitation = _variable_payloads("prate", hours, planes)
-            self.assertTrue(all(entry.predictor == 0 for entry, _payload in precipitation))
-            self.assertEqual([entry.group_id for entry, _payload in precipitation], hours)
+        full_grid, half_grid = GridInfo(10, 7, -180.0, 90.0, 36.0, -30.0), None
+        half_grid = full_grid.decimated()
+        tiers = (
+            (full_grid, (4, 3), {hour: {"tmp2m": np.full(70, hour, dtype=np.uint8),
+                                        "prate": np.full(70, hour, dtype=np.uint8)} for hour in hours}),
+            (half_grid, (2, 2), {hour: {"tmp2m": np.full(20, hour, dtype=np.uint8),
+                                        "prate": np.full(20, hour, dtype=np.uint8)} for hour in hours}),
+        )
+        for grid, tile, codes in tiers:
+            tiles = binformat.TileGeometry(grid.width, grid.height, *tile)
+            variables, groups, chunks = _bundle_chunks(("tmp2m",), hours, codes, tiles)
+            # Groups 0-5, 6-11, 12 — the same partition at both resolutions.
+            self.assertEqual([group.frame_count for group in groups], [6, 6, 1])
+            self.assertEqual([group.first_frame for group in groups], [0, 6, 12])
+            self.assertEqual(len(chunks), len(groups) * tiles.count)
+            self.assertEqual([v.predictor for v in variables], [binformat.PREDICTOR_PREVIOUS])
+            # Precipitation is the exception: any temporal residual makes it
+            # bigger, so its chunks stack the codes RAW.
+            rain, _, _ = _bundle_chunks(("prate",), hours, codes, tiles)
+            self.assertEqual([v.predictor for v in rain], [binformat.PREDICTOR_RAW])
 
     def test_playback_bandwidth_hint(self) -> None:
         # 121 frames at 12 fps take ~10.08 s; 12 MB over that is ~9.5 Mbps.
@@ -294,31 +307,44 @@ class WindBundleTests(unittest.TestCase):
             for hour in self.HOURS
         }
 
-    def test_payloads_interleave_components_per_group(self) -> None:
-        payloads = _wind_bundle_payloads(self.HOURS, self._planes())
-        self.assertEqual(len(payloads), 2 * len(self.HOURS))
-        ids = [entry.variable_id for entry, _payload in payloads]
-        self.assertEqual(ids, [3] * 6 + [4] * 6 + [3] * 6 + [4] * 6 + [3, 4])
-        # Each component covers every hour exactly once, with the same
-        # anchor+residual structure as the temperature groups.
-        for numeric_id, component in ((3, "ugrd10m"), (4, "vgrd10m")):
-            hours = sorted(entry.frame_offset for entry, _payload in payloads if entry.variable_id == numeric_id)
-            self.assertEqual(hours, self.HOURS)
-        reference = [entry.predictor for entry, _payload in _variable_payloads("tmp2m", self.HOURS, {
-            hour: planes["ugrd10m"] for hour, planes in self._planes().items()
-        })]
-        u_predictors = [entry.predictor for entry, _payload in payloads if entry.variable_id == 3]
-        self.assertEqual(u_predictors, reference)
+    TILE = (4, 4)
+
+    def _tiles(self) -> "binformat.TileGeometry":
+        return binformat.TileGeometry(8, 8, *self.TILE)
+
+    def test_chunks_interleave_components_within_a_tile(self) -> None:
+        """v1 interleaved a u group with a v group; v2 goes one level finer,
+        putting u and v of the *same tile* next to each other, so a single
+        range still covers a wind frame and one range covers a wind series."""
+        tiles = self._tiles()
+        variables, groups, chunks = _bundle_chunks(
+            WIND_COMPONENT_IDS, self.HOURS, self._planes(), tiles
+        )
+        self.assertEqual([v.variable_id for v in variables], [3, 4])
+        self.assertEqual([group.frame_count for group in groups], [6, 6, 1])
+        self.assertEqual(len(chunks), len(groups) * tiles.count * 2)
+        # Physical order: group, then tile row-major, then variable — so the
+        # chunk at an even position is u and its immediate neighbour is v of
+        # the same tile and group.
+        self.assertEqual(
+            [position % 2 for position in range(len(chunks))],
+            [variables.index(v) for _ in range(len(chunks) // 2) for v in variables],
+        )
+        # Both components use the same predictor and the same partition.
+        self.assertEqual({v.predictor for v in variables}, {binformat.PREDICTOR_PREVIOUS})
 
     def test_two_variable_bundle_round_trips(self) -> None:
-        from xuebuild import binformat, zstdcli
         from dataclasses import replace
 
+        from xuebuild import zstdcli
+
         planes = self._planes()
-        payloads = [
-            binformat.PlanePayload(replace(entry, compressed_length=len(compressed)), compressed)
-            for entry, raw in _wind_bundle_payloads(self.HOURS, planes)
-            for compressed in (zstdcli.compress(raw, level=3),)
+        tiles = self._tiles()
+        variables, groups, raw = _bundle_chunks(WIND_COMPONENT_IDS, self.HOURS, planes, tiles)
+        chunks = [
+            binformat.ChunkPayload(replace(entry, compressed_length=len(compressed)), compressed)
+            for entry, stored in raw
+            for compressed in (zstdcli.compress(stored.tobytes(), level=3),)
         ]
         grid = GridInfo(8, 8, -180.0, 90.0, 45.0, -25.0)
         metadata = build_metadata(
@@ -326,13 +352,31 @@ class WindBundleTests(unittest.TestCase):
         )
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "wind10m.xue"
-            binformat.write_bundle(path, metadata, payloads)
+            binformat.write_bundle_v2(
+                path,
+                metadata,
+                tile_width=self.TILE[0],
+                tile_height=self.TILE[1],
+                variables=variables,
+                groups=groups,
+                chunks=chunks,
+            )
             bundle = binformat.read_bundle(path)
             bundle.verify_all()
             self.assertEqual(sorted(bundle.variable_ids.values()), ["ugrd10m", "vgrd10m"])
             for hour in self.HOURS:
                 np.testing.assert_array_equal(bundle.decode_plane(3, hour), planes[hour]["ugrd10m"])
                 np.testing.assert_array_equal(bundle.decode_plane(4, hour), planes[hour]["vgrd10m"])
+            # A wind series is one chunk per group of one tile, per component,
+            # and those two chunks are adjacent bytes.
+            for column, row in ((0, 0), (7, 7), (5, 2)):
+                for numeric_id, component in ((3, "ugrd10m"), (4, "vgrd10m")):
+                    expected = [int(planes[hour][component][row * 8 + column]) for hour in self.HOURS]
+                    self.assertEqual(bundle.decode_series(numeric_id, column, row).tolist(), expected)
+            tile = bundle.tiles.tile_of(0, 0)
+            u_span = bundle.chunk_span(bundle.chunk_position(0, tile, 3))
+            v_span = bundle.chunk_span(bundle.chunk_position(0, tile, 4))
+            self.assertEqual(u_span[1], v_span[0])
 
     def test_manifest_accepts_optional_wind_bundle_in_order(self) -> None:
         def bundles(*, wind: bool) -> list[dict[str, object]]:

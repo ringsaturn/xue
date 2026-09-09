@@ -18,10 +18,10 @@ from xuebuild import binformat, temporal, zstdcli
 from xuebuild.binconvert import (
     GridInfo,
     WIND_COMPONENT_IDS,
+    _bundle_chunks,
+    _bundle_tile,
     _decimate_codes,
     _playback_bandwidth,
-    _variable_payloads,
-    _wind_bundle_payloads,
     build_metadata,
     encode_poster,
 )
@@ -50,6 +50,42 @@ SHOWCASE_GRID = GridInfo(
     width=40, height=30, first_longitude=110.0, first_latitude=35.0, longitude_step=0.5, latitude_step=-0.5
 )
 
+
+
+def write_v2_bundle(
+    path: Path,
+    metadata: dict,
+    grid: GridInfo,
+    variable_ids: tuple[str, ...],
+    hours: list[int],
+    planes_by_hour: dict[int, dict[str, np.ndarray]],
+    *,
+    level: int,
+    half: bool = False,
+    source=None,
+) -> bytes:
+    """One synthetic container v2 bundle, cut and packed the way the real
+    encoder cuts and packs — same tile policy, same grouping, same physical
+    order — so what Playwright drives is what production serves."""
+    tile = _bundle_tile((source or source_spec("gfs")).tile, grid, half=half)
+    tiles = binformat.TileGeometry(grid.width, grid.height, *tile)
+    variables, groups, raw = _bundle_chunks(variable_ids, hours, planes_by_hour, tiles)
+    chunks = [
+        binformat.ChunkPayload(replace(entry, compressed_length=len(compressed)), compressed)
+        for entry, stored in raw
+        for compressed in (zstdcli.compress(stored.tobytes(), level=level),)
+    ]
+    binformat.write_bundle_v2(
+        path,
+        metadata,
+        tile_width=tile[0],
+        tile_height=tile[1],
+        variables=variables,
+        groups=groups,
+        chunks=chunks,
+    )
+    binformat.read_bundle(path).verify_all()
+    return path.read_bytes()
 
 def _temperature_plane(hour: int) -> np.ndarray:
     longitude = np.linspace(-180, 177.5, WIDTH)
@@ -118,38 +154,6 @@ def prepare_web_fixture() -> Path:
     )
 
     level = 3  # keep fixture generation fast; the contract is level-independent
-    temperature_planes: list[binformat.PlanePayload] = []
-    for group_id, group in enumerate(temporal.group_forecast_hours(HOURS)):
-        anchor = temporal.anchor_hour(group)
-        group_planes = {hour: _temperature_plane(hour) for hour in group}
-        for hour in [anchor, *[hour for hour in group if hour != anchor]]:
-            if hour == anchor:
-                payload = zstdcli.compress(group_planes[hour].tobytes(), level=level)
-                temperature_planes.append(
-                    binformat.PlanePayload(
-                        _entry(1, binformat.PREDICTOR_RAW, hour, binformat.NO_DEPENDENCY, group_id, group_planes[hour], payload),
-                        payload,
-                    )
-                )
-            else:
-                residual = temporal.encode_residual(group_planes[hour], group_planes[anchor])
-                payload = zstdcli.compress(residual.tobytes(), level=level)
-                temperature_planes.append(
-                    binformat.PlanePayload(
-                        _entry(1, binformat.PREDICTOR_ANCHOR, hour, anchor, group_id, group_planes[hour], payload),
-                        payload,
-                    )
-                )
-    precipitation_planes: list[binformat.PlanePayload] = []
-    for hour in HOURS:
-        plane = _precipitation_plane(hour)
-        payload = zstdcli.compress(plane.tobytes(), level=level)
-        precipitation_planes.append(
-            binformat.PlanePayload(
-                _entry(2, binformat.PREDICTOR_RAW, hour, binformat.NO_DEPENDENCY, hour, plane, payload),
-                payload,
-            )
-        )
 
     # Layout mirrors production: the manifest lives
     # inside the run directory (bundle paths are manifest-relative) and the
@@ -158,26 +162,28 @@ def prepare_web_fixture() -> Path:
     first_planes = {"tmp2m": _temperature_plane(HOURS[0]), "prate": _precipitation_plane(HOURS[0])}
     plane_builders = {"tmp2m": _temperature_plane, "prate": _precipitation_plane}
     half_grid = grid.decimated()
-    for variable_id, planes in (("tmp2m", temperature_planes), ("prate", precipitation_planes)):
+    for variable_id in ("tmp2m", "prate"):
         metadata = build_metadata(RUN_TIME, HOURS, grid, "quality", (variable_id,))
         bundle_path = WEB_FIXTURE_ROOT / f"{variable_id}.xue"
-        binformat.write_bundle(bundle_path, metadata, planes)
-        bundle = binformat.read_bundle(bundle_path)
-        bundle.verify_all()
-        data = bundle_path.read_bytes()
-        # Half-resolution variant, decimated from the same synthetic codes.
-        half_planes = {hour: _decimate_codes(plane_builders[variable_id](hour), grid) for hour in HOURS}
-        half_payloads = [
-            binformat.PlanePayload(replace(entry, compressed_length=len(compressed)), compressed)
-            for entry, raw in _variable_payloads(variable_id, HOURS, half_planes)
-            for compressed in (zstdcli.compress(raw, level=level),)
-        ]
-        half_path = WEB_FIXTURE_ROOT / f"{variable_id}.half.xue"
-        binformat.write_bundle(
-            half_path, build_metadata(RUN_TIME, HOURS, half_grid, "quality", (variable_id,)), half_payloads
+        planes_by_hour = {hour: {variable_id: plane_builders[variable_id](hour)} for hour in HOURS}
+        data = write_v2_bundle(
+            bundle_path, metadata, grid, (variable_id,), HOURS, planes_by_hour, level=level
         )
-        binformat.read_bundle(half_path).verify_all()
-        half_data = half_path.read_bytes()
+        # Half-resolution variant, decimated from the same synthetic codes.
+        half_planes = {
+            hour: {variable_id: _decimate_codes(plane_builders[variable_id](hour), grid)} for hour in HOURS
+        }
+        half_path = WEB_FIXTURE_ROOT / f"{variable_id}.half.xue"
+        half_data = write_v2_bundle(
+            half_path,
+            build_metadata(RUN_TIME, HOURS, half_grid, "quality", (variable_id,)),
+            half_grid,
+            (variable_id,),
+            HOURS,
+            half_planes,
+            level=level,
+            half=True,
+        )
         poster_payload, poster_grid = encode_poster(first_planes[variable_id], grid)
         poster_path = WEB_FIXTURE_ROOT / f"{variable_id}.poster.bin"
         poster_path.write_bytes(poster_payload)
@@ -214,30 +220,31 @@ def prepare_web_fixture() -> Path:
     wind_planes_by_hour = {
         hour: {component: _wind_plane(hour, component) for component in WIND_COMPONENT_IDS} for hour in HOURS
     }
-    wind_payloads = [
-        binformat.PlanePayload(replace(entry, compressed_length=len(compressed)), compressed)
-        for entry, raw in _wind_bundle_payloads(HOURS, wind_planes_by_hour)
-        for compressed in (zstdcli.compress(raw, level=level3),)
-    ]
     wind_path = WEB_FIXTURE_ROOT / "wind10m.xue"
-    binformat.write_bundle(wind_path, build_metadata(RUN_TIME, HOURS, grid, "quality", WIND_COMPONENT_IDS), wind_payloads)
-    binformat.read_bundle(wind_path).verify_all()
-    wind_data = wind_path.read_bytes()
+    wind_data = write_v2_bundle(
+        wind_path,
+        build_metadata(RUN_TIME, HOURS, grid, "quality", WIND_COMPONENT_IDS),
+        grid,
+        WIND_COMPONENT_IDS,
+        HOURS,
+        wind_planes_by_hour,
+        level=level3,
+    )
     wind_half_planes = {
         hour: {component: _decimate_codes(planes[component], grid) for component in WIND_COMPONENT_IDS}
         for hour, planes in wind_planes_by_hour.items()
     }
-    wind_half_payloads = [
-        binformat.PlanePayload(replace(entry, compressed_length=len(compressed)), compressed)
-        for entry, raw in _wind_bundle_payloads(HOURS, wind_half_planes)
-        for compressed in (zstdcli.compress(raw, level=level3),)
-    ]
     wind_half_path = WEB_FIXTURE_ROOT / "wind10m.half.xue"
-    binformat.write_bundle(
-        wind_half_path, build_metadata(RUN_TIME, HOURS, half_grid, "quality", WIND_COMPONENT_IDS), wind_half_payloads
+    wind_half_data = write_v2_bundle(
+        wind_half_path,
+        build_metadata(RUN_TIME, HOURS, half_grid, "quality", WIND_COMPONENT_IDS),
+        half_grid,
+        WIND_COMPONENT_IDS,
+        HOURS,
+        wind_half_planes,
+        level=level3,
+        half=True,
     )
-    binformat.read_bundle(wind_half_path).verify_all()
-    wind_half_data = wind_half_path.read_bytes()
     bundles.append(
         {
             "variable": "wind10m",
@@ -288,19 +295,20 @@ def _prepare_ecmwf_fixture(grid: GridInfo, level: int) -> None:
         ("tmp2m", _temperature_plane, ECMWF_HOURS),
         ("prate", _precipitation_plane, ECMWF_HOURS[1:]),
     ):
-        planes_by_hour = {hour: builder(hour) for hour in bundle_hours}
-        payloads = [
-            binformat.PlanePayload(replace(entry, compressed_length=len(compressed)), compressed)
-            for entry, raw in _variable_payloads(variable_id, bundle_hours, planes_by_hour)
-            for compressed in (zstdcli.compress(raw, level=level),)
-        ]
+        planes_by_hour = {hour: {variable_id: builder(hour)} for hour in bundle_hours}
         metadata = build_metadata(
             ECMWF_RUN_TIME, bundle_hours, grid, "quality", (variable_id,), source=source_spec("ecmwf")
         )
-        bundle_path = ecmwf_root / f"{variable_id}.xue"
-        binformat.write_bundle(bundle_path, metadata, payloads)
-        binformat.read_bundle(bundle_path).verify_all()
-        data = bundle_path.read_bytes()
+        data = write_v2_bundle(
+            ecmwf_root / f"{variable_id}.xue",
+            metadata,
+            grid,
+            (variable_id,),
+            bundle_hours,
+            planes_by_hour,
+            level=level,
+            source=source_spec("ecmwf"),
+        )
         bundles.append(
             {
                 "variable": variable_id,
@@ -337,19 +345,20 @@ def _prepare_sflux_fixture(grid: GridInfo, level: int) -> None:
         ("prate", _precipitation_plane, HOURS[1:]),
         ("dswrf", _solar_plane, HOURS),
     ):
-        planes_by_hour = {hour: builder(hour) for hour in bundle_hours}
-        payloads = [
-            binformat.PlanePayload(replace(entry, compressed_length=len(compressed)), compressed)
-            for entry, raw in _variable_payloads(variable_id, bundle_hours, planes_by_hour)
-            for compressed in (zstdcli.compress(raw, level=level),)
-        ]
+        planes_by_hour = {hour: {variable_id: builder(hour)} for hour in bundle_hours}
         metadata = build_metadata(
             SFLUX_RUN_TIME, bundle_hours, grid, "quality", (variable_id,), source=source_spec("sflux")
         )
-        bundle_path = sflux_root / f"{variable_id}.xue"
-        binformat.write_bundle(bundle_path, metadata, payloads)
-        binformat.read_bundle(bundle_path).verify_all()
-        data = bundle_path.read_bytes()
+        data = write_v2_bundle(
+            sflux_root / f"{variable_id}.xue",
+            metadata,
+            grid,
+            (variable_id,),
+            bundle_hours,
+            planes_by_hour,
+            level=level,
+            source=source_spec("sflux"),
+        )
         bundles.append(
             {
                 "variable": variable_id,
@@ -401,21 +410,23 @@ def _prepare_showcase_fixture(level: int) -> None:
     case_root.mkdir(parents=True, exist_ok=True)
     bundles = []
     for variable_id, builder in (("tmp2m", _showcase_temperature_plane), ("prate", _showcase_precipitation_plane)):
-        planes_by_hour = {hour: builder(hour) for hour in SHOWCASE_HOURS}
-        payloads = [
-            binformat.PlanePayload(replace(entry, compressed_length=len(compressed)), compressed)
-            for entry, raw in _variable_payloads(variable_id, SHOWCASE_HOURS, planes_by_hour)
-            for compressed in (zstdcli.compress(raw, level=level),)
-        ]
+        planes_by_hour = {hour: {variable_id: builder(hour)} for hour in SHOWCASE_HOURS}
         metadata = build_metadata(
             SHOWCASE_RUN_TIME, SHOWCASE_HOURS, SHOWCASE_GRID, "quality", (variable_id,)
         )
-        bundle_path = case_root / f"{variable_id}.xue"
-        binformat.write_bundle(bundle_path, metadata, payloads)
-        binformat.read_bundle(bundle_path).verify_all()
-        data = bundle_path.read_bytes()
+        data = write_v2_bundle(
+            case_root / f"{variable_id}.xue",
+            metadata,
+            SHOWCASE_GRID,
+            (variable_id,),
+            SHOWCASE_HOURS,
+            planes_by_hour,
+            level=level,
+        )
 
-        poster_payload, poster_grid = encode_poster(planes_by_hour[SHOWCASE_HOURS[0]], SHOWCASE_GRID)
+        poster_payload, poster_grid = encode_poster(
+            planes_by_hour[SHOWCASE_HOURS[0]][variable_id], SHOWCASE_GRID
+        )
         (case_root / f"{variable_id}.poster.bin").write_bytes(poster_payload)
         bundles.append(
             {
