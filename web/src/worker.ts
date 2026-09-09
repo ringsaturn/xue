@@ -23,9 +23,22 @@
  *
  * Decoded planes are returned as transferable ArrayBuffers; the main thread
  * may send buffers back for reuse through the `recycle` message.
+ *
+ * On a container v2 bundle two more things are addressable, and the `ready`
+ * message's `tileGeometry` is how the main thread learns they are (it is null
+ * on a v1 file, and on the video path, which has no tiles):
+ *
+ * - `decode` and `prefetch-window` may carry a list of tile rectangles, and
+ *   then only those tiles are fetched and reconstructed. The `frame` reply
+ *   echoes them back: everything outside is whatever the decoder's plane
+ *   buffer already held, so the renderer must clip to them.
+ * - `series` reads one grid cell across the whole axis and replies with one
+ *   code per frame. It costs one chunk per temporal group — a few dozen KB
+ *   and one range request per group — instead of decoding every plane.
  */
 
 import { frameOffsets, type BundleTimeAxis } from "./manifest";
+import { flattenTileRects, type TileRect } from "./tiles";
 import wasmInit, { WasmBundle, WasmStreamingBundle } from "./wasm/xue";
 import wasmUrl from "./wasm/xue_bg.wasm?url";
 
@@ -49,6 +62,22 @@ interface DecodeMessage {
   generation: number;
   variableId: number;
   frameOffset: number;
+  /** Tiles to decode, or absent for the whole plane. Cells outside them keep
+   * whatever the decoder's buffer held, so the reply echoes the rectangles
+   * back as the plane's coverage. */
+  tiles?: TileRect[];
+}
+
+/** One cell read across the whole axis: one chunk per temporal group of the
+ * single tile holding it, which is what makes this affordable on a v2 file
+ * and impossible on a v1 one. */
+interface SeriesMessage {
+  type: "series";
+  requestId: number;
+  generation: number;
+  variableId: number;
+  column: number;
+  row: number;
 }
 
 interface RecycleMessage {
@@ -66,12 +95,15 @@ interface PrefetchWindowMessage {
   hours: number[];
   /** Maximum concurrent background range fetches. */
   concurrency: number;
+  /** Tiles to keep resident, or absent for every tile. */
+  tiles?: TileRect[];
 }
 
 type WorkerRequest =
   | InitMessage
   | InitStreamMessage
   | DecodeMessage
+  | SeriesMessage
   | RecycleMessage
   | ClearMessage
   | PrefetchWindowMessage;
@@ -91,6 +123,8 @@ const recycled: ArrayBuffer[] = [];
 /** Windowed prefetch state (see module docs). */
 let windowOffsets: number[] = [];
 let windowConcurrency = 0;
+/** Tiles the window covers, or null for the whole plane. */
+let windowTiles: TileRect[] | null = null;
 let allOffsets: number[] = [];
 /** Every variable in the bundle; the wind bundle carries two. */
 let bundleNumericIds: number[] = [];
@@ -163,6 +197,26 @@ function ensureSpan(start: number, end: number, forDecode: boolean): Promise<voi
   return task;
 }
 
+/** The byte spans a frame still needs: the whole temporal group, or only the
+ * tiles the main thread narrowed the view to. A v1 bundle has no tiles, so
+ * the main thread never sends any and this stays the group span it always
+ * was. */
+function missingSpansFor(
+  session: WasmStreamingBundle,
+  numericId: number,
+  hour: number,
+  tiles: TileRect[] | null,
+): [number, number][] {
+  if (!tiles) {
+    const span = session.missingGroupSpan(numericId, hour);
+    return span ? [[span[0]!, span[1]!]] : [];
+  }
+  const flat = session.missingTileSpans(numericId, hour, flattenTileRects(tiles));
+  const spans: [number, number][] = [];
+  for (let index = 0; index + 1 < flat.length; index += 2) spans.push([flat[index]!, flat[index + 1]!]);
+  return spans;
+}
+
 /** Fill the prefetch window: keep up to `windowConcurrency` background range
  * fetches in flight for the window's missing groups, pausing entirely while
  * decode-triggered fetches are active so interactive scrubbing always wins
@@ -176,20 +230,20 @@ function pumpPrefetch(): void {
   let missing = false;
   for (const hour of windowOffsets) {
     for (const numericId of bundleNumericIds) {
-      if (spanFetches.size >= windowConcurrency) return;
-      const span = session.missingGroupSpan(numericId, hour);
-      if (!span) continue;
-      if (spanFetches.has(span[0]!)) continue;
-      missing = true;
-      void ensureSpan(span[0]!, span[1]!, false).catch(() => {
-        prefetchFailures += 1;
-        if (prefetchFailures < PREFETCH_RETRIES && !retryTimer) {
-          retryTimer = setTimeout(() => {
-            retryTimer = null;
-            pumpPrefetch();
-          }, 1000 * prefetchFailures);
-        }
-      });
+      for (const [start, end] of missingSpansFor(session, numericId, hour, windowTiles)) {
+        if (spanFetches.size >= windowConcurrency) return;
+        if (spanFetches.has(start)) continue;
+        missing = true;
+        void ensureSpan(start, end, false).catch(() => {
+          prefetchFailures += 1;
+          if (prefetchFailures < PREFETCH_RETRIES && !retryTimer) {
+            retryTimer = setTimeout(() => {
+              retryTimer = null;
+              pumpPrefetch();
+            }, 1000 * prefetchFailures);
+          }
+        });
+      }
     }
   }
   if (!missing && spanFetches.size === 0 && !residentAnnounced) {
@@ -227,6 +281,7 @@ async function initStream(message: InitStreamMessage): Promise<void> {
     type: "ready",
     metadataJson: session.metadataJson(),
     planeLength: session.planeLength(),
+    tileGeometry: session.tileGeometry() ?? null,
     openMs: performance.now() - started,
   });
   postProgress();
@@ -247,9 +302,28 @@ async function initStream(message: InitStreamMessage): Promise<void> {
 async function decodeStreaming(message: DecodeMessage): Promise<Uint8Array> {
   const session = streaming;
   if (!session) throw new Error("bundle is not initialized");
-  const span = session.missingGroupSpan(message.variableId, message.frameOffset);
-  if (span) await ensureSpan(span[0]!, span[1]!, true);
-  return session.decodeFrame(message.variableId, message.frameOffset);
+  const tiles = message.tiles ?? null;
+  const spans = missingSpansFor(session, message.variableId, message.frameOffset, tiles);
+  await Promise.all(spans.map(([start, end]) => ensureSpan(start, end, true)));
+  return tiles
+    ? session.decodeFrameTiles(message.variableId, message.frameOffset, flattenTileRects(tiles))
+    : session.decodeFrame(message.variableId, message.frameOffset);
+}
+
+/** One cell across the whole axis. Streaming fetches one chunk per temporal
+ * group first — a few dozen KB and one range per group, rather than the whole
+ * bundle a plane-major file would have needed. */
+async function decodeSeries(message: SeriesMessage): Promise<Uint8Array> {
+  if (bundle) return bundle.decodeSeries(message.variableId, message.column, message.row);
+  const session = streaming;
+  if (!session) throw new Error("bundle is not initialized");
+  const flat = session.missingSeriesSpans(message.variableId, message.column, message.row);
+  const spans: Promise<void>[] = [];
+  for (let index = 0; index + 1 < flat.length; index += 2) {
+    spans.push(ensureSpan(flat[index]!, flat[index + 1]!, true));
+  }
+  await Promise.all(spans);
+  return session.decodeSeries(message.variableId, message.column, message.row);
 }
 
 self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
@@ -266,6 +340,7 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         type: "ready",
         metadataJson: bundle.metadataJson(),
         planeLength: bundle.planeLength(),
+        tileGeometry: bundle.tileGeometry() ?? null,
         openMs: performance.now() - started,
       });
       return;
@@ -278,7 +353,9 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       if (!bundle && !streaming) throw new Error("bundle is not initialized");
       const started = performance.now();
       const plane = bundle
-        ? bundle.decodeFrame(message.variableId, message.frameOffset)
+        ? message.tiles
+          ? bundle.decodeFrameTiles(message.variableId, message.frameOffset, flattenTileRects(message.tiles))
+          : bundle.decodeFrame(message.variableId, message.frameOffset)
         : await decodeStreaming(message);
       let buffer = recycled.pop();
       if (!buffer || buffer.byteLength !== plane.byteLength) buffer = new ArrayBuffer(plane.byteLength);
@@ -291,6 +368,28 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
           variableId: message.variableId,
           frameOffset: message.frameOffset,
           decodeMs: performance.now() - started,
+          // The plane outside these rectangles is whatever the decoder's
+          // buffer held; absent means the whole plane is valid.
+          tiles: message.tiles,
+          buffer,
+        },
+        [buffer],
+      );
+      return;
+    }
+    if (message.type === "series") {
+      if (!bundle && !streaming) throw new Error("bundle is not initialized");
+      const codes = await decodeSeries(message);
+      const buffer = new ArrayBuffer(codes.byteLength);
+      new Uint8Array(buffer).set(codes);
+      post(
+        {
+          type: "series",
+          requestId: message.requestId,
+          generation: message.generation,
+          variableId: message.variableId,
+          column: message.column,
+          row: message.row,
           buffer,
         },
         [buffer],
@@ -304,6 +403,7 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
     if (message.type === "prefetch-window") {
       windowOffsets = message.hours;
       windowConcurrency = message.concurrency;
+      windowTiles = message.tiles ?? null;
       prefetchFailures = 0;
       pumpPrefetch();
       return;
@@ -315,7 +415,8 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
   } catch (error) {
     post({
       type: "error",
-      requestId: message.type === "decode" ? message.requestId : undefined,
+      requestId:
+        message.type === "decode" || message.type === "series" ? message.requestId : undefined,
       message: error instanceof Error ? error.message : String(error),
     });
   }

@@ -31,7 +31,7 @@ export interface ProbeCell {
 /** The geographic grid a bundle declares. Metadata carries these beside
  * width/height (docs/format.md); the defaults are the global quarter-degree
  * grid, matching ForecastLayer.configureGrid. */
-interface GeoGrid {
+export interface GeoGrid {
   width: number;
   height: number;
   firstLongitude: number;
@@ -43,7 +43,7 @@ interface GeoGrid {
   wraps: boolean;
 }
 
-function geoGrid(metadata: BundleMetadata): GeoGrid {
+export function geoGrid(metadata: BundleMetadata): GeoGrid {
   const grid = metadata.grid as unknown as Record<string, number | boolean | undefined>;
   const width = (grid.width as number) ?? 0;
   const longitudeStep = (grid.longitudeStep as number) ?? 0.25;
@@ -59,7 +59,7 @@ function geoGrid(metadata: BundleMetadata): GeoGrid {
 }
 
 /** Positive remainder, the way GLSL's mod() and the spec's degree wrap work. */
-function wrap(value: number, modulus: number): number {
+export function wrap(value: number, modulus: number): number {
   return ((value % modulus) + modulus) % modulus;
 }
 
