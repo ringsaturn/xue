@@ -761,7 +761,9 @@ test("?lang=zh renders the Chinese UI and the toggle switches back", async ({ pa
   const toggle = page.locator("#lang-toggle");
   await expect(toggle).toHaveText("EN");
   await toggle.click();
-  await expect(page).toHaveURL(/lang=en/);
+  // The choice lives on this device, not in the link: the param the page
+  // opened with goes, so a copied URL opens in each reader's own language.
+  await expect(page).not.toHaveURL(/lang=/);
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
   await expect(tempLabel).toHaveText("2M");
   await expect(toggle).toHaveText("中");

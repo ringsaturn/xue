@@ -1,6 +1,8 @@
 /** UI locale support: Chinese and English. The locale is fixed per page load —
- * detection order is the `?lang=` URL param, then the persisted toggle choice,
- * then the browser language — and the basemap label language follows it.
+ * detection order is the `?lang=` URL param, then the choice the toggle
+ * stored on this device, then the browser language — and the basemap label
+ * language follows it. Only the URL param is ever explicit; a shared link
+ * carries none unless written by hand, so it opens in each reader's own.
  * Technical diagnostics (thrown Error messages, the worker, debug info) stay
  * English in both locales; only human-facing UI copy lives here. */
 
@@ -263,14 +265,22 @@ export function applyStaticMessages(): void {
 
 /** Persists the other locale and reloads onto it (the URL keeps model/type,
  * and the explicit ?lang= makes the resulting page shareable as-is). */
+/** Switch languages: remember the choice on this device and reload onto it.
+ * The choice is deliberately not written into the URL — a link copied
+ * afterwards would carry it to everyone it is shared with, overriding their
+ * browser's language — and an explicit `?lang=` already on the page is
+ * dropped for the same reason, so the reload lands on the stored choice. */
 export function toggleLocale(): void {
   const next: Locale = locale === "zh" ? "en" : "zh";
   try {
     localStorage.setItem(STORAGE_KEY, next);
   } catch {
-    // The URL param below still carries the choice.
+    // Without storage the choice lasts this page load only; the reload
+    // below still shows it, since detection falls back to the browser.
   }
   const params = new URLSearchParams(window.location.search);
-  params.set("lang", next);
-  window.location.search = `?${params.toString()}`;
+  params.delete("lang");
+  const search = params.size > 0 ? `?${params.toString()}` : "";
+  if (search === window.location.search) window.location.reload();
+  else window.location.search = search;
 }
