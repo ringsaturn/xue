@@ -1,9 +1,18 @@
-"""Xue v1 container serialization, validation, and reference decoding.
+"""Xue container serialization, validation, and reference decoding.
 
 This module is the Python source of truth for the binary layout defined in
 docs/format.md. The writer produces complete files, and ``Bundle`` is the
 reference decoder used by ``verify-bin`` and by cross-language golden tests
 against the Rust implementation.
+
+Two container versions live here. **v1** is plane-major: one payload is one
+whole plane of one frame. **v2** is what the encoder writes now: a payload is
+a *chunk* — one spatial tile of one temporal group for one variable — laid
+out group by group, so a reader can fetch only the tiles a viewport covers
+and read one cell's series by fetching one chunk per group. The metadata JSON,
+the codebooks and the modulo-256 residual arithmetic are shared; only the
+payload's granularity and the index describing it differ. Both versions are
+readable, and only v2 is written.
 """
 
 from __future__ import annotations
@@ -25,6 +34,10 @@ from .errors import BundleError
 
 MAGIC = b"XUE\0\0\0\0\0"
 VERSION = 1
+"""The plane-major container. Still read; no longer written."""
+VERSION_V2 = 2
+"""The tiled container: a payload is a chunk, not a plane."""
+CONTAINER_VERSIONS = (VERSION, VERSION_V2)
 HEADER_SIZE = 80
 INDEX_MAGIC = b"IDX1"
 INDEX_HEADER_SIZE = 16
@@ -32,11 +45,23 @@ ENTRY_SIZE = 40
 INDEX_VERSION = 1
 NO_DEPENDENCY = 0xFFFF
 
+INDEX_MAGIC_V2 = b"IDX2"
+INDEX_HEADER_SIZE_V2 = 32
+INDEX_VERSION_V2 = 2
+VARIABLE_ENTRY_SIZE = 4
+GROUP_ENTRY_SIZE = 4
+CHUNK_ENTRY_SIZE = 8
+MAX_GROUP_LENGTH = 255
+"""A group's frameCount is a u8, so a group holds at most 255 frames."""
+
 PREDICTOR_RAW = 0
 PREDICTOR_ANCHOR = 1
 PREDICTOR_PREVIOUS = 2
 PREDICTOR_ZERO = 3
 PREDICTORS = {PREDICTOR_RAW, PREDICTOR_ANCHOR, PREDICTOR_PREVIOUS, PREDICTOR_ZERO}
+PREDICTORS_V2 = {PREDICTOR_RAW, PREDICTOR_PREVIOUS}
+"""A v2 chunk is decompressed whole, so an anchor buys no random access and
+ANCHOR/ZERO are not valid: one chunk has exactly one encoding."""
 
 COMPRESSION_NONE = 0
 COMPRESSION_ZSTD = 1
@@ -74,6 +99,11 @@ _HEADER_STRUCT = struct.Struct("<8sHHIQQQQQQQQ")
 _INDEX_HEADER_STRUCT = struct.Struct("<4sHHII")
 _ENTRY_STRUCT = struct.Struct("<BBBBHHHHIQIIBB6s")
 
+_INDEX_HEADER_V2_STRUCT = struct.Struct("<4sHHHHHBBIIQ")
+_VARIABLE_ENTRY_STRUCT = struct.Struct("<BBH")
+_GROUP_ENTRY_STRUCT = struct.Struct("<HBB")
+_CHUNK_ENTRY_STRUCT = struct.Struct("<II")
+
 
 def align8(value: int) -> int:
     return (value + 7) // 8 * 8
@@ -81,6 +111,133 @@ def align8(value: int) -> int:
 
 def crc32_plane(plane: bytes | np.ndarray) -> int:
     return zlib.crc32(bytes(plane)) & 0xFFFFFFFF
+
+
+@dataclass(frozen=True)
+class TileGeometry:
+    """How a grid is cut into tiles: derived arithmetic, never stored.
+
+    Tiles start at the grid's first cell and are laid out row-major; the last
+    column and the last row are clipped to the grid, so a tile size need not
+    divide the grid (721 rows have no tidy power of two). A tile is cells,
+    never degrees — its geographic footprint follows from the metadata grid,
+    and the horizontal wrap of a global grid belongs to the grid, not to any
+    tile.
+    """
+
+    width: int
+    height: int
+    tile_width: int
+    tile_height: int
+
+    def __post_init__(self) -> None:
+        if not 1 <= self.tile_width <= self.width or not 1 <= self.tile_height <= self.height:
+            raise BundleError("tile size must be between 1 and the grid dimensions")
+
+    @property
+    def columns(self) -> int:
+        return (self.width + self.tile_width - 1) // self.tile_width
+
+    @property
+    def rows(self) -> int:
+        return (self.height + self.tile_height - 1) // self.tile_height
+
+    @property
+    def count(self) -> int:
+        return self.columns * self.rows
+
+    def origin(self, tile: int) -> tuple[int, int]:
+        """The (row, column) of a tile's north-west cell in the grid."""
+        return (tile // self.columns) * self.tile_height, (tile % self.columns) * self.tile_width
+
+    def shape(self, tile: int) -> tuple[int, int]:
+        """The clipped (height, width) of a tile in cells."""
+        row, column = self.origin(tile)
+        return min(self.tile_height, self.height - row), min(self.tile_width, self.width - column)
+
+    def tile_of(self, row: int, column: int) -> int:
+        """The tile containing a grid cell."""
+        if not 0 <= row < self.height or not 0 <= column < self.width:
+            raise BundleError("cell is outside the grid")
+        return (row // self.tile_height) * self.columns + column // self.tile_width
+
+    def tiles_in_rect(self, row: int, column: int, height: int, width: int) -> list[int]:
+        """Every tile a grid rectangle touches, in row-major order."""
+        if height <= 0 or width <= 0:
+            return []
+        first_row, first_column = row // self.tile_height, column // self.tile_width
+        last_row = (row + height - 1) // self.tile_height
+        last_column = (column + width - 1) // self.tile_width
+        return [
+            tile_row * self.columns + tile_column
+            for tile_row in range(first_row, last_row + 1)
+            for tile_column in range(first_column, last_column + 1)
+        ]
+
+
+@dataclass(frozen=True)
+class VariableEntry:
+    """One v2 variable: its id and the predictor every one of its chunks uses."""
+
+    variable_id: int
+    predictor: int
+
+    def pack(self) -> bytes:
+        return _VARIABLE_ENTRY_STRUCT.pack(self.variable_id, self.predictor, 0)
+
+    @classmethod
+    def unpack(cls, data: bytes) -> "VariableEntry":
+        variable_id, predictor, reserved = _VARIABLE_ENTRY_STRUCT.unpack(data)
+        if reserved != 0:
+            raise BundleError("variable entry reserved must be 0")
+        return cls(variable_id=variable_id, predictor=predictor)
+
+
+@dataclass(frozen=True)
+class GroupEntry:
+    """One temporal group, as a run of frame indices on the shared axis."""
+
+    first_frame: int
+    frame_count: int
+
+    def pack(self) -> bytes:
+        return _GROUP_ENTRY_STRUCT.pack(self.first_frame, self.frame_count, 0)
+
+    @classmethod
+    def unpack(cls, data: bytes) -> "GroupEntry":
+        first_frame, frame_count, reserved = _GROUP_ENTRY_STRUCT.unpack(data)
+        if reserved != 0:
+            raise BundleError("group entry reserved must be 0")
+        return cls(first_frame=first_frame, frame_count=frame_count)
+
+
+@dataclass(frozen=True)
+class ChunkEntry:
+    """One chunk's compressed length and the CRC32 of what it reconstructs to.
+
+    A chunk's *offset* is not stored: the physical order is fixed by the spec
+    and chunks are strictly adjacent, so an offset is the prefix sum of the
+    lengths before it.
+    """
+
+    compressed_length: int
+    crc32: int
+
+    def pack(self) -> bytes:
+        return _CHUNK_ENTRY_STRUCT.pack(self.compressed_length, self.crc32)
+
+    @classmethod
+    def unpack(cls, data: bytes) -> "ChunkEntry":
+        compressed_length, checksum = _CHUNK_ENTRY_STRUCT.unpack(data)
+        return cls(compressed_length=compressed_length, crc32=checksum)
+
+
+@dataclass(frozen=True)
+class ChunkPayload:
+    """One chunk in physical file order, before offsets are assigned."""
+
+    entry: ChunkEntry
+    payload: bytes
 
 
 @dataclass(frozen=True)
@@ -213,6 +370,10 @@ def write_bundle(
         output[cursor : cursor + len(plane.payload)] = plane.payload
         cursor += len(plane.payload)
 
+    _publish(path, output)
+
+
+def _publish(path: Path, output: bytes | bytearray) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
     with temporary.open("wb") as handle:
@@ -220,6 +381,120 @@ def write_bundle(
         handle.flush()
         os.fsync(handle.fileno())
     temporary.replace(path)
+
+
+def write_bundle_v2(
+    path: Path,
+    metadata: dict[str, Any],
+    *,
+    tile_width: int,
+    tile_height: int,
+    variables: list[VariableEntry],
+    groups: list[GroupEntry],
+    chunks: list[ChunkPayload],
+    compression: int = COMPRESSION_ZSTD,
+    dictionary: bytes = b"",
+) -> None:
+    """Assemble a complete Xue v2 file and publish it atomically.
+
+    ``chunks`` is already in physical order — group, then tile (row-major),
+    then variable (ascending id) — because that order is what makes a group
+    one contiguous range and a viewport's tiles contiguous per tile row. The
+    writer only checks that the caller produced the right number of them.
+    """
+    metadata_bytes = json.dumps(metadata, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    grid = metadata["grid"]
+    tiles = TileGeometry(grid["width"], grid["height"], tile_width, tile_height)
+    frame_count = metadata["time"]["frameCount"]
+    if len(variables) != len({variable.variable_id for variable in variables}):
+        raise BundleError("duplicate variableId in the variable table")
+    if [variable.variable_id for variable in variables] != sorted(
+        variable.variable_id for variable in variables
+    ):
+        raise BundleError("variable table must be sorted by variableId")
+    if any(variable.predictor not in PREDICTORS_V2 for variable in variables):
+        raise BundleError("v2 predictors must be RAW or PREVIOUS")
+    cursor = 0
+    for group in groups:
+        if group.first_frame != cursor or not 1 <= group.frame_count <= MAX_GROUP_LENGTH:
+            raise BundleError("temporal groups must partition the axis in order")
+        cursor += group.frame_count
+    if cursor != frame_count:
+        raise BundleError("temporal groups must cover the whole axis")
+    expected_chunks = len(groups) * tiles.count * len(variables)
+    if len(chunks) != expected_chunks:
+        raise BundleError(f"expected {expected_chunks} chunks, got {len(chunks)}")
+
+    metadata_offset = HEADER_SIZE
+    index_offset = align8(metadata_offset + len(metadata_bytes))
+    index_length = (
+        INDEX_HEADER_SIZE_V2
+        + VARIABLE_ENTRY_SIZE * len(variables)
+        + GROUP_ENTRY_SIZE * len(groups)
+        + CHUNK_ENTRY_SIZE * len(chunks)
+    )
+    if dictionary:
+        dictionary_offset = align8(index_offset + index_length)
+        data_offset = align8(dictionary_offset + len(dictionary))
+    else:
+        dictionary_offset = 0
+        data_offset = align8(index_offset + index_length)
+
+    cursor = data_offset
+    for chunk in chunks:
+        if chunk.entry.compressed_length != len(chunk.payload):
+            raise BundleError("chunk compressedLength does not match payload")
+        if not chunk.payload:
+            raise BundleError("a chunk must have a payload")
+        cursor += len(chunk.payload)
+    file_size = align8(cursor)
+
+    output = bytearray(file_size)
+    output[0:HEADER_SIZE] = _HEADER_STRUCT.pack(
+        MAGIC,
+        VERSION_V2,
+        HEADER_SIZE,
+        0,
+        file_size,
+        metadata_offset,
+        len(metadata_bytes),
+        index_offset,
+        index_length,
+        data_offset,
+        dictionary_offset,
+        len(dictionary),
+    )
+    output[metadata_offset : metadata_offset + len(metadata_bytes)] = metadata_bytes
+    output[index_offset : index_offset + INDEX_HEADER_SIZE_V2] = _INDEX_HEADER_V2_STRUCT.pack(
+        INDEX_MAGIC_V2,
+        INDEX_VERSION_V2,
+        INDEX_HEADER_SIZE_V2,
+        tile_width,
+        tile_height,
+        len(groups),
+        len(variables),
+        compression,
+        len(chunks),
+        0,
+        0,
+    )
+    table = bytearray()
+    for variable in variables:
+        table += variable.pack()
+    for group in groups:
+        table += group.pack()
+    for chunk in chunks:
+        table += chunk.entry.pack()
+    table_start = index_offset + INDEX_HEADER_SIZE_V2
+    output[table_start : table_start + len(table)] = table
+    if dictionary:
+        output[dictionary_offset : dictionary_offset + len(dictionary)] = dictionary
+    cursor = data_offset
+    for chunk in chunks:
+        output[cursor : cursor + len(chunk.payload)] = chunk.payload
+        cursor += len(chunk.payload)
+
+    _publish(path, output)
 
 
 def _checked_range(offset: int, length: int, file_size: int, label: str) -> None:
@@ -238,10 +513,14 @@ class Bundle:
     def __init__(self, data: bytes) -> None:
         self.data = data
         self._cache: dict[tuple[int, int], np.ndarray] = {}
+        self._chunk_cache: dict[int, np.ndarray] = {}
         self._parse_header()
         self._parse_metadata()
-        self._parse_index()
-        self._validate_entries()
+        if self.container_version == VERSION_V2:
+            self._parse_index_v2()
+        else:
+            self._parse_index()
+            self._validate_entries()
 
     # -- parsing -----------------------------------------------------------
 
@@ -264,16 +543,16 @@ class Bundle:
         ) = _HEADER_STRUCT.unpack_from(self.data, 0)
         if magic != MAGIC:
             raise BundleError("invalid magic, not a Xue file")
-        if version != VERSION:
+        if version not in CONTAINER_VERSIONS:
             raise BundleError(f"unsupported Xue version {version}")
         if header_size != HEADER_SIZE:
-            raise BundleError("headerSize must be 80 for v1")
+            raise BundleError("headerSize must be 80")
         if flags != 0:
-            raise BundleError("header flags must be 0 for v1")
+            raise BundleError("header flags must be 0")
         if file_size != len(self.data):
             raise BundleError(f"header fileSize {file_size} does not match actual length {len(self.data)}")
         if metadata_offset != HEADER_SIZE:
-            raise BundleError("metadataOffset must be 80 for v1")
+            raise BundleError("metadataOffset must be 80")
         _checked_range(metadata_offset, metadata_length, file_size, "metadata")
         if index_offset != align8(metadata_offset + metadata_length):
             raise BundleError("indexOffset must immediately follow aligned metadata")
@@ -297,6 +576,7 @@ class Bundle:
             _require_zero(self.data, dictionary_offset + dictionary_length, data_offset, "dictionary")
         _checked_range(data_offset, 0, file_size, "data")
 
+        self.container_version = version
         self.metadata_offset = metadata_offset
         self.metadata_length = metadata_length
         self.index_offset = index_offset
@@ -490,6 +770,115 @@ class Bundle:
         if len({after - before for before, after in zip(listed, listed[1:])}) < 2:
             raise BundleError(f"a uniform axis must be encoded as {uniform_message}")
 
+    def _parse_index_v2(self) -> None:
+        """The v2 index: three tables over a fixed physical order.
+
+        Nothing here stores where a chunk is — the order is the spec's, and
+        chunks are strictly adjacent, so offsets are the prefix sums of the
+        lengths. What is validated is that the geometry, the axis partition
+        and those prefix sums all agree with the metadata and the file length.
+        """
+        if self.index_length < INDEX_HEADER_SIZE_V2:
+            raise BundleError("index is smaller than its header")
+        (
+            magic,
+            version,
+            header_size,
+            tile_width,
+            tile_height,
+            group_count,
+            variable_count,
+            compression,
+            chunk_count,
+            reserved0,
+            reserved1,
+        ) = _INDEX_HEADER_V2_STRUCT.unpack_from(self.data, self.index_offset)
+        if magic != INDEX_MAGIC_V2:
+            raise BundleError("invalid index magic")
+        if version != INDEX_VERSION_V2:
+            raise BundleError("index version must be 2")
+        if header_size != INDEX_HEADER_SIZE_V2:
+            raise BundleError("index headerSize must be 32 for v2")
+        if reserved0 != 0 or reserved1 != 0:
+            raise BundleError("index reserved words must be 0")
+        if compression not in (COMPRESSION_ZSTD, COMPRESSION_ZSTD_DICT):
+            raise BundleError(f"unsupported v2 compression {compression}")
+        if compression == COMPRESSION_ZSTD_DICT and self.dictionary_length == 0:
+            raise BundleError("ZSTD_DICT requires an embedded dictionary")
+        if group_count < 1 or variable_count < 1:
+            raise BundleError("a v2 file must declare at least one group and one variable")
+        if variable_count != len(self.variable_ids):
+            raise BundleError("index variableCount does not match the metadata variables")
+        self.tiles = TileGeometry(self.width, self.height, tile_width, tile_height)
+        self.compression = compression
+
+        expected_length = (
+            INDEX_HEADER_SIZE_V2
+            + VARIABLE_ENTRY_SIZE * variable_count
+            + GROUP_ENTRY_SIZE * group_count
+            + CHUNK_ENTRY_SIZE * chunk_count
+        )
+        if chunk_count != group_count * self.tiles.count * variable_count:
+            raise BundleError("chunkCount does not match groupCount x tileCount x variableCount")
+        if self.index_length != expected_length:
+            raise BundleError("indexLength does not match the index tables")
+
+        cursor = self.index_offset + INDEX_HEADER_SIZE_V2
+        variables: list[VariableEntry] = []
+        for _ in range(variable_count):
+            variables.append(VariableEntry.unpack(self.data[cursor : cursor + VARIABLE_ENTRY_SIZE]))
+            cursor += VARIABLE_ENTRY_SIZE
+        ids = [variable.variable_id for variable in variables]
+        if ids != sorted(ids) or len(set(ids)) != len(ids):
+            raise BundleError("variable entries must be sorted and unique by variableId")
+        if set(ids) != set(self.variable_ids):
+            raise BundleError("variable entries do not match the metadata variables")
+        for variable in variables:
+            if variable.predictor not in PREDICTORS_V2:
+                raise BundleError(f"predictor {variable.predictor} is not valid in v2")
+        self.variable_entries = variables
+        self.variable_positions = {variable_id: position for position, variable_id in enumerate(ids)}
+        self.predictors = {variable.variable_id: variable.predictor for variable in variables}
+
+        groups: list[GroupEntry] = []
+        frame_cursor = 0
+        for _ in range(group_count):
+            group = GroupEntry.unpack(self.data[cursor : cursor + GROUP_ENTRY_SIZE])
+            cursor += GROUP_ENTRY_SIZE
+            if group.frame_count == 0:
+                raise BundleError("a temporal group must hold at least one frame")
+            if group.first_frame != frame_cursor:
+                raise BundleError("temporal groups must partition the axis in order")
+            frame_cursor += group.frame_count
+            groups.append(group)
+        if frame_cursor != self.frame_count:
+            raise BundleError("temporal groups must end exactly at the axis frameCount")
+        self.groups = groups
+        self.frame_group = [
+            (index, frame - group.first_frame)
+            for index, group in enumerate(groups)
+            for frame in range(group.first_frame, group.first_frame + group.frame_count)
+        ]
+
+        chunks: list[ChunkEntry] = []
+        offsets: list[int] = []
+        position = self.data_offset
+        for _ in range(chunk_count):
+            chunk = ChunkEntry.unpack(self.data[cursor : cursor + CHUNK_ENTRY_SIZE])
+            cursor += CHUNK_ENTRY_SIZE
+            if chunk.compressed_length == 0:
+                raise BundleError("a chunk must have a payload")
+            offsets.append(position)
+            position += chunk.compressed_length
+            if position > len(self.data):
+                raise BundleError("chunk payloads exceed the file size")
+            chunks.append(chunk)
+        if align8(position) != len(self.data):
+            raise BundleError("fileSize must equal the aligned end of the last chunk")
+        _require_zero(self.data, position, len(self.data), "trailing")
+        self.chunks = chunks
+        self.chunk_offsets = offsets
+
     def _parse_index(self) -> None:
         if self.index_length < INDEX_HEADER_SIZE:
             raise BundleError("index is smaller than its header")
@@ -626,7 +1015,94 @@ class Bundle:
             raise BundleError("entry checksum flag does not match the Zstandard frame")
         return zstdcli.decompress(raw, expected_length=entry.decoded_length)
 
-    def decode_plane(self, variable_id: int, frame_offset: int) -> np.ndarray:
+    # -- v2 chunks ---------------------------------------------------------
+
+    def chunk_position(self, group: int, tile: int, variable_id: int) -> int:
+        """A chunk's position in the file's fixed physical order."""
+        try:
+            variable_position = self.variable_positions[variable_id]
+        except KeyError as exc:
+            raise BundleError(f"unknown variableId {variable_id}") from exc
+        if not 0 <= group < len(self.groups) or not 0 <= tile < self.tiles.count:
+            raise BundleError("chunk coordinates are outside the file")
+        return (group * self.tiles.count + tile) * len(self.variable_entries) + variable_position
+
+    def chunk_span(self, position: int) -> tuple[int, int]:
+        """The byte range ``[start, end)`` of a chunk's compressed payload."""
+        start = self.chunk_offsets[position]
+        return start, start + self.chunks[position].compressed_length
+
+    def decode_chunk(self, position: int) -> np.ndarray:
+        """One reconstructed chunk as ``(frames, tileHeight, tileWidth)`` codes."""
+        cached = self._chunk_cache.get(position)
+        if cached is not None:
+            return cached
+        entry = self.chunks[position]
+        group = self.groups[position // (self.tiles.count * len(self.variable_entries))]
+        tile = position // len(self.variable_entries) % self.tiles.count
+        variable_id = self.variable_entries[position % len(self.variable_entries)].variable_id
+        tile_height, tile_width = self.tiles.shape(tile)
+        shape = (group.frame_count, tile_height, tile_width)
+        start, end = self.chunk_span(position)
+        raw = self.data[start:end]
+        if self.compression == COMPRESSION_ZSTD_DICT:
+            raise BundleError("ZSTD_DICT decoding is not implemented by the reference reader")
+        if not zstdcli.frame_has_checksum(raw):
+            raise BundleError("a v2 chunk must be a Zstandard frame with a content checksum")
+        decoded = np.frombuffer(
+            zstdcli.decompress(raw, expected_length=math.prod(shape)), dtype=np.uint8
+        ).reshape(shape)
+        if self.predictors[variable_id] == PREDICTOR_PREVIOUS:
+            # The chunk's frames are consecutive on the axis, so the residual
+            # chain never leaves it: a modulo-256 running sum replays it.
+            chunk = np.cumsum(decoded, axis=0, dtype=np.uint8)
+        else:
+            chunk = decoded
+        if crc32_plane(chunk) != entry.crc32:
+            raise BundleError(f"chunk CRC32 mismatch at position {position}")
+        self._chunk_cache[position] = chunk
+        return chunk
+
+    def _decode_plane_v2(self, variable_id: int, frame_offset: int, tiles: list[int] | None) -> np.ndarray:
+        frame = self._offset_index.get(frame_offset)
+        if frame is None:
+            raise BundleError(f"no plane for variable {variable_id} hour {frame_offset}")
+        group, frame_in_group = self.frame_group[frame]
+        plane = np.zeros((self.height, self.width), dtype=np.uint8)
+        for tile in range(self.tiles.count) if tiles is None else tiles:
+            chunk = self.decode_chunk(self.chunk_position(group, tile, variable_id))
+            row, column = self.tiles.origin(tile)
+            tile_height, tile_width = self.tiles.shape(tile)
+            plane[row : row + tile_height, column : column + tile_width] = chunk[frame_in_group]
+        return plane.ravel()
+
+    def decode_series(self, variable_id: int, column: int, row: int) -> np.ndarray:
+        """One cell's code on every frame of the axis.
+
+        In v2 this costs one chunk per group of the single tile containing the
+        cell, no matter how many frames the axis has. A v1 file has no such
+        shortcut: the series is read plane by plane.
+        """
+        if self.container_version != VERSION_V2:
+            return np.array(
+                [self.decode_plane(variable_id, offset)[row * self.width + column] for offset in self.frame_offsets],
+                dtype=np.uint8,
+            )
+        tile = self.tiles.tile_of(row, column)
+        tile_row, tile_column = self.tiles.origin(tile)
+        series = np.empty(self.frame_count, dtype=np.uint8)
+        cursor = 0
+        for group_index, group in enumerate(self.groups):
+            chunk = self.decode_chunk(self.chunk_position(group_index, tile, variable_id))
+            series[cursor : cursor + group.frame_count] = chunk[:, row - tile_row, column - tile_column]
+            cursor += group.frame_count
+        return series
+
+    def decode_plane(self, variable_id: int, frame_offset: int, tiles: list[int] | None = None) -> np.ndarray:
+        if self.container_version == VERSION_V2:
+            return self._decode_plane_v2(variable_id, frame_offset, tiles)
+        if tiles is not None:
+            raise BundleError("a v1 file has no tiles")
         key = (variable_id, frame_offset)
         cached = self._cache.get(key)
         if cached is not None:
@@ -653,6 +1129,8 @@ class Bundle:
         return plane
 
     def verify_all(self, executor: ThreadPoolExecutor | None = None) -> None:
+        if self.container_version == VERSION_V2:
+            return self._verify_all_v2(executor)
         # Dependencies never leave a temporal group (validated above), so
         # groups decode independently on a thread pool; each group drops its
         # planes from the cache as soon as it finishes, keeping peak memory
@@ -677,6 +1155,23 @@ class Bundle:
             return
         with ThreadPoolExecutor(max_workers=min(16, os.cpu_count() or 4)) as own_executor:
             list(own_executor.map(verify_group, groups.items()))
+
+    def _verify_all_v2(self, executor: ThreadPoolExecutor | None) -> None:
+        # Every chunk stands alone (its own Zstandard frame, its own CRC32),
+        # so verification is one independent job per chunk; each drops its
+        # reconstruction immediately, keeping peak memory at a tile per worker.
+        def verify_chunk(position: int) -> None:
+            try:
+                self.decode_chunk(position)
+            finally:
+                self._chunk_cache.pop(position, None)
+
+        positions = range(len(self.chunks))
+        if executor is not None:
+            list(executor.map(verify_chunk, positions))
+            return
+        with ThreadPoolExecutor(max_workers=min(16, os.cpu_count() or 4)) as own_executor:
+            list(own_executor.map(verify_chunk, positions))
 
 
 def read_bundle(path: Path) -> Bundle:

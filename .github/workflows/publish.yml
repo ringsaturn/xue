@@ -178,8 +178,11 @@ jobs:
       # pinned to `native` above) and the xuepy wheel carries its own — for
       # extraction, and through `xue.gdal_info` for the inspection pass that
       # used to shell out to `gdalinfo`. The dependency pin requires a wheel
-      # carrying it (`xuepy>=0.4`), so `uv sync` above fails rather than
-      # letting a build reach a `gdalinfo` that is not here. `gdal_translate`
+      # carrying it (`xuepy>=0.5`), so `uv sync` above fails rather than
+      # letting a build reach a `gdalinfo` that is not here. The floor is
+      # also what keeps a wheel whose decoder predates container v2 out of
+      # this job: the build reads every bundle back through it.
+      # `gdal_translate`
       # has no such fallback, but nothing here reaches it: `XUE_ENCODER=native`
       # fails loudly instead of dropping to the reference pipeline.
       #

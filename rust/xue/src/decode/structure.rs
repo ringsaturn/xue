@@ -6,17 +6,24 @@
 //! before it has been validated against the metadata grid and the declared
 //! file length.
 //!
-//! Both readers come through here. [`ParseMode`] is the only difference: a
-//! complete file has its payload adjacency and trailing padding verified
-//! against the actual bytes, while a prefix verifies the same geometry
-//! arithmetically against the header's `fileSize`.
+//! Both readers come through here, and both container versions do. The
+//! section geometry above the index is shared; below it the file is either a
+//! plane-major v1 index ([`PlaneLayout`]) or a tiled v2 one ([`TiledLayout`]),
+//! and [`Layout`] is what the decode engine dispatches on.
+//!
+//! [`ParseMode`] is the only difference between the readers: a complete file
+//! has its payload adjacency and trailing padding verified against the actual
+//! bytes, while a prefix verifies the same geometry arithmetically against the
+//! header's `fileSize`.
 
 use std::collections::HashMap;
 
 use crate::decode::metadata::{parse_metadata, Metadata};
 use crate::format::{
-    align8, err, Compression, DecodeError, FixedHeader, FrameRequest, IndexHeader, PlaneEntry,
-    Predictor, ENTRY_SIZE, FLAG_ZSTD_CHECKSUM, HEADER_SIZE, INDEX_HEADER_SIZE, NO_DEPENDENCY,
+    align8, err, ChunkEntry, Compression, DecodeError, FixedHeader, FrameRequest, GroupEntry,
+    IndexHeader, IndexHeaderV2, PlaneEntry, Predictor, TileGeometry, VariableEntry,
+    CHUNK_ENTRY_SIZE, ENTRY_SIZE, FLAG_ZSTD_CHECKSUM, GROUP_ENTRY_SIZE, HEADER_SIZE,
+    INDEX_HEADER_SIZE, INDEX_HEADER_SIZE_V2, NO_DEPENDENCY, VARIABLE_ENTRY_SIZE, VERSION_V2,
 };
 
 /// The next 8-byte boundary, as a decode failure rather than an Option.
@@ -52,16 +59,44 @@ pub(crate) enum ParseMode {
     Prefix,
 }
 
-/// Everything the index describes: parsed header geometry plus all entries.
+/// Everything the index describes: parsed header geometry plus the layout.
 pub(crate) struct Structure {
     pub(crate) metadata: Metadata,
-    pub(crate) entries: Vec<PlaneEntry>,
-    entry_map: HashMap<FrameRequest, usize>,
+    pub(crate) layout: Layout,
     pub(crate) data_offset: u64,
     pub(crate) file_size: u64,
 }
+
+/// What a payload is in this file: a whole plane, or a tile of a group.
+pub(crate) enum Layout {
+    Planes(PlaneLayout),
+    Tiles(TiledLayout),
+}
+
+/// The v1 index: one entry per (variable, frame), with dependency chains.
+pub(crate) struct PlaneLayout {
+    pub(crate) entries: Vec<PlaneEntry>,
+    entry_map: HashMap<FrameRequest, usize>,
+}
+
+/// The v2 index: the tiling, the axis partition, and one entry per chunk.
+///
+/// Chunk offsets are the prefix sums of the lengths — the physical order is
+/// the spec's and chunks are strictly adjacent — so they are computed once
+/// here rather than read from the file.
+pub(crate) struct TiledLayout {
+    pub(crate) geometry: TileGeometry,
+    pub(crate) compression: Compression,
+    pub(crate) variables: Vec<VariableEntry>,
+    pub(crate) groups: Vec<GroupEntry>,
+    pub(crate) chunks: Vec<ChunkEntry>,
+    pub(crate) chunk_offsets: Vec<u64>,
+    /// Frame index on the axis to `(group, index within the group)`.
+    pub(crate) frame_group: Vec<(u32, u32)>,
+}
 pub(crate) fn parse_structure(data: &[u8], mode: ParseMode) -> Result<Structure, DecodeError> {
     let FixedHeader {
+        version,
         file_size,
         metadata_offset,
         metadata_length,
@@ -80,7 +115,7 @@ pub(crate) fn parse_structure(data: &[u8], mode: ParseMode) -> Result<Structure,
     // Section geometry: pure arithmetic against the declared fileSize, so it
     // is identical for full files and prefixes.
     if metadata_offset != HEADER_SIZE as u64 {
-        return Err(err("metadataOffset must be 80 for v1"));
+        return Err(err("metadataOffset must be 80"));
     }
     let metadata_end = checked_end(metadata_offset, metadata_length, file_size, "metadata")?;
     if index_offset != aligned(metadata_end)? {
@@ -121,6 +156,46 @@ pub(crate) fn parse_structure(data: &[u8], mode: ParseMode) -> Result<Structure,
 
     let metadata = parse_metadata(&data[metadata_offset as usize..metadata_end as usize])?;
 
+    let layout = if version == VERSION_V2 {
+        Layout::Tiles(parse_tiled_index(
+            data,
+            &metadata,
+            index_offset,
+            index_length,
+            data_offset,
+            file_size,
+            dictionary_length,
+            mode,
+        )?)
+    } else {
+        Layout::Planes(parse_plane_index(
+            data,
+            &metadata,
+            index_offset,
+            index_length,
+            data_offset,
+            file_size,
+            dictionary_length,
+            mode,
+        )?)
+    };
+    Ok(Structure { metadata, layout, data_offset, file_size })
+}
+
+/// The plane-major v1 index: entries sorted by (variableId, frameOffset),
+/// covering every frame of every variable, with acyclic dependency chains
+/// that never leave a temporal group.
+#[allow(clippy::too_many_arguments)]
+fn parse_plane_index(
+    data: &[u8],
+    metadata: &Metadata,
+    index_offset: u64,
+    index_length: u64,
+    data_offset: u64,
+    file_size: u64,
+    dictionary_length: u64,
+    mode: ParseMode,
+) -> Result<PlaneLayout, DecodeError> {
     // Index header.
     if index_length < INDEX_HEADER_SIZE as u64 {
         return Err(err("index is smaller than its header"));
@@ -260,15 +335,182 @@ pub(crate) fn parse_structure(data: &[u8], mode: ParseMode) -> Result<Structure,
         }
     }
 
-    let structure = Structure { metadata, entries, entry_map, data_offset, file_size };
+    let layout = PlaneLayout { entries, entry_map };
     // Depth and cycle check for every chain.
-    for entry in &structure.entries {
-        structure.dependency_chain(entry.request())?;
+    for entry in &layout.entries {
+        layout.dependency_chain(entry.request(), metadata.frame_count)?;
     }
-    Ok(structure)
+    Ok(layout)
+}
+
+/// The tiled v2 index: three tables over a physical order the spec fixes.
+///
+/// Nothing here says where a chunk is — the order is `group, tile, variable`
+/// and chunks are strictly adjacent, so an offset is the prefix sum of the
+/// lengths before it. What is validated is that the geometry, the axis
+/// partition and those prefix sums all agree with the metadata and the
+/// declared file length.
+#[allow(clippy::too_many_arguments)]
+fn parse_tiled_index(
+    data: &[u8],
+    metadata: &Metadata,
+    index_offset: u64,
+    index_length: u64,
+    data_offset: u64,
+    file_size: u64,
+    dictionary_length: u64,
+    mode: ParseMode,
+) -> Result<TiledLayout, DecodeError> {
+    if index_length < INDEX_HEADER_SIZE_V2 as u64 {
+        return Err(err("index is smaller than its header"));
+    }
+    let index_start = index_offset as usize;
+    let header = IndexHeaderV2::unpack(&data[index_start..])?;
+    if header.compression == Compression::None {
+        return Err(err("v2 chunks must be Zstandard frames"));
+    }
+    if header.compression == Compression::ZstdDict && dictionary_length == 0 {
+        return Err(err("ZSTD_DICT requires an embedded dictionary"));
+    }
+    if header.group_count == 0 || header.variable_count == 0 {
+        return Err(err("a v2 file must declare at least one group and one variable"));
+    }
+    if header.variable_count as usize != metadata.variable_ids.len() {
+        return Err(err("index variableCount does not match the metadata variables"));
+    }
+    let geometry = TileGeometry::new(
+        metadata.width,
+        metadata.height,
+        u32::from(header.tile_width),
+        u32::from(header.tile_height),
+    )?;
+    let expected_chunks = u64::from(header.group_count)
+        .checked_mul(u64::from(geometry.count()))
+        .and_then(|chunks| chunks.checked_mul(u64::from(header.variable_count)))
+        .ok_or_else(|| err("chunk count overflow"))?;
+    if u64::from(header.chunk_count) != expected_chunks {
+        return Err(err("chunkCount does not match groupCount x tileCount x variableCount"));
+    }
+    let tables_bytes = (INDEX_HEADER_SIZE_V2 as u64)
+        + u64::from(header.variable_count) * VARIABLE_ENTRY_SIZE as u64
+        + u64::from(header.group_count) * GROUP_ENTRY_SIZE as u64
+        + u64::from(header.chunk_count) * CHUNK_ENTRY_SIZE as u64;
+    if index_length != tables_bytes {
+        return Err(err("indexLength does not match the index tables"));
+    }
+
+    let mut cursor = index_start + INDEX_HEADER_SIZE_V2;
+    let mut variables = Vec::with_capacity(header.variable_count as usize);
+    for _ in 0..header.variable_count {
+        variables.push(VariableEntry::unpack(&data[cursor..cursor + VARIABLE_ENTRY_SIZE])?);
+        cursor += VARIABLE_ENTRY_SIZE;
+    }
+    if variables
+        .windows(2)
+        .any(|pair| pair[0].variable_id >= pair[1].variable_id)
+    {
+        return Err(err("variable entries must be sorted and unique by variableId"));
+    }
+    if variables
+        .iter()
+        .any(|variable| !metadata.variable_ids.contains(&variable.variable_id))
+    {
+        return Err(err("variable entries do not match the metadata variables"));
+    }
+
+    let mut groups = Vec::with_capacity(header.group_count as usize);
+    let mut frame_group = Vec::with_capacity(metadata.frame_count as usize);
+    let mut frame_cursor: u32 = 0;
+    for index in 0..header.group_count {
+        let group = GroupEntry::unpack(&data[cursor..cursor + GROUP_ENTRY_SIZE])?;
+        cursor += GROUP_ENTRY_SIZE;
+        if group.frame_count == 0 {
+            return Err(err("a temporal group must hold at least one frame"));
+        }
+        if u32::from(group.first_frame) != frame_cursor {
+            return Err(err("temporal groups must partition the axis in order"));
+        }
+        for position in 0..u32::from(group.frame_count) {
+            frame_group.push((u32::from(index), position));
+        }
+        frame_cursor += u32::from(group.frame_count);
+        if frame_cursor > metadata.frame_count {
+            return Err(err("temporal groups overrun the axis"));
+        }
+        groups.push(group);
+    }
+    if frame_cursor != metadata.frame_count {
+        return Err(err("temporal groups must end exactly at the axis frameCount"));
+    }
+
+    let mut chunks = Vec::with_capacity(header.chunk_count as usize);
+    let mut chunk_offsets = Vec::with_capacity(header.chunk_count as usize);
+    let mut position = data_offset;
+    for _ in 0..header.chunk_count {
+        let chunk = ChunkEntry::unpack(&data[cursor..cursor + CHUNK_ENTRY_SIZE])?;
+        cursor += CHUNK_ENTRY_SIZE;
+        if chunk.compressed_length == 0 {
+            return Err(err("a chunk must have a payload"));
+        }
+        chunk_offsets.push(position);
+        position = checked_end(position, u64::from(chunk.compressed_length), file_size, "chunk")?;
+        chunks.push(chunk);
+    }
+    if aligned(position)? != file_size {
+        return Err(err("fileSize must equal the aligned end of the last chunk"));
+    }
+    if mode == ParseMode::FullFile {
+        require_zero(data, position, file_size, "trailing")?;
+    }
+
+    Ok(TiledLayout {
+        geometry,
+        compression: header.compression,
+        variables,
+        groups,
+        chunks,
+        chunk_offsets,
+        frame_group,
+    })
 }
 
 impl Structure {
+    /// How many payloads the index describes — planes in v1, chunks in v2.
+    /// Residency and range requests are tracked per payload, whatever a
+    /// payload happens to be in this file.
+    pub(crate) fn payload_count(&self) -> usize {
+        match &self.layout {
+            Layout::Planes(planes) => planes.entries.len(),
+            Layout::Tiles(tiles) => tiles.chunks.len(),
+        }
+    }
+
+    /// One payload's byte span `[start, end)`. A v1 ZERO plane has no bytes
+    /// at all and reports an empty span.
+    pub(crate) fn payload_span(&self, position: usize) -> (u64, u64) {
+        match &self.layout {
+            Layout::Planes(planes) => {
+                let entry = planes.entries[position];
+                if entry.compressed_length == 0 {
+                    (0, 0)
+                } else {
+                    (entry.data_offset, entry.data_offset + u64::from(entry.compressed_length))
+                }
+            }
+            Layout::Tiles(tiles) => tiles.chunk_span(position),
+        }
+    }
+
+    /// The frame's index on the axis.
+    pub(crate) fn frame_index(&self, frame_offset: u16) -> Result<usize, DecodeError> {
+        self.metadata
+            .offsets
+            .binary_search(&frame_offset)
+            .map_err(|_| err("no plane for the requested variable and forecast hour"))
+    }
+}
+
+impl PlaneLayout {
     pub(crate) fn entry_position(&self, request: FrameRequest) -> Result<usize, DecodeError> {
         self.entry_map
             .get(&request)
@@ -278,7 +520,7 @@ impl Structure {
 
     fn dependency_of(entry: &PlaneEntry) -> Option<u16> {
         // ANCHOR and PREVIOUS both carry their dependency explicitly;
-        // parse_structure has pinned PREVIOUS to the preceding axis frame.
+        // parse_plane_index has pinned PREVIOUS to the preceding axis frame.
         match entry.predictor {
             Predictor::Anchor | Predictor::Previous => Some(entry.dependency_offset),
             _ => None,
@@ -286,7 +528,11 @@ impl Structure {
     }
 
     /// The chain from the requested frame down to its RAW/ZERO base, base last.
-    pub(crate) fn dependency_chain(&self, request: FrameRequest) -> Result<Vec<FrameRequest>, DecodeError> {
+    pub(crate) fn dependency_chain(
+        &self,
+        request: FrameRequest,
+        frame_count: u32,
+    ) -> Result<Vec<FrameRequest>, DecodeError> {
         let mut chain = vec![request];
         let mut current = request;
         loop {
@@ -295,7 +541,7 @@ impl Structure {
                 None => return Ok(chain),
                 Some(hour) => {
                     let next = FrameRequest { variable_id: current.variable_id, frame_offset: hour };
-                    if chain.contains(&next) || chain.len() > self.metadata.frame_count as usize {
+                    if chain.contains(&next) || chain.len() > frame_count as usize {
                         return Err(err("cyclic or too-deep dependency chain"));
                     }
                     chain.push(next);
@@ -303,5 +549,34 @@ impl Structure {
                 }
             }
         }
+    }
+}
+
+impl TiledLayout {
+    pub(crate) fn variable_position(&self, variable_id: u8) -> Result<usize, DecodeError> {
+        self.variables
+            .iter()
+            .position(|variable| variable.variable_id == variable_id)
+            .ok_or_else(|| err("no chunks for the requested variable"))
+    }
+
+    /// A chunk's position in the file's fixed physical order:
+    /// group, then tile (row-major), then variable (ascending id).
+    pub(crate) fn chunk_position(&self, group: u32, tile: u32, variable_position: usize) -> usize {
+        ((group as usize * self.geometry.count() as usize) + tile as usize) * self.variables.len()
+            + variable_position
+    }
+
+    /// The byte range `[start, end)` of a chunk's compressed payload.
+    pub(crate) fn chunk_span(&self, position: usize) -> (u64, u64) {
+        let start = self.chunk_offsets[position];
+        (start, start + u64::from(self.chunks[position].compressed_length))
+    }
+
+    /// How many bytes a chunk reconstructs to: the group's frames of the
+    /// tile's clipped rectangle.
+    pub(crate) fn decoded_length(&self, group: u32, tile: u32) -> usize {
+        let (height, width) = self.geometry.shape(tile);
+        self.groups[group as usize].frame_count as usize * height as usize * width as usize
     }
 }

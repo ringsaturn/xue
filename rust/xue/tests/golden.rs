@@ -1,10 +1,14 @@
 //! Cross-language golden tests: Python encodes the cropped GRIB fixture,
 //! Rust must decode it byte-for-byte identically to the Python reference.
 //!
-//! Generate the fixture first:
+//! Two corpora. The generated one is container v2, what the encoders write
+//! now; regenerate it first:
 //!     .venv/bin/python tests/prepare_bin_fixture.py
+//! The frozen one in `tests/fixtures/v1/` is committed container v1 — no
+//! encoder produces it any more, and the decoder must read it forever
+//! because published runs carry those bytes. See that directory's README.
 
-use xue::{Bundle, FrameRequest, StreamingBundle};
+use xue::{Bundle, FrameRequest, StreamingBundle, TileRect};
 use std::path::PathBuf;
 
 fn fixture_dir() -> PathBuf {
@@ -22,6 +26,18 @@ fn variable_fixture_bytes(name: &str) -> Vec<u8> {
 
 fn fixture_bytes() -> Vec<u8> {
     variable_fixture_bytes("tmp2m")
+}
+
+fn v1_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/v1")
+}
+
+/// One file from the frozen container v1 corpus. These bytes are committed,
+/// so unlike the generated fixtures they never need regenerating — and if
+/// one stops decoding, v1 reading is broken.
+fn v1_fixture_bytes(name: &str) -> Vec<u8> {
+    let path = v1_dir().join(format!("{name}.xue"));
+    std::fs::read(&path).unwrap_or_else(|_| panic!("missing frozen v1 fixture {path:?}"))
 }
 
 #[test]
@@ -59,7 +75,7 @@ fn mixed_hours() -> Vec<u16> {
 
 #[test]
 fn golden_mixed_axis_decode_matches_python_reference() {
-    let bytes = variable_fixture_bytes("mixed");
+    let bytes = v1_fixture_bytes("mixed");
     let mut bundle = Bundle::open(&bytes).expect("mixed-axis fixture must parse");
     let metadata: serde_json::Value =
         serde_json::from_str(bundle.metadata_json()).expect("metadata JSON");
@@ -72,7 +88,7 @@ fn golden_mixed_axis_decode_matches_python_reference() {
     );
 
     for hour in mixed_hours() {
-        let expected_path = fixture_dir().join(format!("expected.mixed.f{hour:03}.bin"));
+        let expected_path = v1_dir().join(format!("expected.mixed.f{hour:03}.bin"));
         let expected = std::fs::read(&expected_path).unwrap_or_else(|_| {
             panic!("missing expected plane {expected_path:?}; regenerate the fixture")
         });
@@ -88,7 +104,7 @@ fn golden_mixed_axis_decode_matches_python_reference() {
 /// metadata does not need, keeping exactly one valid encoding per file.
 #[test]
 fn relabelled_schema_version_rejected() {
-    let bytes = variable_fixture_bytes("mixed");
+    let bytes = v1_fixture_bytes("mixed");
     let metadata_offset = u64::from_le_bytes(bytes[24..32].try_into().unwrap()) as usize;
     let metadata_length = u64::from_le_bytes(bytes[32..40].try_into().unwrap()) as usize;
     let json = std::str::from_utf8(&bytes[metadata_offset..metadata_offset + metadata_length]).unwrap();
@@ -103,7 +119,7 @@ fn relabelled_schema_version_rejected() {
 
 #[test]
 fn streaming_mixed_axis_matches_full_decode() {
-    let bytes = variable_fixture_bytes("mixed");
+    let bytes = v1_fixture_bytes("mixed");
     let data_offset = data_offset_of(&bytes);
     let mut full = Bundle::open(&bytes).expect("full bundle parses");
     let mut streaming = StreamingBundle::open_prefix(&bytes[..data_offset]).expect("prefix parses");
@@ -262,31 +278,284 @@ fn streaming_corrupt_payload_fails_decode() {
 }
 
 /// Deterministic mutation fuzz over the header and index: parsing must never
-/// panic, only return errors or succeed.
+/// panic, only return errors or succeed. Both container versions: v2 derives
+/// far more from file values than v1 does (tile geometry, chunk offsets as
+/// prefix sums, a group partition), so it has more arithmetic to get wrong.
 #[test]
 fn mutated_structures_do_not_panic() {
-    let bytes = fixture_bytes();
-    let index_offset = u64::from_le_bytes(bytes[40..48].try_into().unwrap()) as usize;
-    let structure_end = (index_offset + 16 + 2 * 40).min(bytes.len());
-    let mut state: u64 = 0x9E37_79B9_7F4A_7C15;
-    for _ in 0..4000 {
-        state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
-        let position = (state >> 33) as usize % structure_end;
-        state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
-        let value = (state >> 56) as u8;
-        let mut mutated = bytes.clone();
-        mutated[position] = value;
-        let _ = Bundle::open(&mutated);
+    for bytes in [fixture_bytes(), tiled_bytes()] {
+        let data_offset = data_offset_of(&bytes);
+        let mut state: u64 = 0x9E37_79B9_7F4A_7C15;
+        for _ in 0..4000 {
+            state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            let position = (state >> 33) as usize % data_offset;
+            state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            let value = (state >> 56) as u8;
+            let mut mutated = bytes.clone();
+            mutated[position] = value;
+            if let Ok(mut bundle) = Bundle::open(&mutated) {
+                // Parsing is only half of it: a structure that survived
+                // validation must not panic when it is actually read.
+                let _ = bundle.decode_frame(FrameRequest { variable_id: 1, frame_offset: 0 });
+                let _ = bundle.decode_series(1, 0, 0);
+            }
+            let _ = StreamingBundle::open_prefix(&mutated[..data_offset]);
+        }
     }
 }
 
 #[test]
 fn truncations_do_not_panic() {
-    let bytes = fixture_bytes();
-    let mut length = bytes.len();
-    while length > 0 {
-        let _ = Bundle::open(&bytes[..length]);
-        let _ = StreamingBundle::open_prefix(&bytes[..length]);
-        length = length.saturating_sub(7);
+    for bytes in [fixture_bytes(), tiled_bytes()] {
+        let mut length = bytes.len();
+        while length > 0 {
+            let _ = Bundle::open(&bytes[..length]);
+            let _ = StreamingBundle::open_prefix(&bytes[..length]);
+            length = length.saturating_sub(7);
+        }
     }
+}
+
+// -- container v2 -------------------------------------------------------------
+
+/// The synthetic tiled fixture (tests/prepare_bin_fixture.py
+/// prepare_tiled_fixture): a 17 x 9 grid cut into 5 x 4 tiles, so the last
+/// tile column is two cells wide and the last tile row one cell tall.
+const TILED_WIDTH: u32 = 17;
+const TILED_HEIGHT: u32 = 9;
+
+fn tiled_bytes() -> Vec<u8> {
+    variable_fixture_bytes("tiled")
+}
+
+fn tiled_expected(variable_id: u8, hour: u16) -> Vec<u8> {
+    let path = fixture_dir().join(format!("expected.tiled.v{variable_id}.f{hour:03}.bin"));
+    std::fs::read(&path).unwrap_or_else(|_| panic!("missing {path:?}; regenerate the fixture"))
+}
+
+#[test]
+fn tiled_decode_matches_python_reference() {
+    let mut bundle = Bundle::open(&tiled_bytes()).expect("tiled fixture must parse");
+    let geometry = bundle.tile_geometry().expect("a v2 file declares tiles");
+    assert_eq!((geometry.width, geometry.height), (TILED_WIDTH, TILED_HEIGHT));
+    assert_eq!((geometry.tile_width, geometry.tile_height), (5, 4));
+    assert_eq!((geometry.columns(), geometry.rows()), (4, 3));
+    // The last tile is clipped on both axes: 17 - 3 * 5 = 2 wide, 9 - 2 * 4 = 1 tall.
+    assert_eq!(geometry.shape(geometry.count() - 1), (1, 2));
+    assert_eq!(bundle.variable_ids().len(), 2);
+
+    for variable_id in [1u8, 2u8] {
+        for &hour in &mixed_hours() {
+            let expected = tiled_expected(variable_id, hour);
+            let plane = bundle
+                .decode_frame(FrameRequest { variable_id, frame_offset: hour })
+                .expect("decode");
+            assert_eq!(plane, expected.as_slice(), "variable {variable_id} f{hour:03}");
+        }
+    }
+}
+
+/// A cell's series must be the same bytes as reading that cell out of every
+/// decoded plane — at one chunk per group instead of one plane per frame.
+#[test]
+fn tiled_series_matches_the_planes() {
+    let mut bundle = Bundle::open(&tiled_bytes()).expect("tiled fixture must parse");
+    let hours = mixed_hours();
+    for variable_id in [1u8, 2u8] {
+        // Every corner, plus a cell inside each clipped edge and one interior.
+        for (column, row) in [
+            (0, 0),
+            (TILED_WIDTH - 1, 0),
+            (0, TILED_HEIGHT - 1),
+            (TILED_WIDTH - 1, TILED_HEIGHT - 1),
+            (16, 4),
+            (7, 8),
+            (9, 5),
+        ] {
+            let series = bundle.decode_series(variable_id, column, row).expect("series");
+            assert_eq!(series.len(), hours.len());
+            let expected: Vec<u8> = hours
+                .iter()
+                .map(|&hour| tiled_expected(variable_id, hour)[(row * TILED_WIDTH + column) as usize])
+                .collect();
+            assert_eq!(series, expected, "variable {variable_id} at ({column}, {row})");
+        }
+        // The golden series the Python reference dumped for the south-east
+        // corner, which lives in the doubly clipped last tile.
+        let path = fixture_dir().join(format!("expected.tiled.v{variable_id}.series.bin"));
+        let golden = std::fs::read(&path).unwrap_or_else(|_| panic!("missing {path:?}"));
+        let series = bundle
+            .decode_series(variable_id, TILED_WIDTH - 1, TILED_HEIGHT - 1)
+            .expect("series");
+        assert_eq!(series, golden, "golden series for variable {variable_id}");
+    }
+    assert!(bundle.decode_series(1, TILED_WIDTH, 0).is_err());
+    assert!(bundle.decode_series(1, 0, TILED_HEIGHT).is_err());
+    assert!(bundle.decode_series(9, 0, 0).is_err());
+}
+
+/// Decoding a tile rectangle must produce exactly the bytes a whole-plane
+/// decode produces, inside the rectangle — that equality is the whole promise
+/// of fetching only what a viewport covers.
+#[test]
+fn tiled_partial_decode_matches_the_whole_plane() {
+    let mut bundle = Bundle::open(&tiled_bytes()).expect("tiled fixture must parse");
+    let geometry = bundle.tile_geometry().expect("tiles");
+    let request = FrameRequest { variable_id: 1, frame_offset: 9 };
+    let expected = tiled_expected(1, 9);
+    for rect in [
+        TileRect { first_column: 0, first_row: 0, last_column: 0, last_row: 0 },
+        TileRect { first_column: 1, first_row: 1, last_column: 2, last_row: 2 },
+        TileRect { first_column: 3, first_row: 2, last_column: 3, last_row: 2 },
+        TileRect { first_column: 0, first_row: 0, last_column: 3, last_row: 2 },
+    ] {
+        bundle.clear_cache();
+        let plane = bundle.decode_frame_tiles(request, rect).expect("partial decode").to_vec();
+        for tile in 0..geometry.count() {
+            if !rect.contains(&geometry, tile) {
+                continue;
+            }
+            let (row, column) = geometry.origin(tile);
+            let (height, width) = geometry.shape(tile);
+            for line in 0..height {
+                let start = ((row + line) * TILED_WIDTH + column) as usize;
+                let end = start + width as usize;
+                assert_eq!(plane[start..end], expected[start..end], "tile {tile}");
+            }
+        }
+    }
+}
+
+/// A v2 file streams the way a v1 one does — a whole group is still one
+/// contiguous range — and a viewport or a series asks for strictly less.
+#[test]
+fn tiled_streaming_matches_full_decode() {
+    let bytes = tiled_bytes();
+    let data_offset = data_offset_of(&bytes);
+    let mut full = Bundle::open(&bytes).expect("full bundle parses");
+    let mut streaming = StreamingBundle::open_prefix(&bytes[..data_offset]).expect("prefix parses");
+    assert_eq!(streaming.file_size() as usize, bytes.len());
+    let geometry = streaming.tile_geometry().expect("tiles");
+
+    // One tile's series costs one chunk per group, and nothing else.
+    let series_spans = streaming.missing_series_spans(1, 16, 8).expect("series spans");
+    let series_bytes: u64 = series_spans.iter().map(|(start, end)| end - start).sum();
+    assert!(series_bytes < streaming.total_payload_bytes() / 4, "{series_bytes} bytes for a series");
+
+    // A viewport asks for less than the whole group.
+    let request = FrameRequest { variable_id: 1, frame_offset: 6 };
+    let rect = TileRect { first_column: 0, first_row: 0, last_column: 1, last_row: 0 };
+    let partial: u64 = streaming
+        .missing_spans(request, Some(rect))
+        .expect("spans")
+        .iter()
+        .map(|(start, end)| end - start)
+        .sum();
+    let group = streaming.missing_group_span(request).expect("group span").expect("not resident");
+    assert!(partial < group.1 - group.0, "{partial} vs {}", group.1 - group.0);
+
+    for &hour in &mixed_hours() {
+        for variable_id in [1u8, 2u8] {
+            let request = FrameRequest { variable_id, frame_offset: hour };
+            if let Some((start, end)) = streaming.missing_group_span(request).expect("span") {
+                assert!(streaming.decode_frame(request).is_err());
+                streaming
+                    .insert_range(start, &bytes[start as usize..end as usize])
+                    .expect("insert");
+            }
+            assert!(streaming.missing_group_span(request).expect("span").is_none());
+            let expected = full.decode_frame(request).expect("full decode").to_vec();
+            let plane = streaming.decode_frame(request).expect("streaming decode");
+            assert_eq!(plane, expected.as_slice(), "variable {variable_id} f{hour:03}");
+        }
+    }
+    assert_eq!(streaming.resident_payload_bytes(), streaming.total_payload_bytes());
+    let _ = geometry;
+}
+
+/// A corrupt chunk must fail on its own CRC32, not silently paint wrong cells.
+#[test]
+fn tiled_corrupt_chunk_fails_decode() {
+    let mut bytes = tiled_bytes();
+    let last = bytes.len() - 1;
+    // Flip a byte inside the final chunk's payload (before the tail padding).
+    let data_offset = data_offset_of(&bytes);
+    let target = (data_offset + last) / 2;
+    bytes[target] ^= 0xFF;
+    match Bundle::open(&bytes) {
+        Err(_) => {}
+        Ok(mut bundle) => {
+            let failed = mixed_hours().iter().any(|&hour| {
+                bundle.clear_cache();
+                bundle
+                    .decode_frame(FrameRequest { variable_id: 1, frame_offset: hour })
+                    .is_err()
+                    || bundle
+                        .decode_frame(FrameRequest { variable_id: 2, frame_offset: hour })
+                        .is_err()
+            });
+            assert!(failed, "a flipped payload byte must be caught");
+        }
+    }
+}
+
+// -- the frozen container v1 corpus -------------------------------------------
+
+/// Nothing writes v1 any more, so round-tripping cannot prove the decoder
+/// still reads it. These committed bytes can: a v1 file and the planes it
+/// decoded to, frozen together, so the pair stays self-consistent whatever
+/// later changes do to newly encoded data.
+///
+/// If this fails, v1 reading is broken — and published runs and showcase
+/// cases on R2 are v1 and are never rebuilt.
+#[test]
+fn frozen_v1_corpus_still_decodes() {
+    for (name, variable_id, hours) in [
+        ("tmp2m", 1u8, vec![0u16]),
+        ("prate", 2, vec![0]),
+        ("mixed", 1, mixed_hours()),
+    ] {
+        let bytes = v1_fixture_bytes(name);
+        // The one thing that must be true of every file here.
+        assert_eq!(u16::from_le_bytes(bytes[8..10].try_into().unwrap()), 1, "{name} is container v1");
+        let mut bundle = Bundle::open(&bytes).unwrap_or_else(|error| {
+            panic!("frozen v1 fixture {name} no longer parses: {error}")
+        });
+        assert!(bundle.tile_geometry().is_none(), "{name} is plane-major, not tiled");
+        assert!(bundle.decode_series(variable_id, 0, 0).is_err(), "v1 has no cheap series");
+        for hour in hours {
+            let stem = if name == "mixed" { "mixed".to_string() } else { name.to_string() };
+            let expected_path = v1_dir().join(format!("expected.{stem}.f{hour:03}.bin"));
+            let expected = std::fs::read(&expected_path)
+                .unwrap_or_else(|_| panic!("missing frozen plane {expected_path:?}"));
+            let plane = bundle
+                .decode_frame(FrameRequest { variable_id, frame_offset: hour })
+                .unwrap_or_else(|error| panic!("frozen v1 {name} f{hour:03} no longer decodes: {error}"));
+            assert_eq!(plane, expected.as_slice(), "frozen v1 {name} f{hour:03}");
+        }
+    }
+}
+
+/// The generated corpus is the other side of the same coin: it must be v2,
+/// or the encoder quietly regressed to the layout we just left.
+#[test]
+fn the_generated_corpus_is_container_v2() {
+    for name in ["tmp2m", "prate", "tmp2m.half", "tiled"] {
+        let bytes = variable_fixture_bytes(name);
+        assert_eq!(
+            u16::from_le_bytes(bytes[8..10].try_into().unwrap()),
+            2,
+            "{name} must be container v2"
+        );
+    }
+    // The half-resolution variant halves the tile, so tile n covers the same
+    // ground in both tiers and a viewport keeps its rectangle across a switch.
+    let full = Bundle::open(&variable_fixture_bytes("tmp2m")).expect("full tier");
+    let half = Bundle::open(&variable_fixture_bytes("tmp2m.half")).expect("half tier");
+    let (full_geometry, half_geometry) =
+        (full.tile_geometry().expect("tiles"), half.tile_geometry().expect("tiles"));
+    assert_eq!(half_geometry.tile_width, full_geometry.tile_width.div_ceil(2));
+    assert_eq!(half_geometry.tile_height, full_geometry.tile_height.div_ceil(2));
+    assert_eq!(half_geometry.columns(), full_geometry.columns());
+    assert_eq!(half_geometry.rows(), full_geometry.rows());
 }

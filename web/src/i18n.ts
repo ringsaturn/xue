@@ -112,6 +112,9 @@ const MESSAGES = {
   debugCopied: { zh: "调试信息已复制", en: "Debug info copied" },
   copyFailed: { zh: "复制失败", en: "Copy failed" },
   bundleResident: { zh: "数据包已驻留内存", en: "Bundle fully buffered" },
+  // A narrowed view fetches only the tiles it shows, so it never reaches
+  // whole-bundle residency — and saying so beats a progress bar that stalls.
+  viewportResident: { zh: "当前视野已缓冲完毕", en: "Viewport fully buffered" },
   streamingOnDemand: { zh: "按需流式加载中", en: "Streaming on demand" },
   receivingBundle: { zh: "正在接收预报数据包", en: "Receiving forecast bundle" },
   receivingBundlePercent: { zh: "接收数据包 {percent}%", en: "Receiving bundle {percent}%" },

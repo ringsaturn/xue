@@ -1,13 +1,21 @@
 /**
  * Point probe: one grid cell, read across the whole time axis.
  *
- * A click gives a longitude and latitude; the bundle's own grid turns that
- * into a cell index, and every plane the app decodes anyway — the frame on
- * screen, the playback prefetch, a scrub — contributes that cell's code to a
- * series. Nothing is fetched for the probe itself: the series fills in as
- * frames arrive, and a frame that was never decoded is simply a gap. That is
- * what keeps the probe compatible with windowed streaming, where the client
- * deliberately holds only the frames around the playhead.
+ * A click gives a longitude and latitude, and the bundle's own grid turns
+ * that into a cell index. There are two ways the series behind it fills in.
+ *
+ * On a container v2 bundle the whole series is read outright: one chunk per
+ * temporal group of the single tile holding the cell, which the worker
+ * fetches and replays in one `series` round trip regardless of how many
+ * frames the axis has. `adopt` takes that result.
+ *
+ * Otherwise — a v1 bundle, or the H.264 video path, neither of which can
+ * address a cell — the probe samples opportunistically: every plane the app
+ * decodes anyway (the frame on screen, the playback prefetch, a scrub)
+ * contributes that cell's code through `sample`, and a frame that was never
+ * decoded is simply a gap. That keeps the probe compatible with windowed
+ * streaming, where the client deliberately holds only the frames around the
+ * playhead.
  *
  * The cell lookup mirrors the fragment shader in layer.ts, with one
  * difference the UI has to be honest about: the shader paints a bicubic
@@ -31,7 +39,7 @@ export interface ProbeCell {
 /** The geographic grid a bundle declares. Metadata carries these beside
  * width/height (docs/format.md); the defaults are the global quarter-degree
  * grid, matching ForecastLayer.configureGrid. */
-interface GeoGrid {
+export interface GeoGrid {
   width: number;
   height: number;
   firstLongitude: number;
@@ -43,7 +51,7 @@ interface GeoGrid {
   wraps: boolean;
 }
 
-function geoGrid(metadata: BundleMetadata): GeoGrid {
+export function geoGrid(metadata: BundleMetadata): GeoGrid {
   const grid = metadata.grid as unknown as Record<string, number | boolean | undefined>;
   const width = (grid.width as number) ?? 0;
   const longitudeStep = (grid.longitudeStep as number) ?? 0.25;
@@ -59,7 +67,7 @@ function geoGrid(metadata: BundleMetadata): GeoGrid {
 }
 
 /** Positive remainder, the way GLSL's mod() and the spec's degree wrap work. */
-function wrap(value: number, modulus: number): number {
+export function wrap(value: number, modulus: number): number {
   return ((value % modulus) + modulus) % modulus;
 }
 
@@ -136,6 +144,22 @@ export class ProbeSeries {
       this.cell = probeCell(metadata, this.longitude, this.latitude);
     }
     return this.cell;
+  }
+
+  /** Take a whole series read out of the container: one code per frame, in
+   * the axis order `frameOffsets` gives. Returns false when the point is off
+   * this bundle's grid or the series does not match the axis. */
+  adopt(
+    metadata: BundleMetadata,
+    variableId: number,
+    frameOffsets: readonly number[],
+    codes: Uint8Array,
+  ): boolean {
+    if (!this.cellFor(metadata) || codes.length !== frameOffsets.length) return false;
+    for (const [index, offset] of frameOffsets.entries()) {
+      this.codes.set(seriesKey(variableId, offset), codes[index]!);
+    }
+    return true;
   }
 
   /** Record this plane's code at the pinned point. Returns false when the

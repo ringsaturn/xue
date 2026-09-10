@@ -23,8 +23,10 @@ Gaussian grid (same cadence as GFS, with a solar-radiation layer), and
 ECMWF IFS open data 0.25° (3-hourly to 144 h, 6-hourly to F240 — 65
 frames). No source publishes one cadence all the way out, so these
 mixed-step time axes are listed outright in the bundle metadata (schema
-version 2 in [`docs/format.md`](docs/format.md)). The three sources share
-the same format, the same decoder, and the same rendering pipeline.
+version 3 in [`docs/format.md`](docs/format.md), whose time axis is
+unit-neutral: an offset list against a declared unit rather than whole
+forecast hours). The three sources share the same format, the same
+decoder, and the same rendering pipeline.
 
 ## Format rationale
 
@@ -140,7 +142,8 @@ precipitation from window-cumulative mean-rate records (also without F000,
 160 frames from F001), and additionally publishes the `dswrf` layer
 (instantaneous surface downward shortwave radiation, W/m²). `--hours` may
 be any hour on the model's published axis, so shorter uniform builds
-(e.g. `--hours 120`) still work and stay metadata schema version 1.
+(e.g. `--hours 120`) still work, and their axis is a plain step rather than
+a listed one.
 
 `build-bin` writes one `.xue` per scalar variable (plus a half-resolution
 `.half.xue` rendition, a first-frame poster, and a per-variable lossless

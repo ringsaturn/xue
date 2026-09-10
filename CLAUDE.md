@@ -103,6 +103,36 @@ Manifest schema changes are a two-sided deploy: the new shell accepts old
 manifests, but an old cached shell rejects new ones — **deploy the Pages shell
 before publishing data in a widened schema**.
 
+### Container versions
+
+Distinct from the metadata schema below: `FixedHeader.version` says what a
+*payload* is. **v1** is plane-major — one payload is one whole plane of one
+frame, indexed by `IDX1` + `PlaneEntry`, with a middle RAW anchor per
+temporal group. **v2** is tiled — one payload is a **chunk**: one spatial
+tile of one temporal group for one variable, indexed by `IDX2` plus three
+compact tables (variables with their predictor, groups partitioning the
+axis, and one 8-byte entry per chunk whose offset is a prefix sum rather
+than a stored field). Physical order is group → tile (row-major) → variable,
+which keeps a whole group one contiguous range (so a global view fetches
+exactly what v1 fetched), a viewport's tile row another, and one cell's
+whole series at one chunk per group. Tiling is a storage property: the
+metadata JSON, codebooks and residual arithmetic are unchanged, and the
+geometry appears only in the binary index. `docs/format.md` §"Container v2"
+is normative.
+
+Status: both encoders write v2 and every decoder reads both versions. The
+frontend uses what tiling buys: a streaming session decodes and fetches only
+the tiles its viewport covers (`web/src/tiles.ts` turns the view into
+rectangles, the worker protocol carries them, `u_cover` in `layer.ts` clips
+to what a partial plane actually holds), and a pinned point reads its whole
+series in one round trip instead of waiting for playback to walk the axis.
+A narrowed session never fetches the rest of the grid, so "resident" means
+what the view needs, not the whole file — the worker says which, and the
+data card reads "Viewport fully buffered" for the narrow case. A decoder
+must always keep reading v1 — published runs and showcase cases carry those
+bytes and are never rebuilt. Like a manifest widening, the switch is a
+two-sided deploy: **ship the Pages shell before publishing v2 data.**
+
 ### Bundle metadata schema versions
 
 Inside a `.xue` file, `schemaVersion` is the lowest version a reader must
@@ -175,7 +205,7 @@ dependencies; NumPy is the only runtime dependency. Two exceptions:
   on encode.
 - **`gdalinfo`** has a second source. `gdal.dataset_info` is the one entry
   point for it, and reads through the `xuepy` wheel's linked GDAL
-  (`xue.gdal_info`, hence the `xuepy>=0.4` floor) when the build converts
+  (`xue.gdal_info`, one reason for the `xuepy>=0.5` floor) when the build converts
   natively, the subprocess otherwise — the choice follows `XUE_ENCODER`, so
   a run never mixes two GDAL installs. That is what lets the scheduled
   `publish-*` workflows install **no GDAL at all**: extraction was already

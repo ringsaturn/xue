@@ -1,9 +1,27 @@
-# Xue v1 Binary Format Specification
+# Xue Binary Format Specification
 
-This document is the normative specification of the Xue v1 container
-(`.xue`), a per-variable spatiotemporal binary format for packing a full
-forecast run of one gridded weather field into a single indexed file that a
-browser can decode frame by frame.
+This document is the normative specification of the Xue container (`.xue`),
+a per-variable spatiotemporal binary format for packing a full forecast run
+of one gridded weather field into a single indexed file that a browser can
+decode frame by frame.
+
+Two container versions exist, and they differ in exactly one thing: what a
+payload *is*.
+
+- **v1** is plane-major — one payload is one whole plane of one frame.
+  Sections marked *(v1)* below describe it. Nothing writes it any more, and
+  every decoder must keep reading it: published runs and showcase cases carry
+  those bytes and are never rebuilt.
+- **v2** is tiled — one payload is a **chunk**: one spatial tile of one
+  temporal group for one variable, so a reader can fetch just the region it
+  is showing and read one cell's whole series cheaply. It is what both
+  encoders write, and it is specified in *[Container v2](#container-v2)*.
+
+Everything else is shared and is specified once: the fixed header, the
+metadata JSON and its schema versions, the quantization codebooks, and the
+modulo-256 residual arithmetic. A decoder rejects a container version it
+does not implement, so a v2-capable shell must be deployed before the first
+v2 run is published.
 
 The Python encoder (`xuebuild/binformat.py`, `xuebuild/quantize.py`,
 `xuebuild/temporal.py`) and the Rust decoder (`rust/xue`) are the two reference
@@ -41,14 +59,23 @@ Key decisions:
   step unit is worth and either a uniform step or its offsets outright, so
   it is always exact rather than approximated.
 - **Bounded temporal groups.** Smooth fields (temperature, wind, solar
-  radiation) use six-frame groups with a middle RAW anchor and one-byte
-  residuals, capping random access at two plane decodes. Groups are formed
-  inside a segment of constant step, so no group straddles a change of
-  cadence. Precipitation fields move with weather systems, and temporal
-  differencing increases their compressed size; every precipitation plane
-  is independent RAW.
-- **One independent Zstandard frame per plane** for direct indexing,
-  sequential reads, and localized failure isolation.
+  radiation) are coded in six-frame groups with one-byte residuals; groups
+  are formed inside a segment of constant step, so no group straddles a
+  change of cadence. In v1 a group is a middle RAW anchor plus residuals
+  against it, capping random access at two plane decodes; in v2 a group is
+  packed whole into each tile's chunk and the residuals chain against the
+  previous frame, which is both smaller and, since the chunk decompresses
+  as a unit, no more expensive to seek into. Precipitation fields move with
+  weather systems, and temporal differencing increases their compressed
+  size; precipitation is stacked RAW in both versions.
+- **One independent Zstandard frame per payload** — a plane in v1, a chunk
+  in v2 — for direct indexing, sequential reads, and localized failure
+  isolation.
+- **Space is addressable too (v2).** A payload covers one tile of the grid,
+  so a zoomed-in viewport fetches only the tiles it shows, and one cell's
+  whole series costs one chunk per group rather than a decode of every
+  plane. The tiles are cut in grid space, not Web Mercator: reprojection
+  stays in the fragment shader.
 - **Strict parsing.** All offsets and lengths are validated with checked
   arithmetic before any allocation; sections must be strictly adjacent with
   zero padding; every reconstructed plane carries a CRC-32.
@@ -68,9 +95,13 @@ Key decisions:
 
 ## Container Layout
 
+Both versions have the same five sections in the same order; the index and
+what the payloads are differ. This is v1 — see
+*[Container v2](#container-v2)* for the tiled index.
+
 ```text
 +------------------------------+ 0
-| FixedHeader, 80 bytes        |
+| FixedHeader, 80 bytes        |  version = 1
 +------------------------------+ metadataOffset
 | UTF-8 metadata JSON          |
 +------------------------------+ indexOffset
@@ -396,7 +427,7 @@ metadata identity, the grid, and the time axis differ. Readers must derive
 the frame list from `time` and the grid from `grid`, never from the model
 name, and must not assume two bundles of one run share an axis.
 
-### IndexHeader
+### IndexHeader (v1)
 
 | Offset | Length | Type | Field | Rule |
 |---:|---:|---|---|---|
@@ -406,7 +437,7 @@ name, and must not assume two bundles of one run share an axis.
 | 8 | 4 | u32 | entryCount | Must equal (variables × frames per variable) declared in metadata |
 | 12 | 4 | u32 | reserved | Must be 0 |
 
-### PlaneEntry
+### PlaneEntry (v1)
 
 Index entries are sorted by `(variableId, frameOffset)`. Each entry is 40
 bytes:
@@ -464,7 +495,7 @@ identical to zlib's `crc32` — computed over the reconstructed quantized
 plane. The Zstandard checksum validates the compressed payload, while CRC32
 validates predictor reconstruction.
 
-### Payload Rules
+### Payload Rules (v1)
 
 - Every non-ZERO entry maps to one independent Zstandard frame.
 - ZSTD_DICT frames decompress with the embedded dictionary, which the
@@ -575,6 +606,12 @@ alphabet improves entropy coding, and the GPU needs no bit unpacking.
 
 ## Temporal Prediction
 
+The predictors and the modulo-256 arithmetic below are shared by both
+container versions. Which of them a file may use, and what a residual is
+computed against, is the index's business: v1 allows all four per plane
+(*[PlaneEntry (v1)](#planeentry-v1)*), v2 allows RAW and PREVIOUS per
+variable and chains inside a chunk (*[Container v2](#container-v2)*).
+
 Residuals are defined unconditionally as one-byte modulo-256 wrapping
 differences:
 
@@ -626,7 +663,7 @@ codebook — a value, not a gap. A future missing-data implementation should
 add a separate bitmap so residual bytes never conflict with the nodata
 code.
 
-## Physical Payload Order
+## Physical Payload Order (v1)
 
 Payloads are ordered by variable and temporal group, with each group's
 anchor payload first inside its group:
@@ -660,6 +697,9 @@ temporal continuity is represented by residuals instead.
 
 ## Streaming
 
+This section describes v1; *[Streaming (v2)](#streaming-v2)* covers the
+tiled container, which streams the same way with narrower spans.
+
 The format needs no side files to stream. The structural prefix
 `[0, dataOffset)` — header, metadata, index, optional dictionary, a few KB
 in production — validates exactly like a whole file minus the byte-content
@@ -673,6 +713,10 @@ the Zstandard frame checksums, so a whole-file checksum is only meaningful
 for full downloads.
 
 ## Error Handling
+
+These rules apply to both versions except where they name a v1 structure;
+*[Error handling, additions for v2](#error-handling-additions-for-v2)* adds
+the tiled index's own.
 
 A decoder must reject:
 
@@ -713,6 +757,261 @@ A decoder must reject:
   on the axis (the 65535 sentinel included).
 - Any integer computation that would overflow (use checked arithmetic).
 - A plane whose CRC-32 or Zstandard checksum fails.
+
+## Container v2
+
+Container v2 changes what a payload *is*: a **chunk** — one spatial **tile**
+of one **temporal group** for one variable — instead of one whole plane of
+one frame. A file holds the same set of quantized codes as its v1
+counterpart, cut into tiles and packed group by group, so a reader can fetch
+the region it is looking at, and read one cell's series by fetching one
+chunk per group instead of decoding every plane. An encoder writes one
+version or the other for a whole file; there is no mixing.
+
+The fixed header, the metadata JSON (schema versions 1–3, variable identity,
+the time axis, regional grids), the quantization codebooks and the
+modulo-256 residual arithmetic are shared with v1 and are not repeated here.
+
+```text
++------------------------------+ 0
+| FixedHeader, 80 bytes        |  version = 2
++------------------------------+ metadataOffset = 80
+| UTF-8 metadata JSON          |  unchanged, schemaVersion 3
++------------------------------+ indexOffset
+| IndexHeader, 32 bytes        |  magic IDX2
+| VariableEntry[variableCount] |  4 bytes each
+| GroupEntry[groupCount]       |  4 bytes each
+| ChunkEntry[chunkCount]       |  8 bytes each
++------------------------------+ dictionaryOffset, optional
+| Zstandard dictionary         |
++------------------------------+ dataOffset
+| chunk payloads, contiguous   |
+| zero padding for alignment   |
++------------------------------+ fileSize
+```
+
+Tiling is a *storage* property, not a dataset property: the grid, the time
+axis, the variable identities and the codebooks are unchanged, so the
+metadata JSON is byte-for-byte what a v1 file of the same data would carry
+and the tiling appears only in the binary index.
+
+### FixedHeader (v2)
+
+Identical to v1 in layout and rules, with `version = 2`. `flags` stays 0.
+Section adjacency, alignment and zero padding are validated exactly as in
+v1; `indexLength` covers the IndexHeader and all three tables.
+
+### Tiles
+
+The grid declared in the metadata is cut into tiles of
+`tileWidth × tileHeight` cells, starting at the grid's first cell (the
+north-west corner in the published layout) and laid out row-major:
+
+```text
+tileColumns = ceil(width  / tileWidth)
+tileRows    = ceil(height / tileHeight)
+tileCount   = tileColumns × tileRows
+tile t covers columns [ (t mod tileColumns) × tileWidth,  +tileWidth  )
+          and rows    [ (t div tileColumns) × tileHeight, +tileHeight )
+```
+
+Tiles in the last column and the last row are clipped to the grid; the width
+of a clipped tile is `width − (tileColumns − 1) × tileWidth`, and likewise
+for its height. A file must declare `1 ≤ tileWidth ≤ width` and
+`1 ≤ tileHeight ≤ height`, so a file with one tile declares its grid size
+exactly. `tileColumns`, `tileRows` and `tileCount` are derived from the
+metadata grid and never stored, so the geometry has one encoding.
+
+Tiles are cells, never degrees: the geographic footprint of a tile follows
+from the `grid` block, and the horizontal wrap of a global grid is a
+property of the grid, not of any tile — the last tile column does not wrap
+into the first.
+
+### Temporal groups
+
+A group is a run of consecutive frames on the time axis. The groups of a
+file partition the axis in order: the first group starts at frame index 0,
+each group starts where the previous one ends, and the last group ends at
+`frameCount`. Every variable in the file uses the same groups (a file has
+one axis). A group's frames are stored inside every chunk of that group in
+axis order.
+
+Grouping is chosen by the encoder (see *[Encoder rules](#encoder-rules-v2)*);
+a decoder validates the partition and nothing else about it.
+
+### IndexHeader (v2)
+
+| Offset | Length | Type | Field | Rule |
+|---:|---:|---|---|---|
+| 0 | 4 | bytes | magic | ASCII `IDX2` |
+| 4 | 2 | u16 | version | 2 |
+| 6 | 2 | u16 | headerSize | 32 |
+| 8 | 2 | u16 | tileWidth | `1 ≤ tileWidth ≤ grid.width` |
+| 10 | 2 | u16 | tileHeight | `1 ≤ tileHeight ≤ grid.height` |
+| 12 | 2 | u16 | groupCount | ≥ 1 |
+| 14 | 1 | u8 | variableCount | ≥ 1, equals the number of metadata variables |
+| 15 | 1 | u8 | compression | 1 ZSTD or 2 ZSTD_DICT, for every chunk |
+| 16 | 4 | u32 | chunkCount | Must equal `groupCount × tileCount × variableCount` |
+| 20 | 4 | u32 | reserved | 0 |
+| 24 | 8 | u64 | reserved | 0 |
+
+### VariableEntry
+
+One per variable, sorted by ascending `variableId`; the set must equal the
+metadata's `variables`.
+
+| Offset | Length | Type | Field | Rule |
+|---:|---:|---|---|---|
+| 0 | 1 | u8 | variableId | Registered ids (unchanged from v1) |
+| 1 | 1 | u8 | predictor | 0 RAW or 2 PREVIOUS |
+| 2 | 2 | u16 | reserved | 0 |
+
+The predictor applies to every chunk of the variable. ANCHOR (1) and ZERO
+(3) are not valid in v2: a chunk is decompressed whole, so an anchor buys no
+random access and would only give one chunk a second valid encoding.
+
+### GroupEntry
+
+One per group, in axis order.
+
+| Offset | Length | Type | Field | Rule |
+|---:|---:|---|---|---|
+| 0 | 2 | u16 | firstFrame | Index into the axis (not a frame offset); 0 for the first group, the previous group's `firstFrame + frameCount` otherwise |
+| 2 | 1 | u8 | frameCount | 1–255; the last group must end exactly at the axis's `frameCount` |
+| 3 | 1 | u8 | reserved | 0 |
+
+### ChunkEntry and chunk order
+
+One per chunk, in physical order:
+
+```text
+for group g in 0 .. groupCount
+  for tile t in 0 .. tileCount           (row-major)
+    for variable v in 0 .. variableCount (ascending variableId)
+      chunk position p = (g × tileCount + t) × variableCount + v
+```
+
+| Offset | Length | Type | Field | Rule |
+|---:|---:|---|---|---|
+| 0 | 4 | u32 | compressedLength | ≥ 1 |
+| 4 | 4 | u32 | crc32 | CRC-32/IEEE of the reconstructed chunk |
+
+A chunk's *offset* is not stored. Payloads are contiguous in position order
+starting at `dataOffset`: the offset of chunk 0 is `dataOffset` and the
+offset of chunk `p + 1` is the offset of chunk `p` plus its
+`compressedLength`. `fileSize = align8(end of the last chunk)`, and every
+padding byte is zero. All of this is checked arithmetic against `fileSize`
+before any allocation. Since the order is fixed by this specification and
+the chunks are strictly adjacent, an offset would be redundant — and would
+more than double the index.
+
+This order is what makes the three access patterns cheap: a whole group is
+one contiguous span (a global view fetches exactly what v1 fetched); the
+tiles a viewport needs form one contiguous span per tile row per group; and
+one cell's series is one chunk per group, with the two components of a wind
+bundle adjacent.
+
+### Chunk contents
+
+Every chunk is one independent Zstandard frame that must carry a content
+checksum, decompressing to exactly
+
+```text
+decodedLength = group.frameCount × tile.height × tile.width
+```
+
+bytes (the tile's *clipped* height and width), laid out frame-major: the
+group's frames in axis order, each as the tile's rows top to bottom, each
+row west to east — the same orientation as the plane. With ZSTD_DICT the
+embedded dictionary applies, and a ZSTD_DICT file with `dictionaryLength = 0`
+is invalid.
+
+The reconstructed chunk is derived from the decompressed bytes by the
+variable's predictor:
+
+- **RAW** — the bytes are the codes.
+- **PREVIOUS** — the first frame's bytes are its codes; every later frame's
+  bytes are the modulo-256 residual against the reconstructed previous frame
+  *of the same chunk*, which is the preceding frame on the axis because
+  groups are contiguous. `residual = (current − previous) mod 256`,
+  `current = (residual + previous) mod 256`.
+
+`crc32` covers the reconstructed chunk in the same frame-major layout. A
+decoder must reject a chunk whose Zstandard checksum, decompressed length or
+CRC-32 fails, and must not allocate more than `decodedLength` (or a
+configured safety limit) from file values.
+
+### Decoding a frame and a series
+
+A frame of a variable is assembled from the chunks of its group for the
+tiles wanted: each chunk contributes the frame's `tile.height × tile.width`
+block at the tile's grid position. A reader may assemble a partial plane
+from a subset of tiles; which tiles it holds is then part of the frame's
+state, and a renderer must not draw cells no tile has covered.
+
+One cell's series is the cell's byte from the frame block of the tile
+containing it, in every group's chunk of that tile. The cost of a series is
+therefore one chunk per group of one tile, independent of the number of
+frames.
+
+### Streaming (v2)
+
+The structural prefix `[0, dataOffset)` validates as in v1. A streaming
+reader derives every chunk's byte span from the index and range-fetches
+spans on demand; the spans a viewport needs are contiguous per tile row and
+may be coalesced across small gaps at the reader's discretion. Integrity is
+per chunk (Zstandard checksum plus CRC-32).
+
+The index is larger than v1's: the chunk count is the group count times the
+tile count times the variable count, at 8 bytes each — 94 KB for a
+420-tile, 28-group GFS bundle. That is one extra range request before the
+first frame, and it is what buys every later request its narrowness.
+
+### Error handling, additions for v2
+
+A decoder must reject, in addition to the v1 rules that still apply (unknown
+container versions, section geometry, padding, dictionary presence,
+overflow):
+
+- An IndexHeader whose magic, version or headerSize differ, or whose
+  reserved words are nonzero.
+- `tileWidth` or `tileHeight` of zero or larger than the grid.
+- A `variableCount` or variable set that differs from the metadata;
+  unsorted or duplicate `variableId`s; a predictor other than RAW or
+  PREVIOUS; nonzero reserved fields.
+- Groups that do not partition the axis: a first group not starting at 0, a
+  gap or overlap between consecutive groups, a `frameCount` of 0, or a last
+  group not ending at the axis's `frameCount`.
+- A `chunkCount` other than `groupCount × tileCount × variableCount`, or an
+  `indexLength` other than the header plus the three tables.
+- A `compressedLength` of 0, or chunk spans that exceed `fileSize` or leave
+  `fileSize ≠ align8(end of the last chunk)`.
+- A Zstandard frame without a content checksum, or one whose decompressed
+  length differs from `decodedLength`.
+- A reconstructed chunk whose CRC-32 fails.
+
+### Encoder rules (v2)
+
+Normative for byte identity between the two encoders:
+
+- Every variable's grouping is `GROUP_LENGTH = 6` frames, formed inside
+  segments of constant step exactly as v1's temporal grouping, applied once
+  per file to the shared axis. A trailing short group is its own group.
+- Predictor: RAW for `prate` and `cref`; PREVIOUS for every linear-codebook
+  field.
+- Tile size is a per-source registry value; a half-resolution variant uses
+  `(ceil(tileWidth / 2), ceil(tileHeight / 2))`, so a tile with the same
+  number covers the same ground in both tiers. A regional (cropped) file
+  tiles its own grid from its own origin with the source's tile size.
+- **The tile is then clamped to the grid**: `min(tileWidth, width)` and
+  `min(tileHeight, height)`. The format requires `1 <= tile <= grid` so that
+  a single-tile file states its grid size exactly, and a regional crop is
+  routinely smaller than its source's tile — a six-degree showcase window is
+  24 x 24 cells against the 0.25-degree grid's 48 x 52. Clamping makes such a
+  file one tile, which is the right answer: there is nothing left to
+  subdivide.
+- Compression is ZSTD at the production level with the content checksum; no
+  dictionary.
 
 ## File Naming
 

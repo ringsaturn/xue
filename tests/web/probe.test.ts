@@ -127,6 +127,21 @@ describe("ProbeSeries", () => {
     expect(series.code(1, 1)).toBeUndefined();
   });
 
+  it("adopts a whole series read out of a tiled container", () => {
+    const metadata = globalGrid();
+    const series = new ProbeSeries(116.4, 39.9);
+    expect(series.adopt(metadata, 1, [0, 1, 2], Uint8Array.from([10, 20, 30]))).toBe(true);
+    expect([0, 1, 2].map((offset) => series.code(1, offset))).toEqual([10, 20, 30]);
+  });
+
+  it("declines a series that does not match the axis, or a point off the grid", () => {
+    const metadata = globalGrid();
+    const series = new ProbeSeries(116.4, 39.9);
+    expect(series.adopt(metadata, 1, [0, 1, 2], Uint8Array.from([10, 20]))).toBe(false);
+    expect(series.code(1, 0)).toBeUndefined();
+    expect(new ProbeSeries(0, 0).adopt(croppedGrid(), 1, [0], Uint8Array.from([10]))).toBe(false);
+  });
+
   it("declines to sample a point off the bundle's grid", () => {
     const metadata = croppedGrid();
     const series = new ProbeSeries(0, 0);

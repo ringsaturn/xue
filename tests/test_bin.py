@@ -6,6 +6,7 @@ import struct
 import tempfile
 import unittest
 import zlib
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -21,11 +22,16 @@ from xuebuild.binformat import (
     PREDICTOR_PREVIOUS,
     PREDICTOR_RAW,
     Bundle,
+    ChunkPayload,
+    GroupEntry,
     PlaneEntry,
     PlanePayload,
+    TileGeometry,
+    VariableEntry,
     align8,
     crc32_plane,
     write_bundle,
+    write_bundle_v2,
 )
 from xuebuild.errors import BundleError, ConversionError, ManifestError
 from xuebuild.manifest import build_bin_manifest, validate_bin_manifest
@@ -497,6 +503,282 @@ def mixed_axis_metadata(hours: list[int], **kwargs) -> dict:
         schema_version=2,
         **kwargs,
     )
+
+
+# -- container v2 ------------------------------------------------------------
+
+# A grid no tile size divides: 7 x 5 cells in 3 x 2 tiles leaves a one-cell
+# last column and a one-row last row, so both clippings are always under test.
+TILED_WIDTH, TILED_HEIGHT = 7, 5
+TILE_WIDTH, TILE_HEIGHT = 3, 2
+TILED_HOURS = [0, 1, 2, 3, 4, 5, 6, 7]
+
+
+def tiled_planes() -> dict[int, dict[int, np.ndarray]]:
+    points = TILED_WIDTH * TILED_HEIGHT
+    return {
+        hour: {1: ((np.arange(points, dtype=np.uint16) * 5 + hour * 11) % 251).astype(np.uint8)}
+        for hour in TILED_HOURS
+    }
+
+
+def build_tiled(
+    path: Path,
+    *,
+    predictor: int = PREDICTOR_PREVIOUS,
+    group_length: int = 3,
+) -> dict[int, dict[int, np.ndarray]]:
+    planes = tiled_planes()
+    tiles = TileGeometry(TILED_WIDTH, TILED_HEIGHT, TILE_WIDTH, TILE_HEIGHT)
+    variables, groups, raw = temporal.build_chunks(
+        TILED_HOURS, planes, tiles, {1: predictor}, group_length=group_length
+    )
+    chunks = []
+    for entry, stored in raw:
+        payload = zstdcli.compress(stored.tobytes())
+        chunks.append(ChunkPayload(replace(entry, compressed_length=len(payload)), payload))
+    write_bundle_v2(
+        path,
+        synthetic_metadata(
+            width=TILED_WIDTH,
+            height=TILED_HEIGHT,
+            frame_count=len(TILED_HOURS),
+        ),
+        tile_width=TILE_WIDTH,
+        tile_height=TILE_HEIGHT,
+        variables=variables,
+        groups=groups,
+        chunks=chunks,
+    )
+    return planes
+
+
+class TileGeometryTests(unittest.TestCase):
+    """The tiling is derived arithmetic, never stored, so both implementations
+    must derive it identically — including the clipped last row and column the
+    721-row production grid always has."""
+
+    def test_production_grid_tiling(self) -> None:
+        tiles = TileGeometry(1440, 721, 48, 52)
+        self.assertEqual((tiles.columns, tiles.rows, tiles.count), (30, 14, 420))
+        self.assertEqual(tiles.shape(0), (52, 48))
+        self.assertEqual(tiles.shape(419), (45, 48))
+        self.assertEqual(tiles.origin(419), (676, 1392))
+        area = sum(height * width for height, width in (tiles.shape(t) for t in range(tiles.count)))
+        self.assertEqual(area, 1440 * 721)
+
+    def test_every_cell_lands_in_exactly_one_tile(self) -> None:
+        tiles = TileGeometry(TILED_WIDTH, TILED_HEIGHT, TILE_WIDTH, TILE_HEIGHT)
+        for row in range(TILED_HEIGHT):
+            for column in range(TILED_WIDTH):
+                tile = tiles.tile_of(row, column)
+                origin_row, origin_column = tiles.origin(tile)
+                height, width = tiles.shape(tile)
+                self.assertTrue(origin_row <= row < origin_row + height)
+                self.assertTrue(origin_column <= column < origin_column + width)
+
+    def test_rectangles_and_bounds(self) -> None:
+        tiles = TileGeometry(TILED_WIDTH, TILED_HEIGHT, TILE_WIDTH, TILE_HEIGHT)
+        self.assertEqual(tiles.tiles_in_rect(0, 0, TILED_HEIGHT, TILED_WIDTH), list(range(tiles.count)))
+        self.assertEqual(tiles.tiles_in_rect(3, 4, 1, 1), [tiles.tile_of(3, 4)])
+        with self.assertRaises(BundleError):
+            tiles.tile_of(TILED_HEIGHT, 0)
+        with self.assertRaises(BundleError):
+            TileGeometry(16, 8, 0, 4)
+        with self.assertRaises(BundleError):
+            TileGeometry(16, 8, 17, 4)
+
+
+class TiledContainerTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.path = Path(self.directory.name) / "tiled.xue"
+
+    def read(self) -> Bundle:
+        return binformat.read_bundle(self.path)
+
+    def rewrite(self, mutate) -> bytes:
+        data = bytearray(self.path.read_bytes())
+        mutate(data)
+        return bytes(data)
+
+    def index_offset(self) -> int:
+        return struct.unpack_from("<Q", self.path.read_bytes(), 40)[0]
+
+    def test_round_trip_planes_and_series(self) -> None:
+        for predictor in (PREDICTOR_PREVIOUS, PREDICTOR_RAW):
+            with self.subTest(predictor=predictor):
+                planes = build_tiled(self.path, predictor=predictor)
+                bundle = self.read()
+                self.assertEqual(bundle.container_version, 2)
+                bundle.verify_all()
+                for hour in TILED_HOURS:
+                    self.assertEqual(bundle.decode_plane(1, hour).tolist(), planes[hour][1].tolist())
+                for row in range(TILED_HEIGHT):
+                    for column in range(TILED_WIDTH):
+                        expected = [int(planes[hour][1][row * TILED_WIDTH + column]) for hour in TILED_HOURS]
+                        self.assertEqual(bundle.decode_series(1, column, row).tolist(), expected)
+
+    def test_partial_tile_decode_matches_the_whole_plane(self) -> None:
+        planes = build_tiled(self.path)
+        bundle = self.read()
+        whole = bundle.decode_plane(1, 4).reshape(TILED_HEIGHT, TILED_WIDTH)
+        self.assertEqual(whole.tolist(), planes[4][1].reshape(TILED_HEIGHT, TILED_WIDTH).tolist())
+        for tile in range(bundle.tiles.count):
+            partial = bundle.decode_plane(1, 4, tiles=[tile]).reshape(TILED_HEIGHT, TILED_WIDTH)
+            row, column = bundle.tiles.origin(tile)
+            height, width = bundle.tiles.shape(tile)
+            self.assertEqual(
+                partial[row : row + height, column : column + width].tolist(),
+                whole[row : row + height, column : column + width].tolist(),
+            )
+
+    def test_layout_offsets_and_index_size(self) -> None:
+        build_tiled(self.path)
+        data = self.path.read_bytes()
+        header = struct.unpack_from("<8sHHIQQQQQQQQ", data, 0)
+        self.assertEqual(header[1], 2)
+        self.assertEqual(header[4], len(data))
+        self.assertEqual(len(data) % 8, 0)
+        index = struct.unpack_from("<4sHHHHHBBIIQ", data, header[7])
+        magic, version, header_size, tile_width, tile_height, groups, variables, _, chunks, r0, r1 = index
+        self.assertEqual((magic, version, header_size), (b"IDX2", 2, 32))
+        self.assertEqual((tile_width, tile_height), (TILE_WIDTH, TILE_HEIGHT))
+        self.assertEqual((r0, r1), (0, 0))
+        tiles = TileGeometry(TILED_WIDTH, TILED_HEIGHT, TILE_WIDTH, TILE_HEIGHT)
+        self.assertEqual(chunks, groups * tiles.count * variables)
+        self.assertEqual(header[8], 32 + 4 * variables + 4 * groups + 8 * chunks)
+
+    def test_chunk_offsets_are_the_prefix_sums(self) -> None:
+        """Offsets are not stored, so a reader that computes them differently
+        from the writer would read a shifted file rather than fail."""
+        build_tiled(self.path)
+        bundle = self.read()
+        cursor = bundle.data_offset
+        for position, chunk in enumerate(bundle.chunks):
+            self.assertEqual(bundle.chunk_span(position), (cursor, cursor + chunk.compressed_length))
+            cursor += chunk.compressed_length
+        self.assertEqual(align8(cursor), len(bundle.data))
+
+    def test_a_whole_group_is_one_contiguous_span(self) -> None:
+        """The global-view guarantee: playing a frame costs the same single
+        range request v1 cost."""
+        build_tiled(self.path)
+        bundle = self.read()
+        for group in range(len(bundle.groups)):
+            spans = [
+                bundle.chunk_span(bundle.chunk_position(group, tile, 1))
+                for tile in range(bundle.tiles.count)
+            ]
+            for before, after in zip(spans, spans[1:]):
+                self.assertEqual(before[1], after[0])
+
+    def test_group_partition_rejections(self) -> None:
+        build_tiled(self.path)
+        start = self.index_offset() + 32 + 4  # one variable entry
+        for label, offset, packed in [
+            ("first group not at zero", 0, struct.pack("<HBB", 1, 3, 0)),
+            ("gap between groups", 4, struct.pack("<HBB", 4, 3, 0)),
+            ("overlapping groups", 4, struct.pack("<HBB", 2, 3, 0)),
+            ("empty group", 0, struct.pack("<HBB", 0, 0, 0)),
+            ("short last group", 8, struct.pack("<HBB", 6, 1, 0)),
+            ("reserved byte set", 0, struct.pack("<HBB", 0, 3, 1)),
+        ]:
+            with self.subTest(label):
+                def mutate(data, offset=offset, packed=packed):
+                    data[start + offset : start + offset + 4] = packed
+
+                with self.assertRaises(BundleError):
+                    Bundle(self.rewrite(mutate))
+
+    def test_index_header_rejections(self) -> None:
+        build_tiled(self.path)
+        index = self.index_offset()
+        for label, offset, packed in [
+            ("zero tile width", 8, struct.pack("<H", 0)),
+            ("tile wider than the grid", 8, struct.pack("<H", TILED_WIDTH + 1)),
+            ("tile taller than the grid", 10, struct.pack("<H", TILED_HEIGHT + 1)),
+            ("wrong group count", 12, struct.pack("<H", 9)),
+            ("wrong variable count", 14, struct.pack("<B", 2)),
+            ("uncompressed chunks", 15, struct.pack("<B", COMPRESSION_NONE)),
+            ("dictionary without one", 15, struct.pack("<B", COMPRESSION_ZSTD_DICT)),
+            ("wrong chunk count", 16, struct.pack("<I", 3)),
+            ("wrong magic", 0, b"IDX1"),
+            ("wrong index version", 4, struct.pack("<H", 1)),
+            ("wrong header size", 6, struct.pack("<H", 16)),
+            ("reserved word set", 20, struct.pack("<I", 1)),
+        ]:
+            with self.subTest(label):
+                def mutate(data, offset=offset, packed=packed):
+                    data[index + offset : index + offset + len(packed)] = packed
+
+                with self.assertRaises(BundleError):
+                    Bundle(self.rewrite(mutate))
+
+    def test_anchor_and_zero_predictors_rejected(self) -> None:
+        """A v2 chunk is decompressed whole, so an anchor would give one chunk
+        a second valid encoding."""
+        build_tiled(self.path)
+        variable = self.index_offset() + 32
+        for predictor in (PREDICTOR_ANCHOR, 3, 9):
+            with self.subTest(predictor=predictor):
+                def mutate(data, predictor=predictor):
+                    data[variable + 1] = predictor
+
+                with self.assertRaises(BundleError):
+                    Bundle(self.rewrite(mutate))
+
+    def test_corrupt_chunk_fails_its_crc(self) -> None:
+        build_tiled(self.path)
+        bundle = self.read()
+        start, _ = bundle.chunk_span(0)
+
+        def mutate(data):
+            data[start + 6] ^= 0xFF
+
+        mutated = self.rewrite(mutate)
+        with self.assertRaises((BundleError, ConversionError)):
+            Bundle(mutated).verify_all()
+
+    def test_trailing_garbage_and_size_rejected(self) -> None:
+        build_tiled(self.path)
+        data = self.path.read_bytes()
+        with self.assertRaises(BundleError):
+            Bundle(data + b"\x00" * 8)
+        with self.assertRaises(BundleError):
+            Bundle(data[:-8])
+
+    def test_writer_rejects_a_broken_partition(self) -> None:
+        planes = tiled_planes()
+        tiles = TileGeometry(TILED_WIDTH, TILED_HEIGHT, TILE_WIDTH, TILE_HEIGHT)
+        variables, groups, raw = temporal.build_chunks(TILED_HOURS, planes, tiles, {1: PREDICTOR_RAW})
+        chunks = [
+            ChunkPayload(replace(entry, compressed_length=len(stored.tobytes())), stored.tobytes())
+            for entry, stored in raw
+        ]
+        metadata = synthetic_metadata(
+            width=TILED_WIDTH, height=TILED_HEIGHT, frame_count=len(TILED_HOURS)
+        )
+        arguments = dict(
+            tile_width=TILE_WIDTH,
+            tile_height=TILE_HEIGHT,
+            variables=variables,
+            groups=groups,
+            chunks=chunks,
+        )
+        with self.assertRaises(BundleError):
+            write_bundle_v2(self.path, metadata, **{**arguments, "chunks": chunks[:-1]})
+        with self.assertRaises(BundleError):
+            write_bundle_v2(
+                self.path, metadata, **{**arguments, "groups": [GroupEntry(0, len(TILED_HOURS) - 1)]}
+            )
+        with self.assertRaises(BundleError):
+            write_bundle_v2(
+                self.path,
+                metadata,
+                **{**arguments, "variables": [VariableEntry(1, PREDICTOR_ANCHOR)]},
+            )
 
 
 class SchemaV2Tests(unittest.TestCase):

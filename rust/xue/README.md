@@ -1,9 +1,14 @@
 # xue
 
-Parser and frame decoder for the Xue (雪) v1 bundle format — a per-variable
+Parser and frame decoder for the Xue (雪) bundle format — a per-variable
 spatiotemporal container that packs global weather forecasts (quantized
 single-byte planes, temporal residual prediction, zstd) for streaming
 playback in the browser.
+
+Both container versions are read, and a decoder must keep reading v1:
+published runs carry those bytes and are never rebuilt. In v1 a payload is
+one whole plane of one frame; in v2 it is a chunk — one spatial tile of one
+temporal group for one variable — which is what makes a partial read cheap.
 
 This crate is the decoding half of the [Xue
 project](https://github.com/ringsaturn/xue); the production encoder is the
@@ -20,6 +25,14 @@ Two readers share the same structural validation and decode logic:
 - `StreamingBundle` opens only the structural prefix (header + metadata +
   index) and accepts payload bytes incrementally as HTTP range responses
   arrive, reporting which byte span a requested frame still needs.
+
+Both answer the whole-plane call `decode_frame`, and, on a tiled file, two
+calls that read a fraction of it: `decode_frame_tiles` fills only the tiles a
+viewport covers, and `decode_series` reads one grid cell across the whole
+time axis at one chunk per temporal group, independent of how many frames
+that axis has. `StreamingBundle` reports the byte spans either still needs
+(`missing_spans`, `missing_series_spans`), coalesced so a row of neighbouring
+tiles costs one range request rather than one per tile.
 
 ## Example
 

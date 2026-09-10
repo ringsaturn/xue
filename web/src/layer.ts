@@ -2,6 +2,7 @@ import type { CustomLayerInterface, Map as MaplibreMap } from "maplibre-gl";
 
 import { t } from "./i18n";
 import type { BundleMetadata } from "./manifest";
+import { WHOLE_PLANE_COVERAGE, type CoverageBox } from "./tiles";
 
 /**
  * MapLibre custom layer that renders one quantized R8 forecast plane on the
@@ -15,9 +16,20 @@ import type { BundleMetadata } from "./manifest";
  * `imageWeight` style). Scrubbing shows a single frame (mix 0); playback
  * sweeps mix 0->1 between frames so 12 fps reads as continuous motion and
  * streaming arrival jitter is masked. No raster opacity is ever animated.
+ *
+ * A plane need not be whole. A container v2 bundle can be decoded for just
+ * the tiles a viewport covers, and everything outside them is stale bytes
+ * from whatever the decoder held before — so `u_cover` names the part of the
+ * texture that is real and the shader discards the rest. Showing nothing
+ * there is the honest answer: the alternative is painting another frame's
+ * data. A whole plane sets the box to the whole texture, which passes every
+ * sample and costs one comparison.
  */
 
-const VERTEX_SHADER = `#version 300 es
+// Exported so a headless WebGL2 test can compile and sample the real shader:
+// the antimeridian seam this clips at is a pixel-level property no
+// application-level test sees.
+export const VERTEX_SHADER = `#version 300 es
 in vec2 a_position;
 uniform mat4 u_matrix;
 out vec2 v_mercator;
@@ -26,7 +38,7 @@ void main() {
   gl_Position = u_matrix * vec4(a_position, 0.0, 1.0);
 }`;
 
-const FRAGMENT_SHADER = `#version 300 es
+export const FRAGMENT_SHADER = `#version 300 es
 precision highp float;
 in vec2 v_mercator;
 uniform sampler2D u_data;
@@ -40,6 +52,10 @@ uniform float u_mix;
 // (a showcase case) covers only part of the world, and every longitude
 // outside it has no data to show.
 uniform float u_wrap;
+// The part of the data texture the plane actually filled, as
+// (uStart, uEnd, vStart, vEnd). uStart > uEnd means the box wraps the
+// antimeridian, which a viewport straddling it produces.
+uniform vec4 u_cover;
 out vec4 out_color;
 const float PI = 3.141592653589793;
 
@@ -99,6 +115,16 @@ void main() {
   // never leave the vertical range, so only a cropped grid is ever clipped;
   // without this the edge texels would smear across the whole map.
   if (v < 0.0 || v > 1.0 || (u_wrap < 0.5 && (u < 0.0 || u > 1.0))) discard;
+  // The coverage test runs on the wrapped coordinate. On a global grid the
+  // half-cell before the antimeridian lands just past u = 1 (the cell center
+  // is half a step east of 360 degrees) and the texture's own REPEAT resolves
+  // it; comparing the raw u against the box would discard that sliver and
+  // leave a hairline gap down the dateline.
+  float cu = u_wrap > 0.5 ? fract(u) : u;
+  bool coveredU = u_cover.x <= u_cover.y
+    ? (cu >= u_cover.x && cu <= u_cover.y)
+    : (cu >= u_cover.x || cu <= u_cover.y);
+  if (!coveredU || v < u_cover.z || v > u_cover.w) discard;
   float code = sampleCode(u_data, vec2(u, v));
   if (u_mix > 0.0) {
     code = mix(code, sampleCode(u_data_b, vec2(u, v)), u_mix);
@@ -123,6 +149,8 @@ export class ForecastLayer implements CustomLayerInterface {
   /** Planes currently uploaded to slot A / slot B, compared by identity so
    * redundant per-rAF uploads are skipped during blend sweeps. */
   private uploadedPlanes: [Uint8Array | null, Uint8Array | null] = [null, null];
+  /** The part of the texture the displayed plane actually filled. */
+  private coverage: CoverageBox = WHOLE_PLANE_COVERAGE;
 
   private width = 0;
   private height = 0;
@@ -156,6 +184,7 @@ export class ForecastLayer implements CustomLayerInterface {
     this.hasFrame = false;
     // Texture dimensions changed; every plane must be re-uploaded.
     this.uploadedPlanes = [null, null];
+    this.coverage = WHOLE_PLANE_COVERAGE;
     this.pendingPlaneA = null;
     this.pendingPlaneB = null;
     this.mixWeight = 0;
@@ -187,7 +216,7 @@ export class ForecastLayer implements CustomLayerInterface {
       throw new Error(`program link failed: ${gl.getProgramInfoLog(program) ?? "unknown"}`);
     }
     this.program = program;
-    for (const name of ["u_matrix", "u_data", "u_data_b", "u_palette", "u_first", "u_step", "u_size", "u_mix", "u_wrap"]) {
+    for (const name of ["u_matrix", "u_data", "u_data_b", "u_palette", "u_first", "u_step", "u_size", "u_mix", "u_wrap", "u_cover"]) {
       this.uniforms[name] = gl.getUniformLocation(program, name);
     }
 
@@ -218,7 +247,9 @@ export class ForecastLayer implements CustomLayerInterface {
     this.hasFrame = false;
     this.uploadedPlanes = [null, null];
     if (this.pendingPalette) this.setPalette(this.pendingPalette);
-    if (this.pendingPlaneA) this.setBlend(this.pendingPlaneA, this.pendingPlaneB, this.mixWeight);
+    if (this.pendingPlaneA) {
+      this.setBlend(this.pendingPlaneA, this.pendingPlaneB, this.mixWeight, this.coverage);
+    }
   }
 
   private createDataTexture(gl: WebGL2RenderingContext): WebGLTexture {
@@ -261,17 +292,23 @@ export class ForecastLayer implements CustomLayerInterface {
   }
 
   /** Show a single plane (slot A, blend weight 0). */
-  setFrame(plane: Uint8Array): void {
-    this.setBlend(plane, null, 0);
+  setFrame(plane: Uint8Array, coverage: CoverageBox = WHOLE_PLANE_COVERAGE): void {
+    this.setBlend(plane, null, 0, coverage);
   }
 
   /** Show `mix`-weighted blend between plane A (slot A) and plane B (slot B).
    * Uploads are skipped when a slot already holds the given plane, so calling
    * this every animation frame with a sweeping weight is cheap. */
-  setBlend(planeA: Uint8Array, planeB: Uint8Array | null, mix: number): void {
+  setBlend(
+    planeA: Uint8Array,
+    planeB: Uint8Array | null,
+    mix: number,
+    coverage: CoverageBox = WHOLE_PLANE_COVERAGE,
+  ): void {
     this.pendingPlaneA = planeA;
     this.pendingPlaneB = planeB;
     this.mixWeight = planeB ? Math.min(1, Math.max(0, mix)) : 0;
+    this.coverage = coverage;
     const gl = this.gl;
     if (!gl || !this.dataTextures || !this.width || !this.height) return;
     // A frame step promotes the upcoming plane to the current one; swap the
@@ -309,6 +346,13 @@ export class ForecastLayer implements CustomLayerInterface {
     gl.uniform2f(this.uniforms.u_size!, this.width, this.height);
     gl.uniform1f(this.uniforms.u_mix!, this.uploadedPlanes[1] ? this.mixWeight : 0);
     gl.uniform1f(this.uniforms.u_wrap!, this.wraps ? 1 : 0);
+    gl.uniform4f(
+      this.uniforms.u_cover!,
+      this.coverage.uStart,
+      this.coverage.uEnd,
+      this.coverage.vStart,
+      this.coverage.vEnd,
+    );
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.dataTextures[0]!);
     gl.uniform1i(this.uniforms.u_data!, 0);

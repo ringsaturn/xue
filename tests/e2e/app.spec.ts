@@ -148,6 +148,10 @@ async function routeBundle(
 interface RangeCounters {
   ranged: number;
   full: number;
+  /** Length of every 206 response, in request order — how a narrowed view
+   * shows up: a whole temporal group is one long range, a viewport's tiles
+   * are several short ones. */
+  lengths: number[];
 }
 
 /** Serves bundles like a range-capable host (R2): exact 206 responses for
@@ -160,7 +164,10 @@ async function routeBundleWithRanges(page: Page, counters?: RangeCounters): Prom
     if (match) {
       const start = Number(match[1]);
       const end = Math.min(Number(match[2]), body.length - 1);
-      if (counters) counters.ranged += 1;
+      if (counters) {
+        counters.ranged += 1;
+        counters.lengths.push(end - start + 1);
+      }
       return route.fulfill({
         status: 206,
         contentType: "application/octet-stream",
@@ -522,12 +529,15 @@ test("reduced motion disables autostart and keeps keyboard scrubbing", async ({ 
   await expect(page.locator("#frame-tooltip")).toContainText("F001");
 });
 
-test("range-capable server streams on demand and never downloads the full body", async ({ page }) => {
-  // Full residency needs several playback loops, and the mobile emulation
-  // takes the longest: ~53 s measured on a CI-class runner. Budget well past
-  // that (test.slow()'s 90 s left no room) so only a real stall fails.
+test("range-capable server streams on demand and never downloads the full body", async ({ page }, testInfo) => {
+  // A view that spans the grid fetches whole temporal groups; the narrow
+  // phone viewport does not, and has its own test below.
+  test.skip(testInfo.project.name !== "desktop", "a global view is a desktop-width view");
+  // Full residency needs several playback loops. Budget well past the
+  // measured worst case (test.slow()'s 90 s left no room) so only a real
+  // stall fails.
   test.setTimeout(180_000);
-  const counters: RangeCounters = { ranged: 0, full: 0 };
+  const counters: RangeCounters = { ranged: 0, full: 0, lengths: [] };
   await routeManifest(page);
   await routeBundleWithRanges(page, counters);
   await page.goto("/");
@@ -539,6 +549,24 @@ test("range-capable server streams on demand and never downloads the full body",
   await expect(page.locator("#preload-state")).toHaveText("Bundle fully buffered", { timeout: 120_000 });
   await expect(page.locator("#preload-percent")).toHaveText("100%");
   await expect(page.locator("#preload-format")).toHaveText("Xue");
+  expect(counters.ranged).toBeGreaterThan(1);
+  expect(counters.full).toBe(0);
+});
+
+test("a phone-sized view buffers its own tiles and says so", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "mobile", "the phone viewport is the narrow one");
+  test.setTimeout(180_000);
+  const counters: RangeCounters = { ranged: 0, full: 0, lengths: [] };
+  await routeManifest(page);
+  await routeBundleWithRanges(page, counters);
+  await page.goto("/");
+  await expect(page.getByRole("slider", { name: "Forecast hour" })).toBeEnabled({ timeout: 20_000 });
+  // The phone shows a fraction of the world, so the session never fetches
+  // the rest of the grid — and the card reports what it did buffer rather
+  // than stalling short of "fully buffered".
+  await expect(page.locator("#preload-state")).toHaveText("Viewport fully buffered", { timeout: 120_000 });
+  await expect(page.locator("#preload-percent")).not.toHaveText("100%");
+  await expect(page.locator("#preload-format")).toContainText("Xue");
   expect(counters.ranged).toBeGreaterThan(1);
   expect(counters.full).toBe(0);
 });
@@ -581,7 +609,7 @@ test("?lang=zh renders the Chinese UI and the footer toggle switches back", asyn
   await expect(toggle).toHaveText("中文");
 });
 
-test("clicking the map pins a point and fills its series while scrubbing", async ({ page }, testInfo) => {
+test("clicking the map pins a point and reads its whole series at once", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop", "desktop interaction coverage");
   await page.emulateMedia({ reducedMotion: "reduce" });
   await routeManifest(page);
@@ -596,19 +624,87 @@ test("clicking the map pins a point and fills its series while scrubbing", async
   await expect(page.locator("#probe-code")).toHaveText("PRATE SFC");
   await expect(page.locator("#probe-coords")).toContainText("°");
   await expect(page.locator("#probe-value")).toContainText("mm/h");
-  // Nothing is fetched for the probe: the series holds only the frames the
-  // viewer has already decoded, and grows as the playhead moves.
+  // The container is tiled, so the whole series comes out of the one tile
+  // holding the cell rather than filling in frame by frame as playback walks
+  // the axis.
   const count = page.locator("#probe-count");
-  await expect(count).toContainText("/ 121");
-  const pinned = Number((await count.textContent())!.split("/")[0]!.trim());
+  await expect(count).toHaveText("121 / 121");
+  await expect(page.locator("#probe-hint")).toHaveText("Series complete");
+  // Scrubbing changes the reading, not the series behind it.
   const slider = page.getByRole("slider", { name: "Forecast hour" });
   await slider.focus();
   for (let step = 0; step < 3; step += 1) await page.keyboard.press("ArrowRight");
   await expect(slider).toHaveValue("3");
-  await expect(count).toHaveText(new RegExp(`^${pinned + 3} / 121$`));
+  await expect(count).toHaveText("121 / 121");
   // Escape retires the panel.
   await page.keyboard.press("Escape");
   await expect(panel).toBeHidden();
+});
+
+/** Move the playhead without playing: the app treats a slider `input` the
+ * same way whether it came from a drag or a keypress. */
+async function scrubTo(page: Page, index: number): Promise<void> {
+  await page.getByRole("slider", { name: "Forecast hour" }).evaluate(
+    (element: HTMLInputElement, value: number) => {
+      element.value = String(value);
+      element.dispatchEvent(new Event("input", { bubbles: true }));
+    },
+    index,
+  );
+}
+
+test("zooming in narrows a streaming session to the viewport's tiles", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop", "desktop interaction coverage");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await routeManifest(page);
+  const counters: RangeCounters = { ranged: 0, full: 0, lengths: [] };
+  await routeBundleWithRanges(page, counters);
+  // The stats panel is what reports the narrowing; pin it the way a returning
+  // viewer would have.
+  await page.addInitScript(() => window.localStorage.setItem("g2pv-stats-visible", "1"));
+  await page.goto("/");
+  const slider = page.getByRole("slider", { name: "Forecast hour" });
+  await expect(slider).toBeEnabled({ timeout: 20_000 });
+  // A global view fetches whole temporal groups, every tile of them, and says
+  // so by naming no tile subset at all.
+  const viewport = page.locator("#stat-viewport");
+  await expect(viewport).not.toContainText("tiles");
+  await scrubTo(page, 30);
+  await expect(page.locator("#frame-tooltip")).toContainText("F030");
+  const globalLongest = Math.max(...counters.lengths);
+
+  // Zoom deep into one region. Everything fetched from here on is the tiles
+  // that region covers.
+  const box = (await page.locator("#map").boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  for (let step = 0; step < 6; step += 1) await page.mouse.wheel(0, -400);
+  await expect(viewport).toContainText(/\d+ \/ 45 tiles/, { timeout: 10_000 });
+
+  counters.lengths.length = 0;
+  await scrubTo(page, 90);
+  await expect(page.locator("#frame-tooltip")).toContainText("F090");
+  await expect.poll(() => counters.lengths.length).toBeGreaterThan(0);
+  // A viewport's worth of tiles is strictly less than a whole group, and the
+  // frame still arrives: no error, and no fallback to the whole body.
+  expect(Math.max(...counters.lengths)).toBeLessThan(globalLongest);
+  expect(counters.full).toBe(0);
+  await expect(page.getByRole("alert")).toBeHidden();
+});
+
+test("a streaming session reads a pinned series with a few range requests", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop", "desktop interaction coverage");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await routeManifest(page);
+  const counters: RangeCounters = { ranged: 0, full: 0, lengths: [] };
+  await routeBundleWithRanges(page, counters);
+  await page.goto("/");
+  await expect(page.getByRole("slider", { name: "Forecast hour" })).toBeEnabled({ timeout: 20_000 });
+  const before = counters.ranged;
+  await page.locator("#map").click({ position: { x: 620, y: 300 } });
+  await expect(page.locator("#probe-count")).toHaveText("121 / 121", { timeout: 20_000 });
+  // One chunk per temporal group of one tile, never one request per frame.
+  expect(counters.ranged - before).toBeLessThan(121);
+  expect(counters.full).toBe(0);
 });
 
 test("rapid scrubbing settles on the final slider value", async ({ page }) => {

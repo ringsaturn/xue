@@ -149,12 +149,33 @@ impl Bundle {
         self.inner.plane_length()
     }
 
+    /// The tile size `(width, height)` this file is cut with, or `None` for a
+    /// plane-major container v1 file.
+    ///
+    /// Container v2 stores a payload per tile per temporal group rather than
+    /// per whole plane, which is what makes :meth:`series` cheap.
+    #[getter]
+    fn tile(&self) -> Option<(u32, u32)> {
+        self.inner
+            .tile_geometry()
+            .map(|geometry| (geometry.tile_width, geometry.tile_height))
+    }
+
+    /// The tile grid `(columns, rows)`, or `None` for a v1 file.
+    #[getter]
+    fn tile_grid(&self) -> Option<(u32, u32)> {
+        self.inner
+            .tile_geometry()
+            .map(|geometry| (geometry.columns(), geometry.rows()))
+    }
+
     /// Decode one plane to its quantized codes.
     ///
-    /// Reconstruction follows the predictor recorded in the index — a RAW
-    /// plane, or a residual added to its anchor — and the result is checked
-    /// against the CRC-32 the encoder wrote, so a corrupt file raises rather
-    /// than returning wrong numbers.
+    /// Reconstruction follows the predictor the index records — RAW codes, a
+    /// residual added to its anchor (v1), or a chunk's chain against the
+    /// previous frame (v2) — and the result is checked against the CRC-32 the
+    /// encoder wrote, so a corrupt file raises rather than returning wrong
+    /// numbers.
     fn decode<'py>(
         &mut self,
         python: Python<'py>,
@@ -171,15 +192,37 @@ impl Bundle {
         Ok(plane.to_pyarray(python))
     }
 
-    /// Drop the decoded-plane cache. Decoding walks a temporal group, so the
-    /// reader keeps the anchor it just reconstructed; this releases it.
+    /// One grid cell's code on every frame of the axis, in axis order.
+    ///
+    /// Container v2 only. The cost is one chunk per temporal group of the
+    /// single tile holding the cell — a few tens of KB for a whole 240-hour
+    /// series — rather than a decode of every plane, which is the reason the
+    /// container is tiled at all. `column` and `row` index the metadata grid,
+    /// column 0 being its `firstLongitude`.
+    fn series<'py>(
+        &mut self,
+        python: Python<'py>,
+        variable_id: u8,
+        column: u32,
+        row: u32,
+    ) -> PyResult<Bound<'py, PyArray1<u8>>> {
+        let series = self
+            .inner
+            .decode_series(variable_id, column, row)
+            .map_err(|error| PyValueError::new_err(error.0))?;
+        Ok(series.to_pyarray(python))
+    }
+
+    /// Drop the decode cache: a v1 reader keeps the anchor plane it last
+    /// reconstructed, a v2 reader the chunks of the group it last read.
     fn clear_cache(&mut self) {
         self.inner.clear_cache();
     }
 
     fn __repr__(&self) -> String {
         format!(
-            "<xue.Bundle {} variable(s), {} frames of {} points>",
+            "<xue.Bundle v{} {} variable(s), {} frames of {} points>",
+            if self.inner.tile_geometry().is_some() { 2 } else { 1 },
             self.inner.variable_ids().len(),
             self.inner.frame_count(),
             self.inner.plane_length()

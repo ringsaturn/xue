@@ -1,8 +1,8 @@
 [package]
 name = "xue"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2021"
-description = "Xue v1 bundle parser and frame decoder"
+description = "Parser and frame decoder for the Xue weather-forecast bundle format"
 license = "MIT OR Apache-2.0"
 readme = "README.md"
 repository = "https://github.com/ringsaturn/xue"

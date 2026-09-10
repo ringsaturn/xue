@@ -33,3 +33,7 @@ web/src/wasm/
 *.egg-info/
 docs/format.pdf
 build/
+
+# `maturin develop` drops the extension module into the source package;
+# released wheels build it in CI (scripts/build-encoder-wheel.sh).
+rust/xue-py/pysrc/xue/*.so
