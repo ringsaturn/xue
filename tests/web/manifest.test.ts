@@ -251,6 +251,21 @@ describe("pickBundleVariant", () => {
     // Default view on a retina display needs more than 720 columns.
     expect(pickBundleVariant([half], 1607, false)).toBeNull();
   });
+
+  it("lets a pinned preference override the view and the network", () => {
+    // ?res=half: the reduced tier however wide the view is.
+    expect(pickBundleVariant([half], 4000, false, "half")).toEqual(half);
+    // ?res=full: the canonical bundle even on a metered connection.
+    expect(pickBundleVariant([half], 512, true, "full")).toBeNull();
+    // Explicit auto is the heuristic, unchanged.
+    expect(pickBundleVariant([half], 512, false, "auto")).toEqual(half);
+    expect(pickBundleVariant([half], 1607, false, "auto")).toBeNull();
+  });
+
+  it("falls back to full resolution when a dataset ships no tiers", () => {
+    expect(pickBundleVariant(undefined, 512, false, "half")).toBeNull();
+    expect(pickBundleVariant([], 512, true, "half")).toBeNull();
+  });
 });
 
 describe("crc32", () => {

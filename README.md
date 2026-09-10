@@ -177,6 +177,16 @@ pressure level names itself (`pressure` for sea level pressure, `hgt500`,
 case-insensitive. The address bar stays in sync when switching, and
 unrecognized values fall back to defaults.
 
+Two more parameters are session settings rather than shareable state.
+`?res=` pins the resolution tier the viewer would otherwise pick from the
+viewport and the connection: `half` (alias `low`) always loads the reduced
+rendition, which is the way to hold a session to the smaller download on a
+metered link, and `full` (alias `high`) always loads the canonical bundle.
+A dataset that ships no reduced tier — every showcase case — is full
+resolution either way, and the data card names the tier in use (`Xue ½`).
+`?use_h264=true` opts into the WebCodecs H.264 companions. Both are read
+once at load, so changing either means a reload.
+
 ## Historical showcase
 
 Besides the live feed, the site publishes **cases**: one past weather event

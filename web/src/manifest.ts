@@ -353,10 +353,19 @@ export function hasWindBundle(manifest: ForecastManifest): boolean {
   return hasBundle(manifest, "wind10m");
 }
 
+/** What the session asked for on the resolution ladder: let the viewport and
+ * the connection decide (the default), or pin one end of it. `?res=` carries
+ * this; see urlstate.ts. */
+export type ResolutionPreference = "auto" | "half" | "full";
+
 /** Tier selection (pure so it can be unit-tested): pick the reduced
  * rendition to load instead of the canonical full-resolution bundle, or null
  * to stay on full resolution.
  *
+ * - A pinned `preference` short-circuits the heuristic: "full" never takes a
+ *   variant, "half" always takes the smallest tier offered. A dataset that
+ *   ships no variants at all (showcase cases) has only full resolution, so
+ *   "half" gets it too rather than failing.
  * - On a constrained network the smallest tier always wins — the ladder
  *   exists exactly so those clients stop paying for pixels they cannot see.
  * - Otherwise pick the smallest tier that still covers `neededGridWidth`,
@@ -366,10 +375,12 @@ export function pickBundleVariant(
   variants: VariantDescriptor[] | undefined,
   neededGridWidth: number,
   constrained: boolean,
+  preference: ResolutionPreference = "auto",
 ): VariantDescriptor | null {
+  if (preference === "full") return null;
   if (!variants || variants.length === 0) return null;
   const sorted = [...variants].sort((a, b) => a.width - b.width);
-  if (constrained) return sorted[0] ?? null;
+  if (preference === "half" || constrained) return sorted[0] ?? null;
   return sorted.find((variant) => variant.width >= neededGridWidth) ?? null;
 }
 

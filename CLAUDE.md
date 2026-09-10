@@ -248,7 +248,8 @@ the playhead plus a concurrency cap.
 WebCodecs only when `?use_h264=true` opts in and a video artifact exists and
 the browser supports it, otherwise streaming if a range probe succeeds,
 otherwise a whole-bundle download; and picks a resolution tier via
-`pickBundleVariant` from the viewport and connection. The video path is off by
+`pickBundleVariant` from the viewport and connection, unless `?res=half` or
+`?res=full` pins one end of the ladder. The video path is off by
 default — the Xue decoder is the everyday path, and `use_h264` (parsed in
 `urlstate.ts` like the rest of the URL state) is what turns the companions
 back on.
@@ -328,8 +329,8 @@ locally, browse `http://localhost:4173` rather than the loopback address.
   swaps "FORECAST HOUR"/`F058`/模式周期/有效时间 for
   "TIME ELAPSED"/`T+058:24`/观测起点/观测时间, on the viewer and on the
   showcase cards. Observations have no run cycle and no lead time.
-- URL state (`?model=`, `?type=`, `?case=`, `?use_h264=`) is parsed in
-  `urlstate.ts`; `?lang=` belongs to `i18n.ts` and `?theme=` to `theme.ts`,
+- URL state (`?model=`, `?type=`, `?case=`, `?res=`, `?use_h264=`) is parsed
+  in `urlstate.ts`; `?lang=` belongs to `i18n.ts` and `?theme=` to `theme.ts`,
   since each is read before anything else renders. Unrecognized values fall
   back to defaults rather than error.
 - The Python encoder and Rust decoder are held byte-identical by golden tests

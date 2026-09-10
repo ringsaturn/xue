@@ -1,4 +1,9 @@
-import { FORECAST_MODELS, type ForecastBundleId, type ForecastModelId } from "./manifest";
+import {
+  FORECAST_MODELS,
+  type ForecastBundleId,
+  type ForecastModelId,
+  type ResolutionPreference,
+} from "./manifest";
 
 /** Default model when the URL names none (or names one this app does not
  * serve — a bad link falls back rather than erroring). */
@@ -99,6 +104,29 @@ export function parseUseH264FromSearch(search: string): boolean {
   if (value === null) return false;
   const normalized = value.trim().toLowerCase();
   return normalized === "true" || normalized === "1";
+}
+
+/** Accepted spellings for a pinned resolution tier. Matching is
+ * case-insensitive. */
+const RESOLUTION_ALIASES: Record<string, ResolutionPreference> = {
+  auto: "auto",
+  half: "half",
+  low: "half",
+  full: "full",
+  high: "full",
+};
+
+/** Resolution tier this session asks for: `?res=half` pins the reduced
+ * rendition (the "Xue ½" tier) however wide the view is, `?res=full` pins the
+ * canonical bundle even on a metered connection, and anything else — an
+ * unknown value included — leaves the choice to viewport and network.
+ *
+ * The tier is chosen once per variable session, so this is read at load like
+ * the rest of the URL state; changing it means a reload. */
+export function parseResolutionFromSearch(search: string): ResolutionPreference {
+  const value = new URLSearchParams(search).get("res");
+  if (value === null) return "auto";
+  return RESOLUTION_ALIASES[value.trim().toLowerCase()] ?? "auto";
 }
 
 /** Variable requested by the page URL, or null when the URL names none (or

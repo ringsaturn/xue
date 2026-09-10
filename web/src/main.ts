@@ -70,6 +70,7 @@ import {
   DEFAULT_VARIABLE,
   parseCaseFromSearch,
   parseModelFromSearch,
+  parseResolutionFromSearch,
   parseUseH264FromSearch,
   parseVariableFromSearch,
   searchForCaseVariable,
@@ -602,6 +603,11 @@ const requestedCaseId: string | null = parseCaseFromSearch(window.location.searc
  * default — the Xue decoder is the everyday path, and the video artifacts
  * ride along only for `?use_h264=true`. */
 const h264Enabled = parseUseH264FromSearch(window.location.search);
+/** Resolution tier this session asks for. `auto` — the default — lets the
+ * viewport and the connection pick; `?res=half` / `?res=full` pin one end of
+ * the ladder, for a metered link or for a look at the full grid regardless of
+ * what the view needs. */
+const resolutionPreference = parseResolutionFromSearch(window.location.search);
 let activeCase: ShowcaseCase | null = null;
 /** A case's own default layer applies on the first load only; after that the
  * viewer keeps whatever the visitor picked, even across a retry. */
@@ -2173,7 +2179,12 @@ function loadVariable(variableId: ForecastBundleId, sequence: number): Promise<V
     // variant always rides the Xue path — the video artifacts are full
     // resolution, so whenever a reduced tier suffices the half bundle is
     // strictly cheaper.
-    const variant = pickBundleVariant(descriptor.variants, neededGridWidth(), slowConnection());
+    const variant = pickBundleVariant(
+      descriptor.variants,
+      neededGridWidth(),
+      slowConnection(),
+      resolutionPreference,
+    );
     const video = h264Enabled ? descriptor.video : undefined;
     // Opted in, the video path must still earn its bytes — prefer it only
     // when the stream is not larger than the bundle it replaces (lossless

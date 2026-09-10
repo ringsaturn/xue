@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   parseModelFromSearch,
+  parseResolutionFromSearch,
   parseUseH264FromSearch,
   parseVariableFromSearch,
   searchForVariable,
@@ -110,5 +111,31 @@ describe("parseUseH264FromSearch", () => {
 
   it("survives a layer switch, which preserves unrelated params", () => {
     expect(parseUseH264FromSearch(searchForVariable("prate", "?use_h264=true"))).toBe(true);
+  });
+});
+
+describe("parseResolutionFromSearch", () => {
+  it("is automatic unless the URL pins a tier", () => {
+    expect(parseResolutionFromSearch("")).toBe("auto");
+    expect(parseResolutionFromSearch("?model=gfs&type=temp")).toBe("auto");
+  });
+
+  it("accepts both ends of the ladder and their aliases, case-insensitively", () => {
+    expect(parseResolutionFromSearch("?res=half")).toBe("half");
+    expect(parseResolutionFromSearch("?res=LOW")).toBe("half");
+    expect(parseResolutionFromSearch("?res=full")).toBe("full");
+    expect(parseResolutionFromSearch("?res=High")).toBe("full");
+    expect(parseResolutionFromSearch("?res=auto")).toBe("auto");
+    expect(parseResolutionFromSearch("?model=gfs&res=half&type=temp")).toBe("half");
+  });
+
+  it("treats an unknown value as automatic rather than erroring", () => {
+    expect(parseResolutionFromSearch("?res=quarter")).toBe("auto");
+    expect(parseResolutionFromSearch("?res=")).toBe("auto");
+    expect(parseResolutionFromSearch("?res=720")).toBe("auto");
+  });
+
+  it("survives a layer switch, which preserves unrelated params", () => {
+    expect(parseResolutionFromSearch(searchForVariable("prate", "?res=half"))).toBe("half");
   });
 });
