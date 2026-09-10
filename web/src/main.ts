@@ -515,6 +515,11 @@ let caseDefaultApplied = false;
 let activeSession: VariableSession | null = null;
 let activeVariable: BundleVariable | null = null;
 let activeFrameIndex: number | null = null;
+/** The frame the timeline points at, which is not the one on screen while its
+ * planes are still decoding. A retry aims here rather than at
+ * `activeFrameIndex`: re-requesting the displayed frame would walk the readout
+ * backwards under a scrub that has not landed yet. */
+let requestedFrameIndex: number | null = null;
 let initializeSequence = 0;
 let generation = 0;
 let playing = false;
@@ -1536,7 +1541,8 @@ function refreshViewportTiles(): void {
     session.resident = false;
     refreshDataCard(session);
   }
-  if (activeFrameIndex !== null) trySelectFrame(activeFrameIndex);
+  const target = requestedFrameIndex ?? activeFrameIndex;
+  if (target !== null) trySelectFrame(target);
 }
 
 /** The texture box a plane's tiles fill on its own session grid — what the
@@ -1582,6 +1588,7 @@ function trySelectFrame(index: number): boolean {
   const session = activeSession;
   if (!session || !layer) return false;
   const hour = frameOffset(index);
+  requestedFrameIndex = index;
   updateFrameReadout(index);
   sendPrefetchWindow(index);
   const keys = session.variables.map((variable) => cacheKey(variable.numericId, hour));
@@ -2291,6 +2298,7 @@ function syncTimeline(session: VariableSession): void {
   slider.max = String(time.frameCount - 1);
   slider.value = String(index);
   activeFrameIndex = null;
+  requestedFrameIndex = null;
   trackHorizon.textContent = `+${Math.round((frameOffsets(time).at(-1)! * axisUnitSeconds(time)) / HOUR_SECONDS)}H`;
   buildTicks(time.frameCount);
   buildForecastDays();
@@ -2412,6 +2420,7 @@ async function initialize(): Promise<void> {
   activeSession = null;
   activeVariable = null;
   activeFrameIndex = null;
+  requestedFrameIndex = null;
   slider.value = "0";
   slider.disabled = true;
   playButton.disabled = true;
