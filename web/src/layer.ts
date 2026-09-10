@@ -17,6 +17,15 @@ import { WHOLE_PLANE_COVERAGE, type CoverageBox } from "./tiles";
  * sweeps mix 0->1 between frames so 12 fps reads as continuous motion and
  * streaming arrival jitter is masked. No raster opacity is ever animated.
  *
+ * One layer also draws a two-channel field: the 10 m wind arrives as a u
+ * plane and a v plane, and what the palette colors is their magnitude. That
+ * is the same projection, the same blend and the same coverage clip, so it is
+ * a mode of this layer rather than a second one — the data texture becomes
+ * RG8 (u codes in red, v in green, the interleaving the particle layer
+ * already builds), each channel is reconstructed on its own, and the palette
+ * is looked up by speed / `maxMagnitude` instead of by code. Every scalar
+ * field takes the single-channel path exactly as before.
+ *
  * A plane need not be whole. A container v2 bundle can be decoded for just
  * the tiles a viewport covers, and everything outside them is stale bytes
  * from whatever the decoder held before — so `u_cover` names the part of the
@@ -84,6 +93,18 @@ uniform vec4 u_contour_values;
 uniform float u_contour_value_count;
 uniform vec4 u_line_color;
 uniform float u_fill_alpha;
+// Magnitude mode, off (0) for every scalar field. The data texture then holds
+// two fields rather than one — u codes in red, v in green — and each channel
+// carries its own linear codebook: value = offset + code * 255 * scale.
+// u_vector_max is the magnitude the palette's last entry stands for, and
+// u_vector_nodata the codebooks' reserved no-data code as a texture value: a
+// cell carrying it in either channel is painted as nothing, the way a scalar
+// palette leaves its reserved entries transparent.
+uniform float u_vector;
+uniform vec2 u_vector_offset;
+uniform vec2 u_vector_scale;
+uniform float u_vector_max;
+uniform float u_vector_nodata;
 out vec4 out_color;
 const float PI = 3.141592653589793;
 
@@ -135,6 +156,51 @@ float sampleCode(sampler2D data, vec2 uv) {
     code += wy[row] * rowSum;
   }
   return clamp(code, lo, hi);
+}
+
+// The same reconstruction for a vector plane, whose two channels are two
+// fields (u codes in red, v in green) rather than one code in sixteen bits.
+// Each channel is filtered and clamped on its own, and the two share every
+// tap: one texture read per texel serves both, which is what keeps magnitude
+// mode at the scalar path's fetch count rather than double it.
+//
+// A reserved code is caught on the texels themselves, not on the result: a
+// cell next to a no-data cell reconstructs to something between the two,
+// and in mediump even a lone 255 comes back a fraction of a code short, so
+// a threshold on the interpolated value would miss the very cell it is for.
+// The central 2x2 is the bilinear support, and a no-data texel there makes
+// the sample missing once its bilinear weight is more than a sliver — so the
+// half of a data cell that faces a no-data neighbour is eroded, and the
+// cell's own center still paints. The sliver is wider than the position
+// error mediump makes on a production grid, or a cell center itself could
+// fall on either side of it.
+vec2 sampleCodes(sampler2D data, vec2 uv, out bool missing) {
+  vec2 position = uv * u_size - 0.5;
+  vec2 base = floor(position);
+  vec2 fraction = position - base;
+  vec4 wx = cubicWeights(fraction.x);
+  vec4 wy = cubicWeights(fraction.y);
+  vec2 codes = vec2(0.0);
+  vec2 lo = vec2(1.0);
+  vec2 hi = vec2(0.0);
+  missing = false;
+  for (int row = 0; row < 4; row += 1) {
+    vec2 rowSum = vec2(0.0);
+    for (int column = 0; column < 4; column += 1) {
+      vec2 texel = (base + vec2(float(column - 1), float(row - 1)) + 0.5) / u_size;
+      vec2 value = texture(data, texel).rg;
+      rowSum += wx[column] * value;
+      if (row >= 1 && row <= 2 && column >= 1 && column <= 2) {
+        lo = min(lo, value);
+        hi = max(hi, value);
+        // An 8-bit texel is exact to well within half a code.
+        float weight = (column == 1 ? 1.0 - fraction.x : fraction.x) * (row == 1 ? 1.0 - fraction.y : fraction.y);
+        if (weight > 1.0 / 64.0 && abs(max(value.x, value.y) - u_vector_nodata) < 0.5 / 255.0) missing = true;
+      }
+    }
+    codes += wy[row] * rowSum;
+  }
+  return clamp(codes, lo, hi);
 }
 
 // Coverage of one contour line, anti-aliased to a pixel.
@@ -190,11 +256,34 @@ void main() {
     ? (cu >= u_cover.x && cu <= u_cover.y)
     : (cu >= u_cover.x || cu <= u_cover.y);
   if (!coveredU || v < u_cover.z || v > u_cover.w) discard;
-  float code = sampleCode(u_data, vec2(u, v));
-  if (u_mix > 0.0) {
-    code = mix(code, sampleCode(u_data_b, vec2(u, v)), u_mix);
+  float code = 0.0;
+  vec4 color;
+  if (u_vector > 0.5) {
+    // u and v are reconstructed separately and only then combined, so what
+    // the bicubic filter interpolates is the wind vector rather than a speed:
+    // two opposing 10 m/s cells read as the calm between them, which is what
+    // the field does, instead of as a uniform 10 m/s.
+    // A reserved code in either channel is no wind at all, not the fastest
+    // wind the codebook can spell.
+    bool missing = false;
+    vec2 codes = sampleCodes(u_data, vec2(u, v), missing);
+    if (missing) discard;
+    if (u_mix > 0.0) {
+      bool missingB = false;
+      vec2 codesB = sampleCodes(u_data_b, vec2(u, v), missingB);
+      if (missingB) discard;
+      codes = mix(codes, codesB, u_mix);
+    }
+    vec2 wind = u_vector_offset + codes * 255.0 * u_vector_scale;
+    float speed = clamp(length(wind) / u_vector_max, 0.0, 1.0);
+    color = texture(u_palette, vec2((speed * 255.0 + 0.5) / 256.0, 0.5));
+  } else {
+    code = sampleCode(u_data, vec2(u, v));
+    if (u_mix > 0.0) {
+      code = mix(code, sampleCode(u_data_b, vec2(u, v)), u_mix);
+    }
+    color = texture(u_palette, vec2((code * 255.0 + 0.5) / 256.0, 0.5));
   }
-  vec4 color = texture(u_palette, vec2((code * 255.0 + 0.5) / 256.0, 0.5));
   if (u_contour.x > 0.0) {
     // Codes mix linearly and the pressure family's codebooks are linear, so
     // dequantizing after the frame blend is the same as blending the values.
@@ -317,6 +406,22 @@ export interface ContourStyle {
   smoothing: number;
 }
 
+/** A two-channel field drawn as its magnitude: the 10 m wind, whose plane
+ * carries the u codes in red and the v codes in green. Each channel has its
+ * own linear codebook, and `maxMagnitude` is the value the palette's last
+ * entry stands for — the palette is indexed by magnitude / maxMagnitude
+ * rather than by code, so it is a ramp in the field's own unit. */
+export interface VectorField {
+  /** Dequantization per channel: `value = offset + code * scale`, straight
+   * off each component's linear codebook. */
+  offset: readonly [number, number];
+  scale: readonly [number, number];
+  /** The reserved no-data code (the same in both channels); a cell carrying
+   * it in either is not painted. */
+  nodataCode: number;
+  maxMagnitude: number;
+}
+
 /** The two textures one frame slot owns, and what each currently holds. The
  * raw plane is what the decoder produced; the smoothed one is derived from
  * it by the prerender pass, and is only as current as its bookkeeping says. */
@@ -370,6 +475,9 @@ export class ForecastLayer implements CustomLayerInterface {
   /** Contour drawing, off by default: every filled field renders exactly as
    * it did before this existed. */
   private contours: ContourStyle | null = null;
+  /** Magnitude mode, off by default: a plane is one code per cell unless a
+   * vector field says otherwise. */
+  private vector: VectorField | null = null;
 
   private width = 0;
   private height = 0;
@@ -381,7 +489,7 @@ export class ForecastLayer implements CustomLayerInterface {
    * horizontal texture wrap mode and the shader's out-of-grid clip. */
   private wraps = true;
   private hasFrame = false;
-  /** Hidden while the wind particle layer owns the screen. */
+  /** Hidden while no weather layer is on screen. */
   private visible = true;
 
   // Pending state survives context loss and is re-applied in onAdd.
@@ -422,6 +530,7 @@ export class ForecastLayer implements CustomLayerInterface {
       "u_matrix", "u_data", "u_data_b", "u_palette", "u_first", "u_step", "u_size",
       "u_mix", "u_wrap", "u_cover", "u_decode", "u_contour", "u_contour_values",
       "u_contour_value_count", "u_line_color", "u_fill_alpha",
+      "u_vector", "u_vector_offset", "u_vector_scale", "u_vector_max", "u_vector_nodata",
     ]) {
       this.uniforms[name] = gl.getUniformLocation(program, name);
     }
@@ -537,7 +646,27 @@ export class ForecastLayer implements CustomLayerInterface {
     this.map?.triggerRepaint();
   }
 
-  /** Show a single plane (slot A, blend weight 0). */
+  /** Draw planes as the magnitude of two interleaved channels instead of as
+   * single codes, or pass null to go back to the scalar path. The mode
+   * changes the data texture's format, so the slots forget what they hold:
+   * the caller feeds the next plane in the new shape.
+   *
+   * Between the two calls there is nothing valid to draw — an RG plane read
+   * as R8 is half a world of noise — so the layer holds its fire until that
+   * plane arrives, the same as it does before the first frame of a session. */
+  setVectorField(field: VectorField | null): void {
+    if (this.vector === field) return;
+    const formatChanged = (this.vector === null) !== (field === null);
+    this.vector = field;
+    if (formatChanged) {
+      this.forgetPlanes();
+      this.hasFrame = false;
+    }
+    this.map?.triggerRepaint();
+  }
+
+  /** Show a single plane (slot A, blend weight 0). Interleaved RG bytes while
+   * a vector field is set, one code per cell otherwise. */
   setFrame(plane: Uint8Array, coverage: CoverageBox = WHOLE_PLANE_COVERAGE): void {
     this.setBlend(plane, null, 0, coverage);
   }
@@ -574,7 +703,9 @@ export class ForecastLayer implements CustomLayerInterface {
     gl.bindTexture(gl.TEXTURE_2D, slot.raw);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, this.wraps ? gl.REPEAT : gl.CLAMP_TO_EDGE);
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, this.width, this.height, 0, gl.RED, gl.UNSIGNED_BYTE, plane);
+    // Two bytes per cell in magnitude mode (u, v), one otherwise.
+    const [internal, format] = this.vector ? [gl.RG8, gl.RG] : [gl.R8, gl.RED];
+    gl.texImage2D(gl.TEXTURE_2D, 0, internal, this.width, this.height, 0, format, gl.UNSIGNED_BYTE, plane);
     slot.plane = plane;
   }
 
@@ -705,6 +836,14 @@ export class ForecastLayer implements CustomLayerInterface {
     const line = contours?.lineColor ?? [1, 1, 1, 1];
     gl.uniform4f(this.uniforms.u_line_color!, line[0], line[1], line[2], line[3]);
     gl.uniform1f(this.uniforms.u_fill_alpha!, contours?.fillAlpha ?? 1);
+    const vector = this.vector;
+    gl.uniform1f(this.uniforms.u_vector!, vector ? 1 : 0);
+    gl.uniform2f(this.uniforms.u_vector_offset!, vector?.offset[0] ?? 0, vector?.offset[1] ?? 0);
+    gl.uniform2f(this.uniforms.u_vector_scale!, vector?.scale[0] ?? 0, vector?.scale[1] ?? 0);
+    // Never zero: it divides the magnitude.
+    gl.uniform1f(this.uniforms.u_vector_max!, vector?.maxMagnitude || 1);
+    // Off the code space entirely when no field is set, so nothing matches.
+    gl.uniform1f(this.uniforms.u_vector_nodata!, vector ? vector.nodataCode / 255 : -1);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, textureOf(this.slots[0]));
     gl.uniform1i(this.uniforms.u_data!, 0);

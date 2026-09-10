@@ -124,6 +124,12 @@ const MESSAGES = {
   langToggleShort: { zh: "EN", en: "中" },
   langToggleAria: { zh: "Switch to English", en: "切换到中文" },
   themeToggleAria: { zh: "切换浅色 / 深色", en: "Toggle light / dark" },
+  /** The wind layer's own control, in the transport capsule: the colored
+   * speed field is always drawn, and this turns the particle animation over
+   * it on and off. Icon-only, like the three circles above, so the name is
+   * carried by the accessible label and a visually hidden word. */
+  particlesToggle: { zh: "粒子动画", en: "Particles" },
+  particlesToggleAria: { zh: "切换风场粒子动画", en: "Toggle wind particle animation" },
 
   dataInterrupted: { zh: "数据加载中断", en: "Data loading interrupted" },
   errorHint: {

@@ -741,9 +741,10 @@ body[data-variable="cref"] .legend-bar {
   background: linear-gradient(to bottom, #7800b4, #ff00f0, #c00000, #ff0000, #ff9000, #ffff00, #009000, #00d860, #0050ec, #01a0f6, rgba(0, 236, 236, 0.25));
 }
 
-/* Matches WIND_SPEED_STOPS in palettes.ts, 40 m/s at the top. */
+/* Matches WIND_SPEED_STOPS and WIND_FIELD_ALPHA in palettes.ts, 40 m/s at
+   the top: the field is translucent where calm, so the key is too. */
 body[data-variable="wind10m"] .legend-bar {
-  background: linear-gradient(to bottom, #8137a8, #aa3385, #d43c57, #ee7042, #eba74a, #bfcd5c, #5cbe8c, #529dbf, #6e7cc3);
+  background: linear-gradient(to bottom, rgba(129, 55, 168, 0.8), rgba(170, 51, 133, 0.78), rgba(212, 60, 87, 0.75), rgba(238, 112, 66, 0.72), rgba(235, 167, 74, 0.7), rgba(191, 205, 92, 0.62), rgba(92, 190, 140, 0.55), rgba(82, 157, 191, 0.48), rgba(110, 124, 195, 0.4));
 }
 
 /* The pressure family is a line chart: the contours carry the reading, and a
@@ -999,6 +1000,30 @@ html[lang="zh-CN"] .rail-glyph {
   font-size: 11px;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
+}
+
+/* The wind layer's particle switch. Icon-only and square-ish so it costs the
+   transport row as little as a 40px circle would, pressed-state filled like
+   the level row's buttons. */
+.particles-toggle {
+  display: flex;
+  width: 40px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.particles-toggle[hidden] {
+  display: none;
+}
+
+.particles-toggle[aria-pressed="true"],
+/* The shared pill hover below is more specific than the pressed state, and
+   would paint the glyph in the very tone it sits on. */
+.particles-toggle[aria-pressed="true"]:hover:not(:disabled) {
+  border-color: var(--text);
+  background: var(--text);
+  color: var(--bg);
 }
 
 .pill-button:hover:not(:disabled) {

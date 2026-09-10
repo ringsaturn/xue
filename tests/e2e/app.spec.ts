@@ -297,7 +297,7 @@ test("switching variables downloads the other bundle once and keeps both residen
   expect(counters).toEqual({ tmp2m: 1, prate: 1 });
 });
 
-test("wind variable activates the particle layer session", async ({ page }, testInfo) => {
+test("wind variable opens the speed field with its particle switch", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop", "desktop interaction coverage");
   await page.emulateMedia({ reducedMotion: "reduce" });
   await routeManifest(page);
@@ -317,6 +317,26 @@ test("wind variable activates the particle layer session", async ({ page }, test
   await slider.focus();
   await page.keyboard.press("ArrowRight");
   await expect(page.locator("#frame-tooltip")).toContainText("F001");
+  // The colored speed field is the layer; the particles are an overlay with
+  // its own switch, which this page opens off because it asks for reduced
+  // motion — a frozen scatter of dots would be worse than none.
+  const particles = page.getByRole("button", { name: "Toggle wind particle animation" });
+  await expect(particles).toBeVisible();
+  await expect(particles).toHaveAttribute("aria-pressed", "false");
+  // A default is not a choice: the link carries nothing until the switch is
+  // used, so a reduced-motion visitor does not hand out links that turn the
+  // overlay off for everyone else.
+  await expect(page).not.toHaveURL(/particles=/);
+  await particles.click();
+  await expect(particles).toHaveAttribute("aria-pressed", "true");
+  await expect(page).not.toHaveURL(/particles=/);
+  await particles.click();
+  await expect(particles).toHaveAttribute("aria-pressed", "false");
+  // Switched off by hand, the link says so.
+  await expect(page).toHaveURL(/particles=off/);
+  // The switch belongs to the wind layer alone.
+  await page.getByRole("button", { name: "TEMP 2M" }).click();
+  await expect(particles).toBeHidden();
 });
 
 test("a pressure level loads as its own contour session", async ({ page }, testInfo) => {

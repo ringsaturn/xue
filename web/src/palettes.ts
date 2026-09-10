@@ -173,6 +173,42 @@ export function decodeLog(quantization: LogQuantization, code: number): number |
   return quantization.scale * Math.expm1(lo + unit * (hi - lo));
 }
 
+/** The speed field's own transparency, by speed: the ramp above was drawn
+ * for particles over a bare map and is opaque, but as a filled field it has
+ * to let the ground read through — a calm sea is mostly map, and even a gale
+ * keeps a little of it, the way the precipitation palette does. */
+const WIND_FIELD_ALPHA: [number, number][] = [
+  [0, 0.4],
+  [10, 0.55],
+  [20, 0.7],
+  [40, 0.8],
+];
+
+function windFieldAlpha(speed: number): number {
+  const first = WIND_FIELD_ALPHA[0]!;
+  const last = WIND_FIELD_ALPHA[WIND_FIELD_ALPHA.length - 1]!;
+  if (speed <= first[0]) return first[1];
+  if (speed >= last[0]) return last[1];
+  for (let index = 1; index < WIND_FIELD_ALPHA.length; index += 1) {
+    const [upperSpeed, upperAlpha] = WIND_FIELD_ALPHA[index]!;
+    if (speed > upperSpeed) continue;
+    const [lowerSpeed, lowerAlpha] = WIND_FIELD_ALPHA[index - 1]!;
+    return lowerAlpha + ((speed - lowerSpeed) / (upperSpeed - lowerSpeed)) * (upperAlpha - lowerAlpha);
+  }
+  return last[1];
+}
+
+/** The same ramp as a filled field: indexed by speed like the particle
+ * palette, with the field's transparency folded in. */
+export function buildWindFieldPalette(): Uint8Array {
+  const palette = buildWindSpeedPalette();
+  for (let index = 0; index < 256; index += 1) {
+    const speed = (index / 255) * WIND_SPEED_MAX;
+    palette[index * 4 + 3] = Math.round(palette[index * 4 + 3]! * windFieldAlpha(speed));
+  }
+  return palette;
+}
+
 /** Build the 256x1 RGBA speed palette for the wind particle layer: index i
  * maps speed (i / 255) * WIND_SPEED_MAX m/s to a color; faster wind above the
  * ramp ceiling keeps the last color. */

@@ -251,6 +251,17 @@
             </div>
           </div>
           <div id="load-status" class="load-status" role="status" aria-live="polite" data-i18n="readingManifest">Loading manifest</div>
+          <!-- Only for the wind layer: the speed field is the layer, and the
+               particle animation is an overlay the viewer can switch off. The
+               capsule has no room for a word at phone width, so the glyph is
+               the label, as on the layer rail. -->
+          <button id="particles-toggle" class="pill-button particles-toggle" type="button" aria-pressed="true" data-i18n-aria="particlesToggleAria" aria-label="Toggle wind particle animation" hidden>
+            <svg width="20" height="14" viewBox="0 0 20 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
+              <path d="M1 4h9.5a2 2 0 1 0-2-2" />
+              <path d="M1 10h13a2 2 0 1 1-2 2" />
+            </svg>
+            <span class="sr-only" data-i18n="particlesToggle">Particles</span>
+          </button>
           <button id="speed-button" class="pill-button speed-button" type="button" data-i18n-aria="playbackSpeed" aria-label="Playback speed" disabled>
             <span id="speed-label" class="speed-value">12 FPS</span>
           </button>

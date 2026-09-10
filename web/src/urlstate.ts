@@ -106,6 +106,43 @@ export function parseUseH264FromSearch(search: string): boolean {
   return normalized === "true" || normalized === "1";
 }
 
+/** Accepted spellings of an on/off switch in the query string, so a
+ * hand-written link works however the viewer spells it. */
+const SWITCH_ALIASES: Record<string, boolean> = {
+  on: true,
+  "1": true,
+  true: true,
+  yes: true,
+  off: false,
+  "0": false,
+  false: false,
+  no: false,
+};
+
+/** Whether this session draws the wind particle overlay over the speed field.
+ *
+ * Three-valued on purpose: `null` means the URL said nothing this app
+ * understands — no param, or a spelling that is not one — and the caller then
+ * falls back to the viewer's stored choice and finally to the default (on,
+ * or off where the system asks for reduced motion). An explicit
+ * `?particles=off` in a shared link is what outranks both. */
+export function parseParticlesFromSearch(search: string): boolean | null {
+  const value = new URLSearchParams(search).get("particles");
+  if (value === null) return null;
+  return SWITCH_ALIASES[value.trim().toLowerCase()] ?? null;
+}
+
+/** The given query string carrying the particle choice. Only the state the
+ * viewer changed is written: a link shared with the overlay off says
+ * `particles=off`, and one shared with it on carries nothing, so the
+ * everyday URL stays exactly as short as it was. */
+export function searchWithParticles(search: string, particles: boolean): string {
+  const params = new URLSearchParams(search);
+  if (particles) params.delete("particles");
+  else params.set("particles", "off");
+  return `?${params.toString()}`;
+}
+
 /** Accepted spellings for a pinned resolution tier. Matching is
  * case-insensitive. */
 const RESOLUTION_ALIASES: Record<string, ResolutionPreference> = {

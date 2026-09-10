@@ -24,7 +24,7 @@ import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&ur
 
 import { CRC32_INITIAL, crc32Hex, crc32Update } from "./crc32";
 import { applyStaticMessages, basemapLang, locale, t, toggleLocale } from "./i18n";
-import { ForecastLayer, MAX_NAMED_CONTOURS, type ContourStyle } from "./layer";
+import { ForecastLayer, MAX_NAMED_CONTOURS, type ContourStyle, type VectorField } from "./layer";
 import {
   FORECAST_BUNDLE_IDS,
   FORECAST_MODEL_IDS,
@@ -47,7 +47,7 @@ import {
   type ForecastModelId,
   type VideoBundleDescriptor,
 } from "./manifest";
-import { buildPalette } from "./palettes";
+import { buildPalette, buildWindFieldPalette, WIND_SPEED_MAX } from "./palettes";
 import {
   PRESSURE_BUNDLE_IDS,
   PRESSURE_LEVELS,
@@ -70,11 +70,13 @@ import {
   DEFAULT_VARIABLE,
   parseCaseFromSearch,
   parseModelFromSearch,
+  parseParticlesFromSearch,
   parseResolutionFromSearch,
   parseUseH264FromSearch,
   parseVariableFromSearch,
   searchForCaseVariable,
   searchForVariable,
+  searchWithParticles,
 } from "./urlstate";
 import { WindParticleLayer } from "./particles";
 import type { Feature, FeatureCollection } from "geojson";
@@ -441,6 +443,7 @@ const retryButton = required<HTMLButtonElement>("retry-button");
 const playButton = required<HTMLButtonElement>("play-button");
 const playLabel = required<HTMLElement>("play-label");
 const speedButton = required<HTMLButtonElement>("speed-button");
+const particlesToggle = required<HTMLButtonElement>("particles-toggle");
 const speedLabel = required<HTMLElement>("speed-label");
 const validTime = required<HTMLElement>("valid-time");
 const dataCard = required<HTMLElement>("data-card");
@@ -668,6 +671,41 @@ let nextRequestId = 1;
 let desiredKey: string | null = null;
 let queuedRequest: { variableId: number; hour: number } | null = null;
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+/** Where the viewer's particle-overlay choice is kept between visits, like
+ * the theme, the locale and the playback rate. */
+const PARTICLES_KEY = "xue-particles";
+
+function storedParticles(): boolean | null {
+  try {
+    const stored = localStorage.getItem(PARTICLES_KEY);
+    return stored === "1" ? true : stored === "0" ? false : null;
+  } catch {
+    // Storage can be unavailable (privacy modes); the default applies.
+    return null;
+  }
+}
+
+/** Whether the wind particles are drawn over the colored speed field. The URL
+ * outranks the stored choice, which outranks the default — on, except where
+ * the system asks for reduced motion: the simulation is frozen there, and now
+ * that the field carries the layer on its own, a still scatter of dots is
+ * worse than no overlay at all. An explicit `?particles=on` still wins. */
+const requestedParticles = parseParticlesFromSearch(window.location.search);
+let particlesEnabled = requestedParticles ?? storedParticles() ?? !reducedMotion.matches;
+/** Whether the overlay's state is a choice — the URL's or the viewer's —
+ * rather than this device's default. Only a choice is written back into the
+ * address bar: a reduced-motion visitor who never touched the switch would
+ * otherwise hand out links that turn the overlay off for everyone. */
+let particlesChosen = requestedParticles !== null;
+
+/** The tone the particles are drawn in over the speed field: a bright trace
+ * on the dark theme, the paper theme's own ink on white. Partly transparent
+ * either way — the field underneath has to read through the trails, and the
+ * particles are there for direction and pace, not for a value. */
+const PARTICLE_INK: readonly [number, number, number, number] = isDark
+  ? [1, 1, 1, 0.45]
+  : [0.11, 0.1, 0.09, 0.4];
 
 function required<T extends HTMLElement>(id: string): T {
   const element = document.getElementById(id);
@@ -1546,30 +1584,32 @@ function advancePlayback(timestamp: number): void {
 /** Between frame steps, sweep the shader blend weight toward the
  * next frame's plane so playback reads as continuous motion. Skipped across
  * the loop seam (last -> first frame is a restart, not a transition) and
- * whenever either plane is not decoded yet — the current image just holds. */
+ * whenever either plane is not decoded yet — the current image just holds.
+ *
+ * Wind blends like every other field: its codes mix linearly, and taking the
+ * magnitude after the mix is a blend of the two wind vectors rather than of
+ * two speeds. (It used to be skipped, back when the particles were the whole
+ * visual and supplied the motion between field updates themselves.) */
 function blendTowardNext(timestamp: number): void {
   const session = activeSession;
   if (!session || !activeVariable || !layer || activeFrameIndex === null) return;
   if (displayedReal !== session.id) return;
-  // Wind frames are not blended — the particles themselves provide the
-  // continuous motion between field updates.
-  if (session.id === "wind10m") return;
   const next = activeFrameIndex + 1;
   if (next >= frameCount()) return;
-  const current = planeCache.get(cacheKey(activeVariable.numericId, frameOffset(activeFrameIndex)));
-  const upcoming = planeCache.get(cacheKey(activeVariable.numericId, frameOffset(next)));
+  const current = framePlanes(session, activeFrameIndex);
+  const upcoming = framePlanes(session, next);
   if (!current || !upcoming) return;
   // One coverage box serves both slots, so a pair decoded for different views
   // (a pan mid-playback) holds the current image instead of blending a plane
   // against another frame's stale bytes.
-  if (!sameTileRects(current.tiles, upcoming.tiles)) return;
+  if (!sameTileRects(current[0]!.tiles, upcoming[0]!.tiles)) return;
   const weight = 1 - (nextFrameAt - timestamp) / currentHoldMs;
   ensureSessionGrid();
   layer.setBlend(
-    current.plane,
-    upcoming.plane,
+    displayPlane(session, activeFrameIndex, current),
+    displayPlane(session, next, upcoming),
     weight,
-    sessionCoverage(session, current.tiles),
+    sessionCoverage(session, current[0]!.tiles),
   );
 }
 
@@ -1619,14 +1659,16 @@ function ensureWindGrid(session: VariableSession): void {
 // The tiles the active session decodes for the current view, or null for the
 // whole plane. Narrowing only pays where bytes are still being fetched, so it
 // is limited to a streaming session that is not resident yet; a downloaded
-// bundle has already paid for every byte, and the wind particles respawn
-// across the whole grid rather than the viewport, so they need it whole.
+// bundle has already paid for every byte. Wind narrows like anything else
+// while its particle overlay is off: the filled speed field only needs what
+// the view shows, but the particles respawn anywhere on the grid, so with
+// them on the session takes the whole plane.
 let viewportTiles: TileRect[] | null = null;
 
 function sessionViewportTiles(session: VariableSession): TileRect[] | null {
   if (!session.tiles || !session.streaming) return null;
   if (session.resident && session.residentScope === "bundle") return null;
-  if (session.id === "wind10m") return null;
+  if (session.id === "wind10m" && particlesEnabled) return null;
   const bounds = map.getBounds();
   return viewportTileRects(session.metadata, session.tiles, {
     west: bounds.getWest(),
@@ -1671,6 +1713,59 @@ function cachedFrame(key: string): DecodedFrame | undefined {
   return frame && coversTiles(frame.tiles, viewportTiles) ? frame : undefined;
 }
 
+/** Every plane one frame of this session needs, straight out of the cache —
+ * the u/v pair for wind, one plane otherwise — or null when any is missing.
+ * A pair decoded for different tile sets is refused too: the two channels
+ * share one coverage box, and the wider of them would be read from stale
+ * bytes outside the narrower one. */
+function framePlanes(session: VariableSession, index: number): DecodedFrame[] | null {
+  const hour = frameOffset(index);
+  const planes: DecodedFrame[] = [];
+  for (const variable of session.variables) {
+    const frame = planeCache.get(cacheKey(variable.numericId, hour));
+    if (!frame) return null;
+    if (planes.length > 0 && !sameTileRects(planes[0]!.tiles, frame.tiles)) return null;
+    planes.push(frame);
+  }
+  return planes;
+}
+
+/** Interleaved wind planes, keyed by the frame they belong to. Packing a
+ * 1440x721 pair copies two megabytes, and a blend sweep asks for the same two
+ * frames on every animation frame, so the result is kept and reused as long
+ * as it was built from the very planes still in the cache. Four is the blend's
+ * two plus the step moving onto the next pair. */
+const vectorPlanes = new Map<string, { sources: Uint8Array[]; packed: Uint8Array }>();
+const VECTOR_PLANE_CACHE = 4;
+
+/** The bytes the scalar layer draws for one frame: the plane itself for a
+ * scalar session, and for wind the u/v pair interleaved into one RG plane —
+ * u codes in red, v in green, the same packing the particle layer builds for
+ * its own texture, which is what the layer's magnitude mode reads. */
+function displayPlane(session: VariableSession, index: number, planes: DecodedFrame[]): Uint8Array {
+  if (session.id !== "wind10m" || planes.length < 2) return planes[0]!.plane;
+  const key = cacheKey(session.variables[0]!.numericId, frameOffset(index));
+  const sources = planes.map((frame) => frame.plane);
+  const held = vectorPlanes.get(key);
+  if (held && held.sources.length === sources.length && held.sources.every((plane, at) => plane === sources[at])) {
+    return held.packed;
+  }
+  const [u, v] = sources as [Uint8Array, Uint8Array];
+  const packed = new Uint8Array(u.length * 2);
+  for (let cell = 0; cell < u.length; cell += 1) {
+    packed[cell * 2] = u[cell]!;
+    packed[cell * 2 + 1] = v[cell]!;
+  }
+  vectorPlanes.set(key, { sources, packed });
+  // Oldest first, and never the one just built.
+  while (vectorPlanes.size > VECTOR_PLANE_CACHE) {
+    const oldest = vectorPlanes.keys().next().value;
+    if (oldest === undefined || oldest === key) break;
+    vectorPlanes.delete(oldest);
+  }
+  return packed;
+}
+
 /** Tell the active session which frames to keep resident (windowed
  * prefetch): the window ahead of the playhead, wrapped at the loop point,
  * and the tiles the view needs of them. */
@@ -1711,8 +1806,19 @@ function trySelectFrame(index: number): boolean {
       planeCache.set(key, planes[position]!);
     }
     if (session.id === "wind10m") {
-      ensureWindGrid(session);
-      windLayer?.setWindPlanes(planes[0]!.plane, planes[1]!.plane);
+      ensureSessionGrid();
+      // One coverage box serves both channels, so it has to be a box both
+      // planes hold: their own tiles when the pair agrees, and the view's
+      // otherwise — cachedFrame has already proved every plane covers that.
+      const tiles = sameTileRects(planes[0]!.tiles, planes[1]!.tiles) ? planes[0]!.tiles : viewportTiles;
+      layer.setFrame(displayPlane(session, index, planes as DecodedFrame[]), sessionCoverage(session, tiles));
+      // The particles respawn anywhere on the grid, so they can only run on
+      // whole planes. A narrowed session draws the field alone until the
+      // overlay is switched back on and widens the session again.
+      if (windLayer && planes.every((plane) => plane!.tiles === null)) {
+        ensureWindGrid(session);
+        windLayer.setWindPlanes(planes[0]!.plane, planes[1]!.plane);
+      }
     } else {
       ensureSessionGrid();
       layer.setFrame(planes[0]!.plane, sessionCoverage(session, planes[0]!.tiles));
@@ -1957,6 +2063,8 @@ function updateVariablePresentation(session: VariableSession): void {
   // tile for all nine of them, pressed whenever any level is on screen.
   if (pressure) lastPressureVariableId = session.id as PressureBundleId;
   levelRow.hidden = !pressure;
+  // The particle overlay belongs to one layer, so its switch appears with it.
+  particlesToggle.hidden = session.id !== "wind10m";
   for (const button of variableButtons) {
     const pressed = button.dataset.group === "pressure" ? pressure : button.dataset.variable === session.id;
     button.setAttribute("aria-pressed", String(pressed));
@@ -2002,9 +2110,12 @@ function formatDegrees(value: number, axis: "NS" | "EW"): string {
 /** Keep the address bar shareable: reflect the on-screen model and variable
  * into the query string (replaceState — switches are not history entries). */
 function syncUrl(variableId: ForecastBundleId): void {
-  const search = activeCase
+  const base = activeCase
     ? searchForCaseVariable(variableId, window.location.search, activeCase.id)
     : searchForVariable(variableId, window.location.search, selectedModelId);
+  // Only a chosen, switched-off overlay is written; on is the default and
+  // says nothing, so an ordinary shared link stays as short as it was.
+  const search = searchWithParticles(base, particlesEnabled || !particlesChosen);
   if (search === window.location.search) return;
   window.history.replaceState(null, "", `${window.location.pathname}${search}${window.location.hash}`);
 }
@@ -2622,12 +2733,64 @@ function ensureLayer(): ForecastLayer {
   return layer;
 }
 
+/** The wind bundle's own decode for the layer's magnitude mode: each
+ * component's linear codebook, plus the speed the palette tops out at. Null
+ * when either component is not linearly quantized — nothing published is, and
+ * a magnitude has no meaning without both. */
+function windVectorField(session: VariableSession): VectorField | null {
+  const [u, v] = session.variables;
+  if (u?.quantization.type !== "linear" || v?.quantization.type !== "linear") return null;
+  // One reserved code serves both channels; the encoder gives the pair the
+  // same codebook, and a file that did not could not be drawn as one field.
+  if (u.quantization.nodataCode !== v.quantization.nodataCode) return null;
+  return {
+    offset: [u.quantization.offset, v.quantization.offset],
+    scale: [u.quantization.scale, v.quantization.scale],
+    nodataCode: u.quantization.nodataCode,
+    maxMagnitude: WIND_SPEED_MAX,
+  };
+}
+
+/** Turn the particle overlay on or off. Never a reload: the speed field on
+ * screen is the same either way, so this is a visibility flip plus the tiles
+ * the session should now be fetching — off, wind narrows to the viewport like
+ * any other streaming scalar; on, it needs the whole grid again because the
+ * particles respawn across all of it. */
+function setParticlesEnabled(next: boolean): void {
+  if (particlesEnabled === next) return;
+  particlesEnabled = next;
+  particlesChosen = true;
+  particlesToggle.setAttribute("aria-pressed", String(next));
+  try {
+    localStorage.setItem(PARTICLES_KEY, next ? "1" : "0");
+  } catch {
+    // The URL below still carries the choice for this session.
+  }
+  syncUrl(selectedVariableId);
+  const session = activeSession;
+  if (session?.id !== "wind10m") return;
+  if (next) {
+    ensureWindLayer();
+    ensureWindGrid(session);
+  }
+  windLayer?.setVisible(next);
+  refreshViewportTiles();
+  // refreshViewportTiles only re-selects when the tile set actually changed
+  // (a downloaded bundle narrows nothing), and an overlay just switched on
+  // still has to be handed the planes it was not being given.
+  const target = requestedFrameIndex ?? activeFrameIndex;
+  if (target !== null) trySelectFrame(target);
+}
+
 /** Create the wind particle layer on first use, above the scalar plane and
  * below the boundary lines. */
 function ensureWindLayer(): WindParticleLayer {
   if (!windLayer) {
     windLayer = new WindParticleLayer((message) => showError(message));
     windLayer.animate = !reducedMotion.matches;
+    // The field below already colors speed; a second ramp on top of it would
+    // read as mud, so the particles are drawn in one ink.
+    windLayer.setInk(PARTICLE_INK);
   }
   if (!windLayerAdded) {
     map.addLayer(windLayer, FORECAST_ANCHOR_LAYER);
@@ -2655,6 +2818,9 @@ async function showPoster(variableId: ForecastBundleId, sequence: number): Promi
     target.configureGrid(posterMetadata);
     layerGridSource = posterMetadata;
     displayedReal = null;
+    // Every poster is one scalar plane, even the wind bundle's: switching
+    // away from wind has to leave magnitude mode before this uploads.
+    target.setVectorField(null);
     target.setPalette(buildPalette(variable));
     target.setContours(contourStyleFor(variable));
     target.setFrame(plane);
@@ -2709,16 +2875,27 @@ function applyVariable(session: VariableSession): void {
   syncUrl(session.id);
   const wind = session.id === "wind10m";
   if (wind) {
-    ensureWindLayer();
-    ensureWindGrid(session);
+    // Wind is a filled field like every other layer — the speed, colored
+    // through the same shader from the u/v pair in one magnitude pass — and
+    // the particles ride over it as an optional overlay.
+    const field = windVectorField(session);
+    layer.setContours(null);
+    layer.setVectorField(field);
+    layer.setPalette(buildWindFieldPalette());
+    // Without linear codebooks on both components there is no speed to
+    // color; the overlay is then the whole layer, as it used to be.
+    layer.setVisible(field !== null);
+    if (particlesEnabled) {
+      ensureWindLayer();
+      ensureWindGrid(session);
+    }
   } else {
+    layer.setVectorField(null);
     layer.setPalette(buildPalette(session.variable));
     layer.setContours(contourStyleFor(session.variable));
+    layer.setVisible(true);
   }
-  // Exactly one weather layer owns the screen: the scalar raster plane or the
-  // wind particles.
-  layer.setVisible(!wind);
-  windLayer?.setVisible(wind);
+  windLayer?.setVisible(wind && particlesEnabled);
   updateCacheReadout();
   // The data card reflects only the variable on screen: its own delivery
   // format, its own downloaded bytes, and its own delivery state — never a
@@ -2790,6 +2967,7 @@ async function initialize(): Promise<void> {
   inflight.clear();
   planeCache.clear();
   planeCacheBytes = 0;
+  vectorPlanes.clear();
   viewportTiles = null;
   probe?.clear();
   probeSeriesRequests.clear();
@@ -2809,6 +2987,7 @@ async function initialize(): Promise<void> {
   layerGridSource = null;
   windLayerGridSource = null;
   windLayer?.setVisible(false);
+  particlesToggle.hidden = true;
   clearLabels();
   displayedReal = null;
   activeSession = null;
@@ -3017,6 +3196,7 @@ playButton.addEventListener("click", () => {
 // One button cycling the ladder: at four rungs a menu would cost more taps
 // than it saves, and the label always reads the rate in force.
 speedButton.addEventListener("click", () => setPlaybackFps(nextFps(playbackFps), true));
+particlesToggle.addEventListener("click", () => setParticlesEnabled(!particlesEnabled));
 /** Poll the live pointer; a changed run id re-initializes onto the new
  * run ("排播型电视直播" — the client tunes itself to the newest broadcast). */
 async function checkForNewRun(): Promise<void> {
@@ -3063,6 +3243,7 @@ try {
 }
 
 updateTransport();
+particlesToggle.setAttribute("aria-pressed", String(particlesEnabled));
 buildTicks(FRAME_COUNT);
 resetPreloadCard(FRAME_COUNT);
 map.once("load", () => {

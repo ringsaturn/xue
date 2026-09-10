@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import {
   parseModelFromSearch,
+  parseParticlesFromSearch,
   parseResolutionFromSearch,
   parseUseH264FromSearch,
   parseVariableFromSearch,
   searchForVariable,
+  searchWithParticles,
 } from "../../web/src/urlstate";
 
 describe("parseVariableFromSearch", () => {
@@ -111,6 +113,47 @@ describe("parseUseH264FromSearch", () => {
 
   it("survives a layer switch, which preserves unrelated params", () => {
     expect(parseUseH264FromSearch(searchForVariable("prate", "?use_h264=true"))).toBe(true);
+  });
+});
+
+describe("parseParticlesFromSearch", () => {
+  it("says nothing when the URL does not, so the stored choice can decide", () => {
+    expect(parseParticlesFromSearch("")).toBeNull();
+    expect(parseParticlesFromSearch("?model=gfs&type=wind")).toBeNull();
+  });
+
+  it("accepts the usual on and off spellings, case-insensitively", () => {
+    for (const value of ["on", "1", "true", "TRUE", "yes"]) {
+      expect(parseParticlesFromSearch(`?particles=${value}`)).toBe(true);
+    }
+    for (const value of ["off", "0", "false", "No"]) {
+      expect(parseParticlesFromSearch(`?particles=${value}`)).toBe(false);
+    }
+    expect(parseParticlesFromSearch("?model=gfs&particles=off&type=wind")).toBe(false);
+  });
+
+  it("treats an unrecognized value as unsaid rather than erroring", () => {
+    expect(parseParticlesFromSearch("?particles=maybe")).toBeNull();
+    expect(parseParticlesFromSearch("?particles=")).toBeNull();
+    expect(parseParticlesFromSearch("?particles=2")).toBeNull();
+  });
+
+  it("survives a layer switch, which preserves unrelated params", () => {
+    expect(parseParticlesFromSearch(searchForVariable("prate", "?particles=off"))).toBe(false);
+  });
+});
+
+describe("searchWithParticles", () => {
+  it("writes only the switched-off state, and clears it again", () => {
+    expect(searchWithParticles("?model=gfs&type=wind", false)).toBe("?model=gfs&type=wind&particles=off");
+    expect(searchWithParticles("?model=gfs&type=wind&particles=off", true)).toBe("?model=gfs&type=wind");
+    expect(searchWithParticles("", true)).toBe("?");
+  });
+
+  it("round-trips through parseParticlesFromSearch", () => {
+    expect(parseParticlesFromSearch(searchWithParticles("?type=wind", false))).toBe(false);
+    // On is the default, so an on link carries nothing and reads as unsaid.
+    expect(parseParticlesFromSearch(searchWithParticles("?type=wind", true))).toBeNull();
   });
 });
 

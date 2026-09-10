@@ -255,7 +255,12 @@ default — the Xue decoder is the everyday path, and `use_h264` (parsed in
 back on.
 `layer.ts` renders one quantized R8 plane with inverse Web Mercator and a
 palette lookup in the fragment shader, blending two frames via `u_mix` (never
-animate raster opacity). The same shader draws the **pressure family** (mean
+animate raster opacity). The same shader also draws **10 m wind** as a filled
+speed field: `layer.ts::setVectorField` switches the data texture to RG8 (u
+codes in red, v in green — the packing `particles.ts` already builds, which
+`main.ts` interleaves once per frame and memoizes), reconstructs each channel
+on its own and looks the palette up by `speed / WIND_SPEED_MAX`. The same
+shader draws the **pressure family** (mean
 sea level pressure and the eight isobaric geopotential heights) as contour
 lines instead of a filled field: `web/src/pressure.ts` holds the per-level
 contour intervals and emphasised lines, `layer.ts::setContours` turns the
@@ -279,7 +284,15 @@ so labels do not crawl along moving lines; a stop, a step or a pan refreshes
 at once.
 `tests/fixtures/pressure-registry.json` is the committed golden that holds
 the codebooks, intervals and emphasised lines identical across the Python
-encoder, the Rust encoder and the frontend. `particles.ts` renders 10 m wind. `playback.ts` holds
+encoder, the Rust encoder and the frontend. `particles.ts` advects GPU
+particles through that same wind field, as an overlay over the colored field
+rather than the layer itself: it is on by default, drawn in one ink (a second
+speed ramp over the first reads as mud), and the viewer switches it off from
+the transport capsule — `?particles=off`, remembered in `localStorage`, and
+off by default under `prefers-reduced-motion`, where the simulation is frozen
+anyway. Wind narrows to the viewport like any other streaming scalar while
+the overlay is off; the particles respawn across the whole grid, so with them
+on the session takes the whole plane. `playback.ts` holds
 the frame-rate ladder and the per-frame dwell that keeps a mixed-step axis
 moving at one apparent speed.
 
@@ -329,7 +342,8 @@ locally, browse `http://localhost:4173` rather than the loopback address.
   swaps "FORECAST HOUR"/`F058`/模式周期/有效时间 for
   "TIME ELAPSED"/`T+058:24`/观测起点/观测时间, on the viewer and on the
   showcase cards. Observations have no run cycle and no lead time.
-- URL state (`?model=`, `?type=`, `?case=`, `?res=`, `?use_h264=`) is parsed
+- URL state (`?model=`, `?type=`, `?case=`, `?res=`, `?use_h264=`,
+  `?particles=`) is parsed
   in `urlstate.ts`; `?lang=` belongs to `i18n.ts` and `?theme=` to `theme.ts`,
   since each is read before anything else renders. Unrecognized values fall
   back to defaults rather than error.

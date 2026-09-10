@@ -13,7 +13,11 @@ import { buildWindSpeedPalette, WIND_SPEED_MAX } from "./palettes";
  * the R/G channels of one texture (the industry-wide convention), particle
  * positions live in two ping-pong RGBA8 state textures (16 bits per axis,
  * webgl-wind encoding), and trails come from ping-pong screen textures faded
- * a little every frame. Particles are colored through a 256x1 speed palette.
+ * a little every frame. Particles are colored through a 256x1 speed palette,
+ * or — the everyday case since the scalar layer began drawing the speed
+ * field underneath — in one ink set by `setInk`: two speed ramps stacked
+ * read as mud, and up here the particles are carrying direction and pace,
+ * not a value.
  *
  * The parameter set (count / speed factor / fade / drop a.k.a. reset rate /
  * speed color ramp) and its defaults follow the conventions shared by
@@ -39,7 +43,10 @@ export interface WindParticleOptions {
 }
 
 export const WIND_PARTICLE_DEFAULTS: WindParticleOptions = {
-  count: 65536,
+  // A quarter of what the overlay ran at when it was the whole wind layer:
+  // over the colored speed field the particles are a trace of direction, and
+  // at the old density their trails hazed the field over.
+  count: 16384,
   speedFactor: 55000,
   fadeOpacity: 0.955,
   dropRate: 0.003,
@@ -209,9 +216,15 @@ const DRAW_FRAGMENT_SHADER = `#version 300 es
 precision mediump float;
 in float v_speed_t;
 uniform sampler2D u_palette;
+// One tone for every particle, used when u_monochrome is on; the speed
+// palette is still compiled in and is what an overlay drawn on its own uses.
+uniform vec4 u_ink;
+uniform float u_monochrome;
 out vec4 out_color;
 void main() {
-  vec4 color = texture(u_palette, vec2((v_speed_t * 255.0 + 0.5) / 256.0, 0.5));
+  vec4 color = u_monochrome > 0.5
+    ? u_ink
+    : texture(u_palette, vec2((v_speed_t * 255.0 + 0.5) / 256.0, 0.5));
   out_color = vec4(color.rgb * color.a, color.a);
 }`;
 
@@ -291,6 +304,8 @@ export class WindParticleLayer implements CustomLayerInterface {
   private spawn: [number, number, number, number] = [0, 0, 1, 1];
   private windOffset: [number, number] = [0, 0];
   private windScale: [number, number] = [0, 0];
+  /** Single tone every particle is drawn in, or null for the speed palette. */
+  private ink: readonly [number, number, number, number] | null = null;
 
   // Pending planes survive context loss and re-apply in onAdd.
   private pendingU: Uint8Array | null = null;
@@ -355,6 +370,13 @@ export class WindParticleLayer implements CustomLayerInterface {
     this.map?.triggerRepaint();
   }
 
+  /** Draw every particle in one tone (r, g, b, a in 0..1), or pass null to
+   * color them by speed again. */
+  setInk(ink: readonly [number, number, number, number] | null): void {
+    this.ink = ink;
+    this.map?.triggerRepaint();
+  }
+
   setVisible(visible: boolean): void {
     if (this.visible === visible) return;
     this.visible = visible;
@@ -383,6 +405,7 @@ export class WindParticleLayer implements CustomLayerInterface {
     this.drawProgram = this.createProgram(gl, DRAW_VERTEX_SHADER, DRAW_FRAGMENT_SHADER, [
       "u_particles", "u_wind", "u_wind_offset", "u_wind_scale", "u_first", "u_step", "u_size", "u_wrap",
       "u_particles_res", "u_point_size", "u_world_offset", "u_matrix", "u_max_speed", "u_palette",
+      "u_ink", "u_monochrome",
     ]);
     this.fadeProgram = this.createProgram(gl, QUAD_VERTEX_SHADER, FADE_FRAGMENT_SHADER, ["u_screen", "u_fade"]);
     this.screenProgram = this.createProgram(gl, QUAD_VERTEX_SHADER, SCREEN_FRAGMENT_SHADER, ["u_screen", "u_opacity"]);
@@ -629,6 +652,9 @@ export class WindParticleLayer implements CustomLayerInterface {
     gl.bindTexture(gl.TEXTURE_2D, this.paletteTexture);
     this.bindWindUniforms(gl, draw, 0, 1);
     gl.uniform1i(draw.uniforms.u_palette!, 2);
+    const ink = this.ink;
+    gl.uniform1f(draw.uniforms.u_monochrome!, ink ? 1 : 0);
+    gl.uniform4f(draw.uniforms.u_ink!, ink?.[0] ?? 1, ink?.[1] ?? 1, ink?.[2] ?? 1, ink?.[3] ?? 1);
     gl.uniform1f(draw.uniforms.u_particles_res!, this.particleRes);
     gl.uniform1f(draw.uniforms.u_point_size!, Math.min(3, Math.max(1, 1.3 * (window.devicePixelRatio || 1))));
     gl.uniformMatrix4fv(draw.uniforms.u_matrix!, false, matrix);

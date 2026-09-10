@@ -26,6 +26,15 @@ import {
 const GRID_WIDTH = 8;
 const GRID_HEIGHT = 4;
 
+/** Magnitude-mode uniforms, in the same terms the layer's VectorField uses,
+ * plus the (u, v) code pair each column carries. */
+interface VectorOptions {
+  offset: [number, number];
+  scale: [number, number];
+  max: number;
+  cells: [number, number][];
+}
+
 /** Contour uniforms, in the same terms the layer's ContourStyle uses. */
 interface ContourOptions {
   offset: number;
@@ -51,6 +60,10 @@ interface StripOptions {
   /** Contour drawing; omitted leaves every contour uniform at zero, which is
    * how a filled field renders. */
   contour?: ContourOptions;
+  /** Two-channel wind plane; omitted leaves u_vector at zero, which is how
+   * every scalar field renders. Turns the palette into a ramp whose red
+   * channel reports the index the shader looked up. */
+  vector?: VectorOptions;
 }
 
 /** RGBA of every pixel across one horizontal strip of a world copy. */
@@ -59,7 +72,7 @@ async function renderStripPixels(
   options: StripOptions,
 ): Promise<number[][]> {
   return page.evaluate(
-    ({ vertexSource, fragmentSource, width, height, wrap, cover, firstLongitude, longitudeStep, columnCodes, contour }) => {
+    ({ vertexSource, fragmentSource, width, height, wrap, cover, firstLongitude, longitudeStep, columnCodes, contour, vector }) => {
       const canvas = document.createElement("canvas");
       canvas.width = 256;
       canvas.height = 16;
@@ -133,15 +146,32 @@ async function renderStripPixels(
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, wrap ? gl.REPEAT : gl.CLAMP_TO_EDGE);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
       gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
-      const plane = new Uint8Array(width * height).fill(128);
-      if (columnCodes) {
-        for (let row = 0; row < height; row += 1) {
-          for (let column = 0; column < width; column += 1) {
-            plane[row * width + column] = columnCodes[column]!;
+      // A vector plane spends the two channels on the u and v codes instead
+      // of on one code, which is what magnitude mode reads.
+      const channels = vector ? 2 : 1;
+      const plane = new Uint8Array(width * height * channels).fill(vector ? 0 : 128);
+      for (let row = 0; row < height; row += 1) {
+        for (let column = 0; column < width; column += 1) {
+          const cell = row * width + column;
+          if (vector) {
+            plane[cell * 2] = vector.cells[column]![0];
+            plane[cell * 2 + 1] = vector.cells[column]![1];
+          } else if (columnCodes) {
+            plane[cell] = columnCodes[column]!;
           }
         }
       }
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, width, height, 0, gl.RED, gl.UNSIGNED_BYTE, plane);
+      if (vector) {
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RG8, width, height, 0, gl.RG, gl.UNSIGNED_BYTE, plane);
+        gl.uniform1f(uniform("u_vector"), 1);
+        gl.uniform2f(uniform("u_vector_offset"), vector.offset[0], vector.offset[1]);
+        gl.uniform2f(uniform("u_vector_scale"), vector.scale[0], vector.scale[1]);
+        gl.uniform1f(uniform("u_vector_max"), vector.max);
+        // The wind codebooks' reserved no-data code.
+        gl.uniform1f(uniform("u_vector_nodata"), 1);
+      } else {
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, width, height, 0, gl.RED, gl.UNSIGNED_BYTE, plane);
+      }
       gl.uniform1i(uniform("u_data"), 0);
       gl.activeTexture(gl.TEXTURE1);
       gl.bindTexture(gl.TEXTURE_2D, data);
@@ -155,6 +185,9 @@ async function renderStripPixels(
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
       const colors = new Uint8Array(256 * 4).fill(255);
+      // In magnitude mode the palette reports itself: red is the index, so a
+      // read-back pixel says which speed fraction the shader looked up.
+      if (vector) for (let index = 0; index < 256; index += 1) colors[index * 4] = index;
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 256, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, colors);
       gl.uniform1i(uniform("u_palette"), 2);
 
@@ -184,6 +217,7 @@ async function renderStripPixels(
       longitudeStep: options.longitudeStep ?? 360 / GRID_WIDTH,
       columnCodes: options.columnCodes ?? null,
       contour: options.contour ?? null,
+      vector: options.vector ?? null,
     },
   );
 }
@@ -240,6 +274,70 @@ test("a cropped grid paints only its own window", async ({ page }) => {
   expect(count).toBeLessThan(alpha.length / 6);
   const runs = painted.filter((value, index) => index > 0 && value !== painted[index - 1]).length;
   expect(runs).toBe(2);
+});
+
+// -- magnitude mode ---------------------------------------------------------
+//
+// The wind speed field: one RG plane, u codes in red and v in green, colored
+// by the magnitude of the pair rather than by either code. Nothing else in
+// the suite exercises that path, and getting it wrong looks plausible — a
+// field that is merely the u component would still animate and still be
+// blue where it is calm.
+
+test("the wind field colors by the magnitude of both channels", async ({ page }) => {
+  // Codes of 0.1 m/s each: 200 is 20 m/s, half of the 40 m/s ceiling. The
+  // columns are calm, 20 m/s of pure u, 20 m/s of pure v, and 20 m/s of each
+  // — which is 28.3 m/s, not 20 and not 40.
+  const pixels = await renderStripPixels(page, {
+    wrap: true,
+    cover: [0, 1, 0, 1],
+    vector: {
+      offset: [0, 0],
+      scale: [0.1, 0.1],
+      max: 40,
+      cells: [[0, 0], [200, 0], [0, 200], [200, 200], [0, 0], [200, 0], [0, 200], [200, 200]],
+    },
+  });
+  // One column is 32 pixels of the 256-wide strip, and a column's center
+  // lands half a pixel below x = 32i — read there, not at the strip's own
+  // midpoint, which sits between two columns and interpolates them.
+  const columnIndex = (column: number): number => pixels[column * 32]![0]!;
+  expect(columnIndex(0)).toBeLessThan(8);
+  // Half the ceiling, whichever component carries it: the same color.
+  expect(columnIndex(1)).toBeGreaterThan(120);
+  expect(columnIndex(1)).toBeLessThan(136);
+  expect(Math.abs(columnIndex(2) - columnIndex(1))).toBeLessThan(8);
+  // sqrt(2) * 20 / 40 of the ramp, which is 180 of 255.
+  expect(Math.abs(columnIndex(3) - 180)).toBeLessThan(10);
+  expect(pixels.every((pixel) => pixel[3]! > 0)).toBe(true);
+});
+
+test("a reserved code in either wind channel paints nothing", async ({ page }) => {
+  // 255 is the codebook's no-data code. Decoded as a value it would be the
+  // fastest wind the codebook can spell, so the shader has to leave it out —
+  // in whichever channel it appears, and with the other channel calm or not.
+  // 254 is the last data code, and one code is all that separates the two,
+  // so the test also holds the ceiling to be data — read at the cell's own
+  // center, which is the one place a no-data neighbour never reaches.
+  const pixels = await renderStripPixels(page, {
+    wrap: true,
+    cover: [0, 1, 0, 1],
+    vector: {
+      offset: [0, 0],
+      scale: [0.1, 0.1],
+      max: 40,
+      cells: [[255, 0], [0, 255], [255, 200], [100, 100], [254, 0], [0, 254], [255, 255], [0, 0]],
+    },
+  });
+  const alphaAt = (column: number): number => pixels[column * 32]![3]!;
+  expect(alphaAt(0)).toBe(0);
+  expect(alphaAt(1)).toBe(0);
+  expect(alphaAt(2)).toBe(0);
+  expect(alphaAt(6)).toBe(0);
+  expect(alphaAt(3)).toBeGreaterThan(0);
+  expect(alphaAt(4)).toBeGreaterThan(0);
+  expect(alphaAt(5)).toBeGreaterThan(0);
+  expect(alphaAt(7)).toBeGreaterThan(0);
 });
 
 // -- contours ---------------------------------------------------------------
