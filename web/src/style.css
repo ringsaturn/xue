@@ -1,3 +1,11 @@
+/* MapLibre's own stylesheet comes in here rather than from main.ts, so that
+   it always precedes the overrides below. style.css is shared by the viewer
+   and the showcase page, and Vite hoists a shared stylesheet into a chunk
+   linked ahead of the entry's own — with the two imported side by side in
+   main.ts, the production build put MapLibre's rules after ours, and the
+   zoom control slid up under the theme button. */
+@import "maplibre-gl/dist/maplibre-gl.css";
+
 /* ---------------------------------------------------------------------------
    Xue — design tokens.
 

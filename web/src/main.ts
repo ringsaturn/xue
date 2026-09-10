@@ -4,7 +4,6 @@ import "@fontsource/manrope/500.css";
 import "@fontsource/manrope/600.css";
 import "@fontsource/ibm-plex-mono/400.css";
 import "@fontsource/ibm-plex-mono/500.css";
-import "maplibre-gl/dist/maplibre-gl.css";
 import "./style.css";
 
 import { layers as basemapLayers, namedFlavor } from "@protomaps/basemaps";
