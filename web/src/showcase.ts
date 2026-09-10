@@ -1,9 +1,13 @@
-import "@fontsource/barlow-condensed/500.css";
-import "@fontsource/barlow-condensed/600.css";
+import "@fontsource/instrument-serif/400.css";
+import "@fontsource/instrument-serif/400-italic.css";
+import "@fontsource/manrope/500.css";
+import "@fontsource/manrope/600.css";
 import "@fontsource/ibm-plex-mono/400.css";
+import "@fontsource/ibm-plex-mono/500.css";
 import "./style.css";
 
 import { applyStaticMessages, locale, t, toggleLocale } from "./i18n";
+import { applyTheme, toggleTheme } from "./theme";
 import { isObservationModel, parseBundleMetadata, type ForecastBundleId, type PosterDescriptor } from "./manifest";
 import { buildPalette } from "./palettes";
 import { fetchPoster, isPosterSupported } from "./poster";
@@ -21,10 +25,12 @@ import { fetchCaseManifest, fetchCatalog, localizedText, type ShowcaseCase } fro
  */
 
 applyStaticMessages();
+applyTheme();
 
 const list = document.getElementById("showcase-list") as HTMLUListElement;
 const status = document.getElementById("showcase-status") as HTMLParagraphElement;
 document.getElementById("lang-toggle")?.addEventListener("click", () => toggleLocale());
+document.getElementById("theme-toggle")?.addEventListener("click", () => toggleTheme());
 
 function dataBaseUrl(): string {
   return import.meta.env.VITE_DATA_BASE_URL || "data/";
@@ -94,14 +100,15 @@ function buildCard(showcaseCase: ShowcaseCase): { item: HTMLLIElement; canvas: H
   figure.className = "showcase-thumb";
   const canvas = document.createElement("canvas");
   canvas.setAttribute("aria-hidden", "true");
-  figure.append(canvas);
+  // The dataset code rides on the thumbnail, the way a contact sheet is
+  // stamped rather than captioned.
+  const code = document.createElement("span");
+  code.className = "showcase-code";
+  code.textContent = `${showcaseCase.model} · ${showcaseCase.variables.map((id) => VARIABLE_CODE[id]).join(" / ")}`;
+  figure.append(canvas, code);
 
   const body = document.createElement("div");
   body.className = "showcase-body";
-
-  const eyebrow = document.createElement("p");
-  eyebrow.className = "eyebrow";
-  eyebrow.textContent = `${showcaseCase.model} · ${showcaseCase.variables.map((id) => VARIABLE_CODE[id]).join(" / ")}`;
 
   const title = document.createElement("h2");
   title.textContent = localizedText(showcaseCase.title, locale);
@@ -127,17 +134,23 @@ function buildCard(showcaseCase: ShowcaseCase): { item: HTMLLIElement; canvas: H
     definition(t("showcaseSizeLabel"), formatBytes(showcaseCase.byteLength)),
   );
 
-  body.append(eyebrow, title, summary, facts);
-  if (showcaseCase.tags?.length) {
-    const tags = document.createElement("ul");
-    tags.className = "showcase-tags";
-    for (const tag of showcaseCase.tags) {
-      const tagItem = document.createElement("li");
-      tagItem.textContent = tag;
-      tags.append(tagItem);
-    }
-    body.append(tags);
+  body.append(title, summary, facts);
+  // The foot pins the tags and the play affordance to the card's bottom edge,
+  // so a row of cards ends on one line however long their summaries run.
+  const foot = document.createElement("div");
+  foot.className = "showcase-foot";
+  const tags = document.createElement("ul");
+  tags.className = "showcase-tags";
+  for (const tag of showcaseCase.tags ?? []) {
+    const tagItem = document.createElement("li");
+    tagItem.textContent = tag;
+    tags.append(tagItem);
   }
+  const play = document.createElement("span");
+  play.className = "showcase-play";
+  play.setAttribute("aria-hidden", "true");
+  foot.append(tags, play);
+  body.append(foot);
 
   link.append(figure, body);
   item.append(link);

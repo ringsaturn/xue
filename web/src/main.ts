@@ -1,6 +1,9 @@
-import "@fontsource/barlow-condensed/500.css";
-import "@fontsource/barlow-condensed/600.css";
+import "@fontsource/instrument-serif/400.css";
+import "@fontsource/instrument-serif/400-italic.css";
+import "@fontsource/manrope/500.css";
+import "@fontsource/manrope/600.css";
 import "@fontsource/ibm-plex-mono/400.css";
+import "@fontsource/ibm-plex-mono/500.css";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "./style.css";
 
@@ -73,6 +76,7 @@ import {
   type ProbeValue,
 } from "./probe";
 import { fetchPoster, isPosterSupported } from "./poster";
+import { applyTheme, isDark, toggleTheme } from "./theme";
 import {
   coverageBox,
   coversTiles,
@@ -100,8 +104,10 @@ import {
   type VideoStreamSource,
 } from "./webcodecs";
 
-// Rewrite the static shell into the detected locale before anything renders.
+// Rewrite the static shell into the detected locale and appearance before
+// anything renders.
 applyStaticMessages();
+applyTheme();
 
 /** Playback pacing (the ladder and the per-frame dwell live in playback.ts).
  * The rate is user-adjustable from the transport's speed button because a
@@ -234,17 +240,26 @@ const VARIABLE_UI: Record<ForecastBundleId, VariableUi> = {
   ...pressureVariableUi(),
 };
 
-function pressureBasemapTheme(): Record<PressureBundleId, { ocean: string; land: string }> {
-  const themes = {} as Record<PressureBundleId, { ocean: string; land: string }>;
-  for (const id of PRESSURE_BUNDLE_IDS) themes[id] = { ocean: "#101f2c", land: "#22384a" };
+interface BasemapTones {
+  ocean: string;
+  land: string;
+}
+
+function pressureBasemapTheme(tones: BasemapTones): Record<PressureBundleId, BasemapTones> {
+  const themes = {} as Record<PressureBundleId, BasemapTones>;
+  for (const id of PRESSURE_BUNDLE_IDS) themes[id] = tones;
   return themes;
 }
 
-/** Basemap tones per variable. tmp2m paints an opaque field so its base is
- * nearly invisible; prate and wind composite semi-transparent data over the
- * base, so those get a lighter ocean and a visible landmass to keep the page
- * from reading as a black void. */
-const BASEMAP_THEME: Record<ForecastBundleId, { ocean: string; land: string }> = {
+/** Basemap tones per variable, per theme. tmp2m paints an opaque field so its
+ * base is nearly invisible; prate and wind composite semi-transparent data
+ * over the base, so those get a base with enough contrast of its own to keep
+ * the page from reading as a flat void (dark) or a blank sheet (light).
+ *
+ * The pressure family is drawn as thin lines over a nearly bare map, which is
+ * what a chart looks like: the base has to carry the geography on its own, so
+ * it is the plainest of the set — on paper, the design's own chart stock. */
+const DARK_BASEMAP: Record<ForecastBundleId, BasemapTones> = {
   tmp2m: { ocean: "#0b1826", land: "#182c3d" },
   prate: { ocean: "#16344a", land: "#28495f" },
   dswrf: { ocean: "#0d1b2b", land: "#1c3242" },
@@ -252,19 +267,44 @@ const BASEMAP_THEME: Record<ForecastBundleId, { ocean: string; land: string }> =
   // 5 dBZ edge to read against it.
   cref: { ocean: "#0c1a26", land: "#1a2f3d" },
   wind10m: { ocean: "#0e2131", land: "#1d3849" },
-  // The pressure family is drawn as thin lines over a nearly bare map, which
-  // is what a chart looks like: the base has to carry the geography on its
-  // own, so it is the lightest of the set.
-  ...pressureBasemapTheme(),
+  ...pressureBasemapTheme({ ocean: "#101f2c", land: "#22384a" }),
 };
 
-function currentBasemapTheme(): { ocean: string; land: string } {
+/** Light does not mean a light map. Each of these is the design's own field
+ * for that layer composited over paper at the opacity it specifies: a warm
+ * sheet under temperature, a dark slate under precipitation, wind and radar
+ * (their palettes run translucent at the low end and vanish on paper), and
+ * the chart stock under the pressure family. The paper is the chrome —
+ * capsule, rail, sheet — floating over it. */
+const LIGHT_BASEMAP: Record<ForecastBundleId, BasemapTones> = {
+  tmp2m: { ocean: "#e4ded1", land: "#d8d0be" },
+  prate: { ocean: "#3b3f54", land: "#494e63" },
+  dswrf: { ocean: "#463c58", land: "#544968" },
+  cref: { ocean: "#39434e", land: "#47515c" },
+  wind10m: { ocean: "#3c4a63", land: "#4a5872" },
+  ...pressureBasemapTheme({ ocean: "#dcd6c8", land: "#c9c2b2" }),
+};
+
+const BASEMAP_THEME = isDark ? DARK_BASEMAP : LIGHT_BASEMAP;
+
+function currentBasemapTheme(): BasemapTones {
   const id = document.body.dataset.variable as ForecastBundleId | undefined;
   return BASEMAP_THEME[id ?? "tmp2m"] ?? BASEMAP_THEME.tmp2m;
 }
 
+/** Relative luminance of a `#rrggbb` tone. */
+function luminance(color: string): number {
+  const value = Number.parseInt(color.slice(1), 16);
+  return (0.2126 * ((value >> 16) & 255) + 0.7152 * ((value >> 8) & 255) + 0.0722 * (value & 255)) / 255;
+}
+
 function applyBasemapTheme(): void {
   const theme = currentBasemapTheme();
+  // Everything floating directly on the map — the title, the color scale's
+  // numbers, the credits — takes its ink from the ground it sits on rather
+  // than from the theme, because "light" does not mean a light map: the
+  // design paints precipitation and wind on a dark slate in both themes.
+  document.body.dataset.ground = luminance(theme.ocean) < 0.5 ? "dark" : "light";
   if (map.getLayer("background")) map.setPaintProperty("background", "background-color", theme.ocean);
   if (map.getLayer("water")) map.setPaintProperty("water", "fill-color", theme.ocean);
   if (map.getLayer("earth")) map.setPaintProperty("earth", "fill-color", theme.land);
@@ -282,11 +322,12 @@ type BasemapStyle = Exclude<MapOptions["style"], string | undefined>;
 
 function buildBasemapStyle(): BasemapStyle {
   const theme = currentBasemapTheme();
-  const flavor = { ...namedFlavor("dark"), background: theme.ocean, water: theme.ocean, earth: theme.land };
+  const flavorName = isDark ? "dark" : "light";
+  const flavor = { ...namedFlavor(flavorName), background: theme.ocean, water: theme.ocean, earth: theme.land };
   return {
     version: 8,
     glyphs: "https://protomaps.github.io/basemaps-assets/fonts/{fontstack}/{range}.pbf",
-    sprite: "https://protomaps.github.io/basemaps-assets/sprites/v4/dark",
+    sprite: `https://protomaps.github.io/basemaps-assets/sprites/v4/${flavorName}`,
     sources: {
       // Inline tile URLs (no TileJSON fetch) so the shell still boots — dark
       // ocean, no basemap — when api.protomaps.com is unreachable.
@@ -320,7 +361,6 @@ map.addControl(new NavigationControl({ showCompass: false }), "top-right");
 
 const slider = required<HTMLInputElement>("frame-slider");
 const runTime = required<HTMLElement>("run-time");
-const validTime = required<HTMLElement>("valid-time");
 const forecastLead = required<HTMLOutputElement>("forecast-hour");
 const leadLabel = required<HTMLElement>("lead-label");
 const runTimeLabel = required<HTMLElement>("run-time-label");
@@ -334,6 +374,7 @@ const playButton = required<HTMLButtonElement>("play-button");
 const playLabel = required<HTMLElement>("play-label");
 const speedButton = required<HTMLButtonElement>("speed-button");
 const speedLabel = required<HTMLElement>("speed-label");
+const validTime = required<HTMLElement>("valid-time");
 const dataCard = required<HTMLElement>("data-card");
 const dataCardIndex = required<HTMLElement>("data-card-index");
 const dataCardTitle = required<HTMLElement>("data-card-title");
@@ -364,13 +405,15 @@ const trackHorizon = required<HTMLElement>("track-horizon");
 const frameTooltip = required<HTMLOutputElement>("frame-tooltip");
 const forecastDays = required<HTMLElement>("forecast-days");
 const timelinePanel = required<HTMLElement>("timeline-panel");
+const levelRow = required<HTMLElement>("level-row");
+const modelTrigger = required<HTMLButtonElement>("model-trigger");
+const modelSheet = required<HTMLElement>("model-sheet");
 // Scoped to buttons: <body> carries data-variable/data-model too (styling
 // state), and must never be hidden or aria-pressed like a switch button.
 const variableButtons = [...document.querySelectorAll<HTMLButtonElement>("button[data-variable]")];
 const modelButtons = [...document.querySelectorAll<HTMLButtonElement>("button[data-model]")];
 const modelEyebrow = required<HTMLElement>("model-eyebrow");
 const caseBanner = required<HTMLElement>("case-banner");
-const caseChip = required<HTMLElement>("case-chip");
 const caseTitle = required<HTMLElement>("case-title");
 const caseSummary = required<HTMLElement>("case-summary");
 const caseRegion = required<HTMLElement>("case-region");
@@ -382,40 +425,24 @@ const MODEL_EYEBROW: Record<ForecastModelId, string> = {
   radar: "CMA / RADAR MOSAIC (L3 MST)",
 };
 
-// On phone-sized viewports the station panel starts collapsed — expanded it
-// would cover most of the remaining map between the top strip and timeline.
-const stationPanel = document.querySelector<HTMLDetailsElement>("details.station-panel");
-if (stationPanel && window.matchMedia("(max-width: 720px)").matches) stationPanel.open = false;
+/** The pressure surface to open when the rail's one pressure tile is picked:
+ * whichever level was last on screen, else the first the run publishes. */
+let lastPressureVariableId: PressureBundleId | null = null;
 
-// The timeline starts collapsed (play + slider only) so the map keeps the
-// bottom of the viewport; the chevron reveals the five-day strip and the
-// choice sticks across visits.
-const timelineToggle = required<HTMLButtonElement>("timeline-toggle");
-const TIMELINE_EXPANDED_KEY = "g2pv-timeline-expanded";
-
-function setTimelineExpanded(expanded: boolean): void {
-  document.body.classList.toggle("timeline-collapsed", !expanded);
-  timelineToggle.setAttribute("aria-expanded", String(expanded));
-  timelineToggle.setAttribute("aria-label", expanded ? t("collapseTimeline") : t("expandTimeline"));
+function preferredPressureVariable(): ForecastBundleId {
+  const available = PRESSURE_BUNDLE_IDS.filter((id) => !manifest || hasBundle(manifest, id));
+  if (lastPressureVariableId && available.includes(lastPressureVariableId)) return lastPressureVariableId;
+  return available[0] ?? "prmsl";
 }
 
-let storedTimelineExpanded: string | null = null;
-try {
-  storedTimelineExpanded = localStorage.getItem(TIMELINE_EXPANDED_KEY);
-} catch {
-  // Storage can be unavailable (privacy modes); fall back to collapsed.
+/** The model sheet: a panel under the title on desktop, a bottom sheet on
+ * phones. A case is one fixed run, so it never opens there. */
+function setModelSheetOpen(open: boolean): void {
+  const allowed = open && !activeCase && !switchingVariable;
+  modelSheet.hidden = !allowed;
+  modelTrigger.setAttribute("aria-expanded", String(allowed));
+  if (allowed) modelSheet.querySelector<HTMLButtonElement>('button[aria-pressed="true"]')?.focus();
 }
-setTimelineExpanded(storedTimelineExpanded === "1");
-
-timelineToggle.addEventListener("click", () => {
-  const expanded = document.body.classList.contains("timeline-collapsed");
-  setTimelineExpanded(expanded);
-  try {
-    localStorage.setItem(TIMELINE_EXPANDED_KEY, expanded ? "1" : "0");
-  } catch {
-    // Preference just won't persist.
-  }
-});
 
 interface DecodedFrame {
   plane: Uint8Array;
@@ -602,9 +629,16 @@ function formatCompactDate(value: number): string {
   return `${month}/${day} ${hour}Z`;
 }
 
-function formatDay(value: number): string {
+/** Short weekday in the UI locale, read in UTC like every other stamp the
+ * app shows. */
+const WEEKDAY_FORMAT = new Intl.DateTimeFormat(locale === "zh" ? "zh-CN" : "en-US", {
+  weekday: "short",
+  timeZone: "UTC",
+});
+
+function formatDayMark(value: number): string {
   const date = new Date(value);
-  return `${String(date.getUTCMonth() + 1).padStart(2, "0")}/${String(date.getUTCDate()).padStart(2, "0")}`;
+  return `${WEEKDAY_FORMAT.format(date)} ${String(date.getUTCDate()).padStart(2, "0")}`;
 }
 
 function frameCount(): number {
@@ -1481,7 +1515,9 @@ function updateFrameReadout(index: number): void {
   forecastLead.value = lead;
   validTime.textContent = formatDate(valid);
   frameTooltip.value = `${lead} · ${formatCompactDate(valid)}`;
-  frameTooltip.style.setProperty("--frame-progress", `${(index / Math.max(1, frameCount() - 1)) * 100}%`);
+  // Read by the tooltip and by the track's playhead, so it is set on the
+  // capsule both of them sit in.
+  timelinePanel.style.setProperty("--frame-progress", `${(index / Math.max(1, frameCount() - 1)) * 100}%`);
   updateTicks(index);
   updateForecastDay(index);
   scheduleProbeRender();
@@ -1767,39 +1803,44 @@ function forecastDayCount(): number {
   return Math.floor(frameLeadSeconds(frameCount() - 1) / DAY_SECONDS);
 }
 
+/** Day boundaries as marks along the track, each sitting at the fraction of
+ * the axis its frame falls on. Ten of them on a 240-hour run would collide,
+ * so a long axis labels every other day; a mark that would hang off either
+ * end is dropped, since `.track-ends` already names both. */
 function buildForecastDays(): void {
   forecastDays.replaceChildren();
-  for (let day = 1; day <= forecastDayCount(); day += 1) {
+  const days = forecastDayCount();
+  const stride = days > 6 ? 2 : 1;
+  const lastIndex = Math.max(1, frameCount() - 1);
+  for (let day = stride; day <= days; day += stride) {
     const index = dayFrameIndex(day);
     if (index === null) continue;
-    const segment = document.createElement("span");
-    segment.className = "forecast-day";
-    const label = document.createElement("b");
-    label.textContent = `D+${String(day).padStart(2, "0")}`;
-    const date = document.createElement("time");
+    const percent = (index / lastIndex) * 100;
+    if (percent < 4 || percent > 96) continue;
+    const mark = document.createElement("time");
+    mark.className = "forecast-day";
+    mark.dataset.day = String(day);
+    mark.style.left = `${percent.toFixed(2)}%`;
     const valid = frameValidTime(index);
-    date.dateTime = new Date(valid).toISOString();
-    date.textContent = formatDay(valid);
-    const hour = document.createElement("small");
-    hour.textContent = `+${day * 24}H`;
-    segment.append(label, date, hour);
-    forecastDays.append(segment);
+    mark.dateTime = new Date(valid).toISOString();
+    mark.textContent = formatDayMark(valid);
+    forecastDays.append(mark);
   }
   updateForecastDay(0);
 }
 
 function updateForecastDay(frameIndex: number): void {
-  const lastDay = Math.max(0, forecastDays.children.length - 1);
-  const selectedDay = Math.min(
-    lastDay,
-    Math.max(0, Math.ceil(frameLeadSeconds(frameIndex) / DAY_SECONDS) - 1),
-  );
-  [...forecastDays.children].forEach((segment, index) => {
-    const active = index === selectedDay;
-    segment.classList.toggle("is-active", active);
-    if (active) segment.setAttribute("aria-current", "step");
-    else segment.removeAttribute("aria-current");
-  });
+  const day = Math.ceil(frameLeadSeconds(frameIndex) / DAY_SECONDS);
+  // The playhead belongs to the first mark it has not passed yet — the day
+  // it is running into — and to the last mark once it is past all of them.
+  const marks = [...forecastDays.children] as HTMLElement[];
+  const active = marks.find((mark) => Number(mark.dataset.day) >= day) ?? marks.at(-1) ?? null;
+  for (const mark of marks) {
+    const on = mark === active;
+    mark.classList.toggle("is-active", on);
+    if (on) mark.setAttribute("aria-current", "step");
+    else mark.removeAttribute("aria-current");
+  }
 }
 
 function setVariableButtonsDisabled(disabled: boolean): void {
@@ -1818,17 +1859,17 @@ function updateModelPresentation(): void {
 function updateVariablePresentation(session: VariableSession): void {
   const ui = VARIABLE_UI[session.id];
   const model = FORECAST_MODELS[selectedModelId];
+  const pressure = (PRESSURE_BUNDLE_IDS as readonly string[]).includes(session.id);
   document.body.dataset.variable = session.id;
+  document.body.classList.toggle("is-pressure", pressure);
   applyBasemapTheme();
   updateModelPresentation();
   variableCode.textContent = `${model.label} / ${ui.code}`;
   dataCardTitle.textContent = ui.bufferTitle;
   document.title = `${ui.title.join(" ")} · ${model.label} ${Math.round(frameLeadSeconds(frameCount() - 1) / HOUR_SECONDS)}H`;
-  variableTitle.replaceChildren();
-  ui.title.forEach((line, index) => {
-    if (index > 0) variableTitle.append(document.createElement("br"));
-    variableTitle.append(document.createTextNode(line));
-  });
+  // One line at display size: the title sits over the map, and a wrapped
+  // serif headline there fights the data underneath it.
+  variableTitle.textContent = ui.title.join(" ");
   legend.setAttribute("aria-label", t("legendAria", { label: ui.label }));
   legendUnit.textContent = session.variable.unit;
   legendLabels.replaceChildren(...ui.legend.map((label) => {
@@ -1836,8 +1877,13 @@ function updateVariablePresentation(session: VariableSession): void {
     span.textContent = label;
     return span;
   }));
+  // The level row is the pressure family's own switch; the rail keeps one
+  // tile for all nine of them, pressed whenever any level is on screen.
+  if (pressure) lastPressureVariableId = session.id as PressureBundleId;
+  levelRow.hidden = !pressure;
   for (const button of variableButtons) {
-    button.setAttribute("aria-pressed", String(button.dataset.variable === session.id));
+    const pressed = button.dataset.group === "pressure" ? pressure : button.dataset.variable === session.id;
+    button.setAttribute("aria-pressed", String(pressed));
   }
 }
 
@@ -1864,10 +1910,7 @@ function applyCaseCamera(showcaseCase: ShowcaseCase, recenter: boolean): void {
 /** Fill the showcase banner: which event this is, and the way back to the
  * list. The run itself is already on the station panel's "model run" line. */
 function updateCasePresentation(showcaseCase: ShowcaseCase): void {
-  const title = localizedText(showcaseCase.title, locale);
-  caseChip.textContent = title;
-  caseChip.hidden = false;
-  caseTitle.textContent = title;
+  caseTitle.textContent = localizedText(showcaseCase.title, locale);
   caseSummary.textContent = localizedText(showcaseCase.summary, locale);
   const [west, south, east, north] = showcaseCase.bbox;
   caseRegion.textContent = `${formatDegrees(north, "NS")} ${formatDegrees(west, "EW")} → ${formatDegrees(south, "NS")} ${formatDegrees(east, "EW")}`;
@@ -2210,7 +2253,9 @@ function contourStyleFor(variable: BundleVariable): ContourStyle | null {
     values: (level.emphasisContours ?? []).slice(0, MAX_NAMED_CONTOURS),
     lineWidth: CONTOUR_WIDTH,
     emphasisWidth: CONTOUR_EMPHASIS_WIDTH,
-    lineColor: [0.94, 0.96, 1, 1],
+    // Chart lines are drawn in the ground's opposite: near-white on the dark
+    // ocean, the paper theme's ink on its chart stock.
+    lineColor: isDark ? [0.94, 0.96, 1, 1] : [0.11, 0.1, 0.09, 1],
     // A low-saturation fill under the lines: enough to read a ridge from a
     // trough at a glance, faint enough that the lines stay the subject.
     fillAlpha: 0.45,
@@ -2483,7 +2528,10 @@ async function initialize(): Promise<void> {
     for (const button of variableButtons) {
       const bundleId = button.dataset.variable as ForecastBundleId | undefined;
       if (!bundleId || !FORECAST_BUNDLE_IDS.includes(bundleId)) continue;
-      button.hidden = !hasBundle(loadedManifest, bundleId);
+      button.hidden =
+        button.dataset.group === "pressure"
+          ? !PRESSURE_BUNDLE_IDS.some((id) => hasBundle(loadedManifest, id))
+          : !hasBundle(loadedManifest, bundleId);
     }
     if (!hasBundle(loadedManifest, selectedVariableId)) {
       // A case names its own default; a live run always carries the core pair.
@@ -2539,18 +2587,21 @@ slider.addEventListener("keydown", (event) => {
 });
 for (const button of variableButtons) {
   button.addEventListener("click", () => {
-    const variableId = button.dataset.variable;
+    const variableId =
+      button.dataset.group === "pressure" ? preferredPressureVariable() : button.dataset.variable;
     if (variableId && FORECAST_BUNDLE_IDS.includes(variableId as ForecastBundleId)) {
       void activateVariable(variableId as ForecastBundleId);
-      // On phones the open panel keeps covering the map; picking a variable is
-      // the task it was opened for, so it tucks itself away again.
-      if (stationPanel && window.matchMedia("(max-width: 720px)").matches) stationPanel.open = false;
     }
   });
 }
+modelTrigger.addEventListener("click", () => setModelSheetOpen(modelSheet.hidden));
+modelSheet.addEventListener("click", (event) => {
+  if ((event.target as HTMLElement).closest("[data-sheet-dismiss]")) setModelSheetOpen(false);
+});
 for (const button of modelButtons) {
   button.addEventListener("click", () => {
     const modelId = button.dataset.model;
+    setModelSheetOpen(false);
     if (!modelId || !FORECAST_MODEL_IDS.includes(modelId as ForecastModelId)) return;
     if (activeCase || modelId === selectedModelId || switchingVariable) return;
     // A model is a separate dataset (own pointer, own run, own time axis), so
@@ -2563,9 +2614,11 @@ for (const button of modelButtons) {
   });
 }
 retryButton.addEventListener("click", () => void initialize());
-// The locale is fixed per page load (the basemap style bakes it in), so the
-// toggle persists the choice and reloads onto the other language.
+// Locale and theme are both fixed per page load (the basemap style bakes in
+// the label language and the flavor), so each toggle persists the choice and
+// reloads onto it.
 required<HTMLButtonElement>("lang-toggle").addEventListener("click", toggleLocale);
+required<HTMLButtonElement>("theme-toggle").addEventListener("click", toggleTheme);
 // Right-click (long-press on touch) over the map opens the custom menu:
 // 「详细统计信息」 pins the stats card, 「复制调试信息」 copies a plain-text
 // snapshot. The map-level event (not a DOM listener) is what makes this
@@ -2587,6 +2640,7 @@ window.addEventListener("pointerdown", (event) => {
 window.addEventListener("keydown", (event) => {
   if (event.key !== "Escape") return;
   hideContextMenu();
+  setModelSheetOpen(false);
   closeProbe();
 });
 window.addEventListener("blur", hideContextMenu);
@@ -2651,7 +2705,7 @@ try {
   // Storage can be unavailable (privacy modes); the default rate applies.
 }
 
-// Stats visibility sticks across visits, like the timeline expansion.
+// Stats visibility sticks across visits, like the playback rate.
 try {
   if (localStorage.getItem(STATS_VISIBLE_KEY) === "1") setStatsVisible(true);
 } catch {

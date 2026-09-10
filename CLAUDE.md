@@ -268,19 +268,48 @@ encoder, the Rust encoder and the frontend. `particles.ts` renders 10 m wind. `p
 the frame-rate ladder and the per-frame dwell that keeps a mixed-step axis
 moving at one apparent speed.
 
+The shell is a map with controls floating over it, not a map beside a panel:
+the display-serif title in the top-left corner names the layer *and* opens the
+run picker (`#model-sheet` — a panel under it on desktop, a bottom sheet on
+phones), three round buttons sit top-right (locale, cases, appearance), the
+color scale runs down the left edge, one 48px tile per layer down the right,
+and one capsule at the bottom holds the whole transport: the pressure family's
+level row, the forecast hour and valid time, the speed and play buttons, and a
+track whose tick marks, playhead and day labels *are* the slider's appearance
+(the `<input type=range>` itself is transparent and only carries the hit area,
+the keyboard and the accessible name). `src/theme.ts` resolves light/dark once
+per page load the way `i18n.ts` resolves the locale, and the toggle reloads for
+the same reason: the basemap flavor is baked into the style, and swapping it
+would mean `map.setStyle`, which drops the custom WebGL layers the forecast is
+drawn in. `index.html` repeats that detection inline so the shell never paints
+on the wrong ground first.
+
+Light does not mean a light map. Each layer keeps the ground its palette needs
+— a warm sheet under temperature, a dark slate under precipitation, wind,
+radar and solar (their palettes run translucent at the low end and vanish on
+paper), chart stock under the pressure family — so the chrome's tokens and the
+map's are two different things. The chrome (capsule, rail, sheet, cards) always
+uses the theme's own; anything floating *directly* on the map (the title, the
+color scale's numbers, the credits) uses `--map-ink` / `--map-ink-muted`, which
+follow `body[data-ground]` — stamped by `applyBasemapTheme` from the basemap
+tone's luminance. The top/bottom map fade follows the same attribute.
+
 ## Conventions
 
-- Locale is `zh`/`en` via `web/src/i18n.ts`, fixed per page load. Only
-  human-facing copy is translated; thrown `Error` messages, worker messages
-  and diagnostics stay English in both locales.
+- Locale is `zh`/`en` via `web/src/i18n.ts` and appearance is `light`/`dark`
+  via `web/src/theme.ts`; both are fixed per page load and both toggles
+  persist the choice and reload onto it. Only human-facing copy is
+  translated; thrown `Error` messages, worker messages and diagnostics stay
+  English in both locales.
 - Timeline copy follows the *kind* of dataset, not the locale:
   `isObservationModel` (the frontend mirror of `SourceSpec.observation`)
   swaps "FORECAST HOUR"/`F058`/模式周期/有效时间 for
   "TIME ELAPSED"/`T+058:24`/观测起点/观测时间, on the viewer and on the
   showcase cards. Observations have no run cycle and no lead time.
-- URL state (`?model=`, `?type=`, `?case=`, `?lang=`, `?use_h264=`) is parsed
-  in `urlstate.ts`; unrecognized values fall back to defaults rather than
-  error.
+- URL state (`?model=`, `?type=`, `?case=`, `?use_h264=`) is parsed in
+  `urlstate.ts`; `?lang=` belongs to `i18n.ts` and `?theme=` to `theme.ts`,
+  since each is read before anything else renders. Unrecognized values fall
+  back to defaults rather than error.
 - The Python encoder and Rust decoder are held byte-identical by golden tests
   (`rust/xue/tests/golden.rs`) against fixtures built by
   `tests/prepare_bin_fixture.py`. A format change means changing the spec, both

@@ -84,19 +84,15 @@ test("?case=<id> plays the case back in the ordinary viewer", async ({ page }) =
   const slider = page.getByRole("slider", { name: "Forecast hour" });
   await expect(slider).toBeEnabled({ timeout: 20_000 });
 
-  // The summary line names the case even on phones, where the panel below it
-  // starts collapsed.
-  await expect(page.locator("#case-chip")).toHaveText("Demo typhoon case");
-  await page.locator("details.station-panel").evaluate((panel: HTMLDetailsElement) => {
-    panel.open = true;
-  });
   // The banner names the event and offers the way back to the list.
   await expect(page.locator("#case-title")).toHaveText("Demo typhoon case");
   await expect(page.locator("#case-region")).toContainText("110°E");
   await expect(page.getByRole("link", { name: "← All cases" })).toHaveAttribute("href", "./showcase.html");
 
-  // A case is one fixed dataset and run: no model switch, and the run line
-  // shows the historical cycle rather than a live one.
+  // A case is one fixed dataset and run: the title stops being the model
+  // switch, and the run stamp shows the historical cycle rather than a live one.
+  await expect(page.locator(".model-switch")).toBeHidden();
+  await page.locator("#model-trigger").click();
   await expect(page.locator(".model-switch")).toBeHidden();
   await expect(page.locator("body")).toHaveClass(/is-showcase/);
   await expect(page.locator("#run-time")).toContainText("09/03");
@@ -129,10 +125,6 @@ test("an explicit ?type= overrides the case's own default layer", async ({ page 
   await expect(page.locator("#preload-state")).toHaveText("Bundle fully buffered", { timeout: 20_000 });
   await expect(page.locator("body")).toHaveAttribute("data-variable", "prate");
   // Switching layers keeps the case in the address bar and drops the model.
-  // (The panel holding the switch starts collapsed on phones.)
-  await page.locator("details.station-panel").evaluate((panel: HTMLDetailsElement) => {
-    panel.open = true;
-  });
   await page.getByRole("button", { name: "TEMP 2M" }).click();
   await expect(page).toHaveURL(/case=demo-typhoon/);
   await expect(page).toHaveURL(/type=temp/);

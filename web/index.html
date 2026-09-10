@@ -3,13 +3,32 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#08131C" />
+    <!-- Paper in light, void in dark; the inline script below narrows this to
+         the one the viewer actually gets when they have chosen a side. -->
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#F3EFE6" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#000000" />
     <meta name="description" data-i18n-content="metaDescription" content="NOAA GFS and ECMWF global 240-hour forecasts of temperature, precipitation, wind and solar radiation" />
     <title>GFS / ECMWF Temperature and Precipitation</title>
 
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <!-- The appearance is settled before the first paint: the module bundle
+         lands long after the shell renders, and a page that starts on the
+         wrong ground flashes. Detection order matches theme.ts exactly. -->
+    <script>
+      (function () {
+        try {
+          var url = new URLSearchParams(location.search).get("theme");
+          var stored = localStorage.getItem("xue-theme");
+          var choice = url === "dark" || url === "light" ? url : stored === "dark" || stored === "light" ? stored : null;
+          if (choice) document.documentElement.dataset.theme = choice;
+        } catch (error) {
+          // Storage can be unavailable (privacy modes); prefers-color-scheme decides.
+        }
+      })();
+    </script>
 
     <!-- Social cards are scraped from the static markup, before the i18n pass
          runs, so they stay in English like the pre-JS fallback copy. The
@@ -34,121 +53,84 @@
   <body data-variable="prate">
     <main class="app-shell">
       <div id="map" data-i18n-aria="mapAria" aria-label="Global temperature and precipitation forecast map"></div>
+      <!-- Instrument grid plus the top/bottom fade the floating controls are
+           read against; never interactive. -->
       <div class="atmosphere" aria-hidden="true"></div>
 
-      <details class="station-panel" open>
-        <summary>
-          <span class="status-dot" aria-hidden="true"></span>
-          <span id="variable-code">GFS / PRATE SFC</span>
-          <!-- Case name on the always-visible summary line: on phones the
-               panel below it starts collapsed. -->
-          <span id="case-chip" class="case-chip" hidden></span>
-        </summary>
-        <div class="station-content">
-          <div class="model-switch" role="group" data-i18n-aria="modelSwitchAria" aria-label="Forecast model">
-            <button type="button" data-model="gfs" aria-pressed="true">
-              <span>GFS</span><small>NOAA 0.25°</small>
-            </button>
-            <button type="button" data-model="sflux" aria-pressed="false">
-              <span>GFS</span><small>SFLUX 13KM</small>
-            </button>
-            <button type="button" data-model="ecmwf" aria-pressed="false">
-              <span>ECMWF</span><small>IFS 0.25°</small>
-            </button>
-          </div>
-          <div class="variable-switch" role="group" data-i18n-aria="variableSwitchAria" aria-label="Weather variable">
-            <button type="button" data-variable="tmp2m" aria-pressed="false">
-              <span>TEMP</span><small data-i18n="varTemp">2M</small>
-            </button>
-            <button type="button" data-variable="prate" aria-pressed="true">
-              <span>PRECIP</span><small data-i18n="varPrecip">RATE</small>
-            </button>
-            <button type="button" data-variable="wind10m" aria-pressed="false" hidden>
-              <span>WIND</span><small data-i18n="varWind">10M</small>
-            </button>
-            <button type="button" data-variable="dswrf" aria-pressed="false" hidden>
-              <span>SOLAR</span><small data-i18n="varSolar">FLUX</small>
-            </button>
-            <button type="button" data-variable="cref" aria-pressed="false" hidden>
-              <span>RADAR</span><small data-i18n="varRadar">CREF</small>
-            </button>
-            <!-- The pressure family, drawn as contours. Every one of these is
-                 hidden until the manifest actually ships its bundle, so a run
-                 publishing four levels shows four buttons. -->
-            <button type="button" data-variable="prmsl" aria-pressed="false" hidden>
-              <span>MSLP</span><small data-i18n="varPressure">SEA LVL</small>
-            </button>
-            <button type="button" data-variable="hgt1000" aria-pressed="false" hidden>
-              <span>1000MB</span><small data-i18n="varHeight">HEIGHT</small>
-            </button>
-            <button type="button" data-variable="hgt925" aria-pressed="false" hidden>
-              <span>925MB</span><small data-i18n="varHeight">HEIGHT</small>
-            </button>
-            <button type="button" data-variable="hgt850" aria-pressed="false" hidden>
-              <span>850MB</span><small data-i18n="varHeight">HEIGHT</small>
-            </button>
-            <button type="button" data-variable="hgt700" aria-pressed="false" hidden>
-              <span>700MB</span><small data-i18n="varHeight">HEIGHT</small>
-            </button>
-            <button type="button" data-variable="hgt500" aria-pressed="false" hidden>
-              <span>500MB</span><small data-i18n="varHeight">HEIGHT</small>
-            </button>
-            <button type="button" data-variable="hgt300" aria-pressed="false" hidden>
-              <span>300MB</span><small data-i18n="varHeight">HEIGHT</small>
-            </button>
-            <button type="button" data-variable="hgt250" aria-pressed="false" hidden>
-              <span>250MB</span><small data-i18n="varHeight">HEIGHT</small>
-            </button>
-            <button type="button" data-variable="hgt200" aria-pressed="false" hidden>
-              <span>200MB</span><small data-i18n="varHeight">HEIGHT</small>
-            </button>
-          </div>
-          <!-- Shown only for ?case=<id>: which historical event is on
-               screen, and the way back to the list. -->
-          <div class="case-banner" id="case-banner" hidden>
-            <a class="case-back" href="./showcase.html" data-i18n="showcaseBack">All cases</a>
-            <h2 id="case-title"></h2>
-            <p id="case-summary"></p>
-            <p class="case-region" id="case-region"></p>
-          </div>
-          <p class="eyebrow" id="model-eyebrow">NOAA / GFS (0.25°)</p>
-          <h1 id="variable-title">Precipitation<br />Rate</h1>
-          <dl>
-            <div>
-              <dt id="run-time-label" data-i18n="runCycle">Model run</dt>
-              <dd id="run-time" data-i18n="awaitingData">Awaiting data</dd>
-            </div>
-            <div>
-              <dt id="valid-time-label" data-i18n="validTimeLabel">Valid time</dt>
-              <dd id="valid-time">--</dd>
-            </div>
-          </dl>
-        </div>
-      </details>
+      <!-- The title is the model control: it names what is on screen and
+           opens the model sheet, the way the whole top-left corner reads as
+           one label rather than a panel. -->
+      <h1 class="title-block">
+        <button id="model-trigger" type="button" aria-haspopup="dialog" aria-expanded="false" data-i18n-aria="modelSwitchAria" aria-label="Forecast model">
+          <span class="title-line">
+            <span id="variable-title">Precipitation Rate</span>
+            <span id="variable-code" class="title-code">GFS / PRATE SFC</span>
+          </span>
+          <span class="model-stamp">
+            <span id="model-eyebrow">NOAA / GFS (0.25°)</span>
+            <span class="stamp-sep" aria-hidden="true">·</span>
+            <span id="run-time-label" class="sr-only" data-i18n="runCycle">Model run</span>
+            <span id="run-time" data-i18n="awaitingData">Awaiting data</span>
+            <span class="model-caret" aria-hidden="true">▾</span>
+          </span>
+        </button>
+      </h1>
 
+      <div class="top-actions">
+        <button id="lang-toggle" class="icon-button" type="button" data-i18n-aria="langToggleAria" aria-label="Switch to Chinese">
+          <span data-i18n="langToggleShort">中</span>
+        </button>
+        <a class="icon-button" href="./showcase.html">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z" />
+            <path d="M5 17a3 3 0 0 1 3-3h11" />
+          </svg>
+          <span class="sr-only" data-i18n="showcaseLink">CASES</span>
+        </a>
+        <button id="theme-toggle" class="icon-button" type="button" data-i18n-aria="themeToggleAria" aria-label="Toggle light and dark">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+            <path d="M10 2a8 8 0 1 0 0 16z" />
+            <circle cx="10" cy="10" r="7.5" fill="none" stroke="currentColor" stroke-width="1.6" />
+          </svg>
+        </button>
+      </div>
+
+      <!-- Shown only for ?case=<id>: which historical event is on screen, and
+           the way back to the list. -->
+      <div class="case-banner" id="case-banner" hidden>
+        <div class="case-pill">
+          <span class="case-tag" data-i18n="caseTag">CASE</span>
+          <h2 id="case-title"></h2>
+          <a class="case-back" href="./showcase.html">
+            <span aria-hidden="true">←</span>
+            <span class="sr-only" data-i18n="showcaseBack">All cases</span>
+          </a>
+        </div>
+        <div class="case-detail">
+          <p id="case-summary"></p>
+          <p class="case-region" id="case-region"></p>
+        </div>
+      </div>
+
+      <!-- The buffer card, doubling as "stats for nerds": one muted mono
+           heading, the residency figure, the per-frame bar, then a plain
+           label/value ledger. -->
       <aside id="data-card" class="data-card" data-i18n-aria="statsAria" aria-label="Stats for nerds">
-        <button id="stats-close" class="stats-close" type="button" data-i18n-aria="statsCloseAria" aria-label="Close stats">×</button>
         <div class="data-card-heading">
-          <div>
-            <span id="data-card-index" class="data-card-index">121F</span>
-            <h2 id="data-card-title">Precipitation buffer</h2>
-          </div>
+          <span id="data-card-index" class="data-card-index">121F</span>
+          <h2 id="data-card-title">Precipitation buffer</h2>
+          <button id="stats-close" class="stats-close" type="button" data-i18n-aria="statsCloseAria" aria-label="Close stats">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+              <path d="M2 2l8 8M10 2l-8 8" />
+            </svg>
+          </button>
+        </div>
+        <p class="data-card-figure">
           <output id="preload-percent">0%</output>
-        </div>
-        <div class="data-card-metrics">
-          <div>
-            <span data-i18n="bufferedFrames">Buffered</span>
-            <output id="preload-frames">0 / 121</output>
-          </div>
-          <div>
-            <span data-i18n="downloadedBytes">Downloaded</span>
-            <output id="preload-bytes">0 B</output>
-          </div>
-          <div>
-            <span data-i18n="formatLabel">Format</span>
-            <output id="preload-format">--</output>
-          </div>
-        </div>
+          <output id="preload-frames" data-i18n-aria="bufferedFrames" aria-label="Buffered">0 / 121</output>
+          <span class="figure-sep" aria-hidden="true">·</span>
+          <output id="preload-bytes" data-i18n-aria="downloadedBytes" aria-label="Downloaded">0 B</output>
+        </p>
         <div
           id="preload-segments"
           class="preload-segments"
@@ -162,6 +144,7 @@
         <dl id="stats-grid" class="stats-grid">
           <div><dt data-i18n="statDataset">Dataset</dt><dd id="stat-dataset">--</dd></div>
           <div><dt data-i18n="statGrid">Grid</dt><dd id="stat-grid">--</dd></div>
+          <div><dt data-i18n="formatLabel">Format</dt><dd><output id="preload-format">--</output></dd></div>
           <div><dt data-i18n="statFrameCache">Frame cache</dt><dd id="stat-cache-bytes">--</dd></div>
           <div><dt data-i18n="statDecodeTime">Decode time</dt><dd id="stat-decode">--</dd></div>
           <div><dt data-i18n="statDecodeRate">Decode rate</dt><dd id="stat-decode-rate">--</dd></div>
@@ -176,36 +159,112 @@
 
       <aside id="legend" class="legend" data-i18n-aria="legendPrateAria" aria-label="Precipitation rate color scale">
         <span id="legend-unit" class="legend-unit">mm/h</span>
-        <div class="legend-bar" aria-hidden="true"></div>
-        <div id="legend-labels" class="legend-labels">
-          <span>128</span><span>40</span><span>20</span><span>5</span><span>1</span><span>0</span>
+        <div class="legend-scale">
+          <div class="legend-bar" aria-hidden="true"></div>
+          <div id="legend-labels" class="legend-labels">
+            <span>128</span><span>40</span><span>20</span><span>5</span><span>1</span><span>0</span>
+          </div>
         </div>
       </aside>
 
+      <!-- One tile per layer. The glyph is the label; the code and its gloss
+           ride along visually hidden so the button still names itself. -->
+      <div class="variable-rail" role="group" data-i18n-aria="variableSwitchAria" aria-label="Weather variable">
+        <button type="button" data-variable="tmp2m" aria-pressed="false">
+          <b class="rail-glyph" aria-hidden="true" data-i18n="glyphTmp2m">T</b>
+          <span class="rail-name"><span>TEMP</span> <small data-i18n="varTemp">2M</small></span>
+        </button>
+        <button type="button" data-variable="prate" aria-pressed="true">
+          <b class="rail-glyph" aria-hidden="true" data-i18n="glyphPrate">R</b>
+          <span class="rail-name"><span>PRECIP</span> <small data-i18n="varPrecip">RATE</small></span>
+        </button>
+        <button type="button" data-variable="wind10m" aria-pressed="false" hidden>
+          <b class="rail-glyph" aria-hidden="true" data-i18n="glyphWind10m">W</b>
+          <span class="rail-name"><span>WIND</span> <small data-i18n="varWind">10M</small></span>
+        </button>
+        <button type="button" data-variable="dswrf" aria-pressed="false" hidden>
+          <b class="rail-glyph" aria-hidden="true" data-i18n="glyphDswrf">S</b>
+          <span class="rail-name"><span>SOLAR</span> <small data-i18n="varSolar">FLUX</small></span>
+        </button>
+        <button type="button" data-variable="cref" aria-pressed="false" hidden>
+          <b class="rail-glyph" aria-hidden="true" data-i18n="glyphCref">Z</b>
+          <span class="rail-name"><span>RADAR</span> <small data-i18n="varRadar">CREF</small></span>
+        </button>
+        <!-- The whole pressure family behind one tile: the level itself is
+             chosen on the timeline capsule's level row. -->
+        <button type="button" data-variable="prmsl" data-group="pressure" aria-pressed="false" hidden>
+          <b class="rail-glyph" aria-hidden="true" data-i18n="glyphPressure">P</b>
+          <span class="rail-name"><span>PRESSURE</span> <small data-i18n="varPressureField">FIELD</small></span>
+        </button>
+      </div>
+
       <section id="timeline-panel" class="timeline-panel" data-i18n-aria="timelineAria" aria-label="Forecast time controls">
+        <!-- Only for the pressure family: nine surfaces on one scrolling row,
+             each its own bundle. -->
+        <div id="level-row" class="level-row" role="group" data-i18n-aria="levelSwitchAria" aria-label="Pressure level" hidden>
+          <span class="level-caption" data-i18n="levelCaption">LEVEL</span>
+          <button type="button" data-variable="prmsl" data-level aria-pressed="false" hidden>
+            <b aria-hidden="true">MSL</b>
+            <span class="rail-name"><span>MSLP</span> <small data-i18n="varPressure">SEA LVL</small></span>
+          </button>
+          <button type="button" data-variable="hgt1000" data-level aria-pressed="false" hidden>
+            <b aria-hidden="true">1000</b>
+            <span class="rail-name"><span>1000MB</span> <small data-i18n="varHeight">HEIGHT</small></span>
+          </button>
+          <button type="button" data-variable="hgt925" data-level aria-pressed="false" hidden>
+            <b aria-hidden="true">925</b>
+            <span class="rail-name"><span>925MB</span> <small data-i18n="varHeight">HEIGHT</small></span>
+          </button>
+          <button type="button" data-variable="hgt850" data-level aria-pressed="false" hidden>
+            <b aria-hidden="true">850</b>
+            <span class="rail-name"><span>850MB</span> <small data-i18n="varHeight">HEIGHT</small></span>
+          </button>
+          <button type="button" data-variable="hgt700" data-level aria-pressed="false" hidden>
+            <b aria-hidden="true">700</b>
+            <span class="rail-name"><span>700MB</span> <small data-i18n="varHeight">HEIGHT</small></span>
+          </button>
+          <button type="button" data-variable="hgt500" data-level aria-pressed="false" hidden>
+            <b aria-hidden="true">500</b>
+            <span class="rail-name"><span>500MB</span> <small data-i18n="varHeight">HEIGHT</small></span>
+          </button>
+          <button type="button" data-variable="hgt300" data-level aria-pressed="false" hidden>
+            <b aria-hidden="true">300</b>
+            <span class="rail-name"><span>300MB</span> <small data-i18n="varHeight">HEIGHT</small></span>
+          </button>
+          <button type="button" data-variable="hgt250" data-level aria-pressed="false" hidden>
+            <b aria-hidden="true">250</b>
+            <span class="rail-name"><span>250MB</span> <small data-i18n="varHeight">HEIGHT</small></span>
+          </button>
+          <button type="button" data-variable="hgt200" data-level aria-pressed="false" hidden>
+            <b aria-hidden="true">200</b>
+            <span class="rail-name"><span>200MB</span> <small data-i18n="varHeight">HEIGHT</small></span>
+          </button>
+        </div>
+
         <div class="timeline-heading">
-          <div class="timeline-primary">
-            <button id="play-button" class="transport-button" type="button" data-i18n-aria="playAnimation" aria-label="Play animation" disabled>
-              <span class="transport-icon" aria-hidden="true"></span>
-              <span id="play-label" class="transport-label">PLAY</span>
-            </button>
-            <button id="speed-button" class="transport-button speed-button" type="button" data-i18n-aria="playbackSpeed" aria-label="Playback speed" disabled>
-              <span id="speed-label" class="speed-value">12 FPS</span>
-            </button>
-            <div class="forecast-readout">
+          <div class="forecast-readout">
+            <output id="forecast-hour" for="frame-slider">F---</output>
+            <div class="readout-meta">
               <span id="lead-label" class="control-label">FORECAST HOUR</span>
-              <output id="forecast-hour" for="frame-slider">F---</output>
+              <span id="valid-time-label" class="sr-only" data-i18n="validTimeLabel">Valid time</span>
+              <time id="valid-time">--</time>
             </div>
           </div>
-          <div class="timeline-meta">
-            <div id="load-status" class="load-status" role="status" aria-live="polite" data-i18n="readingManifest">Loading manifest</div>
-            <button id="timeline-toggle" class="timeline-toggle" type="button" aria-expanded="false" data-i18n-aria="expandTimeline" aria-label="Expand timeline details">
-              <span class="timeline-toggle-icon" aria-hidden="true"></span>
-            </button>
-          </div>
+          <div id="load-status" class="load-status" role="status" aria-live="polite" data-i18n="readingManifest">Loading manifest</div>
+          <button id="speed-button" class="pill-button speed-button" type="button" data-i18n-aria="playbackSpeed" aria-label="Playback speed" disabled>
+            <span id="speed-label" class="speed-value">12 FPS</span>
+          </button>
+          <button id="play-button" class="transport-button" type="button" data-i18n-aria="playAnimation" aria-label="Play animation" disabled>
+            <span class="transport-icon" aria-hidden="true"></span>
+            <span id="play-label" class="sr-only">PLAY</span>
+          </button>
         </div>
+
         <div class="track-wrap">
           <output id="frame-tooltip" class="frame-tooltip" for="frame-slider">F000 · --</output>
+          <div id="tick-marks" class="tick-marks" aria-hidden="true"></div>
+          <div class="track-playhead" aria-hidden="true"></div>
+          <div id="forecast-days" class="forecast-days" data-i18n-aria="forecastDaysAria" aria-label="Five-day forecast segments"></div>
           <input
             id="frame-slider"
             type="range"
@@ -217,11 +276,36 @@
             data-i18n-aria="forecastHourAria"
             aria-label="Forecast hour"
           />
-          <div id="tick-marks" class="tick-marks" aria-hidden="true"></div>
         </div>
         <div class="track-ends" aria-hidden="true"><span>NOW</span><span id="track-horizon">+240H</span></div>
-        <div id="forecast-days" class="forecast-days" data-i18n-aria="forecastDaysAria" aria-label="Five-day forecast segments"></div>
       </section>
+
+      <!-- Which run to read. The title block is the trigger; on phones this
+           arrives as a bottom sheet, on desktop as a panel under the title. -->
+      <div id="model-sheet" class="model-sheet" hidden>
+        <div class="model-sheet-scrim" data-sheet-dismiss></div>
+        <div class="model-sheet-panel" role="dialog" aria-modal="true" data-i18n-aria="modelSwitchAria" aria-label="Forecast model">
+          <span class="sheet-grip" aria-hidden="true"></span>
+          <p class="sheet-heading" data-i18n="modelHeading">FORECAST MODEL</p>
+          <div class="model-switch" role="group">
+            <button type="button" data-model="gfs" aria-pressed="true">
+              <span class="model-name">GFS</span>
+              <small>NOAA 0.25°</small>
+              <span class="model-check" aria-hidden="true"></span>
+            </button>
+            <button type="button" data-model="sflux" aria-pressed="false">
+              <span class="model-name">GFS</span>
+              <small>SFLUX 13KM</small>
+              <span class="model-check" aria-hidden="true"></span>
+            </button>
+            <button type="button" data-model="ecmwf" aria-pressed="false">
+              <span class="model-name">ECMWF</span>
+              <small>IFS 0.25°</small>
+              <span class="model-check" aria-hidden="true"></span>
+            </button>
+          </div>
+        </div>
+      </div>
 
       <div id="context-menu" class="context-menu" role="menu" data-i18n-aria="mapMenuAria" aria-label="Map options" hidden>
         <button id="stats-menu-toggle" type="button" role="menuitemcheckbox" aria-checked="false" data-i18n="menuStats">Stats for nerds</button>
@@ -235,19 +319,13 @@
       </div>
 
       <footer class="source-note">
-        <!-- The toggle leads the line: the phone layout ellipsis-clips the
-             footer's tail, which must never swallow an interactive control. -->
-        <button id="lang-toggle" class="lang-toggle" type="button" data-i18n="langToggle">中文</button>
-        <span>•</span>
-        <a href="./showcase.html" data-i18n="showcaseLink">CASES</a>
-        <span>•</span>
         <a href="https://github.com/ringsaturn/xue" target="_blank" rel="noreferrer">GITHUB</a>
-        <span>•</span>
+        <span>·</span>
         DATA <a href="https://registry.opendata.aws/noaa-gfs-bdp-pds/" target="_blank" rel="noreferrer">NOAA GFS</a>
         · CONTAINS MODIFIED <a href="https://www.ecmwf.int/en/forecasts/datasets/open-data" target="_blank" rel="noreferrer">ECMWF OPEN DATA</a>
         (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">CC BY 4.0</a>)
         · RADAR <a href="https://data.cma.cn" target="_blank" rel="noreferrer">CMA</a>
-        <span>•</span>
+        <span>·</span>
         BASEMAP <a href="https://protomaps.com" target="_blank" rel="noreferrer">PROTOMAPS</a>
         © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OPENSTREETMAP</a>
       </footer>

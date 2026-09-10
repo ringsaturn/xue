@@ -198,6 +198,13 @@ async function routeBundleWithRanges(
   });
 }
 
+/** Pick a forecast model. The title block is the trigger; the switch itself
+ * lives in the sheet it opens. */
+async function pickModel(page: Page, name: string): Promise<void> {
+  await page.locator("#model-trigger").click();
+  await page.getByRole("button", { name }).click();
+}
+
 async function waitForReady(page: Page): Promise<void> {
   await expect(page.locator("#preload-state")).toHaveText("Bundle fully buffered", { timeout: 20_000 });
   await expect(page.getByRole("slider", { name: "Forecast hour" })).toBeEnabled({ timeout: 20_000 });
@@ -319,10 +326,16 @@ test("a pressure level loads as its own contour session", async ({ page }, testI
   await routeBundle(page);
   await page.goto("/");
   await waitForReady(page);
+  // The rail carries one tile for the whole pressure family; the surface
+  // itself is picked on the capsule's level row, which only appears once a
+  // pressure layer is on screen.
+  await expect(page.locator("#level-row")).toBeHidden();
+  await page.getByRole("button", { name: "PRESSURE FIELD" }).click();
+  await expect(page.locator("body")).toHaveAttribute("data-variable", "hgt500");
+  await expect(page.locator("#level-row")).toBeVisible();
   const heightButton = page.getByRole("button", { name: "500MB HEIGHT" });
   await expect(heightButton).toBeVisible();
-  await heightButton.click();
-  await expect(page.locator("body")).toHaveAttribute("data-variable", "hgt500");
+  await expect(heightButton).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator("#variable-title")).toContainText("500 hPa");
   await expect(page.locator("#legend-unit")).toHaveText("m");
   // The level names itself in the URL — there is no separate ?level=.
@@ -352,7 +365,7 @@ test("switching to ECMWF loads its own run on a mixed-cadence 240-hour timeline"
   await routeBundle(page);
   await page.goto("/");
   await waitForReady(page);
-  await page.getByRole("button", { name: "ECMWF IFS 0.25°" }).click();
+  await pickModel(page, "ECMWF IFS 0.25°");
   await expect(page.locator("body")).toHaveAttribute("data-model", "ecmwf");
   await waitForReady(page);
   await expect(page).toHaveURL(/model=ecmwf/);
@@ -378,7 +391,7 @@ test("switching to ECMWF loads its own run on a mixed-cadence 240-hour timeline"
   await page.keyboard.press("End");
   await expect(page.locator("#forecast-hour")).toHaveText("F240");
   // And back: GFS re-tunes to its own hourly axis.
-  await page.getByRole("button", { name: "GFS NOAA 0.25°" }).click();
+  await pickModel(page, "GFS NOAA 0.25°");
   await waitForReady(page);
   await expect(page.locator("body")).toHaveAttribute("data-model", "gfs");
   await expect(slider).toHaveAttribute("max", "120");
@@ -393,7 +406,7 @@ test("the SFLUX station reveals and renders the solar radiation layer", async ({
   await waitForReady(page);
   // GFS ships no dswrf bundle, so the SOLAR button stays hidden there.
   await expect(page.getByRole("button", { name: "SOLAR FLUX" })).toBeHidden();
-  await page.getByRole("button", { name: "GFS SFLUX 13KM" }).click();
+  await pickModel(page, "GFS SFLUX 13KM");
   await expect(page.locator("body")).toHaveAttribute("data-model", "sflux");
   await waitForReady(page);
   await expect(page).toHaveURL(/model=sflux/);
@@ -413,7 +426,7 @@ test("the SFLUX station reveals and renders the solar radiation layer", async ({
   await expect(slider).toHaveAttribute("max", "120");
   await expect(slider).toBeEnabled();
   // Back on GFS the solar button hides again and the selection falls back.
-  await page.getByRole("button", { name: "GFS NOAA 0.25°" }).click();
+  await pickModel(page, "GFS NOAA 0.25°");
   await waitForReady(page);
   await expect(page.locator("body")).toHaveAttribute("data-model", "gfs");
   await expect(page.getByRole("button", { name: "SOLAR FLUX" })).toBeHidden();
@@ -510,7 +523,7 @@ test("a mixed-cadence axis holds its longer steps longer", async ({ page }, test
   await page.goto("/");
   await waitForReady(page);
   // ECMWF temperature: 65 frames, 3-hourly to F144 then 6-hourly to F240.
-  await page.getByRole("button", { name: "ECMWF IFS 0.25°" }).click();
+  await pickModel(page, "ECMWF IFS 0.25°");
   await waitForReady(page);
   await page.getByRole("button", { name: "TEMP 2M" }).click();
   const slider = page.getByRole("slider", { name: "Forecast hour" });
@@ -633,10 +646,10 @@ test("scrubbing works while data arrives through range requests", async ({ page 
 });
 
 // The UI locale follows navigator.language (Playwright defaults to en-US, so
-// every other test runs the English UI); ?lang= overrides it, and the footer
-// toggle persists the other language and reloads onto it. The basemap label
+// every other test runs the English UI); ?lang= overrides it, and the round
+// toggle in the top-right persists the other language and reloads onto it. The basemap label
 // language rides the same detection, but the tests stub out the tile API.
-test("?lang=zh renders the Chinese UI and the footer toggle switches back", async ({ page }) => {
+test("?lang=zh renders the Chinese UI and the toggle switches back", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await routeManifest(page);
   await routeBundle(page);
@@ -644,17 +657,41 @@ test("?lang=zh renders the Chinese UI and the footer toggle switches back", asyn
   await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
   await expect(page.locator("#preload-state")).toHaveText("数据包已驻留内存", { timeout: 20_000 });
   await expect(page.getByRole("slider", { name: "预报时次" })).toBeEnabled({ timeout: 20_000 });
-  // toHaveText (not toBeVisible): the station panel starts collapsed on
-  // phone-sized viewports, hiding the variable buttons.
+  // toHaveText (not toBeVisible): a rail tile shows its glyph and carries the
+  // code and gloss visually hidden, for the accessible name.
   const tempLabel = page.locator('button[data-variable="tmp2m"] small');
   await expect(tempLabel).toHaveText("气温");
+  await expect(page.locator('button[data-variable="tmp2m"] .rail-glyph')).toHaveText("温");
+  // The toggle names the language it switches to, in one character.
   const toggle = page.locator("#lang-toggle");
-  await expect(toggle).toHaveText("ENGLISH");
+  await expect(toggle).toHaveText("EN");
   await toggle.click();
   await expect(page).toHaveURL(/lang=en/);
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
   await expect(tempLabel).toHaveText("2M");
-  await expect(toggle).toHaveText("中文");
+  await expect(toggle).toHaveText("中");
+});
+
+// Appearance is resolved before the first paint (an inline script in the
+// shell) and fixed for the page; the round toggle persists the other side and
+// reloads onto it, exactly like the locale.
+test("the appearance toggle round-trips between paper and void", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "light" });
+  await routeManifest(page);
+  await routeBundle(page);
+  await page.goto("/");
+  await waitForReady(page);
+  const root = page.locator("html");
+  await expect(root).toHaveAttribute("data-theme", "light");
+  await page.locator("#theme-toggle").click();
+  await expect(page).toHaveURL(/theme=dark/);
+  await expect(root).toHaveAttribute("data-theme", "dark");
+  // The choice outlives the URL: a fresh visit with no param reads it back.
+  await page.goto("/");
+  await expect(root).toHaveAttribute("data-theme", "dark");
+  // An explicit param outranks both the stored choice and the OS preference.
+  await page.goto("/?theme=light");
+  await expect(root).toHaveAttribute("data-theme", "light");
 });
 
 test("clicking the map pins a point and reads its whole series at once", async ({ page }, testInfo) => {

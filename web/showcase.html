@@ -3,13 +3,28 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#08131C" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#F3EFE6" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#000000" />
     <meta name="description" data-i18n-content="showcaseMetaDescription" content="Replays of past weather events: cropped forecast and radar datasets for typhoons, rainstorms, heatwaves and more" />
     <title>Showcase Cases · Xue</title>
 
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <!-- Settled before the first paint; see the note in index.html. -->
+    <script>
+      (function () {
+        try {
+          var url = new URLSearchParams(location.search).get("theme");
+          var stored = localStorage.getItem("xue-theme");
+          var choice = url === "dark" || url === "light" ? url : stored === "dark" || stored === "light" ? stored : null;
+          if (choice) document.documentElement.dataset.theme = choice;
+        } catch (error) {
+          // Storage can be unavailable (privacy modes); prefers-color-scheme decides.
+        }
+      })();
+    </script>
 
     <!-- Social cards are scraped from the static markup, before the i18n
          pass runs, so they stay in English like the pre-JS fallback copy. -->
@@ -29,9 +44,31 @@
   </head>
   <body class="showcase-page" data-variable="prate">
     <main class="showcase-shell">
+      <div class="showcase-topbar">
+        <a class="showcase-back-link" href="./">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M10 3L5 8l5 5" />
+          </svg>
+          <span data-i18n="showcaseHome">Live forecast</span>
+        </a>
+        <div class="showcase-actions">
+          <button id="lang-toggle" class="icon-button" type="button" data-i18n-aria="langToggleAria" aria-label="Switch to Chinese">
+            <span data-i18n="langToggleShort">中</span>
+          </button>
+          <button id="theme-toggle" class="icon-button" type="button" data-i18n-aria="themeToggleAria" aria-label="Toggle light and dark">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+              <path d="M10 2a8 8 0 1 0 0 16z" />
+              <circle cx="10" cy="10" r="7.5" fill="none" stroke="currentColor" stroke-width="1.6" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
       <header class="showcase-header">
-        <p class="eyebrow" data-i18n="showcaseTitle">Showcase cases</p>
-        <h1 data-i18n="showcaseHeading">Weather events, replayed</h1>
+        <h1>
+          <span data-i18n="showcaseHeading">Weather events, replayed</span>
+          <span class="showcase-eyebrow" data-i18n="showcaseArchive">archive</span>
+        </h1>
         <p class="showcase-intro" data-i18n="showcaseIntro">
           Each case is a slice of one past weather event — an archived forecast run, or observations —
           through the same encoder, cropped to the region and hours it happened in.
@@ -45,12 +82,8 @@
       <ul id="showcase-list" class="showcase-list" data-i18n-aria="showcaseListAria" aria-label="Showcase case list"></ul>
 
       <footer class="source-note">
-        <button id="lang-toggle" class="lang-toggle" type="button" data-i18n="langToggle">中文</button>
-        <span>•</span>
-        <a href="./" data-i18n="showcaseHome">Live forecast →</a>
-        <span>•</span>
         <a href="https://github.com/ringsaturn/xue" target="_blank" rel="noreferrer">GITHUB</a>
-        <span>•</span>
+        <span>·</span>
         DATA <a href="https://registry.opendata.aws/noaa-gfs-bdp-pds/" target="_blank" rel="noreferrer">NOAA GFS</a>
         · CONTAINS MODIFIED <a href="https://www.ecmwf.int/en/forecasts/datasets/open-data" target="_blank" rel="noreferrer">ECMWF OPEN DATA</a>
         (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">CC BY 4.0</a>)

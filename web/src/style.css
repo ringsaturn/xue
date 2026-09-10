@@ -1,27 +1,144 @@
+/* ---------------------------------------------------------------------------
+   Xue — design tokens.
+
+   Two grounds: warm paper by day, void by night. Everything else is derived
+   from six colors, so a surface never hard-codes a value that would have to
+   be found again in the other theme.
+
+   The theme is resolved once per page load and stamped on <html> as
+   data-theme (see src/theme.ts and the inline script in index.html). The
+   media query below is what an unstamped document falls back to, which is
+   also what a scraper or a print stylesheet sees.
+
+   --text / --muted / --accent keep their names from the previous skin: the
+   probe chart and the decode graph read them off the computed style to paint
+   into a canvas, and those are the three they ask for. */
+
 :root {
-  color-scheme: dark;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  color: #eaf4f6;
-  background: #08131c;
+  color-scheme: light;
+
+  --bg: #f3efe6;
+  --text: #1b1a17;
+  --muted: #6e6a60;
+  --line: rgba(27, 26, 23, 0.16);
+  --surface: rgba(251, 249, 244, 0.88);
+  --sheet: #fbf9f4;
+  --card: #fbf9f4;
+  --row-hover: rgba(27, 26, 23, 0.07);
+  --accent: #1b1a17;
+  --accent-rgb: 27, 26, 23;
+  --warning: #b3541e;
+  --warning-rgb: 179, 84, 30;
+  --grid-line: rgba(27, 26, 23, 0.06);
+  --tick-off: rgba(27, 26, 23, 0.25);
+  --label-shadow: 0 0 3px rgba(243, 239, 230, 0.95), 0 0 9px rgba(243, 239, 230, 0.85);
+  --scrim: rgba(27, 26, 23, 0.28);
+  --lift: 0 20px 60px rgba(27, 26, 23, 0.18);
+  --lift-small: 0 10px 30px rgba(27, 26, 23, 0.14);
+  /* Top and bottom of the map fade toward the ground so the title and the
+     transport capsule are read against something, whatever is underneath. */
+  --map-fade: linear-gradient(
+    180deg,
+    rgba(243, 239, 230, 0.7) 0%,
+    rgba(243, 239, 230, 0) 14%,
+    rgba(243, 239, 230, 0) 64%,
+    rgba(243, 239, 230, 0.88) 100%
+  );
+
+  --font-ui: Manrope, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
+  /* Instrument Serif carries no CJK, so a Chinese title falls through to the
+     system's own serif rather than to the UI sans. */
+  --font-display: "Instrument Serif", "Songti SC", "Source Han Serif SC", "Noto Serif CJK SC", serif;
+
+  font-family: var(--font-ui);
+  color: var(--text);
+  background: var(--bg);
   font-synthesis: none;
-  --deep-sea: #08131c;
-  --panel: #102330;
-  --text: #eaf4f6;
-  --muted: #8ca6b2;
-  --accent: #54d6c7;
-  --accent-rgb: 84, 214, 199;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #000;
+    --text: #fff;
+    --muted: rgba(255, 255, 255, 0.62);
+    --line: rgba(255, 255, 255, 0.18);
+    --surface: rgba(0, 0, 0, 0.6);
+    --sheet: #0a0a0a;
+    --card: rgba(255, 255, 255, 0.04);
+    --row-hover: rgba(255, 255, 255, 0.08);
+    --accent: #7fd1ff;
+    --accent-rgb: 127, 209, 255;
+    --warning: #ffc857;
+    --warning-rgb: 255, 200, 87;
+    --grid-line: rgba(255, 255, 255, 0.06);
+    --tick-off: rgba(255, 255, 255, 0.3);
+    --label-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+    --scrim: rgba(0, 0, 0, 0.45);
+    --lift: 0 20px 60px rgba(0, 0, 0, 0.5);
+    --lift-small: 0 10px 30px rgba(0, 0, 0, 0.45);
+    --map-fade: linear-gradient(
+      180deg,
+      rgba(0, 0, 0, 0.5) 0%,
+      rgba(0, 0, 0, 0) 18%,
+      rgba(0, 0, 0, 0) 60%,
+      rgba(0, 0, 0, 0.85) 100%
+    );
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #000;
+  --text: #fff;
+  --muted: rgba(255, 255, 255, 0.62);
+  --line: rgba(255, 255, 255, 0.18);
+  --surface: rgba(0, 0, 0, 0.6);
+  --sheet: #0a0a0a;
+  --card: rgba(255, 255, 255, 0.04);
+  --row-hover: rgba(255, 255, 255, 0.08);
+  --accent: #7fd1ff;
+  --accent-rgb: 127, 209, 255;
   --warning: #ffc857;
-  --hairline: rgba(140, 166, 178, 0.28);
+  --warning-rgb: 255, 200, 87;
+  --grid-line: rgba(255, 255, 255, 0.06);
+  --tick-off: rgba(255, 255, 255, 0.3);
+  --label-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+  --scrim: rgba(0, 0, 0, 0.45);
+  --lift: 0 20px 60px rgba(0, 0, 0, 0.5);
+  --lift-small: 0 10px 30px rgba(0, 0, 0, 0.45);
+  --map-fade: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0.5) 0%,
+    rgba(0, 0, 0, 0) 18%,
+    rgba(0, 0, 0, 0) 60%,
+    rgba(0, 0, 0, 0.85) 100%
+  );
 }
 
-body[data-variable="prate"] {
-  --accent: #6bb8ff;
-  --accent-rgb: 107, 184, 255;
+/* Over-map ink. The chrome — capsule, rail, sheet, cards — always uses the
+   theme's own tokens; the labels that float directly on the map use these,
+   which follow the active layer's ground (main.ts stamps data-ground from the
+   basemap's luminance). In the dark theme the two agree; in the light theme
+   they part company over precipitation, wind, radar and solar, whose fields
+   are painted on a dark slate. */
+body {
+  --map-ink: var(--text);
+  --map-ink-muted: var(--muted);
 }
 
-body[data-variable="wind10m"] {
-  --accent: #8fd66b;
-  --accent-rgb: 143, 214, 107;
+body[data-ground="dark"] {
+  --map-ink: #fff;
+  --map-ink-muted: rgba(255, 255, 255, 0.72);
+  --label-shadow: 0 1px 4px rgba(0, 0, 0, 0.85);
+  --map-fade: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0.55) 0%,
+    rgba(0, 0, 0, 0) 14%,
+    rgba(0, 0, 0, 0) 64%,
+    rgba(0, 0, 0, 0.8) 100%
+  );
 }
 
 * {
@@ -41,12 +158,35 @@ body,
 button,
 input {
   font: inherit;
+  font-family: var(--font-ui);
+}
+
+/* Named for a screen reader, absent from the layout. The rail tiles and the
+   transport buttons show a glyph and carry their code this way. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.rail-name {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .app-shell {
   position: relative;
   isolation: isolate;
-  background: var(--deep-sea);
+  background: var(--bg);
 }
 
 /* Mobile browsers collapse their toolbars while scrolling; dvh keeps the
@@ -58,7 +198,7 @@ input {
 }
 
 body.is-data-loading #map {
-  filter: saturate(0.8) brightness(0.9);
+  filter: saturate(0.85) brightness(0.96);
 }
 
 #map {
@@ -67,70 +207,343 @@ body.is-data-loading #map {
   transition: filter 180ms ease;
 }
 
+/* The instrument grid, then the fade the floating controls are read against.
+   Earlier layers paint on top, so the fade is listed first. */
 .atmosphere {
   position: absolute;
   inset: 0;
-  pointer-events: none;
   z-index: 1;
-  background: repeating-linear-gradient(0deg, rgba(234, 244, 246, 0.018) 0 1px, transparent 1px 5px);
+  pointer-events: none;
+  background:
+    var(--map-fade),
+    linear-gradient(0deg, var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: auto, 120px 120px, 120px 120px;
 }
 
-.station-panel,
+.title-block,
+.top-actions,
+.case-banner,
 .data-card,
 .timeline-panel,
 .legend,
+.variable-rail,
 .error-panel,
 .source-note {
   position: absolute;
   z-index: 2;
 }
 
-.station-panel {
-  top: 22px;
-  left: 22px;
-  width: min(330px, calc(100vw - 44px));
-  padding: 0;
-  background: linear-gradient(135deg, rgba(16, 35, 48, 0.97), rgba(9, 26, 37, 0.9));
-  border: 1px solid var(--hairline);
-  clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 18px, 100% 100%, 0 100%);
-  backdrop-filter: blur(16px);
+/* ---------------------------------------------------------------------------
+   The title: what is on screen, and the control that changes which run it
+   comes from. */
+
+/* The page heading is also the model control: it names what is on screen,
+   and pressing it opens the run picker. */
+.title-block {
+  top: 24px;
+  left: 20px;
+  max-width: min(560px, calc(100% - 200px));
+  margin: 0;
+  font: inherit;
 }
 
-/* The buffer card doubles as YouTube-style "stats for nerds": it shows on its
-   own only while data loads (or on error); the map's right-click menu pins it
-   with the extended stats grid and a close button (body.stats-visible). */
-.data-card {
-  top: 22px;
-  right: 124px;
+#model-trigger {
+  display: flex;
+  max-width: 100%;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+#model-trigger:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 6px;
+  border-radius: 4px;
+}
+
+.title-line {
+  display: block;
+  text-shadow: var(--label-shadow);
+}
+
+#variable-title {
+  color: var(--map-ink);
+  font-family: var(--font-display);
+  font-size: 36px;
+  font-weight: 400;
+  line-height: 1;
+}
+
+.title-code {
+  margin-left: 8px;
+  color: var(--map-ink-muted);
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-style: italic;
+  white-space: nowrap;
+}
+
+.model-stamp {
+  display: flex;
+  max-width: 100%;
+  align-items: center;
+  gap: 6px;
+  color: var(--map-ink-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  text-shadow: var(--label-shadow);
+  white-space: nowrap;
+}
+
+/* The agency and the run cycle both give way before the caret does: the
+   stamp is also the affordance that says the title opens something. */
+#model-eyebrow,
+#run-time {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.stamp-sep,
+.model-caret {
+  flex: none;
+}
+
+.model-caret {
+  font-size: 10px;
+}
+
+/* A case is one fixed dataset and run: switching model would silently leave
+   the event behind, so the title stops being a control. */
+body.is-showcase #model-trigger {
+  cursor: default;
+}
+
+body.is-showcase .model-caret {
   display: none;
-  width: 270px;
-  padding: 15px 16px 13px;
-  background: linear-gradient(145deg, rgba(9, 26, 37, 0.94), rgba(16, 35, 48, 0.9));
-  border: 1px solid var(--hairline);
-  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%);
-  backdrop-filter: blur(14px);
+}
+
+/* ---------------------------------------------------------------------------
+   The round controls in the top-right corner. */
+
+.top-actions {
+  top: 24px;
+  right: 20px;
+  display: flex;
+  gap: 8px;
+}
+
+.icon-button {
+  display: flex;
+  width: 44px;
+  height: 44px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-decoration: none;
+  backdrop-filter: blur(12px);
+  transition: border-color 160ms ease, background-color 160ms ease;
+}
+
+.icon-button:hover {
+  border-color: var(--muted);
+}
+
+.icon-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ---------------------------------------------------------------------------
+   Historical case banner, under the title. */
+
+.case-banner {
+  top: 92px;
+  left: 20px;
+  display: flex;
+  max-width: min(520px, calc(100% - 40px));
+  flex-direction: column;
+  gap: 8px;
+}
+
+.case-banner[hidden] {
+  display: none;
+}
+
+.case-pill {
+  display: flex;
+  height: 44px;
+  align-items: center;
+  gap: 10px;
+  padding: 0 6px 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  backdrop-filter: blur(12px);
+}
+
+.case-tag {
+  flex: none;
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: var(--text);
+  color: var(--bg);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+}
+
+.case-pill h2 {
+  overflow: hidden;
+  min-width: 0;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.case-back {
+  display: flex;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  margin-left: auto;
+  border-radius: 50%;
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.case-back:hover,
+.case-back:focus-visible {
+  color: var(--text);
+}
+
+.case-detail {
+  padding: 0 4px;
+  text-shadow: var(--label-shadow);
+}
+
+.case-detail p {
+  margin: 0;
+  color: var(--map-ink-muted);
+  font-size: 12px;
+  line-height: 1.55;
+  text-wrap: pretty;
+}
+
+.case-region {
+  margin-top: 4px !important;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+}
+
+/* ---------------------------------------------------------------------------
+   The buffer card, doubling as YouTube-style "stats for nerds": it shows on
+   its own only while data loads (or on error); the map's right-click menu
+   pins it with the extended stats grid (body.stats-visible). */
+
+/* Left of the zoom control's column, and clear of the layer rail below it:
+   the card grows downward and must not slide under either. */
+.data-card {
+  top: 80px;
+  right: 78px;
+  display: none;
+  width: 250px;
+  padding: 12px 14px 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  backdrop-filter: blur(12px);
+  box-shadow: var(--lift-small);
   transition: border-color 180ms ease;
 }
 
 body.is-data-loading .data-card,
 body.stats-visible .data-card,
 .data-card.is-error {
-  display: block;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Pinned, the card grows past the layer rail's top edge. It steps aside
+   rather than sliding under it, and stops short of the transport capsule. */
+body.stats-visible .data-card {
+  max-height: calc(100% - 220px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.data-card.is-complete {
+  border-color: rgba(var(--accent-rgb), 0.45);
+}
+
+.data-card.is-error {
+  border-color: rgba(var(--warning-rgb), 0.75);
+}
+
+/* One muted mono line: the axis length, what is being buffered, and the way
+   out. Nothing here competes with the figure below it. */
+.data-card-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+}
+
+.data-card-index {
+  flex: none;
+}
+
+.data-card h2 {
+  overflow: hidden;
+  margin: 0;
+  font: inherit;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .stats-close {
-  position: absolute;
-  top: 4px;
-  right: 6px;
   display: none;
-  padding: 2px 6px;
-  background: none;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  margin: -6px -8px -6px auto;
   border: 0;
+  background: none;
   color: var(--muted);
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 13px;
-  line-height: 1;
   cursor: pointer;
+}
+
+body.stats-visible .stats-close {
+  display: flex;
 }
 
 .stats-close:hover,
@@ -138,18 +551,110 @@ body.stats-visible .data-card,
   color: var(--text);
 }
 
-.stats-grid {
-  display: none;
-  gap: 0;
-  margin-top: 9px;
+/* The residency figure: the percentage at display size, the frame count and
+   the bytes behind it as one mono aside. */
+.data-card-figure {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
 }
 
-body.stats-visible .stats-close {
+.data-card-figure output:not(#preload-percent) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.figure-sep {
+  flex: none;
+}
+
+#preload-percent {
+  margin-right: 4px;
+  flex: none;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 26px;
+  letter-spacing: 0;
+  line-height: 1;
+}
+
+.data-card.is-error #preload-percent {
+  color: var(--warning);
+}
+
+.preload-state {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+}
+
+/* One cell per frame, filled as planes become resident. */
+.preload-segments {
+  display: grid;
+  height: 6px;
+  gap: 1px;
+  grid-template-columns: repeat(var(--frame-count, 121), minmax(0, 1fr));
+}
+
+.preload-segments i {
   display: block;
+  background: var(--line);
+  transition: background-color 160ms ease;
+}
+
+.preload-segments i.is-loaded {
+  background: var(--accent);
+}
+
+.data-card.is-error .preload-segments i.is-loaded {
+  background: var(--warning);
+}
+
+.stats-grid {
+  display: none;
+  gap: 4px 12px;
+  grid-template-columns: auto 1fr;
+  margin: 0;
 }
 
 body.stats-visible .stats-grid {
   display: grid;
+}
+
+.stats-grid div {
+  display: contents;
+}
+
+.stats-grid dt,
+.stats-grid dd {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.stats-grid dt {
+  color: var(--muted);
+}
+
+.stats-grid dd {
+  overflow: hidden;
+  color: var(--text);
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stats-grid dd output {
+  font: inherit;
 }
 
 /* Rolling decode-activity graph, the YouTube network-activity analog: the
@@ -157,9 +662,8 @@ body.stats-visible .stats-grid {
    prefetches planes. */
 .stat-graph-wrap {
   display: none;
-  margin-top: 9px;
-  border-top: 1px solid rgba(140, 166, 178, 0.14);
-  padding-top: 7px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
 }
 
 body.stats-visible .stat-graph-wrap {
@@ -170,293 +674,13 @@ body.stats-visible .stat-graph-wrap {
   display: block;
   width: 100%;
   height: 54px;
-  background: rgba(140, 166, 178, 0.06);
-}
-
-.stats-grid div {
-  grid-template-columns: 74px 1fr;
-  padding: 5px 0 4px;
-  border-top: 1px solid rgba(140, 166, 178, 0.14);
-}
-
-.stats-grid div:first-child {
-  border-top: 0;
-}
-
-.stats-grid dt,
-.stats-grid dd {
-  font-size: 10px;
-}
-
-.stats-grid dt {
-  letter-spacing: 0.09em;
-}
-
-.context-menu {
-  position: fixed;
-  z-index: 6;
-  min-width: 190px;
-  padding: 5px;
-  background: linear-gradient(145deg, rgba(9, 26, 37, 0.97), rgba(16, 35, 48, 0.95));
-  border: 1px solid var(--hairline);
-  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%);
-  backdrop-filter: blur(14px);
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
-}
-
-.context-menu button {
-  display: block;
-  width: 100%;
-  padding: 8px 12px 8px 8px;
-  background: none;
-  border: 0;
-  color: var(--text);
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 11px;
-  letter-spacing: 0.06em;
-  text-align: left;
-  cursor: pointer;
-}
-
-.context-menu button::before {
-  content: "";
-  display: inline-block;
-  width: 16px;
-}
-
-.context-menu button[aria-checked="true"]::before {
-  content: "✓";
-  color: var(--accent);
-}
-
-.context-menu button:hover,
-.context-menu button:focus-visible {
-  background: rgba(var(--accent-rgb), 0.14);
-  outline: none;
-}
-
-/* The point probe: a MapLibre popup wearing the instrument-panel skin. It is
-   anchored to the clicked point, so the panel itself says which cell it
-   reads, and the popup machinery handles placement and the close button. */
-.probe-popup .maplibregl-popup-content {
-  padding: 0;
-  background: none;
-  box-shadow: none;
-}
-
-.probe-popup .maplibregl-popup-close-button {
-  top: 2px;
-  right: 4px;
-  z-index: 1;
-  padding: 0 4px;
-  color: var(--muted);
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 15px;
-  line-height: 1.2;
-}
-
-.probe-popup .maplibregl-popup-close-button:hover,
-.probe-popup .maplibregl-popup-close-button:focus-visible {
-  background: none;
-  color: var(--text);
-  outline: none;
-}
-
-/* MapLibre colors one border of the tip per anchor; each side needs the
-   panel's own background or the arrow disappears. */
-.probe-popup.maplibregl-popup-anchor-top .maplibregl-popup-tip,
-.probe-popup.maplibregl-popup-anchor-top-left .maplibregl-popup-tip,
-.probe-popup.maplibregl-popup-anchor-top-right .maplibregl-popup-tip {
-  border-bottom-color: rgba(9, 26, 37, 0.96);
-}
-
-.probe-popup.maplibregl-popup-anchor-bottom .maplibregl-popup-tip,
-.probe-popup.maplibregl-popup-anchor-bottom-left .maplibregl-popup-tip,
-.probe-popup.maplibregl-popup-anchor-bottom-right .maplibregl-popup-tip {
-  border-top-color: rgba(9, 26, 37, 0.96);
-}
-
-.probe-popup.maplibregl-popup-anchor-left .maplibregl-popup-tip {
-  border-right-color: rgba(9, 26, 37, 0.96);
-}
-
-.probe-popup.maplibregl-popup-anchor-right .maplibregl-popup-tip {
-  border-left-color: rgba(9, 26, 37, 0.96);
-}
-
-.probe-panel {
-  width: 246px;
-  padding: 9px 11px 8px;
-  background: linear-gradient(145deg, rgba(9, 26, 37, 0.96), rgba(16, 35, 48, 0.94));
-  border: 1px solid var(--hairline);
-  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%);
-  backdrop-filter: blur(14px);
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
-  color: var(--text);
-}
-
-.probe-head {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  padding-right: 16px;
-  color: var(--muted);
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 9px;
-  letter-spacing: 0.09em;
-}
-
-.probe-code {
-  color: var(--accent);
-}
-
-.probe-value {
-  display: block;
-  margin-top: 4px;
-  font-family: "Barlow Condensed", sans-serif;
-  font-size: 27px;
-  font-weight: 600;
-  line-height: 1.05;
-  letter-spacing: 0.01em;
-}
-
-.probe-meta {
-  color: var(--muted);
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 10px;
-  letter-spacing: 0.04em;
-}
-
-.probe-chart {
-  display: block;
-  width: 100%;
-  height: 64px;
-  margin-top: 6px;
-}
-
-.probe-footer {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  margin: 3px 0 0;
-  color: var(--muted);
-  font-size: 10px;
-}
-
-.probe-count {
-  font-family: "IBM Plex Mono", monospace;
-  letter-spacing: 0.04em;
-}
-
-.data-card.is-complete {
-  border-color: rgba(var(--accent-rgb), 0.55);
-}
-
-.data-card.is-error {
-  border-color: rgba(255, 200, 87, 0.78);
-}
-
-.data-card-heading,
-.data-card-heading > div,
-.data-card-metrics,
-.data-card-metrics > div {
-  display: flex;
-  align-items: baseline;
-}
-
-.data-card-heading {
-  justify-content: space-between;
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--hairline);
-}
-
-.data-card-heading > div {
-  gap: 8px;
-}
-
-.data-card-index {
-  color: var(--accent);
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 8px;
-  letter-spacing: 0.08em;
-}
-
-.data-card h2 {
-  margin: 0;
-  color: var(--text);
-  font-family: "Barlow Condensed", sans-serif;
-  font-size: 18px;
-  font-weight: 500;
-  letter-spacing: 0.08em;
-  line-height: 1;
-  text-transform: uppercase;
-}
-
-#preload-percent {
-  color: var(--accent);
-  font-family: "Barlow Condensed", sans-serif;
-  font-size: 25px;
-  font-weight: 600;
-  line-height: 1;
-}
-
-.data-card.is-error #preload-percent {
-  color: var(--warning);
-}
-
-.data-card-metrics {
-  gap: 14px;
-  padding: 10px 0 9px;
-}
-
-.data-card-metrics > div {
-  flex-direction: column;
-  gap: 3px;
-  min-width: 64px;
-}
-
-.data-card-metrics span,
-.preload-state {
-  color: var(--muted);
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 8px;
-  letter-spacing: 0.09em;
-}
-
-.data-card-metrics output {
-  color: var(--text);
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 11px;
-}
-
-.preload-segments {
-  display: grid;
-  grid-template-columns: repeat(var(--frame-count, 121), minmax(0, 1fr));
-  gap: 1px;
-  height: 12px;
-}
-
-.preload-segments i {
-  display: block;
-  background: rgba(140, 166, 178, 0.16);
-  border-top: 1px solid rgba(140, 166, 178, 0.25);
-  transition: background-color 160ms ease, box-shadow 160ms ease;
-}
-
-.preload-segments i.is-loaded {
-  background: var(--accent);
-  border-top-color: rgba(234, 244, 246, 0.48);
-  box-shadow: 0 0 8px rgba(var(--accent-rgb), 0.34);
-}
-
-.data-card.is-error .preload-segments i.is-loaded {
-  background: var(--warning);
-  box-shadow: 0 0 8px rgba(255, 200, 87, 0.3);
+  border-radius: 8px;
+  background: var(--row-hover);
 }
 
 .preload-state {
-  margin: 8px 0 0;
   overflow: hidden;
+  margin: 0;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -469,193 +693,40 @@ body.stats-visible .stat-graph-wrap {
   color: var(--warning);
 }
 
-.station-panel summary {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 12px 16px;
-  color: var(--muted);
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 11px;
-  letter-spacing: 0.09em;
-  cursor: pointer;
-  list-style: none;
-  border-bottom: 1px solid transparent;
-}
-
-.station-panel summary::-webkit-details-marker {
-  display: none;
-}
-
-.station-panel[open] summary {
-  border-bottom-color: var(--hairline);
-}
-
-.status-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--accent);
-  box-shadow: 0 0 14px rgba(var(--accent-rgb), 0.75);
-}
-
-.station-content {
-  padding: 21px 22px 23px;
-}
-
-.model-switch,
-.variable-switch {
-  display: grid;
-  /* Two or three buttons share the row evenly; a run that also ships the
-     pressure family has enough of them to need a second row, so the track
-     list wraps rather than squeezing seven codes into one line. */
-  grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
-  gap: 6px;
-  margin-bottom: 18px;
-}
-
-/* The model row sits tight above the variable row — one control stack. */
-.model-switch {
-  margin-bottom: 6px;
-}
-
-.model-switch button[hidden],
-.variable-switch button[hidden] {
-  display: none;
-}
-
-.model-switch button,
-.variable-switch button {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  /* The small label may outgrow the button (the English UI's "Precipitation"
-     vs the two-character Chinese gloss): keep the pair apart and let the
-     small wrap onto its own line instead of colliding with the code. */
-  flex-wrap: wrap;
-  column-gap: 8px;
-  row-gap: 2px;
-  min-height: 34px;
-  padding: 8px 9px;
-  color: var(--muted);
-  background: rgba(8, 19, 28, 0.42);
-  border: 1px solid var(--hairline);
-  cursor: pointer;
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 9px;
-  letter-spacing: 0.08em;
-}
-
-.model-switch button small,
-.variable-switch button small {
-  font-size: 8px;
-  letter-spacing: 0.04em;
-}
-
-/* Model buttons carry a longer agency/resolution detail than the variable
-   buttons, so they stack it on a second line instead of wrapping mid-text. */
-.model-switch button {
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 3px;
-}
-
-.model-switch button small {
-  white-space: nowrap;
-  opacity: 0.75;
-}
-
-.model-switch button[aria-pressed="true"],
-.variable-switch button[aria-pressed="true"] {
-  color: var(--deep-sea);
-  background: var(--accent);
-  border-color: var(--accent);
-}
-
-.model-switch button:focus-visible,
-.variable-switch button:focus-visible {
-  outline: 1px solid var(--text);
-  outline-offset: 2px;
-}
-
-.model-switch button:disabled,
-.variable-switch button:disabled {
-  cursor: wait;
-  opacity: 0.7;
-}
-
-.eyebrow,
-.control-label {
-  margin: 0;
-  color: var(--accent);
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 10px;
-  letter-spacing: 0.16em;
-}
-
-h1 {
-  margin: 6px 0 23px;
-  font-family: "Barlow Condensed", sans-serif;
-  font-size: clamp(42px, 5vw, 58px);
-  font-weight: 500;
-  line-height: 0.82;
-  letter-spacing: -0.025em;
-  text-transform: uppercase;
-}
-
-dl {
-  display: grid;
-  gap: 12px;
-  margin: 0;
-}
-
-dl div {
-  display: grid;
-  grid-template-columns: 86px 1fr;
-  align-items: baseline;
-  border-top: 1px solid var(--hairline);
-  padding-top: 9px;
-}
-
-dt,
-dd {
-  margin: 0;
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 11px;
-}
-
-dt {
-  color: var(--muted);
-}
-
-dd {
-  color: var(--text);
-  text-align: right;
-}
+/* ---------------------------------------------------------------------------
+   Color scale, on the left edge. */
 
 .legend {
   top: 50%;
-  right: 25px;
-  display: grid;
-  grid-template: auto 218px / 18px 11px 30px;
-  gap: 8px 7px;
+  left: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
   transform: translateY(-58%);
-  font-family: "Barlow Condensed", sans-serif;
-  filter: drop-shadow(0 2px 7px rgba(0, 0, 0, 0.45));
+  pointer-events: none;
 }
 
 .legend-unit {
-  grid-column: 1 / -1;
-  color: var(--text);
-  font-size: 14px;
-  text-align: center;
+  color: var(--map-ink-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  text-shadow: var(--label-shadow);
+}
+
+.legend-scale {
+  display: flex;
+  height: 180px;
+  align-items: stretch;
+  gap: 6px;
 }
 
 .legend-bar {
-  grid-column: 2;
-  grid-row: 2;
+  width: 10px;
+  border: 1px solid var(--map-ink-muted);
+  border-radius: 5px;
   background: linear-gradient(to bottom, #701441, #b32037, #e65530, #fd9942, #fed976, #eeefb3, #b5e2ae, #6fc9b7, #419bc9, #3767be, #312f95, #271959);
-  border: 1px solid rgba(234, 244, 246, 0.42);
 }
 
 body[data-variable="prate"] .legend-bar {
@@ -672,186 +743,222 @@ body[data-variable="wind10m"] .legend-bar {
   background: linear-gradient(to bottom, #8137a8, #aa3385, #d43c57, #ee7042, #eba74a, #bfcd5c, #5cbe8c, #529dbf, #6e7cc3);
 }
 
+/* The pressure family is a line chart: the contours carry the reading, and a
+   filled color key beside them would claim a precision the faint fill under
+   the lines does not have. */
+body.is-pressure .legend {
+  display: none;
+}
+
 .legend-labels {
-  grid-column: 3;
-  grid-row: 2;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  color: var(--text);
-  font-size: 14px;
+  color: var(--map-ink);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
   line-height: 1;
+  text-shadow: var(--label-shadow);
 }
 
+/* ---------------------------------------------------------------------------
+   Layer rail, on the right edge. */
+
+.variable-rail {
+  top: 50%;
+  right: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transform: translateY(-58%);
+}
+
+.variable-rail button {
+  display: flex;
+  width: 48px;
+  height: 48px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  backdrop-filter: blur(12px);
+  transition: background-color 160ms ease, color 160ms ease, border-color 160ms ease;
+}
+
+.variable-rail button[hidden] {
+  display: none;
+}
+
+.rail-glyph {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+/* The Chinese glyphs are single characters and carry more ink than a Latin
+   initial; they need the extra size to read at 48px. */
+html[lang="zh-CN"] .rail-glyph {
+  font-size: 17px;
+}
+
+.variable-rail button[aria-pressed="true"] {
+  border-color: var(--text);
+  background: var(--text);
+  color: var(--bg);
+}
+
+.variable-rail button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.variable-rail button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+/* ---------------------------------------------------------------------------
+   The transport capsule. */
+
 .timeline-panel {
-  right: 22px;
-  bottom: 43px;
-  left: 22px;
-  min-height: 166px;
-  padding: 18px 22px 15px;
-  background: rgba(16, 35, 48, 0.95);
-  border: 1px solid var(--hairline);
-  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 16px), calc(100% - 16px) 100%, 0 100%);
+  bottom: 40px;
+  left: 50%;
+  display: flex;
+  width: calc(100% - 28px);
+  max-width: 720px;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px 8px 16px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: var(--surface);
+  transform: translateX(-50%);
   backdrop-filter: blur(18px);
+  box-shadow: var(--lift-small);
+}
+
+/* Nine isobaric surfaces on one scrolling row, shown only when the pressure
+   family is on screen. */
+.level-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: -2px -12px 4px -16px;
+  padding: 0 12px 0 16px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.level-row[hidden] {
+  display: none;
+}
+
+.level-row::-webkit-scrollbar {
+  display: none;
+}
+
+.level-caption {
+  flex: none;
+  margin-right: 6px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+.level-row button {
+  height: 36px;
+  flex: none;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.level-row button[hidden] {
+  display: none;
+}
+
+.level-row button[aria-pressed="true"] {
+  border-color: var(--text);
+  background: var(--text);
+  color: var(--bg);
+}
+
+.level-row button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.level-row button:disabled {
+  cursor: wait;
+  opacity: 0.55;
 }
 
 .timeline-heading {
   display: flex;
-  align-items: end;
-  justify-content: space-between;
-  min-height: 30px;
-  margin-bottom: 14px;
-}
-
-.timeline-meta {
-  display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 
-.timeline-toggle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  color: var(--muted);
-  background: rgba(8, 19, 28, 0.48);
-  border: 1px solid var(--hairline);
-  cursor: pointer;
-}
-
-.timeline-toggle:hover {
-  color: var(--accent);
-  border-color: rgba(var(--accent-rgb), 0.55);
-}
-
-.timeline-toggle:focus-visible {
-  outline: 1px solid var(--text);
-  outline-offset: 2px;
-}
-
-.timeline-toggle-icon {
-  width: 8px;
-  height: 8px;
-  border-right: 1px solid currentColor;
-  border-bottom: 1px solid currentColor;
-  transform: rotate(45deg) translate(-1px, -1px);
-  transition: transform 160ms ease;
-}
-
-/* Collapsed: chevron points up (expand). */
-body.timeline-collapsed .timeline-toggle-icon {
-  transform: rotate(225deg) translate(-1px, -1px);
-}
-
-/* Collapsed timeline keeps play + slider but gives the bottom of the map
-   back: the five-day strip goes away and the bar narrows to the center. */
-body.timeline-collapsed .timeline-panel {
-  right: 50%;
-  left: auto;
-  width: min(620px, calc(100vw - 44px));
-  min-height: 0;
-  padding: 12px 18px 10px;
-  transform: translateX(50%);
-}
-
-body.timeline-collapsed .timeline-heading {
-  min-height: 0;
-  margin-bottom: 8px;
-}
-
-body.timeline-collapsed .forecast-days,
-body.timeline-collapsed .track-ends {
-  display: none;
-}
-
-.timeline-primary,
 .forecast-readout {
   display: flex;
+  min-width: 0;
   align-items: baseline;
-  gap: 13px;
-}
-
-.timeline-primary {
-  align-items: center;
-  gap: 16px;
-}
-
-.transport-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 9px;
-  min-width: 78px;
-  height: 32px;
-  padding: 0 11px;
-  color: var(--accent);
-  background: rgba(8, 19, 28, 0.48);
-  border: 1px solid rgba(var(--accent-rgb), 0.55);
-  cursor: pointer;
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 9px;
-  letter-spacing: 0.1em;
-}
-
-.transport-button:hover,
-.transport-button.is-playing {
-  color: var(--deep-sea);
-  background: var(--accent);
-}
-
-.transport-button:focus-visible {
-  outline: 1px solid var(--text);
-  outline-offset: 3px;
-}
-
-.transport-button:disabled {
-  color: var(--muted);
-  background: rgba(8, 19, 28, 0.25);
-  border-color: var(--hairline);
-  cursor: wait;
-  opacity: 0.65;
-}
-
-/* The speed button's value is its whole content, so it stays visible where
-   the play button drops its label (phones) and sizes to the text. */
-.speed-button {
-  min-width: 66px;
-  gap: 0;
-}
-
-.speed-value {
-  font-variant-numeric: tabular-nums;
-}
-
-.transport-icon {
-  width: 0;
-  height: 0;
-  border-top: 5px solid transparent;
-  border-bottom: 5px solid transparent;
-  border-left: 8px solid currentColor;
-}
-
-.transport-button.is-playing .transport-icon {
-  width: 8px;
-  height: 10px;
-  border: 0;
-  background: linear-gradient(90deg, currentColor 0 3px, transparent 3px 5px, currentColor 5px 8px);
+  gap: 8px;
 }
 
 #forecast-hour {
-  color: var(--text);
-  font-family: "Barlow Condensed", sans-serif;
-  font-size: 25px;
-  font-weight: 600;
+  flex: none;
+  font-family: var(--font-display);
+  font-size: 28px;
   line-height: 1;
+  white-space: nowrap;
+}
+
+.readout-meta {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 8px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.control-label {
+  flex: none;
+  letter-spacing: 0.1em;
+}
+
+#valid-time {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .load-status {
-  color: var(--accent);
-  font-family: "IBM Plex Mono", monospace;
+  overflow: hidden;
+  margin-left: auto;
+  color: var(--muted);
+  font-family: var(--font-mono);
   font-size: 10px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .load-status::before {
@@ -859,10 +966,14 @@ body.timeline-collapsed .track-ends {
   display: inline-block;
   width: 5px;
   height: 5px;
-  margin-right: 7px;
+  margin-right: 6px;
   border-radius: 50%;
   background: currentColor;
   vertical-align: 1px;
+}
+
+.load-status.is-loading {
+  color: var(--accent);
 }
 
 .load-status.is-loading::before {
@@ -873,27 +984,198 @@ body.timeline-collapsed .track-ends {
   color: var(--warning);
 }
 
+.pill-button {
+  height: 32px;
+  flex: none;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.pill-button:hover:not(:disabled) {
+  border-color: var(--muted);
+  color: var(--text);
+}
+
+.pill-button:focus-visible,
+.transport-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.pill-button:disabled,
+.transport-button:disabled {
+  cursor: wait;
+  opacity: 0.5;
+}
+
+/* The one filled control on the page. */
+.transport-button {
+  display: flex;
+  width: 44px;
+  height: 44px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 50%;
+  background: var(--text);
+  color: var(--bg);
+  cursor: pointer;
+}
+
+.transport-icon {
+  width: 0;
+  height: 0;
+  border-top: 6px solid transparent;
+  border-bottom: 6px solid transparent;
+  border-left: 10px solid currentColor;
+  margin-left: 2px;
+}
+
+.transport-button.is-playing .transport-icon {
+  width: 10px;
+  height: 12px;
+  margin-left: 0;
+  border: 0;
+  background: linear-gradient(90deg, currentColor 0 4px, transparent 4px 6px, currentColor 6px 10px);
+}
+
+/* --- the track ---------------------------------------------------------- */
+
 .track-wrap {
   position: relative;
-  height: 26px;
+  height: 44px;
+  margin-right: 4px;
+}
+
+.track-wrap:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+  border-radius: 6px;
+}
+
+.tick-marks {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  display: flex;
+  height: 22px;
+  align-items: flex-end;
+  justify-content: space-between;
+  pointer-events: none;
+}
+
+.tick-marks i {
+  display: block;
+  width: 1px;
+  height: 5px;
+  background: var(--tick-off);
+}
+
+.tick-marks i.major {
+  height: 18px;
+}
+
+.tick-marks i.is-active {
+  background: var(--accent);
+}
+
+.track-playhead {
+  position: absolute;
+  top: 0;
+  left: clamp(0px, var(--frame-progress, 0%), calc(100% - 2px));
+  width: 2px;
+  height: 22px;
+  background: var(--accent);
+  pointer-events: none;
+}
+
+/* Day labels sit under the ticks, each at the fraction of the axis its
+   boundary falls on — the sparse replacement for a five-column strip. */
+.forecast-days {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 20px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  pointer-events: none;
+}
+
+.forecast-day {
+  position: absolute;
+  top: 3px;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  transition: color 120ms linear;
+}
+
+.forecast-day.is-active {
+  color: var(--text);
+}
+
+/* The real control is invisible: the ticks, the playhead and the day labels
+   are the slider's appearance, and this is the hit area and the keyboard
+   target over them. */
+#frame-slider {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  appearance: none;
+  background: transparent;
+  cursor: ew-resize;
+  opacity: 0;
+}
+
+#frame-slider:disabled {
+  cursor: wait;
+}
+
+#frame-slider::-webkit-slider-thumb {
+  width: 44px;
+  height: 44px;
+  appearance: none;
+}
+
+#frame-slider::-moz-range-thumb {
+  width: 44px;
+  height: 44px;
+  border: 0;
+  opacity: 0;
 }
 
 .frame-tooltip {
   position: absolute;
-  top: -2px;
-  left: clamp(48px, var(--frame-progress, 0%), calc(100% - 48px));
+  top: -4px;
+  left: clamp(52px, var(--frame-progress, 0%), calc(100% - 52px));
   z-index: 4;
-  min-width: 90px;
-  padding: 4px 6px;
-  transform: translate(-50%, -100%);
-  color: var(--deep-sea);
-  background: var(--accent);
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 8px;
-  letter-spacing: 0.03em;
+  padding: 4px 7px;
+  border-radius: 8px;
+  background: var(--text);
+  color: var(--bg);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 500;
   line-height: 1;
+  transform: translate(-50%, -100%);
   opacity: 0;
   pointer-events: none;
+  transition: opacity 120ms ease;
 }
 
 .timeline-panel.is-scrubbing .frame-tooltip,
@@ -901,146 +1183,316 @@ body.timeline-collapsed .track-ends {
   opacity: 1;
 }
 
-#frame-slider {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  width: 100%;
-  height: 22px;
-  margin: 0;
-  cursor: ew-resize;
-  appearance: none;
-  background: transparent;
-}
-
-#frame-slider:disabled {
-  cursor: wait;
-}
-
-#frame-slider::-webkit-slider-runnable-track {
-  height: 2px;
-  background: var(--hairline);
-}
-
-#frame-slider::-moz-range-track {
-  height: 2px;
-  background: var(--hairline);
-}
-
-#frame-slider::-webkit-slider-thumb {
-  width: 17px;
-  height: 17px;
-  margin-top: -8px;
-  border: 4px solid var(--panel);
-  border-radius: 50%;
-  appearance: none;
-  background: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent), 0 0 17px rgba(var(--accent-rgb), 0.5);
-}
-
-#frame-slider::-moz-range-thumb {
-  width: 10px;
-  height: 10px;
-  border: 4px solid var(--panel);
-  border-radius: 50%;
-  background: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent), 0 0 17px rgba(var(--accent-rgb), 0.5);
-}
-
-#frame-slider:focus-visible {
-  outline: 1px solid var(--accent);
-  outline-offset: 7px;
-}
-
-.tick-marks {
-  position: absolute;
-  top: 9px;
-  right: 7px;
-  left: 7px;
-  display: flex;
-  justify-content: space-between;
-  height: 12px;
-  pointer-events: none;
-}
-
-.tick-marks i {
-  display: block;
-  width: 1px;
-  height: 4px;
-  background: rgba(140, 166, 178, 0.25);
-}
-
-.tick-marks i.major {
-  height: 11px;
-  background: rgba(140, 166, 178, 0.58);
-}
-
-.tick-marks i.is-active {
-  background: var(--accent);
-}
-
 .track-ends {
   display: flex;
   justify-content: space-between;
+  padding-right: 4px;
   color: var(--muted);
-  font-family: "IBM Plex Mono", monospace;
+  font-family: var(--font-mono);
   font-size: 9px;
-  letter-spacing: 0.12em;
+  font-weight: 500;
+  letter-spacing: 0.1em;
 }
 
-.forecast-days {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  margin-top: 7px;
-  border-top: 1px solid var(--hairline);
-  border-right: 1px solid var(--hairline);
+/* ---------------------------------------------------------------------------
+   The model sheet: a panel under the title on desktop, a bottom sheet on
+   phones. */
+
+.model-sheet {
+  position: absolute;
+  z-index: 7;
+  inset: 0;
 }
 
-.forecast-day {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 1px 8px;
-  min-width: 0;
-  padding: 5px 8px 4px;
+.model-sheet[hidden] {
+  display: none;
+}
+
+.model-sheet-scrim {
+  position: absolute;
+  inset: 0;
+  background: var(--scrim);
+}
+
+.model-sheet-panel {
+  position: absolute;
+  top: 92px;
+  left: 20px;
+  display: flex;
+  width: 320px;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px 10px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: var(--sheet);
+  box-shadow: var(--lift);
+}
+
+.sheet-grip {
+  display: none;
+  width: 40px;
+  height: 5px;
+  align-self: center;
+  margin-bottom: 8px;
+  border-radius: 3px;
+  background: var(--line);
+}
+
+.sheet-heading {
+  margin: 0;
+  padding: 0 8px 8px;
   color: var(--muted);
-  background: rgba(8, 19, 28, 0.22);
-  border-left: 1px solid var(--hairline);
-  font-family: "IBM Plex Mono", monospace;
-  transition: color 120ms linear, background-color 120ms linear;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
 }
 
-.forecast-day b,
-.forecast-day small,
-.forecast-day time {
-  font-size: 8px;
-  font-weight: 400;
-  letter-spacing: 0.08em;
+.model-switch {
+  display: flex;
+  flex-direction: column;
+}
+
+.model-switch button {
+  display: grid;
+  height: 60px;
+  align-items: center;
+  gap: 2px 12px;
+  grid-template: "name check" 1fr "detail check" 1fr / 1fr auto;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.model-switch button:hover {
+  background: var(--row-hover);
+}
+
+.model-switch button[aria-pressed="true"] {
+  background: var(--row-hover);
+}
+
+.model-switch button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.model-switch button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.model-name {
+  align-self: end;
+  font-family: var(--font-display);
+  font-size: 22px;
+  grid-area: name;
+  line-height: 1.1;
+}
+
+.model-switch button small {
+  align-self: start;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  grid-area: detail;
+}
+
+.model-check {
+  align-self: center;
+  color: var(--accent);
+  font-size: 18px;
+  grid-area: check;
+}
+
+.model-switch button[aria-pressed="true"] .model-check::before {
+  content: "✓";
+}
+
+/* ---------------------------------------------------------------------------
+   Map context menu. */
+
+.context-menu {
+  position: fixed;
+  z-index: 6;
+  display: flex;
+  min-width: 200px;
+  flex-direction: column;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--sheet);
+  box-shadow: var(--lift-small);
+}
+
+.context-menu[hidden] {
+  display: none;
+}
+
+.context-menu button {
+  display: flex;
+  height: 40px;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  text-align: left;
+}
+
+.context-menu button::before {
+  content: "";
+  display: inline-block;
+  width: 14px;
+  color: var(--accent);
+}
+
+.context-menu button[aria-checked="true"]::before {
+  content: "✓";
+}
+
+.context-menu button:hover,
+.context-menu button:focus-visible {
+  background: var(--row-hover);
+  outline: none;
+}
+
+/* ---------------------------------------------------------------------------
+   The point probe: a MapLibre popup wearing the capsule skin. It is anchored
+   to the clicked point, so the panel itself says which cell it reads, and the
+   popup machinery handles placement and the close button. */
+
+.probe-popup .maplibregl-popup-content {
+  padding: 0;
+  background: none;
+  box-shadow: none;
+}
+
+.probe-popup .maplibregl-popup-close-button {
+  top: 4px;
+  right: 8px;
+  z-index: 1;
+  padding: 0 4px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 16px;
   line-height: 1.2;
 }
 
-.forecast-day small {
-  justify-self: end;
+.probe-popup .maplibregl-popup-close-button:hover,
+.probe-popup .maplibregl-popup-close-button:focus-visible {
+  background: none;
+  color: var(--text);
+  outline: none;
 }
 
-.forecast-day time {
-  grid-column: 1 / -1;
-  color: rgba(234, 244, 246, 0.72);
+/* MapLibre colors one border of the tip per anchor; each side needs the
+   panel's own background or the arrow disappears. */
+.probe-popup.maplibregl-popup-anchor-top .maplibregl-popup-tip,
+.probe-popup.maplibregl-popup-anchor-top-left .maplibregl-popup-tip,
+.probe-popup.maplibregl-popup-anchor-top-right .maplibregl-popup-tip {
+  border-bottom-color: var(--sheet);
 }
 
-.forecast-day.is-active {
-  color: var(--accent);
-  background: rgba(var(--accent-rgb), 0.1);
-  box-shadow: inset 0 2px 0 var(--accent);
+.probe-popup.maplibregl-popup-anchor-bottom .maplibregl-popup-tip,
+.probe-popup.maplibregl-popup-anchor-bottom-left .maplibregl-popup-tip,
+.probe-popup.maplibregl-popup-anchor-bottom-right .maplibregl-popup-tip {
+  border-top-color: var(--sheet);
 }
+
+.probe-popup.maplibregl-popup-anchor-left .maplibregl-popup-tip {
+  border-right-color: var(--sheet);
+}
+
+.probe-popup.maplibregl-popup-anchor-right .maplibregl-popup-tip {
+  border-left-color: var(--sheet);
+}
+
+.probe-panel {
+  width: 256px;
+  padding: 10px 14px 10px 16px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: var(--sheet);
+  box-shadow: var(--lift-small);
+  color: var(--text);
+}
+
+.probe-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding-right: 18px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+}
+
+.probe-code {
+  color: var(--text);
+}
+
+.probe-value {
+  display: block;
+  margin-top: 4px;
+  font-family: var(--font-display);
+  font-size: 26px;
+  line-height: 1.05;
+}
+
+.probe-meta {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.probe-chart {
+  display: block;
+  width: 100%;
+  height: 56px;
+  margin-top: 6px;
+}
+
+.probe-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+}
+
+/* ---------------------------------------------------------------------------
+   Error panel and footer. */
 
 .error-panel {
   top: 50%;
   left: 50%;
+  z-index: 8;
   width: min(430px, calc(100vw - 36px));
-  padding: 20px;
-  transform: translate(-50%, -60%);
-  background: rgba(16, 35, 48, 0.98);
+  padding: 20px 22px;
   border: 1px solid var(--warning);
+  border-radius: 22px;
+  background: var(--sheet);
+  box-shadow: var(--lift);
+  transform: translate(-50%, -60%);
 }
 
 .error-panel[hidden] {
@@ -1049,39 +1501,48 @@ body.timeline-collapsed .track-ends {
 
 .error-panel strong {
   color: var(--warning);
-  font-family: "Barlow Condensed", sans-serif;
-  font-size: 22px;
-  text-transform: uppercase;
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 400;
 }
 
 .error-panel p {
   color: var(--text);
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.7;
 }
 
 .error-panel button {
-  padding: 8px 13px;
-  color: var(--deep-sea);
-  background: var(--warning);
+  height: 36px;
+  padding: 0 16px;
   border: 0;
+  border-radius: 18px;
+  background: var(--text);
+  color: var(--bg);
   cursor: pointer;
-  font-family: "IBM Plex Mono", monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
+  font-weight: 500;
 }
 
 .source-note {
-  right: 24px;
-  bottom: 18px;
-  color: var(--muted);
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 8px;
+  right: 20px;
+  bottom: 16px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  color: var(--map-ink-muted);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 500;
   letter-spacing: 0.06em;
+  text-shadow: var(--label-shadow);
 }
 
 .source-note a {
-  color: var(--text);
+  color: var(--map-ink);
   text-decoration: none;
 }
 
@@ -1090,40 +1551,48 @@ body.timeline-collapsed .track-ends {
   text-decoration: underline;
 }
 
-/* Language toggle, styled as one more footer link (names the language it
-   switches to). Padding widens the touch target beyond the 8px type. */
-.lang-toggle {
-  padding: 4px 2px;
-  border: 0;
-  background: none;
-  color: var(--text);
-  font: inherit;
-  letter-spacing: inherit;
-  cursor: pointer;
-}
-
-.lang-toggle:hover,
-.lang-toggle:focus-visible {
-  text-decoration: underline;
-}
+/* ---------------------------------------------------------------------------
+   MapLibre chrome. */
 
 .maplibregl-ctrl-top-right {
-  top: 16px;
-  right: 75px;
+  top: 80px;
+  right: 20px;
 }
 
+/* Restyled into the rail's language: one blurred tile, two 40px halves. */
 .maplibregl-ctrl-group {
-  background: rgba(16, 35, 48, 0.88) !important;
-  border: 1px solid var(--hairline);
-  border-radius: 0;
+  border: 1px solid var(--line);
+  border-radius: 14px !important;
+  background: var(--surface) !important;
+  backdrop-filter: blur(12px);
+  box-shadow: none !important;
+}
+
+.maplibregl-ctrl-group button {
+  width: 40px !important;
+  height: 40px !important;
 }
 
 .maplibregl-ctrl-group button + button {
-  border-top-color: var(--hairline);
+  border-top-color: var(--line);
 }
 
-.maplibregl-ctrl button .maplibregl-ctrl-icon {
+.maplibregl-ctrl-group button:first-child {
+  border-radius: 13px 13px 0 0 !important;
+}
+
+.maplibregl-ctrl-group button:last-child {
+  border-radius: 0 0 13px 13px !important;
+}
+
+:root[data-theme="dark"] .maplibregl-ctrl button .maplibregl-ctrl-icon {
   filter: invert(1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .maplibregl-ctrl button .maplibregl-ctrl-icon {
+    filter: invert(1);
+  }
 }
 
 @keyframes pulse {
@@ -1141,179 +1610,129 @@ body.timeline-collapsed .track-ends {
   }
 }
 
+/* ---------------------------------------------------------------------------
+   Phones. The corners keep their meaning; everything tightens toward the
+   safe area, and the two blocks that cost the most map — the case detail and
+   the buffer card's prose — fold away. */
+
 @media (max-width: 720px) {
   /* Pinch gestures replace the +/- control; every saved pixel goes to the map. */
   .maplibregl-ctrl-top-right {
     display: none;
   }
 
-  /* The buffer card collapses to a slim loading strip and, once the bundle is
-     resident, fades out entirely (errors stay pinned). */
-  .data-card {
-    top: calc(10px + env(safe-area-inset-top));
-    right: 10px;
-    left: 10px;
-    width: auto;
-    padding: 8px 12px 9px;
+  .title-block {
+    top: calc(16px + env(safe-area-inset-top));
+    left: 16px;
+    max-width: calc(100% - 160px);
   }
 
+  #variable-title {
+    font-size: 24px;
+  }
+
+  /* Three round controls own the right half of the top strip, so the code
+     drops under the name rather than fighting them for the line. */
+  .title-code {
+    display: block;
+    margin-left: 0;
+    font-size: 15px;
+  }
+
+  .model-stamp {
+    font-size: 10px;
+  }
+
+  .top-actions {
+    top: calc(16px + env(safe-area-inset-top));
+    right: 16px;
+  }
+
+  .case-banner {
+    top: calc(80px + env(safe-area-inset-top));
+    left: 16px;
+    max-width: calc(100% - 32px);
+  }
+
+  .case-detail {
+    display: none;
+  }
+
+  .data-card {
+    top: calc(104px + env(safe-area-inset-top));
+    right: 14px;
+    left: 14px;
+    width: auto;
+  }
+
+  body.stats-visible .data-card {
+    right: 66px;
+    max-height: calc(100% - 280px);
+  }
+
+  /* Once the bundle is resident the card fades out entirely; errors and the
+     pinned stats view stay. */
   body:not(.stats-visible) .data-card.is-complete:not(.is-error) {
     opacity: 0;
     visibility: hidden;
     transition: opacity 400ms ease 1.6s, visibility 0s linear 2s;
   }
 
-  .data-card-heading {
-    align-items: center;
-    padding-bottom: 0;
-    border-bottom: 0;
-  }
-
-  .data-card h2 {
-    font-size: 14px;
-  }
-
-  #preload-percent {
-    font-size: 18px;
-  }
-
-  .data-card-metrics,
-  .preload-state {
+  body:not(.stats-visible) .preload-state {
     display: none;
-  }
-
-  /* Stats mode keeps the full readout even on phones (opened by long-press). */
-  body.stats-visible .data-card-metrics {
-    display: flex;
-  }
-
-  body.stats-visible .preload-state {
-    display: block;
-  }
-
-  .preload-segments {
-    height: 6px;
-    margin-top: 7px;
-    gap: 0;
   }
 
   .legend {
-    top: calc(84px + env(safe-area-inset-top));
-    right: 10px;
+    top: calc(118px + env(safe-area-inset-top));
+    left: 12px;
     transform: none;
-    grid-template: 14px 120px / 14px 8px 22px;
   }
 
-  .legend-labels {
-    font-size: 11px;
+  .legend-scale {
+    height: 120px;
   }
 
-  /* The station panel starts collapsed on phones (main.ts) and docks right
-     above the timeline as a single summary bar. */
-  .station-panel {
-    top: auto;
-    right: 10px;
-    bottom: calc(150px + env(safe-area-inset-bottom));
-    left: 10px;
-    width: auto;
+  .variable-rail {
+    right: 12px;
   }
 
-  .station-panel summary {
-    padding: 10px 13px;
-  }
-
-  /* Open state stays lean: the summary bar already names the layer, so the
-     big title goes and metadata compresses to one line per row. */
-  .station-content {
-    display: grid;
-    gap: 10px;
-    padding: 12px 13px;
-  }
-
-  .model-switch,
-  .variable-switch {
-    margin-bottom: 0;
-  }
-
-  .eyebrow,
-  h1 {
-    display: none;
-  }
-
-  dl {
-    gap: 5px;
-  }
-
-  dl div {
-    grid-template-columns: auto 1fr;
-    gap: 12px;
-    padding-top: 5px;
+  .variable-rail button {
+    width: 44px;
+    height: 44px;
+    border-radius: 13px;
   }
 
   .timeline-panel {
-    right: 10px;
     bottom: calc(24px + env(safe-area-inset-bottom));
-    left: 10px;
-    min-height: 0;
-    padding: 10px 12px 8px;
-  }
-
-  .timeline-heading {
-    min-height: 0;
-    margin-bottom: 6px;
-  }
-
-  .timeline-primary {
-    gap: 10px;
-  }
-
-  .transport-button {
-    min-width: 34px;
-    width: 34px;
-    height: 30px;
-    padding: 0;
-  }
-
-  .transport-label {
-    display: none;
-  }
-
-  .speed-button {
-    min-width: 58px;
-    width: auto;
-    padding: 0 7px;
-  }
-
-  /* The speed button costs the heading row its slack: drop the readout's
-     caption, since F000 sitting on the slider needs no label. */
-  .forecast-readout .control-label {
-    display: none;
+    width: calc(100% - 24px);
+    max-width: none;
+    padding: 8px 10px 6px 14px;
   }
 
   #forecast-hour {
-    font-size: 21px;
+    font-size: 24px;
   }
 
-  .forecast-days {
-    margin-top: 5px;
-  }
-
-  .forecast-day {
-    display: flex;
-    justify-content: space-between;
-    gap: 0 3px;
-    padding: 4px 5px 3px;
-  }
-
-  .forecast-day time {
+  /* The transport row has no slack left: the caption goes (F000 sitting on
+     the slider needs no label), and the status line only earns its place
+     while something is actually happening. */
+  .control-label {
     display: none;
   }
 
+  .load-status:not(.is-loading):not(.is-error) {
+    display: none;
+  }
+
+  /* One clipped line: as a flex row the overflow would eat the start of the
+     credit rather than its tail. */
   .source-note {
-    right: 12px;
-    bottom: calc(7px + env(safe-area-inset-bottom));
-    max-width: calc(100vw - 24px);
+    right: 14px;
+    bottom: calc(8px + env(safe-area-inset-bottom));
+    display: block;
+    max-width: calc(100% - 28px);
     overflow: hidden;
+    text-align: right;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -1322,99 +1741,29 @@ body.timeline-collapsed .track-ends {
     transform: translate(-50%, -85%);
   }
 
-  /* Phones keep the collapsed bar full-width (centering saves nothing there)
-     and the docked station summary slides down with the shorter timeline. */
-  body.timeline-collapsed .timeline-panel {
-    right: 10px;
-    left: 10px;
+  /* The model sheet docks to the bottom edge, where a thumb reaches it. */
+  .model-sheet-panel {
+    top: auto;
+    right: 0;
+    bottom: 0;
+    left: 0;
     width: auto;
-    padding: 8px 12px;
-    transform: none;
+    padding-bottom: calc(24px + env(safe-area-inset-bottom));
+    border-radius: 28px 28px 0 0;
   }
 
-  body.timeline-collapsed .station-panel {
-    bottom: calc(110px + env(safe-area-inset-bottom));
+  .sheet-grip {
+    display: block;
   }
 }
 
 /* ---------------------------------------------------------------------------
    Historical showcase.
 
-   Two surfaces: the case banner inside the viewer's station panel (shown only
-   for ?case=<id>), and the standalone list page. The list page is the one
-   place in this app that scrolls, so it undoes the viewer's full-bleed,
-   overflow-hidden shell rather than sharing it. */
-
-.case-chip {
-  overflow: hidden;
-  max-width: 46%;
-  padding: 2px 6px;
-  border: 1px solid rgba(var(--accent-rgb), 0.5);
-  color: var(--accent);
-  font-family: "Barlow Condensed", sans-serif;
-  font-size: 12px;
-  letter-spacing: 0.02em;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.case-chip[hidden] {
-  display: none;
-}
-
-.case-banner {
-  margin: 0 0 16px;
-  padding: 12px 13px;
-  border: 1px solid var(--hairline);
-  border-left: 2px solid var(--accent);
-  background: rgba(var(--accent-rgb), 0.06);
-}
-
-.case-banner[hidden] {
-  display: none;
-}
-
-.case-back {
-  color: var(--accent);
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 10px;
-  letter-spacing: 0.14em;
-  text-decoration: none;
-}
-
-.case-back:hover,
-.case-back:focus-visible {
-  text-decoration: underline;
-}
-
-.case-banner h2 {
-  margin: 8px 0 6px;
-  font-family: "Barlow Condensed", sans-serif;
-  font-size: 21px;
-  font-weight: 600;
-  line-height: 1.05;
-  letter-spacing: -0.01em;
-}
-
-.case-banner p {
-  margin: 0;
-  color: var(--muted);
-  font-size: 11px;
-  line-height: 1.5;
-}
-
-.case-region {
-  margin-top: 6px !important;
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 9px;
-  letter-spacing: 0.08em;
-}
-
-/* A case is one fixed dataset and run: switching model would silently leave
-   the event behind, so the switch goes away entirely. */
-body.is-showcase .model-switch {
-  display: none;
-}
+   Two surfaces: the case banner inside the viewer (shown only for ?case=<id>,
+   above), and the standalone list page. The list page is the one place in
+   this app that scrolls, so it undoes the viewer's full-bleed, overflow-hidden
+   shell rather than sharing it. */
 
 .showcase-page,
 html:has(.showcase-page) {
@@ -1425,28 +1774,87 @@ html:has(.showcase-page) {
 .showcase-shell {
   max-width: 1080px;
   margin: 0 auto;
-  padding: clamp(32px, 6vw, 72px) clamp(18px, 4vw, 40px) 48px;
+  padding: clamp(24px, 5vw, 32px) clamp(16px, 4vw, 40px) 48px;
+}
+
+.showcase-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.showcase-back-link {
+  display: flex;
+  height: 44px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 16px 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-decoration: none;
+}
+
+.showcase-back-link:hover {
+  border-color: var(--muted);
+}
+
+.showcase-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* On the list page the round controls sit on the page ground, not over a
+   map, so they drop the translucent surface. */
+.showcase-page .icon-button {
+  background: transparent;
+  backdrop-filter: none;
+}
+
+.showcase-header {
+  display: flex;
+  max-width: 60ch;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .showcase-header h1 {
-  margin: 10px 0 14px;
-  font-size: clamp(34px, 6vw, 56px);
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(32px, 6vw, 40px);
+  font-weight: 400;
+  line-height: 1;
+}
+
+.showcase-eyebrow {
+  margin-left: 8px;
+  color: var(--muted);
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-style: italic;
 }
 
 .showcase-intro {
-  max-width: 60ch;
   margin: 0;
   color: var(--muted);
   font-size: 13px;
-  line-height: 1.65;
+  line-height: 1.6;
+  text-wrap: pretty;
 }
 
 .showcase-status {
   margin: 28px 0 0;
   color: var(--muted);
-  font-family: "IBM Plex Mono", monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
-  letter-spacing: 0.08em;
+  font-weight: 500;
+  letter-spacing: 0.06em;
 }
 
 .showcase-status.is-error {
@@ -1455,9 +1863,9 @@ html:has(.showcase-page) {
 
 .showcase-list {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
   gap: 16px;
-  margin: 30px 0 40px;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+  margin: 28px 0 40px;
   padding: 0;
   list-style: none;
 }
@@ -1468,34 +1876,36 @@ html:has(.showcase-page) {
   display: flex;
   height: 100%;
   flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: var(--card);
   color: inherit;
   text-decoration: none;
-  background: linear-gradient(135deg, rgba(16, 35, 48, 0.97), rgba(9, 26, 37, 0.9));
-  border: 1px solid var(--hairline);
-  clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 18px, 100% 100%, 0 100%);
   transition: border-color 160ms ease, transform 160ms ease;
 }
 
 .showcase-card a:hover,
 .showcase-card a:focus-visible {
-  border-color: rgba(var(--accent-rgb), 0.65);
-  transform: translateY(-2px);
+  border-color: var(--muted);
   outline: none;
+  transform: translateY(-2px);
 }
 
 /* The thumbnail is the case's own first frame, painted from its poster. Until
-   it arrives the tile is an empty instrument panel rather than a gap. */
+   it arrives the tile is an empty grid rather than a gap. */
 .showcase-thumb {
   /* The canvas is absolutely positioned so it fills the tile without feeding
      its own height back into the aspect ratio. */
   position: relative;
   aspect-ratio: 16 / 9;
   overflow: hidden;
+  border-bottom: 1px solid var(--line);
   background:
-    repeating-linear-gradient(0deg, rgba(140, 166, 178, 0.07) 0 1px, transparent 1px 14px),
-    repeating-linear-gradient(90deg, rgba(140, 166, 178, 0.07) 0 1px, transparent 1px 14px),
-    #0a1a25;
-  border-bottom: 1px solid var(--hairline);
+    linear-gradient(0deg, var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px),
+    var(--row-hover);
+  background-size: 28px 28px;
 }
 
 .showcase-thumb canvas {
@@ -1504,67 +1914,83 @@ html:has(.showcase-page) {
   width: 100%;
   height: 100%;
   inset: 0;
-  opacity: 0;
   object-fit: cover;
+  opacity: 0;
   transition: opacity 240ms ease;
 }
 
 .showcase-thumb canvas.is-painted {
-  opacity: 1;
+  opacity: 0.92;
+}
+
+.showcase-code {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: var(--text);
+  color: var(--bg);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
 }
 
 .showcase-body {
   display: flex;
   flex: 1;
   flex-direction: column;
-  padding: 15px 17px 17px;
+  padding: 14px 16px 16px;
 }
 
 .showcase-body h2 {
-  margin: 7px 0 8px;
-  font-family: "Barlow Condensed", sans-serif;
-  font-size: 24px;
-  font-weight: 600;
-  line-height: 1.04;
-  letter-spacing: -0.015em;
+  margin: 0 0 8px;
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 400;
+  line-height: 1.1;
+  text-wrap: pretty;
 }
 
 .showcase-summary {
   margin: 0 0 14px;
   color: var(--muted);
   font-size: 12px;
-  line-height: 1.6;
+  line-height: 1.55;
+  text-wrap: pretty;
 }
 
-/* Stacked label-over-value cells, not the station panel's two-column rows:
-   these values are dates and coordinate pairs, too long to sit opposite a
-   label in a card column. */
+/* Stacked label-over-value cells: these values are dates and coordinate
+   pairs, too long to sit opposite a label in a card column. */
 .showcase-facts {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
   gap: 10px 14px;
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  margin: 0;
 }
 
 .showcase-facts div {
   display: block;
   padding-top: 8px;
-  border-top: 1px solid var(--hairline);
+  border-top: 1px solid var(--line);
 }
 
 .showcase-facts dt {
   color: var(--muted);
-  font-family: "IBM Plex Mono", monospace;
+  font-family: var(--font-mono);
   font-size: 9px;
-  letter-spacing: 0.12em;
+  font-weight: 500;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
 }
 
 .showcase-facts dd {
   margin: 4px 0 0;
   color: var(--text);
-  font-family: "IBM Plex Mono", monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
-  text-align: left;
+  font-weight: 500;
 }
 
 /* The region is a coordinate pair; it needs the whole row, not a column. */
@@ -1574,30 +2000,68 @@ html:has(.showcase-page) {
 
 /* The tag row sits at the card's foot whatever the summary's length, so a
    row of cards ends on one line. */
+.showcase-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: auto;
+  padding-top: 14px;
+}
+
 .showcase-tags {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin: 14px 0 0;
-  padding-top: 0;
+  margin: 0;
   padding: 0;
   list-style: none;
 }
 
 .showcase-tags li {
-  padding: 3px 7px;
-  border: 1px solid var(--hairline);
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
   color: var(--muted);
-  font-family: "IBM Plex Mono", monospace;
+  font-family: var(--font-mono);
   font-size: 9px;
-  letter-spacing: 0.1em;
+  font-weight: 500;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+
+.showcase-play {
+  display: flex;
+  width: 44px;
+  height: 44px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--text);
+  color: var(--bg);
+}
+
+.showcase-play::before {
+  content: "";
+  width: 0;
+  height: 0;
+  margin-left: 3px;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  border-left: 9px solid currentColor;
 }
 
 .showcase-page .source-note {
   position: static;
-  right: auto;
-  bottom: auto;
+  display: flex;
+  justify-content: flex-start;
   padding-top: 22px;
-  border-top: 1px solid var(--hairline);
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  text-shadow: none;
+}
+
+.showcase-page .source-note a {
+  color: var(--text);
 }

@@ -63,6 +63,24 @@ const MESSAGES = {
   // "500MB"); the gloss says what the field is, once for all eight heights.
   varPressure: { zh: "气压", en: "SEA LVL" },
   varHeight: { zh: "位势", en: "HEIGHT" },
+  /** The rail tile standing for the whole pressure family; the surface
+   * itself is picked on the timeline capsule's level row. */
+  varPressureField: { zh: "气压场", en: "FIELD" },
+
+  /** The layer rail shows one character per layer — a Chinese single-glyph
+   * name, or the Latin symbol the field is written with (Z for radar
+   * reflectivity). The code and its gloss ride along, visually hidden, so
+   * each tile still names itself. */
+  glyphTmp2m: { zh: "温", en: "T" },
+  glyphPrate: { zh: "雨", en: "R" },
+  glyphWind10m: { zh: "风", en: "W" },
+  glyphDswrf: { zh: "辐", en: "S" },
+  glyphCref: { zh: "雷", en: "Z" },
+  glyphPressure: { zh: "压", en: "P" },
+  levelSwitchAria: { zh: "气压层次", en: "Pressure level" },
+  levelCaption: { zh: "层次", en: "LEVEL" },
+  modelHeading: { zh: "预报模式", en: "FORECAST MODEL" },
+  caseTag: { zh: "个例", en: "CASE" },
   runCycle: { zh: "模式周期", en: "Model run" },
   // An observation dataset has no run cycle and no lead time: its runTime is
   // when the series starts, and a frame is an observation, not a forecast.
@@ -92,8 +110,6 @@ const MESSAGES = {
    * like the forecast hour); only its accessible name is translated. */
   playbackSpeed: { zh: "播放速度", en: "Playback speed" },
   readingManifest: { zh: "正在读取清单", en: "Loading manifest" },
-  expandTimeline: { zh: "展开时间轴详情", en: "Expand timeline details" },
-  collapseTimeline: { zh: "收起时间轴详情", en: "Collapse timeline details" },
   forecastHourAria: { zh: "预报时次", en: "Forecast hour" },
   elapsedAria: { zh: "观测时长", en: "Time elapsed" },
   forecastDaysAria: { zh: "逐日预报分段", en: "Daily forecast segments" },
@@ -103,8 +119,11 @@ const MESSAGES = {
   menuCopyDebug: { zh: "复制调试信息", en: "Copy debug info" },
   errorTitle: { zh: "数据无法显示", en: "Data unavailable" },
   retry: { zh: "重新读取", en: "Retry" },
-  /** The toggle names the language it switches TO. */
-  langToggle: { zh: "ENGLISH", en: "中文" },
+  /** Both name the language the toggle switches TO. The button is a 44px
+   * circle, so the visible half is one character. */
+  langToggleShort: { zh: "EN", en: "中" },
+  langToggleAria: { zh: "Switch to English", en: "切换到中文" },
+  themeToggleAria: { zh: "切换浅色 / 深色", en: "Toggle light / dark" },
 
   dataInterrupted: { zh: "数据加载中断", en: "Data loading interrupted" },
   errorHint: {
@@ -171,9 +190,11 @@ const MESSAGES = {
   // footer link keeps the footer's code-word style in English.
   showcaseLink: { zh: "历史个例", en: "CASES" },
   showcaseBack: { zh: "← 全部个例", en: "← All cases" },
-  showcaseHome: { zh: "实时预报 →", en: "Live forecast →" },
+  showcaseHome: { zh: "实时预报", en: "LIVE FORECAST" },
   showcaseTitle: { zh: "历史个例", en: "Showcase cases" },
   showcaseHeading: { zh: "天气过程回放", en: "Weather events, replayed" },
+  /** The italic sub-title beside the heading. */
+  showcaseArchive: { zh: "归档", en: "archive" },
   showcaseIntro: {
     zh: "每个个例都是一段历史天气的切片——历史预报,或实况观测:同一套编码管线,裁切到事件所在的区域和时段。",
     en: "Each case is a slice of one past weather event — an archived forecast run, or observations — through the same encoder, cropped to the region and hours it happened in.",
