@@ -64,6 +64,18 @@ import {
 } from "./probe";
 import { fetchPoster, isPosterSupported } from "./poster";
 import {
+  coverageBox,
+  coversTiles,
+  parseTileGeometry,
+  sameTileRects,
+  tileCount,
+  viewportTileRects,
+  WHOLE_PLANE_COVERAGE,
+  type CoverageBox,
+  type TileGeometry,
+  type TileRect,
+} from "./tiles";
+import {
   caseCameraLimits,
   fetchCaseManifest,
   fetchCatalog,
@@ -361,6 +373,10 @@ timelineToggle.addEventListener("click", () => {
 interface DecodedFrame {
   plane: Uint8Array;
   decodeMs: number;
+  /** The tiles this plane actually holds, or null for a whole plane. Outside
+   * them the buffer carries whatever the decoder held before, so a plane is
+   * only reusable for a view its tiles still cover. */
+  tiles: TileRect[] | null;
 }
 
 /** One resident per-variable bundle: its decode channel and embedded metadata.
@@ -389,14 +405,26 @@ interface VariableSession {
   /** Bytes outside the channel's own reporting (e.g. the video index),
    * added on top of streaming `progress` messages. */
   extraBytes: number;
+  /** The bundle's tiling, or null when it has none — a container v1 file, or
+   * the video path. Tiles are what make a viewport-sized decode and a
+   * one-shot point series possible. */
+  tiles: TileGeometry | null;
   /** On-demand range delivery; `bytes` grows as groups arrive. */
   streaming: boolean;
-  /** Every artifact byte is local (immediately true for full downloads). */
+  /** Nothing left to fetch for what the viewer is looking at (immediately
+   * true for full downloads). */
   resident: boolean;
+  /** What `resident` covers: the whole bundle, or only the tiles the view
+   * narrowed to — a narrowed session never fetches the rest, so it never
+   * reaches whole-bundle residency, and the data card says which it is. */
+  residentScope: "bundle" | "viewport";
 }
 
 /** Streaming progress that arrived before its session finished registering. */
-const pendingStream = new Map<string, { bytes: number; resident: boolean }>();
+const pendingStream = new Map<
+  string,
+  { bytes: number; resident: boolean; scope: VariableSession["residentScope"] }
+>();
 
 let manifest: ForecastManifest | null = null;
 /** Absolute URL the manifest was loaded from; artifact paths resolve against it. */
@@ -725,6 +753,15 @@ function setStatsVisible(visible: boolean): void {
   }
 }
 
+/** How much of the grid the view is fetching, when it is fetching a subset —
+ * empty on the whole-plane path, which is every non-streaming session and
+ * every global view. */
+function tileShare(): string {
+  const geometry = activeSession?.tiles;
+  if (!geometry || !viewportTiles) return "";
+  return ` · ${tileCount(viewportTiles)} / ${geometry.columns * geometry.rows} tiles`;
+}
+
 function connectionLabel(): string {
   const connection = (navigator as { connection?: { saveData?: boolean; effectiveType?: string } }).connection;
   if (!connection?.effectiveType) return "--";
@@ -740,7 +777,8 @@ function updateStatsReadout(): void {
   statDecode.textContent = lastDecodeMs === null ? "--" : `${lastDecodeMs.toFixed(1)} ms`;
   statDecodeRate.textContent = `${formatBytes(decodeRateBytesPerSec())}/s`;
   const needed = Math.round(neededGridWidth());
-  statViewport.textContent = grid ? `${needed} / ${grid.width} col` : `${needed} col`;
+  const columns = grid ? `${needed} / ${grid.width} col` : `${needed} col`;
+  statViewport.textContent = `${columns}${tileShare()}`;
   statConnection.textContent = connectionLabel();
 }
 
@@ -856,7 +894,7 @@ function debugInfoText(): string {
     `planes: ${cachedFrameCount()} / ${frameCount()} · ${formatBytes(planeCacheBytes)} / ${formatBytes(planeCacheBudgetBytes())}`,
     `network: ${session ? `${formatBytes(session.bytes)} / ${formatBytes(session.totalBytes)}${session.resident ? " · resident" : session.streaming ? " · streaming" : ""}` : "--"}`,
     `decode: ${lastDecodeMs === null ? "--" : `${lastDecodeMs.toFixed(1)} ms`} · ${formatBytes(decodeRateBytesPerSec())}/s`,
-    `viewport: ${Math.round(neededGridWidth())} col · zoom ${map.getZoom().toFixed(2)} · dpr ${window.devicePixelRatio || 1}`,
+    `viewport: ${Math.round(neededGridWidth())} col${tileShare()} · zoom ${map.getZoom().toFixed(2)} · dpr ${window.devicePixelRatio || 1}`,
     `connection: ${connectionLabel()}`,
     `ua: ${navigator.userAgent}`,
   ];
@@ -889,14 +927,20 @@ function showContextMenu(x: number, y: number): void {
 }
 
 // The point probe: a click pins one grid cell and reads it across the whole
-// time axis. It never fetches anything of its own — every plane the app
-// decodes for the screen contributes its sample, so the series fills in as
-// playback or a scrub walks the axis, and an undecoded frame is just a gap.
-// That keeps the probe honest under windowed streaming, where only the frames
-// around the playhead are ever local.
+// time axis. On a container v2 bundle it asks for the series outright — one
+// chunk per temporal group of the one tile holding the cell, a few dozen KB
+// whatever the axis length — so the chart is complete the moment it opens.
+// Where the container cannot address a cell (a v1 bundle, or the H.264 video
+// path) it falls back to sampling every plane the app decodes for the screen
+// anyway: the series fills in as playback or a scrub walks the axis, and an
+// undecoded frame is just a gap. That keeps the probe honest under windowed
+// streaming, where only the frames around the playhead are ever local.
 let probe: ProbeSeries | null = null;
 let probePopup: Popup | null = null;
 let probeRenderFrame: number | null = null;
+/** Series requests in flight, so a re-render or a session swap does not ask
+ * twice for the same cell. Keyed by `variableId:column:row`. */
+const probeSeriesRequests = new Set<string>();
 
 const probePanel = buildProbePanel();
 
@@ -958,6 +1002,7 @@ function setProbe(longitude: number, latitude: number): void {
   if (!activeSession) return;
   probe = new ProbeSeries(longitude, latitude);
   seedProbeFromCache();
+  requestProbeSeries();
   if (!probePopup) {
     probePopup = new Popup({
       closeButton: true,
@@ -977,7 +1022,52 @@ function setProbe(longitude: number, latitude: number): void {
 
 function closeProbe(): void {
   probe = null;
+  probeSeriesRequests.clear();
   probePopup?.remove();
+}
+
+/** Ask the active session's decoder for the pinned cell's whole series, one
+ * request per data variable. Only a tiled bundle can answer; everywhere else
+ * the opportunistic sampling in `handleDecodedFrame` remains the only source.
+ */
+function requestProbeSeries(): void {
+  const session = activeSession;
+  if (!probe || !session || !session.tiles || !ready) return;
+  const cell = probe.cellFor(session.metadata);
+  if (!cell) return;
+  for (const variable of session.variables) {
+    const key = `${variable.numericId}:${cell.column}:${cell.row}`;
+    if (probeSeriesRequests.has(key)) continue;
+    probeSeriesRequests.add(key);
+    session.worker.postMessage({
+      type: "series",
+      requestId: nextRequestId++,
+      generation,
+      variableId: variable.numericId,
+      column: cell.column,
+      row: cell.row,
+    });
+  }
+}
+
+/** A whole series arrived. It is dropped unless the pin is still on the very
+ * cell it was read for — a new run, a new model, or a moved pin all make it
+ * stale, and the codes are meaningless against another grid. */
+function handleProbeSeries(message: {
+  generation: number;
+  variableId: number;
+  column: number;
+  row: number;
+  buffer: ArrayBuffer;
+}): void {
+  const session = sessionsByNumericId.get(message.variableId);
+  if (!probe || !session || message.generation !== generation) return;
+  const cell = probe.cellFor(session.metadata);
+  if (!cell || cell.column !== message.column || cell.row !== message.row) return;
+  const offsets = frameOffsets(session.metadata.time);
+  if (probe.adopt(session.metadata, message.variableId, offsets, new Uint8Array(message.buffer))) {
+    scheduleProbeRender();
+  }
 }
 
 /** Take the samples the frame cache already holds — a point pinned mid-run
@@ -1156,24 +1246,19 @@ function drawProbeChart(values: ProbeValue[], selected: number, variable: Bundle
   if (!flat) context.fillText(formatProbeValue(variable, lowest), gutter - 5, bottom);
 }
 
-function markBundleResident(): void {
-  document.body.classList.remove("is-data-loading");
-  dataCard.setAttribute("aria-busy", "false");
-  dataCard.classList.add("is-complete");
-  preloadState.textContent = t("bundleResident");
-}
-
-/** Sync the data card with one session's delivery state. */
+/** Sync the data card with one session's delivery state. The card only reads
+ * complete for a whole bundle: a narrowed session has every byte its view
+ * needs but nowhere near every byte of the file, and the progress bar behind
+ * the label counts real bytes. */
 function refreshDataCard(session: VariableSession): void {
   updateDownloadProgress(session.bytes, session.totalBytes);
-  if (session.resident) {
-    markBundleResident();
-    return;
-  }
   document.body.classList.remove("is-data-loading");
   dataCard.setAttribute("aria-busy", "false");
-  dataCard.classList.remove("is-complete");
-  preloadState.textContent = t("streamingOnDemand");
+  const whole = session.resident && session.residentScope === "bundle";
+  dataCard.classList.toggle("is-complete", whole);
+  preloadState.textContent = session.resident
+    ? t(whole ? "bundleResident" : "viewportResident")
+    : t("streamingOnDemand");
 }
 
 /** Handles `progress`/`resident` messages from streaming decode channels. */
@@ -1182,22 +1267,31 @@ function handleStreamMessage(message: {
   variableKey?: unknown;
   bytes?: unknown;
   totalBytes?: unknown;
+  scope?: unknown;
 }): void {
   const id = message.variableKey;
   if (typeof id !== "string" || !FORECAST_BUNDLE_IDS.includes(id as ForecastBundleId)) return;
   const bundleId = id as ForecastBundleId;
   const session = sessions.get(bundleId);
   if (!session) {
-    const entry = pendingStream.get(bundleId) ?? { bytes: 0, resident: false };
+    const entry = pendingStream.get(bundleId) ?? { bytes: 0, resident: false, scope: "bundle" as const };
     if (message.type === "progress" && typeof message.bytes === "number") entry.bytes = message.bytes;
-    if (message.type === "resident") entry.resident = true;
+    if (message.type === "resident") {
+      entry.resident = true;
+      entry.scope = message.scope === "viewport" ? "viewport" : "bundle";
+    }
     pendingStream.set(bundleId, entry);
     return;
   }
   if (message.type === "progress" && typeof message.bytes === "number") {
     session.bytes = Math.min(session.totalBytes, session.extraBytes + message.bytes);
   }
-  if (message.type === "resident") session.resident = true;
+  if (message.type === "resident") {
+    session.resident = true;
+    session.residentScope = message.scope === "viewport" ? "viewport" : "bundle";
+    // With the whole bundle local, narrowing to the view buys nothing any more.
+    if (session.residentScope === "bundle" && activeSession?.id === bundleId) refreshViewportTiles();
+  }
   if (activeSession?.id === bundleId) refreshDataCard(session);
 }
 
@@ -1280,19 +1374,29 @@ function advancePlayback(timestamp: number): void {
  * the loop seam (last -> first frame is a restart, not a transition) and
  * whenever either plane is not decoded yet — the current image just holds. */
 function blendTowardNext(timestamp: number): void {
-  if (!activeSession || !activeVariable || !layer || activeFrameIndex === null) return;
-  if (displayedReal !== activeSession.id) return;
+  const session = activeSession;
+  if (!session || !activeVariable || !layer || activeFrameIndex === null) return;
+  if (displayedReal !== session.id) return;
   // Wind frames are not blended — the particles themselves provide the
   // continuous motion between field updates.
-  if (activeSession.id === "wind10m") return;
+  if (session.id === "wind10m") return;
   const next = activeFrameIndex + 1;
   if (next >= frameCount()) return;
   const current = planeCache.get(cacheKey(activeVariable.numericId, frameOffset(activeFrameIndex)));
   const upcoming = planeCache.get(cacheKey(activeVariable.numericId, frameOffset(next)));
   if (!current || !upcoming) return;
+  // One coverage box serves both slots, so a pair decoded for different views
+  // (a pan mid-playback) holds the current image instead of blending a plane
+  // against another frame's stale bytes.
+  if (!sameTileRects(current.tiles, upcoming.tiles)) return;
   const weight = 1 - (nextFrameAt - timestamp) / currentHoldMs;
   ensureSessionGrid();
-  layer.setBlend(current.plane, upcoming.plane, weight);
+  layer.setBlend(
+    current.plane,
+    upcoming.plane,
+    weight,
+    sessionCoverage(session, current.tiles),
+  );
 }
 
 function startPlayback(): void {
@@ -1336,8 +1440,63 @@ function ensureWindGrid(session: VariableSession): void {
   windLayerGridSource = session.metadata;
 }
 
+// The tiles the active session decodes for the current view, or null for the
+// whole plane. Narrowing only pays where bytes are still being fetched, so it
+// is limited to a streaming session that is not resident yet; a downloaded
+// bundle has already paid for every byte, and the wind particles respawn
+// across the whole grid rather than the viewport, so they need it whole.
+let viewportTiles: TileRect[] | null = null;
+
+function sessionViewportTiles(session: VariableSession): TileRect[] | null {
+  if (!session.tiles || !session.streaming) return null;
+  if (session.resident && session.residentScope === "bundle") return null;
+  if (session.id === "wind10m") return null;
+  const bounds = map.getBounds();
+  return viewportTileRects(session.metadata, session.tiles, {
+    west: bounds.getWest(),
+    east: bounds.getEast(),
+    south: bounds.getSouth(),
+    north: bounds.getNorth(),
+  });
+}
+
+/** Recompute the view's tiles after a pan, a zoom, or a session change. A
+ * plane already decoded for a wider set stays valid; anything narrower is
+ * re-requested by the frame retry below. */
+function refreshViewportTiles(): void {
+  const next = activeSession ? sessionViewportTiles(activeSession) : null;
+  if (sameTileRects(next, viewportTiles)) return;
+  viewportTiles = next;
+  // The window is keyed by its first hour alone, so force the next send.
+  lastPrefetchWindow = "";
+  updateStatsReadout();
+  const session = activeSession;
+  if (session?.resident && session.residentScope === "viewport") {
+    // The view moved, so what it needs is no longer all local.
+    session.resident = false;
+    refreshDataCard(session);
+  }
+  if (activeFrameIndex !== null) trySelectFrame(activeFrameIndex);
+}
+
+/** The texture box a plane's tiles fill on its own session grid — what the
+ * shader clips to, so the stale bytes outside them are never painted. */
+function sessionCoverage(session: VariableSession, tiles: TileRect[] | null): CoverageBox {
+  if (!tiles || !session.tiles) return WHOLE_PLANE_COVERAGE;
+  const grid = session.metadata.grid;
+  return coverageBox(session.tiles, grid.width, grid.height, tiles);
+}
+
+/** The plane cached under `key`, but only if it covers the current view. A
+ * plane decoded for a viewport that has since moved is not a hit. */
+function cachedFrame(key: string): DecodedFrame | undefined {
+  const frame = planeCache.get(key);
+  return frame && coversTiles(frame.tiles, viewportTiles) ? frame : undefined;
+}
+
 /** Tell the active session which frames to keep resident (windowed
- * prefetch): the window ahead of the playhead, wrapped at the loop point. */
+ * prefetch): the window ahead of the playhead, wrapped at the loop point,
+ * and the tiles the view needs of them. */
 function sendPrefetchWindow(index: number): void {
   const session = activeSession;
   if (!session || !session.streaming || session.resident) return;
@@ -1349,7 +1508,12 @@ function sendPrefetchWindow(index: number): void {
   const key = `${session.id}:${hours[0]}`;
   if (key === lastPrefetchWindow) return;
   lastPrefetchWindow = key;
-  session.worker.postMessage({ type: "prefetch-window", hours, concurrency: prefetchConcurrency() });
+  session.worker.postMessage({
+    type: "prefetch-window",
+    hours,
+    concurrency: prefetchConcurrency(),
+    tiles: viewportTiles ?? undefined,
+  });
 }
 
 /** Show the frame if every needed plane is decoded (one for scalars, the u/v
@@ -1361,7 +1525,7 @@ function trySelectFrame(index: number): boolean {
   updateFrameReadout(index);
   sendPrefetchWindow(index);
   const keys = session.variables.map((variable) => cacheKey(variable.numericId, hour));
-  const planes = keys.map((key) => planeCache.get(key));
+  const planes = keys.map((key) => cachedFrame(key));
   if (planes.every((plane) => plane !== undefined)) {
     // Refresh LRU positions, then swap textures — no opacity involved.
     for (const [position, key] of keys.entries()) {
@@ -1373,7 +1537,7 @@ function trySelectFrame(index: number): boolean {
       windLayer?.setWindPlanes(planes[0]!.plane, planes[1]!.plane);
     } else {
       ensureSessionGrid();
-      layer.setFrame(planes[0]!.plane);
+      layer.setFrame(planes[0]!.plane, sessionCoverage(session, planes[0]!.tiles));
     }
     displayedReal = session.id;
     activeFrameIndex = index;
@@ -1403,7 +1567,7 @@ function prefetchNext(index: number): void {
     const hour = frameOffset((index + step) % frameCount());
     for (const variable of activeSession.variables) {
       const key = cacheKey(variable.numericId, hour);
-      if (!planeCache.has(key)) requestDecode(variable.numericId, hour);
+      if (!cachedFrame(key)) requestDecode(variable.numericId, hour);
     }
   }
 }
@@ -1428,6 +1592,9 @@ function requestDecode(variableId: number, hour: number): void {
     generation,
     variableId,
     frameOffset: hour,
+    // Only the active session's view narrows the decode; a background session
+    // (the other variable, preloading) is asked for whole planes.
+    tiles: (session === activeSession ? viewportTiles : null) ?? undefined,
   });
 }
 
@@ -1437,6 +1604,8 @@ function handleDecodedFrame(message: {
   variableId: number;
   frameOffset: number;
   decodeMs: number;
+  /** Absent when the whole plane is valid — the video path never narrows. */
+  tiles?: TileRect[];
   buffer: ArrayBuffer;
 }): void {
   if (typeof message.requestId === "number") inflight.delete(message.requestId);
@@ -1444,7 +1613,7 @@ function handleDecodedFrame(message: {
   const previous = planeCache.get(key);
   if (previous) planeCacheBytes -= previous.plane.byteLength;
   const plane = new Uint8Array(message.buffer);
-  planeCache.set(key, { plane, decodeMs: message.decodeMs });
+  planeCache.set(key, { plane, decodeMs: message.decodeMs, tiles: message.tiles ?? null });
   planeCacheBytes += plane.byteLength;
   lastDecodeMs = message.decodeMs;
   recordDecodeEvent(plane.byteLength, message.decodeMs);
@@ -1754,7 +1923,7 @@ function initializeChannel(
   initMessage: unknown,
   transfer: Transferable[],
   sequence: number,
-): Promise<{ worker: DecodeChannel; metadata: BundleMetadata }> {
+): Promise<{ worker: DecodeChannel; metadata: BundleMetadata; tiles: TileGeometry | null }> {
   return new Promise((resolve, reject) => {
     channel.onmessage = (event: MessageEvent) => {
       const message = event.data as Record<string, unknown>;
@@ -1770,7 +1939,11 @@ function initializeChannel(
         case "ready": {
           try {
             const parsed = parseBundleMetadata(message.metadataJson as string);
-            resolve({ worker: channel, metadata: parsed });
+            resolve({
+              worker: channel,
+              metadata: parsed,
+              tiles: parseTileGeometry(message.tileGeometry as Uint32Array | null | undefined),
+            });
           } catch (error) {
             reject(error instanceof Error ? error : new Error(String(error)));
           }
@@ -1778,6 +1951,9 @@ function initializeChannel(
         }
         case "frame":
           handleDecodedFrame(message as unknown as Parameters<typeof handleDecodedFrame>[0]);
+          break;
+        case "series":
+          handleProbeSeries(message as unknown as Parameters<typeof handleProbeSeries>[0]);
           break;
         case "error": {
           const text = String(message.message ?? t("decodeFailed"));
@@ -1885,12 +2061,11 @@ function loadVariable(variableId: ForecastBundleId, sequence: number): Promise<V
     }
 
     loadStatus.textContent = streaming ? t("readingIndex") : t("initializingDecoder");
-    const { worker: sessionWorker, metadata: bundleMetadata } = await initializeChannel(
-      channel,
-      initMessage,
-      transfer,
-      sequence,
-    );
+    const {
+      worker: sessionWorker,
+      metadata: bundleMetadata,
+      tiles,
+    } = await initializeChannel(channel, initMessage, transfer, sequence);
     if (sequence !== initializeSequence) {
       sessionWorker.terminate();
       throw new DOMException("aborted", "AbortError");
@@ -1921,15 +2096,20 @@ function loadVariable(variableId: ForecastBundleId, sequence: number): Promise<V
       bytes: downloadedBytes,
       totalBytes,
       extraBytes,
+      tiles,
       streaming,
       resident: !streaming,
+      residentScope: "bundle",
     };
     // Streaming progress may have raced ahead of session registration.
     const early = pendingStream.get(variableId);
     if (early) {
       pendingStream.delete(variableId);
       if (early.bytes > 0) session.bytes = Math.min(totalBytes, extraBytes + early.bytes);
-      if (early.resident) session.resident = true;
+      if (early.resident) {
+        session.resident = true;
+        session.residentScope = early.scope;
+      }
     }
     sessions.set(variableId, session);
     for (const item of sessionVariables) sessionsByNumericId.set(item.numericId, session);
@@ -2051,12 +2231,17 @@ function applyVariable(session: VariableSession): void {
   // cross-variable total.
   preloadFormat.value = session.format;
   refreshDataCard(session);
+  // Sessions differ in grid, tiling and delivery, so the view's tiles are the
+  // new session's to answer.
+  refreshViewportTiles();
   const index = activeFrameIndex ?? Number(slider.value);
   trySelectFrame(index);
   // The other variable has its own codebook, unit and grid, and its own
-  // samples in the frame cache.
+  // samples in the frame cache — and, on a tiled bundle, its own series to
+  // read for the pinned cell.
   if (probe) {
     seedProbeFromCache();
+    requestProbeSeries();
     scheduleProbeRender();
   }
 }
@@ -2111,7 +2296,9 @@ async function initialize(): Promise<void> {
   inflight.clear();
   planeCache.clear();
   planeCacheBytes = 0;
+  viewportTiles = null;
   probe?.clear();
+  probeSeriesRequests.clear();
   scheduleProbeRender();
   lastDecodeMs = null;
   decodeEvents.length = 0;
@@ -2312,7 +2499,10 @@ copyDebugButton.addEventListener("click", () => {
 });
 statsClose.addEventListener("click", () => setStatsVisible(false));
 // The viewport-sampling row tracks zoom/resize while the panel is pinned.
-map.on("moveend", () => updateStatsReadout());
+map.on("moveend", () => {
+  refreshViewportTiles();
+  updateStatsReadout();
+});
 window.addEventListener("resize", () => updateStatsReadout());
 playButton.addEventListener("click", () => {
   if (playing) stopPlayback();

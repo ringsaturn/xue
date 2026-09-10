@@ -210,3 +210,73 @@ export function coversTiles(
   if (!want) return false;
   return want.every((rect) => have.some((held) => containsRect(held, rect)));
 }
+
+/**
+ * A coverage box in texture coordinates: what part of the data texture a
+ * partially decoded plane actually filled.
+ *
+ * `uStart > uEnd` means the box wraps the antimeridian, which is exactly the
+ * two-rectangle case above — one box covers it because the u axis is
+ * periodic. A whole plane is `{0, 1, 0, 1}`, which passes every sample, so
+ * the shader needs no separate "no coverage" flag.
+ */
+export interface CoverageBox {
+  uStart: number;
+  uEnd: number;
+  vStart: number;
+  vEnd: number;
+}
+
+export const WHOLE_PLANE_COVERAGE: CoverageBox = { uStart: 0, uEnd: 1, vStart: 0, vEnd: 1 };
+
+/**
+ * The texture-space box a rectangle list covers on a grid of `width` x
+ * `height` cells. `null` rectangles (the whole plane) give the whole box.
+ *
+ * The bounds are cell edges, not centers: a tile column starting at cell c
+ * begins at `c / width`, and one ending at cell c ends at `(c + 1) / width`.
+ */
+export function coverageBox(
+  geometry: TileGeometry,
+  width: number,
+  height: number,
+  rects: readonly TileRect[] | null,
+): CoverageBox {
+  if (!rects || rects.length === 0) return WHOLE_PLANE_COVERAGE;
+  const firstRow = Math.min(...rects.map((rect) => rect.firstRow));
+  const lastRow = Math.max(...rects.map((rect) => rect.lastRow));
+  const vStart = (firstRow * geometry.tileHeight) / height;
+  const vEnd = Math.min(1, ((lastRow + 1) * geometry.tileHeight) / height);
+  // One rectangle is a plain span; two are the halves of a span that wrapped,
+  // and the wrapped box is written by taking the western half's start and the
+  // eastern half's end.
+  const wrapped = rects.length > 1;
+  const west = wrapped ? rects.reduce((a, b) => (a.firstColumn > b.firstColumn ? a : b)) : rects[0]!;
+  const east = wrapped ? rects.reduce((a, b) => (a.lastColumn < b.lastColumn ? a : b)) : rects[0]!;
+  return {
+    uStart: (west.firstColumn * geometry.tileWidth) / width,
+    uEnd: Math.min(1, ((east.lastColumn + 1) * geometry.tileWidth) / width),
+    vStart,
+    vEnd,
+  };
+}
+
+/** Whether two rectangle lists name the same tiles. */
+export function sameTileRects(
+  a: readonly TileRect[] | null,
+  b: readonly TileRect[] | null,
+): boolean {
+  if (!a || !b) return a === b;
+  return (
+    a.length === b.length &&
+    a.every((rect, index) => {
+      const other = b[index]!;
+      return (
+        rect.firstColumn === other.firstColumn &&
+        rect.lastColumn === other.lastColumn &&
+        rect.firstRow === other.firstRow &&
+        rect.lastRow === other.lastRow
+      );
+    })
+  );
+}

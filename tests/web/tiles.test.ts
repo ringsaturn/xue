@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  coverageBox,
   coversTiles,
   flattenTileRects,
   parseTileGeometry,
+  sameTileRects,
   tileCount,
   tileFraction,
   viewportTileRects,
+  WHOLE_PLANE_COVERAGE,
   type TileGeometry,
   type TileRect,
 } from "../../web/src/tiles";
@@ -181,5 +184,48 @@ describe("coversTiles", () => {
     expect(
       coversTiles([outer], [{ firstColumn: 6, firstRow: 3, lastColumn: 7, lastRow: 4 }]),
     ).toBe(false);
+  });
+});
+
+describe("coverageBox", () => {
+  it("is the whole texture for a whole plane", () => {
+    expect(coverageBox(GFS_TILES, 1440, 721, null)).toEqual(WHOLE_PLANE_COVERAGE);
+    expect(coverageBox(GFS_TILES, 1440, 721, [])).toEqual(WHOLE_PLANE_COVERAGE);
+  });
+
+  it("spans cell edges, not centers, and clamps at the far edge", () => {
+    const box = coverageBox(GFS_TILES, 1440, 721, [
+      { firstColumn: 2, firstRow: 0, lastColumn: 3, lastRow: 13 },
+    ]);
+    expect(box.uStart).toBeCloseTo((2 * 48) / 1440);
+    expect(box.uEnd).toBeCloseTo((4 * 48) / 1440);
+    // The last tile row is clipped by the grid, so v stops at 1 rather than
+    // running past the pole.
+    expect(box).toMatchObject({ vStart: 0, vEnd: 1 });
+  });
+
+  it("writes a straddling pair as one wrapped box", () => {
+    const box = coverageBox(GFS_TILES, 1440, 721, [
+      { firstColumn: 28, firstRow: 2, lastColumn: 29, lastRow: 6 },
+      { firstColumn: 0, firstRow: 2, lastColumn: 1, lastRow: 6 },
+    ]);
+    // uStart > uEnd is what tells the shader the box wraps.
+    expect(box.uStart).toBeCloseTo((28 * 48) / 1440);
+    expect(box.uEnd).toBeCloseTo((2 * 48) / 1440);
+    expect(box.uStart).toBeGreaterThan(box.uEnd);
+    expect(box.vStart).toBeCloseTo((2 * 52) / 721);
+    expect(box.vEnd).toBeCloseTo((7 * 52) / 721);
+  });
+});
+
+describe("sameTileRects", () => {
+  const rect: TileRect = { firstColumn: 1, firstRow: 2, lastColumn: 3, lastRow: 4 };
+
+  it("compares by value and treats the whole plane as its own answer", () => {
+    expect(sameTileRects([rect], [{ ...rect }])).toBe(true);
+    expect(sameTileRects(null, null)).toBe(true);
+    expect(sameTileRects(null, [rect])).toBe(false);
+    expect(sameTileRects([rect], [{ ...rect, lastRow: 5 }])).toBe(false);
+    expect(sameTileRects([rect], [rect, rect])).toBe(false);
   });
 });

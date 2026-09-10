@@ -120,12 +120,18 @@ metadata JSON, codebooks and residual arithmetic are unchanged, and the
 geometry appears only in the binary index. `docs/format.md` §"Container v2"
 is normative.
 
-Status: the format layer, the Python reference writer/reader and the Rust
-decoder handle both versions; the conversion pipeline (`binconvert.py`, the
-native encoder, the frontend) still produces and consumes v1, and switching
-it over is the remaining work. A decoder must always keep reading v1 —
-published runs and showcase cases carry those bytes and are never rebuilt. Like a manifest widening, the switch is a two-sided
-deploy: **ship the Pages shell before publishing v2 data.**
+Status: both encoders write v2 and every decoder reads both versions. The
+frontend uses what tiling buys: a streaming session decodes and fetches only
+the tiles its viewport covers (`web/src/tiles.ts` turns the view into
+rectangles, the worker protocol carries them, `u_cover` in `layer.ts` clips
+to what a partial plane actually holds), and a pinned point reads its whole
+series in one round trip instead of waiting for playback to walk the axis.
+A narrowed session never fetches the rest of the grid, so "resident" means
+what the view needs, not the whole file — the worker says which, and the
+data card reads "Viewport fully buffered" for the narrow case. A decoder
+must always keep reading v1 — published runs and showcase cases carry those
+bytes and are never rebuilt. Like a manifest widening, the switch is a
+two-sided deploy: **ship the Pages shell before publishing v2 data.**
 
 ### Bundle metadata schema versions
 

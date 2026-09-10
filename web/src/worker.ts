@@ -38,7 +38,7 @@
  */
 
 import { frameOffsets, type BundleTimeAxis } from "./manifest";
-import { flattenTileRects, type TileRect } from "./tiles";
+import { flattenTileRects, sameTileRects, type TileRect } from "./tiles";
 import wasmInit, { WasmBundle, WasmStreamingBundle } from "./wasm/xue";
 import wasmUrl from "./wasm/xue_bg.wasm?url";
 
@@ -247,11 +247,14 @@ function pumpPrefetch(): void {
     }
   }
   if (!missing && spanFetches.size === 0 && !residentAnnounced) {
-    if (
-      allOffsets.every((hour) => bundleNumericIds.every((numericId) => !session.missingGroupSpan(numericId, hour)))
-    ) {
+    const complete = allOffsets.every((hour) =>
+      bundleNumericIds.every(
+        (numericId) => missingSpansFor(session, numericId, hour, windowTiles).length === 0,
+      ),
+    );
+    if (complete) {
       residentAnnounced = true;
-      post({ type: "resident", variableKey });
+      post({ type: "resident", variableKey, scope: windowTiles ? "viewport" : "bundle" });
     }
   }
 }
@@ -403,7 +406,11 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
     if (message.type === "prefetch-window") {
       windowOffsets = message.hours;
       windowConcurrency = message.concurrency;
-      windowTiles = message.tiles ?? null;
+      if (!sameTileRects(message.tiles ?? null, windowTiles)) {
+        windowTiles = message.tiles ?? null;
+        // A wider view has more to fetch, so residency has to be earned again.
+        residentAnnounced = false;
+      }
       prefetchFailures = 0;
       pumpPrefetch();
       return;

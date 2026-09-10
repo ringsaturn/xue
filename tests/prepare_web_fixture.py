@@ -33,6 +33,11 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 WEB_FIXTURE_ROOT = REPOSITORY_ROOT / "tests" / "fixtures" / "generated" / "web"
 RUN_TIME = datetime(2026, 8, 15, 6, tzinfo=UTC)
 WIDTH, HEIGHT = 144, 73
+# The tile the synthetic global bundles are cut with. The production 48 x 52
+# tile would leave this small grid 3 x 2 tiles, which any viewport covers
+# whole; 16 x 16 gives 9 x 5, close to production's 30 x 14, so a zoomed-in
+# view fetches a proper subset here the way it does against a real run.
+FIXTURE_TILE = (16, 16)
 HOURS = list(range(121))
 # The ECMWF fixture models the full IFS open data series: 3-hourly to 144
 # hours, 6-hourly to 240 — a mixed-step axis, so its bundles list their hours
@@ -63,11 +68,12 @@ def write_v2_bundle(
     level: int,
     half: bool = False,
     source=None,
+    tile: tuple[int, int] | None = None,
 ) -> bytes:
     """One synthetic container v2 bundle, cut and packed the way the real
     encoder cuts and packs — same tile policy, same grouping, same physical
     order — so what Playwright drives is what production serves."""
-    tile = _bundle_tile((source or source_spec("gfs")).tile, grid, half=half)
+    tile = _bundle_tile(tile or (source or source_spec("gfs")).tile, grid, half=half)
     tiles = binformat.TileGeometry(grid.width, grid.height, *tile)
     variables, groups, raw = _bundle_chunks(variable_ids, hours, planes_by_hour, tiles)
     chunks = [
@@ -167,7 +173,14 @@ def prepare_web_fixture() -> Path:
         bundle_path = WEB_FIXTURE_ROOT / f"{variable_id}.xue"
         planes_by_hour = {hour: {variable_id: plane_builders[variable_id](hour)} for hour in HOURS}
         data = write_v2_bundle(
-            bundle_path, metadata, grid, (variable_id,), HOURS, planes_by_hour, level=level
+            bundle_path,
+            metadata,
+            grid,
+            (variable_id,),
+            HOURS,
+            planes_by_hour,
+            level=level,
+            tile=FIXTURE_TILE,
         )
         # Half-resolution variant, decimated from the same synthetic codes.
         half_planes = {
@@ -183,6 +196,7 @@ def prepare_web_fixture() -> Path:
             half_planes,
             level=level,
             half=True,
+            tile=FIXTURE_TILE,
         )
         poster_payload, poster_grid = encode_poster(first_planes[variable_id], grid)
         poster_path = WEB_FIXTURE_ROOT / f"{variable_id}.poster.bin"
@@ -229,6 +243,7 @@ def prepare_web_fixture() -> Path:
         HOURS,
         wind_planes_by_hour,
         level=level3,
+        tile=FIXTURE_TILE,
     )
     wind_half_planes = {
         hour: {component: _decimate_codes(planes[component], grid) for component in WIND_COMPONENT_IDS}
@@ -244,6 +259,7 @@ def prepare_web_fixture() -> Path:
         wind_half_planes,
         level=level3,
         half=True,
+        tile=FIXTURE_TILE,
     )
     bundles.append(
         {
@@ -308,6 +324,7 @@ def _prepare_ecmwf_fixture(grid: GridInfo, level: int) -> None:
             planes_by_hour,
             level=level,
             source=source_spec("ecmwf"),
+            tile=FIXTURE_TILE,
         )
         bundles.append(
             {
@@ -358,6 +375,7 @@ def _prepare_sflux_fixture(grid: GridInfo, level: int) -> None:
             planes_by_hour,
             level=level,
             source=source_spec("sflux"),
+            tile=FIXTURE_TILE,
         )
         bundles.append(
             {
