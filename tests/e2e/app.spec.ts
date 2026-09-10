@@ -163,9 +163,16 @@ interface RangeCounters {
 }
 
 /** Serves bundles like a range-capable host (R2): exact 206 responses for
- * single byte ranges, 200 with the whole body otherwise. */
-async function routeBundleWithRanges(page: Page, counters?: RangeCounters): Promise<void> {
-  await page.route("**/data/**/*.xue?*", (route) => {
+ * single byte ranges, 200 with the whole body otherwise. `latencyMs` holds
+ * every response back, which is what keeps a frame pending long enough to
+ * interact with it. */
+async function routeBundleWithRanges(
+  page: Page,
+  counters?: RangeCounters,
+  latencyMs = 0,
+): Promise<void> {
+  await page.route("**/data/**/*.xue?*", async (route) => {
+    if (latencyMs > 0) await new Promise((resolve) => setTimeout(resolve, latencyMs));
     const isTemperature = new URL(route.request().url()).pathname.endsWith("tmp2m.xue");
     const body = isTemperature ? TMP2M_FIXTURE : PRATE_FIXTURE;
     const match = /^bytes=(\d+)-(\d+)$/.exec(route.request().headers()["range"] ?? "");
@@ -741,6 +748,37 @@ test("zooming in narrows a streaming session to the viewport's tiles", async ({ 
   // frame still arrives: no error, and no fallback to the whole body.
   expect(Math.max(...counters.lengths)).toBeLessThan(globalLongest);
   expect(counters.full).toBe(0);
+  await expect(page.getByRole("alert")).toBeHidden();
+});
+
+test("a view change under a pending scrub keeps the timeline on the new frame", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop", "desktop interaction coverage");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await routeManifest(page);
+  // Slow enough that the frame scrubbed to is still decoding when the view
+  // moves under it.
+  await routeBundleWithRanges(page, undefined, 300);
+  await page.addInitScript(() => window.localStorage.setItem("g2pv-stats-visible", "1"));
+  await page.goto("/");
+  const slider = page.getByRole("slider", { name: "Forecast hour" });
+  await expect(slider).toBeEnabled({ timeout: 20_000 });
+  // Only a narrowed session re-requests anything on a view change, so zoom in
+  // until the view names a tile subset of its own.
+  const viewport = page.locator("#stat-viewport");
+  const box = (await page.locator("#map").boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  for (let step = 0; step < 6; step += 1) await page.mouse.wheel(0, -400);
+  await expect(viewport).toContainText(/\d+ \/ 45 tiles/, { timeout: 10_000 });
+  const tilesBefore = /\d+ \/ 45 tiles/.exec((await viewport.textContent()) ?? "")![0];
+
+  await scrubTo(page, 90);
+  await expect(page.locator("#frame-tooltip")).toContainText("F090");
+  // A narrower window covers fewer tiles, so the frame is requested again for
+  // the new view — and the frame to request is the one asked for, not the one
+  // still on screen while it decodes.
+  await page.setViewportSize({ width: 600, height: 720 });
+  await expect(viewport).not.toContainText(tilesBefore, { timeout: 10_000 });
+  await expect(page.locator("#frame-tooltip")).toContainText("F090");
   await expect(page.getByRole("alert")).toBeHidden();
 });
 
