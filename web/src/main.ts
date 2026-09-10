@@ -300,14 +300,39 @@ function luminance(color: string): number {
 
 function applyBasemapTheme(): void {
   const theme = currentBasemapTheme();
-  // Everything floating directly on the map — the title, the color scale's
-  // numbers, the credits — takes its ink from the ground it sits on rather
-  // than from the theme, because "light" does not mean a light map: the
-  // design paints precipitation and wind on a dark slate in both themes.
-  document.body.dataset.ground = luminance(theme.ocean) < 0.5 ? "dark" : "light";
+  // Everything drawn over the data — the title, the color scale's numbers,
+  // the credits, and the basemap's own place labels and boundaries — takes
+  // its ink from the ground it sits on rather than from the theme, because
+  // "light" does not mean a light map: the design paints precipitation and
+  // wind on a dark slate in both themes.
+  const darkGround = luminance(theme.ocean) < 0.5;
+  document.body.dataset.ground = darkGround ? "dark" : "light";
   if (map.getLayer("background")) map.setPaintProperty("background", "background-color", theme.ocean);
   if (map.getLayer("water")) map.setPaintProperty("water", "fill-color", theme.ocean);
   if (map.getLayer("earth")) map.setPaintProperty("earth", "fill-color", theme.land);
+  applyBasemapInk(darkGround);
+}
+
+/** Repaint the basemap's labels and boundaries for the current ground.
+ *
+ * The Protomaps flavor is baked into the style when the map is built, and a
+ * flavor cannot be swapped afterwards without `map.setStyle`, which would drop
+ * the custom WebGL layers the forecast is drawn in. A session does switch
+ * layers under those labels, though, so the two colors that have to stay
+ * legible are set here instead of coming from the flavor. */
+function applyBasemapInk(darkGround: boolean): void {
+  if (!map.isStyleLoaded()) return;
+  const ink = darkGround ? "#eef1f4" : "#3a3730";
+  const halo = darkGround ? "rgba(0, 0, 0, 0.75)" : "rgba(243, 239, 230, 0.92)";
+  const border = darkGround ? "rgba(255, 255, 255, 0.32)" : "rgba(27, 26, 23, 0.3)";
+  for (const layer of map.getStyle().layers ?? []) {
+    if (layer.type === "symbol") {
+      map.setPaintProperty(layer.id, "text-color", ink);
+      map.setPaintProperty(layer.id, "text-halo-color", halo);
+    } else if (layer.id === "boundaries" || layer.id === "boundaries_country") {
+      map.setPaintProperty(layer.id, "line-color", border);
+    }
+  }
 }
 
 /** Protomaps hosted basemap (real coastlines, waterways, boundaries and

@@ -292,7 +292,15 @@ map's are two different things. The chrome (capsule, rail, sheet, cards) always
 uses the theme's own; anything floating *directly* on the map (the title, the
 color scale's numbers, the credits) uses `--map-ink` / `--map-ink-muted`, which
 follow `body[data-ground]` — stamped by `applyBasemapTheme` from the basemap
-tone's luminance. The top/bottom map fade follows the same attribute.
+tone's luminance. The top/bottom map fade follows the same attribute, and so
+do the basemap's own place labels and boundaries: a Protomaps flavor is baked
+into the style at construction and cannot be swapped without `setStyle`, so
+`applyBasemapInk` repaints their text and line colors instead.
+
+The Protomaps key is origin-locked to the production domains **and to
+`localhost`** — not to `127.0.0.1`, which is what `playwright.config.ts` serves
+from, so the e2e suite stubs tiles out. To see the app over the real basemap
+locally, browse `http://localhost:4173` rather than the loopback address.
 
 ## Conventions
 
