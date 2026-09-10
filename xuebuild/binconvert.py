@@ -1371,16 +1371,26 @@ def convert_bin(
 
 
 def verify_bin(path: Path) -> dict[str, Any]:
-    """Structurally validate a bundle and decode every plane."""
+    """Structurally validate a bundle and decode every payload."""
     bundle = binformat.read_bundle(path)
     bundle.verify_all()
-    return {
+    report = {
         "path": str(path),
         "byteLength": len(bundle.data),
-        "planes": len(bundle.entries),
+        "containerVersion": bundle.container_version,
         "variables": sorted(bundle.variable_ids.values()),
         "frameCount": bundle.frame_count,
         "grid": f"{bundle.width}x{bundle.height}",
         "runTime": bundle.metadata.get("runTime"),
         "profile": bundle.metadata.get("profile"),
     }
+    # A payload is a whole plane in v1 and a chunk — one tile of one temporal
+    # group — in v2, so the count that describes a file depends on which.
+    if bundle.container_version == binformat.VERSION_V2:
+        report["chunks"] = len(bundle.chunks)
+        report["groups"] = len(bundle.groups)
+        report["tiles"] = f"{bundle.tiles.tile_width}x{bundle.tiles.tile_height}"
+        report["tileCount"] = bundle.tiles.count
+    else:
+        report["planes"] = len(bundle.entries)
+    return report
