@@ -98,12 +98,17 @@ pub const SOURCES: &[SourceSpec] = &[
         latest_filename: Some("latest.json"),
         // Hourly through f120, then three-hourly through f240.
         steps: &[(120, 1), (240, 3)],
-        input_variable_ids: &["tmp2m", "prate", "ugrd10m", "vgrd10m"],
+        // The pressure family ships the three isobaric levels of the first
+        // launch (850 / 500 / 250) beside mean sea level pressure; the other
+        // five registered levels are not published.
+        input_variable_ids: &[
+            "tmp2m", "prate", "ugrd10m", "vgrd10m", "prmsl", "hgt850", "hgt500", "hgt250",
+        ],
         accumulated_precipitation: false,
         averaged_precipitation: false,
         average_window_hours: 6,
         optional_at_analysis: &[],
-        bundle_scalar_ids: &["tmp2m", "prate"],
+        bundle_scalar_ids: &["tmp2m", "prate", "prmsl", "hgt850", "hgt500", "hgt250"],
         production_grid: (1440, 721),
         tile: (48, 52),
         observation: false,

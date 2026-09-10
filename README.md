@@ -151,7 +151,10 @@ H.264 companion; disable with `--skip-variants` / `--skip-video`). The
 pressure family — mean sea level pressure and geopotential height on the
 standard isobaric surfaces, one bundle per level — gets neither a poster nor
 a video companion: the page draws it as contour lines, which need the exact
-codes and never a filled first frame. `build-bin` also adds the
+codes and never a filled first frame. GFS publishes `prmsl` with the 850,
+500 and 250 hPa heights; the other five levels are registered in the format
+but not fetched, so turning one on is a line in `xuebuild/sources.py` (and
+its mirror in the native encoder) rather than a format change. `build-bin` also adds the
 two-variable `wind10m.xue` when the input GRIB carries the 10 m wind
 components (older cached GRIBs without wind records are skipped
 automatically — re-fetch with `--force-download` to pick wind up), and

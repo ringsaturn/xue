@@ -121,8 +121,22 @@ SOURCES: dict[str, SourceSpec] = {
         latest_filename="latest.json",
         # Hourly through f120, then three-hourly through f240.
         steps=((120, 1), (240, 3)),
-        input_variable_ids=("tmp2m", "prate", "ugrd10m", "vgrd10m"),
+        # The pressure family ships the three isobaric levels the plan's first
+        # launch names (850 / 500 / 250) beside mean sea level pressure; the
+        # other five levels in variables.py are registered but not published,
+        # so the fetch stays four extra GRIB records per frame rather than ten.
+        input_variable_ids=(
+            "tmp2m",
+            "prate",
+            "ugrd10m",
+            "vgrd10m",
+            "prmsl",
+            "hgt850",
+            "hgt500",
+            "hgt250",
+        ),
         accumulated_precipitation=False,
+        bundle_scalar_ids=("tmp2m", "prate", "prmsl", "hgt850", "hgt500", "hgt250"),
     ),
     "ecmwf": SourceSpec(
         id="ecmwf",
