@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  parseLinesFromSearch,
   parseModelFromSearch,
   parseParticlesFromSearch,
   parseResolutionFromSearch,
   parseUseH264FromSearch,
   parseVariableFromSearch,
   searchForVariable,
+  searchWithLines,
   searchWithParticles,
 } from "../../web/src/urlstate";
 
@@ -180,5 +182,44 @@ describe("parseResolutionFromSearch", () => {
 
   it("survives a layer switch, which preserves unrelated params", () => {
     expect(parseResolutionFromSearch(searchForVariable("prate", "?res=half"))).toBe("half");
+  });
+});
+
+describe("parseLinesFromSearch", () => {
+  it("says nothing when the URL names no lines", () => {
+    expect(parseLinesFromSearch("")).toBeNull();
+    expect(parseLinesFromSearch("?model=gfs&type=precip")).toBeNull();
+  });
+
+  it("accepts every spelling ?type= takes for a pressure surface", () => {
+    expect(parseLinesFromSearch("?lines=pressure")).toBe("prmsl");
+    expect(parseLinesFromSearch("?lines=MSLP")).toBe("prmsl");
+    expect(parseLinesFromSearch("?lines=prmsl")).toBe("prmsl");
+    expect(parseLinesFromSearch("?lines=hgt500")).toBe("hgt500");
+    expect(parseLinesFromSearch("?lines=subtropicalhigh")).toBe("hgt500");
+    expect(parseLinesFromSearch("?type=precip&lines=hgt850")).toBe("hgt850");
+  });
+
+  it("refuses a filled field as lines, and anything unknown, rather than erroring", () => {
+    expect(parseLinesFromSearch("?lines=temp")).toBeNull();
+    expect(parseLinesFromSearch("?lines=wind")).toBeNull();
+    expect(parseLinesFromSearch("?lines=vorticity")).toBeNull();
+    expect(parseLinesFromSearch("?lines=")).toBeNull();
+  });
+});
+
+describe("searchWithLines", () => {
+  it("writes the canonical name over a field and clears it again", () => {
+    expect(searchWithLines("?model=gfs&type=precip", "prmsl")).toBe("?model=gfs&type=precip&lines=pressure");
+    expect(searchWithLines("?model=gfs&type=temp", "hgt500")).toBe("?model=gfs&type=temp&lines=hgt500");
+    expect(searchWithLines("?model=gfs&type=precip&lines=pressure", null)).toBe("?model=gfs&type=precip");
+  });
+
+  it("round-trips through parseLinesFromSearch and leaves the field alone", () => {
+    const search = searchWithLines(searchForVariable("prate", ""), "hgt500");
+    expect(parseLinesFromSearch(search)).toBe("hgt500");
+    expect(parseVariableFromSearch(search)).toBe("prate");
+    // A layer switch preserves the lines, which is what keeps them sticky.
+    expect(parseLinesFromSearch(searchForVariable("tmp2m", search))).toBe("hgt500");
   });
 });

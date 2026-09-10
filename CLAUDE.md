@@ -244,7 +244,22 @@ holds either one in the same field without branching. Prefetch in both is
 windowed: the main thread sends `prefetch-window` with the hours just ahead of
 the playhead plus a concurrency cap.
 
-`main.ts` (large, deliberately central) picks the delivery path per session:
+`main.ts` (large, deliberately central) composes the view from **slots**
+rather than holding one layer: a *fill* slot (temperature, precipitation,
+reflectivity, radiation, wind speed) and a *lines* slot (the pressure
+family), each a `ForecastLayer` instance of its own, each fed by its own
+bundle session with its own worker, grid, tiles and resolution tier.
+`ViewComposition {fill, lines}` says what is on screen; the **primary**
+session (the fill's, or the lines' when nothing is filled) drives the
+timeline, legend, data card and ground tone, and the lines slot as an
+overlay follows it by *lead seconds* on its own axis — a frame not decoded
+yet keeps the last one up, a lead time the overlay's axis lacks hides it.
+The primary gates the playhead; overlays never do. Prefetch fans out to every
+session on screen (the primary at the connection's concurrency, an overlay at
+one), an overlay takes the half-resolution tier unless `?res=full`, and every
+`?type=` of old is a composition with one slot filled, so the single-layer
+views run exactly the code they always did. It also picks the delivery path
+per session:
 WebCodecs only when `?use_h264=true` opts in and a video artifact exists and
 the browser supports it, otherwise streaming if a range probe succeeds,
 otherwise a whole-bundle download; and picks a resolution tier via
@@ -342,8 +357,8 @@ locally, browse `http://localhost:4173` rather than the loopback address.
   swaps "FORECAST HOUR"/`F058`/模式周期/有效时间 for
   "TIME ELAPSED"/`T+058:24`/观测起点/观测时间, on the viewer and on the
   showcase cards. Observations have no run cycle and no lead time.
-- URL state (`?model=`, `?type=`, `?case=`, `?res=`, `?use_h264=`,
-  `?particles=`) is parsed
+- URL state (`?model=`, `?type=`, `?lines=`, `?case=`, `?res=`,
+  `?use_h264=`, `?particles=`) is parsed
   in `urlstate.ts`; `?lang=` belongs to `i18n.ts` and `?theme=` to `theme.ts`,
   since each is read before anything else renders. Unrecognized values fall
   back to defaults rather than error.

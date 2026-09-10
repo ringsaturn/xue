@@ -50,6 +50,7 @@ import { buildPalette, buildWindFieldPalette, WIND_SPEED_MAX } from "./palettes"
 import {
   PRESSURE_BUNDLE_IDS,
   PRESSURE_LEVELS,
+  isPressureBundle,
   pressureCode,
   pressureLabel,
   pressureLegend,
@@ -68,6 +69,7 @@ import {
 import {
   DEFAULT_VARIABLE,
   parseCaseFromSearch,
+  parseLinesFromSearch,
   parseModelFromSearch,
   parseParticlesFromSearch,
   parseResolutionFromSearch,
@@ -75,6 +77,7 @@ import {
   parseVariableFromSearch,
   searchForCaseVariable,
   searchForVariable,
+  searchWithLines,
   searchWithParticles,
 } from "./urlstate";
 import { WindParticleLayer } from "./particles";
@@ -562,6 +565,27 @@ interface VariableSession {
    * narrowed to — a narrowed session never fetches the rest, so it never
    * reaches whole-bundle residency, and the data card says which it is. */
   residentScope: "bundle" | "viewport";
+  /** The tiles this session decodes for the current view, or null for the
+   * whole plane. Every session on screen has its own: the filled field and
+   * the lines over it come from different bundles, with different grids and
+   * tilings, and each narrows to what the view needs of *its* grid. */
+  viewTiles: TileRect[] | null;
+  /** Lead seconds → this bundle's frame offset, built on first use. An
+   * overlay is keyed off the primary session's timeline, and the two axes can
+   * differ (ECMWF prate has no analysis frame), so a frame is found by lead
+   * time rather than by index. */
+  leadOffsets: Map<number, number> | null;
+}
+
+/** Where a session's frame offset for a lead time comes from: exact match
+ * on its own axis, or null when the axis has no frame there. */
+function sessionOffsetForLead(session: VariableSession, seconds: number): number | null {
+  if (!session.leadOffsets) {
+    const time = session.metadata.time;
+    const unit = axisUnitSeconds(time);
+    session.leadOffsets = new Map(frameOffsets(time).map((offset) => [offset * unit, offset]));
+  }
+  return session.leadOffsets.get(seconds) ?? null;
 }
 
 /** Streaming progress that arrived before its session finished registering. */
@@ -576,26 +600,122 @@ let manifestUrl: string | null = null;
 /** Run id from the latest.json live pointer, e.g. "2026081600". */
 let currentRun: string | null = null;
 let metadata: BundleMetadata | null = null;
-let layer: ForecastLayer | null = null;
-let layerAdded = false;
+
+/** What is on screen, as slots rather than as one layer: a filled field
+ * (temperature, precipitation, reflectivity, radiation, wind speed) and the
+ * contour lines drawn over it (the pressure family). Either may be empty but
+ * not both. Every `?type=` of old is a composition with one slot filled; the
+ * pressure views are `{fill: null, lines: X}`; `?type=precip&lines=pressure`
+ * fills both. Each slot's bundle is its own session — own worker, own grid,
+ * own tiles, own resolution tier — and the **primary** session (the fill's,
+ * or the lines' when there is no fill) drives the timeline, the legend, the
+ * data card and the ground tone. The lines follow it by lead time. */
+interface ViewComposition {
+  fill: ForecastBundleId | null;
+  lines: PressureBundleId | null;
+}
+
+/** A slot's raster layer and what it is showing. Two exist for the life of
+ * the page — one per slot — and a session takes the slot its kind belongs
+ * to: a pressure surface always draws in `lines`, everything else in
+ * `fill`, whichever of them is primary at the time. */
+interface RasterSlot {
+  role: "fill" | "lines";
+  layer: ForecastLayer;
+  /** The session feeding this slot, or null while it is empty. */
+  session: VariableSession | null;
+  /** Metadata object whose grid the layer is currently configured for.
+   * Sessions can legitimately differ in grid (resolution tiers), so this
+   * tracks the exact metadata identity rather than a poster/full flag. */
+  gridSource: BundleMetadata | null;
+  /** Bundle whose REAL (bundle-decoded) frame is on screen, if any. */
+  displayedReal: ForecastBundleId | null;
+  /** Cache key of the plane on screen, kept so the labels can be traced
+   * again and the eviction pass knows to leave it alone. */
+  shownKey: string | null;
+  /** Cache key of the plane an overlay is waiting on: the frame at the
+   * primary's lead time, not decoded yet. The overlay keeps its last frame
+   * up meanwhile and swaps when this one lands. */
+  wantedKey: string | null;
+}
+
+function makeSlot(role: RasterSlot["role"]): RasterSlot {
+  return {
+    role,
+    layer: new ForecastLayer((message) => showError(message), `forecast-${role}`),
+    session: null,
+    gridSource: null,
+    displayedReal: null,
+    shownKey: null,
+    wantedKey: null,
+  };
+}
+
+const slots: Record<RasterSlot["role"], RasterSlot> = { fill: makeSlot("fill"), lines: makeSlot("lines") };
+let layersAdded = false;
+
+/** The slot a bundle draws in, by its kind. */
+function slotFor(id: ForecastBundleId): RasterSlot {
+  return isPressureBundle(id) ? slots.lines : slots.fill;
+}
+
+/** The slot the primary session is drawing in, or null before one exists. */
+function primarySlot(): RasterSlot | null {
+  return activeSession ? slotFor(activeSession.id) : null;
+}
+
+/** Slots showing a session other than the primary — the overlays. */
+function overlaySlots(): RasterSlot[] {
+  return [slots.fill, slots.lines].filter((slot) => slot.session !== null && slot.session !== activeSession);
+}
+
+/** Every session with a slot on screen, the primary first: prefetch fans
+ * out to each, and under an inflight cap the primary's requests go first. */
+function slotSessions(): VariableSession[] {
+  const list: VariableSession[] = [];
+  if (activeSession) list.push(activeSession);
+  for (const slot of overlaySlots()) list.push(slot.session!);
+  return list;
+}
+
 /** Wind GPU particle layer; created alongside the scalar layer and toggled by
  * the active variable. */
 let windLayer: WindParticleLayer | null = null;
 let windLayerAdded = false;
 let windLayerGridSource: BundleMetadata | null = null;
-/** Metadata object whose grid the layer is currently configured for. Sessions
- * can legitimately differ in grid (resolution tiers), so this tracks
- * the exact metadata identity rather than a poster/full flag. */
-let layerGridSource: BundleMetadata | null = null;
-/** Bundle whose REAL (bundle-decoded) frame is on screen, if any. */
-let displayedReal: ForecastBundleId | null = null;
 /** Shareable URL entry (e.g. /?model=ecmwf&type=wind) picks the initial model
  * and layer; a missing or unrecognized param falls back to the default. */
 let selectedModelId: ForecastModelId = parseModelFromSearch(window.location.search);
 /** Layer the URL asked for, or null when it named none — which is what lets
  * a showcase case's own default win over the app-wide one. */
 const requestedVariableId: ForecastBundleId | null = parseVariableFromSearch(window.location.search);
+/** Contour lines the URL asked for over the filled field, or none. */
+const requestedLines: PressureBundleId | null = parseLinesFromSearch(window.location.search);
+/** The primary bundle: the fill's, or the lines' when nothing is filled. */
 let selectedVariableId: ForecastBundleId = requestedVariableId ?? DEFAULT_VARIABLE;
+/** The composition on screen, or being switched to. */
+let composition: ViewComposition = compositionForPrimary(selectedVariableId, requestedLines);
+
+/** The composition whose primary is `primary`: a pressure surface is the
+ * lines alone, anything else is the fill with `lines` kept over it. */
+function compositionForPrimary(primary: ForecastBundleId, lines: PressureBundleId | null): ViewComposition {
+  return isPressureBundle(primary) ? { fill: null, lines: primary } : { fill: primary, lines };
+}
+
+function compositionPrimary(view: ViewComposition): ForecastBundleId {
+  return view.fill ?? view.lines ?? DEFAULT_VARIABLE;
+}
+
+/** The composition the manifest can actually serve. A slot the run does not
+ * ship empties rather than errors — a showcase case carries only the layers
+ * its event is about — and if that empties both, the dataset's own default
+ * takes the primary slot. */
+function resolveComposition(view: ViewComposition, run: ForecastManifest, fallback: ForecastBundleId): ViewComposition {
+  const fill = view.fill !== null && hasBundle(run, view.fill) ? view.fill : null;
+  const lines = view.lines !== null && hasBundle(run, view.lines) ? view.lines : null;
+  if (fill === null && lines === null) return compositionForPrimary(fallback, null);
+  return { fill, lines };
+}
 /** Showcase case named by `?case=<id>`: a past run cropped to one weather
  * event. A case pins its own dataset and run, so while one is open the model
  * switch is hidden, the live pointer is never read, and the new-run poll is
@@ -663,8 +783,8 @@ function decodeRateBytesPerSec(): number {
   }
   return sum / 2;
 }
-/** Last prefetch window sent, to skip redundant messages. */
-let lastPrefetchWindow = "";
+/** Last prefetch window sent per session, to skip redundant messages. */
+const lastPrefetchWindow = new Map<ForecastBundleId, string>();
 const inflight = new Map<number, string>();
 let nextRequestId = 1;
 let desiredKey: string | null = null;
@@ -958,8 +1078,9 @@ function setStatsVisible(visible: boolean): void {
  * every global view. */
 function tileShare(): string {
   const geometry = activeSession?.tiles;
-  if (!geometry || !viewportTiles) return "";
-  return ` · ${tileCount(viewportTiles)} / ${geometry.columns * geometry.rows} tiles`;
+  const tiles = activeSession?.viewTiles;
+  if (!geometry || !tiles) return "";
+  return ` · ${tileCount(tiles)} / ${geometry.columns * geometry.rows} tiles`;
 }
 
 function connectionLabel(): string {
@@ -1088,6 +1209,7 @@ function debugInfoText(): string {
     `dataset: ${currentRun ? `${selectedModelId}.${currentRun}` : "--"}`,
     `variable: ${session ? `${session.id} (${session.variable.unit})` : "--"}`,
     `format: ${session?.format ?? "--"}`,
+    `lines: ${overlaySlots().map((slot) => `${slot.session!.id} (${slot.session!.format})`).join(", ") || "--"}`,
     `grid: ${session ? `${session.metadata.grid.width} × ${session.metadata.grid.height}` : "--"}`,
     `time: ${time ? `${time.frameCount}F · first ${time.firstForecastHour}h · ${time.stepHours !== undefined ? `step ${time.stepHours}h` : "mixed step"}` : "--"}`,
     `frame: ${activeFrameIndex === null ? "--" : formatLead(activeFrameIndex)} · ${playbackFps} fps`,
@@ -1499,7 +1621,7 @@ function handleStreamMessage(message: {
     session.resident = true;
     session.residentScope = message.scope === "viewport" ? "viewport" : "bundle";
     // With the whole bundle local, narrowing to the view buys nothing any more.
-    if (session.residentScope === "bundle" && activeSession?.id === bundleId) refreshViewportTiles();
+    if (session.residentScope === "bundle" && slotSessions().includes(session)) refreshViewportTiles();
   }
   if (activeSession?.id === bundleId) refreshDataCard(session);
 }
@@ -1591,25 +1713,48 @@ function advancePlayback(timestamp: number): void {
  * visual and supplied the motion between field updates themselves.) */
 function blendTowardNext(timestamp: number): void {
   const session = activeSession;
-  if (!session || !activeVariable || !layer || activeFrameIndex === null) return;
-  if (displayedReal !== session.id) return;
+  const slot = primarySlot();
+  if (!session || !slot || !activeVariable || activeFrameIndex === null) return;
+  if (slot.displayedReal !== session.id) return;
   const next = activeFrameIndex + 1;
   if (next >= frameCount()) return;
+  const weight = 1 - (nextFrameAt - timestamp) / currentHoldMs;
   const current = framePlanes(session, activeFrameIndex);
   const upcoming = framePlanes(session, next);
-  if (!current || !upcoming) return;
   // One coverage box serves both slots, so a pair decoded for different views
   // (a pan mid-playback) holds the current image instead of blending a plane
   // against another frame's stale bytes.
-  if (!sameTileRects(current[0]!.tiles, upcoming[0]!.tiles)) return;
-  const weight = 1 - (nextFrameAt - timestamp) / currentHoldMs;
-  ensureSessionGrid();
-  layer.setBlend(
-    displayPlane(session, activeFrameIndex, current),
-    displayPlane(session, next, upcoming),
-    weight,
-    sessionCoverage(session, current[0]!.tiles),
-  );
+  if (current && upcoming && sameTileRects(current[0]!.tiles, upcoming[0]!.tiles)) {
+    ensureSlotGrid(slot, session);
+    slot.layer.setBlend(
+      displayPlane(session, activeFrameIndex, current),
+      displayPlane(session, next, upcoming),
+      weight,
+      sessionCoverage(session, current[0]!.tiles),
+    );
+  }
+  // The lines blend their own pair on the same clock, so at any instant the
+  // two slots sit at the same fraction of the step. An overlay still catching
+  // up (its plane for this frame not decoded, or not on its axis) holds.
+  for (const overlay of overlaySlots()) blendOverlay(overlay, activeFrameIndex, next, weight);
+}
+
+/** Sweep one overlay between the planes it holds for two primary frames,
+ * found by lead time on its own axis. Nothing happens unless the overlay is
+ * showing exactly the current frame and has the next one cached too. */
+function blendOverlay(slot: RasterSlot, index: number, next: number, weight: number): void {
+  const session = slot.session;
+  if (!session || slot.displayedReal !== session.id) return;
+  const offsetA = sessionOffsetForLead(session, frameLeadSeconds(index));
+  const offsetB = sessionOffsetForLead(session, frameLeadSeconds(next));
+  if (offsetA === null || offsetB === null) return;
+  const keyA = cacheKey(session.variable.numericId, offsetA);
+  if (slot.shownKey !== keyA) return;
+  const planeA = planeCache.get(keyA);
+  const planeB = planeCache.get(cacheKey(session.variable.numericId, offsetB));
+  if (!planeA || !planeB || !sameTileRects(planeA.tiles, planeB.tiles)) return;
+  ensureSlotGrid(slot, session);
+  slot.layer.setBlend(planeA.plane, planeB.plane, weight, sessionCoverage(session, planeA.tiles));
 }
 
 function startPlayback(): void {
@@ -1637,14 +1782,13 @@ function updateFrameReadout(index: number): void {
   scheduleProbeRender();
 }
 
-/** Reconfigure the layer for the active session's own bundle grid (poster
+/** Reconfigure a slot's layer for its session's own bundle grid (poster
  * grid, full grid, and variant grids all differ) before showing a real
  * plane of that session. */
-function ensureSessionGrid(): void {
-  if (!layer || !activeSession) return;
-  if (layerGridSource === activeSession.metadata) return;
-  layer.configureGrid(activeSession.metadata);
-  layerGridSource = activeSession.metadata;
+function ensureSlotGrid(slot: RasterSlot, session: VariableSession): void {
+  if (slot.gridSource === session.metadata) return;
+  slot.layer.configureGrid(session.metadata);
+  slot.gridSource = session.metadata;
 }
 
 /** Same for the wind particle layer: adopt the wind session's grid and its
@@ -1655,15 +1799,14 @@ function ensureWindGrid(session: VariableSession): void {
   windLayerGridSource = session.metadata;
 }
 
-// The tiles the active session decodes for the current view, or null for the
-// whole plane. Narrowing only pays where bytes are still being fetched, so it
-// is limited to a streaming session that is not resident yet; a downloaded
+// The tiles a session decodes for the current view, or null for the whole
+// plane. Narrowing only pays where bytes are still being fetched, so it is
+// limited to a streaming session that is not resident yet; a downloaded
 // bundle has already paid for every byte. Wind narrows like anything else
 // while its particle overlay is off: the filled speed field only needs what
 // the view shows, but the particles respawn anywhere on the grid, so with
-// them on the session takes the whole plane.
-let viewportTiles: TileRect[] | null = null;
-
+// them on the session takes the whole plane. Each session on screen keeps
+// its own answer in `viewTiles`.
 function sessionViewportTiles(session: VariableSession): TileRect[] | null {
   if (!session.tiles || !session.streaming) return null;
   if (session.resident && session.residentScope === "bundle") return null;
@@ -1677,22 +1820,26 @@ function sessionViewportTiles(session: VariableSession): TileRect[] | null {
   });
 }
 
-/** Recompute the view's tiles after a pan, a zoom, or a session change. A
- * plane already decoded for a wider set stays valid; anything narrower is
- * re-requested by the frame retry below. */
+/** Recompute the view's tiles after a pan, a zoom, or a session change, for
+ * every session on screen. A plane already decoded for a wider set stays
+ * valid; anything narrower is re-requested by the frame retry below. */
 function refreshViewportTiles(): void {
-  const next = activeSession ? sessionViewportTiles(activeSession) : null;
-  if (sameTileRects(next, viewportTiles)) return;
-  viewportTiles = next;
-  // The window is keyed by its first hour alone, so force the next send.
-  lastPrefetchWindow = "";
-  updateStatsReadout();
-  const session = activeSession;
-  if (session?.resident && session.residentScope === "viewport") {
-    // The view moved, so what it needs is no longer all local.
-    session.resident = false;
-    refreshDataCard(session);
+  let changed = false;
+  for (const session of slotSessions()) {
+    const next = sessionViewportTiles(session);
+    if (sameTileRects(next, session.viewTiles)) continue;
+    session.viewTiles = next;
+    changed = true;
+    // The window is keyed by its first hour alone, so force the next send.
+    lastPrefetchWindow.delete(session.id);
+    if (session.resident && session.residentScope === "viewport") {
+      // The view moved, so what it needs is no longer all local.
+      session.resident = false;
+      if (session === activeSession) refreshDataCard(session);
+    }
   }
+  if (!changed) return;
+  updateStatsReadout();
   const target = requestedFrameIndex ?? activeFrameIndex;
   if (target !== null) trySelectFrame(target);
 }
@@ -1705,11 +1852,11 @@ function sessionCoverage(session: VariableSession, tiles: TileRect[] | null): Co
   return coverageBox(session.tiles, grid.width, grid.height, tiles);
 }
 
-/** The plane cached under `key`, but only if it covers the current view. A
- * plane decoded for a viewport that has since moved is not a hit. */
-function cachedFrame(key: string): DecodedFrame | undefined {
+/** The plane cached under `key`, but only if it covers the session's current
+ * view. A plane decoded for a viewport that has since moved is not a hit. */
+function cachedFrame(key: string, session: VariableSession): DecodedFrame | undefined {
   const frame = planeCache.get(key);
-  return frame && coversTiles(frame.tiles, viewportTiles) ? frame : undefined;
+  return frame && coversTiles(frame.tiles, session.viewTiles) ? frame : undefined;
 }
 
 /** Every plane one frame of this session needs, straight out of the cache —
@@ -1765,52 +1912,62 @@ function displayPlane(session: VariableSession, index: number, planes: DecodedFr
   return packed;
 }
 
-/** Tell the active session which frames to keep resident (windowed
+/** Tell every session on screen which frames to keep resident (windowed
  * prefetch): the window ahead of the playhead, wrapped at the loop point,
- * and the tiles the view needs of them. */
+ * and the tiles the view needs of them. The primary gets the connection's
+ * concurrency; an overlay one fetch at a time, so it never crowds out the
+ * frame that gates playback, and on a constrained connection an overlay
+ * only prefetches while playback is stopped. */
 function sendPrefetchWindow(index: number): void {
-  const session = activeSession;
-  if (!session || !session.streaming || session.resident) return;
   const total = frameCount();
-  const hours: number[] = [];
-  for (let step = 0; step <= prefetchWindowFrames(); step += 1) {
-    hours.push(frameOffset((index + step) % total));
+  for (const session of slotSessions()) {
+    if (!session.streaming || session.resident) continue;
+    const overlay = session !== activeSession;
+    if (overlay && playing && constrainedConnection()) continue;
+    const hours: number[] = [];
+    for (let step = 0; step <= prefetchWindowFrames(); step += 1) {
+      const frame = (index + step) % total;
+      const offset = overlay ? sessionOffsetForLead(session, frameLeadSeconds(frame)) : frameOffset(frame);
+      if (offset !== null) hours.push(offset);
+    }
+    if (hours.length === 0) continue;
+    const key = String(hours[0]);
+    if (lastPrefetchWindow.get(session.id) === key) continue;
+    lastPrefetchWindow.set(session.id, key);
+    session.worker.postMessage({
+      type: "prefetch-window",
+      hours,
+      concurrency: overlay ? 1 : prefetchConcurrency(),
+      tiles: session.viewTiles ?? undefined,
+    });
   }
-  const key = `${session.id}:${hours[0]}`;
-  if (key === lastPrefetchWindow) return;
-  lastPrefetchWindow = key;
-  session.worker.postMessage({
-    type: "prefetch-window",
-    hours,
-    concurrency: prefetchConcurrency(),
-    tiles: viewportTiles ?? undefined,
-  });
 }
 
 /** Show the frame if every needed plane is decoded (one for scalars, the u/v
  * pair for wind); otherwise request the missing decodes. */
 function trySelectFrame(index: number): boolean {
   const session = activeSession;
-  if (!session || !layer) return false;
+  const slot = primarySlot();
+  if (!session || !slot || !layersAdded) return false;
   const hour = frameOffset(index);
   requestedFrameIndex = index;
   updateFrameReadout(index);
   sendPrefetchWindow(index);
   const keys = session.variables.map((variable) => cacheKey(variable.numericId, hour));
-  const planes = keys.map((key) => cachedFrame(key));
+  const planes = keys.map((key) => cachedFrame(key, session));
   if (planes.every((plane) => plane !== undefined)) {
     // Refresh LRU positions, then swap textures — no opacity involved.
     for (const [position, key] of keys.entries()) {
       planeCache.delete(key);
       planeCache.set(key, planes[position]!);
     }
+    ensureSlotGrid(slot, session);
     if (session.id === "wind10m") {
-      ensureSessionGrid();
       // One coverage box serves both channels, so it has to be a box both
       // planes hold: their own tiles when the pair agrees, and the view's
       // otherwise — cachedFrame has already proved every plane covers that.
-      const tiles = sameTileRects(planes[0]!.tiles, planes[1]!.tiles) ? planes[0]!.tiles : viewportTiles;
-      layer.setFrame(displayPlane(session, index, planes as DecodedFrame[]), sessionCoverage(session, tiles));
+      const tiles = sameTileRects(planes[0]!.tiles, planes[1]!.tiles) ? planes[0]!.tiles : session.viewTiles;
+      slot.layer.setFrame(displayPlane(session, index, planes as DecodedFrame[]), sessionCoverage(session, tiles));
       // The particles respawn anywhere on the grid, so they can only run on
       // whole planes. A narrowed session draws the field alone until the
       // overlay is switched back on and widens the session again.
@@ -1819,13 +1976,17 @@ function trySelectFrame(index: number): boolean {
         windLayer.setWindPlanes(planes[0]!.plane, planes[1]!.plane);
       }
     } else {
-      ensureSessionGrid();
-      layer.setFrame(planes[0]!.plane, sessionCoverage(session, planes[0]!.tiles));
-      scheduleLabels(planes[0]!, false);
+      slot.layer.setFrame(planes[0]!.plane, sessionCoverage(session, planes[0]!.tiles));
+      if (slot === slots.lines) scheduleLabels(planes[0]!, false);
     }
-    displayedReal = session.id;
+    slot.displayedReal = session.id;
+    slot.shownKey = keys[0]!;
     activeFrameIndex = index;
     desiredKey = null;
+    // The overlays follow the frame that is actually on screen, not the one
+    // asked for: a line chart of one hour over a field of another would be
+    // the wrong picture, whichever of the two were ahead.
+    for (const overlay of overlaySlots()) trySelectOverlayFrame(overlay, index);
     prefetchNext(index);
     return true;
   }
@@ -1836,7 +1997,58 @@ function trySelectFrame(index: number): boolean {
     if (planes[position] !== undefined) continue;
     requestDecode(session.variables[position]!.numericId, hour);
   }
+  // The overlays' planes for this frame are asked for now too, after the
+  // primary's, so they are as likely to be there when it lands.
+  for (const overlay of overlaySlots()) requestOverlayDecode(overlay, index);
   return false;
+}
+
+/** The overlay's frame offset for a primary frame, or null when its axis has
+ * no frame at that lead time. */
+function overlayOffset(slot: RasterSlot, index: number): number | null {
+  return slot.session ? sessionOffsetForLead(slot.session, frameLeadSeconds(index)) : null;
+}
+
+/** Show an overlay's plane for the primary frame at `index` if it is
+ * decoded; otherwise keep what it has and ask for the plane. A frame that is
+ * not on the overlay's axis at all hides the slot: "not decoded yet" and
+ * "does not exist" are different — the first is a slightly old chart, the
+ * second would be a chart of another hour drawn over this one. */
+function trySelectOverlayFrame(slot: RasterSlot, index: number): void {
+  const session = slot.session;
+  if (!session) return;
+  const offset = overlayOffset(slot, index);
+  if (offset === null) {
+    slot.layer.setVisible(false);
+    slot.wantedKey = null;
+    if (slot === slots.lines) clearLabels();
+    return;
+  }
+  const key = cacheKey(session.variable.numericId, offset);
+  const frame = cachedFrame(key, session);
+  if (!frame) {
+    slot.wantedKey = key;
+    requestDecode(session.variable.numericId, offset);
+    return;
+  }
+  planeCache.delete(key);
+  planeCache.set(key, frame);
+  ensureSlotGrid(slot, session);
+  slot.layer.setFrame(frame.plane, sessionCoverage(session, frame.tiles));
+  slot.layer.setVisible(true);
+  slot.displayedReal = session.id;
+  slot.shownKey = key;
+  slot.wantedKey = null;
+  if (slot === slots.lines) scheduleLabels(frame, false);
+}
+
+/** Ask for an overlay's plane for a primary frame without showing anything. */
+function requestOverlayDecode(slot: RasterSlot, index: number): void {
+  const session = slot.session;
+  const offset = overlayOffset(slot, index);
+  if (!session || offset === null) return;
+  const key = cacheKey(session.variable.numericId, offset);
+  if (!cachedFrame(key, session)) requestDecode(session.variable.numericId, offset);
 }
 
 /** Frames decoded ahead of the playhead during playback. One is not enough:
@@ -1846,13 +2058,16 @@ function trySelectFrame(index: number): boolean {
 const PLAYBACK_DECODE_AHEAD = 3;
 
 function prefetchNext(index: number): void {
-  if (!activeSession || !playing) return;
+  const session = activeSession;
+  if (!session || !playing) return;
   for (let step = 1; step <= PLAYBACK_DECODE_AHEAD; step += 1) {
-    const hour = frameOffset((index + step) % frameCount());
-    for (const variable of activeSession.variables) {
+    const frame = (index + step) % frameCount();
+    const hour = frameOffset(frame);
+    for (const variable of session.variables) {
       const key = cacheKey(variable.numericId, hour);
-      if (!cachedFrame(key)) requestDecode(variable.numericId, hour);
+      if (!cachedFrame(key, session)) requestDecode(variable.numericId, hour);
     }
+    for (const overlay of overlaySlots()) requestOverlayDecode(overlay, frame);
   }
 }
 
@@ -1861,9 +2076,9 @@ function requestDecode(variableId: number, hour: number): void {
   if (!session || !ready) return;
   const key = cacheKey(variableId, hour);
   if ([...inflight.values()].includes(key)) return;
-  // The wind session needs two planes per frame, so scale the inflight cap to
-  // the active session's channel count.
-  if (inflight.size >= 2 * (activeSession?.variables.length ?? 1)) {
+  // The wind session needs two planes per frame and an overlay adds its own,
+  // so the inflight cap scales with the planes one frame of the view needs.
+  if (inflight.size >= 2 * planesPerFrame()) {
     // Keep only the newest queued request while scrubbing.
     queuedRequest = { variableId, hour };
     return;
@@ -1876,10 +2091,18 @@ function requestDecode(variableId: number, hour: number): void {
     generation,
     variableId,
     frameOffset: hour,
-    // Only the active session's view narrows the decode; a background session
-    // (the other variable, preloading) is asked for whole planes.
-    tiles: (session === activeSession ? viewportTiles : null) ?? undefined,
+    // Only a session on screen narrows the decode to its view; a background
+    // session (the other variable, preloading) is asked for whole planes.
+    tiles: (slotSessions().includes(session) ? session.viewTiles : null) ?? undefined,
   });
+}
+
+/** Planes one frame of the whole view needs: the u/v pair for wind, one per
+ * scalar, summed over the slots on screen. */
+function planesPerFrame(): number {
+  let planes = 0;
+  for (const session of slotSessions()) planes += session.variables.length;
+  return Math.max(1, planes);
 }
 
 function handleDecodedFrame(message: {
@@ -1916,6 +2139,9 @@ function handleDecodedFrame(message: {
       displayedKeys.add(cacheKey(variable.numericId, frameOffset(activeFrameIndex)));
     }
   }
+  for (const overlay of overlaySlots()) {
+    if (overlay.shownKey !== null) displayedKeys.add(overlay.shownKey);
+  }
   while (planeCacheBytes > planeCacheBudgetBytes() && planeCache.size > 2) {
     const oldest = planeCache.keys().next().value;
     if (oldest === undefined || oldest === key) break;
@@ -1944,7 +2170,7 @@ function handleDecodedFrame(message: {
     }
   }
   // Display only the newest requested target; stale decodes stay cached.
-  if (desiredKey === key && activeVariable && layer) {
+  if (desiredKey === key && activeVariable) {
     const index = frameIndexForOffset(message.frameOffset);
     if (index < 0) return;
     const shown = trySelectFrame(index);
@@ -1953,6 +2179,11 @@ function handleDecodedFrame(message: {
     // deadline and steps again immediately — the fast half of the visible
     // fast/slow playback jitter.
     if (shown && playing) restartCadence(index);
+    return;
+  }
+  // An overlay's plane for the frame on screen: swap it in now.
+  for (const overlay of overlaySlots()) {
+    if (overlay.wantedKey === key && activeFrameIndex !== null) trySelectOverlayFrame(overlay, activeFrameIndex);
   }
 }
 
@@ -2058,14 +2289,20 @@ function updateVariablePresentation(session: VariableSession): void {
     span.textContent = label;
     return span;
   }));
-  // The level row is the pressure family's own switch; the rail keeps one
-  // tile for all nine of them, pressed whenever any level is on screen.
-  if (pressure) lastPressureVariableId = session.id as PressureBundleId;
-  levelRow.hidden = !pressure;
+  // The level row is the pressure family's own switch, shown whenever a
+  // surface is on screen — alone or as lines over a field; the rail's one
+  // pressure tile stands for the lines-alone view.
+  const lines = composition.lines;
+  if (lines !== null) lastPressureVariableId = lines;
+  levelRow.hidden = lines === null;
   // The particle overlay belongs to one layer, so its switch appears with it.
   particlesToggle.hidden = session.id !== "wind10m";
   for (const button of variableButtons) {
-    const pressed = button.dataset.group === "pressure" ? pressure : button.dataset.variable === session.id;
+    const pressed = button.dataset.level !== undefined
+      ? button.dataset.variable === lines
+      : button.dataset.group === "pressure"
+        ? pressure
+        : button.dataset.variable === composition.fill;
     button.setAttribute("aria-pressed", String(pressed));
   }
 }
@@ -2106,15 +2343,19 @@ function formatDegrees(value: number, axis: "NS" | "EW"): string {
   return `${Math.abs(value).toFixed(Math.abs(value) % 1 === 0 ? 0 : 1)}°${hemisphere}`;
 }
 
-/** Keep the address bar shareable: reflect the on-screen model and variable
- * into the query string (replaceState — switches are not history entries). */
-function syncUrl(variableId: ForecastBundleId): void {
+/** Keep the address bar shareable: reflect the on-screen model and
+ * composition into the query string (replaceState — switches are not history
+ * entries). `type` names the primary; `lines` the surface over a filled
+ * field, and nothing when the lines are the view. */
+function syncUrl(): void {
+  const variableId = compositionPrimary(composition);
   const base = activeCase
     ? searchForCaseVariable(variableId, window.location.search, activeCase.id)
     : searchForVariable(variableId, window.location.search, selectedModelId);
+  const withLines = searchWithLines(base, composition.fill !== null ? composition.lines : null);
   // Only a chosen, switched-off overlay is written; on is the default and
   // says nothing, so an ordinary shared link stays as short as it was.
-  const search = searchWithParticles(base, particlesEnabled || !particlesChosen);
+  const search = searchWithParticles(withLines, particlesEnabled || !particlesChosen);
   if (search === window.location.search) return;
   window.history.replaceState(null, "", `${window.location.pathname}${search}${window.location.hash}`);
 }
@@ -2154,8 +2395,9 @@ async function supportsRangeRequests(url: string): Promise<boolean> {
 async function downloadBundle(
   descriptor: { path: string; byteLength: number; crc32: string },
   sequence: number,
+  quiet = false,
 ): Promise<ArrayBuffer> {
-  preloadState.textContent = t("receivingBundle");
+  if (!quiet) preloadState.textContent = t("receivingBundle");
   const response = await fetch(artifactUrl(descriptor.path, descriptor.crc32));
   if (!response.ok) throw new Error(t("bundleRequestFailed", { status: response.status }));
   const total = descriptor.byteLength;
@@ -2174,6 +2416,7 @@ async function downloadBundle(
       data.set(chunk, offset);
       offset += chunk.byteLength;
       crc = crc32Update(crc, chunk);
+      if (quiet) continue;
       updateDownloadProgress(offset, total);
       loadStatus.textContent = t("receivingBundlePercent", { percent: Math.round((offset / total) * 100) });
     }
@@ -2183,7 +2426,7 @@ async function downloadBundle(
     data.set(buffer, 0);
     offset = buffer.byteLength;
     crc = crc32Update(crc, buffer);
-    updateDownloadProgress(offset, total);
+    if (!quiet) updateDownloadProgress(offset, total);
   }
 
   if (offset !== total) throw new Error(t("bundleLengthMismatch"));
@@ -2266,8 +2509,17 @@ function initializeChannel(
   });
 }
 
-/** Download and initialize one variable's bundle; resident sessions are reused. */
-function loadVariable(variableId: ForecastBundleId, sequence: number): Promise<VariableSession> {
+/** Download and initialize one variable's bundle; resident sessions are
+ * reused. An overlay loads quietly — the data card and the status line
+ * describe the primary — and takes the half-resolution tier where one is
+ * offered: contour lines are smoothed again in the shader, and nothing the
+ * lines slot draws needs the full grid, so the bytes go to the field the
+ * viewer is actually reading. `?res=full` still pins every session. */
+function loadVariable(
+  variableId: ForecastBundleId,
+  sequence: number,
+  role: "primary" | "overlay" = "primary",
+): Promise<VariableSession> {
   const resident = sessions.get(variableId);
   if (resident) return Promise.resolve(resident);
   const pending = sessionLoads.get(variableId);
@@ -2289,11 +2541,12 @@ function loadVariable(variableId: ForecastBundleId, sequence: number): Promise<V
     // variant always rides the Xue path — the video artifacts are full
     // resolution, so whenever a reduced tier suffices the half bundle is
     // strictly cheaper.
+    const overlay = role === "overlay";
     const variant = pickBundleVariant(
       descriptor.variants,
       neededGridWidth(),
       slowConnection(),
-      resolutionPreference,
+      overlay && resolutionPreference !== "full" ? "half" : resolutionPreference,
     );
     const video = h264Enabled ? descriptor.video : undefined;
     // Opted in, the video path must still earn its bytes — prefer it only
@@ -2320,6 +2573,7 @@ function loadVariable(variableId: ForecastBundleId, sequence: number): Promise<V
         const streamBuffer = await downloadBundle(
           { path: video.streamPath, byteLength: video.byteLength, crc32: video.crc32 },
           sequence,
+          overlay,
         );
         if (sequence !== initializeSequence) throw new DOMException("aborted", "AbortError");
         source = { kind: "buffer", buffer: streamBuffer };
@@ -2351,7 +2605,7 @@ function loadVariable(variableId: ForecastBundleId, sequence: number): Promise<V
         };
         downloadedBytes = 0;
       } else {
-        const initBuffer = await downloadBundle(target, sequence);
+        const initBuffer = await downloadBundle(target, sequence, overlay);
         if (sequence !== initializeSequence) throw new DOMException("aborted", "AbortError");
         channel = spawnWorker();
         initMessage = { type: "init", buffer: initBuffer };
@@ -2362,7 +2616,7 @@ function loadVariable(variableId: ForecastBundleId, sequence: number): Promise<V
       totalBytes = target.byteLength;
     }
 
-    loadStatus.textContent = streaming ? t("readingIndex") : t("initializingDecoder");
+    if (!overlay) loadStatus.textContent = streaming ? t("readingIndex") : t("initializingDecoder");
     const {
       worker: sessionWorker,
       metadata: bundleMetadata,
@@ -2402,6 +2656,8 @@ function loadVariable(variableId: ForecastBundleId, sequence: number): Promise<V
       streaming,
       resident: !streaming,
       residentScope: "bundle",
+      viewTiles: null,
+      leadOffsets: null,
     };
     // Streaming progress may have raced ahead of session registration.
     const early = pendingStream.get(variableId);
@@ -2443,9 +2699,27 @@ const CONTOUR_SMOOTHING_CELLS = 2;
  * level registry: the registry says what to draw, the file says what its
  * codes mean, and a run encoded at a different profile stays correct.
  * A logarithmic codebook has no contour reading at all. */
-function contourStyleFor(variable: BundleVariable): ContourStyle | null {
+function contourStyleFor(variable: BundleVariable, overlay = false): ContourStyle | null {
   const level = pressureLevel(variable.id);
   if (!level || variable.quantization.type !== "linear") return null;
+  if (overlay) {
+    // Lines over another field: no fill of their own, and one ink that reads
+    // on every ground the fills use — near-white on the dark theme's slates,
+    // the paper theme's ink on white — a shade lighter than the chart's so
+    // the field underneath stays the subject.
+    return {
+      offset: variable.quantization.offset,
+      scale: variable.quantization.scale,
+      interval: level.contourInterval,
+      emphasisInterval: level.emphasisInterval ?? 0,
+      values: (level.emphasisContours ?? []).slice(0, MAX_NAMED_CONTOURS),
+      lineWidth: CONTOUR_WIDTH,
+      emphasisWidth: CONTOUR_EMPHASIS_WIDTH,
+      lineColor: isDark ? [1, 1, 1, 0.85] : [0.11, 0.1, 0.09, 0.85],
+      fillAlpha: 0,
+      smoothing: CONTOUR_SMOOTHING_CELLS,
+    };
+  }
   return {
     offset: variable.quantization.offset,
     scale: variable.quantization.scale,
@@ -2570,14 +2844,22 @@ function ensureLabelLayers(): GeoJSONSource | null {
 
 /** Ink for the labels: the ground's own ink, and a halo of the ground's
  * ocean tone rather than the basemap's paper, so it reads as a gap in the
- * line rather than a sticker on it. */
+ * line rather than a sticker on it. Over a filled field there is no one
+ * tone to open a gap in — the halo would be a box of ocean on a warm
+ * temperature field — so the lines slot as an overlay takes a soft shadow
+ * in the ink's opposite instead, the way the basemap's own names do. */
 function applyLabelInk(): void {
   if (!map.getLayer(CONTOUR_LABEL_LAYER)) return;
   const theme = currentBasemapTheme();
-  const ink = document.body.dataset.ground === "dark" ? "#eef1f4" : "#2a2824";
+  const darkGround = document.body.dataset.ground === "dark";
+  const overlay = slots.lines.session !== null && slots.lines.session !== activeSession;
+  const ink = darkGround ? "#eef1f4" : "#2a2824";
+  const halo = overlay ? (darkGround ? "rgba(0, 0, 0, 0.6)" : "rgba(255, 255, 255, 0.8)") : theme.ocean;
   for (const id of [CONTOUR_LABEL_LAYER, CENTER_LABEL_LAYER]) {
     map.setPaintProperty(id, "text-color", ink);
-    map.setPaintProperty(id, "text-halo-color", theme.ocean);
+    map.setPaintProperty(id, "text-halo-color", halo);
+    map.setPaintProperty(id, "text-halo-width", overlay ? 1.5 : id === CONTOUR_LABEL_LAYER ? 2.5 : 2);
+    map.setPaintProperty(id, "text-halo-blur", overlay ? 1 : 0.5);
   }
 }
 
@@ -2600,8 +2882,8 @@ function clearLabels(): void {
 /** Trace the labels for the plane on screen: right away when the viewer is
  * stepping or panning, throttled during playback. */
 function scheduleLabels(frame: DecodedFrame, force: boolean): void {
-  const session = activeSession;
-  if (!session || !layer || !contourStyleFor(session.variable)) return;
+  const session = slots.lines.session;
+  if (!session || !layersAdded || !contourStyleFor(session.variable)) return;
   const now = performance.now();
   if (!force && playing && now - labelsLastAt < LABELS_PLAYBACK_INTERVAL_MS) {
     // Remember the newest frame so the next allowed trace is not stale.
@@ -2617,9 +2899,10 @@ function scheduleLabels(frame: DecodedFrame, force: boolean): void {
 
 /** The frame on screen, traced again — after a pan, a zoom, or a stop. */
 function refreshLabels(): void {
-  const session = activeSession;
-  if (!session || activeFrameIndex === null || !contourStyleFor(session.variable)) return;
-  const frame = cachedFrame(cacheKey(session.variable.numericId, frameOffset(activeFrameIndex)));
+  const slot = slots.lines;
+  const session = slot.session;
+  if (!session || slot.shownKey === null || !contourStyleFor(session.variable)) return;
+  const frame = cachedFrame(slot.shownKey, session);
   if (frame) scheduleLabels(frame, true);
 }
 
@@ -2656,7 +2939,7 @@ function viewportCellWindow(grid: ReturnType<typeof geoGrid>): CellWindow | null
 }
 
 function sendLabels(frame: DecodedFrame): void {
-  const session = activeSession;
+  const session = slots.lines.session;
   if (!session) return;
   const style = contourStyleFor(session.variable);
   const level = pressureLevel(session.variable.id);
@@ -2718,18 +3001,53 @@ function handleLabels(response: LabelsWorkerResponse): void {
   if (pending && pending !== labelsLastPlane) scheduleLabels(pending, !playing);
 }
 
-/** Create the custom layer (and add it to the map) if it does not exist yet.
- * Grid configuration is the caller's business — poster and bundle planes use
- * different grids. */
-function ensureLayer(): ForecastLayer {
-  if (!layer) {
-    layer = new ForecastLayer((message) => showError(message));
+/** Add the slot layers to the map on first use, fill under lines, both under
+ * the basemap's boundaries and names; the particles, created later, go over
+ * both. Grid configuration is the caller's business — poster and bundle
+ * planes use different grids. */
+function ensureLayers(): void {
+  if (layersAdded) return;
+  map.addLayer(slots.fill.layer, FORECAST_ANCHOR_LAYER);
+  map.addLayer(slots.lines.layer, FORECAST_ANCHOR_LAYER);
+  layersAdded = true;
+}
+
+/** Empty a slot: nothing drawn, no session, and nothing waited on. The
+ * session itself stays resident, like every session that leaves the screen. */
+function detachSlot(slot: RasterSlot): void {
+  slot.session = null;
+  slot.displayedReal = null;
+  slot.shownKey = null;
+  slot.wantedKey = null;
+  slot.layer.setVisible(false);
+}
+
+/** Point a slot's layer at a session: its palette, its contour style (the
+ * chart's own when the lines are the view, the overlay's over a field), and
+ * magnitude mode for wind. */
+function configureSlotLayer(slot: RasterSlot, session: VariableSession, overlay: boolean): void {
+  slot.session = session;
+  const { layer } = slot;
+  if (session.id === "wind10m") {
+    // Wind is a filled field like every other layer — the speed, colored
+    // through the same shader from the u/v pair in one magnitude pass — and
+    // the particles ride over it as an optional overlay.
+    const field = windVectorField(session);
+    layer.setContours(null);
+    layer.setVectorField(field);
+    layer.setPalette(buildWindFieldPalette());
+    // Without linear codebooks on both components there is no speed to
+    // color; the overlay is then the whole layer, as it used to be.
+    layer.setVisible(field !== null);
+  } else {
+    layer.setVectorField(null);
+    layer.setPalette(buildPalette(session.variable));
+    layer.setContours(contourStyleFor(session.variable, overlay));
+    // An overlay shows nothing until its first plane lands: the slot may
+    // still hold another surface's plane, and lines of the wrong level over
+    // the field would be worse than none.
+    layer.setVisible(!overlay);
   }
-  if (!layerAdded) {
-    map.addLayer(layer, FORECAST_ANCHOR_LAYER);
-    layerAdded = true;
-  }
-  return layer;
 }
 
 /** The wind bundle's own decode for the layer's magnitude mode: each
@@ -2765,7 +3083,7 @@ function setParticlesEnabled(next: boolean): void {
   } catch {
     // The URL below still carries the choice for this session.
   }
-  syncUrl(selectedVariableId);
+  syncUrl();
   const session = activeSession;
   if (session?.id !== "wind10m") return;
   if (next) {
@@ -2808,21 +3126,25 @@ async function showPoster(variableId: ForecastBundleId, sequence: number): Promi
   try {
     const plane = await fetchPoster(artifactUrl(descriptor.path, descriptor.crc32), descriptor);
     if (sequence !== initializeSequence || selectedVariableId !== variableId) return;
+    const slot = slotFor(variableId);
     // A real frame of this variable beat the poster to the screen.
-    if (displayedReal === variableId) return;
+    if (slot.displayedReal === variableId) return;
     const posterMetadata = parseBundleMetadata(descriptor.metadataJson);
     const variable = posterMetadata.variables.find((item) => item.id === variableId);
     if (!variable) return;
-    const target = ensureLayer();
+    ensureLayers();
+    const target = slot.layer;
     target.configureGrid(posterMetadata);
-    layerGridSource = posterMetadata;
-    displayedReal = null;
+    slot.gridSource = posterMetadata;
+    slot.displayedReal = null;
+    slot.shownKey = null;
     // Every poster is one scalar plane, even the wind bundle's: switching
     // away from wind has to leave magnitude mode before this uploads.
     target.setVectorField(null);
     target.setPalette(buildPalette(variable));
     target.setContours(contourStyleFor(variable));
     target.setFrame(plane);
+    target.setVisible(true);
   } catch (error) {
     console.warn("poster skipped:", error);
   }
@@ -2863,38 +3185,30 @@ function syncTimeline(session: VariableSession): void {
 }
 
 function applyVariable(session: VariableSession): void {
-  if (!layer) return;
+  if (!layersAdded) return;
   // Another level's labels, or a filled field's none, replace the last.
   clearLabels();
   activeSession = session;
   activeVariable = session.variable;
   selectedVariableId = session.id;
+  // The composition follows the session that actually landed: a slot the
+  // run could not fill has already emptied by now.
+  composition = compositionForPrimary(session.id, composition.lines);
   syncTimeline(session);
-  updateVariablePresentation(session);
-  syncUrl(session.id);
+  const slot = slotFor(session.id);
+  configureSlotLayer(slot, session, false);
+  // The fill slot is only ever primary: with a surface as the view it goes
+  // dark. The lines slot is reconciled against the composition below.
+  if (slot !== slots.fill) detachSlot(slots.fill);
   const wind = session.id === "wind10m";
-  if (wind) {
-    // Wind is a filled field like every other layer — the speed, colored
-    // through the same shader from the u/v pair in one magnitude pass — and
-    // the particles ride over it as an optional overlay.
-    const field = windVectorField(session);
-    layer.setContours(null);
-    layer.setVectorField(field);
-    layer.setPalette(buildWindFieldPalette());
-    // Without linear codebooks on both components there is no speed to
-    // color; the overlay is then the whole layer, as it used to be.
-    layer.setVisible(field !== null);
-    if (particlesEnabled) {
-      ensureWindLayer();
-      ensureWindGrid(session);
-    }
-  } else {
-    layer.setVectorField(null);
-    layer.setPalette(buildPalette(session.variable));
-    layer.setContours(contourStyleFor(session.variable));
-    layer.setVisible(true);
+  if (wind && particlesEnabled) {
+    ensureWindLayer();
+    ensureWindGrid(session);
   }
   windLayer?.setVisible(wind && particlesEnabled);
+  applyOverlays();
+  updateVariablePresentation(session);
+  syncUrl();
   updateCacheReadout();
   // The data card reflects only the variable on screen: its own delivery
   // format, its own downloaded bytes, and its own delivery state — never a
@@ -2916,8 +3230,74 @@ function applyVariable(session: VariableSession): void {
   }
 }
 
+/** Reconcile the lines slot with the composition: over a filled field it
+ * carries the surface named in `lines`, loading it if need be — after the
+ * primary, never blocking it — and it empties when the composition names
+ * none. With the lines as the view the slot is the primary's and left alone. */
+function applyOverlays(): void {
+  const slot = slots.lines;
+  if (slot === primarySlot()) return;
+  const wanted = composition.fill !== null ? composition.lines : null;
+  if (wanted === null) {
+    if (slot.session) detachSlot(slot);
+    return;
+  }
+  if (slot.session?.id === wanted) {
+    // Already here — but possibly as the view, with the chart's own style.
+    configureSlotLayer(slot, slot.session, true);
+    if (slot.shownKey !== null) slot.layer.setVisible(true);
+    return;
+  }
+  if (slot.session) detachSlot(slot);
+  const sequence = initializeSequence;
+  loadVariable(wanted, sequence, "overlay")
+    .then((session) => {
+      if (sequence !== initializeSequence || !ready) return;
+      // The composition may have moved on while this loaded.
+      if (composition.fill === null || composition.lines !== wanted) return;
+      attachOverlay(slot, session);
+    })
+    .catch((error: unknown) => {
+      if (sequence !== initializeSequence) return;
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      showError(error instanceof Error ? error.message : t("bundleLoadFailed"));
+    });
+}
+
+/** Put a loaded session in an overlay slot and hand it the frame on screen. */
+function attachOverlay(slot: RasterSlot, session: VariableSession): void {
+  configureSlotLayer(slot, session, true);
+  clearLabels();
+  applyLabelInk();
+  refreshViewportTiles();
+  const index = activeFrameIndex ?? requestedFrameIndex ?? Number(slider.value);
+  sendPrefetchWindow(index);
+  if (activeFrameIndex !== null) trySelectOverlayFrame(slot, activeFrameIndex);
+  else requestOverlayDecode(slot, index);
+}
+
+/** Switch to a composition: load its primary if it is not the one on screen
+ * (the existing variable switch), then reconcile the overlays. A slot the
+ * run does not ship empties rather than errors. */
+async function activateComposition(next: ViewComposition): Promise<void> {
+  if (!manifest || !layersAdded || switchingVariable) return;
+  const resolved = resolveComposition(next, manifest, activeCase?.defaultVariable ?? DEFAULT_VARIABLE);
+  const primary = compositionPrimary(resolved);
+  composition = resolved;
+  if (primary !== activeSession?.id) {
+    await activateVariable(primary);
+    return;
+  }
+  // The same primary, other lines: only the overlay changes.
+  applyOverlays();
+  if (activeSession) {
+    updateVariablePresentation(activeSession);
+    syncUrl();
+  }
+}
+
 async function activateVariable(variableId: ForecastBundleId): Promise<void> {
-  if (!manifest || !layer || switchingVariable || variableId === activeSession?.id) return;
+  if (!manifest || !layersAdded || switchingVariable || variableId === activeSession?.id) return;
   const sequence = initializeSequence;
   const resident = sessions.get(variableId);
   if (resident) {
@@ -2967,13 +3347,12 @@ async function initialize(): Promise<void> {
   planeCache.clear();
   planeCacheBytes = 0;
   vectorPlanes.clear();
-  viewportTiles = null;
   probe?.clear();
   probeSeriesRequests.clear();
   scheduleProbeRender();
   lastDecodeMs = null;
   decodeEvents.length = 0;
-  lastPrefetchWindow = "";
+  lastPrefetchWindow.clear();
   pendingStream.clear();
   for (const session of sessions.values()) session.worker.terminate();
   sessions.clear();
@@ -2983,12 +3362,14 @@ async function initialize(): Promise<void> {
   manifestUrl = null;
   currentRun = null;
   metadata = null;
-  layerGridSource = null;
+  for (const slot of [slots.fill, slots.lines]) {
+    detachSlot(slot);
+    slot.gridSource = null;
+  }
   windLayerGridSource = null;
   windLayer?.setVisible(false);
   particlesToggle.hidden = true;
   clearLabels();
-  displayedReal = null;
   activeSession = null;
   activeVariable = null;
   activeFrameIndex = null;
@@ -3023,7 +3404,9 @@ async function initialize(): Promise<void> {
       // The case names the layer its event is about — a heat dome opens on
       // temperature, not on the app's usual precipitation. Only an explicit
       // ?type= overrides it.
-      if (!caseDefaultApplied && requestedVariableId === null) selectedVariableId = found.defaultVariable;
+      if (!caseDefaultApplied && requestedVariableId === null) {
+        composition = compositionForPrimary(found.defaultVariable, composition.lines);
+      }
       caseDefaultApplied = true;
       document.body.classList.add("is-showcase");
       updateCasePresentation(found);
@@ -3060,10 +3443,11 @@ async function initialize(): Promise<void> {
           ? !PRESSURE_BUNDLE_IDS.some((id) => hasBundle(loadedManifest, id))
           : !hasBundle(loadedManifest, bundleId);
     }
-    if (!hasBundle(loadedManifest, selectedVariableId)) {
-      // A case names its own default; a live run always carries the core pair.
-      selectedVariableId = activeCase?.defaultVariable ?? DEFAULT_VARIABLE;
-    }
+    // A slot this run does not ship empties; a case names its own default
+    // for when that leaves nothing, and a live run always carries the core
+    // pair.
+    composition = resolveComposition(composition, loadedManifest, activeCase?.defaultVariable ?? DEFAULT_VARIABLE);
+    selectedVariableId = compositionPrimary(composition);
 
     // Paint the poster while the bundle opens (never blocks the load).
     void showPoster(selectedVariableId, sequence);
@@ -3071,8 +3455,8 @@ async function initialize(): Promise<void> {
     const session = await loadVariable(selectedVariableId, sequence);
     if (sequence !== initializeSequence) return;
 
-    ensureLayer();
-    // If a poster is on screen, keep it: ensureSessionGrid() switches the
+    ensureLayers();
+    // If a poster is on screen, keep it: ensureSlotGrid() switches the
     // layer to the session's bundle grid the moment the first real plane is
     // ready (trySelectFrame's cached branch).
 
@@ -3114,10 +3498,19 @@ slider.addEventListener("keydown", (event) => {
 });
 for (const button of variableButtons) {
   button.addEventListener("click", () => {
-    const variableId =
-      button.dataset.group === "pressure" ? preferredPressureVariable() : button.dataset.variable;
-    if (variableId && FORECAST_BUNDLE_IDS.includes(variableId as ForecastBundleId)) {
-      void activateVariable(variableId as ForecastBundleId);
+    const id = button.dataset.variable as ForecastBundleId | undefined;
+    if (!id || !FORECAST_BUNDLE_IDS.includes(id)) return;
+    if (button.dataset.level !== undefined) {
+      // A level changes the lines wherever they are: the view, or the chart
+      // over a field.
+      if (isPressureBundle(id)) void activateComposition({ ...composition, lines: id });
+    } else if (button.dataset.group === "pressure") {
+      // The pressure tile is the lines-alone view; from a field with lines
+      // over it, this is the way out to the chart itself.
+      void activateComposition({ fill: null, lines: preferredPressureVariable() as PressureBundleId });
+    } else {
+      // A fill tile changes the field alone; lines over it stay.
+      void activateComposition({ fill: id, lines: composition.lines });
     }
   });
 }
@@ -3136,7 +3529,7 @@ for (const button of modelButtons) {
     // currently selected variable.
     selectedModelId = modelId as ForecastModelId;
     updateModelPresentation();
-    syncUrl(selectedVariableId);
+    syncUrl();
     void initialize();
   });
 }

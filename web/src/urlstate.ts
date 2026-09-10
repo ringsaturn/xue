@@ -4,6 +4,7 @@ import {
   type ForecastModelId,
   type ResolutionPreference,
 } from "./manifest";
+import { isPressureBundle, type PressureBundleId } from "./pressure";
 
 /** Default model when the URL names none (or names one this app does not
  * serve — a bad link falls back rather than erroring). */
@@ -176,6 +177,30 @@ export function parseVariableFromSearch(search: string): ForecastBundleId | null
   const type = params.get("type");
   if (type === null) return null;
   return TYPE_ALIASES[type.toLowerCase()] ?? null;
+}
+
+/** The contour lines drawn over a filled field, from `?lines=`. Any spelling
+ * `?type=` accepts for a pressure surface works here too (`lines=pressure`,
+ * `lines=hgt500`); a value naming a filled field, or nothing this app knows,
+ * reads as no overlay rather than an error. The lines slot is only ever a
+ * pressure surface: a filled field cannot be drawn as lines, and two filled
+ * fields over each other has no reading. */
+export function parseLinesFromSearch(search: string): PressureBundleId | null {
+  const value = new URLSearchParams(search).get("lines");
+  if (value === null) return null;
+  const id = TYPE_ALIASES[value.trim().toLowerCase()];
+  return id !== undefined && isPressureBundle(id) ? id : null;
+}
+
+/** The given query string carrying the lines overlay, or none. Written only
+ * when a filled field has lines over it: a view of the lines alone names
+ * them in `type`, and a second copy in `lines` would be one parameter
+ * contradicting the other the next time either changed. */
+export function searchWithLines(search: string, lines: PressureBundleId | null): string {
+  const params = new URLSearchParams(search);
+  if (lines === null) params.delete("lines");
+  else params.set("lines", CANONICAL_TYPE[lines]);
+  return `?${params.toString()}`;
 }
 
 /** Query string advertising the given model and variable, preserving any

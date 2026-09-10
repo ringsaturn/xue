@@ -449,7 +449,6 @@ export function gaussianWeights(sigma: number): number[] {
 }
 
 export class ForecastLayer implements CustomLayerInterface {
-  readonly id = "forecast-plane";
   readonly type = "custom" as const;
   readonly renderingMode = "2d" as const;
 
@@ -497,7 +496,13 @@ export class ForecastLayer implements CustomLayerInterface {
   private pendingPlaneB: Uint8Array | null = null;
   private pendingPalette: Uint8Array | null = null;
 
-  constructor(private readonly onUnsupported: (message: string) => void) {}
+  /** One instance per raster slot on the map — the filled field and the
+   * contour lines are two planes from two bundles — so the MapLibre layer
+   * id is the caller's to name. */
+  constructor(
+    private readonly onUnsupported: (message: string) => void,
+    readonly id: string = "forecast-plane",
+  ) {}
 
   configureGrid(metadata: BundleMetadata): void {
     const grid = metadata.grid as Record<string, number | boolean>;

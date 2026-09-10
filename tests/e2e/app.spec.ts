@@ -25,6 +25,11 @@ const WIND_FIXTURE = readFileSync(
 const HGT500_FIXTURE = readFileSync(
   fileURLToPath(new URL("../fixtures/generated/web/hgt500.xue", import.meta.url)),
 );
+// Its half-resolution tier, which is what the level takes as lines over a
+// filled field: the lines slot never needs the full grid.
+const HGT500_HALF_FIXTURE = readFileSync(
+  fileURLToPath(new URL("../fixtures/generated/web/hgt500.half.xue", import.meta.url)),
+);
 const MANIFEST_FIXTURE = JSON.parse(
   readFileSync(
     fileURLToPath(new URL("../fixtures/generated/web/manifest.json", import.meta.url)),
@@ -94,6 +99,8 @@ const SFLUX_LATEST_FIXTURE = JSON.parse(
 interface BundleCounters {
   tmp2m: number;
   prate: number;
+  /** Either tier of the height bundle; counted only when asked for. */
+  hgt500?: number;
 }
 
 /** Serves the two-layer manifest contract: the mutable latest.json pointer,
@@ -128,6 +135,7 @@ async function routeBundle(
     if (counters && !isProbe && (name === "tmp2m.xue" || name === "prate.xue")) {
       counters[name === "tmp2m.xue" ? "tmp2m" : "prate"] += 1;
     }
+    if (counters?.hgt500 !== undefined && !isProbe && name.startsWith("hgt500.")) counters.hgt500 += 1;
     const pathname = new URL(route.request().url()).pathname;
     const isEcmwf = pathname.includes("/ecmwf.");
     const isSflux = pathname.includes("/sflux.");
@@ -143,7 +151,9 @@ async function routeBundle(
             ? WIND_FIXTURE
             : name === "hgt500.xue"
               ? HGT500_FIXTURE
-              : (prateBody ?? PRATE_FIXTURE);
+              : name === "hgt500.half.xue"
+                ? HGT500_HALF_FIXTURE
+                : (prateBody ?? PRATE_FIXTURE);
     if (!body) return route.fulfill({ status: 404, body: "missing" });
     return route.fulfill({
       status: 200,
@@ -366,6 +376,71 @@ test("a pressure level loads as its own contour session", async ({ page }, testI
   await slider.focus();
   await page.keyboard.press("ArrowRight");
   await expect(page.locator("#frame-tooltip")).toContainText("F001");
+});
+
+test("?lines= draws a pressure surface over the filled field", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop", "desktop interaction coverage");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const counters: BundleCounters = { tmp2m: 0, prate: 0, hgt500: 0 };
+  await routeManifest(page);
+  await routeBundle(page, counters);
+  await page.goto("/?type=precip&lines=hgt500");
+  await waitForReady(page);
+  // The field is the view: its ground, its legend, its data card. The lines
+  // are a second session over it, taking the half tier and loading after
+  // the field rather than gating it.
+  await expect(page.locator("body")).toHaveAttribute("data-variable", "prate");
+  await expect(page.locator("#legend-unit")).toHaveText("mm/h");
+  await expect(page.locator("#preload-format")).toHaveText("Xue");
+  await expect.poll(() => counters.hgt500).toBe(1);
+  expect(counters.prate).toBe(1);
+  // The level row belongs to the lines slot, wherever the lines are drawn.
+  await expect(page.locator("#level-row")).toBeVisible();
+  await expect(page.getByRole("button", { name: "500MB HEIGHT" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("button", { name: "PRECIP RATE" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("button", { name: "PRESSURE FIELD" })).toHaveAttribute("aria-pressed", "false");
+  // The lines follow the timeline of the field.
+  const slider = page.getByRole("slider", { name: "Forecast hour" });
+  await slider.focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(page.locator("#frame-tooltip")).toContainText("F001");
+  // A fill switch keeps the lines: the level row stays, the URL carries both.
+  await page.getByRole("button", { name: "TEMP 2M" }).click();
+  await expect(page.locator("body")).toHaveAttribute("data-variable", "tmp2m");
+  await expect(page.locator("#level-row")).toBeVisible();
+  await expect(page).toHaveURL(/type=temp/);
+  await expect(page).toHaveURL(/lines=hgt500/);
+  expect(counters).toEqual({ tmp2m: 1, prate: 1, hgt500: 1 });
+  // The pressure tile is the chart alone: the level names itself in `type`
+  // and `lines` goes, so the two never contradict each other.
+  await page.getByRole("button", { name: "PRESSURE FIELD" }).click();
+  await expect(page.locator("body")).toHaveAttribute("data-variable", "hgt500");
+  await expect(page).toHaveURL(/type=hgt500/);
+  await expect(page).not.toHaveURL(/lines=/);
+  await expect(page.locator("#legend")).toBeHidden();
+  // Back to a field from the chart, and the lines stay over it.
+  await page.getByRole("button", { name: "PRECIP RATE" }).click();
+  await expect(page.locator("body")).toHaveAttribute("data-variable", "prate");
+  await expect(page).toHaveURL(/type=precip/);
+  await expect(page).toHaveURL(/lines=hgt500/);
+  await expect(page.locator("#legend")).toBeVisible();
+  // Every session stayed resident throughout.
+  expect(counters).toEqual({ tmp2m: 1, prate: 1, hgt500: 1 });
+});
+
+test("playback keeps moving with lines over the field", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop", "desktop interaction coverage");
+  await routeManifest(page);
+  await routeBundle(page);
+  await page.goto("/?type=precip&lines=hgt500");
+  await waitForReady(page);
+  const slider = page.getByRole("slider", { name: "Forecast hour" });
+  await expect(page.getByRole("button", { name: "Pause animation" })).toBeVisible();
+  // Two sessions decode for every frame; the field gates the playhead and
+  // the lines catch up, so the playhead has to keep walking the axis rather
+  // than wait on both.
+  await expect.poll(() => slider.inputValue().then(Number), { timeout: 15_000 }).toBeGreaterThan(8);
+  await expect(page.locator("#level-row")).toBeVisible();
 });
 
 test("?type=hgt500 opens the height view straight from the URL", async ({ page }, testInfo) => {
