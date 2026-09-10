@@ -245,9 +245,13 @@ windowed: the main thread sends `prefetch-window` with the hours just ahead of
 the playhead plus a concurrency cap.
 
 `main.ts` (large, deliberately central) picks the delivery path per session:
-WebCodecs if supported and a video artifact exists, otherwise streaming if a
-range probe succeeds, otherwise a whole-bundle download; and picks a
-resolution tier via `pickBundleVariant` from the viewport and connection.
+WebCodecs only when `?use_h264=true` opts in and a video artifact exists and
+the browser supports it, otherwise streaming if a range probe succeeds,
+otherwise a whole-bundle download; and picks a resolution tier via
+`pickBundleVariant` from the viewport and connection. The video path is off by
+default — the Xue decoder is the everyday path, and `use_h264` (parsed in
+`urlstate.ts` like the rest of the URL state) is what turns the companions
+back on.
 `layer.ts` renders one quantized R8 plane with inverse Web Mercator and a
 palette lookup in the fragment shader, blending two frames via `u_mix` (never
 animate raster opacity). `particles.ts` renders 10 m wind. `playback.ts` holds
@@ -264,8 +268,9 @@ moving at one apparent speed.
   swaps "FORECAST HOUR"/`F058`/模式周期/有效时间 for
   "TIME ELAPSED"/`T+058:24`/观测起点/观测时间, on the viewer and on the
   showcase cards. Observations have no run cycle and no lead time.
-- URL state (`?model=`, `?type=`, `?case=`, `?lang=`) is parsed in
-  `urlstate.ts`; unrecognized values fall back to defaults rather than error.
+- URL state (`?model=`, `?type=`, `?case=`, `?lang=`, `?use_h264=`) is parsed
+  in `urlstate.ts`; unrecognized values fall back to defaults rather than
+  error.
 - The Python encoder and Rust decoder are held byte-identical by golden tests
   (`rust/xue/tests/golden.rs`) against fixtures built by
   `tests/prepare_bin_fixture.py`. A format change means changing the spec, both

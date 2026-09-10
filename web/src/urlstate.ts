@@ -65,6 +65,16 @@ export function parseCaseFromSearch(search: string): string | null {
   return id;
 }
 
+/** Whether this session may use the H.264 companion artifacts. The video
+ * path is opt-in: `?use_h264=true` (or `1`) turns it on, and anything else —
+ * including no param at all — keeps every variable on the Xue decoder. */
+export function parseUseH264FromSearch(search: string): boolean {
+  const value = new URLSearchParams(search).get("use_h264");
+  if (value === null) return false;
+  const normalized = value.trim().toLowerCase();
+  return normalized === "true" || normalized === "1";
+}
+
 /** Variable requested by the page URL, or null when the URL names none (or
  * names a type this app does not serve — a bad link falls back to the
  * default rather than erroring). */

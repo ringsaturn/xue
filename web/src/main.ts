@@ -51,6 +51,7 @@ import {
   DEFAULT_VARIABLE,
   parseCaseFromSearch,
   parseModelFromSearch,
+  parseUseH264FromSearch,
   parseVariableFromSearch,
   searchForCaseVariable,
   searchForVariable,
@@ -457,6 +458,10 @@ let selectedVariableId: ForecastBundleId = requestedVariableId ?? DEFAULT_VARIAB
  * switch is hidden, the live pointer is never read, and the new-run poll is
  * off — everything below the manifest is the ordinary viewer. */
 const requestedCaseId: string | null = parseCaseFromSearch(window.location.search);
+/** Whether this session may take the H.264 video path at all. It is off by
+ * default — the Xue decoder is the everyday path, and the video artifacts
+ * ride along only for `?use_h264=true`. */
+const h264Enabled = parseUseH264FromSearch(window.location.search);
 let activeCase: ShowcaseCase | null = null;
 /** A case's own default layer applies on the first load only; after that the
  * viewer keeps whatever the visitor picked, even across a retry. */
@@ -1994,11 +1999,12 @@ function loadVariable(variableId: ForecastBundleId, sequence: number): Promise<V
     // resolution, so whenever a reduced tier suffices the half bundle is
     // strictly cheaper.
     const variant = pickBundleVariant(descriptor.variants, neededGridWidth(), slowConnection());
-    const video = descriptor.video;
-    // The video path must also earn its bytes — prefer it only when the
-    // stream is not larger than the bundle it replaces (lossless H.264 wins
-    // that comparison for tmp2m but loses it for prate; the manifest's
-    // byteLengths decide, so a future lossy tier flips this automatically).
+    const video = h264Enabled ? descriptor.video : undefined;
+    // Opted in, the video path must still earn its bytes — prefer it only
+    // when the stream is not larger than the bundle it replaces (lossless
+    // H.264 wins that comparison for tmp2m but loses it for prate; the
+    // manifest's byteLengths decide, so a future lossy tier flips this
+    // automatically).
     if (
       !variant &&
       video &&

@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { parseModelFromSearch, parseVariableFromSearch, searchForVariable } from "../../web/src/urlstate";
+import {
+  parseModelFromSearch,
+  parseUseH264FromSearch,
+  parseVariableFromSearch,
+  searchForVariable,
+} from "../../web/src/urlstate";
 
 describe("parseVariableFromSearch", () => {
   it("resolves the canonical type names", () => {
@@ -80,5 +85,30 @@ describe("searchForVariable", () => {
     expect(parseModelFromSearch(searchForVariable("prate", "", "ecmwf"))).toBe("ecmwf");
     expect(searchForVariable("dswrf", "", "sflux")).toBe("?model=sflux&type=solar");
     expect(parseModelFromSearch(searchForVariable("dswrf", "", "sflux"))).toBe("sflux");
+  });
+});
+
+describe("parseUseH264FromSearch", () => {
+  it("is off unless the URL opts in", () => {
+    expect(parseUseH264FromSearch("")).toBe(false);
+    expect(parseUseH264FromSearch("?model=gfs&type=temp")).toBe(false);
+  });
+
+  it("accepts true and 1, case-insensitively", () => {
+    expect(parseUseH264FromSearch("?use_h264=true")).toBe(true);
+    expect(parseUseH264FromSearch("?use_h264=TRUE")).toBe(true);
+    expect(parseUseH264FromSearch("?use_h264=1")).toBe(true);
+    expect(parseUseH264FromSearch("?model=gfs&use_h264=true&type=temp")).toBe(true);
+  });
+
+  it("treats any other value as off rather than erroring", () => {
+    expect(parseUseH264FromSearch("?use_h264=false")).toBe(false);
+    expect(parseUseH264FromSearch("?use_h264=0")).toBe(false);
+    expect(parseUseH264FromSearch("?use_h264=")).toBe(false);
+    expect(parseUseH264FromSearch("?use_h264=yes%20please")).toBe(false);
+  });
+
+  it("survives a layer switch, which preserves unrelated params", () => {
+    expect(parseUseH264FromSearch(searchForVariable("prate", "?use_h264=true"))).toBe(true);
   });
 });

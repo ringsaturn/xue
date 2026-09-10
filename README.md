@@ -76,7 +76,7 @@ implementations share it:
 - **TypeScript frontend** (`web/src/`): manifest resolution with
   resolution-tier selection, a decode worker with windowed prefetch, the
   WebGL2 blend-playback layer, the wind particle layer, and an alternate
-  WebCodecs H.264 path where the browser supports it.
+  WebCodecs H.264 path, opt-in per session with `?use_h264=true`.
 
 Cross-language golden tests keep the Python encoder and Rust decoder
 byte-identical.
