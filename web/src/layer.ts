@@ -26,7 +26,10 @@ import { WHOLE_PLANE_COVERAGE, type CoverageBox } from "./tiles";
  * sample and costs one comparison.
  */
 
-const VERTEX_SHADER = `#version 300 es
+// Exported so a headless WebGL2 test can compile and sample the real shader:
+// the antimeridian seam this clips at is a pixel-level property no
+// application-level test sees.
+export const VERTEX_SHADER = `#version 300 es
 in vec2 a_position;
 uniform mat4 u_matrix;
 out vec2 v_mercator;
@@ -35,7 +38,7 @@ void main() {
   gl_Position = u_matrix * vec4(a_position, 0.0, 1.0);
 }`;
 
-const FRAGMENT_SHADER = `#version 300 es
+export const FRAGMENT_SHADER = `#version 300 es
 precision highp float;
 in vec2 v_mercator;
 uniform sampler2D u_data;
@@ -112,9 +115,15 @@ void main() {
   // never leave the vertical range, so only a cropped grid is ever clipped;
   // without this the edge texels would smear across the whole map.
   if (v < 0.0 || v > 1.0 || (u_wrap < 0.5 && (u < 0.0 || u > 1.0))) discard;
+  // The coverage test runs on the wrapped coordinate. On a global grid the
+  // half-cell before the antimeridian lands just past u = 1 (the cell center
+  // is half a step east of 360 degrees) and the texture's own REPEAT resolves
+  // it; comparing the raw u against the box would discard that sliver and
+  // leave a hairline gap down the dateline.
+  float cu = u_wrap > 0.5 ? fract(u) : u;
   bool coveredU = u_cover.x <= u_cover.y
-    ? (u >= u_cover.x && u <= u_cover.y)
-    : (u >= u_cover.x || u <= u_cover.y);
+    ? (cu >= u_cover.x && cu <= u_cover.y)
+    : (cu >= u_cover.x || cu <= u_cover.y);
   if (!coveredU || v < u_cover.z || v > u_cover.w) discard;
   float code = sampleCode(u_data, vec2(u, v));
   if (u_mix > 0.0) {
