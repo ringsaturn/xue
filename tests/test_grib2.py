@@ -18,8 +18,8 @@ FIXTURE = Path(__file__).parent / "fixtures" / "gfs.2026081406.f000.crop.grib2"
 class IndexMessagesTests(unittest.TestCase):
     def test_fixture_identities(self) -> None:
         messages = grib2.index_messages(FIXTURE)
-        self.assertEqual(len(messages), 2)
-        temperature, precipitation = messages
+        self.assertEqual(len(messages), 6)
+        temperature, precipitation, pressure, *heights = messages
         self.assertEqual(temperature.band, 1)
         self.assertEqual(
             (temperature.discipline, temperature.parameter_category, temperature.parameter_number),
@@ -34,6 +34,24 @@ class IndexMessagesTests(unittest.TestCase):
             (2, 1, 7),
         )
         self.assertEqual((precipitation.level_type, precipitation.level_value), (1, 0.0))
+        # Mean sea level pressure: the surface (101) carries no value of its
+        # own, which GRIB2 writes as a zero the registry declares as None.
+        self.assertEqual(
+            (pressure.band, pressure.parameter_category, pressure.parameter_number),
+            (3, 3, 1),
+        )
+        self.assertEqual((pressure.level_type, pressure.level_value), (101, 0.0))
+        # The three published isobaric surfaces, whose value is the level in
+        # pascals — the same number variables.py declares for each level.
+        self.assertEqual(
+            [(message.band, message.level_type, message.level_value) for message in heights],
+            [(4, 100, 85000.0), (5, 100, 50000.0), (6, 100, 25000.0)],
+        )
+        for height in heights:
+            self.assertEqual(
+                (height.discipline, height.parameter_category, height.parameter_number),
+                (0, 3, 5),
+            )
 
     def test_rejects_non_grib_payload(self) -> None:
         with tempfile.NamedTemporaryFile(suffix=".grib2") as handle:

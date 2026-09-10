@@ -333,14 +333,20 @@ def _is_mean_sea_level_pressure(metadata: dict[str, str], description: str) -> b
 
 
 def _is_isobaric_height(metadata: dict[str, str], description: str, level_hpa: int) -> bool:
-    """HGT on one isobaric surface. GDAL spells the short name
-    ``<level in mb>-ISBL``; the phrase fallback accepts the level written as
-    millibars or hectopascals, and both must name *this* level — a matcher
-    that let 500 also match 1000 would silently pick the wrong plane."""
+    """HGT on one isobaric surface.
+
+    The surface value is pascals in GRIB2 itself, and that is what GDAL
+    reports: the 850 hPa record comes back as short name ``85000-ISBL`` with
+    the description ``85000[Pa] ISBL="Isobaric surface"``. Hectopascals are
+    accepted too — that is how the level is spelled in an ``.idx`` phrase and
+    in every human-facing description — so a driver reporting ``850-ISBL``
+    still matches. Whichever unit, it must name *this* level: a matcher that
+    let 500 also match 1000 (or 50000 Pa also match 100000) would silently
+    pick the wrong plane."""
     if metadata.get("GRIB_ELEMENT", "").upper() != "HGT":
         return False
     short_name = metadata.get("GRIB_SHORT_NAME", "").upper()
-    if short_name == f"{level_hpa}-ISBL":
+    if short_name in {f"{level_hpa}-ISBL", f"{level_hpa * 100}-ISBL"}:
         return True
     searchable = " ".join(
         [
@@ -353,7 +359,12 @@ def _is_isobaric_height(metadata: dict[str, str], description: str, level_hpa: i
 
 
 def _isobaric_level_re(level_hpa: int) -> re.Pattern[str]:
-    return re.compile(rf"(?:^|[^0-9]){level_hpa}\s*(?:mb|hpa)(?:$|[^a-z0-9])", re.IGNORECASE)
+    """The level written either way: ``850 mb`` / ``850 hPa`` / ``85000 Pa``
+    (GDAL writes the pascals form with the unit bracketed, ``85000[Pa]``)."""
+    return re.compile(
+        rf"(?:^|[^0-9])(?:{level_hpa}\s*\[?(?:mb|hpa)\]?|{level_hpa * 100}\s*\[?pa\]?)(?:$|[^a-z0-9])",
+        re.IGNORECASE,
+    )
 
 
 def _band_matches(variable_id: str, metadata: dict[str, str], description: str) -> bool:

@@ -152,12 +152,19 @@ pub fn raster_expression(variable_id: &str, unit: &str) -> Result<String> {
     }
 }
 
-/// Whether one band names the given isobaric surface. GDAL spells the short
-/// name `<level in mb>-ISBL`; the phrase fallback accepts the level written as
-/// millibars or hectopascals, and both must name *this* level — a matcher
-/// that let 500 also match 1000 would silently pick the wrong plane.
+/// Whether one band names the given isobaric surface.
+///
+/// The surface value is pascals in GRIB2 itself, and that is what GDAL
+/// reports: the 850 hPa record comes back as short name `85000-ISBL` with the
+/// description `85000[Pa] ISBL="Isobaric surface"`. Hectopascals are accepted
+/// too — that is how the level is spelled in an `.idx` phrase and in every
+/// human-facing description. Whichever unit, it must name *this* level: a
+/// matcher that let 500 also match 1000 (or 50000 Pa also match 100000) would
+/// silently pick the wrong plane.
 fn is_isobaric_height(band: &BandInfo, level_hpa: u32) -> bool {
-    if band.item("GRIB_SHORT_NAME").to_uppercase() == format!("{level_hpa}-ISBL") {
+    let short_name = band.item("GRIB_SHORT_NAME").to_uppercase();
+    let level_pa = level_hpa * 100;
+    if short_name == format!("{level_hpa}-ISBL") || short_name == format!("{level_pa}-ISBL") {
         return true;
     }
     let text = [
@@ -167,7 +174,7 @@ fn is_isobaric_height(band: &BandInfo, level_hpa: u32) -> bool {
     ]
     .join(" ");
     Regex::new(&format!(
-        r"(?i)(?:^|[^0-9]){level_hpa}\s*(?:mb|hpa)(?:$|[^a-z0-9])"
+        r"(?i)(?:^|[^0-9])(?:{level_hpa}\s*\[?(?:mb|hpa)\]?|{level_pa}\s*\[?pa\]?)(?:$|[^a-z0-9])"
     ))
     .expect("valid regex")
     .is_match(&text)

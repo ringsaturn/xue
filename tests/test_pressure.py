@@ -211,20 +211,52 @@ class RecordMatchingTests(unittest.TestCase):
         )
 
     def test_a_level_matches_only_itself(self) -> None:
+        # Both spellings of the surface: pascals, which is what GRIB2 stores
+        # and GDAL reports, and hectopascals, which is how the level is
+        # written in an .idx phrase and in human-facing descriptions.
         for level in HEIGHT_LEVELS_HPA:
             variable_id = height_variable_id(level)
-            metadata = {"GRIB_ELEMENT": "HGT", "GRIB_SHORT_NAME": f"{level}-ISBL"}
+            for short_name in (f"{level}-ISBL", f"{level * 100}-ISBL"):
+                metadata = {"GRIB_ELEMENT": "HGT", "GRIB_SHORT_NAME": short_name}
+                with self.subTest(level=level, short_name=short_name):
+                    self.assertTrue(_band_matches(variable_id, metadata, ""))
+                    for other in HEIGHT_LEVELS_HPA:
+                        if other != level:
+                            self.assertFalse(_band_matches(height_variable_id(other), metadata, ""))
+
+    def test_the_bands_a_real_gfs_file_reports_match(self) -> None:
+        """The shape GDAL 3.x actually hands back for a pgrb2 HGT record.
+
+        The level is in pascals in both the short name and the description,
+        which no hectopascal-only matcher would have hit — every isobaric
+        level would have been reported missing from a complete file."""
+        for level in HEIGHT_LEVELS_HPA:
+            metadata = {
+                "GRIB_ELEMENT": "HGT",
+                "GRIB_SHORT_NAME": f"{level * 100}-ISBL",
+                "GRIB_COMMENT": "Geopotential height [gpm]",
+                "GRIB_UNIT": "[gpm]",
+            }
+            description = f'{level * 100}[Pa] ISBL="Isobaric surface"'
             with self.subTest(level=level):
-                self.assertTrue(_band_matches(variable_id, metadata, ""))
-                for other in HEIGHT_LEVELS_HPA:
-                    if other != level:
-                        self.assertFalse(_band_matches(height_variable_id(other), metadata, ""))
+                self.assertTrue(_band_matches(height_variable_id(level), metadata, description))
+                # The description alone, without the short name, is enough.
+                self.assertTrue(
+                    _band_matches(
+                        height_variable_id(level), {"GRIB_ELEMENT": "HGT"}, description
+                    )
+                )
 
     def test_the_phrase_fallback_does_not_match_a_longer_number(self) -> None:
         # A driver that reports no ISBL short name still has to name the
-        # level; "1500 mb" must not satisfy the 500 hPa matcher.
+        # level; "1500 mb" must not satisfy the 500 hPa matcher, and neither
+        # must the 1000 hPa surface written in pascals (100000 Pa) satisfy
+        # the 1000 Pa-suffixed prefix of it.
         self.assertTrue(_band_matches("hgt500", {"GRIB_ELEMENT": "HGT"}, "HGT at 500 mb"))
         self.assertFalse(_band_matches("hgt500", {"GRIB_ELEMENT": "HGT"}, "HGT at 1500 mb"))
+        self.assertFalse(
+            _band_matches("hgt500", {"GRIB_ELEMENT": "HGT"}, '150000[Pa] ISBL="Isobaric surface"')
+        )
 
 
 if __name__ == "__main__":
