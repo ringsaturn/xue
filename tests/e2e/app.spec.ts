@@ -630,6 +630,18 @@ test("clicking the map pins a point and reads its whole series at once", async (
   const count = page.locator("#probe-count");
   await expect(count).toHaveText("121 / 121");
   await expect(page.locator("#probe-hint")).toHaveText("Series complete");
+  // Pinning a second point re-reads the series there: the panel follows the
+  // new cell instead of holding the first one's numbers.
+  const coords = page.locator("#probe-coords");
+  const first = await coords.textContent();
+  await page.locator("#map").click({ position: { x: 300, y: 520 } });
+  await expect(coords).not.toHaveText(first ?? "");
+  await expect(count).toHaveText("121 / 121");
+  // And back to the first point, which the request bookkeeping must not
+  // mistake for a series it already has.
+  await page.locator("#map").click({ position: { x: 620, y: 300 } });
+  await expect(coords).toHaveText(first ?? "");
+  await expect(count).toHaveText("121 / 121");
   // Scrubbing changes the reading, not the series behind it.
   const slider = page.getByRole("slider", { name: "Forecast hour" });
   await slider.focus();

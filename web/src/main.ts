@@ -1006,6 +1006,10 @@ function formatProbeValue(variable: BundleVariable, value: number): string {
 function setProbe(longitude: number, latitude: number): void {
   if (!activeSession) return;
   probe = new ProbeSeries(longitude, latitude);
+  // The requests tracked for the previous pin say nothing about this cell,
+  // and keeping them would suppress the series read when a point is pinned
+  // again later.
+  probeSeriesRequests.clear();
   seedProbeFromCache();
   requestProbeSeries();
   if (!probePopup) {
@@ -1019,9 +1023,14 @@ function setProbe(longitude: number, latitude: number): void {
     }).setDOMContent(probePanel.root);
     probePopup.on("close", () => {
       probe = null;
+      probeSeriesRequests.clear();
     });
   }
-  probePopup.setLngLat([longitude, latitude]).addTo(map);
+  probePopup.setLngLat([longitude, latitude]);
+  // Moving an open popup is setLngLat alone: addTo() on one that is already
+  // on the map removes it first, and that fires `close` — dropping the pin
+  // this call just made, so the panel would keep showing the old point.
+  if (!probePopup.isOpen()) probePopup.addTo(map);
   renderProbe();
 }
 
