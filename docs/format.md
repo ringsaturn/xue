@@ -295,6 +295,14 @@ Registered variable identities:
 | `vgrd10m` | 0 / 2 / 3 | 103, 10 m | |
 | `dswrf` | 0 / 4 / 192 | 1, 0 | NCEP local parameter |
 | `cref` | 0 / 16 / 5 | 10, no value | Composite reflectivity, entire atmosphere |
+| `prmsl` | 0 / 3 / 1 | 101, no value | Mean sea level pressure, the reduction ECMWF calls `msl` (not NCEP's MSLET, 0 / 3 / 192) |
+| `hgt<level>` | 0 / 3 / 5 | 100, `<level>` hPa in Pa | Geopotential height, one variable per isobaric surface |
+
+The eight registered isobaric surfaces are 1000, 925, 850, 700, 500, 300, 250
+and 200 hPa, spelled `hgt1000` … `hgt200`. They differ only in the surface
+value, which is written in the surface's own unit — pascals — so `hgt500`
+carries `scaleFactorOfFirstFixedSurface: 0`,
+`scaledValueOfFirstFixedSurface: 50000`.
 
 #### Time Axis
 
@@ -470,6 +478,15 @@ Registered `variableId` values:
 | 4 | `vgrd10m` | 10 m wind, V component |
 | 5 | `dswrf` | Surface downward shortwave radiation flux, instantaneous |
 | 6 | `cref` | Radar composite reflectivity over the entire atmosphere |
+| 7 | `prmsl` | Mean sea level pressure |
+| 8 | `hgt1000` | Geopotential height at 1000 hPa |
+| 9 | `hgt925` | Geopotential height at 925 hPa |
+| 10 | `hgt850` | Geopotential height at 850 hPa |
+| 11 | `hgt700` | Geopotential height at 700 hPa |
+| 12 | `hgt500` | Geopotential height at 500 hPa |
+| 13 | `hgt300` | Geopotential height at 300 hPa |
+| 14 | `hgt250` | Geopotential height at 250 hPa |
+| 15 | `hgt200` | Geopotential height at 200 hPa |
 
 Predictor enum:
 
@@ -545,9 +562,32 @@ same values unless noted):
 | `ugrd10m` / `vgrd10m` | −63.5 m/s | 0.5 | 254 | 255 | 0.25 m/s |
 | `dswrf` | 0 W/m² | 5 | 254 | 255 | 2.5 W/m² |
 | `cref` | 0 dBZ | 0.5 | 160 | 255 | 0.25 dB |
+| `prmsl` | 870.5 hPa | 1 | 254 | 255 | 0.5 hPa |
+| `hgt1000` | −905 m | 10 | 254 | 255 | 5 m |
+| `hgt925` | −249 m | 6 | 254 | 255 | 3 m |
+| `hgt850` | 423 m | 6 | 254 | 255 | 3 m |
+| `hgt700` | 1911 m | 6 | 254 | 255 | 3 m |
+| `hgt500` | 4252 m | 8 | 254 | 255 | 4 m |
+| `hgt300` | 7505 m | 10 | 254 | 255 | 5 m |
+| `hgt250` | 8598 m | 12 | 254 | 255 | 6 m |
+| `hgt200` | 10086 m | 12 | 254 | 255 | 6 m |
 
 The `compact` profile doubles each `scale` (temperature 1.0 → maximumCode
-110, wind 1.0 → 127, dswrf 10 → 127, cref 1.0 → 80).
+110, wind 1.0 → 127, dswrf 10 → 127, cref 1.0 → 80, and every pressure-family
+codebook → 127 over the same range).
+
+The pressure family's offsets are chosen so that every standard contour value
+lands exactly **half a code** off: `(contour − offset) / scale` has fractional
+part 0.5, for the level's own interval (4 hPa for `prmsl`, 30 m up to 700 hPa,
+40 m at 500, 120 m above) and for the emphasised lines a chart is read by
+(every 20 hPa on `prmsl`; 5840 and 5880 gpm on `hgt500`, the pair the
+subtropical high is defined by). This is an **encoder** rule, in the same
+sense as v1's segment grouping: a decoder must not assume it, and nothing in
+the container records it. It exists because a contour drawn where the code is
+flat covers a whole plateau instead of a line. The coverage is likewise fixed
+per variable for all time rather than fitted per run — byte-identical
+re-encoding, a stable legend, and comparable point series across runs all
+depend on it.
 
 `cref` code 0 is both "no echo" and "outside the radar network's coverage".
 A ground mosaic is a regional product on a rectangular grid, and this
@@ -626,7 +666,8 @@ fallback for out-of-range differences.
 
 Per-variable rules in v1:
 
-- **Linear-codebook fields (`tmp2m`, `ugrd10m`, `vgrd10m`, `dswrf`)** are
+- **Linear-codebook fields (`tmp2m`, `ugrd10m`, `vgrd10m`, `dswrf`, and the
+  pressure family `prmsl` / `hgt<level>`)** are
   smooth enough for temporal prediction. Each segment of the time axis
   splits independently into groups of 6 frames, so a group never spans a
   change of step. Within each group of `n` frames, the frame at zero-based

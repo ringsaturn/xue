@@ -15,7 +15,7 @@ use time::OffsetDateTime;
 use crate::encode::errors::{EncodeError, Result};
 use crate::encode::gdalio::{BandInfo, Dataset};
 use crate::encode::model::SourceFrame;
-use crate::encode::variables::variable_spec;
+use crate::encode::variables::{isobaric_level_hpa, variable_spec};
 
 static HEIGHT_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i)(?:^|[^0-9])2(?:\.0+)?\s*m(?:eter)?s?\s+above\s+ground").expect("valid regex")
@@ -121,10 +121,56 @@ pub fn raster_expression(variable_id: &str, unit: &str) -> Result<String> {
             }
             Ok("maximum(-64,minimum(64,A))".into())
         }
+        // Mean sea level pressure: GRIB2 carries pascals, the codebook
+        // quantizes hectopascals. Only Pa is accepted — a file already in
+        // hPa would divide twice, and no source publishes one.
+        "prmsl" => {
+            if unit.trim().trim_matches(|character| "[]()".contains(character)) != "Pa" {
+                return Err(EncodeError::conversion(format!(
+                    "unsupported pressure unit: {}",
+                    if unit.is_empty() { "<missing>" } else { unit }
+                )));
+            }
+            Ok("A/100".into())
+        }
+        // Geopotential height, already in metres. GDAL reports GFS HGT as
+        // "gpm"; a source spelling it "m" differs by less than the codebook
+        // step at these levels.
+        other if isobaric_level_hpa(other).is_some() => {
+            let compact = unit.trim().trim_matches(|character| "[]()".contains(character));
+            if !matches!(compact, "gpm" | "m") {
+                return Err(EncodeError::conversion(format!(
+                    "unsupported geopotential height unit: {}",
+                    if unit.is_empty() { "<missing>" } else { unit }
+                )));
+            }
+            Ok("A".into())
+        }
         other => Err(EncodeError::conversion(format!(
             "unsupported variable: {other}"
         ))),
     }
+}
+
+/// Whether one band names the given isobaric surface. GDAL spells the short
+/// name `<level in mb>-ISBL`; the phrase fallback accepts the level written as
+/// millibars or hectopascals, and both must name *this* level — a matcher
+/// that let 500 also match 1000 would silently pick the wrong plane.
+fn is_isobaric_height(band: &BandInfo, level_hpa: u32) -> bool {
+    if band.item("GRIB_SHORT_NAME").to_uppercase() == format!("{level_hpa}-ISBL") {
+        return true;
+    }
+    let text = [
+        band.item("GRIB_COMMENT"),
+        band.item("GRIB_LEVEL"),
+        &band.description,
+    ]
+    .join(" ");
+    Regex::new(&format!(
+        r"(?i)(?:^|[^0-9]){level_hpa}\s*(?:mb|hpa)(?:$|[^a-z0-9])"
+    ))
+    .expect("valid regex")
+    .is_match(&text)
 }
 
 fn searchable(band: &BandInfo) -> String {
@@ -174,6 +220,17 @@ fn band_matches(variable_id: &str, band: &BandInfo) -> Result<bool> {
             element == variable_spec(variable_id)?.grib_element
                 && (matches!(short_name.as_str(), "10-HTGL" | "10-M-HTGL")
                     || TEN_METRE_RE.is_match(&searchable(band)))
+        }
+        // PRMSL on GRIB2 surface 101 (mean sea level); GDAL spells that
+        // short name `0-MSL`, and the phrase fallback catches drivers that
+        // do not.
+        "prmsl" => {
+            element == "PRMSL"
+                && (short_name == "0-MSL"
+                    || searchable(band).to_lowercase().contains("mean sea level"))
+        }
+        other if isobaric_level_hpa(other).is_some() => {
+            element == "HGT" && is_isobaric_height(band, isobaric_level_hpa(other).expect("checked"))
         }
         other => {
             return Err(EncodeError::conversion(format!(

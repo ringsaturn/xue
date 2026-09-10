@@ -26,7 +26,13 @@ from xuebuild.binconvert import (
     encode_poster,
 )
 from xuebuild.manifest import build_bin_manifest, build_latest_pointer, iso_z
-from xuebuild.quantize import QUALITY_FLUX, QUALITY_PRECIPITATION, QUALITY_TEMPERATURE, QUALITY_WIND
+from xuebuild.quantize import (
+    QUALITY_FLUX,
+    QUALITY_PRECIPITATION,
+    QUALITY_PRESSURE,
+    QUALITY_TEMPERATURE,
+    QUALITY_WIND,
+)
 from xuebuild.sources import source_spec
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -117,6 +123,22 @@ def _solar_plane(hour: int) -> np.ndarray:
     lon_grid, lat_grid = np.meshgrid(longitude, latitude)
     values = 1100 * np.cos(np.radians(lat_grid)) * np.cos(np.radians(lon_grid + hour * 15))
     return QUALITY_FLUX.quantize(np.maximum(values, 0.0).ravel())
+
+
+def _height_plane(hour: int) -> np.ndarray:
+    """A synthetic 500 hPa height field: a warm tropical ridge near 5900 gpm,
+    a cold polar trough near 4900, and a long wave drifting east. Enough
+    gradient everywhere that the contour shader has real lines to draw, and
+    it crosses 5880 — the line the subtropical high is read by."""
+    longitude = np.linspace(-180, 177.5, WIDTH)
+    latitude = np.linspace(90, -90, HEIGHT)
+    lon_grid, lat_grid = np.meshgrid(longitude, latitude)
+    values = (
+        5450
+        + 480 * np.cos(np.radians(lat_grid))
+        + 90 * np.sin(np.radians(lon_grid * 2 + hour * 4)) * np.sin(np.radians(2 * lat_grid))
+    )
+    return QUALITY_PRESSURE["hgt500"].quantize(values.ravel())
 
 
 def _wind_plane(hour: int, component: str) -> np.ndarray:
@@ -227,6 +249,52 @@ def prepare_web_fixture() -> Path:
                 },
             }
         )
+
+    # One level of the pressure family: an optional bundle the viewer draws as
+    # contours rather than a filled field. Like production it ships no poster
+    # and no video companion — a filled first frame would misrepresent a view
+    # made of lines — so this is also the fixture's only bundle with a variant
+    # and nothing else.
+    height_planes = {hour: {"hgt500": _height_plane(hour)} for hour in HOURS}
+    height_data = write_v2_bundle(
+        WEB_FIXTURE_ROOT / "hgt500.xue",
+        build_metadata(RUN_TIME, HOURS, grid, "quality", ("hgt500",)),
+        grid,
+        ("hgt500",),
+        HOURS,
+        height_planes,
+        level=level,
+        tile=FIXTURE_TILE,
+    )
+    height_half_data = write_v2_bundle(
+        WEB_FIXTURE_ROOT / "hgt500.half.xue",
+        build_metadata(RUN_TIME, HOURS, half_grid, "quality", ("hgt500",)),
+        half_grid,
+        ("hgt500",),
+        HOURS,
+        {hour: {"hgt500": _decimate_codes(planes["hgt500"], grid)} for hour, planes in height_planes.items()},
+        level=level,
+        half=True,
+        tile=FIXTURE_TILE,
+    )
+    bundles.append(
+        {
+            "variable": "hgt500",
+            "path": "hgt500.xue",
+            "byteLength": len(height_data),
+            "crc32": f"{zlib.crc32(height_data) & 0xFFFFFFFF:08x}",
+            "variants": [
+                {
+                    "path": "hgt500.half.xue",
+                    "width": half_grid.width,
+                    "height": half_grid.height,
+                    "byteLength": len(height_half_data),
+                    "crc32": f"{zlib.crc32(height_half_data) & 0xFFFFFFFF:08x}",
+                    "bandwidth": _playback_bandwidth(len(height_half_data), len(HOURS)),
+                }
+            ],
+        }
+    )
 
     # The optional two-variable wind bundle (u/v pair on one time axis),
     # with its own half-resolution variant and no poster or video artifacts.

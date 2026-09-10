@@ -11,10 +11,15 @@ from typing import Any
 
 from .errors import ConversionError
 from .model import SourceFrame
-from .variables import variable_spec
+from .variables import HEIGHT_LEVELS_HPA, height_variable_id, variable_spec
 
 
 SUPPORTED_EXTENSIONS = {".grb", ".grb2", ".grib2"}
+# Geopotential height variable id -> its isobaric surface in hPa, the one
+# number the record matcher needs beyond the shared HGT element.
+HEIGHT_VARIABLE_IDS: dict[str, int] = {
+    height_variable_id(level): level for level in HEIGHT_LEVELS_HPA
+}
 HEIGHT_RE = re.compile(r"(?:^|[^0-9])2(?:\.0+)?\s*m(?:eter)?s?\s+above\s+ground", re.IGNORECASE)
 TEN_METRE_RE = re.compile(r"(?:^|[^0-9])10(?:\.0+)?\s*m(?:eter)?s?\s+above\s+ground", re.IGNORECASE)
 
@@ -192,6 +197,28 @@ def accumulation_expression(unit: str) -> str:
     return "A"
 
 
+def pressure_expression(unit: str) -> str:
+    """Mean sea level pressure. GRIB2 carries it in pascals and the codebook
+    quantizes hectopascals, so this is the one pressure-family field with a
+    unit conversion. Only Pa is accepted: a file already in hPa would divide
+    twice, and no source publishes one."""
+    compact = unit.strip().strip("[]()")
+    if compact != "Pa":
+        raise ConversionError(f"unsupported pressure unit: {unit or '<missing>'}")
+    return "A/100"
+
+
+def height_expression(unit: str) -> str:
+    """Geopotential height, already in metres. GDAL reports GFS HGT as
+    "gpm" (geopotential metres); a source spelling it "m" means the same
+    number to within the difference between geopotential and geometric
+    height, which at these levels is far below the codebook step."""
+    compact = unit.strip().strip("[]()")
+    if compact not in {"gpm", "m"}:
+        raise ConversionError(f"unsupported geopotential height unit: {unit or '<missing>'}")
+    return "A"
+
+
 def raster_expression(variable_id: str, unit: str) -> str:
     if variable_id == "tmp2m":
         return celsius_expression(unit)
@@ -205,6 +232,10 @@ def raster_expression(variable_id: str, unit: str) -> str:
         return flux_expression(unit)
     if variable_id in ("ugrd10m", "vgrd10m"):
         return wind_expression(unit)
+    if variable_id == "prmsl":
+        return pressure_expression(unit)
+    if variable_id in HEIGHT_VARIABLE_IDS:
+        return height_expression(unit)
     raise ConversionError(f"unsupported variable: {variable_id}")
 
 
@@ -284,6 +315,47 @@ def _is_ten_metre_wind(metadata: dict[str, str], description: str, element: str)
     return short_name in {"10-HTGL", "10-M-HTGL"} or bool(TEN_METRE_RE.search(searchable))
 
 
+def _is_mean_sea_level_pressure(metadata: dict[str, str], description: str) -> bool:
+    """PRMSL on GRIB2 surface 101 (mean sea level). GDAL spells that short
+    name ``0-MSL``; the phrase fallback catches drivers that do not."""
+    if metadata.get("GRIB_ELEMENT", "").upper() != "PRMSL":
+        return False
+    short_name = metadata.get("GRIB_SHORT_NAME", "").upper()
+    searchable = " ".join(
+        [
+            short_name,
+            metadata.get("GRIB_COMMENT", ""),
+            metadata.get("GRIB_LEVEL", ""),
+            description,
+        ]
+    ).lower()
+    return short_name == "0-MSL" or "mean sea level" in searchable
+
+
+def _is_isobaric_height(metadata: dict[str, str], description: str, level_hpa: int) -> bool:
+    """HGT on one isobaric surface. GDAL spells the short name
+    ``<level in mb>-ISBL``; the phrase fallback accepts the level written as
+    millibars or hectopascals, and both must name *this* level — a matcher
+    that let 500 also match 1000 would silently pick the wrong plane."""
+    if metadata.get("GRIB_ELEMENT", "").upper() != "HGT":
+        return False
+    short_name = metadata.get("GRIB_SHORT_NAME", "").upper()
+    if short_name == f"{level_hpa}-ISBL":
+        return True
+    searchable = " ".join(
+        [
+            metadata.get("GRIB_COMMENT", ""),
+            metadata.get("GRIB_LEVEL", ""),
+            description,
+        ]
+    )
+    return bool(_isobaric_level_re(level_hpa).search(searchable))
+
+
+def _isobaric_level_re(level_hpa: int) -> re.Pattern[str]:
+    return re.compile(rf"(?:^|[^0-9]){level_hpa}\s*(?:mb|hpa)(?:$|[^a-z0-9])", re.IGNORECASE)
+
+
 def _band_matches(variable_id: str, metadata: dict[str, str], description: str) -> bool:
     if variable_id == "tmp2m":
         return _is_two_metre_temperature(metadata, description)
@@ -298,6 +370,10 @@ def _band_matches(variable_id: str, metadata: dict[str, str], description: str) 
         return _is_surface_flux(metadata, description, variable_spec(variable_id).grib_element)
     if variable_id in ("ugrd10m", "vgrd10m"):
         return _is_ten_metre_wind(metadata, description, variable_spec(variable_id).grib_element)
+    if variable_id == "prmsl":
+        return _is_mean_sea_level_pressure(metadata, description)
+    if variable_id in HEIGHT_VARIABLE_IDS:
+        return _is_isobaric_height(metadata, description, HEIGHT_VARIABLE_IDS[variable_id])
     raise ConversionError(f"unsupported variable: {variable_id}")
 
 

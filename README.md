@@ -147,7 +147,11 @@ a listed one.
 
 `build-bin` writes one `.xue` per scalar variable (plus a half-resolution
 `.half.xue` rendition, a first-frame poster, and a per-variable lossless
-H.264 companion; disable with `--skip-variants` / `--skip-video`), adds the
+H.264 companion; disable with `--skip-variants` / `--skip-video`). The
+pressure family — mean sea level pressure and geopotential height on the
+standard isobaric surfaces, one bundle per level — gets neither a poster nor
+a video companion: the page draws it as contour lines, which need the exact
+codes and never a filled first frame. `build-bin` also adds the
 two-variable `wind10m.xue` when the input GRIB carries the 10 m wind
 components (older cached GRIBs without wind records are skipped
 automatically — re-fetch with `--force-download` to pick wind up), and
@@ -164,7 +168,9 @@ existing manifest requires `--force` (`make mvp FORCE=--force`).
 The page supports shareable URLs per model and layer:
 `/?model=gfs&type=wind`, `/?model=ecmwf&type=temp`, and so on. `model`
 accepts `gfs` / `ecmwf` (alias `ifs`) / `sflux`; `type` also accepts
-aliases like `tmp2m` / `prate` / `wind10m` / `solar` / `radar`; both are
+aliases like `tmp2m` / `prate` / `wind10m` / `solar` / `radar`, and each
+pressure level names itself (`pressure` for sea level pressure, `hgt500`,
+`hgt850` and so on — there is no separate `level` parameter); both are
 case-insensitive. The address bar stays in sync when switching, and
 unrecognized values fall back to defaults.
 

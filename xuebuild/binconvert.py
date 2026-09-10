@@ -50,7 +50,7 @@ from .manifest import (
 )
 from .model import GRIB_PLANE_SOURCE, PlaneSource, SourceFrame
 from .observation import inspect_observation
-from .quantize import PROFILES, PrecipitationCodebook, TemperatureCodebook
+from .quantize import PRESSURE_VARIABLE_IDS, PROFILES, PrecipitationCodebook, TemperatureCodebook
 from .sources import SourceSpec, source_spec
 from .variables import VARIABLES, variable_spec
 from .videoconvert import build_debug_playlist, encode_variable_video
@@ -81,6 +81,12 @@ WIND_BUNDLE_ID = "wind10m"
 # RAW. Every linear-codebook field is smooth enough to chain against the
 # previous frame inside its chunk.
 RAW_VARIABLE_IDS = {"prate", "cref"}
+# The pressure family (sea level pressure, pressure-level geopotential
+# heights) ships bundles only: the frontend draws it as contour lines, which
+# needs the exact codes and never the H.264 companion's chroma-subsampled
+# approximation, and a poster would paint a filled field the view does not
+# show. Everything else about them is an ordinary linear scalar bundle.
+PRESSURE_BUNDLE_IDS = frozenset(PRESSURE_VARIABLE_IDS)
 
 # gdal_translate decodes GRIB packing on the CPU: one worker per core.
 _EXTRACT_WORKERS = min(16, os.cpu_count() or 4)
@@ -335,7 +341,12 @@ def _convert_units(frame: SourceFrame, values: np.ndarray) -> np.ndarray:
         # ECMWF run-total precipitation accumulation, metres -> mm; the rate
         # derivation (de-accumulation) happens later against the previous frame.
         values *= 1000.0
-    # Wind components are already m/s.
+    elif frame.variable_id == "prmsl":
+        # GRIB2 carries mean sea level pressure in pascals; the codebook
+        # quantizes hectopascals.
+        values /= 100.0
+    # Wind components and geopotential heights are already in their output
+    # units (m/s, m).
     return values
 
 
@@ -1115,6 +1126,11 @@ def convert_bin(
             variable_id for variable_id in scalar_variable_ids if variable_id in bundle_ids
         )
     encoded_variable_ids = scalar_variable_ids + (WIND_COMPONENT_IDS if wind_available else ())
+    # Scalars that also ship a poster and (when ffmpeg is around) a video
+    # companion — every published scalar but the contour-drawn pressure family.
+    companion_variable_ids = tuple(
+        variable_id for variable_id in scalar_variable_ids if variable_id not in PRESSURE_BUNDLE_IDS
+    )
 
     # Per-variable time axes. On derived-precipitation sources (ECMWF
     # accumulations, sflux window averages) the rate has no data for the
@@ -1135,7 +1151,7 @@ def convert_bin(
     # variable's artifact, Xue remains the universal fallback.
     video_reports: dict[str, dict[str, Any]] = {}
     if not skip_video:
-        for variable_id in scalar_variable_ids:
+        for variable_id in companion_variable_ids:
             try:
                 video_artifact = encode_variable_video(
                     codes_by_offset, variable_offsets[variable_id], variable_id, width=grid.width, height=grid.height
@@ -1177,7 +1193,7 @@ def convert_bin(
     # can paint immediately while the real stream loads.
     output_dir.mkdir(parents=True, exist_ok=True)
     poster_reports: dict[str, dict[str, Any]] = {}
-    for variable_id in scalar_variable_ids:
+    for variable_id in companion_variable_ids:
         payload, poster_grid = encode_poster(codes_by_offset[variable_offsets[variable_id][0]][variable_id], grid)
         poster_path = output_dir / f"{variable_id}.poster.bin"
         poster_path.write_bytes(payload)

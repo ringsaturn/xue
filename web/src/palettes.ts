@@ -1,4 +1,5 @@
 import type { BundleVariable, LinearQuantization, LogQuantization } from "./manifest";
+import { isPressureBundle } from "./pressure";
 
 /**
  * Color ramps in physical units. The shader samples them per pixel, so the
@@ -89,6 +90,33 @@ const REFLECTIVITY_STOPS: Stop[] = [
   [80, 240, 233, 255, 255],
 ];
 
+// The pressure family shares one ramp, given in fractions of the level's own
+// codebook range rather than absolute values: a fill under contour lines is
+// read as "low here, high there", and every level would otherwise need its
+// own table of metres. Low-saturation on purpose — the lines are the
+// subject, and the fill is composited beneath them at partial alpha, so a
+// vivid ramp would compete with them for the eye. Cool for troughs and lows,
+// warm for ridges and highs, the way a filled height chart is conventionally
+// coloured.
+const PRESSURE_UNIT_STOPS: Stop[] = [
+  [0.0, 52, 66, 120, 255],
+  [0.2, 62, 104, 148, 255],
+  [0.4, 82, 142, 150, 255],
+  [0.55, 128, 166, 136, 255],
+  [0.7, 186, 172, 116, 255],
+  [0.85, 196, 132, 100, 255],
+  [1.0, 168, 82, 92, 255],
+];
+
+/** The pressure ramp mapped onto one variable's own codebook range. */
+function pressureStops(quantization: LinearQuantization): Stop[] {
+  const low = quantization.offset;
+  const high = quantization.offset + quantization.scale * quantization.maximumCode;
+  return PRESSURE_UNIT_STOPS.map(
+    ([unit, r, g, b, a]) => [low + unit * (high - low), r, g, b, a] as Stop,
+  );
+}
+
 // Wind speed ramp for the GPU particle layer: the
 // familiar blue -> teal -> green -> yellow -> orange -> red -> violet
 // progression (earth.nullschool / Windy convention). Values are m/s.
@@ -159,6 +187,9 @@ export function buildWindSpeedPalette(): Uint8Array {
 function stopsFor(variable: BundleVariable): Stop[] {
   if (variable.id === "dswrf") return SOLAR_STOPS;
   if (variable.id === "cref") return REFLECTIVITY_STOPS;
+  if (isPressureBundle(variable.id) && variable.quantization.type === "linear") {
+    return pressureStops(variable.quantization);
+  }
   return TEMPERATURE_STOPS;
 }
 

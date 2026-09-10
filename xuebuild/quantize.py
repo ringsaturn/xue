@@ -140,6 +140,98 @@ COMPACT_FLUX = TemperatureCodebook(minimum=0.0, maximum=1270.0, step=10.0, name=
 QUALITY_REFLECTIVITY = TemperatureCodebook(minimum=0.0, maximum=80.0, step=0.5, name="cref")
 COMPACT_REFLECTIVITY = TemperatureCodebook(minimum=0.0, maximum=80.0, step=1.0, name="cref")
 
+# Sea-level pressure and the pressure-level geopotential heights. Three rules
+# fix these numbers:
+#
+# 1. The step is a fraction of the level's business contour interval and the
+#    254 in-range codes cover the global envelope of GFS analyses with margin.
+#    PRMSL is the coarsest at 1 hPa against a 4 hPa interval; the upper-air
+#    fields get a quarter of that ratio or better.
+# 2. **Half-code alignment**: every standard contour value falls exactly
+#    halfway between two codes. A contour that coincides with a code value
+#    turns each flat pair of cells into a plateau the shader's `fract`
+#    test lights up wholesale; offset by half a step, the line always
+#    crosses somewhere the code changes. The rule is
+#    `(contour - offset) / step ≡ 0.5 (mod 1)`, which needs the step to
+#    divide the interval and the offset to sit half a step off it. This is
+#    an *encoder* rule: nothing in the container depends on it, and a
+#    decoder must not assume it.
+# 3. The coverage is fixed, not adapted per run — golden byte-identity, a
+#    stable legend, and comparable probe series across runs all need one
+#    codebook per variable for all time. A run that exceeds it flattens the
+#    extreme core and leaves every other contour untouched.
+#
+# The `compact` profile doubles the step as everywhere else, which halves the
+# code space and gives up rule 2: it is a size experiment, not a profile a
+# contour view is drawn from.
+_PRESSURE_STEPS: dict[str, tuple[float, float]] = {
+    # variable id -> (offset, quality step)
+    "prmsl": (870.5, 1.0),
+    # 1000 hPa takes a 10 m step rather than the 6 m the other 30 m-interval
+    # levels use: its envelope spans 1474 m (the Antarctic ice sheet's
+    # extrapolated heights at one end, the Siberian high at the other) and
+    # 6 m x 254 leaves no usable margin. 10 divides 30, so rule 2 still holds.
+    "hgt1000": (-905.0, 10.0),
+    "hgt925": (-249.0, 6.0),
+    "hgt850": (423.0, 6.0),
+    "hgt700": (1911.0, 6.0),
+    "hgt500": (4252.0, 8.0),
+    "hgt300": (7505.0, 10.0),
+    "hgt250": (8598.0, 12.0),
+    "hgt200": (10086.0, 12.0),
+}
+
+# The standard contour interval each level is drawn at, in the variable's own
+# unit — what rule 2 aligns against, and what the frontend's isoline layer
+# draws. Not part of the container: it never reaches a bundle.
+CONTOUR_INTERVALS: dict[str, float] = {
+    "prmsl": 4.0,
+    "hgt1000": 30.0,
+    "hgt925": 30.0,
+    "hgt850": 30.0,
+    "hgt700": 30.0,
+    "hgt500": 40.0,
+    "hgt300": 120.0,
+    "hgt250": 120.0,
+    "hgt200": 120.0,
+}
+
+# Contours a level draws heavier than the rest, two shapes because the two
+# reasons differ. PRMSL emphasises a regular sub-family — every fifth line,
+# the 20 hPa grid a surface chart is read on — so it is an interval. 500 hPa
+# emphasises two *particular* adjacent contours, the pair the subtropical
+# high is defined by (5880 and 5840 gpm, "588" and "584" on a Chinese chart),
+# which no interval can express. Both are drawn from the same field the
+# ordinary contours are, so they inherit the half-code alignment.
+EMPHASIS_INTERVALS: dict[str, float] = {"prmsl": 20.0}
+EMPHASIS_CONTOURS: dict[str, tuple[float, ...]] = {"hgt500": (5840.0, 5880.0)}
+
+
+def _pressure_codebook(variable_id: str, *, compact: bool) -> TemperatureCodebook:
+    """One pressure-family codebook.
+
+    The quality profile spends all 254 in-range codes from the registered
+    offset; the compact profile covers the same range at twice the step, so
+    the coverage a plane clamps to never depends on the profile."""
+    offset, step = _PRESSURE_STEPS[variable_id]
+    return TemperatureCodebook(
+        minimum=offset,
+        maximum=offset + step * 254,
+        step=step * 2.0 if compact else step,
+        name=variable_id,
+    )
+
+
+PRESSURE_VARIABLE_IDS: tuple[str, ...] = tuple(_PRESSURE_STEPS)
+QUALITY_PRESSURE = {
+    variable_id: _pressure_codebook(variable_id, compact=False)
+    for variable_id in PRESSURE_VARIABLE_IDS
+}
+COMPACT_PRESSURE = {
+    variable_id: _pressure_codebook(variable_id, compact=True)
+    for variable_id in PRESSURE_VARIABLE_IDS
+}
+
 PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
     "quality": {
         "tmp2m": QUALITY_TEMPERATURE,
@@ -148,6 +240,7 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
         "vgrd10m": QUALITY_WIND,
         "dswrf": QUALITY_FLUX,
         "cref": QUALITY_REFLECTIVITY,
+        **QUALITY_PRESSURE,
     },
     "compact": {
         "tmp2m": COMPACT_TEMPERATURE,
@@ -156,6 +249,7 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
         "vgrd10m": COMPACT_WIND,
         "dswrf": COMPACT_FLUX,
         "cref": COMPACT_REFLECTIVITY,
+        **COMPACT_PRESSURE,
     },
     # Production default since 2026-08-17: temperature keeps the 0.5°C step
     # (0.25°C error budget, shared with the H.264 video artifact), while
@@ -169,5 +263,6 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
         "vgrd10m": QUALITY_WIND,
         "dswrf": QUALITY_FLUX,
         "cref": QUALITY_REFLECTIVITY,
+        **QUALITY_PRESSURE,
     },
 }

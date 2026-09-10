@@ -15,6 +15,17 @@ const CANONICAL_TYPE: Record<ForecastBundleId, string> = {
   prate: "precip",
   dswrf: "solar",
   cref: "radar",
+  // The pressure family names itself: the level *is* the layer, so there is
+  // no separate `?level=` parameter to keep in step with `?type=`.
+  prmsl: "pressure",
+  hgt1000: "hgt1000",
+  hgt925: "hgt925",
+  hgt850: "hgt850",
+  hgt700: "hgt700",
+  hgt500: "hgt500",
+  hgt300: "hgt300",
+  hgt250: "hgt250",
+  hgt200: "hgt200",
   wind10m: "wind",
 };
 
@@ -38,6 +49,21 @@ const TYPE_ALIASES: Record<string, ForecastBundleId> = {
   radar: "cref",
   reflectivity: "cref",
   cref: "cref",
+  pressure: "prmsl",
+  mslp: "prmsl",
+  msl: "prmsl",
+  prmsl: "prmsl",
+  hgt1000: "hgt1000",
+  hgt925: "hgt925",
+  hgt850: "hgt850",
+  hgt700: "hgt700",
+  // The subtropical high is read off the 500 hPa chart, so the view has the
+  // name people look for as well as the level's own.
+  hgt500: "hgt500",
+  subtropicalhigh: "hgt500",
+  hgt300: "hgt300",
+  hgt250: "hgt250",
+  hgt200: "hgt200",
 };
 
 /** Accepted spellings for each model. Matching is case-insensitive. */

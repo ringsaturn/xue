@@ -56,6 +56,19 @@ uniform float u_wrap;
 // (uStart, uEnd, vStart, vEnd). uStart > uEnd means the box wraps the
 // antimeridian, which a viewport straddling it produces.
 uniform vec4 u_cover;
+// Contour drawing, off (interval 0) for every filled field. The pressure
+// family is drawn as lines instead: u_decode turns a sampled code back into
+// its physical value, u_contour is (interval, emphasis interval, half width
+// in px, emphasis half width), u_contour_values holds up to four particular
+// contours drawn heavy (the 5880 / 5840 gpm pair at 500 hPa) with
+// u_contour_value_count saying how many are real, and u_fill_alpha scales
+// the palette fill under the lines — 0 draws lines alone.
+uniform vec2 u_decode;
+uniform vec4 u_contour;
+uniform vec4 u_contour_values;
+uniform float u_contour_value_count;
+uniform vec4 u_line_color;
+uniform float u_fill_alpha;
 out vec4 out_color;
 const float PI = 3.141592653589793;
 
@@ -102,6 +115,36 @@ float sampleCode(sampler2D data, vec2 uv) {
   return clamp(code, lo, hi);
 }
 
+// Coverage of one contour line, anti-aliased to a pixel.
+//
+// "distance" is how far this fragment is from the line in the field's own
+// unit; dividing by the field's screen gradient turns that into pixels, so a
+// line keeps its width at every zoom without a second texture or any CPU
+// work. A gradient of zero means a flat neighbourhood — no line passes
+// through it, whatever the value happens to be.
+float lineCoverage(float distance, float gradient, float halfWidth) {
+  if (gradient <= 0.0) return 0.0;
+  float pixels = distance / gradient;
+  return 1.0 - smoothstep(halfWidth - 0.5, halfWidth + 0.5, pixels);
+}
+
+// The whole family of contours at multiples of one interval.
+//
+// Where the field climbs a whole interval in a couple of pixels — a jet
+// stream at a zoomed-out view — the family is finer than the screen can
+// resolve, and drawing it anyway turns the gradient into a solid band. So
+// the family fades out as its spacing approaches a pixel. Showing nothing
+// is the honest answer, the same one u_cover gives outside the data; a
+// named contour is a single line and never needs it.
+float contourCoverage(float value, float gradient, float interval, float halfWidth) {
+  if (interval <= 0.0 || gradient <= 0.0) return 0.0;
+  float steps = value / interval;
+  // Distance to the nearest multiple, back in the field's unit.
+  float distance = abs(fract(steps + 0.5) - 0.5) * interval;
+  float spacingPixels = interval / gradient;
+  return lineCoverage(distance, gradient, halfWidth) * smoothstep(2.0, 6.0, spacingPixels);
+}
+
 void main() {
   float longitude = fract(v_mercator.x) * 360.0 - 180.0;
   float latitude = 90.0 - (360.0 / PI) * atan(exp((v_mercator.y * 2.0 - 1.0) * PI));
@@ -130,8 +173,53 @@ void main() {
     code = mix(code, sampleCode(u_data_b, vec2(u, v)), u_mix);
   }
   vec4 color = texture(u_palette, vec2((code * 255.0 + 0.5) / 256.0, 0.5));
+  if (u_contour.x > 0.0) {
+    // Codes mix linearly and the pressure family's codebooks are linear, so
+    // dequantizing after the frame blend is the same as blending the values.
+    float value = u_decode.x + code * 255.0 * u_decode.y;
+    float gradient = fwidth(value);
+    float lines = contourCoverage(value, gradient, u_contour.x, u_contour.z);
+    lines = max(lines, contourCoverage(value, gradient, u_contour.y, u_contour.w));
+    // Four is the length of the vec4 the named contours travel in; see
+    // MAX_NAMED_CONTOURS.
+    for (int index = 0; index < 4; index += 1) {
+      if (float(index) >= u_contour_value_count) break;
+      lines = max(
+        lines,
+        lineCoverage(abs(value - u_contour_values[index]), gradient, u_contour.w)
+      );
+    }
+    color.a *= u_fill_alpha;
+    color = mix(color, u_line_color, lines);
+  }
   out_color = vec4(color.rgb * color.a, color.a);
 }`;
+
+/** How many particular contours one level may name; the shader holds them in
+ * a vec4 because two (the 5880 / 5840 pair at 500 hPa) is what a chart wants
+ * and a loop over a texture would cost far more than it bought. */
+export const MAX_NAMED_CONTOURS = 4;
+
+/** Contour drawing for one variable, all of it in the variable's own physical
+ * unit. Widths are half-widths in device pixels. */
+export interface ContourStyle {
+  /** Dequantization: `value = offset + code * scale`, straight off the
+   * bundle's linear codebook. */
+  offset: number;
+  scale: number;
+  /** Ordinary contour interval; 0 turns contour drawing off entirely. */
+  interval: number;
+  /** A regular sub-family drawn heavier (every 20 hPa on a surface chart), or
+   * 0 for none. */
+  emphasisInterval: number;
+  /** Particular contours drawn heavier, at most MAX_NAMED_CONTOURS of them. */
+  values: readonly number[];
+  lineWidth: number;
+  emphasisWidth: number;
+  lineColor: readonly [number, number, number, number];
+  /** Opacity of the palette fill beneath the lines; 0 draws lines alone. */
+  fillAlpha: number;
+}
 
 export class ForecastLayer implements CustomLayerInterface {
   readonly id = "forecast-plane";
@@ -151,6 +239,9 @@ export class ForecastLayer implements CustomLayerInterface {
   private uploadedPlanes: [Uint8Array | null, Uint8Array | null] = [null, null];
   /** The part of the texture the displayed plane actually filled. */
   private coverage: CoverageBox = WHOLE_PLANE_COVERAGE;
+  /** Contour drawing, off by default: every filled field renders exactly as
+   * it did before this existed. */
+  private contours: ContourStyle | null = null;
 
   private width = 0;
   private height = 0;
@@ -216,7 +307,11 @@ export class ForecastLayer implements CustomLayerInterface {
       throw new Error(`program link failed: ${gl.getProgramInfoLog(program) ?? "unknown"}`);
     }
     this.program = program;
-    for (const name of ["u_matrix", "u_data", "u_data_b", "u_palette", "u_first", "u_step", "u_size", "u_mix", "u_wrap", "u_cover"]) {
+    for (const name of [
+      "u_matrix", "u_data", "u_data_b", "u_palette", "u_first", "u_step", "u_size",
+      "u_mix", "u_wrap", "u_cover", "u_decode", "u_contour", "u_contour_values",
+      "u_contour_value_count", "u_line_color", "u_fill_alpha",
+    ]) {
       this.uniforms[name] = gl.getUniformLocation(program, name);
     }
 
@@ -291,6 +386,15 @@ export class ForecastLayer implements CustomLayerInterface {
     this.map?.triggerRepaint();
   }
 
+  /** Draw this plane as contour lines instead of (or over) a filled field,
+   * or pass null to go back to plain fill. The style carries the variable's
+   * own dequantization, so the layer never needs the bundle metadata for it.
+   */
+  setContours(style: ContourStyle | null): void {
+    this.contours = style;
+    this.map?.triggerRepaint();
+  }
+
   /** Show a single plane (slot A, blend weight 0). */
   setFrame(plane: Uint8Array, coverage: CoverageBox = WHOLE_PLANE_COVERAGE): void {
     this.setBlend(plane, null, 0, coverage);
@@ -353,6 +457,27 @@ export class ForecastLayer implements CustomLayerInterface {
       this.coverage.vStart,
       this.coverage.vEnd,
     );
+    const contours = this.contours;
+    gl.uniform2f(this.uniforms.u_decode!, contours?.offset ?? 0, contours?.scale ?? 0);
+    gl.uniform4f(
+      this.uniforms.u_contour!,
+      contours?.interval ?? 0,
+      contours?.emphasisInterval ?? 0,
+      contours?.lineWidth ?? 0,
+      contours?.emphasisWidth ?? 0,
+    );
+    const values = contours?.values ?? [];
+    gl.uniform4f(
+      this.uniforms.u_contour_values!,
+      values[0] ?? 0,
+      values[1] ?? 0,
+      values[2] ?? 0,
+      values[3] ?? 0,
+    );
+    gl.uniform1f(this.uniforms.u_contour_value_count!, Math.min(values.length, MAX_NAMED_CONTOURS));
+    const line = contours?.lineColor ?? [1, 1, 1, 1];
+    gl.uniform4f(this.uniforms.u_line_color!, line[0], line[1], line[2], line[3]);
+    gl.uniform1f(this.uniforms.u_fill_alpha!, contours?.fillAlpha ?? 1);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.dataTextures[0]!);
     gl.uniform1i(this.uniforms.u_data!, 0);

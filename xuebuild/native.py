@@ -32,7 +32,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from .binconvert import published_bundle_ids
+from .binconvert import PRESSURE_BUNDLE_IDS, published_bundle_ids
 from .errors import ConversionError
 from .manifest import (
     REQUIRED_BIN_BUNDLE_VARIABLES,
@@ -111,6 +111,11 @@ def _video_reports(
         if len(numeric_ids) != 1:
             # The wind pair ships as one two-variable bundle. The video path is
             # per scalar plane, and the particle layer never takes it.
+            continue
+        if variable_id in PRESSURE_BUNDLE_IDS:
+            # The pressure family is drawn as contour lines, which need the
+            # exact codes — an H.264 companion's approximation would move every
+            # line. The native encoder skips its poster for the same reason.
             continue
         grid = reader.metadata["grid"]
         offsets = [int(offset) for offset in reader.frame_offsets]

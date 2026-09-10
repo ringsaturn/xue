@@ -52,18 +52,60 @@ function modelForManifestString(model: unknown): ForecastModelInfo | null {
   return null;
 }
 
+/** The pressure family: mean sea level pressure and geopotential height on
+ * the eight registered isobaric surfaces. One bundle per level — container v2
+ * orders chunks group -> tile -> variable, so packing the levels together
+ * would make a viewport pull every level to read one. What the viewer draws
+ * from them is contours; see pressure.ts. */
+export type PressureBundleId =
+  | "prmsl"
+  | "hgt1000"
+  | "hgt925"
+  | "hgt850"
+  | "hgt700"
+  | "hgt500"
+  | "hgt300"
+  | "hgt250"
+  | "hgt200";
+
 /** Bundle-level ids the manifest can carry. On a live run the scalar
  * variables are mandatory; the two-variable wind bundle, the dswrf
- * solar-radiation bundle (sflux only) and the cref radar bundle (the radar
- * archive only) are optional so pre-existing runs keep validating. */
-export type ForecastBundleId = ForecastVariableId | "dswrf" | "cref" | "wind10m";
+ * solar-radiation bundle (sflux only), the cref radar bundle (the radar
+ * archive only) and the pressure family are optional so pre-existing runs
+ * keep validating.
+ *
+ * A manifest naming a bundle that is not in this list is rejected outright,
+ * not ignored — which is why a widened registry must reach the deployed shell
+ * *before* any run publishes the new bundles. */
+export type ForecastBundleId = ForecastVariableId | "dswrf" | "cref" | PressureBundleId | "wind10m";
 
 /** Data-level variable ids that can appear inside bundle metadata; the wind
  * bundle carries both 10 m components on one time axis. */
-export type DataVariableId = ForecastVariableId | "dswrf" | "cref" | "ugrd10m" | "vgrd10m";
+export type DataVariableId =
+  | ForecastVariableId
+  | "dswrf"
+  | "cref"
+  | PressureBundleId
+  | "ugrd10m"
+  | "vgrd10m";
 
 export const FORECAST_VARIABLE_IDS: readonly ForecastVariableId[] = ["tmp2m", "prate"];
-export const FORECAST_BUNDLE_IDS: readonly ForecastBundleId[] = ["tmp2m", "prate", "dswrf", "cref", "wind10m"];
+export const FORECAST_BUNDLE_IDS: readonly ForecastBundleId[] = [
+  "tmp2m",
+  "prate",
+  "dswrf",
+  "cref",
+  "prmsl",
+  "hgt1000",
+  "hgt925",
+  "hgt850",
+  "hgt700",
+  "hgt500",
+  "hgt300",
+  "hgt250",
+  "hgt200",
+  "wind10m",
+];
 export const WIND_COMPONENT_IDS: readonly DataVariableId[] = ["ugrd10m", "vgrd10m"];
 
 export interface VideoBundleDescriptor {

@@ -14,8 +14,32 @@ from .sources import MODEL_PRODUCTS
 # 10 m components into one two-variable .xue and is optional so
 # runs built from wind-less inputs (and older manifests) stay valid; dswrf
 # is optional because only the sflux source carries it, and cref because
-# only the radar observation archive does.
-BIN_BUNDLE_VARIABLES = ("tmp2m", "prate", "dswrf", "cref", "wind10m")
+# only the radar observation archive does. The pressure family (mean sea
+# level pressure and the eight isobaric geopotential heights) is optional for
+# the same reason and one bundle per level: container v2 orders chunks group
+# -> tile -> variable, so a multi-variable pressure bundle would make a
+# viewport pull every level to read one.
+#
+# This list is the frontend's admission test as well: `manifest.ts` rejects a
+# whole manifest that names a bundle it does not know, so a widened registry
+# must reach the deployed shell *before* any run publishes the new bundles
+# (docs/format.md).
+BIN_BUNDLE_VARIABLES = (
+    "tmp2m",
+    "prate",
+    "dswrf",
+    "cref",
+    "prmsl",
+    "hgt1000",
+    "hgt925",
+    "hgt850",
+    "hgt700",
+    "hgt500",
+    "hgt300",
+    "hgt250",
+    "hgt200",
+    "wind10m",
+)
 REQUIRED_BIN_BUNDLE_VARIABLES = ("tmp2m", "prate")
 
 

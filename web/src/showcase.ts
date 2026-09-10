@@ -36,6 +36,15 @@ const VARIABLE_CODE: Record<ForecastBundleId, string> = {
   prate: "PRECIP",
   dswrf: "SOLAR",
   cref: "RADAR",
+  prmsl: "MSLP",
+  hgt1000: "1000MB",
+  hgt925: "925MB",
+  hgt850: "850MB",
+  hgt700: "700MB",
+  hgt500: "500MB",
+  hgt300: "300MB",
+  hgt250: "250MB",
+  hgt200: "200MB",
   wind10m: "WIND",
 };
 

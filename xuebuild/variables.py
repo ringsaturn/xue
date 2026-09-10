@@ -205,6 +205,25 @@ VARIABLES: dict[str, VariableSpec] = {
         grib2_level_value=10.0,
         gdal_unit="m/s",
     ),
+    # Mean sea level pressure. NCEP publishes two reductions; PRMSL
+    # (0/3/1) is the one ECMWF also calls ``msl``, so the two sources carry
+    # the same field. MSLET (0/3/192, the NCEP-local Shuell reduction) is a
+    # different quantity and is deliberately not registered. Surface 101 is
+    # "mean sea level", which carries no value.
+    "prmsl": VariableSpec(
+        id="prmsl",
+        label="Mean sea level pressure",
+        output_unit="hPa",
+        value_range=(870, 1125),
+        numeric_id=7,
+        grib_element="PRMSL",
+        index_field=":PRMSL:mean sea level:",
+        ecmwf_param="msl",
+        grib2_category=3,
+        grib2_number=1,
+        grib2_level_type=101,
+        gdal_unit="Pa",
+    ),
     # Radar composite reflectivity: the column maximum of the equivalent
     # reflectivity factor, so its fixed surface is the entire atmosphere
     # (code table 4.5 value 10, which carries no surface value). The only
@@ -221,6 +240,60 @@ VARIABLES: dict[str, VariableSpec] = {
         grib2_level_type=10,
     ),
 }
+
+
+# Geopotential height on the standard isobaric surfaces. Every level is the
+# same GRIB2 parameter (0/3/5) on the same surface type (100, isobaric),
+# differing only in the surface's pressure — so the entries are generated
+# from one table of (level in hPa, registered numericId, codebook coverage)
+# rather than written out eight times. The level appears three ways and all
+# three must agree: hPa in the id and the ``.idx`` phrase GFS uses, Pa in the
+# GRIB2 fixed surface. Registration is not publication: which levels a source
+# actually ships is ``SourceSpec.bundle_scalar_ids``.
+HEIGHT_LEVELS_HPA: tuple[int, ...] = (1000, 925, 850, 700, 500, 300, 250, 200)
+
+
+def height_variable_id(level_hpa: int) -> str:
+    return f"hgt{level_hpa}"
+
+
+def _height_spec(level_hpa: int, numeric_id: int, value_range: tuple[int, int]) -> VariableSpec:
+    return VariableSpec(
+        id=height_variable_id(level_hpa),
+        label=f"{level_hpa} hPa geopotential height",
+        output_unit="m",
+        value_range=value_range,
+        numeric_id=numeric_id,
+        grib_element="HGT",
+        index_field=f":HGT:{level_hpa} mb:",
+        ecmwf_param="gh",
+        grib2_category=3,
+        grib2_number=5,
+        grib2_level_type=100,
+        grib2_level_value=float(level_hpa) * 100.0,
+        gdal_unit="gpm",
+    )
+
+
+# numericId 8..15 in the order of HEIGHT_LEVELS_HPA; the value range is the
+# level's codebook coverage (xuebuild/quantize.py), which is what an
+# observation fill would clamp to.
+_HEIGHT_VALUE_RANGES: dict[int, tuple[int, int]] = {
+    1000: (-905, 1635),
+    925: (-249, 1275),
+    850: (423, 1947),
+    700: (1911, 3435),
+    500: (4252, 6284),
+    300: (7505, 10045),
+    250: (8598, 11646),
+    200: (10086, 13134),
+}
+
+for _index, _level in enumerate(HEIGHT_LEVELS_HPA):
+    VARIABLES[height_variable_id(_level)] = _height_spec(
+        _level, 8 + _index, _HEIGHT_VALUE_RANGES[_level]
+    )
+del _index, _level
 
 
 def variable_spec(variable_id: str) -> VariableSpec:

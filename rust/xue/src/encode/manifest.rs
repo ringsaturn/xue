@@ -19,7 +19,10 @@ use crate::encode::errors::{EncodeError, Result};
 use crate::encode::metadata::iso_z;
 
 /// Schema v5 bundle registry, in manifest order.
-pub const BIN_BUNDLE_VARIABLES: &[&str] = &["tmp2m", "prate", "dswrf", "cref", "wind10m"];
+pub const BIN_BUNDLE_VARIABLES: &[&str] = &[
+    "tmp2m", "prate", "dswrf", "cref", "prmsl", "hgt1000", "hgt925", "hgt850", "hgt700", "hgt500",
+    "hgt300", "hgt250", "hgt200", "wind10m",
+];
 pub const REQUIRED_BIN_BUNDLE_VARIABLES: &[&str] = &["tmp2m", "prate"];
 
 /// Build a schema v5 manifest describing one `.xue` bundle per variable.

@@ -254,7 +254,17 @@ default — the Xue decoder is the everyday path, and `use_h264` (parsed in
 back on.
 `layer.ts` renders one quantized R8 plane with inverse Web Mercator and a
 palette lookup in the fragment shader, blending two frames via `u_mix` (never
-animate raster opacity). `particles.ts` renders 10 m wind. `playback.ts` holds
+animate raster opacity). The same shader draws the **pressure family** (mean
+sea level pressure and the eight isobaric geopotential heights) as contour
+lines instead of a filled field: `web/src/pressure.ts` holds the per-level
+contour intervals and emphasised lines, `layer.ts::setContours` turns the
+pass on, and the lines are found per pixel from the dequantized value and its
+screen gradient — no marching squares, no CPU. What makes that legal is an
+*encoder* rule: each pressure codebook's offset puts every standard contour
+exactly half a code off, so a line never coincides with a flat plateau.
+`tests/fixtures/pressure-registry.json` is the committed golden that holds
+the codebooks, intervals and emphasised lines identical across the Python
+encoder, the Rust encoder and the frontend. `particles.ts` renders 10 m wind. `playback.ts` holds
 the frame-rate ladder and the per-frame dwell that keeps a mixed-step axis
 moving at one apparent speed.
 

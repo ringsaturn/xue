@@ -45,6 +45,14 @@ pub const WIND_BUNDLE_ID: &str = "wind10m";
 /// frame inside its chunk. Mirrors `RAW_VARIABLE_IDS` in
 /// `xuebuild/binconvert.py`.
 const RAW_VARIABLE_IDS: [&str; 2] = ["prate", "cref"];
+/// The pressure family: mean sea level pressure and the isobaric geopotential
+/// heights. The frontend draws them as contour lines, so they ship bundles
+/// only — no poster (it would paint a filled field the view never shows) and
+/// no H.264 companion. Mirrors `PRESSURE_BUNDLE_IDS` in
+/// `xuebuild/binconvert.py`.
+const PRESSURE_BUNDLE_IDS: [&str; 9] = [
+    "prmsl", "hgt1000", "hgt925", "hgt850", "hgt700", "hgt500", "hgt300", "hgt250", "hgt200",
+];
 /// Every source names its precipitation input differently.
 const PRECIPITATION_INPUT_IDS: [&str; 3] = ["prate", "tp", "prate_ave"];
 /// The raw precipitation inputs a frame differences against its predecessor.
@@ -333,7 +341,11 @@ fn convert_units(variable_id: &str, unit: &str, values: &mut [f64]) -> Result<()
         // ECMWF run-total precipitation accumulation, metres -> mm; the rate
         // derivation happens later against the previous frame.
         "tp" => values.iter_mut().for_each(|value| *value *= 1000.0),
-        // Wind components are already m/s.
+        // GRIB2 carries mean sea level pressure in pascals; the codebook
+        // quantizes hectopascals.
+        "prmsl" => values.iter_mut().for_each(|value| *value /= 100.0),
+        // Wind components and geopotential heights are already in their
+        // output units (m/s, m).
         _ => {}
     }
     Ok(())
@@ -1065,6 +1077,15 @@ pub fn convert_bin(
     if wind_available {
         encoded_variable_ids.extend_from_slice(&WIND_COMPONENT_IDS);
     }
+    // Scalars that also ship a poster — every published scalar but the
+    // contour-drawn pressure family, which a filled first-frame poster would
+    // misrepresent (the native encoder writes no video at all; xuebuild's
+    // `native.py` adds those afterwards, and skips the same set).
+    let companion_variable_ids: Vec<&str> = scalar_variable_ids
+        .iter()
+        .copied()
+        .filter(|id| !PRESSURE_BUNDLE_IDS.contains(id))
+        .collect();
 
     // Per-variable time axes. On derived-precipitation sources the rate has no
     // data for the analysis frame — its interval would precede the run — so
@@ -1086,7 +1107,7 @@ pub fn convert_bin(
         EncodeError::conversion(format!("cannot create {}: {error}", output_dir.display()))
     })?;
     let mut poster_reports: BTreeMap<&str, Value> = BTreeMap::new();
-    for variable_id in &scalar_variable_ids {
+    for variable_id in &companion_variable_ids {
         let first = variable_offsets[variable_id][0];
         let plane = codes_by_offset[&first]
             .iter()

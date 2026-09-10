@@ -1,0 +1,277 @@
+{
+  "prmsl": {
+    "numericId": 7,
+    "label": "Mean sea level pressure",
+    "unit": "hPa",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 3,
+      "parameterNumber": 1,
+      "typeOfFirstFixedSurface": 101,
+      "scaleFactorOfFirstFixedSurface": null,
+      "scaledValueOfFirstFixedSurface": null
+    },
+    "contourInterval": 4.0,
+    "quality": {
+      "type": "linear",
+      "offset": 870.5,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 870.5,
+      "scale": 2.0,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    },
+    "emphasisInterval": 20.0
+  },
+  "hgt1000": {
+    "numericId": 8,
+    "label": "1000 hPa geopotential height",
+    "unit": "m",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 3,
+      "parameterNumber": 5,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 100000
+    },
+    "contourInterval": 30.0,
+    "quality": {
+      "type": "linear",
+      "offset": -905.0,
+      "scale": 10.0,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -905.0,
+      "scale": 20.0,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "hgt925": {
+    "numericId": 9,
+    "label": "925 hPa geopotential height",
+    "unit": "m",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 3,
+      "parameterNumber": 5,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 92500
+    },
+    "contourInterval": 30.0,
+    "quality": {
+      "type": "linear",
+      "offset": -249.0,
+      "scale": 6.0,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -249.0,
+      "scale": 12.0,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "hgt850": {
+    "numericId": 10,
+    "label": "850 hPa geopotential height",
+    "unit": "m",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 3,
+      "parameterNumber": 5,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 85000
+    },
+    "contourInterval": 30.0,
+    "quality": {
+      "type": "linear",
+      "offset": 423.0,
+      "scale": 6.0,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 423.0,
+      "scale": 12.0,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "hgt700": {
+    "numericId": 11,
+    "label": "700 hPa geopotential height",
+    "unit": "m",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 3,
+      "parameterNumber": 5,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 70000
+    },
+    "contourInterval": 30.0,
+    "quality": {
+      "type": "linear",
+      "offset": 1911.0,
+      "scale": 6.0,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 1911.0,
+      "scale": 12.0,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "hgt500": {
+    "numericId": 12,
+    "label": "500 hPa geopotential height",
+    "unit": "m",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 3,
+      "parameterNumber": 5,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 50000
+    },
+    "contourInterval": 40.0,
+    "quality": {
+      "type": "linear",
+      "offset": 4252.0,
+      "scale": 8.0,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 4252.0,
+      "scale": 16.0,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    },
+    "emphasisContours": [
+      5840.0,
+      5880.0
+    ]
+  },
+  "hgt300": {
+    "numericId": 13,
+    "label": "300 hPa geopotential height",
+    "unit": "m",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 3,
+      "parameterNumber": 5,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 30000
+    },
+    "contourInterval": 120.0,
+    "quality": {
+      "type": "linear",
+      "offset": 7505.0,
+      "scale": 10.0,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 7505.0,
+      "scale": 20.0,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "hgt250": {
+    "numericId": 14,
+    "label": "250 hPa geopotential height",
+    "unit": "m",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 3,
+      "parameterNumber": 5,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 25000
+    },
+    "contourInterval": 120.0,
+    "quality": {
+      "type": "linear",
+      "offset": 8598.0,
+      "scale": 12.0,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 8598.0,
+      "scale": 24.0,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "hgt200": {
+    "numericId": 15,
+    "label": "200 hPa geopotential height",
+    "unit": "m",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 3,
+      "parameterNumber": 5,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 20000
+    },
+    "contourInterval": 120.0,
+    "quality": {
+      "type": "linear",
+      "offset": 10086.0,
+      "scale": 12.0,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 10086.0,
+      "scale": 24.0,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  }
+}

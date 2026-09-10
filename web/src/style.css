@@ -506,10 +506,10 @@ body.stats-visible .stat-graph-wrap {
 .model-switch,
 .variable-switch {
   display: grid;
-  /* Two or three buttons (the wind button appears only when the run ships a
-     wind bundle) share the row evenly. */
-  grid-auto-flow: column;
-  grid-auto-columns: 1fr;
+  /* Two or three buttons share the row evenly; a run that also ships the
+     pressure family has enough of them to need a second row, so the track
+     list wraps rather than squeezing seven codes into one line. */
+  grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
   gap: 6px;
   margin-bottom: 18px;
 }

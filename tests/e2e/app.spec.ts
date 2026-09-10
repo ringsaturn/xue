@@ -19,6 +19,12 @@ const PRATE_FIXTURE = readFileSync(
 const WIND_FIXTURE = readFileSync(
   fileURLToPath(new URL("../fixtures/generated/web/wind10m.xue", import.meta.url)),
 );
+// One level of the pressure family: the viewer draws it as contour lines,
+// and it ships no poster, so switching to it exercises the path where nothing
+// paints until the first real plane decodes.
+const HGT500_FIXTURE = readFileSync(
+  fileURLToPath(new URL("../fixtures/generated/web/hgt500.xue", import.meta.url)),
+);
 const MANIFEST_FIXTURE = JSON.parse(
   readFileSync(
     fileURLToPath(new URL("../fixtures/generated/web/manifest.json", import.meta.url)),
@@ -135,7 +141,9 @@ async function routeBundle(
           ? TMP2M_FIXTURE
           : name === "wind10m.xue"
             ? WIND_FIXTURE
-            : (prateBody ?? PRATE_FIXTURE);
+            : name === "hgt500.xue"
+              ? HGT500_FIXTURE
+              : (prateBody ?? PRATE_FIXTURE);
     if (!body) return route.fulfill({ status: 404, body: "missing" });
     return route.fulfill({
       status: 200,
@@ -295,6 +303,39 @@ test("wind variable activates the particle layer session", async ({ page }, test
   await slider.focus();
   await page.keyboard.press("ArrowRight");
   await expect(page.locator("#frame-tooltip")).toContainText("F001");
+});
+
+test("a pressure level loads as its own contour session", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop", "desktop interaction coverage");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await routeManifest(page);
+  await routeBundle(page);
+  await page.goto("/");
+  await waitForReady(page);
+  const heightButton = page.getByRole("button", { name: "500MB HEIGHT" });
+  await expect(heightButton).toBeVisible();
+  await heightButton.click();
+  await expect(page.locator("body")).toHaveAttribute("data-variable", "hgt500");
+  await expect(page.locator("#variable-title")).toContainText("500 hPa");
+  await expect(page.locator("#legend-unit")).toHaveText("m");
+  // The level names itself in the URL — there is no separate ?level=.
+  await expect.poll(() => new URL(page.url()).searchParams.get("type")).toBe("hgt500");
+  // A bundle with no poster still reaches a decoded frame and a live slider.
+  await expect(page.getByRole("slider", { name: "Forecast hour" })).toBeEnabled();
+  const slider = page.getByRole("slider", { name: "Forecast hour" });
+  await slider.focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(page.locator("#frame-tooltip")).toContainText("F001");
+});
+
+test("?type=hgt500 opens the height view straight from the URL", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop", "desktop interaction coverage");
+  await routeManifest(page);
+  await routeBundle(page);
+  await page.goto("/?type=hgt500");
+  await waitForReady(page);
+  await expect(page.locator("body")).toHaveAttribute("data-variable", "hgt500");
+  await expect(page.locator("#variable-code")).toContainText("HGT 500MB");
 });
 
 test("switching to ECMWF loads its own run on a mixed-cadence 240-hour timeline", async ({ page }, testInfo) => {

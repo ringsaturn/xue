@@ -214,6 +214,50 @@ const COMPACT_REFLECTIVITY: LinearCodebook = LinearCodebook {
     ..QUALITY_REFLECTIVITY
 };
 
+// Sea level pressure and the pressure-level geopotential heights. The three
+// rules that fix these numbers are documented in `xuebuild/quantize.py`; the
+// one a reader of this file needs is **half-code alignment**: every standard
+// contour value falls exactly halfway between two codes, so a contour never
+// coincides with a code value and lights up a flat plateau wholesale. It is
+// an encoder rule — nothing in the container depends on it.
+//
+// The quality profile spends all 254 in-range codes from the offset; the
+// compact profile covers the same range at twice the step (and gives the
+// alignment up along with half the code space).
+//
+// This table must stay identical to `_PRESSURE_STEPS` in
+// `xuebuild/quantize.py`, or the two encoders stop being byte-identical.
+const PRESSURE_STEPS: &[(&str, f64, f64)] = &[
+    // (variable id, offset, quality step)
+    ("prmsl", 870.5, 1.0),
+    // 1000 hPa takes a 10 m step rather than the 6 m the other 30 m-interval
+    // levels use: its envelope spans 1474 m and 6 x 254 leaves no usable
+    // margin. 10 divides 30, so the alignment rule still holds.
+    ("hgt1000", -905.0, 10.0),
+    ("hgt925", -249.0, 6.0),
+    ("hgt850", 423.0, 6.0),
+    ("hgt700", 1911.0, 6.0),
+    ("hgt500", 4252.0, 8.0),
+    ("hgt300", 7505.0, 10.0),
+    ("hgt250", 8598.0, 12.0),
+    ("hgt200", 10086.0, 12.0),
+];
+
+/// The pressure-family codebook for one variable, or `None` when the variable
+/// is not in that family.
+fn pressure_codebook(variable_id: &str, compact: bool) -> Option<LinearCodebook> {
+    let &(name, offset, step) = PRESSURE_STEPS
+        .iter()
+        .find(|(id, _, _)| *id == variable_id)?;
+    Some(LinearCodebook {
+        minimum: offset,
+        maximum: offset + step * 254.0,
+        step: if compact { step * 2.0 } else { step },
+        nodata_code: 255,
+        name,
+    })
+}
+
 pub const PROFILES: &[&str] = &["quality", "compact", "balanced"];
 
 /// One profile's codebook for one variable.
@@ -233,6 +277,9 @@ pub fn codebook(profile: &str, variable_id: &str) -> Result<Codebook> {
         (_, "dswrf") => Codebook::Linear(COMPACT_FLUX),
         (_, "cref") if quality => Codebook::Linear(QUALITY_REFLECTIVITY),
         (_, "cref") => Codebook::Linear(COMPACT_REFLECTIVITY),
+        _ if pressure_codebook(variable_id, !quality).is_some() => Codebook::Linear(
+            pressure_codebook(variable_id, !quality).expect("checked just above"),
+        ),
         _ => {
             return Err(EncodeError::conversion(format!(
                 "no {profile} codebook for {variable_id}"

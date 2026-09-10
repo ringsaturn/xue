@@ -14,7 +14,7 @@ import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&ur
 
 import { CRC32_INITIAL, crc32Hex, crc32Update } from "./crc32";
 import { applyStaticMessages, basemapLang, locale, t, toggleLocale } from "./i18n";
-import { ForecastLayer } from "./layer";
+import { ForecastLayer, MAX_NAMED_CONTOURS, type ContourStyle } from "./layer";
 import {
   FORECAST_BUNDLE_IDS,
   FORECAST_MODEL_IDS,
@@ -38,6 +38,15 @@ import {
   type VideoBundleDescriptor,
 } from "./manifest";
 import { buildPalette } from "./palettes";
+import {
+  PRESSURE_BUNDLE_IDS,
+  PRESSURE_LEVELS,
+  pressureCode,
+  pressureLabel,
+  pressureLegend,
+  pressureLevel,
+  type PressureBundleId,
+} from "./pressure";
 import {
   DEFAULT_FPS,
   defaultFpsForLoop,
@@ -160,7 +169,33 @@ function prefetchConcurrency(): number {
 
 /** Per-variable UI copy; the `code` is prefixed with the active model's label
  * ("GFS / TMP 2M", "ECMWF / TMP 2M"). */
-const VARIABLE_UI = {
+interface VariableUi {
+  code: string;
+  title: readonly string[];
+  bufferTitle: string;
+  label: string;
+  legend: readonly string[];
+}
+
+/** The pressure family's nine entries, built from the level registry rather
+ * than written out: they differ only in the level, and the instrument panel's
+ * code and legend are already derived there. */
+function pressureVariableUi(): Record<PressureBundleId, VariableUi> {
+  const entries = {} as Record<PressureBundleId, VariableUi>;
+  for (const id of PRESSURE_BUNDLE_IDS) {
+    const level = PRESSURE_LEVELS[id];
+    entries[id] = {
+      code: pressureCode(id),
+      title: level.levelHpa === null ? ["Sea Level", "Pressure"] : [`${level.levelHpa} hPa`, "Height"],
+      bufferTitle: level.levelHpa === null ? "Pressure buffer" : "Height buffer",
+      label: pressureLabel(id),
+      legend: pressureLegend(id),
+    };
+  }
+  return entries;
+}
+
+const VARIABLE_UI: Record<ForecastBundleId, VariableUi> = {
   tmp2m: {
     code: "TMP 2M",
     title: ["Surface", "Temperature"],
@@ -196,13 +231,20 @@ const VARIABLE_UI = {
     label: t("varLabelWind10m"),
     legend: ["40", "30", "20", "10", "5", "0"],
   },
-} as const satisfies Record<ForecastBundleId, unknown>;
+  ...pressureVariableUi(),
+};
+
+function pressureBasemapTheme(): Record<PressureBundleId, { ocean: string; land: string }> {
+  const themes = {} as Record<PressureBundleId, { ocean: string; land: string }>;
+  for (const id of PRESSURE_BUNDLE_IDS) themes[id] = { ocean: "#101f2c", land: "#22384a" };
+  return themes;
+}
 
 /** Basemap tones per variable. tmp2m paints an opaque field so its base is
  * nearly invisible; prate and wind composite semi-transparent data over the
  * base, so those get a lighter ocean and a visible landmass to keep the page
  * from reading as a black void. */
-const BASEMAP_THEME = {
+const BASEMAP_THEME: Record<ForecastBundleId, { ocean: string; land: string }> = {
   tmp2m: { ocean: "#0b1826", land: "#182c3d" },
   prate: { ocean: "#16344a", land: "#28495f" },
   dswrf: { ocean: "#0d1b2b", land: "#1c3242" },
@@ -210,7 +252,11 @@ const BASEMAP_THEME = {
   // 5 dBZ edge to read against it.
   cref: { ocean: "#0c1a26", land: "#1a2f3d" },
   wind10m: { ocean: "#0e2131", land: "#1d3849" },
-} as const satisfies Record<ForecastBundleId, { ocean: string; land: string }>;
+  // The pressure family is drawn as thin lines over a nearly bare map, which
+  // is what a chart looks like: the base has to carry the geography on its
+  // own, so it is the lightest of the set.
+  ...pressureBasemapTheme(),
+};
 
 function currentBasemapTheme(): { ocean: string; land: string } {
   const id = document.body.dataset.variable as ForecastBundleId | undefined;
@@ -2134,6 +2180,36 @@ function loadVariable(variableId: ForecastBundleId, sequence: number): Promise<V
   return load.finally(() => sessionLoads.delete(variableId));
 }
 
+/** Half-widths in device pixels for the two weights a chart draws. Thin
+ * enough that a 4 hPa surface analysis does not fill in over a low, heavy
+ * enough that the emphasised lines read at a glance. */
+const CONTOUR_WIDTH = 0.6;
+const CONTOUR_EMPHASIS_WIDTH = 1.2;
+
+/** The contour settings for a variable, or null when it is a filled field.
+ *
+ * The dequantization comes off the bundle's own codebook rather than the
+ * level registry: the registry says what to draw, the file says what its
+ * codes mean, and a run encoded at a different profile stays correct.
+ * A logarithmic codebook has no contour reading at all. */
+function contourStyleFor(variable: BundleVariable): ContourStyle | null {
+  const level = pressureLevel(variable.id);
+  if (!level || variable.quantization.type !== "linear") return null;
+  return {
+    offset: variable.quantization.offset,
+    scale: variable.quantization.scale,
+    interval: level.contourInterval,
+    emphasisInterval: level.emphasisInterval ?? 0,
+    values: (level.emphasisContours ?? []).slice(0, MAX_NAMED_CONTOURS),
+    lineWidth: CONTOUR_WIDTH,
+    emphasisWidth: CONTOUR_EMPHASIS_WIDTH,
+    lineColor: [0.94, 0.96, 1, 1],
+    // A low-saturation fill under the lines: enough to read a ridge from a
+    // trough at a glance, faint enough that the lines stay the subject.
+    fillAlpha: 0.45,
+  };
+}
+
 /** Create the custom layer (and add it to the map) if it does not exist yet.
  * Grid configuration is the caller's business — poster and bundle planes use
  * different grids. */
@@ -2182,6 +2258,7 @@ async function showPoster(variableId: ForecastBundleId, sequence: number): Promi
     layerGridSource = posterMetadata;
     displayedReal = null;
     target.setPalette(buildPalette(variable));
+    target.setContours(contourStyleFor(variable));
     target.setFrame(plane);
   } catch (error) {
     console.warn("poster skipped:", error);
@@ -2235,6 +2312,7 @@ function applyVariable(session: VariableSession): void {
     ensureWindGrid(session);
   } else {
     layer.setPalette(buildPalette(session.variable));
+    layer.setContours(contourStyleFor(session.variable));
   }
   // Exactly one weather layer owns the screen: the scalar raster plane or the
   // wind particles.

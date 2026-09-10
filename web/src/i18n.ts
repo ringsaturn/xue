@@ -59,6 +59,10 @@ const MESSAGES = {
   varWind: { zh: "风场", en: "10M" },
   varSolar: { zh: "辐射", en: "FLUX" },
   varRadar: { zh: "雷达", en: "CREF" },
+  // The pressure family's buttons carry the level in the code ("MSLP",
+  // "500MB"); the gloss says what the field is, once for all eight heights.
+  varPressure: { zh: "气压", en: "SEA LVL" },
+  varHeight: { zh: "位势", en: "HEIGHT" },
   runCycle: { zh: "模式周期", en: "Model run" },
   // An observation dataset has no run cycle and no lead time: its runTime is
   // when the series starts, and a frame is an observation, not a forecast.
@@ -132,6 +136,12 @@ const MESSAGES = {
   varLabelDswrf: { zh: "太阳辐射", en: "Solar radiation" },
   varLabelWind10m: { zh: "10 米风", en: "10 m wind" },
   varLabelCref: { zh: "雷达组合反射率", en: "Composite radar reflectivity" },
+  varLabelPrmsl: { zh: "海平面气压", en: "Mean sea level pressure" },
+  // One string for eight levels: pressure.ts substitutes {level}.
+  varLabelHeightAtLevel: { zh: "{level} 百帕位势高度", en: "{level} hPa geopotential height" },
+  // The 5880 gpm contour, "588" on a Chinese chart — the line the western
+  // Pacific subtropical high is defined by.
+  legendSubtropicalHigh: { zh: "588 线", en: "588 line" },
   webglUnavailable: {
     zh: "此浏览器未提供 WebGL2 上下文",
     en: "This browser does not provide a WebGL2 context",
