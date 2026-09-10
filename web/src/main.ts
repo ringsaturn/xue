@@ -2290,6 +2290,16 @@ function loadVariable(variableId: ForecastBundleId, sequence: number): Promise<V
 const CONTOUR_WIDTH = 0.6;
 const CONTOUR_EMPHASIS_WIDTH = 1.2;
 
+/** Standard deviation, in grid cells, of the smoothing a plane gets before
+ * it is contoured. Sea level pressure is stored in 1 hPa codes and drawn
+ * every 4 hPa, so in a weak gradient one code spans several cells and the
+ * raw contour is a staircase along their edges; two cells of Gaussian
+ * (half a degree on the production grids) is enough to recover the smooth
+ * field underneath without blunting a low. The heights are quantized finer
+ * relative to their interval and need less, but one figure keeps every
+ * level of the family reading the same way. */
+const CONTOUR_SMOOTHING_CELLS = 2;
+
 /** The contour settings for a variable, or null when it is a filled field.
  *
  * The dequantization comes off the bundle's own codebook rather than the
@@ -2313,6 +2323,7 @@ function contourStyleFor(variable: BundleVariable): ContourStyle | null {
     // A low-saturation fill under the lines: enough to read a ridge from a
     // trough at a glance, faint enough that the lines stay the subject.
     fillAlpha: 0.45,
+    smoothing: CONTOUR_SMOOTHING_CELLS,
   };
 }
 

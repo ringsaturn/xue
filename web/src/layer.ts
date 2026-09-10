@@ -24,6 +24,21 @@ import { WHOLE_PLANE_COVERAGE, type CoverageBox } from "./tiles";
  * there is the honest answer: the alternative is painting another frame's
  * data. A whole plane sets the box to the whole texture, which passes every
  * sample and costs one comparison.
+ *
+ * The pressure family is drawn as contour lines from the same plane, and a
+ * contour is where 8-bit quantization shows: sea level pressure is stored in
+ * 1 hPa codes and drawn every 4 hPa, so in a weak gradient one code covers
+ * several cells and a line traced through the raw codes walks the edges of
+ * those plateaus as a staircase, with specks wherever the field sits on a
+ * code boundary. The real field is smooth, and a local mean over a few cells
+ * recovers what the quantization threw away. So when contours are on, the
+ * layer runs a separable Gaussian over each uploaded plane in *grid* space —
+ * an offscreen pass in `prerender`, once per plane rather than per pixel —
+ * into a 16-bit fixed-point RG8 texture, and the contour shader samples that
+ * instead of the codes. The pass renormalises its kernel by coverage, so a
+ * partial plane's edge and the poles get a one-sided mean rather than a bleed
+ * of stale texels. Filled fields never touch it; the probe still reads the
+ * original codes.
  */
 
 // Exported so a headless WebGL2 test can compile and sample the real shader:
@@ -84,6 +99,13 @@ vec4 cubicWeights(float t) {
   );
 }
 
+// One texel's code. A raw plane is an R8 texture, whose green channel reads
+// as zero; a smoothed plane is RG8 with the fraction of a code in green, so
+// one dot product decodes both without a branch or a uniform.
+float fetchCode(sampler2D data, vec2 texel) {
+  return dot(texture(data, texel).rg, vec2(1.0, 1.0 / 255.0));
+}
+
 // Bicubic Catmull-Rom reconstruction of the code field. Taps sit exactly on
 // texel centers, so the texture's own REPEAT/CLAMP wrap modes keep handling
 // the antimeridian and the poles. Catmull-Rom rings at sharp edges, and an
@@ -103,7 +125,7 @@ float sampleCode(sampler2D data, vec2 uv) {
     float rowSum = 0.0;
     for (int column = 0; column < 4; column += 1) {
       vec2 texel = (base + vec2(float(column - 1), float(row - 1)) + 0.5) / u_size;
-      float value = texture(data, texel).r;
+      float value = fetchCode(data, texel);
       rowSum += wx[column] * value;
       if (row >= 1 && row <= 2 && column >= 1 && column <= 2) {
         lo = min(lo, value);
@@ -200,6 +222,77 @@ void main() {
  * and a loop over a texture would cost far more than it bought. */
 export const MAX_NAMED_CONTOURS = 4;
 
+/** The widest half-kernel the smoothing pass compiles, in cells: three
+ * standard deviations of the widest smoothing a level asks for. */
+export const MAX_SMOOTHING_RADIUS = 9;
+
+// The smoothing pass: one axis of a separable Gaussian over a plane, drawn
+// with the viewport set to the plane's own size so every fragment is one
+// texel. The quad it draws is the same one the map pass uses; clip space
+// keeps the [0, 1] part.
+export const SMOOTH_VERTEX_SHADER = `#version 300 es
+in vec2 a_position;
+void main() {
+  gl_Position = vec4(a_position * 2.0 - 1.0, 0.0, 1.0);
+}`;
+
+export const SMOOTH_FRAGMENT_SHADER = `#version 300 es
+precision highp float;
+uniform sampler2D u_source;
+uniform vec2 u_size;
+// The direction of this pass in texels: (1, 0) then (0, 1).
+uniform vec2 u_axis;
+uniform float u_wrap;
+uniform vec4 u_cover;
+// Gaussian weights by distance from the center, u_radius of them in use.
+uniform int u_radius;
+uniform float u_weights[${MAX_SMOOTHING_RADIUS + 1}];
+out vec4 out_color;
+
+float fetchCode(vec2 texel) {
+  return dot(texture(u_source, texel).rg, vec2(1.0, 1.0 / 255.0));
+}
+
+// Whether a tap lands on real data: inside the grid (past the poles, or past
+// the edge of a cropped grid, there is nothing) and inside the coverage box,
+// tested on the wrapped coordinate exactly as the map pass tests it.
+bool covered(vec2 uv) {
+  if (uv.y < 0.0 || uv.y > 1.0) return false;
+  if (u_wrap < 0.5 && (uv.x < 0.0 || uv.x > 1.0)) return false;
+  float cu = u_wrap > 0.5 ? fract(uv.x) : uv.x;
+  bool coveredU = u_cover.x <= u_cover.y
+    ? (cu >= u_cover.x && cu <= u_cover.y)
+    : (cu >= u_cover.x || cu <= u_cover.y);
+  return coveredU && uv.y >= u_cover.z && uv.y <= u_cover.w;
+}
+
+// A code in [0, 1] as sixteen fixed-point bits across two channels: the
+// whole codes in red, the fraction of one in green. Reading it back is the
+// same dot product the map pass applies to every plane.
+vec2 pack(float code) {
+  float scaled = clamp(code, 0.0, 1.0) * 255.0;
+  float whole = floor(scaled);
+  return vec2(whole / 255.0, scaled - whole);
+}
+
+void main() {
+  vec2 texel = floor(gl_FragCoord.xy);
+  float sum = 0.0;
+  float weight = 0.0;
+  for (int offset = -${MAX_SMOOTHING_RADIUS}; offset <= ${MAX_SMOOTHING_RADIUS}; offset += 1) {
+    if (abs(offset) > u_radius) continue;
+    vec2 uv = (texel + float(offset) * u_axis + 0.5) / u_size;
+    if (!covered(uv)) continue;
+    float w = u_weights[abs(offset)];
+    sum += w * fetchCode(uv);
+    weight += w;
+  }
+  // Renormalising by the weight that landed makes the mean one-sided at an
+  // edge instead of pulling it toward whatever lies beyond. A texel outside
+  // the coverage gathers nothing and is discarded by the map pass anyway.
+  out_color = vec4(pack(weight > 0.0 ? sum / weight : 0.0), 0.0, 1.0);
+}`;
+
 /** Contour drawing for one variable, all of it in the variable's own physical
  * unit. Widths are half-widths in device pixels. */
 export interface ContourStyle {
@@ -219,6 +312,35 @@ export interface ContourStyle {
   lineColor: readonly [number, number, number, number];
   /** Opacity of the palette fill beneath the lines; 0 draws lines alone. */
   fillAlpha: number;
+  /** Standard deviation, in grid cells, of the Gaussian the plane is
+   * smoothed with before contouring; 0 contours the raw codes. */
+  smoothing: number;
+}
+
+/** The two textures one frame slot owns, and what each currently holds. The
+ * raw plane is what the decoder produced; the smoothed one is derived from
+ * it by the prerender pass, and is only as current as its bookkeeping says. */
+interface FrameSlot {
+  raw: WebGLTexture;
+  smooth: WebGLTexture;
+  /** Plane uploaded to `raw`, compared by identity so redundant per-rAF
+   * uploads are skipped during blend sweeps. */
+  plane: Uint8Array | null;
+  /** Plane `smooth` was built from, and the coverage and kernel it was built
+   * with; a mismatch on either means the pass has to run again. */
+  smoothedPlane: Uint8Array | null;
+  smoothedKey: string;
+}
+
+/** A Gaussian's weights out to three standard deviations, unnormalised: the
+ * pass divides by the weight that actually lands. */
+export function gaussianWeights(sigma: number): number[] {
+  const radius = Math.min(MAX_SMOOTHING_RADIUS, Math.ceil(3 * sigma));
+  const weights: number[] = [];
+  for (let offset = 0; offset <= radius; offset += 1) {
+    weights.push(Math.exp(-(offset * offset) / (2 * sigma * sigma)));
+  }
+  return weights;
 }
 
 export class ForecastLayer implements CustomLayerInterface {
@@ -230,13 +352,19 @@ export class ForecastLayer implements CustomLayerInterface {
   private gl: WebGL2RenderingContext | null = null;
   private program: WebGLProgram | null = null;
   private vertexArray: WebGLVertexArrayObject | null = null;
-  private dataTextures: [WebGLTexture, WebGLTexture] | null = null;
+  /** Slot A carries the displayed frame, slot B the following one. */
+  private slots: [FrameSlot, FrameSlot] | null = null;
   private paletteTexture: WebGLTexture | null = null;
   private uniforms: Record<string, WebGLUniformLocation | null> = {};
+  // The smoothing pass: its program, the texture the horizontal pass writes
+  // and the vertical one reads, and the framebuffer both draw through.
+  private smoothProgram: WebGLProgram | null = null;
+  private smoothUniforms: Record<string, WebGLUniformLocation | null> = {};
+  private scratchTexture: WebGLTexture | null = null;
+  private framebuffer: WebGLFramebuffer | null = null;
+  /** Grid size the smoothed and scratch textures were last allocated for. */
+  private smoothSize: [number, number] = [0, 0];
   private mixWeight = 0;
-  /** Planes currently uploaded to slot A / slot B, compared by identity so
-   * redundant per-rAF uploads are skipped during blend sweeps. */
-  private uploadedPlanes: [Uint8Array | null, Uint8Array | null] = [null, null];
   /** The part of the texture the displayed plane actually filled. */
   private coverage: CoverageBox = WHOLE_PLANE_COVERAGE;
   /** Contour drawing, off by default: every filled field renders exactly as
@@ -274,7 +402,7 @@ export class ForecastLayer implements CustomLayerInterface {
     this.wraps = (grid.wrapLongitude as boolean) ?? Math.abs(this.width * this.longitudeStep - 360) < 1e-6;
     this.hasFrame = false;
     // Texture dimensions changed; every plane must be re-uploaded.
-    this.uploadedPlanes = [null, null];
+    this.forgetPlanes();
     this.coverage = WHOLE_PLANE_COVERAGE;
     this.pendingPlaneA = null;
     this.pendingPlaneB = null;
@@ -288,24 +416,7 @@ export class ForecastLayer implements CustomLayerInterface {
     }
     this.map = map;
     this.gl = gl;
-    const program = gl.createProgram();
-    for (const [kind, source] of [
-      [gl.VERTEX_SHADER, VERTEX_SHADER],
-      [gl.FRAGMENT_SHADER, FRAGMENT_SHADER],
-    ] as const) {
-      const shader = gl.createShader(kind);
-      if (!shader) throw new Error("failed to create shader");
-      gl.shaderSource(shader, source);
-      gl.compileShader(shader);
-      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-        throw new Error(`shader compile failed: ${gl.getShaderInfoLog(shader) ?? "unknown"}`);
-      }
-      gl.attachShader(program, shader);
-    }
-    gl.linkProgram(program);
-    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-      throw new Error(`program link failed: ${gl.getProgramInfoLog(program) ?? "unknown"}`);
-    }
+    const program = buildProgram(gl, VERTEX_SHADER, FRAGMENT_SHADER);
     this.program = program;
     for (const name of [
       "u_matrix", "u_data", "u_data_b", "u_palette", "u_first", "u_step", "u_size",
@@ -314,8 +425,15 @@ export class ForecastLayer implements CustomLayerInterface {
     ]) {
       this.uniforms[name] = gl.getUniformLocation(program, name);
     }
+    const smoothProgram = buildProgram(gl, SMOOTH_VERTEX_SHADER, SMOOTH_FRAGMENT_SHADER);
+    this.smoothProgram = smoothProgram;
+    for (const name of ["u_source", "u_size", "u_axis", "u_wrap", "u_cover", "u_radius", "u_weights"]) {
+      this.smoothUniforms[name] = gl.getUniformLocation(smoothProgram, name);
+    }
 
     // One quad spanning three world copies so wrapped views stay covered.
+    // Both programs bind a_position to attribute 0, so the smoothing pass
+    // draws the same array; its clip space keeps the middle copy.
     this.vertexArray = gl.createVertexArray();
     gl.bindVertexArray(this.vertexArray);
     const buffer = gl.createBuffer();
@@ -325,12 +443,14 @@ export class ForecastLayer implements CustomLayerInterface {
       new Float32Array([-1, 0, 2, 0, -1, 1, -1, 1, 2, 0, 2, 1]),
       gl.STATIC_DRAW,
     );
-    const positionLocation = gl.getAttribLocation(program, "a_position");
-    gl.enableVertexAttribArray(positionLocation);
-    gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(POSITION_ATTRIBUTE);
+    gl.vertexAttribPointer(POSITION_ATTRIBUTE, 2, gl.FLOAT, false, 0, 0);
     gl.bindVertexArray(null);
 
-    this.dataTextures = [this.createDataTexture(gl), this.createDataTexture(gl)];
+    this.slots = [this.createSlot(gl), this.createSlot(gl)];
+    this.scratchTexture = this.createDataTexture(gl);
+    this.framebuffer = gl.createFramebuffer();
+    this.smoothSize = [0, 0];
     this.paletteTexture = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, this.paletteTexture);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
@@ -340,10 +460,29 @@ export class ForecastLayer implements CustomLayerInterface {
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 256, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
 
     this.hasFrame = false;
-    this.uploadedPlanes = [null, null];
     if (this.pendingPalette) this.setPalette(this.pendingPalette);
     if (this.pendingPlaneA) {
       this.setBlend(this.pendingPlaneA, this.pendingPlaneB, this.mixWeight, this.coverage);
+    }
+  }
+
+  private createSlot(gl: WebGL2RenderingContext): FrameSlot {
+    return {
+      raw: this.createDataTexture(gl),
+      smooth: this.createDataTexture(gl),
+      plane: null,
+      smoothedPlane: null,
+      smoothedKey: "",
+    };
+  }
+
+  /** Forget what the slots hold, so every plane is uploaded and smoothed
+   * afresh: after a grid change, and after the context comes back. */
+  private forgetPlanes(): void {
+    for (const slot of this.slots ?? []) {
+      slot.plane = null;
+      slot.smoothedPlane = null;
+      slot.smoothedKey = "";
     }
   }
 
@@ -365,7 +504,10 @@ export class ForecastLayer implements CustomLayerInterface {
     this.gl = null;
     this.map = null;
     this.program = null;
-    this.dataTextures = null;
+    this.smoothProgram = null;
+    this.slots = null;
+    this.scratchTexture = null;
+    this.framebuffer = null;
     this.paletteTexture = null;
   }
 
@@ -414,41 +556,126 @@ export class ForecastLayer implements CustomLayerInterface {
     this.mixWeight = planeB ? Math.min(1, Math.max(0, mix)) : 0;
     this.coverage = coverage;
     const gl = this.gl;
-    if (!gl || !this.dataTextures || !this.width || !this.height) return;
+    if (!gl || !this.slots || !this.width || !this.height) return;
     // A frame step promotes the upcoming plane to the current one; swap the
-    // texture slots so the promotion costs a pointer flip, not a re-upload of
-    // megabytes of texels inside one animation frame.
-    if (this.uploadedPlanes[0] !== planeA && this.uploadedPlanes[1] === planeA) {
-      this.dataTextures = [this.dataTextures[1]!, this.dataTextures[0]!];
-      this.uploadedPlanes = [this.uploadedPlanes[1], this.uploadedPlanes[0]];
+    // slots so the promotion costs a pointer flip, not a re-upload of
+    // megabytes of texels (and a re-smoothing) inside one animation frame.
+    if (this.slots[0].plane !== planeA && this.slots[1].plane === planeA) {
+      this.slots = [this.slots[1], this.slots[0]];
     }
-    this.uploadPlane(gl, 0, planeA);
-    if (planeB) this.uploadPlane(gl, 1, planeB);
+    this.uploadPlane(gl, this.slots[0], planeA);
+    if (planeB) this.uploadPlane(gl, this.slots[1], planeB);
     this.hasFrame = true;
     this.map?.triggerRepaint();
   }
 
-  private uploadPlane(gl: WebGL2RenderingContext, slot: 0 | 1, plane: Uint8Array): void {
-    if (this.uploadedPlanes[slot] === plane) return;
-    gl.bindTexture(gl.TEXTURE_2D, this.dataTextures![slot]!);
+  private uploadPlane(gl: WebGL2RenderingContext, slot: FrameSlot, plane: Uint8Array): void {
+    if (slot.plane === plane) return;
+    gl.bindTexture(gl.TEXTURE_2D, slot.raw);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, this.wraps ? gl.REPEAT : gl.CLAMP_TO_EDGE);
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, this.width, this.height, 0, gl.RED, gl.UNSIGNED_BYTE, plane);
-    this.uploadedPlanes[slot] = plane;
+    slot.plane = plane;
+  }
+
+  /** What the smoothing pass would be built from right now, or null when
+   * contours are off or unsmoothed. Coverage is part of it because the
+   * kernel is renormalised against the box: a plane re-covered by a wider
+   * decode has different edges. */
+  private smoothingKey(): string | null {
+    const sigma = this.contours?.smoothing ?? 0;
+    if (!this.contours || this.contours.interval <= 0 || sigma <= 0) return null;
+    const box = this.coverage;
+    return `${sigma}|${box.uStart},${box.uEnd},${box.vStart},${box.vEnd}`;
+  }
+
+  /** The smoothing pass, run by the map before the layers draw. It costs one
+   * plane-sized draw per axis per slot, and only for a slot whose raw plane
+   * (or coverage, or kernel) changed since it last ran, which during
+   * playback is one slot per frame step. */
+  prerender(gl: WebGLRenderingContext | WebGL2RenderingContext): void {
+    if (!(gl instanceof WebGL2RenderingContext)) return;
+    if (!this.visible || !this.hasFrame || !this.slots || !this.smoothProgram || !this.framebuffer) return;
+    const key = this.smoothingKey();
+    if (key === null) return;
+    const stale = this.slots.filter(
+      (slot) => slot.plane && (slot.smoothedPlane !== slot.plane || slot.smoothedKey !== key),
+    );
+    if (stale.length === 0) return;
+
+    if (this.smoothSize[0] !== this.width || this.smoothSize[1] !== this.height) {
+      for (const texture of [this.scratchTexture!, this.slots[0].smooth, this.slots[1].smooth]) {
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, this.wraps ? gl.REPEAT : gl.CLAMP_TO_EDGE);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RG8, this.width, this.height, 0, gl.RG, gl.UNSIGNED_BYTE, null);
+      }
+      this.smoothSize = [this.width, this.height];
+    }
+
+    const previousFramebuffer = gl.getParameter(gl.FRAMEBUFFER_BINDING) as WebGLFramebuffer | null;
+    const previousViewport = gl.getParameter(gl.VIEWPORT) as Int32Array;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffer);
+    gl.viewport(0, 0, this.width, this.height);
+    gl.disable(gl.BLEND);
+    gl.disable(gl.DEPTH_TEST);
+    gl.disable(gl.STENCIL_TEST);
+    gl.disable(gl.SCISSOR_TEST);
+    gl.useProgram(this.smoothProgram);
+    gl.bindVertexArray(this.vertexArray);
+    const weights = gaussianWeights(this.contours!.smoothing);
+    gl.uniform2f(this.smoothUniforms.u_size!, this.width, this.height);
+    gl.uniform1f(this.smoothUniforms.u_wrap!, this.wraps ? 1 : 0);
+    gl.uniform4f(
+      this.smoothUniforms.u_cover!,
+      this.coverage.uStart,
+      this.coverage.uEnd,
+      this.coverage.vStart,
+      this.coverage.vEnd,
+    );
+    gl.uniform1i(this.smoothUniforms.u_radius!, weights.length - 1);
+    const padded = new Float32Array(MAX_SMOOTHING_RADIUS + 1);
+    padded.set(weights);
+    gl.uniform1fv(this.smoothUniforms.u_weights!, padded);
+    gl.uniform1i(this.smoothUniforms.u_source!, 0);
+    gl.activeTexture(gl.TEXTURE0);
+    for (const slot of stale) {
+      // Rows first into the scratch texture, then columns into the slot's own.
+      for (const [source, target, axis] of [
+        [slot.raw, this.scratchTexture!, [1, 0]],
+        [this.scratchTexture!, slot.smooth, [0, 1]],
+      ] as const) {
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, target, 0);
+        gl.bindTexture(gl.TEXTURE_2D, source);
+        gl.uniform2f(this.smoothUniforms.u_axis!, axis[0], axis[1]);
+        gl.drawArrays(gl.TRIANGLES, 0, 6);
+      }
+      slot.smoothedPlane = slot.plane;
+      slot.smoothedKey = key;
+    }
+    gl.bindVertexArray(null);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, previousFramebuffer);
+    gl.viewport(previousViewport[0]!, previousViewport[1]!, previousViewport[2]!, previousViewport[3]!);
   }
 
   render(gl: WebGLRenderingContext | WebGL2RenderingContext, args: unknown): void {
     if (!(gl instanceof WebGL2RenderingContext)) return;
-    if (!this.visible || !this.program || !this.dataTextures || !this.hasFrame || !this.pendingPalette) return;
+    if (!this.visible || !this.program || !this.slots || !this.hasFrame || !this.pendingPalette) return;
     const matrix = extractMatrix(args);
     if (!matrix) return;
+
+    // A slot reads through its smoothed texture only when that is current;
+    // prerender runs first in the same frame, so it is, but a raw plane is
+    // the right fallback rather than a stale one.
+    const key = this.smoothingKey();
+    const textureOf = (slot: FrameSlot): WebGLTexture =>
+      key !== null && slot.smoothedPlane === slot.plane && slot.smoothedKey === key ? slot.smooth : slot.raw;
 
     gl.useProgram(this.program);
     gl.uniformMatrix4fv(this.uniforms.u_matrix!, false, matrix);
     gl.uniform2f(this.uniforms.u_first!, this.firstLongitude, this.firstLatitude);
     gl.uniform2f(this.uniforms.u_step!, this.longitudeStep, this.latitudeStep);
     gl.uniform2f(this.uniforms.u_size!, this.width, this.height);
-    gl.uniform1f(this.uniforms.u_mix!, this.uploadedPlanes[1] ? this.mixWeight : 0);
+    gl.uniform1f(this.uniforms.u_mix!, this.slots[1].plane ? this.mixWeight : 0);
     gl.uniform1f(this.uniforms.u_wrap!, this.wraps ? 1 : 0);
     gl.uniform4f(
       this.uniforms.u_cover!,
@@ -479,10 +706,10 @@ export class ForecastLayer implements CustomLayerInterface {
     gl.uniform4f(this.uniforms.u_line_color!, line[0], line[1], line[2], line[3]);
     gl.uniform1f(this.uniforms.u_fill_alpha!, contours?.fillAlpha ?? 1);
     gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, this.dataTextures[0]!);
+    gl.bindTexture(gl.TEXTURE_2D, textureOf(this.slots[0]));
     gl.uniform1i(this.uniforms.u_data!, 0);
     gl.activeTexture(gl.TEXTURE1);
-    gl.bindTexture(gl.TEXTURE_2D, this.dataTextures[1]!);
+    gl.bindTexture(gl.TEXTURE_2D, textureOf(this.slots[1]));
     gl.uniform1i(this.uniforms.u_data_b!, 1);
     gl.activeTexture(gl.TEXTURE2);
     gl.bindTexture(gl.TEXTURE_2D, this.paletteTexture);
@@ -494,6 +721,33 @@ export class ForecastLayer implements CustomLayerInterface {
     gl.drawArrays(gl.TRIANGLES, 0, 6);
     gl.bindVertexArray(null);
   }
+}
+
+/** Attribute index both programs bind `a_position` to, so one vertex array
+ * serves the map pass and the smoothing pass alike. */
+const POSITION_ATTRIBUTE = 0;
+
+function buildProgram(gl: WebGL2RenderingContext, vertexSource: string, fragmentSource: string): WebGLProgram {
+  const program = gl.createProgram();
+  for (const [kind, source] of [
+    [gl.VERTEX_SHADER, vertexSource],
+    [gl.FRAGMENT_SHADER, fragmentSource],
+  ] as const) {
+    const shader = gl.createShader(kind);
+    if (!shader) throw new Error("failed to create shader");
+    gl.shaderSource(shader, source);
+    gl.compileShader(shader);
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+      throw new Error(`shader compile failed: ${gl.getShaderInfoLog(shader) ?? "unknown"}`);
+    }
+    gl.attachShader(program, shader);
+  }
+  gl.bindAttribLocation(program, POSITION_ATTRIBUTE, "a_position");
+  gl.linkProgram(program);
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    throw new Error(`program link failed: ${gl.getProgramInfoLog(program) ?? "unknown"}`);
+  }
+  return program;
 }
 
 /** MapLibre v4 passed a mat4 directly; v5 wraps it in projection data. */

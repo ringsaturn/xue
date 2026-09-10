@@ -14,7 +14,14 @@
 
 import { expect, test } from "@playwright/test";
 
-import { FRAGMENT_SHADER, VERTEX_SHADER } from "../../web/src/layer";
+import {
+  FRAGMENT_SHADER,
+  MAX_SMOOTHING_RADIUS,
+  SMOOTH_FRAGMENT_SHADER,
+  SMOOTH_VERTEX_SHADER,
+  VERTEX_SHADER,
+  gaussianWeights,
+} from "../../web/src/layer";
 
 const GRID_WIDTH = 8;
 const GRID_HEIGHT = 4;
@@ -321,4 +328,183 @@ test("a contour family too fine for the screen fades out instead of smearing", a
   });
   expect(linePixels(resolvable)).toBeGreaterThan(0);
   expect(linePixels(unresolvable)).toBe(0);
+});
+
+// -- smoothing --------------------------------------------------------------
+//
+// Before a plane is contoured it is smoothed in grid space by an offscreen
+// pass, which is what turns the 1 hPa staircase of a quantized surface chart
+// into a line. What these check is the pass's bookkeeping rather than its
+// looks: it wraps where the grid wraps, it stops at the coverage box, and a
+// code survives the sixteen-bit round trip exactly.
+
+interface SmoothingOptions {
+  wrap: boolean;
+  cover: [number, number, number, number];
+  /** Code of each column, repeated down every row. */
+  columnCodes: number[];
+  sigma: number;
+}
+
+/** The smoothed code of every column along the middle row, in code units:
+ * both passes of the real program run over a plane of the given columns. */
+async function smoothColumns(
+  page: import("@playwright/test").Page,
+  options: SmoothingOptions,
+): Promise<number[]> {
+  return page.evaluate(
+    ({ vertexSource, fragmentSource, height, wrap, cover, columnCodes, weights, weightSlots }) => {
+      const width = columnCodes.length;
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const gl = canvas.getContext("webgl2", { antialias: false });
+      if (!gl) throw new Error("no WebGL2 context");
+
+      const program = gl.createProgram()!;
+      for (const [kind, source] of [
+        [gl.VERTEX_SHADER, vertexSource],
+        [gl.FRAGMENT_SHADER, fragmentSource],
+      ] as const) {
+        const shader = gl.createShader(kind)!;
+        gl.shaderSource(shader, source);
+        gl.compileShader(shader);
+        if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+          throw new Error(`compile failed: ${gl.getShaderInfoLog(shader)}`);
+        }
+        gl.attachShader(program, shader);
+      }
+      gl.bindAttribLocation(program, 0, "a_position");
+      gl.linkProgram(program);
+      if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+        throw new Error(`link failed: ${gl.getProgramInfoLog(program)}`);
+      }
+      gl.useProgram(program);
+
+      const quad = new Float32Array([0, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 1]);
+      const buffer = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+      gl.bufferData(gl.ARRAY_BUFFER, quad, gl.STATIC_DRAW);
+      gl.enableVertexAttribArray(0);
+      gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+
+      const texture = (internalFormat: number, format: number, data: Uint8Array | null) => {
+        const created = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, created);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, wrap ? gl.REPEAT : gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+        gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, width, height, 0, format, gl.UNSIGNED_BYTE, data);
+        return created;
+      };
+      const plane = new Uint8Array(width * height);
+      for (let row = 0; row < height; row += 1) {
+        for (let column = 0; column < width; column += 1) {
+          plane[row * width + column] = columnCodes[column]!;
+        }
+      }
+      const raw = texture(gl.R8, gl.RED, plane);
+      const scratch = texture(gl.RG8, gl.RG, null);
+      const smooth = texture(gl.RG8, gl.RG, null);
+
+      const uniform = (name: string) => gl.getUniformLocation(program, name);
+      gl.uniform2f(uniform("u_size"), width, height);
+      gl.uniform1f(uniform("u_wrap"), wrap ? 1 : 0);
+      gl.uniform4f(uniform("u_cover"), cover[0], cover[1], cover[2], cover[3]);
+      gl.uniform1i(uniform("u_radius"), weights.length - 1);
+      const padded = new Float32Array(weightSlots);
+      padded.set(weights);
+      gl.uniform1fv(uniform("u_weights"), padded);
+      gl.uniform1i(uniform("u_source"), 0);
+      gl.activeTexture(gl.TEXTURE0);
+
+      const framebuffer = gl.createFramebuffer();
+      gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+      gl.viewport(0, 0, width, height);
+      for (const [source, target, axis] of [
+        [raw, scratch, [1, 0]],
+        [scratch, smooth, [0, 1]],
+      ] as const) {
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, target, 0);
+        gl.bindTexture(gl.TEXTURE_2D, source);
+        gl.uniform2f(uniform("u_axis"), axis[0], axis[1]);
+        gl.drawArrays(gl.TRIANGLES, 0, 6);
+      }
+
+      const pixels = new Uint8Array(width * 4);
+      gl.readPixels(0, Math.floor(height / 2), width, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+      // The map pass's own decode: whole codes in red, the fraction in green.
+      return Array.from({ length: width }, (_, x) => pixels[x * 4]! + pixels[x * 4 + 1]! / 255);
+    },
+    {
+      vertexSource: SMOOTH_VERTEX_SHADER,
+      fragmentSource: SMOOTH_FRAGMENT_SHADER,
+      height: GRID_HEIGHT,
+      wrap: options.wrap,
+      cover: options.cover,
+      columnCodes: options.columnCodes,
+      weights: gaussianWeights(options.sigma),
+      weightSlots: MAX_SMOOTHING_RADIUS + 1,
+    },
+  );
+}
+
+/** Eight columns of one code then eight of another: the staircase's edge. */
+const STEP_COLUMNS = [...Array<number>(8).fill(100), ...Array<number>(8).fill(200)];
+
+test("smoothing turns a code step into a ramp and leaves the far cells alone", async ({ page }) => {
+  const codes = await smoothColumns(page, {
+    wrap: false,
+    cover: [0, 1, 0, 1],
+    columnCodes: STEP_COLUMNS,
+    sigma: 2,
+  });
+  for (let column = 1; column < codes.length; column += 1) {
+    expect(codes[column]!).toBeGreaterThanOrEqual(codes[column - 1]!);
+  }
+  // The cells beside the step now hold something in between.
+  expect(codes[7]!).toBeGreaterThan(110);
+  expect(codes[8]!).toBeLessThan(190);
+  // A cropped grid ends at its edge: the first column sees only its own
+  // side and keeps its code exactly, sixteen-bit round trip included.
+  expect(codes[0]).toBeCloseTo(100, 6);
+  expect(codes[codes.length - 1]).toBeCloseTo(200, 6);
+});
+
+test("smoothing wraps across the antimeridian when the grid does", async ({ page }) => {
+  const codes = await smoothColumns(page, {
+    wrap: true,
+    cover: [0, 1, 0, 1],
+    columnCodes: STEP_COLUMNS,
+    sigma: 2,
+  });
+  // The first column is now next to the last one, and each feels the other.
+  expect(codes[0]!).toBeGreaterThan(110);
+  expect(codes[codes.length - 1]!).toBeLessThan(190);
+});
+
+test("smoothing stops at the coverage box instead of bleeding stale texels", async ({ page }) => {
+  // Only the western half is real data; the eastern half is whatever the
+  // texture held before. The last real column must not see it.
+  const codes = await smoothColumns(page, {
+    wrap: true,
+    cover: [0, 0.5, 0, 1],
+    columnCodes: STEP_COLUMNS,
+    sigma: 2,
+  });
+  for (let column = 0; column < 8; column += 1) {
+    expect(codes[column]).toBeCloseTo(100, 6);
+  }
+});
+
+test("a flat plane comes back from the smoothing pass unchanged", async ({ page }) => {
+  const codes = await smoothColumns(page, {
+    wrap: true,
+    cover: [0, 1, 0, 1],
+    columnCodes: Array<number>(16).fill(128),
+    sigma: 2,
+  });
+  for (const code of codes) expect(code).toBeCloseTo(128, 6);
 });
