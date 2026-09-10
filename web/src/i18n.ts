@@ -186,6 +186,12 @@ const MESSAGES = {
   probeNoData: { zh: "此帧无数据", en: "No data at this frame" },
   probeAwaiting: { zh: "等待该帧解码", en: "Waiting for this frame" },
 
+  // The letter on a pressure center. A Chinese chart writes the character,
+  // an English one the initial; either way it is the one glyph on the map
+  // that is not a number.
+  centerHigh: { zh: "高", en: "H" },
+  centerLow: { zh: "低", en: "L" },
+
   // Historical showcase: the list page and the viewer's case banner. The
   // footer link keeps the footer's code-word style in English.
   showcaseLink: { zh: "历史个例", en: "CASES" },

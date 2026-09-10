@@ -266,7 +266,16 @@ exactly half a code off, so a line never coincides with a flat plateau. The
 so before contouring, `layer.ts::prerender` smooths each uploaded plane in
 grid space — a separable Gaussian, coverage-renormalised, into a 16-bit RG8
 texture the same shader then samples; `CONTOUR_SMOOTHING_CELLS` in `main.ts`
-sets its width, and filled fields never go through it.
+sets its width, and filled fields never go through it. The labels — a value on
+each line, an H/L (高/低) with its value on each closed center — are the one
+CPU step: `web/src/isolines.ts` reduces the displayed plane to the cells in
+view, smooths it the same way, runs marching squares and a windowed-extremum
+search, and `labels.worker.ts` runs that off the main thread; the result is a
+small GeoJSON that two MapLibre symbol layers place (along the line, at the
+point) with the basemap's own collision handling, a halo in the ground tone
+opening the gap in the line. Playback throttles the trace to once a second
+so labels do not crawl along moving lines; a stop, a step or a pan refreshes
+at once.
 `tests/fixtures/pressure-registry.json` is the committed golden that holds
 the codebooks, intervals and emphasised lines identical across the Python
 encoder, the Rust encoder and the frontend. `particles.ts` renders 10 m wind. `playback.ts` holds
