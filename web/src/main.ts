@@ -243,6 +243,11 @@ const VARIABLE_UI: Record<ForecastBundleId, VariableUi> = {
 interface BasemapTones {
   ocean: string;
   land: string;
+  /** Painted behind everything — visible past the coastlines' antialiasing
+   * and across the whole canvas until the first tiles arrive. Defaults to
+   * `ocean`, which is what a themed slate wants; a layer that leaves the
+   * flavor alone names the flavor's own background instead. */
+  background?: string;
 }
 
 function pressureBasemapTheme(tones: BasemapTones): Record<PressureBundleId, BasemapTones> {
@@ -270,18 +275,35 @@ const DARK_BASEMAP: Record<ForecastBundleId, BasemapTones> = {
   ...pressureBasemapTheme({ ocean: "#101f2c", land: "#22384a" }),
 };
 
-/** Light does not mean a light map. Each of these is the design's own field
- * for that layer composited over paper at the opacity it specifies: a warm
- * sheet under temperature, a dark slate under precipitation, wind and radar
- * (their palettes run translucent at the low end and vanish on paper), and
- * the chart stock under the pressure family. The paper is the chrome —
- * capsule, rail, sheet — floating over it. */
+/** Protomaps' data-viz flavor for the light theme: white land, pale grey
+ * water, and no landcover tinting the continents — a base that stays out of
+ * the data's way. The dark theme keeps the "dark" flavor. */
+const LIGHT_FLAVOR = "white";
+
+/** The white flavor's own ground, read from the flavor rather than copied
+ * into hexes here: a light-theme layer that takes these tones leaves the
+ * basemap exactly as Protomaps drew it. */
+const PAPER_GROUND: BasemapTones = {
+  ocean: namedFlavor(LIGHT_FLAVOR).water,
+  land: namedFlavor(LIGHT_FLAVOR).earth,
+  background: namedFlavor(LIGHT_FLAVOR).background,
+};
+
+/** Light means a light map: every layer sits on that same white ground, the
+ * four whose palettes run translucent at the low end included, so the page
+ * is one sheet rather than paper chrome floating over a dark map. Drizzle,
+ * the faintest wind and a 5 dBZ edge read weaker on white than they do on
+ * the dark theme's slate — the accepted cost of one palette serving both
+ * themes (see PRECIPITATION_STOPS in palettes.ts).
+ *
+ * The pressure family keeps its chart stock. Contours are a weather chart,
+ * and the warm sheet is the design's own paper for one. */
 const LIGHT_BASEMAP: Record<ForecastBundleId, BasemapTones> = {
-  tmp2m: { ocean: "#e4ded1", land: "#d8d0be" },
-  prate: { ocean: "#3b3f54", land: "#494e63" },
-  dswrf: { ocean: "#463c58", land: "#544968" },
-  cref: { ocean: "#39434e", land: "#47515c" },
-  wind10m: { ocean: "#3c4a63", land: "#4a5872" },
+  tmp2m: PAPER_GROUND,
+  prate: PAPER_GROUND,
+  dswrf: PAPER_GROUND,
+  cref: PAPER_GROUND,
+  wind10m: PAPER_GROUND,
   ...pressureBasemapTheme({ ocean: "#dcd6c8", land: "#c9c2b2" }),
 };
 
@@ -302,12 +324,14 @@ function applyBasemapTheme(): void {
   const theme = currentBasemapTheme();
   // Everything drawn over the data — the title, the color scale's numbers,
   // the credits, and the basemap's own place labels and boundaries — takes
-  // its ink from the ground it sits on rather than from the theme, because
-  // "light" does not mean a light map: the design paints precipitation and
-  // wind on a dark slate in both themes.
+  // its ink from the ground it sits on rather than from the theme. Since the
+  // light theme went white every one of its grounds is light and this is
+  // constant there, but the dark theme still has grounds of its own and one
+  // rule covering both is what keeps the two from drifting.
   const darkGround = luminance(theme.ocean) < 0.5;
   document.body.dataset.ground = darkGround ? "dark" : "light";
-  if (map.getLayer("background")) map.setPaintProperty("background", "background-color", theme.ocean);
+  if (map.getLayer("background"))
+    map.setPaintProperty("background", "background-color", theme.background ?? theme.ocean);
   if (map.getLayer("water")) map.setPaintProperty("water", "fill-color", theme.ocean);
   if (map.getLayer("earth")) map.setPaintProperty("earth", "fill-color", theme.land);
   applyBasemapInk(darkGround);
@@ -347,8 +371,13 @@ type BasemapStyle = Exclude<MapOptions["style"], string | undefined>;
 
 function buildBasemapStyle(): BasemapStyle {
   const theme = currentBasemapTheme();
-  const flavorName = isDark ? "dark" : "light";
-  const flavor = { ...namedFlavor(flavorName), background: theme.ocean, water: theme.ocean, earth: theme.land };
+  const flavorName = isDark ? "dark" : LIGHT_FLAVOR;
+  const flavor = {
+    ...namedFlavor(flavorName),
+    background: theme.background ?? theme.ocean,
+    water: theme.ocean,
+    earth: theme.land,
+  };
   return {
     version: 8,
     glyphs: "https://protomaps.github.io/basemaps-assets/fonts/{fontstack}/{range}.pbf",

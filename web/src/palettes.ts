@@ -25,8 +25,11 @@ const TEMPERATURE_STOPS: Stop[] = [
 // The top of the ramp deepens through violet instead of washing out to
 // near-white, and extends to the codebook's 128 mm/h ceiling so extreme
 // cells keep their own gradation rather than sharing one color above 50.
-// The low end (<= 2 mm/h) runs light and opaque: drizzle must stay readable
-// over the dark basemap instead of sinking into it.
+// The low end (<= 2 mm/h) climbs from nearly transparent to opaque, which is
+// what makes drizzle legible over the dark theme's basemap. One ramp serves
+// both themes, so on the light theme's white ground those same faint blues
+// read weaker than they do on a slate — a known trade, taken so a value is
+// the same color in both themes rather than two palettes drifting apart.
 const PRECIPITATION_STOPS: Stop[] = [
   [0, 8, 19, 28, 0],
   [0.05, 64, 131, 183, 70],

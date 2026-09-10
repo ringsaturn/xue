@@ -33,6 +33,10 @@
   --tick-off: rgba(27, 26, 23, 0.25);
   --label-shadow: 0 0 3px rgba(243, 239, 230, 0.95), 0 0 9px rgba(243, 239, 230, 0.85);
   --scrim: rgba(27, 26, 23, 0.28);
+  /* A lift belongs to what covers the map — the model sheet, the context
+     menu, the probe popover, an error — not to the controls affixed to it:
+     the capsule and the data card sit on the map, and a shadow under them
+     only smudges the ground they are meant to read against. */
   --lift: 0 20px 60px rgba(27, 26, 23, 0.18);
   --lift-small: 0 10px 30px rgba(27, 26, 23, 0.14);
   /* Top and bottom of the map fade toward the ground so the title and the
@@ -80,10 +84,10 @@
     --lift-small: 0 10px 30px rgba(0, 0, 0, 0.45);
     --map-fade: linear-gradient(
       180deg,
-      rgba(0, 0, 0, 0.5) 0%,
+      rgba(0, 0, 0, 0.35) 0%,
       rgba(0, 0, 0, 0) 18%,
       rgba(0, 0, 0, 0) 60%,
-      rgba(0, 0, 0, 0.85) 100%
+      rgba(0, 0, 0, 0.3) 100%
     );
   }
 }
@@ -110,10 +114,10 @@
   --lift-small: 0 10px 30px rgba(0, 0, 0, 0.45);
   --map-fade: linear-gradient(
     180deg,
-    rgba(0, 0, 0, 0.5) 0%,
+    rgba(0, 0, 0, 0.35) 0%,
     rgba(0, 0, 0, 0) 18%,
     rgba(0, 0, 0, 0) 60%,
-    rgba(0, 0, 0, 0.85) 100%
+    rgba(0, 0, 0, 0.3) 100%
   );
 }
 
@@ -134,10 +138,10 @@ body[data-ground="dark"] {
   --label-shadow: 0 1px 4px rgba(0, 0, 0, 0.85);
   --map-fade: linear-gradient(
     180deg,
-    rgba(0, 0, 0, 0.55) 0%,
+    rgba(0, 0, 0, 0.35) 0%,
     rgba(0, 0, 0, 0) 14%,
     rgba(0, 0, 0, 0) 64%,
-    rgba(0, 0, 0, 0.8) 100%
+    rgba(0, 0, 0, 0.3) 100%
   );
 }
 
@@ -475,7 +479,6 @@ body.is-showcase .model-caret {
   border-radius: 16px;
   background: var(--surface);
   backdrop-filter: blur(12px);
-  box-shadow: var(--lift-small);
   transition: border-color 180ms ease;
 }
 
@@ -838,7 +841,6 @@ html[lang="zh-CN"] .rail-glyph {
   background: var(--surface);
   transform: translateX(-50%);
   backdrop-filter: blur(18px);
-  box-shadow: var(--lift-small);
 }
 
 /* Nine isobaric surfaces on one scrolling row, shown only when the pressure
