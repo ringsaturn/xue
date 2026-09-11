@@ -25,12 +25,13 @@ import { CRC32_INITIAL, crc32Hex, crc32Update } from "./crc32";
 import { applyStaticMessages, basemapLang, locale, t, toggleLocale } from "./i18n";
 import { ForecastLayer, MAX_NAMED_CONTOURS, type ContourStyle, type VectorField } from "./layer";
 import {
-  FORECAST_BUNDLE_IDS,
+  KNOWN_BUNDLE_IDS,
   FORECAST_MODEL_IDS,
   FORECAST_MODELS,
   fetchLatestPointer,
   fetchManifest,
   hasBundle,
+  isBundleVariableId,
   parseBundleMetadata,
   pickBundleVariant,
   axisUnitSeconds,
@@ -38,16 +39,21 @@ import {
   HOUR_SECONDS,
   isObservationModel,
   sameTimeAxis,
-  isVectorBundle,
-  vectorComponents,
   type BundleMetadata,
   type BundleVariable,
   type ForecastBundleId,
   type ForecastManifest,
   type ForecastModelId,
-  type VectorBundleId,
+  type KnownBundleId,
   type VideoBundleDescriptor,
 } from "./manifest";
+import {
+  identifyBundle,
+  identityForBundleId,
+  registeredBundleId,
+  sameIdentity,
+  type VariableIdentity,
+} from "./identity";
 import {
   FAMILIES,
   ISOBARIC_FILL_IDS,
@@ -58,6 +64,8 @@ import {
   isobaricCode,
   isobaricLegend,
   levelCode,
+  niceStep,
+  rangeLegend,
   temperatureLegendRange,
   vectorMaxMagnitude,
   type IsobaricFamily,
@@ -70,7 +78,7 @@ import {
   pressureCode,
   pressureLabel,
   pressureLegend,
-  pressureLevel,
+  pressureLevelForIdentity,
   type PressureBundleId,
 } from "./pressure";
 import {
@@ -107,8 +115,10 @@ import {
   probeWindDirection,
   wrap,
   type ProbeValue,
+  type ProbeVariable,
 } from "./probe";
 import { fetchPoster, isPosterSupported } from "./poster";
+import { frameCacheKey, parseFrameCacheKey, variableKey } from "./sessionkeys";
 import { applyTheme, isDark, toggleTheme } from "./theme";
 import {
   coverageBox,
@@ -253,13 +263,13 @@ function isobaricVariableUi(): Record<string, VariableUi> {
       title: [`${bundleLevel(id)} hPa`, word],
       bufferTitle: `${word} buffer`,
       label: familyLabel(id),
-      legend: isobaricLegend(id),
+      legend: isobaricLegend(identityForBundleId(id)!) ?? [],
     };
   }
   return entries;
 }
 
-const VARIABLE_UI: Record<ForecastBundleId, VariableUi> = {
+const VARIABLE_UI: Record<string, VariableUi> = {
   tmp2m: {
     code: "TMP 2M",
     title: ["Surface", "Temperature"],
@@ -297,7 +307,7 @@ const VARIABLE_UI: Record<ForecastBundleId, VariableUi> = {
   },
   ...pressureVariableUi(),
   ...isobaricVariableUi(),
-} as unknown as Record<ForecastBundleId, VariableUi>;
+} as unknown as Record<string, VariableUi>;
 
 interface BasemapTones {
   ocean: string;
@@ -333,7 +343,7 @@ function isobaricBasemapTheme(pick: (family: IsobaricFamily) => BasemapTones): R
  * The pressure family is drawn as thin lines over a nearly bare map, which is
  * what a chart looks like: the base has to carry the geography on its own, so
  * it is the plainest of the set — on paper, the design's own chart stock. */
-const DARK_BASEMAP: Record<ForecastBundleId, BasemapTones> = {
+const DARK_BASEMAP: Record<string, BasemapTones> = {
   tmp2m: { ocean: "#0b1826", land: "#182c3d" },
   prate: { ocean: "#16344a", land: "#28495f" },
   dswrf: { ocean: "#0d1b2b", land: "#1c3242" },
@@ -349,7 +359,7 @@ const DARK_BASEMAP: Record<ForecastBundleId, BasemapTones> = {
         ? { ocean: "#0b1826", land: "#182c3d" }
         : { ocean: "#16344a", land: "#28495f" },
   ),
-} as Record<ForecastBundleId, BasemapTones>;
+} as Record<string, BasemapTones>;
 
 /** Protomaps' data-viz flavor for the light theme: white land, pale grey
  * water, and no landcover tinting the continents — a base that stays out of
@@ -374,7 +384,7 @@ const PAPER_GROUND: BasemapTones = {
  *
  * The pressure family keeps its chart stock. Contours are a weather chart,
  * and the warm sheet is the design's own paper for one. */
-const LIGHT_BASEMAP: Record<ForecastBundleId, BasemapTones> = {
+const LIGHT_BASEMAP: Record<string, BasemapTones> = {
   tmp2m: PAPER_GROUND,
   prate: PAPER_GROUND,
   dswrf: PAPER_GROUND,
@@ -382,13 +392,13 @@ const LIGHT_BASEMAP: Record<ForecastBundleId, BasemapTones> = {
   wind10m: PAPER_GROUND,
   ...pressureBasemapTheme({ ocean: "#dcd6c8", land: "#c9c2b2" }),
   ...isobaricBasemapTheme(() => PAPER_GROUND),
-} as Record<ForecastBundleId, BasemapTones>;
+} as Record<string, BasemapTones>;
 
 const BASEMAP_THEME = isDark ? DARK_BASEMAP : LIGHT_BASEMAP;
 
 function currentBasemapTheme(): BasemapTones {
-  const id = document.body.dataset.variable as ForecastBundleId | undefined;
-  return BASEMAP_THEME[id ?? "tmp2m"] ?? BASEMAP_THEME.tmp2m;
+  const id = document.body.dataset.variable;
+  return BASEMAP_THEME[id ?? "tmp2m"] ?? BASEMAP_THEME.tmp2m!;
 }
 
 /** Relative luminance of a `#rrggbb` tone. */
@@ -544,7 +554,15 @@ const modelTrigger = required<HTMLButtonElement>("model-trigger");
 const modelSheet = required<HTMLElement>("model-sheet");
 // Scoped to buttons: <body> carries data-variable/data-model too (styling
 // state), and must never be hidden or aria-pressed like a switch button.
-const variableButtons = [...document.querySelectorAll<HTMLButtonElement>("button[data-variable]")];
+const variableRail = document.querySelector<HTMLElement>(".variable-rail");
+/** The layer rail's tiles. Read live rather than snapshotted: the shell
+ * writes one tile per family it knows, and a run publishing a bundle this
+ * build has never heard of gets a generic tile appended here
+ * (`syncUnknownRailTiles`) — a layer nobody can reach is the same as one
+ * nobody can see. */
+function variableButtons(): HTMLButtonElement[] {
+  return variableRail ? [...variableRail.querySelectorAll<HTMLButtonElement>("button[data-variable]")] : [];
+}
 const modelButtons = [...document.querySelectorAll<HTMLButtonElement>("button[data-model]")];
 const modelEyebrow = required<HTMLElement>("model-eyebrow");
 const caseBanner = required<HTMLElement>("case-banner");
@@ -592,6 +610,11 @@ interface DecodedFrame {
    * them the buffer carries whatever the decoder held before, so a plane is
    * only reusable for a view its tiles still cover. */
   tiles: TileRect[] | null;
+  /** The session that decoded it: the buffer belongs to that worker and is
+   * recycled back into it, and its grid is what the plane's bytes are on.
+   * A numericId alone cannot say — it is a *file-local* handle, and two open
+   * bundles routinely use the same one. */
+  session: VariableSession;
 }
 
 /** One resident per-variable bundle: its decode channel and embedded metadata.
@@ -602,8 +625,27 @@ interface VariableSession {
   /** Bundle-level id this session was loaded for (wind10m carries two data
    * variables). */
   id: ForecastBundleId;
+  /** This session's identity in the frame cache and the probe series.
+   * Variables inside a `.xue` file are numbered 1..n *per file*, so a
+   * numericId is meaningful only next to the session it came from: two open
+   * bundles — a temperature fill under pressure lines — both carry variable
+   * 1, and every key that leaves a session has to say which. */
+  key: number;
   worker: DecodeChannel;
   metadata: BundleMetadata;
+  /** What this bundle is, from its variables' GRIB2 parameter blocks (or,
+   * for a schemaVersion 1/2 file, from the closed legacy id list). Null when
+   * the file describes something this build has no chart knowledge for — it
+   * is then drawn as a plain scalar off its own codebook. */
+  identity: VariableIdentity | null;
+  /** The registered bundle id `identity` corresponds to: the key every chart
+   * registry (palette, legend, ground tone, instrument copy) is written
+   * under. Null exactly when `identity` is, or when the field sits on a
+   * surface nothing is registered on. */
+  chartId: KnownBundleId | null;
+  /** True when the bundle carries a u/v component pair — read from the
+   * parameter blocks, not from the id string. */
+  vector: boolean;
   /** Primary data variable (drives palette/unit for scalars; the u component
    * for wind). */
   variable: BundleVariable;
@@ -819,8 +861,10 @@ let ready = false;
 let switchingVariable = false;
 
 const sessions = new Map<ForecastBundleId, VariableSession>();
-const sessionsByNumericId = new Map<number, VariableSession>();
 const sessionLoads = new Map<ForecastBundleId, Promise<VariableSession>>();
+/** Hands out `VariableSession.key`. Monotonic for the life of the page, so a
+ * reloaded session never inherits a stale session's cache entries. */
+let nextSessionKey = 1;
 
 const planeCache = new Map<string, DecodedFrame>();
 let planeCacheBytes = 0;
@@ -856,7 +900,7 @@ const lastPrefetchWindow = new Map<ForecastBundleId, string>();
 const inflight = new Map<number, string>();
 let nextRequestId = 1;
 let desiredKey: string | null = null;
-let queuedRequest: { variableId: number; hour: number } | null = null;
+let queuedRequest: { session: VariableSession; variable: BundleVariable; hour: number } | null = null;
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
 /** Where the viewer's particle-overlay choice is kept between visits, like
@@ -1051,8 +1095,25 @@ function formatLead(index: number): string {
     : `${label}:${String(minutes).padStart(2, "0")}`;
 }
 
-function cacheKey(variableId: number, hour: number): string {
-  return `${variableId}:${hour}`;
+/** The frame cache's key. A numericId is file-local — the encoder numbers a
+ * bundle's variables 1..n, so `tmp2m`'s only variable and `prmsl`'s are both
+ * 1 — and the session it belongs to is what makes the pair unique
+ * (sessionkeys.ts). Every reader and writer of this cache, the probe series
+ * included, keys the same way. */
+function cacheKey(session: VariableSession, variable: BundleVariable, offset: number): string {
+  return frameCacheKey(session, variable, offset);
+}
+
+/** The probe series' key for one of a session's variables — the same session
+ * scoping, without a frame offset. */
+function probeKey(session: VariableSession, variable: BundleVariable): string {
+  return variableKey(session, variable);
+}
+
+/** A session's variables paired with the keys their samples are filed under,
+ * which is what reading a series takes. */
+function probeVariables(session: VariableSession): ProbeVariable[] {
+  return session.variables.map((variable) => ({ key: probeKey(session, variable), variable }));
 }
 
 function showError(message: string): void {
@@ -1104,10 +1165,11 @@ function updateDownloadProgress(bytes: number, total: number): void {
 }
 
 function cachedFrameCount(): number {
-  if (!activeVariable) return 0;
+  if (!activeVariable || !activeSession) return 0;
+  const prefix = `${probeKey(activeSession, activeVariable)}:`;
   let cached = 0;
   for (const key of planeCache.keys()) {
-    if (key.startsWith(`${activeVariable.numericId}:`)) cached += 1;
+    if (key.startsWith(prefix)) cached += 1;
   }
   return cached;
 }
@@ -1435,7 +1497,7 @@ function requestProbeSeries(): void {
   const cell = probe.cellFor(session.metadata);
   if (!cell) return;
   for (const variable of session.variables) {
-    const key = `${variable.numericId}:${cell.column}:${cell.row}`;
+    const key = `${probeKey(session, variable)}:${cell.column}:${cell.row}`;
     if (probeSeriesRequests.has(key)) continue;
     probeSeriesRequests.add(key);
     session.worker.postMessage({
@@ -1452,19 +1514,22 @@ function requestProbeSeries(): void {
 /** A whole series arrived. It is dropped unless the pin is still on the very
  * cell it was read for — a new run, a new model, or a moved pin all make it
  * stale, and the codes are meaningless against another grid. */
-function handleProbeSeries(message: {
-  generation: number;
-  variableId: number;
-  column: number;
-  row: number;
-  buffer: ArrayBuffer;
-}): void {
-  const session = sessionsByNumericId.get(message.variableId);
-  if (!probe || !session || message.generation !== generation) return;
+function handleProbeSeries(
+  session: VariableSession,
+  message: {
+    generation: number;
+    variableId: number;
+    column: number;
+    row: number;
+    buffer: ArrayBuffer;
+  },
+): void {
+  const variable = session.variables.find((item) => item.numericId === message.variableId);
+  if (!probe || !variable || message.generation !== generation) return;
   const cell = probe.cellFor(session.metadata);
   if (!cell || cell.column !== message.column || cell.row !== message.row) return;
   const offsets = frameOffsets(session.metadata.time);
-  if (probe.adopt(session.metadata, message.variableId, offsets, new Uint8Array(message.buffer))) {
+  if (probe.adopt(session.metadata, probeKey(session, variable), offsets, new Uint8Array(message.buffer))) {
     scheduleProbeRender();
   }
 }
@@ -1474,11 +1539,12 @@ function handleProbeSeries(message: {
 function seedProbeFromCache(): void {
   if (!probe) return;
   for (const [key, frame] of planeCache) {
-    const [variableText, offsetText] = key.split(":");
-    const variableId = Number(variableText);
-    const session = sessionsByNumericId.get(variableId);
-    if (!session) continue;
-    probe.sample(session.metadata, variableId, Number(offsetText), frame.plane);
+    const parts = parseFrameCacheKey(key);
+    // The owning session travels with the plane; only the variable and the
+    // frame have to be read back out of the key.
+    const variable = parts && frame.session.variables.find((item) => item.numericId === parts.numericId);
+    if (!parts || !variable) continue;
+    probe.sample(frame.session.metadata, probeKey(frame.session, variable), parts.frameOffset, frame.plane);
   }
 }
 
@@ -1508,14 +1574,15 @@ function renderProbe(): void {
   }
   const variable = session.variable;
   const cell = series.cellFor(session.metadata);
-  probePanel.code.textContent = VARIABLE_UI[session.id].code;
+  probePanel.code.textContent = variableUi(session).code;
   const point = cell ?? { longitude: series.longitude, latitude: series.latitude };
   probePanel.coords.textContent =
     `${formatProbeDegrees(point.latitude, "NS")} ${formatProbeDegrees(point.longitude, "EW")}`;
 
   const index = activeFrameIndex ?? Number(slider.value);
   const offsets = frameAxis();
-  const values = cell ? probeSeriesValues(series, session.variables, offsets) : [];
+  const probed = probeVariables(session);
+  const values = cell ? probeSeriesValues(series, probed, offsets) : [];
   const current = values[index];
 
   if (!cell) {
@@ -1530,9 +1597,7 @@ function renderProbe(): void {
     else {
       // Wind's series is the speed; the direction only means anything for the
       // frame on screen, so it rides the lead-time line.
-      const direction = isVectorBundle(session.id)
-        ? probeWindDirection(series, session.variables, frameOffset(index))
-        : null;
+      const direction = session.vector ? probeWindDirection(series, probed, frameOffset(index)) : null;
       probePanel.meta.textContent = direction === null
         ? lead
         : `${lead} · ${String(Math.round(direction)).padStart(3, "0")}°`;
@@ -1669,8 +1734,8 @@ function handleStreamMessage(message: {
   scope?: unknown;
 }): void {
   const id = message.variableKey;
-  if (typeof id !== "string" || !FORECAST_BUNDLE_IDS.includes(id as ForecastBundleId)) return;
-  const bundleId = id as ForecastBundleId;
+  if (!isBundleVariableId(id)) return;
+  const bundleId = id;
   const session = sessions.get(bundleId);
   if (!session) {
     const entry = pendingStream.get(bundleId) ?? { bytes: 0, resident: false, scope: "bundle" as const };
@@ -1816,10 +1881,10 @@ function blendOverlay(slot: RasterSlot, index: number, next: number, weight: num
   const offsetA = sessionOffsetForLead(session, frameLeadSeconds(index));
   const offsetB = sessionOffsetForLead(session, frameLeadSeconds(next));
   if (offsetA === null || offsetB === null) return;
-  const keyA = cacheKey(session.variable.numericId, offsetA);
+  const keyA = cacheKey(session, session.variable, offsetA);
   if (slot.shownKey !== keyA) return;
   const planeA = planeCache.get(keyA);
-  const planeB = planeCache.get(cacheKey(session.variable.numericId, offsetB));
+  const planeB = planeCache.get(cacheKey(session, session.variable, offsetB));
   if (!planeA || !planeB || !sameTileRects(planeA.tiles, planeB.tiles)) return;
   ensureSlotGrid(slot, session);
   slot.layer.setBlend(planeA.plane, planeB.plane, weight, sessionCoverage(session, planeA.tiles));
@@ -1863,9 +1928,11 @@ function ensureSlotGrid(slot: RasterSlot, session: VariableSession): void {
  * quantization and its magnitude ceiling before feeding it planes. */
 function ensureWindGrid(session: VariableSession): void {
   if (!windLayer || windLayerGridSource === session.metadata) return;
-  const components = vectorComponents(session.id);
-  windLayer.configureGrid(session.metadata, components ?? undefined);
-  windLayer.setMaxSpeed(vectorMaxMagnitude(session.id as VectorBundleId));
+  // The pair comes off the session's own variables — the file's u and v, in
+  // the order its parameter blocks put them.
+  const [u, v] = session.variables;
+  windLayer.configureGrid(session.metadata, u && v ? [u.id, v.id] : undefined);
+  windLayer.setMaxSpeed(sessionMaxMagnitude(session));
   windLayerGridSource = session.metadata;
 }
 
@@ -1880,7 +1947,7 @@ function ensureWindGrid(session: VariableSession): void {
 function sessionViewportTiles(session: VariableSession): TileRect[] | null {
   if (!session.tiles || !session.streaming) return null;
   if (session.resident && session.residentScope === "bundle") return null;
-  if (isVectorBundle(session.id) && particlesEnabled) return null;
+  if (session.vector && particlesEnabled) return null;
   const bounds = map.getBounds();
   return viewportTileRects(session.metadata, session.tiles, {
     west: bounds.getWest(),
@@ -1938,7 +2005,7 @@ function framePlanes(session: VariableSession, index: number): DecodedFrame[] | 
   const hour = frameOffset(index);
   const planes: DecodedFrame[] = [];
   for (const variable of session.variables) {
-    const frame = planeCache.get(cacheKey(variable.numericId, hour));
+    const frame = planeCache.get(cacheKey(session, variable, hour));
     if (!frame) return null;
     if (planes.length > 0 && !sameTileRects(planes[0]!.tiles, frame.tiles)) return null;
     planes.push(frame);
@@ -1959,8 +2026,8 @@ const VECTOR_PLANE_CACHE = 4;
  * u codes in red, v in green, the same packing the particle layer builds for
  * its own texture, which is what the layer's magnitude mode reads. */
 function displayPlane(session: VariableSession, index: number, planes: DecodedFrame[]): Uint8Array {
-  if (!isVectorBundle(session.id) || planes.length < 2) return planes[0]!.plane;
-  const key = cacheKey(session.variables[0]!.numericId, frameOffset(index));
+  if (!session.vector || planes.length < 2) return planes[0]!.plane;
+  const key = cacheKey(session, session.variables[0]!, frameOffset(index));
   const sources = planes.map((frame) => frame.plane);
   const held = vectorPlanes.get(key);
   if (held && held.sources.length === sources.length && held.sources.every((plane, at) => plane === sources[at])) {
@@ -2023,7 +2090,7 @@ function trySelectFrame(index: number): boolean {
   requestedFrameIndex = index;
   updateFrameReadout(index);
   sendPrefetchWindow(index);
-  const keys = session.variables.map((variable) => cacheKey(variable.numericId, hour));
+  const keys = session.variables.map((variable) => cacheKey(session, variable, hour));
   const planes = keys.map((key) => cachedFrame(key, session));
   if (planes.every((plane) => plane !== undefined)) {
     // Refresh LRU positions, then swap textures — no opacity involved.
@@ -2032,7 +2099,7 @@ function trySelectFrame(index: number): boolean {
       planeCache.set(key, planes[position]!);
     }
     ensureSlotGrid(slot, session);
-    if (isVectorBundle(session.id)) {
+    if (session.vector) {
       // One coverage box serves both channels, so it has to be a box both
       // planes hold: their own tiles when the pair agrees, and the view's
       // otherwise — cachedFrame has already proved every plane covers that.
@@ -2065,7 +2132,7 @@ function trySelectFrame(index: number): boolean {
   desiredKey = keys.find((_, position) => planes[position] === undefined) ?? null;
   for (const [position] of keys.entries()) {
     if (planes[position] !== undefined) continue;
-    requestDecode(session.variables[position]!.numericId, hour);
+    requestDecode(session, session.variables[position]!, hour);
   }
   // The overlays' planes for this frame are asked for now too, after the
   // primary's, so they are as likely to be there when it lands.
@@ -2094,11 +2161,11 @@ function trySelectOverlayFrame(slot: RasterSlot, index: number): void {
     if (slot === slots.lines) clearLabels();
     return;
   }
-  const key = cacheKey(session.variable.numericId, offset);
+  const key = cacheKey(session, session.variable, offset);
   const frame = cachedFrame(key, session);
   if (!frame) {
     slot.wantedKey = key;
-    requestDecode(session.variable.numericId, offset);
+    requestDecode(session, session.variable, offset);
     return;
   }
   planeCache.delete(key);
@@ -2117,8 +2184,8 @@ function requestOverlayDecode(slot: RasterSlot, index: number): void {
   const session = slot.session;
   const offset = overlayOffset(slot, index);
   if (!session || offset === null) return;
-  const key = cacheKey(session.variable.numericId, offset);
-  if (!cachedFrame(key, session)) requestDecode(session.variable.numericId, offset);
+  const key = cacheKey(session, session.variable, offset);
+  if (!cachedFrame(key, session)) requestDecode(session, session.variable, offset);
 }
 
 /** Frames decoded ahead of the playhead during playback. One is not enough:
@@ -2134,23 +2201,25 @@ function prefetchNext(index: number): void {
     const frame = (index + step) % frameCount();
     const hour = frameOffset(frame);
     for (const variable of session.variables) {
-      const key = cacheKey(variable.numericId, hour);
-      if (!cachedFrame(key, session)) requestDecode(variable.numericId, hour);
+      const key = cacheKey(session, variable, hour);
+      if (!cachedFrame(key, session)) requestDecode(session, variable, hour);
     }
     for (const overlay of overlaySlots()) requestOverlayDecode(overlay, frame);
   }
 }
 
-function requestDecode(variableId: number, hour: number): void {
-  const session = sessionsByNumericId.get(variableId);
-  if (!session || !ready) return;
-  const key = cacheKey(variableId, hour);
+/** Ask one session's decoder for one of its variables at one frame offset.
+ * The session is passed in rather than looked up: a numericId names a
+ * variable only inside the file it came from. */
+function requestDecode(session: VariableSession, variable: BundleVariable, hour: number): void {
+  if (!ready) return;
+  const key = cacheKey(session, variable, hour);
   if ([...inflight.values()].includes(key)) return;
   // The wind session needs two planes per frame and an overlay adds its own,
   // so the inflight cap scales with the planes one frame of the view needs.
   if (inflight.size >= 2 * planesPerFrame()) {
     // Keep only the newest queued request while scrubbing.
-    queuedRequest = { variableId, hour };
+    queuedRequest = { session, variable, hour };
     return;
   }
   const requestId = nextRequestId++;
@@ -2159,7 +2228,7 @@ function requestDecode(variableId: number, hour: number): void {
     type: "decode",
     requestId,
     generation,
-    variableId,
+    variableId: variable.numericId,
     frameOffset: hour,
     // Only a session on screen narrows the decode to its view; a background
     // session (the other variable, preloading) is asked for whole planes.
@@ -2175,29 +2244,35 @@ function planesPerFrame(): number {
   return Math.max(1, planes);
 }
 
-function handleDecodedFrame(message: {
-  /** Absent on cache-warm-up frames the video path decodes alongside a target. */
-  requestId?: number;
-  variableId: number;
-  frameOffset: number;
-  decodeMs: number;
-  /** Absent when the whole plane is valid — the video path never narrows. */
-  tiles?: TileRect[];
-  buffer: ArrayBuffer;
-}): void {
+function handleDecodedFrame(
+  session: VariableSession,
+  message: {
+    /** Absent on cache-warm-up frames the video path decodes alongside a target. */
+    requestId?: number;
+    variableId: number;
+    frameOffset: number;
+    decodeMs: number;
+    /** Absent when the whole plane is valid — the video path never narrows. */
+    tiles?: TileRect[];
+    buffer: ArrayBuffer;
+  },
+): void {
   if (typeof message.requestId === "number") inflight.delete(message.requestId);
-  const key = cacheKey(message.variableId, message.frameOffset);
+  // The message names a variable of *its own* file; the session it arrived
+  // on is what makes that a key.
+  const variable = session.variables.find((item) => item.numericId === message.variableId);
+  if (!variable) return;
+  const key = cacheKey(session, variable, message.frameOffset);
   const previous = planeCache.get(key);
   if (previous) planeCacheBytes -= previous.plane.byteLength;
   const plane = new Uint8Array(message.buffer);
-  planeCache.set(key, { plane, decodeMs: message.decodeMs, tiles: message.tiles ?? null });
+  planeCache.set(key, { plane, decodeMs: message.decodeMs, tiles: message.tiles ?? null, session });
   planeCacheBytes += plane.byteLength;
   lastDecodeMs = message.decodeMs;
   recordDecodeEvent(plane.byteLength, message.decodeMs);
   // The probe reads its cell here, before the eviction below can recycle this
   // plane back into the worker: one byte is kept, never the plane.
-  const probeOwner = sessionsByNumericId.get(message.variableId);
-  if (probe && probeOwner && probe.sample(probeOwner.metadata, message.variableId, message.frameOffset, plane)) {
+  if (probe && probe.sample(session.metadata, probeKey(session, variable), message.frameOffset, plane)) {
     scheduleProbeRender();
   }
   // Evict by byte budget, oldest first; never evict the just-inserted
@@ -2206,7 +2281,7 @@ function handleDecodedFrame(message: {
   const displayedKeys = new Set<string>();
   if (activeSession && activeFrameIndex !== null) {
     for (const variable of activeSession.variables) {
-      displayedKeys.add(cacheKey(variable.numericId, frameOffset(activeFrameIndex)));
+      displayedKeys.add(cacheKey(activeSession, variable, frameOffset(activeFrameIndex)));
     }
   }
   for (const overlay of overlaySlots()) {
@@ -2223,20 +2298,19 @@ function handleDecodedFrame(message: {
       continue;
     }
     planeCacheBytes -= evicted.plane.byteLength;
-    const owner = sessionsByNumericId.get(Number(oldest.split(":")[0]));
-    if (owner) {
-      const buffer = evicted.plane.buffer as ArrayBuffer;
-      owner.worker.postMessage({ type: "recycle", buffer }, [buffer]);
-    }
+    // The buffer goes back to the worker that produced it — which the frame
+    // itself names, not the key it was filed under.
+    const buffer = evicted.plane.buffer as ArrayBuffer;
+    evicted.session.worker.postMessage({ type: "recycle", buffer }, [buffer]);
   }
   updateCacheReadout();
 
   if (queuedRequest) {
     const queued = queuedRequest;
     queuedRequest = null;
-    const queuedKey = cacheKey(queued.variableId, queued.hour);
+    const queuedKey = cacheKey(queued.session, queued.variable, queued.hour);
     if (queuedKey !== key && !planeCache.has(queuedKey)) {
-      requestDecode(queued.variableId, queued.hour);
+      requestDecode(queued.session, queued.variable, queued.hour);
     }
   }
   // Display only the newest requested target; stale decodes stay cached.
@@ -2325,8 +2399,13 @@ function updateForecastDay(frameIndex: number): void {
   }
 }
 
+/** Whether the layer switches are locked, so a tile built while a run is
+ * still loading opens in the same state as the ones already on the rail. */
+let variableButtonsDisabled = false;
+
 function setVariableButtonsDisabled(disabled: boolean): void {
-  for (const button of variableButtons) button.disabled = disabled;
+  variableButtonsDisabled = disabled;
+  for (const button of variableButtons()) button.disabled = disabled;
   for (const button of modelButtons) button.disabled = disabled;
   for (const button of levelRow.querySelectorAll("button")) button.disabled = disabled;
 }
@@ -2430,24 +2509,88 @@ function renderLevelRow(): void {
   }
 }
 
+/** Give every bundle the run publishes a way onto the screen, including the
+ * ones this build has no tile written for. The shell's own tiles stand for
+ * the families it knows; anything else gets a plain one in manifest order,
+ * lettered with the id's initial. Rebuilt per run, so a dataset that ships
+ * nothing unusual carries no extra chrome. */
+function syncUnknownRailTiles(run: ForecastManifest): void {
+  if (!variableRail) return;
+  for (const stale of variableRail.querySelectorAll("button[data-unknown]")) stale.remove();
+  for (const bundle of run.bundles) {
+    const id = bundle.variable;
+    // A known name already has a tile of its own, or belongs to a family
+    // whose tile stands for it.
+    if ((KNOWN_BUNDLE_IDS as readonly string[]).includes(id)) continue;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.variable = id;
+    button.dataset.unknown = "";
+    button.disabled = variableButtonsDisabled || switchingVariable;
+    button.setAttribute("aria-pressed", "false");
+    const glyph = document.createElement("b");
+    glyph.className = "rail-glyph";
+    glyph.setAttribute("aria-hidden", "true");
+    glyph.textContent = id.slice(0, 1).toUpperCase();
+    const name = document.createElement("span");
+    name.className = "rail-name";
+    const code = document.createElement("span");
+    code.textContent = id.toUpperCase();
+    const gloss = document.createElement("small");
+    gloss.textContent = t("varUnknownLayer");
+    name.append(code, " ", gloss);
+    button.append(glyph, name);
+    button.addEventListener("click", () => {
+      void activateComposition({ fill: id, lines: composition.lines });
+    });
+    variableRail.append(button);
+  }
+}
+
 /** The legend bar's gradient for a field whose key is not in the stylesheet:
- * the isobaric fills read theirs off the palette they are drawn with, over
- * the range the legend's ticks span. */
+ * the upper-air fills and every unrecognized field read theirs off the
+ * palette they are actually drawn with, over the range the legend's ticks
+ * span. The surface layers keep their hand-written CSS gradients. */
 function legendGradientFor(session: VariableSession): string {
-  if (!(ISOBARIC_FILL_IDS as readonly string[]).includes(session.id)) return "";
-  if (isVectorBundle(session.id)) return legendGradient(vectorPalette(session.id));
+  const chartId = session.chartId;
+  if (chartId !== null && !(ISOBARIC_FILL_IDS as readonly string[]).includes(chartId)) return "";
+  if (session.vector) return legendGradient(vectorPalette(session));
   const variable = session.variable;
   if (variable.quantization.type !== "linear") return "";
   const { offset, scale, maximumCode } = variable.quantization;
-  const level = bundleLevel(session.id);
   let from = 0;
   let to = maximumCode;
-  if (level !== null && session.id.startsWith("tmp")) {
-    const [low, high] = temperatureLegendRange(level);
+  // Only a registered temperature surface has a ramp domain narrower than
+  // its codebook; an unrecognized field's bar spans the codebook, which is
+  // exactly what its legend's ticks say.
+  if (chartId !== null && session.identity?.family === "tmp" && session.identity.level !== null) {
+    const [low, high] = temperatureLegendRange(session.identity.level);
     from = Math.max(0, Math.round((low - offset) / scale));
     to = Math.min(maximumCode, Math.round((high - offset) / scale));
   }
-  return legendGradient(buildPalette(variable), from, to);
+  return legendGradient(buildPalette(variable, session.identity), from, to);
+}
+
+/** The instrument-panel copy for a session: the registry's, keyed by what the
+ * field is, and a generic card read off the file's own metadata when it is
+ * nothing this build knows. The title and unit are then the encoder's own
+ * label and unit, and the legend spans the codebook. */
+function variableUi(session: VariableSession): VariableUi {
+  const known = session.chartId === null ? undefined : VARIABLE_UI[session.chartId];
+  if (known) return known;
+  const variable = session.variable;
+  const quantization = variable.quantization;
+  const range: readonly [number, number] =
+    quantization.type === "linear"
+      ? [quantization.offset, quantization.offset + quantization.scale * quantization.maximumCode]
+      : [0, quantization.maximum];
+  return {
+    code: session.id.toUpperCase(),
+    title: [variable.label],
+    bufferTitle: "Data buffer",
+    label: variable.label,
+    legend: rangeLegend(range, niceStep(range[1] - range[0])),
+  };
 }
 
 function updateModelPresentation(): void {
@@ -2459,9 +2602,9 @@ function updateModelPresentation(): void {
 }
 
 function updateVariablePresentation(session: VariableSession): void {
-  const ui = VARIABLE_UI[session.id];
+  const ui = variableUi(session);
   const model = FORECAST_MODELS[selectedModelId];
-  const pressure = (PRESSURE_BUNDLE_IDS as readonly string[]).includes(session.id);
+  const pressure = pressureLevelForIdentity(session.identity) !== null;
   document.body.dataset.variable = session.id;
   document.body.classList.toggle("is-pressure", pressure);
   applyBasemapTheme();
@@ -2492,8 +2635,8 @@ function updateVariablePresentation(session: VariableSession): void {
   renderLevelRow();
   // The particle overlay belongs to the vector fields, so its switch appears
   // with them.
-  particlesToggle.hidden = !isVectorBundle(session.id);
-  for (const button of variableButtons) {
+  particlesToggle.hidden = !session.vector;
+  for (const button of variableButtons()) {
     const family = button.dataset.family as IsobaricFamily | undefined;
     const pressed = button.dataset.group === "pressure"
       ? pressure
@@ -2654,6 +2797,10 @@ function spawnWorker(): Worker {
   return decodeWorker;
 }
 
+/** Open a channel and wait for its `ready`: boot, hand it the init message,
+ * parse the metadata it answers with. Only the messages of that handshake are
+ * routed here — a decoded plane cannot arrive before the session it belongs
+ * to exists, because nothing has asked for one yet. */
 function initializeChannel(
   channel: DecodeChannel,
   initMessage: unknown,
@@ -2685,25 +2832,76 @@ function initializeChannel(
           }
           break;
         }
-        case "frame":
-          handleDecodedFrame(message as unknown as Parameters<typeof handleDecodedFrame>[0]);
-          break;
-        case "series":
-          handleProbeSeries(message as unknown as Parameters<typeof handleProbeSeries>[0]);
-          break;
         case "error": {
           const text = String(message.message ?? t("decodeFailed"));
-          if (typeof message.requestId === "number") {
-            inflight.delete(message.requestId);
-            showError(t("frameDecodeFailed", { message: text }));
-          } else {
-            reject(new Error(text));
-          }
+          if (typeof message.requestId === "number") inflight.delete(message.requestId);
+          else reject(new Error(text));
           break;
         }
       }
     };
   });
+}
+
+/** Route a session's channel to the session itself.
+ *
+ * Every message a decoder sends names a variable by its `numericId`, which is
+ * a *file-local* handle: the encoder numbers a bundle's variables 1..n, so
+ * the temperature fill and the pressure lines on top of it both answer about
+ * "variable 1". There is no global map from that number to a session, and
+ * there must not be — the binding is the closure, one handler per channel. */
+function bindChannel(session: VariableSession, sequence: number): void {
+  session.worker.onmessage = (event: MessageEvent) => {
+    const message = event.data as Record<string, unknown>;
+    if (sequence !== initializeSequence) return;
+    switch (message.type) {
+      case "progress":
+      case "resident":
+        handleStreamMessage(message as Parameters<typeof handleStreamMessage>[0]);
+        break;
+      case "frame":
+        handleDecodedFrame(session, message as unknown as Parameters<typeof handleDecodedFrame>[1]);
+        break;
+      case "series":
+        handleProbeSeries(session, message as unknown as Parameters<typeof handleProbeSeries>[1]);
+        break;
+      case "error": {
+        const text = String(message.message ?? t("decodeFailed"));
+        if (typeof message.requestId === "number") inflight.delete(message.requestId);
+        showError(t("frameDecodeFailed", { message: text }));
+        break;
+      }
+    }
+  };
+}
+
+/** The variables to draw from a bundle whose parameter blocks say nothing
+ * this build recognizes: the one named like the bundle, else simply the
+ * first. A two-variable bundle that is not a component pair in the table is
+ * not a vector field, so only its first variable is drawn. A bundle named by
+ * the convention is still held to carrying the variable that name promises —
+ * a file contradicting its own manifest entry is a broken build, not a new
+ * layer. */
+function fallbackVariables(variableId: ForecastBundleId, bundleMetadata: BundleMetadata): BundleVariable[] {
+  const named = bundleMetadata.variables.find((item) => item.id === variableId);
+  if (named) return [named];
+  if (identityForBundleId(variableId) !== null) throw new Error(t("bundleMissingVariable", { id: variableId }));
+  return [bundleMetadata.variables[0]!];
+}
+
+/** The manifest can only be read by the naming convention, and the file
+ * itself is authoritative. Where they disagree the parameter block wins
+ * silently for rendering — but a run publishing `tmp850` bytes under the name
+ * `rh850` is a pipeline bug the console should say out loud. Diagnostics stay
+ * English in both locales. */
+function warnOnIdentityMismatch(variableId: ForecastBundleId, identity: VariableIdentity | null): void {
+  const guess = identityForBundleId(variableId);
+  if (guess === null || sameIdentity(guess, identity)) return;
+  console.warn(
+    `bundle "${variableId}" is named for ${guess.family}${guess.level ?? ""} but its parameter block says ` +
+      (identity === null ? "something this build does not know" : `${identity.family}${identity.level ?? ""}`) +
+      "; the file wins",
+  );
 }
 
 /** Download and initialize one variable's bundle; resident sessions are
@@ -2831,18 +3029,23 @@ function loadVariable(
     // prate has no analysis frame, so that series starts at the first real
     // step. syncTimeline() rebuilds the timeline for whichever session is
     // active; only the run cycle above must agree.
-    // The wind bundle carries the u/v pair; every scalar bundle carries
-    // exactly its own variable.
-    const wantedIds = vectorComponents(variableId) ?? [variableId];
-    const sessionVariables = wantedIds.map((wanted) => {
-      const found = bundleMetadata.variables.find((item) => item.id === wanted);
-      if (!found) throw new Error(t("bundleMissingVariable", { id: wanted }));
-      return found;
-    });
+    // What the bundle *is* comes from its own variables' GRIB2 parameter
+    // blocks, not from the name the manifest filed it under: a vector bundle
+    // is one whose two variables are a component pair in the table, and the
+    // u/v order is the table's. A file this build cannot place renders its
+    // first variable as a plain scalar.
+    const derived = identifyBundle(bundleMetadata.variables);
+    const sessionVariables = derived?.variables ?? fallbackVariables(variableId, bundleMetadata);
+    const identity = derived?.identity ?? null;
+    warnOnIdentityMismatch(variableId, identity);
     const session: VariableSession = {
       id: variableId,
+      key: nextSessionKey++,
       worker: sessionWorker,
       metadata: bundleMetadata,
+      identity,
+      chartId: registeredBundleId(identity),
+      vector: identity?.vector === true && sessionVariables.length >= 2,
       variable: sessionVariables[0]!,
       variables: sessionVariables,
       format,
@@ -2867,7 +3070,7 @@ function loadVariable(
       }
     }
     sessions.set(variableId, session);
-    for (const item of sessionVariables) sessionsByNumericId.set(item.numericId, session);
+    bindChannel(session, sequence);
     return session;
   })();
   sessionLoads.set(variableId, load);
@@ -2892,12 +3095,19 @@ const CONTOUR_SMOOTHING_CELLS = 2;
 
 /** The contour settings for a variable, or null when it is a filled field.
  *
- * The dequantization comes off the bundle's own codebook rather than the
- * level registry: the registry says what to draw, the file says what its
+ * Which interval to draw follows the field's `(family, level)` identity;
+ * `identity` is a session's, read off the parameter block, and defaults to
+ * the naming-convention guess for a poster, which has metadata but no
+ * session. The dequantization comes off the bundle's own codebook rather than
+ * the level registry: the registry says what to draw, the file says what its
  * codes mean, and a run encoded at a different profile stays correct.
  * A logarithmic codebook has no contour reading at all. */
-function contourStyleFor(variable: BundleVariable, overlay = false): ContourStyle | null {
-  const level = pressureLevel(variable.id);
+function contourStyleFor(
+  variable: BundleVariable,
+  identity: VariableIdentity | null = identityForBundleId(variable.id),
+  overlay = false,
+): ContourStyle | null {
+  const level = pressureLevelForIdentity(identity);
   if (!level || variable.quantization.type !== "linear") return null;
   if (overlay) {
     // Lines over another field: no fill of their own, and one ink that reads
@@ -3080,7 +3290,7 @@ function clearLabels(): void {
  * stepping or panning, throttled during playback. */
 function scheduleLabels(frame: DecodedFrame, force: boolean): void {
   const session = slots.lines.session;
-  if (!session || !layersAdded || !contourStyleFor(session.variable)) return;
+  if (!session || !layersAdded || !contourStyleFor(session.variable, session.identity)) return;
   const now = performance.now();
   if (!force && playing && now - labelsLastAt < LABELS_PLAYBACK_INTERVAL_MS) {
     // Remember the newest frame so the next allowed trace is not stale.
@@ -3098,7 +3308,7 @@ function scheduleLabels(frame: DecodedFrame, force: boolean): void {
 function refreshLabels(): void {
   const slot = slots.lines;
   const session = slot.session;
-  if (!session || slot.shownKey === null || !contourStyleFor(session.variable)) return;
+  if (!session || slot.shownKey === null || !contourStyleFor(session.variable, session.identity)) return;
   const frame = cachedFrame(slot.shownKey, session);
   if (frame) scheduleLabels(frame, true);
 }
@@ -3138,8 +3348,8 @@ function viewportCellWindow(grid: ReturnType<typeof geoGrid>): CellWindow | null
 function sendLabels(frame: DecodedFrame): void {
   const session = slots.lines.session;
   if (!session) return;
-  const style = contourStyleFor(session.variable);
-  const level = pressureLevel(session.variable.id);
+  const style = contourStyleFor(session.variable, session.identity);
+  const level = pressureLevelForIdentity(session.identity);
   if (!style || !level || !ensureLabelLayers()) return;
   const grid = geoGrid(session.metadata);
   const window = viewportCellWindow(grid);
@@ -3225,21 +3435,21 @@ function detachSlot(slot: RasterSlot): void {
 function configureSlotLayer(slot: RasterSlot, session: VariableSession, overlay: boolean): void {
   slot.session = session;
   const { layer } = slot;
-  if (isVectorBundle(session.id)) {
+  if (session.vector) {
     // A vector field is a filled field like every other layer — the
     // magnitude, colored through the same shader from the u/v pair in one
     // pass — and the particles ride over it as an optional overlay.
     const field = windVectorField(session);
     layer.setContours(null);
     layer.setVectorField(field);
-    layer.setPalette(vectorPalette(session.id));
+    layer.setPalette(vectorPalette(session));
     // Without linear codebooks on both components there is no speed to
     // color; the overlay is then the whole layer, as it used to be.
     layer.setVisible(field !== null);
   } else {
     layer.setVectorField(null);
-    layer.setPalette(buildPalette(session.variable));
-    layer.setContours(contourStyleFor(session.variable, overlay));
+    layer.setPalette(buildPalette(session.variable, session.identity));
+    layer.setContours(contourStyleFor(session.variable, session.identity, overlay));
     // An overlay shows nothing until its first plane lands: the slot may
     // still hold another surface's plane, and lines of the wrong level over
     // the field would be worse than none.
@@ -3247,10 +3457,18 @@ function configureSlotLayer(slot: RasterSlot, session: VariableSession, overlay:
   }
 }
 
-/** The magnitude palette of a vector bundle: the wind ramp up to the
+/** The ceiling a vector session's magnitude palette tops out at, from what
+ * the field is rather than what it is called. */
+function sessionMaxMagnitude(session: VariableSession): number {
+  const identity = session.identity;
+  return identity === null ? vectorMaxMagnitude("wind", null) : vectorMaxMagnitude(identity.family, identity.level);
+}
+
+/** The magnitude palette of a vector session: the wind ramp up to the
  * field's own ceiling, or the vapour flux ramp. */
-function vectorPalette(id: VectorBundleId): Uint8Array {
-  return id.startsWith("qflux") ? buildVapourFluxPalette(vectorMaxMagnitude(id)) : buildWindFieldPalette(vectorMaxMagnitude(id));
+function vectorPalette(session: VariableSession): Uint8Array {
+  const max = sessionMaxMagnitude(session);
+  return session.identity?.family === "qflux" ? buildVapourFluxPalette(max) : buildWindFieldPalette(max);
 }
 
 /** A vector bundle's own decode for the layer's magnitude mode: each
@@ -3267,7 +3485,7 @@ function windVectorField(session: VariableSession): VectorField | null {
     offset: [u.quantization.offset, v.quantization.offset],
     scale: [u.quantization.scale, v.quantization.scale],
     nodataCode: u.quantization.nodataCode,
-    maxMagnitude: vectorMaxMagnitude(session.id as VectorBundleId),
+    maxMagnitude: sessionMaxMagnitude(session),
   };
 }
 
@@ -3288,7 +3506,7 @@ function setParticlesEnabled(next: boolean): void {
   }
   syncUrl();
   const session = activeSession;
-  if (!session || !isVectorBundle(session.id)) return;
+  if (!session || !session.vector) return;
   if (next) {
     ensureWindLayer();
     ensureWindGrid(session);
@@ -3403,7 +3621,7 @@ function applyVariable(session: VariableSession): void {
   // The fill slot is only ever primary: with a surface as the view it goes
   // dark. The lines slot is reconciled against the composition below.
   if (slot !== slots.fill) detachSlot(slots.fill);
-  const wind = isVectorBundle(session.id);
+  const wind = session.vector;
   if (wind && particlesEnabled) {
     ensureWindLayer();
     ensureWindGrid(session);
@@ -3559,7 +3777,6 @@ async function initialize(): Promise<void> {
   pendingStream.clear();
   for (const session of sessions.values()) session.worker.terminate();
   sessions.clear();
-  sessionsByNumericId.clear();
   sessionLoads.clear();
   manifest = null;
   manifestUrl = null;
@@ -3638,9 +3855,9 @@ async function initialize(): Promise<void> {
     // bundle. On the live feed that is wind10m everywhere and dswrf on the
     // sflux source; a showcase case additionally ships only the variables
     // its event is about, so the core pair can be missing too.
-    for (const button of variableButtons) {
-      const bundleId = button.dataset.variable as ForecastBundleId | undefined;
-      if (!bundleId || !FORECAST_BUNDLE_IDS.includes(bundleId)) continue;
+    for (const button of variableButtons()) {
+      const bundleId = button.dataset.variable;
+      if (!bundleId || !(KNOWN_BUNDLE_IDS as readonly string[]).includes(bundleId)) continue;
       const family = button.dataset.family as IsobaricFamily | undefined;
       button.hidden =
         button.dataset.group === "pressure"
@@ -3649,6 +3866,7 @@ async function initialize(): Promise<void> {
             ? !familyMembers(family).some((id) => hasBundle(loadedManifest, id))
             : !hasBundle(loadedManifest, bundleId);
     }
+    syncUnknownRailTiles(loadedManifest);
     // A slot this run does not ship empties; a case names its own default
     // for when that leaves nothing, and a live run always carries the core
     // pair.
@@ -3702,10 +3920,10 @@ slider.addEventListener("keydown", (event) => {
   const next = Math.max(0, Math.min(frameCount() - 1, Number(slider.value) + direction));
   trySelectFrame(next);
 });
-for (const button of variableButtons) {
+for (const button of variableButtons()) {
   button.addEventListener("click", () => {
-    const id = button.dataset.variable as ForecastBundleId | undefined;
-    if (!id || !FORECAST_BUNDLE_IDS.includes(id)) return;
+    const id = button.dataset.variable;
+    if (!isBundleVariableId(id)) return;
     const family = button.dataset.family as IsobaricFamily | undefined;
     if (button.dataset.group === "pressure") {
       // The pressure tile is the lines-alone view; from a field with lines

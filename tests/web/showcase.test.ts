@@ -70,6 +70,24 @@ describe("showcase catalog", () => {
     expect(catalog.cases[0]!.variables).toEqual(["cref"]);
   });
 
+  it("admits a case on the shape of its variable names, not on a registry", () => {
+    // Same rule the run manifest is admitted by: a case built from a bundle
+    // this build has never heard of is a layer it renders generically.
+    const catalog = validateCatalog(
+      catalogFixture([caseFixture({ variables: ["prate", "gust10m"], defaultVariable: "gust10m" })]),
+    );
+    expect(catalog.cases[0]!.variables).toEqual(["prate", "gust10m"]);
+    expect(catalog.cases[0]!.defaultVariable).toBe("gust10m");
+  });
+
+  it("rejects malformed or repeated variable names", () => {
+    for (const variables of [["Prate"], ["tmp-2m"], [""], ["prate", "prate"], [], ["prate", 7]]) {
+      expect(() =>
+        validateCatalog(catalogFixture([caseFixture({ variables, defaultVariable: variables[0] })])),
+      ).toThrow();
+    }
+  });
+
   it("rejects a manifest path outside the case's own directory", () => {
     expect(() =>
       validateCatalog(catalogFixture([caseFixture({ manifestPath: "showcase/other/manifest.json" })])),

@@ -320,7 +320,7 @@ class WindBundleTests(unittest.TestCase):
         variables, groups, chunks = _bundle_chunks(
             WIND_COMPONENT_IDS, self.HOURS, self._planes(), tiles
         )
-        self.assertEqual([v.variable_id for v in variables], [3, 4])
+        self.assertEqual([v.variable_id for v in variables], [1, 2])
         self.assertEqual([group.frame_count for group in groups], [6, 6, 1])
         self.assertEqual(len(chunks), len(groups) * tiles.count * 2)
         # Physical order: group, then tile row-major, then variable — so the
@@ -365,20 +365,20 @@ class WindBundleTests(unittest.TestCase):
             bundle.verify_all()
             self.assertEqual(sorted(bundle.variable_ids.values()), ["ugrd10m", "vgrd10m"])
             for hour in self.HOURS:
-                np.testing.assert_array_equal(bundle.decode_plane(3, hour), planes[hour]["ugrd10m"])
-                np.testing.assert_array_equal(bundle.decode_plane(4, hour), planes[hour]["vgrd10m"])
+                np.testing.assert_array_equal(bundle.decode_plane(1, hour), planes[hour]["ugrd10m"])
+                np.testing.assert_array_equal(bundle.decode_plane(2, hour), planes[hour]["vgrd10m"])
             # A wind series is one chunk per group of one tile, per component,
             # and those two chunks are adjacent bytes.
             for column, row in ((0, 0), (7, 7), (5, 2)):
-                for numeric_id, component in ((3, "ugrd10m"), (4, "vgrd10m")):
+                for numeric_id, component in ((1, "ugrd10m"), (2, "vgrd10m")):
                     expected = [int(planes[hour][component][row * 8 + column]) for hour in self.HOURS]
                     self.assertEqual(bundle.decode_series(numeric_id, column, row).tolist(), expected)
             tile = bundle.tiles.tile_of(0, 0)
-            u_span = bundle.chunk_span(bundle.chunk_position(0, tile, 3))
-            v_span = bundle.chunk_span(bundle.chunk_position(0, tile, 4))
+            u_span = bundle.chunk_span(bundle.chunk_position(0, tile, 1))
+            v_span = bundle.chunk_span(bundle.chunk_position(0, tile, 2))
             self.assertEqual(u_span[1], v_span[0])
 
-    def test_manifest_accepts_optional_wind_bundle_in_order(self) -> None:
+    def test_manifest_admits_any_well_formed_bundle_name(self) -> None:
         def bundles(*, wind: bool) -> list[dict[str, object]]:
             entries: list[dict[str, object]] = [
                 {"variable": "tmp2m", "path": "tmp2m.xue", "byteLength": 1000, "crc32": "0123abcd"},
@@ -402,9 +402,31 @@ class WindBundleTests(unittest.TestCase):
 
         validate_bin_manifest(manifest(bundles(wind=False)))
         validate_bin_manifest(manifest(bundles(wind=True)))
-        out_of_order = manifest(list(reversed(bundles(wind=True))))
-        with self.assertRaisesRegex(ManifestError, "ordered"):
-            validate_bin_manifest(out_of_order)
+        # Order is the encoder's business, not the validator's.
+        validate_bin_manifest(manifest(list(reversed(bundles(wind=True)))))
+        # A name this encoder has never heard of is a layer a reader skips,
+        # not a malformed manifest: the variable is a file-local handle's
+        # label, not an entry in a closed registry.
+        unknown = manifest(
+            bundles(wind=False)
+            + [{"variable": "cape180", "path": "cape180.xue", "byteLength": 900, "crc32": "0011aabb"}]
+        )
+        validate_bin_manifest(unknown)
+        # What a name must still be: lowercase alphanumeric, leading letter,
+        # unique within the manifest.
+        for bad in ("Tmp2m", "tmp-2m", "tmp_2m", "2mtmp", "", "tmp 2m"):
+            malformed = manifest(
+                bundles(wind=False)
+                + [{"variable": bad, "path": "other.xue", "byteLength": 900, "crc32": "0011aabb"}]
+            )
+            with self.assertRaisesRegex(ManifestError, "not a bundle name"):
+                validate_bin_manifest(malformed)
+        duplicate = manifest(
+            bundles(wind=False)
+            + [{"variable": "prate", "path": "prate-again.xue", "byteLength": 900, "crc32": "0011aabb"}]
+        )
+        with self.assertRaisesRegex(ManifestError, "duplicate bundle variables"):
+            validate_bin_manifest(duplicate)
         missing_scalar = manifest([entry for entry in bundles(wind=True) if entry["variable"] != "prate"])
         with self.assertRaisesRegex(ManifestError, "prate"):
             validate_bin_manifest(missing_scalar)

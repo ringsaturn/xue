@@ -70,7 +70,16 @@ fn time_metadata(offsets: &[i64], unit_seconds: i64) -> Map<String, Value> {
 
 /// One schema v3 variable descriptor: what the field is (GRIB2 parameter and
 /// fixed surface), what its values mean, and how they are quantized.
-fn variable_metadata(variable_id: &str, source: &SourceSpec, profile: &str) -> Result<Value> {
+///
+/// `numeric_id` is the file-local `variableId` handle that ties this
+/// descriptor to the index (docs/format.md): the variable's 1-based position
+/// in the bundle's variable list, assigned by [`build_metadata`].
+fn variable_metadata(
+    variable_id: &str,
+    numeric_id: u8,
+    source: &SourceSpec,
+    profile: &str,
+) -> Result<Value> {
     let spec = variable_spec(variable_id)?;
     let mut parameter = spec.parameter_metadata();
     if variable_id == "prate" && (source.accumulated_precipitation || source.averaged_precipitation)
@@ -82,7 +91,7 @@ fn variable_metadata(variable_id: &str, source: &SourceSpec, profile: &str) -> R
         parameter.insert("typeOfStatisticalProcessing".into(), json!(0));
     }
     let mut block = Map::new();
-    block.insert("numericId".into(), json!(spec.numeric_id));
+    block.insert("numericId".into(), json!(numeric_id));
     block.insert("id".into(), json!(variable_id));
     block.insert("label".into(), json!(spec.label));
     block.insert("unit".into(), json!(spec.output_unit));
@@ -111,12 +120,19 @@ pub fn build_metadata(
     block.insert("profile".into(), json!(profile));
     block.insert("time".into(), Value::Object(time_metadata(offsets, unit_seconds)));
     block.insert("grid".into(), Value::Object(grid.metadata()));
+    // variableId is a file-local handle: 1..n by position in the bundle's
+    // variable list, which is the same list that fixes chunk order in
+    // `bundle_chunks`. Nothing outside one file reads these numbers — a
+    // variable's identity is its GRIB2 parameter block.
     block.insert(
         "variables".into(),
         Value::Array(
             variable_ids
                 .iter()
-                .map(|variable_id| variable_metadata(variable_id, source, profile))
+                .enumerate()
+                .map(|(index, variable_id)| {
+                    variable_metadata(variable_id, index as u8 + 1, source, profile)
+                })
                 .collect::<Result<Vec<_>>>()?,
         ),
     );

@@ -42,7 +42,9 @@ fn v1_fixture_bytes(name: &str) -> Vec<u8> {
 
 #[test]
 fn golden_decode_matches_python_reference() {
-    for (variable_id, name) in [(1u8, "tmp2m"), (2u8, "prate")] {
+    // Both are single-variable bundles, so both carry variableId 1: the id is
+    // the variable's position within its own file (docs/format.md).
+    for (variable_id, name) in [(1u8, "tmp2m"), (1u8, "prate")] {
         let mut bundle =
             Bundle::open(&variable_fixture_bytes(name)).expect("fixture must parse");
         let metadata: serde_json::Value =
@@ -210,7 +212,9 @@ fn data_offset_of(bytes: &[u8]) -> usize {
 /// to decoding the complete file.
 #[test]
 fn streaming_matches_full_decode() {
-    for (variable_id, name) in [(1u8, "tmp2m"), (2u8, "prate")] {
+    // Both are single-variable bundles, so both carry variableId 1: the id is
+    // the variable's position within its own file (docs/format.md).
+    for (variable_id, name) in [(1u8, "tmp2m"), (1u8, "prate")] {
         let bytes = variable_fixture_bytes(name);
         let data_offset = data_offset_of(&bytes);
         let mut full = Bundle::open(&bytes).expect("full bundle parses");

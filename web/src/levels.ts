@@ -1,12 +1,6 @@
 import { t, type MessageKey } from "./i18n";
-import {
-  ISOBARIC_LEVELS,
-  isVectorBundle,
-  type ForecastBundleId,
-  type IsobaricLevel,
-  type IsobaricScalarBundleId,
-  type VectorBundleId,
-} from "./manifest";
+import type { ChartFamily, VariableIdentity } from "./identity";
+import { ISOBARIC_LEVELS, type ForecastBundleId, type IsobaricLevel } from "./manifest";
 import { PRESSURE_BUNDLE_IDS, pressureLabel } from "./pressure";
 
 /**
@@ -79,8 +73,14 @@ export const FAMILIES: Record<IsobaricFamily, FamilyInfo> = {
   },
 };
 
-/** The family a bundle belongs to, or null for a single layer (precipitation,
- * radiation, reflectivity). */
+/** The family a bundle id *names*, or null for a single layer (precipitation,
+ * radiation, reflectivity) and for any name the convention does not describe.
+ *
+ * A naming-convention reading of the id string — `<family><level>`, plus the
+ * surface members — and nothing more. It is what the rail, the level row and
+ * `?type=` have to go on before a bundle is open; once one is, its variables'
+ * parameter blocks are the identity (identity.ts) and this is only a guess
+ * checked against them. Unknown names return null rather than throwing. */
 export function familyOf(id: ForecastBundleId): IsobaricFamily | null {
   for (const family of ISOBARIC_FAMILIES) {
     if (FAMILIES[family].surface === id) return family;
@@ -91,8 +91,9 @@ export function familyOf(id: ForecastBundleId): IsobaricFamily | null {
   return ISOBARIC_FAMILIES.includes(prefix) && (ISOBARIC_LEVELS as readonly number[]).includes(Number(match[2])) ? prefix : null;
 }
 
-/** The isobaric surface of a bundle in hPa, or null for a surface member and
- * for anything outside the families. */
+/** The isobaric surface a bundle id names, in hPa, or null for a surface
+ * member and for anything outside the families. The same naming convention
+ * `familyOf` reads, with the same standing. */
 export function bundleLevel(id: ForecastBundleId): IsobaricLevel | null {
   const match = /^(?:hgt|tmp|rh|spfh|wind|qflux)(\d+)$/.exec(id);
   if (!match) return null;
@@ -142,11 +143,22 @@ const SPECIFIC_HUMIDITY_MAX: Record<IsobaricLevel, number> = {
   200: 1.27,
 };
 
-export function isobaricRange(id: IsobaricScalarBundleId): readonly [number, number] {
-  const level = bundleLevel(id)!;
-  if (id.startsWith("tmp")) return TEMPERATURE_RANGES[level];
-  if (id.startsWith("rh")) return [0, 100];
-  return [0, SPECIFIC_HUMIDITY_MAX[level]];
+/** True when a level is one of the eight the encoders register a family on.
+ * Chart knowledge exists only there; a field on any other surface is drawn
+ * generically from its own codebook. */
+export function isRegisteredLevel(level: number | null): level is IsobaricLevel {
+  return level !== null && (ISOBARIC_LEVELS as readonly number[]).includes(level);
+}
+
+/** Codebook coverage of one filled isobaric scalar, keyed by what the field
+ * *is* rather than by what it is called. Null for a family or a surface the
+ * encoders register nothing on. */
+export function isobaricRange(family: ChartFamily, level: number | null): readonly [number, number] | null {
+  if (!isRegisteredLevel(level)) return null;
+  if (family === "tmp") return TEMPERATURE_RANGES[level];
+  if (family === "rh") return [0, 100];
+  if (family === "spfh") return [0, SPECIFIC_HUMIDITY_MAX[level]];
+  return null;
 }
 
 /** The temperature ramp's domain on one surface. Up to 700 hPa the absolute
@@ -161,25 +173,28 @@ const UPPER_TEMPERATURE_DOMAINS: Partial<Record<IsobaricLevel, readonly [number,
   200: [-85, -25],
 };
 
-export function temperaturePaletteDomain(level: IsobaricLevel): readonly [number, number] {
-  return UPPER_TEMPERATURE_DOMAINS[level] ?? [-60, 50];
+/** `level` is the isobaric surface in hPa, or null for the 2 m member, which
+ * takes the absolute ramp. */
+export function temperaturePaletteDomain(level: number | null): readonly [number, number] {
+  return (isRegisteredLevel(level) ? UPPER_TEMPERATURE_DOMAINS[level] : undefined) ?? [-60, 50];
 }
 
 /** The part of the ramp's domain the level's codebook can actually hold —
  * what the legend spans. 850 hPa stops at 45 °C, 700 hPa at 35. */
-export function temperatureLegendRange(level: IsobaricLevel): readonly [number, number] {
+export function temperatureLegendRange(level: number | null): readonly [number, number] {
   const [low, high] = temperaturePaletteDomain(level);
-  const [min, max] = TEMPERATURE_RANGES[level];
-  return [Math.max(low, min), Math.min(high, max)];
+  const range = isobaricRange("tmp", level);
+  if (!range) return [low, high];
+  return [Math.max(low, range[0]), Math.min(high, range[1])];
 }
 
-/** Ceiling of a vector bundle's magnitude palette: the 10 m wind's 40 m/s,
+/** Ceiling of a vector field's magnitude palette: the 10 m wind's 40 m/s,
  * more for the isobaric winds (a jet core passes 80), and the vapour flux's
- * own scale — strong transport is 20–40 g·cm⁻¹·hPa⁻¹·s⁻¹. */
-export function vectorMaxMagnitude(id: VectorBundleId): number {
-  if (id === "wind10m") return 40;
-  if (id.startsWith("qflux")) return 50;
-  const level = bundleLevel(id)!;
+ * own scale — strong transport is 20–40 g·cm⁻¹·hPa⁻¹·s⁻¹. Keyed by the pair
+ * the field *is*; a surface with no registered ceiling takes the 10 m one. */
+export function vectorMaxMagnitude(family: ChartFamily, level: number | null): number {
+  if (family === "qflux") return 50;
+  if (!isRegisteredLevel(level)) return 40;
   if (level >= 700) return 60;
   if (level === 500) return 80;
   return 100;
@@ -229,15 +244,27 @@ export function rangeLegend(range: readonly [number, number], step: number): str
   return ticks;
 }
 
-/** The legend ticks of one isobaric member: a filled scalar across its
- * palette domain, a vector field from its magnitude ceiling down to zero. */
-export function isobaricLegend(id: ForecastBundleId): string[] {
-  if (isVectorBundle(id)) return rangeLegend([0, vectorMaxMagnitude(id)], id.startsWith("qflux") ? 10 : 10);
-  const level = bundleLevel(id)!;
-  if (id.startsWith("tmp")) return rangeLegend(temperatureLegendRange(level), 5);
-  if (id.startsWith("rh")) return rangeLegend([0, 100], 20);
-  const max = SPECIFIC_HUMIDITY_MAX[level];
-  return rangeLegend([0, max], max >= 20 ? 5 : max >= 5 ? 1 : 0.25);
+/** A step that puts six readable ticks across a span — the fallback for a
+ * field with no registered legend, whose range is its codebook's own. */
+export function niceStep(span: number): number {
+  if (!Number.isFinite(span) || span <= 0) return 1;
+  return 10 ** Math.floor(Math.log10(span / 5));
+}
+
+/** The legend ticks of one identified field: a filled scalar across its
+ * palette domain, a vector field from its magnitude ceiling down to zero.
+ * Null where the pair has no registered legend — the caller then builds one
+ * from the file's own codebook. */
+export function isobaricLegend(identity: VariableIdentity): string[] | null {
+  const { family, level, vector } = identity;
+  if (vector) return rangeLegend([0, vectorMaxMagnitude(family, level)], 10);
+  if (family === "tmp" && isRegisteredLevel(level)) return rangeLegend(temperatureLegendRange(level), 5);
+  if (family === "rh" && isRegisteredLevel(level)) return rangeLegend([0, 100], 20);
+  if (family === "spfh" && isRegisteredLevel(level)) {
+    const max = SPECIFIC_HUMIDITY_MAX[level];
+    return rangeLegend([0, max], max >= 20 ? 5 : max >= 5 ? 1 : 0.25);
+  }
+  return null;
 }
 
 /** The isobaric members that are filled fields or vector fields — everything

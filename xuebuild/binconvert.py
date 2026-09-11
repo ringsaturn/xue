@@ -52,7 +52,7 @@ from .model import GRIB_PLANE_SOURCE, PlaneSource, SourceFrame
 from .observation import inspect_observation
 from .quantize import PRESSURE_VARIABLE_IDS, PROFILES, PrecipitationCodebook, TemperatureCodebook
 from .sources import SourceSpec, source_spec
-from .variables import ISOBARIC_LEVELS_HPA, STANDARD_GRAVITY, VARIABLES, isobaric_variable, variable_spec
+from .variables import ISOBARIC_LEVELS_HPA, STANDARD_GRAVITY, isobaric_variable, variable_spec
 from .videoconvert import build_debug_playlist, encode_variable_video
 
 LOG = logging.getLogger(__name__)
@@ -61,13 +61,6 @@ METADATA_SCHEMA_VERSION = 3
 """Bundle metadata schema this encoder writes: every variable descriptor
 carries its GRIB2 parameter identity (docs/format.md). Earlier versions
 remain readable; nothing new is written at them."""
-
-# The container's registered variableId values, straight off the variable
-# registry — an input-only variable (ECMWF tp, sflux prate_ave) has none
-# because it never reaches a bundle.
-VARIABLE_NUMERIC_IDS = {
-    variable_id: spec.numeric_id for variable_id, spec in VARIABLES.items() if spec.numeric_id is not None
-}
 
 # Scalar variables ship one single-variable bundle each (with a poster, and
 # for the surface fields a video companion); which scalars a source publishes
@@ -636,9 +629,13 @@ def _time_metadata(offsets: list[int], unit_seconds: int) -> dict[str, Any]:
     return block
 
 
-def _variable_metadata(variable_id: str, source: SourceSpec, profile: str) -> dict[str, Any]:
+def _variable_metadata(variable_id: str, numeric_id: int, source: SourceSpec, profile: str) -> dict[str, Any]:
     """One schema v3 variable descriptor: what the field is (GRIB2 parameter
-    and fixed surface), what its values mean, and how they are quantized."""
+    and fixed surface), what its values mean, and how they are quantized.
+
+    ``numeric_id`` is the file-local ``variableId`` handle that ties this
+    descriptor to the index (docs/format.md): the variable's 1-based position
+    in the bundle's variable list, assigned by :func:`build_metadata`."""
     spec = variable_spec(variable_id)
     parameter = spec.parameter_metadata()
     if variable_id == "prate" and (source.accumulated_precipitation or source.averaged_precipitation):
@@ -648,7 +645,7 @@ def _variable_metadata(variable_id: str, source: SourceSpec, profile: str) -> di
         # pgrb2 carries under the same parameter.
         parameter["typeOfStatisticalProcessing"] = 0
     return {
-        "numericId": spec.numeric_id,
+        "numericId": numeric_id,
         "id": variable_id,
         "label": spec.label,
         "unit": spec.output_unit,
@@ -676,7 +673,14 @@ def build_metadata(
         "profile": profile,
         "time": _time_metadata(offsets, unit_seconds),
         "grid": grid.metadata(),
-        "variables": [_variable_metadata(variable_id, resolved, profile) for variable_id in variable_ids],
+        # variableId is a file-local handle: 1..n by position in the bundle's
+        # variable list, which is the same list that fixes chunk order in
+        # _bundle_chunks. Nothing outside one file reads these numbers — a
+        # variable's identity is its GRIB2 parameter block.
+        "variables": [
+            _variable_metadata(variable_id, numeric_id, resolved, profile)
+            for numeric_id, variable_id in enumerate(variable_ids, start=1)
+        ],
     }
 
 
@@ -821,9 +825,15 @@ def _bundle_chunks(
     makes the two components of the wind bundle adjacent within a tile, so a
     single range request still covers a wind frame, while a viewport's tile
     row and a cell's series each stay one narrow span.
+
+    ``variableId`` is file-local and assigned here exactly the way
+    :func:`build_metadata` assigns it — 1..n by position in ``variable_ids``
+    — so the index and the metadata agree by construction, and the ascending
+    id order the spec fixes is the bundle's own variable order.
     """
+    numeric_ids = {variable_id: index for index, variable_id in enumerate(variable_ids, start=1)}
     predictors = {
-        VARIABLE_NUMERIC_IDS[variable_id]: (
+        numeric_ids[variable_id]: (
             binformat.PREDICTOR_RAW
             if variable_id in RAW_VARIABLE_IDS
             else binformat.PREDICTOR_PREVIOUS
@@ -831,7 +841,7 @@ def _bundle_chunks(
         for variable_id in variable_ids
     }
     planes = {
-        offset: {VARIABLE_NUMERIC_IDS[variable_id]: codes[offset][variable_id] for variable_id in variable_ids}
+        offset: {numeric_ids[variable_id]: codes[offset][variable_id] for variable_id in variable_ids}
         for offset in offsets
     }
     return temporal.build_chunks(offsets, planes, tiles, predictors)

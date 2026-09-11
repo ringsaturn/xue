@@ -599,7 +599,11 @@ test("URL entry ?model=gfs&type=wind opens the wind layer directly", async ({ pa
   await expect(page.getByRole("slider", { name: "Forecast hour" })).toBeEnabled({ timeout: 20_000 });
 });
 
-test("unknown type in the URL falls back to the default variable", async ({ page }) => {
+// `vorticity` is a well-formed bundle name, so the URL parser passes it
+// through rather than rejecting it — the shell is not the registry of what
+// exists. What decides is the manifest: this run does not ship it, so the
+// composition falls back to the default and the URL is rewritten.
+test("a type the run does not ship falls back to the default variable", async ({ page }) => {
   await routeManifest(page);
   await routeBundle(page);
   await page.goto("/?model=gfs&type=vorticity");

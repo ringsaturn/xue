@@ -101,7 +101,24 @@ can be served from either the site origin or the R2 bucket
 
 Manifest schema changes are a two-sided deploy: the new shell accepts old
 manifests, but an old cached shell rejects new ones — **deploy the Pages shell
-before publishing data in a widened schema**.
+before publishing data in a widened schema**. The *set* of bundles is not a
+schema: a manifest's `variable` is admitted on its shape alone
+(`^[a-z][a-z0-9]*$`, unique; `tmp2m` and `prate` still required on a live
+run) in all three validators, so a run may publish a bundle the shell has
+never heard of and the shell renders it generically instead of refusing the
+manifest. Adding a level of a known family is two source-table lines and no
+frontend change; a new quantity is an encoder registration plus, optionally,
+frontend chart knowledge.
+
+Inside a bundle, `numericId` / `variableId` is a **file-local handle**: both
+encoders number a bundle's variables 1..n in bundle order, so every scalar
+bundle carries variable 1 and every vector bundle 1 (u) and 2 (v). A
+variable's identity is its GRIB2 `parameter` block (`web/src/identity.ts`
+derives family, level and vector-ness from it once a session is open; the id
+string is only the naming convention the rail and `?type=` read before
+then). Nothing may key across sessions by `numericId` alone —
+`web/src/sessionkeys.ts` scopes the frame cache and probe keys by session,
+and each session's worker is bound to it by closure.
 
 ### Container versions
 
@@ -171,14 +188,14 @@ publishing data at the new version.**
   cron job, no fetch — one local NetCDF file per event, read by
   `observation.py`, with whatever time axis the file carries.
 - `variables.py` — the variable registry, in GRIB2's own terms: the parameter
-  triple, the fixed surface, the container's `numericId`, the metadata label
-  and unit, plus the GRIB matching hints (element, `.idx` phrase, ECMWF
-  param). One entry per variable feeds both record matching and the schema v3
-  metadata block. Some entries are *input-only* (no `numeric_id`): ECMWF `tp`
-  de-accumulates into `prate`, sflux `prate_ave` de-averages into `prate`;
-  neither reaches a bundle. The isobaric families (`hgt`, `tmp`, `rh`,
-  `spfh`, `ugrd`/`vgrd`, `uqflx`/`vqflx`) are generated from one table of
-  eight levels; `isobaric_variable(id)` answers `(family, level)`, and the
+  triple, the fixed surface, the metadata label and unit, plus the GRIB
+  matching hints (element, `.idx` phrase, ECMWF param). One entry per
+  variable feeds both record matching and the schema v3 metadata block; it
+  assigns no container id (see the delivery contract above). Some entries
+  are *input-only*: ECMWF `tp` de-accumulates into `prate`, sflux
+  `prate_ave` de-averages into `prate`; neither reaches a bundle. The
+  isobaric families (`hgt`, `tmp`, `rh`, `spfh`, `ugrd`/`vgrd`,
+  `uqflx`/`vqflx`) are generated from one table of eight levels; `isobaric_variable(id)` answers `(family, level)`, and the
   vapour flux pair is derived in the converter (`q·V/g`), never fetched.
   Registration is not publication: `SourceSpec.bundle_scalar_ids` and
   `bundle_vector_ids` say what a source ships, and a vector bundle

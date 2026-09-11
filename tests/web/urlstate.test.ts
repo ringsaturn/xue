@@ -44,9 +44,12 @@ describe("parseVariableFromSearch", () => {
     expect(parseVariableFromSearch("?type=vapor850")).toBe("qflux850");
     expect(parseVariableFromSearch("?type=moisture700")).toBe("qflux700");
     expect(parseVariableFromSearch("?type=z500")).toBe("hgt500");
-    // Only the eight registered surfaces exist.
-    expect(parseVariableFromSearch("?type=tmp550")).toBeNull();
-    expect(parseVariableFromSearch("?type=wind1")).toBeNull();
+    // The rule, not a table of the eight surfaces the encoders happen to
+    // register today: an alias for a level this build has never rendered
+    // still resolves to the id a manifest would carry, and whether the run
+    // ships it is the manifest's answer.
+    expect(parseVariableFromSearch("?type=t550")).toBe("tmp550");
+    expect(parseVariableFromSearch("?type=wind1")).toBe("wind1");
     // The level is the layer: the canonical spelling is the id itself.
     expect(searchForVariable("tmp850", "")).toBe("?model=gfs&type=tmp850");
     expect(searchForVariable("qflux850", "", "gfs")).toBe("?model=gfs&type=qflux850");
@@ -68,9 +71,26 @@ describe("parseVariableFromSearch", () => {
     expect(parseVariableFromSearch("?type=reflectivity")).toBe("cref");
   });
 
-  it("falls back to null on unknown model, unknown type, or no params", () => {
+  it("passes a well-formed name the tables do not know straight through", () => {
+    // The shell is not the registry of what exists: a run may publish a
+    // bundle this build has never heard of, and a link to it has to open.
+    // main.ts falls back to the default when the manifest does not ship it.
+    expect(parseVariableFromSearch("?model=gfs&type=vorticity")).toBe("vorticity");
+    expect(parseVariableFromSearch("?type=CAPE")).toBe("cape");
+    expect(parseVariableFromSearch("?type=gust10m")).toBe("gust10m");
+    // A well-formed unknown name is still not a pressure surface.
+    expect(parseLinesFromSearch("?lines=vorticity")).toBeNull();
+    // Round-trips under its own name, since it has no canonical alias.
+    expect(searchForVariable("vorticity", "")).toBe("?model=gfs&type=vorticity");
+    expect(parseVariableFromSearch(searchForVariable("vorticity", ""))).toBe("vorticity");
+  });
+
+  it("falls back to null on unknown model, a malformed type, or no params", () => {
     expect(parseVariableFromSearch("?model=icon&type=wind")).toBeNull();
-    expect(parseVariableFromSearch("?model=gfs&type=vorticity")).toBeNull();
+    // Not bundle names at all: a manifest could never carry these.
+    expect(parseVariableFromSearch("?type=tmp-2m")).toBeNull();
+    expect(parseVariableFromSearch("?type=2mtemp")).toBeNull();
+    expect(parseVariableFromSearch("?type=")).toBeNull();
     expect(parseVariableFromSearch("?model=gfs")).toBeNull();
     expect(parseVariableFromSearch("")).toBeNull();
   });

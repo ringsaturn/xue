@@ -1235,16 +1235,17 @@ class BinManifestTests(unittest.TestCase):
             with self.assertRaises(ManifestError):
                 validate_bin_manifest(broken)
 
-    def test_missing_or_misordered_variables_rejected(self) -> None:
+    def test_missing_core_variable_rejected_but_order_is_free(self) -> None:
         payload = build_bin_manifest(datetime(2026, 8, 15, 6, tzinfo=UTC), bundles=manifest_bundles())
         only_one = json.loads(json.dumps(payload))
         only_one["bundles"] = only_one["bundles"][:1]
         with self.assertRaises(ManifestError):
             validate_bin_manifest(only_one)
+        # Order is the encoder's, not the validator's: a reordered manifest
+        # describes the same artifacts.
         reordered = json.loads(json.dumps(payload))
         reordered["bundles"].reverse()
-        with self.assertRaises(ManifestError):
-            validate_bin_manifest(reordered)
+        validate_bin_manifest(reordered)
 
 
 if __name__ == "__main__":

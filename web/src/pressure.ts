@@ -1,4 +1,5 @@
 import { t } from "./i18n";
+import { registeredBundleId, type VariableIdentity } from "./identity";
 import type { DataVariableId, ForecastBundleId, PressureBundleId } from "./manifest";
 
 /**
@@ -78,10 +79,21 @@ export function isPressureBundle(id: ForecastBundleId | DataVariableId): id is P
   return id in PRESSURE_LEVELS;
 }
 
-/** The contour settings for a field, or null when it is not a pressure
- * one — which is what turns the renderer's contour pass off. */
+/** The contour settings for a field named by the convention, or null when it
+ * is not a pressure one — which is what turns the renderer's contour pass
+ * off. A guess from the id string; an open session asks
+ * `pressureLevelForIdentity` instead. */
 export function pressureLevel(id: ForecastBundleId | DataVariableId): PressureLevelInfo | null {
   return isPressureBundle(id) ? PRESSURE_LEVELS[id] : null;
+}
+
+/** The contour settings for what a field *is*: the pressure family is the
+ * `hgt` family, sea level pressure its surface member. Null for every filled
+ * field, and for a height on a surface nothing is registered on. */
+export function pressureLevelForIdentity(identity: VariableIdentity | null): PressureLevelInfo | null {
+  if (identity === null || identity.family !== "hgt" || identity.vector) return null;
+  const id = registeredBundleId(identity);
+  return id !== null && isPressureBundle(id) ? PRESSURE_LEVELS[id] : null;
 }
 
 /** Human-facing name of one level. Sea level pressure is a field with a name;

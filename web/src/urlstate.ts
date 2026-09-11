@@ -1,6 +1,6 @@
 import {
   FORECAST_MODELS,
-  ISOBARIC_LEVELS,
+  isBundleVariableId,
   type ForecastBundleId,
   type ForecastModelId,
   type ResolutionPreference,
@@ -16,25 +16,26 @@ export const DEFAULT_MODEL: ForecastModelId = "gfs";
  * the core tmp2m/prate pair, so this is always available there. */
 export const DEFAULT_VARIABLE: ForecastBundleId = "prate";
 
-/** Canonical `type` value written into shared URLs, per bundle. Every
- * isobaric field names itself — the level *is* the layer, so there is no
- * separate `?level=` parameter to keep in step with `?type=`. */
-const CANONICAL_TYPE: Record<ForecastBundleId, string> = {
+/** Canonical `type` value for the surface members, which have short names of
+ * their own. Everything else names itself — an isobaric field's level *is*
+ * the layer, so there is no separate `?level=` parameter to keep in step
+ * with `?type=`, and a bundle this build has never heard of is written out
+ * under its own id. */
+const CANONICAL_TYPE: Record<string, string> = {
   tmp2m: "temp",
   prate: "precip",
   dswrf: "solar",
   cref: "radar",
   prmsl: "pressure",
   wind10m: "wind",
-  ...Object.fromEntries(
-    ISOBARIC_LEVELS.flatMap((level) =>
-      (["hgt", "tmp", "rh", "spfh", "wind", "qflux"] as const).map((family) => [`${family}${level}`, `${family}${level}`]),
-    ),
-  ),
-} as Record<ForecastBundleId, string>;
+};
 
-/** Accepted spellings for each bundle — canonical name, bundle id, and a few
- * common aliases. Matching is case-insensitive. */
+function canonicalType(id: ForecastBundleId): string {
+  return CANONICAL_TYPE[id] ?? id;
+}
+
+/** Accepted spellings for the named layers — canonical name, bundle id, and
+ * a few common aliases. Matching is case-insensitive. */
 const TYPE_ALIASES: Record<string, ForecastBundleId> = {
   temp: "tmp2m",
   temperature: "tmp2m",
@@ -60,28 +61,48 @@ const TYPE_ALIASES: Record<string, ForecastBundleId> = {
   // The subtropical high is read off the 500 hPa chart, so the view has the
   // name people look for as well as the level's own.
   subtropicalhigh: "hgt500",
-  // Every isobaric field by its own id (`hgt500`, `tmp850`, `rh700`,
-  // `wind850`, `qflux850`), plus the spellings a chart reader types: `t850`,
-  // `z500`, `humidity700`, `vapor850` / `vapour850` / `moisture850`.
-  ...Object.fromEntries(
-    ISOBARIC_LEVELS.flatMap((level) => [
-      [`hgt${level}`, `hgt${level}`],
-      [`z${level}`, `hgt${level}`],
-      [`tmp${level}`, `tmp${level}`],
-      [`t${level}`, `tmp${level}`],
-      [`temp${level}`, `tmp${level}`],
-      [`rh${level}`, `rh${level}`],
-      [`humidity${level}`, `rh${level}`],
-      [`spfh${level}`, `spfh${level}`],
-      [`q${level}`, `spfh${level}`],
-      [`wind${level}`, `wind${level}`],
-      [`qflux${level}`, `qflux${level}`],
-      [`vapor${level}`, `qflux${level}`],
-      [`vapour${level}`, `qflux${level}`],
-      [`moisture${level}`, `qflux${level}`],
-    ]),
-  ),
-} as Record<string, ForecastBundleId>;
+};
+
+/** The family an isobaric spelling names: the id's own prefix, plus the
+ * spellings a chart reader types — `t850`, `z500`, `humidity700`, `q850`,
+ * `vapor850` / `vapour850` / `moisture850`. */
+const FAMILY_ALIASES: Record<string, string> = {
+  hgt: "hgt",
+  z: "hgt",
+  tmp: "tmp",
+  t: "tmp",
+  temp: "tmp",
+  rh: "rh",
+  humidity: "rh",
+  spfh: "spfh",
+  q: "spfh",
+  wind: "wind",
+  qflux: "qflux",
+  vapor: "qflux",
+  vapour: "qflux",
+  moisture: "qflux",
+};
+
+/** `<family alias><level>` resolved by rule rather than by an enumerated
+ * table: the levels a run publishes are the run's business, not the shell's,
+ * so a spelling for one this build has never rendered still resolves to the
+ * id the manifest would carry. */
+function isobaricType(value: string): ForecastBundleId | null {
+  const match = /^([a-z]+)(\d+)$/.exec(value);
+  if (!match) return null;
+  const family = FAMILY_ALIASES[match[1]!];
+  return family === undefined ? null : `${family}${match[2]}`;
+}
+
+/** The bundle id a `?type=` / `?lines=` spelling names. An alias resolves to
+ * its canonical id; anything else that is a well-formed bundle name passes
+ * through unchanged, so a run may publish a layer this build has never heard
+ * of and a link to it still opens. The caller falls back to the default when
+ * the manifest does not ship what came back. */
+function resolveType(value: string): ForecastBundleId | null {
+  const lower = value.trim().toLowerCase();
+  return TYPE_ALIASES[lower] ?? isobaricType(lower) ?? (isBundleVariableId(lower) ? lower : null);
+}
 
 /** Accepted spellings for each model. Matching is case-insensitive. */
 const MODEL_ALIASES: Record<string, ForecastModelId> = {
@@ -179,15 +200,17 @@ export function parseResolutionFromSearch(search: string): ResolutionPreference 
 }
 
 /** Variable requested by the page URL, or null when the URL names none (or
- * names a type this app does not serve — a bad link falls back to the
- * default rather than erroring). */
+ * spells one so badly it is not a bundle name at all — a bad link falls back
+ * to the default rather than erroring). A well-formed name the alias tables
+ * do not know is passed through: whether the run ships it is the manifest's
+ * answer, not the URL parser's. */
 export function parseVariableFromSearch(search: string): ForecastBundleId | null {
   const params = new URLSearchParams(search);
   const model = params.get("model");
   if (model !== null && !(model.toLowerCase() in MODEL_ALIASES)) return null;
   const type = params.get("type");
   if (type === null) return null;
-  return TYPE_ALIASES[type.toLowerCase()] ?? null;
+  return resolveType(type);
 }
 
 /** The contour lines drawn over a filled field, from `?lines=`. Any spelling
@@ -199,8 +222,8 @@ export function parseVariableFromSearch(search: string): ForecastBundleId | null
 export function parseLinesFromSearch(search: string): PressureBundleId | null {
   const value = new URLSearchParams(search).get("lines");
   if (value === null) return null;
-  const id = TYPE_ALIASES[value.trim().toLowerCase()];
-  return id !== undefined && isPressureBundle(id) ? id : null;
+  const id = resolveType(value);
+  return id !== null && isPressureBundle(id) ? id : null;
 }
 
 /** The given query string carrying the lines overlay, or none. Written only
@@ -210,7 +233,7 @@ export function parseLinesFromSearch(search: string): PressureBundleId | null {
 export function searchWithLines(search: string, lines: PressureBundleId | null): string {
   const params = new URLSearchParams(search);
   if (lines === null) params.delete("lines");
-  else params.set("lines", CANONICAL_TYPE[lines]);
+  else params.set("lines", canonicalType(lines));
   return `?${params.toString()}`;
 }
 
@@ -223,7 +246,7 @@ export function searchForVariable(
 ): string {
   const params = new URLSearchParams(search);
   params.set("model", FORECAST_MODELS[modelId].id);
-  params.set("type", CANONICAL_TYPE[variableId]);
+  params.set("type", canonicalType(variableId));
   return `?${params.toString()}`;
 }
 
@@ -234,6 +257,6 @@ export function searchForCaseVariable(variableId: ForecastBundleId, search: stri
   const params = new URLSearchParams(search);
   params.delete("model");
   params.set("case", caseId);
-  params.set("type", CANONICAL_TYPE[variableId]);
+  params.set("type", canonicalType(variableId));
   return `?${params.toString()}`;
 }

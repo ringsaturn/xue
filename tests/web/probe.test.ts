@@ -121,38 +121,38 @@ describe("ProbeSeries", () => {
     const cell = series.cellFor(metadata)!;
     const plane = new Uint8Array(1440 * 721);
     plane[cell.index] = 170;
-    expect(series.sample(metadata, 1, 0, plane)).toBe(true);
+    expect(series.sample(metadata, "a:1", 0, plane)).toBe(true);
     plane.fill(0);
-    expect(series.code(1, 0)).toBe(170);
-    expect(series.code(1, 1)).toBeUndefined();
+    expect(series.code("a:1", 0)).toBe(170);
+    expect(series.code("a:1", 1)).toBeUndefined();
   });
 
   it("adopts a whole series read out of a tiled container", () => {
     const metadata = globalGrid();
     const series = new ProbeSeries(116.4, 39.9);
-    expect(series.adopt(metadata, 1, [0, 1, 2], Uint8Array.from([10, 20, 30]))).toBe(true);
-    expect([0, 1, 2].map((offset) => series.code(1, offset))).toEqual([10, 20, 30]);
+    expect(series.adopt(metadata, "a:1", [0, 1, 2], Uint8Array.from([10, 20, 30]))).toBe(true);
+    expect([0, 1, 2].map((offset) => series.code("a:1", offset))).toEqual([10, 20, 30]);
   });
 
   it("declines a series that does not match the axis, or a point off the grid", () => {
     const metadata = globalGrid();
     const series = new ProbeSeries(116.4, 39.9);
-    expect(series.adopt(metadata, 1, [0, 1, 2], Uint8Array.from([10, 20]))).toBe(false);
-    expect(series.code(1, 0)).toBeUndefined();
-    expect(new ProbeSeries(0, 0).adopt(croppedGrid(), 1, [0], Uint8Array.from([10]))).toBe(false);
+    expect(series.adopt(metadata, "a:1", [0, 1, 2], Uint8Array.from([10, 20]))).toBe(false);
+    expect(series.code("a:1", 0)).toBeUndefined();
+    expect(new ProbeSeries(0, 0).adopt(croppedGrid(), "a:1", [0], Uint8Array.from([10]))).toBe(false);
   });
 
   it("declines to sample a point off the bundle's grid", () => {
     const metadata = croppedGrid();
     const series = new ProbeSeries(0, 0);
     expect(series.cellFor(metadata)).toBeNull();
-    expect(series.sample(metadata, 1, 0, new Uint8Array(40 * 30))).toBe(false);
+    expect(series.sample(metadata, "a:1", 0, new Uint8Array(40 * 30))).toBe(false);
   });
 
   it("declines to sample a plane that is short of the cell", () => {
     const metadata = globalGrid();
     const series = new ProbeSeries(116.4, 39.9);
-    expect(series.sample(metadata, 1, 0, new Uint8Array(16))).toBe(false);
+    expect(series.sample(metadata, "a:1", 0, new Uint8Array(16))).toBe(false);
   });
 
   it("re-resolves the cell when the grid changes", () => {
@@ -166,9 +166,9 @@ describe("ProbeSeries", () => {
     const metadata = globalGrid();
     const series = new ProbeSeries(116.4, 39.9);
     const plane = new Uint8Array(1440 * 721).fill(150);
-    series.sample(metadata, 1, 0, plane);
+    series.sample(metadata, "a:1", 0, plane);
     series.clear();
-    expect(series.code(1, 0)).toBeUndefined();
+    expect(series.code("a:1", 0)).toBeUndefined();
     expect(series.longitude).toBe(116.4);
     expect(series.cellFor(metadata)).not.toBeNull();
   });
@@ -181,10 +181,10 @@ describe("probeSeriesValues", () => {
     const cell = series.cellFor(metadata)!;
     const plane = new Uint8Array(1440 * 721);
     plane[cell.index] = 170;
-    series.sample(metadata, 1, 0, plane);
+    series.sample(metadata, "a:1", 0, plane);
     plane[cell.index] = 255; // the codebook's no-data code
-    series.sample(metadata, 1, 2, plane);
-    const values = probeSeriesValues(series, [temperature()], [0, 1, 2]);
+    series.sample(metadata, "a:1", 2, plane);
+    const values = probeSeriesValues(series, [{ key: "a:1", variable: temperature() }], [0, 1, 2]);
     expect(values[0]).toBeCloseTo(25, 9);
     expect(values[1]).toBeUndefined();
     expect(values[2]).toBeNull();
@@ -192,24 +192,30 @@ describe("probeSeriesValues", () => {
 
   it("reads the wind pair as a speed, and only once both components landed", () => {
     const metadata = globalGrid();
-    const variables = [windComponent(3, "ugrd10m"), windComponent(4, "vgrd10m")];
+    const variables = [
+      { key: "a:3", variable: windComponent(3, "ugrd10m") },
+      { key: "a:4", variable: windComponent(4, "vgrd10m") },
+    ];
     const series = new ProbeSeries(0, 0);
     const cell = series.cellFor(metadata)!;
     const plane = new Uint8Array(1440 * 721);
     // u = -3 m/s, v = -4 m/s: a 5 m/s northeasterly.
     plane[cell.index] = (-3 + 60) / 0.5;
-    series.sample(metadata, 3, 0, plane);
+    series.sample(metadata, "a:3", 0, plane);
     expect(probeSeriesValues(series, variables, [0])[0]).toBeUndefined();
     plane[cell.index] = (-4 + 60) / 0.5;
-    series.sample(metadata, 4, 0, plane);
+    series.sample(metadata, "a:4", 0, plane);
     expect(probeSeriesValues(series, variables, [0])[0]).toBeCloseTo(5, 9);
     expect(probeWindDirection(series, variables, 0)).toBeCloseTo(36.8699, 3);
   });
 
   it("has no direction before both components are sampled", () => {
     const series = new ProbeSeries(0, 0);
-    const variables = [windComponent(3, "ugrd10m"), windComponent(4, "vgrd10m")];
+    const variables = [
+      { key: "a:3", variable: windComponent(3, "ugrd10m") },
+      { key: "a:4", variable: windComponent(4, "vgrd10m") },
+    ];
     expect(probeWindDirection(series, variables, 0)).toBeNull();
-    expect(probeWindDirection(series, [temperature()], 0)).toBeNull();
+    expect(probeWindDirection(series, [{ key: "a:1", variable: temperature() }], 0)).toBeNull();
   });
 });

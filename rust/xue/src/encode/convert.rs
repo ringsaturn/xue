@@ -31,7 +31,6 @@ use crate::encode::poster::encode_poster;
 use crate::encode::quantize::{codebook, Codebook};
 use crate::encode::sources::{source_spec, SourceSpec};
 use crate::encode::temporal::build_chunks;
-use crate::encode::variables::numeric_id;
 
 /// Scalar variables ship one single-variable bundle each; the two wind
 /// components ship together in one two-variable bundle for the GPU particle
@@ -695,32 +694,37 @@ fn bundle_tile(tile: (usize, usize), grid: &GridInfo, half: bool) -> (usize, usi
 /// the two components of the wind bundle next to each other inside a tile, so
 /// one range request still covers a wind frame while a viewport's tile row
 /// and a cell's series each stay one narrow span.
+///
+/// `variableId` is file-local and assigned here exactly the way
+/// [`build_metadata`](crate::encode::metadata::build_metadata) assigns it —
+/// 1..n by position in `variable_ids` — so the index and the metadata agree
+/// by construction, and the ascending id order the spec fixes is the bundle's
+/// own variable order.
 fn bundle_chunks(
     variable_ids: &[&str],
     offsets: &[i64],
     codes: &BTreeMap<i64, Vec<(String, Vec<u8>)>>,
     geometry: &TileGeometry,
 ) -> Result<ChunkTables> {
-    let mut variables: Vec<VariableEntry> = variable_ids
+    let variables: Vec<VariableEntry> = variable_ids
         .iter()
-        .map(|variable_id| {
-            Ok(VariableEntry {
-                variable_id: numeric_id(variable_id)?,
-                predictor: if RAW_VARIABLE_IDS.contains(variable_id) {
-                    Predictor::Raw
-                } else {
-                    Predictor::Previous
-                },
-            })
+        .enumerate()
+        .map(|(index, variable_id)| VariableEntry {
+            variable_id: index as u8 + 1,
+            predictor: if RAW_VARIABLE_IDS.contains(variable_id) {
+                Predictor::Raw
+            } else {
+                Predictor::Previous
+            },
         })
-        .collect::<Result<_>>()?;
-    variables.sort_by_key(|variable| variable.variable_id);
+        .collect();
 
     // Numeric id back to the name the code planes are keyed by.
     let names: BTreeMap<u8, &str> = variable_ids
         .iter()
-        .map(|variable_id| Ok((numeric_id(variable_id)?, *variable_id)))
-        .collect::<Result<_>>()?;
+        .enumerate()
+        .map(|(index, variable_id)| (index as u8 + 1, *variable_id))
+        .collect();
     let plane = |offset: i64, variable_id: u8| -> Result<&[u8]> {
         let name = names[&variable_id];
         codes

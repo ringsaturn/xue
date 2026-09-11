@@ -113,8 +113,8 @@ export function probeCell(
   };
 }
 
-function seriesKey(variableId: number, frameOffset: number): string {
-  return `${variableId}:${frameOffset}`;
+function seriesKey(variableKey: string, frameOffset: number): string {
+  return `${variableKey}|${frameOffset}`;
 }
 
 /**
@@ -125,6 +125,11 @@ function seriesKey(variableId: number, frameOffset: number): string {
  * Grids differ per session (resolution tiers, and per-variable crops), so the
  * cell is resolved against the metadata of whichever bundle a plane came
  * from, memoized on that metadata's identity.
+ *
+ * `variableKey` is an opaque string the caller scopes to the session a plane
+ * came from — never a bare numericId, which is file-local and repeats across
+ * open bundles (main.ts `probeKey`). One series holds several sessions'
+ * samples, and they must not read each other's.
  */
 export class ProbeSeries {
   private readonly codes = new Map<string, number>();
@@ -151,30 +156,30 @@ export class ProbeSeries {
    * this bundle's grid or the series does not match the axis. */
   adopt(
     metadata: BundleMetadata,
-    variableId: number,
+    variableKey: string,
     frameOffsets: readonly number[],
     codes: Uint8Array,
   ): boolean {
     if (!this.cellFor(metadata) || codes.length !== frameOffsets.length) return false;
     for (const [index, offset] of frameOffsets.entries()) {
-      this.codes.set(seriesKey(variableId, offset), codes[index]!);
+      this.codes.set(seriesKey(variableKey, offset), codes[index]!);
     }
     return true;
   }
 
   /** Record this plane's code at the pinned point. Returns false when the
    * point is off the bundle's grid or the plane is short of the cell. */
-  sample(metadata: BundleMetadata, variableId: number, frameOffset: number, plane: Uint8Array): boolean {
+  sample(metadata: BundleMetadata, variableKey: string, frameOffset: number, plane: Uint8Array): boolean {
     const cell = this.cellFor(metadata);
     if (!cell || cell.index >= plane.length) return false;
-    this.codes.set(seriesKey(variableId, frameOffset), plane[cell.index]!);
+    this.codes.set(seriesKey(variableKey, frameOffset), plane[cell.index]!);
     return true;
   }
 
   /** The code sampled for one frame, or undefined when that frame has not
    * been decoded since the point was pinned. */
-  code(variableId: number, frameOffset: number): number | undefined {
-    return this.codes.get(seriesKey(variableId, frameOffset));
+  code(variableKey: string, frameOffset: number): number | undefined {
+    return this.codes.get(seriesKey(variableKey, frameOffset));
   }
 
   /** Drop every sample, keeping the pin — what a new run or a new model
@@ -190,21 +195,28 @@ export class ProbeSeries {
  * says no data, `undefined` where the frame has not been decoded yet. */
 export type ProbeValue = number | null | undefined;
 
+/** One of a session's variables together with the key its samples are filed
+ * under — the pair every read of a series needs. */
+export interface ProbeVariable {
+  key: string;
+  variable: BundleVariable;
+}
+
 /**
  * The series a set of variables reads at the pinned point, over the given
- * frame offsets. A scalar bundle has one variable; the wind bundle has the
- * u/v pair, and its series is the speed, so a frame counts only once both
+ * frame offsets. A scalar bundle has one variable; a vector bundle has the
+ * u/v pair, and its series is the magnitude, so a frame counts only once both
  * components are sampled.
  */
 export function probeSeriesValues(
   series: ProbeSeries,
-  variables: readonly BundleVariable[],
+  variables: readonly ProbeVariable[],
   frameOffsets: readonly number[],
 ): ProbeValue[] {
   return frameOffsets.map((offset) => {
     const values: (number | null)[] = [];
-    for (const variable of variables) {
-      const code = series.code(variable.numericId, offset);
+    for (const { key, variable } of variables) {
+      const code = series.code(key, offset);
       if (code === undefined) return undefined;
       values.push(decodeValue(variable, code));
     }
@@ -218,16 +230,16 @@ export function probeSeriesValues(
  * or null when either component is missing at that frame. */
 export function probeWindDirection(
   series: ProbeSeries,
-  variables: readonly BundleVariable[],
+  variables: readonly ProbeVariable[],
   frameOffset: number,
 ): number | null {
   if (variables.length < 2) return null;
-  const [u, v] = variables;
-  const uCode = series.code(u!.numericId, frameOffset);
-  const vCode = series.code(v!.numericId, frameOffset);
+  const [u, v] = variables as [ProbeVariable, ProbeVariable];
+  const uCode = series.code(u.key, frameOffset);
+  const vCode = series.code(v.key, frameOffset);
   if (uCode === undefined || vCode === undefined) return null;
-  const uValue = decodeValue(u!, uCode);
-  const vValue = decodeValue(v!, vCode);
+  const uValue = decodeValue(u.variable, uCode);
+  const vValue = decodeValue(v.variable, vCode);
   if (uValue === null || vValue === null) return null;
   return wrap((Math.atan2(-uValue, -vValue) * 180) / Math.PI, 360);
 }

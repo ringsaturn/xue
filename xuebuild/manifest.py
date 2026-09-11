@@ -2,48 +2,37 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from .errors import ManifestError
 from .sources import MODEL_PRODUCTS
-from .variables import ISOBARIC_LEVELS_HPA
 
 
-# Schema v5 bundle registry, in manifest order: every scalar, then every
-# two-variable vector bundle. The wind bundle packs both 10 m components into
-# one two-variable .xue and is optional so runs built from wind-less inputs
-# (and older manifests) stay valid; dswrf is optional because only the sflux
-# source carries it, and cref because only the radar observation archive
-# does. The pressure family (mean sea level pressure and the eight isobaric
-# geopotential heights) and the upper-air fills (temperature, relative and
-# specific humidity, the wind and the water vapour flux on the same eight
-# surfaces) are optional for the same reason and one bundle per level:
-# container v2 orders chunks group -> tile -> variable, so a multi-variable
-# bundle would make a viewport pull every level to read one. All vectors
-# follow all scalars, so a manifest written before a family existed is still
-# a subsequence of this list.
+# A bundle's `variable` is a name, not a registered number: it must look like
+# one (`^[a-z][a-z0-9]*$`) and be unique within the manifest, and nothing more.
+# A manifest is a description of one run's artifacts, so a name it carries that
+# a particular reader does not draw is a layer that reader skips, not a
+# malformed manifest — which is what lets a new bundle (another isobaric level,
+# another family) ship without every implementation being widened first. The
+# encoder decides the order, from `bundle_scalar_ids + bundle_vector_ids`; no
+# validator here has an opinion about it.
 #
-# This list is the frontend's admission test as well: `manifest.ts` rejects a
-# whole manifest that names a bundle it does not know, so a widened registry
-# must reach the deployed shell *before* any run publishes the new bundles
-# (docs/format.md).
-BIN_BUNDLE_VARIABLES = (
-    "tmp2m",
-    "prate",
-    "dswrf",
-    "cref",
-    "prmsl",
-    *(f"hgt{level}" for level in ISOBARIC_LEVELS_HPA),
-    *(f"tmp{level}" for level in ISOBARIC_LEVELS_HPA),
-    *(f"rh{level}" for level in ISOBARIC_LEVELS_HPA),
-    *(f"spfh{level}" for level in ISOBARIC_LEVELS_HPA),
-    "wind10m",
-    *(f"wind{level}" for level in ISOBARIC_LEVELS_HPA),
-    *(f"qflux{level}" for level in ISOBARIC_LEVELS_HPA),
-)
+# The core pair below is the exception, and the only closed set left: a
+# forecast manifest that names neither temperature nor precipitation describes
+# a run the viewer cannot open at all, so `require_core_variables` rejects it.
+# (A cropped showcase case or a `--bundles` build passes False.)
+#
+# Historically this was a closed registry the frontend re-implemented as its
+# own admission test, which made every new bundle a two-sided deploy: the
+# shell had to learn the name before a run could publish it. The shell that
+# carries this relaxation is the last one that ever needs to; from it on, an
+# unknown bundle name is skipped rather than rejected (docs/format.md).
 REQUIRED_BIN_BUNDLE_VARIABLES = ("tmp2m", "prate")
+
+_BUNDLE_VARIABLE_PATTERN = re.compile(r"^[a-z][a-z0-9]*$")
 
 
 def iso_z(value: datetime) -> str:
@@ -246,8 +235,10 @@ def validate_bin_manifest(
         if not isinstance(bundle, dict):
             raise ManifestError("manifest bundle must be an object")
         variable = bundle.get("variable")
-        if not isinstance(variable, str) or variable not in BIN_BUNDLE_VARIABLES:
-            raise ManifestError(f"manifest bundle variable is unsupported: {variable}")
+        if not isinstance(variable, str) or not _BUNDLE_VARIABLE_PATTERN.fullmatch(variable):
+            raise ManifestError(f"manifest bundle variable is not a bundle name: {variable!r}")
+        if variable in variables:
+            raise ManifestError(f"manifest contains duplicate bundle variables: {variable}")
         path = bundle.get("path")
         if (
             not isinstance(path, str)
@@ -276,8 +267,6 @@ def validate_bin_manifest(
         if "poster" in bundle:
             _validate_poster_descriptor(bundle["poster"], variable, paths)
         variables.append(variable)
-    if variables != [item for item in BIN_BUNDLE_VARIABLES if item in variables]:
-        raise ManifestError(f"manifest bundles must be unique and ordered as {list(BIN_BUNDLE_VARIABLES)}")
     if require_core_variables:
         for required in REQUIRED_BIN_BUNDLE_VARIABLES:
             if required not in variables:

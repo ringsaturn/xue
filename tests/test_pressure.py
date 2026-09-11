@@ -25,7 +25,6 @@ import numpy as np
 
 from xuebuild.errors import ConversionError
 from xuebuild.gdal import _band_matches, height_expression, pressure_expression, raster_expression
-from xuebuild.manifest import BIN_BUNDLE_VARIABLES
 from xuebuild.quantize import (
     CONTOUR_INTERVALS,
     EMPHASIS_CONTOURS,
@@ -42,7 +41,6 @@ def registry_entry(variable_id: str) -> dict:
     """The registry as the three implementations must agree it is."""
     spec = variable_spec(variable_id)
     entry: dict = {
-        "numericId": spec.numeric_id,
         "label": spec.label,
         "unit": spec.output_unit,
         "parameter": spec.parameter_metadata(),
@@ -71,12 +69,7 @@ class RegistryTests(unittest.TestCase):
     def test_the_levels_are_registered_once_each_and_in_order(self) -> None:
         heights = [height_variable_id(level) for level in HEIGHT_LEVELS_HPA]
         self.assertEqual(list(PRESSURE_VARIABLE_IDS), ["prmsl", *heights])
-        numeric_ids = [variable_spec(variable_id).numeric_id for variable_id in PRESSURE_VARIABLE_IDS]
-        self.assertEqual(numeric_ids, list(range(7, 16)))
-        self.assertEqual(
-            [variable for variable in BIN_BUNDLE_VARIABLES if variable in PRESSURE_VARIABLE_IDS],
-            list(PRESSURE_VARIABLE_IDS),
-        )
+        self.assertEqual(len(set(PRESSURE_VARIABLE_IDS)), len(PRESSURE_VARIABLE_IDS))
 
     def test_the_surface_pressure_is_stated_three_ways_and_they_agree(self) -> None:
         for level in HEIGHT_LEVELS_HPA:

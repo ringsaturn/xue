@@ -19,9 +19,6 @@ pub struct VariableSpec {
     /// Unit of the values a bundle's codebook quantizes.
     pub output_unit: &'static str,
     pub value_range: (i32, i32),
-    /// The container's registered `variableId`, or `None` for an input-only
-    /// variable that never reaches a bundle (ECMWF `tp`, sflux `prate_ave`).
-    pub numeric_id: Option<u8>,
     pub grib_element: &'static str,
     pub grib2_discipline: u8,
     pub grib2_category: u8,
@@ -82,22 +79,14 @@ fn scaled_surface_value(value: f64) -> (i32, i64) {
 }
 
 /// The standard isobaric surfaces every isobaric family is registered on, in
-/// hPa, in `variableId` order. Mirrors `ISOBARIC_LEVELS_HPA` in
+/// hPa, in level order. Mirrors `ISOBARIC_LEVELS_HPA` in
 /// `xuebuild/variables.py`.
 pub const ISOBARIC_LEVELS_HPA: &[u32] = &[1000, 925, 850, 700, 500, 300, 250, 200];
 
-/// The isobaric families — id prefix and the first of its eight contiguous
-/// `variableId`s. Mirrors `ISOBARIC_FAMILY_FIRST_ID` in
+/// The id prefixes of the isobaric families. Mirrors `ISOBARIC_FAMILIES` in
 /// `xuebuild/variables.py`.
-pub const ISOBARIC_FAMILIES: &[(&str, u8)] = &[
-    ("hgt", 8),
-    ("tmp", 16),
-    ("rh", 24),
-    ("spfh", 32),
-    ("ugrd", 40),
-    ("vgrd", 48),
-    ("uqflx", 56),
-    ("vqflx", 64),
+pub const ISOBARIC_FAMILIES: &[&str] = &[
+    "hgt", "tmp", "rh", "spfh", "ugrd", "vgrd", "uqflx", "vqflx",
 ];
 
 /// Standard gravity, the `g` in the water vapour flux `q·V/g`.
@@ -108,11 +97,11 @@ pub const STANDARD_GRAVITY: f64 = 9.80665;
 /// record matching needs beyond the family's element: every level of a family
 /// is the same GRIB2 parameter.
 pub fn isobaric_variable(variable_id: &str) -> Option<(&'static str, u32)> {
-    for (family, _) in ISOBARIC_FAMILIES {
+    for family in ISOBARIC_FAMILIES {
         if let Some(rest) = variable_id.strip_prefix(family) {
             if !rest.is_empty() && rest.bytes().all(|byte| byte.is_ascii_digit()) {
                 let level: u32 = rest.parse().ok()?;
-                return ISOBARIC_LEVELS_HPA.contains(&level).then_some((family, level));
+                return ISOBARIC_LEVELS_HPA.contains(&level).then_some((*family, level));
             }
         }
     }
@@ -120,18 +109,16 @@ pub fn isobaric_variable(variable_id: &str) -> Option<(&'static str, u32)> {
 }
 
 /// One isobaric entry. Every level of a family shares its parameter on
-/// surface type 100 and differs only in the surface's pressure (Pa) and the
-/// registered `variableId`, so the entries below are tables of numbers
-/// rather than hand-written blocks.
+/// surface type 100 and differs only in the surface's pressure (Pa), so the
+/// entries below are tables of numbers rather than hand-written blocks.
 macro_rules! isobaric_spec {
-    ($id:literal, $label:literal, $numeric:literal, $level_pa:literal, $range:expr,
+    ($id:literal, $label:literal, $level_pa:literal, $range:expr,
      $unit:literal, $element:literal, $category:literal, $number:literal, $gdal_unit:literal) => {
         VariableSpec {
             id: $id,
             label: $label,
             output_unit: $unit,
             value_range: $range,
-            numeric_id: Some($numeric),
             grib_element: $element,
             grib2_discipline: 0,
             grib2_category: $category,
@@ -145,35 +132,35 @@ macro_rules! isobaric_spec {
 }
 
 macro_rules! height_spec {
-    ($id:literal, $label:literal, $numeric:literal, $level_pa:literal, $range:expr) => {
-        isobaric_spec!($id, $label, $numeric, $level_pa, $range, "m", "HGT", 3, 5, "gpm")
+    ($id:literal, $label:literal, $level_pa:literal, $range:expr) => {
+        isobaric_spec!($id, $label, $level_pa, $range, "m", "HGT", 3, 5, "gpm")
     };
 }
 // GDAL normalizes every GRIB temperature to Celsius, isobaric TMP included.
 macro_rules! temperature_spec {
-    ($id:literal, $label:literal, $numeric:literal, $level_pa:literal, $range:expr) => {
-        isobaric_spec!($id, $label, $numeric, $level_pa, $range, "°C", "TMP", 0, 0, "C")
+    ($id:literal, $label:literal, $level_pa:literal, $range:expr) => {
+        isobaric_spec!($id, $label, $level_pa, $range, "°C", "TMP", 0, 0, "C")
     };
 }
 macro_rules! humidity_spec {
-    ($id:literal, $label:literal, $numeric:literal, $level_pa:literal) => {
-        isobaric_spec!($id, $label, $numeric, $level_pa, (0, 100), "%", "RH", 1, 1, "%")
+    ($id:literal, $label:literal, $level_pa:literal) => {
+        isobaric_spec!($id, $label, $level_pa, (0, 100), "%", "RH", 1, 1, "%")
     };
 }
 // GRIB2 carries kg/kg; the codebook quantizes g/kg.
 macro_rules! specific_humidity_spec {
-    ($id:literal, $label:literal, $numeric:literal, $level_pa:literal, $range:expr) => {
-        isobaric_spec!($id, $label, $numeric, $level_pa, $range, "g/kg", "SPFH", 1, 0, "kg/kg")
+    ($id:literal, $label:literal, $level_pa:literal, $range:expr) => {
+        isobaric_spec!($id, $label, $level_pa, $range, "g/kg", "SPFH", 1, 0, "kg/kg")
     };
 }
 macro_rules! u_wind_spec {
-    ($id:literal, $label:literal, $numeric:literal, $level_pa:literal) => {
-        isobaric_spec!($id, $label, $numeric, $level_pa, (-127, 127), "m/s", "UGRD", 2, 2, "m/s")
+    ($id:literal, $label:literal, $level_pa:literal) => {
+        isobaric_spec!($id, $label, $level_pa, (-127, 127), "m/s", "UGRD", 2, 2, "m/s")
     };
 }
 macro_rules! v_wind_spec {
-    ($id:literal, $label:literal, $numeric:literal, $level_pa:literal) => {
-        isobaric_spec!($id, $label, $numeric, $level_pa, (-127, 127), "m/s", "VGRD", 2, 3, "m/s")
+    ($id:literal, $label:literal, $level_pa:literal) => {
+        isobaric_spec!($id, $label, $level_pa, (-127, 127), "m/s", "VGRD", 2, 3, "m/s")
     };
 }
 // Water vapour flux, q·V/g in g·cm⁻¹·hPa⁻¹·s⁻¹ — derived by the converter
@@ -182,8 +169,8 @@ macro_rules! v_wind_spec {
 // for a per-level horizontal vapour flux; 250 / 251 are local-use numbers of
 // our own in the moisture category.
 macro_rules! vapour_flux_spec {
-    ($id:literal, $label:literal, $numeric:literal, $level_pa:literal, $number:literal) => {
-        isobaric_spec!($id, $label, $numeric, $level_pa, (-64, 64), "g/(cm·hPa·s)", "", 1, $number, "")
+    ($id:literal, $label:literal, $level_pa:literal, $number:literal) => {
+        isobaric_spec!($id, $label, $level_pa, (-64, 64), "g/(cm·hPa·s)", "", 1, $number, "")
     };
 }
 
@@ -193,7 +180,6 @@ pub const VARIABLES: &[VariableSpec] = &[
         label: "2 meter temperature",
         output_unit: "°C",
         value_range: (-60, 50),
-        numeric_id: Some(1),
         grib_element: "TMP",
         grib2_discipline: 0,
         grib2_category: 0,
@@ -208,7 +194,6 @@ pub const VARIABLES: &[VariableSpec] = &[
         label: "Precipitation rate",
         output_unit: "mm/h",
         value_range: (0, 50),
-        numeric_id: Some(2),
         grib_element: "PRATE",
         grib2_discipline: 0,
         grib2_category: 1,
@@ -226,7 +211,6 @@ pub const VARIABLES: &[VariableSpec] = &[
         label: "Total precipitation",
         output_unit: "m",
         value_range: (0, 1),
-        numeric_id: None,
         grib_element: "unknown",
         grib2_discipline: 0,
         grib2_category: 1,
@@ -243,7 +227,6 @@ pub const VARIABLES: &[VariableSpec] = &[
         label: "Window-averaged precipitation rate",
         output_unit: "kg/m^2s",
         value_range: (0, 1),
-        numeric_id: None,
         grib_element: "PRATE",
         grib2_discipline: 0,
         grib2_category: 1,
@@ -258,7 +241,6 @@ pub const VARIABLES: &[VariableSpec] = &[
         label: "Downward shortwave radiation flux",
         output_unit: "W/m²",
         value_range: (0, 1270),
-        numeric_id: Some(5),
         grib_element: "DSWRF",
         grib2_discipline: 0,
         grib2_category: 4,
@@ -273,7 +255,6 @@ pub const VARIABLES: &[VariableSpec] = &[
         label: "10 meter U wind component",
         output_unit: "m/s",
         value_range: (-64, 64),
-        numeric_id: Some(3),
         grib_element: "UGRD",
         grib2_discipline: 0,
         grib2_category: 2,
@@ -288,7 +269,6 @@ pub const VARIABLES: &[VariableSpec] = &[
         label: "10 meter V wind component",
         output_unit: "m/s",
         value_range: (-64, 64),
-        numeric_id: Some(4),
         grib_element: "VGRD",
         grib2_discipline: 0,
         grib2_category: 2,
@@ -306,7 +286,6 @@ pub const VARIABLES: &[VariableSpec] = &[
         label: "Composite radar reflectivity",
         output_unit: "dBZ",
         value_range: (0, 80),
-        numeric_id: Some(6),
         grib_element: "",
         grib2_discipline: 0,
         grib2_category: 16,
@@ -326,7 +305,6 @@ pub const VARIABLES: &[VariableSpec] = &[
         label: "Mean sea level pressure",
         output_unit: "hPa",
         value_range: (870, 1125),
-        numeric_id: Some(7),
         grib_element: "PRMSL",
         grib2_discipline: 0,
         grib2_category: 3,
@@ -338,70 +316,70 @@ pub const VARIABLES: &[VariableSpec] = &[
     },
     // The isobaric families, eight levels each. Value ranges are the level's
     // codebook coverage (quantize.rs), truncated to integers.
-    height_spec!("hgt1000", "1000 hPa geopotential height", 8, 100000.0, (-905, 1635)),
-    height_spec!("hgt925", "925 hPa geopotential height", 9, 92500.0, (-249, 1275)),
-    height_spec!("hgt850", "850 hPa geopotential height", 10, 85000.0, (423, 1947)),
-    height_spec!("hgt700", "700 hPa geopotential height", 11, 70000.0, (1911, 3435)),
-    height_spec!("hgt500", "500 hPa geopotential height", 12, 50000.0, (4252, 6284)),
-    height_spec!("hgt300", "300 hPa geopotential height", 13, 30000.0, (7505, 10045)),
-    height_spec!("hgt250", "250 hPa geopotential height", 14, 25000.0, (8598, 11646)),
-    height_spec!("hgt200", "200 hPa geopotential height", 15, 20000.0, (10086, 13134)),
-    temperature_spec!("tmp1000", "1000 hPa temperature", 16, 100000.0, (-60, 60)),
-    temperature_spec!("tmp925", "925 hPa temperature", 17, 92500.0, (-65, 50)),
-    temperature_spec!("tmp850", "850 hPa temperature", 18, 85000.0, (-70, 45)),
-    temperature_spec!("tmp700", "700 hPa temperature", 19, 70000.0, (-75, 35)),
-    temperature_spec!("tmp500", "500 hPa temperature", 20, 50000.0, (-85, 15)),
-    temperature_spec!("tmp300", "300 hPa temperature", 21, 30000.0, (-95, 0)),
-    temperature_spec!("tmp250", "250 hPa temperature", 22, 25000.0, (-100, -5)),
-    temperature_spec!("tmp200", "200 hPa temperature", 23, 20000.0, (-100, -10)),
-    humidity_spec!("rh1000", "1000 hPa relative humidity", 24, 100000.0),
-    humidity_spec!("rh925", "925 hPa relative humidity", 25, 92500.0),
-    humidity_spec!("rh850", "850 hPa relative humidity", 26, 85000.0),
-    humidity_spec!("rh700", "700 hPa relative humidity", 27, 70000.0),
-    humidity_spec!("rh500", "500 hPa relative humidity", 28, 50000.0),
-    humidity_spec!("rh300", "300 hPa relative humidity", 29, 30000.0),
-    humidity_spec!("rh250", "250 hPa relative humidity", 30, 25000.0),
-    humidity_spec!("rh200", "200 hPa relative humidity", 31, 20000.0),
-    specific_humidity_spec!("spfh1000", "1000 hPa specific humidity", 32, 100000.0, (0, 50)),
-    specific_humidity_spec!("spfh925", "925 hPa specific humidity", 33, 92500.0, (0, 50)),
-    specific_humidity_spec!("spfh850", "850 hPa specific humidity", 34, 85000.0, (0, 25)),
-    specific_humidity_spec!("spfh700", "700 hPa specific humidity", 35, 70000.0, (0, 25)),
-    specific_humidity_spec!("spfh500", "500 hPa specific humidity", 36, 50000.0, (0, 5)),
-    specific_humidity_spec!("spfh300", "300 hPa specific humidity", 37, 30000.0, (0, 2)),
-    specific_humidity_spec!("spfh250", "250 hPa specific humidity", 38, 25000.0, (0, 1)),
-    specific_humidity_spec!("spfh200", "200 hPa specific humidity", 39, 20000.0, (0, 1)),
-    u_wind_spec!("ugrd1000", "1000 hPa U wind component", 40, 100000.0),
-    u_wind_spec!("ugrd925", "925 hPa U wind component", 41, 92500.0),
-    u_wind_spec!("ugrd850", "850 hPa U wind component", 42, 85000.0),
-    u_wind_spec!("ugrd700", "700 hPa U wind component", 43, 70000.0),
-    u_wind_spec!("ugrd500", "500 hPa U wind component", 44, 50000.0),
-    u_wind_spec!("ugrd300", "300 hPa U wind component", 45, 30000.0),
-    u_wind_spec!("ugrd250", "250 hPa U wind component", 46, 25000.0),
-    u_wind_spec!("ugrd200", "200 hPa U wind component", 47, 20000.0),
-    v_wind_spec!("vgrd1000", "1000 hPa V wind component", 48, 100000.0),
-    v_wind_spec!("vgrd925", "925 hPa V wind component", 49, 92500.0),
-    v_wind_spec!("vgrd850", "850 hPa V wind component", 50, 85000.0),
-    v_wind_spec!("vgrd700", "700 hPa V wind component", 51, 70000.0),
-    v_wind_spec!("vgrd500", "500 hPa V wind component", 52, 50000.0),
-    v_wind_spec!("vgrd300", "300 hPa V wind component", 53, 30000.0),
-    v_wind_spec!("vgrd250", "250 hPa V wind component", 54, 25000.0),
-    v_wind_spec!("vgrd200", "200 hPa V wind component", 55, 20000.0),
-    vapour_flux_spec!("uqflx1000", "1000 hPa U water vapour flux component", 56, 100000.0, 250),
-    vapour_flux_spec!("uqflx925", "925 hPa U water vapour flux component", 57, 92500.0, 250),
-    vapour_flux_spec!("uqflx850", "850 hPa U water vapour flux component", 58, 85000.0, 250),
-    vapour_flux_spec!("uqflx700", "700 hPa U water vapour flux component", 59, 70000.0, 250),
-    vapour_flux_spec!("uqflx500", "500 hPa U water vapour flux component", 60, 50000.0, 250),
-    vapour_flux_spec!("uqflx300", "300 hPa U water vapour flux component", 61, 30000.0, 250),
-    vapour_flux_spec!("uqflx250", "250 hPa U water vapour flux component", 62, 25000.0, 250),
-    vapour_flux_spec!("uqflx200", "200 hPa U water vapour flux component", 63, 20000.0, 250),
-    vapour_flux_spec!("vqflx1000", "1000 hPa V water vapour flux component", 64, 100000.0, 251),
-    vapour_flux_spec!("vqflx925", "925 hPa V water vapour flux component", 65, 92500.0, 251),
-    vapour_flux_spec!("vqflx850", "850 hPa V water vapour flux component", 66, 85000.0, 251),
-    vapour_flux_spec!("vqflx700", "700 hPa V water vapour flux component", 67, 70000.0, 251),
-    vapour_flux_spec!("vqflx500", "500 hPa V water vapour flux component", 68, 50000.0, 251),
-    vapour_flux_spec!("vqflx300", "300 hPa V water vapour flux component", 69, 30000.0, 251),
-    vapour_flux_spec!("vqflx250", "250 hPa V water vapour flux component", 70, 25000.0, 251),
-    vapour_flux_spec!("vqflx200", "200 hPa V water vapour flux component", 71, 20000.0, 251),
+    height_spec!("hgt1000", "1000 hPa geopotential height", 100000.0, (-905, 1635)),
+    height_spec!("hgt925", "925 hPa geopotential height", 92500.0, (-249, 1275)),
+    height_spec!("hgt850", "850 hPa geopotential height", 85000.0, (423, 1947)),
+    height_spec!("hgt700", "700 hPa geopotential height", 70000.0, (1911, 3435)),
+    height_spec!("hgt500", "500 hPa geopotential height", 50000.0, (4252, 6284)),
+    height_spec!("hgt300", "300 hPa geopotential height", 30000.0, (7505, 10045)),
+    height_spec!("hgt250", "250 hPa geopotential height", 25000.0, (8598, 11646)),
+    height_spec!("hgt200", "200 hPa geopotential height", 20000.0, (10086, 13134)),
+    temperature_spec!("tmp1000", "1000 hPa temperature", 100000.0, (-60, 60)),
+    temperature_spec!("tmp925", "925 hPa temperature", 92500.0, (-65, 50)),
+    temperature_spec!("tmp850", "850 hPa temperature", 85000.0, (-70, 45)),
+    temperature_spec!("tmp700", "700 hPa temperature", 70000.0, (-75, 35)),
+    temperature_spec!("tmp500", "500 hPa temperature", 50000.0, (-85, 15)),
+    temperature_spec!("tmp300", "300 hPa temperature", 30000.0, (-95, 0)),
+    temperature_spec!("tmp250", "250 hPa temperature", 25000.0, (-100, -5)),
+    temperature_spec!("tmp200", "200 hPa temperature", 20000.0, (-100, -10)),
+    humidity_spec!("rh1000", "1000 hPa relative humidity", 100000.0),
+    humidity_spec!("rh925", "925 hPa relative humidity", 92500.0),
+    humidity_spec!("rh850", "850 hPa relative humidity", 85000.0),
+    humidity_spec!("rh700", "700 hPa relative humidity", 70000.0),
+    humidity_spec!("rh500", "500 hPa relative humidity", 50000.0),
+    humidity_spec!("rh300", "300 hPa relative humidity", 30000.0),
+    humidity_spec!("rh250", "250 hPa relative humidity", 25000.0),
+    humidity_spec!("rh200", "200 hPa relative humidity", 20000.0),
+    specific_humidity_spec!("spfh1000", "1000 hPa specific humidity", 100000.0, (0, 50)),
+    specific_humidity_spec!("spfh925", "925 hPa specific humidity", 92500.0, (0, 50)),
+    specific_humidity_spec!("spfh850", "850 hPa specific humidity", 85000.0, (0, 25)),
+    specific_humidity_spec!("spfh700", "700 hPa specific humidity", 70000.0, (0, 25)),
+    specific_humidity_spec!("spfh500", "500 hPa specific humidity", 50000.0, (0, 5)),
+    specific_humidity_spec!("spfh300", "300 hPa specific humidity", 30000.0, (0, 2)),
+    specific_humidity_spec!("spfh250", "250 hPa specific humidity", 25000.0, (0, 1)),
+    specific_humidity_spec!("spfh200", "200 hPa specific humidity", 20000.0, (0, 1)),
+    u_wind_spec!("ugrd1000", "1000 hPa U wind component", 100000.0),
+    u_wind_spec!("ugrd925", "925 hPa U wind component", 92500.0),
+    u_wind_spec!("ugrd850", "850 hPa U wind component", 85000.0),
+    u_wind_spec!("ugrd700", "700 hPa U wind component", 70000.0),
+    u_wind_spec!("ugrd500", "500 hPa U wind component", 50000.0),
+    u_wind_spec!("ugrd300", "300 hPa U wind component", 30000.0),
+    u_wind_spec!("ugrd250", "250 hPa U wind component", 25000.0),
+    u_wind_spec!("ugrd200", "200 hPa U wind component", 20000.0),
+    v_wind_spec!("vgrd1000", "1000 hPa V wind component", 100000.0),
+    v_wind_spec!("vgrd925", "925 hPa V wind component", 92500.0),
+    v_wind_spec!("vgrd850", "850 hPa V wind component", 85000.0),
+    v_wind_spec!("vgrd700", "700 hPa V wind component", 70000.0),
+    v_wind_spec!("vgrd500", "500 hPa V wind component", 50000.0),
+    v_wind_spec!("vgrd300", "300 hPa V wind component", 30000.0),
+    v_wind_spec!("vgrd250", "250 hPa V wind component", 25000.0),
+    v_wind_spec!("vgrd200", "200 hPa V wind component", 20000.0),
+    vapour_flux_spec!("uqflx1000", "1000 hPa U water vapour flux component", 100000.0, 250),
+    vapour_flux_spec!("uqflx925", "925 hPa U water vapour flux component", 92500.0, 250),
+    vapour_flux_spec!("uqflx850", "850 hPa U water vapour flux component", 85000.0, 250),
+    vapour_flux_spec!("uqflx700", "700 hPa U water vapour flux component", 70000.0, 250),
+    vapour_flux_spec!("uqflx500", "500 hPa U water vapour flux component", 50000.0, 250),
+    vapour_flux_spec!("uqflx300", "300 hPa U water vapour flux component", 30000.0, 250),
+    vapour_flux_spec!("uqflx250", "250 hPa U water vapour flux component", 25000.0, 250),
+    vapour_flux_spec!("uqflx200", "200 hPa U water vapour flux component", 20000.0, 250),
+    vapour_flux_spec!("vqflx1000", "1000 hPa V water vapour flux component", 100000.0, 251),
+    vapour_flux_spec!("vqflx925", "925 hPa V water vapour flux component", 92500.0, 251),
+    vapour_flux_spec!("vqflx850", "850 hPa V water vapour flux component", 85000.0, 251),
+    vapour_flux_spec!("vqflx700", "700 hPa V water vapour flux component", 70000.0, 251),
+    vapour_flux_spec!("vqflx500", "500 hPa V water vapour flux component", 50000.0, 251),
+    vapour_flux_spec!("vqflx300", "300 hPa V water vapour flux component", 30000.0, 251),
+    vapour_flux_spec!("vqflx250", "250 hPa V water vapour flux component", 25000.0, 251),
+    vapour_flux_spec!("vqflx200", "200 hPa V water vapour flux component", 20000.0, 251),
 ];
 
 pub fn variable_spec(variable_id: &str) -> Result<&'static VariableSpec> {
@@ -409,14 +387,6 @@ pub fn variable_spec(variable_id: &str) -> Result<&'static VariableSpec> {
         .iter()
         .find(|spec| spec.id == variable_id)
         .ok_or_else(|| EncodeError::conversion(format!("unsupported variable: {variable_id}")))
-}
-
-/// The container's registered `variableId`, for a variable that reaches a
-/// bundle.
-pub fn numeric_id(variable_id: &str) -> Result<u8> {
-    variable_spec(variable_id)?.numeric_id.ok_or_else(|| {
-        EncodeError::conversion(format!("{variable_id} is input-only and has no variableId"))
-    })
 }
 
 #[cfg(test)]
@@ -446,7 +416,6 @@ mod tests {
         assert_eq!(entries.len(), 7 * ISOBARIC_LEVELS_HPA.len());
         for (variable_id, entry) in entries {
             let spec = variable_spec(&variable_id).unwrap_or_else(|_| panic!("{variable_id}"));
-            assert_eq!(json!(spec.numeric_id), entry["numericId"], "{variable_id}");
             assert_eq!(json!(spec.label), entry["label"], "{variable_id}");
             assert_eq!(json!(spec.output_unit), entry["unit"], "{variable_id}");
             assert_eq!(
@@ -466,12 +435,11 @@ mod tests {
     }
 
     #[test]
-    fn every_family_is_registered_at_every_level_with_contiguous_ids() {
-        for (family, first) in ISOBARIC_FAMILIES {
-            for (index, level) in ISOBARIC_LEVELS_HPA.iter().enumerate() {
+    fn every_family_is_registered_at_every_level() {
+        for family in ISOBARIC_FAMILIES {
+            for level in ISOBARIC_LEVELS_HPA {
                 let id = format!("{family}{level}");
                 let spec = variable_spec(&id).unwrap_or_else(|_| panic!("{id}"));
-                assert_eq!(spec.numeric_id, Some(first + index as u8), "{id}");
                 assert_eq!(spec.grib2_level_type, 100, "{id}");
                 assert_eq!(spec.grib2_level_value, Some(f64::from(*level) * 100.0), "{id}");
                 assert_eq!(isobaric_variable(&id), Some((*family, *level)));
@@ -516,7 +484,6 @@ mod tests {
     fn the_pressure_identities_match_the_shared_registry() {
         for (variable_id, entry) in pressure_registry() {
             let spec = variable_spec(&variable_id).unwrap_or_else(|_| panic!("{variable_id}"));
-            assert_eq!(json!(spec.numeric_id), entry["numericId"], "{variable_id}");
             assert_eq!(json!(spec.label), entry["label"], "{variable_id}");
             assert_eq!(json!(spec.output_unit), entry["unit"], "{variable_id}");
             assert_eq!(

@@ -28,10 +28,6 @@ class VariableSpec:
     output_unit: str
     """Unit of the values a bundle's codebook quantizes, carried in metadata."""
     value_range: tuple[int, int]
-    numeric_id: int | None = None
-    """The container's registered ``variableId`` (docs/format.md), or None for
-    an input-only variable that never reaches a bundle (ECMWF ``tp``, sflux
-    ``prate_ave``)."""
     grib_element: str = ""
     index_field: str = ""
     excluded_index_phrases: tuple[str, ...] = ()
@@ -95,7 +91,6 @@ VARIABLES: dict[str, VariableSpec] = {
         label="2 meter temperature",
         output_unit="°C",
         value_range=(-60, 50),
-        numeric_id=1,
         grib_element="TMP",
         index_field=":TMP:2 m above ground:",
         ecmwf_param="2t",
@@ -110,7 +105,6 @@ VARIABLES: dict[str, VariableSpec] = {
         label="Precipitation rate",
         output_unit="mm/h",
         value_range=(0, 50),
-        numeric_id=2,
         grib_element="PRATE",
         index_field=":PRATE:surface:",
         excluded_index_phrases=("ave fcst",),
@@ -163,7 +157,6 @@ VARIABLES: dict[str, VariableSpec] = {
         label="Downward shortwave radiation flux",
         output_unit="W/m²",
         value_range=(0, 1270),
-        numeric_id=5,
         grib_element="DSWRF",
         index_field=":DSWRF:surface:",
         excluded_index_phrases=("ave fcst",),
@@ -180,7 +173,6 @@ VARIABLES: dict[str, VariableSpec] = {
         label="10 meter U wind component",
         output_unit="m/s",
         value_range=(-64, 64),
-        numeric_id=3,
         grib_element="UGRD",
         index_field=":UGRD:10 m above ground:",
         ecmwf_param="10u",
@@ -195,7 +187,6 @@ VARIABLES: dict[str, VariableSpec] = {
         label="10 meter V wind component",
         output_unit="m/s",
         value_range=(-64, 64),
-        numeric_id=4,
         grib_element="VGRD",
         index_field=":VGRD:10 m above ground:",
         ecmwf_param="10v",
@@ -215,7 +206,6 @@ VARIABLES: dict[str, VariableSpec] = {
         label="Mean sea level pressure",
         output_unit="hPa",
         value_range=(870, 1125),
-        numeric_id=7,
         grib_element="PRMSL",
         index_field=":PRMSL:mean sea level:",
         ecmwf_param="msl",
@@ -234,7 +224,6 @@ VARIABLES: dict[str, VariableSpec] = {
         label="Composite radar reflectivity",
         output_unit="dBZ",
         value_range=(0, 80),
-        numeric_id=6,
         grib2_category=16,
         grib2_number=5,
         grib2_level_type=10,
@@ -255,19 +244,17 @@ VARIABLES: dict[str, VariableSpec] = {
 ISOBARIC_LEVELS_HPA: tuple[int, ...] = (1000, 925, 850, 700, 500, 300, 250, 200)
 HEIGHT_LEVELS_HPA = ISOBARIC_LEVELS_HPA
 
-# Family prefix -> the first registered numericId of its eight levels. The
-# ids are contiguous per family, in ISOBARIC_LEVELS_HPA order.
-ISOBARIC_FAMILY_FIRST_ID: dict[str, int] = {
-    "hgt": 8,
-    "tmp": 16,
-    "rh": 24,
-    "spfh": 32,
-    "ugrd": 40,
-    "vgrd": 48,
-    "uqflx": 56,
-    "vqflx": 64,
-}
-ISOBARIC_FAMILIES: tuple[str, ...] = tuple(ISOBARIC_FAMILY_FIRST_ID)
+# The id prefixes of the isobaric families.
+ISOBARIC_FAMILIES: tuple[str, ...] = (
+    "hgt",
+    "tmp",
+    "rh",
+    "spfh",
+    "ugrd",
+    "vgrd",
+    "uqflx",
+    "vqflx",
+)
 
 
 def isobaric_variable_id(family: str, level_hpa: int) -> str:
@@ -329,11 +316,8 @@ _SPECIFIC_HUMIDITY_VALUE_RANGES: dict[int, tuple[float, float]] = {
 
 
 def _isobaric_spec(family: str, level_hpa: int) -> VariableSpec:
-    index = ISOBARIC_LEVELS_HPA.index(level_hpa)
-    numeric_id = ISOBARIC_FAMILY_FIRST_ID[family] + index
     common = dict(
         id=isobaric_variable_id(family, level_hpa),
-        numeric_id=numeric_id,
         grib2_level_type=100,
         grib2_level_value=float(level_hpa) * 100.0,
     )

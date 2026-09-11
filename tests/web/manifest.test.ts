@@ -147,9 +147,38 @@ describe("validateManifest", () => {
     const broken = manifestFixture();
     broken.bundles = broken.bundles.slice(0, 1);
     expect(() => validateManifest(broken)).toThrow("prate");
-    const unknown = manifestFixture();
-    unknown.bundles[0]!.variable = "gust10m";
-    expect(() => validateManifest(unknown)).toThrow("variable");
+  });
+
+  it("admits a bundle on the shape of its name, not on a registry of names", () => {
+    // The point of the rule: a run may publish a layer this build has never
+    // heard of, and the shell renders it generically instead of refusing the
+    // whole manifest — which is what used to force a shell deploy ahead of
+    // every new bundle.
+    const extra = manifestFixture();
+    extra.bundles.push({
+      variable: "gust10m",
+      path: "gfs.2026081506/gust10m.xue",
+      byteLength: 30_000_000,
+      crc32: "0badcafe",
+    });
+    const manifest = validateManifest(extra);
+    expect(manifest.bundles.map((bundle) => bundle.variable)).toEqual(["tmp2m", "prate", "gust10m"]);
+    expect(hasBundle(manifest, "gust10m")).toBe(true);
+    // No ordering constraint either: the rail has its own order.
+    const reordered = manifestFixture();
+    reordered.bundles.reverse();
+    expect(validateManifest(reordered).bundles[0]!.variable).toBe("prate");
+  });
+
+  it("rejects a malformed or repeated bundle name", () => {
+    for (const name of ["Tmp2m", "tmp-2m", "tmp 2m", "2mtemp", "", "tmp_2m", 7, null]) {
+      const broken = manifestFixture();
+      broken.bundles[0]!.variable = name as string;
+      expect(() => validateManifest(broken)).toThrow("bundle variable name");
+    }
+    const duplicate = manifestFixture();
+    duplicate.bundles[1]!.variable = "tmp2m";
+    expect(() => validateManifest(duplicate)).toThrow("duplicate");
   });
 
   it("accepts the optional wind10m bundle and reports it via hasWindBundle", () => {

@@ -25,7 +25,7 @@ from xuebuild.binconvert import (
     build_metadata,
     encode_poster,
 )
-from xuebuild.manifest import BIN_BUNDLE_VARIABLES, build_bin_manifest, build_latest_pointer, iso_z
+from xuebuild.manifest import build_bin_manifest, build_latest_pointer, iso_z
 from xuebuild.quantize import (
     QUALITY_FLUX,
     QUALITY_PRECIPITATION,
@@ -45,6 +45,10 @@ WIDTH, HEIGHT = 144, 73
 # whole; 16 x 16 gives 9 x 5, close to production's 30 x 14, so a zoomed-in
 # view fetches a proper subset here the way it does against a real run.
 FIXTURE_TILE = (16, 16)
+# The GFS fixture's bundles in the order a real run writes them: every scalar,
+# then every vector. The manifest no longer validates an order, so the fixture
+# states its own.
+FIXTURE_BUNDLE_ORDER = ("tmp2m", "prate", "hgt500", "tmp850", "wind10m")
 HOURS = list(range(121))
 # The ECMWF fixture models the full IFS open data series: 3-hourly to 144
 # hours, 6-hourly to 240 — a mixed-step axis, so its bundles list their hours
@@ -365,9 +369,9 @@ def prepare_web_fixture() -> Path:
         }
     )
 
-    # The manifest lists scalars before vectors in the registry's order,
-    # whatever order the fixture happened to write them in.
-    bundles.sort(key=lambda bundle: BIN_BUNDLE_VARIABLES.index(bundle["variable"]))
+    # A real run writes scalars before vectors; the fixture mirrors that,
+    # whatever order it happened to build them in.
+    bundles.sort(key=lambda bundle: FIXTURE_BUNDLE_ORDER.index(bundle["variable"]))
     manifest = build_bin_manifest(RUN_TIME, bundles=bundles)
     manifest_bytes = (json.dumps(manifest, indent=2) + "\n").encode("utf-8")
     (WEB_FIXTURE_ROOT / "manifest.json").write_bytes(manifest_bytes)

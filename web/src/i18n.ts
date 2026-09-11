@@ -74,6 +74,10 @@ const MESSAGES = {
   /** The rail tile standing for the whole pressure family; the surface
    * itself is picked on the timeline capsule's level row. */
   varPressureField: { zh: "气压场", en: "FIELD" },
+  /** The gloss on a generic rail tile: a bundle the run publishes that this
+   * build has no tile of its own for. Before it is opened the id is all
+   * there is to say about it. */
+  varUnknownLayer: { zh: "数据层", en: "LAYER" },
 
   /** The layer rail shows one character per layer — a Chinese single-glyph
    * name, or the Latin symbol the field is written with (Z for radar

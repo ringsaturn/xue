@@ -14,8 +14,7 @@ import numpy as np
 
 from xuebuild.binconvert import (
     GridInfo,
-    VARIABLE_NUMERIC_IDS,
-    _normalize_longitudes,
+        _normalize_longitudes,
     average_window_start,
     deaverage_precipitation,
 )
@@ -178,8 +177,7 @@ class LongitudeNormalizationTests(unittest.TestCase):
 
 
 class DswrfRegistryTests(unittest.TestCase):
-    def test_numeric_id_and_codebooks(self) -> None:
-        self.assertEqual(VARIABLE_NUMERIC_IDS["dswrf"], 5)
+    def test_codebooks(self) -> None:
         for profile, codebooks in PROFILES.items():
             codebook = codebooks["dswrf"]
             self.assertIsInstance(codebook, TemperatureCodebook)
@@ -233,7 +231,7 @@ class SfluxManifestTests(unittest.TestCase):
         )
         validate_bin_manifest(payload)
 
-    def test_dswrf_stays_optional_and_ordered(self) -> None:
+    def test_dswrf_stays_optional(self) -> None:
         payload = build_bin_manifest(
             datetime(2026, 8, 15, 6, tzinfo=UTC),
             bundles=self._bundles(with_dswrf=False),
@@ -241,16 +239,17 @@ class SfluxManifestTests(unittest.TestCase):
             product="sfluxgrb",
         )
         validate_bin_manifest(payload)
-        misordered = build_bin_manifest(
+        # And its position is free: the manifest validates the shape of a
+        # bundle name, never its rank in a registry.
+        reordered = build_bin_manifest(
             datetime(2026, 8, 15, 6, tzinfo=UTC),
             bundles=self._bundles(with_dswrf=True),
             model="GFS-SFLUX",
             product="sfluxgrb",
         )
-        order = misordered["bundles"]
+        order = reordered["bundles"]
         order[2], order[3] = order[3], order[2]  # dswrf after wind10m
-        with self.assertRaises(ManifestError):
-            validate_bin_manifest(misordered)
+        validate_bin_manifest(reordered)
 
     def test_mismatched_product_rejected(self) -> None:
         payload = build_bin_manifest(
