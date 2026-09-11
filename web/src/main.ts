@@ -362,9 +362,9 @@ function pressureBasemapTheme(tones: BasemapTones): Record<PressureBundleId, Bas
 }
 
 /** The upper-air fills take the ground of the surface field they read like:
- * the opaque ones (temperature, relative humidity) the temperature's, the
- * winds the 10 m wind's, and the translucent moisture fields (specific
- * humidity, vapour flux) the precipitation's slate. */
+ * the opaque temperatures the 2 m temperature's, the winds the 10 m wind's,
+ * and the translucent moisture fields (relative and specific humidity, vapour
+ * flux) the precipitation's slate. */
 function isobaricBasemapTheme(pick: (family: IsobaricFamily) => BasemapTones): Record<string, BasemapTones> {
   const themes: Record<string, BasemapTones> = {};
   for (const id of ISOBARIC_FILL_IDS) themes[id] = pick(familyOf(id)!);
@@ -397,10 +397,13 @@ const DARK_BASEMAP: Record<string, BasemapTones> = {
   // precipitation slate under it rather than the temperature's near-void.
   cape: { ocean: "#16344a", land: "#28495f" },
   ...pressureBasemapTheme({ ocean: "#101f2c", land: "#22384a" }),
+  // Relative humidity is a light wash, not a coat, and goes with the
+  // moisture fields on the precipitation slate rather than with the
+  // temperature's near-void.
   ...isobaricBasemapTheme((family) =>
     family === "wind"
       ? { ocean: "#0e2131", land: "#1d3849" }
-      : family === "tmp" || family === "rh"
+      : family === "tmp"
         ? { ocean: "#0b1826", land: "#182c3d" }
         : { ocean: "#16344a", land: "#28495f" },
   ),

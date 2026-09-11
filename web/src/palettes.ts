@@ -131,20 +131,22 @@ function remapStops(stops: Stop[], from: readonly [number, number], to: readonly
 // Relative humidity, the way a moisture chart is read: dry air in the browns
 // of bare ground, the middle in paper tones, saturated air in greens deepening
 // to blue past 90 %, where cloud and rain live. The field covers everything —
-// there is no "nothing here" — but it is drawn as a wash rather than a
-// coat: half-transparent where dry, firmest where saturated, so the map's
+// there is no "nothing here" — but it is drawn as a light wash rather than a
+// coat: the colours are kept pale and unsaturated, and the transparency runs
+// from under half where dry to three quarters at saturation, so the map's
 // coastlines and names stay legible under it and the pressure lines drawn
 // over it (one ink per theme) keep their contrast against a ground the
-// theme's slate or paper still shows through.
+// theme's slate or paper still shows through. On the dark theme it takes
+// the precipitation slate (main.ts) so a wash this light has a ground.
 const HUMIDITY_STOPS: Stop[] = [
-  [0, 128, 84, 40, 130],
-  [20, 176, 132, 84, 135],
-  [40, 216, 196, 150, 140],
-  [55, 224, 224, 196, 150],
-  [70, 170, 212, 170, 180],
-  [80, 104, 184, 140, 205],
-  [90, 56, 144, 160, 215],
-  [100, 36, 84, 160, 230],
+  [0, 150, 104, 58, 110],
+  [20, 192, 150, 100, 110],
+  [40, 222, 206, 165, 110],
+  [55, 232, 232, 210, 115],
+  [70, 186, 220, 186, 140],
+  [80, 130, 196, 165, 160],
+  [90, 88, 162, 176, 180],
+  [100, 60, 116, 176, 195],
 ];
 
 // Specific humidity in fractions of the level's codebook ceiling: dry air is
