@@ -349,8 +349,10 @@ moving at one apparent speed.
 The shell is a map with controls floating over it, not a map beside a panel:
 the display-serif title in the top-left corner names the layer *and* opens the
 run picker (`#model-sheet` — a panel under it on desktop, a bottom sheet on
-phones), three round buttons sit top-right (locale, cases, appearance), the
-color scale runs down the left edge, one 48px tile per layer down the right,
+phones), three round buttons sit top-right (language, cases, appearance — the
+language one opening a picker of the ten endonyms through the same sheet
+mechanism, `web/src/sheet.ts`, that `#model-sheet` and the sources sheet
+use), the color scale runs down the left edge, one 48px tile per layer down the right,
 and one capsule at the bottom holds the whole transport: the pressure family's
 level row, the forecast hour and valid time, the speed and play buttons, and a
 track whose tick marks, playhead and day labels *are* the slider's appearance
@@ -387,11 +389,16 @@ locally, browse `http://localhost:4173` rather than the loopback address.
 
 ## Conventions
 
-- Locale is `zh`/`en` via `web/src/i18n.ts` and appearance is `light`/`dark`
-  via `web/src/theme.ts`; both are fixed per page load and both toggles
-  persist the choice and reload onto it. Only human-facing copy is
-  translated; thrown `Error` messages, worker messages and diagnostics stay
-  English in both locales.
+- Locale is one of ten — `zh`, `zh-Hant`, `en`, `ja`, `ko`, `de`, `fr`, `es`,
+  `pt`, `ru` — via `web/src/i18n.ts`, and appearance is `light`/`dark` via
+  `web/src/theme.ts`; both are fixed per page load, and the language picker
+  and the appearance toggle each persist the choice and reload onto it. The
+  dictionary is one module per language under `web/src/locales/`, each typed
+  `Record<MessageKey, string>` against `en.ts` — the source of truth, and the
+  only one carrying the design notes on what a string has to fit — so `tsc`
+  rejects a missing or stray key. Only human-facing copy is translated;
+  thrown `Error` messages, worker messages, instrument-panel codes (`F058`,
+  `12 FPS`, `PLAY`) and diagnostics stay English in every locale.
 - Timeline copy follows the *kind* of dataset, not the locale:
   `isObservationModel` (the frontend mirror of `SourceSpec.observation`)
   swaps "FORECAST HOUR"/`F058`/模式周期/有效时间 for

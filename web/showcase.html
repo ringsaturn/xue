@@ -52,8 +52,13 @@
           <span data-i18n="showcaseHome">Live forecast</span>
         </a>
         <div class="showcase-actions">
-          <button id="lang-toggle" class="icon-button" type="button" data-i18n-aria="langToggleAria" aria-label="Switch to Chinese">
-            <span data-i18n="langToggleShort">中</span>
+          <!-- The same language picker as the viewer's, opening the sheet at
+               the foot of this page. -->
+          <button id="lang-toggle" class="icon-button" type="button" aria-haspopup="dialog" aria-expanded="false" data-i18n-aria="langPickerAria" aria-label="Language">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M3 5h8M7 5V3.5M9.2 5c0 3.4-2.4 6.2-6.2 7.6M5 8.4c1 1.9 2.8 3.4 5.2 4.1" />
+              <path d="M12.4 20l4-9.5 4 9.5M13.9 16.6h5" />
+            </svg>
           </button>
           <button id="theme-toggle" class="icon-button" type="button" data-i18n-aria="themeToggleAria" aria-label="Toggle light and dark">
             <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
@@ -89,6 +94,17 @@
         (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">CC BY 4.0</a>)
         · RADAR <a href="https://data.cma.cn" target="_blank" rel="noreferrer">CMA</a>
       </footer>
+
+      <!-- The language picker, the same sheet the viewer carries; the rows
+           are written by showcase.ts. -->
+      <div id="lang-sheet" class="model-sheet lang-sheet" hidden>
+        <div class="model-sheet-scrim" data-sheet-dismiss></div>
+        <div class="model-sheet-panel lang-panel" role="dialog" aria-modal="true" data-i18n-aria="langPickerAria" aria-label="Language">
+          <span class="sheet-grip" aria-hidden="true"></span>
+          <p class="sheet-heading" data-i18n="langPickerHeading">LANGUAGE</p>
+          <div id="lang-list" class="lang-list" role="group"></div>
+        </div>
+      </div>
     </main>
     <script type="module" src="/src/showcase.ts"></script>
   </body>

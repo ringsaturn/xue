@@ -856,9 +856,11 @@ test("scrubbing works while data arrives through range requests", async ({ page 
 
 // The UI locale follows navigator.language (Playwright defaults to en-US, so
 // every other test runs the English UI); ?lang= overrides it, and the round
-// toggle in the top-right persists the other language and reloads onto it. The basemap label
-// language rides the same detection, but the tests stub out the tile API.
-test("?lang=zh renders the Chinese UI and the toggle switches back", async ({ page }) => {
+// button in the top-right opens a picker of the ten languages, each naming
+// itself in its own script. Picking one persists it and reloads onto it. The
+// basemap label language rides the same detection, but the tests stub out the
+// tile API.
+test("?lang=zh renders the Chinese UI and the picker switches back", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await routeManifest(page);
   await routeBundle(page);
@@ -871,16 +873,44 @@ test("?lang=zh renders the Chinese UI and the toggle switches back", async ({ pa
   const tempLabel = page.locator('button[data-variable="tmp2m"] small');
   await expect(tempLabel).toHaveText("气温");
   await expect(page.locator('button[data-variable="tmp2m"] .rail-glyph')).toHaveText("温");
-  // The toggle names the language it switches to, in one character.
-  const toggle = page.locator("#lang-toggle");
-  await expect(toggle).toHaveText("EN");
-  await toggle.click();
+  // The trigger is a glyph and an accessible name; the panel under it lists
+  // the endonyms, with the current language checked.
+  const trigger = page.locator("#lang-toggle");
+  await expect(trigger).toHaveAttribute("aria-expanded", "false");
+  await trigger.click();
+  const sheet = page.locator("#lang-sheet");
+  await expect(sheet).toBeVisible();
+  await expect(trigger).toHaveAttribute("aria-expanded", "true");
+  await expect(sheet.locator('button[data-locale="zh"]')).toHaveAttribute("aria-current", "true");
+  await expect(sheet.locator('button[data-locale="ja"]')).toHaveText("日本語");
+  await expect(sheet.locator("button[data-locale]")).toHaveCount(10);
+  await sheet.locator('button[data-locale="en"]').click();
   // The choice lives on this device, not in the link: the param the page
   // opened with goes, so a copied URL opens in each reader's own language.
   await expect(page).not.toHaveURL(/lang=/);
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
   await expect(tempLabel).toHaveText("2M");
-  await expect(toggle).toHaveText("中");
+});
+
+// One of the eight languages the picker added: the same detection path, a
+// different dictionary and a different <html lang>.
+test("?lang=ja renders the Japanese UI", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await routeManifest(page);
+  await routeBundle(page);
+  await page.goto("/?lang=ja");
+  await expect(page.locator("html")).toHaveAttribute("lang", "ja");
+  await expect(page.locator("#preload-state")).toHaveText("バンドルをすべて保持しました", { timeout: 20_000 });
+  await expect(page.locator('button[data-variable="tmp2m"] small')).toHaveText("気温");
+  await expect(page.locator('button[data-variable="tmp2m"] .rail-glyph')).toHaveText("温");
+  // Escape closes the picker and hands focus back to the trigger it came from.
+  const trigger = page.locator("#lang-toggle");
+  await expect(trigger).toHaveAttribute("aria-label", "言語");
+  await trigger.click();
+  await expect(page.locator("#lang-sheet")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#lang-sheet")).toBeHidden();
+  await expect(trigger).toBeFocused();
 });
 
 // Appearance is resolved before the first paint (an inline script in the

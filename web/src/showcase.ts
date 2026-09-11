@@ -6,7 +6,8 @@ import "@fontsource/ibm-plex-mono/400.css";
 import "@fontsource/ibm-plex-mono/500.css";
 import "./style.css";
 
-import { applyStaticMessages, locale, t, toggleLocale } from "./i18n";
+import { applyStaticMessages, locale, localeHtmlLang, LOCALES, setLocale, t, type Locale } from "./i18n";
+import { createSheet, fillLanguageList } from "./sheet";
 import { applyTheme, toggleTheme } from "./theme";
 import { isObservationModel, parseBundleMetadata, type ForecastBundleId, type PosterDescriptor } from "./manifest";
 import { buildPalette } from "./palettes";
@@ -29,8 +30,28 @@ applyTheme();
 
 const list = document.getElementById("showcase-list") as HTMLUListElement;
 const status = document.getElementById("showcase-status") as HTMLParagraphElement;
-document.getElementById("lang-toggle")?.addEventListener("click", () => toggleLocale());
 document.getElementById("theme-toggle")?.addEventListener("click", () => toggleTheme());
+
+// The language picker: the viewer's sheet, the viewer's rows, on this page's
+// own trigger.
+const langTrigger = document.getElementById("lang-toggle");
+const langSheet = document.getElementById("lang-sheet");
+const langList = document.getElementById("lang-list");
+if (langTrigger && langSheet && langList) {
+  const langSheetControl = createSheet({
+    trigger: langTrigger,
+    sheet: langSheet,
+    initialFocus: (sheet) => sheet.querySelector<HTMLButtonElement>("button[aria-current]"),
+  });
+  fillLanguageList(langList, LOCALES, {
+    current: locale,
+    htmlLang: localeHtmlLang,
+    onPick: (next: Locale) => {
+      langSheetControl.close();
+      if (next !== locale) setLocale(next);
+    },
+  });
+}
 
 function dataBaseUrl(): string {
   return import.meta.env.VITE_DATA_BASE_URL || "data/";

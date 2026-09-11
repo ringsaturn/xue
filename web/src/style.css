@@ -60,6 +60,26 @@
   font-synthesis: none;
 }
 
+/* The display fallbacks above are Simplified-Chinese faces, and the Han
+   scripts do not share them: a Traditional, Japanese or Korean page rendered
+   in Songti SC gets the wrong character forms. Instrument Serif still leads —
+   it carries the Latin — and the regional serif picks up everything after it.
+   `--font-ui` and `--font-mono` need nothing: both end in a system stack the
+   platform resolves per script, for Cyrillic as well as CJK. */
+:root:lang(zh-TW) {
+  --font-display: "Instrument Serif", "Songti TC", "Source Han Serif TC", "Noto Serif CJK TC", serif;
+}
+
+:root:lang(ja) {
+  --font-display: "Instrument Serif", "Hiragino Mincho ProN", "Yu Mincho", "Source Han Serif", "Noto Serif CJK JP",
+    serif;
+}
+
+:root:lang(ko) {
+  --font-display: "Instrument Serif", "Apple SD Gothic Neo", "Nanum Myeongjo", "Source Han Serif K", "Noto Serif CJK KR",
+    serif;
+}
+
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
@@ -784,9 +804,12 @@ body.is-pressure .legend {
   letter-spacing: 0.02em;
 }
 
-/* The Chinese glyphs are single characters and carry more ink than a Latin
-   initial; they need the extra size to read at 44px. */
-html[lang="zh-CN"] .rail-glyph {
+/* The CJK glyphs are single characters and carry more ink than a Latin
+   initial; they need the extra size to read at 44px. The other locales use
+   the Latin WMO symbols and keep the default. */
+html[lang="zh-CN"] .rail-glyph,
+html[lang="zh-TW"] .rail-glyph,
+html[lang="ja"] .rail-glyph {
   font-size: 17px;
 }
 
@@ -1358,6 +1381,72 @@ html[lang="zh-CN"] .rail-glyph {
   content: "✓";
 }
 
+/* The language picker. The same sheet, hung under its own trigger in the
+   top-right column instead of under the title: narrower (an endonym is a
+   word, not a code and a detail), and one row per language rather than a
+   two-line stack. */
+.lang-sheet .model-sheet-panel {
+  top: 80px;
+  right: 20px;
+  left: auto;
+  width: 220px;
+}
+
+/* This page scrolls, unlike the viewer's full-bleed shell, so the sheet is
+   pinned to the viewport rather than to a page that moves under it. */
+.showcase-page .model-sheet {
+  position: fixed;
+}
+
+.showcase-page .lang-sheet .model-sheet-panel {
+  top: 76px;
+}
+
+.lang-list {
+  display: flex;
+  max-height: min(60vh, 520px);
+  flex-direction: column;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.lang-list button {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.lang-list button:hover,
+.lang-list button[aria-current] {
+  background: var(--row-hover);
+}
+
+.lang-list button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* An endonym can be two glyphs (日本語) or ten letters (Português); it sets
+   its own width and wraps rather than being clipped. */
+.lang-name {
+  min-width: 0;
+  font-size: 15px;
+  line-height: 1.3;
+}
+
+.lang-list button[aria-current] .model-check::before {
+  content: "✓";
+}
+
 /* ---------------------------------------------------------------------------
    Map context menu. */
 
@@ -1380,7 +1469,9 @@ html[lang="zh-CN"] .rail-glyph {
 
 .context-menu button {
   display: flex;
-  height: 40px;
+  /* A minimum, not a height: "Copy debug info" runs to thirty characters in
+     Russian, and a row that has to wrap must grow rather than spill. */
+  min-height: 40px;
   align-items: center;
   gap: 10px;
   padding: 0 12px;
@@ -1899,6 +1990,16 @@ html[lang="zh-CN"] .rail-glyph {
     border-radius: 28px 28px 0 0;
   }
 
+  /* The language sheet does the same; its desktop rules are more specific
+     than the one above, so they are undone by name. */
+  .lang-sheet .model-sheet-panel,
+  .showcase-page .lang-sheet .model-sheet-panel {
+    top: auto;
+    right: 0;
+    left: 0;
+    width: auto;
+  }
+
   .sheet-grip {
     display: block;
   }
@@ -1950,6 +2051,16 @@ html:has(.showcase-page) {
 
 .showcase-back-link:hover {
   border-color: var(--muted);
+}
+
+/* The pill is one line at a fixed height, and "live forecast" is three words
+   in some languages: it keeps to the line and ellipsizes rather than wrapping
+   out of its own border. */
+.showcase-back-link span {
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .showcase-actions {

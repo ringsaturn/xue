@@ -22,7 +22,18 @@ import {
 import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 
 import { CRC32_INITIAL, crc32Hex, crc32Update } from "./crc32";
-import { applyStaticMessages, basemapLang, locale, t, toggleLocale } from "./i18n";
+import {
+  applyStaticMessages,
+  basemapLang,
+  htmlLang,
+  locale,
+  localeHtmlLang,
+  LOCALES,
+  setLocale,
+  t,
+  type Locale,
+} from "./i18n";
+import { createSheet, fillLanguageList } from "./sheet";
 import { ForecastLayer, MAX_NAMED_CONTOURS, type ContourStyle, type VectorField } from "./layer";
 import {
   KNOWN_BUNDLE_IDS,
@@ -554,6 +565,8 @@ const modelTrigger = required<HTMLButtonElement>("model-trigger");
 const modelSheet = required<HTMLElement>("model-sheet");
 const creditsTrigger = required<HTMLButtonElement>("credits-trigger");
 const creditsSheet = required<HTMLElement>("credits-sheet");
+const langTrigger = required<HTMLButtonElement>("lang-toggle");
+const langSheet = required<HTMLElement>("lang-sheet");
 // Scoped to buttons: <body> carries data-variable/data-model too (styling
 // state), and must never be hidden or aria-pressed like a switch button.
 const variableRail = document.querySelector<HTMLElement>(".variable-rail");
@@ -598,22 +611,33 @@ function preferredPressureVariable(): PressureBundleId {
 
 /** The model sheet: a panel under the title on desktop, a bottom sheet on
  * phones. A case is one fixed run, so it never opens there. */
-function setModelSheetOpen(open: boolean): void {
-  const allowed = open && !activeCase && !switchingVariable;
-  modelSheet.hidden = !allowed;
-  modelTrigger.setAttribute("aria-expanded", String(allowed));
-  if (allowed) modelSheet.querySelector<HTMLButtonElement>('button[aria-pressed="true"]')?.focus();
-}
+const modelSheetControl = createSheet({
+  trigger: modelTrigger,
+  sheet: modelSheet,
+  canOpen: () => !activeCase && !switchingVariable,
+  initialFocus: (sheet) => sheet.querySelector<HTMLButtonElement>('button[aria-pressed="true"]'),
+});
 
 /** The sources sheet: the credit line's contents, one row per source, opened
- * from the trigger that stands in for the line where it does not fit. Focus
- * goes to the first row and comes back to the trigger on close. */
-function setCreditsSheetOpen(open: boolean): void {
-  creditsSheet.hidden = !open;
-  creditsTrigger.setAttribute("aria-expanded", String(open));
-  if (open) creditsSheet.querySelector<HTMLAnchorElement>("a")?.focus();
-  else if (document.activeElement && creditsSheet.contains(document.activeElement)) creditsTrigger.focus();
-}
+ * from the trigger that stands in for the line where it does not fit. */
+createSheet({ trigger: creditsTrigger, sheet: creditsSheet });
+
+/** The language picker: the same sheet again, under the round trigger in the
+ * top-right column. Ten languages do not cycle on a press, so the button
+ * opens a list of endonyms instead of naming the next one. */
+const langSheetControl = createSheet({
+  trigger: langTrigger,
+  sheet: langSheet,
+  initialFocus: (sheet) => sheet.querySelector<HTMLButtonElement>("button[aria-current]"),
+});
+fillLanguageList(required<HTMLElement>("lang-list"), LOCALES, {
+  current: locale,
+  htmlLang: localeHtmlLang,
+  onPick: (next: Locale) => {
+    langSheetControl.close();
+    if (next !== locale) setLocale(next);
+  },
+});
 
 interface DecodedFrame {
   plane: Uint8Array;
@@ -985,7 +1009,7 @@ function formatCompactDate(value: number): string {
 
 /** Short weekday in the UI locale, read in UTC like every other stamp the
  * app shows. */
-const WEEKDAY_FORMAT = new Intl.DateTimeFormat(locale === "zh" ? "zh-CN" : "en-US", {
+const WEEKDAY_FORMAT = new Intl.DateTimeFormat(htmlLang, {
   weekday: "short",
   timeZone: "UTC",
 });
@@ -3985,18 +4009,10 @@ for (const button of variableButtons()) {
     }
   });
 }
-modelTrigger.addEventListener("click", () => setModelSheetOpen(modelSheet.hidden));
-modelSheet.addEventListener("click", (event) => {
-  if ((event.target as HTMLElement).closest("[data-sheet-dismiss]")) setModelSheetOpen(false);
-});
-creditsTrigger.addEventListener("click", () => setCreditsSheetOpen(creditsSheet.hidden));
-creditsSheet.addEventListener("click", (event) => {
-  if ((event.target as HTMLElement).closest("[data-sheet-dismiss]")) setCreditsSheetOpen(false);
-});
 for (const button of modelButtons) {
   button.addEventListener("click", () => {
     const modelId = button.dataset.model;
-    setModelSheetOpen(false);
+    modelSheetControl.close();
     if (!modelId || !FORECAST_MODEL_IDS.includes(modelId as ForecastModelId)) return;
     if (activeCase || modelId === selectedModelId || switchingVariable) return;
     // A model is a separate dataset (own pointer, own run, own time axis), so
@@ -4010,9 +4026,9 @@ for (const button of modelButtons) {
 }
 retryButton.addEventListener("click", () => void initialize());
 // Locale and theme are both fixed per page load (the basemap style bakes in
-// the label language and the flavor), so each toggle persists the choice and
-// reloads onto it.
-required<HTMLButtonElement>("lang-toggle").addEventListener("click", toggleLocale);
+// the label language and the flavor), so picking either one persists the
+// choice and reloads onto it. The language picker is wired where it is built,
+// beside the other two sheets.
 required<HTMLButtonElement>("theme-toggle").addEventListener("click", toggleTheme);
 // Right-click (long-press on touch) over the map opens the custom menu:
 // 「详细统计信息」 pins the stats card, 「复制调试信息」 copies a plain-text
@@ -4034,9 +4050,9 @@ window.addEventListener("pointerdown", (event) => {
 });
 window.addEventListener("keydown", (event) => {
   if (event.key !== "Escape") return;
+  // The sheets close themselves on Escape (createSheet wires that); this
+  // handler carries the surfaces that have no sheet of their own.
   hideContextMenu();
-  setModelSheetOpen(false);
-  setCreditsSheetOpen(false);
   closeProbe();
 });
 window.addEventListener("blur", hideContextMenu);

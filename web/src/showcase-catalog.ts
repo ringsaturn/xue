@@ -180,10 +180,18 @@ export async function fetchCatalog(baseUrl: string): Promise<ShowcaseCatalog> {
   return validateCatalog(await response.json());
 }
 
-/** The case string for `locale`, falling back to any other locale the catalog
- * carries rather than rendering an empty card. */
+/** The case string for `locale`, falling back rather than rendering an empty
+ * card. Cases are authored in zh and en (`xuebuild/showcase.py` requires
+ * both) and may carry more, so a reader in one of the other eight UI
+ * languages lands on English. Traditional Chinese falls back to simplified
+ * first: the two are far closer to each other than either is to English. */
 export function localizedText(strings: Record<string, string>, locale: string): string {
-  return strings[locale] ?? strings.en ?? Object.values(strings).find((item) => item.length > 0) ?? "";
+  const chain = locale === "zh-Hant" ? [locale, "zh", "en"] : [locale, "en"];
+  for (const candidate of chain) {
+    const text = strings[candidate];
+    if (text) return text;
+  }
+  return Object.values(strings).find((item) => item.length > 0) ?? "";
 }
 
 /** Longitude span of a box, handling the antimeridian. */

@@ -115,10 +115,25 @@ describe("showcase catalog", () => {
     expect(() => validateCatalog({ ...catalogFixture(), schemaVersion: 2 })).toThrow();
   });
 
+  // Cases are authored in zh and en, so eight of the ten UI languages land
+  // on English — except Traditional Chinese, which takes the Simplified text
+  // first: the two are far closer to each other than either is to English.
   it("falls back across locales for card text", () => {
     expect(localizedText({ zh: "郑州", en: "Zhengzhou" }, "zh")).toBe("郑州");
     expect(localizedText({ en: "Zhengzhou" }, "zh")).toBe("Zhengzhou");
     expect(localizedText({ fr: "Zhengzhou" }, "zh")).toBe("Zhengzhou");
+    expect(localizedText({ zh: "郑州", en: "Zhengzhou" }, "ja")).toBe("Zhengzhou");
+    expect(localizedText({ zh: "郑州", en: "Zhengzhou" }, "ru")).toBe("Zhengzhou");
+  });
+
+  it("takes a case's own translation when it carries one beyond zh and en", () => {
+    expect(localizedText({ zh: "郑州", en: "Zhengzhou", ja: "鄭州" }, "ja")).toBe("鄭州");
+  });
+
+  it("sends Traditional Chinese through Simplified before English", () => {
+    expect(localizedText({ zh: "郑州", en: "Zhengzhou" }, "zh-Hant")).toBe("郑州");
+    expect(localizedText({ zh: "郑州", en: "Zhengzhou", "zh-Hant": "鄭州" }, "zh-Hant")).toBe("鄭州");
+    expect(localizedText({ en: "Zhengzhou" }, "zh-Hant")).toBe("Zhengzhou");
   });
 });
 

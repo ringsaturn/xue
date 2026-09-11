@@ -76,8 +76,14 @@
       </h1>
 
       <div class="top-actions">
-        <button id="lang-toggle" class="icon-button" type="button" data-i18n-aria="langToggleAria" aria-label="Switch to Chinese">
-          <span data-i18n="langToggleShort">中</span>
+        <!-- The language picker's trigger. Ten languages cannot cycle on a
+             press, so this opens the sheet at the end of the shell: the same
+             round button, a translate glyph rather than a character. -->
+        <button id="lang-toggle" class="icon-button" type="button" aria-haspopup="dialog" aria-expanded="false" data-i18n-aria="langPickerAria" aria-label="Language">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M3 5h8M7 5V3.5M9.2 5c0 3.4-2.4 6.2-6.2 7.6M5 8.4c1 1.9 2.8 3.4 5.2 4.1" />
+            <path d="M12.4 20l4-9.5 4 9.5M13.9 16.6h5" />
+          </svg>
         </button>
         <a class="icon-button" href="./showcase.html">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
@@ -296,6 +302,19 @@
               <span class="model-check" aria-hidden="true"></span>
             </button>
           </div>
+        </div>
+      </div>
+
+      <!-- The language picker: the same sheet as the model one, hung under
+           its own trigger in the top-right column on desktop and docked to
+           the bottom edge on phones. The rows are written by main.ts, each
+           language naming itself in its own script. -->
+      <div id="lang-sheet" class="model-sheet lang-sheet" hidden>
+        <div class="model-sheet-scrim" data-sheet-dismiss></div>
+        <div class="model-sheet-panel lang-panel" role="dialog" aria-modal="true" data-i18n-aria="langPickerAria" aria-label="Language">
+          <span class="sheet-grip" aria-hidden="true"></span>
+          <p class="sheet-heading" data-i18n="langPickerHeading">LANGUAGE</p>
+          <div id="lang-list" class="lang-list" role="group"></div>
         </div>
       </div>
 

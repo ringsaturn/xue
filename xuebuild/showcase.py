@@ -31,6 +31,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import zlib
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -58,7 +59,15 @@ CASE_SIDECAR = "case.json"
 """Per-case catalog entry, written next to the case's manifest."""
 
 LOCALES = ("zh", "en")
-"""Locales every human-facing case string must provide, matching the UI."""
+"""Locales every human-facing case string must provide. The UI ships ten, but
+a case is authored by hand: these two are what a definition must carry, and
+the frontend falls back onto English (Traditional Chinese onto Simplified
+first) for the rest. A definition is free to carry more — any extra locale
+key is kept and published as it stands."""
+
+_LOCALE_TAG = re.compile(r"^[a-z]{2,3}(-[A-Za-z]{2,4})?$")
+"""Shape of an extra locale key: a language subtag, optionally with a script
+or region. Matching the tags the frontend's own detection normalizes."""
 
 OBSERVATION_ROOT_ENV = "XUE_OBSERVATION_ROOT"
 """Environment variable holding the root an observation case's ``dataset``
@@ -128,7 +137,19 @@ def _localized(value: object, label: str, case_id: str) -> dict[str, str]:
     missing = [locale for locale in LOCALES if not isinstance(value.get(locale), str) or not value[locale].strip()]
     if missing:
         raise ShowcaseError(f"case {case_id}: {label} is missing {', '.join(missing)}")
-    return {locale: value[locale].strip() for locale in LOCALES}
+    # The two required locales first, then whatever else the definition
+    # carries, so a case translated into more of the UI's ten reaches the
+    # catalog instead of being silently dropped here.
+    text = {locale: value[locale].strip() for locale in LOCALES}
+    for locale, item in value.items():
+        if locale in text:
+            continue
+        if not isinstance(locale, str) or not _LOCALE_TAG.match(locale):
+            raise ShowcaseError(f"case {case_id}: {label} has a key that is not a locale tag: {locale!r}")
+        if not isinstance(item, str) or not item.strip():
+            raise ShowcaseError(f"case {case_id}: {label} has an empty {locale}")
+        text[locale] = item.strip()
+    return text
 
 
 def parse_case(payload: dict[str, Any], *, source_name: str = "<case>") -> CaseSpec:

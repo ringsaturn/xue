@@ -182,6 +182,20 @@ class CaseDefinitionTest(unittest.TestCase):
         with self.assertRaises(ShowcaseError):
             parse_case(case_payload(title={"en": "Demo"}))
 
+    def test_keeps_a_locale_beyond_the_two_required(self) -> None:
+        # The UI ships ten languages; a case need only be authored in zh and
+        # en, but one translated further must reach the catalog intact.
+        spec = parse_case(case_payload(title={"zh": "示例", "en": "Demo", "ja": "見本", "pt-BR": "Exemplo"}))
+        self.assertEqual(spec.title, {"zh": "示例", "en": "Demo", "ja": "見本", "pt-BR": "Exemplo"})
+
+    def test_rejects_a_key_that_is_not_a_locale_tag(self) -> None:
+        with self.assertRaises(ShowcaseError):
+            parse_case(case_payload(title={"zh": "示例", "en": "Demo", "Japanese": "見本"}))
+
+    def test_rejects_an_empty_extra_locale(self) -> None:
+        with self.assertRaises(ShowcaseError):
+            parse_case(case_payload(title={"zh": "示例", "en": "Demo", "ja": "  "}))
+
     def test_rejects_an_sflux_case_with_nothing_at_the_analysis_hour(self) -> None:
         # sflux publishes no PRATE record at f000, so a prate-only case has no
         # variable to key its frames by.
