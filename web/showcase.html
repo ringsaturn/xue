@@ -12,6 +12,16 @@
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 
+    <!-- Search metadata; pagemeta.ts completes the hreflang set and pins a
+         `?lang=` rendering's canonical to itself, as on the viewer. -->
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <link rel="canonical" href="https://xue.ringsaturn.me/showcase.html" />
+    <link rel="alternate" hreflang="x-default" href="https://xue.ringsaturn.me/showcase.html" />
+    <link rel="alternate" hreflang="en" href="https://xue.ringsaturn.me/showcase.html?lang=en" />
+    <link rel="alternate" hreflang="zh-CN" href="https://xue.ringsaturn.me/showcase.html?lang=zh" />
+    <link rel="alternate" hreflang="zh-TW" href="https://xue.ringsaturn.me/showcase.html?lang=zh-Hant" />
+    <link rel="preconnect" href="https://dataset.ringsaturn.me" crossorigin />
+
     <!-- Settled before the first paint; see the note in index.html. -->
     <script>
       (function () {
@@ -41,6 +51,20 @@
     <meta name="twitter:title" content="Showcase Cases · Xue" />
     <meta name="twitter:description" content="Replays of past weather events: cropped forecast and radar datasets for typhoons, rainstorms, heatwaves and more" />
     <meta name="twitter:image" content="https://xue.ringsaturn.me/og-image.jpg" />
+
+    <!-- The page as a collection; showcase.ts adds the ItemList of cases
+         once the catalog has loaded, since the list is data, not markup. -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "CollectionPage",
+        "@id": "https://xue.ringsaturn.me/showcase.html",
+        "url": "https://xue.ringsaturn.me/showcase.html",
+        "name": "Showcase Cases · Xue",
+        "description": "Replays of past weather events: cropped forecast and radar datasets for typhoons, rainstorms, heatwaves and more",
+        "isPartOf": { "@type": "WebSite", "@id": "https://xue.ringsaturn.me/#website", "url": "https://xue.ringsaturn.me/", "name": "Xue" }
+      }
+    </script>
   </head>
   <body class="showcase-page" data-variable="prate">
     <main class="showcase-shell">

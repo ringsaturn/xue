@@ -7,12 +7,36 @@
          the one the viewer actually gets when they have chosen a side. -->
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="#F3EFE6" />
     <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#000000" />
-    <meta name="description" data-i18n-content="metaDescription" content="NOAA GFS and ECMWF global 240-hour forecasts of temperature, precipitation, wind and solar radiation" />
-    <title>GFS / ECMWF Temperature and Precipitation</title>
+    <meta name="description" data-i18n-content="metaDescription" content="NOAA GFS and ECMWF global 240-hour forecasts of temperature, precipitation, wind, pressure and upper-air humidity and moisture transport" />
+    <title>Xue · GFS &amp; ECMWF global weather forecast maps</title>
 
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <!-- Search metadata. The static values describe the live viewer at `/`;
+         pagemeta.ts rewrites them once the view is known — a case is its own
+         page — and adds the rest of the hreflang set. Only view state that
+         *is* content (`?case=`, `?lang=`) reaches the canonical URL. -->
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <link rel="canonical" href="https://xue.ringsaturn.me/" />
+    <link rel="alternate" hreflang="x-default" href="https://xue.ringsaturn.me/" />
+    <link rel="alternate" hreflang="en" href="https://xue.ringsaturn.me/?lang=en" />
+    <link rel="alternate" hreflang="zh-CN" href="https://xue.ringsaturn.me/?lang=zh" />
+    <link rel="alternate" hreflang="zh-TW" href="https://xue.ringsaturn.me/?lang=zh-Hant" />
+    <link rel="alternate" hreflang="ja" href="https://xue.ringsaturn.me/?lang=ja" />
+    <link rel="alternate" hreflang="ko" href="https://xue.ringsaturn.me/?lang=ko" />
+    <link rel="alternate" hreflang="de" href="https://xue.ringsaturn.me/?lang=de" />
+    <link rel="alternate" hreflang="fr" href="https://xue.ringsaturn.me/?lang=fr" />
+    <link rel="alternate" hreflang="es" href="https://xue.ringsaturn.me/?lang=es" />
+    <link rel="alternate" hreflang="pt" href="https://xue.ringsaturn.me/?lang=pt" />
+    <link rel="alternate" hreflang="ru" href="https://xue.ringsaturn.me/?lang=ru" />
+
+    <!-- The two cross-origin hosts every session opens before it can paint
+         anything: the data bucket (pointer, manifest, bundles) and the
+         basemap tiles. Both are fetched with CORS, hence crossorigin. -->
+    <link rel="preconnect" href="https://dataset.ringsaturn.me" crossorigin />
+    <link rel="preconnect" href="https://api.protomaps.com" crossorigin />
 
     <!-- The appearance is settled before the first paint: the module bundle
          lands long after the shell renders, and a page that starts on the
@@ -37,20 +61,132 @@
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Xue" />
     <meta property="og:url" content="https://xue.ringsaturn.me/" />
-    <meta property="og:title" content="GFS / ECMWF Temperature and Precipitation" />
-    <meta property="og:description" content="NOAA GFS and ECMWF global 120-hour forecasts of temperature, precipitation, wind and solar radiation" />
+    <meta property="og:title" content="Xue · GFS &amp; ECMWF global weather forecast maps" />
+    <meta property="og:description" content="NOAA GFS and ECMWF global 240-hour forecasts of temperature, precipitation, wind, pressure and upper-air humidity and moisture transport" />
+    <meta property="og:locale" content="en_US" />
     <meta property="og:image" content="https://xue.ringsaturn.me/og-image.jpg" />
     <meta property="og:image:type" content="image/jpeg" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta property="og:image:alt" content="Animated GFS SFLUX precipitation rate over the East Pacific and North America" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="GFS / ECMWF Temperature and Precipitation" />
-    <meta name="twitter:description" content="NOAA GFS and ECMWF global 120-hour forecasts of temperature, precipitation, wind and solar radiation" />
+    <meta name="twitter:title" content="Xue · GFS &amp; ECMWF global weather forecast maps" />
+    <meta name="twitter:description" content="NOAA GFS and ECMWF global 240-hour forecasts of temperature, precipitation, wind, pressure and upper-air humidity and moisture transport" />
     <meta name="twitter:image" content="https://xue.ringsaturn.me/og-image.jpg" />
     <meta name="twitter:image:alt" content="Animated GFS SFLUX precipitation rate over the East Pacific and North America" />
+
+    <!-- Structured data: what the page is (a free web application), where
+         its code is, and what the data it plays is derived from. Static and
+         English like the cards above; the sitemap and llms.txt carry the
+         rest of what a crawler or an agent needs. -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "WebSite",
+            "@id": "https://xue.ringsaturn.me/#website",
+            "url": "https://xue.ringsaturn.me/",
+            "name": "Xue",
+            "alternateName": "雪",
+            "description": "Global weather forecast maps: whole NOAA GFS and ECMWF IFS runs played back as smooth animations in the browser.",
+            "inLanguage": ["zh-CN", "zh-TW", "en", "ja", "ko", "de", "fr", "es", "pt", "ru"],
+            "publisher": { "@id": "https://github.com/ringsaturn#person" }
+          },
+          {
+            "@type": "WebApplication",
+            "@id": "https://xue.ringsaturn.me/#app",
+            "name": "Xue",
+            "url": "https://xue.ringsaturn.me/",
+            "isPartOf": { "@id": "https://xue.ringsaturn.me/#website" },
+            "applicationCategory": "UtilitiesApplication",
+            "operatingSystem": "Any",
+            "browserRequirements": "Requires WebGL2 and WebAssembly",
+            "isAccessibleForFree": true,
+            "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+            "screenshot": "https://xue.ringsaturn.me/og-image.jpg",
+            "featureList": [
+              "NOAA GFS 0.25° and GFS surface-flux 13 km runs, hourly to 120 h and 3-hourly to 240 h",
+              "ECMWF IFS 0.25° open data runs, 3-hourly to 144 h and 6-hourly to 240 h",
+              "2 m temperature, precipitation rate, 10 m wind with particle animation, downward shortwave radiation",
+              "Sea level pressure isobars and 850/700/500/250 hPa geopotential height contours with labelled highs and lows",
+              "Upper-air temperature, relative humidity, wind and water vapour flux on isobaric surfaces",
+              "Historical cases: typhoons, rainstorms and heatwaves replayed from archived runs and radar mosaics",
+              "Ten interface languages, light and dark appearance, deep links for every view"
+            ],
+            "about": { "@id": "https://xue.ringsaturn.me/#data" },
+            "softwareHelp": { "@type": "CreativeWork", "url": "https://xue.ringsaturn.me/llms.txt" },
+            "license": ["https://opensource.org/licenses/MIT", "https://www.apache.org/licenses/LICENSE-2.0"],
+            "author": { "@id": "https://github.com/ringsaturn#person" }
+          },
+          {
+            "@type": "SoftwareSourceCode",
+            "@id": "https://github.com/ringsaturn/xue#code",
+            "name": "ringsaturn/xue",
+            "codeRepository": "https://github.com/ringsaturn/xue",
+            "programmingLanguage": ["Rust", "Python", "TypeScript"],
+            "runtimePlatform": "Web browser (WebAssembly, WebGL2)",
+            "license": ["https://opensource.org/licenses/MIT", "https://www.apache.org/licenses/LICENSE-2.0"],
+            "targetProduct": { "@id": "https://xue.ringsaturn.me/#app" },
+            "author": { "@id": "https://github.com/ringsaturn#person" }
+          },
+          {
+            "@type": "Dataset",
+            "@id": "https://xue.ringsaturn.me/#data",
+            "name": "Xue live forecast bundles",
+            "description": "The current NOAA GFS, GFS surface-flux and ECMWF IFS runs converted into the .xue container: 8-bit quantized planes on the native grid with temporal residual prediction and Zstandard compression, one file per variable, streamable by HTTP range request. Only the newest run per source is kept.",
+            "url": "https://dataset.ringsaturn.me/xue/",
+            "isAccessibleForFree": true,
+            "creator": { "@id": "https://github.com/ringsaturn#person" },
+            "isBasedOn": [
+              { "@type": "Dataset", "name": "NOAA Global Forecast System (GFS)", "url": "https://registry.opendata.aws/noaa-gfs-bdp-pds/" },
+              { "@type": "Dataset", "name": "ECMWF Open Data (real-time)", "url": "https://www.ecmwf.int/en/forecasts/datasets/open-data", "license": "https://creativecommons.org/licenses/by/4.0/" }
+            ],
+            "spatialCoverage": { "@type": "Place", "geo": { "@type": "GeoShape", "box": "-90 -180 90 180" } },
+            "variableMeasured": [
+              "2 m air temperature",
+              "precipitation rate",
+              "10 m wind",
+              "downward shortwave radiation flux",
+              "mean sea level pressure",
+              "geopotential height on isobaric surfaces",
+              "temperature, relative humidity, wind and water vapour flux on isobaric surfaces"
+            ],
+            "distribution": [
+              { "@type": "DataDownload", "name": "GFS live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest.json" },
+              { "@type": "DataDownload", "name": "GFS surface-flux live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-sflux.json" },
+              { "@type": "DataDownload", "name": "ECMWF live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-ecmwf.json" },
+              { "@type": "DataDownload", "name": "Historical case catalog", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/showcase.json" }
+            ]
+          },
+          {
+            "@type": "Person",
+            "@id": "https://github.com/ringsaturn#person",
+            "name": "Han Xiao",
+            "url": "https://github.com/ringsaturn"
+          }
+        ]
+      }
+    </script>
   </head>
   <body data-variable="prate">
+    <!-- The one thing on the page that reads without the module bundle: what
+         this is and where else it lives, for a viewer without scripts and for
+         an indexer that does not run them. -->
+    <noscript>
+      <div class="noscript-note">
+        <p>
+          <strong>Xue</strong> plays whole NOAA GFS and ECMWF IFS forecast runs — temperature, precipitation, wind,
+          pressure and upper-air fields out to 240 hours — as animated maps, decoding them in the browser with
+          WebAssembly and WebGL2. It needs JavaScript to run.
+        </p>
+        <p>
+          <a href="https://github.com/ringsaturn/xue">Source code and documentation</a> ·
+          <a href="./showcase.html">Historical cases</a> ·
+          <a href="/llms.txt">Plain-text project description</a>
+        </p>
+      </div>
+    </noscript>
     <main class="app-shell">
       <div id="map" data-i18n-aria="mapAria" aria-label="Global temperature and precipitation forecast map"></div>
       <!-- Instrument grid; never interactive. -->

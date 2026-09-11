@@ -12,7 +12,9 @@ import { applyTheme, toggleTheme } from "./theme";
 import { isObservationModel, parseBundleMetadata, type ForecastBundleId, type PosterDescriptor } from "./manifest";
 import { buildPalette } from "./palettes";
 import { fetchPoster, isPosterSupported } from "./poster";
+import { applyPageMeta, pageUrl } from "./pagemeta";
 import { fetchCaseManifest, fetchCatalog, localizedText, type ShowcaseCase } from "./showcase-catalog";
+import { SITE_NAME } from "./site";
 
 /**
  * The historical showcase list.
@@ -27,6 +29,9 @@ import { fetchCaseManifest, fetchCatalog, localizedText, type ShowcaseCase } fro
 
 applyStaticMessages();
 applyTheme();
+// Title and description stay the markup's; this pins a `?lang=` rendering's
+// canonical to itself and completes the hreflang set.
+applyPageMeta({ path: "/showcase.html" });
 
 const list = document.getElementById("showcase-list") as HTMLUListElement;
 const status = document.getElementById("showcase-status") as HTMLParagraphElement;
@@ -214,6 +219,29 @@ async function paintThumbnail(showcaseCase: ShowcaseCase, canvas: HTMLCanvasElem
   canvas.classList.add("is-painted");
 }
 
+/** The cases as structured data — an ItemList of the pages they open — so
+ * an indexer that ran the page sees the same list the cards show. Appended
+ * once per load; the catalog is the list, so nothing here is re-rendered. */
+function publishCaseList(cases: readonly ShowcaseCase[]): void {
+  const script = document.createElement("script");
+  script.type = "application/ld+json";
+  script.textContent = JSON.stringify({
+    "@context": "https://schema.org",
+    "@type": "ItemList",
+    "@id": `${pageUrl("/showcase.html", null)}#cases`,
+    name: `Showcase Cases · ${SITE_NAME}`,
+    numberOfItems: cases.length,
+    itemListElement: cases.map((showcaseCase, index) => ({
+      "@type": "ListItem",
+      position: index + 1,
+      url: pageUrl(`/?case=${encodeURIComponent(showcaseCase.id)}`, null),
+      name: localizedText(showcaseCase.title, locale),
+      description: localizedText(showcaseCase.summary, locale),
+    })),
+  });
+  document.head.appendChild(script);
+}
+
 async function render(): Promise<void> {
   try {
     const catalog = await fetchCatalog(dataBaseUrl());
@@ -224,6 +252,7 @@ async function render(): Promise<void> {
     status.hidden = true;
     const cards = catalog.cases.map((showcaseCase) => ({ showcaseCase, ...buildCard(showcaseCase) }));
     list.replaceChildren(...cards.map((card) => card.item));
+    publishCaseList(catalog.cases);
     // Thumbnails are posters — under a kilobyte each — so the handful a
     // catalog holds can all be fetched at once.
     await Promise.allSettled(cards.map((card) => paintThumbnail(card.showcaseCase, card.canvas)));

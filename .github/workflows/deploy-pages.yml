@@ -18,6 +18,12 @@ on:
     paths:
       - web/**
       - rust/**
+      # The build derives sitemap.xml from the case definitions and
+      # llms-full.txt from these documents (web/tooling/discovery.ts).
+      - showcase/cases/**
+      - showcase/README.md
+      - docs/**
+      - README.md
       - package.json
       - package-lock.json
       - tsconfig.json

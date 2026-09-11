@@ -97,7 +97,27 @@ Two layers, both versioned:
 
 Manifest paths are resolved relative to the manifest URL, so a run directory
 can be served from either the site origin or the R2 bucket
-(`VITE_DATA_BASE_URL`, see `web/.env.deploy`).
+(`VITE_DATA_BASE_URL`, see `web/.env.deploy`). The production hostnames
+appear in the frontend only through `web/src/site.ts`.
+
+### Discovery (search engines, language models, agents)
+
+The shell describes itself in three places that must stay in agreement with
+what the encoder publishes. `web/index.html` and `web/showcase.html` carry
+the static English metadata, the hreflang set and a JSON-LD graph (site,
+application, source code, the live dataset); `web/src/pagemeta.ts` rewrites
+title, description, canonical and og:url once the view is known — a case
+(`/?case=<id>`) is its own page, every live view is `/`, and a `?lang=`
+rendering is canonical to itself. `web/public/robots.txt` (allows every
+crawler, AI ones by name) and `web/public/llms.txt` (the llmstxt.org index:
+sources, published bundle set, URL grammar, the pointer → manifest → bundle
+contract, decoder packages) are static prose — **update `llms.txt` when
+`sources.py` changes what a model publishes or `urlstate.ts` gains a
+parameter**. `sitemap.xml` (the two pages plus one URL per case) and
+`llms-full.txt` (README + `docs/*.md` + `showcase/README.md`, links
+rewritten to the repository) are generated at build time by
+`web/tooling/discovery.ts`, which is why `deploy-pages.yml` also triggers on
+those documents and on `showcase/cases/`.
 
 Manifest schema changes are a two-sided deploy: the new shell accepts old
 manifests, but an old cached shell rejects new ones — **deploy the Pages shell

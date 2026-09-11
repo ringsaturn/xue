@@ -144,6 +144,7 @@ import {
   type TileGeometry,
   type TileRect,
 } from "./tiles";
+import { applyPageMeta } from "./pagemeta";
 import {
   caseCameraLimits,
   fetchCaseManifest,
@@ -2692,7 +2693,21 @@ function updateVariablePresentation(session: VariableSession): void {
   updateModelPresentation();
   variableCode.textContent = `${model.label} / ${ui.code}`;
   dataCardTitle.textContent = ui.bufferTitle;
-  document.title = `${ui.title.join(" ")} · ${model.label} ${Math.round(frameLeadSeconds(frameCount() - 1) / HOUR_SECONDS)}H`;
+  // A case is its own page — its title and summary are what a search result
+  // or a shared link should say; every live view is the one page at `/`.
+  applyPageMeta(
+    activeCase
+      ? {
+          path: `/?case=${encodeURIComponent(activeCase.id)}`,
+          title: localizedText(activeCase.title, locale),
+          description: localizedText(activeCase.summary, locale),
+        }
+      : {
+          path: "/",
+          title: `${ui.title.join(" ")} · ${model.label} ${Math.round(frameLeadSeconds(frameCount() - 1) / HOUR_SECONDS)}H`,
+          description: t("metaDescription"),
+        },
+  );
   // One line at display size: the title sits over the map, and a wrapped
   // serif headline there fights the data underneath it.
   variableTitle.textContent = ui.title.join(" ");

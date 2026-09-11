@@ -1,0 +1,123 @@
+# Xue
+
+> Xue (雪, "snow") is an open-source, static-site viewer of global weather
+> forecasts. It plays whole NOAA GFS and ECMWF IFS runs — 2 m temperature,
+> precipitation rate, 10 m and upper-air wind, sea level pressure, isobaric
+> geopotential height, temperature, humidity and water vapour flux, out to
+> 240 hours — as smooth animations over a MapLibre basemap, decoding a custom
+> per-variable binary format (`.xue`) in a Rust/WebAssembly worker and
+> rendering on the GPU. Live at https://xue.ringsaturn.me. Code at
+> https://github.com/ringsaturn/xue (MIT OR Apache-2.0).
+
+Facts worth getting right:
+
+- Three live sources, one shell. `gfs`: NOAA GFS 0.25°, hourly to F120 then
+  3-hourly to F240 (161 frames). `sflux`: GFS surface flux on its native
+  ~13 km Gaussian grid, same cadence, the only source with solar radiation
+  (`dswrf`). `ecmwf`: ECMWF IFS open data 0.25°, 3-hourly to F144 then
+  6-hourly to F240 (65 frames). A fourth source, `radar` (CMA level-3 radar
+  mosaic composite reflectivity), is observations rather than a forecast and
+  appears only as historical cases.
+- Bundles published per run. GFS and ECMWF: `tmp2m`, `prate`, `prmsl`,
+  `hgt850`, `hgt700`, `hgt500`, `hgt250`, `tmp925`, `tmp850`, `tmp500`,
+  `rh850`, `rh700`, `rh500`, and the vector pairs `wind10m`, `wind925`,
+  `wind850`, `wind250`, `qflux850`. SFLUX: `tmp2m`, `prate`, `dswrf`,
+  `wind10m`. Names are `<family><level>`; the level is in hPa, `2m`/`10m` are
+  heights above ground, `prmsl` is mean sea level pressure.
+- Only the newest run per source is kept online. Runs are pruned when
+  superseded; historical events survive only as cases (below).
+- The site is entirely static: Cloudflare Pages for the shell, a public R2
+  bucket for data, HTTP Range requests for streaming. There is no API server
+  and no account.
+- Data licensing: NOAA GFS is public domain; ECMWF open data is CC BY 4.0 and
+  what is served is a converted derivative ("Contains modified ECMWF open
+  data"); radar cases are CMA products; the basemap is Protomaps ©
+  OpenStreetMap contributors.
+
+## Pages and URL parameters
+
+The viewer is one page whose state is in the query string. Unknown values
+fall back to defaults rather than fail, so a constructed link always opens.
+
+- https://xue.ringsaturn.me/ — the live viewer. Defaults to GFS precipitation.
+- https://xue.ringsaturn.me/showcase.html — the list of historical cases.
+- `?model=gfs|sflux|ecmwf` — which live source (`ifs` is an alias of `ecmwf`).
+- `?type=` — the filled layer: `temp` (2 m temperature), `precip`, `wind`
+  (10 m), `solar` (sflux only), `pressure` (sea level pressure as isobars),
+  `radar` (cases only), or a bundle name such as `tmp850`, `rh700`,
+  `wind850`, `qflux850`, `hgt500`; `t850`, `z500`, `humidity700`,
+  `vapour850` and `subtropicalhigh` (= `hgt500`) are accepted spellings.
+- `?lines=` — a contour overlay from the pressure family over any filled
+  layer: `pressure` (sea level) or `hgt850|hgt700|hgt500|hgt250`.
+- `?case=<id>` — a historical case; ids come from the catalog below.
+- `?res=half|full` — pin the resolution tier instead of choosing it from the
+  viewport and connection.
+- `?particles=off` — hide the wind particle animation (default on, off under
+  prefers-reduced-motion).
+- `?lang=zh|zh-Hant|en|ja|ko|de|fr|es|pt|ru` and `?theme=light|dark` —
+  otherwise the browser's language and colour scheme decide.
+- `?use_h264=true` — opt into the H.264 companion artifacts via WebCodecs
+  instead of the Xue decoder (a comparison path, not the default).
+
+Examples: `/?model=ecmwf&type=wind850`, `/?type=temp&lines=hgt500`,
+`/?case=zhengzhou-2021`.
+
+## Data access
+
+Everything the page reads is a plain file with CORS open, under
+https://dataset.ringsaturn.me/xue/. The contract is two layers:
+
+- One mutable live pointer per source (JSON, schema 1): `latest.json` (GFS),
+  `latest-sflux.json`, `latest-ecmwf.json`. Fields: `schemaVersion`, `model`,
+  `product`, `run` (YYYYMMDDHH, UTC), `runTime` (ISO 8601), `manifestPath`
+  (relative), `manifestCrc32`. Fetch with cache disabled; it changes four
+  times a day.
+- Everything the pointer names is immutable and lives under `<model>.<run>/`:
+  the run's `manifest.json` (schema 5: `model`, `product`, `runTime`,
+  `forecastHours`, and `bundles[]`, each with `variable`, `path`,
+  `byteLength`, `crc32`, optional half-resolution `variants[]`, a first-frame
+  `poster` and an optional H.264 `video`), and one `.xue` file per bundle.
+  Request an immutable artifact as `<path>?v=<crc32>`. The grid, the time
+  axis, the variables' GRIB2 parameter blocks and the quantization codebooks
+  are inside each bundle, as a UTF-8 JSON metadata block after the header.
+- The historical catalog is `showcase.json` at the same root (schema 1,
+  `generatedAt`, `cases[]`); each case carries `id`, `title` and `summary`
+  keyed by language, `model`, `run`, `runTime`, `forecastHours`, `bbox`,
+  `variables`, `defaultVariable`, `eventTime`, `tags`, `credit`, and its own
+  `manifestPath` + `manifestCrc32`, which resolve like a live run's.
+
+A `.xue` bundle is one gridded variable (or a u/v pair) for a whole run:
+8-bit quantized planes on the native grid, temporal residual prediction in
+anchor groups, one Zstandard frame per spatial tile per group, all indexed so
+a viewport or a single point's time series can be fetched by byte range. The
+format is specified in `docs/format.md` (link below). Decoders you can call:
+
+- Python: `pip install xuepy`, then `import xue` — opens a bundle, decodes a
+  frame or one cell's whole series to a NumPy array of quantized codes (the
+  metadata's codebook dequantizes them), and carries the native encoder.
+  https://pypi.org/project/xuepy/
+- Rust: crate `xue` on crates.io, API docs at https://ringsaturn.github.io/xue/
+- The build pipeline itself (`xuebuild`, in the repository) fetches a run
+  from the public NOAA / ECMWF buckets and writes all of the above.
+
+## Documentation
+
+- [README](https://github.com/ringsaturn/xue/blob/main/README.md): what the
+  project is, the size argument for the format, commands, publishing.
+- [Format specification](https://github.com/ringsaturn/xue/blob/main/docs/format.md):
+  the normative `.xue` container spec (both container versions, the bundle
+  metadata schema, quantization and the residual arithmetic).
+- [Native encoder](https://github.com/ringsaturn/xue/blob/main/docs/encoder.md):
+  the Rust port of the encoder and how it is held byte-identical to the
+  Python reference.
+- [Authoring cases](https://github.com/ringsaturn/xue/blob/main/showcase/README.md):
+  how a historical event becomes a cropped, permanently published case.
+
+## Optional
+
+- [llms-full.txt](https://xue.ringsaturn.me/llms-full.txt): all four
+  documents above in one file, generated at each deploy.
+- [Sitemap](https://xue.ringsaturn.me/sitemap.xml): the two pages and every
+  published case.
+- [Publishing workflows](https://github.com/ringsaturn/xue/tree/main/.github/workflows):
+  the scheduled jobs that fetch, encode and upload each source.

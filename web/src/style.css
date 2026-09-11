@@ -1633,6 +1633,35 @@ html[lang="ja"] .rail-glyph {
   display: none;
 }
 
+/* Only ever painted without scripts: a plain card over the ground, above
+   the map container the module would have filled. */
+.noscript-note {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  z-index: 9;
+  width: min(480px, calc(100vw - 36px));
+  padding: 20px 22px;
+  border-radius: 22px;
+  background: var(--sheet);
+  color: var(--text);
+  box-shadow: var(--lift);
+  transform: translate(-50%, -50%);
+  line-height: 1.5;
+}
+
+.noscript-note p {
+  margin: 0 0 10px;
+}
+
+.noscript-note p:last-child {
+  margin-bottom: 0;
+}
+
+.noscript-note a {
+  color: inherit;
+}
+
 .error-panel strong {
   color: var(--warning);
   font-family: var(--font-display);
