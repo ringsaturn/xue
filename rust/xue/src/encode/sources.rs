@@ -34,8 +34,13 @@ pub struct SourceSpec {
     /// Input variables absent from the analysis (f000) file.
     pub optional_at_analysis: &'static [&'static str],
     /// Scalar variables published as single-variable bundles, in manifest
-    /// order (the wind pair always ships as the combined wind10m bundle).
+    /// order.
     pub bundle_scalar_ids: &'static [&'static str],
+    /// Two-variable bundles published, in manifest order: `wind10m` for the
+    /// 10 m pair, `wind<level>` for an isobaric pair, `qflux<level>` for the
+    /// water vapour flux the converter derives on that surface. One ships
+    /// only when every input it is built from is in `input_variable_ids`.
+    pub bundle_vector_ids: &'static [&'static str],
     /// Grid a complete (`require_complete`) build must arrive on.
     pub production_grid: (usize, usize),
     /// Container v2 tile size as `(width, height)` in grid cells. Mirrors
@@ -99,16 +104,24 @@ pub const SOURCES: &[SourceSpec] = &[
         // Hourly through f120, then three-hourly through f240.
         steps: &[(120, 1), (240, 3)],
         // The pressure family ships the three isobaric levels of the first
-        // launch (850 / 500 / 250) beside mean sea level pressure; the other
-        // five registered levels are not published.
+        // launch (850 / 500 / 250) beside mean sea level pressure; the
+        // upper-air fills the surfaces a synoptic chart is read on — 850 and
+        // 500 hPa temperature, 850 and 700 hPa relative humidity, the 850 hPa
+        // wind and the vapour flux derived from it and the specific humidity
+        // there (fetched as an input only). Mirrors `xuebuild/sources.py`.
         input_variable_ids: &[
             "tmp2m", "prate", "ugrd10m", "vgrd10m", "prmsl", "hgt850", "hgt500", "hgt250",
+            "tmp850", "tmp500", "rh850", "rh700", "spfh850", "ugrd850", "vgrd850",
         ],
         accumulated_precipitation: false,
         averaged_precipitation: false,
         average_window_hours: 6,
         optional_at_analysis: &[],
-        bundle_scalar_ids: &["tmp2m", "prate", "prmsl", "hgt850", "hgt500", "hgt250"],
+        bundle_scalar_ids: &[
+            "tmp2m", "prate", "prmsl", "hgt850", "hgt500", "hgt250", "tmp850", "tmp500", "rh850",
+            "rh700",
+        ],
+        bundle_vector_ids: &["wind10m", "wind850", "qflux850"],
         production_grid: (1440, 721),
         tile: (48, 52),
         observation: false,
@@ -126,6 +139,7 @@ pub const SOURCES: &[SourceSpec] = &[
         average_window_hours: 6,
         optional_at_analysis: &[],
         bundle_scalar_ids: &["tmp2m", "prate"],
+        bundle_vector_ids: &["wind10m"],
         production_grid: (1440, 721),
         tile: (48, 52),
         observation: false,
@@ -144,6 +158,7 @@ pub const SOURCES: &[SourceSpec] = &[
         average_window_hours: 6,
         optional_at_analysis: &["prate_ave"],
         bundle_scalar_ids: &["tmp2m", "prate", "dswrf"],
+        bundle_vector_ids: &["wind10m"],
         production_grid: (3072, 1536),
         tile: (96, 96),
         observation: false,
@@ -162,6 +177,7 @@ pub const SOURCES: &[SourceSpec] = &[
         average_window_hours: 6,
         optional_at_analysis: &[],
         bundle_scalar_ids: &["cref"],
+        bundle_vector_ids: &[],
         // Tile-grid dependent: the file says what it covers, and nothing here
         // is ever built with require_complete.
         production_grid: (0, 0),

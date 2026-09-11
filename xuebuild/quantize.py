@@ -14,6 +14,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from .errors import ConversionError
+from .variables import ISOBARIC_LEVELS_HPA, isobaric_variable_id
 
 
 @dataclass(frozen=True)
@@ -232,6 +233,93 @@ COMPACT_PRESSURE = {
     for variable_id in PRESSURE_VARIABLE_IDS
 }
 
+# The filled isobaric families — temperature, relative humidity, specific
+# humidity, the wind components and the water vapour flux components on the
+# same eight surfaces. None of these is contoured, so none carries the
+# half-code rule above; what they share with the pressure family is fixed
+# coverage per variable for all time (byte-identical re-encoding, a stable
+# legend, comparable point series), and a compact profile at twice the step.
+#
+# Temperature keeps tmp2m's 0.5 °C step and takes its range per level: the
+# low end has to hold the Antarctic winter at every surface, the high end the
+# below-ground extrapolation the lowest surfaces take under the Tibetan
+# plateau and the Sahara — no single 127-degree window covers both 850 hPa in
+# summer and 200 hPa in winter.
+_ISOBARIC_TEMPERATURE_RANGES: dict[int, tuple[float, float]] = {
+    1000: (-60.0, 60.0),
+    925: (-65.0, 50.0),
+    850: (-70.0, 45.0),
+    700: (-75.0, 35.0),
+    500: (-85.0, 15.0),
+    300: (-95.0, 0.0),
+    250: (-100.0, -5.0),
+    200: (-100.0, -10.0),
+}
+# Specific humidity spans two orders of magnitude between the surface and the
+# upper troposphere, so its step follows the level: 0.2 g/kg where a saturated
+# tropical boundary layer reaches 30 g/kg, 0.005 g/kg where saturation is a
+# fraction of a gram. Every range spends the full 0..254 code space.
+_SPECIFIC_HUMIDITY_STEPS: dict[int, float] = {
+    1000: 0.2,
+    925: 0.2,
+    850: 0.1,
+    700: 0.1,
+    500: 0.02,
+    300: 0.01,
+    250: 0.005,
+    200: 0.005,
+}
+
+
+def _isobaric_temperature_codebook(level_hpa: int, *, compact: bool) -> TemperatureCodebook:
+    minimum, maximum = _ISOBARIC_TEMPERATURE_RANGES[level_hpa]
+    return TemperatureCodebook(
+        minimum=minimum, maximum=maximum, step=1.0 if compact else 0.5, name=isobaric_variable_id("tmp", level_hpa)
+    )
+
+
+def _specific_humidity_codebook(level_hpa: int, *, compact: bool) -> TemperatureCodebook:
+    step = _SPECIFIC_HUMIDITY_STEPS[level_hpa]
+    return TemperatureCodebook(
+        minimum=0.0,
+        maximum=step * 254,
+        step=step * 2.0 if compact else step,
+        name=isobaric_variable_id("spfh", level_hpa),
+    )
+
+
+# Relative humidity: 0–100 % at half a percent, one codebook for every level.
+QUALITY_HUMIDITY = TemperatureCodebook(minimum=0.0, maximum=100.0, step=0.5, name="rh")
+COMPACT_HUMIDITY = TemperatureCodebook(minimum=0.0, maximum=100.0, step=1.0, name="rh")
+# Isobaric wind components: a jet core passes 100 m/s, so the isobaric pair
+# takes ±127 m/s at a 1 m/s step — coarser than the 10 m pair's 0.5 m/s, and
+# still far below what a colored field or a particle trace resolves.
+QUALITY_ISOBARIC_WIND = TemperatureCodebook(minimum=-127.0, maximum=127.0, step=1.0, name="isobaric wind")
+COMPACT_ISOBARIC_WIND = TemperatureCodebook(minimum=-127.0, maximum=127.0, step=2.0, name="isobaric wind")
+# Water vapour flux components, q·V/g in g·cm⁻¹·hPa⁻¹·s⁻¹: strong transport
+# is 20–40, so ±63.5 at a 0.5 step — the 10 m wind's own numbers — covers
+# everything but a typhoon core, which clamps.
+QUALITY_VAPOUR_FLUX = TemperatureCodebook(minimum=-63.5, maximum=63.5, step=0.5, name="vapour flux")
+COMPACT_VAPOUR_FLUX = TemperatureCodebook(minimum=-63.5, maximum=63.5, step=1.0, name="vapour flux")
+
+
+def _isobaric_codebooks(*, compact: bool) -> dict[str, TemperatureCodebook]:
+    books: dict[str, TemperatureCodebook] = {}
+    for level in ISOBARIC_LEVELS_HPA:
+        books[isobaric_variable_id("tmp", level)] = _isobaric_temperature_codebook(level, compact=compact)
+        books[isobaric_variable_id("rh", level)] = COMPACT_HUMIDITY if compact else QUALITY_HUMIDITY
+        books[isobaric_variable_id("spfh", level)] = _specific_humidity_codebook(level, compact=compact)
+        for family in ("ugrd", "vgrd"):
+            books[isobaric_variable_id(family, level)] = COMPACT_ISOBARIC_WIND if compact else QUALITY_ISOBARIC_WIND
+        for family in ("uqflx", "vqflx"):
+            books[isobaric_variable_id(family, level)] = COMPACT_VAPOUR_FLUX if compact else QUALITY_VAPOUR_FLUX
+    return books
+
+
+QUALITY_ISOBARIC = _isobaric_codebooks(compact=False)
+COMPACT_ISOBARIC = _isobaric_codebooks(compact=True)
+ISOBARIC_VARIABLE_IDS: tuple[str, ...] = tuple(QUALITY_ISOBARIC)
+
 PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
     "quality": {
         "tmp2m": QUALITY_TEMPERATURE,
@@ -241,6 +329,7 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
         "dswrf": QUALITY_FLUX,
         "cref": QUALITY_REFLECTIVITY,
         **QUALITY_PRESSURE,
+        **QUALITY_ISOBARIC,
     },
     "compact": {
         "tmp2m": COMPACT_TEMPERATURE,
@@ -250,12 +339,17 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
         "dswrf": COMPACT_FLUX,
         "cref": COMPACT_REFLECTIVITY,
         **COMPACT_PRESSURE,
+        **COMPACT_ISOBARIC,
     },
     # Production default since 2026-08-17: temperature keeps the 0.5°C step
     # (0.25°C error budget, shared with the H.264 video artifact), while
     # precipitation drops to the 128-level codebook — halving its symbol
     # count cuts the prate bundle by roughly 13% for a codebook step that
     # stays well inside the palette's visual resolution.
+    # Relative humidity is the noisiest field published — small-scale
+    # structure at every level — and a 0.5 % step costs ~570 KB a frame on
+    # the real 850 hPa plane against ~450 KB at 1 %, for a precision no
+    # moisture chart reads. Balanced takes the compact (1 %) codebook there.
     "balanced": {
         "tmp2m": QUALITY_TEMPERATURE,
         "prate": COMPACT_PRECIPITATION,
@@ -264,5 +358,7 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
         "dswrf": QUALITY_FLUX,
         "cref": QUALITY_REFLECTIVITY,
         **QUALITY_PRESSURE,
+        **QUALITY_ISOBARIC,
+        **{variable_id: COMPACT_HUMIDITY for variable_id in QUALITY_ISOBARIC if variable_id.startswith("rh")},
     },
 }

@@ -37,22 +37,25 @@ function dataBaseUrl(): string {
 }
 
 /** Variable codes, matching the viewer's own switch labels. */
-const VARIABLE_CODE: Record<ForecastBundleId, string> = {
+const VARIABLE_CODE: Partial<Record<ForecastBundleId, string>> = {
   tmp2m: "TEMP",
   prate: "PRECIP",
   dswrf: "SOLAR",
   cref: "RADAR",
   prmsl: "MSLP",
-  hgt1000: "1000MB",
-  hgt925: "925MB",
-  hgt850: "850MB",
-  hgt700: "700MB",
-  hgt500: "500MB",
-  hgt300: "300MB",
-  hgt250: "250MB",
-  hgt200: "200MB",
   wind10m: "WIND",
 };
+
+/** The contact-sheet code of one bundle: the surface fields have a word,
+ * every isobaric field is its family and level ("HGT 500MB", "T 850MB"). */
+function variableCode(id: ForecastBundleId): string {
+  const fixed = VARIABLE_CODE[id];
+  if (fixed) return fixed;
+  const match = /^([a-z]+)(\d+)$/.exec(id);
+  if (!match) return id.toUpperCase();
+  const family = { hgt: "HGT", tmp: "T", rh: "RH", spfh: "Q", wind: "WIND", qflux: "QFLUX" }[match[1]!] ?? match[1]!.toUpperCase();
+  return `${family} ${match[2]}MB`;
+}
 
 /** Compact UTC stamp. Cards line several of these up in narrow columns, so
  * they stay in the fixed ISO-like shape rather than a locale long form. */
@@ -104,7 +107,7 @@ function buildCard(showcaseCase: ShowcaseCase): { item: HTMLLIElement; canvas: H
   // stamped rather than captioned.
   const code = document.createElement("span");
   code.className = "showcase-code";
-  code.textContent = `${showcaseCase.model} · ${showcaseCase.variables.map((id) => VARIABLE_CODE[id]).join(" / ")}`;
+  code.textContent = `${showcaseCase.model} · ${showcaseCase.variables.map((id) => variableCode(id)).join(" / ")}`;
   figure.append(canvas, code);
 
   const body = document.createElement("div");

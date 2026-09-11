@@ -32,6 +32,29 @@ describe("parseVariableFromSearch", () => {
     expect(parseVariableFromSearch("?model=GFS&type=wind")).toBe("wind10m");
   });
 
+  it("names every isobaric field by its id and a chart reader's spellings", () => {
+    expect(parseVariableFromSearch("?type=tmp850")).toBe("tmp850");
+    expect(parseVariableFromSearch("?type=T850")).toBe("tmp850");
+    expect(parseVariableFromSearch("?type=temp500")).toBe("tmp500");
+    expect(parseVariableFromSearch("?type=rh700")).toBe("rh700");
+    expect(parseVariableFromSearch("?type=humidity850")).toBe("rh850");
+    expect(parseVariableFromSearch("?type=q850")).toBe("spfh850");
+    expect(parseVariableFromSearch("?type=wind850")).toBe("wind850");
+    expect(parseVariableFromSearch("?type=qflux850")).toBe("qflux850");
+    expect(parseVariableFromSearch("?type=vapor850")).toBe("qflux850");
+    expect(parseVariableFromSearch("?type=moisture700")).toBe("qflux700");
+    expect(parseVariableFromSearch("?type=z500")).toBe("hgt500");
+    // Only the eight registered surfaces exist.
+    expect(parseVariableFromSearch("?type=tmp550")).toBeNull();
+    expect(parseVariableFromSearch("?type=wind1")).toBeNull();
+    // The level is the layer: the canonical spelling is the id itself.
+    expect(searchForVariable("tmp850", "")).toBe("?model=gfs&type=tmp850");
+    expect(searchForVariable("qflux850", "", "gfs")).toBe("?model=gfs&type=qflux850");
+    // A filled isobaric field is never the lines slot.
+    expect(parseLinesFromSearch("?lines=tmp850")).toBeNull();
+    expect(parseLinesFromSearch("?lines=z500")).toBe("hgt500");
+  });
+
   it("resolves types for every served model", () => {
     expect(parseVariableFromSearch("?model=ecmwf&type=wind")).toBe("wind10m");
     expect(parseVariableFromSearch("?model=ifs&type=temp")).toBe("tmp2m");

@@ -9,6 +9,7 @@
 use serde_json::{json, Map, Value};
 
 use crate::encode::errors::{EncodeError, Result};
+use crate::encode::variables::isobaric_variable;
 
 /// Linear uint8 codebook. Not temperature-specific: it quantizes any linear
 /// field; the wind components reuse it with a symmetric m/s range.
@@ -258,6 +259,130 @@ fn pressure_codebook(variable_id: &str, compact: bool) -> Option<LinearCodebook>
     })
 }
 
+// The filled isobaric families — temperature, relative humidity, specific
+// humidity, the wind components and the water vapour flux components on the
+// same eight surfaces. None is contoured, so none carries the half-code rule;
+// what they share with the pressure family is fixed coverage per variable for
+// all time, and a compact profile at twice the step. The tables must stay
+// identical to their namesakes in `xuebuild/quantize.py`.
+//
+// Temperature keeps tmp2m's 0.5 °C step and takes its range per level: the
+// low end holds the Antarctic winter at every surface, the high end the
+// below-ground extrapolation the lowest surfaces take under high terrain.
+const ISOBARIC_TEMPERATURE_RANGES: &[(u32, f64, f64)] = &[
+    (1000, -60.0, 60.0),
+    (925, -65.0, 50.0),
+    (850, -70.0, 45.0),
+    (700, -75.0, 35.0),
+    (500, -85.0, 15.0),
+    (300, -95.0, 0.0),
+    (250, -100.0, -5.0),
+    (200, -100.0, -10.0),
+];
+// Specific humidity spans two orders of magnitude between the surface and the
+// upper troposphere, so its step follows the level; every range spends the
+// full 0..254 code space.
+const SPECIFIC_HUMIDITY_STEPS: &[(u32, f64)] = &[
+    (1000, 0.2),
+    (925, 0.2),
+    (850, 0.1),
+    (700, 0.1),
+    (500, 0.02),
+    (300, 0.01),
+    (250, 0.005),
+    (200, 0.005),
+];
+// Relative humidity: 0–100 % at half a percent, one codebook for every level.
+const QUALITY_HUMIDITY: LinearCodebook = LinearCodebook {
+    minimum: 0.0,
+    maximum: 100.0,
+    step: 0.5,
+    nodata_code: 255,
+    name: "rh",
+};
+const COMPACT_HUMIDITY: LinearCodebook = LinearCodebook {
+    step: 1.0,
+    ..QUALITY_HUMIDITY
+};
+// Isobaric wind components: a jet core passes 100 m/s, so the isobaric pair
+// takes ±127 m/s at a 1 m/s step.
+const QUALITY_ISOBARIC_WIND: LinearCodebook = LinearCodebook {
+    minimum: -127.0,
+    maximum: 127.0,
+    step: 1.0,
+    nodata_code: 255,
+    name: "isobaric wind",
+};
+const COMPACT_ISOBARIC_WIND: LinearCodebook = LinearCodebook {
+    step: 2.0,
+    ..QUALITY_ISOBARIC_WIND
+};
+// Water vapour flux components, q·V/g in g·cm⁻¹·hPa⁻¹·s⁻¹: the 10 m wind's
+// own numbers cover everything but a typhoon core, which clamps.
+const QUALITY_VAPOUR_FLUX: LinearCodebook = LinearCodebook {
+    minimum: -63.5,
+    maximum: 63.5,
+    step: 0.5,
+    nodata_code: 255,
+    name: "vapour flux",
+};
+const COMPACT_VAPOUR_FLUX: LinearCodebook = LinearCodebook {
+    step: 1.0,
+    ..QUALITY_VAPOUR_FLUX
+};
+
+/// The codebook of one filled isobaric variable, or `None` when the variable
+/// is not one (the pressure family answers through `pressure_codebook`).
+fn isobaric_codebook(variable_id: &str, compact: bool) -> Option<LinearCodebook> {
+    let (family, level) = isobaric_variable(variable_id)?;
+    Some(match family {
+        "tmp" => {
+            let &(_, minimum, maximum) = ISOBARIC_TEMPERATURE_RANGES
+                .iter()
+                .find(|(at, _, _)| *at == level)?;
+            LinearCodebook {
+                minimum,
+                maximum,
+                step: if compact { 1.0 } else { 0.5 },
+                nodata_code: 255,
+                name: "isobaric temperature",
+            }
+        }
+        "rh" => {
+            if compact {
+                COMPACT_HUMIDITY
+            } else {
+                QUALITY_HUMIDITY
+            }
+        }
+        "spfh" => {
+            let &(_, step) = SPECIFIC_HUMIDITY_STEPS.iter().find(|(at, _)| *at == level)?;
+            LinearCodebook {
+                minimum: 0.0,
+                maximum: step * 254.0,
+                step: if compact { step * 2.0 } else { step },
+                nodata_code: 255,
+                name: "specific humidity",
+            }
+        }
+        "ugrd" | "vgrd" => {
+            if compact {
+                COMPACT_ISOBARIC_WIND
+            } else {
+                QUALITY_ISOBARIC_WIND
+            }
+        }
+        "uqflx" | "vqflx" => {
+            if compact {
+                COMPACT_VAPOUR_FLUX
+            } else {
+                QUALITY_VAPOUR_FLUX
+            }
+        }
+        _ => return None,
+    })
+}
+
 pub const PROFILES: &[&str] = &["quality", "compact", "balanced"];
 
 /// One profile's codebook for one variable.
@@ -280,6 +405,15 @@ pub fn codebook(profile: &str, variable_id: &str) -> Result<Codebook> {
         _ if pressure_codebook(variable_id, !quality).is_some() => Codebook::Linear(
             pressure_codebook(variable_id, !quality).expect("checked just above"),
         ),
+        // Relative humidity is the noisiest field published; balanced takes
+        // the 1 % step (see `xuebuild/quantize.py`).
+        _ if isobaric_codebook(variable_id, !quality).is_some() => {
+            let humidity = matches!(isobaric_variable(variable_id), Some(("rh", _)));
+            Codebook::Linear(
+                isobaric_codebook(variable_id, !quality || (humidity && profile == "balanced"))
+                    .expect("checked just above"),
+            )
+        }
         _ => {
             return Err(EncodeError::conversion(format!(
                 "no {profile} codebook for {variable_id}"

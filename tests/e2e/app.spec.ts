@@ -19,6 +19,11 @@ const PRATE_FIXTURE = readFileSync(
 const WIND_FIXTURE = readFileSync(
   fileURLToPath(new URL("../fixtures/generated/web/wind10m.xue", import.meta.url)),
 );
+// One upper-air fill: the temperature family's 850 hPa member, which is what
+// gives the temperature tile a level row of its own.
+const TMP850_FIXTURE = readFileSync(
+  fileURLToPath(new URL("../fixtures/generated/web/tmp850.xue", import.meta.url)),
+);
 // One level of the pressure family: the viewer draws it as contour lines,
 // and it ships no poster, so switching to it exercises the path where nothing
 // paints until the first real plane decodes.
@@ -147,6 +152,8 @@ async function routeBundle(
           : ECMWF_PRATE_FIXTURE
         : name === "tmp2m.xue"
           ? TMP2M_FIXTURE
+          : name === "tmp850.xue"
+            ? TMP850_FIXTURE
           : name === "wind10m.xue"
             ? WIND_FIXTURE
             : name === "hgt500.xue"
@@ -441,6 +448,60 @@ test("playback keeps moving with lines over the field", async ({ page }, testInf
   // than wait on both.
   await expect.poll(() => slider.inputValue().then(Number), { timeout: 15_000 }).toBeGreaterThan(8);
   await expect(page.locator("#level-row")).toBeVisible();
+});
+
+test("the temperature tile opens a family whose level row picks the surface", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop", "desktop interaction coverage");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await routeManifest(page);
+  await routeBundle(page);
+  await page.goto("/");
+  await waitForReady(page);
+  // Precipitation is a single layer: no level row.
+  await expect(page.locator("#level-row")).toBeHidden();
+  // The family tile opens its surface member, and the row lists the members
+  // the run publishes with the surface pressed.
+  // The rail's family tile and the level row's surface member share a name,
+  // so the rail is addressed by its own group.
+  const temperatureTile = page.locator('.variable-rail button[data-variable="tmp2m"]');
+  await temperatureTile.click();
+  await expect(page.locator("body")).toHaveAttribute("data-variable", "tmp2m");
+  await expect(page.locator("#level-row")).toBeVisible();
+  const surfaceButton = page.locator('#level-row button[data-variable="tmp2m"]');
+  const upperButton = page.locator('#level-row button[data-variable="tmp850"]');
+  await expect(surfaceButton).toHaveAttribute("aria-pressed", "true");
+  await expect(upperButton).toHaveAttribute("aria-pressed", "false");
+  // 850 hPa is its own session with its own codebook, palette and title.
+  await upperButton.click();
+  await expect(page.locator("body")).toHaveAttribute("data-variable", "tmp850");
+  await expect(upperButton).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("#variable-title")).toContainText("850 hPa");
+  await expect(page.locator("#legend-unit")).toHaveText("°C");
+  await expect(page.locator("#legend")).toBeVisible();
+  // The level names itself in the URL, and the family tile stays pressed.
+  await expect.poll(() => new URL(page.url()).searchParams.get("type")).toBe("tmp850");
+  await expect(temperatureTile).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("slider", { name: "Forecast hour" })).toBeEnabled();
+  // Lines over the upper-air field put a second group beside the family's.
+  await page.getByRole("button", { name: "PRESSURE FIELD" }).click();
+  await expect(page.locator("body")).toHaveAttribute("data-variable", "hgt500");
+  await temperatureTile.click();
+  // The family reopens the member last on screen.
+  await expect(page.locator("body")).toHaveAttribute("data-variable", "tmp850");
+  await expect(page).toHaveURL(/lines=hgt500/);
+  await expect(page.locator("#level-row .level-group")).toHaveCount(2);
+  await expect(page.locator('#level-row button[data-variable="hgt500"]')).toHaveAttribute("aria-pressed", "true");
+});
+
+test("?type=tmp850 opens the upper-air field straight from the URL", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop", "desktop interaction coverage");
+  await routeManifest(page);
+  await routeBundle(page);
+  await page.goto("/?type=t850");
+  await waitForReady(page);
+  await expect(page.locator("body")).toHaveAttribute("data-variable", "tmp850");
+  await expect(page.locator("#level-row")).toBeVisible();
+  await expect(page.locator("#variable-code")).toContainText("TMP 850MB");
 });
 
 test("?type=hgt500 opens the height view straight from the URL", async ({ page }, testInfo) => {

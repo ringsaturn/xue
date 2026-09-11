@@ -2,8 +2,9 @@
 run directory, manifest identity, and time axis are named.
 
 The models share one output contract: whatever the source, the bundles carry
-the same data variable ids (tmp2m, prate, ugrd10m/vgrd10m, and on sflux also
-dswrf) so the decoder and frontend never care which model produced them.
+the same data variable ids (tmp2m, prate, ugrd10m/vgrd10m, on sflux also
+dswrf, and on GFS the pressure family and the upper-air fills) so the decoder
+and frontend never care which model produced them.
 Not every source is a forecast: an ``observation`` source (the CMA radar
 mosaic) is a local file holding a series of observed analyses, with no cycle
 to fetch, no live pointer, and an axis that is whatever times the file
@@ -57,7 +58,15 @@ class SourceSpec:
     real step (mirroring the ECMWF de-accumulated prate axis)."""
     bundle_scalar_ids: tuple[str, ...] = ("tmp2m", "prate")
     """Scalar variables published as single-variable bundles, in manifest
-    order (the wind pair always ships as the combined wind10m bundle)."""
+    order."""
+    bundle_vector_ids: tuple[str, ...] = ()
+    """Two-variable bundles published, in manifest order: ``wind10m`` for the
+    10 m pair, ``wind<level>`` for an isobaric pair, ``qflux<level>`` for the
+    water vapour flux the converter derives on that surface. Listing one is
+    not enough on its own — it ships only when every input it is built from
+    (:func:`xuebuild.binconvert.vector_input_ids`) is in
+    :attr:`input_variable_ids`, and a run whose files turn out to lack them
+    builds without it and says so."""
     production_grid: tuple[int, int] = (1440, 721)
     """Grid a complete (``require_complete``) build must arrive on."""
     tile: tuple[int, int] = (48, 52)
@@ -122,9 +131,13 @@ SOURCES: dict[str, SourceSpec] = {
         # Hourly through f120, then three-hourly through f240.
         steps=((120, 1), (240, 3)),
         # The pressure family ships the three isobaric levels the plan's first
-        # launch names (850 / 500 / 250) beside mean sea level pressure; the
-        # other five levels in variables.py are registered but not published,
-        # so the fetch stays four extra GRIB records per frame rather than ten.
+        # launch names (850 / 500 / 250) beside mean sea level pressure. The
+        # upper-air fills are the surfaces a synoptic chart is read on: 850
+        # and 500 hPa temperature, 850 and 700 hPa relative humidity, and the
+        # 850 hPa wind with the water vapour flux derived from it and the
+        # specific humidity there — so spfh850 is fetched as an input only.
+        # Every other registered level stays unpublished, which keeps the
+        # fetch at fifteen GRIB records per frame.
         input_variable_ids=(
             "tmp2m",
             "prate",
@@ -134,9 +147,28 @@ SOURCES: dict[str, SourceSpec] = {
             "hgt850",
             "hgt500",
             "hgt250",
+            "tmp850",
+            "tmp500",
+            "rh850",
+            "rh700",
+            "spfh850",
+            "ugrd850",
+            "vgrd850",
         ),
         accumulated_precipitation=False,
-        bundle_scalar_ids=("tmp2m", "prate", "prmsl", "hgt850", "hgt500", "hgt250"),
+        bundle_scalar_ids=(
+            "tmp2m",
+            "prate",
+            "prmsl",
+            "hgt850",
+            "hgt500",
+            "hgt250",
+            "tmp850",
+            "tmp500",
+            "rh850",
+            "rh700",
+        ),
+        bundle_vector_ids=("wind10m", "wind850", "qflux850"),
     ),
     "ecmwf": SourceSpec(
         id="ecmwf",
@@ -147,6 +179,7 @@ SOURCES: dict[str, SourceSpec] = {
         steps=((144, 3), (240, 6)),
         input_variable_ids=("tmp2m", "tp", "ugrd10m", "vgrd10m"),
         accumulated_precipitation=True,
+        bundle_vector_ids=("wind10m",),
         fetch_concurrency=1,
     ),
     # GFS surface flux files on the native ~13 km T1534 Gaussian grid
@@ -166,6 +199,7 @@ SOURCES: dict[str, SourceSpec] = {
         averaged_precipitation=True,
         optional_at_analysis=("prate_ave",),
         bundle_scalar_ids=("tmp2m", "prate", "dswrf"),
+        bundle_vector_ids=("wind10m",),
         production_grid=(3072, 1536),
         # 3072 x 1536 divides exactly into 32 x 16 = 512 tiles with no
         # clipped edge, at about the same 11-degree ground scale as the

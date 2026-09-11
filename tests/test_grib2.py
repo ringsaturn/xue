@@ -18,8 +18,14 @@ FIXTURE = Path(__file__).parent / "fixtures" / "gfs.2026081406.f000.crop.grib2"
 class IndexMessagesTests(unittest.TestCase):
     def test_fixture_identities(self) -> None:
         messages = grib2.index_messages(FIXTURE)
-        self.assertEqual(len(messages), 6)
-        temperature, precipitation, pressure, *heights = messages
+        # Every record the GFS source fetches, in the order the fetcher assembles
+        # them: the surface fields, the pressure family, then the upper-air
+        # inputs (the 850 hPa specific humidity among them, fetched only to
+        # derive the vapour flux).
+        self.assertEqual(len(messages), 15)
+        temperature, precipitation, u_wind, v_wind, pressure = messages[:5]
+        heights = messages[5:8]
+        upper_air = messages[8:]
         self.assertEqual(temperature.band, 1)
         self.assertEqual(
             (temperature.discipline, temperature.parameter_category, temperature.parameter_number),
@@ -34,24 +40,41 @@ class IndexMessagesTests(unittest.TestCase):
             (2, 1, 7),
         )
         self.assertEqual((precipitation.level_type, precipitation.level_value), (1, 0.0))
+        self.assertEqual(
+            [(m.band, m.parameter_category, m.parameter_number, m.level_type, m.level_value) for m in (u_wind, v_wind)],
+            [(3, 2, 2, 103, 10.0), (4, 2, 3, 103, 10.0)],
+        )
         # Mean sea level pressure: the surface (101) carries no value of its
         # own, which GRIB2 writes as a zero the registry declares as None.
         self.assertEqual(
             (pressure.band, pressure.parameter_category, pressure.parameter_number),
-            (3, 3, 1),
+            (5, 3, 1),
         )
         self.assertEqual((pressure.level_type, pressure.level_value), (101, 0.0))
         # The three published isobaric surfaces, whose value is the level in
         # pascals — the same number variables.py declares for each level.
         self.assertEqual(
             [(message.band, message.level_type, message.level_value) for message in heights],
-            [(4, 100, 85000.0), (5, 100, 50000.0), (6, 100, 25000.0)],
+            [(6, 100, 85000.0), (7, 100, 50000.0), (8, 100, 25000.0)],
         )
         for height in heights:
             self.assertEqual(
                 (height.discipline, height.parameter_category, height.parameter_number),
                 (0, 3, 5),
             )
+        self.assertEqual(
+            [(m.band, m.parameter_category, m.parameter_number, m.level_value) for m in upper_air],
+            [
+                (9, 0, 0, 85000.0),
+                (10, 0, 0, 50000.0),
+                (11, 1, 1, 85000.0),
+                (12, 1, 1, 70000.0),
+                (13, 1, 0, 85000.0),
+                (14, 2, 2, 85000.0),
+                (15, 2, 3, 85000.0),
+            ],
+        )
+        self.assertTrue(all(message.level_type == 100 for message in upper_air))
 
     def test_rejects_non_grib_payload(self) -> None:
         with tempfile.NamedTemporaryFile(suffix=".grib2") as handle:

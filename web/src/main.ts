@@ -38,15 +38,31 @@ import {
   HOUR_SECONDS,
   isObservationModel,
   sameTimeAxis,
-  WIND_COMPONENT_IDS,
+  isVectorBundle,
+  vectorComponents,
   type BundleMetadata,
   type BundleVariable,
   type ForecastBundleId,
   type ForecastManifest,
   type ForecastModelId,
+  type VectorBundleId,
   type VideoBundleDescriptor,
 } from "./manifest";
-import { buildPalette, buildWindFieldPalette, WIND_SPEED_MAX } from "./palettes";
+import {
+  FAMILIES,
+  ISOBARIC_FILL_IDS,
+  bundleLevel,
+  familyLabel,
+  familyMembers,
+  familyOf,
+  isobaricCode,
+  isobaricLegend,
+  levelCode,
+  temperatureLegendRange,
+  vectorMaxMagnitude,
+  type IsobaricFamily,
+} from "./levels";
+import { buildPalette, buildVapourFluxPalette, buildWindFieldPalette, legendGradient } from "./palettes";
 import {
   PRESSURE_BUNDLE_IDS,
   PRESSURE_LEVELS,
@@ -218,6 +234,31 @@ function pressureVariableUi(): Record<PressureBundleId, VariableUi> {
   return entries;
 }
 
+/** The upper-air fills, built from the family registry the same way: the
+ * code, title and legend all follow from the family and the level. */
+function isobaricVariableUi(): Record<string, VariableUi> {
+  const words: Record<IsobaricFamily, string> = {
+    hgt: "Height",
+    tmp: "Temperature",
+    rh: "Humidity",
+    spfh: "Specific Humidity",
+    wind: "Wind",
+    qflux: "Vapour Flux",
+  };
+  const entries: Record<string, VariableUi> = {};
+  for (const id of ISOBARIC_FILL_IDS) {
+    const word = words[familyOf(id)!];
+    entries[id] = {
+      code: isobaricCode(id),
+      title: [`${bundleLevel(id)} hPa`, word],
+      bufferTitle: `${word} buffer`,
+      label: familyLabel(id),
+      legend: isobaricLegend(id),
+    };
+  }
+  return entries;
+}
+
 const VARIABLE_UI: Record<ForecastBundleId, VariableUi> = {
   tmp2m: {
     code: "TMP 2M",
@@ -255,7 +296,8 @@ const VARIABLE_UI: Record<ForecastBundleId, VariableUi> = {
     legend: ["40", "30", "20", "10", "5", "0"],
   },
   ...pressureVariableUi(),
-};
+  ...isobaricVariableUi(),
+} as unknown as Record<ForecastBundleId, VariableUi>;
 
 interface BasemapTones {
   ocean: string;
@@ -270,6 +312,16 @@ interface BasemapTones {
 function pressureBasemapTheme(tones: BasemapTones): Record<PressureBundleId, BasemapTones> {
   const themes = {} as Record<PressureBundleId, BasemapTones>;
   for (const id of PRESSURE_BUNDLE_IDS) themes[id] = tones;
+  return themes;
+}
+
+/** The upper-air fills take the ground of the surface field they read like:
+ * the opaque ones (temperature, relative humidity) the temperature's, the
+ * winds the 10 m wind's, and the translucent moisture fields (specific
+ * humidity, vapour flux) the precipitation's slate. */
+function isobaricBasemapTheme(pick: (family: IsobaricFamily) => BasemapTones): Record<string, BasemapTones> {
+  const themes: Record<string, BasemapTones> = {};
+  for (const id of ISOBARIC_FILL_IDS) themes[id] = pick(familyOf(id)!);
   return themes;
 }
 
@@ -290,7 +342,14 @@ const DARK_BASEMAP: Record<ForecastBundleId, BasemapTones> = {
   cref: { ocean: "#0c1a26", land: "#1a2f3d" },
   wind10m: { ocean: "#0e2131", land: "#1d3849" },
   ...pressureBasemapTheme({ ocean: "#101f2c", land: "#22384a" }),
-};
+  ...isobaricBasemapTheme((family) =>
+    family === "wind"
+      ? { ocean: "#0e2131", land: "#1d3849" }
+      : family === "tmp" || family === "rh"
+        ? { ocean: "#0b1826", land: "#182c3d" }
+        : { ocean: "#16344a", land: "#28495f" },
+  ),
+} as Record<ForecastBundleId, BasemapTones>;
 
 /** Protomaps' data-viz flavor for the light theme: white land, pale grey
  * water, and no landcover tinting the continents — a base that stays out of
@@ -322,7 +381,8 @@ const LIGHT_BASEMAP: Record<ForecastBundleId, BasemapTones> = {
   cref: PAPER_GROUND,
   wind10m: PAPER_GROUND,
   ...pressureBasemapTheme({ ocean: "#dcd6c8", land: "#c9c2b2" }),
-};
+  ...isobaricBasemapTheme(() => PAPER_GROUND),
+} as Record<ForecastBundleId, BasemapTones>;
 
 const BASEMAP_THEME = isDark ? DARK_BASEMAP : LIGHT_BASEMAP;
 
@@ -472,6 +532,7 @@ const statConnection = required<HTMLElement>("stat-connection");
 const variableCode = required<HTMLElement>("variable-code");
 const variableTitle = required<HTMLElement>("variable-title");
 const legend = required<HTMLElement>("legend");
+const legendBar = legend.querySelector<HTMLElement>(".legend-bar")!;
 const legendUnit = required<HTMLElement>("legend-unit");
 const legendLabels = required<HTMLElement>("legend-labels");
 const trackHorizon = required<HTMLElement>("track-horizon");
@@ -498,14 +559,21 @@ const MODEL_EYEBROW: Record<ForecastModelId, string> = {
   radar: "CMA / RADAR MOSAIC (L3 MST)",
 };
 
-/** The pressure surface to open when the rail's one pressure tile is picked:
- * whichever level was last on screen, else the first the run publishes. */
-let lastPressureVariableId: PressureBundleId | null = null;
+/** The member to open when a family's one rail tile is picked: whichever
+ * level was last on screen, else the first the run publishes — the surface
+ * member where the family has one (2 m temperature, 10 m wind, sea level
+ * pressure), the lowest isobaric surface otherwise. */
+const lastFamilyMember = new Map<IsobaricFamily, ForecastBundleId>();
 
-function preferredPressureVariable(): ForecastBundleId {
-  const available = PRESSURE_BUNDLE_IDS.filter((id) => !manifest || hasBundle(manifest, id));
-  if (lastPressureVariableId && available.includes(lastPressureVariableId)) return lastPressureVariableId;
-  return available[0] ?? "prmsl";
+function preferredFamilyMember(family: IsobaricFamily): ForecastBundleId {
+  const available = familyMembers(family).filter((id) => !manifest || hasBundle(manifest, id));
+  const last = lastFamilyMember.get(family);
+  if (last && available.includes(last)) return last;
+  return available[0] ?? familyMembers(family)[0]!;
+}
+
+function preferredPressureVariable(): PressureBundleId {
+  return preferredFamilyMember("hgt") as PressureBundleId;
 }
 
 /** The model sheet: a panel under the title on desktop, a bottom sheet on
@@ -1462,7 +1530,7 @@ function renderProbe(): void {
     else {
       // Wind's series is the speed; the direction only means anything for the
       // frame on screen, so it rides the lead-time line.
-      const direction = session.id === "wind10m"
+      const direction = isVectorBundle(session.id)
         ? probeWindDirection(series, session.variables, frameOffset(index))
         : null;
       probePanel.meta.textContent = direction === null
@@ -1791,11 +1859,13 @@ function ensureSlotGrid(slot: RasterSlot, session: VariableSession): void {
   slot.gridSource = session.metadata;
 }
 
-/** Same for the wind particle layer: adopt the wind session's grid and its
- * u/v quantization before feeding it planes. */
+/** Same for the particle layer: adopt the vector session's grid, its u/v
+ * quantization and its magnitude ceiling before feeding it planes. */
 function ensureWindGrid(session: VariableSession): void {
   if (!windLayer || windLayerGridSource === session.metadata) return;
-  windLayer.configureGrid(session.metadata);
+  const components = vectorComponents(session.id);
+  windLayer.configureGrid(session.metadata, components ?? undefined);
+  windLayer.setMaxSpeed(vectorMaxMagnitude(session.id as VectorBundleId));
   windLayerGridSource = session.metadata;
 }
 
@@ -1810,7 +1880,7 @@ function ensureWindGrid(session: VariableSession): void {
 function sessionViewportTiles(session: VariableSession): TileRect[] | null {
   if (!session.tiles || !session.streaming) return null;
   if (session.resident && session.residentScope === "bundle") return null;
-  if (session.id === "wind10m" && particlesEnabled) return null;
+  if (isVectorBundle(session.id) && particlesEnabled) return null;
   const bounds = map.getBounds();
   return viewportTileRects(session.metadata, session.tiles, {
     west: bounds.getWest(),
@@ -1889,7 +1959,7 @@ const VECTOR_PLANE_CACHE = 4;
  * u codes in red, v in green, the same packing the particle layer builds for
  * its own texture, which is what the layer's magnitude mode reads. */
 function displayPlane(session: VariableSession, index: number, planes: DecodedFrame[]): Uint8Array {
-  if (session.id !== "wind10m" || planes.length < 2) return planes[0]!.plane;
+  if (!isVectorBundle(session.id) || planes.length < 2) return planes[0]!.plane;
   const key = cacheKey(session.variables[0]!.numericId, frameOffset(index));
   const sources = planes.map((frame) => frame.plane);
   const held = vectorPlanes.get(key);
@@ -1962,7 +2032,7 @@ function trySelectFrame(index: number): boolean {
       planeCache.set(key, planes[position]!);
     }
     ensureSlotGrid(slot, session);
-    if (session.id === "wind10m") {
+    if (isVectorBundle(session.id)) {
       // One coverage box serves both channels, so it has to be a box both
       // planes hold: their own tiles when the pair agrees, and the view's
       // otherwise — cachedFrame has already proved every plane covers that.
@@ -2258,6 +2328,126 @@ function updateForecastDay(frameIndex: number): void {
 function setVariableButtonsDisabled(disabled: boolean): void {
   for (const button of variableButtons) button.disabled = disabled;
   for (const button of modelButtons) button.disabled = disabled;
+  for (const button of levelRow.querySelectorAll("button")) button.disabled = disabled;
+}
+
+/** One group of the level row: the members of a family the run publishes,
+ * for one slot. */
+interface LevelGroup {
+  caption: string;
+  slot: RasterSlot["role"];
+  members: ForecastBundleId[];
+  active: ForecastBundleId;
+}
+
+/** The level row's groups for the composition on screen: the fill's family
+ * when it has more than one published member, then the lines' surfaces
+ * whenever lines are drawn. With one group the caption is the generic word;
+ * with two, each names its family. */
+function levelGroups(): LevelGroup[] {
+  if (!manifest) return [];
+  const run = manifest;
+  const groups: LevelGroup[] = [];
+  const fill = composition.fill;
+  const fillFamily = fill === null ? null : familyOf(fill);
+  if (fill !== null && fillFamily !== null) {
+    const members = familyMembers(fillFamily).filter((id) => hasBundle(run, id));
+    if (members.length > 1) groups.push({ caption: FAMILIES[fillFamily].code, slot: "fill", members, active: fill });
+  }
+  if (composition.lines !== null) {
+    const members = PRESSURE_BUNDLE_IDS.filter((id) => hasBundle(run, id));
+    groups.push({
+      caption: groups.length > 0 ? t("linesCaption") : t("levelCaption"),
+      slot: "lines",
+      members,
+      active: composition.lines,
+    });
+  }
+  if (groups.length === 1) groups[0]!.caption = t("levelCaption");
+  return groups;
+}
+
+/** The visually hidden name of one level button: the instrument code and its
+ * gloss, the same shape the rail tiles carry. */
+function levelButtonName(id: ForecastBundleId): [string, string] {
+  if (isPressureBundle(id)) {
+    return id === "prmsl" ? ["MSLP", t("varPressure")] : [`${bundleLevel(id)}MB`, t("varHeight")];
+  }
+  const family = familyOf(id);
+  if (family !== null && bundleLevel(id) === null) {
+    return [`${FAMILIES[family].code} ${FAMILIES[family].surfaceCode}`, t(FAMILIES[family].glossKey)];
+  }
+  return [isobaricCode(id), familyLabel(id)];
+}
+
+/** Rebuild the level row for the composition on screen. The buttons are
+ * generated from the manifest rather than written out: every family has
+ * eight surfaces, and a run publishes a few of each. */
+function renderLevelRow(): void {
+  const groups = levelGroups();
+  levelRow.hidden = groups.length === 0;
+  levelRow.replaceChildren();
+  for (const group of groups) {
+    const container = document.createElement("div");
+    container.className = "level-group";
+    container.dataset.slot = group.slot;
+    const caption = document.createElement("span");
+    caption.className = "level-caption";
+    caption.textContent = group.caption;
+    container.append(caption);
+    for (const id of group.members) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.dataset.variable = id;
+      button.dataset.level = "";
+      button.dataset.slot = group.slot;
+      button.disabled = switchingVariable;
+      button.setAttribute("aria-pressed", String(id === group.active));
+      const glyph = document.createElement("b");
+      glyph.setAttribute("aria-hidden", "true");
+      glyph.textContent = levelCode(id);
+      const name = document.createElement("span");
+      name.className = "rail-name";
+      const [code, gloss] = levelButtonName(id);
+      const codeSpan = document.createElement("span");
+      codeSpan.textContent = code;
+      const glossSmall = document.createElement("small");
+      glossSmall.textContent = gloss;
+      name.append(codeSpan, " ", glossSmall);
+      button.append(glyph, name);
+      button.addEventListener("click", () => {
+        // A level changes its own slot: the fill's family member, or the
+        // lines wherever they are — the view, or the chart over a field.
+        if (group.slot === "lines") {
+          if (isPressureBundle(id)) void activateComposition({ ...composition, lines: id });
+        } else {
+          void activateComposition({ fill: id, lines: composition.lines });
+        }
+      });
+      container.append(button);
+    }
+    levelRow.append(container);
+  }
+}
+
+/** The legend bar's gradient for a field whose key is not in the stylesheet:
+ * the isobaric fills read theirs off the palette they are drawn with, over
+ * the range the legend's ticks span. */
+function legendGradientFor(session: VariableSession): string {
+  if (!(ISOBARIC_FILL_IDS as readonly string[]).includes(session.id)) return "";
+  if (isVectorBundle(session.id)) return legendGradient(vectorPalette(session.id));
+  const variable = session.variable;
+  if (variable.quantization.type !== "linear") return "";
+  const { offset, scale, maximumCode } = variable.quantization;
+  const level = bundleLevel(session.id);
+  let from = 0;
+  let to = maximumCode;
+  if (level !== null && session.id.startsWith("tmp")) {
+    const [low, high] = temperatureLegendRange(level);
+    from = Math.max(0, Math.round((low - offset) / scale));
+    to = Math.min(maximumCode, Math.round((high - offset) / scale));
+  }
+  return legendGradient(buildPalette(variable), from, to);
 }
 
 function updateModelPresentation(): void {
@@ -2289,19 +2479,26 @@ function updateVariablePresentation(session: VariableSession): void {
     span.textContent = label;
     return span;
   }));
-  // The level row is the pressure family's own switch, shown whenever a
-  // surface is on screen — alone or as lines over a field; the rail's one
-  // pressure tile stands for the lines-alone view.
+  legendBar.style.background = legendGradientFor(session);
+  // Each family remembers the member last on screen, so its rail tile
+  // reopens it.
   const lines = composition.lines;
-  if (lines !== null) lastPressureVariableId = lines;
-  levelRow.hidden = lines === null;
-  // The particle overlay belongs to one layer, so its switch appears with it.
-  particlesToggle.hidden = session.id !== "wind10m";
+  if (lines !== null) lastFamilyMember.set("hgt", lines);
+  const fillFamily = composition.fill === null ? null : familyOf(composition.fill);
+  if (composition.fill !== null && fillFamily !== null) lastFamilyMember.set(fillFamily, composition.fill);
+  // The level row: the fill's surfaces when its family has several, and the
+  // lines' whenever a surface is drawn — alone or over a field; the rail's
+  // one pressure tile stands for the lines-alone view.
+  renderLevelRow();
+  // The particle overlay belongs to the vector fields, so its switch appears
+  // with them.
+  particlesToggle.hidden = !isVectorBundle(session.id);
   for (const button of variableButtons) {
-    const pressed = button.dataset.level !== undefined
-      ? button.dataset.variable === lines
-      : button.dataset.group === "pressure"
-        ? pressure
+    const family = button.dataset.family as IsobaricFamily | undefined;
+    const pressed = button.dataset.group === "pressure"
+      ? pressure
+      : family !== undefined
+        ? fillFamily === family
         : button.dataset.variable === composition.fill;
     button.setAttribute("aria-pressed", String(pressed));
   }
@@ -2636,7 +2833,7 @@ function loadVariable(
     // active; only the run cycle above must agree.
     // The wind bundle carries the u/v pair; every scalar bundle carries
     // exactly its own variable.
-    const wantedIds = variableId === "wind10m" ? WIND_COMPONENT_IDS : [variableId];
+    const wantedIds = vectorComponents(variableId) ?? [variableId];
     const sessionVariables = wantedIds.map((wanted) => {
       const found = bundleMetadata.variables.find((item) => item.id === wanted);
       if (!found) throw new Error(t("bundleMissingVariable", { id: wanted }));
@@ -3028,14 +3225,14 @@ function detachSlot(slot: RasterSlot): void {
 function configureSlotLayer(slot: RasterSlot, session: VariableSession, overlay: boolean): void {
   slot.session = session;
   const { layer } = slot;
-  if (session.id === "wind10m") {
-    // Wind is a filled field like every other layer — the speed, colored
-    // through the same shader from the u/v pair in one magnitude pass — and
-    // the particles ride over it as an optional overlay.
+  if (isVectorBundle(session.id)) {
+    // A vector field is a filled field like every other layer — the
+    // magnitude, colored through the same shader from the u/v pair in one
+    // pass — and the particles ride over it as an optional overlay.
     const field = windVectorField(session);
     layer.setContours(null);
     layer.setVectorField(field);
-    layer.setPalette(buildWindFieldPalette());
+    layer.setPalette(vectorPalette(session.id));
     // Without linear codebooks on both components there is no speed to
     // color; the overlay is then the whole layer, as it used to be.
     layer.setVisible(field !== null);
@@ -3050,10 +3247,16 @@ function configureSlotLayer(slot: RasterSlot, session: VariableSession, overlay:
   }
 }
 
-/** The wind bundle's own decode for the layer's magnitude mode: each
- * component's linear codebook, plus the speed the palette tops out at. Null
- * when either component is not linearly quantized — nothing published is, and
- * a magnitude has no meaning without both. */
+/** The magnitude palette of a vector bundle: the wind ramp up to the
+ * field's own ceiling, or the vapour flux ramp. */
+function vectorPalette(id: VectorBundleId): Uint8Array {
+  return id.startsWith("qflux") ? buildVapourFluxPalette(vectorMaxMagnitude(id)) : buildWindFieldPalette(vectorMaxMagnitude(id));
+}
+
+/** A vector bundle's own decode for the layer's magnitude mode: each
+ * component's linear codebook, plus the magnitude the palette tops out at.
+ * Null when either component is not linearly quantized — nothing published
+ * is, and a magnitude has no meaning without both. */
 function windVectorField(session: VariableSession): VectorField | null {
   const [u, v] = session.variables;
   if (u?.quantization.type !== "linear" || v?.quantization.type !== "linear") return null;
@@ -3064,7 +3267,7 @@ function windVectorField(session: VariableSession): VectorField | null {
     offset: [u.quantization.offset, v.quantization.offset],
     scale: [u.quantization.scale, v.quantization.scale],
     nodataCode: u.quantization.nodataCode,
-    maxMagnitude: WIND_SPEED_MAX,
+    maxMagnitude: vectorMaxMagnitude(session.id as VectorBundleId),
   };
 }
 
@@ -3085,7 +3288,7 @@ function setParticlesEnabled(next: boolean): void {
   }
   syncUrl();
   const session = activeSession;
-  if (session?.id !== "wind10m") return;
+  if (!session || !isVectorBundle(session.id)) return;
   if (next) {
     ensureWindLayer();
     ensureWindGrid(session);
@@ -3200,7 +3403,7 @@ function applyVariable(session: VariableSession): void {
   // The fill slot is only ever primary: with a surface as the view it goes
   // dark. The lines slot is reconciled against the composition below.
   if (slot !== slots.fill) detachSlot(slots.fill);
-  const wind = session.id === "wind10m";
+  const wind = isVectorBundle(session.id);
   if (wind && particlesEnabled) {
     ensureWindLayer();
     ensureWindGrid(session);
@@ -3438,10 +3641,13 @@ async function initialize(): Promise<void> {
     for (const button of variableButtons) {
       const bundleId = button.dataset.variable as ForecastBundleId | undefined;
       if (!bundleId || !FORECAST_BUNDLE_IDS.includes(bundleId)) continue;
+      const family = button.dataset.family as IsobaricFamily | undefined;
       button.hidden =
         button.dataset.group === "pressure"
           ? !PRESSURE_BUNDLE_IDS.some((id) => hasBundle(loadedManifest, id))
-          : !hasBundle(loadedManifest, bundleId);
+          : family !== undefined
+            ? !familyMembers(family).some((id) => hasBundle(loadedManifest, id))
+            : !hasBundle(loadedManifest, bundleId);
     }
     // A slot this run does not ship empties; a case names its own default
     // for when that leaves nothing, and a live run always carries the core
@@ -3500,14 +3706,15 @@ for (const button of variableButtons) {
   button.addEventListener("click", () => {
     const id = button.dataset.variable as ForecastBundleId | undefined;
     if (!id || !FORECAST_BUNDLE_IDS.includes(id)) return;
-    if (button.dataset.level !== undefined) {
-      // A level changes the lines wherever they are: the view, or the chart
-      // over a field.
-      if (isPressureBundle(id)) void activateComposition({ ...composition, lines: id });
-    } else if (button.dataset.group === "pressure") {
+    const family = button.dataset.family as IsobaricFamily | undefined;
+    if (button.dataset.group === "pressure") {
       // The pressure tile is the lines-alone view; from a field with lines
       // over it, this is the way out to the chart itself.
-      void activateComposition({ fill: null, lines: preferredPressureVariable() as PressureBundleId });
+      void activateComposition({ fill: null, lines: preferredPressureVariable() });
+    } else if (family !== undefined) {
+      // A family tile opens the member last on screen; the level row then
+      // moves between its surfaces. Lines over it stay.
+      void activateComposition({ fill: preferredFamilyMember(family), lines: composition.lines });
     } else {
       // A fill tile changes the field alone; lines over it stay.
       void activateComposition({ fill: id, lines: composition.lines });

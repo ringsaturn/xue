@@ -25,13 +25,14 @@ from xuebuild.binconvert import (
     build_metadata,
     encode_poster,
 )
-from xuebuild.manifest import build_bin_manifest, build_latest_pointer, iso_z
+from xuebuild.manifest import BIN_BUNDLE_VARIABLES, build_bin_manifest, build_latest_pointer, iso_z
 from xuebuild.quantize import (
     QUALITY_FLUX,
     QUALITY_PRECIPITATION,
     QUALITY_PRESSURE,
     QUALITY_TEMPERATURE,
     QUALITY_WIND,
+    PROFILES,
 )
 from xuebuild.sources import source_spec
 
@@ -105,6 +106,16 @@ def _temperature_plane(hour: int) -> np.ndarray:
     lon_grid, lat_grid = np.meshgrid(longitude, latitude)
     values = 30 * np.cos(np.radians(lat_grid)) - 10 + 8 * np.sin(np.radians(lon_grid + hour * 3))
     return QUALITY_TEMPERATURE.quantize(values.ravel())
+
+
+def _upper_temperature_plane(hour: int) -> np.ndarray:
+    """850 hPa temperature: the surface field's shape, a dozen degrees colder,
+    in the level's own codebook."""
+    longitude = np.linspace(-180, 177.5, WIDTH)
+    latitude = np.linspace(90, -90, HEIGHT)
+    lon_grid, lat_grid = np.meshgrid(longitude, latitude)
+    values = 26 * np.cos(np.radians(lat_grid)) - 22 + 6 * np.sin(np.radians(lon_grid + hour * 3))
+    return PROFILES["quality"]["tmp850"].quantize(values.ravel())
 
 
 def _precipitation_plane(hour: int) -> np.ndarray:
@@ -187,10 +198,16 @@ def prepare_web_fixture() -> Path:
     # inside the run directory (bundle paths are manifest-relative) and the
     # mutable latest.json pointer at the data root names it.
     bundles = []
-    first_planes = {"tmp2m": _temperature_plane(HOURS[0]), "prate": _precipitation_plane(HOURS[0])}
-    plane_builders = {"tmp2m": _temperature_plane, "prate": _precipitation_plane}
+    # tmp850 is one upper-air fill: the temperature family's second member,
+    # which is what puts a level row under the temperature tile.
+    first_planes = {
+        "tmp2m": _temperature_plane(HOURS[0]),
+        "prate": _precipitation_plane(HOURS[0]),
+        "tmp850": _upper_temperature_plane(HOURS[0]),
+    }
+    plane_builders = {"tmp2m": _temperature_plane, "prate": _precipitation_plane, "tmp850": _upper_temperature_plane}
     half_grid = grid.decimated()
-    for variable_id in ("tmp2m", "prate"):
+    for variable_id in ("tmp2m", "prate", "tmp850"):
         metadata = build_metadata(RUN_TIME, HOURS, grid, "quality", (variable_id,))
         bundle_path = WEB_FIXTURE_ROOT / f"{variable_id}.xue"
         planes_by_hour = {hour: {variable_id: plane_builders[variable_id](hour)} for hour in HOURS}
@@ -348,6 +365,9 @@ def prepare_web_fixture() -> Path:
         }
     )
 
+    # The manifest lists scalars before vectors in the registry's order,
+    # whatever order the fixture happened to write them in.
+    bundles.sort(key=lambda bundle: BIN_BUNDLE_VARIABLES.index(bundle["variable"]))
     manifest = build_bin_manifest(RUN_TIME, bundles=bundles)
     manifest_bytes = (json.dumps(manifest, indent=2) + "\n").encode("utf-8")
     (WEB_FIXTURE_ROOT / "manifest.json").write_bytes(manifest_bytes)

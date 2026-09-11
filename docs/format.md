@@ -297,12 +297,26 @@ Registered variable identities:
 | `cref` | 0 / 16 / 5 | 10, no value | Composite reflectivity, entire atmosphere |
 | `prmsl` | 0 / 3 / 1 | 101, no value | Mean sea level pressure, the reduction ECMWF calls `msl` (not NCEP's MSLET, 0 / 3 / 192) |
 | `hgt<level>` | 0 / 3 / 5 | 100, `<level>` hPa in Pa | Geopotential height, one variable per isobaric surface |
+| `tmp<level>` | 0 / 0 / 0 | 100, `<level>` hPa in Pa | Temperature on the isobaric surface |
+| `rh<level>` | 0 / 1 / 1 | 100, `<level>` hPa in Pa | Relative humidity on the isobaric surface |
+| `spfh<level>` | 0 / 1 / 0 | 100, `<level>` hPa in Pa | Specific humidity on the isobaric surface, quantized in g/kg |
+| `ugrd<level>` / `vgrd<level>` | 0 / 2 / 2, 0 / 2 / 3 | 100, `<level>` hPa in Pa | Wind components on the isobaric surface |
+| `uqflx<level>` / `vqflx<level>` | 0 / 1 / 250, 0 / 1 / 251 | 100, `<level>` hPa in Pa | Water vapour flux components, `q·V/g` in g·cm⁻¹·hPa⁻¹·s⁻¹ — Xue-local parameter numbers |
 
 The eight registered isobaric surfaces are 1000, 925, 850, 700, 500, 300, 250
-and 200 hPa, spelled `hgt1000` … `hgt200`. They differ only in the surface
-value, which is written in the surface's own unit — pascals — so `hgt500`
-carries `scaleFactorOfFirstFixedSurface: 0`,
+and 200 hPa, and every isobaric family is registered on all eight: `hgt1000`
+… `hgt200`, `tmp1000` … `tmp200`, and so on. Within a family the variables
+differ only in the surface value, which is written in the surface's own unit
+— pascals — so `hgt500` carries `scaleFactorOfFirstFixedSurface: 0`,
 `scaledValueOfFirstFixedSurface: 50000`.
+
+The water vapour flux is not a GRIB2 field at all: the encoder derives it on
+each surface as the specific humidity (g/kg) times the wind component (m/s)
+over standard gravity (9.80665 m/s²), the quantity a synoptic chart contours
+in g·cm⁻¹·hPa⁻¹·s⁻¹. GRIB2 has no standard parameter for a per-level
+horizontal vapour flux, so the two components take local-use numbers 250 and
+251 in the moisture category — an ordinary number in the format's terms, and
+one no centre this pipeline reads from uses.
 
 #### Time Axis
 
@@ -487,6 +501,16 @@ Registered `variableId` values:
 | 13 | `hgt300` | Geopotential height at 300 hPa |
 | 14 | `hgt250` | Geopotential height at 250 hPa |
 | 15 | `hgt200` | Geopotential height at 200 hPa |
+| 16–23 | `tmp1000` … `tmp200` | Temperature on the isobaric surfaces, in level order |
+| 24–31 | `rh1000` … `rh200` | Relative humidity on the isobaric surfaces |
+| 32–39 | `spfh1000` … `spfh200` | Specific humidity on the isobaric surfaces |
+| 40–47 | `ugrd1000` … `ugrd200` | Isobaric wind, U component |
+| 48–55 | `vgrd1000` … `vgrd200` | Isobaric wind, V component |
+| 56–63 | `uqflx1000` … `uqflx200` | Water vapour flux, U component |
+| 64–71 | `vqflx1000` … `vqflx200` | Water vapour flux, V component |
+
+Every isobaric family occupies eight consecutive ids in the level order
+1000, 925, 850, 700, 500, 300, 250, 200.
 
 Predictor enum:
 
@@ -571,10 +595,37 @@ same values unless noted):
 | `hgt300` | 7505 m | 10 | 254 | 255 | 5 m |
 | `hgt250` | 8598 m | 12 | 254 | 255 | 6 m |
 | `hgt200` | 10086 m | 12 | 254 | 255 | 6 m |
+| `tmp1000` | −60 °C | 0.5 | 240 | 255 | 0.25 °C |
+| `tmp925` | −65 °C | 0.5 | 230 | 255 | 0.25 °C |
+| `tmp850` | −70 °C | 0.5 | 230 | 255 | 0.25 °C |
+| `tmp700` | −75 °C | 0.5 | 220 | 255 | 0.25 °C |
+| `tmp500` | −85 °C | 0.5 | 200 | 255 | 0.25 °C |
+| `tmp300` | −95 °C | 0.5 | 190 | 255 | 0.25 °C |
+| `tmp250` | −100 °C | 0.5 | 190 | 255 | 0.25 °C |
+| `tmp200` | −100 °C | 0.5 | 180 | 255 | 0.25 °C |
+| `rh<level>` | 0 % | 0.5 | 200 | 255 | 0.25 % |
+| `spfh1000` / `spfh925` | 0 g/kg | 0.2 | 254 | 255 | 0.1 g/kg |
+| `spfh850` / `spfh700` | 0 g/kg | 0.1 | 254 | 255 | 0.05 g/kg |
+| `spfh500` | 0 g/kg | 0.02 | 254 | 255 | 0.01 g/kg |
+| `spfh300` | 0 g/kg | 0.01 | 254 | 255 | 0.005 g/kg |
+| `spfh250` / `spfh200` | 0 g/kg | 0.005 | 254 | 255 | 0.0025 g/kg |
+| `ugrd<level>` / `vgrd<level>` | −127 m/s | 1 | 254 | 255 | 0.5 m/s |
+| `uqflx<level>` / `vqflx<level>` | −63.5 g·cm⁻¹·hPa⁻¹·s⁻¹ | 0.5 | 254 | 255 | 0.25 |
 
 The `compact` profile doubles each `scale` (temperature 1.0 → maximumCode
 110, wind 1.0 → 127, dswrf 10 → 127, cref 1.0 → 80, and every pressure-family
-codebook → 127 over the same range).
+and isobaric codebook → half its maximumCode over the same range).
+
+The isobaric temperature takes its range per level: the low end holds the
+Antarctic winter at every surface, the high end the below-ground
+extrapolation the lowest surfaces take under high terrain, and no single
+127-degree window covers both 850 hPa in summer and 200 hPa in winter.
+Specific humidity spans two orders of magnitude between the surface and the
+upper troposphere, so its step follows the level. Relative humidity is the
+noisiest field published, so the `balanced` profile takes its `compact`
+codebook (1 %, maximumCode 100) — the one departure from quality in that
+profile besides precipitation. None of the isobaric fills is contoured, so
+none carries the half-code rule below.
 
 The pressure family's offsets are chosen so that every standard contour value
 lands exactly **half a code** off: `(contour − offset) / scale` has fractional

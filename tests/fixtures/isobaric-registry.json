@@ -1,0 +1,1626 @@
+{
+  "tmp1000": {
+    "numericId": 16,
+    "label": "1000 hPa temperature",
+    "unit": "°C",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 0,
+      "parameterNumber": 0,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 100000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": -60.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 240,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -60.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 120,
+      "nodataCode": 255
+    }
+  },
+  "rh1000": {
+    "numericId": 24,
+    "label": "1000 hPa relative humidity",
+    "unit": "%",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 1,
+      "parameterNumber": 1,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 100000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 200,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 100,
+      "nodataCode": 255
+    }
+  },
+  "spfh1000": {
+    "numericId": 32,
+    "label": "1000 hPa specific humidity",
+    "unit": "g/kg",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 1,
+      "parameterNumber": 0,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 100000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.2,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.4,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "ugrd1000": {
+    "numericId": 40,
+    "label": "1000 hPa U wind component",
+    "unit": "m/s",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 2,
+      "parameterNumber": 2,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 100000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": -127.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -127.0,
+      "scale": 2.0,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "vgrd1000": {
+    "numericId": 48,
+    "label": "1000 hPa V wind component",
+    "unit": "m/s",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 2,
+      "parameterNumber": 3,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 100000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": -127.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -127.0,
+      "scale": 2.0,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "uqflx1000": {
+    "numericId": 56,
+    "label": "1000 hPa U water vapour flux component",
+    "unit": "g/(cm·hPa·s)",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 1,
+      "parameterNumber": 250,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 100000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": -63.5,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -63.5,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "vqflx1000": {
+    "numericId": 64,
+    "label": "1000 hPa V water vapour flux component",
+    "unit": "g/(cm·hPa·s)",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 1,
+      "parameterNumber": 251,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 100000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": -63.5,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -63.5,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "tmp925": {
+    "numericId": 17,
+    "label": "925 hPa temperature",
+    "unit": "°C",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 0,
+      "parameterNumber": 0,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 92500
+    },
+    "quality": {
+      "type": "linear",
+      "offset": -65.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 230,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -65.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 115,
+      "nodataCode": 255
+    }
+  },
+  "rh925": {
+    "numericId": 25,
+    "label": "925 hPa relative humidity",
+    "unit": "%",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 1,
+      "parameterNumber": 1,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 92500
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 200,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 100,
+      "nodataCode": 255
+    }
+  },
+  "spfh925": {
+    "numericId": 33,
+    "label": "925 hPa specific humidity",
+    "unit": "g/kg",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 1,
+      "parameterNumber": 0,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 92500
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.2,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.4,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "ugrd925": {
+    "numericId": 41,
+    "label": "925 hPa U wind component",
+    "unit": "m/s",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 2,
+      "parameterNumber": 2,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 92500
+    },
+    "quality": {
+      "type": "linear",
+      "offset": -127.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -127.0,
+      "scale": 2.0,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "vgrd925": {
+    "numericId": 49,
+    "label": "925 hPa V wind component",
+    "unit": "m/s",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 2,
+      "parameterNumber": 3,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 92500
+    },
+    "quality": {
+      "type": "linear",
+      "offset": -127.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -127.0,
+      "scale": 2.0,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "uqflx925": {
+    "numericId": 57,
+    "label": "925 hPa U water vapour flux component",
+    "unit": "g/(cm·hPa·s)",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 1,
+      "parameterNumber": 250,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 92500
+    },
+    "quality": {
+      "type": "linear",
+      "offset": -63.5,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -63.5,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "vqflx925": {
+    "numericId": 65,
+    "label": "925 hPa V water vapour flux component",
+    "unit": "g/(cm·hPa·s)",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 1,
+      "parameterNumber": 251,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 92500
+    },
+    "quality": {
+      "type": "linear",
+      "offset": -63.5,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -63.5,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "tmp850": {
+    "numericId": 18,
+    "label": "850 hPa temperature",
+    "unit": "°C",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 0,
+      "parameterNumber": 0,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 85000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": -70.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 230,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -70.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 115,
+      "nodataCode": 255
+    }
+  },
+  "rh850": {
+    "numericId": 26,
+    "label": "850 hPa relative humidity",
+    "unit": "%",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 1,
+      "parameterNumber": 1,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 85000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 200,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 100,
+      "nodataCode": 255
+    }
+  },
+  "spfh850": {
+    "numericId": 34,
+    "label": "850 hPa specific humidity",
+    "unit": "g/kg",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 1,
+      "parameterNumber": 0,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 85000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.1,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.2,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "ugrd850": {
+    "numericId": 42,
+    "label": "850 hPa U wind component",
+    "unit": "m/s",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 2,
+      "parameterNumber": 2,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 85000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": -127.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -127.0,
+      "scale": 2.0,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "vgrd850": {
+    "numericId": 50,
+    "label": "850 hPa V wind component",
+    "unit": "m/s",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 2,
+      "parameterNumber": 3,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 85000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": -127.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -127.0,
+      "scale": 2.0,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "uqflx850": {
+    "numericId": 58,
+    "label": "850 hPa U water vapour flux component",
+    "unit": "g/(cm·hPa·s)",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 1,
+      "parameterNumber": 250,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 85000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": -63.5,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -63.5,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "vqflx850": {
+    "numericId": 66,
+    "label": "850 hPa V water vapour flux component",
+    "unit": "g/(cm·hPa·s)",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 1,
+      "parameterNumber": 251,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 85000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": -63.5,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -63.5,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "tmp700": {
+    "numericId": 19,
+    "label": "700 hPa temperature",
+    "unit": "°C",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 0,
+      "parameterNumber": 0,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 70000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": -75.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 220,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -75.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 110,
+      "nodataCode": 255
+    }
+  },
+  "rh700": {
+    "numericId": 27,
+    "label": "700 hPa relative humidity",
+    "unit": "%",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 1,
+      "parameterNumber": 1,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 70000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 200,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 100,
+      "nodataCode": 255
+    }
+  },
+  "spfh700": {
+    "numericId": 35,
+    "label": "700 hPa specific humidity",
+    "unit": "g/kg",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 1,
+      "parameterNumber": 0,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 70000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.1,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.2,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "ugrd700": {
+    "numericId": 43,
+    "label": "700 hPa U wind component",
+    "unit": "m/s",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 2,
+      "parameterNumber": 2,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 70000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": -127.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -127.0,
+      "scale": 2.0,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "vgrd700": {
+    "numericId": 51,
+    "label": "700 hPa V wind component",
+    "unit": "m/s",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 2,
+      "parameterNumber": 3,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 70000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": -127.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -127.0,
+      "scale": 2.0,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "uqflx700": {
+    "numericId": 59,
+    "label": "700 hPa U water vapour flux component",
+    "unit": "g/(cm·hPa·s)",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 1,
+      "parameterNumber": 250,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 70000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": -63.5,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -63.5,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "vqflx700": {
+    "numericId": 67,
+    "label": "700 hPa V water vapour flux component",
+    "unit": "g/(cm·hPa·s)",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 1,
+      "parameterNumber": 251,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 70000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": -63.5,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -63.5,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "tmp500": {
+    "numericId": 20,
+    "label": "500 hPa temperature",
+    "unit": "°C",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 0,
+      "parameterNumber": 0,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 50000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": -85.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 200,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -85.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 100,
+      "nodataCode": 255
+    }
+  },
+  "rh500": {
+    "numericId": 28,
+    "label": "500 hPa relative humidity",
+    "unit": "%",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 1,
+      "parameterNumber": 1,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 50000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 200,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 100,
+      "nodataCode": 255
+    }
+  },
+  "spfh500": {
+    "numericId": 36,
+    "label": "500 hPa specific humidity",
+    "unit": "g/kg",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 1,
+      "parameterNumber": 0,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 50000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.02,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.04,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "ugrd500": {
+    "numericId": 44,
+    "label": "500 hPa U wind component",
+    "unit": "m/s",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 2,
+      "parameterNumber": 2,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 50000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": -127.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -127.0,
+      "scale": 2.0,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "vgrd500": {
+    "numericId": 52,
+    "label": "500 hPa V wind component",
+    "unit": "m/s",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 2,
+      "parameterNumber": 3,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 50000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": -127.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -127.0,
+      "scale": 2.0,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "uqflx500": {
+    "numericId": 60,
+    "label": "500 hPa U water vapour flux component",
+    "unit": "g/(cm·hPa·s)",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 1,
+      "parameterNumber": 250,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 50000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": -63.5,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -63.5,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "vqflx500": {
+    "numericId": 68,
+    "label": "500 hPa V water vapour flux component",
+    "unit": "g/(cm·hPa·s)",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 1,
+      "parameterNumber": 251,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 50000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": -63.5,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -63.5,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "tmp300": {
+    "numericId": 21,
+    "label": "300 hPa temperature",
+    "unit": "°C",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 0,
+      "parameterNumber": 0,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 30000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": -95.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 190,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -95.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 95,
+      "nodataCode": 255
+    }
+  },
+  "rh300": {
+    "numericId": 29,
+    "label": "300 hPa relative humidity",
+    "unit": "%",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 1,
+      "parameterNumber": 1,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 30000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 200,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 100,
+      "nodataCode": 255
+    }
+  },
+  "spfh300": {
+    "numericId": 37,
+    "label": "300 hPa specific humidity",
+    "unit": "g/kg",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 1,
+      "parameterNumber": 0,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 30000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.01,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.02,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "ugrd300": {
+    "numericId": 45,
+    "label": "300 hPa U wind component",
+    "unit": "m/s",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 2,
+      "parameterNumber": 2,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 30000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": -127.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -127.0,
+      "scale": 2.0,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "vgrd300": {
+    "numericId": 53,
+    "label": "300 hPa V wind component",
+    "unit": "m/s",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 2,
+      "parameterNumber": 3,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 30000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": -127.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -127.0,
+      "scale": 2.0,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "uqflx300": {
+    "numericId": 61,
+    "label": "300 hPa U water vapour flux component",
+    "unit": "g/(cm·hPa·s)",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 1,
+      "parameterNumber": 250,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 30000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": -63.5,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -63.5,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "vqflx300": {
+    "numericId": 69,
+    "label": "300 hPa V water vapour flux component",
+    "unit": "g/(cm·hPa·s)",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 1,
+      "parameterNumber": 251,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 30000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": -63.5,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -63.5,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "tmp250": {
+    "numericId": 22,
+    "label": "250 hPa temperature",
+    "unit": "°C",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 0,
+      "parameterNumber": 0,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 25000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": -100.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 190,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -100.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 95,
+      "nodataCode": 255
+    }
+  },
+  "rh250": {
+    "numericId": 30,
+    "label": "250 hPa relative humidity",
+    "unit": "%",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 1,
+      "parameterNumber": 1,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 25000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 200,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 100,
+      "nodataCode": 255
+    }
+  },
+  "spfh250": {
+    "numericId": 38,
+    "label": "250 hPa specific humidity",
+    "unit": "g/kg",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 1,
+      "parameterNumber": 0,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 25000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.005,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.01,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "ugrd250": {
+    "numericId": 46,
+    "label": "250 hPa U wind component",
+    "unit": "m/s",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 2,
+      "parameterNumber": 2,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 25000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": -127.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -127.0,
+      "scale": 2.0,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "vgrd250": {
+    "numericId": 54,
+    "label": "250 hPa V wind component",
+    "unit": "m/s",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 2,
+      "parameterNumber": 3,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 25000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": -127.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -127.0,
+      "scale": 2.0,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "uqflx250": {
+    "numericId": 62,
+    "label": "250 hPa U water vapour flux component",
+    "unit": "g/(cm·hPa·s)",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 1,
+      "parameterNumber": 250,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 25000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": -63.5,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -63.5,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "vqflx250": {
+    "numericId": 70,
+    "label": "250 hPa V water vapour flux component",
+    "unit": "g/(cm·hPa·s)",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 1,
+      "parameterNumber": 251,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 25000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": -63.5,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -63.5,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "tmp200": {
+    "numericId": 23,
+    "label": "200 hPa temperature",
+    "unit": "°C",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 0,
+      "parameterNumber": 0,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 20000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": -100.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 180,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -100.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 90,
+      "nodataCode": 255
+    }
+  },
+  "rh200": {
+    "numericId": 31,
+    "label": "200 hPa relative humidity",
+    "unit": "%",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 1,
+      "parameterNumber": 1,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 20000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 200,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 100,
+      "nodataCode": 255
+    }
+  },
+  "spfh200": {
+    "numericId": 39,
+    "label": "200 hPa specific humidity",
+    "unit": "g/kg",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 1,
+      "parameterNumber": 0,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 20000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.005,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.01,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "ugrd200": {
+    "numericId": 47,
+    "label": "200 hPa U wind component",
+    "unit": "m/s",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 2,
+      "parameterNumber": 2,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 20000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": -127.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -127.0,
+      "scale": 2.0,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "vgrd200": {
+    "numericId": 55,
+    "label": "200 hPa V wind component",
+    "unit": "m/s",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 2,
+      "parameterNumber": 3,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 20000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": -127.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -127.0,
+      "scale": 2.0,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "uqflx200": {
+    "numericId": 63,
+    "label": "200 hPa U water vapour flux component",
+    "unit": "g/(cm·hPa·s)",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 1,
+      "parameterNumber": 250,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 20000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": -63.5,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -63.5,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "vqflx200": {
+    "numericId": 71,
+    "label": "200 hPa V water vapour flux component",
+    "unit": "g/(cm·hPa·s)",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 1,
+      "parameterNumber": 251,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 20000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": -63.5,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -63.5,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  }
+}

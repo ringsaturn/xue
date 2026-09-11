@@ -17,6 +17,7 @@ use time::OffsetDateTime;
 use crate::encode::binformat::{self, ChunkPayload, ChunkTables, HOUR_SECONDS};
 use crate::format::{ChunkEntry, Predictor, TileGeometry, VariableEntry, NO_DEPENDENCY};
 use crate::encode::errors::{EncodeError, Result};
+use crate::encode::variables::{isobaric_variable, ISOBARIC_LEVELS_HPA, STANDARD_GRAVITY};
 use crate::encode::gdalio::{needs_serial_access, netcdf_guard, Dataset};
 use crate::encode::grid::{crop_grid, normalize_longitudes, GridInfo};
 use crate::encode::gribindex::inspect_grib_fast;
@@ -34,9 +35,47 @@ use crate::encode::variables::numeric_id;
 
 /// Scalar variables ship one single-variable bundle each; the two wind
 /// components ship together in one two-variable bundle for the GPU particle
-/// layer.
+/// layer — as does the wind on each isobaric surface, and the water vapour
+/// flux the converter derives there. Mirrors `VECTOR_BUNDLES` in
+/// `xuebuild/binconvert.py`.
 pub const WIND_COMPONENT_IDS: [&str; 2] = ["ugrd10m", "vgrd10m"];
 pub const WIND_BUNDLE_ID: &str = "wind10m";
+
+/// The two component variables of a vector bundle, or `None` for a scalar.
+pub fn vector_components(bundle_id: &str) -> Option<(String, String)> {
+    if bundle_id == WIND_BUNDLE_ID {
+        return Some((WIND_COMPONENT_IDS[0].into(), WIND_COMPONENT_IDS[1].into()));
+    }
+    for (prefix, u, v) in [("wind", "ugrd", "vgrd"), ("qflux", "uqflx", "vqflx")] {
+        if let Some(level) = bundle_id.strip_prefix(prefix) {
+            if let Ok(level) = level.parse::<u32>() {
+                if ISOBARIC_LEVELS_HPA.contains(&level) {
+                    return Some((format!("{u}{level}"), format!("{v}{level}")));
+                }
+            }
+        }
+    }
+    None
+}
+
+/// The isobaric surface of a `qflux<level>` bundle, or `None`.
+pub fn vapour_flux_level(bundle_id: &str) -> Option<u32> {
+    let level: u32 = bundle_id.strip_prefix("qflux")?.parse().ok()?;
+    ISOBARIC_LEVELS_HPA.contains(&level).then_some(level)
+}
+
+/// The source inputs one vector bundle is built from: a wind pair is its own
+/// two components; a vapour flux pair is derived from the specific humidity
+/// and both wind components on the same surface.
+pub fn vector_input_ids(bundle_id: &str) -> Vec<String> {
+    if let Some(level) = vapour_flux_level(bundle_id) {
+        return vec![format!("spfh{level}"), format!("ugrd{level}"), format!("vgrd{level}")];
+    }
+    match vector_components(bundle_id) {
+        Some((u, v)) => vec![u, v],
+        None => vec![bundle_id.to_string()],
+    }
+}
 /// Linear-codebook fields are smooth enough for the six-frame ANCHOR groups;
 /// precipitation stays independent RAW planes.
 /// Precipitation and radar reflectivity move with weather systems, so
@@ -181,9 +220,9 @@ pub fn discover_inputs(inputs: &[PathBuf]) -> Result<Vec<PathBuf>> {
 /// Every source names its precipitation input differently (GFS `prate`, ECMWF
 /// `tp`, sflux `prate_ave`), so the prate bundle's input is resolved off the
 /// source's own list rather than hard-coded per model.
-pub fn bundle_input_ids<'a>(source: &SourceSpec, bundle_id: &'a str) -> Vec<&'a str> {
-    if bundle_id == WIND_BUNDLE_ID {
-        return WIND_COMPONENT_IDS.to_vec();
+pub fn bundle_input_ids(source: &SourceSpec, bundle_id: &str) -> Vec<String> {
+    if vector_components(bundle_id).is_some() {
+        return vector_input_ids(bundle_id);
     }
     if bundle_id == "prate" {
         return source
@@ -192,19 +231,24 @@ pub fn bundle_input_ids<'a>(source: &SourceSpec, bundle_id: &'a str) -> Vec<&'a 
             .copied()
             .filter(|id| PRECIPITATION_INPUT_IDS.contains(id))
             .take(1)
+            .map(str::to_string)
             .collect();
     }
-    vec![bundle_id]
+    vec![bundle_id.to_string()]
 }
 
-/// Every bundle a source can publish, in manifest order.
+/// Every bundle a source can publish, in manifest order: its scalars, then
+/// each listed vector bundle whose inputs the source fetches.
 pub fn published_bundle_ids(source: &SourceSpec) -> Vec<&'static str> {
-    let wind = WIND_COMPONENT_IDS
-        .iter()
-        .all(|id| source.input_variable_ids.contains(id));
     let mut ids: Vec<&'static str> = source.bundle_scalar_ids.to_vec();
-    if wind {
-        ids.push(WIND_BUNDLE_ID);
+    for bundle_id in source.bundle_vector_ids {
+        let inputs = vector_input_ids(bundle_id);
+        if inputs
+            .iter()
+            .all(|id| source.input_variable_ids.contains(&id.as_str()))
+        {
+            ids.push(bundle_id);
+        }
     }
     ids
 }
@@ -344,11 +388,45 @@ fn convert_units(variable_id: &str, unit: &str, values: &mut [f64]) -> Result<()
         // GRIB2 carries mean sea level pressure in pascals; the codebook
         // quantizes hectopascals.
         "prmsl" => values.iter_mut().for_each(|value| *value /= 100.0),
-        // Wind components and geopotential heights are already in their
-        // output units (m/s, m).
-        _ => {}
+        other => match isobaric_variable(other) {
+            // Isobaric temperature follows the 2 m rule.
+            Some(("tmp", _)) => match normalize_unit(unit)? {
+                "K" => values.iter_mut().for_each(|value| *value -= 273.15),
+                "F" => values
+                    .iter_mut()
+                    .for_each(|value| *value = (*value - 32.0) * 5.0 / 9.0),
+                _ => {}
+            },
+            // GRIB2 carries specific humidity as a mass ratio (kg/kg); the
+            // codebook quantizes g/kg.
+            Some(("spfh", _)) => values.iter_mut().for_each(|value| *value *= 1000.0),
+            // Wind components, geopotential heights and relative humidity
+            // are already in their output units (m/s, m, %).
+            _ => {}
+        },
     }
     Ok(())
+}
+
+/// The water vapour flux components on one isobaric surface, q·V/g in
+/// g·cm⁻¹·hPa⁻¹·s⁻¹, from the specific humidity already in g/kg and the wind
+/// in m/s there. One multiplication then one division per component, in this
+/// order, in f64 — exactly what `derive_vapour_flux` in
+/// `xuebuild/binconvert.py` does, so the two encoders stay byte-identical on
+/// a field neither reads from a record.
+pub fn derive_vapour_flux(
+    specific_humidity: &[f64],
+    u_wind: &[f64],
+    v_wind: &[f64],
+) -> (Vec<f64>, Vec<f64>) {
+    let flux = |wind: &[f64]| -> Vec<f64> {
+        specific_humidity
+            .iter()
+            .zip(wind)
+            .map(|(q, w)| q * w / STANDARD_GRAVITY)
+            .collect()
+    };
+    (flux(u_wind), flux(v_wind))
 }
 
 /// Extract every requested band of one file, as float64 planes in physical
@@ -457,6 +535,8 @@ fn quantize_file(
     average_window_hours: i64,
     previous: Option<(i64, Arc<PlaneSlot>)>,
     own: Option<Arc<PlaneSlot>>,
+    derived_vector_ids: &[&str],
+    drop_ids: &[String],
 ) -> Result<QuantizedFile> {
     let lead = frames[0].1.lead_seconds;
     // The precipitation derivations below are GRIB-only, and every GRIB record
@@ -520,6 +600,26 @@ fn quantize_file(
         };
         values.insert(position, ("prate".to_string(), derived));
     }
+
+    // The vapour flux bundles, derived from the planes just extracted; the
+    // inputs that served only such a derivation (and are not published
+    // themselves) are released here rather than quantized and carried
+    // through the whole run.
+    for bundle_id in derived_vector_ids {
+        let inputs = vector_input_ids(bundle_id);
+        let plane = |name: &str| -> Result<&Vec<f64>> {
+            values
+                .iter()
+                .find(|(id, _)| id == name)
+                .map(|(_, plane)| plane)
+                .ok_or_else(|| EncodeError::conversion(format!("missing {name} plane for {bundle_id}")))
+        };
+        let (flux_u, flux_v) = derive_vapour_flux(plane(&inputs[0])?, plane(&inputs[1])?, plane(&inputs[2])?);
+        let (u_id, v_id) = vector_components(bundle_id).expect("a vapour flux bundle is a vector");
+        values.push((u_id, flux_u));
+        values.push((v_id, flux_v));
+    }
+    values.retain(|(name, _)| !drop_ids.contains(name));
 
     let mut codes = Vec::with_capacity(values.len());
     let mut stats = Vec::with_capacity(values.len());
@@ -843,7 +943,8 @@ pub fn convert_bin(
     // -- frame discovery ----------------------------------------------------
     let mut per_file: Vec<FileFrames>;
     let variable_ids: Vec<String>;
-    let wind_available: bool;
+    let available_vector_ids: Vec<&'static str>;
+    let drop_ids: Vec<String>;
     let grid_path: PathBuf;
     let plane_source: PlaneSource;
 
@@ -888,70 +989,113 @@ pub fn convert_bin(
             .iter()
             .map(|id| (*id).to_string())
             .collect();
-        wind_available = false;
+        available_vector_ids = Vec::new();
+        drop_ids = Vec::new();
         grid_path = series.dataset;
         plane_source = series.plane_source;
     } else {
         let paths = discover_inputs(inputs)?;
-        // One real GDAL inspection pass over the first file: it probes wind
-        // availability (wind is optional, so runs fetched before the wind
-        // components joined the download set still build cleanly) and serves
-        // as the per-run cross-check reference for the GRIB2 header index used
-        // on every file.
+        // One real GDAL inspection pass over the first file: it probes which
+        // vector bundles can be built (their inputs are optional, so runs
+        // fetched before the wind components joined the download set still
+        // build cleanly) and serves as the per-run cross-check reference for
+        // the GRIB2 header index used on every file.
         let mut inspect_ids: Vec<&str> = source.input_variable_ids.to_vec();
         if let Some(bundle_ids) = &options.bundle_ids {
-            let needed: Vec<&str> = bundle_ids
+            let needed: Vec<String> = bundle_ids
                 .iter()
                 .flat_map(|bundle_id| bundle_input_ids(source, bundle_id))
                 .collect();
-            inspect_ids.retain(|id| needed.contains(id));
+            inspect_ids.retain(|id| needed.iter().any(|needed| needed == id));
         }
-        let mut optional: Vec<&str> = source.optional_at_analysis.to_vec();
-        optional.extend_from_slice(&WIND_COMPONENT_IDS);
-        let reference_frames = inspect_grib_multi(&paths[0], &inspect_ids, &optional)?;
-
-        let wind_requested = options
-            .bundle_ids
-            .as_ref()
-            .is_none_or(|ids| ids.iter().any(|id| id == WIND_BUNDLE_ID));
-        wind_available = wind_requested
-            && WIND_COMPONENT_IDS
-                .iter()
-                .all(|id| reference_frames.iter().any(|(name, _)| name == id));
-        if wind_requested && !wind_available {
-            eprintln!(
-                "WARNING building without the wind10m bundle, 10 m wind components are not in {}",
-                paths[0].display()
-            );
-        }
-
-        // The variables read from the GRIB inputs; ECMWF carries the
-        // accumulated tp instead of a rate and sflux the window-averaged
-        // prate_ave, which the per-file stage derives into prate.
-        let mut ordered: Vec<&str> = inspect_ids
+        let requested_vector_ids: Vec<&'static str> = published
             .iter()
             .copied()
-            .filter(|id| !WIND_COMPONENT_IDS.contains(id))
+            .filter(|id| vector_components(id).is_some())
+            .filter(|id| {
+                options
+                    .bundle_ids
+                    .as_ref()
+                    .is_none_or(|ids| ids.iter().any(|wanted| wanted == id))
+            })
             .collect();
-        if wind_available {
-            ordered.extend_from_slice(&WIND_COMPONENT_IDS);
+        // An input that only feeds a vector bundle may be absent; one that is
+        // also a published scalar may not.
+        let vector_only_ids: Vec<String> = requested_vector_ids
+            .iter()
+            .flat_map(|bundle_id| vector_input_ids(bundle_id))
+            .filter(|id| !source.bundle_scalar_ids.contains(&id.as_str()))
+            .collect();
+        let mut optional: Vec<&str> = source.optional_at_analysis.to_vec();
+        optional.extend(vector_only_ids.iter().map(String::as_str));
+        let reference_frames = inspect_grib_multi(&paths[0], &inspect_ids, &optional)?;
+
+        available_vector_ids = requested_vector_ids
+            .iter()
+            .copied()
+            .filter(|bundle_id| {
+                vector_input_ids(bundle_id)
+                    .iter()
+                    .all(|id| reference_frames.iter().any(|(name, _)| name == id))
+            })
+            .collect();
+        for bundle_id in &requested_vector_ids {
+            if !available_vector_ids.contains(bundle_id) {
+                eprintln!(
+                    "WARNING building without the {bundle_id} bundle, {} are not all in {}",
+                    vector_input_ids(bundle_id).join(", "),
+                    paths[0].display()
+                );
+            }
         }
+
+        // The variables read from the GRIB inputs: every scalar input (ECMWF
+        // carries the accumulated tp instead of a rate and sflux the
+        // window-averaged prate_ave, which the per-file stage derives into
+        // prate), plus the inputs of each vector bundle that can be built.
+        let mut ordered: Vec<String> = inspect_ids
+            .iter()
+            .filter(|id| !vector_only_ids.iter().any(|only| only == *id))
+            .map(|id| (*id).to_string())
+            .collect();
+        let scalar_count = ordered.len();
+        for bundle_id in &available_vector_ids {
+            for id in vector_input_ids(bundle_id) {
+                if !ordered.contains(&id) {
+                    ordered.push(id);
+                }
+            }
+        }
+        // The inputs that only serve a derivation (spfh850 under the vapour
+        // flux) are released once it is done, rather than quantized and held
+        // for the whole run.
+        let components: Vec<String> = available_vector_ids
+            .iter()
+            .filter_map(|bundle_id| vector_components(bundle_id))
+            .flat_map(|(u, v)| [u, v])
+            .collect();
+        drop_ids = ordered[scalar_count..]
+            .iter()
+            .filter(|id| !components.contains(id))
+            .cloned()
+            .collect();
         // The first variable is the run's reference: every file is keyed by
         // its forecast hour, so it must be one no file can lack. Stable-sorting
         // the analysis-optional inputs to the back is enough unless nothing
         // else was asked for.
-        ordered.sort_by_key(|id| source.optional_at_analysis.contains(id));
-        if ordered.is_empty() || source.optional_at_analysis.contains(&ordered[0]) {
+        ordered.sort_by_key(|id| source.optional_at_analysis.contains(&id.as_str()));
+        if ordered.is_empty() || source.optional_at_analysis.contains(&ordered[0].as_str()) {
             return Err(EncodeError::conversion(format!(
                 "a {} build needs at least one variable present in every file, including the \
                  analysis; {ordered:?} is not enough",
                 source.manifest_model
             )));
         }
-        variable_ids = ordered.iter().map(|id| (*id).to_string()).collect();
+        variable_ids = ordered;
+        let ordered_refs: Vec<&str> = variable_ids.iter().map(String::as_str).collect();
         per_file = prepare_frames_all(
             &paths,
-            &ordered,
+            &ordered_refs,
             source.optional_at_analysis,
             &reference_frames,
             options,
@@ -1043,6 +1187,11 @@ pub fn convert_bin(
         .find(|id| variable_ids.iter().any(|name| name == *id))
         .copied();
     let plan = sharing_plan(&per_file, raw_precipitation_id, source)?;
+    let derived_vector_ids: Vec<&str> = available_vector_ids
+        .iter()
+        .copied()
+        .filter(|bundle_id| vapour_flux_level(bundle_id).is_some())
+        .collect();
     let results = for_each_ordered(per_file.len(), options.extract_workers, |index| {
         let (previous, own) = plan[index].clone();
         quantize_file(
@@ -1053,6 +1202,8 @@ pub fn convert_bin(
             source.average_window_hours,
             previous,
             own,
+            &derived_vector_ids,
+            &drop_ids,
         )
     })?;
 
@@ -1073,9 +1224,12 @@ pub fn convert_bin(
     if let Some(bundle_ids) = &options.bundle_ids {
         scalar_variable_ids.retain(|id| bundle_ids.iter().any(|wanted| wanted == id));
     }
-    let mut encoded_variable_ids: Vec<&str> = scalar_variable_ids.clone();
-    if wind_available {
-        encoded_variable_ids.extend_from_slice(&WIND_COMPONENT_IDS);
+    let mut encoded_variable_ids: Vec<String> =
+        scalar_variable_ids.iter().map(|id| (*id).to_string()).collect();
+    for bundle_id in &available_vector_ids {
+        let (u, v) = vector_components(bundle_id).expect("a vector bundle");
+        encoded_variable_ids.push(u);
+        encoded_variable_ids.push(v);
     }
     // Scalars that also ship a poster — every published scalar but the
     // contour-drawn pressure family, which a filled first-frame poster would
@@ -1091,15 +1245,15 @@ pub fn convert_bin(
     // data for the analysis frame — its interval would precede the run — so
     // the prate series starts at the first real step and every prate artifact
     // carries its own shorter axis.
-    let mut variable_offsets: BTreeMap<&str, Vec<i64>> = encoded_variable_ids
+    let mut variable_offsets: BTreeMap<String, Vec<i64>> = encoded_variable_ids
         .iter()
-        .map(|id| (*id, offsets.clone()))
+        .map(|id| (id.clone(), offsets.clone()))
         .collect();
-    if encoded_variable_ids.contains(&"prate")
+    if encoded_variable_ids.iter().any(|id| id == "prate")
         && (source.accumulated_precipitation || source.averaged_precipitation)
         && offsets.len() > 1
     {
-        variable_offsets.insert("prate", offsets[1..].to_vec());
+        variable_offsets.insert("prate".to_string(), offsets[1..].to_vec());
     }
 
     // -- posters --------------------------------------------------------------
@@ -1108,7 +1262,7 @@ pub fn convert_bin(
     })?;
     let mut poster_reports: BTreeMap<&str, Value> = BTreeMap::new();
     for variable_id in &companion_variable_ids {
-        let first = variable_offsets[variable_id][0];
+        let first = variable_offsets[*variable_id][0];
         let plane = codes_by_offset[&first]
             .iter()
             .find(|(name, _)| name == variable_id)
@@ -1121,7 +1275,7 @@ pub fn convert_bin(
         binformat::write_atomic(&poster_path, &payload)?;
         let metadata = build_metadata(
             run_time,
-            &variable_offsets[variable_id],
+            &variable_offsets[*variable_id],
             &poster_grid,
             &options.profile,
             &[variable_id],
@@ -1166,30 +1320,22 @@ pub fn convert_bin(
             .collect()
     };
 
-    let mut submit_order: Vec<&str> = Vec::new();
-    if wind_available {
-        submit_order.push(WIND_BUNDLE_ID);
-    }
+    // Vector bundles first (the largest), scalars after; reports keep the
+    // scalars-then-vectors manifest order regardless.
+    let mut submit_order: Vec<&str> = available_vector_ids.clone();
     submit_order.extend_from_slice(&scalar_variable_ids);
     let mut report_order: Vec<&str> = scalar_variable_ids.clone();
-    if wind_available {
-        report_order.push(WIND_BUNDLE_ID);
-    }
+    report_order.extend_from_slice(&available_vector_ids);
 
     let mut full_reports: BTreeMap<&str, Value> = BTreeMap::new();
     let mut variant_reports: BTreeMap<&str, Vec<Value>> = BTreeMap::new();
     for bundle_id in &submit_order {
-        let wind = *bundle_id == WIND_BUNDLE_ID;
-        let bundle_offsets: Vec<i64> = if wind {
-            offsets.clone()
-        } else {
-            variable_offsets[bundle_id].clone()
+        let bundle_variables: Vec<String> = match vector_components(bundle_id) {
+            Some((u, v)) => vec![u, v],
+            None => vec![(*bundle_id).to_string()],
         };
-        let variables: Vec<&str> = if wind {
-            WIND_COMPONENT_IDS.to_vec()
-        } else {
-            vec![bundle_id]
-        };
+        let variables: Vec<&str> = bundle_variables.iter().map(String::as_str).collect();
+        let bundle_offsets: Vec<i64> = variable_offsets[variables[0]].clone();
         for (suffix, bundle_grid, codes) in [
             ("", grid, &codes_by_offset),
             (".half", half_grid, &half_codes_by_offset),
@@ -1214,12 +1360,7 @@ pub fn convert_bin(
                 tile.1 as u32,
             )
             .map_err(|error| EncodeError::conversion(error.0))?;
-            let variable_ids: Vec<&str> = if wind {
-                WIND_COMPONENT_IDS.to_vec()
-            } else {
-                vec![bundle_id]
-            };
-            let tables = bundle_chunks(&variable_ids, &bundle_offsets, codes, &geometry)?;
+            let tables = bundle_chunks(&variables, &bundle_offsets, codes, &geometry)?;
             let output = output_dir.join(format!("{bundle_id}{suffix}.xue"));
             let mut report = write_variable_bundle(
                 bundle_id,
@@ -1304,7 +1445,7 @@ pub fn convert_bin(
             .map(|item| item.overflow_points)
             .sum::<u64>()),
     );
-    if wind_available {
+    if available_vector_ids.contains(&WIND_BUNDLE_ID) {
         report.insert("windMaxAbsError".into(), json!(stat_max(&WIND_COMPONENT_IDS)));
         report.insert(
             "windClampedPoints".into(),
@@ -1535,11 +1676,9 @@ fn prepare_frames_all(
             eprintln!(
                 "WARNING GRIB2 header index unavailable ({error}); falling back to GDAL inspection"
             );
-            let mut optional = optional_at_analysis.to_vec();
-            optional.extend_from_slice(&WIND_COMPONENT_IDS);
             paths
                 .par_iter()
-                .map(|path| inspect_grib_multi(path, variable_ids, &optional))
+                .map(|path| inspect_grib_multi(path, variable_ids, optional_at_analysis))
                 .collect::<Result<Vec<_>>>()?
         }
     };

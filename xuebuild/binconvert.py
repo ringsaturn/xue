@@ -52,7 +52,7 @@ from .model import GRIB_PLANE_SOURCE, PlaneSource, SourceFrame
 from .observation import inspect_observation
 from .quantize import PRESSURE_VARIABLE_IDS, PROFILES, PrecipitationCodebook, TemperatureCodebook
 from .sources import SourceSpec, source_spec
-from .variables import VARIABLES, variable_spec
+from .variables import ISOBARIC_LEVELS_HPA, STANDARD_GRAVITY, VARIABLES, isobaric_variable, variable_spec
 from .videoconvert import build_debug_playlist, encode_variable_video
 
 LOG = logging.getLogger(__name__)
@@ -69,13 +69,44 @@ VARIABLE_NUMERIC_IDS = {
     variable_id: spec.numeric_id for variable_id, spec in VARIABLES.items() if spec.numeric_id is not None
 }
 
-# Scalar variables ship one single-variable bundle each (with poster + video
-# artifacts); which scalars a source publishes is the source's business
-# (sources.py bundle_scalar_ids — sflux adds dswrf). The two wind components
-# ship together in one two-variable wind10m bundle for the GPU particle
-# layer.
+# Scalar variables ship one single-variable bundle each (with a poster, and
+# for the surface fields a video companion); which scalars a source publishes
+# is the source's business (sources.py bundle_scalar_ids — sflux adds dswrf).
+# A vector field ships its two components together in one two-variable bundle
+# for the frontend's magnitude shader and particle layer: the 10 m wind, the
+# wind on each isobaric surface, and the water vapour flux the converter
+# derives on each surface from the specific humidity and the wind there.
 WIND_COMPONENT_IDS = ("ugrd10m", "vgrd10m")
 WIND_BUNDLE_ID = "wind10m"
+VECTOR_BUNDLES: dict[str, tuple[str, str]] = {
+    WIND_BUNDLE_ID: WIND_COMPONENT_IDS,
+    **{f"wind{level}": (f"ugrd{level}", f"vgrd{level}") for level in ISOBARIC_LEVELS_HPA},
+    **{f"qflux{level}": (f"uqflx{level}", f"vqflx{level}") for level in ISOBARIC_LEVELS_HPA},
+}
+
+
+def vapour_flux_level(bundle_id: str) -> int | None:
+    """The isobaric surface of a ``qflux<level>`` bundle, or None."""
+    if bundle_id.startswith("qflux") and bundle_id in VECTOR_BUNDLES:
+        return int(bundle_id[len("qflux") :])
+    return None
+
+
+def vector_input_ids(bundle_id: str) -> tuple[str, ...]:
+    """The source inputs one vector bundle is built from: a wind pair is its
+    own two components; a vapour flux pair is derived from the specific
+    humidity and both wind components on the same surface."""
+    level = vapour_flux_level(bundle_id)
+    if level is not None:
+        return (f"spfh{level}", f"ugrd{level}", f"vgrd{level}")
+    return VECTOR_BUNDLES[bundle_id]
+
+
+# The scalars that also get an H.264 companion: the surface fields the video
+# path was built for. It is an opt-in path (`?use_h264=true`), so the
+# upper-air fills ship bundles and posters only rather than cost the
+# scheduled build an ffmpeg pass per level.
+VIDEO_VARIABLE_IDS = frozenset({"tmp2m", "prate", "dswrf", "cref"})
 # Precipitation and radar reflectivity move with weather systems, so temporal
 # differencing makes them larger, not smaller: their chunks stack the codes
 # RAW. Every linear-codebook field is smooth enough to chain against the
@@ -197,8 +228,8 @@ PRECIPITATION_INPUT_IDS = ("prate", "tp", "prate_ave")
 
 def bundle_input_ids(source: SourceSpec, bundle_id: str) -> tuple[str, ...]:
     """The source input variables one published bundle is built from."""
-    if bundle_id == WIND_BUNDLE_ID:
-        return WIND_COMPONENT_IDS
+    if bundle_id in VECTOR_BUNDLES:
+        return vector_input_ids(bundle_id)
     if bundle_id == "prate":
         return (next(vid for vid in source.input_variable_ids if vid in PRECIPITATION_INPUT_IDS),)
     return (bundle_id,)
@@ -210,9 +241,14 @@ def series_lead_seconds(frames: dict[str, SourceFrame]) -> int:
 
 
 def published_bundle_ids(source: SourceSpec) -> tuple[str, ...]:
-    """Every bundle a source can publish, in manifest order."""
-    wind = all(variable_id in source.input_variable_ids for variable_id in WIND_COMPONENT_IDS)
-    return source.bundle_scalar_ids + ((WIND_BUNDLE_ID,) if wind else ())
+    """Every bundle a source can publish, in manifest order: its scalars,
+    then each listed vector bundle whose inputs the source fetches."""
+    vectors = tuple(
+        bundle_id
+        for bundle_id in source.bundle_vector_ids
+        if all(variable_id in source.input_variable_ids for variable_id in vector_input_ids(bundle_id))
+    )
+    return source.bundle_scalar_ids + vectors
 
 
 def _grid_info(path: Path) -> GridInfo:
@@ -329,7 +365,8 @@ def crop_grid(grid: GridInfo, bbox: tuple[float, float, float, float]) -> GridIn
 
 
 def _convert_units(frame: SourceFrame, values: np.ndarray) -> np.ndarray:
-    if frame.variable_id == "tmp2m":
+    isobaric = isobaric_variable(frame.variable_id)
+    if frame.variable_id == "tmp2m" or (isobaric is not None and isobaric[0] == "tmp"):
         unit = normalize_unit(frame.unit)
         if unit == "K":
             values -= 273.15
@@ -345,9 +382,26 @@ def _convert_units(frame: SourceFrame, values: np.ndarray) -> np.ndarray:
         # GRIB2 carries mean sea level pressure in pascals; the codebook
         # quantizes hectopascals.
         values /= 100.0
-    # Wind components and geopotential heights are already in their output
-    # units (m/s, m).
+    elif isobaric is not None and isobaric[0] == "spfh":
+        # GRIB2 carries specific humidity as a mass ratio (kg/kg); the
+        # codebook quantizes g/kg.
+        values *= 1000.0
+    # Wind components, geopotential heights and relative humidity are already
+    # in their output units (m/s, m, %).
     return values
+
+
+def derive_vapour_flux(
+    values: dict[str, np.ndarray], bundle_id: str
+) -> tuple[np.ndarray, np.ndarray]:
+    """The water vapour flux components on one isobaric surface, q·V/g in
+    g·cm⁻¹·hPa⁻¹·s⁻¹, from the specific humidity already in g/kg and the wind
+    in m/s there. One multiplication then one division per component, in this
+    order, in float64: the native encoder does exactly the same, and the two
+    are held byte-identical."""
+    specific_humidity_id, u_id, v_id = vector_input_ids(bundle_id)
+    q = values[specific_humidity_id]
+    return q * values[u_id] / STANDARD_GRAVITY, q * values[v_id] / STANDARD_GRAVITY
 
 
 def deaccumulate_precipitation(
@@ -657,8 +711,15 @@ def _quantize_file(
     average_window_hours: int = 6,
     own_precipitation: Future | None = None,
     plane_source: PlaneSource = GRIB_PLANE_SOURCE,
+    derived_vector_ids: tuple[str, ...] = (),
+    drop_ids: frozenset[str] = frozenset(),
 ) -> tuple[int, dict[str, np.ndarray], list[PlaneStats]]:
     """Extract and quantize every variable of one file; runs on a worker thread.
+
+    ``derived_vector_ids`` names the vapour flux bundles to derive from the
+    planes just extracted, and ``drop_ids`` the inputs that served only such a
+    derivation and are not themselves published — they are released here
+    rather than quantized and carried through the whole run.
 
     Derived-precipitation sources (ECMWF run-total tp, sflux window-averaged
     prate_ave) difference against the previous file's raw plane. Instead of
@@ -705,6 +766,11 @@ def _quantize_file(
             previous_hour,
             average_window_hours,
         )
+    for bundle_id in derived_vector_ids:
+        u_id, v_id = VECTOR_BUNDLES[bundle_id]
+        values[u_id], values[v_id] = derive_vapour_flux(values, bundle_id)
+    for variable_id in drop_ids:
+        values.pop(variable_id, None)
     codes: dict[str, np.ndarray] = {}
     stats: list[PlaneStats] = []
     for variable_id, plane_values in values.items():
@@ -960,16 +1026,17 @@ def convert_bin(
                     f"hour {series_lead_seconds(series.frames[-1]) / binformat.HOUR_SECONDS:g}"
                 )
         variable_ids = source.input_variable_ids
-        wind_available = False
+        available_vector_ids: tuple[str, ...] = ()
+        drop_ids: frozenset[str] = frozenset()
         grid_path = series.dataset
         plane_source = series.plane_source
     else:
         paths = discover_inputs(input_path)
-        # One real gdalinfo pass over the first file: it probes wind availability
-        # (wind is optional so runs fetched before the wind components joined the
-        # download set, and the cropped test fixtures, still build cleanly) and
-        # serves as the per-run cross-check reference for the GRIB2 header index
-        # used on every file.
+        # One real gdalinfo pass over the first file: it probes which vector
+        # bundles can be built (their inputs are optional, so runs fetched
+        # before the wind components joined the download set, and the cropped
+        # test fixtures, still build cleanly) and serves as the per-run
+        # cross-check reference for the GRIB2 header index used on every file.
         # A restricted build inspects only the inputs it asked for: a case that
         # ships temperature alone must not fail on a file that carries no
         # precipitation record, because it never downloaded one.
@@ -977,31 +1044,67 @@ def convert_bin(
         if bundle_ids is not None:
             needed = {input_id for bundle_id in bundle_ids for input_id in bundle_input_ids(source, bundle_id)}
             inspect_ids = tuple(variable_id for variable_id in inspect_ids if variable_id in needed)
+        requested_vector_ids = tuple(
+            bundle_id
+            for bundle_id in published_bundle_ids(source)
+            if bundle_id in VECTOR_BUNDLES and (bundle_ids is None or bundle_id in bundle_ids)
+        )
+        # An input that only feeds a vector bundle may be absent; one that is
+        # also a published scalar may not.
+        vector_only_ids = tuple(
+            variable_id
+            for bundle_id in requested_vector_ids
+            for variable_id in vector_input_ids(bundle_id)
+            if variable_id not in source.bundle_scalar_ids
+        )
         reference_frames = inspect_grib_multi(
             paths[0],
             inspect_ids,
-            optional_ids=source.optional_at_analysis + WIND_COMPONENT_IDS,
+            optional_ids=source.optional_at_analysis + vector_only_ids,
         )
-        wind_requested = bundle_ids is None or WIND_BUNDLE_ID in bundle_ids
-        wind_available = wind_requested and all(
-            variable_id in reference_frames for variable_id in WIND_COMPONENT_IDS
+        available_vector_ids = tuple(
+            bundle_id
+            for bundle_id in requested_vector_ids
+            if all(variable_id in reference_frames for variable_id in vector_input_ids(bundle_id))
         )
-        if wind_requested and not wind_available:
-            LOG.warning("building without the wind10m bundle, 10 m wind components are not in %s", paths[0])
+        for bundle_id in requested_vector_ids:
+            if bundle_id not in available_vector_ids:
+                LOG.warning(
+                    "building without the %s bundle, %s are not all in %s",
+                    bundle_id,
+                    ", ".join(vector_input_ids(bundle_id)),
+                    paths[0],
+                )
 
-        # The variables read from the GRIB inputs; ECMWF carries the accumulated
-        # tp instead of a rate and sflux the window-averaged prate_ave, which
-        # _quantize_file de-accumulates / de-averages into prate.
+        # The variables read from the GRIB inputs: every scalar input (ECMWF
+        # carries the accumulated tp instead of a rate and sflux the
+        # window-averaged prate_ave, which _quantize_file de-accumulates /
+        # de-averages into prate), plus the inputs of each vector bundle that
+        # can be built.
         input_scalar_ids = tuple(
-            variable_id for variable_id in inspect_ids if variable_id not in WIND_COMPONENT_IDS
+            variable_id for variable_id in inspect_ids if variable_id not in vector_only_ids
         )
+        vector_read_ids = tuple(
+            dict.fromkeys(
+                variable_id
+                for bundle_id in available_vector_ids
+                for variable_id in vector_input_ids(bundle_id)
+                if variable_id not in input_scalar_ids
+            )
+        )
+        # The inputs that only serve a derivation (spfh850 under the vapour
+        # flux) are released once it is done, rather than quantized and held
+        # for the whole run.
+        drop_ids = frozenset(vector_read_ids) - {
+            variable_id for bundle_id in available_vector_ids for variable_id in VECTOR_BUNDLES[bundle_id]
+        }
         # The first variable is the run's reference: every file is keyed by its
         # forecast hour, so it must be one no file can lack. Stable-sorting the
         # analysis-optional inputs (sflux prate_ave) to the back is enough unless
         # nothing else was asked for.
         variable_ids = tuple(
             sorted(
-                input_scalar_ids + (WIND_COMPONENT_IDS if wind_available else ()),
+                input_scalar_ids + vector_read_ids,
                 key=lambda variable_id: variable_id in source.optional_at_analysis,
             )
         )
@@ -1106,10 +1209,22 @@ def convert_bin(
                 previous_future = own
                 yield frames, previous, own
 
+        derived_vector_ids = tuple(
+            bundle_id for bundle_id in available_vector_ids if vapour_flux_level(bundle_id) is not None
+        )
         with ThreadPoolExecutor(max_workers=_EXTRACT_WORKERS) as executor:
             results = executor.map(
                 lambda item: _quantize_file(
-                    item[0], grid, work, codebooks, item[1], source.average_window_hours, item[2], plane_source
+                    item[0],
+                    grid,
+                    work,
+                    codebooks,
+                    item[1],
+                    source.average_window_hours,
+                    item[2],
+                    plane_source,
+                    derived_vector_ids,
+                    drop_ids,
                 ),
                 sharing_plan(),
             )
@@ -1125,11 +1240,17 @@ def convert_bin(
         scalar_variable_ids = tuple(
             variable_id for variable_id in scalar_variable_ids if variable_id in bundle_ids
         )
-    encoded_variable_ids = scalar_variable_ids + (WIND_COMPONENT_IDS if wind_available else ())
-    # Scalars that also ship a poster and (when ffmpeg is around) a video
-    # companion — every published scalar but the contour-drawn pressure family.
+    encoded_variable_ids = scalar_variable_ids + tuple(
+        variable_id for bundle_id in available_vector_ids for variable_id in VECTOR_BUNDLES[bundle_id]
+    )
+    # Scalars that also ship a poster — every published scalar but the
+    # contour-drawn pressure family — and, among those, the surface fields
+    # that also get a video companion when ffmpeg is around.
     companion_variable_ids = tuple(
         variable_id for variable_id in scalar_variable_ids if variable_id not in PRESSURE_BUNDLE_IDS
+    )
+    video_variable_ids = tuple(
+        variable_id for variable_id in companion_variable_ids if variable_id in VIDEO_VARIABLE_IDS
     )
 
     # Per-variable time axes. On derived-precipitation sources (ECMWF
@@ -1151,7 +1272,7 @@ def convert_bin(
     # variable's artifact, Xue remains the universal fallback.
     video_reports: dict[str, dict[str, Any]] = {}
     if not skip_video:
-        for variable_id in companion_variable_ids:
+        for variable_id in video_variable_ids:
             try:
                 video_artifact = encode_variable_video(
                     codes_by_offset, variable_offsets[variable_id], variable_id, width=grid.width, height=grid.height
@@ -1207,8 +1328,8 @@ def convert_bin(
         }
         LOG.info("wrote %s (%.1f KB)", poster_path, len(payload) / 1e3)
 
-    # Full-resolution canonical bundles (one per scalar variable plus the
-    # combined two-variable wind bundle) and the half-resolution ladder
+    # Full-resolution canonical bundles (one per scalar variable plus one per
+    # two-variable vector bundle) and the half-resolution ladder
     # (decimated from the already-quantized codes exactly like the posters,
     # same temporal structure; the half grid is embedded in the variant
     # bundle's own metadata, the manifest carries the tier list).
@@ -1239,19 +1360,18 @@ def convert_bin(
             bundle_grid: GridInfo,
             codes: dict[int, dict[str, np.ndarray]],
         ) -> Future:
-            wind = bundle_id == WIND_BUNDLE_ID
-            bundle_offsets = offsets if wind else variable_offsets[bundle_id]
+            bundle_variable_ids = VECTOR_BUNDLES.get(bundle_id, (bundle_id,))
+            bundle_offsets = variable_offsets[bundle_variable_ids[0]]
             metadata = build_metadata(
                 run_time,
                 bundle_offsets,
                 bundle_grid,
                 profile,
-                WIND_COMPONENT_IDS if wind else (bundle_id,),
+                bundle_variable_ids,
                 source=source,
                 unit_seconds=unit_seconds,
             )
 
-            bundle_variable_ids = WIND_COMPONENT_IDS if wind else (bundle_id,)
             tile = _bundle_tile(source.tile, bundle_grid, half=bool(suffix))
             tiles = binformat.TileGeometry(bundle_grid.width, bundle_grid.height, *tile)
 
@@ -1274,10 +1394,11 @@ def convert_bin(
 
             return writers.submit(job)
 
-        # Submit largest first so the wind bundle's long compression starts at
-        # once; reports keep the scalars-then-wind order regardless.
-        submit_order = ((WIND_BUNDLE_ID,) if wind_available else ()) + scalar_variable_ids
-        report_order = scalar_variable_ids + ((WIND_BUNDLE_ID,) if wind_available else ())
+        # Submit largest first so the vector bundles' long compression starts
+        # at once; reports keep the scalars-then-vectors manifest order
+        # regardless.
+        submit_order = available_vector_ids + scalar_variable_ids
+        report_order = scalar_variable_ids + available_vector_ids
         full_futures = {bundle_id: submit_bundle(bundle_id, "", grid, codes_by_offset) for bundle_id in submit_order}
         half_futures = (
             {bundle_id: submit_bundle(bundle_id, ".half", half_grid, half_codes_by_offset) for bundle_id in submit_order}
@@ -1305,7 +1426,7 @@ def convert_bin(
         "temperatureClampedPoints": sum(item.clamped_points for item in stats if item.variable_id == "tmp2m"),
         "precipitationOverflowPoints": sum(item.overflow_points for item in stats if item.variable_id == "prate"),
     }
-    if wind_available:
+    if WIND_BUNDLE_ID in available_vector_ids:
         report["windMaxAbsError"] = max(
             (item.max_abs_error for item in stats if item.variable_id in WIND_COMPONENT_IDS), default=0.0
         )

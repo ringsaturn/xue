@@ -1,5 +1,5 @@
 import { t } from "./i18n";
-import type { DataVariableId, ForecastBundleId } from "./manifest";
+import type { DataVariableId, ForecastBundleId, PressureBundleId } from "./manifest";
 
 /**
  * The pressure family: mean sea level pressure and geopotential height on the
@@ -34,16 +34,7 @@ export interface PressureLevelInfo {
   range: readonly [number, number];
 }
 
-export type PressureBundleId =
-  | "prmsl"
-  | "hgt1000"
-  | "hgt925"
-  | "hgt850"
-  | "hgt700"
-  | "hgt500"
-  | "hgt300"
-  | "hgt250"
-  | "hgt200";
+export type { PressureBundleId };
 
 export const PRESSURE_BUNDLE_IDS: readonly PressureBundleId[] = [
   "prmsl",

@@ -1,3 +1,4 @@
+import { bundleLevel, isobaricRange, temperaturePaletteDomain } from "./levels";
 import type { BundleVariable, LinearQuantization, LogQuantization } from "./manifest";
 import { isPressureBundle } from "./pressure";
 
@@ -120,6 +121,57 @@ function pressureStops(quantization: LinearQuantization): Stop[] {
   );
 }
 
+/** A ramp given over one range, laid over another: the stop values move
+ * linearly, the colours stay. */
+function remapStops(stops: Stop[], from: readonly [number, number], to: readonly [number, number]): Stop[] {
+  const scale = (to[1] - to[0]) / (from[1] - from[0]);
+  return stops.map(([value, r, g, b, a]) => [to[0] + (value - from[0]) * scale, r, g, b, a] as Stop);
+}
+
+// Relative humidity, the way a moisture chart is read: dry air in the browns
+// of bare ground, the middle in paper tones, saturated air in greens deepening
+// to blue past 90 %, where cloud and rain live. Opaque like temperature — the
+// field covers everything, and there is no "nothing here" to let the map
+// through.
+const HUMIDITY_STOPS: Stop[] = [
+  [0, 128, 84, 40, 235],
+  [20, 176, 132, 84, 235],
+  [40, 216, 196, 150, 235],
+  [55, 224, 224, 196, 235],
+  [70, 170, 212, 170, 240],
+  [80, 104, 184, 140, 245],
+  [90, 56, 144, 160, 250],
+  [100, 36, 84, 160, 255],
+];
+
+// Specific humidity in fractions of the level's codebook ceiling: dry air is
+// transparent (the map reads through as it does under precipitation), and
+// the moist end runs pale green through teal to a deep blue.
+const SPECIFIC_HUMIDITY_UNIT_STOPS: Stop[] = [
+  [0.0, 200, 220, 200, 0],
+  [0.08, 190, 222, 170, 120],
+  [0.2, 140, 204, 140, 180],
+  [0.35, 90, 184, 150, 215],
+  [0.5, 60, 150, 170, 235],
+  [0.7, 50, 104, 176, 245],
+  [1.0, 56, 48, 140, 255],
+];
+
+// Water vapour flux magnitude, g·cm⁻¹·hPa⁻¹·s⁻¹. Nothing below 2 — dry or
+// calm air is the map — then greens into teal, blue and violet for the
+// conveyor belts a rainstorm feeds on (20–40 is strong transport).
+export const VAPOUR_FLUX_STOPS: Stop[] = [
+  [0, 160, 210, 170, 0],
+  [2, 160, 210, 170, 60],
+  [5, 130, 200, 140, 140],
+  [10, 90, 186, 150, 190],
+  [15, 70, 164, 176, 215],
+  [20, 60, 132, 196, 232],
+  [30, 72, 96, 200, 245],
+  [40, 110, 70, 190, 252],
+  [50, 140, 50, 170, 255],
+];
+
 // Wind speed ramp for the GPU particle layer: the
 // familiar blue -> teal -> green -> yellow -> orange -> red -> violet
 // progression (earth.nullschool / Windy convention). Values are m/s.
@@ -199,35 +251,74 @@ function windFieldAlpha(speed: number): number {
 }
 
 /** The same ramp as a filled field: indexed by speed like the particle
- * palette, with the field's transparency folded in. */
-export function buildWindFieldPalette(): Uint8Array {
-  const palette = buildWindSpeedPalette();
+ * palette, with the field's transparency folded in. `maxSpeed` is the
+ * speed the last entry stands for; the ramp and its transparency stretch
+ * with it, so an isobaric wind with a higher ceiling keeps the same colours
+ * at the same fraction of its own scale. */
+export function buildWindFieldPalette(maxSpeed = WIND_SPEED_MAX): Uint8Array {
+  const palette = buildWindSpeedPalette(maxSpeed);
+  const stretch = maxSpeed / WIND_SPEED_MAX;
   for (let index = 0; index < 256; index += 1) {
-    const speed = (index / 255) * WIND_SPEED_MAX;
-    palette[index * 4 + 3] = Math.round(palette[index * 4 + 3]! * windFieldAlpha(speed));
+    const speed = (index / 255) * maxSpeed;
+    palette[index * 4 + 3] = Math.round(palette[index * 4 + 3]! * windFieldAlpha(speed / stretch));
   }
   return palette;
 }
 
 /** Build the 256x1 RGBA speed palette for the wind particle layer: index i
- * maps speed (i / 255) * WIND_SPEED_MAX m/s to a color; faster wind above the
+ * maps speed (i / 255) * maxSpeed m/s to a color; faster wind above the
  * ramp ceiling keeps the last color. */
-export function buildWindSpeedPalette(): Uint8Array {
+export function buildWindSpeedPalette(maxSpeed = WIND_SPEED_MAX): Uint8Array {
   const palette = new Uint8Array(256 * 4);
+  const stops = maxSpeed === WIND_SPEED_MAX ? WIND_SPEED_STOPS : remapStops(WIND_SPEED_STOPS, [0, WIND_SPEED_MAX], [0, maxSpeed]);
   for (let index = 0; index < 256; index += 1) {
-    const speed = (index / 255) * WIND_SPEED_MAX;
-    palette.set(interpolate(WIND_SPEED_STOPS, speed), index * 4);
+    const speed = (index / 255) * maxSpeed;
+    palette.set(interpolate(stops, speed), index * 4);
   }
   return palette;
 }
 
+/** The vapour flux magnitude palette, indexed like the wind field's: entry i
+ * is the flux (i / 255) * maxMagnitude. */
+export function buildVapourFluxPalette(maxMagnitude: number): Uint8Array {
+  const palette = new Uint8Array(256 * 4);
+  for (let index = 0; index < 256; index += 1) {
+    palette.set(interpolate(VAPOUR_FLUX_STOPS, (index / 255) * maxMagnitude), index * 4);
+  }
+  return palette;
+}
+
+/** A CSS gradient reading a palette top-down — the legend bar of a field
+ * whose key is not hand-written in the stylesheet. `from`/`to` pick the index
+ * range the legend spans (a codebook's valid codes, or the whole magnitude
+ * scale). */
+export function legendGradient(palette: Uint8Array, from = 0, to = 255, samples = 12): string {
+  const stops: string[] = [];
+  for (let sample = 0; sample < samples; sample += 1) {
+    const index = Math.round(to - (sample / (samples - 1)) * (to - from));
+    const at = index * 4;
+    stops.push(`rgba(${palette[at]}, ${palette[at + 1]}, ${palette[at + 2]}, ${(palette[at + 3]! / 255).toFixed(3)})`);
+  }
+  return `linear-gradient(to bottom, ${stops.join(", ")})`;
+}
+
 /** Color stops for one variable's physical values. Linear fields default to
- * the temperature ramp; dswrf and cref carry their own. */
+ * the temperature ramp; dswrf and cref carry their own, the pressure family
+ * and the isobaric fills take theirs from the level. */
 function stopsFor(variable: BundleVariable): Stop[] {
   if (variable.id === "dswrf") return SOLAR_STOPS;
   if (variable.id === "cref") return REFLECTIVITY_STOPS;
   if (isPressureBundle(variable.id) && variable.quantization.type === "linear") {
     return pressureStops(variable.quantization);
+  }
+  const level = bundleLevel(variable.id as Parameters<typeof bundleLevel>[0]);
+  if (level !== null) {
+    if (variable.id.startsWith("tmp")) return remapStops(TEMPERATURE_STOPS, [-60, 50], temperaturePaletteDomain(level));
+    if (variable.id.startsWith("rh")) return HUMIDITY_STOPS;
+    if (variable.id.startsWith("spfh")) {
+      const [, max] = isobaricRange(variable.id as Parameters<typeof isobaricRange>[0]);
+      return remapStops(SPECIFIC_HUMIDITY_UNIT_STOPS, [0, 1], [0, max]);
+    }
   }
   return TEMPERATURE_STOPS;
 }

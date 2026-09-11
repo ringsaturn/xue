@@ -18,10 +18,17 @@ use crate::encode::binformat::write_atomic;
 use crate::encode::errors::{EncodeError, Result};
 use crate::encode::metadata::iso_z;
 
-/// Schema v5 bundle registry, in manifest order.
+/// Schema v5 bundle registry, in manifest order: every scalar, then every
+/// two-variable vector bundle. Mirrors `BIN_BUNDLE_VARIABLES` in
+/// `xuebuild/manifest.py`.
 pub const BIN_BUNDLE_VARIABLES: &[&str] = &[
     "tmp2m", "prate", "dswrf", "cref", "prmsl", "hgt1000", "hgt925", "hgt850", "hgt700", "hgt500",
-    "hgt300", "hgt250", "hgt200", "wind10m",
+    "hgt300", "hgt250", "hgt200", "tmp1000", "tmp925", "tmp850", "tmp700", "tmp500", "tmp300",
+    "tmp250", "tmp200", "rh1000", "rh925", "rh850", "rh700", "rh500", "rh300", "rh250", "rh200",
+    "spfh1000", "spfh925", "spfh850", "spfh700", "spfh500", "spfh300", "spfh250", "spfh200",
+    "wind10m", "wind1000", "wind925", "wind850", "wind700", "wind500", "wind300", "wind250",
+    "wind200", "qflux1000", "qflux925", "qflux850", "qflux700", "qflux500", "qflux300",
+    "qflux250", "qflux200",
 ];
 pub const REQUIRED_BIN_BUNDLE_VARIABLES: &[&str] = &["tmp2m", "prate"];
 

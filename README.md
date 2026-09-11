@@ -152,14 +152,22 @@ pressure family — mean sea level pressure and geopotential height on the
 standard isobaric surfaces, one bundle per level — gets neither a poster nor
 a video companion: the page draws it as contour lines, which need the exact
 codes and never a filled first frame. GFS publishes `prmsl` with the 850,
-500 and 250 hPa heights; the other five levels are registered in the format
-but not fetched, so turning one on is a line in `xuebuild/sources.py` (and
-its mirror in the native encoder) rather than a format change. `build-bin` also adds the
-two-variable `wind10m.xue` when the input GRIB carries the 10 m wind
-components (older cached GRIBs without wind records are skipped
-automatically — re-fetch with `--force-download` to pick wind up), and
-generates `manifest.json` (per-bundle path, byte length, CRC-32, and the
-`variants` resolution ladder). `verify-bin` fully validates one file's
+500 and 250 hPa heights. The upper-air fills — temperature, relative and
+specific humidity, wind and water vapour flux on the same eight isobaric
+surfaces — are registered in the format the same way, and GFS publishes the
+surfaces a synoptic chart is read on: 850 and 500 hPa temperature
+(`tmp850`, `tmp500`), 850 and 700 hPa relative humidity (`rh850`, `rh700`),
+the 850 hPa wind (`wind850`) and the 850 hPa water vapour flux (`qflux850`,
+`q·V/g` derived from the specific humidity and the wind there). Every other
+level is registered but not fetched, so turning one on is a line in
+`xuebuild/sources.py` (and its mirror in the native encoder) rather than a
+format change; the upper-air fills get a poster but no video companion.
+`build-bin` also adds each two-variable vector bundle (`wind10m.xue`,
+`wind850.xue`, `qflux850.xue`) when the input GRIB carries its components
+(older cached GRIBs without them are skipped automatically — re-fetch with
+`--force-download` to pick them up), and generates `manifest.json`
+(per-bundle path, byte length, CRC-32, and the `variants` resolution
+ladder). `verify-bin` fully validates one file's
 structure and decodes every frame. Conversion runs one `gdalinfo` and one
 multi-band `gdal_translate` per GRIB file, parallelized across files: a
 full 121-frame run converts in about 43 seconds.
@@ -172,9 +180,12 @@ The page supports shareable URLs per model and layer:
 `/?model=gfs&type=wind`, `/?model=ecmwf&type=temp`, and so on. `model`
 accepts `gfs` / `ecmwf` (alias `ifs`) / `sflux`; `type` also accepts
 aliases like `tmp2m` / `prate` / `wind10m` / `solar` / `radar`, and each
-pressure level names itself (`pressure` for sea level pressure, `hgt500`,
-`hgt850` and so on — there is no separate `level` parameter); both are
-case-insensitive. The address bar stays in sync when switching, and
+isobaric field names itself (`pressure` for sea level pressure, `hgt500`,
+`tmp850` / `t850`, `rh700`, `wind850`, `qflux850` / `vapor850` and so on —
+there is no separate `level` parameter); both are case-insensitive. In the
+page, one rail tile stands for a whole family (temperature from 2 m up, wind
+from 10 m up, humidity, vapour flux, pressure) and the level row on the
+transport capsule picks the surface. The address bar stays in sync when switching, and
 unrecognized values fall back to defaults.
 
 Two more parameters are session settings rather than shareable state.

@@ -852,16 +852,29 @@ html[lang="zh-CN"] .rail-glyph {
   backdrop-filter: blur(18px);
 }
 
-/* Nine isobaric surfaces on one scrolling row, shown only when the pressure
-   family is on screen. */
+/* The surfaces of the families on screen, one group per slot (the filled
+   family's levels, then the lines'), on one scrolling row; shown only when a
+   slot has a choice. */
 .level-row {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 14px;
   margin: -2px -12px 4px -16px;
   padding: 0 12px 0 16px;
   overflow-x: auto;
   scrollbar-width: none;
+}
+
+.level-group {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+}
+
+.level-group + .level-group {
+  padding-left: 14px;
+  border-left: 1px solid var(--line);
 }
 
 .level-row[hidden] {

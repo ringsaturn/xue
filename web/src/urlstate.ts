@@ -1,5 +1,6 @@
 import {
   FORECAST_MODELS,
+  ISOBARIC_LEVELS,
   type ForecastBundleId,
   type ForecastModelId,
   type ResolutionPreference,
@@ -15,25 +16,22 @@ export const DEFAULT_MODEL: ForecastModelId = "gfs";
  * the core tmp2m/prate pair, so this is always available there. */
 export const DEFAULT_VARIABLE: ForecastBundleId = "prate";
 
-/** Canonical `type` value written into shared URLs, per bundle. */
+/** Canonical `type` value written into shared URLs, per bundle. Every
+ * isobaric field names itself — the level *is* the layer, so there is no
+ * separate `?level=` parameter to keep in step with `?type=`. */
 const CANONICAL_TYPE: Record<ForecastBundleId, string> = {
   tmp2m: "temp",
   prate: "precip",
   dswrf: "solar",
   cref: "radar",
-  // The pressure family names itself: the level *is* the layer, so there is
-  // no separate `?level=` parameter to keep in step with `?type=`.
   prmsl: "pressure",
-  hgt1000: "hgt1000",
-  hgt925: "hgt925",
-  hgt850: "hgt850",
-  hgt700: "hgt700",
-  hgt500: "hgt500",
-  hgt300: "hgt300",
-  hgt250: "hgt250",
-  hgt200: "hgt200",
   wind10m: "wind",
-};
+  ...Object.fromEntries(
+    ISOBARIC_LEVELS.flatMap((level) =>
+      (["hgt", "tmp", "rh", "spfh", "wind", "qflux"] as const).map((family) => [`${family}${level}`, `${family}${level}`]),
+    ),
+  ),
+} as Record<ForecastBundleId, string>;
 
 /** Accepted spellings for each bundle — canonical name, bundle id, and a few
  * common aliases. Matching is case-insensitive. */
@@ -59,18 +57,31 @@ const TYPE_ALIASES: Record<string, ForecastBundleId> = {
   mslp: "prmsl",
   msl: "prmsl",
   prmsl: "prmsl",
-  hgt1000: "hgt1000",
-  hgt925: "hgt925",
-  hgt850: "hgt850",
-  hgt700: "hgt700",
   // The subtropical high is read off the 500 hPa chart, so the view has the
   // name people look for as well as the level's own.
-  hgt500: "hgt500",
   subtropicalhigh: "hgt500",
-  hgt300: "hgt300",
-  hgt250: "hgt250",
-  hgt200: "hgt200",
-};
+  // Every isobaric field by its own id (`hgt500`, `tmp850`, `rh700`,
+  // `wind850`, `qflux850`), plus the spellings a chart reader types: `t850`,
+  // `z500`, `humidity700`, `vapor850` / `vapour850` / `moisture850`.
+  ...Object.fromEntries(
+    ISOBARIC_LEVELS.flatMap((level) => [
+      [`hgt${level}`, `hgt${level}`],
+      [`z${level}`, `hgt${level}`],
+      [`tmp${level}`, `tmp${level}`],
+      [`t${level}`, `tmp${level}`],
+      [`temp${level}`, `tmp${level}`],
+      [`rh${level}`, `rh${level}`],
+      [`humidity${level}`, `rh${level}`],
+      [`spfh${level}`, `spfh${level}`],
+      [`q${level}`, `spfh${level}`],
+      [`wind${level}`, `wind${level}`],
+      [`qflux${level}`, `qflux${level}`],
+      [`vapor${level}`, `qflux${level}`],
+      [`vapour${level}`, `qflux${level}`],
+      [`moisture${level}`, `qflux${level}`],
+    ]),
+  ),
+} as Record<string, ForecastBundleId>;
 
 /** Accepted spellings for each model. Matching is case-insensitive. */
 const MODEL_ALIASES: Record<string, ForecastModelId> = {

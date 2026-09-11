@@ -3,7 +3,7 @@ import type { CustomLayerInterface, Map as MaplibreMap } from "maplibre-gl";
 import { t } from "./i18n";
 import { extractMatrix } from "./layer";
 import type { BundleMetadata, LinearQuantization } from "./manifest";
-import { WIND_COMPONENT_IDS, type BundleVariable } from "./manifest";
+import { WIND_COMPONENT_IDS, type BundleVariable, type DataVariableId } from "./manifest";
 import { mercatorY } from "./mercator";
 import { buildWindSpeedPalette, WIND_SPEED_MAX } from "./palettes";
 
@@ -304,6 +304,10 @@ export class WindParticleLayer implements CustomLayerInterface {
   private spawn: [number, number, number, number] = [0, 0, 1, 1];
   private windOffset: [number, number] = [0, 0];
   private windScale: [number, number] = [0, 0];
+  /** The magnitude the speed palette tops out at — and the scale a particle's
+   * pace is read against. The 10 m wind's 40 m/s by default; an isobaric wind
+   * or a vapour flux field sets its own. */
+  private maxSpeed = WIND_SPEED_MAX;
   /** Single tone every particle is drawn in, or null for the speed palette. */
   private ink: readonly [number, number, number, number] | null = null;
 
@@ -329,9 +333,17 @@ export class WindParticleLayer implements CustomLayerInterface {
     this.particleCount = this.particleRes * this.particleRes;
   }
 
-  /** Adopt the wind bundle's grid and both components' linear quantization.
-   * Clears any uploaded planes — the caller re-feeds them for the new grid. */
-  configureGrid(metadata: BundleMetadata): void {
+  /** The magnitude the palette (and the pace) is normalised by. */
+  setMaxSpeed(maxSpeed: number): void {
+    this.maxSpeed = maxSpeed;
+    this.map?.triggerRepaint();
+  }
+
+  /** Adopt a vector bundle's grid and both components' linear quantization.
+   * Clears any uploaded planes — the caller re-feeds them for the new grid.
+   * `components` names the u/v pair inside the metadata; the 10 m wind's by
+   * default. */
+  configureGrid(metadata: BundleMetadata, components: readonly [DataVariableId, DataVariableId] = [WIND_COMPONENT_IDS[0]!, WIND_COMPONENT_IDS[1]!]): void {
     const grid = metadata.grid as Record<string, number | boolean>;
     this.width = (grid.width as number) ?? 0;
     this.height = (grid.height as number) ?? 0;
@@ -349,9 +361,9 @@ export class WindParticleLayer implements CustomLayerInterface {
       this.height,
       this.wraps,
     );
-    const [u, v] = WIND_COMPONENT_IDS.map((id) => metadata.variables.find((item) => item.id === id));
+    const [u, v] = components.map((id) => metadata.variables.find((item) => item.id === id));
     if (!u || !v || !isLinear(u.quantization) || !isLinear(v.quantization)) {
-      throw new Error("wind bundle is missing linear-quantized u/v components");
+      throw new Error("vector bundle is missing linear-quantized u/v components");
     }
     this.windOffset = [u.quantization.offset, v.quantization.offset];
     this.windScale = [u.quantization.scale, v.quantization.scale];
@@ -581,7 +593,7 @@ export class WindParticleLayer implements CustomLayerInterface {
     if (info.uniforms.u_spawn) {
       gl.uniform4f(info.uniforms.u_spawn, this.spawn[0], this.spawn[1], this.spawn[2], this.spawn[3]);
     }
-    gl.uniform1f(info.uniforms.u_max_speed!, WIND_SPEED_MAX);
+    gl.uniform1f(info.uniforms.u_max_speed!, this.maxSpeed);
   }
 
   private drawQuadTexture(gl: WebGL2RenderingContext, info: ProgramInfo, texture: WebGLTexture, value: number, valueName: string): void {

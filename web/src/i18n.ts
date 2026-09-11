@@ -46,8 +46,8 @@ export const htmlLang = locale === "zh" ? "zh-CN" : "en";
 
 const MESSAGES = {
   metaDescription: {
-    zh: "NOAA GFS 与 ECMWF 全球未来 240 小时气温、降水、风场与太阳辐射预报",
-    en: "NOAA GFS and ECMWF global 240-hour forecasts of temperature, precipitation, wind and solar radiation",
+    zh: "NOAA GFS 与 ECMWF 全球未来 240 小时气温、降水、风场、气压与高空温湿、水汽通量预报",
+    en: "NOAA GFS and ECMWF global 240-hour forecasts of temperature, precipitation, wind, pressure and upper-air humidity and moisture transport",
   },
   mapAria: { zh: "全球气温与降水预报地图", en: "Global temperature and precipitation forecast map" },
   modelSwitchAria: { zh: "预报模式", en: "Forecast model" },
@@ -61,6 +61,12 @@ const MESSAGES = {
   varWind: { zh: "风场", en: "10M" },
   varSolar: { zh: "辐射", en: "FLUX" },
   varRadar: { zh: "雷达", en: "CREF" },
+  /** The upper-air families' tiles: relative humidity, specific humidity and
+   * the water vapour flux have no surface member, so the gloss names the
+   * field rather than a level. */
+  varHumidity: { zh: "湿度", en: "REL" },
+  varSpecificHumidity: { zh: "比湿", en: "SPEC" },
+  varVapourFlux: { zh: "水汽", en: "FLUX" },
   // The pressure family's buttons carry the level in the code ("MSLP",
   // "500MB"); the gloss says what the field is, once for all eight heights.
   varPressure: { zh: "气压", en: "SEA LVL" },
@@ -79,8 +85,16 @@ const MESSAGES = {
   glyphDswrf: { zh: "辐", en: "S" },
   glyphCref: { zh: "雷", en: "Z" },
   glyphPressure: { zh: "压", en: "P" },
-  levelSwitchAria: { zh: "气压层次", en: "Pressure level" },
+  // U is the WMO symbol for relative humidity, q for specific humidity; the
+  // vapour flux takes the F of flux.
+  glyphRh: { zh: "湿", en: "U" },
+  glyphSpfh: { zh: "比", en: "q" },
+  glyphQflux: { zh: "汽", en: "F" },
+  levelSwitchAria: { zh: "层次", en: "Level" },
   levelCaption: { zh: "层次", en: "LEVEL" },
+  /** The level row's caption for the lines' group when the fill has a level
+   * row of its own beside it. */
+  linesCaption: { zh: "等压线", en: "LINES" },
   modelHeading: { zh: "预报模式", en: "FORECAST MODEL" },
   caseTag: { zh: "个例", en: "CASE" },
   runCycle: { zh: "模式周期", en: "Model run" },
@@ -164,8 +178,13 @@ const MESSAGES = {
   varLabelWind10m: { zh: "10 米风", en: "10 m wind" },
   varLabelCref: { zh: "雷达组合反射率", en: "Composite radar reflectivity" },
   varLabelPrmsl: { zh: "海平面气压", en: "Mean sea level pressure" },
-  // One string for eight levels: pressure.ts substitutes {level}.
+  // One string for eight levels: pressure.ts and levels.ts substitute {level}.
   varLabelHeightAtLevel: { zh: "{level} 百帕位势高度", en: "{level} hPa geopotential height" },
+  varLabelTempAtLevel: { zh: "{level} 百帕气温", en: "{level} hPa temperature" },
+  varLabelRhAtLevel: { zh: "{level} 百帕相对湿度", en: "{level} hPa relative humidity" },
+  varLabelSpfhAtLevel: { zh: "{level} 百帕比湿", en: "{level} hPa specific humidity" },
+  varLabelWindAtLevel: { zh: "{level} 百帕风", en: "{level} hPa wind" },
+  varLabelQfluxAtLevel: { zh: "{level} 百帕水汽通量", en: "{level} hPa water vapour flux" },
   // The 5880 gpm contour, "588" on a Chinese chart — the line the western
   // Pacific subtropical high is defined by.
   legendSubtropicalHigh: { zh: "588 线", en: "588 line" },

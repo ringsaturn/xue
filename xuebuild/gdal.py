@@ -11,15 +11,10 @@ from typing import Any
 
 from .errors import ConversionError
 from .model import SourceFrame
-from .variables import HEIGHT_LEVELS_HPA, height_variable_id, variable_spec
+from .variables import isobaric_variable, variable_spec
 
 
 SUPPORTED_EXTENSIONS = {".grb", ".grb2", ".grib2"}
-# Geopotential height variable id -> its isobaric surface in hPa, the one
-# number the record matcher needs beyond the shared HGT element.
-HEIGHT_VARIABLE_IDS: dict[str, int] = {
-    height_variable_id(level): level for level in HEIGHT_LEVELS_HPA
-}
 HEIGHT_RE = re.compile(r"(?:^|[^0-9])2(?:\.0+)?\s*m(?:eter)?s?\s+above\s+ground", re.IGNORECASE)
 TEN_METRE_RE = re.compile(r"(?:^|[^0-9])10(?:\.0+)?\s*m(?:eter)?s?\s+above\s+ground", re.IGNORECASE)
 
@@ -219,6 +214,43 @@ def height_expression(unit: str) -> str:
     return "A"
 
 
+def humidity_expression(unit: str) -> str:
+    """Relative humidity, already in percent."""
+    compact = unit.strip().strip("[]()")
+    if compact != "%":
+        raise ConversionError(f"unsupported relative humidity unit: {unit or '<missing>'}")
+    return "maximum(0,minimum(100,A))"
+
+
+def specific_humidity_expression(unit: str) -> str:
+    """Specific humidity: GRIB2 carries a mass ratio (kg/kg), the codebook
+    quantizes g/kg. Only kg/kg is accepted — a file already in g/kg would
+    scale twice, and no source publishes one."""
+    compact = re.sub(r"[\s*()\[\]]", "", unit.strip().lower())
+    if compact != "kg/kg":
+        raise ConversionError(f"unsupported specific humidity unit: {unit or '<missing>'}")
+    return "A*1000"
+
+
+def isobaric_expression(variable_id: str, unit: str) -> str:
+    """The unit rule of one isobaric-family record, by family. Temperature
+    takes the 2 m temperature's rule (GDAL normalizes every GRIB temperature
+    to Celsius), the wind components the 10 m pair's; the flux components are
+    derived and never arrive as a record."""
+    family, _level = isobaric_variable(variable_id) or (None, None)
+    if family == "hgt":
+        return height_expression(unit)
+    if family == "tmp":
+        return celsius_expression(unit)
+    if family == "rh":
+        return humidity_expression(unit)
+    if family == "spfh":
+        return specific_humidity_expression(unit)
+    if family in ("ugrd", "vgrd"):
+        return wind_expression(unit)
+    raise ConversionError(f"unsupported variable: {variable_id}")
+
+
 def raster_expression(variable_id: str, unit: str) -> str:
     if variable_id == "tmp2m":
         return celsius_expression(unit)
@@ -234,8 +266,8 @@ def raster_expression(variable_id: str, unit: str) -> str:
         return wind_expression(unit)
     if variable_id == "prmsl":
         return pressure_expression(unit)
-    if variable_id in HEIGHT_VARIABLE_IDS:
-        return height_expression(unit)
+    if isobaric_variable(variable_id) is not None:
+        return isobaric_expression(variable_id, unit)
     raise ConversionError(f"unsupported variable: {variable_id}")
 
 
@@ -332,8 +364,8 @@ def _is_mean_sea_level_pressure(metadata: dict[str, str], description: str) -> b
     return short_name == "0-MSL" or "mean sea level" in searchable
 
 
-def _is_isobaric_height(metadata: dict[str, str], description: str, level_hpa: int) -> bool:
-    """HGT on one isobaric surface.
+def _is_isobaric_record(metadata: dict[str, str], description: str, element: str, level_hpa: int) -> bool:
+    """One GRIB element on one isobaric surface.
 
     The surface value is pascals in GRIB2 itself, and that is what GDAL
     reports: the 850 hPa record comes back as short name ``85000-ISBL`` with
@@ -343,7 +375,7 @@ def _is_isobaric_height(metadata: dict[str, str], description: str, level_hpa: i
     still matches. Whichever unit, it must name *this* level: a matcher that
     let 500 also match 1000 (or 50000 Pa also match 100000) would silently
     pick the wrong plane."""
-    if metadata.get("GRIB_ELEMENT", "").upper() != "HGT":
+    if metadata.get("GRIB_ELEMENT", "").upper() != element:
         return False
     short_name = metadata.get("GRIB_SHORT_NAME", "").upper()
     if short_name in {f"{level_hpa}-ISBL", f"{level_hpa * 100}-ISBL"}:
@@ -383,8 +415,12 @@ def _band_matches(variable_id: str, metadata: dict[str, str], description: str) 
         return _is_ten_metre_wind(metadata, description, variable_spec(variable_id).grib_element)
     if variable_id == "prmsl":
         return _is_mean_sea_level_pressure(metadata, description)
-    if variable_id in HEIGHT_VARIABLE_IDS:
-        return _is_isobaric_height(metadata, description, HEIGHT_VARIABLE_IDS[variable_id])
+    isobaric = isobaric_variable(variable_id)
+    if isobaric is not None:
+        spec = variable_spec(variable_id)
+        if not spec.grib_element:
+            raise ConversionError(f"{variable_id} is derived, not a GRIB record")
+        return _is_isobaric_record(metadata, description, spec.grib_element, isobaric[1])
     raise ConversionError(f"unsupported variable: {variable_id}")
 
 

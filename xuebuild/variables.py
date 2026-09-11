@@ -242,42 +242,55 @@ VARIABLES: dict[str, VariableSpec] = {
 }
 
 
-# Geopotential height on the standard isobaric surfaces. Every level is the
-# same GRIB2 parameter (0/3/5) on the same surface type (100, isobaric),
-# differing only in the surface's pressure — so the entries are generated
-# from one table of (level in hPa, registered numericId, codebook coverage)
-# rather than written out eight times. The level appears three ways and all
-# three must agree: hPa in the id and the ``.idx`` phrase GFS uses, Pa in the
-# GRIB2 fixed surface. Registration is not publication: which levels a source
-# actually ships is ``SourceSpec.bundle_scalar_ids``.
-HEIGHT_LEVELS_HPA: tuple[int, ...] = (1000, 925, 850, 700, 500, 300, 250, 200)
+# The isobaric families: geopotential height, temperature, relative humidity,
+# specific humidity, the wind components and the water vapour flux components,
+# each on the eight standard isobaric surfaces. Within a family every level is
+# the same GRIB2 parameter on the same surface type (100, isobaric), differing
+# only in the surface's pressure — so the entries are generated from one table
+# of levels rather than written out eight times per family. The level appears
+# three ways and all three must agree: hPa in the id and the ``.idx`` phrase
+# GFS uses, Pa in the GRIB2 fixed surface. Registration is not publication:
+# which levels a source actually ships is ``SourceSpec.bundle_scalar_ids`` and
+# ``SourceSpec.bundle_vector_ids``.
+ISOBARIC_LEVELS_HPA: tuple[int, ...] = (1000, 925, 850, 700, 500, 300, 250, 200)
+HEIGHT_LEVELS_HPA = ISOBARIC_LEVELS_HPA
+
+# Family prefix -> the first registered numericId of its eight levels. The
+# ids are contiguous per family, in ISOBARIC_LEVELS_HPA order.
+ISOBARIC_FAMILY_FIRST_ID: dict[str, int] = {
+    "hgt": 8,
+    "tmp": 16,
+    "rh": 24,
+    "spfh": 32,
+    "ugrd": 40,
+    "vgrd": 48,
+    "uqflx": 56,
+    "vqflx": 64,
+}
+ISOBARIC_FAMILIES: tuple[str, ...] = tuple(ISOBARIC_FAMILY_FIRST_ID)
+
+
+def isobaric_variable_id(family: str, level_hpa: int) -> str:
+    return f"{family}{level_hpa}"
 
 
 def height_variable_id(level_hpa: int) -> str:
-    return f"hgt{level_hpa}"
+    return isobaric_variable_id("hgt", level_hpa)
 
 
-def _height_spec(level_hpa: int, numeric_id: int, value_range: tuple[int, int]) -> VariableSpec:
-    return VariableSpec(
-        id=height_variable_id(level_hpa),
-        label=f"{level_hpa} hPa geopotential height",
-        output_unit="m",
-        value_range=value_range,
-        numeric_id=numeric_id,
-        grib_element="HGT",
-        index_field=f":HGT:{level_hpa} mb:",
-        ecmwf_param="gh",
-        grib2_category=3,
-        grib2_number=5,
-        grib2_level_type=100,
-        grib2_level_value=float(level_hpa) * 100.0,
-        gdal_unit="gpm",
-    )
+def isobaric_variable(variable_id: str) -> tuple[str, int] | None:
+    """``(family, level_hpa)`` of an isobaric variable, or None for anything
+    else — including a level that is not registered (``hgt550``)."""
+    for family in ISOBARIC_FAMILIES:
+        if variable_id.startswith(family) and variable_id[len(family) :].isdigit():
+            level = int(variable_id[len(family) :])
+            if level in ISOBARIC_LEVELS_HPA:
+                return family, level
+    return None
 
 
-# numericId 8..15 in the order of HEIGHT_LEVELS_HPA; the value range is the
-# level's codebook coverage (xuebuild/quantize.py), which is what an
-# observation fill would clamp to.
+# The value range is the level's codebook coverage (xuebuild/quantize.py),
+# which is what an observation fill would clamp to.
 _HEIGHT_VALUE_RANGES: dict[int, tuple[int, int]] = {
     1000: (-905, 1635),
     925: (-249, 1275),
@@ -288,12 +301,137 @@ _HEIGHT_VALUE_RANGES: dict[int, tuple[int, int]] = {
     250: (8598, 11646),
     200: (10086, 13134),
 }
+# Temperature coverage per level: the low end holds the Antarctic winter at
+# every level, the high end the extrapolated below-ground temperatures the
+# lowest surfaces take under the Tibetan plateau and the Sahara.
+_TEMPERATURE_VALUE_RANGES: dict[int, tuple[int, int]] = {
+    1000: (-60, 60),
+    925: (-65, 50),
+    850: (-70, 45),
+    700: (-75, 35),
+    500: (-85, 15),
+    300: (-95, 0),
+    250: (-100, -5),
+    200: (-100, -10),
+}
+# Specific humidity coverage per level, in g/kg: the saturated tropical
+# boundary layer at the bottom, a fraction of a gram at the top.
+_SPECIFIC_HUMIDITY_VALUE_RANGES: dict[int, tuple[float, float]] = {
+    1000: (0.0, 50.8),
+    925: (0.0, 50.8),
+    850: (0.0, 25.4),
+    700: (0.0, 25.4),
+    500: (0.0, 5.08),
+    300: (0.0, 2.54),
+    250: (0.0, 1.27),
+    200: (0.0, 1.27),
+}
 
-for _index, _level in enumerate(HEIGHT_LEVELS_HPA):
-    VARIABLES[height_variable_id(_level)] = _height_spec(
-        _level, 8 + _index, _HEIGHT_VALUE_RANGES[_level]
+
+def _isobaric_spec(family: str, level_hpa: int) -> VariableSpec:
+    index = ISOBARIC_LEVELS_HPA.index(level_hpa)
+    numeric_id = ISOBARIC_FAMILY_FIRST_ID[family] + index
+    common = dict(
+        id=isobaric_variable_id(family, level_hpa),
+        numeric_id=numeric_id,
+        grib2_level_type=100,
+        grib2_level_value=float(level_hpa) * 100.0,
     )
-del _index, _level
+    if family == "hgt":
+        return VariableSpec(
+            label=f"{level_hpa} hPa geopotential height",
+            output_unit="m",
+            value_range=_HEIGHT_VALUE_RANGES[level_hpa],
+            grib_element="HGT",
+            index_field=f":HGT:{level_hpa} mb:",
+            ecmwf_param="gh",
+            grib2_category=3,
+            grib2_number=5,
+            gdal_unit="gpm",
+            **common,
+        )
+    if family == "tmp":
+        # GDAL normalizes every GRIB temperature to Celsius, isobaric TMP
+        # included; the converter accepts K as well.
+        return VariableSpec(
+            label=f"{level_hpa} hPa temperature",
+            output_unit="°C",
+            value_range=_TEMPERATURE_VALUE_RANGES[level_hpa],
+            grib_element="TMP",
+            index_field=f":TMP:{level_hpa} mb:",
+            ecmwf_param="t",
+            grib2_category=0,
+            grib2_number=0,
+            gdal_unit="C",
+            **common,
+        )
+    if family == "rh":
+        return VariableSpec(
+            label=f"{level_hpa} hPa relative humidity",
+            output_unit="%",
+            value_range=(0, 100),
+            grib_element="RH",
+            index_field=f":RH:{level_hpa} mb:",
+            ecmwf_param="r",
+            grib2_category=1,
+            grib2_number=1,
+            gdal_unit="%",
+            **common,
+        )
+    if family == "spfh":
+        # GRIB2 carries kg/kg; the codebook quantizes g/kg.
+        low, high = _SPECIFIC_HUMIDITY_VALUE_RANGES[level_hpa]
+        return VariableSpec(
+            label=f"{level_hpa} hPa specific humidity",
+            output_unit="g/kg",
+            value_range=(int(low), int(high)),
+            grib_element="SPFH",
+            index_field=f":SPFH:{level_hpa} mb:",
+            ecmwf_param="q",
+            grib2_category=1,
+            grib2_number=0,
+            gdal_unit="kg/kg",
+            **common,
+        )
+    if family in ("ugrd", "vgrd"):
+        element = "UGRD" if family == "ugrd" else "VGRD"
+        return VariableSpec(
+            label=f"{level_hpa} hPa {'U' if family == 'ugrd' else 'V'} wind component",
+            output_unit="m/s",
+            value_range=(-127, 127),
+            grib_element=element,
+            index_field=f":{element}:{level_hpa} mb:",
+            ecmwf_param="u" if family == "ugrd" else "v",
+            grib2_category=2,
+            grib2_number=2 if family == "ugrd" else 3,
+            gdal_unit="m/s",
+            **common,
+        )
+    # Water vapour flux, q·V/g in g·cm⁻¹·hPa⁻¹·s⁻¹ — the unit a Chinese
+    # synoptic chart contours it in. Derived by the converter from the
+    # specific humidity and the wind on the same surface, never fetched, so
+    # the record-matching fields stay empty. GRIB2 has no standard parameter
+    # for a per-level horizontal vapour flux; 250 / 251 are local-use numbers
+    # of our own in the moisture category, clear of every NCEP and ECMWF
+    # local number this pipeline meets.
+    assert family in ("uqflx", "vqflx")
+    return VariableSpec(
+        label=f"{level_hpa} hPa {'U' if family == 'uqflx' else 'V'} water vapour flux component",
+        output_unit="g/(cm·hPa·s)",
+        value_range=(-64, 64),
+        grib2_category=1,
+        grib2_number=250 if family == "uqflx" else 251,
+        **common,
+    )
+
+
+for _family in ISOBARIC_FAMILIES:
+    for _level in ISOBARIC_LEVELS_HPA:
+        VARIABLES[isobaric_variable_id(_family, _level)] = _isobaric_spec(_family, _level)
+del _family, _level
+
+# Standard gravity, the g in q·V/g.
+STANDARD_GRAVITY = 9.80665
 
 
 def variable_spec(variable_id: str) -> VariableSpec:

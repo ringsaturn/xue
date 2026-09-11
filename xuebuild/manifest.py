@@ -8,17 +8,22 @@ from typing import Any
 
 from .errors import ManifestError
 from .sources import MODEL_PRODUCTS
+from .variables import ISOBARIC_LEVELS_HPA
 
 
-# Schema v5 bundle registry, in manifest order. The wind bundle packs both
-# 10 m components into one two-variable .xue and is optional so
-# runs built from wind-less inputs (and older manifests) stay valid; dswrf
-# is optional because only the sflux source carries it, and cref because
-# only the radar observation archive does. The pressure family (mean sea
-# level pressure and the eight isobaric geopotential heights) is optional for
-# the same reason and one bundle per level: container v2 orders chunks group
-# -> tile -> variable, so a multi-variable pressure bundle would make a
-# viewport pull every level to read one.
+# Schema v5 bundle registry, in manifest order: every scalar, then every
+# two-variable vector bundle. The wind bundle packs both 10 m components into
+# one two-variable .xue and is optional so runs built from wind-less inputs
+# (and older manifests) stay valid; dswrf is optional because only the sflux
+# source carries it, and cref because only the radar observation archive
+# does. The pressure family (mean sea level pressure and the eight isobaric
+# geopotential heights) and the upper-air fills (temperature, relative and
+# specific humidity, the wind and the water vapour flux on the same eight
+# surfaces) are optional for the same reason and one bundle per level:
+# container v2 orders chunks group -> tile -> variable, so a multi-variable
+# bundle would make a viewport pull every level to read one. All vectors
+# follow all scalars, so a manifest written before a family existed is still
+# a subsequence of this list.
 #
 # This list is the frontend's admission test as well: `manifest.ts` rejects a
 # whole manifest that names a bundle it does not know, so a widened registry
@@ -30,15 +35,13 @@ BIN_BUNDLE_VARIABLES = (
     "dswrf",
     "cref",
     "prmsl",
-    "hgt1000",
-    "hgt925",
-    "hgt850",
-    "hgt700",
-    "hgt500",
-    "hgt300",
-    "hgt250",
-    "hgt200",
+    *(f"hgt{level}" for level in ISOBARIC_LEVELS_HPA),
+    *(f"tmp{level}" for level in ISOBARIC_LEVELS_HPA),
+    *(f"rh{level}" for level in ISOBARIC_LEVELS_HPA),
+    *(f"spfh{level}" for level in ISOBARIC_LEVELS_HPA),
     "wind10m",
+    *(f"wind{level}" for level in ISOBARIC_LEVELS_HPA),
+    *(f"qflux{level}" for level in ISOBARIC_LEVELS_HPA),
 )
 REQUIRED_BIN_BUNDLE_VARIABLES = ("tmp2m", "prate")
 

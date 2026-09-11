@@ -15,7 +15,7 @@ use time::OffsetDateTime;
 use crate::encode::errors::{EncodeError, Result};
 use crate::encode::gdalio::{BandInfo, Dataset};
 use crate::encode::model::SourceFrame;
-use crate::encode::variables::{isobaric_level_hpa, variable_spec};
+use crate::encode::variables::{isobaric_variable, variable_spec};
 
 static HEIGHT_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i)(?:^|[^0-9])2(?:\.0+)?\s*m(?:eter)?s?\s+above\s+ground").expect("valid regex")
@@ -106,21 +106,7 @@ pub fn raster_expression(variable_id: &str, unit: &str) -> Result<String> {
             }
             Ok("maximum(0,minimum(1270,A))".into())
         }
-        "ugrd10m" | "vgrd10m" => {
-            let compact: String = unit
-                .trim()
-                .to_lowercase()
-                .chars()
-                .filter(|character| !" *()[]".contains(*character))
-                .collect();
-            if !["m/s", "m/sec", "ms-1", "ms^-1", "mps"].contains(&compact.as_str()) {
-                return Err(EncodeError::conversion(format!(
-                    "unsupported wind component unit: {}",
-                    if unit.is_empty() { "<missing>" } else { unit }
-                )));
-            }
-            Ok("maximum(-64,minimum(64,A))".into())
-        }
+        "ugrd10m" | "vgrd10m" => wind_expression(unit),
         // Mean sea level pressure: GRIB2 carries pascals, the codebook
         // quantizes hectopascals. Only Pa is accepted — a file already in
         // hPa would divide twice, and no source publishes one.
@@ -133,18 +119,62 @@ pub fn raster_expression(variable_id: &str, unit: &str) -> Result<String> {
             }
             Ok("A/100".into())
         }
-        // Geopotential height, already in metres. GDAL reports GFS HGT as
-        // "gpm"; a source spelling it "m" differs by less than the codebook
-        // step at these levels.
-        other if isobaric_level_hpa(other).is_some() => {
+        // The isobaric families, by family: geopotential height is already
+        // in metres (GDAL reports GFS HGT as "gpm"; a source spelling it "m"
+        // differs by less than the codebook step), temperature takes the 2 m
+        // temperature's rule, the wind components the 10 m pair's, relative
+        // humidity is percent, and specific humidity is a kg/kg mass ratio
+        // the codebook quantizes in g/kg.
+        other if isobaric_variable(other).is_some() => {
+            let (family, _) = isobaric_variable(other).expect("checked");
             let compact = unit.trim().trim_matches(|character| "[]()".contains(character));
-            if !matches!(compact, "gpm" | "m") {
-                return Err(EncodeError::conversion(format!(
-                    "unsupported geopotential height unit: {}",
-                    if unit.is_empty() { "<missing>" } else { unit }
-                )));
+            match family {
+                "hgt" => {
+                    if !matches!(compact, "gpm" | "m") {
+                        return Err(EncodeError::conversion(format!(
+                            "unsupported geopotential height unit: {}",
+                            if unit.is_empty() { "<missing>" } else { unit }
+                        )));
+                    }
+                    Ok("A".into())
+                }
+                "tmp" => {
+                    let value = match normalize_unit(unit)? {
+                        "K" => "A-273.15",
+                        "F" => "(A-32)*5/9",
+                        _ => "A",
+                    };
+                    Ok(format!("maximum(-60,minimum(50,{value}))"))
+                }
+                "rh" => {
+                    if compact != "%" {
+                        return Err(EncodeError::conversion(format!(
+                            "unsupported relative humidity unit: {}",
+                            if unit.is_empty() { "<missing>" } else { unit }
+                        )));
+                    }
+                    Ok("maximum(0,minimum(100,A))".into())
+                }
+                "spfh" => {
+                    let compact: String = unit
+                        .trim()
+                        .to_lowercase()
+                        .chars()
+                        .filter(|character| !" *()[]".contains(*character))
+                        .collect();
+                    if compact != "kg/kg" {
+                        return Err(EncodeError::conversion(format!(
+                            "unsupported specific humidity unit: {}",
+                            if unit.is_empty() { "<missing>" } else { unit }
+                        )));
+                    }
+                    Ok("A*1000".into())
+                }
+                "ugrd" | "vgrd" => wind_expression(unit),
+                _ => Err(EncodeError::conversion(format!(
+                    "unsupported variable: {other}"
+                ))),
             }
-            Ok("A".into())
         }
         other => Err(EncodeError::conversion(format!(
             "unsupported variable: {other}"
@@ -152,7 +182,23 @@ pub fn raster_expression(variable_id: &str, unit: &str) -> Result<String> {
     }
 }
 
-/// Whether one band names the given isobaric surface.
+fn wind_expression(unit: &str) -> Result<String> {
+    let compact: String = unit
+        .trim()
+        .to_lowercase()
+        .chars()
+        .filter(|character| !" *()[]".contains(*character))
+        .collect();
+    if !["m/s", "m/sec", "ms-1", "ms^-1", "mps"].contains(&compact.as_str()) {
+        return Err(EncodeError::conversion(format!(
+            "unsupported wind component unit: {}",
+            if unit.is_empty() { "<missing>" } else { unit }
+        )));
+    }
+    Ok("maximum(-64,minimum(64,A))".into())
+}
+
+/// Whether one band carries the given element on the given isobaric surface.
 ///
 /// The surface value is pascals in GRIB2 itself, and that is what GDAL
 /// reports: the 850 hPa record comes back as short name `85000-ISBL` with the
@@ -161,7 +207,10 @@ pub fn raster_expression(variable_id: &str, unit: &str) -> Result<String> {
 /// human-facing description. Whichever unit, it must name *this* level: a
 /// matcher that let 500 also match 1000 (or 50000 Pa also match 100000) would
 /// silently pick the wrong plane.
-fn is_isobaric_height(band: &BandInfo, level_hpa: u32) -> bool {
+fn is_isobaric_record(band: &BandInfo, element: &str, level_hpa: u32) -> bool {
+    if band.item("GRIB_ELEMENT").to_uppercase() != element {
+        return false;
+    }
     let short_name = band.item("GRIB_SHORT_NAME").to_uppercase();
     let level_pa = level_hpa * 100;
     if short_name == format!("{level_hpa}-ISBL") || short_name == format!("{level_pa}-ISBL") {
@@ -236,8 +285,15 @@ fn band_matches(variable_id: &str, band: &BandInfo) -> Result<bool> {
                 && (short_name == "0-MSL"
                     || searchable(band).to_lowercase().contains("mean sea level"))
         }
-        other if isobaric_level_hpa(other).is_some() => {
-            element == "HGT" && is_isobaric_height(band, isobaric_level_hpa(other).expect("checked"))
+        other if isobaric_variable(other).is_some() => {
+            let (_, level) = isobaric_variable(other).expect("checked");
+            let spec = variable_spec(other)?;
+            if spec.grib_element.is_empty() {
+                return Err(EncodeError::conversion(format!(
+                    "{other} is derived, not a GRIB record"
+                )));
+            }
+            is_isobaric_record(band, spec.grib_element, level)
         }
         other => {
             return Err(EncodeError::conversion(format!(

@@ -176,7 +176,16 @@ publishing data at the new version.**
   param). One entry per variable feeds both record matching and the schema v3
   metadata block. Some entries are *input-only* (no `numeric_id`): ECMWF `tp`
   de-accumulates into `prate`, sflux `prate_ave` de-averages into `prate`;
-  neither reaches a bundle.
+  neither reaches a bundle. The isobaric families (`hgt`, `tmp`, `rh`,
+  `spfh`, `ugrd`/`vgrd`, `uqflx`/`vqflx`) are generated from one table of
+  eight levels; `isobaric_variable(id)` answers `(family, level)`, and the
+  vapour flux pair is derived in the converter (`q·V/g`), never fetched.
+  Registration is not publication: `SourceSpec.bundle_scalar_ids` and
+  `bundle_vector_ids` say what a source ships, and a vector bundle
+  (`wind10m`, `wind<level>`, `qflux<level>`) ships only when every input in
+  `binconvert.vector_input_ids` is fetched. `tests/fixtures/isobaric-registry.json`
+  holds the three implementations to one set of ids and codebooks, the way
+  `pressure-registry.json` does for the pressure family.
 - `fetch.py` → `idx.py` / `grib2.py` — byte-range fetches of exact GRIB
   records; ECMWF open data is CCSDS-packed and is repacked to `grid_simple`
   with `grib_set` at fetch time.
@@ -274,7 +283,13 @@ animate raster opacity). The same shader also draws **10 m wind** as a filled
 speed field: `layer.ts::setVectorField` switches the data texture to RG8 (u
 codes in red, v in green — the packing `particles.ts` already builds, which
 `main.ts` interleaves once per frame and memoizes), reconstructs each channel
-on its own and looks the palette up by `speed / WIND_SPEED_MAX`. The same
+on its own and looks the palette up by `magnitude / maxMagnitude` — the same
+path draws every **vector bundle** (`wind<level>`, `qflux<level>`), each with
+its own ceiling from `levels.ts::vectorMaxMagnitude`. `web/src/levels.ts` is
+the **family** registry: one rail tile per family (temperature from 2 m up,
+wind from 10 m up, relative humidity, specific humidity, vapour flux,
+pressure), the level row on the capsule picks the member, and the fill's
+group sits beside the lines' group when both have a choice. The same
 shader draws the **pressure family** (mean
 sea level pressure and the eight isobaric geopotential heights) as contour
 lines instead of a filled field: `web/src/pressure.ts` holds the per-level

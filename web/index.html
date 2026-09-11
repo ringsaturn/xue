@@ -167,10 +167,14 @@
         </div>
       </aside>
 
-      <!-- One tile per layer. The glyph is the label; the code and its gloss
-           ride along visually hidden so the button still names itself. -->
+      <!-- One tile per layer or family. The glyph is the label; the code and
+           its gloss ride along visually hidden so the button still names
+           itself. A family tile (data-family) stands for every surface of a
+           quantity — 2 m and the isobaric temperatures, 10 m and the isobaric
+           winds — and the surface itself is chosen on the timeline capsule's
+           level row. -->
       <div class="variable-rail" role="group" data-i18n-aria="variableSwitchAria" aria-label="Weather variable">
-        <button type="button" data-variable="tmp2m" aria-pressed="false">
+        <button type="button" data-variable="tmp2m" data-family="tmp" aria-pressed="false">
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphTmp2m">T</b>
           <span class="rail-name"><span>TEMP</span> <small data-i18n="varTemp">2M</small></span>
         </button>
@@ -178,9 +182,21 @@
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphPrate">R</b>
           <span class="rail-name"><span>PRECIP</span> <small data-i18n="varPrecip">RATE</small></span>
         </button>
-        <button type="button" data-variable="wind10m" aria-pressed="false" hidden>
+        <button type="button" data-variable="wind10m" data-family="wind" aria-pressed="false" hidden>
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphWind10m">W</b>
           <span class="rail-name"><span>WIND</span> <small data-i18n="varWind">10M</small></span>
+        </button>
+        <button type="button" data-variable="rh850" data-family="rh" aria-pressed="false" hidden>
+          <b class="rail-glyph" aria-hidden="true" data-i18n="glyphRh">U</b>
+          <span class="rail-name"><span>HUMIDITY</span> <small data-i18n="varHumidity">REL</small></span>
+        </button>
+        <button type="button" data-variable="qflux850" data-family="qflux" aria-pressed="false" hidden>
+          <b class="rail-glyph" aria-hidden="true" data-i18n="glyphQflux">F</b>
+          <span class="rail-name"><span>VAPOUR</span> <small data-i18n="varVapourFlux">FLUX</small></span>
+        </button>
+        <button type="button" data-variable="spfh850" data-family="spfh" aria-pressed="false" hidden>
+          <b class="rail-glyph" aria-hidden="true" data-i18n="glyphSpfh">q</b>
+          <span class="rail-name"><span>HUMIDITY</span> <small data-i18n="varSpecificHumidity">SPEC</small></span>
         </button>
         <button type="button" data-variable="dswrf" aria-pressed="false" hidden>
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphDswrf">S</b>
@@ -199,47 +215,11 @@
       </div>
 
       <section id="timeline-panel" class="timeline-panel" data-i18n-aria="timelineAria" aria-label="Forecast time controls">
-        <!-- Only for the pressure family: nine surfaces on one scrolling row,
-             each its own bundle. -->
-        <div id="level-row" class="level-row" role="group" data-i18n-aria="levelSwitchAria" aria-label="Pressure level" hidden>
-          <span class="level-caption" data-i18n="levelCaption">LEVEL</span>
-          <button type="button" data-variable="prmsl" data-level aria-pressed="false" hidden>
-            <b aria-hidden="true">MSL</b>
-            <span class="rail-name"><span>MSLP</span> <small data-i18n="varPressure">SEA LVL</small></span>
-          </button>
-          <button type="button" data-variable="hgt1000" data-level aria-pressed="false" hidden>
-            <b aria-hidden="true">1000</b>
-            <span class="rail-name"><span>1000MB</span> <small data-i18n="varHeight">HEIGHT</small></span>
-          </button>
-          <button type="button" data-variable="hgt925" data-level aria-pressed="false" hidden>
-            <b aria-hidden="true">925</b>
-            <span class="rail-name"><span>925MB</span> <small data-i18n="varHeight">HEIGHT</small></span>
-          </button>
-          <button type="button" data-variable="hgt850" data-level aria-pressed="false" hidden>
-            <b aria-hidden="true">850</b>
-            <span class="rail-name"><span>850MB</span> <small data-i18n="varHeight">HEIGHT</small></span>
-          </button>
-          <button type="button" data-variable="hgt700" data-level aria-pressed="false" hidden>
-            <b aria-hidden="true">700</b>
-            <span class="rail-name"><span>700MB</span> <small data-i18n="varHeight">HEIGHT</small></span>
-          </button>
-          <button type="button" data-variable="hgt500" data-level aria-pressed="false" hidden>
-            <b aria-hidden="true">500</b>
-            <span class="rail-name"><span>500MB</span> <small data-i18n="varHeight">HEIGHT</small></span>
-          </button>
-          <button type="button" data-variable="hgt300" data-level aria-pressed="false" hidden>
-            <b aria-hidden="true">300</b>
-            <span class="rail-name"><span>300MB</span> <small data-i18n="varHeight">HEIGHT</small></span>
-          </button>
-          <button type="button" data-variable="hgt250" data-level aria-pressed="false" hidden>
-            <b aria-hidden="true">250</b>
-            <span class="rail-name"><span>250MB</span> <small data-i18n="varHeight">HEIGHT</small></span>
-          </button>
-          <button type="button" data-variable="hgt200" data-level aria-pressed="false" hidden>
-            <b aria-hidden="true">200</b>
-            <span class="rail-name"><span>200MB</span> <small data-i18n="varHeight">HEIGHT</small></span>
-          </button>
-        </div>
+        <!-- The level row: one group per slot with a choice of surfaces — the
+             filled family's (2 m / 850 / 500 hPa temperature), and the lines'
+             (sea level pressure and the isobaric heights). Built from the
+             manifest by main.ts; hidden when neither has a choice. -->
+        <div id="level-row" class="level-row" role="group" data-i18n-aria="levelSwitchAria" aria-label="Level" hidden></div>
 
         <div class="timeline-heading">
           <div class="forecast-readout">

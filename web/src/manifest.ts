@@ -52,61 +52,103 @@ function modelForManifestString(model: unknown): ForecastModelInfo | null {
   return null;
 }
 
-/** The pressure family: mean sea level pressure and geopotential height on
- * the eight registered isobaric surfaces. One bundle per level — container v2
- * orders chunks group -> tile -> variable, so packing the levels together
- * would make a viewport pull every level to read one. What the viewer draws
- * from them is contours; see pressure.ts. */
-export type PressureBundleId =
-  | "prmsl"
-  | "hgt1000"
-  | "hgt925"
-  | "hgt850"
-  | "hgt700"
-  | "hgt500"
-  | "hgt300"
-  | "hgt250"
-  | "hgt200";
+/** The eight standard isobaric surfaces every isobaric family is registered
+ * on, in hPa, in the encoders' `variableId` order (mirrors
+ * `ISOBARIC_LEVELS_HPA` in xuebuild/variables.py). One bundle per level —
+ * container v2 orders chunks group -> tile -> variable, so packing the levels
+ * together would make a viewport pull every level to read one. */
+export const ISOBARIC_LEVELS = [1000, 925, 850, 700, 500, 300, 250, 200] as const;
+export type IsobaricLevel = (typeof ISOBARIC_LEVELS)[number];
 
-/** Bundle-level ids the manifest can carry. On a live run the scalar
- * variables are mandatory; the two-variable wind bundle, the dswrf
- * solar-radiation bundle (sflux only), the cref radar bundle (the radar
- * archive only) and the pressure family are optional so pre-existing runs
- * keep validating.
+/** The pressure family: mean sea level pressure and geopotential height on
+ * the isobaric surfaces. What the viewer draws from them is contours; see
+ * pressure.ts. */
+export type PressureBundleId = "prmsl" | `hgt${IsobaricLevel}`;
+
+/** The filled isobaric scalars: temperature, relative humidity and specific
+ * humidity on the same surfaces (levels.ts). */
+export type IsobaricScalarBundleId = `tmp${IsobaricLevel}` | `rh${IsobaricLevel}` | `spfh${IsobaricLevel}`;
+
+/** The two-variable bundles: a u/v pair the viewer draws as a magnitude field
+ * with optional particles — the 10 m wind, the wind on each isobaric surface,
+ * and the water vapour flux the encoder derives there. */
+export type VectorBundleId = "wind10m" | `wind${IsobaricLevel}` | `qflux${IsobaricLevel}`;
+
+/** Bundle-level ids the manifest can carry. On a live run the core scalar
+ * pair is mandatory; the vector bundles, the dswrf solar-radiation bundle
+ * (sflux only), the cref radar bundle (the radar archive only), the pressure
+ * family and the upper-air fills are optional so pre-existing runs keep
+ * validating.
  *
  * A manifest naming a bundle that is not in this list is rejected outright,
  * not ignored — which is why a widened registry must reach the deployed shell
  * *before* any run publishes the new bundles. */
-export type ForecastBundleId = ForecastVariableId | "dswrf" | "cref" | PressureBundleId | "wind10m";
+export type ForecastBundleId =
+  | ForecastVariableId
+  | "dswrf"
+  | "cref"
+  | PressureBundleId
+  | IsobaricScalarBundleId
+  | VectorBundleId;
 
-/** Data-level variable ids that can appear inside bundle metadata; the wind
- * bundle carries both 10 m components on one time axis. */
+/** The component variables a vector bundle carries, both on one time axis. */
+export type VectorComponentId =
+  | "ugrd10m"
+  | "vgrd10m"
+  | `ugrd${IsobaricLevel}`
+  | `vgrd${IsobaricLevel}`
+  | `uqflx${IsobaricLevel}`
+  | `vqflx${IsobaricLevel}`;
+
+/** Data-level variable ids that can appear inside bundle metadata. */
 export type DataVariableId =
   | ForecastVariableId
   | "dswrf"
   | "cref"
   | PressureBundleId
-  | "ugrd10m"
-  | "vgrd10m";
+  | IsobaricScalarBundleId
+  | VectorComponentId;
 
 export const FORECAST_VARIABLE_IDS: readonly ForecastVariableId[] = ["tmp2m", "prate"];
+
+function perLevel<Prefix extends string>(prefix: Prefix): `${Prefix}${IsobaricLevel}`[] {
+  return ISOBARIC_LEVELS.map((level) => `${prefix}${level}` as `${Prefix}${IsobaricLevel}`);
+}
+
+/** Every bundle id, in manifest order: all scalars, then all vectors. Mirrors
+ * `BIN_BUNDLE_VARIABLES` in xuebuild/manifest.py. */
 export const FORECAST_BUNDLE_IDS: readonly ForecastBundleId[] = [
   "tmp2m",
   "prate",
   "dswrf",
   "cref",
   "prmsl",
-  "hgt1000",
-  "hgt925",
-  "hgt850",
-  "hgt700",
-  "hgt500",
-  "hgt300",
-  "hgt250",
-  "hgt200",
+  ...perLevel("hgt"),
+  ...perLevel("tmp"),
+  ...perLevel("rh"),
+  ...perLevel("spfh"),
   "wind10m",
+  ...perLevel("wind"),
+  ...perLevel("qflux"),
 ];
 export const WIND_COMPONENT_IDS: readonly DataVariableId[] = ["ugrd10m", "vgrd10m"];
+
+/** The u/v component pair of every vector bundle. */
+export const VECTOR_BUNDLES: Record<VectorBundleId, readonly [VectorComponentId, VectorComponentId]> = {
+  wind10m: ["ugrd10m", "vgrd10m"],
+  ...Object.fromEntries(ISOBARIC_LEVELS.map((level) => [`wind${level}`, [`ugrd${level}`, `vgrd${level}`]])),
+  ...Object.fromEntries(ISOBARIC_LEVELS.map((level) => [`qflux${level}`, [`uqflx${level}`, `vqflx${level}`]])),
+} as unknown as Record<VectorBundleId, readonly [VectorComponentId, VectorComponentId]>;
+
+/** True when a bundle carries a u/v pair rather than one scalar. */
+export function isVectorBundle(id: ForecastBundleId): id is VectorBundleId {
+  return id in VECTOR_BUNDLES;
+}
+
+/** The two components a vector bundle carries, or null for a scalar. */
+export function vectorComponents(id: ForecastBundleId): readonly [VectorComponentId, VectorComponentId] | null {
+  return isVectorBundle(id) ? VECTOR_BUNDLES[id] : null;
+}
 
 export interface VideoBundleDescriptor {
   streamPath: string;
