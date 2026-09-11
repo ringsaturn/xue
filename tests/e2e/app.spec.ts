@@ -364,9 +364,10 @@ test("a pressure level loads as its own contour session", async ({ page }, testI
   await page.goto("/");
   await waitForReady(page);
   // The rail carries one tile for the whole pressure family; the surface
-  // itself is picked on the capsule's level row, which only appears once a
-  // pressure layer is on screen.
-  await expect(page.locator("#level-row")).toBeHidden();
+  // itself is picked on the capsule's level row. Over a field the row offers
+  // the surfaces as lines, none pressed until one is.
+  await expect(page.locator("#level-row")).toBeVisible();
+  await expect(page.locator('#level-row [data-slot="lines"] button[aria-pressed="true"]')).toHaveCount(0);
   await page.getByRole("button", { name: "PRESSURE FIELD" }).click();
   await expect(page.locator("body")).toHaveAttribute("data-variable", "hgt500");
   await expect(page.locator("#level-row")).toBeVisible();
@@ -433,6 +434,31 @@ test("?lines= draws a pressure surface over the filled field", async ({ page }, 
   await expect(page.locator("#legend")).toBeVisible();
   // Every session stayed resident throughout.
   expect(counters).toEqual({ tmp2m: 1, prate: 1, hgt500: 1 });
+  // Over a field the pressed lines member is the overlay's off switch:
+  // pressing it again takes the lines away, and with them their level group
+  // and the `lines` parameter, leaving the field as it was.
+  const linesButton = page.locator('#level-row button[data-variable="hgt500"]');
+  await expect(linesButton).toHaveClass(/is-removable/);
+  await linesButton.click();
+  await expect(page).not.toHaveURL(/lines=/);
+  await expect(page.locator("body")).toHaveAttribute("data-variable", "prate");
+  await expect(page.getByRole("button", { name: "PRESSURE FIELD" })).toHaveAttribute("aria-pressed", "false");
+  // The group stays on the row with nothing pressed, so a slip is undone
+  // with one press rather than a trip through the chart view.
+  await expect(page.locator("#level-row")).toBeVisible();
+  await expect(page.locator('#level-row [data-slot="lines"] button[aria-pressed="true"]')).toHaveCount(0);
+  await expect(linesButton).not.toHaveClass(/is-removable/);
+  await linesButton.click();
+  await expect(page).toHaveURL(/lines=hgt500/);
+  await expect(linesButton).toHaveAttribute("aria-pressed", "true");
+  await expect(linesButton).toHaveClass(/is-removable/);
+  expect(counters).toEqual({ tmp2m: 1, prate: 1, hgt500: 1 });
+  // As the view itself the lines cannot be switched off, only changed.
+  await page.getByRole("button", { name: "PRESSURE FIELD" }).click();
+  await expect(page.locator("body")).toHaveAttribute("data-variable", "hgt500");
+  await expect(page.locator('#level-row button[data-variable="hgt500"]')).not.toHaveClass(/is-removable/);
+  await page.locator('#level-row button[data-variable="hgt500"]').click();
+  await expect(page.locator("body")).toHaveAttribute("data-variable", "hgt500");
 });
 
 test("playback keeps moving with lines over the field", async ({ page }, testInfo) => {
@@ -457,8 +483,10 @@ test("the temperature tile opens a family whose level row picks the surface", as
   await routeBundle(page);
   await page.goto("/");
   await waitForReady(page);
-  // Precipitation is a single layer: no level row.
-  await expect(page.locator("#level-row")).toBeHidden();
+  // Precipitation is a single layer: the row carries only the lines group,
+  // offering the run's pressure surfaces with none pressed.
+  await expect(page.locator("#level-row .level-group")).toHaveCount(1);
+  await expect(page.locator('#level-row .level-group[data-slot="lines"]')).toBeVisible();
   // The family tile opens its surface member, and the row lists the members
   // the run publishes with the surface pressed.
   // The rail's family tile and the level row's surface member share a name,
@@ -772,6 +800,27 @@ test("range-capable server streams on demand and never downloads the full body",
   await expect(page.locator("#preload-format")).toHaveText("Xue");
   expect(counters.ranged).toBeGreaterThan(1);
   expect(counters.full).toBe(0);
+});
+
+test("a phone folds the credit line into a sources sheet", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "mobile", "the phone viewport is the narrow one");
+  await routeManifest(page);
+  await routeBundle(page);
+  await page.goto("/");
+  await expect(page.getByRole("slider", { name: "Forecast hour" })).toBeEnabled({ timeout: 20_000 });
+  // The line never fit a phone; a trigger stands in its corner instead.
+  await expect(page.locator(".source-note .source-line")).toBeHidden();
+  const trigger = page.getByRole("button", { name: "SOURCES" });
+  await expect(trigger).toBeVisible();
+  await trigger.click();
+  const sheet = page.getByRole("dialog", { name: "Data & credits" });
+  await expect(sheet).toBeVisible();
+  await expect(sheet.getByRole("link", { name: /ECMWF Open Data/ })).toBeVisible();
+  await expect(sheet.getByRole("link", { name: /Protomaps/ })).toHaveAttribute("href", "https://protomaps.com");
+  await expect(trigger).toHaveAttribute("aria-expanded", "true");
+  await page.keyboard.press("Escape");
+  await expect(sheet).toBeHidden();
+  await expect(trigger).toHaveAttribute("aria-expanded", "false");
 });
 
 test("a phone-sized view buffers its own tiles and says so", async ({ page }, testInfo) => {

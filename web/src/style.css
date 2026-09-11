@@ -47,15 +47,6 @@
      only smudges the ground they are meant to read against. */
   --lift: 0 20px 60px rgba(27, 26, 23, 0.18);
   --lift-small: 0 10px 30px rgba(27, 26, 23, 0.14);
-  /* Top and bottom of the map fade toward the ground so the title and the
-     transport capsule are read against something, whatever is underneath. */
-  --map-fade: linear-gradient(
-    180deg,
-    rgba(243, 239, 230, 0.7) 0%,
-    rgba(243, 239, 230, 0) 14%,
-    rgba(243, 239, 230, 0) 64%,
-    rgba(243, 239, 230, 0.88) 100%
-  );
 
   --font-ui: Manrope, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
@@ -90,13 +81,6 @@
     --scrim: rgba(0, 0, 0, 0.45);
     --lift: 0 20px 60px rgba(0, 0, 0, 0.5);
     --lift-small: 0 10px 30px rgba(0, 0, 0, 0.45);
-    --map-fade: linear-gradient(
-      180deg,
-      rgba(0, 0, 0, 0.35) 0%,
-      rgba(0, 0, 0, 0) 18%,
-      rgba(0, 0, 0, 0) 60%,
-      rgba(0, 0, 0, 0.3) 100%
-    );
   }
 }
 
@@ -120,13 +104,6 @@
   --scrim: rgba(0, 0, 0, 0.45);
   --lift: 0 20px 60px rgba(0, 0, 0, 0.5);
   --lift-small: 0 10px 30px rgba(0, 0, 0, 0.45);
-  --map-fade: linear-gradient(
-    180deg,
-    rgba(0, 0, 0, 0.35) 0%,
-    rgba(0, 0, 0, 0) 18%,
-    rgba(0, 0, 0, 0) 60%,
-    rgba(0, 0, 0, 0.3) 100%
-  );
 }
 
 /* Over-map ink. The chrome — capsule, rail, sheet, cards — always uses the
@@ -144,13 +121,6 @@ body[data-ground="dark"] {
   --map-ink: #fff;
   --map-ink-muted: rgba(255, 255, 255, 0.72);
   --label-shadow: 0 1px 4px rgba(0, 0, 0, 0.85);
-  --map-fade: linear-gradient(
-    180deg,
-    rgba(0, 0, 0, 0.35) 0%,
-    rgba(0, 0, 0, 0) 14%,
-    rgba(0, 0, 0, 0) 64%,
-    rgba(0, 0, 0, 0.3) 100%
-  );
 }
 
 * {
@@ -219,18 +189,18 @@ body.is-data-loading #map {
   transition: filter 180ms ease;
 }
 
-/* The instrument grid, then the fade the floating controls are read against.
-   Earlier layers paint on top, so the fade is listed first. */
+/* The instrument grid. The floating controls read against the map itself:
+   the title and the capsule carry their own text shadow and surface, so
+   nothing is faded into the ground at the top or bottom edge. */
 .atmosphere {
   position: absolute;
   inset: 0;
   z-index: 1;
   pointer-events: none;
   background:
-    var(--map-fade),
     linear-gradient(0deg, var(--grid-line) 1px, transparent 1px),
     linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
-  background-size: auto, 120px 120px, 120px 120px;
+  background-size: 120px 120px;
 }
 
 .title-block,
@@ -475,8 +445,9 @@ body.is-showcase .model-caret {
    its own only while data loads (or on error); the map's right-click menu
    pins it with the extended stats grid (body.stats-visible). */
 
-/* Left of the zoom control's column, and clear of the layer rail below it:
-   the card grows downward and must not slide under either. */
+/* Left of the right-hand column (the zoom tile and the layer rail, 44px at
+   20px from the edge), and clear of the rail below it: the card grows
+   downward and must not slide under either. */
 .data-card {
   top: 80px;
   right: 78px;
@@ -709,7 +680,7 @@ body.stats-visible .stat-graph-wrap {
 
 .legend {
   top: 50%;
-  left: 16px;
+  left: 20px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -775,11 +746,13 @@ body.is-pressure .legend {
 }
 
 /* ---------------------------------------------------------------------------
-   Layer rail, on the right edge. */
+   Layer rail, on the right edge. It shares one 44px column with the round
+   controls above it and the zoom tile between them: same width, same right
+   offset, so the three read as one vertical axis. */
 
 .variable-rail {
   top: 50%;
-  right: 14px;
+  right: 20px;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -788,8 +761,8 @@ body.is-pressure .legend {
 
 .variable-rail button {
   display: flex;
-  width: 48px;
-  height: 48px;
+  width: 44px;
+  height: 44px;
   align-items: center;
   justify-content: center;
   border: 1px solid var(--line);
@@ -812,7 +785,7 @@ body.is-pressure .legend {
 }
 
 /* The Chinese glyphs are single characters and carry more ink than a Latin
-   initial; they need the extra size to read at 48px. */
+   initial; they need the extra size to read at 44px. */
 html[lang="zh-CN"] .rail-glyph {
   font-size: 17px;
 }
@@ -856,6 +829,8 @@ html[lang="zh-CN"] .rail-glyph {
    family's levels, then the lines'), on one scrolling row; shown only when a
    slot has a choice. */
 .level-row {
+  --fade-start: 0px;
+  --fade-end: 0px;
   display: flex;
   align-items: center;
   gap: 14px;
@@ -863,6 +838,17 @@ html[lang="zh-CN"] .rail-glyph {
   padding: 0 12px 0 16px;
   overflow-x: auto;
   scrollbar-width: none;
+  scroll-padding: 0 12px 0 16px;
+  /* A row wider than the capsule fades out at the clipped end instead of
+     cutting a button in half; main.ts keeps the two lengths in step with the
+     scroll position, and a row that fits has both at zero. */
+  mask-image: linear-gradient(
+    90deg,
+    transparent 0,
+    #000 var(--fade-start),
+    #000 calc(100% - var(--fade-end)),
+    transparent 100%
+  );
 }
 
 .level-group {
@@ -919,6 +905,15 @@ html[lang="zh-CN"] .rail-glyph {
   border-color: var(--text);
   background: var(--text);
   color: var(--bg);
+}
+
+/* Over a filled field the pressed lines member is also the way to take the
+   lines off again, and says so with the × a removable chip carries. */
+.level-row button.is-removable::after {
+  content: "✕";
+  margin-left: 7px;
+  font-size: 9px;
+  opacity: 0.7;
 }
 
 .level-row button:focus-visible {
@@ -1599,6 +1594,100 @@ html[lang="zh-CN"] .rail-glyph {
   text-decoration: underline;
 }
 
+/* The phone's replacement for the credit line: one small pill in the same
+   corner, opening the sources sheet. Hidden wherever the line itself fits. */
+.credits-trigger {
+  display: none;
+  height: 26px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-shadow: none;
+  backdrop-filter: blur(12px);
+}
+
+.credits-trigger:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* The sources sheet docks to the bottom edge at every width: it is opened
+   from the bottom corner, and lists rows the way the model sheet does. */
+.credits-panel {
+  top: auto;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  width: auto;
+  max-width: 480px;
+  margin: 0 auto;
+  padding-bottom: calc(24px + env(safe-area-inset-bottom));
+  border-radius: 28px 28px 0 0;
+}
+
+.credits-panel .sheet-grip {
+  display: block;
+}
+
+.credits-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.credits-list a {
+  display: grid;
+  min-height: 56px;
+  align-items: center;
+  gap: 2px 12px;
+  grid-template: "name arrow" auto "detail arrow" auto / 1fr auto;
+  padding: 8px 14px;
+  border-radius: 14px;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.credits-list a:hover,
+.credits-list a:focus-visible {
+  background: var(--row-hover);
+  outline: none;
+}
+
+.credits-name {
+  align-self: end;
+  font-family: var(--font-display);
+  font-size: 20px;
+  grid-area: name;
+  line-height: 1.1;
+}
+
+.credits-list small {
+  align-self: start;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  grid-area: detail;
+}
+
+.credits-arrow {
+  color: var(--muted);
+  font-size: 14px;
+  grid-area: arrow;
+}
+
 /* ---------------------------------------------------------------------------
    MapLibre chrome. */
 
@@ -1607,7 +1696,9 @@ html[lang="zh-CN"] .rail-glyph {
   right: 20px;
 }
 
-/* Restyled into the rail's language: one blurred tile, two 40px halves. */
+/* Restyled into the rail's language: one blurred tile, two halves. With
+   the 1px border the tile is 44px wide — the rail tile's and the round
+   controls' width, on the same right offset. */
 .maplibregl-ctrl-group {
   border: 1px solid var(--line);
   border-radius: 14px !important;
@@ -1617,7 +1708,7 @@ html[lang="zh-CN"] .rail-glyph {
 }
 
 .maplibregl-ctrl-group button {
-  width: 40px !important;
+  width: 42px !important;
   height: 40px !important;
 }
 
@@ -1732,7 +1823,7 @@ html[lang="zh-CN"] .rail-glyph {
 
   .legend {
     top: calc(118px + env(safe-area-inset-top));
-    left: 12px;
+    left: 16px;
     transform: none;
   }
 
@@ -1740,18 +1831,18 @@ html[lang="zh-CN"] .rail-glyph {
     height: 120px;
   }
 
+  /* The same column as the round controls above: 44px at 16px. Biased
+     upward: the capsule is taller here once a level row is on it, and the
+     rail must stop short of it. */
   .variable-rail {
-    right: 12px;
+    right: 16px;
+    transform: translateY(-64%);
   }
 
-  .variable-rail button {
-    width: 44px;
-    height: 44px;
-    border-radius: 13px;
-  }
-
+  /* Room under the capsule for the credits trigger, which is taller than
+     the credit line it replaces. */
   .timeline-panel {
-    bottom: calc(24px + env(safe-area-inset-bottom));
+    bottom: calc(40px + env(safe-area-inset-bottom));
     width: calc(100% - 24px);
     max-width: none;
     padding: 8px 10px 6px 14px;
@@ -1772,17 +1863,19 @@ html[lang="zh-CN"] .rail-glyph {
     display: none;
   }
 
-  /* One clipped line: as a flex row the overflow would eat the start of the
-     credit rather than its tail. */
+  /* The credit line does not fit a phone: it folds into the trigger, and
+     the sheet carries every source in full. */
   .source-note {
-    right: 14px;
+    right: 16px;
     bottom: calc(8px + env(safe-area-inset-bottom));
-    display: block;
-    max-width: calc(100% - 28px);
-    overflow: hidden;
-    text-align: right;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+  }
+
+  .source-note .source-line {
+    display: none;
+  }
+
+  .credits-trigger {
+    display: inline-flex;
   }
 
   .error-panel {

@@ -552,6 +552,8 @@ const timelinePanel = required<HTMLElement>("timeline-panel");
 const levelRow = required<HTMLElement>("level-row");
 const modelTrigger = required<HTMLButtonElement>("model-trigger");
 const modelSheet = required<HTMLElement>("model-sheet");
+const creditsTrigger = required<HTMLButtonElement>("credits-trigger");
+const creditsSheet = required<HTMLElement>("credits-sheet");
 // Scoped to buttons: <body> carries data-variable/data-model too (styling
 // state), and must never be hidden or aria-pressed like a switch button.
 const variableRail = document.querySelector<HTMLElement>(".variable-rail");
@@ -601,6 +603,16 @@ function setModelSheetOpen(open: boolean): void {
   modelSheet.hidden = !allowed;
   modelTrigger.setAttribute("aria-expanded", String(allowed));
   if (allowed) modelSheet.querySelector<HTMLButtonElement>('button[aria-pressed="true"]')?.focus();
+}
+
+/** The sources sheet: the credit line's contents, one row per source, opened
+ * from the trigger that stands in for the line where it does not fit. Focus
+ * goes to the first row and comes back to the trigger on close. */
+function setCreditsSheetOpen(open: boolean): void {
+  creditsSheet.hidden = !open;
+  creditsTrigger.setAttribute("aria-expanded", String(open));
+  if (open) creditsSheet.querySelector<HTMLAnchorElement>("a")?.focus();
+  else if (document.activeElement && creditsSheet.contains(document.activeElement)) creditsTrigger.focus();
 }
 
 interface DecodedFrame {
@@ -2416,13 +2428,17 @@ interface LevelGroup {
   caption: string;
   slot: RasterSlot["role"];
   members: ForecastBundleId[];
-  active: ForecastBundleId;
+  /** The pressed member; null for the lines group over a field with no
+   * lines on it. */
+  active: ForecastBundleId | null;
 }
 
 /** The level row's groups for the composition on screen: the fill's family
- * when it has more than one published member, then the lines' surfaces
- * whenever lines are drawn. With one group the caption is the generic word;
- * with two, each names its family. */
+ * when it has more than one published member, then the lines. Over a field
+ * the lines group is on the row whenever the run has a surface to chart,
+ * with no member pressed while the lines are off — so the overlay is one
+ * press away, and one press back after it was taken off. As the view itself
+ * the lines are the one group, under the generic caption. */
 function levelGroups(): LevelGroup[] {
   if (!manifest) return [];
   const run = manifest;
@@ -2433,16 +2449,13 @@ function levelGroups(): LevelGroup[] {
     const members = familyMembers(fillFamily).filter((id) => hasBundle(run, id));
     if (members.length > 1) groups.push({ caption: FAMILIES[fillFamily].code, slot: "fill", members, active: fill });
   }
-  if (composition.lines !== null) {
-    const members = PRESSURE_BUNDLE_IDS.filter((id) => hasBundle(run, id));
-    groups.push({
-      caption: groups.length > 0 ? t("linesCaption") : t("levelCaption"),
-      slot: "lines",
-      members,
-      active: composition.lines,
-    });
+  const surfaces = PRESSURE_BUNDLE_IDS.filter((id) => hasBundle(run, id));
+  if (fill !== null) {
+    if (surfaces.length > 0) groups.push({ caption: t("linesCaption"), slot: "lines", members: surfaces, active: composition.lines });
+  } else if (composition.lines !== null) {
+    groups.push({ caption: t("levelCaption"), slot: "lines", members: surfaces, active: composition.lines });
   }
-  if (groups.length === 1) groups[0]!.caption = t("levelCaption");
+  if (groups.length === 1 && groups[0]!.slot === "fill") groups[0]!.caption = t("levelCaption");
   return groups;
 }
 
@@ -2494,11 +2507,20 @@ function renderLevelRow(): void {
       glossSmall.textContent = gloss;
       name.append(codeSpan, " ", glossSmall);
       button.append(glyph, name);
+      // Over a filled field the lines are an overlay, and the pressed member
+      // is also its off switch: pressing it again takes the lines away. As
+      // the view itself the lines cannot be switched off, only changed.
+      const removable = group.slot === "lines" && id === group.active && composition.fill !== null;
+      if (removable) {
+        button.classList.add("is-removable");
+        button.title = t("linesRemoveTitle");
+      }
       button.addEventListener("click", () => {
         // A level changes its own slot: the fill's family member, or the
         // lines wherever they are — the view, or the chart over a field.
         if (group.slot === "lines") {
-          if (isPressureBundle(id)) void activateComposition({ ...composition, lines: id });
+          if (removable) void activateComposition({ fill: composition.fill, lines: null });
+          else if (isPressureBundle(id)) void activateComposition({ ...composition, lines: id });
         } else {
           void activateComposition({ fill: id, lines: composition.lines });
         }
@@ -2507,7 +2529,26 @@ function renderLevelRow(): void {
     }
     levelRow.append(container);
   }
+  // A row wider than the capsule scrolls: bring each pressed member into
+  // view (the lines' last, so the group that changed most recently wins)
+  // and fade whichever end is clipped.
+  for (const pressed of levelRow.querySelectorAll<HTMLButtonElement>('button[aria-pressed="true"]')) {
+    pressed.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }
+  syncLevelRowFade();
 }
+
+/** How far the level row is clipped at each end, as the two lengths the
+ * stylesheet's mask fades over; both zero for a row that fits. */
+function syncLevelRowFade(): void {
+  const clipped = levelRow.scrollWidth - levelRow.clientWidth;
+  const start = clipped > 1 && levelRow.scrollLeft > 1 ? 28 : 0;
+  const end = clipped > 1 && levelRow.scrollLeft < clipped - 1 ? 28 : 0;
+  levelRow.style.setProperty("--fade-start", `${start}px`);
+  levelRow.style.setProperty("--fade-end", `${end}px`);
+}
+levelRow.addEventListener("scroll", syncLevelRowFade, { passive: true });
+window.addEventListener("resize", syncLevelRowFade);
 
 /** Give every bundle the run publishes a way onto the screen, including the
  * ones this build has no tile written for. The shell's own tiles stand for
@@ -3660,7 +3701,12 @@ function applyOverlays(): void {
   if (slot === primarySlot()) return;
   const wanted = composition.fill !== null ? composition.lines : null;
   if (wanted === null) {
-    if (slot.session) detachSlot(slot);
+    // The lines go, and their labels with them: the label source is fed by
+    // the slot's frames, so nothing else would ever empty it.
+    if (slot.session) {
+      detachSlot(slot);
+      clearLabels();
+    }
     return;
   }
   if (slot.session?.id === wanted) {
@@ -3943,6 +3989,10 @@ modelTrigger.addEventListener("click", () => setModelSheetOpen(modelSheet.hidden
 modelSheet.addEventListener("click", (event) => {
   if ((event.target as HTMLElement).closest("[data-sheet-dismiss]")) setModelSheetOpen(false);
 });
+creditsTrigger.addEventListener("click", () => setCreditsSheetOpen(creditsSheet.hidden));
+creditsSheet.addEventListener("click", (event) => {
+  if ((event.target as HTMLElement).closest("[data-sheet-dismiss]")) setCreditsSheetOpen(false);
+});
 for (const button of modelButtons) {
   button.addEventListener("click", () => {
     const modelId = button.dataset.model;
@@ -3986,6 +4036,7 @@ window.addEventListener("keydown", (event) => {
   if (event.key !== "Escape") return;
   hideContextMenu();
   setModelSheetOpen(false);
+  setCreditsSheetOpen(false);
   closeProbe();
 });
 window.addEventListener("blur", hideContextMenu);

@@ -100,6 +100,19 @@ const MESSAGES = {
    * row of its own beside it. */
   linesCaption: { zh: "等压线", en: "LINES" },
   modelHeading: { zh: "预报模式", en: "FORECAST MODEL" },
+  /** The pressed lines member over a filled field is the overlay's off
+   * switch; the tooltip says so, since the × alone is a hint. */
+  linesRemoveTitle: { zh: "再按一次关闭等压线叠加", en: "Press again to remove the lines" },
+  /** The credits: a one-line footer on desktop, and on phones a trigger in
+   * its corner opening a sheet with one row per source. The row names are
+   * proper nouns and stay as they are; the glosses are translated. */
+  creditsTrigger: { zh: "数据来源", en: "SOURCES" },
+  creditsHeading: { zh: "数据来源与致谢", en: "DATA & CREDITS" },
+  creditsGfs: { zh: "预报数据 · GFS 0.25° 与 SFLUX", en: "FORECAST DATA · GFS 0.25° AND SFLUX" },
+  creditsEcmwf: { zh: "含经修改的 ECMWF 数据 · CC BY 4.0", en: "CONTAINS MODIFIED ECMWF DATA · CC BY 4.0" },
+  creditsRadar: { zh: "雷达拼图", en: "RADAR MOSAIC" },
+  creditsBasemap: { zh: "底图 · © OPENSTREETMAP 贡献者", en: "BASEMAP · © OPENSTREETMAP CONTRIBUTORS" },
+  creditsCode: { zh: "源代码 · RINGSATURN/XUE", en: "SOURCE CODE · RINGSATURN/XUE" },
   caseTag: { zh: "个例", en: "CASE" },
   runCycle: { zh: "模式周期", en: "Model run" },
   // An observation dataset has no run cycle and no lead time: its runTime is

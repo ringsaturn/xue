@@ -53,8 +53,7 @@
   <body data-variable="prate">
     <main class="app-shell">
       <div id="map" data-i18n-aria="mapAria" aria-label="Global temperature and precipitation forecast map"></div>
-      <!-- Instrument grid plus the top/bottom fade the floating controls are
-           read against; never interactive. -->
+      <!-- Instrument grid; never interactive. -->
       <div class="atmosphere" aria-hidden="true"></div>
 
       <!-- The title is the model control: it names what is on screen and
@@ -215,10 +214,12 @@
       </div>
 
       <section id="timeline-panel" class="timeline-panel" data-i18n-aria="timelineAria" aria-label="Forecast time controls">
-        <!-- The level row: one group per slot with a choice of surfaces — the
-             filled family's (2 m / 850 / 500 hPa temperature), and the lines'
-             (sea level pressure and the isobaric heights). Built from the
-             manifest by main.ts; hidden when neither has a choice. -->
+        <!-- The level row: one group per slot — the filled family's surfaces
+             (2 m / 850 / 500 hPa temperature) when it has several, and the
+             lines' (sea level pressure and the isobaric heights) over every
+             field the run can chart, none pressed while the lines are off.
+             Built from the manifest by main.ts; hidden when there is nothing
+             to choose. -->
         <div id="level-row" class="level-row" role="group" data-i18n-aria="levelSwitchAria" aria-label="Level" hidden></div>
 
         <div class="timeline-heading">
@@ -309,17 +310,75 @@
         <button id="retry-button" type="button" data-i18n="retry">Retry</button>
       </div>
 
+      <!-- The credit line, and on phones — where it never fit — a trigger in
+           its place that opens the sources sheet below. -->
       <footer class="source-note">
-        <a href="https://github.com/ringsaturn/xue" target="_blank" rel="noreferrer">GITHUB</a>
-        <span>·</span>
-        DATA <a href="https://registry.opendata.aws/noaa-gfs-bdp-pds/" target="_blank" rel="noreferrer">NOAA GFS</a>
-        · CONTAINS MODIFIED <a href="https://www.ecmwf.int/en/forecasts/datasets/open-data" target="_blank" rel="noreferrer">ECMWF OPEN DATA</a>
-        (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">CC BY 4.0</a>)
-        · RADAR <a href="https://data.cma.cn" target="_blank" rel="noreferrer">CMA</a>
-        <span>·</span>
-        BASEMAP <a href="https://protomaps.com" target="_blank" rel="noreferrer">PROTOMAPS</a>
-        © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OPENSTREETMAP</a>
+        <span class="source-line">
+          <a href="https://github.com/ringsaturn/xue" target="_blank" rel="noreferrer">GITHUB</a>
+          <span>·</span>
+          DATA <a href="https://registry.opendata.aws/noaa-gfs-bdp-pds/" target="_blank" rel="noreferrer">NOAA GFS</a>
+          · CONTAINS MODIFIED <a href="https://www.ecmwf.int/en/forecasts/datasets/open-data" target="_blank" rel="noreferrer">ECMWF OPEN DATA</a>
+          (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">CC BY 4.0</a>)
+          · RADAR <a href="https://data.cma.cn" target="_blank" rel="noreferrer">CMA</a>
+          <span>·</span>
+          BASEMAP <a href="https://protomaps.com" target="_blank" rel="noreferrer">PROTOMAPS</a>
+          © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OPENSTREETMAP</a>
+        </span>
+        <button id="credits-trigger" class="credits-trigger" type="button" aria-haspopup="dialog" aria-expanded="false">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true">
+            <circle cx="6" cy="6" r="5" />
+            <path d="M6 5.4v3.2M6 3.4v.2" stroke-linecap="round" />
+          </svg>
+          <span data-i18n="creditsTrigger">SOURCES</span>
+        </button>
       </footer>
+
+      <!-- Every source the credit line names, one row each, as a bottom
+           sheet. -->
+      <div id="credits-sheet" class="model-sheet" hidden>
+        <div class="model-sheet-scrim" data-sheet-dismiss></div>
+        <div class="model-sheet-panel credits-panel" role="dialog" aria-modal="true" data-i18n-aria="creditsHeading" aria-label="Data & credits">
+          <span class="sheet-grip" aria-hidden="true"></span>
+          <p class="sheet-heading" data-i18n="creditsHeading">DATA &amp; CREDITS</p>
+          <ul class="credits-list">
+            <li>
+              <a href="https://registry.opendata.aws/noaa-gfs-bdp-pds/" target="_blank" rel="noreferrer">
+                <span class="credits-name">NOAA GFS</span>
+                <small data-i18n="creditsGfs">FORECAST DATA · GFS 0.25° AND SFLUX</small>
+                <span class="credits-arrow" aria-hidden="true">↗</span>
+              </a>
+            </li>
+            <li>
+              <a href="https://www.ecmwf.int/en/forecasts/datasets/open-data" target="_blank" rel="noreferrer">
+                <span class="credits-name">ECMWF Open Data</span>
+                <small data-i18n="creditsEcmwf">CONTAINS MODIFIED ECMWF DATA · CC BY 4.0</small>
+                <span class="credits-arrow" aria-hidden="true">↗</span>
+              </a>
+            </li>
+            <li>
+              <a href="https://data.cma.cn" target="_blank" rel="noreferrer">
+                <span class="credits-name">CMA</span>
+                <small data-i18n="creditsRadar">RADAR MOSAIC</small>
+                <span class="credits-arrow" aria-hidden="true">↗</span>
+              </a>
+            </li>
+            <li>
+              <a href="https://protomaps.com" target="_blank" rel="noreferrer">
+                <span class="credits-name">Protomaps</span>
+                <small data-i18n="creditsBasemap">BASEMAP · © OPENSTREETMAP CONTRIBUTORS</small>
+                <span class="credits-arrow" aria-hidden="true">↗</span>
+              </a>
+            </li>
+            <li>
+              <a href="https://github.com/ringsaturn/xue" target="_blank" rel="noreferrer">
+                <span class="credits-name">GitHub</span>
+                <small data-i18n="creditsCode">SOURCE CODE · RINGSATURN/XUE</small>
+                <span class="credits-arrow" aria-hidden="true">↗</span>
+              </a>
+            </li>
+          </ul>
+        </div>
+      </div>
     </main>
     <script type="module" src="/src/main.ts"></script>
   </body>

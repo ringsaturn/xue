@@ -306,7 +306,10 @@ its own ceiling from `levels.ts::vectorMaxMagnitude`. `web/src/levels.ts` is
 the **family** registry: one rail tile per family (temperature from 2 m up,
 wind from 10 m up, relative humidity, specific humidity, vapour flux,
 pressure), the level row on the capsule picks the member, and the fill's
-group sits beside the lines' group when both have a choice. The same
+group sits beside the lines' group. Over a field the lines group is on the
+row whenever the run publishes a pressure surface: a pressed member is the
+overlay (and pressing it again takes the lines off), none pressed means no
+lines, so the overlay is always one press away in either direction. The same
 shader draws the **pressure family** (mean
 sea level pressure and the eight isobaric geopotential heights) as contour
 lines instead of a filled field: `web/src/pressure.ts` holds the per-level
@@ -367,10 +370,15 @@ map's are two different things. The chrome (capsule, rail, sheet, cards) always
 uses the theme's own; anything floating *directly* on the map (the title, the
 color scale's numbers, the credits) uses `--map-ink` / `--map-ink-muted`, which
 follow `body[data-ground]` — stamped by `applyBasemapTheme` from the basemap
-tone's luminance. The top/bottom map fade follows the same attribute, and so
-do the basemap's own place labels and boundaries: a Protomaps flavor is baked
-into the style at construction and cannot be swapped without `setStyle`, so
-`applyBasemapInk` repaints their text and line colors instead.
+tone's luminance. So do the basemap's own place labels and boundaries: a
+Protomaps flavor is baked into the style at construction and cannot be swapped
+without `setStyle`, so `applyBasemapInk` repaints their text and line colors
+instead. There is no fade at the top or bottom of the map: the title carries
+its own text shadow and the capsule its own surface.
+
+The round controls top-right, the zoom tile under them and the layer rail
+share one 44px column at the same right offset (20px, 16px on phones), so the
+three read as one vertical axis; a control added to that edge keeps to it.
 
 The Protomaps key is origin-locked to the production domains **and to
 `localhost`** — not to `127.0.0.1`, which is what `playwright.config.ts` serves
