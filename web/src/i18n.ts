@@ -134,9 +134,10 @@ export function t(key: MessageKey, params?: Record<string, string | number>): st
   return text;
 }
 
-/** Rewrites every element carrying data-i18n / data-i18n-aria / data-i18n-content
- * from the dictionary, and stamps <html lang> and the meta description. The
- * markup ships the English copy as its pre-JS fallback. */
+/** Rewrites every element carrying data-i18n / data-i18n-aria /
+ * data-i18n-content / data-i18n-tip from the dictionary, and stamps <html
+ * lang> and the meta description. The markup ships the English copy as its
+ * pre-JS fallback. */
 export function applyStaticMessages(): void {
   document.documentElement.lang = htmlLang;
   for (const element of document.querySelectorAll<HTMLElement>("[data-i18n]")) {
@@ -147,6 +148,11 @@ export function applyStaticMessages(): void {
   }
   for (const element of document.querySelectorAll<HTMLElement>("[data-i18n-content]")) {
     element.setAttribute("content", t(element.dataset.i18nContent as MessageKey));
+  }
+  // The stylesheet's hover tooltip reads `data-tip` (attr()), so the copy
+  // lands there rather than in a title, which would show a second, native one.
+  for (const element of document.querySelectorAll<HTMLElement>("[data-i18n-tip]")) {
+    element.dataset.tip = t(element.dataset.i18nTip as MessageKey);
   }
 }
 

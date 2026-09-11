@@ -68,6 +68,15 @@ export const en = {
   // of flux.
   glyphRh: "U",
   glyphQflux: "F",
+  /** The rail tiles' hover tooltip: the full name of the layer, in plain
+   * words, since an icon and a WMO letter do not explain themselves. A
+   * family tile names the quantity (the level row picks the surface); a
+   * single layer reuses its data-card label (`varLabel*`). */
+  tipTemp: "Temperature",
+  tipHumidity: "Relative humidity",
+  tipWind: "Wind",
+  tipPressure: "Pressure and geopotential height",
+  tipVapourFlux: "Water vapour flux",
   levelSwitchAria: "Level",
   levelCaption: "LEVEL",
   /** The level row's caption for the lines' group when the fill has a level

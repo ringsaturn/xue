@@ -2628,6 +2628,24 @@ function railTileStandsFor(id: string): boolean {
   );
 }
 
+/** A generic tile's icon — stacked layers, since the shell knows nothing
+ * of the quantity — drawn the way the written tiles' icons are. */
+function unknownRailIcon(): SVGSVGElement {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("class", "rail-icon");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("fill", "none");
+  svg.setAttribute("stroke", "currentColor");
+  svg.setAttribute("stroke-width", "1.7");
+  svg.setAttribute("stroke-linecap", "round");
+  svg.setAttribute("stroke-linejoin", "round");
+  svg.setAttribute("aria-hidden", "true");
+  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  path.setAttribute("d", "M12 4l8.5 4.5L12 13 3.5 8.5z M3.5 12.5L12 17l8.5-4.5 M3.5 16.5L12 21l8.5-4.5");
+  svg.append(path);
+  return svg;
+}
+
 /** Give every bundle the run publishes a way onto the screen, including the
  * ones this build has no tile written for. The shell's own tiles stand for
  * the families they name; anything else gets a plain one in manifest order,
@@ -2645,6 +2663,9 @@ function syncUnknownRailTiles(run: ForecastManifest): void {
     button.dataset.unknown = "";
     button.disabled = variableButtonsDisabled || switchingVariable;
     button.setAttribute("aria-pressed", "false");
+    // The id is all the tooltip can say before the bundle is open.
+    button.dataset.tip = id;
+    button.append(unknownRailIcon());
     const glyph = document.createElement("b");
     glyph.className = "rail-glyph";
     glyph.setAttribute("aria-hidden", "true");

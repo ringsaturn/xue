@@ -780,11 +780,14 @@ body.is-pressure .legend {
 }
 
 .variable-rail button {
+  position: relative;
   display: flex;
   width: 44px;
   height: 44px;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 2px;
   border: 1px solid var(--line);
   border-radius: 14px;
   background: var(--surface);
@@ -798,19 +801,69 @@ body.is-pressure .legend {
   display: none;
 }
 
+/* The icon carries the tile; the WMO letter sits under it as a caption,
+   in the instrument face's mono. */
+.rail-icon {
+  display: block;
+  width: 20px;
+  height: 20px;
+  flex: none;
+}
+
 .rail-glyph {
-  font-size: 15px;
+  font-family: var(--font-mono);
+  font-size: 9px;
   font-weight: 600;
-  letter-spacing: 0.02em;
+  line-height: 1;
+  letter-spacing: 0.08em;
 }
 
 /* The CJK glyphs are single characters and carry more ink than a Latin
-   initial; they need the extra size to read at 44px. The other locales use
-   the Latin WMO symbols and keep the default. */
+   initial; they need the extra size to read under the icon. The other
+   locales use the Latin WMO symbols and keep the default. */
 html[lang="zh-CN"] .rail-glyph,
 html[lang="zh-TW"] .rail-glyph,
 html[lang="ja"] .rail-glyph {
-  font-size: 17px;
+  font-size: 10px;
+  letter-spacing: 0;
+}
+
+/* The full name, to the left of the tile, on hover and keyboard focus. A
+   pseudo-element reading `data-tip` rather than a native title: instant,
+   in the shell's own ink, and never shown twice. Hover-only devices, so a
+   tap on a phone does not leave it standing. */
+.variable-rail button::after {
+  position: absolute;
+  top: 50%;
+  right: calc(100% + 10px);
+  z-index: 4;
+  padding: 5px 9px;
+  border-radius: 8px;
+  background: var(--text);
+  color: var(--bg);
+  content: attr(data-tip);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.2;
+  white-space: nowrap;
+  transform: translateY(-50%);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+}
+
+.variable-rail button:not([data-tip])::after {
+  content: none;
+}
+
+@media (hover: hover) {
+  .variable-rail button:hover::after {
+    opacity: 1;
+  }
+}
+
+.variable-rail button:focus-visible::after {
+  opacity: 1;
 }
 
 .variable-rail button[aria-pressed="true"] {

@@ -308,58 +308,70 @@
         </div>
       </aside>
 
-      <!-- One tile per layer or family. The glyph is the label; the code and
-           its gloss ride along visually hidden so the button still names
-           itself. A family tile (data-family) stands for every surface of a
+      <!-- One tile per layer or family: an icon over the layer's glyph, the
+           code and its gloss riding along visually hidden so the button still
+           names itself, and the full name (data-i18n-tip) as a tooltip on
+           hover or focus. A family tile (data-family) stands for every surface of a
            quantity — 2 m and the isobaric temperatures, 10 m and the isobaric
            winds — and the surface itself is chosen on the timeline capsule's
            level row. -->
       <div class="variable-rail" role="group" data-i18n-aria="variableSwitchAria" aria-label="Weather variable">
-        <button type="button" data-variable="tmp2m" data-family="tmp" aria-pressed="false">
+        <button type="button" data-variable="tmp2m" data-i18n-tip="tipTemp" data-family="tmp" aria-pressed="false">
+          <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5a2.5 2.5 0 0 1 2.5 2.5v7.4a4.5 4.5 0 1 1-5 0V6A2.5 2.5 0 0 1 12 3.5z" /><path d="M12 9.5v7.5" /><circle cx="12" cy="17" r="1.3" fill="currentColor" stroke="none" /></svg>
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphTmp2m">T</b>
           <span class="rail-name"><span>TEMP</span> <small data-i18n="varTemp">2M</small></span>
         </button>
-        <button type="button" data-variable="rh850" data-family="rh" aria-pressed="false" hidden>
+        <button type="button" data-variable="rh850" data-i18n-tip="tipHumidity" data-family="rh" aria-pressed="false" hidden>
+          <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5c3.5 4.2 6 7.4 6 10.5a6 6 0 0 1-12 0c0-3.1 2.5-6.3 6-10.5z" /><path d="M9.3 14.3a2.7 2.7 0 0 0 2.4 2.7" /></svg>
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphRh">U</b>
           <span class="rail-name"><span>HUMIDITY</span> <small data-i18n="varHumidity">REL</small></span>
         </button>
-        <button type="button" data-variable="wind10m" data-family="wind" aria-pressed="false" hidden>
+        <button type="button" data-variable="wind10m" data-i18n-tip="tipWind" data-family="wind" aria-pressed="false" hidden>
+          <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8h9.5a2.5 2.5 0 1 0-2.5-2.5" /><path d="M3 12.5h14a2.5 2.5 0 1 1-2.5 2.5" /><path d="M3 17h7a2 2 0 1 1-2 2" /></svg>
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphWind10m">W</b>
           <span class="rail-name"><span>WIND</span> <small data-i18n="varWind">10M</small></span>
         </button>
         <!-- The whole pressure family behind one tile: the level itself is
              chosen on the timeline capsule's level row. -->
-        <button type="button" data-variable="prmsl" data-group="pressure" aria-pressed="false" hidden>
+        <button type="button" data-variable="prmsl" data-i18n-tip="tipPressure" data-group="pressure" aria-pressed="false" hidden>
+          <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="13" rx="3" ry="2" /><ellipse cx="12" cy="13" rx="6.5" ry="4.6" /><path d="M2.5 17.5C2.5 10.6 6.8 5.5 12 5.5s9.5 5.1 9.5 12" /></svg>
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphPressure">P</b>
           <span class="rail-name"><span>PRESSURE</span> <small data-i18n="varPressureField">FIELD</small></span>
         </button>
-        <button type="button" data-variable="prate" aria-pressed="true">
+        <button type="button" data-variable="prate" data-i18n-tip="varLabelPrate" aria-pressed="true">
+          <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.5 14.5a3.5 3.5 0 0 0-.4-7A5.5 5.5 0 0 0 6.6 8.6 3 3 0 0 0 7 14.5h10.5z" /><path d="M8.5 17.5l-1 2.5M12.5 17.5l-1 2.5M16.5 17.5l-1 2.5" /></svg>
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphPrate">R</b>
           <span class="rail-name"><span>PRECIP</span> <small data-i18n="varPrecip">RATE</small></span>
         </button>
-        <button type="button" data-variable="qflux850" data-family="qflux" aria-pressed="false" hidden>
+        <button type="button" data-variable="qflux850" data-i18n-tip="tipVapourFlux" data-family="qflux" aria-pressed="false" hidden>
+          <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8.5 4c2.3 2.8 4 4.9 4 7a4 4 0 0 1-8 0c0-2.1 1.7-4.2 4-7z" /><path d="M12 17.5h8.5M17.5 14.5l3 3-3 3" /></svg>
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphQflux">F</b>
           <span class="rail-name"><span>VAPOUR</span> <small data-i18n="varVapourFlux">FLUX</small></span>
         </button>
-        <button type="button" data-variable="dswrf" aria-pressed="false" hidden>
+        <button type="button" data-variable="dswrf" data-i18n-tip="varLabelDswrf" aria-pressed="false" hidden>
+          <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4" /><path d="M12 2.5V5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8" /></svg>
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphDswrf">S</b>
           <span class="rail-name"><span>SOLAR</span> <small data-i18n="varSolar">FLUX</small></span>
         </button>
-        <button type="button" data-variable="cref" aria-pressed="false" hidden>
+        <button type="button" data-variable="cref" data-i18n-tip="varLabelCref" aria-pressed="false" hidden>
+          <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5" /><circle cx="12" cy="12" r="4.5" /><path d="M12 12l6-6" /><circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none" /></svg>
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphCref">Z</b>
           <span class="rail-name"><span>RADAR</span> <small data-i18n="varRadar">CREF</small></span>
         </button>
         <!-- The surface diagnostics: registered on both encoders, published
              by no source yet, so these stay hidden until a run ships them. -->
-        <button type="button" data-variable="gust" aria-pressed="false" hidden>
+        <button type="button" data-variable="gust" data-i18n-tip="varLabelGust" aria-pressed="false" hidden>
+          <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7.5h8.5a2.5 2.5 0 1 0-2.5-2.5" /><path d="M3 12h13.5a2.5 2.5 0 1 1-2.5 2.5" /><path d="M3 16.5h4M10 16.5h2M15 16.5h1.5" /></svg>
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphGust">G</b>
           <span class="rail-name"><span>GUST</span> <small data-i18n="varGust">SFC</small></span>
         </button>
-        <button type="button" data-variable="tcdc" aria-pressed="false" hidden>
+        <button type="button" data-variable="tcdc" data-i18n-tip="varLabelTcdc" aria-pressed="false" hidden>
+          <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.5 17a4 4 0 0 0-.4-8A6 6 0 0 0 5.6 10.6 3.3 3.3 0 0 0 6.5 17h11z" /></svg>
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphTcdc">N</b>
           <span class="rail-name"><span>CLOUD</span> <small data-i18n="varCloud">TOTAL</small></span>
         </button>
-        <button type="button" data-variable="cape" aria-pressed="false" hidden>
+        <button type="button" data-variable="cape" data-i18n-tip="varLabelCape" aria-pressed="false" hidden>
+          <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 3L6 13.5h5l-1 7.5 8-11.5h-5z" /></svg>
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphCape">C</b>
           <span class="rail-name"><span>CAPE</span> <small data-i18n="varCape">SFC</small></span>
         </button>
