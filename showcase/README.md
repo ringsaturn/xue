@@ -103,6 +103,10 @@ retires a case.
    Cases upload immutable and `?v=<crc32>`-addressed; `showcase.json` is copied
    last with `no-cache`, and that is what makes a new case visible.
 
+   The sitemap lists what that catalog holds, read at shell build time, so
+   the new case's `/?case=<id>` page appears in `sitemap.xml` at the next
+   Pages deploy — run the `deploy pages` workflow by hand if none is due.
+
 ## Choosing a run
 
 The public archives do not go back forever:

@@ -117,7 +117,11 @@ parameter**. `sitemap.xml` (the two pages plus one URL per case) and
 `llms-full.txt` (README + `docs/*.md` + `showcase/README.md`, links
 rewritten to the repository) are generated at build time by
 `web/tooling/discovery.ts`, which is why `deploy-pages.yml` also triggers on
-those documents and on `showcase/cases/`.
+those documents. The sitemap's cases come from the *published* catalog
+(`showcase.json` at the build's `VITE_DATA_BASE_URL`), never from
+`showcase/cases/` — a definition may sit unbuilt for a long time — so a
+deploy build fails if the bucket does not answer, and a newly uploaded case
+reaches the sitemap at the next shell deploy.
 
 Manifest schema changes are a two-sided deploy: the new shell accepts old
 manifests, but an old cached shell rejects new ones — **deploy the Pages shell
@@ -222,7 +226,11 @@ publishing data at the new version.**
   (`wind10m`, `wind<level>`, `qflux<level>`) ships only when every input in
   `binconvert.vector_input_ids` is fetched. `tests/fixtures/isobaric-registry.json`
   holds the three implementations to one set of ids and codebooks, the way
-  `pressure-registry.json` does for the pressure family.
+  `pressure-registry.json` does for the pressure family and
+  `surface-registry.json` for the surface diagnostics (`gust`, `tcdc`,
+  `cape` — registered on both encoders and charted by the shell, published
+  by no source yet; publishing one is a source-table line plus a recut of
+  the GRIB fixture the parity test builds from).
 - `fetch.py` → `idx.py` / `grib2.py` — byte-range fetches of exact GRIB
   records; ECMWF open data is CCSDS-packed and is repacked to `grid_simple`
   with `grib_set` at fetch time.

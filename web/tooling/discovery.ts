@@ -2,16 +2,23 @@
  * sitemap and `llms-full.txt`, emitted by the production build.
  *
  * Both are derived, not written: the sitemap's case pages come from the
- * checked-in case definitions (`showcase/cases/*.json`), and `llms-full.txt`
- * is the project's own documentation — README, the format and encoder
- * specs, the case authoring guide — concatenated with its relative links
- * rewritten to the repository, so a model reading one file follows none
- * into the void. `llms.txt` (the short index) and `robots.txt` are prose and
- * live as static files in `web/public/`.
+ * *published* showcase catalog (`showcase.json` at the data root — the same
+ * mutable index the showcase page lists), and `llms-full.txt` is the
+ * project's own documentation — README, the format and encoder specs, the
+ * case authoring guide — concatenated with its relative links rewritten to
+ * the repository, so a model reading one file follows none into the void.
+ * `llms.txt` (the short index) and `robots.txt` are prose and live as static
+ * files in `web/public/`.
+ *
+ * The catalog, not the checked-in definitions under `showcase/cases/`, is
+ * the source because a definition is only an input: it is authored first
+ * and built and uploaded later, sometimes much later (a case pulls a whole
+ * archived run), and a sitemap naming `/?case=<id>` for a case the viewer
+ * cannot find sends every crawler to an error card.
  *
  * Node-only: imported by vite.config.ts, never by the page. */
 
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join, posix } from "node:path";
 import type { Plugin } from "vite";
 
@@ -50,17 +57,43 @@ export function renderSitemap(urls: readonly string[]): string {
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${entries}\n</urlset>\n`;
 }
 
-/** Case ids from a directory of definitions, in filename order so the
- * output is stable across builds. The `id` field is authoritative; the
- * filename is the convention (`<id>.json`) and only a fallback. */
-export function readCaseIds(casesDir: string): string[] {
-  return readdirSync(casesDir)
-    .filter((name) => name.endsWith(".json"))
-    .sort()
-    .map((name) => {
-      const parsed = JSON.parse(readFileSync(join(casesDir, name), "utf8")) as { id?: unknown };
-      return typeof parsed.id === "string" && parsed.id !== "" ? parsed.id : name.slice(0, -".json".length);
-    });
+/** The catalog's filename at the data root; `xuebuild/showcase.py` writes it
+ * and `web/src/showcase-catalog.ts` reads it. Repeated here rather than
+ * imported because that module's graph reaches `window` at load time. */
+export const CATALOG_FILENAME = "showcase.json";
+
+/** Case ids from the published catalog, in catalog order. Only the shape the
+ * sitemap needs is checked — the id must be the slug the viewer's `?case=`
+ * accepts — and anything else is a build error: a catalog the page could
+ * not list must not be advertised either. */
+export function catalogCaseIds(catalogJson: string): string[] {
+  const catalog = JSON.parse(catalogJson) as { schemaVersion?: unknown; cases?: unknown };
+  if (catalog.schemaVersion !== 1) throw new Error("showcase catalog: unsupported schema version");
+  if (!Array.isArray(catalog.cases)) throw new Error("showcase catalog: no case list");
+  const ids = catalog.cases.map((entry: unknown, index) => {
+    const id = (entry as { id?: unknown } | null)?.id;
+    if (typeof id !== "string" || !/^[a-z0-9-]+$/.test(id)) throw new Error(`showcase catalog: case ${index} has no slug id`);
+    return id;
+  });
+  if (new Set(ids).size !== ids.length) throw new Error("showcase catalog: duplicate case ids");
+  return ids;
+}
+
+/** Fetch the catalog the deployed page will read. `dataBaseUrl` is the
+ * build's `VITE_DATA_BASE_URL`: the public bucket on a deploy build, unset
+ * (the local `web/public/data/` directory) otherwise. A local build without
+ * a built case has no catalog and lists no case pages; a deploy whose bucket
+ * does not answer fails, because a sitemap silently missing every case is
+ * the wrong thing to ship. */
+export async function loadCatalogCaseIds(dataBaseUrl: string | undefined, publicDir: string): Promise<string[]> {
+  if (dataBaseUrl && /^https?:\/\//.test(dataBaseUrl)) {
+    const url = new URL(CATALOG_FILENAME, dataBaseUrl);
+    const response = await fetch(url, { cache: "no-cache" });
+    if (!response.ok) throw new Error(`showcase catalog request failed (${response.status}) for ${url}`);
+    return catalogCaseIds(await response.text());
+  }
+  const path = join(publicDir, dataBaseUrl || "data/", CATALOG_FILENAME);
+  return existsSync(path) ? catalogCaseIds(readFileSync(path, "utf8")) : [];
 }
 
 /** One document folded into `llms-full.txt`. */
@@ -102,22 +135,25 @@ export function renderLlmsFull(docs: readonly DocSource[]): string {
 export const LLMS_FULL_SOURCES: readonly string[] = ["README.md", "docs/format.md", "docs/encoder.md", "showcase/README.md"];
 
 export interface DiscoveryOptions {
-  /** Repository root: where `showcase/cases/` and the documents live. */
+  /** Repository root: where the documents live. */
   repoRoot: string;
+  /** The page's `VITE_DATA_BASE_URL` for this build mode, if set. */
+  dataBaseUrl: string | undefined;
 }
 
 /** Vite plugin: emit `sitemap.xml` and `llms-full.txt` next to the pages.
  * Build only — the dev server serves the static `web/public/` files and
  * nothing here matters before deploy. */
-export function discoveryFiles({ repoRoot }: DiscoveryOptions): Plugin {
+export function discoveryFiles({ repoRoot, dataBaseUrl }: DiscoveryOptions): Plugin {
   return {
     name: "xue:discovery-files",
     apply: "build",
-    generateBundle() {
+    async generateBundle() {
+      const caseIds = await loadCatalogCaseIds(dataBaseUrl, join(repoRoot, "web", "public"));
       this.emitFile({
         type: "asset",
         fileName: "sitemap.xml",
-        source: renderSitemap(sitemapUrls(readCaseIds(join(repoRoot, "showcase", "cases")))),
+        source: renderSitemap(sitemapUrls(caseIds)),
       });
       this.emitFile({
         type: "asset",

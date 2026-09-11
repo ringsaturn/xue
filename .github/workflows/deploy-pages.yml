@@ -18,9 +18,10 @@ on:
     paths:
       - web/**
       - rust/**
-      # The build derives sitemap.xml from the case definitions and
-      # llms-full.txt from these documents (web/tooling/discovery.ts).
-      - showcase/cases/**
+      # The build derives llms-full.txt from these documents
+      # (web/tooling/discovery.ts). sitemap.xml comes from the published
+      # showcase catalog in the bucket, not from showcase/cases/, so a case
+      # enters the sitemap at the first shell deploy after its upload.
       - showcase/README.md
       - docs/**
       - README.md

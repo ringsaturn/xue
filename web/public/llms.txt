@@ -60,7 +60,7 @@ fall back to defaults rather than fail, so a constructed link always opens.
   instead of the Xue decoder (a comparison path, not the default).
 
 Examples: `/?model=ecmwf&type=wind850`, `/?type=temp&lines=hgt500`,
-`/?case=zhengzhou-2021`.
+`/?case=pnw-heat-dome-2021`.
 
 ## Data access
 

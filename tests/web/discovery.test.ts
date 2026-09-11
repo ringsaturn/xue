@@ -1,13 +1,14 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   absolutizeLinks,
+  catalogCaseIds,
   LLMS_FULL_SOURCES,
-  readCaseIds,
+  loadCatalogCaseIds,
   renderLlmsFull,
   renderSitemap,
   sitemapUrls,
@@ -17,15 +18,26 @@ import { REPO_URL, SITE_ORIGIN } from "../../web/src/site";
 const scratch: string[] = [];
 
 afterEach(() => {
+  vi.unstubAllGlobals();
   for (const dir of scratch.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
-function casesDir(files: Record<string, string>): string {
-  const dir = mkdtempSync(join(tmpdir(), "xue-cases-"));
+/** A `web/public/`-shaped directory, with `data/showcase.json` when given. */
+function publicDir(catalog?: string): string {
+  const dir = mkdtempSync(join(tmpdir(), "xue-public-"));
   scratch.push(dir);
-  for (const [name, content] of Object.entries(files)) writeFileSync(join(dir, name), content);
+  if (catalog !== undefined) {
+    mkdirSync(join(dir, "data"));
+    writeFileSync(join(dir, "data", "showcase.json"), catalog);
+  }
   return dir;
 }
+
+const CATALOG = JSON.stringify({
+  schemaVersion: 1,
+  generatedAt: "2026-09-10T10:18:43Z",
+  cases: [{ id: "shadel-2026", title: {} }, { id: "pnw-heat-dome-2021", title: {} }],
+});
 
 describe("sitemap", () => {
   it("lists the two pages and one URL per case", () => {
@@ -44,13 +56,43 @@ describe("sitemap", () => {
     expect(xml.trimEnd().endsWith("</urlset>")).toBe(true);
   });
 
-  it("reads case ids from the definitions, in filename order, id field first", () => {
-    const dir = casesDir({
-      "b-case.json": JSON.stringify({ id: "b-case", title: {} }),
-      "a-case.json": JSON.stringify({ title: {} }),
-      "notes.md": "not a case",
+  it("takes case ids from the published catalog, in catalog order", () => {
+    expect(catalogCaseIds(CATALOG)).toEqual(["shadel-2026", "pnw-heat-dome-2021"]);
+  });
+
+  it("rejects a catalog the page could not list", () => {
+    expect(() => catalogCaseIds(JSON.stringify({ schemaVersion: 2, cases: [] }))).toThrow(/schema version/);
+    expect(() => catalogCaseIds(JSON.stringify({ schemaVersion: 1 }))).toThrow(/no case list/);
+    expect(() => catalogCaseIds(JSON.stringify({ schemaVersion: 1, cases: [{ id: "Not A Slug" }] }))).toThrow(/slug/);
+    expect(() => catalogCaseIds(JSON.stringify({ schemaVersion: 1, cases: [{ id: "a" }, { id: "a" }] }))).toThrow(
+      /duplicate/,
+    );
+  });
+
+  it("fetches the catalog from the bucket on a deploy build", async () => {
+    const requested: string[] = [];
+    vi.stubGlobal("fetch", async (url: URL) => {
+      requested.push(url.href);
+      return new Response(CATALOG, { status: 200 });
     });
-    expect(readCaseIds(dir)).toEqual(["a-case", "b-case"]);
+    await expect(loadCatalogCaseIds("https://dataset.example/xue/", publicDir())).resolves.toEqual([
+      "shadel-2026",
+      "pnw-heat-dome-2021",
+    ]);
+    expect(requested).toEqual(["https://dataset.example/xue/showcase.json"]);
+  });
+
+  it("fails a deploy build whose bucket does not answer", async () => {
+    vi.stubGlobal("fetch", async () => new Response("", { status: 503 }));
+    await expect(loadCatalogCaseIds("https://dataset.example/xue/", publicDir())).rejects.toThrow(/503/);
+  });
+
+  it("reads the local catalog otherwise, and lists no case without one", async () => {
+    await expect(loadCatalogCaseIds(undefined, publicDir(CATALOG))).resolves.toEqual([
+      "shadel-2026",
+      "pnw-heat-dome-2021",
+    ]);
+    await expect(loadCatalogCaseIds(undefined, publicDir())).resolves.toEqual([]);
   });
 });
 
