@@ -310,6 +310,65 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_aliases: &[],
         gdal_unit: "",
     },
+    // Three more surface diagnostics, each a GRIB record of its own with no
+    // unit conversion. Registered from the GFS pgrb2 set; ECMWF open data
+    // carries neighbours rather than equivalents (`10fg` is the interval
+    // *maximum* gust on the 10 m surface, `tcc` a 0–1 fraction). No source
+    // ships them yet (sources.rs).
+    //
+    // Wind gust: the instantaneous surface gust diagnostic, 0/2/22 on the
+    // ground surface.
+    VariableSpec {
+        id: "gust",
+        label: "Wind gust",
+        output_unit: "m/s",
+        value_range: (0, 127),
+        grib_element: "GUST",
+        grib2_discipline: 0,
+        grib2_category: 2,
+        grib2_number: 22,
+        grib2_level_type: 1,
+        grib2_level_value: Some(0.0),
+        grib2_statistical: None,
+        grib2_aliases: &[],
+        gdal_unit: "m/s",
+    },
+    // Total cloud cover over the whole column, 0/6/1 on the entire
+    // atmosphere (surface type 10, no value); the identity's missing
+    // statistical process is what rejects pgrb2's interval average of the
+    // same field.
+    VariableSpec {
+        id: "tcdc",
+        label: "Total cloud cover",
+        output_unit: "%",
+        value_range: (0, 100),
+        grib_element: "TCDC",
+        grib2_discipline: 0,
+        grib2_category: 6,
+        grib2_number: 1,
+        grib2_level_type: 10,
+        grib2_level_value: None,
+        grib2_statistical: None,
+        grib2_aliases: &[],
+        gdal_unit: "%",
+    },
+    // Surface-based convective available potential energy, 0/7/6 on the
+    // ground surface — not the mixed-layer variants on surface type 108.
+    VariableSpec {
+        id: "cape",
+        label: "Convective available potential energy",
+        output_unit: "J/kg",
+        value_range: (0, 6350),
+        grib_element: "CAPE",
+        grib2_discipline: 0,
+        grib2_category: 7,
+        grib2_number: 6,
+        grib2_level_type: 1,
+        grib2_level_value: Some(0.0),
+        grib2_statistical: None,
+        grib2_aliases: &[],
+        gdal_unit: "J/kg",
+    },
     // Mean sea level pressure. NCEP publishes two reductions; PRMSL (0/3/1)
     // is the same quantity ECMWF calls `msl` — encoded there as plain
     // pressure (0/3/0) on the mean sea level surface, hence the alias — so
@@ -467,6 +526,37 @@ mod tests {
         assert_eq!(isobaric_variable("tmp2m"), None);
         assert_eq!(isobaric_variable("prmsl"), None);
         assert_eq!(isobaric_variable("rh"), None);
+    }
+
+    /// `tests/fixtures/surface-registry.json`: the surface diagnostics
+    /// (wind gust, total cloud cover, CAPE), held to the Python encoder and
+    /// the frontend the same way.
+    #[test]
+    fn the_surface_registry_matches_the_shared_fixture() {
+        let entries = registry("surface-registry.json");
+        assert_eq!(
+            entries.keys().collect::<Vec<_>>(),
+            ["gust", "tcdc", "cape"],
+            "three variables, in the fixture's order"
+        );
+        for (variable_id, entry) in entries {
+            let spec = variable_spec(&variable_id).unwrap_or_else(|_| panic!("{variable_id}"));
+            assert_eq!(json!(spec.label), entry["label"], "{variable_id}");
+            assert_eq!(json!(spec.output_unit), entry["unit"], "{variable_id}");
+            assert_eq!(
+                Value::Object(spec.parameter_metadata()),
+                entry["parameter"],
+                "{variable_id} GRIB2 identity"
+            );
+            // balanced is quality everywhere but cloud cover, which takes
+            // the compact 1 % step like relative humidity.
+            let balanced_key = if variable_id == "tcdc" { "compact" } else { "quality" };
+            for (profile, key) in [("quality", "quality"), ("compact", "compact"), ("balanced", balanced_key)] {
+                let book = codebook(profile, &variable_id)
+                    .unwrap_or_else(|error| panic!("{variable_id} {profile}: {error}"));
+                assert_eq!(Value::Object(book.metadata()), entry[key], "{variable_id} {profile} codebook");
+            }
+        }
     }
 
     /// `tests/fixtures/pressure-registry.json`, the committed golden the

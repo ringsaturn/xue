@@ -1,5 +1,5 @@
 import { identityForBundleId, type VariableIdentity } from "./identity";
-import { isobaricRange, temperaturePaletteDomain } from "./levels";
+import { CAPE_CHART_MAX, GUST_SPEED_MAX, isobaricRange, temperaturePaletteDomain } from "./levels";
 import type { BundleVariable, LinearQuantization, LogQuantization } from "./manifest";
 
 /**
@@ -188,6 +188,40 @@ const WIND_SPEED_STOPS: Stop[] = [
   [40, 129, 55, 168, 255],
 ];
 
+// Total cloud cover: clear sky is the map, and cover is a grey veil that
+// thickens with the fraction — the alpha carries the reading, the colour
+// barely moves. One neutral grey rather than white on purpose: a white veil
+// vanishes on the light theme's paper, and a light grey reads as cloud on
+// the dark slate and as overcast on paper alike. Values are percent.
+const CLOUD_STOPS: Stop[] = [
+  [0, 170, 178, 190, 0],
+  [10, 172, 180, 192, 40],
+  [25, 176, 184, 196, 95],
+  [50, 184, 191, 202, 160],
+  [75, 192, 198, 208, 205],
+  [90, 200, 206, 215, 232],
+  [100, 208, 213, 221, 245],
+];
+
+// CAPE, in the classes a severe-weather chart draws: nothing under 100 J/kg
+// (stable air is the map), pale straw through yellow for the marginal
+// hundreds, amber and orange past 1000, red at 2000, crimson at 3000 and
+// violet for the extreme — the SPC / Windy progression, so a reader who
+// knows one reads the other. Saturates at 5000; the codebook runs on to
+// 6350 so a probe still tells 5500 from 6000. Values are J/kg.
+export const CAPE_STOPS: Stop[] = [
+  [0, 250, 240, 180, 0],
+  [100, 250, 240, 180, 60],
+  [250, 240, 228, 120, 120],
+  [500, 232, 208, 80, 170],
+  [1000, 240, 170, 50, 210],
+  [1500, 240, 128, 40, 230],
+  [2000, 226, 80, 40, 245],
+  [3000, 190, 30, 60, 252],
+  [4000, 140, 30, 110, 255],
+  [CAPE_CHART_MAX, 90, 30, 130, 255],
+];
+
 function interpolate(stops: Stop[], value: number): [number, number, number, number] {
   const first = stops[0]!;
   const last = stops[stops.length - 1]!;
@@ -250,6 +284,16 @@ function windFieldAlpha(speed: number): number {
   return last[1];
 }
 
+/** The wind ramp as colour stops in m/s with the field's transparency folded
+ * in, stretched so the last stop stands for `maxSpeed` — the gust layer's
+ * ramp, a scalar the shader looks up by value like any other. */
+export function windFieldStops(maxSpeed = WIND_SPEED_MAX): Stop[] {
+  const stretch = maxSpeed / WIND_SPEED_MAX;
+  return remapStops(WIND_SPEED_STOPS, [0, WIND_SPEED_MAX], [0, maxSpeed]).map(
+    ([speed, r, g, b, a]) => [speed, r, g, b, Math.round(a * windFieldAlpha(speed / stretch))] as Stop,
+  );
+}
+
 /** The same ramp as a filled field: indexed by speed like the particle
  * palette, with the field's transparency folded in. `maxSpeed` is the
  * speed the last entry stands for; the ramp and its transparency stretch
@@ -309,11 +353,12 @@ function codebookRange(quantization: LinearQuantization): readonly [number, numb
 }
 
 /** Color stops for one variable's physical values, chosen by what the field
- * *is* (identity.ts) rather than by what it is called: dswrf and cref carry
- * their own ramps, the pressure family reads its codebook, and the isobaric
- * fills take theirs from the family and the level. A field this build does
- * not recognize gets the temperature ramp spread over its own codebook, so
- * it is at least legible. */
+ * *is* (identity.ts) rather than by what it is called: dswrf, cref, cloud
+ * cover and CAPE carry their own ramps, the gust borrows the wind speed
+ * ramp, the pressure family reads its codebook, and the isobaric fills take
+ * theirs from the family and the level. A field this build does not
+ * recognize gets the temperature ramp spread over its own codebook, so it
+ * is at least legible. */
 function stopsFor(variable: BundleVariable, identity: VariableIdentity | null): Stop[] {
   const linear = variable.quantization.type === "linear" ? variable.quantization : null;
   if (identity === null) {
@@ -322,6 +367,9 @@ function stopsFor(variable: BundleVariable, identity: VariableIdentity | null): 
   const { family, level } = identity;
   if (family === "dswrf") return SOLAR_STOPS;
   if (family === "cref") return REFLECTIVITY_STOPS;
+  if (family === "gust") return windFieldStops(GUST_SPEED_MAX);
+  if (family === "tcdc") return CLOUD_STOPS;
+  if (family === "cape") return CAPE_STOPS;
   if (family === "hgt" && linear) return pressureStops(linear);
   if (family === "tmp") return remapStops(TEMPERATURE_STOPS, [-60, 50], temperaturePaletteDomain(level));
   if (family === "rh") return HUMIDITY_STOPS;

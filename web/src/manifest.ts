@@ -95,9 +95,16 @@ export type KnownBundleId =
   | ForecastVariableId
   | "dswrf"
   | "cref"
+  | SurfaceDiagnosticId
   | PressureBundleId
   | IsobaricScalarBundleId
   | VectorBundleId;
+
+/** The surface diagnostics — wind gust, total cloud cover and surface-based
+ * CAPE — single layers like `dswrf`, held to the encoders by
+ * `tests/fixtures/surface-registry.json`. */
+export type SurfaceDiagnosticId = "gust" | "tcdc" | "cape";
+export const SURFACE_DIAGNOSTIC_IDS: readonly SurfaceDiagnosticId[] = ["gust", "tcdc", "cape"];
 
 /** A well-formed bundle/variable name: lowercase alphanumeric, starting with
  * a letter. This is the whole admission rule — a manifest is rejected for
@@ -126,6 +133,7 @@ export type KnownDataVariableId =
   | ForecastVariableId
   | "dswrf"
   | "cref"
+  | SurfaceDiagnosticId
   | PressureBundleId
   | IsobaricScalarBundleId
   | VectorComponentId;
@@ -145,6 +153,7 @@ export const KNOWN_BUNDLE_IDS: readonly KnownBundleId[] = [
   "prate",
   "dswrf",
   "cref",
+  ...SURFACE_DIAGNOSTIC_IDS,
   "prmsl",
   ...perLevel("hgt"),
   ...perLevel("tmp"),

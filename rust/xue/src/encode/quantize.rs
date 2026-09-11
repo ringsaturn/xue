@@ -214,6 +214,45 @@ const COMPACT_REFLECTIVITY: LinearCodebook = LinearCodebook {
     step: 1.0,
     ..QUALITY_REFLECTIVITY
 };
+// Wind gust: one-sided, at the 10 m components' step over the isobaric
+// wind's 127 m/s ceiling, spending the full 0..254 code space.
+const QUALITY_GUST: LinearCodebook = LinearCodebook {
+    minimum: 0.0,
+    maximum: 127.0,
+    step: 0.5,
+    nodata_code: 255,
+    name: "gust",
+};
+const COMPACT_GUST: LinearCodebook = LinearCodebook {
+    step: 1.0,
+    ..QUALITY_GUST
+};
+// Total cloud cover: 0–100 % at half a percent, relative humidity's numbers;
+// like it, balanced takes the 1 % step.
+const QUALITY_CLOUD: LinearCodebook = LinearCodebook {
+    minimum: 0.0,
+    maximum: 100.0,
+    step: 0.5,
+    nodata_code: 255,
+    name: "tcdc",
+};
+const COMPACT_CLOUD: LinearCodebook = LinearCodebook {
+    step: 1.0,
+    ..QUALITY_CLOUD
+};
+// CAPE: 0–6350 J/kg at 25 J/kg spends the full 0..254 code space; the rare
+// extreme past it clamps.
+const QUALITY_CAPE: LinearCodebook = LinearCodebook {
+    minimum: 0.0,
+    maximum: 6350.0,
+    step: 25.0,
+    nodata_code: 255,
+    name: "cape",
+};
+const COMPACT_CAPE: LinearCodebook = LinearCodebook {
+    step: 50.0,
+    ..QUALITY_CAPE
+};
 
 // Sea level pressure and the pressure-level geopotential heights. The three
 // rules that fix these numbers are documented in `xuebuild/quantize.py`; the
@@ -402,6 +441,12 @@ pub fn codebook(profile: &str, variable_id: &str) -> Result<Codebook> {
         (_, "dswrf") => Codebook::Linear(COMPACT_FLUX),
         (_, "cref") if quality => Codebook::Linear(QUALITY_REFLECTIVITY),
         (_, "cref") => Codebook::Linear(COMPACT_REFLECTIVITY),
+        (_, "gust") if quality => Codebook::Linear(QUALITY_GUST),
+        (_, "gust") => Codebook::Linear(COMPACT_GUST),
+        ("quality", "tcdc") => Codebook::Linear(QUALITY_CLOUD),
+        (_, "tcdc") => Codebook::Linear(COMPACT_CLOUD),
+        (_, "cape") if quality => Codebook::Linear(QUALITY_CAPE),
+        (_, "cape") => Codebook::Linear(COMPACT_CAPE),
         _ if pressure_codebook(variable_id, !quality).is_some() => Codebook::Linear(
             pressure_codebook(variable_id, !quality).expect("checked just above"),
         ),

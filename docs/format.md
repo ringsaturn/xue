@@ -311,6 +311,9 @@ no chart for.
 | `vgrd10m` | 0 / 2 / 3 | 103, 10 m | |
 | `dswrf` | 0 / 4 / 192 | 1, 0 | NCEP local parameter |
 | `cref` | 0 / 16 / 5 | 10, no value | Composite reflectivity, entire atmosphere |
+| `gust` | 0 / 2 / 22 | 1, 0 | Instantaneous surface wind gust |
+| `tcdc` | 0 / 6 / 1 | 10, no value | Total cloud cover, entire atmosphere; the instantaneous record, not the interval average |
+| `cape` | 0 / 7 / 6 | 1, 0 | Surface-based CAPE (not the mixed-layer variants on surface type 108) |
 | `prmsl` | 0 / 3 / 1 | 101, no value | Mean sea level pressure, the quantity ECMWF calls `msl` and encodes as 0 / 3 / 0 on this surface — accepted on input, never written (not NCEP's MSLET, 0 / 3 / 192) |
 | `hgt<level>` | 0 / 3 / 5 | 100, `<level>` hPa in Pa | Geopotential height, one variable per isobaric surface |
 | `tmp<level>` | 0 / 0 / 0 | 100, `<level>` hPa in Pa | Temperature on the isobaric surface |
@@ -599,6 +602,9 @@ same values unless noted):
 | `ugrd10m` / `vgrd10m` | −63.5 m/s | 0.5 | 254 | 255 | 0.25 m/s |
 | `dswrf` | 0 W/m² | 5 | 254 | 255 | 2.5 W/m² |
 | `cref` | 0 dBZ | 0.5 | 160 | 255 | 0.25 dB |
+| `gust` | 0 m/s | 0.5 | 254 | 255 | 0.25 m/s |
+| `tcdc` | 0 % | 0.5 | 200 | 255 | 0.25 % |
+| `cape` | 0 J/kg | 25 | 254 | 255 | 12.5 J/kg |
 | `prmsl` | 870.5 hPa | 1 | 254 | 255 | 0.5 hPa |
 | `hgt1000` | −905 m | 10 | 254 | 255 | 5 m |
 | `hgt925` | −249 m | 6 | 254 | 255 | 3 m |
@@ -626,8 +632,9 @@ same values unless noted):
 | `uqflx<level>` / `vqflx<level>` | −63.5 g·cm⁻¹·hPa⁻¹·s⁻¹ | 0.5 | 254 | 255 | 0.25 |
 
 The `compact` profile doubles each `scale` (temperature 1.0 → maximumCode
-110, wind 1.0 → 127, dswrf 10 → 127, cref 1.0 → 80, and every pressure-family
-and isobaric codebook → half its maximumCode over the same range).
+110, wind 1.0 → 127, dswrf 10 → 127, cref 1.0 → 80, gust 1.0 → 127, tcdc
+1.0 → 100, cape 50 → 127, and every pressure-family and isobaric codebook →
+half its maximumCode over the same range).
 
 The isobaric temperature takes its range per level: the low end holds the
 Antarctic winter at every surface, the high end the below-ground
@@ -636,8 +643,9 @@ extrapolation the lowest surfaces take under high terrain, and no single
 Specific humidity spans two orders of magnitude between the surface and the
 upper troposphere, so its step follows the level. Relative humidity is the
 noisiest field published, so the `balanced` profile takes its `compact`
-codebook (1 %, maximumCode 100) — the one departure from quality in that
-profile besides precipitation. None of the isobaric fills is contoured, so
+codebook (1 %, maximumCode 100), and total cloud cover — the same kind of
+field on the same scale — follows it; those are the departures from quality
+in that profile besides precipitation. None of the isobaric fills is contoured, so
 none carries the half-code rule below.
 
 The pressure family's offsets are chosen so that every standard contour value
@@ -730,8 +738,8 @@ fallback for out-of-range differences.
 
 Per-variable rules in v1:
 
-- **Linear-codebook fields (`tmp2m`, `ugrd10m`, `vgrd10m`, `dswrf`, and the
-  pressure family `prmsl` / `hgt<level>`)** are
+- **Linear-codebook fields (`tmp2m`, `ugrd10m`, `vgrd10m`, `dswrf`, `gust`,
+  `tcdc`, `cape`, and the pressure family `prmsl` / `hgt<level>`)** are
   smooth enough for temporal prediction. Each segment of the time axis
   splits independently into groups of 6 frames, so a group never spans a
   change of step. Within each group of `n` frames, the frame at zero-based

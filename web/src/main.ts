@@ -78,7 +78,7 @@ import {
   levelCode,
   niceStep,
   rangeLegend,
-  temperatureLegendRange,
+  scalarLegendRange,
   vectorMaxMagnitude,
   type IsobaricFamily,
 } from "./levels";
@@ -318,6 +318,29 @@ const VARIABLE_UI: Record<string, VariableUi> = {
     label: t("varLabelWind10m"),
     legend: ["40", "30", "20", "10", "5", "0"],
   },
+  // The surface diagnostics' legends read off their chart ceilings
+  // (levels.ts), the way the upper-air fills' do.
+  gust: {
+    code: "GUST SFC",
+    title: ["Wind", "Gust"],
+    bufferTitle: "Gust buffer",
+    label: t("varLabelGust"),
+    legend: isobaricLegend(identityForBundleId("gust")!) ?? [],
+  },
+  tcdc: {
+    code: "TCDC EATM",
+    title: ["Cloud", "Cover"],
+    bufferTitle: "Cloud buffer",
+    label: t("varLabelTcdc"),
+    legend: isobaricLegend(identityForBundleId("tcdc")!) ?? [],
+  },
+  cape: {
+    code: "CAPE SFC",
+    title: ["Convective", "Energy"],
+    bufferTitle: "CAPE buffer",
+    label: t("varLabelCape"),
+    legend: isobaricLegend(identityForBundleId("cape")!) ?? [],
+  },
   ...pressureVariableUi(),
   ...isobaricVariableUi(),
 } as unknown as Record<string, VariableUi>;
@@ -364,6 +387,15 @@ const DARK_BASEMAP: Record<string, BasemapTones> = {
   // 5 dBZ edge to read against it.
   cref: { ocean: "#0c1a26", land: "#1a2f3d" },
   wind10m: { ocean: "#0e2131", land: "#1d3849" },
+  // Translucent at the low end like the wind field, and on its ground.
+  gust: { ocean: "#0e2131", land: "#1d3849" },
+  // A grey veil over a slate: clear sky has to read as the map, so the
+  // ground carries the geography and stays dark enough for thin cloud to
+  // show against it.
+  tcdc: { ocean: "#16344a", land: "#28495f" },
+  // Stable air is the map; the ramp starts in pale straw, which needs the
+  // precipitation slate under it rather than the temperature's near-void.
+  cape: { ocean: "#16344a", land: "#28495f" },
   ...pressureBasemapTheme({ ocean: "#101f2c", land: "#22384a" }),
   ...isobaricBasemapTheme((family) =>
     family === "wind"
@@ -403,6 +435,9 @@ const LIGHT_BASEMAP: Record<string, BasemapTones> = {
   dswrf: PAPER_GROUND,
   cref: PAPER_GROUND,
   wind10m: PAPER_GROUND,
+  gust: PAPER_GROUND,
+  tcdc: PAPER_GROUND,
+  cape: PAPER_GROUND,
   ...pressureBasemapTheme({ ocean: "#dcd6c8", land: "#c9c2b2" }),
   ...isobaricBasemapTheme(() => PAPER_GROUND),
 } as Record<string, BasemapTones>;
@@ -2629,24 +2664,32 @@ function syncUnknownRailTiles(run: ForecastManifest): void {
   }
 }
 
+/** The layers whose legend bar is a hand-written gradient in the stylesheet
+ * (`body[data-variable=…] .legend-bar`, and the default for temperature);
+ * every other field reads its bar off the palette it is actually drawn
+ * with. */
+const STYLESHEET_LEGEND_IDS: ReadonlySet<string> = new Set(["tmp2m", "prate", "cref", "wind10m"]);
+
 /** The legend bar's gradient for a field whose key is not in the stylesheet:
- * the upper-air fills and every unrecognized field read theirs off the
- * palette they are actually drawn with, over the range the legend's ticks
- * span. The surface layers keep their hand-written CSS gradients. */
+ * the upper-air fills, the surface diagnostics, solar radiation and every
+ * unrecognized field read theirs off the palette they are actually drawn
+ * with, over the range the legend's ticks span. */
 function legendGradientFor(session: VariableSession): string {
   const chartId = session.chartId;
-  if (chartId !== null && !(ISOBARIC_FILL_IDS as readonly string[]).includes(chartId)) return "";
+  if (chartId !== null && STYLESHEET_LEGEND_IDS.has(chartId)) return "";
   if (session.vector) return legendGradient(vectorPalette(session));
   const variable = session.variable;
   if (variable.quantization.type !== "linear") return "";
   const { offset, scale, maximumCode } = variable.quantization;
   let from = 0;
   let to = maximumCode;
-  // Only a registered temperature surface has a ramp domain narrower than
-  // its codebook; an unrecognized field's bar spans the codebook, which is
+  // A registered field may read over less than its codebook — a windowed
+  // temperature surface, a diagnostic whose ramp saturates before the
+  // codebook ends; an unrecognized field's bar spans the codebook, which is
   // exactly what its legend's ticks say.
-  if (chartId !== null && session.identity?.family === "tmp" && session.identity.level !== null) {
-    const [low, high] = temperatureLegendRange(session.identity.level);
+  const range = chartId !== null && session.identity ? scalarLegendRange(session.identity) : null;
+  if (range) {
+    const [low, high] = range;
     from = Math.max(0, Math.round((low - offset) / scale));
     to = Math.min(maximumCode, Math.round((high - offset) / scale));
   }

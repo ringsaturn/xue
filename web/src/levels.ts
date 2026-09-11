@@ -11,11 +11,13 @@ import { PRESSURE_BUNDLE_IDS, pressureLabel } from "./pressure";
  * surfaces (manifest.ts `ISOBARIC_LEVELS`), possibly with a near-surface
  * member of its own — 2 m temperature heads the temperature family, 10 m wind
  * the wind family, mean sea level pressure the pressure family. Precipitation,
- * radiation and reflectivity are single layers and belong to no family.
+ * radiation, reflectivity and the surface diagnostics (gust, cloud cover,
+ * CAPE) are single layers and belong to no family.
  *
  * Everything here is chart knowledge, not container knowledge: the codebook
  * ranges are copied from the encoders and held to them by
- * `tests/fixtures/isobaric-registry.json` (`tests/web/levels.test.ts`), the
+ * `tests/fixtures/isobaric-registry.json` (`tests/web/levels.test.ts`) and
+ * `tests/fixtures/surface-registry.json` (`tests/web/surface.test.ts`), the
  * way pressure.ts is held by its own registry.
  */
 export type IsobaricFamily = "hgt" | "tmp" | "rh" | "spfh" | "wind" | "qflux";
@@ -172,6 +174,31 @@ export function temperatureLegendRange(level: number | null): readonly [number, 
   return [Math.max(low, range[0]), Math.min(high, range[1])];
 }
 
+/** The surface diagnostics' chart ceilings — where each palette saturates
+ * and what its legend spans, narrower than the codebook where the codebook
+ * keeps headroom the chart does not need. Gust reuses the wind speed ramp
+ * stretched to 50 m/s: a 10 m wind rarely passes 30, a gust routinely does,
+ * and 50 is a category-3 typhoon's. CAPE saturates at 5000 J/kg, the top
+ * class of a severe-weather chart; the codebook's 6350 keeps the rare
+ * extreme distinct in a probe without stretching the ramp for it. Cloud
+ * cover is the whole 0–100 %. Held to `tests/fixtures/surface-registry.json`
+ * by `tests/web/surface.test.ts`. */
+export const GUST_SPEED_MAX = 50;
+export const CAPE_CHART_MAX = 5000;
+
+/** The value span a filled scalar's legend reads over, or null where the
+ * span is the codebook's own: a registered temperature surface takes its
+ * windowed domain, a surface diagnostic its chart ceiling. */
+export function scalarLegendRange(identity: VariableIdentity): readonly [number, number] | null {
+  const { family, level, vector } = identity;
+  if (vector) return null;
+  if (family === "tmp" && isRegisteredLevel(level)) return temperatureLegendRange(level);
+  if (family === "gust") return [0, GUST_SPEED_MAX];
+  if (family === "tcdc") return [0, 100];
+  if (family === "cape") return [0, CAPE_CHART_MAX];
+  return null;
+}
+
 /** Ceiling of a vector field's magnitude palette: the 10 m wind's 40 m/s,
  * more for the isobaric winds (a jet core passes 80), and the vapour flux's
  * own scale — strong transport is 20–40 g·cm⁻¹·hPa⁻¹·s⁻¹. Keyed by the pair
@@ -236,12 +263,16 @@ export function niceStep(span: number): number {
 }
 
 /** The legend ticks of one identified field: a filled scalar across its
- * palette domain, a vector field from its magnitude ceiling down to zero.
- * Null where the pair has no registered legend — the caller then builds one
- * from the file's own codebook. */
+ * palette domain, a vector field from its magnitude ceiling down to zero,
+ * a surface diagnostic across its chart ceiling. Null where the pair has no
+ * registered legend — the caller then builds one from the file's own
+ * codebook. */
 export function isobaricLegend(identity: VariableIdentity): string[] | null {
   const { family, level, vector } = identity;
   if (vector) return rangeLegend([0, vectorMaxMagnitude(family, level)], 10);
+  if (family === "gust") return rangeLegend([0, GUST_SPEED_MAX], 10);
+  if (family === "tcdc") return rangeLegend([0, 100], 20);
+  if (family === "cape") return rangeLegend([0, CAPE_CHART_MAX], 1000);
   if (family === "tmp" && isRegisteredLevel(level)) return rangeLegend(temperatureLegendRange(level), 5);
   if (family === "rh" && isRegisteredLevel(level)) return rangeLegend([0, 100], 20);
   if (family === "spfh" && isRegisteredLevel(level)) {

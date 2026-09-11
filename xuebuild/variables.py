@@ -237,6 +237,65 @@ VARIABLES: dict[str, VariableSpec] = {
         grib2_number=5,
         grib2_level_type=10,
     ),
+    # Three more surface diagnostics, each a GRIB record of its own with no
+    # unit conversion. Registered from the GFS pgrb2 set; ECMWF open data
+    # carries neighbours rather than equivalents (``10fg`` is the interval
+    # *maximum* gust on the 10 m surface, ``tcc`` a 0–1 fraction) and needs
+    # its own matching rule before a source lists them, so ``ecmwf_param``
+    # stays empty here. Registration is not publication: no source ships
+    # these yet (sources.py), and publishing one means widening its input
+    # list and recutting tests/fixtures/gfs.*.crop.grib2 alongside.
+    #
+    # Wind gust: the instantaneous surface gust diagnostic, 0/2/22 on the
+    # ground surface (the ``:GUST:surface:`` pgrb2 record).
+    "gust": VariableSpec(
+        id="gust",
+        label="Wind gust",
+        output_unit="m/s",
+        value_range=(0, 127),
+        grib_element="GUST",
+        index_field=":GUST:surface:",
+        grib2_category=2,
+        grib2_number=22,
+        grib2_level_type=1,
+        grib2_level_value=0.0,
+        gdal_unit="m/s",
+    ),
+    # Total cloud cover over the whole column, 0/6/1 on the entire atmosphere
+    # (surface type 10, no value). pgrb2 carries the instantaneous record
+    # beside an interval average of the same field; the ``ave fcst`` phrase
+    # is excluded exactly as it is for prate, and the identity's missing
+    # statistical process rejects the average at the GRIB2 header too.
+    "tcdc": VariableSpec(
+        id="tcdc",
+        label="Total cloud cover",
+        output_unit="%",
+        value_range=(0, 100),
+        grib_element="TCDC",
+        index_field=":TCDC:entire atmosphere:",
+        excluded_index_phrases=("ave fcst",),
+        grib2_category=6,
+        grib2_number=1,
+        grib2_level_type=10,
+        gdal_unit="%",
+    ),
+    # Surface-based convective available potential energy, 0/7/6 on the
+    # ground surface. pgrb2 also carries the 180 mb and 255 mb mixed-layer
+    # variants on surface type 108; the ``:CAPE:surface:`` phrase and the
+    # surface type pick the surface-based one.
+    "cape": VariableSpec(
+        id="cape",
+        label="Convective available potential energy",
+        output_unit="J/kg",
+        value_range=(0, 6350),
+        grib_element="CAPE",
+        index_field=":CAPE:surface:",
+        grib2_category=7,
+        grib2_number=6,
+        grib2_level_type=1,
+        grib2_level_value=0.0,
+        gdal_unit="J/kg",
+    ),
 }
 
 

@@ -349,6 +349,20 @@
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphCref">Z</b>
           <span class="rail-name"><span>RADAR</span> <small data-i18n="varRadar">CREF</small></span>
         </button>
+        <!-- The surface diagnostics: registered on both encoders, published
+             by no source yet, so these stay hidden until a run ships them. -->
+        <button type="button" data-variable="gust" aria-pressed="false" hidden>
+          <b class="rail-glyph" aria-hidden="true" data-i18n="glyphGust">G</b>
+          <span class="rail-name"><span>GUST</span> <small data-i18n="varGust">SFC</small></span>
+        </button>
+        <button type="button" data-variable="tcdc" aria-pressed="false" hidden>
+          <b class="rail-glyph" aria-hidden="true" data-i18n="glyphTcdc">N</b>
+          <span class="rail-name"><span>CLOUD</span> <small data-i18n="varCloud">TOTAL</small></span>
+        </button>
+        <button type="button" data-variable="cape" aria-pressed="false" hidden>
+          <b class="rail-glyph" aria-hidden="true" data-i18n="glyphCape">C</b>
+          <span class="rail-name"><span>CAPE</span> <small data-i18n="varCape">SFC</small></span>
+        </button>
       </div>
 
       <section id="timeline-panel" class="timeline-panel" data-i18n-aria="timelineAria" aria-label="Forecast time controls">

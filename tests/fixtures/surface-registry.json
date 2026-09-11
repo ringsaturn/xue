@@ -1,0 +1,86 @@
+{
+  "gust": {
+    "label": "Wind gust",
+    "unit": "m/s",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 2,
+      "parameterNumber": 22,
+      "typeOfFirstFixedSurface": 1,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 0
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "tcdc": {
+    "label": "Total cloud cover",
+    "unit": "%",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 6,
+      "parameterNumber": 1,
+      "typeOfFirstFixedSurface": 10,
+      "scaleFactorOfFirstFixedSurface": null,
+      "scaledValueOfFirstFixedSurface": null
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 200,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 100,
+      "nodataCode": 255
+    }
+  },
+  "cape": {
+    "label": "Convective available potential energy",
+    "unit": "J/kg",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 7,
+      "parameterNumber": 6,
+      "typeOfFirstFixedSurface": 1,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 0
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 25.0,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 50.0,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  }
+}

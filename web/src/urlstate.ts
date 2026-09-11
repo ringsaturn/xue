@@ -28,6 +28,9 @@ const CANONICAL_TYPE: Record<string, string> = {
   cref: "radar",
   prmsl: "pressure",
   wind10m: "wind",
+  gust: "gust",
+  tcdc: "cloud",
+  cape: "cape",
 };
 
 function canonicalType(id: ForecastBundleId): string {
@@ -58,6 +61,14 @@ const TYPE_ALIASES: Record<string, ForecastBundleId> = {
   mslp: "prmsl",
   msl: "prmsl",
   prmsl: "prmsl",
+  gust: "gust",
+  gusts: "gust",
+  cloud: "tcdc",
+  clouds: "tcdc",
+  cloudcover: "tcdc",
+  tcdc: "tcdc",
+  cape: "cape",
+  instability: "cape",
   // The subtropical high is read off the 500 hPa chart, so the view has the
   // name people look for as well as the level's own.
   subtropicalhigh: "hgt500",

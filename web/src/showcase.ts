@@ -70,6 +70,9 @@ const VARIABLE_CODE: Partial<Record<ForecastBundleId, string>> = {
   cref: "RADAR",
   prmsl: "MSLP",
   wind10m: "WIND",
+  gust: "GUST",
+  tcdc: "CLOUD",
+  cape: "CAPE",
 };
 
 /** The contact-sheet code of one bundle: the surface fields have a word,

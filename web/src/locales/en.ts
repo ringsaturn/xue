@@ -25,6 +25,11 @@ export const en = {
   varWind: "10M",
   varSolar: "FLUX",
   varRadar: "CREF",
+  /** The surface diagnostics: gust and CAPE are surface fields (SFC,
+   * the same detail the codes carry), cloud cover is the whole column. */
+  varGust: "SFC",
+  varCloud: "TOTAL",
+  varCape: "SFC",
   /** The upper-air families' tiles: relative humidity and the water vapour
    * flux have no surface member, so the gloss names the field rather than a
    * level. */
@@ -53,6 +58,11 @@ export const en = {
   glyphWind10m: "W",
   glyphDswrf: "S",
   glyphCref: "Z",
+  // N is the synoptic-code letter for total cloud amount; the gust and CAPE
+  // take their initials.
+  glyphGust: "G",
+  glyphTcdc: "N",
+  glyphCape: "C",
   glyphPressure: "P",
   // U is the WMO symbol for relative humidity; the vapour flux takes the F
   // of flux.
@@ -161,6 +171,9 @@ export const en = {
   varLabelDswrf: "Solar radiation",
   varLabelWind10m: "10 m wind",
   varLabelCref: "Composite radar reflectivity",
+  varLabelGust: "Wind gust",
+  varLabelTcdc: "Total cloud cover",
+  varLabelCape: "Convective available potential energy",
   varLabelPrmsl: "Mean sea level pressure",
   // One string for eight levels: pressure.ts and levels.ts substitute {level}.
   varLabelHeightAtLevel: "{level} hPa geopotential height",

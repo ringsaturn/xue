@@ -20,9 +20,21 @@ import { ISOBARIC_LEVELS, type BundleParameter, type BundleVariable, type KnownB
  */
 
 /** The chart families. The first six are registered on isobaric surfaces and
- * some of them also have a near-surface member; the last three are single
- * layers. */
-export type ChartFamily = "hgt" | "tmp" | "rh" | "spfh" | "wind" | "qflux" | "prate" | "dswrf" | "cref";
+ * some of them also have a near-surface member; the rest are single layers
+ * (precipitation, radiation, reflectivity, gust, cloud cover, CAPE). */
+export type ChartFamily =
+  | "hgt"
+  | "tmp"
+  | "rh"
+  | "spfh"
+  | "wind"
+  | "qflux"
+  | "prate"
+  | "dswrf"
+  | "cref"
+  | "gust"
+  | "tcdc"
+  | "cape";
 
 export interface VariableIdentity {
   family: ChartFamily;
@@ -84,7 +96,8 @@ function isTriple(parameter: BundleParameter, discipline: number, category: numb
  * (0,0,0) @100 and @103 value 2 temperature, (0,1,1) @100 relative humidity,
  * (0,1,0) @100 specific humidity, (0,1,7) @1 precipitation rate,
  * (0,4,192) @1 downward shortwave radiation, (0,16,5) @10 composite
- * reflectivity.
+ * reflectivity, (0,2,22) @1 wind gust, (0,6,1) @10 total cloud cover,
+ * (0,7,6) @1 surface-based CAPE.
  */
 export function identityForParameter(parameter: BundleParameter): VariableIdentity | null {
   const surface = parameter.typeOfFirstFixedSurface;
@@ -101,6 +114,9 @@ export function identityForParameter(parameter: BundleParameter): VariableIdenti
   if (isTriple(parameter, 0, 1, 7) && surface === 1) return scalar("prate", null);
   if (isTriple(parameter, 0, 4, 192) && surface === 1) return scalar("dswrf", null);
   if (isTriple(parameter, 0, 16, 5) && surface === 10) return scalar("cref", null);
+  if (isTriple(parameter, 0, 2, 22) && surface === 1) return scalar("gust", null);
+  if (isTriple(parameter, 0, 6, 1) && surface === 10) return scalar("tcdc", null);
+  if (isTriple(parameter, 0, 7, 6) && surface === 1) return scalar("cape", null);
   return null;
 }
 
@@ -195,6 +211,9 @@ const SURFACE_IDS: Record<string, VariableIdentity> = {
   prate: scalar("prate", null),
   dswrf: scalar("dswrf", null),
   cref: scalar("cref", null),
+  gust: scalar("gust", null),
+  tcdc: scalar("tcdc", null),
+  cape: scalar("cape", null),
 };
 
 const ISOBARIC_PREFIXES: Record<string, ChartFamily> = {
@@ -238,6 +257,9 @@ const FAMILY_SURFACE_ID: Record<ChartFamily, KnownBundleId | null> = {
   prate: "prate",
   dswrf: "dswrf",
   cref: "cref",
+  gust: "gust",
+  tcdc: "tcdc",
+  cape: "cape",
 };
 
 /**

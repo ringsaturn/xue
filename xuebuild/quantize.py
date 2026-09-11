@@ -140,6 +140,26 @@ COMPACT_FLUX = TemperatureCodebook(minimum=0.0, maximum=1270.0, step=10.0, name=
 # with a class the data never reached.
 QUALITY_REFLECTIVITY = TemperatureCodebook(minimum=0.0, maximum=80.0, step=0.5, name="cref")
 COMPACT_REFLECTIVITY = TemperatureCodebook(minimum=0.0, maximum=80.0, step=1.0, name="cref")
+# Wind gust: a speed, so one-sided, at the 10 m components' 0.5 m/s step but
+# over 0–127 m/s — the isobaric wind's ceiling, which no surface gust in a
+# 0.25° model reaches (a category-5 core gusts in the 80s). Spends the full
+# 0..254 code space.
+QUALITY_GUST = TemperatureCodebook(minimum=0.0, maximum=127.0, step=0.5, name="gust")
+COMPACT_GUST = TemperatureCodebook(minimum=0.0, maximum=127.0, step=1.0, name="gust")
+# Total cloud cover: 0–100 % at half a percent, the relative humidity's own
+# numbers — and, like it, a field of small-scale structure a chart reads in
+# tens of percent, so the balanced profile takes the 1 % step here too.
+QUALITY_CLOUD = TemperatureCodebook(minimum=0.0, maximum=100.0, step=0.5, name="tcdc")
+COMPACT_CLOUD = TemperatureCodebook(minimum=0.0, maximum=100.0, step=1.0, name="tcdc")
+# Convective available potential energy: 0–6350 J/kg at 25 J/kg spends the
+# full 0..254 code space. A severe-weather chart classes CAPE in the
+# hundreds and thousands, so the 12.5 J/kg error budget is far below any
+# line it draws; the rare extreme past 6350 clamps like a temperature
+# extreme. Linear rather than log1p on purpose — the zero plateau costs
+# nothing either way, and a linear codebook is what every generic reader of
+# the format (legend, probe, poster) already spreads a ramp over.
+QUALITY_CAPE = TemperatureCodebook(minimum=0.0, maximum=6350.0, step=25.0, name="cape")
+COMPACT_CAPE = TemperatureCodebook(minimum=0.0, maximum=6350.0, step=50.0, name="cape")
 
 # Sea-level pressure and the pressure-level geopotential heights. Three rules
 # fix these numbers:
@@ -320,6 +340,11 @@ QUALITY_ISOBARIC = _isobaric_codebooks(compact=False)
 COMPACT_ISOBARIC = _isobaric_codebooks(compact=True)
 ISOBARIC_VARIABLE_IDS: tuple[str, ...] = tuple(QUALITY_ISOBARIC)
 
+# The surface diagnostics held to the Rust encoder and the frontend by
+# tests/fixtures/surface-registry.json, the way the pressure family and the
+# isobaric families have registries of their own.
+SURFACE_VARIABLE_IDS: tuple[str, ...] = ("gust", "tcdc", "cape")
+
 PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
     "quality": {
         "tmp2m": QUALITY_TEMPERATURE,
@@ -328,6 +353,9 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
         "vgrd10m": QUALITY_WIND,
         "dswrf": QUALITY_FLUX,
         "cref": QUALITY_REFLECTIVITY,
+        "gust": QUALITY_GUST,
+        "tcdc": QUALITY_CLOUD,
+        "cape": QUALITY_CAPE,
         **QUALITY_PRESSURE,
         **QUALITY_ISOBARIC,
     },
@@ -338,6 +366,9 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
         "vgrd10m": COMPACT_WIND,
         "dswrf": COMPACT_FLUX,
         "cref": COMPACT_REFLECTIVITY,
+        "gust": COMPACT_GUST,
+        "tcdc": COMPACT_CLOUD,
+        "cape": COMPACT_CAPE,
         **COMPACT_PRESSURE,
         **COMPACT_ISOBARIC,
     },
@@ -349,7 +380,8 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
     # Relative humidity is the noisiest field published — small-scale
     # structure at every level — and a 0.5 % step costs ~570 KB a frame on
     # the real 850 hPa plane against ~450 KB at 1 %, for a precision no
-    # moisture chart reads. Balanced takes the compact (1 %) codebook there.
+    # moisture chart reads. Balanced takes the compact (1 %) codebook there,
+    # and for total cloud cover, the same kind of field on the same scale.
     "balanced": {
         "tmp2m": QUALITY_TEMPERATURE,
         "prate": COMPACT_PRECIPITATION,
@@ -357,6 +389,9 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
         "vgrd10m": QUALITY_WIND,
         "dswrf": QUALITY_FLUX,
         "cref": QUALITY_REFLECTIVITY,
+        "gust": QUALITY_GUST,
+        "tcdc": COMPACT_CLOUD,
+        "cape": QUALITY_CAPE,
         **QUALITY_PRESSURE,
         **QUALITY_ISOBARIC,
         **{variable_id: COMPACT_HUMIDITY for variable_id in QUALITY_ISOBARIC if variable_id.startswith("rh")},

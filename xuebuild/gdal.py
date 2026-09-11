@@ -182,6 +182,34 @@ def wind_expression(unit: str) -> str:
     return "maximum(-64,minimum(64,A))"
 
 
+def gust_expression(unit: str) -> str:
+    """Wind gust: a speed in the wind components' unit, one-sided, clamped
+    to the gust codebook's range."""
+    compact = re.sub(r"[\s*()\[\]]", "", unit.strip().lower())
+    aliases = {"m/s", "m/sec", "ms-1", "ms^-1", "mps"}
+    if compact not in aliases:
+        raise ConversionError(f"unsupported wind gust unit: {unit or '<missing>'}")
+    return "maximum(0,minimum(127,A))"
+
+
+def cloud_cover_expression(unit: str) -> str:
+    """Total cloud cover, already in percent."""
+    compact = unit.strip().strip("[]()")
+    if compact != "%":
+        raise ConversionError(f"unsupported cloud cover unit: {unit or '<missing>'}")
+    return "maximum(0,minimum(100,A))"
+
+
+def cape_expression(unit: str) -> str:
+    """Convective available potential energy in J/kg, clamped to the cape
+    codebook's range."""
+    compact = re.sub(r"[\s*()\[\]]", "", unit.strip().lower())
+    aliases = {"j/kg", "jkg-1", "jkg^-1"}
+    if compact not in aliases:
+        raise ConversionError(f"unsupported CAPE unit: {unit or '<missing>'}")
+    return "maximum(0,minimum(6350,A))"
+
+
 def accumulation_expression(unit: str) -> str:
     """ECMWF tp arrives in metres of accumulated water; GDAL reports the
     ECMWF-local parameter's unit as "-". The expression is identity — the
@@ -266,6 +294,12 @@ def raster_expression(variable_id: str, unit: str) -> str:
         return wind_expression(unit)
     if variable_id == "prmsl":
         return pressure_expression(unit)
+    if variable_id == "gust":
+        return gust_expression(unit)
+    if variable_id == "tcdc":
+        return cloud_cover_expression(unit)
+    if variable_id == "cape":
+        return cape_expression(unit)
     if isobaric_variable(variable_id) is not None:
         return isobaric_expression(variable_id, unit)
     raise ConversionError(f"unsupported variable: {variable_id}")
@@ -315,9 +349,11 @@ def _is_total_precipitation(metadata: dict[str, str], description: str) -> bool:
     )
 
 
-def _is_surface_flux(metadata: dict[str, str], description: str, element: str) -> bool:
-    """Surface radiative flux (e.g. DSWRF). The fetched sflux files carry only
-    the instantaneous record, so element + surface level is unambiguous."""
+def _is_surface_record(metadata: dict[str, str], description: str, element: str) -> bool:
+    """One GRIB element on the ground surface (DSWRF, GUST, CAPE). The
+    fetched files carry only the instantaneous surface record of each, so
+    element + surface level is unambiguous — the interval averages and the
+    mixed-layer CAPE variants are never downloaded."""
     if metadata.get("GRIB_ELEMENT", "").upper() != element:
         return False
     short_name = metadata.get("GRIB_SHORT_NAME", "").upper()
@@ -330,6 +366,25 @@ def _is_surface_flux(metadata: dict[str, str], description: str, element: str) -
         ]
     ).lower()
     return short_name == "0-SFC" or "surface" in searchable
+
+
+def _is_entire_atmosphere_record(metadata: dict[str, str], description: str, element: str) -> bool:
+    """One GRIB element on the entire atmosphere (surface type 10), which
+    GDAL spells ``0-EATM``; the phrase fallback catches drivers that do not.
+    The fetched pgrb2 files carry the instantaneous TCDC record alone — the
+    per-layer cloud covers and the interval average are never downloaded."""
+    if metadata.get("GRIB_ELEMENT", "").upper() != element:
+        return False
+    short_name = metadata.get("GRIB_SHORT_NAME", "").upper()
+    searchable = " ".join(
+        [
+            short_name,
+            metadata.get("GRIB_COMMENT", ""),
+            metadata.get("GRIB_LEVEL", ""),
+            description,
+        ]
+    ).lower()
+    return short_name == "0-EATM" or "entire atmosphere" in searchable
 
 
 def _is_ten_metre_wind(metadata: dict[str, str], description: str, element: str) -> bool:
@@ -411,8 +466,10 @@ def _band_matches(variable_id: str, metadata: dict[str, str], description: str) 
         return _is_surface_precipitation_rate(metadata, description)
     if variable_id == "tp":
         return _is_total_precipitation(metadata, description)
-    if variable_id == "dswrf":
-        return _is_surface_flux(metadata, description, variable_spec(variable_id).grib_element)
+    if variable_id in ("dswrf", "gust", "cape"):
+        return _is_surface_record(metadata, description, variable_spec(variable_id).grib_element)
+    if variable_id == "tcdc":
+        return _is_entire_atmosphere_record(metadata, description, variable_spec(variable_id).grib_element)
     if variable_id in ("ugrd10m", "vgrd10m"):
         return _is_ten_metre_wind(metadata, description, variable_spec(variable_id).grib_element)
     if variable_id == "prmsl":

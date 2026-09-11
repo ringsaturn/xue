@@ -107,6 +107,42 @@ pub fn raster_expression(variable_id: &str, unit: &str) -> Result<String> {
             Ok("maximum(0,minimum(1270,A))".into())
         }
         "ugrd10m" | "vgrd10m" => wind_expression(unit),
+        // Wind gust: a speed in the wind components' unit, one-sided.
+        "gust" => {
+            let compact: String = unit
+                .trim()
+                .to_lowercase()
+                .chars()
+                .filter(|character| !" *()[]".contains(*character))
+                .collect();
+            if !["m/s", "m/sec", "ms-1", "ms^-1", "mps"].contains(&compact.as_str()) {
+                return Err(EncodeError::conversion(format!(
+                    "unsupported wind gust unit: {}",
+                    if unit.is_empty() { "<missing>" } else { unit }
+                )));
+            }
+            Ok("maximum(0,minimum(127,A))".into())
+        }
+        // Total cloud cover, already in percent.
+        "tcdc" => {
+            if unit.trim().trim_matches(|character| "[]()".contains(character)) != "%" {
+                return Err(EncodeError::conversion(format!(
+                    "unsupported cloud cover unit: {}",
+                    if unit.is_empty() { "<missing>" } else { unit }
+                )));
+            }
+            Ok("maximum(0,minimum(100,A))".into())
+        }
+        // CAPE in J/kg.
+        "cape" => {
+            if !["j/kg", "jkg-1", "jkg^-1"].contains(&compact_unit(unit).as_str()) {
+                return Err(EncodeError::conversion(format!(
+                    "unsupported CAPE unit: {}",
+                    if unit.is_empty() { "<missing>" } else { unit }
+                )));
+            }
+            Ok("maximum(0,minimum(6350,A))".into())
+        }
         // Mean sea level pressure: GRIB2 carries pascals, the codebook
         // quantizes hectopascals. Only Pa is accepted — a file already in
         // hPa would divide twice, and no source publishes one.
@@ -268,9 +304,18 @@ fn band_matches(variable_id: &str, band: &BandInfo) -> Result<bool> {
                 && (comment.contains("cat 1, subcat 193")
                     || text.contains("total precipitation"))
         }
-        "dswrf" => {
+        // One element on the ground surface: the fetched files carry only
+        // the instantaneous surface record of each, so element + surface is
+        // unambiguous.
+        "dswrf" | "gust" | "cape" => {
             element == variable_spec(variable_id)?.grib_element
                 && (short_name == "0-SFC" || searchable(band).to_lowercase().contains("surface"))
+        }
+        // The entire atmosphere (surface type 10), which GDAL spells
+        // `0-EATM`; the per-layer cloud covers are never downloaded.
+        "tcdc" => {
+            element == variable_spec(variable_id)?.grib_element
+                && (short_name == "0-EATM" || searchable(band).to_lowercase().contains("entire atmosphere"))
         }
         "ugrd10m" | "vgrd10m" => {
             element == variable_spec(variable_id)?.grib_element
