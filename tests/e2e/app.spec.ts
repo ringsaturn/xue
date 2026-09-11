@@ -927,10 +927,12 @@ test("clicking the map pins a point and reads its whole series at once", async (
   await expect(count).toHaveText("121 / 121");
   await expect(page.locator("#probe-hint")).toHaveText("Series complete");
   // Pinning a second point re-reads the series there: the panel follows the
-  // new cell instead of holding the first one's numbers.
+  // new cell instead of holding the first one's numbers. The point sits left
+  // of the transport capsule (x 280–1000 on this viewport), which the level
+  // row makes tall enough to cover y=520 in the middle of the screen.
   const coords = page.locator("#probe-coords");
   const first = await coords.textContent();
-  await page.locator("#map").click({ position: { x: 300, y: 520 } });
+  await page.locator("#map").click({ position: { x: 200, y: 520 } });
   await expect(coords).not.toHaveText(first ?? "");
   await expect(count).toHaveText("121 / 121");
   // And back to the first point, which the request bookkeeping must not
