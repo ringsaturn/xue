@@ -151,10 +151,14 @@ describe("the upper-air palettes", () => {
     expect(upperPalette[255 * 4 + 3]).toBe(0);
   });
 
-  it("paints relative humidity opaque and specific humidity transparent when dry", () => {
+  it("paints relative humidity as a wash and specific humidity transparent when dry", () => {
+    // Humidity covers the whole grid, but as a wash the map shows through:
+    // half-transparent where dry, firmest (never quite opaque) when saturated.
     const humidity = buildPalette(variable("rh850"));
-    expect(humidity[3]).toBeGreaterThan(200);
-    expect(humidity[200 * 4 + 3]).toBe(255);
+    expect(humidity[3]).toBeGreaterThan(100);
+    expect(humidity[3]).toBeLessThan(160);
+    expect(humidity[200 * 4 + 3]).toBeGreaterThan(humidity[3]!);
+    expect(humidity[200 * 4 + 3]).toBeLessThan(255);
     const specific = buildPalette(variable("spfh850"));
     expect(specific[3]).toBe(0);
     expect(specific[254 * 4 + 3]).toBe(255);

@@ -130,18 +130,21 @@ function remapStops(stops: Stop[], from: readonly [number, number], to: readonly
 
 // Relative humidity, the way a moisture chart is read: dry air in the browns
 // of bare ground, the middle in paper tones, saturated air in greens deepening
-// to blue past 90 %, where cloud and rain live. Opaque like temperature — the
-// field covers everything, and there is no "nothing here" to let the map
-// through.
+// to blue past 90 %, where cloud and rain live. The field covers everything —
+// there is no "nothing here" — but it is drawn as a wash rather than a
+// coat: half-transparent where dry, firmest where saturated, so the map's
+// coastlines and names stay legible under it and the pressure lines drawn
+// over it (one ink per theme) keep their contrast against a ground the
+// theme's slate or paper still shows through.
 const HUMIDITY_STOPS: Stop[] = [
-  [0, 128, 84, 40, 235],
-  [20, 176, 132, 84, 235],
-  [40, 216, 196, 150, 235],
-  [55, 224, 224, 196, 235],
-  [70, 170, 212, 170, 240],
-  [80, 104, 184, 140, 245],
-  [90, 56, 144, 160, 250],
-  [100, 36, 84, 160, 255],
+  [0, 128, 84, 40, 130],
+  [20, 176, 132, 84, 135],
+  [40, 216, 196, 150, 140],
+  [55, 224, 224, 196, 150],
+  [70, 170, 212, 170, 180],
+  [80, 104, 184, 140, 205],
+  [90, 56, 144, 160, 215],
+  [100, 36, 84, 160, 230],
 ];
 
 // Specific humidity in fractions of the level's codebook ceiling: dry air is
@@ -159,14 +162,17 @@ const SPECIFIC_HUMIDITY_UNIT_STOPS: Stop[] = [
 
 // Water vapour flux magnitude, g·cm⁻¹·hPa⁻¹·s⁻¹. Nothing below 2 — dry or
 // calm air is the map — then greens into teal, blue and violet for the
-// conveyor belts a rainstorm feeds on (20–40 is strong transport).
+// conveyor belts a rainstorm feeds on (20–40 is strong transport). The
+// transparency climbs slowly through the background flux (5–10 is most of
+// an ocean) and only firms up past 15, so the belts stand out of the map
+// instead of out of a green veil.
 export const VAPOUR_FLUX_STOPS: Stop[] = [
   [0, 160, 210, 170, 0],
-  [2, 160, 210, 170, 60],
-  [5, 130, 200, 140, 140],
-  [10, 90, 186, 150, 190],
-  [15, 70, 164, 176, 215],
-  [20, 60, 132, 196, 232],
+  [2, 160, 210, 170, 0],
+  [5, 130, 200, 140, 50],
+  [10, 90, 186, 150, 120],
+  [15, 70, 164, 176, 170],
+  [20, 60, 132, 196, 210],
   [30, 72, 96, 200, 245],
   [40, 110, 70, 190, 252],
   [50, 140, 50, 170, 255],
