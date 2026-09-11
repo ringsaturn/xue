@@ -103,25 +103,28 @@ pub const SOURCES: &[SourceSpec] = &[
         latest_filename: Some("latest.json"),
         // Hourly through f120, then three-hourly through f240.
         steps: &[(120, 1), (240, 3)],
-        // The pressure family ships the three isobaric levels of the first
-        // launch (850 / 500 / 250) beside mean sea level pressure; the
-        // upper-air fills the surfaces a synoptic chart is read on — 850 and
-        // 500 hPa temperature, 850 and 700 hPa relative humidity, the 850 hPa
-        // wind and the vapour flux derived from it and the specific humidity
-        // there (fetched as an input only). Mirrors `xuebuild/sources.py`.
+        // The pressure family ships mean sea level pressure and the four
+        // isobaric levels a synoptic chart is read on (850 / 700 / 500 /
+        // 250); the upper-air fills the surfaces those charts carry — 925,
+        // 850 and 500 hPa temperature, 850, 700 and 500 hPa relative
+        // humidity, the 925 and 850 hPa winds with the vapour flux derived
+        // from the 850 hPa one and the specific humidity there (fetched as
+        // an input only), and the 250 hPa wind for the jet. Mirrors
+        // `xuebuild/sources.py`.
         input_variable_ids: &[
-            "tmp2m", "prate", "ugrd10m", "vgrd10m", "prmsl", "hgt850", "hgt500", "hgt250",
-            "tmp850", "tmp500", "rh850", "rh700", "spfh850", "ugrd850", "vgrd850",
+            "tmp2m", "prate", "ugrd10m", "vgrd10m", "prmsl", "hgt850", "hgt700", "hgt500",
+            "hgt250", "tmp925", "tmp850", "tmp500", "rh850", "rh700", "rh500", "spfh850",
+            "ugrd925", "vgrd925", "ugrd850", "vgrd850", "ugrd250", "vgrd250",
         ],
         accumulated_precipitation: false,
         averaged_precipitation: false,
         average_window_hours: 6,
         optional_at_analysis: &[],
         bundle_scalar_ids: &[
-            "tmp2m", "prate", "prmsl", "hgt850", "hgt500", "hgt250", "tmp850", "tmp500", "rh850",
-            "rh700",
+            "tmp2m", "prate", "prmsl", "hgt850", "hgt700", "hgt500", "hgt250", "tmp925", "tmp850",
+            "tmp500", "rh850", "rh700", "rh500",
         ],
-        bundle_vector_ids: &["wind10m", "wind850", "qflux850"],
+        bundle_vector_ids: &["wind10m", "wind925", "wind850", "wind250", "qflux850"],
         production_grid: (1440, 721),
         tile: (48, 52),
         observation: false,
@@ -133,13 +136,23 @@ pub const SOURCES: &[SourceSpec] = &[
         latest_filename: Some("latest-ecmwf.json"),
         // Three-hourly through 144 hours, then six-hourly through 240.
         steps: &[(144, 3), (240, 6)],
-        input_variable_ids: &["tmp2m", "tp", "ugrd10m", "vgrd10m"],
+        // The same pressure family and upper-air fills as GFS, from the open
+        // data pressure-level records, so the two models offer one set of
+        // layers. ECMWF `msl` is matched through the registry's 0/3/0 alias.
+        input_variable_ids: &[
+            "tmp2m", "tp", "ugrd10m", "vgrd10m", "prmsl", "hgt850", "hgt700", "hgt500", "hgt250",
+            "tmp925", "tmp850", "tmp500", "rh850", "rh700", "rh500", "spfh850", "ugrd925",
+            "vgrd925", "ugrd850", "vgrd850", "ugrd250", "vgrd250",
+        ],
         accumulated_precipitation: true,
         averaged_precipitation: false,
         average_window_hours: 6,
         optional_at_analysis: &[],
-        bundle_scalar_ids: &["tmp2m", "prate"],
-        bundle_vector_ids: &["wind10m"],
+        bundle_scalar_ids: &[
+            "tmp2m", "prate", "prmsl", "hgt850", "hgt700", "hgt500", "hgt250", "tmp925", "tmp850",
+            "tmp500", "rh850", "rh700", "rh500",
+        ],
+        bundle_vector_ids: &["wind10m", "wind925", "wind850", "wind250", "qflux850"],
         production_grid: (1440, 721),
         tile: (48, 52),
         observation: false,

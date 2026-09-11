@@ -349,8 +349,10 @@ def _is_ten_metre_wind(metadata: dict[str, str], description: str, element: str)
 
 def _is_mean_sea_level_pressure(metadata: dict[str, str], description: str) -> bool:
     """PRMSL on GRIB2 surface 101 (mean sea level). GDAL spells that short
-    name ``0-MSL``; the phrase fallback catches drivers that do not."""
-    if metadata.get("GRIB_ELEMENT", "").upper() != "PRMSL":
+    name ``0-MSL``; the phrase fallback catches drivers that do not. ECMWF
+    ``msl`` is plain pressure on that surface (the registry's 0/3/0 alias),
+    which GDAL names PRES — the surface is what makes it the same field."""
+    if metadata.get("GRIB_ELEMENT", "").upper() not in {"PRMSL", "PRES"}:
         return False
     short_name = metadata.get("GRIB_SHORT_NAME", "").upper()
     searchable = " ".join(

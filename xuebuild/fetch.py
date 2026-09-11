@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Callable
 
 from .errors import DownloadError
-from .idx import ByteRange, ecmwf_field_byte_range, field_byte_range
+from .idx import ByteRange, ecmwf_field_byte_range, ecmwf_level_selector, field_byte_range
 from .model import GfsRun
 from .sources import SourceSpec, source_spec
 from .variables import VARIABLES
@@ -47,6 +47,16 @@ ECMWF_BASE_URLS = tuple(
 if not ECMWF_BASE_URLS:
     raise ValueError("XUE_ECMWF_BASE_URLS must contain at least one URL")
 ECMWF_REQUEST_INTERVAL = float(os.environ.get("XUE_ECMWF_REQUEST_INTERVAL", "0.75"))
+# Mirrors that answer bursts without throttling, so the pacing below does not
+# apply to them. Google's copy took the whole 22-record set of eight frames
+# four frames at a time — 184 range requests in one burst — with every
+# response a 206 (measured 2026-09-11); the S3 bucket and data.ecmwf.int are
+# the ones that answer 503 Slow Down, and stay paced.
+ECMWF_UNPACED_BASE_URLS = tuple(
+    url.strip().rstrip("/")
+    for url in os.environ.get("XUE_ECMWF_UNPACED_BASE_URLS", "https://storage.googleapis.com/ecmwf-open-data").split(",")
+    if url.strip()
+)
 ECMWF_FRAME_ATTEMPTS = 3
 CONTENT_RANGE_RE = re.compile(r"^bytes (\d+)-(\d+)/(\d+|\*)$")
 USER_AGENT = "xue/0.1 (+https://registry.opendata.aws/noaa-gfs-bdp-pds/)"
@@ -112,9 +122,17 @@ def _is_ecmwf_url(url: str) -> bool:
     return any(url == base or url.startswith(base + "/") for base in ECMWF_BASE_URLS)
 
 
+def _is_paced_url(url: str) -> bool:
+    """Whether a request to ``url`` must wait its turn: an ECMWF mirror that
+    is not on the unpaced list."""
+    if not _is_ecmwf_url(url):
+        return False
+    return not any(url == base or url.startswith(base + "/") for base in ECMWF_UNPACED_BASE_URLS)
+
+
 def _pace_ecmwf_request(url: str) -> None:
     global _ECMWF_NEXT_REQUEST_AT
-    if not _is_ecmwf_url(url) or ECMWF_REQUEST_INTERVAL <= 0:
+    if not _is_paced_url(url) or ECMWF_REQUEST_INTERVAL <= 0:
         return
     with _ECMWF_PACING_LOCK:
         now = time.monotonic()
@@ -363,10 +381,15 @@ def _download_ecmwf_payload(
         url = ecmwf_object_url(run, forecast_hour, base_url=base_url)
         try:
             index_text = fetch_text(url.removesuffix(".grib2") + ".index")
-            byte_ranges = [
-                ecmwf_field_byte_range(index_text, VARIABLES[variable_id].ecmwf_param)
-                for variable_id in _frame_variable_ids(spec, forecast_hour, input_ids)
-            ]
+            byte_ranges = []
+            for variable_id in _frame_variable_ids(spec, forecast_hour, input_ids):
+                variable = VARIABLES[variable_id]
+                levtype, levelist = ecmwf_level_selector(variable)
+                byte_ranges.append(
+                    ecmwf_field_byte_range(
+                        index_text, variable.ecmwf_param, levtype=levtype, levelist=levelist
+                    )
+                )
             # Index offsets are scoped to a particular replica. Restart the
             # whole frame on the next mirror if any range request fails.
             return b"".join(fetch_range(url, byte_range) for byte_range in byte_ranges)
@@ -458,35 +481,27 @@ def fetch_run(
     spec = source_spec(model)
     destination = raw_root / f"{spec.id}.{run.id}"
     forecast_hours = spec.forecast_hours(hours)
+    frame_attempts = ECMWF_FRAME_ATTEMPTS if model == "ecmwf" else 1
+
+    def fetch_with_retries(hour: int) -> Path:
+        for attempt in range(frame_attempts):
+            try:
+                return fetch_frame(run, hour, destination, force=force, model=model, input_ids=input_ids)
+            except DownloadError as exc:
+                if attempt + 1 == frame_attempts:
+                    raise
+                delay_cap = min(180.0, 60.0 * (2**attempt))
+                delay = random.uniform(60.0, delay_cap)
+                LOG.warning(
+                    "ECMWF frame f%03d failed (%s), retrying in %.1fs",
+                    hour,
+                    exc,
+                    delay,
+                )
+                time.sleep(delay)
+        raise AssertionError("unreachable")
+
     if spec.fetch_concurrency <= 1:
-        paths: list[Path] = []
-        frame_attempts = ECMWF_FRAME_ATTEMPTS if model == "ecmwf" else 1
-        for hour in forecast_hours:
-            for attempt in range(frame_attempts):
-                try:
-                    paths.append(
-                        fetch_frame(run, hour, destination, force=force, model=model, input_ids=input_ids)
-                    )
-                    break
-                except DownloadError as exc:
-                    if attempt + 1 == frame_attempts:
-                        raise
-                    delay_cap = min(180.0, 60.0 * (2**attempt))
-                    delay = random.uniform(60.0, delay_cap)
-                    LOG.warning(
-                        "ECMWF frame f%03d failed (%s), retrying in %.1fs",
-                        hour,
-                        exc,
-                        delay,
-                    )
-                    time.sleep(delay)
-        return paths
+        return [fetch_with_retries(hour) for hour in forecast_hours]
     with ThreadPoolExecutor(max_workers=spec.fetch_concurrency) as executor:
-        return list(
-            executor.map(
-                lambda hour: fetch_frame(
-                    run, hour, destination, force=force, model=model, input_ids=input_ids
-                ),
-                forecast_hours,
-            )
-        )
+        return list(executor.map(fetch_with_retries, forecast_hours))

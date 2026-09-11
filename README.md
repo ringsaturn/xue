@@ -151,19 +151,25 @@ H.264 companion; disable with `--skip-variants` / `--skip-video`). The
 pressure family — mean sea level pressure and geopotential height on the
 standard isobaric surfaces, one bundle per level — gets neither a poster nor
 a video companion: the page draws it as contour lines, which need the exact
-codes and never a filled first frame. GFS publishes `prmsl` with the 850,
-500 and 250 hPa heights. The upper-air fills — temperature, relative and
-specific humidity, wind and water vapour flux on the same eight isobaric
-surfaces — are registered in the format the same way, and GFS publishes the
-surfaces a synoptic chart is read on: 850 and 500 hPa temperature
-(`tmp850`, `tmp500`), 850 and 700 hPa relative humidity (`rh850`, `rh700`),
-the 850 hPa wind (`wind850`) and the 850 hPa water vapour flux (`qflux850`,
-`q·V/g` derived from the specific humidity and the wind there). Every other
-level is registered but not fetched, so turning one on is a line in
-`xuebuild/sources.py` (and its mirror in the native encoder) rather than a
-format change; the upper-air fills get a poster but no video companion.
-`build-bin` also adds each two-variable vector bundle (`wind10m.xue`,
-`wind850.xue`, `qflux850.xue`) when the input GRIB carries its components
+codes and never a filled first frame. GFS and ECMWF both publish `prmsl`
+with the 850, 700, 500 and 250 hPa heights. The upper-air fills —
+temperature, relative and specific humidity, wind and water vapour flux on
+the same eight isobaric surfaces — are registered in the format the same
+way, and the two models publish the same surfaces, the ones a synoptic
+chart is read on: 925, 850 and 500 hPa temperature (`tmp925`, `tmp850`,
+`tmp500`), 850, 700 and 500 hPa relative humidity (`rh850`, `rh700`,
+`rh500`), the 925 and 850 hPa winds (`wind925`, `wind850`), the 250 hPa
+wind for the jet (`wind250`) and the 850 hPa water vapour flux (`qflux850`,
+`q·V/g` derived from the specific humidity and the wind there). ECMWF's
+come from the open data pressure-level records; its `msl` is plain pressure
+on the mean sea level surface (GRIB2 0/3/0) where NCEP writes PRMSL
+(0/3/1), which the registry accepts as an alias so both carry one identity.
+Every other level is registered but not fetched, so turning one on is a
+line in `xuebuild/sources.py` (and its mirror in the native encoder) rather
+than a format change; the upper-air fills get a poster but no video
+companion. `build-bin` also adds each two-variable vector bundle
+(`wind10m.xue`, `wind850.xue`, `qflux850.xue` and so on) when the input
+GRIB carries its components
 (older cached GRIBs without them are skipped automatically — re-fetch with
 `--force-download` to pick them up), and generates `manifest.json`
 (per-bundle path, byte length, CRC-32, and the `variants` resolution

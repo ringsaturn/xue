@@ -22,10 +22,10 @@ class IndexMessagesTests(unittest.TestCase):
         # them: the surface fields, the pressure family, then the upper-air
         # inputs (the 850 hPa specific humidity among them, fetched only to
         # derive the vapour flux).
-        self.assertEqual(len(messages), 15)
+        self.assertEqual(len(messages), 22)
         temperature, precipitation, u_wind, v_wind, pressure = messages[:5]
-        heights = messages[5:8]
-        upper_air = messages[8:]
+        heights = messages[5:9]
+        upper_air = messages[9:]
         self.assertEqual(temperature.band, 1)
         self.assertEqual(
             (temperature.discipline, temperature.parameter_category, temperature.parameter_number),
@@ -51,11 +51,11 @@ class IndexMessagesTests(unittest.TestCase):
             (5, 3, 1),
         )
         self.assertEqual((pressure.level_type, pressure.level_value), (101, 0.0))
-        # The three published isobaric surfaces, whose value is the level in
+        # The four published isobaric surfaces, whose value is the level in
         # pascals — the same number variables.py declares for each level.
         self.assertEqual(
             [(message.band, message.level_type, message.level_value) for message in heights],
-            [(6, 100, 85000.0), (7, 100, 50000.0), (8, 100, 25000.0)],
+            [(6, 100, 85000.0), (7, 100, 70000.0), (8, 100, 50000.0), (9, 100, 25000.0)],
         )
         for height in heights:
             self.assertEqual(
@@ -65,13 +65,19 @@ class IndexMessagesTests(unittest.TestCase):
         self.assertEqual(
             [(m.band, m.parameter_category, m.parameter_number, m.level_value) for m in upper_air],
             [
-                (9, 0, 0, 85000.0),
-                (10, 0, 0, 50000.0),
-                (11, 1, 1, 85000.0),
-                (12, 1, 1, 70000.0),
-                (13, 1, 0, 85000.0),
-                (14, 2, 2, 85000.0),
-                (15, 2, 3, 85000.0),
+                (10, 0, 0, 92500.0),
+                (11, 0, 0, 85000.0),
+                (12, 0, 0, 50000.0),
+                (13, 1, 1, 85000.0),
+                (14, 1, 1, 70000.0),
+                (15, 1, 1, 50000.0),
+                (16, 1, 0, 85000.0),
+                (17, 2, 2, 92500.0),
+                (18, 2, 3, 92500.0),
+                (19, 2, 2, 85000.0),
+                (20, 2, 3, 85000.0),
+                (21, 2, 2, 25000.0),
+                (22, 2, 3, 25000.0),
             ],
         )
         self.assertTrue(all(message.level_type == 100 for message in upper_air))
@@ -143,6 +149,16 @@ class MatcherTests(unittest.TestCase):
         accumulation = self._message(parameter_number=193, level_value=None, statistical_process=1)
         self.assertTrue(grib2._matches(variable_spec("tp"), accumulation))
         self.assertFalse(grib2._matches(variable_spec("prate"), self._message(level_value=None)))
+
+    def test_alias_triple_matches_on_the_same_surface_only(self) -> None:
+        # ECMWF msl: plain pressure (0/3/0) on the mean sea level surface is
+        # the registry's PRMSL (0/3/1); the same triple at the ground is the
+        # surface pressure, a different field.
+        prmsl = variable_spec("prmsl")
+        self.assertTrue(grib2._matches(prmsl, self._message(parameter_category=3, parameter_number=1, level_type=101)))
+        self.assertTrue(grib2._matches(prmsl, self._message(parameter_category=3, parameter_number=0, level_type=101)))
+        self.assertFalse(grib2._matches(prmsl, self._message(parameter_category=3, parameter_number=0, level_type=1)))
+        self.assertFalse(grib2._matches(prmsl, self._message(parameter_category=3, parameter_number=192, level_type=101)))
 
 
 if __name__ == "__main__":

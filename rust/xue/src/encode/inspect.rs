@@ -279,9 +279,11 @@ fn band_matches(variable_id: &str, band: &BandInfo) -> Result<bool> {
         }
         // PRMSL on GRIB2 surface 101 (mean sea level); GDAL spells that
         // short name `0-MSL`, and the phrase fallback catches drivers that
-        // do not.
+        // do not. ECMWF `msl` is plain pressure on that surface (the
+        // registry's 0/3/0 alias), which GDAL names PRES — the surface is
+        // what makes it the same field.
         "prmsl" => {
-            element == "PRMSL"
+            matches!(element.as_str(), "PRMSL" | "PRES")
                 && (short_name == "0-MSL"
                     || searchable(band).to_lowercase().contains("mean sea level"))
         }

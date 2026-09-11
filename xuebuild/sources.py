@@ -3,8 +3,8 @@ run directory, manifest identity, and time axis are named.
 
 The models share one output contract: whatever the source, the bundles carry
 the same data variable ids (tmp2m, prate, ugrd10m/vgrd10m, on sflux also
-dswrf, and on GFS the pressure family and the upper-air fills) so the decoder
-and frontend never care which model produced them.
+dswrf, and on GFS and ECMWF the pressure family and the upper-air fills) so
+the decoder and frontend never care which model produced them.
 Not every source is a forecast: an ``observation`` source (the CMA radar
 mosaic) is a local file holding a series of observed analyses, with no cycle
 to fetch, no live pointer, and an axis that is whatever times the file
@@ -85,9 +85,12 @@ class SourceSpec:
     fixtures and the encoder-parity test are regenerated with it."""
     fetch_concurrency: int = 4
     """Frames fetched in parallel. Each frame costs several fresh HTTPS
-    round-trips, so sequential fetching is latency-bound; NOAA's bucket
-    takes a few parallel streams happily, while ECMWF's open data bucket
-    answers bursts with 503 Slow Down and stays at 1."""
+    round-trips, so sequential fetching is latency-bound. NOAA's bucket and
+    Google's copy of the ECMWF open data take a few parallel streams
+    happily; the mirrors that answer bursts with 503 Slow Down are paced
+    per request (:mod:`xuebuild.fetch`), one shared clock across the
+    threads, so falling back to one of them costs the same as it always
+    did rather than a burst."""
     observation: bool = False
     """True for a source that is not a forecast at all: one local file
     holding a series of observed analyses, read through
@@ -130,14 +133,15 @@ SOURCES: dict[str, SourceSpec] = {
         latest_filename="latest.json",
         # Hourly through f120, then three-hourly through f240.
         steps=((120, 1), (240, 3)),
-        # The pressure family ships the three isobaric levels the plan's first
-        # launch names (850 / 500 / 250) beside mean sea level pressure. The
-        # upper-air fills are the surfaces a synoptic chart is read on: 850
-        # and 500 hPa temperature, 850 and 700 hPa relative humidity, and the
-        # 850 hPa wind with the water vapour flux derived from it and the
-        # specific humidity there — so spfh850 is fetched as an input only.
-        # Every other registered level stays unpublished, which keeps the
-        # fetch at fifteen GRIB records per frame.
+        # The pressure family ships mean sea level pressure and the four
+        # isobaric levels a synoptic chart is read on (850 / 700 / 500 / 250).
+        # The upper-air fills are the surfaces those charts carry: 925, 850
+        # and 500 hPa temperature, 850, 700 and 500 hPa relative humidity,
+        # the 925 and 850 hPa winds with the water vapour flux derived from
+        # the 850 hPa one and the specific humidity there (so spfh850 is
+        # fetched as an input only), and the 250 hPa wind for the jet. Every
+        # other registered level stays unpublished, which keeps the fetch at
+        # twenty-two GRIB records per frame.
         input_variable_ids=(
             "tmp2m",
             "prate",
@@ -145,15 +149,22 @@ SOURCES: dict[str, SourceSpec] = {
             "vgrd10m",
             "prmsl",
             "hgt850",
+            "hgt700",
             "hgt500",
             "hgt250",
+            "tmp925",
             "tmp850",
             "tmp500",
             "rh850",
             "rh700",
+            "rh500",
             "spfh850",
+            "ugrd925",
+            "vgrd925",
             "ugrd850",
             "vgrd850",
+            "ugrd250",
+            "vgrd250",
         ),
         accumulated_precipitation=False,
         bundle_scalar_ids=(
@@ -161,14 +172,17 @@ SOURCES: dict[str, SourceSpec] = {
             "prate",
             "prmsl",
             "hgt850",
+            "hgt700",
             "hgt500",
             "hgt250",
+            "tmp925",
             "tmp850",
             "tmp500",
             "rh850",
             "rh700",
+            "rh500",
         ),
-        bundle_vector_ids=("wind10m", "wind850", "qflux850"),
+        bundle_vector_ids=("wind10m", "wind925", "wind850", "wind250", "qflux850"),
     ),
     "ecmwf": SourceSpec(
         id="ecmwf",
@@ -177,10 +191,52 @@ SOURCES: dict[str, SourceSpec] = {
         latest_filename="latest-ecmwf.json",
         # Three-hourly through 144 hours, then six-hourly through 240.
         steps=((144, 3), (240, 6)),
-        input_variable_ids=("tmp2m", "tp", "ugrd10m", "vgrd10m"),
+        # The same pressure family and upper-air fills as GFS, from the
+        # open data pressure-level records (``levtype`` ``pl``), so the two
+        # models offer one set of layers and switching between them never
+        # loses one. ECMWF ``msl`` is matched through the registry's 0/3/0
+        # alias.
+        input_variable_ids=(
+            "tmp2m",
+            "tp",
+            "ugrd10m",
+            "vgrd10m",
+            "prmsl",
+            "hgt850",
+            "hgt700",
+            "hgt500",
+            "hgt250",
+            "tmp925",
+            "tmp850",
+            "tmp500",
+            "rh850",
+            "rh700",
+            "rh500",
+            "spfh850",
+            "ugrd925",
+            "vgrd925",
+            "ugrd850",
+            "vgrd850",
+            "ugrd250",
+            "vgrd250",
+        ),
         accumulated_precipitation=True,
-        bundle_vector_ids=("wind10m",),
-        fetch_concurrency=1,
+        bundle_scalar_ids=(
+            "tmp2m",
+            "prate",
+            "prmsl",
+            "hgt850",
+            "hgt700",
+            "hgt500",
+            "hgt250",
+            "tmp925",
+            "tmp850",
+            "tmp500",
+            "rh850",
+            "rh700",
+            "rh500",
+        ),
+        bundle_vector_ids=("wind10m", "wind925", "wind850", "wind250", "qflux850"),
     ),
     # GFS surface flux files on the native ~13 km T1534 Gaussian grid
     # (3072x1536; GDAL reports a uniform geoTransform whose tiny latitude

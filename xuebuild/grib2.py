@@ -172,12 +172,10 @@ def index_messages(path: Path) -> list[MessageInfo]:
 
 
 def _matches(spec: VariableSpec, message: MessageInfo) -> bool:
-    if (
-        message.discipline != spec.grib2_discipline
-        or message.parameter_category != spec.grib2_category
-        or message.parameter_number != spec.grib2_number
-        or message.level_type != spec.grib2_level_type
-    ):
+    triple = (message.discipline, message.parameter_category, message.parameter_number)
+    if triple != (spec.grib2_discipline, spec.grib2_category, spec.grib2_number) and triple not in spec.grib2_aliases:
+        return False
+    if message.level_type != spec.grib2_level_type:
         return False
     if spec.grib2_level_value is not None and message.level_value != spec.grib2_level_value:
         return False

@@ -116,16 +116,30 @@ class VectorBundleTests(unittest.TestCase):
         self.assertIsNone(vapour_flux_level("wind700"))
         self.assertIsNone(vapour_flux_level("qflux550"))
 
-    def test_gfs_publishes_the_first_launch_set(self) -> None:
+    def test_gfs_and_ecmwf_publish_the_same_upper_air_set(self) -> None:
         gfs = source_spec("gfs")
         published = published_bundle_ids(gfs)
-        for bundle_id in ("tmp850", "tmp500", "rh850", "rh700", "wind10m", "wind850", "qflux850"):
+        for bundle_id in (
+            "tmp925",
+            "tmp850",
+            "tmp500",
+            "rh850",
+            "rh700",
+            "rh500",
+            "wind10m",
+            "wind925",
+            "wind850",
+            "wind250",
+            "qflux850",
+        ):
             self.assertIn(bundle_id, published)
         self.assertNotIn("spfh850", published, "the specific humidity is an input only")
         self.assertEqual(bundle_input_ids(gfs, "qflux850"), ("spfh850", "ugrd850", "vgrd850"))
+        # ECMWF ships the same layers from its pressure-level records, so a
+        # model switch never loses one.
+        self.assertEqual(published_bundle_ids(source_spec("ecmwf")), published)
         # A listed vector bundle without its inputs is not published.
         self.assertEqual(published_bundle_ids(source_spec("radar")), ("cref",))
-        self.assertEqual(published_bundle_ids(source_spec("ecmwf"))[-1], "wind10m")
         self.assertEqual(published_bundle_ids(source_spec("sflux"))[-1], "wind10m")
         # Scalars first, then vectors: the order build-bin writes them in.
         self.assertEqual(

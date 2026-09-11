@@ -158,7 +158,7 @@ class FetchTests(unittest.TestCase):
         ):
             payload = _download_ecmwf_payload(run, 0, source_spec("ecmwf"))
 
-        self.assertEqual(payload, b"xxxx")
+        self.assertEqual(payload, b"x" * len(source_spec("ecmwf").input_variable_ids))
         self.assertEqual(len(requested_indexes), 2)
         self.assertTrue(
             all(

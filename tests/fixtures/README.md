@@ -3,13 +3,14 @@
 `gfs.2026081406.f000.crop.grib2` is an 80 by 80 cell crop of every record
 the GFS source fetches from the 2026-08-14 06:00 UTC analysis: 2 m
 temperature, surface precipitation rate, the 10 m wind pair, mean sea level
-pressure, the 850 / 500 / 250 hPa geopotential heights, 850 and 500 hPa
-temperature, 850 and 700 hPa relative humidity, 850 hPa specific humidity and
-the 850 hPa wind pair — fifteen records, in the order `xuebuild/sources.py`
-lists them. It covers approximately 118E to 138E and 18N to 38N, including
-the browser test's initial viewport, so the record matchers, the GRIB2
-header index, the vapour flux derivation and the byte-identity parity test
-all run against real records.
+pressure, the 850 / 700 / 500 / 250 hPa geopotential heights, 925, 850 and
+500 hPa temperature, 850, 700 and 500 hPa relative humidity, 850 hPa
+specific humidity and the 925, 850 and 250 hPa wind pairs — twenty-two
+records, in the order `xuebuild/sources.py` lists them. It covers
+approximately 118E to 138E and 18N to 38N, including the browser test's
+initial viewport, so the record matchers, the GRIB2 header index, the vapour
+flux derivation and the byte-identity parity test all run against real
+records.
 
 The fixture was recut from the downloaded analysis with:
 

@@ -32,6 +32,12 @@ pub struct VariableSpec {
     /// Code table 4.10 statistical process required of the record (0 average,
     /// 1 accumulation); `None` requires an instantaneous product.
     pub grib2_statistical: Option<u8>,
+    /// Other `(discipline, category, number)` triples that carry this same
+    /// quantity on the same surface, accepted when matching a record and
+    /// never written: the primary triple is the identity a bundle declares.
+    /// ECMWF encodes `msl` as plain pressure (0/3/0) on the mean sea level
+    /// surface where NCEP writes PRMSL (0/3/1).
+    pub grib2_aliases: &'static [(u8, u8, u8)],
     /// Unit string GDAL's GRIB driver reports for this record (it normalizes
     /// temperatures to Celsius).
     pub gdal_unit: &'static str,
@@ -126,6 +132,7 @@ macro_rules! isobaric_spec {
             grib2_level_type: 100,
             grib2_level_value: Some($level_pa),
             grib2_statistical: None,
+            grib2_aliases: &[],
             gdal_unit: $gdal_unit,
         }
     };
@@ -187,6 +194,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_level_type: 103,
         grib2_level_value: Some(2.0),
         grib2_statistical: None,
+        grib2_aliases: &[],
         gdal_unit: "C",
     },
     VariableSpec {
@@ -201,6 +209,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_level_type: 1,
         grib2_level_value: Some(0.0),
         grib2_statistical: None,
+        grib2_aliases: &[],
         gdal_unit: "kg/(m^2 s)",
     },
     // ECMWF open data has no rate field: tp is the run-total accumulation
@@ -218,6 +227,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_level_type: 1,
         grib2_level_value: None,
         grib2_statistical: Some(1),
+        grib2_aliases: &[],
         gdal_unit: "-",
     },
     // GFS sflux PRATE is the mean rate over an averaging window that resets
@@ -234,6 +244,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_level_type: 1,
         grib2_level_value: Some(0.0),
         grib2_statistical: Some(0),
+        grib2_aliases: &[],
         gdal_unit: "kg/(m^2 s)",
     },
     VariableSpec {
@@ -248,6 +259,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_level_type: 1,
         grib2_level_value: Some(0.0),
         grib2_statistical: None,
+        grib2_aliases: &[],
         gdal_unit: "W/(m^2)",
     },
     VariableSpec {
@@ -262,6 +274,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_level_type: 103,
         grib2_level_value: Some(10.0),
         grib2_statistical: None,
+        grib2_aliases: &[],
         gdal_unit: "m/s",
     },
     VariableSpec {
@@ -276,6 +289,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_level_type: 103,
         grib2_level_value: Some(10.0),
         grib2_statistical: None,
+        grib2_aliases: &[],
         gdal_unit: "m/s",
     },
     // Radar composite reflectivity: the column maximum, so its fixed surface
@@ -293,13 +307,16 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_level_type: 10,
         grib2_level_value: None,
         grib2_statistical: None,
+        grib2_aliases: &[],
         gdal_unit: "",
     },
     // Mean sea level pressure. NCEP publishes two reductions; PRMSL (0/3/1)
-    // is the one ECMWF also calls `msl`, so both sources carry the same
-    // field. MSLET (0/3/192, the NCEP-local Shuell reduction) is a different
-    // quantity and is deliberately not registered. Surface 101 ("mean sea
-    // level") carries no value.
+    // is the same quantity ECMWF calls `msl` — encoded there as plain
+    // pressure (0/3/0) on the mean sea level surface, hence the alias — so
+    // both sources carry the same field under one identity. MSLET (0/3/192,
+    // the NCEP-local Shuell reduction) is a different quantity and is
+    // deliberately not registered. Surface 101 ("mean sea level") carries no
+    // value.
     VariableSpec {
         id: "prmsl",
         label: "Mean sea level pressure",
@@ -312,6 +329,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_level_type: 101,
         grib2_level_value: None,
         grib2_statistical: None,
+        grib2_aliases: &[(0, 3, 0)],
         gdal_unit: "Pa",
     },
     // The isobaric families, eight levels each. Value ranges are the level's

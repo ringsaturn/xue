@@ -48,6 +48,12 @@ class VariableSpec:
     grib2_statistical: int | None = None
     """Code table 4.10 statistical process required of the record (0 average,
     1 accumulation); None requires an instantaneous product."""
+    grib2_aliases: tuple[tuple[int, int, int], ...] = ()
+    """Other ``(discipline, category, number)`` triples that carry this same
+    quantity on the same surface, accepted when matching a record and never
+    written: the primary triple is the identity a bundle declares. Centres
+    disagree on a few codes — ECMWF encodes ``msl`` as plain pressure (0/3/0)
+    on the mean sea level surface where NCEP writes PRMSL (0/3/1)."""
     gdal_unit: str = ""
     """Unit string GDAL's GRIB driver reports for this record (it normalizes
     temperatures to Celsius); carried by header-indexed frames and
@@ -197,10 +203,12 @@ VARIABLES: dict[str, VariableSpec] = {
         gdal_unit="m/s",
     ),
     # Mean sea level pressure. NCEP publishes two reductions; PRMSL
-    # (0/3/1) is the one ECMWF also calls ``msl``, so the two sources carry
-    # the same field. MSLET (0/3/192, the NCEP-local Shuell reduction) is a
-    # different quantity and is deliberately not registered. Surface 101 is
-    # "mean sea level", which carries no value.
+    # (0/3/1) is the same quantity ECMWF calls ``msl`` — encoded there as
+    # plain pressure (0/3/0) on the mean sea level surface, hence the alias —
+    # so the two sources carry the same field under one identity. MSLET
+    # (0/3/192, the NCEP-local Shuell reduction) is a different quantity and
+    # is deliberately not registered. Surface 101 is "mean sea level", which
+    # carries no value.
     "prmsl": VariableSpec(
         id="prmsl",
         label="Mean sea level pressure",
@@ -211,6 +219,7 @@ VARIABLES: dict[str, VariableSpec] = {
         ecmwf_param="msl",
         grib2_category=3,
         grib2_number=1,
+        grib2_aliases=((0, 3, 0),),
         grib2_level_type=101,
         gdal_unit="Pa",
     ),

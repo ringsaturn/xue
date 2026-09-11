@@ -4,6 +4,7 @@ import json
 from dataclasses import dataclass
 
 from .errors import DownloadError
+from .variables import VariableSpec
 
 
 TARGET_FIELD = ":TMP:2 m above ground:"
@@ -85,11 +86,16 @@ def target_byte_range(text: str, file_size: int | None = None) -> ByteRange:
     return field_byte_range(text, TARGET_FIELD, file_size=file_size)
 
 
-def ecmwf_field_byte_range(text: str, param: str, *, levtype: str = "sfc") -> ByteRange:
+def ecmwf_field_byte_range(
+    text: str, param: str, *, levtype: str = "sfc", levelist: str | None = None
+) -> ByteRange:
     """Byte range of one field in an ECMWF open data ``.index`` file.
 
     The index is JSON lines; each line carries the GRIB message's ``_offset``
-    and ``_length`` directly, so no next-record arithmetic is needed.
+    and ``_length`` directly, so no next-record arithmetic is needed. A
+    surface field is ``levtype`` ``sfc`` with no level; a pressure-level
+    field is ``pl`` with its ``levelist`` in hectopascals, one line per
+    level, so the level must be named to pick one.
     """
     matches: list[ByteRange] = []
     for line_number, raw_line in enumerate(text.splitlines(), start=1):
@@ -104,10 +110,25 @@ def ecmwf_field_byte_range(text: str, param: str, *, levtype: str = "sfc") -> By
             raise DownloadError(f"ECMWF .index line {line_number} is not an object")
         if record.get("param") != param or record.get("levtype", levtype) != levtype:
             continue
+        if levelist is not None and record.get("levelist") != levelist:
+            continue
         offset, length = record.get("_offset"), record.get("_length")
         if not isinstance(offset, int) or not isinstance(length, int) or offset < 0 or length <= 0:
             raise DownloadError(f"invalid ECMWF .index byte range on line {line_number}")
         matches.append(ByteRange(offset, offset + length - 1))
     if len(matches) != 1:
-        raise DownloadError(f"expected exactly one {param} record in the ECMWF .index, found {len(matches)}")
+        field = param if levelist is None else f"{param} at {levelist} hPa"
+        raise DownloadError(f"expected exactly one {field} record in the ECMWF .index, found {len(matches)}")
     return matches[0]
+
+
+def ecmwf_level_selector(spec: VariableSpec) -> tuple[str, str | None]:
+    """The ``(levtype, levelist)`` an ECMWF ``.index`` line carries for a
+    registered variable: ``pl`` with the level in hectopascals on an isobaric
+    surface (GRIB2 type 100, whose value is pascals), ``sfc`` otherwise —
+    mean sea level included, which the index files under ``sfc``."""
+    if spec.grib2_level_type == 100:
+        if spec.grib2_level_value is None:
+            raise DownloadError(f"{spec.id} is isobaric but names no level")
+        return "pl", f"{spec.grib2_level_value / 100:g}"
+    return "sfc", None

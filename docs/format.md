@@ -311,7 +311,7 @@ no chart for.
 | `vgrd10m` | 0 / 2 / 3 | 103, 10 m | |
 | `dswrf` | 0 / 4 / 192 | 1, 0 | NCEP local parameter |
 | `cref` | 0 / 16 / 5 | 10, no value | Composite reflectivity, entire atmosphere |
-| `prmsl` | 0 / 3 / 1 | 101, no value | Mean sea level pressure, the reduction ECMWF calls `msl` (not NCEP's MSLET, 0 / 3 / 192) |
+| `prmsl` | 0 / 3 / 1 | 101, no value | Mean sea level pressure, the quantity ECMWF calls `msl` and encodes as 0 / 3 / 0 on this surface — accepted on input, never written (not NCEP's MSLET, 0 / 3 / 192) |
 | `hgt<level>` | 0 / 3 / 5 | 100, `<level>` hPa in Pa | Geopotential height, one variable per isobaric surface |
 | `tmp<level>` | 0 / 0 / 0 | 100, `<level>` hPa in Pa | Temperature on the isobaric surface |
 | `rh<level>` | 0 / 1 / 1 | 100, `<level>` hPa in Pa | Relative humidity on the isobaric surface |

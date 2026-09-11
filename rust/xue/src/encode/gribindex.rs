@@ -200,11 +200,17 @@ pub fn index_messages(path: &Path) -> Result<Vec<MessageInfo>> {
 }
 
 fn matches(spec: &VariableSpec, message: &MessageInfo) -> bool {
-    if message.discipline != spec.grib2_discipline
-        || message.parameter_category != spec.grib2_category
-        || message.parameter_number != spec.grib2_number
-        || message.level_type != spec.grib2_level_type
+    let triple = (
+        message.discipline,
+        message.parameter_category,
+        message.parameter_number,
+    );
+    if triple != (spec.grib2_discipline, spec.grib2_category, spec.grib2_number)
+        && !spec.grib2_aliases.contains(&triple)
     {
+        return false;
+    }
+    if message.level_type != spec.grib2_level_type {
         return false;
     }
     if let Some(expected) = spec.grib2_level_value {
@@ -273,4 +279,37 @@ pub fn inspect_grib_fast(
         ));
     }
     Ok(frames)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{matches, MessageInfo};
+    use crate::encode::variables::variable_spec;
+    use time::OffsetDateTime;
+
+    fn message(category: u8, number: u8, level_type: u8) -> MessageInfo {
+        MessageInfo {
+            band: 1,
+            discipline: 0,
+            parameter_category: category,
+            parameter_number: number,
+            level_type,
+            level_value: None,
+            reference_time: OffsetDateTime::UNIX_EPOCH,
+            valid_time: OffsetDateTime::UNIX_EPOCH,
+            statistical_process: None,
+        }
+    }
+
+    /// ECMWF `msl`: plain pressure (0/3/0) on the mean sea level surface is
+    /// the registry's PRMSL (0/3/1); the same triple at the ground is the
+    /// surface pressure, a different field, and MSLET stays unregistered.
+    #[test]
+    fn an_alias_triple_matches_on_the_same_surface_only() {
+        let prmsl = variable_spec("prmsl").unwrap();
+        assert!(matches(&prmsl, &message(3, 1, 101)));
+        assert!(matches(&prmsl, &message(3, 0, 101)));
+        assert!(!matches(&prmsl, &message(3, 0, 1)));
+        assert!(!matches(&prmsl, &message(3, 192, 101)));
+    }
 }
