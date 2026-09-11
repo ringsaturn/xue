@@ -1696,6 +1696,12 @@ html[lang="zh-CN"] .rail-glyph {
   right: 20px;
 }
 
+/* MapLibre's own 10px control margin would push the tile off the column
+   the round controls and the rail sit on. */
+.maplibregl-ctrl-top-right .maplibregl-ctrl {
+  margin: 0;
+}
+
 /* Restyled into the rail's language: one blurred tile, two halves. With
    the 1px border the tile is 44px wide — the rail tile's and the round
    controls' width, on the same right offset. */
