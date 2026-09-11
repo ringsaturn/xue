@@ -296,6 +296,99 @@ VARIABLES: dict[str, VariableSpec] = {
         grib2_level_value=0.0,
         gdal_unit="J/kg",
     ),
+    # Surface visibility, 0/19/0 on the ground surface. GRIB2 carries metres
+    # (GFS caps it at ~24 km); the codebook quantizes kilometres.
+    "vis": VariableSpec(
+        id="vis",
+        label="Visibility",
+        output_unit="km",
+        value_range=(0, 25),
+        grib_element="VIS",
+        index_field=":VIS:surface:",
+        grib2_category=19,
+        grib2_number=0,
+        grib2_level_type=1,
+        grib2_level_value=0.0,
+        gdal_unit="m",
+    ),
+    # 2 m dew point, 0/0/6 on the 2 m surface — the 2 m temperature's own
+    # matching and unit rules (GDAL normalizes it to Celsius too). ECMWF open
+    # data carries it as ``2d``.
+    "dpt2m": VariableSpec(
+        id="dpt2m",
+        label="2 meter dew point temperature",
+        output_unit="°C",
+        value_range=(-70, 40),
+        grib_element="DPT",
+        index_field=":DPT:2 m above ground:",
+        ecmwf_param="2d",
+        grib2_category=0,
+        grib2_number=6,
+        grib2_level_type=103,
+        grib2_level_value=2.0,
+        gdal_unit="C",
+    ),
+    # NCEP's apparent temperature (heat index above 26.7 °C, wind chill below
+    # 10 °C, the air temperature between), 0/0/21 on the 2 m surface. A
+    # record of its own rather than a derivation, so it is GFS-only.
+    "aptmp2m": VariableSpec(
+        id="aptmp2m",
+        label="2 meter apparent temperature",
+        output_unit="°C",
+        value_range=(-90, 60),
+        grib_element="APTMP",
+        index_field=":APTMP:2 m above ground:",
+        grib2_category=0,
+        grib2_number=21,
+        grib2_level_type=103,
+        grib2_level_value=2.0,
+        gdal_unit="C",
+    ),
+    # The cloud layers: three parameters of their own (0/6/3, 0/6/4, 0/6/5),
+    # each on its own layer surface (214 low, 224 middle, 234 high — code
+    # table 4.5's cloud layers, which carry no value). pgrb2 writes an
+    # instantaneous record beside an interval average of each; the average
+    # is excluded by phrase and rejected by its statistical process, as for
+    # the total.
+    "lcdc": VariableSpec(
+        id="lcdc",
+        label="Low cloud cover",
+        output_unit="%",
+        value_range=(0, 100),
+        grib_element="LCDC",
+        index_field=":LCDC:low cloud layer:",
+        excluded_index_phrases=("ave fcst",),
+        grib2_category=6,
+        grib2_number=3,
+        grib2_level_type=214,
+        gdal_unit="%",
+    ),
+    "mcdc": VariableSpec(
+        id="mcdc",
+        label="Middle cloud cover",
+        output_unit="%",
+        value_range=(0, 100),
+        grib_element="MCDC",
+        index_field=":MCDC:middle cloud layer:",
+        excluded_index_phrases=("ave fcst",),
+        grib2_category=6,
+        grib2_number=4,
+        grib2_level_type=224,
+        gdal_unit="%",
+    ),
+    "hcdc": VariableSpec(
+        id="hcdc",
+        label="High cloud cover",
+        output_unit="%",
+        value_range=(0, 100),
+        grib_element="HCDC",
+        index_field=":HCDC:high cloud layer:",
+        excluded_index_phrases=("ave fcst",),
+        grib2_category=6,
+        grib2_number=5,
+        grib2_level_type=234,
+        gdal_unit="%",
+    ),
 }
 
 
@@ -322,6 +415,8 @@ ISOBARIC_FAMILIES: tuple[str, ...] = (
     "vgrd",
     "uqflx",
     "vqflx",
+    "vvel",
+    "thetae",
 )
 
 
@@ -380,6 +475,22 @@ _SPECIFIC_HUMIDITY_VALUE_RANGES: dict[int, tuple[float, float]] = {
     300: (0.0, 2.54),
     250: (0.0, 1.27),
     200: (0.0, 1.27),
+}
+# Equivalent potential temperature coverage per level, in K: each range is
+# the level's codebook (127 K at a 0.5 K step), placed so that the warm-moist
+# tropical end fits — 850 hPa runs to 357 K, which holds the 99.9th
+# percentile of a real analysis — and the Antarctic winter clamps at the
+# bottom, as the temperature does. Only 850 hPa is verified against data;
+# the others follow the dry potential temperature's rise with height.
+_THETA_E_VALUE_RANGES: dict[int, tuple[int, int]] = {
+    1000: (235, 362),
+    925: (232, 359),
+    850: (230, 357),
+    700: (235, 362),
+    500: (250, 377),
+    300: (285, 412),
+    250: (295, 422),
+    200: (305, 432),
 }
 
 
@@ -457,6 +568,36 @@ def _isobaric_spec(family: str, level_hpa: int) -> VariableSpec:
             grib2_category=2,
             grib2_number=2 if family == "ugrd" else 3,
             gdal_unit="m/s",
+            **common,
+        )
+    if family == "vvel":
+        # Vertical velocity in pressure coordinates, ω = dp/dt: negative is
+        # ascent. pgrb2 carries it on every registered level; ECMWF open
+        # data as ``w``.
+        return VariableSpec(
+            label=f"{level_hpa} hPa vertical velocity",
+            output_unit="Pa/s",
+            value_range=(-6, 6),
+            grib_element="VVEL",
+            index_field=f":VVEL:{level_hpa} mb:",
+            ecmwf_param="w",
+            grib2_category=2,
+            grib2_number=8,
+            gdal_unit="Pa/s",
+            **common,
+        )
+    if family == "thetae":
+        # Equivalent potential temperature, Bolton (1980) eq. 43, derived by
+        # the converter from the temperature and the specific humidity on
+        # the same surface (binconvert.derive_theta_e), never fetched, so
+        # the record-matching fields stay empty. GRIB2's own number for the
+        # quantity is 0/0/3 (EPOT).
+        return VariableSpec(
+            label=f"{level_hpa} hPa equivalent potential temperature",
+            output_unit="K",
+            value_range=_THETA_E_VALUE_RANGES[level_hpa],
+            grib2_category=0,
+            grib2_number=3,
             **common,
         )
     # Water vapour flux, q·V/g in g·cm⁻¹·hPa⁻¹·s⁻¹ — the unit a Chinese

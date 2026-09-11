@@ -92,7 +92,7 @@ pub const ISOBARIC_LEVELS_HPA: &[u32] = &[1000, 925, 850, 700, 500, 300, 250, 20
 /// The id prefixes of the isobaric families. Mirrors `ISOBARIC_FAMILIES` in
 /// `xuebuild/variables.py`.
 pub const ISOBARIC_FAMILIES: &[&str] = &[
-    "hgt", "tmp", "rh", "spfh", "ugrd", "vgrd", "uqflx", "vqflx",
+    "hgt", "tmp", "rh", "spfh", "ugrd", "vgrd", "uqflx", "vqflx", "vvel", "thetae",
 ];
 
 /// Standard gravity, the `g` in the water vapour flux `q·V/g`.
@@ -178,6 +178,20 @@ macro_rules! v_wind_spec {
 macro_rules! vapour_flux_spec {
     ($id:literal, $label:literal, $level_pa:literal, $number:literal) => {
         isobaric_spec!($id, $label, $level_pa, (-64, 64), "g/(cm·hPa·s)", "", 1, $number, "")
+    };
+}
+// Vertical velocity in pressure coordinates, ω = dp/dt: negative is ascent.
+macro_rules! vertical_velocity_spec {
+    ($id:literal, $label:literal, $level_pa:literal) => {
+        isobaric_spec!($id, $label, $level_pa, (-6, 6), "Pa/s", "VVEL", 2, 8, "Pa/s")
+    };
+}
+// Equivalent potential temperature, Bolton (1980), derived by the converter
+// from the temperature and the specific humidity on the same surface, never
+// fetched. GRIB2's own number for the quantity is 0/0/3 (EPOT).
+macro_rules! theta_e_spec {
+    ($id:literal, $label:literal, $level_pa:literal, $range:expr) => {
+        isobaric_spec!($id, $label, $level_pa, $range, "K", "", 0, 3, "")
     };
 }
 
@@ -369,6 +383,104 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_aliases: &[],
         gdal_unit: "J/kg",
     },
+    // Surface visibility, 0/19/0 on the ground surface: GRIB2 carries metres,
+    // the codebook quantizes kilometres.
+    VariableSpec {
+        id: "vis",
+        label: "Visibility",
+        output_unit: "km",
+        value_range: (0, 25),
+        grib_element: "VIS",
+        grib2_discipline: 0,
+        grib2_category: 19,
+        grib2_number: 0,
+        grib2_level_type: 1,
+        grib2_level_value: Some(0.0),
+        grib2_statistical: None,
+        grib2_aliases: &[],
+        gdal_unit: "m",
+    },
+    // 2 m dew point, 0/0/6 on the 2 m surface — the 2 m temperature's own
+    // matching and unit rules.
+    VariableSpec {
+        id: "dpt2m",
+        label: "2 meter dew point temperature",
+        output_unit: "°C",
+        value_range: (-70, 40),
+        grib_element: "DPT",
+        grib2_discipline: 0,
+        grib2_category: 0,
+        grib2_number: 6,
+        grib2_level_type: 103,
+        grib2_level_value: Some(2.0),
+        grib2_statistical: None,
+        grib2_aliases: &[],
+        gdal_unit: "C",
+    },
+    // NCEP's apparent temperature, 0/0/21 on the 2 m surface.
+    VariableSpec {
+        id: "aptmp2m",
+        label: "2 meter apparent temperature",
+        output_unit: "°C",
+        value_range: (-90, 60),
+        grib_element: "APTMP",
+        grib2_discipline: 0,
+        grib2_category: 0,
+        grib2_number: 21,
+        grib2_level_type: 103,
+        grib2_level_value: Some(2.0),
+        grib2_statistical: None,
+        grib2_aliases: &[],
+        gdal_unit: "C",
+    },
+    // The cloud layers: three parameters of their own (0/6/3, 0/6/4, 0/6/5),
+    // each on its own layer surface (214 low, 224 middle, 234 high), which
+    // carries no value.
+    VariableSpec {
+        id: "lcdc",
+        label: "Low cloud cover",
+        output_unit: "%",
+        value_range: (0, 100),
+        grib_element: "LCDC",
+        grib2_discipline: 0,
+        grib2_category: 6,
+        grib2_number: 3,
+        grib2_level_type: 214,
+        grib2_level_value: None,
+        grib2_statistical: None,
+        grib2_aliases: &[],
+        gdal_unit: "%",
+    },
+    VariableSpec {
+        id: "mcdc",
+        label: "Middle cloud cover",
+        output_unit: "%",
+        value_range: (0, 100),
+        grib_element: "MCDC",
+        grib2_discipline: 0,
+        grib2_category: 6,
+        grib2_number: 4,
+        grib2_level_type: 224,
+        grib2_level_value: None,
+        grib2_statistical: None,
+        grib2_aliases: &[],
+        gdal_unit: "%",
+    },
+    VariableSpec {
+        id: "hcdc",
+        label: "High cloud cover",
+        output_unit: "%",
+        value_range: (0, 100),
+        grib_element: "HCDC",
+        grib2_discipline: 0,
+        grib2_category: 6,
+        grib2_number: 5,
+        grib2_level_type: 234,
+        grib2_level_value: None,
+        grib2_statistical: None,
+        grib2_aliases: &[],
+        gdal_unit: "%",
+    },
     // Mean sea level pressure. NCEP publishes two reductions; PRMSL (0/3/1)
     // is the same quantity ECMWF calls `msl` — encoded there as plain
     // pressure (0/3/0) on the mean sea level surface, hence the alias — so
@@ -457,6 +569,23 @@ pub const VARIABLES: &[VariableSpec] = &[
     vapour_flux_spec!("vqflx300", "300 hPa V water vapour flux component", 30000.0, 251),
     vapour_flux_spec!("vqflx250", "250 hPa V water vapour flux component", 25000.0, 251),
     vapour_flux_spec!("vqflx200", "200 hPa V water vapour flux component", 20000.0, 251),
+    vertical_velocity_spec!("vvel1000", "1000 hPa vertical velocity", 100000.0),
+    vertical_velocity_spec!("vvel925", "925 hPa vertical velocity", 92500.0),
+    vertical_velocity_spec!("vvel850", "850 hPa vertical velocity", 85000.0),
+    vertical_velocity_spec!("vvel700", "700 hPa vertical velocity", 70000.0),
+    vertical_velocity_spec!("vvel500", "500 hPa vertical velocity", 50000.0),
+    vertical_velocity_spec!("vvel300", "300 hPa vertical velocity", 30000.0),
+    vertical_velocity_spec!("vvel250", "250 hPa vertical velocity", 25000.0),
+    vertical_velocity_spec!("vvel200", "200 hPa vertical velocity", 20000.0),
+    // Value ranges are the level's codebook coverage (quantize.rs).
+    theta_e_spec!("thetae1000", "1000 hPa equivalent potential temperature", 100000.0, (235, 362)),
+    theta_e_spec!("thetae925", "925 hPa equivalent potential temperature", 92500.0, (232, 359)),
+    theta_e_spec!("thetae850", "850 hPa equivalent potential temperature", 85000.0, (230, 357)),
+    theta_e_spec!("thetae700", "700 hPa equivalent potential temperature", 70000.0, (235, 362)),
+    theta_e_spec!("thetae500", "500 hPa equivalent potential temperature", 50000.0, (250, 377)),
+    theta_e_spec!("thetae300", "300 hPa equivalent potential temperature", 30000.0, (285, 412)),
+    theta_e_spec!("thetae250", "250 hPa equivalent potential temperature", 25000.0, (295, 422)),
+    theta_e_spec!("thetae200", "200 hPa equivalent potential temperature", 20000.0, (305, 432)),
 ];
 
 pub fn variable_spec(variable_id: &str) -> Result<&'static VariableSpec> {
@@ -490,7 +619,7 @@ mod tests {
     #[test]
     fn the_isobaric_registry_matches_the_shared_fixture() {
         let entries = registry("isobaric-registry.json");
-        assert_eq!(entries.len(), 7 * ISOBARIC_LEVELS_HPA.len());
+        assert_eq!(entries.len(), 9 * ISOBARIC_LEVELS_HPA.len());
         for (variable_id, entry) in entries {
             let spec = variable_spec(&variable_id).unwrap_or_else(|_| panic!("{variable_id}"));
             assert_eq!(json!(spec.label), entry["label"], "{variable_id}");
@@ -536,8 +665,8 @@ mod tests {
         let entries = registry("surface-registry.json");
         assert_eq!(
             entries.keys().collect::<Vec<_>>(),
-            ["gust", "tcdc", "cape"],
-            "three variables, in the fixture's order"
+            ["gust", "tcdc", "cape", "vis", "dpt2m", "aptmp2m", "lcdc", "mcdc", "hcdc"],
+            "nine variables, in the fixture's order"
         );
         for (variable_id, entry) in entries {
             let spec = variable_spec(&variable_id).unwrap_or_else(|_| panic!("{variable_id}"));
@@ -548,9 +677,10 @@ mod tests {
                 entry["parameter"],
                 "{variable_id} GRIB2 identity"
             );
-            // balanced is quality everywhere but cloud cover, which takes
-            // the compact 1 % step like relative humidity.
-            let balanced_key = if variable_id == "tcdc" { "compact" } else { "quality" };
+            // balanced is quality everywhere but cloud cover — the total
+            // and the layers — which takes the compact 1 % step like
+            // relative humidity.
+            let balanced_key = if variable_id.ends_with("cdc") { "compact" } else { "quality" };
             for (profile, key) in [("quality", "quality"), ("compact", "compact"), ("balanced", balanced_key)] {
                 let book = codebook(profile, &variable_id)
                     .unwrap_or_else(|error| panic!("{variable_id} {profile}: {error}"));

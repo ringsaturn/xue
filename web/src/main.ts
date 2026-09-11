@@ -267,6 +267,9 @@ function isobaricVariableUi(): Record<string, VariableUi> {
     spfh: "Specific Humidity",
     wind: "Wind",
     qflux: "Vapour Flux",
+    vvel: "Vertical Velocity",
+    thetae: "Theta-e",
+    cloud: "Cloud Cover",
   };
   const entries: Record<string, VariableUi> = {};
   for (const id of ISOBARIC_FILL_IDS) {
@@ -341,6 +344,48 @@ const VARIABLE_UI: Record<string, VariableUi> = {
     label: t("varLabelCape"),
     legend: isobaricLegend(identityForBundleId("cape")!) ?? [],
   },
+  lcdc: {
+    code: "LCDC LOW",
+    title: ["Low", "Cloud"],
+    bufferTitle: "Cloud buffer",
+    label: t("varLabelLcdc"),
+    legend: isobaricLegend(identityForBundleId("lcdc")!) ?? [],
+  },
+  mcdc: {
+    code: "MCDC MID",
+    title: ["Middle", "Cloud"],
+    bufferTitle: "Cloud buffer",
+    label: t("varLabelMcdc"),
+    legend: isobaricLegend(identityForBundleId("mcdc")!) ?? [],
+  },
+  hcdc: {
+    code: "HCDC HIGH",
+    title: ["High", "Cloud"],
+    bufferTitle: "Cloud buffer",
+    label: t("varLabelHcdc"),
+    legend: isobaricLegend(identityForBundleId("hcdc")!) ?? [],
+  },
+  vis: {
+    code: "VIS SFC",
+    title: ["Surface", "Visibility"],
+    bufferTitle: "Visibility buffer",
+    label: t("varLabelVis"),
+    legend: isobaricLegend(identityForBundleId("vis")!) ?? [],
+  },
+  dpt2m: {
+    code: "DPT 2M",
+    title: ["Dew", "Point"],
+    bufferTitle: "Dew point buffer",
+    label: t("varLabelDpt2m"),
+    legend: isobaricLegend(identityForBundleId("dpt2m")!) ?? [],
+  },
+  aptmp2m: {
+    code: "APTMP 2M",
+    title: ["Apparent", "Temperature"],
+    bufferTitle: "Apparent temperature buffer",
+    label: t("varLabelAptmp2m"),
+    legend: isobaricLegend(identityForBundleId("aptmp2m")!) ?? [],
+  },
   ...pressureVariableUi(),
   ...isobaricVariableUi(),
 } as unknown as Record<string, VariableUi>;
@@ -396,14 +441,23 @@ const DARK_BASEMAP: Record<string, BasemapTones> = {
   // Stable air is the map; the ramp starts in pale straw, which needs the
   // precipitation slate under it rather than the temperature's near-void.
   cape: { ocean: "#16344a", land: "#28495f" },
+  lcdc: { ocean: "#16344a", land: "#28495f" },
+  mcdc: { ocean: "#16344a", land: "#28495f" },
+  hcdc: { ocean: "#16344a", land: "#28495f" },
+  // Clear air is the map, and the reduced-visibility ramp comes in
+  // translucent: the same slate.
+  vis: { ocean: "#16344a", land: "#28495f" },
+  // Opaque fields on the temperature's near-void.
+  dpt2m: { ocean: "#0b1826", land: "#182c3d" },
+  aptmp2m: { ocean: "#0b1826", land: "#182c3d" },
   ...pressureBasemapTheme({ ocean: "#101f2c", land: "#22384a" }),
   // Relative humidity is a light wash, not a coat, and goes with the
   // moisture fields on the precipitation slate rather than with the
-  // temperature's near-void.
+  // temperature's near-void; θe is a coat like the temperature.
   ...isobaricBasemapTheme((family) =>
     family === "wind"
       ? { ocean: "#0e2131", land: "#1d3849" }
-      : family === "tmp"
+      : family === "tmp" || family === "thetae"
         ? { ocean: "#0b1826", land: "#182c3d" }
         : { ocean: "#16344a", land: "#28495f" },
   ),
@@ -440,7 +494,13 @@ const LIGHT_BASEMAP: Record<string, BasemapTones> = {
   wind10m: PAPER_GROUND,
   gust: PAPER_GROUND,
   tcdc: PAPER_GROUND,
+  lcdc: PAPER_GROUND,
+  mcdc: PAPER_GROUND,
+  hcdc: PAPER_GROUND,
   cape: PAPER_GROUND,
+  vis: PAPER_GROUND,
+  dpt2m: PAPER_GROUND,
+  aptmp2m: PAPER_GROUND,
   ...pressureBasemapTheme({ ocean: "#dcd6c8", land: "#c9c2b2" }),
   ...isobaricBasemapTheme(() => PAPER_GROUND),
 } as Record<string, BasemapTones>;
@@ -2531,8 +2591,11 @@ function levelButtonName(id: ForecastBundleId): [string, string] {
   }
   const family = familyOf(id);
   if (family !== null && bundleLevel(id) === null) {
-    const { code, surfaceCode, glossKey } = FAMILIES[family];
-    return [`${code} ${surfaceCode}`, glossKey === null ? familyLabel(id) : t(glossKey)];
+    const { code, glossKey, members } = FAMILIES[family];
+    // A listed member (the cloud layers) is named for itself; a surface
+    // member repeats its family tile's gloss.
+    const gloss = members || glossKey === null ? familyLabel(id) : t(glossKey);
+    return [`${code} ${levelCode(id)}`, gloss];
   }
   return [isobaricCode(id), familyLabel(id)];
 }
@@ -2693,6 +2756,18 @@ function syncUnknownRailTiles(run: ForecastManifest): void {
  * every other field reads its bar off the palette it is actually drawn
  * with. */
 const STYLESHEET_LEGEND_IDS: ReadonlySet<string> = new Set(["tmp2m", "prate", "cref", "wind10m"]);
+
+/** Past ten visible tiles the rail no longer fits a laptop screen at full
+ * size, so the stylesheet's dense variant takes over (see `.variable-rail`).
+ * Nothing about which tiles show changes — only their height. */
+const DENSE_RAIL_TILES = 10;
+
+function syncRailDensity(): void {
+  if (!variableRail) return;
+  const visible = variableButtons().filter((button) => !button.hidden).length;
+  if (visible > DENSE_RAIL_TILES) variableRail.dataset.dense = "";
+  else delete variableRail.dataset.dense;
+}
 
 /** The legend bar's gradient for a field whose key is not in the stylesheet:
  * the upper-air fills, the surface diagnostics, solar radiation and every
@@ -4035,6 +4110,7 @@ async function initialize(): Promise<void> {
             : !hasBundle(loadedManifest, bundleId);
     }
     syncUnknownRailTiles(loadedManifest);
+    syncRailDensity();
     // A slot this run does not ship empties; a case names its own default
     // for when that leaves nothing, and a live run always carries the core
     // pair.

@@ -801,6 +801,24 @@ body.is-pressure .legend {
   display: none;
 }
 
+/* A run that ships the whole GFS set puts fourteen tiles on the rail, which
+   no laptop screen fits at 44px: past ten visible tiles main.ts marks the
+   rail dense, the tiles drop to 36px and lose their letter caption — the
+   icon and the hover name carry the tile, the visually hidden name still
+   reads aloud — so the column stays clear of the title and the capsule. */
+.variable-rail[data-dense] {
+  gap: 4px;
+}
+
+.variable-rail[data-dense] button {
+  height: 36px;
+  border-radius: 12px;
+}
+
+.variable-rail[data-dense] .rail-glyph {
+  display: none;
+}
+
 /* The icon carries the tile; the WMO letter sits under it as a caption,
    in the instrument face's mono. */
 .rail-icon {

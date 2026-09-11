@@ -19,9 +19,11 @@ import { ISOBARIC_LEVELS, type BundleParameter, type BundleVariable, type KnownB
  * exactly the ids those files can carry and nothing more.
  */
 
-/** The chart families. The first six are registered on isobaric surfaces and
- * some of them also have a near-surface member; the rest are single layers
- * (precipitation, radiation, reflectivity, gust, cloud cover, CAPE). */
+/** The chart families. The first eight are registered on isobaric surfaces
+ * and some of them also have a near-surface member; the rest are single
+ * layers (precipitation, radiation, reflectivity, and the surface
+ * diagnostics: gust, the four cloud covers, CAPE, visibility, dew point,
+ * apparent temperature). */
 export type ChartFamily =
   | "hgt"
   | "tmp"
@@ -29,12 +31,20 @@ export type ChartFamily =
   | "spfh"
   | "wind"
   | "qflux"
+  | "vvel"
+  | "thetae"
   | "prate"
   | "dswrf"
   | "cref"
   | "gust"
   | "tcdc"
-  | "cape";
+  | "lcdc"
+  | "mcdc"
+  | "hcdc"
+  | "cape"
+  | "vis"
+  | "dpt2m"
+  | "aptmp2m";
 
 export interface VariableIdentity {
   family: ChartFamily;
@@ -97,7 +107,11 @@ function isTriple(parameter: BundleParameter, discipline: number, category: numb
  * (0,1,0) @100 specific humidity, (0,1,7) @1 precipitation rate,
  * (0,4,192) @1 downward shortwave radiation, (0,16,5) @10 composite
  * reflectivity, (0,2,22) @1 wind gust, (0,6,1) @10 total cloud cover,
- * (0,7,6) @1 surface-based CAPE.
+ * (0,6,3) @214 / (0,6,4) @224 / (0,6,5) @234 low / middle / high cloud
+ * cover, (0,7,6) @1 surface-based CAPE, (0,19,0) @1 visibility, (0,0,6)
+ * @103 value 2 dew point, (0,0,21) @103 value 2 apparent temperature,
+ * (0,2,8) @100 vertical velocity, (0,0,3) @100 equivalent potential
+ * temperature.
  */
 export function identityForParameter(parameter: BundleParameter): VariableIdentity | null {
   const surface = parameter.typeOfFirstFixedSurface;
@@ -109,6 +123,10 @@ export function identityForParameter(parameter: BundleParameter): VariableIdenti
     if (level !== null) return scalar("tmp", level);
     if (surface === 103 && value === 2) return scalar("tmp", null);
   }
+  if (isTriple(parameter, 0, 0, 3) && level !== null) return scalar("thetae", level);
+  if (isTriple(parameter, 0, 0, 6) && surface === 103 && value === 2) return scalar("dpt2m", null);
+  if (isTriple(parameter, 0, 0, 21) && surface === 103 && value === 2) return scalar("aptmp2m", null);
+  if (isTriple(parameter, 0, 2, 8) && level !== null) return scalar("vvel", level);
   if (isTriple(parameter, 0, 1, 1) && level !== null) return scalar("rh", level);
   if (isTriple(parameter, 0, 1, 0) && level !== null) return scalar("spfh", level);
   if (isTriple(parameter, 0, 1, 7) && surface === 1) return scalar("prate", null);
@@ -116,7 +134,11 @@ export function identityForParameter(parameter: BundleParameter): VariableIdenti
   if (isTriple(parameter, 0, 16, 5) && surface === 10) return scalar("cref", null);
   if (isTriple(parameter, 0, 2, 22) && surface === 1) return scalar("gust", null);
   if (isTriple(parameter, 0, 6, 1) && surface === 10) return scalar("tcdc", null);
+  if (isTriple(parameter, 0, 6, 3) && surface === 214) return scalar("lcdc", null);
+  if (isTriple(parameter, 0, 6, 4) && surface === 224) return scalar("mcdc", null);
+  if (isTriple(parameter, 0, 6, 5) && surface === 234) return scalar("hcdc", null);
   if (isTriple(parameter, 0, 7, 6) && surface === 1) return scalar("cape", null);
+  if (isTriple(parameter, 0, 19, 0) && surface === 1) return scalar("vis", null);
   return null;
 }
 
@@ -213,7 +235,13 @@ const SURFACE_IDS: Record<string, VariableIdentity> = {
   cref: scalar("cref", null),
   gust: scalar("gust", null),
   tcdc: scalar("tcdc", null),
+  lcdc: scalar("lcdc", null),
+  mcdc: scalar("mcdc", null),
+  hcdc: scalar("hcdc", null),
   cape: scalar("cape", null),
+  vis: scalar("vis", null),
+  dpt2m: scalar("dpt2m", null),
+  aptmp2m: scalar("aptmp2m", null),
 };
 
 const ISOBARIC_PREFIXES: Record<string, ChartFamily> = {
@@ -223,6 +251,8 @@ const ISOBARIC_PREFIXES: Record<string, ChartFamily> = {
   spfh: "spfh",
   wind: "wind",
   qflux: "qflux",
+  vvel: "vvel",
+  thetae: "thetae",
 };
 
 /**
@@ -257,9 +287,17 @@ const FAMILY_SURFACE_ID: Record<ChartFamily, KnownBundleId | null> = {
   prate: "prate",
   dswrf: "dswrf",
   cref: "cref",
+  vvel: null,
+  thetae: null,
   gust: "gust",
   tcdc: "tcdc",
+  lcdc: "lcdc",
+  mcdc: "mcdc",
+  hcdc: "hcdc",
   cape: "cape",
+  vis: "vis",
+  dpt2m: "dpt2m",
+  aptmp2m: "aptmp2m",
 };
 
 /**

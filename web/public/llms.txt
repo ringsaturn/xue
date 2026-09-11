@@ -21,9 +21,14 @@ Facts worth getting right:
 - Bundles published per run. GFS and ECMWF: `tmp2m`, `prate`, `prmsl`,
   `hgt850`, `hgt700`, `hgt500`, `hgt250`, `tmp925`, `tmp850`, `tmp500`,
   `rh850`, `rh700`, `rh500`, and the vector pairs `wind10m`, `wind925`,
-  `wind850`, `wind250`, `qflux850`. SFLUX: `tmp2m`, `prate`, `dswrf`,
-  `wind10m`. Names are `<family><level>`; the level is in hPa, `2m`/`10m` are
-  heights above ground, `prmsl` is mean sea level pressure.
+  `wind850`, `wind250`, `qflux850`. GFS additionally: the surface
+  diagnostics `gust`, `tcdc`, `lcdc`, `mcdc`, `hcdc` (total / low / middle /
+  high cloud cover), `cape`, `vis`, `dpt2m`, `aptmp2m` (apparent
+  temperature), the vertical velocity `vvel850`, `vvel700`, `vvel500`, and
+  the 850 hPa equivalent potential temperature `thetae850`. SFLUX: `tmp2m`,
+  `prate`, `dswrf`, `wind10m`. Names are `<family><level>`; the level is in
+  hPa, `2m`/`10m` are heights above ground, `prmsl` is mean sea level
+  pressure.
 - Only the newest run per source is kept online. Runs are pruned when
   superseded; historical events survive only as cases (below).
 - The site is entirely static: Cloudflare Pages for the shell, a public R2
@@ -44,9 +49,12 @@ fall back to defaults rather than fail, so a constructed link always opens.
 - `?model=gfs|sflux|ecmwf` — which live source (`ifs` is an alias of `ecmwf`).
 - `?type=` — the filled layer: `temp` (2 m temperature), `precip`, `wind`
   (10 m), `solar` (sflux only), `pressure` (sea level pressure as isobars),
-  `radar` (cases only), or a bundle name such as `tmp850`, `rh700`,
-  `wind850`, `qflux850`, `hgt500`; `t850`, `z500`, `humidity700`,
-  `vapour850` and `subtropicalhigh` (= `hgt500`) are accepted spellings.
+  `radar` (cases only), the GFS surface diagnostics `gust`, `cloud`
+  (`lowcloud` / `midcloud` / `highcloud` for the layers), `cape`,
+  `visibility`, `dewpoint`, `feelslike`, or a bundle name such as `tmp850`,
+  `rh700`, `wind850`, `qflux850`, `hgt500`, `vvel700`, `thetae850`; `t850`,
+  `z500`, `humidity700`, `vapour850`, `omega700`, `subtropicalhigh`
+  (= `hgt500`) are accepted spellings.
 - `?lines=` — a contour overlay from the pressure family over any filled
   layer: `pressure` (sea level) or `hgt850|hgt700|hgt500|hgt250`.
 - `?case=<id>` — a historical case; ids come from the catalog below.

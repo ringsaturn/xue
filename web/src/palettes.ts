@@ -1,5 +1,14 @@
 import { identityForBundleId, type VariableIdentity } from "./identity";
-import { CAPE_CHART_MAX, GUST_SPEED_MAX, isobaricRange, temperaturePaletteDomain } from "./levels";
+import {
+  CAPE_CHART_MAX,
+  DEW_POINT_CHART_RANGE,
+  GUST_SPEED_MAX,
+  OMEGA_PALETTE_MAX,
+  VISIBILITY_CHART_MAX,
+  isobaricRange,
+  temperaturePaletteDomain,
+  thetaEPaletteDomain,
+} from "./levels";
 import type { BundleVariable, LinearQuantization, LogQuantization } from "./manifest";
 
 /**
@@ -230,6 +239,79 @@ export const CAPE_STOPS: Stop[] = [
   [CAPE_CHART_MAX, 90, 30, 130, 255],
 ];
 
+// Vertical velocity ω, a diverging ramp about zero: nothing within
+// ±0.1 Pa/s, where most of a field sits and the small values are noise,
+// ascent (negative ω, the side a rainfall chart shades) in blues deepening
+// to violet, descent in a fainter amber to brown — subsidence is the quieter
+// half of the story, so it gets the quieter colours. Values are Pa/s; the
+// ramp saturates at ±2.5 and the codebook runs on to ±6.35.
+export const OMEGA_STOPS: Stop[] = [
+  [-OMEGA_PALETTE_MAX, 70, 30, 130, 255],
+  [-1.5, 60, 70, 180, 250],
+  [-1.0, 50, 120, 200, 240],
+  [-0.5, 90, 170, 210, 200],
+  [-0.25, 150, 205, 220, 120],
+  [-0.1, 190, 225, 230, 0],
+  [0, 220, 220, 210, 0],
+  [0.1, 235, 215, 170, 0],
+  [0.25, 232, 195, 130, 110],
+  [0.5, 222, 165, 90, 180],
+  [1.0, 200, 125, 60, 225],
+  [1.5, 170, 90, 45, 240],
+  [OMEGA_PALETTE_MAX, 130, 60, 35, 250],
+];
+
+// Equivalent potential temperature in fractions of the level's hundred-kelvin
+// window: cold dry air in deep blue, through teal and green, to the yellow,
+// orange and red of a warm moist tropical air mass — the way a Chinese
+// 850 hPa θse chart is filled, so the energy front reads as the colour edge.
+// Opaque: the field covers everything.
+const THETA_E_UNIT_STOPS: Stop[] = [
+  [0.0, 40, 40, 120, 245],
+  [0.15, 50, 90, 170, 245],
+  [0.3, 60, 150, 180, 245],
+  [0.45, 110, 190, 140, 245],
+  [0.6, 200, 215, 100, 245],
+  [0.72, 245, 190, 70, 245],
+  [0.85, 235, 120, 50, 245],
+  [1.0, 170, 30, 50, 245],
+];
+
+// 2 m dew point, read as moisture rather than as heat: arid air in the
+// browns of bare ground, the middle in paper tones, humid air in greens
+// deepening through teal to a saturated tropical blue at 25 °C and above.
+// The same convention as the relative humidity ramp, so the two moisture
+// fields agree on what "dry" looks like. Opaque like temperature.
+const DEW_POINT_STOPS: Stop[] = [
+  [DEW_POINT_CHART_RANGE[0], 110, 72, 36, 240],
+  [-20, 150, 108, 66, 240],
+  [-10, 190, 156, 108, 240],
+  [0, 222, 208, 168, 240],
+  [5, 214, 222, 178, 240],
+  [10, 168, 210, 150, 245],
+  [15, 110, 190, 140, 245],
+  [20, 60, 160, 150, 250],
+  [25, 40, 110, 160, 255],
+  [DEW_POINT_CHART_RANGE[1], 40, 60, 140, 255],
+];
+
+// Visibility in kilometres, painted where it is *reduced*: clear air above
+// ten kilometres is the map, haze from ten down to five comes in as a
+// translucent straw, mist below five as amber, then orange, red and violet
+// as fog closes in under two, one and half a kilometre — the classes an
+// aviation or road chart draws, with the worst the most saturated.
+const VISIBILITY_STOPS: Stop[] = [
+  [0, 90, 30, 130, 250],
+  [0.5, 150, 40, 110, 245],
+  [1, 205, 55, 60, 240],
+  [2, 235, 120, 50, 225],
+  [3, 240, 170, 70, 200],
+  [5, 236, 210, 120, 160],
+  [8, 230, 225, 170, 90],
+  [10, 225, 225, 200, 0],
+  [VISIBILITY_CHART_MAX, 225, 225, 200, 0],
+];
+
 function interpolate(stops: Stop[], value: number): [number, number, number, number] {
   const first = stops[0]!;
   const last = stops[stops.length - 1]!;
@@ -376,8 +458,15 @@ function stopsFor(variable: BundleVariable, identity: VariableIdentity | null): 
   if (family === "dswrf") return SOLAR_STOPS;
   if (family === "cref") return REFLECTIVITY_STOPS;
   if (family === "gust") return windFieldStops(GUST_SPEED_MAX);
-  if (family === "tcdc") return CLOUD_STOPS;
+  if (family === "tcdc" || family === "lcdc" || family === "mcdc" || family === "hcdc") return CLOUD_STOPS;
   if (family === "cape") return CAPE_STOPS;
+  if (family === "vis") return VISIBILITY_STOPS;
+  if (family === "dpt2m") return DEW_POINT_STOPS;
+  // The apparent temperature is a temperature: the same ramp, so 30 °C
+  // "feels like" is the same orange as 30 °C is.
+  if (family === "aptmp2m") return TEMPERATURE_STOPS;
+  if (family === "vvel") return OMEGA_STOPS;
+  if (family === "thetae") return remapStops(THETA_E_UNIT_STOPS, [0, 1], thetaEPaletteDomain(level));
   if (family === "hgt" && linear) return pressureStops(linear);
   if (family === "tmp") return remapStops(TEMPERATURE_STOPS, [-60, 50], temperaturePaletteDomain(level));
   if (family === "rh") return HUMIDITY_STOPS;

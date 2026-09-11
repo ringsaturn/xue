@@ -5,8 +5,11 @@ the GFS source fetches from the 2026-08-14 06:00 UTC analysis: 2 m
 temperature, surface precipitation rate, the 10 m wind pair, mean sea level
 pressure, the 850 / 700 / 500 / 250 hPa geopotential heights, 925, 850 and
 500 hPa temperature, 850, 700 and 500 hPa relative humidity, 850 hPa
-specific humidity and the 925, 850 and 250 hPa wind pairs — twenty-two
-records, in the order `xuebuild/sources.py` lists them. It covers
+specific humidity, the 925, 850 and 250 hPa wind pairs, then the surface
+diagnostics (gust, total / low / middle / high cloud cover, CAPE,
+visibility, 2 m dew point and apparent temperature) and the 850 / 700 /
+500 hPa vertical velocity — thirty-four records, in the order
+`xuebuild/sources.py` lists them. It covers
 approximately 118E to 138E and 18N to 38N, including the browser test's
 initial viewport, so the record matchers, the GRIB2 header index, the vapour
 flux derivation and the byte-identity parity test all run against real

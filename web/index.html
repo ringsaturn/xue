@@ -150,7 +150,8 @@
               "downward shortwave radiation flux",
               "mean sea level pressure",
               "geopotential height on isobaric surfaces",
-              "temperature, relative humidity, wind and water vapour flux on isobaric surfaces"
+              "temperature, relative humidity, wind, water vapour flux, vertical velocity and equivalent potential temperature on isobaric surfaces",
+              "wind gust, total and low / middle / high cloud cover, CAPE, visibility, 2 m dew point and apparent temperature"
             ],
             "distribution": [
               { "@type": "DataDownload", "name": "GFS live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest.json" },
@@ -358,14 +359,16 @@
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphCref">Z</b>
           <span class="rail-name"><span>RADAR</span> <small data-i18n="varRadar">CREF</small></span>
         </button>
-        <!-- The surface diagnostics: registered on both encoders, published
-             by no source yet, so these stay hidden until a run ships them. -->
+        <!-- The surface diagnostics and the two remaining upper-air families,
+             GFS-only for now; each tile shows only when the run ships it. -->
         <button type="button" data-variable="gust" data-i18n-tip="varLabelGust" aria-pressed="false" hidden>
           <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7.5h8.5a2.5 2.5 0 1 0-2.5-2.5" /><path d="M3 12h13.5a2.5 2.5 0 1 1-2.5 2.5" /><path d="M3 16.5h4M10 16.5h2M15 16.5h1.5" /></svg>
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphGust">G</b>
           <span class="rail-name"><span>GUST</span> <small data-i18n="varGust">SFC</small></span>
         </button>
-        <button type="button" data-variable="tcdc" data-i18n-tip="varLabelTcdc" aria-pressed="false" hidden>
+        <!-- The whole cloud family behind one tile: total, low, middle and
+             high are picked on the level row. -->
+        <button type="button" data-variable="tcdc" data-family="cloud" data-i18n-tip="tipCloud" aria-pressed="false" hidden>
           <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.5 17a4 4 0 0 0-.4-8A6 6 0 0 0 5.6 10.6 3.3 3.3 0 0 0 6.5 17h11z" /></svg>
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphTcdc">N</b>
           <span class="rail-name"><span>CLOUD</span> <small data-i18n="varCloud">TOTAL</small></span>
@@ -374,6 +377,31 @@
           <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 3L6 13.5h5l-1 7.5 8-11.5h-5z" /></svg>
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphCape">C</b>
           <span class="rail-name"><span>CAPE</span> <small data-i18n="varCape">SFC</small></span>
+        </button>
+        <button type="button" data-variable="vis" data-i18n-tip="varLabelVis" aria-pressed="false" hidden>
+          <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z" /><circle cx="12" cy="12" r="3" /><path d="M3 20h18" stroke-dasharray="2 2" /></svg>
+          <b class="rail-glyph" aria-hidden="true" data-i18n="glyphVis">V</b>
+          <span class="rail-name"><span>VIS</span> <small data-i18n="varVis">SFC</small></span>
+        </button>
+        <button type="button" data-variable="dpt2m" data-i18n-tip="varLabelDpt2m" aria-pressed="false" hidden>
+          <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5s-6 6.8-6 11a6 6 0 0 0 12 0c0-4.2-6-11-6-11z" /><path d="M9.5 15.5a2.5 2.5 0 0 0 2.5 2.5" /></svg>
+          <b class="rail-glyph" aria-hidden="true" data-i18n="glyphDpt2m">D</b>
+          <span class="rail-name"><span>DEWPT</span> <small data-i18n="varDewPoint">2M</small></span>
+        </button>
+        <button type="button" data-variable="aptmp2m" data-i18n-tip="varLabelAptmp2m" aria-pressed="false" hidden>
+          <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5a2 2 0 0 0-4 0v8.5a4 4 0 1 0 4 0z" /><path d="M10 9v6" /><path d="M16 5h3M16 8.5h4M16 12h3" /></svg>
+          <b class="rail-glyph" aria-hidden="true" data-i18n="glyphAptmp2m">A</b>
+          <span class="rail-name"><span>FEELS</span> <small data-i18n="varFeelsLike">2M</small></span>
+        </button>
+        <button type="button" data-variable="vvel700" data-family="vvel" data-i18n-tip="tipOmega" aria-pressed="false" hidden>
+          <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 20V6" /><path d="M4 9l3-3 3 3" /><path d="M17 4v14" /><path d="M14 15l3 3 3-3" /></svg>
+          <b class="rail-glyph" aria-hidden="true" data-i18n="glyphVvel">ω</b>
+          <span class="rail-name"><span>OMEGA</span> <small data-i18n="varOmega">VERT</small></span>
+        </button>
+        <button type="button" data-variable="thetae850" data-family="thetae" data-i18n-tip="tipThetaE" aria-pressed="false" hidden>
+          <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="12" rx="6.5" ry="9" /><path d="M6.5 12h11" /></svg>
+          <b class="rail-glyph" aria-hidden="true" data-i18n="glyphThetae">θ</b>
+          <span class="rail-name"><span>THETAE</span> <small data-i18n="varThetaE">EQUIV</small></span>
         </button>
       </div>
 

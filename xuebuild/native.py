@@ -300,6 +300,27 @@ def convert_bin(
         verbose=LOG.isEnabledFor(logging.DEBUG),
     )
 
+    # The wheel carries a source table of its own. One that predates this
+    # repository's would build the run it knows — fewer bundles, silently —
+    # and a scheduled publish pins the native path precisely so a shortfall
+    # cannot pass unnoticed, so the sets are compared here. (A vector bundle
+    # or a derived scalar whose inputs a run turned out to lack is left out
+    # by both encoders alike; that case never reaches this check because the
+    # inputs were fetched off the same table.)
+    expected = tuple(
+        bundle_id
+        for bundle_id in published_bundle_ids(source)
+        if bundle_ids is None or bundle_id in bundle_ids
+    )
+    written = tuple(bundle["variable"] for bundle in report["bundles"])
+    if written != expected:
+        raise ConversionError(
+            f"{DISTRIBUTION} {version() or 'dev'} built {list(written)} where this "
+            f"xuebuild publishes {list(expected)} for {source.manifest_model}; the "
+            "wheel's source table is out of step with xuebuild/sources.py — "
+            "release or upgrade the wheel, or set XUE_ENCODER=python"
+        )
+
     videos: dict[str, dict[str, Any]] = {}
     if not skip_video:
         videos = _video_reports(report["bundles"], Path(output_dir), module)

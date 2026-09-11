@@ -19,13 +19,15 @@ class IndexMessagesTests(unittest.TestCase):
     def test_fixture_identities(self) -> None:
         messages = grib2.index_messages(FIXTURE)
         # Every record the GFS source fetches, in the order the fetcher assembles
-        # them: the surface fields, the pressure family, then the upper-air
-        # inputs (the 850 hPa specific humidity among them, fetched only to
-        # derive the vapour flux).
-        self.assertEqual(len(messages), 22)
+        # them: the surface fields, the pressure family, the upper-air inputs
+        # (the 850 hPa specific humidity among them, fetched only to derive
+        # the vapour flux and the equivalent potential temperature), then the
+        # surface diagnostics and the vertical velocity.
+        self.assertEqual(len(messages), 34)
         temperature, precipitation, u_wind, v_wind, pressure = messages[:5]
         heights = messages[5:9]
-        upper_air = messages[9:]
+        upper_air = messages[9:22]
+        diagnostics = messages[22:]
         self.assertEqual(temperature.band, 1)
         self.assertEqual(
             (temperature.discipline, temperature.parameter_category, temperature.parameter_number),
@@ -81,6 +83,28 @@ class IndexMessagesTests(unittest.TestCase):
             ],
         )
         self.assertTrue(all(message.level_type == 100 for message in upper_air))
+        # The surface diagnostics, each on the surface its registry entry
+        # declares: the ground, the entire atmosphere, the three cloud
+        # layers, the 2 m surface — and every one the instantaneous record,
+        # not the interval average that sits beside the cloud covers.
+        self.assertEqual(
+            [(m.band, m.parameter_category, m.parameter_number, m.level_type, m.level_value) for m in diagnostics],
+            [
+                (23, 2, 22, 1, 0.0),
+                (24, 6, 1, 10, 0.0),
+                (25, 6, 3, 214, 0.0),
+                (26, 6, 4, 224, 0.0),
+                (27, 6, 5, 234, 0.0),
+                (28, 7, 6, 1, 0.0),
+                (29, 19, 0, 1, 0.0),
+                (30, 0, 6, 103, 2.0),
+                (31, 0, 21, 103, 2.0),
+                (32, 2, 8, 100, 85000.0),
+                (33, 2, 8, 100, 70000.0),
+                (34, 2, 8, 100, 50000.0),
+            ],
+        )
+        self.assertTrue(all(message.statistical_process is None for message in diagnostics))
 
     def test_rejects_non_grib_payload(self) -> None:
         with tempfile.NamedTemporaryFile(suffix=".grib2") as handle:

@@ -160,6 +160,32 @@ COMPACT_CLOUD = TemperatureCodebook(minimum=0.0, maximum=100.0, step=1.0, name="
 # the format (legend, probe, poster) already spreads a ramp over.
 QUALITY_CAPE = TemperatureCodebook(minimum=0.0, maximum=6350.0, step=25.0, name="cape")
 COMPACT_CAPE = TemperatureCodebook(minimum=0.0, maximum=6350.0, step=50.0, name="cape")
+# Visibility in kilometres: 0–25.4 km at 100 m spends the full code space
+# over GFS's ~24 km ceiling; fog (under 1 km) keeps ten codes, enough for
+# the 200 / 500 / 1000 m classes a visibility chart draws.
+QUALITY_VISIBILITY = TemperatureCodebook(minimum=0.0, maximum=25.4, step=0.1, name="vis")
+COMPACT_VISIBILITY = TemperatureCodebook(minimum=0.0, maximum=25.4, step=0.2, name="vis")
+# 2 m dew point: the temperature's step over a range shifted ten degrees
+# down — a dew point never passes 35 °C, and the Antarctic plateau's clamps
+# like the temperature's own extremes.
+QUALITY_DEW_POINT = TemperatureCodebook(minimum=-70.0, maximum=40.0, step=0.5, name="dpt2m")
+COMPACT_DEW_POINT = TemperatureCodebook(minimum=-70.0, maximum=40.0, step=1.0, name="dpt2m")
+# Apparent temperature spans wind chill on the Antarctic plateau (-90 °C in
+# a real analysis) and a 49 °C heat index: 150 K, which no half-degree
+# codebook holds, so it takes a whole degree — what a feels-like reading is
+# quoted to anyway.
+QUALITY_APPARENT = TemperatureCodebook(minimum=-90.0, maximum=60.0, step=1.0, name="aptmp2m")
+COMPACT_APPARENT = TemperatureCodebook(minimum=-90.0, maximum=60.0, step=2.0, name="aptmp2m")
+# The cloud layers take the total's codebook, and its balanced rule.
+QUALITY_CLOUD_LAYER = {
+    "lcdc": TemperatureCodebook(minimum=0.0, maximum=100.0, step=0.5, name="lcdc"),
+    "mcdc": TemperatureCodebook(minimum=0.0, maximum=100.0, step=0.5, name="mcdc"),
+    "hcdc": TemperatureCodebook(minimum=0.0, maximum=100.0, step=0.5, name="hcdc"),
+}
+COMPACT_CLOUD_LAYER = {
+    variable_id: TemperatureCodebook(minimum=0.0, maximum=100.0, step=1.0, name=variable_id)
+    for variable_id in QUALITY_CLOUD_LAYER
+}
 
 # Sea-level pressure and the pressure-level geopotential heights. Three rules
 # fix these numbers:
@@ -321,6 +347,31 @@ COMPACT_ISOBARIC_WIND = TemperatureCodebook(minimum=-127.0, maximum=127.0, step=
 # everything but a typhoon core, which clamps.
 QUALITY_VAPOUR_FLUX = TemperatureCodebook(minimum=-63.5, maximum=63.5, step=0.5, name="vapour flux")
 COMPACT_VAPOUR_FLUX = TemperatureCodebook(minimum=-63.5, maximum=63.5, step=1.0, name="vapour flux")
+# Vertical velocity ω in Pa/s, symmetric like the wind components: synoptic
+# ascent is -0.5 to -2, so 0.05 Pa/s gives that range forty codes, and
+# ±6.35 keeps a convective core distinct from the ambient before the rare
+# grid-point storm past it clamps.
+QUALITY_VERTICAL_VELOCITY = TemperatureCodebook(minimum=-6.35, maximum=6.35, step=0.05, name="vvel")
+COMPACT_VERTICAL_VELOCITY = TemperatureCodebook(minimum=-6.35, maximum=6.35, step=0.1, name="vvel")
+# Equivalent potential temperature: the temperature's 0.5 K step over a
+# 127 K window placed per level (xuebuild/variables.py).
+_THETA_E_OFFSETS: dict[int, float] = {
+    1000: 235.0,
+    925: 232.0,
+    850: 230.0,
+    700: 235.0,
+    500: 250.0,
+    300: 285.0,
+    250: 295.0,
+    200: 305.0,
+}
+
+
+def _theta_e_codebook(level_hpa: int, *, compact: bool) -> TemperatureCodebook:
+    offset = _THETA_E_OFFSETS[level_hpa]
+    return TemperatureCodebook(
+        minimum=offset, maximum=offset + 127.0, step=1.0 if compact else 0.5, name=isobaric_variable_id("thetae", level_hpa)
+    )
 
 
 def _isobaric_codebooks(*, compact: bool) -> dict[str, TemperatureCodebook]:
@@ -333,6 +384,10 @@ def _isobaric_codebooks(*, compact: bool) -> dict[str, TemperatureCodebook]:
             books[isobaric_variable_id(family, level)] = COMPACT_ISOBARIC_WIND if compact else QUALITY_ISOBARIC_WIND
         for family in ("uqflx", "vqflx"):
             books[isobaric_variable_id(family, level)] = COMPACT_VAPOUR_FLUX if compact else QUALITY_VAPOUR_FLUX
+        books[isobaric_variable_id("vvel", level)] = (
+            COMPACT_VERTICAL_VELOCITY if compact else QUALITY_VERTICAL_VELOCITY
+        )
+        books[isobaric_variable_id("thetae", level)] = _theta_e_codebook(level, compact=compact)
     return books
 
 
@@ -343,7 +398,7 @@ ISOBARIC_VARIABLE_IDS: tuple[str, ...] = tuple(QUALITY_ISOBARIC)
 # The surface diagnostics held to the Rust encoder and the frontend by
 # tests/fixtures/surface-registry.json, the way the pressure family and the
 # isobaric families have registries of their own.
-SURFACE_VARIABLE_IDS: tuple[str, ...] = ("gust", "tcdc", "cape")
+SURFACE_VARIABLE_IDS: tuple[str, ...] = ("gust", "tcdc", "cape", "vis", "dpt2m", "aptmp2m", "lcdc", "mcdc", "hcdc")
 
 PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
     "quality": {
@@ -356,6 +411,10 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
         "gust": QUALITY_GUST,
         "tcdc": QUALITY_CLOUD,
         "cape": QUALITY_CAPE,
+        "vis": QUALITY_VISIBILITY,
+        "dpt2m": QUALITY_DEW_POINT,
+        "aptmp2m": QUALITY_APPARENT,
+        **QUALITY_CLOUD_LAYER,
         **QUALITY_PRESSURE,
         **QUALITY_ISOBARIC,
     },
@@ -369,6 +428,10 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
         "gust": COMPACT_GUST,
         "tcdc": COMPACT_CLOUD,
         "cape": COMPACT_CAPE,
+        "vis": COMPACT_VISIBILITY,
+        "dpt2m": COMPACT_DEW_POINT,
+        "aptmp2m": COMPACT_APPARENT,
+        **COMPACT_CLOUD_LAYER,
         **COMPACT_PRESSURE,
         **COMPACT_ISOBARIC,
     },
@@ -392,6 +455,10 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
         "gust": QUALITY_GUST,
         "tcdc": COMPACT_CLOUD,
         "cape": QUALITY_CAPE,
+        "vis": QUALITY_VISIBILITY,
+        "dpt2m": QUALITY_DEW_POINT,
+        "aptmp2m": QUALITY_APPARENT,
+        **COMPACT_CLOUD_LAYER,
         **QUALITY_PRESSURE,
         **QUALITY_ISOBARIC,
         **{variable_id: COMPACT_HUMIDITY for variable_id in QUALITY_ISOBARIC if variable_id.startswith("rh")},

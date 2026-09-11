@@ -15,6 +15,7 @@ import {
   levelCode,
   temperatureLegendRange,
   temperaturePaletteDomain,
+  thetaEPaletteDomain,
   vectorMaxMagnitude,
 } from "../../web/src/levels";
 import { identityForBundleId } from "../../web/src/identity";
@@ -84,10 +85,20 @@ describe("the isobaric family registry", () => {
     expect(familyOf("dswrf")).toBeNull();
     for (const family of ISOBARIC_FAMILIES) {
       const members = familyMembers(family);
+      const listed = FAMILIES[family].members;
       expect(members[0]).toBe(FAMILIES[family].surface ?? `${family}1000`);
-      expect(members.length).toBe(ISOBARIC_LEVELS.length + (FAMILIES[family].surface ? 1 : 0));
+      // A family that lists its members (cloud cover) has exactly those;
+      // an isobaric one has the eight surfaces plus its surface member.
+      expect(members.length).toBe(listed ? listed.length : ISOBARIC_LEVELS.length + (FAMILIES[family].surface ? 1 : 0));
       for (const member of members) expect(familyOf(member)).toBe(family);
     }
+    expect(familyMembers("cloud")).toEqual(["tcdc", "lcdc", "mcdc", "hcdc"]);
+    expect(levelCode("lcdc")).toBe("LOW");
+    expect(levelCode("tcdc")).toBe("TOTAL");
+    expect(bundleLevel("lcdc")).toBeNull();
+    expect(familyOf("vvel700")).toBe("vvel");
+    expect(familyOf("thetae850")).toBe("thetae");
+    expect(bundleLevel("thetae850")).toBe(850);
     expect(bundleLevel("tmp850")).toBe(850);
     expect(bundleLevel("tmp2m")).toBeNull();
     expect(bundleLevel("qflux700")).toBe(700);
@@ -95,6 +106,35 @@ describe("the isobaric family registry", () => {
     expect(levelCode("wind10m")).toBe("10M");
     expect(levelCode("prmsl")).toBe("MSL");
     expect(levelCode("rh700")).toBe("700");
+  });
+
+  it("paints the vertical velocity about zero and theta-e over its window", () => {
+    const omegaVariable: BundleVariable = {
+      numericId: 1,
+      id: "vvel700",
+      label: "",
+      unit: "Pa/s",
+      quantization: registry.vvel700!.quality,
+    };
+    const omega = buildPalette(omegaVariable);
+    const { offset, scale } = registry.vvel700!.quality;
+    const code = (value: number) => Math.round((value - offset) / scale);
+    // Still air is the map; ascent (negative ω) is blue, descent amber.
+    expect(omega[code(0) * 4 + 3]).toBe(0);
+    expect(omega[code(-1) * 4 + 2]).toBeGreaterThan(omega[code(-1) * 4]!);
+    expect(omega[code(1) * 4]).toBeGreaterThan(omega[code(1) * 4 + 2]!);
+    // Past ±2.5 the ramp holds; the codebook runs on to ±6.35.
+    expect([...omega.subarray(code(-2.5) * 4, code(-2.5) * 4 + 4)]).toEqual([...omega.subarray(0, 4)]);
+    expect(isobaricLegend(identityForBundleId("vvel700")!)).toEqual(["2.5", "1.5", "0.5", "-0.5", "-1.5", "-2.5"]);
+    // θe: the legend window sits inside the level's codebook and ticks in
+    // fives from the top.
+    const thetaRange = isobaricRange("thetae", 850)!;
+    const [low, high] = thetaEPaletteDomain(850);
+    expect(low).toBeGreaterThanOrEqual(thetaRange[0]);
+    expect(high).toBeLessThanOrEqual(thetaRange[1]);
+    expect(isobaricLegend(identityForBundleId("thetae850")!)).toEqual(["355", "335", "315", "295", "275", "255"]);
+    expect(isobaricCode("vvel700")).toBe("OMEGA 700MB");
+    expect(isobaricCode("thetae850")).toBe("THETAE 850MB");
   });
 
   it("writes the instrument code from the family and the level", () => {

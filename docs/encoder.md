@@ -257,7 +257,7 @@ Every source, on real runs, with every artifact compared byte for byte:
 
 | Source | What it exercises |
 |---|---|
-| GFS | the plain path, plus the two-variable wind bundle |
+| GFS | the plain path, the two-variable wind bundles, the derived vapour flux and the derived 850 hPa equivalent potential temperature (`exp` / `ln` / `pow` on both sides, still byte-identical), and the surface diagnostics |
 | ECMWF | de-accumulating `tp`, and the shorter prate axis that follows |
 | GFS-SFLUX | de-averaging `prate_ave`, the Gaussian grid, the -180 column roll, `dswrf` |
 | GFS, cropped | `--bbox` with `--bundles`, and `manifest.json` |

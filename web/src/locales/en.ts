@@ -30,6 +30,13 @@ export const en = {
   varGust: "SFC",
   varCloud: "TOTAL",
   varCape: "SFC",
+  /** Visibility is a surface field; the dew point and apparent temperature
+   * are 2 m fields; the two upper-air families name their quantity. */
+  varVis: "SFC",
+  varDewPoint: "2M",
+  varFeelsLike: "2M",
+  varOmega: "VERT",
+  varThetaE: "EQUIV",
   /** The upper-air families' tiles: relative humidity and the water vapour
    * flux have no surface member, so the gloss names the field rather than a
    * level. */
@@ -63,6 +70,13 @@ export const en = {
   glyphGust: "G",
   glyphTcdc: "N",
   glyphCape: "C",
+  // ω and θ are the symbols the two upper-air quantities are written with
+  // in every script; the surface fields take their initials.
+  glyphVis: "V",
+  glyphDpt2m: "D",
+  glyphAptmp2m: "A",
+  glyphVvel: "ω",
+  glyphThetae: "θ",
   glyphPressure: "P",
   // U is the WMO symbol for relative humidity; the vapour flux takes the F
   // of flux.
@@ -77,6 +91,9 @@ export const en = {
   tipWind: "Wind",
   tipPressure: "Pressure and geopotential height",
   tipVapourFlux: "Water vapour flux",
+  tipCloud: "Cloud cover",
+  tipOmega: "Vertical velocity",
+  tipThetaE: "Equivalent potential temperature",
   levelSwitchAria: "Level",
   levelCaption: "LEVEL",
   /** The level row's caption for the lines' group when the fill has a level
@@ -183,6 +200,12 @@ export const en = {
   varLabelGust: "Wind gust",
   varLabelTcdc: "Total cloud cover",
   varLabelCape: "Convective available potential energy",
+  varLabelVis: "Visibility",
+  varLabelDpt2m: "2 m dew point",
+  varLabelAptmp2m: "2 m apparent temperature",
+  varLabelLcdc: "Low cloud cover",
+  varLabelMcdc: "Middle cloud cover",
+  varLabelHcdc: "High cloud cover",
   varLabelPrmsl: "Mean sea level pressure",
   // One string for eight levels: pressure.ts and levels.ts substitute {level}.
   varLabelHeightAtLevel: "{level} hPa geopotential height",
@@ -191,6 +214,8 @@ export const en = {
   varLabelSpfhAtLevel: "{level} hPa specific humidity",
   varLabelWindAtLevel: "{level} hPa wind",
   varLabelQfluxAtLevel: "{level} hPa water vapour flux",
+  varLabelVvelAtLevel: "{level} hPa vertical velocity",
+  varLabelThetaeAtLevel: "{level} hPa equivalent potential temperature",
   // The 5880 gpm contour, "588" on a Chinese chart — the line the western
   // Pacific subtropical high is defined by.
   legendSubtropicalHigh: "588 line",

@@ -82,5 +82,173 @@
       "maximumCode": 127,
       "nodataCode": 255
     }
+  },
+  "vis": {
+    "label": "Visibility",
+    "unit": "km",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 19,
+      "parameterNumber": 0,
+      "typeOfFirstFixedSurface": 1,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 0
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.1,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.2,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "dpt2m": {
+    "label": "2 meter dew point temperature",
+    "unit": "°C",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 0,
+      "parameterNumber": 6,
+      "typeOfFirstFixedSurface": 103,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 2
+    },
+    "quality": {
+      "type": "linear",
+      "offset": -70.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 220,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -70.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 110,
+      "nodataCode": 255
+    }
+  },
+  "aptmp2m": {
+    "label": "2 meter apparent temperature",
+    "unit": "°C",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 0,
+      "parameterNumber": 21,
+      "typeOfFirstFixedSurface": 103,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 2
+    },
+    "quality": {
+      "type": "linear",
+      "offset": -90.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 150,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -90.0,
+      "scale": 2.0,
+      "minimumCode": 0,
+      "maximumCode": 75,
+      "nodataCode": 255
+    }
+  },
+  "lcdc": {
+    "label": "Low cloud cover",
+    "unit": "%",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 6,
+      "parameterNumber": 3,
+      "typeOfFirstFixedSurface": 214,
+      "scaleFactorOfFirstFixedSurface": null,
+      "scaledValueOfFirstFixedSurface": null
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 200,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 100,
+      "nodataCode": 255
+    }
+  },
+  "mcdc": {
+    "label": "Middle cloud cover",
+    "unit": "%",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 6,
+      "parameterNumber": 4,
+      "typeOfFirstFixedSurface": 224,
+      "scaleFactorOfFirstFixedSurface": null,
+      "scaledValueOfFirstFixedSurface": null
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 200,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 100,
+      "nodataCode": 255
+    }
+  },
+  "hcdc": {
+    "label": "High cloud cover",
+    "unit": "%",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 6,
+      "parameterNumber": 5,
+      "typeOfFirstFixedSurface": 234,
+      "scaleFactorOfFirstFixedSurface": null,
+      "scaledValueOfFirstFixedSurface": null
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 200,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 100,
+      "nodataCode": 255
+    }
   }
 }

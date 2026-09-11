@@ -57,6 +57,22 @@ pub fn vector_components(bundle_id: &str) -> Option<(String, String)> {
     None
 }
 
+/// The isobaric surface of a `thetae<level>` bundle — the equivalent
+/// potential temperature the converter derives from the temperature and the
+/// specific humidity there — or `None`. Mirrors `DERIVED_SCALARS` /
+/// `theta_e_level` in `xuebuild/binconvert.py`.
+pub fn theta_e_level(bundle_id: &str) -> Option<u32> {
+    let level: u32 = bundle_id.strip_prefix("thetae")?.parse().ok()?;
+    ISOBARIC_LEVELS_HPA.contains(&level).then_some(level)
+}
+
+/// The source inputs a derived scalar is built from, or `None` for a scalar
+/// read from a record.
+pub fn derived_scalar_inputs(bundle_id: &str) -> Option<Vec<String>> {
+    let level = theta_e_level(bundle_id)?;
+    Some(vec![format!("tmp{level}"), format!("spfh{level}")])
+}
+
 /// The isobaric surface of a `qflux<level>` bundle, or `None`.
 pub fn vapour_flux_level(bundle_id: &str) -> Option<u32> {
     let level: u32 = bundle_id.strip_prefix("qflux")?.parse().ok()?;
@@ -223,6 +239,9 @@ pub fn bundle_input_ids(source: &SourceSpec, bundle_id: &str) -> Vec<String> {
     if vector_components(bundle_id).is_some() {
         return vector_input_ids(bundle_id);
     }
+    if let Some(inputs) = derived_scalar_inputs(bundle_id) {
+        return inputs;
+    }
     if bundle_id == "prate" {
         return source
             .input_variable_ids
@@ -237,9 +256,19 @@ pub fn bundle_input_ids(source: &SourceSpec, bundle_id: &str) -> Vec<String> {
 }
 
 /// Every bundle a source can publish, in manifest order: its scalars, then
-/// each listed vector bundle whose inputs the source fetches.
+/// each listed vector bundle whose inputs the source fetches. A derived
+/// scalar counts the same way — listed, it ships only when its inputs are.
 pub fn published_bundle_ids(source: &SourceSpec) -> Vec<&'static str> {
-    let mut ids: Vec<&'static str> = source.bundle_scalar_ids.to_vec();
+    let mut ids: Vec<&'static str> = source
+        .bundle_scalar_ids
+        .iter()
+        .copied()
+        .filter(|bundle_id| {
+            bundle_input_ids(source, bundle_id)
+                .iter()
+                .all(|id| source.input_variable_ids.contains(&id.as_str()))
+        })
+        .collect();
     for bundle_id in source.bundle_vector_ids {
         let inputs = vector_input_ids(bundle_id);
         if inputs
@@ -373,7 +402,9 @@ pub fn deaverage_precipitation(
 
 fn convert_units(variable_id: &str, unit: &str, values: &mut [f64]) -> Result<()> {
     match variable_id {
-        "tmp2m" => match normalize_unit(unit)? {
+        // The 2 m temperature, dew point and apparent temperature all take
+        // the Celsius rule.
+        "tmp2m" | "dpt2m" | "aptmp2m" => match normalize_unit(unit)? {
             "K" => values.iter_mut().for_each(|value| *value -= 273.15),
             "F" => values
                 .iter_mut()
@@ -387,6 +418,8 @@ fn convert_units(variable_id: &str, unit: &str, values: &mut [f64]) -> Result<()
         // GRIB2 carries mean sea level pressure in pascals; the codebook
         // quantizes hectopascals.
         "prmsl" => values.iter_mut().for_each(|value| *value /= 100.0),
+        // GRIB2 carries visibility in metres; the codebook quantizes km.
+        "vis" => values.iter_mut().for_each(|value| *value /= 1000.0),
         other => match isobaric_variable(other) {
             // Isobaric temperature follows the 2 m rule.
             Some(("tmp", _)) => match normalize_unit(unit)? {
@@ -399,12 +432,44 @@ fn convert_units(variable_id: &str, unit: &str, values: &mut [f64]) -> Result<()
             // GRIB2 carries specific humidity as a mass ratio (kg/kg); the
             // codebook quantizes g/kg.
             Some(("spfh", _)) => values.iter_mut().for_each(|value| *value *= 1000.0),
-            // Wind components, geopotential heights and relative humidity
-            // are already in their output units (m/s, m, %).
+            // Wind components, geopotential heights, relative humidity,
+            // cloud cover, CAPE and vertical velocity are already in their
+            // output units.
             _ => {}
         },
     }
     Ok(())
+}
+
+/// The smallest specific humidity the derivation sees, in kg/kg: a dry
+/// stratospheric cell can carry zero, whose vapour pressure has no logarithm.
+const THETA_E_MINIMUM_Q: f64 = 1e-7;
+
+/// The equivalent potential temperature on one isobaric surface, in K, from
+/// the temperature already in °C and the specific humidity already in g/kg
+/// there: Bolton (1980) eq. 43 with its own lifting-condensation-level
+/// temperature (eq. 15) and the dew point inverted from its eq. 10. Every
+/// operation runs in the exact order `derive_theta_e` in
+/// `xuebuild/binconvert.py` runs it, in f64, which is what keeps the two
+/// encoders byte-identical on a field neither reads from a record.
+pub fn derive_theta_e(temperature: &[f64], specific_humidity: &[f64], level_hpa: u32) -> Vec<f64> {
+    let p = f64::from(level_hpa);
+    temperature
+        .iter()
+        .zip(specific_humidity)
+        .map(|(temperature_c, humidity_g)| {
+            let t = temperature_c + 273.15;
+            let q = (humidity_g / 1000.0).max(THETA_E_MINIMUM_Q);
+            let r = q / (1.0 - q);
+            let e = p * r / (0.622 + r);
+            let ln_e = (e / 6.112).ln();
+            let dew_point = 243.5 * ln_e / (17.67 - ln_e) + 273.15;
+            let t_lcl = 1.0 / (1.0 / (dew_point - 56.0) + (t / dew_point).ln() / 800.0) + 56.0;
+            let theta = t * (1000.0 / p).powf(0.2854 * (1.0 - 0.28 * r));
+            let r_g = r * 1000.0;
+            theta * ((3.376 / t_lcl - 0.00254) * r_g * (1.0 + 0.00081 * r_g)).exp()
+        })
+        .collect()
 }
 
 /// The water vapour flux components on one isobaric surface, q·V/g in
@@ -536,6 +601,7 @@ fn quantize_file(
     own: Option<Arc<PlaneSlot>>,
     derived_vector_ids: &[&str],
     drop_ids: &[String],
+    derived_scalar_ids: &[&str],
 ) -> Result<QuantizedFile> {
     let lead = frames[0].1.lead_seconds;
     // The precipitation derivations below are GRIB-only, and every GRIB record
@@ -617,6 +683,21 @@ fn quantize_file(
         let (u_id, v_id) = vector_components(bundle_id).expect("a vapour flux bundle is a vector");
         values.push((u_id, flux_u));
         values.push((v_id, flux_v));
+    }
+    // The equivalent potential temperatures, after the vapour flux and
+    // before the derivation-only inputs go: both read the specific humidity.
+    for bundle_id in derived_scalar_ids {
+        let inputs = derived_scalar_inputs(bundle_id).expect("a derived scalar");
+        let level = theta_e_level(bundle_id).expect("a derived scalar has a level");
+        let plane = |name: &str| -> Result<&Vec<f64>> {
+            values
+                .iter()
+                .find(|(id, _)| id == name)
+                .map(|(_, plane)| plane)
+                .ok_or_else(|| EncodeError::conversion(format!("missing {name} plane for {bundle_id}")))
+        };
+        let derived = derive_theta_e(plane(&inputs[0])?, plane(&inputs[1])?, level);
+        values.push(((*bundle_id).to_string(), derived));
     }
     values.retain(|(name, _)| !drop_ids.contains(name));
 
@@ -948,6 +1029,7 @@ pub fn convert_bin(
     let mut per_file: Vec<FileFrames>;
     let variable_ids: Vec<String>;
     let available_vector_ids: Vec<&'static str>;
+    let available_derived_ids: Vec<&'static str>;
     let drop_ids: Vec<String>;
     let grid_path: PathBuf;
     let plane_source: PlaneSource;
@@ -994,6 +1076,7 @@ pub fn convert_bin(
             .map(|id| (*id).to_string())
             .collect();
         available_vector_ids = Vec::new();
+        available_derived_ids = Vec::new();
         drop_ids = Vec::new();
         grid_path = series.dataset;
         plane_source = series.plane_source;
@@ -1023,13 +1106,27 @@ pub fn convert_bin(
                     .is_none_or(|ids| ids.iter().any(|wanted| wanted == id))
             })
             .collect();
-        // An input that only feeds a vector bundle may be absent; one that is
-        // also a published scalar may not.
-        let vector_only_ids: Vec<String> = requested_vector_ids
+        let requested_derived_ids: Vec<&'static str> = published
             .iter()
-            .flat_map(|bundle_id| vector_input_ids(bundle_id))
-            .filter(|id| !source.bundle_scalar_ids.contains(&id.as_str()))
+            .copied()
+            .filter(|id| derived_scalar_inputs(id).is_some())
+            .filter(|id| {
+                options
+                    .bundle_ids
+                    .as_ref()
+                    .is_none_or(|ids| ids.iter().any(|wanted| wanted == id))
+            })
             .collect();
+        // An input that only feeds a derivation — a vector bundle, a derived
+        // scalar — may be absent; one that is also a published scalar may not.
+        let mut vector_only_ids: Vec<String> = Vec::new();
+        for bundle_id in requested_vector_ids.iter().chain(&requested_derived_ids) {
+            for id in bundle_input_ids(source, bundle_id) {
+                if !source.bundle_scalar_ids.contains(&id.as_str()) && !vector_only_ids.contains(&id) {
+                    vector_only_ids.push(id);
+                }
+            }
+        }
         let mut optional: Vec<&str> = source.optional_at_analysis.to_vec();
         optional.extend(vector_only_ids.iter().map(String::as_str));
         let reference_frames = inspect_grib_multi(&paths[0], &inspect_ids, &optional)?;
@@ -1043,11 +1140,20 @@ pub fn convert_bin(
                     .all(|id| reference_frames.iter().any(|(name, _)| name == id))
             })
             .collect();
-        for bundle_id in &requested_vector_ids {
-            if !available_vector_ids.contains(bundle_id) {
+        available_derived_ids = requested_derived_ids
+            .iter()
+            .copied()
+            .filter(|bundle_id| {
+                bundle_input_ids(source, bundle_id)
+                    .iter()
+                    .all(|id| reference_frames.iter().any(|(name, _)| name == id))
+            })
+            .collect();
+        for bundle_id in requested_vector_ids.iter().chain(&requested_derived_ids) {
+            if !available_vector_ids.contains(bundle_id) && !available_derived_ids.contains(bundle_id) {
                 eprintln!(
                     "WARNING building without the {bundle_id} bundle, {} are not all in {}",
-                    vector_input_ids(bundle_id).join(", "),
+                    bundle_input_ids(source, bundle_id).join(", "),
                     paths[0].display()
                 );
             }
@@ -1063,8 +1169,8 @@ pub fn convert_bin(
             .map(|id| (*id).to_string())
             .collect();
         let scalar_count = ordered.len();
-        for bundle_id in &available_vector_ids {
-            for id in vector_input_ids(bundle_id) {
+        for bundle_id in available_vector_ids.iter().chain(&available_derived_ids) {
+            for id in bundle_input_ids(source, bundle_id) {
                 if !ordered.contains(&id) {
                     ordered.push(id);
                 }
@@ -1196,6 +1302,7 @@ pub fn convert_bin(
         .copied()
         .filter(|bundle_id| vapour_flux_level(bundle_id).is_some())
         .collect();
+    let derived_scalar_ids: Vec<&str> = available_derived_ids.clone();
     let results = for_each_ordered(per_file.len(), options.extract_workers, |index| {
         let (previous, own) = plan[index].clone();
         quantize_file(
@@ -1208,6 +1315,7 @@ pub fn convert_bin(
             own,
             &derived_vector_ids,
             &drop_ids,
+            &derived_scalar_ids,
         )
     })?;
 
@@ -1224,7 +1332,14 @@ pub fn convert_bin(
     );
 
     // -- what gets published -------------------------------------------------
-    let mut scalar_variable_ids: Vec<&str> = source.bundle_scalar_ids.to_vec();
+    // A derived scalar whose inputs the run lacked is left out like a vector
+    // bundle is.
+    let mut scalar_variable_ids: Vec<&str> = source
+        .bundle_scalar_ids
+        .iter()
+        .copied()
+        .filter(|id| derived_scalar_inputs(id).is_none() || available_derived_ids.contains(id))
+        .collect();
     if let Some(bundle_ids) = &options.bundle_ids {
         scalar_variable_ids.retain(|id| bundle_ids.iter().any(|wanted| wanted == id));
     }

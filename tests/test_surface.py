@@ -1,5 +1,6 @@
-"""The surface diagnostics: wind gust, total cloud cover and convective
-available potential energy.
+"""The surface diagnostics: wind gust, total / low / middle / high cloud
+cover, convective available potential energy, visibility, 2 m dew point and
+2 m apparent temperature.
 
 Like the pressure family and the upper-air fills before them, these add
 nothing to the container and everything to the registries: a GRIB2 identity,
@@ -9,9 +10,9 @@ numbers: this module regenerates and compares it, the Rust encoder's unit
 tests and the frontend's vitest read the same file, so a codebook can only
 move in all three at once.
 
-Registration is not publication: no source lists these yet, and the tests
-here say so, because publishing one means widening a source's input list and
-recutting the GRIB fixture the parity test builds from.
+GFS publishes them all; sflux and ECMWF none yet (ECMWF carries neighbours
+rather than equivalents of most — ``10fg`` is an interval maximum, ``tcc``
+a fraction — and needs its own matching rules first).
 """
 
 from __future__ import annotations
@@ -26,11 +27,12 @@ from xuebuild.errors import ConversionError
 from xuebuild.gdal import _band_matches, raster_expression
 from xuebuild.grib2 import MessageInfo, _matches
 from xuebuild.quantize import PROFILES, SURFACE_VARIABLE_IDS
-from xuebuild.sources import SOURCES
+from xuebuild.sources import source_spec
 from xuebuild.variables import variable_spec
 
 REGISTRY = Path(__file__).resolve().parent / "fixtures" / "surface-registry.json"
 EPOCH = datetime(2026, 1, 1, tzinfo=UTC)
+CLOUD_COVER_IDS = ("tcdc", "lcdc", "mcdc", "hcdc")
 
 
 def registry_entry(variable_id: str) -> dict:
@@ -59,9 +61,9 @@ class RegistryTests(unittest.TestCase):
     def test_balanced_is_quality_except_for_cloud_cover(self) -> None:
         # Cloud cover is relative humidity's kind of field — small-scale
         # structure everywhere, read in tens of percent — and takes the same
-        # 1 % step in production.
+        # 1 % step in production, the layers with the total.
         for variable_id in SURFACE_VARIABLE_IDS:
-            expected = "compact" if variable_id == "tcdc" else "quality"
+            expected = "compact" if variable_id in CLOUD_COVER_IDS else "quality"
             self.assertEqual(
                 PROFILES["balanced"][variable_id].metadata(),
                 PROFILES[expected][variable_id].metadata(),
@@ -73,12 +75,15 @@ class RegistryTests(unittest.TestCase):
             quality = PROFILES["quality"][variable_id]
             compact = PROFILES["compact"][variable_id]
             with self.subTest(variable=variable_id):
-                self.assertEqual(quality.minimum, 0.0, "every surface diagnostic is one-sided")
+                if variable_id not in ("dpt2m", "aptmp2m"):
+                    self.assertEqual(quality.minimum, 0.0, "one-sided, like every quantity but a temperature")
                 self.assertEqual(compact.minimum, quality.minimum)
                 self.assertEqual(compact.maximum, quality.maximum)
                 self.assertEqual(compact.step, quality.step * 2)
                 self.assertLessEqual(quality.maximum_code, 254)
-                self.assertGreaterEqual(quality.maximum_code, 200)
+                # The apparent temperature spends a whole degree over 150 K
+                # rather than half a degree over less.
+                self.assertGreaterEqual(quality.maximum_code, 150 if variable_id == "aptmp2m" else 200)
 
     def test_each_variable_is_registered_where_a_pgrb2_record_lives(self) -> None:
         gust = variable_spec("gust")
@@ -91,19 +96,33 @@ class RegistryTests(unittest.TestCase):
         self.assertEqual((tcdc.grib2_category, tcdc.grib2_number, tcdc.grib2_level_type), (6, 1, 10))
         self.assertIsNone(tcdc.grib2_level_value, "the entire atmosphere carries no surface value")
         self.assertEqual(tcdc.excluded_index_phrases, ("ave fcst",))
+        for layer, number, surface in (("lcdc", 3, 214), ("mcdc", 4, 224), ("hcdc", 5, 234)):
+            spec = variable_spec(layer)
+            self.assertEqual((spec.grib2_category, spec.grib2_number, spec.grib2_level_type), (6, number, surface))
+            self.assertIsNone(spec.grib2_level_value, "a cloud layer surface carries no value")
+            self.assertEqual(spec.excluded_index_phrases, ("ave fcst",))
+        vis = variable_spec("vis")
+        self.assertEqual((vis.grib2_category, vis.grib2_number, vis.grib2_level_type, vis.output_unit), (19, 0, 1, "km"))
+        for two_metre, number in (("dpt2m", 6), ("aptmp2m", 21)):
+            spec = variable_spec(two_metre)
+            self.assertEqual((spec.grib2_category, spec.grib2_number, spec.grib2_level_type, spec.grib2_level_value), (0, number, 103, 2.0))
+            self.assertEqual(spec.index_field, f":{spec.grib_element}:2 m above ground:")
         for variable_id in SURFACE_VARIABLE_IDS:
             spec = variable_spec(variable_id)
             self.assertIsNone(spec.grib2_statistical, f"{variable_id} is an instantaneous product")
-            self.assertEqual(spec.ecmwf_param, "", f"{variable_id} has no ECMWF matching rule yet")
+            # Only the dew point has an ECMWF equivalent under the same identity.
+            self.assertEqual(spec.ecmwf_param, "2d" if variable_id == "dpt2m" else "", variable_id)
 
-    def test_no_source_publishes_them_yet(self) -> None:
-        for source in SOURCES.values():
+    def test_gfs_publishes_them_and_the_other_sources_do_not_yet(self) -> None:
+        gfs = published_bundle_ids(source_spec("gfs"))
+        for variable_id in SURFACE_VARIABLE_IDS:
+            self.assertIn(variable_id, gfs)
+            self.assertNotIn(variable_id, VECTOR_BUNDLES)
+            self.assertNotIn(variable_id, VIDEO_VARIABLE_IDS)
+        for source in (source_spec("ecmwf"), source_spec("sflux"), source_spec("radar")):
             published = published_bundle_ids(source)
             for variable_id in SURFACE_VARIABLE_IDS:
                 self.assertNotIn(variable_id, published, source.id)
-                self.assertNotIn(variable_id, source.input_variable_ids, source.id)
-                self.assertNotIn(variable_id, VECTOR_BUNDLES)
-                self.assertNotIn(variable_id, VIDEO_VARIABLE_IDS)
 
 
 class MatcherTests(unittest.TestCase):
@@ -130,6 +149,20 @@ class MatcherTests(unittest.TestCase):
         self.assertFalse(_matches(variable_spec("tcdc"), message(6, 1, 214, None, None)), "the low cloud layer")
 
     def test_gdal_bands_match_on_element_and_surface(self) -> None:
+        self.assertTrue(_band_matches("vis", {"GRIB_ELEMENT": "VIS", "GRIB_SHORT_NAME": "0-SFC"}, ""))
+        self.assertTrue(_band_matches("dpt2m", {"GRIB_ELEMENT": "DPT", "GRIB_SHORT_NAME": "2-HTGL"}, ""))
+        self.assertTrue(_band_matches("aptmp2m", {"GRIB_ELEMENT": "APTMP", "GRIB_COMMENT": "2 m above ground"}, ""))
+        self.assertFalse(_band_matches("dpt2m", {"GRIB_ELEMENT": "TMP", "GRIB_SHORT_NAME": "2-HTGL"}, ""))
+        self.assertFalse(_band_matches("tmp2m", {"GRIB_ELEMENT": "DPT", "GRIB_SHORT_NAME": "2-HTGL"}, ""))
+        for layer, element, short_name, phrase in (
+            ("lcdc", "LCDC", "0-LCY", "Low cloud level"),
+            ("mcdc", "MCDC", "0-MCY", "Middle cloud level"),
+            ("hcdc", "HCDC", "0-HCY", "High cloud level"),
+        ):
+            self.assertTrue(_band_matches(layer, {"GRIB_ELEMENT": element, "GRIB_SHORT_NAME": short_name}, ""))
+            self.assertTrue(_band_matches(layer, {"GRIB_ELEMENT": element}, f'0[-] {short_name[2:]}="{phrase}"'))
+            self.assertFalse(_band_matches(layer, {"GRIB_ELEMENT": "TCDC", "GRIB_SHORT_NAME": short_name}, ""))
+            self.assertFalse(_band_matches(layer, {"GRIB_ELEMENT": element, "GRIB_SHORT_NAME": "0-EATM"}, ""))
         self.assertTrue(_band_matches("gust", {"GRIB_ELEMENT": "GUST", "GRIB_SHORT_NAME": "0-SFC"}, ""))
         self.assertTrue(_band_matches("gust", {"GRIB_ELEMENT": "GUST"}, '0[-] SFC="Ground or water surface"'))
         self.assertFalse(_band_matches("gust", {"GRIB_ELEMENT": "GUST", "GRIB_SHORT_NAME": "10-HTGL"}, ""))
@@ -150,7 +183,12 @@ class MatcherTests(unittest.TestCase):
         self.assertEqual(raster_expression("gust", "[m/s]"), "maximum(0,minimum(127,A))")
         self.assertEqual(raster_expression("tcdc", "[%]"), "maximum(0,minimum(100,A))")
         self.assertEqual(raster_expression("cape", "[J/kg]"), "maximum(0,minimum(6350,A))")
-        for variable_id, unit in (("gust", "km/h"), ("tcdc", "kg/kg"), ("cape", "m^2/s^2")):
+        self.assertEqual(raster_expression("vis", "[m]"), "A/1000")
+        self.assertEqual(raster_expression("dpt2m", "[C]"), "maximum(-70,minimum(40,A))")
+        self.assertEqual(raster_expression("dpt2m", "K"), "maximum(-70,minimum(40,A-273.15))")
+        self.assertEqual(raster_expression("aptmp2m", "[C]"), "maximum(-90,minimum(60,A))")
+        self.assertEqual(raster_expression("lcdc", "[%]"), raster_expression("tcdc", "[%]"))
+        for variable_id, unit in (("gust", "km/h"), ("tcdc", "kg/kg"), ("cape", "m^2/s^2"), ("vis", "km"), ("dpt2m", "%")):
             with self.assertRaises(ConversionError):
                 raster_expression(variable_id, unit)
 

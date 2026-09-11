@@ -3,8 +3,10 @@ run directory, manifest identity, and time axis are named.
 
 The models share one output contract: whatever the source, the bundles carry
 the same data variable ids (tmp2m, prate, ugrd10m/vgrd10m, on sflux also
-dswrf, and on GFS and ECMWF the pressure family and the upper-air fills) so
-the decoder and frontend never care which model produced them.
+dswrf, on GFS and ECMWF the pressure family and the upper-air fills, and on
+GFS alone — for now — the surface diagnostics, the vertical velocity and the
+850 hPa equivalent potential temperature) so the decoder and frontend never
+care which model produced them.
 Not every source is a forecast: an ``observation`` source (the CMA radar
 mosaic) is a local file holding a series of observed analyses, with no cycle
 to fetch, no live pointer, and an axis that is whatever times the file
@@ -139,9 +141,14 @@ SOURCES: dict[str, SourceSpec] = {
         # and 500 hPa temperature, 850, 700 and 500 hPa relative humidity,
         # the 925 and 850 hPa winds with the water vapour flux derived from
         # the 850 hPa one and the specific humidity there (so spfh850 is
-        # fetched as an input only), and the 250 hPa wind for the jet. Every
-        # other registered level stays unpublished, which keeps the fetch at
-        # twenty-two GRIB records per frame.
+        # fetched as an input only — it also feeds the 850 hPa equivalent
+        # potential temperature the converter derives), and the 250 hPa wind
+        # for the jet. Then the surface diagnostics — gust, the total and
+        # the three cloud layers, CAPE, visibility, dew point and apparent
+        # temperature — and the vertical velocity on the three surfaces a
+        # rainfall chart reads ascent on. Every other registered level stays
+        # unpublished, which keeps the fetch at thirty-four GRIB records per
+        # frame.
         input_variable_ids=(
             "tmp2m",
             "prate",
@@ -165,6 +172,18 @@ SOURCES: dict[str, SourceSpec] = {
             "vgrd850",
             "ugrd250",
             "vgrd250",
+            "gust",
+            "tcdc",
+            "lcdc",
+            "mcdc",
+            "hcdc",
+            "cape",
+            "vis",
+            "dpt2m",
+            "aptmp2m",
+            "vvel850",
+            "vvel700",
+            "vvel500",
         ),
         accumulated_precipitation=False,
         bundle_scalar_ids=(
@@ -181,6 +200,19 @@ SOURCES: dict[str, SourceSpec] = {
             "rh850",
             "rh700",
             "rh500",
+            "gust",
+            "tcdc",
+            "lcdc",
+            "mcdc",
+            "hcdc",
+            "cape",
+            "vis",
+            "dpt2m",
+            "aptmp2m",
+            "vvel850",
+            "vvel700",
+            "vvel500",
+            "thetae850",
         ),
         bundle_vector_ids=("wind10m", "wind925", "wind850", "wind250", "qflux850"),
     ),

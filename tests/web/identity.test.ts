@@ -92,8 +92,8 @@ describe("identityForParameter", () => {
   });
 
   it("returns null for a parameter this build has no chart knowledge for", () => {
-    // Visibility: a real field, not one we draw.
-    expect(identityForParameter(parameter(0, 19, 0, 1, 0))).toBeNull();
+    // Total ozone: a real field, not one we draw.
+    expect(identityForParameter(parameter(0, 14, 0, 1, 0))).toBeNull();
     // The right triple on the wrong surface is not the same field.
     expect(identityForParameter(parameter(0, 0, 0, 103, 100))).toBeNull();
     expect(identityForParameter(parameter(0, 1, 7, 100, 85_000))).toBeNull();
@@ -173,7 +173,7 @@ describe("identifyBundle", () => {
   it("returns null for a bundle nothing in the file places", () => {
     expect(identifyBundle([])).toBeNull();
     expect(identifyBundle([variable(1, "gust10m")])).toBeNull();
-    expect(identifyBundle([variable(1, "vis", parameter(0, 19, 0, 1, 0))])).toBeNull();
+    expect(identifyBundle([variable(1, "tozne", parameter(0, 14, 0, 1, 0))])).toBeNull();
   });
 });
 
@@ -185,7 +185,7 @@ describe("identityForBundleId", () => {
     expect(identityForBundleId("hgt500")).toEqual({ family: "hgt", level: 500, vector: false });
     expect(identityForBundleId("qflux850")).toEqual({ family: "qflux", level: 850, vector: true });
     expect(identityForBundleId("gust10m")).toBeNull();
-    expect(identityForBundleId("vis")).toBeNull();
+    expect(identityForBundleId("tozne")).toBeNull();
   });
 
   it("agrees with the parameter block on every id the encoders publish", () => {

@@ -38,8 +38,9 @@ describe("the surface diagnostic registry", () => {
     for (const id of SURFACE_DIAGNOSTIC_IDS) {
       expect(KNOWN_BUNDLE_IDS).toContain(id);
       expect(isVectorBundle(id)).toBe(false);
-      // Single layers: no family, no level row.
-      expect(familyOf(id)).toBeNull();
+      // Single layers with no family and no level row — except the cloud
+      // covers, which the level row picks among as one family.
+      expect(familyOf(id)).toBe(id.endsWith("cdc") ? "cloud" : null);
     }
   });
 
@@ -60,7 +61,7 @@ describe("the surface diagnostic registry", () => {
       const { offset, scale, maximumCode } = registry[id]!.quality;
       const identity = identityForBundleId(id)!;
       const [low, high] = scalarLegendRange(identity)!;
-      expect(low).toBe(offset);
+      expect(low).toBeGreaterThanOrEqual(offset);
       expect(high).toBeLessThanOrEqual(offset + scale * maximumCode);
       // Six ticks, high to low, the top one at the chart ceiling.
       const legend = isobaricLegend(identity)!;
@@ -74,6 +75,10 @@ describe("the surface diagnostic registry", () => {
     expect(scalarLegendRange(identityForBundleId("gust")!)).toEqual([0, GUST_SPEED_MAX]);
     expect(scalarLegendRange(identityForBundleId("tcdc")!)).toEqual([0, 100]);
     expect(scalarLegendRange(identityForBundleId("cape")!)).toEqual([0, CAPE_CHART_MAX]);
+    expect(scalarLegendRange(identityForBundleId("vis")!)).toEqual([0, 25]);
+    expect(scalarLegendRange(identityForBundleId("dpt2m")!)).toEqual([-30, 30]);
+    expect(scalarLegendRange(identityForBundleId("aptmp2m")!)).toEqual([-50, 50]);
+    for (const layer of ["lcdc", "mcdc", "hcdc"]) expect(scalarLegendRange(identityForBundleId(layer)!)).toEqual([0, 100]);
     // The cloud legend is the codebook's whole span; the other two saturate
     // short of theirs, so a probe still tells the extreme apart.
     expect(GUST_SPEED_MAX).toBeLessThan(registry.gust!.quality.scale * registry.gust!.quality.maximumCode);
@@ -147,6 +152,34 @@ describe("the surface diagnostic registry", () => {
     const gradient = legendGradient(cape, 0, Math.round(CAPE_CHART_MAX / 25));
     expect(gradient.startsWith("linear-gradient(to bottom, rgba(90, 30, 130, 1.000)")).toBe(true);
     expect(gradient.endsWith("rgba(250, 240, 180, 0.000))")).toBe(true);
+  });
+
+  it("paints reduced visibility and leaves clear air to the map", () => {
+    const vis = buildPalette(bundleVariable("vis"));
+    const at = (km: number) => [...vis.subarray(km * 10 * 4, km * 10 * 4 + 4)];
+    // Fog is the most saturated, and opaque; clear air past ten kilometres
+    // is nothing at all.
+    expect(at(0)[3]).toBeGreaterThan(240);
+    expect(at(1)[3]).toBeGreaterThan(200);
+    expect(at(10)[3]).toBe(0);
+    expect(at(25)[3]).toBe(0);
+    // Alpha falls monotonically as visibility improves.
+    for (let code = 1; code <= 100; code += 1) expect(vis[code * 4 + 3]).toBeLessThanOrEqual(vis[(code - 1) * 4 + 3]!);
+  });
+
+  it("reads the dew point as moisture and the apparent temperature as a temperature", () => {
+    const dew = buildPalette(bundleVariable("dpt2m"));
+    const code = (celsius: number) => Math.round((celsius + 70) / 0.5);
+    // Arid brown, humid blue: red dominates the dry end, blue the moist one.
+    expect(dew[code(-25) * 4]).toBeGreaterThan(dew[code(-25) * 4 + 2]!);
+    expect(dew[code(28) * 4 + 2]).toBeGreaterThan(dew[code(28) * 4]!);
+    // Opaque throughout: the field covers everything.
+    for (let c = 0; c <= 220; c += 1) expect(dew[c * 4 + 3]).toBeGreaterThan(230);
+    // The same 30 °C is the same colour on the temperature and the
+    // apparent temperature, because it is the same ramp.
+    const apparent = buildPalette(bundleVariable("aptmp2m"));
+    const temperature = buildPalette({ ...bundleVariable("aptmp2m"), id: "tmp2m", parameter: undefined, quantization: { type: "linear", offset: -60, scale: 0.5, minimumCode: 0, maximumCode: 220, nodataCode: 255 } });
+    expect([...apparent.subarray(120 * 4, 120 * 4 + 4)]).toEqual([...temperature.subarray(180 * 4, 180 * 4 + 4)]);
   });
 
   it("decodes every valid code and no reserved one", () => {

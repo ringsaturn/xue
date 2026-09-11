@@ -195,6 +195,62 @@
       "nodataCode": 255
     }
   },
+  "vvel1000": {
+    "label": "1000 hPa vertical velocity",
+    "unit": "Pa/s",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 2,
+      "parameterNumber": 8,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 100000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": -6.35,
+      "scale": 0.05,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -6.35,
+      "scale": 0.1,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "thetae1000": {
+    "label": "1000 hPa equivalent potential temperature",
+    "unit": "K",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 0,
+      "parameterNumber": 3,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 100000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 235.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 235.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
   "tmp925": {
     "label": "925 hPa temperature",
     "unit": "°C",
@@ -385,6 +441,62 @@
     "compact": {
       "type": "linear",
       "offset": -63.5,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "vvel925": {
+    "label": "925 hPa vertical velocity",
+    "unit": "Pa/s",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 2,
+      "parameterNumber": 8,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 92500
+    },
+    "quality": {
+      "type": "linear",
+      "offset": -6.35,
+      "scale": 0.05,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -6.35,
+      "scale": 0.1,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "thetae925": {
+    "label": "925 hPa equivalent potential temperature",
+    "unit": "K",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 0,
+      "parameterNumber": 3,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 92500
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 232.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 232.0,
       "scale": 1.0,
       "minimumCode": 0,
       "maximumCode": 127,
@@ -587,6 +699,62 @@
       "nodataCode": 255
     }
   },
+  "vvel850": {
+    "label": "850 hPa vertical velocity",
+    "unit": "Pa/s",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 2,
+      "parameterNumber": 8,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 85000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": -6.35,
+      "scale": 0.05,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -6.35,
+      "scale": 0.1,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "thetae850": {
+    "label": "850 hPa equivalent potential temperature",
+    "unit": "K",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 0,
+      "parameterNumber": 3,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 85000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 230.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 230.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
   "tmp700": {
     "label": "700 hPa temperature",
     "unit": "°C",
@@ -777,6 +945,62 @@
     "compact": {
       "type": "linear",
       "offset": -63.5,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "vvel700": {
+    "label": "700 hPa vertical velocity",
+    "unit": "Pa/s",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 2,
+      "parameterNumber": 8,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 70000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": -6.35,
+      "scale": 0.05,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -6.35,
+      "scale": 0.1,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "thetae700": {
+    "label": "700 hPa equivalent potential temperature",
+    "unit": "K",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 0,
+      "parameterNumber": 3,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 70000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 235.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 235.0,
       "scale": 1.0,
       "minimumCode": 0,
       "maximumCode": 127,
@@ -979,6 +1203,62 @@
       "nodataCode": 255
     }
   },
+  "vvel500": {
+    "label": "500 hPa vertical velocity",
+    "unit": "Pa/s",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 2,
+      "parameterNumber": 8,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 50000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": -6.35,
+      "scale": 0.05,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -6.35,
+      "scale": 0.1,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "thetae500": {
+    "label": "500 hPa equivalent potential temperature",
+    "unit": "K",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 0,
+      "parameterNumber": 3,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 50000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 250.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 250.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
   "tmp300": {
     "label": "300 hPa temperature",
     "unit": "°C",
@@ -1169,6 +1449,62 @@
     "compact": {
       "type": "linear",
       "offset": -63.5,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "vvel300": {
+    "label": "300 hPa vertical velocity",
+    "unit": "Pa/s",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 2,
+      "parameterNumber": 8,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 30000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": -6.35,
+      "scale": 0.05,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -6.35,
+      "scale": 0.1,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "thetae300": {
+    "label": "300 hPa equivalent potential temperature",
+    "unit": "K",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 0,
+      "parameterNumber": 3,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 30000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 285.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 285.0,
       "scale": 1.0,
       "minimumCode": 0,
       "maximumCode": 127,
@@ -1371,6 +1707,62 @@
       "nodataCode": 255
     }
   },
+  "vvel250": {
+    "label": "250 hPa vertical velocity",
+    "unit": "Pa/s",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 2,
+      "parameterNumber": 8,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 25000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": -6.35,
+      "scale": 0.05,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -6.35,
+      "scale": 0.1,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "thetae250": {
+    "label": "250 hPa equivalent potential temperature",
+    "unit": "K",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 0,
+      "parameterNumber": 3,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 25000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 295.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 295.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
   "tmp200": {
     "label": "200 hPa temperature",
     "unit": "°C",
@@ -1561,6 +1953,62 @@
     "compact": {
       "type": "linear",
       "offset": -63.5,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "vvel200": {
+    "label": "200 hPa vertical velocity",
+    "unit": "Pa/s",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 2,
+      "parameterNumber": 8,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 20000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": -6.35,
+      "scale": 0.05,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -6.35,
+      "scale": 0.1,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "thetae200": {
+    "label": "200 hPa equivalent potential temperature",
+    "unit": "K",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 0,
+      "parameterNumber": 3,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 20000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 305.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 305.0,
       "scale": 1.0,
       "minimumCode": 0,
       "maximumCode": 127,

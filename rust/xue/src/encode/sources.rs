@@ -109,12 +109,16 @@ pub const SOURCES: &[SourceSpec] = &[
         // 850 and 500 hPa temperature, 850, 700 and 500 hPa relative
         // humidity, the 925 and 850 hPa winds with the vapour flux derived
         // from the 850 hPa one and the specific humidity there (fetched as
-        // an input only), and the 250 hPa wind for the jet. Mirrors
+        // an input only — it also feeds the 850 hPa equivalent potential
+        // temperature), and the 250 hPa wind for the jet; then the surface
+        // diagnostics and the vertical velocity on three surfaces. Mirrors
         // `xuebuild/sources.py`.
         input_variable_ids: &[
             "tmp2m", "prate", "ugrd10m", "vgrd10m", "prmsl", "hgt850", "hgt700", "hgt500",
             "hgt250", "tmp925", "tmp850", "tmp500", "rh850", "rh700", "rh500", "spfh850",
-            "ugrd925", "vgrd925", "ugrd850", "vgrd850", "ugrd250", "vgrd250",
+            "ugrd925", "vgrd925", "ugrd850", "vgrd850", "ugrd250", "vgrd250", "gust", "tcdc",
+            "lcdc", "mcdc", "hcdc", "cape", "vis", "dpt2m", "aptmp2m", "vvel850", "vvel700",
+            "vvel500",
         ],
         accumulated_precipitation: false,
         averaged_precipitation: false,
@@ -122,7 +126,8 @@ pub const SOURCES: &[SourceSpec] = &[
         optional_at_analysis: &[],
         bundle_scalar_ids: &[
             "tmp2m", "prate", "prmsl", "hgt850", "hgt700", "hgt500", "hgt250", "tmp925", "tmp850",
-            "tmp500", "rh850", "rh700", "rh500",
+            "tmp500", "rh850", "rh700", "rh500", "gust", "tcdc", "lcdc", "mcdc", "hcdc", "cape",
+            "vis", "dpt2m", "aptmp2m", "vvel850", "vvel700", "vvel500", "thetae850",
         ],
         bundle_vector_ids: &["wind10m", "wind925", "wind850", "wind250", "qflux850"],
         production_grid: (1440, 721),

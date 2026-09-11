@@ -78,6 +78,23 @@ VECTOR_BUNDLES: dict[str, tuple[str, str]] = {
 }
 
 
+# Scalar bundles the converter derives rather than reads: the equivalent
+# potential temperature on each isobaric surface, from the temperature and
+# the specific humidity there. Like a vapour flux bundle, listing one in a
+# source's scalars publishes it only when every input is fetched, and an
+# input that serves only the derivation is released once it is done.
+DERIVED_SCALARS: dict[str, tuple[str, ...]] = {
+    f"thetae{level}": (f"tmp{level}", f"spfh{level}") for level in ISOBARIC_LEVELS_HPA
+}
+
+
+def theta_e_level(bundle_id: str) -> int | None:
+    """The isobaric surface of a ``thetae<level>`` bundle, or None."""
+    if bundle_id in DERIVED_SCALARS:
+        return int(bundle_id[len("thetae") :])
+    return None
+
+
 def vapour_flux_level(bundle_id: str) -> int | None:
     """The isobaric surface of a ``qflux<level>`` bundle, or None."""
     if bundle_id.startswith("qflux") and bundle_id in VECTOR_BUNDLES:
@@ -223,6 +240,8 @@ def bundle_input_ids(source: SourceSpec, bundle_id: str) -> tuple[str, ...]:
     """The source input variables one published bundle is built from."""
     if bundle_id in VECTOR_BUNDLES:
         return vector_input_ids(bundle_id)
+    if bundle_id in DERIVED_SCALARS:
+        return DERIVED_SCALARS[bundle_id]
     if bundle_id == "prate":
         return (next(vid for vid in source.input_variable_ids if vid in PRECIPITATION_INPUT_IDS),)
     return (bundle_id,)
@@ -235,13 +254,20 @@ def series_lead_seconds(frames: dict[str, SourceFrame]) -> int:
 
 def published_bundle_ids(source: SourceSpec) -> tuple[str, ...]:
     """Every bundle a source can publish, in manifest order: its scalars,
-    then each listed vector bundle whose inputs the source fetches."""
+    then each listed vector bundle whose inputs the source fetches. A
+    derived scalar counts the same way — listed, it ships only when its
+    inputs are."""
+    scalars = tuple(
+        bundle_id
+        for bundle_id in source.bundle_scalar_ids
+        if all(variable_id in source.input_variable_ids for variable_id in bundle_input_ids(source, bundle_id))
+    )
     vectors = tuple(
         bundle_id
         for bundle_id in source.bundle_vector_ids
         if all(variable_id in source.input_variable_ids for variable_id in vector_input_ids(bundle_id))
     )
-    return source.bundle_scalar_ids + vectors
+    return scalars + vectors
 
 
 def _grid_info(path: Path) -> GridInfo:
@@ -359,7 +385,7 @@ def crop_grid(grid: GridInfo, bbox: tuple[float, float, float, float]) -> GridIn
 
 def _convert_units(frame: SourceFrame, values: np.ndarray) -> np.ndarray:
     isobaric = isobaric_variable(frame.variable_id)
-    if frame.variable_id == "tmp2m" or (isobaric is not None and isobaric[0] == "tmp"):
+    if frame.variable_id in ("tmp2m", "dpt2m", "aptmp2m") or (isobaric is not None and isobaric[0] == "tmp"):
         unit = normalize_unit(frame.unit)
         if unit == "K":
             values -= 273.15
@@ -379,8 +405,11 @@ def _convert_units(frame: SourceFrame, values: np.ndarray) -> np.ndarray:
         # GRIB2 carries specific humidity as a mass ratio (kg/kg); the
         # codebook quantizes g/kg.
         values *= 1000.0
-    # Wind components, geopotential heights and relative humidity are already
-    # in their output units (m/s, m, %).
+    elif frame.variable_id == "vis":
+        # GRIB2 carries visibility in metres; the codebook quantizes km.
+        values /= 1000.0
+    # Wind components, geopotential heights, relative humidity, cloud cover,
+    # CAPE and vertical velocity are already in their output units.
     return values
 
 
@@ -395,6 +424,33 @@ def derive_vapour_flux(
     specific_humidity_id, u_id, v_id = vector_input_ids(bundle_id)
     q = values[specific_humidity_id]
     return q * values[u_id] / STANDARD_GRAVITY, q * values[v_id] / STANDARD_GRAVITY
+
+
+# The smallest specific humidity the derivation sees, in kg/kg: a dry
+# stratospheric cell can carry zero, whose vapour pressure has no logarithm.
+_THETA_E_MINIMUM_Q = 1e-7
+
+
+def derive_theta_e(values: dict[str, np.ndarray], bundle_id: str) -> np.ndarray:
+    """The equivalent potential temperature on one isobaric surface, in K,
+    from the temperature already in °C and the specific humidity already in
+    g/kg there: Bolton (1980) eq. 43 with its own lifting-condensation-level
+    temperature (eq. 15) and the dew point inverted from its eq. 10. The
+    operations below run in this exact order, in float64, and the native
+    encoder reproduces them one by one — that is what keeps the two
+    byte-identical on a field neither reads from a record."""
+    temperature_id, humidity_id = DERIVED_SCALARS[bundle_id]
+    p = float(theta_e_level(bundle_id))
+    t = values[temperature_id] + 273.15
+    q = np.maximum(values[humidity_id] / 1000.0, _THETA_E_MINIMUM_Q)
+    r = q / (1.0 - q)
+    e = p * r / (0.622 + r)
+    ln_e = np.log(e / 6.112)
+    dew_point = 243.5 * ln_e / (17.67 - ln_e) + 273.15
+    t_lcl = 1.0 / (1.0 / (dew_point - 56.0) + np.log(t / dew_point) / 800.0) + 56.0
+    theta = t * (1000.0 / p) ** (0.2854 * (1.0 - 0.28 * r))
+    r_g = r * 1000.0
+    return theta * np.exp((3.376 / t_lcl - 0.00254) * r_g * (1.0 + 0.00081 * r_g))
 
 
 def deaccumulate_precipitation(
@@ -465,7 +521,10 @@ def _extract_planes(
     order = list(frames)
     source = frames[order[0]].path
     hour = frames[order[0]].lead_seconds
-    raw = work / f"planes.f{hour:03d}.{os.getpid()}.{'-'.join(order)}.bin"
+    # Named by the band set's hash rather than the ids joined: a GFS frame
+    # now carries over thirty of them, past a filesystem's 255-byte name.
+    band_set = zlib.crc32("-".join(order).encode("ascii")) & 0xFFFFFFFF
+    raw = work / f"planes.f{hour:03d}.{os.getpid()}.{band_set:08x}.bin"
     command = [require_command("gdal_translate"), "-q"]
     if plane_source.unscale:
         command.append("-unscale")
@@ -717,13 +776,15 @@ def _quantize_file(
     plane_source: PlaneSource = GRIB_PLANE_SOURCE,
     derived_vector_ids: tuple[str, ...] = (),
     drop_ids: frozenset[str] = frozenset(),
+    derived_scalar_ids: tuple[str, ...] = (),
 ) -> tuple[int, dict[str, np.ndarray], list[PlaneStats]]:
     """Extract and quantize every variable of one file; runs on a worker thread.
 
-    ``derived_vector_ids`` names the vapour flux bundles to derive from the
-    planes just extracted, and ``drop_ids`` the inputs that served only such a
-    derivation and are not themselves published — they are released here
-    rather than quantized and carried through the whole run.
+    ``derived_vector_ids`` names the vapour flux bundles and
+    ``derived_scalar_ids`` the equivalent potential temperatures to derive
+    from the planes just extracted, and ``drop_ids`` the inputs that served
+    only such a derivation and are not themselves published — they are
+    released here rather than quantized and carried through the whole run.
 
     Derived-precipitation sources (ECMWF run-total tp, sflux window-averaged
     prate_ave) difference against the previous file's raw plane. Instead of
@@ -773,6 +834,8 @@ def _quantize_file(
     for bundle_id in derived_vector_ids:
         u_id, v_id = VECTOR_BUNDLES[bundle_id]
         values[u_id], values[v_id] = derive_vapour_flux(values, bundle_id)
+    for bundle_id in derived_scalar_ids:
+        values[bundle_id] = derive_theta_e(values, bundle_id)
     for variable_id in drop_ids:
         values.pop(variable_id, None)
     codes: dict[str, np.ndarray] = {}
@@ -1037,6 +1100,7 @@ def convert_bin(
                 )
         variable_ids = source.input_variable_ids
         available_vector_ids: tuple[str, ...] = ()
+        available_derived_ids: tuple[str, ...] = ()
         drop_ids: frozenset[str] = frozenset()
         grid_path = series.dataset
         plane_source = series.plane_source
@@ -1059,30 +1123,42 @@ def convert_bin(
             for bundle_id in published_bundle_ids(source)
             if bundle_id in VECTOR_BUNDLES and (bundle_ids is None or bundle_id in bundle_ids)
         )
-        # An input that only feeds a vector bundle may be absent; one that is
-        # also a published scalar may not.
-        vector_only_ids = tuple(
-            variable_id
-            for bundle_id in requested_vector_ids
-            for variable_id in vector_input_ids(bundle_id)
-            if variable_id not in source.bundle_scalar_ids
+        requested_derived_ids = tuple(
+            bundle_id
+            for bundle_id in published_bundle_ids(source)
+            if bundle_id in DERIVED_SCALARS and (bundle_ids is None or bundle_id in bundle_ids)
+        )
+        # An input that only feeds a derivation — a vector bundle, a derived
+        # scalar — may be absent; one that is also a published scalar may not.
+        derivation_only_ids = tuple(
+            dict.fromkeys(
+                variable_id
+                for bundle_id in requested_vector_ids + requested_derived_ids
+                for variable_id in bundle_input_ids(source, bundle_id)
+                if variable_id not in source.bundle_scalar_ids
+            )
         )
         reference_frames = inspect_grib_multi(
             paths[0],
             inspect_ids,
-            optional_ids=source.optional_at_analysis + vector_only_ids,
+            optional_ids=source.optional_at_analysis + derivation_only_ids,
         )
         available_vector_ids = tuple(
             bundle_id
             for bundle_id in requested_vector_ids
             if all(variable_id in reference_frames for variable_id in vector_input_ids(bundle_id))
         )
-        for bundle_id in requested_vector_ids:
-            if bundle_id not in available_vector_ids:
+        available_derived_ids = tuple(
+            bundle_id
+            for bundle_id in requested_derived_ids
+            if all(variable_id in reference_frames for variable_id in DERIVED_SCALARS[bundle_id])
+        )
+        for bundle_id in requested_vector_ids + requested_derived_ids:
+            if bundle_id not in available_vector_ids + available_derived_ids:
                 LOG.warning(
                     "building without the %s bundle, %s are not all in %s",
                     bundle_id,
-                    ", ".join(vector_input_ids(bundle_id)),
+                    ", ".join(bundle_input_ids(source, bundle_id)),
                     paths[0],
                 )
 
@@ -1092,19 +1168,19 @@ def convert_bin(
         # de-averages into prate), plus the inputs of each vector bundle that
         # can be built.
         input_scalar_ids = tuple(
-            variable_id for variable_id in inspect_ids if variable_id not in vector_only_ids
+            variable_id for variable_id in inspect_ids if variable_id not in derivation_only_ids
         )
         vector_read_ids = tuple(
             dict.fromkeys(
                 variable_id
-                for bundle_id in available_vector_ids
-                for variable_id in vector_input_ids(bundle_id)
+                for bundle_id in available_vector_ids + available_derived_ids
+                for variable_id in bundle_input_ids(source, bundle_id)
                 if variable_id not in input_scalar_ids
             )
         )
         # The inputs that only serve a derivation (spfh850 under the vapour
-        # flux) are released once it is done, rather than quantized and held
-        # for the whole run.
+        # flux and the equivalent potential temperature) are released once it
+        # is done, rather than quantized and held for the whole run.
         drop_ids = frozenset(vector_read_ids) - {
             variable_id for bundle_id in available_vector_ids for variable_id in VECTOR_BUNDLES[bundle_id]
         }
@@ -1222,6 +1298,9 @@ def convert_bin(
         derived_vector_ids = tuple(
             bundle_id for bundle_id in available_vector_ids if vapour_flux_level(bundle_id) is not None
         )
+        # Derived after the vapour flux and before the derivation-only inputs
+        # are dropped: both read spfh850.
+        derived_scalar_ids = available_derived_ids
         with ThreadPoolExecutor(max_workers=_EXTRACT_WORKERS) as executor:
             results = executor.map(
                 lambda item: _quantize_file(
@@ -1235,6 +1314,7 @@ def convert_bin(
                     plane_source,
                     derived_vector_ids,
                     drop_ids,
+                    derived_scalar_ids,
                 ),
                 sharing_plan(),
             )
@@ -1244,8 +1324,13 @@ def convert_bin(
     LOG.info("quantized %d planes", sum(len(codes) for codes in codes_by_offset.values()))
 
     # The encoded (bundle) variables — the raw tp / prate_ave inputs have
-    # already been derived into prate by this point.
-    scalar_variable_ids = source.bundle_scalar_ids
+    # already been derived into prate by this point, and a derived scalar
+    # whose inputs the run lacked is left out like a vector bundle is.
+    scalar_variable_ids = tuple(
+        variable_id
+        for variable_id in source.bundle_scalar_ids
+        if variable_id not in DERIVED_SCALARS or variable_id in available_derived_ids
+    )
     if bundle_ids is not None:
         scalar_variable_ids = tuple(
             variable_id for variable_id in scalar_variable_ids if variable_id in bundle_ids

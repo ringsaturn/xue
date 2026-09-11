@@ -140,7 +140,12 @@ F000 (65 frames); the page's timeline follows the active variable. The
 sflux source uses the native ~13 km Gaussian grid (3072 × 1536), derives
 precipitation from window-cumulative mean-rate records (also without F000,
 160 frames from F001), and additionally publishes the `dswrf` layer
-(instantaneous surface downward shortwave radiation, W/m²). `--hours` may
+(instantaneous surface downward shortwave radiation, W/m²). The GFS source
+alone also publishes the surface diagnostics (wind gust, total and low /
+middle / high cloud cover, CAPE, visibility, 2 m dew point and apparent
+temperature), the 850 / 700 / 500 hPa vertical velocity and the 850 hPa
+equivalent potential temperature the converter derives from the temperature
+and specific humidity there. `--hours` may
 be any hour on the model's published axis, so shorter uniform builds
 (e.g. `--hours 120`) still work, and their axis is a plain step rather than
 a listed one.

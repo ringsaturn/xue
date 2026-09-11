@@ -30,7 +30,13 @@ const CANONICAL_TYPE: Record<string, string> = {
   wind10m: "wind",
   gust: "gust",
   tcdc: "cloud",
+  lcdc: "lowcloud",
+  mcdc: "midcloud",
+  hcdc: "highcloud",
   cape: "cape",
+  vis: "visibility",
+  dpt2m: "dewpoint",
+  aptmp2m: "feelslike",
 };
 
 function canonicalType(id: ForecastBundleId): string {
@@ -69,6 +75,24 @@ const TYPE_ALIASES: Record<string, ForecastBundleId> = {
   tcdc: "tcdc",
   cape: "cape",
   instability: "cape",
+  lowcloud: "lcdc",
+  lcdc: "lcdc",
+  midcloud: "mcdc",
+  middlecloud: "mcdc",
+  mcdc: "mcdc",
+  highcloud: "hcdc",
+  hcdc: "hcdc",
+  visibility: "vis",
+  vis: "vis",
+  fog: "vis",
+  dewpoint: "dpt2m",
+  dew: "dpt2m",
+  td: "dpt2m",
+  dpt2m: "dpt2m",
+  feelslike: "aptmp2m",
+  apparent: "aptmp2m",
+  aptmp: "aptmp2m",
+  aptmp2m: "aptmp2m",
   // The subtropical high is read off the 500 hPa chart, so the view has the
   // name people look for as well as the level's own.
   subtropicalhigh: "hgt500",
@@ -92,6 +116,12 @@ const FAMILY_ALIASES: Record<string, string> = {
   vapor: "qflux",
   vapour: "qflux",
   moisture: "qflux",
+  vvel: "vvel",
+  omega: "vvel",
+  w: "vvel",
+  thetae: "thetae",
+  thetase: "thetae",
+  epot: "thetae",
 };
 
 /** `<family alias><level>` resolved by rule rather than by an enumerated

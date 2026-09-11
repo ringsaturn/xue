@@ -72,7 +72,13 @@ const VARIABLE_CODE: Partial<Record<ForecastBundleId, string>> = {
   wind10m: "WIND",
   gust: "GUST",
   tcdc: "CLOUD",
+  lcdc: "CLOUD LOW",
+  mcdc: "CLOUD MID",
+  hcdc: "CLOUD HIGH",
   cape: "CAPE",
+  vis: "VIS",
+  dpt2m: "DEWPT",
+  aptmp2m: "FEELS",
 };
 
 /** The contact-sheet code of one bundle: the surface fields have a word,
@@ -82,7 +88,9 @@ function variableCode(id: ForecastBundleId): string {
   if (fixed) return fixed;
   const match = /^([a-z]+)(\d+)$/.exec(id);
   if (!match) return id.toUpperCase();
-  const family = { hgt: "HGT", tmp: "T", rh: "RH", spfh: "Q", wind: "WIND", qflux: "QFLUX" }[match[1]!] ?? match[1]!.toUpperCase();
+  const family =
+    { hgt: "HGT", tmp: "T", rh: "RH", spfh: "Q", wind: "WIND", qflux: "QFLUX", vvel: "OMEGA", thetae: "THETAE" }[match[1]!] ??
+    match[1]!.toUpperCase();
   return `${family} ${match[2]}MB`;
 }
 

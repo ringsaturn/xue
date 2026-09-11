@@ -107,6 +107,30 @@ pub fn raster_expression(variable_id: &str, unit: &str) -> Result<String> {
             Ok("maximum(0,minimum(1270,A))".into())
         }
         "ugrd10m" | "vgrd10m" => wind_expression(unit),
+        // The 2 m dew point and apparent temperature take the temperature's
+        // rule over their own codebook ranges.
+        "dpt2m" | "aptmp2m" => {
+            let value = match normalize_unit(unit)? {
+                "K" => "A-273.15",
+                "F" => "(A-32)*5/9",
+                _ => "A",
+            };
+            Ok(if variable_id == "dpt2m" {
+                format!("maximum(-70,minimum(40,{value}))")
+            } else {
+                format!("maximum(-90,minimum(60,{value}))")
+            })
+        }
+        // Visibility: GRIB2 carries metres, the codebook quantizes km.
+        "vis" => {
+            if !["m", "metre", "meter", "metres", "meters"].contains(&compact_unit(unit).as_str()) {
+                return Err(EncodeError::conversion(format!(
+                    "unsupported visibility unit: {}",
+                    if unit.is_empty() { "<missing>" } else { unit }
+                )));
+            }
+            Ok("A/1000".into())
+        }
         // Wind gust: a speed in the wind components' unit, one-sided.
         "gust" => {
             let compact: String = unit
@@ -123,8 +147,8 @@ pub fn raster_expression(variable_id: &str, unit: &str) -> Result<String> {
             }
             Ok("maximum(0,minimum(127,A))".into())
         }
-        // Total cloud cover, already in percent.
-        "tcdc" => {
+        // Cloud cover — the total and the layers — already in percent.
+        "tcdc" | "lcdc" | "mcdc" | "hcdc" => {
             if unit.trim().trim_matches(|character| "[]()".contains(character)) != "%" {
                 return Err(EncodeError::conversion(format!(
                     "unsupported cloud cover unit: {}",
@@ -207,6 +231,16 @@ pub fn raster_expression(variable_id: &str, unit: &str) -> Result<String> {
                     Ok("A*1000".into())
                 }
                 "ugrd" | "vgrd" => wind_expression(unit),
+                // Vertical velocity in pressure coordinates, already Pa/s.
+                "vvel" => {
+                    if !["pa/s", "pas-1", "pas^-1"].contains(&compact_unit(unit).as_str()) {
+                        return Err(EncodeError::conversion(format!(
+                            "unsupported vertical velocity unit: {}",
+                            if unit.is_empty() { "<missing>" } else { unit }
+                        )));
+                    }
+                    Ok("maximum(-6.35,minimum(6.35,A))".into())
+                }
                 _ => Err(EncodeError::conversion(format!(
                     "unsupported variable: {other}"
                 ))),
@@ -279,8 +313,10 @@ fn band_matches(variable_id: &str, band: &BandInfo) -> Result<bool> {
     let element = band.item("GRIB_ELEMENT").to_uppercase();
     let short_name = band.item("GRIB_SHORT_NAME").to_uppercase();
     Ok(match variable_id {
-        "tmp2m" => {
-            element == "TMP"
+        // One element on the 2 m surface: the temperature, the dew point,
+        // the apparent temperature.
+        "tmp2m" | "dpt2m" | "aptmp2m" => {
+            element == variable_spec(variable_id)?.grib_element
                 && (matches!(short_name.as_str(), "2-HTGL" | "2-M-HTGL")
                     || HEIGHT_RE.is_match(&searchable(band)))
         }
@@ -307,9 +343,22 @@ fn band_matches(variable_id: &str, band: &BandInfo) -> Result<bool> {
         // One element on the ground surface: the fetched files carry only
         // the instantaneous surface record of each, so element + surface is
         // unambiguous.
-        "dswrf" | "gust" | "cape" => {
+        "dswrf" | "gust" | "cape" | "vis" => {
             element == variable_spec(variable_id)?.grib_element
                 && (short_name == "0-SFC" || searchable(band).to_lowercase().contains("surface"))
+        }
+        // One cloud cover element on its own layer surface (code table 4.5
+        // types 214 / 224 / 234, which GDAL spells `0-LCY` / `0-MCY` /
+        // `0-HCY`); the interval averages are never downloaded.
+        "lcdc" | "mcdc" | "hcdc" => {
+            let (token, phrases): (&str, &[&str]) = match variable_id {
+                "lcdc" => ("0-LCY", &["low cloud"]),
+                "mcdc" => ("0-MCY", &["middle cloud", "medium cloud"]),
+                _ => ("0-HCY", &["high cloud"]),
+            };
+            let text = searchable(band).to_lowercase();
+            element == variable_spec(variable_id)?.grib_element
+                && (short_name == token || phrases.iter().any(|phrase| text.contains(phrase)))
         }
         // The entire atmosphere (surface type 10), which GDAL spells
         // `0-EATM`; the per-layer cloud covers are never downloaded.
@@ -365,7 +414,7 @@ fn frame_from_band(path: &Path, variable_id: &str, band: &BandInfo) -> Result<So
     } else {
         band.item("GRIB_UNIT").to_string()
     };
-    let unit = if variable_id == "tmp2m" {
+    let unit = if matches!(variable_id, "tmp2m" | "dpt2m" | "aptmp2m") {
         normalize_unit(&raw_unit)?.to_string()
     } else {
         raw_unit

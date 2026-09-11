@@ -10,9 +10,12 @@ import { PRESSURE_BUNDLE_IDS, pressureLabel } from "./pressure";
  * A family is one physical quantity registered on the eight standard isobaric
  * surfaces (manifest.ts `ISOBARIC_LEVELS`), possibly with a near-surface
  * member of its own — 2 m temperature heads the temperature family, 10 m wind
- * the wind family, mean sea level pressure the pressure family. Precipitation,
- * radiation, reflectivity and the surface diagnostics (gust, cloud cover,
- * CAPE) are single layers and belong to no family.
+ * the wind family, mean sea level pressure the pressure family. One family is
+ * not isobaric at all: cloud cover's members are the total and the three
+ * layers, and the level row picks among those the same way. Precipitation,
+ * radiation, reflectivity and the other surface diagnostics (gust, CAPE,
+ * visibility, dew point, apparent temperature) are single layers and belong
+ * to no family.
  *
  * Everything here is chart knowledge, not container knowledge: the codebook
  * ranges are copied from the encoders and held to them by
@@ -20,9 +23,9 @@ import { PRESSURE_BUNDLE_IDS, pressureLabel } from "./pressure";
  * `tests/fixtures/surface-registry.json` (`tests/web/surface.test.ts`), the
  * way pressure.ts is held by its own registry.
  */
-export type IsobaricFamily = "hgt" | "tmp" | "rh" | "spfh" | "wind" | "qflux";
+export type IsobaricFamily = "hgt" | "tmp" | "rh" | "spfh" | "wind" | "qflux" | "vvel" | "thetae" | "cloud";
 
-export const ISOBARIC_FAMILIES: readonly IsobaricFamily[] = ["hgt", "tmp", "rh", "spfh", "wind", "qflux"];
+export const ISOBARIC_FAMILIES: readonly IsobaricFamily[] = ["hgt", "tmp", "rh", "spfh", "wind", "qflux", "vvel", "thetae", "cloud"];
 
 export interface FamilyInfo {
   id: IsobaricFamily;
@@ -39,6 +42,9 @@ export interface FamilyInfo {
   /** The rail tile's visually hidden gloss, which the surface member's level
    * button repeats; null for a family the shell writes no tile for. */
   glossKey: MessageKey | null;
+  /** A family whose members are not the eight isobaric surfaces lists them
+   * outright, in level-row order, each with its level-row label. */
+  members?: readonly { id: ForecastBundleId; code: string }[];
 }
 
 export const FAMILIES: Record<IsobaricFamily, FamilyInfo> = {
@@ -57,6 +63,24 @@ export const FAMILIES: Record<IsobaricFamily, FamilyInfo> = {
   spfh: { id: "spfh", kind: "scalar", surface: null, code: "SPFH", surfaceCode: "", glossKey: null },
   wind: { id: "wind", kind: "vector", surface: "wind10m", code: "WIND", surfaceCode: "10M", glossKey: "varWind" },
   qflux: { id: "qflux", kind: "vector", surface: null, code: "QFLUX", surfaceCode: "", glossKey: "varVapourFlux" },
+  vvel: { id: "vvel", kind: "scalar", surface: null, code: "OMEGA", surfaceCode: "", glossKey: "varOmega" },
+  thetae: { id: "thetae", kind: "scalar", surface: null, code: "THETAE", surfaceCode: "", glossKey: "varThetaE" },
+  // Cloud cover: the total heads the family and the three layers are its
+  // members, so one rail tile and the level row serve all four.
+  cloud: {
+    id: "cloud",
+    kind: "scalar",
+    surface: "tcdc",
+    code: "CLOUD",
+    surfaceCode: "TOTAL",
+    glossKey: "varCloud",
+    members: [
+      { id: "tcdc", code: "TOTAL" },
+      { id: "lcdc", code: "LOW" },
+      { id: "mcdc", code: "MID" },
+      { id: "hcdc", code: "HIGH" },
+    ],
+  },
 };
 
 /** The family a bundle id *names*, or null for a single layer (precipitation,
@@ -69,7 +93,8 @@ export const FAMILIES: Record<IsobaricFamily, FamilyInfo> = {
  * checked against them. Unknown names return null rather than throwing. */
 export function familyOf(id: ForecastBundleId): IsobaricFamily | null {
   for (const family of ISOBARIC_FAMILIES) {
-    if (FAMILIES[family].surface === id) return family;
+    const info = FAMILIES[family];
+    if (info.surface === id || info.members?.some((member) => member.id === id)) return family;
   }
   const match = /^([a-z]+)(\d+)$/.exec(id);
   if (!match) return null;
@@ -81,7 +106,7 @@ export function familyOf(id: ForecastBundleId): IsobaricFamily | null {
  * member and for anything outside the families. The same naming convention
  * `familyOf` reads, with the same standing. */
 export function bundleLevel(id: ForecastBundleId): IsobaricLevel | null {
-  const match = /^(?:hgt|tmp|rh|spfh|wind|qflux)(\d+)$/.exec(id);
+  const match = /^(?:hgt|tmp|rh|spfh|wind|qflux|vvel|thetae)(\d+)$/.exec(id);
   if (!match) return null;
   const level = Number(match[1]);
   return (ISOBARIC_LEVELS as readonly number[]).includes(level) ? (level as IsobaricLevel) : null;
@@ -91,16 +116,20 @@ export function bundleLevel(id: ForecastBundleId): IsobaricLevel | null {
  * isobaric surfaces from the ground up. */
 export function familyMembers(family: IsobaricFamily): ForecastBundleId[] {
   const info = FAMILIES[family];
+  if (info.members) return info.members.map((member) => member.id);
   const members: ForecastBundleId[] = info.surface ? [info.surface] : [];
   for (const level of ISOBARIC_LEVELS) members.push(`${family}${level}` as ForecastBundleId);
   return members;
 }
 
 /** The level row's label for one member: "MSL" / "2M" / "10M" for a surface
- * member, the pressure in hPa otherwise. */
+ * member, the pressure in hPa otherwise — or the member's own label in a
+ * family that lists its members ("TOTAL", "LOW", "MID", "HIGH"). */
 export function levelCode(id: ForecastBundleId): string {
   const family = familyOf(id);
   if (family === null) return id.toUpperCase();
+  const listed = FAMILIES[family].members?.find((member) => member.id === id);
+  if (listed) return listed.code;
   const level = bundleLevel(id);
   return level === null ? FAMILIES[family].surfaceCode : String(level);
 }
@@ -144,8 +173,37 @@ export function isobaricRange(family: ChartFamily, level: number | null): readon
   if (family === "tmp") return TEMPERATURE_RANGES[level];
   if (family === "rh") return [0, 100];
   if (family === "spfh") return [0, SPECIFIC_HUMIDITY_MAX[level]];
+  if (family === "vvel") return [-6.35, 6.35];
+  if (family === "thetae") return [THETA_E_OFFSETS[level], THETA_E_OFFSETS[level] + 127];
   return null;
 }
+
+/** Codebook offsets of the equivalent potential temperature per level, in
+ * K: a 127 K window at 0.5 K each. Copied from xuebuild/quantize.py. */
+const THETA_E_OFFSETS: Record<IsobaricLevel, number> = {
+  1000: 235,
+  925: 232,
+  850: 230,
+  700: 235,
+  500: 250,
+  300: 285,
+  250: 295,
+  200: 305,
+};
+
+/** The θe ramp's domain on one surface: the middle hundred kelvin of the
+ * level's codebook — 255–355 K at 850 hPa, where a moist tropical air mass
+ * sits near 350 and a polar one near 280 — so the legend reads in twenties.
+ * An unregistered level takes the 850 hPa window. */
+export function thetaEPaletteDomain(level: number | null): readonly [number, number] {
+  const offset = isRegisteredLevel(level) ? THETA_E_OFFSETS[level] : THETA_E_OFFSETS[850];
+  return [offset + 25, offset + 125];
+}
+
+/** The ω ramp's domain: ±2.5 Pa/s, where synoptic ascent lives; the
+ * codebook keeps going to ±6.35 so a convective core stays distinct in a
+ * probe, but the ramp saturates before it. */
+export const OMEGA_PALETTE_MAX = 2.5;
 
 /** The temperature ramp's domain on one surface. Up to 700 hPa the absolute
  * ramp the 2 m field uses, so the 0 °C isotherm keeps its colour where it
@@ -193,11 +251,27 @@ export function scalarLegendRange(identity: VariableIdentity): readonly [number,
   const { family, level, vector } = identity;
   if (vector) return null;
   if (family === "tmp" && isRegisteredLevel(level)) return temperatureLegendRange(level);
+  if (family === "thetae" && isRegisteredLevel(level)) return thetaEPaletteDomain(level);
+  if (family === "vvel" && isRegisteredLevel(level)) return [-OMEGA_PALETTE_MAX, OMEGA_PALETTE_MAX];
   if (family === "gust") return [0, GUST_SPEED_MAX];
-  if (family === "tcdc") return [0, 100];
+  if (family === "tcdc" || family === "lcdc" || family === "mcdc" || family === "hcdc") return [0, 100];
   if (family === "cape") return [0, CAPE_CHART_MAX];
+  if (family === "vis") return [0, VISIBILITY_CHART_MAX];
+  if (family === "dpt2m") return DEW_POINT_CHART_RANGE;
+  if (family === "aptmp2m") return APPARENT_CHART_RANGE;
   return null;
 }
+
+/** Visibility reads to 25 km — the codebook's 25.4 without the odd tenth;
+ * the ramp is transparent long before that. */
+export const VISIBILITY_CHART_MAX = 25;
+/** The dew point ramp's domain: the moisture a reader cares about lives
+ * between an arid -30 °C and a tropical 30. */
+export const DEW_POINT_CHART_RANGE: readonly [number, number] = [-30, 30];
+/** The apparent temperature reads over the temperature ramp's own domain,
+ * trimmed to ±50 so the legend ticks in twenties; the codebook's extremes
+ * beyond it hold the ramp's end colours. */
+export const APPARENT_CHART_RANGE: readonly [number, number] = [-50, 50];
 
 /** Ceiling of a vector field's magnitude palette: the 10 m wind's 40 m/s,
  * more for the isobaric winds (a jet core passes 80), and the vapour flux's
@@ -219,6 +293,8 @@ export function familyLabel(id: ForecastBundleId): string {
   if (level === null) {
     if (id === "tmp2m") return t("varLabelTmp2m");
     if (id === "wind10m") return t("varLabelWind10m");
+    const cloud = CLOUD_LABEL_KEYS[id];
+    if (cloud) return t(cloud);
     return id;
   }
   const key: MessageKey = {
@@ -228,9 +304,19 @@ export function familyLabel(id: ForecastBundleId): string {
     wind: "varLabelWindAtLevel",
     qflux: "varLabelQfluxAtLevel",
     hgt: "varLabelHeightAtLevel",
+    vvel: "varLabelVvelAtLevel",
+    thetae: "varLabelThetaeAtLevel",
+    cloud: "varLabelTcdc",
   }[family!] as MessageKey;
   return t(key).replace("{level}", String(level));
 }
+
+const CLOUD_LABEL_KEYS: Record<string, MessageKey> = {
+  tcdc: "varLabelTcdc",
+  lcdc: "varLabelLcdc",
+  mcdc: "varLabelMcdc",
+  hcdc: "varLabelHcdc",
+};
 
 /** The instrument-panel code of one isobaric member: "TMP 850MB", "RH
  * 700MB", "WIND 850MB", "QFLUX 850MB". */
@@ -238,7 +324,7 @@ export function isobaricCode(id: ForecastBundleId): string {
   const level = bundleLevel(id);
   const family = familyOf(id);
   if (level === null || family === null) return id.toUpperCase();
-  const word = { hgt: "HGT", tmp: "TMP", rh: "RH", spfh: "SPFH", wind: "WIND", qflux: "QFLUX" }[family];
+  const word = { hgt: "HGT", tmp: "TMP", rh: "RH", spfh: "SPFH", wind: "WIND", qflux: "QFLUX", vvel: "OMEGA", thetae: "THETAE", cloud: "CLOUD" }[family];
   return `${word} ${level}MB`;
 }
 
@@ -271,8 +357,13 @@ export function isobaricLegend(identity: VariableIdentity): string[] | null {
   const { family, level, vector } = identity;
   if (vector) return rangeLegend([0, vectorMaxMagnitude(family, level)], 10);
   if (family === "gust") return rangeLegend([0, GUST_SPEED_MAX], 10);
-  if (family === "tcdc") return rangeLegend([0, 100], 20);
+  if (family === "tcdc" || family === "lcdc" || family === "mcdc" || family === "hcdc") return rangeLegend([0, 100], 20);
   if (family === "cape") return rangeLegend([0, CAPE_CHART_MAX], 1000);
+  if (family === "vis") return rangeLegend([0, VISIBILITY_CHART_MAX], 5);
+  if (family === "dpt2m") return rangeLegend(DEW_POINT_CHART_RANGE, 6);
+  if (family === "aptmp2m") return rangeLegend(APPARENT_CHART_RANGE, 10);
+  if (family === "vvel" && isRegisteredLevel(level)) return rangeLegend([-OMEGA_PALETTE_MAX, OMEGA_PALETTE_MAX], 0.5);
+  if (family === "thetae" && isRegisteredLevel(level)) return rangeLegend(thetaEPaletteDomain(level), 5);
   if (family === "tmp" && isRegisteredLevel(level)) return rangeLegend(temperatureLegendRange(level), 5);
   if (family === "rh" && isRegisteredLevel(level)) return rangeLegend([0, 100], 20);
   if (family === "spfh" && isRegisteredLevel(level)) {
@@ -285,6 +376,6 @@ export function isobaricLegend(identity: VariableIdentity): string[] | null {
 /** The isobaric members that are filled fields or vector fields — everything
  * the level row can put in the fill slot. The pressure family is the lines
  * slot's and lives in pressure.ts. */
-export const ISOBARIC_FILL_IDS: readonly ForecastBundleId[] = (["tmp", "rh", "spfh", "wind", "qflux"] as const).flatMap(
+export const ISOBARIC_FILL_IDS: readonly ForecastBundleId[] = (["tmp", "rh", "spfh", "wind", "qflux", "vvel", "thetae"] as const).flatMap(
   (family) => ISOBARIC_LEVELS.map((level) => `${family}${level}` as ForecastBundleId),
 );

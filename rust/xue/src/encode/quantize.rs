@@ -253,6 +253,54 @@ const COMPACT_CAPE: LinearCodebook = LinearCodebook {
     step: 50.0,
     ..QUALITY_CAPE
 };
+// Visibility in kilometres: 0–25.4 km at 100 m spends the full code space
+// over GFS's ~24 km ceiling.
+const QUALITY_VISIBILITY: LinearCodebook = LinearCodebook {
+    minimum: 0.0,
+    maximum: 25.4,
+    step: 0.1,
+    nodata_code: 255,
+    name: "vis",
+};
+const COMPACT_VISIBILITY: LinearCodebook = LinearCodebook {
+    step: 0.2,
+    ..QUALITY_VISIBILITY
+};
+// 2 m dew point: the temperature's step over a range shifted ten degrees down.
+const QUALITY_DEW_POINT: LinearCodebook = LinearCodebook {
+    minimum: -70.0,
+    maximum: 40.0,
+    step: 0.5,
+    nodata_code: 255,
+    name: "dpt2m",
+};
+const COMPACT_DEW_POINT: LinearCodebook = LinearCodebook {
+    step: 1.0,
+    ..QUALITY_DEW_POINT
+};
+// Apparent temperature spans 150 K, which no half-degree codebook holds, so
+// it takes a whole degree.
+const QUALITY_APPARENT: LinearCodebook = LinearCodebook {
+    minimum: -90.0,
+    maximum: 60.0,
+    step: 1.0,
+    nodata_code: 255,
+    name: "aptmp2m",
+};
+const COMPACT_APPARENT: LinearCodebook = LinearCodebook {
+    step: 2.0,
+    ..QUALITY_APPARENT
+};
+// The cloud layers take the total's codebook, and its balanced rule.
+const fn cloud_layer_codebook(name: &'static str, compact: bool) -> LinearCodebook {
+    LinearCodebook {
+        minimum: 0.0,
+        maximum: 100.0,
+        step: if compact { 1.0 } else { 0.5 },
+        nodata_code: 255,
+        name,
+    }
+}
 
 // Sea level pressure and the pressure-level geopotential heights. The three
 // rules that fix these numbers are documented in `xuebuild/quantize.py`; the
@@ -369,6 +417,33 @@ const COMPACT_VAPOUR_FLUX: LinearCodebook = LinearCodebook {
     step: 1.0,
     ..QUALITY_VAPOUR_FLUX
 };
+// Vertical velocity ω in Pa/s, symmetric like the wind components: 0.05 Pa/s
+// gives synoptic ascent forty codes, and ±6.35 keeps a convective core
+// distinct before the rare grid-point storm past it clamps.
+const QUALITY_VERTICAL_VELOCITY: LinearCodebook = LinearCodebook {
+    minimum: -6.35,
+    maximum: 6.35,
+    step: 0.05,
+    nodata_code: 255,
+    name: "vvel",
+};
+const COMPACT_VERTICAL_VELOCITY: LinearCodebook = LinearCodebook {
+    step: 0.1,
+    ..QUALITY_VERTICAL_VELOCITY
+};
+// Equivalent potential temperature: the temperature's 0.5 K step over a
+// 127 K window placed per level. Must stay identical to `_THETA_E_OFFSETS`
+// in `xuebuild/quantize.py`.
+const THETA_E_OFFSETS: &[(u32, f64)] = &[
+    (1000, 235.0),
+    (925, 232.0),
+    (850, 230.0),
+    (700, 235.0),
+    (500, 250.0),
+    (300, 285.0),
+    (250, 295.0),
+    (200, 305.0),
+];
 
 /// The codebook of one filled isobaric variable, or `None` when the variable
 /// is not one (the pressure family answers through `pressure_codebook`).
@@ -418,6 +493,23 @@ fn isobaric_codebook(variable_id: &str, compact: bool) -> Option<LinearCodebook>
                 QUALITY_VAPOUR_FLUX
             }
         }
+        "vvel" => {
+            if compact {
+                COMPACT_VERTICAL_VELOCITY
+            } else {
+                QUALITY_VERTICAL_VELOCITY
+            }
+        }
+        "thetae" => {
+            let &(_, offset) = THETA_E_OFFSETS.iter().find(|(at, _)| *at == level)?;
+            LinearCodebook {
+                minimum: offset,
+                maximum: offset + 127.0,
+                step: if compact { 1.0 } else { 0.5 },
+                nodata_code: 255,
+                name: "equivalent potential temperature",
+            }
+        }
         _ => return None,
     })
 }
@@ -447,6 +539,18 @@ pub fn codebook(profile: &str, variable_id: &str) -> Result<Codebook> {
         (_, "tcdc") => Codebook::Linear(COMPACT_CLOUD),
         (_, "cape") if quality => Codebook::Linear(QUALITY_CAPE),
         (_, "cape") => Codebook::Linear(COMPACT_CAPE),
+        (_, "vis") if quality => Codebook::Linear(QUALITY_VISIBILITY),
+        (_, "vis") => Codebook::Linear(COMPACT_VISIBILITY),
+        (_, "dpt2m") if quality => Codebook::Linear(QUALITY_DEW_POINT),
+        (_, "dpt2m") => Codebook::Linear(COMPACT_DEW_POINT),
+        (_, "aptmp2m") if quality => Codebook::Linear(QUALITY_APPARENT),
+        (_, "aptmp2m") => Codebook::Linear(COMPACT_APPARENT),
+        ("quality", "lcdc") => Codebook::Linear(cloud_layer_codebook("lcdc", false)),
+        (_, "lcdc") => Codebook::Linear(cloud_layer_codebook("lcdc", true)),
+        ("quality", "mcdc") => Codebook::Linear(cloud_layer_codebook("mcdc", false)),
+        (_, "mcdc") => Codebook::Linear(cloud_layer_codebook("mcdc", true)),
+        ("quality", "hcdc") => Codebook::Linear(cloud_layer_codebook("hcdc", false)),
+        (_, "hcdc") => Codebook::Linear(cloud_layer_codebook("hcdc", true)),
         _ if pressure_codebook(variable_id, !quality).is_some() => Codebook::Linear(
             pressure_codebook(variable_id, !quality).expect("checked just above"),
         ),

@@ -68,7 +68,12 @@ export type PressureBundleId = "prmsl" | `hgt${IsobaricLevel}`;
 
 /** The filled isobaric scalars: temperature, relative humidity and specific
  * humidity on the same surfaces (levels.ts). */
-export type IsobaricScalarBundleId = `tmp${IsobaricLevel}` | `rh${IsobaricLevel}` | `spfh${IsobaricLevel}`;
+export type IsobaricScalarBundleId =
+  | `tmp${IsobaricLevel}`
+  | `rh${IsobaricLevel}`
+  | `spfh${IsobaricLevel}`
+  | `vvel${IsobaricLevel}`
+  | `thetae${IsobaricLevel}`;
 
 /** The two-variable bundles: a u/v pair the viewer draws as a magnitude field
  * with optional particles — the 10 m wind, the wind on each isobaric surface,
@@ -100,11 +105,22 @@ export type KnownBundleId =
   | IsobaricScalarBundleId
   | VectorBundleId;
 
-/** The surface diagnostics — wind gust, total cloud cover and surface-based
- * CAPE — single layers like `dswrf`, held to the encoders by
- * `tests/fixtures/surface-registry.json`. */
-export type SurfaceDiagnosticId = "gust" | "tcdc" | "cape";
-export const SURFACE_DIAGNOSTIC_IDS: readonly SurfaceDiagnosticId[] = ["gust", "tcdc", "cape"];
+/** The surface diagnostics — wind gust, cloud cover (the total and the
+ * three layers), surface-based CAPE, visibility, 2 m dew point and 2 m
+ * apparent temperature — single layers like `dswrf`, held to the encoders
+ * by `tests/fixtures/surface-registry.json`. */
+export type SurfaceDiagnosticId = "gust" | "tcdc" | "cape" | "vis" | "dpt2m" | "aptmp2m" | "lcdc" | "mcdc" | "hcdc";
+export const SURFACE_DIAGNOSTIC_IDS: readonly SurfaceDiagnosticId[] = [
+  "gust",
+  "tcdc",
+  "cape",
+  "vis",
+  "dpt2m",
+  "aptmp2m",
+  "lcdc",
+  "mcdc",
+  "hcdc",
+];
 
 /** A well-formed bundle/variable name: lowercase alphanumeric, starting with
  * a letter. This is the whole admission rule — a manifest is rejected for
@@ -159,6 +175,8 @@ export const KNOWN_BUNDLE_IDS: readonly KnownBundleId[] = [
   ...perLevel("tmp"),
   ...perLevel("rh"),
   ...perLevel("spfh"),
+  ...perLevel("vvel"),
+  ...perLevel("thetae"),
   "wind10m",
   ...perLevel("wind"),
   ...perLevel("qflux"),

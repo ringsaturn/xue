@@ -227,10 +227,16 @@ publishing data at the new version.**
   `binconvert.vector_input_ids` is fetched. `tests/fixtures/isobaric-registry.json`
   holds the three implementations to one set of ids and codebooks, the way
   `pressure-registry.json` does for the pressure family and
-  `surface-registry.json` for the surface diagnostics (`gust`, `tcdc`,
-  `cape` — registered on both encoders and charted by the shell, published
-  by no source yet; publishing one is a source-table line plus a recut of
-  the GRIB fixture the parity test builds from).
+  `surface-registry.json` for the surface diagnostics (`gust`, the four
+  cloud covers, `cape`, `vis`, `dpt2m`, `aptmp2m`). The isobaric families
+  also include `vvel` (fetched) and `thetae` — the first **derived scalar**:
+  `binconvert.DERIVED_SCALARS` names its inputs (`tmp<level>`,
+  `spfh<level>`), `derive_theta_e` is Bolton (1980) in a fixed operation
+  order the native encoder repeats, and like a vapour flux bundle it ships
+  only when its inputs are fetched. GFS publishes all of these; ECMWF and
+  sflux do not yet. Widening a source's input list means recutting
+  `tests/fixtures/gfs.*.crop.grib2` (same run, same `-srcwin`) and
+  regenerating both registry fixtures.
 - `fetch.py` → `idx.py` / `grib2.py` — byte-range fetches of exact GRIB
   records; ECMWF open data is CCSDS-packed and is repacked to `grid_simple`
   with `grib_set` at fetch time.
@@ -333,8 +339,12 @@ path draws every **vector bundle** (`wind<level>`, `qflux<level>`), each with
 its own ceiling from `levels.ts::vectorMaxMagnitude`. `web/src/levels.ts` is
 the **family** registry: one rail tile per family (temperature from 2 m up,
 wind from 10 m up, relative humidity, specific humidity, vapour flux,
-pressure), the level row on the capsule picks the member, and the fill's
-group sits beside the lines' group. Over a field the lines group is on the
+vertical velocity, θe, pressure — and cloud cover, whose members are the
+total and the three layers rather than isobaric surfaces, listed outright
+in `FamilyInfo.members`), the level row on the capsule picks the member,
+and the fill's group sits beside the lines' group. Past ten visible rail
+tiles `main.ts` marks the rail dense and the stylesheet drops the tiles to
+36px without their letter caption. Over a field the lines group is on the
 row whenever the run publishes a pressure surface: a pressed member is the
 overlay (and pressing it again takes the lines off), none pressed means no
 lines, so the overlay is always one press away in either direction. The same

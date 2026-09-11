@@ -125,7 +125,10 @@ def normalize_unit(unit: str) -> str:
     return aliases[compact]
 
 
-def celsius_expression(unit: str) -> str:
+def celsius_expression(unit: str, *, low: int = -60, high: int = 50) -> str:
+    """A temperature in Celsius, from whichever of K / C / F the record
+    reports, clamped to a codebook's range — the 2 m temperature's by
+    default; the dew point and the apparent temperature pass their own."""
     normalized = normalize_unit(unit)
     if normalized == "K":
         value = "A-273.15"
@@ -133,7 +136,7 @@ def celsius_expression(unit: str) -> str:
         value = "(A-32)*5/9"
     else:
         value = "A"
-    return f"maximum(-60,minimum(50,{value}))"
+    return f"maximum({low},minimum({high},{value}))"
 
 
 def precipitation_expression(unit: str) -> str:
@@ -198,6 +201,24 @@ def cloud_cover_expression(unit: str) -> str:
     if compact != "%":
         raise ConversionError(f"unsupported cloud cover unit: {unit or '<missing>'}")
     return "maximum(0,minimum(100,A))"
+
+
+def visibility_expression(unit: str) -> str:
+    """Visibility: GRIB2 carries metres, the codebook quantizes kilometres.
+    Only metres are accepted — a file already in km would divide twice, and
+    no source publishes one."""
+    compact = re.sub(r"[\s*()\[\]]", "", unit.strip().lower())
+    if compact not in {"m", "metre", "meter", "metres", "meters"}:
+        raise ConversionError(f"unsupported visibility unit: {unit or '<missing>'}")
+    return "A/1000"
+
+
+def vertical_velocity_expression(unit: str) -> str:
+    """Vertical velocity in pressure coordinates, already in Pa/s."""
+    compact = re.sub(r"[\s*()\[\]]", "", unit.strip().lower())
+    if compact not in {"pa/s", "pas-1", "pas^-1"}:
+        raise ConversionError(f"unsupported vertical velocity unit: {unit or '<missing>'}")
+    return "maximum(-6.35,minimum(6.35,A))"
 
 
 def cape_expression(unit: str) -> str:
@@ -276,6 +297,8 @@ def isobaric_expression(variable_id: str, unit: str) -> str:
         return specific_humidity_expression(unit)
     if family in ("ugrd", "vgrd"):
         return wind_expression(unit)
+    if family == "vvel":
+        return vertical_velocity_expression(unit)
     raise ConversionError(f"unsupported variable: {variable_id}")
 
 
@@ -300,13 +323,23 @@ def raster_expression(variable_id: str, unit: str) -> str:
         return cloud_cover_expression(unit)
     if variable_id == "cape":
         return cape_expression(unit)
+    if variable_id == "vis":
+        return visibility_expression(unit)
+    if variable_id == "dpt2m":
+        return celsius_expression(unit, low=-70, high=40)
+    if variable_id == "aptmp2m":
+        return celsius_expression(unit, low=-90, high=60)
+    if variable_id in ("lcdc", "mcdc", "hcdc"):
+        return cloud_cover_expression(unit)
     if isobaric_variable(variable_id) is not None:
         return isobaric_expression(variable_id, unit)
     raise ConversionError(f"unsupported variable: {variable_id}")
 
 
-def _is_two_metre_temperature(metadata: dict[str, str], description: str) -> bool:
-    if metadata.get("GRIB_ELEMENT", "").upper() != "TMP":
+def _is_two_metre_record(metadata: dict[str, str], description: str, element: str) -> bool:
+    """One GRIB element on the 2 m surface: the temperature, the dew point,
+    the apparent temperature."""
+    if metadata.get("GRIB_ELEMENT", "").upper() != element:
         return False
     short_name = metadata.get("GRIB_SHORT_NAME", "").upper()
     searchable = " ".join(
@@ -387,6 +420,34 @@ def _is_entire_atmosphere_record(metadata: dict[str, str], description: str, ele
     return short_name == "0-EATM" or "entire atmosphere" in searchable
 
 
+# The cloud layer surfaces as GDAL spells them (code table 4.5 types 214,
+# 224, 234), with the phrase fallback for a driver that does not.
+_CLOUD_LAYER_SURFACES: dict[str, tuple[str, tuple[str, ...]]] = {
+    "LCDC": ("0-LCY", ("low cloud",)),
+    "MCDC": ("0-MCY", ("middle cloud", "medium cloud")),
+    "HCDC": ("0-HCY", ("high cloud",)),
+}
+
+
+def _is_cloud_layer_record(metadata: dict[str, str], description: str, element: str) -> bool:
+    """One cloud cover element on its own layer surface. The fetched pgrb2
+    files carry the instantaneous record of each layer alone — the interval
+    averages are never downloaded — so element + surface is unambiguous."""
+    if metadata.get("GRIB_ELEMENT", "").upper() != element:
+        return False
+    short_name_token, phrases = _CLOUD_LAYER_SURFACES[element]
+    short_name = metadata.get("GRIB_SHORT_NAME", "").upper()
+    searchable = " ".join(
+        [
+            short_name,
+            metadata.get("GRIB_COMMENT", ""),
+            metadata.get("GRIB_LEVEL", ""),
+            description,
+        ]
+    ).lower()
+    return short_name == short_name_token or any(phrase in searchable for phrase in phrases)
+
+
 def _is_ten_metre_wind(metadata: dict[str, str], description: str, element: str) -> bool:
     if metadata.get("GRIB_ELEMENT", "").upper() != element:
         return False
@@ -457,8 +518,8 @@ def _isobaric_level_re(level_hpa: int) -> re.Pattern[str]:
 
 
 def _band_matches(variable_id: str, metadata: dict[str, str], description: str) -> bool:
-    if variable_id == "tmp2m":
-        return _is_two_metre_temperature(metadata, description)
+    if variable_id in ("tmp2m", "dpt2m", "aptmp2m"):
+        return _is_two_metre_record(metadata, description, variable_spec(variable_id).grib_element)
     if variable_id in ("prate", "prate_ave"):
         # sflux files carry only the interval-averaged PRATE record, pgrb2
         # fetches only the instantaneous one — the same surface matcher hits
@@ -466,10 +527,12 @@ def _band_matches(variable_id: str, metadata: dict[str, str], description: str) 
         return _is_surface_precipitation_rate(metadata, description)
     if variable_id == "tp":
         return _is_total_precipitation(metadata, description)
-    if variable_id in ("dswrf", "gust", "cape"):
+    if variable_id in ("dswrf", "gust", "cape", "vis"):
         return _is_surface_record(metadata, description, variable_spec(variable_id).grib_element)
     if variable_id == "tcdc":
         return _is_entire_atmosphere_record(metadata, description, variable_spec(variable_id).grib_element)
+    if variable_id in ("lcdc", "mcdc", "hcdc"):
+        return _is_cloud_layer_record(metadata, description, variable_spec(variable_id).grib_element)
     if variable_id in ("ugrd10m", "vgrd10m"):
         return _is_ten_metre_wind(metadata, description, variable_spec(variable_id).grib_element)
     if variable_id == "prmsl":
@@ -485,7 +548,11 @@ def _band_matches(variable_id: str, metadata: dict[str, str], description: str) 
 
 def _frame_from_band(path: Path, variable_id: str, band_number: int, metadata: dict[str, str]) -> SourceFrame:
     unit_value = metadata.get("GRIB_UNIT") or metadata.get("GRIB_COMMENT", "").rsplit("[", 1)[-1].rstrip("]")
-    unit = normalize_unit(unit_value) if variable_id == "tmp2m" else unit_value.strip().strip("[]")
+    unit = (
+        normalize_unit(unit_value)
+        if variable_id in ("tmp2m", "dpt2m", "aptmp2m")
+        else unit_value.strip().strip("[]")
+    )
     raster_expression(variable_id, unit)
     run_time = _timestamp(metadata, "GRIB_REF_TIME")
     valid_time = _timestamp(metadata, "GRIB_VALID_TIME")

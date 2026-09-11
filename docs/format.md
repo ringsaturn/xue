@@ -314,6 +314,10 @@ no chart for.
 | `gust` | 0 / 2 / 22 | 1, 0 | Instantaneous surface wind gust |
 | `tcdc` | 0 / 6 / 1 | 10, no value | Total cloud cover, entire atmosphere; the instantaneous record, not the interval average |
 | `cape` | 0 / 7 / 6 | 1, 0 | Surface-based CAPE (not the mixed-layer variants on surface type 108) |
+| `lcdc` / `mcdc` / `hcdc` | 0 / 6 / 3, 0 / 6 / 4, 0 / 6 / 5 | 214 / 224 / 234, no value | Low / middle / high cloud cover, each its own parameter on its own layer surface; the instantaneous records |
+| `vis` | 0 / 19 / 0 | 1, 0 | Surface visibility, quantized in km |
+| `dpt2m` | 0 / 0 / 6 | 103, 2 m | 2 m dew point |
+| `aptmp2m` | 0 / 0 / 21 | 103, 2 m | NCEP's 2 m apparent temperature |
 | `prmsl` | 0 / 3 / 1 | 101, no value | Mean sea level pressure, the quantity ECMWF calls `msl` and encodes as 0 / 3 / 0 on this surface — accepted on input, never written (not NCEP's MSLET, 0 / 3 / 192) |
 | `hgt<level>` | 0 / 3 / 5 | 100, `<level>` hPa in Pa | Geopotential height, one variable per isobaric surface |
 | `tmp<level>` | 0 / 0 / 0 | 100, `<level>` hPa in Pa | Temperature on the isobaric surface |
@@ -321,6 +325,8 @@ no chart for.
 | `spfh<level>` | 0 / 1 / 0 | 100, `<level>` hPa in Pa | Specific humidity on the isobaric surface, quantized in g/kg |
 | `ugrd<level>` / `vgrd<level>` | 0 / 2 / 2, 0 / 2 / 3 | 100, `<level>` hPa in Pa | Wind components on the isobaric surface |
 | `uqflx<level>` / `vqflx<level>` | 0 / 1 / 250, 0 / 1 / 251 | 100, `<level>` hPa in Pa | Water vapour flux components, `q·V/g` in g·cm⁻¹·hPa⁻¹·s⁻¹ — Xue-local parameter numbers |
+| `vvel<level>` | 0 / 2 / 8 | 100, `<level>` hPa in Pa | Vertical velocity ω in Pa/s on the isobaric surface |
+| `thetae<level>` | 0 / 0 / 3 | 100, `<level>` hPa in Pa | Equivalent potential temperature in K, derived by the encoder (Bolton 1980) from the temperature and specific humidity on the surface — GRIB2's EPOT number |
 
 The eight registered isobaric surfaces are 1000, 925, 850, 700, 500, 300, 250
 and 200 hPa, and every isobaric family is registered on all eight: `hgt1000`
@@ -605,6 +611,10 @@ same values unless noted):
 | `gust` | 0 m/s | 0.5 | 254 | 255 | 0.25 m/s |
 | `tcdc` | 0 % | 0.5 | 200 | 255 | 0.25 % |
 | `cape` | 0 J/kg | 25 | 254 | 255 | 12.5 J/kg |
+| `lcdc` / `mcdc` / `hcdc` | 0 % | 0.5 | 200 | 255 | 0.25 % |
+| `vis` | 0 km | 0.1 | 254 | 255 | 0.05 km |
+| `dpt2m` | −70 °C | 0.5 | 220 | 255 | 0.25 °C |
+| `aptmp2m` | −90 °C | 1 | 150 | 255 | 0.5 °C |
 | `prmsl` | 870.5 hPa | 1 | 254 | 255 | 0.5 hPa |
 | `hgt1000` | −905 m | 10 | 254 | 255 | 5 m |
 | `hgt925` | −249 m | 6 | 254 | 255 | 3 m |
@@ -630,11 +640,21 @@ same values unless noted):
 | `spfh250` / `spfh200` | 0 g/kg | 0.005 | 254 | 255 | 0.0025 g/kg |
 | `ugrd<level>` / `vgrd<level>` | −127 m/s | 1 | 254 | 255 | 0.5 m/s |
 | `uqflx<level>` / `vqflx<level>` | −63.5 g·cm⁻¹·hPa⁻¹·s⁻¹ | 0.5 | 254 | 255 | 0.25 |
+| `vvel<level>` | −6.35 Pa/s | 0.05 | 254 | 255 | 0.025 Pa/s |
+| `thetae1000` | 235 K | 0.5 | 254 | 255 | 0.25 K |
+| `thetae925` | 232 K | 0.5 | 254 | 255 | 0.25 K |
+| `thetae850` | 230 K | 0.5 | 254 | 255 | 0.25 K |
+| `thetae700` | 235 K | 0.5 | 254 | 255 | 0.25 K |
+| `thetae500` | 250 K | 0.5 | 254 | 255 | 0.25 K |
+| `thetae300` | 285 K | 0.5 | 254 | 255 | 0.25 K |
+| `thetae250` | 295 K | 0.5 | 254 | 255 | 0.25 K |
+| `thetae200` | 305 K | 0.5 | 254 | 255 | 0.25 K |
 
 The `compact` profile doubles each `scale` (temperature 1.0 → maximumCode
-110, wind 1.0 → 127, dswrf 10 → 127, cref 1.0 → 80, gust 1.0 → 127, tcdc
-1.0 → 100, cape 50 → 127, and every pressure-family and isobaric codebook →
-half its maximumCode over the same range).
+110, wind 1.0 → 127, dswrf 10 → 127, cref 1.0 → 80, gust 1.0 → 127, every
+cloud cover 1.0 → 100, cape 50 → 127, vis 0.2 → 127, dpt2m 1.0 → 110,
+aptmp2m 2 → 75, and every pressure-family and isobaric codebook → half its
+maximumCode over the same range).
 
 The isobaric temperature takes its range per level: the low end holds the
 Antarctic winter at every surface, the high end the below-ground
@@ -643,9 +663,13 @@ extrapolation the lowest surfaces take under high terrain, and no single
 Specific humidity spans two orders of magnitude between the surface and the
 upper troposphere, so its step follows the level. Relative humidity is the
 noisiest field published, so the `balanced` profile takes its `compact`
-codebook (1 %, maximumCode 100), and total cloud cover — the same kind of
-field on the same scale — follows it; those are the departures from quality
-in that profile besides precipitation. None of the isobaric fills is contoured, so
+codebook (1 %, maximumCode 100), and the cloud covers — the same kind of
+field on the same scale — follow it; those are the departures from quality
+in that profile besides precipitation. The equivalent potential temperature
+takes a 127 K window per level at the temperature's step, placed so the
+warm-moist tropical end fits (850 hPa runs to 357 K); only the 850 hPa
+window is verified against an analysis, the others follow the potential
+temperature's rise with height. None of the isobaric fills is contoured, so
 none carries the half-code rule below.
 
 The pressure family's offsets are chosen so that every standard contour value
@@ -738,8 +762,9 @@ fallback for out-of-range differences.
 
 Per-variable rules in v1:
 
-- **Linear-codebook fields (`tmp2m`, `ugrd10m`, `vgrd10m`, `dswrf`, `gust`,
-  `tcdc`, `cape`, and the pressure family `prmsl` / `hgt<level>`)** are
+- **Linear-codebook fields (`tmp2m`, `ugrd10m`, `vgrd10m`, `dswrf`, the
+  surface diagnostics, the isobaric fills and the pressure family `prmsl` /
+  `hgt<level>`)** are
   smooth enough for temporal prediction. Each segment of the time axis
   splits independently into groups of 6 frames, so a group never spans a
   change of step. Within each group of `n` frames, the frame at zero-based
