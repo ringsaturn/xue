@@ -74,22 +74,36 @@ export type IsobaricScalarBundleId = `tmp${IsobaricLevel}` | `rh${IsobaricLevel}
  * and the water vapour flux the encoder derives there. */
 export type VectorBundleId = "wind10m" | `wind${IsobaricLevel}` | `qflux${IsobaricLevel}`;
 
-/** Bundle-level ids the manifest can carry. On a live run the core scalar
- * pair is mandatory; the vector bundles, the dswrf solar-radiation bundle
- * (sflux only), the cref radar bundle (the radar archive only), the pressure
- * family and the upper-air fills are optional so pre-existing runs keep
- * validating.
+/** A bundle-level id in a manifest.
  *
- * A manifest naming a bundle that is not in this list is rejected outright,
- * not ignored — which is why a widened registry must reach the deployed shell
- * *before* any run publishes the new bundles. */
-export type ForecastBundleId =
+ * Deliberately a plain string: the manifest is not a registry. What a bundle
+ * *is* lives in the file, as the GRIB2 parameter block on each of its
+ * variables (identity.ts); what the manifest carries is a name, admitted on
+ * its shape alone (`isBundleVariableId`). A run may therefore publish a
+ * bundle this shell has never heard of and still validate — it renders
+ * generically rather than taking the whole manifest down with it.
+ *
+ * The ids the shell has chart knowledge about are `KnownBundleId`, and they
+ * are a naming convention (`<family><level>`, `tmp2m`, `wind10m`), not a
+ * closed set. */
+export type ForecastBundleId = string;
+
+/** The bundle ids this shell draws with a palette, legend and ceiling of
+ * its own. Used for typing the chart registries, never for admission. */
+export type KnownBundleId =
   | ForecastVariableId
   | "dswrf"
   | "cref"
   | PressureBundleId
   | IsobaricScalarBundleId
   | VectorBundleId;
+
+/** A well-formed bundle/variable name: lowercase alphanumeric, starting with
+ * a letter. This is the whole admission rule — a manifest is rejected for
+ * naming a bundle badly, never for naming one this build does not know. */
+export function isBundleVariableId(value: unknown): value is ForecastBundleId {
+  return typeof value === "string" && /^[a-z][a-z0-9]*$/.test(value);
+}
 
 /** The component variables a vector bundle carries, both on one time axis. */
 export type VectorComponentId =
@@ -100,8 +114,14 @@ export type VectorComponentId =
   | `uqflx${IsobaricLevel}`
   | `vqflx${IsobaricLevel}`;
 
-/** Data-level variable ids that can appear inside bundle metadata. */
-export type DataVariableId =
+/** Data-level variable ids that can appear inside bundle metadata. A plain
+ * string for the same reason `ForecastBundleId` is: a file names its own
+ * variables, and the parameter block — not the name — says what they are. */
+export type DataVariableId = string;
+
+/** The data-level ids this shell knows by name (the v1/v2 fallback in
+ * identity.ts, and the component pairs below). */
+export type KnownDataVariableId =
   | ForecastVariableId
   | "dswrf"
   | "cref"
@@ -115,9 +135,11 @@ function perLevel<Prefix extends string>(prefix: Prefix): `${Prefix}${IsobaricLe
   return ISOBARIC_LEVELS.map((level) => `${prefix}${level}` as `${Prefix}${IsobaricLevel}`);
 }
 
-/** Every bundle id, in manifest order: all scalars, then all vectors. Mirrors
- * `BIN_BUNDLE_VARIABLES` in xuebuild/manifest.py. */
-export const FORECAST_BUNDLE_IDS: readonly ForecastBundleId[] = [
+/** Every bundle id this shell has chart knowledge about, in the rail's
+ * order (every scalar, then every vector — the order the encoders write).
+ * This is what the layer rail and the level row are built from — *not* a
+ * list a manifest is checked against. */
+export const KNOWN_BUNDLE_IDS: readonly KnownBundleId[] = [
   "tmp2m",
   "prate",
   "dswrf",
@@ -131,7 +153,7 @@ export const FORECAST_BUNDLE_IDS: readonly ForecastBundleId[] = [
   ...perLevel("wind"),
   ...perLevel("qflux"),
 ];
-export const WIND_COMPONENT_IDS: readonly DataVariableId[] = ["ugrd10m", "vgrd10m"];
+export const WIND_COMPONENT_IDS: readonly KnownDataVariableId[] = ["ugrd10m", "vgrd10m"];
 
 /** The u/v component pair of every vector bundle. */
 export const VECTOR_BUNDLES: Record<VectorBundleId, readonly [VectorComponentId, VectorComponentId]> = {
@@ -140,12 +162,17 @@ export const VECTOR_BUNDLES: Record<VectorBundleId, readonly [VectorComponentId,
   ...Object.fromEntries(ISOBARIC_LEVELS.map((level) => [`qflux${level}`, [`uqflx${level}`, `vqflx${level}`]])),
 } as unknown as Record<VectorBundleId, readonly [VectorComponentId, VectorComponentId]>;
 
-/** True when a bundle carries a u/v pair rather than one scalar. */
+/** True when a bundle *named* by the convention carries a u/v pair rather
+ * than one scalar. A guess from the id string, for use before the bundle is
+ * open; an open session answers this from its variables' parameter blocks
+ * instead (`VariableSession.vector`). */
 export function isVectorBundle(id: ForecastBundleId): id is VectorBundleId {
   return id in VECTOR_BUNDLES;
 }
 
-/** The two components a vector bundle carries, or null for a scalar. */
+/** The two components a conventionally named vector bundle carries, or null
+ * for a scalar. Also a naming-convention guess; an open bundle names its own
+ * components. */
 export function vectorComponents(id: ForecastBundleId): readonly [VectorComponentId, VectorComponentId] | null {
   return isVectorBundle(id) ? VECTOR_BUNDLES[id] : null;
 }
@@ -341,9 +368,11 @@ export function validateManifest(
   const paths = new Set<string>();
   for (const item of value.bundles) {
     const bundle = object(item);
-    if (typeof bundle.variable !== "string" || !FORECAST_BUNDLE_IDS.includes(bundle.variable as ForecastBundleId)) {
-      throw new Error("unsupported bundle variable");
-    }
+    // Structural, not a registry lookup: a name this build has never seen is
+    // a layer it renders generically, not a manifest it refuses. Order is
+    // not constrained either — the rail has its own.
+    if (!isBundleVariableId(bundle.variable)) throw new Error("malformed bundle variable name");
+    if (variables.includes(bundle.variable)) throw new Error("manifest contains duplicate variable bundles");
     if (
       typeof bundle.path !== "string" ||
       !bundle.path.endsWith(BUNDLE_SUFFIX) ||
@@ -381,7 +410,6 @@ export function validateManifest(
       if (!variables.includes(id)) throw new Error(`manifest has no bundle for variable ${id}`);
     }
   }
-  if (new Set(variables).size !== variables.length) throw new Error("manifest contains duplicate variable bundles");
   return value as unknown as ForecastManifest;
 }
 

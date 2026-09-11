@@ -18,19 +18,28 @@ use crate::encode::binformat::write_atomic;
 use crate::encode::errors::{EncodeError, Result};
 use crate::encode::metadata::iso_z;
 
-/// Schema v5 bundle registry, in manifest order: every scalar, then every
-/// two-variable vector bundle. Mirrors `BIN_BUNDLE_VARIABLES` in
+/// A bundle's `variable` is a name, not a registered number: it must look like
+/// one (`^[a-z][a-z0-9]*$`) and be unique within the manifest, and nothing
+/// more. A name a particular reader does not draw is a layer that reader
+/// skips, not a malformed manifest, which is what lets a new bundle ship
+/// without every implementation being widened first. Order is whatever the
+/// encoder's scalar-then-vector bundle list produces. Mirrors
 /// `xuebuild/manifest.py`.
-pub const BIN_BUNDLE_VARIABLES: &[&str] = &[
-    "tmp2m", "prate", "dswrf", "cref", "prmsl", "hgt1000", "hgt925", "hgt850", "hgt700", "hgt500",
-    "hgt300", "hgt250", "hgt200", "tmp1000", "tmp925", "tmp850", "tmp700", "tmp500", "tmp300",
-    "tmp250", "tmp200", "rh1000", "rh925", "rh850", "rh700", "rh500", "rh300", "rh250", "rh200",
-    "spfh1000", "spfh925", "spfh850", "spfh700", "spfh500", "spfh300", "spfh250", "spfh200",
-    "wind10m", "wind1000", "wind925", "wind850", "wind700", "wind500", "wind300", "wind250",
-    "wind200", "qflux1000", "qflux925", "qflux850", "qflux700", "qflux500", "qflux300",
-    "qflux250", "qflux200",
-];
+///
+/// The core pair is the exception, and the only closed set left: a forecast
+/// manifest naming neither temperature nor precipitation describes a run the
+/// viewer cannot open.
 pub const REQUIRED_BIN_BUNDLE_VARIABLES: &[&str] = &["tmp2m", "prate"];
+
+/// `^[a-z][a-z0-9]*$`, spelled out rather than pulling in a regex crate.
+fn is_bundle_variable_name(variable: &str) -> bool {
+    let mut bytes = variable.bytes();
+    match bytes.next() {
+        Some(first) if first.is_ascii_lowercase() => {}
+        _ => return false,
+    }
+    bytes.all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit())
+}
 
 /// Build a schema v5 manifest describing one `.xue` bundle per variable.
 ///
@@ -57,8 +66,8 @@ pub fn build_bin_manifest(
 }
 
 /// The structural rules a reader depends on. Deliberately a subset of the
-/// Python validator — the bundle paths, the variable registry, and the core
-/// pair — since the Python side stays the contract's reference.
+/// Python validator — the bundle paths, the shape of a bundle name, and the
+/// core pair — since the Python side stays the contract's reference.
 fn validate_bin_manifest(payload: &Value, require_core_variables: bool) -> Result<()> {
     let bundles = payload["bundles"]
         .as_array()
@@ -66,9 +75,9 @@ fn validate_bin_manifest(payload: &Value, require_core_variables: bool) -> Resul
     let mut seen = Vec::new();
     for bundle in bundles {
         let variable = bundle["variable"].as_str().unwrap_or_default();
-        if !BIN_BUNDLE_VARIABLES.contains(&variable) {
+        if !is_bundle_variable_name(variable) {
             return Err(EncodeError::manifest(format!(
-                "manifest bundle variable {variable} is not registered"
+                "manifest bundle variable is not a bundle name: {variable:?}"
             )));
         }
         let path = bundle["path"].as_str().unwrap_or_default();

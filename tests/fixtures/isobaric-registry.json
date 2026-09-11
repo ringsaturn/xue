@@ -1,6 +1,5 @@
 {
   "tmp1000": {
-    "numericId": 16,
     "label": "1000 hPa temperature",
     "unit": "°C",
     "parameter": {
@@ -29,7 +28,6 @@
     }
   },
   "rh1000": {
-    "numericId": 24,
     "label": "1000 hPa relative humidity",
     "unit": "%",
     "parameter": {
@@ -58,7 +56,6 @@
     }
   },
   "spfh1000": {
-    "numericId": 32,
     "label": "1000 hPa specific humidity",
     "unit": "g/kg",
     "parameter": {
@@ -87,7 +84,6 @@
     }
   },
   "ugrd1000": {
-    "numericId": 40,
     "label": "1000 hPa U wind component",
     "unit": "m/s",
     "parameter": {
@@ -116,7 +112,6 @@
     }
   },
   "vgrd1000": {
-    "numericId": 48,
     "label": "1000 hPa V wind component",
     "unit": "m/s",
     "parameter": {
@@ -145,7 +140,6 @@
     }
   },
   "uqflx1000": {
-    "numericId": 56,
     "label": "1000 hPa U water vapour flux component",
     "unit": "g/(cm·hPa·s)",
     "parameter": {
@@ -174,7 +168,6 @@
     }
   },
   "vqflx1000": {
-    "numericId": 64,
     "label": "1000 hPa V water vapour flux component",
     "unit": "g/(cm·hPa·s)",
     "parameter": {
@@ -203,7 +196,6 @@
     }
   },
   "tmp925": {
-    "numericId": 17,
     "label": "925 hPa temperature",
     "unit": "°C",
     "parameter": {
@@ -232,7 +224,6 @@
     }
   },
   "rh925": {
-    "numericId": 25,
     "label": "925 hPa relative humidity",
     "unit": "%",
     "parameter": {
@@ -261,7 +252,6 @@
     }
   },
   "spfh925": {
-    "numericId": 33,
     "label": "925 hPa specific humidity",
     "unit": "g/kg",
     "parameter": {
@@ -290,7 +280,6 @@
     }
   },
   "ugrd925": {
-    "numericId": 41,
     "label": "925 hPa U wind component",
     "unit": "m/s",
     "parameter": {
@@ -319,7 +308,6 @@
     }
   },
   "vgrd925": {
-    "numericId": 49,
     "label": "925 hPa V wind component",
     "unit": "m/s",
     "parameter": {
@@ -348,7 +336,6 @@
     }
   },
   "uqflx925": {
-    "numericId": 57,
     "label": "925 hPa U water vapour flux component",
     "unit": "g/(cm·hPa·s)",
     "parameter": {
@@ -377,7 +364,6 @@
     }
   },
   "vqflx925": {
-    "numericId": 65,
     "label": "925 hPa V water vapour flux component",
     "unit": "g/(cm·hPa·s)",
     "parameter": {
@@ -406,7 +392,6 @@
     }
   },
   "tmp850": {
-    "numericId": 18,
     "label": "850 hPa temperature",
     "unit": "°C",
     "parameter": {
@@ -435,7 +420,6 @@
     }
   },
   "rh850": {
-    "numericId": 26,
     "label": "850 hPa relative humidity",
     "unit": "%",
     "parameter": {
@@ -464,7 +448,6 @@
     }
   },
   "spfh850": {
-    "numericId": 34,
     "label": "850 hPa specific humidity",
     "unit": "g/kg",
     "parameter": {
@@ -493,7 +476,6 @@
     }
   },
   "ugrd850": {
-    "numericId": 42,
     "label": "850 hPa U wind component",
     "unit": "m/s",
     "parameter": {
@@ -522,7 +504,6 @@
     }
   },
   "vgrd850": {
-    "numericId": 50,
     "label": "850 hPa V wind component",
     "unit": "m/s",
     "parameter": {
@@ -551,7 +532,6 @@
     }
   },
   "uqflx850": {
-    "numericId": 58,
     "label": "850 hPa U water vapour flux component",
     "unit": "g/(cm·hPa·s)",
     "parameter": {
@@ -580,7 +560,6 @@
     }
   },
   "vqflx850": {
-    "numericId": 66,
     "label": "850 hPa V water vapour flux component",
     "unit": "g/(cm·hPa·s)",
     "parameter": {
@@ -609,7 +588,6 @@
     }
   },
   "tmp700": {
-    "numericId": 19,
     "label": "700 hPa temperature",
     "unit": "°C",
     "parameter": {
@@ -638,7 +616,6 @@
     }
   },
   "rh700": {
-    "numericId": 27,
     "label": "700 hPa relative humidity",
     "unit": "%",
     "parameter": {
@@ -667,7 +644,6 @@
     }
   },
   "spfh700": {
-    "numericId": 35,
     "label": "700 hPa specific humidity",
     "unit": "g/kg",
     "parameter": {
@@ -696,7 +672,6 @@
     }
   },
   "ugrd700": {
-    "numericId": 43,
     "label": "700 hPa U wind component",
     "unit": "m/s",
     "parameter": {
@@ -725,7 +700,6 @@
     }
   },
   "vgrd700": {
-    "numericId": 51,
     "label": "700 hPa V wind component",
     "unit": "m/s",
     "parameter": {
@@ -754,7 +728,6 @@
     }
   },
   "uqflx700": {
-    "numericId": 59,
     "label": "700 hPa U water vapour flux component",
     "unit": "g/(cm·hPa·s)",
     "parameter": {
@@ -783,7 +756,6 @@
     }
   },
   "vqflx700": {
-    "numericId": 67,
     "label": "700 hPa V water vapour flux component",
     "unit": "g/(cm·hPa·s)",
     "parameter": {
@@ -812,7 +784,6 @@
     }
   },
   "tmp500": {
-    "numericId": 20,
     "label": "500 hPa temperature",
     "unit": "°C",
     "parameter": {
@@ -841,7 +812,6 @@
     }
   },
   "rh500": {
-    "numericId": 28,
     "label": "500 hPa relative humidity",
     "unit": "%",
     "parameter": {
@@ -870,7 +840,6 @@
     }
   },
   "spfh500": {
-    "numericId": 36,
     "label": "500 hPa specific humidity",
     "unit": "g/kg",
     "parameter": {
@@ -899,7 +868,6 @@
     }
   },
   "ugrd500": {
-    "numericId": 44,
     "label": "500 hPa U wind component",
     "unit": "m/s",
     "parameter": {
@@ -928,7 +896,6 @@
     }
   },
   "vgrd500": {
-    "numericId": 52,
     "label": "500 hPa V wind component",
     "unit": "m/s",
     "parameter": {
@@ -957,7 +924,6 @@
     }
   },
   "uqflx500": {
-    "numericId": 60,
     "label": "500 hPa U water vapour flux component",
     "unit": "g/(cm·hPa·s)",
     "parameter": {
@@ -986,7 +952,6 @@
     }
   },
   "vqflx500": {
-    "numericId": 68,
     "label": "500 hPa V water vapour flux component",
     "unit": "g/(cm·hPa·s)",
     "parameter": {
@@ -1015,7 +980,6 @@
     }
   },
   "tmp300": {
-    "numericId": 21,
     "label": "300 hPa temperature",
     "unit": "°C",
     "parameter": {
@@ -1044,7 +1008,6 @@
     }
   },
   "rh300": {
-    "numericId": 29,
     "label": "300 hPa relative humidity",
     "unit": "%",
     "parameter": {
@@ -1073,7 +1036,6 @@
     }
   },
   "spfh300": {
-    "numericId": 37,
     "label": "300 hPa specific humidity",
     "unit": "g/kg",
     "parameter": {
@@ -1102,7 +1064,6 @@
     }
   },
   "ugrd300": {
-    "numericId": 45,
     "label": "300 hPa U wind component",
     "unit": "m/s",
     "parameter": {
@@ -1131,7 +1092,6 @@
     }
   },
   "vgrd300": {
-    "numericId": 53,
     "label": "300 hPa V wind component",
     "unit": "m/s",
     "parameter": {
@@ -1160,7 +1120,6 @@
     }
   },
   "uqflx300": {
-    "numericId": 61,
     "label": "300 hPa U water vapour flux component",
     "unit": "g/(cm·hPa·s)",
     "parameter": {
@@ -1189,7 +1148,6 @@
     }
   },
   "vqflx300": {
-    "numericId": 69,
     "label": "300 hPa V water vapour flux component",
     "unit": "g/(cm·hPa·s)",
     "parameter": {
@@ -1218,7 +1176,6 @@
     }
   },
   "tmp250": {
-    "numericId": 22,
     "label": "250 hPa temperature",
     "unit": "°C",
     "parameter": {
@@ -1247,7 +1204,6 @@
     }
   },
   "rh250": {
-    "numericId": 30,
     "label": "250 hPa relative humidity",
     "unit": "%",
     "parameter": {
@@ -1276,7 +1232,6 @@
     }
   },
   "spfh250": {
-    "numericId": 38,
     "label": "250 hPa specific humidity",
     "unit": "g/kg",
     "parameter": {
@@ -1305,7 +1260,6 @@
     }
   },
   "ugrd250": {
-    "numericId": 46,
     "label": "250 hPa U wind component",
     "unit": "m/s",
     "parameter": {
@@ -1334,7 +1288,6 @@
     }
   },
   "vgrd250": {
-    "numericId": 54,
     "label": "250 hPa V wind component",
     "unit": "m/s",
     "parameter": {
@@ -1363,7 +1316,6 @@
     }
   },
   "uqflx250": {
-    "numericId": 62,
     "label": "250 hPa U water vapour flux component",
     "unit": "g/(cm·hPa·s)",
     "parameter": {
@@ -1392,7 +1344,6 @@
     }
   },
   "vqflx250": {
-    "numericId": 70,
     "label": "250 hPa V water vapour flux component",
     "unit": "g/(cm·hPa·s)",
     "parameter": {
@@ -1421,7 +1372,6 @@
     }
   },
   "tmp200": {
-    "numericId": 23,
     "label": "200 hPa temperature",
     "unit": "°C",
     "parameter": {
@@ -1450,7 +1400,6 @@
     }
   },
   "rh200": {
-    "numericId": 31,
     "label": "200 hPa relative humidity",
     "unit": "%",
     "parameter": {
@@ -1479,7 +1428,6 @@
     }
   },
   "spfh200": {
-    "numericId": 39,
     "label": "200 hPa specific humidity",
     "unit": "g/kg",
     "parameter": {
@@ -1508,7 +1456,6 @@
     }
   },
   "ugrd200": {
-    "numericId": 47,
     "label": "200 hPa U wind component",
     "unit": "m/s",
     "parameter": {
@@ -1537,7 +1484,6 @@
     }
   },
   "vgrd200": {
-    "numericId": 55,
     "label": "200 hPa V wind component",
     "unit": "m/s",
     "parameter": {
@@ -1566,7 +1512,6 @@
     }
   },
   "uqflx200": {
-    "numericId": 63,
     "label": "200 hPa U water vapour flux component",
     "unit": "g/(cm·hPa·s)",
     "parameter": {
@@ -1595,7 +1540,6 @@
     }
   },
   "vqflx200": {
-    "numericId": 71,
     "label": "200 hPa V water vapour flux component",
     "unit": "g/(cm·hPa·s)",
     "parameter": {

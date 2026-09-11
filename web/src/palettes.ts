@@ -1,6 +1,6 @@
-import { bundleLevel, isobaricRange, temperaturePaletteDomain } from "./levels";
+import { identityForBundleId, type VariableIdentity } from "./identity";
+import { isobaricRange, temperaturePaletteDomain } from "./levels";
 import type { BundleVariable, LinearQuantization, LogQuantization } from "./manifest";
-import { isPressureBundle } from "./pressure";
 
 /**
  * Color ramps in physical units. The shader samples them per pixel, so the
@@ -302,23 +302,32 @@ export function legendGradient(palette: Uint8Array, from = 0, to = 255, samples 
   return `linear-gradient(to bottom, ${stops.join(", ")})`;
 }
 
-/** Color stops for one variable's physical values. Linear fields default to
- * the temperature ramp; dswrf and cref carry their own, the pressure family
- * and the isobaric fills take theirs from the level. */
-function stopsFor(variable: BundleVariable): Stop[] {
-  if (variable.id === "dswrf") return SOLAR_STOPS;
-  if (variable.id === "cref") return REFLECTIVITY_STOPS;
-  if (isPressureBundle(variable.id) && variable.quantization.type === "linear") {
-    return pressureStops(variable.quantization);
+/** The codebook's own coverage, in the variable's unit — the range an
+ * unrecognized field's ramp is spread over. */
+function codebookRange(quantization: LinearQuantization): readonly [number, number] {
+  return [quantization.offset, quantization.offset + quantization.scale * quantization.maximumCode];
+}
+
+/** Color stops for one variable's physical values, chosen by what the field
+ * *is* (identity.ts) rather than by what it is called: dswrf and cref carry
+ * their own ramps, the pressure family reads its codebook, and the isobaric
+ * fills take theirs from the family and the level. A field this build does
+ * not recognize gets the temperature ramp spread over its own codebook, so
+ * it is at least legible. */
+function stopsFor(variable: BundleVariable, identity: VariableIdentity | null): Stop[] {
+  const linear = variable.quantization.type === "linear" ? variable.quantization : null;
+  if (identity === null) {
+    return linear ? remapStops(TEMPERATURE_STOPS, [-60, 50], codebookRange(linear)) : TEMPERATURE_STOPS;
   }
-  const level = bundleLevel(variable.id as Parameters<typeof bundleLevel>[0]);
-  if (level !== null) {
-    if (variable.id.startsWith("tmp")) return remapStops(TEMPERATURE_STOPS, [-60, 50], temperaturePaletteDomain(level));
-    if (variable.id.startsWith("rh")) return HUMIDITY_STOPS;
-    if (variable.id.startsWith("spfh")) {
-      const [, max] = isobaricRange(variable.id as Parameters<typeof isobaricRange>[0]);
-      return remapStops(SPECIFIC_HUMIDITY_UNIT_STOPS, [0, 1], [0, max]);
-    }
+  const { family, level } = identity;
+  if (family === "dswrf") return SOLAR_STOPS;
+  if (family === "cref") return REFLECTIVITY_STOPS;
+  if (family === "hgt" && linear) return pressureStops(linear);
+  if (family === "tmp") return remapStops(TEMPERATURE_STOPS, [-60, 50], temperaturePaletteDomain(level));
+  if (family === "rh") return HUMIDITY_STOPS;
+  if (family === "spfh") {
+    const range = isobaricRange("spfh", level);
+    if (range) return remapStops(SPECIFIC_HUMIDITY_UNIT_STOPS, [0, 1], [0, range[1]]);
   }
   return TEMPERATURE_STOPS;
 }
@@ -331,15 +340,24 @@ export function decodeValue(variable: BundleVariable, code: number): number | nu
     : decodeLog(variable.quantization, code);
 }
 
-/** Build the 256x1 RGBA palette texture for one variable's code space. */
-export function buildPalette(variable: BundleVariable): Uint8Array {
+/** Build the 256x1 RGBA palette texture for one variable's code space.
+ *
+ * `identity` is what the field is, from its parameter block; omit it and the
+ * id string is read as the naming convention instead, which is all a poster
+ * (metadata without an open session) has. An explicit `null` means the field
+ * is not one this build recognizes. */
+export function buildPalette(
+  variable: BundleVariable,
+  identity: VariableIdentity | null = identityForBundleId(variable.id),
+): Uint8Array {
   const palette = new Uint8Array(256 * 4);
+  const stops = stopsFor(variable, identity);
   for (let code = 0; code < 256; code += 1) {
     let color: [number, number, number, number] = [0, 0, 0, 0];
     const value = decodeValue(variable, code);
     if (value !== null) {
       // A logarithmic codebook's zero code is dry, and dry is not painted.
-      if (variable.quantization.type === "linear") color = interpolate(stopsFor(variable), value);
+      if (variable.quantization.type === "linear") color = interpolate(stops, value);
       else if (value > 0) color = interpolate(PRECIPITATION_STOPS, value);
     }
     palette.set(color, code * 4);

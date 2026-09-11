@@ -1,6 +1,6 @@
 import {
-  FORECAST_BUNDLE_IDS,
   FORECAST_MODELS,
+  isBundleVariableId,
   validateManifest,
   type ForecastBundleId,
   type ForecastManifest,
@@ -132,12 +132,16 @@ function validateCase(input: unknown): ShowcaseCase {
     throw new Error(`showcase case ${id} has an invalid manifest crc32`);
   }
   const variables = value.variables;
+  // Same structural rule the run manifest is admitted by: a well-formed name
+  // this build has never seen is a layer it renders generically, not a
+  // catalog it refuses.
   if (
     !Array.isArray(variables) ||
     variables.length === 0 ||
-    variables.some((item) => !FORECAST_BUNDLE_IDS.includes(item as ForecastBundleId))
+    variables.some((item) => !isBundleVariableId(item)) ||
+    new Set(variables as string[]).size !== variables.length
   ) {
-    throw new Error(`showcase case ${id} lists unsupported variables`);
+    throw new Error(`showcase case ${id} lists malformed variables`);
   }
   const defaultVariable = value.defaultVariable;
   if (!variables.includes(defaultVariable)) {

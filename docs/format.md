@@ -215,6 +215,11 @@ A bundle may declare more than one variable; the two 10 m wind components
 ship together in one two-variable `wind10m.xue` bundle. Every variable's
 quantization block must be one of the codebook types below.
 
+`numericId` is the variable's `variableId` — the handle the binary index
+refers to it by, unique within the file and meaningless outside it (see
+*[`variableId` is file-local](#variableid-is-file-local)*). The encoders
+here number the variables 1…n in the order they are listed.
+
 #### Metadata Schema Version
 
 `schemaVersion` is the lowest metadata schema a reader must implement to
@@ -257,6 +262,11 @@ terms, so a reader can recognize a field without matching on `id` strings.
 The block is required on every variable of a version 3 file and invalid
 below it.
 
+**The `parameter` block is a variable's identity.** Neither `variableId` —
+a file-local handle (see *[`variableId` is file-local](#variableid-is-file-local)*)
+— nor the `id` string carries it; the parameter triple and the fixed surface
+do, and two files describe the same field exactly when their blocks agree.
+
 | Field | GRIB2 origin | Rule |
 |---|---|---|
 | `discipline` | Section 0, octet 7 | 0–255 |
@@ -285,7 +295,13 @@ so any later addition is a new schema version. GRIB2's local-use ranges
 here — a local number is an ordinary number, and two of the variables below
 already use one.
 
-Registered variable identities:
+The identities this pipeline produces are below. This is **not** an
+admission list: a decoder validates the shape of a `parameter` block, never
+its contents against this table, and a file naming a parameter that is not
+here is a well-formed file. The table says which fields a *chart-aware*
+reader — one that has a palette, a contour interval or a legend for the
+quantity — can recognize; anything else it can still decode, and simply has
+no chart for.
 
 | `id` | Parameter | Surface | Notes |
 |---|---|---|---|
@@ -466,7 +482,7 @@ bytes:
 
 | Offset | Length | Type | Field | Rule |
 |---:|---:|---|---|---|
-| 0 | 1 | u8 | variableId | Registered ids below |
+| 0 | 1 | u8 | variableId | A handle into this file's metadata; see below |
 | 1 | 1 | u8 | predictor | See enum below |
 | 2 | 1 | u8 | compression | 0 NONE, 1 ZSTD, 2 ZSTD_DICT |
 | 3 | 1 | u8 | flags | See flags below |
@@ -481,36 +497,6 @@ bytes:
 | 32 | 1 | u8 | minimumCode | Actual minimum code in the final plane |
 | 33 | 1 | u8 | maximumCode | Actual maximum code in the final plane |
 | 34 | 6 | bytes | reserved1 | Every byte must be 0 |
-
-Registered `variableId` values:
-
-| Value | Variable | Field |
-|---:|---|---|
-| 1 | `tmp2m` | 2 m temperature |
-| 2 | `prate` | Surface precipitation rate |
-| 3 | `ugrd10m` | 10 m wind, U component |
-| 4 | `vgrd10m` | 10 m wind, V component |
-| 5 | `dswrf` | Surface downward shortwave radiation flux, instantaneous |
-| 6 | `cref` | Radar composite reflectivity over the entire atmosphere |
-| 7 | `prmsl` | Mean sea level pressure |
-| 8 | `hgt1000` | Geopotential height at 1000 hPa |
-| 9 | `hgt925` | Geopotential height at 925 hPa |
-| 10 | `hgt850` | Geopotential height at 850 hPa |
-| 11 | `hgt700` | Geopotential height at 700 hPa |
-| 12 | `hgt500` | Geopotential height at 500 hPa |
-| 13 | `hgt300` | Geopotential height at 300 hPa |
-| 14 | `hgt250` | Geopotential height at 250 hPa |
-| 15 | `hgt200` | Geopotential height at 200 hPa |
-| 16–23 | `tmp1000` … `tmp200` | Temperature on the isobaric surfaces, in level order |
-| 24–31 | `rh1000` … `rh200` | Relative humidity on the isobaric surfaces |
-| 32–39 | `spfh1000` … `spfh200` | Specific humidity on the isobaric surfaces |
-| 40–47 | `ugrd1000` … `ugrd200` | Isobaric wind, U component |
-| 48–55 | `vgrd1000` … `vgrd200` | Isobaric wind, V component |
-| 56–63 | `uqflx1000` … `uqflx200` | Water vapour flux, U component |
-| 64–71 | `vqflx1000` … `vqflx200` | Water vapour flux, V component |
-
-Every isobaric family occupies eight consecutive ids in the level order
-1000, 925, 850, 700, 500, 300, 250, 200.
 
 Predictor enum:
 
@@ -535,6 +521,33 @@ implementation `0xEDB88320`, initial value and final XOR `0xFFFFFFFF`,
 identical to zlib's `crc32` — computed over the reconstructed quantized
 plane. The Zstandard checksum validates the compressed payload, while CRC32
 validates predictor reconstruction.
+
+#### `variableId` is file-local
+
+`variableId` is a **handle**, not a name: the whole of its meaning is that it
+ties an index entry to one variable descriptor in *this file's* metadata. It
+must be 1–255 and unique within the file, and every id an index entry names
+must appear in the file's `variables`; there is no global table to check it
+against, and a decoder must not carry one. What a variable *is* lives in the
+metadata: its `parameter` block (see
+*[Variable Identity](#variable-identity)*) and its `id` string.
+
+The encoders in this repository assign ids **positionally**: 1…n by the
+variable's order in the bundle's variable list, which is also the order the
+v2 chunk layout uses. A single-variable bundle is therefore always id 1, and
+a vector bundle is 1 for the U component and 2 for the V component.
+
+*Historical assignment.* Encoders before this rule drew ids from a global
+registry, and files already published carry those numbers: 1 `tmp2m`,
+2 `prate`, 3 `ugrd10m`, 4 `vgrd10m`, 5 `dswrf`, 6 `cref`, 7 `prmsl`,
+8–15 `hgt1000` … `hgt200`, 16–23 `tmp1000` … `tmp200`,
+24–31 `rh1000` … `rh200`, 32–39 `spfh1000` … `spfh200`,
+40–47 `ugrd1000` … `ugrd200`, 48–55 `vgrd1000` … `vgrd200`,
+56–63 `uqflx1000` … `uqflx200`, 64–71 `vqflx1000` … `vqflx200` (each
+isobaric family in the level order 1000, 925, 850, 700, 500, 300, 250, 200).
+No decoder ever required those numbers — they were only ever matched against
+the file's own metadata — so every such file stays valid, and nothing needs
+rebuilding.
 
 ### Payload Rules (v1)
 
@@ -815,7 +828,9 @@ A decoder must reject:
 - Unknown container versions, and metadata `schemaVersion` values the
   decoder does not implement.
 - Nonzero reserved fields in a known version.
-- Unknown predictor, compression, variableId, or flags values.
+- Unknown predictor, compression, or flags values, and a `variableId` that
+  is not one of the file's own metadata `variables` ("unknown" here means
+  absent from *this* file, not absent from any registry — there is none).
 - ZSTD_DICT entries when `dictionaryLength` is 0.
 - Entries overlapping the header, metadata, index, or dictionary.
 - Overlapping payload ranges (ZERO entries may have zero length).
@@ -954,7 +969,7 @@ metadata's `variables`.
 
 | Offset | Length | Type | Field | Rule |
 |---:|---:|---|---|---|
-| 0 | 1 | u8 | variableId | Registered ids (unchanged from v1) |
+| 0 | 1 | u8 | variableId | A handle into this file's metadata (unchanged from v1) |
 | 1 | 1 | u8 | predictor | 0 RAW or 2 PREVIOUS |
 | 2 | 2 | u16 | reserved | 0 |
 
@@ -1068,9 +1083,10 @@ overflow):
 - An IndexHeader whose magic, version or headerSize differ, or whose
   reserved words are nonzero.
 - `tileWidth` or `tileHeight` of zero or larger than the grid.
-- A `variableCount` or variable set that differs from the metadata;
-  unsorted or duplicate `variableId`s; a predictor other than RAW or
-  PREVIOUS; nonzero reserved fields.
+- A `variableCount` or variable set that differs from the metadata's own —
+  every `variableId` here must be a `variableId` there, and the two sets must
+  be equal; unsorted or duplicate `variableId`s; a predictor other than RAW
+  or PREVIOUS; nonzero reserved fields.
 - Groups that do not partition the axis: a first group not starting at 0, a
   gap or overlap between consecutive groups, a `frameCount` of 0, or a last
   group not ending at the axis's `frameCount`.

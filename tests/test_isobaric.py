@@ -34,12 +34,10 @@ from xuebuild.binconvert import (
 )
 from xuebuild.errors import ConversionError
 from xuebuild.gdal import _band_matches, raster_expression
-from xuebuild.manifest import BIN_BUNDLE_VARIABLES
 from xuebuild.quantize import ISOBARIC_VARIABLE_IDS, PROFILES
 from xuebuild.sources import source_spec
 from xuebuild.variables import (
     ISOBARIC_FAMILIES,
-    ISOBARIC_FAMILY_FIRST_ID,
     ISOBARIC_LEVELS_HPA,
     STANDARD_GRAVITY,
     isobaric_variable,
@@ -54,7 +52,6 @@ def registry_entry(variable_id: str) -> dict:
     """The registry as the three implementations must agree it is."""
     spec = variable_spec(variable_id)
     return {
-        "numericId": spec.numeric_id,
         "label": spec.label,
         "unit": spec.output_unit,
         "parameter": spec.parameter_metadata(),
@@ -83,34 +80,30 @@ class RegistryTests(unittest.TestCase):
                 variable_id,
             )
 
-    def test_every_family_is_registered_at_every_level_with_contiguous_ids(self) -> None:
+    def test_every_family_is_registered_at_every_level(self) -> None:
         for family in ISOBARIC_FAMILIES:
-            first = ISOBARIC_FAMILY_FIRST_ID[family]
-            for index, level in enumerate(ISOBARIC_LEVELS_HPA):
+            for level in ISOBARIC_LEVELS_HPA:
                 variable_id = isobaric_variable_id(family, level)
                 spec = variable_spec(variable_id)
-                self.assertEqual(spec.numeric_id, first + index, variable_id)
                 self.assertEqual(spec.grib2_level_type, 100, variable_id)
                 self.assertEqual(spec.grib2_level_value, level * 100.0, variable_id)
                 self.assertEqual(isobaric_variable(variable_id), (family, level))
-        numeric_ids = [variable_spec(variable_id).numeric_id for variable_id in ISOBARIC_VARIABLE_IDS]
-        self.assertEqual(len(numeric_ids), len(set(numeric_ids)))
         self.assertIsNone(isobaric_variable("tmp550"), "not a registered level")
         self.assertIsNone(isobaric_variable("tmp2m"))
         self.assertIsNone(isobaric_variable("prmsl"))
 
-    def test_the_manifest_orders_every_scalar_before_every_vector(self) -> None:
-        vectors = [variable for variable in BIN_BUNDLE_VARIABLES if variable in VECTOR_BUNDLES]
-        scalars = [variable for variable in BIN_BUNDLE_VARIABLES if variable not in VECTOR_BUNDLES]
-        self.assertEqual(list(BIN_BUNDLE_VARIABLES), scalars + vectors)
-        for family in ("tmp", "rh", "spfh"):
-            self.assertTrue(all(isobaric_variable_id(family, level) in scalars for level in ISOBARIC_LEVELS_HPA))
+    def test_a_published_run_orders_every_scalar_before_every_vector(self) -> None:
+        # The manifest has no registry to be ordered against any more: the
+        # order is whatever a source publishes, scalars then vectors.
+        published = published_bundle_ids(source_spec("gfs"))
+        vectors = [variable for variable in published if variable in VECTOR_BUNDLES]
+        scalars = [variable for variable in published if variable not in VECTOR_BUNDLES]
+        self.assertEqual(list(published), scalars + vectors)
         self.assertEqual(vectors[0], "wind10m")
-        for level in ISOBARIC_LEVELS_HPA:
-            self.assertIn(f"wind{level}", vectors)
-            self.assertIn(f"qflux{level}", vectors)
-        # The flux components never appear as bundles of their own.
-        self.assertFalse(any(variable.startswith(("uqflx", "vqflx", "ugrd", "vgrd")) for variable in BIN_BUNDLE_VARIABLES))
+        # The flux and wind components never appear as bundles of their own.
+        self.assertFalse(
+            any(variable.startswith(("uqflx", "vqflx", "ugrd", "vgrd")) for variable in published)
+        )
 
 
 class VectorBundleTests(unittest.TestCase):
@@ -134,10 +127,11 @@ class VectorBundleTests(unittest.TestCase):
         self.assertEqual(published_bundle_ids(source_spec("radar")), ("cref",))
         self.assertEqual(published_bundle_ids(source_spec("ecmwf"))[-1], "wind10m")
         self.assertEqual(published_bundle_ids(source_spec("sflux"))[-1], "wind10m")
-        # The manifest order is the published order.
+        # Scalars first, then vectors: the order build-bin writes them in.
         self.assertEqual(
             list(published),
-            [variable for variable in BIN_BUNDLE_VARIABLES if variable in published],
+            [variable for variable in published if variable not in VECTOR_BUNDLES]
+            + [variable for variable in published if variable in VECTOR_BUNDLES],
         )
 
     def test_only_the_surface_fields_get_a_video_companion(self) -> None:

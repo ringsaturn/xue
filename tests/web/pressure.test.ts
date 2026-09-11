@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import registryJson from "../fixtures/pressure-registry.json";
 
-import { FORECAST_BUNDLE_IDS } from "../../web/src/manifest";
+import { KNOWN_BUNDLE_IDS } from "../../web/src/manifest";
 import type { LinearQuantization } from "../../web/src/manifest";
 import { buildPalette } from "../../web/src/palettes";
 import {
@@ -19,7 +19,6 @@ import {
  * frontend's own table has to agree with it or a contour is drawn at an
  * interval the codebook was not aligned for. */
 interface RegistryEntry {
-  numericId: number;
   contourInterval: number;
   emphasisInterval?: number;
   emphasisContours?: number[];
@@ -33,7 +32,7 @@ describe("the pressure level registry", () => {
   it("names the same levels the encoders register", () => {
     expect([...PRESSURE_BUNDLE_IDS]).toEqual(Object.keys(registry));
     for (const id of PRESSURE_BUNDLE_IDS) {
-      expect(FORECAST_BUNDLE_IDS).toContain(id);
+      expect(KNOWN_BUNDLE_IDS).toContain(id);
     }
   });
 

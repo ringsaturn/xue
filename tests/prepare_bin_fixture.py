@@ -33,9 +33,11 @@ TILED_GRID = GridInfo(
     latitude_step=-20.0,
 )
 TILE_SIZE = (5, 4)
-# tmp2m (numericId 1) is a linear field and chains against the previous frame;
-# prate (2) is stacked RAW, the way precipitation must be. Two variables also
-# put the (tile, variable) interleave of a wind bundle under test.
+# tmp2m is a linear field and chains against the previous frame; prate is
+# stacked RAW, the way precipitation must be. Their variableIds are their
+# positions in the bundle's variable list — 1 and 2 — the way the encoder
+# assigns them. Two variables also put the (tile, variable) interleave of a
+# wind bundle under test.
 TILED_PREDICTORS = {1: binformat.PREDICTOR_PREVIOUS, 2: binformat.PREDICTOR_RAW}
 
 
