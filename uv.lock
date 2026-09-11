@@ -87,18 +87,18 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "numpy", specifier = ">=2.0" },
-    { name = "xuepy", specifier = ">=0.8,<0.9" },
+    { name = "xuepy", specifier = ">=0.9,<0.10" },
 ]
 
 [[package]]
 name = "xuepy"
-version = "0.8.0"
+version = "0.9.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "numpy" },
 ]
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/87/f0/550bacc2d6f22feeb45478d889cb47e8845b495f804c2a761103a8683c89/xuepy-0.8.0-cp311-abi3-macosx_11_0_arm64.whl", hash = "sha256:97df10a9050985edbb8973c0f7c117ce7c11a634dd86b6f1d1c1670dd34ff530", size = 12603635, upload-time = "2026-09-11T05:54:04.636Z" },
-    { url = "https://files.pythonhosted.org/packages/9e/e1/71513db3207158ff18105b62262208ade8c0fafd9e06a728add334822439/xuepy-0.8.0-cp311-abi3-manylinux_2_39_aarch64.whl", hash = "sha256:fff2996b5f338625ab135ab3602eab7769a6bcb46313e1ff52d3e6a188c1c87b", size = 16257411, upload-time = "2026-09-11T05:54:07.523Z" },
-    { url = "https://files.pythonhosted.org/packages/83/b5/b44fa27533c84a4d293c7c68119b1bb885198e4881d8713a54f01c91d175/xuepy-0.8.0-cp311-abi3-manylinux_2_39_x86_64.whl", hash = "sha256:6f5dc8367fbdcacf9f5343186540aa5b8c0925670cbf89c3d25088f616bac455", size = 17285467, upload-time = "2026-09-11T05:54:10.702Z" },
+    { url = "https://files.pythonhosted.org/packages/d7/39/3d63512100b1217146f477a03ca11db516c99804ee0bc348285092ca1002/xuepy-0.9.0-cp311-abi3-macosx_11_0_arm64.whl", hash = "sha256:a6fd61819fe7a92d8fe94eb1a40d0131eeb6116e9fcd813375cb918db3ec71e9", size = 12604919, upload-time = "2026-09-11T14:55:04.212Z" },
+    { url = "https://files.pythonhosted.org/packages/5d/92/ec92851df5b81136a262ed52d13c30a61ea8634c3948b79e069b70633a79/xuepy-0.9.0-cp311-abi3-manylinux_2_39_aarch64.whl", hash = "sha256:2e4cd998e949c28f7952895d3f86111ca835baef8d758404221b23c9906cd46c", size = 16257480, upload-time = "2026-09-11T14:55:07.155Z" },
+    { url = "https://files.pythonhosted.org/packages/5e/c4/97605cca27f098e85857ea0d7380d0dbec05d3a64e4feedb60e70cfc2d48/xuepy-0.9.0-cp311-abi3-manylinux_2_39_x86_64.whl", hash = "sha256:ab05b832eada1c3fcb6565ee645ecad3e1889f38e2f56eb3f6550bfc48e8bc6c", size = 17285993, upload-time = "2026-09-11T14:55:10.157Z" },
 ]
