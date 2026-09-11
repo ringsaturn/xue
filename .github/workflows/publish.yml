@@ -219,7 +219,9 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       # `aws s3 sync` for the run assets (immutable, ?v=<crc32>-addressed),
-      # then the mutable per-model live pointer, which takes the run live.
+      # a pass over them through the CDN so the edge holds the run before
+      # anyone asks for it (scripts/warm_edge_cache.sh), then the mutable
+      # per-model live pointer, which takes the run live.
       - name: Upload the run to R2
         if: steps.target.outputs.skip != 'true'
         env:

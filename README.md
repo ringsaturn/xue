@@ -249,13 +249,23 @@ the Pages 25 MB per-file limit. The bucket is managed over R2's S3 API with
 the AWS CLI:
 
 ```sh
-make upload-r2 MODEL=gfs RUN=2026081600   # run assets, then the live pointer
+make upload-r2 MODEL=gfs RUN=2026081600   # run assets, warm the CDN, then the live pointer
 make prune-r2  MODEL=gfs                  # delete the runs it superseded
 make upload-r2-showcase                   # showcase cases, then the catalog
 ```
 
 Pruning only ever considers `<model>.<run>/` directories, so showcase cases
 are never swept up by it.
+
+Between the assets and the pointer, `upload-r2` runs `make warm-r2`
+(`scripts/warm_edge_cache.sh`): one full GET of every artifact through
+`dataset.ringsaturn.me` with the site's `Origin` header, so the edge — and,
+with the zone's Smart Tiered Cache, the upper tier every other data center
+fills from — already holds the run when its first viewer arrives. A cold
+fill from R2 runs at about 1 MB/s per object, so without it the first
+viewer of a new run waits tens of seconds per bundle. The H.264 companions
+are left cold: they are opt-in. A failed warm-up is reported and the pointer
+goes live anyway.
 
 Credentials are an R2 API token's key pair in `AWS_ACCESS_KEY_ID` /
 `AWS_SECRET_ACCESS_KEY`, plus `CLOUDFLARE_ACCOUNT_ID` for the endpoint.

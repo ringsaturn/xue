@@ -32,7 +32,7 @@ AWS_REQUEST_CHECKSUM_CALCULATION ?= when_required
 AWS_RESPONSE_CHECKSUM_VALIDATION ?= when_required
 export AWS_DEFAULT_REGION AWS_REQUEST_CHECKSUM_CALCULATION AWS_RESPONSE_CHECKSUM_VALIDATION
 
-.PHONY: check install wasm test test-rust test-e2e encoder-rust encoder-rust-test encoder-wheel bench bench-video bench-lossy mvp serve format-pdf deploy-build upload-r2 prune-r2 live-run deploy-pages deploy showcase showcase-check upload-r2-showcase clean
+.PHONY: check install wasm test test-rust test-e2e encoder-rust encoder-rust-test encoder-wheel bench bench-video bench-lossy mvp serve format-pdf deploy-build upload-r2 warm-r2 prune-r2 live-run deploy-pages deploy showcase showcase-check upload-r2-showcase clean
 
 check:
 	$(PYTHON) scripts/check_dependencies.py
@@ -135,7 +135,10 @@ deploy-build:
 # (full and .half.xue resolution tiers), posters, the optional WebCodecs
 # video artifacts, and the run's manifest. Run assets are immutable (clients
 # address them as ?v=<crc32>); the mutable per-model live pointer is copied
-# afterwards, and uploading it is what takes the run live.
+# afterwards, and uploading it is what takes the run live. Between the two,
+# `warm-r2` pulls every artifact through the CDN so the first viewer of the
+# new run finds it at the edge rather than waiting on the fill from R2; a
+# warm-up failure is reported but never holds the pointer back.
 # Pass a concrete RUN=YYYYMMDDHH.
 upload-r2:
 	@set -e; dir=web/public/data/$(MODEL).$(RUN); \
@@ -147,9 +150,17 @@ upload-r2:
 		exit 1; }; \
 	$(S3) sync $$dir s3://$(R2_BUCKET)/$(R2_PREFIX)/$(MODEL).$(RUN)/ --no-progress $(DRY_RUN) \
 		--cache-control "public, max-age=31536000, immutable"; \
+	[ -n "$(DRY_RUN)" ] || $(MAKE) --no-print-directory warm-r2 MODEL=$(MODEL) RUN=$(RUN) \
+		|| echo "warming the edge cache failed; the run goes live cold"; \
 	echo "Uploading $(LATEST_FILE) (takes $(MODEL) run $(RUN) live)..."; \
 	$(S3) cp web/public/data/$(LATEST_FILE) s3://$(R2_BUCKET)/$(R2_PREFIX)/$(LATEST_FILE) --no-progress $(DRY_RUN) \
 		--content-type application/json --cache-control "no-cache"
+
+# GET every artifact of one uploaded run through the public hostname, with
+# the site's Origin header, so the edge (and, with tiered cache, the upper
+# tier every other data center fills from) holds it before anyone asks.
+warm-r2:
+	scripts/warm_edge_cache.sh $(MODEL) $(RUN)
 
 # Historical showcase cases: past runs cropped to one weather event, defined
 # in showcase/cases/*.json and built into web/public/data/showcase/. Pass
