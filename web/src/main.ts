@@ -2491,7 +2491,8 @@ function levelButtonName(id: ForecastBundleId): [string, string] {
   }
   const family = familyOf(id);
   if (family !== null && bundleLevel(id) === null) {
-    return [`${FAMILIES[family].code} ${FAMILIES[family].surfaceCode}`, t(FAMILIES[family].glossKey)];
+    const { code, surfaceCode, glossKey } = FAMILIES[family];
+    return [`${code} ${surfaceCode}`, glossKey === null ? familyLabel(id) : t(glossKey)];
   }
   return [isobaricCode(id), familyLabel(id)];
 }
@@ -2574,9 +2575,25 @@ function syncLevelRowFade(): void {
 levelRow.addEventListener("scroll", syncLevelRowFade, { passive: true });
 window.addEventListener("resize", syncLevelRowFade);
 
+/** Whether one of the shell's own rail tiles stands for a bundle: a tile
+ * of its own, its family's, or the pressure family's for a surface it
+ * charts. A registered family the shell writes no tile for (specific
+ * humidity, which no source publishes) reads as unknown here, so a run
+ * that does ship it still gets a way onto the screen. */
+function railTileStandsFor(id: string): boolean {
+  const family = familyOf(id as ForecastBundleId);
+  return variableButtons().some(
+    (button) =>
+      !("unknown" in button.dataset) &&
+      (button.dataset.variable === id ||
+        (family !== null && button.dataset.family === family) ||
+        (button.dataset.group === "pressure" && (PRESSURE_BUNDLE_IDS as readonly string[]).includes(id))),
+  );
+}
+
 /** Give every bundle the run publishes a way onto the screen, including the
  * ones this build has no tile written for. The shell's own tiles stand for
- * the families it knows; anything else gets a plain one in manifest order,
+ * the families they name; anything else gets a plain one in manifest order,
  * lettered with the id's initial. Rebuilt per run, so a dataset that ships
  * nothing unusual carries no extra chrome. */
 function syncUnknownRailTiles(run: ForecastManifest): void {
@@ -2584,9 +2601,7 @@ function syncUnknownRailTiles(run: ForecastManifest): void {
   for (const stale of variableRail.querySelectorAll("button[data-unknown]")) stale.remove();
   for (const bundle of run.bundles) {
     const id = bundle.variable;
-    // A known name already has a tile of its own, or belongs to a family
-    // whose tile stands for it.
-    if ((KNOWN_BUNDLE_IDS as readonly string[]).includes(id)) continue;
+    if (railTileStandsFor(id)) continue;
     const button = document.createElement("button");
     button.type = "button";
     button.dataset.variable = id;

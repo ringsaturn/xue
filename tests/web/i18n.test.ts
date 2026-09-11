@@ -169,7 +169,6 @@ describe("the dictionaries", () => {
       "varSolar",
       "varRadar",
       "varHumidity",
-      "varSpecificHumidity",
       "varVapourFlux",
       "varPressure",
       "varHeight",

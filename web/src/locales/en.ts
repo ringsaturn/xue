@@ -25,11 +25,10 @@ export const en = {
   varWind: "10M",
   varSolar: "FLUX",
   varRadar: "CREF",
-  /** The upper-air families' tiles: relative humidity, specific humidity and
-   * the water vapour flux have no surface member, so the gloss names the
-   * field rather than a level. */
+  /** The upper-air families' tiles: relative humidity and the water vapour
+   * flux have no surface member, so the gloss names the field rather than a
+   * level. */
   varHumidity: "REL",
-  varSpecificHumidity: "SPEC",
   varVapourFlux: "FLUX",
   // The pressure family's buttons carry the level in the code ("MSLP",
   // "500MB"); the gloss says what the field is, once for all eight heights.
@@ -55,10 +54,9 @@ export const en = {
   glyphDswrf: "S",
   glyphCref: "Z",
   glyphPressure: "P",
-  // U is the WMO symbol for relative humidity, q for specific humidity; the
-  // vapour flux takes the F of flux.
+  // U is the WMO symbol for relative humidity; the vapour flux takes the F
+  // of flux.
   glyphRh: "U",
-  glyphSpfh: "q",
   glyphQflux: "F",
   levelSwitchAria: "Level",
   levelCaption: "LEVEL",

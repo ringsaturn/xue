@@ -183,25 +183,27 @@
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphTmp2m">T</b>
           <span class="rail-name"><span>TEMP</span> <small data-i18n="varTemp">2M</small></span>
         </button>
-        <button type="button" data-variable="prate" aria-pressed="true">
-          <b class="rail-glyph" aria-hidden="true" data-i18n="glyphPrate">R</b>
-          <span class="rail-name"><span>PRECIP</span> <small data-i18n="varPrecip">RATE</small></span>
+        <button type="button" data-variable="rh850" data-family="rh" aria-pressed="false" hidden>
+          <b class="rail-glyph" aria-hidden="true" data-i18n="glyphRh">U</b>
+          <span class="rail-name"><span>HUMIDITY</span> <small data-i18n="varHumidity">REL</small></span>
         </button>
         <button type="button" data-variable="wind10m" data-family="wind" aria-pressed="false" hidden>
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphWind10m">W</b>
           <span class="rail-name"><span>WIND</span> <small data-i18n="varWind">10M</small></span>
         </button>
-        <button type="button" data-variable="rh850" data-family="rh" aria-pressed="false" hidden>
-          <b class="rail-glyph" aria-hidden="true" data-i18n="glyphRh">U</b>
-          <span class="rail-name"><span>HUMIDITY</span> <small data-i18n="varHumidity">REL</small></span>
+        <!-- The whole pressure family behind one tile: the level itself is
+             chosen on the timeline capsule's level row. -->
+        <button type="button" data-variable="prmsl" data-group="pressure" aria-pressed="false" hidden>
+          <b class="rail-glyph" aria-hidden="true" data-i18n="glyphPressure">P</b>
+          <span class="rail-name"><span>PRESSURE</span> <small data-i18n="varPressureField">FIELD</small></span>
+        </button>
+        <button type="button" data-variable="prate" aria-pressed="true">
+          <b class="rail-glyph" aria-hidden="true" data-i18n="glyphPrate">R</b>
+          <span class="rail-name"><span>PRECIP</span> <small data-i18n="varPrecip">RATE</small></span>
         </button>
         <button type="button" data-variable="qflux850" data-family="qflux" aria-pressed="false" hidden>
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphQflux">F</b>
           <span class="rail-name"><span>VAPOUR</span> <small data-i18n="varVapourFlux">FLUX</small></span>
-        </button>
-        <button type="button" data-variable="spfh850" data-family="spfh" aria-pressed="false" hidden>
-          <b class="rail-glyph" aria-hidden="true" data-i18n="glyphSpfh">q</b>
-          <span class="rail-name"><span>HUMIDITY</span> <small data-i18n="varSpecificHumidity">SPEC</small></span>
         </button>
         <button type="button" data-variable="dswrf" aria-pressed="false" hidden>
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphDswrf">S</b>
@@ -210,12 +212,6 @@
         <button type="button" data-variable="cref" aria-pressed="false" hidden>
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphCref">Z</b>
           <span class="rail-name"><span>RADAR</span> <small data-i18n="varRadar">CREF</small></span>
-        </button>
-        <!-- The whole pressure family behind one tile: the level itself is
-             chosen on the timeline capsule's level row. -->
-        <button type="button" data-variable="prmsl" data-group="pressure" aria-pressed="false" hidden>
-          <b class="rail-glyph" aria-hidden="true" data-i18n="glyphPressure">P</b>
-          <span class="rail-name"><span>PRESSURE</span> <small data-i18n="varPressureField">FIELD</small></span>
         </button>
       </div>
 

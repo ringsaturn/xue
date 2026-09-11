@@ -34,10 +34,9 @@ export interface FamilyInfo {
   code: string;
   /** The level row's label for the surface member ("2M", "10M", "MSL"). */
   surfaceCode: string;
-  /** The one glyph the rail tile carries. */
-  glyphKey: MessageKey;
-  /** The tile's visually hidden gloss. */
-  glossKey: MessageKey;
+  /** The rail tile's visually hidden gloss, which the surface member's level
+   * button repeats; null for a family the shell writes no tile for. */
+  glossKey: MessageKey | null;
 }
 
 export const FAMILIES: Record<IsobaricFamily, FamilyInfo> = {
@@ -47,30 +46,15 @@ export const FAMILIES: Record<IsobaricFamily, FamilyInfo> = {
     surface: "prmsl",
     code: "PRESSURE",
     surfaceCode: "MSL",
-    glyphKey: "glyphPressure",
     glossKey: "varPressureField",
   },
-  tmp: { id: "tmp", kind: "scalar", surface: "tmp2m", code: "TEMP", surfaceCode: "2M", glyphKey: "glyphTmp2m", glossKey: "varTemp" },
-  rh: { id: "rh", kind: "scalar", surface: null, code: "RH", surfaceCode: "", glyphKey: "glyphRh", glossKey: "varHumidity" },
-  spfh: {
-    id: "spfh",
-    kind: "scalar",
-    surface: null,
-    code: "SPFH",
-    surfaceCode: "",
-    glyphKey: "glyphSpfh",
-    glossKey: "varSpecificHumidity",
-  },
-  wind: { id: "wind", kind: "vector", surface: "wind10m", code: "WIND", surfaceCode: "10M", glyphKey: "glyphWind10m", glossKey: "varWind" },
-  qflux: {
-    id: "qflux",
-    kind: "vector",
-    surface: null,
-    code: "QFLUX",
-    surfaceCode: "",
-    glyphKey: "glyphQflux",
-    glossKey: "varVapourFlux",
-  },
+  tmp: { id: "tmp", kind: "scalar", surface: "tmp2m", code: "TEMP", surfaceCode: "2M", glossKey: "varTemp" },
+  rh: { id: "rh", kind: "scalar", surface: null, code: "RH", surfaceCode: "", glossKey: "varHumidity" },
+  // Registered on both encoders and fetched by GFS as the vapour flux's
+  // input, but no source publishes it, so the shell writes no tile.
+  spfh: { id: "spfh", kind: "scalar", surface: null, code: "SPFH", surfaceCode: "", glossKey: null },
+  wind: { id: "wind", kind: "vector", surface: "wind10m", code: "WIND", surfaceCode: "10M", glossKey: "varWind" },
+  qflux: { id: "qflux", kind: "vector", surface: null, code: "QFLUX", surfaceCode: "", glossKey: "varVapourFlux" },
 };
 
 /** The family a bundle id *names*, or null for a single layer (precipitation,
