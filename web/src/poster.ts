@@ -9,6 +9,7 @@
  */
 
 import { crc32Of } from "./crc32";
+import { fetchImmutable } from "./fetchimmutable";
 import type { PosterDescriptor } from "./manifest";
 
 export function isPosterSupported(): boolean {
@@ -51,7 +52,7 @@ export async function decodePosterPlane(payload: Uint8Array, width: number, heig
 
 /** Download, CRC32-verify, and decode one manifest-declared poster. */
 export async function fetchPoster(url: string, descriptor: PosterDescriptor): Promise<Uint8Array> {
-  const response = await fetch(url);
+  const response = await fetchImmutable(url);
   if (!response.ok) throw new Error(`poster request returned HTTP ${response.status}`);
   const payload = new Uint8Array(await response.arrayBuffer());
   if (payload.byteLength !== descriptor.byteLength) throw new Error("poster length does not match the manifest");

@@ -1,3 +1,4 @@
+import { fetchImmutable } from "./fetchimmutable";
 import { t } from "./i18n";
 
 export type ForecastVariableId = "tmp2m" | "prate";
@@ -503,7 +504,7 @@ export async function fetchManifest(baseUrl: string, model: ForecastModelId = "g
   const latest = await fetchLatestPointer(baseUrl, model);
   const url = new URL(latest.manifestPath, new URL(baseUrl, document.baseURI));
   url.searchParams.set("v", latest.manifestCrc32);
-  const response = await fetch(url);
+  const response = await fetchImmutable(url);
   if (!response.ok) throw new Error(t("manifestRequestFailed", { status: response.status }));
   return { manifest: validateManifest(await response.json(), model), latest, manifestUrl: url.href };
 }

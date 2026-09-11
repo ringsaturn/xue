@@ -1,3 +1,4 @@
+import { fetchImmutable } from "./fetchimmutable";
 import {
   FORECAST_MODELS,
   isBundleVariableId,
@@ -223,7 +224,7 @@ export interface LoadedCase {
 export async function fetchCaseManifest(baseUrl: string, showcaseCase: ShowcaseCase): Promise<LoadedCase> {
   const url = new URL(showcaseCase.manifestPath, new URL(baseUrl, document.baseURI));
   url.searchParams.set("v", showcaseCase.manifestCrc32);
-  const response = await fetch(url);
+  const response = await fetchImmutable(url);
   if (!response.ok) throw new Error(`showcase manifest request failed (${response.status})`);
   const manifest = validateManifest(await response.json(), showcaseCase.modelId, { requireCoreVariables: false });
   for (const variable of showcaseCase.variables) {

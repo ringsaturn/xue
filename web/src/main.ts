@@ -22,6 +22,7 @@ import {
 import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 
 import { CRC32_INITIAL, crc32Hex, crc32Update } from "./crc32";
+import { fetchImmutable } from "./fetchimmutable";
 import {
   applyStaticMessages,
   basemapLang,
@@ -2818,7 +2819,7 @@ async function downloadBundle(
   quiet = false,
 ): Promise<ArrayBuffer> {
   if (!quiet) preloadState.textContent = t("receivingBundle");
-  const response = await fetch(artifactUrl(descriptor.path, descriptor.crc32));
+  const response = await fetchImmutable(artifactUrl(descriptor.path, descriptor.crc32));
   if (!response.ok) throw new Error(t("bundleRequestFailed", { status: response.status }));
   const total = descriptor.byteLength;
   const data = new Uint8Array(total);
