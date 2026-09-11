@@ -25,7 +25,7 @@ dependencies = [
     # wheel's own GDAL. Below it a build still works but needs a system
     # `gdalinfo` on PATH, which the scheduled publish workflows no longer
     # install.
-    "xuepy>=0.7,<0.8",
+    "xuepy>=0.8,<0.9",
 ]
 
 [project.scripts]
