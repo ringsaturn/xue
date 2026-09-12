@@ -494,7 +494,7 @@ The shell is a map with controls floating over it, not a map beside a panel:
 the display-serif title in the top-left corner names the layer *and* opens the
 run picker (`#model-sheet` — a panel under it on desktop, a bottom sheet on
 phones), three round buttons sit top-right (language, cases, appearance — the
-language one opening a picker of the ten endonyms through the same sheet
+language one opening a picker of the eleven endonyms through the same sheet
 mechanism, `web/src/sheet.ts`, that `#model-sheet` and the sources sheet
 use), the color scale runs down the left edge, one 48px tile per layer down the right,
 and one capsule at the bottom (960px wide at most) holds the whole transport
@@ -547,8 +547,8 @@ locally, browse `http://localhost:4173` rather than the loopback address.
 
 ## Conventions
 
-- Locale is one of ten — `zh`, `zh-Hant`, `en`, `ja`, `ko`, `de`, `fr`, `es`,
-  `pt`, `ru` — via `web/src/i18n.ts`, and appearance is `light`/`dark` via
+- Locale is one of eleven — `zh`, `zh-Hant`, `en`, `ja`, `ko`, `de`, `fr`,
+  `es`, `pt`, `tr`, `ru` — via `web/src/i18n.ts`, and appearance is `light`/`dark` via
   `web/src/theme.ts`; both are resolved before the first render, and the
   language picker and the appearance toggle each persist the choice and
   switch in place (see the shell section above). Long-lived status copy in

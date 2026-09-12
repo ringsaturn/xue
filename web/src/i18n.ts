@@ -1,4 +1,4 @@
-/** UI locale support: ten languages. The locale is resolved before the first
+/** UI locale support: eleven languages. The locale is resolved before the first
  * render — detection order is the `?lang=` URL param, then the choice the
  * picker stored on this device, then the browser language — and the basemap
  * label language and `<html lang>` follow it. Only the URL param is ever
@@ -28,31 +28,33 @@ import { ja } from "./locales/ja";
 import { ko } from "./locales/ko";
 import { pt } from "./locales/pt";
 import { ru } from "./locales/ru";
+import { tr } from "./locales/tr";
 import { zh } from "./locales/zh";
 import { zhHant } from "./locales/zh-hant";
 
 export type { MessageKey };
 
-export type Locale = "zh" | "zh-Hant" | "en" | "ja" | "ko" | "de" | "fr" | "es" | "pt" | "ru";
+export type Locale = "zh" | "zh-Hant" | "en" | "ja" | "ko" | "de" | "fr" | "es" | "pt" | "tr" | "ru";
 
 const STORAGE_KEY = "xue-locale";
 
 interface LocaleDefinition {
   /** The language's own name, in its own script. Never translated: a picker
-   * of ten languages is only usable if each row reads as itself. */
+   * of eleven languages is only usable if each row reads as itself. */
   endonym: string;
   /** Value for `<html lang>`, and the Intl locale derived from it. */
   htmlLang: string;
   /** Protomaps `name:*` label language. Every code here is one the
    * `@protomaps/basemaps` `language_script_pairs` table declares, so the
-   * basemap's own labels follow the UI in all ten. */
+   * basemap's own labels follow the UI in all eleven. */
   basemapLang: string;
   messages: Record<MessageKey, string>;
 }
 
-/** The ten languages, in the order the picker lists them: the two Chinese
+/** The eleven languages, in the order the picker lists them: the two Chinese
  * scripts and English first (the project's own), then the rest by script and
- * proximity. */
+ * proximity — the Latin-script ones together, Turkish closing them before
+ * Cyrillic. */
 const DEFINITIONS: Record<Locale, LocaleDefinition> = {
   zh: { endonym: "简体中文", htmlLang: "zh-CN", basemapLang: "zh-Hans", messages: zh },
   "zh-Hant": { endonym: "繁體中文", htmlLang: "zh-TW", basemapLang: "zh-Hant", messages: zhHant },
@@ -63,6 +65,7 @@ const DEFINITIONS: Record<Locale, LocaleDefinition> = {
   fr: { endonym: "Français", htmlLang: "fr", basemapLang: "fr", messages: fr },
   es: { endonym: "Español", htmlLang: "es", basemapLang: "es", messages: es },
   pt: { endonym: "Português", htmlLang: "pt", basemapLang: "pt", messages: pt },
+  tr: { endonym: "Türkçe", htmlLang: "tr", basemapLang: "tr", messages: tr },
   ru: { endonym: "Русский", htmlLang: "ru", basemapLang: "ru", messages: ru },
 };
 
@@ -71,7 +74,7 @@ export const LOCALES: readonly { code: Locale; endonym: string }[] = (
   Object.keys(DEFINITIONS) as Locale[]
 ).map((code) => ({ code, endonym: DEFINITIONS[code].endonym }));
 
-/** The `<html lang>` tag of any of the ten — what the picker stamps on each
+/** The `<html lang>` tag of any of the eleven — what the picker stamps on each
  * row so a screen reader reads each endonym in its own language. */
 export function localeHtmlLang(code: Locale): string {
   return DEFINITIONS[code].htmlLang;
@@ -82,7 +85,7 @@ export function localeHtmlLang(code: Locale): string {
  * Kong and Macau write traditional; the mainland and Singapore simplified. */
 const TRADITIONAL_REGIONS = new Set(["tw", "hk", "mo"]);
 
-/** Map a BCP-47 tag onto one of the ten, or null. Case-insensitive, and
+/** Map a BCP-47 tag onto one of the eleven, or null. Case-insensitive, and
  * exported for the unit tests and for the canonical-URL logic. */
 export function normalizeLocale(value: string | null | undefined): Locale | null {
   if (!value) return null;

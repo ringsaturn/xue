@@ -872,7 +872,7 @@ test("scrubbing works while data arrives through range requests", async ({ page 
 
 // The UI locale follows navigator.language (Playwright defaults to en-US, so
 // every other test runs the English UI); ?lang= overrides it, and the round
-// button in the top-right opens a picker of the ten languages, each naming
+// button in the top-right opens a picker of the eleven languages, each naming
 // itself in its own script. Picking one persists it and switches the page in
 // place — no reload, the session and its frames stay. The basemap label
 // language rides the same detection, but the tests stub out the tile API.

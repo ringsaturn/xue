@@ -86,7 +86,7 @@ fall back to defaults rather than fail, so a constructed link always opens.
   viewport and connection.
 - `?particles=off` — hide the wind particle animation (default on, off under
   prefers-reduced-motion).
-- `?lang=zh|zh-Hant|en|ja|ko|de|fr|es|pt|ru` and `?theme=light|dark` —
+- `?lang=zh|zh-Hant|en|ja|ko|de|fr|es|pt|tr|ru` and `?theme=light|dark` —
   otherwise the browser's language and colour scheme decide.
 - `?use_h264=true` — opt into the H.264 companion artifacts via WebCodecs
   instead of the Xue decoder (a comparison path, not the default).

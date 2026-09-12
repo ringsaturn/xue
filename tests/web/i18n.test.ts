@@ -9,6 +9,7 @@ import { ja } from "../../web/src/locales/ja";
 import { ko } from "../../web/src/locales/ko";
 import { pt } from "../../web/src/locales/pt";
 import { ru } from "../../web/src/locales/ru";
+import { tr } from "../../web/src/locales/tr";
 import { zh } from "../../web/src/locales/zh";
 import { zhHant } from "../../web/src/locales/zh-hant";
 
@@ -26,6 +27,7 @@ const DICTIONARIES: Record<Locale, Record<MessageKey, string>> = {
   fr,
   es,
   pt,
+  tr,
   ru,
 };
 
@@ -45,6 +47,7 @@ describe("locale detection", () => {
     expect(normalizeLocale("es")).toBe("es");
     expect(normalizeLocale("pt")).toBe("pt");
     expect(normalizeLocale("ru")).toBe("ru");
+    expect(normalizeLocale("tr-TR")).toBe("tr");
   });
 
   it("reads the Chinese script out of the script subtag", () => {
@@ -100,6 +103,7 @@ describe("the picker's list", () => {
     expect(LOCALES.find((item) => item.code === "ja")?.endonym).toBe("日本語");
     expect(LOCALES.find((item) => item.code === "ko")?.endonym).toBe("한국어");
     expect(LOCALES.find((item) => item.code === "ru")?.endonym).toBe("Русский");
+    expect(LOCALES.find((item) => item.code === "tr")?.endonym).toBe("Türkçe");
   });
 
   it("round-trips every code through <html lang> back onto itself", () => {

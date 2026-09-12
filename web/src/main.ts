@@ -759,7 +759,7 @@ function diffStyleProperties(
 }
 
 /** Bring the basemap onto the current theme and locale without rebuilding
- * it. Both flavors and all ten label languages come out of the same
+ * it. Both flavors and all eleven label languages come out of the same
  * `basemapLayers` call — the same layers under the same ids, differing only
  * in their paint and layout values — so a switch is the difference between
  * the style the map carries and a fresh build, applied property by property,

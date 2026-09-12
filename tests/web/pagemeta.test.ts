@@ -25,6 +25,7 @@ describe("page URLs", () => {
       "fr",
       "es",
       "pt",
+      "tr",
       "ru",
       "x-default",
     ]);
