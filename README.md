@@ -284,6 +284,29 @@ reusable [`publish.yml`](.github/workflows/publish.yml) — using the
 repository secrets. The bucket keeps only the live run per source. Each
 workflow also takes a manual dispatch with a dry-run switch.
 
+The scheduled publish does not build a run in one go. A run's bundles are
+independent of one another, so `publish.yml` splits them into groups
+(`xuebuild bundle-groups`, at most `max_jobs` of roughly equal cost) and
+builds each group in a job of its own: that job fetches only its bundles'
+GRIB records, packs them (`xuebuild build-bin --bundles …`), syncs and
+warms what it built (`make upload-r2-bundles`) and hands on a partial
+manifest, `manifest.part.<group>.json`, as a workflow artifact. One last
+job merges the parts into the run's `manifest.json` and pointer (`xuebuild
+assemble-run`), uploads and warms the manifest and takes the run live
+(`make upload-r2-manifest`), then prunes. The wall time is one group's
+build rather than every bundle's in a row, and stays flat as bundles are
+added; `tests/test_assemble.py` holds a split build byte-identical to a
+whole one. The same pieces work by hand:
+
+```sh
+# on as many machines as you like, one group each
+.venv/bin/python -m xuebuild build-bin --model gfs --run 2026081600 --profile balanced --bundles tmp2m prate
+make upload-r2-bundles MODEL=gfs RUN=2026081600
+# then, with every manifest.part.*.json gathered into web/public/data/gfs.2026081600/
+.venv/bin/python -m xuebuild assemble-run --model gfs --run 2026081600
+make upload-r2-manifest MODEL=gfs RUN=2026081600    # manifest, warm it, then the pointer
+```
+
 The Pages shell is deployed separately (`make deploy`) and only needs
 redeploying when frontend code changes.
 

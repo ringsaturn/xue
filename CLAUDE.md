@@ -254,6 +254,21 @@ publishing data at the new version.**
 - `showcase.py` — case definitions → cropped bundles → `showcase.json`. An
   observation case names a local `dataset` file instead of a `run` to fetch
   (`XUE_OBSERVATION_ROOT`).
+- `assemble.py` — a run built in pieces. The scheduled `publish.yml` fans a
+  run out over one job per **bundle group** (`bundle-groups` packs the
+  source's bundles into at most `max_jobs` jobs of roughly equal cost; the
+  matrix also says which jobs need ffmpeg): each job runs `build-bin
+  --bundles …`, which fetches only those bundles' inputs (into
+  `data/raw/partial/<group>/`, never mistaken for a full fetch), converts
+  with `bundle_ids` restricted and writes `manifest.part.<group>.json`
+  beside the bundles instead of `manifest.json`; the finalize job merges
+  the parts with `assemble-run` (every published bundle exactly once, in
+  publication order, core pair required) and only then writes the pointer.
+  `make upload-r2-bundles` / `upload-r2-manifest` are the two halves of
+  `upload-r2`; a part never reaches the bucket. `tests/test_assemble.py`
+  holds a split build byte-identical to a whole one — a bundle's bytes must
+  never depend on what else was in the build, so nothing cross-variable
+  may creep into a bundle or its manifest entry.
 
 External tools are invoked as CLI subprocesses (`gdal.py`, `zstdcli.py`,
 `ffmpegcli.py`, `eccodescli.py`) rather than added as binary Python

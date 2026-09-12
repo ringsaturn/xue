@@ -57,4 +57,8 @@ jobs:
       keep: ${{ inputs.keep || '1' }}
       force: ${{ inputs.force || false }}
       dry_run: ${{ inputs.dry_run || false }}
+      # The open data mirrors answer bursts with 503 Slow Down, and the
+      # request pacing in xuebuild.fetch is per process: every build job is
+      # another client, so fewer of them.
+      max_jobs: 8
     secrets: inherit

@@ -20,16 +20,34 @@
 # The H.264 companions are skipped: they are opt-in (`?use_h264=true`) and
 # would double the bytes warmed for viewers that never request them.
 #
-# Usage: scripts/warm_edge_cache.sh <model> <run>
-# Reads web/public/data/<model>.<run>/manifest.json and the model's pointer
-# file for the manifest's own ?v=. DATA_DIR, DATA_URL, SITE_ORIGIN and
-# WARM_JOBS override the local data root, the hostnames and the concurrency.
-# Exits non-zero if any fetch failed; the caller decides whether that blocks
-# anything.
+# Usage: scripts/warm_edge_cache.sh <model> <run> [--artifacts-of <manifest>]
+#                                                [--manifest-only]
+# Without a flag: reads web/public/data/<model>.<run>/manifest.json and the
+# model's pointer file for the manifest's own ?v=, and warms everything —
+# the whole-run publish. The scheduled publish builds a run in pieces and
+# warms in pieces: `--artifacts-of` warms the artifacts one partial manifest
+# (manifest.part.<group>.json) names and nothing else, and `--manifest-only`
+# warms the assembled manifest alone, once it is uploaded. DATA_DIR,
+# DATA_URL, SITE_ORIGIN and WARM_JOBS override the local data root, the
+# hostnames and the concurrency.
+#
+# Each GET is bounded (WARM_MAX_TIME, default 300 s) and retried once: a
+# fill that stalls at the edge — seen taking 18 minutes for a 15 MB object
+# and then not completing — must not hold a whole publish, and a second
+# request usually finds the fill done. Exits non-zero if any fetch still
+# failed; the caller decides whether that blocks anything.
 set -eu
 
 model=$1
 run=$2
+scope=all
+source=
+case ${3:-} in
+  "") ;;
+  --artifacts-of) scope=artifacts; source=${4:?--artifacts-of needs a manifest file} ;;
+  --manifest-only) scope=manifest ;;
+  *) echo "unknown option: $3" >&2; exit 2 ;;
+esac
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 data=${DATA_DIR:-$root/web/public/data}
 dir=$data/$model.$run
@@ -37,29 +55,37 @@ case $model in
   gfs) pointer=$data/latest.json ;;
   *) pointer=$data/latest-$model.json ;;
 esac
-[ -f "$dir/manifest.json" ] || { echo "no manifest at $dir/manifest.json" >&2; exit 1; }
-[ -f "$pointer" ] || { echo "no pointer at $pointer" >&2; exit 1; }
+[ "$scope" = artifacts ] || [ -f "$pointer" ] || { echo "no pointer at $pointer" >&2; exit 1; }
+[ "$scope" = manifest ] || [ -n "$source" ] || source=$dir/manifest.json
+[ -z "$source" ] || [ -f "$source" ] || { echo "no manifest at $source" >&2; exit 1; }
 
 export WARM_BASE="${DATA_URL:-https://dataset.ringsaturn.me/xue}/$model.$run"
 export WARM_ORIGIN=${SITE_ORIGIN:-https://xue.ringsaturn.me}
+export WARM_MAX_TIME=${WARM_MAX_TIME:-300}
 jobs=${WARM_JOBS:-6}
 
 # One `<path>?v=<crc32>` per line, the manifest first: it is the first thing
 # a viewer fetches, and the pointer is where its crc32 lives.
 artifacts=$(
-  printf 'manifest.json?v=%s\n' "$(jq -r .manifestCrc32 "$pointer")"
-  jq -r '.bundles[]
+  [ "$scope" = artifacts ] || printf 'manifest.json?v=%s\n' "$(jq -r .manifestCrc32 "$pointer")"
+  [ "$scope" = manifest ] || jq -r '.bundles[]
          | ., .variants[], (.poster // empty)
-         | "\(.path)?v=\(.crc32)"' "$dir/manifest.json"
+         | "\(.path)?v=\(.crc32)"' "$source"
 )
 
 # Status, bytes, seconds, edge cache status and the artifact, one line each.
 # `%header{}` needs curl >= 7.83; a `000` status is a transport failure.
+# Two attempts: a second GET of a stalled object is served once the fill
+# completes, and the reported line is the attempt that succeeded.
 report=$(
   printf '%s\n' "$artifacts" | xargs -P "$jobs" -n 1 sh -c '
-    curl -sS -o /dev/null -H "Origin: $WARM_ORIGIN" \
-      -w "%{http_code} %{size_download} %{time_total} %header{cf-cache-status} $1\n" \
-      "$WARM_BASE/$1" || printf "000 0 0 - %s\n" "$1"' sh
+    for attempt in 1 2; do
+      line=$(curl -sS -o /dev/null -H "Origin: $WARM_ORIGIN" --max-time "$WARM_MAX_TIME" \
+        -w "%{http_code} %{size_download} %{time_total} %header{cf-cache-status} $1\n" \
+        "$WARM_BASE/$1") || line="000 0 0 - $1"
+      case $line in 2*) break ;; esac
+    done
+    printf "%s\n" "$line"' sh
 )
 
 printf '%s\n' "$report" | sort -k5

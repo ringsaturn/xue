@@ -2,8 +2,10 @@ name: publish sflux
 
 # GFS surface flux on the native ~13 km Gaussian grid (3072 × 1536), hourly
 # to F120 and 3-hourly to F240, with the extra dswrf layer. Same cycles as
-# GFS 0.25°, but roughly 4.5× the points per frame, so it builds slower and
-# needs more runner disk. The pipeline lives in the reusable publish.yml.
+# GFS 0.25°, but roughly 4.5× the points per frame, so each bundle builds
+# slower. Split one bundle per job, a build fits a hosted runner's disk
+# without sweeping the preinstalled toolchains first. The pipeline lives in
+# the reusable publish.yml.
 
 on:
   schedule:
@@ -54,7 +56,4 @@ jobs:
       keep: ${{ inputs.keep || '1' }}
       force: ${{ inputs.force || false }}
       dry_run: ${{ inputs.dry_run || false }}
-      # 3072 × 1536 × 121 frames of GRIB and intermediate planes do not fit
-      # beside the runner's preinstalled toolchains.
-      free_disk_space: true
     secrets: inherit

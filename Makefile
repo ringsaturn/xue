@@ -32,7 +32,7 @@ AWS_REQUEST_CHECKSUM_CALCULATION ?= when_required
 AWS_RESPONSE_CHECKSUM_VALIDATION ?= when_required
 export AWS_DEFAULT_REGION AWS_REQUEST_CHECKSUM_CALCULATION AWS_RESPONSE_CHECKSUM_VALIDATION
 
-.PHONY: check install wasm test test-rust test-e2e encoder-rust encoder-rust-test encoder-wheel bench bench-video bench-lossy mvp serve format-pdf deploy-build upload-r2 warm-r2 prune-r2 live-run deploy-pages deploy showcase showcase-check upload-r2-showcase clean
+.PHONY: check install wasm test test-rust test-e2e encoder-rust encoder-rust-test encoder-wheel bench bench-video bench-lossy mvp serve format-pdf deploy-build upload-r2 upload-r2-bundles upload-r2-manifest check-pointer upload-r2-pointer warm-r2 prune-r2 live-run deploy-pages deploy showcase showcase-check upload-r2-showcase clean
 
 check:
 	$(PYTHON) scripts/check_dependencies.py
@@ -140,19 +140,74 @@ deploy-build:
 # new run finds it at the edge rather than waiting on the fill from R2; a
 # warm-up failure is reported but never holds the pointer back.
 # Pass a concrete RUN=YYYYMMDDHH.
+#
+# This is the whole-run path for a run built in one go. The scheduled publish
+# builds a run in pieces — one job per bundle group, each syncing what it
+# built with `upload-r2-bundles`, then one job assembling the manifest and
+# taking the run live with `upload-r2-manifest` — and the three targets share
+# their pieces: a partial manifest (manifest.part.*.json, the assembler's
+# input) never reaches the bucket from any of them.
 upload-r2:
 	@set -e; dir=web/public/data/$(MODEL).$(RUN); \
 	[ -d "$$dir" ] || { echo "no built run at $$dir, pass RUN=YYYYMMDDHH"; exit 1; }; \
+	$(MAKE) --no-print-directory check-pointer MODEL=$(MODEL) RUN=$(RUN); \
+	$(S3) sync $$dir s3://$(R2_BUCKET)/$(R2_PREFIX)/$(MODEL).$(RUN)/ --no-progress $(DRY_RUN) \
+		--exclude "manifest.part.*.json" \
+		--cache-control "public, max-age=31536000, immutable"; \
+	[ -n "$(DRY_RUN)" ] || $(MAKE) --no-print-directory warm-r2 MODEL=$(MODEL) RUN=$(RUN) \
+		|| echo "warming the edge cache failed; the run goes live cold"; \
+	$(MAKE) --no-print-directory upload-r2-pointer MODEL=$(MODEL) RUN=$(RUN) DRY_RUN=$(DRY_RUN)
+
+# One piece of a fanned-out publish: sync whatever bundles, variants, posters
+# and companions this machine built into the run directory (no manifest —
+# the assembler writes that, and a part stays local), then warm exactly
+# those artifacts, listed by the partial manifests present. The run is not
+# live and nothing references these objects until the pointer flips, so a
+# piece that never gets assembled is an orphan the next prune deletes.
+upload-r2-bundles:
+	@set -e; dir=web/public/data/$(MODEL).$(RUN); \
+	[ -d "$$dir" ] || { echo "no built bundles at $$dir, pass RUN=YYYYMMDDHH"; exit 1; }; \
+	ls $$dir/manifest.part.*.json > /dev/null 2>&1 || { echo "no manifest.part.*.json in $$dir: build with --bundles"; exit 1; }; \
+	$(S3) sync $$dir s3://$(R2_BUCKET)/$(R2_PREFIX)/$(MODEL).$(RUN)/ --no-progress $(DRY_RUN) \
+		--exclude "manifest.json" --exclude "manifest.part.*.json" \
+		--cache-control "public, max-age=31536000, immutable"; \
+	[ -n "$(DRY_RUN)" ] || for part in $$dir/manifest.part.*.json; do \
+		scripts/warm_edge_cache.sh $(MODEL) $(RUN) --artifacts-of "$$part" \
+			|| echo "warming the edge cache for $$part failed; those artifacts go live cold"; \
+	done
+
+# The last piece: the assembled manifest (immutable like the bundles it
+# names), warmed on its own, then the pointer that takes the run live.
+upload-r2-manifest:
+	@set -e; dir=web/public/data/$(MODEL).$(RUN); \
+	[ -f "$$dir/manifest.json" ] || { echo "no manifest at $$dir/manifest.json: run assemble-run first"; exit 1; }; \
+	$(MAKE) --no-print-directory check-pointer MODEL=$(MODEL) RUN=$(RUN); \
+	$(S3) cp $$dir/manifest.json s3://$(R2_BUCKET)/$(R2_PREFIX)/$(MODEL).$(RUN)/manifest.json --no-progress $(DRY_RUN) \
+		--content-type application/json --cache-control "public, max-age=31536000, immutable"; \
+	[ -n "$(DRY_RUN)" ] || scripts/warm_edge_cache.sh $(MODEL) $(RUN) --manifest-only \
+		|| echo "warming the manifest failed; the run goes live cold"; \
+	$(MAKE) --no-print-directory upload-r2-pointer MODEL=$(MODEL) RUN=$(RUN) DRY_RUN=$(DRY_RUN)
+
+# The pointer must name the run being uploaded and carry the CRC32 of the
+# manifest on disk — a later build, or an assemble of other parts, rewrites
+# both, and a pointer that disagrees with its manifest strands every viewer
+# on a 404.
+check-pointer:
+	@set -e; dir=web/public/data/$(MODEL).$(RUN); \
 	pointer_run=$$(jq -r .run web/public/data/$(LATEST_FILE)); \
 	[ "$$pointer_run" = "$(RUN)" ] || { \
 		echo "$(LATEST_FILE) names run $$pointer_run, not $(RUN) — a later build rewrote it;"; \
 		echo "rebuild run $(RUN) (or upload run $$pointer_run) so the pointer matches the assets"; \
 		exit 1; }; \
-	$(S3) sync $$dir s3://$(R2_BUCKET)/$(R2_PREFIX)/$(MODEL).$(RUN)/ --no-progress $(DRY_RUN) \
-		--cache-control "public, max-age=31536000, immutable"; \
-	[ -n "$(DRY_RUN)" ] || $(MAKE) --no-print-directory warm-r2 MODEL=$(MODEL) RUN=$(RUN) \
-		|| echo "warming the edge cache failed; the run goes live cold"; \
-	echo "Uploading $(LATEST_FILE) (takes $(MODEL) run $(RUN) live)..."; \
+	pointer_crc=$$(jq -r .manifestCrc32 web/public/data/$(LATEST_FILE)); \
+	manifest_crc=$$($(PYTHON) -c "import sys, zlib; print(f'{zlib.crc32(open(sys.argv[1], \"rb\").read()) & 0xFFFFFFFF:08x}')" $$dir/manifest.json); \
+	[ "$$pointer_crc" = "$$manifest_crc" ] || { \
+		echo "$(LATEST_FILE) carries manifest CRC32 $$pointer_crc but $$dir/manifest.json is $$manifest_crc;"; \
+		echo "rebuild or reassemble run $(RUN) so the pointer matches the manifest"; \
+		exit 1; }
+
+upload-r2-pointer:
+	@echo "Uploading $(LATEST_FILE) (takes $(MODEL) run $(RUN) live)..."; \
 	$(S3) cp web/public/data/$(LATEST_FILE) s3://$(R2_BUCKET)/$(R2_PREFIX)/$(LATEST_FILE) --no-progress $(DRY_RUN) \
 		--content-type application/json --cache-control "no-cache"
 
