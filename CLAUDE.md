@@ -402,12 +402,20 @@ and one capsule at the bottom holds the whole transport: the pressure family's
 level row, the forecast hour and valid time, the speed and play buttons, and a
 track whose tick marks, playhead and day labels *are* the slider's appearance
 (the `<input type=range>` itself is transparent and only carries the hit area,
-the keyboard and the accessible name). `src/theme.ts` resolves light/dark once
-per page load the way `i18n.ts` resolves the locale, and the toggle reloads for
-the same reason: the basemap flavor is baked into the style, and swapping it
-would mean `map.setStyle`, which drops the custom WebGL layers the forecast is
-drawn in. `index.html` repeats that detection inline so the shell never paints
-on the wrong ground first.
+the keyboard and the accessible name). `src/theme.ts` resolves light/dark
+before the first render the way `i18n.ts` resolves the locale, and both
+switch **in place**, never by reload: `toggleTheme` / `setLocale` persist the
+choice, restamp the document and notify listeners (`onThemeChange`,
+`onLocaleChange`), and `main.ts::applyAppearance` / `applyLocale` repaint
+what the stylesheet cannot. The basemap is the delicate part — a Protomaps
+flavor and label language are baked into the style, and `map.setStyle`
+would drop the custom WebGL layers the forecast is drawn in — so
+`syncBasemapStyle` builds the style again and applies the property-level
+diff (paint, layout, filter, sprite) to the layers already on the map.
+`isDark`, `locale`, `htmlLang` and `basemapLang` are live bindings: read
+them at use, never capture them in a module-level constant. `index.html`
+repeats the theme detection inline so the shell never paints on the wrong
+ground first.
 
 Light does not mean a light map. Each layer keeps the ground its palette needs
 — a warm sheet under temperature, a dark slate under precipitation, wind,
@@ -436,8 +444,10 @@ locally, browse `http://localhost:4173` rather than the loopback address.
 
 - Locale is one of ten — `zh`, `zh-Hant`, `en`, `ja`, `ko`, `de`, `fr`, `es`,
   `pt`, `ru` — via `web/src/i18n.ts`, and appearance is `light`/`dark` via
-  `web/src/theme.ts`; both are fixed per page load, and the language picker
-  and the appearance toggle each persist the choice and reload onto it. The
+  `web/src/theme.ts`; both are resolved before the first render, and the
+  language picker and the appearance toggle each persist the choice and
+  switch in place (see the shell section above). Long-lived status copy in
+  `main.ts` goes through `say()` so a switch can restate it. The
   dictionary is one module per language under `web/src/locales/`, each typed
   `Record<MessageKey, string>` against `en.ts` — the source of truth, and the
   only one carrying the design notes on what a string has to fit — so `tsc`

@@ -6,7 +6,17 @@ import "@fontsource/ibm-plex-mono/400.css";
 import "@fontsource/ibm-plex-mono/500.css";
 import "./style.css";
 
-import { applyStaticMessages, locale, localeHtmlLang, LOCALES, setLocale, t, type Locale } from "./i18n";
+import {
+  applyStaticMessages,
+  locale,
+  localeHtmlLang,
+  LOCALES,
+  onLocaleChange,
+  setLocale,
+  t,
+  type Locale,
+  type MessageKey,
+} from "./i18n";
 import { createSheet, fillLanguageList } from "./sheet";
 import { applyTheme, toggleTheme } from "./theme";
 import { isObservationModel, parseBundleMetadata, type ForecastBundleId, type PosterDescriptor } from "./manifest";
@@ -38,7 +48,8 @@ const status = document.getElementById("showcase-status") as HTMLParagraphElemen
 document.getElementById("theme-toggle")?.addEventListener("click", () => toggleTheme());
 
 // The language picker: the viewer's sheet, the viewer's rows, on this page's
-// own trigger.
+// own trigger. A pick re-renders the cards in place; the thumbnails, already
+// painted, are carried over rather than fetched again.
 const langTrigger = document.getElementById("lang-toggle");
 const langSheet = document.getElementById("lang-sheet");
 const langList = document.getElementById("lang-list");
@@ -48,14 +59,17 @@ if (langTrigger && langSheet && langList) {
     sheet: langSheet,
     initialFocus: (sheet) => sheet.querySelector<HTMLButtonElement>("button[aria-current]"),
   });
-  fillLanguageList(langList, LOCALES, {
-    current: locale,
-    htmlLang: localeHtmlLang,
-    onPick: (next: Locale) => {
-      langSheetControl.close();
-      if (next !== locale) setLocale(next);
-    },
-  });
+  const renderLanguageList = () =>
+    fillLanguageList(langList, LOCALES, {
+      current: locale,
+      htmlLang: localeHtmlLang,
+      onPick: (next: Locale) => {
+        langSheetControl.close();
+        setLocale(next);
+      },
+    });
+  renderLanguageList();
+  onLocaleChange(renderLanguageList);
 }
 
 function dataBaseUrl(): string {
@@ -129,7 +143,12 @@ function definition(label: string, value: string, wide = false): HTMLElement {
   return item;
 }
 
-function buildCard(showcaseCase: ShowcaseCase): { item: HTMLLIElement; canvas: HTMLCanvasElement } {
+/** One card. The canvas is the thumbnail's, and a card rebuilt for another
+ * language takes the one already painted. */
+function buildCard(
+  showcaseCase: ShowcaseCase,
+  canvas: HTMLCanvasElement = document.createElement("canvas"),
+): { item: HTMLLIElement; canvas: HTMLCanvasElement } {
   const item = document.createElement("li");
   item.className = "showcase-card";
   const link = document.createElement("a");
@@ -138,7 +157,6 @@ function buildCard(showcaseCase: ShowcaseCase): { item: HTMLLIElement; canvas: H
 
   const figure = document.createElement("div");
   figure.className = "showcase-thumb";
-  const canvas = document.createElement("canvas");
   canvas.setAttribute("aria-hidden", "true");
   // The dataset code rides on the thumbnail, the way a contact sheet is
   // stamped rather than captioned.
@@ -231,10 +249,12 @@ async function paintThumbnail(showcaseCase: ShowcaseCase, canvas: HTMLCanvasElem
 }
 
 /** The cases as structured data — an ItemList of the pages they open — so
- * an indexer that ran the page sees the same list the cards show. Appended
- * once per load; the catalog is the list, so nothing here is re-rendered. */
+ * an indexer that ran the page sees the same list the cards show. One
+ * element per load, rewritten when the cards are (a language switch). */
+let caseListScript: HTMLScriptElement | null = null;
+
 function publishCaseList(cases: readonly ShowcaseCase[]): void {
-  const script = document.createElement("script");
+  const script = caseListScript ?? document.createElement("script");
   script.type = "application/ld+json";
   script.textContent = JSON.stringify({
     "@context": "https://schema.org",
@@ -250,30 +270,56 @@ function publishCaseList(cases: readonly ShowcaseCase[]): void {
       description: localizedText(showcaseCase.summary, locale),
     })),
   });
-  document.head.appendChild(script);
+  if (!caseListScript) {
+    caseListScript = script;
+    document.head.appendChild(script);
+  }
+}
+
+/** The catalog once it has loaded, and each case's thumbnail canvas, so
+ * the cards can be built again in another language. */
+let cases: readonly ShowcaseCase[] = [];
+const thumbnails = new Map<string, HTMLCanvasElement>();
+
+/** The status line's message, kept so a language switch can say it again. */
+let statusMessage: { key: MessageKey; params?: Record<string, string | number> } | null = null;
+
+function setStatus(key: MessageKey, params?: Record<string, string | number>): void {
+  statusMessage = { key, params };
+  status.textContent = t(key, params);
+}
+
+function renderCards(): void {
+  const cards = cases.map((showcaseCase) => ({ showcaseCase, ...buildCard(showcaseCase, thumbnails.get(showcaseCase.id)) }));
+  for (const card of cards) thumbnails.set(card.showcaseCase.id, card.canvas);
+  list.replaceChildren(...cards.map((card) => card.item));
+  publishCaseList(cases);
 }
 
 async function render(): Promise<void> {
   try {
     const catalog = await fetchCatalog(dataBaseUrl());
     if (catalog.cases.length === 0) {
-      status.textContent = t("showcaseEmpty");
+      setStatus("showcaseEmpty");
       return;
     }
     status.hidden = true;
-    const cards = catalog.cases.map((showcaseCase) => ({ showcaseCase, ...buildCard(showcaseCase) }));
-    list.replaceChildren(...cards.map((card) => card.item));
-    publishCaseList(catalog.cases);
+    cases = catalog.cases;
+    renderCards();
     // Thumbnails are posters — under a kilobyte each — so the handful a
     // catalog holds can all be fetched at once.
-    await Promise.allSettled(cards.map((card) => paintThumbnail(card.showcaseCase, card.canvas)));
+    await Promise.allSettled(cases.map((showcaseCase) => paintThumbnail(showcaseCase, thumbnails.get(showcaseCase.id)!)));
   } catch (error) {
     status.hidden = false;
     status.classList.add("is-error");
-    status.textContent = t("showcaseLoadFailed", {
-      message: error instanceof Error ? error.message : String(error),
-    });
+    setStatus("showcaseLoadFailed", { message: error instanceof Error ? error.message : String(error) });
   }
 }
+
+onLocaleChange(() => {
+  applyPageMeta({ path: "/showcase.html" });
+  if (statusMessage) setStatus(statusMessage.key, statusMessage.params);
+  if (cases.length > 0) renderCards();
+});
 
 void render();

@@ -30,9 +30,11 @@ import {
   locale,
   localeHtmlLang,
   LOCALES,
+  onLocaleChange,
   setLocale,
   t,
   type Locale,
+  type MessageKey,
 } from "./i18n";
 import { createSheet, fillLanguageList } from "./sheet";
 import { ForecastLayer, MAX_NAMED_CONTOURS, type ContourStyle, type VectorField } from "./layer";
@@ -131,7 +133,7 @@ import {
 } from "./probe";
 import { fetchPoster, isPosterSupported } from "./poster";
 import { frameCacheKey, parseFrameCacheKey, variableKey } from "./sessionkeys";
-import { applyTheme, isDark, toggleTheme } from "./theme";
+import { applyTheme, isDark, onThemeChange, toggleTheme } from "./theme";
 import {
   coverageBox,
   coversTiles,
@@ -285,110 +287,117 @@ function isobaricVariableUi(): Record<string, VariableUi> {
   return entries;
 }
 
-const VARIABLE_UI: Record<string, VariableUi> = {
-  tmp2m: {
-    code: "TMP 2M",
-    title: ["Surface", "Temperature"],
-    bufferTitle: "Temperature buffer",
-    label: t("varLabelTmp2m"),
-    legend: ["50", "30", "10", "-10", "-30", "-60"],
-  },
-  prate: {
-    code: "PRATE SFC",
-    title: ["Precipitation", "Rate"],
-    bufferTitle: "Precipitation buffer",
-    label: t("varLabelPrate"),
-    legend: ["128", "40", "20", "5", "1", "0"],
-  },
-  dswrf: {
-    code: "DSWRF SFC",
-    title: ["Solar", "Radiation"],
-    bufferTitle: "Radiation buffer",
-    label: t("varLabelDswrf"),
-    legend: ["1200", "900", "600", "300", "100", "0"],
-  },
-  cref: {
-    code: "CREF EATM",
-    title: ["Composite", "Reflectivity"],
-    bufferTitle: "Reflectivity buffer",
-    label: t("varLabelCref"),
-    legend: ["75", "60", "45", "30", "15", "0"],
-  },
-  wind10m: {
-    code: "WIND 10M",
-    title: ["Surface", "Wind"],
-    bufferTitle: "Wind buffer",
-    label: t("varLabelWind10m"),
-    legend: ["40", "30", "20", "10", "5", "0"],
-  },
-  // The surface diagnostics' legends read off their chart ceilings
-  // (levels.ts), the way the upper-air fills' do.
-  gust: {
-    code: "GUST SFC",
-    title: ["Wind", "Gust"],
-    bufferTitle: "Gust buffer",
-    label: t("varLabelGust"),
-    legend: isobaricLegend(identityForBundleId("gust")!) ?? [],
-  },
-  tcdc: {
-    code: "TCDC EATM",
-    title: ["Cloud", "Cover"],
-    bufferTitle: "Cloud buffer",
-    label: t("varLabelTcdc"),
-    legend: isobaricLegend(identityForBundleId("tcdc")!) ?? [],
-  },
-  cape: {
-    code: "CAPE SFC",
-    title: ["Convective", "Energy"],
-    bufferTitle: "CAPE buffer",
-    label: t("varLabelCape"),
-    legend: isobaricLegend(identityForBundleId("cape")!) ?? [],
-  },
-  lcdc: {
-    code: "LCDC LOW",
-    title: ["Low", "Cloud"],
-    bufferTitle: "Cloud buffer",
-    label: t("varLabelLcdc"),
-    legend: isobaricLegend(identityForBundleId("lcdc")!) ?? [],
-  },
-  mcdc: {
-    code: "MCDC MID",
-    title: ["Middle", "Cloud"],
-    bufferTitle: "Cloud buffer",
-    label: t("varLabelMcdc"),
-    legend: isobaricLegend(identityForBundleId("mcdc")!) ?? [],
-  },
-  hcdc: {
-    code: "HCDC HIGH",
-    title: ["High", "Cloud"],
-    bufferTitle: "Cloud buffer",
-    label: t("varLabelHcdc"),
-    legend: isobaricLegend(identityForBundleId("hcdc")!) ?? [],
-  },
-  vis: {
-    code: "VIS SFC",
-    title: ["Surface", "Visibility"],
-    bufferTitle: "Visibility buffer",
-    label: t("varLabelVis"),
-    legend: isobaricLegend(identityForBundleId("vis")!) ?? [],
-  },
-  dpt2m: {
-    code: "DPT 2M",
-    title: ["Dew", "Point"],
-    bufferTitle: "Dew point buffer",
-    label: t("varLabelDpt2m"),
-    legend: isobaricLegend(identityForBundleId("dpt2m")!) ?? [],
-  },
-  aptmp2m: {
-    code: "APTMP 2M",
-    title: ["Apparent", "Temperature"],
-    bufferTitle: "Apparent temperature buffer",
-    label: t("varLabelAptmp2m"),
-    legend: isobaricLegend(identityForBundleId("aptmp2m")!) ?? [],
-  },
-  ...pressureVariableUi(),
-  ...isobaricVariableUi(),
-} as unknown as Record<string, VariableUi>;
+/** The whole table, built rather than written so that the translated
+ * labels in it follow a language switch: `VARIABLE_UI` is rebuilt from
+ * here on every `onLocaleChange`. */
+function buildVariableUi(): Record<string, VariableUi> {
+  return {
+    tmp2m: {
+      code: "TMP 2M",
+      title: ["Surface", "Temperature"],
+      bufferTitle: "Temperature buffer",
+      label: t("varLabelTmp2m"),
+      legend: ["50", "30", "10", "-10", "-30", "-60"],
+    },
+    prate: {
+      code: "PRATE SFC",
+      title: ["Precipitation", "Rate"],
+      bufferTitle: "Precipitation buffer",
+      label: t("varLabelPrate"),
+      legend: ["128", "40", "20", "5", "1", "0"],
+    },
+    dswrf: {
+      code: "DSWRF SFC",
+      title: ["Solar", "Radiation"],
+      bufferTitle: "Radiation buffer",
+      label: t("varLabelDswrf"),
+      legend: ["1200", "900", "600", "300", "100", "0"],
+    },
+    cref: {
+      code: "CREF EATM",
+      title: ["Composite", "Reflectivity"],
+      bufferTitle: "Reflectivity buffer",
+      label: t("varLabelCref"),
+      legend: ["75", "60", "45", "30", "15", "0"],
+    },
+    wind10m: {
+      code: "WIND 10M",
+      title: ["Surface", "Wind"],
+      bufferTitle: "Wind buffer",
+      label: t("varLabelWind10m"),
+      legend: ["40", "30", "20", "10", "5", "0"],
+    },
+    // The surface diagnostics' legends read off their chart ceilings
+    // (levels.ts), the way the upper-air fills' do.
+    gust: {
+      code: "GUST SFC",
+      title: ["Wind", "Gust"],
+      bufferTitle: "Gust buffer",
+      label: t("varLabelGust"),
+      legend: isobaricLegend(identityForBundleId("gust")!) ?? [],
+    },
+    tcdc: {
+      code: "TCDC EATM",
+      title: ["Cloud", "Cover"],
+      bufferTitle: "Cloud buffer",
+      label: t("varLabelTcdc"),
+      legend: isobaricLegend(identityForBundleId("tcdc")!) ?? [],
+    },
+    cape: {
+      code: "CAPE SFC",
+      title: ["Convective", "Energy"],
+      bufferTitle: "CAPE buffer",
+      label: t("varLabelCape"),
+      legend: isobaricLegend(identityForBundleId("cape")!) ?? [],
+    },
+    lcdc: {
+      code: "LCDC LOW",
+      title: ["Low", "Cloud"],
+      bufferTitle: "Cloud buffer",
+      label: t("varLabelLcdc"),
+      legend: isobaricLegend(identityForBundleId("lcdc")!) ?? [],
+    },
+    mcdc: {
+      code: "MCDC MID",
+      title: ["Middle", "Cloud"],
+      bufferTitle: "Cloud buffer",
+      label: t("varLabelMcdc"),
+      legend: isobaricLegend(identityForBundleId("mcdc")!) ?? [],
+    },
+    hcdc: {
+      code: "HCDC HIGH",
+      title: ["High", "Cloud"],
+      bufferTitle: "Cloud buffer",
+      label: t("varLabelHcdc"),
+      legend: isobaricLegend(identityForBundleId("hcdc")!) ?? [],
+    },
+    vis: {
+      code: "VIS SFC",
+      title: ["Surface", "Visibility"],
+      bufferTitle: "Visibility buffer",
+      label: t("varLabelVis"),
+      legend: isobaricLegend(identityForBundleId("vis")!) ?? [],
+    },
+    dpt2m: {
+      code: "DPT 2M",
+      title: ["Dew", "Point"],
+      bufferTitle: "Dew point buffer",
+      label: t("varLabelDpt2m"),
+      legend: isobaricLegend(identityForBundleId("dpt2m")!) ?? [],
+    },
+    aptmp2m: {
+      code: "APTMP 2M",
+      title: ["Apparent", "Temperature"],
+      bufferTitle: "Apparent temperature buffer",
+      label: t("varLabelAptmp2m"),
+      legend: isobaricLegend(identityForBundleId("aptmp2m")!) ?? [],
+    },
+    ...pressureVariableUi(),
+    ...isobaricVariableUi(),
+  } as unknown as Record<string, VariableUi>;
+}
+
+let VARIABLE_UI: Record<string, VariableUi> = buildVariableUi();
 
 interface BasemapTones {
   ocean: string;
@@ -505,11 +514,15 @@ const LIGHT_BASEMAP: Record<string, BasemapTones> = {
   ...isobaricBasemapTheme(() => PAPER_GROUND),
 } as Record<string, BasemapTones>;
 
-const BASEMAP_THEME = isDark ? DARK_BASEMAP : LIGHT_BASEMAP;
+/** Read at every use rather than once: the theme toggles in place. */
+function basemapThemes(): Record<string, BasemapTones> {
+  return isDark ? DARK_BASEMAP : LIGHT_BASEMAP;
+}
 
 function currentBasemapTheme(): BasemapTones {
+  const themes = basemapThemes();
   const id = document.body.dataset.variable;
-  return BASEMAP_THEME[id ?? "tmp2m"] ?? BASEMAP_THEME.tmp2m!;
+  return themes[id ?? "tmp2m"] ?? themes.tmp2m!;
 }
 
 /** Relative luminance of a `#rrggbb` tone. */
@@ -537,13 +550,14 @@ function applyBasemapTheme(): void {
 
 /** Repaint the basemap's labels and boundaries for the current ground.
  *
- * The Protomaps flavor is baked into the style when the map is built, and a
- * flavor cannot be swapped afterwards without `map.setStyle`, which would drop
- * the custom WebGL layers the forecast is drawn in. A session does switch
- * layers under those labels, though, so the two colors that have to stay
- * legible are set here instead of coming from the flavor. */
+ * A session switches layers under those labels, and the ground changes with
+ * the layer while the flavor's own text colors do not, so the two colors
+ * that have to stay legible are set here instead of coming from the flavor
+ * (and set again after `syncBasemapStyle` has repainted the flavor). */
 function applyBasemapInk(darkGround: boolean): void {
-  if (!map.isStyleLoaded()) return;
+  // The style's layers exist once it has loaded; `isStyleLoaded()` would also
+  // wait out every tile in flight and skip the repaint after a pan.
+  if (!mapStyleReady) return;
   const ink = darkGround ? "#eef1f4" : "#3a3730";
   const halo = darkGround ? "rgba(0, 0, 0, 0.75)" : "rgba(243, 239, 230, 0.92)";
   const border = darkGround ? "rgba(255, 255, 255, 0.32)" : "rgba(27, 26, 23, 0.3)";
@@ -601,6 +615,10 @@ function buildBasemapStyle(): BasemapStyle {
 
 setWorkerUrl(maplibreWorkerUrl);
 
+/** The basemap style the map currently carries, as built — what
+ * `syncBasemapStyle` diffs the next build against. */
+let appliedBasemapStyle: BasemapStyle = buildBasemapStyle();
+
 const map = new MaplibreMap({
   container: "map",
   center: [128, 28],
@@ -608,9 +626,69 @@ const map = new MaplibreMap({
   minZoom: 0,
   maxZoom: 7,
   attributionControl: false,
-  style: buildBasemapStyle(),
+  style: appliedBasemapStyle,
 });
 map.addControl(new NavigationControl({ showCompass: false }), "top-right");
+
+type StyleProperties = Record<string, unknown> | undefined;
+type PaintName = Parameters<typeof map.setPaintProperty>[1];
+type PaintValue = Parameters<typeof map.setPaintProperty>[2];
+type LayoutName = Parameters<typeof map.setLayoutProperty>[1];
+type LayoutValue = Parameters<typeof map.setLayoutProperty>[2];
+
+/** Apply every property of `next` that differs from `before`, and reset the
+ * ones `next` no longer has. */
+function diffStyleProperties(
+  before: StyleProperties,
+  next: StyleProperties,
+  set: (name: string, value: unknown) => void,
+): void {
+  for (const name of new Set([...Object.keys(before ?? {}), ...Object.keys(next ?? {})])) {
+    const previous = before?.[name];
+    const value = next?.[name];
+    if (JSON.stringify(previous) !== JSON.stringify(value)) set(name, value);
+  }
+}
+
+/** Bring the basemap onto the current theme and locale without rebuilding
+ * it. Both flavors and all ten label languages come out of the same
+ * `basemapLayers` call — the same layers under the same ids, differing only
+ * in their paint and layout values — so a switch is the difference between
+ * the style the map carries and a fresh build, applied property by property,
+ * plus the flavor's sprite. `map.setStyle` would do the same and also drop
+ * the custom WebGL layers the forecast is drawn in, which is what this
+ * exists to avoid. The ground tones and the ink go on top afterwards,
+ * through `applyBasemapTheme`, as they do on every layer switch. */
+function syncBasemapStyle(): void {
+  if (!mapStyleReady) return;
+  const next = buildBasemapStyle();
+  if (next.sprite !== appliedBasemapStyle.sprite && typeof next.sprite === "string") map.setSprite(next.sprite);
+  const previous = new Map(appliedBasemapStyle.layers.map((layer) => [layer.id, layer]));
+  for (const layer of next.layers) {
+    const before = previous.get(layer.id);
+    if (!before || !map.getLayer(layer.id)) continue;
+    const id = layer.id;
+    const paintBefore = (before as { paint?: StyleProperties }).paint;
+    const paintNext = (layer as { paint?: StyleProperties }).paint;
+    const layoutBefore = (before as { layout?: StyleProperties }).layout;
+    const layoutNext = (layer as { layout?: StyleProperties }).layout;
+    // The names come from the style itself; the typed overloads only know
+    // the property names written out in the spec.
+    diffStyleProperties(paintBefore, paintNext, (name, value) =>
+      map.setPaintProperty(id, name as PaintName, value as PaintValue),
+    );
+    diffStyleProperties(layoutBefore, layoutNext, (name, value) =>
+      map.setLayoutProperty(id, name as LayoutName, value as LayoutValue),
+    );
+    const filterBefore = (before as { filter?: unknown }).filter;
+    const filterNext = (layer as { filter?: unknown }).filter;
+    if (JSON.stringify(filterBefore) !== JSON.stringify(filterNext)) {
+      map.setFilter(id, filterNext as Parameters<typeof map.setFilter>[1]);
+    }
+  }
+  appliedBasemapStyle = next;
+  applyBasemapTheme();
+}
 
 const slider = required<HTMLInputElement>("frame-slider");
 const runTime = required<HTMLElement>("run-time");
@@ -730,14 +808,19 @@ const langSheetControl = createSheet({
   sheet: langSheet,
   initialFocus: (sheet) => sheet.querySelector<HTMLButtonElement>("button[aria-current]"),
 });
-fillLanguageList(required<HTMLElement>("lang-list"), LOCALES, {
-  current: locale,
-  htmlLang: localeHtmlLang,
-  onPick: (next: Locale) => {
-    langSheetControl.close();
-    if (next !== locale) setLocale(next);
-  },
-});
+/** The picker's rows, with the language in force checked; rebuilt after a
+ * switch so the check moves. */
+function renderLanguageList(): void {
+  fillLanguageList(required<HTMLElement>("lang-list"), LOCALES, {
+    current: locale,
+    htmlLang: localeHtmlLang,
+    onPick: (next: Locale) => {
+      langSheetControl.close();
+      setLocale(next);
+    },
+  });
+}
+renderLanguageList();
 
 interface DecodedFrame {
   plane: Uint8Array;
@@ -1070,14 +1153,41 @@ let particlesChosen = requestedParticles !== null;
  * on the dark theme, the paper theme's own ink on white. Partly transparent
  * either way — the field underneath has to read through the trails, and the
  * particles are there for direction and pace, not for a value. */
-const PARTICLE_INK: readonly [number, number, number, number] = isDark
-  ? [1, 1, 1, 0.45]
-  : [0.11, 0.1, 0.09, 0.4];
+function particleInk(): readonly [number, number, number, number] {
+  return isDark ? [1, 1, 1, 0.45] : [0.11, 0.1, 0.09, 0.4];
+}
 
 function required<T extends HTMLElement>(id: string): T {
   const element = document.getElementById(id);
   if (!element) throw new Error(`missing element #${id}`);
   return element as T;
+}
+
+/** Status copy that stays up for a long time — the load status, the data
+ * card's state line, the run stamp before a manifest, the error hint — is
+ * written through here so that a language switch can say it again in the
+ * new language: each element remembers the message it is showing. A stamp
+ * that is not a message (a date, a copied-notice restore) goes through
+ * `sayText`, which forgets the message. */
+const liveCopy = new Map<HTMLElement, () => string>();
+
+function say(element: HTMLElement, key: MessageKey, params?: Record<string, string | number>): void {
+  const speak = () => t(key, params);
+  // The markup's own key was the pre-JS copy; from here on the element is
+  // this registry's, and the static pass must not write over it again.
+  delete element.dataset.i18n;
+  liveCopy.set(element, speak);
+  element.textContent = speak();
+}
+
+function sayText(element: HTMLElement, text: string): void {
+  delete element.dataset.i18n;
+  liveCopy.delete(element);
+  element.textContent = text;
+}
+
+function resayAll(): void {
+  for (const [element, speak] of liveCopy) element.textContent = speak();
 }
 
 function formatDate(value: string | number): string {
@@ -1108,15 +1218,15 @@ function formatCompactDate(value: number): string {
 }
 
 /** Short weekday in the UI locale, read in UTC like every other stamp the
- * app shows. */
-const WEEKDAY_FORMAT = new Intl.DateTimeFormat(htmlLang, {
-  weekday: "short",
-  timeZone: "UTC",
-});
+ * app shows. Built per language, since the language can change under it. */
+let weekdayFormat: { lang: string; format: Intl.DateTimeFormat } | null = null;
 
 function formatDayMark(value: number): string {
+  if (weekdayFormat?.lang !== htmlLang) {
+    weekdayFormat = { lang: htmlLang, format: new Intl.DateTimeFormat(htmlLang, { weekday: "short", timeZone: "UTC" }) };
+  }
   const date = new Date(value);
-  return `${WEEKDAY_FORMAT.format(date)} ${String(date.getUTCDate()).padStart(2, "0")}`;
+  return `${weekdayFormat.format.format(date)} ${String(date.getUTCDate()).padStart(2, "0")}`;
 }
 
 function frameCount(): number {
@@ -1257,10 +1367,10 @@ function showError(message: string): void {
   document.body.classList.remove("is-data-loading");
   dataCard.setAttribute("aria-busy", "false");
   dataCard.classList.add("is-error");
-  preloadState.textContent = t("dataInterrupted");
-  errorMessage.textContent = t("errorHint", { message });
+  say(preloadState, "dataInterrupted");
+  say(errorMessage, "errorHint", { message });
   errorPanel.hidden = false;
-  loadStatus.textContent = t("loadFailed");
+  say(loadStatus, "loadFailed");
   loadStatus.className = "load-status is-error";
   setVariableButtonsDisabled(false);
 }
@@ -1285,7 +1395,7 @@ function resetPreloadCard(total: number): void {
   updateDownloadProgress(0, 1);
   preloadFrames.value = `0 / ${total}`;
   preloadFormat.value = "--";
-  preloadState.textContent = t("awaitingManifest");
+  say(preloadState, "awaitingManifest");
 }
 
 function updateDownloadProgress(bytes: number, total: number): void {
@@ -1497,6 +1607,8 @@ async function copyDebugInfo(): Promise<void> {
   } catch {
     notice = t("copyFailed");
   }
+  // A passing notice: the status underneath keeps its message, so a language
+  // switch during it restores the right one.
   loadStatus.textContent = notice;
   window.setTimeout(() => {
     if (loadStatus.textContent === notice) loadStatus.textContent = previous;
@@ -1856,9 +1968,7 @@ function refreshDataCard(session: VariableSession): void {
   dataCard.setAttribute("aria-busy", "false");
   const whole = session.resident && session.residentScope === "bundle";
   dataCard.classList.toggle("is-complete", whole);
-  preloadState.textContent = session.resident
-    ? t(whole ? "bundleResident" : "viewportResident")
-    : t("streamingOnDemand");
+  say(preloadState, session.resident ? (whole ? "bundleResident" : "viewportResident") : "streamingOnDemand");
 }
 
 /** Handles `progress`/`resident` messages from streaming decode channels. */
@@ -3013,7 +3123,7 @@ async function downloadBundle(
   sequence: number,
   quiet = false,
 ): Promise<ArrayBuffer> {
-  if (!quiet) preloadState.textContent = t("receivingBundle");
+  if (!quiet) say(preloadState, "receivingBundle");
   const response = await fetchImmutable(artifactUrl(descriptor.path, descriptor.crc32));
   if (!response.ok) throw new Error(t("bundleRequestFailed", { status: response.status }));
   const total = descriptor.byteLength;
@@ -3034,7 +3144,7 @@ async function downloadBundle(
       crc = crc32Update(crc, chunk);
       if (quiet) continue;
       updateDownloadProgress(offset, total);
-      loadStatus.textContent = t("receivingBundlePercent", { percent: Math.round((offset / total) * 100) });
+      say(loadStatus, "receivingBundlePercent", { percent: Math.round((offset / total) * 100) });
     }
   } else {
     const buffer = new Uint8Array(await response.arrayBuffer());
@@ -3287,7 +3397,7 @@ function loadVariable(
       totalBytes = target.byteLength;
     }
 
-    if (!overlay) loadStatus.textContent = streaming ? t("readingIndex") : t("initializingDecoder");
+    if (!overlay) say(loadStatus, streaming ? "readingIndex" : "initializingDecoder");
     const {
       worker: sessionWorker,
       metadata: bundleMetadata,
@@ -3804,7 +3914,7 @@ function ensureWindLayer(): WindParticleLayer {
     windLayer.animate = !reducedMotion.matches;
     // The field below already colors speed; a second ramp on top of it would
     // read as mud, so the particles are drawn in one ink.
-    windLayer.setInk(PARTICLE_INK);
+    windLayer.setInk(particleInk());
   }
   if (!windLayerAdded) {
     map.addLayer(windLayer, FORECAST_ANCHOR_LAYER);
@@ -4006,7 +4116,7 @@ async function activateVariable(variableId: ForecastBundleId): Promise<void> {
     applyVariable(resident);
     // Frame counts can differ per variable (ECMWF prate has no analysis
     // frame), so the readiness line follows the session it now describes.
-    loadStatus.textContent = t("framesReady", { count: frameCount() });
+    say(loadStatus, "framesReady", { count: frameCount() });
     loadStatus.className = "load-status";
     return;
   }
@@ -4017,7 +4127,7 @@ async function activateVariable(variableId: ForecastBundleId): Promise<void> {
   document.body.classList.add("is-data-loading");
   dataCard.setAttribute("aria-busy", "true");
   resetPreloadCard(frameCount());
-  loadStatus.textContent = t("readingData");
+  say(loadStatus, "readingData");
   loadStatus.className = "load-status is-loading";
   selectedVariableId = variableId;
   void showPoster(variableId, sequence);
@@ -4025,7 +4135,7 @@ async function activateVariable(variableId: ForecastBundleId): Promise<void> {
     const session = await loadVariable(variableId, sequence);
     if (sequence !== initializeSequence) return;
     applyVariable(session);
-    loadStatus.textContent = t("framesReady", { count: frameCount() });
+    say(loadStatus, "framesReady", { count: frameCount() });
     loadStatus.className = "load-status";
     if (wasPlaying && !reducedMotion.matches) startPlayback();
   } catch (error) {
@@ -4085,9 +4195,9 @@ async function initialize(): Promise<void> {
   hideError();
   resetPreloadCard(FRAME_COUNT);
   updateModelPresentation();
-  loadStatus.textContent = t("readingData");
+  say(loadStatus, "readingData");
   loadStatus.className = "load-status is-loading";
-  runTime.textContent = t("awaitingData");
+  say(runTime, "awaitingData");
 
   try {
     // Two ways in, one manifest contract. The live feed reads the mutable
@@ -4130,7 +4240,7 @@ async function initialize(): Promise<void> {
     // The dataset is settled here (a case pins its own), so the timeline can
     // be titled for what it actually shows.
     applyDatasetWording();
-    runTime.textContent = formatDate(loadedManifest.runTime);
+    sayText(runTime, formatDate(loadedManifest.runTime));
 
     // Each variable button appears only when the manifest actually ships its
     // bundle. On the live feed that is wind10m everywhere and dswrf on the
@@ -4171,7 +4281,7 @@ async function initialize(): Promise<void> {
     // the slider, ticks, and day strip from it.
     applyVariable(session);
 
-    loadStatus.textContent = t("framesReady", { count: frameCount() });
+    say(loadStatus, "framesReady", { count: frameCount() });
     loadStatus.className = "load-status";
     slider.disabled = false;
     playButton.disabled = false;
@@ -4237,10 +4347,57 @@ for (const button of modelButtons) {
   });
 }
 retryButton.addEventListener("click", () => void initialize());
-// Locale and theme are both fixed per page load (the basemap style bakes in
-// the label language and the flavor), so picking either one persists the
-// choice and reloads onto it. The language picker is wired where it is built,
-// beside the other two sheets.
+
+/** Everything the theme touches that is not the stylesheet's to repaint:
+ * the basemap flavor, the ground tones and inks over it, the contour ink
+ * of whatever surface is drawn, the particle ink, and the two canvases that
+ * read their colors off the chrome's tokens. The session — its workers,
+ * its decoded frames, its playhead — is untouched. */
+function applyAppearance(): void {
+  syncBasemapStyle();
+  windLayer?.setInk(particleInk());
+  for (const slot of [slots.fill, slots.lines]) {
+    const session = slot.session;
+    if (!session || session.vector) continue;
+    slot.layer.setContours(contourStyleFor(session.variable, session.identity, session !== activeSession));
+  }
+  scheduleProbeRender();
+}
+
+/** Everything the language touches beyond the static markup (which
+ * `setLocale` has already rewritten): the copy this module composes from
+ * state — the instrument table, the timeline wording, the day marks, the
+ * level row and legend, the page's own metadata, the long-lived status
+ * lines — and the basemap's label language. */
+function applyLocale(): void {
+  VARIABLE_UI = buildVariableUi();
+  renderLanguageList();
+  probePanel.root.setAttribute("aria-label", t("probeAria"));
+  applyDatasetWording();
+  updateTransport();
+  resayAll();
+  if (variableRail) {
+    for (const gloss of variableRail.querySelectorAll("button[data-unknown] small")) gloss.textContent = t("varUnknownLayer");
+  }
+  const index = activeFrameIndex ?? Number(slider.value);
+  if (metadata) {
+    buildForecastDays();
+    updateForecastDay(index);
+  }
+  if (activeCase) updateCasePresentation(activeCase);
+  if (activeSession) updateVariablePresentation(activeSession);
+  else applyPageMeta({ path: activeCase ? `/?case=${encodeURIComponent(activeCase.id)}` : "/" });
+  renderProbe();
+  syncBasemapStyle();
+  // The H/L letters on the pressure centers are the dictionary's.
+  refreshLabels();
+}
+
+// Neither the locale nor the theme reloads: the picker and the toggle each
+// persist the choice and repaint in place through the two listeners here.
+// The language picker is wired where it is built, beside the other sheets.
+onThemeChange(applyAppearance);
+onLocaleChange(applyLocale);
 required<HTMLButtonElement>("theme-toggle").addEventListener("click", toggleTheme);
 // Right-click (long-press on touch) over the map opens the custom menu:
 // 「详细统计信息」 pins the stats card, 「复制调试信息」 copies a plain-text
@@ -4344,6 +4501,8 @@ buildTicks(FRAME_COUNT);
 resetPreloadCard(FRAME_COUNT);
 map.once("load", () => {
   mapStyleReady = true;
-  applyBasemapTheme();
+  // A theme or language picked while the style was still loading was built
+  // into nothing; the sync is a no-op otherwise, and applies the ground.
+  syncBasemapStyle();
   void initialize();
 });

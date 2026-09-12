@@ -13,10 +13,11 @@
    from six colors, so a surface never hard-codes a value that would have to
    be found again in the other theme.
 
-   The theme is resolved once per page load and stamped on <html> as
-   data-theme (see src/theme.ts and the inline script in index.html). The
-   media query below is what an unstamped document falls back to, which is
-   also what a scraper or a print stylesheet sees.
+   The theme is resolved before the first paint and stamped on <html> as
+   data-theme (see src/theme.ts and the inline script in index.html); the
+   toggle restamps it in place. The media query below is what an unstamped
+   document falls back to, which is also what a scraper or a print
+   stylesheet sees.
 
    --text / --muted / --accent keep their names from the previous skin: the
    probe chart and the decode graph read them off the computed style to paint

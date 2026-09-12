@@ -1,9 +1,15 @@
-/** UI locale support: ten languages. The locale is fixed per page load —
- * detection order is the `?lang=` URL param, then the choice the picker
- * stored on this device, then the browser language — and the basemap label
- * language and `<html lang>` follow it. Only the URL param is ever explicit;
- * a shared link carries none unless written by hand, so it opens in each
- * reader's own.
+/** UI locale support: ten languages. The locale is resolved before the first
+ * render — detection order is the `?lang=` URL param, then the choice the
+ * picker stored on this device, then the browser language — and the basemap
+ * label language and `<html lang>` follow it. Only the URL param is ever
+ * explicit; a shared link carries none unless written by hand, so it opens
+ * in each reader's own.
+ *
+ * Picking another language never reloads: `setLocale` swaps the dictionary,
+ * rewrites the static markup and lets every `onLocaleChange` listener redo
+ * the copy it owns, so the session keeps its decoded frames and playhead.
+ * `locale`, `htmlLang` and `basemapLang` are live bindings — read them when
+ * needed rather than capturing them at module load.
  *
  * The dictionary itself lives in `locales/`, one module per language, each
  * typed `Record<MessageKey, string>` against `locales/en.ts` — the source of
@@ -77,8 +83,7 @@ export function localeHtmlLang(code: Locale): string {
 const TRADITIONAL_REGIONS = new Set(["tw", "hk", "mo"]);
 
 /** Map a BCP-47 tag onto one of the ten, or null. Case-insensitive, and
- * exported for the unit tests — `locale` itself is resolved once at module
- * load and cannot be re-derived. */
+ * exported for the unit tests and for the canonical-URL logic. */
 export function normalizeLocale(value: string | null | undefined): Locale | null {
   if (!value) return null;
   const parts = value.trim().toLowerCase().split(/[-_]/).filter(Boolean);
@@ -114,15 +119,24 @@ function detectLocale(): Locale {
   return "en";
 }
 
-export const locale: Locale = detectLocale();
+export let locale: Locale = detectLocale();
 
-const active = DEFINITIONS[locale];
+let active = DEFINITIONS[locale];
 
 /** Language for the Protomaps basemap labels — the map follows the UI. */
-export const basemapLang: string = active.basemapLang;
+export let basemapLang: string = active.basemapLang;
 
 /** Value for <html lang>, and the tag every Intl formatter is built on. */
-export const htmlLang: string = active.htmlLang;
+export let htmlLang: string = active.htmlLang;
+
+const listeners = new Set<() => void>();
+
+/** Run `listener` after every language switch, once the dictionary and the
+ * static markup already read in the new language; the listener rewrites
+ * whatever copy it composed itself. */
+export function onLocaleChange(listener: () => void): void {
+  listeners.add(listener);
+}
 
 export function t(key: MessageKey, params?: Record<string, string | number>): string {
   let text: string = active.messages[key];
@@ -156,21 +170,29 @@ export function applyStaticMessages(): void {
   }
 }
 
-/** Switch languages: remember the choice on this device and reload onto it.
- * The choice is deliberately not written into the URL — a link copied
+/** Switch languages in place: remember the choice on this device, swap the
+ * dictionary, rewrite the static markup and let every listener redo its own
+ * copy. The choice is deliberately not written into the URL — a link copied
  * afterwards would carry it to everyone it is shared with, overriding their
  * browser's language — and an explicit `?lang=` already on the page is
- * dropped for the same reason, so the reload lands on the stored choice. */
+ * dropped for the same reason. */
 export function setLocale(next: Locale): void {
+  if (next === locale) return;
   try {
     localStorage.setItem(STORAGE_KEY, next);
   } catch {
-    // Without storage the choice lasts this page load only; the reload
-    // below still shows it, since detection falls back to the browser.
+    // Without storage the choice lasts this page load only.
   }
   const params = new URLSearchParams(window.location.search);
   params.delete("lang");
   const search = params.size > 0 ? `?${params.toString()}` : "";
-  if (search === window.location.search) window.location.reload();
-  else window.location.search = search;
+  if (search !== window.location.search) {
+    window.history.replaceState(null, "", `${window.location.pathname}${search}${window.location.hash}`);
+  }
+  locale = next;
+  active = DEFINITIONS[next];
+  basemapLang = active.basemapLang;
+  htmlLang = active.htmlLang;
+  applyStaticMessages();
+  for (const listener of listeners) listener();
 }

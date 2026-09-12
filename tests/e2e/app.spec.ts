@@ -857,9 +857,9 @@ test("scrubbing works while data arrives through range requests", async ({ page 
 // The UI locale follows navigator.language (Playwright defaults to en-US, so
 // every other test runs the English UI); ?lang= overrides it, and the round
 // button in the top-right opens a picker of the ten languages, each naming
-// itself in its own script. Picking one persists it and reloads onto it. The
-// basemap label language rides the same detection, but the tests stub out the
-// tile API.
+// itself in its own script. Picking one persists it and switches the page in
+// place — no reload, the session and its frames stay. The basemap label
+// language rides the same detection, but the tests stub out the tile API.
 test("?lang=zh renders the Chinese UI and the picker switches back", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await routeManifest(page);
@@ -884,12 +884,22 @@ test("?lang=zh renders the Chinese UI and the picker switches back", async ({ pa
   await expect(sheet.locator('button[data-locale="zh"]')).toHaveAttribute("aria-current", "true");
   await expect(sheet.locator('button[data-locale="ja"]')).toHaveText("日本語");
   await expect(sheet.locator("button[data-locale]")).toHaveCount(10);
+  // A marker on the window survives only if the document does.
+  await page.evaluate(() => {
+    (window as unknown as { __xueSameDocument: boolean }).__xueSameDocument = true;
+  });
   await sheet.locator('button[data-locale="en"]').click();
   // The choice lives on this device, not in the link: the param the page
   // opened with goes, so a copied URL opens in each reader's own language.
   await expect(page).not.toHaveURL(/lang=/);
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
   await expect(tempLabel).toHaveText("2M");
+  // Copy the shell composed itself follows too: the data card's state line,
+  // the picker's check, the slider's name.
+  await expect(page.locator("#preload-state")).toHaveText("Bundle fully buffered");
+  await expect(sheet.locator('button[data-locale="en"]')).toHaveAttribute("aria-current", "true");
+  await expect(page.getByRole("slider", { name: "Forecast hour" })).toBeEnabled();
+  expect(await page.evaluate(() => (window as unknown as { __xueSameDocument?: boolean }).__xueSameDocument)).toBe(true);
 });
 
 // One of the eight languages the picker added: the same detection path, a
@@ -914,8 +924,8 @@ test("?lang=ja renders the Japanese UI", async ({ page }) => {
 });
 
 // Appearance is resolved before the first paint (an inline script in the
-// shell) and fixed for the page; the round toggle persists the other side and
-// reloads onto it, exactly like the locale.
+// shell); the round toggle persists the other side and restamps the document
+// in place — the session, its decoded frames and the playhead all stay.
 test("the appearance toggle round-trips between paper and void", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "light" });
   await routeManifest(page);
@@ -924,9 +934,14 @@ test("the appearance toggle round-trips between paper and void", async ({ page }
   await waitForReady(page);
   const root = page.locator("html");
   await expect(root).toHaveAttribute("data-theme", "light");
+  await page.evaluate(() => {
+    (window as unknown as { __xueSameDocument: boolean }).__xueSameDocument = true;
+  });
   await page.locator("#theme-toggle").click();
   await expect(page).toHaveURL(/theme=dark/);
   await expect(root).toHaveAttribute("data-theme", "dark");
+  await expect(page.locator("#preload-state")).toHaveText("Bundle fully buffered");
+  expect(await page.evaluate(() => (window as unknown as { __xueSameDocument?: boolean }).__xueSameDocument)).toBe(true);
   // The choice outlives the URL: a fresh visit with no param reads it back.
   await page.goto("/");
   await expect(root).toHaveAttribute("data-theme", "dark");
