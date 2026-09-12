@@ -3,7 +3,9 @@
 import type { MessageKey } from "./en";
 
 export const zh: Record<MessageKey, string> = {
-  metaDescription: "NOAA GFS 与 ECMWF 全球未来 240 小时气温、降水、风场、气压与高空温湿、水汽通量预报",
+  metaDescription:
+    "免费的 GFS 与 ECMWF 数值预报图：未来 240 小时全球气温、降水、风场、海平面气压等压线、500/850 hPa 高空图、高空湿度与水汽通量，浏览器内动画播放。",
+  pageTitleLive: "{variable}预报图 · {model} {hours}H",
   mapAria: "全球气温与降水预报地图",
   modelSwitchAria: "预报模式",
   variableSwitchAria: "气象变量",

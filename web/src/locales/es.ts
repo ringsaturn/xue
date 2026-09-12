@@ -7,7 +7,8 @@ import type { MessageKey } from "./en";
 
 export const es: Record<MessageKey, string> = {
   metaDescription:
-    "Predicciones globales a 240 horas de NOAA GFS y ECMWF: temperatura, precipitación, viento, presión, humedad en altura y transporte de vapor de agua",
+    "Mapas gratuitos de los modelos GFS y ECMWF a 240 horas: temperatura, precipitación, viento, isobaras de presión a nivel del mar, cartas de 500/850 hPa, humedad y flujo de vapor de agua en altura.",
+  pageTitleLive: "Mapa de predicción: {variable} · {model} {hours}H",
   mapAria: "Mapa global de predicción de temperatura y precipitación",
   modelSwitchAria: "Modelo de predicción",
   variableSwitchAria: "Variable meteorológica",

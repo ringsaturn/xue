@@ -10,7 +10,12 @@
 
 export const en = {
   metaDescription:
-    "NOAA GFS and ECMWF global 240-hour forecasts of temperature, precipitation, wind, pressure and upper-air humidity and moisture transport",
+    "Free GFS and ECMWF weather model maps to 240 hours: temperature, precipitation, wind, MSLP isobars, 500/850 hPa charts, upper-air humidity and moisture flux.",
+  /** The live viewer's document title, what a search result for `/` shows:
+   * the field by its localized label, the kind of thing this is, and the
+   * model with its horizon (`{hours}H` stays as the instrument reads it).
+   * `· Xue` is appended by pagemeta.ts. */
+  pageTitleLive: "{variable} forecast map · {model} {hours}H",
   mapAria: "Global temperature and precipitation forecast map",
   modelSwitchAria: "Forecast model",
   variableSwitchAria: "Weather variable",

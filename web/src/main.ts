@@ -2836,7 +2836,10 @@ function updateVariablePresentation(session: VariableSession): void {
   variableCode.textContent = `${model.label} / ${ui.code}`;
   dataCardTitle.textContent = ui.bufferTitle;
   // A case is its own page — its title and summary are what a search result
-  // or a shared link should say; every live view is the one page at `/`.
+  // or a shared link should say; every live view is the one page at `/`,
+  // whose indexed title is whichever view rendered, so it names the kind of
+  // thing this is ("forecast map") and not only the field — in the page's
+  // language, unlike the English headline over the map.
   applyPageMeta(
     activeCase
       ? {
@@ -2846,7 +2849,11 @@ function updateVariablePresentation(session: VariableSession): void {
         }
       : {
           path: "/",
-          title: `${ui.title.join(" ")} · ${model.label} ${Math.round(frameLeadSeconds(frameCount() - 1) / HOUR_SECONDS)}H`,
+          title: t("pageTitleLive", {
+            variable: ui.label,
+            model: model.label,
+            hours: String(Math.round(frameLeadSeconds(frameCount() - 1) / HOUR_SECONDS)),
+          }),
           description: t("metaDescription"),
         },
   );

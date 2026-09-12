@@ -3,7 +3,9 @@
 import type { MessageKey } from "./en";
 
 export const zhHant: Record<MessageKey, string> = {
-  metaDescription: "NOAA GFS 與 ECMWF 全球未來 240 小時氣溫、降水、風場、氣壓與高空溫濕、水氣通量預報",
+  metaDescription:
+    "免費的 GFS 與 ECMWF 數值預報圖：未來 240 小時全球氣溫、降水、風場、海平面氣壓等壓線、500/850 hPa 高空圖、高層濕度與水氣通量，瀏覽器內動畫播放。",
+  pageTitleLive: "{variable}預報圖 · {model} {hours}H",
   mapAria: "全球氣溫與降水預報地圖",
   modelSwitchAria: "預報模式",
   variableSwitchAria: "氣象變數",

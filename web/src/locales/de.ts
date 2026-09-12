@@ -7,7 +7,8 @@ import type { MessageKey } from "./en";
 
 export const de: Record<MessageKey, string> = {
   metaDescription:
-    "Globale 240-Stunden-Vorhersagen von NOAA GFS und ECMWF für Temperatur, Niederschlag, Wind, Luftdruck sowie Feuchte und Wasserdampftransport in der Höhe",
+    "Kostenlose GFS- und ECMWF-Modellkarten bis 240 Stunden: Temperatur, Niederschlag, Wind, Isobaren des Luftdrucks auf Meereshöhe, 500/850-hPa-Höhenkarten, Feuchte und Wasserdampftransport in der Höhe.",
+  pageTitleLive: "{variable} – Vorhersagekarte · {model} {hours}H",
   mapAria: "Globale Vorhersagekarte für Temperatur und Niederschlag",
   modelSwitchAria: "Vorhersagemodell",
   variableSwitchAria: "Meteorologische Größe",

@@ -240,7 +240,7 @@ function publishCaseList(cases: readonly ShowcaseCase[]): void {
     "@context": "https://schema.org",
     "@type": "ItemList",
     "@id": `${pageUrl("/showcase.html", null)}#cases`,
-    name: `Showcase Cases · ${SITE_NAME}`,
+    name: `Historical Weather Cases · ${SITE_NAME}`,
     numberOfItems: cases.length,
     itemListElement: cases.map((showcaseCase, index) => ({
       "@type": "ListItem",

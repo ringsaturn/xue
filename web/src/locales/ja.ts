@@ -4,7 +4,8 @@ import type { MessageKey } from "./en";
 
 export const ja: Record<MessageKey, string> = {
   metaDescription:
-    "NOAA GFS と ECMWF による全球 240 時間先までの気温・降水・風・気圧、および高層の湿度と水蒸気輸送の予報",
+    "GFS・ECMWF の数値予報図を無料で：240 時間先までの全球の気温・降水・風、海面気圧の等圧線、500/850 hPa 高層天気図、高層の湿度と水蒸気フラックスをブラウザでアニメーション表示。",
+  pageTitleLive: "{variable}の予報図 · {model} {hours}H",
   mapAria: "全球の気温・降水予報図",
   modelSwitchAria: "予報モデル",
   variableSwitchAria: "気象要素",
