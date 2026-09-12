@@ -197,9 +197,12 @@ SOURCES: dict[str, SourceSpec] = {
         # rainfall chart reads ascent on. Then the ocean: the surface (skin)
         # temperature, which is the SST over water, and the two sea ice
         # fields from pgrb2, and the significant wave height, primary wave
-        # period and direction from the cycle's GFS-Wave file. Every other
-        # registered level stays unpublished, which keeps the fetch at
-        # thirty-seven pgrb2 records and three wave records per frame.
+        # period and direction from the cycle's GFS-Wave file — the
+        # direction as an input only, like spfh850: it ships inside the
+        # wave vector the converter derives from it and the height, not as
+        # a scalar of its own. Every other registered level stays
+        # unpublished, which keeps the fetch at thirty-seven pgrb2 records
+        # and three wave records per frame.
         input_variable_ids=(
             "tmp2m",
             "prate",
@@ -276,7 +279,6 @@ SOURCES: dict[str, SourceSpec] = {
             "icetk",
             "htsgw",
             "perpw",
-            "dirpw",
         ),
         bundle_vector_ids=("wind10m", "wind925", "wind850", "wind250", "qflux850", "wave"),
     ),

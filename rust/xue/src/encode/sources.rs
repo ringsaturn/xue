@@ -160,7 +160,7 @@ pub const SOURCES: &[SourceSpec] = &[
             "tmp2m", "prate", "prmsl", "hgt850", "hgt700", "hgt500", "hgt250", "tmp925", "tmp850",
             "tmp500", "rh850", "rh700", "rh500", "gust", "tcdc", "lcdc", "mcdc", "hcdc", "cape",
             "vis", "dpt2m", "aptmp2m", "vvel850", "vvel700", "vvel500", "thetae850", "tmpsfc",
-            "icec", "icetk", "htsgw", "perpw", "dirpw",
+            "icec", "icetk", "htsgw", "perpw",
         ],
         bundle_vector_ids: &["wind10m", "wind925", "wind850", "wind250", "qflux850", "wave"],
         production_grid: (1440, 721),
@@ -272,9 +272,12 @@ mod tests {
         assert_eq!(wave.id, "wave");
         for variable_id in wave.variable_ids {
             assert!(gfs.input_variable_ids.contains(variable_id), "{variable_id} is fetched");
-            assert!(gfs.bundle_scalar_ids.contains(variable_id), "{variable_id} is published");
+            // The direction is an input only: it ships inside the wave
+            // vector derived from it, not as a scalar of its own.
+            assert_eq!(gfs.bundle_scalar_ids.contains(variable_id), *variable_id != "dirpw", "{variable_id}");
             assert_eq!(gfs.companion_of(variable_id).map(|c| c.id), Some("wave"));
         }
+        assert!(gfs.bundle_vector_ids.contains(&"wave"));
         assert!(gfs.companion_of("tmpsfc").is_none());
         // Assembly order: the companion's records come last.
         assert_eq!(&gfs.input_variable_ids[gfs.input_variable_ids.len() - 3..], wave.variable_ids);

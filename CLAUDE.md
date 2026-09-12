@@ -258,7 +258,10 @@ publishing data at the new version.**
   `derive_wave_vector` lays the height along the direction of travel in
   the wind's convention (`-h sin θ, -h cos θ`) so the frontend's vector
   path — magnitude fill, particles, the probe's `atan2(-u, -v)` — draws
-  the sea as it draws the wind; the scalars stay published beside it.
+  the sea as it draws the wind. `htsgw` stays published beside it; `dirpw`
+  is fetched as an input only (released after the derivation, like
+  `spfh850`), since a scalar direction is no chart and the vector carries
+  it.
   Widening a source's input list means recutting
   `tests/fixtures/gfs.*.crop.grib2` (same run, same `-srcwin`) and
   regenerating the registry fixtures.

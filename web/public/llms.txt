@@ -27,11 +27,13 @@ Facts worth getting right:
   temperature), the vertical velocity `vvel850`, `vvel700`, `vvel500`, the
   850 hPa equivalent potential temperature `thetae850`, and the ocean
   fields `tmpsfc` (surface / skin temperature, the SST over water), `icec`
-  and `icetk` (sea ice cover and thickness), `htsgw`, `perpw`, `dirpw`
-  (significant wave height, primary wave period and direction, from the
-  GFS-Wave file of the same cycle; land is 0 in all three), and the vector
-  pair `wave` (the height laid along the direction of travel, u/v in
-  metres, derived from the two — the viewer's wave layer). SFLUX: `tmp2m`,
+  and `icetk` (sea ice cover and thickness), `htsgw` and `perpw`
+  (significant wave height and primary wave period, from the GFS-Wave file
+  of the same cycle; land is 0 in both), and the vector pair `wave` (the
+  height laid along the direction the waves travel, u/v in metres — the
+  viewer's wave layer; the primary direction is read from it as
+  `atan2(-u, -v)`, degrees true the waves come from, and is not published
+  as a scalar). SFLUX: `tmp2m`,
   `prate`, `dswrf`, `wind10m`. Names are `<family><level>`; the level is in
   hPa, `2m`/`10m` are heights above ground, `prmsl` is mean sea level
   pressure.
@@ -60,8 +62,8 @@ fall back to defaults rather than fail, so a constructed link always opens.
   `visibility`, `dewpoint`, `feelslike`, the GFS ocean set `sst` (the
   skin temperature, `tmpsfc`), `seaice` (`icec`; `icethickness` for
   `icetk`), `waves` (the `wave` vector — height as the fill, direction as
-  particles; `waveheight` for the scalar `htsgw`, `waveperiod` for `perpw`,
-  `wavedirection` for `dirpw`), or a bundle name such as `tmp850`,
+  particles; `waveheight` for the scalar `htsgw`, `waveperiod` for
+  `perpw`), or a bundle name such as `tmp850`,
   `rh700`, `wind850`, `qflux850`, `hgt500`, `vvel700`, `thetae850`; `t850`,
   `z500`, `humidity700`, `vapour850`, `omega700`, `subtropicalhigh`
   (= `hgt500`) are accepted spellings.

@@ -197,14 +197,21 @@ class RegistryTests(unittest.TestCase):
         gfs = source_spec("gfs")
         published = published_bundle_ids(gfs)
         for variable_id in OCEAN_VARIABLE_IDS:
-            self.assertIn(variable_id, published)
             self.assertIn(variable_id, gfs.input_variable_ids)
             self.assertNotIn(variable_id, VECTOR_BUNDLES)
             self.assertNotIn(variable_id, VIDEO_VARIABLE_IDS)
-        # The wave vector is the last bundle GFS publishes: a vector, derived
-        # from two of the scalars above, which stay published beside it — a
-        # reader who wants the height to a tenth or the direction to a
-        # degree and a half has them.
+            # The direction ships inside the wave vector only: as a scalar
+            # it is no chart (0 is north and land alike), and the vector
+            # carries it to five degrees where the sea is over a metre.
+            # Like spfh850 it is fetched as an input and released once the
+            # derivation has read it.
+            if variable_id == "dirpw":
+                self.assertNotIn(variable_id, published)
+            else:
+                self.assertIn(variable_id, published)
+        # The wave vector is the last bundle GFS publishes: a vector derived
+        # from the height, which stays published beside it, and the
+        # direction, which does not.
         self.assertEqual(published[-1], WAVE_BUNDLE_ID)
         self.assertEqual(VECTOR_BUNDLES[WAVE_BUNDLE_ID], WAVE_VECTOR_COMPONENT_IDS)
         self.assertEqual(DERIVED_VECTORS[WAVE_BUNDLE_ID], ("htsgw", "dirpw"))

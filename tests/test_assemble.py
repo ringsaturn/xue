@@ -80,8 +80,8 @@ class BundleGroupTests(unittest.TestCase):
         # A top-up builds only what the live run lacks; the groups keep the
         # publication order and never reach past the subset.
         source = source_spec("gfs")
-        groups = assemble.bundle_groups(source, 2, ("dirpw", "tmpsfc", "wind10m"))
-        self.assertEqual(sorted(bundle_id for group in groups for bundle_id in group), ["dirpw", "tmpsfc", "wind10m"])
+        groups = assemble.bundle_groups(source, 2, ("wave", "tmpsfc", "wind10m"))
+        self.assertEqual(sorted(bundle_id for group in groups for bundle_id in group), ["tmpsfc", "wave", "wind10m"])
         self.assertEqual(len(groups), 2)
         self.assertEqual(assemble.bundle_groups(source, 16, ()), [])
         self.assertEqual(assemble.bundle_group_matrix(source, 16, ()), [])
@@ -307,12 +307,19 @@ class TopUpIdentityTests(unittest.TestCase):
             run_id=run_id,
             model="gfs",
         )
-        # The live run: the whole manifest without the ocean set, the way a
-        # run published before those bundles existed reads.
+        # The live run: the whole manifest without the ocean set and the wave
+        # vector, the way a run published before those bundles existed
+        # reads — and carrying a scalar wave direction, which was published
+        # for a day before the vector replaced it, so the top-up has an
+        # entry to drop as well as bundles to add.
         whole_manifest = json.loads((cls.whole / cls.run_directory / "manifest.json").read_text(encoding="utf-8"))
-        cls.ocean = ("tmpsfc", "icec", "icetk", "htsgw", "perpw", "dirpw")
+        cls.ocean = ("tmpsfc", "icec", "icetk", "htsgw", "perpw", "wave")
         live = dict(whole_manifest)
         live["bundles"] = [bundle for bundle in whole_manifest["bundles"] if bundle["variable"] not in cls.ocean]
+        stale = json.loads(json.dumps(next(b for b in whole_manifest["bundles"] if b["variable"] == "htsgw")))
+        stale["variable"] = "dirpw"
+        stale["path"] = "dirpw.xue"
+        live["bundles"].append(stale)
         cls.base = cls.root / "live-manifest.json"
         cls.base.write_text(json.dumps(live), encoding="utf-8")
         cls.missing = assemble.missing_bundle_ids(cls.source, live)
@@ -337,7 +344,7 @@ class TopUpIdentityTests(unittest.TestCase):
     def test_only_the_missing_bundles_were_built(self) -> None:
         self.assertEqual(self.missing, self.ocean)
         self.assertEqual(sorted(self.report["built"]), sorted(self.ocean))
-        self.assertEqual(self.report["dropped"], [])
+        self.assertEqual(self.report["dropped"], ["dirpw"])
         self.assertEqual(self.report["bundles"], list(published_bundle_ids(self.source)))
         built = {path.name.split(".")[0] for path in (self.topped / self.run_directory).iterdir() if not path.name.startswith("manifest")}
         self.assertEqual(built, set(self.ocean))

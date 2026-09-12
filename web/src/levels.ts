@@ -118,9 +118,11 @@ export const FAMILIES: Record<IsobaricFamily, FamilyInfo> = {
   // the primary period is its other member. The scalar height (`htsgw`)
   // stands in for the vector on a run that predates it, so an older run
   // or case keeps its height fill; beside the vector it is reachable by
-  // URL (`?type=waveheight`) only, and so is the primary direction
-  // (`dirpw`, `?type=wavedirection`), which as a scalar wraps at north and
-  // paints land, 0 in the file, as north — the vector is how it is read.
+  // URL (`?type=waveheight`) only. The primary direction (`dirpw`) was
+  // published as a scalar for one day before the vector: as a fill it
+  // wraps at north and paints land, 0 in the file, as north, so it never
+  // had a tile, and a run that still carries it is reachable by URL
+  // (`?type=wavedirection`).
   wave: {
     id: "wave",
     kind: "vector",
@@ -137,9 +139,10 @@ export const FAMILIES: Record<IsobaricFamily, FamilyInfo> = {
 };
 
 /** Bundles the shell has chart knowledge for but deliberately writes no rail
- * tile for: the primary wave direction, which is not a fill (see the wave
- * family above) — the wave vector is how it is drawn. Reachable by URL; a
- * run that ships one gets no generic tile for it either. */
+ * tile for: the scalar primary wave direction, which is not a fill (see the
+ * wave family above) and is no longer published — the wave vector is how
+ * it is drawn. Reachable by URL on a run that still carries it, which gets
+ * no generic tile for it either. */
 export const UNTILED_BUNDLE_IDS: readonly ForecastBundleId[] = ["dirpw"];
 
 /** The family a bundle id *names*, or null for a single layer (precipitation,

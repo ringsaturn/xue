@@ -147,13 +147,14 @@ temperature), the 850 / 700 / 500 hPa vertical velocity, the 850 hPa
 equivalent potential temperature the converter derives from the temperature
 and specific humidity there, and the ocean fields: the surface (skin)
 temperature, which is the SST over water, sea ice cover and thickness from
-pgrb2, and the significant wave height, primary wave period and direction
-read from the cycle's GFS-Wave file (`wave/gridded/`, the same 0.25° grid
-and axis; its JPEG 2000 packing is repacked with `grib_set` at fetch time,
-so a GFS fetch needs eccodes like an ECMWF one — a GFS run is complete only
-once its wave frames are up too,
-usually within minutes of the pgrb2 f240, occasionally twenty minutes
-after it). `--hours` may
+pgrb2, and the significant wave height and primary wave period read from
+the cycle's GFS-Wave file (`wave/gridded/`, the same 0.25° grid and axis,
+JPEG 2000-packed, which both encoders' GDAL reads as published — a GFS run
+is complete only once its wave frames are up too, usually within minutes
+of the pgrb2 f240, occasionally twenty minutes after it), plus the wave
+vector `wave` the converter derives from the height and the primary
+direction: the height laid along the direction the waves travel, as a u/v
+pair, so the viewer draws the sea the way it draws the wind. `--hours` may
 be any hour on the model's published axis, so shorter uniform builds
 (e.g. `--hours 120`) still work, and their axis is a plain step rather than
 a listed one.

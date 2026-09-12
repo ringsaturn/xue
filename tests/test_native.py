@@ -271,7 +271,7 @@ class NativeJpeg2000Tests(unittest.TestCase):
     wave bundles and the wave vector derived from two of them come out
     byte-identical from the raw records."""
 
-    WAVE_BUNDLES = ("htsgw", "perpw", "dirpw", "wave")
+    WAVE_BUNDLES = ("htsgw", "perpw", "wave")
 
     @classmethod
     def setUpClass(cls) -> None:
