@@ -4,9 +4,11 @@ run directory, manifest identity, and time axis are named.
 The models share one output contract: whatever the source, the bundles carry
 the same data variable ids (tmp2m, prate, ugrd10m/vgrd10m, on sflux also
 dswrf, on GFS and ECMWF the pressure family and the upper-air fills, and on
-GFS alone — for now — the surface diagnostics, the vertical velocity and the
-850 hPa equivalent potential temperature) so the decoder and frontend never
-care which model produced them.
+GFS alone — for now — the surface diagnostics, the vertical velocity, the
+850 hPa equivalent potential temperature and the ocean fields) so the decoder
+and frontend never care which model produced them. A source may read more
+than one file family of a cycle (GFS pgrb2 plus GFS-Wave, :class:`CompanionFile`);
+the frame the converter sees is still one GRIB.
 Not every source is a forecast: an ``observation`` source (the CMA radar
 mosaic) is a local file holding a series of observed analyses, with no cycle
 to fetch, no live pointer, and an axis that is whatever times the file
@@ -22,6 +24,23 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .errors import DownloadError
+
+
+@dataclass(frozen=True)
+class CompanionFile:
+    """A second file family of the same cycle some of a source's inputs are
+    read from. GFS publishes its wave model beside the atmosphere — one
+    ``gfswave.tHHz.global.0p25.fFFF.grib2`` per forecast hour under
+    ``wave/gridded/``, on the pgrb2 grid and axis — and the fetcher appends
+    the records it needs from it to the frame's GRIB after the primary
+    file's, so downstream of the download a frame is still one file.
+    :mod:`xuebuild.fetch` knows each family's object name by ``id``."""
+
+    id: str
+    """The family: ``wave`` for GFS-Wave."""
+    variable_ids: tuple[str, ...]
+    """Which of the source's :attr:`SourceSpec.input_variable_ids` come
+    from this family rather than the primary file, in assembly order."""
 
 
 @dataclass(frozen=True)
@@ -44,10 +63,15 @@ class SourceSpec:
     240 hours, so an axis that crosses a segment boundary is mixed-step and
     its bundles carry metadata schemaVersion 2 (docs/format.md)."""
     input_variable_ids: tuple[str, ...]
-    """Variables fetched from the source, in GRIB assembly order."""
+    """Variables fetched from the source, in GRIB assembly order: the primary
+    file's records first, then each companion family's."""
     accumulated_precipitation: bool
     """True when precipitation arrives as a run-total accumulation (ECMWF
     ``tp``, metres) and must be de-accumulated into a rate."""
+    companion_files: tuple[CompanionFile, ...] = ()
+    """Further file families of the same cycle some inputs come from. A run
+    is complete only when every family has its first and last frame, and a
+    frame's download is one range set per family."""
     averaged_precipitation: bool = False
     """True when precipitation arrives as an interval-averaged rate whose
     averaging window resets every :attr:`average_window_hours` (GFS sflux
@@ -105,6 +129,18 @@ class SourceSpec:
         """Whether the source has a live feed to fetch and point at."""
         return self.latest_filename is not None
 
+    def companion_of(self, variable_id: str) -> CompanionFile | None:
+        """The companion family ``variable_id`` is read from, or None for an
+        input of the primary file."""
+        for companion in self.companion_files:
+            if variable_id in companion.variable_ids:
+                return companion
+        return None
+
+    def primary_input_ids(self) -> tuple[str, ...]:
+        """The inputs read from the primary file, in assembly order."""
+        return tuple(variable_id for variable_id in self.input_variable_ids if self.companion_of(variable_id) is None)
+
     def forecast_hours(self, last_hour: int) -> list[int]:
         """The published axis from the analysis through ``last_hour``.
 
@@ -146,9 +182,12 @@ SOURCES: dict[str, SourceSpec] = {
         # for the jet. Then the surface diagnostics — gust, the total and
         # the three cloud layers, CAPE, visibility, dew point and apparent
         # temperature — and the vertical velocity on the three surfaces a
-        # rainfall chart reads ascent on. Every other registered level stays
-        # unpublished, which keeps the fetch at thirty-four GRIB records per
-        # frame.
+        # rainfall chart reads ascent on. Then the ocean: the surface (skin)
+        # temperature, which is the SST over water, and the two sea ice
+        # fields from pgrb2, and the significant wave height, primary wave
+        # period and direction from the cycle's GFS-Wave file. Every other
+        # registered level stays unpublished, which keeps the fetch at
+        # thirty-seven pgrb2 records and three wave records per frame.
         input_variable_ids=(
             "tmp2m",
             "prate",
@@ -184,8 +223,15 @@ SOURCES: dict[str, SourceSpec] = {
             "vvel850",
             "vvel700",
             "vvel500",
+            "tmpsfc",
+            "icec",
+            "icetk",
+            "htsgw",
+            "perpw",
+            "dirpw",
         ),
         accumulated_precipitation=False,
+        companion_files=(CompanionFile(id="wave", variable_ids=("htsgw", "perpw", "dirpw")),),
         bundle_scalar_ids=(
             "tmp2m",
             "prate",
@@ -213,6 +259,12 @@ SOURCES: dict[str, SourceSpec] = {
             "vvel700",
             "vvel500",
             "thetae850",
+            "tmpsfc",
+            "icec",
+            "icetk",
+            "htsgw",
+            "perpw",
+            "dirpw",
         ),
         bundle_vector_ids=("wind10m", "wind925", "wind850", "wind250", "qflux850"),
     ),

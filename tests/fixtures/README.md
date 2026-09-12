@@ -7,13 +7,16 @@ pressure, the 850 / 700 / 500 / 250 hPa geopotential heights, 925, 850 and
 500 hPa temperature, 850, 700 and 500 hPa relative humidity, 850 hPa
 specific humidity, the 925, 850 and 250 hPa wind pairs, then the surface
 diagnostics (gust, total / low / middle / high cloud cover, CAPE,
-visibility, 2 m dew point and apparent temperature) and the 850 / 700 /
-500 hPa vertical velocity — thirty-four records, in the order
-`xuebuild/sources.py` lists them. It covers
+visibility, 2 m dew point and apparent temperature), the 850 / 700 /
+500 hPa vertical velocity, the surface temperature and the two sea ice
+fields, and — appended by the fetcher from the cycle's GFS-Wave file — the
+significant wave height, primary wave period and direction: forty records,
+in the order `xuebuild/sources.py` lists them. It covers
 approximately 118E to 138E and 18N to 38N, including the browser test's
 initial viewport, so the record matchers, the GRIB2 header index, the vapour
 flux derivation and the byte-identity parity test all run against real
-records.
+records. About a sixth of the window is land, which the wave records leave
+to their bitmap, so the nodata fill runs against real masked points too.
 
 The fixture was recut from the downloaded analysis with:
 

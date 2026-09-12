@@ -22,12 +22,15 @@ class IndexMessagesTests(unittest.TestCase):
         # them: the surface fields, the pressure family, the upper-air inputs
         # (the 850 hPa specific humidity among them, fetched only to derive
         # the vapour flux and the equivalent potential temperature), then the
-        # surface diagnostics and the vertical velocity.
-        self.assertEqual(len(messages), 34)
+        # surface diagnostics and the vertical velocity, then the ocean —
+        # three pgrb2 records and, appended from the cycle's GFS-Wave file,
+        # three wave records.
+        self.assertEqual(len(messages), 40)
         temperature, precipitation, u_wind, v_wind, pressure = messages[:5]
         heights = messages[5:9]
         upper_air = messages[9:22]
-        diagnostics = messages[22:]
+        diagnostics = messages[22:34]
+        ocean = messages[34:]
         self.assertEqual(temperature.band, 1)
         self.assertEqual(
             (temperature.discipline, temperature.parameter_category, temperature.parameter_number),
@@ -105,6 +108,23 @@ class IndexMessagesTests(unittest.TestCase):
             ],
         )
         self.assertTrue(all(message.statistical_process is None for message in diagnostics))
+        # The ocean fields: the skin temperature and the two sea ice fields
+        # on the ground surface (value 0), then the wave fields on the water
+        # surface as WAVEWATCH III writes it — value 1, which the registry
+        # declares as None and so accepts. The ice and wave fields are the
+        # first records of GRIB2's oceanographic discipline in the set.
+        self.assertEqual(
+            [(m.band, m.discipline, m.parameter_category, m.parameter_number, m.level_type, m.level_value) for m in ocean],
+            [
+                (35, 0, 0, 0, 1, 0.0),
+                (36, 10, 2, 0, 1, 0.0),
+                (37, 10, 2, 1, 1, 0.0),
+                (38, 10, 0, 3, 1, 1.0),
+                (39, 10, 0, 11, 1, 1.0),
+                (40, 10, 0, 10, 1, 1.0),
+            ],
+        )
+        self.assertTrue(all(message.statistical_process is None for message in ocean))
 
     def test_rejects_non_grib_payload(self) -> None:
         with tempfile.NamedTemporaryFile(suffix=".grib2") as handle:

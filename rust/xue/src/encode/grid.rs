@@ -120,6 +120,39 @@ impl GridInfo {
     }
 }
 
+/// How far short of (or past) a full circle a grid's columns may fall, as a
+/// fraction of one cell, and still be the global grid they clearly are.
+const GLOBAL_SPAN_TOLERANCE_CELLS: f64 = 1e-3;
+
+/// Give a global grid the exact step and origin its column count implies —
+/// the port of `_snap_global_longitudes` in `xuebuild/binconvert.py`, which
+/// explains the rule; the two must agree to the bit.
+///
+/// GDAL derives a GRIB grid's longitude step from the first and last
+/// longitudes, and WAVEWATCH III writes the 0.25° grid's last column as
+/// 359.750016°, which makes a 0.2500000111° step whose 1440 columns do not
+/// close the circle. A grid whose columns span 360° to within a thousandth
+/// of a cell is the global grid: its step becomes `360 / width` and its
+/// first center is placed on that step's grid (rounding half up) when it
+/// lies within the same tolerance of it. Exact and regional grids pass
+/// through unchanged.
+pub fn snap_global_longitudes(grid: GridInfo) -> GridInfo {
+    let span = grid.width as f64 * grid.longitude_step;
+    if (span - 360.0).abs() > grid.longitude_step * GLOBAL_SPAN_TOLERANCE_CELLS {
+        return grid;
+    }
+    let step = 360.0 / grid.width as f64;
+    let mut first = (grid.first_longitude / step + 0.5).floor() * step;
+    if (first - grid.first_longitude).abs() > step * GLOBAL_SPAN_TOLERANCE_CELLS {
+        first = grid.first_longitude;
+    }
+    GridInfo {
+        longitude_step: step,
+        first_longitude: first,
+        ..grid
+    }
+}
+
 /// Roll grids that start at Greenwich to the -180-first layout.
 ///
 /// GDAL's GRIB driver rotates global regular lat/lon grids to start at -180
@@ -258,4 +291,51 @@ pub fn crop_grid(grid: GridInfo, bbox: (f64, f64, f64, f64)) -> Result<GridInfo>
             height,
         }),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{snap_global_longitudes, GridInfo};
+
+    const WAVE_STEP: f64 = 0.2500000111188325;
+    const WAVE_ORIGIN: f64 = -180.12500000555943;
+
+    #[test]
+    fn the_wave_grid_snaps_to_the_pgrb2_grid() {
+        let raw = GridInfo::new(1440, 721, WAVE_ORIGIN + WAVE_STEP / 2.0, 90.0, WAVE_STEP, -0.25);
+        assert!(!raw.wraps(), "as GDAL reports it, the grid does not close");
+        let snapped = snap_global_longitudes(raw);
+        assert_eq!((snapped.longitude_step, snapped.first_longitude), (0.25, -180.0));
+        assert!(snapped.wraps());
+    }
+
+    #[test]
+    fn exact_and_regional_grids_pass_through_unchanged() {
+        for grid in [
+            GridInfo::new(1440, 721, -180.0, 90.0, 0.25, -0.25),
+            // The sflux Gaussian grid before its roll: first center at 0.
+            GridInfo::new(3072, 1536, 0.0, 89.91, 0.1171875, -0.117),
+            GridInfo::new(80, 80, 118.0, 38.0, WAVE_STEP, -0.25),
+            GridInfo::new(80, 80, 118.0, 38.0, 0.25, -0.25),
+        ] {
+            let snapped = snap_global_longitudes(grid);
+            assert_eq!(snapped.longitude_step, grid.longitude_step);
+            assert_eq!(snapped.first_longitude, grid.first_longitude);
+        }
+    }
+
+    #[test]
+    fn an_origin_off_the_step_grid_keeps_its_step_only() {
+        let grid = GridInfo::new(1440, 721, -179.9, 90.0, WAVE_STEP, -0.25);
+        let snapped = snap_global_longitudes(grid);
+        assert_eq!(snapped.longitude_step, 0.25);
+        assert_eq!(snapped.first_longitude, -179.9);
+    }
+
+    #[test]
+    fn a_grid_more_than_a_thousandth_of_a_cell_short_is_not_global() {
+        let grid = GridInfo::new(1440, 721, -180.0, 90.0, 0.25 * (1.0 - 2e-3), -0.25);
+        let snapped = snap_global_longitudes(grid);
+        assert_eq!(snapped.longitude_step, grid.longitude_step);
+    }
 }

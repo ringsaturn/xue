@@ -15,7 +15,7 @@ use time::OffsetDateTime;
 use crate::encode::errors::{EncodeError, Result};
 use crate::encode::gdalio::{BandInfo, Dataset};
 use crate::encode::model::SourceFrame;
-use crate::encode::variables::{isobaric_variable, variable_spec};
+use crate::encode::variables::{isobaric_variable, variable_spec, SURFACE_TEMPERATURE_IDS};
 
 static HEIGHT_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i)(?:^|[^0-9])2(?:\.0+)?\s*m(?:eter)?s?\s+above\s+ground").expect("valid regex")
@@ -107,19 +107,69 @@ pub fn raster_expression(variable_id: &str, unit: &str) -> Result<String> {
             Ok("maximum(0,minimum(1270,A))".into())
         }
         "ugrd10m" | "vgrd10m" => wind_expression(unit),
-        // The 2 m dew point and apparent temperature take the temperature's
-        // rule over their own codebook ranges.
-        "dpt2m" | "aptmp2m" => {
+        // The 2 m dew point, the apparent temperature and the surface (skin)
+        // temperature take the temperature's rule over their own codebook
+        // ranges.
+        "dpt2m" | "aptmp2m" | "tmpsfc" => {
             let value = match normalize_unit(unit)? {
                 "K" => "A-273.15",
                 "F" => "(A-32)*5/9",
                 _ => "A",
             };
-            Ok(if variable_id == "dpt2m" {
-                format!("maximum(-70,minimum(40,{value}))")
-            } else {
-                format!("maximum(-90,minimum(60,{value}))")
+            Ok(match variable_id {
+                "dpt2m" => format!("maximum(-70,minimum(40,{value}))"),
+                "aptmp2m" => format!("maximum(-90,minimum(60,{value}))"),
+                _ => format!("maximum(-60,minimum(67,{value}))"),
             })
+        }
+        // Sea ice cover: GRIB2 carries a 0–1 proportion (GDAL spells the
+        // unit "Proportion"), the codebook quantizes percent.
+        "icec" => {
+            if !["proportion", "fraction", "1", "-", ""].contains(&compact_unit(unit).as_str()) {
+                return Err(EncodeError::conversion(format!(
+                    "unsupported sea ice cover unit: {}",
+                    if unit.is_empty() { "<missing>" } else { unit }
+                )));
+            }
+            Ok("maximum(0,minimum(100,A*100))".into())
+        }
+        // Sea ice thickness and significant wave height, in metres.
+        "icetk" | "htsgw" => {
+            if !["m", "metre", "meter", "metres", "meters"].contains(&compact_unit(unit).as_str()) {
+                return Err(EncodeError::conversion(format!(
+                    "unsupported {} unit: {}",
+                    if variable_id == "icetk" { "sea ice thickness" } else { "wave height" },
+                    if unit.is_empty() { "<missing>" } else { unit }
+                )));
+            }
+            Ok(if variable_id == "icetk" {
+                "maximum(0,minimum(5.08,A))".into()
+            } else {
+                "maximum(0,minimum(25.4,A))".into()
+            })
+        }
+        // Wave period in seconds.
+        "perpw" => {
+            if !["s", "sec", "second", "seconds"].contains(&compact_unit(unit).as_str()) {
+                return Err(EncodeError::conversion(format!(
+                    "unsupported wave period unit: {}",
+                    if unit.is_empty() { "<missing>" } else { unit }
+                )));
+            }
+            Ok("maximum(0,minimum(25.4,A))".into())
+        }
+        // Wave direction in degrees true (GDAL spells it "Degree true"); the
+        // converter reduces it modulo 360 itself.
+        "dirpw" => {
+            if !["degreetrue", "degtrue", "degrees", "degree", "deg", "degreestrue"]
+                .contains(&compact_unit(unit).as_str())
+            {
+                return Err(EncodeError::conversion(format!(
+                    "unsupported wave direction unit: {}",
+                    if unit.is_empty() { "<missing>" } else { unit }
+                )));
+            }
+            Ok("A".into())
         }
         // Visibility: GRIB2 carries metres, the codebook quantizes km.
         "vis" => {
@@ -340,12 +390,21 @@ fn band_matches(variable_id: &str, band: &BandInfo) -> Result<bool> {
                 && (comment.contains("cat 1, subcat 193")
                     || text.contains("total precipitation"))
         }
-        // One element on the ground surface: the fetched files carry only
-        // the instantaneous surface record of each, so element + surface is
-        // unambiguous.
-        "dswrf" | "gust" | "cape" | "vis" => {
+        // One element on the ground or water surface: the fetched files
+        // carry only the instantaneous surface record of each, so element +
+        // surface is unambiguous. GDAL spells the surface `0-SFC`; the
+        // GFS-Wave records carry a surface value of 1 and come out `1-SFC`,
+        // so any value on the SFC surface is accepted. The prose test looks
+        // for the surface's own name rather than the word "surface", which
+        // the isobaric levels the same TMP element is fetched on also carry
+        // ("Isobaric surface").
+        "dswrf" | "gust" | "cape" | "vis" | "tmpsfc" | "icec" | "icetk" | "htsgw" | "perpw"
+        | "dirpw" => {
+            let text = searchable(band).to_lowercase();
             element == variable_spec(variable_id)?.grib_element
-                && (short_name == "0-SFC" || searchable(band).to_lowercase().contains("surface"))
+                && (short_name.ends_with("-SFC")
+                    || text.contains("sfc=\"")
+                    || text.contains("ground or water surface"))
         }
         // One cloud cover element on its own layer surface (code table 4.5
         // types 214 / 224 / 234, which GDAL spells `0-LCY` / `0-MCY` /
@@ -414,7 +473,7 @@ fn frame_from_band(path: &Path, variable_id: &str, band: &BandInfo) -> Result<So
     } else {
         band.item("GRIB_UNIT").to_string()
     };
-    let unit = if matches!(variable_id, "tmp2m" | "dpt2m" | "aptmp2m") {
+    let unit = if SURFACE_TEMPERATURE_IDS.contains(&variable_id) {
         normalize_unit(&raw_unit)?.to_string()
     } else {
         raw_unit

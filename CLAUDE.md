@@ -234,16 +234,30 @@ publishing data at the new version.**
   `spfh<level>`), `derive_theta_e` is Bolton (1980) in a fixed operation
   order the native encoder repeats, and like a vapour flux bundle it ships
   only when its inputs are fetched. GFS publishes all of these; ECMWF and
-  sflux do not yet. Widening a source's input list means recutting
-  `tests/fixtures/gfs.*.crop.grib2` (same run, same `-srcwin`) and
-  regenerating both registry fixtures.
+  sflux do not yet. The **ocean set** (`ocean-registry.json`: `tmpsfc`
+  skin temperature / SST, `icec`, `icetk`, `htsgw`, `perpw`, `dirpw`) is
+  GFS-only too and brings two mechanisms: a source may read a second **file
+  family** of the same cycle (`SourceSpec.companion_files`, the `wave`
+  family = `gfswave.*.global.0p25.fFFF.grib2`, appended by the fetcher
+  after the pgrb2 records so a frame is still one GRIB — and a run is
+  complete only when its wave frames are up too, usually within minutes
+  of pgrb2 f240, occasionally 20 min after),
+  and a record may not cover its grid (`VariableSpec.fill_values`: the
+  wave bitmap's GDAL nodata 9999 becomes the codebook bottom before unit
+  conversion, in both encoders — the format has no bitmap). Widening a
+  source's input list means recutting `tests/fixtures/gfs.*.crop.grib2`
+  (same run, same `-srcwin`) and regenerating the registry fixtures.
 - `fetch.py` → `idx.py` / `grib2.py` — byte-range fetches of exact GRIB
-  records; ECMWF open data is CCSDS-packed and is repacked to `grid_simple`
-  with `grib_set` at fetch time.
-- `binconvert.py` — the whole conversion: grid discovery, cropping
-  (`crop_grid`, showcase cases), unit conversion, de-accumulation /
-  de-averaging, quantization, temporal grouping, bundle writing, half-res
-  variants, posters, H.264 companions, manifest entries.
+  records, one `.idx` + range set per file family; ECMWF open data is
+  CCSDS-packed and is repacked to `grid_simple` with `grib_set` at fetch
+  time.
+- `binconvert.py` — the whole conversion: grid discovery (a global grid is
+  snapped to `360 / width` — WAVEWATCH III writes the last longitude a hair
+  off, and a wave-only bundle group must land on the same grid as its
+  pgrb2 siblings; `grid.rs` repeats the rule), cropping (`crop_grid`,
+  showcase cases), unit conversion, de-accumulation / de-averaging,
+  quantization, temporal grouping, bundle writing, half-res variants,
+  posters, H.264 companions, manifest entries.
 - `quantize.py` / `temporal.py` / `binformat.py` — the format itself:
   codebooks, modulo-256 residual prediction, container read/write.
 - `manifest.py` — manifest and live-pointer construction *and validation*;

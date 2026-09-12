@@ -101,6 +101,25 @@ def sflux_object_url(run: GfsRun, forecast_hour: int) -> str:
     return f"{_noaa_cycle_prefix(run)}gfs.t{run.cycle}z.sfluxgrbf{forecast_hour:03d}.grib2"
 
 
+def wave_object_url(run: GfsRun, forecast_hour: int) -> str:
+    """The cycle's GFS-Wave gridded file on the global 0.25° grid — the
+    ``wave`` companion family of the GFS source. It sits beside ``atmos/``
+    rather than inside it, and has since the wave model joined the cycle
+    with the same GFSv16 upgrade that introduced ``atmos/``. Its files land
+    on their own schedule — the f240 usually within minutes of the pgrb2
+    f240, occasionally twenty minutes after it — which is why a run is not
+    complete until its companion frames are there too."""
+    return f"{BASE_URL}/gfs.{run.date}/{run.cycle}/wave/gridded/gfswave.t{run.cycle}z.global.0p25.f{forecast_hour:03d}.grib2"
+
+
+def companion_object_url(run: GfsRun, forecast_hour: int, family: str) -> str:
+    """The object one companion family (``sources.CompanionFile.id``) of a
+    NOAA source publishes for one forecast hour."""
+    if family == "wave":
+        return wave_object_url(run, forecast_hour)
+    raise DownloadError(f"unknown companion file family: {family}")
+
+
 def ecmwf_object_url(
     run: GfsRun, forecast_hour: int, *, base_url: str | None = None
 ) -> str:
@@ -236,9 +255,10 @@ def _run_is_complete(
     exists: Callable[[str], bool],
 ) -> bool:
     if model != "ecmwf":
-        return exists(model_object_url(run, 0, model)) and exists(
-            model_object_url(run, hours, model)
-        )
+        urls = [model_object_url(run, 0, model), model_object_url(run, hours, model)]
+        for companion in source_spec(model).companion_files:
+            urls += [companion_object_url(run, 0, companion.id), companion_object_url(run, hours, companion.id)]
+        return all(exists(url) for url in urls)
 
     transient_error: DownloadError | None = None
     for base_url in ECMWF_BASE_URLS:
@@ -354,10 +374,11 @@ def _frame_variable_ids(
     return tuple(wanted)
 
 
-def _download_noaa_payload(
-    run: GfsRun, forecast_hour: int, spec: SourceSpec, input_ids: tuple[str, ...] | None = None
-) -> bytes:
-    url = model_object_url(run, forecast_hour, spec.id)
+def _download_noaa_records(url: str, variable_ids: tuple[str, ...]) -> bytes:
+    """The requested records of one NOAA object, located through its
+    ``.idx`` sidecar and fetched as byte ranges, in the order given."""
+    if not variable_ids:
+        return b""
     index_text = fetch_text(url + ".idx")
     byte_ranges = [
         field_byte_range(
@@ -365,12 +386,28 @@ def _download_noaa_payload(
             variable.index_field,
             excluded_phrases=variable.excluded_index_phrases,
         )
-        for variable in (
-            VARIABLES[variable_id]
-            for variable_id in _frame_variable_ids(spec, forecast_hour, input_ids)
-        )
+        for variable in (VARIABLES[variable_id] for variable_id in variable_ids)
     ]
     return b"".join(fetch_range(url, byte_range) for byte_range in byte_ranges)
+
+
+def _download_noaa_payload(
+    run: GfsRun, forecast_hour: int, spec: SourceSpec, input_ids: tuple[str, ...] | None = None
+) -> bytes:
+    """One frame's GRIB: the primary file's records, then each companion
+    family's — so a frame narrowed to one family's variables (a bundle group
+    of the fan-out build) touches only that family's object."""
+    wanted = _frame_variable_ids(spec, forecast_hour, input_ids)
+    payload = _download_noaa_records(
+        model_object_url(run, forecast_hour, spec.id),
+        tuple(variable_id for variable_id in wanted if spec.companion_of(variable_id) is None),
+    )
+    for companion in spec.companion_files:
+        payload += _download_noaa_records(
+            companion_object_url(run, forecast_hour, companion.id),
+            tuple(variable_id for variable_id in wanted if variable_id in companion.variable_ids),
+        )
+    return payload
 
 
 def _download_ecmwf_payload(
@@ -429,8 +466,8 @@ def fetch_frame(
             return output
         except Exception:
             raise DownloadError(
-                "existing GRIB is unreadable or lacks required records (files fetched "
-                f"before the 10 m wind components joined the download set qualify), "
+                "existing GRIB is unreadable or lacks required records (a file fetched "
+                f"before a variable joined the download set qualifies), "
                 f"enable a forced download to replace it: {output}"
             )
     LOG.info("downloading GRIB %s", output)

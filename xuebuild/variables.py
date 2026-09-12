@@ -8,6 +8,10 @@ both what the fetchers match records on and what a bundle's metadata carries
 from schema version 3 onwards (docs/format.md), so there is one description
 of a variable rather than one per pipeline stage.
 
+Most entries are meteorological (discipline 0); the sea ice and wave fields
+are GRIB2's oceanographic discipline (10), which is why the triple carries a
+discipline at all.
+
 The parameter numbers 192-254 in every category, and the surface types
 192-254, are GRIB2's local-use ranges: ``dswrf`` (0/4/192) and ECMWF ``tp``
 (0/1/193) already live there. Nothing here needs a locally *defined*
@@ -58,6 +62,15 @@ class VariableSpec:
     """Unit string GDAL's GRIB driver reports for this record (it normalizes
     temperatures to Celsius); carried by header-indexed frames and
     cross-checked against a real gdalinfo pass once per run."""
+    fill_values: tuple[float, ...] = ()
+    """Values GDAL hands back where the record carries no data. A GRIB2
+    record with a bitmap (the GFS-Wave fields, which cover water only) comes
+    out of the GRIB driver with its masked points set to 9999; the format
+    carries no bitmap, so the converter maps them to the bottom of the
+    variable's codebook (``value_range[0]``) before anything else touches
+    the plane — a value, not a gap, the way the radar mosaic's fill is
+    handled (docs/format.md). Empty for a field that covers its whole
+    grid."""
 
     def parameter_metadata(self) -> dict[str, object]:
         """The variable's GRIB2 identity, as a schema v3 metadata block.
@@ -389,7 +402,121 @@ VARIABLES: dict[str, VariableSpec] = {
         grib2_level_type=234,
         gdal_unit="%",
     ),
+    # The ocean fields of the pgrb2 set. The surface temperature is the
+    # model's ground-or-water skin temperature, 0/0/0 on surface type 1 (the
+    # ``:TMP:surface:`` record) — over the sea it is the SST analysis the
+    # cycle was started from, which is what a chart of it is read for, and
+    # over land a skin that runs well past the 2 m air temperature, hence a
+    # codebook that reaches 67 °C. The two sea ice fields are GRIB2's
+    # oceanographic discipline (10): ice cover (10/2/0) arrives as a 0–1
+    # proportion the codebook quantizes in percent, ice thickness (10/2/1)
+    # in metres. The ice temperature beside them (10/2/8) is not registered:
+    # pgrb2 writes it with a missing-value substitute GDAL reports under the
+    # wrong unit.
+    "tmpsfc": VariableSpec(
+        id="tmpsfc",
+        label="Surface temperature",
+        output_unit="°C",
+        value_range=(-60, 67),
+        grib_element="TMP",
+        index_field=":TMP:surface:",
+        grib2_category=0,
+        grib2_number=0,
+        grib2_level_type=1,
+        grib2_level_value=0.0,
+        gdal_unit="C",
+    ),
+    "icec": VariableSpec(
+        id="icec",
+        label="Sea ice cover",
+        output_unit="%",
+        value_range=(0, 100),
+        grib_element="ICEC",
+        index_field=":ICEC:surface:",
+        grib2_discipline=10,
+        grib2_category=2,
+        grib2_number=0,
+        grib2_level_type=1,
+        grib2_level_value=0.0,
+        gdal_unit="Proportion",
+    ),
+    "icetk": VariableSpec(
+        id="icetk",
+        label="Sea ice thickness",
+        output_unit="m",
+        value_range=(0, 5),
+        grib_element="ICETK",
+        index_field=":ICETK:surface:",
+        grib2_discipline=10,
+        grib2_category=2,
+        grib2_number=1,
+        grib2_level_type=1,
+        grib2_level_value=0.0,
+        gdal_unit="m",
+    ),
+    # The GFS-Wave fields, read from the cycle's second file family
+    # (``sources.CompanionFile``, the ``wave/gridded`` product on the same
+    # 0.25° grid and axis): the significant height of combined wind waves
+    # and swell (10/0/3), the primary wave mean period (10/0/11) and the
+    # primary wave direction (10/0/10, degrees true, the direction the waves
+    # come *from*). All three sit on the water surface (type 1), which
+    # WAVEWATCH III writes with a surface value of 1 where every pgrb2
+    # surface record carries 0 — so the registry declares no value and the
+    # matchers accept either, and the metadata writes the surface as
+    # carrying none. The records carry a bitmap: land (and the ice edge)
+    # arrives as GDAL's nodata value, 9999, and becomes the bottom of each
+    # codebook.
+    "htsgw": VariableSpec(
+        id="htsgw",
+        label="Significant wave height",
+        output_unit="m",
+        value_range=(0, 25),
+        grib_element="HTSGW",
+        index_field=":HTSGW:surface:",
+        grib2_discipline=10,
+        grib2_category=0,
+        grib2_number=3,
+        grib2_level_type=1,
+        gdal_unit="m",
+        fill_values=(9999.0,),
+    ),
+    "perpw": VariableSpec(
+        id="perpw",
+        label="Primary wave mean period",
+        output_unit="s",
+        value_range=(0, 25),
+        grib_element="PERPW",
+        index_field=":PERPW:surface:",
+        grib2_discipline=10,
+        grib2_category=0,
+        grib2_number=11,
+        grib2_level_type=1,
+        gdal_unit="s",
+        fill_values=(9999.0,),
+    ),
+    "dirpw": VariableSpec(
+        id="dirpw",
+        label="Primary wave direction",
+        output_unit="°",
+        value_range=(0, 358),
+        grib_element="DIRPW",
+        index_field=":DIRPW:surface:",
+        grib2_discipline=10,
+        grib2_category=0,
+        grib2_number=10,
+        grib2_level_type=1,
+        gdal_unit="Degree true",
+        fill_values=(9999.0,),
+    ),
 }
+
+# The ocean set: the three pgrb2 fields and the three GFS-Wave fields above,
+# held to the Rust encoder by tests/fixtures/ocean-registry.json the way the
+# surface diagnostics are by surface-registry.json.
+OCEAN_VARIABLE_IDS: tuple[str, ...] = ("tmpsfc", "icec", "icetk", "htsgw", "perpw", "dirpw")
+# The ids the Celsius rule applies to at the surface: GDAL normalizes every
+# GRIB temperature to Celsius, and the converter accepts K and F as well.
+SURFACE_TEMPERATURE_IDS: tuple[str, ...] = ("tmp2m", "dpt2m", "aptmp2m", "tmpsfc")
 
 
 # The isobaric families: geopotential height, temperature, relative humidity,

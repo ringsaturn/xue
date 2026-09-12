@@ -24,8 +24,12 @@ Facts worth getting right:
   `wind850`, `wind250`, `qflux850`. GFS additionally: the surface
   diagnostics `gust`, `tcdc`, `lcdc`, `mcdc`, `hcdc` (total / low / middle /
   high cloud cover), `cape`, `vis`, `dpt2m`, `aptmp2m` (apparent
-  temperature), the vertical velocity `vvel850`, `vvel700`, `vvel500`, and
-  the 850 hPa equivalent potential temperature `thetae850`. SFLUX: `tmp2m`,
+  temperature), the vertical velocity `vvel850`, `vvel700`, `vvel500`, the
+  850 hPa equivalent potential temperature `thetae850`, and the ocean
+  fields `tmpsfc` (surface / skin temperature, the SST over water), `icec`
+  and `icetk` (sea ice cover and thickness), `htsgw`, `perpw`, `dirpw`
+  (significant wave height, primary wave period and direction, from the
+  GFS-Wave file of the same cycle; land is 0 in all three). SFLUX: `tmp2m`,
   `prate`, `dswrf`, `wind10m`. Names are `<family><level>`; the level is in
   hPa, `2m`/`10m` are heights above ground, `prmsl` is mean sea level
   pressure.

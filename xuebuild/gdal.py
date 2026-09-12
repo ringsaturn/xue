@@ -11,7 +11,7 @@ from typing import Any
 
 from .errors import ConversionError
 from .model import SourceFrame
-from .variables import isobaric_variable, variable_spec
+from .variables import SURFACE_TEMPERATURE_IDS, isobaric_variable, variable_spec
 
 
 SUPPORTED_EXTENSIONS = {".grb", ".grb2", ".grib2"}
@@ -231,6 +231,48 @@ def cape_expression(unit: str) -> str:
     return "maximum(0,minimum(6350,A))"
 
 
+def ice_cover_expression(unit: str) -> str:
+    """Sea ice cover: GRIB2 carries a 0–1 proportion (GDAL spells the unit
+    "Proportion"), the codebook quantizes percent."""
+    compact = re.sub(r"[\s*()\[\]]", "", unit.strip().lower())
+    if compact not in {"proportion", "fraction", "1", "-", ""}:
+        raise ConversionError(f"unsupported sea ice cover unit: {unit or '<missing>'}")
+    return "maximum(0,minimum(100,A*100))"
+
+
+def ice_thickness_expression(unit: str) -> str:
+    """Sea ice thickness in metres, clamped to the icetk codebook range."""
+    compact = re.sub(r"[\s*()\[\]]", "", unit.strip().lower())
+    if compact not in {"m", "metre", "meter", "metres", "meters"}:
+        raise ConversionError(f"unsupported sea ice thickness unit: {unit or '<missing>'}")
+    return "maximum(0,minimum(5.08,A))"
+
+
+def wave_height_expression(unit: str) -> str:
+    """Significant wave height in metres, clamped to the htsgw codebook range."""
+    compact = re.sub(r"[\s*()\[\]]", "", unit.strip().lower())
+    if compact not in {"m", "metre", "meter", "metres", "meters"}:
+        raise ConversionError(f"unsupported wave height unit: {unit or '<missing>'}")
+    return "maximum(0,minimum(25.4,A))"
+
+
+def wave_period_expression(unit: str) -> str:
+    """Wave period in seconds, clamped to the perpw codebook range."""
+    compact = re.sub(r"[\s*()\[\]]", "", unit.strip().lower())
+    if compact not in {"s", "sec", "second", "seconds"}:
+        raise ConversionError(f"unsupported wave period unit: {unit or '<missing>'}")
+    return "maximum(0,minimum(25.4,A))"
+
+
+def wave_direction_expression(unit: str) -> str:
+    """Wave direction in degrees true (GDAL spells it "Degree true"); the
+    converter reduces it modulo 360 itself."""
+    compact = re.sub(r"[\s*()\[\]]", "", unit.strip().lower())
+    if compact not in {"degreetrue", "degtrue", "degrees", "degree", "deg", "degreestrue"}:
+        raise ConversionError(f"unsupported wave direction unit: {unit or '<missing>'}")
+    return "A"
+
+
 def accumulation_expression(unit: str) -> str:
     """ECMWF tp arrives in metres of accumulated water; GDAL reports the
     ECMWF-local parameter's unit as "-". The expression is identity — the
@@ -331,6 +373,18 @@ def raster_expression(variable_id: str, unit: str) -> str:
         return celsius_expression(unit, low=-90, high=60)
     if variable_id in ("lcdc", "mcdc", "hcdc"):
         return cloud_cover_expression(unit)
+    if variable_id == "tmpsfc":
+        return celsius_expression(unit, low=-60, high=67)
+    if variable_id == "icec":
+        return ice_cover_expression(unit)
+    if variable_id == "icetk":
+        return ice_thickness_expression(unit)
+    if variable_id == "htsgw":
+        return wave_height_expression(unit)
+    if variable_id == "perpw":
+        return wave_period_expression(unit)
+    if variable_id == "dirpw":
+        return wave_direction_expression(unit)
     if isobaric_variable(variable_id) is not None:
         return isobaric_expression(variable_id, unit)
     raise ConversionError(f"unsupported variable: {variable_id}")
@@ -383,10 +437,16 @@ def _is_total_precipitation(metadata: dict[str, str], description: str) -> bool:
 
 
 def _is_surface_record(metadata: dict[str, str], description: str, element: str) -> bool:
-    """One GRIB element on the ground surface (DSWRF, GUST, CAPE). The
-    fetched files carry only the instantaneous surface record of each, so
-    element + surface level is unambiguous — the interval averages and the
-    mixed-layer CAPE variants are never downloaded."""
+    """One GRIB element on the ground or water surface (DSWRF, GUST, CAPE,
+    the surface temperature, the sea ice and wave fields). The fetched files
+    carry only the instantaneous surface record of each, so element +
+    surface level is unambiguous — the interval averages and the mixed-layer
+    CAPE variants are never downloaded. GDAL spells the surface ``0-SFC``;
+    the GFS-Wave records carry a surface value of 1 and come out ``1-SFC``,
+    so any value on the SFC surface is accepted. The prose test looks for
+    the surface's own name rather than the word "surface", which the
+    isobaric levels the same TMP element is fetched on also carry
+    ("Isobaric surface")."""
     if metadata.get("GRIB_ELEMENT", "").upper() != element:
         return False
     short_name = metadata.get("GRIB_SHORT_NAME", "").upper()
@@ -398,7 +458,7 @@ def _is_surface_record(metadata: dict[str, str], description: str, element: str)
             description,
         ]
     ).lower()
-    return short_name == "0-SFC" or "surface" in searchable
+    return short_name.endswith("-SFC") or 'sfc="' in searchable or "ground or water surface" in searchable
 
 
 def _is_entire_atmosphere_record(metadata: dict[str, str], description: str, element: str) -> bool:
@@ -527,7 +587,7 @@ def _band_matches(variable_id: str, metadata: dict[str, str], description: str) 
         return _is_surface_precipitation_rate(metadata, description)
     if variable_id == "tp":
         return _is_total_precipitation(metadata, description)
-    if variable_id in ("dswrf", "gust", "cape", "vis"):
+    if variable_id in ("dswrf", "gust", "cape", "vis", "tmpsfc", "icec", "icetk", "htsgw", "perpw", "dirpw"):
         return _is_surface_record(metadata, description, variable_spec(variable_id).grib_element)
     if variable_id == "tcdc":
         return _is_entire_atmosphere_record(metadata, description, variable_spec(variable_id).grib_element)
@@ -550,7 +610,7 @@ def _frame_from_band(path: Path, variable_id: str, band_number: int, metadata: d
     unit_value = metadata.get("GRIB_UNIT") or metadata.get("GRIB_COMMENT", "").rsplit("[", 1)[-1].rstrip("]")
     unit = (
         normalize_unit(unit_value)
-        if variable_id in ("tmp2m", "dpt2m", "aptmp2m")
+        if variable_id in SURFACE_TEMPERATURE_IDS
         else unit_value.strip().strip("[]")
     )
     raster_expression(variable_id, unit)

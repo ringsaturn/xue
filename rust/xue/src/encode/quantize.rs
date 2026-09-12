@@ -291,6 +291,78 @@ const COMPACT_APPARENT: LinearCodebook = LinearCodebook {
     step: 2.0,
     ..QUALITY_APPARENT
 };
+// The ocean fields (see `xuebuild/quantize.py` for the reasoning behind each
+// range). The surface (skin) temperature keeps the 2 m temperature's step
+// and floor and runs to 67 °C, where a desert skin goes.
+const QUALITY_SURFACE_TEMPERATURE: LinearCodebook = LinearCodebook {
+    minimum: -60.0,
+    maximum: 67.0,
+    step: 0.5,
+    nodata_code: 255,
+    name: "tmpsfc",
+};
+const COMPACT_SURFACE_TEMPERATURE: LinearCodebook = LinearCodebook {
+    step: 1.0,
+    ..QUALITY_SURFACE_TEMPERATURE
+};
+// Sea ice cover in percent: the cloud cover's numbers and its balanced rule.
+const QUALITY_ICE_COVER: LinearCodebook = LinearCodebook {
+    minimum: 0.0,
+    maximum: 100.0,
+    step: 0.5,
+    nodata_code: 255,
+    name: "icec",
+};
+const COMPACT_ICE_COVER: LinearCodebook = LinearCodebook {
+    step: 1.0,
+    ..QUALITY_ICE_COVER
+};
+// Sea ice thickness: 0–5.08 m at 2 cm over the 5 m GFS caps the field at.
+const QUALITY_ICE_THICKNESS: LinearCodebook = LinearCodebook {
+    minimum: 0.0,
+    maximum: 5.08,
+    step: 0.02,
+    nodata_code: 255,
+    name: "icetk",
+};
+const COMPACT_ICE_THICKNESS: LinearCodebook = LinearCodebook {
+    step: 0.04,
+    ..QUALITY_ICE_THICKNESS
+};
+// Significant wave height and primary wave period: 0–25.4 at a tenth.
+const QUALITY_WAVE_HEIGHT: LinearCodebook = LinearCodebook {
+    minimum: 0.0,
+    maximum: 25.4,
+    step: 0.1,
+    nodata_code: 255,
+    name: "htsgw",
+};
+const COMPACT_WAVE_HEIGHT: LinearCodebook = LinearCodebook {
+    step: 0.2,
+    ..QUALITY_WAVE_HEIGHT
+};
+const QUALITY_WAVE_PERIOD: LinearCodebook = LinearCodebook {
+    name: "perpw",
+    ..QUALITY_WAVE_HEIGHT
+};
+const COMPACT_WAVE_PERIOD: LinearCodebook = LinearCodebook {
+    step: 0.2,
+    ..QUALITY_WAVE_PERIOD
+};
+// Primary wave direction: 1.5° over 0–358.5; the compact profile stops one
+// code short of 360 as well (357°), so no code aliases 0 in either.
+const QUALITY_WAVE_DIRECTION: LinearCodebook = LinearCodebook {
+    minimum: 0.0,
+    maximum: 358.5,
+    step: 1.5,
+    nodata_code: 255,
+    name: "dirpw",
+};
+const COMPACT_WAVE_DIRECTION: LinearCodebook = LinearCodebook {
+    maximum: 357.0,
+    step: 3.0,
+    ..QUALITY_WAVE_DIRECTION
+};
 // The cloud layers take the total's codebook, and its balanced rule.
 const fn cloud_layer_codebook(name: &'static str, compact: bool) -> LinearCodebook {
     LinearCodebook {
@@ -551,6 +623,20 @@ pub fn codebook(profile: &str, variable_id: &str) -> Result<Codebook> {
         (_, "mcdc") => Codebook::Linear(cloud_layer_codebook("mcdc", true)),
         ("quality", "hcdc") => Codebook::Linear(cloud_layer_codebook("hcdc", false)),
         (_, "hcdc") => Codebook::Linear(cloud_layer_codebook("hcdc", true)),
+        (_, "tmpsfc") if quality => Codebook::Linear(QUALITY_SURFACE_TEMPERATURE),
+        (_, "tmpsfc") => Codebook::Linear(COMPACT_SURFACE_TEMPERATURE),
+        // Ice concentration is read in tenths: balanced takes the 1 % step,
+        // as for cloud cover.
+        ("quality", "icec") => Codebook::Linear(QUALITY_ICE_COVER),
+        (_, "icec") => Codebook::Linear(COMPACT_ICE_COVER),
+        (_, "icetk") if quality => Codebook::Linear(QUALITY_ICE_THICKNESS),
+        (_, "icetk") => Codebook::Linear(COMPACT_ICE_THICKNESS),
+        (_, "htsgw") if quality => Codebook::Linear(QUALITY_WAVE_HEIGHT),
+        (_, "htsgw") => Codebook::Linear(COMPACT_WAVE_HEIGHT),
+        (_, "perpw") if quality => Codebook::Linear(QUALITY_WAVE_PERIOD),
+        (_, "perpw") => Codebook::Linear(COMPACT_WAVE_PERIOD),
+        (_, "dirpw") if quality => Codebook::Linear(QUALITY_WAVE_DIRECTION),
+        (_, "dirpw") => Codebook::Linear(COMPACT_WAVE_DIRECTION),
         _ if pressure_codebook(variable_id, !quality).is_some() => Codebook::Linear(
             pressure_codebook(variable_id, !quality).expect("checked just above"),
         ),

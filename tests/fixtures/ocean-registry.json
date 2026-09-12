@@ -1,0 +1,170 @@
+{
+  "tmpsfc": {
+    "label": "Surface temperature",
+    "unit": "°C",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 0,
+      "parameterNumber": 0,
+      "typeOfFirstFixedSurface": 1,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 0
+    },
+    "quality": {
+      "type": "linear",
+      "offset": -60.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -60.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "icec": {
+    "label": "Sea ice cover",
+    "unit": "%",
+    "parameter": {
+      "discipline": 10,
+      "parameterCategory": 2,
+      "parameterNumber": 0,
+      "typeOfFirstFixedSurface": 1,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 0
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 200,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 100,
+      "nodataCode": 255
+    }
+  },
+  "icetk": {
+    "label": "Sea ice thickness",
+    "unit": "m",
+    "parameter": {
+      "discipline": 10,
+      "parameterCategory": 2,
+      "parameterNumber": 1,
+      "typeOfFirstFixedSurface": 1,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 0
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.02,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.04,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "htsgw": {
+    "label": "Significant wave height",
+    "unit": "m",
+    "parameter": {
+      "discipline": 10,
+      "parameterCategory": 0,
+      "parameterNumber": 3,
+      "typeOfFirstFixedSurface": 1,
+      "scaleFactorOfFirstFixedSurface": null,
+      "scaledValueOfFirstFixedSurface": null
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.1,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.2,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "perpw": {
+    "label": "Primary wave mean period",
+    "unit": "s",
+    "parameter": {
+      "discipline": 10,
+      "parameterCategory": 0,
+      "parameterNumber": 11,
+      "typeOfFirstFixedSurface": 1,
+      "scaleFactorOfFirstFixedSurface": null,
+      "scaledValueOfFirstFixedSurface": null
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.1,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.2,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "dirpw": {
+    "label": "Primary wave direction",
+    "unit": "°",
+    "parameter": {
+      "discipline": 10,
+      "parameterCategory": 0,
+      "parameterNumber": 10,
+      "typeOfFirstFixedSurface": 1,
+      "scaleFactorOfFirstFixedSurface": null,
+      "scaledValueOfFirstFixedSurface": null
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 1.5,
+      "minimumCode": 0,
+      "maximumCode": 239,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 3.0,
+      "minimumCode": 0,
+      "maximumCode": 119,
+      "nodataCode": 255
+    }
+  }
+}

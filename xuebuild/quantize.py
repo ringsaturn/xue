@@ -14,7 +14,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from .errors import ConversionError
-from .variables import ISOBARIC_LEVELS_HPA, isobaric_variable_id
+from .variables import ISOBARIC_LEVELS_HPA, OCEAN_VARIABLE_IDS, isobaric_variable_id
 
 
 @dataclass(frozen=True)
@@ -176,6 +176,57 @@ COMPACT_DEW_POINT = TemperatureCodebook(minimum=-70.0, maximum=40.0, step=1.0, n
 # quoted to anyway.
 QUALITY_APPARENT = TemperatureCodebook(minimum=-90.0, maximum=60.0, step=1.0, name="aptmp2m")
 COMPACT_APPARENT = TemperatureCodebook(minimum=-90.0, maximum=60.0, step=2.0, name="aptmp2m")
+# The ocean fields. The surface (skin) temperature keeps the 2 m
+# temperature's 0.5 °C step and its -60 °C floor — the Antarctic plateau
+# clamps there as it does for tmp2m — but runs to 67 °C, spending all 254
+# codes, because a desert skin in the afternoon passes 60 °C where the air
+# at 2 m never does. Over the sea, where the field is the SST, the half
+# degree is what resolves a front.
+QUALITY_SURFACE_TEMPERATURE = TemperatureCodebook(minimum=-60.0, maximum=67.0, step=0.5, name="tmpsfc")
+COMPACT_SURFACE_TEMPERATURE = TemperatureCodebook(minimum=-60.0, maximum=67.0, step=1.0, name="tmpsfc")
+# Sea ice cover: a 0–1 proportion in GRIB2, percent in the codebook — the
+# cloud cover's numbers, and its balanced rule too: an ice chart classes
+# concentration in tenths, so production takes the compact 1 % step.
+QUALITY_ICE_COVER = TemperatureCodebook(minimum=0.0, maximum=100.0, step=0.5, name="icec")
+COMPACT_ICE_COVER = TemperatureCodebook(minimum=0.0, maximum=100.0, step=1.0, name="icec")
+# Sea ice thickness: 0–5.08 m at 2 cm spends the full code space over the
+# 5 m GFS caps the field at.
+QUALITY_ICE_THICKNESS = TemperatureCodebook(minimum=0.0, maximum=5.08, step=0.02, name="icetk")
+COMPACT_ICE_THICKNESS = TemperatureCodebook(minimum=0.0, maximum=5.08, step=0.04, name="icetk")
+# Significant wave height and primary wave period: 0–25.4 at a tenth spends
+# the full code space over both — the highest significant wave height a
+# global wave model analyses is about 20 m, the longest primary period about
+# 25 s. Land is 0 (variables.py), the bottom of both, so a renderer paints
+# nothing there, as it does for a dry precipitation cell.
+QUALITY_WAVE_HEIGHT = TemperatureCodebook(minimum=0.0, maximum=25.4, step=0.1, name="htsgw")
+COMPACT_WAVE_HEIGHT = TemperatureCodebook(minimum=0.0, maximum=25.4, step=0.2, name="htsgw")
+QUALITY_WAVE_PERIOD = TemperatureCodebook(minimum=0.0, maximum=25.4, step=0.1, name="perpw")
+COMPACT_WAVE_PERIOD = TemperatureCodebook(minimum=0.0, maximum=25.4, step=0.2, name="perpw")
+# Primary wave direction, degrees true the waves come from: 1.5° over
+# 0–358.5 (240 codes). The converter reduces the 360 a record can carry to 0
+# before quantization, so the wrap is the codebook's own and no code aliases
+# another; a direction is read off an arrow, not a legend, so the step is
+# generous. The compact profile doubles the step and stops one code short
+# (357°) for the same reason — 360/3 codes would put 360° back on the grid.
+QUALITY_WAVE_DIRECTION = TemperatureCodebook(minimum=0.0, maximum=358.5, step=1.5, name="dirpw")
+COMPACT_WAVE_DIRECTION = TemperatureCodebook(minimum=0.0, maximum=357.0, step=3.0, name="dirpw")
+QUALITY_OCEAN = {
+    "tmpsfc": QUALITY_SURFACE_TEMPERATURE,
+    "icec": QUALITY_ICE_COVER,
+    "icetk": QUALITY_ICE_THICKNESS,
+    "htsgw": QUALITY_WAVE_HEIGHT,
+    "perpw": QUALITY_WAVE_PERIOD,
+    "dirpw": QUALITY_WAVE_DIRECTION,
+}
+COMPACT_OCEAN = {
+    "tmpsfc": COMPACT_SURFACE_TEMPERATURE,
+    "icec": COMPACT_ICE_COVER,
+    "icetk": COMPACT_ICE_THICKNESS,
+    "htsgw": COMPACT_WAVE_HEIGHT,
+    "perpw": COMPACT_WAVE_PERIOD,
+    "dirpw": COMPACT_WAVE_DIRECTION,
+}
+assert tuple(QUALITY_OCEAN) == OCEAN_VARIABLE_IDS
 # The cloud layers take the total's codebook, and its balanced rule.
 QUALITY_CLOUD_LAYER = {
     "lcdc": TemperatureCodebook(minimum=0.0, maximum=100.0, step=0.5, name="lcdc"),
@@ -415,6 +466,7 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
         "dpt2m": QUALITY_DEW_POINT,
         "aptmp2m": QUALITY_APPARENT,
         **QUALITY_CLOUD_LAYER,
+        **QUALITY_OCEAN,
         **QUALITY_PRESSURE,
         **QUALITY_ISOBARIC,
     },
@@ -432,6 +484,7 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
         "dpt2m": COMPACT_DEW_POINT,
         "aptmp2m": COMPACT_APPARENT,
         **COMPACT_CLOUD_LAYER,
+        **COMPACT_OCEAN,
         **COMPACT_PRESSURE,
         **COMPACT_ISOBARIC,
     },
@@ -444,7 +497,8 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
     # structure at every level — and a 0.5 % step costs ~570 KB a frame on
     # the real 850 hPa plane against ~450 KB at 1 %, for a precision no
     # moisture chart reads. Balanced takes the compact (1 %) codebook there,
-    # and for total cloud cover, the same kind of field on the same scale.
+    # for total cloud cover, the same kind of field on the same scale, and
+    # for sea ice cover, which is read in tenths.
     "balanced": {
         "tmp2m": QUALITY_TEMPERATURE,
         "prate": COMPACT_PRECIPITATION,
@@ -459,6 +513,8 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
         "dpt2m": QUALITY_DEW_POINT,
         "aptmp2m": QUALITY_APPARENT,
         **COMPACT_CLOUD_LAYER,
+        **QUALITY_OCEAN,
+        "icec": COMPACT_ICE_COVER,
         **QUALITY_PRESSURE,
         **QUALITY_ISOBARIC,
         **{variable_id: COMPACT_HUMIDITY for variable_id in QUALITY_ISOBARIC if variable_id.startswith("rh")},

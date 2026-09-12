@@ -9,6 +9,21 @@
 
 use crate::encode::errors::{EncodeError, Result};
 
+/// A second file family of the same cycle some of a source's inputs are read
+/// from — GFS-Wave beside the pgrb2 atmosphere. The fetcher
+/// (`xuebuild/fetch.py`) appends its records to the frame's GRIB after the
+/// primary file's, so the converter still sees one file per frame; the
+/// native encoder carries the table so the two registries stay one. Mirrors
+/// `CompanionFile` in `xuebuild/sources.py`.
+#[derive(Debug, Clone, Copy)]
+pub struct CompanionFile {
+    /// The family: `wave` for GFS-Wave.
+    pub id: &'static str,
+    /// Which of the source's `input_variable_ids` come from this family, in
+    /// assembly order.
+    pub variable_ids: &'static [&'static str],
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct SourceSpec {
     /// CLI / URL / directory id.
@@ -22,8 +37,11 @@ pub struct SourceSpec {
     pub latest_filename: Option<&'static str>,
     /// The published time axis as `(last_hour, step_hours)` segments.
     pub steps: &'static [(i64, i64)],
-    /// Variables fetched from the source, in GRIB assembly order.
+    /// Variables fetched from the source, in GRIB assembly order: the primary
+    /// file's records first, then each companion family's.
     pub input_variable_ids: &'static [&'static str],
+    /// Further file families of the same cycle some inputs come from.
+    pub companion_files: &'static [CompanionFile],
     /// True when precipitation arrives as a run-total accumulation (ECMWF
     /// `tp`, metres) and must be de-accumulated into a rate.
     pub accumulated_precipitation: bool,
@@ -56,6 +74,14 @@ impl SourceSpec {
     /// Whether the source has a live feed to fetch and point at.
     pub fn live(&self) -> bool {
         self.latest_filename.is_some()
+    }
+
+    /// The companion family `variable_id` is read from, or `None` for an
+    /// input of the primary file.
+    pub fn companion_of(&self, variable_id: &str) -> Option<&'static CompanionFile> {
+        self.companion_files
+            .iter()
+            .find(|companion| companion.variable_ids.contains(&variable_id))
     }
 
     /// The published axis from the analysis through `last_hour`.
@@ -111,15 +137,21 @@ pub const SOURCES: &[SourceSpec] = &[
         // from the 850 hPa one and the specific humidity there (fetched as
         // an input only — it also feeds the 850 hPa equivalent potential
         // temperature), and the 250 hPa wind for the jet; then the surface
-        // diagnostics and the vertical velocity on three surfaces. Mirrors
+        // diagnostics and the vertical velocity on three surfaces; then the
+        // ocean — the skin temperature and the sea ice fields from pgrb2,
+        // the wave fields from the cycle's GFS-Wave file. Mirrors
         // `xuebuild/sources.py`.
         input_variable_ids: &[
             "tmp2m", "prate", "ugrd10m", "vgrd10m", "prmsl", "hgt850", "hgt700", "hgt500",
             "hgt250", "tmp925", "tmp850", "tmp500", "rh850", "rh700", "rh500", "spfh850",
             "ugrd925", "vgrd925", "ugrd850", "vgrd850", "ugrd250", "vgrd250", "gust", "tcdc",
             "lcdc", "mcdc", "hcdc", "cape", "vis", "dpt2m", "aptmp2m", "vvel850", "vvel700",
-            "vvel500",
+            "vvel500", "tmpsfc", "icec", "icetk", "htsgw", "perpw", "dirpw",
         ],
+        companion_files: &[CompanionFile {
+            id: "wave",
+            variable_ids: &["htsgw", "perpw", "dirpw"],
+        }],
         accumulated_precipitation: false,
         averaged_precipitation: false,
         average_window_hours: 6,
@@ -127,7 +159,8 @@ pub const SOURCES: &[SourceSpec] = &[
         bundle_scalar_ids: &[
             "tmp2m", "prate", "prmsl", "hgt850", "hgt700", "hgt500", "hgt250", "tmp925", "tmp850",
             "tmp500", "rh850", "rh700", "rh500", "gust", "tcdc", "lcdc", "mcdc", "hcdc", "cape",
-            "vis", "dpt2m", "aptmp2m", "vvel850", "vvel700", "vvel500", "thetae850",
+            "vis", "dpt2m", "aptmp2m", "vvel850", "vvel700", "vvel500", "thetae850", "tmpsfc",
+            "icec", "icetk", "htsgw", "perpw", "dirpw",
         ],
         bundle_vector_ids: &["wind10m", "wind925", "wind850", "wind250", "qflux850"],
         production_grid: (1440, 721),
@@ -149,6 +182,7 @@ pub const SOURCES: &[SourceSpec] = &[
             "tmp925", "tmp850", "tmp500", "rh850", "rh700", "rh500", "spfh850", "ugrd925",
             "vgrd925", "ugrd850", "vgrd850", "ugrd250", "vgrd250",
         ],
+        companion_files: &[],
         accumulated_precipitation: true,
         averaged_precipitation: false,
         average_window_hours: 6,
@@ -171,6 +205,7 @@ pub const SOURCES: &[SourceSpec] = &[
         latest_filename: Some("latest-sflux.json"),
         steps: &[(120, 1), (240, 3)],
         input_variable_ids: &["tmp2m", "prate_ave", "ugrd10m", "vgrd10m", "dswrf"],
+        companion_files: &[],
         accumulated_precipitation: false,
         averaged_precipitation: true,
         average_window_hours: 6,
@@ -190,6 +225,7 @@ pub const SOURCES: &[SourceSpec] = &[
         latest_filename: None,
         steps: &[],
         input_variable_ids: &["cref"],
+        companion_files: &[],
         accumulated_precipitation: false,
         averaged_precipitation: false,
         average_window_hours: 6,
@@ -227,5 +263,23 @@ mod tests {
         assert!(gfs.forecast_hours(121).is_err());
         // An observation source publishes no forecast axis at all.
         assert!(source_spec("radar").expect("radar").forecast_hours(1).is_err());
+    }
+
+    #[test]
+    fn the_wave_fields_come_from_the_companion_family() {
+        let gfs = source_spec("gfs").expect("gfs");
+        let [wave] = gfs.companion_files else { panic!("one companion family") };
+        assert_eq!(wave.id, "wave");
+        for variable_id in wave.variable_ids {
+            assert!(gfs.input_variable_ids.contains(variable_id), "{variable_id} is fetched");
+            assert!(gfs.bundle_scalar_ids.contains(variable_id), "{variable_id} is published");
+            assert_eq!(gfs.companion_of(variable_id).map(|c| c.id), Some("wave"));
+        }
+        assert!(gfs.companion_of("tmpsfc").is_none());
+        // Assembly order: the companion's records come last.
+        assert_eq!(&gfs.input_variable_ids[gfs.input_variable_ids.len() - 3..], wave.variable_ids);
+        for model in ["ecmwf", "sflux", "radar"] {
+            assert!(source_spec(model).expect(model).companion_files.is_empty(), "{model}");
+        }
     }
 }

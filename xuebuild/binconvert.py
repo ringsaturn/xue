@@ -52,7 +52,13 @@ from .model import GRIB_PLANE_SOURCE, PlaneSource, SourceFrame
 from .observation import inspect_observation
 from .quantize import PRESSURE_VARIABLE_IDS, PROFILES, PrecipitationCodebook, TemperatureCodebook
 from .sources import SourceSpec, source_spec
-from .variables import ISOBARIC_LEVELS_HPA, STANDARD_GRAVITY, isobaric_variable, variable_spec
+from .variables import (
+    ISOBARIC_LEVELS_HPA,
+    STANDARD_GRAVITY,
+    SURFACE_TEMPERATURE_IDS,
+    isobaric_variable,
+    variable_spec,
+)
 from .videoconvert import build_debug_playlist, encode_variable_video
 
 LOG = logging.getLogger(__name__)
@@ -280,15 +286,50 @@ def _grid_info(path: Path) -> GridInfo:
     if lon_step <= 0 or lat_step >= 0:
         raise ConversionError(f"grid must run west-to-east and north-to-south: {path}")
     return _normalize_longitudes(
-        GridInfo(
-            width=width,
-            height=height,
-            first_longitude=float(transform[0]) + lon_step / 2,
-            first_latitude=float(transform[3]) + lat_step / 2,
-            longitude_step=lon_step,
-            latitude_step=lat_step,
+        _snap_global_longitudes(
+            GridInfo(
+                width=width,
+                height=height,
+                first_longitude=float(transform[0]) + lon_step / 2,
+                first_latitude=float(transform[3]) + lat_step / 2,
+                longitude_step=lon_step,
+                latitude_step=lat_step,
+            )
         )
     )
+
+
+# How far short of (or past) a full circle a grid's columns may fall, as a
+# fraction of one cell, and still be the global grid they clearly are.
+_GLOBAL_SPAN_TOLERANCE_CELLS = 1e-3
+
+
+def _snap_global_longitudes(grid: GridInfo) -> GridInfo:
+    """Give a global grid the exact step and origin its column count implies.
+
+    GDAL derives a GRIB grid's longitude step from the first and last
+    longitudes rather than from the increment the record also carries, so
+    an encoder that rounds the last longitude is enough to put a grid a hair
+    off the globe: WAVEWATCH III writes the 0.25° grid's last column as
+    359.750016°, which GDAL turns into a 0.2500000111° step whose 1440
+    columns span 360.000016° — not a wrapping grid by :attr:`GridInfo.wraps`,
+    and a different ``longitudeStep`` from the pgrb2 record of the same
+    cycle on the very same grid. A grid whose columns span 360° to within a
+    thousandth of a cell is the global grid, and is described as one: the
+    step becomes ``360 / width`` and the first center is placed on that
+    step's grid (rounding half up, as everywhere in this pipeline) when it
+    lies within the same tolerance of it. An exact grid (every other source)
+    passes through unchanged — the same numbers come back out — and a
+    regional grid is left alone. The native encoder applies the identical
+    rule (``grid.rs``): the two must agree to the bit."""
+    span = grid.width * grid.longitude_step
+    if abs(span - 360.0) > grid.longitude_step * _GLOBAL_SPAN_TOLERANCE_CELLS:
+        return grid
+    step = 360.0 / grid.width
+    first = math.floor(grid.first_longitude / step + 0.5) * step
+    if abs(first - grid.first_longitude) > step * _GLOBAL_SPAN_TOLERANCE_CELLS:
+        first = grid.first_longitude
+    return replace(grid, longitude_step=step, first_longitude=first)
 
 
 def _normalize_longitudes(grid: GridInfo) -> GridInfo:
@@ -385,7 +426,7 @@ def crop_grid(grid: GridInfo, bbox: tuple[float, float, float, float]) -> GridIn
 
 def _convert_units(frame: SourceFrame, values: np.ndarray) -> np.ndarray:
     isobaric = isobaric_variable(frame.variable_id)
-    if frame.variable_id in ("tmp2m", "dpt2m", "aptmp2m") or (isobaric is not None and isobaric[0] == "tmp"):
+    if frame.variable_id in SURFACE_TEMPERATURE_IDS or (isobaric is not None and isobaric[0] == "tmp"):
         unit = normalize_unit(frame.unit)
         if unit == "K":
             values -= 273.15
@@ -408,8 +449,17 @@ def _convert_units(frame: SourceFrame, values: np.ndarray) -> np.ndarray:
     elif frame.variable_id == "vis":
         # GRIB2 carries visibility in metres; the codebook quantizes km.
         values /= 1000.0
+    elif frame.variable_id == "icec":
+        # GRIB2 carries sea ice cover as a 0–1 proportion; the codebook
+        # quantizes percent.
+        values *= 100.0
+    elif frame.variable_id == "dirpw":
+        # A direction in degrees true: a record can carry 360, which is the
+        # codebook's 0 — reduce it there so the wrap never clamps.
+        values = np.mod(values, 360.0)
     # Wind components, geopotential heights, relative humidity, cloud cover,
-    # CAPE and vertical velocity are already in their output units.
+    # CAPE, vertical velocity, ice thickness and the wave height and period
+    # are already in their output units.
     return values
 
 
@@ -545,10 +595,24 @@ def _extract_planes(
         if grid.crop is not None:
             plane = np.ascontiguousarray(grid.crop.take(plane))
         plane = plane_source.apply_fill(plane.ravel())
+        plane = _fill_missing(variable_id, plane)
         if not np.isfinite(plane).all():
             raise ConversionError(f"Xue v1 requires complete planes, found non-finite values in {source}")
         planes[variable_id] = _convert_units(frames[variable_id], plane)
     return planes
+
+
+def _fill_missing(variable_id: str, plane: np.ndarray) -> np.ndarray:
+    """Map the points a record does not cover to the bottom of the
+    variable's codebook — a value, not a gap (docs/format.md). Which values
+    mark them is the variable's own to declare (``VariableSpec.fill_values``:
+    GDAL's 9999 for a GRIB2 bitmap); a variable that covers its grid declares
+    none and passes through untouched. Runs before unit conversion, on the
+    raw record values."""
+    spec = variable_spec(variable_id)
+    if not spec.fill_values:
+        return plane
+    return PlaneSource(fill_values=spec.fill_values, fill_replacement=float(spec.value_range[0])).apply_fill(plane)
 
 
 def _prepare_frames(paths: list[Path], variable_id: str) -> list[SourceFrame]:

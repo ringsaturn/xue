@@ -318,6 +318,12 @@ no chart for.
 | `vis` | 0 / 19 / 0 | 1, 0 | Surface visibility, quantized in km |
 | `dpt2m` | 0 / 0 / 6 | 103, 2 m | 2 m dew point |
 | `aptmp2m` | 0 / 0 / 21 | 103, 2 m | NCEP's 2 m apparent temperature |
+| `tmpsfc` | 0 / 0 / 0 | 1, 0 | Surface (skin) temperature — the SST over water |
+| `icec` | 10 / 2 / 0 | 1, 0 | Sea ice cover, a 0–1 proportion quantized in percent |
+| `icetk` | 10 / 2 / 1 | 1, 0 | Sea ice thickness |
+| `htsgw` | 10 / 0 / 3 | 1, no value | Significant height of combined wind waves and swell (GFS-Wave); WAVEWATCH III writes the surface value as 1, so none is declared and either is accepted |
+| `perpw` | 10 / 0 / 11 | 1, no value | Primary wave mean period (GFS-Wave) |
+| `dirpw` | 10 / 0 / 10 | 1, no value | Primary wave direction, degrees true the waves come from (GFS-Wave); a record's 360 is reduced to 0 |
 | `prmsl` | 0 / 3 / 1 | 101, no value | Mean sea level pressure, the quantity ECMWF calls `msl` and encodes as 0 / 3 / 0 on this surface — accepted on input, never written (not NCEP's MSLET, 0 / 3 / 192) |
 | `hgt<level>` | 0 / 3 / 5 | 100, `<level>` hPa in Pa | Geopotential height, one variable per isobaric surface |
 | `tmp<level>` | 0 / 0 / 0 | 100, `<level>` hPa in Pa | Temperature on the isobaric surface |
@@ -615,6 +621,12 @@ same values unless noted):
 | `vis` | 0 km | 0.1 | 254 | 255 | 0.05 km |
 | `dpt2m` | −70 °C | 0.5 | 220 | 255 | 0.25 °C |
 | `aptmp2m` | −90 °C | 1 | 150 | 255 | 0.5 °C |
+| `tmpsfc` | −60 °C | 0.5 | 254 | 255 | 0.25 °C |
+| `icec` | 0 % | 0.5 | 200 | 255 | 0.25 % |
+| `icetk` | 0 m | 0.02 | 254 | 255 | 0.01 m |
+| `htsgw` | 0 m | 0.1 | 254 | 255 | 0.05 m |
+| `perpw` | 0 s | 0.1 | 254 | 255 | 0.05 s |
+| `dirpw` | 0° | 1.5 | 239 | 255 | 0.75° |
 | `prmsl` | 870.5 hPa | 1 | 254 | 255 | 0.5 hPa |
 | `hgt1000` | −905 m | 10 | 254 | 255 | 5 m |
 | `hgt925` | −249 m | 6 | 254 | 255 | 3 m |
@@ -653,8 +665,18 @@ same values unless noted):
 The `compact` profile doubles each `scale` (temperature 1.0 → maximumCode
 110, wind 1.0 → 127, dswrf 10 → 127, cref 1.0 → 80, gust 1.0 → 127, every
 cloud cover 1.0 → 100, cape 50 → 127, vis 0.2 → 127, dpt2m 1.0 → 110,
-aptmp2m 2 → 75, and every pressure-family and isobaric codebook → half its
-maximumCode over the same range).
+aptmp2m 2 → 75, tmpsfc 1.0 → 127, icec 1.0 → 100, icetk 0.04 → 127, htsgw
+and perpw 0.2 → 127, and every pressure-family and isobaric codebook → half
+its maximumCode over the same range). The one exception to "the same range"
+is `dirpw`, whose compact codebook stops at 357° (3 → 119): 360 / 3 codes
+would put 360°, which is 0°, back on the grid. `balanced` takes the compact
+`icec` beside the compact humidity and cloud cover.
+
+The wave fields are the first whose records do not cover the grid: GFS-Wave
+carries a bitmap, and land comes out of GDAL as its nodata value (9999). The
+encoder maps those points to code 0 — 0 m, 0 s, 0° — before quantization,
+the way the radar mosaic's fill is handled (see "Xue v1 requires complete
+input planes" below); the `nodataCode` is still never written.
 
 The isobaric temperature takes its range per level: the low end holds the
 Antarctic winter at every surface, the high end the below-ground
@@ -763,8 +785,8 @@ fallback for out-of-range differences.
 Per-variable rules in v1:
 
 - **Linear-codebook fields (`tmp2m`, `ugrd10m`, `vgrd10m`, `dswrf`, the
-  surface diagnostics, the isobaric fills and the pressure family `prmsl` /
-  `hgt<level>`)** are
+  surface diagnostics, the ocean fields, the isobaric fills and the pressure
+  family `prmsl` / `hgt<level>`)** are
   smooth enough for temporal prediction. Each segment of the time axis
   splits independently into groups of 6 frames, so a group never spans a
   change of step. Within each group of `n` frames, the frame at zero-based

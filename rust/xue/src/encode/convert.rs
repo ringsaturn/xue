@@ -17,9 +17,9 @@ use time::OffsetDateTime;
 use crate::encode::binformat::{self, ChunkPayload, ChunkTables, HOUR_SECONDS};
 use crate::format::{ChunkEntry, Predictor, TileGeometry, VariableEntry, NO_DEPENDENCY};
 use crate::encode::errors::{EncodeError, Result};
-use crate::encode::variables::{isobaric_variable, ISOBARIC_LEVELS_HPA, STANDARD_GRAVITY};
+use crate::encode::variables::{isobaric_variable, variable_spec, ISOBARIC_LEVELS_HPA, STANDARD_GRAVITY};
 use crate::encode::gdalio::{needs_serial_access, netcdf_guard, Dataset};
-use crate::encode::grid::{crop_grid, normalize_longitudes, GridInfo};
+use crate::encode::grid::{crop_grid, normalize_longitudes, snap_global_longitudes, GridInfo};
 use crate::encode::gribindex::inspect_grib_fast;
 use crate::encode::inspect::{inspect_grib_multi, normalize_unit, raster_expression, SUPPORTED_EXTENSIONS};
 use crate::encode::manifest::{build_bin_manifest, build_latest_pointer, serialize_json, write_json};
@@ -314,14 +314,14 @@ fn grid_info(path: &Path) -> Result<GridInfo> {
             path.display()
         )));
     }
-    Ok(normalize_longitudes(GridInfo::new(
+    Ok(normalize_longitudes(snap_global_longitudes(GridInfo::new(
         width,
         height,
         transform[0] + longitude_step / 2.0,
         transform[3] + latitude_step / 2.0,
         longitude_step,
         latitude_step,
-    )))
+    ))))
 }
 
 // -- derived precipitation ---------------------------------------------------
@@ -402,9 +402,10 @@ pub fn deaverage_precipitation(
 
 fn convert_units(variable_id: &str, unit: &str, values: &mut [f64]) -> Result<()> {
     match variable_id {
-        // The 2 m temperature, dew point and apparent temperature all take
-        // the Celsius rule.
-        "tmp2m" | "dpt2m" | "aptmp2m" => match normalize_unit(unit)? {
+        // The 2 m temperature, dew point, apparent temperature and the
+        // surface (skin) temperature all take the Celsius rule
+        // (`SURFACE_TEMPERATURE_IDS`).
+        "tmp2m" | "dpt2m" | "aptmp2m" | "tmpsfc" => match normalize_unit(unit)? {
             "K" => values.iter_mut().for_each(|value| *value -= 273.15),
             "F" => values
                 .iter_mut()
@@ -420,6 +421,15 @@ fn convert_units(variable_id: &str, unit: &str, values: &mut [f64]) -> Result<()
         "prmsl" => values.iter_mut().for_each(|value| *value /= 100.0),
         // GRIB2 carries visibility in metres; the codebook quantizes km.
         "vis" => values.iter_mut().for_each(|value| *value /= 1000.0),
+        // GRIB2 carries sea ice cover as a 0–1 proportion; the codebook
+        // quantizes percent.
+        "icec" => values.iter_mut().for_each(|value| *value *= 100.0),
+        // A direction in degrees true: a record can carry 360, which is the
+        // codebook's 0 — reduce it there so the wrap never clamps. Every
+        // value is non-negative here, so this is numpy's `mod`.
+        "dirpw" => values
+            .iter_mut()
+            .for_each(|value| *value = value.rem_euclid(360.0)),
         other => match isobaric_variable(other) {
             // Isobaric temperature follows the 2 m rule.
             Some(("tmp", _)) => match normalize_unit(unit)? {
@@ -433,8 +443,8 @@ fn convert_units(variable_id: &str, unit: &str, values: &mut [f64]) -> Result<()
             // codebook quantizes g/kg.
             Some(("spfh", _)) => values.iter_mut().for_each(|value| *value *= 1000.0),
             // Wind components, geopotential heights, relative humidity,
-            // cloud cover, CAPE and vertical velocity are already in their
-            // output units.
+            // cloud cover, CAPE, vertical velocity, ice thickness and the
+            // wave height and period are already in their output units.
             _ => {}
         },
     }
@@ -539,6 +549,7 @@ fn extract_planes(
             plane = crop.take(&plane);
         }
         plane_source.apply_fill(&mut plane);
+        fill_missing(variable_id, &mut plane)?;
         if plane.iter().any(|value| !value.is_finite()) {
             return Err(EncodeError::conversion(format!(
                 "Xue v1 requires complete planes, found non-finite values in {}",
@@ -549,6 +560,26 @@ fn extract_planes(
         planes.push((variable_id.clone(), plane));
     }
     Ok(planes)
+}
+
+/// Map the points a record does not cover to the bottom of the variable's
+/// codebook — a value, not a gap. Which values mark them is the variable's
+/// own to declare (`VariableSpec::fill_values`: GDAL's 9999 for a GRIB2
+/// bitmap); a variable that covers its grid declares none and passes through
+/// untouched. Runs before unit conversion, on the raw record values — the
+/// port of `_fill_missing` in `xuebuild/binconvert.py`.
+fn fill_missing(variable_id: &str, plane: &mut [f64]) -> Result<()> {
+    let spec = variable_spec(variable_id)?;
+    if spec.fill_values.is_empty() {
+        return Ok(());
+    }
+    PlaneSource {
+        unscale: false,
+        fill_values: spec.fill_values.to_vec(),
+        fill_replacement: f64::from(spec.value_range.0),
+    }
+    .apply_fill(plane);
+    Ok(())
 }
 
 // -- per-file quantization ---------------------------------------------------
