@@ -24,8 +24,11 @@ dependencies = [
     # `xuebuild.gdal.dataset_info` uses it to inspect inputs through the
     # wheel's own GDAL. Below it a build still works but needs a system
     # `gdalinfo` on PATH, which the scheduled publish workflows no longer
-    # install.
-    "xuepy>=0.11,<0.12",
+    # install. The floor tracks the current release because the wheel's
+    # source table must match sources.py (a wheel that publishes a different
+    # bundle set refuses to build), and 0.12 is also the first wheel whose
+    # GDAL reads the JPEG 2000-packed GFS-Wave records as published.
+    "xuepy>=0.12,<0.13",
 ]
 
 [project.scripts]
