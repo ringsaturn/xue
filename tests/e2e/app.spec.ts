@@ -975,10 +975,10 @@ test("clicking the map pins a point and reads its whole series at once", async (
   await waitForReady(page);
   const panel = page.locator("#probe-panel");
   await expect(panel).toBeHidden();
-  // The panel docks over the capsule at its width (x 280–1000 on this
-  // viewport), so every point pinned here sits left of both, where a
-  // second click still reaches the map.
-  await page.locator("#map").click({ position: { x: 200, y: 300 } });
+  // The panel docks over the capsule at its width — 960px centred on the
+  // 1280px viewport, x 160–1120 — so every point pinned here sits left of
+  // both, where a second click still reaches the map.
+  await page.locator("#map").click({ position: { x: 100, y: 300 } });
   await expect(panel).toBeVisible();
   // The probe names the variable it reads and the grid cell it reads it at.
   await expect(page.locator("#probe-code")).toHaveText("PRATE SFC");
@@ -1012,12 +1012,12 @@ test("clicking the map pins a point and reads its whole series at once", async (
   // new cell instead of holding the first one's numbers.
   const coords = page.locator("#probe-coords");
   const first = await coords.textContent();
-  await page.locator("#map").click({ position: { x: 200, y: 520 } });
+  await page.locator("#map").click({ position: { x: 100, y: 520 } });
   await expect(coords).not.toHaveText(first ?? "");
   await expect(count).toHaveText("121 / 121");
   // And back to the first point, which the request bookkeeping must not
   // mistake for a series it already has.
-  await page.locator("#map").click({ position: { x: 200, y: 300 } });
+  await page.locator("#map").click({ position: { x: 100, y: 300 } });
   await expect(coords).toHaveText(first ?? "");
   await expect(count).toHaveText("121 / 121");
   // Scrubbing changes the reading, not the series behind it.
