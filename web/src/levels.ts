@@ -10,22 +10,37 @@ import { PRESSURE_BUNDLE_IDS, pressureLabel } from "./pressure";
  * A family is one physical quantity registered on the eight standard isobaric
  * surfaces (manifest.ts `ISOBARIC_LEVELS`), possibly with a near-surface
  * member of its own — 2 m temperature heads the temperature family, 10 m wind
- * the wind family, mean sea level pressure the pressure family. One family is
- * not isobaric at all: cloud cover's members are the total and the three
- * layers, and the level row picks among those the same way. Precipitation,
- * radiation, reflectivity and the other surface diagnostics (gust, CAPE,
- * visibility, dew point, apparent temperature) are single layers and belong
- * to no family.
+ * the wind family, mean sea level pressure the pressure family. Three
+ * families are not isobaric at all and list their members outright: cloud
+ * cover (the total and the three layers), sea ice (cover and thickness) and
+ * waves (significant height and primary period), and the level row picks
+ * among those the same way. Precipitation, radiation, reflectivity, the
+ * other surface diagnostics (gust, CAPE, visibility, dew point, apparent
+ * temperature) and the skin temperature are single layers and belong to no
+ * family.
  *
  * Everything here is chart knowledge, not container knowledge: the codebook
  * ranges are copied from the encoders and held to them by
- * `tests/fixtures/isobaric-registry.json` (`tests/web/levels.test.ts`) and
- * `tests/fixtures/surface-registry.json` (`tests/web/surface.test.ts`), the
- * way pressure.ts is held by its own registry.
+ * `tests/fixtures/isobaric-registry.json` (`tests/web/levels.test.ts`),
+ * `tests/fixtures/surface-registry.json` (`tests/web/surface.test.ts`) and
+ * `tests/fixtures/ocean-registry.json` (`tests/web/ocean.test.ts`), the way
+ * pressure.ts is held by its own registry.
  */
-export type IsobaricFamily = "hgt" | "tmp" | "rh" | "spfh" | "wind" | "qflux" | "vvel" | "thetae" | "cloud";
+export type IsobaricFamily = "hgt" | "tmp" | "rh" | "spfh" | "wind" | "qflux" | "vvel" | "thetae" | "cloud" | "ice" | "wave";
 
-export const ISOBARIC_FAMILIES: readonly IsobaricFamily[] = ["hgt", "tmp", "rh", "spfh", "wind", "qflux", "vvel", "thetae", "cloud"];
+export const ISOBARIC_FAMILIES: readonly IsobaricFamily[] = [
+  "hgt",
+  "tmp",
+  "rh",
+  "spfh",
+  "wind",
+  "qflux",
+  "vvel",
+  "thetae",
+  "cloud",
+  "ice",
+  "wave",
+];
 
 export interface FamilyInfo {
   id: IsobaricFamily;
@@ -81,7 +96,44 @@ export const FAMILIES: Record<IsobaricFamily, FamilyInfo> = {
       { id: "hcdc", code: "HIGH" },
     ],
   },
+  // Sea ice: concentration heads the family, thickness is its other member.
+  ice: {
+    id: "ice",
+    kind: "scalar",
+    surface: "icec",
+    code: "ICE",
+    surfaceCode: "COVER",
+    glossKey: "varIce",
+    members: [
+      { id: "icec", code: "COVER" },
+      { id: "icetk", code: "THICK" },
+    ],
+  },
+  // Waves: the significant height heads the family, the primary period is
+  // its other member. The primary direction (`dirpw`) is published too but
+  // is no member: a direction is not a fill — as a scalar it wraps at
+  // north and paints land, which is 0 in the file, as north — so it waits
+  // for the arrow or particle rendering that reads it properly, and is
+  // reachable by URL (`?type=wavedirection`) meanwhile.
+  wave: {
+    id: "wave",
+    kind: "scalar",
+    surface: "htsgw",
+    code: "WAVE",
+    surfaceCode: "HEIGHT",
+    glossKey: "varWave",
+    members: [
+      { id: "htsgw", code: "HEIGHT" },
+      { id: "perpw", code: "PERIOD" },
+    ],
+  },
 };
+
+/** Bundles the shell has chart knowledge for but deliberately writes no rail
+ * tile for: the primary wave direction, which is not a fill (see the wave
+ * family above) and waits for an arrow rendering. Reachable by URL; a run
+ * that ships one gets no generic tile for it either. */
+export const UNTILED_BUNDLE_IDS: readonly ForecastBundleId[] = ["dirpw"];
 
 /** The family a bundle id *names*, or null for a single layer (precipitation,
  * radiation, reflectivity) and for any name the convention does not describe.
@@ -232,6 +284,16 @@ export function temperatureLegendRange(level: number | null): readonly [number, 
   return [Math.max(low, range[0]), Math.min(high, range[1])];
 }
 
+/** The ocean set's chart ceilings, in the same spirit. Sea ice thickness
+ * reads to 5 m, the whole codebook. Significant wave height saturates at
+ * 10 m: a storm sea, past which the codebook's 25.4 m keeps the extreme
+ * distinct in a probe. The primary period reads to 20 s, the longest swell
+ * that crosses an ocean. Held to `tests/fixtures/ocean-registry.json` by
+ * `tests/web/ocean.test.ts`. */
+export const ICE_THICKNESS_CHART_MAX = 5;
+export const WAVE_HEIGHT_CHART_MAX = 10;
+export const WAVE_PERIOD_CHART_MAX = 20;
+
 /** The surface diagnostics' chart ceilings — where each palette saturates
  * and what its legend spans, narrower than the codebook where the codebook
  * keeps headroom the chart does not need. Gust reuses the wind speed ramp
@@ -259,6 +321,14 @@ export function scalarLegendRange(identity: VariableIdentity): readonly [number,
   if (family === "vis") return [0, VISIBILITY_CHART_MAX];
   if (family === "dpt2m") return DEW_POINT_CHART_RANGE;
   if (family === "aptmp2m") return APPARENT_CHART_RANGE;
+  // The skin temperature reads over the 2 m temperature's ramp; the
+  // codebook's 67 °C desert top holds the ramp's last colour.
+  if (family === "tmpsfc") return temperaturePaletteDomain(null);
+  if (family === "icec") return [0, 100];
+  if (family === "icetk") return [0, ICE_THICKNESS_CHART_MAX];
+  if (family === "htsgw") return [0, WAVE_HEIGHT_CHART_MAX];
+  if (family === "perpw") return [0, WAVE_PERIOD_CHART_MAX];
+  if (family === "dirpw") return [0, 360];
   return null;
 }
 
@@ -293,8 +363,8 @@ export function familyLabel(id: ForecastBundleId): string {
   if (level === null) {
     if (id === "tmp2m") return t("varLabelTmp2m");
     if (id === "wind10m") return t("varLabelWind10m");
-    const cloud = CLOUD_LABEL_KEYS[id];
-    if (cloud) return t(cloud);
+    const listed = MEMBER_LABEL_KEYS[id];
+    if (listed) return t(listed);
     return id;
   }
   const key: MessageKey = {
@@ -307,15 +377,23 @@ export function familyLabel(id: ForecastBundleId): string {
     vvel: "varLabelVvelAtLevel",
     thetae: "varLabelThetaeAtLevel",
     cloud: "varLabelTcdc",
+    ice: "varLabelIcec",
+    wave: "varLabelHtsgw",
   }[family!] as MessageKey;
   return t(key).replace("{level}", String(level));
 }
 
-const CLOUD_LABEL_KEYS: Record<string, MessageKey> = {
+/** The labels of the listed members — the cloud layers, the ice and wave
+ * fields — which have no level to substitute. */
+const MEMBER_LABEL_KEYS: Record<string, MessageKey> = {
   tcdc: "varLabelTcdc",
   lcdc: "varLabelLcdc",
   mcdc: "varLabelMcdc",
   hcdc: "varLabelHcdc",
+  icec: "varLabelIcec",
+  icetk: "varLabelIcetk",
+  htsgw: "varLabelHtsgw",
+  perpw: "varLabelPerpw",
 };
 
 /** The instrument-panel code of one isobaric member: "TMP 850MB", "RH
@@ -324,7 +402,19 @@ export function isobaricCode(id: ForecastBundleId): string {
   const level = bundleLevel(id);
   const family = familyOf(id);
   if (level === null || family === null) return id.toUpperCase();
-  const word = { hgt: "HGT", tmp: "TMP", rh: "RH", spfh: "SPFH", wind: "WIND", qflux: "QFLUX", vvel: "OMEGA", thetae: "THETAE", cloud: "CLOUD" }[family];
+  const word = {
+    hgt: "HGT",
+    tmp: "TMP",
+    rh: "RH",
+    spfh: "SPFH",
+    wind: "WIND",
+    qflux: "QFLUX",
+    vvel: "OMEGA",
+    thetae: "THETAE",
+    cloud: "CLOUD",
+    ice: "ICE",
+    wave: "WAVE",
+  }[family];
   return `${word} ${level}MB`;
 }
 
@@ -362,6 +452,12 @@ export function isobaricLegend(identity: VariableIdentity): string[] | null {
   if (family === "vis") return rangeLegend([0, VISIBILITY_CHART_MAX], 5);
   if (family === "dpt2m") return rangeLegend(DEW_POINT_CHART_RANGE, 6);
   if (family === "aptmp2m") return rangeLegend(APPARENT_CHART_RANGE, 10);
+  if (family === "tmpsfc") return rangeLegend(temperaturePaletteDomain(null), 10);
+  if (family === "icec") return rangeLegend([0, 100], 20);
+  if (family === "icetk") return rangeLegend([0, ICE_THICKNESS_CHART_MAX], 1);
+  if (family === "htsgw") return rangeLegend([0, WAVE_HEIGHT_CHART_MAX], 2);
+  if (family === "perpw") return rangeLegend([0, WAVE_PERIOD_CHART_MAX], 4);
+  if (family === "dirpw") return rangeLegend([0, 360], 45);
   if (family === "vvel" && isRegisteredLevel(level)) return rangeLegend([-OMEGA_PALETTE_MAX, OMEGA_PALETTE_MAX], 0.5);
   if (family === "thetae" && isRegisteredLevel(level)) return rangeLegend(thetaEPaletteDomain(level), 5);
   if (family === "tmp" && isRegisteredLevel(level)) return rangeLegend(temperatureLegendRange(level), 5);

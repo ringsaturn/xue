@@ -21,9 +21,10 @@ import { ISOBARIC_LEVELS, type BundleParameter, type BundleVariable, type KnownB
 
 /** The chart families. The first eight are registered on isobaric surfaces
  * and some of them also have a near-surface member; the rest are single
- * layers (precipitation, radiation, reflectivity, and the surface
- * diagnostics: gust, the four cloud covers, CAPE, visibility, dew point,
- * apparent temperature). */
+ * layers (precipitation, radiation, reflectivity, the surface diagnostics:
+ * gust, the four cloud covers, CAPE, visibility, dew point, apparent
+ * temperature — and the ocean set: skin temperature, sea ice cover and
+ * thickness, wave height, period and direction). */
 export type ChartFamily =
   | "hgt"
   | "tmp"
@@ -44,7 +45,13 @@ export type ChartFamily =
   | "cape"
   | "vis"
   | "dpt2m"
-  | "aptmp2m";
+  | "aptmp2m"
+  | "tmpsfc"
+  | "icec"
+  | "icetk"
+  | "htsgw"
+  | "perpw"
+  | "dirpw";
 
 export interface VariableIdentity {
   family: ChartFamily;
@@ -111,7 +118,11 @@ function isTriple(parameter: BundleParameter, discipline: number, category: numb
  * cover, (0,7,6) @1 surface-based CAPE, (0,19,0) @1 visibility, (0,0,6)
  * @103 value 2 dew point, (0,0,21) @103 value 2 apparent temperature,
  * (0,2,8) @100 vertical velocity, (0,0,3) @100 equivalent potential
- * temperature.
+ * temperature, (0,0,0) @1 surface (skin) temperature, (10,2,0) @1 sea ice
+ * cover, (10,2,1) @1 sea ice thickness, (10,0,3) / (10,0,11) / (10,0,10)
+ * @1 significant wave height, primary wave period and direction — the
+ * oceanographic discipline's surface, whose value (0 from pgrb2, 1 from
+ * WAVEWATCH III, none once declared) is not part of the identity.
  */
 export function identityForParameter(parameter: BundleParameter): VariableIdentity | null {
   const surface = parameter.typeOfFirstFixedSurface;
@@ -122,7 +133,13 @@ export function identityForParameter(parameter: BundleParameter): VariableIdenti
   if (isTriple(parameter, 0, 0, 0)) {
     if (level !== null) return scalar("tmp", level);
     if (surface === 103 && value === 2) return scalar("tmp", null);
+    if (surface === 1) return scalar("tmpsfc", null);
   }
+  if (isTriple(parameter, 10, 2, 0) && surface === 1) return scalar("icec", null);
+  if (isTriple(parameter, 10, 2, 1) && surface === 1) return scalar("icetk", null);
+  if (isTriple(parameter, 10, 0, 3) && surface === 1) return scalar("htsgw", null);
+  if (isTriple(parameter, 10, 0, 11) && surface === 1) return scalar("perpw", null);
+  if (isTriple(parameter, 10, 0, 10) && surface === 1) return scalar("dirpw", null);
   if (isTriple(parameter, 0, 0, 3) && level !== null) return scalar("thetae", level);
   if (isTriple(parameter, 0, 0, 6) && surface === 103 && value === 2) return scalar("dpt2m", null);
   if (isTriple(parameter, 0, 0, 21) && surface === 103 && value === 2) return scalar("aptmp2m", null);
@@ -242,6 +259,12 @@ const SURFACE_IDS: Record<string, VariableIdentity> = {
   vis: scalar("vis", null),
   dpt2m: scalar("dpt2m", null),
   aptmp2m: scalar("aptmp2m", null),
+  tmpsfc: scalar("tmpsfc", null),
+  icec: scalar("icec", null),
+  icetk: scalar("icetk", null),
+  htsgw: scalar("htsgw", null),
+  perpw: scalar("perpw", null),
+  dirpw: scalar("dirpw", null),
 };
 
 const ISOBARIC_PREFIXES: Record<string, ChartFamily> = {
@@ -298,6 +321,12 @@ const FAMILY_SURFACE_ID: Record<ChartFamily, KnownBundleId | null> = {
   vis: "vis",
   dpt2m: "dpt2m",
   aptmp2m: "aptmp2m",
+  tmpsfc: "tmpsfc",
+  icec: "icec",
+  icetk: "icetk",
+  htsgw: "htsgw",
+  perpw: "perpw",
+  dirpw: "dirpw",
 };
 
 /**

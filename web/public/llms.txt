@@ -55,7 +55,10 @@ fall back to defaults rather than fail, so a constructed link always opens.
   (10 m), `solar` (sflux only), `pressure` (sea level pressure as isobars),
   `radar` (cases only), the GFS surface diagnostics `gust`, `cloud`
   (`lowcloud` / `midcloud` / `highcloud` for the layers), `cape`,
-  `visibility`, `dewpoint`, `feelslike`, or a bundle name such as `tmp850`,
+  `visibility`, `dewpoint`, `feelslike`, the GFS ocean set `sst` (the
+  skin temperature, `tmpsfc`), `seaice` (`icec`; `icethickness` for
+  `icetk`), `waves` (`htsgw`; `waveperiod` for `perpw`, `wavedirection`
+  for `dirpw`), or a bundle name such as `tmp850`,
   `rh700`, `wind850`, `qflux850`, `hgt500`, `vvel700`, `thetae850`; `t850`,
   `z500`, `humidity700`, `vapour850`, `omega700`, `subtropicalhigh`
   (= `hgt500`) are accepted spellings.

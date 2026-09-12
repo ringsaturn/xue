@@ -101,6 +101,7 @@ export type KnownBundleId =
   | "dswrf"
   | "cref"
   | SurfaceDiagnosticId
+  | OceanId
   | PressureBundleId
   | IsobaricScalarBundleId
   | VectorBundleId;
@@ -121,6 +122,13 @@ export const SURFACE_DIAGNOSTIC_IDS: readonly SurfaceDiagnosticId[] = [
   "mcdc",
   "hcdc",
 ];
+
+/** The ocean set — the surface (skin) temperature, which is the SST over
+ * water, sea ice cover and thickness, and the GFS-Wave significant wave
+ * height, primary wave period and direction — single layers held to the
+ * encoders by `tests/fixtures/ocean-registry.json`. */
+export type OceanId = "tmpsfc" | "icec" | "icetk" | "htsgw" | "perpw" | "dirpw";
+export const OCEAN_IDS: readonly OceanId[] = ["tmpsfc", "icec", "icetk", "htsgw", "perpw", "dirpw"];
 
 /** A well-formed bundle/variable name: lowercase alphanumeric, starting with
  * a letter. This is the whole admission rule — a manifest is rejected for
@@ -150,6 +158,7 @@ export type KnownDataVariableId =
   | "dswrf"
   | "cref"
   | SurfaceDiagnosticId
+  | OceanId
   | PressureBundleId
   | IsobaricScalarBundleId
   | VectorComponentId;
@@ -170,6 +179,7 @@ export const KNOWN_BUNDLE_IDS: readonly KnownBundleId[] = [
   "dswrf",
   "cref",
   ...SURFACE_DIAGNOSTIC_IDS,
+  ...OCEAN_IDS,
   "prmsl",
   ...perLevel("hgt"),
   ...perLevel("tmp"),

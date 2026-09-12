@@ -93,6 +93,12 @@ const VARIABLE_CODE: Partial<Record<ForecastBundleId, string>> = {
   vis: "VIS",
   dpt2m: "DEWPT",
   aptmp2m: "FEELS",
+  tmpsfc: "SST",
+  icec: "ICE",
+  icetk: "ICE THK",
+  htsgw: "WAVE HS",
+  perpw: "WAVE TP",
+  dirpw: "WAVE DIR",
 };
 
 /** The contact-sheet code of one bundle: the surface fields have a word,

@@ -42,6 +42,12 @@ export const en = {
   varFeelsLike: "2M",
   varOmega: "VERT",
   varThetaE: "EQUIV",
+  /** The ocean set's tiles: the skin temperature is read as the SST it is
+   * over water but the gloss says what the field is, sea ice heads with
+   * its cover, the waves with their significant height. */
+  varSst: "SKIN",
+  varIce: "COVER",
+  varWave: "HEIGHT",
   /** The upper-air families' tiles: relative humidity and the water vapour
    * flux have no surface member, so the gloss names the field rather than a
    * level. */
@@ -82,6 +88,11 @@ export const en = {
   glyphAptmp2m: "A",
   glyphVvel: "ω",
   glyphThetae: "θ",
+  // S for the sea surface, I for ice, H for Hs — the significant wave
+  // height's own symbol (W is the wind's).
+  glyphTmpsfc: "S",
+  glyphIce: "I",
+  glyphWave: "H",
   glyphPressure: "P",
   // U is the WMO symbol for relative humidity; the vapour flux takes the F
   // of flux.
@@ -99,6 +110,10 @@ export const en = {
   tipCloud: "Cloud cover",
   tipOmega: "Vertical velocity",
   tipThetaE: "Equivalent potential temperature",
+  /** Sea ice and the waves are family tiles; the skin temperature reuses
+   * its data-card label. */
+  tipIce: "Sea ice",
+  tipWave: "Waves",
   levelSwitchAria: "Level",
   levelCaption: "LEVEL",
   /** The level row's caption for the lines' group when the fill has a level
@@ -213,6 +228,15 @@ export const en = {
   varLabelLcdc: "Low cloud cover",
   varLabelMcdc: "Middle cloud cover",
   varLabelHcdc: "High cloud cover",
+  // The ocean set. The skin temperature is one field that is the SST over
+  // water and the ground's skin over land; the label says both, since the
+  // tile reads "SST".
+  varLabelTmpsfc: "Sea surface temperature (skin temperature over land)",
+  varLabelIcec: "Sea ice cover",
+  varLabelIcetk: "Sea ice thickness",
+  varLabelHtsgw: "Significant wave height",
+  varLabelPerpw: "Primary wave period",
+  varLabelDirpw: "Primary wave direction",
   varLabelPrmsl: "Mean sea level pressure",
   // One string for eight levels: pressure.ts and levels.ts substitute {level}.
   varLabelHeightAtLevel: "{level} hPa geopotential height",

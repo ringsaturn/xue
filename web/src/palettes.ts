@@ -3,8 +3,11 @@ import {
   CAPE_CHART_MAX,
   DEW_POINT_CHART_RANGE,
   GUST_SPEED_MAX,
+  ICE_THICKNESS_CHART_MAX,
   OMEGA_PALETTE_MAX,
   VISIBILITY_CHART_MAX,
+  WAVE_HEIGHT_CHART_MAX,
+  WAVE_PERIOD_CHART_MAX,
   isobaricRange,
   temperaturePaletteDomain,
   thetaEPaletteDomain,
@@ -312,6 +315,83 @@ const VISIBILITY_STOPS: Stop[] = [
   [VISIBILITY_CHART_MAX, 225, 225, 200, 0],
 ];
 
+// Sea ice cover in percent. Open water is the map; the ice edge — 15 %,
+// the concentration an ice chart draws its edge at — comes in as a pale
+// cyan, and the pack deepens through sky blue to a saturated blue at full
+// cover. Blue rather than the white an ice chart paints on a blue sea: the
+// same ramp has to read on the light theme's white paper, where white ice
+// would vanish, and on the dark slate, where it reads lighter than the
+// water either way.
+const ICE_COVER_STOPS: Stop[] = [
+  [0, 200, 232, 245, 0],
+  [10, 200, 232, 245, 0],
+  [15, 200, 232, 245, 140],
+  [40, 150, 210, 235, 200],
+  [70, 100, 175, 225, 240],
+  [100, 60, 130, 200, 255],
+];
+
+// Sea ice thickness in metres, transparent at zero (open water and land),
+// climbing from the pale blue of new ice through the blues of first-year
+// ice to the violet of a multi-year floe at the codebook's 5 m.
+const ICE_THICKNESS_STOPS: Stop[] = [
+  [0, 200, 235, 240, 0],
+  [0.1, 200, 235, 240, 120],
+  [0.5, 150, 215, 235, 190],
+  [1, 100, 185, 225, 225],
+  [2, 60, 140, 205, 245],
+  [3, 50, 95, 180, 255],
+  [4, 70, 50, 150, 255],
+  [ICE_THICKNESS_CHART_MAX, 90, 20, 110, 255],
+];
+
+// Significant wave height in metres: a calm sea under half a metre is
+// nearly the map (and land, 0 in the file, is exactly the map), then the
+// ramp climbs the way a marine chart's does — blue through teal and green
+// to yellow at 3 m, orange and red through 5 and 6, and the violet of a
+// storm sea at the 10 m ceiling.
+const WAVE_HEIGHT_STOPS: Stop[] = [
+  [0, 20, 60, 100, 0],
+  [0.25, 60, 130, 185, 120],
+  [0.5, 70, 160, 200, 160],
+  [1, 80, 195, 195, 195],
+  [1.5, 110, 210, 150, 215],
+  [2, 170, 220, 110, 230],
+  [3, 240, 215, 80, 240],
+  [4, 250, 165, 60, 245],
+  [5, 245, 110, 55, 250],
+  [6, 225, 60, 70, 255],
+  [8, 170, 40, 120, 255],
+  [WAVE_HEIGHT_CHART_MAX, 110, 30, 130, 255],
+];
+
+// Primary wave period in seconds, cool for a short wind sea and warm for a
+// long swell: a period under a second does not occur at sea, so the ramp
+// is transparent there and land (0) stays the map.
+const WAVE_PERIOD_STOPS: Stop[] = [
+  [0, 90, 120, 170, 0],
+  [1, 90, 120, 170, 150],
+  [4, 90, 160, 200, 190],
+  [8, 110, 200, 180, 215],
+  [12, 200, 210, 110, 235],
+  [16, 245, 170, 70, 250],
+  [WAVE_PERIOD_CHART_MAX, 225, 80, 60, 255],
+];
+
+// Primary wave direction, degrees true the waves come from, on a hue wheel
+// that closes: north red, east yellow, south cyan, west blue, north red
+// again. Not a fill the rail offers (levels.ts) — the file's 0 is both
+// north and land, so the first code alone is left transparent; a coast
+// blends through the wheel. Reachable by URL for a look at the data.
+const WAVE_DIRECTION_STOPS: Stop[] = [
+  [0, 220, 60, 60, 0],
+  [1.5, 220, 60, 60, 255],
+  [90, 230, 200, 60, 255],
+  [180, 60, 190, 200, 255],
+  [270, 70, 90, 210, 255],
+  [360, 220, 60, 60, 255],
+];
+
 function interpolate(stops: Stop[], value: number): [number, number, number, number] {
   const first = stops[0]!;
   const last = stops[stops.length - 1]!;
@@ -467,6 +547,14 @@ function stopsFor(variable: BundleVariable, identity: VariableIdentity | null): 
   if (family === "aptmp2m") return TEMPERATURE_STOPS;
   if (family === "vvel") return OMEGA_STOPS;
   if (family === "thetae") return remapStops(THETA_E_UNIT_STOPS, [0, 1], thetaEPaletteDomain(level));
+  // The skin temperature is a temperature: the 2 m ramp, so the sea
+  // surface reads in the same colours as the air over it.
+  if (family === "tmpsfc") return TEMPERATURE_STOPS;
+  if (family === "icec") return ICE_COVER_STOPS;
+  if (family === "icetk") return ICE_THICKNESS_STOPS;
+  if (family === "htsgw") return WAVE_HEIGHT_STOPS;
+  if (family === "perpw") return WAVE_PERIOD_STOPS;
+  if (family === "dirpw") return WAVE_DIRECTION_STOPS;
   if (family === "hgt" && linear) return pressureStops(linear);
   if (family === "tmp") return remapStops(TEMPERATURE_STOPS, [-60, 50], temperaturePaletteDomain(level));
   if (family === "rh") return HUMIDITY_STOPS;

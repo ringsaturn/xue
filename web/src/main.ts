@@ -83,6 +83,7 @@ import {
   scalarLegendRange,
   vectorMaxMagnitude,
   type IsobaricFamily,
+  UNTILED_BUNDLE_IDS,
 } from "./levels";
 import { buildPalette, buildVapourFluxPalette, buildWindFieldPalette, legendGradient } from "./palettes";
 import {
@@ -272,6 +273,8 @@ function isobaricVariableUi(): Record<string, VariableUi> {
     vvel: "Vertical Velocity",
     thetae: "Theta-e",
     cloud: "Cloud Cover",
+    ice: "Sea Ice",
+    wave: "Waves",
   };
   const entries: Record<string, VariableUi> = {};
   for (const id of ISOBARIC_FILL_IDS) {
@@ -392,6 +395,50 @@ function buildVariableUi(): Record<string, VariableUi> {
       label: t("varLabelAptmp2m"),
       legend: isobaricLegend(identityForBundleId("aptmp2m")!) ?? [],
     },
+    // The ocean set: the skin temperature reads as the SST it is over
+    // water, the ice and wave fields over their chart ceilings.
+    tmpsfc: {
+      code: "TMP SFC",
+      title: ["Sea Surface", "Temperature"],
+      bufferTitle: "Surface temperature buffer",
+      label: t("varLabelTmpsfc"),
+      legend: isobaricLegend(identityForBundleId("tmpsfc")!) ?? [],
+    },
+    icec: {
+      code: "ICEC SFC",
+      title: ["Sea Ice", "Cover"],
+      bufferTitle: "Sea ice buffer",
+      label: t("varLabelIcec"),
+      legend: isobaricLegend(identityForBundleId("icec")!) ?? [],
+    },
+    icetk: {
+      code: "ICETK SFC",
+      title: ["Sea Ice", "Thickness"],
+      bufferTitle: "Sea ice buffer",
+      label: t("varLabelIcetk"),
+      legend: isobaricLegend(identityForBundleId("icetk")!) ?? [],
+    },
+    htsgw: {
+      code: "HTSGW SFC",
+      title: ["Significant", "Wave Height"],
+      bufferTitle: "Wave buffer",
+      label: t("varLabelHtsgw"),
+      legend: isobaricLegend(identityForBundleId("htsgw")!) ?? [],
+    },
+    perpw: {
+      code: "PERPW SFC",
+      title: ["Primary", "Wave Period"],
+      bufferTitle: "Wave buffer",
+      label: t("varLabelPerpw"),
+      legend: isobaricLegend(identityForBundleId("perpw")!) ?? [],
+    },
+    dirpw: {
+      code: "DIRPW SFC",
+      title: ["Primary", "Wave Direction"],
+      bufferTitle: "Wave buffer",
+      label: t("varLabelDirpw"),
+      legend: isobaricLegend(identityForBundleId("dirpw")!) ?? [],
+    },
     ...pressureVariableUi(),
     ...isobaricVariableUi(),
   } as unknown as Record<string, VariableUi>;
@@ -459,6 +506,17 @@ const DARK_BASEMAP: Record<string, BasemapTones> = {
   // Opaque fields on the temperature's near-void.
   dpt2m: { ocean: "#0b1826", land: "#182c3d" },
   aptmp2m: { ocean: "#0b1826", land: "#182c3d" },
+  // The skin temperature is a coat like the 2 m temperature. The ice and
+  // wave fields leave open water and land to the map — the ice ramp starts
+  // pale and translucent, the wave ramps at nothing — so they take the
+  // precipitation slate, dark enough for the ice edge and a half-metre sea
+  // to show against it.
+  tmpsfc: { ocean: "#0b1826", land: "#182c3d" },
+  icec: { ocean: "#16344a", land: "#28495f" },
+  icetk: { ocean: "#16344a", land: "#28495f" },
+  htsgw: { ocean: "#16344a", land: "#28495f" },
+  perpw: { ocean: "#16344a", land: "#28495f" },
+  dirpw: { ocean: "#16344a", land: "#28495f" },
   ...pressureBasemapTheme({ ocean: "#101f2c", land: "#22384a" }),
   // Relative humidity is a light wash, not a coat, and goes with the
   // moisture fields on the precipitation slate rather than with the
@@ -510,6 +568,12 @@ const LIGHT_BASEMAP: Record<string, BasemapTones> = {
   vis: PAPER_GROUND,
   dpt2m: PAPER_GROUND,
   aptmp2m: PAPER_GROUND,
+  tmpsfc: PAPER_GROUND,
+  icec: PAPER_GROUND,
+  icetk: PAPER_GROUND,
+  htsgw: PAPER_GROUND,
+  perpw: PAPER_GROUND,
+  dirpw: PAPER_GROUND,
   ...pressureBasemapTheme({ ocean: "#dcd6c8", land: "#c9c2b2" }),
   ...isobaricBasemapTheme(() => PAPER_GROUND),
 } as Record<string, BasemapTones>;
@@ -2794,6 +2858,7 @@ window.addEventListener("resize", syncLevelRowFade);
  * humidity, which no source publishes) reads as unknown here, so a run
  * that does ship it still gets a way onto the screen. */
 function railTileStandsFor(id: string): boolean {
+  if (UNTILED_BUNDLE_IDS.includes(id)) return true;
   const family = familyOf(id as ForecastBundleId);
   return variableButtons().some(
     (button) =>
