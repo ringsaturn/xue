@@ -279,10 +279,16 @@ publishing data at the new version.**
   the parts with `assemble-run` (every published bundle exactly once, in
   publication order, core pair required) and only then writes the pointer.
   `make upload-r2-bundles` / `upload-r2-manifest` are the two halves of
-  `upload-r2`; a part never reaches the bucket. `tests/test_assemble.py`
-  holds a split build byte-identical to a whole one — a bundle's bytes must
-  never depend on what else was in the build, so nothing cross-variable
-  may creep into a bundle or its manifest entry.
+  `upload-r2`; a part never reaches the bucket. The same independence gives
+  the **top-up**: when the resolved cycle is already live but lacks bundles
+  the source now publishes, `publish.yml` builds only those
+  (`bundle-groups --base-manifest`, against `make live-manifest`) and
+  `assemble-run --base-manifest` merges the parts onto the live manifest —
+  a new variable reaches the live run without a full rebuild; `force`
+  still rebuilds everything. `tests/test_assemble.py` holds a split build
+  and a top-up byte-identical to a whole one — a bundle's bytes must never
+  depend on what else was in the build, so nothing cross-variable may creep
+  into a bundle or its manifest entry.
 
 External tools are invoked as CLI subprocesses (`gdal.py`, `zstdcli.py`,
 `ffmpegcli.py`, `eccodescli.py`) rather than added as binary Python

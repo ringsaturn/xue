@@ -75,6 +75,30 @@ class BundleGroupTests(unittest.TestCase):
             Path("run/manifest.part.hgt850-rh700.json"),
         )
 
+    def test_a_subset_is_grouped_on_its_own(self) -> None:
+        # A top-up builds only what the live run lacks; the groups keep the
+        # publication order and never reach past the subset.
+        source = source_spec("gfs")
+        groups = assemble.bundle_groups(source, 2, ("dirpw", "tmpsfc", "wind10m"))
+        self.assertEqual(sorted(bundle_id for group in groups for bundle_id in group), ["dirpw", "tmpsfc", "wind10m"])
+        self.assertEqual(len(groups), 2)
+        self.assertEqual(assemble.bundle_groups(source, 16, ()), [])
+        self.assertEqual(assemble.bundle_group_matrix(source, 16, ()), [])
+        with self.assertRaisesRegex(ManifestError, "not \\['sst'\\]"):
+            assemble.bundle_groups(source, 16, ("tmpsfc", "sst"))
+
+    def test_the_missing_bundles_are_what_the_live_run_lacks(self) -> None:
+        source = source_spec("gfs")
+        published = published_bundle_ids(source)
+        live = {"bundles": [_entry(bundle_id) for bundle_id in published if bundle_id not in ("htsgw", "prmsl")]}
+        self.assertEqual(assemble.missing_bundle_ids(source, live), ("prmsl", "htsgw"))
+        self.assertEqual(assemble.missing_bundle_ids(source, {"bundles": [_entry(b) for b in published]}), ())
+        # A live entry for a bundle no longer published is not "missing".
+        live["bundles"].append(_entry("retired"))
+        self.assertEqual(assemble.missing_bundle_ids(source, live), ("prmsl", "htsgw"))
+        with self.assertRaises(ManifestError):
+            assemble.missing_bundle_ids(source, {"bundles": "tmp2m"})
+
 
 def _entry(variable: str) -> dict:
     return {"variable": variable, "path": f"{variable}.xue", "byteLength": 10, "crc32": "0badf00d"}
@@ -144,6 +168,33 @@ class MergePartialManifestTests(unittest.TestCase):
     def test_no_parts_is_an_error(self) -> None:
         with self.assertRaises(ManifestError):
             assemble.merge_partial_manifests([], source=self.source, expected_hours=240)
+
+    def test_parts_top_up_a_live_manifest(self) -> None:
+        # The live run lacks dswrf and carries a bundle no longer published;
+        # one part brings dswrf and rebuilds prate. The result is the
+        # manifest a whole build writes today: the live entries kept, the
+        # part's entry winning for prate, the retired one dropped.
+        live = _part(self.source, ["tmp2m", "prate", "wind10m"])
+        live["bundles"].append(_entry("retired"))
+        live["bundles"][1]["crc32"] = "11111111"
+        part = _part(self.source, ["dswrf", "prate"])
+        merged = assemble.merge_partial_manifests([part], source=self.source, expected_hours=240, base=live)
+        self.assertEqual([bundle["variable"] for bundle in merged["bundles"]], list(published_bundle_ids(self.source)))
+        self.assertEqual(merged["bundles"][1]["crc32"], "0badf00d", "the part replaces the live entry")
+        whole = assemble.merge_partial_manifests(
+            [_part(self.source, ["tmp2m", "prate", "dswrf", "wind10m"])], source=self.source, expected_hours=240
+        )
+        self.assertEqual(merged, whole)
+
+    def test_a_top_up_still_needs_every_bundle(self) -> None:
+        live = _part(self.source, ["tmp2m", "prate"])
+        with self.assertRaisesRegex(ManifestError, "missing \\['wind10m'\\]"):
+            assemble.merge_partial_manifests([_part(self.source, ["dswrf"])], source=self.source, expected_hours=240, base=live)
+
+    def test_a_top_up_onto_another_run_is_refused(self) -> None:
+        live = _part(self.source, ["tmp2m", "prate", "wind10m"], run_time=datetime(2026, 8, 14, 12, tzinfo=UTC))
+        with self.assertRaisesRegex(ManifestError, "live manifest and the partial manifests disagree on runTime"):
+            assemble.merge_partial_manifests([_part(self.source, ["dswrf"])], source=self.source, expected_hours=240, base=live)
 
 
 class SplitBuildIdentityTests(unittest.TestCase):
@@ -230,3 +281,74 @@ class SplitBuildIdentityTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TopUpIdentityTests(unittest.TestCase):
+    """A run published short of some bundles, topped up with only those,
+    is the run built whole today — manifest, pointer and artifacts."""
+
+    root: Path
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.root = Path(tempfile.mkdtemp(prefix="xue-topup-"))
+        cls.source = source_spec("gfs")
+        run_id = "2026081406"
+        cls.run_directory = f"gfs.{run_id}"
+        cls.whole = cls.root / "whole"
+        cls.topped = cls.root / "topped"
+        binconvert.convert_bin(
+            FIXTURE_GRIB,
+            cls.whole / cls.run_directory,
+            work_root=cls.root / "whole-work",
+            manifest_path=cls.whole / cls.run_directory / "manifest.json",
+            latest_path=cls.whole / "latest.json",
+            run_id=run_id,
+            model="gfs",
+        )
+        # The live run: the whole manifest without the ocean set, the way a
+        # run published before those bundles existed reads.
+        whole_manifest = json.loads((cls.whole / cls.run_directory / "manifest.json").read_text(encoding="utf-8"))
+        cls.ocean = ("tmpsfc", "icec", "icetk", "htsgw", "perpw", "dirpw")
+        live = dict(whole_manifest)
+        live["bundles"] = [bundle for bundle in whole_manifest["bundles"] if bundle["variable"] not in cls.ocean]
+        cls.base = cls.root / "live-manifest.json"
+        cls.base.write_text(json.dumps(live), encoding="utf-8")
+        cls.missing = assemble.missing_bundle_ids(cls.source, live)
+        cls.groups = assemble.bundle_groups(cls.source, 2, cls.missing)
+        for group in cls.groups:
+            binconvert.convert_bin(
+                FIXTURE_GRIB,
+                cls.topped / cls.run_directory,
+                work_root=cls.root / f"topped-work-{assemble.bundle_group_slug(group)}",
+                manifest_path=assemble.partial_manifest_path(cls.topped / cls.run_directory, group),
+                model="gfs",
+                bundle_ids=group,
+            )
+        cls.report = assemble.assemble_run(
+            cls.topped, model="gfs", run_id=run_id, expected_hours=120, base_manifest=cls.base
+        )
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        shutil.rmtree(cls.root, ignore_errors=True)
+
+    def test_only_the_missing_bundles_were_built(self) -> None:
+        self.assertEqual(self.missing, self.ocean)
+        self.assertEqual(sorted(self.report["built"]), sorted(self.ocean))
+        self.assertEqual(self.report["dropped"], [])
+        self.assertEqual(self.report["bundles"], list(published_bundle_ids(self.source)))
+        built = {path.name.split(".")[0] for path in (self.topped / self.run_directory).iterdir() if not path.name.startswith("manifest")}
+        self.assertEqual(built, set(self.ocean))
+
+    def test_the_manifest_and_pointer_are_the_whole_builds(self) -> None:
+        for name in (f"{self.run_directory}/manifest.json", "latest.json"):
+            with self.subTest(file=name):
+                self.assertTrue(filecmp.cmp(self.whole / name, self.topped / name, shallow=False), name)
+
+    def test_the_built_artifacts_are_byte_identical(self) -> None:
+        for path in sorted((self.topped / self.run_directory).iterdir()):
+            if path.name.startswith(assemble.PARTIAL_MANIFEST_PREFIX):
+                continue
+            with self.subTest(artifact=path.name):
+                self.assertTrue(filecmp.cmp(path, self.whole / self.run_directory / path.name, shallow=False), path.name)

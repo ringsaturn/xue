@@ -313,6 +313,25 @@ make upload-r2-bundles MODEL=gfs RUN=2026081600
 make upload-r2-manifest MODEL=gfs RUN=2026081600    # manifest, warm it, then the pointer
 ```
 
+When the cycle R2 already serves is still the newest one, the publish
+normally has nothing to do — unless the source has started publishing
+bundles that run does not carry (a variable landed between two cycles).
+Then it **tops the run up**: `bundle-groups --base-manifest` lists only the
+bundles the live manifest lacks, those groups are built and uploaded as
+above, and `assemble-run --base-manifest` merges their parts onto the live
+manifest, so the pointer flips to the manifest a whole build would have
+written today without rebuilding the thirty-odd bundles already there.
+`force` still rebuilds everything. By hand:
+
+```sh
+make live-manifest MODEL=gfs > live-manifest.json
+.venv/bin/python -m xuebuild bundle-groups --model gfs --base-manifest live-manifest.json   # what is missing
+.venv/bin/python -m xuebuild build-bin --model gfs --run 2026081600 --bundles htsgw perpw
+make upload-r2-bundles MODEL=gfs RUN=2026081600
+.venv/bin/python -m xuebuild assemble-run --model gfs --run 2026081600 --base-manifest live-manifest.json
+make upload-r2-manifest MODEL=gfs RUN=2026081600
+```
+
 The Pages shell is deployed separately (`make deploy`) and only needs
 redeploying when frontend code changes.
 

@@ -32,7 +32,7 @@ AWS_REQUEST_CHECKSUM_CALCULATION ?= when_required
 AWS_RESPONSE_CHECKSUM_VALIDATION ?= when_required
 export AWS_DEFAULT_REGION AWS_REQUEST_CHECKSUM_CALCULATION AWS_RESPONSE_CHECKSUM_VALIDATION
 
-.PHONY: check install wasm test test-rust test-e2e encoder-rust encoder-rust-test encoder-wheel bench bench-video bench-lossy mvp serve format-pdf deploy-build upload-r2 upload-r2-bundles upload-r2-manifest check-pointer upload-r2-pointer warm-r2 prune-r2 live-run deploy-pages deploy showcase showcase-check upload-r2-showcase clean
+.PHONY: check install wasm test test-rust test-e2e encoder-rust encoder-rust-test encoder-wheel bench bench-video bench-lossy mvp serve format-pdf deploy-build upload-r2 upload-r2-bundles upload-r2-manifest check-pointer upload-r2-pointer warm-r2 prune-r2 live-run live-manifest deploy-pages deploy showcase showcase-check upload-r2-showcase clean
 
 check:
 	$(PYTHON) scripts/check_dependencies.py
@@ -266,6 +266,14 @@ prune-r2:
 # Print the run the live pointer names, or nothing when there is no pointer.
 live-run:
 	@$(S3) cp s3://$(R2_BUCKET)/$(R2_PREFIX)/$(LATEST_FILE) - --only-show-errors | jq -r .run || true
+
+# The manifest of the run the pointer names, as the bucket holds it — the
+# base a top-up merges new bundles onto (`xuebuild assemble-run
+# --base-manifest`). Prints nothing when there is no live run.
+live-manifest:
+	@set -e; live=$$($(MAKE) -s --no-print-directory live-run MODEL=$(MODEL)); \
+	[ -n "$$live" ] || exit 0; \
+	$(S3) cp s3://$(R2_BUCKET)/$(R2_PREFIX)/$(MODEL).$$live/manifest.json - --only-show-errors
 
 # Publish dist-deploy/ (built via deploy-build) to the Cloudflare Pages project.
 deploy-pages:

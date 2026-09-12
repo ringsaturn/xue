@@ -6,7 +6,15 @@ import logging
 import sys
 from pathlib import Path
 
-from .assemble import DEFAULT_MAX_GROUPS, assemble_run, bundle_group_matrix, bundle_group_slug, partial_manifest_path
+from .assemble import (
+    DEFAULT_MAX_GROUPS,
+    assemble_run,
+    bundle_group_matrix,
+    bundle_group_slug,
+    missing_bundle_ids,
+    partial_manifest_path,
+    read_manifest,
+)
 from .binconvert import bundle_input_ids, published_bundle_ids, verify_bin
 from .encoder import convert_bin
 from .errors import ConversionError, XueError
@@ -135,6 +143,14 @@ def parser() -> argparse.ArgumentParser:
         help="last forecast hour the parts were built to, inclusive",
     )
     assemble_parser.add_argument("--force", action="store_true", help="replace an existing manifest")
+    assemble_parser.add_argument(
+        "--base-manifest",
+        type=Path,
+        help=(
+            "top up instead of assemble: the run's live manifest, whose entries the parts are merged onto "
+            "(a part replaces the live entry for the same bundle)"
+        ),
+    )
     _model_argument(assemble_parser)
     assemble_parser.add_argument("--output-dir", type=Path, default=Path("web/public/data"))
 
@@ -148,6 +164,14 @@ def parser() -> argparse.ArgumentParser:
         type=int,
         default=DEFAULT_MAX_GROUPS,
         help=f"most groups to split the run into (default {DEFAULT_MAX_GROUPS})",
+    )
+    groups_parser.add_argument(
+        "--base-manifest",
+        type=Path,
+        help=(
+            "group only the published bundles this manifest (the run as R2 serves it) lacks — "
+            "the top-up's build jobs; prints [] when it lacks none"
+        ),
     )
 
     showcase_parser = commands.add_parser(
@@ -309,10 +333,15 @@ def main(argv: list[str] | None = None) -> int:
                 run_id=run.id,
                 expected_hours=arguments.hours,
                 force=arguments.force,
+                base_manifest=arguments.base_manifest,
             )
             print(json.dumps(report, indent=2))
         elif arguments.command == "bundle-groups":
-            print(json.dumps(bundle_group_matrix(source_spec(arguments.model), arguments.max_jobs)))
+            source = source_spec(arguments.model)
+            bundle_ids = None
+            if arguments.base_manifest is not None:
+                bundle_ids = missing_bundle_ids(source, read_manifest(arguments.base_manifest, what="live manifest"))
+            print(json.dumps(bundle_group_matrix(source, arguments.max_jobs, bundle_ids)))
         return 0
     except XueError as exc:
         print(f"error: {exc}", file=sys.stderr)

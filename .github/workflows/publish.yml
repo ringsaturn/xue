@@ -5,15 +5,18 @@ name: publish run
 # and the manual dispatch; this file owns the work, fanned out over three
 # jobs:
 #
-#   resolve   the newest complete cycle -> skip if R2 already serves it ->
-#             split the source's bundles into groups (`xuebuild bundle-groups`)
+#   resolve   the newest complete cycle -> skip if R2 already serves it with
+#             every bundle the source publishes today, *top up* if it serves
+#             it short of some (a variable that landed between cycles) ->
+#             split the bundles to build into groups (`xuebuild bundle-groups`)
 #   build     one job per group, in parallel: fetch only that group's GRIB
 #             records -> pack its .xue bundles -> upload them to the run
 #             directory on R2 and warm them at the edge -> hand the partial
 #             manifest on as a workflow artifact
 #   finalize  merge the parts into the run's manifest (`xuebuild
-#             assemble-run`) -> upload and warm it -> flip the live pointer
-#             -> delete the runs it superseded
+#             assemble-run`; onto the live manifest for a top-up) -> upload
+#             and warm it -> flip the live pointer -> delete the runs it
+#             superseded
 #
 # A run's bundles do not depend on one another (tests/test_assemble.py holds
 # a split build byte-identical to a whole one), so the wall time is one
@@ -93,6 +96,7 @@ jobs:
     outputs:
       run: ${{ steps.target.outputs.run }}
       skip: ${{ steps.target.outputs.skip }}
+      topup: ${{ steps.target.outputs.topup }}
       groups: ${{ steps.groups.outputs.groups }}
     env:
       MODEL: ${{ inputs.model }}
@@ -152,10 +156,14 @@ jobs:
       - name: Sync Python environment
         run: uv sync
 
-      # Skip the build when R2 already serves the newest available cycle —
-      # the schedule fires on a fixed clock, but a source can be late or a
-      # cycle can be published twice. A dry run never skips: its whole point
-      # is to exercise the pipeline and preview the writes.
+      # When R2 already serves the newest available cycle — the schedule
+      # fires on a fixed clock, but a source can be late or a cycle can be
+      # published twice — there is nothing to do unless the source has
+      # started publishing bundles that run does not carry: then the run is
+      # *topped up*, only those bundles built and merged onto the manifest
+      # the bucket holds (saved here as the finalize job's base). A dry run
+      # never skips and never tops up: its whole point is to exercise the
+      # whole pipeline and preview the writes. `force` rebuilds everything.
       - name: Resolve the run to publish
         id: target
         env:
@@ -168,22 +176,50 @@ jobs:
           live=$(make -s live-run MODEL="$MODEL" || true)
           echo "run=$run" >> "$GITHUB_OUTPUT"
           if [ "$run" = "$live" ] && [ "$FORCE" != "true" ] && [ -z "$DRY_RUN" ]; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "R2 already serves $MODEL run $run, nothing to publish." >> "$GITHUB_STEP_SUMMARY"
+            make -s live-manifest MODEL="$MODEL" > live-manifest.json
+            missing=$(uv run python -m xuebuild bundle-groups --model "$MODEL" --max-jobs "$MAX_JOBS" \
+              --base-manifest live-manifest.json | jq -r '[.[].group] | join(" ")')
+            if [ -z "$missing" ]; then
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              echo "topup=false" >> "$GITHUB_OUTPUT"
+              echo "R2 already serves $MODEL run $run with every published bundle, nothing to publish." >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "skip=false" >> "$GITHUB_OUTPUT"
+              echo "topup=true" >> "$GITHUB_OUTPUT"
+              echo "Topping up $MODEL run $run, which R2 serves without: $missing." >> "$GITHUB_STEP_SUMMARY"
+            fi
           else
             echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "topup=false" >> "$GITHUB_OUTPUT"
             echo "Publishing $MODEL run $run (live: ${live:-none})." >> "$GITHUB_STEP_SUMMARY"
           fi
 
+      # The live manifest travels to the finalize job as it was read here,
+      # so the top-up merges onto exactly the run the missing set was
+      # computed against.
+      - uses: actions/upload-artifact@v4
+        if: ${{ steps.target.outputs.topup == 'true' }}
+        with:
+          name: base-${{ inputs.model }}
+          path: live-manifest.json
+          retention-days: 3
+          if-no-files-found: error
+
       # The build matrix: which bundles each job packs, whether it needs
-      # ffmpeg for an H.264 companion, and the slug its files go by. Computed
-      # even for a skipped publish so the matrix expression below always
-      # has JSON to parse.
+      # ffmpeg for an H.264 companion, and the slug its files go by — every
+      # published bundle, or for a top-up only the ones the live run lacks.
+      # Computed even for a skipped publish so the matrix expression below
+      # always has JSON to parse.
       - name: Split the run into build jobs
         id: groups
+        env:
+          TOPUP: ${{ steps.target.outputs.topup }}
         run: |
           set -euo pipefail
-          groups=$(uv run python -m xuebuild bundle-groups --model "$MODEL" --max-jobs "$MAX_JOBS")
+          base=""
+          [ "$TOPUP" != "true" ] || base="--base-manifest live-manifest.json"
+          # shellcheck disable=SC2086 # the base flag is deliberately unquoted
+          groups=$(uv run python -m xuebuild bundle-groups --model "$MODEL" --max-jobs "$MAX_JOBS" $base)
           echo "groups=$groups" >> "$GITHUB_OUTPUT"
           {
             echo "### $MODEL build jobs"
@@ -304,6 +340,7 @@ jobs:
       MODEL: ${{ inputs.model }}
       RUN: ${{ needs.resolve.outputs.run }}
       KEEP: ${{ inputs.keep }}
+      TOPUP: ${{ needs.resolve.outputs.topup }}
       DRY_RUN: ${{ inputs.dry_run && '--dryrun' || '' }}
     steps:
       - uses: actions/checkout@v4
@@ -322,20 +359,30 @@ jobs:
           merge-multiple: true
           path: web/public/data/${{ inputs.model }}.${{ needs.resolve.outputs.run }}
 
+      - uses: actions/download-artifact@v4
+        if: ${{ needs.resolve.outputs.topup == 'true' }}
+        with:
+          name: base-${{ inputs.model }}
+
       # The parts merge into the run's manifest in publication order, every
       # published bundle present exactly once, and the pointer is written
-      # with the finished manifest's CRC32. Nothing is on this runner but
+      # with the finished manifest's CRC32. For a top-up they merge onto the
+      # live manifest the resolve job saved, so the result is the manifest a
+      # whole build would have written today. Nothing is on this runner but
       # the parts: the bundles are already in the bucket.
       - name: Assemble the manifest
         run: |
           set -euo pipefail
+          base=""
+          [ "$TOPUP" != "true" ] || base="--base-manifest live-manifest.json"
+          # shellcheck disable=SC2086 # the base flag is deliberately unquoted
           uv run python -m xuebuild -v assemble-run \
-            --model "$MODEL" --run "$RUN" --hours 240 > assemble-report.json
+            --model "$MODEL" --run "$RUN" --hours 240 $base > assemble-report.json
           {
             echo "### $MODEL $RUN"
             echo
             echo '```json'
-            jq '{model, run, byteLength, bundles}' assemble-report.json
+            jq '{model, run, byteLength, bundles, built, dropped}' assemble-report.json
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
