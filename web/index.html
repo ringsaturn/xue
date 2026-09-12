@@ -331,21 +331,27 @@
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphAptmp2m">A</b>
           <span class="rail-name"><span>FEELS</span> <small data-i18n="varFeelsLike">2M</small></span>
         </button>
+        <!-- Dew point is a temperature reached by moisture: a thermometer
+             with a drop beside it, so it does not share humidity's drop. -->
         <button type="button" data-variable="dpt2m" data-i18n-tip="varLabelDpt2m" aria-pressed="false" hidden>
-          <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5s-6 6.8-6 11a6 6 0 0 0 12 0c0-4.2-6-11-6-11z" /><path d="M9.5 15.5a2.5 2.5 0 0 0 2.5 2.5" /></svg>
+          <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5a2 2 0 0 0-4 0v8.5a4 4 0 1 0 4 0z" /><path d="M9 9v6" /><path d="M18 8.5s-3.5 4-3.5 6.5a3.5 3.5 0 0 0 7 0c0-2.5-3.5-6.5-3.5-6.5z" /></svg>
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphDpt2m">D</b>
           <span class="rail-name"><span>DEWPT</span> <small data-i18n="varDewPoint">2M</small></span>
         </button>
+        <!-- Relative humidity is a percentage: the drop carries a % sign. -->
         <button type="button" data-variable="rh850" data-i18n-tip="tipHumidity" data-family="rh" aria-pressed="false" hidden>
-          <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5c3.5 4.2 6 7.4 6 10.5a6 6 0 0 1-12 0c0-3.1 2.5-6.3 6-10.5z" /><path d="M9.3 14.3a2.7 2.7 0 0 0 2.4 2.7" /></svg>
+          <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5c3.5 4.2 6 7.4 6 10.5a6 6 0 0 1-12 0c0-3.1 2.5-6.3 6-10.5z" /><path d="M14.3 11l-4.6 6.2" stroke-width="1.4" /><circle cx="9.9" cy="11.6" r="1.2" fill="currentColor" stroke="none" /><circle cx="14.1" cy="16.6" r="1.2" fill="currentColor" stroke="none" /></svg>
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphRh">U</b>
           <span class="rail-name"><span>HUMIDITY</span> <small data-i18n="varHumidity">REL</small></span>
         </button>
         <!-- Water: what falls, what the radar sees, what covers the sky.
-             The whole cloud family is behind one tile; total, low, middle
-             and high are picked on the level row. -->
+             Rain is the WMO present-weather glyph (ww 63: three dots in a
+             triangle, point up) under a cloud; cloud cover is the WMO
+             station-model circle at 4 oktas (WMO-No. 306 table 2700, the
+             right half filled). The whole cloud family is behind one
+             tile; total, low, middle and high are picked on the level row. -->
         <button type="button" data-variable="prate" data-i18n-tip="varLabelPrate" aria-pressed="true">
-          <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.5 14.5a3.5 3.5 0 0 0-.4-7A5.5 5.5 0 0 0 6.6 8.6 3 3 0 0 0 7 14.5h10.5z" /><path d="M8.5 17.5l-1 2.5M12.5 17.5l-1 2.5M16.5 17.5l-1 2.5" /></svg>
+          <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.5 13.5a3.5 3.5 0 0 0-.4-7A5.5 5.5 0 0 0 6.6 7.6 3 3 0 0 0 7 13.5h10.5z" /><circle cx="12" cy="16.6" r="1.3" fill="currentColor" stroke="none" /><circle cx="9.6" cy="20.2" r="1.3" fill="currentColor" stroke="none" /><circle cx="14.4" cy="20.2" r="1.3" fill="currentColor" stroke="none" /></svg>
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphPrate">R</b>
           <span class="rail-name"><span>PRECIP</span> <small data-i18n="varPrecip">RATE</small></span>
         </button>
@@ -355,7 +361,7 @@
           <span class="rail-name"><span>RADAR</span> <small data-i18n="varRadar">CREF</small></span>
         </button>
         <button type="button" data-variable="tcdc" data-family="cloud" data-i18n-tip="tipCloud" aria-pressed="false" hidden>
-          <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.5 17a4 4 0 0 0-.4-8A6 6 0 0 0 5.6 10.6 3.3 3.3 0 0 0 6.5 17h11z" /></svg>
+          <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor" stroke="none" /><circle cx="12" cy="12" r="8" /></svg>
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphTcdc">N</b>
           <span class="rail-name"><span>CLOUD</span> <small data-i18n="varCloud">TOTAL</small></span>
         </button>

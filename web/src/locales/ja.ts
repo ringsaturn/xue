@@ -30,7 +30,7 @@ export const ja: Record<MessageKey, string> = {
   varUnknownLayer: "レイヤ",
 
   glyphTmp2m: "温",
-  glyphPrate: "雨",
+  glyphPrate: "水",
   glyphWind10m: "風",
   glyphDswrf: "日",
   glyphCref: "雷",

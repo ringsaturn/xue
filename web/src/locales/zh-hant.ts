@@ -30,7 +30,7 @@ export const zhHant: Record<MessageKey, string> = {
   varUnknownLayer: "資料層",
 
   glyphTmp2m: "溫",
-  glyphPrate: "雨",
+  glyphPrate: "水",
   glyphWind10m: "風",
   glyphDswrf: "輻",
   glyphCref: "雷",
