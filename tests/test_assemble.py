@@ -61,10 +61,29 @@ class BundleGroupTests(unittest.TestCase):
         matrix = assemble.bundle_group_matrix(source_spec("sflux"), 100)
         self.assertEqual(
             {entry["group"]: entry["video"] for entry in matrix},
-            {"tmp2m": True, "prate": True, "dswrf": True, "wind10m": False},
+            {"tmp2m prate": True, "dswrf": True, "wind10m": False},
         )
-        self.assertEqual([entry["slug"] for entry in matrix], ["tmp2m", "prate", "dswrf", "wind10m"])
+        self.assertEqual([entry["slug"] for entry in matrix], ["tmp2m-prate", "dswrf", "wind10m"])
         self.assertFalse(any(entry["eccodes"] for entry in matrix), "sflux repacks nothing")
+
+    def test_a_bundle_absent_from_the_analysis_never_builds_alone(self) -> None:
+        # sflux has no PRATE record at f000: a prate-only job fetches nothing
+        # for the analysis and the converter has no variable present in
+        # every file (the 2026-09-12 00Z publish failed exactly so). prate
+        # therefore always shares a job with a bundle present at f000 — the
+        # lightest such group, and the lightest such bundle when a top-up
+        # asks for prate alone, rebuilt byte-identical beside it.
+        source = source_spec("sflux")
+        for max_groups in (1, 2, 3, 4, 100):
+            with self.subTest(max_groups=max_groups):
+                for group in assemble.bundle_groups(source, max_groups):
+                    if "prate" in group:
+                        self.assertTrue(any(bundle_id != "prate" for bundle_id in group), group)
+        self.assertEqual(assemble.bundle_groups(source, 100, ("prate",)), [("tmp2m", "prate")])
+        self.assertEqual(assemble.bundle_groups(source, 100, ("prate", "dswrf")), [("prate", "dswrf")])
+        # GFS has no analysis-optional input, so nothing changes there.
+        gfs = source_spec("gfs")
+        self.assertEqual(assemble.bundle_groups(gfs, 100, ("prate",)), [("prate",)])
 
     def test_no_groups_is_refused(self) -> None:
         with self.assertRaises(ManifestError):

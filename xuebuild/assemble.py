@@ -125,7 +125,14 @@ def bundle_groups(
     the lightest group so far. Within a group and across groups the
     publication order is kept, so a job's name reads the way the manifest
     does. With ``max_groups`` at or above the bundle count every bundle is
-    its own group.
+    its own group — except one that could not build on its own: a bundle
+    whose every input is absent from the analysis file (sflux ``prate``,
+    whose ``prate_ave`` has no f000 record) leaves a job fetching nothing
+    for f000 and a converter with no variable to key the frames by, so such
+    a bundle always shares a group with one that is present at f000 — the
+    lightest such group, or, when nothing requested qualifies (a top-up of
+    that bundle alone), the lightest such bundle the source publishes,
+    rebuilt byte-identical beside it.
     """
     if max_groups < 1:
         raise ManifestError("a run needs at least one bundle group")
@@ -137,11 +144,32 @@ def bundle_groups(
         if unknown:
             raise ManifestError(f"{source.manifest_model} publishes {list(published)}, not {unknown}")
     order = {bundle_id: index for index, bundle_id in enumerate(published)}
+
+    def weight(bundle_id: str) -> int:
+        return _bundle_weight(source, bundle_id)
+
+    def anchored(bundle_id: str) -> bool:
+        return any(
+            input_id not in source.optional_at_analysis for input_id in bundle_input_ids(source, bundle_id)
+        )
+
+    if bundle_ids and not any(anchored(bundle_id) for bundle_id in bundle_ids):
+        anchor = min((bundle_id for bundle_id in published if anchored(bundle_id)), key=lambda b: (weight(b), order[b]))
+        bundle_ids = (*bundle_ids, anchor)
     bins: list[tuple[int, list[str]]] = [(0, []) for _ in range(min(max_groups, len(bundle_ids)))]
-    for bundle_id in sorted(bundle_ids, key=lambda bundle_id: (-_bundle_weight(source, bundle_id), order[bundle_id])):
+    for bundle_id in sorted(bundle_ids, key=lambda bundle_id: (-weight(bundle_id), order[bundle_id])):
         lightest = min(range(len(bins)), key=lambda index: (bins[index][0], index))
-        weight, members = bins[lightest]
-        bins[lightest] = (weight + _bundle_weight(source, bundle_id), members + [bundle_id])
+        total, members = bins[lightest]
+        bins[lightest] = (total + weight(bundle_id), members + [bundle_id])
+    bins = [bin_ for bin_ in bins if bin_[1]]
+    # A group with no anchor joins the lightest group that has one.
+    anchored_bins = [index for index, (_, members) in enumerate(bins) if any(anchored(b) for b in members)]
+    for index, (total, members) in enumerate(bins):
+        if index in anchored_bins:
+            continue
+        target = min(anchored_bins, key=lambda i: (bins[i][0], i))
+        bins[target] = (bins[target][0] + total, bins[target][1] + members)
+        bins[index] = (0, [])
     groups = [tuple(sorted(members, key=order.get)) for _, members in bins if members]
     return sorted(groups, key=lambda group: order[group[0]])
 
