@@ -410,6 +410,29 @@ class FixtureGridTests(unittest.TestCase):
                 full[crop.row_start : crop.row_start + crop.height, crop.column_start : crop.column_start + crop.width],
             )
 
+    def test_the_origin_survives_a_gdal_releases_worth_of_noise(self) -> None:
+        # GDAL places a projected grid by projecting the record's first
+        # point, and two releases land that double a few nanometres apart
+        # (the wheel's 3.13 against Ubuntu's system GDAL, seen on CI). Every
+        # resampled coordinate descends from the origin, so two GDALs must
+        # read one grid: the origin is taken to the millimetre.
+        with mock.patch.dict(os.environ, {"XUE_ENCODER": "python"}):
+            original = dict(self.info)
+            noisy = dict(original)
+            noisy["geoTransform"] = [
+                original["geoTransform"][0] + 2.5e-9,
+                original["geoTransform"][1],
+                0.0,
+                original["geoTransform"][3] - 3e-9,
+                0.0,
+                original["geoTransform"][5],
+            ]
+            with mock.patch("xuebuild.binconvert.dataset_info", return_value=noisy):
+                perturbed = _grid_info(FIXTURE, HRRR)
+        self.assertEqual(perturbed.resample.source, self.grid.resample.source)
+        np.testing.assert_array_equal(perturbed.resample.fx, self.grid.resample.fx)
+        np.testing.assert_array_equal(perturbed.resample.column, self.grid.resample.column)
+
     def test_a_projected_file_needs_a_regridded_source_and_vice_versa(self) -> None:
         with mock.patch.dict(os.environ, {"XUE_ENCODER": "python"}):
             with self.assertRaisesRegex(ConversionError, "map projection, which this source does not declare"):
