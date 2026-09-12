@@ -5,8 +5,10 @@
 # A distribution-grade GDAL (the one a package manager installs) links Arrow,
 # TileDB, OpenBLAS, Poppler, x265 and about 220 other libraries — 318 MB, and
 # several of those are GPL or LGPL, which a redistributed binary wheel would
-# have to answer for. The encoder needs exactly two drivers, GRIB and netCDF,
-# and no OGR at all. Everything else is switched off here.
+# have to answer for. The encoder needs exactly two format drivers, GRIB and
+# netCDF, plus the JPEG 2000 codec the GRIB driver decodes DRS template 5.40
+# through (GFS-Wave packs its records that way), and no OGR at all.
+# Everything else is switched off here.
 #
 #   ./scripts/build-gdal-minimal.sh [prefix]
 #
@@ -25,13 +27,14 @@ export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-11.0}"
 # The libraries find each other beside themselves, both in the prefix and once
 # delocate/auditwheel has moved them into the wheel.
 case "$(uname -s)" in
-  Darwin) ORIGIN_RPATH="@loader_path" ;;
-  *) ORIGIN_RPATH="\$ORIGIN" ;;
+  Darwin) ORIGIN_RPATH="@loader_path"; SHLIB_EXT=".dylib" ;;
+  *) ORIGIN_RPATH="\$ORIGIN"; SHLIB_EXT=".so" ;;
 esac
 
 # Pinned to the versions the byte-identity comparison was run against; a GDAL
 # version bump can change GRIB band metadata, so it is a deliberate step.
 AEC_VERSION=1.1.3
+OPENJPEG_VERSION=2.5.3
 HDF5_VERSION=1.14.6
 NETCDF_VERSION=4.9.3
 PROJ_VERSION=9.8.1
@@ -77,6 +80,10 @@ echo "==> libaec ${AEC_VERSION} (CCSDS packing, GRIB template 5.42)"
 cmake_build include/libaec.h "$(fetch "https://github.com/MathisRosenhauer/libaec/releases/download/v${AEC_VERSION}/libaec-${AEC_VERSION}.tar.gz" "libaec-${AEC_VERSION}")" \
   -DBUILD_SHARED_LIBS=ON
 
+echo "==> OpenJPEG ${OPENJPEG_VERSION} (JPEG 2000 packing, GRIB template 5.40)"
+cmake_build lib/pkgconfig/libopenjp2.pc "$(fetch "https://github.com/uclouvain/openjpeg/archive/refs/tags/v${OPENJPEG_VERSION}.tar.gz" "openjpeg-${OPENJPEG_VERSION}")" \
+  -DBUILD_SHARED_LIBS=ON -DBUILD_STATIC_LIBS=OFF -DBUILD_CODEC=OFF -DBUILD_DOC=OFF
+
 echo "==> HDF5 ${HDF5_VERSION} (under netCDF)"
 cmake_build include/hdf5.h "$(fetch "https://github.com/HDFGroup/hdf5/releases/download/hdf5_${HDF5_VERSION}/hdf5-${HDF5_VERSION}.tar.gz" "hdf5-${HDF5_VERSION}")" \
   -DBUILD_SHARED_LIBS=ON -DBUILD_STATIC_LIBS=OFF \
@@ -97,13 +104,19 @@ cmake_build lib/pkgconfig/proj.pc "$(fetch "https://download.osgeo.org/proj/proj
   -DBUILD_SHARED_LIBS=ON -DBUILD_APPS=OFF -DENABLE_TIFF=OFF -DENABLE_CURL=OFF \
   -DBUILD_PROJSYNC=OFF -DBUILD_EXAMPLES=OFF
 
-echo "==> GDAL ${GDAL_VERSION}, GRIB and netCDF only"
+echo "==> GDAL ${GDAL_VERSION}, GRIB and netCDF only (JP2OpenJPEG for the GRIB driver's sake)"
 cmake_build lib/pkgconfig/gdal.pc "$(fetch "https://github.com/OSGeo/gdal/releases/download/v${GDAL_VERSION}/gdal-${GDAL_VERSION}.tar.gz" "gdal-${GDAL_VERSION}")" \
   -DBUILD_SHARED_LIBS=ON \
   -DGDAL_BUILD_OPTIONAL_DRIVERS=OFF \
   -DOGR_BUILD_OPTIONAL_DRIVERS=OFF \
   -DGDAL_ENABLE_DRIVER_GRIB=ON \
   -DGDAL_ENABLE_DRIVER_NETCDF=ON \
+  `# GRIB template 5.40 is JPEG 2000: the GRIB driver hands the codestream to
+   # whichever JPEG 2000 driver is registered, and refuses the record ("Is
+   # the JPEG2000 driver available?") when none is. WAVEWATCH III writes
+   # the GFS-Wave records that way, so the OpenJPEG-backed driver is on —
+   # for that purpose only; nothing here opens a .jp2 file.` \
+  -DGDAL_ENABLE_DRIVER_JP2OPENJPEG=ON \
   `# Enumerating the codecs to switch off does not work: GDAL probes several
    # of them through pkg-config, which has its own search path, and a machine
    # with Homebrew ends up linking libjxl and Brotli into a build that has no
@@ -116,6 +129,14 @@ cmake_build lib/pkgconfig/gdal.pc "$(fetch "https://github.com/OSGeo/gdal/releas
    # ECMWF open data arrives that way before the fetcher repacks it, so the
    # two must not differ here.` \
   -DGDAL_USE_LIBAEC=ON \
+  `# Named outright rather than found: GDAL's OpenJPEG probe goes through
+   # pkg-config, which sees the package manager's copy, and CMake caches
+   # what it found the first time this tree was configured — so a
+   # developer machine would link Homebrew's libopenjp2 into a wheel that
+   # is supposed to carry its own.` \
+  -DGDAL_USE_OPENJPEG=ON \
+  -DOPENJPEG_INCLUDE_DIR="$PREFIX/include/openjpeg-2.5" \
+  -DOPENJPEG_LIBRARY="$PREFIX/lib/libopenjp2$SHLIB_EXT" \
   `# GTiff is a core driver and always builds. Left to itself GDAL detects a
    # system libjpeg-turbo, sees its dual 8/12-bit mode, and then compiles
    # libtiff's 12-bit path against the *internal* 8-bit headers, which does

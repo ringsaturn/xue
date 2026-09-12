@@ -105,7 +105,10 @@ jobs:
       # The wheel bundles its own GDAL, and the whole point of bundling it is
       # that the module finds it with nothing set in the environment. Encode
       # the repository's GRIB fixture and decode the result back, which needs
-      # GDAL, its data directory, and both halves of the extension.
+      # GDAL, its data directory, and both halves of the extension — then the
+      # JPEG 2000-packed GFS-Wave fixture, which needs the OpenJPEG the
+      # minimal GDAL links: the first wheel refused those records, and the
+      # scheduled GFS build now fetches them as published.
       - name: Smoke-test the wheel
         run: |
           set -euo pipefail
@@ -124,6 +127,12 @@ jobs:
           assert plane.dtype == numpy.uint8, plane.dtype
           assert plane.size == bundle.plane_length, (plane.size, bundle.plane_length)
           print(f"wheel encoded and decoded {bundle!r}")
+
+          xue.convert_bin(["tests/fixtures/gfswave.2026091100.f000.jp2.crop.grib2"], "/tmp/smoke-jp2",
+                          model="gfs", bundle_ids=["htsgw", "wave"], skip_variants=True)
+          wave = xue.Bundle.open("/tmp/smoke-jp2/wave.xue")
+          assert wave.decode(1, 0).size == wave.plane_length
+          print(f"wheel read the JPEG 2000 records into {wave!r}")
           PY
 
       - uses: actions/upload-artifact@v4

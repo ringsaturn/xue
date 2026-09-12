@@ -30,6 +30,25 @@ gdal_translate -srcwin 1192 208 80 80 -of GRIB \
 Widening the GFS input list means recutting it the same way, so the parity
 test keeps building the full published set.
 
+`gfswave.2026091100.f000.jp2.crop.grib2` is the same window of the three
+GFS-Wave records of the 2026-09-11 00:00 UTC analysis, packed the way
+WAVEWATCH III publishes them: JPEG 2000 (DRS template 5.40) with a bitmap
+over land. `gdal_translate` re-encodes what it crops and cannot write a
+bitmap into a JPEG 2000 record, so the crop fixture above never carried
+that packing; this one holds the wheel's GDAL — built with OpenJPEG for
+exactly this — to the reference GDAL on the packing as published, in
+`tests/test_native.py` and the wheel's release smoke test. Cut with:
+
+```sh
+# the three records, by byte range off the GFS-Wave .idx
+curl -r <HTSGW offset>-<WVHGT offset - 1> \
+  https://noaa-gfs-bdp-pds.s3.amazonaws.com/gfs.20260911/00/wave/gridded/gfswave.t00z.global.0p25.f000.grib2 \
+  -o /tmp/wave3.grib2
+gdal_translate -srcwin 1192 208 80 80 -of GRIB /tmp/wave3.grib2 /tmp/wave.crop.grib2
+grib_set -r -s packingType=grid_jpeg /tmp/wave.crop.grib2 \
+  tests/fixtures/gfswave.2026091100.f000.jp2.crop.grib2
+```
+
 # Xue fixtures
 
 `tests/prepare_bin_fixture.py` encodes the same cropped GRIB into per-variable

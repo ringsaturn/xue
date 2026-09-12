@@ -30,6 +30,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -219,15 +220,19 @@ class RegistryTests(unittest.TestCase):
         gfs = source_spec("gfs")
         (wave,) = gfs.companion_files
         self.assertEqual((wave.id, wave.variable_ids), ("wave", WAVE_IDS))
-        # WAVEWATCH III packs its records as JPEG 2000, which the wheel's
-        # GDAL cannot read: the fetcher repacks them, and the build job of
-        # any bundle from the family installs grib_set.
-        self.assertTrue(wave.repack)
-        self.assertTrue(group_needs_eccodes(gfs, ("tmp2m", "htsgw")))
-        self.assertTrue(group_needs_eccodes(gfs, ("tmp2m", WAVE_BUNDLE_ID)), "the wave vector reads the family too")
-        self.assertFalse(group_needs_eccodes(gfs, ("tmp2m", "tmpsfc", "icec")))
-        flags = {entry["group"]: entry["eccodes"] for entry in bundle_group_matrix(gfs, 100)}
-        self.assertEqual([group for group, needs in flags.items() if needs], [*WAVE_IDS, WAVE_BUNDLE_ID])
+        # WAVEWATCH III packs its records as JPEG 2000. The wheel's GDAL
+        # reads that since it took OpenJPEG on board (the JP2 fixture below
+        # is what proves it), so the family is fetched as published and no
+        # GFS build job installs grib_set; the repack switch stays for a
+        # packing some GDAL cannot read.
+        self.assertFalse(wave.repack)
+        self.assertFalse(group_needs_eccodes(gfs, ("tmp2m", "htsgw")))
+        self.assertFalse(group_needs_eccodes(gfs, ("tmp2m", WAVE_BUNDLE_ID)))
+        self.assertFalse(any(entry["eccodes"] for entry in bundle_group_matrix(gfs, 100)))
+        self.assertTrue(
+            group_needs_eccodes(replace(gfs, companion_files=(replace(wave, repack=True),)), ("tmp2m", WAVE_BUNDLE_ID)),
+            "a repacked family flags every group that reads it, the wave vector's included",
+        )
         self.assertFalse(any(entry["eccodes"] for entry in bundle_group_matrix(source_spec("sflux"), 100)))
         for variable_id in WAVE_IDS:
             self.assertIs(gfs.companion_of(variable_id), wave)
@@ -277,13 +282,13 @@ class FetchTests(unittest.TestCase):
 class RepackTests(unittest.TestCase):
     @unittest.skipUnless(shutil.which("grib_set"), "eccodes CLI")
     def test_repacking_rewrites_every_message_as_grid_simple(self) -> None:
-        # The plumbing only: the fixture's messages were written by GDAL
-        # (grid_ieee and grid_complex with GDAL's own scale choices), which
-        # `grib_set -r` does not carry over faithfully, so the values are
-        # not compared here. The product this is for — WAVEWATCH III's JPEG
-        # 2000 records, 10/12/16 bits at a decimal scale of 2 — repacks to
-        # the same integers; that was verified on a live frame by hand, and
-        # the byte-identity of the two encoders on a repacked frame with it.
+        # The plumbing only, kept for the next family that needs it: the
+        # fixture's messages were written by GDAL (grid_ieee and
+        # grid_complex with GDAL's own scale choices), which `grib_set -r`
+        # does not carry over faithfully, so the values are not compared
+        # here. WAVEWATCH III's JPEG 2000 records, which this was written
+        # for, repack to the same integers; that was verified on a live
+        # frame by hand before the wheel learnt to read them as published.
         repacked = _repack_grid_simple(FIXTURE.read_bytes(), "fixture")
         with tempfile.TemporaryDirectory() as scratch:
             path = Path(scratch) / "repacked.grib2"

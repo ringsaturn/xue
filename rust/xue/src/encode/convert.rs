@@ -305,24 +305,23 @@ pub fn published_bundle_ids(source: &SourceSpec) -> Vec<&'static str> {
 
 // -- grid --------------------------------------------------------------------
 
-/// Round to 16 significant decimal digits, which is what `gdalinfo -json`
-/// prints (`%.16g`).
+/// The grid, from the geotransform GDAL holds — the doubles themselves, not
+/// a printed rounding of them.
 ///
-/// The reference encoder reads the geotransform out of that JSON, so its grid
-/// origin and steps carry the text's rounding — up to an ulp away from the
-/// doubles GDAL actually holds. Reading them in process is strictly more
-/// precise, but it would put a different `firstLongitude` in the published
-/// metadata for the same run, so the numbers are rounded the same way here and
-/// the two encoders stay byte-comparable.
-fn as_gdalinfo_json(value: f64) -> f64 {
-    format!("{value:.15e}").parse().unwrap_or(value)
-}
-
+/// The reference encoder reads the same doubles: `xuebuild.gdal.dataset_info`
+/// inspects through the wheel's `gdal_info` (`gdalio::info_json`) whenever
+/// the wheel is installed, and the `gdalinfo -json` it falls back to without
+/// one prints the geotransform at a precision that has changed between GDAL
+/// releases (16 significant digits in 3.8, every digit later). Rounding here
+/// to imitate one of those texts once held the two encoders byte-comparable
+/// on the rounded side; it now put the native grid an ulp off the reference
+/// on any origin the rounding touched — a regional crop of the GFS-Wave
+/// grid, whose step is a hair over 0.25° — while the clean 0.25° origins
+/// every published grid has never noticed either way.
 fn grid_info(path: &Path) -> Result<GridInfo> {
     let dataset = Dataset::open(path)?;
     let (width, height) = dataset.size();
-    let mut transform = dataset.geo_transform()?;
-    transform = transform.map(as_gdalinfo_json);
+    let transform = dataset.geo_transform()?;
     if transform[2] != 0.0 || transform[4] != 0.0 {
         return Err(EncodeError::conversion(format!(
             "rotated grids are unsupported: {}",

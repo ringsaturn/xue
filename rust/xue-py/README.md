@@ -55,9 +55,10 @@ The stages are also exposed on their own — `quantize`, `encode_residual`,
 
 ## What is in the wheel
 
-Its own minimal GDAL: the GRIB and netCDF drivers and nothing else, with
-GDAL's and PROJ's data directories beside it, because the GRIB driver cannot
-read a band without them. Seven shared libraries rather than the 227 a
+Its own minimal GDAL: the GRIB and netCDF drivers, the OpenJPEG codec the
+GRIB driver needs for JPEG 2000-packed records (GFS-Wave), and nothing else,
+with GDAL's and PROJ's data directories beside it, because the GRIB driver
+cannot read a band without them. Eight shared libraries rather than the 227 a
 distribution GDAL pulls in, all permissively licensed, with their notices in
 `xue/licenses/`. Nothing needs to be installed alongside it and no environment
 variable needs setting.

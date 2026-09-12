@@ -245,11 +245,14 @@ publishing data at the new version.**
   and a record may not cover its grid (`VariableSpec.fill_values`: the
   wave bitmap's GDAL nodata 9999 becomes the codebook bottom before unit
   conversion, in both encoders — the format has no bitmap). WAVEWATCH III
-  packs as JPEG 2000, which the wheel's two-driver GDAL cannot read, so the
-  fetcher repacks the family to `grid_simple` with `grib_set`
-  (`CompanionFile.repack`, lossless) the way ECMWF's CCSDS files are, and
-  `bundle-groups` flags those jobs `eccodes` so `publish.yml` installs it.
-  The **wave vector** `wave` (`uwave` / `vwave`, Xue-local
+  packs as JPEG 2000, which the wheel's GDAL reads through the OpenJPEG
+  `scripts/build-gdal-minimal.sh` links for that one purpose
+  (`tests/fixtures/gfswave.*.jp2.crop.grib2` holds it to the reference
+  GDAL); a family some GDAL cannot read can still be marked
+  `CompanionFile.repack`, which repacks it to `grid_simple` with `grib_set`
+  at fetch time the way ECMWF's CCSDS files are and makes `bundle-groups`
+  flag its jobs `eccodes` so `publish.yml` installs it — no family needs
+  that now. The **wave vector** `wave` (`uwave` / `vwave`, Xue-local
   10/0/250–251) is the second derived vector after the vapour flux:
   `binconvert.DERIVED_VECTORS` names its inputs (`htsgw`, `dirpw`),
   `derive_wave_vector` lays the height along the direction of travel in

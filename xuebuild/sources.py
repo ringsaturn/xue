@@ -43,12 +43,15 @@ class CompanionFile:
     from this family rather than the primary file, in assembly order."""
     repack: bool = False
     """True when the family's records must be repacked to ``grid_simple``
-    with eccodes at fetch time, the way the CCSDS-packed ECMWF files are.
-    WAVEWATCH III writes JPEG 2000 packing (DRS template 5.40), which the
-    GDAL the ``xuepy`` wheel carries — GRIB and netCDF drivers only — cannot
-    decode; repacked, the records read everywhere and decode to the same
-    values (the packing is lossless either way). A build job of a bundle
-    from such a family installs ``grib_set`` (``assemble.group_needs_eccodes``)."""
+    with eccodes at fetch time, the way the CCSDS-packed ECMWF files are,
+    because some GDAL this pipeline converts through cannot decode their
+    packing. A build job of a bundle from such a family installs
+    ``grib_set`` (``assemble.group_needs_eccodes``). No family needs it
+    now: WAVEWATCH III writes JPEG 2000 packing (DRS template 5.40), and
+    the GDAL the ``xuepy`` wheel carries decodes it since the wheel took
+    OpenJPEG on board (``scripts/build-gdal-minimal.sh``); before that the
+    wave family was repacked here, and the switch stays for the next
+    packing a wheel cannot read."""
 
 
 @dataclass(frozen=True)
@@ -240,7 +243,7 @@ SOURCES: dict[str, SourceSpec] = {
             "dirpw",
         ),
         accumulated_precipitation=False,
-        companion_files=(CompanionFile(id="wave", variable_ids=("htsgw", "perpw", "dirpw"), repack=True),),
+        companion_files=(CompanionFile(id="wave", variable_ids=("htsgw", "perpw", "dirpw")),),
         bundle_scalar_ids=(
             "tmp2m",
             "prate",

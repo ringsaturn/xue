@@ -272,9 +272,11 @@ jobs:
       # missing, which is why the matrix says rather than the job guessing.
       # ECMWF open data is CCSDS packed; xue repacks it with eccodes at fetch
       # time because GDAL builds usually lack libaec, so every ECMWF job
-      # installs the tools — and so does a GFS job whose group reads the
-      # JPEG 2000-packed GFS-Wave file (the matrix's `eccodes`), repacked
-      # the same way. zstd is only reached below Python 3.14.
+      # installs the tools — and so would any job whose group reads a
+      # companion family marked for the same repack (the matrix's
+      # `eccodes`; none is now that the wheel's GDAL reads the JPEG
+      # 2000-packed GFS-Wave file as published). zstd is only reached below
+      # Python 3.14.
       - name: Install ffmpeg / eccodes
         if: ${{ matrix.video || matrix.eccodes || inputs.model == 'ecmwf' }}
         env:

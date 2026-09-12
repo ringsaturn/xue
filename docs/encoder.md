@@ -141,8 +141,8 @@ inside a `manylinux_2_28` container. macOS is arm64 only.
 make encoder-wheel          # minimal GDAL, then the wheel, then repair it
 ```
 
-`scripts/build-gdal-minimal.sh` builds libaec, HDF5, netCDF, PROJ and GDAL from
-source into `build/gdal-minimal`, and `scripts/build-encoder-wheel.sh` stages GDAL's
+`scripts/build-gdal-minimal.sh` builds libaec, OpenJPEG, HDF5, netCDF, PROJ and
+GDAL from source into `build/gdal-minimal`, and `scripts/build-encoder-wheel.sh` stages GDAL's
 and PROJ's data directories plus every licence text into the package, runs
 maturin, and lets `delocate` (macOS) or `auditwheel` (Linux) move the shared
 libraries in. zlib and sqlite3 come from the platform and are not bundled.
@@ -166,8 +166,10 @@ x265 — of which the encoder uses none. It also drags in Poppler (GPL-2/3),
 x265 (GPL-2), libde265 (LGPL-3), libspatialite and mariadb-connector-c
 (LGPL), whose obligations a redistributed binary would have to answer for.
 
-Built here with the GRIB and netCDF drivers and nothing else, the whole
-closure is seven libraries:
+Built here with the GRIB and netCDF drivers, plus the JP2OpenJPEG driver the
+GRIB driver decodes JPEG 2000-packed records through (WAVEWATCH III packs
+the GFS-Wave files that way, DRS template 5.40), and nothing else, the whole
+closure is eight libraries:
 
 | | |
 |---:|---|
@@ -175,14 +177,15 @@ closure is seven libraries:
 | 4.2 MB | libproj |
 | 3.9 MB | libhdf5 |
 | 1.2 MB | libnetcdf |
+| 0.4 MB | libopenjp2 |
 | | libhdf5_hl, libaec, libsz |
 
 plus 10.2 MB of `proj.db` and 3 MB of GDAL's data tables — **a 12 MB wheel**.
 zlib, sqlite3, libSystem and libc++ come from the platform.
 
 Everything bundled is permissive and allows binary redistribution with
-attribution: GDAL and PROJ (MIT), HDF5 and libaec (BSD), netCDF (MIT-style),
-and zlib and sqlite3 from the platform. Several ask explicitly for their
+attribution: GDAL and PROJ (MIT), HDF5, libaec and OpenJPEG (BSD), netCDF
+(MIT-style), and zlib and sqlite3 from the platform. Several ask explicitly for their
 notice to travel with a binary, so the wheel carries them in
 `xue/licenses/`.
 
@@ -195,7 +198,11 @@ Each is commented where it happens, and each was found the hard way:
   ends up linking libjxl and Brotli into a build with no driver able to use
   them, and — because those were built for a newer macOS — the wheel comes out
   tagged `macosx_26_0` instead of `macosx_11_0`. `GDAL_USE_EXTERNAL_LIBS=OFF`
-  plus the two dependencies by name is the reliable form.
+  plus the three dependencies by name is the reliable form — and for OpenJPEG
+  the library's path as well: GDAL's probe goes through pkg-config, CMake
+  caches what it found the first time the tree was configured, and a
+  developer machine linked Homebrew's `libopenjp2` into a wheel meant to
+  carry its own.
 * **CMake will compile against one copy of a library and link another.** With
   Homebrew's HDF5 2.1 headers ahead of the 1.14 built here, netCDF built
   cleanly and then failed at run time on every netCDF-4 file with
@@ -213,14 +220,18 @@ Each is commented where it happens, and each was found the hard way:
 encodes `tests/fixtures/gfs.2026081406.f000.crop.grib2` and demands the exact
 bytes `tests/prepare_bin_fixture.py` produced with the Python encoder.
 
-Two places needed deliberate bug-compatibility to reach that:
+Three places needed care to reach that:
 
-* **The geotransform is rounded to 16 significant digits.** The Python encoder
-  reads it out of `gdalinfo -json`, which prints `%.16g`, so its published
-  `firstLongitude` / `longitudeStep` are up to an ulp off the doubles GDAL
-  holds. Reading them in process is strictly more precise but would publish
-  different metadata for the same run, so `as_gdalinfo_json` reproduces the
-  rounding.
+* **The geotransform is the doubles GDAL holds, on both sides.** The Python
+  encoder inspects through the wheel's `gdal_info` whenever the wheel is
+  installed, which reports the geotransform at full precision; the
+  `gdalinfo -json` it falls back to without one prints it at a precision that
+  has changed between GDAL releases (16 significant digits in 3.8, every
+  digit later). The native encoder used to round to 16 digits to imitate that
+  text, which put it an ulp off the reference on any origin the rounding
+  touched — a regional crop of the GFS-Wave grid, whose step is a hair over
+  0.25° — so it reads the doubles as they are; `tests/test_native.py` holds
+  the two together on exactly such a crop.
 * **`flate2` links stock libz, not `zlib-rs`.** `zlib-rs` is a port of zlib-ng,
   whose deflate output differs slightly from the zlib CPython uses, which would
   change every poster payload.

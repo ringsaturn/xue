@@ -26,11 +26,16 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from xuebuild import binconvert, encoder, native, zstdcli
+from xuebuild import binconvert, binformat, encoder, native, zstdcli
 from xuebuild.errors import ConversionError
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 FIXTURE_GRIB = REPOSITORY_ROOT / "tests" / "fixtures" / "gfs.2026081406.f000.crop.grib2"
+# The three GFS-Wave records of the 2026-09-11 00Z analysis, the same window,
+# packed as WAVEWATCH III publishes them: JPEG 2000 (DRS template 5.40) with
+# a bitmap over land. gdal_translate re-encodes what it crops, so the crop
+# fixture above never carried that packing.
+FIXTURE_JP2_GRIB = REPOSITORY_ROOT / "tests" / "fixtures" / "gfswave.2026091100.f000.jp2.crop.grib2"
 
 requires_native = unittest.skipUnless(
     native.available(), f"{native.DISTRIBUTION} is not installed"
@@ -245,6 +250,61 @@ class NativeRestrictedBuildTests(unittest.TestCase):
         self.assertEqual([bundle["variable"] for bundle in manifest["bundles"]], ["tmp2m"])
 
     def test_the_cropped_build_is_byte_identical(self) -> None:
+        require_comparable_compression(self, self.reference_report, self.subject_report)
+        for path in sorted(self.reference.rglob("*")):
+            if path.is_dir():
+                continue
+            relative = path.relative_to(self.reference)
+            with self.subTest(artifact=relative.as_posix()):
+                self.assertTrue(
+                    filecmp.cmp(path, self.subject / relative, shallow=False),
+                    f"{relative} differs between the two encoders",
+                )
+
+
+@requires_native
+class NativeJpeg2000Tests(unittest.TestCase):
+    """The GDAL the wheel carries decodes JPEG 2000-packed records — the
+    GFS-Wave family as published, which the first wheel refused ("Is the
+    JPEG2000 driver available?") and the fetcher repacked for — and reads
+    them, bitmap included, to the same values the reference GDAL does: the
+    wave bundles and the wave vector derived from two of them come out
+    byte-identical from the raw records."""
+
+    WAVE_BUNDLES = ("htsgw", "perpw", "dirpw", "wave")
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.root = Path(tempfile.mkdtemp(prefix="xue-native-jp2-"))
+        cls.reference, cls.reference_report = cls._build(binconvert, "reference")
+        cls.subject, cls.subject_report = cls._build(native, "subject")
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        shutil.rmtree(cls.root, ignore_errors=True)
+
+    @classmethod
+    def _build(cls, implementation, name: str) -> tuple[Path, dict]:
+        directory = cls.root / name
+        report = implementation.convert_bin(
+            FIXTURE_JP2_GRIB,
+            directory,
+            work_root=cls.root / f"{name}-work",
+            manifest_path=directory / "manifest.json",
+            model="gfs",
+            bundle_ids=cls.WAVE_BUNDLES,
+            skip_video=True,
+            skip_variants=True,
+        )
+        return directory, report
+
+    def test_the_wave_bundles_are_built_from_the_raw_records(self) -> None:
+        manifest = json.loads((self.subject / "manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual([bundle["variable"] for bundle in manifest["bundles"]], list(self.WAVE_BUNDLES))
+        wave = binformat.Bundle((self.subject / "wave.xue").read_bytes())
+        self.assertEqual([variable["id"] for variable in wave.metadata["variables"]], ["uwave", "vwave"])
+
+    def test_the_jpeg_2000_build_is_byte_identical(self) -> None:
         require_comparable_compression(self, self.reference_report, self.subject_report)
         for path in sorted(self.reference.rglob("*")):
             if path.is_dir():
