@@ -349,15 +349,19 @@ fn grid_info(path: &Path, source: &SourceSpec) -> Result<GridInfo> {
                 path.display()
             )));
         }
+        // To the millimetre, as the reference encoder takes them: GDAL
+        // releases place a projected grid's origin a few nanometres apart,
+        // and every resampled coordinate descends from these four numbers.
+        let [x0, dx, y0, dy] = [transform[0], transform[1], transform[3], transform[5]].map(round3);
         let resampler = build_resampler(
             ProjectedGrid {
                 projection,
                 width,
                 height,
-                x0: transform[0] + transform[1] / 2.0,
-                y0: transform[3] + transform[5] / 2.0,
-                dx: transform[1],
-                dy: -transform[5],
+                x0: x0 + dx / 2.0,
+                y0: y0 + dy / 2.0,
+                dx,
+                dy: -dy,
             },
             regrid,
         )?;
@@ -393,6 +397,12 @@ fn grid_info(path: &Path, source: &SourceSpec) -> Result<GridInfo> {
         longitude_step,
         latitude_step,
     ))))
+}
+
+/// Round to three decimal places the way Python's `round(value, 3)` does:
+/// correct decimal rounding, ties to even.
+fn round3(value: f64) -> f64 {
+    format!("{value:.3}").parse().unwrap_or(value)
 }
 
 // -- derived precipitation ---------------------------------------------------

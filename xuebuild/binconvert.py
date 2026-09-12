@@ -316,15 +316,24 @@ def _grid_info(path: Path, source: SourceSpec | None = None) -> GridInfo:
             raise ConversionError(f"{path} is on a map projection, which this source does not declare")
         if transform[1] <= 0 or transform[5] >= 0:
             raise ConversionError(f"grid must run west-to-east and north-to-south: {path}")
+        # GDAL places a projected grid by projecting the record's first
+        # point itself, and two GDAL releases land that double a few
+        # nanometres apart (seen between the wheel's 3.13 and Ubuntu's
+        # system GDAL). The resampler's every coordinate descends from these
+        # four numbers, and the two encoders must read the same grid, so
+        # they are taken to the millimetre — far below anything a 3 km grid
+        # means, far above the noise. The native encoder rounds the same
+        # way (grid.rs `round3`).
+        x0, dx, y0, dy = (round(float(transform[index]), 3) for index in (0, 1, 3, 5))
         resampler = build_resampler(
             ProjectedGrid(
                 projection=projection,
                 width=width,
                 height=height,
-                x0=float(transform[0]) + float(transform[1]) / 2.0,
-                y0=float(transform[3]) + float(transform[5]) / 2.0,
-                dx=float(transform[1]),
-                dy=-float(transform[5]),
+                x0=x0 + dx / 2.0,
+                y0=y0 + dy / 2.0,
+                dx=dx,
+                dy=-dy,
             ),
             regrid,
         )
