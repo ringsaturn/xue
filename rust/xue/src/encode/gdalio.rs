@@ -22,8 +22,8 @@ use gdal_sys::{
     CPLErr, CPLGetLastErrorMsg, GDALAccess, GDALAllRegister, GDALClose, GDALDataType,
     GDALDatasetH, GDALGetDescription, GDALGetGeoTransform, GDALGetMetadata, GDALGetRasterBand,
     GDALGetRasterCount, GDALGetRasterNoDataValue, GDALGetRasterOffset, GDALGetRasterScale,
-    GDALGetRasterUnitType, GDALGetRasterXSize, GDALGetRasterYSize, GDALOpen, GDALRWFlag,
-    GDALRasterIO,
+    GDALGetRasterUnitType, GDALGetRasterXSize, GDALGetRasterYSize, GDALGetSpatialRef, GDALOpen,
+    GDALRWFlag, GDALRasterIO, OSRExportToWktEx, VSIFree,
 };
 
 use crate::encode::errors::{EncodeError, Result};
@@ -137,6 +137,30 @@ impl Dataset {
             )));
         }
         Ok(transform)
+    }
+
+    /// The dataset's coordinate system as WKT2, the text `gdalinfo -json`
+    /// prints under `coordinateSystem.wkt` (the same export options:
+    /// `FORMAT=WKT2`, multi-line); empty when the dataset declares none.
+    /// A projected source (HRRR's Lambert conformal grid) is recognised
+    /// from it (`reproject::lambert_conformal_from_wkt`).
+    pub fn projection_wkt(&self) -> String {
+        let reference = unsafe { GDALGetSpatialRef(self.handle) };
+        if reference.is_null() {
+            return String::new();
+        }
+        let format = CString::new("FORMAT=WKT2").expect("static option");
+        let multiline = CString::new("MULTILINE=YES").expect("static option");
+        let options = [format.as_ptr(), multiline.as_ptr(), ptr::null()];
+        let mut text: *mut std::ffi::c_char = ptr::null_mut();
+        let status = unsafe { OSRExportToWktEx(reference, &mut text, options.as_ptr()) };
+        if status != gdal_sys::OGRErr::OGRERR_NONE || text.is_null() {
+            return String::new();
+        }
+        let wkt = unsafe { CStr::from_ptr(text) }.to_string_lossy().into_owned();
+        // The string is CPLMalloc'd; VSIFree is CPLFree by another name.
+        unsafe { VSIFree(text.cast()) };
+        wkt
     }
 
     /// Dataset-level metadata of one domain (`""` is the default domain).
@@ -253,6 +277,10 @@ pub fn info_json(name: &Path) -> Result<serde_json::Value> {
     info.insert("size".into(), serde_json::json!([width, height]));
     if let Ok(transform) = dataset.geo_transform() {
         info.insert("geoTransform".into(), serde_json::json!(transform));
+    }
+    let wkt = dataset.projection_wkt();
+    if !wkt.is_empty() {
+        info.insert("coordinateSystem".into(), serde_json::json!({ "wkt": wkt }));
     }
     info.insert(
         "metadata".into(),

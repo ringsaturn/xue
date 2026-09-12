@@ -1,5 +1,6 @@
 import type { CustomLayerInterface, Map as MaplibreMap } from "maplibre-gl";
 
+import { DOMAIN_GLSL, DOMAIN_UNIFORM_NAMES, setDomainUniforms, type LambertDomain } from "./domain";
 import { t } from "./i18n";
 import type { BundleMetadata } from "./manifest";
 import { WHOLE_PLANE_COVERAGE, type CoverageBox } from "./tiles";
@@ -105,6 +106,11 @@ uniform vec2 u_vector_offset;
 uniform vec2 u_vector_scale;
 uniform float u_vector_max;
 uniform float u_vector_nodata;
+// A regional model's own footprint on its map projection (domain.ts): the
+// encoder's regular grid extends past a conic domain's corners with the
+// nearest cell, and those corners are not a forecast, so they are clipped
+// here the way the cells outside the grid are.
+${DOMAIN_GLSL}
 out vec4 out_color;
 const float PI = 3.141592653589793;
 
@@ -246,6 +252,7 @@ void main() {
   // never leave the vertical range, so only a cropped grid is ever clipped;
   // without this the edge texels would smear across the whole map.
   if (v < 0.0 || v > 1.0 || (u_wrap < 0.5 && (u < 0.0 || u > 1.0))) discard;
+  if (outsideDomain(longitude, latitude)) discard;
   // The coverage test runs on the wrapped coordinate. On a global grid the
   // half-cell before the antimeridian lands just past u = 1 (the cell center
   // is half a step east of 360 degrees) and the texture's own REPEAT resolves
@@ -487,6 +494,9 @@ export class ForecastLayer implements CustomLayerInterface {
   /** Whether the columns cover the full 360 degrees. Drives both the
    * horizontal texture wrap mode and the shader's out-of-grid clip. */
   private wraps = true;
+  /** The model's own footprint, when the grid extends past it (domain.ts);
+   * the shader draws nothing outside. */
+  private domain: LambertDomain | null = null;
   private hasFrame = false;
   /** Hidden while no weather layer is on screen. */
   private visible = true;
@@ -522,6 +532,13 @@ export class ForecastLayer implements CustomLayerInterface {
     this.mixWeight = 0;
   }
 
+  /** Clip to a regional model's own footprint, or to nothing but the grid. */
+  setDomain(domain: LambertDomain | null): void {
+    if (this.domain === domain) return;
+    this.domain = domain;
+    this.map?.triggerRepaint();
+  }
+
   onAdd(map: MaplibreMap, gl: WebGLRenderingContext | WebGL2RenderingContext): void {
     if (!(gl instanceof WebGL2RenderingContext)) {
       this.onUnsupported(t("webglUnavailable"));
@@ -536,6 +553,7 @@ export class ForecastLayer implements CustomLayerInterface {
       "u_mix", "u_wrap", "u_cover", "u_decode", "u_contour", "u_contour_values",
       "u_contour_value_count", "u_line_color", "u_fill_alpha",
       "u_vector", "u_vector_offset", "u_vector_scale", "u_vector_max", "u_vector_nodata",
+      ...DOMAIN_UNIFORM_NAMES,
     ]) {
       this.uniforms[name] = gl.getUniformLocation(program, name);
     }
@@ -820,6 +838,7 @@ export class ForecastLayer implements CustomLayerInterface {
       this.coverage.vStart,
       this.coverage.vEnd,
     );
+    setDomainUniforms(gl, this.uniforms, this.domain);
     const contours = this.contours;
     gl.uniform2f(this.uniforms.u_decode!, contours?.offset ?? 0, contours?.scale ?? 0);
     gl.uniform4f(

@@ -1,3 +1,4 @@
+import { HRRR_DOMAIN, type LambertDomain } from "./domain";
 import { fetchImmutable } from "./fetchimmutable";
 import { t } from "./i18n";
 
@@ -9,7 +10,7 @@ export type ForecastVariableId = "tmp2m" | "prate";
  * bare ``latest.json``; the other live models use ``latest-<model>.json``.
  * The radar mosaic has no live feed at all: it is an observation archive
  * that reaches the app only as showcase cases. */
-export type ForecastModelId = "gfs" | "ecmwf" | "sflux" | "radar";
+export type ForecastModelId = "gfs" | "ecmwf" | "sflux" | "hrrr" | "radar";
 
 export interface ForecastModelInfo {
   id: ForecastModelId;
@@ -25,6 +26,15 @@ export interface ForecastModelInfo {
    * a frame's offset is time elapsed since — so the viewer labels it as
    * such (mirrors `SourceSpec.observation` in xue/sources.py). */
   observation?: boolean;
+  /** The part of the world a regional model covers, as [west, south, east,
+   * north] in degrees: where the camera goes when the model is opened on a
+   * view that shows none of it. A global model has none. */
+  region?: readonly [number, number, number, number];
+  /** The model's own grid on its map projection, for a model the encoder
+   * resampled onto the regular grid the bundles carry (`domain.ts`): the
+   * renderers clip to it, since the rectangle around a conic footprint
+   * holds corners the model never forecast. */
+  domain?: LambertDomain;
 }
 
 export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
@@ -33,6 +43,17 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
   // only source that ships the dswrf solar-radiation bundle.
   sflux: { id: "sflux", label: "GFS-SFLUX", product: "sfluxgrb", latestFilename: "latest-sflux.json" },
   ecmwf: { id: "ecmwf", label: "ECMWF", product: "ifs-0p25", latestFilename: "latest-ecmwf.json" },
+  // NOAA HRRR, 3 km over the contiguous United States, a new cycle every
+  // hour: a regional model, resampled by the encoder from its Lambert
+  // conformal grid onto a 0.03° one over the domain's footprint.
+  hrrr: {
+    id: "hrrr",
+    label: "HRRR",
+    product: "wrfsfc",
+    latestFilename: "latest-hrrr.json",
+    region: [-134.1, 21.12, -60.9, 52.62],
+    domain: HRRR_DOMAIN,
+  },
   // CMA weather radar level-3 mosaic composite reflectivity: observations,
   // not a forecast, and published only as showcase cases.
   radar: { id: "radar", label: "CMA-RADAR", product: "l3-mst-cref", observation: true },
@@ -44,7 +65,7 @@ export function isObservationModel(model: ForecastModelId): boolean {
 }
 
 /** The live feeds, in model-switch order. The radar archive is not one. */
-export const FORECAST_MODEL_IDS: readonly ForecastModelId[] = ["gfs", "sflux", "ecmwf"];
+export const FORECAST_MODEL_IDS: readonly ForecastModelId[] = ["gfs", "sflux", "ecmwf", "hrrr"];
 
 function modelForManifestString(model: unknown): ForecastModelInfo | null {
   for (const info of Object.values(FORECAST_MODELS)) {

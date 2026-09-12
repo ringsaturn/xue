@@ -171,6 +171,18 @@ pub fn raster_expression(variable_id: &str, unit: &str) -> Result<String> {
             }
             Ok("A".into())
         }
+        // Composite reflectivity in dBZ, which GDAL's GRIB tables spell
+        // "dB" and the radar mosaic's NetCDF spells in full; sub-zero
+        // returns are below the codebook, no echo either way.
+        "cref" => {
+            if !["db", "dbz"].contains(&compact_unit(unit).as_str()) {
+                return Err(EncodeError::conversion(format!(
+                    "unsupported reflectivity unit: {}",
+                    if unit.is_empty() { "<missing>" } else { unit }
+                )));
+            }
+            Ok("maximum(0,minimum(80,A))".into())
+        }
         // Visibility: GRIB2 carries metres, the codebook quantizes km.
         "vis" => {
             if !["m", "metre", "meter", "metres", "meters"].contains(&compact_unit(unit).as_str()) {
@@ -421,7 +433,7 @@ fn band_matches(variable_id: &str, band: &BandInfo) -> Result<bool> {
         }
         // The entire atmosphere (surface type 10), which GDAL spells
         // `0-EATM`; the per-layer cloud covers are never downloaded.
-        "tcdc" => {
+        "tcdc" | "cref" => {
             element == variable_spec(variable_id)?.grib_element
                 && (short_name == "0-EATM" || searchable(band).to_lowercase().contains("entire atmosphere"))
         }
@@ -433,10 +445,11 @@ fn band_matches(variable_id: &str, band: &BandInfo) -> Result<bool> {
         // PRMSL on GRIB2 surface 101 (mean sea level); GDAL spells that
         // short name `0-MSL`, and the phrase fallback catches drivers that
         // do not. ECMWF `msl` is plain pressure on that surface (the
-        // registry's 0/3/0 alias), which GDAL names PRES — the surface is
-        // what makes it the same field.
+        // registry's 0/3/0 alias), which GDAL names PRES, and HRRR's is the
+        // MAPS reduction MSLMA (the 0/3/198 alias) — the surface is what
+        // makes them the same field.
         "prmsl" => {
-            matches!(element.as_str(), "PRMSL" | "PRES")
+            matches!(element.as_str(), "PRMSL" | "PRES" | "MSLMA")
                 && (short_name == "0-MSL"
                     || searchable(band).to_lowercase().contains("mean sea level"))
         }

@@ -177,7 +177,7 @@ def parse_case(payload: dict[str, Any], *, source_name: str = "<case>") -> CaseS
             raise ShowcaseError(f"case {case_id}: only an observation case is built from a dataset file")
         if not isinstance(run, str) or not run:
             raise ShowcaseError(f"case {case_id}: run must be a UTC cycle in YYYYMMDDHH format")
-        parse_run(run)
+        parse_run(run, source.id)
 
     hours = payload.get("hours")
     if not isinstance(hours, int) or isinstance(hours, bool) or hours <= 0:
@@ -327,7 +327,7 @@ def build_case(
             )
         LOG.info("reading %s observation series %s", source.manifest_model, inputs)
     else:
-        run = parse_run(spec.run)
+        run = parse_run(spec.run, source.id)
         input_ids = tuple(
             dict.fromkeys(
                 input_id for bundle_id in spec.variables for input_id in bundle_input_ids(source, bundle_id)

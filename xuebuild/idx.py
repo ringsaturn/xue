@@ -57,14 +57,22 @@ def field_byte_range(
     *,
     file_size: int | None = None,
     excluded_phrases: tuple[str, ...] = (),
+    alternate_fields: tuple[str, ...] = (),
 ) -> ByteRange:
+    """Byte range of the one record ``target_field`` names. When it names
+    none, each of ``alternate_fields`` is tried in turn — the same quantity
+    under another product's spelling — and the first that names exactly one
+    record wins; a phrase that names several is an error whichever it is."""
     records = parse_index(text)
-    matches = [
-        index
-        for index, record in enumerate(records)
-        if target_field in f":{record.description}"
-        and not any(phrase in record.description for phrase in excluded_phrases)
-    ]
+    for field in (target_field, *alternate_fields):
+        matches = [
+            index
+            for index, record in enumerate(records)
+            if field in f":{record.description}"
+            and not any(phrase in record.description for phrase in excluded_phrases)
+        ]
+        if matches:
+            break
     if len(matches) != 1:
         raise DownloadError(
             f"expected exactly one {target_field} record in .idx, found {len(matches)}"

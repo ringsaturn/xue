@@ -74,6 +74,7 @@ export const ko: Record<MessageKey, string> = {
   creditsTrigger: "자료 출처",
   creditsHeading: "자료 출처 및 감사의 글",
   creditsGfs: "예보 자료 · GFS 0.25° 및 SFLUX",
+  creditsHrrr: "예보 자료 · HRRR 3 KM, 미국 본토",
   creditsEcmwf: "수정된 ECMWF 자료 포함 · CC BY 4.0",
   creditsRadar: "레이더 합성도",
   creditsBasemap: "배경지도 · © OPENSTREETMAP 기여자",

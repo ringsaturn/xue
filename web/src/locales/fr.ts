@@ -72,6 +72,7 @@ export const fr: Record<MessageKey, string> = {
   creditsTrigger: "SOURCES",
   creditsHeading: "DONNÉES & CRÉDITS",
   creditsGfs: "DONNÉES DE PRÉVISION · GFS 0.25° ET SFLUX",
+  creditsHrrr: "DONNÉES DE PRÉVISION · HRRR 3 KM, ÉTATS-UNIS CONTIGUS",
   creditsEcmwf: "CONTIENT DES DONNÉES ECMWF MODIFIÉES · CC BY 4.0",
   creditsRadar: "MOSAÏQUE RADAR",
   creditsBasemap: "FOND DE CARTE · © CONTRIBUTEURS OPENSTREETMAP",

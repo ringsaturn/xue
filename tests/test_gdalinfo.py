@@ -34,6 +34,9 @@ from xuebuild.errors import ConversionError
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 FIXTURE_GRIB = REPOSITORY_ROOT / "tests" / "fixtures" / "gfs.2026081406.f000.crop.grib2"
+# A GRIB on a map projection: the converter recognises one from the
+# coordinate system the inspection reports.
+FIXTURE_PROJECTED_GRIB = REPOSITORY_ROOT / "tests" / "fixtures" / "hrrr.2026091100.f000.crop.grib2"
 
 # The keys xuebuild reads off a band. gdalinfo reports plenty more; nothing
 # here promises those, so nothing here compares them.
@@ -110,6 +113,37 @@ class NativeMatchesTheCommandLine(unittest.TestCase):
                     native_band.get("metadata", {}).get("", {}),
                     cli_band.get("metadata", {}).get("", {}),
                 )
+
+
+def wheel_reports_coordinate_systems() -> bool:
+    """Whether the resolved wheel reports `coordinateSystem` — newer again
+    than `gdal_info` itself, and what a projected source (HRRR) needs."""
+    return wheel_can_inspect() and "coordinateSystem" in native.require().gdal_info(str(FIXTURE_GRIB))
+
+
+@unittest.skipUnless(wheel_reports_coordinate_systems(), "the installed xuepy wheel reports no coordinate system")
+@requires_cli
+class CoordinateSystemMatchesTheCommandLine(unittest.TestCase):
+    """The WKT is what tells a projected grid from a regular one, so the two
+    sources must print the same text — a geographic system for the global
+    grids, the Lambert conformal conic for HRRR."""
+
+    def test_the_wkt_is_the_same_text(self) -> None:
+        for fixture in (FIXTURE_GRIB, FIXTURE_PROJECTED_GRIB):
+            with self.subTest(fixture=fixture.name):
+                native_wkt = native.require().gdal_info(str(fixture))["coordinateSystem"]["wkt"]
+                self.assertEqual(native_wkt, cli_info(fixture)["coordinateSystem"]["wkt"])
+
+    def test_the_grid_is_read_the_same_way(self) -> None:
+        from xuebuild.binconvert import _grid_info
+        from xuebuild.sources import source_spec
+
+        with mock.patch.dict(os.environ, {"XUE_ENCODER": "native"}):
+            through_wheel = _grid_info(FIXTURE_PROJECTED_GRIB, source_spec("hrrr"))
+        with mock.patch.dict(os.environ, {"XUE_ENCODER": "python"}):
+            through_cli = _grid_info(FIXTURE_PROJECTED_GRIB, source_spec("hrrr"))
+        self.assertEqual(through_wheel.metadata(), through_cli.metadata())
+        self.assertEqual(through_wheel.resample.source, through_cli.resample.source)
 
 
 @requires_native_info

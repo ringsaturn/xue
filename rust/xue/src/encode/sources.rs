@@ -8,6 +8,7 @@
 //! whatever times the file carries.
 
 use crate::encode::errors::{EncodeError, Result};
+use crate::encode::reproject::Regrid;
 
 /// A second file family of the same cycle some of a source's inputs are read
 /// from — GFS-Wave beside the pgrb2 atmosphere. The fetcher
@@ -68,6 +69,13 @@ pub struct SourceSpec {
     /// True for a source that is not a forecast at all: one local file holding
     /// a series of observed analyses, read through `observation.rs`.
     pub observation: bool,
+    /// Set when the source's records are on a map projection rather than a
+    /// regular latitude/longitude grid, and must be resampled onto one of
+    /// this step before anything else reads them (`reproject.rs`). The grid
+    /// the bundles carry is then the regular one; `production_grid` and
+    /// `tile` describe it. Mirrors `SourceSpec.regrid` in
+    /// `xuebuild/sources.py`.
+    pub regrid: Option<Regrid>,
 }
 
 impl SourceSpec {
@@ -165,6 +173,7 @@ pub const SOURCES: &[SourceSpec] = &[
         bundle_vector_ids: &["wind10m", "wind925", "wind850", "wind250", "qflux850", "wave"],
         production_grid: (1440, 721),
         tile: (48, 52),
+        regrid: None,
         observation: false,
     },
     SourceSpec {
@@ -194,6 +203,7 @@ pub const SOURCES: &[SourceSpec] = &[
         bundle_vector_ids: &["wind10m", "wind925", "wind850", "wind250", "qflux850"],
         production_grid: (1440, 721),
         tile: (48, 52),
+        regrid: None,
         observation: false,
     },
     // GFS surface flux files on the native ~13 km T1534 Gaussian grid. Adds
@@ -214,6 +224,44 @@ pub const SOURCES: &[SourceSpec] = &[
         bundle_vector_ids: &["wind10m"],
         production_grid: (3072, 1536),
         tile: (96, 96),
+        regrid: None,
+        observation: false,
+    },
+    // NOAA HRRR: the 3 km convection-allowing model over the contiguous
+    // United States, a cycle every hour, hourly to F18. Computed on a
+    // Lambert conformal conic grid (1799 x 1059), so every plane is
+    // resampled onto a regular 0.03° grid over the domain's footprint and
+    // the bundles carry that grid. Read from the 2-D surface file, which
+    // carries no 250 hPa height and no isobaric humidity; its sea level
+    // pressure is the MAPS reduction (`MSLMA`, the registry's 0/3/198
+    // alias) and its composite reflectivity is published under the radar
+    // mosaic's `cref`. Mirrors `xuebuild/sources.py`.
+    SourceSpec {
+        id: "hrrr",
+        manifest_model: "HRRR",
+        product: "wrfsfc",
+        latest_filename: Some("latest-hrrr.json"),
+        steps: &[(18, 1)],
+        input_variable_ids: &[
+            "tmp2m", "prate", "ugrd10m", "vgrd10m", "prmsl", "hgt850", "hgt700", "hgt500",
+            "tmp925", "tmp850", "tmp500", "ugrd925", "vgrd925", "ugrd850", "vgrd850", "ugrd250",
+            "vgrd250", "gust", "tcdc", "lcdc", "mcdc", "hcdc", "cape", "vis", "dpt2m", "cref",
+        ],
+        companion_files: &[],
+        accumulated_precipitation: false,
+        averaged_precipitation: false,
+        average_window_hours: 6,
+        optional_at_analysis: &[],
+        bundle_scalar_ids: &[
+            "tmp2m", "prate", "prmsl", "hgt850", "hgt700", "hgt500", "tmp925", "tmp850", "tmp500",
+            "gust", "tcdc", "lcdc", "mcdc", "hcdc", "cape", "vis", "dpt2m", "cref",
+        ],
+        bundle_vector_ids: &["wind10m", "wind925", "wind850", "wind250"],
+        // The 0.03° grid over the footprint of the 1799 x 1059 domain, from
+        // 134.10 W, 52.62 N to 60.90 W, 21.12 N.
+        production_grid: (2441, 1051),
+        tile: (64, 64),
+        regrid: Some(Regrid { step: 0.03 }),
         observation: false,
     },
     // CMA weather radar level-3 mosaic composite reflectivity: an observation
@@ -236,6 +284,7 @@ pub const SOURCES: &[SourceSpec] = &[
         // is ever built with require_complete.
         production_grid: (0, 0),
         tile: (64, 64),
+        regrid: None,
         observation: true,
     },
 ];
@@ -281,7 +330,7 @@ mod tests {
         assert!(gfs.companion_of("tmpsfc").is_none());
         // Assembly order: the companion's records come last.
         assert_eq!(&gfs.input_variable_ids[gfs.input_variable_ids.len() - 3..], wave.variable_ids);
-        for model in ["ecmwf", "sflux", "radar"] {
+        for model in ["ecmwf", "sflux", "hrrr", "radar"] {
             assert!(source_spec(model).expect(model).companion_files.is_empty(), "{model}");
         }
     }

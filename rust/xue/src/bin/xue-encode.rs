@@ -15,7 +15,7 @@ usage: xue-encode convert-bin <input>... --output <dir> [options]
   <input>                  a GRIB directory, one or more GRIB files, or one
                            NetCDF file for an observation source
   --output <dir>           output directory for the per-variable .xue files
-  --model <name>           gfs | ecmwf | sflux | radar        (default gfs)
+  --model <name>           gfs | ecmwf | sflux | hrrr | radar (default gfs)
   --profile <name>         quality | compact | balanced       (default quality)
   --manifest <path>        write a schema v5 manifest.json here
   --latest <path>          also write the mutable live pointer here

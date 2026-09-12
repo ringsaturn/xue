@@ -133,6 +133,7 @@ export const en = {
   creditsTrigger: "SOURCES",
   creditsHeading: "DATA & CREDITS",
   creditsGfs: "FORECAST DATA · GFS 0.25° AND SFLUX",
+  creditsHrrr: "FORECAST DATA · HRRR 3 KM, CONTIGUOUS US",
   creditsEcmwf: "CONTAINS MODIFIED ECMWF DATA · CC BY 4.0",
   creditsRadar: "RADAR MOSAIC",
   creditsBasemap: "BASEMAP · © OPENSTREETMAP CONTRIBUTORS",

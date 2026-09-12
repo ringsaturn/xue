@@ -12,10 +12,12 @@ data/work/
 web/public/data/gfs.*/
 web/public/data/ecmwf.*/
 web/public/data/sflux.*/
+web/public/data/hrrr.*/
 web/public/data/manifest.json
 web/public/data/latest.json
 web/public/data/latest-ecmwf.json
 web/public/data/latest-sflux.json
+web/public/data/latest-hrrr.json
 web/public/data/showcase/
 # Scratch case definitions for local development; the curated set is
 # showcase/cases/ and is checked in.

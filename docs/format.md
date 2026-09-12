@@ -310,7 +310,7 @@ no chart for.
 | `ugrd10m` | 0 / 2 / 2 | 103, 10 m | |
 | `vgrd10m` | 0 / 2 / 3 | 103, 10 m | |
 | `dswrf` | 0 / 4 / 192 | 1, 0 | NCEP local parameter |
-| `cref` | 0 / 16 / 5 | 10, no value | Composite reflectivity, entire atmosphere |
+| `cref` | 0 / 16 / 5 | 10, no value | Composite reflectivity, entire atmosphere — observed (the radar mosaic) or forecast (HRRR's `REFC`, NCEP-local 0 / 16 / 196, accepted on input and never written) |
 | `gust` | 0 / 2 / 22 | 1, 0 | Instantaneous surface wind gust |
 | `tcdc` | 0 / 6 / 1 | 10, no value | Total cloud cover, entire atmosphere; the instantaneous record, not the interval average |
 | `cape` | 0 / 7 / 6 | 1, 0 | Surface-based CAPE (not the mixed-layer variants on surface type 108) |
@@ -325,7 +325,7 @@ no chart for.
 | `perpw` | 10 / 0 / 11 | 1, no value | Primary wave mean period (GFS-Wave) |
 | `dirpw` | 10 / 0 / 10 | 1, no value | Primary wave direction, degrees true the waves come from (GFS-Wave); a record's 360 is reduced to 0 |
 | `uwave` / `vwave` | 10 / 0 / 250, 10 / 0 / 251 | 1, no value | Wave vector components in metres: the significant wave height laid along the direction the waves travel, derived by the encoder from `htsgw` and `dirpw` as the wind's `(-h sin θ, -h cos θ)` — Xue-local parameter numbers |
-| `prmsl` | 0 / 3 / 1 | 101, no value | Mean sea level pressure, the quantity ECMWF calls `msl` and encodes as 0 / 3 / 0 on this surface — accepted on input, never written (not NCEP's MSLET, 0 / 3 / 192) |
+| `prmsl` | 0 / 3 / 1 | 101, no value | Mean sea level pressure, the quantity ECMWF calls `msl` and encodes as 0 / 3 / 0 on this surface, and HRRR writes as its MAPS reduction `MSLMA`, 0 / 3 / 198 — both accepted on input, never written (not NCEP's MSLET, 0 / 3 / 192) |
 | `hgt<level>` | 0 / 3 / 5 | 100, `<level>` hPa in Pa | Geopotential height, one variable per isobaric surface |
 | `tmp<level>` | 0 / 0 / 0 | 100, `<level>` hPa in Pa | Temperature on the isobaric surface |
 | `rh<level>` | 0 / 1 / 1 | 100, `<level>` hPa in Pa | Relative humidity on the isobaric surface |
@@ -454,6 +454,29 @@ satisfies trivially:
   file; a renderer must draw nothing there rather than clamp, which would
   smear the border across the map.
 
+#### Projected Sources
+
+A model computed on a map projection (HRRR, Lambert conformal conic) does
+not arrive on a grid this block can describe, and the block is not
+widened for it: the encoder resamples every plane onto a regular
+latitude/longitude grid before anything else reads it, and the file is an
+ordinary regional file of that grid. The rule for the target is fixed so a
+product lands on one grid for all time: the regular grid of the source's
+declared step whose origin is a whole multiple of the step and which
+covers the extremes of longitude and latitude the source's boundary cell
+centers reach; each target cell center is projected with the source's own
+forward formulas and the source plane is bilinearly interpolated there. A
+conic domain is a trapezoid on that rectangle, and the corners it never
+covered are neither gaps nor a reserved code — the format has neither —
+but the nearest source cell continued outwards (the sampling coordinate is
+clamped to the source grid), so the plane is complete, no filter or
+contour meets an edge, and the extension costs almost nothing compressed.
+Those cells are not a forecast: a reader that knows the source's
+projection clips to its footprint, and one that does not draws the
+extension. The reference pipeline documents the arithmetic in
+`xuebuild/reproject.py`; the native encoder repeats it and the two are
+held byte-identical.
+
 `model` and `product` identify the source dataset. Registered pairs:
 
 | `model` | `product` | Grid | Steps published | Notes |
@@ -461,7 +484,8 @@ satisfies trivially:
 | `GFS` | `pgrb2.0p25` | 1440 × 721, 0.25° | 1 h to f120, 3 h to f240 | All series include the analysis frame (f000). `prate` is an instantaneous rate at every step |
 | `ECMWF` | `ifs-0p25` | 1440 × 721, 0.25° | 3 h to 144 h, 6 h to 240 h | `prate` is de-accumulated from the run-total `tp`, so its series has no analysis frame and starts at `firstFrameOffset: 3` |
 | `GFS-SFLUX` | `sfluxgrb` | 3072 × 1536 Gaussian, ~13 km | 1 h to f120, 3 h to f240 | `prate` is de-averaged from window-cumulative records and starts at `firstFrameOffset: 1`; the only source shipping `dswrf` |
-| `CMA-RADAR` | `l3-mst-cref` | tile grid, 360/(256·2^z) degrees | 6 min, as published | Observations, not a forecast: `runTime` is the first observation and offsets count from it. The only source shipping `cref`, and the only one whose `unitSeconds` is not 3600; the axis lists its offsets wherever a publication was missed |
+| `HRRR` | `wrfsfc` | 2441 × 1051, 0.03°, regional (134.10 W – 60.90 W, 52.62 N – 21.12 N) | 1 h to f18 | A new cycle every hour. Resampled by the encoder from the model's 3 km Lambert conformal grid (see "Projected sources" below); the rectangle's corners the conic domain never covered repeat the nearest source cell. Its `prmsl` is the MAPS reduction and its `cref` the model's forecast reflectivity |
+| `CMA-RADAR` | `l3-mst-cref` | tile grid, 360/(256·2^z) degrees | 6 min, as published | Observations, not a forecast: `runTime` is the first observation and offsets count from it. The only one whose `unitSeconds` is not 3600; the axis lists its offsets wherever a publication was missed |
 
 How far a run is published is a pipeline choice, not a format constraint;
 the steps above are what each source makes available. A uniform series

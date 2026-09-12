@@ -204,16 +204,34 @@ publishing data at the new version.**
 ### Encoder pipeline (`xuebuild/`)
 
 - `sources.py` — the per-model registry (`SourceSpec`): where the data comes
-  from, the published time axis as `(last_hour, step)` segments, which input
-  variables are fetched, which bundles are published, the production grid, and
-  fetch concurrency. **Adding or changing a model starts here**, and the
-  frontend mirror is `FORECAST_MODELS` in `web/src/manifest.ts`. A source with
+  from, the published time axis as `(last_hour, step)` segments (whose last
+  boundary is `horizon_hours`, the `--hours` default), the cycle cadence
+  (`cycle_hours`: 6 for the global models, 1 for HRRR — `parse_run` and
+  `resolve_run` read it), which input variables are fetched, which bundles
+  are published, the production grid, and fetch concurrency. **Adding or
+  changing a model starts here**, and the frontend mirror is
+  `FORECAST_MODELS` in `web/src/manifest.ts`. A source with
   `observation=True` (`radar`) is not a forecast at all: no live pointer, no
   cron job, no fetch — one local NetCDF file per event, read by
-  `observation.py`, with whatever time axis the file carries.
+  `observation.py`, with whatever time axis the file carries. A source with
+  a `regrid` (`hrrr`) is computed on a map projection: `_grid_info` reads
+  the Lambert conformal parameters out of GDAL's WKT (`reproject.py`, and
+  the wheel's `gdal_info` reports `coordinateSystem.wkt` for it), builds a
+  `Resampler` onto the regular grid of that step over the source's
+  footprint, and `_extract_planes` resamples each plane (bilinear, edge
+  cells continued into the corners the conic domain never covered) before
+  the crop; `production_grid` and `tile` describe the regular grid. The
+  arithmetic is repeated by `rust/xue/src/encode/reproject.rs` and held
+  byte-identical (`tests/test_hrrr.py`), so its op order is not free. The
+  shell knows the model's footprint (`web/src/domain.ts`,
+  `FORECAST_MODELS[].domain`): the raster shader, the particles, the probe
+  and the contour labels all clip to it, and `region` is where the camera
+  goes when a regional model is opened on a view showing none of it.
 - `variables.py` — the variable registry, in GRIB2's own terms: the parameter
   triple, the fixed surface, the metadata label and unit, plus the GRIB
-  matching hints (element, `.idx` phrase, ECMWF param). One entry per
+  matching hints (element, `.idx` phrase and its alternates at another
+  centre — HRRR's `MSLMA` under `prmsl`, `REFC` under `cref` — ECMWF
+  param). One entry per
   variable feeds both record matching and the schema v3 metadata block; it
   assigns no container id (see the delivery contract above). Some entries
   are *input-only*: ECMWF `tp` de-accumulates into `prate`, sflux

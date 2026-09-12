@@ -1,0 +1,60 @@
+name: publish hrrr
+
+# NOAA HRRR, 3 km over the contiguous United States: a new cycle every hour,
+# hourly to F18, resampled from the model's Lambert conformal grid onto a
+# 0.03° one (2441 × 1051) by the encoder. Nineteen frames of 2.6 million
+# cells is a fraction of a GFS run's work, so the run is split into a few
+# jobs rather than sixteen — a publish every hour should not ask the runner
+# pool for much. The pipeline lives in the reusable publish.yml.
+
+on:
+  schedule:
+    # A cycle's F18 lands about 55 minutes after the hour; ten past, the
+    # previous hour's cycle is complete and the resolve step finds it (or
+    # the one before, on a late hour — a run is only ever taken whole).
+    - cron: "10 * * * *"
+  workflow_dispatch:
+    inputs:
+      run:
+        description: "Cycle to publish: latest or YYYYMMDDHH (any hour)"
+        type: string
+        default: latest
+      profile:
+        description: "Quantization/compression profile"
+        type: choice
+        options: [balanced, quality, compact]
+        default: balanced
+      keep:
+        description: "Published runs to keep on R2 (1 = live run only)"
+        type: string
+        default: "1"
+      force:
+        description: "Rebuild even when R2 already serves this run"
+        type: boolean
+        default: false
+      dry_run:
+        description: "Build and report what pruning would delete, but write nothing to R2"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-hrrr
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    # Scheduled runs on forks would publish into a bucket they cannot reach.
+    if: github.event_name != 'schedule' || github.repository == 'ringsaturn/xue'
+    uses: ./.github/workflows/publish.yml
+    with:
+      model: hrrr
+      run: ${{ inputs.run || 'latest' }}
+      profile: ${{ inputs.profile || 'balanced' }}
+      keep: ${{ inputs.keep || '1' }}
+      force: ${{ inputs.force || false }}
+      dry_run: ${{ inputs.dry_run || false }}
+      max_jobs: 4
+    secrets: inherit

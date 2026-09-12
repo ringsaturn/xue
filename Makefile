@@ -1,11 +1,14 @@
 PYTHON ?= $(shell test -x .venv/bin/python && echo .venv/bin/python || echo python3)
 # RUN ?= 2026081506
 RUN ?= latest
-HOURS ?= 240
+# Last forecast hour to build; empty takes the whole axis the model publishes
+# (240 for the global models, 18 for HRRR).
+HOURS ?=
 FORCE ?=
 PROFILE ?= balanced
 # Forecast source: gfs (NOAA 0.25°, hourly), ecmwf (IFS open data, 3-hourly),
-# or sflux (GFS surface flux, native ~13 km, hourly, adds the dswrf layer).
+# sflux (GFS surface flux, native ~13 km, hourly, adds the dswrf layer), or
+# hrrr (NOAA HRRR, 3 km over the contiguous US, a cycle every hour, to F18).
 MODEL ?= gfs
 # Published runs of one model to keep on R2 (`make prune-r2`). One means the
 # live run only: the bucket carries no history.
@@ -99,13 +102,14 @@ bench-lossy:
 # WebCodecs random-access spike: can the browser's native VideoDecoder
 # random-access the lossless H.264 stream byte-exactly?
 spike-webcodecs:
-	$(PYTHON) scripts/prep_webcodecs_spike.py data/raw/gfs.$(RUN) --frames $(HOURS)
+	$(PYTHON) scripts/prep_webcodecs_spike.py data/raw/gfs.$(RUN) --frames $(or $(HOURS),240)
 
 # Default build: per-variable Xue bundles plus the WebGL2 frontend.
 # MODEL=ecmwf builds the ECMWF IFS open data feed instead of GFS;
-# MODEL=sflux builds the native-resolution GFS surface flux feed.
+# MODEL=sflux builds the native-resolution GFS surface flux feed;
+# MODEL=hrrr builds the hourly 3 km HRRR feed over the contiguous US.
 mvp: check install wasm
-	$(PYTHON) -m xuebuild build-bin --model $(MODEL) --run $(RUN) --hours $(HOURS) --profile $(PROFILE) $(FORCE)
+	$(PYTHON) -m xuebuild build-bin --model $(MODEL) --run $(RUN) $(if $(HOURS),--hours $(HOURS)) --profile $(PROFILE) $(FORCE)
 	npm run build
 
 serve:

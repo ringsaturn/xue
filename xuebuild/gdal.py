@@ -213,6 +213,17 @@ def visibility_expression(unit: str) -> str:
     return "A/1000"
 
 
+def reflectivity_expression(unit: str) -> str:
+    """Composite reflectivity in dBZ, which GDAL's GRIB tables spell "dB"
+    and the radar mosaic's NetCDF spells in full; clamped to the cref
+    codebook's range. Sub-zero returns are below the codebook — the mosaic
+    treats them as no echo, and so does this."""
+    compact = re.sub(r"[\s*()\[\]]", "", unit.strip().lower())
+    if compact not in {"db", "dbz"}:
+        raise ConversionError(f"unsupported reflectivity unit: {unit or '<missing>'}")
+    return "maximum(0,minimum(80,A))"
+
+
 def vertical_velocity_expression(unit: str) -> str:
     """Vertical velocity in pressure coordinates, already in Pa/s."""
     compact = re.sub(r"[\s*()\[\]]", "", unit.strip().lower())
@@ -367,6 +378,8 @@ def raster_expression(variable_id: str, unit: str) -> str:
         return cape_expression(unit)
     if variable_id == "vis":
         return visibility_expression(unit)
+    if variable_id == "cref":
+        return reflectivity_expression(unit)
     if variable_id == "dpt2m":
         return celsius_expression(unit, low=-70, high=40)
     if variable_id == "aptmp2m":
@@ -527,8 +540,9 @@ def _is_mean_sea_level_pressure(metadata: dict[str, str], description: str) -> b
     """PRMSL on GRIB2 surface 101 (mean sea level). GDAL spells that short
     name ``0-MSL``; the phrase fallback catches drivers that do not. ECMWF
     ``msl`` is plain pressure on that surface (the registry's 0/3/0 alias),
-    which GDAL names PRES — the surface is what makes it the same field."""
-    if metadata.get("GRIB_ELEMENT", "").upper() not in {"PRMSL", "PRES"}:
+    which GDAL names PRES, and HRRR's is the MAPS reduction MSLMA (the
+    0/3/198 alias) — the surface is what makes them the same field."""
+    if metadata.get("GRIB_ELEMENT", "").upper() not in {"PRMSL", "PRES", "MSLMA"}:
         return False
     short_name = metadata.get("GRIB_SHORT_NAME", "").upper()
     searchable = " ".join(
@@ -589,7 +603,7 @@ def _band_matches(variable_id: str, metadata: dict[str, str], description: str) 
         return _is_total_precipitation(metadata, description)
     if variable_id in ("dswrf", "gust", "cape", "vis", "tmpsfc", "icec", "icetk", "htsgw", "perpw", "dirpw"):
         return _is_surface_record(metadata, description, variable_spec(variable_id).grib_element)
-    if variable_id == "tcdc":
+    if variable_id in ("tcdc", "cref"):
         return _is_entire_atmosphere_record(metadata, description, variable_spec(variable_id).grib_element)
     if variable_id in ("lcdc", "mcdc", "hcdc"):
         return _is_cloud_layer_record(metadata, description, variable_spec(variable_id).grib_element)

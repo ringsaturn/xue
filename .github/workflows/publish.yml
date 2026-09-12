@@ -1,7 +1,8 @@
 name: publish run
 
 # Reusable publishing pipeline, one call per source. Callers
-# (publish-gfs.yml, publish-sflux.yml, publish-ecmwf.yml) own the schedule
+# (publish-gfs.yml, publish-sflux.yml, publish-ecmwf.yml, publish-hrrr.yml)
+# own the schedule
 # and the manual dispatch; this file owns the work, fanned out over three
 # jobs:
 #
@@ -36,7 +37,7 @@ on:
   workflow_call:
     inputs:
       model:
-        description: "Forecast source: gfs, sflux or ecmwf"
+        description: "Forecast source: gfs, sflux, ecmwf or hrrr"
         required: true
         type: string
       run:
@@ -134,7 +135,7 @@ jobs:
         run: |
           set -euo pipefail
           case "$MODEL" in
-            gfs|sflux|ecmwf) ;;
+            gfs|sflux|ecmwf|hrrr) ;;
             *) echo "::error::unknown source: $MODEL"; exit 1 ;;
           esac
           case "$PROFILE" in
@@ -172,7 +173,10 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
         run: |
           set -euo pipefail
-          run=$(uv run python -c "from xuebuild.fetch import resolve_run; print(resolve_run('${RUN_INPUT}', hours=240, model='${MODEL}').id)")
+          # The whole axis the source publishes (240 hours for the global
+          # models, 18 for HRRR) — the same default `build-bin` and
+          # `assemble-run` take below when given no --hours.
+          run=$(uv run python -c "from xuebuild.fetch import resolve_run; from xuebuild.sources import source_spec; print(resolve_run('${RUN_INPUT}', hours=source_spec('${MODEL}').horizon_hours, model='${MODEL}').id)")
           live=$(make -s live-run MODEL="$MODEL" || true)
           echo "run=$run" >> "$GITHUB_OUTPUT"
           if [ "$run" = "$live" ] && [ "$FORCE" != "true" ] && [ -z "$DRY_RUN" ]; then
@@ -298,7 +302,7 @@ jobs:
           set -euo pipefail
           # shellcheck disable=SC2086 # the group is a space-separated list
           uv run python -m xuebuild -v build-bin \
-            --model "$MODEL" --run "$RUN" --hours 240 --profile "$PROFILE" \
+            --model "$MODEL" --run "$RUN" --profile "$PROFILE" \
             --bundles $GROUP \
             > "build-report-$SLUG.json"
           {
@@ -382,7 +386,7 @@ jobs:
           [ "$TOPUP" != "true" ] || base="--base-manifest live-manifest.json"
           # shellcheck disable=SC2086 # the base flag is deliberately unquoted
           uv run python -m xuebuild -v assemble-run \
-            --model "$MODEL" --run "$RUN" --hours 240 $base > assemble-report.json
+            --model "$MODEL" --run "$RUN" $base > assemble-report.json
           {
             echo "### $MODEL $RUN"
             echo

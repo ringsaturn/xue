@@ -72,6 +72,7 @@ export const de: Record<MessageKey, string> = {
   creditsTrigger: "QUELLEN",
   creditsHeading: "DATEN & DANK",
   creditsGfs: "VORHERSAGEDATEN · GFS 0.25° UND SFLUX",
+  creditsHrrr: "VORHERSAGEDATEN · HRRR 3 KM, KONTINENTALE USA",
   creditsEcmwf: "ENTHÄLT VERÄNDERTE ECMWF-DATEN · CC BY 4.0",
   creditsRadar: "RADARKOMPOSIT",
   creditsBasemap: "BASISKARTE · © OPENSTREETMAP-MITWIRKENDE",

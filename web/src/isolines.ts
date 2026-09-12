@@ -23,6 +23,7 @@
 
 import type { GeoGrid } from "./probe";
 import { wrap } from "./probe";
+import { domainContains, lambertCone, type LambertDomain } from "./domain";
 import type { CoverageBox } from "./tiles";
 
 /** A rectangle of full-resolution cells. `column0 + columns` may exceed the
@@ -107,12 +108,16 @@ export function reduceField(
   window: CellWindow,
   coverage: CoverageBox,
   stride: number,
+  domain?: LambertDomain,
 ): Field {
   const columns = Math.ceil(window.columns / stride);
   const rows = Math.ceil(window.rows / stride);
   const values = new Float32Array(columns * rows);
   const masks = coverageMasks(grid, coverage);
   const wraps = grid.wraps && window.columns >= grid.width;
+  // A regional model's footprint is not separable; its test runs per cell,
+  // and only where a domain is set.
+  const cone = domain ? lambertCone(domain) : null;
   for (let by = 0; by < rows; by += 1) {
     for (let bx = 0; bx < columns; bx += 1) {
       let sum = 0;
@@ -120,11 +125,19 @@ export function reduceField(
       for (let dy = 0; dy < stride; dy += 1) {
         const r = window.row0 + by * stride + dy;
         if (r < 0 || r >= grid.height || !masks.row[r]) continue;
+        const latitude = grid.firstLatitude + r * grid.latitudeStep;
         for (let dx = 0; dx < stride; dx += 1) {
           let c = window.column0 + bx * stride + dx;
           if (grid.wraps) c = wrap(c, grid.width);
           else if (c < 0 || c >= grid.width) continue;
           if (!masks.column[c]) continue;
+          if (
+            domain &&
+            cone &&
+            !domainContains(domain, cone, grid.firstLongitude + c * grid.longitudeStep, latitude)
+          ) {
+            continue;
+          }
           sum += plane[r * grid.width + c]!;
           count += 1;
         }
@@ -428,6 +441,9 @@ export interface LabelRequest {
   grid: GeoGrid;
   window: CellWindow;
   coverage: CoverageBox;
+  /** A regional model's own footprint (domain.ts): cells outside it hold
+   * the encoder's edge extension, not a forecast, and are left out. */
+  domain?: LambertDomain;
   stride: number;
   /** Standard deviation of the smoothing in full-resolution cells, matched
    * to the shader's. */
@@ -464,7 +480,7 @@ export interface LabelResult {
 /** The whole job, from a plane to geometry in degrees. */
 export function computeLabels(plane: Uint8Array, request: LabelRequest): LabelResult {
   const { grid, stride } = request;
-  const field = reduceField(plane, grid, request.window, request.coverage, stride);
+  const field = reduceField(plane, grid, request.window, request.coverage, stride, request.domain);
   smoothField(field, request.smoothingCells / stride);
   // Contours are found on codes, so the interval is expressed in codes; the
   // codebook puts every contour on an exact code offset, which is `phase`.

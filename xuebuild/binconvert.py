@@ -51,6 +51,7 @@ from .manifest import (
 from .model import GRIB_PLANE_SOURCE, PlaneSource, SourceFrame
 from .observation import inspect_observation
 from .quantize import PRESSURE_VARIABLE_IDS, PROFILES, PrecipitationCodebook, TemperatureCodebook
+from .reproject import ProjectedGrid, Resampler, build_resampler, lambert_conformal_from_wkt
 from .sources import SourceSpec, source_spec
 from .variables import (
     ISOBARIC_LEVELS_HPA,
@@ -196,8 +197,14 @@ class GridInfo:
     crop: CropWindow | None = None
     """Regional window applied after the roll (showcase cases). When set,
     every field above describes the *cropped* planes, and the window carries
-    the source dimensions gdal_translate actually extracts. Never serialized:
-    the cropped origin and extent already say where the data is."""
+    the source dimensions gdal_translate actually extracts — or, on a
+    projected source, the regular grid the resampler produces. Never
+    serialized: the cropped origin and extent already say where the data is."""
+    resample: Resampler | None = None
+    """Set for a source on a map projection (HRRR): the extracted planes are
+    the projected grid, and every field above describes the regular grid
+    they are resampled onto (:mod:`xuebuild.reproject`), before any crop.
+    Never serialized either — the bundle's grid is the regular one."""
 
     @property
     def wraps(self) -> bool:
@@ -206,6 +213,8 @@ class GridInfo:
     @property
     def source_shape(self) -> tuple[int, int]:
         """(height, width) of the plane gdal_translate extracts."""
+        if self.resample is not None:
+            return self.resample.source_shape
         if self.crop is None:
             return self.height, self.width
         return self.crop.source_height, self.crop.source_width
@@ -288,12 +297,48 @@ def published_bundle_ids(source: SourceSpec) -> tuple[str, ...]:
     return scalars + vectors
 
 
-def _grid_info(path: Path) -> GridInfo:
+def _grid_info(path: Path, source: SourceSpec | None = None) -> GridInfo:
+    """The grid one file's planes are published on. A regular
+    latitude/longitude file describes it outright; a file on a map
+    projection describes the projected grid, and the published one is the
+    regular grid ``source.regrid`` asks for over its footprint — a source
+    that declares no regrid must not be projected, and one that does must
+    be, so a file of the wrong kind is refused rather than misread."""
     info = dataset_info(path, description=f"inspect grid of {path}")
     width, height = (int(value) for value in info["size"])
     transform = info["geoTransform"]
     if transform[2] or transform[4]:
         raise ConversionError(f"rotated grids are unsupported: {path}")
+    projection = lambert_conformal_from_wkt(str(info.get("coordinateSystem", {}).get("wkt", "")))
+    regrid = source.regrid if source is not None else None
+    if projection is not None:
+        if regrid is None:
+            raise ConversionError(f"{path} is on a map projection, which this source does not declare")
+        if transform[1] <= 0 or transform[5] >= 0:
+            raise ConversionError(f"grid must run west-to-east and north-to-south: {path}")
+        resampler = build_resampler(
+            ProjectedGrid(
+                projection=projection,
+                width=width,
+                height=height,
+                x0=float(transform[0]) + float(transform[1]) / 2.0,
+                y0=float(transform[3]) + float(transform[5]) / 2.0,
+                dx=float(transform[1]),
+                dy=-float(transform[5]),
+            ),
+            regrid,
+        )
+        return GridInfo(
+            width=resampler.width,
+            height=resampler.height,
+            first_longitude=resampler.first_longitude,
+            first_latitude=resampler.first_latitude,
+            longitude_step=resampler.step,
+            latitude_step=-resampler.step,
+            resample=resampler,
+        )
+    if regrid is not None:
+        raise ConversionError(f"{path} is a regular grid, but this source declares a projected one")
     lon_step, lat_step = float(transform[1]), float(transform[5])
     if lon_step <= 0 or lat_step >= 0:
         raise ConversionError(f"grid must run west-to-east and north-to-south: {path}")
@@ -433,6 +478,7 @@ def crop_grid(grid: GridInfo, bbox: tuple[float, float, float, float]) -> GridIn
             width=width,
             height=height,
         ),
+        resample=grid.resample,
     )
 
 
@@ -629,10 +675,16 @@ def _extract_planes(
         plane = values[index * plane_size : (index + 1) * plane_size].copy().reshape(source_height, source_width)
         if grid.column_roll:
             plane = np.roll(plane, grid.column_roll, axis=1)
+        # Missing data becomes a value before the plane is resampled, so a
+        # fill never blends into its neighbours; then the projected plane
+        # lands on the regular grid, and only then is a regional window cut.
+        plane = plane_source.apply_fill(plane)
+        plane = _fill_missing(variable_id, plane)
+        if grid.resample is not None:
+            plane = grid.resample.take(plane)
         if grid.crop is not None:
             plane = np.ascontiguousarray(grid.crop.take(plane))
-        plane = plane_source.apply_fill(plane.ravel())
-        plane = _fill_missing(variable_id, plane)
+        plane = plane.ravel()
         if not np.isfinite(plane).all():
             raise ConversionError(f"Xue v1 requires complete planes, found non-finite values in {source}")
         planes[variable_id] = _convert_units(frames[variable_id], plane)
@@ -1337,7 +1389,7 @@ def convert_bin(
                 )
     run_time = per_file[0][variable_ids[0]].run_time.astimezone(UTC)
 
-    grid = _grid_info(grid_path)
+    grid = _grid_info(grid_path, source)
     if require_complete and (grid.width, grid.height) != source.production_grid:
         raise ConversionError(
             f"production build requires a {source.production_grid[0]}x{source.production_grid[1]} grid"

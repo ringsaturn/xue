@@ -335,23 +335,25 @@ pub const VARIABLES: &[VariableSpec] = &[
         gdal_unit: "m/s",
         fill_values: &[],
     },
-    // Radar composite reflectivity: the column maximum, so its fixed surface
-    // is the entire atmosphere (type 10, which carries no value). The only
-    // variable not fetched from GRIB.
+    // Composite reflectivity: the column maximum, so its fixed surface is
+    // the entire atmosphere (type 10, which carries no value). It arrives
+    // two ways under one identity: as the radar mosaic's NetCDF observation
+    // series, and as the reflectivity HRRR forecasts — the `REFC` record,
+    // NCEP's local 0/16/196 (the alias), which GDAL reports in dB.
     VariableSpec {
         id: "cref",
         label: "Composite radar reflectivity",
         output_unit: "dBZ",
         value_range: (0, 80),
-        grib_element: "",
+        grib_element: "REFC",
         grib2_discipline: 0,
         grib2_category: 16,
         grib2_number: 5,
         grib2_level_type: 10,
         grib2_level_value: None,
         grib2_statistical: None,
-        grib2_aliases: &[],
-        gdal_unit: "",
+        grib2_aliases: &[(0, 16, 196)],
+        gdal_unit: "dB",
         fill_values: &[],
     },
     // Three more surface diagnostics, each a GRIB record of its own with no
@@ -670,10 +672,11 @@ pub const VARIABLES: &[VariableSpec] = &[
     // Mean sea level pressure. NCEP publishes two reductions; PRMSL (0/3/1)
     // is the same quantity ECMWF calls `msl` — encoded there as plain
     // pressure (0/3/0) on the mean sea level surface, hence the alias — so
-    // both sources carry the same field under one identity. MSLET (0/3/192,
-    // the NCEP-local Shuell reduction) is a different quantity and is
-    // deliberately not registered. Surface 101 ("mean sea level") carries no
-    // value.
+    // both sources carry the same field under one identity, and HRRR's MAPS
+    // reduction MSLMA (0/3/198, NCEP-local) is accepted under it too. MSLET
+    // (0/3/192, the NCEP-local Shuell reduction) is a different quantity and
+    // is deliberately not registered. Surface 101 ("mean sea level") carries
+    // no value.
     VariableSpec {
         id: "prmsl",
         label: "Mean sea level pressure",
@@ -686,7 +689,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_level_type: 101,
         grib2_level_value: None,
         grib2_statistical: None,
-        grib2_aliases: &[(0, 3, 0)],
+        grib2_aliases: &[(0, 3, 0), (0, 3, 198)],
         gdal_unit: "Pa",
         fill_values: &[],
     },

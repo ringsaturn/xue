@@ -1,9 +1,12 @@
 //! Grid discovery, the -180-first column roll, and regional cropping — the
 //! grid half of `xuebuild/binconvert.py`.
 
+use std::sync::Arc;
+
 use serde_json::{json, Map, Value};
 
 use crate::encode::errors::{EncodeError, Result};
+use crate::encode::reproject::Resampler;
 
 /// A rectangular window cut out of every extracted plane, indexed in the
 /// -180-first layout the column roll produces.
@@ -35,7 +38,7 @@ impl CropWindow {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct GridInfo {
     pub width: usize,
     pub height: usize,
@@ -50,9 +53,15 @@ pub struct GridInfo {
     pub column_roll: usize,
     /// Regional window applied after the roll (showcase cases). When set,
     /// every field above describes the *cropped* planes, and the window
-    /// carries the source dimensions the extraction actually reads. Never
+    /// carries the source dimensions the extraction actually reads — or, on
+    /// a projected source, the regular grid the resampler produces. Never
     /// serialized: the cropped origin and extent already say where the data is.
     pub crop: Option<CropWindow>,
+    /// Set for a source on a map projection (HRRR): the extracted planes are
+    /// the projected grid, and every field above describes the regular grid
+    /// they are resampled onto (`reproject.rs`), before any crop. Shared by
+    /// every extraction worker, hence the `Arc`. Never serialized either.
+    pub resample: Option<Arc<Resampler>>,
 }
 
 impl GridInfo {
@@ -73,6 +82,7 @@ impl GridInfo {
             latitude_step,
             column_roll: 0,
             crop: None,
+            resample: None,
         }
     }
 
@@ -82,6 +92,9 @@ impl GridInfo {
 
     /// `(height, width)` of the plane the extraction reads.
     pub fn source_shape(&self) -> (usize, usize) {
+        if let Some(resample) = &self.resample {
+            return resample.source_shape();
+        }
         match self.crop {
             None => (self.height, self.width),
             Some(crop) => (crop.source_height, crop.source_width),
@@ -101,6 +114,7 @@ impl GridInfo {
             latitude_step: self.latitude_step * 2.0,
             column_roll: 0,
             crop: None,
+            resample: None,
         }
     }
 
@@ -290,6 +304,7 @@ pub fn crop_grid(grid: GridInfo, bbox: (f64, f64, f64, f64)) -> Result<GridInfo>
             width,
             height,
         }),
+        resample: grid.resample.clone(),
     })
 }
 
@@ -318,7 +333,7 @@ mod tests {
             GridInfo::new(80, 80, 118.0, 38.0, WAVE_STEP, -0.25),
             GridInfo::new(80, 80, 118.0, 38.0, 0.25, -0.25),
         ] {
-            let snapped = snap_global_longitudes(grid);
+            let snapped = snap_global_longitudes(grid.clone());
             assert_eq!(snapped.longitude_step, grid.longitude_step);
             assert_eq!(snapped.first_longitude, grid.first_longitude);
         }
@@ -335,7 +350,7 @@ mod tests {
     #[test]
     fn a_grid_more_than_a_thousandth_of_a_cell_short_is_not_global() {
         let grid = GridInfo::new(1440, 721, -180.0, 90.0, 0.25 * (1.0 - 2e-3), -0.25);
-        let snapped = snap_global_longitudes(grid);
+        let snapped = snap_global_longitudes(grid.clone());
         assert_eq!(snapped.longitude_step, grid.longitude_step);
     }
 }

@@ -108,6 +108,7 @@
             "featureList": [
               "NOAA GFS 0.25° and GFS surface-flux 13 km runs, hourly to 120 h and 3-hourly to 240 h",
               "ECMWF IFS 0.25° open data runs, 3-hourly to 144 h and 6-hourly to 240 h",
+              "NOAA HRRR 3 km runs over the contiguous United States, a new cycle every hour, hourly to 18 h, with the model's forecast radar reflectivity",
               "2 m temperature, precipitation rate, 10 m wind with particle animation, downward shortwave radiation",
               "Sea level pressure isobars and 850/700/500/250 hPa geopotential height contours with labelled highs and lows",
               "Upper-air temperature, relative humidity, wind and water vapour flux on isobaric surfaces",
@@ -134,12 +135,13 @@
             "@type": "Dataset",
             "@id": "https://xue.ringsaturn.me/#data",
             "name": "Xue live forecast bundles",
-            "description": "The current NOAA GFS, GFS surface-flux and ECMWF IFS runs converted into the .xue container: 8-bit quantized planes on the native grid with temporal residual prediction and Zstandard compression, one file per variable, streamable by HTTP range request. Only the newest run per source is kept.",
+            "description": "The current NOAA GFS, GFS surface-flux, ECMWF IFS and NOAA HRRR runs converted into the .xue container: 8-bit quantized planes on the native grid with temporal residual prediction and Zstandard compression, one file per variable, streamable by HTTP range request. Only the newest run per source is kept.",
             "url": "https://dataset.ringsaturn.me/xue/",
             "isAccessibleForFree": true,
             "creator": { "@id": "https://github.com/ringsaturn#person" },
             "isBasedOn": [
               { "@type": "Dataset", "name": "NOAA Global Forecast System (GFS)", "url": "https://registry.opendata.aws/noaa-gfs-bdp-pds/" },
+              { "@type": "Dataset", "name": "NOAA High-Resolution Rapid Refresh (HRRR)", "url": "https://registry.opendata.aws/noaa-hrrr-pds/" },
               { "@type": "Dataset", "name": "ECMWF Open Data (real-time)", "url": "https://www.ecmwf.int/en/forecasts/datasets/open-data", "license": "https://creativecommons.org/licenses/by/4.0/" }
             ],
             "spatialCoverage": { "@type": "Place", "geo": { "@type": "GeoShape", "box": "-90 -180 90 180" } },
@@ -152,12 +154,14 @@
               "geopotential height on isobaric surfaces",
               "temperature, relative humidity, wind, water vapour flux, vertical velocity and equivalent potential temperature on isobaric surfaces",
               "wind gust, total and low / middle / high cloud cover, CAPE, visibility, 2 m dew point and apparent temperature",
-              "sea surface (skin) temperature, sea ice cover and thickness, significant wave height, primary wave period, and the wave vector (height along the direction of travel) with particle animation"
+              "sea surface (skin) temperature, sea ice cover and thickness, significant wave height, primary wave period, and the wave vector (height along the direction of travel) with particle animation",
+              "composite radar reflectivity (observed by the CMA mosaic, forecast by HRRR)"
             ],
             "distribution": [
               { "@type": "DataDownload", "name": "GFS live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest.json" },
               { "@type": "DataDownload", "name": "GFS surface-flux live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-sflux.json" },
               { "@type": "DataDownload", "name": "ECMWF live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-ecmwf.json" },
+              { "@type": "DataDownload", "name": "HRRR live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-hrrr.json" },
               { "@type": "DataDownload", "name": "Historical case catalog", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/showcase.json" }
             ]
           },
@@ -178,9 +182,9 @@
     <noscript>
       <div class="noscript-note">
         <p>
-          <strong>Xue</strong> plays whole NOAA GFS and ECMWF IFS weather model runs — 2 m temperature,
+          <strong>Xue</strong> plays whole NOAA GFS, ECMWF IFS and NOAA HRRR weather model runs — 2 m temperature,
           precipitation, 10 m wind, sea level pressure isobars, 500 and 850 hPa charts and other upper-air fields
-          out to 240 hours — as animated forecast maps, decoding them in the browser with WebAssembly and WebGL2.
+          out to 240 hours (18 for HRRR) — as animated forecast maps, decoding them in the browser with WebAssembly and WebGL2.
           It needs JavaScript to run.
         </p>
         <p>
@@ -525,6 +529,11 @@
               <small>IFS 0.25°</small>
               <span class="model-check" aria-hidden="true"></span>
             </button>
+            <button type="button" data-model="hrrr" aria-pressed="false">
+              <span class="model-name">HRRR</span>
+              <small>CONUS 3KM</small>
+              <span class="model-check" aria-hidden="true"></span>
+            </button>
           </div>
         </div>
       </div>
@@ -588,6 +597,13 @@
                 <span class="credits-name">NOAA GFS</span>
                 <small data-i18n="creditsGfs">FORECAST DATA · GFS 0.25° AND SFLUX</small>
                 <span class="credits-arrow" aria-hidden="true">↗</span>
+              </a>
+            </li>
+            <li>
+              <a href="https://registry.opendata.aws/noaa-hrrr-pds/" target="_blank" rel="noreferrer">
+                <span class="credits-name">NOAA HRRR</span>
+                <small data-i18n="creditsHrrr">FORECAST DATA · HRRR 3 KM, CONTIGUOUS US</small>
+                <span class="credits-arrow" aria-hidden="true"></span>
               </a>
             </li>
             <li>

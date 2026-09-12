@@ -9,16 +9,19 @@ import numpy as np
 
 @dataclass(frozen=True, order=True)
 class GfsRun:
+    """One cycle of a forecast source: the UTC hour it started. Which hours
+    a source cycles on is the source's business (``SourceSpec.cycle_hours``
+    — every six hours for the global models, every hour for HRRR), checked
+    where a run is parsed or resolved rather than here."""
+
     time: datetime
 
     def __post_init__(self) -> None:
         if self.time.tzinfo is None:
-            raise ValueError("GFS run time must include a timezone")
+            raise ValueError("run time must include a timezone")
         normalized = self.time.astimezone(UTC)
         if normalized.minute or normalized.second or normalized.microsecond:
-            raise ValueError("GFS run time must be aligned to an hour")
-        if normalized.hour not in (0, 6, 12, 18):
-            raise ValueError("GFS run hour must be 00, 06, 12, or 18 UTC")
+            raise ValueError("run time must be aligned to an hour")
         object.__setattr__(self, "time", normalized)
 
     @property

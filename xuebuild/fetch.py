@@ -35,6 +35,22 @@ LOG = logging.getLogger(__name__)
 BASE_URL = os.environ.get(
     "XUE_GFS_BASE_URL", "https://storage.googleapis.com/global-forecast-system"
 )
+# HRRR is mirrored the same way (registry.opendata.aws/noaa-hrrr-pds), and
+# neither copy of a cycle fills in a whole run at once: the hours land one
+# by one, not always in order, and one mirror can hold an hour the other
+# does not yet (seen 2026-09-12: f002 on Google, not on S3, then the other
+# way round). So a frame is fetched from the first mirror that has it, and a
+# cycle is complete only when one mirror has every hour of it.
+HRRR_BASE_URLS = tuple(
+    url.strip().rstrip("/")
+    for url in os.environ.get(
+        "XUE_HRRR_BASE_URLS",
+        "https://storage.googleapis.com/high-resolution-rapid-refresh,https://noaa-hrrr-bdp-pds.s3.amazonaws.com",
+    ).split(",")
+    if url.strip()
+)
+if not HRRR_BASE_URLS:
+    raise ValueError("XUE_HRRR_BASE_URLS must contain at least one URL")
 ECMWF_BASE_URLS = tuple(
     url.strip().rstrip("/")
     for url in os.environ.get(
@@ -69,16 +85,22 @@ _ECMWF_PACING_LOCK = threading.Lock()
 _ECMWF_NEXT_REQUEST_AT = 0.0
 
 
-def floor_to_cycle(now: datetime) -> datetime:
+def floor_to_cycle(now: datetime, cycle_hours: int = 6) -> datetime:
+    """The most recent cycle start at or before ``now``."""
     current = now.astimezone(UTC)
-    return current.replace(hour=(current.hour // 6) * 6, minute=0, second=0, microsecond=0)
+    return current.replace(hour=(current.hour // cycle_hours) * cycle_hours, minute=0, second=0, microsecond=0)
 
 
-def parse_run(value: str) -> GfsRun:
+def parse_run(value: str, model: str = "gfs") -> GfsRun:
+    """A ``YYYYMMDDHH`` cycle of ``model``, on one of the hours it runs."""
+    spec = source_spec(model)
+    cycles = ", ".join(f"{hour:02d}" for hour in range(0, 24, spec.cycle_hours)) if spec.cycle_hours > 1 else "any hour"
     try:
         parsed = datetime.strptime(value, "%Y%m%d%H").replace(tzinfo=UTC)
     except ValueError as exc:
-        raise DownloadError("--run must be 'latest' or YYYYMMDDHH at 00, 06, 12, or 18 UTC") from exc
+        raise DownloadError(f"--run must be 'latest' or YYYYMMDDHH at {cycles} UTC") from exc
+    if parsed.hour % spec.cycle_hours:
+        raise DownloadError(f"{spec.manifest_model} cycles start at {cycles} UTC, not {parsed.hour:02d}")
     try:
         return GfsRun(parsed)
     except ValueError as exc:
@@ -104,6 +126,15 @@ def object_url(run: GfsRun, forecast_hour: int) -> str:
 def sflux_object_url(run: GfsRun, forecast_hour: int) -> str:
     """GFS surface flux files, published next to pgrb2 in the same bucket."""
     return f"{_noaa_cycle_prefix(run)}gfs.t{run.cycle}z.sfluxgrbf{forecast_hour:03d}.grib2"
+
+
+def hrrr_object_url(run: GfsRun, forecast_hour: int, *, base_url: str | None = None) -> str:
+    """The HRRR 2-D surface file of one forecast hour — its own bucket
+    (``noaa-hrrr-bdp-pds``, mirrored by Google like GFS), one directory per
+    day, the CONUS domain's files under ``conus/``, the hour in two digits:
+    the model never runs past F48."""
+    base = (base_url or HRRR_BASE_URLS[0]).rstrip("/")
+    return f"{base}/hrrr.{run.date}/conus/hrrr.t{run.cycle}z.wrfsfcf{forecast_hour:02d}.grib2"
 
 
 def wave_object_url(run: GfsRun, forecast_hour: int) -> str:
@@ -139,6 +170,8 @@ def model_object_url(run: GfsRun, forecast_hour: int, model: str) -> str:
         return ecmwf_object_url(run, forecast_hour)
     if model == "sflux":
         return sflux_object_url(run, forecast_hour)
+    if model == "hrrr":
+        return hrrr_object_url(run, forecast_hour)
     return object_url(run, forecast_hour)
 
 
@@ -259,6 +292,20 @@ def _run_is_complete(
     model: str,
     exists: Callable[[str], bool],
 ) -> bool:
+    if model == "hrrr":
+        # Every hour, on one mirror: the hours of a cycle land out of order
+        # and the two copies disagree for a while, so the ends prove nothing.
+        # A mirror that cannot be probed is a mirror that cannot serve.
+        for base_url in HRRR_BASE_URLS:
+            try:
+                if all(
+                    exists(hrrr_object_url(run, hour, base_url=base_url))
+                    for hour in source_spec(model).forecast_hours(hours)
+                ):
+                    return True
+            except DownloadError as exc:
+                LOG.warning("could not probe HRRR mirror %s: %s", base_url, exc)
+        return False
     if model != "ecmwf":
         urls = [model_object_url(run, 0, model), model_object_url(run, hours, model)]
         for companion in source_spec(model).companion_files:
@@ -297,21 +344,22 @@ def resolve_run(
     # off-axis --hours fails with the axis description instead of a 404.
     spec.forecast_hours(hours)
     if value != "latest":
-        run = parse_run(value)
+        run = parse_run(value, model)
         if not _run_is_complete(run, hours, model, exists):
             raise DownloadError(f"{label} run {run.id} is incomplete for f000 through f{hours:03d}")
         return run
 
-    candidate = floor_to_cycle(now or datetime.now(UTC))
+    cycle = timedelta(hours=spec.cycle_hours)
+    candidate = floor_to_cycle(now or datetime.now(UTC), spec.cycle_hours)
     for _ in range(max_cycles):
         run = GfsRun(candidate)
         if model == "ecmwf" and hours > 90 and run.cycle in {"06", "18"}:
-            candidate -= timedelta(hours=6)
+            candidate -= cycle
             continue
         LOG.info("checking %s run %s", label, run.id)
         if _run_is_complete(run, hours, model, exists):
             return run
-        candidate -= timedelta(hours=6)
+        candidate -= cycle
     raise DownloadError(f"could not find a complete {label} cycle in the last {max_cycles} runs")
 
 
@@ -390,6 +438,7 @@ def _download_noaa_records(url: str, variable_ids: tuple[str, ...]) -> bytes:
             index_text,
             variable.index_field,
             excluded_phrases=variable.excluded_index_phrases,
+            alternate_fields=variable.alternate_index_fields,
         )
         for variable in (VARIABLES[variable_id] for variable_id in variable_ids)
     ]
@@ -434,6 +483,26 @@ def _repack_grid_simple(records: bytes, url: str) -> bytes:
             return repacked.read_bytes()
         except Exception as exc:
             raise DownloadError(f"could not repack GRIB records from {url}: {exc}") from exc
+
+
+def _download_hrrr_payload(
+    run: GfsRun, forecast_hour: int, spec: SourceSpec, input_ids: tuple[str, ...] | None = None
+) -> bytes:
+    """One HRRR frame from the first mirror that has it: a mirror still
+    missing the hour answers 404 for the ``.idx``, and the next is tried;
+    any other failure is the frame's."""
+    wanted = _frame_variable_ids(spec, forecast_hour, input_ids)
+    missing: list[str] = []
+    for base_url in HRRR_BASE_URLS:
+        url = hrrr_object_url(run, forecast_hour, base_url=base_url)
+        try:
+            return _download_noaa_records(url, wanted)
+        except DownloadError as exc:
+            if _http_error_code(exc) != 404:
+                raise
+            missing.append(base_url)
+            LOG.warning("HRRR mirror has no f%02d of %s yet, trying the next: %s", forecast_hour, run.id, base_url)
+    raise DownloadError(f"no HRRR mirror has run {run.id} f{forecast_hour:02d}: " + ", ".join(missing))
 
 
 def _download_ecmwf_payload(
@@ -500,6 +569,8 @@ def fetch_frame(
     url = model_object_url(run, forecast_hour, model)
     if spec.id == "ecmwf":
         payload = _download_ecmwf_payload(run, forecast_hour, spec, input_ids)
+    elif spec.id == "hrrr":
+        payload = _download_hrrr_payload(run, forecast_hour, spec, input_ids)
     else:
         payload = _download_noaa_payload(run, forecast_hour, spec, input_ids)
     if spec.id == "ecmwf":

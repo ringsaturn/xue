@@ -31,6 +31,7 @@ use crate::encode::observation::inspect_observation;
 use crate::encode::parallel::for_each_ordered;
 use crate::encode::poster::encode_poster;
 use crate::encode::quantize::{codebook, Codebook};
+use crate::encode::reproject::{build_resampler, lambert_conformal_from_wkt, ProjectedGrid};
 use crate::encode::sources::{source_spec, SourceSpec};
 use crate::encode::temporal::build_chunks;
 
@@ -318,13 +319,62 @@ pub fn published_bundle_ids(source: &SourceSpec) -> Vec<&'static str> {
 /// on any origin the rounding touched — a regional crop of the GFS-Wave
 /// grid, whose step is a hair over 0.25° — while the clean 0.25° origins
 /// every published grid has never noticed either way.
-fn grid_info(path: &Path) -> Result<GridInfo> {
+///
+/// A file on a map projection describes the projected grid, and the
+/// published one is the regular grid `source.regrid` asks for over its
+/// footprint (`reproject.rs`); a source that declares no regrid must not be
+/// projected, and one that does must be, so a file of the wrong kind is
+/// refused rather than misread.
+fn grid_info(path: &Path, source: &SourceSpec) -> Result<GridInfo> {
     let dataset = Dataset::open(path)?;
     let (width, height) = dataset.size();
     let transform = dataset.geo_transform()?;
     if transform[2] != 0.0 || transform[4] != 0.0 {
         return Err(EncodeError::conversion(format!(
             "rotated grids are unsupported: {}",
+            path.display()
+        )));
+    }
+    let projection = lambert_conformal_from_wkt(&dataset.projection_wkt())?;
+    if let Some(projection) = projection {
+        let Some(regrid) = source.regrid else {
+            return Err(EncodeError::conversion(format!(
+                "{} is on a map projection, which this source does not declare",
+                path.display()
+            )));
+        };
+        if transform[1] <= 0.0 || transform[5] >= 0.0 {
+            return Err(EncodeError::conversion(format!(
+                "grid must run west-to-east and north-to-south: {}",
+                path.display()
+            )));
+        }
+        let resampler = build_resampler(
+            ProjectedGrid {
+                projection,
+                width,
+                height,
+                x0: transform[0] + transform[1] / 2.0,
+                y0: transform[3] + transform[5] / 2.0,
+                dx: transform[1],
+                dy: -transform[5],
+            },
+            regrid,
+        )?;
+        let mut grid = GridInfo::new(
+            resampler.width,
+            resampler.height,
+            resampler.first_longitude,
+            resampler.first_latitude,
+            resampler.step,
+            -resampler.step,
+        );
+        grid.resample = Some(Arc::new(resampler));
+        return Ok(grid);
+    }
+    if source.regrid.is_some() {
+        return Err(EncodeError::conversion(format!(
+            "{} is a regular grid, but this source declares a projected one",
             path.display()
         )));
     }
@@ -586,11 +636,17 @@ fn extract_planes(
             }
             plane = rolled;
         }
+        // Missing data becomes a value before the plane is resampled, so a
+        // fill never blends into its neighbours; then the projected plane
+        // lands on the regular grid, and only then is a regional window cut.
+        plane_source.apply_fill(&mut plane);
+        fill_missing(variable_id, &mut plane)?;
+        if let Some(resample) = &grid.resample {
+            plane = resample.take(&plane)?;
+        }
         if let Some(crop) = grid.crop {
             plane = crop.take(&plane);
         }
-        plane_source.apply_fill(&mut plane);
-        fill_missing(variable_id, &mut plane)?;
         if plane.iter().any(|value| !value.is_finite()) {
             return Err(EncodeError::conversion(format!(
                 "Xue v1 requires complete planes, found non-finite values in {}",
@@ -1342,7 +1398,7 @@ pub fn convert_bin(
         .to_offset(time::UtcOffset::UTC);
 
     // -- the grid -----------------------------------------------------------
-    let mut grid = grid_info(&grid_path)?;
+    let mut grid = grid_info(&grid_path, source)?;
     if options.require_complete && (grid.width, grid.height) != source.production_grid {
         return Err(EncodeError::conversion(format!(
             "production build requires a {}x{} grid",
@@ -1532,8 +1588,8 @@ pub fn convert_bin(
         let variables: Vec<&str> = bundle_variables.iter().map(String::as_str).collect();
         let bundle_offsets: Vec<i64> = variable_offsets[variables[0]].clone();
         for (suffix, bundle_grid, codes) in [
-            ("", grid, &codes_by_offset),
-            (".half", half_grid, &half_codes_by_offset),
+            ("", &grid, &codes_by_offset),
+            (".half", &half_grid, &half_codes_by_offset),
         ] {
             if suffix == ".half" && options.skip_variants {
                 continue;

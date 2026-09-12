@@ -44,6 +44,7 @@ pub(crate) mod observation;
 pub(crate) mod parallel;
 pub mod poster;
 pub mod quantize;
+pub(crate) mod reproject;
 pub(crate) mod sources;
 pub mod temporal;
 pub(crate) mod variables;

@@ -69,6 +69,7 @@ export const zh: Record<MessageKey, string> = {
   creditsTrigger: "数据来源",
   creditsHeading: "数据来源与致谢",
   creditsGfs: "预报数据 · GFS 0.25° 与 SFLUX",
+  creditsHrrr: "预报数据 · HRRR 3 公里，美国本土",
   creditsEcmwf: "含经修改的 ECMWF 数据 · CC BY 4.0",
   creditsRadar: "雷达拼图",
   creditsBasemap: "底图 · © OPENSTREETMAP 贡献者",

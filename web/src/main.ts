@@ -120,6 +120,7 @@ import {
   searchWithParticles,
 } from "./urlstate";
 import { WindParticleLayer } from "./particles";
+import { domainContains, lambertCone, type LambertDomain } from "./domain";
 import type { Feature, FeatureCollection } from "geojson";
 import { strideFor, type CellWindow, type LabelRequest } from "./isolines";
 import type { LabelsWorkerRequest, LabelsWorkerResponse } from "./labels.worker";
@@ -853,6 +854,7 @@ const MODEL_EYEBROW: Record<ForecastModelId, string> = {
   gfs: "NOAA / GFS (0.25°)",
   ecmwf: "ECMWF / IFS (0.25°)",
   sflux: "NOAA / GFS SFLUX (13 KM)",
+  hrrr: "NOAA / HRRR CONUS (3 KM)",
   radar: "CMA / RADAR MOSAIC (L3 MST)",
 };
 
@@ -1879,6 +1881,13 @@ function formatProbeValue(variable: BundleVariable, value: number): string {
  * to sample against, so a click is simply ignored. */
 function setProbe(longitude: number, latitude: number): void {
   if (!activeSession) return;
+  // Off a regional model's own footprint the grid still holds a value — the
+  // encoder's edge extension — but no forecast; there is nothing to pin.
+  const domain = modelDomain();
+  if (domain && !domainContains(domain, lambertCone(domain), longitude, latitude)) {
+    closeProbe();
+    return;
+  }
   probe = new ProbeSeries(longitude, latitude);
   // The requests tracked for the previous pin say nothing about this cell,
   // and keeping them would suppress the series read when a point is pinned
@@ -2542,7 +2551,15 @@ function updateFrameReadout(index: number): void {
 function ensureSlotGrid(slot: RasterSlot, session: VariableSession): void {
   if (slot.gridSource === session.metadata) return;
   slot.layer.configureGrid(session.metadata);
+  slot.layer.setDomain(modelDomain());
   slot.gridSource = session.metadata;
+}
+
+/** The dataset's own footprint on its map projection, for a regional model
+ * whose regular grid extends past it (domain.ts); null for every other. A
+ * case pins its own model, so this follows whichever is selected. */
+function modelDomain(): LambertDomain | null {
+  return FORECAST_MODELS[selectedModelId].domain ?? null;
 }
 
 /** Same for the particle layer: adopt the vector session's grid, its u/v
@@ -2553,6 +2570,7 @@ function ensureWindGrid(session: VariableSession): void {
   // the order its parameter blocks put them.
   const [u, v] = session.variables;
   windLayer.configureGrid(session.metadata, u && v ? [u.id, v.id] : undefined);
+  windLayer.setDomain(modelDomain());
   windLayer.setMaxSpeed(sessionMaxMagnitude(session));
   windLayer.setPace(sessionParticlePace(session));
   windLayerGridSource = session.metadata;
@@ -3430,6 +3448,26 @@ function applyCaseCamera(showcaseCase: ShowcaseCase, recenter: boolean): void {
   map.setMaxBounds(limits.bounds);
 }
 
+/** Move the camera onto a regional model's own region when the view shows
+ * none of it (`FORECAST_MODELS[].region`); a view already over it is left
+ * alone, and a global model has no region. Unlike a case's camera, nothing
+ * is pinned: the limits are computed only to pick the framing. */
+function frameModelRegion(): void {
+  const region = FORECAST_MODELS[selectedModelId].region;
+  if (!region) return;
+  const [west, south, east, north] = region;
+  const bounds = map.getBounds();
+  const overlaps =
+    bounds.getEast() > west && bounds.getWest() < east && bounds.getNorth() > south && bounds.getSouth() < north;
+  if (overlaps) return;
+  const canvas = map.getCanvas();
+  const limits = caseCameraLimits([west, south, east, north], {
+    width: canvas.clientWidth,
+    height: canvas.clientHeight,
+  });
+  map.jumpTo({ center: limits.center, zoom: limits.minZoom });
+}
+
 /** Fill the showcase banner: which event this is, and the way back to the
  * list. The run itself is already on the station panel's "model run" line. */
 function updateCasePresentation(showcaseCase: ShowcaseCase): void {
@@ -4131,6 +4169,7 @@ function sendLabels(frame: DecodedFrame): void {
     grid,
     window,
     coverage: sessionCoverage(session, frame.tiles),
+    domain: modelDomain() ?? undefined,
     stride: strideFor(window.columns * window.rows),
     smoothingCells: style.smoothing,
     offset: style.offset,
@@ -4343,6 +4382,7 @@ async function showPoster(variableId: ForecastBundleId, sequence: number): Promi
     ensureLayers();
     const target = slot.layer;
     target.configureGrid(posterMetadata);
+    target.setDomain(modelDomain());
     slot.gridSource = posterMetadata;
     slot.displayedReal = null;
     slot.shownKey = null;
@@ -4632,6 +4672,11 @@ async function initialize(): Promise<void> {
       manifestUrl = loadedCase.manifestUrl;
       currentRun = found.run;
     } else {
+      // A regional model opened on a view showing none of it would paint
+      // nothing: frame its region first, the way a case is framed, but
+      // without holding the camera there — the world around it stays
+      // reachable, empty as it is.
+      frameModelRegion();
       const loaded = await fetchManifest(dataBaseUrl(), selectedModelId);
       if (sequence !== initializeSequence) return;
       loadedManifest = loaded.manifest;

@@ -38,9 +38,10 @@ def _common_run_arguments(parser: argparse.ArgumentParser, *, force_help: str) -
     parser.add_argument(
         "--hours",
         type=forecast_hours,
-        default=240,
+        default=None,
         help="last forecast hour, inclusive; must lie on the model's published axis "
-        "(e.g. GFS: hourly to 120, then 3-hourly to 240)",
+        "(e.g. GFS: hourly to 120, then 3-hourly to 240); defaults to the whole axis "
+        "the model publishes (240 for the global models, 18 for HRRR)",
     )
     parser.add_argument("--force", action="store_true", help=force_help)
 
@@ -56,7 +57,8 @@ def _model_argument(parser: argparse.ArgumentParser, *, live_only: bool = True) 
         default="gfs",
         help=(
             "data source: NOAA GFS 0.25 degree (hourly), ECMWF IFS open data "
-            "(3-hourly), or GFS surface flux on the native ~13 km grid (hourly, adds dswrf)"
+            "(3-hourly), GFS surface flux on the native ~13 km grid (hourly, adds dswrf), "
+            "or NOAA HRRR over the contiguous US (3 km, a cycle every hour, hourly to 18)"
             + ("" if live_only else "; radar is the CMA mosaic, read from a local NetCDF file")
         ),
     )
@@ -139,8 +141,8 @@ def parser() -> argparse.ArgumentParser:
     assemble_parser.add_argument(
         "--hours",
         type=forecast_hours,
-        default=240,
-        help="last forecast hour the parts were built to, inclusive",
+        default=None,
+        help="last forecast hour the parts were built to, inclusive (default: the whole axis the model publishes)",
     )
     assemble_parser.add_argument("--force", action="store_true", help="replace an existing manifest")
     assemble_parser.add_argument(
@@ -213,6 +215,13 @@ def parser() -> argparse.ArgumentParser:
     return root
 
 
+def _run_hours(arguments: argparse.Namespace) -> int:
+    """``--hours`` as given, else the whole axis the model publishes."""
+    if arguments.hours is not None:
+        return arguments.hours
+    return source_spec(arguments.model).horizon_hours
+
+
 def main(argv: list[str] | None = None) -> int:
     arguments = parser().parse_args(argv)
     logging.basicConfig(
@@ -220,6 +229,8 @@ def main(argv: list[str] | None = None) -> int:
         format="%(levelname)s %(message)s",
     )
     try:
+        if arguments.command in ("fetch", "build-bin", "assemble-run"):
+            arguments.hours = _run_hours(arguments)
         if arguments.command == "fetch":
             run = resolve_run(arguments.run, hours=arguments.hours, model=arguments.model)
             paths = fetch_run(run, arguments.hours, arguments.raw_dir, force=arguments.force, model=arguments.model)
@@ -326,7 +337,7 @@ def main(argv: list[str] | None = None) -> int:
             # touches the network to find one.
             if arguments.run == "latest":
                 raise XueError("assemble-run needs the cycle the parts were built from: --run YYYYMMDDHH")
-            run = parse_run(arguments.run)
+            run = parse_run(arguments.run, arguments.model)
             report = assemble_run(
                 arguments.output_dir,
                 model=arguments.model,

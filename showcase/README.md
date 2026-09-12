@@ -38,14 +38,16 @@ retires a case.
      the antimeridian. The crop rounds outward to whole grid cells, so the
      published data always covers the box outright.
    - `hours` must land on the model's published axis (GFS and sflux: hourly to
-     f120, then 3-hourly to f240; ECMWF: 3-hourly to 144, then 6-hourly). On
+     f120, then 3-hourly to f240; ECMWF: 3-hourly to 144, then 6-hourly;
+     HRRR: hourly to 18, from a cycle at any hour). On
      an observation source it is where to stop, and must be a whole hour the
      dataset carries a frame at — the frames in between come at whatever
      cadence the file has (six minutes for the radar mosaic).
    - `variables` is any subset of what the model publishes, in any order —
      `tmp2m`, `prate`, `wind10m`, `dswrf` on sflux only, and `cref` on radar
-     only. The manifest ships just these, and the viewer hides the buttons for
-     the rest.
+     and HRRR. The manifest ships just these, and the viewer hides the
+     buttons for the rest. An HRRR case is cropped from the regular grid the
+     encoder resamples the model onto, so its `bbox` works like any other.
    - Optional: `defaultVariable` (defaults to the first), `eventTime`, `tags`,
      `credit`, `profile`.
 
@@ -115,6 +117,7 @@ The public archives do not go back forever:
 |---|---|---|
 | `gfs`, `sflux` | about 2021-01 | NOAA moved the files under `atmos/` on 2021-03-23; `xue.fetch` picks the layout by run id |
 | `ecmwf` | about 2024-02 | Only the 00z and 12z oper cycles reach far enough for a long case |
+| `hrrr` | about 2014-08 | Every hour's cycle, hourly to f18 |
 | `radar` | — | Not an archive to reach back into: whatever event someone has already decoded into a local NetCDF |
 
 Pick a cycle a day or two before the event peaks, so the case is a *forecast*

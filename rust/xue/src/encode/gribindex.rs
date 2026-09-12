@@ -309,6 +309,7 @@ mod tests {
         let prmsl = variable_spec("prmsl").unwrap();
         assert!(matches(&prmsl, &message(3, 1, 101)));
         assert!(matches(&prmsl, &message(3, 0, 101)));
+        assert!(matches(&prmsl, &message(3, 198, 101)));
         assert!(!matches(&prmsl, &message(3, 0, 1)));
         assert!(!matches(&prmsl, &message(3, 192, 101)));
     }

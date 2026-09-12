@@ -35,6 +35,12 @@ class VariableSpec:
     grib_element: str = ""
     index_field: str = ""
     excluded_index_phrases: tuple[str, ...] = ()
+    alternate_index_fields: tuple[str, ...] = ()
+    """Other ``.idx`` phrases the same quantity goes by at another centre or
+    in another product, tried when ``index_field`` finds no record: HRRR
+    writes its sea level pressure as ``MSLMA``. Each pairs with a
+    ``grib2_aliases`` entry, since the record found under it carries that
+    other parameter number."""
     ecmwf_param: str = ""
     """The ``param`` value in ECMWF open data .index lines, empty when the
     variable is not fetched from ECMWF."""
@@ -215,12 +221,15 @@ VARIABLES: dict[str, VariableSpec] = {
         grib2_level_value=10.0,
         gdal_unit="m/s",
     ),
-    # Mean sea level pressure. NCEP publishes two reductions; PRMSL
+    # Mean sea level pressure. NCEP publishes several reductions; PRMSL
     # (0/3/1) is the same quantity ECMWF calls ``msl`` — encoded there as
     # plain pressure (0/3/0) on the mean sea level surface, hence the alias —
-    # so the two sources carry the same field under one identity. MSLET
-    # (0/3/192, the NCEP-local Shuell reduction) is a different quantity and
-    # is deliberately not registered. Surface 101 is "mean sea level", which
+    # so the two sources carry the same field under one identity. HRRR
+    # writes only the MAPS reduction, MSLMA (0/3/198, NCEP-local), the
+    # reduction its own analysis system uses; it is the sea level pressure
+    # of that model and is accepted under the same identity. MSLET (0/3/192,
+    # the NCEP-local Shuell reduction) is a different quantity and is
+    # deliberately not registered. Surface 101 is "mean sea level", which
     # carries no value.
     "prmsl": VariableSpec(
         id="prmsl",
@@ -229,26 +238,35 @@ VARIABLES: dict[str, VariableSpec] = {
         value_range=(870, 1125),
         grib_element="PRMSL",
         index_field=":PRMSL:mean sea level:",
+        alternate_index_fields=(":MSLMA:mean sea level:",),
         ecmwf_param="msl",
         grib2_category=3,
         grib2_number=1,
-        grib2_aliases=((0, 3, 0),),
+        grib2_aliases=((0, 3, 0), (0, 3, 198)),
         grib2_level_type=101,
         gdal_unit="Pa",
     ),
-    # Radar composite reflectivity: the column maximum of the equivalent
+    # Composite reflectivity: the column maximum of the equivalent
     # reflectivity factor, so its fixed surface is the entire atmosphere
-    # (code table 4.5 value 10, which carries no surface value). The only
-    # variable not fetched from GRIB — it arrives as a NetCDF observation
-    # series (xue/observation.py), so the record-matching fields are empty.
+    # (code table 4.5 value 10, which carries no surface value). It arrives
+    # two ways under one identity: as the radar mosaic's NetCDF observation
+    # series (xue/observation.py), and as the reflectivity a
+    # convection-allowing model forecasts — HRRR's ``REFC`` record, NCEP's
+    # local 0/16/196 (the alias), which GDAL reports in dB. The same
+    # quantity in the same unit, so a forecast bundle and an observation
+    # bundle draw with one palette.
     "cref": VariableSpec(
         id="cref",
         label="Composite radar reflectivity",
         output_unit="dBZ",
         value_range=(0, 80),
+        grib_element="REFC",
+        index_field=":REFC:entire atmosphere:",
         grib2_category=16,
         grib2_number=5,
+        grib2_aliases=((0, 16, 196),),
         grib2_level_type=10,
+        gdal_unit="dB",
     ),
     # Three more surface diagnostics, each a GRIB record of its own with no
     # unit conversion. Registered from the GFS pgrb2 set; ECMWF open data

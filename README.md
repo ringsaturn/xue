@@ -5,6 +5,7 @@
 [![GFS/0p25 run](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest.json&query=%24.run&label=GFS/0p25&color=0b7cbd&cacheSeconds=600)](https://dataset.ringsaturn.me/xue/latest.json)
 [![GFS/SFLUX run](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-sflux.json&query=%24.run&label=GFS/SFLUX&color=2b6cb0&cacheSeconds=600)](https://dataset.ringsaturn.me/xue/latest-sflux.json)
 [![ECMWF/IFS 0p25 run](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-ecmwf.json&query=%24.run&label=ECMWF/IFS%200p25&color=1f6f8b&cacheSeconds=600)](https://dataset.ringsaturn.me/xue/latest-ecmwf.json)
+[![HRRR run](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-hrrr.json&query=%24.run&label=HRRR&color=7b4ea3&cacheSeconds=600)](https://dataset.ringsaturn.me/xue/latest-hrrr.json)
 
 > Xue (雪, pronounced /ɕɥɛ/, roughly "shweh"), Chinese for snow.
 
@@ -106,10 +107,13 @@ Build the latest run end to end and serve the frontend:
 make mvp                  # NOAA GFS (default)
 make mvp MODEL=ecmwf      # ECMWF IFS open data
 make mvp MODEL=sflux      # GFS surface flux (native ~13 km, adds solar radiation)
+make mvp MODEL=hrrr       # NOAA HRRR (3 km over the contiguous US, a cycle every hour)
 make serve
 ```
 
-Or step by step (`--model gfs|ecmwf|sflux`, default `gfs`):
+Or step by step (`--model gfs|ecmwf|sflux|hrrr`, default `gfs`; `--hours`
+defaults to the whole axis the model publishes — 240 for the global models,
+18 for HRRR):
 
 ```sh
 python -m xuebuild fetch --run latest --hours 240
@@ -120,6 +124,7 @@ python -m xuebuild verify-bin web/public/data/gfs.YYYYMMDDHH/tmp2m.xue
 python -m xuebuild build-bin --run latest --hours 240
 python -m xuebuild build-bin --model ecmwf --run latest --hours 240
 python -m xuebuild build-bin --model sflux --run latest --hours 240
+python -m xuebuild build-bin --model hrrr --run latest
 ```
 
 `XUE_ENCODER` picks which encoder converts: `auto` (the default — the
@@ -130,8 +135,9 @@ produce identical bytes, so the choice is only ever about speed.
 
 Each model publishes as an independent dataset: GFS runs land in
 `gfs.<run>/` and go live via `latest.json` at the data root, ECMWF in
-`ecmwf.<run>/` via `latest-ecmwf.json`, and GFS surface flux in
-`sflux.<run>/` via `latest-sflux.json`. ECMWF open data carries no
+`ecmwf.<run>/` via `latest-ecmwf.json`, GFS surface flux in
+`sflux.<run>/` via `latest-sflux.json`, and HRRR in `hrrr.<run>/` via
+`latest-hrrr.json`. ECMWF open data carries no
 precipitation-rate field, so the converter differences the run-total
 accumulation `tp` between consecutive frames into an interval-mean rate
 (mm/h); the analysis frame has no preceding interval, so the ECMWF
@@ -158,6 +164,21 @@ pair, so the viewer draws the sea the way it draws the wind. `--hours` may
 be any hour on the model's published axis, so shorter uniform builds
 (e.g. `--hours 120`) still work, and their axis is a plain step rather than
 a listed one.
+
+HRRR is the one regional source: NOAA's 3 km convection-allowing model
+over the contiguous United States, a new cycle every hour, hourly to F18,
+read from the 2-D surface file. The model runs on a Lambert conformal
+conic grid, which the format does not describe, so the encoder resamples
+every plane onto a regular 0.03° grid over the domain's footprint
+(2441 × 1051; `xuebuild/reproject.py`, repeated bit for bit by the native
+encoder) and the bundles carry that grid; the rectangle's corners the
+conic domain never covered repeat the nearest cell, and the viewer clips
+them to the model's own footprint. It publishes the core pair, sea level
+pressure (the model's MAPS reduction, `MSLMA`), the 850 / 700 / 500 hPa
+heights, 925 / 850 / 500 hPa temperature, the 10 m, 925, 850 and 250 hPa
+winds, the surface diagnostics the surface file carries (gust, the cloud
+covers, CAPE, visibility, dew point) and the forecast composite radar
+reflectivity under the mosaic's own `cref`.
 
 `build-bin` writes one `.xue` per scalar variable (plus a half-resolution
 `.half.xue` rendition, a first-frame poster, and a per-variable lossless
@@ -198,7 +219,7 @@ existing manifest requires `--force` (`make mvp FORCE=--force`).
 
 The page supports shareable URLs per model and layer:
 `/?model=gfs&type=wind`, `/?model=ecmwf&type=temp`, and so on. `model`
-accepts `gfs` / `ecmwf` (alias `ifs`) / `sflux`; `type` also accepts
+accepts `gfs` / `ecmwf` (alias `ifs`) / `sflux` / `hrrr`; `type` also accepts
 aliases like `tmp2m` / `prate` / `wind10m` / `solar` / `radar`, and each
 isobaric field names itself (`pressure` for sea level pressure, `hgt500`,
 `tmp850` / `t850`, `rh700`, `wind850`, `qflux850` / `vapor850` and so on —
@@ -296,7 +317,9 @@ Credentials are an R2 API token's key pair in `AWS_ACCESS_KEY_ID` /
 GitHub Actions runs the whole loop on a schedule — one workflow per source
 ([`publish-gfs.yml`](.github/workflows/publish-gfs.yml),
 [`publish-sflux.yml`](.github/workflows/publish-sflux.yml),
-[`publish-ecmwf.yml`](.github/workflows/publish-ecmwf.yml)), all calling the
+[`publish-ecmwf.yml`](.github/workflows/publish-ecmwf.yml),
+[`publish-hrrr.yml`](.github/workflows/publish-hrrr.yml), the last every
+hour), all calling the
 reusable [`publish.yml`](.github/workflows/publish.yml) — using the
 `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `CLOUDFLARE_ACCOUNT_ID`
 repository secrets. The bucket keeps only the live run per source. Each

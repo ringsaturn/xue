@@ -5,10 +5,14 @@ The models share one output contract: whatever the source, the bundles carry
 the same data variable ids (tmp2m, prate, ugrd10m/vgrd10m, on sflux also
 dswrf, on GFS and ECMWF the pressure family and the upper-air fills, and on
 GFS alone — for now — the surface diagnostics, the vertical velocity, the
-850 hPa equivalent potential temperature and the ocean fields) so the decoder
-and frontend never care which model produced them. A source may read more
-than one file family of a cycle (GFS pgrb2 plus GFS-Wave, :class:`CompanionFile`);
-the frame the converter sees is still one GRIB.
+850 hPa equivalent potential temperature and the ocean fields; on HRRR the
+forecast composite reflectivity under the radar mosaic's ``cref``) so the
+decoder and frontend never care which model produced them. A source may read
+more than one file family of a cycle (GFS pgrb2 plus GFS-Wave,
+:class:`CompanionFile`); the frame the converter sees is still one GRIB. A
+source may be computed on a map projection (HRRR, Lambert conformal): its
+``regrid`` says so, and the converter resamples every plane onto the regular
+grid the format describes (:mod:`xuebuild.reproject`).
 Not every source is a forecast: an ``observation`` source (the CMA radar
 mosaic) is a local file holding a series of observed analyses, with no cycle
 to fetch, no live pointer, and an axis that is whatever times the file
@@ -24,6 +28,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .errors import DownloadError
+from .reproject import Regrid
 
 
 @dataclass(frozen=True)
@@ -57,7 +62,7 @@ class CompanionFile:
 @dataclass(frozen=True)
 class SourceSpec:
     id: str
-    """CLI / URL / directory id: "gfs" or "ecmwf"."""
+    """CLI / URL / directory id: "gfs", "ecmwf", "sflux", "hrrr" or "radar"."""
     manifest_model: str
     """The manifest and bundle-metadata ``model`` string."""
     product: str
@@ -135,11 +140,28 @@ class SourceSpec:
     :mod:`xue.observation` instead of fetched frame by frame. Its axis is
     whatever times the file carries — including gaps where a publication was
     missed — so it has no published cadence to validate against."""
+    cycle_hours: int = 6
+    """Hours between the source's cycles: a run starts on a multiple of this
+    (00/06/12/18 UTC for the global models, every hour for HRRR)."""
+    regrid: Regrid | None = None
+    """Set when the source's records are on a map projection rather than a
+    regular latitude/longitude grid, and must be resampled onto one of this
+    step before anything else reads them (:mod:`xuebuild.reproject`). The
+    grid the bundles carry is then the regular one; ``production_grid`` and
+    ``tile`` describe it, not the projected source."""
 
     @property
     def live(self) -> bool:
         """Whether the source has a live feed to fetch and point at."""
         return self.latest_filename is not None
+
+    @property
+    def horizon_hours(self) -> int:
+        """The last forecast hour the source publishes — what a live run
+        carries, and what ``--hours`` defaults to."""
+        if not self.steps:
+            raise DownloadError(f"{self.manifest_model} publishes no forecast axis")
+        return self.steps[-1][0]
 
     def companion_of(self, variable_id: str) -> CompanionFile | None:
         """The companion family ``variable_id`` is read from, or None for an
@@ -359,6 +381,89 @@ SOURCES: dict[str, SourceSpec] = {
         # clipped edge, at about the same 11-degree ground scale as the
         # 0p25 grid's 48 x 52.
         tile=(96, 96),
+    ),
+    # NOAA HRRR: the 3 km convection-allowing model over the contiguous
+    # United States, a new cycle every hour, hourly to F18 (the four
+    # synoptic cycles run to F48, which is not published here so every
+    # cycle reads the same). Computed on a Lambert conformal conic grid
+    # (1799 x 1059), so the encoder resamples every plane onto a regular
+    # 0.03° grid over the domain's footprint — about 3.3 km north-south and
+    # 2.6 km east-west at the domain's middle latitude — and the bundles
+    # carry that grid (xuebuild/reproject.py). The records come from the
+    # 2-D surface file (``wrfsfcf``), which carries the surface set and a
+    # handful of pressure levels: no 250 hPa height, no isobaric humidity
+    # (dew point instead), no apparent temperature. Its sea level pressure
+    # is the MAPS reduction (``MSLMA``, matched through the registry's
+    # 0/3/198 alias), and the composite reflectivity the model forecasts is
+    # published under the radar mosaic's ``cref`` — the same quantity in
+    # the same unit, so the shell draws the forecast the way it draws the
+    # observation.
+    "hrrr": SourceSpec(
+        id="hrrr",
+        manifest_model="HRRR",
+        product="wrfsfc",
+        latest_filename="latest-hrrr.json",
+        steps=((18, 1),),
+        input_variable_ids=(
+            "tmp2m",
+            "prate",
+            "ugrd10m",
+            "vgrd10m",
+            "prmsl",
+            "hgt850",
+            "hgt700",
+            "hgt500",
+            "tmp925",
+            "tmp850",
+            "tmp500",
+            "ugrd925",
+            "vgrd925",
+            "ugrd850",
+            "vgrd850",
+            "ugrd250",
+            "vgrd250",
+            "gust",
+            "tcdc",
+            "lcdc",
+            "mcdc",
+            "hcdc",
+            "cape",
+            "vis",
+            "dpt2m",
+            "cref",
+        ),
+        accumulated_precipitation=False,
+        bundle_scalar_ids=(
+            "tmp2m",
+            "prate",
+            "prmsl",
+            "hgt850",
+            "hgt700",
+            "hgt500",
+            "tmp925",
+            "tmp850",
+            "tmp500",
+            "gust",
+            "tcdc",
+            "lcdc",
+            "mcdc",
+            "hcdc",
+            "cape",
+            "vis",
+            "dpt2m",
+            "cref",
+        ),
+        bundle_vector_ids=("wind10m", "wind925", "wind850", "wind250"),
+        # The 0.03° grid over the footprint of the 1799 x 1059 domain: the
+        # north-west corner is at 134.10 W, 52.62 N and the grid runs to
+        # 60.90 W, 21.12 N (reproject.build_resampler snaps the footprint
+        # outwards to whole steps).
+        production_grid=(2441, 1051),
+        # 64 x 64 cells is about 1.9° at this step — 39 x 17 = 663 tiles,
+        # each a series of nineteen 4 KB planes.
+        tile=(64, 64),
+        cycle_hours=1,
+        regrid=Regrid(step=0.03),
     ),
     # CMA weather radar level-3 mosaic composite reflectivity, decoded from
     # the published BIN tiles into a NetCDF series by the radar-l3-mst

@@ -1,5 +1,6 @@
 import type { CustomLayerInterface, Map as MaplibreMap } from "maplibre-gl";
 
+import { DOMAIN_GLSL, DOMAIN_UNIFORM_NAMES, setDomainUniforms, type LambertDomain } from "./domain";
 import { t } from "./i18n";
 import { extractMatrix } from "./layer";
 import type { BundleMetadata, LinearQuantization } from "./manifest";
@@ -112,12 +113,17 @@ vec2 gridUv(vec2 pos) {
   );
 }
 
-// A regional grid (a showcase case) has no wind outside its window; a
-// particle that drifts out has to be respawned rather than pushed by the
-// clamped edge texel forever.
-bool inGrid(vec2 uv) {
+${DOMAIN_GLSL}
+
+// A regional grid (a showcase case) has no wind outside its window, and a
+// regional model none outside its own footprint (domain.ts); a particle
+// that drifts out has to be respawned rather than pushed by the clamped
+// edge texel forever.
+bool inGrid(vec2 pos) {
+  vec2 uv = gridUv(pos);
   if (uv.y < 0.0 || uv.y > 1.0) return false;
-  return u_wrap > 0.5 || (uv.x >= 0.0 && uv.x <= 1.0);
+  if (u_wrap < 0.5 && (uv.x < 0.0 || uv.x > 1.0)) return false;
+  return !outsideDomain(fract(pos.x) * 360.0 - 180.0, latitudeOf(pos));
 }
 
 vec2 windAt(vec2 pos) {
@@ -171,7 +177,7 @@ void main() {
   vec2 seed = (pos + v_tex_pos) * u_rand_seed;
   float drop = max(
     step(1.0 - u_drop_rate - speed_t * u_drop_rate_bump, rand(seed)),
-    inGrid(gridUv(pos)) ? 0.0 : 1.0
+    inGrid(pos) ? 0.0 : 1.0
   );
   vec2 random_pos = vec2(
     fract(u_spawn.x + rand(seed + 1.3) * u_spawn.z),
@@ -207,7 +213,9 @@ void main() {
     floor(a_index / u_particles_res) / u_particles_res + 0.5 / u_particles_res
   );
   vec2 pos = decodePosition(texture(u_particles, lookup));
-  v_speed_t = clamp(length(windAt(pos)) / u_max_speed, 0.0, 1.0);
+  // A particle waiting to be respawned off the model's footprint reads as
+  // calm, which the fragment stage leaves undrawn.
+  v_speed_t = inGrid(pos) ? clamp(length(windAt(pos)) / u_max_speed, 0.0, 1.0) : 0.0;
   gl_PointSize = u_point_size;
   gl_Position = u_matrix * vec4(pos.x + u_world_offset, pos.y, 0.0, 1.0);
 }`;
@@ -305,6 +313,9 @@ export class WindParticleLayer implements CustomLayerInterface {
   private longitudeStep = 0.25;
   private latitudeStep = -0.25;
   private wraps = true;
+  /** The model's own footprint when the grid extends past it (domain.ts):
+   * no particle is drawn or kept outside. */
+  private domain: LambertDomain | null = null;
   /** Respawn rectangle in world Mercator units, (x, y, width, height). */
   private spawn: [number, number, number, number] = [0, 0, 1, 1];
   private windOffset: [number, number] = [0, 0];
@@ -403,6 +414,15 @@ export class WindParticleLayer implements CustomLayerInterface {
     this.map?.triggerRepaint();
   }
 
+  /** Keep the particles to a regional model's own footprint, or to the
+   * grid alone. */
+  setDomain(domain: LambertDomain | null): void {
+    if (this.domain === domain) return;
+    this.domain = domain;
+    this.trailsStale = true;
+    this.map?.triggerRepaint();
+  }
+
   setVisible(visible: boolean): void {
     if (this.visible === visible) return;
     this.visible = visible;
@@ -427,11 +447,12 @@ export class WindParticleLayer implements CustomLayerInterface {
     this.updateProgram = this.createProgram(gl, QUAD_VERTEX_SHADER, UPDATE_FRAGMENT_SHADER, [
       "u_particles", "u_wind", "u_wind_offset", "u_wind_scale", "u_first", "u_step", "u_size", "u_wrap", "u_spawn",
       "u_rand_seed", "u_speed_factor", "u_elapsed", "u_drop_rate", "u_drop_rate_bump", "u_max_speed",
+      ...DOMAIN_UNIFORM_NAMES,
     ]);
     this.drawProgram = this.createProgram(gl, DRAW_VERTEX_SHADER, DRAW_FRAGMENT_SHADER, [
       "u_particles", "u_wind", "u_wind_offset", "u_wind_scale", "u_first", "u_step", "u_size", "u_wrap",
       "u_particles_res", "u_point_size", "u_world_offset", "u_matrix", "u_max_speed", "u_palette",
-      "u_ink", "u_monochrome",
+      "u_ink", "u_monochrome", ...DOMAIN_UNIFORM_NAMES,
     ]);
     this.fadeProgram = this.createProgram(gl, QUAD_VERTEX_SHADER, FADE_FRAGMENT_SHADER, ["u_screen", "u_fade"]);
     this.screenProgram = this.createProgram(gl, QUAD_VERTEX_SHADER, SCREEN_FRAGMENT_SHADER, ["u_screen", "u_opacity"]);
@@ -604,6 +625,7 @@ export class WindParticleLayer implements CustomLayerInterface {
     gl.uniform2f(info.uniforms.u_step!, this.longitudeStep, this.latitudeStep);
     gl.uniform2f(info.uniforms.u_size!, this.width, this.height);
     gl.uniform1f(info.uniforms.u_wrap!, this.wraps ? 1 : 0);
+    setDomainUniforms(gl, info.uniforms, this.domain);
     if (info.uniforms.u_spawn) {
       gl.uniform4f(info.uniforms.u_spawn, this.spawn[0], this.spawn[1], this.spawn[2], this.spawn[3]);
     }

@@ -1,23 +1,29 @@
 # Xue
 
-> Xue (雪, "snow") is an open-source, static-site viewer of global weather
-> forecasts. It plays whole NOAA GFS and ECMWF IFS runs — 2 m temperature,
-> precipitation rate, 10 m and upper-air wind, sea level pressure, isobaric
-> geopotential height, temperature, humidity and water vapour flux, out to
-> 240 hours — as smooth animations over a MapLibre basemap, decoding a custom
+> Xue (雪, "snow") is an open-source, static-site viewer of weather
+> forecasts. It plays whole NOAA GFS, ECMWF IFS and NOAA HRRR runs — 2 m
+> temperature, precipitation rate, 10 m and upper-air wind, sea level
+> pressure, isobaric geopotential height, temperature, humidity and water
+> vapour flux, out to 240 hours (18 for HRRR) — as smooth animations over a
+> MapLibre basemap, decoding a custom
 > per-variable binary format (`.xue`) in a Rust/WebAssembly worker and
 > rendering on the GPU. Live at https://xue.ringsaturn.me. Code at
 > https://github.com/ringsaturn/xue (MIT OR Apache-2.0).
 
 Facts worth getting right:
 
-- Three live sources, one shell. `gfs`: NOAA GFS 0.25°, hourly to F120 then
+- Four live sources, one shell. `gfs`: NOAA GFS 0.25°, hourly to F120 then
   3-hourly to F240 (161 frames). `sflux`: GFS surface flux on its native
   ~13 km Gaussian grid, same cadence, the only source with solar radiation
   (`dswrf`). `ecmwf`: ECMWF IFS open data 0.25°, 3-hourly to F144 then
-  6-hourly to F240 (65 frames). A fourth source, `radar` (CMA level-3 radar
-  mosaic composite reflectivity), is observations rather than a forecast and
-  appears only as historical cases.
+  6-hourly to F240 (65 frames). `hrrr`: NOAA HRRR, 3 km over the contiguous
+  United States, a new cycle every hour, hourly to F18 (19 frames) — the
+  one regional source, resampled from its Lambert conformal grid onto a
+  0.03° latitude/longitude grid (2441 × 1051) over the domain's footprint;
+  the rectangle's corners the conic domain never covered repeat the nearest
+  cell and are not a forecast (the viewer clips them). A fifth source,
+  `radar` (CMA level-3 radar mosaic composite reflectivity), is observations
+  rather than a forecast and appears only as historical cases.
 - Bundles published per run. GFS and ECMWF: `tmp2m`, `prate`, `prmsl`,
   `hgt850`, `hgt700`, `hgt500`, `hgt250`, `tmp925`, `tmp850`, `tmp500`,
   `rh850`, `rh700`, `rh500`, and the vector pairs `wind10m`, `wind925`,
@@ -34,15 +40,19 @@ Facts worth getting right:
   viewer's wave layer; the primary direction is read from it as
   `atan2(-u, -v)`, degrees true the waves come from, and is not published
   as a scalar). SFLUX: `tmp2m`,
-  `prate`, `dswrf`, `wind10m`. Names are `<family><level>`; the level is in
-  hPa, `2m`/`10m` are heights above ground, `prmsl` is mean sea level
-  pressure.
+  `prate`, `dswrf`, `wind10m`. HRRR: `tmp2m`, `prate`, `prmsl`, `hgt850`,
+  `hgt700`, `hgt500`, `tmp925`, `tmp850`, `tmp500`, `gust`, `tcdc`,
+  `lcdc`, `mcdc`, `hcdc`, `cape`, `vis`, `dpt2m`, the forecast composite
+  radar reflectivity `cref` (the same name and unit as the radar mosaic's),
+  and the vector pairs `wind10m`, `wind925`, `wind850`, `wind250`. Names
+  are `<family><level>`; the level is in hPa, `2m`/`10m` are heights above
+  ground, `prmsl` is mean sea level pressure.
 - Only the newest run per source is kept online. Runs are pruned when
   superseded; historical events survive only as cases (below).
 - The site is entirely static: Cloudflare Pages for the shell, a public R2
   bucket for data, HTTP Range requests for streaming. There is no API server
   and no account.
-- Data licensing: NOAA GFS is public domain; ECMWF open data is CC BY 4.0 and
+- Data licensing: NOAA GFS and HRRR are public domain; ECMWF open data is CC BY 4.0 and
   what is served is a converted derivative ("Contains modified ECMWF open
   data"); radar cases are CMA products; the basemap is Protomaps ©
   OpenStreetMap contributors.
@@ -54,10 +64,12 @@ fall back to defaults rather than fail, so a constructed link always opens.
 
 - https://xue.ringsaturn.me/ — the live viewer. Defaults to GFS precipitation.
 - https://xue.ringsaturn.me/showcase.html — the list of historical cases.
-- `?model=gfs|sflux|ecmwf` — which live source (`ifs` is an alias of `ecmwf`).
+- `?model=gfs|sflux|ecmwf|hrrr` — which live source (`ifs` is an alias of
+  `ecmwf`).
 - `?type=` — the filled layer: `temp` (2 m temperature), `precip`, `wind`
   (10 m), `solar` (sflux only), `pressure` (sea level pressure as isobars),
-  `radar` (cases only), the GFS surface diagnostics `gust`, `cloud`
+  `radar` (composite reflectivity: cases, and the HRRR forecast), the GFS
+  and HRRR surface diagnostics `gust`, `cloud`
   (`lowcloud` / `midcloud` / `highcloud` for the layers), `cape`,
   `visibility`, `dewpoint`, `feelslike`, the GFS ocean set `sst` (the
   skin temperature, `tmpsfc`), `seaice` (`icec`; `icethickness` for
@@ -88,10 +100,10 @@ Everything the page reads is a plain file with CORS open, under
 https://dataset.ringsaturn.me/xue/. The contract is two layers:
 
 - One mutable live pointer per source (JSON, schema 1): `latest.json` (GFS),
-  `latest-sflux.json`, `latest-ecmwf.json`. Fields: `schemaVersion`, `model`,
-  `product`, `run` (YYYYMMDDHH, UTC), `runTime` (ISO 8601), `manifestPath`
-  (relative), `manifestCrc32`. Fetch with cache disabled; it changes four
-  times a day.
+  `latest-sflux.json`, `latest-ecmwf.json`, `latest-hrrr.json`. Fields:
+  `schemaVersion`, `model`, `product`, `run` (YYYYMMDDHH, UTC), `runTime`
+  (ISO 8601), `manifestPath` (relative), `manifestCrc32`. Fetch with cache
+  disabled; it changes four times a day (every hour for HRRR).
 - Everything the pointer names is immutable and lives under `<model>.<run>/`:
   the run's `manifest.json` (schema 5: `model`, `product`, `runTime`,
   `forecastHours`, and `bundles[]`, each with `variable`, `path`,

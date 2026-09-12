@@ -49,6 +49,22 @@ grib_set -r -s packingType=grid_jpeg /tmp/wave.crop.grib2 \
   tests/fixtures/gfswave.2026091100.f000.jp2.crop.grib2
 ```
 
+`hrrr.2026091100.f000.crop.grib2` is a 120 by 120 cell window of every
+record the HRRR source fetches from the 2026-09-11 00:00 UTC analysis,
+twenty-six records in `xuebuild/sources.py` order, over the Gulf coast
+(roughly 88W to 84W, 27N to 31N) and still on the model's own 3 km Lambert
+conformal grid — a crop keeps the projection, and GDAL's GRIB writer
+carries it — so the WKT parsing, the footprint, the resampling onto the
+regular 0.03° grid, the `MSLMA` / `REFC` aliases and the byte-identity
+parity test all run against real projected records. Complex packing keeps
+it a third of a megabyte. Cut from the records assembled by byte range off
+the `.idx` (the order and phrases are the source's) with:
+
+```sh
+gdal_translate -srcwin 1220 800 120 120 -of GRIB -co DATA_ENCODING=COMPLEX_PACKING \
+  /tmp/hrrr.f00.grib2 tests/fixtures/hrrr.2026091100.f000.crop.grib2
+```
+
 # Xue fixtures
 
 `tests/prepare_bin_fixture.py` encodes the same cropped GRIB into per-variable
