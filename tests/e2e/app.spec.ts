@@ -803,6 +803,11 @@ test("range-capable server streams on demand and never downloads the full body",
 });
 
 test("the credit mark opens the sources sheet, and the line folds into it on a phone", async ({ page }, testInfo) => {
+  // This is a test of the chrome, not of playback: with the animation running
+  // under software GL every round trip below waited on a frame (the phone
+  // project took 27 s of its 30 s budget, and a slower runner ran out), so it
+  // opens the page still, the way the language and appearance tests do.
+  await page.emulateMedia({ reducedMotion: "reduce" });
   await routeManifest(page);
   await routeBundle(page);
   await page.goto("/");
