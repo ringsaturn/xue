@@ -335,3 +335,29 @@ export function searchForCaseVariable(variableId: ForecastBundleId, search: stri
   params.set("type", canonicalType(variableId));
   return `?${params.toString()}`;
 }
+
+/** Where the map is looking, as a shared link carries it. */
+export interface MapCamera {
+  /** [longitude, latitude] of the view's center, in degrees. */
+  center: [number, number];
+  zoom: number;
+}
+
+/** The camera a link carries in its fragment: `#map=<zoom>/<lat>/<lon>`,
+ * MapLibre's own named-hash grammar (bearing and pitch may follow; they are
+ * not read here). The map itself reads and writes the fragment — this
+ * parser exists so the shell knows *whether* the link fixed the view: a
+ * camera the sharer chose outranks the framing a dataset would otherwise
+ * be opened on. The query string is untouched, so the camera never reaches
+ * the canonical URL and a pan never changes which page this is. A fragment
+ * that spells no camera, or one off the globe, reads as none. */
+export function parseCameraFromHash(hash: string): MapCamera | null {
+  const value = new URLSearchParams(hash.replace(/^#/, "")).get("map");
+  if (value === null) return null;
+  const parts = value.split("/");
+  if (parts.length < 3) return null;
+  const [zoom, latitude, longitude] = parts.map(Number) as [number, number, number];
+  if (!Number.isFinite(zoom) || !Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+  if (zoom < 0 || Math.abs(latitude) > 90) return null;
+  return { center: [longitude, latitude], zoom };
+}

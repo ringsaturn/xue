@@ -568,7 +568,15 @@ locally, browse `http://localhost:4173` rather than the loopback address.
   `?use_h264=`, `?particles=`) is parsed
   in `urlstate.ts`; `?lang=` belongs to `i18n.ts` and `?theme=` to `theme.ts`,
   since each is read before anything else renders. Unrecognized values fall
-  back to defaults rather than error.
+  back to defaults rather than error. The camera is in the fragment, not the
+  query string — `#map=<zoom>/<lat>/<lon>`, MapLibre's own `hash: "map"`,
+  which reads it at construction and rewrites it on every `moveend` — so a
+  pan never touches the canonical URL. `urlstate.ts::parseCameraFromHash`
+  only says whether a link fixed the view: `initialize({ frame })` frames
+  the dataset's region (a case's box; `FORECAST_MODELS[].region` through
+  `frameModelRegion`, unless `regionShareOfView` says the map is already
+  over it) on a model switch and on a first open without a camera, and
+  never on a retry or a new run.
 - The Python encoder and Rust decoder are held byte-identical by golden tests
   (`rust/xue/tests/golden.rs`) against fixtures built by
   `tests/prepare_bin_fixture.py`. A format change means changing the spec, both

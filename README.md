@@ -227,7 +227,12 @@ there is no separate `level` parameter); both are case-insensitive. In the
 page, one rail tile stands for a whole family (temperature from 2 m up, wind
 from 10 m up, humidity, vapour flux, pressure) and the level row on the
 transport capsule picks the surface. The address bar stays in sync when switching, and
-unrecognized values fall back to defaults.
+unrecognized values fall back to defaults. The view itself is in the
+fragment, `#map=<zoom>/<lat>/<lon>` (MapLibre's own spelling), kept current
+on every pan and zoom, so a copied address reopens on the same view; a link
+without one opens on the dataset's own region — a case's box, or a regional
+model's footprint — and switching to a regional model such as HRRR frames
+that footprint unless the map is already over it.
 
 Clicking the map pins a point and opens its forecast over the transport
 capsule: the field on screen at the playhead, and under it a meteogram —

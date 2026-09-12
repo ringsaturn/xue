@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  parseCameraFromHash,
   parseLinesFromSearch,
   parseModelFromSearch,
   parseParticlesFromSearch,
@@ -264,5 +265,25 @@ describe("searchWithLines", () => {
     expect(parseVariableFromSearch(search)).toBe("prate");
     // A layer switch preserves the lines, which is what keeps them sticky.
     expect(parseLinesFromSearch(searchForVariable("tmp2m", search))).toBe("hgt500");
+  });
+});
+
+describe("parseCameraFromHash", () => {
+  it("reads MapLibre's named hash, zoom then latitude then longitude", () => {
+    expect(parseCameraFromHash("#map=4.5/38.5/-97.5")).toEqual({ center: [-97.5, 38.5], zoom: 4.5 });
+    // Bearing and pitch may follow; the camera is still the first three.
+    expect(parseCameraFromHash("#map=4.5/38.5/-97.5/30/45")).toEqual({ center: [-97.5, 38.5], zoom: 4.5 });
+    // Other fragment params beside it are left to whoever owns them.
+    expect(parseCameraFromHash("#other=1&map=2/28/128")).toEqual({ center: [128, 28], zoom: 2 });
+  });
+
+  it("reads no camera from an empty, foreign or malformed fragment", () => {
+    expect(parseCameraFromHash("")).toBeNull();
+    expect(parseCameraFromHash("#")).toBeNull();
+    expect(parseCameraFromHash("#4.5/38.5/-97.5")).toBeNull();
+    expect(parseCameraFromHash("#map=4.5/38.5")).toBeNull();
+    expect(parseCameraFromHash("#map=zoom/lat/lon")).toBeNull();
+    expect(parseCameraFromHash("#map=4.5/91/0")).toBeNull();
+    expect(parseCameraFromHash("#map=-1/38.5/-97.5")).toBeNull();
   });
 });

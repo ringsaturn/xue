@@ -139,3 +139,24 @@ export const HRRR_DOMAIN: LambertDomain = {
   south: 1588193.8474433357 - 1059 * 3000,
   north: 1588193.8474433357,
 };
+
+/** A rectangle of the globe as [west, south, east, north] in degrees — a
+ * model's `region`, or the map's own bounds, whose longitudes run past ±180
+ * when the view is wider than the world. */
+export type GeoBox = readonly [number, number, number, number];
+
+/** How much of the view a region fills: the area of their overlap as a
+ * fraction of the view's, in degrees squared. Zero when they miss each
+ * other; one when the view sits wholly over the region. The shell uses it
+ * to decide whether a viewer opening a regional model is already looking at
+ * it — a world view overlaps every region and shows none of them. */
+export function regionShareOfView(region: GeoBox, view: GeoBox): number {
+  const [west, south, east, north] = region;
+  const [viewWest, viewSouth, viewEast, viewNorth] = view;
+  const viewArea = (viewEast - viewWest) * (viewNorth - viewSouth);
+  if (!(viewArea > 0)) return 0;
+  const width = Math.min(east, viewEast) - Math.max(west, viewWest);
+  const height = Math.min(north, viewNorth) - Math.max(south, viewSouth);
+  if (width <= 0 || height <= 0) return 0;
+  return (width * height) / viewArea;
+}

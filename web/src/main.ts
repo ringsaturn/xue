@@ -107,6 +107,7 @@ import {
 } from "./playback";
 import {
   DEFAULT_VARIABLE,
+  parseCameraFromHash,
   parseCaseFromSearch,
   parseLinesFromSearch,
   parseModelFromSearch,
@@ -120,7 +121,7 @@ import {
   searchWithParticles,
 } from "./urlstate";
 import { WindParticleLayer } from "./particles";
-import { domainContains, lambertCone, type LambertDomain } from "./domain";
+import { domainContains, lambertCone, regionShareOfView, type LambertDomain } from "./domain";
 import type { Feature, FeatureCollection } from "geojson";
 import { strideFor, type CellWindow, type LabelRequest } from "./isolines";
 import type { LabelsWorkerRequest, LabelsWorkerResponse } from "./labels.worker";
@@ -706,12 +707,22 @@ setWorkerUrl(maplibreWorkerUrl);
  * `syncBasemapStyle` diffs the next build against. */
 let appliedBasemapStyle: BasemapStyle = buildBasemapStyle();
 
+/** The camera the link fixed, if it did (`#map=<zoom>/<lat>/<lon>`). The
+ * map reads and writes the fragment itself (`hash` below): this is read
+ * once, before anything moves the camera, and says whether the dataset's
+ * own framing yields to the sharer's view. */
+const urlCamera = parseCameraFromHash(window.location.hash);
+
 const map = new MaplibreMap({
   container: "map",
   center: [128, 28],
   zoom: 1.65,
   minZoom: 0,
   maxZoom: 7,
+  // The view lives in the fragment, `#map=<zoom>/<lat>/<lon>`, kept
+  // current on every move — so a copied address reproduces the view, and
+  // the query string, which is what names the page, never changes on a pan.
+  hash: "map",
   attributionControl: false,
   style: appliedBasemapStyle,
 });
@@ -3493,20 +3504,26 @@ function applyCaseCamera(showcaseCase: ShowcaseCase, recenter: boolean): void {
   map.setMaxBounds(limits.bounds);
 }
 
-/** Move the camera onto a regional model's own region when the view shows
- * none of it (`FORECAST_MODELS[].region`); a view already over it is left
- * alone, and a global model has no region. Unlike a case's camera, nothing
- * is pinned: the limits are computed only to pick the framing. */
+/** The share of the view a regional model's region must fill for the
+ * viewer to count as already looking at it. Below this the region is a
+ * patch on a wider map — the world view overlaps every region and shows
+ * none of them — and opening the model frames it; at or above it, a view
+ * zoomed onto some part of the region stays where it is. */
+const REGION_IN_VIEW_SHARE = 0.5;
+
+/** Move the camera onto a regional model's own region
+ * (`FORECAST_MODELS[].region`) unless the view is already over it; a global
+ * model has no region. Unlike a case's camera, nothing is pinned: the
+ * limits are computed only to pick the framing, and the world around the
+ * region stays reachable, empty as it is. */
 function frameModelRegion(): void {
   const region = FORECAST_MODELS[selectedModelId].region;
   if (!region) return;
-  const [west, south, east, north] = region;
   const bounds = map.getBounds();
-  const overlaps =
-    bounds.getEast() > west && bounds.getWest() < east && bounds.getNorth() > south && bounds.getSouth() < north;
-  if (overlaps) return;
+  const view = [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()] as const;
+  if (regionShareOfView(region, view) >= REGION_IN_VIEW_SHARE) return;
   const canvas = map.getCanvas();
-  const limits = caseCameraLimits([west, south, east, north], {
+  const limits = caseCameraLimits([...region], {
     width: canvas.clientWidth,
     height: canvas.clientHeight,
   });
@@ -4635,7 +4652,13 @@ async function activateVariable(variableId: ForecastBundleId): Promise<void> {
   }
 }
 
-async function initialize(): Promise<void> {
+/** Tune to the dataset the URL names and open its first layer.
+ *
+ * `frame` says whether the camera goes to the dataset's own region — a
+ * case's box, a regional model's footprint. A switch frames; the first
+ * open frames unless the link fixed the view; a retry or a new run of the
+ * same model never moves a camera the viewer has since placed. */
+async function initialize({ frame = false }: { frame?: boolean } = {}): Promise<void> {
   const sequence = ++initializeSequence;
   stopPlayback();
   ready = false;
@@ -4710,18 +4733,17 @@ async function initialize(): Promise<void> {
       updateCasePresentation(found);
       // Frame the event before any byte lands, so the first painted plane
       // arrives on the region it belongs to rather than on the world view.
-      applyCaseCamera(found, true);
+      applyCaseCamera(found, frame);
       const loadedCase = await fetchCaseManifest(dataBaseUrl(), found);
       if (sequence !== initializeSequence) return;
       loadedManifest = loadedCase.manifest;
       manifestUrl = loadedCase.manifestUrl;
       currentRun = found.run;
     } else {
-      // A regional model opened on a view showing none of it would paint
-      // nothing: frame its region first, the way a case is framed, but
-      // without holding the camera there — the world around it stays
-      // reachable, empty as it is.
-      frameModelRegion();
+      // A regional model opened on a view showing little of it would paint
+      // nothing worth the name: frame its region first, the way a case is
+      // framed, but without holding the camera there.
+      if (frame) frameModelRegion();
       const loaded = await fetchManifest(dataBaseUrl(), selectedModelId);
       if (sequence !== initializeSequence) return;
       loadedManifest = loaded.manifest;
@@ -4835,7 +4857,7 @@ for (const button of modelButtons) {
     selectedModelId = modelId as ForecastModelId;
     updateModelPresentation();
     syncUrl();
-    void initialize();
+    void initialize({ frame: true });
   });
 }
 retryButton.addEventListener("click", () => void initialize());
@@ -4997,5 +5019,7 @@ map.once("load", () => {
   // A theme or language picked while the style was still loading was built
   // into nothing; the sync is a no-op otherwise, and applies the ground.
   syncBasemapStyle();
-  void initialize();
+  // A link that fixed the view is opened on that view; every other opens
+  // on the dataset's own region.
+  void initialize({ frame: urlCamera === null });
 });

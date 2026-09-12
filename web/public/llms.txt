@@ -90,9 +90,13 @@ fall back to defaults rather than fail, so a constructed link always opens.
   otherwise the browser's language and colour scheme decide.
 - `?use_h264=true` — opt into the H.264 companion artifacts via WebCodecs
   instead of the Xue decoder (a comparison path, not the default).
+- `#map=<zoom>/<lat>/<lon>` — the view, in the fragment (MapLibre's named
+  hash; the page keeps it current on every move). Without it the page opens
+  on the dataset's own region: the world for a global model, the contiguous
+  United States for `hrrr`, the case's box for a case.
 
 Examples: `/?model=ecmwf&type=wind850`, `/?type=temp&lines=hgt500`,
-`/?case=pnw-heat-dome-2021`.
+`/?case=pnw-heat-dome-2021`, `/?model=hrrr&type=radar#map=6/32.8/-96.8`.
 
 ## Data access
 
