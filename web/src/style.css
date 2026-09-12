@@ -771,12 +771,61 @@ body.is-pressure .legend {
    offset, so the three read as one vertical axis. */
 
 .variable-rail {
-  top: 50%;
-  right: 20px;
+  --fade-start: 0px;
+  --fade-end: 0px;
+  /* The box the column may use: under the zoom tile, level with the
+     capsule's bottom edge. Inside it the tiles sit a third of the way down
+     the slack — where the centred rail of old landed — and a rail taller
+     than the box scrolls (below) instead of running into the controls
+     above or the capsule beneath. */
+  top: 172px;
+  right: 16px;
+  bottom: 40px;
   display: flex;
   flex-direction: column;
   gap: 6px;
-  transform: translateY(-58%);
+  /* The scrolling clips on both axes, so the hover name — which sits to the
+     left of its tile — needs room inside the box, and the focus ring 4px
+     around. The box itself takes no pointer events, so the map still pans
+     under that room; the tiles do, and a wheel or a drag on one scrolls the
+     column all the same. */
+  padding: 4px 4px 4px 320px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-padding-block: 28px;
+  scrollbar-width: none;
+  pointer-events: none;
+}
+
+.variable-rail::-webkit-scrollbar {
+  display: none;
+}
+
+/* The slack above and below, one part to two, so a short rail lands where
+   the centred one used to; both collapse to nothing once the tiles fill the
+   box, which is what lets the column scroll from its first tile. */
+.variable-rail::before,
+.variable-rail::after {
+  flex: 1 0 0;
+  content: "";
+}
+
+.variable-rail::after {
+  flex-grow: 2;
+}
+
+/* A column taller than its box fades out at the clipped end instead of
+   cutting a tile in half; main.ts keeps the two lengths in step with the
+   scroll position and marks the rail clipped only while it is — a mask
+   would otherwise cost the tiles their backdrop blur even when it fits. */
+.variable-rail[data-clipped] {
+  mask-image: linear-gradient(
+    180deg,
+    transparent 0,
+    #000 var(--fade-start),
+    #000 calc(100% - var(--fade-end)),
+    transparent 100%
+  );
 }
 
 .variable-rail button {
@@ -784,6 +833,8 @@ body.is-pressure .legend {
   display: flex;
   width: 44px;
   height: 44px;
+  flex: none;
+  pointer-events: auto;
   flex-direction: column;
   align-items: center;
   justify-content: center;
@@ -801,11 +852,11 @@ body.is-pressure .legend {
   display: none;
 }
 
-/* A run that ships the whole GFS set puts fourteen tiles on the rail, which
+/* A run that ships the whole GFS set puts sixteen tiles on the rail, which
    no laptop screen fits at 44px: past ten visible tiles main.ts marks the
    rail dense, the tiles drop to 36px and lose their letter caption — the
    icon and the hover name carry the tile, the visually hidden name still
-   reads aloud — so the column stays clear of the title and the capsule. */
+   reads aloud. What still does not fit its box scrolls. */
 .variable-rail[data-dense] {
   gap: 4px;
 }
@@ -1951,6 +2002,15 @@ html[lang="ja"] .rail-glyph {
    safe area, and the two blocks that cost the most map — the case detail and
    the buffer card's prose — fold away. */
 
+/* Under 860px the capsule (720px wide at most, centred) reaches under the
+   rail's column, so the box stops short of it: main.ts keeps
+   --capsule-height at the capsule's measured height, level row and all. */
+@media (max-width: 860px) {
+  .variable-rail {
+    bottom: calc(52px + var(--capsule-height, 130px));
+  }
+}
+
 @media (max-width: 720px) {
   /* Pinch gestures replace the +/- control; every saved pixel goes to the map. */
   .maplibregl-ctrl-top-right {
@@ -2028,12 +2088,13 @@ html[lang="ja"] .rail-glyph {
     height: 120px;
   }
 
-  /* The same column as the round controls above: 44px at 16px. Biased
-     upward: the capsule is taller here once a level row is on it, and the
-     rail must stop short of it. */
+  /* The same column as the round controls above: 44px at 16px, and the box
+     runs from just under them to just over the capsule — there is no zoom
+     tile here, and a phone's rail is the one most likely to scroll. */
   .variable-rail {
-    right: 16px;
-    transform: translateY(-64%);
+    top: calc(72px + env(safe-area-inset-top));
+    right: 12px;
+    bottom: calc(52px + env(safe-area-inset-bottom) + var(--capsule-height, 130px));
   }
 
   /* Room under the capsule for the credits trigger, which is taller than

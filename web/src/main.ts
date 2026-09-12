@@ -2767,7 +2767,34 @@ function syncRailDensity(): void {
   const visible = variableButtons().filter((button) => !button.hidden).length;
   if (visible > DENSE_RAIL_TILES) variableRail.dataset.dense = "";
   else delete variableRail.dataset.dense;
+  syncRailFade();
 }
+
+/** How far the rail is clipped at each end, as the two lengths the
+ * stylesheet's mask fades over, the way `syncLevelRowFade` does for the
+ * level row; a column that fits its box is not marked clipped at all, so
+ * the mask (which costs the tiles their backdrop blur) is only ever on a
+ * rail that scrolls. */
+function syncRailFade(): void {
+  if (!variableRail) return;
+  const clipped = variableRail.scrollHeight - variableRail.clientHeight;
+  const start = clipped > 1 && variableRail.scrollTop > 1 ? 28 : 0;
+  const end = clipped > 1 && variableRail.scrollTop < clipped - 1 ? 28 : 0;
+  variableRail.style.setProperty("--fade-start", `${start}px`);
+  variableRail.style.setProperty("--fade-end", `${end}px`);
+  if (clipped > 1) variableRail.dataset.clipped = "";
+  else delete variableRail.dataset.clipped;
+}
+variableRail?.addEventListener("scroll", syncRailFade, { passive: true });
+// The rail's box ends where the capsule begins on a narrow screen, and the
+// capsule is taller with a level row on it: the stylesheet reads its
+// measured height back through --capsule-height. The rail's own size
+// changes with the viewport and the tile set, and either can clip it.
+new ResizeObserver(() => {
+  document.documentElement.style.setProperty("--capsule-height", `${Math.ceil(timelinePanel.offsetHeight)}px`);
+  syncRailFade();
+}).observe(timelinePanel);
+if (variableRail) new ResizeObserver(syncRailFade).observe(variableRail);
 
 /** The legend bar's gradient for a field whose key is not in the stylesheet:
  * the upper-air fills, the surface diagnostics, solar radiation and every
@@ -2889,7 +2916,11 @@ function updateVariablePresentation(session: VariableSession): void {
         ? fillFamily === family
         : button.dataset.variable === composition.fill;
     button.setAttribute("aria-pressed", String(pressed));
+    // A rail taller than its box scrolls, and the tile on screen belongs in
+    // view — clear of the fade, which is what the rail's scroll padding is.
+    if (pressed && !button.hidden) button.scrollIntoView({ block: "nearest", inline: "nearest" });
   }
+  syncRailFade();
 }
 
 /** Hold the camera to a case's own region. A case is the whole dataset, so

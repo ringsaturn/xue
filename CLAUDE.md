@@ -344,7 +344,14 @@ total and the three layers rather than isobaric surfaces, listed outright
 in `FamilyInfo.members`), the level row on the capsule picks the member,
 and the fill's group sits beside the lines' group. Past ten visible rail
 tiles `main.ts` marks the rail dense and the stylesheet drops the tiles to
-36px without their letter caption. Over a field the lines group is on the
+36px without their letter caption. The rail is a scroll column in a fixed
+box — under the zoom tile down to the capsule's bottom edge on desktop,
+under the round controls down to the capsule on phones, where `main.ts`
+publishes the capsule's measured height as `--capsule-height` — faded at a
+clipped end like the level row, and its tiles are grouped by quantity in
+`index.html` (temperature, water, wind and pressure, the remaining surface
+diagnostics, the upper-air dynamics), so a new tile goes into its group
+rather than onto the end. Over a field the lines group is on the
 row whenever the run publishes a pressure surface: a pressed member is the
 overlay (and pressing it again takes the lines off), none pressed means no
 lines, so the overlay is always one press away in either direction. The same
