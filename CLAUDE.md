@@ -431,9 +431,14 @@ without `setStyle`, so `applyBasemapInk` repaints their text and line colors
 instead. There is no fade at the top or bottom of the map: the title carries
 its own text shadow and the capsule its own surface.
 
-The round controls top-right, the zoom tile under them and the layer rail
-share one 44px column at the same right offset (20px, 16px on phones), so the
-three read as one vertical axis; a control added to that edge keeps to it.
+The round controls top-right, the zoom tile under them, the layer rail and
+the credit mark at the foot share one 44px column at the same right offset
+(20px, 16px on phones), so the four read as one vertical axis; a control
+added to that edge keeps to it. The credit is a mark, not a row: the capsule
+sits on the bottom edge, the sources sheet is behind the mark at every
+width, and the line beside it (basemap always; a dataset's own notice via
+`body[data-model]` only while that dataset is up) shows only where it fits
+next to the capsule — above 1180px.
 
 The Protomaps key is origin-locked to the production domains **and to
 `localhost`** — not to `127.0.0.1`, which is what `playwright.config.ts` serves

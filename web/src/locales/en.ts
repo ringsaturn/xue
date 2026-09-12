@@ -108,9 +108,11 @@ export const en = {
   /** The pressed lines member over a filled field is the overlay's off
    * switch; the tooltip says so, since the × alone is a hint. */
   linesRemoveTitle: "Press again to remove the lines",
-  /** The credits: a one-line footer on desktop, and on phones a trigger in
-   * its corner opening a sheet with one row per source. The row names are
-   * proper nouns and stay as they are; the glosses are translated. They are
+  /** The credits: a round mark at the foot of the right-hand column opening
+   * a sheet with one row per source, with the map's own credit line beside
+   * it where the screen has room. The trigger's string is the mark's
+   * accessible name (the mark itself is a glyph); the row names are proper
+   * nouns and stay as they are; the glosses are translated. They are
    * uppercase code words here, and stay uppercase wherever the script has
    * case. */
   creditsTrigger: "SOURCES",

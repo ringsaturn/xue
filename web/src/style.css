@@ -774,14 +774,14 @@ body.is-pressure .legend {
 .variable-rail {
   --fade-start: 0px;
   --fade-end: 0px;
-  /* The box the column may use: under the zoom tile, level with the
-     capsule's bottom edge. Inside it the tiles sit a third of the way down
-     the slack — where the centred rail of old landed — and a rail taller
-     than the box scrolls (below) instead of running into the controls
-     above or the capsule beneath. */
+  /* The box the column may use: under the zoom tile, down to the credit
+     mark that ends the column. Inside it the tiles sit a third of the way
+     down the slack — where the centred rail of old landed — and a rail
+     taller than the box scrolls (below) instead of running into the
+     controls above or the mark beneath. */
   top: 172px;
   right: 16px;
-  bottom: 40px;
+  bottom: 56px;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -958,7 +958,7 @@ html[lang="ja"] .rail-glyph {
    The transport capsule. */
 
 .timeline-panel {
-  bottom: 40px;
+  bottom: 16px;
   left: 50%;
   display: flex;
   width: calc(100% - 28px);
@@ -1813,56 +1813,84 @@ html[lang="ja"] .rail-glyph {
   font-weight: 500;
 }
 
+/* The credit ends the right-hand column: a 32px mark centred on the 44px
+   axis the round controls, the zoom tile and the rail share, level with
+   the capsule's bottom edge, and the line to its left on the same baseline —
+   beside the capsule, never under it, which is why the capsule can sit at
+   the bottom. Below 1180px the line no longer fits next to a 720px capsule
+   and folds into the mark, the way a compact map attribution does; the
+   sheet behind the mark carries every source in full at every width. */
 .source-note {
-  right: 20px;
+  right: 26px;
   bottom: 16px;
   display: flex;
-  gap: 8px;
+  gap: 12px;
   align-items: center;
-  flex-wrap: wrap;
   justify-content: flex-end;
+}
+
+.source-line {
+  max-width: calc(50vw - 360px - 86px);
   color: var(--map-ink-muted);
   font-family: var(--font-mono);
   font-size: 9px;
   font-weight: 500;
+  line-height: 1.5;
   letter-spacing: 0.06em;
+  text-align: right;
   text-shadow: var(--label-shadow);
 }
 
-.source-note a {
+.source-line a {
   color: var(--map-ink);
   text-decoration: none;
 }
 
-.source-note a:hover,
-.source-note a:focus-visible {
+.source-line a:hover,
+.source-line a:focus-visible {
   text-decoration: underline;
 }
 
-/* The phone's replacement for the credit line: one small pill in the same
-   corner, opening the sources sheet. Hidden wherever the line itself fits. */
-.credits-trigger {
+/* A dataset's notice is on the line only while that dataset is on screen. */
+.source-credit {
   display: none;
-  height: 26px;
+}
+
+body[data-model="ecmwf"] .source-credit[data-credit-model="ecmwf"],
+body[data-model="radar"] .source-credit[data-credit-model="radar"] {
+  display: inline;
+}
+
+.credits-trigger {
+  display: flex;
+  flex: none;
+  width: 32px;
+  height: 32px;
   align-items: center;
-  gap: 6px;
-  padding: 0 10px 0 8px;
+  justify-content: center;
+  padding: 0;
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: 50%;
   background: var(--surface);
   color: var(--text);
   cursor: pointer;
-  font-family: var(--font-mono);
-  font-size: 9px;
-  font-weight: 500;
-  letter-spacing: 0.06em;
-  text-shadow: none;
   backdrop-filter: blur(12px);
+  transition: border-color 160ms ease;
+}
+
+.credits-trigger:hover {
+  border-color: var(--muted);
 }
 
 .credits-trigger:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+@media (max-width: 1179px) {
+  .source-line {
+    display: none;
+  }
 }
 
 /* The sources sheet docks to the bottom edge at every width: it is opened
@@ -2006,11 +2034,16 @@ html[lang="ja"] .rail-glyph {
    the buffer card's prose — fold away. */
 
 /* Under 860px the capsule (720px wide at most, centred) reaches under the
-   rail's column, so the box stops short of it: main.ts keeps
-   --capsule-height at the capsule's measured height, level row and all. */
+   rail's column, so the credit mark moves up over it and the rail's box
+   stops short of the mark: main.ts keeps --capsule-height at the capsule's
+   measured height, level row and all. */
 @media (max-width: 860px) {
+  .source-note {
+    bottom: calc(28px + var(--capsule-height, 130px));
+  }
+
   .variable-rail {
-    bottom: calc(52px + var(--capsule-height, 130px));
+    bottom: calc(68px + var(--capsule-height, 130px));
   }
 }
 
@@ -2097,13 +2130,12 @@ html[lang="ja"] .rail-glyph {
   .variable-rail {
     top: calc(72px + env(safe-area-inset-top));
     right: 12px;
-    bottom: calc(52px + env(safe-area-inset-bottom) + var(--capsule-height, 130px));
+    bottom: calc(62px + env(safe-area-inset-bottom) + var(--capsule-height, 130px));
   }
 
-  /* Room under the capsule for the credits trigger, which is taller than
-     the credit line it replaces. */
+  /* The capsule sits on the safe area; nothing is under it. */
   .timeline-panel {
-    bottom: calc(40px + env(safe-area-inset-bottom));
+    bottom: calc(12px + env(safe-area-inset-bottom));
     width: calc(100% - 24px);
     max-width: none;
     padding: 8px 10px 6px 14px;
@@ -2124,19 +2156,11 @@ html[lang="ja"] .rail-glyph {
     display: none;
   }
 
-  /* The credit line does not fit a phone: it folds into the trigger, and
-     the sheet carries every source in full. */
+  /* The credit mark keeps the column's centre (44px at 16px) between the
+     rail and the capsule. */
   .source-note {
-    right: 16px;
-    bottom: calc(8px + env(safe-area-inset-bottom));
-  }
-
-  .source-note .source-line {
-    display: none;
-  }
-
-  .credits-trigger {
-    display: inline-flex;
+    right: 22px;
+    bottom: calc(22px + env(safe-area-inset-bottom) + var(--capsule-height, 130px));
   }
 
   .error-panel {
@@ -2477,13 +2501,25 @@ html:has(.showcase-page) {
 .showcase-page .source-note {
   position: static;
   display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
   justify-content: flex-start;
   padding-top: 22px;
   border-top: 1px solid var(--line);
   color: var(--muted);
-  text-shadow: none;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
 }
 
 .showcase-page .source-note a {
   color: var(--text);
+  text-decoration: none;
+}
+
+.showcase-page .source-note a:hover,
+.showcase-page .source-note a:focus-visible {
+  text-decoration: underline;
 }

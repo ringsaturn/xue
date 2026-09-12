@@ -529,26 +529,25 @@
         <button id="retry-button" type="button" data-i18n="retry">Retry</button>
       </div>
 
-      <!-- The credit line, and on phones — where it never fit — a trigger in
-           its place that opens the sources sheet below. -->
+      <!-- The credit: a mark at the foot of the right-hand column, opening
+           the sources sheet below, and beside it — where the screen has room
+           next to the capsule — the line the map must carry. The line names
+           what is on screen, not everything the site ever shows: the basemap
+           always, a dataset's own notice only while that dataset is up (the
+           stylesheet reads body[data-model]); GFS is public domain and is
+           already named under the title. -->
       <footer class="source-note">
         <span class="source-line">
-          <a href="https://github.com/ringsaturn/xue" target="_blank" rel="noreferrer">GITHUB</a>
-          <span>·</span>
-          DATA <a href="https://registry.opendata.aws/noaa-gfs-bdp-pds/" target="_blank" rel="noreferrer">NOAA GFS</a>
-          · CONTAINS MODIFIED <a href="https://www.ecmwf.int/en/forecasts/datasets/open-data" target="_blank" rel="noreferrer">ECMWF OPEN DATA</a>
-          (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">CC BY 4.0</a>)
-          · RADAR <a href="https://data.cma.cn" target="_blank" rel="noreferrer">CMA</a>
-          <span>·</span>
-          BASEMAP <a href="https://protomaps.com" target="_blank" rel="noreferrer">PROTOMAPS</a>
+          <span class="source-credit" data-credit-model="ecmwf">CONTAINS MODIFIED <a href="https://www.ecmwf.int/en/forecasts/datasets/open-data" target="_blank" rel="noreferrer">ECMWF OPEN DATA</a> (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">CC BY 4.0</a>) ·</span>
+          <span class="source-credit" data-credit-model="radar">RADAR <a href="https://data.cma.cn" target="_blank" rel="noreferrer">CMA</a> ·</span>
           © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OPENSTREETMAP</a>
+          · <a href="https://protomaps.com" target="_blank" rel="noreferrer">PROTOMAPS</a>
         </span>
-        <button id="credits-trigger" class="credits-trigger" type="button" aria-haspopup="dialog" aria-expanded="false">
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true">
-            <circle cx="6" cy="6" r="5" />
-            <path d="M6 5.4v3.2M6 3.4v.2" stroke-linecap="round" />
+        <button id="credits-trigger" class="credits-trigger" type="button" aria-haspopup="dialog" aria-expanded="false" data-i18n-aria="creditsTrigger" aria-label="SOURCES">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true">
+            <circle cx="8" cy="8" r="6.6" />
+            <path d="M8 7.2v4.2M8 4.6v.2" stroke-linecap="round" />
           </svg>
-          <span data-i18n="creditsTrigger">SOURCES</span>
         </button>
       </footer>
 

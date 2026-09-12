@@ -802,14 +802,18 @@ test("range-capable server streams on demand and never downloads the full body",
   expect(counters.full).toBe(0);
 });
 
-test("a phone folds the credit line into a sources sheet", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "mobile", "the phone viewport is the narrow one");
+test("the credit mark opens the sources sheet, and the line folds into it on a phone", async ({ page }, testInfo) => {
   await routeManifest(page);
   await routeBundle(page);
   await page.goto("/");
   await expect(page.getByRole("slider", { name: "Forecast hour" })).toBeEnabled({ timeout: 20_000 });
-  // The line never fit a phone; a trigger stands in its corner instead.
-  await expect(page.locator(".source-note .source-line")).toBeHidden();
+  // The line sits beside the capsule where the screen has room for it; a
+  // phone never had that room, and keeps only the mark.
+  const line = page.locator(".source-note .source-line");
+  if (testInfo.project.name === "mobile") await expect(line).toBeHidden();
+  else await expect(line).toContainText("OPENSTREETMAP");
+  // GFS is on screen: the line carries the basemap credit and nothing else.
+  await expect(line).not.toContainText("ECMWF");
   const trigger = page.getByRole("button", { name: "SOURCES" });
   await expect(trigger).toBeVisible();
   await trigger.click();
