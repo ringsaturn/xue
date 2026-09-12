@@ -26,9 +26,10 @@ dependencies = [
     # `gdalinfo` on PATH, which the scheduled publish workflows no longer
     # install. The floor tracks the current release because the wheel's
     # source table must match sources.py (a wheel that publishes a different
-    # bundle set refuses to build), and 0.12 is also the first wheel whose
-    # GDAL reads the JPEG 2000-packed GFS-Wave records as published.
-    "xuepy>=0.12,<0.13",
+    # bundle set refuses to build), and 0.13 is also the first wheel whose
+    # `gdal_info` reports the coordinate system, which is what the converter
+    # recognises a projected source (HRRR) from.
+    "xuepy>=0.13,<0.14",
 ]
 
 [project.scripts]
