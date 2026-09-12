@@ -224,9 +224,9 @@ export interface MeteogramInk {
 }
 
 /** Vertical room inside a row: the trace never touches the separator. */
-const ROW_PADDING = 5;
+const ROW_PADDING = 4;
 /** The strip at the foot of a wind row holding its direction arrows. */
-const ARROW_STRIP = 12;
+const ARROW_STRIP = 10;
 /** The least horizontal room between two direction arrows. */
 const ARROW_SPACING = 16;
 

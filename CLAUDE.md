@@ -482,7 +482,13 @@ reads the primary axis by lead seconds (`alignSeries`), so a bundle whose
 axis lacks a frame leaves a gap rather than a shifted column; the row
 labels and readouts are DOM text on the same pitch as the canvas the
 traces are drawn on; a press on either chart scrubs the timeline. Only the
-numeric rows exist — no per-column weather icons.
+numeric rows exist — no per-column weather icons. The panel and the
+capsule are laid out on the same two columns — `--probe-column` for the
+labels, the rest for the axis — so the sparkline's plot, the traces and
+the track run on one line and their three playheads coincide; the capsule
+reads down its label column the way a meteogram row does (caption, frame,
+valid time) and keeps the level chips and the transport buttons on the
+axis column, which is what holds it to two rows.
 
 The shell is a map with controls floating over it, not a map beside a panel:
 the display-serif title in the top-left corner names the layer *and* opens the
@@ -491,9 +497,10 @@ phones), three round buttons sit top-right (language, cases, appearance — the
 language one opening a picker of the ten endonyms through the same sheet
 mechanism, `web/src/sheet.ts`, that `#model-sheet` and the sources sheet
 use), the color scale runs down the left edge, one 48px tile per layer down the right,
-and one capsule at the bottom holds the whole transport: the pressure family's
-level row, the forecast hour and valid time, the speed and play buttons, and a
-track whose tick marks, playhead and day labels *are* the slider's appearance
+and one capsule at the bottom (960px wide at most) holds the whole transport
+in two rows: the pressure family's level chips with the speed and play
+buttons, then the forecast hour and valid time beside a track whose tick
+marks, playhead, day labels and end labels *are* the slider's appearance
 (the `<input type=range>` itself is transparent and only carries the hit area,
 the keyboard and the accessible name). `src/theme.ts` resolves light/dark
 before the first render the way `i18n.ts` resolves the locale, and both
@@ -531,7 +538,7 @@ added to that edge keeps to it. The credit is a mark, not a row: the capsule
 sits on the bottom edge, the sources sheet is behind the mark at every
 width, and the line beside it (basemap always; a dataset's own notice via
 `body[data-model]` only while that dataset is up) shows only where it fits
-next to the capsule — above 1180px.
+next to the capsule — above 1400px.
 
 The Protomaps key is origin-locked to the production domains **and to
 `localhost`** — not to `127.0.0.1`, which is what `playwright.config.ts` serves

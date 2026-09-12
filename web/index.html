@@ -448,28 +448,33 @@
       </div>
 
       <section id="timeline-panel" class="timeline-panel" data-i18n-aria="timelineAria" aria-label="Forecast time controls">
-        <!-- The level row: one group per slot — the filled family's surfaces
-             (2 m / 850 / 500 hPa temperature) when it has several, and the
-             lines' (sea level pressure and the isobaric heights) over every
-             field the run can chart, none pressed while the lines are off.
-             Built from the manifest by main.ts; hidden when there is nothing
-             to choose. -->
-        <div id="level-row" class="level-row" role="group" data-i18n-aria="levelSwitchAria" aria-label="Level" hidden></div>
-
-        <div class="timeline-heading">
-          <div class="forecast-readout">
-            <output id="forecast-hour" for="frame-slider">F---</output>
-            <div class="readout-meta">
-              <span id="lead-label" class="control-label">FORECAST HOUR</span>
-              <span id="valid-time-label" class="sr-only" data-i18n="validTimeLabel">Valid time</span>
-              <time id="valid-time">--</time>
-            </div>
+        <!-- Two rows on the same two columns the probe panel's meteogram
+             uses (a label column, then the axis), so the track under a
+             pinned point runs exactly under its traces and the three
+             playheads line up. The label column is one cell down both rows,
+             centred on the capsule: the caption, the frame, the valid time —
+             the way a meteogram row reads code, value, unit. -->
+        <div class="timeline-readout">
+          <span id="lead-label" class="control-label">FORECAST HOUR</span>
+          <output id="forecast-hour" for="frame-slider">F---</output>
+          <div class="readout-meta">
+            <span id="valid-time-label" class="sr-only" data-i18n="validTimeLabel">Valid time</span>
+            <time id="valid-time">--</time>
           </div>
+        </div>
+        <div class="timeline-tools">
+          <!-- The level row: one group per slot — the filled family's
+               surfaces (2 m / 850 / 500 hPa temperature) when it has
+               several, and the lines' (sea level pressure and the isobaric
+               heights) over every field the run can chart, none pressed
+               while the lines are off. Built from the manifest by main.ts;
+               hidden when there is nothing to choose. -->
+          <div id="level-row" class="level-row" role="group" data-i18n-aria="levelSwitchAria" aria-label="Level" hidden></div>
           <div id="load-status" class="load-status" role="status" aria-live="polite" data-i18n="readingManifest">Loading manifest</div>
-          <!-- Only for the wind layer: the speed field is the layer, and the
-               particle animation is an overlay the viewer can switch off. The
-               capsule has no room for a word at phone width, so the glyph is
-               the label, as on the layer rail. -->
+          <!-- Only for the wind layer: the speed field is the layer, and
+               the particle animation is an overlay the viewer can switch
+               off. The capsule has no room for a word at phone width, so
+               the glyph is the label, as on the layer rail. -->
           <button id="particles-toggle" class="pill-button particles-toggle" type="button" aria-pressed="true" data-i18n-aria="particlesToggleAria" aria-label="Toggle wind particle animation" hidden>
             <svg width="20" height="14" viewBox="0 0 20 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
               <path d="M1 4h9.5a2 2 0 1 0-2-2" />
@@ -491,6 +496,7 @@
           <div id="tick-marks" class="tick-marks" aria-hidden="true"></div>
           <div class="track-playhead" aria-hidden="true"></div>
           <div id="forecast-days" class="forecast-days" data-i18n-aria="forecastDaysAria" aria-label="Five-day forecast segments"></div>
+          <div class="track-ends" aria-hidden="true"><span>NOW</span><span id="track-horizon">+240H</span></div>
           <input
             id="frame-slider"
             type="range"
@@ -503,7 +509,6 @@
             aria-label="Forecast hour"
           />
         </div>
-        <div class="track-ends" aria-hidden="true"><span>NOW</span><span id="track-horizon">+240H</span></div>
       </section>
 
       <!-- Which run to read. The title block is the trigger; on phones this

@@ -1741,9 +1741,11 @@ let probeRenderFrame: number | null = null;
 const probeSeriesRequests = new Set<string>();
 
 /** The day strip and the row pitch of the meteogram, shared by the canvas
- * and the DOM rows beside it so the two stay aligned. */
-const METEOGRAM_HEADER_HEIGHT = 14;
-const METEOGRAM_ROW_HEIGHT = 44;
+ * and the DOM rows beside it so the two stay aligned. A row is two lines of
+ * text — the code, then the readout with its unit — and the pitch is what
+ * those need. */
+const METEOGRAM_HEADER_HEIGHT = 12;
+const METEOGRAM_ROW_HEIGHT = 30;
 
 const probePanel = buildProbePanel();
 
@@ -1756,10 +1758,18 @@ function buildProbePanel() {
   root.id = "probe-panel";
   root.setAttribute("aria-label", t("probeAria"));
   root.hidden = true;
-  // One line of headline: what is read, its value at the playhead, the
-  // frame, the cell, and how much of the series is in hand.
+  // The headline is the first row of the same two columns the meteogram
+  // rows and the capsule use: what is read and its value at the playhead
+  // in the label column, and on the axis column the frame, the cell and how
+  // much of the series is in hand, with the sparkline under them.
   const head = document.createElement("div");
   head.className = "probe-head";
+  const headline = document.createElement("div");
+  headline.className = "probe-headline";
+  const axis = document.createElement("div");
+  axis.className = "probe-axis";
+  const metaLine = document.createElement("div");
+  metaLine.className = "probe-meta-line";
   const code = document.createElement("span");
   code.className = "probe-code";
   code.id = "probe-code";
@@ -1787,10 +1797,13 @@ function buildProbePanel() {
   close.innerHTML =
     '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M2 2l8 8M10 2l-8 8" /></svg>';
   close.addEventListener("click", closeProbe);
-  head.append(code, value, meta, coords, footer, close);
   const canvas = document.createElement("canvas");
   canvas.className = "probe-chart";
   canvas.setAttribute("aria-hidden", "true");
+  headline.append(code, value);
+  metaLine.append(meta, coords, footer, close);
+  axis.append(metaLine, canvas);
+  head.append(headline, axis);
   // The meteogram: the row labels and readouts are DOM text in the left
   // column, the traces one canvas beside them, both on the same row pitch.
   const rows = document.createElement("div");
@@ -1804,7 +1817,7 @@ function buildProbePanel() {
   rowsChart.className = "probe-rows-chart";
   rowsChart.setAttribute("aria-hidden", "true");
   rows.append(rowList, rowsChart);
-  root.append(head, canvas, rows);
+  root.append(head, rows);
   timelinePanel.parentElement!.insertBefore(root, timelinePanel);
   return { root, code, coords, value, meta, canvas, count, hint, close, rows, rowList, rowsChart };
 }
@@ -1845,7 +1858,12 @@ function syncProbeRowElements(specs: MeteogramRowSpec[]): void {
     value.className = "probe-row-value";
     const note = document.createElement("span");
     note.className = "probe-row-note";
-    root.append(code, value, note);
+    // One line for the readout and its unit: the row is a flex column, and
+    // would put two children on two lines.
+    const line = document.createElement("span");
+    line.className = "probe-row-line";
+    line.append(value, note);
+    root.append(code, line);
     return { spec, root, value, note };
   });
   probePanel.rowList.replaceChildren(...probeRowElements.map((row) => row.root));
@@ -2224,11 +2242,11 @@ function bindProbeScrub(canvas: HTMLCanvasElement): void {
   canvas.addEventListener("pointerdown", (event) => {
     pressed = true;
     canvas.setPointerCapture(event.pointerId);
-    scrub(event, canvas === probePanel.canvas ? PROBE_CHART_GUTTER : 0);
+    scrub(event, canvas === probePanel.canvas ? probeColumnWidth() : 0);
     event.preventDefault();
   });
   canvas.addEventListener("pointermove", (event) => {
-    if (pressed) scrub(event, canvas === probePanel.canvas ? PROBE_CHART_GUTTER : 0);
+    if (pressed) scrub(event, canvas === probePanel.canvas ? probeColumnWidth() : 0);
   });
   const release = (): void => {
     pressed = false;
@@ -2239,8 +2257,14 @@ function bindProbeScrub(canvas: HTMLCanvasElement): void {
 bindProbeScrub(probePanel.canvas);
 bindProbeScrub(probePanel.rowsChart);
 
-/** The sparkline's left gutter, where its value range is written. */
-const PROBE_CHART_GUTTER = 30;
+
+/** The label column the stylesheet gives the probe panel and the capsule:
+ * the sparkline's gutter, so its plot starts where the traces and the track
+ * do. */
+function probeColumnWidth(): number {
+  const width = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--probe-column"));
+  return Number.isFinite(width) ? width : 136;
+}
 
 /** The series as a sparkline: sampled frames joined, gaps left open, the
  * playhead marked. Values are quantized, so the ladder in a flat stretch is
@@ -2266,8 +2290,10 @@ function drawProbeChart(values: ProbeValue[], selected: number, variable: Bundle
   context.font = "8px 'IBM Plex Mono', monospace";
   context.textBaseline = "middle";
 
-  // A left gutter carries the value range, so the plot never runs under it.
-  const gutter = PROBE_CHART_GUTTER;
+  // The canvas runs under both columns (the stylesheet pulls it left by the
+  // label column), so the plot starts where the traces and the track do,
+  // and the gutter before it is where the range is written.
+  const gutter = probeColumnWidth();
   const top = 6;
   const bottom = height - 6;
   const plotWidth = Math.max(1, width - gutter);
@@ -2336,10 +2362,12 @@ function drawProbeChart(values: ProbeValue[], selected: number, variable: Bundle
     context.fill();
   }
 
+  // The range, as a scale to the left of the plot's edge: in the label
+  // column, under the headline's code and below its value.
   context.fillStyle = mutedColor;
   context.textAlign = "right";
-  context.fillText(formatProbeValue(variable, highest), gutter - 5, top);
-  if (!flat) context.fillText(formatProbeValue(variable, lowest), gutter - 5, bottom);
+  context.fillText(formatProbeValue(variable, highest), gutter - 8, top);
+  if (!flat) context.fillText(formatProbeValue(variable, lowest), gutter - 8, bottom);
 }
 
 /** Sync the data card with one session's delivery state. The card only reads
@@ -2999,20 +3027,28 @@ function forecastDayCount(): number {
   return Math.floor(frameLeadSeconds(frameCount() - 1) / DAY_SECONDS);
 }
 
+/** The room at each end of the day-label strip that NOW and the horizon
+ * take, in pixels of the track: a mark centred inside it would run into
+ * them. */
+const TRACK_END_LABEL_PX = 48;
+
 /** Day boundaries as marks along the track, each sitting at the fraction of
  * the axis its frame falls on. Ten of them on a 240-hour run would collide,
- * so a long axis labels every other day; a mark that would hang off either
- * end is dropped, since `.track-ends` already names both. */
+ * so a long axis labels every other day; a mark that would run into NOW or
+ * the horizon at the ends of the same strip is dropped, since those already
+ * name both — measured against the track, which is a third as wide on a
+ * phone. Leaves the active mark where the playhead is. */
 function buildForecastDays(): void {
   forecastDays.replaceChildren();
   const days = forecastDayCount();
   const stride = days > 6 ? 2 : 1;
   const lastIndex = Math.max(1, frameCount() - 1);
+  const edge = Math.max(4, (TRACK_END_LABEL_PX / Math.max(1, forecastDays.clientWidth || 680)) * 100);
   for (let day = stride; day <= days; day += stride) {
     const index = dayFrameIndex(day);
     if (index === null) continue;
     const percent = (index / lastIndex) * 100;
-    if (percent < 4 || percent > 96) continue;
+    if (percent < edge || percent > 100 - edge) continue;
     const mark = document.createElement("time");
     mark.className = "forecast-day";
     mark.dataset.day = String(day);
@@ -3022,7 +3058,7 @@ function buildForecastDays(): void {
     mark.textContent = formatDayMark(valid);
     forecastDays.append(mark);
   }
-  updateForecastDay(0);
+  updateForecastDay(activeFrameIndex ?? Number(slider.value));
 }
 
 function updateForecastDay(frameIndex: number): void {
@@ -3299,6 +3335,15 @@ new ResizeObserver(() => {
   document.documentElement.style.setProperty("--capsule-height", `${Math.ceil(timelinePanel.offsetHeight)}px`);
   syncRailFade();
 }).observe(timelinePanel);
+// Which day marks fit beside NOW and the horizon depends on the track's
+// width, so a resize lays them out again.
+let forecastDaysWidth = 0;
+new ResizeObserver(() => {
+  const width = forecastDays.clientWidth;
+  if (width === forecastDaysWidth) return;
+  forecastDaysWidth = width;
+  if (metadata) buildForecastDays();
+}).observe(forecastDays);
 if (variableRail) new ResizeObserver(syncRailFade).observe(variableRail);
 
 /** The legend bar's gradient for a field whose key is not in the stylesheet:

@@ -55,6 +55,18 @@
      system's own serif rather than to the UI sans. */
   --font-display: "Instrument Serif", "Songti SC", "Source Han Serif SC", "Noto Serif CJK SC", serif;
 
+  /* The label column the capsule and the probe panel share, so the track
+     and the meteogram traces run on one axis: wide enough for the widest
+     readout with its unit beside it — three overcast layers,
+     "100 · 100 · 100 %", or the wind's "6.5 · 11.0 m/s · 302°". The
+     sparkline's gutter (main.ts) reads it too. */
+  --probe-column: 136px;
+  /* The capsule and the probe panel over it, on a desktop: a 240-hour axis
+     with its meteogram traces earns two thirds of a laptop's width, and
+     the corners' columns (legend left, rail right) still clear it above
+     1100px. */
+  --capsule-width: 960px;
+
   font-family: var(--font-ui);
   color: var(--text);
   background: var(--bg);
@@ -960,14 +972,16 @@ html[lang="ja"] .rail-glyph {
 .timeline-panel {
   bottom: 16px;
   left: 50%;
-  display: flex;
+  display: grid;
   width: calc(100% - 28px);
-  max-width: 720px;
-  flex-direction: column;
-  gap: 6px;
-  padding: 10px 12px 8px 16px;
+  max-width: var(--capsule-width);
+  grid-template-columns: var(--probe-column) minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  align-items: center;
+  row-gap: 4px;
+  padding: 8px 12px 6px 16px;
   border: 1px solid var(--line);
-  border-radius: 22px;
+  border-radius: 20px;
   background: var(--surface);
   transform: translateX(-50%);
   backdrop-filter: blur(18px);
@@ -980,13 +994,13 @@ html[lang="ja"] .rail-glyph {
   --fade-start: 0px;
   --fade-end: 0px;
   display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
   align-items: center;
   gap: 14px;
-  margin: -2px -12px 4px -16px;
-  padding: 0 12px 0 16px;
+  margin-right: 4px;
   overflow-x: auto;
   scrollbar-width: none;
-  scroll-padding: 0 12px 0 16px;
   /* A row wider than the capsule fades out at the clipped end instead of
      cutting a button in half; main.ts keeps the two lengths in step with the
      scroll position, and a row that fits has both at zero. */
@@ -1031,11 +1045,11 @@ html[lang="ja"] .rail-glyph {
 }
 
 .level-row button {
-  height: 36px;
+  height: 28px;
   flex: none;
-  padding: 0 12px;
+  padding: 0 10px;
   border: 1px solid var(--line);
-  border-radius: 18px;
+  border-radius: 14px;
   background: transparent;
   color: var(--muted);
   cursor: pointer;
@@ -1074,44 +1088,58 @@ html[lang="ja"] .rail-glyph {
   opacity: 0.55;
 }
 
-.timeline-heading {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.forecast-readout {
+/* The label column, one cell down both rows and centred on the capsule:
+   the caption over the frame over the valid time, on the pitch of a
+   meteogram row's code, value and unit. */
+.timeline-readout {
   display: flex;
   min-width: 0;
-  align-items: baseline;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  padding-right: 8px;
+  grid-row: 1 / 3;
+}
+
+.control-label {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  white-space: nowrap;
+}
+
+/* The chips, the status and the transport buttons, on the axis column: the
+   chips take what is left, and the buttons keep to the right end even when
+   there are no chips and the status has folded away. */
+.timeline-tools {
+  display: flex;
+  min-width: 0;
+  min-height: 36px;
+  align-items: center;
+  justify-content: flex-end;
   gap: 8px;
 }
 
 #forecast-hour {
-  flex: none;
   font-family: var(--font-display);
-  font-size: 28px;
+  font-size: 22px;
   line-height: 1;
   white-space: nowrap;
 }
 
 .readout-meta {
-  display: flex;
   min-width: 0;
-  align-items: baseline;
-  gap: 8px;
   color: var(--muted);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 500;
-}
-
-.control-label {
-  flex: none;
-  letter-spacing: 0.1em;
+  line-height: 12px;
 }
 
 #valid-time {
+  display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1152,11 +1180,11 @@ html[lang="ja"] .rail-glyph {
 }
 
 .pill-button {
-  height: 32px;
+  height: 28px;
   flex: none;
-  padding: 0 12px;
+  padding: 0 10px;
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: 14px;
   background: transparent;
   color: var(--muted);
   cursor: pointer;
@@ -1167,11 +1195,11 @@ html[lang="ja"] .rail-glyph {
 }
 
 /* The wind layer's particle switch. Icon-only and square-ish so it costs the
-   transport row as little as a 40px circle would, pressed-state filled like
+   transport row as little as the play button does, pressed-state filled like
    the level row's buttons. */
 .particles-toggle {
   display: flex;
-  width: 40px;
+  width: 36px;
   align-items: center;
   justify-content: center;
   padding: 0;
@@ -1207,11 +1235,13 @@ html[lang="ja"] .rail-glyph {
   opacity: 0.5;
 }
 
-/* The one filled control on the page. */
+/* The one filled control on the page. 36px, not the 44 of the round
+   controls in the corner: the capsule's height is map the viewer loses, and
+   the button has nothing within a finger's width of it. */
 .transport-button {
   display: flex;
-  width: 44px;
-  height: 44px;
+  width: 36px;
+  height: 36px;
   flex: none;
   align-items: center;
   justify-content: center;
@@ -1239,11 +1269,14 @@ html[lang="ja"] .rail-glyph {
   background: linear-gradient(90deg, currentColor 0 4px, transparent 4px 6px, currentColor 6px 10px);
 }
 
-/* --- the track ---------------------------------------------------------- */
+/* --- the track ----------------------------------------------------------
+   Two strips: the ticks with the playhead over them, and under them one
+   line of labels — NOW and the horizon at the ends, the day marks between
+   (main.ts drops a mark that would run into either end). */
 
 .track-wrap {
   position: relative;
-  height: 44px;
+  height: 36px;
   margin-right: 4px;
 }
 
@@ -1259,7 +1292,7 @@ html[lang="ja"] .rail-glyph {
   right: 0;
   left: 0;
   display: flex;
-  height: 22px;
+  height: 18px;
   align-items: flex-end;
   justify-content: space-between;
   pointer-events: none;
@@ -1268,12 +1301,12 @@ html[lang="ja"] .rail-glyph {
 .tick-marks i {
   display: block;
   width: 1px;
-  height: 5px;
+  height: 4px;
   background: var(--tick-off);
 }
 
 .tick-marks i.major {
-  height: 18px;
+  height: 14px;
 }
 
 .tick-marks i.is-active {
@@ -1285,19 +1318,20 @@ html[lang="ja"] .rail-glyph {
   top: 0;
   left: clamp(0px, var(--frame-progress, 0%), calc(100% - 2px));
   width: 2px;
-  height: 22px;
+  height: 18px;
   background: var(--accent);
   pointer-events: none;
 }
 
 /* Day labels sit under the ticks, each at the fraction of the axis its
    boundary falls on — the sparse replacement for a five-column strip. */
-.forecast-days {
+.forecast-days,
+.track-ends {
   position: absolute;
   right: 0;
   bottom: 0;
   left: 0;
-  height: 20px;
+  height: 18px;
   color: var(--muted);
   font-family: var(--font-mono);
   font-size: 10px;
@@ -1307,7 +1341,7 @@ html[lang="ja"] .rail-glyph {
 
 .forecast-day {
   position: absolute;
-  top: 3px;
+  top: 4px;
   transform: translateX(-50%);
   white-space: nowrap;
   transition: color 120ms linear;
@@ -1377,11 +1411,8 @@ html[lang="ja"] .rail-glyph {
 .track-ends {
   display: flex;
   justify-content: space-between;
-  padding-right: 4px;
-  color: var(--muted);
-  font-family: var(--font-mono);
+  padding-top: 4px;
   font-size: 9px;
-  font-weight: 500;
   letter-spacing: 0.1em;
 }
 
@@ -1636,13 +1667,13 @@ html[lang="ja"] .rail-glyph {
 .probe-panel {
   position: absolute;
   z-index: 2;
-  bottom: calc(24px + var(--capsule-height, 130px));
+  bottom: calc(24px + var(--capsule-height, 90px));
   left: 50%;
   width: calc(100% - 28px);
-  max-width: 720px;
-  padding: 8px 12px 10px 16px;
+  max-width: var(--capsule-width);
+  padding: 8px 12px 8px 16px;
   border: 1px solid var(--line);
-  border-radius: 22px;
+  border-radius: 20px;
   background: var(--surface);
   color: var(--text);
   transform: translateX(-50%);
@@ -1653,9 +1684,49 @@ html[lang="ja"] .rail-glyph {
   display: none;
 }
 
-/* The headline is one line: the code, the value, the frame, the cell, the
-   series count — and it wraps to two where the panel is narrow. */
+/* The headline is the first row on the panel's two columns: the code over
+   the value in the label column, like a meteogram row's code over its
+   readout; the frame, the cell and the series count on one line of the
+   axis column — wrapping to two where the panel is narrow — with the
+   sparkline under them. */
 .probe-head {
+  display: grid;
+  grid-template-columns: var(--probe-column) minmax(0, 1fr);
+  align-items: center;
+}
+
+.probe-headline {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+  padding-right: 8px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.probe-code {
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+}
+
+.probe-value {
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 22px;
+  line-height: 1.05;
+}
+
+.probe-axis {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.probe-meta-line {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
@@ -1665,18 +1736,6 @@ html[lang="ja"] .rail-glyph {
   font-size: 10px;
   font-weight: 500;
   letter-spacing: 0.06em;
-}
-
-.probe-code {
-  color: var(--text);
-}
-
-.probe-value {
-  color: var(--text);
-  font-family: var(--font-display);
-  font-size: 22px;
-  letter-spacing: 0;
-  line-height: 1.05;
 }
 
 .probe-coords {
@@ -1708,11 +1767,17 @@ html[lang="ja"] .rail-glyph {
   color: var(--text);
 }
 
+/* The sparkline runs under both columns — pulled left by the label column
+   so its range can be written there, to the left of the plot's edge, while
+   the plot itself keeps to the axis column (main.ts reads the same width
+   for its gutter). Under the headline's code and below its value, since
+   the canvas takes the foot of the row. */
 .probe-chart {
   display: block;
-  width: 100%;
-  height: 56px;
-  margin-top: 6px;
+  width: calc(100% + var(--probe-column));
+  height: 44px;
+  margin-top: 2px;
+  margin-left: calc(-1 * var(--probe-column));
 }
 
 .probe-chart[hidden] {
@@ -1731,15 +1796,13 @@ html[lang="ja"] .rail-glyph {
 
 /* The meteogram under the headline: the row labels and readouts in a text
    column on the left, the traces on one canvas to the right, both on the row
-   pitch main.ts sets inline so the numbers sit beside their traces. */
+   pitch main.ts sets inline so the numbers sit beside their traces. The
+   column is the capsule's, so the traces run over the track. */
 .probe-rows {
   display: grid;
-  /* Wide enough for the widest readout, three overcast layers
-     ("100 · 100 · 100"): a readout must never wrap, since the rows' text
-     and the traces beside them share one pitch. */
-  grid-template-columns: 104px minmax(0, 1fr);
-  margin-top: 6px;
-  padding-top: 4px;
+  grid-template-columns: var(--probe-column) minmax(0, 1fr);
+  margin-top: 4px;
+  padding-top: 2px;
   border-top: 1px solid var(--line);
 }
 
@@ -1751,15 +1814,24 @@ html[lang="ja"] .rail-glyph {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  /* The closing separator, on the edge the canvas draws its own along. */
+  border-bottom: 1px solid color-mix(in srgb, var(--muted) 22%, transparent);
 }
 
+/* Two lines a row: the code, then the readout with its unit beside it. A
+   readout must never wrap, since the rows' text and the traces beside them
+   share one pitch. The separator the canvas draws between two rows carries
+   on across the label column (same ink, same alpha, on the row's top edge,
+   which is where the canvas puts it), so a label and its trace read as one
+   row rather than the text as a list of its own. */
 .probe-row {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 1px;
+  gap: 2px;
   box-sizing: border-box;
   padding-right: 8px;
+  border-top: 1px solid color-mix(in srgb, var(--muted) 22%, transparent);
   overflow: hidden;
   font-family: var(--font-mono);
   font-weight: 500;
@@ -1769,6 +1841,7 @@ html[lang="ja"] .rail-glyph {
 .probe-row-code {
   color: var(--muted);
   font-size: 9px;
+  line-height: 11px;
   letter-spacing: 0.06em;
   white-space: nowrap;
 }
@@ -1778,17 +1851,23 @@ html[lang="ja"] .rail-glyph {
   color: var(--text);
 }
 
-.probe-row-value {
+.probe-row-line {
   display: block;
+  overflow: hidden;
+  line-height: 13px;
+}
+
+.probe-row-value {
+  display: inline;
   color: var(--text);
   font-size: 10.5px;
-  line-height: 1.2;
 }
 
 .probe-row-note {
+  margin-left: 4px;
   color: var(--muted);
-  font-size: 10px;
-  line-height: 1.2;
+  font-size: 9.5px;
+  line-height: 13px;
 }
 
 /* A row still waiting for its series, or one whose bundle never opened. */
@@ -1889,7 +1968,7 @@ html[lang="ja"] .rail-glyph {
    axis the round controls, the zoom tile and the rail share, level with
    the capsule's bottom edge, and the line to its left on the same baseline —
    beside the capsule, never under it, which is why the capsule can sit at
-   the bottom. Below 1180px the line no longer fits next to a 720px capsule
+   the bottom. Below 1400px the line no longer fits next to a 960px capsule
    and folds into the mark, the way a compact map attribution does; the
    sheet behind the mark carries every source in full at every width. */
 .source-note {
@@ -1902,7 +1981,7 @@ html[lang="ja"] .rail-glyph {
 }
 
 .source-line {
-  max-width: calc(50vw - 360px - 86px);
+  max-width: calc(50vw - var(--capsule-width) / 2 - 86px);
   color: var(--map-ink-muted);
   font-family: var(--font-mono);
   font-size: 9px;
@@ -1959,7 +2038,7 @@ body[data-model="radar"] .source-credit[data-credit-model="radar"] {
   outline-offset: 2px;
 }
 
-@media (max-width: 1179px) {
+@media (max-width: 1399px) {
   .source-line {
     display: none;
   }
@@ -2105,17 +2184,17 @@ body[data-model="radar"] .source-credit[data-credit-model="radar"] {
    safe area, and the two blocks that cost the most map — the case detail and
    the buffer card's prose — fold away. */
 
-/* Under 860px the capsule (720px wide at most, centred) reaches under the
+/* Under 1100px the capsule (960px wide at most, centred) reaches under the
    rail's column, so the credit mark moves up over it and the rail's box
    stops short of the mark: main.ts keeps --capsule-height at the capsule's
    measured height, level row and all. */
-@media (max-width: 860px) {
+@media (max-width: 1100px) {
   .source-note {
-    bottom: calc(28px + var(--capsule-height, 130px));
+    bottom: calc(28px + var(--capsule-height, 90px));
   }
 
   .variable-rail {
-    bottom: calc(68px + var(--capsule-height, 130px));
+    bottom: calc(68px + var(--capsule-height, 90px));
   }
 }
 
@@ -2202,13 +2281,32 @@ body[data-model="radar"] .source-credit[data-credit-model="radar"] {
   .variable-rail {
     top: calc(72px + env(safe-area-inset-top));
     right: 12px;
-    bottom: calc(62px + env(safe-area-inset-bottom) + var(--capsule-height, 130px));
+    bottom: calc(62px + env(safe-area-inset-bottom) + var(--capsule-height, 90px));
   }
 
   .probe-panel {
-    bottom: calc(20px + env(safe-area-inset-bottom) + var(--capsule-height, 130px));
+    bottom: calc(20px + env(safe-area-inset-bottom) + var(--capsule-height, 90px));
     width: calc(100% - 24px);
     max-width: none;
+  }
+
+  /* The label column costs the axis a third of a phone's width, so it
+     narrows as far as the readouts allow at one size down. */
+  :root {
+    --probe-column: 116px;
+  }
+
+  .probe-row-value {
+    font-size: 10px;
+  }
+
+  #forecast-hour {
+    font-size: 20px;
+  }
+
+  .probe-row-note {
+    margin-left: 3px;
+    font-size: 8.5px;
   }
 
   /* The capsule sits on the safe area; nothing is under it. */
@@ -2216,18 +2314,23 @@ body[data-model="radar"] .source-credit[data-credit-model="radar"] {
     bottom: calc(12px + env(safe-area-inset-bottom));
     width: calc(100% - 24px);
     max-width: none;
-    padding: 8px 10px 6px 14px;
+    padding: 6px 10px 5px 14px;
   }
 
-  #forecast-hour {
-    font-size: 24px;
-  }
-
-  /* The transport row has no slack left: the caption goes (F000 sitting on
-     the slider needs no label), and the status line only earns its place
-     while something is actually happening. */
+  /* The top row has no caption at this width (F000 sitting on the slider
+     needs no label), so the chips take the whole row and the readout sits
+     beside the track alone; the status line only earns its place while
+     something is actually happening. */
   .control-label {
     display: none;
+  }
+
+  .timeline-tools {
+    grid-column: 1 / -1;
+  }
+
+  .timeline-readout {
+    grid-row: 2;
   }
 
   .load-status:not(.is-loading):not(.is-error) {
@@ -2238,7 +2341,7 @@ body[data-model="radar"] .source-credit[data-credit-model="radar"] {
      rail and the capsule. */
   .source-note {
     right: 22px;
-    bottom: calc(22px + env(safe-area-inset-bottom) + var(--capsule-height, 130px));
+    bottom: calc(22px + env(safe-area-inset-bottom) + var(--capsule-height, 90px));
   }
 
   .error-panel {
