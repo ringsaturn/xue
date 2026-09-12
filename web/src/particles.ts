@@ -222,6 +222,11 @@ uniform vec4 u_ink;
 uniform float u_monochrome;
 out vec4 out_color;
 void main() {
+  // A particle sitting in a null field — the wave vector's land, (0, 0)
+  // exactly — would otherwise stand still as a dot; a wind is never that
+  // calm, so the threshold (a hundredth of a percent of the ceiling) costs
+  // it nothing.
+  if (v_speed_t < 1e-4) discard;
   vec4 color = u_monochrome > 0.5
     ? u_ink
     : texture(u_palette, vec2((v_speed_t * 255.0 + 0.5) / 256.0, 0.5));
