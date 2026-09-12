@@ -814,6 +814,22 @@ body.is-pressure .legend {
   display: none;
 }
 
+/* A finger has no hover name to make room for, and the scroller has to be
+   hit-testable itself for a drag to scroll it: a touch that lands on a tile
+   inside a box that takes no pointer events pans nothing on iOS, whatever
+   the tile says. So on a touch screen the gutter goes and the box takes the
+   touch — but only while it actually scrolls, so a rail that fits keeps
+   letting the map pan through the gaps and the slack around it. */
+@media (hover: none) {
+  .variable-rail {
+    padding-left: 4px;
+  }
+
+  .variable-rail[data-clipped] {
+    pointer-events: auto;
+  }
+}
+
 /* The slack above and below, one part to two, so a short rail lands where
    the centred one used to; both collapse to nothing once the tiles fill the
    box, which is what lets the column scroll from its first tile. */
