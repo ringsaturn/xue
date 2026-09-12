@@ -1123,7 +1123,7 @@ dependencies = [
 
 [[package]]
 name = "xue"
-version = "0.13.0"
+version = "0.13.1"
 dependencies = [
  "crc32fast",
  "flate2",
@@ -1141,7 +1141,7 @@ dependencies = [
 
 [[package]]
 name = "xue-py"
-version = "0.13.0"
+version = "0.13.1"
 dependencies = [
  "numpy",
  "pyo3",

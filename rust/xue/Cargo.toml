@@ -1,6 +1,6 @@
 [package]
 name = "xue"
-version = "0.13.0"
+version = "0.13.1"
 edition = "2021"
 description = "Parser and frame decoder for the Xue weather-forecast bundle format"
 license = "MIT OR Apache-2.0"

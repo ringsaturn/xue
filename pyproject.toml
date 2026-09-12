@@ -26,10 +26,11 @@ dependencies = [
     # `gdalinfo` on PATH, which the scheduled publish workflows no longer
     # install. The floor tracks the current release because the wheel's
     # source table must match sources.py (a wheel that publishes a different
-    # bundle set refuses to build), and 0.13 is also the first wheel whose
-    # `gdal_info` reports the coordinate system, which is what the converter
-    # recognises a projected source (HRRR) from.
-    "xuepy>=0.13,<0.14",
+    # bundle set refuses to build), and 0.13.1 is the first wheel that reads
+    # a projected source (HRRR) the way the reference does: `gdal_info`
+    # reporting the coordinate system, and the projected origin taken to the
+    # millimetre.
+    "xuepy>=0.13.1,<0.14",
 ]
 
 [project.scripts]
