@@ -193,7 +193,8 @@ export function frameIndexAtX(x: number, count: number, width: number): number {
   return Math.max(0, Math.min(count - 1, Math.round((x / width) * (count - 1))));
 }
 
-/** A day boundary on the axis: the first frame of a UTC day and its mark. */
+/** A day boundary on the axis: the frame a whole forecast day falls on,
+ * labelled with that instant's weekday in the display zone. */
 export interface DayMark {
   index: number;
   label: string;

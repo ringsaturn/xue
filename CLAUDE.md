@@ -564,6 +564,15 @@ locally, browse `http://localhost:4173` rather than the loopback address.
   swaps "FORECAST HOUR"/`F058`/模式周期/有效时间 for
   "TIME ELAPSED"/`T+058:24`/观测起点/观测时间, on the viewer and on the
   showcase cards. Observations have no run cycle and no lead time.
+- Valid times read in one **display zone** (`web/src/timezone.ts`): the
+  browser's own, or the pinned point's while a probe is open — `tzf-wasm`
+  answers the point → zone lookup, a 4 MB index loaded on the first pin and
+  never before, and `Etc/GMT±N` over open water. `displayZone` is a live
+  binding like `theme` and `locale` (`onDisplayZoneChange` repaints the
+  capsule readout, tooltip and day marks). The run cycle stays UTC wherever
+  it is stamped — 00Z is the cycle's name — and so do the showcase cards.
+  Offset labels (`UTC+9`) and zone ids are instrument text, English in
+  every locale.
 - URL state (`?model=`, `?type=`, `?lines=`, `?case=`, `?res=`,
   `?use_h264=`, `?particles=`) is parsed
   in `urlstate.ts`; `?lang=` belongs to `i18n.ts` and `?theme=` to `theme.ts`,

@@ -16,7 +16,8 @@
     "@fontsource/instrument-serif": "^5.3.0",
     "@fontsource/manrope": "^5.3.0",
     "@protomaps/basemaps": "^5.7.2",
-    "maplibre-gl": "^6.4.1"
+    "maplibre-gl": "^6.4.1",
+    "tzf-wasm": "^2.0.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.54.2",

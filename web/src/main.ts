@@ -149,6 +149,16 @@ import { fetchPoster, isPosterSupported } from "./poster";
 import { frameCacheKey, parseFrameCacheKey, variableKey } from "./sessionkeys";
 import { applyTheme, isDark, onThemeChange, toggleTheme } from "./theme";
 import {
+  displayZone,
+  formatCompactStamp,
+  formatDayMark as formatDayMarkIn,
+  formatStamp,
+  onDisplayZoneChange,
+  setDisplayZone,
+  zoneAt,
+  zoneDisplayName,
+} from "./timezone";
+import {
   coverageBox,
   coversTiles,
   parseTileGeometry,
@@ -804,7 +814,7 @@ const playLabel = required<HTMLElement>("play-label");
 const speedButton = required<HTMLButtonElement>("speed-button");
 const particlesToggle = required<HTMLButtonElement>("particles-toggle");
 const speedLabel = required<HTMLElement>("speed-label");
-const validTime = required<HTMLElement>("valid-time");
+const validTime = required<HTMLTimeElement>("valid-time");
 const dataCard = required<HTMLElement>("data-card");
 const dataCardIndex = required<HTMLElement>("data-card-index");
 const dataCardTitle = required<HTMLElement>("data-card-title");
@@ -1290,17 +1300,10 @@ function resayAll(): void {
   for (const [element, speak] of liveCopy) element.textContent = speak();
 }
 
+/** A valid time, in the display zone — the browser's, or the pinned
+ * point's (`timezone.ts`). */
 function formatDate(value: string | number): string {
-  return new Intl.DateTimeFormat("zh-CN", {
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-    timeZone: "UTC",
-  })
-    .format(new Date(value))
-    .replace("24:", "00:") + " UTC";
+  return formatStamp(value, displayZone);
 }
 
 function formatBytes(bytes: number): string {
@@ -1310,23 +1313,13 @@ function formatBytes(bytes: number): string {
 }
 
 function formatCompactDate(value: number): string {
-  const date = new Date(value);
-  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
-  const day = String(date.getUTCDate()).padStart(2, "0");
-  const hour = String(date.getUTCHours()).padStart(2, "0");
-  return `${month}/${day} ${hour}Z`;
+  return formatCompactStamp(value, displayZone);
 }
 
-/** Short weekday in the UI locale, read in UTC like every other stamp the
- * app shows. Built per language, since the language can change under it. */
-let weekdayFormat: { lang: string; format: Intl.DateTimeFormat } | null = null;
-
+/** Short weekday in the UI locale and the day of month, read in the display
+ * zone like every other valid-time stamp. */
 function formatDayMark(value: number): string {
-  if (weekdayFormat?.lang !== htmlLang) {
-    weekdayFormat = { lang: htmlLang, format: new Intl.DateTimeFormat(htmlLang, { weekday: "short", timeZone: "UTC" }) };
-  }
-  const date = new Date(value);
-  return `${weekdayFormat.format.format(date)} ${String(date.getUTCDate()).padStart(2, "0")}`;
+  return formatDayMarkIn(value, displayZone, htmlLang);
 }
 
 function frameCount(): number {
@@ -1694,6 +1687,7 @@ function debugInfoText(): string {
     `decode: ${lastDecodeMs === null ? "--" : `${lastDecodeMs.toFixed(1)} ms`} · ${formatBytes(decodeRateBytesPerSec())}/s`,
     `viewport: ${Math.round(neededGridWidth())} col${tileShare()} · zoom ${map.getZoom().toFixed(2)} · dpr ${window.devicePixelRatio || 1}`,
     `connection: ${connectionLabel()}`,
+    `clock: ${displayZone}${probeZone ? " (pinned)" : ""}`,
     `ua: ${navigator.userAgent}`,
   ];
   return lines.join("\n");
@@ -1747,6 +1741,12 @@ let probe: ProbeSeries | null = null;
  * reads is marked where it was clicked. */
 let probeMarker: Marker | null = null;
 let probeRenderFrame: number | null = null;
+/** The pinned point's zone once the lookup has answered, and the pin it
+ * answered for: an answer for a pin since replaced must not land on the
+ * new one, and the first pin's answer can arrive seconds later, behind the
+ * index download. */
+let probeZone: string | null = null;
+let probePinSequence = 0;
 /** Series requests in flight, so a re-render or a session swap does not ask
  * twice for the same cell. Keyed by `variableId:column:row`. */
 const probeSeriesRequests = new Set<string>();
@@ -1793,6 +1793,11 @@ function buildProbePanel() {
   const coords = document.createElement("span");
   coords.className = "probe-coords";
   coords.id = "probe-coords";
+  // The zone the pinned point lies in, which every valid time on screen now
+  // reads in; empty until the lookup answers.
+  const zone = document.createElement("span");
+  zone.className = "probe-zone";
+  zone.id = "probe-zone";
   const footer = document.createElement("span");
   footer.className = "probe-footer";
   const count = document.createElement("span");
@@ -1812,7 +1817,7 @@ function buildProbePanel() {
   canvas.className = "probe-chart";
   canvas.setAttribute("aria-hidden", "true");
   headline.append(code, value);
-  metaLine.append(meta, coords, footer, close);
+  metaLine.append(meta, coords, zone, footer, close);
   axis.append(metaLine, canvas);
   head.append(headline, axis);
   // The meteogram: the row labels and readouts are DOM text in the left
@@ -1830,7 +1835,7 @@ function buildProbePanel() {
   rows.append(rowList, rowsChart);
   root.append(head, rows);
   timelinePanel.parentElement!.insertBefore(root, timelinePanel);
-  return { root, code, coords, value, meta, canvas, count, hint, close, rows, rowList, rowsChart };
+  return { root, code, coords, zone, value, meta, canvas, count, hint, close, rows, rowList, rowsChart };
 }
 
 /** One meteogram row's DOM: its code, its readout at the playhead, and the
@@ -1922,6 +1927,7 @@ function setProbe(longitude: number, latitude: number): void {
   // and keeping them would suppress the series read when a point is pinned
   // again later.
   probeSeriesRequests.clear();
+  void resolveProbeZone(longitude, latitude);
   seedProbeFromCache();
   requestAllProbeSeries();
   ensureProbeSessions();
@@ -1938,6 +1944,24 @@ function closeProbe(): void {
   probeSeriesRequests.clear();
   probeMarker?.remove();
   probePanel.root.hidden = true;
+  // Unpinned, the clock is the viewer's own again.
+  probePinSequence += 1;
+  probeZone = null;
+  setDisplayZone(null);
+}
+
+/** Read the pinned point's zone and move every valid time onto it. Until
+ * the answer comes (the first time, after a 4 MB index has loaded) the
+ * stamps keep the zone they had, so a pin never blanks the capsule. */
+async function resolveProbeZone(longitude: number, latitude: number): Promise<void> {
+  const sequence = ++probePinSequence;
+  // The previous pin's zone says nothing about this point.
+  probeZone = null;
+  const zone = await zoneAt(longitude, latitude);
+  if (sequence !== probePinSequence) return;
+  probeZone = zone;
+  setDisplayZone(zone);
+  renderProbe();
 }
 
 /** Every session the pinned point reads: the ones on screen and the
@@ -2080,6 +2104,7 @@ function renderProbe(): void {
   const point = cell ?? { longitude: series.longitude, latitude: series.latitude };
   probePanel.coords.textContent =
     `${formatProbeDegrees(point.latitude, "NS")} ${formatProbeDegrees(point.longitude, "EW")}`;
+  probePanel.zone.textContent = probeZone ? zoneDisplayName(probeZone, frameValidTime(activeFrameIndex ?? Number(slider.value))) : "";
 
   const index = activeFrameIndex ?? Number(slider.value);
   const offsets = frameAxis();
@@ -2575,6 +2600,7 @@ function updateFrameReadout(index: number): void {
   slider.setAttribute("aria-valuetext", `${lead}, ${formatDate(valid)}`);
   forecastLead.value = lead;
   validTime.textContent = formatDate(valid);
+  validTime.dateTime = new Date(valid).toISOString();
   frameTooltip.value = `${lead} · ${formatCompactDate(valid)}`;
   // Read by the tooltip and by the track's playhead, so it is set on the
   // capsule both of them sit in.
@@ -4754,7 +4780,9 @@ async function initialize({ frame = false }: { frame?: boolean } = {}): Promise<
     // The dataset is settled here (a case pins its own), so the timeline can
     // be titled for what it actually shows.
     applyDatasetWording();
-    sayText(runTime, formatDate(loadedManifest.runTime));
+    // The cycle is named in UTC wherever it is stamped (00Z is its name),
+    // whatever zone the valid times below read in.
+    sayText(runTime, formatStamp(loadedManifest.runTime, "UTC"));
 
     // Each variable button appears only when the manifest actually ships its
     // bundle. On the live feed that is wind10m everywhere and dswrf on the
@@ -4908,11 +4936,22 @@ function applyLocale(): void {
   refreshLabels();
 }
 
+/** Rewrite every valid-time stamp in the display zone in force: the
+ * capsule's readout and tooltip, the day marks along the track, and the
+ * meteogram's (which the probe redraws). The run cycle is not one. */
+function applyDisplayZone(): void {
+  if (!metadata) return;
+  updateFrameReadout(activeFrameIndex ?? Number(slider.value));
+  buildForecastDays();
+}
+
 // Neither the locale nor the theme reloads: the picker and the toggle each
 // persist the choice and repaint in place through the two listeners here.
 // The language picker is wired where it is built, beside the other sheets.
 onThemeChange(applyAppearance);
 onLocaleChange(applyLocale);
+// The display zone moves with the pin; every valid-time stamp follows it.
+onDisplayZoneChange(applyDisplayZone);
 required<HTMLButtonElement>("theme-toggle").addEventListener("click", toggleTheme);
 // Right-click (long-press on touch) over the map opens the custom menu:
 // 「详细统计信息」 pins the stats card, 「复制调试信息」 copies a plain-text

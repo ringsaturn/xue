@@ -1031,6 +1031,39 @@ test("clicking the map pins a point and reads its whole series at once", async (
   await expect(panel).toBeHidden();
 });
 
+test.describe("the clock", () => {
+  // A viewer in New York: the fixture's 06Z run is 02:00 there in August.
+  test.use({ timezoneId: "America/New_York" });
+
+  test("reads in the browser's zone, then in a pinned point's, then back", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop", "desktop interaction coverage");
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await routeManifest(page);
+    await routeBundle(page);
+    // The camera over Tokyo, so a click at the middle of the map pins a
+    // point well inside one zone.
+    await page.goto("/#map=5/35.68/139.77");
+    await waitForReady(page);
+    const validTime = page.locator("#valid-time");
+    await expect(validTime).toHaveText("08/15 02:00 UTC-4");
+    // The run cycle is named in UTC whatever the clock reads in.
+    const runTime = page.locator("#run-time");
+    await expect(runTime).toHaveText("08/15 06:00 UTC");
+    await page.locator("#map").click({ position: { x: 640, y: 300 } });
+    const panel = page.locator("#probe-panel");
+    await expect(panel).toBeVisible();
+    // The zone index is 4 MB and loads behind the first pin.
+    await expect(page.locator("#probe-zone")).toHaveText("Asia/Tokyo", { timeout: 20_000 });
+    await expect(validTime).toHaveText("08/15 15:00 UTC+9");
+    await expect(runTime).toHaveText("08/15 06:00 UTC");
+    await expect(page.locator("#frame-tooltip")).toContainText("08/15 15:00");
+    // Unpinned, the clock is the viewer's own again.
+    await page.keyboard.press("Escape");
+    await expect(panel).toBeHidden();
+    await expect(validTime).toHaveText("08/15 02:00 UTC-4");
+  });
+});
+
 /** Move the playhead without playing: the app treats a slider `input` the
  * same way whether it came from a drag or a keypress. */
 async function scrubTo(page: Page, index: number): Promise<void> {

@@ -1758,6 +1758,17 @@ html[lang="ja"] .rail-glyph {
   margin-left: auto;
 }
 
+/* The pinned point's zone — the one the capsule under this panel now reads
+   in — beside its coordinates; a zone id is an identifier, so it is not
+   tracked out like the rest of the line. */
+.probe-zone {
+  letter-spacing: 0.02em;
+}
+
+.probe-zone:empty {
+  display: none;
+}
+
 .probe-footer {
   display: flex;
   gap: 10px;
