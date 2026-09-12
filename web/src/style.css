@@ -854,20 +854,22 @@ body.is-pressure .legend {
 
 /* A run that ships the whole GFS set puts sixteen tiles on the rail, which
    no laptop screen fits at 44px: past ten visible tiles main.ts marks the
-   rail dense, the tiles drop to 36px and lose their letter caption — the
-   icon and the hover name carry the tile, the visually hidden name still
-   reads aloud. What still does not fit its box scrolls. */
+   rail dense and the tiles drop to 36px with a smaller icon. The letter
+   caption stays — on a phone it is the only name a tile has, there being
+   no hover — and what still does not fit its box scrolls. */
 .variable-rail[data-dense] {
   gap: 4px;
 }
 
 .variable-rail[data-dense] button {
   height: 36px;
+  gap: 1px;
   border-radius: 12px;
 }
 
-.variable-rail[data-dense] .rail-glyph {
-  display: none;
+.variable-rail[data-dense] .rail-icon {
+  width: 16px;
+  height: 16px;
 }
 
 /* The icon carries the tile; the WMO letter sits under it as a caption,

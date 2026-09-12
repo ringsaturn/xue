@@ -2759,7 +2759,7 @@ const STYLESHEET_LEGEND_IDS: ReadonlySet<string> = new Set(["tmp2m", "prate", "c
 
 /** Past ten visible tiles the rail no longer fits a laptop screen at full
  * size, so the stylesheet's dense variant takes over (see `.variable-rail`).
- * Nothing about which tiles show changes — only their height. */
+ * Nothing about which tiles show changes — only their height and icon. */
 const DENSE_RAIL_TILES = 10;
 
 function syncRailDensity(): void {

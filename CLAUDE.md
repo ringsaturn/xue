@@ -344,7 +344,7 @@ total and the three layers rather than isobaric surfaces, listed outright
 in `FamilyInfo.members`), the level row on the capsule picks the member,
 and the fill's group sits beside the lines' group. Past ten visible rail
 tiles `main.ts` marks the rail dense and the stylesheet drops the tiles to
-36px without their letter caption. The rail is a scroll column in a fixed
+36px with a smaller icon, the letter caption kept. The rail is a scroll column in a fixed
 box — under the zoom tile down to the capsule's bottom edge on desktop,
 under the round controls down to the capsule on phones, where `main.ts`
 publishes the capsule's measured height as `--capsule-height` — faded at a
