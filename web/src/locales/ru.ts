@@ -188,6 +188,7 @@ export const ru: Record<MessageKey, string> = {
   probeOutside: "Точка вне сетки этого набора данных",
   probeNoData: "В этом кадре нет данных",
   probeAwaiting: "Ожидание этого кадра",
+  probeCloseAria: "Закрыть данные точки",
 
   centerHigh: "В",
   centerLow: "Н",

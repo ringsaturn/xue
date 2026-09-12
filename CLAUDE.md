@@ -444,6 +444,28 @@ on the session takes the whole plane. `playback.ts` holds
 the frame-rate ladder and the per-frame dwell that keeps a mixed-step axis
 moving at one apparent speed.
 
+A click on the map pins a **point probe**: `probe.ts` turns the click into a
+grid cell, and on a v2 bundle the worker's `series` message reads that
+cell's whole axis in one round trip (one chunk per temporal group of one
+tile); a v1 bundle or the video path fills it in opportunistically from
+the planes decoded for the screen. The probe's panel docks over the
+transport capsule at the capsule's width — a ring on the map marks the
+point — and under the headline (the field on screen at the playhead) sit
+the **meteogram rows** (`meteogram.ts`): temperature with the dew point,
+precipitation, wind with the gust and direction arrows, the cloud layers
+(the total standing in when no layer is published), sea level pressure.
+Rows come from the manifest, not the model: a run publishes what it
+publishes and the rest are simply absent. Each row's bundle is opened as a
+*probe session* — `loadVariable(id, sequence, "probe")`, the primary's tier
+on the streaming path alone, never the video path and never a whole
+download (a host that cannot serve ranges leaves the row empty) — so the
+rows cost the structural prefix plus one tile's chunks apiece. Every row
+reads the primary axis by lead seconds (`alignSeries`), so a bundle whose
+axis lacks a frame leaves a gap rather than a shifted column; the row
+labels and readouts are DOM text on the same pitch as the canvas the
+traces are drawn on; a press on either chart scrubs the timeline. Only the
+numeric rows exist — no per-column weather icons.
+
 The shell is a map with controls floating over it, not a map beside a panel:
 the display-serif title in the top-left corner names the layer *and* opens the
 run picker (`#model-sheet` — a panel under it on desktop, a bottom sheet on

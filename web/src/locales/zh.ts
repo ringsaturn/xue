@@ -183,6 +183,7 @@ export const zh: Record<MessageKey, string> = {
   probeOutside: "该点在本数据集网格之外",
   probeNoData: "此帧无数据",
   probeAwaiting: "等待该帧解码",
+  probeCloseAria: "关闭点位数据",
 
   centerHigh: "高",
   centerLow: "低",

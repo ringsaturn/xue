@@ -208,6 +208,15 @@ from 10 m up, humidity, vapour flux, pressure) and the level row on the
 transport capsule picks the surface. The address bar stays in sync when switching, and
 unrecognized values fall back to defaults.
 
+Clicking the map pins a point and opens its forecast over the transport
+capsule: the field on screen at the playhead, and under it a meteogram —
+temperature and dew point, precipitation, wind with gusts and direction,
+cloud layers, sea level pressure — read from the same run at that grid
+cell, each row present when the run publishes its bundle. On a tiled
+bundle a whole series costs one small range request per temporal group, so
+the rows fill in moments after the click; a press on the chart scrubs the
+timeline to that frame.
+
 Two more parameters are session settings rather than shareable state.
 `?res=` pins the resolution tier the viewer would otherwise pick from the
 viewport and the connection: `half` (alias `low`) always loads the reduced

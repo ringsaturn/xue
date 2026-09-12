@@ -190,8 +190,12 @@ async function routeBundleWithRanges(
 ): Promise<void> {
   await page.route("**/data/**/*.xue?*", async (route) => {
     if (latencyMs > 0) await new Promise((resolve) => setTimeout(resolve, latencyMs));
-    const isTemperature = new URL(route.request().url()).pathname.endsWith("tmp2m.xue");
-    const body = isTemperature ? TMP2M_FIXTURE : PRATE_FIXTURE;
+    const pathname = new URL(route.request().url()).pathname;
+    const body = pathname.endsWith("tmp2m.xue")
+      ? TMP2M_FIXTURE
+      : pathname.endsWith("wind10m.xue")
+        ? WIND_FIXTURE
+        : PRATE_FIXTURE;
     const match = /^bytes=(\d+)-(\d+)$/.exec(route.request().headers()["range"] ?? "");
     if (match) {
       const start = Number(match[1]);
@@ -971,7 +975,10 @@ test("clicking the map pins a point and reads its whole series at once", async (
   await waitForReady(page);
   const panel = page.locator("#probe-panel");
   await expect(panel).toBeHidden();
-  await page.locator("#map").click({ position: { x: 620, y: 300 } });
+  // The panel docks over the capsule at its width (x 280–1000 on this
+  // viewport), so every point pinned here sits left of both, where a
+  // second click still reaches the map.
+  await page.locator("#map").click({ position: { x: 200, y: 300 } });
   await expect(panel).toBeVisible();
   // The probe names the variable it reads and the grid cell it reads it at.
   await expect(page.locator("#probe-code")).toHaveText("PRATE SFC");
@@ -983,10 +990,26 @@ test("clicking the map pins a point and reads its whole series at once", async (
   const count = page.locator("#probe-count");
   await expect(count).toHaveText("121 / 121");
   await expect(page.locator("#probe-hint")).toHaveText("Series complete");
+  // Under the sparkline, the meteogram rows the run can fill — the fixture
+  // publishes the three surface bundles — each labelled by its code. The
+  // precipitation row reads the session already on screen; the others
+  // would need their bundles opened as probe sessions, which a host that
+  // cannot serve ranges (this stub answers 200) never gets, so they stay
+  // empty rather than downloading a bundle whole behind a click.
+  const rows = page.locator("#probe-rows .probe-row");
+  await expect(rows).toHaveCount(3);
+  await expect(rows.nth(0)).toHaveAttribute("data-row", "temperature");
+  await expect(rows.nth(1)).toHaveAttribute("data-row", "precipitation");
+  await expect(rows.nth(2)).toHaveAttribute("data-row", "wind");
+  await expect(rows.nth(0).locator(".probe-row-code")).toHaveText("TMP 2M");
+  await expect(rows.nth(2).locator(".probe-row-code")).toHaveText("WIND 10M");
+  await expect(rows.nth(1)).toHaveAttribute("data-state", "complete");
+  await expect(rows.nth(1).locator(".probe-row-value")).toHaveText(/^\d+\.\d+$/);
+  await expect(rows.nth(1).locator(".probe-row-note")).toHaveText("mm/h");
+  await expect(rows.nth(0)).toHaveAttribute("data-state", "empty");
+  await expect(rows.nth(0).locator(".probe-row-value")).toHaveText("--");
   // Pinning a second point re-reads the series there: the panel follows the
-  // new cell instead of holding the first one's numbers. The point sits left
-  // of the transport capsule (x 280–1000 on this viewport), which the level
-  // row makes tall enough to cover y=520 in the middle of the screen.
+  // new cell instead of holding the first one's numbers.
   const coords = page.locator("#probe-coords");
   const first = await coords.textContent();
   await page.locator("#map").click({ position: { x: 200, y: 520 } });
@@ -994,7 +1017,7 @@ test("clicking the map pins a point and reads its whole series at once", async (
   await expect(count).toHaveText("121 / 121");
   // And back to the first point, which the request bookkeeping must not
   // mistake for a series it already has.
-  await page.locator("#map").click({ position: { x: 620, y: 300 } });
+  await page.locator("#map").click({ position: { x: 200, y: 300 } });
   await expect(coords).toHaveText(first ?? "");
   await expect(count).toHaveText("121 / 121");
   // Scrubbing changes the reading, not the series behind it.
@@ -1103,6 +1126,26 @@ test("a streaming session reads a pinned series with a few range requests", asyn
   // One chunk per temporal group of one tile, never one request per frame.
   expect(counters.ranged - before).toBeLessThan(121);
   expect(counters.full).toBe(0);
+  // The meteogram's other rows open their bundles the same way: the prefix
+  // and one tile's chunks each, never a whole bundle, and every row fills.
+  const rows = page.locator("#probe-rows .probe-row");
+  await expect(rows).toHaveCount(3);
+  for (const row of ["temperature", "precipitation", "wind"]) {
+    await expect(page.locator(`#probe-rows .probe-row[data-row="${row}"]`)).toHaveAttribute("data-state", "complete", {
+      timeout: 20_000,
+    });
+  }
+  await expect(page.locator('#probe-rows .probe-row[data-row="temperature"] .probe-row-note')).toHaveText("°C");
+  // The wind row reads the speed, with the unit and the direction under it.
+  await expect(page.locator('#probe-rows .probe-row[data-row="wind"] .probe-row-value')).toHaveText(/^\d+\.\d+$/);
+  await expect(page.locator('#probe-rows .probe-row[data-row="wind"] .probe-row-note')).toHaveText(/^m\/s · \d{3}°$/);
+  expect(counters.full).toBe(0);
+  // A press on the rows scrubs the timeline to the frame under it.
+  const chart = page.locator("#probe-rows .probe-rows-chart");
+  const box = await chart.boundingBox();
+  expect(box).not.toBeNull();
+  await chart.click({ position: { x: box!.width / 2, y: box!.height / 2 } });
+  await expect(page.getByRole("slider", { name: "Forecast hour" })).toHaveValue("60");
 });
 
 test("rapid scrubbing settles on the final slider value", async ({ page }) => {

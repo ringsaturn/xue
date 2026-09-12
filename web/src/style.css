@@ -43,8 +43,8 @@
   --label-shadow: 0 0 3px rgba(243, 239, 230, 0.95), 0 0 9px rgba(243, 239, 230, 0.85);
   --scrim: rgba(27, 26, 23, 0.28);
   /* A lift belongs to what covers the map — the model sheet, the context
-     menu, the probe popover, an error — not to the controls affixed to it:
-     the capsule and the data card sit on the map, and a shadow under them
+     menu, an error — not to the controls affixed to it, the probe panel now
+     among them: the capsule and the data card sit on the map, and a shadow under them
      only smudges the ground they are meant to read against. */
   --lift: 0 20px 60px rgba(27, 26, 23, 0.18);
   --lift-small: 0 10px 30px rgba(27, 26, 23, 0.14);
@@ -1629,71 +1629,37 @@ html[lang="ja"] .rail-glyph {
 }
 
 /* ---------------------------------------------------------------------------
-   The point probe: a MapLibre popup wearing the capsule skin. It is anchored
-   to the clicked point, so the panel itself says which cell it reads, and the
-   popup machinery handles placement and the close button. */
-
-.probe-popup .maplibregl-popup-content {
-  padding: 0;
-  background: none;
-  box-shadow: none;
-}
-
-.probe-popup .maplibregl-popup-close-button {
-  top: 4px;
-  right: 8px;
-  z-index: 1;
-  padding: 0 4px;
-  color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: 16px;
-  line-height: 1.2;
-}
-
-.probe-popup .maplibregl-popup-close-button:hover,
-.probe-popup .maplibregl-popup-close-button:focus-visible {
-  background: none;
-  color: var(--text);
-  outline: none;
-}
-
-/* MapLibre colors one border of the tip per anchor; each side needs the
-   panel's own background or the arrow disappears. */
-.probe-popup.maplibregl-popup-anchor-top .maplibregl-popup-tip,
-.probe-popup.maplibregl-popup-anchor-top-left .maplibregl-popup-tip,
-.probe-popup.maplibregl-popup-anchor-top-right .maplibregl-popup-tip {
-  border-bottom-color: var(--sheet);
-}
-
-.probe-popup.maplibregl-popup-anchor-bottom .maplibregl-popup-tip,
-.probe-popup.maplibregl-popup-anchor-bottom-left .maplibregl-popup-tip,
-.probe-popup.maplibregl-popup-anchor-bottom-right .maplibregl-popup-tip {
-  border-top-color: var(--sheet);
-}
-
-.probe-popup.maplibregl-popup-anchor-left .maplibregl-popup-tip {
-  border-right-color: var(--sheet);
-}
-
-.probe-popup.maplibregl-popup-anchor-right .maplibregl-popup-tip {
-  border-left-color: var(--sheet);
-}
+   The point probe: a panel docked over the transport capsule at the capsule's
+   own width, so its rows run the length of the track and its playhead sits
+   over the track's. The point it reads is pinned on the map by a ring. */
 
 .probe-panel {
-  width: 256px;
-  padding: 10px 14px 10px 16px;
+  position: absolute;
+  z-index: 2;
+  bottom: calc(24px + var(--capsule-height, 130px));
+  left: 50%;
+  width: calc(100% - 28px);
+  max-width: 720px;
+  padding: 8px 12px 10px 16px;
   border: 1px solid var(--line);
   border-radius: 22px;
-  background: var(--sheet);
-  box-shadow: var(--lift-small);
+  background: var(--surface);
   color: var(--text);
+  transform: translateX(-50%);
+  backdrop-filter: blur(18px);
 }
 
+.probe-panel[hidden] {
+  display: none;
+}
+
+/* The headline is one line: the code, the value, the frame, the cell, the
+   series count — and it wraps to two where the panel is narrow. */
 .probe-head {
   display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  padding-right: 18px;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 12px;
   color: var(--muted);
   font-family: var(--font-mono);
   font-size: 10px;
@@ -1706,18 +1672,40 @@ html[lang="ja"] .rail-glyph {
 }
 
 .probe-value {
-  display: block;
-  margin-top: 4px;
+  color: var(--text);
   font-family: var(--font-display);
-  font-size: 26px;
+  font-size: 22px;
+  letter-spacing: 0;
   line-height: 1.05;
 }
 
-.probe-meta {
+.probe-coords {
+  margin-left: auto;
+}
+
+.probe-footer {
+  display: flex;
+  gap: 10px;
+}
+
+.probe-close {
+  display: flex;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  margin: -6px -6px -6px 0;
+  border: 0;
+  background: none;
   color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 500;
+  cursor: pointer;
+}
+
+.probe-close:hover,
+.probe-close:focus-visible {
+  color: var(--text);
 }
 
 .probe-chart {
@@ -1727,15 +1715,99 @@ html[lang="ja"] .rail-glyph {
   margin-top: 6px;
 }
 
-.probe-footer {
+.probe-chart[hidden] {
+  display: none;
+}
+
+/* The pin on the map: a ring in the ink the map is drawn over. */
+.probe-pin {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--map-ink);
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--surface);
+  pointer-events: none;
+}
+
+/* The meteogram under the headline: the row labels and readouts in a text
+   column on the left, the traces on one canvas to the right, both on the row
+   pitch main.ts sets inline so the numbers sit beside their traces. */
+.probe-rows {
+  display: grid;
+  /* Wide enough for the widest readout, three overcast layers
+     ("100 · 100 · 100"): a readout must never wrap, since the rows' text
+     and the traces beside them share one pitch. */
+  grid-template-columns: 104px minmax(0, 1fr);
+  margin-top: 6px;
+  padding-top: 4px;
+  border-top: 1px solid var(--line);
+}
+
+.probe-rows[hidden] {
+  display: none;
+}
+
+.probe-row-list {
   display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  margin: 3px 0 0;
-  color: var(--muted);
+  flex-direction: column;
+  min-width: 0;
+}
+
+.probe-row {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  box-sizing: border-box;
+  padding-right: 8px;
+  overflow: hidden;
   font-family: var(--font-mono);
-  font-size: 10px;
   font-weight: 500;
+  white-space: nowrap;
+}
+
+.probe-row-code {
+  color: var(--muted);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+
+/* The row the field on screen belongs to, standing in for the sparkline. */
+.probe-row.is-active .probe-row-code {
+  color: var(--text);
+}
+
+.probe-row-value {
+  display: block;
+  color: var(--text);
+  font-size: 10.5px;
+  line-height: 1.2;
+}
+
+.probe-row-note {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+/* A row still waiting for its series, or one whose bundle never opened. */
+.probe-row[data-state="empty"] .probe-row-value,
+.probe-row[data-state="partial"] .probe-row-value {
+  color: var(--muted);
+}
+
+.probe-rows-chart {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  touch-action: none;
+  cursor: ew-resize;
+}
+
+.probe-chart {
+  touch-action: none;
+  cursor: ew-resize;
 }
 
 /* ---------------------------------------------------------------------------
@@ -2131,6 +2203,12 @@ body[data-model="radar"] .source-credit[data-credit-model="radar"] {
     top: calc(72px + env(safe-area-inset-top));
     right: 12px;
     bottom: calc(62px + env(safe-area-inset-bottom) + var(--capsule-height, 130px));
+  }
+
+  .probe-panel {
+    bottom: calc(20px + env(safe-area-inset-bottom) + var(--capsule-height, 130px));
+    width: calc(100% - 24px);
+    max-width: none;
   }
 
   /* The capsule sits on the safe area; nothing is under it. */

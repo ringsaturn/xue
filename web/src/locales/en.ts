@@ -274,6 +274,7 @@ export const en = {
   probeOutside: "Outside this dataset's grid",
   probeNoData: "No data at this frame",
   probeAwaiting: "Waiting for this frame",
+  probeCloseAria: "Close point data",
 
   // The letter on a pressure center, following each country's own chart
   // convention: H/L in English, 高/低 on a Chinese or Japanese chart, 고/저

@@ -183,6 +183,7 @@ export const zhHant: Record<MessageKey, string> = {
   probeOutside: "該點在本資料集網格之外",
   probeNoData: "此影格無資料",
   probeAwaiting: "等待該影格解碼",
+  probeCloseAria: "關閉點位資料",
 
   centerHigh: "高",
   centerLow: "低",

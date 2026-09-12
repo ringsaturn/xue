@@ -11,7 +11,7 @@ import {
   GeoJSONSource,
   Map as MaplibreMap,
   NavigationControl,
-  Popup,
+  Marker,
   setWorkerUrl,
   type MapOptions,
 } from "maplibre-gl";
@@ -132,6 +132,17 @@ import {
   type ProbeValue,
   type ProbeVariable,
 } from "./probe";
+import {
+  alignSeries,
+  drawMeteogram,
+  frameIndexAtX,
+  meteogramRowCode,
+  meteogramRows,
+  seriesState,
+  type DayMark,
+  type MeteogramRowData,
+  type MeteogramRowSpec,
+} from "./meteogram";
 import { fetchPoster, isPosterSupported } from "./poster";
 import { frameCacheKey, parseFrameCacheKey, variableKey } from "./sessionkeys";
 import { applyTheme, isDark, onThemeChange, toggleTheme } from "./theme";
@@ -1711,39 +1722,55 @@ function showContextMenu(x: number, y: number): void {
 // anyway: the series fills in as playback or a scrub walks the axis, and an
 // undecoded frame is just a gap. That keeps the probe honest under windowed
 // streaming, where only the frames around the playhead are ever local.
+//
+// Under the variable on screen sit the meteogram rows (meteogram.ts): the
+// surface quantities a run publishes, each read at the same cell from its
+// own bundle. Those bundles are opened as *probe sessions* — the same
+// streaming session a layer would get, minus any plane ever decoded: the
+// structural prefix and then one chunk per temporal group of the one tile,
+// which is what makes five more bundles affordable behind one click.
 let probe: ProbeSeries | null = null;
-let probePopup: Popup | null = null;
+/** The pin on the map: the panel sits over the capsule, so the point it
+ * reads is marked where it was clicked. */
+let probeMarker: Marker | null = null;
 let probeRenderFrame: number | null = null;
 /** Series requests in flight, so a re-render or a session swap does not ask
  * twice for the same cell. Keyed by `variableId:column:row`. */
 const probeSeriesRequests = new Set<string>();
 
+/** The day strip and the row pitch of the meteogram, shared by the canvas
+ * and the DOM rows beside it so the two stay aligned. */
+const METEOGRAM_HEADER_HEIGHT = 14;
+const METEOGRAM_ROW_HEIGHT = 44;
+
 const probePanel = buildProbePanel();
 
+/** The panel docks over the transport capsule at the capsule's own width,
+ * so the rows get the track's length. Built once, hidden until a point is
+ * pinned. */
 function buildProbePanel() {
-  const root = document.createElement("div");
+  const root = document.createElement("section");
   root.className = "probe-panel";
   root.id = "probe-panel";
   root.setAttribute("aria-label", t("probeAria"));
+  root.hidden = true;
+  // One line of headline: what is read, its value at the playhead, the
+  // frame, the cell, and how much of the series is in hand.
   const head = document.createElement("div");
   head.className = "probe-head";
   const code = document.createElement("span");
   code.className = "probe-code";
   code.id = "probe-code";
-  const coords = document.createElement("span");
-  coords.className = "probe-coords";
-  coords.id = "probe-coords";
-  head.append(code, coords);
   const value = document.createElement("output");
   value.className = "probe-value";
   value.id = "probe-value";
-  const meta = document.createElement("div");
+  const meta = document.createElement("span");
   meta.className = "probe-meta";
   meta.id = "probe-meta";
-  const canvas = document.createElement("canvas");
-  canvas.className = "probe-chart";
-  canvas.setAttribute("aria-hidden", "true");
-  const footer = document.createElement("p");
+  const coords = document.createElement("span");
+  coords.className = "probe-coords";
+  coords.id = "probe-coords";
+  const footer = document.createElement("span");
   footer.className = "probe-footer";
   const count = document.createElement("span");
   count.className = "probe-count";
@@ -1751,8 +1778,84 @@ function buildProbePanel() {
   const hint = document.createElement("span");
   hint.id = "probe-hint";
   footer.append(count, hint);
-  root.append(head, value, meta, canvas, footer);
-  return { root, code, coords, value, meta, canvas, count, hint };
+  const close = document.createElement("button");
+  close.type = "button";
+  close.className = "probe-close";
+  close.setAttribute("aria-label", t("probeCloseAria"));
+  close.innerHTML =
+    '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M2 2l8 8M10 2l-8 8" /></svg>';
+  close.addEventListener("click", closeProbe);
+  head.append(code, value, meta, coords, footer, close);
+  const canvas = document.createElement("canvas");
+  canvas.className = "probe-chart";
+  canvas.setAttribute("aria-hidden", "true");
+  // The meteogram: the row labels and readouts are DOM text in the left
+  // column, the traces one canvas beside them, both on the same row pitch.
+  const rows = document.createElement("div");
+  rows.className = "probe-rows";
+  rows.id = "probe-rows";
+  rows.hidden = true;
+  const rowList = document.createElement("div");
+  rowList.className = "probe-row-list";
+  rowList.style.paddingTop = `${METEOGRAM_HEADER_HEIGHT}px`;
+  const rowsChart = document.createElement("canvas");
+  rowsChart.className = "probe-rows-chart";
+  rowsChart.setAttribute("aria-hidden", "true");
+  rows.append(rowList, rowsChart);
+  root.append(head, canvas, rows);
+  timelinePanel.parentElement!.insertBefore(root, timelinePanel);
+  return { root, code, coords, value, meta, canvas, count, hint, close, rows, rowList, rowsChart };
+}
+
+/** One meteogram row's DOM: its code, its readout at the playhead, and the
+ * state the tests and the stylesheet read. Rebuilt when the run's row set
+ * changes, updated in place otherwise. */
+interface ProbeRowElements {
+  spec: MeteogramRowSpec;
+  root: HTMLElement;
+  value: HTMLOutputElement;
+  /** The line under the value: the unit, and the wind row's direction. */
+  note: HTMLElement;
+}
+
+let probeRowElements: ProbeRowElements[] = [];
+
+/** The rows this run can fill, or none before a manifest is up. */
+function currentMeteogramRows(): MeteogramRowSpec[] {
+  const run = manifest;
+  return run ? meteogramRows((id) => hasBundle(run, id)) : [];
+}
+
+function syncProbeRowElements(specs: MeteogramRowSpec[]): void {
+  const same =
+    probeRowElements.length === specs.length &&
+    probeRowElements.every((row, index) => row.spec.bundles.join() === specs[index]!.bundles.join());
+  if (same) return;
+  probeRowElements = specs.map((spec) => {
+    const root = document.createElement("div");
+    root.className = "probe-row";
+    root.dataset.row = spec.id;
+    root.style.height = `${METEOGRAM_ROW_HEIGHT}px`;
+    const code = document.createElement("span");
+    code.className = "probe-row-code";
+    code.textContent = meteogramRowCode(spec);
+    const value = document.createElement("output");
+    value.className = "probe-row-value";
+    const note = document.createElement("span");
+    note.className = "probe-row-note";
+    root.append(code, value, note);
+    return { spec, root, value, note };
+  });
+  probePanel.rowList.replaceChildren(...probeRowElements.map((row) => row.root));
+  probePanel.rows.hidden = specs.length === 0;
+}
+
+/** The pin's element: a ring in the theme's ink, drawn by the stylesheet. */
+function buildProbePin(): HTMLElement {
+  const pin = document.createElement("div");
+  pin.className = "probe-pin";
+  pin.setAttribute("aria-hidden", "true");
+  return pin;
 }
 
 /** A probed coordinate, at the precision a grid cell center needs. */
@@ -1782,42 +1885,78 @@ function setProbe(longitude: number, latitude: number): void {
   // again later.
   probeSeriesRequests.clear();
   seedProbeFromCache();
-  requestProbeSeries();
-  if (!probePopup) {
-    probePopup = new Popup({
-      closeButton: true,
-      closeOnClick: false,
-      closeOnMove: false,
-      maxWidth: "none",
-      className: "probe-popup",
-      offset: 10,
-    }).setDOMContent(probePanel.root);
-    probePopup.on("close", () => {
-      probe = null;
-      probeSeriesRequests.clear();
-    });
-  }
-  probePopup.setLngLat([longitude, latitude]);
-  // Moving an open popup is setLngLat alone: addTo() on one that is already
-  // on the map removes it first, and that fires `close` — dropping the pin
-  // this call just made, so the panel would keep showing the old point.
-  if (!probePopup.isOpen()) probePopup.addTo(map);
+  requestAllProbeSeries();
+  ensureProbeSessions();
+  if (!probeMarker) probeMarker = new Marker({ element: buildProbePin(), anchor: "center" });
+  probeMarker.setLngLat([longitude, latitude]);
+  probeMarker.addTo(map);
+  probePanel.root.hidden = false;
   renderProbe();
 }
 
 function closeProbe(): void {
+  if (!probe) return;
   probe = null;
   probeSeriesRequests.clear();
-  probePopup?.remove();
+  probeMarker?.remove();
+  probePanel.root.hidden = true;
 }
 
-/** Ask the active session's decoder for the pinned cell's whole series, one
+/** Every session the pinned point reads: the ones on screen and the
+ * meteogram's, resident or still opening. */
+function probeSessions(): VariableSession[] {
+  const list = slotSessions();
+  for (const spec of currentMeteogramRows()) {
+    for (const id of spec.bundles) {
+      const session = sessions.get(id);
+      if (session && !list.includes(session)) list.push(session);
+    }
+  }
+  return list;
+}
+
+/** Open the meteogram's bundles for the pinned point, quietly and without
+ * ever downloading one whole: a bundle the origin cannot range-serve is
+ * left closed, and its row simply stays empty. A bundle already open for
+ * the screen is reused as it is. Each session asks for its series the
+ * moment it is ready. */
+function ensureProbeSessions(): void {
+  if (!probe || !manifest || !ready) return;
+  const sequence = initializeSequence;
+  for (const spec of currentMeteogramRows()) {
+    for (const id of spec.bundles) {
+      const resident = sessions.get(id);
+      if (resident) {
+        requestProbeSeries(resident);
+        continue;
+      }
+      void loadVariable(id, sequence, "probe")
+        .then((session) => {
+          if (sequence !== initializeSequence || !probe) return;
+          requestProbeSeries(session);
+          scheduleProbeRender();
+        })
+        .catch((error: unknown) => {
+          if (error instanceof DOMException && error.name === "AbortError") return;
+          // Diagnostics stay English: a row that cannot open is a console
+          // note, never an error panel over the map.
+          console.warn(`meteogram: ${id} not opened:`, error instanceof Error ? error.message : error);
+        });
+    }
+  }
+}
+
+/** Ask every probed session for the pinned cell's whole series. */
+function requestAllProbeSeries(): void {
+  for (const session of probeSessions()) requestProbeSeries(session);
+}
+
+/** Ask one session's decoder for the pinned cell's whole series, one
  * request per data variable. Only a tiled bundle can answer; everywhere else
  * the opportunistic sampling in `handleDecodedFrame` remains the only source.
  */
-function requestProbeSeries(): void {
-  const session = activeSession;
-  if (!probe || !session || !session.tiles || !ready) return;
+function requestProbeSeries(session: VariableSession): void {
+  if (!probe || !session.tiles || !ready) return;
   const cell = probe.cellFor(session.metadata);
   if (!cell) return;
   for (const variable of session.variables) {
@@ -1894,6 +2033,7 @@ function renderProbe(): void {
     probePanel.count.textContent = "";
     probePanel.hint.textContent = "";
     probePanel.canvas.getContext("2d")?.clearRect(0, 0, probePanel.canvas.width, probePanel.canvas.height);
+    syncProbeRowElements([]);
     return;
   }
   const variable = session.variable;
@@ -1932,7 +2072,166 @@ function renderProbe(): void {
   probePanel.count.textContent = cell ? `${sampled} / ${offsets.length}` : "";
   probePanel.hint.textContent = !cell ? "" : sampled >= offsets.length ? t("probeComplete") : t("probeHint");
   drawProbeChart(values, index, variable);
+  renderProbeRows(series, index);
 }
+
+/** One bundle's series at the pinned point on the *primary* axis: a lead
+ * time the bundle's own axis lacks is a gap, and a session not open yet
+ * (or a point off its grid) is a series of nothing. */
+function probeSessionSeries(
+  series: ProbeSeries,
+  session: VariableSession | undefined,
+  leads: readonly number[],
+): { values: ProbeValue[]; state: ReturnType<typeof seriesState> } {
+  if (!session || !series.cellFor(session.metadata)) {
+    return { values: leads.map(() => undefined), state: "empty" };
+  }
+  const variables = probeVariables(session);
+  const offsetFor = (lead: number) => sessionOffsetForLead(session, lead);
+  const values = alignSeries(leads, offsetFor, (offset) => probeSeriesValues(series, variables, [offset])[0]);
+  return { values, state: seriesState(leads, offsetFor, values) };
+}
+
+/** The row's readout at the playhead: every series' value in row order
+ * ("23.5 · 18.0"), and the unit they share for the line beneath. */
+function formatRowReadout(row: MeteogramRowData, index: number): { values: string; unit: string } {
+  const parts: string[] = [];
+  let unit = "";
+  for (const [position, id] of row.spec.bundles.entries()) {
+    const session = sessions.get(id);
+    if (session) unit ||= session.variable.unit;
+    const value = row.series[position]![index];
+    parts.push(session && typeof value === "number" ? formatProbeValue(session.variable, value) : "--");
+  }
+  return { values: parts.join(" · "), unit };
+}
+
+/** The day marks, placed exactly as the capsule's day strip places them —
+ * whole forecast days from the run, every other one on a long axis — so
+ * the two read the same instants. */
+function meteogramDayMarks(): DayMark[] {
+  const marks: DayMark[] = [];
+  const days = forecastDayCount();
+  const stride = days > 6 ? 2 : 1;
+  for (let day = stride; day <= days; day += stride) {
+    const index = dayFrameIndex(day);
+    if (index === null) continue;
+    marks.push({ index, label: formatDayMark(frameValidTime(index)) });
+  }
+  return marks;
+}
+
+/** The meteogram rows: read every series onto the primary axis, write the
+ * readouts, draw the traces. */
+function renderProbeRows(series: ProbeSeries, index: number): void {
+  const specs = currentMeteogramRows();
+  syncProbeRowElements(specs);
+  // The sparkline repeats a row when the field on screen is one of the
+  // rows' bundles; then the row stands for it, marked, and the sparkline
+  // gives its height back to the map.
+  const active = activeSession?.id;
+  const inRows = active !== undefined && specs.some((spec) => spec.bundles.includes(active));
+  probePanel.canvas.hidden = inRows;
+  for (const element of probeRowElements) {
+    element.root.classList.toggle("is-active", active !== undefined && element.spec.bundles.includes(active));
+  }
+  if (specs.length === 0) return;
+  const offsets = frameAxis();
+  const leads = offsets.map((_, position) => frameLeadSeconds(position));
+  const rows: MeteogramRowData[] = [];
+  for (const [position, spec] of specs.entries()) {
+    const element = probeRowElements[position]!;
+    const read = spec.bundles.map((id) => probeSessionSeries(series, sessions.get(id), leads));
+    const row: MeteogramRowData = { spec, series: read.map((item) => item.values) };
+    let direction: number | null = null;
+    const wind = spec.id === "wind" ? sessions.get(spec.bundles[0]!) : undefined;
+    if (wind?.vector && series.cellFor(wind.metadata)) {
+      const variables = probeVariables(wind);
+      row.directions = leads.map((lead) => {
+        const offset = sessionOffsetForLead(wind, lead);
+        return offset === null ? null : probeWindDirection(series, variables, offset);
+      });
+      direction = row.directions[index] ?? null;
+    }
+    rows.push(row);
+    // The row's state is its headline series': the stylesheet dims a row
+    // still waiting, and the tests read it.
+    element.root.dataset.state = read[0]!.state;
+    const readout = formatRowReadout(row, index);
+    element.value.value = readout.values;
+    // The unit sits under the numbers, and the wind's direction beside it
+    // the way it rides the lead line above: degrees the wind comes from.
+    element.note.textContent =
+      direction === null ? readout.unit : `${readout.unit} · ${String(Math.round(direction)).padStart(3, "0")}°`;
+  }
+  drawProbeRowsChart(rows, index, offsets.length);
+}
+
+function drawProbeRowsChart(rows: MeteogramRowData[], selected: number, count: number): void {
+  const canvas = probePanel.rowsChart;
+  const context = canvas.getContext("2d");
+  if (!context) return;
+  const width = canvas.clientWidth;
+  const height = METEOGRAM_HEADER_HEIGHT + rows.length * METEOGRAM_ROW_HEIGHT;
+  canvas.style.height = `${height}px`;
+  if (width === 0) return;
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  if (canvas.width !== Math.round(width * dpr) || canvas.height !== Math.round(height * dpr)) {
+    canvas.width = Math.round(width * dpr);
+    canvas.height = Math.round(height * dpr);
+  }
+  context.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const styles = getComputedStyle(document.body);
+  drawMeteogram(
+    context,
+    { width, headerHeight: METEOGRAM_HEADER_HEIGHT, rowHeight: METEOGRAM_ROW_HEIGHT },
+    rows,
+    {
+      count,
+      selected,
+      dayMarks: meteogramDayMarks(),
+      ink: {
+        ink: styles.getPropertyValue("--accent").trim() || "#54d6c7",
+        muted: styles.getPropertyValue("--muted").trim() || "#8ca6b2",
+      },
+      font: "8px 'IBM Plex Mono', monospace",
+    },
+  );
+}
+
+/** A press on either chart scrubs to the frame under the pointer, the way
+ * a press on the track does, and a drag keeps scrubbing until it lifts. */
+function bindProbeScrub(canvas: HTMLCanvasElement): void {
+  const scrub = (event: PointerEvent, gutter: number): void => {
+    if (!activeVariable) return;
+    const rect = canvas.getBoundingClientRect();
+    const width = rect.width - gutter;
+    const index = frameIndexAtX(event.clientX - rect.left - gutter, frameCount(), width);
+    stopPlayback();
+    generation += 1;
+    trySelectFrame(index);
+  };
+  let pressed = false;
+  canvas.addEventListener("pointerdown", (event) => {
+    pressed = true;
+    canvas.setPointerCapture(event.pointerId);
+    scrub(event, canvas === probePanel.canvas ? PROBE_CHART_GUTTER : 0);
+    event.preventDefault();
+  });
+  canvas.addEventListener("pointermove", (event) => {
+    if (pressed) scrub(event, canvas === probePanel.canvas ? PROBE_CHART_GUTTER : 0);
+  });
+  const release = (): void => {
+    pressed = false;
+  };
+  canvas.addEventListener("pointerup", release);
+  canvas.addEventListener("pointercancel", release);
+}
+bindProbeScrub(probePanel.canvas);
+bindProbeScrub(probePanel.rowsChart);
+
+/** The sparkline's left gutter, where its value range is written. */
+const PROBE_CHART_GUTTER = 30;
 
 /** The series as a sparkline: sampled frames joined, gaps left open, the
  * playhead marked. Values are quantized, so the ladder in a flat stretch is
@@ -1940,7 +2239,7 @@ function renderProbe(): void {
 function drawProbeChart(values: ProbeValue[], selected: number, variable: BundleVariable): void {
   const canvas = probePanel.canvas;
   const context = canvas.getContext("2d");
-  if (!context) return;
+  if (!context || canvas.hidden) return;
   const width = canvas.clientWidth;
   const height = canvas.clientHeight;
   if (width === 0 || height === 0) return;
@@ -1959,7 +2258,7 @@ function drawProbeChart(values: ProbeValue[], selected: number, variable: Bundle
   context.textBaseline = "middle";
 
   // A left gutter carries the value range, so the plot never runs under it.
-  const gutter = 30;
+  const gutter = PROBE_CHART_GUTTER;
   const top = 6;
   const bottom = height - 6;
   const plotWidth = Math.max(1, width - gutter);
@@ -3373,11 +3672,18 @@ function warnOnIdentityMismatch(variableId: ForecastBundleId, identity: Variable
  * describe the primary — and takes the half-resolution tier where one is
  * offered: contour lines are smoothed again in the shader, and nothing the
  * lines slot draws needs the full grid, so the bytes go to the field the
- * viewer is actually reading. `?res=full` still pins every session. */
+ * viewer is actually reading. `?res=full` still pins every session.
+ *
+ * A probe session (the meteogram's rows) is the primary's tier opened
+ * quietly on the streaming path alone: it exists to read one cell's series
+ * out of one tile, so it never takes the video path and never downloads a
+ * bundle whole — where the origin cannot serve ranges it is not opened at
+ * all. The session it makes is otherwise the one a layer would have made,
+ * and the rail reuses it should the viewer switch to that field. */
 function loadVariable(
   variableId: ForecastBundleId,
   sequence: number,
-  role: "primary" | "overlay" = "primary",
+  role: "primary" | "overlay" | "probe" = "primary",
 ): Promise<VariableSession> {
   const resident = sessions.get(variableId);
   if (resident) return Promise.resolve(resident);
@@ -3401,13 +3707,14 @@ function loadVariable(
     // resolution, so whenever a reduced tier suffices the half bundle is
     // strictly cheaper.
     const overlay = role === "overlay";
+    const quiet = role !== "primary";
     const variant = pickBundleVariant(
       descriptor.variants,
       neededGridWidth(),
       slowConnection(),
       overlay && resolutionPreference !== "full" ? "half" : resolutionPreference,
     );
-    const video = h264Enabled ? descriptor.video : undefined;
+    const video = h264Enabled && role !== "probe" ? descriptor.video : undefined;
     // Opted in, the video path must still earn its bytes — prefer it only
     // when the stream is not larger than the bundle it replaces (lossless
     // H.264 wins that comparison for tmp2m but loses it for prate; the
@@ -3432,7 +3739,7 @@ function loadVariable(
         const streamBuffer = await downloadBundle(
           { path: video.streamPath, byteLength: video.byteLength, crc32: video.crc32 },
           sequence,
-          overlay,
+          quiet,
         );
         if (sequence !== initializeSequence) throw new DOMException("aborted", "AbortError");
         source = { kind: "buffer", buffer: streamBuffer };
@@ -3463,8 +3770,10 @@ function loadVariable(
           variableKey: variableId,
         };
         downloadedBytes = 0;
+      } else if (role === "probe") {
+        throw new Error("range requests unsupported; a probe session never downloads a whole bundle");
       } else {
-        const initBuffer = await downloadBundle(target, sequence, overlay);
+        const initBuffer = await downloadBundle(target, sequence, quiet);
         if (sequence !== initializeSequence) throw new DOMException("aborted", "AbortError");
         channel = spawnWorker();
         initMessage = { type: "init", buffer: initBuffer };
@@ -3475,7 +3784,7 @@ function loadVariable(
       totalBytes = target.byteLength;
     }
 
-    if (!overlay) say(loadStatus, streaming ? "readingIndex" : "initializingDecoder");
+    if (!quiet) say(loadStatus, streaming ? "readingIndex" : "initializingDecoder");
     const {
       worker: sessionWorker,
       metadata: bundleMetadata,
@@ -4124,7 +4433,8 @@ function applyVariable(session: VariableSession): void {
   // read for the pinned cell.
   if (probe) {
     seedProbeFromCache();
-    requestProbeSeries();
+    requestAllProbeSeries();
+    ensureProbeSessions();
     scheduleProbeRender();
   }
 }
@@ -4465,6 +4775,7 @@ function applyLocale(): void {
   VARIABLE_UI = buildVariableUi();
   renderLanguageList();
   probePanel.root.setAttribute("aria-label", t("probeAria"));
+  probePanel.close.setAttribute("aria-label", t("probeCloseAria"));
   applyDatasetWording();
   updateTransport();
   resayAll();

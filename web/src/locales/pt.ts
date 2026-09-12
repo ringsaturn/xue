@@ -186,6 +186,7 @@ export const pt: Record<MessageKey, string> = {
   probeOutside: "Fora da grelha deste conjunto de dados",
   probeNoData: "Sem dados neste fotograma",
   probeAwaiting: "A aguardar este fotograma",
+  probeCloseAria: "Fechar os dados do ponto",
 
   centerHigh: "A",
   centerLow: "B",

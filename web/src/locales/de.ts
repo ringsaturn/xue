@@ -186,6 +186,7 @@ export const de: Record<MessageKey, string> = {
   probeOutside: "Außerhalb des Gitters dieses Datensatzes",
   probeNoData: "Keine Daten in diesem Bild",
   probeAwaiting: "Warte auf dieses Bild",
+  probeCloseAria: "Punktdaten schließen",
 
   centerHigh: "H",
   centerLow: "T",
