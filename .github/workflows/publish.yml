@@ -224,7 +224,7 @@ jobs:
           {
             echo "### $MODEL build jobs"
             echo
-            printf '%s' "$groups" | jq -r '.[] | "- `\(.group)`" + (if .video then " (video)" else "" end)'
+            printf '%s' "$groups" | jq -r '.[] | "- `\(.group)`" + (if .video then " (video)" else "" end) + (if .eccodes then " (eccodes)" else "" end)'
           } >> "$GITHUB_STEP_SUMMARY"
 
   build:
@@ -272,16 +272,19 @@ jobs:
       # missing, which is why the matrix says rather than the job guessing.
       # ECMWF open data is CCSDS packed; xue repacks it with eccodes at fetch
       # time because GDAL builds usually lack libaec, so every ECMWF job
-      # installs the tools. zstd is only reached below Python 3.14.
+      # installs the tools — and so does a GFS job whose group reads the
+      # JPEG 2000-packed GFS-Wave file (the matrix's `eccodes`), repacked
+      # the same way. zstd is only reached below Python 3.14.
       - name: Install ffmpeg / eccodes
-        if: ${{ matrix.video || inputs.model == 'ecmwf' }}
+        if: ${{ matrix.video || matrix.eccodes || inputs.model == 'ecmwf' }}
         env:
           VIDEO: ${{ matrix.video }}
+          ECCODES: ${{ matrix.eccodes }}
         run: |
           set -euo pipefail
           packages=""
           [ "$VIDEO" != "true" ] || packages="$packages ffmpeg"
-          [ "$MODEL" != "ecmwf" ] || packages="$packages libeccodes-tools"
+          [ "$MODEL" != "ecmwf" ] && [ "$ECCODES" != "true" ] || packages="$packages libeccodes-tools"
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends $packages
 

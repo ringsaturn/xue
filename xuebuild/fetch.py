@@ -4,22 +4,27 @@ import logging
 import os
 import random
 import re
+import tempfile
 import threading
 import time
 import urllib.error
 import urllib.request
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
 from pathlib import Path
-from typing import Callable
 
 from .errors import DownloadError
-from .idx import ByteRange, ecmwf_field_byte_range, ecmwf_level_selector, field_byte_range
+from .idx import (
+    ByteRange,
+    ecmwf_field_byte_range,
+    ecmwf_level_selector,
+    field_byte_range,
+)
 from .model import GfsRun
 from .sources import SourceSpec, source_spec
 from .variables import VARIABLES
-
 
 LOG = logging.getLogger(__name__)
 # GFS objects (pgrb2 and sflux, including .idx files) are mirrored bit-for-bit
@@ -403,11 +408,32 @@ def _download_noaa_payload(
         tuple(variable_id for variable_id in wanted if spec.companion_of(variable_id) is None),
     )
     for companion in spec.companion_files:
-        payload += _download_noaa_records(
-            companion_object_url(run, forecast_hour, companion.id),
-            tuple(variable_id for variable_id in wanted if variable_id in companion.variable_ids),
+        url = companion_object_url(run, forecast_hour, companion.id)
+        records = _download_noaa_records(
+            url, tuple(variable_id for variable_id in wanted if variable_id in companion.variable_ids)
         )
+        if records and companion.repack:
+            records = _repack_grid_simple(records, url)
+        payload += records
     return payload
+
+
+def _repack_grid_simple(records: bytes, url: str) -> bytes:
+    """The same GRIB messages repacked to ``grid_simple`` with eccodes — for
+    a family whose packing the wheel's GDAL cannot read (GFS-Wave's JPEG
+    2000). Done on the family's bytes alone, before they join the frame, so
+    the pgrb2 records keep the packing they came with."""
+    from .eccodescli import repack_grid_simple
+
+    with tempfile.TemporaryDirectory(prefix="xue-repack-") as scratch:
+        raw = Path(scratch) / "records.grib2"
+        repacked = Path(scratch) / "records.simple.grib2"
+        raw.write_bytes(records)
+        try:
+            repack_grid_simple(raw, repacked)
+            return repacked.read_bytes()
+        except Exception as exc:
+            raise DownloadError(f"could not repack GRIB records from {url}: {exc}") from exc
 
 
 def _download_ecmwf_payload(

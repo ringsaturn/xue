@@ -67,6 +67,18 @@ def group_needs_video(bundle_ids: tuple[str, ...]) -> bool:
     return any(bundle_id in VIDEO_VARIABLE_IDS for bundle_id in bundle_ids)
 
 
+def group_needs_eccodes(source: SourceSpec, bundle_ids: tuple[str, ...]) -> bool:
+    """Whether a group fetches records the fetcher repacks with ``grib_set``
+    (a companion family with ``repack``), i.e. whether its job needs eccodes
+    installed. ECMWF needs it for every group and the workflow says so on its
+    own; this is for the sources that need it for some bundles only."""
+    return any(
+        (companion := source.companion_of(input_id)) is not None and companion.repack
+        for bundle_id in bundle_ids
+        for input_id in bundle_input_ids(source, bundle_id)
+    )
+
+
 def _bundle_weight(source: SourceSpec, bundle_id: str) -> int:
     # A job's time is a fixed setup cost plus work that scales with the planes
     # it fetches and compresses: one per input variable (a vector pair is
@@ -141,9 +153,15 @@ def bundle_group_matrix(
 ) -> list[dict[str, Any]]:
     """The groups as a GitHub Actions matrix: ``group`` is the space-separated
     ids a shell passes straight to ``--bundles``, ``slug`` names the job's
-    files and artifacts, ``video`` says whether the job installs ffmpeg."""
+    files and artifacts, ``video`` says whether the job installs ffmpeg and
+    ``eccodes`` whether it installs grib_set."""
     return [
-        {"group": " ".join(group), "slug": bundle_group_slug(group), "video": group_needs_video(group)}
+        {
+            "group": " ".join(group),
+            "slug": bundle_group_slug(group),
+            "video": group_needs_video(group),
+            "eccodes": group_needs_eccodes(source, group),
+        }
         for group in bundle_groups(source, max_groups, bundle_ids)
     ]
 

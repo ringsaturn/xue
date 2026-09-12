@@ -47,12 +47,12 @@ def main() -> int:
         else:
             print(f"missing: {utility}", file=sys.stderr)
             failed = True
-    # eccodes is only needed for the ECMWF source (its open data is CCSDS
-    # packed and gets repacked with grib_set); GFS-only builds run without it.
+    # eccodes repacks what GDAL builds cannot read: ECMWF open data (CCSDS)
+    # and the GFS-Wave records GFS fetches (JPEG 2000). sflux runs without it.
     if shutil.which("grib_set"):
         print("ok: grib_set (eccodes)")
     else:
-        print("warning: grib_set (eccodes) missing — ECMWF builds need it, GFS builds do not", file=sys.stderr)
+        print("warning: grib_set (eccodes) missing — ECMWF and GFS builds need it, sflux does not", file=sys.stderr)
     try:
         import numpy
 

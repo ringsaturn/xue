@@ -149,7 +149,9 @@ and specific humidity there, and the ocean fields: the surface (skin)
 temperature, which is the SST over water, sea ice cover and thickness from
 pgrb2, and the significant wave height, primary wave period and direction
 read from the cycle's GFS-Wave file (`wave/gridded/`, the same 0.25° grid
-and axis — a GFS run is complete only once its wave frames are up too,
+and axis; its JPEG 2000 packing is repacked with `grib_set` at fetch time,
+so a GFS fetch needs eccodes like an ECMWF one — a GFS run is complete only
+once its wave frames are up too,
 usually within minutes of the pgrb2 f240, occasionally twenty minutes
 after it). `--hours` may
 be any hour on the model's published axis, so shorter uniform builds

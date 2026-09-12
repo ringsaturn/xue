@@ -244,7 +244,11 @@ publishing data at the new version.**
   of pgrb2 f240, occasionally 20 min after),
   and a record may not cover its grid (`VariableSpec.fill_values`: the
   wave bitmap's GDAL nodata 9999 becomes the codebook bottom before unit
-  conversion, in both encoders — the format has no bitmap). Widening a
+  conversion, in both encoders — the format has no bitmap). WAVEWATCH III
+  packs as JPEG 2000, which the wheel's two-driver GDAL cannot read, so the
+  fetcher repacks the family to `grid_simple` with `grib_set`
+  (`CompanionFile.repack`, lossless) the way ECMWF's CCSDS files are, and
+  `bundle-groups` flags those jobs `eccodes` so `publish.yml` installs it. Widening a
   source's input list means recutting `tests/fixtures/gfs.*.crop.grib2`
   (same run, same `-srcwin`) and regenerating the registry fixtures.
 - `fetch.py` → `idx.py` / `grib2.py` — byte-range fetches of exact GRIB

@@ -20,6 +20,9 @@ from __future__ import annotations
 
 import json
 import math
+import shutil
+import subprocess
+import tempfile
 import unittest
 from datetime import UTC, datetime
 from pathlib import Path
@@ -27,6 +30,7 @@ from pathlib import Path
 import numpy as np
 
 from xuebuild import grib2
+from xuebuild.assemble import bundle_group_matrix, group_needs_eccodes
 from xuebuild.binconvert import (
     VECTOR_BUNDLES,
     VIDEO_VARIABLE_IDS,
@@ -38,7 +42,13 @@ from xuebuild.binconvert import (
     published_bundle_ids,
 )
 from xuebuild.errors import ConversionError, DownloadError
-from xuebuild.fetch import _run_is_complete, companion_object_url, object_url, wave_object_url
+from xuebuild.fetch import (
+    _repack_grid_simple,
+    _run_is_complete,
+    companion_object_url,
+    object_url,
+    wave_object_url,
+)
 from xuebuild.gdal import _band_matches, raster_expression
 from xuebuild.grib2 import MessageInfo, _matches
 from xuebuild.model import GfsRun, SourceFrame
@@ -148,6 +158,15 @@ class RegistryTests(unittest.TestCase):
         gfs = source_spec("gfs")
         (wave,) = gfs.companion_files
         self.assertEqual((wave.id, wave.variable_ids), ("wave", WAVE_IDS))
+        # WAVEWATCH III packs its records as JPEG 2000, which the wheel's
+        # GDAL cannot read: the fetcher repacks them, and the build job of
+        # any bundle from the family installs grib_set.
+        self.assertTrue(wave.repack)
+        self.assertTrue(group_needs_eccodes(gfs, ("tmp2m", "htsgw")))
+        self.assertFalse(group_needs_eccodes(gfs, ("tmp2m", "tmpsfc", "icec")))
+        flags = {entry["group"]: entry["eccodes"] for entry in bundle_group_matrix(gfs, 100)}
+        self.assertEqual([group for group, needs in flags.items() if needs], list(WAVE_IDS))
+        self.assertFalse(any(entry["eccodes"] for entry in bundle_group_matrix(source_spec("sflux"), 100)))
         for variable_id in WAVE_IDS:
             self.assertIs(gfs.companion_of(variable_id), wave)
         for variable_id in ("tmpsfc", "icec", "icetk", "tmp2m", "prate"):
@@ -191,6 +210,29 @@ class FetchTests(unittest.TestCase):
         self.assertTrue(_run_is_complete(run, 240, "sflux", exists))
         self.assertEqual(len(probed), 2)
         self.assertFalse(any("gfswave" in url for url in probed))
+
+
+class RepackTests(unittest.TestCase):
+    @unittest.skipUnless(shutil.which("grib_set"), "eccodes CLI")
+    def test_repacking_rewrites_every_message_as_grid_simple(self) -> None:
+        # The plumbing only: the fixture's messages were written by GDAL
+        # (grid_ieee and grid_complex with GDAL's own scale choices), which
+        # `grib_set -r` does not carry over faithfully, so the values are
+        # not compared here. The product this is for — WAVEWATCH III's JPEG
+        # 2000 records, 10/12/16 bits at a decimal scale of 2 — repacks to
+        # the same integers; that was verified on a live frame by hand, and
+        # the byte-identity of the two encoders on a repacked frame with it.
+        repacked = _repack_grid_simple(FIXTURE.read_bytes(), "fixture")
+        with tempfile.TemporaryDirectory() as scratch:
+            path = Path(scratch) / "repacked.grib2"
+            path.write_bytes(repacked)
+            self.assertEqual(len(grib2.index_messages(path)), 40, "every message survives, in order")
+            listing = subprocess.run(
+                ["grib_ls", "-p", "packingType", str(path)], capture_output=True, text=True, check=True
+            ).stdout
+            self.assertEqual(listing.count("grid_simple"), 40)
+        with self.assertRaises(DownloadError):
+            _repack_grid_simple(b"not a grib message", "nowhere")
 
 
 class MatcherTests(unittest.TestCase):
@@ -294,8 +336,6 @@ class ConversionTests(unittest.TestCase):
         gfs = source_spec("gfs")
         grid = _grid_info(FIXTURE)
         frames = grib2.inspect_grib_fast(FIXTURE, gfs.input_variable_ids)
-        import tempfile
-
         with tempfile.TemporaryDirectory() as work:
             planes = _extract_planes({v: frames[v] for v in ("tmp2m", *OCEAN_VARIABLE_IDS)}, grid, Path(work))
         for variable_id in OCEAN_VARIABLE_IDS:

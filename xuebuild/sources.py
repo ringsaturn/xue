@@ -41,6 +41,14 @@ class CompanionFile:
     variable_ids: tuple[str, ...]
     """Which of the source's :attr:`SourceSpec.input_variable_ids` come
     from this family rather than the primary file, in assembly order."""
+    repack: bool = False
+    """True when the family's records must be repacked to ``grid_simple``
+    with eccodes at fetch time, the way the CCSDS-packed ECMWF files are.
+    WAVEWATCH III writes JPEG 2000 packing (DRS template 5.40), which the
+    GDAL the ``xuepy`` wheel carries — GRIB and netCDF drivers only — cannot
+    decode; repacked, the records read everywhere and decode to the same
+    values (the packing is lossless either way). A build job of a bundle
+    from such a family installs ``grib_set`` (``assemble.group_needs_eccodes``)."""
 
 
 @dataclass(frozen=True)
@@ -231,7 +239,7 @@ SOURCES: dict[str, SourceSpec] = {
             "dirpw",
         ),
         accumulated_precipitation=False,
-        companion_files=(CompanionFile(id="wave", variable_ids=("htsgw", "perpw", "dirpw")),),
+        companion_files=(CompanionFile(id="wave", variable_ids=("htsgw", "perpw", "dirpw"), repack=True),),
         bundle_scalar_ids=(
             "tmp2m",
             "prate",

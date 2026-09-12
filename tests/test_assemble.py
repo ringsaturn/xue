@@ -64,6 +64,7 @@ class BundleGroupTests(unittest.TestCase):
             {"tmp2m": True, "prate": True, "dswrf": True, "wind10m": False},
         )
         self.assertEqual([entry["slug"] for entry in matrix], ["tmp2m", "prate", "dswrf", "wind10m"])
+        self.assertFalse(any(entry["eccodes"] for entry in matrix), "sflux repacks nothing")
 
     def test_no_groups_is_refused(self) -> None:
         with self.assertRaises(ManifestError):
