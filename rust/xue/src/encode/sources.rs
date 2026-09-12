@@ -162,7 +162,7 @@ pub const SOURCES: &[SourceSpec] = &[
             "vis", "dpt2m", "aptmp2m", "vvel850", "vvel700", "vvel500", "thetae850", "tmpsfc",
             "icec", "icetk", "htsgw", "perpw", "dirpw",
         ],
-        bundle_vector_ids: &["wind10m", "wind925", "wind850", "wind250", "qflux850"],
+        bundle_vector_ids: &["wind10m", "wind925", "wind850", "wind250", "qflux850", "wave"],
         production_grid: (1440, 721),
         tile: (48, 52),
         observation: false,

@@ -29,7 +29,9 @@ Facts worth getting right:
   fields `tmpsfc` (surface / skin temperature, the SST over water), `icec`
   and `icetk` (sea ice cover and thickness), `htsgw`, `perpw`, `dirpw`
   (significant wave height, primary wave period and direction, from the
-  GFS-Wave file of the same cycle; land is 0 in all three). SFLUX: `tmp2m`,
+  GFS-Wave file of the same cycle; land is 0 in all three), and the vector
+  pair `wave` (the height laid along the direction of travel, u/v in
+  metres, derived from the two — the viewer's wave layer). SFLUX: `tmp2m`,
   `prate`, `dswrf`, `wind10m`. Names are `<family><level>`; the level is in
   hPa, `2m`/`10m` are heights above ground, `prmsl` is mean sea level
   pressure.
@@ -57,8 +59,9 @@ fall back to defaults rather than fail, so a constructed link always opens.
   (`lowcloud` / `midcloud` / `highcloud` for the layers), `cape`,
   `visibility`, `dewpoint`, `feelslike`, the GFS ocean set `sst` (the
   skin temperature, `tmpsfc`), `seaice` (`icec`; `icethickness` for
-  `icetk`), `waves` (`htsgw`; `waveperiod` for `perpw`, `wavedirection`
-  for `dirpw`), or a bundle name such as `tmp850`,
+  `icetk`), `waves` (the `wave` vector — height as the fill, direction as
+  particles; `waveheight` for the scalar `htsgw`, `waveperiod` for `perpw`,
+  `wavedirection` for `dirpw`), or a bundle name such as `tmp850`,
   `rh700`, `wind850`, `qflux850`, `hgt500`, `vvel700`, `thetae850`; `t850`,
   `z500`, `humidity700`, `vapour850`, `omega700`, `subtropicalhigh`
   (= `hgt500`) are accepted spellings.

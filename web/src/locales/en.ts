@@ -234,6 +234,9 @@ export const en = {
   varLabelTmpsfc: "Sea surface temperature (skin temperature over land)",
   varLabelIcec: "Sea ice cover",
   varLabelIcetk: "Sea ice thickness",
+  /** The wave vector: the height as the fill, the direction as particles —
+   * the label names both, since the tile reads "WAVE HEIGHT". */
+  varLabelWave: "Waves: significant height and direction",
   varLabelHtsgw: "Significant wave height",
   varLabelPerpw: "Primary wave period",
   varLabelDirpw: "Primary wave direction",

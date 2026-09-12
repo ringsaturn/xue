@@ -151,6 +151,7 @@ export const zhHant: Record<MessageKey, string> = {
   varLabelTmpsfc: "海表溫度（陸地為地表溫度）",
   varLabelIcec: "海冰密集度",
   varLabelIcetk: "海冰厚度",
+  varLabelWave: "海浪（有效波高與波向）",
   varLabelHtsgw: "有效波高",
   varLabelPerpw: "主波週期",
   varLabelDirpw: "主波向",

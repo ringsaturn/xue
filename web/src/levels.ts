@@ -13,8 +13,9 @@ import { PRESSURE_BUNDLE_IDS, pressureLabel } from "./pressure";
  * the wind family, mean sea level pressure the pressure family. Three
  * families are not isobaric at all and list their members outright: cloud
  * cover (the total and the three layers), sea ice (cover and thickness) and
- * waves (significant height and primary period), and the level row picks
- * among those the same way. Precipitation, radiation, reflectivity, the
+ * waves (the wave vector — significant height along the direction of
+ * travel — and the primary period), and the level row picks among those
+ * the same way. Precipitation, radiation, reflectivity, the
  * other surface diagnostics (gust, CAPE, visibility, dew point, apparent
  * temperature) and the skin temperature are single layers and belong to no
  * family.
@@ -58,8 +59,10 @@ export interface FamilyInfo {
    * button repeats; null for a family the shell writes no tile for. */
   glossKey: MessageKey | null;
   /** A family whose members are not the eight isobaric surfaces lists them
-   * outright, in level-row order, each with its level-row label. */
-  members?: readonly { id: ForecastBundleId; code: string }[];
+   * outright, in level-row order, each with its level-row label. A member
+   * may stand in for another: it is offered only while the run does not
+   * ship the one it stands in for (`familyMembers`). */
+  members?: readonly { id: ForecastBundleId; code: string; standInFor?: ForecastBundleId }[];
 }
 
 export const FAMILIES: Record<IsobaricFamily, FamilyInfo> = {
@@ -109,21 +112,25 @@ export const FAMILIES: Record<IsobaricFamily, FamilyInfo> = {
       { id: "icetk", code: "THICK" },
     ],
   },
-  // Waves: the significant height heads the family, the primary period is
-  // its other member. The primary direction (`dirpw`) is published too but
-  // is no member: a direction is not a fill — as a scalar it wraps at
-  // north and paints land, which is 0 in the file, as north — so it waits
-  // for the arrow or particle rendering that reads it properly, and is
-  // reachable by URL (`?type=wavedirection`) meanwhile.
+  // Waves: the wave vector heads the family — the significant height laid
+  // along the direction the waves travel, drawn the way the wind is, the
+  // height as the filled magnitude and the direction as particles — and
+  // the primary period is its other member. The scalar height (`htsgw`)
+  // stands in for the vector on a run that predates it, so an older run
+  // or case keeps its height fill; beside the vector it is reachable by
+  // URL (`?type=waveheight`) only, and so is the primary direction
+  // (`dirpw`, `?type=wavedirection`), which as a scalar wraps at north and
+  // paints land, 0 in the file, as north — the vector is how it is read.
   wave: {
     id: "wave",
-    kind: "scalar",
-    surface: "htsgw",
+    kind: "vector",
+    surface: "wave",
     code: "WAVE",
     surfaceCode: "HEIGHT",
     glossKey: "varWave",
     members: [
-      { id: "htsgw", code: "HEIGHT" },
+      { id: "wave", code: "HEIGHT" },
+      { id: "htsgw", code: "HEIGHT", standInFor: "wave" },
       { id: "perpw", code: "PERIOD" },
     ],
   },
@@ -131,8 +138,8 @@ export const FAMILIES: Record<IsobaricFamily, FamilyInfo> = {
 
 /** Bundles the shell has chart knowledge for but deliberately writes no rail
  * tile for: the primary wave direction, which is not a fill (see the wave
- * family above) and waits for an arrow rendering. Reachable by URL; a run
- * that ships one gets no generic tile for it either. */
+ * family above) — the wave vector is how it is drawn. Reachable by URL; a
+ * run that ships one gets no generic tile for it either. */
 export const UNTILED_BUNDLE_IDS: readonly ForecastBundleId[] = ["dirpw"];
 
 /** The family a bundle id *names*, or null for a single layer (precipitation,
@@ -165,10 +172,17 @@ export function bundleLevel(id: ForecastBundleId): IsobaricLevel | null {
 }
 
 /** Every member of a family in level-row order: the surface first, then the
- * isobaric surfaces from the ground up. */
-export function familyMembers(family: IsobaricFamily): ForecastBundleId[] {
+ * isobaric surfaces from the ground up. `published` says what the run at
+ * hand ships: a listed member that stands in for another is left out once
+ * the one it stands in for is published (the scalar wave height beside the
+ * wave vector); without it every listed member is returned. */
+export function familyMembers(family: IsobaricFamily, published?: (id: ForecastBundleId) => boolean): ForecastBundleId[] {
   const info = FAMILIES[family];
-  if (info.members) return info.members.map((member) => member.id);
+  if (info.members) {
+    return info.members
+      .filter((member) => !(published && member.standInFor !== undefined && published(member.standInFor)))
+      .map((member) => member.id);
+  }
   const members: ForecastBundleId[] = info.surface ? [info.surface] : [];
   for (const level of ISOBARIC_LEVELS) members.push(`${family}${level}` as ForecastBundleId);
   return members;
@@ -344,11 +358,14 @@ export const DEW_POINT_CHART_RANGE: readonly [number, number] = [-30, 30];
 export const APPARENT_CHART_RANGE: readonly [number, number] = [-50, 50];
 
 /** Ceiling of a vector field's magnitude palette: the 10 m wind's 40 m/s,
- * more for the isobaric winds (a jet core passes 80), and the vapour flux's
- * own scale — strong transport is 20–40 g·cm⁻¹·hPa⁻¹·s⁻¹. Keyed by the pair
- * the field *is*; a surface with no registered ceiling takes the 10 m one. */
+ * more for the isobaric winds (a jet core passes 80), the vapour flux's
+ * own scale — strong transport is 20–40 g·cm⁻¹·hPa⁻¹·s⁻¹ — and the wave
+ * vector's magnitude is the significant wave height, which reads to the
+ * height's own chart ceiling. Keyed by the pair the field *is*; a surface
+ * with no registered ceiling takes the 10 m one. */
 export function vectorMaxMagnitude(family: ChartFamily, level: number | null): number {
   if (family === "qflux") return 50;
+  if (family === "wave") return WAVE_HEIGHT_CHART_MAX;
   if (!isRegisteredLevel(level)) return 40;
   if (level >= 700) return 60;
   if (level === 500) return 80;
@@ -363,6 +380,7 @@ export function familyLabel(id: ForecastBundleId): string {
   if (level === null) {
     if (id === "tmp2m") return t("varLabelTmp2m");
     if (id === "wind10m") return t("varLabelWind10m");
+    if (id === "wave") return t("varLabelWave");
     const listed = MEMBER_LABEL_KEYS[id];
     if (listed) return t(listed);
     return id;
@@ -445,7 +463,7 @@ export function niceStep(span: number): number {
  * codebook. */
 export function isobaricLegend(identity: VariableIdentity): string[] | null {
   const { family, level, vector } = identity;
-  if (vector) return rangeLegend([0, vectorMaxMagnitude(family, level)], 10);
+  if (vector) return rangeLegend([0, vectorMaxMagnitude(family, level)], family === "wave" ? 2 : 10);
   if (family === "gust") return rangeLegend([0, GUST_SPEED_MAX], 10);
   if (family === "tcdc" || family === "lcdc" || family === "mcdc" || family === "hcdc") return rangeLegend([0, 100], 20);
   if (family === "cape") return rangeLegend([0, CAPE_CHART_MAX], 1000);

@@ -23,12 +23,18 @@ import {
 import {
   KNOWN_BUNDLE_IDS,
   OCEAN_IDS,
+  VECTOR_BUNDLES,
+  WAVE_COMPONENT_IDS,
   isVectorBundle,
   type BundleParameter,
   type BundleVariable,
   type LinearQuantization,
 } from "../../web/src/manifest";
-import { buildPalette, decodeValue } from "../../web/src/palettes";
+import { buildPalette, buildWaveFieldPalette, decodeValue } from "../../web/src/palettes";
+import {
+  identityForParameterPair,
+} from "../../web/src/identity";
+import { vectorMaxMagnitude } from "../../web/src/levels";
 import {
   parseVariableFromSearch,
   searchForVariable,
@@ -75,30 +81,115 @@ function rgba(
 
 describe("the ocean registry", () => {
   it("knows exactly the variables the encoders register", () => {
-    expect([...OCEAN_IDS].sort()).toEqual(Object.keys(registry).sort());
+    expect([...OCEAN_IDS, ...WAVE_COMPONENT_IDS].sort()).toEqual(
+      Object.keys(registry).sort(),
+    );
     for (const id of OCEAN_IDS) {
       expect(KNOWN_BUNDLE_IDS).toContain(id);
       expect(isVectorBundle(id)).toBe(false);
     }
+    // The wave vector is a bundle of the two derived components.
+    expect(KNOWN_BUNDLE_IDS).toContain("wave");
+    expect(isVectorBundle("wave")).toBe(true);
+    expect(VECTOR_BUNDLES.wave).toEqual(WAVE_COMPONENT_IDS);
     // Sea ice and the waves are families the level row picks within; the
     // skin temperature is a single layer, and the wave direction — no fill
-    // — belongs to no tile.
+    // — belongs to no tile: the vector is how it is drawn.
     expect(familyOf("icec")).toBe("ice");
     expect(familyOf("icetk")).toBe("ice");
+    expect(familyOf("wave")).toBe("wave");
     expect(familyOf("htsgw")).toBe("wave");
     expect(familyOf("perpw")).toBe("wave");
     expect(familyOf("tmpsfc")).toBeNull();
     expect(familyOf("dirpw")).toBeNull();
     expect(familyMembers("ice")).toEqual(["icec", "icetk"]);
-    expect(familyMembers("wave")).toEqual(["htsgw", "perpw"]);
     expect(FAMILIES.ice.surface).toBe("icec");
-    expect(FAMILIES.wave.surface).toBe("htsgw");
+    expect(FAMILIES.wave.surface).toBe("wave");
+    expect(FAMILIES.wave.kind).toBe("vector");
     expect([
       levelCode("icec"),
       levelCode("icetk"),
+      levelCode("wave"),
       levelCode("htsgw"),
       levelCode("perpw"),
-    ]).toEqual(["COVER", "THICK", "HEIGHT", "PERIOD"]);
+    ]).toEqual(["COVER", "THICK", "HEIGHT", "HEIGHT", "PERIOD"]);
+  });
+
+  it("offers the scalar height only on a run without the wave vector", () => {
+    // Without a run to ask, every listed member: the wave vector heads the
+    // family and the scalar height stands in for it.
+    expect(familyMembers("wave")).toEqual(["wave", "htsgw", "perpw"]);
+    // A run that ships the vector: the scalar height leaves the level row
+    // (reachable by URL still), so HEIGHT is one button.
+    const withVector = new Set(["wave", "htsgw", "perpw", "dirpw"]);
+    expect(familyMembers("wave", (id) => withVector.has(id))).toEqual([
+      "wave",
+      "perpw",
+    ]);
+    // A run that predates the vector keeps its height fill.
+    const scalarsOnly = new Set(["htsgw", "perpw", "dirpw"]);
+    expect(familyMembers("wave", (id) => scalarsOnly.has(id))).toEqual([
+      "wave",
+      "htsgw",
+      "perpw",
+    ]);
+    // Stand-ins are a listed-family affair; the isobaric families are as
+    // they were.
+    expect(familyMembers("wind", () => true)).toEqual(familyMembers("wind"));
+  });
+
+  it("identifies the wave vector from its pair and draws it as the height", () => {
+    const u = registry.uwave!.parameter;
+    const v = registry.vwave!.parameter;
+    // Xue-local numbers in the waves category on the water surface, the
+    // surface value no part of the identity — as for the fields it is
+    // derived from.
+    expect([u.discipline, u.parameterCategory, u.parameterNumber]).toEqual([10, 0, 250]);
+    expect([v.discipline, v.parameterCategory, v.parameterNumber]).toEqual([10, 0, 251]);
+    const identity = { family: "wave", level: null, vector: true };
+    expect(identityForParameterPair(u, v)).toEqual(identity);
+    expect(identityForParameterPair(v, u)).toBeNull();
+    expect(
+      identityForParameterPair(
+        { ...u, scaleFactorOfFirstFixedSurface: 0, scaledValueOfFirstFixedSurface: 1 },
+        { ...v, scaleFactorOfFirstFixedSurface: 0, scaledValueOfFirstFixedSurface: 1 },
+      ),
+    ).toEqual(identity);
+    // Not on an isobaric surface, and not the wind's numbers.
+    expect(identityForParameterPair({ ...u, typeOfFirstFixedSurface: 100 }, { ...v, typeOfFirstFixedSurface: 100 })).toBeNull();
+    expect(identityForParameterPair({ ...u, discipline: 0 }, { ...v, discipline: 0 })).toBeNull();
+    expect(identityForBundleId("wave")).toEqual(identity);
+    expect(registeredBundleId(identity as never)).toBe("wave");
+    // The bundle's variables are read as u then v whichever order the file
+    // lists them in; a file naming them anything at all still draws.
+    const pair = [
+      { ...bundleVariable("vwave"), id: "second", numericId: 2 },
+      { ...bundleVariable("uwave"), id: "first", numericId: 1 },
+    ];
+    const placed = identifyBundle(pair);
+    expect(placed?.identity).toEqual(identity);
+    expect(placed?.variables.map((variable) => variable.id)).toEqual(["first", "second"]);
+    // The magnitude is the significant wave height: symmetric components
+    // over the height codebook's own coverage, land the middle code of
+    // both, and the ramp is the height's up to its chart ceiling.
+    const { offset, scale, maximumCode } = registry.uwave!.quality;
+    expect(offset).toBe(-25.4);
+    expect(offset + scale * maximumCode).toBeCloseTo(25.4, 9);
+    expect(decodeValue(bundleVariable("uwave"), 127)).toBeCloseTo(0, 9);
+    expect(decodeValue(bundleVariable("uwave", "compact"), 63)).toBeCloseTo(0, 9);
+    expect(vectorMaxMagnitude("wave", null)).toBe(WAVE_HEIGHT_CHART_MAX);
+    const field = buildWaveFieldPalette(WAVE_HEIGHT_CHART_MAX);
+    const height = buildPalette(bundleVariable("htsgw"));
+    const atHeight = (metres: number) => rgba(height, Math.round(metres / registry.htsgw!.quality.scale));
+    const atMagnitude = (metres: number) => rgba(field, Math.round((metres / WAVE_HEIGHT_CHART_MAX) * 255));
+    expect(atMagnitude(0)[3]).toBe(0);
+    for (const metres of [1, 3, 6, WAVE_HEIGHT_CHART_MAX]) {
+      const [r, g, b, a] = atHeight(metres);
+      const [fr, fg, fb, fa] = atMagnitude(metres);
+      for (const [x, y] of [[r, fr], [g, fg], [b, fb], [a, fa]] as const)
+        expect(Math.abs(x - y)).toBeLessThanOrEqual(6);
+    }
+    expect(isobaricLegend(identity as never)).toEqual(["10", "8", "6", "4", "2", "0"]);
   });
 
   it("identifies each field from its parameter block, and from its name before the file is open", () => {
@@ -330,7 +421,9 @@ describe("the ocean registry", () => {
     expect(parseVariableFromSearch("?type=seaice")).toBe("icec");
     expect(parseVariableFromSearch("?type=ice")).toBe("icec");
     expect(parseVariableFromSearch("?type=icethickness")).toBe("icetk");
-    expect(parseVariableFromSearch("?type=waves")).toBe("htsgw");
+    expect(parseVariableFromSearch("?type=waves")).toBe("wave");
+    expect(parseVariableFromSearch("?type=wave")).toBe("wave");
+    expect(parseVariableFromSearch("?type=waveheight")).toBe("htsgw");
     expect(parseVariableFromSearch("?type=swh")).toBe("htsgw");
     expect(parseVariableFromSearch("?type=waveperiod")).toBe("perpw");
     expect(parseVariableFromSearch("?type=wavedirection")).toBe("dirpw");
@@ -338,7 +431,8 @@ describe("the ocean registry", () => {
       ["tmpsfc", "sst"],
       ["icec", "seaice"],
       ["icetk", "icethickness"],
-      ["htsgw", "waves"],
+      ["wave", "waves"],
+      ["htsgw", "waveheight"],
       ["perpw", "waveperiod"],
       ["dirpw", "wavedirection"],
     ] as const) {

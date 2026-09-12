@@ -166,5 +166,61 @@
       "maximumCode": 119,
       "nodataCode": 255
     }
+  },
+  "uwave": {
+    "label": "U wave vector component",
+    "unit": "m",
+    "parameter": {
+      "discipline": 10,
+      "parameterCategory": 0,
+      "parameterNumber": 250,
+      "typeOfFirstFixedSurface": 1,
+      "scaleFactorOfFirstFixedSurface": null,
+      "scaledValueOfFirstFixedSurface": null
+    },
+    "quality": {
+      "type": "linear",
+      "offset": -25.4,
+      "scale": 0.2,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -25.2,
+      "scale": 0.4,
+      "minimumCode": 0,
+      "maximumCode": 126,
+      "nodataCode": 255
+    }
+  },
+  "vwave": {
+    "label": "V wave vector component",
+    "unit": "m",
+    "parameter": {
+      "discipline": 10,
+      "parameterCategory": 0,
+      "parameterNumber": 251,
+      "typeOfFirstFixedSurface": 1,
+      "scaleFactorOfFirstFixedSurface": null,
+      "scaledValueOfFirstFixedSurface": null
+    },
+    "quality": {
+      "type": "linear",
+      "offset": -25.4,
+      "scale": 0.2,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -25.2,
+      "scale": 0.4,
+      "minimumCode": 0,
+      "maximumCode": 126,
+      "nodataCode": 255
+    }
   }
 }

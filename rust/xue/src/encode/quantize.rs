@@ -363,6 +363,23 @@ const COMPACT_WAVE_DIRECTION: LinearCodebook = LinearCodebook {
     step: 3.0,
     ..QUALITY_WAVE_DIRECTION
 };
+// The wave vector components: symmetric over the height codebook's ±25.4 m
+// at 0.2 m, the full 0..254 code space; the compact profile stops at ±25.2
+// so that 0 — land, which must quantize to (0, 0) exactly — stays on the
+// grid (see `xuebuild/quantize.py`).
+const QUALITY_WAVE_VECTOR: LinearCodebook = LinearCodebook {
+    minimum: -25.4,
+    maximum: 25.4,
+    step: 0.2,
+    nodata_code: 255,
+    name: "wave vector",
+};
+const COMPACT_WAVE_VECTOR: LinearCodebook = LinearCodebook {
+    minimum: -25.2,
+    maximum: 25.2,
+    step: 0.4,
+    ..QUALITY_WAVE_VECTOR
+};
 // The cloud layers take the total's codebook, and its balanced rule.
 const fn cloud_layer_codebook(name: &'static str, compact: bool) -> LinearCodebook {
     LinearCodebook {
@@ -637,6 +654,8 @@ pub fn codebook(profile: &str, variable_id: &str) -> Result<Codebook> {
         (_, "perpw") => Codebook::Linear(COMPACT_WAVE_PERIOD),
         (_, "dirpw") if quality => Codebook::Linear(QUALITY_WAVE_DIRECTION),
         (_, "dirpw") => Codebook::Linear(COMPACT_WAVE_DIRECTION),
+        (_, "uwave" | "vwave") if quality => Codebook::Linear(QUALITY_WAVE_VECTOR),
+        (_, "uwave" | "vwave") => Codebook::Linear(COMPACT_WAVE_VECTOR),
         _ if pressure_codebook(variable_id, !quality).is_some() => Codebook::Linear(
             pressure_codebook(variable_id, !quality).expect("checked just above"),
         ),

@@ -85,7 +85,7 @@ import {
   type IsobaricFamily,
   UNTILED_BUNDLE_IDS,
 } from "./levels";
-import { buildPalette, buildVapourFluxPalette, buildWindFieldPalette, legendGradient } from "./palettes";
+import { buildPalette, buildVapourFluxPalette, buildWaveFieldPalette, buildWindFieldPalette, legendGradient } from "./palettes";
 import {
   PRESSURE_BUNDLE_IDS,
   PRESSURE_LEVELS,
@@ -418,6 +418,15 @@ function buildVariableUi(): Record<string, VariableUi> {
       label: t("varLabelIcetk"),
       legend: isobaricLegend(identityForBundleId("icetk")!) ?? [],
     },
+    // The wave vector: the height as the fill, the direction as particles,
+    // so its legend is the height's.
+    wave: {
+      code: "WAVE SFC",
+      title: ["Waves", "Height · Direction"],
+      bufferTitle: "Wave buffer",
+      label: t("varLabelWave"),
+      legend: isobaricLegend(identityForBundleId("wave")!) ?? [],
+    },
     htsgw: {
       code: "HTSGW SFC",
       title: ["Significant", "Wave Height"],
@@ -517,6 +526,7 @@ const DARK_BASEMAP: Record<string, BasemapTones> = {
   htsgw: { ocean: "#16344a", land: "#28495f" },
   perpw: { ocean: "#16344a", land: "#28495f" },
   dirpw: { ocean: "#16344a", land: "#28495f" },
+  wave: { ocean: "#16344a", land: "#28495f" },
   ...pressureBasemapTheme({ ocean: "#101f2c", land: "#22384a" }),
   // Relative humidity is a light wash, not a coat, and goes with the
   // moisture fields on the precipitation slate rather than with the
@@ -574,6 +584,7 @@ const LIGHT_BASEMAP: Record<string, BasemapTones> = {
   htsgw: PAPER_GROUND,
   perpw: PAPER_GROUND,
   dirpw: PAPER_GROUND,
+  wave: PAPER_GROUND,
   ...pressureBasemapTheme({ ocean: "#dcd6c8", land: "#c9c2b2" }),
   ...isobaricBasemapTheme(() => PAPER_GROUND),
 } as Record<string, BasemapTones>;
@@ -841,7 +852,8 @@ const MODEL_EYEBROW: Record<ForecastModelId, string> = {
 const lastFamilyMember = new Map<IsobaricFamily, ForecastBundleId>();
 
 function preferredFamilyMember(family: IsobaricFamily): ForecastBundleId {
-  const available = familyMembers(family).filter((id) => !manifest || hasBundle(manifest, id));
+  const run = manifest;
+  const available = run ? familyMembers(family, (id) => hasBundle(run, id)).filter((id) => hasBundle(run, id)) : familyMembers(family);
   const last = lastFamilyMember.get(family);
   if (last && available.includes(last)) return last;
   return available[0] ?? familyMembers(family)[0]!;
@@ -2243,6 +2255,7 @@ function ensureWindGrid(session: VariableSession): void {
   const [u, v] = session.variables;
   windLayer.configureGrid(session.metadata, u && v ? [u.id, v.id] : undefined);
   windLayer.setMaxSpeed(sessionMaxMagnitude(session));
+  windLayer.setPace(sessionParticlePace(session));
   windLayerGridSource = session.metadata;
 }
 
@@ -2744,7 +2757,7 @@ function levelGroups(): LevelGroup[] {
   const fill = composition.fill;
   const fillFamily = fill === null ? null : familyOf(fill);
   if (fill !== null && fillFamily !== null) {
-    const members = familyMembers(fillFamily).filter((id) => hasBundle(run, id));
+    const members = familyMembers(fillFamily, (id) => hasBundle(run, id)).filter((id) => hasBundle(run, id));
     if (members.length > 1) groups.push({ caption: FAMILIES[fillFamily].code, slot: "fill", members, active: fill });
   }
   const surfaces = PRESSURE_BUNDLE_IDS.filter((id) => hasBundle(run, id));
@@ -3916,11 +3929,25 @@ function sessionMaxMagnitude(session: VariableSession): number {
 }
 
 /** The magnitude palette of a vector session: the wind ramp up to the
- * field's own ceiling, or the vapour flux ramp. */
+ * field's own ceiling, the vapour flux ramp, or — for the wave vector,
+ * whose magnitude is the significant wave height — the wave height ramp. */
 function vectorPalette(session: VariableSession): Uint8Array {
   const max = sessionMaxMagnitude(session);
-  return session.identity?.family === "qflux" ? buildVapourFluxPalette(max) : buildWindFieldPalette(max);
+  const family = session.identity?.family;
+  if (family === "qflux") return buildVapourFluxPalette(max);
+  if (family === "wave") return buildWaveFieldPalette(max);
+  return buildWindFieldPalette(max);
 }
+
+/** How fast the particles run over a vector session's field, relative to
+ * the wind's pace, where the field is a speed: the wave vector's magnitude
+ * is a height, and a metre of sea is made to travel like three metres a
+ * second of wind — a three-metre sea like a fresh breeze, a storm sea past
+ * the ramp's ceiling like a gale. */
+function sessionParticlePace(session: VariableSession): number {
+  return session.identity?.family === "wave" ? WAVE_PARTICLE_PACE : 1;
+}
+const WAVE_PARTICLE_PACE = 3;
 
 /** A vector bundle's own decode for the layer's magnitude mode: each
  * component's linear codebook, plus the magnitude the palette tops out at.
@@ -4319,7 +4346,7 @@ async function initialize(): Promise<void> {
         button.dataset.group === "pressure"
           ? !PRESSURE_BUNDLE_IDS.some((id) => hasBundle(loadedManifest, id))
           : family !== undefined
-            ? !familyMembers(family).some((id) => hasBundle(loadedManifest, id))
+            ? !familyMembers(family, (id) => hasBundle(loadedManifest, id)).some((id) => hasBundle(loadedManifest, id))
             : !hasBundle(loadedManifest, bundleId);
     }
     syncUnknownRailTiles(loadedManifest);

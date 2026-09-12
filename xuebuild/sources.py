@@ -96,7 +96,8 @@ class SourceSpec:
     bundle_vector_ids: tuple[str, ...] = ()
     """Two-variable bundles published, in manifest order: ``wind10m`` for the
     10 m pair, ``wind<level>`` for an isobaric pair, ``qflux<level>`` for the
-    water vapour flux the converter derives on that surface. Listing one is
+    water vapour flux the converter derives on that surface, ``wave`` for
+    the wave vector it derives from the height and direction. Listing one is
     not enough on its own — it ships only when every input it is built from
     (:func:`xuebuild.binconvert.vector_input_ids`) is in
     :attr:`input_variable_ids`, and a run whose files turn out to lack them
@@ -274,7 +275,7 @@ SOURCES: dict[str, SourceSpec] = {
             "perpw",
             "dirpw",
         ),
-        bundle_vector_ids=("wind10m", "wind925", "wind850", "wind250", "qflux850"),
+        bundle_vector_ids=("wind10m", "wind925", "wind850", "wind250", "qflux850", "wave"),
     ),
     "ecmwf": SourceSpec(
         id="ecmwf",

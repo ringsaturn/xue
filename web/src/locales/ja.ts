@@ -151,6 +151,7 @@ export const ja: Record<MessageKey, string> = {
   varLabelTmpsfc: "海面水温（陸上は地表面温度）",
   varLabelIcec: "海氷密接度",
   varLabelIcetk: "海氷の厚さ",
+  varLabelWave: "波浪（有義波高と波向）",
   varLabelHtsgw: "有義波高",
   varLabelPerpw: "卓越波周期",
   varLabelDirpw: "卓越波向",

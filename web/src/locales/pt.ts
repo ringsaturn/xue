@@ -154,6 +154,7 @@ export const pt: Record<MessageKey, string> = {
   varLabelTmpsfc: "Temperatura da superfície do mar (temperatura da superfície em terra)",
   varLabelIcec: "Cobertura de gelo marinho",
   varLabelIcetk: "Espessura do gelo marinho",
+  varLabelWave: "Ondas: altura significativa e direção",
   varLabelHtsgw: "Altura significativa das ondas",
   varLabelPerpw: "Período da onda primária",
   varLabelDirpw: "Direção da onda primária",

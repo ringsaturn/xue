@@ -508,12 +508,44 @@ VARIABLES: dict[str, VariableSpec] = {
         gdal_unit="Degree true",
         fill_values=(9999.0,),
     ),
+    # The wave vector: the significant wave height laid along the direction
+    # the waves travel, as an eastward and a northward component in metres
+    # — derived by the converter from ``htsgw`` and ``dirpw``
+    # (binconvert.derive_wave_vector), never fetched, so the record-matching
+    # fields stay empty. It exists so a renderer can draw the sea the way it
+    # draws the wind: the height as a filled magnitude, the direction as
+    # particles. GRIB2 has no parameter for such a pair; 250 / 251 are
+    # local-use numbers of our own in the waves category, the way the vapour
+    # flux components are in the moisture category. Same water surface as
+    # the inputs, with no value declared; land, 0 in both inputs, is (0, 0).
+    "uwave": VariableSpec(
+        id="uwave",
+        label="U wave vector component",
+        output_unit="m",
+        value_range=(-25, 25),
+        grib2_discipline=10,
+        grib2_category=0,
+        grib2_number=250,
+        grib2_level_type=1,
+    ),
+    "vwave": VariableSpec(
+        id="vwave",
+        label="V wave vector component",
+        output_unit="m",
+        value_range=(-25, 25),
+        grib2_discipline=10,
+        grib2_category=0,
+        grib2_number=251,
+        grib2_level_type=1,
+    ),
 }
 
 # The ocean set: the three pgrb2 fields and the three GFS-Wave fields above,
 # held to the Rust encoder by tests/fixtures/ocean-registry.json the way the
-# surface diagnostics are by surface-registry.json.
+# surface diagnostics are by surface-registry.json. The registry fixture
+# also carries the two derived wave vector components.
 OCEAN_VARIABLE_IDS: tuple[str, ...] = ("tmpsfc", "icec", "icetk", "htsgw", "perpw", "dirpw")
+WAVE_VECTOR_COMPONENT_IDS: tuple[str, str] = ("uwave", "vwave")
 # The ids the Celsius rule applies to at the surface: GDAL normalizes every
 # GRIB temperature to Celsius, and the converter accepts K and F as well.
 SURFACE_TEMPERATURE_IDS: tuple[str, ...] = ("tmp2m", "dpt2m", "aptmp2m", "tmpsfc")

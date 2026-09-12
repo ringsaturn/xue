@@ -14,6 +14,12 @@ the real records in the GRIB fixture: a source reading a second file family
 of the same cycle (``sources.CompanionFile``), and a record that does not
 cover its grid — land arrives as GDAL's GRIB nodata value and becomes the
 bottom of the codebook, since the format carries no bitmap.
+
+The wave vector (``wave``, the ``uwave`` / ``vwave`` pair) is the first
+vector bundle derived from two scalars that are published themselves: the
+height laid along the direction of travel, so the frontend draws the sea
+the way it draws the wind. Its derivation is checked here for convention
+and for the round trip back through the codebook.
 """
 
 from __future__ import annotations
@@ -32,14 +38,20 @@ import numpy as np
 from xuebuild import grib2
 from xuebuild.assemble import bundle_group_matrix, group_needs_eccodes
 from xuebuild.binconvert import (
+    DERIVED_VECTORS,
     VECTOR_BUNDLES,
     VIDEO_VARIABLE_IDS,
+    WAVE_BUNDLE_ID,
     GridInfo,
     _convert_units,
     _extract_planes,
     _grid_info,
     _snap_global_longitudes,
+    bundle_input_ids,
+    derive_vector,
+    derive_wave_vector,
     published_bundle_ids,
+    vector_input_ids,
 )
 from xuebuild.errors import ConversionError, DownloadError
 from xuebuild.fetch import (
@@ -54,7 +66,7 @@ from xuebuild.grib2 import MessageInfo, _matches
 from xuebuild.model import GfsRun, SourceFrame
 from xuebuild.quantize import PROFILES
 from xuebuild.sources import source_spec
-from xuebuild.variables import OCEAN_VARIABLE_IDS, variable_spec
+from xuebuild.variables import OCEAN_VARIABLE_IDS, WAVE_VECTOR_COMPONENT_IDS, variable_spec
 
 FIXTURE = Path(__file__).resolve().parent / "fixtures" / "gfs.2026081406.f000.crop.grib2"
 REGISTRY = Path(__file__).resolve().parent / "fixtures" / "ocean-registry.json"
@@ -78,7 +90,10 @@ def registry_entry(variable_id: str) -> dict:
 class RegistryTests(unittest.TestCase):
     def test_the_committed_registry_still_describes_this_encoder(self) -> None:
         expected = json.loads(REGISTRY.read_text(encoding="utf-8"))
-        actual = {variable_id: registry_entry(variable_id) for variable_id in OCEAN_VARIABLE_IDS}
+        actual = {
+            variable_id: registry_entry(variable_id)
+            for variable_id in OCEAN_VARIABLE_IDS + WAVE_VECTOR_COMPONENT_IDS
+        }
         self.assertEqual(
             actual,
             expected,
@@ -89,7 +104,7 @@ class RegistryTests(unittest.TestCase):
     def test_balanced_is_quality_except_for_ice_cover(self) -> None:
         # Ice concentration is read in tenths, so production takes the same
         # 1 % step cloud cover does.
-        for variable_id in OCEAN_VARIABLE_IDS:
+        for variable_id in OCEAN_VARIABLE_IDS + WAVE_VECTOR_COMPONENT_IDS:
             expected = "compact" if variable_id == "icec" else "quality"
             self.assertEqual(
                 PROFILES["balanced"][variable_id].metadata(),
@@ -98,14 +113,23 @@ class RegistryTests(unittest.TestCase):
             )
 
     def test_the_code_space_is_spent(self) -> None:
-        for variable_id in OCEAN_VARIABLE_IDS:
+        for variable_id in OCEAN_VARIABLE_IDS + WAVE_VECTOR_COMPONENT_IDS:
             quality = PROFILES["quality"][variable_id]
             compact = PROFILES["compact"][variable_id]
             with self.subTest(variable=variable_id):
-                self.assertEqual(compact.minimum, quality.minimum)
                 self.assertEqual(compact.step, quality.step * 2)
                 self.assertLessEqual(quality.maximum_code, 254)
                 self.assertGreaterEqual(quality.maximum_code, 200)
+                if variable_id in WAVE_VECTOR_COMPONENT_IDS:
+                    # Symmetric, and 0 on the grid in both profiles: land
+                    # is (0, 0) exactly, so the compact codebook gives up a
+                    # code at each end rather than the middle.
+                    self.assertEqual(compact.minimum, quality.minimum + quality.step)
+                    for book in (quality, compact):
+                        self.assertEqual(-book.minimum, book.maximum)
+                        self.assertEqual(book.quantize(np.array([0.0])).tolist(), [book.maximum_code // 2])
+                    continue
+                self.assertEqual(compact.minimum, quality.minimum)
                 # The bottom of the codebook is what a bitmap-masked point
                 # becomes, so it must be the value the registry says it is.
                 self.assertEqual(quality.minimum, float(variable_spec(variable_id).value_range[0]))
@@ -141,6 +165,33 @@ class RegistryTests(unittest.TestCase):
             self.assertIsNone(spec.grib2_statistical, f"{variable_id} is an instantaneous product")
             self.assertEqual(spec.ecmwf_param, "", f"{variable_id} is not fetched from ECMWF yet")
 
+    def test_the_wave_vector_components_are_derived_and_local(self) -> None:
+        # Never matched against a record — the converter derives them — so
+        # the matching fields stay empty; a Xue-local pair of numbers in the
+        # waves category on the same water surface as the inputs, with no
+        # surface value declared, like the inputs themselves.
+        for variable_id, number in zip(WAVE_VECTOR_COMPONENT_IDS, (250, 251), strict=True):
+            spec = variable_spec(variable_id)
+            self.assertEqual((spec.grib_element, spec.index_field, spec.gdal_unit), ("", "", ""))
+            self.assertEqual((spec.grib2_discipline, spec.grib2_category, spec.grib2_number), (10, 0, number))
+            self.assertEqual(spec.grib2_level_type, 1)
+            self.assertIsNone(spec.grib2_level_value)
+            self.assertEqual(spec.output_unit, "m")
+            self.assertEqual(spec.fill_values, ())
+            with self.assertRaises(ConversionError):
+                _band_matches(variable_id, {"GRIB_ELEMENT": "HTSGW", "GRIB_SHORT_NAME": "1-SFC"}, "")
+        # Symmetric over the height codebook's own coverage, so no sea the
+        # height field holds clamps in the vector, and land is the middle
+        # code of both components.
+        height = PROFILES["quality"]["htsgw"]
+        for variable_id in WAVE_VECTOR_COMPONENT_IDS:
+            for profile in ("quality", "balanced"):
+                book = PROFILES[profile][variable_id]
+                self.assertEqual((book.minimum, book.maximum), (-height.maximum, height.maximum), profile)
+                self.assertEqual(book.quantize(np.array([0.0, -0.0])).tolist(), [127, 127], profile)
+            self.assertEqual(PROFILES["compact"][variable_id].quantize(np.array([0.0, -0.0])).tolist(), [63, 63])
+        self.assertEqual(PROFILES["quality"]["uwave"].step, 2 * height.step)
+
     def test_gfs_publishes_them_and_the_other_sources_do_not_yet(self) -> None:
         gfs = source_spec("gfs")
         published = published_bundle_ids(gfs)
@@ -149,9 +200,19 @@ class RegistryTests(unittest.TestCase):
             self.assertIn(variable_id, gfs.input_variable_ids)
             self.assertNotIn(variable_id, VECTOR_BUNDLES)
             self.assertNotIn(variable_id, VIDEO_VARIABLE_IDS)
+        # The wave vector is the last bundle GFS publishes: a vector, derived
+        # from two of the scalars above, which stay published beside it — a
+        # reader who wants the height to a tenth or the direction to a
+        # degree and a half has them.
+        self.assertEqual(published[-1], WAVE_BUNDLE_ID)
+        self.assertEqual(VECTOR_BUNDLES[WAVE_BUNDLE_ID], WAVE_VECTOR_COMPONENT_IDS)
+        self.assertEqual(DERIVED_VECTORS[WAVE_BUNDLE_ID], ("htsgw", "dirpw"))
+        self.assertEqual(vector_input_ids(WAVE_BUNDLE_ID), ("htsgw", "dirpw"))
+        self.assertEqual(bundle_input_ids(gfs, WAVE_BUNDLE_ID), ("htsgw", "dirpw"))
+        self.assertNotIn(WAVE_BUNDLE_ID, VIDEO_VARIABLE_IDS)
         for source in (source_spec("ecmwf"), source_spec("sflux"), source_spec("radar")):
             self.assertEqual(source.companion_files, ())
-            for variable_id in OCEAN_VARIABLE_IDS:
+            for variable_id in OCEAN_VARIABLE_IDS + (WAVE_BUNDLE_ID,):
                 self.assertNotIn(variable_id, published_bundle_ids(source), source.id)
 
     def test_the_wave_fields_come_from_the_companion_family(self) -> None:
@@ -163,9 +224,10 @@ class RegistryTests(unittest.TestCase):
         # any bundle from the family installs grib_set.
         self.assertTrue(wave.repack)
         self.assertTrue(group_needs_eccodes(gfs, ("tmp2m", "htsgw")))
+        self.assertTrue(group_needs_eccodes(gfs, ("tmp2m", WAVE_BUNDLE_ID)), "the wave vector reads the family too")
         self.assertFalse(group_needs_eccodes(gfs, ("tmp2m", "tmpsfc", "icec")))
         flags = {entry["group"]: entry["eccodes"] for entry in bundle_group_matrix(gfs, 100)}
-        self.assertEqual([group for group, needs in flags.items() if needs], list(WAVE_IDS))
+        self.assertEqual([group for group, needs in flags.items() if needs], [*WAVE_IDS, WAVE_BUNDLE_ID])
         self.assertFalse(any(entry["eccodes"] for entry in bundle_group_matrix(source_spec("sflux"), 100)))
         for variable_id in WAVE_IDS:
             self.assertIs(gfs.companion_of(variable_id), wave)
@@ -357,6 +419,56 @@ class ConversionTests(unittest.TestCase):
         # Nothing frozen in the South China Sea.
         np.testing.assert_array_equal(planes["icec"], 0.0)
         np.testing.assert_array_equal(planes["icetk"], 0.0)
+
+
+class WaveVectorTests(unittest.TestCase):
+    """The wave vector: the significant height along the direction of
+    travel, in the wind's convention, so the frontend's vector path — the
+    magnitude shader, the particles, the probe's ``atan2(-u, -v)`` — reads
+    it without knowing it is not a wind."""
+
+    def test_the_components_follow_the_wind_convention(self) -> None:
+        # Degrees true the waves come *from*: from the north they travel
+        # south (v negative), from the east they travel west (u negative).
+        u, v = derive_wave_vector(
+            {"htsgw": np.array([2.0, 2.0, 2.0, 2.0, 3.0]), "dirpw": np.array([0.0, 90.0, 180.0, 270.0, 45.0])},
+            WAVE_BUNDLE_ID,
+        )
+        np.testing.assert_allclose(u, [0.0, -2.0, 0.0, 2.0, -3 * math.sqrt(0.5)], atol=1e-12)
+        np.testing.assert_allclose(v, [-2.0, 0.0, 2.0, 0.0, -3 * math.sqrt(0.5)], atol=1e-12)
+        # Back to what the probe shows: the magnitude is the height, the
+        # direction the one the record carried.
+        np.testing.assert_allclose(np.hypot(u, v), [2.0, 2.0, 2.0, 2.0, 3.0])
+        np.testing.assert_allclose(np.degrees(np.arctan2(-u, -v)) % 360.0, [0.0, 90.0, 180.0, 270.0, 45.0], atol=1e-9)
+        # derive_vector dispatches the wave bundle here and the flux
+        # bundles to their own derivation.
+        same_u, same_v = derive_vector({"htsgw": np.array([1.0]), "dirpw": np.array([30.0])}, WAVE_BUNDLE_ID)
+        np.testing.assert_array_equal((same_u, same_v), derive_wave_vector({"htsgw": np.array([1.0]), "dirpw": np.array([30.0])}, WAVE_BUNDLE_ID))
+
+    def test_land_is_the_middle_code_of_both_components(self) -> None:
+        # Land is 0 m from 0° in the inputs (the bitmap's fill), so the
+        # vector there is (0, 0) — code 127 in both — and a renderer's
+        # magnitude palette paints nothing, as the height's bottom code does.
+        gfs = source_spec("gfs")
+        grid = _grid_info(FIXTURE)
+        frames = grib2.inspect_grib_fast(FIXTURE, gfs.input_variable_ids)
+        with tempfile.TemporaryDirectory() as work:
+            planes = _extract_planes({v: frames[v] for v in ("htsgw", "dirpw")}, grid, Path(work))
+        planes = {variable_id: _convert_units(frames[variable_id], plane) for variable_id, plane in planes.items()}
+        u, v = derive_vector(planes, WAVE_BUNDLE_ID)
+        land = planes["htsgw"] == 0.0
+        book = PROFILES["balanced"]["uwave"]
+        codes_u, codes_v = book.quantize(u), book.quantize(v)
+        np.testing.assert_array_equal(codes_u[land], 127)
+        np.testing.assert_array_equal(codes_v[land], 127)
+        # At sea the pair reconstructs the height within the codebook's
+        # error budget, and nothing clamps: the height's own range is the
+        # vector's.
+        self.assertFalse(np.isin(codes_u, (0, 254)).any())
+        self.assertFalse(np.isin(codes_v, (0, 254)).any())
+        height = np.hypot(book.decode(codes_u), book.decode(codes_v))
+        self.assertLess(np.abs(height - planes["htsgw"])[~land].max(), book.step * math.sqrt(0.5) + 1e-9)
+        self.assertGreater(np.count_nonzero(codes_u != 127), 0)
 
 
 class GlobalGridTests(unittest.TestCase):

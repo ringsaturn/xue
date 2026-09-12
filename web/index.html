@@ -152,7 +152,7 @@
               "geopotential height on isobaric surfaces",
               "temperature, relative humidity, wind, water vapour flux, vertical velocity and equivalent potential temperature on isobaric surfaces",
               "wind gust, total and low / middle / high cloud cover, CAPE, visibility, 2 m dew point and apparent temperature",
-              "sea surface (skin) temperature, sea ice cover and thickness, significant wave height, primary wave period and direction"
+              "sea surface (skin) temperature, sea ice cover and thickness, significant wave height, primary wave period and direction, and the wave vector (height along the direction of travel) with particle animation"
             ],
             "distribution": [
               { "@type": "DataDownload", "name": "GFS live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest.json" },
@@ -421,9 +421,11 @@
         <!-- The ocean, GFS-only for now: the skin temperature (the SST over
              water — a thermometer over a wave), sea ice (a six-armed ice
              crystal; cover and thickness on the level row) and the waves
-             (two swells; significant height and primary period on the level
-             row). The wave direction ships too but has no tile until it is
-             drawn as arrows (levels.ts). -->
+             (two swells; the wave vector — height as the fill, direction as
+             particles — and the primary period on the level row, the scalar
+             height standing in on a run without the vector). The wave
+             direction ships as a scalar too but has no tile: the vector is
+             how it is drawn (levels.ts). -->
         <button type="button" data-variable="tmpsfc" data-i18n-tip="varLabelTmpsfc" aria-pressed="false" hidden>
           <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a2 2 0 0 1 2 2v6.2a3.5 3.5 0 1 1-4 0V5a2 2 0 0 1 2-2z" /><path d="M12 8v6" /><path d="M2.5 20c2-2 4-2 6 0s4 2 6 0 4-2 6 0" /></svg>
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphTmpsfc">S</b>
@@ -434,7 +436,7 @@
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphIce">I</b>
           <span class="rail-name"><span>ICE</span> <small data-i18n="varIce">COVER</small></span>
         </button>
-        <button type="button" data-variable="htsgw" data-family="wave" data-i18n-tip="tipWave" aria-pressed="false" hidden>
+        <button type="button" data-variable="wave" data-family="wave" data-i18n-tip="tipWave" aria-pressed="false" hidden>
           <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 9.5c2.4-3 4.8-3 7.2 0s4.8 3 7.2 0 3.6-2.2 4.6-1" /><path d="M2.5 16c2.4-3 4.8-3 7.2 0s4.8 3 7.2 0 3.6-2.2 4.6-1" /></svg>
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphWave">H</b>
           <span class="rail-name"><span>WAVE</span> <small data-i18n="varWave">HEIGHT</small></span>

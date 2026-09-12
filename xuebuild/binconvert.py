@@ -56,6 +56,7 @@ from .variables import (
     ISOBARIC_LEVELS_HPA,
     STANDARD_GRAVITY,
     SURFACE_TEMPERATURE_IDS,
+    WAVE_VECTOR_COMPONENT_IDS,
     isobaric_variable,
     variable_spec,
 )
@@ -73,14 +74,27 @@ remain readable; nothing new is written at them."""
 # is the source's business (sources.py bundle_scalar_ids — sflux adds dswrf).
 # A vector field ships its two components together in one two-variable bundle
 # for the frontend's magnitude shader and particle layer: the 10 m wind, the
-# wind on each isobaric surface, and the water vapour flux the converter
-# derives on each surface from the specific humidity and the wind there.
+# wind on each isobaric surface, the water vapour flux the converter derives
+# on each surface from the specific humidity and the wind there, and the
+# wave vector it derives from the significant wave height and the primary
+# wave direction.
 WIND_COMPONENT_IDS = ("ugrd10m", "vgrd10m")
 WIND_BUNDLE_ID = "wind10m"
+WAVE_BUNDLE_ID = "wave"
 VECTOR_BUNDLES: dict[str, tuple[str, str]] = {
     WIND_BUNDLE_ID: WIND_COMPONENT_IDS,
     **{f"wind{level}": (f"ugrd{level}", f"vgrd{level}") for level in ISOBARIC_LEVELS_HPA},
     **{f"qflux{level}": (f"uqflx{level}", f"vqflx{level}") for level in ISOBARIC_LEVELS_HPA},
+    WAVE_BUNDLE_ID: WAVE_VECTOR_COMPONENT_IDS,
+}
+
+# The vector bundles the converter derives rather than reads, and what from:
+# a vapour flux pair from the specific humidity and both wind components on
+# its surface, the wave vector from the wave height and direction. A wind
+# pair is its own two components and is not here.
+DERIVED_VECTORS: dict[str, tuple[str, ...]] = {
+    **{f"qflux{level}": (f"spfh{level}", f"ugrd{level}", f"vgrd{level}") for level in ISOBARIC_LEVELS_HPA},
+    WAVE_BUNDLE_ID: ("htsgw", "dirpw"),
 }
 
 
@@ -111,11 +125,9 @@ def vapour_flux_level(bundle_id: str) -> int | None:
 def vector_input_ids(bundle_id: str) -> tuple[str, ...]:
     """The source inputs one vector bundle is built from: a wind pair is its
     own two components; a vapour flux pair is derived from the specific
-    humidity and both wind components on the same surface."""
-    level = vapour_flux_level(bundle_id)
-    if level is not None:
-        return (f"spfh{level}", f"ugrd{level}", f"vgrd{level}")
-    return VECTOR_BUNDLES[bundle_id]
+    humidity and both wind components on the same surface; the wave vector
+    from the significant wave height and the primary wave direction."""
+    return DERIVED_VECTORS.get(bundle_id, VECTOR_BUNDLES[bundle_id])
 
 
 # The scalars that also get an H.264 companion: the surface fields the video
@@ -474,6 +486,31 @@ def derive_vapour_flux(
     specific_humidity_id, u_id, v_id = vector_input_ids(bundle_id)
     q = values[specific_humidity_id]
     return q * values[u_id] / STANDARD_GRAVITY, q * values[v_id] / STANDARD_GRAVITY
+
+
+def derive_wave_vector(values: dict[str, np.ndarray], bundle_id: str) -> tuple[np.ndarray, np.ndarray]:
+    """The wave vector: the significant wave height, already in metres, laid
+    along the direction the waves travel, as an eastward and a northward
+    component. The primary direction is degrees true the waves come *from*
+    (the meteorological convention the wind uses), so the components are
+    the wind's ``(-h sin θ, -h cos θ)`` and a reader's ``atan2(-u, -v)``
+    gives the direction back. Land is 0 m from 0°, so (0, 0). The
+    operations run in this order, in float64 — degrees to radians by one
+    multiplication, sine and cosine, the negated height times each — and
+    the native encoder repeats them, which is what keeps the two
+    byte-identical on a field neither reads from a record."""
+    height_id, direction_id = vector_input_ids(bundle_id)
+    radians = values[direction_id] * (math.pi / 180.0)
+    height = -values[height_id]
+    return height * np.sin(radians), height * np.cos(radians)
+
+
+def derive_vector(values: dict[str, np.ndarray], bundle_id: str) -> tuple[np.ndarray, np.ndarray]:
+    """The two components of one derived vector bundle, from the planes of
+    its inputs."""
+    if bundle_id == WAVE_BUNDLE_ID:
+        return derive_wave_vector(values, bundle_id)
+    return derive_vapour_flux(values, bundle_id)
 
 
 # The smallest specific humidity the derivation sees, in kg/kg: a dry
@@ -897,7 +934,7 @@ def _quantize_file(
         )
     for bundle_id in derived_vector_ids:
         u_id, v_id = VECTOR_BUNDLES[bundle_id]
-        values[u_id], values[v_id] = derive_vapour_flux(values, bundle_id)
+        values[u_id], values[v_id] = derive_vector(values, bundle_id)
     for bundle_id in derived_scalar_ids:
         values[bundle_id] = derive_theta_e(values, bundle_id)
     for variable_id in drop_ids:
@@ -1359,9 +1396,7 @@ def convert_bin(
                 previous_future = own
                 yield frames, previous, own
 
-        derived_vector_ids = tuple(
-            bundle_id for bundle_id in available_vector_ids if vapour_flux_level(bundle_id) is not None
-        )
+        derived_vector_ids = tuple(bundle_id for bundle_id in available_vector_ids if bundle_id in DERIVED_VECTORS)
         # Derived after the vapour flux and before the derivation-only inputs
         # are dropped: both read spfh850.
         derived_scalar_ids = available_derived_ids

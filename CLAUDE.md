@@ -248,9 +248,17 @@ publishing data at the new version.**
   packs as JPEG 2000, which the wheel's two-driver GDAL cannot read, so the
   fetcher repacks the family to `grid_simple` with `grib_set`
   (`CompanionFile.repack`, lossless) the way ECMWF's CCSDS files are, and
-  `bundle-groups` flags those jobs `eccodes` so `publish.yml` installs it. Widening a
-  source's input list means recutting `tests/fixtures/gfs.*.crop.grib2`
-  (same run, same `-srcwin`) and regenerating the registry fixtures.
+  `bundle-groups` flags those jobs `eccodes` so `publish.yml` installs it.
+  The **wave vector** `wave` (`uwave` / `vwave`, Xue-local
+  10/0/250–251) is the second derived vector after the vapour flux:
+  `binconvert.DERIVED_VECTORS` names its inputs (`htsgw`, `dirpw`),
+  `derive_wave_vector` lays the height along the direction of travel in
+  the wind's convention (`-h sin θ, -h cos θ`) so the frontend's vector
+  path — magnitude fill, particles, the probe's `atan2(-u, -v)` — draws
+  the sea as it draws the wind; the scalars stay published beside it.
+  Widening a source's input list means recutting
+  `tests/fixtures/gfs.*.crop.grib2` (same run, same `-srcwin`) and
+  regenerating the registry fixtures.
 - `fetch.py` → `idx.py` / `grib2.py` — byte-range fetches of exact GRIB
   records, one `.idx` + range set per file family; ECMWF open data is
   CCSDS-packed and is repacked to `grid_simple` with `grib_set` at fetch

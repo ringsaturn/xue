@@ -308,6 +308,7 @@ export class WindParticleLayer implements CustomLayerInterface {
    * pace is read against. The 10 m wind's 40 m/s by default; an isobaric wind
    * or a vapour flux field sets its own. */
   private maxSpeed = WIND_SPEED_MAX;
+  private pace = 1;
   /** Single tone every particle is drawn in, or null for the speed palette. */
   private ink: readonly [number, number, number, number] | null = null;
 
@@ -336,6 +337,14 @@ export class WindParticleLayer implements CustomLayerInterface {
   /** The magnitude the palette (and the pace) is normalised by. */
   setMaxSpeed(maxSpeed: number): void {
     this.maxSpeed = maxSpeed;
+    this.map?.triggerRepaint();
+  }
+
+  /** How fast the particles run for a given field magnitude, as a multiple
+   * of the wind's pace — 1 where the field is a speed in m/s, more where it
+   * is not (the wave vector's magnitude is a height in metres). */
+  setPace(pace: number): void {
+    this.pace = pace;
     this.map?.triggerRepaint();
   }
 
@@ -688,7 +697,7 @@ export class WindParticleLayer implements CustomLayerInterface {
       gl.bindTexture(gl.TEXTURE_2D, this.windTexture);
       this.bindWindUniforms(gl, update, 0, 1);
       gl.uniform1f(update.uniforms.u_rand_seed!, Math.random());
-      gl.uniform1f(update.uniforms.u_speed_factor!, this.options.speedFactor);
+      gl.uniform1f(update.uniforms.u_speed_factor!, this.options.speedFactor * this.pace);
       gl.uniform1f(update.uniforms.u_elapsed!, elapsed);
       gl.uniform1f(update.uniforms.u_drop_rate!, this.options.dropRate);
       gl.uniform1f(update.uniforms.u_drop_rate_bump!, this.options.dropRateBump);

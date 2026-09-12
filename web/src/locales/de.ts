@@ -154,6 +154,7 @@ export const de: Record<MessageKey, string> = {
   varLabelTmpsfc: "Meeresoberflächentemperatur (über Land Oberflächentemperatur)",
   varLabelIcec: "Meereisbedeckung",
   varLabelIcetk: "Meereisdicke",
+  varLabelWave: "Seegang: signifikante Wellenhöhe und Richtung",
   varLabelHtsgw: "Signifikante Wellenhöhe",
   varLabelPerpw: "Periode der Hauptwelle",
   varLabelDirpw: "Richtung der Hauptwelle",

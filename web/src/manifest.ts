@@ -78,7 +78,7 @@ export type IsobaricScalarBundleId =
 /** The two-variable bundles: a u/v pair the viewer draws as a magnitude field
  * with optional particles — the 10 m wind, the wind on each isobaric surface,
  * and the water vapour flux the encoder derives there. */
-export type VectorBundleId = "wind10m" | `wind${IsobaricLevel}` | `qflux${IsobaricLevel}`;
+export type VectorBundleId = "wind10m" | `wind${IsobaricLevel}` | `qflux${IsobaricLevel}` | "wave";
 
 /** A bundle-level id in a manifest.
  *
@@ -126,7 +126,9 @@ export const SURFACE_DIAGNOSTIC_IDS: readonly SurfaceDiagnosticId[] = [
 /** The ocean set — the surface (skin) temperature, which is the SST over
  * water, sea ice cover and thickness, and the GFS-Wave significant wave
  * height, primary wave period and direction — single layers held to the
- * encoders by `tests/fixtures/ocean-registry.json`. */
+ * encoders by `tests/fixtures/ocean-registry.json`. The same registry
+ * carries the components of the `wave` vector bundle the encoders derive
+ * from the height and direction (`WAVE_COMPONENT_IDS`). */
 export type OceanId = "tmpsfc" | "icec" | "icetk" | "htsgw" | "perpw" | "dirpw";
 export const OCEAN_IDS: readonly OceanId[] = ["tmpsfc", "icec", "icetk", "htsgw", "perpw", "dirpw"];
 
@@ -144,7 +146,9 @@ export type VectorComponentId =
   | `ugrd${IsobaricLevel}`
   | `vgrd${IsobaricLevel}`
   | `uqflx${IsobaricLevel}`
-  | `vqflx${IsobaricLevel}`;
+  | `vqflx${IsobaricLevel}`
+  | "uwave"
+  | "vwave";
 
 /** Data-level variable ids that can appear inside bundle metadata. A plain
  * string for the same reason `ForecastBundleId` is: a file names its own
@@ -190,14 +194,19 @@ export const KNOWN_BUNDLE_IDS: readonly KnownBundleId[] = [
   "wind10m",
   ...perLevel("wind"),
   ...perLevel("qflux"),
+  "wave",
 ];
 export const WIND_COMPONENT_IDS: readonly KnownDataVariableId[] = ["ugrd10m", "vgrd10m"];
+/** The wave vector's pair: the significant wave height laid along the
+ * direction the waves travel, in metres, in the wind's u/v convention. */
+export const WAVE_COMPONENT_IDS: readonly ["uwave", "vwave"] = ["uwave", "vwave"];
 
 /** The u/v component pair of every vector bundle. */
 export const VECTOR_BUNDLES: Record<VectorBundleId, readonly [VectorComponentId, VectorComponentId]> = {
   wind10m: ["ugrd10m", "vgrd10m"],
   ...Object.fromEntries(ISOBARIC_LEVELS.map((level) => [`wind${level}`, [`ugrd${level}`, `vgrd${level}`]])),
   ...Object.fromEntries(ISOBARIC_LEVELS.map((level) => [`qflux${level}`, [`uqflx${level}`, `vqflx${level}`]])),
+  wave: WAVE_COMPONENT_IDS,
 } as unknown as Record<VectorBundleId, readonly [VectorComponentId, VectorComponentId]>;
 
 /** True when a bundle *named* by the convention carries a u/v pair rather

@@ -96,6 +96,7 @@ const VARIABLE_CODE: Partial<Record<ForecastBundleId, string>> = {
   tmpsfc: "SST",
   icec: "ICE",
   icetk: "ICE THK",
+  wave: "WAVE",
   htsgw: "WAVE HS",
   perpw: "WAVE TP",
   dirpw: "WAVE DIR",

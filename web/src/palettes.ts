@@ -492,14 +492,26 @@ export function buildWindSpeedPalette(maxSpeed = WIND_SPEED_MAX): Uint8Array {
   return palette;
 }
 
-/** The vapour flux magnitude palette, indexed like the wind field's: entry i
- * is the flux (i / 255) * maxMagnitude. */
-export function buildVapourFluxPalette(maxMagnitude: number): Uint8Array {
+/** A magnitude palette indexed like the wind field's: entry i is the
+ * magnitude (i / 255) * maxMagnitude on the given ramp. */
+function buildMagnitudePalette(stops: Stop[], maxMagnitude: number): Uint8Array {
   const palette = new Uint8Array(256 * 4);
   for (let index = 0; index < 256; index += 1) {
-    palette.set(interpolate(VAPOUR_FLUX_STOPS, (index / 255) * maxMagnitude), index * 4);
+    palette.set(interpolate(stops, (index / 255) * maxMagnitude), index * 4);
   }
   return palette;
+}
+
+/** The vapour flux magnitude palette. */
+export function buildVapourFluxPalette(maxMagnitude: number): Uint8Array {
+  return buildMagnitudePalette(VAPOUR_FLUX_STOPS, maxMagnitude);
+}
+
+/** The wave vector's magnitude palette: its magnitude is the significant
+ * wave height, so the ramp is the height's own — land, (0, 0) in the pair,
+ * is the map, and a storm sea saturates at the chart ceiling. */
+export function buildWaveFieldPalette(maxHeight: number): Uint8Array {
+  return buildMagnitudePalette(WAVE_HEIGHT_STOPS, maxHeight);
 }
 
 /** A CSS gradient reading a palette top-down — the legend bar of a field

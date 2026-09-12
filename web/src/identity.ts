@@ -24,7 +24,8 @@ import { ISOBARIC_LEVELS, type BundleParameter, type BundleVariable, type KnownB
  * layers (precipitation, radiation, reflectivity, the surface diagnostics:
  * gust, the four cloud covers, CAPE, visibility, dew point, apparent
  * temperature — and the ocean set: skin temperature, sea ice cover and
- * thickness, wave height, period and direction). */
+ * thickness, wave height, period and direction, and the wave vector, the
+ * height laid along the direction of travel as a u/v pair). */
 export type ChartFamily =
   | "hgt"
   | "tmp"
@@ -51,7 +52,8 @@ export type ChartFamily =
   | "icetk"
   | "htsgw"
   | "perpw"
-  | "dirpw";
+  | "dirpw"
+  | "wave";
 
 export interface VariableIdentity {
   family: ChartFamily;
@@ -159,10 +161,16 @@ export function identityForParameter(parameter: BundleParameter): VariableIdenti
   return null;
 }
 
-/** The u and v halves of each vector family, as parameter triples. */
+/** The u and v halves of each vector family, as parameter triples. The
+ * wind and the vapour flux are on isobaric surfaces (the wind also at 10 m);
+ * the wave vector — Xue-local numbers in the oceanographic discipline's
+ * waves category, the height along the direction of travel — sits on the
+ * water surface like the wave fields it is derived from, its surface value
+ * no more part of the identity than theirs. */
 const VECTOR_PAIRS: readonly { family: ChartFamily; u: readonly [number, number, number]; v: readonly [number, number, number] }[] = [
   { family: "wind", u: [0, 2, 2], v: [0, 2, 3] },
   { family: "qflux", u: [0, 1, 250], v: [0, 1, 251] },
+  { family: "wave", u: [10, 0, 250], v: [10, 0, 251] },
 ];
 
 /**
@@ -178,6 +186,7 @@ export function identityForParameterPair(u: BundleParameter, v: BundleParameter)
     if (pair.family === "wind" && u.typeOfFirstFixedSurface === 103 && surfaceValue(u) === 10) {
       return vector("wind", null);
     }
+    if (pair.family === "wave") return u.typeOfFirstFixedSurface === 1 ? vector("wave", null) : null;
     const level = isobaricLevel(u);
     return level === null ? null : vector(pair.family, level);
   }
@@ -265,6 +274,7 @@ const SURFACE_IDS: Record<string, VariableIdentity> = {
   htsgw: scalar("htsgw", null),
   perpw: scalar("perpw", null),
   dirpw: scalar("dirpw", null),
+  wave: vector("wave", null),
 };
 
 const ISOBARIC_PREFIXES: Record<string, ChartFamily> = {
@@ -327,6 +337,7 @@ const FAMILY_SURFACE_ID: Record<ChartFamily, KnownBundleId | null> = {
   htsgw: "htsgw",
   perpw: "perpw",
   dirpw: "dirpw",
+  wave: "wave",
 };
 
 /**

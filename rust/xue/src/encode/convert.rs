@@ -17,7 +17,9 @@ use time::OffsetDateTime;
 use crate::encode::binformat::{self, ChunkPayload, ChunkTables, HOUR_SECONDS};
 use crate::format::{ChunkEntry, Predictor, TileGeometry, VariableEntry, NO_DEPENDENCY};
 use crate::encode::errors::{EncodeError, Result};
-use crate::encode::variables::{isobaric_variable, variable_spec, ISOBARIC_LEVELS_HPA, STANDARD_GRAVITY};
+use crate::encode::variables::{
+    isobaric_variable, variable_spec, ISOBARIC_LEVELS_HPA, STANDARD_GRAVITY, WAVE_VECTOR_COMPONENT_IDS,
+};
 use crate::encode::gdalio::{needs_serial_access, netcdf_guard, Dataset};
 use crate::encode::grid::{crop_grid, normalize_longitudes, snap_global_longitudes, GridInfo};
 use crate::encode::gribindex::inspect_grib_fast;
@@ -34,16 +36,25 @@ use crate::encode::temporal::build_chunks;
 
 /// Scalar variables ship one single-variable bundle each; the two wind
 /// components ship together in one two-variable bundle for the GPU particle
-/// layer — as does the wind on each isobaric surface, and the water vapour
-/// flux the converter derives there. Mirrors `VECTOR_BUNDLES` in
+/// layer — as does the wind on each isobaric surface, the water vapour
+/// flux the converter derives there, and the wave vector it derives from
+/// the wave height and direction. Mirrors `VECTOR_BUNDLES` in
 /// `xuebuild/binconvert.py`.
 pub const WIND_COMPONENT_IDS: [&str; 2] = ["ugrd10m", "vgrd10m"];
 pub const WIND_BUNDLE_ID: &str = "wind10m";
+pub const WAVE_BUNDLE_ID: &str = "wave";
+/// The inputs the wave vector is derived from: the significant wave height
+/// and the primary wave direction. Mirrors `DERIVED_VECTORS["wave"]` in
+/// `xuebuild/binconvert.py`.
+const WAVE_INPUT_IDS: [&str; 2] = ["htsgw", "dirpw"];
 
 /// The two component variables of a vector bundle, or `None` for a scalar.
 pub fn vector_components(bundle_id: &str) -> Option<(String, String)> {
     if bundle_id == WIND_BUNDLE_ID {
         return Some((WIND_COMPONENT_IDS[0].into(), WIND_COMPONENT_IDS[1].into()));
+    }
+    if bundle_id == WAVE_BUNDLE_ID {
+        return Some((WAVE_VECTOR_COMPONENT_IDS[0].into(), WAVE_VECTOR_COMPONENT_IDS[1].into()));
     }
     for (prefix, u, v) in [("wind", "ugrd", "vgrd"), ("qflux", "uqflx", "vqflx")] {
         if let Some(level) = bundle_id.strip_prefix(prefix) {
@@ -79,12 +90,23 @@ pub fn vapour_flux_level(bundle_id: &str) -> Option<u32> {
     ISOBARIC_LEVELS_HPA.contains(&level).then_some(level)
 }
 
+/// Whether a vector bundle is derived rather than read: a vapour flux pair
+/// or the wave vector. A wind pair is its own two components. Mirrors
+/// `DERIVED_VECTORS` in `xuebuild/binconvert.py`.
+pub fn is_derived_vector(bundle_id: &str) -> bool {
+    bundle_id == WAVE_BUNDLE_ID || vapour_flux_level(bundle_id).is_some()
+}
+
 /// The source inputs one vector bundle is built from: a wind pair is its own
 /// two components; a vapour flux pair is derived from the specific humidity
-/// and both wind components on the same surface.
+/// and both wind components on the same surface; the wave vector from the
+/// significant wave height and the primary wave direction.
 pub fn vector_input_ids(bundle_id: &str) -> Vec<String> {
     if let Some(level) = vapour_flux_level(bundle_id) {
         return vec![format!("spfh{level}"), format!("ugrd{level}"), format!("vgrd{level}")];
+    }
+    if bundle_id == WAVE_BUNDLE_ID {
+        return WAVE_INPUT_IDS.iter().map(|id| (*id).to_string()).collect();
     }
     match vector_components(bundle_id) {
         Some((u, v)) => vec![u, v],
@@ -503,6 +525,26 @@ pub fn derive_vapour_flux(
     (flux(u_wind), flux(v_wind))
 }
 
+/// The wave vector: the significant wave height, already in metres, laid
+/// along the direction the waves travel, as an eastward and a northward
+/// component. The primary direction is degrees true the waves come *from*,
+/// the meteorological convention the wind uses, so the components are the
+/// wind's `(-h sin θ, -h cos θ)`. Degrees to radians by one multiplication,
+/// sine and cosine, the negated height times each, in f64 — the order
+/// `derive_wave_vector` in `xuebuild/binconvert.py` runs them in, so the
+/// two encoders stay byte-identical on a field neither reads from a record.
+pub fn derive_wave_vector(height: &[f64], direction: &[f64]) -> (Vec<f64>, Vec<f64>) {
+    let mut u = Vec::with_capacity(height.len());
+    let mut v = Vec::with_capacity(height.len());
+    for (h, degrees) in height.iter().zip(direction) {
+        let radians = degrees * (std::f64::consts::PI / 180.0);
+        let negated = -h;
+        u.push(negated * radians.sin());
+        v.push(negated * radians.cos());
+    }
+    (u, v)
+}
+
 /// Extract every requested band of one file, as float64 planes in physical
 /// units, cropped and rolled into the published layout.
 fn extract_planes(
@@ -697,10 +739,10 @@ fn quantize_file(
         values.insert(position, ("prate".to_string(), derived));
     }
 
-    // The vapour flux bundles, derived from the planes just extracted; the
-    // inputs that served only such a derivation (and are not published
-    // themselves) are released here rather than quantized and carried
-    // through the whole run.
+    // The derived vector bundles — the vapour flux, the wave vector — from
+    // the planes just extracted; the inputs that served only such a
+    // derivation (and are not published themselves) are released here
+    // rather than quantized and carried through the whole run.
     for bundle_id in derived_vector_ids {
         let inputs = vector_input_ids(bundle_id);
         let plane = |name: &str| -> Result<&Vec<f64>> {
@@ -710,10 +752,14 @@ fn quantize_file(
                 .map(|(_, plane)| plane)
                 .ok_or_else(|| EncodeError::conversion(format!("missing {name} plane for {bundle_id}")))
         };
-        let (flux_u, flux_v) = derive_vapour_flux(plane(&inputs[0])?, plane(&inputs[1])?, plane(&inputs[2])?);
-        let (u_id, v_id) = vector_components(bundle_id).expect("a vapour flux bundle is a vector");
-        values.push((u_id, flux_u));
-        values.push((v_id, flux_v));
+        let (component_u, component_v) = if *bundle_id == WAVE_BUNDLE_ID {
+            derive_wave_vector(plane(&inputs[0])?, plane(&inputs[1])?)
+        } else {
+            derive_vapour_flux(plane(&inputs[0])?, plane(&inputs[1])?, plane(&inputs[2])?)
+        };
+        let (u_id, v_id) = vector_components(bundle_id).expect("a derived vector bundle is a vector");
+        values.push((u_id, component_u));
+        values.push((v_id, component_v));
     }
     // The equivalent potential temperatures, after the vapour flux and
     // before the derivation-only inputs go: both read the specific humidity.
@@ -1331,7 +1377,7 @@ pub fn convert_bin(
     let derived_vector_ids: Vec<&str> = available_vector_ids
         .iter()
         .copied()
-        .filter(|bundle_id| vapour_flux_level(bundle_id).is_some())
+        .filter(|bundle_id| is_derived_vector(bundle_id))
         .collect();
     let derived_scalar_ids: Vec<&str> = available_derived_ids.clone();
     let results = for_each_ordered(per_file.len(), options.extract_workers, |index| {

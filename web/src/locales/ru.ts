@@ -156,6 +156,7 @@ export const ru: Record<MessageKey, string> = {
   varLabelTmpsfc: "Температура поверхности моря (над сушей — поверхности земли)",
   varLabelIcec: "Сплочённость морского льда",
   varLabelIcetk: "Толщина морского льда",
+  varLabelWave: "Волнение: значительная высота и направление",
   varLabelHtsgw: "Значительная высота волн",
   varLabelPerpw: "Период основной волны",
   varLabelDirpw: "Направление основной волны",

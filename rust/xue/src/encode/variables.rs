@@ -110,6 +110,9 @@ pub const STANDARD_GRAVITY: f64 = 9.80665;
 /// `OCEAN_VARIABLE_IDS` in `xuebuild/variables.py`.
 #[allow(dead_code)] // read by the registry test; the Python side keys its fixture on it
 pub const OCEAN_VARIABLE_IDS: &[&str] = &["tmpsfc", "icec", "icetk", "htsgw", "perpw", "dirpw"];
+/// The two components of the derived wave vector bundle, in the same
+/// fixture. Mirrors `WAVE_VECTOR_COMPONENT_IDS` in `xuebuild/variables.py`.
+pub const WAVE_VECTOR_COMPONENT_IDS: [&str; 2] = ["uwave", "vwave"];
 
 /// The ids the Celsius rule applies to at the surface: GDAL normalizes every
 /// GRIB temperature to Celsius, and the converter accepts K and F as well.
@@ -624,6 +627,46 @@ pub const VARIABLES: &[VariableSpec] = &[
         gdal_unit: "Degree true",
         fill_values: &[9999.0],
     },
+    // The wave vector: the significant wave height laid along the direction
+    // the waves travel, as an eastward and a northward component in metres,
+    // derived by the converter from `htsgw` and `dirpw`
+    // (`convert::derive_wave_vector`) and never fetched, so the
+    // record-matching fields stay empty. GRIB2 has no parameter for such a
+    // pair; 250 / 251 are local-use numbers of our own in the waves
+    // category, as the vapour flux components are in the moisture category.
+    // Same water surface as the inputs, no value declared.
+    VariableSpec {
+        id: "uwave",
+        label: "U wave vector component",
+        output_unit: "m",
+        value_range: (-25, 25),
+        grib_element: "",
+        grib2_discipline: 10,
+        grib2_category: 0,
+        grib2_number: 250,
+        grib2_level_type: 1,
+        grib2_level_value: None,
+        grib2_statistical: None,
+        grib2_aliases: &[],
+        gdal_unit: "",
+        fill_values: &[],
+    },
+    VariableSpec {
+        id: "vwave",
+        label: "V wave vector component",
+        output_unit: "m",
+        value_range: (-25, 25),
+        grib_element: "",
+        grib2_discipline: 10,
+        grib2_category: 0,
+        grib2_number: 251,
+        grib2_level_type: 1,
+        grib2_level_value: None,
+        grib2_statistical: None,
+        grib2_aliases: &[],
+        gdal_unit: "",
+        fill_values: &[],
+    },
     // Mean sea level pressure. NCEP publishes two reductions; PRMSL (0/3/1)
     // is the same quantity ECMWF calls `msl` — encoded there as plain
     // pressure (0/3/0) on the mean sea level surface, hence the alias — so
@@ -741,7 +784,10 @@ pub fn variable_spec(variable_id: &str) -> Result<&'static VariableSpec> {
 
 #[cfg(test)]
 mod tests {
-    use super::{isobaric_variable, variable_spec, ISOBARIC_FAMILIES, ISOBARIC_LEVELS_HPA, OCEAN_VARIABLE_IDS};
+    use super::{
+        isobaric_variable, variable_spec, ISOBARIC_FAMILIES, ISOBARIC_LEVELS_HPA, OCEAN_VARIABLE_IDS,
+        WAVE_VECTOR_COMPONENT_IDS,
+    };
     use crate::encode::quantize::codebook;
     use serde_json::{json, Value};
     use std::path::PathBuf;
@@ -835,14 +881,19 @@ mod tests {
 
     /// `tests/fixtures/ocean-registry.json`: the surface temperature, the
     /// sea ice fields and the wave fields, held to the Python encoder the
-    /// same way.
+    /// same way — plus the two derived wave vector components.
     #[test]
     fn the_ocean_registry_matches_the_shared_fixture() {
         let entries = registry("ocean-registry.json");
+        let expected: Vec<&str> = OCEAN_VARIABLE_IDS
+            .iter()
+            .chain(&WAVE_VECTOR_COMPONENT_IDS)
+            .copied()
+            .collect();
         assert_eq!(
             entries.keys().collect::<Vec<_>>(),
-            OCEAN_VARIABLE_IDS,
-            "six variables, in the fixture's order"
+            expected,
+            "eight variables, in the fixture's order"
         );
         for (variable_id, entry) in entries {
             let spec = variable_spec(&variable_id).unwrap_or_else(|_| panic!("{variable_id}"));
@@ -856,18 +907,34 @@ mod tests {
             // balanced is quality everywhere but ice cover, read in tenths,
             // which takes the compact 1 % step like cloud cover.
             let balanced_key = if variable_id == "icec" { "compact" } else { "quality" };
+            let wave = matches!(variable_id.as_str(), "htsgw" | "perpw" | "dirpw");
+            let derived = WAVE_VECTOR_COMPONENT_IDS.contains(&variable_id.as_str());
             for (profile, key) in [("quality", "quality"), ("compact", "compact"), ("balanced", balanced_key)] {
                 let book = codebook(profile, &variable_id)
                     .unwrap_or_else(|error| panic!("{variable_id} {profile}: {error}"));
                 assert_eq!(Value::Object(book.metadata()), entry[key], "{variable_id} {profile} codebook");
-                // A bitmap-masked point becomes the bottom of the codebook,
-                // so that must be the value the registry says it is.
                 let linear = book.as_linear().expect("linear");
-                assert_eq!(linear.minimum, f64::from(spec.value_range.0), "{variable_id}");
+                if derived {
+                    // Symmetric, with 0 — land, (0, 0) exactly — on the
+                    // grid in every profile.
+                    assert_eq!(-linear.minimum, linear.maximum, "{variable_id} {profile}");
+                    let mut code = [0u8];
+                    book.quantize(&[0.0], &mut code).expect("in range");
+                    assert_eq!(u16::from(code[0]), linear.maximum_code() / 2, "{variable_id} {profile}: land");
+                } else {
+                    // A bitmap-masked point becomes the bottom of the
+                    // codebook, so that must be the value the registry says
+                    // it is.
+                    assert_eq!(linear.minimum, f64::from(spec.value_range.0), "{variable_id}");
+                }
             }
-            let wave = matches!(variable_id.as_str(), "htsgw" | "perpw" | "dirpw");
             assert_eq!(spec.fill_values, if wave { &[9999.0][..] } else { &[][..] }, "{variable_id}");
-            assert_eq!(spec.grib2_level_value.is_none(), wave, "{variable_id}: WAVEWATCH III's surface value");
+            assert_eq!(
+                spec.grib2_level_value.is_none(),
+                wave || derived,
+                "{variable_id}: WAVEWATCH III's surface value"
+            );
+            assert_eq!(spec.grib_element.is_empty(), derived, "{variable_id}: derived, never matched");
         }
     }
 

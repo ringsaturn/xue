@@ -14,7 +14,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from .errors import ConversionError
-from .variables import ISOBARIC_LEVELS_HPA, OCEAN_VARIABLE_IDS, isobaric_variable_id
+from .variables import ISOBARIC_LEVELS_HPA, OCEAN_VARIABLE_IDS, WAVE_VECTOR_COMPONENT_IDS, isobaric_variable_id
 
 
 @dataclass(frozen=True)
@@ -210,6 +210,19 @@ COMPACT_WAVE_PERIOD = TemperatureCodebook(minimum=0.0, maximum=25.4, step=0.2, n
 # (357°) for the same reason — 360/3 codes would put 360° back on the grid.
 QUALITY_WAVE_DIRECTION = TemperatureCodebook(minimum=0.0, maximum=358.5, step=1.5, name="dirpw")
 COMPACT_WAVE_DIRECTION = TemperatureCodebook(minimum=0.0, maximum=357.0, step=3.0, name="dirpw")
+# The wave vector components, the significant height along the direction of
+# travel: symmetric over the height codebook's own ±25.4 m at 0.2 m, so no
+# sea the height field holds clamps in the vector, and the pair spends the
+# full 0..254 code space. The 0.2 m step is twice the height's — the
+# magnitude a renderer reconstructs from the pair is read off a ramp that
+# saturates at 10 m, and the direction off a particle, neither to a tenth;
+# a reader who wants either exactly has the scalar bundles. Land is (0, 0),
+# the middle code of both — which is why the compact profile stops at
+# ±25.2 rather than doubling the step over the same range: 25.4 / 0.4 codes
+# either side would leave 0 between two codes, and land, which the
+# magnitude palette must paint as nothing, a fifth of a metre off it.
+QUALITY_WAVE_VECTOR = TemperatureCodebook(minimum=-25.4, maximum=25.4, step=0.2, name="wave vector")
+COMPACT_WAVE_VECTOR = TemperatureCodebook(minimum=-25.2, maximum=25.2, step=0.4, name="wave vector")
 QUALITY_OCEAN = {
     "tmpsfc": QUALITY_SURFACE_TEMPERATURE,
     "icec": QUALITY_ICE_COVER,
@@ -217,6 +230,8 @@ QUALITY_OCEAN = {
     "htsgw": QUALITY_WAVE_HEIGHT,
     "perpw": QUALITY_WAVE_PERIOD,
     "dirpw": QUALITY_WAVE_DIRECTION,
+    "uwave": QUALITY_WAVE_VECTOR,
+    "vwave": QUALITY_WAVE_VECTOR,
 }
 COMPACT_OCEAN = {
     "tmpsfc": COMPACT_SURFACE_TEMPERATURE,
@@ -225,8 +240,10 @@ COMPACT_OCEAN = {
     "htsgw": COMPACT_WAVE_HEIGHT,
     "perpw": COMPACT_WAVE_PERIOD,
     "dirpw": COMPACT_WAVE_DIRECTION,
+    "uwave": COMPACT_WAVE_VECTOR,
+    "vwave": COMPACT_WAVE_VECTOR,
 }
-assert tuple(QUALITY_OCEAN) == OCEAN_VARIABLE_IDS
+assert tuple(QUALITY_OCEAN) == OCEAN_VARIABLE_IDS + WAVE_VECTOR_COMPONENT_IDS
 # The cloud layers take the total's codebook, and its balanced rule.
 QUALITY_CLOUD_LAYER = {
     "lcdc": TemperatureCodebook(minimum=0.0, maximum=100.0, step=0.5, name="lcdc"),

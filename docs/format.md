@@ -324,6 +324,7 @@ no chart for.
 | `htsgw` | 10 / 0 / 3 | 1, no value | Significant height of combined wind waves and swell (GFS-Wave); WAVEWATCH III writes the surface value as 1, so none is declared and either is accepted |
 | `perpw` | 10 / 0 / 11 | 1, no value | Primary wave mean period (GFS-Wave) |
 | `dirpw` | 10 / 0 / 10 | 1, no value | Primary wave direction, degrees true the waves come from (GFS-Wave); a record's 360 is reduced to 0 |
+| `uwave` / `vwave` | 10 / 0 / 250, 10 / 0 / 251 | 1, no value | Wave vector components in metres: the significant wave height laid along the direction the waves travel, derived by the encoder from `htsgw` and `dirpw` as the wind's `(-h sin θ, -h cos θ)` — Xue-local parameter numbers |
 | `prmsl` | 0 / 3 / 1 | 101, no value | Mean sea level pressure, the quantity ECMWF calls `msl` and encodes as 0 / 3 / 0 on this surface — accepted on input, never written (not NCEP's MSLET, 0 / 3 / 192) |
 | `hgt<level>` | 0 / 3 / 5 | 100, `<level>` hPa in Pa | Geopotential height, one variable per isobaric surface |
 | `tmp<level>` | 0 / 0 / 0 | 100, `<level>` hPa in Pa | Temperature on the isobaric surface |
@@ -627,6 +628,7 @@ same values unless noted):
 | `htsgw` | 0 m | 0.1 | 254 | 255 | 0.05 m |
 | `perpw` | 0 s | 0.1 | 254 | 255 | 0.05 s |
 | `dirpw` | 0° | 1.5 | 239 | 255 | 0.75° |
+| `uwave` / `vwave` | −25.4 m | 0.2 | 254 | 255 | 0.1 m |
 | `prmsl` | 870.5 hPa | 1 | 254 | 255 | 0.5 hPa |
 | `hgt1000` | −905 m | 10 | 254 | 255 | 5 m |
 | `hgt925` | −249 m | 6 | 254 | 255 | 3 m |
@@ -669,8 +671,10 @@ aptmp2m 2 → 75, tmpsfc 1.0 → 127, icec 1.0 → 100, icetk 0.04 → 127, htsg
 and perpw 0.2 → 127, and every pressure-family and isobaric codebook → half
 its maximumCode over the same range). The one exception to "the same range"
 is `dirpw`, whose compact codebook stops at 357° (3 → 119): 360 / 3 codes
-would put 360°, which is 0°, back on the grid. `balanced` takes the compact
-`icec` beside the compact humidity and cloud cover.
+would put 360°, which is 0°, back on the grid — and the wave vector's, which
+stops at ±25.2 m (0.4 → 126) so that 0 stays on the grid: land is (0, 0) in
+the pair, and the middle code of both. `balanced` takes the compact `icec`
+beside the compact humidity and cloud cover.
 
 The wave fields are the first whose records do not cover the grid: GFS-Wave
 carries a bitmap, and land comes out of GDAL as its nodata value (9999). The

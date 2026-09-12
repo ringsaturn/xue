@@ -156,6 +156,7 @@ export const ko: Record<MessageKey, string> = {
   varLabelTmpsfc: "해수면 온도(육지는 지표면 온도)",
   varLabelIcec: "해빙 밀집도",
   varLabelIcetk: "해빙 두께",
+  varLabelWave: "파랑: 유의파고와 파향",
   varLabelHtsgw: "유의파고",
   varLabelPerpw: "주파주기",
   varLabelDirpw: "주파향",
