@@ -813,7 +813,10 @@ test("the credit mark opens the sources sheet, and the line folds into it on a p
   if (testInfo.project.name === "mobile") await expect(line).toBeHidden();
   else await expect(line).toContainText("OPENSTREETMAP");
   // GFS is on screen: the line carries the basemap credit and nothing else.
-  await expect(line).not.toContainText("ECMWF");
+  // The dataset notices stay in the markup and are hidden by the stylesheet,
+  // so this is a visibility check, not a text one — textContent has them.
+  await expect(page.locator('.source-credit[data-credit-model="ecmwf"]')).toBeHidden();
+  await expect(page.locator('.source-credit[data-credit-model="radar"]')).toBeHidden();
   const trigger = page.getByRole("button", { name: "SOURCES" });
   await expect(trigger).toBeVisible();
   await trigger.click();
