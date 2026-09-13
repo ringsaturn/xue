@@ -899,7 +899,7 @@ test("?lang=zh renders the Chinese UI and the picker switches back", async ({ pa
   await expect(trigger).toHaveAttribute("aria-expanded", "true");
   await expect(sheet.locator('button[data-locale="zh"]')).toHaveAttribute("aria-current", "true");
   await expect(sheet.locator('button[data-locale="ja"]')).toHaveText("日本語");
-  await expect(sheet.locator("button[data-locale]")).toHaveCount(10);
+  await expect(sheet.locator("button[data-locale]")).toHaveCount(11);
   // A marker on the window survives only if the document does.
   await page.evaluate(() => {
     (window as unknown as { __xueSameDocument: boolean }).__xueSameDocument = true;
