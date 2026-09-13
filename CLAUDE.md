@@ -347,8 +347,18 @@ source fails on its own into `sources[]`; the pointer is withheld only
 when no agency and no model contributed. `tests/fixtures/tc/` is a
 fetched hour and `tests/fixtures/tc/expected/` the golden built from it
 (`tests/prepare_tc_golden.py` regenerates; needs `bufr_dump`);
-`tc-registry.json` pins `registry.py` for the frontend's table to come.
-The shell does not draw the product yet.
+`tc-registry.json` pins `registry.py` and `web/src/tc/agencies.ts` to
+one table (`tests/web/tc.test.ts`). The shell draws the product as
+**marks** over any composition (`web/src/tc/`): `schema.ts` validates
+what `schema.py` writes, `tracks.ts` fetches pointer → index → storm and
+interpolates a track by valid time, `layers.ts` is MapLibre GeoJSON
+layers (agency forecasts dashed ahead of the playhead and solid behind
+it, the wind radii at the current position, best tracks, model tracks,
+ensemble members off by default), `panel.ts` the storm sheet behind the
+rail's `#tc-tile`. The marks take no session and never gate the playhead;
+`main.ts::syncTcTime` hands them the frame's valid time, `loadTc` polls
+the pointer with the runs, and a case hides them. URL state is
+`?tc=<id>|off`, `?tcagency=`, `?tcmodel=`, `?tcmembers=`.
 
 External tools are invoked as CLI subprocesses (`gdal.py`, `zstdcli.py`,
 `ffmpegcli.py`, `eccodescli.py`) rather than added as binary Python
@@ -598,7 +608,8 @@ locally, browse `http://localhost:4173` rather than the loopback address.
   Offset labels (`UTC+9`) and zone ids are instrument text, English in
   every locale.
 - URL state (`?model=`, `?type=`, `?lines=`, `?case=`, `?res=`,
-  `?use_h264=`, `?particles=`) is parsed
+  `?use_h264=`, `?particles=`, `?tc=` with `?tcagency=` / `?tcmodel=` /
+  `?tcmembers=`) is parsed
   in `urlstate.ts`; `?lang=` belongs to `i18n.ts` and `?theme=` to `theme.ts`,
   since each is read before anything else renders. Unrecognized values fall
   back to defaults rather than error. The camera is in the fragment, not the

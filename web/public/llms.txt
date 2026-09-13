@@ -88,6 +88,12 @@ fall back to defaults rather than fail, so a constructed link always opens.
   prefers-reduced-motion).
 - `?lang=zh|zh-Hant|en|ja|ko|de|fr|es|pt|tr|ru` and `?theme=light|dark` —
   otherwise the browser's language and colour scheme decide.
+- `?tc=<storm id>` — focus one tropical cyclone (an ATCF id such as
+  `EP142026`, or the product's `x-<basin>-<hour>-<n>` id for an unnumbered
+  system) and frame it; `?tc=off` hides the storm tracks; absent, every
+  named system is drawn over whatever layer is on screen. `?tcagency=nhc,jtwc`
+  and `?tcmodel=gfs,ecmwf` narrow the official and model tracks drawn
+  (absent means all); `?tcmembers=on` adds the ensemble members.
 - `?use_h264=true` — opt into the H.264 companion artifacts via WebCodecs
   instead of the Xue decoder (a comparison path, not the default).
 - `#map=<zoom>/<lat>/<lon>` — the view, in the fragment (MapLibre's named
@@ -96,7 +102,8 @@ fall back to defaults rather than fail, so a constructed link always opens.
   United States for `hrrr`, the case's box for a case.
 
 Examples: `/?model=ecmwf&type=wind850`, `/?type=temp&lines=hgt500`,
-`/?case=pnw-heat-dome-2021`, `/?model=hrrr&type=radar#map=6/32.8/-96.8`.
+`/?case=pnw-heat-dome-2021`, `/?model=hrrr&type=radar#map=6/32.8/-96.8`,
+`/?type=wind&tc=EP142026`.
 
 ## Data access
 
@@ -137,7 +144,7 @@ https://dataset.ringsaturn.me/xue/. The contract is two layers:
   are SI (m/s, hPa, km, seconds from `base`); wind radii are keyed `34` /
   `50` / `64` (knots, the centres' names) as `[ne, se, sw, nw]` in km.
   Sources: NHC, JTWC, the NCEP GFS/GEFS tracker, ECMWF open data `tf`
-  BUFR, IBTrACS. The viewer does not draw it yet.
+  BUFR, IBTrACS. The viewer draws it as tracks over any layer (`?tc=`).
 
 A `.xue` bundle is one gridded variable (or a u/v pair) for a whole run:
 8-bit quantized planes on the native grid, temporal residual prediction in

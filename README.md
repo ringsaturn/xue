@@ -397,7 +397,11 @@ make prune-r2-tc                            # issues older than 30 days
 .venv/bin/python -m xuebuild tc-build --issue 2026091206 --offline --raw-dir tests/fixtures/tc   # from the fixture
 ```
 
-The viewer does not draw the product yet; the shell side is the next phase.
+The viewer draws it over any layer: the rail's storm tile opens a sheet of
+the systems the product carries, `?tc=<id>` deep-links one, and the agency
+forecasts (dashed ahead of the playhead, solid behind it, the wind radii
+at the current position), the best tracks and the model tracks follow the
+timeline by valid time.
 
 ## Testing
 

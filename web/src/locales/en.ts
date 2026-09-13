@@ -314,6 +314,32 @@ export const en = {
   showcaseHours: "{count} h",
   showcaseCaseAria: "Open case {title}",
   showcaseListAria: "Showcase case list",
+
+  /** The tropical cyclone marks: the rail tile (its gloss and glyph — the
+   * CJK locales use their one character for a typhoon, the others C for
+   * cyclone, a letter CAPE shares the way solar and skin share S), the
+   * storm sheet's heading, groups, rows and chips. Agency
+   * and model codes (`NHC`, `JTWC`, `GEFS`) and a storm's class as its
+   * centre spells it (`TS`, `TY`) are instrument text and stay as they
+   * are. `{count}` is a number. */
+  tcTileTip: "Tropical cyclones",
+  varTc: "TRACKS",
+  glyphTc: "C",
+  tcSheetAria: "Tropical cyclones",
+  tcHeading: "TROPICAL CYCLONES",
+  tcAllSystems: "All named systems",
+  tcNone: "No active systems",
+  tcUnnamed: "Unnamed system",
+  tcDisturbances: "Disturbances and depressions",
+  tcPotential: "Potential systems",
+  tcPotentialShow: "Show {count} model-only systems",
+  tcModelOnly: "model only",
+  tcAgencies: "Official forecasts",
+  tcModels: "Model tracks",
+  tcMembers: "Ensemble members",
+  tcBest: "Best track",
+  tcHide: "Hide tracks",
+  tcShow: "Show tracks",
 } as const;
 
 /** Every key the UI can ask for. Each locale module is typed against this,

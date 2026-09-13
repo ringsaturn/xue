@@ -361,3 +361,69 @@ export function parseCameraFromHash(hash: string): MapCamera | null {
   if (zoom < 0 || Math.abs(latitude) > 90) return null;
   return { center: [longitude, latitude], zoom };
 }
+
+/** The tropical cyclone marks a link carries. `?tc=<storm id>` focuses one
+ * system (an ATCF id or the product's synthetic `x-…` id, followed through
+ * the index's crosswalk when the storm has since been numbered);
+ * `?tc=off` draws none; no parameter, or one naming nothing this parser
+ * recognises, is the default view — every named system, unfocused.
+ * `?tcagency=nhc,jtwc` and `?tcmodel=gfs,ecmwf` narrow which forecasts are
+ * drawn (absent means all of them); `?tcmembers=on` adds the ensemble
+ * members, which are off by default. */
+export interface TcUrlState {
+  storm: string | null;
+  off: boolean;
+  agencies: readonly string[] | null;
+  models: readonly string[] | null;
+  members: boolean;
+}
+
+const TC_ID = /^(?:[A-Z]{2}\d{6}|x-[a-z]{2}-\d{10}-\d+)$/;
+const TC_KEY = /^[a-z][a-z0-9]*$/;
+
+function keyList(value: string | null): readonly string[] | null {
+  if (value === null) return null;
+  const keys = value
+    .split(",")
+    .map((item) => item.trim().toLowerCase())
+    .filter((item) => TC_KEY.test(item));
+  return keys.length ? [...new Set(keys)] : null;
+}
+
+export function parseTcFromSearch(search: string): TcUrlState {
+  const params = new URLSearchParams(search);
+  const raw = params.get("tc");
+  let storm: string | null = null;
+  let off = false;
+  if (raw !== null) {
+    const trimmed = raw.trim();
+    // An ATCF id is written upper-case, a synthetic one lower-case; a link
+    // typed either way still opens.
+    const id = trimmed.toLowerCase().startsWith("x-") ? trimmed.toLowerCase() : trimmed.toUpperCase();
+    if (SWITCH_ALIASES[trimmed.toLowerCase()] === false) off = true;
+    else if (TC_ID.test(id)) storm = id;
+  }
+  return {
+    storm,
+    off,
+    agencies: keyList(params.get("tcagency")),
+    models: keyList(params.get("tcmodel")),
+    members: SWITCH_ALIASES[(params.get("tcmembers") ?? "").trim().toLowerCase()] === true,
+  };
+}
+
+/** The given query string carrying the marks state. Only what differs
+ * from the default is written, so the everyday link stays as it was. */
+export function searchWithTc(search: string, state: TcUrlState): string {
+  const params = new URLSearchParams(search);
+  if (state.off) params.set("tc", "off");
+  else if (state.storm !== null) params.set("tc", state.storm);
+  else params.delete("tc");
+  if (state.agencies !== null && !state.off) params.set("tcagency", state.agencies.join(","));
+  else params.delete("tcagency");
+  if (state.models !== null && !state.off) params.set("tcmodel", state.models.join(","));
+  else params.delete("tcmodel");
+  if (state.members && !state.off) params.set("tcmembers", "on");
+  else params.delete("tcmembers");
+  return `?${params.toString()}`;
+}

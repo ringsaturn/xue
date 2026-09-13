@@ -113,13 +113,20 @@ import {
   parseModelFromSearch,
   parseParticlesFromSearch,
   parseResolutionFromSearch,
+  parseTcFromSearch,
   parseUseH264FromSearch,
   parseVariableFromSearch,
   searchForCaseVariable,
   searchForVariable,
   searchWithLines,
   searchWithParticles,
+  searchWithTc,
 } from "./urlstate";
+import { TC_MODELS } from "./tc/agencies";
+import { StormLayers, type StormView } from "./tc/layers";
+import { renderTcPanel } from "./tc/panel";
+import type { TcIndexEntry, TcStorm } from "./tc/schema";
+import { fetchTcIndex, fetchTcStorm, resolveTcStormId, stormBounds, type LoadedTcIndex } from "./tc/tracks";
 import { WindParticleLayer } from "./particles";
 import { domainContains, lambertCone, regionShareOfView, type LambertDomain } from "./domain";
 import type { Feature, FeatureCollection } from "geojson";
@@ -644,6 +651,7 @@ function applyBasemapTheme(): void {
   if (map.getLayer("water")) map.setPaintProperty("water", "fill-color", theme.ocean);
   if (map.getLayer("earth")) map.setPaintProperty("earth", "fill-color", theme.land);
   applyBasemapInk(darkGround);
+  tcLayers?.setInk(darkGround);
 }
 
 /** Repaint the basemap's labels and boundaries for the current ground.
@@ -853,6 +861,9 @@ const creditsTrigger = required<HTMLButtonElement>("credits-trigger");
 const creditsSheet = required<HTMLElement>("credits-sheet");
 const langTrigger = required<HTMLButtonElement>("lang-toggle");
 const langSheet = required<HTMLElement>("lang-sheet");
+const tcTile = required<HTMLButtonElement>("tc-tile");
+const tcSheet = required<HTMLElement>("tc-sheet");
+const tcList = required<HTMLElement>("tc-list");
 // Scoped to buttons: <body> carries data-variable/data-model too (styling
 // state), and must never be hidden or aria-pressed like a switch button.
 const variableRail = document.querySelector<HTMLElement>(".variable-rail");
@@ -913,6 +924,12 @@ createSheet({ trigger: creditsTrigger, sheet: creditsSheet });
 /** The language picker: the same sheet again, under the round trigger in the
  * top-right column. Ten languages do not cycle on a press, so the button
  * opens a list of endonyms instead of naming the next one. */
+const tcSheetControl = createSheet({
+  trigger: tcTile,
+  sheet: tcSheet,
+  canOpen: () => tcLoaded !== null && activeCase === null,
+});
+
 const langSheetControl = createSheet({
   trigger: langTrigger,
   sheet: langSheet,
@@ -2608,6 +2625,7 @@ function updateFrameReadout(index: number): void {
   updateTicks(index);
   updateForecastDay(index);
   scheduleProbeRender();
+  syncTcTime();
 }
 
 /** Reconfigure a slot's layer for its session's own bundle grid (poster
@@ -3584,7 +3602,14 @@ function syncUrl(): void {
   const withLines = searchWithLines(base, composition.fill !== null ? composition.lines : null);
   // Only a chosen, switched-off overlay is written; on is the default and
   // says nothing, so an ordinary shared link stays as short as it was.
-  const search = searchWithParticles(withLines, particlesEnabled || !particlesChosen);
+  const withParticles = searchWithParticles(withLines, particlesEnabled || !particlesChosen);
+  const search = searchWithTc(withParticles, {
+    storm: tcSelected,
+    off: tcHidden,
+    agencies: tcAgencies ? [...tcAgencies] : null,
+    models: tcModels ? [...tcModels] : null,
+    members: tcMembers,
+  });
   if (search === window.location.search) return;
   window.history.replaceState(null, "", `${window.location.pathname}${search}${window.location.hash}`);
 }
@@ -4312,6 +4337,214 @@ function handleLabels(response: LabelsWorkerResponse): void {
  * the basemap's boundaries and names; the particles, created later, go over
  * both. Grid configuration is the caller's business — poster and bundle
  * planes use different grids. */
+// ---------------------------------------------------------------------------
+// Tropical cyclone marks: the product beside the runs (docs/tc.md), drawn
+// as MapLibre GeoJSON layers over whatever fill and lines are on screen.
+// They take no session and no worker and never gate the playhead; the
+// playhead's valid time is what they follow.
+
+const requestedTc = parseTcFromSearch(window.location.search);
+let tcLoaded: LoadedTcIndex | null = null;
+/** The focused storm's id, or null for every named system. */
+let tcSelected: string | null = requestedTc.storm;
+let tcHidden = requestedTc.off;
+/** Whether the C-level systems — found by a model, tracked by no centre —
+ * are listed and drawn. A session choice, not carried in the URL. */
+let tcPotential = false;
+/** The agency / model keys switched on; null means all of them. */
+let tcAgencies: Set<string> | null = requestedTc.agencies ? new Set(requestedTc.agencies) : null;
+let tcModels: Set<string> | null = requestedTc.models ? new Set(requestedTc.models) : null;
+let tcMembers = requestedTc.members;
+let tcBest = true;
+const tcStorms = new Map<string, { crc32: string; storm: TcStorm }>();
+/** Storm files in flight, keyed by id and crc, so two views asked for at
+ * once (the run's initialize and the product's poll) share one fetch. */
+const tcStormLoads = new Map<string, Promise<void>>();
+let tcLayers: StormLayers | null = null;
+let tcApplySequence = 0;
+let tcDrawn: TcStorm[] = [];
+/** Whether the storm selected from a link or the sheet has been flown to.
+ * Once per selection: a returning poll never moves the camera. */
+let tcFramed: string | null = null;
+
+/** The live index, or none: a data root without the product hides the
+ * tile, and a transient failure keeps whatever was loaded before. */
+async function loadTc(): Promise<void> {
+  if (document.hidden && tcLoaded !== null) return;
+  try {
+    const loaded = await fetchTcIndex(dataBaseUrl());
+    tcLoaded = loaded;
+  } catch {
+    // A poll that fails leaves the previous hour drawn.
+    if (tcLoaded === null) return;
+  }
+  if (tcLoaded && tcSelected !== null) {
+    const resolved = resolveTcStormId(tcLoaded.index, tcSelected);
+    // A storm that has left the product falls back to the overview rather
+    // than to an empty map.
+    tcSelected = resolved;
+    if (resolved === null) syncUrl();
+  }
+  void applyTcView();
+}
+
+function ensureTcLayers(): StormLayers | null {
+  if (!mapStyleReady) return null;
+  if (!tcLayers) tcLayers = new StormLayers(map);
+  const before = (map.getStyle().layers ?? []).find((entry) => entry.type === "symbol")?.id;
+  tcLayers.ensure(before);
+  tcLayers.setInk(document.body.dataset.ground === "dark");
+  return tcLayers;
+}
+
+/** The index entries the view draws: the focused storm, else every named
+ * and every tracked-but-unnumbered system, plus the model-only ones when
+ * asked for. */
+function tcEntriesToDraw(): TcIndexEntry[] {
+  if (!tcLoaded || tcHidden || activeCase !== null) return [];
+  const storms = tcLoaded.index.storms;
+  if (tcSelected !== null) return storms.filter((entry) => entry.id === tcSelected);
+  return storms.filter((entry) => entry.level !== "C" || tcPotential);
+}
+
+/** The valid time the marks are drawn at: the playhead's, or now before a
+ * run has loaded. */
+function syncTcTime(): void {
+  if (!tcLayers) return;
+  const index = activeFrameIndex ?? requestedFrameIndex;
+  tcLayers.setTime(metadata && index !== null ? frameValidTime(index) : Date.now());
+}
+
+function tcAgencyKeys(): string[] {
+  const keys: string[] = [];
+  for (const storm of tcDrawn) for (const key of Object.keys(storm.agencies)) if (!keys.includes(key)) keys.push(key);
+  return keys;
+}
+
+function tcModelKeys(): string[] {
+  const keys = new Set<string>();
+  for (const storm of tcDrawn) for (const key of Object.keys(storm.models)) keys.add(key);
+  const known = Object.keys(TC_MODELS);
+  return [...keys].sort((a, b) => (known.indexOf(a) + 1 || 99) - (known.indexOf(b) + 1 || 99));
+}
+
+async function applyTcView(): Promise<void> {
+  const sequence = ++tcApplySequence;
+  const entries = tcEntriesToDraw();
+  const hidden = activeCase !== null || !tcLoaded || tcLoaded.index.storms.length === 0;
+  if (tcTile.hidden !== hidden) {
+    tcTile.hidden = hidden;
+    syncRailFade();
+  }
+  const loaded = tcLoaded;
+  if (loaded) {
+    await Promise.all(
+      entries
+        .filter((entry) => tcStorms.get(entry.id)?.crc32 !== entry.crc32)
+        .map((entry) => {
+          const key = `${entry.id}?${entry.crc32}`;
+          let load = tcStormLoads.get(key);
+          if (!load) {
+            load = fetchTcStorm(loaded, entry)
+              .then((storm) => {
+                tcStorms.set(entry.id, { crc32: entry.crc32, storm });
+              })
+              .catch((error: unknown) => {
+                console.warn(`tc: ${entry.id} not loaded`, error);
+              })
+              .finally(() => {
+                tcStormLoads.delete(key);
+              });
+            tcStormLoads.set(key, load);
+          }
+          return load;
+        }),
+    );
+  }
+  if (sequence !== tcApplySequence) return;
+  tcDrawn = entries.map((entry) => tcStorms.get(entry.id)?.storm).filter((storm): storm is TcStorm => storm !== undefined);
+  const layers = ensureTcLayers();
+  const views: StormView[] = tcDrawn.map((storm) => ({
+    storm,
+    agencies: new Set(Object.keys(storm.agencies).filter((key) => tcAgencies === null || tcAgencies.has(key))),
+    models: new Set(Object.keys(storm.models).filter((key) => tcModels === null || tcModels.has(key))),
+    members: tcMembers,
+    best: tcBest,
+  }));
+  layers?.setViews(views);
+  syncTcTime();
+  tcTile.setAttribute("aria-pressed", String(views.length > 0));
+  renderTcSheet();
+  if (tcSelected !== null && tcFramed !== tcSelected && tcDrawn.length === 1) {
+    tcFramed = tcSelected;
+    const bounds = stormBounds(tcDrawn[0]!);
+    if (bounds) map.fitBounds(bounds, { padding: 80, maxZoom: 6, duration: 900 });
+  }
+}
+
+/** Turn one key on or off within a "null means all" set. */
+function tcToggleKey(current: Set<string> | null, available: string[], key: string, on: boolean): Set<string> | null {
+  const next = new Set(current ?? available);
+  if (on) next.add(key);
+  else next.delete(key);
+  return available.every((item) => next.has(item)) ? null : next;
+}
+
+function renderTcSheet(): void {
+  renderTcPanel(
+    tcList,
+    {
+      index: tcLoaded?.index ?? null,
+      selected: tcSelected,
+      hidden: tcHidden,
+      potential: tcPotential,
+      agencies: new Set(tcAgencyKeys().filter((key) => tcAgencies === null || tcAgencies.has(key))),
+      models: new Set(tcModelKeys().filter((key) => tcModels === null || tcModels.has(key))),
+      members: tcMembers,
+      best: tcBest,
+    },
+    { agencies: tcAgencyKeys(), models: tcModelKeys() },
+    {
+      onSelect(id) {
+        tcSelected = id;
+        tcHidden = false;
+        tcFramed = null;
+        syncUrl();
+        tcSheetControl.close();
+        void applyTcView();
+      },
+      onAgency(id, on) {
+        tcAgencies = tcToggleKey(tcAgencies, tcAgencyKeys(), id, on);
+        syncUrl();
+        void applyTcView();
+      },
+      onModel(id, on) {
+        tcModels = tcToggleKey(tcModels, tcModelKeys(), id, on);
+        syncUrl();
+        void applyTcView();
+      },
+      onMembers(on) {
+        tcMembers = on;
+        syncUrl();
+        void applyTcView();
+      },
+      onBest(on) {
+        tcBest = on;
+        void applyTcView();
+      },
+      onPotential(on) {
+        tcPotential = on;
+        void applyTcView();
+      },
+      onHidden(hidden) {
+        tcHidden = hidden;
+        syncUrl();
+        void applyTcView();
+      },
+    },
+  );
+}
+
 function ensureLayers(): void {
   if (layersAdded) return;
   map.addLayer(slots.fill.layer, FORECAST_ANCHOR_LAYER);
@@ -4780,6 +5013,8 @@ async function initialize({ frame = false }: { frame?: boolean } = {}): Promise<
     // The dataset is settled here (a case pins its own), so the timeline can
     // be titled for what it actually shows.
     applyDatasetWording();
+    // A case is a fixed past; the live storms have no place over it.
+    void applyTcView();
     // The cycle is named in UTC wherever it is stamped (00Z is its name),
     // whatever zone the valid times below read in.
     sayText(runTime, formatStamp(loadedManifest.runTime, "UTC"));
@@ -4934,6 +5169,7 @@ function applyLocale(): void {
   syncBasemapStyle();
   // The H/L letters on the pressure centers are the dictionary's.
   refreshLabels();
+  renderTcSheet();
 }
 
 /** Rewrite every valid-time stamp in the display zone in force: the
@@ -5019,9 +5255,13 @@ async function checkForNewRun(): Promise<void> {
   }
 }
 window.setInterval(() => void checkForNewRun(), LATEST_POLL_MS);
+window.setInterval(() => void loadTc(), LATEST_POLL_MS);
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) stopPlayback();
-  else void checkForNewRun();
+  else {
+    void checkForNewRun();
+    void loadTc();
+  }
 });
 // A narrower window fits less of the case, so its limits move with it.
 map.on("resize", () => {
@@ -5061,4 +5301,5 @@ map.once("load", () => {
   // A link that fixed the view is opened on that view; every other opens
   // on the dataset's own region.
   void initialize({ frame: urlCamera === null });
+  void loadTc();
 });

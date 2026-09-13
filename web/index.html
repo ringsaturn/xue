@@ -384,6 +384,14 @@
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphGust">G</b>
           <span class="rail-name"><span>GUST</span> <small data-i18n="varGust">SFC</small></span>
         </button>
+        <!-- The tropical cyclone marks: not a layer but a sheet of storm
+             tracks over whatever is on screen. Hidden until the product
+             lists a system; pressed while tracks are drawn. -->
+        <button id="tc-tile" type="button" data-i18n-tip="tcTileTip" aria-pressed="false" aria-haspopup="dialog" aria-expanded="false" hidden>
+          <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 12m-2.2 0a2.2 2.2 0 1 0 4.4 0a2.2 2.2 0 1 0-4.4 0" /><path d="M14.2 12c0-4.2-2.6-7.5-6.6-8.6" /><path d="M9.8 12c0 4.2 2.6 7.5 6.6 8.6" /><path d="M12 9.8c4.2 0 7.5 2.6 8.6 6.6" /><path d="M12 14.2c-4.2 0-7.5-2.6-8.6-6.6" /></svg>
+          <b class="rail-glyph" aria-hidden="true" data-i18n="glyphTc">C</b>
+          <span class="rail-name"><span>TC</span> <small data-i18n="varTc">TRACKS</small></span>
+        </button>
         <button type="button" data-variable="prmsl" data-i18n-tip="tipPressure" data-group="pressure" aria-pressed="false" hidden>
           <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="13" rx="3" ry="2" /><ellipse cx="12" cy="13" rx="6.5" ry="4.6" /><path d="M2.5 17.5C2.5 10.6 6.8 5.5 12 5.5s9.5 5.1 9.5 12" /></svg>
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphPressure">P</b>
@@ -554,6 +562,18 @@
           <span class="sheet-grip" aria-hidden="true"></span>
           <p class="sheet-heading" data-i18n="langPickerHeading">LANGUAGE</p>
           <div id="lang-list" class="lang-list" role="group"></div>
+        </div>
+      </div>
+
+      <!-- The storm sheet, opened from the rail tile: the systems the
+           tropical cyclone product carries and what to draw of them. The
+           rows are written by main.ts from the live index. -->
+      <div id="tc-sheet" class="model-sheet tc-sheet" hidden>
+        <div class="model-sheet-scrim" data-sheet-dismiss></div>
+        <div class="model-sheet-panel tc-panel" role="dialog" aria-modal="true" data-i18n-aria="tcSheetAria" aria-label="Tropical cyclones">
+          <span class="sheet-grip" aria-hidden="true"></span>
+          <p class="sheet-heading" data-i18n="tcHeading">TROPICAL CYCLONES</p>
+          <div id="tc-list" class="tc-list" role="group"></div>
         </div>
       </div>
 
