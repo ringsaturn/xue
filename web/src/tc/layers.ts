@@ -53,6 +53,7 @@ const LAYERS = {
   point: "tc-point",
   current: "tc-current",
   lineLabel: "tc-line-label",
+  modelLabel: "tc-model-label",
   nameLabel: "tc-name-label",
 } as const;
 
@@ -425,55 +426,94 @@ export class StormLayers {
       },
       before,
     );
-    map.addLayer(
-      {
-        id: LAYERS.lineLabel,
-        type: "symbol",
-        source: TC_SOURCE,
-        filter: kind("agency"),
-        layout: {
-          "symbol-placement": "line",
-          "symbol-spacing": 300,
-          "text-field": ["get", "code"],
-          "text-font": ["Noto Sans Medium"],
-          "text-size": 10,
-          "text-letter-spacing": 0.08,
-          "text-max-angle": 30,
-          "text-padding": 2,
-          "text-rotation-alignment": "map",
-          "text-pitch-alignment": "viewport",
-        },
-        paint: {
-          "text-color": ["get", "color"],
-          "text-halo-color": this.halo,
-          "text-halo-width": 1.6,
-        },
+    // The labels sit on top of everything, the basemap's names included:
+    // a track's source is what the line means, and a town under it must
+    // not silence it. Along-line codes appear once the line is long enough
+    // on screen to carry them and grow with the zoom.
+    const labelSize: ExpressionSpecification = [
+      "interpolate",
+      ["linear"],
+      ["zoom"],
+      3,
+      9,
+      6,
+      11,
+      9,
+      13,
+    ];
+    map.addLayer({
+      id: LAYERS.lineLabel,
+      type: "symbol",
+      source: TC_SOURCE,
+      filter: kind("agency"),
+      minzoom: 2.5,
+      layout: {
+        "symbol-placement": "line",
+        "symbol-spacing": 220,
+        "text-field": ["get", "code"],
+        "text-font": ["Noto Sans Medium"],
+        "text-size": labelSize,
+        "text-letter-spacing": 0.1,
+        "text-max-angle": 35,
+        "text-padding": 2,
+        "text-keep-upright": true,
+        "text-rotation-alignment": "map",
+        "text-pitch-alignment": "viewport",
       },
-      before,
-    );
-    map.addLayer(
-      {
-        id: LAYERS.nameLabel,
-        type: "symbol",
-        source: TC_SOURCE,
-        filter: kind("current"),
-        layout: {
-          "text-field": ["get", "label"],
-          "text-font": ["Noto Sans Medium"],
-          "text-size": 12,
-          "text-anchor": "left",
-          "text-offset": [0.9, 0],
-          "text-padding": 4,
-          "text-optional": true,
-        },
-        paint: {
-          "text-color": ["get", "color"],
-          "text-halo-color": this.halo,
-          "text-halo-width": 1.8,
-        },
+      paint: {
+        "text-color": ["get", "color"],
+        "text-halo-color": this.halo,
+        "text-halo-width": 1.6,
       },
-      before,
-    );
+    });
+    // The model tracks and the best tracks carry their code too, a step
+    // later in the zoom: they are the quieter lines.
+    map.addLayer({
+      id: LAYERS.modelLabel,
+      type: "symbol",
+      source: TC_SOURCE,
+      filter: ["any", kind("model"), kind("best")],
+      minzoom: 4,
+      layout: {
+        "symbol-placement": "line",
+        "symbol-spacing": 260,
+        "text-field": ["get", "code"],
+        "text-font": ["Noto Sans Regular"],
+        "text-size": ["interpolate", ["linear"], ["zoom"], 4, 9, 9, 11],
+        "text-letter-spacing": 0.08,
+        "text-max-angle": 35,
+        "text-padding": 2,
+        "text-keep-upright": true,
+        "text-rotation-alignment": "map",
+        "text-pitch-alignment": "viewport",
+      },
+      paint: {
+        "text-color": ["get", "color"],
+        "text-halo-color": this.halo,
+        "text-halo-width": 1.4,
+        "text-opacity": 0.85,
+      },
+    });
+    map.addLayer({
+      id: LAYERS.nameLabel,
+      type: "symbol",
+      source: TC_SOURCE,
+      filter: kind("current"),
+      layout: {
+        "text-field": ["get", "label"],
+        "text-font": ["Noto Sans Medium"],
+        "text-size": 12,
+        "text-anchor": "left",
+        "text-offset": [0.9, 0],
+        "text-padding": 4,
+        "text-optional": true,
+      },
+      paint: {
+        "text-color": ["get", "color"],
+        "text-halo-color": this.halo,
+        "text-halo-width": 1.8,
+      },
+    });
     this.added = true;
     this.applyInk();
     this.publish();
@@ -499,7 +539,7 @@ export class StormLayers {
     for (const id of [LAYERS.point, LAYERS.current])
       this.map.setPaintProperty(id, "circle-stroke-color", this.halo);
     this.map.setPaintProperty(LAYERS.bestPoint, "circle-color", this.halo);
-    for (const id of [LAYERS.lineLabel, LAYERS.nameLabel])
+    for (const id of [LAYERS.lineLabel, LAYERS.modelLabel, LAYERS.nameLabel])
       this.map.setPaintProperty(id, "text-halo-color", this.halo);
   }
 
@@ -537,7 +577,7 @@ export class StormLayers {
             kind: "best",
             color,
             storm: storm.id,
-            code,
+            code: `BEST · ${code}`,
           });
           if (drawn) features.push(drawn);
           for (const point of track.points) {
