@@ -114,16 +114,23 @@ async function routeTc(page: Page, requests?: TcRequests): Promise<void> {
   });
 }
 
+/** Ready, and paused: playback drives a WebGL loop that on the emulated
+ * phone leaves the sheet's DOM barely responsive, and nothing here needs
+ * the frames to move. */
 async function waitForReady(page: Page): Promise<void> {
   await expect(page.locator("#preload-state")).toHaveText(
     "Bundle fully buffered",
     { timeout: 20_000 },
   );
+  const pause = page.getByRole("button", { name: "Pause animation" });
+  if (await pause.isVisible()) await pause.click();
 }
 
 test("the storm tile appears with the product and its sheet focuses a storm", async ({
   page,
 }) => {
+  // The phone project walks the sheet at a couple of seconds a step.
+  test.slow();
   await routeRun(page);
   const requests: TcRequests = { storms: [] };
   await routeTc(page, requests);
@@ -167,6 +174,8 @@ test("the storm tile appears with the product and its sheet focuses a storm", as
 test("?tc= and ?tcagency= open a focused storm with one centre, and hiding writes tc=off", async ({
   page,
 }) => {
+  // The phone project walks the sheet at a couple of seconds a step.
+  test.slow();
   await routeRun(page);
   await routeTc(page);
   await page.goto("/?tc=ep142026&tcagency=nhc");
