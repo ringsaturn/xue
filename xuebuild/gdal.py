@@ -196,11 +196,14 @@ def gust_expression(unit: str) -> str:
 
 
 def cloud_cover_expression(unit: str) -> str:
-    """Total cloud cover, already in percent."""
-    compact = unit.strip().strip("[]()")
-    if compact != "%":
-        raise ConversionError(f"unsupported cloud cover unit: {unit or '<missing>'}")
-    return "maximum(0,minimum(100,A))"
+    """Cloud cover in percent — as pgrb2 carries it, or scaled up from the
+    0–1 fraction ECMWF writes (GDAL spells that unit "-")."""
+    compact = unit.strip().strip("[]()").lower()
+    if compact == "%":
+        return "maximum(0,minimum(100,A))"
+    if compact in {"-", "1", "fraction", "proportion", "(0 - 1)", "0-1"}:
+        return "maximum(0,minimum(100,A*100))"
+    raise ConversionError(f"unsupported cloud cover unit: {unit or '<missing>'}")
 
 
 def visibility_expression(unit: str) -> str:
@@ -449,6 +452,18 @@ def _is_total_precipitation(metadata: dict[str, str], description: str) -> bool:
     )
 
 
+# The elements GDAL names another centre's spelling of a surface quantity
+# by, accepted beside the registry's own: ECMWF's skin temperature is SKINT
+# where pgrb2's surface TMP is the same field, its peak wave period PWPER
+# and its mean wave direction WWSDIR stand in for WAVEWATCH III's PERPW and
+# DIRPW (the registry's alias triples).
+_SURFACE_ELEMENT_ALIASES: dict[str, tuple[str, ...]] = {
+    "TMP": ("SKINT",),
+    "PERPW": ("PWPER",),
+    "DIRPW": ("WWSDIR",),
+}
+
+
 def _is_surface_record(metadata: dict[str, str], description: str, element: str) -> bool:
     """One GRIB element on the ground or water surface (DSWRF, GUST, CAPE,
     the surface temperature, the sea ice and wave fields). The fetched files
@@ -460,7 +475,7 @@ def _is_surface_record(metadata: dict[str, str], description: str, element: str)
     the surface's own name rather than the word "surface", which the
     isobaric levels the same TMP element is fetched on also carry
     ("Isobaric surface")."""
-    if metadata.get("GRIB_ELEMENT", "").upper() != element:
+    if metadata.get("GRIB_ELEMENT", "").upper() not in (element, *_SURFACE_ELEMENT_ALIASES.get(element, ())):
         return False
     short_name = metadata.get("GRIB_SHORT_NAME", "").upper()
     searchable = " ".join(
@@ -472,6 +487,35 @@ def _is_surface_record(metadata: dict[str, str], description: str, element: str)
         ]
     ).lower()
     return short_name.endswith("-SFC") or 'sfc="' in searchable or "ground or water surface" in searchable
+
+
+def _is_ecmwf_total_cloud_cover(metadata: dict[str, str], description: str) -> bool:
+    """ECMWF ``tcc``: the ECMWF-local 0/6/192 on the ground surface — GDAL's
+    tables do not know it, so GRIB_ELEMENT is "unknown" and the comment
+    carries the raw triple, the way it does for ``tp``."""
+    if metadata.get("GRIB_ELEMENT", "").lower() != "unknown":
+        return False
+    short_name = metadata.get("GRIB_SHORT_NAME", "").upper()
+    comment = metadata.get("GRIB_COMMENT", "")
+    searchable = " ".join([comment, metadata.get("GRIB_LEVEL", ""), description]).lower()
+    return (short_name == "0-SFC" or "ground or water surface" in searchable) and "cat 6, subcat 192" in comment
+
+
+def _is_most_unstable_cape(metadata: dict[str, str], description: str) -> bool:
+    """ECMWF ``mucape``: the CAPE element departing from surface type 17,
+    the level of the most unstable parcel, which GDAL describes as such and
+    gives no short name of its own."""
+    if metadata.get("GRIB_ELEMENT", "").upper() != "CAPE":
+        return False
+    searchable = " ".join([metadata.get("GRIB_COMMENT", ""), metadata.get("GRIB_LEVEL", ""), description]).lower()
+    return "most unstable" in searchable or "mudl" in searchable
+
+
+def _is_interval_maximum_gust(metadata: dict[str, str], description: str) -> bool:
+    """ECMWF ``10fg``: the gust element on the 10 m surface (the maximum over
+    the interval ending at the frame); pgrb2's instantaneous gust sits on the
+    ground surface and is matched by :func:`_is_surface_record`."""
+    return _is_ten_metre_wind(metadata, description, "GUST")
 
 
 def _is_entire_atmosphere_record(metadata: dict[str, str], description: str, element: str) -> bool:
@@ -601,9 +645,17 @@ def _band_matches(variable_id: str, metadata: dict[str, str], description: str) 
         return _is_surface_precipitation_rate(metadata, description)
     if variable_id == "tp":
         return _is_total_precipitation(metadata, description)
-    if variable_id in ("dswrf", "gust", "cape", "vis", "tmpsfc", "icec", "icetk", "htsgw", "perpw", "dirpw"):
+    if variable_id == "gust":
+        return _is_surface_record(metadata, description, "GUST") or _is_interval_maximum_gust(metadata, description)
+    if variable_id == "cape":
+        return _is_surface_record(metadata, description, "CAPE") or _is_most_unstable_cape(metadata, description)
+    if variable_id in ("dswrf", "vis", "tmpsfc", "icec", "icetk", "htsgw", "perpw", "dirpw"):
         return _is_surface_record(metadata, description, variable_spec(variable_id).grib_element)
-    if variable_id in ("tcdc", "cref"):
+    if variable_id == "tcdc":
+        return _is_entire_atmosphere_record(metadata, description, "TCDC") or _is_ecmwf_total_cloud_cover(
+            metadata, description
+        )
+    if variable_id == "cref":
         return _is_entire_atmosphere_record(metadata, description, variable_spec(variable_id).grib_element)
     if variable_id in ("lcdc", "mcdc", "hcdc"):
         return _is_cloud_layer_record(metadata, description, variable_spec(variable_id).grib_element)

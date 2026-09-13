@@ -58,11 +58,23 @@ class BundleGroupTests(unittest.TestCase):
         self.assertEqual(groups, [(bundle_id,) for bundle_id in published_bundle_ids(source)])
 
     def test_the_matrix_flags_the_video_jobs(self) -> None:
+        matrix = assemble.bundle_group_matrix(source_spec("gfs"), 100)
+        flagged = {entry["group"]: entry["video"] for entry in matrix}
+        self.assertEqual({group for group, video in flagged.items() if video}, {"tmp2m", "prate"})
+        self.assertFalse(any(entry["eccodes"] for entry in matrix), "GFS repacks nothing")
+
+    def test_a_source_without_video_flags_no_job(self) -> None:
+        # sflux and ECMWF have switched the H.264 companion off, so no job of
+        # theirs installs ffmpeg, and the companion no longer weighs on the
+        # grouping: tmp2m, prate and dswrf each cost one plane.
+        for model in ("sflux", "ecmwf"):
+            with self.subTest(model=model):
+                source = source_spec(model)
+                self.assertFalse(source.video)
+                self.assertEqual(binconvert.video_variable_ids(source), frozenset())
+                matrix = assemble.bundle_group_matrix(source, 100)
+                self.assertFalse(any(entry["video"] for entry in matrix))
         matrix = assemble.bundle_group_matrix(source_spec("sflux"), 100)
-        self.assertEqual(
-            {entry["group"]: entry["video"] for entry in matrix},
-            {"tmp2m prate": True, "dswrf": True, "wind10m": False},
-        )
         self.assertEqual([entry["slug"] for entry in matrix], ["tmp2m-prate", "dswrf", "wind10m"])
         self.assertFalse(any(entry["eccodes"] for entry in matrix), "sflux repacks nothing")
 

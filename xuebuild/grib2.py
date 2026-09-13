@@ -171,15 +171,34 @@ def index_messages(path: Path) -> list[MessageInfo]:
     return messages
 
 
-def _matches(spec: VariableSpec, message: MessageInfo) -> bool:
+def _matching_unit(spec: VariableSpec, message: MessageInfo) -> str | None:
+    """The GDAL unit of ``message`` when it carries ``spec``'s quantity —
+    under the registered identity or one of its alias triples (the same
+    surface, the same statistical process), or under one of its whole
+    alternate identities — and None when it does not. The unit is the
+    identity's own: an alternate may spell it differently (ECMWF's cloud
+    cover fraction)."""
     triple = (message.discipline, message.parameter_category, message.parameter_number)
-    if triple != (spec.grib2_discipline, spec.grib2_category, spec.grib2_number) and triple not in spec.grib2_aliases:
-        return False
-    if message.level_type != spec.grib2_level_type:
-        return False
-    if spec.grib2_level_value is not None and message.level_value != spec.grib2_level_value:
-        return False
-    return message.statistical_process == spec.grib2_statistical
+    if (
+        (triple == (spec.grib2_discipline, spec.grib2_category, spec.grib2_number) or triple in spec.grib2_aliases)
+        and message.level_type == spec.grib2_level_type
+        and (spec.grib2_level_value is None or message.level_value == spec.grib2_level_value)
+        and message.statistical_process == spec.grib2_statistical
+    ):
+        return spec.gdal_unit
+    for alternate in spec.grib2_alternates:
+        if (
+            triple == alternate.triple
+            and message.level_type == alternate.level_type
+            and (alternate.level_value is None or message.level_value == alternate.level_value)
+            and message.statistical_process == alternate.statistical
+        ):
+            return alternate.gdal_unit or spec.gdal_unit
+    return None
+
+
+def _matches(spec: VariableSpec, message: MessageInfo) -> bool:
+    return _matching_unit(spec, message) is not None
 
 
 def inspect_grib_fast(
@@ -192,7 +211,8 @@ def inspect_grib_fast(
 
     Mirrors :func:`xue.gdal.inspect_grib_multi`: variables in ``optional_ids``
     may be absent, more than one match is an error. Units are the fixed
-    GDAL-normalized strings from the variable table (validated against a real
+    GDAL-normalized strings from the variable table — the identity's own, or
+    the alternate's the record matched under (validated against a real
     gdalinfo pass once per run by the converter)."""
     if not path.is_file():
         raise ConversionError(f"GRIB input does not exist: {path}")
@@ -211,6 +231,8 @@ def inspect_grib_fast(
         delta = (message.valid_time - message.reference_time).total_seconds()
         if delta < 0 or delta % 3600:
             raise ConversionError(f"forecast time is not a non-negative whole hour in {path}")
+        unit = _matching_unit(spec, message)
+        assert unit is not None
         frames[variable_id] = SourceFrame(
             path,
             message.band,
@@ -218,6 +240,6 @@ def inspect_grib_fast(
             message.reference_time,
             message.valid_time,
             int(delta),
-            spec.gdal_unit,
+            unit,
         )
     return frames

@@ -25,6 +25,35 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
+class RecordAlternate:
+    """Another record the same quantity arrives as at another centre, when
+    it differs from the registered identity in more than the parameter
+    number: another fixed surface (ECMWF's most-unstable CAPE departs from
+    surface type 17, its skin temperature is 0/0/17 with no surface value),
+    a statistical product (its ``10fg`` is the maximum gust over the
+    interval ending at the frame), a unit GDAL spells differently (its
+    ``tcc`` is a 0–1 fraction). Accepted when matching a record and never
+    written: the primary identity is what a bundle declares, and a chart of
+    the quantity is the same chart."""
+
+    discipline: int
+    category: int
+    number: int
+    level_type: int
+    level_value: float | None = None
+    """As :attr:`VariableSpec.grib2_level_value`: None accepts any."""
+    statistical: int | None = None
+    """As :attr:`VariableSpec.grib2_statistical`: 2 for a maximum."""
+    gdal_unit: str = ""
+    """The unit GDAL reports for this record when it differs from the
+    primary's (:attr:`VariableSpec.gdal_unit`); empty for the same."""
+
+    @property
+    def triple(self) -> tuple[int, int, int]:
+        return (self.discipline, self.category, self.number)
+
+
+@dataclass(frozen=True)
 class VariableSpec:
     id: str
     label: str
@@ -44,6 +73,12 @@ class VariableSpec:
     ecmwf_param: str = ""
     """The ``param`` value in ECMWF open data .index lines, empty when the
     variable is not fetched from ECMWF."""
+    ecmwf_alternate_params: tuple[str, ...] = ()
+    """Other ``param`` values the same field goes by at other steps of an
+    ECMWF run, tried when :attr:`ecmwf_param` names no record: the gust is
+    ``10fg`` while the model post-processes hourly and ``10fg3`` where the
+    3-hourly steps beyond 90 hours carry a 3-hour maximum. The pair with
+    :attr:`alternate_index_fields` on the NOAA side."""
     grib2_discipline: int = 0
     grib2_category: int = -1
     grib2_number: int = -1
@@ -64,6 +99,10 @@ class VariableSpec:
     written: the primary triple is the identity a bundle declares. Centres
     disagree on a few codes — ECMWF encodes ``msl`` as plain pressure (0/3/0)
     on the mean sea level surface where NCEP writes PRMSL (0/3/1)."""
+    grib2_alternates: tuple[RecordAlternate, ...] = ()
+    """Whole other record identities the same quantity arrives as, when an
+    alias triple is not enough (:class:`RecordAlternate`): accepted when
+    matching, never written."""
     gdal_unit: str = ""
     """Unit string GDAL's GRIB driver reports for this record (it normalizes
     temperatures to Celsius); carried by header-indexed frames and
@@ -270,15 +309,22 @@ VARIABLES: dict[str, VariableSpec] = {
     ),
     # Three more surface diagnostics, each a GRIB record of its own with no
     # unit conversion. Registered from the GFS pgrb2 set; ECMWF open data
-    # carries neighbours rather than equivalents (``10fg`` is the interval
-    # *maximum* gust on the 10 m surface, ``tcc`` a 0–1 fraction) and needs
-    # its own matching rule before a source lists them, so ``ecmwf_param``
-    # stays empty here. Registration is not publication: no source ships
-    # these yet (sources.py), and publishing one means widening its input
-    # list and recutting tests/fixtures/gfs.*.crop.grib2 alongside.
+    # carries neighbours rather than equivalents, each accepted through a
+    # ``RecordAlternate`` so the two models publish one chart under one
+    # identity. Registration is not publication: which sources ship these
+    # is sources.py, and widening a source's input list means recutting its
+    # crop fixture under tests/fixtures/ alongside.
     #
     # Wind gust: the instantaneous surface gust diagnostic, 0/2/22 on the
-    # ground surface (the ``:GUST:surface:`` pgrb2 record).
+    # ground surface (the ``:GUST:surface:`` pgrb2 record). ECMWF's is the
+    # same parameter on the 10 m surface as the *maximum* over the interval
+    # ending at the frame (product template 4.8, statistical process 2):
+    # an hour while the model post-processes hourly, then the three- and
+    # six-hour steps' own length — and, under ``10fg3``, spelled
+    # differently for the 3-hourly steps beyond 90 hours. At the analysis
+    # the interval is empty and the record all zeros, so a source lists it
+    # under ``optional_at_analysis`` and the series starts at the first
+    # step, like a de-accumulated rate.
     "gust": VariableSpec(
         id="gust",
         label="Wind gust",
@@ -286,10 +332,13 @@ VARIABLES: dict[str, VariableSpec] = {
         value_range=(0, 127),
         grib_element="GUST",
         index_field=":GUST:surface:",
+        ecmwf_param="10fg",
+        ecmwf_alternate_params=("10fg3",),
         grib2_category=2,
         grib2_number=22,
         grib2_level_type=1,
         grib2_level_value=0.0,
+        grib2_alternates=(RecordAlternate(0, 2, 22, 103, 10.0, statistical=2),),
         gdal_unit="m/s",
     ),
     # Total cloud cover over the whole column, 0/6/1 on the entire atmosphere
@@ -297,6 +346,9 @@ VARIABLES: dict[str, VariableSpec] = {
     # beside an interval average of the same field; the ``ave fcst`` phrase
     # is excluded exactly as it is for prate, and the identity's missing
     # statistical process rejects the average at the GRIB2 header too.
+    # ECMWF ``tcc`` is the ECMWF-local 0/6/192 as a 0–1 fraction on the
+    # ground surface (GDAL reports its unit as "-"), which the converter
+    # scales to percent.
     "tcdc": VariableSpec(
         id="tcdc",
         label="Total cloud cover",
@@ -305,15 +357,20 @@ VARIABLES: dict[str, VariableSpec] = {
         grib_element="TCDC",
         index_field=":TCDC:entire atmosphere:",
         excluded_index_phrases=("ave fcst",),
+        ecmwf_param="tcc",
         grib2_category=6,
         grib2_number=1,
         grib2_level_type=10,
+        grib2_alternates=(RecordAlternate(0, 6, 192, 1, gdal_unit="-"),),
         gdal_unit="%",
     ),
     # Surface-based convective available potential energy, 0/7/6 on the
     # ground surface. pgrb2 also carries the 180 mb and 255 mb mixed-layer
     # variants on surface type 108; the ``:CAPE:surface:`` phrase and the
-    # surface type pick the surface-based one.
+    # surface type pick the surface-based one. ECMWF open data carries the
+    # most-unstable CAPE (``mucape``), the same parameter departing from
+    # surface type 17 (the level of the most unstable parcel): a different
+    # parcel, the same chart.
     "cape": VariableSpec(
         id="cape",
         label="Convective available potential energy",
@@ -321,10 +378,12 @@ VARIABLES: dict[str, VariableSpec] = {
         value_range=(0, 6350),
         grib_element="CAPE",
         index_field=":CAPE:surface:",
+        ecmwf_param="mucape",
         grib2_category=7,
         grib2_number=6,
         grib2_level_type=1,
         grib2_level_value=0.0,
+        grib2_alternates=(RecordAlternate(0, 7, 6, 17),),
         gdal_unit="J/kg",
     ),
     # Surface visibility, 0/19/0 on the ground surface. GRIB2 carries metres
@@ -430,7 +489,10 @@ VARIABLES: dict[str, VariableSpec] = {
     # proportion the codebook quantizes in percent, ice thickness (10/2/1)
     # in metres. The ice temperature beside them (10/2/8) is not registered:
     # pgrb2 writes it with a missing-value substitute GDAL reports under the
-    # wrong unit.
+    # wrong unit. ECMWF writes the skin temperature as its own parameter,
+    # 0/0/17 (``skt``, GDAL's SKINT), with no surface value, and the sea ice
+    # thickness (``sithick``) under the same 10/2/1 with no surface value
+    # and a bitmap over land; ECMWF open data carries no ice cover.
     "tmpsfc": VariableSpec(
         id="tmpsfc",
         label="Surface temperature",
@@ -438,10 +500,12 @@ VARIABLES: dict[str, VariableSpec] = {
         value_range=(-60, 67),
         grib_element="TMP",
         index_field=":TMP:surface:",
+        ecmwf_param="skt",
         grib2_category=0,
         grib2_number=0,
         grib2_level_type=1,
         grib2_level_value=0.0,
+        grib2_alternates=(RecordAlternate(0, 0, 17, 1),),
         gdal_unit="C",
     ),
     "icec": VariableSpec(
@@ -465,25 +529,32 @@ VARIABLES: dict[str, VariableSpec] = {
         value_range=(0, 5),
         grib_element="ICETK",
         index_field=":ICETK:surface:",
+        ecmwf_param="sithick",
         grib2_discipline=10,
         grib2_category=2,
         grib2_number=1,
         grib2_level_type=1,
         grib2_level_value=0.0,
+        grib2_alternates=(RecordAlternate(10, 2, 1, 1),),
         gdal_unit="m",
+        fill_values=(9999.0,),
     ),
-    # The GFS-Wave fields, read from the cycle's second file family
-    # (``sources.CompanionFile``, the ``wave/gridded`` product on the same
-    # 0.25° grid and axis): the significant height of combined wind waves
-    # and swell (10/0/3), the primary wave mean period (10/0/11) and the
-    # primary wave direction (10/0/10, degrees true, the direction the waves
-    # come *from*). All three sit on the water surface (type 1), which
+    # The wave fields, read from the cycle's second file family
+    # (``sources.CompanionFile``: GFS-Wave's ``wave/gridded`` product, the
+    # ``wave`` stream of ECMWF open data — both on the same 0.25° grid and
+    # axis as their atmosphere): the significant height of combined wind
+    # waves and swell (10/0/3), the primary wave mean period (10/0/11) and
+    # the primary wave direction (10/0/10, degrees true, the direction the
+    # waves come *from*). All three sit on the water surface (type 1), which
     # WAVEWATCH III writes with a surface value of 1 where every pgrb2
-    # surface record carries 0 — so the registry declares no value and the
-    # matchers accept either, and the metadata writes the surface as
-    # carrying none. The records carry a bitmap: land (and the ice edge)
-    # arrives as GDAL's nodata value, 9999, and becomes the bottom of each
-    # codebook.
+    # surface record carries 0 and ECMWF writes none — so the registry
+    # declares no value and the matchers accept any, and the metadata
+    # writes the surface as carrying none. ECMWF's period is the peak
+    # period (``pp1d``, 10/0/34) and its direction the mean direction of
+    # combined wind waves and swell (``mwd``, 10/0/14), each the nearest
+    # neighbour of the WAVEWATCH III quantity and accepted as an alias. The
+    # records carry a bitmap: land (and the ice edge) arrives as GDAL's
+    # nodata value, 9999, and becomes the bottom of each codebook.
     "htsgw": VariableSpec(
         id="htsgw",
         label="Significant wave height",
@@ -491,6 +562,7 @@ VARIABLES: dict[str, VariableSpec] = {
         value_range=(0, 25),
         grib_element="HTSGW",
         index_field=":HTSGW:surface:",
+        ecmwf_param="swh",
         grib2_discipline=10,
         grib2_category=0,
         grib2_number=3,
@@ -505,9 +577,11 @@ VARIABLES: dict[str, VariableSpec] = {
         value_range=(0, 25),
         grib_element="PERPW",
         index_field=":PERPW:surface:",
+        ecmwf_param="pp1d",
         grib2_discipline=10,
         grib2_category=0,
         grib2_number=11,
+        grib2_aliases=((10, 0, 34),),
         grib2_level_type=1,
         gdal_unit="s",
         fill_values=(9999.0,),
@@ -519,9 +593,11 @@ VARIABLES: dict[str, VariableSpec] = {
         value_range=(0, 358),
         grib_element="DIRPW",
         index_field=":DIRPW:surface:",
+        ecmwf_param="mwd",
         grib2_discipline=10,
         grib2_category=0,
         grib2_number=10,
+        grib2_aliases=((10, 0, 14),),
         grib2_level_type=1,
         gdal_unit="Degree true",
         fill_values=(9999.0,),

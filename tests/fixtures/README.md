@@ -65,6 +65,35 @@ gdal_translate -srcwin 1220 800 120 120 -of GRIB -co DATA_ENCODING=COMPLEX_PACKI
   /tmp/hrrr.f00.grib2 tests/fixtures/hrrr.2026091100.f000.crop.grib2
 ```
 
+`ecmwf.2026091212.f000.crop.grib2` and `ecmwf.2026091212.f003.crop.grib2`
+are an 80 by 80 cell window of the analysis and the first step of the
+2026-09-12 12:00 UTC ECMWF open data cycle, every record the ECMWF source
+fetches in `xuebuild/sources.py` order — the `oper` stream's, then the
+three `wave` stream records the fetcher appends: thirty-three records at
+the analysis, which carries no gust (the interval maximum is empty there
+and the source lists it as optional), thirty-four at F003. The window is
+the Kara Sea, 60E to 80E and 65N to 85N: sea ice (the ice thickness
+carries a bitmap over land), open water (the wave records' bitmap covers
+the ice and the land) and Novaya Zemlya and Yamal, so every fill rule meets
+real masked points, and the records that arrive under another identity
+than GFS's — the template-4.8 gust on the 10 m surface, the cloud cover as
+ECMWF-local 0/6/192 in a 0–1 fraction, the most-unstable CAPE on surface
+type 17, the skin temperature as 0/0/17, the peak wave period and mean
+wave direction under 10/0/34 and 10/0/14 — are matched by both matchers
+and built by both encoders (`tests/test_ecmwf.py`). The window sits away
+from the GFS crop's because the sea ice thickness is all bitmap there,
+which GDAL's GRIB writer cannot pack. Cut, after the fetcher had assembled
+and repacked the frames, with:
+
+```sh
+python -m xuebuild fetch --model ecmwf --run 2026091212 --hours 3 --raw-dir /tmp/raw
+for h in 000 003; do
+  gdal_translate -srcwin 960 20 80 80 -of GRIB -co DATA_ENCODING=COMPLEX_PACKING \
+    /tmp/raw/ecmwf.2026091212/ecmwf.2026091212.f$h.grib2 \
+    tests/fixtures/ecmwf.2026091212.f$h.crop.grib2
+done
+```
+
 # Xue fixtures
 
 `tests/prepare_bin_fixture.py` encodes the same cropped GRIB into per-variable

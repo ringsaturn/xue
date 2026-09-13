@@ -295,6 +295,17 @@ so any later addition is a new schema version. GRIB2's local-use ranges
 here — a local number is an ordinary number, and two of the variables below
 already use one.
 
+The identity written is the registered one, whatever record the encoder
+read. Centres disagree on how to write the same quantity — ECMWF encodes
+its mean sea level pressure as plain pressure on the mean sea level surface,
+its gust as an interval maximum on the 10 m surface, its skin temperature as
+a parameter of its own with no surface value — and the encoder's registry
+accepts such a record as an *alias* (another parameter number on the same
+surface) or an *alternate* (a whole other identity: surface, value,
+statistical process, unit) of the variable, so that GFS and ECMWF publish
+one chart under one `parameter` block. The table notes each such
+acceptance; none of them is ever written.
+
 The identities this pipeline produces are below. This is **not** an
 admission list: a decoder validates the shape of a `parameter` block, never
 its contents against this table, and a file naming a parameter that is not
@@ -311,19 +322,19 @@ no chart for.
 | `vgrd10m` | 0 / 2 / 3 | 103, 10 m | |
 | `dswrf` | 0 / 4 / 192 | 1, 0 | NCEP local parameter |
 | `cref` | 0 / 16 / 5 | 10, no value | Composite reflectivity, entire atmosphere — observed (the radar mosaic) or forecast (HRRR's `REFC`, NCEP-local 0 / 16 / 196, accepted on input and never written) |
-| `gust` | 0 / 2 / 22 | 1, 0 | Instantaneous surface wind gust |
-| `tcdc` | 0 / 6 / 1 | 10, no value | Total cloud cover, entire atmosphere; the instantaneous record, not the interval average |
-| `cape` | 0 / 7 / 6 | 1, 0 | Surface-based CAPE (not the mixed-layer variants on surface type 108) |
+| `gust` | 0 / 2 / 22 | 1, 0 | Instantaneous surface wind gust (GFS). ECMWF's `10fg` / `10fg3` — the same parameter on the 10 m surface (103, 10 m) as the *maximum* over the interval ending at the frame, product template 4.8 — is accepted on input under this identity and never written; on ECMWF the series starts at the first step |
+| `tcdc` | 0 / 6 / 1 | 10, no value | Total cloud cover, entire atmosphere; the instantaneous record, not the interval average. ECMWF's `tcc` — the ECMWF-local 0 / 6 / 192 on the ground surface, a 0–1 fraction — is accepted on input, scaled to percent, and never written |
+| `cape` | 0 / 7 / 6 | 1, 0 | Surface-based CAPE (not the mixed-layer variants on surface type 108). ECMWF's `mucape` — the same parameter departing from surface type 17, the most unstable parcel's level — is accepted on input and never written |
 | `lcdc` / `mcdc` / `hcdc` | 0 / 6 / 3, 0 / 6 / 4, 0 / 6 / 5 | 214 / 224 / 234, no value | Low / middle / high cloud cover, each its own parameter on its own layer surface; the instantaneous records |
 | `vis` | 0 / 19 / 0 | 1, 0 | Surface visibility, quantized in km |
 | `dpt2m` | 0 / 0 / 6 | 103, 2 m | 2 m dew point |
 | `aptmp2m` | 0 / 0 / 21 | 103, 2 m | NCEP's 2 m apparent temperature |
-| `tmpsfc` | 0 / 0 / 0 | 1, 0 | Surface (skin) temperature — the SST over water |
-| `icec` | 10 / 2 / 0 | 1, 0 | Sea ice cover, a 0–1 proportion quantized in percent |
-| `icetk` | 10 / 2 / 1 | 1, 0 | Sea ice thickness |
-| `htsgw` | 10 / 0 / 3 | 1, no value | Significant height of combined wind waves and swell (GFS-Wave); WAVEWATCH III writes the surface value as 1, so none is declared and either is accepted |
-| `perpw` | 10 / 0 / 11 | 1, no value | Primary wave mean period (GFS-Wave) |
-| `dirpw` | 10 / 0 / 10 | 1, no value | Primary wave direction, degrees true the waves come from (GFS-Wave); a record's 360 is reduced to 0 |
+| `tmpsfc` | 0 / 0 / 0 | 1, 0 | Surface (skin) temperature — the SST over water. ECMWF's `skt`, its own parameter 0 / 0 / 17 with no surface value, is accepted on input and never written |
+| `icec` | 10 / 2 / 0 | 1, 0 | Sea ice cover, a 0–1 proportion quantized in percent (GFS only) |
+| `icetk` | 10 / 2 / 1 | 1, 0 | Sea ice thickness; ECMWF's `sithick` carries no surface value and a bitmap over land (GDAL's 9999, the bottom of the codebook), and is accepted on input |
+| `htsgw` | 10 / 0 / 3 | 1, no value | Significant height of combined wind waves and swell (GFS-Wave, ECMWF `swh`); WAVEWATCH III writes the surface value as 1 and ECMWF none, so none is declared and any is accepted |
+| `perpw` | 10 / 0 / 11 | 1, no value | Primary wave mean period (GFS-Wave); ECMWF's peak period `pp1d`, 10 / 0 / 34, is the nearest neighbour and accepted on input under this identity |
+| `dirpw` | 10 / 0 / 10 | 1, no value | Primary wave direction, degrees true the waves come from (GFS-Wave); ECMWF's mean wave direction `mwd`, 10 / 0 / 14, is accepted the same way; a record's 360 is reduced to 0 |
 | `uwave` / `vwave` | 10 / 0 / 250, 10 / 0 / 251 | 1, no value | Wave vector components in metres: the significant wave height laid along the direction the waves travel, derived by the encoder from `htsgw` and `dirpw` as the wind's `(-h sin θ, -h cos θ)` — Xue-local parameter numbers |
 | `prmsl` | 0 / 3 / 1 | 101, no value | Mean sea level pressure, the quantity ECMWF calls `msl` and encodes as 0 / 3 / 0 on this surface, and HRRR writes as its MAPS reduction `MSLMA`, 0 / 3 / 198 — both accepted on input, never written (not NCEP's MSLET, 0 / 3 / 192) |
 | `hgt<level>` | 0 / 3 / 5 | 100, `<level>` hPa in Pa | Geopotential height, one variable per isobaric surface |
@@ -482,8 +493,8 @@ held byte-identical.
 | `model` | `product` | Grid | Steps published | Notes |
 |---|---|---|---|---|
 | `GFS` | `pgrb2.0p25` | 1440 × 721, 0.25° | 1 h to f120, 3 h to f240 | All series include the analysis frame (f000). `prate` is an instantaneous rate at every step |
-| `ECMWF` | `ifs-0p25` | 1440 × 721, 0.25° | 3 h to 144 h, 6 h to 240 h | `prate` is de-accumulated from the run-total `tp`, so its series has no analysis frame and starts at `firstFrameOffset: 3` |
-| `GFS-SFLUX` | `sfluxgrb` | 3072 × 1536 Gaussian, ~13 km | 1 h to f120, 3 h to f240 | `prate` is de-averaged from window-cumulative records and starts at `firstFrameOffset: 1`; the only source shipping `dswrf` |
+| `ECMWF` | `ifs-0p25` | 1440 × 721, 0.25° | 3 h to 144 h, 6 h to 240 h | `prate` is de-accumulated from the run-total `tp`, so its series has no analysis frame and starts at `firstFrameOffset: 3`; so does `gust`, whose record (the maximum over the interval ending at the frame) is empty at the analysis. Its wave fields come from the cycle's `wave` stream; ships no H.264 companions |
+| `GFS-SFLUX` | `sfluxgrb` | 3072 × 1536 Gaussian, ~13 km | 1 h to f120, 3 h to f240 | `prate` is de-averaged from window-cumulative records and starts at `firstFrameOffset: 1`; the only source shipping `dswrf`; ships no H.264 companions |
 | `HRRR` | `wrfsfc` | 2441 × 1051, 0.03°, regional (134.10 W – 60.90 W, 52.62 N – 21.12 N) | 1 h to f18 | A new cycle every hour. Resampled by the encoder from the model's 3 km Lambert conformal grid (see "Projected sources" below); the rectangle's corners the conic domain never covered repeat the nearest source cell. Its `prmsl` is the MAPS reduction and its `cref` the model's forecast reflectivity |
 | `CMA-RADAR` | `l3-mst-cref` | tile grid, 360/(256·2^z) degrees | 6 min, as published | Observations, not a forecast: `runTime` is the first observation and offsets count from it. The only one whose `unitSeconds` is not 3600; the axis lists its offsets wherever a publication was missed |
 

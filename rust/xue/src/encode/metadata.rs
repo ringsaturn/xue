@@ -82,13 +82,16 @@ fn variable_metadata(
 ) -> Result<Value> {
     let spec = variable_spec(variable_id)?;
     let mut parameter = spec.parameter_metadata();
-    if variable_id == "prate" && (source.accumulated_precipitation || source.averaged_precipitation)
+    if let Some((_, process)) = source
+        .statistical_processes
+        .iter()
+        .find(|(statistical_id, _)| *statistical_id == variable_id)
     {
-        // The published rate is the mean over the step, derived from the
-        // source's run-total accumulation (ECMWF) or window average (sflux) —
-        // a statistic over the interval, not the instantaneous field GFS
-        // pgrb2 carries under the same parameter.
-        parameter.insert("typeOfStatisticalProcessing".into(), json!(0));
+        // A statistic over the step, not the instantaneous field GFS pgrb2
+        // carries under the same parameter: the rate derived from a
+        // run-total accumulation (ECMWF) or a window average (sflux) is a
+        // mean, ECMWF's gust a maximum.
+        parameter.insert("typeOfStatisticalProcessing".into(), json!(process));
     }
     let mut block = Map::new();
     block.insert("numericId".into(), json!(numeric_id));

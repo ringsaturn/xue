@@ -156,16 +156,22 @@ class FetchTests(unittest.TestCase):
             patch("xuebuild.fetch.fetch_range", side_effect=fetch_range),
             patch("xuebuild.fetch.ecmwf_field_byte_range", return_value=ByteRange(0, 0)),
         ):
-            payload = _download_ecmwf_payload(run, 0, source_spec("ecmwf"))
+            payload = _download_ecmwf_payload(run, 3, source_spec("ecmwf"))
 
+        # Every input, the wave family's from its own stream, all from the
+        # mirror the frame settled on: the `oper` index of the throttled
+        # mirror, then that mirror's `oper` and `wave` indexes.
         self.assertEqual(payload, b"x" * len(source_spec("ecmwf").input_variable_ids))
-        self.assertEqual(len(requested_indexes), 2)
+        self.assertEqual(len(requested_indexes), 3)
+        self.assertTrue(requested_indexes[1].endswith("/oper/20260815000000-3h-oper-fc.index"))
+        self.assertTrue(requested_indexes[2].endswith("/wave/20260815000000-3h-wave-fc.index"))
         self.assertTrue(
             all(
                 "ecmwf-forecasts.s3.eu-central-1.amazonaws.com" in url
                 for url in requested_ranges
             )
         )
+        self.assertEqual(sum("-wave-fc.grib2" in url for url in requested_ranges), 3)
 
     def test_ecmwf_run_retries_only_the_failed_frame(self) -> None:
         run = GfsRun(datetime(2026, 8, 15, 0, tzinfo=UTC))

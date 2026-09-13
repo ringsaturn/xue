@@ -3,13 +3,14 @@ run directory, manifest identity, and time axis are named.
 
 The models share one output contract: whatever the source, the bundles carry
 the same data variable ids (tmp2m, prate, ugrd10m/vgrd10m, on sflux also
-dswrf, on GFS and ECMWF the pressure family and the upper-air fills, and on
-GFS alone — for now — the surface diagnostics, the vertical velocity, the
-850 hPa equivalent potential temperature and the ocean fields; on HRRR the
-forecast composite reflectivity under the radar mosaic's ``cref``) so the
-decoder and frontend never care which model produced them. A source may read
-more than one file family of a cycle (GFS pgrb2 plus GFS-Wave,
-:class:`CompanionFile`); the frame the converter sees is still one GRIB. A
+dswrf, on GFS and ECMWF the pressure family, the upper-air fills, the
+vertical velocity, the 850 hPa equivalent potential temperature and as much
+of the surface diagnostics and the ocean fields as each publishes; on HRRR
+the forecast composite reflectivity under the radar mosaic's ``cref``) so
+the decoder and frontend never care which model produced them. A source may
+read more than one file family of a cycle (GFS pgrb2 plus GFS-Wave, ECMWF
+``oper`` plus ``wave``, :class:`CompanionFile`); the frame the converter
+sees is still one GRIB. A
 source may be computed on a map projection (HRRR, Lambert conformal): its
 ``regrid`` says so, and the converter resamples every plane onto the regular
 grid the format describes (:mod:`xuebuild.reproject`).
@@ -36,13 +37,16 @@ class CompanionFile:
     """A second file family of the same cycle some of a source's inputs are
     read from. GFS publishes its wave model beside the atmosphere — one
     ``gfswave.tHHz.global.0p25.fFFF.grib2`` per forecast hour under
-    ``wave/gridded/``, on the pgrb2 grid and axis — and the fetcher appends
-    the records it needs from it to the frame's GRIB after the primary
-    file's, so downstream of the download a frame is still one file.
-    :mod:`xuebuild.fetch` knows each family's object name by ``id``."""
+    ``wave/gridded/``, on the pgrb2 grid and axis — and ECMWF open data its
+    own as the ``wave`` stream beside ``oper``, with an ``.index`` of its
+    own; the fetcher appends the records it needs from the family to the
+    frame's GRIB after the primary file's, so downstream of the download a
+    frame is still one file. :mod:`xuebuild.fetch` knows each family's
+    object name by ``id`` and source."""
 
     id: str
-    """The family: ``wave`` for GFS-Wave."""
+    """The family: ``wave`` for GFS-Wave and for the ``wave`` stream of
+    ECMWF open data — the same three quantities, so one id."""
     variable_ids: tuple[str, ...]
     """Which of the source's :attr:`SourceSpec.input_variable_ids` come
     from this family rather than the primary file, in assembly order."""
@@ -96,8 +100,18 @@ class SourceSpec:
     """Length of the averaging-window reset cycle for averaged precipitation."""
     optional_at_analysis: tuple[str, ...] = ()
     """Input variables absent from the analysis (f000) file — sflux carries no
-    PRATE record at f000, so the derived prate series starts at the first
-    real step (mirroring the ECMWF de-accumulated prate axis)."""
+    PRATE record at f000, ECMWF's gust is an interval maximum whose interval
+    is empty there — so the series built from one starts at the first real
+    step (mirroring the ECMWF de-accumulated prate axis)."""
+    statistical_processes: tuple[tuple[str, int], ...] = ()
+    """Published scalars whose values are a statistic over the step ending
+    at the frame rather than the instantaneous field their identity names,
+    with the code table 4.10 process: the rate a source derives by
+    de-accumulating or de-averaging is a mean (0), ECMWF's gust a maximum
+    (2). Written into the bundle's metadata as
+    ``typeOfStatisticalProcessing`` (docs/format.md), which is what tells a
+    reader that ECMWF's ``prate`` or ``gust`` and GFS's are not quite the
+    same field under the same parameter."""
     bundle_scalar_ids: tuple[str, ...] = ("tmp2m", "prate")
     """Scalar variables published as single-variable bundles, in manifest
     order."""
@@ -149,6 +163,15 @@ class SourceSpec:
     step before anything else reads them (:mod:`xuebuild.reproject`). The
     grid the bundles carry is then the regular one; ``production_grid`` and
     ``tile`` describe it, not the projected source."""
+    video: bool = True
+    """Whether the source's surface fields also ship their H.264 companion
+    (:data:`xuebuild.binconvert.VIDEO_VARIABLE_IDS`). The video path is an
+    opt-in the Xue decoder serves without, so a source turns it off where
+    the companion costs more than it is worth: ECMWF's is a quarter the
+    size of GFS's and never asked for, and a lossless encode of the sflux
+    Gaussian grid is a third of the run — 334 MB on top of 1.07 GB of
+    bundles — and the slowest step of its build. Read on the Python side
+    only, where ffmpeg runs; the native encoder writes no video."""
 
     @property
     def live(self) -> bool:
@@ -315,7 +338,18 @@ SOURCES: dict[str, SourceSpec] = {
         # open data pressure-level records (``levtype`` ``pl``), so the two
         # models offer one set of layers and switching between them never
         # loses one. ECMWF ``msl`` is matched through the registry's 0/3/0
-        # alias.
+        # alias. Then as much of the GFS surface, vertical-velocity and
+        # ocean set as the open data carries, each under its GFS identity
+        # through the registry's alternates: the interval-maximum gust
+        # (``10fg`` / ``10fg3``, all zeros at the analysis, hence optional
+        # there), the total cloud cover as a fraction, the most-unstable
+        # CAPE, the 2 m dew point, the vertical velocity on the three
+        # surfaces, the skin temperature and the sea ice thickness, and from
+        # the cycle's ``wave`` stream the significant wave height, the peak
+        # period and the mean direction — the direction an input only, like
+        # spfh850, carried by the derived wave vector. Not in the open data:
+        # the layer cloud covers, the visibility, the sea ice cover, and an
+        # apparent temperature record.
         input_variable_ids=(
             "tmp2m",
             "tp",
@@ -339,8 +373,23 @@ SOURCES: dict[str, SourceSpec] = {
             "vgrd850",
             "ugrd250",
             "vgrd250",
+            "gust",
+            "tcdc",
+            "cape",
+            "dpt2m",
+            "vvel850",
+            "vvel700",
+            "vvel500",
+            "tmpsfc",
+            "icetk",
+            "htsgw",
+            "perpw",
+            "dirpw",
         ),
         accumulated_precipitation=True,
+        companion_files=(CompanionFile(id="wave", variable_ids=("htsgw", "perpw", "dirpw")),),
+        optional_at_analysis=("gust",),
+        statistical_processes=(("prate", 0), ("gust", 2)),
         bundle_scalar_ids=(
             "tmp2m",
             "prate",
@@ -355,8 +404,21 @@ SOURCES: dict[str, SourceSpec] = {
             "rh850",
             "rh700",
             "rh500",
+            "gust",
+            "tcdc",
+            "cape",
+            "dpt2m",
+            "vvel850",
+            "vvel700",
+            "vvel500",
+            "thetae850",
+            "tmpsfc",
+            "icetk",
+            "htsgw",
+            "perpw",
         ),
-        bundle_vector_ids=("wind10m", "wind925", "wind850", "wind250", "qflux850"),
+        bundle_vector_ids=("wind10m", "wind925", "wind850", "wind250", "qflux850", "wave"),
+        video=False,
     ),
     # GFS surface flux files on the native ~13 km T1534 Gaussian grid
     # (3072x1536; GDAL reports a uniform geoTransform whose tiny latitude
@@ -374,8 +436,10 @@ SOURCES: dict[str, SourceSpec] = {
         accumulated_precipitation=False,
         averaged_precipitation=True,
         optional_at_analysis=("prate_ave",),
+        statistical_processes=(("prate", 0),),
         bundle_scalar_ids=("tmp2m", "prate", "dswrf"),
         bundle_vector_ids=("wind10m",),
+        video=False,
         production_grid=(3072, 1536),
         # 3072 x 1536 divides exactly into 32 x 16 = 512 tiles with no
         # clipped edge, at about the same 11-degree ground scale as the

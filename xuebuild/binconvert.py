@@ -134,8 +134,19 @@ def vector_input_ids(bundle_id: str) -> tuple[str, ...]:
 # The scalars that also get an H.264 companion: the surface fields the video
 # path was built for. It is an opt-in path (`?use_h264=true`), so the
 # upper-air fills ship bundles and posters only rather than cost the
-# scheduled build an ffmpeg pass per level.
+# scheduled build an ffmpeg pass per level — and a source can turn the
+# companion off altogether (`SourceSpec.video`), which is what
+# `video_variable_ids` reads.
 VIDEO_VARIABLE_IDS = frozenset({"tmp2m", "prate", "dswrf", "cref"})
+
+
+def video_variable_ids(source: SourceSpec) -> frozenset[str]:
+    """The scalars of one source that ship an H.264 companion: the surface
+    fields above, or none at all where the source has switched the video
+    path off."""
+    return VIDEO_VARIABLE_IDS if source.video else frozenset()
+
+
 # Precipitation and radar reflectivity move with weather systems, so temporal
 # differencing makes them larger, not smaller: their chunks stack the codes
 # RAW. Every linear-codebook field is smooth enough to chain against the
@@ -272,6 +283,19 @@ def bundle_input_ids(source: SourceSpec, bundle_id: str) -> tuple[str, ...]:
     if bundle_id == "prate":
         return (next(vid for vid in source.input_variable_ids if vid in PRECIPITATION_INPUT_IDS),)
     return (bundle_id,)
+
+
+def analysis_optional_ids(source: SourceSpec, scalar_ids: tuple[str, ...]) -> tuple[str, ...]:
+    """The published scalars of ``scalar_ids`` whose series has no analysis
+    frame: the precipitation rate a source derives by de-accumulating or
+    de-averaging, and any scalar read from a record the source lists under
+    ``optional_at_analysis``."""
+    return tuple(
+        variable_id
+        for variable_id in scalar_ids
+        if (variable_id == "prate" and (source.accumulated_precipitation or source.averaged_precipitation))
+        or any(input_id in source.optional_at_analysis for input_id in bundle_input_ids(source, variable_id))
+    )
 
 
 def series_lead_seconds(frames: dict[str, SourceFrame]) -> int:
@@ -519,6 +543,10 @@ def _convert_units(frame: SourceFrame, values: np.ndarray) -> np.ndarray:
     elif frame.variable_id == "icec":
         # GRIB2 carries sea ice cover as a 0–1 proportion; the codebook
         # quantizes percent.
+        values *= 100.0
+    elif frame.variable_id in ("tcdc", "lcdc", "mcdc", "hcdc") and frame.unit.strip().strip("[]()") != "%":
+        # Cloud cover: percent as pgrb2 carries it, or the 0–1 fraction
+        # ECMWF writes (GDAL spells that unit "-"), scaled up.
         values *= 100.0
     elif frame.variable_id == "dirpw":
         # A direction in degrees true: a record can carry 360, which is the
@@ -859,12 +887,13 @@ def _variable_metadata(variable_id: str, numeric_id: int, source: SourceSpec, pr
     in the bundle's variable list, assigned by :func:`build_metadata`."""
     spec = variable_spec(variable_id)
     parameter = spec.parameter_metadata()
-    if variable_id == "prate" and (source.accumulated_precipitation or source.averaged_precipitation):
-        # The published rate is the mean over the step, derived from the
-        # source's run-total accumulation (ECMWF) or window average (sflux) —
-        # a statistic over the interval, not the instantaneous field GFS
-        # pgrb2 carries under the same parameter.
-        parameter["typeOfStatisticalProcessing"] = 0
+    for statistical_id, process in source.statistical_processes:
+        if statistical_id == variable_id:
+            # A statistic over the step, not the instantaneous field GFS
+            # pgrb2 carries under the same parameter: the rate derived from
+            # a run-total accumulation (ECMWF) or a window average (sflux)
+            # is a mean, ECMWF's gust a maximum.
+            parameter["typeOfStatisticalProcessing"] = process
     return {
         "numericId": numeric_id,
         "id": variable_id,
@@ -1504,30 +1533,29 @@ def convert_bin(
     companion_variable_ids = tuple(
         variable_id for variable_id in scalar_variable_ids if variable_id not in PRESSURE_BUNDLE_IDS
     )
-    video_variable_ids = tuple(
-        variable_id for variable_id in companion_variable_ids if variable_id in VIDEO_VARIABLE_IDS
+    video_bundle_ids = tuple(
+        variable_id for variable_id in companion_variable_ids if variable_id in video_variable_ids(source)
     )
 
-    # Per-variable time axes. On derived-precipitation sources (ECMWF
-    # accumulations, sflux window averages) the rate has no data for the
-    # analysis frame — its interval would precede the run — so the prate
-    # series starts at the first real step and every prate artifact (bundle,
-    # variant, poster, video) carries its own shorter axis. All other
-    # variables keep the full run axis.
+    # Per-variable time axes. A variable with no data for the analysis frame
+    # starts at the first real step, and every artifact of it (bundle,
+    # variant, poster, video) carries its own shorter axis: the rate on a
+    # derived-precipitation source (ECMWF accumulations, sflux window
+    # averages), whose interval would precede the run, and any scalar whose
+    # record the source lists as optional at the analysis (ECMWF's gust, an
+    # interval maximum with an empty interval there). All other variables
+    # keep the full run axis.
     variable_offsets: dict[str, list[int]] = {variable_id: offsets for variable_id in encoded_variable_ids}
-    if (
-        "prate" in encoded_variable_ids
-        and (source.accumulated_precipitation or source.averaged_precipitation)
-        and len(offsets) > 1
-    ):
-        variable_offsets["prate"] = offsets[1:]
+    if len(offsets) > 1:
+        for variable_id in analysis_optional_ids(source, scalar_variable_ids):
+            variable_offsets[variable_id] = offsets[1:]
 
     # Optional per-variable WebCodecs video artifacts.
     # Best-effort: a missing ffmpeg or an encode failure just skips that
     # variable's artifact, Xue remains the universal fallback.
     video_reports: dict[str, dict[str, Any]] = {}
     if not skip_video:
-        for variable_id in video_variable_ids:
+        for variable_id in video_bundle_ids:
             try:
                 video_artifact = encode_variable_video(
                     codes_by_offset, variable_offsets[variable_id], variable_id, width=grid.width, height=grid.height

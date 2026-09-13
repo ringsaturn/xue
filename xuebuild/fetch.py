@@ -156,13 +156,33 @@ def companion_object_url(run: GfsRun, forecast_hour: int, family: str) -> str:
     raise DownloadError(f"unknown companion file family: {family}")
 
 
+# The ECMWF open data stream one companion family is read from: the wave
+# model's output sits beside the atmosphere's ``oper`` stream under its own
+# directory, one file and one ``.index`` per step on the same 0.25° grid
+# and axis.
+ECMWF_COMPANION_STREAMS: dict[str, str] = {"wave": "wave"}
+
+
 def ecmwf_object_url(
-    run: GfsRun, forecast_hour: int, *, base_url: str | None = None
+    run: GfsRun, forecast_hour: int, *, base_url: str | None = None, stream: str = "oper"
 ) -> str:
-    """ECMWF open data with an unpadded ``-{h}h-`` step in the object name."""
-    filename = f"{run.date}{run.cycle}0000-{forecast_hour}h-oper-fc.grib2"
+    """ECMWF open data with an unpadded ``-{h}h-`` step in the object name:
+    the ``oper`` atmosphere by default, or a companion family's stream."""
+    filename = f"{run.date}{run.cycle}0000-{forecast_hour}h-{stream}-fc.grib2"
     base = (base_url or ECMWF_BASE_URLS[0]).rstrip("/")
-    return f"{base}/{run.date}/{run.cycle}z/ifs/0p25/oper/{filename}"
+    return f"{base}/{run.date}/{run.cycle}z/ifs/0p25/{stream}/{filename}"
+
+
+def ecmwf_companion_object_url(
+    run: GfsRun, forecast_hour: int, family: str, *, base_url: str | None = None
+) -> str:
+    """The object one companion family of the ECMWF source publishes for one
+    forecast hour, on one mirror."""
+    try:
+        stream = ECMWF_COMPANION_STREAMS[family]
+    except KeyError:
+        raise DownloadError(f"unknown ECMWF companion file family: {family}") from None
+    return ecmwf_object_url(run, forecast_hour, base_url=base_url, stream=stream)
 
 
 def model_object_url(run: GfsRun, forecast_hour: int, model: str) -> str:
@@ -312,12 +332,17 @@ def _run_is_complete(
             urls += [companion_object_url(run, 0, companion.id), companion_object_url(run, hours, companion.id)]
         return all(exists(url) for url in urls)
 
+    # Both ends of every family, on one mirror: the wave stream lands on
+    # its own schedule, and a run is complete only when it is there too.
     transient_error: DownloadError | None = None
     for base_url in ECMWF_BASE_URLS:
+        urls = [ecmwf_object_url(run, 0, base_url=base_url), ecmwf_object_url(run, hours, base_url=base_url)]
+        for companion in source_spec(model).companion_files:
+            urls += [
+                ecmwf_companion_object_url(run, hour, companion.id, base_url=base_url) for hour in (0, hours)
+            ]
         try:
-            if exists(ecmwf_object_url(run, 0, base_url=base_url)) and exists(
-                ecmwf_object_url(run, hours, base_url=base_url)
-            ):
+            if all(exists(url) for url in urls):
                 return True
         except DownloadError as exc:
             transient_error = exc
@@ -505,26 +530,51 @@ def _download_hrrr_payload(
     raise DownloadError(f"no HRRR mirror has run {run.id} f{forecast_hour:02d}: " + ", ".join(missing))
 
 
+def _download_ecmwf_records(url: str, variable_ids: tuple[str, ...]) -> bytes:
+    """The requested records of one ECMWF open data object, located through
+    its ``.index`` sidecar and fetched as byte ranges, in the order given."""
+    if not variable_ids:
+        return b""
+    index_text = fetch_text(url.removesuffix(".grib2") + ".index")
+    byte_ranges = []
+    for variable_id in variable_ids:
+        variable = VARIABLES[variable_id]
+        levtype, levelist = ecmwf_level_selector(variable)
+        byte_ranges.append(
+            ecmwf_field_byte_range(
+                index_text,
+                variable.ecmwf_param,
+                levtype=levtype,
+                levelist=levelist,
+                alternate_params=variable.ecmwf_alternate_params,
+            )
+        )
+    return b"".join(fetch_range(url, byte_range) for byte_range in byte_ranges)
+
+
 def _download_ecmwf_payload(
     run: GfsRun, forecast_hour: int, spec: SourceSpec, input_ids: tuple[str, ...] | None = None
 ) -> bytes:
+    """One frame's GRIB from the first mirror that serves the whole of it:
+    the ``oper`` records, then each companion family's from its own stream
+    — so a frame narrowed to one family's variables touches only that
+    family's object, as on the NOAA side."""
     errors: list[str] = []
+    wanted = _frame_variable_ids(spec, forecast_hour, input_ids)
     for base_url in ECMWF_BASE_URLS:
-        url = ecmwf_object_url(run, forecast_hour, base_url=base_url)
         try:
-            index_text = fetch_text(url.removesuffix(".grib2") + ".index")
-            byte_ranges = []
-            for variable_id in _frame_variable_ids(spec, forecast_hour, input_ids):
-                variable = VARIABLES[variable_id]
-                levtype, levelist = ecmwf_level_selector(variable)
-                byte_ranges.append(
-                    ecmwf_field_byte_range(
-                        index_text, variable.ecmwf_param, levtype=levtype, levelist=levelist
-                    )
+            payload = _download_ecmwf_records(
+                ecmwf_object_url(run, forecast_hour, base_url=base_url),
+                tuple(variable_id for variable_id in wanted if spec.companion_of(variable_id) is None),
+            )
+            for companion in spec.companion_files:
+                payload += _download_ecmwf_records(
+                    ecmwf_companion_object_url(run, forecast_hour, companion.id, base_url=base_url),
+                    tuple(variable_id for variable_id in wanted if variable_id in companion.variable_ids),
                 )
             # Index offsets are scoped to a particular replica. Restart the
             # whole frame on the next mirror if any range request fails.
-            return b"".join(fetch_range(url, byte_range) for byte_range in byte_ranges)
+            return payload
         except DownloadError as exc:
             errors.append(f"{base_url}: {exc}")
             LOG.warning(

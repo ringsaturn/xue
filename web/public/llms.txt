@@ -26,20 +26,24 @@ Facts worth getting right:
   rather than a forecast and appears only as historical cases.
 - Bundles published per run. GFS and ECMWF: `tmp2m`, `prate`, `prmsl`,
   `hgt850`, `hgt700`, `hgt500`, `hgt250`, `tmp925`, `tmp850`, `tmp500`,
-  `rh850`, `rh700`, `rh500`, and the vector pairs `wind10m`, `wind925`,
-  `wind850`, `wind250`, `qflux850`. GFS additionally: the surface
-  diagnostics `gust`, `tcdc`, `lcdc`, `mcdc`, `hcdc` (total / low / middle /
-  high cloud cover), `cape`, `vis`, `dpt2m`, `aptmp2m` (apparent
-  temperature), the vertical velocity `vvel850`, `vvel700`, `vvel500`, the
-  850 hPa equivalent potential temperature `thetae850`, and the ocean
-  fields `tmpsfc` (surface / skin temperature, the SST over water), `icec`
-  and `icetk` (sea ice cover and thickness), `htsgw` and `perpw`
-  (significant wave height and primary wave period, from the GFS-Wave file
-  of the same cycle; land is 0 in both), and the vector pair `wave` (the
-  height laid along the direction the waves travel, u/v in metres — the
-  viewer's wave layer; the primary direction is read from it as
-  `atan2(-u, -v)`, degrees true the waves come from, and is not published
-  as a scalar). SFLUX: `tmp2m`,
+  `rh850`, `rh700`, `rh500`, the surface diagnostics `gust`, `tcdc` (total
+  cloud cover), `cape`, `dpt2m`, the vertical velocity `vvel850`,
+  `vvel700`, `vvel500`, the 850 hPa equivalent potential temperature
+  `thetae850`, the ocean fields `tmpsfc` (surface / skin temperature, the
+  SST over water), `icetk` (sea ice thickness), `htsgw` and `perpw`
+  (significant wave height and primary wave period, from the wave model of
+  the same cycle — GFS-Wave, ECMWF's `wave` stream; land is 0 in both), and
+  the vector pairs `wind10m`, `wind925`, `wind850`, `wind250`, `qflux850`
+  and `wave` (the height laid along the direction the waves travel, u/v in
+  metres — the viewer's wave layer; the primary direction is read from it
+  as `atan2(-u, -v)`, degrees true the waves come from, and is not
+  published as a scalar). On ECMWF the gust is the maximum over the
+  interval ending at the frame (ECMWF `10fg`) and, like `prate`, has no
+  analysis frame; its CAPE is the most-unstable parcel's (`mucape`), its
+  wave period the peak period (`pp1d`). GFS additionally: `lcdc`, `mcdc`,
+  `hcdc` (low / middle / high cloud cover), `vis`, `aptmp2m` (apparent
+  temperature) and `icec` (sea ice cover), which the ECMWF open data does
+  not carry. SFLUX: `tmp2m`,
   `prate`, `dswrf`, `wind10m`. HRRR: `tmp2m`, `prate`, `prmsl`, `hgt850`,
   `hgt700`, `hgt500`, `tmp925`, `tmp850`, `tmp500`, `gust`, `tcdc`,
   `lcdc`, `mcdc`, `hcdc`, `cape`, `vis`, `dpt2m`, the forecast composite
@@ -95,7 +99,9 @@ fall back to defaults rather than fail, so a constructed link always opens.
   and `?tcmodel=gfs,ecmwf` narrow the official and model tracks drawn
   (absent means all); `?tcmembers=on` adds the ensemble members.
 - `?use_h264=true` — opt into the H.264 companion artifacts via WebCodecs
-  instead of the Xue decoder (a comparison path, not the default).
+  instead of the Xue decoder (a comparison path, not the default; GFS and
+  HRRR publish the companions for their surface fields, ECMWF and SFLUX
+  publish none).
 - `#map=<zoom>/<lat>/<lon>` — the view, in the fragment (MapLibre's named
   hash; the page keeps it current on every move). Without it the page opens
   on the dataset's own region: the world for a global model, the contiguous

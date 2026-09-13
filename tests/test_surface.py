@@ -107,19 +107,32 @@ class RegistryTests(unittest.TestCase):
             spec = variable_spec(two_metre)
             self.assertEqual((spec.grib2_category, spec.grib2_number, spec.grib2_level_type, spec.grib2_level_value), (0, number, 103, 2.0))
             self.assertEqual(spec.index_field, f":{spec.grib_element}:2 m above ground:")
+        # ECMWF open data carries the dew point under the same identity, and
+        # the gust, the total cloud cover and the CAPE as neighbours accepted
+        # through a whole alternate identity each; the layer cloud covers,
+        # the visibility and the apparent temperature it does not carry.
+        ecmwf_params = {"dpt2m": "2d", "gust": "10fg", "tcdc": "tcc", "cape": "mucape"}
         for variable_id in SURFACE_VARIABLE_IDS:
             spec = variable_spec(variable_id)
             self.assertIsNone(spec.grib2_statistical, f"{variable_id} is an instantaneous product")
-            # Only the dew point has an ECMWF equivalent under the same identity.
-            self.assertEqual(spec.ecmwf_param, "2d" if variable_id == "dpt2m" else "", variable_id)
+            self.assertEqual(spec.ecmwf_param, ecmwf_params.get(variable_id, ""), variable_id)
+            self.assertEqual(bool(spec.grib2_alternates), variable_id in ("gust", "tcdc", "cape"), variable_id)
+        self.assertEqual(variable_spec("gust").ecmwf_alternate_params, ("10fg3",))
+        gust, tcdc, cape = (variable_spec(variable_id).grib2_alternates[0] for variable_id in ("gust", "tcdc", "cape"))
+        self.assertEqual((gust.triple, gust.level_type, gust.level_value, gust.statistical), ((0, 2, 22), 103, 10.0, 2))
+        self.assertEqual((tcdc.triple, tcdc.level_type, tcdc.level_value, tcdc.gdal_unit), ((0, 6, 192), 1, None, "-"))
+        self.assertEqual((cape.triple, cape.level_type, cape.level_value), ((0, 7, 6), 17, None))
 
-    def test_gfs_publishes_them_and_the_other_sources_do_not_yet(self) -> None:
+    def test_gfs_publishes_them_all_and_ecmwf_what_the_open_data_carries(self) -> None:
         gfs = published_bundle_ids(source_spec("gfs"))
         for variable_id in SURFACE_VARIABLE_IDS:
             self.assertIn(variable_id, gfs)
             self.assertNotIn(variable_id, VECTOR_BUNDLES)
             self.assertNotIn(variable_id, VIDEO_VARIABLE_IDS)
-        for source in (source_spec("ecmwf"), source_spec("sflux"), source_spec("radar")):
+        ecmwf = published_bundle_ids(source_spec("ecmwf"))
+        for variable_id in SURFACE_VARIABLE_IDS:
+            self.assertEqual(variable_id in ecmwf, variable_id in ("gust", "tcdc", "cape", "dpt2m"), variable_id)
+        for source in (source_spec("sflux"), source_spec("radar")):
             published = published_bundle_ids(source)
             for variable_id in SURFACE_VARIABLE_IDS:
                 self.assertNotIn(variable_id, published, source.id)
@@ -165,14 +178,34 @@ class MatcherTests(unittest.TestCase):
             self.assertFalse(_band_matches(layer, {"GRIB_ELEMENT": element, "GRIB_SHORT_NAME": "0-EATM"}, ""))
         self.assertTrue(_band_matches("gust", {"GRIB_ELEMENT": "GUST", "GRIB_SHORT_NAME": "0-SFC"}, ""))
         self.assertTrue(_band_matches("gust", {"GRIB_ELEMENT": "GUST"}, '0[-] SFC="Ground or water surface"'))
-        self.assertFalse(_band_matches("gust", {"GRIB_ELEMENT": "GUST", "GRIB_SHORT_NAME": "10-HTGL"}, ""))
+        # ECMWF's interval-maximum gust sits on the 10 m surface.
+        self.assertTrue(_band_matches("gust", {"GRIB_ELEMENT": "GUST", "GRIB_SHORT_NAME": "10-HTGL"}, ""))
+        self.assertFalse(_band_matches("gust", {"GRIB_ELEMENT": "GUST", "GRIB_SHORT_NAME": "2-HTGL"}, ""))
         self.assertFalse(_band_matches("gust", {"GRIB_ELEMENT": "UGRD", "GRIB_SHORT_NAME": "0-SFC"}, ""))
+        self.assertFalse(_band_matches("gust", {"GRIB_ELEMENT": "UGRD", "GRIB_SHORT_NAME": "10-HTGL"}, ""))
         self.assertTrue(_band_matches("cape", {"GRIB_ELEMENT": "CAPE", "GRIB_SHORT_NAME": "0-SFC"}, ""))
         self.assertFalse(_band_matches("cape", {"GRIB_ELEMENT": "CAPE", "GRIB_SHORT_NAME": "18000-0-SPDL"}, ""))
+        # ECMWF's most-unstable CAPE departs from surface type 17, which GDAL
+        # gives no short name and describes by its name.
+        self.assertTrue(
+            _band_matches(
+                "cape",
+                {"GRIB_ELEMENT": "CAPE", "GRIB_SHORT_NAME": "0-"},
+                '0[-] ="Departure level of the most unstable parcel of air (MUDL)"',
+            )
+        )
+        self.assertFalse(_band_matches("cape", {"GRIB_ELEMENT": "CAPE", "GRIB_SHORT_NAME": "0-"}, ""))
         self.assertTrue(_band_matches("tcdc", {"GRIB_ELEMENT": "TCDC", "GRIB_SHORT_NAME": "0-EATM"}, ""))
         self.assertTrue(_band_matches("tcdc", {"GRIB_ELEMENT": "TCDC"}, '0[-] EATM="Entire atmosphere"'))
         self.assertFalse(_band_matches("tcdc", {"GRIB_ELEMENT": "TCDC", "GRIB_SHORT_NAME": "0-LCY"}, "low cloud layer"))
         self.assertFalse(_band_matches("tcdc", {"GRIB_ELEMENT": "CAPE", "GRIB_SHORT_NAME": "0-EATM"}, ""))
+        # ECMWF's tcc is the local 0/6/192 GDAL does not know, at the surface.
+        ecmwf_tcc = {"GRIB_ELEMENT": "unknown", "GRIB_SHORT_NAME": "0-SFC", "GRIB_COMMENT": "(prodType 0, cat 6, subcat 192) [-]"}
+        self.assertTrue(_band_matches("tcdc", ecmwf_tcc, '0[-] SFC="Ground or water surface"'))
+        self.assertFalse(_band_matches("tcdc", {**ecmwf_tcc, "GRIB_COMMENT": "(prodType 0, cat 1, subcat 193) [-]"}, ""))
+        self.assertFalse(_band_matches("tp", ecmwf_tcc, '0[-] SFC="Ground or water surface"'))
+        self.assertEqual(raster_expression("tcdc", "-"), "maximum(0,minimum(100,A*100))")
+        self.assertEqual(raster_expression("tcdc", "%"), "maximum(0,minimum(100,A))")
 
     def test_units_are_accepted_as_gdal_reports_them(self) -> None:
         for variable_id in SURFACE_VARIABLE_IDS:

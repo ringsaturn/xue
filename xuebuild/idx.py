@@ -95,7 +95,12 @@ def target_byte_range(text: str, file_size: int | None = None) -> ByteRange:
 
 
 def ecmwf_field_byte_range(
-    text: str, param: str, *, levtype: str = "sfc", levelist: str | None = None
+    text: str,
+    param: str,
+    *,
+    levtype: str = "sfc",
+    levelist: str | None = None,
+    alternate_params: tuple[str, ...] = (),
 ) -> ByteRange:
     """Byte range of one field in an ECMWF open data ``.index`` file.
 
@@ -103,9 +108,13 @@ def ecmwf_field_byte_range(
     and ``_length`` directly, so no next-record arithmetic is needed. A
     surface field is ``levtype`` ``sfc`` with no level; a pressure-level
     field is ``pl`` with its ``levelist`` in hectopascals, one line per
-    level, so the level must be named to pick one.
+    level, so the level must be named to pick one. When ``param`` names no
+    record, each of ``alternate_params`` is tried in turn — the same field
+    under the spelling another step of the run gives it (the gust's
+    ``10fg3``) — and the first that names exactly one record wins; a
+    spelling that names several is an error whichever it is.
     """
-    matches: list[ByteRange] = []
+    records: list[dict[str, object]] = []
     for line_number, raw_line in enumerate(text.splitlines(), start=1):
         line = raw_line.strip()
         if not line:
@@ -116,14 +125,22 @@ def ecmwf_field_byte_range(
             raise DownloadError(f"invalid ECMWF .index line {line_number}") from exc
         if not isinstance(record, dict):
             raise DownloadError(f"ECMWF .index line {line_number} is not an object")
-        if record.get("param") != param or record.get("levtype", levtype) != levtype:
-            continue
-        if levelist is not None and record.get("levelist") != levelist:
-            continue
-        offset, length = record.get("_offset"), record.get("_length")
-        if not isinstance(offset, int) or not isinstance(length, int) or offset < 0 or length <= 0:
-            raise DownloadError(f"invalid ECMWF .index byte range on line {line_number}")
-        matches.append(ByteRange(offset, offset + length - 1))
+        record["_line"] = line_number
+        records.append(record)
+    matches: list[ByteRange] = []
+    for candidate in (param, *alternate_params):
+        matches = []
+        for record in records:
+            if record.get("param") != candidate or record.get("levtype", levtype) != levtype:
+                continue
+            if levelist is not None and record.get("levelist") != levelist:
+                continue
+            offset, length = record.get("_offset"), record.get("_length")
+            if not isinstance(offset, int) or not isinstance(length, int) or offset < 0 or length <= 0:
+                raise DownloadError(f"invalid ECMWF .index byte range on line {record['_line']}")
+            matches.append(ByteRange(offset, offset + length - 1))
+        if matches:
+            break
     if len(matches) != 1:
         field = param if levelist is None else f"{param} at {levelist} hPa"
         raise DownloadError(f"expected exactly one {field} record in the ECMWF .index, found {len(matches)}")

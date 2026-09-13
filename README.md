@@ -146,9 +146,9 @@ F000 (65 frames); the page's timeline follows the active variable. The
 sflux source uses the native ~13 km Gaussian grid (3072 × 1536), derives
 precipitation from window-cumulative mean-rate records (also without F000,
 160 frames from F001), and additionally publishes the `dswrf` layer
-(instantaneous surface downward shortwave radiation, W/m²). The GFS source
-alone also publishes the surface diagnostics (wind gust, total and low /
-middle / high cloud cover, CAPE, visibility, 2 m dew point and apparent
+(instantaneous surface downward shortwave radiation, W/m²). GFS also
+publishes the surface diagnostics (wind gust, total and low / middle /
+high cloud cover, CAPE, visibility, 2 m dew point and apparent
 temperature), the 850 / 700 / 500 hPa vertical velocity, the 850 hPa
 equivalent potential temperature the converter derives from the temperature
 and specific humidity there, and the ocean fields: the surface (skin)
@@ -160,10 +160,20 @@ is complete only once its wave frames are up too, usually within minutes
 of the pgrb2 f240, occasionally twenty minutes after it), plus the wave
 vector `wave` the converter derives from the height and the primary
 direction: the height laid along the direction the waves travel, as a u/v
-pair, so the viewer draws the sea the way it draws the wind. `--hours` may
-be any hour on the model's published axis, so shorter uniform builds
-(e.g. `--hours 120`) still work, and their axis is a plain step rather than
-a listed one.
+pair, so the viewer draws the sea the way it draws the wind. ECMWF
+publishes as much of that set as its open data carries, each under the
+same identity as GFS's: the gust (`10fg`, the maximum over the interval
+ending at the frame rather than an instantaneous value — empty at the
+analysis, so like the precipitation its series starts at F003), the total
+cloud cover, CAPE (the most-unstable parcel's, `mucape`), the dew point,
+the three vertical velocities, the equivalent potential temperature, the
+skin temperature and the sea ice thickness, and from the cycle's `wave`
+stream the wave height, peak period and mean direction with the derived
+wave vector. Not in the open data, so GFS-only: the layer cloud covers,
+the visibility, the sea ice cover and the apparent temperature record.
+`--hours` may be any hour on the model's published axis, so shorter
+uniform builds (e.g. `--hours 120`) still work, and their axis is a plain
+step rather than a listed one.
 
 HRRR is the one regional source: NOAA's 3 km convection-allowing model
 over the contiguous United States, a new cycle every hour, hourly to F18,
@@ -181,8 +191,11 @@ covers, CAPE, visibility, dew point) and the forecast composite radar
 reflectivity under the mosaic's own `cref`.
 
 `build-bin` writes one `.xue` per scalar variable (plus a half-resolution
-`.half.xue` rendition, a first-frame poster, and a per-variable lossless
-H.264 companion; disable with `--skip-variants` / `--skip-video`). The
+`.half.xue` rendition, a first-frame poster, and — on GFS and HRRR — a
+per-variable lossless H.264 companion for the surface fields; disable with
+`--skip-variants` / `--skip-video`. ECMWF and sflux have the companion
+switched off in `xuebuild/sources.py`: the video path is opt-in and the
+sflux encode alone was a third of that run's bytes). The
 pressure family — mean sea level pressure and geopotential height on the
 standard isobaric surfaces, one bundle per level — gets neither a poster nor
 a video companion: the page draws it as contour lines, which need the exact

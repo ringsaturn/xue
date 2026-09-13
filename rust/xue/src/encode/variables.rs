@@ -11,6 +11,35 @@ use serde_json::{json, Map, Value};
 
 use crate::encode::errors::{EncodeError, Result};
 
+/// Another record the same quantity arrives as at another centre, when it
+/// differs from the registered identity in more than the parameter number:
+/// another fixed surface (ECMWF's most-unstable CAPE departs from surface
+/// type 17, its skin temperature is 0/0/17 with no surface value), a
+/// statistical product (its `10fg` is the maximum gust over the interval
+/// ending at the frame), a unit GDAL spells differently (its `tcc` is a 0–1
+/// fraction). Accepted when matching a record and never written. Mirrors
+/// `RecordAlternate` in `xuebuild/variables.py`.
+#[derive(Debug, Clone, Copy)]
+pub struct RecordAlternate {
+    pub discipline: u8,
+    pub category: u8,
+    pub number: u8,
+    pub level_type: u8,
+    /// As `VariableSpec::grib2_level_value`: `None` accepts any.
+    pub level_value: Option<f64>,
+    /// As `VariableSpec::grib2_statistical`: 2 for a maximum.
+    pub statistical: Option<u8>,
+    /// The unit GDAL reports for this record when it differs from the
+    /// primary's (`VariableSpec::gdal_unit`); empty for the same.
+    pub gdal_unit: &'static str,
+}
+
+impl RecordAlternate {
+    pub fn triple(&self) -> (u8, u8, u8) {
+        (self.discipline, self.category, self.number)
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct VariableSpec {
     pub id: &'static str,
@@ -38,6 +67,10 @@ pub struct VariableSpec {
     /// ECMWF encodes `msl` as plain pressure (0/3/0) on the mean sea level
     /// surface where NCEP writes PRMSL (0/3/1).
     pub grib2_aliases: &'static [(u8, u8, u8)],
+    /// Whole other record identities the same quantity arrives as, when an
+    /// alias triple is not enough ([`RecordAlternate`]): accepted when
+    /// matching, never written.
+    pub grib2_alternates: &'static [RecordAlternate],
     /// Unit string GDAL's GRIB driver reports for this record (it normalizes
     /// temperatures to Celsius).
     pub gdal_unit: &'static str,
@@ -154,6 +187,7 @@ macro_rules! isobaric_spec {
             grib2_level_value: Some($level_pa),
             grib2_statistical: None,
             grib2_aliases: &[],
+            grib2_alternates: &[],
             gdal_unit: $gdal_unit,
             fill_values: &[],
         }
@@ -231,6 +265,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_level_value: Some(2.0),
         grib2_statistical: None,
         grib2_aliases: &[],
+        grib2_alternates: &[],
         gdal_unit: "C",
         fill_values: &[],
     },
@@ -247,6 +282,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_level_value: Some(0.0),
         grib2_statistical: None,
         grib2_aliases: &[],
+        grib2_alternates: &[],
         gdal_unit: "kg/(m^2 s)",
         fill_values: &[],
     },
@@ -266,6 +302,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_level_value: None,
         grib2_statistical: Some(1),
         grib2_aliases: &[],
+        grib2_alternates: &[],
         gdal_unit: "-",
         fill_values: &[],
     },
@@ -284,6 +321,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_level_value: Some(0.0),
         grib2_statistical: Some(0),
         grib2_aliases: &[],
+        grib2_alternates: &[],
         gdal_unit: "kg/(m^2 s)",
         fill_values: &[],
     },
@@ -300,6 +338,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_level_value: Some(0.0),
         grib2_statistical: None,
         grib2_aliases: &[],
+        grib2_alternates: &[],
         gdal_unit: "W/(m^2)",
         fill_values: &[],
     },
@@ -316,6 +355,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_level_value: Some(10.0),
         grib2_statistical: None,
         grib2_aliases: &[],
+        grib2_alternates: &[],
         gdal_unit: "m/s",
         fill_values: &[],
     },
@@ -332,6 +372,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_level_value: Some(10.0),
         grib2_statistical: None,
         grib2_aliases: &[],
+        grib2_alternates: &[],
         gdal_unit: "m/s",
         fill_values: &[],
     },
@@ -353,17 +394,21 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_level_value: None,
         grib2_statistical: None,
         grib2_aliases: &[(0, 16, 196)],
+        grib2_alternates: &[],
         gdal_unit: "dB",
         fill_values: &[],
     },
     // Three more surface diagnostics, each a GRIB record of its own with no
     // unit conversion. Registered from the GFS pgrb2 set; ECMWF open data
-    // carries neighbours rather than equivalents (`10fg` is the interval
-    // *maximum* gust on the 10 m surface, `tcc` a 0–1 fraction). No source
-    // ships them yet (sources.rs).
+    // carries neighbours rather than equivalents, each accepted through a
+    // `RecordAlternate` so the two models publish one chart under one
+    // identity (see `xuebuild/variables.py`).
     //
     // Wind gust: the instantaneous surface gust diagnostic, 0/2/22 on the
-    // ground surface.
+    // ground surface. ECMWF's is the same parameter on the 10 m surface as
+    // the *maximum* over the interval ending at the frame (template 4.8,
+    // statistical process 2); all zeros at the analysis, so a source lists
+    // it as optional there.
     VariableSpec {
         id: "gust",
         label: "Wind gust",
@@ -377,13 +422,24 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_level_value: Some(0.0),
         grib2_statistical: None,
         grib2_aliases: &[],
+        grib2_alternates: &[RecordAlternate {
+            discipline: 0,
+            category: 2,
+            number: 22,
+            level_type: 103,
+            level_value: Some(10.0),
+            statistical: Some(2),
+            gdal_unit: "",
+        }],
         gdal_unit: "m/s",
         fill_values: &[],
     },
     // Total cloud cover over the whole column, 0/6/1 on the entire
     // atmosphere (surface type 10, no value); the identity's missing
     // statistical process is what rejects pgrb2's interval average of the
-    // same field.
+    // same field. ECMWF `tcc` is the ECMWF-local 0/6/192 as a 0–1 fraction
+    // on the ground surface (GDAL reports its unit as "-"), scaled to
+    // percent by the converter.
     VariableSpec {
         id: "tcdc",
         label: "Total cloud cover",
@@ -397,11 +453,22 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_level_value: None,
         grib2_statistical: None,
         grib2_aliases: &[],
+        grib2_alternates: &[RecordAlternate {
+            discipline: 0,
+            category: 6,
+            number: 192,
+            level_type: 1,
+            level_value: None,
+            statistical: None,
+            gdal_unit: "-",
+        }],
         gdal_unit: "%",
         fill_values: &[],
     },
     // Surface-based convective available potential energy, 0/7/6 on the
     // ground surface — not the mixed-layer variants on surface type 108.
+    // ECMWF open data carries the most-unstable CAPE (`mucape`), the same
+    // parameter departing from surface type 17.
     VariableSpec {
         id: "cape",
         label: "Convective available potential energy",
@@ -415,6 +482,15 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_level_value: Some(0.0),
         grib2_statistical: None,
         grib2_aliases: &[],
+        grib2_alternates: &[RecordAlternate {
+            discipline: 0,
+            category: 7,
+            number: 6,
+            level_type: 17,
+            level_value: None,
+            statistical: None,
+            gdal_unit: "",
+        }],
         gdal_unit: "J/kg",
         fill_values: &[],
     },
@@ -433,6 +509,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_level_value: Some(0.0),
         grib2_statistical: None,
         grib2_aliases: &[],
+        grib2_alternates: &[],
         gdal_unit: "m",
         fill_values: &[],
     },
@@ -451,6 +528,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_level_value: Some(2.0),
         grib2_statistical: None,
         grib2_aliases: &[],
+        grib2_alternates: &[],
         gdal_unit: "C",
         fill_values: &[],
     },
@@ -468,6 +546,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_level_value: Some(2.0),
         grib2_statistical: None,
         grib2_aliases: &[],
+        grib2_alternates: &[],
         gdal_unit: "C",
         fill_values: &[],
     },
@@ -487,6 +566,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_level_value: None,
         grib2_statistical: None,
         grib2_aliases: &[],
+        grib2_alternates: &[],
         gdal_unit: "%",
         fill_values: &[],
     },
@@ -503,6 +583,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_level_value: None,
         grib2_statistical: None,
         grib2_aliases: &[],
+        grib2_alternates: &[],
         gdal_unit: "%",
         fill_values: &[],
     },
@@ -519,6 +600,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_level_value: None,
         grib2_statistical: None,
         grib2_aliases: &[],
+        grib2_alternates: &[],
         gdal_unit: "%",
         fill_values: &[],
     },
@@ -526,7 +608,10 @@ pub const VARIABLES: &[VariableSpec] = &[
     // ground-or-water skin temperature, 0/0/0 on surface type 1 — the SST
     // over the sea — and the two sea ice fields of GRIB2's oceanographic
     // discipline (10): cover (10/2/0), a 0–1 proportion the codebook takes
-    // in percent, and thickness (10/2/1) in metres.
+    // in percent, and thickness (10/2/1) in metres. ECMWF writes the skin
+    // temperature as its own parameter, 0/0/17 (`skt`, GDAL's SKINT), with
+    // no surface value, and the ice thickness under the same 10/2/1 with no
+    // surface value and a bitmap over land.
     VariableSpec {
         id: "tmpsfc",
         label: "Surface temperature",
@@ -540,6 +625,15 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_level_value: Some(0.0),
         grib2_statistical: None,
         grib2_aliases: &[],
+        grib2_alternates: &[RecordAlternate {
+            discipline: 0,
+            category: 0,
+            number: 17,
+            level_type: 1,
+            level_value: None,
+            statistical: None,
+            gdal_unit: "",
+        }],
         gdal_unit: "C",
         fill_values: &[],
     },
@@ -556,6 +650,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_level_value: Some(0.0),
         grib2_statistical: None,
         grib2_aliases: &[],
+        grib2_alternates: &[],
         gdal_unit: "Proportion",
         fill_values: &[],
     },
@@ -572,15 +667,28 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_level_value: Some(0.0),
         grib2_statistical: None,
         grib2_aliases: &[],
+        grib2_alternates: &[RecordAlternate {
+            discipline: 10,
+            category: 2,
+            number: 1,
+            level_type: 1,
+            level_value: None,
+            statistical: None,
+            gdal_unit: "",
+        }],
         gdal_unit: "m",
-        fill_values: &[],
+        fill_values: &[9999.0],
     },
-    // The GFS-Wave fields, appended to the frame from the cycle's second
-    // file family: significant wave height (10/0/3), primary wave mean
-    // period (10/0/11) and direction (10/0/10, degrees true, from). All on
-    // the water surface, which WAVEWATCH III writes with a value of 1 where
-    // pgrb2 writes 0 — so no value is declared and either is accepted. The
-    // records carry a bitmap: land arrives as GDAL's nodata value, 9999.
+    // The wave fields, appended to the frame from the cycle's second file
+    // family (GFS-Wave, or the `wave` stream of ECMWF open data):
+    // significant wave height (10/0/3), primary wave mean period (10/0/11)
+    // and direction (10/0/10, degrees true, from). All on the water
+    // surface, which WAVEWATCH III writes with a value of 1 where pgrb2
+    // writes 0 and ECMWF none — so no value is declared and any is
+    // accepted. ECMWF's peak period (`pp1d`, 10/0/34) and mean direction
+    // (`mwd`, 10/0/14) are the nearest neighbours of the WAVEWATCH III
+    // quantities and accepted as aliases. The records carry a bitmap: land
+    // arrives as GDAL's nodata value, 9999.
     VariableSpec {
         id: "htsgw",
         label: "Significant wave height",
@@ -594,6 +702,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_level_value: None,
         grib2_statistical: None,
         grib2_aliases: &[],
+        grib2_alternates: &[],
         gdal_unit: "m",
         fill_values: &[9999.0],
     },
@@ -609,7 +718,8 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_level_type: 1,
         grib2_level_value: None,
         grib2_statistical: None,
-        grib2_aliases: &[],
+        grib2_aliases: &[(10, 0, 34)],
+        grib2_alternates: &[],
         gdal_unit: "s",
         fill_values: &[9999.0],
     },
@@ -625,7 +735,8 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_level_type: 1,
         grib2_level_value: None,
         grib2_statistical: None,
-        grib2_aliases: &[],
+        grib2_aliases: &[(10, 0, 14)],
+        grib2_alternates: &[],
         gdal_unit: "Degree true",
         fill_values: &[9999.0],
     },
@@ -650,6 +761,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_level_value: None,
         grib2_statistical: None,
         grib2_aliases: &[],
+        grib2_alternates: &[],
         gdal_unit: "",
         fill_values: &[],
     },
@@ -666,6 +778,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_level_value: None,
         grib2_statistical: None,
         grib2_aliases: &[],
+        grib2_alternates: &[],
         gdal_unit: "",
         fill_values: &[],
     },
@@ -690,6 +803,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_level_value: None,
         grib2_statistical: None,
         grib2_aliases: &[(0, 3, 0), (0, 3, 198)],
+        grib2_alternates: &[],
         gdal_unit: "Pa",
         fill_values: &[],
     },
@@ -931,7 +1045,10 @@ mod tests {
                     assert_eq!(linear.minimum, f64::from(spec.value_range.0), "{variable_id}");
                 }
             }
-            assert_eq!(spec.fill_values, if wave { &[9999.0][..] } else { &[][..] }, "{variable_id}");
+            // The wave records carry a bitmap, and so does ECMWF's ice
+            // thickness (over land); pgrb2's never reaches the fill value.
+            let masked = wave || variable_id == "icetk";
+            assert_eq!(spec.fill_values, if masked { &[9999.0][..] } else { &[][..] }, "{variable_id}");
             assert_eq!(
                 spec.grib2_level_value.is_none(),
                 wave || derived,

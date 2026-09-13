@@ -78,6 +78,25 @@ pub fn theta_e_level(bundle_id: &str) -> Option<u32> {
     ISOBARIC_LEVELS_HPA.contains(&level).then_some(level)
 }
 
+/// The published scalars of `scalar_ids` whose series has no analysis frame:
+/// the precipitation rate a source derives by de-accumulating or
+/// de-averaging, and any scalar read from a record the source lists under
+/// `optional_at_analysis`. Mirrors `analysis_optional_ids` in
+/// `xuebuild/binconvert.py`.
+pub fn analysis_optional_ids<'a>(source: &SourceSpec, scalar_ids: &[&'a str]) -> Vec<&'a str> {
+    scalar_ids
+        .iter()
+        .copied()
+        .filter(|variable_id| {
+            (*variable_id == "prate"
+                && (source.accumulated_precipitation || source.averaged_precipitation))
+                || bundle_input_ids(source, variable_id)
+                    .iter()
+                    .any(|input_id| source.optional_at_analysis.contains(&input_id.as_str()))
+        })
+        .collect()
+}
+
 /// The source inputs a derived scalar is built from, or `None` for a scalar
 /// read from a record.
 pub fn derived_scalar_inputs(bundle_id: &str) -> Option<Vec<String>> {
@@ -505,6 +524,17 @@ fn convert_units(variable_id: &str, unit: &str, values: &mut [f64]) -> Result<()
         // GRIB2 carries sea ice cover as a 0–1 proportion; the codebook
         // quantizes percent.
         "icec" => values.iter_mut().for_each(|value| *value *= 100.0),
+        // Cloud cover: percent as pgrb2 carries it, or the 0–1 fraction
+        // ECMWF writes (GDAL spells that unit "-"), scaled up.
+        "tcdc" | "lcdc" | "mcdc" | "hcdc" => {
+            if unit
+                .trim()
+                .trim_matches(|character| "[]()".contains(character))
+                != "%"
+            {
+                values.iter_mut().for_each(|value| *value *= 100.0);
+            }
+        }
         // A direction in degrees true: a record can carry 360, which is the
         // codebook's 0 — reduce it there so the wrap never clamps. Every
         // value is non-negative here, so this is numpy's `mod`.
@@ -1502,19 +1532,20 @@ pub fn convert_bin(
         .filter(|id| !PRESSURE_BUNDLE_IDS.contains(id))
         .collect();
 
-    // Per-variable time axes. On derived-precipitation sources the rate has no
-    // data for the analysis frame — its interval would precede the run — so
-    // the prate series starts at the first real step and every prate artifact
-    // carries its own shorter axis.
+    // Per-variable time axes. A variable with no data for the analysis frame
+    // starts at the first real step, and every artifact of it carries its
+    // own shorter axis: the rate on a derived-precipitation source, whose
+    // interval would precede the run, and any scalar whose record the source
+    // lists as optional at the analysis (ECMWF's gust). Mirrors
+    // `analysis_optional_ids` in `xuebuild/binconvert.py`.
     let mut variable_offsets: BTreeMap<String, Vec<i64>> = encoded_variable_ids
         .iter()
         .map(|id| (id.clone(), offsets.clone()))
         .collect();
-    if encoded_variable_ids.iter().any(|id| id == "prate")
-        && (source.accumulated_precipitation || source.averaged_precipitation)
-        && offsets.len() > 1
-    {
-        variable_offsets.insert("prate".to_string(), offsets[1..].to_vec());
+    if offsets.len() > 1 {
+        for variable_id in analysis_optional_ids(source, &scalar_variable_ids) {
+            variable_offsets.insert(variable_id.to_string(), offsets[1..].to_vec());
+        }
     }
 
     // -- posters --------------------------------------------------------------

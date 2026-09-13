@@ -199,34 +199,58 @@ pub fn index_messages(path: &Path) -> Result<Vec<MessageInfo>> {
     Ok(messages)
 }
 
-fn matches(spec: &VariableSpec, message: &MessageInfo) -> bool {
+/// The GDAL unit of `message` when it carries `spec`'s quantity — under the
+/// registered identity or one of its alias triples (the same surface, the
+/// same statistical process), or under one of its whole alternate
+/// identities — and `None` when it does not. The unit is the identity's own:
+/// an alternate may spell it differently (ECMWF's cloud cover fraction).
+/// Mirrors `_matching_unit` in `xuebuild/grib2.py`.
+fn matching_unit(spec: &VariableSpec, message: &MessageInfo) -> Option<&'static str> {
     let triple = (
         message.discipline,
         message.parameter_category,
         message.parameter_number,
     );
-    if triple != (spec.grib2_discipline, spec.grib2_category, spec.grib2_number)
-        && !spec.grib2_aliases.contains(&triple)
-    {
-        return false;
+    let primary = (triple == (spec.grib2_discipline, spec.grib2_category, spec.grib2_number)
+        || spec.grib2_aliases.contains(&triple))
+        && message.level_type == spec.grib2_level_type
+        && spec
+            .grib2_level_value
+            .is_none_or(|expected| message.level_value == Some(expected))
+        && message.statistical_process == spec.grib2_statistical;
+    if primary {
+        return Some(spec.gdal_unit);
     }
-    if message.level_type != spec.grib2_level_type {
-        return false;
-    }
-    if let Some(expected) = spec.grib2_level_value {
-        if message.level_value != Some(expected) {
-            return false;
-        }
-    }
-    message.statistical_process == spec.grib2_statistical
+    spec.grib2_alternates
+        .iter()
+        .find(|alternate| {
+            triple == alternate.triple()
+                && message.level_type == alternate.level_type
+                && alternate
+                    .level_value
+                    .is_none_or(|expected| message.level_value == Some(expected))
+                && message.statistical_process == alternate.statistical
+        })
+        .map(|alternate| {
+            if alternate.gdal_unit.is_empty() {
+                spec.gdal_unit
+            } else {
+                alternate.gdal_unit
+            }
+        })
+}
+
+fn matches(spec: &VariableSpec, message: &MessageInfo) -> bool {
+    matching_unit(spec, message).is_some()
 }
 
 /// Locate every requested variable from the GRIB2 headers alone.
 ///
 /// Mirrors [`crate::encode::inspect::inspect_grib_multi`]: variables in `optional_ids`
 /// may be absent, more than one match is an error. Units are the fixed
-/// GDAL-normalized strings from the variable table, validated against a real
-/// GDAL pass once per run by the converter.
+/// GDAL-normalized strings from the variable table — the identity's own, or
+/// the alternate's the record matched under — validated against a real GDAL
+/// pass once per run by the converter.
 pub fn inspect_grib_fast(
     path: &Path,
     variable_ids: &[&str],
@@ -258,6 +282,7 @@ pub fn inspect_grib_fast(
             )));
         }
         let message = found[0];
+        let unit = matching_unit(spec, message).expect("found by matching");
         let delta = message.valid_time.unix_timestamp() - message.reference_time.unix_timestamp();
         if delta < 0 || delta % 3600 != 0 {
             return Err(EncodeError::conversion(format!(
@@ -274,7 +299,7 @@ pub fn inspect_grib_fast(
                 run_time: message.reference_time,
                 valid_time: message.valid_time,
                 lead_seconds: delta,
-                unit: spec.gdal_unit.to_string(),
+                unit: unit.to_string(),
             },
         ));
     }
@@ -283,7 +308,7 @@ pub fn inspect_grib_fast(
 
 #[cfg(test)]
 mod tests {
-    use super::{matches, MessageInfo};
+    use super::{matches, matching_unit, MessageInfo};
     use crate::encode::variables::variable_spec;
     use time::OffsetDateTime;
 
@@ -312,5 +337,35 @@ mod tests {
         assert!(matches(&prmsl, &message(3, 198, 101)));
         assert!(!matches(&prmsl, &message(3, 0, 1)));
         assert!(!matches(&prmsl, &message(3, 192, 101)));
+    }
+
+    /// An alternate is a whole identity: ECMWF's gust is the same parameter
+    /// on the 10 m surface as an interval maximum, its cloud cover the local
+    /// 0/6/192 at the ground under another unit, its skin temperature 0/0/17
+    /// with no surface value where pgrb2's declares 0 — and the primary's
+    /// surface value is still required of a record under the primary triple.
+    #[test]
+    fn an_alternate_matches_as_a_whole_identity_with_its_own_unit() {
+        let gust = variable_spec("gust").unwrap();
+        let mut maximum = message(2, 22, 103);
+        maximum.level_value = Some(10.0);
+        maximum.statistical_process = Some(2);
+        assert_eq!(matching_unit(&gust, &maximum), Some("m/s"));
+        maximum.statistical_process = None;
+        assert_eq!(matching_unit(&gust, &maximum), None);
+        let mut surface = message(2, 22, 1);
+        surface.level_value = Some(0.0);
+        assert_eq!(matching_unit(&gust, &surface), Some("m/s"));
+        surface.level_value = None;
+        assert_eq!(matching_unit(&gust, &surface), None);
+
+        let tcdc = variable_spec("tcdc").unwrap();
+        assert_eq!(matching_unit(&tcdc, &message(6, 1, 10)), Some("%"));
+        assert_eq!(matching_unit(&tcdc, &message(6, 192, 1)), Some("-"));
+        assert_eq!(matching_unit(&tcdc, &message(6, 192, 10)), None);
+
+        let tmpsfc = variable_spec("tmpsfc").unwrap();
+        assert_eq!(matching_unit(&tmpsfc, &message(0, 17, 1)), Some("C"));
+        assert_eq!(matching_unit(&tmpsfc, &message(0, 0, 1)), None);
     }
 }

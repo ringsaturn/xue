@@ -136,16 +136,16 @@ class VectorBundleTests(unittest.TestCase):
         self.assertNotIn("spfh850", published, "the specific humidity is an input only")
         self.assertEqual(bundle_input_ids(gfs, "qflux850"), ("spfh850", "ugrd850", "vgrd850"))
         # ECMWF ships the same upper-air layers from its pressure-level
-        # records, so a model switch never loses one; the surface
-        # diagnostics, the vertical velocity and the equivalent potential
-        # temperature are GFS-only for now.
+        # records, so a model switch never loses one — the vertical velocity
+        # and the equivalent potential temperature included — and in the
+        # same order.
         ecmwf = published_bundle_ids(source_spec("ecmwf"))
         self.assertEqual(
             [bundle_id for bundle_id in published if bundle_id in ecmwf],
             list(ecmwf),
         )
-        self.assertNotIn("vvel850", ecmwf)
-        self.assertNotIn("thetae850", ecmwf)
+        for bundle_id in ("vvel850", "vvel700", "vvel500", "thetae850"):
+            self.assertIn(bundle_id, ecmwf)
         self.assertIn("thetae850", published)
         self.assertEqual(bundle_input_ids(gfs, "thetae850"), ("tmp850", "spfh850"))
         # A listed vector bundle without its inputs is not published.

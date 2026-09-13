@@ -232,7 +232,19 @@ publishing data at the new version.**
   triple, the fixed surface, the metadata label and unit, plus the GRIB
   matching hints (element, `.idx` phrase and its alternates at another
   centre — HRRR's `MSLMA` under `prmsl`, `REFC` under `cref` — ECMWF
-  param). One entry per
+  param, and `ecmwf_alternate_params` where the open data spells one
+  field differently along the axis: the gust is `10fg` to 90 h and
+  `10fg3` on the 3-hourly steps beyond). Another centre's record is
+  accepted under a variable's identity two ways, both matched by the
+  GRIB2 header index and by GDAL's band metadata in both encoders and
+  never written: `grib2_aliases` (another triple on the same surface —
+  ECMWF `msl`, its `pp1d` / `mwd` under `perpw` / `dirpw`) and
+  `grib2_alternates` (a whole `RecordAlternate`: surface, value,
+  statistical process, GDAL unit — ECMWF's `10fg` as a template-4.8
+  maximum on the 10 m surface under `gust`, `tcc` as local 0/6/192 in a
+  0–1 fraction under `tcdc`, `mucape` on surface type 17 under `cape`,
+  `skt` 0/0/17 under `tmpsfc`, `sithick` with no surface value under
+  `icetk`). One entry per
   variable feeds both record matching and the schema v3 metadata block; it
   assigns no container id (see the delivery contract above). Some entries
   are *input-only*: ECMWF `tp` de-accumulates into `prate`, sflux
@@ -252,18 +264,29 @@ publishing data at the new version.**
   `binconvert.DERIVED_SCALARS` names its inputs (`tmp<level>`,
   `spfh<level>`), `derive_theta_e` is Bolton (1980) in a fixed operation
   order the native encoder repeats, and like a vapour flux bundle it ships
-  only when its inputs are fetched. GFS publishes all of these; ECMWF and
-  sflux do not yet. The **ocean set** (`ocean-registry.json`: `tmpsfc`
-  skin temperature / SST, `icec`, `icetk`, `htsgw`, `perpw`, `dirpw`) is
-  GFS-only too and brings two mechanisms: a source may read a second **file
-  family** of the same cycle (`SourceSpec.companion_files`, the `wave`
-  family = `gfswave.*.global.0p25.fFFF.grib2`, appended by the fetcher
-  after the pgrb2 records so a frame is still one GRIB — and a run is
-  complete only when its wave frames are up too, usually within minutes
-  of pgrb2 f240, occasionally 20 min after),
+  only when its inputs are fetched. GFS publishes all of these; ECMWF
+  publishes what its open data carries (`gust`, `tcdc`, `cape`, `dpt2m`,
+  the three `vvel`, `thetae850`, `tmpsfc`, `icetk`, `htsgw`, `perpw`,
+  `wave` — not `lcdc`/`mcdc`/`hcdc`, `vis`, `icec`, `aptmp2m`), in GFS
+  order, so a model switch keeps the layer; sflux stays at its four. The
+  ECMWF gust is empty at the analysis, so it is `optional_at_analysis`
+  there and `binconvert.analysis_optional_ids` (mirrored in `convert.rs`)
+  starts its series at the first step the way the de-accumulated `prate`
+  does — the rule is generic now, not prate's alone. The **ocean set**
+  (`ocean-registry.json`: `tmpsfc` skin temperature / SST, `icec`,
+  `icetk`, `htsgw`, `perpw`, `dirpw`) brings two mechanisms: a source may
+  read a second **file family** of the same cycle
+  (`SourceSpec.companion_files`, the `wave` family = GFS's
+  `gfswave.*.global.0p25.fFFF.grib2` beside `atmos/`, ECMWF's `wave`
+  stream beside `oper` with an `.index` of its own — `fetch.py` knows the
+  object by family id and source; appended by the fetcher after the
+  primary records so a frame is still one GRIB — and a run is complete
+  only when its wave frames are up too, usually within minutes of pgrb2
+  f240, occasionally 20 min after),
   and a record may not cover its grid (`VariableSpec.fill_values`: the
   wave bitmap's GDAL nodata 9999 becomes the codebook bottom before unit
-  conversion, in both encoders — the format has no bitmap). WAVEWATCH III
+  conversion, in both encoders — the format has no bitmap; ECMWF's
+  `sithick` carries one over land too). WAVEWATCH III
   packs as JPEG 2000, which the wheel's GDAL reads through the OpenJPEG
   `scripts/build-gdal-minimal.sh` links for that one purpose
   (`tests/fixtures/gfswave.*.jp2.crop.grib2` holds it to the reference
@@ -281,9 +304,11 @@ publishing data at the new version.**
   is fetched as an input only (released after the derivation, like
   `spfh850`), since a scalar direction is no chart and the vector carries
   it.
-  Widening a source's input list means recutting
-  `tests/fixtures/gfs.*.crop.grib2` (same run, same `-srcwin`) and
-  regenerating the registry fixtures.
+  Widening a source's input list means recutting its crop fixture —
+  `tests/fixtures/gfs.*.crop.grib2` (same run, same `-srcwin`), or the
+  two-frame `ecmwf.*.crop.grib2` pair over the Kara Sea that
+  `tests/test_ecmwf.py` matches both ways and builds through both
+  encoders — and regenerating the registry fixtures.
 - `fetch.py` → `idx.py` / `grib2.py` — byte-range fetches of exact GRIB
   records, one `.idx` + range set per file family; ECMWF open data is
   CCSDS-packed and is repacked to `grid_simple` with `grib_set` at fetch
@@ -294,7 +319,9 @@ publishing data at the new version.**
   pgrb2 siblings; `grid.rs` repeats the rule), cropping (`crop_grid`,
   showcase cases), unit conversion, de-accumulation / de-averaging,
   quantization, temporal grouping, bundle writing, half-res variants,
-  posters, H.264 companions, manifest entries.
+  posters, H.264 companions (for the surface fields of a source whose
+  `SourceSpec.video` is on — GFS and HRRR; ECMWF and sflux ship none, and
+  `bundle-groups` flags no ffmpeg job for them), manifest entries.
 - `quantize.py` / `temporal.py` / `binformat.py` — the format itself:
   codebooks, modulo-256 residual prediction, container read/write.
 - `manifest.py` — manifest and live-pointer construction *and validation*;

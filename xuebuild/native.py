@@ -32,7 +32,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from .binconvert import VIDEO_VARIABLE_IDS, published_bundle_ids
+from .binconvert import published_bundle_ids, video_variable_ids
 from .errors import ConversionError
 from .manifest import (
     REQUIRED_BIN_BUNDLE_VARIABLES,
@@ -41,7 +41,7 @@ from .manifest import (
     write_bin_manifest,
     write_latest_pointer,
 )
-from .sources import source_spec
+from .sources import SourceSpec, source_spec
 from .videoconvert import build_debug_playlist, encode_variable_video
 from .zstdcli import DEFAULT_LEVEL as DEFAULT_ZSTD_LEVEL
 
@@ -92,6 +92,7 @@ def _run_time(manifest: dict[str, Any]) -> datetime:
 
 
 def _video_reports(
+    source: SourceSpec,
     bundles: list[dict[str, Any]],
     output_dir: Path,
     module: Any,
@@ -112,11 +113,13 @@ def _video_reports(
             # The wind pair ships as one two-variable bundle. The video path is
             # per scalar plane, and the particle layer never takes it.
             continue
-        if variable_id not in VIDEO_VARIABLE_IDS:
-            # Only the surface fields get a companion. The pressure family is
-            # drawn as contour lines, which need the exact codes — an H.264
-            # approximation would move every line — and the upper-air fills
-            # are not worth an ffmpeg pass per level for an opt-in path.
+        if variable_id not in video_variable_ids(source):
+            # Only the surface fields get a companion, and only on a source
+            # that has not switched the video path off. The pressure family
+            # is drawn as contour lines, which need the exact codes — an
+            # H.264 approximation would move every line — and the upper-air
+            # fills are not worth an ffmpeg pass per level for an opt-in
+            # path.
             continue
         grid = reader.metadata["grid"]
         offsets = [int(offset) for offset in reader.frame_offsets]
@@ -323,7 +326,7 @@ def convert_bin(
 
     videos: dict[str, dict[str, Any]] = {}
     if not skip_video:
-        videos = _video_reports(report["bundles"], Path(output_dir), module)
+        videos = _video_reports(source, report["bundles"], Path(output_dir), module)
     report["videos"] = list(videos.values())
 
     if manifest_path is not None:

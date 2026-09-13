@@ -11,20 +11,24 @@ use crate::encode::errors::{EncodeError, Result};
 use crate::encode::reproject::Regrid;
 
 /// A second file family of the same cycle some of a source's inputs are read
-/// from — GFS-Wave beside the pgrb2 atmosphere. The fetcher
-/// (`xuebuild/fetch.py`) appends its records to the frame's GRIB after the
-/// primary file's, so the converter still sees one file per frame; the
-/// native encoder carries the table so the two registries stay one. Mirrors
-/// `CompanionFile` in `xuebuild/sources.py`.
+/// from — GFS-Wave beside the pgrb2 atmosphere, ECMWF's `wave` stream beside
+/// `oper`. The fetcher (`xuebuild/fetch.py`) appends its records to the
+/// frame's GRIB after the primary file's, so the converter still sees one
+/// file per frame; the native encoder carries the table so the two
+/// registries stay one. Mirrors `CompanionFile` in `xuebuild/sources.py`.
 #[derive(Debug, Clone, Copy)]
 pub struct CompanionFile {
-    /// The family: `wave` for GFS-Wave.
+    /// The family: `wave` for GFS-Wave and for the `wave` stream of ECMWF
+    /// open data.
     pub id: &'static str,
     /// Which of the source's `input_variable_ids` come from this family, in
     /// assembly order.
     pub variable_ids: &'static [&'static str],
 }
 
+/// Mirrors `SourceSpec` in `xuebuild/sources.py`, field for field but one:
+/// its `video` switch is read where ffmpeg runs, and the native encoder
+/// writes no video.
 #[derive(Debug, Clone, Copy)]
 pub struct SourceSpec {
     /// CLI / URL / directory id.
@@ -52,6 +56,12 @@ pub struct SourceSpec {
     pub average_window_hours: i64,
     /// Input variables absent from the analysis (f000) file.
     pub optional_at_analysis: &'static [&'static str],
+    /// Published scalars whose values are a statistic over the step ending
+    /// at the frame rather than the instantaneous field their identity
+    /// names, with the code table 4.10 process (0 mean, 2 maximum); written
+    /// as `typeOfStatisticalProcessing`. Mirrors `statistical_processes` in
+    /// `xuebuild/sources.py`.
+    pub statistical_processes: &'static [(&'static str, u8)],
     /// Scalar variables published as single-variable bundles, in manifest
     /// order.
     pub bundle_scalar_ids: &'static [&'static str],
@@ -164,6 +174,7 @@ pub const SOURCES: &[SourceSpec] = &[
         averaged_precipitation: false,
         average_window_hours: 6,
         optional_at_analysis: &[],
+        statistical_processes: &[],
         bundle_scalar_ids: &[
             "tmp2m", "prate", "prmsl", "hgt850", "hgt700", "hgt500", "hgt250", "tmp925", "tmp850",
             "tmp500", "rh850", "rh700", "rh500", "gust", "tcdc", "lcdc", "mcdc", "hcdc", "cape",
@@ -186,21 +197,37 @@ pub const SOURCES: &[SourceSpec] = &[
         // The same pressure family and upper-air fills as GFS, from the open
         // data pressure-level records, so the two models offer one set of
         // layers. ECMWF `msl` is matched through the registry's 0/3/0 alias.
+        // Then as much of the GFS surface, vertical-velocity and ocean set
+        // as the open data carries, each under its GFS identity through the
+        // registry's alternates: the interval-maximum gust (all zeros at the
+        // analysis, hence optional there), the total cloud cover as a
+        // fraction, the most-unstable CAPE, the 2 m dew point, the vertical
+        // velocity on three surfaces, the skin temperature and the sea ice
+        // thickness, and from the cycle's `wave` stream the wave height,
+        // peak period and mean direction — the direction an input only,
+        // carried by the derived wave vector. Mirrors `xuebuild/sources.py`.
         input_variable_ids: &[
             "tmp2m", "tp", "ugrd10m", "vgrd10m", "prmsl", "hgt850", "hgt700", "hgt500", "hgt250",
             "tmp925", "tmp850", "tmp500", "rh850", "rh700", "rh500", "spfh850", "ugrd925",
-            "vgrd925", "ugrd850", "vgrd850", "ugrd250", "vgrd250",
+            "vgrd925", "ugrd850", "vgrd850", "ugrd250", "vgrd250", "gust", "tcdc", "cape",
+            "dpt2m", "vvel850", "vvel700", "vvel500", "tmpsfc", "icetk", "htsgw", "perpw",
+            "dirpw",
         ],
-        companion_files: &[],
+        companion_files: &[CompanionFile {
+            id: "wave",
+            variable_ids: &["htsgw", "perpw", "dirpw"],
+        }],
         accumulated_precipitation: true,
         averaged_precipitation: false,
         average_window_hours: 6,
-        optional_at_analysis: &[],
+        optional_at_analysis: &["gust"],
+        statistical_processes: &[("prate", 0), ("gust", 2)],
         bundle_scalar_ids: &[
             "tmp2m", "prate", "prmsl", "hgt850", "hgt700", "hgt500", "hgt250", "tmp925", "tmp850",
-            "tmp500", "rh850", "rh700", "rh500",
+            "tmp500", "rh850", "rh700", "rh500", "gust", "tcdc", "cape", "dpt2m", "vvel850",
+            "vvel700", "vvel500", "thetae850", "tmpsfc", "icetk", "htsgw", "perpw",
         ],
-        bundle_vector_ids: &["wind10m", "wind925", "wind850", "wind250", "qflux850"],
+        bundle_vector_ids: &["wind10m", "wind925", "wind850", "wind250", "qflux850", "wave"],
         production_grid: (1440, 721),
         tile: (48, 52),
         regrid: None,
@@ -220,6 +247,7 @@ pub const SOURCES: &[SourceSpec] = &[
         averaged_precipitation: true,
         average_window_hours: 6,
         optional_at_analysis: &["prate_ave"],
+        statistical_processes: &[("prate", 0)],
         bundle_scalar_ids: &["tmp2m", "prate", "dswrf"],
         bundle_vector_ids: &["wind10m"],
         production_grid: (3072, 1536),
@@ -252,6 +280,7 @@ pub const SOURCES: &[SourceSpec] = &[
         averaged_precipitation: false,
         average_window_hours: 6,
         optional_at_analysis: &[],
+        statistical_processes: &[],
         bundle_scalar_ids: &[
             "tmp2m", "prate", "prmsl", "hgt850", "hgt700", "hgt500", "tmp925", "tmp850", "tmp500",
             "gust", "tcdc", "lcdc", "mcdc", "hcdc", "cape", "vis", "dpt2m", "cref",
@@ -278,6 +307,7 @@ pub const SOURCES: &[SourceSpec] = &[
         averaged_precipitation: false,
         average_window_hours: 6,
         optional_at_analysis: &[],
+        statistical_processes: &[],
         bundle_scalar_ids: &["cref"],
         bundle_vector_ids: &[],
         // Tile-grid dependent: the file says what it covers, and nothing here
@@ -316,22 +346,38 @@ mod tests {
 
     #[test]
     fn the_wave_fields_come_from_the_companion_family() {
-        let gfs = source_spec("gfs").expect("gfs");
-        let [wave] = gfs.companion_files else { panic!("one companion family") };
-        assert_eq!(wave.id, "wave");
-        for variable_id in wave.variable_ids {
-            assert!(gfs.input_variable_ids.contains(variable_id), "{variable_id} is fetched");
-            // The direction is an input only: it ships inside the wave
-            // vector derived from it, not as a scalar of its own.
-            assert_eq!(gfs.bundle_scalar_ids.contains(variable_id), *variable_id != "dirpw", "{variable_id}");
-            assert_eq!(gfs.companion_of(variable_id).map(|c| c.id), Some("wave"));
+        for model in ["gfs", "ecmwf"] {
+            let source = source_spec(model).expect(model);
+            let [wave] = source.companion_files else { panic!("one companion family") };
+            assert_eq!(wave.id, "wave");
+            for variable_id in wave.variable_ids {
+                assert!(source.input_variable_ids.contains(variable_id), "{variable_id} is fetched");
+                // The direction is an input only: it ships inside the wave
+                // vector derived from it, not as a scalar of its own.
+                assert_eq!(
+                    source.bundle_scalar_ids.contains(variable_id),
+                    *variable_id != "dirpw",
+                    "{model} {variable_id}"
+                );
+                assert_eq!(source.companion_of(variable_id).map(|c| c.id), Some("wave"));
+            }
+            assert!(source.bundle_vector_ids.contains(&"wave"));
+            assert!(source.companion_of("tmpsfc").is_none());
+            // Assembly order: the companion's records come last.
+            assert_eq!(&source.input_variable_ids[source.input_variable_ids.len() - 3..], wave.variable_ids);
         }
-        assert!(gfs.bundle_vector_ids.contains(&"wave"));
-        assert!(gfs.companion_of("tmpsfc").is_none());
-        // Assembly order: the companion's records come last.
-        assert_eq!(&gfs.input_variable_ids[gfs.input_variable_ids.len() - 3..], wave.variable_ids);
-        for model in ["ecmwf", "sflux", "hrrr", "radar"] {
+        for model in ["sflux", "hrrr", "radar"] {
             assert!(source_spec(model).expect(model).companion_files.is_empty(), "{model}");
         }
+    }
+
+    /// ECMWF's gust record is all zeros at the analysis and not fetched
+    /// there, so the series starts at the first step, the way its
+    /// de-accumulated rate does.
+    #[test]
+    fn the_ecmwf_gust_is_optional_at_the_analysis() {
+        let ecmwf = source_spec("ecmwf").expect("ecmwf");
+        assert_eq!(ecmwf.optional_at_analysis, &["gust"]);
+        assert!(ecmwf.bundle_scalar_ids.contains(&"gust"));
     }
 }

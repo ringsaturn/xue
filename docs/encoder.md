@@ -269,7 +269,7 @@ Every source, on real runs, with every artifact compared byte for byte:
 | Source | What it exercises |
 |---|---|
 | GFS | the plain path, the two-variable wind bundles, the derived vapour flux and the derived 850 hPa equivalent potential temperature (`exp` / `ln` / `pow` on both sides, still byte-identical), the surface diagnostics, and the ocean fields — the wave records' bitmap fill and, on a whole frame, the WAVEWATCH III grid snapped to the exact 0.25° grid |
-| ECMWF | de-accumulating `tp`, and the shorter prate axis that follows |
+| ECMWF | de-accumulating `tp`, and the shorter prate axis that follows; the records that arrive under another identity than GFS's — the interval-maximum gust on the 10 m surface (and its own analysis-less axis), the cloud cover as a local parameter in a 0–1 fraction, the most-unstable CAPE on surface type 17, the skin temperature as 0/0/17, the ice thickness with a bitmap, the wave period and direction under neighbouring parameter numbers — each matched both by the GRIB2 header index and by GDAL's band metadata (`tests/test_ecmwf.py`, on the Kara Sea fixture) |
 | GFS-SFLUX | de-averaging `prate_ave`, the Gaussian grid, the -180 column roll, `dswrf` |
 | HRRR | a projected source: the Lambert conformal grid read out of GDAL's WKT, the footprint, the resampling onto the regular 0.03° grid (`sin` / `cos` / `tan` / `pow` per row and column, exact IEEE arithmetic per cell, still byte-identical — `tests/test_hrrr.py`), and the `MSLMA` / `REFC` aliases |
 | GFS, cropped | `--bbox` with `--bundles`, and `manifest.json` |

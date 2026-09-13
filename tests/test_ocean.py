@@ -153,7 +153,10 @@ class RegistryTests(unittest.TestCase):
             spec = variable_spec(variable_id)
             self.assertEqual((spec.grib2_discipline, spec.grib2_category, spec.grib2_number), (10, 2, number))
             self.assertEqual((spec.grib2_level_type, spec.grib2_level_value, spec.output_unit), (1, 0.0, unit))
-            self.assertEqual(spec.fill_values, ())
+        self.assertEqual(variable_spec("icec").fill_values, ())
+        # ECMWF's ice thickness carries a bitmap over land; pgrb2's never
+        # reaches the fill value, so the rule is harmless there.
+        self.assertEqual(variable_spec("icetk").fill_values, (GDAL_GRIB_NODATA,))
         for variable_id, number in (("htsgw", 3), ("perpw", 11), ("dirpw", 10)):
             spec = variable_spec(variable_id)
             self.assertEqual((spec.grib2_discipline, spec.grib2_category, spec.grib2_number), (10, 0, number))
@@ -161,10 +164,23 @@ class RegistryTests(unittest.TestCase):
             self.assertIsNone(spec.grib2_level_value, "WAVEWATCH III writes the surface with value 1; either is accepted")
             self.assertEqual(spec.fill_values, (GDAL_GRIB_NODATA,), "the wave records carry a bitmap")
             self.assertEqual(spec.index_field, f":{spec.grib_element}:surface:")
+        # ECMWF open data carries every ocean field but the ice cover: the
+        # skin temperature as its own parameter (0/0/17) and the ice
+        # thickness with no surface value, each through a whole alternate
+        # identity, and the wave period and direction under neighbouring
+        # parameter numbers on the same surface, accepted as aliases.
+        ecmwf_params = {"tmpsfc": "skt", "icetk": "sithick", "htsgw": "swh", "perpw": "pp1d", "dirpw": "mwd"}
         for variable_id in OCEAN_VARIABLE_IDS:
             spec = variable_spec(variable_id)
             self.assertIsNone(spec.grib2_statistical, f"{variable_id} is an instantaneous product")
-            self.assertEqual(spec.ecmwf_param, "", f"{variable_id} is not fetched from ECMWF yet")
+            self.assertEqual(spec.ecmwf_param, ecmwf_params.get(variable_id, ""), variable_id)
+        (skt,) = skin.grib2_alternates
+        self.assertEqual((skt.triple, skt.level_type, skt.level_value, skt.statistical), ((0, 0, 17), 1, None, None))
+        (sithick,) = variable_spec("icetk").grib2_alternates
+        self.assertEqual((sithick.triple, sithick.level_type, sithick.level_value), ((10, 2, 1), 1, None))
+        self.assertEqual(variable_spec("perpw").grib2_aliases, ((10, 0, 34),))
+        self.assertEqual(variable_spec("dirpw").grib2_aliases, ((10, 0, 14),))
+        self.assertEqual(variable_spec("htsgw").grib2_aliases, ())
 
     def test_the_wave_vector_components_are_derived_and_local(self) -> None:
         # Never matched against a record — the converter derives them — so
@@ -193,7 +209,7 @@ class RegistryTests(unittest.TestCase):
             self.assertEqual(PROFILES["compact"][variable_id].quantize(np.array([0.0, -0.0])).tolist(), [63, 63])
         self.assertEqual(PROFILES["quality"]["uwave"].step, 2 * height.step)
 
-    def test_gfs_publishes_them_and_the_other_sources_do_not_yet(self) -> None:
+    def test_gfs_publishes_them_and_ecmwf_all_but_the_ice_cover(self) -> None:
         gfs = source_spec("gfs")
         published = published_bundle_ids(gfs)
         for variable_id in OCEAN_VARIABLE_IDS:
@@ -218,7 +234,11 @@ class RegistryTests(unittest.TestCase):
         self.assertEqual(vector_input_ids(WAVE_BUNDLE_ID), ("htsgw", "dirpw"))
         self.assertEqual(bundle_input_ids(gfs, WAVE_BUNDLE_ID), ("htsgw", "dirpw"))
         self.assertNotIn(WAVE_BUNDLE_ID, VIDEO_VARIABLE_IDS)
-        for source in (source_spec("ecmwf"), source_spec("sflux"), source_spec("radar")):
+        ecmwf = published_bundle_ids(source_spec("ecmwf"))
+        for variable_id in OCEAN_VARIABLE_IDS + (WAVE_BUNDLE_ID,):
+            self.assertEqual(variable_id in ecmwf, variable_id not in ("icec", "dirpw"), variable_id)
+        self.assertEqual(ecmwf[-1], WAVE_BUNDLE_ID)
+        for source in (source_spec("sflux"), source_spec("radar")):
             self.assertEqual(source.companion_files, ())
             for variable_id in OCEAN_VARIABLE_IDS + (WAVE_BUNDLE_ID,):
                 self.assertNotIn(variable_id, published_bundle_ids(source), source.id)
@@ -250,6 +270,13 @@ class RegistryTests(unittest.TestCase):
         primary = gfs.primary_input_ids()
         self.assertEqual(gfs.input_variable_ids, primary + WAVE_IDS)
         self.assertEqual(len(primary), 37)
+        # ECMWF reads the same three from its `wave` stream, under the same
+        # family id, appended the same way.
+        ecmwf = source_spec("ecmwf")
+        (ecmwf_wave,) = ecmwf.companion_files
+        self.assertEqual((ecmwf_wave.id, ecmwf_wave.variable_ids, ecmwf_wave.repack), ("wave", WAVE_IDS, False))
+        self.assertEqual(ecmwf.input_variable_ids, ecmwf.primary_input_ids() + WAVE_IDS)
+        self.assertEqual(len(ecmwf.primary_input_ids()), 31)
 
 
 class FetchTests(unittest.TestCase):

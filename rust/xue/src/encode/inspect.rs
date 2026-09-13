@@ -209,15 +209,25 @@ pub fn raster_expression(variable_id: &str, unit: &str) -> Result<String> {
             }
             Ok("maximum(0,minimum(127,A))".into())
         }
-        // Cloud cover — the total and the layers — already in percent.
+        // Cloud cover — the total and the layers — in percent as pgrb2
+        // carries it, or scaled up from the 0–1 fraction ECMWF writes (GDAL
+        // spells that unit "-").
         "tcdc" | "lcdc" | "mcdc" | "hcdc" => {
-            if unit.trim().trim_matches(|character| "[]()".contains(character)) != "%" {
-                return Err(EncodeError::conversion(format!(
+            match unit
+                .trim()
+                .trim_matches(|character| "[]()".contains(character))
+                .to_lowercase()
+                .as_str()
+            {
+                "%" => Ok("maximum(0,minimum(100,A))".into()),
+                "-" | "1" | "fraction" | "proportion" | "(0 - 1)" | "0-1" => {
+                    Ok("maximum(0,minimum(100,A*100))".into())
+                }
+                _ => Err(EncodeError::conversion(format!(
                     "unsupported cloud cover unit: {}",
                     if unit.is_empty() { "<missing>" } else { unit }
-                )));
+                ))),
             }
-            Ok("maximum(0,minimum(100,A))".into())
         }
         // CAPE in J/kg.
         "cape" => {
@@ -409,14 +419,36 @@ fn band_matches(variable_id: &str, band: &BandInfo) -> Result<bool> {
         // so any value on the SFC surface is accepted. The prose test looks
         // for the surface's own name rather than the word "surface", which
         // the isobaric levels the same TMP element is fetched on also carry
-        // ("Isobaric surface").
+        // ("Isobaric surface"). Beside the registry's element, the one GDAL
+        // names another centre's spelling by: ECMWF's skin temperature is
+        // SKINT, its peak wave period PWPER and its mean wave direction
+        // WWSDIR (the registry's alias triples). Two ECMWF records sit on
+        // another surface altogether and are matched by their own rule: the
+        // gust on the 10 m surface (the interval maximum, `10fg`) and the
+        // most-unstable CAPE departing from surface type 17, which GDAL
+        // describes as such and gives no short name of its own.
         "dswrf" | "gust" | "cape" | "vis" | "tmpsfc" | "icec" | "icetk" | "htsgw" | "perpw"
         | "dirpw" => {
             let text = searchable(band).to_lowercase();
-            element == variable_spec(variable_id)?.grib_element
+            let registered = variable_spec(variable_id)?.grib_element;
+            let aliases: &[&str] = match registered {
+                "TMP" => &["SKINT"],
+                "PERPW" => &["PWPER"],
+                "DIRPW" => &["WWSDIR"],
+                _ => &[],
+            };
+            let on_surface = (element == registered || aliases.contains(&element.as_str()))
                 && (short_name.ends_with("-SFC")
                     || text.contains("sfc=\"")
-                    || text.contains("ground or water surface"))
+                    || text.contains("ground or water surface"));
+            on_surface
+                || (variable_id == "gust"
+                    && element == "GUST"
+                    && (matches!(short_name.as_str(), "10-HTGL" | "10-M-HTGL")
+                        || TEN_METRE_RE.is_match(&searchable(band))))
+                || (variable_id == "cape"
+                    && element == "CAPE"
+                    && (text.contains("most unstable") || text.contains("mudl")))
         }
         // One cloud cover element on its own layer surface (code table 4.5
         // types 214 / 224 / 234, which GDAL spells `0-LCY` / `0-MCY` /
@@ -432,10 +464,19 @@ fn band_matches(variable_id: &str, band: &BandInfo) -> Result<bool> {
                 && (short_name == token || phrases.iter().any(|phrase| text.contains(phrase)))
         }
         // The entire atmosphere (surface type 10), which GDAL spells
-        // `0-EATM`; the per-layer cloud covers are never downloaded.
+        // `0-EATM`; the per-layer cloud covers are never downloaded. ECMWF
+        // `tcc` is the ECMWF-local 0/6/192 on the ground surface — GDAL's
+        // tables do not know it, so GRIB_ELEMENT is "unknown" and the
+        // comment carries the raw triple, the way it does for `tp`.
         "tcdc" | "cref" => {
-            element == variable_spec(variable_id)?.grib_element
-                && (short_name == "0-EATM" || searchable(band).to_lowercase().contains("entire atmosphere"))
+            let text = searchable(band).to_lowercase();
+            let comment = band.item("GRIB_COMMENT");
+            (element == variable_spec(variable_id)?.grib_element
+                && (short_name == "0-EATM" || text.contains("entire atmosphere")))
+                || (variable_id == "tcdc"
+                    && element.to_lowercase() == "unknown"
+                    && (short_name == "0-SFC" || text.contains("ground or water surface"))
+                    && comment.contains("cat 6, subcat 192"))
         }
         "ugrd10m" | "vgrd10m" => {
             element == variable_spec(variable_id)?.grib_element
