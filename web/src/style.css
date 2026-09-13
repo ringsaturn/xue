@@ -453,21 +453,29 @@ body.is-showcase .model-caret {
   color: var(--text);
 }
 
+/* The summary is a card like the pill above it, not text on the map: a
+   case's field can cover its whole box opaquely (a radar mosaic, a
+   hurricane's rain shield), and a paragraph over that has no ground tone
+   to sit on — a text shadow is not enough. Chrome tokens, like every card. */
 .case-detail {
-  padding: 0 4px;
-  text-shadow: var(--label-shadow);
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  backdrop-filter: blur(12px);
 }
 
 .case-detail p {
   margin: 0;
-  color: var(--map-ink-muted);
+  color: var(--text);
   font-size: 12px;
   line-height: 1.55;
   text-wrap: pretty;
 }
 
 .case-region {
-  margin-top: 4px !important;
+  margin-top: 6px !important;
+  color: var(--muted) !important;
   font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.06em;
@@ -2293,7 +2301,8 @@ html[lang="ja"] .rail-glyph {
 }
 
 body[data-model="ecmwf"] .source-credit[data-credit-model="ecmwf"],
-body[data-model="radar"] .source-credit[data-credit-model="radar"] {
+body[data-model="radar"] .source-credit[data-credit-model="radar"],
+body[data-model="mrms"] .source-credit[data-credit-model="mrms"] {
   display: inline;
 }
 

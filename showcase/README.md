@@ -51,9 +51,10 @@ retires a case.
    - Optional: `defaultVariable` (defaults to the first), `eventTime`, `tags`,
      `credit`, `profile`.
 
-   An **observation case** is the same file with one substitution: instead of
-   a `run` to fetch it names the local `dataset` it is built from, and `hours`
-   counts from the first frame of that file rather than from an analysis.
+   An **observation case** on the CMA radar mosaic is the same file with one
+   substitution: instead of a `run` to fetch it names the local `dataset`
+   it is built from, and `hours` counts from the first frame of that file
+   rather than from an analysis.
 
    ```json
    {
@@ -71,9 +72,35 @@ retires a case.
    someone who has the dataset — the built output is an ordinary case like any
    other.
 
+   An **MRMS case** is the third shape — an observation that is *fetched*:
+   like a forecast case it names a `run`, the first hour of its window
+   (any hour, `YYYYMMDDHH`), and `hours` is the window's length; there is
+   no `dataset`. The frames come off the NOAA bucket every two minutes,
+   the reflectivity and the rate as separate objects, and a slot either
+   product lacks is a gap on the axis; a window the archive cannot fill to
+   its last hour is refused rather than shortened. Expect the picture to
+   advance in steps: a radar volume scan takes four to six minutes, so
+   about every other frame repeats the last one over a radar's coverage. `variables` is `cref`
+   and, optionally, `prate`.
+
+   ```json
+   {
+     "id": "ida-2021",
+     "model": "mrms",
+     "run": "2021082912",
+     "hours": 12,
+     "bbox": [-95.0, 27.0, -85.0, 33.0],
+     "variables": ["cref", "prate"]
+   }
+   ```
+
    Watch the size: an observation case keeps the source cadence, so it is
    frames × grid, not hours × grid. The radar mosaic at six minutes is ten
-   times an hourly case, which is what the `bbox` is for.
+   times an hourly case, and MRMS at two minutes thirty times, which is
+   what the `bbox` is for — on the thinned 0.02° grid a 10° × 6° box is
+   150 000 cells, a few tens of kilobytes a frame. The download is the
+   whole national mosaic for every frame (about 1.5 MB gzipped per
+   product), so a twelve-hour case fetches half a gigabyte per product.
 
 2. Validate without downloading anything:
 
@@ -118,6 +145,7 @@ The public archives do not go back forever:
 | `gfs`, `sflux` | about 2021-01 | NOAA moved the files under `atmos/` on 2021-03-23; `xue.fetch` picks the layout by run id |
 | `ecmwf` | about 2024-02 | Only the 00z and 12z oper cycles reach far enough for a long case |
 | `hrrr` | about 2014-08 | Every hour's cycle, hourly to f18 |
+| `mrms` | 2020-10-14 | Every two minutes; a case is a window from any hour |
 | `radar` | — | Not an archive to reach back into: whatever event someone has already decoded into a local NetCDF |
 
 Pick a cycle a day or two before the event peaks, so the case is a *forecast*

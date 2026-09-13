@@ -21,9 +21,16 @@ Facts worth getting right:
   one regional source, resampled from its Lambert conformal grid onto a
   0.03° latitude/longitude grid (2441 × 1051) over the domain's footprint;
   the rectangle's corners the conic domain never covered repeat the nearest
-  cell and are not a forecast (the viewer clips them). A fifth source,
-  `radar` (CMA level-3 radar mosaic composite reflectivity), is observations
-  rather than a forecast and appears only as historical cases.
+  cell and are not a forecast (the viewer clips them). Two more sources are
+  observations rather than forecasts and appear only as historical cases:
+  `radar` (CMA level-3 radar mosaic composite reflectivity, six-minute
+  frames) and `mrms` (NOAA MRMS, the national radar mosaic over the
+  contiguous United States, two-minute frames on a 0.01° grid thinned by
+  block maximum to 0.02°, 130°W–60°W and 20°N–55°N; a radar volume scan
+  takes four to six minutes, so a frame with no new scan behind it repeats
+  the last one over that radar's coverage). An observation
+  dataset has no run cycle and no lead time: its `run` is the hour its
+  series starts and a frame's offset is time elapsed since.
 - Bundles published per run. GFS and ECMWF: `tmp2m`, `prate`, `prmsl`,
   `hgt850`, `hgt700`, `hgt500`, `hgt250`, `tmp925`, `tmp850`, `tmp500`,
   `rh850`, `rh700`, `rh500`, the surface diagnostics `gust`, `tcdc` (total
@@ -47,8 +54,11 @@ Facts worth getting right:
   `prate`, `dswrf`, `wind10m`. HRRR: `tmp2m`, `prate`, `prmsl`, `hgt850`,
   `hgt700`, `hgt500`, `tmp925`, `tmp850`, `tmp500`, `gust`, `tcdc`,
   `lcdc`, `mcdc`, `hcdc`, `cape`, `vis`, `dpt2m`, the forecast composite
-  radar reflectivity `cref` (the same name and unit as the radar mosaic's),
-  and the vector pairs `wind10m`, `wind925`, `wind850`, `wind250`. Names
+  radar reflectivity `cref` (the same name and unit as the radar mosaics'),
+  and the vector pairs `wind10m`, `wind925`, `wind850`, `wind250`. RADAR:
+  `cref`. MRMS: `cref` (observed composite reflectivity, dBZ) and `prate`
+  (the MRMS precipitation rate, mm/h; a case may ship the reflectivity
+  alone). Names
   are `<family><level>`; the level is in hPa, `2m`/`10m` are heights above
   ground, `prmsl` is mean sea level pressure.
 - Only the newest run per source is kept online. Runs are pruned when
@@ -58,8 +68,8 @@ Facts worth getting right:
   and no account.
 - Data licensing: NOAA GFS and HRRR are public domain; ECMWF open data is CC BY 4.0 and
   what is served is a converted derivative ("Contains modified ECMWF open
-  data"); radar cases are CMA products; the basemap is Protomaps ©
-  OpenStreetMap contributors.
+  data"); `radar` cases are CMA products and `mrms` cases NOAA products
+  (public domain); the basemap is Protomaps © OpenStreetMap contributors.
 
 ## Pages and URL parameters
 
@@ -72,7 +82,7 @@ fall back to defaults rather than fail, so a constructed link always opens.
   `ecmwf`).
 - `?type=` — the filled layer: `temp` (2 m temperature), `precip`, `wind`
   (10 m), `solar` (sflux only), `pressure` (sea level pressure as isobars),
-  `radar` (composite reflectivity: cases, and the HRRR forecast), the GFS
+  `radar` (composite reflectivity: the radar cases, and the HRRR forecast), the GFS
   and HRRR surface diagnostics `gust`, `cloud`
   (`lowcloud` / `midcloud` / `highcloud` for the layers), `cape`,
   `visibility`, `dewpoint`, `feelslike`, the GFS ocean set `sst` (the
@@ -108,8 +118,8 @@ fall back to defaults rather than fail, so a constructed link always opens.
   United States for `hrrr`, the case's box for a case.
 
 Examples: `/?model=ecmwf&type=wind850`, `/?type=temp&lines=hgt500`,
-`/?case=pnw-heat-dome-2021`, `/?model=hrrr&type=radar#map=6/32.8/-96.8`,
-`/?type=wind&tc=EP142026`.
+`/?case=pnw-heat-dome-2021`, `/?case=ida-2021&type=radar`,
+`/?model=hrrr&type=radar#map=6/32.8/-96.8`, `/?type=wind&tc=EP142026`.
 
 ## Data access
 

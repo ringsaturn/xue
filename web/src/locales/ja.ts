@@ -71,6 +71,7 @@ export const ja: Record<MessageKey, string> = {
   creditsGfs: "予報データ · GFS 0.25° および SFLUX",
   creditsHrrr: "予報データ · HRRR 3 KM、米国本土",
   creditsEcmwf: "改変した ECMWF データを含む · CC BY 4.0",
+  creditsMrms: "レーダー観測 · MRMS、米国本土",
   creditsRadar: "レーダー合成図",
   creditsBasemap: "ベースマップ · © OPENSTREETMAP 貢献者",
   creditsCode: "ソースコード · RINGSATURN/XUE",

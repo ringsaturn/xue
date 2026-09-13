@@ -76,6 +76,7 @@ export const ru: Record<MessageKey, string> = {
   creditsGfs: "ПРОГНОСТИЧЕСКИЕ ДАННЫЕ · GFS 0.25° И SFLUX",
   creditsHrrr: "ПРОГНОСТИЧЕСКИЕ ДАННЫЕ · HRRR 3 КМ, КОНТИНЕНТАЛЬНЫЕ США",
   creditsEcmwf: "СОДЕРЖИТ ИЗМЕНЁННЫЕ ДАННЫЕ ECMWF · CC BY 4.0",
+  creditsMrms: "РАДАРНЫЕ НАБЛЮДЕНИЯ · MRMS, КОНТИНЕНТАЛЬНЫЕ США",
   creditsRadar: "РАДАРНАЯ МОЗАИКА",
   creditsBasemap: "ПОДЛОЖКА · © УЧАСТНИКИ OPENSTREETMAP",
   creditsCode: "ИСХОДНЫЙ КОД · RINGSATURN/XUE",

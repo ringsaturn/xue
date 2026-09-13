@@ -243,8 +243,11 @@ publishing data at the new version.**
   first and last coordinates, and MRMS writes its last one a hair short.
   No live pointer yet — the rolling window is the next step: `build-bin
   --model mrms --run <hour> --hours 3` builds a past window into
-  `mrms.<run>/` and nothing points at it. A source with a `regrid` (`hrrr`)
-  is computed on a map projection: `_grid_info` reads
+  `mrms.<run>/` and nothing points at it; what is published are showcase
+  cases (`ida-2021`, `quad-state-tornado-2021`), and the shell registers
+  `mrms` in `FORECAST_MODELS` as an observation dataset off the live list.
+  A source with a `regrid` (`hrrr`) is computed on a map projection:
+  `_grid_info` reads
   the Lambert conformal parameters out of GDAL's WKT (`reproject.py`, and
   the wheel's `gdal_info` reports `coordinateSystem.wkt` for it), builds a
   `Resampler` onto the regular grid of that step over the source's
@@ -358,9 +361,14 @@ publishing data at the new version.**
 - `observation.py` — the NetCDF ingest: one `dataset_info` pass turns a file's
   bands into the same `SourceFrame` list the GRIB inspectors return, plus the
   `PlaneSource` saying to unscale the values and what its fill value means.
-- `showcase.py` — case definitions → cropped bundles → `showcase.json`. An
-  observation case names a local `dataset` file instead of a `run` to fetch
-  (`XUE_OBSERVATION_ROOT`).
+- `showcase.py` — case definitions → cropped bundles → `showcase.json`. A
+  case has three shapes: a forecast case (`run` + `hours` on the published
+  axis), a local-file observation case (`radar`: a `dataset` file instead
+  of a `run`, `XUE_OBSERVATION_ROOT`), and a fetched-observation case
+  (`mrms`: `run` is the window's first hour, `hours` its length, no
+  `dataset`; `CaseSpec.from_dataset` tells the first two apart from the
+  third, and a window the archive cannot fill to its declared end is
+  refused rather than shortened).
 - `assemble.py` — a run built in pieces. The scheduled `publish.yml` fans a
   run out over one job per **bundle group** (`bundle-groups` packs the
   source's bundles into at most `max_jobs` jobs of roughly equal cost; the

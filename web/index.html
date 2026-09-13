@@ -113,7 +113,7 @@
               "2 m temperature, precipitation rate, 10 m wind with particle animation, downward shortwave radiation",
               "Sea level pressure isobars and 850/700/500/250 hPa geopotential height contours with labelled highs and lows",
               "Upper-air temperature, relative humidity, wind and water vapour flux on isobaric surfaces",
-              "Historical cases: typhoons, rainstorms and heatwaves replayed from archived runs and radar mosaics",
+              "Historical cases: typhoons, hurricanes, tornado outbreaks, rainstorms and heatwaves replayed from archived runs and radar mosaics (CMA, NOAA MRMS)",
               "Ten interface languages, light and dark appearance, deep links for every view"
             ],
             "about": { "@id": "https://xue.ringsaturn.me/#data" },
@@ -156,7 +156,7 @@
               "temperature, relative humidity, wind, water vapour flux, vertical velocity and equivalent potential temperature on isobaric surfaces",
               "wind gust, total and low / middle / high cloud cover, CAPE, visibility, 2 m dew point and apparent temperature",
               "sea surface (skin) temperature, sea ice cover and thickness, significant wave height, primary wave period, and the wave vector (height along the direction of travel) with particle animation",
-              "composite radar reflectivity (observed by the CMA mosaic, forecast by HRRR)"
+              "composite radar reflectivity (observed by the CMA and NOAA MRMS mosaics, forecast by HRRR)"
             ],
             "distribution": [
               { "@type": "DataDownload", "name": "GFS live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest.json" },
@@ -599,6 +599,7 @@
         <span class="source-line">
           <span class="source-credit" data-credit-model="ecmwf">CONTAINS MODIFIED <a href="https://www.ecmwf.int/en/forecasts/datasets/open-data" target="_blank" rel="noreferrer">ECMWF OPEN DATA</a> (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">CC BY 4.0</a>) ·</span>
           <span class="source-credit" data-credit-model="radar">RADAR <a href="https://data.cma.cn" target="_blank" rel="noreferrer">CMA</a> ·</span>
+          <span class="source-credit" data-credit-model="mrms">RADAR <a href="https://registry.opendata.aws/noaa-mrms-pds/" target="_blank" rel="noreferrer">NOAA MRMS</a> ·</span>
           © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OPENSTREETMAP</a>
           · <a href="https://protomaps.com" target="_blank" rel="noreferrer">PROTOMAPS</a>
         </span>
@@ -636,6 +637,13 @@
               <a href="https://www.ecmwf.int/en/forecasts/datasets/open-data" target="_blank" rel="noreferrer">
                 <span class="credits-name">ECMWF Open Data</span>
                 <small data-i18n="creditsEcmwf">CONTAINS MODIFIED ECMWF DATA · CC BY 4.0</small>
+                <span class="credits-arrow" aria-hidden="true">↗</span>
+              </a>
+            </li>
+            <li>
+              <a href="https://registry.opendata.aws/noaa-mrms-pds/" target="_blank" rel="noreferrer">
+                <span class="credits-name">NOAA MRMS</span>
+                <small data-i18n="creditsMrms">RADAR OBSERVATIONS · MRMS, CONTIGUOUS US</small>
                 <span class="credits-arrow" aria-hidden="true">↗</span>
               </a>
             </li>
