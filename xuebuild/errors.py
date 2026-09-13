@@ -17,3 +17,7 @@ class ManifestError(XueError):
 class BundleError(XueError):
     """A Xue bundle violates the versioned binary contract."""
 
+
+
+class TcProductError(XueError):
+    """The tropical cyclone product violates its versioned contract."""

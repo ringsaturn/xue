@@ -1,0 +1,117 @@
+name: publish tc
+
+# The tropical cyclone product (docs/tc.md): the agencies' forecasts and
+# best tracks and the models' objective tracks, aggregated once an hour
+# into an immutable tc.<issue>/ directory on R2 and taken live by the
+# mutable latest-tc.json beside the run pointers. Independent of the
+# raster publishes — nothing here reads a run, and a red run does not
+# hold this back — and cheap: a few hundred kilobytes of text and BUFR
+# in, one job, well under two minutes.
+#
+# Twenty past the hour keeps clear of the agencies' on-the-hour issue
+# times (NHC and JTWC at 03/09/15/21Z, the trackers four to five hours
+# after a cycle). A source that is late or down is recorded in the
+# product's `sources` and the hour publishes without it; the pointer is
+# withheld only when no agency and no model contributed at all.
+
+on:
+  schedule:
+    - cron: "20 * * * *"
+  workflow_dispatch:
+    inputs:
+      issue:
+        description: "Aggregation hour to build: now or YYYYMMDDHH"
+        type: string
+        default: now
+      keep:
+        description: "Issue directories to keep on R2 (hours)"
+        type: string
+        default: "720"
+      dry_run:
+        description: "Build and report what would be uploaded and pruned, but write nothing to R2"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# One at a time: the pointer is the product's only mutable object, and the
+# previous hour's index is what the next build's identities carry over from.
+concurrency:
+  group: publish-tc
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    # Scheduled runs on forks would publish into a bucket they cannot reach.
+    if: github.event_name != 'schedule' || github.repository == 'ringsaturn/xue'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      ISSUE: ${{ inputs.issue || 'now' }}
+      TC_KEEP: ${{ inputs.keep || '720' }}
+      DRY_RUN: ${{ inputs.dry_run && '--dryrun' || '' }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # ECMWF's track files are BUFR; bufr_dump turns them into JSON. No
+      # GDAL, no wheel: this pipeline touches no raster.
+      - name: Install eccodes
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libeccodes-tools
+          bufr_dump -V
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          python-version: "3.14"
+
+      - name: Sync Python environment
+        run: uv sync
+
+      # The live index is the memory the identity rules read: an
+      # unnumbered system keeps its id from one hour to the next only
+      # because the previous index says what it was called.
+      - name: Fetch the live index
+        run: make live-tc-index
+
+      - name: Build the product
+        run: |
+          set -euo pipefail
+          uv run python -m xuebuild -v tc-build --issue "$ISSUE" > tc-report.json
+          issue=$(jq -r .issue tc-report.json)
+          echo "issue=$issue" >> "$GITHUB_ENV"
+          {
+            echo "### tc $issue"
+            echo
+            echo '```json'
+            jq '{storms: [.storms[] | "\(.id) \(.level) \(.name // "-")"], crosswalk, sources: [.sources[] | "\(.id): \(if .ok then "ok" else .error end)"], pointer}' tc-report.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: tc-report-${{ github.run_id }}
+          path: tc-report.json
+          retention-days: 14
+          if-no-files-found: ignore
+
+      # The directory goes up immutable, then the pointer takes it live.
+      # A build that withheld the pointer (nothing contributed) stops here
+      # with the previous hour still live.
+      - name: Upload and take the issue live
+        run: |
+          set -euo pipefail
+          if [ "$(jq -r .pointer tc-report.json)" = "null" ]; then
+            echo "no source contributed; the previous hour stays live" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          make upload-r2-tc ISSUE="$issue" DRY_RUN="$DRY_RUN"
+
+      - name: Delete issues older than the retention
+        run: make prune-r2-tc TC_KEEP="$TC_KEEP" DRY_RUN="$DRY_RUN"

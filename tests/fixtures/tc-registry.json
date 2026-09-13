@@ -1,0 +1,225 @@
+{
+  "agencies": [
+    {
+      "id": "nhc",
+      "name": "National Hurricane Center",
+      "color": "#d55e00",
+      "basins": [
+        "AL",
+        "EP",
+        "CP"
+      ],
+      "scale": "sshs",
+      "ibtracs": "USA",
+      "forecasts": true
+    },
+    {
+      "id": "jtwc",
+      "name": "Joint Typhoon Warning Center",
+      "color": "#e69f00",
+      "basins": [
+        "WP",
+        "IO",
+        "SH"
+      ],
+      "scale": "sshs",
+      "ibtracs": "USA",
+      "forecasts": true
+    },
+    {
+      "id": "jma",
+      "name": "Japan Meteorological Agency",
+      "color": "#0072b2",
+      "basins": [
+        "WP"
+      ],
+      "scale": "jma",
+      "ibtracs": "TOKYO",
+      "forecasts": false
+    },
+    {
+      "id": "cma",
+      "name": "China Meteorological Administration",
+      "color": "#009e73",
+      "basins": [
+        "WP"
+      ],
+      "scale": "cma",
+      "ibtracs": "CMA",
+      "forecasts": false
+    },
+    {
+      "id": "cwa",
+      "name": "Central Weather Administration",
+      "color": "#cc79a7",
+      "basins": [
+        "WP"
+      ],
+      "scale": "cwa",
+      "ibtracs": null,
+      "forecasts": false
+    },
+    {
+      "id": "hko",
+      "name": "Hong Kong Observatory",
+      "color": "#56b4e9",
+      "basins": [
+        "WP"
+      ],
+      "scale": "hko",
+      "ibtracs": "HKO",
+      "forecasts": false
+    },
+    {
+      "id": "kma",
+      "name": "Korea Meteorological Administration",
+      "color": "#f0e442",
+      "basins": [
+        "WP"
+      ],
+      "scale": "kma",
+      "ibtracs": "KMA",
+      "forecasts": false
+    },
+    {
+      "id": "imd",
+      "name": "India Meteorological Department",
+      "color": "#8a8a8a",
+      "basins": [
+        "IO"
+      ],
+      "scale": "imd",
+      "ibtracs": "NEWDELHI",
+      "forecasts": false
+    },
+    {
+      "id": "mfr",
+      "name": "Météo-France La Réunion",
+      "color": "#8a8a8a",
+      "basins": [
+        "SH"
+      ],
+      "scale": "mfr",
+      "ibtracs": "REUNION",
+      "forecasts": false
+    },
+    {
+      "id": "bom",
+      "name": "Bureau of Meteorology",
+      "color": "#8a8a8a",
+      "basins": [
+        "SH"
+      ],
+      "scale": "bom",
+      "ibtracs": "BOM",
+      "forecasts": false
+    },
+    {
+      "id": "fms",
+      "name": "Fiji Meteorological Service",
+      "color": "#8a8a8a",
+      "basins": [
+        "SH"
+      ],
+      "scale": "fms",
+      "ibtracs": "NADI",
+      "forecasts": false
+    },
+    {
+      "id": "mnz",
+      "name": "MetService New Zealand",
+      "color": "#8a8a8a",
+      "basins": [
+        "SH"
+      ],
+      "scale": "mnz",
+      "ibtracs": "WELLINGTON",
+      "forecasts": false
+    }
+  ],
+  "models": [
+    {
+      "id": "gfs",
+      "name": "GFS",
+      "ensemble": false,
+      "techs": [
+        "AVNO"
+      ],
+      "color": "#333333"
+    },
+    {
+      "id": "gefs",
+      "name": "GEFS",
+      "ensemble": true,
+      "techs": [
+        "AC00",
+        "AP01",
+        "AP02",
+        "AP03",
+        "AP04",
+        "AP05",
+        "AP06",
+        "AP07",
+        "AP08",
+        "AP09",
+        "AP10",
+        "AP11",
+        "AP12",
+        "AP13",
+        "AP14",
+        "AP15",
+        "AP16",
+        "AP17",
+        "AP18",
+        "AP19",
+        "AP20",
+        "AP21",
+        "AP22",
+        "AP23",
+        "AP24",
+        "AP25",
+        "AP26",
+        "AP27",
+        "AP28",
+        "AP29",
+        "AP30"
+      ],
+      "color": "#333333"
+    },
+    {
+      "id": "ecmwf",
+      "name": "ECMWF IFS",
+      "ensemble": false,
+      "techs": [],
+      "color": "#555555"
+    },
+    {
+      "id": "ecmwfens",
+      "name": "ECMWF ENS",
+      "ensemble": true,
+      "techs": [],
+      "color": "#555555"
+    }
+  ],
+  "basins": {
+    "AL": "North Atlantic",
+    "EP": "Eastern North Pacific",
+    "CP": "Central North Pacific",
+    "WP": "Western North Pacific",
+    "IO": "North Indian Ocean",
+    "SH": "Southern Hemisphere"
+  },
+  "basinLetters": {
+    "L": "AL",
+    "E": "EP",
+    "C": "CP",
+    "W": "WP",
+    "A": "IO",
+    "B": "IO",
+    "S": "SH",
+    "P": "SH",
+    "U": "SH"
+  },
+  "numberedMax": 49,
+  "investMin": 90
+}

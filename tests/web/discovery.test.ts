@@ -123,6 +123,12 @@ describe("llms-full", () => {
   });
 
   it("names documents that exist in the repository", () => {
-    expect(LLMS_FULL_SOURCES).toEqual(["README.md", "docs/format.md", "docs/encoder.md", "showcase/README.md"]);
+    expect(LLMS_FULL_SOURCES).toEqual([
+      "README.md",
+      "docs/format.md",
+      "docs/encoder.md",
+      "docs/tc.md",
+      "showcase/README.md",
+    ]);
   });
 });

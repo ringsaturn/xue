@@ -375,6 +375,30 @@ make upload-r2-manifest MODEL=gfs RUN=2026081600
 The Pages shell is deployed separately (`make deploy`) and only needs
 redeploying when frontend code changes.
 
+### Tropical cyclones
+
+Storm tracks are not rasters, so they are a second product beside the
+runs ([`docs/tc.md`](docs/tc.md)): every hour `xue tc-build` fetches the
+centres' and the models' own track files — JTWC's warnings, NHC's ATCF
+decks, the NCEP GFS and GEFS tracker output, ECMWF's `tf` BUFR (through
+eccodes' `bufr_dump`), IBTrACS — parses each, decides which sightings are
+one storm (ATCF ids first, invests and model-found systems by alias
+memory and proximity) and writes `web/public/data/tc.<hour>/` plus the
+pointer `latest-tc.json`. Each source fails on its own and is recorded in
+the product's `sources`; the pointer is withheld only when nothing
+contributed. [`publish-tc.yml`](.github/workflows/publish-tc.yml) runs it
+at twenty past every hour, independent of the raster publishes:
+
+```sh
+make live-tc-index                          # the live index, so ids carry over
+make tc-build                               # this hour, into web/public/data/
+make upload-r2-tc ISSUE=2026091301          # the directory, then the pointer
+make prune-r2-tc                            # issues older than 30 days
+.venv/bin/python -m xuebuild tc-build --issue 2026091206 --offline --raw-dir tests/fixtures/tc   # from the fixture
+```
+
+The viewer does not draw the product yet; the shell side is the next phase.
+
 ## Testing
 
 ```sh
@@ -386,7 +410,9 @@ make test-e2e    # browser end-to-end tests
 Python tests cover the quantization codebooks, modulo-256 temporal
 residuals, container structure and rejection paths (truncation,
 out-of-range offsets, overlaps, gaps, nonzero padding, cyclic
-dependencies, checksum failures), and the manifest contract. The Rust side
+dependencies, checksum failures), the manifest contract, and the
+tropical cyclone product (each parser, the identity rules, the
+validators, and a build held to a committed golden). The Rust side
 adds cross-language golden tests decoding byte-identically against the
 Python reference, plus mutation fuzzing;
 `wasm-pack test --headless --chrome rust/xue-wasm` runs the decoder in a

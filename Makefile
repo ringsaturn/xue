@@ -35,7 +35,7 @@ AWS_REQUEST_CHECKSUM_CALCULATION ?= when_required
 AWS_RESPONSE_CHECKSUM_VALIDATION ?= when_required
 export AWS_DEFAULT_REGION AWS_REQUEST_CHECKSUM_CALCULATION AWS_RESPONSE_CHECKSUM_VALIDATION
 
-.PHONY: check install wasm test test-rust test-e2e encoder-rust encoder-rust-test encoder-wheel bench bench-video bench-lossy mvp serve format-pdf deploy-build upload-r2 upload-r2-bundles upload-r2-manifest check-pointer upload-r2-pointer warm-r2 prune-r2 live-run live-manifest deploy-pages deploy showcase showcase-check upload-r2-showcase clean
+.PHONY: check install wasm test test-rust test-e2e encoder-rust encoder-rust-test encoder-wheel bench bench-video bench-lossy mvp serve format-pdf deploy-build upload-r2 upload-r2-bundles upload-r2-manifest check-pointer upload-r2-pointer warm-r2 prune-r2 live-run live-manifest deploy-pages deploy showcase showcase-check upload-r2-showcase tc-build live-tc-index upload-r2-tc prune-r2-tc clean
 
 check:
 	$(PYTHON) scripts/check_dependencies.py
@@ -247,6 +247,68 @@ upload-r2-showcase:
 	echo "Uploading showcase.json (publishes the case list)..."; \
 	$(S3) cp web/public/data/showcase.json s3://$(R2_BUCKET)/$(R2_PREFIX)/showcase.json --no-progress $(DRY_RUN) \
 		--content-type application/json --cache-control "no-cache"
+
+# The tropical cyclone product (docs/tc.md): agency and model tracks
+# aggregated once an hour into web/public/data/tc.<issue>/ and the mutable
+# latest-tc.json beside the run pointers. ISSUE=YYYYMMDDHH names the hour
+# (default: this one). The previous hour's index is what keeps an
+# unnumbered system's id stable, so a publish fetches the live one first.
+ISSUE ?= now
+TC_KEEP ?= 720
+
+tc-build:
+	$(PYTHON) -m xuebuild tc-build --issue $(ISSUE) $(FORCE)
+
+# The live product's pointer and index, into web/public/data/ where
+# tc-build looks for the previous hour. Prints nothing and writes nothing
+# when there is no live product yet (the first publish).
+live-tc-index:
+	@set -e; mkdir -p web/public/data; \
+	pointer=$$($(S3) cp s3://$(R2_BUCKET)/$(R2_PREFIX)/latest-tc.json - --only-show-errors 2>/dev/null || true); \
+	[ -n "$$pointer" ] || { echo "no live tc pointer"; exit 0; }; \
+	path=$$(printf '%s' "$$pointer" | jq -r .path); \
+	mkdir -p "web/public/data/$$(dirname "$$path")"; \
+	$(S3) cp "s3://$(R2_BUCKET)/$(R2_PREFIX)/$$path" "web/public/data/$$path" --only-show-errors; \
+	printf '%s' "$$pointer" > web/public/data/latest-tc.json; \
+	echo "live tc issue: $$path"
+
+# Push one issue's directory (immutable, ?v=<crc32>-addressed like a run)
+# and then the pointer that takes it live. The pointer on disk must name
+# the issue being uploaded and carry its index's CRC32, the way
+# check-pointer holds a run's.
+upload-r2-tc:
+	@set -e; \
+	[ "$(ISSUE)" != "now" ] || { echo "pass ISSUE=YYYYMMDDHH"; exit 1; }; \
+	dir=web/public/data/tc.$(ISSUE); \
+	[ -f "$$dir/index.json" ] || { echo "no built tc issue at $$dir"; exit 1; }; \
+	[ -f web/public/data/latest-tc.json ] || { echo "no latest-tc.json: the build withheld the pointer (no source contributed)"; exit 1; }; \
+	pointer_path=$$(jq -r .path web/public/data/latest-tc.json); \
+	[ "$$pointer_path" = "tc.$(ISSUE)/index.json" ] || { echo "latest-tc.json names $$pointer_path, not tc.$(ISSUE)"; exit 1; }; \
+	pointer_crc=$$(jq -r .crc32 web/public/data/latest-tc.json); \
+	index_crc=$$($(PYTHON) -c "import sys, zlib; print(f'{zlib.crc32(open(sys.argv[1], \"rb\").read()) & 0xFFFFFFFF:08x}')" $$dir/index.json); \
+	[ "$$pointer_crc" = "$$index_crc" ] || { echo "latest-tc.json carries CRC32 $$pointer_crc but $$dir/index.json is $$index_crc"; exit 1; }; \
+	$(S3) sync $$dir s3://$(R2_BUCKET)/$(R2_PREFIX)/tc.$(ISSUE)/ --no-progress $(DRY_RUN) \
+		--content-type application/json --cache-control "public, max-age=31536000, immutable"; \
+	echo "Uploading latest-tc.json (takes tc issue $(ISSUE) live)..."; \
+	$(S3) cp web/public/data/latest-tc.json s3://$(R2_BUCKET)/$(R2_PREFIX)/latest-tc.json --no-progress $(DRY_RUN) \
+		--content-type application/json --cache-control "no-cache"
+
+# Delete tc issue directories beyond the newest TC_KEEP (720 hours = 30
+# days) and never the one the live pointer names.
+prune-r2-tc:
+	@set -e; \
+	live=$$($(S3) cp s3://$(R2_BUCKET)/$(R2_PREFIX)/latest-tc.json - --only-show-errors | jq -r .path | cut -d/ -f1); \
+	[ -n "$$live" ] || { echo "no live tc pointer, refusing to prune"; exit 1; }; \
+	echo "live tc issue: $$live"; \
+	listing=$$($(S3) ls s3://$(R2_BUCKET)/$(R2_PREFIX)/) \
+		|| { echo "listing the bucket failed, refusing to prune"; exit 1; }; \
+	for issue in $$(printf '%s\n' "$$listing" | awk '/ PRE /{print $$2}' \
+		| sed 's:/$$::' | grep "^tc\." | sort -r | tail -n +$$(($(TC_KEEP) + 1))); do \
+		if [ "$$issue" != "$$live" ]; then \
+			echo "Deleting $$issue..."; \
+			$(S3) rm s3://$(R2_BUCKET)/$(R2_PREFIX)/$$issue/ --recursive --only-show-errors $(DRY_RUN); \
+		fi; \
+	done
 
 # Delete every published run of one model except the newest KEEP and the one
 # the live pointer names, so a new run retires the one it replaces. Listing

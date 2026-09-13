@@ -56,6 +56,7 @@ make serve                       # vite preview on 127.0.0.1
 npm run dev                      # vite dev server
 
 make test                        # rust + python + web unit tests (incl. encoder parity)
+make tc-build [ISSUE=YYYYMMDDHH] # the tropical cyclone product for one hour (needs eccodes' bufr_dump)
 make test-rust                   # regenerates the golden fixture, then cargo test
 make test-e2e                    # playwright (needs `npx playwright install chromium`)
 make encoder-rust                # build the native encoder from source (needs GDAL + libclang)
@@ -325,6 +326,29 @@ publishing data at the new version.**
   and a top-up byte-identical to a whole one — a bundle's bytes must never
   depend on what else was in the build, so nothing cross-variable may creep
   into a bundle or its manifest entry.
+
+### Tropical cyclone product (`xuebuild/tc/`)
+
+Storm tracks are a second product beside the runs, not inside the
+container: `docs/tc.md` is normative (schema v1). `xue tc-build` fetches
+each source into `data/raw/tc.<issue>/<source>/` with a `fetch.json`
+(`tc/fetch.py` — JTWC's RSS → `.tcw`, NHC's `CurrentStorms.json` → gzip
+a-deck + b-deck, the NCEP tracker's `avno` and GEFS member files, ECMWF
+`tf` BUFR through `eccodescli.bufr_dump_json`, IBTrACS), parses each with
+a parser that imports no other (`atcf.py`, `tcw.py`, `bufrtracks.py`,
+`ibtracs.py` → the shapes in `track.py`, SI units at the parser),
+resolves identities (`identity.py`: ATCF id first; invests and
+model-found systems get `x-<basin>-<hour>-<n>` ids that the **previous
+hour's index** carries forward by alias and by proximity, so
+`publish-tc.yml` runs `make live-tc-index` before building) and writes
+`web/public/data/tc.<issue>/` plus `latest-tc.json` (`schema.py`
+validates on write; `build.py` is the only place the sources meet). A
+source fails on its own into `sources[]`; the pointer is withheld only
+when no agency and no model contributed. `tests/fixtures/tc/` is a
+fetched hour and `tests/fixtures/tc/expected/` the golden built from it
+(`tests/prepare_tc_golden.py` regenerates; needs `bufr_dump`);
+`tc-registry.json` pins `registry.py` for the frontend's table to come.
+The shell does not draw the product yet.
 
 External tools are invoked as CLI subprocesses (`gdal.py`, `zstdcli.py`,
 `ffmpegcli.py`, `eccodescli.py`) rather than added as binary Python

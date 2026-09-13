@@ -120,8 +120,8 @@ export function renderLlmsFull(docs: readonly DocSource[]): string {
     "# Xue — full documentation",
     "",
     `> Concatenated from the repository (${REPO_URL}) at build time: the README, the`,
-    "> normative format specification, the native encoder notes and the case",
-    `> authoring guide. The short index is ${SITE_ORIGIN}/llms.txt.`,
+    "> normative format specification, the native encoder notes, the tropical",
+    `> cyclone product specification and the case authoring guide. The short index is ${SITE_ORIGIN}/llms.txt.`,
     "",
   ].join("\n");
   const sections = docs.map(
@@ -132,7 +132,13 @@ export function renderLlmsFull(docs: readonly DocSource[]): string {
 }
 
 /** The documents `llms-full.txt` carries, in reading order. */
-export const LLMS_FULL_SOURCES: readonly string[] = ["README.md", "docs/format.md", "docs/encoder.md", "showcase/README.md"];
+export const LLMS_FULL_SOURCES: readonly string[] = [
+  "README.md",
+  "docs/format.md",
+  "docs/encoder.md",
+  "docs/tc.md",
+  "showcase/README.md",
+];
 
 export interface DiscoveryOptions {
   /** Repository root: where the documents live. */

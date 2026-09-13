@@ -4,6 +4,7 @@ import argparse
 import json
 import logging
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 
 from .assemble import (
@@ -21,6 +22,11 @@ from .errors import ConversionError, XueError
 from .fetch import fetch_run, parse_run, resolve_run
 from .showcase import build_case, load_cases, write_catalog
 from .sources import SOURCES, source_spec
+from .tc.build import build_product as build_tc_product
+from .tc.build import load_previous_index as load_previous_tc_index
+from .tc.fetch import SOURCE_IDS as TC_SOURCE_IDS
+from .tc.fetch import fetch_sources as fetch_tc_sources
+from .tc.schema import parse_issue as parse_tc_issue
 
 
 def forecast_hours(value: str) -> int:
@@ -212,6 +218,31 @@ def parser() -> argparse.ArgumentParser:
     showcase_check = showcase_commands.add_parser("check", help="validate the case definitions without building")
     showcase_check.add_argument("cases", nargs="*")
     showcase_check.add_argument("--cases-dir", type=Path, default=Path("showcase/cases"))
+
+    tc_build = commands.add_parser(
+        "tc-build",
+        help="fetch the tropical cyclone track sources and write one tc.<issue>/ product directory and its pointer",
+    )
+    tc_build.add_argument(
+        "--issue",
+        default="now",
+        help="the aggregation hour, YYYYMMDDHH in UTC, or now (the current hour); one directory per hour",
+    )
+    tc_build.add_argument("--raw-dir", type=Path, default=Path("data/raw"))
+    tc_build.add_argument("--output-dir", type=Path, default=Path("web/public/data"))
+    tc_build.add_argument(
+        "--sources",
+        help=f"comma-separated subset of the sources to build from (default: all of {','.join(TC_SOURCE_IDS)})",
+    )
+    tc_build.add_argument(
+        "--previous-index",
+        type=Path,
+        help="the previous hour's index.json, whose system ids carry over (default: the one the local "
+        "latest-tc.json names, if any; `make live-tc-index` fetches the live one)",
+    )
+    tc_build.add_argument("--offline", action="store_true", help="build from what is already fetched; touch no network")
+    tc_build.add_argument("--force", action="store_true", help="rebuild an issue whose directory exists")
+    tc_build.add_argument("--force-download", action="store_true", help="fetch every source again")
     return root
 
 
@@ -353,6 +384,29 @@ def main(argv: list[str] | None = None) -> int:
             if arguments.base_manifest is not None:
                 bundle_ids = missing_bundle_ids(source, read_manifest(arguments.base_manifest, what="live manifest"))
             print(json.dumps(bundle_group_matrix(source, arguments.max_jobs, bundle_ids)))
+        elif arguments.command == "tc-build":
+            if arguments.issue == "now":
+                issue = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
+            else:
+                issue = parse_tc_issue(arguments.issue)
+            sources = TC_SOURCE_IDS
+            if arguments.sources:
+                sources = tuple(dict.fromkeys(item.strip() for item in arguments.sources.split(",") if item.strip()))
+                unknown = [item for item in sources if item not in TC_SOURCE_IDS]
+                if unknown:
+                    raise XueError(f"unknown tc sources {unknown}; choose from {', '.join(TC_SOURCE_IDS)}")
+            if not arguments.offline:
+                fetch_tc_sources(arguments.raw_dir, issue, sources, force=arguments.force_download)
+            previous = load_previous_tc_index(arguments.previous_index, arguments.output_dir)
+            report = build_tc_product(
+                issue,
+                arguments.raw_dir,
+                arguments.output_dir,
+                sources=sources,
+                previous_index=previous,
+                force=arguments.force,
+            )
+            print(json.dumps(report, indent=2))
         return 0
     except XueError as exc:
         print(f"error: {exc}", file=sys.stderr)

@@ -18,6 +18,8 @@ web/public/data/latest.json
 web/public/data/latest-ecmwf.json
 web/public/data/latest-sflux.json
 web/public/data/latest-hrrr.json
+web/public/data/tc.*/
+web/public/data/latest-tc.json
 web/public/data/showcase/
 # Scratch case definitions for local development; the curated set is
 # showcase/cases/ and is checked in.

@@ -1,0 +1,10 @@
+{
+  "id": "ecmwf",
+  "ok": true,
+  "fetched": "2026-09-12T07:03:00Z",
+  "url": "https://storage.googleapis.com/ecmwf-open-data/20260912/00z/ifs/0p25/oper/20260912000000-360h-oper-tf.bufr",
+  "cycle": "2026091200",
+  "files": [
+    "2026091200-oper-tf.bufr"
+  ]
+}

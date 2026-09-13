@@ -1,0 +1,11 @@
+{
+  "id": "jtwc",
+  "ok": true,
+  "fetched": "2026-09-12T07:03:00Z",
+  "url": "https://www.metoc.navy.mil/jtwc/rss/jtwc.rss",
+  "products": 2,
+  "files": [
+    "ep1426.tcw",
+    "ep9726.tcw"
+  ]
+}

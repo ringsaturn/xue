@@ -121,6 +121,23 @@ https://dataset.ringsaturn.me/xue/. The contract is two layers:
   keyed by language, `model`, `run`, `runTime`, `forecastHours`, `bbox`,
   `variables`, `defaultVariable`, `eventTime`, `tags`, `credit`, and its own
   `manifestPath` + `manifestCrc32`, which resolve like a live run's.
+- Tropical cyclones are a separate, hourly JSON product under the same
+  root (schema 1, `docs/tc.md`): the mutable pointer `latest-tc.json`
+  (`schemaVersion`, `product: "tc"`, `issued`, `path`, `byteLength`,
+  `crc32`) names `tc.<YYYYMMDDHH>/index.json`, an immutable directory per
+  aggregation hour holding the index (`storms[]` with `id`, `level` A/B/C,
+  `basin`, `name`, `path`, `byteLength`, `crc32`, the headline `position`
+  / `vmax` / `pmin` / `class`, the keys present; `crosswalk` from retired
+  ids; `sources[]` with `ok` and the error when not) and one `<storm
+  id>.json` per system: `best` (multi-agency best tracks, IBTrACS keys),
+  `agencies` (official forecasts: `nhc`, `jtwc`), `models` (`gfs`, `ecmwf`
+  as tracks; `gefs`, `ecmwfens` as member × lead fixed-point arrays, −32768
+  missing), `alert` (a JTWC formation alert). A-level ids are ATCF ids
+  (`EP142026`); unnumbered systems carry `x-<basin>-<hour>-<n>`. Units
+  are SI (m/s, hPa, km, seconds from `base`); wind radii are keyed `34` /
+  `50` / `64` (knots, the centres' names) as `[ne, se, sw, nw]` in km.
+  Sources: NHC, JTWC, the NCEP GFS/GEFS tracker, ECMWF open data `tf`
+  BUFR, IBTrACS. The viewer does not draw it yet.
 
 A `.xue` bundle is one gridded variable (or a u/v pair) for a whole run:
 8-bit quantized planes on the native grid, temporal residual prediction in
@@ -146,12 +163,15 @@ format is specified in `docs/format.md` (link below). Decoders you can call:
 - [Native encoder](https://github.com/ringsaturn/xue/blob/main/docs/encoder.md):
   the Rust port of the encoder and how it is held byte-identical to the
   Python reference.
+- [Tropical cyclone product](https://github.com/ringsaturn/xue/blob/main/docs/tc.md):
+  the normative description of the hourly track product — delivery,
+  units, identity rules, the index, storm and pointer files.
 - [Authoring cases](https://github.com/ringsaturn/xue/blob/main/showcase/README.md):
   how a historical event becomes a cropped, permanently published case.
 
 ## Optional
 
-- [llms-full.txt](https://xue.ringsaturn.me/llms-full.txt): all four
+- [llms-full.txt](https://xue.ringsaturn.me/llms-full.txt): all five
   documents above in one file, generated at each deploy.
 - [Sitemap](https://xue.ringsaturn.me/sitemap.xml): the two pages and every
   published case.

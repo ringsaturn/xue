@@ -1,0 +1,10 @@
+{
+  "id": "ecmwfens",
+  "ok": true,
+  "fetched": "2026-09-12T07:03:00Z",
+  "url": "https://storage.googleapis.com/ecmwf-open-data/20260911/00z/ifs/0p25/enfo/20260911000000-360h-enfo-tf.bufr",
+  "cycle": "2026091100",
+  "files": [
+    "2026091100-enfo-tf.bufr"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "gefs",
+  "ok": true,
+  "fetched": "2026-09-12T07:03:00Z",
+  "url": "https://nomads.ncep.noaa.gov/pub/data/nccf/com/ens_tracker/prod/gefs.20260912/00/tctrack/aemn.t00z.cyclone.trackatcfunix",
+  "cycle": "2026091200",
+  "members": 4,
+  "files": [
+    "2026091200/ac00.t00z.cyclone.trackatcfunix",
+    "2026091200/aemn.t00z.cyclone.trackatcfunix",
+    "2026091200/ap01.t00z.cyclone.trackatcfunix",
+    "2026091200/ap02.t00z.cyclone.trackatcfunix"
+  ]
+}

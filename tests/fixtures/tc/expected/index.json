@@ -1,0 +1,146 @@
+{
+ "schemaVersion": 1,
+ "issued": "2026-09-12T06:00:00Z",
+ "generated": "2026-09-12T07:05:00Z",
+ "storms": [
+  {
+   "id": "EP142026",
+   "level": "A",
+   "basin": "EP",
+   "name": "NORBERT",
+   "path": "EP142026.json",
+   "byteLength": 100903,
+   "crc32": "3d613283",
+   "aliases": {},
+   "position": {
+    "time": "2026-09-12T00:00:00Z",
+    "lat": 16.8,
+    "lon": -126.0
+   },
+   "vmax": 28.3,
+   "pmin": 996.0,
+   "class": "TS",
+   "classAgency": "nhc",
+   "agencies": ["jtwc", "nhc"],
+   "models": ["gfs", "gefs", "ecmwf", "ecmwfens"],
+   "best": ["usa"]
+  },
+  {
+   "id": "x-ep-2026091012-1",
+   "level": "B",
+   "basin": "EP",
+   "name": null,
+   "path": "x-ep-2026091012-1.json",
+   "byteLength": 19155,
+   "crc32": "24eebb54",
+   "aliases": {
+    "EP97": {
+     "from": "2026-09-11T18:00:00Z",
+     "to": "2026-09-12T00:00:00Z"
+    }
+   },
+   "position": {
+    "time": "2026-09-11T18:00:00Z",
+    "lat": 12.9,
+    "lon": -112.8
+   },
+   "vmax": 10.3,
+   "pmin": null,
+   "class": null,
+   "classAgency": "jtwc",
+   "agencies": [],
+   "models": ["gfs", "gefs"],
+   "best": ["usa"]
+  },
+  {
+   "id": "x-wp-2026091200-1",
+   "level": "B",
+   "basin": "WP",
+   "name": null,
+   "path": "x-wp-2026091200-1.json",
+   "byteLength": 12766,
+   "crc32": "95419395",
+   "aliases": {
+    "WP98": {
+     "from": "2026-09-12T00:00:00Z",
+     "to": "2026-09-12T00:00:00Z"
+    },
+    "ecmwf:70W": {
+     "from": "2026-09-12T00:00:00Z",
+     "to": "2026-09-12T00:00:00Z"
+    }
+   },
+   "position": {
+    "time": "2026-09-12T00:00:00Z",
+    "lat": 15.7,
+    "lon": 109.6
+   },
+   "vmax": 17.0,
+   "pmin": 1007.0,
+   "class": null,
+   "classAgency": "gfs",
+   "agencies": [],
+   "models": ["gfs", "gefs", "ecmwf"],
+   "best": []
+  }
+ ],
+ "crosswalk": {},
+ "sources": [
+  {
+   "id": "jtwc",
+   "ok": true,
+   "fetched": "2026-09-12T07:03:00Z",
+   "url": "https://www.metoc.navy.mil/jtwc/rss/jtwc.rss",
+   "products": 2,
+   "systems": 2
+  },
+  {
+   "id": "nhc",
+   "ok": true,
+   "fetched": "2026-09-12T07:03:00Z",
+   "url": "https://www.nhc.noaa.gov/CurrentStorms.json",
+   "storms": 1,
+   "systems": 1
+  },
+  {
+   "id": "gfs",
+   "ok": true,
+   "fetched": "2026-09-12T07:03:00Z",
+   "url": "https://nomads.ncep.noaa.gov/pub/data/nccf/com/ens_tracker/prod/gfs.20260912/00/tctrack/avno.t00z.cyclone.trackatcfunix",
+   "cycle": "2026091200",
+   "systems": 3
+  },
+  {
+   "id": "gefs",
+   "ok": true,
+   "fetched": "2026-09-12T07:03:00Z",
+   "url": "https://nomads.ncep.noaa.gov/pub/data/nccf/com/ens_tracker/prod/gefs.20260912/00/tctrack/aemn.t00z.cyclone.trackatcfunix",
+   "cycle": "2026091200",
+   "members": 4,
+   "systems": 3
+  },
+  {
+   "id": "ecmwf",
+   "ok": true,
+   "fetched": "2026-09-12T07:03:00Z",
+   "url": "https://storage.googleapis.com/ecmwf-open-data/20260912/00z/ifs/0p25/oper/20260912000000-360h-oper-tf.bufr",
+   "cycle": "2026091200",
+   "systems": 2
+  },
+  {
+   "id": "ecmwfens",
+   "ok": true,
+   "fetched": "2026-09-12T07:03:00Z",
+   "url": "https://storage.googleapis.com/ecmwf-open-data/20260911/00z/ifs/0p25/enfo/20260911000000-360h-enfo-tf.bufr",
+   "cycle": "2026091100",
+   "systems": 1
+  },
+  {
+   "id": "ibtracs",
+   "ok": true,
+   "fetched": "2026-09-12T07:03:00Z",
+   "url": "https://www.ncei.noaa.gov/data/international-best-track-archive-for-climate-stewardship-ibtracs/v04r01/access/csv/ibtracs.ACTIVE.list.v04r01.csv",
+   "systems": 2
+  }
+ ]
+}

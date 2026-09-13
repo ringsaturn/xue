@@ -1,0 +1,12 @@
+{
+  "id": "nhc",
+  "ok": true,
+  "fetched": "2026-09-12T07:03:00Z",
+  "url": "https://www.nhc.noaa.gov/CurrentStorms.json",
+  "storms": 1,
+  "files": [
+    "CurrentStorms.json",
+    "aep142026.dat",
+    "bep142026.dat"
+  ]
+}

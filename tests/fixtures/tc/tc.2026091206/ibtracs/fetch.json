@@ -1,0 +1,9 @@
+{
+  "id": "ibtracs",
+  "ok": true,
+  "fetched": "2026-09-12T07:03:00Z",
+  "url": "https://www.ncei.noaa.gov/data/international-best-track-archive-for-climate-stewardship-ibtracs/v04r01/access/csv/ibtracs.ACTIVE.list.v04r01.csv",
+  "files": [
+    "ibtracs.ACTIVE.list.v04r01.csv"
+  ]
+}

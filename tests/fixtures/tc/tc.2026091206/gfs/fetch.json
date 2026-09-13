@@ -1,0 +1,10 @@
+{
+  "id": "gfs",
+  "ok": true,
+  "fetched": "2026-09-12T07:03:00Z",
+  "url": "https://nomads.ncep.noaa.gov/pub/data/nccf/com/ens_tracker/prod/gfs.20260912/00/tctrack/avno.t00z.cyclone.trackatcfunix",
+  "cycle": "2026091200",
+  "files": [
+    "2026091200/avno.t00z.cyclone.trackatcfunix"
+  ]
+}

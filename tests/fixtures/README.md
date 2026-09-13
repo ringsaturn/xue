@@ -84,3 +84,33 @@ independent ECMWF-identity dataset (`generated/web/ecmwf/` with 3-hourly
 41-frame scalar bundles and `generated/web/latest-ecmwf.json`) so the model
 switcher can be exercised end to end. Playwright global setup runs it
 automatically. All generated files stay in ignored directories.
+
+# Tropical cyclone fixture
+
+`tc/tc.2026091206/` is one issue hour's raw directory as `xue tc-build`
+fetches it (`xuebuild/tc/fetch.py`), one subdirectory per source with the
+`fetch.json` the fetcher leaves: JTWC's warning for 14E (Norbert) and the
+formation alert for invest 97E, taken 2026-09-12 ~07 UTC; NHC's
+`CurrentStorms.json`, the `EP142026` b-deck cut at the 2026-09-12 00Z
+line and the a-deck cut to the `OFCL` / `AVNO` / `AEMN` / `EMXI` / `CARQ`
+lines of the 2026-09-11 18Z and 2026-09-12 00Z bases (so "the newest
+base wins" has two to choose from); the NCEP tracker's `avno` file of the
+2026-09-12 00Z cycle and four of the GEFS member files (`ac00`, `aemn`,
+`ap01`, `ap02`) of the same cycle; ECMWF's 2026-09-12 00Z `oper` `tf`
+BUFR cut to `14E` and `70W` and the 2026-09-11 00Z `enfo` file cut to
+`14E` (51 subsets, compressed), both with `bufr_filter`; and the IBTrACS
+active list cut to Norbert and one other system. About 180 KB.
+
+`tc/expected/` is the product built from it, offline, pretty-printed
+with scalar arrays kept on one line; `tests/prepare_tc_golden.py`
+regenerates it after a deliberate change, and `tests/test_tc.py` holds
+the build to it (skipped without `bufr_dump`). `tc-registry.json` pins
+the agency / model registry (`xuebuild/tc/registry.py`) the frontend's
+table is held to.
+
+The BUFR crops were cut with:
+
+```sh
+printf 'set unpack=1;\nif (stormIdentifier is "14E" || stormIdentifier is "70W") { write; }\n' > sel.filter
+bufr_filter -o 2026091200-oper-tf.bufr sel.filter 20260912000000-360h-oper-tf.bufr
+```
