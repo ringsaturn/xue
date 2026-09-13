@@ -47,16 +47,18 @@ def _common_run_arguments(parser: argparse.ArgumentParser, *, force_help: str) -
         default=None,
         help="last forecast hour, inclusive; must lie on the model's published axis "
         "(e.g. GFS: hourly to 120, then 3-hourly to 240); defaults to the whole axis "
-        "the model publishes (240 for the global models, 18 for HRRR)",
+        "the model publishes (240 for the global models, 18 for HRRR); on an observation "
+        "source, the window length in hours (3 for MRMS)",
     )
     parser.add_argument("--force", action="store_true", help=force_help)
 
 
-def _model_argument(parser: argparse.ArgumentParser, *, live_only: bool = True) -> None:
-    """The --model choice. Fetching and live runs are for forecast sources
-    only; conversion also takes an observation source, whose input is one
-    local NetCDF file rather than a fetched cycle."""
-    choices = tuple(name for name, source in SOURCES.items() if source.live or not live_only)
+def _model_argument(parser: argparse.ArgumentParser, *, fetched_only: bool = True) -> None:
+    """The --model choice. Fetching and building are for the sources with a
+    bucket to fetch from — every forecast, and the MRMS mosaic; conversion
+    also takes the local-file observation source, whose input is one NetCDF
+    file rather than a fetched run."""
+    choices = tuple(name for name, source in SOURCES.items() if source.fetched or not fetched_only)
     parser.add_argument(
         "--model",
         choices=choices,
@@ -64,8 +66,10 @@ def _model_argument(parser: argparse.ArgumentParser, *, live_only: bool = True) 
         help=(
             "data source: NOAA GFS 0.25 degree (hourly), ECMWF IFS open data "
             "(3-hourly), GFS surface flux on the native ~13 km grid (hourly, adds dswrf), "
-            "or NOAA HRRR over the contiguous US (3 km, a cycle every hour, hourly to 18)"
-            + ("" if live_only else "; radar is the CMA mosaic, read from a local NetCDF file")
+            "NOAA HRRR over the contiguous US (3 km, a cycle every hour, hourly to 18), "
+            "or NOAA MRMS, the radar mosaic over the contiguous US (an observation every "
+            "two minutes; --run names the window's first hour and --hours its length, 3 by default)"
+            + ("" if fetched_only else "; radar is the CMA mosaic, read from a local NetCDF file")
         ),
     )
 
@@ -84,7 +88,7 @@ def parser() -> argparse.ArgumentParser:
         "convert-bin", help="convert a GRIB run (or one observation NetCDF file) into per-variable Xue bundles"
     )
     convert_bin_parser.add_argument("input", type=Path)
-    _model_argument(convert_bin_parser, live_only=False)
+    _model_argument(convert_bin_parser, fetched_only=False)
     convert_bin_parser.add_argument("--output", type=Path, required=True, help="output directory for per-variable .xue files")
     convert_bin_parser.add_argument("--profile", choices=("quality", "compact", "balanced"), default="quality")
     convert_bin_parser.add_argument("--work-dir", type=Path, default=Path("data/work"))
@@ -323,7 +327,11 @@ def main(argv: list[str] | None = None) -> int:
                 # directory; the tiny mutable per-model latest pointer at the
                 # data root is what takes a new run live.
                 manifest_path = output_directory / "manifest.json"
-                latest_path: Path | None = arguments.output_dir / source.latest_filename
+                # A fetched source with no live feed yet (MRMS) builds the
+                # run directory and its manifest, and nothing points at it.
+                latest_path: Path | None = (
+                    arguments.output_dir / source.latest_filename if source.latest_filename else None
+                )
             else:
                 # One group of a fanned-out publish: only these bundles'
                 # inputs are fetched, into a raw directory of their own so the

@@ -14,10 +14,13 @@ sees is still one GRIB. A
 source may be computed on a map projection (HRRR, Lambert conformal): its
 ``regrid`` says so, and the converter resamples every plane onto the regular
 grid the format describes (:mod:`xuebuild.reproject`).
-Not every source is a forecast: an ``observation`` source (the CMA radar
-mosaic) is a local file holding a series of observed analyses, with no cycle
-to fetch, no live pointer, and an axis that is whatever times the file
-carries.
+Not every source is a forecast: an ``observation`` source holds a series
+of observed analyses with no cycle and an axis that is whatever times the
+observations carry. The CMA radar mosaic is one local file per event, with
+nothing to fetch and no live pointer; the NOAA MRMS mosaic is fetched from
+its bucket a window at a time (``window_hours``), one whole GRIB per
+two-minute frame, and thinned onto a coarser grid (``downsample``) before
+anything else reads it.
 ECMWF has no native rate field; its accumulated ``tp`` input is de-accumulated
 into prate by the converter. GFS sflux has only interval-averaged PRATE (the
 averaging window resets every 6 hours); the converter de-averages consecutive
@@ -64,9 +67,32 @@ class CompanionFile:
 
 
 @dataclass(frozen=True)
+class Downsample:
+    """How a source's planes are thinned onto the grid its bundles carry:
+    every ``factor`` x ``factor`` block of source cells becomes one cell.
+
+    The MRMS mosaic is published at 0.01° (7000 x 3500 cells over the
+    contiguous United States), which is more than a browser wants to move
+    every two minutes; the bundles carry it at 0.02°. The reduction is the
+    **block maximum**, not a sample and not a mean: a composite reflectivity
+    is already the column maximum, and keeping the strongest return of each
+    block is how a radar product is thinned — a sample drops convective
+    cores at random and a mean dilutes them. The block maximum of a plane
+    whose fills are already the codebook bottom has no floating-point order
+    to disagree on, so the two encoders repeat it byte for byte for free.
+    Runs after the fill rules and before any crop; the grid ``production_grid``
+    and ``tile`` describe is the thinned one. Mutually exclusive with
+    ``regrid``: a projected source is resampled, not thinned."""
+
+    factor: int
+    """Cells per block along each axis; the source dimensions must divide
+    by it."""
+
+
+@dataclass(frozen=True)
 class SourceSpec:
     id: str
-    """CLI / URL / directory id: "gfs", "ecmwf", "sflux", "hrrr" or "radar"."""
+    """CLI / URL / directory id: "gfs", "ecmwf", "sflux", "hrrr", "radar" or "mrms"."""
     manifest_model: str
     """The manifest and bundle-metadata ``model`` string."""
     product: str
@@ -115,6 +141,14 @@ class SourceSpec:
     bundle_scalar_ids: tuple[str, ...] = ("tmp2m", "prate")
     """Scalar variables published as single-variable bundles, in manifest
     order."""
+    core_bundle_ids: tuple[str, ...] = ("tmp2m", "prate")
+    """The bundles a complete run of this source must publish — what a live
+    manifest is refused without (:mod:`xuebuild.manifest`). The temperature
+    and precipitation pair for every forecast source, the composite
+    reflectivity for a radar mosaic, which has no temperature to publish;
+    a cropped showcase case or a ``--bundles`` build is exempt either
+    way. Mirrored by ``MODEL_CORE_BUNDLES`` for the validators, which know
+    a manifest by its ``model`` string."""
     bundle_vector_ids: tuple[str, ...] = ()
     """Two-variable bundles published, in manifest order: ``wind10m`` for the
     10 m pair, ``wind<level>`` for an isobaric pair, ``qflux<level>`` for the
@@ -149,11 +183,32 @@ class SourceSpec:
     threads, so falling back to one of them costs the same as it always
     did rather than a burst."""
     observation: bool = False
-    """True for a source that is not a forecast at all: one local file
-    holding a series of observed analyses, read through
-    :mod:`xue.observation` instead of fetched frame by frame. Its axis is
-    whatever times the file carries — including gaps where a publication was
-    missed — so it has no published cadence to validate against."""
+    """True for a source that is not a forecast at all: a series of observed
+    analyses, with no cycle and no lead time. Its axis is whatever times
+    the observations carry — including gaps where a publication was missed —
+    so it has no published cadence to validate against. Read from one local
+    file through :mod:`xuebuild.observation` when :attr:`window_hours` is
+    None, fetched from a bucket frame by frame otherwise."""
+    window_hours: int | None = None
+    """Set for an observation source whose frames are fetched rather than
+    read from a local file: the length of the window one build takes, in
+    hours, which is what ``--hours`` defaults to the way
+    :attr:`horizon_hours` is for a forecast. A run of such a source is the
+    window that starts at the run's hour and reaches ``hours`` past it,
+    inclusive; the run time is that hour, and the run id names it. None for
+    a local-file observation (the CMA mosaic), which has nothing to fetch."""
+    cadence_seconds: int | None = None
+    """For a fetched observation: the product's nominal interval, which every
+    frame's observation time is snapped *down* to before it becomes a frame
+    offset. MRMS stamps each two-minute composite some forty seconds past
+    the mark (``00:00:42``, ``00:02:41``, ...), and the container's axis
+    has no room for the seconds: the frame at ``00:02:41`` is the frame at
+    ``00:02``. It is also the ``unitSeconds`` such a bundle declares, since
+    no coarser unit fits its axis."""
+    downsample: Downsample | None = None
+    """Set when the source is published on a grid coarser than it arrives
+    on (:class:`Downsample`). Like ``regrid``, ``production_grid`` and
+    ``tile`` describe the grid the bundles carry, not the source's."""
     cycle_hours: int = 6
     """Hours between the source's cycles: a run starts on a multiple of this
     (00/06/12/18 UTC for the global models, every hour for HRRR)."""
@@ -179,9 +234,20 @@ class SourceSpec:
         return self.latest_filename is not None
 
     @property
+    def fetched(self) -> bool:
+        """Whether a run of the source is fetched from a bucket — every
+        forecast, and an observation with a :attr:`window_hours` — as
+        opposed to read from a local file. What ``fetch`` and ``build-bin``
+        offer."""
+        return not self.observation or self.window_hours is not None
+
+    @property
     def horizon_hours(self) -> int:
         """The last forecast hour the source publishes — what a live run
-        carries, and what ``--hours`` defaults to."""
+        carries, and what ``--hours`` defaults to. For a fetched observation
+        it is the window length instead."""
+        if self.observation and self.window_hours is not None:
+            return self.window_hours
         if not self.steps:
             raise DownloadError(f"{self.manifest_model} publishes no forecast axis")
         return self.steps[-1][0]
@@ -544,6 +610,7 @@ SOURCES: dict[str, SourceSpec] = {
         input_variable_ids=("cref",),
         accumulated_precipitation=False,
         bundle_scalar_ids=("cref",),
+        core_bundle_ids=("cref",),
         # Tile-grid dependent: the file says what it covers, and nothing here
         # is ever built with require_complete.
         production_grid=(0, 0),
@@ -553,9 +620,56 @@ SOURCES: dict[str, SourceSpec] = {
         tile=(64, 64),
         observation=True,
     ),
+    # NOAA MRMS (Multi-Radar Multi-Sensor): the national radar mosaic over
+    # the contiguous United States, already merged and quality-controlled,
+    # a composite every two minutes on a regular 0.01° grid, public domain,
+    # on its own bucket about a minute behind real time. An observation
+    # source like the CMA mosaic, but fetched: one whole gzipped GRIB per
+    # product per frame, no ``.idx`` and no byte ranges (``xuebuild/fetch.py``
+    # lists the day's directory and takes the frames of the window). The
+    # composite reflectivity is published under the mosaic's ``cref`` and the
+    # precipitation rate under ``prate``, each through the registry's
+    # alternate for the MRMS-local identity (discipline 209), with the
+    # product's out-of-coverage and no-echo sentinels folded to the codebook
+    # bottom. The 7000 x 3500 grid is thinned two to one by block maximum
+    # (``Downsample``) onto 0.02°, which is 6.1 M cells a frame — measured
+    # 2026-09-13 on a convective evening at about 420 KB a frame raw and
+    # half that against the previous frame, so a three-hour window is tens
+    # of megabytes. Its frames are stamped a jittered forty seconds past each
+    # two-minute mark and snapped to the mark (``cadence_seconds``). No live
+    # pointer yet: a build names the window's first hour as its run.
+    "mrms": SourceSpec(
+        id="mrms",
+        manifest_model="NOAA-MRMS",
+        product="conus-cref",
+        latest_filename=None,
+        steps=(),
+        input_variable_ids=("cref", "prate"),
+        accumulated_precipitation=False,
+        bundle_scalar_ids=("cref", "prate"),
+        core_bundle_ids=("cref",),
+        # The thinned 0.02° grid: 130W to 60W, 55N to 20N.
+        production_grid=(3500, 1750),
+        # 64 x 64 cells is 1.28° at this step — 55 x 28 = 1540 tiles, each a
+        # series of ninety 4 KB planes over a three-hour window.
+        tile=(64, 64),
+        # S3 answers bursts without throttling, and a frame is one object.
+        fetch_concurrency=8,
+        observation=True,
+        cycle_hours=1,
+        window_hours=3,
+        cadence_seconds=120,
+        downsample=Downsample(factor=2),
+        video=False,
+    ),
 }
 
 MODEL_PRODUCTS: dict[str, str] = {spec.manifest_model: spec.product for spec in SOURCES.values()}
+MODEL_CORE_BUNDLES: dict[str, tuple[str, ...]] = {
+    spec.manifest_model: spec.core_bundle_ids for spec in SOURCES.values()
+}
+"""The bundles a complete run of each dataset must publish, by the manifest
+``model`` string the validators know a manifest by."""
 
 
 def source_spec(model: str) -> SourceSpec:

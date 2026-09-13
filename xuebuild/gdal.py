@@ -139,8 +139,21 @@ def celsius_expression(unit: str, *, low: int = -60, high: int = 50) -> str:
     return f"maximum({low},minimum({high},{value}))"
 
 
+# How GDAL spells a rate already in millimetres per hour: the MRMS
+# radar-derived precipitation rate arrives that way, and takes no scaling.
+_MM_PER_HOUR_UNITS = {"mm/hr", "mm/h"}
+
+
+def precipitation_rate_is_mm_per_hour(unit: str) -> bool:
+    """Whether a precipitation rate record is already in mm/h (MRMS), as
+    opposed to the kg m⁻² s⁻¹ every NWP record carries."""
+    return re.sub(r"[\s*()\[\]]", "", unit.strip().lower()) in _MM_PER_HOUR_UNITS
+
+
 def precipitation_expression(unit: str) -> str:
     compact = re.sub(r"[\s*()\[\]]", "", unit.strip().lower()).replace("²", "^2")
+    if compact in _MM_PER_HOUR_UNITS:
+        return "maximum(0,minimum(50,A))"
     aliases = {
         "kg/m^2s",
         "kg/m2s",
@@ -635,13 +648,29 @@ def _isobaric_level_re(level_hpa: int) -> re.Pattern[str]:
     )
 
 
+def _is_mrms_record(metadata: dict[str, str], variable_id: str) -> bool:
+    """One MRMS product under the registry's MRMS alternate for
+    ``variable_id``: GDAL names the record by the product (its local table
+    for centre 161 — ``MergedReflectivityQCComposite``, ``PrecipRate``), on
+    the MRMS-local discipline 209. The level is part of the product name
+    (``_00.50`` is the 500 m surface the composite is stamped on), so the
+    element alone is unambiguous."""
+    product = variable_spec(variable_id).mrms_product
+    if not product:
+        return False
+    element = product.split("_", 1)[0]
+    return metadata.get("GRIB_ELEMENT", "") == element and metadata.get("GRIB_DISCIPLINE", "") == "209"
+
+
 def _band_matches(variable_id: str, metadata: dict[str, str], description: str) -> bool:
     if variable_id in ("tmp2m", "dpt2m", "aptmp2m"):
         return _is_two_metre_record(metadata, description, variable_spec(variable_id).grib_element)
-    if variable_id in ("prate", "prate_ave"):
-        # sflux files carry only the interval-averaged PRATE record, pgrb2
-        # fetches only the instantaneous one — the same surface matcher hits
-        # exactly the record its source provides.
+    if variable_id == "prate":
+        # pgrb2 fetches only the instantaneous PRATE record, so the surface
+        # matcher hits exactly it; the MRMS rate is its own product.
+        return _is_surface_precipitation_rate(metadata, description) or _is_mrms_record(metadata, variable_id)
+    if variable_id == "prate_ave":
+        # sflux files carry only the interval-averaged PRATE record.
         return _is_surface_precipitation_rate(metadata, description)
     if variable_id == "tp":
         return _is_total_precipitation(metadata, description)
@@ -656,7 +685,9 @@ def _band_matches(variable_id: str, metadata: dict[str, str], description: str) 
             metadata, description
         )
     if variable_id == "cref":
-        return _is_entire_atmosphere_record(metadata, description, variable_spec(variable_id).grib_element)
+        return _is_entire_atmosphere_record(
+            metadata, description, variable_spec(variable_id).grib_element
+        ) or _is_mrms_record(metadata, variable_id)
     if variable_id in ("lcdc", "mcdc", "hcdc"):
         return _is_cloud_layer_record(metadata, description, variable_spec(variable_id).grib_element)
     if variable_id in ("ugrd10m", "vgrd10m"):

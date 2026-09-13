@@ -21,9 +21,14 @@ use crate::encode::variables::{
     isobaric_variable, variable_spec, ISOBARIC_LEVELS_HPA, STANDARD_GRAVITY, WAVE_VECTOR_COMPONENT_IDS,
 };
 use crate::encode::gdalio::{needs_serial_access, netcdf_guard, Dataset};
-use crate::encode::grid::{crop_grid, normalize_longitudes, snap_global_longitudes, GridInfo};
+use crate::encode::grid::{
+    crop_grid, normalize_longitudes, snap_global_longitudes, snap_regional_steps, GridInfo,
+};
 use crate::encode::gribindex::inspect_grib_fast;
-use crate::encode::inspect::{inspect_grib_multi, normalize_unit, raster_expression, SUPPORTED_EXTENSIONS};
+use crate::encode::inspect::{
+    inspect_grib_multi, normalize_unit, precipitation_rate_is_mm_per_hour, raster_expression,
+    SUPPORTED_EXTENSIONS,
+};
 use crate::encode::manifest::{build_bin_manifest, build_latest_pointer, serialize_json, write_json};
 use crate::encode::metadata::{axis_unit_seconds, build_metadata, lead_hours, to_spaced_json};
 use crate::encode::model::{PlaneSource, SourceFrame};
@@ -408,14 +413,18 @@ fn grid_info(path: &Path, source: &SourceSpec) -> Result<GridInfo> {
             path.display()
         )));
     }
-    Ok(normalize_longitudes(snap_global_longitudes(GridInfo::new(
+    let grid = normalize_longitudes(snap_regional_steps(snap_global_longitudes(GridInfo::new(
         width,
         height,
         transform[0] + longitude_step / 2.0,
         transform[3] + latitude_step / 2.0,
         longitude_step,
         latitude_step,
-    ))))
+    ))));
+    match source.downsample {
+        Some(downsample) => grid.downsampled(downsample.factor, path),
+        None => Ok(grid),
+    }
 }
 
 /// Round to three decimal places the way Python's `round(value, 3)` does:
@@ -512,7 +521,12 @@ fn convert_units(variable_id: &str, unit: &str, values: &mut [f64]) -> Result<()
                 .for_each(|value| *value = (*value - 32.0) * 5.0 / 9.0),
             _ => {}
         },
-        "prate" => values.iter_mut().for_each(|value| *value *= 3600.0),
+        // kg m⁻² s⁻¹ (a millimetre per second) to mm/h; the MRMS rate is
+        // already mm/h.
+        "prate" if !precipitation_rate_is_mm_per_hour(unit) => {
+            values.iter_mut().for_each(|value| *value *= 3600.0)
+        }
+        "prate" => {}
         // ECMWF run-total precipitation accumulation, metres -> mm; the rate
         // derivation happens later against the previous frame.
         "tp" => values.iter_mut().for_each(|value| *value *= 1000.0),
@@ -683,6 +697,9 @@ fn extract_planes(
         fill_missing(variable_id, &mut plane)?;
         if let Some(resample) = &grid.resample {
             plane = resample.take(&plane)?;
+        }
+        if let Some(downsample) = &grid.downsample {
+            plane = downsample.take(&plane)?;
         }
         if let Some(crop) = grid.crop {
             plane = crop.take(&plane);
@@ -1206,11 +1223,13 @@ pub fn convert_bin(
     let grid_path: PathBuf;
     let plane_source: PlaneSource;
 
-    if source.observation {
-        // An observation source is one local file holding the whole series,
-        // one band per time. There are no records to match, no wind pair, and
-        // no published cadence to validate the axis against — the file's own
-        // times are the axis, gaps included.
+    if source.observation && !source.fetched() {
+        // A local-file observation source is one NetCDF file holding the
+        // whole series, one band per time. There are no records to match, no
+        // wind pair, and no published cadence to validate the axis against —
+        // the file's own times are the axis, gaps included. (A fetched
+        // observation is one GRIB per frame and takes the record path
+        // below, re-keyed onto its window's axis.)
         if inputs.len() != 1 {
             return Err(EncodeError::conversion(format!(
                 "a {} build takes exactly one NetCDF file",
@@ -1380,6 +1399,7 @@ pub fn convert_bin(
             &ordered_refs,
             source.optional_at_analysis,
             &reference_frames,
+            source.cadence_seconds,
             options,
         )?;
         grid_path = paths[0].clone();
@@ -1761,13 +1781,11 @@ pub fn convert_bin(
 
     // -- manifest and live pointer --------------------------------------------
     if let Some(manifest_path) = &options.manifest_path {
-        // The core tmp2m/prate pair is what a complete forecast run must
-        // publish. A restricted build ships only the bundles it was asked for,
-        // and a source that publishes neither can never satisfy the rule.
-        let require_core = options.bundle_ids.is_none()
-            && crate::encode::manifest::REQUIRED_BIN_BUNDLE_VARIABLES
-                .iter()
-                .all(|id| published.contains(id));
+        // The source's core bundles (`core_bundle_ids`: the tmp2m/prate pair
+        // on a forecast, the reflectivity on a radar mosaic) are what a
+        // complete run must publish. A restricted build ships only the
+        // bundles it was asked for.
+        let require_core = options.bundle_ids.is_none();
         let manifest_dir = manifest_path.parent().unwrap_or(Path::new("."));
         let entries: Vec<Value> = bundle_reports
             .iter()
@@ -1950,6 +1968,7 @@ fn prepare_frames_all(
     variable_ids: &[&str],
     optional_at_analysis: &[&str],
     reference_frames: &FileFrames,
+    cadence_seconds: Option<i64>,
     options: &ConvertOptions,
 ) -> Result<Vec<FileFrames>> {
     use rayon::prelude::*;
@@ -1975,6 +1994,9 @@ fn prepare_frames_all(
         }
     };
     log!(options, "indexed {} files", per_file.len());
+    if let Some(cadence_seconds) = cadence_seconds {
+        per_file = snap_observation_frames(per_file, cadence_seconds)?;
+    }
 
     for frames in &per_file {
         let mut leads: Vec<i64> = frames.iter().map(|(_, frame)| frame.lead_seconds).collect();
@@ -2031,6 +2053,59 @@ fn prepare_frames_all(
         }
     }
     Ok(per_file)
+}
+
+/// Re-key the frames of a fetched observation onto the window's axis — the
+/// port of `_snap_observation_frames` in `xuebuild/binconvert.py`.
+///
+/// A GRIB observation names only its own time: each MRMS composite is its
+/// own reference time, some forty seconds past a two-minute mark, with a
+/// zero forecast time. Every observation time is snapped *down* to its
+/// `cadence_seconds` slot (the products of one frame are stamped apart and
+/// agree on the slot), the run time is the whole hour the first slot falls
+/// in, and a frame's lead is its slot's distance from it.
+fn snap_observation_frames(per_file: Vec<FileFrames>, cadence_seconds: i64) -> Result<Vec<FileFrames>> {
+    let mut slots = Vec::with_capacity(per_file.len());
+    for frames in &per_file {
+        let mut file_slots: Vec<i64> = frames
+            .iter()
+            .map(|(_, frame)| frame.valid_time.unix_timestamp().div_euclid(cadence_seconds) * cadence_seconds)
+            .collect();
+        file_slots.sort_unstable();
+        file_slots.dedup();
+        if file_slots.len() != 1 {
+            return Err(EncodeError::conversion(format!(
+                "variables disagree on the observation slot in {}",
+                frames[0].1.path.display()
+            )));
+        }
+        slots.push(file_slots[0]);
+    }
+    let window_start = slots.iter().copied().min().unwrap_or(0).div_euclid(HOUR_SECONDS) * HOUR_SECONDS;
+    let run_time = OffsetDateTime::from_unix_timestamp(window_start)
+        .map_err(|error| EncodeError::conversion(format!("invalid observation time: {error}")))?;
+    let mut snapped = Vec::with_capacity(per_file.len());
+    for (frames, slot) in per_file.into_iter().zip(slots) {
+        let valid_time = OffsetDateTime::from_unix_timestamp(slot)
+            .map_err(|error| EncodeError::conversion(format!("invalid observation time: {error}")))?;
+        snapped.push(
+            frames
+                .into_iter()
+                .map(|(variable_id, frame)| {
+                    (
+                        variable_id,
+                        SourceFrame {
+                            run_time,
+                            valid_time,
+                            lead_seconds: slot - window_start,
+                            ..frame
+                        },
+                    )
+                })
+                .collect(),
+        );
+    }
+    Ok(snapped)
 }
 
 /// Raise if the GRIB2 header index disagrees with GDAL on the per-run
