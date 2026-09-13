@@ -26,6 +26,11 @@ export interface ForecastModelInfo {
    * a frame's offset is time elapsed since — so the viewer labels it as
    * such (mirrors `SourceSpec.observation` in xue/sources.py). */
   observation?: boolean;
+  /** The bundles a complete run of the dataset must ship — what a live
+   * manifest is refused without: the tmp2m/prate pair on a forecast, the
+   * reflectivity on a radar mosaic (mirrors `SourceSpec.core_bundle_ids`).
+   * Absent means the forecast pair, `FORECAST_VARIABLE_IDS`. */
+  coreBundles?: readonly string[];
   /** The part of the world a regional model covers, as [west, south, east,
    * north] in degrees: where the camera goes when the model is opened on a
    * view that shows none of it. A global model has none. */
@@ -56,7 +61,7 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
   },
   // CMA weather radar level-3 mosaic composite reflectivity: observations,
   // not a forecast, and published only as showcase cases.
-  radar: { id: "radar", label: "CMA-RADAR", product: "l3-mst-cref", observation: true },
+  radar: { id: "radar", label: "CMA-RADAR", product: "l3-mst-cref", observation: true, coreBundles: ["cref"] },
 };
 
 /** True when a dataset is observations, not a forecast. */
@@ -405,9 +410,11 @@ function validateVideoDescriptor(input: unknown, paths: Set<string>): VideoBundl
 }
 
 export interface ManifestValidationOptions {
-  /** Whether the manifest must ship the core tmp2m and prate pair. True for
-   * a live run, which always covers every core variable; false for a
-   * showcase case, which ships only the bundles its event is about. */
+  /** Whether the manifest must ship its dataset's core bundles
+   * (`ForecastModelInfo.coreBundles`: the tmp2m and prate pair on a
+   * forecast). True for a live run, which always covers every core
+   * variable; false for a showcase case, which ships only the bundles its
+   * event is about. */
   requireCoreVariables?: boolean;
 }
 
@@ -474,7 +481,7 @@ export function validateManifest(
     variables.push(bundle.variable);
   }
   if (options.requireCoreVariables ?? true) {
-    for (const id of FORECAST_VARIABLE_IDS) {
+    for (const id of modelInfo.coreBundles ?? FORECAST_VARIABLE_IDS) {
       if (!variables.includes(id)) throw new Error(`manifest has no bundle for variable ${id}`);
     }
   }

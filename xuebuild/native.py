@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import zlib
 from collections.abc import Sequence
 from datetime import datetime
@@ -35,7 +36,6 @@ from typing import Any
 from .binconvert import published_bundle_ids, video_variable_ids
 from .errors import ConversionError
 from .manifest import (
-    REQUIRED_BIN_BUNDLE_VARIABLES,
     build_bin_manifest,
     build_latest_pointer,
     write_bin_manifest,
@@ -74,6 +74,22 @@ def available() -> bool:
         require()
     except ConversionError:
         return False
+    return True
+
+
+def knows_source(model: str) -> bool:
+    """Whether the installed wheel's source table has ``model``.
+
+    The wheel carries a table of its own, and one that predates a source
+    refuses the model before it looks at any input — so an empty input list
+    is enough to ask, and nothing is read or written. What a test that
+    needs a wheel at least as new as some source skips on."""
+    if not available():
+        return False
+    try:
+        require().convert_bin([], Path(os.devnull), model=model)
+    except Exception as exc:  # noqa: BLE001 - the wheel raises a plain RuntimeError
+        return "unsupported model" not in str(exc)
     return True
 
 
@@ -330,10 +346,7 @@ def convert_bin(
     report["videos"] = list(videos.values())
 
     if manifest_path is not None:
-        require_core = bundle_ids is None and all(
-            variable_id in published_bundle_ids(source)
-            for variable_id in REQUIRED_BIN_BUNDLE_VARIABLES
-        )
+        require_core = bundle_ids is None
         payload = _rewrite_manifest(Path(manifest_path), videos, require_core=require_core)
         LOG.info("wrote manifest %s", manifest_path)
         if latest_path is not None and run_id is not None:

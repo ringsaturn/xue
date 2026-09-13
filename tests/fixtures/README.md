@@ -94,6 +94,36 @@ for h in 000 003; do
 done
 ```
 
+`mrms.2026091300.t0000.crop.grib2` and `mrms.2026091300.t0002.crop.grib2`
+are a 160 by 160 cell window of two consecutive frames of the MRMS mosaic,
+each the composite reflectivity (`MergedReflectivityQCComposite_00.50`,
+stamped 2026-09-13 00:00:42 and 00:02:42) followed by the precipitation
+rate (`PrecipRate_00.00`, stamped 00:00 and 00:02) — two messages per
+file, in the source's input order, the way the fetcher assembles a frame
+from the two products' objects; the names are the fetcher's, the slot's
+offset from the run (`t<HHMM>`). The window is the James Bay shore in
+Quebec (77.6W to 76W, 51.8N to 50.2N), at the edge of the Canadian radar
+coverage on a night with a rain band on the coast: about a quarter of it
+is outside coverage (`-999`), half inside with no echo (`-99`), and a
+quarter echo to 39.5 dBZ, so every sentinel rule, the block-maximum
+thinning (160 cells become 80, two by two tiles at 64), the slot snapping
+and the byte-identity parity test all run against real records. PNG
+packing (DRS template 5.41), as MRMS publishes — which is what holds the
+wheel's GDAL to the reference on that packing. Cut, from the four objects
+gunzipped, with:
+
+```sh
+for f in MRMS_MergedReflectivityQCComposite_00.50_20260913-000042 \
+         MRMS_MergedReflectivityQCComposite_00.50_20260913-000242 \
+         MRMS_PrecipRate_00.00_20260913-000000 MRMS_PrecipRate_00.00_20260913-000200; do
+  gdal_translate -srcwin 5240 320 160 160 -of GRIB -co DATA_ENCODING=PNG $f.grib2 crop.$f.grib2
+done
+cat crop.MRMS_MergedReflectivityQCComposite_00.50_20260913-000042.grib2 \
+    crop.MRMS_PrecipRate_00.00_20260913-000000.grib2 > tests/fixtures/mrms.2026091300.t0000.crop.grib2
+cat crop.MRMS_MergedReflectivityQCComposite_00.50_20260913-000242.grib2 \
+    crop.MRMS_PrecipRate_00.00_20260913-000200.grib2 > tests/fixtures/mrms.2026091300.t0002.crop.grib2
+```
+
 # Xue fixtures
 
 `tests/prepare_bin_fixture.py` encodes the same cropped GRIB into per-variable

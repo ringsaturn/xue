@@ -275,6 +275,12 @@ class NativeJpeg2000Tests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
+        # The crop is a regional grid a hair off 0.25° as GDAL reads it,
+        # which an encoder describes on its round step since the MRMS
+        # source arrived (`_snap_regional_steps`); a wheel from before then
+        # writes the old grid block and cannot match.
+        if not native.knows_source("mrms"):
+            raise unittest.SkipTest(f"the installed {native.DISTRIBUTION} wheel predates the regional grid snap")
         cls.root = Path(tempfile.mkdtemp(prefix="xue-native-jp2-"))
         cls.reference, cls.reference_report = cls._build(binconvert, "reference")
         cls.subject, cls.subject_report = cls._build(native, "subject")

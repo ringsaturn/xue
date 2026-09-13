@@ -47,6 +47,13 @@ pub fn normalize_unit(unit: &str) -> Result<&'static str> {
     }
 }
 
+/// Whether a precipitation rate record is already in mm/h (MRMS), as
+/// opposed to the kg m⁻² s⁻¹ every NWP record carries. Mirrors
+/// `precipitation_rate_is_mm_per_hour` in `xuebuild/gdal.py`.
+pub fn precipitation_rate_is_mm_per_hour(unit: &str) -> bool {
+    matches!(compact_unit(unit).as_str(), "mm/hr" | "mm/h")
+}
+
 fn compact_unit(unit: &str) -> String {
     unit.trim()
         .to_lowercase()
@@ -63,6 +70,11 @@ fn compact_unit(unit: &str) -> String {
 pub fn raster_expression(variable_id: &str, unit: &str) -> Result<String> {
     let rate_units = ["kg/m^2s", "kg/m2s", "kgm^-2s^-1", "kgm-2s-1"];
     match variable_id {
+        // A rate already in mm/h (the MRMS radar-derived rate) takes no
+        // scaling. Mirrors `precipitation_expression` in `xuebuild/gdal.py`.
+        "prate" if precipitation_rate_is_mm_per_hour(unit) => {
+            Ok("maximum(0,minimum(50,A))".into())
+        }
         "tmp2m" => {
             let value = match normalize_unit(unit)? {
                 "K" => "A-273.15",
@@ -381,6 +393,16 @@ fn searchable(band: &BandInfo) -> String {
     .join(" ")
 }
 
+/// One MRMS product under the registry's MRMS alternate: GDAL names the
+/// record by the product (its local table for centre 161 —
+/// `MergedReflectivityQCComposite`, `PrecipRate`), on the MRMS-local
+/// discipline 209. The level is part of the product name, so the element
+/// alone is unambiguous. Mirrors `_is_mrms_record` in `xuebuild/gdal.py`;
+/// `element` is the product's name in upper case, as `band_matches` compares.
+fn is_mrms_record(band: &BandInfo, element: &str) -> bool {
+    band.item("GRIB_ELEMENT").to_uppercase() == element && band.item("GRIB_DISCIPLINE") == "209"
+}
+
 fn band_matches(variable_id: &str, band: &BandInfo) -> Result<bool> {
     let element = band.item("GRIB_ELEMENT").to_uppercase();
     let short_name = band.item("GRIB_SHORT_NAME").to_uppercase();
@@ -394,10 +416,12 @@ fn band_matches(variable_id: &str, band: &BandInfo) -> Result<bool> {
         }
         // sflux files carry only the interval-averaged PRATE record, pgrb2
         // fetches only the instantaneous one — the same surface matcher hits
-        // exactly the record its source provides.
+        // exactly the record its source provides; the MRMS rate is its own
+        // product.
         "prate" | "prate_ave" => {
-            element == "PRATE"
-                && (short_name == "0-SFC" || searchable(band).to_lowercase().contains("surface"))
+            (element == "PRATE"
+                && (short_name == "0-SFC" || searchable(band).to_lowercase().contains("surface")))
+                || (variable_id == "prate" && is_mrms_record(band, "PRECIPRATE"))
         }
         // ECMWF open data tp: GDAL's tables do not know the local parameter
         // 0/1/193, so GRIB_ELEMENT is "unknown" and the comment carries the
@@ -477,6 +501,7 @@ fn band_matches(variable_id: &str, band: &BandInfo) -> Result<bool> {
                     && element.to_lowercase() == "unknown"
                     && (short_name == "0-SFC" || text.contains("ground or water surface"))
                     && comment.contains("cat 6, subcat 192"))
+                || (variable_id == "cref" && is_mrms_record(band, "MERGEDREFLECTIVITYQCCOMPOSITE"))
         }
         "ugrd10m" | "vgrd10m" => {
             element == variable_spec(variable_id)?.grib_element

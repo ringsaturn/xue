@@ -274,6 +274,7 @@ Every source, on real runs, with every artifact compared byte for byte:
 | HRRR | a projected source: the Lambert conformal grid read out of GDAL's WKT, the footprint, the resampling onto the regular 0.03° grid (`sin` / `cos` / `tan` / `pow` per row and column, exact IEEE arithmetic per cell, still byte-identical — `tests/test_hrrr.py`), and the `MSLMA` / `REFC` aliases |
 | GFS, cropped | `--bbox` with `--bundles`, and `manifest.json` |
 | CMA-RADAR | the NetCDF observation path: unscaling, the fill value, a `unitSeconds: 360` axis listing its offsets around archive gaps, `--hours` |
+| NOAA-MRMS | a fetched observation: one GRIB per two-minute frame, each its own reference time, re-keyed onto the window's axis (`unitSeconds: 120`, the observation times snapped to the mark, the first hour as the run); the MRMS-local identities (discipline 209) under `cref` and `prate` through the registry's alternates, a rate already in mm/h, the `-999` / `-99` / `-3` sentinels folded to the codebook bottom; a regional grid described on its round step; and the 2 x 2 block-maximum thinning onto 0.02° (`tests/test_mrms.py`) |
 
 One thing the reference never had to handle showed up here: GDAL's netCDF
 driver is not thread-safe, and reading one file from several threads fails with

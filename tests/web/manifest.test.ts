@@ -326,6 +326,25 @@ describe("dataset kinds", () => {
     expect(FORECAST_MODEL_IDS).not.toContain("radar");
     expect(FORECAST_MODELS.radar.latestFilename).toBeUndefined();
   });
+
+  it("requires each dataset's own core bundles of a live manifest", () => {
+    // Mirrors SourceSpec.core_bundle_ids: the tmp2m/prate pair on a
+    // forecast, the reflectivity alone on a radar mosaic, which has no
+    // temperature to publish.
+    const radar = {
+      schemaVersion: 5,
+      model: "CMA-RADAR",
+      product: "l3-mst-cref",
+      runTime: "2026-05-10T00:00:00Z",
+      forecastHours: 6,
+      bundles: [{ variable: "cref", path: "showcase/x/cref.xue", byteLength: 1, crc32: "00000000" }],
+    };
+    expect(validateManifest(radar, "radar").bundles).toHaveLength(1);
+    const withoutReflectivity = { ...radar, bundles: [{ ...radar.bundles[0]!, variable: "prate" }] };
+    expect(() => validateManifest(withoutReflectivity, "radar")).toThrow(/no bundle for variable cref/);
+    expect(() => validateManifest(withoutReflectivity, "radar", { requireCoreVariables: false })).not.toThrow();
+    for (const model of FORECAST_MODEL_IDS) expect(FORECAST_MODELS[model].coreBundles).toBeUndefined();
+  });
 });
 
 describe("parseBundleMetadata", () => {

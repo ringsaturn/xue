@@ -36,12 +36,12 @@ from .gdal import (
     inspect_grib,
     inspect_grib_multi,
     normalize_unit,
+    precipitation_rate_is_mm_per_hour,
     raster_expression,
     require_command,
     run_command,
 )
 from .manifest import (
-    REQUIRED_BIN_BUNDLE_VARIABLES,
     build_bin_manifest,
     build_latest_pointer,
     iso_z,
@@ -52,7 +52,7 @@ from .model import GRIB_PLANE_SOURCE, PlaneSource, SourceFrame
 from .observation import inspect_observation
 from .quantize import PRESSURE_VARIABLE_IDS, PROFILES, PrecipitationCodebook, TemperatureCodebook
 from .reproject import ProjectedGrid, Resampler, build_resampler, lambert_conformal_from_wkt
-from .sources import SourceSpec, source_spec
+from .sources import Downsample, SourceSpec, source_spec
 from .variables import (
     ISOBARIC_LEVELS_HPA,
     STANDARD_GRAVITY,
@@ -194,6 +194,33 @@ class CropWindow:
 
 
 @dataclass(frozen=True)
+class BlockReduction:
+    """The thinning a source's :class:`~xuebuild.sources.Downsample` asks for,
+    fixed to one file's grid: every ``factor`` x ``factor`` block of the
+    ``(source_height, source_width)`` plane becomes its maximum. Carried on
+    the grid the way a :class:`~xuebuild.reproject.Resampler` is, and like it
+    never serialized — the bundle's grid is the thinned one."""
+
+    factor: int
+    source_width: int
+    source_height: int
+
+    @property
+    def source_shape(self) -> tuple[int, int]:
+        return self.source_height, self.source_width
+
+    def take(self, plane: np.ndarray) -> np.ndarray:
+        """The block maximum of one ``(source_height, source_width)`` plane.
+        A NaN anywhere in a block is the block's value, as with ``max``
+        everywhere in this pipeline, so a broken record still fails the
+        completeness check downstream instead of vanishing into a maximum."""
+        if plane.shape != self.source_shape:
+            raise ConversionError(f"plane is {plane.shape}, expected {self.source_shape}")
+        k = self.factor
+        return plane.reshape(self.source_height // k, k, self.source_width // k, k).max(axis=(1, 3))
+
+
+@dataclass(frozen=True)
 class GridInfo:
     width: int
     height: int
@@ -216,6 +243,11 @@ class GridInfo:
     the projected grid, and every field above describes the regular grid
     they are resampled onto (:mod:`xuebuild.reproject`), before any crop.
     Never serialized either — the bundle's grid is the regular one."""
+    downsample: BlockReduction | None = None
+    """Set for a source published coarser than it arrives (MRMS): the
+    extracted planes are the source grid, and every field above describes
+    the thinned grid their block maxima land on, before any crop. Never
+    serialized either."""
 
     @property
     def wraps(self) -> bool:
@@ -226,6 +258,8 @@ class GridInfo:
         """(height, width) of the plane gdal_translate extracts."""
         if self.resample is not None:
             return self.resample.source_shape
+        if self.downsample is not None:
+            return self.downsample.source_shape
         if self.crop is None:
             return self.height, self.width
         return self.crop.source_height, self.crop.source_width
@@ -375,17 +409,50 @@ def _grid_info(path: Path, source: SourceSpec | None = None) -> GridInfo:
     lon_step, lat_step = float(transform[1]), float(transform[5])
     if lon_step <= 0 or lat_step >= 0:
         raise ConversionError(f"grid must run west-to-east and north-to-south: {path}")
-    return _normalize_longitudes(
-        _snap_global_longitudes(
-            GridInfo(
-                width=width,
-                height=height,
-                first_longitude=float(transform[0]) + lon_step / 2,
-                first_latitude=float(transform[3]) + lat_step / 2,
-                longitude_step=lon_step,
-                latitude_step=lat_step,
+    grid = _normalize_longitudes(
+        _snap_regional_steps(
+            _snap_global_longitudes(
+                GridInfo(
+                    width=width,
+                    height=height,
+                    first_longitude=float(transform[0]) + lon_step / 2,
+                    first_latitude=float(transform[3]) + lat_step / 2,
+                    longitude_step=lon_step,
+                    latitude_step=lat_step,
+                )
             )
         )
+    )
+    if source is not None and source.downsample is not None:
+        grid = _downsample_grid(grid, source.downsample, path)
+    return grid
+
+
+def _downsample_grid(grid: GridInfo, downsample: Downsample, path: Path) -> GridInfo:
+    """The grid a source's block reduction publishes: one cell per
+    ``factor`` x ``factor`` block, centered on the block — half a source
+    step in from the source's first center per extra cell — at ``factor``
+    times the step. The source must divide into whole blocks, and a global
+    or rolled grid is not thinned (nothing publishes one that way)."""
+    k = downsample.factor
+    if k < 1:
+        raise ConversionError(f"downsample factor must be positive, not {k}")
+    if grid.width % k or grid.height % k:
+        raise ConversionError(
+            f"{path} is {grid.width}x{grid.height}, which does not divide into {k}x{k} blocks"
+        )
+    if grid.wraps or grid.column_roll:
+        raise ConversionError(f"{path} is a global grid, which this source does not thin")
+    return GridInfo(
+        width=grid.width // k,
+        height=grid.height // k,
+        # Rounded to ten decimals the way a crop's origin is: the sum of two
+        # decimals is not always the double nearest their decimal sum.
+        first_longitude=round(grid.first_longitude + grid.longitude_step * (k - 1) / 2, 10),
+        first_latitude=round(grid.first_latitude + grid.latitude_step * (k - 1) / 2, 10),
+        longitude_step=grid.longitude_step * k,
+        latitude_step=grid.latitude_step * k,
+        downsample=BlockReduction(factor=k, source_width=grid.width, source_height=grid.height),
     )
 
 
@@ -420,6 +487,60 @@ def _snap_global_longitudes(grid: GridInfo) -> GridInfo:
     if abs(first - grid.first_longitude) > step * _GLOBAL_SPAN_TOLERANCE_CELLS:
         first = grid.first_longitude
     return replace(grid, longitude_step=step, first_longitude=first)
+
+
+# The steps a regional grid is snapped to: whole thousandths of a degree.
+_REGIONAL_STEP_UNIT = 1e-3
+
+
+def _snap_regional_steps(grid: GridInfo) -> GridInfo:
+    """Give a regional grid the round step it was clearly published on.
+
+    The same GDAL habit that puts a global grid a hair off the globe puts a
+    regional one a hair off its step: the step is derived from the first
+    and last coordinates, and MRMS writes the last longitude of its 0.01°
+    grid two millionths of a degree short, which GDAL turns into a
+    0.0099999997° step (and a crop of it, whose last coordinate the GRIB
+    writer rounds again, into 0.0099999937°). A grid whose cells, at the
+    nearest whole thousandth of a degree, span its extent to within a
+    thousandth of a cell is on that step, on both axes independently, and
+    its first center is placed on the half-step grid (rounding half up) when
+    it lies within the same tolerance of it — a grid whose edges are on
+    whole steps has its centers half a step in. A step that is not near a
+    thousandth — the sflux Gaussian grid, the radar mosaic's power-of-two
+    tiles — passes through unchanged, as does a global grid, which
+    :func:`_snap_global_longitudes` has already described. The native
+    encoder applies the identical rule (``grid.rs``): the two must agree to
+    the bit."""
+    if grid.wraps:
+        return grid
+    longitude_step, first_longitude = _snap_axis(grid.longitude_step, grid.first_longitude, grid.width)
+    latitude_step, first_latitude = _snap_axis(grid.latitude_step, grid.first_latitude, grid.height)
+    return replace(
+        grid,
+        longitude_step=longitude_step,
+        first_longitude=first_longitude,
+        latitude_step=latitude_step,
+        first_latitude=first_latitude,
+    )
+
+
+def _snap_axis(step: float, first: float, count: int) -> tuple[float, float]:
+    """One axis of :func:`_snap_regional_steps`: ``(step, first)`` snapped,
+    or as given. The snapped values are whole thousandths divided out at
+    the end — ``30 / 1000`` is the double nearest 0.03 where ``30 * 0.001``
+    is not — so a bundle says ``0.03``, not ``0.030000000000000002``."""
+    thousandths = math.floor(step / _REGIONAL_STEP_UNIT + 0.5)
+    rounded = thousandths / 1000.0
+    if thousandths == 0 or abs(count * step - count * rounded) > abs(step) * _GLOBAL_SPAN_TOLERANCE_CELLS:
+        return step, first
+    # The first *center* sits on the half-step grid: a grid whose edges are
+    # on whole steps (MRMS: 130.00 W) has its centers half a step in.
+    half_steps = math.floor(first / (rounded / 2.0) + 0.5)
+    snapped_first = (half_steps * thousandths) / 2000.0
+    if abs(snapped_first - first) > abs(rounded) * _GLOBAL_SPAN_TOLERANCE_CELLS:
+        snapped_first = first
+    return rounded, snapped_first
 
 
 def _normalize_longitudes(grid: GridInfo) -> GridInfo:
@@ -512,6 +633,7 @@ def crop_grid(grid: GridInfo, bbox: tuple[float, float, float, float]) -> GridIn
             height=height,
         ),
         resample=grid.resample,
+        downsample=grid.downsample,
     )
 
 
@@ -523,7 +645,9 @@ def _convert_units(frame: SourceFrame, values: np.ndarray) -> np.ndarray:
             values -= 273.15
         elif unit == "F":
             values = (values - 32.0) * 5.0 / 9.0
-    elif frame.variable_id == "prate":
+    elif frame.variable_id == "prate" and not precipitation_rate_is_mm_per_hour(frame.unit):
+        # kg m⁻² s⁻¹ (a millimetre per second) to mm/h; the MRMS rate is
+        # already mm/h.
         values *= 3600.0
     elif frame.variable_id == "tp":
         # ECMWF run-total precipitation accumulation, metres -> mm; the rate
@@ -719,6 +843,8 @@ def _extract_planes(
         plane = _fill_missing(variable_id, plane)
         if grid.resample is not None:
             plane = grid.resample.take(plane)
+        if grid.downsample is not None:
+            plane = grid.downsample.take(plane)
         if grid.crop is not None:
             plane = np.ascontiguousarray(grid.crop.take(plane))
         plane = plane.ravel()
@@ -786,11 +912,53 @@ def _check_reference_frames(
             )
 
 
+def _snap_observation_frames(
+    per_file: list[dict[str, SourceFrame]], cadence_seconds: int
+) -> list[dict[str, SourceFrame]]:
+    """Re-key the frames of a fetched observation onto the window's axis.
+
+    A GRIB observation names only its own time: each MRMS composite is its
+    own reference time, some forty seconds past a two-minute mark, with a
+    zero forecast time. The window is the axis: every observation time is
+    snapped *down* to its ``cadence_seconds`` slot, the run time is the
+    whole hour the first slot falls in (which is the hour the run id
+    names), and a frame's lead is its slot's distance from it. Two files in
+    one slot then collide on the lead, which the caller's uniqueness check
+    refuses — the fetcher keeps one per slot."""
+    snapped: list[dict[str, SourceFrame]] = []
+    slots: list[int] = []
+    for frames in per_file:
+        # The products of one frame are stamped apart — the composite some
+        # forty seconds past the mark, the rate on it — and agree on the slot.
+        file_slots = {
+            int(frame.valid_time.timestamp()) // cadence_seconds * cadence_seconds for frame in frames.values()
+        }
+        if len(file_slots) != 1:
+            raise ConversionError(f"variables disagree on the observation slot in {next(iter(frames.values())).path}")
+        slots.append(file_slots.pop())
+    window_start = min(slots) // binformat.HOUR_SECONDS * binformat.HOUR_SECONDS
+    run_time = datetime.fromtimestamp(window_start, tz=UTC)
+    for frames, slot in zip(per_file, slots):
+        snapped.append(
+            {
+                variable_id: replace(
+                    frame,
+                    run_time=run_time,
+                    valid_time=datetime.fromtimestamp(slot, tz=UTC),
+                    lead_seconds=slot - window_start,
+                )
+                for variable_id, frame in frames.items()
+            }
+        )
+    return snapped
+
+
 def _prepare_frames_all(
     paths: list[Path],
     variable_ids: tuple[str, ...],
     optional_at_analysis: tuple[str, ...] = (),
     reference_frames: dict[str, SourceFrame] | None = None,
+    cadence_seconds: int | None = None,
 ) -> list[dict[str, SourceFrame]]:
     """Inspect every file once for all variables, in parallel across files.
 
@@ -798,7 +966,10 @@ def _prepare_frames_all(
     only (sflux carries no PRATE record at analysis time). Inspection uses
     the GRIB2 header index; the first file is cross-checked against
     ``reference_frames`` (a real gdalinfo pass) and a run whose files the
-    header index cannot parse falls back to gdalinfo inspection."""
+    header index cannot parse falls back to gdalinfo inspection. With a
+    ``cadence_seconds`` the files are a fetched observation, each stamped
+    with its own time, and are re-keyed onto the window's axis
+    (:func:`_snap_observation_frames`)."""
     with ThreadPoolExecutor(max_workers=_INSPECT_WORKERS) as executor:
         try:
             per_file = list(
@@ -816,6 +987,8 @@ def _prepare_frames_all(
                     lambda path: inspect_grib_multi(path, variable_ids, optional_ids=optional_at_analysis), paths
                 )
             )
+    if cadence_seconds is not None:
+        per_file = _snap_observation_frames(per_file, cadence_seconds)
     for frames in per_file:
         leads = {frame.lead_seconds for frame in frames.values()}
         if len(leads) != 1:
@@ -1267,11 +1440,13 @@ def convert_bin(
     zstd_version = zstdcli.zstd_version()
     codebooks = PROFILES[profile]
 
-    if source.observation:
-        # An observation source is one local file holding the whole series,
-        # one band per time (xue/observation.py). There are no records to
-        # match, no wind pair, and no published cadence to validate the axis
-        # against — the file's own times are the axis, gaps included.
+    if source.observation and not source.fetched:
+        # A local-file observation source is one NetCDF file holding the
+        # whole series, one band per time (xue/observation.py). There are no
+        # records to match, no wind pair, and no published cadence to
+        # validate the axis against — the file's own times are the axis,
+        # gaps included. (A fetched observation is one GRIB per frame and
+        # takes the record path below, re-keyed onto its window's axis.)
         if not isinstance(input_path, Path):
             raise ConversionError(f"a {source.manifest_model} build takes exactly one NetCDF file")
         if require_complete:
@@ -1390,7 +1565,9 @@ def convert_bin(
                 f"a {source.manifest_model} build needs at least one variable present in every file, "
                 f"including the analysis; {list(variable_ids)} is not enough"
             )
-        per_file = _prepare_frames_all(paths, variable_ids, source.optional_at_analysis, reference_frames)
+        per_file = _prepare_frames_all(
+            paths, variable_ids, source.optional_at_analysis, reference_frames, source.cadence_seconds
+        )
         grid_path = paths[0]
         plane_source = GRIB_PLANE_SOURCE
 
@@ -1727,13 +1904,11 @@ def convert_bin(
             raise ConversionError(f"{variable_id} quantization error exceeds half a step")
 
     if manifest_path is not None:
-        # The core tmp2m/prate pair is what a complete forecast run must
-        # publish. A restricted build ships only the bundles it was asked
-        # for, and a source that publishes neither (the radar archive) can
-        # never satisfy the rule at all.
-        require_core = bundle_ids is None and all(
-            variable_id in published_bundle_ids(source) for variable_id in REQUIRED_BIN_BUNDLE_VARIABLES
-        )
+        # The source's core bundles (sources.py core_bundle_ids: the
+        # tmp2m/prate pair on a forecast, the reflectivity on a radar
+        # mosaic) are what a complete run must publish. A restricted build
+        # ships only the bundles it was asked for.
+        require_core = bundle_ids is None
         payload = build_bin_manifest(
             run_time,
             bundles=[

@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from .errors import ManifestError
-from .sources import MODEL_PRODUCTS
+from .sources import MODEL_CORE_BUNDLES, MODEL_PRODUCTS
 
 
 # A bundle's `variable` is a name, not a registered number: it must look like
@@ -20,8 +20,10 @@ from .sources import MODEL_PRODUCTS
 # encoder decides the order, from `bundle_scalar_ids + bundle_vector_ids`; no
 # validator here has an opinion about it.
 #
-# The core pair below is the exception, and the only closed set left: a
-# forecast manifest that names neither temperature nor precipitation describes
+# The core set is the exception, and the only closed set left, and it is the
+# dataset's own (`SourceSpec.core_bundle_ids`, by manifest model in
+# `MODEL_CORE_BUNDLES`): a forecast manifest that names neither temperature
+# nor precipitation, or a radar manifest without the reflectivity, describes
 # a run the viewer cannot open at all, so `require_core_variables` rejects it.
 # (A cropped showcase case or a `--bundles` build passes False.)
 #
@@ -30,7 +32,6 @@ from .sources import MODEL_PRODUCTS
 # shell had to learn the name before a run could publish it. The shell that
 # carries this relaxation is the last one that ever needs to; from it on, an
 # unknown bundle name is skipped rather than rejected (docs/format.md).
-REQUIRED_BIN_BUNDLE_VARIABLES = ("tmp2m", "prate")
 
 _BUNDLE_VARIABLE_PATTERN = re.compile(r"^[a-z][a-z0-9]*$")
 
@@ -215,8 +216,9 @@ def validate_bin_manifest(
     """Validate a schema v5 manifest.
 
     ``require_core_variables`` is what separates a full run from a showcase
-    case: a run covering the whole globe always publishes the core tmp2m and
-    prate pair, while a case ships only the bundles its event needs.
+    case: a run covering the whole dataset always publishes its core bundles
+    (the tmp2m and prate pair on a forecast, the reflectivity on a radar
+    mosaic), while a case ships only the bundles its event needs.
     """
     if payload.get("schemaVersion") != 5:
         raise ManifestError("manifest schemaVersion must be 5")
@@ -268,7 +270,7 @@ def validate_bin_manifest(
             _validate_poster_descriptor(bundle["poster"], variable, paths)
         variables.append(variable)
     if require_core_variables:
-        for required in REQUIRED_BIN_BUNDLE_VARIABLES:
+        for required in MODEL_CORE_BUNDLES[model]:
             if required not in variables:
                 raise ManifestError(f"manifest is missing the required {required} bundle")
 

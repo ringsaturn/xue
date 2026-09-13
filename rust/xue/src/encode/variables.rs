@@ -282,9 +282,21 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_level_value: Some(0.0),
         grib2_statistical: None,
         grib2_aliases: &[],
-        grib2_alternates: &[],
+        // The MRMS radar-derived rate: the MRMS-local 209/6/1 on a "specific
+        // altitude above mean sea level" surface at 0 m, already in mm/h
+        // (GDAL spells it `mm/hr`), so the kg m⁻² s⁻¹ scaling does not apply
+        // to it. Points outside radar coverage carry -3.
+        grib2_alternates: &[RecordAlternate {
+            discipline: 209,
+            category: 6,
+            number: 1,
+            level_type: 102,
+            level_value: Some(0.0),
+            statistical: None,
+            gdal_unit: "mm/hr",
+        }],
         gdal_unit: "kg/(m^2 s)",
-        fill_values: &[],
+        fill_values: &[-3.0],
     },
     // ECMWF open data has no rate field: tp is the run-total accumulation
     // (metres, ECMWF-local GRIB2 parameter 0/1/193). Input-only — the
@@ -394,9 +406,21 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_level_value: None,
         grib2_statistical: None,
         grib2_aliases: &[(0, 16, 196)],
-        grib2_alternates: &[],
+        // The MRMS mosaic's own composite: the MRMS-local 209/10/0, stamped
+        // on a "specific altitude above mean sea level" surface at 500 m, in
+        // dBZ. Points outside radar coverage carry -999 and points inside
+        // it with no echo -99; both are the codebook bottom.
+        grib2_alternates: &[RecordAlternate {
+            discipline: 209,
+            category: 10,
+            number: 0,
+            level_type: 102,
+            level_value: Some(500.0),
+            statistical: None,
+            gdal_unit: "dBZ",
+        }],
         gdal_unit: "dB",
-        fill_values: &[],
+        fill_values: &[-999.0, -99.0],
     },
     // Three more surface diagnostics, each a GRIB record of its own with no
     // unit conversion. Registered from the GFS pgrb2 set; ECMWF open data

@@ -128,12 +128,14 @@ Manifest schema changes are a two-sided deploy: the new shell accepts old
 manifests, but an old cached shell rejects new ones — **deploy the Pages shell
 before publishing data in a widened schema**. The *set* of bundles is not a
 schema: a manifest's `variable` is admitted on its shape alone
-(`^[a-z][a-z0-9]*$`, unique; `tmp2m` and `prate` still required on a live
-run) in all three validators, so a run may publish a bundle the shell has
-never heard of and the shell renders it generically instead of refusing the
-manifest. Adding a level of a known family is two source-table lines and no
-frontend change; a new quantity is an encoder registration plus, optionally,
-frontend chart knowledge.
+(`^[a-z][a-z0-9]*$`, unique; the dataset's own core set —
+`SourceSpec.core_bundle_ids`, the `tmp2m`/`prate` pair on a forecast, `cref`
+on a radar mosaic — still required on a live run) in all three validators,
+so a run may publish a bundle the shell has never heard of and the shell
+renders it generically instead of refusing the manifest. Adding a level of a
+known family is two source-table lines and no frontend change; a new
+quantity is an encoder registration plus, optionally, frontend chart
+knowledge.
 
 Inside a bundle, `numericId` / `variableId` is a **file-local handle**: both
 encoders number a bundle's variables 1..n in bundle order, so every scalar
@@ -212,10 +214,37 @@ publishing data at the new version.**
   are published, the production grid, and fetch concurrency. **Adding or
   changing a model starts here**, and the frontend mirror is
   `FORECAST_MODELS` in `web/src/manifest.ts`. A source with
-  `observation=True` (`radar`) is not a forecast at all: no live pointer, no
-  cron job, no fetch — one local NetCDF file per event, read by
-  `observation.py`, with whatever time axis the file carries. A source with
-  a `regrid` (`hrrr`) is computed on a map projection: `_grid_info` reads
+  `observation=True` is not a forecast at all: no cycle, no lead time, an
+  axis that is whatever times the observations carry. `radar` is one local
+  NetCDF file per event, read by `observation.py`, with no pointer, no cron
+  job and no fetch. `mrms` is the other kind — a **fetched observation**
+  (`window_hours`, which is also its `--hours` default): a run is a window
+  named by its first hour, its frames are listed off the bucket rather than
+  computed (`fetch.py::mrms_window_frames` — one whole gzipped GRIB per
+  product per frame, the day's directory listed, each product's stamp
+  snapped down to its `cadence_seconds` slot, a slot kept only when every
+  product has it, `fetch.json` left beside the frames), and the converter
+  re-keys the frames onto the window's axis
+  (`binconvert.py::_snap_observation_frames`, mirrored in `convert.rs`: the
+  first slot's hour is the run time, a slot's distance from it the lead, so
+  `unitSeconds` is 120). Its records are matched under `cref` / `prate`
+  through `RecordAlternate`s for the MRMS-local discipline 209 (GDAL names
+  them by product from its centre-161 table; `_is_mrms_record`), with the
+  `-999` / `-99` / `-3` sentinels folded to the codebook bottom by
+  `fill_values` and the rate accepted already in mm/h. A source with a
+  `downsample` (`mrms`) is published coarser than it arrives: `_grid_info`
+  describes the block-maximum grid (`BlockReduction` on the `GridInfo`,
+  like `resample`) and `_extract_planes` thins each plane after the fill
+  rules and before the crop; `production_grid` and `tile` describe the
+  thinned grid. `_grid_info` also snaps a *regional* grid's steps to the
+  whole thousandth of a degree they were clearly published on
+  (`_snap_regional_steps`, the regional analogue of the global `360 /
+  width` rule, mirrored in `grid.rs`) — GDAL derives the step from the
+  first and last coordinates, and MRMS writes its last one a hair short.
+  No live pointer yet — the rolling window is the next step: `build-bin
+  --model mrms --run <hour> --hours 3` builds a past window into
+  `mrms.<run>/` and nothing points at it. A source with a `regrid` (`hrrr`)
+  is computed on a map projection: `_grid_info` reads
   the Lambert conformal parameters out of GDAL's WKT (`reproject.py`, and
   the wheel's `gdal_info` reports `coordinateSystem.wkt` for it), builds a
   `Resampler` onto the regular grid of that step over the source's
