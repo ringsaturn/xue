@@ -294,11 +294,13 @@ upload-r2-tc:
 		--content-type application/json --cache-control "no-cache"
 
 # Delete tc issue directories beyond the newest TC_KEEP (720 hours = 30
-# days) and never the one the live pointer names.
+# days) and never the one the live pointer names. No pointer yet (before
+# the first publish, or a dry run of it) means nothing is live to protect
+# and nothing to prune, not a reason to fail.
 prune-r2-tc:
 	@set -e; \
-	live=$$($(S3) cp s3://$(R2_BUCKET)/$(R2_PREFIX)/latest-tc.json - --only-show-errors | jq -r .path | cut -d/ -f1); \
-	[ -n "$$live" ] || { echo "no live tc pointer, refusing to prune"; exit 1; }; \
+	live=$$($(S3) cp s3://$(R2_BUCKET)/$(R2_PREFIX)/latest-tc.json - --only-show-errors 2>/dev/null | jq -r .path | cut -d/ -f1 || true); \
+	[ -n "$$live" ] || { echo "no live tc pointer, nothing to prune"; exit 0; }; \
 	echo "live tc issue: $$live"; \
 	listing=$$($(S3) ls s3://$(R2_BUCKET)/$(R2_PREFIX)/) \
 		|| { echo "listing the bucket failed, refusing to prune"; exit 1; }; \
