@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import gzip
+import json
 import logging
 import os
 import random
@@ -8,9 +10,12 @@ import tempfile
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
+import xml.etree.ElementTree as ElementTree
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
 from pathlib import Path
@@ -79,6 +84,14 @@ ECMWF_UNPACED_BASE_URLS = tuple(
     if url.strip()
 )
 ECMWF_FRAME_ATTEMPTS = 3
+# MRMS is on its own AWS Open Data bucket (registry.opendata.aws/noaa-mrms-pds),
+# anonymous, listable, and about a minute behind real time. There is no
+# mirror and no ``.idx``: a frame is one whole gzipped GRIB per product,
+# named by the product's observation time to the second, which only a
+# directory listing can tell.
+MRMS_BASE_URL = os.environ.get("XUE_MRMS_BASE_URL", "https://noaa-mrms-pds.s3.amazonaws.com").rstrip("/")
+MRMS_DOMAIN = "CONUS"
+MRMS_FETCH_FILENAME = "fetch.json"
 CONTENT_RANGE_RE = re.compile(r"^bytes (\d+)-(\d+)/(\d+|\*)$")
 USER_AGENT = "xue/0.1 (+https://registry.opendata.aws/noaa-gfs-bdp-pds/)"
 _ECMWF_PACING_LOCK = threading.Lock()
@@ -183,6 +196,257 @@ def ecmwf_companion_object_url(
     except KeyError:
         raise DownloadError(f"unknown ECMWF companion file family: {family}") from None
     return ecmwf_object_url(run, forecast_hour, base_url=base_url, stream=stream)
+
+
+# -- MRMS ---------------------------------------------------------------------
+#
+# ``CONUS/<Product>_<Level>/<YYYYMMDD>/MRMS_<Product>_<Level>_<YYYYMMDD>-<HHMMSS>.grib2.gz``,
+# one object per product per frame. The composite reflectivity is stamped a
+# jittered forty seconds past each two-minute mark (``000042``, ``000241``,
+# ``000437``...), the precipitation rate on the mark; neither can be
+# computed, so the day's directory is listed and each key's time is snapped
+# down to its slot (``SourceSpec.cadence_seconds``).
+
+_MRMS_KEY_TIME = re.compile(r"_(\d{8})-(\d{6})\.grib2\.gz$")
+_S3_NAMESPACE = "{http://s3.amazonaws.com/doc/2006-03-01/}"
+
+
+@dataclass(frozen=True)
+class MrmsObject:
+    """One MRMS object of one product, as the bucket lists it."""
+
+    key: str
+    observed: datetime
+    """The observation time in the object name, to the second."""
+
+    def slot(self, cadence_seconds: int) -> datetime:
+        """The cadence slot the observation falls in: its time snapped down."""
+        seconds = int(self.observed.timestamp()) // cadence_seconds * cadence_seconds
+        return datetime.fromtimestamp(seconds, tz=UTC)
+
+
+def mrms_product_prefix(product: str, day: datetime) -> str:
+    """The bucket prefix of one product's directory for one UTC day."""
+    return f"{MRMS_DOMAIN}/{product}/{day.astimezone(UTC):%Y%m%d}/"
+
+
+def mrms_object_url(key: str) -> str:
+    return f"{MRMS_BASE_URL}/{key}"
+
+
+def parse_mrms_listing(xml_text: str) -> tuple[list[MrmsObject], str | None]:
+    """The objects of one ``ListObjectsV2`` page and its continuation token,
+    if the page was truncated. Keys that are not a product frame — the
+    bucket carries nothing else under a product day, but a listing is
+    somebody else's file — are skipped."""
+    try:
+        root = ElementTree.fromstring(xml_text)
+    except ElementTree.ParseError as exc:
+        raise DownloadError(f"MRMS listing is not XML: {exc}") from exc
+    objects: list[MrmsObject] = []
+    for contents in root.iter(f"{_S3_NAMESPACE}Contents"):
+        key = contents.findtext(f"{_S3_NAMESPACE}Key") or ""
+        match = _MRMS_KEY_TIME.search(key)
+        if not match:
+            continue
+        try:
+            observed = datetime.strptime(match.group(1) + match.group(2), "%Y%m%d%H%M%S").replace(tzinfo=UTC)
+        except ValueError:
+            continue
+        objects.append(MrmsObject(key=key, observed=observed))
+    token = None
+    if (root.findtext(f"{_S3_NAMESPACE}IsTruncated") or "").lower() == "true":
+        token = root.findtext(f"{_S3_NAMESPACE}NextContinuationToken") or None
+        if token is None:
+            raise DownloadError("MRMS listing is truncated but carries no continuation token")
+    return objects, token
+
+
+def list_mrms_objects(product: str, day: datetime, *, fetch: Callable[[str], str] | None = None) -> list[MrmsObject]:
+    """Every frame of one product on one UTC day, in key order. A day is at
+    most 720 two-minute frames, one page at ``max-keys=1000``; the
+    continuation token is followed all the same."""
+    fetch = fetch or fetch_text
+    prefix = mrms_product_prefix(product, day)
+    objects: list[MrmsObject] = []
+    token: str | None = None
+    while True:
+        query = {"list-type": "2", "prefix": prefix, "max-keys": "1000"}
+        if token is not None:
+            query["continuation-token"] = token
+        page, token = parse_mrms_listing(fetch(f"{MRMS_BASE_URL}/?{urllib.parse.urlencode(query)}"))
+        objects.extend(page)
+        if token is None:
+            return objects
+
+
+def mrms_window_frames(
+    spec: SourceSpec,
+    run: GfsRun,
+    hours: int,
+    input_ids: tuple[str, ...] | None = None,
+    *,
+    fetch: Callable[[str], str] | None = None,
+) -> dict[datetime, dict[str, MrmsObject]]:
+    """The frames of one window, keyed by slot: for every slot from the run's
+    hour through ``hours`` past it (inclusive) that every requested product
+    has an object in, the object of each product, in the source's input
+    order. A slot any product lacks is left out — the axis allows the gap,
+    and the next build takes the slot if the object lands later. Two objects
+    of one product in one slot (a reissue) resolve to the later one.
+    ``input_ids`` narrows the products, the way a bundle group's fetch
+    does."""
+    if spec.cadence_seconds is None:
+        raise DownloadError(f"{spec.manifest_model} declares no observation cadence")
+    wanted = spec.input_variable_ids if input_ids is None else tuple(vid for vid in spec.input_variable_ids if vid in input_ids)
+    if not wanted:
+        raise DownloadError(f"{spec.manifest_model} has no products to fetch for {input_ids}")
+    start = run.time
+    end = start + timedelta(hours=hours)
+    days: list[datetime] = []
+    day = start.replace(hour=0, minute=0, second=0, microsecond=0)
+    while day <= end:
+        days.append(day)
+        day += timedelta(days=1)
+    per_product: list[dict[datetime, MrmsObject]] = []
+    for variable_id in wanted:
+        product = VARIABLES[variable_id].mrms_product
+        if not product:
+            raise DownloadError(f"{variable_id} is not an MRMS product")
+        slots: dict[datetime, MrmsObject] = {}
+        for listed_day in days:
+            for item in list_mrms_objects(product, listed_day, fetch=fetch):
+                slot = item.slot(spec.cadence_seconds)
+                if start <= slot <= end and (slot not in slots or item.observed > slots[slot].observed):
+                    slots[slot] = item
+        per_product.append(slots)
+    common = sorted(set.intersection(*(set(slots) for slots in per_product)))
+    return {slot: {vid: slots[slot] for vid, slots in zip(wanted, per_product)} for slot in common}
+
+
+def mrms_frame_name(spec: SourceSpec, run: GfsRun, slot: datetime) -> str:
+    """The local name of one fetched frame: ``mrms.<run>.t<HHMM>.grib2``,
+    the slot's offset from the run — hours and minutes, not a forecast
+    hour, since there is no forecast."""
+    offset = int((slot - run.time).total_seconds())
+    if offset < 0 or offset % 60:
+        raise DownloadError(f"{spec.manifest_model} slot {slot.isoformat()} is not a whole minute after run {run.id}")
+    return f"{spec.id}.{run.id}.t{offset // 3600:02d}{offset % 3600 // 60:02d}.grib2"
+
+
+def _download_mrms_frame(
+    spec: SourceSpec, run: GfsRun, slot: datetime, objects: dict[str, MrmsObject], destination: Path, *, force: bool
+) -> Path:
+    """One frame: each product's object, decompressed, in input order, one
+    GRIB with one message per product — the shape every other source's
+    frame has downstream of the download."""
+    from .gdal import inspect_grib
+
+    output = destination / mrms_frame_name(spec, run, slot)
+    if output.exists() and not force:
+        try:
+            for variable_id in objects:
+                inspect_grib(output, variable_id)
+            LOG.info("reusing readable GRIB %s", output)
+            return output
+        except Exception:
+            raise DownloadError(
+                "existing GRIB is unreadable or lacks required records (a file fetched "
+                f"before a product joined the download set qualifies), "
+                f"enable a forced download to replace it: {output}"
+            )
+    LOG.info("downloading GRIB %s", output)
+    payload = b""
+    for variable_id, item in objects.items():
+        url = mrms_object_url(item.key)
+        response = _request(url)
+        with response:
+            status = getattr(response, "status", None)
+            if status != 200:
+                raise DownloadError(f"expected HTTP 200 for {url}, received {status}")
+            body = _read_response(response)
+        try:
+            payload += gzip.decompress(body)
+        except (OSError, EOFError) as exc:
+            raise DownloadError(f"MRMS object is not a gzip file: {url}: {exc}") from exc
+    _atomic_write(output, payload)
+    try:
+        for variable_id in objects:
+            inspect_grib(output, variable_id)
+    except Exception as exc:
+        if output.exists():
+            output.unlink()
+        raise DownloadError(f"downloaded GRIB cannot be read by GDAL: {output}: {exc}") from exc
+    return output
+
+
+def _fetch_mrms_run(
+    spec: SourceSpec,
+    run: GfsRun,
+    hours: int,
+    raw_root: Path,
+    *,
+    force: bool,
+    input_ids: tuple[str, ...] | None,
+) -> list[Path]:
+    """Fetch one window of the MRMS mosaic (:func:`mrms_window_frames`),
+    ``spec.fetch_concurrency`` frames at a time, and leave a ``fetch.json``
+    beside the frames saying which object served each slot — what a
+    rolling rebuild reads to know which frames it already has. Results are
+    in slot order."""
+    destination = raw_root / f"{spec.id}.{run.id}"
+    frames = mrms_window_frames(spec, run, hours, input_ids)
+    if not frames:
+        raise DownloadError(f"{spec.manifest_model} has no frames on the bucket for run {run.id} through +{hours} h")
+    LOG.info("%s run %s: %d frames of %d products", spec.manifest_model, run.id, len(frames), len(next(iter(frames.values()))))
+
+    def download(slot: datetime) -> Path:
+        return _download_mrms_frame(spec, run, slot, frames[slot], destination, force=force)
+
+    slots = list(frames)
+    if spec.fetch_concurrency <= 1:
+        paths = [download(slot) for slot in slots]
+    else:
+        with ThreadPoolExecutor(max_workers=spec.fetch_concurrency) as executor:
+            paths = list(executor.map(download, slots))
+    record = {
+        "model": spec.id,
+        "run": run.id,
+        "hours": hours,
+        "cadenceSeconds": spec.cadence_seconds,
+        "frames": [
+            {
+                "path": path.name,
+                "slot": slot.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "objects": {
+                    variable_id: {"key": item.key, "observed": item.observed.strftime("%Y-%m-%dT%H:%M:%SZ")}
+                    for variable_id, item in frames[slot].items()
+                },
+            }
+            for slot, path in zip(slots, paths)
+        ],
+    }
+    (destination / MRMS_FETCH_FILENAME).write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
+    return paths
+
+
+def _mrms_run_is_complete(spec: SourceSpec, run: GfsRun, hours: int, *, fetch: Callable[[str], str] | None = None) -> bool:
+    """Whether the window has fully landed: the bucket carries a frame of
+    every product at or past the window's end. The end slot itself may be a
+    gap — an observation axis allows one — so what proves the window is
+    that the products have moved past it."""
+    end = run.time + timedelta(hours=hours)
+    for variable_id in spec.input_variable_ids:
+        product = VARIABLES[variable_id].mrms_product
+        latest = None
+        for day in (end, end + timedelta(days=1)):
+            objects = list_mrms_objects(product, day, fetch=fetch)
+            if objects:
+                latest = max(item.observed for item in objects)
+                break
+        if latest is None or latest < end:
+            return False
+    return True
 
 
 def model_object_url(run: GfsRun, forecast_hour: int, model: str) -> str:
@@ -312,6 +576,8 @@ def _run_is_complete(
     model: str,
     exists: Callable[[str], bool],
 ) -> bool:
+    if model == "mrms":
+        return _mrms_run_is_complete(source_spec(model), run, hours)
     if model == "hrrr":
         # Every hour, on one mirror: the hours of a cycle land out of order
         # and the two copies disagree for a while, so the ends prove nothing.
@@ -365,6 +631,22 @@ def resolve_run(
 ) -> GfsRun:
     spec = source_spec(model)
     label = spec.manifest_model
+    if not spec.fetched:
+        raise DownloadError(f"{label} is read from a local file, not fetched")
+    if spec.observation:
+        # A fetched observation has no published axis: a run is the window
+        # starting at the run's hour, ``hours`` long, and it is complete when
+        # the bucket has moved past its end. There is no "latest" window yet
+        # — a live rolling window is the pointer's business, and there is no
+        # pointer for it yet.
+        if hours < 1:
+            raise DownloadError(f"a {label} window must be at least an hour long")
+        if value == "latest":
+            raise DownloadError(f"{label} has no live feed yet: name the window's first hour with --run YYYYMMDDHH")
+        run = parse_run(value, model)
+        if not _run_is_complete(run, hours, model, exists):
+            raise DownloadError(f"{label} run {run.id} has not fully landed on the bucket through +{hours} h")
+        return run
     # Validate the horizon against the model's published axis up front, so an
     # off-axis --hours fails with the axis description instead of a 404.
     spec.forecast_hours(hours)
@@ -663,6 +945,8 @@ def fetch_run(
     fetch is latency-bound, not bandwidth-bound). Results keep frame order.
     ECMWF retries a failed frame in place so completed frames remain reusable."""
     spec = source_spec(model)
+    if spec.id == "mrms":
+        return _fetch_mrms_run(spec, run, hours, raw_root, force=force, input_ids=input_ids)
     destination = raw_root / f"{spec.id}.{run.id}"
     forecast_hours = spec.forecast_hours(hours)
     frame_attempts = ECMWF_FRAME_ATTEMPTS if model == "ecmwf" else 1

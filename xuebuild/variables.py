@@ -79,6 +79,12 @@ class VariableSpec:
     ``10fg`` while the model post-processes hourly and ``10fg3`` where the
     3-hourly steps beyond 90 hours carry a 3-hour maximum. The pair with
     :attr:`alternate_index_fields` on the NOAA side."""
+    mrms_product: str = ""
+    """The MRMS product directory the variable is fetched from
+    (``CONUS/<product>/<day>/`` on the ``noaa-mrms-pds`` bucket, one whole
+    GRIB per frame), empty when the variable is not an MRMS product. The
+    record found there carries the MRMS-local identity a
+    :attr:`grib2_alternates` entry accepts."""
     grib2_discipline: int = 0
     grib2_category: int = -1
     grib2_number: int = -1
@@ -177,6 +183,13 @@ VARIABLES: dict[str, VariableSpec] = {
         grib2_level_type=1,
         grib2_level_value=0.0,
         gdal_unit="kg/(m^2 s)",
+        # The MRMS radar-derived rate: the MRMS-local 209/6/1 on a "specific
+        # altitude above mean sea level" surface at 0 m, already in mm/h
+        # (GDAL spells it ``mm/hr``), so the converter's kg m⁻² s⁻¹ scaling
+        # does not apply to it. Points outside radar coverage carry -3.
+        mrms_product="PrecipRate_00.00",
+        grib2_alternates=(RecordAlternate(209, 6, 1, 102, 0.0, gdal_unit="mm/hr"),),
+        fill_values=(-3.0,),
     ),
     # ECMWF open data has no rate field: tp is the run-total precipitation
     # accumulation (metres, ECMWF-local GRIB2 parameter 0/1/193). It is an
@@ -306,6 +319,16 @@ VARIABLES: dict[str, VariableSpec] = {
         grib2_aliases=((0, 16, 196),),
         grib2_level_type=10,
         gdal_unit="dB",
+        # The MRMS mosaic's own composite: the MRMS-local 209/10/0, stamped on
+        # a "specific altitude above mean sea level" surface at 500 m rather
+        # than the entire atmosphere, in dBZ. Points outside radar coverage
+        # carry -999 and points inside it with no echo -99 (the product's
+        # missing and no-coverage sentinels); both are the codebook bottom,
+        # which is the value a renderer paints as nothing, and the sub-zero
+        # returns that remain are clamped there by the codebook.
+        mrms_product="MergedReflectivityQCComposite_00.50",
+        grib2_alternates=(RecordAlternate(209, 10, 0, 102, 500.0, gdal_unit="dBZ"),),
+        fill_values=(-999.0, -99.0),
     ),
     # Three more surface diagnostics, each a GRIB record of its own with no
     # unit conversion. Registered from the GFS pgrb2 set; ECMWF open data

@@ -1,6 +1,7 @@
 //! Grid discovery, the -180-first column roll, and regional cropping — the
 //! grid half of `xuebuild/binconvert.py`.
 
+use std::path::Path;
 use std::sync::Arc;
 
 use serde_json::{json, Map, Value};
@@ -38,6 +39,59 @@ impl CropWindow {
     }
 }
 
+/// The thinning a source's `Downsample` asks for, fixed to one file's grid:
+/// every `factor` x `factor` block of the `(source_height, source_width)`
+/// plane becomes its maximum. Carried on the grid the way a `Resampler` is,
+/// and like it never serialized — the bundle's grid is the thinned one.
+/// Mirrors `BlockReduction` in `xuebuild/binconvert.py`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BlockReduction {
+    pub factor: usize,
+    pub source_width: usize,
+    pub source_height: usize,
+}
+
+impl BlockReduction {
+    pub fn source_shape(&self) -> (usize, usize) {
+        (self.source_height, self.source_width)
+    }
+
+    /// The block maximum of one `(source_height, source_width)` plane. A NaN
+    /// anywhere in a block is the block's value, as numpy's `max` has it, so
+    /// a broken record still fails the completeness check downstream instead
+    /// of vanishing into a maximum (`f64::max` would drop it).
+    pub fn take(&self, plane: &[f64]) -> Result<Vec<f64>> {
+        if plane.len() != self.source_width * self.source_height {
+            return Err(EncodeError::conversion(format!(
+                "plane has {} cells, expected {}x{}",
+                plane.len(),
+                self.source_width,
+                self.source_height
+            )));
+        }
+        let k = self.factor;
+        let (width, height) = (self.source_width / k, self.source_height / k);
+        let mut reduced = Vec::with_capacity(width * height);
+        for row in 0..height {
+            for column in 0..width {
+                let mut best = f64::NEG_INFINITY;
+                for r in 0..k {
+                    let base = (row * k + r) * self.source_width + column * k;
+                    for value in &plane[base..base + k] {
+                        if value.is_nan() || best.is_nan() {
+                            best = f64::NAN;
+                        } else if *value > best {
+                            best = *value;
+                        }
+                    }
+                }
+                reduced.push(best);
+            }
+        }
+        Ok(reduced)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct GridInfo {
     pub width: usize,
@@ -62,6 +116,11 @@ pub struct GridInfo {
     /// they are resampled onto (`reproject.rs`), before any crop. Shared by
     /// every extraction worker, hence the `Arc`. Never serialized either.
     pub resample: Option<Arc<Resampler>>,
+    /// Set for a source published coarser than it arrives (MRMS): the
+    /// extracted planes are the source grid, and every field above describes
+    /// the thinned grid their block maxima land on, before any crop. Never
+    /// serialized either.
+    pub downsample: Option<BlockReduction>,
 }
 
 impl GridInfo {
@@ -83,6 +142,7 @@ impl GridInfo {
             column_roll: 0,
             crop: None,
             resample: None,
+            downsample: None,
         }
     }
 
@@ -94,6 +154,9 @@ impl GridInfo {
     pub fn source_shape(&self) -> (usize, usize) {
         if let Some(resample) = &self.resample {
             return resample.source_shape();
+        }
+        if let Some(downsample) = &self.downsample {
+            return downsample.source_shape();
         }
         match self.crop {
             None => (self.height, self.width),
@@ -115,7 +178,53 @@ impl GridInfo {
             column_roll: 0,
             crop: None,
             resample: None,
+            downsample: None,
         }
+    }
+
+    /// The grid a source's block reduction publishes — the port of
+    /// `_downsample_grid` in `xuebuild/binconvert.py`: one cell per
+    /// `factor` x `factor` block, centered on the block (half a source step
+    /// in per extra cell, rounded to ten decimals the way a crop's origin
+    /// is), at `factor` times the step. The source must divide into whole
+    /// blocks, and a global or rolled grid is not thinned.
+    pub fn downsampled(&self, factor: usize, path: &Path) -> Result<Self> {
+        if factor < 1 {
+            return Err(EncodeError::conversion(format!(
+                "downsample factor must be positive, not {factor}"
+            )));
+        }
+        if !self.width.is_multiple_of(factor) || !self.height.is_multiple_of(factor) {
+            return Err(EncodeError::conversion(format!(
+                "{} is {}x{}, which does not divide into {factor}x{factor} blocks",
+                path.display(),
+                self.width,
+                self.height
+            )));
+        }
+        if self.wraps() || self.column_roll != 0 {
+            return Err(EncodeError::conversion(format!(
+                "{} is a global grid, which this source does not thin",
+                path.display()
+            )));
+        }
+        let k = factor as f64;
+        Ok(Self {
+            width: self.width / factor,
+            height: self.height / factor,
+            first_longitude: round10(self.first_longitude + self.longitude_step * (k - 1.0) / 2.0),
+            first_latitude: round10(self.first_latitude + self.latitude_step * (k - 1.0) / 2.0),
+            longitude_step: self.longitude_step * k,
+            latitude_step: self.latitude_step * k,
+            column_roll: 0,
+            crop: None,
+            resample: None,
+            downsample: Some(BlockReduction {
+                factor,
+                source_width: self.width,
+                source_height: self.height,
+            }),
+        })
     }
 
     pub fn metadata(&self) -> Map<String, Value> {
@@ -165,6 +274,57 @@ pub fn snap_global_longitudes(grid: GridInfo) -> GridInfo {
         first_longitude: first,
         ..grid
     }
+}
+
+/// The steps a regional grid is snapped to: whole thousandths of a degree.
+const REGIONAL_STEP_UNIT: f64 = 1e-3;
+
+/// Give a regional grid the round step it was clearly published on — the
+/// port of `_snap_regional_steps` in `xuebuild/binconvert.py`, which
+/// explains the rule; the two must agree to the bit.
+///
+/// The same GDAL habit that puts a global grid a hair off the globe puts a
+/// regional one a hair off its step: MRMS writes the last longitude of its
+/// 0.01° grid two millionths short, which GDAL turns into a 0.0099999997°
+/// step. A grid whose cells, at the nearest whole thousandth of a degree,
+/// span its extent to within a thousandth of a cell is on that step, on
+/// both axes independently, and its first *center* is placed on the
+/// half-step grid (a grid whose edges are on whole steps has its centers
+/// half a step in) when it lies within the same tolerance. A step that is
+/// not near a thousandth passes through unchanged, as does a global grid.
+pub fn snap_regional_steps(grid: GridInfo) -> GridInfo {
+    if grid.wraps() {
+        return grid;
+    }
+    let (longitude_step, first_longitude) =
+        snap_axis(grid.longitude_step, grid.first_longitude, grid.width);
+    let (latitude_step, first_latitude) =
+        snap_axis(grid.latitude_step, grid.first_latitude, grid.height);
+    GridInfo {
+        longitude_step,
+        first_longitude,
+        latitude_step,
+        first_latitude,
+        ..grid
+    }
+}
+
+/// One axis of [`snap_regional_steps`]: `(step, first)` snapped, or as
+/// given. The snapped values are whole thousandths divided out at the end —
+/// `30 / 1000` is the double nearest 0.03 where `30 * 0.001` is not.
+fn snap_axis(step: f64, first: f64, count: usize) -> (f64, f64) {
+    let thousandths = (step / REGIONAL_STEP_UNIT + 0.5).floor();
+    let rounded = thousandths / 1000.0;
+    let count = count as f64;
+    if thousandths == 0.0 || (count * step - count * rounded).abs() > step.abs() * GLOBAL_SPAN_TOLERANCE_CELLS {
+        return (step, first);
+    }
+    let half_steps = (first / (rounded / 2.0) + 0.5).floor();
+    let mut snapped_first = (half_steps * thousandths) / 2000.0;
+    if (snapped_first - first).abs() > rounded.abs() * GLOBAL_SPAN_TOLERANCE_CELLS {
+        snapped_first = first;
+    }
+    (rounded, snapped_first)
 }
 
 /// Roll grids that start at Greenwich to the -180-first layout.
@@ -305,12 +465,14 @@ pub fn crop_grid(grid: GridInfo, bbox: (f64, f64, f64, f64)) -> Result<GridInfo>
             height,
         }),
         resample: grid.resample.clone(),
+        downsample: grid.downsample,
     })
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{snap_global_longitudes, GridInfo};
+    use super::{snap_global_longitudes, snap_regional_steps, BlockReduction, GridInfo};
+    use std::path::Path;
 
     const WAVE_STEP: f64 = 0.2500000111188325;
     const WAVE_ORIGIN: f64 = -180.12500000555943;
@@ -352,5 +514,51 @@ mod tests {
         let grid = GridInfo::new(1440, 721, -180.0, 90.0, 0.25 * (1.0 - 2e-3), -0.25);
         let snapped = snap_global_longitudes(grid.clone());
         assert_eq!(snapped.longitude_step, grid.longitude_step);
+    }
+
+    /// The MRMS grid as GDAL reports it, and a crop of it as the GRIB writer
+    /// re-rounds it, both land on 0.01° with their centers half a step in.
+    #[test]
+    fn the_mrms_grid_snaps_to_its_hundredth() {
+        let step = 0.0099999997142449;
+        let full = snap_regional_steps(GridInfo::new(
+            7000, 3500, -129.99999999985712 + step / 2.0, 54.9999999998571 - 0.0099999997142041 / 2.0, step, -0.0099999997142041,
+        ));
+        assert_eq!((full.longitude_step, full.latitude_step), (0.01, -0.01));
+        assert_eq!((full.first_longitude, full.first_latitude), (-129.995, 54.995));
+        let crop_step = 0.009999993710692;
+        let crop = snap_regional_steps(GridInfo::new(160, 160, -77.60000099685537 + crop_step / 2.0, 51.795, crop_step, -0.01));
+        assert_eq!((crop.longitude_step, crop.first_longitude), (0.01, -77.595));
+        // A step that is not near a thousandth — the radar mosaic's
+        // power-of-two tiles, the Gaussian grid — passes through.
+        for grid in [
+            GridInfo::new(512, 512, 100.0, 40.0, 360.0 / 65536.0, -360.0 / 65536.0),
+            GridInfo::new(3072, 1536, -180.0, 89.91, 0.1171875, -0.117),
+        ] {
+            let same = snap_regional_steps(grid.clone());
+            assert_eq!(same.longitude_step, grid.longitude_step);
+            assert_eq!(same.first_longitude, grid.first_longitude);
+        }
+        // 0.03 comes out as the double nearest 0.03, not 30 * 0.001.
+        let thirty = snap_regional_steps(GridInfo::new(100, 100, -100.0, 40.0, 0.03 + 1e-10, -0.03));
+        assert_eq!(thirty.longitude_step, 0.03);
+    }
+
+    #[test]
+    fn the_block_maximum_keeps_the_strongest_cell_and_propagates_nan() {
+        let grid = snap_regional_steps(GridInfo::new(4, 2, -129.995, 54.995, 0.01, -0.01))
+            .downsampled(2, Path::new("x"))
+            .expect("divides");
+        assert_eq!((grid.width, grid.height), (2, 1));
+        assert_eq!((grid.first_longitude, grid.first_latitude), (-129.99, 54.99));
+        assert_eq!((grid.longitude_step, grid.latitude_step), (0.02, -0.02));
+        assert_eq!(grid.source_shape(), (2, 4));
+        let reduction = grid.downsample.expect("reduction");
+        assert_eq!(reduction, BlockReduction { factor: 2, source_width: 4, source_height: 2 });
+        let plane = [0.0, 5.5, -1.0, f64::NAN, 3.0, 1.0, 2.0, 0.0];
+        let reduced = reduction.take(&plane).expect("reduces");
+        assert_eq!(reduced[0], 5.5);
+        assert!(reduced[1].is_nan());
+        assert!(GridInfo::new(5, 2, -129.995, 54.995, 0.01, -0.01).downsampled(2, Path::new("x")).is_err());
     }
 }

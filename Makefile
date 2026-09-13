@@ -8,7 +8,9 @@ FORCE ?=
 PROFILE ?= balanced
 # Forecast source: gfs (NOAA 0.25°, hourly), ecmwf (IFS open data, 3-hourly),
 # sflux (GFS surface flux, native ~13 km, hourly, adds the dswrf layer), or
-# hrrr (NOAA HRRR, 3 km over the contiguous US, a cycle every hour, to F18).
+# hrrr (NOAA HRRR, 3 km over the contiguous US, a cycle every hour, to F18);
+# mrms (the NOAA radar mosaic, an observation every two minutes) builds a
+# window named by its first hour and has no live pointer yet.
 MODEL ?= gfs
 # Published runs of one model to keep on R2 (`make prune-r2`). One means the
 # live run only: the bucket carries no history.

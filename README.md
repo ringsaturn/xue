@@ -111,9 +111,9 @@ make mvp MODEL=hrrr       # NOAA HRRR (3 km over the contiguous US, a cycle ever
 make serve
 ```
 
-Or step by step (`--model gfs|ecmwf|sflux|hrrr`, default `gfs`; `--hours`
+Or step by step (`--model gfs|ecmwf|sflux|hrrr|mrms`, default `gfs`; `--hours`
 defaults to the whole axis the model publishes — 240 for the global models,
-18 for HRRR):
+18 for HRRR, and on MRMS the window length, 3):
 
 ```sh
 python -m xuebuild fetch --run latest --hours 240
@@ -125,6 +125,7 @@ python -m xuebuild build-bin --run latest --hours 240
 python -m xuebuild build-bin --model ecmwf --run latest --hours 240
 python -m xuebuild build-bin --model sflux --run latest --hours 240
 python -m xuebuild build-bin --model hrrr --run latest
+python -m xuebuild build-bin --model mrms --run 2026091300 --hours 3   # a past window
 ```
 
 `XUE_ENCODER` picks which encoder converts: `auto` (the default — the
@@ -189,6 +190,22 @@ heights, 925 / 850 / 500 hPa temperature, the 10 m, 925, 850 and 250 hPa
 winds, the surface diagnostics the surface file carries (gust, the cloud
 covers, CAPE, visibility, dew point) and the forecast composite radar
 reflectivity under the mosaic's own `cref`.
+
+MRMS (NOAA's Multi-Radar Multi-Sensor mosaic) is the one source that is
+an observation *and* fetched: the merged, quality-controlled radar
+composite over the contiguous United States, a frame every two minutes on
+a regular 0.01° grid, public domain, on its own bucket
+(`noaa-mrms-pds`) about a minute behind real time. There is no cycle: a
+run is a window — `--run` names its first hour and `--hours` its length —
+whose frames are listed off the bucket (the composites are stamped a
+jittered forty seconds past each two-minute mark and snapped to the
+mark), fetched one whole gzipped GRIB per product, and thinned two to one
+by block maximum onto a 0.02° grid (3500 × 1750) the bundles carry. It
+publishes the composite reflectivity under `cref` and the radar-derived
+precipitation rate under `prate`, with points outside radar coverage and
+points with no echo at the codebook bottom. A three-hour window is about
+90 frames and 20–40 MB of reflectivity. It has no live pointer yet: a
+window builds into `mrms.<run>/` and nothing points at it.
 
 `build-bin` writes one `.xue` per scalar variable (plus a half-resolution
 `.half.xue` rendition, a first-frame poster, and — on GFS and HRRR — a

@@ -17,6 +17,7 @@ use time::OffsetDateTime;
 use crate::encode::binformat::write_atomic;
 use crate::encode::errors::{EncodeError, Result};
 use crate::encode::metadata::iso_z;
+use crate::encode::sources::SOURCES;
 
 /// A bundle's `variable` is a name, not a registered number: it must look like
 /// one (`^[a-z][a-z0-9]*$`) and be unique within the manifest, and nothing
@@ -26,10 +27,18 @@ use crate::encode::metadata::iso_z;
 /// encoder's scalar-then-vector bundle list produces. Mirrors
 /// `xuebuild/manifest.py`.
 ///
-/// The core pair is the exception, and the only closed set left: a forecast
-/// manifest naming neither temperature nor precipitation describes a run the
-/// viewer cannot open.
-pub const REQUIRED_BIN_BUNDLE_VARIABLES: &[&str] = &["tmp2m", "prate"];
+/// The core set is the exception, and the only closed set left, and it is
+/// the dataset's own (`SourceSpec::core_bundle_ids`, looked up by the
+/// manifest's `model` string): a forecast manifest naming neither
+/// temperature nor precipitation, or a radar manifest without the
+/// reflectivity, describes a run the viewer cannot open.
+fn core_bundle_ids(model: &str) -> Result<&'static [&'static str]> {
+    SOURCES
+        .iter()
+        .find(|source| source.manifest_model == model)
+        .map(|source| source.core_bundle_ids)
+        .ok_or_else(|| EncodeError::manifest(format!("manifest model is not a registered dataset: {model}")))
+}
 
 /// `^[a-z][a-z0-9]*$`, spelled out rather than pulling in a regex crate.
 fn is_bundle_variable_name(variable: &str) -> bool {
@@ -67,7 +76,7 @@ pub fn build_bin_manifest(
 
 /// The structural rules a reader depends on. Deliberately a subset of the
 /// Python validator — the bundle paths, the shape of a bundle name, and the
-/// core pair — since the Python side stays the contract's reference.
+/// core set — since the Python side stays the contract's reference.
 fn validate_bin_manifest(payload: &Value, require_core_variables: bool) -> Result<()> {
     let bundles = payload["bundles"]
         .as_array()
@@ -99,7 +108,7 @@ fn validate_bin_manifest(payload: &Value, require_core_variables: bool) -> Resul
         seen.push(variable);
     }
     if require_core_variables {
-        for variable in REQUIRED_BIN_BUNDLE_VARIABLES {
+        for variable in core_bundle_ids(payload["model"].as_str().unwrap_or_default())? {
             if !seen.contains(variable) {
                 return Err(EncodeError::manifest(format!(
                     "manifest is missing the required {variable} bundle"

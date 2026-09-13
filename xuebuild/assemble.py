@@ -288,6 +288,10 @@ def assemble_run(
     manifest, for a top-up — then the model's live pointer beside the run
     directory, and return a small report."""
     source = source_spec(model)
+    if not source.live:
+        # The fan-out ends in the pointer, and a source without a live feed
+        # (MRMS, until its rolling window is published) has none to write.
+        raise ManifestError(f"{source.manifest_model} has no live pointer to assemble a run under")
     run_directory = output_dir / f"{source.id}.{run_id}"
     part_paths = find_partial_manifests(run_directory)
     if not part_paths:
