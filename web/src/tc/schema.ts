@@ -63,6 +63,8 @@ export interface TcIndex {
 }
 
 export type TcRadii = Partial<Record<"34" | "50" | "64", (number | null)[]>>;
+/** The order a radii threshold's four quadrants come in. */
+export const QUADRANT_CODES = ["NE", "SE", "SW", "NW"] as const;
 
 export interface TcPoint {
   time: string;

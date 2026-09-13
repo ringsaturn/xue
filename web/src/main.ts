@@ -12,6 +12,7 @@ import {
   Map as MaplibreMap,
   NavigationControl,
   Marker,
+  Popup,
   setWorkerUrl,
   type MapOptions,
 } from "maplibre-gl";
@@ -123,7 +124,8 @@ import {
   searchWithTc,
 } from "./urlstate";
 import { TC_MODELS } from "./tc/agencies";
-import { StormLayers, type StormView } from "./tc/layers";
+import { buildTcCard } from "./tc/card";
+import { pointDataOf, StormLayers, TC_CLICKABLE_LAYERS, type StormView, type TcPointData } from "./tc/layers";
 import { renderTcPanel } from "./tc/panel";
 import type { TcIndexEntry, TcStorm } from "./tc/schema";
 import { fetchTcIndex, fetchTcStorm, resolveTcStormId, stormBounds, type LoadedTcIndex } from "./tc/tracks";
@@ -4388,6 +4390,37 @@ async function loadTc(): Promise<void> {
   void applyTcView();
 }
 
+/** The card open on a clicked storm point, one at a time. */
+let tcCard: Popup | null = null;
+
+function tcPointAt(point: { x: number; y: number }): { data: TcPointData; lngLat: [number, number] } | null {
+  if (!tcLayers) return null;
+  const layers = TC_CLICKABLE_LAYERS.filter((id) => map.getLayer(id) !== undefined);
+  if (!layers.length) return null;
+  const box: [[number, number], [number, number]] = [
+    [point.x - 6, point.y - 6],
+    [point.x + 6, point.y + 6],
+  ];
+  for (const feature of map.queryRenderedFeatures(box, { layers })) {
+    const data = pointDataOf(feature);
+    if (data) return { data, lngLat: [data.lon, data.lat] };
+  }
+  return null;
+}
+
+function showTcCard(data: TcPointData, lngLat: [number, number]): void {
+  closeTcCard();
+  tcCard = new Popup({ closeButton: false, closeOnClick: false, className: "tc-popup", maxWidth: "300px", offset: 12 })
+    .setLngLat(lngLat)
+    .setDOMContent(buildTcCard(data, { formatTime: (time) => formatDate(time) }))
+    .addTo(map);
+}
+
+function closeTcCard(): void {
+  tcCard?.remove();
+  tcCard = null;
+}
+
 function ensureTcLayers(): StormLayers | null {
   if (!mapStyleReady) return null;
   if (!tcLayers) tcLayers = new StormLayers(map);
@@ -4473,6 +4506,7 @@ async function applyTcView(): Promise<void> {
   }));
   layers?.setViews(views);
   syncTcTime();
+  closeTcCard();
   tcTile.setAttribute("aria-pressed", String(views.length > 0));
   renderTcSheet();
   if (tcSelected !== null && tcFramed !== tcSelected && tcDrawn.length === 1) {
@@ -5202,7 +5236,19 @@ map.on("contextmenu", (event) => {
 // clicks on the panels above it.
 map.on("click", (event) => {
   hideContextMenu();
+  // A storm point under the pointer opens its card; the probe pin is for
+  // the field.
+  const hit = tcPointAt(event.point);
+  if (hit) {
+    showTcCard(hit.data, hit.lngLat);
+    return;
+  }
+  closeTcCard();
   setProbe(event.lngLat.lng, event.lngLat.lat);
+});
+map.on("mousemove", (event) => {
+  if (!tcLayers) return;
+  map.getCanvas().style.cursor = tcPointAt(event.point) ? "pointer" : "";
 });
 window.addEventListener("pointerdown", (event) => {
   if (!contextMenu.hidden && !contextMenu.contains(event.target as Node)) hideContextMenu();
@@ -5213,6 +5259,7 @@ window.addEventListener("keydown", (event) => {
   // handler carries the surfaces that have no sheet of their own.
   hideContextMenu();
   closeProbe();
+  closeTcCard();
 });
 window.addEventListener("blur", hideContextMenu);
 map.on("movestart", hideContextMenu);

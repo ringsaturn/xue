@@ -21,7 +21,12 @@ import {
   NEUTRAL_LIGHT_GROUND,
   TC_BEST_AGENCY,
 } from "./agencies";
-import { isTcEnsemble, type TcStorm } from "./schema";
+import {
+  isTcEnsemble,
+  type TcPoint,
+  type TcRadii,
+  type TcStorm,
+} from "./schema";
 import {
   ensembleLines,
   forecastLine,
@@ -31,6 +36,7 @@ import {
   radiiRing,
   unwrapLongitudes,
   type LonLat,
+  type TrackPosition,
 } from "./tracks";
 
 export const TC_SOURCE = "tc-tracks";
@@ -43,6 +49,7 @@ const LAYERS = {
   best: "tc-best",
   agencyFuture: "tc-agency-future",
   agencyPast: "tc-agency-past",
+  bestPoint: "tc-best-point",
   point: "tc-point",
   current: "tc-current",
   lineLabel: "tc-line-label",
@@ -50,6 +57,52 @@ const LAYERS = {
 } as const;
 
 export const TC_LAYER_IDS: readonly string[] = Object.values(LAYERS);
+/** The layers a click on the map may hit a storm point through, nearest
+ * on top first. */
+export const TC_CLICKABLE_LAYERS: readonly string[] = [
+  LAYERS.current,
+  LAYERS.point,
+  LAYERS.bestPoint,
+];
+
+/** What a clicked point carries, as the feature's `data` property (a JSON
+ * string: MapLibre flattens nested properties). */
+export interface TcPointData {
+  storm: string;
+  name: string;
+  /** `forecast` for an agency's forecast point, `best` for a best-track
+   * point, `current` for the interpolated position at the playhead. */
+  source: "forecast" | "best" | "current";
+  /** The agency key, or the best track's key. */
+  agency: string;
+  code: string;
+  time: string;
+  /** Seconds from the forecast's base; absent on a best track. */
+  lead?: number;
+  number?: string;
+  lat: number;
+  lon: number;
+  vmax: number | null;
+  pmin: number | null;
+  radii: TcRadii | null;
+  class: string | null;
+  rmw: number | null;
+  gust: number | null;
+}
+
+export function pointDataOf(feature: {
+  properties?: unknown;
+}): TcPointData | null {
+  const properties = feature.properties as
+    Record<string, unknown> | null | undefined;
+  const raw = properties?.data;
+  if (typeof raw !== "string") return null;
+  try {
+    return JSON.parse(raw) as TcPointData;
+  } catch {
+    return null;
+  }
+}
 
 /** What to draw of one storm. */
 export interface StormView {
@@ -73,6 +126,52 @@ interface Properties {
   label?: string;
   threshold?: string;
   dotted?: boolean;
+  opacity?: number;
+  data?: string;
+}
+
+function pointData(
+  storm: TcStorm,
+  source: TcPointData["source"],
+  agency: string,
+  code: string,
+  point: TcPoint,
+  extra: { lead?: number; number?: string } = {},
+): string {
+  const data: TcPointData = {
+    storm: storm.id,
+    name: storm.name ?? storm.id,
+    source,
+    agency,
+    code,
+    time: point.time,
+    lat: point.lat,
+    lon: point.lon,
+    vmax: point.vmax,
+    pmin: point.pmin,
+    radii: point.radii,
+    class: point.class,
+    rmw: point.rmw,
+    gust: point.gust,
+    ...extra,
+  };
+  return JSON.stringify(data);
+}
+
+/** The interpolated position as a point, for the current marker's card. */
+function positionPoint(time: number, position: TrackPosition): TcPoint {
+  return {
+    time: new Date(time).toISOString().replace(/\.\d{3}Z$/, "Z"),
+    lat: position.lat,
+    lon: position.lon,
+    vmax: position.vmax,
+    pmin: position.pmin,
+    radii: position.radii,
+    class: position.class,
+    rmw: null,
+    gust: null,
+    cone: null,
+  };
 }
 
 function feature(geometry: Geometry, properties: Properties): Feature {
@@ -226,6 +325,32 @@ export class StormLayers {
     );
     map.addLayer(
       {
+        id: LAYERS.bestPoint,
+        type: "circle",
+        source: TC_SOURCE,
+        filter: kind("bestpoint"),
+        paint: {
+          "circle-radius": [
+            "interpolate",
+            ["linear"],
+            ["zoom"],
+            2,
+            1.4,
+            6,
+            2.2,
+            10,
+            3.5,
+          ],
+          "circle-color": this.halo,
+          "circle-stroke-color": ["get", "color"],
+          "circle-stroke-width": 1,
+          "circle-opacity": 0.9,
+        },
+      },
+      before,
+    );
+    map.addLayer(
+      {
         id: LAYERS.agencyFuture,
         type: "line",
         source: TC_SOURCE,
@@ -373,6 +498,7 @@ export class StormLayers {
     if (!this.added) return;
     for (const id of [LAYERS.point, LAYERS.current])
       this.map.setPaintProperty(id, "circle-stroke-color", this.halo);
+    this.map.setPaintProperty(LAYERS.bestPoint, "circle-color", this.halo);
     for (const id of [LAYERS.lineLabel, LAYERS.nameLabel])
       this.map.setPaintProperty(id, "text-halo-color", this.halo);
   }
@@ -406,13 +532,28 @@ export class StormLayers {
         for (const [key, track] of Object.entries(storm.best)) {
           const agency = TC_BEST_AGENCY[key] ?? null;
           const color = agency ? this.colorOf(agency) : this.neutral;
+          const code = key.toUpperCase();
           const drawn = line(forecastLine(track.points), {
             kind: "best",
             color,
             storm: storm.id,
-            code: key.toUpperCase(),
+            code,
           });
           if (drawn) features.push(drawn);
+          for (const point of track.points) {
+            features.push(
+              feature(
+                { type: "Point", coordinates: [point.lon, point.lat] },
+                {
+                  kind: "bestpoint",
+                  color,
+                  storm: storm.id,
+                  code,
+                  data: pointData(storm, "best", key, code, point),
+                },
+              ),
+            );
+          }
         }
       }
       for (const [model, value] of Object.entries(storm.models)) {
@@ -455,7 +596,16 @@ export class StormLayers {
           features.push(
             feature(
               { type: "Point", coordinates: [point.lon, point.lat] },
-              { kind: "point", color, storm: storm.id, code },
+              {
+                kind: "point",
+                color,
+                storm: storm.id,
+                code,
+                data: pointData(storm, "forecast", agency, code, point, {
+                  lead: point.lead,
+                  number: forecast.number,
+                }),
+              },
             ),
           );
         }
@@ -511,13 +661,16 @@ export class StormLayers {
           const ring = radiiRing(position.lat, position.lon, quadrants);
           if (!ring) continue;
           features.push(
-            feature({ type: "Polygon", coordinates: [ring] }, {
-              kind: "radii",
-              color,
-              storm: storm.id,
-              threshold,
-              opacity: RADII_OPACITY[threshold],
-            } as Properties),
+            feature(
+              { type: "Polygon", coordinates: [ring] },
+              {
+                kind: "radii",
+                color,
+                storm: storm.id,
+                threshold,
+                opacity: RADII_OPACITY[threshold],
+              },
+            ),
           );
         }
       }
@@ -530,7 +683,24 @@ export class StormLayers {
       features.push(
         feature(
           { type: "Point", coordinates: [position.lon, position.lat] },
-          { kind: "current", color, storm: storm.id, code, label },
+          {
+            kind: "current",
+            color,
+            storm: storm.id,
+            code,
+            label,
+            data: pointData(
+              storm,
+              "current",
+              agency,
+              code,
+              positionPoint(time, position),
+              {
+                lead: Math.round((time - Date.parse(forecast.base)) / 1000),
+                number: forecast.number,
+              },
+            ),
+          },
         ),
       );
     }
@@ -543,10 +713,24 @@ export class StormLayers {
         const agency = TC_BEST_AGENCY[key] ?? null;
         const color = agency ? this.colorOf(agency) : this.neutral;
         const label = position.class ? `${name} · ${position.class}` : name;
+        const code = key.toUpperCase();
         features.push(
           feature(
             { type: "Point", coordinates: [position.lon, position.lat] },
-            { kind: "current", color, storm: storm.id, code: key, label },
+            {
+              kind: "current",
+              color,
+              storm: storm.id,
+              code,
+              label,
+              data: pointData(
+                storm,
+                "current",
+                key,
+                code,
+                positionPoint(time, position),
+              ),
+            },
           ),
         );
         break;

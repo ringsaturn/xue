@@ -1750,6 +1750,133 @@ html[lang="ja"] .rail-glyph {
   outline-offset: 1px;
 }
 
+/* The card a clicked storm point opens: MapLibre's popup with its own
+   chrome removed and the sheet's put on — the same surface, line and
+   lift the capsule has — the centre's color on the code and the class.
+   The tip is MapLibre's; it is inked to match the surface. */
+.tc-popup .maplibregl-popup-content {
+  padding: 10px 14px 9px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--sheet);
+  box-shadow: var(--lift);
+  color: var(--text);
+  font-family: var(--font-ui);
+}
+
+.tc-popup .maplibregl-popup-tip {
+  border-top-color: var(--sheet);
+  border-bottom-color: var(--sheet);
+}
+
+.tc-popup.maplibregl-popup-anchor-left .maplibregl-popup-tip {
+  border-right-color: var(--sheet);
+}
+
+.tc-popup.maplibregl-popup-anchor-right .maplibregl-popup-tip {
+  border-left-color: var(--sheet);
+}
+
+.tc-card {
+  --card-ink: var(--text);
+  display: flex;
+  min-width: 200px;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.tc-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.tc-card-name {
+  font-family: var(--font-display);
+  font-size: 19px;
+  line-height: 1.1;
+}
+
+.tc-card-code,
+.tc-card-lead,
+.tc-card-extra,
+.tc-card-position,
+.tc-card-radii {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+.tc-card-code {
+  color: var(--card-ink);
+  font-weight: 600;
+}
+
+.tc-card-time {
+  display: flex;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.tc-card-lead {
+  color: var(--muted);
+}
+
+.tc-card-headline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  font-size: 13px;
+}
+
+.tc-card-class {
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--card-ink);
+  color: var(--sheet);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+
+.tc-card-radii {
+  border-collapse: collapse;
+  margin-top: 2px;
+}
+
+.tc-card-radii th,
+.tc-card-radii td {
+  padding: 1px 6px 1px 0;
+  color: var(--muted);
+  font-weight: 500;
+  text-align: right;
+}
+
+.tc-card-radii th:first-child {
+  padding-right: 10px;
+  color: var(--text);
+  text-align: left;
+}
+
+.tc-card-radii td {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.tc-card-unit {
+  padding-left: 4px;
+  text-align: left !important;
+}
+
+.tc-card-extra,
+.tc-card-position {
+  color: var(--muted);
+}
+
 /* ---------------------------------------------------------------------------
    Map context menu. */
 

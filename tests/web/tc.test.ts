@@ -335,3 +335,62 @@ describe("?tc= in the URL", () => {
     ).toBe("?model=gfs&tc=off");
   });
 });
+
+describe("the point card", () => {
+  it("prints the centre's numbers for a forecast point", async () => {
+    const { buildTcCard } = await import("../../web/src/tc/card");
+    const { pointDataOf } = await import("../../web/src/tc/layers");
+    const storm = validateTcStorm(expectedStorm);
+    const point = storm.agencies.nhc!.points[1]!;
+    const feature = {
+      properties: {
+        data: JSON.stringify({
+          storm: storm.id,
+          name: storm.name,
+          source: "forecast",
+          agency: "nhc",
+          code: "NHC",
+          time: point.time,
+          lead: point.lead,
+          number: undefined,
+          lat: point.lat,
+          lon: point.lon,
+          vmax: point.vmax,
+          pmin: point.pmin,
+          radii: point.radii,
+          class: point.class,
+          rmw: point.rmw,
+          gust: point.gust,
+        }),
+      },
+    };
+    const data = pointDataOf(feature)!;
+    expect(data.agency).toBe("nhc");
+    expect(pointDataOf({ properties: {} })).toBeNull();
+    const card = buildTcCard(data, { formatTime: (time) => `at ${time}` });
+    expect(card.querySelector(".tc-card-name")?.textContent).toBe("NORBERT");
+    expect(card.querySelector(".tc-card-code")?.textContent).toBe("NHC");
+    expect(card.querySelector(".tc-card-time")?.textContent).toContain(
+      `at ${point.time}`,
+    );
+    expect(card.querySelector(".tc-card-lead")?.textContent).toBe("+3h");
+    expect(card.querySelector(".tc-card-class")?.textContent).toBe("TS");
+    // 28.3 m/s is the 55 kt the advisory said.
+    expect(card.querySelector(".tc-card-headline")?.textContent).toContain(
+      "55 kt · 28 m/s",
+    );
+    expect(card.querySelector(".tc-card-headline")?.textContent).toContain(
+      "996 hPa",
+    );
+    const rows = [...card.querySelectorAll(".tc-card-radii tbody tr")].map(
+      (row) => row.textContent,
+    );
+    expect(rows).toEqual(["34KT167745693", "50KT560037"]);
+    expect(card.querySelector(".tc-card-extra")?.textContent).toBe(
+      "GUST 65 kt · 33 m/s",
+    );
+    expect(card.querySelector(".tc-card-position")?.textContent).toBe(
+      "17.2°N 126.6°W",
+    );
+  });
+});
