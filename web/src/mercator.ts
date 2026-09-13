@@ -37,3 +37,14 @@ export function worldPixels(zoom: number): number {
 export function zoomForSpan(worldSize: number, pixels: number): number {
   return Math.log2(pixels / worldSize / 512);
 }
+
+/** The zoom at which one grid cell of `longitudeStep` degrees spans
+ * `cellPixels` CSS pixels along the equator — how far a dataset is worth
+ * zooming into before it is only the interpolation being magnified. Never
+ * below `floor`: the global 0.25° models reach it at zoom 5.5, and a
+ * ceiling under the basemap's own detail would take the map away from
+ * the viewer for nothing. */
+export function zoomCeilingForStep(longitudeStep: number, cellPixels: number, floor: number): number {
+  if (!(longitudeStep > 0)) return floor;
+  return Math.max(floor, zoomForSpan(longitudeStep / 360, cellPixels));
+}

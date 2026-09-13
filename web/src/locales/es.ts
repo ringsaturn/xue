@@ -74,6 +74,7 @@ export const es: Record<MessageKey, string> = {
   creditsGfs: "DATOS DE PREDICCIÓN · GFS 0.25° Y SFLUX",
   creditsHrrr: "DATOS DE PREDICCIÓN · HRRR 3 KM, EE. UU. CONTIGUOS",
   creditsEcmwf: "CONTIENE DATOS ECMWF MODIFICADOS · CC BY 4.0",
+  creditsMrms: "OBSERVACIONES DE RADAR · MRMS, EE. UU. CONTIGUOS",
   creditsRadar: "MOSAICO RADAR",
   creditsBasemap: "MAPA BASE · © COLABORADORES DE OPENSTREETMAP",
   creditsCode: "CÓDIGO FUENTE · RINGSATURN/XUE",

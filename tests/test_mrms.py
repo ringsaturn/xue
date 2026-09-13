@@ -72,6 +72,7 @@ from xuebuild.fetch import (
 from xuebuild.gdal import _band_matches, inspect_grib_multi, precipitation_rate_is_mm_per_hour, raster_expression
 from xuebuild.manifest import MODEL_CORE_BUNDLES, build_bin_manifest, validate_bin_manifest
 from xuebuild.model import GfsRun, SourceFrame
+from xuebuild.showcase import ShowcaseError, build_case, parse_case
 from xuebuild.sources import SOURCES, Downsample, source_spec
 from xuebuild.variables import variable_spec
 
@@ -570,6 +571,81 @@ class FixtureGridTests(unittest.TestCase):
         np.testing.assert_array_equal(
             window, whole[crop.row_start : crop.row_start + crop.height, crop.column_start : crop.column_start + crop.width]
         )
+
+
+@requires_gdalinfo
+class ShowcaseCaseTests(DownloadTests):
+    """A historical case on the mosaic: the third shape of a case (a window
+    fetched from the bucket, cropped like a forecast case), built end to
+    end against the fixture served back as the bucket."""
+
+    def fetch_text(self, url: str) -> str:
+        if "MergedReflectivityQCComposite" in url and "20260913" in url:
+            return listing(cref_key("20260913", "000042"), cref_key("20260913", "000242"))
+        if "PrecipRate" in url and "20260913" in url:
+            return listing(prate_key("20260913", "000000"), prate_key("20260913", "000200"))
+        return listing()
+
+    def case(self, **overrides: object):
+        payload: dict[str, object] = {
+            "id": "mrms-window",
+            "title": {"zh": "示例", "en": "Demo"},
+            "summary": {"zh": "示例说明", "en": "Demo summary"},
+            "model": "mrms",
+            "run": "2026091300",
+            "hours": 1,
+            "bbox": [-77.0, 51.0, -76.5, 51.5],
+            "variables": ["cref"],
+            "credit": "NOAA MRMS",
+        }
+        payload.update(overrides)
+        return parse_case(payload)
+
+    def build(self, spec):
+        with (
+            mock.patch("xuebuild.fetch._request", self.request),
+            mock.patch("xuebuild.fetch.fetch_text", self.fetch_text),
+            mock.patch.dict(os.environ, {"XUE_ENCODER": "python"}),
+        ):
+            return build_case(
+                spec, output_root=self.root / "out", raw_root=self.root / "raw", work_root=self.root / "work"
+            )
+
+    def test_a_case_is_a_cropped_window_of_the_mosaic(self) -> None:
+        entry = self.build(self.case())
+        # Only the case's product was fetched, into the case's own raw
+        # directory, and recorded there.
+        raw = self.root / "raw" / "showcase" / "mrms-window" / "mrms.2026091300"
+        self.assertEqual(sorted(path.name for path in raw.iterdir()), ["fetch.json", "mrms.2026091300.t0000.grib2", "mrms.2026091300.t0002.grib2"])
+        record = json.loads((raw / "fetch.json").read_text())
+        self.assertEqual(list(record["frames"][0]["objects"]), ["cref"])
+        # The catalog row is the forecast shape: the run is the window's
+        # first hour, the axis the two-minute slots, the grid the crop of
+        # the thinned 0.02° grid.
+        self.assertEqual((entry["modelId"], entry["model"], entry["product"]), ("mrms", "NOAA-MRMS", "conus-cref"))
+        self.assertEqual((entry["run"], entry["runTime"], entry["forecastHours"]), ("2026091300", "2026-09-13T00:00:00Z", 1))
+        self.assertEqual(entry["variables"], ["cref"])
+        self.assertEqual(entry["credit"], "NOAA MRMS")
+        self.assertEqual(entry["grid"], {"width": 27, "height": 27})
+        west, south, east, north = entry["dataBbox"]
+        self.assertLessEqual(west, -77.0)
+        self.assertGreaterEqual(east, -76.5)
+        self.assertLessEqual(south, 51.0)
+        self.assertGreaterEqual(north, 51.5)
+        manifest = json.loads((self.root / "out" / entry["manifestPath"]).read_text())
+        self.assertEqual([bundle["variable"] for bundle in manifest["bundles"]], ["cref"])
+        self.assertNotIn("video", manifest["bundles"][0])
+        self.assertNotIn("variants", manifest["bundles"][0])
+        bundle = read_bundle(self.root / "out" / "showcase" / "mrms-window" / "cref.xue")
+        self.assertEqual(bundle.metadata["time"]["unitSeconds"], 120)
+        self.assertEqual((bundle.metadata["time"]["firstFrameOffset"], bundle.metadata["time"]["frameStep"], bundle.metadata["time"]["frameCount"]), (0, 1, 2))
+        self.assertEqual((bundle.metadata["grid"]["width"], bundle.metadata["grid"]["longitudeStep"]), (27, 0.02))
+
+    def test_a_window_the_archive_cuts_short_is_refused(self) -> None:
+        # The bucket answers two slots at the top of the hour; a case
+        # declaring three hours does not quietly become a one-hour case.
+        with self.assertRaisesRegex(ShowcaseError, r"reaches \+1 h, not the declared 3"):
+            self.build(self.case(hours=3))
 
 
 @requires_gdalinfo

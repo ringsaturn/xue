@@ -1,0 +1,32 @@
+{
+  "id": "ida-2021",
+  "title": {
+    "zh": "飓风「艾达」登陆路易斯安那",
+    "en": "Hurricane Ida on radar"
+  },
+  "summary": {
+    "zh": "2021 年 8 月 29 日，飓风「艾达」在墨西哥湾北部快速增强后，于 16:55 UTC（当地 11:55）以四级、130 节（约 240 km/h）、930 hPa 登陆路易斯安那州富尔雄港——与「卡特里娜」登陆恰好相隔十六年，风速与 2020 年的「劳拉」并列该州有记录以来最强。此处是 NOAA MRMS 全国雷达拼图从 12Z 起的 12 小时：组合反射率与降水率，原生两分钟一帧，眼墙自近海推进、跨过海岸、在东南路易斯安那缓慢内陆化的全过程。产品每两分钟发一帧，但雷达体扫四到六分钟一圈，新扫描没到的那一帧就是上一帧的重复，所以画面按体扫的节奏一跳一跳地更新，降水率上尤其明显。雷达观测，非预报产品；0.01° 原始网格按 2×2 块最大抽稀到 0.02°。",
+    "en": "On 29 August 2021, after rapid intensification over the northern Gulf of Mexico, Hurricane Ida made landfall at Port Fourchon, Louisiana at 16:55 UTC (11:55 local) as a category 4 with 130 kt (about 240 km/h) winds and 930 hPa — sixteen years to the day after Katrina, and tied with Laura in 2020 as the strongest on record for the state by wind. This is twelve hours of the NOAA MRMS national radar mosaic from 12Z: composite reflectivity and precipitation rate at the source two-minute cadence, the eyewall advancing from offshore, crossing the coast and pushing slowly inland over southeast Louisiana. The product is issued every two minutes but a radar volume scan takes four to six, so a frame with no new scan behind it repeats the last one and the picture advances in steps at the scan cadence — most visibly in the rain rate. Radar observations, not a forecast; the 0.01° source grid is thinned to 0.02° by 2×2 block maximum."
+  },
+  "model": "mrms",
+  "run": "2021082912",
+  "hours": 12,
+  "bbox": [
+    -95.0,
+    27.0,
+    -85.0,
+    33.0
+  ],
+  "variables": [
+    "cref",
+    "prate"
+  ],
+  "defaultVariable": "cref",
+  "eventTime": "2021-08-29T16:55:00Z",
+  "tags": [
+    "hurricane",
+    "radar",
+    "north-america"
+  ],
+  "credit": "NOAA MRMS"
+}

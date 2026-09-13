@@ -154,6 +154,7 @@ import {
   type MeteogramRowData,
   type MeteogramRowSpec,
 } from "./meteogram";
+import { zoomCeilingForStep } from "./mercator";
 import { fetchPoster, isPosterSupported } from "./poster";
 import { frameCacheKey, parseFrameCacheKey, variableKey } from "./sessionkeys";
 import { applyTheme, isDark, onThemeChange, toggleTheme } from "./theme";
@@ -733,12 +734,22 @@ let appliedBasemapStyle: BasemapStyle = buildBasemapStyle();
  * own framing yields to the sharer's view. */
 const urlCamera = parseCameraFromHash(window.location.hash);
 
+/** The zoom ceiling with nothing finer than the global models on screen.
+ * A finer grid raises it (`applyZoomCeiling`): the ceiling follows the
+ * data, since past the point where a cell is `ZOOM_CEILING_CELL_PIXELS`
+ * wide the map only magnifies the interpolation. */
+const BASE_MAX_ZOOM = 7;
+/** How wide a grid cell may get on screen before the zoom stops — 16 CSS
+ * px puts a 0.02° radar mosaic at zoom 9 and the 0.03° HRRR grid at 8.5,
+ * while the 0.25° models stay at the base ceiling. */
+const ZOOM_CEILING_CELL_PIXELS = 16;
+
 const map = new MaplibreMap({
   container: "map",
   center: [128, 28],
   zoom: 1.65,
   minZoom: 0,
-  maxZoom: 7,
+  maxZoom: BASE_MAX_ZOOM,
   // The view lives in the fragment, `#map=<zoom>/<lat>/<lon>`, kept
   // current on every move — so a copied address reproduces the view, and
   // the query string, which is what names the page, never changes on a pan.
@@ -890,6 +901,7 @@ const MODEL_EYEBROW: Record<ForecastModelId, string> = {
   sflux: "NOAA / GFS SFLUX (13 KM)",
   hrrr: "NOAA / HRRR CONUS (3 KM)",
   radar: "CMA / RADAR MOSAIC (L3 MST)",
+  mrms: "NOAA / MRMS CONUS (0.02°)",
 };
 
 /** The member to open when a family's one rail tile is picked: whichever
@@ -4787,6 +4799,15 @@ function syncTimeline(session: VariableSession): void {
   buildPreloadSegments(time.frameCount);
 }
 
+/** Let the camera go as deep as the primary's grid is worth — the ceiling
+ * is the data's, so a 0.02° mosaic opens two zoom levels the 0.25° models
+ * never had. MapLibre clamps the camera at once when the ceiling drops
+ * below it, which is what a switch back to a coarser dataset wants. */
+function applyZoomCeiling(session: VariableSession): void {
+  const grid = geoGrid(session.metadata);
+  map.setMaxZoom(zoomCeilingForStep(grid.longitudeStep, ZOOM_CEILING_CELL_PIXELS, BASE_MAX_ZOOM));
+}
+
 function applyVariable(session: VariableSession): void {
   if (!layersAdded) return;
   // Another level's labels, or a filled field's none, replace the last.
@@ -4797,6 +4818,7 @@ function applyVariable(session: VariableSession): void {
   // The composition follows the session that actually landed: a slot the
   // run could not fill has already emptied by now.
   composition = compositionForPrimary(session.id, composition.lines);
+  applyZoomCeiling(session);
   syncTimeline(session);
   const slot = slotFor(session.id);
   configureSlotLayer(slot, session, false);

@@ -8,9 +8,9 @@ export type ForecastVariableId = "tmp2m" | "prate";
  * immutable run directories and its own manifest identity, and — when it has
  * a live feed — its own mutable live pointer at the data root. GFS uses the
  * bare ``latest.json``; the other live models use ``latest-<model>.json``.
- * The radar mosaic has no live feed at all: it is an observation archive
- * that reaches the app only as showcase cases. */
-export type ForecastModelId = "gfs" | "ecmwf" | "sflux" | "hrrr" | "radar";
+ * The two radar mosaics have no live feed (yet): they are observation
+ * archives that reach the app only as showcase cases. */
+export type ForecastModelId = "gfs" | "ecmwf" | "sflux" | "hrrr" | "radar" | "mrms";
 
 export interface ForecastModelInfo {
   id: ForecastModelId;
@@ -62,6 +62,19 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
   // CMA weather radar level-3 mosaic composite reflectivity: observations,
   // not a forecast, and published only as showcase cases.
   radar: { id: "radar", label: "CMA-RADAR", product: "l3-mst-cref", observation: true, coreBundles: ["cref"] },
+  // NOAA MRMS, the national radar mosaic over the contiguous United States:
+  // composite reflectivity and precipitation rate every two minutes on a
+  // regular grid the encoder thins to 0.02°. Observations, published as
+  // showcase cases; a live rolling window is the next step, and the region
+  // is where the camera will go when it is opened from elsewhere.
+  mrms: {
+    id: "mrms",
+    label: "NOAA-MRMS",
+    product: "conus-cref",
+    observation: true,
+    coreBundles: ["cref"],
+    region: [-130, 20, -60, 55],
+  },
 };
 
 /** True when a dataset is observations, not a forecast. */
@@ -69,7 +82,7 @@ export function isObservationModel(model: ForecastModelId): boolean {
   return FORECAST_MODELS[model].observation === true;
 }
 
-/** The live feeds, in model-switch order. The radar archive is not one. */
+/** The live feeds, in model-switch order. The radar archives are not ones. */
 export const FORECAST_MODEL_IDS: readonly ForecastModelId[] = ["gfs", "sflux", "ecmwf", "hrrr"];
 
 function modelForManifestString(model: unknown): ForecastModelInfo | null {

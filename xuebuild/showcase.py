@@ -19,11 +19,17 @@ directory-layout change in 2021-03, see :data:`xue.fetch.ATMOS_SUBDIRECTORY_FROM
 and the ECMWF open data mirrors from about 2024-02. A case naming a run
 older than its source published simply fails to fetch.
 
-A case on an observation source (the CMA radar mosaic) is the same object
-built from a different input: it names a local ``dataset`` file instead of a
-``run`` to fetch, and its axis is whatever times that file carries. Nothing
-fetches it, so such a case is only rebuildable by someone who has the
-dataset; the built output is an ordinary case like any other.
+A case on an observation source is the same object built from a different
+input, and comes in two shapes. The CMA radar mosaic names a local
+``dataset`` file instead of a ``run`` to fetch, and its axis is whatever
+times that file carries; nothing fetches it, so such a case is only
+rebuildable by someone who has the dataset. The NOAA MRMS mosaic is a
+*fetched* observation (``SourceSpec.fetched``): like a forecast case it
+names a ``run`` — the first hour of its window, which the bucket holds from
+2020-10-14 — and ``hours`` is the window's length rather than a point on a
+published axis, since the frames come every two minutes with gaps wherever
+the archive skipped one. The built output is an ordinary case like any
+other.
 """
 
 from __future__ import annotations
@@ -95,14 +101,16 @@ class CaseSpec:
     summary: dict[str, str]
     model: str
     run: str
-    """The archived cycle to fetch, empty on an observation case — the
-    dataset file says when its series starts."""
+    """The archived cycle to fetch — on a fetched observation, the first
+    hour of the window — and empty on a local-file observation case, where
+    the dataset file says when its series starts."""
     dataset: str
-    """Observation cases only: the NetCDF file holding the series, resolved
-    against :data:`OBSERVATION_ROOT_ENV` (default
+    """Local-file observation cases only: the NetCDF file holding the
+    series, resolved against :data:`OBSERVATION_ROOT_ENV` (default
     :data:`DEFAULT_OBSERVATION_ROOT`) when it is not absolute."""
     hours: int
-    """Last hour of the case's axis, counted from its first frame."""
+    """Last hour of the case's axis, counted from its first frame; on a
+    fetched observation, the length of the window."""
     bbox: tuple[float, float, float, float]
     variables: tuple[str, ...]
     default_variable: str
@@ -118,6 +126,13 @@ class CaseSpec:
     @property
     def source(self) -> SourceSpec:
         return source_spec(self.model)
+
+    @property
+    def from_dataset(self) -> bool:
+        """Whether the case is built from a local observation file rather
+        than fetched — the CMA mosaic, not MRMS."""
+        source = self.source
+        return source.observation and not source.fetched
 
     @property
     def dataset_path(self) -> Path:
@@ -162,26 +177,31 @@ def parse_case(payload: dict[str, Any], *, source_name: str = "<case>") -> CaseS
         raise ShowcaseError(f"case {case_id}: model must be a string")
     source = source_spec(model)
 
-    # A forecast case names an archived cycle to fetch; an observation case
-    # names the local file that already holds its series, and its start time
+    # A forecast case names an archived cycle to fetch, and so does a fetched
+    # observation — the first hour of its window; a local-file observation
+    # case names the file that already holds its series, and its start time
     # comes out of that file rather than out of the definition.
     run = payload.get("run", "")
     dataset = payload.get("dataset", "")
-    if source.observation:
+    if source.observation and not source.fetched:
         if run:
-            raise ShowcaseError(f"case {case_id}: an observation case has no run to name")
+            raise ShowcaseError(f"case {case_id}: an observation case built from a file has no run to name")
         if not isinstance(dataset, str) or not dataset:
             raise ShowcaseError(f"case {case_id}: dataset must name the observation file to build from")
     else:
         if dataset:
-            raise ShowcaseError(f"case {case_id}: only an observation case is built from a dataset file")
+            raise ShowcaseError(f"case {case_id}: only an observation case read from a file names a dataset")
         if not isinstance(run, str) or not run:
-            raise ShowcaseError(f"case {case_id}: run must be a UTC cycle in YYYYMMDDHH format")
+            what = "the window's first hour" if source.observation else "a UTC cycle"
+            raise ShowcaseError(f"case {case_id}: run must be {what} in YYYYMMDDHH format")
         parse_run(run, source.id)
 
     hours = payload.get("hours")
     if not isinstance(hours, int) or isinstance(hours, bool) or hours <= 0:
         raise ShowcaseError(f"case {case_id}: hours must be a positive integer forecast hour")
+    # A forecast hour must sit on the published axis; an observation's axis
+    # is the file's or the window's own, so any whole hour is a legal
+    # declaration until the frames are read.
     if not source.observation:
         try:
             source.forecast_hours(hours)
@@ -313,12 +333,13 @@ def build_case(
     sidecar.
 
     Only the case's own variables are downloaded, and into a per-case raw
-    directory so a partial record set never shadows a full run's cache. An
-    observation case downloads nothing: its input is the local dataset file
-    the definition names.
+    directory so a partial record set never shadows a full run's cache. A
+    local-file observation case downloads nothing: its input is the dataset
+    file the definition names. A fetched observation (MRMS) downloads its
+    window frame by frame, the products of the case's variables only.
     """
     source = spec.source
-    if source.observation:
+    if spec.from_dataset:
         inputs: Path | list[Path] = spec.dataset_path
         if not inputs.is_file():
             raise ShowcaseError(
@@ -334,9 +355,14 @@ def build_case(
             )
         )
         case_raw_root = raw_root / SHOWCASE_DIRECTORY / spec.id
-        LOG.info(
-            "fetching %s run %s f000-f%03d (%s)", source.manifest_model, spec.run, spec.hours, ", ".join(input_ids)
-        )
+        if source.observation:
+            LOG.info(
+                "fetching %s window %s +%d h (%s)", source.manifest_model, spec.run, spec.hours, ", ".join(input_ids)
+            )
+        else:
+            LOG.info(
+                "fetching %s run %s f000-f%03d (%s)", source.manifest_model, spec.run, spec.hours, ", ".join(input_ids)
+            )
         # Exactly the case's own frames: the raw directory can hold more, left
         # behind by an earlier build of the same case with a longer range.
         inputs = fetch_run(
@@ -361,9 +387,20 @@ def build_case(
         model=spec.model,
         bbox=spec.bbox,
         bundle_ids=spec.variables,
-        last_hour=spec.hours if source.observation else None,
+        # A local file holds more than the case; a fetched window is exactly
+        # the frames that were fetched, like a forecast run.
+        last_hour=spec.hours if spec.from_dataset else None,
     )
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if manifest["forecastHours"] != spec.hours:
+        # A forecast case is held to its axis by the converter and a
+        # local-file case by ``last_hour``; a fetched window can only come
+        # up short when the archive lacks its last hour, and a case's
+        # declared range is never silently shortened.
+        raise ShowcaseError(
+            f"case {spec.id}: the {source.manifest_model} window reaches +{manifest['forecastHours']} h, "
+            f"not the declared {spec.hours}; the archive lacks the frames past that"
+        )
     entry = build_catalog_entry(spec, manifest, manifest_path.read_bytes(), report)
     (output_dir / CASE_SIDECAR).write_text(json.dumps(entry, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     LOG.info("built case %s (%d bundles, %.2f MB)", spec.id, len(manifest["bundles"]), report["byteLength"] / 1e6)

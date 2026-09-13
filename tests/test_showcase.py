@@ -10,7 +10,7 @@ from unittest import mock
 import numpy as np
 
 from xuebuild.binconvert import GridInfo, bundle_input_ids, crop_grid, published_bundle_ids
-from xuebuild.errors import ConversionError, ManifestError
+from xuebuild.errors import ConversionError, ManifestError, XueError
 from xuebuild.manifest import build_bin_manifest, validate_bin_manifest
 from xuebuild.showcase import (
     OBSERVATION_ROOT_ENV,
@@ -37,6 +37,21 @@ def observation_payload(**overrides: object) -> dict[str, object]:
         "dataset": "event/series.nc",
         "hours": 24,
         "bbox": [105.0, 14.0, 130.0, 34.0],
+        "variables": ["cref"],
+    }
+    payload.update(overrides)
+    return payload
+
+
+def fetched_observation_payload(**overrides: object) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "id": "demo-window",
+        "title": {"zh": "示例", "en": "Demo"},
+        "summary": {"zh": "示例说明", "en": "Demo summary"},
+        "model": "mrms",
+        "run": "2021082912",
+        "hours": 12,
+        "bbox": [-95.0, 27.0, -85.0, 33.0],
         "variables": ["cref"],
     }
     payload.update(overrides)
@@ -233,6 +248,43 @@ class CaseDefinitionTest(unittest.TestCase):
         parse_case(observation_payload(hours=125))
         with self.assertRaises(ShowcaseError):
             parse_case(observation_payload(hours=0))
+
+    def test_parses_a_fetched_observation_definition(self) -> None:
+        # MRMS is an observation like the CMA mosaic but fetched from its
+        # bucket: a case names the window's first hour as its run, the way a
+        # forecast case names a cycle, and no dataset file.
+        spec = parse_case(fetched_observation_payload())
+        self.assertEqual(spec.model, "mrms")
+        self.assertEqual(spec.run, "2021082912")
+        self.assertEqual(spec.dataset, "")
+        self.assertFalse(spec.from_dataset)
+        self.assertTrue(parse_case(observation_payload()).from_dataset)
+        self.assertFalse(parse_case(case_payload()).from_dataset)
+        with self.assertRaises(ShowcaseError):
+            spec.dataset_path
+
+    def test_a_fetched_observation_case_names_a_window_not_a_file(self) -> None:
+        with self.assertRaises(ShowcaseError):
+            parse_case(fetched_observation_payload(dataset="series.nc"))
+        with self.assertRaisesRegex(ShowcaseError, "window's first hour"):
+            parse_case(fetched_observation_payload(run=""))
+        # Any hour is a cycle on the two-minute mosaic; the run must still be
+        # a well-formed hour.
+        parse_case(fetched_observation_payload(run="2021082913"))
+        with self.assertRaises(XueError):
+            parse_case(fetched_observation_payload(run="2021-08-29T12"))
+
+    def test_a_fetched_observation_window_is_any_whole_number_of_hours(self) -> None:
+        # 125 is off every forecast axis; a window is as long as it says.
+        parse_case(fetched_observation_payload(hours=125))
+        with self.assertRaises(ShowcaseError):
+            parse_case(fetched_observation_payload(hours=0))
+
+    def test_a_fetched_observation_case_ships_what_the_source_publishes(self) -> None:
+        spec = parse_case(fetched_observation_payload(variables=["prate", "cref"]))
+        self.assertEqual(spec.variables, ("cref", "prate"))
+        with self.assertRaises(ShowcaseError):
+            parse_case(fetched_observation_payload(variables=["tmp2m"]))
 
     def test_definition_file_must_be_named_after_its_id(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

@@ -1,0 +1,31 @@
+{
+  "id": "quad-state-tornado-2021",
+  "title": {
+    "zh": "2021 年 12 月四州龙卷夜",
+    "en": "The December 2021 tornado outbreak on radar"
+  },
+  "summary": {
+    "zh": "2021 年 12 月 10 日夜至 11 日凌晨，一条强盛的超级单体线自阿肯色州东北部经田纳西州西北角扫过肯塔基州西部，肯塔基州西部龙卷在地面上连续行进 165.7 英里（约 267 km），21:27 CST（03:27 UTC）穿过梅菲尔德，随后袭击道森斯普林斯；同一夜伊利诺伊州爱德华兹维尔的亚马逊仓库、阿肯色州莫内特的养老院与肯塔基州鲍灵格林先后遭受龙卷。这场深冬罕见的爆发在四州留下超过 80 人死亡。此处是 NOAA MRMS 全国雷达拼图自 12 月 10 日 22Z 起的 10 小时组合反射率，原生两分钟一帧（雷达体扫四到六分钟一圈，画面按体扫节奏更新），钩状回波沿密西西比河谷向东北推进的整晚。雷达观测，非预报产品。",
+    "en": "Through the night of 10–11 December 2021 a line of intense supercells ran from northeast Arkansas across the northwest corner of Tennessee into western Kentucky. The Western Kentucky tornado stayed on the ground for 165.7 miles (about 267 km), crossing Mayfield at 21:27 CST (03:27 UTC) and going on to Dawson Springs; the same night tornadoes struck the Amazon warehouse at Edwardsville, Illinois, the nursing home at Monette, Arkansas, and Bowling Green, Kentucky. An outbreak of this strength in deep winter is rare, and it killed more than 80 people across four states. This is ten hours of the NOAA MRMS national radar mosaic from 22Z on 10 December: composite reflectivity at the source two-minute cadence (a radar volume scan takes four to six minutes, and the picture advances at that pace), the hook echoes moving northeast up the Mississippi valley all night. Radar observations, not a forecast."
+  },
+  "model": "mrms",
+  "run": "2021121022",
+  "hours": 10,
+  "bbox": [
+    -92.0,
+    34.0,
+    -84.0,
+    40.0
+  ],
+  "variables": [
+    "cref"
+  ],
+  "defaultVariable": "cref",
+  "eventTime": "2021-12-11T03:27:00Z",
+  "tags": [
+    "tornado",
+    "radar",
+    "north-america"
+  ],
+  "credit": "NOAA MRMS"
+}

@@ -314,17 +314,43 @@ describe("crc32", () => {
 });
 
 describe("dataset kinds", () => {
-  it("marks the radar archive as observations and the forecasts as forecasts", () => {
+  it("marks the radar archives as observations and the forecasts as forecasts", () => {
     // Mirrors SourceSpec.observation in xue/sources.py; the viewer titles its
     // timeline off this (run cycle and lead time vs. series start and elapsed).
     expect(isObservationModel("radar")).toBe(true);
+    expect(isObservationModel("mrms")).toBe(true);
     for (const model of FORECAST_MODEL_IDS) expect(isObservationModel(model)).toBe(false);
   });
 
-  it("keeps the radar archive out of the live-feed list", () => {
-    // It has no live pointer, so nothing may try to fetch one.
+  it("keeps the radar archives out of the live-feed list", () => {
+    // Neither has a live pointer (yet), so nothing may try to fetch one.
     expect(FORECAST_MODEL_IDS).not.toContain("radar");
+    expect(FORECAST_MODEL_IDS).not.toContain("mrms");
     expect(FORECAST_MODELS.radar.latestFilename).toBeUndefined();
+    expect(FORECAST_MODELS.mrms.latestFilename).toBeUndefined();
+  });
+
+  it("admits an mrms case manifest by its own identity and core set", () => {
+    // Mirrors the `mrms` entry of SOURCES: the NOAA mosaic is a second
+    // radar dataset, keyed by its own model and product strings, with the
+    // reflectivity as its one required bundle and the rate optional.
+    const mrms = {
+      schemaVersion: 5,
+      model: "NOAA-MRMS",
+      product: "conus-cref",
+      runTime: "2021-08-29T12:00:00Z",
+      forecastHours: 12,
+      bundles: [
+        { variable: "cref", path: "showcase/ida-2021/cref.xue", byteLength: 1, crc32: "00000000" },
+        { variable: "prate", path: "showcase/ida-2021/prate.xue", byteLength: 1, crc32: "00000001" },
+      ],
+    };
+    expect(validateManifest(mrms, "mrms").bundles).toHaveLength(2);
+    expect(validateManifest({ ...mrms, bundles: [mrms.bundles[0]!] }, "mrms").bundles).toHaveLength(1);
+    expect(() => validateManifest({ ...mrms, bundles: [mrms.bundles[1]!] }, "mrms")).toThrow(/no bundle for variable cref/);
+    // The two mosaics are not interchangeable.
+    expect(() => validateManifest(mrms, "radar")).toThrow();
+    expect(FORECAST_MODELS.mrms.region).toEqual([-130, 20, -60, 55]);
   });
 
   it("requires each dataset's own core bundles of a live manifest", () => {

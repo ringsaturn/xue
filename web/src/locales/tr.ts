@@ -77,6 +77,7 @@ export const tr: Record<MessageKey, string> = {
   creditsGfs: "TAHMİN VERİSİ · GFS 0.25° VE SFLUX",
   creditsHrrr: "TAHMİN VERİSİ · HRRR 3 KM, ABD ANAKARASI",
   creditsEcmwf: "DEĞİŞTİRİLMİŞ ECMWF VERİSİ İÇERİR · CC BY 4.0",
+  creditsMrms: "RADAR GÖZLEMLERİ · MRMS, ABD ANAKARASI",
   creditsRadar: "RADAR MOZAİĞİ",
   creditsBasemap: "ALTLIK HARİTA · © OPENSTREETMAP KATKIDA BULUNANLAR",
   creditsCode: "KAYNAK KODU · RINGSATURN/XUE",
