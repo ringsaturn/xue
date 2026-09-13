@@ -72,7 +72,7 @@ from xuebuild.fetch import (
 from xuebuild.gdal import _band_matches, inspect_grib_multi, precipitation_rate_is_mm_per_hour, raster_expression
 from xuebuild.manifest import MODEL_CORE_BUNDLES, build_bin_manifest, validate_bin_manifest
 from xuebuild.model import GfsRun, SourceFrame
-from xuebuild.showcase import ShowcaseError, build_case, parse_case
+from xuebuild.showcase import LOCALES, ShowcaseError, build_case, parse_case
 from xuebuild.sources import SOURCES, Downsample, source_spec
 from xuebuild.variables import variable_spec
 
@@ -589,8 +589,8 @@ class ShowcaseCaseTests(DownloadTests):
     def case(self, **overrides: object):
         payload: dict[str, object] = {
             "id": "mrms-window",
-            "title": {"zh": "示例", "en": "Demo"},
-            "summary": {"zh": "示例说明", "en": "Demo summary"},
+            "title": {locale: "Demo" for locale in LOCALES},
+            "summary": {locale: "Demo summary" for locale in LOCALES},
             "model": "mrms",
             "run": "2026091300",
             "hours": 1,

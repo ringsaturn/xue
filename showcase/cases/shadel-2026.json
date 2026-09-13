@@ -2,19 +2,48 @@
   "id": "shadel-2026",
   "title": {
     "zh": "台风「沙德尔」雷达全程",
-    "en": "Typhoon Shadel on radar"
+    "en": "Typhoon Shadel on radar",
+    "zh-Hant": "颱風「沙德爾」雷達全程",
+    "ja": "台風シャデルのレーダー全記録",
+    "ko": "태풍 샤델 레이더 전 과정",
+    "de": "Taifun Shadel im Radar",
+    "fr": "Le typhon Shadel au radar",
+    "es": "El tifón Shadel en el radar",
+    "pt": "O tufão Shadel no radar",
+    "tr": "Radarda Shadel Tayfunu",
+    "ru": "Тайфун «Шадель» на радаре"
   },
   "summary": {
     "zh": "2026 年第 18 号台风「沙德尔」的雷达组合反射率全过程，原生 6 分钟档，北京时 8 月 26 日 00 时至 9 月 3 日 20 时，共 2096 帧，其中 25 个时次原始档案缺发布。8 月 28 日 08:05 以 12 级（35 m/s，975 hPa）首次登陆浙江台州玉环坎门，深入内陆后于 8 月 30 日停止编号；残余涡旋南下，9 月 1 日凌晨在南海重新加强为热带风暴级，9 月 2 日掠过粤东沿海，9 月 3 日 06:30 以 9 级（23 m/s，985 hPa）第三次登陆福建漳州漳浦古雷。数据为中国气象局雷达三级拼图组合反射率（RADAR_L3_MST_CREF），非预报产品。",
-    "en": "Composite radar reflectivity through the life of Typhoon Shadel (2026 no. 18), at the source six-minute cadence from 00 CST on 26 August to 20 CST on 3 September — 2096 frames, with 25 slots missing from the archive. It first came ashore at Kanmen, Yuhuan, Zhejiang at 08:05 CST on 28 August at 35 m/s and 975 hPa, and was discontinued over land on 30 August. Its remnant circulation moved south, re-intensified to tropical storm strength over the South China Sea early on 1 September, grazed the eastern Guangdong coast on 2 September, and made a third landfall at Gulei, Zhangpu, Fujian at 06:30 CST on 3 September at 23 m/s and 985 hPa. The data is the China Meteorological Administration level-3 radar mosaic (RADAR_L3_MST_CREF) — observations, not a forecast."
+    "en": "Composite radar reflectivity through the life of Typhoon Shadel (2026 no. 18), at the source six-minute cadence from 00 CST on 26 August to 20 CST on 3 September — 2096 frames, with 25 slots missing from the archive. It first came ashore at Kanmen, Yuhuan, Zhejiang at 08:05 CST on 28 August at 35 m/s and 975 hPa, and was discontinued over land on 30 August. Its remnant circulation moved south, re-intensified to tropical storm strength over the South China Sea early on 1 September, grazed the eastern Guangdong coast on 2 September, and made a third landfall at Gulei, Zhangpu, Fujian at 06:30 CST on 3 September at 23 m/s and 985 hPa. The data is the China Meteorological Administration level-3 radar mosaic (RADAR_L3_MST_CREF) — observations, not a forecast.",
+    "zh-Hant": "2026 年第 18 號颱風「沙德爾」的雷達組合反射率全過程，原生 6 分鐘檔，北京時 8 月 26 日 00 時至 9 月 3 日 20 時，共 2096 幀，其中 25 個時次原始檔案缺發布。8 月 28 日 08:05 以 12 級（35 m/s，975 hPa）首次登陸浙江台州玉環坎門，深入內陸後於 8 月 30 日停止編號；殘餘渦旋南下，9 月 1 日凌晨在南海重新加強為熱帶風暴級，9 月 2 日掠過粵東沿海，9 月 3 日 06:30 以 9 級（23 m/s，985 hPa）第三次登陸福建漳州漳浦古雷。資料為中國氣象局雷達三級拼圖組合反射率（RADAR_L3_MST_CREF），非預報產品。",
+    "ja": "台風シャデル（2026 年第 18 号）の一生を追った合成レーダー反射強度。元データどおり 6 分間隔で、中国標準時 8 月 26 日 0 時から 9 月 3 日 20 時まで 2096 フレーム、うち 25 コマはアーカイブに欠けている。8 月 28 日 08:05 CST に浙江省台州市玉環の坎門に最大風速 35 m/s、975 hPa で最初の上陸を果たし、内陸へ進んで 8 月 30 日に番号が打ち切られた。残った循環は南下し、9 月 1 日未明に南シナ海で熱帯暴風の強さまで再発達、9 月 2 日に広東省東部沿岸をかすめ、9 月 3 日 06:30 CST に福建省漳州市漳浦の古雷へ 23 m/s、985 hPa で三度目の上陸をした。データは中国気象局のレベル 3 レーダー合成（RADAR_L3_MST_CREF）——予報ではなく観測である。",
+    "ko": "태풍 샤델(2026년 제18호)의 일생을 담은 합성 레이더 반사도. 원본 그대로 6분 간격으로 중국 표준시 8월 26일 0시부터 9월 3일 20시까지 2096프레임이며, 그중 25개 시각은 아카이브에 빠져 있다. 8월 28일 08:05 CST 저장성 타이저우 위환의 칸먼에 최대풍속 35 m/s, 975 hPa로 처음 상륙해 내륙으로 들어간 뒤 8월 30일 번호가 소멸됐다. 남은 순환은 남하해 9월 1일 새벽 남중국해에서 열대폭풍 강도로 재발달했고, 9월 2일 광둥성 동부 연안을 스친 뒤 9월 3일 06:30 CST 푸젠성 장저우 장푸의 구레이에 23 m/s, 985 hPa로 세 번째 상륙했다. 자료는 중국기상국 레벨 3 레이더 합성(RADAR_L3_MST_CREF)으로, 예보가 아닌 관측이다.",
+    "de": "Die Kompositreflektivität über das ganze Leben von Taifun Shadel (Nr. 18 des Jahres 2026), im Sechs-Minuten-Takt der Quelle von 00 CST am 26. August bis 20 CST am 3. September — 2096 Bilder, 25 Termine fehlen im Archiv. Er ging am 28. August um 08:05 CST bei Kanmen, Yuhuan, Zhejiang mit 35 m/s und 975 hPa erstmals an Land und wurde am 30. August über Land aufgelöst. Sein Restwirbel zog nach Süden, verstärkte sich am frühen 1. September über dem Südchinesischen Meer wieder zum Tropensturm, streifte am 2. September die Küste von Ost-Guangdong und ging am 3. September um 06:30 CST bei Gulei, Zhangpu, Fujian mit 23 m/s und 985 hPa ein drittes Mal an Land. Die Daten sind das Level-3-Radarkomposit der chinesischen Wetterbehörde (RADAR_L3_MST_CREF) — Beobachtungen, keine Vorhersage.",
+    "fr": "La réflectivité radar composite sur toute la vie du typhon Shadel (n° 18 de 2026), à la cadence source de six minutes du 26 août 00 h CST au 3 septembre 20 h CST — 2096 images, 25 créneaux manquant dans l’archive. Il touche terre une première fois à Kanmen (Yuhuan, Zhejiang) le 28 août à 08:05 CST avec des vents de 35 m/s et 975 hPa, puis est dissous sur terre le 30 août. Sa circulation résiduelle redescend vers le sud, se réintensifie en tempête tropicale sur la mer de Chine méridionale dans la nuit du 1er septembre, frôle la côte est du Guangdong le 2 septembre et touche terre une troisième fois à Gulei (Zhangpu, Fujian) le 3 septembre à 06:30 CST avec 23 m/s et 985 hPa. Les données sont la mosaïque radar de niveau 3 de l’Administration météorologique chinoise (RADAR_L3_MST_CREF) — des observations, pas une prévision.",
+    "es": "La reflectividad radar compuesta a lo largo de toda la vida del tifón Shadel (n.º 18 de 2026), a la cadencia original de seis minutos desde las 00 CST del 26 de agosto hasta las 20 CST del 3 de septiembre: 2096 cuadros, con 25 instantes ausentes del archivo. Tocó tierra por primera vez en Kanmen (Yuhuan, Zhejiang) el 28 de agosto a las 08:05 CST con 35 m/s y 975 hPa, y se disolvió sobre tierra el 30 de agosto. Su circulación remanente bajó hacia el sur, se reintensificó a tormenta tropical sobre el mar de China Meridional en la madrugada del 1 de septiembre, rozó la costa oriental de Guangdong el 2 de septiembre y tocó tierra por tercera vez en Gulei (Zhangpu, Fujian) el 3 de septiembre a las 06:30 CST con 23 m/s y 985 hPa. Los datos son el mosaico radar de nivel 3 de la Administración Meteorológica de China (RADAR_L3_MST_CREF): observaciones, no un pronóstico.",
+    "pt": "A refletividade composta de radar ao longo de toda a vida do tufão Shadel (n.º 18 de 2026), na cadência original de seis minutos das 00 CST de 26 de agosto às 20 CST de 3 de setembro — 2096 quadros, com 25 horários ausentes do arquivo. Tocou terra pela primeira vez em Kanmen (Yuhuan, Zhejiang) em 28 de agosto às 08:05 CST, com 35 m/s e 975 hPa, e foi extinto sobre terra em 30 de agosto. A circulação remanescente desceu para o sul, reintensificou-se a tempestade tropical sobre o mar da China Meridional na madrugada de 1.º de setembro, roçou o litoral leste de Guangdong em 2 de setembro e tocou terra pela terceira vez em Gulei (Zhangpu, Fujian) em 3 de setembro às 06:30 CST, com 23 m/s e 985 hPa. Os dados são o mosaico de radar de nível 3 da Administração Meteorológica da China (RADAR_L3_MST_CREF) — observações, não uma previsão.",
+    "tr": "Shadel Tayfunu’nun (2026 yılının 18 numaralısı) tüm ömrü boyunca bileşik radar yansıtırlığı; kaynak verinin altı dakikalık adımıyla, 26 Ağustos 00 CST’den 3 Eylül 20 CST’ye — 2096 kare, 25 zaman dilimi arşivde eksik. 28 Ağustos 08:05 CST’de Zhejiang’daki Yuhuan’ın Kanmen bölgesine 35 m/s ve 975 hPa ile ilk kez karaya çıktı ve 30 Ağustos’ta kara üzerinde sona erdirildi. Artık dolaşımı güneye indi, 1 Eylül sabahın erken saatlerinde Güney Çin Denizi üzerinde yeniden tropikal fırtına şiddetine ulaştı, 2 Eylül’de doğu Guangdong kıyısını sıyırdı ve 3 Eylül 06:30 CST’de Fujian’daki Zhangpu’nun Gulei bölgesine 23 m/s ve 985 hPa ile üçüncü kez karaya çıktı. Veri, Çin Meteoroloji İdaresi’nin 3. seviye radar mozaiğidir (RADAR_L3_MST_CREF) — gözlem, tahmin değil.",
+    "ru": "Композитная радарная отражаемость за всю жизнь тайфуна «Шадель» (№ 18 сезона 2026 года) с исходным шагом в шесть минут, с 00 CST 26 августа до 20 CST 3 сентября — 2096 кадров, 25 сроков в архиве отсутствуют. Первый выход на берег — 28 августа в 08:05 CST у Каньмэня (Юйхуань, Чжэцзян) при ветре 35 м/с и давлении 975 гПа; 30 августа над сушей тайфун был снят с учёта. Остаточная циркуляция ушла на юг, рано утром 1 сентября вновь усилилась до тропического шторма над Южно-Китайским морем, 2 сентября прошла вдоль восточного побережья Гуандуна и 3 сентября в 06:30 CST в третий раз вышла на берег у Гулэя (Чжанпу, Фуцзянь) при 23 м/с и 985 гПа. Данные — радарная мозаика 3-го уровня Метеорологического управления Китая (RADAR_L3_MST_CREF): наблюдения, не прогноз."
   },
   "model": "radar",
   "dataset": "typhoon_shadel/shadel_full_nation_6min_z5.nc",
   "hours": 212,
-  "bbox": [105.0, 14.0, 130.0, 34.0],
-  "variables": ["cref"],
+  "bbox": [
+    105.0,
+    14.0,
+    130.0,
+    34.0
+  ],
+  "variables": [
+    "cref"
+  ],
   "defaultVariable": "cref",
   "eventTime": "2026-08-28T00:05:00Z",
-  "tags": ["typhoon", "radar", "asia"],
+  "tags": [
+    "typhoon",
+    "radar",
+    "asia"
+  ],
   "credit": "CMA RADAR_L3_MST_CREF"
 }

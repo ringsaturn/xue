@@ -64,12 +64,18 @@ SHOWCASE_DIRECTORY = "showcase"
 CASE_SIDECAR = "case.json"
 """Per-case catalog entry, written next to the case's manifest."""
 
-LOCALES = ("zh", "en")
-"""Locales every human-facing case string must provide. The UI ships ten, but
-a case is authored by hand: these two are what a definition must carry, and
-the frontend falls back onto English (Traditional Chinese onto Simplified
-first) for the rest. A definition is free to carry more — any extra locale
+LOCALES = ("zh", "zh-Hant", "en", "ja", "ko", "de", "fr", "es", "pt", "tr", "ru")
+"""Locales every human-facing case string must provide: the UI's eleven
+(`web/src/i18n.ts`, held to this tuple by ``tests/fixtures/locales.json``).
+A case is published content, and a shell that speaks eleven languages must
+not show a card in English to nine of them. The frontend still falls back
+onto English (Traditional Chinese onto Simplified first) for a catalog row
+that predates a locale, and a definition may carry more — any extra locale
 key is kept and published as it stands."""
+
+REQUIRED_LOCALES = ("zh", "en")
+"""The two a catalog row is refused without: the languages every case was
+first authored in, which is what a row already on the bucket is held to."""
 
 _LOCALE_TAG = re.compile(r"^[a-z]{2,3}(-[A-Za-z]{2,4})?$")
 """Shape of an extra locale key: a language subtag, optionally with a script
@@ -146,16 +152,18 @@ class CaseSpec:
         return root / path
 
 
-def _localized(value: object, label: str, case_id: str) -> dict[str, str]:
+def _localized(
+    value: object, label: str, case_id: str, required: tuple[str, ...] = LOCALES
+) -> dict[str, str]:
     if not isinstance(value, dict):
         raise ShowcaseError(f"case {case_id}: {label} must be an object keyed by locale")
-    missing = [locale for locale in LOCALES if not isinstance(value.get(locale), str) or not value[locale].strip()]
+    missing = [locale for locale in required if not isinstance(value.get(locale), str) or not value[locale].strip()]
     if missing:
         raise ShowcaseError(f"case {case_id}: {label} is missing {', '.join(missing)}")
-    # The two required locales first, then whatever else the definition
-    # carries, so a case translated into more of the UI's ten reaches the
-    # catalog instead of being silently dropped here.
-    text = {locale: value[locale].strip() for locale in LOCALES}
+    # The required locales first, in the UI's order, then whatever else the
+    # definition carries, so a case translated beyond the UI's set reaches
+    # the catalog instead of being silently dropped here.
+    text = {locale: value[locale].strip() for locale in required}
     for locale, item in value.items():
         if locale in text:
             continue
@@ -461,7 +469,7 @@ def validate_catalog_entry(entry: dict[str, Any]) -> None:
     if len(entry["manifestCrc32"]) != 8:
         raise ShowcaseError(f"catalog entry {entry['id']} has an invalid manifest crc32")
     for key in ("title", "summary"):
-        _localized(entry.get(key), key, entry["id"])
+        _localized(entry.get(key), key, entry["id"], REQUIRED_LOCALES)
     for key in ("bbox", "dataBbox"):
         box = entry.get(key)
         if not isinstance(box, list) or len(box) != 4:
@@ -473,6 +481,51 @@ def validate_catalog_entry(entry: dict[str, Any]) -> None:
         raise ShowcaseError(f"catalog entry {entry['id']} defaults to a variable it does not ship")
     if not isinstance(entry.get("forecastHours"), int) or entry["forecastHours"] <= 0:
         raise ShowcaseError(f"catalog entry {entry['id']} has an invalid forecastHours")
+
+
+def refresh_sidecar(spec: CaseSpec, output_root: Path) -> dict[str, Any]:
+    """Rewrite a built case's sidecar from its definition without rebuilding
+    it: the prose (title, summary), the default variable, the event time,
+    the tags and the credit are the definition's to change — a translation
+    added, a summary corrected — and none of them names a byte of the
+    bundles. What does (model, run, box, variables) must still match, so a
+    definition that has moved on from what was built is refused and the
+    case rebuilt instead."""
+    sidecar = output_root / spec.output_subdirectory / CASE_SIDECAR
+    if not sidecar.is_file():
+        raise ShowcaseError(f"case {spec.id} is not built at {sidecar.parent}; build it instead")
+    entry = json.loads(sidecar.read_text(encoding="utf-8"))
+    validate_catalog_entry(entry)
+    built = (
+        entry["modelId"],
+        entry["run"],
+        entry["forecastHours"],
+        [round(value, 6) for value in entry["bbox"]],
+        entry["variables"],
+    )
+    wanted = (
+        spec.model,
+        spec.run or entry["run"],
+        spec.hours,
+        [round(value, 6) for value in spec.bbox],
+        list(spec.variables),
+    )
+    if built != wanted:
+        raise ShowcaseError(f"case {spec.id}: the definition no longer describes the built case; rebuild it")
+    if spec.default_variable not in entry["variables"]:
+        raise ShowcaseError(f"case {spec.id}: defaultVariable {spec.default_variable} is not among the built bundles")
+    entry["title"] = spec.title
+    entry["summary"] = spec.summary
+    entry["defaultVariable"] = spec.default_variable
+    for key, value in (("eventTime", spec.event_time), ("tags", list(spec.tags)), ("credit", spec.credit)):
+        if value:
+            entry[key] = value
+        else:
+            entry.pop(key, None)
+    validate_catalog_entry(entry)
+    sidecar.write_text(json.dumps(entry, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    LOG.info("refreshed case %s", spec.id)
+    return entry
 
 
 def _catalog_sort_key(entry: dict[str, Any]) -> tuple[str, str]:

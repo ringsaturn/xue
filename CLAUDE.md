@@ -362,6 +362,11 @@ publishing data at the new version.**
   bands into the same `SourceFrame` list the GRIB inspectors return, plus the
   `PlaneSource` saying to unscale the values and what its fill value means.
 - `showcase.py` — case definitions → cropped bundles → `showcase.json`. A
+  case's `title` / `summary` must carry all eleven UI locales
+  (`showcase.LOCALES`, held to `web/src/i18n.ts` by
+  `tests/fixtures/locales.json`); `showcase refresh` (`make
+  showcase-refresh`) rewrites a built case's sidecar from its definition
+  without a rebuild, so prose reaches the catalog without a refetch. A
   case has three shapes: a forecast case (`run` + `hours` on the published
   axis), a local-file observation case (`radar`: a `dataset` file instead
   of a `run`, `XUE_OBSERVATION_ROOT`), and a fetched-observation case

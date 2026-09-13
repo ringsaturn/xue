@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -13,13 +14,16 @@ from xuebuild.binconvert import GridInfo, bundle_input_ids, crop_grid, published
 from xuebuild.errors import ConversionError, ManifestError, XueError
 from xuebuild.manifest import build_bin_manifest, validate_bin_manifest
 from xuebuild.showcase import (
+    LOCALES,
     OBSERVATION_ROOT_ENV,
     ShowcaseError,
     _grid_extent,
     build_catalog_entry,
+    collect_catalog,
     load_case,
     load_cases,
     parse_case,
+    refresh_sidecar,
     validate_catalog_entry,
 )
 from xuebuild.sources import source_spec
@@ -28,11 +32,16 @@ PRODUCTION_GRID = GridInfo(1440, 721, -180.0, 90.0, 0.25, -0.25)
 CASES_DIRECTORY = Path(__file__).resolve().parent.parent / "showcase" / "cases"
 
 
+def localized(text: str) -> dict[str, str]:
+    """The same text under every locale a case must carry."""
+    return {locale: text for locale in LOCALES}
+
+
 def observation_payload(**overrides: object) -> dict[str, object]:
     payload: dict[str, object] = {
         "id": "demo-observation",
-        "title": {"zh": "示例", "en": "Demo"},
-        "summary": {"zh": "示例说明", "en": "Demo summary"},
+        "title": localized("Demo"),
+        "summary": localized("Demo summary"),
         "model": "radar",
         "dataset": "event/series.nc",
         "hours": 24,
@@ -46,8 +55,8 @@ def observation_payload(**overrides: object) -> dict[str, object]:
 def fetched_observation_payload(**overrides: object) -> dict[str, object]:
     payload: dict[str, object] = {
         "id": "demo-window",
-        "title": {"zh": "示例", "en": "Demo"},
-        "summary": {"zh": "示例说明", "en": "Demo summary"},
+        "title": localized("Demo"),
+        "summary": localized("Demo summary"),
         "model": "mrms",
         "run": "2021082912",
         "hours": 12,
@@ -61,8 +70,8 @@ def fetched_observation_payload(**overrides: object) -> dict[str, object]:
 def case_payload(**overrides: object) -> dict[str, object]:
     payload: dict[str, object] = {
         "id": "demo-case",
-        "title": {"zh": "示例", "en": "Demo"},
-        "summary": {"zh": "示例说明", "en": "Demo summary"},
+        "title": localized("Demo"),
+        "summary": localized("Demo summary"),
         "model": "gfs",
         "run": "2021071800",
         "hours": 24,
@@ -193,23 +202,36 @@ class CaseDefinitionTest(unittest.TestCase):
         with self.assertRaises(ShowcaseError):
             parse_case(case_payload(defaultVariable="tmp2m"))
 
-    def test_rejects_a_missing_locale(self) -> None:
+    def test_requires_every_ui_locale(self) -> None:
+        # The UI's eleven, held to the frontend's list by the shared fixture.
+        fixture = json.loads((CASES_DIRECTORY.parent.parent / "tests" / "fixtures" / "locales.json").read_text())
+        self.assertEqual(list(LOCALES), fixture)
+        with self.assertRaisesRegex(ShowcaseError, "title is missing ja"):
+            parse_case(case_payload(title={**localized("Demo"), "ja": ""}))
         with self.assertRaises(ShowcaseError):
             parse_case(case_payload(title={"en": "Demo"}))
 
-    def test_keeps_a_locale_beyond_the_two_required(self) -> None:
-        # The UI ships ten languages; a case need only be authored in zh and
-        # en, but one translated further must reach the catalog intact.
-        spec = parse_case(case_payload(title={"zh": "示例", "en": "Demo", "ja": "見本", "pt-BR": "Exemplo"}))
-        self.assertEqual(spec.title, {"zh": "示例", "en": "Demo", "ja": "見本", "pt-BR": "Exemplo"})
+    def test_keeps_a_locale_beyond_the_required(self) -> None:
+        # A case translated further than the UI must reach the catalog intact.
+        spec = parse_case(case_payload(title={**localized("Demo"), "pt-BR": "Exemplo"}))
+        self.assertEqual(spec.title, {**localized("Demo"), "pt-BR": "Exemplo"})
 
     def test_rejects_a_key_that_is_not_a_locale_tag(self) -> None:
         with self.assertRaises(ShowcaseError):
-            parse_case(case_payload(title={"zh": "示例", "en": "Demo", "Japanese": "見本"}))
+            parse_case(case_payload(title={**localized("Demo"), "Japanese": "見本"}))
 
     def test_rejects_an_empty_extra_locale(self) -> None:
         with self.assertRaises(ShowcaseError):
-            parse_case(case_payload(title={"zh": "示例", "en": "Demo", "ja": "  "}))
+            parse_case(case_payload(title={**localized("Demo"), "pt-BR": "  "}))
+
+    def test_a_published_row_is_held_only_to_its_first_two_locales(self) -> None:
+        # Rows on the bucket predate the wider set; the catalog keeps them.
+        entry, _ = build_entry()
+        entry["title"] = {"zh": "示例", "en": "Demo"}
+        validate_catalog_entry(entry)
+        entry["title"] = {"en": "Demo"}
+        with self.assertRaises(ShowcaseError):
+            validate_catalog_entry(entry)
 
     def test_rejects_an_sflux_case_with_nothing_at_the_analysis_hour(self) -> None:
         # sflux publishes no PRATE record at f000, so a prate-only case has no
@@ -299,28 +321,31 @@ class CaseDefinitionTest(unittest.TestCase):
         self.assertEqual(len({spec.id for spec in specs}), len(specs))
 
 
-class CatalogEntryTest(unittest.TestCase):
-    def build_entry(self, **overrides: object) -> dict[str, object]:
-        spec = parse_case(case_payload(**overrides))
-        grid = crop_grid(PRODUCTION_GRID, spec.bbox)
-        manifest = build_bin_manifest(
-            __import__("datetime").datetime(2021, 7, 18, tzinfo=__import__("datetime").UTC),
-            bundles=[
-                {"variable": "prate", "path": "prate.xue", "byteLength": 32, "crc32": "00000000"},
-                {"variable": "wind10m", "path": "wind10m.xue", "byteLength": 64, "crc32": "00000001"},
-            ],
-            expected_hours=spec.hours,
-            require_core_variables=False,
-        )
-        return build_catalog_entry(
-            spec,
-            manifest,
-            json.dumps(manifest).encode(),
-            {"byteLength": 96, "grid": grid.metadata()},
-        )
+def build_entry(**overrides: object) -> tuple[dict[str, object], dict[str, object]]:
+    """A catalog row for the demo case, as if built, plus its manifest."""
+    spec = parse_case(case_payload(**overrides))
+    grid = crop_grid(PRODUCTION_GRID, spec.bbox)
+    manifest = build_bin_manifest(
+        __import__("datetime").datetime(2021, 7, 18, tzinfo=__import__("datetime").UTC),
+        bundles=[
+            {"variable": "prate", "path": "prate.xue", "byteLength": 32, "crc32": "00000000"},
+            {"variable": "wind10m", "path": "wind10m.xue", "byteLength": 64, "crc32": "00000001"},
+        ],
+        expected_hours=spec.hours,
+        require_core_variables=False,
+    )
+    entry = build_catalog_entry(
+        spec,
+        manifest,
+        json.dumps(manifest).encode(),
+        {"byteLength": 96, "grid": grid.metadata()},
+    )
+    return entry, manifest
 
+
+class CatalogEntryTest(unittest.TestCase):
     def test_entry_describes_the_cropped_case(self) -> None:
-        entry = self.build_entry()
+        entry, _ = build_entry()
         self.assertEqual(entry["manifestPath"], "showcase/demo-case/manifest.json")
         self.assertEqual(entry["variables"], ["prate", "wind10m"])
         self.assertEqual(entry["modelId"], "gfs")
@@ -333,7 +358,7 @@ class CatalogEntryTest(unittest.TestCase):
         self.assertGreaterEqual(north, 42.0)
 
     def test_rejects_a_manifest_outside_the_case_directory(self) -> None:
-        entry = self.build_entry()
+        entry, _ = build_entry()
         entry["manifestPath"] = "showcase/other/manifest.json"
         with self.assertRaises(ShowcaseError):
             validate_catalog_entry(entry)
@@ -345,6 +370,57 @@ class CatalogEntryTest(unittest.TestCase):
         self.assertEqual(east, -170.0)
         self.assertLessEqual(south, -20.0)
         self.assertGreaterEqual(north, 10.0)
+
+
+class RefreshSidecarTest(unittest.TestCase):
+    """A built case's row rewritten from its definition, bundles untouched."""
+
+    def setUp(self) -> None:
+        self.root = Path(tempfile.mkdtemp(prefix="xue-showcase-refresh-"))
+        self.addCleanup(shutil.rmtree, self.root, ignore_errors=True)
+        entry, manifest = build_entry()
+        case_dir = self.root / "showcase" / "demo-case"
+        case_dir.mkdir(parents=True)
+        (case_dir / "manifest.json").write_bytes(json.dumps(manifest).encode())
+        (case_dir / "case.json").write_text(json.dumps(entry), encoding="utf-8")
+        self.entry = entry
+
+    def test_prose_and_tags_follow_the_definition(self) -> None:
+        spec = parse_case(
+            case_payload(
+                title={**localized("Demo"), "ja": "見本"},
+                summary=localized("Corrected"),
+                tags=["typhoon"],
+                credit="NOAA GFS",
+                eventTime="2021-07-20T08:00:00Z",
+                defaultVariable="wind10m",
+            )
+        )
+        refreshed = refresh_sidecar(spec, self.root)
+        on_disk = json.loads((self.root / "showcase" / "demo-case" / "case.json").read_text(encoding="utf-8"))
+        self.assertEqual(refreshed, on_disk)
+        self.assertEqual(on_disk["title"]["ja"], "見本")
+        self.assertEqual(on_disk["summary"]["en"], "Corrected")
+        self.assertEqual((on_disk["tags"], on_disk["credit"], on_disk["eventTime"]), (["typhoon"], "NOAA GFS", "2021-07-20T08:00:00Z"))
+        self.assertEqual(on_disk["defaultVariable"], "wind10m")
+        # Everything that names the bytes is as built.
+        for key in ("manifestCrc32", "byteLength", "bbox", "dataBbox", "grid", "variables", "run", "runTime"):
+            self.assertEqual(on_disk[key], self.entry[key])
+        # A field the definition dropped leaves the row.
+        refresh_sidecar(parse_case(case_payload()), self.root)
+        on_disk = json.loads((self.root / "showcase" / "demo-case" / "case.json").read_text(encoding="utf-8"))
+        self.assertNotIn("tags", on_disk)
+        self.assertNotIn("credit", on_disk)
+        # And the catalog collects the refreshed row.
+        catalog = collect_catalog(self.root)
+        self.assertEqual(catalog["cases"][0]["summary"]["en"], "Demo summary")
+
+    def test_a_definition_that_moved_on_needs_a_rebuild(self) -> None:
+        for overrides in ({"hours": 48}, {"bbox": [100.0, 20.0, 120.0, 40.0]}, {"variables": ["prate"]}, {"run": "2021071900"}):
+            with self.assertRaisesRegex(ShowcaseError, "rebuild"):
+                refresh_sidecar(parse_case(case_payload(**overrides)), self.root)
+        with self.assertRaisesRegex(ShowcaseError, "not built"):
+            refresh_sidecar(parse_case(case_payload(id="other-case")), self.root)
 
 
 class RestrictedManifestTest(unittest.TestCase):

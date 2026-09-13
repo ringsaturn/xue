@@ -33,7 +33,11 @@ retires a case.
    }
    ```
 
-   - `title` and `summary` must carry every UI locale (`zh` and `en`).
+   - `title` and `summary` must carry every UI locale — the eleven in
+     `web/src/i18n.ts` (`zh`, `zh-Hant`, `en`, `ja`, `ko`, `de`, `fr`, `es`,
+     `pt`, `tr`, `ru`; `tests/fixtures/locales.json` holds the two lists
+     to one). A case is published content: a shell that speaks eleven
+     languages must not show nine of them an English card.
    - `bbox` is `[west, south, east, north]` in degrees. `west > east` crosses
      the antimeridian. The crop rounds outward to whole grid cells, so the
      published data always covers the box outright.
@@ -101,6 +105,19 @@ retires a case.
    150 000 cells, a few tens of kilobytes a frame. The download is the
    whole national mosaic for every frame (about 1.5 MB gzipped per
    product), so a twelve-hour case fetches half a gigabyte per product.
+
+   Prose is the definition's to change after the fact: a translation added
+   or a summary corrected reaches the catalog with
+
+   ```sh
+   make showcase-refresh
+   ```
+
+   which rewrites each built case's `case.json` (title, summary, default
+   variable, event time, tags, credit) from its definition and regenerates
+   `showcase.json`, refetching nothing — the bundles are untouched, and a
+   definition that now names a different run, box, range or variable set
+   is refused and needs a rebuild.
 
 2. Validate without downloading anything:
 

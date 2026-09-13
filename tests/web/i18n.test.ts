@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import localesJson from "../fixtures/locales.json";
 import { LOCALES, localeHtmlLang, normalizeLocale, type Locale } from "../../web/src/i18n";
 import { de } from "../../web/src/locales/de";
 import { en, type MessageKey } from "../../web/src/locales/en";
@@ -95,6 +96,14 @@ describe("the picker's list", () => {
     const codes = LOCALES.map((item) => item.code);
     expect([...codes].sort()).toEqual(Object.keys(DICTIONARIES).sort());
     expect(new Set(codes).size).toBe(codes.length);
+  });
+
+  it("is the set a showcase case must be authored in", () => {
+    // tests/fixtures/locales.json holds the encoder's showcase.LOCALES and
+    // this list to one set, in one order: a case is published content, and
+    // a locale added here without its case text would show nine languages
+    // an English card.
+    expect(LOCALES.map((item) => item.code)).toEqual(localesJson);
   });
 
   it("names each language in its own script", () => {

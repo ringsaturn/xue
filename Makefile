@@ -37,7 +37,7 @@ AWS_REQUEST_CHECKSUM_CALCULATION ?= when_required
 AWS_RESPONSE_CHECKSUM_VALIDATION ?= when_required
 export AWS_DEFAULT_REGION AWS_REQUEST_CHECKSUM_CALCULATION AWS_RESPONSE_CHECKSUM_VALIDATION
 
-.PHONY: check install wasm test test-rust test-e2e encoder-rust encoder-rust-test encoder-wheel bench bench-video bench-lossy mvp serve format-pdf deploy-build upload-r2 upload-r2-bundles upload-r2-manifest check-pointer upload-r2-pointer warm-r2 prune-r2 live-run live-manifest deploy-pages deploy showcase showcase-check upload-r2-showcase tc-build live-tc-index upload-r2-tc prune-r2-tc clean
+.PHONY: check install wasm test test-rust test-e2e encoder-rust encoder-rust-test encoder-wheel bench bench-video bench-lossy mvp serve format-pdf deploy-build upload-r2 upload-r2-bundles upload-r2-manifest check-pointer upload-r2-pointer warm-r2 prune-r2 live-run live-manifest deploy-pages deploy showcase showcase-check showcase-refresh upload-r2-showcase tc-build live-tc-index upload-r2-tc prune-r2-tc clean
 
 check:
 	$(PYTHON) scripts/check_dependencies.py
@@ -237,6 +237,12 @@ showcase:
 
 showcase-check:
 	$(PYTHON) -m xuebuild showcase check --cases-dir $(CASES_DIR) $(CASE)
+
+# A built case's catalog row (title, summary, tags, credit) rewritten from
+# its definition without a rebuild — a translation or a corrected summary
+# reaches showcase.json without refetching the run.
+showcase-refresh:
+	$(PYTHON) -m xuebuild showcase refresh --cases-dir $(CASES_DIR) $(CASE)
 
 # Push the built cases and the catalog to R2. Cases are immutable and
 # ?v=<crc32>-addressed like run assets; showcase.json is the mutable index and

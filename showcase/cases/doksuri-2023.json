@@ -2,19 +2,48 @@
   "id": "doksuri-2023",
   "title": {
     "zh": "2023 台风杜苏芮登陆福建",
-    "en": "Typhoon Doksuri (2023) landfall"
+    "en": "Typhoon Doksuri (2023) landfall",
+    "zh-Hant": "2023 颱風杜蘇芮登陸福建",
+    "ja": "台風トクスリ（2023年）の上陸",
+    "ko": "태풍 독수리(2023) 상륙",
+    "de": "Taifun Doksuri (2023) beim Landgang",
+    "fr": "Le typhon Doksuri (2023) touche terre",
+    "es": "La llegada a tierra del tifón Doksuri (2023)",
+    "pt": "A chegada do tufão Doksuri (2023) ao continente",
+    "tr": "Doksuri Tayfunu’nun (2023) karaya çıkışı",
+    "ru": "Выход тайфуна «Токсури» (2023) на берег"
   },
   "summary": {
     "zh": "台风杜苏芮于 2023 年 7 月 28 日上午在福建晋江沿海登陆，其残余环流随后给华北带来创纪录降水。此处是 7 月 26 日 00Z 起报的 GFS 原生 13 公里地面通量场，降水率与 10 米风场。",
-    "en": "Typhoon Doksuri made landfall near Jinjiang, Fujian on the morning of 28 July 2023; its remnants later brought record rainfall to northern China. This is the 26 July 00Z run on the native 13 km GFS surface-flux grid, precipitation rate and 10 m wind."
+    "en": "Typhoon Doksuri made landfall near Jinjiang, Fujian on the morning of 28 July 2023; its remnants later brought record rainfall to northern China. This is the 26 July 00Z run on the native 13 km GFS surface-flux grid, precipitation rate and 10 m wind.",
+    "zh-Hant": "颱風杜蘇芮於 2023 年 7 月 28 日上午在福建晉江沿海登陸，其殘餘環流隨後給華北帶來創紀錄降水。此處是 7 月 26 日 00Z 起報的 GFS 原生 13 公里地面通量場，降水率與 10 米風場。",
+    "ja": "台風トクスリは 2023 年 7 月 28 日午前、福建省晋江の沿岸に上陸し、その残骸が後に華北へ記録的な豪雨をもたらした。これは 7 月 26 日 00Z 初期時刻の GFS 地表フラックス（元の 13 km 格子）、降水強度と 10 m 風。",
+    "ko": "태풍 독수리는 2023년 7월 28일 오전 푸젠성 진장 연안에 상륙했고, 그 잔해는 뒤에 화베이에 기록적인 폭우를 몰고 왔다. 이 사례는 7월 26일 00Z 실행의 GFS 지표 플럭스(원본 13 km 격자), 강수강도와 10 m 바람이다.",
+    "de": "Taifun Doksuri ging am Morgen des 28. Juli 2023 bei Jinjiang, Fujian, an Land; seine Reste brachten später Nordchina Rekordregen. Dies ist der Lauf vom 26. Juli 00Z auf dem nativen 13-km-Gitter der GFS-Oberflächenflüsse, Niederschlagsrate und 10-m-Wind.",
+    "fr": "Le typhon Doksuri touche terre près de Jinjiang (Fujian) dans la matinée du 28 juillet 2023 ; ses restes apportent ensuite des pluies record au nord de la Chine. Voici le run du 26 juillet 00Z sur la grille native de 13 km des flux de surface du GFS, intensité des précipitations et vent à 10 m.",
+    "es": "El tifón Doksuri tocó tierra cerca de Jinjiang (Fujian) en la mañana del 28 de julio de 2023; sus restos llevaron después lluvias récord al norte de China. Esta es la pasada del 26 de julio a las 00Z en la malla nativa de 13 km de los flujos de superficie del GFS, intensidad de precipitación y viento a 10 m.",
+    "pt": "O tufão Doksuri chegou à costa perto de Jinjiang (Fujian) na manhã de 28 de julho de 2023; os seus remanescentes trouxeram depois chuvas recordes ao norte da China. Esta é a rodada de 26 de julho às 00Z na grade nativa de 13 km dos fluxos de superfície do GFS, taxa de precipitação e vento a 10 m.",
+    "tr": "Doksuri Tayfunu 28 Temmuz 2023 sabahı Fujian’daki Jinjiang kıyısında karaya çıktı; kalıntıları sonradan kuzey Çin’e rekor yağış getirdi. Bu, 26 Temmuz 00Z koşusunun GFS yüzey akıları (yerli 13 km ızgara), yağış şiddeti ve 10 m rüzgâr.",
+    "ru": "Тайфун «Токсури» вышел на берег у Цзиньцзяна (Фуцзянь) утром 28 июля 2023 года; его остатки затем принесли рекордные дожди на север Китая. Это прогон 26 июля 00Z на исходной 13-км сетке приземных потоков GFS — интенсивность осадков и ветер на 10 м."
   },
   "model": "sflux",
   "run": "2023072600",
   "hours": 120,
-  "bbox": [112.0, 15.0, 132.0, 32.0],
-  "variables": ["prate", "wind10m"],
+  "bbox": [
+    112.0,
+    15.0,
+    132.0,
+    32.0
+  ],
+  "variables": [
+    "prate",
+    "wind10m"
+  ],
   "defaultVariable": "prate",
   "eventTime": "2023-07-28T01:00:00Z",
-  "tags": ["typhoon", "asia"],
+  "tags": [
+    "typhoon",
+    "asia"
+  ],
   "credit": "NOAA GFS SFLUX"
 }

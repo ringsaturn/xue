@@ -20,7 +20,7 @@ from .binconvert import bundle_input_ids, published_bundle_ids, verify_bin
 from .encoder import convert_bin
 from .errors import ConversionError, XueError
 from .fetch import fetch_run, parse_run, resolve_run
-from .showcase import build_case, load_cases, write_catalog
+from .showcase import CASE_SIDECAR, build_case, load_cases, refresh_sidecar, write_catalog
 from .sources import SOURCES, source_spec
 from .tc.build import build_product as build_tc_product
 from .tc.build import load_previous_index as load_previous_tc_index
@@ -219,6 +219,14 @@ def parser() -> argparse.ArgumentParser:
     )
     showcase_catalog.add_argument("--output-dir", type=Path, default=Path("web/public/data"))
 
+    showcase_refresh = showcase_commands.add_parser(
+        "refresh",
+        help="rewrite built cases' catalog rows (title, summary, tags, credit) from their definitions, without rebuilding",
+    )
+    showcase_refresh.add_argument("cases", nargs="*", help="case ids; every built definition in --cases-dir when omitted")
+    showcase_refresh.add_argument("--cases-dir", type=Path, default=Path("showcase/cases"))
+    showcase_refresh.add_argument("--output-dir", type=Path, default=Path("web/public/data"))
+
     showcase_check = showcase_commands.add_parser("check", help="validate the case definitions without building")
     showcase_check.add_argument("cases", nargs="*")
     showcase_check.add_argument("--cases-dir", type=Path, default=Path("showcase/cases"))
@@ -289,6 +297,17 @@ def main(argv: list[str] | None = None) -> int:
         elif arguments.command == "showcase":
             if arguments.showcase_command == "catalog":
                 print(write_catalog(arguments.output_dir))
+            elif arguments.showcase_command == "refresh":
+                specs = load_cases(arguments.cases_dir, tuple(arguments.cases))
+                if not arguments.cases:
+                    # Every definition that has a build on disk; the rest are
+                    # simply not published yet.
+                    specs = [
+                        spec for spec in specs if (arguments.output_dir / spec.output_subdirectory / CASE_SIDECAR).is_file()
+                    ]
+                entries = [refresh_sidecar(spec, arguments.output_dir) for spec in specs]
+                write_catalog(arguments.output_dir)
+                print(json.dumps(entries, indent=2, ensure_ascii=False))
             elif arguments.showcase_command == "check":
                 for spec in load_cases(arguments.cases_dir, tuple(arguments.cases)):
                     origin = spec.run or str(spec.dataset_path)

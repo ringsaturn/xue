@@ -2,19 +2,48 @@
   "id": "zhengzhou-2021",
   "title": {
     "zh": "郑州「7·20」特大暴雨",
-    "en": "Zhengzhou 7·20 rainstorm"
+    "en": "Zhengzhou 7·20 rainstorm",
+    "zh-Hant": "鄭州「7·20」特大暴雨",
+    "ja": "鄭州「7·20」豪雨",
+    "ko": "정저우 ‘7·20’ 폭우",
+    "de": "Der Starkregen von Zhengzhou am 20. Juli 2021",
+    "fr": "Les pluies torrentielles de Zhengzhou du 20 juillet 2021",
+    "es": "La lluvia torrencial de Zhengzhou del 20 de julio de 2021",
+    "pt": "A chuva torrencial de Zhengzhou de 20 de julho de 2021",
+    "tr": "Zhengzhou 20 Temmuz 2021 sağanağı",
+    "ru": "Ливень в Чжэнчжоу 20 июля 2021 года"
   },
   "summary": {
     "zh": "2021 年 7 月 20 日，河南郑州出现极端强降水，郑州国家站单小时雨量达 201.9 毫米。此处是灾害发生前两天 GFS 00Z 起报的 120 小时降水率与 10 米风场。",
-    "en": "On 20 July 2021 extreme rainfall hit Zhengzhou, Henan, where the national station recorded 201.9 mm in a single hour. This is the GFS 00Z run from two days earlier, 120 hours of precipitation rate and 10 m wind."
+    "en": "On 20 July 2021 extreme rainfall hit Zhengzhou, Henan, where the national station recorded 201.9 mm in a single hour. This is the GFS 00Z run from two days earlier, 120 hours of precipitation rate and 10 m wind.",
+    "zh-Hant": "2021 年 7 月 20 日，河南鄭州出現極端強降水，鄭州國家站單小時雨量達 201.9 毫米。此處是災害發生前兩天 GFS 00Z 起報的 120 小時降水率與 10 米風場。",
+    "ja": "2021 年 7 月 20 日、河南省鄭州を極端な豪雨が襲い、鄭州の国家観測所では 1 時間に 201.9 mm を記録した。これは 2 日前の GFS 00Z 初期時刻の 120 時間、降水強度と 10 m 風。",
+    "ko": "2021년 7월 20일 허난성 정저우에 극단적인 폭우가 쏟아져 정저우 국가관측소에서 한 시간에 201.9 mm를 기록했다. 이 사례는 이틀 전 GFS 00Z 실행의 120시간 강수강도와 10 m 바람이다.",
+    "de": "Am 20. Juli 2021 traf extremer Starkregen Zhengzhou in Henan; die nationale Station maß 201,9 mm in einer einzigen Stunde. Dies ist der GFS-Lauf 00Z von zwei Tagen zuvor, 120 Stunden Niederschlagsrate und 10-m-Wind.",
+    "fr": "Le 20 juillet 2021, des pluies extrêmes frappent Zhengzhou (Henan), où la station nationale relève 201,9 mm en une seule heure. Voici le run GFS 00Z de deux jours plus tôt, 120 heures d’intensité des précipitations et de vent à 10 m.",
+    "es": "El 20 de julio de 2021 lluvias extremas azotaron Zhengzhou (Henan), donde la estación nacional registró 201,9 mm en una sola hora. Esta es la pasada GFS 00Z de dos días antes, 120 horas de intensidad de precipitación y viento a 10 m.",
+    "pt": "Em 20 de julho de 2021, chuvas extremas atingiram Zhengzhou (Henan), onde a estação nacional registrou 201,9 mm em uma única hora. Esta é a rodada GFS 00Z de dois dias antes, 120 horas de taxa de precipitação e vento a 10 m.",
+    "tr": "20 Temmuz 2021’de Henan’daki Zhengzhou’yu aşırı yağış vurdu; ulusal istasyon tek saatte 201,9 mm ölçtü. Bu, iki gün öncesinin GFS 00Z koşusu — 120 saatlik yağış şiddeti ve 10 m rüzgâr.",
+    "ru": "20 июля 2021 года на Чжэнчжоу (Хэнань) обрушился экстремальный ливень: национальная станция зафиксировала 201,9 мм за один час. Это прогон GFS 00Z за два дня до события — 120 часов интенсивности осадков и ветра на 10 м."
   },
   "model": "gfs",
   "run": "2021071800",
   "hours": 120,
-  "bbox": [105.0, 28.0, 122.0, 42.0],
-  "variables": ["prate", "wind10m"],
+  "bbox": [
+    105.0,
+    28.0,
+    122.0,
+    42.0
+  ],
+  "variables": [
+    "prate",
+    "wind10m"
+  ],
   "defaultVariable": "prate",
   "eventTime": "2021-07-20T08:00:00Z",
-  "tags": ["rainstorm", "asia"],
+  "tags": [
+    "rainstorm",
+    "asia"
+  ],
   "credit": "NOAA GFS"
 }
