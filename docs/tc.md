@@ -44,7 +44,10 @@ The publisher builds every hour at twenty past (`publish-tc.yml`). A
 source that is late or unreachable is *recorded* — see `sources` — and
 the hour publishes without it. The pointer is withheld only when no
 agency and no model contributed at all, in which case the previous hour
-stays live.
+stays live. An hour the pointer already names is finished: a run that
+resolves to it (a dispatch landed in the same hour, or the schedule ran
+late) builds nothing, and the workflow's `force` input is the manual
+rebuild.
 
 Deployment is one-sided: the product is new files under a new pointer, so
 a shell that does not know it never asks for it. A `schemaVersion` bump

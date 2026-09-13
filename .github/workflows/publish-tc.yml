@@ -31,6 +31,10 @@ on:
         description: "Build and report what would be uploaded and pruned, but write nothing to R2"
         type: boolean
         default: false
+      force:
+        description: "Rebuild the issue even when it is already live"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -51,6 +55,7 @@ jobs:
       ISSUE: ${{ inputs.issue || 'now' }}
       TC_KEEP: ${{ inputs.keep || '720' }}
       DRY_RUN: ${{ inputs.dry_run && '--dryrun' || '' }}
+      FORCE: ${{ inputs.force && '--force' || '' }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
@@ -79,10 +84,26 @@ jobs:
       - name: Fetch the live index
         run: make live-tc-index
 
+      # An issue is immutable once the pointer names it (docs/tc.md), so
+      # an hour that is already live — a dispatch landed in it, or the
+      # schedule ran late — is finished, not built again; `force` is the
+      # manual rebuild the spec allows, with the live index as memory.
       - name: Build the product
+        id: build
         run: |
           set -euo pipefail
-          uv run python -m xuebuild -v tc-build --issue "$ISSUE" > tc-report.json
+          issue=$ISSUE
+          [ "$issue" != "now" ] || issue=$(date -u +%Y%m%d%H)
+          live=""
+          if [ -f web/public/data/latest-tc.json ]; then
+            live=$(jq -r .path web/public/data/latest-tc.json | sed -n 's:^tc\.\([0-9]\{10\}\)/index\.json$:\1:p')
+          fi
+          if [ "$live" = "$issue" ] && [ -z "$FORCE" ]; then
+            echo "tc $issue is already live; nothing to build" | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "skipped=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          uv run python -m xuebuild -v tc-build --issue "$issue" $FORCE > tc-report.json
           issue=$(jq -r .issue tc-report.json)
           echo "issue=$issue" >> "$GITHUB_ENV"
           {
@@ -105,6 +126,7 @@ jobs:
       # A build that withheld the pointer (nothing contributed) stops here
       # with the previous hour still live.
       - name: Upload and take the issue live
+        if: steps.build.outputs.skipped != 'true'
         run: |
           set -euo pipefail
           if [ "$(jq -r .pointer tc-report.json)" = "null" ]; then
