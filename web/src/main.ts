@@ -948,6 +948,7 @@ const legendLabels = required<HTMLElement>("legend-labels");
 const legendDerived = required<HTMLElement>("legend-derived");
 const legendInflow = required<HTMLElement>("legend-inflow");
 const legendFront = required<HTMLElement>("legend-front");
+const trackStart = required<HTMLElement>("track-start");
 const trackHorizon = required<HTMLElement>("track-horizon");
 const frameTooltip = required<HTMLOutputElement>("frame-tooltip");
 const forecastDays = required<HTMLElement>("forecast-days");
@@ -3263,14 +3264,14 @@ function forecastDayCount(): number {
   return Math.floor(frameLeadSeconds(frameCount() - 1) / DAY_SECONDS);
 }
 
-/** The room at each end of the day-label strip that NOW and the horizon
+/** The room at each end of the day-label strip that the start and the horizon
  * take, in pixels of the track: a mark centred inside it would run into
  * them. */
 const TRACK_END_LABEL_PX = 48;
 
 /** Day boundaries as marks along the track, each sitting at the fraction of
  * the axis its frame falls on. Ten of them on a 240-hour run would collide,
- * so a long axis labels every other day; a mark that would run into NOW or
+ * so a long axis labels every other day; a mark that would run into the start or
  * the horizon at the ends of the same strip is dropped, since those already
  * name both — measured against the track, which is a third as wide on a
  * phone. Leaves the active mark where the playhead is. */
@@ -3571,7 +3572,7 @@ new ResizeObserver(() => {
   document.documentElement.style.setProperty("--capsule-height", `${Math.ceil(timelinePanel.offsetHeight)}px`);
   syncRailFade();
 }).observe(timelinePanel);
-// Which day marks fit beside NOW and the horizon depends on the track's
+// Which day marks fit beside the start and the horizon depends on the track's
 // width, so a resize lays them out again.
 let forecastDaysWidth = 0;
 new ResizeObserver(() => {
@@ -4998,11 +4999,22 @@ function syncTimeline(session: VariableSession): void {
   slider.value = String(index);
   activeFrameIndex = null;
   requestedFrameIndex = null;
-  trackHorizon.textContent = `+${Math.round((frameOffsets(time).at(-1)! * axisUnitSeconds(time)) / HOUR_SECONDS)}H`;
+  // Both ends of the track name a lead time, not the clock: the first frame
+  // is the analysis on most axes, the first real step on a series that
+  // skips it (ECMWF prate, the gust), and the window's start on an
+  // observation.
+  const offsets = frameOffsets(time);
+  trackStart.textContent = formatTrackEnd(offsets[0]! * axisUnitSeconds(time));
+  trackHorizon.textContent = formatTrackEnd(offsets.at(-1)! * axisUnitSeconds(time));
   buildTicks(time.frameCount);
   buildForecastDays();
   dataCardIndex.textContent = `${time.frameCount}F`;
   buildPreloadSegments(time.frameCount);
+}
+
+/** An end label of the track: a lead time in whole hours, `+0H` to `+240H`. */
+function formatTrackEnd(leadSeconds: number): string {
+  return `+${Math.round(leadSeconds / HOUR_SECONDS)}H`;
 }
 
 /** Let the camera go as deep as the primary's grid is worth — the ceiling

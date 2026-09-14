@@ -564,6 +564,7 @@ test("switching to ECMWF loads its own run on a mixed-cadence 240-hour timeline"
   const slider = page.getByRole("slider", { name: "Forecast hour" });
   await expect(slider).toHaveAttribute("max", "63");
   await expect(page.locator("#forecast-hour")).toHaveText("F003");
+  await expect(page.locator("#track-start")).toHaveText("+0H");
   await expect(page.locator("#track-horizon")).toHaveText("+240H");
   await slider.focus();
   await page.keyboard.press("ArrowRight");
