@@ -812,6 +812,13 @@ body.is-pressure .legend {
   gap: 6px;
 }
 
+/* The flex displays above outrank the hidden attribute, as everywhere else
+   in this sheet, so the key and each of its rows hide by rule. */
+.legend-derived[hidden],
+.legend-derived li[hidden] {
+  display: none;
+}
+
 .legend-swatch {
   width: 10px;
   height: 10px;
