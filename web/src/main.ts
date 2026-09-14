@@ -213,7 +213,7 @@ applyStaticMessages();
 applyTheme();
 
 /** The experimental synoptic composite (`?x=true`, urlstate.ts): the
- * precipitation on a stepped key over chart paper, the sea level pressure
+ * precipitation on a stepped key, the sea level pressure
  * lines and their H/L marks over it, the particles run by the 850 hPa
  * vapour flux instead of the fill's own vector, and two fields the frontend
  * computes from several bundles at once (composite.ts) — the warm moist
@@ -660,15 +660,8 @@ function basemapThemes(): Record<string, BasemapTones> {
 function currentBasemapTheme(): BasemapTones {
   const themes = basemapThemes();
   const id = document.body.dataset.variable;
-  if (experimentEnabled && !isDark && id === "prate") return EXPERIMENT_GROUND;
   return themes[id ?? "tmp2m"] ?? themes.tmp2m!;
 }
-
-/** The experiment's chart paper under the stepped precipitation: white
- * land and a teal sea, the ground a broadcast surface chart draws on, where
- * an opaque key needs no slate to read against. Light theme only; the dark
- * theme keeps the precipitation slate. */
-const EXPERIMENT_GROUND: BasemapTones = { ocean: "#9dccd6", land: "#fbfbf7", background: "#9dccd6" };
 
 /** Relative luminance of a `#rrggbb` tone. */
 function luminance(color: string): number {

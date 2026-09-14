@@ -113,7 +113,7 @@ fall back to defaults rather than fail, so a constructed link always opens.
   HRRR publish the companions for their surface fields, ECMWF and SFLUX
   publish none).
 - `?x=true` — the experimental synoptic composite: the precipitation on a
-  stepped 0.1/1/2/5/10/20/50 mm/h key over chart paper, the sea level
+  stepped 0.1/1/2/5/10/20/50 mm/h key, the sea level
   pressure lines with their H/L marks over it, the particles run by the
   850 hPa vapour flux, and two fields computed in the browser from several
   bundles, drawn as outlined washes — a warm moist inflow (strong
