@@ -136,13 +136,14 @@
             "@type": "Dataset",
             "@id": "https://xue.ringsaturn.me/#data",
             "name": "Xue live forecast bundles",
-            "description": "The current NOAA GFS, GFS surface-flux, ECMWF IFS and NOAA HRRR runs converted into the .xue container: 8-bit quantized planes on the native grid with temporal residual prediction and Zstandard compression, one file per variable, streamable by HTTP range request. Only the newest run per source is kept.",
+            "description": "The current NOAA GFS, GFS surface-flux, ECMWF IFS and NOAA HRRR runs, and the last three to four hours of the NOAA MRMS radar mosaic as a rolling window rebuilt every five minutes, converted into the .xue container: 8-bit quantized planes on the native grid with temporal residual prediction and Zstandard compression, one file per variable, streamable by HTTP range request. Only the newest run per source is kept.",
             "url": "https://dataset.ringsaturn.me/xue/",
             "isAccessibleForFree": true,
             "creator": { "@id": "https://github.com/ringsaturn#person" },
             "isBasedOn": [
               { "@type": "Dataset", "name": "NOAA Global Forecast System (GFS)", "url": "https://registry.opendata.aws/noaa-gfs-bdp-pds/" },
               { "@type": "Dataset", "name": "NOAA High-Resolution Rapid Refresh (HRRR)", "url": "https://registry.opendata.aws/noaa-hrrr-pds/" },
+              { "@type": "Dataset", "name": "NOAA Multi-Radar/Multi-Sensor System (MRMS)", "url": "https://registry.opendata.aws/noaa-mrms-pds/" },
               { "@type": "Dataset", "name": "ECMWF Open Data (real-time)", "url": "https://www.ecmwf.int/en/forecasts/datasets/open-data", "license": "https://creativecommons.org/licenses/by/4.0/" }
             ],
             "spatialCoverage": { "@type": "Place", "geo": { "@type": "GeoShape", "box": "-90 -180 90 180" } },
@@ -163,6 +164,7 @@
               { "@type": "DataDownload", "name": "GFS surface-flux live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-sflux.json" },
               { "@type": "DataDownload", "name": "ECMWF live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-ecmwf.json" },
               { "@type": "DataDownload", "name": "HRRR live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-hrrr.json" },
+              { "@type": "DataDownload", "name": "MRMS radar live pointer (rolling window of the last three to four hours)", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-mrms.json" },
               { "@type": "DataDownload", "name": "Historical case catalog", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/showcase.json" }
             ]
           },
@@ -567,6 +569,11 @@
             <button type="button" data-model="hrrr" aria-pressed="false">
               <span class="model-name">HRRR</span>
               <small>CONUS 3KM</small>
+              <span class="model-check" aria-hidden="true"></span>
+            </button>
+            <button type="button" data-model="mrms" aria-pressed="false">
+              <span class="model-name">MRMS</span>
+              <small>CONUS RADAR</small>
               <span class="model-check" aria-hidden="true"></span>
             </button>
           </div>

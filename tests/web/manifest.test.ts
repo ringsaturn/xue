@@ -12,6 +12,7 @@ import {
   parseBundleMetadata,
   pickBundleVariant,
   sameTimeAxis,
+  validateLatestPointer,
   validateManifest,
 } from "../../web/src/manifest";
 import { buildPalette, buildWindSpeedPalette, decodeLinear, decodeLog } from "../../web/src/palettes";
@@ -295,6 +296,25 @@ describe("pickBundleVariant", () => {
     expect(pickBundleVariant(undefined, 512, false, "half")).toBeNull();
     expect(pickBundleVariant([], 512, true, "half")).toBeNull();
   });
+
+  it("scales the need to a regional grid's own longitude span", () => {
+    // The MRMS mosaic: 3500 columns over 70° of longitude, a 1750-column
+    // half tier. A phone on the national view (world width 4096 px at
+    // dpr 2) needs 4096 × 70 / 360 ≈ 800 columns of it — the half tier —
+    // where the world's width compared bare would never take it.
+    const regionalHalf = { ...half, width: 1750, height: 875 };
+    expect(pickBundleVariant([regionalHalf], 4096, false, "auto", 70)).toEqual(regionalHalf);
+    expect(pickBundleVariant([regionalHalf], 4096, false)).toBeNull();
+    // A retina desktop on the same view (14 000 px) needs ~2 700 columns:
+    // full resolution, and rightly so.
+    expect(pickBundleVariant([regionalHalf], 14000, false, "auto", 70)).toBeNull();
+    // A global grid's span is the world's, so the default is unchanged.
+    expect(pickBundleVariant([half], 1607, false, "auto", 360)).toBeNull();
+    expect(pickBundleVariant([half], 512, false, "auto", 360)).toEqual(half);
+    // The pins and the constrained network still outrank the view.
+    expect(pickBundleVariant([regionalHalf], 14000, true, "auto", 70)).toEqual(regionalHalf);
+    expect(pickBundleVariant([regionalHalf], 512, false, "full", 70)).toBeNull();
+  });
 });
 
 describe("crc32", () => {
@@ -314,20 +334,39 @@ describe("crc32", () => {
 });
 
 describe("dataset kinds", () => {
-  it("marks the radar archives as observations and the forecasts as forecasts", () => {
+  it("marks the radar mosaics as observations and the forecasts as forecasts", () => {
     // Mirrors SourceSpec.observation in xue/sources.py; the viewer titles its
     // timeline off this (run cycle and lead time vs. series start and elapsed).
     expect(isObservationModel("radar")).toBe(true);
     expect(isObservationModel("mrms")).toBe(true);
-    for (const model of FORECAST_MODEL_IDS) expect(isObservationModel(model)).toBe(false);
+    for (const model of ["gfs", "sflux", "ecmwf", "hrrr"] as const) expect(isObservationModel(model)).toBe(false);
   });
 
-  it("keeps the radar archives out of the live-feed list", () => {
-    // Neither has a live pointer (yet), so nothing may try to fetch one.
-    expect(FORECAST_MODEL_IDS).not.toContain("radar");
-    expect(FORECAST_MODEL_IDS).not.toContain("mrms");
+  it("lists the live feeds, the MRMS window among them, and not the CMA archive", () => {
+    // Every live feed has a pointer to poll; the CMA archive has none, so
+    // nothing may try to fetch one. MRMS is the one dataset that is
+    // observations and live (mirrors SourceSpec.latest_filename).
+    expect(FORECAST_MODEL_IDS).toEqual(["gfs", "sflux", "ecmwf", "hrrr", "mrms"]);
+    for (const model of FORECAST_MODEL_IDS) expect(FORECAST_MODELS[model].latestFilename).toBeDefined();
+    expect(FORECAST_MODELS.mrms.latestFilename).toBe("latest-mrms.json");
     expect(FORECAST_MODELS.radar.latestFilename).toBeUndefined();
-    expect(FORECAST_MODELS.mrms.latestFilename).toBeUndefined();
+  });
+
+  it("accepts a live pointer naming a round of a rolling window", () => {
+    // The MRMS pointer names `<model>.<run>/<HHMM>/manifest.json`: one
+    // directory deeper than a forecast's, relative like it, and the run
+    // stays the window's first hour.
+    const pointer = {
+      schemaVersion: 1,
+      model: "NOAA-MRMS",
+      product: "conus-cref",
+      run: "2026091321",
+      runTime: "2026-09-13T21:00:00Z",
+      manifestPath: "mrms.2026091321/0035/manifest.json",
+      manifestCrc32: "0badf00d",
+    };
+    expect(validateLatestPointer(pointer, "mrms").manifestPath).toBe("mrms.2026091321/0035/manifest.json");
+    expect(() => validateLatestPointer(pointer, "radar")).toThrow();
   });
 
   it("admits an mrms case manifest by its own identity and core set", () => {
@@ -369,7 +408,8 @@ describe("dataset kinds", () => {
     const withoutReflectivity = { ...radar, bundles: [{ ...radar.bundles[0]!, variable: "prate" }] };
     expect(() => validateManifest(withoutReflectivity, "radar")).toThrow(/no bundle for variable cref/);
     expect(() => validateManifest(withoutReflectivity, "radar", { requireCoreVariables: false })).not.toThrow();
-    for (const model of FORECAST_MODEL_IDS) expect(FORECAST_MODELS[model].coreBundles).toBeUndefined();
+    for (const model of ["gfs", "sflux", "ecmwf", "hrrr"] as const) expect(FORECAST_MODELS[model].coreBundles).toBeUndefined();
+    expect(FORECAST_MODELS.mrms.coreBundles).toEqual(["cref"]);
   });
 });
 

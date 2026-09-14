@@ -6,6 +6,7 @@
 [![GFS/SFLUX run](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-sflux.json&query=%24.run&label=GFS/SFLUX&color=2b6cb0&cacheSeconds=600)](https://dataset.ringsaturn.me/xue/latest-sflux.json)
 [![ECMWF/IFS 0p25 run](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-ecmwf.json&query=%24.run&label=ECMWF/IFS%200p25&color=1f6f8b&cacheSeconds=600)](https://dataset.ringsaturn.me/xue/latest-ecmwf.json)
 [![HRRR run](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-hrrr.json&query=%24.run&label=HRRR&color=7b4ea3&cacheSeconds=600)](https://dataset.ringsaturn.me/xue/latest-hrrr.json)
+[![MRMS window](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-mrms.json&query=%24.run&label=MRMS&color=b7472a&cacheSeconds=300)](https://dataset.ringsaturn.me/xue/latest-mrms.json)
 
 > Xue (雪, pronounced /ɕɥɛ/, roughly "shweh"), Chinese for snow.
 
@@ -126,6 +127,7 @@ python -m xuebuild build-bin --model ecmwf --run latest --hours 240
 python -m xuebuild build-bin --model sflux --run latest --hours 240
 python -m xuebuild build-bin --model hrrr --run latest
 python -m xuebuild build-bin --model mrms --run 2026091300 --hours 3   # a past window
+python -m xuebuild build-bin --model mrms --run latest --hours 4 --round now   # one round of the live window
 ```
 
 `XUE_ENCODER` picks which encoder converts: `auto` (the default — the
@@ -204,8 +206,15 @@ by block maximum onto a 0.02° grid (3500 × 1750) the bundles carry. It
 publishes the composite reflectivity under `cref` and the radar-derived
 precipitation rate under `prate`, with points outside radar coverage and
 points with no echo at the codebook bottom. A three-hour window is about
-90 frames and 20–40 MB of reflectivity. It has no live pointer yet: a
-window builds into `mrms.<run>/` and nothing points at it.
+90 frames and 20–40 MB of reflectivity. Its live feed is a **rolling
+window** under `latest-mrms.json`: `--run latest` resolves to the window
+whose last hour holds the bucket's newest frame (`--hours 4`: three whole
+hours plus the hour in progress), and because the same run is rebuilt
+every five minutes for an hour, each build goes into a round subdirectory
+of its own (`--round HHMM` → `mrms.<run>/<HHMM>/`) that the pointer names
+— a rewritten object under an unchanged `?v=` would hand a viewer's range
+requests the wrong bytes. A `window.json` beside the manifest says which
+frames the round holds; see Publishing below.
 
 `build-bin` writes one `.xue` per scalar variable (plus a half-resolution
 `.half.xue` rendition, a first-frame poster, and — on GFS and HRRR — a
@@ -357,8 +366,9 @@ GitHub Actions runs the whole loop on a schedule — one workflow per source
 hour), all calling the
 reusable [`publish.yml`](.github/workflows/publish.yml) — using the
 `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `CLOUDFLARE_ACCOUNT_ID`
-repository secrets. The bucket keeps only the live run per source. Each
-workflow also takes a manual dispatch with a dry-run switch.
+repository secrets. The bucket keeps only the live run per source (the
+MRMS window keeps the previous run too). Each workflow also takes a manual
+dispatch with a dry-run switch.
 
 The scheduled publish does not build a run in one go. A run's bundles are
 independent of one another, so `publish.yml` splits them into groups
@@ -404,6 +414,35 @@ make upload-r2-manifest MODEL=gfs RUN=2026081600
 
 The Pages shell is deployed separately (`make deploy`) and only needs
 redeploying when frontend code changes.
+
+### The MRMS rolling window
+
+The radar mosaic is published differently, because it is observations
+and never complete: [`publish-mrms.yml`](.github/workflows/publish-mrms.yml)
+runs one job an hour that loops through
+[`scripts/mrms_rounds.sh`](scripts/mrms_rounds.sh) — a round every five
+minutes until five to the hour, then the next hour's cron takes over
+(GitHub's cron is too coarse and too late for a five-minute cadence, so
+the job keeps its own time). A round compares the bucket's newest frame
+with the live round's `window.json` (`make live-window`) and, when there
+is something new, builds the whole window again (`build-bin --run latest
+--hours 4 --round HHMM`; frames already on disk are reused and the
+previous run's are linked across when the window crosses an hour),
+uploads the round with `make upload-r2 … ROUND=HHMM` (the bundles,
+manifest and window record into `mrms.<run>/<HHMM>/`, warmed, then the
+pointer), and prunes: the rounds before the newest two of the run (`make
+prune-r2-rounds`, never the one the pointer names), then the runs before
+the newest two (`make prune-r2 KEEP=2`, so a viewer still on the previous
+window keeps its artifacts). One log line per round records the newest
+frame's age when the pointer was written and each step's seconds. By
+hand:
+
+```sh
+ONCE=true scripts/mrms_rounds.sh                     # one round, as the job would run it
+.venv/bin/python -m xuebuild build-bin --model mrms --run latest --hours 4 --round now
+make upload-r2 MODEL=mrms RUN=2026091321 ROUND=1405  # the round the build named
+make prune-r2-rounds MODEL=mrms && make prune-r2 MODEL=mrms KEEP=2
+```
 
 ### Tropical cyclones
 

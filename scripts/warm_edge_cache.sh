@@ -27,9 +27,11 @@
 # the whole-run publish. The scheduled publish builds a run in pieces and
 # warms in pieces: `--artifacts-of` warms the artifacts one partial manifest
 # (manifest.part.<group>.json) names and nothing else, and `--manifest-only`
-# warms the assembled manifest alone, once it is uploaded. DATA_DIR,
-# DATA_URL, SITE_ORIGIN and WARM_JOBS override the local data root, the
-# hostnames and the concurrency.
+# warms the assembled manifest alone, once it is uploaded. ROUND names one
+# round of a rolling window (`build-bin --round`): the run's artifacts and
+# manifest then sit in <model>.<run>/<ROUND>/, locally and on the CDN.
+# DATA_DIR, DATA_URL, SITE_ORIGIN and WARM_JOBS override the local data
+# root, the hostnames and the concurrency.
 #
 # Each GET is bounded (WARM_MAX_TIME, default 300 s) and retried once: a
 # fill that stalls at the edge — seen taking 18 minutes for a 15 MB object
@@ -50,7 +52,7 @@ case ${3:-} in
 esac
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 data=${DATA_DIR:-$root/web/public/data}
-dir=$data/$model.$run
+dir=$data/$model.$run${ROUND:+/$ROUND}
 case $model in
   gfs) pointer=$data/latest.json ;;
   *) pointer=$data/latest-$model.json ;;
@@ -59,7 +61,7 @@ esac
 [ "$scope" = manifest ] || [ -n "$source" ] || source=$dir/manifest.json
 [ -z "$source" ] || [ -f "$source" ] || { echo "no manifest at $source" >&2; exit 1; }
 
-export WARM_BASE="${DATA_URL:-https://dataset.ringsaturn.me/xue}/$model.$run"
+export WARM_BASE="${DATA_URL:-https://dataset.ringsaturn.me/xue}/$model.$run${ROUND:+/$ROUND}"
 export WARM_ORIGIN=${SITE_ORIGIN:-https://xue.ringsaturn.me}
 export WARM_MAX_TIME=${WARM_MAX_TIME:-300}
 jobs=${WARM_JOBS:-6}

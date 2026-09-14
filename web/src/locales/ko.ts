@@ -11,6 +11,7 @@ export const ko: Record<MessageKey, string> = {
   metaDescription:
     "무료 GFS·ECMWF 수치예보 지도: 240시간 전 지구 기온·강수·바람, 해면기압 등압선, 500/850 hPa 상층 일기도, 상층 습도와 수증기 수송을 브라우저에서 애니메이션으로.",
   pageTitleLive: "{variable} 예보 지도 · {model} {hours}H",
+  pageTitleLiveObservation: "{variable} 관측 지도 · {model} T+{hours}H",
   mapAria: "전 지구 기온·강수 예보 지도",
   modelSwitchAria: "예보 모델",
   variableSwitchAria: "기상 요소",

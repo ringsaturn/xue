@@ -10,8 +10,15 @@ PROFILE ?= balanced
 # sflux (GFS surface flux, native ~13 km, hourly, adds the dswrf layer), or
 # hrrr (NOAA HRRR, 3 km over the contiguous US, a cycle every hour, to F18);
 # mrms (the NOAA radar mosaic, an observation every two minutes) builds a
-# window named by its first hour and has no live pointer yet.
+# window named by its first hour — `RUN=latest` the live rolling window.
 MODEL ?= gfs
+# One round of a rolling window (`build-bin --round`): the run's artifacts
+# and manifest live in <model>.<run>/<ROUND>/ and the pointer names that
+# round, so a later round of the same run never overwrites what a viewer is
+# still reading (a range request against a rewritten object decodes the
+# wrong bytes). Empty for a forecast run, which is built once.
+ROUND ?=
+RUN_DIR = $(MODEL).$(RUN)$(if $(ROUND),/$(ROUND))
 # Published runs of one model to keep on R2 (`make prune-r2`). One means the
 # live run only: the bucket carries no history.
 KEEP ?= 1
@@ -37,7 +44,7 @@ AWS_REQUEST_CHECKSUM_CALCULATION ?= when_required
 AWS_RESPONSE_CHECKSUM_VALIDATION ?= when_required
 export AWS_DEFAULT_REGION AWS_REQUEST_CHECKSUM_CALCULATION AWS_RESPONSE_CHECKSUM_VALIDATION
 
-.PHONY: check install wasm test test-rust test-e2e encoder-rust encoder-rust-test encoder-wheel bench bench-video bench-lossy mvp serve format-pdf deploy-build upload-r2 upload-r2-bundles upload-r2-manifest check-pointer upload-r2-pointer warm-r2 prune-r2 live-run live-manifest deploy-pages deploy showcase showcase-check showcase-refresh upload-r2-showcase tc-build live-tc-index upload-r2-tc prune-r2-tc clean
+.PHONY: check install wasm test test-rust test-e2e encoder-rust encoder-rust-test encoder-wheel bench bench-video bench-lossy mvp serve format-pdf deploy-build upload-r2 upload-r2-bundles upload-r2-manifest check-pointer upload-r2-pointer warm-r2 prune-r2 prune-r2-rounds live-run live-manifest live-window deploy-pages deploy showcase showcase-check showcase-refresh upload-r2-showcase tc-build live-tc-index upload-r2-tc prune-r2-tc clean
 
 check:
 	$(PYTHON) scripts/check_dependencies.py
@@ -153,14 +160,18 @@ deploy-build:
 # taking the run live with `upload-r2-manifest` — and the three targets share
 # their pieces: a partial manifest (manifest.part.*.json, the assembler's
 # input) never reaches the bucket from any of them.
+#
+# A rolling window's round (ROUND=HHMM) is the same path one directory
+# deeper: the round's artifacts and manifest are synced into
+# <model>.<run>/<ROUND>/ and the pointer names the round.
 upload-r2:
-	@set -e; dir=web/public/data/$(MODEL).$(RUN); \
+	@set -e; dir=web/public/data/$(RUN_DIR); \
 	[ -d "$$dir" ] || { echo "no built run at $$dir, pass RUN=YYYYMMDDHH"; exit 1; }; \
-	$(MAKE) --no-print-directory check-pointer MODEL=$(MODEL) RUN=$(RUN); \
-	$(S3) sync $$dir s3://$(R2_BUCKET)/$(R2_PREFIX)/$(MODEL).$(RUN)/ --no-progress $(DRY_RUN) \
+	$(MAKE) --no-print-directory check-pointer MODEL=$(MODEL) RUN=$(RUN) ROUND=$(ROUND); \
+	$(S3) sync $$dir s3://$(R2_BUCKET)/$(R2_PREFIX)/$(RUN_DIR)/ --no-progress $(DRY_RUN) \
 		--exclude "manifest.part.*.json" \
 		--cache-control "public, max-age=31536000, immutable"; \
-	[ -n "$(DRY_RUN)" ] || $(MAKE) --no-print-directory warm-r2 MODEL=$(MODEL) RUN=$(RUN) \
+	[ -n "$(DRY_RUN)" ] || $(MAKE) --no-print-directory warm-r2 MODEL=$(MODEL) RUN=$(RUN) ROUND=$(ROUND) \
 		|| echo "warming the edge cache failed; the run goes live cold"; \
 	$(MAKE) --no-print-directory upload-r2-pointer MODEL=$(MODEL) RUN=$(RUN) DRY_RUN=$(DRY_RUN)
 
@@ -199,11 +210,15 @@ upload-r2-manifest:
 # both, and a pointer that disagrees with its manifest strands every viewer
 # on a 404.
 check-pointer:
-	@set -e; dir=web/public/data/$(MODEL).$(RUN); \
+	@set -e; dir=web/public/data/$(RUN_DIR); \
 	pointer_run=$$(jq -r .run web/public/data/$(LATEST_FILE)); \
 	[ "$$pointer_run" = "$(RUN)" ] || { \
 		echo "$(LATEST_FILE) names run $$pointer_run, not $(RUN) — a later build rewrote it;"; \
 		echo "rebuild run $(RUN) (or upload run $$pointer_run) so the pointer matches the assets"; \
+		exit 1; }; \
+	pointer_path=$$(jq -r .manifestPath web/public/data/$(LATEST_FILE)); \
+	[ "$$pointer_path" = "$(RUN_DIR)/manifest.json" ] || { \
+		echo "$(LATEST_FILE) names $$pointer_path, not $(RUN_DIR)/manifest.json — pass the ROUND it was built with"; \
 		exit 1; }; \
 	pointer_crc=$$(jq -r .manifestCrc32 web/public/data/$(LATEST_FILE)); \
 	manifest_crc=$$($(PYTHON) -c "import sys, zlib; print(f'{zlib.crc32(open(sys.argv[1], \"rb\").read()) & 0xFFFFFFFF:08x}')" $$dir/manifest.json); \
@@ -221,7 +236,7 @@ upload-r2-pointer:
 # the site's Origin header, so the edge (and, with tiered cache, the upper
 # tier every other data center fills from) holds it before anyone asks.
 warm-r2:
-	scripts/warm_edge_cache.sh $(MODEL) $(RUN)
+	ROUND=$(ROUND) scripts/warm_edge_cache.sh $(MODEL) $(RUN)
 
 # Historical showcase cases: past runs cropped to one weather event, defined
 # in showcase/cases/*.json and built into web/public/data/showcase/. Pass
@@ -339,6 +354,31 @@ prune-r2:
 		fi; \
 	done
 
+# A rolling window keeps its rounds beside one another inside the run
+# directory. After the pointer has moved on to a new round, the rounds
+# before the newest ROUNDS_KEEP are deleted — never the one the pointer
+# names, whatever its name sorts as. A viewer on a replaced round has the
+# next round plus a poll interval to be brought forward before its objects
+# go; the top-level prune (`prune-r2`, KEEP=2 for this source) is what
+# keeps the previous run's last round alongside.
+ROUNDS_KEEP ?= 2
+prune-r2-rounds:
+	@set -e; \
+	pointer=$$($(S3) cp s3://$(R2_BUCKET)/$(R2_PREFIX)/$(LATEST_FILE) - --only-show-errors 2>/dev/null || true); \
+	[ -n "$$pointer" ] || { echo "no live pointer for $(MODEL), refusing to prune"; exit 1; }; \
+	live=$$(printf '%s' "$$pointer" | jq -r .manifestPath | xargs dirname); \
+	run=$$(printf '%s' "$$pointer" | jq -r .run); \
+	echo "live $(MODEL) round: $$live"; \
+	listing=$$($(S3) ls s3://$(R2_BUCKET)/$(R2_PREFIX)/$(MODEL).$$run/) \
+		|| { echo "listing the run failed, refusing to prune"; exit 1; }; \
+	for round in $$(printf '%s\n' "$$listing" | awk '/ PRE /{print $$2}' \
+		| sed 's:/$$::' | sort -r | tail -n +$$(($(ROUNDS_KEEP) + 1))); do \
+		if [ "$(MODEL).$$run/$$round" != "$$live" ]; then \
+			echo "Deleting $(MODEL).$$run/$$round..."; \
+			$(S3) rm s3://$(R2_BUCKET)/$(R2_PREFIX)/$(MODEL).$$run/$$round/ --recursive --only-show-errors $(DRY_RUN); \
+		fi; \
+	done
+
 # Print the run the live pointer names, or nothing when there is no pointer.
 live-run:
 	@$(S3) cp s3://$(R2_BUCKET)/$(R2_PREFIX)/$(LATEST_FILE) - --only-show-errors | jq -r .run || true
@@ -347,9 +387,17 @@ live-run:
 # base a top-up merges new bundles onto (`xuebuild assemble-run
 # --base-manifest`). Prints nothing when there is no live run.
 live-manifest:
-	@set -e; live=$$($(MAKE) -s --no-print-directory live-run MODEL=$(MODEL)); \
-	[ -n "$$live" ] || exit 0; \
-	$(S3) cp s3://$(R2_BUCKET)/$(R2_PREFIX)/$(MODEL).$$live/manifest.json - --only-show-errors
+	@set -e; path=$$($(S3) cp s3://$(R2_BUCKET)/$(R2_PREFIX)/$(LATEST_FILE) - --only-show-errors 2>/dev/null | jq -r .manifestPath || true); \
+	[ -n "$$path" ] || exit 0; \
+	$(S3) cp s3://$(R2_BUCKET)/$(R2_PREFIX)/$$path - --only-show-errors
+
+# The window.json beside the live manifest of a rolling window (what the
+# round holds: frame count, first and newest slot), as the bucket holds it.
+# Prints nothing when there is no live run or the run has no window record.
+live-window:
+	@set -e; path=$$($(S3) cp s3://$(R2_BUCKET)/$(R2_PREFIX)/$(LATEST_FILE) - --only-show-errors 2>/dev/null | jq -r .manifestPath || true); \
+	[ -n "$$path" ] || exit 0; \
+	$(S3) cp s3://$(R2_BUCKET)/$(R2_PREFIX)/$$(dirname $$path)/window.json - --only-show-errors 2>/dev/null || true
 
 # Publish dist-deploy/ (built via deploy-build) to the Cloudflare Pages project.
 deploy-pages:

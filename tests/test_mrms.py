@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import filecmp
 import gzip
+import io
 import json
 import math
 import os
@@ -41,7 +42,7 @@ from unittest import mock
 
 import numpy as np
 
-from xuebuild import binconvert, fetch, grib2, native, zstdcli
+from xuebuild import binconvert, cli, fetch, grib2, native, zstdcli
 from xuebuild.binconvert import (
     BlockReduction,
     GridInfo,
@@ -61,6 +62,7 @@ from xuebuild.fetch import (
     _download_mrms_frame,
     _fetch_mrms_run,
     _mrms_run_is_complete,
+    latest_mrms_slot,
     list_mrms_objects,
     mrms_frame_name,
     mrms_object_url,
@@ -68,9 +70,16 @@ from xuebuild.fetch import (
     mrms_window_frames,
     parse_mrms_listing,
     resolve_run,
+    window_summary,
 )
 from xuebuild.gdal import _band_matches, inspect_grib_multi, precipitation_rate_is_mm_per_hour, raster_expression
-from xuebuild.manifest import MODEL_CORE_BUNDLES, build_bin_manifest, validate_bin_manifest
+from xuebuild.manifest import (
+    MODEL_CORE_BUNDLES,
+    build_bin_manifest,
+    build_latest_pointer,
+    validate_bin_manifest,
+    validate_latest_pointer,
+)
 from xuebuild.model import GfsRun, SourceFrame
 from xuebuild.showcase import LOCALES, ShowcaseError, build_case, parse_case
 from xuebuild.sources import SOURCES, Downsample, source_spec
@@ -125,8 +134,10 @@ class SourceRegistryTests(unittest.TestCase):
         self.assertEqual((MRMS.manifest_model, MRMS.product), ("NOAA-MRMS", "conus-cref"))
         self.assertTrue(MRMS.observation)
         self.assertTrue(MRMS.fetched)
-        self.assertFalse(MRMS.live)
-        self.assertIsNone(MRMS.latest_filename)
+        # The one source that is an observation and live: a rolling window
+        # its pointer follows.
+        self.assertTrue(MRMS.live)
+        self.assertEqual(MRMS.latest_filename, "latest-mrms.json")
         self.assertEqual((MRMS.window_hours, MRMS.cadence_seconds), (3, 120))
         self.assertEqual(MRMS.horizon_hours, 3)
         self.assertEqual(MRMS.cycle_hours, 1)
@@ -282,12 +293,55 @@ class ListingTests(unittest.TestCase):
             self.assertFalse(_mrms_run_is_complete(MRMS, RUN, 3))
             with self.assertRaisesRegex(DownloadError, "has not fully landed"):
                 resolve_run("2026091300", hours=3, model="mrms")
-        with self.assertRaisesRegex(DownloadError, "no live feed yet"):
-            resolve_run("latest", hours=3, model="mrms")
         with self.assertRaisesRegex(DownloadError, "at least an hour"):
             resolve_run("2026091300", hours=0, model="mrms")
         with self.assertRaisesRegex(DownloadError, "read from a local file"):
             resolve_run("2026091300", hours=3, model="radar")
+
+    def test_the_live_window_ends_at_the_newest_common_slot(self) -> None:
+        # The composite is a slot ahead of the rate; the window ends where
+        # both are, and its run is that hour less the window's whole hours.
+        def fetch_text(url: str) -> str:
+            if "20260913" not in url:
+                return listing()
+            if "MergedReflectivityQCComposite" in url:
+                return listing(cref_key("20260913", "140042"), cref_key("20260913", "140241"), cref_key("20260913", "140441"))
+            return listing(prate_key("20260913", "140000"), prate_key("20260913", "140200"))
+
+        now = datetime(2026, 9, 13, 14, 5, 30, tzinfo=UTC)
+        self.assertEqual(latest_mrms_slot(MRMS, now=now, fetch=fetch_text), datetime(2026, 9, 13, 14, 2, tzinfo=UTC))
+        with mock.patch("xuebuild.fetch.fetch_text", fetch_text):
+            self.assertEqual(resolve_run("latest", hours=4, now=now, model="mrms").id, "2026091311")
+            self.assertEqual(resolve_run("latest", hours=1, now=now, model="mrms").id, "2026091314")
+        # A feed with no common slot is down, not an empty window.
+        with self.assertRaisesRegex(DownloadError, "no frame of every product"):
+            latest_mrms_slot(MRMS, now=now, fetch=lambda url: listing())
+
+    def test_the_live_window_reads_across_midnight(self) -> None:
+        listed: list[str] = []
+
+        def fetch_text(url: str) -> str:
+            listed.append(url)
+            if "20260912" in url:
+                if "MergedReflectivityQCComposite" in url:
+                    return listing(cref_key("20260912", "235642"), cref_key("20260912", "235841"))
+                return listing(prate_key("20260912", "235600"), prate_key("20260912", "235800"))
+            if "20260913" in url and "MergedReflectivityQCComposite" in url:
+                # The composite has crossed midnight, the rate has not yet.
+                return listing(cref_key("20260913", "000042"))
+            return listing()
+
+        # Just past midnight both days are read, and the newest slot every
+        # product has is yesterday's last.
+        now = datetime(2026, 9, 13, 0, 1, 30, tzinfo=UTC)
+        self.assertEqual(latest_mrms_slot(MRMS, now=now, fetch=fetch_text), datetime(2026, 9, 12, 23, 58, tzinfo=UTC))
+        self.assertEqual(sum("20260912" in url for url in listed), 2)
+        # Later in the day yesterday is only read when a product has nothing
+        # today — and then for every product, so the slots can still meet.
+        listed.clear()
+        now = datetime(2026, 9, 13, 3, 0, tzinfo=UTC)
+        self.assertEqual(latest_mrms_slot(MRMS, now=now, fetch=fetch_text), datetime(2026, 9, 12, 23, 58, tzinfo=UTC))
+        self.assertEqual([("20260912" in url) for url in listed], [False, False, True, True])
 
 
 class DownloadTests(unittest.TestCase):
@@ -359,6 +413,139 @@ class DownloadTests(unittest.TestCase):
         self.assertEqual(record["frames"][1]["objects"]["prate"]["key"], prate_key("20260913", "000200"))
         with mock.patch("xuebuild.fetch.fetch_text", lambda url: listing()), self.assertRaisesRegex(DownloadError, "no frames"):
             _fetch_mrms_run(MRMS, RUN, 3, self.root, force=False, input_ids=None)
+        # What the window holds, for the rolling publish to compare the
+        # bucket against.
+        self.assertEqual(
+            window_summary(self.root / "mrms.2026091300"),
+            {
+                "model": "mrms",
+                "cadenceSeconds": 120,
+                "frameCount": 2,
+                "firstSlot": "2026-09-13T00:00:00Z",
+                "latestSlot": "2026-09-13T00:02:00Z",
+            },
+        )
+        with self.assertRaisesRegex(DownloadError, "no fetch record"):
+            window_summary(self.root / "mrms.2026091200")
+
+    def test_the_previous_windows_frames_are_linked_into_the_next(self) -> None:
+        """The rolling window advances an hour at a time; the frames the
+        new run shares with the old one are the same objects, and are
+        linked across rather than downloaded again."""
+
+        def fetch_text(url: str) -> str:
+            if "MergedReflectivityQCComposite" in url and "20260913" in url:
+                return listing(cref_key("20260913", "000042"), cref_key("20260913", "000242"))
+            if "PrecipRate" in url and "20260913" in url:
+                return listing(prate_key("20260913", "000000"), prate_key("20260913", "000200"))
+            return listing()
+
+        with mock.patch("xuebuild.fetch._request", self.request), mock.patch("xuebuild.fetch.fetch_text", fetch_text):
+            fetch.fetch_run(RUN, 3, self.root, model="mrms")
+        # The window an hour earlier reaches the same two slots: nothing is
+        # requested from the bucket.
+        earlier = GfsRun(datetime(2026, 9, 12, 23, tzinfo=UTC))
+        with (
+            mock.patch("xuebuild.fetch._request", mock.Mock(side_effect=AssertionError("no download"))),
+            mock.patch("xuebuild.fetch.fetch_text", fetch_text),
+        ):
+            paths = fetch.fetch_run(earlier, 2, self.root, model="mrms")
+        self.assertEqual([path.name for path in paths], ["mrms.2026091223.t0100.grib2", "mrms.2026091223.t0102.grib2"])
+        for path, fixture in zip(paths, FRAMES):
+            self.assertEqual(path.read_bytes(), fixture.read_bytes())
+        # Linked, not copied, where the filesystem allows.
+        self.assertEqual(paths[0].stat().st_ino, (self.root / "mrms.2026091300" / "mrms.2026091300.t0000.grib2").stat().st_ino)
+        # A forced download replaces the link with a fresh download.
+        with mock.patch("xuebuild.fetch._request", self.request), mock.patch("xuebuild.fetch.fetch_text", fetch_text):
+            fetch.fetch_run(earlier, 2, self.root, model="mrms", force=True)
+
+
+class RollingWindowCliTests(DownloadTests):
+    """`build-bin --run latest --round HHMM`: the live window resolved off
+    the bucket, built into a round subdirectory of its run, its window
+    record beside the manifest and the pointer naming the round."""
+
+    def test_a_round_is_built_into_its_own_subdirectory(self) -> None:
+        def fetch_text(url: str) -> str:
+            if "MergedReflectivityQCComposite" in url and "20260913" in url:
+                return listing(cref_key("20260913", "000042"), cref_key("20260913", "000242"))
+            if "PrecipRate" in url and "20260913" in url:
+                return listing(prate_key("20260913", "000000"), prate_key("20260913", "000200"))
+            return listing()
+
+        calls: list[dict[str, object]] = []
+
+        def convert_bin(input_path: Path, output_dir: Path, **options: object) -> dict[str, object]:
+            calls.append({"input": input_path, "output": output_dir, **options})
+            manifest_path = options["manifest_path"]
+            assert isinstance(manifest_path, Path)
+            manifest_path.parent.mkdir(parents=True, exist_ok=True)
+            manifest_path.write_text("{}\n")
+            return {"bundles": []}
+
+        out = self.root / "out"
+        with (
+            mock.patch("xuebuild.fetch._request", self.request),
+            mock.patch("xuebuild.fetch.fetch_text", fetch_text),
+            mock.patch("xuebuild.cli.convert_bin", convert_bin),
+            mock.patch("xuebuild.fetch.datetime", wraps=datetime) as clock,
+            mock.patch("sys.stdout", new_callable=io.StringIO) as stdout,
+        ):
+            clock.now.return_value = datetime(2026, 9, 13, 0, 4, 30, tzinfo=UTC)
+            status = cli.main(
+                [
+                    "build-bin",
+                    "--model",
+                    "mrms",
+                    "--run",
+                    "latest",
+                    "--hours",
+                    "1",
+                    "--round",
+                    "0004",
+                    "--raw-dir",
+                    str(self.root),
+                    "--output-dir",
+                    str(out),
+                ]
+            )
+        self.assertEqual(status, 0)
+        report = json.loads(stdout.getvalue())
+        # The newest common slot is 00:02, so the one-hour live window is
+        # the run at 00.
+        self.assertEqual((report["run"], report["round"]), ("2026091300", "0004"))
+        self.assertEqual(report["window"]["latestSlot"], "2026-09-13T00:02:00Z")
+        self.assertEqual(report["window"]["frameCount"], 2)
+        [call] = calls
+        self.assertEqual(call["input"], self.root / "mrms.2026091300")
+        self.assertEqual(call["output"], out / "mrms.2026091300" / "0004")
+        self.assertEqual(call["manifest_path"], out / "mrms.2026091300" / "0004" / "manifest.json")
+        self.assertEqual(call["latest_path"], out / "latest-mrms.json")
+        self.assertEqual((call["run_id"], call["require_complete"], call["expected_hours"]), ("2026091300", True, 1))
+        window = json.loads((out / "mrms.2026091300" / "0004" / "window.json").read_text())
+        self.assertEqual((window["run"], window["round"], window["hours"]), ("2026091300", "0004", 1))
+        self.assertEqual(window["latestSlot"], "2026-09-13T00:02:00Z")
+        # The pointer names the round, one directory deeper than a
+        # forecast's manifest, and both validators accept the path.
+        pointer = build_latest_pointer(
+            "2026091300",
+            RUN.time,
+            manifest_path=(call["manifest_path"]).relative_to(out).as_posix(),
+            manifest_crc32="0badf00d",
+            model="NOAA-MRMS",
+            product="conus-cref",
+        )
+        self.assertEqual(pointer["manifestPath"], "mrms.2026091300/0004/manifest.json")
+        validate_latest_pointer(pointer)
+        # A round is a whole run.
+        with mock.patch("sys.stderr", new_callable=io.StringIO) as stderr:
+            status = cli.main(["build-bin", "--model", "mrms", "--round", "0004", "--bundles", "cref"])
+        self.assertEqual(status, 2)
+        self.assertIn("cannot be combined with --bundles", stderr.getvalue())
+        with self.assertRaises(SystemExit):
+            cli.parser().parse_args(["build-bin", "--model", "mrms", "--round", "2460"])
+        self.assertEqual(cli.round_name("2359"), "2359")
+        self.assertRegex(cli.round_name("now"), r"^[0-2][0-9][0-5][0-9]$")
 
 
 class RecordMatchingTests(unittest.TestCase):

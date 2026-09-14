@@ -249,8 +249,16 @@ const PLAYBACK_FPS_KEY = "xue-playback-fps";
 /** Pre-manifest placeholder frame count: the GFS 240-hour axis
  * (121 hourly frames, then 40 three-hourly). */
 const FRAME_COUNT = 161;
-/** How often the latest.json live pointer is re-checked for a new run. */
+/** How often the live pointer is re-checked for a new run: a forecast
+ * cycle lands every hour at most, an observation window is rebuilt every
+ * five minutes, and the pointer is a 200-byte no-cache object, so the
+ * observation feed is polled more often than the forecasts (the storm
+ * product keeps the forecasts' cadence). */
 const LATEST_POLL_MS = 5 * 60_000;
+const OBSERVATION_POLL_MS = 2 * 60_000;
+function latestPollMs(): number {
+  return isObservationModel(selectedModelId) ? OBSERVATION_POLL_MS : LATEST_POLL_MS;
+}
 
 /** True on connections where downloads should be frugal (Save-Data or 2G). */
 function constrainedConnection(): boolean {
@@ -268,14 +276,29 @@ function slowConnection(): boolean {
   return connection.saveData === true || /(^|-)[23]g$/.test(connection.effectiveType ?? "");
 }
 
-/** Horizontal grid samples the current view can actually display — the
- * world's CSS pixel width at the current zoom times devicePixelRatio (capped:
- * beyond 2x extra grid columns are invisible). A global 0.25 degree grid is
- * 1440 columns over 360 degrees, so this is directly comparable to variant
- * widths. */
+/** Horizontal grid samples the current view can actually display across
+ * the whole world — its CSS pixel width at the current zoom times
+ * devicePixelRatio (capped: beyond 2x extra grid columns are invisible). A
+ * global 0.25 degree grid is 1440 columns over 360 degrees, so this is
+ * directly comparable to a global variant's width; a regional grid's
+ * columns cover only its own span, which `pickBundleVariant` scales the
+ * need by (`bundleLongitudeSpan`). */
 function neededGridWidth(): number {
   const worldCssWidth = 512 * 2 ** map.getZoom();
   return worldCssWidth * Math.min(2, window.devicePixelRatio || 1);
+}
+
+/** The degrees of longitude a bundle's grid covers, read off its poster's
+ * metadata — the same grid at a coarser step, and in the manifest before
+ * any bundle byte is — or the world's when the bundle ships no poster. */
+function bundleLongitudeSpan(descriptor: ForecastManifest["bundles"][number]): number {
+  if (!descriptor.poster) return 360;
+  try {
+    const grid = geoGrid(parseBundleMetadata(descriptor.poster.metadataJson));
+    return Math.min(360, Math.abs(grid.width * grid.longitudeStep));
+  } catch {
+    return 360;
+  }
 }
 
 // The plane cache is byte-budgeted (not frame-count-limited) and the
@@ -1159,6 +1182,9 @@ let manifest: ForecastManifest | null = null;
 let manifestUrl: string | null = null;
 /** Run id from the latest.json live pointer, e.g. "2026081600". */
 let currentRun: string | null = null;
+/** The crc of the live manifest on screen, off the pointer that named it —
+ * what the pointer poll compares against; null for a case. */
+let currentManifestCrc: string | null = null;
 let metadata: BundleMetadata | null = null;
 
 /** What is on screen, as slots rather than as one layer: a filled field
@@ -1612,6 +1638,14 @@ function nearestFrameIndex(seconds: number): number {
 function frameValidTime(index: number): number {
   const base = metadata ? Date.parse(metadata.runTime) : 0;
   return base + frameLeadSeconds(index) * 1000;
+}
+
+/** The frame whose valid time is nearest to `validTime` (a millisecond
+ * epoch), on the active axis — how a playhead keeps its place across runs
+ * whose run times differ. */
+function nearestFrameIndexForValidTime(validTime: number): number {
+  const base = metadata ? Date.parse(metadata.runTime) : 0;
+  return nearestFrameIndex((validTime - base) / 1000);
 }
 
 /** The lead-time readout. A forecast reads as the forecast hour it has
@@ -3663,7 +3697,7 @@ function updateVariablePresentation(session: VariableSession): void {
         }
       : {
           path: "/",
-          title: t("pageTitleLive", {
+          title: t(showingObservations() ? "pageTitleLiveObservation" : "pageTitleLive", {
             variable: ui.label,
             model: model.label,
             hours: String(Math.round(frameLeadSeconds(frameCount() - 1) / HOUR_SECONDS)),
@@ -4061,6 +4095,7 @@ function loadVariable(
       neededGridWidth(),
       slowConnection(),
       overlay && resolutionPreference !== "full" ? "half" : resolutionPreference,
+      bundleLongitudeSpan(descriptor),
     );
     const video = h264Enabled && role !== "probe" ? descriptor.video : undefined;
     // Opted in, the video path must still earn its bytes — prefer it only
@@ -5417,6 +5452,10 @@ async function activateVariable(variableId: ForecastBundleId): Promise<void> {
  * same model never moves a camera the viewer has since placed. */
 async function initialize({ frame = false }: { frame?: boolean } = {}): Promise<void> {
   const sequence = ++initializeSequence;
+  // Taken here, so a resume the poll asked for never outlives the open it
+  // was meant for.
+  const resume = resumeOnNewRun;
+  resumeOnNewRun = null;
   stopPlayback();
   ready = false;
   switchingVariable = false;
@@ -5439,6 +5478,7 @@ async function initialize({ frame = false }: { frame?: boolean } = {}): Promise<
   manifest = null;
   manifestUrl = null;
   currentRun = null;
+  currentManifestCrc = null;
   metadata = null;
   for (const slot of [slots.fill, slots.lines]) {
     detachSlot(slot);
@@ -5507,6 +5547,7 @@ async function initialize({ frame = false }: { frame?: boolean } = {}): Promise<
       loadedManifest = loaded.manifest;
       manifestUrl = loaded.manifestUrl;
       currentRun = loaded.latest.run;
+      currentManifestCrc = loaded.latest.manifestCrc32;
     }
     manifest = loadedManifest;
     // The dataset is settled here (a case pins its own), so the timeline can
@@ -5537,9 +5578,14 @@ async function initialize({ frame = false }: { frame?: boolean } = {}): Promise<
     syncDerivedTiles(loadedManifest);
     syncRailDensity();
     // A slot this run does not ship empties; a case names its own default
-    // for when that leaves nothing, and a live run always carries the core
-    // pair.
-    composition = resolveComposition(composition, loadedManifest, activeCase?.defaultVariable ?? DEFAULT_VARIABLE);
+    // for when that leaves nothing, and a live run always carries its core
+    // set — the forecast pair, or the reflectivity on a radar mosaic, which
+    // is what a switch onto one opens.
+    composition = resolveComposition(
+      composition,
+      loadedManifest,
+      activeCase?.defaultVariable ?? FORECAST_MODELS[selectedModelId].coreBundles?.[0] ?? DEFAULT_VARIABLE,
+    );
     selectedVariableId = compositionPrimary(composition);
 
     // Paint the poster while the bundle opens (never blocks the load).
@@ -5557,6 +5603,13 @@ async function initialize({ frame = false }: { frame?: boolean } = {}): Promise<
     // applyVariable adopts the session's time axis (syncTimeline) and builds
     // the slider, ticks, and day strip from it.
     applyVariable(session);
+    if (resume) {
+      // The same dataset, a newer window: back to the observation time the
+      // viewer was on, or to the new end for one who was at the old end.
+      const index = resume.atEnd ? frameCount() - 1 : nearestFrameIndexForValidTime(resume.validTime);
+      generation += 1;
+      trySelectFrame(index);
+    }
 
     say(loadStatus, "framesReady", { count: frameCount() });
     loadStatus.className = "load-status";
@@ -5564,7 +5617,7 @@ async function initialize({ frame = false }: { frame?: boolean } = {}): Promise<
     playButton.disabled = false;
     speedButton.disabled = false;
     setVariableButtonsDisabled(false);
-    if (!reducedMotion.matches) startPlayback();
+    if (!reducedMotion.matches && (resume === null || resume.playing)) startPlayback();
   } catch (error) {
     if (sequence !== initializeSequence) return;
     if (error instanceof DOMException && error.name === "AbortError") return;
@@ -5759,21 +5812,47 @@ playButton.addEventListener("click", () => {
 // than it saves, and the label always reads the rate in force.
 speedButton.addEventListener("click", () => setPlaybackFps(nextFps(playbackFps), true));
 particlesToggle.addEventListener("click", () => setParticlesEnabled(!particlesEnabled));
-/** Poll the live pointer; a changed run id re-initializes onto the new
- * run ("排播型电视直播" — the client tunes itself to the newest broadcast). */
+/** Poll the live pointer; a changed manifest re-initializes onto the new
+ * run ("排播型电视直播" — the client tunes itself to the newest broadcast).
+ * The manifest's crc is what says "new": a forecast's changes with its run
+ * id, an observation window's every few minutes under the same id. */
 async function checkForNewRun(): Promise<void> {
   // A case is a fixed historical run; there is no newer one to move to.
-  if (activeCase || !currentRun || document.hidden || switchingVariable) return;
+  if (activeCase || !currentRun || currentManifestCrc === null || document.hidden || switchingVariable) return;
   try {
     const model = selectedModelId;
     const latest = await fetchLatestPointer(dataBaseUrl(), model);
-    if (model !== selectedModelId) return;
-    if (currentRun !== null && latest.run !== currentRun) void initialize();
+    if (model !== selectedModelId || activeCase || currentManifestCrc === null) return;
+    if (latest.manifestCrc32 === currentManifestCrc) return;
+    // A rolling window moves under the viewer: the playhead keeps its
+    // place by observation time, and one left at the newest frame follows
+    // the window's end — the live default. The same run topped up with a
+    // bundle keeps its place too (the axis is the same). A new forecast
+    // cycle opens at its analysis as it always has.
+    if ((showingObservations() || latest.run === currentRun) && metadata) {
+      const index = activeFrameIndex ?? Number(slider.value);
+      resumeOnNewRun = {
+        validTime: frameValidTime(index),
+        atEnd: index >= frameCount() - 1,
+        playing,
+      };
+    }
+    void initialize();
   } catch {
     // Transient poll failures never disturb the running app.
   }
 }
-window.setInterval(() => void checkForNewRun(), LATEST_POLL_MS);
+/** Where the playhead goes once a new run of the same dataset has opened
+ * from the pointer poll; null for every other open. */
+let resumeOnNewRun: { validTime: number; atEnd: boolean; playing: boolean } | null = null;
+/** The pointer poll, rescheduled after each check so the interval follows
+ * the dataset on screen. */
+function schedulePointerPoll(): void {
+  window.setTimeout(() => {
+    void checkForNewRun().finally(schedulePointerPoll);
+  }, latestPollMs());
+}
+schedulePointerPoll();
 window.setInterval(() => void loadTc(), LATEST_POLL_MS);
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) stopPlayback();

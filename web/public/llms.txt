@@ -12,7 +12,7 @@
 
 Facts worth getting right:
 
-- Four live sources, one shell. `gfs`: NOAA GFS 0.25°, hourly to F120 then
+- Five live sources, one shell. `gfs`: NOAA GFS 0.25°, hourly to F120 then
   3-hourly to F240 (161 frames). `sflux`: GFS surface flux on its native
   ~13 km Gaussian grid, same cadence, the only source with solar radiation
   (`dswrf`). `ecmwf`: ECMWF IFS open data 0.25°, 3-hourly to F144 then
@@ -22,13 +22,15 @@ Facts worth getting right:
   0.03° latitude/longitude grid (2441 × 1051) over the domain's footprint;
   the rectangle's corners the conic domain never covered repeat the nearest
   cell and are not a forecast (the viewer clips them). Two more sources are
-  observations rather than forecasts and appear only as historical cases:
-  `radar` (CMA level-3 radar mosaic composite reflectivity, six-minute
-  frames) and `mrms` (NOAA MRMS, the national radar mosaic over the
-  contiguous United States, two-minute frames on a 0.01° grid thinned by
-  block maximum to 0.02°, 130°W–60°W and 20°N–55°N; a radar volume scan
-  takes four to six minutes, so a frame with no new scan behind it repeats
-  the last one over that radar's coverage). An observation
+  observations rather than forecasts: `radar` (CMA level-3 radar mosaic
+  composite reflectivity, six-minute frames), historical cases only, and
+  `mrms` (NOAA MRMS, the national radar mosaic over the contiguous United
+  States, two-minute frames on a 0.01° grid thinned by block maximum to
+  0.02°, 130°W–60°W and 20°N–55°N; a radar volume scan takes four to six
+  minutes, so a frame with no new scan behind it repeats the last one over
+  that radar's coverage), which is also the fifth live source: a rolling
+  window of the last three to four hours, rebuilt every five minutes and
+  reaching to within about three minutes of real time. An observation
   dataset has no run cycle and no lead time: its `run` is the hour its
   series starts and a frame's offset is time elapsed since.
 - Bundles published per run. GFS and ECMWF: `tmp2m`, `prate`, `prmsl`,
@@ -137,10 +139,12 @@ Everything the page reads is a plain file with CORS open, under
 https://dataset.ringsaturn.me/xue/. The contract is two layers:
 
 - One mutable live pointer per source (JSON, schema 1): `latest.json` (GFS),
-  `latest-sflux.json`, `latest-ecmwf.json`, `latest-hrrr.json`. Fields:
-  `schemaVersion`, `model`, `product`, `run` (YYYYMMDDHH, UTC), `runTime`
-  (ISO 8601), `manifestPath` (relative), `manifestCrc32`. Fetch with cache
-  disabled; it changes four times a day (every hour for HRRR).
+  `latest-sflux.json`, `latest-ecmwf.json`, `latest-hrrr.json`,
+  `latest-mrms.json`. Fields: `schemaVersion`, `model`, `product`, `run`
+  (YYYYMMDDHH, UTC), `runTime` (ISO 8601), `manifestPath` (relative),
+  `manifestCrc32`. Fetch with cache disabled; it changes four times a day
+  (every hour for HRRR, every five minutes for MRMS — compare
+  `manifestCrc32`, not `run`, to see whether it moved).
 - Everything the pointer names is immutable and lives under `<model>.<run>/`:
   the run's `manifest.json` (schema 5: `model`, `product`, `runTime`,
   `forecastHours`, and `bundles[]`, each with `variable`, `path`,
@@ -149,6 +153,15 @@ https://dataset.ringsaturn.me/xue/. The contract is two layers:
   Request an immutable artifact as `<path>?v=<crc32>`. The grid, the time
   axis, the variables' GRIB2 parameter blocks and the quantization codebooks
   are inside each bundle, as a UTF-8 JSON metadata block after the header.
+- The MRMS window is one directory deeper: its `run` is the window's *first*
+  hour (three hours before the newest frame's, moving on every hour), and
+  each five-minute rebuild of that run is a round of its own,
+  `mrms.<run>/<HHMM>/manifest.json` (HHMM the round's UTC start), so a
+  round's artifacts are never rewritten under a `?v=` a reader may hold.
+  A `window.json` beside the manifest (`frameCount`, `firstSlot`,
+  `latestSlot`, `hours`, `round`) says which frames the round holds. The
+  live run's last two rounds and the previous run's are kept; older rounds
+  are deleted once the pointer has moved on.
 - The historical catalog is `showcase.json` at the same root (schema 1,
   `generatedAt`, `cases[]`); each case carries `id`, `title` and `summary`
   keyed by language, `model`, `run`, `runTime`, `forecastHours`, `bbox`,

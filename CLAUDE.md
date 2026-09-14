@@ -241,11 +241,30 @@ publishing data at the new version.**
   (`_snap_regional_steps`, the regional analogue of the global `360 /
   width` rule, mirrored in `grid.rs`) — GDAL derives the step from the
   first and last coordinates, and MRMS writes its last one a hair short.
-  No live pointer yet — the rolling window is the next step: `build-bin
+  MRMS is the one source that is an observation *and* live. `build-bin
   --model mrms --run <hour> --hours 3` builds a past window into
-  `mrms.<run>/` and nothing points at it; what is published are showcase
-  cases (`ida-2021`, `quad-state-tornado-2021`), and the shell registers
-  `mrms` in `FORECAST_MODELS` as an observation dataset off the live list.
+  `mrms.<run>/` (the showcase cases `ida-2021`, `quad-state-tornado-2021`
+  are cropped ones); the live feed is a **rolling window**: `--run latest`
+  resolves (`fetch.py::latest_mrms_slot`, `resolve_run`) to the run whose
+  last hour holds the bucket's newest frame, `--hours 4` (three whole
+  hours plus the hour in progress, `window_hours + 1`), and since the same
+  run is rebuilt every five minutes, each build takes `--round HHMM` and
+  lands in `mrms.<run>/<HHMM>/` with a `window.json` (`fetch.py::
+  window_summary`) beside its manifest and the pointer naming the round —
+  never overwrite an object under an unchanged `?v=`: a viewer's range
+  requests against it decode the wrong bytes. `publish-mrms.yml` is one
+  job an hour looping `scripts/mrms_rounds.sh` (a round every five
+  minutes to five to the hour: newest frame vs the live `window.json`
+  → build → `make upload-r2 … ROUND=` → `prune-r2-rounds` keeps the run's
+  newest two rounds, `prune-r2 KEEP=2` the previous run), not the
+  three-job `publish.yml`. The shell lists `mrms` among
+  `FORECAST_MODEL_IDS`, polls its pointer every two minutes instead of
+  five, treats a changed `manifestCrc32` (not a changed run id) as a new
+  run, and on a rolling window keeps the playhead by observation time —
+  or follows the end when it was at the end (`checkForNewRun` /
+  `resumeOnNewRun` in `main.ts`). `pickBundleVariant` scales the needed
+  width by the bundle's longitude span (read off the poster metadata), so
+  a regional grid can take its half tier on a far-out view.
   A source with a `regrid` (`hrrr`) is computed on a map projection:
   `_grid_info` reads
   the Lambert conformal parameters out of GDAL's WKT (`reproject.py`, and

@@ -1,0 +1,173 @@
+name: publish mrms
+
+# NOAA MRMS, the radar mosaic over the contiguous United States: an
+# observation every two minutes, about a minute behind real time on its
+# bucket. The live feed is a rolling window — the last three whole hours
+# plus the hour in progress, 0.02°, the native two-minute step — rebuilt
+# every five minutes into a round subdirectory of its run
+# (<model>.<run>/<HHMM>/) and pointed at by latest-mrms.json.
+#
+# Not the three-job pipeline of publish.yml: a cron here fires once a
+# minute at best and tens of minutes late under load, so one job an hour
+# runs the rounds itself (scripts/mrms_rounds.sh), sleeping to each
+# five-minute boundary until five to the hour, and the next hour's cron
+# takes over. The cron's lateness costs the first round of the hour only.
+#
+# Machine time: twenty-four jobs of up to fifty-five minutes a day, about
+# 660 hours a month — free on a public repository's standard runners, far
+# past the free allowance were this repository ever private (then the
+# round would have to stretch to twenty minutes, or the job move to a
+# self-hosted runner).
+
+on:
+  schedule:
+    - cron: "0 * * * *"
+  workflow_dispatch:
+    inputs:
+      once:
+        description: "Run one round and stop, instead of the rest of the hour"
+        type: boolean
+        default: false
+      round_minutes:
+        description: "Minutes between rounds"
+        type: string
+        default: "5"
+      hours:
+        description: "Window length in hours (the whole hours on screen plus the one in progress)"
+        type: string
+        default: "4"
+      profile:
+        description: "Quantization/compression profile"
+        type: choice
+        options: [balanced, quality, compact]
+        default: balanced
+      keep:
+        description: "Published runs to keep on R2 (2 = the live run and the one before it)"
+        type: string
+        default: "2"
+      force:
+        description: "Build a round even when the live one already ends at the bucket's newest frame"
+        type: boolean
+        default: false
+      dry_run:
+        description: "Build and report what the uploads and prunes would do, but write nothing to R2"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-mrms
+  cancel-in-progress: false
+
+env:
+  # Convert through the native encoder (the xuepy wheel, a dependency of
+  # xuebuild) and insist on it: a round that quietly fell back to the
+  # subprocess pipeline would overrun its five minutes.
+  XUE_ENCODER: native
+
+jobs:
+  publish:
+    # Scheduled runs on forks would publish into a bucket they cannot reach.
+    if: github.event_name != 'schedule' || github.repository == 'ringsaturn/xue'
+    runs-on: ubuntu-24.04
+    # The rounds stop at five to the hour on their own; this is the
+    # backstop for a round that hangs.
+    timeout-minutes: 65
+    env:
+      ONCE: ${{ inputs.once || false }}
+      ROUND_MINUTES: ${{ inputs.round_minutes || '5' }}
+      HOURS: ${{ inputs.hours || '4' }}
+      PROFILE: ${{ inputs.profile || 'balanced' }}
+      KEEP: ${{ inputs.keep || '2' }}
+      FORCE: ${{ inputs.force || false }}
+      DRY_RUN: ${{ inputs.dry_run && '--dryrun' || '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate inputs
+        run: |
+          set -euo pipefail
+          printf '%s' "$ROUND_MINUTES" | grep -Eq '^[1-9][0-9]?$' \
+            || { echo "::error::round_minutes must be a positive integer of minutes"; exit 1; }
+          printf '%s' "$HOURS" | grep -Eq '^[1-9][0-9]?$' \
+            || { echo "::error::hours must be a positive integer"; exit 1; }
+          printf '%s' "$KEEP" | grep -Eq '^[1-9][0-9]*$' \
+            || { echo "::error::keep must be a positive integer"; exit 1; }
+
+      # The AWS CLI is preinstalled on the runner; R2 is its S3 endpoint.
+      # The credentials are step-scoped rather than job env, so third-party
+      # actions never see them; the listing proves they work before the
+      # first round rather than at its upload.
+      - name: Check R2 credentials
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+          AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+        run: |
+          for name in CLOUDFLARE_ACCOUNT_ID AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY; do
+            [ -n "${!name}" ] || { echo "::error::$name is empty; set the R2 repository secrets"; exit 1; }
+          done
+          aws --version
+          aws s3 ls "s3://dataset/xue/" --region auto \
+            --endpoint-url "https://${CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com" > /dev/null \
+            || { echo "::error::R2 credentials failed a test listing of the dataset bucket"; exit 1; }
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          python-version: "3.14"
+
+      # No GDAL and no ffmpeg: the source ships no video, and the xuepy
+      # wheel carries the GDAL the native encoder extracts and inspects
+      # with (`xuepy>=0.15`, the first wheel that knows the source).
+      - name: Sync Python environment
+        run: uv sync
+
+      - name: Run the rounds
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: |
+          set -o pipefail
+          scripts/mrms_rounds.sh 2>&1 | tee rounds.log
+          status=$?
+          {
+            echo "### mrms rounds"
+            echo
+            echo '```'
+            grep -E '^round [0-9]{4}:|rounds this hour' rounds.log || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit $status
+
+      # The pointer is served with no-cache, so the edge revalidates it; a
+      # stale read here means the last flip has not propagated rather than
+      # failed, so it warns instead of failing an otherwise complete hour.
+      - name: Verify the live pointer
+        if: ${{ !inputs.dry_run }}
+        run: |
+          set -uo pipefail
+          [ -f web/public/data/latest-mrms.json ] || { echo "No round built this hour." >> "$GITHUB_STEP_SUMMARY"; exit 0; }
+          url="https://dataset.ringsaturn.me/xue/latest-mrms.json"
+          published=$(curl -fsSL "$url" | jq -r '.manifestPath' || true)
+          if [ -n "$published" ] && [ -f "web/public/data/$published" ]; then
+            echo "$url serves $published." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::$url serves '${published:-nothing}', not the round this job last built"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: publish-report-mrms
+          path: |
+            rounds.log
+            build-report.json
+            web/public/data/latest-mrms.json
+          retention-days: 14
+          if-no-files-found: ignore

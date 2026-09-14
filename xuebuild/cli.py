@@ -19,7 +19,7 @@ from .assemble import (
 from .binconvert import bundle_input_ids, published_bundle_ids, verify_bin
 from .encoder import convert_bin
 from .errors import ConversionError, XueError
-from .fetch import fetch_run, parse_run, resolve_run
+from .fetch import WINDOW_FILENAME, fetch_run, parse_run, resolve_run, window_summary
 from .showcase import CASE_SIDECAR, build_case, load_cases, refresh_sidecar, write_catalog
 from .sources import SOURCES, source_spec
 from .tc.build import build_product as build_tc_product
@@ -39,8 +39,23 @@ def forecast_hours(value: str) -> int:
     return parsed
 
 
+def round_name(value: str) -> str:
+    """``HHMM`` of a rolling-window round, or ``now`` for the current UTC
+    minute."""
+    if value == "now":
+        return datetime.now(UTC).strftime("%H%M")
+    if len(value) != 4 or not value.isdigit() or int(value[:2]) > 23 or int(value[2:]) > 59:
+        raise argparse.ArgumentTypeError("round must be HHMM (UTC) or now")
+    return value
+
+
 def _common_run_arguments(parser: argparse.ArgumentParser, *, force_help: str) -> None:
-    parser.add_argument("--run", default="latest", help="latest or a UTC cycle in YYYYMMDDHH format")
+    parser.add_argument(
+        "--run",
+        default="latest",
+        help="latest or a UTC cycle in YYYYMMDDHH format; on an observation source, the window's "
+        "first hour, or latest for the live window ending at the bucket's newest frame",
+    )
     parser.add_argument(
         "--hours",
         type=forecast_hours,
@@ -141,6 +156,15 @@ def parser() -> argparse.ArgumentParser:
         metavar="BUNDLE",
         help="build only these bundles (one job of a fanned-out publish): fetch just their inputs, "
         "write a manifest.part.<group>.json beside them instead of manifest.json, and no live pointer",
+    )
+    build_bin_parser.add_argument(
+        "--round",
+        type=round_name,
+        metavar="HHMM",
+        help="one round of a rolling window (the live MRMS feed): write the run into the "
+        "<model>.<run>/<HHMM>/ subdirectory, so a rebuild of the same run never overwrites artifacts "
+        "a viewer may still be reading, and point the live pointer at that round; now for the current "
+        "UTC minute",
     )
 
     assemble_parser = commands.add_parser(
@@ -336,9 +360,13 @@ def main(argv: list[str] | None = None) -> int:
                     raise ConversionError(
                         f"{source.manifest_model} publishes {list(published_bundle_ids(source))}, not {unknown}"
                     )
+            if arguments.round is not None and bundle_ids is not None:
+                raise ConversionError("--round builds a whole run; it cannot be combined with --bundles")
             run = resolve_run(arguments.run, hours=arguments.hours, model=arguments.model)
             run_directory = f"{source.id}.{run.id}"
             output_directory = arguments.output_dir / run_directory
+            if arguments.round is not None:
+                output_directory = output_directory / arguments.round
             if bundle_ids is None:
                 raw_root = arguments.raw_dir
                 input_ids = None
@@ -346,8 +374,9 @@ def main(argv: list[str] | None = None) -> int:
                 # directory; the tiny mutable per-model latest pointer at the
                 # data root is what takes a new run live.
                 manifest_path = output_directory / "manifest.json"
-                # A fetched source with no live feed yet (MRMS) builds the
-                # run directory and its manifest, and nothing points at it.
+                # A rolling window's pointer names the round's manifest
+                # inside the run directory; the pointer itself stays at the
+                # root like every other model's.
                 latest_path: Path | None = (
                     arguments.output_dir / source.latest_filename if source.latest_filename else None
                 )
@@ -373,6 +402,17 @@ def main(argv: list[str] | None = None) -> int:
                 model=arguments.model,
                 input_ids=input_ids,
             )
+            window: dict[str, object] | None = None
+            if source.observation:
+                # What the window holds, beside its manifest: the rolling
+                # publish reads the live round's copy to know whether the
+                # bucket has a newer frame than the one it last built to.
+                window = window_summary(raw_root / run_directory)
+                window.update({"run": run.id, "round": arguments.round, "hours": arguments.hours})
+                output_directory.mkdir(parents=True, exist_ok=True)
+                (output_directory / WINDOW_FILENAME).write_text(
+                    json.dumps(window, indent=2) + "\n", encoding="utf-8"
+                )
             report = convert_bin(
                 raw_root / run_directory,
                 output_directory,
@@ -389,6 +429,11 @@ def main(argv: list[str] | None = None) -> int:
                 model=arguments.model,
                 bundle_ids=bundle_ids,
             )
+            report["run"] = run.id
+            if arguments.round is not None:
+                report["round"] = arguments.round
+            if window is not None:
+                report["window"] = window
             print(json.dumps(report, indent=2))
         elif arguments.command == "assemble-run":
             # The parts were built from one concrete cycle; nothing here

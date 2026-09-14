@@ -11,6 +11,7 @@ export const ru: Record<MessageKey, string> = {
   metaDescription:
     "Бесплатные карты моделей GFS и ECMWF на 240 часов: температура, осадки, ветер, изобары приземного давления, карты 500/850 гПа, влажность и перенос водяного пара на высотах.",
   pageTitleLive: "Прогностическая карта: {variable} · {model} {hours}H",
+  pageTitleLiveObservation: "Карта наблюдений: {variable} · {model} T+{hours}H",
   mapAria: "Глобальная карта прогноза температуры и осадков",
   modelSwitchAria: "Прогностическая модель",
   variableSwitchAria: "Метеорологическая величина",

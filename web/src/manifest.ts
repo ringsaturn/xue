@@ -19,7 +19,11 @@ export interface ForecastModelInfo {
   /** The manifest/pointer ``product`` string. */
   product: string;
   /** Mutable live pointer filename at the data root, absent for a dataset
-   * with no live feed. */
+   * with no live feed. On an observation dataset the pointer follows a
+   * rolling window: the run is the window's first hour and moves on every
+   * hour, and the manifest it names is rebuilt every few minutes into a
+   * round of its own (`<model>.<run>/<HHMM>/manifest.json`), so what says
+   * "new" is the manifest's crc, not the run id. */
   latestFilename?: string;
   /** True when the dataset is observations rather than a forecast. It has no
    * run cycle and no lead time — its `runTime` is when the series starts and
@@ -64,13 +68,15 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
   radar: { id: "radar", label: "CMA-RADAR", product: "l3-mst-cref", observation: true, coreBundles: ["cref"] },
   // NOAA MRMS, the national radar mosaic over the contiguous United States:
   // composite reflectivity and precipitation rate every two minutes on a
-  // regular grid the encoder thins to 0.02°. Observations, published as
-  // showcase cases; a live rolling window is the next step, and the region
-  // is where the camera will go when it is opened from elsewhere.
+  // regular grid the encoder thins to 0.02°. Observations, and the one
+  // dataset that is observations *and* live: the pointer names a rolling
+  // window of the last three to four hours, rebuilt every five minutes.
+  // The region is where the camera goes when it is opened from elsewhere.
   mrms: {
     id: "mrms",
     label: "NOAA-MRMS",
     product: "conus-cref",
+    latestFilename: "latest-mrms.json",
     observation: true,
     coreBundles: ["cref"],
     region: [-130, 20, -60, 55],
@@ -82,8 +88,9 @@ export function isObservationModel(model: ForecastModelId): boolean {
   return FORECAST_MODELS[model].observation === true;
 }
 
-/** The live feeds, in model-switch order. The radar archives are not ones. */
-export const FORECAST_MODEL_IDS: readonly ForecastModelId[] = ["gfs", "sflux", "ecmwf", "hrrr"];
+/** The live feeds, in model-switch order: the four forecasts and the MRMS
+ * mosaic's rolling window. The CMA radar archive is cases only. */
+export const FORECAST_MODEL_IDS: readonly ForecastModelId[] = ["gfs", "sflux", "ecmwf", "hrrr", "mrms"];
 
 function modelForManifestString(model: unknown): ForecastModelInfo | null {
   for (const info of Object.values(FORECAST_MODELS)) {
@@ -528,18 +535,25 @@ export type ResolutionPreference = "auto" | "half" | "full";
  *   exists exactly so those clients stop paying for pixels they cannot see.
  * - Otherwise pick the smallest tier that still covers `neededGridWidth`,
  *   the horizontal grid samples the current view can actually display
- *   (world CSS width x devicePixelRatio); if no tier suffices, use full. */
+ *   across the whole world (world CSS width x devicePixelRatio); if no
+ *   tier suffices, use full. A variant's width covers only the grid's own
+ *   longitude span — 360° on a global grid, 70° on the MRMS mosaic — so
+ *   the need is scaled to `longitudeSpan` before the comparison: a
+ *   regional grid compared against the world's width would never take the
+ *   half tier, however far out the view. */
 export function pickBundleVariant(
   variants: VariantDescriptor[] | undefined,
   neededGridWidth: number,
   constrained: boolean,
   preference: ResolutionPreference = "auto",
+  longitudeSpan = 360,
 ): VariantDescriptor | null {
   if (preference === "full") return null;
   if (!variants || variants.length === 0) return null;
   const sorted = [...variants].sort((a, b) => a.width - b.width);
   if (preference === "half" || constrained) return sorted[0] ?? null;
-  return sorted.find((variant) => variant.width >= neededGridWidth) ?? null;
+  const needed = (neededGridWidth * Math.min(360, Math.max(0, longitudeSpan))) / 360;
+  return sorted.find((variant) => variant.width >= needed) ?? null;
 }
 
 // ---------------------------------------------------------------------------
