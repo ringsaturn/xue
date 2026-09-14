@@ -12,6 +12,7 @@ export const tr: Record<MessageKey, string> = {
   metaDescription:
     "240 saate kadar ücretsiz GFS ve ECMWF hava modeli haritaları: sıcaklık, yağış, rüzgar, deniz seviyesi basıncı izobarları, 500/850 hPa haritaları, üst atmosfer nemi ve nem akısı.",
   pageTitleLive: "{variable} tahmin haritası · {model} {hours}H",
+  pageTitleLiveObservation: "{variable} gözlem haritası · {model} T+{hours}H",
   mapAria: "Küresel sıcaklık ve yağış tahmin haritası",
   modelSwitchAria: "Tahmin modeli",
   variableSwitchAria: "Hava değişkeni",

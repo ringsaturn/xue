@@ -290,7 +290,8 @@ def assemble_run(
     source = source_spec(model)
     if not source.live:
         # The fan-out ends in the pointer, and a source without a live feed
-        # (MRMS, until its rolling window is published) has none to write.
+        # has none to write. (The MRMS rolling window is live but never
+        # fanned out — one round is one `build-bin --round`.)
         raise ManifestError(f"{source.manifest_model} has no live pointer to assemble a run under")
     run_directory = output_dir / f"{source.id}.{run_id}"
     part_paths = find_partial_manifests(run_directory)

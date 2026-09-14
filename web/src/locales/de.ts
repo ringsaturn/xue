@@ -9,6 +9,7 @@ export const de: Record<MessageKey, string> = {
   metaDescription:
     "Kostenlose GFS- und ECMWF-Modellkarten bis 240 Stunden: Temperatur, Niederschlag, Wind, Isobaren des Luftdrucks auf Meereshöhe, 500/850-hPa-Höhenkarten, Feuchte und Wasserdampftransport in der Höhe.",
   pageTitleLive: "{variable} – Vorhersagekarte · {model} {hours}H",
+  pageTitleLiveObservation: "{variable} – Beobachtungskarte · {model} T+{hours}H",
   mapAria: "Globale Vorhersagekarte für Temperatur und Niederschlag",
   modelSwitchAria: "Vorhersagemodell",
   variableSwitchAria: "Meteorologische Größe",

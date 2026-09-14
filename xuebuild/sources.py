@@ -19,8 +19,9 @@ of observed analyses with no cycle and an axis that is whatever times the
 observations carry. The CMA radar mosaic is one local file per event, with
 nothing to fetch and no live pointer; the NOAA MRMS mosaic is fetched from
 its bucket a window at a time (``window_hours``), one whole GRIB per
-two-minute frame, and thinned onto a coarser grid (``downsample``) before
-anything else reads it.
+two-minute frame, thinned onto a coarser grid (``downsample``) before
+anything else reads it, and — the one source that is an observation *and*
+live — published as a rolling window its pointer follows.
 ECMWF has no native rate field; its accumulated ``tp`` input is de-accumulated
 into prate by the converter. GFS sflux has only interval-averaged PRATE (the
 averaging window resets every 6 hours); the converter de-averages consecutive
@@ -100,8 +101,10 @@ class SourceSpec:
     latest_filename: str | None
     """Per-model mutable live pointer at the data root. GFS uses the bare
     ``latest.json``; the other models use ``latest-<model>.json``. None for a
-    source with no live feed — an observation dataset arrives as whole files
-    after the fact, so there is no cycle to point at."""
+    source with no live feed — the CMA mosaic arrives as whole files after
+    the fact, so there is nothing to point at. An observation source with a
+    pointer (MRMS) points at a rolling window: ``--run latest`` resolves to
+    the window ending at the bucket's newest frame."""
     steps: tuple[tuple[int, int], ...]
     """The published time axis as ``(last_hour, step_hours)`` segments: the
     series runs at ``step_hours`` up to and including ``last_hour``, then the
@@ -636,13 +639,17 @@ SOURCES: dict[str, SourceSpec] = {
     # 2026-09-13 on a convective evening at about 420 KB a frame raw and
     # half that against the previous frame, so a three-hour window is tens
     # of megabytes. Its frames are stamped a jittered forty seconds past each
-    # two-minute mark and snapped to the mark (``cadence_seconds``). No live
-    # pointer yet: a build names the window's first hour as its run.
+    # two-minute mark and snapped to the mark (``cadence_seconds``). A build
+    # names the window's first hour as its run; the live feed is a rolling
+    # window — ``--run latest`` is the window whose last hour holds the
+    # bucket's newest frame — rebuilt every few minutes into a round
+    # subdirectory of the run (``build-bin --round``), and the pointer names
+    # the round (.github/workflows/publish-mrms.yml).
     "mrms": SourceSpec(
         id="mrms",
         manifest_model="NOAA-MRMS",
         product="conus-cref",
-        latest_filename=None,
+        latest_filename="latest-mrms.json",
         steps=(),
         input_variable_ids=("cref", "prate"),
         accumulated_precipitation=False,

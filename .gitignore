@@ -13,11 +13,13 @@ web/public/data/gfs.*/
 web/public/data/ecmwf.*/
 web/public/data/sflux.*/
 web/public/data/hrrr.*/
+web/public/data/mrms.*/
 web/public/data/manifest.json
 web/public/data/latest.json
 web/public/data/latest-ecmwf.json
 web/public/data/latest-sflux.json
 web/public/data/latest-hrrr.json
+web/public/data/latest-mrms.json
 web/public/data/tc.*/
 web/public/data/latest-tc.json
 web/public/data/showcase/

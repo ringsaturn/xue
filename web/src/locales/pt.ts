@@ -9,6 +9,7 @@ export const pt: Record<MessageKey, string> = {
   metaDescription:
     "Mapas gratuitos dos modelos GFS e ECMWF até 240 horas: temperatura, precipitação, vento, isóbaras de pressão ao nível do mar, cartas de 500/850 hPa, humidade e fluxo de vapor de água em altitude.",
   pageTitleLive: "Mapa de previsão: {variable} · {model} {hours}H",
+  pageTitleLiveObservation: "Mapa de observação: {variable} · {model} T+{hours}H",
   mapAria: "Mapa global de previsão de temperatura e precipitação",
   modelSwitchAria: "Modelo de previsão",
   variableSwitchAria: "Variável meteorológica",

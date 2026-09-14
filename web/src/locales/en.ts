@@ -16,6 +16,10 @@ export const en = {
    * model with its horizon (`{hours}H` stays as the instrument reads it).
    * `· Xue` is appended by pagemeta.ts. */
   pageTitleLive: "{variable} forecast map · {model} {hours}H",
+  /** The same for a live observation dataset (the MRMS window): no
+   * forecast, and the horizon is how far back the window reaches, in the
+   * elapsed-time form the instrument reads (`T+003`). */
+  pageTitleLiveObservation: "{variable} observation map · {model} T+{hours}H",
   mapAria: "Global temperature and precipitation forecast map",
   modelSwitchAria: "Forecast model",
   variableSwitchAria: "Weather variable",

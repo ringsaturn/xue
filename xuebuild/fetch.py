@@ -6,6 +6,7 @@ import logging
 import os
 import random
 import re
+import shutil
 import tempfile
 import threading
 import time
@@ -92,6 +93,9 @@ ECMWF_FRAME_ATTEMPTS = 3
 MRMS_BASE_URL = os.environ.get("XUE_MRMS_BASE_URL", "https://noaa-mrms-pds.s3.amazonaws.com").rstrip("/")
 MRMS_DOMAIN = "CONUS"
 MRMS_FETCH_FILENAME = "fetch.json"
+# What a built window holds, written beside its manifest by `build-bin` for
+# an observation source (`xuebuild.cli`), from the fetch record below.
+WINDOW_FILENAME = "window.json"
 CONTENT_RANGE_RE = re.compile(r"^bytes (\d+)-(\d+)/(\d+|\*)$")
 USER_AGENT = "xue/0.1 (+https://registry.opendata.aws/noaa-gfs-bdp-pds/)"
 _ECMWF_PACING_LOCK = threading.Lock()
@@ -355,6 +359,20 @@ def _download_mrms_frame(
                 f"before a product joined the download set qualifies), "
                 f"enable a forced download to replace it: {output}"
             )
+    # The same objects fetched under another run's name — the previous
+    # window of the rolling feed, whose frames this one overlaps — are the
+    # same frame; the file is linked into place rather than downloaded again.
+    previous = None
+    if not force:
+        previous = _fetched_mrms_frames(destination.parent, spec).get(frozenset(item.key for item in objects.values()))
+    if previous is not None and previous != output and previous.is_file():
+        LOG.info("reusing %s as %s", previous.name, output.name)
+        destination.mkdir(parents=True, exist_ok=True)
+        try:
+            os.link(previous, output)
+        except OSError:
+            shutil.copyfile(previous, output)
+        return output
     LOG.info("downloading GRIB %s", output)
     payload = b""
     for variable_id, item in objects.items():
@@ -378,6 +396,52 @@ def _download_mrms_frame(
             output.unlink()
         raise DownloadError(f"downloaded GRIB cannot be read by GDAL: {output}: {exc}") from exc
     return output
+
+
+def window_summary(raw_dir: Path) -> dict[str, object]:
+    """The frames a fetched window holds, off its ``fetch.json``: how many,
+    and the first and newest slot. The newest slot is what a rolling
+    publish compares the bucket against."""
+    record_path = raw_dir / MRMS_FETCH_FILENAME
+    try:
+        record = json.loads(record_path.read_text(encoding="utf-8"))
+        slots = [frame["slot"] for frame in record["frames"]]
+    except (OSError, json.JSONDecodeError, KeyError, TypeError) as exc:
+        raise DownloadError(f"no fetch record at {record_path}: {exc}") from exc
+    if not slots:
+        raise DownloadError(f"the fetch record at {record_path} holds no frames")
+    return {
+        "model": record.get("model"),
+        "cadenceSeconds": record.get("cadenceSeconds"),
+        "frameCount": len(slots),
+        "firstSlot": min(slots),
+        "latestSlot": max(slots),
+    }
+
+
+def _fetched_mrms_frames(raw_root: Path, spec: SourceSpec) -> dict[frozenset[str], Path]:
+    """Every frame some run directory under ``raw_root`` has fetched, by the
+    set of bucket objects it was assembled from — what the ``fetch.json``
+    each fetch leaves records. Read once per fetch and memoized on the
+    root, since a window's frames are looked up one by one."""
+    cached = _FETCHED_MRMS_FRAMES.get(raw_root)
+    if cached is not None:
+        return cached
+    frames: dict[frozenset[str], Path] = {}
+    for record_path in sorted(raw_root.glob(f"{spec.id}.*/{MRMS_FETCH_FILENAME}")):
+        try:
+            record = json.loads(record_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        for frame in record.get("frames", []):
+            keys = frozenset(item["key"] for item in frame.get("objects", {}).values())
+            if keys and set(frame.get("objects", {})) == set(spec.input_variable_ids):
+                frames[keys] = record_path.parent / frame["path"]
+    _FETCHED_MRMS_FRAMES[raw_root] = frames
+    return frames
+
+
+_FETCHED_MRMS_FRAMES: dict[Path, dict[frozenset[str], Path]] = {}
 
 
 def _fetch_mrms_run(
@@ -427,6 +491,7 @@ def _fetch_mrms_run(
         ],
     }
     (destination / MRMS_FETCH_FILENAME).write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
+    _FETCHED_MRMS_FRAMES.pop(raw_root, None)
     return paths
 
 
@@ -447,6 +512,37 @@ def _mrms_run_is_complete(spec: SourceSpec, run: GfsRun, hours: int, *, fetch: C
         if latest is None or latest < end:
             return False
     return True
+
+
+def latest_mrms_slot(
+    spec: SourceSpec, *, now: datetime | None = None, fetch: Callable[[str], str] | None = None
+) -> datetime:
+    """The newest slot every product has an object in — the end of the live
+    window. Today's directory is listed for each product, and yesterday's
+    too when the day has just begun or a product's day is still empty, so
+    the answer is the same on either side of midnight. A feed with no
+    common slot in two days is down."""
+    if spec.cadence_seconds is None:
+        raise DownloadError(f"{spec.manifest_model} declares no observation cadence")
+    current = (now or datetime.now(UTC)).astimezone(UTC)
+    today = current.replace(hour=0, minute=0, second=0, microsecond=0)
+    products = []
+    for variable_id in spec.input_variable_ids:
+        product = VARIABLES[variable_id].mrms_product
+        if not product:
+            raise DownloadError(f"{variable_id} is not an MRMS product")
+        products.append(product)
+    per_product = [
+        {item.slot(spec.cadence_seconds) for item in list_mrms_objects(product, today, fetch=fetch)}
+        for product in products
+    ]
+    if current - today < timedelta(hours=1) or not all(per_product):
+        for slots, product in zip(per_product, products):
+            slots.update(item.slot(spec.cadence_seconds) for item in list_mrms_objects(product, today - timedelta(days=1), fetch=fetch))
+    common = set.intersection(*per_product) if per_product else set()
+    if not common:
+        raise DownloadError(f"{spec.manifest_model} has no frame of every product on the bucket today or yesterday")
+    return max(common)
 
 
 def model_object_url(run: GfsRun, forecast_hour: int, model: str) -> str:
@@ -635,14 +731,23 @@ def resolve_run(
         raise DownloadError(f"{label} is read from a local file, not fetched")
     if spec.observation:
         # A fetched observation has no published axis: a run is the window
-        # starting at the run's hour, ``hours`` long, and it is complete when
-        # the bucket has moved past its end. There is no "latest" window yet
-        # — a live rolling window is the pointer's business, and there is no
-        # pointer for it yet.
+        # starting at the run's hour, ``hours`` long. A named window is a
+        # past one and must have fully landed — the bucket has moved past its
+        # end. The latest window is the live one: the ``hours`` whole hours
+        # ending with the hour of the bucket's newest frame, so the run is
+        # that hour less ``hours - 1`` and the window's end lies ahead of
+        # the newest frame, by definition incomplete. The window advances
+        # by an hour whenever the newest frame crosses one, and each build
+        # in between is a fuller copy of the same run.
         if hours < 1:
             raise DownloadError(f"a {label} window must be at least an hour long")
         if value == "latest":
-            raise DownloadError(f"{label} has no live feed yet: name the window's first hour with --run YYYYMMDDHH")
+            if not spec.live:
+                raise DownloadError(f"{label} has no live feed: name the window's first hour with --run YYYYMMDDHH")
+            newest = latest_mrms_slot(spec, now=now)
+            start = newest.replace(minute=0, second=0, microsecond=0) - timedelta(hours=hours - 1)
+            LOG.info("%s newest frame %s, live window from %s", label, newest.isoformat(), start.isoformat())
+            return GfsRun(start)
         run = parse_run(value, model)
         if not _run_is_complete(run, hours, model, exists):
             raise DownloadError(f"{label} run {run.id} has not fully landed on the bucket through +{hours} h")
