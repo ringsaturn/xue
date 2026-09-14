@@ -40,6 +40,15 @@ import {
 import { createSheet, fillLanguageList } from "./sheet";
 import { ForecastLayer, MAX_NAMED_CONTOURS, type ContourStyle, type VectorField } from "./layer";
 import {
+  DERIVED_MAX_CODE,
+  frontPalette,
+  inflowPalette,
+  steppedPrecipitationLegend,
+  steppedPrecipitationPalette,
+  thermalFrontZone,
+  warmMoistInflow,
+} from "./composite";
+import {
   KNOWN_BUNDLE_IDS,
   FORECAST_MODEL_IDS,
   FORECAST_MODELS,
@@ -110,6 +119,7 @@ import {
   DEFAULT_VARIABLE,
   parseCameraFromHash,
   parseCaseFromSearch,
+  parseExperimentFromSearch,
   parseLinesFromSearch,
   parseModelFromSearch,
   parseParticlesFromSearch,
@@ -119,6 +129,7 @@ import {
   parseVariableFromSearch,
   searchForCaseVariable,
   searchForVariable,
+  searchWithExperiment,
   searchWithLines,
   searchWithParticles,
   searchWithTc,
@@ -200,6 +211,25 @@ import {
 // anything renders.
 applyStaticMessages();
 applyTheme();
+
+/** The experimental synoptic composite (`?x=true`, urlstate.ts): the
+ * precipitation on a stepped key over chart paper, the sea level pressure
+ * lines and their H/L marks over it, the particles run by the 850 hPa
+ * vapour flux instead of the fill's own vector, and two fields the frontend
+ * computes from several bundles at once (composite.ts) — the warm moist
+ * inflow and the frontal zone. Opt-in and unremembered: it is a look at how
+ * far the published data goes, not a product. */
+const experiment = parseExperimentFromSearch(window.location.search);
+const experimentEnabled = experiment.enabled;
+/** Which derived layers are drawn; the rail's two toggle tiles flip them. */
+const derivedShown: Record<"inflow" | "front", boolean> = { inflow: experiment.inflow, front: experiment.front };
+/** What the experiment opens when the URL names nothing else. */
+const EXPERIMENT_FILL: ForecastBundleId = "prate";
+const EXPERIMENT_LINES: PressureBundleId = "prmsl";
+/** The bundles the experiment's derived fields are computed from: the
+ * vapour flux pair (whose particles also run over the fill) and the θe. */
+const EXPERIMENT_FLOW_ID: ForecastBundleId = "qflux850";
+const EXPERIMENT_WARMTH_ID: ForecastBundleId = "thetae850";
 
 /** Playback pacing (the ladder and the per-frame dwell live in playback.ts).
  * The rate is user-adjustable from the transport's speed button because a
@@ -630,8 +660,15 @@ function basemapThemes(): Record<string, BasemapTones> {
 function currentBasemapTheme(): BasemapTones {
   const themes = basemapThemes();
   const id = document.body.dataset.variable;
+  if (experimentEnabled && !isDark && id === "prate") return EXPERIMENT_GROUND;
   return themes[id ?? "tmp2m"] ?? themes.tmp2m!;
 }
+
+/** The experiment's chart paper under the stepped precipitation: white
+ * land and a teal sea, the ground a broadcast surface chart draws on, where
+ * an opaque key needs no slate to read against. Light theme only; the dark
+ * theme keeps the precipitation slate. */
+const EXPERIMENT_GROUND: BasemapTones = { ocean: "#9dccd6", land: "#fbfbf7", background: "#9dccd6" };
 
 /** Relative luminance of a `#rrggbb` tone. */
 function luminance(color: string): number {
@@ -915,6 +952,9 @@ const legend = required<HTMLElement>("legend");
 const legendBar = legend.querySelector<HTMLElement>(".legend-bar")!;
 const legendUnit = required<HTMLElement>("legend-unit");
 const legendLabels = required<HTMLElement>("legend-labels");
+const legendDerived = required<HTMLElement>("legend-derived");
+const legendInflow = required<HTMLElement>("legend-inflow");
+const legendFront = required<HTMLElement>("legend-front");
 const trackHorizon = required<HTMLElement>("track-horizon");
 const frameTooltip = required<HTMLOutputElement>("frame-tooltip");
 const forecastDays = required<HTMLElement>("forecast-days");
@@ -939,6 +979,10 @@ const variableRail = document.querySelector<HTMLElement>(".variable-rail");
  * nobody can see. */
 function variableButtons(): HTMLButtonElement[] {
   return variableRail ? [...variableRail.querySelectorAll<HTMLButtonElement>("button[data-variable]")] : [];
+}
+/** The experiment's toggle tiles for its derived layers. */
+function derivedButtons(): HTMLButtonElement[] {
+  return variableRail ? [...variableRail.querySelectorAll<HTMLButtonElement>("button[data-derived]")] : [];
 }
 const modelButtons = [...document.querySelectorAll<HTMLButtonElement>("button[data-model]")];
 const modelEyebrow = required<HTMLElement>("model-eyebrow");
@@ -1197,6 +1241,7 @@ function slotSessions(): VariableSession[] {
   const list: VariableSession[] = [];
   if (activeSession) list.push(activeSession);
   for (const slot of overlaySlots()) list.push(slot.session!);
+  for (const session of compositeSessions()) list.push(session);
   return list;
 }
 
@@ -1205,6 +1250,68 @@ function slotSessions(): VariableSession[] {
 let windLayer: WindParticleLayer | null = null;
 let windLayerAdded = false;
 let windLayerGridSource: BundleMetadata | null = null;
+
+/** One field the experiment computes: its layer, the grid it was last
+ * configured for, and the input planes the plane on screen was built from
+ * (their joined cache keys), so a repeat select never recomputes. */
+interface DerivedLayer {
+  id: "inflow" | "front";
+  layer: ForecastLayer;
+  gridSource: BundleMetadata | null;
+  builtFrom: string | null;
+}
+
+/** The experiment's state: the two input sessions, opened beside the
+ * composition's own like overlays, the derived layers, and the cache keys
+ * they are waiting on or showing. Null unless `?x=true`. */
+interface Composite {
+  flow: VariableSession | null;
+  warmth: VariableSession | null;
+  layers: Record<DerivedLayer["id"], DerivedLayer>;
+  /** Input planes not decoded yet for the frame on screen: a decode landing
+   * on one of these retries the composite. */
+  wantedKeys: Set<string>;
+  /** Input planes the derived fields on screen were built from — protected
+   * from eviction like a displayed plane. */
+  shownKeys: string[];
+}
+
+function makeDerivedLayer(id: DerivedLayer["id"]): DerivedLayer {
+  return {
+    id,
+    layer: new ForecastLayer((message) => showError(message), `forecast-derived-${id}`),
+    gridSource: null,
+    builtFrom: null,
+  };
+}
+
+const composite: Composite | null = experimentEnabled
+  ? {
+      flow: null,
+      warmth: null,
+      layers: { inflow: makeDerivedLayer("inflow"), front: makeDerivedLayer("front") },
+      wantedKeys: new Set(),
+      shownKeys: [],
+    }
+  : null;
+
+/** Whether a session feeds the experiment's derived fields. Such a session
+ * always decodes whole planes: the fields are computed over the grid, and
+ * the particles the flow runs respawn anywhere on it. */
+function isCompositeInput(session: VariableSession): boolean {
+  return composite !== null && (session === composite.flow || session === composite.warmth);
+}
+
+/** The experiment's input sessions that are not otherwise on screen. */
+function compositeSessions(): VariableSession[] {
+  if (!composite) return [];
+  const shown = new Set<VariableSession>();
+  if (activeSession) shown.add(activeSession);
+  for (const slot of overlaySlots()) shown.add(slot.session!);
+  return [composite.flow, composite.warmth].filter(
+    (session): session is VariableSession => session !== null && !shown.has(session),
+  );
+}
 /** Shareable URL entry (e.g. /?model=ecmwf&type=wind) picks the initial model
  * and layer; a missing or unrecognized param falls back to the default. */
 let selectedModelId: ForecastModelId = parseModelFromSearch(window.location.search);
@@ -1214,9 +1321,12 @@ const requestedVariableId: ForecastBundleId | null = parseVariableFromSearch(win
 /** Contour lines the URL asked for over the filled field, or none. */
 const requestedLines: PressureBundleId | null = parseLinesFromSearch(window.location.search);
 /** The primary bundle: the fill's, or the lines' when nothing is filled. */
-let selectedVariableId: ForecastBundleId = requestedVariableId ?? DEFAULT_VARIABLE;
+let selectedVariableId: ForecastBundleId = requestedVariableId ?? (experimentEnabled ? EXPERIMENT_FILL : DEFAULT_VARIABLE);
 /** The composition on screen, or being switched to. */
-let composition: ViewComposition = compositionForPrimary(selectedVariableId, requestedLines);
+let composition: ViewComposition = compositionForPrimary(
+  selectedVariableId,
+  requestedLines ?? (experimentEnabled && requestedVariableId === null ? EXPERIMENT_LINES : null),
+);
 
 /** The composition whose primary is `primary`: a pressure surface is the
  * lines alone, anything else is the fill with `lines` kept over it. */
@@ -1348,6 +1458,13 @@ let particlesChosen = requestedParticles !== null;
  * particles are there for direction and pace, not for a value. */
 function particleInk(): readonly [number, number, number, number] {
   return isDark ? [1, 1, 1, 0.45] : [0.11, 0.1, 0.09, 0.4];
+}
+
+/** The ink of the experiment's flow particles over a scalar fill: the
+ * inflow tint's own red-brown, heavier than the wind's grey so the stream
+ * reads over the stepped rain and the chart paper. */
+function experimentFlowInk(): readonly [number, number, number, number] {
+  return isDark ? [1, 0.72, 0.6, 0.7] : [0.55, 0.16, 0.08, 0.85];
 }
 
 function required<T extends HTMLElement>(id: string): T {
@@ -2737,6 +2854,7 @@ function sessionViewportTiles(session: VariableSession): TileRect[] | null {
   if (!session.tiles || !session.streaming) return null;
   if (session.resident && session.residentScope === "bundle") return null;
   if (session.vector && particlesEnabled) return null;
+  if (isCompositeInput(session)) return null;
   const bounds = map.getBounds();
   return viewportTileRects(session.metadata, session.tiles, {
     west: bounds.getWest(),
@@ -2913,6 +3031,7 @@ function trySelectFrame(index: number): boolean {
     // asked for: a line chart of one hour over a field of another would be
     // the wrong picture, whichever of the two were ahead.
     for (const overlay of overlaySlots()) trySelectOverlayFrame(overlay, index);
+    trySelectComposite(index);
     prefetchNext(index);
     return true;
   }
@@ -2994,6 +3113,7 @@ function prefetchNext(index: number): void {
       if (!cachedFrame(key, session)) requestDecode(session, variable, hour);
     }
     for (const overlay of overlaySlots()) requestOverlayDecode(overlay, frame);
+    for (const input of compositeSessions()) requestCompositeDecode(input, frame);
   }
 }
 
@@ -3076,6 +3196,7 @@ function handleDecodedFrame(
   for (const overlay of overlaySlots()) {
     if (overlay.shownKey !== null) displayedKeys.add(overlay.shownKey);
   }
+  for (const shown of composite?.shownKeys ?? []) displayedKeys.add(shown);
   while (planeCacheBytes > planeCacheBudgetBytes() && planeCache.size > 2) {
     const oldest = planeCache.keys().next().value;
     if (oldest === undefined || oldest === key) break;
@@ -3118,6 +3239,7 @@ function handleDecodedFrame(
   for (const overlay of overlaySlots()) {
     if (overlay.wantedKey === key && activeFrameIndex !== null) trySelectOverlayFrame(overlay, activeFrameIndex);
   }
+  if (composite?.wantedKeys.has(key) && activeFrameIndex !== null) trySelectComposite(activeFrameIndex);
 }
 
 function updateTicks(selected: number): void {
@@ -3426,7 +3548,7 @@ const DENSE_RAIL_TILES = 10;
 
 function syncRailDensity(): void {
   if (!variableRail) return;
-  const visible = variableButtons().filter((button) => !button.hidden).length;
+  const visible = [...variableButtons(), ...derivedButtons()].filter((button) => !button.hidden).length;
   if (visible > DENSE_RAIL_TILES) variableRail.dataset.dense = "";
   else delete variableRail.dataset.dense;
   syncRailFade();
@@ -3566,6 +3688,16 @@ function updateVariablePresentation(session: VariableSession): void {
     return span;
   }));
   legendBar.style.background = legendGradientFor(session);
+  syncDerivedLegend();
+  if (experimentEnabled && session.chartId === "prate") {
+    const key = steppedPrecipitationLegend();
+    legendBar.style.background = key.gradient;
+    legendLabels.replaceChildren(...key.labels.map((label) => {
+      const span = document.createElement("span");
+      span.textContent = label;
+      return span;
+    }));
+  }
   // Each family remembers the member last on screen, so its rail tile
   // reopens it.
   const lines = composition.lines;
@@ -3578,7 +3710,7 @@ function updateVariablePresentation(session: VariableSession): void {
   renderLevelRow();
   // The particle overlay belongs to the vector fields, so its switch appears
   // with them.
-  particlesToggle.hidden = !session.vector;
+  particlesToggle.hidden = !session.vector && !compositeFlowPublished();
   for (const button of variableButtons()) {
     const family = button.dataset.family as IsobaricFamily | undefined;
     const pressed = button.dataset.group === "pressure"
@@ -3669,7 +3801,12 @@ function syncUrl(): void {
   // Only a chosen, switched-off overlay is written; on is the default and
   // says nothing, so an ordinary shared link stays as short as it was.
   const withParticles = searchWithParticles(withLines, particlesEnabled || !particlesChosen);
-  const search = searchWithTc(withParticles, {
+  const withExperiment = searchWithExperiment(withParticles, {
+    enabled: experimentEnabled,
+    inflow: derivedShown.inflow,
+    front: derivedShown.front,
+  });
+  const search = searchWithTc(withExperiment, {
     storm: tcSelected,
     off: tcHidden,
     agencies: tcAgencies ? [...tcAgencies] : null,
@@ -4646,6 +4783,14 @@ function renderTcSheet(): void {
 function ensureLayers(): void {
   if (layersAdded) return;
   map.addLayer(slots.fill.layer, FORECAST_ANCHOR_LAYER);
+  // The derived fields sit over the fill and under the lines: a tint over
+  // the rain, the isobars over both.
+  if (composite) {
+    for (const derived of Object.values(composite.layers)) {
+      derived.layer.setVisible(false);
+      map.addLayer(derived.layer, FORECAST_ANCHOR_LAYER);
+    }
+  }
   map.addLayer(slots.lines.layer, FORECAST_ANCHOR_LAYER);
   layersAdded = true;
 }
@@ -4679,7 +4824,11 @@ function configureSlotLayer(slot: RasterSlot, session: VariableSession, overlay:
     layer.setVisible(field !== null);
   } else {
     layer.setVectorField(null);
-    layer.setPalette(buildPalette(session.variable, session.identity));
+    layer.setPalette(
+      experimentEnabled && session.chartId === "prate"
+        ? steppedPrecipitationPalette(session.variable)
+        : buildPalette(session.variable, session.identity),
+    );
     layer.setContours(contourStyleFor(session.variable, session.identity, overlay));
     // An overlay shows nothing until its first plane lands: the slot may
     // still hold another surface's plane, and lines of the wrong level over
@@ -4751,7 +4900,19 @@ function setParticlesEnabled(next: boolean): void {
   }
   syncUrl();
   const session = activeSession;
-  if (!session || !session.vector) return;
+  if (!session) return;
+  if (!session.vector) {
+    // Over a scalar fill the particles are the experiment's flow, when it
+    // has one: a visibility flip, and the frame's planes handed over again.
+    if (!composite?.flow) return;
+    if (next) {
+      ensureWindLayer();
+      ensureWindGrid(composite.flow);
+    }
+    windLayer?.setVisible(next);
+    if (next && activeFrameIndex !== null) trySelectComposite(activeFrameIndex);
+    return;
+  }
   if (next) {
     ensureWindLayer();
     ensureWindGrid(session);
@@ -4881,9 +5042,12 @@ function applyVariable(session: VariableSession): void {
   if (wind && particlesEnabled) {
     ensureWindLayer();
     ensureWindGrid(session);
+    // Back from the experiment's flow, if it was on: the wind's own ink.
+    windLayer?.setInk(particleInk());
   }
   windLayer?.setVisible(wind && particlesEnabled);
   applyOverlays();
+  applyComposite();
   updateVariablePresentation(session);
   syncUrl();
   updateCacheReadout();
@@ -4957,6 +5121,227 @@ function attachOverlay(slot: RasterSlot, session: VariableSession): void {
   sendPrefetchWindow(index);
   if (activeFrameIndex !== null) trySelectOverlayFrame(slot, activeFrameIndex);
   else requestOverlayDecode(slot, index);
+}
+
+/** The experiment's key under the colour scale: a row per derived layer
+ * the run can feed — the frontal zone needs the θe, the inflow both
+ * inputs — and nothing at all outside the experiment. */
+function syncDerivedLegend(): void {
+  const warmth = experimentEnabled && manifest !== null && hasBundle(manifest, EXPERIMENT_WARMTH_ID);
+  const flow = warmth && compositeFlowPublished();
+  legendInflow.hidden = !(flow && derivedShown.inflow);
+  legendFront.hidden = !(warmth && derivedShown.front);
+  legendDerived.hidden = legendInflow.hidden && legendFront.hidden;
+}
+
+/** The rail's derived-layer tiles: shown under the experiment on a run that
+ * ships their inputs, pressed while the layer is drawn. */
+function syncDerivedTiles(run: ForecastManifest): void {
+  const warmth = experimentEnabled && hasBundle(run, EXPERIMENT_WARMTH_ID);
+  const flow = warmth && hasBundle(run, EXPERIMENT_FLOW_ID);
+  for (const button of derivedButtons()) {
+    const id = button.dataset.derived as "inflow" | "front";
+    button.hidden = id === "inflow" ? !flow : !warmth;
+    button.setAttribute("aria-pressed", String(derivedShown[id]));
+  }
+}
+
+/** Flip one derived layer: off hides it at once, on shows it from the
+ * frame on screen (computing it if its inputs are decoded). */
+function setDerivedShown(id: "inflow" | "front", shown: boolean): void {
+  if (derivedShown[id] === shown) return;
+  derivedShown[id] = shown;
+  for (const button of derivedButtons()) {
+    if (button.dataset.derived === id) button.setAttribute("aria-pressed", String(shown));
+  }
+  syncDerivedLegend();
+  syncUrl();
+  if (!composite) return;
+  if (!shown) composite.layers[id].layer.setVisible(false);
+  else if (activeFrameIndex !== null) trySelectComposite(activeFrameIndex);
+}
+
+/** Whether the run on screen ships the experiment's flow bundle — the
+ * particle switch shows over a scalar fill when it does. */
+function compositeFlowPublished(): boolean {
+  return composite !== null && manifest !== null && hasBundle(manifest, EXPERIMENT_FLOW_ID);
+}
+
+/** Open the experiment's input sessions beside the composition — after the
+ * primary, never blocking it, at the overlay tier — and hand each the frame
+ * on screen as it lands. A run that does not ship an input leaves that
+ * field off: the frontal zone needs the θe alone, the inflow both. */
+function applyComposite(): void {
+  if (!composite || !manifest) return;
+  const sequence = initializeSequence;
+  const inputs: Array<["flow" | "warmth", ForecastBundleId]> = [
+    ["flow", EXPERIMENT_FLOW_ID],
+    ["warmth", EXPERIMENT_WARMTH_ID],
+  ];
+  for (const [role, id] of inputs) {
+    if (composite[role]?.id === id || !hasBundle(manifest, id)) continue;
+    loadVariable(id, sequence, "overlay")
+      .then((session) => {
+        if (sequence !== initializeSequence || !composite) return;
+        composite[role] = session;
+        refreshViewportTiles();
+        const index = activeFrameIndex ?? requestedFrameIndex ?? Number(slider.value);
+        sendPrefetchWindow(index);
+        if (activeFrameIndex !== null) trySelectComposite(activeFrameIndex);
+        else requestCompositeDecode(session, index);
+        if (activeSession) particlesToggle.hidden = !activeSession.vector && !compositeFlowPublished();
+      })
+      .catch((error: unknown) => {
+        if (sequence !== initializeSequence) return;
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        console.warn(`composite input ${id} unavailable`, error);
+      });
+  }
+}
+
+/** Forget the experiment's sessions and blank its layers: a new dataset. */
+function resetComposite(): void {
+  if (!composite) return;
+  composite.flow = null;
+  composite.warmth = null;
+  composite.wantedKeys.clear();
+  composite.shownKeys = [];
+  for (const derived of Object.values(composite.layers)) {
+    derived.layer.setVisible(false);
+    derived.gridSource = null;
+    derived.builtFrom = null;
+  }
+}
+
+/** Ask an input session for its whole planes at a primary frame. */
+function requestCompositeDecode(session: VariableSession, index: number): void {
+  const offset = sessionOffsetForLead(session, frameLeadSeconds(index));
+  if (offset === null) return;
+  for (const variable of session.variables) {
+    const key = cacheKey(session, variable, offset);
+    const frame = planeCache.get(key);
+    if (!frame || frame.tiles !== null) requestDecode(session, variable, offset);
+  }
+}
+
+/** An input session's whole planes for a lead time, straight out of the
+ * cache, or null when any is missing — those are then asked for and noted,
+ * so their arrival retries the composite. A lead the session's axis lacks is
+ * null too, and nothing is asked. */
+function compositeInputPlanes(session: VariableSession, lead: number): { keys: string[]; frames: DecodedFrame[] } | null {
+  if (!composite) return null;
+  const offset = sessionOffsetForLead(session, lead);
+  if (offset === null) return null;
+  const keys = session.variables.map((variable) => cacheKey(session, variable, offset));
+  const frames: DecodedFrame[] = [];
+  let complete = true;
+  for (const [position, key] of keys.entries()) {
+    const frame = planeCache.get(key);
+    if (frame && frame.tiles === null) {
+      frames.push(frame);
+      continue;
+    }
+    complete = false;
+    composite.wantedKeys.add(key);
+    requestDecode(session, session.variables[position]!, offset);
+  }
+  if (!complete) return null;
+  for (const [position, key] of keys.entries()) {
+    planeCache.delete(key);
+    planeCache.set(key, frames[position]!);
+  }
+  return { keys, frames };
+}
+
+/** Put a derived plane on its layer, configured for the grid it was
+ * computed on, unless the plane on screen was built from these very
+ * inputs already. */
+function showDerived(derived: DerivedLayer, source: VariableSession, builtFrom: string, compute: () => Uint8Array): void {
+  if (derived.builtFrom === builtFrom) {
+    derived.layer.setVisible(true);
+    return;
+  }
+  if (derived.gridSource !== source.metadata) {
+    derived.layer.configureGrid(source.metadata);
+    derived.layer.setDomain(modelDomain());
+    derived.layer.setContours(derivedContourStyle(derived.id));
+    derived.layer.setVectorField(null);
+    derived.layer.setPalette(derived.id === "inflow" ? inflowPalette() : frontPalette());
+    derived.gridSource = source.metadata;
+  }
+  derived.layer.setFrame(compute());
+  derived.layer.setVisible(true);
+  derived.builtFrom = builtFrom;
+}
+
+/** A derived layer draws as an outlined region, not a coat: the palette
+ * fill is turned down to a wash so the rain underneath still reads, and
+ * the shader's named contours trace the index at two strengths in the
+ * layer's own ink — where the inflow and the rain band overlap, both are
+ * seen, the way a chart's translucent arrow sits over its shading.
+ *
+ * The plane's codes are the index itself (0..DERIVED_MAX_CODE), decoded
+ * here as 50 + index so the regular contour family, which the shader
+ * always draws at multiples of the interval, never lands: an interval of
+ * 100 has no multiple between 50 and 51, and the zero contour that would
+ * otherwise ring every faint patch is out of range. */
+function derivedContourStyle(id: DerivedLayer["id"]): ContourStyle {
+  const inflow = id === "inflow";
+  return {
+    offset: DERIVED_DECODE_OFFSET,
+    scale: 1 / DERIVED_MAX_CODE,
+    interval: 100,
+    emphasisInterval: 0,
+    values: (inflow ? [0.3, 0.65] : [0.4]).map((index) => DERIVED_DECODE_OFFSET + index),
+    lineWidth: 0.9,
+    emphasisWidth: 0.9,
+    lineColor: inflow ? [0.8, 0.27, 0.15, 0.95] : [0.45, 0.17, 0.59, 0.95],
+    fillAlpha: inflow ? 0.4 : 0.45,
+    smoothing: 0,
+  };
+}
+const DERIVED_DECODE_OFFSET = 50;
+
+/** Compute and show the experiment's fields for the primary frame at
+ * `index`, and run the particles off the flow, from whatever input planes
+ * are decoded: a field whose inputs are not all there yet keeps its last
+ * plane up, the way an overlay does, and a field whose input the run does
+ * not ship stays off. The fill's own vector, when the fill is one, keeps
+ * the particles; the flow only drives them over a scalar. */
+function trySelectComposite(index: number): void {
+  if (!composite || !layersAdded) return;
+  const lead = frameLeadSeconds(index);
+  const flow = composite.flow ? compositeInputPlanes(composite.flow, lead) : null;
+  const warmth = composite.warmth ? compositeInputPlanes(composite.warmth, lead) : null;
+  composite.shownKeys = [...(flow?.keys ?? []), ...(warmth?.keys ?? [])];
+  for (const key of composite.shownKeys) composite.wantedKeys.delete(key);
+  if (warmth && composite.warmth && derivedShown.front) {
+    const session = composite.warmth;
+    const plane = warmth.frames[0]!.plane;
+    showDerived(composite.layers.front, session, warmth.keys.join("|"), () =>
+      thermalFrontZone({ grid: geoGrid(session.metadata), variable: session.variable, plane }),
+    );
+  }
+  if (flow && warmth && composite.flow && composite.warmth && derivedShown.inflow) {
+    const flowSession = composite.flow;
+    const warmthSession = composite.warmth;
+    const [u, v] = flowSession.variables;
+    if (u && v && flow.frames.length >= 2) {
+      showDerived(composite.layers.inflow, flowSession, [...flow.keys, ...warmth.keys].join("|"), () =>
+        warmMoistInflow(
+          { grid: geoGrid(flowSession.metadata), u, v, uPlane: flow.frames[0]!.plane, vPlane: flow.frames[1]!.plane },
+          { grid: geoGrid(warmthSession.metadata), variable: warmthSession.variable, plane: warmth.frames[0]!.plane },
+        ),
+      );
+    }
+  }
+  if (flow && composite.flow && flow.frames.length >= 2 && particlesEnabled && activeSession && !activeSession.vector) {
+    ensureWindLayer();
+    ensureWindGrid(composite.flow);
+    windLayer!.setInk(experimentFlowInk());
+    windLayer!.setWindPlanes(flow.frames[0]!.plane, flow.frames[1]!.plane);
+    windLayer!.setVisible(true);
+  }
 }
 
 /** Switch to a composition: load its primary if it is not the one on screen
@@ -5056,6 +5441,7 @@ async function initialize({ frame = false }: { frame?: boolean } = {}): Promise<
   }
   windLayerGridSource = null;
   windLayer?.setVisible(false);
+  resetComposite();
   particlesToggle.hidden = true;
   clearLabels();
   activeSession = null;
@@ -5143,6 +5529,7 @@ async function initialize({ frame = false }: { frame?: boolean } = {}): Promise<
             : !hasBundle(loadedManifest, bundleId);
     }
     syncUnknownRailTiles(loadedManifest);
+    syncDerivedTiles(loadedManifest);
     syncRailDensity();
     // A slot this run does not ship empties; a case names its own default
     // for when that leaves nothing, and a live run always carries the core
@@ -5216,6 +5603,12 @@ for (const button of variableButtons()) {
     }
   });
 }
+for (const button of derivedButtons()) {
+  button.addEventListener("click", () => {
+    const id = button.dataset.derived as "inflow" | "front";
+    setDerivedShown(id, !derivedShown[id]);
+  });
+}
 for (const button of modelButtons) {
   button.addEventListener("click", () => {
     const modelId = button.dataset.model;
@@ -5240,7 +5633,7 @@ retryButton.addEventListener("click", () => void initialize());
  * its decoded frames, its playhead — is untouched. */
 function applyAppearance(): void {
   syncBasemapStyle();
-  windLayer?.setInk(particleInk());
+  windLayer?.setInk(activeSession && !activeSession.vector && composite?.flow ? experimentFlowInk() : particleInk());
   for (const slot of [slots.fill, slots.lines]) {
     const session = slot.session;
     if (!session || session.vector) continue;

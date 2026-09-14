@@ -585,6 +585,13 @@ export function decodeValue(variable: BundleVariable, code: number): number | nu
     : decodeLog(variable.quantization, code);
 }
 
+/** The precipitation ramp's colour at one rate in mm/h — the same stops
+ * the continuous palette is built from, so a stepped key that samples this
+ * per band is the viewer's own ramp banded, not another palette. */
+export function precipitationColor(rate: number): [number, number, number, number] {
+  return interpolate(PRECIPITATION_STOPS, rate);
+}
+
 /** Build the 256x1 RGBA palette texture for one variable's code space.
  *
  * `identity` is what the field is, from its parameter block; omit it and the

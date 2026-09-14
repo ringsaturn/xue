@@ -214,6 +214,49 @@ export function parseUseH264FromSearch(search: string): boolean {
   return normalized === "true" || normalized === "1";
 }
 
+/** The experimental synoptic composite (`?x=`): whether it is on at all
+ * — the stepped precipitation key on chart paper, the sea level pressure
+ * lines, the particles run by the 850 hPa vapour flux — and which of the
+ * two fields the frontend computes from several bundles (composite.ts)
+ * are drawn. Nothing is remembered between sessions. */
+export interface ExperimentState {
+  enabled: boolean;
+  inflow: boolean;
+  front: boolean;
+}
+
+export const EXPERIMENT_OFF: ExperimentState = { enabled: false, inflow: false, front: false };
+
+/** `?x=true` (or any on-spelling) draws both derived fields; `?x=inflow`,
+ * `?x=front` or `?x=inflow,front` names the ones to draw; `?x=none` is the
+ * experiment with neither. Anything else — no param included — is off. */
+export function parseExperimentFromSearch(search: string): ExperimentState {
+  const value = new URLSearchParams(search).get("x");
+  if (value === null) return EXPERIMENT_OFF;
+  const normalized = value.trim().toLowerCase();
+  const on = SWITCH_ALIASES[normalized];
+  if (on === true) return { enabled: true, inflow: true, front: true };
+  if (on === false) return EXPERIMENT_OFF;
+  if (normalized === "none") return { enabled: true, inflow: false, front: false };
+  const parts = normalized.split(",").map((part) => part.trim());
+  const inflow = parts.includes("inflow");
+  const front = parts.includes("front");
+  return inflow || front ? { enabled: true, inflow, front } : EXPERIMENT_OFF;
+}
+
+/** The given query string carrying the experiment: `x=true` with both
+ * fields, the named field alone, `x=none` with neither, and nothing at all
+ * when the experiment is off. */
+export function searchWithExperiment(search: string, state: ExperimentState): string {
+  const params = new URLSearchParams(search);
+  if (!state.enabled) params.delete("x");
+  else if (state.inflow && state.front) params.set("x", "true");
+  else if (state.inflow) params.set("x", "inflow");
+  else if (state.front) params.set("x", "front");
+  else params.set("x", "none");
+  return `?${params.toString()}`;
+}
+
 /** Accepted spellings of an on/off switch in the query string, so a
  * hand-written link works however the viewer spells it. */
 const SWITCH_ALIASES: Record<string, boolean> = {

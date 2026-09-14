@@ -314,6 +314,12 @@
             <span>128</span><span>40</span><span>20</span><span>5</span><span>1</span><span>0</span>
           </div>
         </div>
+        <!-- The experimental composite's derived layers (?x=true), each a
+             swatch in its own tint beside its name; hidden otherwise. -->
+        <ul id="legend-derived" class="legend-derived" hidden>
+          <li id="legend-inflow" hidden><span class="legend-swatch legend-swatch-inflow" aria-hidden="true"></span><span data-i18n="legendInflow">Warm moist inflow</span></li>
+          <li id="legend-front" hidden><span class="legend-swatch legend-swatch-front" aria-hidden="true"></span><span data-i18n="legendFront">Frontal zone (θe gradient)</span></li>
+        </ul>
       </aside>
 
       <!-- One tile per layer or family: an icon over the layer's glyph, the
@@ -396,6 +402,21 @@
           <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="13" rx="3" ry="2" /><ellipse cx="12" cy="13" rx="6.5" ry="4.6" /><path d="M2.5 17.5C2.5 10.6 6.8 5.5 12 5.5s9.5 5.1 9.5 12" /></svg>
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphPressure">P</b>
           <span class="rail-name"><span>PRESSURE</span> <small data-i18n="varPressureField">FIELD</small></span>
+        </button>
+        <!-- The experimental composite's derived layers (?x=): toggles, not
+             fills — each draws over whatever the fill is. A curling stream
+             for the warm moist inflow, a line with the front's bumps for
+             the frontal zone. Shown only under the experiment, on a run that
+             ships the inputs (main.ts::syncDerivedTiles). -->
+        <button type="button" data-derived="inflow" data-i18n-tip="legendInflow" aria-pressed="false" hidden>
+          <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19c3-6 6-9 12-10" /><path d="M12.5 7.5L17 9l-1.5 4.5" /><path d="M4 13c2-3 4-4.5 7-5.5" /></svg>
+          <b class="rail-glyph" aria-hidden="true" data-i18n="glyphInflow">M</b>
+          <span class="rail-name"><span>QFLUX·θe</span> <small data-i18n="varInflow">INFLOW</small></span>
+        </button>
+        <button type="button" data-derived="front" data-i18n-tip="legendFront" aria-pressed="false" hidden>
+          <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 15c3-2 5-4 8-4s5 2 10 0" /><path d="M7 12.5a2 2 0 0 1 4 0" /><path d="M14 11.5a2 2 0 0 1 4 0" /></svg>
+          <b class="rail-glyph" aria-hidden="true" data-i18n="glyphFront">F</b>
+          <span class="rail-name"><span>∇θe</span> <small data-i18n="varFront">FRONT</small></span>
         </button>
         <!-- The remaining surface diagnostics. -->
         <button type="button" data-variable="vis" data-i18n-tip="varLabelVis" aria-pressed="false" hidden>

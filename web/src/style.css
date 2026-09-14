@@ -786,6 +786,51 @@ body.is-pressure .legend {
   text-shadow: var(--label-shadow);
 }
 
+/* The experimental composite's key: the two derived layers named beside
+   their tints, under the fill's bar, in the same ink as the bar's labels.
+   Left-aligned so the swatches line up under the bar. */
+.legend-derived {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 4px 0 0;
+  padding: 0;
+  align-self: flex-start;
+  list-style: none;
+  color: var(--map-ink);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  text-shadow: var(--label-shadow);
+}
+
+.legend-derived li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.legend-swatch {
+  width: 10px;
+  height: 10px;
+  border: 1px solid var(--map-ink-muted);
+  border-radius: 3px;
+}
+
+/* An outlined region with a wash inside, like the layers themselves:
+   matches derivedContourStyle in main.ts and the palettes in composite.ts. */
+.legend-swatch-inflow {
+  border-color: rgb(204, 69, 38);
+  background: rgba(205, 68, 38, 0.3);
+}
+
+.legend-swatch-front {
+  border-color: rgb(115, 43, 150);
+  background: rgba(116, 44, 150, 0.32);
+}
+
 /* ---------------------------------------------------------------------------
    Layer rail, on the right edge. It shares one 44px column with the round
    controls above it and the zoom tile between them: same width, same right

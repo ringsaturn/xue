@@ -42,6 +42,9 @@ export const en = {
   varFeelsLike: "2M",
   varOmega: "VERT",
   varThetaE: "EQUIV",
+  // The experiment's derived layers' captions: one word under the code.
+  varInflow: "INFLOW",
+  varFront: "FRONT",
   /** The ocean set's tiles: the skin temperature is read as the SST it is
    * over water but the gloss says what the field is, sea ice heads with
    * its cover, the waves with their significant height. */
@@ -88,6 +91,9 @@ export const en = {
   glyphAptmp2m: "A",
   glyphVvel: "ω",
   glyphThetae: "θ",
+  // The experiment's two derived layers (`?x=`): M for moist, F for front.
+  glyphInflow: "M",
+  glyphFront: "F",
   // S for the sea surface, I for ice, H for Hs — the significant wave
   // height's own symbol (W is the wind's).
   glyphTmpsfc: "S",
@@ -216,6 +222,11 @@ export const en = {
   decodeFailed: "Decode failed",
   frameDecodeFailed: "Frame decode failed: {message}",
   legendAria: "{label} color scale",
+  // The experimental composite's key (`?x=true`): one row per derived
+  // layer beside its swatch, under the fill's bar. Short — a noun phrase
+  // that fits on one line at 10px mono next to a 10px square.
+  legendInflow: "Warm moist inflow",
+  legendFront: "Frontal zone (θe gradient)",
   varLabelTmp2m: "2 m temperature",
   varLabelPrate: "Precipitation rate",
   varLabelDswrf: "Solar radiation",

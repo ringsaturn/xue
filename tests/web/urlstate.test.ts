@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  EXPERIMENT_OFF,
   parseCameraFromHash,
+  parseExperimentFromSearch,
   parseLinesFromSearch,
   parseModelFromSearch,
   parseParticlesFromSearch,
@@ -9,6 +11,7 @@ import {
   parseUseH264FromSearch,
   parseVariableFromSearch,
   searchForVariable,
+  searchWithExperiment,
   searchWithLines,
   searchWithParticles,
 } from "../../web/src/urlstate";
@@ -134,6 +137,44 @@ describe("searchForVariable", () => {
     expect(parseModelFromSearch(searchForVariable("prate", "", "ecmwf"))).toBe("ecmwf");
     expect(searchForVariable("dswrf", "", "sflux")).toBe("?model=sflux&type=solar");
     expect(parseModelFromSearch(searchForVariable("dswrf", "", "sflux"))).toBe("sflux");
+  });
+});
+
+describe("parseExperimentFromSearch", () => {
+  it("is off unless the URL opts in", () => {
+    expect(parseExperimentFromSearch("")).toEqual(EXPERIMENT_OFF);
+    expect(parseExperimentFromSearch("?model=gfs&type=precip")).toEqual(EXPERIMENT_OFF);
+    expect(parseExperimentFromSearch("?x=off")).toEqual(EXPERIMENT_OFF);
+    expect(parseExperimentFromSearch("?x=")).toEqual(EXPERIMENT_OFF);
+    expect(parseExperimentFromSearch("?x=maybe")).toEqual(EXPERIMENT_OFF);
+  });
+
+  it("draws both derived layers for the on-spellings, case-insensitively", () => {
+    const both = { enabled: true, inflow: true, front: true };
+    expect(parseExperimentFromSearch("?x=true")).toEqual(both);
+    expect(parseExperimentFromSearch("?x=1")).toEqual(both);
+    expect(parseExperimentFromSearch("?x=ON")).toEqual(both);
+    expect(parseExperimentFromSearch("?model=gfs&x=true&type=precip")).toEqual(both);
+  });
+
+  it("names the derived layers to draw, or none", () => {
+    expect(parseExperimentFromSearch("?x=inflow")).toEqual({ enabled: true, inflow: true, front: false });
+    expect(parseExperimentFromSearch("?x=front")).toEqual({ enabled: true, inflow: false, front: true });
+    expect(parseExperimentFromSearch("?x=front,inflow")).toEqual({ enabled: true, inflow: true, front: true });
+    expect(parseExperimentFromSearch("?x=none")).toEqual({ enabled: true, inflow: false, front: false });
+    expect(parseExperimentFromSearch("?x=inflow,bogus")).toEqual({ enabled: true, inflow: true, front: false });
+  });
+
+  it("writes the shortest spelling and drops the param when off", () => {
+    expect(searchWithExperiment("?type=precip", { enabled: true, inflow: true, front: true })).toBe("?type=precip&x=true");
+    expect(searchWithExperiment("?type=precip&x=true", { enabled: true, inflow: true, front: false })).toBe("?type=precip&x=inflow");
+    expect(searchWithExperiment("?x=true", { enabled: true, inflow: false, front: true })).toBe("?x=front");
+    expect(searchWithExperiment("?x=true", { enabled: true, inflow: false, front: false })).toBe("?x=none");
+    expect(searchWithExperiment("?x=true&type=precip", EXPERIMENT_OFF)).toBe("?type=precip");
+  });
+
+  it("survives a layer switch, which preserves unrelated params", () => {
+    expect(parseExperimentFromSearch(searchForVariable("tmp2m", "?x=inflow&type=precip")).inflow).toBe(true);
   });
 });
 
