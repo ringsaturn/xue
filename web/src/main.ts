@@ -648,6 +648,29 @@ function applyBasemapTheme(): void {
   if (map.getLayer("earth")) map.setPaintProperty("earth", "fill-color", theme.land);
   applyBasemapInk(darkGround);
   tcLayers?.setInk(darkGround);
+  applyGroundInk();
+}
+
+/** Whether the map under the data is dark right now — the stamp
+ * `applyBasemapTheme` leaves, read at use like `isDark`. Every ink drawn
+ * over the field keys on this, not on the theme: under light chrome the
+ * translucent fields still sit on a slate. */
+function onDarkGround(): boolean {
+  return document.body.dataset.ground === "dark";
+}
+
+/** The inks the WebGL layers carry — the particles' trace and the contour
+ * lines of both slots — restated for the current ground. Called from
+ * `applyBasemapTheme`, so a layer switch that moves the map from paper to
+ * slate re-inks the lines already over it; the slot's own `setContours` on
+ * load may run before the ground is stamped for the new field. */
+function applyGroundInk(): void {
+  windLayer?.setInk(particleInk());
+  for (const slot of [slots.fill, slots.lines]) {
+    const session = slot.session;
+    if (!session || session.vector) continue;
+    slot.layer.setContours(contourStyleFor(session.variable, session.identity, session !== activeSession));
+  }
 }
 
 /** Repaint the basemap's labels and boundaries for the current ground.
@@ -1336,11 +1359,13 @@ let particlesEnabled = requestedParticles ?? storedParticles() ?? !reducedMotion
 let particlesChosen = requestedParticles !== null;
 
 /** The tone the particles are drawn in over the speed field: a bright trace
- * on the dark theme, the paper theme's own ink on white. Partly transparent
- * either way — the field underneath has to read through the trails, and the
- * particles are there for direction and pace, not for a value. */
+ * on a dark ground, the paper ink on a light one — the ground's, not the
+ * theme's, since the wind keeps its slate under light chrome. Partly
+ * transparent either way — the field underneath has to read through the
+ * trails, and the particles are there for direction and pace, not for a
+ * value. */
 function particleInk(): readonly [number, number, number, number] {
-  return isDark ? [1, 1, 1, 0.45] : [0.11, 0.1, 0.09, 0.4];
+  return onDarkGround() ? [1, 1, 1, 0.45] : [0.11, 0.1, 0.09, 0.4];
 }
 
 function required<T extends HTMLElement>(id: string): T {
@@ -4094,9 +4119,9 @@ function contourStyleFor(
   if (!level || variable.quantization.type !== "linear") return null;
   if (overlay) {
     // Lines over another field: no fill of their own, and one ink that reads
-    // on every ground the fills use — near-white on the dark theme's slates,
-    // the paper theme's ink on white — a shade lighter than the chart's so
-    // the field underneath stays the subject.
+    // on the ground the field under them uses — near-white on a slate, the
+    // paper ink on white, whichever theme the chrome is in — a shade lighter
+    // than the chart's so the field underneath stays the subject.
     return {
       offset: variable.quantization.offset,
       scale: variable.quantization.scale,
@@ -4105,7 +4130,7 @@ function contourStyleFor(
       values: (level.emphasisContours ?? []).slice(0, MAX_NAMED_CONTOURS),
       lineWidth: CONTOUR_WIDTH,
       emphasisWidth: CONTOUR_EMPHASIS_WIDTH,
-      lineColor: isDark ? [1, 1, 1, 0.85] : [0.11, 0.1, 0.09, 0.85],
+      lineColor: onDarkGround() ? [1, 1, 1, 0.85] : [0.11, 0.1, 0.09, 0.85],
       fillAlpha: 0,
       smoothing: CONTOUR_SMOOTHING_CELLS,
     };
@@ -4119,8 +4144,8 @@ function contourStyleFor(
     lineWidth: CONTOUR_WIDTH,
     emphasisWidth: CONTOUR_EMPHASIS_WIDTH,
     // Chart lines are drawn in the ground's opposite: near-white on the dark
-    // ocean, the paper theme's ink on its chart stock.
-    lineColor: isDark ? [0.94, 0.96, 1, 1] : [0.11, 0.1, 0.09, 1],
+    // ocean, the paper ink on the light chart stock.
+    lineColor: onDarkGround() ? [0.94, 0.96, 1, 1] : [0.11, 0.1, 0.09, 1],
     // A low-saturation fill under the lines: enough to read a ridge from a
     // trough at a glance, faint enough that the lines stay the subject.
     fillAlpha: 0.45,
@@ -5232,13 +5257,9 @@ retryButton.addEventListener("click", () => void initialize());
  * read their colors off the chrome's tokens. The session — its workers,
  * its decoded frames, its playhead — is untouched. */
 function applyAppearance(): void {
+  // The ground and the inks over it come back through `applyBasemapTheme`;
+  // before the style has loaded there is nothing on the map to re-ink.
   syncBasemapStyle();
-  windLayer?.setInk(particleInk());
-  for (const slot of [slots.fill, slots.lines]) {
-    const session = slot.session;
-    if (!session || session.vector) continue;
-    slot.layer.setContours(contourStyleFor(session.variable, session.identity, session !== activeSession));
-  }
   scheduleProbeRender();
 }
 
