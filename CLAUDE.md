@@ -631,7 +631,12 @@ follow `body[data-ground]` — stamped by `applyBasemapTheme` from the basemap
 tone's luminance. So do the basemap's own place labels and boundaries: a
 Protomaps flavor is baked into the style at construction and cannot be swapped
 without `setStyle`, so `applyBasemapInk` repaints their text and line colors
-instead. There is no fade at the top or bottom of the map: the title carries
+instead. The coastline is the shell's own layer, not the flavor's: Protomaps
+draws no coast (it is only where the `earth` fill meets the `water` fill,
+which vanishes under a field), so `buildBasemapStyle` inserts a `coastline`
+line layer over the `earth` polygons just under the boundaries — it is the
+anchor the forecast layers insert themselves before — with a zoom-stepped
+width in the style and its ink set by `applyBasemapInk` like the borders'. There is no fade at the top or bottom of the map: the title carries
 its own text shadow and the capsule its own surface.
 
 The round controls top-right, the zoom tile under them, the layer rail and

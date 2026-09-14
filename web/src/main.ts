@@ -670,26 +670,57 @@ function applyBasemapInk(darkGround: boolean): void {
   const ink = darkGround ? "#eef1f4" : "#3a3730";
   const halo = darkGround ? "rgba(0, 0, 0, 0.75)" : "rgba(243, 239, 230, 0.92)";
   const border = darkGround ? "rgba(255, 255, 255, 0.32)" : "rgba(27, 26, 23, 0.3)";
+  // The coast reads darker than a border, the way it does on a chart.
+  const coast = darkGround ? "rgba(255, 255, 255, 0.55)" : "rgba(27, 26, 23, 0.6)";
   for (const layer of map.getStyle().layers ?? []) {
     if (layer.type === "symbol") {
       map.setPaintProperty(layer.id, "text-color", ink);
       map.setPaintProperty(layer.id, "text-halo-color", halo);
     } else if (layer.id === "boundaries" || layer.id === "boundaries_country") {
       map.setPaintProperty(layer.id, "line-color", border);
+    } else if (layer.id === COASTLINE_LAYER) {
+      map.setPaintProperty(layer.id, "line-color", coast);
     }
   }
   applyLabelInk();
 }
 
+/** The coastline drawn as a line of its own. Protomaps has no coastline
+ * layer: the coast is only where the `earth` fill meets the `water` fill,
+ * and under a translucent field that edge all but disappears (Windy draws
+ * its coast as a dark line over the data, which is what the eye expects).
+ * A line layer over the `earth` polygons traces their outline — the ocean
+ * coast, since lakes are `water` features inside the land — and the tile
+ * clip edges fall in the tile buffer, where the renderer never paints. Its
+ * width is a style property; its color follows the ground in
+ * `applyBasemapInk`, like the boundaries'. */
+const COASTLINE_LAYER = "coastline";
+/** Coastline width in CSS px by zoom: a hairline would vanish under the
+ * data at the global view, and past the regional scale the coast stays a
+ * line rather than growing into an edge. */
+const COASTLINE_WIDTH: NonNullable<NonNullable<LineLayer["paint"]>["line-width"]> = [
+  "interpolate",
+  ["linear"],
+  ["zoom"],
+  0,
+  0.9,
+  4,
+  1.3,
+  8,
+  1.8,
+];
+
 /** Protomaps hosted basemap (real coastlines, waterways, boundaries and
- * labels). The forecast layers insert themselves before this layer, keeping
- * boundaries and place labels legible above the data. */
-const FORECAST_ANCHOR_LAYER = "boundaries_country";
+ * labels). The forecast layers insert themselves before this layer — the
+ * coastline, which sits just under the boundaries — keeping the coast, the
+ * boundaries and the place labels legible above the data. */
+const FORECAST_ANCHOR_LAYER = COASTLINE_LAYER;
 const PROTOMAPS_KEY = "249bb192fefe0a77";
 
 // maplibre-gl 6 no longer re-exports the style-spec types; take the style
 // object's type from the map options that consume it.
 type BasemapStyle = Exclude<MapOptions["style"], string | undefined>;
+type LineLayer = Extract<BasemapStyle["layers"][number], { type: "line" }>;
 
 function buildBasemapStyle(): BasemapStyle {
   const theme = currentBasemapTheme();
@@ -718,8 +749,29 @@ function buildBasemapStyle(): BasemapStyle {
     // near-black tones, defeating the per-variable earth color — drop it so
     // land stays a flat themed slate under the data.
     // Basemap labels follow the UI locale.
-    layers: basemapLayers("protomaps", flavor, { lang: basemapLang }).filter((layer) => layer.id !== "landcover"),
+    layers: withCoastline(
+      basemapLayers("protomaps", flavor, { lang: basemapLang }).filter((layer) => layer.id !== "landcover"),
+    ),
   };
+}
+
+/** The flavor's layers with the coastline inserted just under the country
+ * boundaries, so the two read as one set of lines over the data. */
+function withCoastline(layers: BasemapStyle["layers"]): BasemapStyle["layers"] {
+  const coastline: BasemapStyle["layers"][number] = {
+    id: COASTLINE_LAYER,
+    type: "line",
+    source: "protomaps",
+    "source-layer": "earth",
+    filter: ["==", "$type", "Polygon"],
+    layout: { "line-join": "round", "line-cap": "round" },
+    // The color is the ground's ink, set by `applyBasemapInk`; this is only
+    // what the layer carries until the style has loaded.
+    paint: { "line-color": "rgba(27, 26, 23, 0.6)", "line-width": COASTLINE_WIDTH },
+  };
+  const at = layers.findIndex((layer) => layer.id === "boundaries_country");
+  if (at < 0) throw new Error("basemap style has no boundaries_country layer");
+  return [...layers.slice(0, at), coastline, ...layers.slice(at)];
 }
 
 setWorkerUrl(maplibreWorkerUrl);
