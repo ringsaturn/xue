@@ -621,10 +621,12 @@ repeats the theme detection inline so the shell never paints on the wrong
 ground first.
 
 Light does not mean a light map. Each layer keeps the ground its palette needs
-— a warm sheet under temperature, a dark slate under precipitation, wind,
-radar and solar (their palettes run translucent at the low end and vanish on
-paper), chart stock under the pressure family — so the chrome's tokens and the
-map's are two different things. The chrome (capsule, rail, sheet, cards) always
+— the white flavor's paper under an opaque coat (the temperatures, dew point,
+skin temperature, θe), a dark slate under every palette that runs translucent
+at the low end and vanishes on paper (precipitation, wind, radar, solar, the
+cloud covers, CAPE, visibility, the ice and wave fields, the moisture washes),
+chart stock under the pressure family — so the chrome's tokens and the map's
+are two different things; `LIGHT_BASEMAP` in `main.ts` is that table. The chrome (capsule, rail, sheet, cards) always
 uses the theme's own; anything floating *directly* on the map (the title, the
 color scale's numbers, the credits) uses `--map-ink` / `--map-ink-muted`, which
 follow `body[data-ground]` — stamped by `applyBasemapTheme` from the basemap

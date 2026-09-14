@@ -587,39 +587,32 @@ const PAPER_GROUND: BasemapTones = {
   background: namedFlavor(LIGHT_FLAVOR).background,
 };
 
-/** Light means a light map: every layer sits on that same white ground, the
- * four whose palettes run translucent at the low end included, so the page
- * is one sheet rather than paper chrome floating over a dark map. Drizzle,
- * the faintest wind and a 5 dBZ edge read weaker on white than they do on
- * the dark theme's slate — the accepted cost of one palette serving both
- * themes (see PRECIPITATION_STOPS in palettes.ts).
+/** Light does not mean a light map. The theme switches the chrome — capsule,
+ * rail, sheets, cards — and the ground under each layer stays the one its
+ * palette needs. An opaque coat (the temperatures, the dew point, the skin
+ * temperature, θe) covers the ground almost entirely, so it sits on the
+ * white flavor's own paper and the page is one sheet. A palette that runs
+ * translucent at the low end — drizzle, the faintest wind, a 5 dBZ edge, a
+ * thin grey veil of cloud, the night side of the solar field — is drawn on
+ * the ground, not over it, and on white paper its low end vanishes: those
+ * layers keep the dark theme's slates, and `applyBasemapTheme` stamps
+ * `data-ground` so the ink floating on the map follows the ground rather
+ * than the theme.
  *
  * The pressure family keeps its chart stock. Contours are a weather chart,
  * and the warm sheet is the design's own paper for one. */
 const LIGHT_BASEMAP: Record<string, BasemapTones> = {
+  ...DARK_BASEMAP,
   tmp2m: PAPER_GROUND,
-  prate: PAPER_GROUND,
-  dswrf: PAPER_GROUND,
-  cref: PAPER_GROUND,
-  wind10m: PAPER_GROUND,
-  gust: PAPER_GROUND,
-  tcdc: PAPER_GROUND,
-  lcdc: PAPER_GROUND,
-  mcdc: PAPER_GROUND,
-  hcdc: PAPER_GROUND,
-  cape: PAPER_GROUND,
-  vis: PAPER_GROUND,
   dpt2m: PAPER_GROUND,
   aptmp2m: PAPER_GROUND,
   tmpsfc: PAPER_GROUND,
-  icec: PAPER_GROUND,
-  icetk: PAPER_GROUND,
-  htsgw: PAPER_GROUND,
-  perpw: PAPER_GROUND,
-  dirpw: PAPER_GROUND,
-  wave: PAPER_GROUND,
   ...pressureBasemapTheme({ ocean: "#dcd6c8", land: "#c9c2b2" }),
-  ...isobaricBasemapTheme(() => PAPER_GROUND),
+  // The upper-air coats join the 2 m temperature on paper; the winds and
+  // the moisture washes keep the slates they inherit above.
+  ...Object.fromEntries(
+    ISOBARIC_FILL_IDS.filter((id) => familyOf(id) === "tmp" || familyOf(id) === "thetae").map((id) => [id, PAPER_GROUND]),
+  ),
 } as Record<string, BasemapTones>;
 
 /** Read at every use rather than once: the theme toggles in place. */
@@ -643,10 +636,10 @@ function applyBasemapTheme(): void {
   const theme = currentBasemapTheme();
   // Everything drawn over the data — the title, the color scale's numbers,
   // the credits, and the basemap's own place labels and boundaries — takes
-  // its ink from the ground it sits on rather than from the theme. Since the
-  // light theme went white every one of its grounds is light and this is
-  // constant there, but the dark theme still has grounds of its own and one
-  // rule covering both is what keeps the two from drifting.
+  // its ink from the ground it sits on rather than from the theme: on the
+  // light theme the translucent layers sit on a dark slate under light
+  // chrome, and one rule covering both themes is what keeps the ink and
+  // the ground from drifting apart.
   const darkGround = luminance(theme.ocean) < 0.5;
   document.body.dataset.ground = darkGround ? "dark" : "light";
   if (map.getLayer("background"))
