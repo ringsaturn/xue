@@ -39,10 +39,10 @@ const TEMPERATURE_STOPS: Stop[] = [
 // near-white, and extends to the codebook's 128 mm/h ceiling so extreme
 // cells keep their own gradation rather than sharing one color above 50.
 // The low end (<= 2 mm/h) climbs from nearly transparent to opaque, which is
-// what makes drizzle legible over the basemap's slate. One ramp serves both
-// themes, and the slate goes with it: the light theme keeps the dark ground
-// under this field (main.ts) rather than a second palette for paper, so a
-// value is the same color in both themes.
+// what makes drizzle legible over the dark theme's basemap. One ramp serves
+// both themes, so on the light theme's white ground those same faint blues
+// read weaker than they do on a slate — a known trade, taken so a value is
+// the same color in both themes rather than two palettes drifting apart.
 const PRECIPITATION_STOPS: Stop[] = [
   [0, 8, 19, 28, 0],
   [0.05, 64, 131, 183, 70],
@@ -210,9 +210,9 @@ const WIND_SPEED_STOPS: Stop[] = [
 
 // Total cloud cover: clear sky is the map, and cover is a grey veil that
 // thickens with the fraction — the alpha carries the reading, the colour
-// barely moves. One neutral grey rather than white on purpose: a white
-// veil would read as glare, and a light grey reads as cloud on the dark
-// slate the field keeps in both themes (main.ts). Values are percent.
+// barely moves. One neutral grey rather than white on purpose: a white veil
+// vanishes on the light theme's paper, and a light grey reads as cloud on
+// the dark slate and as overcast on paper alike. Values are percent.
 const CLOUD_STOPS: Stop[] = [
   [0, 170, 178, 190, 0],
   [10, 172, 180, 192, 40],
@@ -318,9 +318,10 @@ const VISIBILITY_STOPS: Stop[] = [
 // Sea ice cover in percent. Open water is the map; the ice edge — 15 %,
 // the concentration an ice chart draws its edge at — comes in as a pale
 // cyan, and the pack deepens through sky blue to a saturated blue at full
-// cover. Blue rather than the white an ice chart paints on a blue sea: on
-// the dark slate the field keeps in both themes (main.ts) white ice would
-// read as glare, and the blue reads lighter than the water either way.
+// cover. Blue rather than the white an ice chart paints on a blue sea: the
+// same ramp has to read on the light theme's white paper, where white ice
+// would vanish, and on the dark slate, where it reads lighter than the
+// water either way.
 const ICE_COVER_STOPS: Stop[] = [
   [0, 200, 232, 245, 0],
   [10, 200, 232, 245, 0],

@@ -143,8 +143,8 @@
    theme's own tokens; the labels that float directly on the map use these,
    which follow the active layer's ground (main.ts stamps data-ground from the
    basemap's luminance). In the dark theme the two agree; in the light theme
-   they part company over every translucent field — precipitation, wind,
-   radar, solar, cloud and the rest — which is painted on a dark slate. */
+   they part company over precipitation, wind, radar and solar, whose fields
+   are painted on a dark slate. */
 body {
   --map-ink: var(--text);
   --map-ink-muted: var(--muted);
