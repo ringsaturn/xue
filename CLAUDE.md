@@ -439,8 +439,10 @@ shard index + CRC-32C; NumPy only, no zarr-python at runtime), which is why
 both encoder paths produce identical stores: `binconvert` exports inside
 each bundle job, `native.py::_zarr_reports` after the wheel has written, and
 `test_native.py` compares the objects byte for byte. `build-bin --zarr` /
-`convert-bin --zarr` or `XUE_ZARR=1` turns it on (off by default, and off in
-the publish workflows); `xue export-zarr <bundle>` derives one by hand, with
+`convert-bin --zarr` or `XUE_ZARR=1` turns it on (off by default; **on** in
+the scheduled `publish-*` workflows and `make mvp` since the phase-5 soak,
+so every live run ships both deliveries until the container stops being
+written); `xue export-zarr <bundle>` derives one by hand, with
 `--delta` (the `xue.delta` codec in front of `bytes` on PREVIOUS variables,
 `xuebuild/zarrcodec.py` registers it for zarr-python) and
 `--index-location start|end` (`end` by default: the form zarrita fetches as

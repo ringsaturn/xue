@@ -88,6 +88,13 @@ env:
   # quietly took the subprocess pipeline would take far longer and look
   # identical in the logs.
   XUE_ENCODER: native
+  # Derive a Zarr store beside every bundle and tier (docs/zarr-profile.md):
+  # the dual-publish soak of plan 017 phase 5. The shell opens the store by
+  # default where the manifest names one and the container otherwise, so a
+  # run built without this is still whole; each bundle job pays the export
+  # (about a second a bundle) and the bucket carries both until the
+  # container stops being written.
+  XUE_ZARR: "1"
 
 jobs:
   resolve:

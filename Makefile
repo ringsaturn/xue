@@ -118,7 +118,7 @@ spike-webcodecs:
 # MODEL=sflux builds the native-resolution GFS surface flux feed;
 # MODEL=hrrr builds the hourly 3 km HRRR feed over the contiguous US.
 mvp: check install wasm
-	$(PYTHON) -m xuebuild build-bin --model $(MODEL) --run $(RUN) $(if $(HOURS),--hours $(HOURS)) --profile $(PROFILE) $(FORCE)
+	$(PYTHON) -m xuebuild build-bin --model $(MODEL) --run $(RUN) $(if $(HOURS),--hours $(HOURS)) --profile $(PROFILE) --zarr $(FORCE)
 	npm run build
 
 serve:

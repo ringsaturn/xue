@@ -66,6 +66,9 @@ env:
   # xuebuild) and insist on it: a round that quietly fell back to the
   # subprocess pipeline would overrun its five minutes.
   XUE_ENCODER: native
+  # Derive the Zarr stores too (plan 017 phase 5, as publish.yml does); a
+  # round's export is a fraction of its build.
+  XUE_ZARR: "1"
 
 jobs:
   publish:
