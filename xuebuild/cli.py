@@ -299,6 +299,12 @@ def parser() -> argparse.ArgumentParser:
         action="store_true",
         help="also derive a Zarr v3 store beside every bundle of the case (or set XUE_ZARR=1)",
     )
+    showcase_build.add_argument(
+        "--no-xue",
+        dest="container",
+        action="store_false",
+        help="publish each bundle's Zarr store alone and retire its .xue (needs --zarr; or set XUE_CONTAINER=0)",
+    )
 
     showcase_catalog = showcase_commands.add_parser(
         "catalog", help="rewrite showcase.json from the cases already built on disk"
@@ -418,6 +424,7 @@ def main(argv: list[str] | None = None) -> int:
                         force=arguments.force,
                         force_download=arguments.force_download,
                         zarr=arguments.zarr or enabled_by_environment(),
+                        container=arguments.container and container_enabled_by_environment(),
                     )
                     for spec in load_cases(arguments.cases_dir, tuple(arguments.cases))
                 ]

@@ -337,10 +337,12 @@ def build_case(
     force: bool = False,
     force_download: bool = False,
     zarr: bool = False,
+    container: bool = True,
 ) -> dict[str, Any]:
     """Fetch (or open), crop and encode one case, and write its manifest and
     sidecar. ``zarr`` derives a Zarr store beside every bundle, the way
-    ``build-bin --zarr`` does for a run.
+    ``build-bin --zarr`` does for a run, and ``container=False`` retires the
+    ``.xue`` behind it, the way ``--no-xue`` does.
 
     Only the case's own variables are downloaded, and into a per-case raw
     directory so a partial record set never shadows a full run's cache. A
@@ -401,6 +403,7 @@ def build_case(
         # the frames that were fetched, like a forecast run.
         last_hour=spec.hours if spec.from_dataset else None,
         zarr=zarr,
+        container=container,
     )
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     if manifest["forecastHours"] != spec.hours:
@@ -414,7 +417,7 @@ def build_case(
         )
     entry = build_catalog_entry(spec, manifest, manifest_path.read_bytes(), report)
     (output_dir / CASE_SIDECAR).write_text(json.dumps(entry, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    LOG.info("built case %s (%d bundles, %.2f MB)", spec.id, len(manifest["bundles"]), report["byteLength"] / 1e6)
+    LOG.info("built case %s (%d bundles, %.2f MB)", spec.id, len(manifest["bundles"]), entry["byteLength"] / 1e6)
     return entry
 
 
@@ -448,7 +451,12 @@ def build_catalog_entry(
         "defaultVariable": spec.default_variable,
         "manifestPath": f"{spec.output_subdirectory}/manifest.json",
         "manifestCrc32": f"{zlib.crc32(manifest_bytes) & 0xFFFFFFFF:08x}",
-        "byteLength": report["byteLength"],
+        # What the case weighs on the bucket: each bundle's container, or
+        # its store on a bundle that ships only the store.
+        "byteLength": sum(
+            bundle["byteLength"] if "byteLength" in bundle else bundle["zarr"]["byteLength"]
+            for bundle in manifest["bundles"]
+        ),
     }
     if spec.event_time:
         entry["eventTime"] = spec.event_time
