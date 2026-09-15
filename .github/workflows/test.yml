@@ -130,6 +130,22 @@ jobs:
           node-version: 22
           cache: npm
 
+      # tests/web/zarr.test.ts builds its fixtures with
+      # tests/prepare_web_fixture.py the way the Playwright global setup
+      # does, so the unit-test job needs the Python environment too.
+      - name: Install zstd
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends zstd
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          python-version: "3.12"
+
+      - name: Sync Python environment
+        run: uv sync
+
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown

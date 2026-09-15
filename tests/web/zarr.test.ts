@@ -65,7 +65,9 @@ function ensureFixtures(): void {
   if (existsSync(`${FIXTURE_ROOT}/tmp2m.delta.zarr/zarr.json`) && existsSync(`${FIXTURE_ROOT}/wind10m.zarr/zarr.json`)) return;
   const python = process.env.PYTHON || ".venv/bin/python";
   const result = spawnSync(python, ["tests/prepare_web_fixture.py"], { cwd: REPOSITORY_ROOT, encoding: "utf8" });
-  if (result.status !== 0) throw new Error(`fixture generation failed: ${result.stderr || result.stdout}`);
+  if (result.status !== 0) {
+    throw new Error(`fixture generation failed (${python}): ${result.error?.message ?? result.stderr ?? result.stdout}`);
+  }
 }
 
 beforeAll(async () => {

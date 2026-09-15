@@ -126,11 +126,13 @@ test("?backend=zarr plays the default layer from its store", async ({ page }) =>
   await routeArtifacts(page, counters);
   await page.goto("/?backend=zarr");
   await expect(page.locator("body")).toHaveAttribute("data-variable", "prate");
-  // The data card names the channel, and the whole axis becomes resident
-  // through the same windowed prefetch the container path runs.
+  // The data card names the channel. The session streams: nothing is
+  // downloaded whole, and with reduced motion playback never starts, so the
+  // windowed prefetch stays around the playhead and the axis never becomes
+  // fully resident — the same shape the container's streaming session has.
   await expect(page.locator("#preload-format")).toHaveText("Zarr");
-  await expect(page.locator("#preload-state")).toHaveText("Bundle fully buffered", { timeout: 20_000 });
   await expect(page.getByRole("slider", { name: "Forecast hour" })).toBeEnabled({ timeout: 20_000 });
+  await expect(page.locator("#preload-state")).toHaveText("Streaming on demand");
   // A frame decoded through the channel is on screen: the readout follows a
   // scrub, which only completes once the plane arrives.
   const slider = page.getByRole("slider", { name: "Forecast hour" });
