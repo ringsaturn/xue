@@ -273,6 +273,11 @@ def parser() -> argparse.ArgumentParser:
         action="store_true",
         help="do not rewrite showcase.json after building",
     )
+    showcase_build.add_argument(
+        "--zarr",
+        action="store_true",
+        help="also derive a Zarr v3 store beside every bundle of the case (or set XUE_ZARR=1)",
+    )
 
     showcase_catalog = showcase_commands.add_parser(
         "catalog", help="rewrite showcase.json from the cases already built on disk"
@@ -390,6 +395,7 @@ def main(argv: list[str] | None = None) -> int:
                         work_root=arguments.work_dir,
                         force=arguments.force,
                         force_download=arguments.force_download,
+                        zarr=arguments.zarr or enabled_by_environment(),
                     )
                     for spec in load_cases(arguments.cases_dir, tuple(arguments.cases))
                 ]

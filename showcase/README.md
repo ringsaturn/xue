@@ -134,7 +134,10 @@ retires a case.
 
    This writes `web/public/data/showcase/<id>/` (bundles, posters, manifest,
    and a `case.json` sidecar) and rewrites `web/public/data/showcase.json`,
-   the mutable catalog collected from every sidecar on disk.
+   the mutable catalog collected from every sidecar on disk. `--zarr` (or
+   `XUE_ZARR=1`) also derives a Zarr store beside every bundle, the way
+   `build-bin --zarr` does for a run, so the case plays under
+   `?backend=zarr`.
 
    Scratch cases for local development go in `showcase/cases-local/`
    (gitignored) and build with `make showcase CASES_DIR=showcase/cases-local`,

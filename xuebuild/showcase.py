@@ -336,9 +336,11 @@ def build_case(
     work_root: Path,
     force: bool = False,
     force_download: bool = False,
+    zarr: bool = False,
 ) -> dict[str, Any]:
     """Fetch (or open), crop and encode one case, and write its manifest and
-    sidecar.
+    sidecar. ``zarr`` derives a Zarr store beside every bundle, the way
+    ``build-bin --zarr`` does for a run.
 
     Only the case's own variables are downloaded, and into a per-case raw
     directory so a partial record set never shadows a full run's cache. A
@@ -398,6 +400,7 @@ def build_case(
         # A local file holds more than the case; a fetched window is exactly
         # the frames that were fetched, like a forecast run.
         last_hour=spec.hours if spec.from_dataset else None,
+        zarr=zarr,
     )
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     if manifest["forecastHours"] != spec.hours:
