@@ -674,22 +674,7 @@ def export_bundle(
     own_executor = executor is None
     pool = executor or ThreadPoolExecutor(max_workers=os.cpu_count() or 4)
     try:
-        # The root group first: its `xue` block is the bundle's metadata
-        # verbatim, which is what the viewer's parsers already read.
-        root = _dump_json(
-            {
-                "zarr_format": 3,
-                "node_type": "group",
-                "attributes": {"xue": bundle.metadata, "xue_profile": PROFILE_VERSION},
-            }
-        )
-        report = ExportReport(
-            path=zarr_dir,
-            byte_length=_write(zarr_dir / "zarr.json", root),
-            crc32=f"{binformat.crc32_plane(root):08x}",
-            delta=delta,
-            index_location=index_location,
-        )
+        report = ExportReport(path=zarr_dir, byte_length=0, crc32="", delta=delta, index_location=index_location)
         name_to_numeric = {name: numeric_id for numeric_id, name in bundle.variable_ids.items()}
         for name in array_names:
             numeric_id = name_to_numeric[name]
@@ -711,6 +696,27 @@ def export_bundle(
         for name, written in _write_coordinates(bundle, zarr_dir).items():
             report.arrays[name] = written
             report.byte_length += written
+        # The root group last: its `xue` block is the bundle's metadata
+        # verbatim, which is what the viewer's parsers already read, and
+        # its consolidated metadata is every array document just written,
+        # inline — the Zarr v3 spelling zarr-python reads — so a client on
+        # a store that cannot be listed (a plain HTTP origin) still finds
+        # the arrays. The group's CRC-32, the store's `?v=`, is over this
+        # document, so it covers every array's metadata too.
+        root = _dump_json(
+            {
+                "zarr_format": 3,
+                "node_type": "group",
+                "attributes": {"xue": bundle.metadata, "xue_profile": PROFILE_VERSION},
+                "consolidated_metadata": {
+                    "kind": "inline",
+                    "must_understand": False,
+                    "metadata": {name: read_json(zarr_dir / name / "zarr.json") for name in report.arrays},
+                },
+            }
+        )
+        report.byte_length += _write(zarr_dir / "zarr.json", root)
+        report.crc32 = f"{binformat.crc32_plane(root):08x}"
     finally:
         if own_executor:
             pool.shutdown()

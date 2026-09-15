@@ -220,6 +220,14 @@ class ExportTests(unittest.TestCase):
                 self.assertEqual(report.crc32, f"{binformat.crc32_plane((store / 'zarr.json').read_bytes()):08x}")
                 self.assertEqual(report.byte_length, zarrstore.store_byte_length(store))
                 self.assertEqual(sorted(report.arrays), ["latitude", "longitude", "prate", "time", "tmp2m"])
+                # Every array document is repeated inline in the group's, so
+                # a client that cannot list the store (plain HTTP) still
+                # finds the arrays; and the group's CRC covers them all.
+                consolidated = root["consolidated_metadata"]
+                self.assertEqual((consolidated["kind"], consolidated["must_understand"]), ("inline", False))
+                self.assertEqual(sorted(consolidated["metadata"]), sorted(report.arrays))
+                for name in report.arrays:
+                    self.assertEqual(consolidated["metadata"][name], zarrstore.read_json(store / name / "zarr.json"))
                 for name, predictor in (("tmp2m", "previous"), ("prate", "raw")):
                     array = zarrstore.read_json(store / name / "zarr.json")
                     variable = next(v for v in self.bundle.metadata["variables"] if v["id"] == name)
@@ -387,7 +395,9 @@ class ZarrClientTests(unittest.TestCase):
         for report in (self.standard, self.delta):
             with self.subTest(store=report.path.name), warnings.catch_warnings():
                 warnings.simplefilter("ignore")
-                dataset = xr.open_zarr(report.path, consolidated=False)
+                # The default: xarray takes the consolidated metadata, the
+                # way it would over an origin it cannot list.
+                dataset = xr.open_zarr(report.path)
                 self.assertEqual(dataset["tmp2m"].dims, ("time", "latitude", "longitude"))
                 np.testing.assert_allclose(dataset["tmp2m"].values, physical)
                 # The log codebook has no CF spelling: the codes come through

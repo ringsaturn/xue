@@ -546,7 +546,7 @@ the catalog with the pointer, the showcase's with `upload-r2-showcase`.
 ```python
 import pystac, xarray as xr
 run = next(pystac.Catalog.from_file("https://dataset.ringsaturn.me/xue/catalog.json").get_child("gfs").get_items())
-ds = xr.open_zarr(run.assets["tmp2m"].get_absolute_href(), consolidated=False)
+ds = xr.open_zarr(run.assets["tmp2m"].get_absolute_href())
 ```
 
 ## Testing

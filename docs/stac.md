@@ -185,7 +185,7 @@ catalog = pystac.Catalog.from_file("https://dataset.ringsaturn.me/xue/catalog.js
 gfs = catalog.get_child("gfs")
 run = next(gfs.get_items())                       # the live Item, …/gfs/item.json
 store = run.assets["tmp2m"].get_absolute_href()   # …/gfs.<run>/tmp2m.zarr
-ds = xr.open_zarr(store, consolidated=False)      # the profile in docs/zarr-profile.md
+ds = xr.open_zarr(store)                          # the profile in docs/zarr-profile.md
 ```
 
 `run.properties["cube:variables"]` says what else the run carries and in

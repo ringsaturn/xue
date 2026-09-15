@@ -163,6 +163,28 @@ document's version. A store written before this revision also carries a
 `xue_index` attribute naming a whole-store index object, `index.bin`; a
 reader ignores both — the shard's own index is the whole index now.
 
+The group document also carries **consolidated metadata**, in the Zarr v3
+inline form zarr-python reads:
+
+```json
+"consolidated_metadata": {
+  "kind": "inline", "must_understand": false,
+  "metadata": { "tmp2m": { "…the array's zarr.json…" }, "time": { "…" },
+                "latitude": { "…" }, "longitude": { "…" } }
+}
+```
+
+Every array document of the store, repeated verbatim, so a client on an
+origin that cannot be listed — a plain HTTP bucket, which is where every
+store is served from — still discovers the arrays: `xr.open_zarr(url)`
+works with no `consolidated=` argument and no directory listing. The
+group document is written last, after the arrays, and the store's `crc32`
+(its `?v=`) is the CRC-32 of this document, so it covers every array's
+metadata too. A reader that opens arrays by name (the frontend, `zarr`'s
+`open_group(url)["tmp2m"]`) never needs it; a store written before this
+revision lacks it and opens with `consolidated=False` from a listable
+store only.
+
 Each variable array's `zarr.json`:
 
 ```json
