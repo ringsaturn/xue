@@ -30,6 +30,7 @@ pointers:
 |---|---|---|---|
 | `catalog.json` | the root **Catalog**: one `child` per source with a live feed, one for the showcase | yes (rarely changes; a pure function of the registry) | every publish, `showcase catalog` |
 | `<source>/collection.json` | one **Collection** per source (`gfs`, `ecmwf`, `sflux`, `hrrr`, `mrms`) | yes — the STAC face of the live pointer | `build-bin` (whole run), `assemble-run` |
+| `<source>/item.json` | the **live Item**: the run's Item relocated to a path that never changes | yes — replaced by every publish | same |
 | `<source>.<run>/item.json` | one **Item** per published run, beside its manifest | rewritten in place by a top-up, like the manifest | `build-bin` (whole run), `assemble-run` |
 | `<source>.<run>/<HHMM>/item.json` | the Item of one round of the MRMS rolling window | no | `build-bin --round` |
 | `showcase/collection.json` | the **Collection** of the historical cases | yes | `showcase build` / `refresh` / `catalog` |
@@ -42,11 +43,20 @@ and a top-up rewrites it. Links are **relative** — `../catalog.json`,
 whichever origin it read the document from, and no document names a host.
 There are no `self` links for the same reason.
 
-Only the newest run per source is kept on the bucket (`prune-r2`), so a
-source's Collection lists one Item: its `item` link and its
-`latest-version` link both name the run the pointer names. A client that
-wants the live run follows either; a client that wants the pointer's own
-fields follows the `xue:pointer` link (`../latest.json`, `../latest-<source>.json`).
+Only the newest run per source is kept on the bucket (`prune-r2`) — an
+hour for HRRR, minutes for an MRMS round — so a link into
+`<source>.<run>/` dies with the run, and a client that bookmarked one, or
+held a Collection in its cache, would land on a 404. The Collection
+therefore lists one Item at a **stable path**: `<source>/item.json`, the
+run's Item with every relative href rewritten to reach into the run
+directory (`../gfs.2026091512/tmp2m.zarr`) and nothing else changed
+(`relocate_item`). Its `item` and `latest-version` links both name it; an
+`alternate` link names the run's own copy beside its manifest. A client
+that wants the live run follows `item`; one that wants the pointer's own
+fields follows `xue:pointer` (`../latest.json`, `../latest-<source>.json`).
+The live Item's assets still name objects that are deleted when the run is
+superseded, so a client holds it no longer than the source's cadence, the
+way the shell polls the pointer.
 
 ## The run Item
 
@@ -121,9 +131,9 @@ link, the NOAA open data policy) and `providers` come from a table in
 and the model. `extent` is the live run's: its bbox, its
 `[start_datetime, end_datetime]`. A forecast source's `summaries` carry
 `forecast:reference_datetime`. Links: `root` and `parent` to the catalog,
-`item` and `latest-version` to the live run's Item, `xue:pointer` to the
-live pointer, `license`. `xue:live` repeats the Item id and `xue:pointer`
-the pointer's file name.
+`item` and `latest-version` to the live Item beside it, `alternate` to the
+run's own Item, `xue:pointer` to the live pointer, `license`. `xue:live`
+repeats the Item id and `xue:pointer` the pointer's file name.
 
 ## The showcase
 
@@ -145,13 +155,16 @@ Assets are the same per-bundle set as a run's.
 
 Nothing here is a separate step to remember. `xuebuild build-bin` for a
 whole run and `xuebuild assemble-run` for one built in pieces write the
-Item, the Collection and the catalog right after the manifest and the
-pointer (the report's `stac` names the three files); a piece of a fanned-out
+run's Item, the live Item, the Collection and the catalog right after the
+manifest and the pointer (the report's `stac` names the four files); a
+piece of a fanned-out
 publish (`build-bin --bundles`) writes none, since an Item describes a whole
 run. `showcase build`, `refresh` and `catalog` write the cases' documents
 whenever they rewrite `showcase.json`. On the way to the bucket, `make
-upload-r2` / `upload-r2-manifest` copy the Item with the manifest, `make
-upload-r2-pointer` copies the Collection and the catalog with the pointer,
+upload-r2` / `upload-r2-manifest` copy the run's Item with the manifest,
+`make upload-r2-pointer` copies the live Item, the Collection and the
+catalog with the pointer (the Item first, so the Collection never names a
+live Item that is not there yet),
 and `make upload-r2-showcase` the showcase's — all through the same targets
 the scheduled workflows call, so a publish that predates this document
 simply has no Item, and that is not an error.
@@ -170,7 +183,7 @@ import pystac, xarray as xr
 
 catalog = pystac.Catalog.from_file("https://dataset.ringsaturn.me/xue/catalog.json")
 gfs = catalog.get_child("gfs")
-run = next(gfs.get_items())                       # the live run
+run = next(gfs.get_items())                       # the live Item, …/gfs/item.json
 store = run.assets["tmp2m"].get_absolute_href()   # …/gfs.<run>/tmp2m.zarr
 ds = xr.open_zarr(store, consolidated=False)      # the profile in docs/zarr-profile.md
 ```

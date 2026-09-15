@@ -28,8 +28,9 @@ DRY_RUN ?=
 # the other models use latest-<model>.json.
 LATEST_FILE = $(if $(filter gfs,$(MODEL)),latest.json,latest-$(MODEL).json)
 # The STAC catalog derived beside those (docs/stac.md): a root catalog at
-# the data root, one Collection per model under <model>/, one Item per run
-# beside its manifest. Not read by the shell; for STAC clients.
+# the data root, one Collection per model under <model>/ with the live
+# Item beside it, one Item per run beside its manifest. Not read by the
+# shell; for STAC clients.
 STAC_CATALOG = catalog.json
 STAC_COLLECTION = collection.json
 STAC_ITEM = item.json
@@ -266,15 +267,21 @@ upload-r2-pointer:
 		--content-type application/json --cache-control "no-cache" \
 	&& $(MAKE) --no-print-directory upload-r2-stac-collection MODEL=$(MODEL) DRY_RUN=$(DRY_RUN)
 
-# The pointer's STAC face: the source's Collection, whose `item` and
-# `latest-version` links name the run the pointer names, and the root
-# catalog listing every source. Both mutable like the pointer, so both
+# The pointer's STAC face: the live Item at the source's stable path
+# (the run's Item relocated, so a bookmark outlives the run), the source's
+# Collection, whose `item` and `latest-version` links name it, and the root
+# catalog listing every source. All mutable like the pointer, so all
 # no-cache; uploaded right after it, since a Collection that points at a
 # run the pointer does not is the one inconsistency a client could see.
+# The Item goes first: a Collection must never name a live Item that is
+# not there yet.
 upload-r2-stac-collection:
 	@set -e; \
 	[ -f web/public/data/$(MODEL)/$(STAC_COLLECTION) ] || { echo "no $(MODEL)/$(STAC_COLLECTION); nothing built the catalog"; exit 0; }; \
-	echo "Uploading $(MODEL)/$(STAC_COLLECTION) and $(STAC_CATALOG)..."; \
+	echo "Uploading $(MODEL)/$(STAC_ITEM), $(MODEL)/$(STAC_COLLECTION) and $(STAC_CATALOG)..."; \
+	[ ! -f web/public/data/$(MODEL)/$(STAC_ITEM) ] || \
+	$(S3) cp web/public/data/$(MODEL)/$(STAC_ITEM) s3://$(R2_BUCKET)/$(R2_PREFIX)/$(MODEL)/$(STAC_ITEM) --no-progress $(DRY_RUN) \
+		--content-type application/geo+json --cache-control "no-cache"; \
 	$(S3) cp web/public/data/$(MODEL)/$(STAC_COLLECTION) s3://$(R2_BUCKET)/$(R2_PREFIX)/$(MODEL)/$(STAC_COLLECTION) --no-progress $(DRY_RUN) \
 		--content-type application/json --cache-control "no-cache"; \
 	$(S3) cp web/public/data/$(STAC_CATALOG) s3://$(R2_BUCKET)/$(R2_PREFIX)/$(STAC_CATALOG) --no-progress $(DRY_RUN) \

@@ -505,8 +505,9 @@ their shape — the encoder derives a static
 [STAC](https://stacspec.org/) catalog for clients that find data that way
 (`docs/stac.md`): `catalog.json` at the data root, one
 `<source>/collection.json` per live source whose `item` / `latest-version`
-links name the run the pointer names, one `<source>.<run>/item.json` per
-run beside its manifest with an asset per artifact (the Zarr store as
+links name the live Item at the stable `<source>/item.json` (the run's
+Item with its hrefs relocated, so a bookmark outlives the run), one
+`<source>.<run>/item.json` per run beside its manifest with an asset per artifact (the Zarr store as
 `application/vnd.zarr`, sizes and CRCs under the file extension, the grid
 and axis as datacube dimensions, the cycle as
 `forecast:reference_datetime`), and `showcase/collection.json` with an Item

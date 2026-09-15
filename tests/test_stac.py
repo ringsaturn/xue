@@ -279,12 +279,36 @@ class CollectionAndCatalogTests(unittest.TestCase):
         self.assertEqual(collection["extent"]["spatial"]["bbox"], [[-180.0, -90.0, 180.0, 90.0]])
         self.assertEqual(collection["extent"]["temporal"]["interval"], [["2026-08-14T06:00:00Z", "2026-08-24T06:00:00Z"]])
         links = {link["rel"]: link["href"] for link in collection["links"]}
-        self.assertEqual(links["item"], "../gfs.2026081406/item.json")
-        self.assertEqual(links["latest-version"], "../gfs.2026081406/item.json")
+        # The live Item at the stable path beside the Collection, not the
+        # run's own, which dies with the run.
+        self.assertEqual(links["item"], "item.json")
+        self.assertEqual(links["latest-version"], "item.json")
+        self.assertEqual(links["alternate"], "../gfs.2026081406/item.json")
         self.assertEqual(links["xue:pointer"], "../latest.json")
         self.assertEqual(links["root"], "../catalog.json")
         self.assertIn("license", links)
         self.assertEqual(collection["summaries"]["forecast:reference_datetime"], ["2026-08-14T06:00:00Z"])
+
+    def test_the_live_item_is_the_run_item_relocated(self) -> None:
+        item = stac.run_item(
+            _gfs_manifest(), "dbf3a790", source=source_spec("gfs"), manifest_relative_path="gfs.2026081406/manifest.json"
+        )
+        live = stac.relocate_item(item, from_dir="gfs.2026081406", to_dir="gfs")
+        self.assertEqual(live["id"], item["id"])
+        self.assertEqual(live["properties"], item["properties"])
+        self.assertEqual(live["assets"]["tmp2m"]["href"], "../gfs.2026081406/tmp2m.zarr")
+        self.assertEqual(live["assets"]["manifest"]["href"], "../gfs.2026081406/manifest.json?v=dbf3a790")
+        links = {link["rel"]: link["href"] for link in live["links"]}
+        self.assertEqual(links, {"root": "../catalog.json", "parent": "collection.json", "collection": "collection.json"})
+        # A round's Item is one directory deeper; the relocation climbs it.
+        deep = stac.run_item(
+            _gfs_manifest(), "dbf3a790", source=source_spec("gfs"), manifest_relative_path="gfs.2026081406/1455/manifest.json"
+        )
+        live = stac.relocate_item(deep, from_dir="gfs.2026081406/1455", to_dir="gfs")
+        self.assertEqual(live["assets"]["tmp2m"]["href"], "../gfs.2026081406/1455/tmp2m.zarr")
+        self.assertEqual(live["links"][0]["href"], "../catalog.json")
+        # Everything else is untouched: the two documents differ only in hrefs.
+        self.assertEqual(stac.relocate_item(live, from_dir="gfs", to_dir="gfs.2026081406/1455"), deep)
 
     def test_a_source_without_a_feed_has_no_collection(self) -> None:
         source = source_spec("radar")
@@ -402,6 +426,7 @@ class WritingTests(unittest.TestCase):
         manifest_path.write_text(json.dumps(_gfs_manifest()), encoding="utf-8")
         written = stac.write_run_documents(self.root, source=source_spec("gfs"), manifest_path=manifest_path)
         self.assertEqual(Path(written["item"]), self.root / "gfs.2026081406" / "item.json")
+        self.assertEqual(Path(written["liveItem"]), self.root / "gfs" / "item.json")
         self.assertEqual(Path(written["collection"]), self.root / "gfs" / "collection.json")
         self.assertEqual(Path(written["catalog"]), self.root / "catalog.json")
         item = json.loads(Path(written["item"]).read_text(encoding="utf-8"))
@@ -437,6 +462,10 @@ class PystacRoundTripTests(unittest.TestCase):
         self.assertEqual([item.id for item in items], ["gfs.2026081406"])
         self.assertEqual(items[0].assets["tmp2m"].media_type, stac.ZARR_MEDIA_TYPE)
         self.assertEqual(items[0].bbox, [-180.0, -90.0, 180.0, 90.0])
+        # Walked from the Collection, the Item is the live one, and its
+        # assets resolve into the run directory.
+        self.assertEqual(items[0].get_self_href(), str(root / "gfs" / "item.json"))
+        self.assertEqual(items[0].assets["tmp2m"].get_absolute_href(), str(root / "gfs.2026081406" / "tmp2m.zarr"))
 
 
 if __name__ == "__main__":

@@ -15,6 +15,11 @@ The layout, at the data root:
   like the pointer it mirrors: its ``item`` / ``latest-version`` links name
   the run the pointer names. Rewritten by every publish, uploaded with the
   pointer.
+- ``<source>/item.json`` — the **live Item**: the run Item below, relocated
+  to a path that never changes. Only the newest run is kept on the bucket
+  (an hour for HRRR, minutes for an MRMS round), so a link into
+  ``<source>.<run>/`` dies with the run; this is the URL a Collection
+  links and a client bookmarks, and it always resolves.
 - ``<source>.<run>/item.json`` (a rolling window's
   ``<source>.<run>/<HHMM>/item.json``) — one **Item** per published run,
   beside its manifest and derived from it alone: one asset per artifact
@@ -50,6 +55,7 @@ under the ``xue:`` prefix, undeclared, as STAC custom fields are.
 from __future__ import annotations
 
 import json
+import posixpath
 import re
 import zlib
 from datetime import UTC, datetime, timedelta
@@ -663,14 +669,17 @@ def case_item(entry: dict[str, Any], manifest: dict[str, Any], manifest_crc32: s
 def source_collection(source: SourceSpec, item: dict[str, Any], item_relative_path: str) -> dict[str, Any]:
     """The Collection of one live source: its extent is the live run's
     (only the newest run is kept), and its ``item`` and ``latest-version``
-    links both name that run's Item — ``latest-version`` because the
-    Collection is the STAC face of the live pointer and a client following
-    it lands where the pointer points. Sits at ``<source>/collection.json``,
+    links both name the **live Item** beside it (``item.json`` in the same
+    directory, the run's Item relocated to a stable path) — ``latest-version``
+    because the Collection is the STAC face of the live pointer and a
+    client following it lands where the pointer points. The run's own Item
+    beside its manifest is the ``alternate``: the same document at an
+    address that dies with the run. Sits at ``<source>/collection.json``,
     one level under the data root."""
     if not source.live:
         raise StacError(f"{source.manifest_model} has no live feed to catalog")
     prose = _source_prose(source)
-    item_href = f"../{item_relative_path}"
+    item_href = ITEM_FILENAME
     properties = item["properties"]
     collection: dict[str, Any] = {
         "type": "Collection",
@@ -693,6 +702,12 @@ def source_collection(source: SourceSpec, item: dict[str, Any], item_relative_pa
             {"rel": "parent", "href": f"../{CATALOG_FILENAME}", "type": STAC_JSON_MEDIA_TYPE},
             {"rel": "item", "href": item_href, "type": GEOJSON_MEDIA_TYPE, "title": properties["title"]},
             {"rel": "latest-version", "href": item_href, "type": GEOJSON_MEDIA_TYPE, "title": properties["title"]},
+            {
+                "rel": "alternate",
+                "href": f"../{item_relative_path}",
+                "type": GEOJSON_MEDIA_TYPE,
+                "title": f"{properties['title']} (beside its manifest; gone when the run is)",
+            },
             {
                 "rel": "xue:pointer",
                 "href": f"../{source.latest_filename}",
@@ -919,11 +934,38 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
     temporary.replace(path)
 
 
+def _rebase_href(href: str, from_dir: str, to_dir: str) -> str:
+    """``href``, written relative to ``from_dir``, rewritten relative to
+    ``to_dir`` (both directories relative to the data root, ``""`` for the
+    root itself). An absolute URL and a query string pass through."""
+    if href.startswith(("http:", "https:", "/")):
+        return href
+    path, separator, query = href.partition("?")
+    target = posixpath.normpath(posixpath.join(from_dir, path)) if from_dir else posixpath.normpath(path)
+    rebased = posixpath.relpath(target, to_dir or ".")
+    return f"{rebased}{separator}{query}"
+
+
+def relocate_item(item: dict[str, Any], *, from_dir: str, to_dir: str) -> dict[str, Any]:
+    """The same Item at another address: every relative asset and link href
+    rewritten from ``from_dir`` to ``to_dir``, nothing else touched, so the
+    live Item at ``<source>/item.json`` names exactly the objects the run's
+    own Item does."""
+    relocated = json.loads(json.dumps(item))
+    for link in relocated["links"]:
+        link["href"] = _rebase_href(link["href"], from_dir, to_dir)
+    for asset in relocated["assets"].values():
+        asset["href"] = _rebase_href(asset["href"], from_dir, to_dir)
+    validate_item(relocated)
+    return relocated
+
+
 def write_run_documents(output_dir: Path, *, source: SourceSpec, manifest_path: Path) -> dict[str, str]:
     """Write the STAC documents a published run needs, from the manifest at
     ``manifest_path`` under ``output_dir`` (the data root): the run's
-    ``item.json`` beside the manifest, the source's ``collection.json`` and
-    the root ``catalog.json``. Returns their paths by name.
+    ``item.json`` beside the manifest, the same Item relocated to the
+    source's stable ``<source>/item.json``, the source's ``collection.json``
+    and the root ``catalog.json``. Returns their paths by name.
 
     Called after the manifest and the pointer are written — by ``build-bin``
     for a run built whole (either encoder) and by ``assemble-run`` for one
@@ -935,13 +977,21 @@ def write_run_documents(output_dir: Path, *, source: SourceSpec, manifest_path: 
     item = run_item(manifest, _crc32_of(manifest_bytes), source=source, manifest_relative_path=relative)
     item_path = manifest_path.with_name(ITEM_FILENAME)
     item_relative = item_path.relative_to(output_dir).as_posix()
+    live_item = relocate_item(item, from_dir=posixpath.dirname(item_relative), to_dir=source.id)
+    live_item_path = output_dir / source.id / ITEM_FILENAME
     collection = source_collection(source, item, item_relative)
     collection_path = output_dir / source.id / COLLECTION_FILENAME
     catalog_path = output_dir / CATALOG_FILENAME
     _write_json(item_path, item)
+    _write_json(live_item_path, live_item)
     _write_json(collection_path, collection)
     _write_json(catalog_path, root_catalog())
-    return {"item": str(item_path), "collection": str(collection_path), "catalog": str(catalog_path)}
+    return {
+        "item": str(item_path),
+        "liveItem": str(live_item_path),
+        "collection": str(collection_path),
+        "catalog": str(catalog_path),
+    }
 
 
 def write_showcase_documents(output_dir: Path, catalog: dict[str, Any]) -> dict[str, Any]:

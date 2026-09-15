@@ -374,6 +374,7 @@ class SplitBuildIdentityTests(unittest.TestCase):
 
     def test_the_stac_documents_describe_the_run(self) -> None:
         self.assertIn(Path("gfs.2026081406/item.json"), self._artifacts(self.split))
+        self.assertIn(Path("gfs/item.json"), self._artifacts(self.split))
         self.assertIn(Path("gfs/collection.json"), self._artifacts(self.split))
         self.assertIn(Path("catalog.json"), self._artifacts(self.split))
         item = json.loads((self.split / "gfs.2026081406" / "item.json").read_text(encoding="utf-8"))
@@ -466,7 +467,13 @@ class TopUpIdentityTests(unittest.TestCase):
         self.assertEqual(built, set(self.ocean))
 
     def test_the_manifest_and_pointer_are_the_whole_builds(self) -> None:
-        for name in (f"{self.run_directory}/manifest.json", "latest.json", f"{self.run_directory}/item.json", "gfs/collection.json"):
+        for name in (
+            f"{self.run_directory}/manifest.json",
+            "latest.json",
+            f"{self.run_directory}/item.json",
+            "gfs/item.json",
+            "gfs/collection.json",
+        ):
             with self.subTest(file=name):
                 self.assertTrue(filecmp.cmp(self.whole / name, self.topped / name, shallow=False), name)
 

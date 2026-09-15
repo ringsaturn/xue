@@ -525,8 +525,11 @@ A static STAC 1.1.0 catalog is **derived** beside the JSON the shell reads
 frontend never reads the catalog (`docs/stac.md` is the contract). Root
 `catalog.json` (one child per live source + the showcase, a pure function
 of the registry), `<source>/collection.json` (the pointer's STAC face: its
-`item` / `latest-version` links name the live run, mutable, uploaded with
-the pointer by `upload-r2-pointer`), `<source>.<run>/item.json` beside
+`item` / `latest-version` links name the **live Item** `<source>/item.json`
+beside it — the run's Item with its hrefs relocated (`relocate_item`) to a
+path that outlives the run, since a link into `<source>.<run>/` dies with
+the run on prune; both mutable, uploaded with the pointer by
+`upload-r2-pointer`), `<source>.<run>/item.json` beside
 each manifest (`<run>/<HHMM>/item.json` for an MRMS round; uploaded
 no-cache with the manifest by `upload-r2` / `upload-r2-manifest`), and
 `showcase/collection.json` + `showcase/<case>/item.json` (written by
