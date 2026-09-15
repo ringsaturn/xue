@@ -4,6 +4,7 @@ import { CRC32_INITIAL, crc32Hex, crc32Of, crc32Update } from "../../web/src/crc
 import {
   axisUnitSeconds,
   containerOf,
+  modelDefaultVariable,
   deliveryBytes,
   FORECAST_MODEL_IDS,
   FORECAST_MODELS,
@@ -409,6 +410,15 @@ describe("crc32", () => {
       crc = crc32Update(crc, data.subarray(offset, offset + 100));
     }
     expect(crc32Hex(crc)).toBe(crc32Of(data));
+  });
+});
+
+describe("modelDefaultVariable", () => {
+  it("opens the radar mosaic on its reflectivity and a forecast on the app's default", () => {
+    expect(modelDefaultVariable("mrms", "prate")).toBe("cref");
+    for (const model of ["gfs", "sflux", "ecmwf", "hrrr"] as const) {
+      expect(modelDefaultVariable(model, "prate")).toBe("prate");
+    }
   });
 });
 

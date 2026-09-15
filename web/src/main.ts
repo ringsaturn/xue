@@ -59,6 +59,7 @@ import {
   ManifestRejectedError,
   hasBundle,
   isBundleVariableId,
+  modelDefaultVariable,
   parseBundleMetadata,
   pickBundleVariant,
   axisUnitSeconds,
@@ -1346,6 +1347,12 @@ let selectedModelId: ForecastModelId = parseModelFromSearch(window.location.sear
 const requestedVariableId: ForecastBundleId | null = parseVariableFromSearch(window.location.search);
 /** Contour lines the URL asked for over the filled field, or none. */
 const requestedLines: PressureBundleId | null = parseLinesFromSearch(window.location.search);
+/** Whether the layer on screen was asked for — by `?type=` or by a press
+ * on the rail — rather than defaulted. A defaulted layer follows the
+ * dataset: opening or switching to the radar mosaic shows its
+ * reflectivity, a forecast its precipitation; a chosen layer is kept
+ * across a model switch as it always was. */
+let variableChosen = requestedVariableId !== null;
 /** The primary bundle: the fill's, or the lines' when nothing is filled. */
 let selectedVariableId: ForecastBundleId = requestedVariableId ?? (experimentEnabled ? EXPERIMENT_FILL : DEFAULT_VARIABLE);
 /** The composition on screen, or being switched to. */
@@ -5450,6 +5457,7 @@ function trySelectComposite(index: number): void {
  * (the existing variable switch), then reconcile the overlays. A slot the
  * run does not ship empties rather than errors. */
 async function activateComposition(next: ViewComposition): Promise<void> {
+  variableChosen = true;
   if (!manifest || !layersAdded || switchingVariable) return;
   const resolved = resolveComposition(next, manifest, activeCase?.defaultVariable ?? DEFAULT_VARIABLE);
   const primary = compositionPrimary(resolved);
@@ -5467,6 +5475,7 @@ async function activateComposition(next: ViewComposition): Promise<void> {
 }
 
 async function activateVariable(variableId: ForecastBundleId): Promise<void> {
+  variableChosen = true;
   if (!manifest || !layersAdded || switchingVariable || variableId === activeSession?.id) return;
   const sequence = initializeSequence;
   const resident = sessions.get(variableId);
@@ -5643,6 +5652,9 @@ async function initialize({ frame = false }: { frame?: boolean } = {}): Promise<
     // for when that leaves nothing, and a live run always carries its core
     // set — the forecast pair, or the reflectivity on a radar mosaic, which
     // is what a switch onto one opens.
+    if (!activeCase && !variableChosen && !experimentEnabled) {
+      composition = compositionForPrimary(modelDefaultVariable(selectedModelId, DEFAULT_VARIABLE), composition.lines);
+    }
     composition = resolveComposition(
       composition,
       loadedManifest,

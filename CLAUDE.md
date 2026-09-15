@@ -788,6 +788,12 @@ locally, browse `http://localhost:4173` rather than the loopback address.
   rejects a missing or stray key. Only human-facing copy is translated;
   thrown `Error` messages, worker messages, instrument-panel codes (`F058`,
   `12 FPS`, `PLAY`) and diagnostics stay English in every locale.
+- A layer nobody asked for follows the dataset: with no `?type=` and no
+  tile pressed this session (`main.ts::variableChosen`), opening or
+  switching to a model shows `FORECAST_MODELS[].defaultVariable` — the
+  reflectivity on the MRMS mosaic, whose precipitation rate is the derived
+  product — else `DEFAULT_VARIABLE` (precipitation); a chosen layer is kept
+  across a model switch as before.
 - Timeline copy follows the *kind* of dataset, not the locale:
   `isObservationModel` (the frontend mirror of `SourceSpec.observation`)
   swaps "FORECAST HOUR"/`F058`/模式周期/有效时间 for

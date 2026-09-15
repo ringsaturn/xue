@@ -35,6 +35,11 @@ export interface ForecastModelInfo {
    * reflectivity on a radar mosaic (mirrors `SourceSpec.core_bundle_ids`).
    * Absent means the forecast pair, `FORECAST_VARIABLE_IDS`. */
   coreBundles?: readonly string[];
+  /** The layer the dataset opens on when nothing asked for one — no
+   * `?type=`, no tile pressed this session: the reflectivity on a radar
+   * mosaic, whose precipitation rate is the derived product. Absent means
+   * the app's default, precipitation. */
+  defaultVariable?: ForecastBundleId;
   /** The part of the world a regional model covers, as [west, south, east,
    * north] in degrees: where the camera goes when the model is opened on a
    * view that shows none of it. A global model has none. */
@@ -79,9 +84,15 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
     latestFilename: "latest-mrms.json",
     observation: true,
     coreBundles: ["cref"],
+    defaultVariable: "cref",
     region: [-130, 20, -60, 55],
   },
 };
+
+/** The layer a dataset opens on when nothing asked for one. */
+export function modelDefaultVariable(model: ForecastModelId, fallback: ForecastBundleId): ForecastBundleId {
+  return FORECAST_MODELS[model].defaultVariable ?? fallback;
+}
 
 /** True when a dataset is observations, not a forecast. */
 export function isObservationModel(model: ForecastModelId): boolean {
