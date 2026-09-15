@@ -57,4 +57,8 @@ jobs:
       force: ${{ inputs.force || false }}
       dry_run: ${{ inputs.dry_run || false }}
       max_jobs: 4
+      # The dual-publish soak (plan 017 phase 5) runs on this source first:
+      # a small hourly run whose viewers are few, so a store that misbehaves
+      # costs an hour of one regional model rather than the global default.
+      zarr: true
     secrets: inherit
