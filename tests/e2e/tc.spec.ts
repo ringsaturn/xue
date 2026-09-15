@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { routeStores } from "./artifacts";
+import { withoutStores } from "./artifacts";
 
 // The Protomaps API key is origin-locked to the production domains, so from
 // 127.0.0.1 every tile request dies on CORS — and a map whose tiles never
@@ -22,12 +22,18 @@ const LATEST_FIXTURE = JSON.parse(
     "utf8",
   ),
 );
-const MANIFEST_FIXTURE = JSON.parse(
-  readFileSync(
-    fileURLToPath(
-      new URL("../fixtures/generated/web/manifest.json", import.meta.url),
+// The run as one published before the Zarr store existed (app.spec.ts
+// runs on the same shape): the bundles are served whole, and the wait
+// below is for the whole-download state. The marks take no session, so
+// which path the field came by is not this suite's concern.
+const MANIFEST_FIXTURE = withoutStores(
+  JSON.parse(
+    readFileSync(
+      fileURLToPath(
+        new URL("../fixtures/generated/web/manifest.json", import.meta.url),
+      ),
+      "utf8",
     ),
-    "utf8",
   ),
 );
 const BUNDLES: Record<string, Buffer> = Object.fromEntries(
@@ -70,10 +76,6 @@ async function routeRun(page: Page): Promise<void> {
   await page.route("**/data/gfs.*/manifest.json*", (route) =>
     route.fulfill({ json: MANIFEST_FIXTURE }),
   );
-  // The run ships stores for its surface bundles, which is what the shell
-  // opens by default; the marks take no session, so which path the field
-  // came by is not this suite's concern.
-  await routeStores(page, "**/data/gfs.*/*.zarr/**", fileURLToPath(new URL("../fixtures/generated/web/", import.meta.url)));
   await page.route("**/data/gfs.*/*.xue?*", (route) => {
     const name = new URL(route.request().url()).pathname.split("/").pop() ?? "";
     const body = BUNDLES[name];
