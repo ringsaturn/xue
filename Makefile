@@ -175,19 +175,32 @@ upload-r2:
 		|| echo "warming the edge cache failed; the run goes live cold"; \
 	$(MAKE) --no-print-directory upload-r2-pointer MODEL=$(MODEL) RUN=$(RUN) DRY_RUN=$(DRY_RUN)
 
-# One piece of a fanned-out publish: sync whatever bundles, variants, posters
+# One piece of a fanned-out publish: copy whatever bundles, variants, posters
 # and companions this machine built into the run directory (no manifest —
 # the assembler writes that, and a part stays local), then warm exactly
 # those artifacts, listed by the partial manifests present. The run is not
 # live and nothing references these objects until the pointer flips, so a
 # piece that never gets assembled is an orphan the next prune deletes.
+#
+# `cp --recursive`, not `sync`: a sync lists the destination prefix to
+# decide what to skip, and with every piece of a run doing that at once
+# over a prefix of a few hundred store objects, R2 answered one of them
+# `ServiceUnavailable: reduce your concurrent request rate for the same
+# object` and the piece failed. A piece has nothing to skip — its objects
+# are its own, immutable, and written once — so a plain copy is the same
+# upload without the listing. Three attempts, since a transient refusal of
+# one object out of hundreds should not cost the whole publish.
 upload-r2-bundles:
 	@set -e; dir=web/public/data/$(MODEL).$(RUN); \
 	[ -d "$$dir" ] || { echo "no built bundles at $$dir, pass RUN=YYYYMMDDHH"; exit 1; }; \
 	ls $$dir/manifest.part.*.json > /dev/null 2>&1 || { echo "no manifest.part.*.json in $$dir: build with --bundles"; exit 1; }; \
-	$(S3) sync $$dir s3://$(R2_BUCKET)/$(R2_PREFIX)/$(MODEL).$(RUN)/ --no-progress $(DRY_RUN) \
-		--exclude "manifest.json" --exclude "manifest.part.*.json" \
-		--cache-control "public, max-age=31536000, immutable"; \
+	for attempt in 1 2 3; do \
+		$(S3) cp $$dir s3://$(R2_BUCKET)/$(R2_PREFIX)/$(MODEL).$(RUN)/ --recursive --no-progress $(DRY_RUN) \
+			--exclude "manifest.json" --exclude "manifest.part.*.json" \
+			--cache-control "public, max-age=31536000, immutable" && break; \
+		[ "$$attempt" -lt 3 ] || { echo "uploading the bundles failed three times"; exit 1; }; \
+		echo "upload attempt $$attempt failed; retrying in $$((attempt * 20)) s"; sleep $$((attempt * 20)); \
+	done; \
 	[ -n "$(DRY_RUN)" ] || for part in $$dir/manifest.part.*.json; do \
 		scripts/warm_edge_cache.sh $(MODEL) $(RUN) --artifacts-of "$$part" \
 			|| echo "warming the edge cache for $$part failed; those artifacts go live cold"; \
