@@ -74,7 +74,9 @@ beforeAll(async () => {
   ensureFixtures();
   wasm = await import("../../web/src/wasm/xue");
   await wasm.default({ module_or_path: readFileSync(`${WASM_DIR}xue_bg.wasm`) });
-});
+  // Generating the fixtures on a fresh checkout encodes five runs of 121
+  // frames through the Python encoder, well past vitest's 10 s hook default.
+}, 300_000);
 
 // -- pure parts ----------------------------------------------------------------
 

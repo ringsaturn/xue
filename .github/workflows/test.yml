@@ -169,6 +169,11 @@ jobs:
       - name: Build WASM decoder
         run: make wasm
 
+      # The same fixtures the Playwright global setup builds; generated here
+      # as a step of its own so the unit tests never wait on the encoder.
+      - name: Build web fixtures
+        run: .venv/bin/python tests/prepare_web_fixture.py
+
       - name: Run web unit tests
         run: npm run test:web
 
