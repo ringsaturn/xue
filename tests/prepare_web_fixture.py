@@ -14,7 +14,7 @@ from pathlib import Path
 
 import numpy as np
 
-from xuebuild import binformat, temporal, zstdcli
+from xuebuild import binformat, temporal, zarrstore, zstdcli
 from xuebuild.binconvert import (
     GridInfo,
     WIND_COMPONENT_IDS,
@@ -49,6 +49,11 @@ FIXTURE_TILE = (16, 16)
 # then every vector. The manifest no longer validates an order, so the fixture
 # states its own.
 FIXTURE_BUNDLE_ORDER = ("tmp2m", "prate", "hgt500", "tmp850", "wind10m")
+# The bundles that also ship as Zarr stores (docs/zarr-profile.md), so the
+# manifest carries `zarr` descriptors for the `?backend=zarr` channel to
+# take and leaves the rest on the container path — both are exercised. The
+# upper-air and pressure bundles stay container-only.
+FIXTURE_ZARR_BUNDLES = ("tmp2m", "prate", "wind10m")
 HOURS = list(range(121))
 # The ECMWF fixture models the full IFS open data series: 3-hourly to 144
 # hours, 6-hourly to 240 — a mixed-step axis, so its bundles list their hours
@@ -103,6 +108,13 @@ def write_v2_bundle(
     )
     binformat.read_bundle(path).verify_all()
     return path.read_bytes()
+
+def _export_store(bundle_path: Path) -> dict:
+    """The bundle's Zarr store beside it, and the manifest descriptor that
+    names it — derived from the finished file the way a build derives it."""
+    report = zarrstore.export_bundle(bundle_path, zarrstore.store_path_for(bundle_path))
+    return report.descriptor(WEB_FIXTURE_ROOT)
+
 
 def _temperature_plane(hour: int) -> np.ndarray:
     longitude = np.linspace(-180, 177.5, WIDTH)
@@ -244,22 +256,27 @@ def prepare_web_fixture() -> Path:
         poster_payload, poster_grid = encode_poster(first_planes[variable_id], grid)
         poster_path = WEB_FIXTURE_ROOT / f"{variable_id}.poster.bin"
         poster_path.write_bytes(poster_payload)
+        variant = {
+            "path": f"{variable_id}.half.xue",
+            "width": half_grid.width,
+            "height": half_grid.height,
+            "byteLength": len(half_data),
+            "crc32": f"{zlib.crc32(half_data) & 0xFFFFFFFF:08x}",
+            "bandwidth": _playback_bandwidth(len(half_data), len(HOURS)),
+        }
+        entry = {
+            "variable": variable_id,
+            "path": f"{variable_id}.xue",
+            "byteLength": len(data),
+            "crc32": f"{zlib.crc32(data) & 0xFFFFFFFF:08x}",
+        }
+        if variable_id in FIXTURE_ZARR_BUNDLES:
+            entry["zarr"] = _export_store(bundle_path)
+            variant["zarr"] = _export_store(half_path)
         bundles.append(
             {
-                "variable": variable_id,
-                "path": f"{variable_id}.xue",
-                "byteLength": len(data),
-                "crc32": f"{zlib.crc32(data) & 0xFFFFFFFF:08x}",
-                "variants": [
-                    {
-                        "path": f"{variable_id}.half.xue",
-                        "width": half_grid.width,
-                        "height": half_grid.height,
-                        "byteLength": len(half_data),
-                        "crc32": f"{zlib.crc32(half_data) & 0xFFFFFFFF:08x}",
-                        "bandwidth": _playback_bandwidth(len(half_data), len(HOURS)),
-                    }
-                ],
+                **entry,
+                "variants": [variant],
                 "poster": {
                     "path": f"{variable_id}.poster.bin",
                     "width": poster_grid.width,
@@ -364,9 +381,18 @@ def prepare_web_fixture() -> Path:
                     "byteLength": len(wind_half_data),
                     "crc32": f"{zlib.crc32(wind_half_data) & 0xFFFFFFFF:08x}",
                     "bandwidth": _playback_bandwidth(len(wind_half_data), len(HOURS)),
+                    "zarr": _export_store(wind_half_path),
                 }
             ],
+            "zarr": _export_store(wind_path),
         }
+    )
+    # A delta-chain store with its index at the start of each shard, for the
+    # unit tests alone — the manifest never names it. The two options the
+    # profile leaves open are what it exercises: the reader must accept
+    # either index location and decode `xue.delta` as the PREVIOUS predictor.
+    zarrstore.export_bundle(
+        WEB_FIXTURE_ROOT / "tmp2m.xue", WEB_FIXTURE_ROOT / "tmp2m.delta.zarr", delta=True, index_location="start"
     )
 
     # A real run writes scalars before vectors; the fixture mirrors that,

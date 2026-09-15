@@ -22,6 +22,7 @@ from .errors import ConversionError, XueError
 from .fetch import WINDOW_FILENAME, fetch_run, parse_run, resolve_run, window_summary
 from .showcase import CASE_SIDECAR, build_case, load_cases, refresh_sidecar, write_catalog
 from .sources import SOURCES, source_spec
+from .zarrstore import DEFAULT_INDEX_LOCATION, INDEX_LOCATIONS, enabled_by_environment, export_bundle, store_path_for
 from .tc.build import build_product as build_tc_product
 from .tc.build import load_previous_index as load_previous_tc_index
 from .tc.fetch import SOURCE_IDS as TC_SOURCE_IDS
@@ -124,9 +125,38 @@ def parser() -> argparse.ArgumentParser:
         action="store_true",
         help="do not build the half-resolution .half.xue variant bundles",
     )
+    convert_bin_parser.add_argument(
+        "--zarr",
+        action="store_true",
+        help="also derive a Zarr v3 store beside every bundle and variant (docs/zarr-profile.md) and name it "
+        "in the manifest; XUE_ZARR=1 in the environment does the same",
+    )
 
     verify_bin_parser = commands.add_parser("verify-bin", help="validate and fully decode a Xue bundle")
     verify_bin_parser.add_argument("bundle", type=Path)
+
+    export_zarr_parser = commands.add_parser(
+        "export-zarr",
+        help="derive a Zarr v3 store from a Xue bundle: the same codes, re-chunked onto a regular six-frame time "
+        "grid, one shard per time chunk (docs/zarr-profile.md)",
+    )
+    export_zarr_parser.add_argument("bundle", type=Path)
+    export_zarr_parser.add_argument(
+        "--out", type=Path, help="the store's root directory (default: <bundle>.zarr beside the bundle)"
+    )
+    export_zarr_parser.add_argument(
+        "--delta",
+        action="store_true",
+        help="put the xue.delta codec in front of zstd on the variables the bundle predicts from the previous "
+        "frame, so their chunks compress to the bundle's own bytes; a client then needs the codec registered",
+    )
+    export_zarr_parser.add_argument(
+        "--index-location",
+        choices=INDEX_LOCATIONS,
+        default=DEFAULT_INDEX_LOCATION,
+        help=f"where each shard keeps its chunk index (default {DEFAULT_INDEX_LOCATION}, which a client fetches "
+        "as a suffix range without knowing the object's length)",
+    )
 
     build_bin_parser = commands.add_parser("build-bin", help="fetch a run and build per-variable Xue bundles and the manifest")
     _common_run_arguments(build_bin_parser, force_help="replace existing bundle and manifest")
@@ -149,6 +179,12 @@ def parser() -> argparse.ArgumentParser:
         "--skip-variants",
         action="store_true",
         help="do not build the half-resolution .half.xue variant bundles",
+    )
+    build_bin_parser.add_argument(
+        "--zarr",
+        action="store_true",
+        help="also derive a Zarr v3 store beside every bundle and variant (docs/zarr-profile.md) and name it "
+        "in the manifest; XUE_ZARR=1 in the environment does the same",
     )
     build_bin_parser.add_argument(
         "--bundles",
@@ -314,10 +350,19 @@ def main(argv: list[str] | None = None) -> int:
                 skip_variants=arguments.skip_variants,
                 model=arguments.model,
                 last_hour=arguments.hours,
+                zarr=arguments.zarr or enabled_by_environment(),
             )
             print(json.dumps(report, indent=2))
         elif arguments.command == "verify-bin":
             print(json.dumps(verify_bin(arguments.bundle), indent=2))
+        elif arguments.command == "export-zarr":
+            report = export_bundle(
+                arguments.bundle,
+                arguments.out if arguments.out is not None else store_path_for(arguments.bundle),
+                delta=arguments.delta,
+                index_location=arguments.index_location,
+            )
+            print(json.dumps(report.to_dict(), indent=2))
         elif arguments.command == "showcase":
             if arguments.showcase_command == "catalog":
                 print(write_catalog(arguments.output_dir))
@@ -428,6 +473,7 @@ def main(argv: list[str] | None = None) -> int:
                 skip_variants=arguments.skip_variants,
                 model=arguments.model,
                 bundle_ids=bundle_ids,
+                zarr=arguments.zarr or enabled_by_environment(),
             )
             report["run"] = run.id
             if arguments.round is not None:

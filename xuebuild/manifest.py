@@ -104,12 +104,41 @@ def build_bin_manifest(
                 **({"variants": bundle["variants"]} if "variants" in bundle else {}),
                 **({"video": bundle["video"]} if "video" in bundle else {}),
                 **({"poster": bundle["poster"]} if "poster" in bundle else {}),
+                **({"zarr": bundle["zarr"]} if "zarr" in bundle else {}),
             }
             for bundle in bundles
         ],
     }
     validate_bin_manifest(payload, expected_hours=expected_hours, require_core_variables=require_core_variables)
     return payload
+
+
+def _validate_zarr_descriptor(store: object, variable: str, paths: set[str]) -> None:
+    """The optional Zarr store beside a bundle or a variant: the store's root
+    directory (a relative ``.zarr`` path, under the same rules as the bundle
+    path), the sum of every object in it, and the CRC-32 of its root
+    ``zarr.json``. Optional everywhere: a run that ships no store is
+    complete without it, and a reader that does not know the field skips it
+    — every validator here checks named fields and rejects no extra key."""
+    if not isinstance(store, dict):
+        raise ManifestError(f"manifest bundle zarr descriptor must be an object for {variable}")
+    path = store.get("path")
+    if (
+        not isinstance(path, str)
+        or not path.endswith(".zarr")
+        or path.startswith(("/", "http:", "https:"))
+        or ".." in Path(path).parts
+    ):
+        raise ManifestError(f"manifest bundle zarr path must be a relative .zarr path for {variable}")
+    if path in paths:
+        raise ManifestError("manifest contains duplicate bundle paths")
+    paths.add(path)
+    byte_length = store.get("byteLength")
+    if not isinstance(byte_length, int) or byte_length <= 0:
+        raise ManifestError(f"manifest bundle zarr byteLength must be a positive integer for {variable}")
+    crc32 = store.get("crc32")
+    if not isinstance(crc32, str) or len(crc32) != 8 or any(ch not in "0123456789abcdef" for ch in crc32):
+        raise ManifestError(f"manifest bundle zarr crc32 must be 8 lowercase hex characters for {variable}")
 
 
 def _validate_variant_descriptor(variant: object, variable: str, paths: set[str]) -> None:
@@ -133,6 +162,8 @@ def _validate_variant_descriptor(variant: object, variable: str, paths: set[str]
     crc32 = variant.get("crc32")
     if not isinstance(crc32, str) or len(crc32) != 8 or any(ch not in "0123456789abcdef" for ch in crc32):
         raise ManifestError(f"manifest bundle variant crc32 must be 8 lowercase hex characters for {variable}")
+    if "zarr" in variant:
+        _validate_zarr_descriptor(variant["zarr"], variable, paths)
 
 
 def _validate_poster_descriptor(poster: object, variable: str, paths: set[str]) -> None:
@@ -268,6 +299,8 @@ def validate_bin_manifest(
             _validate_video_descriptor(bundle["video"], variable, paths)
         if "poster" in bundle:
             _validate_poster_descriptor(bundle["poster"], variable, paths)
+        if "zarr" in bundle:
+            _validate_zarr_descriptor(bundle["zarr"], variable, paths)
         variables.append(variable)
     if require_core_variables:
         for required in MODEL_CORE_BUNDLES[model]:

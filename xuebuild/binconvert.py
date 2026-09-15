@@ -28,7 +28,7 @@ from typing import Any
 
 import numpy as np
 
-from . import binformat, grib2, temporal, zstdcli
+from . import binformat, grib2, temporal, zarrstore, zstdcli
 from .errors import ConversionError, DownloadError
 from .gdal import (
     discover_inputs,
@@ -1361,6 +1361,7 @@ def _bundle_manifest_entry(
                 "byteLength": variant["byteLength"],
                 "crc32": variant["crc32"],
                 "bandwidth": variant["bandwidth"],
+                **({"zarr": _zarr_descriptor(variant["zarr"], manifest_dir)} if "zarr" in variant else {}),
             }
             for variant in variant_reports
         ]
@@ -1386,7 +1387,20 @@ def _bundle_manifest_entry(
             "frameCount": video_report["frameCount"],
             "metadataJson": video_report["metadataJson"],
         }
+    if "zarr" in bundle:
+        entry["zarr"] = _zarr_descriptor(bundle["zarr"], manifest_dir)
     return entry
+
+
+def _zarr_descriptor(report: dict[str, Any], manifest_dir: Path) -> dict[str, Any]:
+    """The manifest's ``zarr`` descriptor from a bundle report's ``zarr``
+    block (the store's absolute path, its size and the CRC-32 of its root
+    document, as `zarrstore.export_bundle` reports them)."""
+    return {
+        "path": Path(report["path"]).relative_to(manifest_dir).as_posix(),
+        "byteLength": report["byteLength"],
+        "crc32": report["crc32"],
+    }
 
 
 def convert_bin(
@@ -1408,6 +1422,7 @@ def convert_bin(
     bbox: tuple[float, float, float, float] | None = None,
     bundle_ids: tuple[str, ...] | None = None,
     last_hour: int | None = None,
+    zarr: bool = False,
 ) -> dict[str, Any]:
     """Convert a GRIB run into per-variable Xue bundles.
 
@@ -1427,6 +1442,11 @@ def convert_bin(
     for, so it is not required to hold the core tmp2m and prate pair.
     ``last_hour`` trims an observation source's series to a leading window;
     a forecast run is already exactly the frames that were fetched.
+    ``zarr`` derives a Zarr v3 store beside every bundle and variant written
+    (`xuebuild.zarrstore`, docs/zarr-profile.md) and names it in the
+    manifest; the store is read back out of the finished ``.xue``, so it
+    carries the same codes by construction and the bundle's bytes do not
+    depend on whether it was asked for.
     """
     if profile not in PROFILES:
         raise ConversionError(f"unknown profile: {profile}")
@@ -1850,6 +1870,17 @@ def convert_bin(
                     report["width"] = bundle_grid.width
                     report["height"] = bundle_grid.height
                     report["bandwidth"] = _playback_bandwidth(report["byteLength"], len(bundle_offsets))
+                if zarr:
+                    # Derived from the file just written, never from the
+                    # codes in memory: the store is a second packaging of
+                    # the bundle's bytes, and reading them back is what
+                    # makes the two agree by construction.
+                    bundle_path = Path(report["output"])
+                    export = zarrstore.export_bundle(
+                        bundle_path, zarrstore.store_path_for(bundle_path), executor=compressor
+                    )
+                    LOG.info("wrote %s (%.2f MB)", export.path, export.byte_length / 1e6)
+                    report["zarr"] = export.to_dict()
                 return report
 
             return writers.submit(job)

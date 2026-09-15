@@ -117,6 +117,7 @@ import {
 } from "./playback";
 import {
   DEFAULT_VARIABLE,
+  parseBackendFromSearch,
   parseCameraFromHash,
   parseCaseFromSearch,
   parseExperimentFromSearch,
@@ -206,6 +207,7 @@ import {
   type VideoFrameIndexEntry,
   type VideoStreamSource,
 } from "./webcodecs";
+import { spawnZarrWorker, zarrInitMessage, zarrObjectUrl, zarrRootUrl, zarrStoreFor } from "./zarr/channel";
 
 // Rewrite the static shell into the detected locale and appearance before
 // anything renders.
@@ -1126,8 +1128,9 @@ interface VariableSession {
    * scalars, the u and v pair for wind. */
   variables: BundleVariable[];
   /** Delivery format actually in use for this variable ("Xue ½" is the
-   * half-resolution variant tier). */
-  format: "H.264" | "Xue" | "Xue ½";
+   * half-resolution variant tier; "Zarr" and "Zarr ½" the same tiers read
+   * through the Zarr channel). */
+  format: "H.264" | "Xue" | "Xue ½" | "Zarr" | "Zarr ½";
   /** Network bytes downloaded for this variable's artifacts only. */
   bytes: number;
   /** Total bytes of this variable's artifacts (stream + index). */
@@ -1377,6 +1380,11 @@ const requestedCaseId: string | null = parseCaseFromSearch(window.location.searc
  * default — the Xue decoder is the everyday path, and the video artifacts
  * ride along only for `?use_h264=true`. */
 const h264Enabled = parseUseH264FromSearch(window.location.search);
+/** Which channel a session reads its bundle through. `xue` — the default —
+ * is the container; `?backend=zarr` takes the Zarr store a run publishes
+ * beside it, for the bundles that have one, and the container for the rest.
+ * A comparison path: the same decoder over another index. */
+const dataBackend = parseBackendFromSearch(window.location.search);
 /** Resolution tier this session asks for. `auto` — the default — lets the
  * viewport and the connection pick; `?res=half` / `?res=full` pin one end of
  * the ladder, for a metered link or for a look at the full grid regardless of
@@ -2632,6 +2640,16 @@ function drawProbeChart(values: ProbeValue[], selected: number, variable: Bundle
   context.textAlign = "right";
   context.fillText(formatProbeValue(variable, highest), gutter - 8, top);
   if (!flat) context.fillText(formatProbeValue(variable, lowest), gutter - 8, bottom);
+}
+
+
+/** The data card's format readout. The container's names are literals the
+ * card has always shown; the store's goes through the dictionary like the
+ * rest of the card, though as instrument text it reads "Zarr" everywhere. */
+function formatReadout(format: VariableSession["format"]): string {
+  if (format === "Zarr") return t("formatZarr");
+  if (format === "Zarr ½") return `${t("formatZarr")} ½`;
+  return format;
 }
 
 /** Sync the data card with one session's delivery state. The card only reads
@@ -4141,30 +4159,47 @@ function loadVariable(
       extraBytes = index.byteLength;
     } else {
       const target = variant ?? descriptor;
-      const url = artifactUrl(target.path, target.crc32);
-      streaming = await supportsRangeRequests(url);
+      // The Zarr channel is taken only when asked for and only where the
+      // tier carries a store; it is streamed or nothing, so an origin that
+      // cannot serve ranges sends the session down the container path.
+      const store = zarrStoreFor(dataBackend, descriptor, variant);
+      const storeRoot = store && manifestUrl ? zarrRootUrl(store.path, manifestUrl) : null;
+      const zarr = store && storeRoot !== null && (await supportsRangeRequests(zarrObjectUrl(storeRoot, "zarr.json", store.crc32)));
       if (sequence !== initializeSequence) throw new DOMException("aborted", "AbortError");
-      if (streaming) {
-        channel = spawnWorker();
-        initMessage = {
-          type: "init-stream",
-          url,
-          byteLength: target.byteLength,
-          variableKey: variableId,
-        };
+      if (zarr) {
+        streaming = true;
+        channel = spawnZarrWorker();
+        channel.onerror = (event) => showError(event.message || t("workerStartFailed"));
+        initMessage = zarrInitMessage(storeRoot, store, variableId);
         downloadedBytes = 0;
-      } else if (role === "probe") {
-        throw new Error("range requests unsupported; a probe session never downloads a whole bundle");
+        format = variant ? "Zarr ½" : "Zarr";
+        totalBytes = store.byteLength;
       } else {
-        const initBuffer = await downloadBundle(target, sequence, quiet);
+        const url = artifactUrl(target.path, target.crc32);
+        streaming = await supportsRangeRequests(url);
         if (sequence !== initializeSequence) throw new DOMException("aborted", "AbortError");
-        channel = spawnWorker();
-        initMessage = { type: "init", buffer: initBuffer };
-        transfer = [initBuffer];
-        downloadedBytes = target.byteLength;
+        if (streaming) {
+          channel = spawnWorker();
+          initMessage = {
+            type: "init-stream",
+            url,
+            byteLength: target.byteLength,
+            variableKey: variableId,
+          };
+          downloadedBytes = 0;
+        } else if (role === "probe") {
+          throw new Error("range requests unsupported; a probe session never downloads a whole bundle");
+        } else {
+          const initBuffer = await downloadBundle(target, sequence, quiet);
+          if (sequence !== initializeSequence) throw new DOMException("aborted", "AbortError");
+          channel = spawnWorker();
+          initMessage = { type: "init", buffer: initBuffer };
+          transfer = [initBuffer];
+          downloadedBytes = target.byteLength;
+        }
+        format = variant ? "Xue ½" : "Xue";
+        totalBytes = target.byteLength;
       }
-      format = variant ? "Xue ½" : "Xue";
-      totalBytes = target.byteLength;
     }
 
     if (!quiet) say(loadStatus, streaming ? "readingIndex" : "initializingDecoder");
@@ -5094,7 +5129,7 @@ function applyVariable(session: VariableSession): void {
   // The data card reflects only the variable on screen: its own delivery
   // format, its own downloaded bytes, and its own delivery state — never a
   // cross-variable total.
-  preloadFormat.value = session.format;
+  preloadFormat.value = formatReadout(session.format);
   refreshDataCard(session);
   // Sessions differ in grid, tiling and delivery, so the view's tiles are the
   // new session's to answer.

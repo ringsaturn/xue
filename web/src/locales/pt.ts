@@ -94,6 +94,7 @@ export const pt: Record<MessageKey, string> = {
   bufferedFrames: "Em memória",
   downloadedBytes: "Transferido",
   formatLabel: "Formato",
+  formatZarr: "Zarr",
   preloadProgressAria: "Progresso do pré-carregamento dos dados de previsão",
   statDataset: "Conjunto de dados",
   statGrid: "Grelha",

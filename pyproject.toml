@@ -42,3 +42,11 @@ include = ["xuebuild*"]
 
 [tool.setuptools.package-data]
 xuebuild = ["palette.txt", "precipitation_palette.txt"]
+
+[dependency-groups]
+# Optional, for tests and for reading a delta-coded store through
+# zarr-python / xarray. The exporter itself (xuebuild/zarrstore.py) writes a
+# Zarr v3 store with NumPy alone, so the runtime dependencies above stay
+# NumPy + xuepy; this group only registers the `xue.delta` codec
+# (xuebuild/zarrcodec.py) and opens the result the way any Zarr client would.
+zarr = ["zarr>=3.1", "numcodecs>=0.16", "xarray>=2025.1"]

@@ -91,6 +91,7 @@ export const zhHant: Record<MessageKey, string> = {
   bufferedFrames: "快取影格",
   downloadedBytes: "資料量",
   formatLabel: "格式",
+  formatZarr: "Zarr",
   preloadProgressAria: "預報資料預先載入進度",
   statDataset: "資料集",
   statGrid: "網格",

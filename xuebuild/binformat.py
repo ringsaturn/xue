@@ -1003,6 +1003,16 @@ class Bundle:
 
     # -- decoding ----------------------------------------------------------
 
+    def clear_cache(self) -> None:
+        """Drop every decoded plane and chunk.
+
+        The caches make a group's frames cheap to revisit, but a pass over a
+        whole run (the Zarr export walks every chunk of every variable) would
+        otherwise hold the entire decoded bundle — a quarter of a gigabyte for
+        a global wind bundle. A walker clears between groups instead."""
+        self._cache.clear()
+        self._chunk_cache.clear()
+
     def _payload(self, entry: PlaneEntry) -> bytes:
         raw = self.data[entry.data_offset : entry.data_offset + entry.compressed_length]
         if entry.compression == COMPRESSION_NONE:

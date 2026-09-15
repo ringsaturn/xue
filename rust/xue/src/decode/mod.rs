@@ -8,7 +8,9 @@
 //!   its dependency chains) or a v2 tiled one into the layout `core`
 //!   dispatches on.
 //! * `core` replays residuals over payload bytes, wherever they came from,
-//!   and assembles planes and cell series out of tiles.
+//!   and assembles planes and cell series out of tiles. Its chunk path is
+//!   also exposed on its own as [`decode_chunk`], for a chunk that did not
+//!   come out of a container index — an inner chunk of the Zarr store.
 //! * `bundle` is the public surface: [`Bundle`] and [`StreamingBundle`].
 
 mod bundle;
@@ -17,3 +19,4 @@ mod metadata;
 mod structure;
 
 pub use bundle::{Bundle, StreamingBundle};
+pub use core::decode_chunk;

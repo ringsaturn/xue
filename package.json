@@ -8,6 +8,7 @@
     "build": "tsc --noEmit && vite build --config vite.config.ts",
     "preview": "vite preview --config vite.config.ts",
     "test:web": "vitest run",
+    "measure:backends": "vitest run --config web/tooling/vitest.measure.config.ts",
     "test:e2e": "playwright test"
   },
   "dependencies": {

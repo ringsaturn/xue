@@ -97,6 +97,7 @@ export const tr: Record<MessageKey, string> = {
   bufferedFrames: "Arabellekte",
   downloadedBytes: "İndirilen",
   formatLabel: "Biçim",
+  formatZarr: "Zarr",
   preloadProgressAria: "Tahmin verisi ön yükleme ilerlemesi",
   statDataset: "Veri seti",
   statGrid: "Grid",

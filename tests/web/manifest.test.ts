@@ -16,7 +16,7 @@ import {
   validateManifest,
 } from "../../web/src/manifest";
 import { buildPalette, buildWindSpeedPalette, decodeLinear, decodeLog } from "../../web/src/palettes";
-import type { BundleVariable, LogQuantization, VariantDescriptor } from "../../web/src/manifest";
+import type { BundleVariable, LogQuantization, VariantDescriptor, ZarrStoreDescriptor } from "../../web/src/manifest";
 
 function videoMetadataFixture() {
   return JSON.stringify({
@@ -69,6 +69,16 @@ function variantFixture(): VariantDescriptor {
     crc32: "12345678",
     bandwidth: 10_500_000,
   };
+}
+
+function zarrFixture(path = "gfs.2026081506/tmp2m.zarr"): ZarrStoreDescriptor {
+  return { path, byteLength: 12_347_075, crc32: "760cef95" };
+}
+
+/** The fixture's bundles are plain literals; this is the tmp2m entry seen
+ * as something a store can be hung on. */
+function storeBearing(manifest: ReturnType<typeof manifestFixture>) {
+  return manifest.bundles[0] as unknown as { zarr?: unknown; variants: { zarr?: ZarrStoreDescriptor }[] };
 }
 
 function manifestFixture() {
@@ -260,6 +270,36 @@ describe("validateManifest", () => {
     const empty = manifestFixture();
     empty.bundles[0]!.variants = [];
     expect(() => validateManifest(empty)).toThrow("variant");
+  });
+
+  it("accepts an optional zarr store on a bundle and on a variant, and rejects a broken one", () => {
+    const withStore = manifestFixture();
+    storeBearing(withStore).zarr = zarrFixture();
+    storeBearing(withStore).variants[0]!.zarr = zarrFixture("gfs.2026081506/tmp2m.half.zarr");
+    const manifest = validateManifest(withStore);
+    expect(manifest.bundles[0]!.zarr?.path).toBe("gfs.2026081506/tmp2m.zarr");
+    expect(manifest.bundles[0]!.variants![0]!.zarr?.crc32).toBe("760cef95");
+    expect(manifest.bundles[1]!.zarr).toBeUndefined();
+
+    for (const [mutation, message] of [
+      [{ path: "gfs.2026081506/tmp2m.zip" }, "path"],
+      [{ path: "/gfs.2026081506/tmp2m.zarr" }, "path"],
+      [{ path: "../tmp2m.zarr" }, "path"],
+      [{ byteLength: 0 }, "byteLength"],
+      [{ crc32: "760CEF95" }, "crc32"],
+    ] as const) {
+      const broken = manifestFixture();
+      storeBearing(broken).zarr = { ...zarrFixture(), ...mutation };
+      expect(() => validateManifest(broken)).toThrow(message);
+    }
+    // The same store named twice, on the bundle and on its variant.
+    const twice = manifestFixture();
+    storeBearing(twice).zarr = zarrFixture();
+    storeBearing(twice).variants[0]!.zarr = zarrFixture();
+    expect(() => validateManifest(twice)).toThrow("duplicate");
+    const notAnObject = manifestFixture();
+    storeBearing(notAnObject).zarr = "gfs.2026081506/tmp2m.zarr";
+    expect(() => validateManifest(notAnObject)).toThrow("object");
   });
 });
 

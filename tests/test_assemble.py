@@ -162,6 +162,34 @@ class MergePartialManifestTests(unittest.TestCase):
         self.assertEqual(merged["schemaVersion"], 5)
         self.assertEqual(merged["forecastHours"], 240)
 
+    def test_a_zarr_descriptor_is_carried_through_unchanged(self) -> None:
+        """A part built with --zarr names its stores; the merge must keep
+        them, on the bundle and on its variants, exactly as written."""
+        store = {"path": "tmp2m.zarr", "byteLength": 12_347_075, "crc32": "760cef95"}
+        variant_store = {"path": "tmp2m.half.zarr", "byteLength": 4_000_000, "crc32": "0d3a2e6b"}
+        with_store = _part(self.source, ["tmp2m"])
+        with_store["bundles"][0]["zarr"] = dict(store)
+        with_store["bundles"][0]["variants"] = [
+            {
+                "path": "tmp2m.half.xue",
+                "width": 720,
+                "height": 361,
+                "byteLength": 5,
+                "crc32": "0badf00d",
+                "bandwidth": 1,
+                "zarr": dict(variant_store),
+            }
+        ]
+        merged = assemble.merge_partial_manifests(
+            [_part(self.source, ["wind10m", "prate", "dswrf"]), with_store],
+            source=self.source,
+            expected_hours=240,
+        )
+        entry = next(bundle for bundle in merged["bundles"] if bundle["variable"] == "tmp2m")
+        self.assertEqual(entry["zarr"], store)
+        self.assertEqual(entry["variants"][0]["zarr"], variant_store)
+        self.assertTrue(all("zarr" not in bundle for bundle in merged["bundles"] if bundle["variable"] != "tmp2m"))
+
     def test_a_missing_bundle_is_an_error_not_a_shorter_run(self) -> None:
         with self.assertRaisesRegex(ManifestError, "missing \\['dswrf'\\]"):
             assemble.merge_partial_manifests(

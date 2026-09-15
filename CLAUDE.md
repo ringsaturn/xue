@@ -63,6 +63,7 @@ make encoder-rust                # build the native encoder from source (needs G
 make encoder-rust-test           # its unit tests plus the byte-identity golden test
 make encoder-wheel               # a self-contained wheel carrying a minimal GDAL
 npm run build                    # tsc --noEmit && vite build
+.venv/bin/python -m xuebuild export-zarr <bundle.xue> [--delta] [--index-location start|end]
 ```
 
 Single tests:
@@ -414,6 +415,76 @@ publishing data at the new version.**
   and a top-up byte-identical to a whole one — a bundle's bytes must never
   depend on what else was in the build, so nothing cross-variable may creep
   into a bundle or its manifest entry.
+
+### Zarr store (`xuebuild/zarrstore.py`)
+
+A bundle can also be published as a **Zarr v3 store**, `<bundle>.zarr/`
+beside the `.xue` (`docs/zarr-profile.md` is normative): one group per
+bundle whose `attributes.xue` is the bundle's metadata JSON verbatim, one
+`uint8` array per variable (`tmp2m/`; `ugrd10m/` and `vgrd10m/` under
+`wind10m.zarr`), a regular six-frame time chunk with one `sharding_indexed`
+shard per chunk whose inner chunks are the bundle's tiles in the bundle's
+order, `[bytes, zstd{15, checksum}]` inside, `fill_value` = `nodataCode`,
+CF `scale_factor` / `add_offset` / `_FillValue` on linear codebooks, and
+`time` / `latitude` / `longitude` coordinate arrays for xarray, plus one
+object of the profile's own, `index.bin` — every shard's index verbatim,
+array by array and time chunk by time chunk, described by the group's
+`xue_index` attribute, so a reader holds every offset after one fetch at
+open (the way the container's prefix holds its index) and a series costs
+one request per time chunk instead of two; optional for a reader, ignored
+by a standard client. The store is
+**derived from the finished `.xue`** by `zarrstore.export_bundle`
+(`read_bundle` → chunk by chunk → pad edge tiles → zstd → hand-written
+shard index + CRC-32C; NumPy only, no zarr-python at runtime), which is why
+both encoder paths produce identical stores: `binconvert` exports inside
+each bundle job, `native.py::_zarr_reports` after the wheel has written, and
+`test_native.py` compares the objects byte for byte. `build-bin --zarr` /
+`convert-bin --zarr` or `XUE_ZARR=1` turns it on (off by default, and off in
+the publish workflows); `xue export-zarr <bundle>` derives one by hand, with
+`--delta` (the `xue.delta` codec in front of `bytes` on PREVIOUS variables,
+`xuebuild/zarrcodec.py` registers it for zarr-python) and
+`--index-location start|end` (`end` by default: the form zarrita fetches as
+a suffix range). The manifest gains an optional `zarr` descriptor
+`{path, byteLength, crc32}` on a bundle entry and on each variant — `crc32`
+is that of the group `zarr.json`, the store's `?v=` — validated when present
+by all three validators, ignored by a shell that predates it, and carried
+through `assemble-run` unchanged. The store's time chunks coincide with the
+bundle's groups only up to the first change of step, so every chunk is
+re-encoded from codes and the export report *measures* how many compressed
+payloads equal the bundle's (`comparableChunks` / `identicalChunks`) rather
+than copying them. The optional `zarr` dependency group (`uv sync --group
+zarr`) is for the tests and for reading a delta store; `tests/test_zarr.py`
+skips its zarr-python / xarray cases without it.
+
+The frontend plays a store through a third `DecodeChannel`, `web/src/zarr/`,
+chosen in `main.ts::loadVariable` only when `?backend=zarr`
+(`urlstate.ts::parseBackendFromSearch`, default `xue`) *and* the bundle or
+its picked tier carries a `zarr` descriptor *and* the store's origin serves
+ranges — otherwise the `.xue` path runs untouched, so the channel is
+additive and off by default. `zarr/worker.ts` answers exactly the protocol
+`worker.ts` answers (`protocol.ts` spells its messages; `init-stream` gains
+`kind: "zarr"`, the root URL and the descriptor's crc32) over
+`zarr/session.ts`: `shard.ts` validates the group and array documents
+(`attributes.xue` goes straight through `parseBundleMetadata`, `xue_index`
+is held to the arrays' geometry), parses the CRC-32C-checked shard index —
+seeded for every shard from `index.bin` at open, a block that fails or an
+object that cannot be fetched falling back to the per-shard suffix read —
+and maps frame and tile to a byte span — a
+Zarr time chunk is a fixed six frames and may straddle the container's
+groups, so nothing there consults a group — and `store.ts` appends the
+store's `?v=` and **coalesces** the ranges of one shard issued in one
+microtask (gap ≤ 64 KB) into one request, which is what keeps a viewport at
+one request per tile row. Decoding is the container's own chunk path
+exported as `decodeChunk` from `rust/xue-wasm` (`decode::core::decode_chunk`:
+zstd with a mandatory, verified content checksum, exact length, PREVIOUS as
+the modulo-256 running sum), so the comparison isolates the container and
+its index. The data card reads `Zarr` / `Zarr ½`. `tests/web/zarr.test.ts`
+holds every frame and series byte-identical to `WasmBundle` on the
+synthetic fixtures (`prepare_web_fixture.py` exports `tmp2m`, `prate`,
+`wind10m` stores and a delta/`start`-index `tmp2m.delta.zarr`),
+`tests/e2e/zarr.spec.ts` drives the shell, and `npm run measure:backends`
+(`web/tooling/measure-backends.test.ts`) prints requests and bytes per
+backend on a local run.
 
 ### Tropical cyclone product (`xuebuild/tc/`)
 

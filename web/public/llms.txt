@@ -114,6 +114,12 @@ fall back to defaults rather than fail, so a constructed link always opens.
   instead of the Xue decoder (a comparison path, not the default; GFS and
   HRRR publish the companions for their surface fields, ECMWF and SFLUX
   publish none).
+- `?backend=zarr` — read each bundle through the Zarr v3 store a run may
+  publish beside it (`<bundle>.zarr/`, the same codes under standard
+  codecs; docs/zarr-profile.md), for the bundles whose manifest entry
+  carries a `zarr` descriptor, and the `.xue` container for the rest. A
+  comparison path, not the default; the data card reads `Zarr` when it is
+  in use.
 - `?x=true` — the experimental synoptic composite: the precipitation on a
   stepped 0.1/1/2/5/10/20/50 mm/h key, the sea level
   pressure lines with their H/L marks over it, the particles run by the
@@ -149,7 +155,13 @@ https://dataset.ringsaturn.me/xue/. The contract is two layers:
   the run's `manifest.json` (schema 5: `model`, `product`, `runTime`,
   `forecastHours`, and `bundles[]`, each with `variable`, `path`,
   `byteLength`, `crc32`, optional half-resolution `variants[]`, a first-frame
-  `poster` and an optional H.264 `video`), and one `.xue` file per bundle.
+  `poster`, an optional H.264 `video` and an optional `zarr` store
+  descriptor), and one `.xue` file per bundle. A `zarr` descriptor names the
+  same bundle as a Zarr v3 store (`<bundle>.zarr/`, a directory of objects:
+  uint8, one shard per six frames, sharded into the bundle's tiles, zstd,
+  plus `index.bin`, every shard's index in one object a standard client
+  ignores — `docs/zarr-profile.md`), readable with xarray or any Zarr v3
+  client; its `crc32` is the `?v=` for every object in the store.
   Request an immutable artifact as `<path>?v=<crc32>`. The grid, the time
   axis, the variables' GRIB2 parameter blocks and the quantization codebooks
   are inside each bundle, as a UTF-8 JSON metadata block after the header.

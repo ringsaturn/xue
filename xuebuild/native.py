@@ -13,9 +13,14 @@ Two things the native encoder does not do, and this module supplies:
   be read straight back out of them with the decoder the same wheel carries,
   and handed to the existing ffmpeg encoder. That keeps the video artifacts on
   the Python side, where they started, without re-extracting anything.
+* the optional Zarr stores (`build-bin --zarr`). Like the video, they are
+  derived from the bundles just written, by the same `zarrstore.export_bundle`
+  the Python path calls on its own bundles, so both paths' stores are the
+  same bytes whenever their bundles are.
 * the live pointer. The pointer carries the manifest's CRC32, so it can only
-  be written once the video descriptors are in the manifest; the native
-  encoder is asked for the manifest alone and the pointer is written here.
+  be written once the video and Zarr descriptors are in the manifest; the
+  native encoder is asked for the manifest alone and the pointer is written
+  here.
 
 `binconvert` stays the reference implementation. Nothing in this module
 reimplements a stage — it calls the native encoder, then the same manifest,
@@ -29,10 +34,12 @@ import logging
 import os
 import zlib
 from collections.abc import Sequence
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from . import zarrstore
 from .binconvert import published_bundle_ids, video_variable_ids
 from .errors import ConversionError
 from .manifest import (
@@ -201,10 +208,28 @@ def _canonical_metadata_json(text: str) -> str:
     return json.dumps(json.loads(text))
 
 
+def _zarr_reports(bundles: list[dict[str, Any]], variants: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """One Zarr store per bundle and per variant the native encoder wrote,
+    keyed by the bundle file's absolute path."""
+    reports: dict[str, dict[str, Any]] = {}
+    with ThreadPoolExecutor(max_workers=os.cpu_count() or 4) as executor:
+        for artifact in [*bundles, *variants]:
+            bundle_path = Path(artifact["output"])
+            export = zarrstore.export_bundle(bundle_path, zarrstore.store_path_for(bundle_path), executor=executor)
+            LOG.info("wrote %s (%.2f MB)", export.path, export.byte_length / 1e6)
+            reports[str(bundle_path)] = export.to_dict()
+    return reports
+
+
 def _manifest_entry(
-    entry: dict[str, Any], video: dict[str, Any] | None, manifest_dir: Path
+    entry: dict[str, Any],
+    video: dict[str, Any] | None,
+    manifest_dir: Path,
+    zarr: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """One manifest bundle entry, with its video descriptor folded in."""
+    """One manifest bundle entry, with its video and Zarr descriptors folded
+    in. ``zarr`` is keyed by bundle path, absolute, as `_zarr_reports` keys
+    it; the entry's own paths are relative to the manifest."""
     entry = dict(entry)
     poster = entry.get("poster")
     if poster is not None:
@@ -212,6 +237,22 @@ def _manifest_entry(
             **poster,
             "metadataJson": _canonical_metadata_json(poster["metadataJson"]),
         }
+
+    def store(path: str) -> dict[str, Any] | None:
+        report = (zarr or {}).get(str(manifest_dir / path))
+        if report is None:
+            return None
+        return {
+            "path": Path(report["path"]).relative_to(manifest_dir).as_posix(),
+            "byteLength": report["byteLength"],
+            "crc32": report["crc32"],
+        }
+
+    if "variants" in entry:
+        entry["variants"] = [
+            {**variant, **({"zarr": descriptor} if (descriptor := store(variant["path"])) else {})}
+            for variant in entry["variants"]
+        ]
     if video is not None:
         entry["video"] = {
             "streamPath": Path(video["streamPath"]).relative_to(manifest_dir).as_posix(),
@@ -225,6 +266,9 @@ def _manifest_entry(
             "frameCount": video["frameCount"],
             "metadataJson": video["metadataJson"],
         }
+    descriptor = store(entry["path"])
+    if descriptor is not None:
+        entry["zarr"] = descriptor
     return entry
 
 
@@ -233,8 +277,10 @@ def _rewrite_manifest(
     videos: dict[str, dict[str, Any]],
     *,
     require_core: bool,
+    zarr: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """Fold the video descriptors into the manifest the native encoder wrote.
+    """Fold the video and Zarr descriptors into the manifest the native
+    encoder wrote.
 
     Rebuilt through `build_bin_manifest` rather than edited in place, so the
     result is validated and its keys land in the order the reference writes
@@ -246,7 +292,7 @@ def _rewrite_manifest(
     payload = build_bin_manifest(
         _run_time(existing),
         bundles=[
-            _manifest_entry(entry, videos.get(entry["variable"]), manifest_path.parent)
+            _manifest_entry(entry, videos.get(entry["variable"]), manifest_path.parent, zarr)
             for entry in existing["bundles"]
         ],
         expected_hours=expected_hours,
@@ -283,6 +329,7 @@ def convert_bin(
     bbox: tuple[float, float, float, float] | None = None,
     bundle_ids: tuple[str, ...] | None = None,
     last_hour: int | None = None,
+    zarr: bool = False,
 ) -> dict[str, Any]:
     """`binconvert.convert_bin`, run through the native encoder.
 
@@ -345,9 +392,16 @@ def convert_bin(
         videos = _video_reports(source, report["bundles"], Path(output_dir), module)
     report["videos"] = list(videos.values())
 
+    stores: dict[str, dict[str, Any]] = {}
+    if zarr:
+        stores = _zarr_reports(report["bundles"], report.get("variants", []))
+        # The Python path reports a store on the bundle it belongs to.
+        for artifact in [*report["bundles"], *report.get("variants", [])]:
+            artifact["zarr"] = stores[str(Path(artifact["output"]))]
+
     if manifest_path is not None:
         require_core = bundle_ids is None
-        payload = _rewrite_manifest(Path(manifest_path), videos, require_core=require_core)
+        payload = _rewrite_manifest(Path(manifest_path), videos, require_core=require_core, zarr=stores)
         LOG.info("wrote manifest %s", manifest_path)
         if latest_path is not None and run_id is not None:
             manifest_bytes = Path(manifest_path).read_bytes()

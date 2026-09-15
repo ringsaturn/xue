@@ -91,6 +91,7 @@ export const zh: Record<MessageKey, string> = {
   bufferedFrames: "缓存帧",
   downloadedBytes: "数据量",
   formatLabel: "格式",
+  formatZarr: "Zarr",
   preloadProgressAria: "预报数据预加载进度",
   statDataset: "数据集",
   statGrid: "网格",

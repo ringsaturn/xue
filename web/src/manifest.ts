@@ -311,6 +311,20 @@ export interface VariantDescriptor {
   /** Average bits per second needed to sustain 12 fps playback while
    * downloading the whole tier — the STREAM-INF BANDWIDTH analogue. */
   bandwidth: number;
+  /** This tier as a Zarr store, when the build derived one. */
+  zarr?: ZarrStoreDescriptor;
+}
+
+/** The same bundle as a Zarr v3 store (docs/zarr-profile.md): `path` is the
+ * store's root directory (relative, `.zarr`), `byteLength` the sum of every
+ * object in it, and `crc32` the CRC-32 of its root `zarr.json` — the one
+ * value a client appends as `?v=` to every object it fetches from the store.
+ * Optional on a bundle and on each of its variants; a run that ships none is
+ * complete without it. */
+export interface ZarrStoreDescriptor {
+  path: string;
+  byteLength: number;
+  crc32: string;
 }
 
 export interface VariableBundleDescriptor {
@@ -325,6 +339,8 @@ export interface VariableBundleDescriptor {
   video?: VideoBundleDescriptor;
   /** Tiny first-frame artifact for instant paint on variable switch. */
   poster?: PosterDescriptor;
+  /** The bundle as a Zarr store, when the build derived one. */
+  zarr?: ZarrStoreDescriptor;
 }
 
 export interface ForecastManifest {
@@ -380,6 +396,18 @@ function metadataJsonField(value: unknown, label: string): string {
   return value;
 }
 
+function validateZarrDescriptor(input: unknown, paths: Set<string>): ZarrStoreDescriptor {
+  const store = object(input);
+  relativePath(store.path, ".zarr", paths, "zarr store");
+  if (typeof store.byteLength !== "number" || !Number.isInteger(store.byteLength) || store.byteLength <= 0) {
+    throw new Error("invalid zarr store byteLength");
+  }
+  if (typeof store.crc32 !== "string" || !/^[0-9a-f]{8}$/.test(store.crc32)) {
+    throw new Error("invalid zarr store crc32");
+  }
+  return store as unknown as ZarrStoreDescriptor;
+}
+
 function validateVariantDescriptor(input: unknown, paths: Set<string>): VariantDescriptor {
   const variant = object(input);
   relativePath(variant.path, BUNDLE_SUFFIX, paths, "variant");
@@ -391,6 +419,7 @@ function validateVariantDescriptor(input: unknown, paths: Set<string>): VariantD
   if (typeof variant.crc32 !== "string" || !/^[0-9a-f]{8}$/.test(variant.crc32)) {
     throw new Error("invalid variant crc32");
   }
+  if (variant.zarr !== undefined) validateZarrDescriptor(variant.zarr, paths);
   return variant as unknown as VariantDescriptor;
 }
 
@@ -497,6 +526,9 @@ export function validateManifest(
     }
     if (bundle.poster !== undefined) {
       validatePosterDescriptor(bundle.poster, paths);
+    }
+    if (bundle.zarr !== undefined) {
+      validateZarrDescriptor(bundle.zarr, paths);
     }
     variables.push(bundle.variable);
   }

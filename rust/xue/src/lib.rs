@@ -35,7 +35,7 @@
 pub mod format;
 pub mod decode;
 
-pub use decode::{Bundle, StreamingBundle};
+pub use decode::{decode_chunk, Bundle, StreamingBundle};
 pub use format::{
     align8, ChunkEntry, Compression, DecodeError, FixedHeader, FrameRequest, GroupEntry,
     IndexHeader, IndexHeaderV2, PlaneEntry, Predictor, TileGeometry, TileRect, VariableEntry,

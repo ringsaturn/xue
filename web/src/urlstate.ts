@@ -318,6 +318,22 @@ export function parseResolutionFromSearch(search: string): ResolutionPreference 
   return RESOLUTION_ALIASES[value.trim().toLowerCase()] ?? "auto";
 }
 
+/** Where a session reads its bundles from: the `.xue` container, or the
+ * Zarr v3 store a run may publish beside it (docs/zarr-profile.md). */
+export type DataBackend = "xue" | "zarr";
+
+export const DEFAULT_BACKEND: DataBackend = "xue";
+
+/** `?backend=zarr` asks for the Zarr channel — taken only for a bundle
+ * whose manifest entry carries a store, the `.xue` path otherwise — and
+ * anything else, an unknown value included, is the container. A comparison
+ * setting rather than shareable state: read once at load like `?res=`. */
+export function parseBackendFromSearch(search: string): DataBackend {
+  const value = new URLSearchParams(search).get("backend");
+  if (value === null) return DEFAULT_BACKEND;
+  return value.trim().toLowerCase() === "zarr" ? "zarr" : DEFAULT_BACKEND;
+}
+
 /** Variable requested by the page URL, or null when the URL names none (or
  * spells one so badly it is not a bundle name at all — a bad link falls back
  * to the default rather than erroring). A well-formed name the alias tables

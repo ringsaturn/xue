@@ -83,6 +83,24 @@ implementations share it:
 Cross-language golden tests keep the Python encoder and Rust decoder
 byte-identical.
 
+The same bundle can also be published as a **Zarr v3 store**
+([`docs/zarr-profile.md`](docs/zarr-profile.md)): a container v2 bundle is,
+to within its index format, a sharded Zarr `uint8` array — one shard per
+six-frame time chunk, the bundle's tiles as the inner chunks, one zstd
+frame each — so `build-bin --zarr` (or `XUE_ZARR=1`) derives a
+`<bundle>.zarr/` beside every `.xue` and its half-resolution variant from
+the codes just written, and names it in the manifest (`zarr: {path,
+byteLength, crc32}`). The store carries the bundle's metadata verbatim in
+its root attributes plus CF `scale_factor` / `add_offset` / `_FillValue` on
+linear codebooks and `time` / `latitude` / `longitude` coordinates, so
+`xarray.open_zarr` reads it as physical values with nothing installed
+beyond a Zarr client. `xue export-zarr <bundle.xue>` derives one by hand;
+`--delta` swaps in the `xue.delta` codec (the container's temporal
+residual as a codec, `xuebuild/zarrcodec.py`), under which a chunk's
+compressed bytes equal the bundle's wherever the two chunkings coincide.
+The `.xue` stays the primary artifact and the viewer's format; the store is
+off by default.
+
 ## Requirements
 
 - Python ≥ 3.12 (NumPy and the `xuepy` wheel; `uv sync` creates `.venv`)
@@ -289,8 +307,10 @@ rendition, which is the way to hold a session to the smaller download on a
 metered link, and `full` (alias `high`) always loads the canonical bundle.
 A dataset that ships no reduced tier — every showcase case — is full
 resolution either way, and the data card names the tier in use (`Xue ½`).
-`?use_h264=true` opts into the WebCodecs H.264 companions. Both are read
-once at load, so changing either means a reload.
+`?use_h264=true` opts into the WebCodecs H.264 companions, and
+`?backend=zarr` reads a bundle through the Zarr v3 store a run may publish
+beside it (`docs/zarr-profile.md`), where the manifest names one. All three
+are read once at load, so changing any of them means a reload.
 
 ## Historical showcase
 

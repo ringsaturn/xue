@@ -12,8 +12,29 @@
 //! the byte spans either still needs. `tileGeometry` returning `undefined` is
 //! how the Worker tells the two versions apart without an error path.
 
-use xue::{Bundle, FrameRequest, StreamingBundle, TileGeometry, TileRect};
+use xue::{Bundle, FrameRequest, Predictor, StreamingBundle, TileGeometry, TileRect};
 use wasm_bindgen::prelude::*;
+
+/// Decode one chunk payload that came from outside a container: an inner
+/// chunk of the Zarr store (`docs/zarr-profile.md`).
+///
+/// The container's own chunk path — a Zstandard frame holding
+/// `frames × height × width` bytes, RAW (`predictor` 0) or a PREVIOUS
+/// residual chain (2) replayed as a modulo-256 running sum along the frame
+/// axis — with the frame's content checksum mandatory and verified, since a
+/// store chunk carries no CRC of its own. The shape is validated and capped
+/// before anything is allocated.
+#[wasm_bindgen(js_name = decodeChunk)]
+pub fn decode_chunk(
+    bytes: &[u8],
+    frames: u32,
+    height: u32,
+    width: u32,
+    predictor: u8,
+) -> Result<Vec<u8>, JsError> {
+    let predictor = Predictor::parse(predictor).map_err(|error| JsError::new(&error.0))?;
+    xue::decode_chunk(bytes, frames, height, width, predictor).map_err(|error| JsError::new(&error.0))
+}
 
 /// A viewport's tile rectangles, flattened as
 /// `[firstColumn, firstRow, lastColumn, lastRow, ...]`.

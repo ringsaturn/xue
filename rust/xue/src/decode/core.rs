@@ -12,8 +12,120 @@ use std::io::Read;
 use crate::decode::structure::{Layout, Structure, TiledLayout};
 use crate::format::{
     crc32, err, Compression, DecodeError, FrameRequest, PlaneEntry, Predictor, TileGeometry,
-    TileRect,
+    TileRect, MAX_PLANE_LENGTH,
 };
+
+/// Whether a Zstandard frame's own content checksum is consulted.
+///
+/// Inside the container the reconstructed codes are covered by a CRC-32 in
+/// the index, so the frame's checksum is redundant there and is ignored, as
+/// it always was. A chunk decoded outside the container — one inner chunk of
+/// a Zarr store, which carries no CRC of its own — has nothing else, so the
+/// frame must declare a checksum and it must match.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ContentChecksum {
+    Ignore,
+    Require,
+}
+
+/// Decompress one Zstandard frame to exactly `expected` bytes.
+///
+/// The decoder is capped one byte above `expected`, so a hostile frame can
+/// neither over-allocate nor run long; a frame shorter than promised is
+/// rejected the same way. With [`ContentChecksum::Require`] the frame header
+/// must set the content-checksum flag and the XXH64 the frame carries must
+/// equal the one computed over the output.
+pub(crate) fn decompress_zstd(
+    raw: &[u8],
+    expected: usize,
+    checksum: ContentChecksum,
+) -> Result<Vec<u8>, DecodeError> {
+    if checksum == ContentChecksum::Require && !zstd_frame_declares_checksum(raw) {
+        return Err(err("chunk must be a Zstandard frame with a content checksum"));
+    }
+    let mut decoder = ruzstd::decoding::StreamingDecoder::new(raw)
+        .map_err(|error| err(format!("zstd frame error: {error}")))?;
+    let mut output = Vec::with_capacity(expected);
+    let mut limited = decoder.by_ref().take(expected as u64 + 1);
+    limited
+        .read_to_end(&mut output)
+        .map_err(|error| err(format!("zstd decode error: {error}")))?;
+    if output.len() != expected {
+        return Err(err("decompressed payload length mismatch"));
+    }
+    if checksum == ContentChecksum::Require {
+        let frame = decoder.into_frame_decoder();
+        let stored = frame.get_checksum_from_data();
+        let computed = frame.get_calculated_checksum();
+        if stored.is_none() || stored != computed {
+            return Err(err("zstd content checksum mismatch"));
+        }
+    }
+    Ok(output)
+}
+
+/// The Content_Checksum_flag of a Zstandard frame header: bit 2 of the frame
+/// header descriptor, the byte after the four-byte magic. Read before the
+/// frame is decoded so a frame without one is refused up front.
+fn zstd_frame_declares_checksum(raw: &[u8]) -> bool {
+    const MAGIC: [u8; 4] = [0x28, 0xB5, 0x2F, 0xFD];
+    raw.len() >= 5 && raw[..4] == MAGIC && raw[4] & 0x04 != 0
+}
+
+/// Replay the PREVIOUS predictor inside one chunk: a group's frames are
+/// contiguous on the axis, so the chain never leaves the chunk, and each
+/// frame is a modulo-256 residual against the frame reconstructed just
+/// before it. `stride` is one frame's cell count.
+pub(crate) fn replay_previous(chunk: &mut [u8], frames: usize, stride: usize) {
+    for frame in 1..frames {
+        let (previous, current) = chunk.split_at_mut(frame * stride);
+        let previous = &previous[(frame - 1) * stride..];
+        for (target, base) in current[..stride].iter_mut().zip(previous.iter()) {
+            *target = target.wrapping_add(*base);
+        }
+    }
+}
+
+/// Decode one chunk payload outside any container.
+///
+/// This is the container's own chunk path — one Zstandard frame holding
+/// `frames × height × width` bytes, frame-major and row-major within a
+/// frame, RAW or a PREVIOUS residual chain — applied to bytes that did not
+/// come out of a `.xue` index: an inner chunk of the Zarr store
+/// (`docs/zarr-profile.md`), whose only integrity check is the frame's own
+/// content checksum, which is therefore mandatory here. Only the RAW and
+/// PREVIOUS predictors exist inside a chunk; the plane-level ANCHOR and ZERO
+/// of container v1 are refused.
+///
+/// Nothing is allocated before the shape is validated: a chunk is capped at
+/// [`MAX_PLANE_LENGTH`] bytes in total, the container's own plane limit.
+pub fn decode_chunk(
+    bytes: &[u8],
+    frames: u32,
+    height: u32,
+    width: u32,
+    predictor: Predictor,
+) -> Result<Vec<u8>, DecodeError> {
+    if frames == 0 || height == 0 || width == 0 {
+        return Err(err("chunk shape must be non-zero"));
+    }
+    let stride = u64::from(height) * u64::from(width);
+    let total = stride * u64::from(frames);
+    if total > MAX_PLANE_LENGTH {
+        return Err(err("chunk exceeds the decoded size limit"));
+    }
+    match predictor {
+        Predictor::Raw | Predictor::Previous => {}
+        Predictor::Anchor | Predictor::Zero => {
+            return Err(err("a chunk is RAW or PREVIOUS; ANCHOR and ZERO are plane predictors"))
+        }
+    }
+    let mut chunk = decompress_zstd(bytes, total as usize, ContentChecksum::Require)?;
+    if predictor == Predictor::Previous {
+        replay_previous(&mut chunk, frames as usize, stride as usize);
+    }
+    Ok(chunk)
+}
 
 /// Where payload bytes live: the whole file, or per-payload sparse buffers
 /// filled in by [`crate::StreamingBundle::insert_range`].
@@ -79,7 +191,9 @@ impl Core {
     ///
     /// The output length is checked against what the structure says it must
     /// be, and the decoder is capped one byte above it, so a hostile frame
-    /// can neither over-allocate nor run long.
+    /// can neither over-allocate nor run long. The container checks the
+    /// reconstructed codes with its own CRC-32, so the Zstandard content
+    /// checksum is not consulted here.
     fn decompress(
         &self,
         position: usize,
@@ -96,19 +210,7 @@ impl Core {
                 Ok(raw.to_vec())
             }
             Compression::ZstdDict => Err(err("ZSTD_DICT payloads require an embedded dictionary decoder")),
-            Compression::Zstd => {
-                let mut decoder = ruzstd::decoding::StreamingDecoder::new(raw)
-                    .map_err(|error| err(format!("zstd frame error: {error}")))?;
-                let mut output = Vec::with_capacity(expected);
-                let mut limited = decoder.by_ref().take(expected as u64 + 1);
-                limited
-                    .read_to_end(&mut output)
-                    .map_err(|error| err(format!("zstd decode error: {error}")))?;
-                if output.len() != expected {
-                    return Err(err("decompressed payload length mismatch"));
-                }
-                Ok(output)
-            }
+            Compression::Zstd => decompress_zstd(raw, expected, ContentChecksum::Ignore),
         }
     }
 
@@ -233,17 +335,7 @@ impl Core {
             expected,
         )?;
         if variable.predictor == Predictor::Previous {
-            // A group's frames are contiguous on the axis, so the chain never
-            // leaves the chunk: each frame is a modulo-256 residual against
-            // the frame reconstructed just before it.
-            let stride = height as usize * width as usize;
-            for frame in 1..frames {
-                let (previous, current) = chunk.split_at_mut(frame * stride);
-                let previous = &previous[(frame - 1) * stride..];
-                for (target, base) in current[..stride].iter_mut().zip(previous.iter()) {
-                    *target = target.wrapping_add(*base);
-                }
-            }
+            replay_previous(&mut chunk, frames, height as usize * width as usize);
         }
         if crc32(&chunk) != layout.chunks[position].crc32 {
             return Err(err(format!("chunk CRC32 mismatch at position {position}")));
@@ -350,5 +442,75 @@ impl Core {
             }
             Layout::Tiles(_) => self.decode_frame_v2(request, tiles),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The bytes 1..=12 as one Zstandard frame with a content checksum —
+    /// `zstdcli.compress(bytes(range(1, 13)), level=15, checksum=True)` in
+    /// the Python encoder — and the same frame written without one.
+    const FRAME: [u8; 25] = [
+        0x28, 0xB5, 0x2F, 0xFD, 0x24, 0x0C, 0x61, 0x00, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06,
+        0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0xA5, 0xE9, 0x82, 0xA5,
+    ];
+    const FRAME_WITHOUT_CHECKSUM: [u8; 21] = [
+        0x28, 0xB5, 0x2F, 0xFD, 0x20, 0x0C, 0x61, 0x00, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06,
+        0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C,
+    ];
+
+    #[test]
+    fn raw_chunk_is_the_frame_content() {
+        let chunk = decode_chunk(&FRAME, 3, 2, 2, Predictor::Raw).expect("decode");
+        assert_eq!(chunk, (1..=12).collect::<Vec<u8>>());
+    }
+
+    #[test]
+    fn previous_chunk_is_the_running_sum_along_the_frame_axis() {
+        let chunk = decode_chunk(&FRAME, 3, 2, 2, Predictor::Previous).expect("decode");
+        assert_eq!(chunk, vec![1, 2, 3, 4, 6, 8, 10, 12, 15, 18, 21, 24]);
+    }
+
+    #[test]
+    fn running_sum_wraps_modulo_256() {
+        let mut chunk = vec![250, 10, 10];
+        replay_previous(&mut chunk, 3, 1);
+        assert_eq!(chunk, vec![250, 4, 14]);
+    }
+
+    #[test]
+    fn shape_must_match_the_frame_exactly() {
+        assert!(decode_chunk(&FRAME, 2, 2, 2, Predictor::Raw).is_err());
+        assert!(decode_chunk(&FRAME, 4, 2, 2, Predictor::Raw).is_err());
+        assert!(decode_chunk(&FRAME, 0, 2, 2, Predictor::Raw).is_err());
+    }
+
+    #[test]
+    fn content_checksum_is_mandatory_and_verified() {
+        assert!(decode_chunk(&FRAME_WITHOUT_CHECKSUM, 3, 2, 2, Predictor::Raw).is_err());
+        let mut corrupt_checksum = FRAME;
+        corrupt_checksum[24] ^= 0x01;
+        assert!(decode_chunk(&corrupt_checksum, 3, 2, 2, Predictor::Raw).is_err());
+        let mut corrupt_content = FRAME;
+        corrupt_content[12] ^= 0x01;
+        assert!(decode_chunk(&corrupt_content, 3, 2, 2, Predictor::Raw).is_err());
+    }
+
+    #[test]
+    fn plane_predictors_are_refused() {
+        assert!(decode_chunk(&FRAME, 3, 2, 2, Predictor::Anchor).is_err());
+        assert!(decode_chunk(&FRAME, 3, 2, 2, Predictor::Zero).is_err());
+    }
+
+    #[test]
+    fn oversized_shape_is_refused_before_decoding() {
+        assert!(decode_chunk(&FRAME, 255, 65_536, 65_536, Predictor::Raw).is_err());
+    }
+
+    #[test]
+    fn not_a_zstd_frame() {
+        assert!(decode_chunk(b"XUE\0\0\0\0\0", 1, 2, 4, Predictor::Raw).is_err());
     }
 }

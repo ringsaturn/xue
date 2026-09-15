@@ -96,6 +96,7 @@ export const ru: Record<MessageKey, string> = {
   bufferedFrames: "В буфере",
   downloadedBytes: "Загружено",
   formatLabel: "Формат",
+  formatZarr: "Zarr",
   preloadProgressAria: "Ход предварительной загрузки прогностических данных",
   statDataset: "Набор данных",
   statGrid: "Сетка",

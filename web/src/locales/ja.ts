@@ -91,6 +91,7 @@ export const ja: Record<MessageKey, string> = {
   bufferedFrames: "取得フレーム",
   downloadedBytes: "受信量",
   formatLabel: "形式",
+  formatZarr: "Zarr",
   preloadProgressAria: "予報データの先読み進捗",
   statDataset: "データセット",
   statGrid: "格子",

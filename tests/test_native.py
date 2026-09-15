@@ -177,6 +177,65 @@ class NativeParityTests(unittest.TestCase):
 
 
 @requires_native
+class NativeZarrParityTests(unittest.TestCase):
+    """`--zarr` on both paths: the stores are derived from the bundles by one
+    exporter, so they agree exactly when the bundles do — and the manifest
+    names every one of them the same way."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.root = Path(tempfile.mkdtemp(prefix="xue-native-zarr-"))
+        cls.reference, cls.reference_report = cls._build(binconvert, "reference")
+        cls.subject, cls.subject_report = cls._build(native, "subject")
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        shutil.rmtree(cls.root, ignore_errors=True)
+
+    @classmethod
+    def _build(cls, implementation, name: str) -> tuple[Path, dict]:
+        run_directory = cls.root / name / "gfs.2026081406"
+        report = implementation.convert_bin(
+            FIXTURE_GRIB,
+            run_directory,
+            work_root=cls.root / f"{name}-work",
+            manifest_path=run_directory / "manifest.json",
+            latest_path=cls.root / name / "latest.json",
+            run_id="2026081406",
+            model="gfs",
+            skip_video=True,
+            zarr=True,
+        )
+        return cls.root / name, report
+
+    def test_a_store_stands_beside_every_bundle_and_variant(self) -> None:
+        manifest = json.loads((self.subject / "gfs.2026081406" / "manifest.json").read_text(encoding="utf-8"))
+        for bundle in manifest["bundles"]:
+            for artifact in (bundle, *bundle.get("variants", [])):
+                with self.subTest(path=artifact["path"]):
+                    self.assertEqual(artifact["zarr"]["path"], artifact["path"].removesuffix(".xue") + ".zarr")
+                    self.assertTrue((self.subject / "gfs.2026081406" / artifact["zarr"]["path"] / "zarr.json").is_file())
+        self.assertTrue(all("zarr" in bundle for bundle in self.subject_report["bundles"]))
+        self.assertTrue(all("zarr" in variant for variant in self.subject_report["variants"]))
+
+    def test_every_object_of_every_store_is_byte_identical(self) -> None:
+        require_comparable_compression(self, self.reference_report, self.subject_report)
+        self.assertEqual(
+            sorted(path.relative_to(self.reference).as_posix() for path in self.reference.rglob("*")),
+            sorted(path.relative_to(self.subject).as_posix() for path in self.subject.rglob("*")),
+        )
+        for path in sorted(self.reference.rglob("*")):
+            if path.is_dir():
+                continue
+            relative = path.relative_to(self.reference)
+            with self.subTest(artifact=relative.as_posix()):
+                self.assertTrue(
+                    filecmp.cmp(path, self.subject / relative, shallow=False),
+                    f"{relative} differs between the two encoders",
+                )
+
+
+@requires_native
 class NativeReportTests(unittest.TestCase):
     """The report is the CLI's output and the publish workflow's summary
     input, so it has to carry the same keys the reference does."""

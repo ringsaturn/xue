@@ -1202,6 +1202,43 @@ class BinManifestTests(unittest.TestCase):
         with self.assertRaises(ManifestError):
             validate_bin_manifest(empty)
 
+    def test_zarr_descriptor_is_optional_and_validated(self) -> None:
+        """The bundle's Zarr store, on the bundle and on a variant: the same
+        path rules as the bundle, and no collision with any other artifact."""
+        bundles = manifest_bundles()
+        bundles[0]["zarr"] = {"path": "gfs.2026081506/tmp2m.zarr", "byteLength": 12_347_075, "crc32": "760cef95"}
+        bundles[0]["variants"][0]["zarr"] = {
+            "path": "gfs.2026081506/tmp2m.half.zarr",
+            "byteLength": 4_000_000,
+            "crc32": "0d3a2e6b",
+        }
+        payload = build_bin_manifest(datetime(2026, 8, 15, 6, tzinfo=UTC), bundles=bundles)
+        self.assertEqual(payload["bundles"][0]["zarr"]["path"], "gfs.2026081506/tmp2m.zarr")
+        self.assertEqual(payload["bundles"][0]["variants"][0]["zarr"]["crc32"], "0d3a2e6b")
+        self.assertNotIn("zarr", payload["bundles"][1])
+        validate_bin_manifest(payload)
+        for mutation in (
+            {"path": "gfs.2026081506/tmp2m.zip"},
+            {"path": "/absolute.zarr"},
+            {"path": "../escape.zarr"},
+            {"path": "gfs.2026081506/tmp2m.xue"},  # the bundle's own path
+            {"path": "gfs.2026081506/tmp2m.half.zarr"},  # the variant's store
+            {"byteLength": 0},
+            {"byteLength": "12"},
+            {"crc32": "760CEF95"},
+            {"crc32": "760c"},
+        ):
+            broken = json.loads(json.dumps(payload))
+            broken["bundles"][0]["zarr"].update(mutation)
+            with self.assertRaises(ManifestError, msg=str(mutation)):
+                validate_bin_manifest(broken)
+        for where in ("bundles", "variants"):
+            broken = json.loads(json.dumps(payload))
+            target = broken["bundles"][0] if where == "bundles" else broken["bundles"][0]["variants"][0]
+            target["zarr"] = "gfs.2026081506/tmp2m.zarr"
+            with self.assertRaises(ManifestError):
+                validate_bin_manifest(broken)
+
     def test_invalid_video_descriptor_rejected(self) -> None:
         payload = build_bin_manifest(datetime(2026, 8, 15, 6, tzinfo=UTC), bundles=manifest_bundles())
         for mutation in (

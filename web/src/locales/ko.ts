@@ -96,6 +96,7 @@ export const ko: Record<MessageKey, string> = {
   bufferedFrames: "버퍼된 프레임",
   downloadedBytes: "내려받은 용량",
   formatLabel: "형식",
+  formatZarr: "Zarr",
   preloadProgressAria: "예보 자료 미리 읽기 진행률",
   statDataset: "데이터셋",
   statGrid: "격자",
