@@ -56,4 +56,7 @@ jobs:
       keep: ${{ inputs.keep || '1' }}
       force: ${{ inputs.force || false }}
       dry_run: ${{ inputs.dry_run || false }}
+      # Published as Zarr stores alone (plan 017 phase 7), after HRRR.
+      zarr: true
+      container: false
     secrets: inherit

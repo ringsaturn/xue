@@ -443,9 +443,9 @@ both encoder paths produce identical stores: `binconvert` exports inside
 each bundle job, `native.py::_zarr_reports` after the wheel has written, and
 `test_native.py` compares the objects byte for byte. `build-bin --zarr` /
 `convert-bin --zarr` or `XUE_ZARR=1` turns it on (off by default; the
-reusable `publish.yml` takes a `zarr` input, which `publish-hrrr.yml` alone
-sets — a source is switched on one at a time, and a run built without it
-is still whole — and `make mvp` passes `--zarr`). `--no-xue` /
+reusable `publish.yml` takes a `zarr` input, set by every per-model
+workflow but GFS's — a source is switched on one at a time, and a run
+built without it is still whole — and `make mvp` passes `--zarr`). `--no-xue` /
 `XUE_CONTAINER=0` (publish.yml's `container: false`, HRRR again) goes one
 step further and **retires the container**: the `.xue` is still written
 and the store derived from it, then the file is removed

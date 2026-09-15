@@ -163,9 +163,10 @@ https://dataset.ringsaturn.me/xue/. The contract is two layers:
   uint8, one shard per variable array holding the whole axis, its inner
   chunks six-frame time chunks of the bundle's tiles, zstd —
   `docs/zarr-profile.md`), readable with xarray or any Zarr v3
-  client; its `crc32` is the `?v=` for every object in the store. HRRR
-  publishes the store alone; the other models publish the container, and
-  their older runs, the showcase cases and the MRMS rounds always will.
+  client; its `crc32` is the `?v=` for every object in the store. HRRR,
+  ECMWF, SFLUX and the MRMS rounds publish the store alone; GFS still
+  publishes the container, and runs published before the store, and the
+  showcase cases, always will.
   Request an immutable artifact as `<path>?v=<crc32>`. The grid, the time
   axis, the variables' GRIB2 parameter blocks and the quantization codebooks
   are inside each bundle — a UTF-8 JSON metadata block after the container's

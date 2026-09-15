@@ -61,4 +61,7 @@ jobs:
       # request pacing in xuebuild.fetch is per process: every build job is
       # another client, so fewer of them.
       max_jobs: 8
+      # Published as Zarr stores alone (plan 017 phase 7), after HRRR.
+      zarr: true
+      container: false
     secrets: inherit
