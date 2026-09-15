@@ -81,6 +81,15 @@ on:
           container stops being written.
         type: boolean
         default: false
+      container:
+        description: >-
+          Keep the `.xue` container beside the store. Off, a run publishes
+          the store alone: each bundle's `.xue` is removed once its store
+          and its video companions have been read out of it and the
+          manifest names no container — plan 017 phase 7 for one source at
+          a time, which needs `zarr` on and the phase-4 shell live.
+        type: boolean
+        default: true
     secrets:
       R2_ACCESS_KEY_ID:
         required: true
@@ -101,6 +110,7 @@ env:
   # The store export (`zarr` input) reaches the bundle jobs through the
   # encoder's own switch; empty leaves it off.
   XUE_ZARR: ${{ inputs.zarr && '1' || '' }}
+  XUE_CONTAINER: ${{ inputs.container && '1' || '0' }}
 
 jobs:
   resolve:

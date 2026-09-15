@@ -244,6 +244,24 @@ test("missing manifest shows a recoverable error", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Retry" })).toBeVisible();
 });
 
+test("a manifest this shell refuses reloads the tab once, then shows the error", async ({ page }) => {
+  // A run published in a schema a newer shell reads would reach a tab
+  // opened before that shell; the reload is what fetches the new shell.
+  // Here the manifest is refused by every shell, so the second attempt
+  // lands on the error and no third is made.
+  let manifestRequests = 0;
+  await page.route("**/data/latest.json*", (route) => route.fulfill({ json: LATEST_FIXTURE }));
+  await page.route("**/data/gfs.*/manifest.json*", (route) => {
+    manifestRequests += 1;
+    return route.fulfill({ json: { ...MANIFEST_FIXTURE, schemaVersion: 4 } });
+  });
+  await page.goto("/");
+  await expect(page.getByRole("alert")).toContainText("schema", { timeout: 20_000 });
+  expect(manifestRequests).toBe(2);
+  await page.waitForTimeout(1_000);
+  expect(manifestRequests).toBe(2);
+});
+
 test("bundle download failure keeps animation controls disabled", async ({ page }) => {
   await routeManifest(page);
   await page.route("**/data/**/*.xue?*", (route) => route.fulfill({ status: 404, body: "missing" }));

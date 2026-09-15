@@ -154,18 +154,22 @@ https://dataset.ringsaturn.me/xue/. The contract is two layers:
   `manifestCrc32`, not `run`, to see whether it moved).
 - Everything the pointer names is immutable and lives under `<model>.<run>/`:
   the run's `manifest.json` (schema 5: `model`, `product`, `runTime`,
-  `forecastHours`, and `bundles[]`, each with `variable`, `path`,
-  `byteLength`, `crc32`, optional half-resolution `variants[]`, a first-frame
-  `poster`, an optional H.264 `video` and an optional `zarr` store
-  descriptor), and one `.xue` file per bundle. A `zarr` descriptor names the
-  same bundle as a Zarr v3 store (`<bundle>.zarr/`, a directory of objects:
+  `forecastHours`, and `bundles[]`, each with `variable`, optional
+  half-resolution `variants[]`, a first-frame `poster`, an optional H.264
+  `video`, and one or both of two deliveries of the same codes: the `.xue`
+  container as `path` + `byteLength` + `crc32` (one unit, present whole or
+  absent whole) and a `zarr` store descriptor). A `zarr` descriptor names
+  the bundle as a Zarr v3 store (`<bundle>.zarr/`, a directory of objects:
   uint8, one shard per six frames, sharded into the bundle's tiles, zstd,
   plus `index.bin`, every shard's index in one object a standard client
   ignores — `docs/zarr-profile.md`), readable with xarray or any Zarr v3
-  client; its `crc32` is the `?v=` for every object in the store.
+  client; its `crc32` is the `?v=` for every object in the store. HRRR
+  publishes the store alone; the other models publish the container, and
+  their older runs, the showcase cases and the MRMS rounds always will.
   Request an immutable artifact as `<path>?v=<crc32>`. The grid, the time
   axis, the variables' GRIB2 parameter blocks and the quantization codebooks
-  are inside each bundle, as a UTF-8 JSON metadata block after the header.
+  are inside each bundle — a UTF-8 JSON metadata block after the container's
+  header, the store group's `attributes.xue` verbatim.
 - The MRMS window is one directory deeper: its `run` is the window's *first*
   hour (three hours before the newest frame's, moving on every hour), and
   each five-minute rebuild of that run is a round of its own,

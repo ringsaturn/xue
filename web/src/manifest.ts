@@ -659,13 +659,35 @@ export interface LoadedManifest {
   manifestUrl: string;
 }
 
+/** A live manifest this build's validator refused. Carries the pointer's
+ * crc32 so the shell can tell a manifest it will never accept from one a
+ * newer build would: a run published in a widened schema reaches a tab
+ * opened before the shell that reads it, and the tab's cure is a reload,
+ * once (main.ts). */
+export class ManifestRejectedError extends Error {
+  constructor(
+    message: string,
+    readonly manifestCrc32: string,
+  ) {
+    super(message);
+    this.name = "ManifestRejectedError";
+  }
+}
+
 export async function fetchManifest(baseUrl: string, model: ForecastModelId = "gfs"): Promise<LoadedManifest> {
   const latest = await fetchLatestPointer(baseUrl, model);
   const url = new URL(latest.manifestPath, new URL(baseUrl, document.baseURI));
   url.searchParams.set("v", latest.manifestCrc32);
   const response = await fetchImmutable(url);
   if (!response.ok) throw new Error(t("manifestRequestFailed", { status: response.status }));
-  return { manifest: validateManifest(await response.json(), model), latest, manifestUrl: url.href };
+  const payload: unknown = await response.json();
+  let manifest: ForecastManifest;
+  try {
+    manifest = validateManifest(payload, model);
+  } catch (error) {
+    throw new ManifestRejectedError(error instanceof Error ? error.message : String(error), latest.manifestCrc32);
+  }
+  return { manifest, latest, manifestUrl: url.href };
 }
 
 // ---------------------------------------------------------------------------

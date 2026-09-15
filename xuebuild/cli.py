@@ -22,7 +22,14 @@ from .errors import ConversionError, XueError
 from .fetch import WINDOW_FILENAME, fetch_run, parse_run, resolve_run, window_summary
 from .showcase import CASE_SIDECAR, build_case, load_cases, refresh_sidecar, write_catalog
 from .sources import SOURCES, source_spec
-from .zarrstore import DEFAULT_INDEX_LOCATION, INDEX_LOCATIONS, enabled_by_environment, export_bundle, store_path_for
+from .zarrstore import (
+    DEFAULT_INDEX_LOCATION,
+    INDEX_LOCATIONS,
+    container_enabled_by_environment,
+    enabled_by_environment,
+    export_bundle,
+    store_path_for,
+)
 from .tc.build import build_product as build_tc_product
 from .tc.build import load_previous_index as load_previous_tc_index
 from .tc.fetch import SOURCE_IDS as TC_SOURCE_IDS
@@ -131,6 +138,13 @@ def parser() -> argparse.ArgumentParser:
         help="also derive a Zarr v3 store beside every bundle and variant (docs/zarr-profile.md) and name it "
         "in the manifest; XUE_ZARR=1 in the environment does the same",
     )
+    convert_bin_parser.add_argument(
+        "--no-xue",
+        dest="container",
+        action="store_false",
+        help="publish the Zarr store alone: remove each .xue once its store and video companions are read "
+        "out of it and name no container in the manifest (needs --zarr); XUE_CONTAINER=0 does the same",
+    )
 
     verify_bin_parser = commands.add_parser("verify-bin", help="validate and fully decode a Xue bundle")
     verify_bin_parser.add_argument("bundle", type=Path)
@@ -185,6 +199,13 @@ def parser() -> argparse.ArgumentParser:
         action="store_true",
         help="also derive a Zarr v3 store beside every bundle and variant (docs/zarr-profile.md) and name it "
         "in the manifest; XUE_ZARR=1 in the environment does the same",
+    )
+    build_bin_parser.add_argument(
+        "--no-xue",
+        dest="container",
+        action="store_false",
+        help="publish the Zarr store alone: remove each .xue once its store and video companions are read "
+        "out of it and name no container in the manifest (needs --zarr); XUE_CONTAINER=0 does the same",
     )
     build_bin_parser.add_argument(
         "--bundles",
@@ -356,6 +377,7 @@ def main(argv: list[str] | None = None) -> int:
                 model=arguments.model,
                 last_hour=arguments.hours,
                 zarr=arguments.zarr or enabled_by_environment(),
+                container=arguments.container and container_enabled_by_environment(),
             )
             print(json.dumps(report, indent=2))
         elif arguments.command == "verify-bin":
@@ -480,6 +502,7 @@ def main(argv: list[str] | None = None) -> int:
                 model=arguments.model,
                 bundle_ids=bundle_ids,
                 zarr=arguments.zarr or enabled_by_environment(),
+                container=arguments.container and container_enabled_by_environment(),
             )
             report["run"] = run.id
             if arguments.round is not None:

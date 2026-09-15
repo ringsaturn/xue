@@ -1346,25 +1346,12 @@ def _bundle_manifest_entry(
 ) -> dict[str, Any]:
     entry = {
         "variable": bundle["variable"],
-        "path": Path(bundle["output"]).relative_to(manifest_dir).as_posix(),
-        "byteLength": bundle["byteLength"],
-        "crc32": bundle["crc32"],
+        **_container_fields(bundle, manifest_dir),
     }
     if variant_reports:
         # Resolution ladder: STREAM-INF style alternate renditions of the
-        # same variable; the top-level path stays the canonical full-res tier.
-        entry["variants"] = [
-            {
-                "path": Path(variant["output"]).relative_to(manifest_dir).as_posix(),
-                "width": variant["width"],
-                "height": variant["height"],
-                "byteLength": variant["byteLength"],
-                "crc32": variant["crc32"],
-                "bandwidth": variant["bandwidth"],
-                **({"zarr": _zarr_descriptor(variant["zarr"], manifest_dir)} if "zarr" in variant else {}),
-            }
-            for variant in variant_reports
-        ]
+        # same variable; the top-level entry stays the canonical full-res tier.
+        entry["variants"] = [_variant_manifest_entry(variant, manifest_dir) for variant in variant_reports]
     if poster_report is not None:
         entry["poster"] = {
             "path": Path(poster_report["path"]).relative_to(manifest_dir).as_posix(),
@@ -1390,6 +1377,46 @@ def _bundle_manifest_entry(
     if "zarr" in bundle:
         entry["zarr"] = _zarr_descriptor(bundle["zarr"], manifest_dir)
     return entry
+
+
+def _variant_manifest_entry(variant: dict[str, Any], manifest_dir: Path) -> dict[str, Any]:
+    """One tier's manifest entry, in the key order the native encoder writes
+    (the manifests are compared byte for byte): the container's `path` first
+    and its `byteLength` / `crc32` after the grid, or none of the three on a
+    tier whose container was retired."""
+    container = _container_fields(variant, manifest_dir)
+    return {
+        **({"path": container["path"]} if container else {}),
+        "width": variant["width"],
+        "height": variant["height"],
+        **({"byteLength": container["byteLength"], "crc32": container["crc32"]} if container else {}),
+        "bandwidth": variant["bandwidth"],
+        **({"zarr": _zarr_descriptor(variant["zarr"], manifest_dir)} if "zarr" in variant else {}),
+    }
+
+
+def _container_fields(report: dict[str, Any], manifest_dir: Path) -> dict[str, Any]:
+    """The manifest's ``path`` / ``byteLength`` / ``crc32`` unit for a bundle
+    or variant report — or nothing, for a report whose container was
+    retired after its store was derived (``container: False``)."""
+    if not report.get("container", True):
+        return {}
+    return {
+        "path": Path(report["output"]).relative_to(manifest_dir).as_posix(),
+        "byteLength": report["byteLength"],
+        "crc32": report["crc32"],
+    }
+
+
+def retire_container(report: dict[str, Any]) -> None:
+    """Remove a bundle or variant's ``.xue`` once its store stands, and mark
+    the report so the manifest names the store alone. Both encoder paths
+    call this after the video companions and the store have been read out
+    of the file."""
+    if "zarr" not in report:
+        raise ConversionError(f"{report['variable']}: the container can only be retired behind a store")
+    Path(report["output"]).unlink()
+    report["container"] = False
 
 
 def _zarr_descriptor(report: dict[str, Any], manifest_dir: Path) -> dict[str, Any]:
@@ -1423,6 +1450,7 @@ def convert_bin(
     bundle_ids: tuple[str, ...] | None = None,
     last_hour: int | None = None,
     zarr: bool = False,
+    container: bool = True,
 ) -> dict[str, Any]:
     """Convert a GRIB run into per-variable Xue bundles.
 
@@ -1446,10 +1474,15 @@ def convert_bin(
     (`xuebuild.zarrstore`, docs/zarr-profile.md) and names it in the
     manifest; the store is read back out of the finished ``.xue``, so it
     carries the same codes by construction and the bundle's bytes do not
-    depend on whether it was asked for.
+    depend on whether it was asked for. ``container=False`` (with ``zarr``)
+    retires the ``.xue`` once the store and the video companions have been
+    read out of it: the manifest then names the store alone and the file
+    is removed, so a run publishes one delivery.
     """
     if profile not in PROFILES:
         raise ConversionError(f"unknown profile: {profile}")
+    if not container and not zarr:
+        raise ConversionError("a build without the container needs the store: pass zarr=True")
     source = source_spec(model)
     if bundle_ids is not None:
         unsupported = [bundle_id for bundle_id in bundle_ids if bundle_id not in published_bundle_ids(source)]
@@ -1881,6 +1914,10 @@ def convert_bin(
                     )
                     LOG.info("wrote %s (%.2f MB)", export.path, export.byte_length / 1e6)
                     report["zarr"] = export.to_dict()
+                    if not container:
+                        # The video companions were encoded from the codes
+                        # in memory, so nothing else reads the file.
+                        retire_container(report)
                 return report
 
             return writers.submit(job)

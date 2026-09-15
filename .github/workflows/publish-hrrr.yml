@@ -57,8 +57,11 @@ jobs:
       force: ${{ inputs.force || false }}
       dry_run: ${{ inputs.dry_run || false }}
       max_jobs: 4
-      # The dual-publish soak (plan 017 phase 5) runs on this source first:
-      # a small hourly run whose viewers are few, so a store that misbehaves
-      # costs an hour of one regional model rather than the global default.
+      # The first source to publish the Zarr store alone (plan 017, phases
+      # 5 and 7 taken together on one source): a small hourly run whose
+      # viewers are few, so a store that misbehaves costs an hour of one
+      # regional model rather than the global default. The `.xue` is still
+      # built — the store is derived from it — and retired before upload.
       zarr: true
+      container: false
     secrets: inherit

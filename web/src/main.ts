@@ -56,6 +56,7 @@ import {
   deliveryBytes,
   fetchLatestPointer,
   fetchManifest,
+  ManifestRejectedError,
   hasBundle,
   isBundleVariableId,
   parseBundleMetadata,
@@ -5674,8 +5675,28 @@ async function initialize({ frame = false }: { frame?: boolean } = {}): Promise<
   } catch (error) {
     if (sequence !== initializeSequence) return;
     if (error instanceof DOMException && error.name === "AbortError") return;
+    if (error instanceof ManifestRejectedError && reloadForNewerShell(error.manifestCrc32)) return;
     showError(error instanceof Error ? error.message : t("bundleLoadFailed"));
   }
+}
+
+/** The one cure for a tab older than the data: a live manifest this shell
+ * refuses is, far more often than not, one published in a schema a newer
+ * shell reads — a run that ships only its Zarr stores reaching a tab that
+ * predates the store — and the pointer poll would otherwise leave the tab
+ * on an error until someone refreshes it. Reload once per manifest: the
+ * crc32 is remembered for the tab's life, so a manifest the new shell
+ * refuses too shows its error instead of looping. */
+const RELOADED_FOR_KEY = "xue-reloaded-for-manifest";
+function reloadForNewerShell(manifestCrc32: string): boolean {
+  try {
+    if (sessionStorage.getItem(RELOADED_FOR_KEY) === manifestCrc32) return false;
+    sessionStorage.setItem(RELOADED_FOR_KEY, manifestCrc32);
+  } catch {
+    return false;
+  }
+  window.location.reload();
+  return true;
 }
 
 slider.addEventListener("input", () => {

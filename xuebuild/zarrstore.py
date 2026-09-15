@@ -105,6 +105,19 @@ def enabled_by_environment() -> bool:
     return os.environ.get(ENVIRONMENT_VARIABLE, "").strip() == "1"
 
 
+CONTAINER_VARIABLE = "XUE_CONTAINER"
+
+
+def container_enabled_by_environment() -> bool:
+    """Whether a build keeps the ``.xue`` container it wrote: ``XUE_CONTAINER=0``
+    retires it — the store derived from it is the only delivery published,
+    the manifest names no ``path``, and the file is removed once the store
+    and the video companions have been read out of it. The transitional
+    form of plan 017's phase 7, taken one source at a time; anything else,
+    the variable unset included, keeps the container."""
+    return os.environ.get(CONTAINER_VARIABLE, "").strip() != "0"
+
+
 # -- CRC-32C -------------------------------------------------------------------
 
 def _crc32c_table() -> np.ndarray:

@@ -16,9 +16,12 @@ plays a store **by default** wherever a bundle's manifest entry names one
 whose entries name only their stores — no `.xue` at all — is accepted; a
 run published without stores plays from its containers as before, and a
 reader that does not know the manifest field ignores it. The container is
-on its way to becoming a read-only legacy format: the encoders still write
-it, and every decoder keeps reading it indefinitely, since runs, cases and
-rounds already published are never rebuilt.
+on its way to becoming a read-only legacy format: **HRRR already publishes
+the store alone** (`build-bin --zarr --no-xue`: the `.xue` is still written,
+the store derived from it, and the file retired before upload), the other
+sources still publish the container, and every decoder keeps reading it
+indefinitely, since runs, cases and rounds already published are never
+rebuilt.
 
 ## Why a profile
 

@@ -40,7 +40,7 @@ from pathlib import Path
 from typing import Any
 
 from . import zarrstore
-from .binconvert import published_bundle_ids, video_variable_ids
+from .binconvert import published_bundle_ids, retire_container, video_variable_ids
 from .errors import ConversionError
 from .manifest import (
     build_bin_manifest,
@@ -226,11 +226,20 @@ def _manifest_entry(
     video: dict[str, Any] | None,
     manifest_dir: Path,
     zarr: dict[str, dict[str, Any]] | None = None,
+    retired: set[str] = frozenset(),
 ) -> dict[str, Any]:
     """One manifest bundle entry, with its video and Zarr descriptors folded
     in. ``zarr`` is keyed by bundle path, absolute, as `_zarr_reports` keys
-    it; the entry's own paths are relative to the manifest."""
+    it; the entry's own paths are relative to the manifest. ``retired`` is
+    the set of those paths whose container was removed behind its store:
+    the entry then drops the container's ``path`` / ``byteLength`` /
+    ``crc32`` unit, on the bundle and on its tiers alike."""
     entry = dict(entry)
+
+    def without_container(node: dict[str, Any]) -> dict[str, Any]:
+        if str(manifest_dir / node["path"]) not in retired:
+            return node
+        return {key: value for key, value in node.items() if key not in ("path", "byteLength", "crc32")}
     poster = entry.get("poster")
     if poster is not None:
         entry["poster"] = {
@@ -250,7 +259,7 @@ def _manifest_entry(
 
     if "variants" in entry:
         entry["variants"] = [
-            {**variant, **({"zarr": descriptor} if (descriptor := store(variant["path"])) else {})}
+            without_container({**variant, **({"zarr": descriptor} if (descriptor := store(variant["path"])) else {})})
             for variant in entry["variants"]
         ]
     if video is not None:
@@ -269,7 +278,7 @@ def _manifest_entry(
     descriptor = store(entry["path"])
     if descriptor is not None:
         entry["zarr"] = descriptor
-    return entry
+    return without_container(entry)
 
 
 def _rewrite_manifest(
@@ -278,6 +287,7 @@ def _rewrite_manifest(
     *,
     require_core: bool,
     zarr: dict[str, dict[str, Any]] | None = None,
+    retired: set[str] = frozenset(),
 ) -> dict[str, Any]:
     """Fold the video and Zarr descriptors into the manifest the native
     encoder wrote.
@@ -292,7 +302,7 @@ def _rewrite_manifest(
     payload = build_bin_manifest(
         _run_time(existing),
         bundles=[
-            _manifest_entry(entry, videos.get(entry["variable"]), manifest_path.parent, zarr)
+            _manifest_entry(entry, videos.get(entry["variable"]), manifest_path.parent, zarr, retired)
             for entry in existing["bundles"]
         ],
         expected_hours=expected_hours,
@@ -330,6 +340,7 @@ def convert_bin(
     bundle_ids: tuple[str, ...] | None = None,
     last_hour: int | None = None,
     zarr: bool = False,
+    container: bool = True,
 ) -> dict[str, Any]:
     """`binconvert.convert_bin`, run through the native encoder.
 
@@ -337,6 +348,8 @@ def convert_bin(
     native encoder holds its intermediate planes in memory and writes no
     scratch files.
     """
+    if not container and not zarr:
+        raise ConversionError("a build without the container needs the store: pass zarr=True")
     module = require()
     source = source_spec(model)
     inputs = (
@@ -393,15 +406,23 @@ def convert_bin(
     report["videos"] = list(videos.values())
 
     stores: dict[str, dict[str, Any]] = {}
+    retired: set[str] = set()
     if zarr:
         stores = _zarr_reports(report["bundles"], report.get("variants", []))
         # The Python path reports a store on the bundle it belongs to.
         for artifact in [*report["bundles"], *report.get("variants", [])]:
             artifact["zarr"] = stores[str(Path(artifact["output"]))]
+            if not container:
+                # The videos above and the store were both read out of the
+                # file; nothing else will be.
+                retire_container(artifact)
+                retired.add(str(Path(artifact["output"])))
 
     if manifest_path is not None:
         require_core = bundle_ids is None
-        payload = _rewrite_manifest(Path(manifest_path), videos, require_core=require_core, zarr=stores)
+        payload = _rewrite_manifest(
+            Path(manifest_path), videos, require_core=require_core, zarr=stores, retired=retired
+        )
         LOG.info("wrote manifest %s", manifest_path)
         if latest_path is not None and run_id is not None:
             manifest_bytes = Path(manifest_path).read_bytes()

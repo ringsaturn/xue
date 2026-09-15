@@ -94,7 +94,10 @@ byteLength, crc32}`). The store carries the bundle's metadata verbatim in
 its root attributes plus CF `scale_factor` / `add_offset` / `_FillValue` on
 linear codebooks and `time` / `latitude` / `longitude` coordinates, so
 `xarray.open_zarr` reads it as physical values with nothing installed
-beyond a Zarr client. `xue export-zarr <bundle.xue>` derives one by hand;
+beyond a Zarr client. `--no-xue` (or `XUE_CONTAINER=0`) publishes the store
+alone — the `.xue` is retired once the store has been derived from it and
+the manifest names no container — which is how HRRR is published today.
+`xue export-zarr <bundle.xue>` derives one by hand;
 `--delta` swaps in the `xue.delta` codec (the container's temporal
 residual as a codec, `xuebuild/zarrcodec.py`), under which a chunk's
 compressed bytes equal the bundle's wherever the two chunkings coincide.

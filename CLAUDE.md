@@ -441,9 +441,16 @@ each bundle job, `native.py::_zarr_reports` after the wheel has written, and
 `test_native.py` compares the objects byte for byte. `build-bin --zarr` /
 `convert-bin --zarr` or `XUE_ZARR=1` turns it on (off by default; the
 reusable `publish.yml` takes a `zarr` input, which `publish-hrrr.yml` alone
-sets for the phase-5 soak — a source is switched on one at a time, and a
-run built without it is still whole — and `make mvp` passes `--zarr`);
-`xue export-zarr <bundle>` derives one by hand, with
+sets — a source is switched on one at a time, and a run built without it
+is still whole — and `make mvp` passes `--zarr`). `--no-xue` /
+`XUE_CONTAINER=0` (publish.yml's `container: false`, HRRR again) goes one
+step further and **retires the container**: the `.xue` is still written
+and the store derived from it, then the file is removed
+(`binconvert.retire_container`, on both encoder paths, after the video
+companions have been read out of it) and the manifest entry names the
+store alone — the transitional form of plan 017's phase 7 for one source,
+which `tests/test_native.py::NativeStoreOnlyParityTests` holds identical
+across the two encoders. `xue export-zarr <bundle>` derives one by hand, with
 `--delta` (the `xue.delta` codec in front of `bytes` on PREVIOUS variables,
 `xuebuild/zarrcodec.py` registers it for zarr-python) and
 `--index-location start|end` (`end` by default: the form zarrita fetches as
@@ -476,7 +483,11 @@ every decoder indefinitely — published runs, cases and rounds are never
 rebuilt — so `tests/e2e/app.spec.ts` runs on the fixture manifest with its
 stores stripped (`tests/e2e/artifacts.ts::withoutStores`, the shape of
 every run published before) while `zarr.spec.ts` drives the default and
-the store-only shape (`storeOnly`). `zarr/worker.ts` answers exactly the protocol
+the store-only shape (`storeOnly`). A tab older than the data — one whose
+validator refuses a live manifest a newer shell reads — reloads itself
+once per manifest (`ManifestRejectedError`, `main.ts::reloadForNewerShell`,
+the crc32 kept in `sessionStorage`), which is what lets a store-only run go
+live without waiting for every open tab to be refreshed. `zarr/worker.ts` answers exactly the protocol
 `worker.ts` answers (`protocol.ts` spells its messages; `init-stream` gains
 `kind: "zarr"`, the root URL and the descriptor's crc32) over
 `zarr/session.ts`: `shard.ts` validates the group and array documents
