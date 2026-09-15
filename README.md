@@ -498,6 +498,31 @@ forecasts (dashed ahead of the playhead, solid behind it, the wind radii
 at the current position), the best tracks and the model tracks follow the
 timeline by valid time.
 
+### The STAC catalog
+
+Beside the pointers, the manifests and `showcase.json` — all of which keep
+their shape — the encoder derives a static
+[STAC](https://stacspec.org/) catalog for clients that find data that way
+(`docs/stac.md`): `catalog.json` at the data root, one
+`<source>/collection.json` per live source whose `item` / `latest-version`
+links name the run the pointer names, one `<source>.<run>/item.json` per
+run beside its manifest with an asset per artifact (the Zarr store as
+`application/vnd.zarr`, sizes and CRCs under the file extension, the grid
+and axis as datacube dimensions, the cycle as
+`forecast:reference_datetime`), and `showcase/collection.json` with an Item
+per case. Nothing is derived from anything but the manifest, the catalog
+row and the source registry, so the documents are the same whether a run
+was built whole or in pieces, and they are written wherever the manifest
+is: `build-bin`, `assemble-run`, `showcase build` / `refresh` / `catalog`.
+The upload targets carry them: an Item with its manifest, a Collection and
+the catalog with the pointer, the showcase's with `upload-r2-showcase`.
+
+```python
+import pystac, xarray as xr
+run = next(pystac.Catalog.from_file("https://dataset.ringsaturn.me/xue/catalog.json").get_child("gfs").get_items())
+ds = xr.open_zarr(run.assets["tmp2m"].get_absolute_href(), consolidated=False)
+```
+
 ## Testing
 
 ```sh

@@ -64,6 +64,7 @@ make encoder-rust-test           # its unit tests plus the byte-identity golden 
 make encoder-wheel               # a self-contained wheel carrying a minimal GDAL
 npm run build                    # tsc --noEmit && vite build
 .venv/bin/python -m xuebuild export-zarr <bundle.xue> [--delta] [--index-location start|end]
+.venv/bin/python -m xuebuild stac --model gfs --run YYYYMMDDHH [--round HHMM]   # rewrite a run's STAC documents
 ```
 
 Single tests:
@@ -516,6 +517,35 @@ synthetic fixtures (`prepare_web_fixture.py` exports `tmp2m`, `prate`,
 `tests/e2e/zarr.spec.ts` drives the shell, and `npm run measure:backends`
 (`web/tooling/measure-backends.test.ts`) prints requests and bytes per
 backend on a local run.
+
+### STAC catalog (`xuebuild/stac.py`)
+
+A static STAC 1.1.0 catalog is **derived** beside the JSON the shell reads
+— the manifests, the pointers and `showcase.json` keep their shape and the
+frontend never reads the catalog (`docs/stac.md` is the contract). Root
+`catalog.json` (one child per live source + the showcase, a pure function
+of the registry), `<source>/collection.json` (the pointer's STAC face: its
+`item` / `latest-version` links name the live run, mutable, uploaded with
+the pointer by `upload-r2-pointer`), `<source>.<run>/item.json` beside
+each manifest (`<run>/<HHMM>/item.json` for an MRMS round; uploaded
+no-cache with the manifest by `upload-r2` / `upload-r2-manifest`), and
+`showcase/collection.json` + `showcase/<case>/item.json` (written by
+`write_catalog`, uploaded by `upload-r2-showcase`). Every document is a
+pure function of the manifest, the catalog row and `sources.py` — no
+timestamps, no host names, relative links only — so the split-build and
+top-up identity tests cover them. An Item reads its grid off the poster
+(decimated two to one: steps halved back, far edge right to within a cell)
+or the video metadata, its axis as the union of every bundle's, one asset
+per artifact (`<bundle>` the store as `application/vnd.zarr` or the
+container, `-xue`, `-half`, `-poster`, `-video`, `manifest` under its
+`?v=`), `file:checksum` as the crc32 multihash (`b20204` + hex),
+`cube:variables` one per array from `variables.py`, the forecast extension
+on forecast sources only. The writer runs in the CLI, not the converter:
+`build-bin` for a whole live run (either encoder), `assemble-run`, and
+`xue stac --model … --run …` to regenerate by hand; a `--bundles` piece
+writes none. Licenses and provider prose live in `_source_prose`, held to
+the registry by `tests/test_stac.py`, which also round-trips through
+pystac when the `zarr` dependency group is installed.
 
 ### Tropical cyclone product (`xuebuild/tc/`)
 

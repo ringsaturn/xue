@@ -19,7 +19,7 @@ import unittest
 from datetime import UTC, datetime
 from pathlib import Path
 
-from xuebuild import assemble, binconvert
+from xuebuild import assemble, binconvert, stac
 from xuebuild.binconvert import published_bundle_ids
 from xuebuild.errors import ManifestError
 from xuebuild.manifest import build_bin_manifest
@@ -332,6 +332,11 @@ class SplitBuildIdentityTests(unittest.TestCase):
             )
         # The fixture is one analysis frame; convert_bin's default axis is 120 h.
         cls.report = assemble.assemble_run(cls.split, model="gfs", run_id=run_id, expected_hours=120)
+        # The STAC documents the CLI derives after either path has written
+        # its manifest (build-bin for the whole run, assemble-run for the
+        # pieces): the Item, the source's Collection and the root catalog.
+        for root in (cls.whole, cls.split):
+            stac.write_run_documents(root, source=cls.source, manifest_path=root / run_directory / "manifest.json")
 
     @classmethod
     def tearDownClass(cls) -> None:
@@ -352,8 +357,9 @@ class SplitBuildIdentityTests(unittest.TestCase):
         self.assertEqual(self._artifacts(self.whole), self._artifacts(self.split))
 
     def test_every_artifact_is_byte_identical(self) -> None:
-        """Bundles, variants, posters, companions, the manifest and the
-        pointer: nothing may depend on what else was in the build."""
+        """Bundles, variants, posters, companions, the manifest, the pointer
+        and the STAC documents derived from the manifest: nothing may
+        depend on what else was in the build."""
         for relative in self._artifacts(self.whole):
             with self.subTest(artifact=relative.as_posix()):
                 self.assertTrue(
@@ -365,6 +371,15 @@ class SplitBuildIdentityTests(unittest.TestCase):
         pointer = json.loads((self.split / "latest.json").read_text(encoding="utf-8"))
         whole = json.loads((self.whole / "latest.json").read_text(encoding="utf-8"))
         self.assertEqual(pointer, whole)
+
+    def test_the_stac_documents_describe_the_run(self) -> None:
+        self.assertIn(Path("gfs.2026081406/item.json"), self._artifacts(self.split))
+        self.assertIn(Path("gfs/collection.json"), self._artifacts(self.split))
+        self.assertIn(Path("catalog.json"), self._artifacts(self.split))
+        item = json.loads((self.split / "gfs.2026081406" / "item.json").read_text(encoding="utf-8"))
+        manifest = json.loads((self.split / "gfs.2026081406" / "manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(item["assets"]["manifest"]["xue:crc32"], json.loads((self.split / "latest.json").read_text())["manifestCrc32"])
+        self.assertTrue({bundle["variable"] for bundle in manifest["bundles"]} <= set(item["assets"]))
 
     def test_assembling_again_is_a_no_op(self) -> None:
         # Same parts, same manifest: an unforced repeat writes nothing and
@@ -431,6 +446,8 @@ class TopUpIdentityTests(unittest.TestCase):
         cls.report = assemble.assemble_run(
             cls.topped, model="gfs", run_id=run_id, expected_hours=120, base_manifest=cls.base
         )
+        for root in (cls.whole, cls.topped):
+            stac.write_run_documents(root, source=cls.source, manifest_path=root / cls.run_directory / "manifest.json")
 
     @classmethod
     def tearDownClass(cls) -> None:
@@ -441,11 +458,15 @@ class TopUpIdentityTests(unittest.TestCase):
         self.assertEqual(sorted(self.report["built"]), sorted(self.ocean))
         self.assertEqual(self.report["dropped"], ["dirpw"])
         self.assertEqual(self.report["bundles"], list(published_bundle_ids(self.source)))
-        built = {path.name.split(".")[0] for path in (self.topped / self.run_directory).iterdir() if not path.name.startswith("manifest")}
+        built = {
+            path.name.split(".")[0]
+            for path in (self.topped / self.run_directory).iterdir()
+            if not path.name.startswith("manifest") and path.name != stac.ITEM_FILENAME
+        }
         self.assertEqual(built, set(self.ocean))
 
     def test_the_manifest_and_pointer_are_the_whole_builds(self) -> None:
-        for name in (f"{self.run_directory}/manifest.json", "latest.json"):
+        for name in (f"{self.run_directory}/manifest.json", "latest.json", f"{self.run_directory}/item.json", "gfs/collection.json"):
             with self.subTest(file=name):
                 self.assertTrue(filecmp.cmp(self.whole / name, self.topped / name, shallow=False), name)
 

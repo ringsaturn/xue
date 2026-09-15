@@ -180,6 +180,18 @@ https://dataset.ringsaturn.me/xue/. The contract is two layers:
   `latestSlot`, `hours`, `round`) says which frames the round holds. The
   live run's last two rounds and the previous run's are kept; older rounds
   are deleted once the pointer has moved on.
+- The same runs and cases are also described as a static STAC 1.1.0
+  catalog derived from the documents above (`docs/stac.md`; nothing here
+  replaces them): `catalog.json` at the root, one `<source>/collection.json`
+  per live source whose `item` / `latest-version` links name the run the
+  pointer names, one `<source>.<run>/item.json` per run beside its
+  manifest — an asset per artifact (the store as `application/vnd.zarr`,
+  `file:size` / `file:checksum` from the manifest's bytes and CRC, the
+  manifest itself under its `?v=`), the grid and axis as `cube:dimensions`,
+  every array as `cube:variables`, the cycle as
+  `forecast:reference_datetime` — and `showcase/collection.json` with an
+  Item per case. Links are relative; the mutable documents are served
+  no-cache like the pointer.
 - The historical catalog is `showcase.json` at the same root (schema 1,
   `generatedAt`, `cases[]`); each case carries `id`, `title` and `summary`
   keyed by language, `model`, `run`, `runTime`, `forecastHours`, `bbox`,
@@ -230,12 +242,15 @@ format is specified in `docs/format.md` (link below). Decoders you can call:
 - [Tropical cyclone product](https://github.com/ringsaturn/xue/blob/main/docs/tc.md):
   the normative description of the hourly track product — delivery,
   units, identity rules, the index, storm and pointer files.
+- [STAC catalog](https://github.com/ringsaturn/xue/blob/main/docs/stac.md):
+  the catalog / collection / item layout derived beside the manifests, what
+  each document carries and where it comes from.
 - [Authoring cases](https://github.com/ringsaturn/xue/blob/main/showcase/README.md):
   how a historical event becomes a cropped, permanently published case.
 
 ## Optional
 
-- [llms-full.txt](https://xue.ringsaturn.me/llms-full.txt): all five
+- [llms-full.txt](https://xue.ringsaturn.me/llms-full.txt): all six
   documents above in one file, generated at each deploy.
 - [Sitemap](https://xue.ringsaturn.me/sitemap.xml): the two pages and every
   published case.

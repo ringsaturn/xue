@@ -22,6 +22,7 @@ from .errors import ConversionError, XueError
 from .fetch import WINDOW_FILENAME, fetch_run, parse_run, resolve_run, window_summary
 from .showcase import CASE_SIDECAR, build_case, load_cases, refresh_sidecar, write_catalog
 from .sources import SOURCES, source_spec
+from .stac import write_run_documents
 from .zarrstore import (
     DEFAULT_INDEX_LOCATION,
     INDEX_LOCATIONS,
@@ -246,6 +247,16 @@ def parser() -> argparse.ArgumentParser:
     )
     _model_argument(assemble_parser)
     assemble_parser.add_argument("--output-dir", type=Path, default=Path("web/public/data"))
+
+    stac_parser = commands.add_parser(
+        "stac",
+        help="rewrite a published run's STAC documents (docs/stac.md) from the manifest on disk: "
+        "its item.json, the model's collection.json and the root catalog.json",
+    )
+    stac_parser.add_argument("--run", required=True, help="the run whose manifest is on disk, YYYYMMDDHH")
+    stac_parser.add_argument("--round", type=round_name, metavar="HHMM", help="the round of a rolling window")
+    _model_argument(stac_parser)
+    stac_parser.add_argument("--output-dir", type=Path, default=Path("web/public/data"))
 
     groups_parser = commands.add_parser(
         "bundle-groups",
@@ -516,6 +527,11 @@ def main(argv: list[str] | None = None) -> int:
                 report["round"] = arguments.round
             if window is not None:
                 report["window"] = window
+            if latest_path is not None:
+                # A whole live run, by either encoder: the STAC face of the
+                # manifest just written (docs/stac.md). A piece of a fanned-out
+                # publish gets its Item from assemble-run instead.
+                report["stac"] = write_run_documents(arguments.output_dir, source=source, manifest_path=manifest_path)
             print(json.dumps(report, indent=2))
         elif arguments.command == "assemble-run":
             # The parts were built from one concrete cycle; nothing here
@@ -531,7 +547,20 @@ def main(argv: list[str] | None = None) -> int:
                 force=arguments.force,
                 base_manifest=arguments.base_manifest,
             )
+            report["stac"] = write_run_documents(
+                arguments.output_dir, source=source_spec(arguments.model), manifest_path=Path(report["manifest"])
+            )
             print(json.dumps(report, indent=2))
+        elif arguments.command == "stac":
+            source = source_spec(arguments.model)
+            run = parse_run(arguments.run, arguments.model)
+            run_directory = arguments.output_dir / f"{source.id}.{run.id}"
+            if arguments.round is not None:
+                run_directory = run_directory / arguments.round
+            manifest_path = run_directory / "manifest.json"
+            if not manifest_path.is_file():
+                raise XueError(f"no manifest at {manifest_path}")
+            print(json.dumps(write_run_documents(arguments.output_dir, source=source, manifest_path=manifest_path), indent=2))
         elif arguments.command == "bundle-groups":
             source = source_spec(arguments.model)
             bundle_ids = None

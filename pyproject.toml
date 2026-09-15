@@ -48,5 +48,7 @@ xuebuild = ["palette.txt", "precipitation_palette.txt"]
 # zarr-python / xarray. The exporter itself (xuebuild/zarrstore.py) writes a
 # Zarr v3 store with NumPy alone, so the runtime dependencies above stay
 # NumPy + xuepy; this group only registers the `xue.delta` codec
-# (xuebuild/zarrcodec.py) and opens the result the way any Zarr client would.
-zarr = ["zarr>=3.1", "numcodecs>=0.16", "xarray>=2025.1"]
+# (xuebuild/zarrcodec.py) and opens the result the way any Zarr client
+# would — pystac likewise reads the STAC catalog (xuebuild/stac.py, also
+# hand-written) the way a catalog client would, in tests/test_stac.py.
+zarr = ["zarr>=3.1", "numcodecs>=0.16", "xarray>=2025.1", "pystac>=1.14"]

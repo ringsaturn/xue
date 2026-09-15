@@ -15,9 +15,11 @@ name: publish run
 #             directory on R2 and warm them at the edge -> hand the partial
 #             manifest on as a workflow artifact
 #   finalize  merge the parts into the run's manifest (`xuebuild
-#             assemble-run`; onto the live manifest for a top-up) -> upload
-#             and warm it -> flip the live pointer -> delete the runs it
-#             superseded
+#             assemble-run`; onto the live manifest for a top-up), and derive
+#             the run's STAC Item, the source's Collection and the root
+#             catalog from it (docs/stac.md) -> upload and warm the manifest,
+#             the Item beside it -> flip the live pointer, the Collection and
+#             catalog with it -> delete the runs it superseded
 #
 # A run's bundles do not depend on one another (tests/test_assemble.py holds
 # a split build byte-identical to a whole one), so the wall time is one
@@ -414,7 +416,7 @@ jobs:
             echo "### $MODEL $RUN"
             echo
             echo '```json'
-            jq '{model, run, byteLength, bundles, built, dropped}' assemble-report.json
+            jq '{model, run, byteLength, bundles, built, dropped, stac}' assemble-report.json
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -459,6 +461,9 @@ jobs:
           path: |
             assemble-report.json
             web/public/data/${{ inputs.model }}.${{ needs.resolve.outputs.run }}/manifest.json
+            web/public/data/${{ inputs.model }}.${{ needs.resolve.outputs.run }}/item.json
+            web/public/data/${{ inputs.model }}/collection.json
+            web/public/data/catalog.json
             web/public/data/latest*.json
           retention-days: 14
           if-no-files-found: ignore

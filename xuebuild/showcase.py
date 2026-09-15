@@ -50,6 +50,7 @@ from .errors import DownloadError, ManifestError, XueError
 from .fetch import fetch_run, parse_run
 from .manifest import iso_z, validate_bin_manifest
 from .sources import SourceSpec, source_spec
+from .stac import write_showcase_documents
 
 LOG = logging.getLogger(__name__)
 
@@ -583,4 +584,8 @@ def write_catalog(output_root: Path) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(catalog, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     LOG.info("wrote %s (%d case(s))", path, len(catalog["cases"]))
+    # The STAC face of the same rows (docs/stac.md): one Item per case
+    # beside its manifest, the showcase Collection, the root catalog.
+    documents = write_showcase_documents(output_root, catalog)
+    LOG.info("wrote %s and %d case item(s)", documents["collection"], len(documents["items"]))
     return path

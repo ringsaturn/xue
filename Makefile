@@ -27,6 +27,12 @@ DRY_RUN ?=
 # Each model has its own mutable live pointer; GFS uses the bare latest.json,
 # the other models use latest-<model>.json.
 LATEST_FILE = $(if $(filter gfs,$(MODEL)),latest.json,latest-$(MODEL).json)
+# The STAC catalog derived beside those (docs/stac.md): a root catalog at
+# the data root, one Collection per model under <model>/, one Item per run
+# beside its manifest. Not read by the shell; for STAC clients.
+STAC_CATALOG = catalog.json
+STAC_COLLECTION = collection.json
+STAC_ITEM = item.json
 
 # R2 is S3-compatible, so the dataset bucket is managed with the AWS CLI
 # rather than anything of ours. Needs an R2 API token's key pair in
@@ -44,7 +50,7 @@ AWS_REQUEST_CHECKSUM_CALCULATION ?= when_required
 AWS_RESPONSE_CHECKSUM_VALIDATION ?= when_required
 export AWS_DEFAULT_REGION AWS_REQUEST_CHECKSUM_CALCULATION AWS_RESPONSE_CHECKSUM_VALIDATION
 
-.PHONY: check install wasm test test-rust test-e2e encoder-rust encoder-rust-test encoder-wheel bench bench-video bench-lossy mvp serve format-pdf deploy-build upload-r2 upload-r2-bundles upload-r2-manifest check-pointer upload-r2-pointer warm-r2 prune-r2 prune-r2-rounds live-run live-manifest live-window deploy-pages deploy showcase showcase-check showcase-refresh upload-r2-showcase tc-build live-tc-index upload-r2-tc prune-r2-tc clean
+.PHONY: check install wasm test test-rust test-e2e encoder-rust encoder-rust-test encoder-wheel bench bench-video bench-lossy mvp serve format-pdf deploy-build upload-r2 upload-r2-bundles upload-r2-manifest upload-r2-stac-item check-pointer upload-r2-pointer upload-r2-stac-collection warm-r2 prune-r2 prune-r2-rounds live-run live-manifest live-window deploy-pages deploy showcase showcase-check showcase-refresh upload-r2-showcase tc-build live-tc-index upload-r2-tc prune-r2-tc clean
 
 check:
 	$(PYTHON) scripts/check_dependencies.py
@@ -169,8 +175,9 @@ upload-r2:
 	[ -d "$$dir" ] || { echo "no built run at $$dir, pass RUN=YYYYMMDDHH"; exit 1; }; \
 	$(MAKE) --no-print-directory check-pointer MODEL=$(MODEL) RUN=$(RUN) ROUND=$(ROUND); \
 	$(S3) sync $$dir s3://$(R2_BUCKET)/$(R2_PREFIX)/$(RUN_DIR)/ --no-progress $(DRY_RUN) \
-		--exclude "manifest.part.*.json" \
+		--exclude "manifest.part.*.json" --exclude "$(STAC_ITEM)" \
 		--cache-control "public, max-age=31536000, immutable"; \
+	$(MAKE) --no-print-directory upload-r2-stac-item MODEL=$(MODEL) RUN=$(RUN) ROUND=$(ROUND) DRY_RUN=$(DRY_RUN); \
 	[ -n "$(DRY_RUN)" ] || $(MAKE) --no-print-directory warm-r2 MODEL=$(MODEL) RUN=$(RUN) ROUND=$(ROUND) \
 		|| echo "warming the edge cache failed; the run goes live cold"; \
 	$(MAKE) --no-print-directory upload-r2-pointer MODEL=$(MODEL) RUN=$(RUN) DRY_RUN=$(DRY_RUN)
@@ -214,9 +221,22 @@ upload-r2-manifest:
 	$(MAKE) --no-print-directory check-pointer MODEL=$(MODEL) RUN=$(RUN); \
 	$(S3) cp $$dir/manifest.json s3://$(R2_BUCKET)/$(R2_PREFIX)/$(MODEL).$(RUN)/manifest.json --no-progress $(DRY_RUN) \
 		--content-type application/json --cache-control "public, max-age=31536000, immutable"; \
+	$(MAKE) --no-print-directory upload-r2-stac-item MODEL=$(MODEL) RUN=$(RUN) DRY_RUN=$(DRY_RUN); \
 	[ -n "$(DRY_RUN)" ] || scripts/warm_edge_cache.sh $(MODEL) $(RUN) --manifest-only \
 		|| echo "warming the manifest failed; the run goes live cold"; \
 	$(MAKE) --no-print-directory upload-r2-pointer MODEL=$(MODEL) RUN=$(RUN) DRY_RUN=$(DRY_RUN)
+
+# The run's STAC Item (docs/stac.md), beside its manifest. It is not
+# ?v=-addressed — a STAC client reads it by its plain name, and a top-up
+# rewrites it in place with the manifest — so unlike the artifacts it is
+# served revalidated rather than immutable. Written by build-bin and
+# assemble-run; a run directory built before them has none, and that is not
+# an error.
+upload-r2-stac-item:
+	@set -e; dir=web/public/data/$(RUN_DIR); \
+	[ -f "$$dir/$(STAC_ITEM)" ] || { echo "no $(STAC_ITEM) in $$dir; the run predates the catalog"; exit 0; }; \
+	$(S3) cp $$dir/$(STAC_ITEM) s3://$(R2_BUCKET)/$(R2_PREFIX)/$(RUN_DIR)/$(STAC_ITEM) --no-progress $(DRY_RUN) \
+		--content-type application/geo+json --cache-control "no-cache"
 
 # The pointer must name the run being uploaded and carry the CRC32 of the
 # manifest on disk — a later build, or an assemble of other parts, rewrites
@@ -243,6 +263,21 @@ check-pointer:
 upload-r2-pointer:
 	@echo "Uploading $(LATEST_FILE) (takes $(MODEL) run $(RUN) live)..."; \
 	$(S3) cp web/public/data/$(LATEST_FILE) s3://$(R2_BUCKET)/$(R2_PREFIX)/$(LATEST_FILE) --no-progress $(DRY_RUN) \
+		--content-type application/json --cache-control "no-cache" \
+	&& $(MAKE) --no-print-directory upload-r2-stac-collection MODEL=$(MODEL) DRY_RUN=$(DRY_RUN)
+
+# The pointer's STAC face: the source's Collection, whose `item` and
+# `latest-version` links name the run the pointer names, and the root
+# catalog listing every source. Both mutable like the pointer, so both
+# no-cache; uploaded right after it, since a Collection that points at a
+# run the pointer does not is the one inconsistency a client could see.
+upload-r2-stac-collection:
+	@set -e; \
+	[ -f web/public/data/$(MODEL)/$(STAC_COLLECTION) ] || { echo "no $(MODEL)/$(STAC_COLLECTION); nothing built the catalog"; exit 0; }; \
+	echo "Uploading $(MODEL)/$(STAC_COLLECTION) and $(STAC_CATALOG)..."; \
+	$(S3) cp web/public/data/$(MODEL)/$(STAC_COLLECTION) s3://$(R2_BUCKET)/$(R2_PREFIX)/$(MODEL)/$(STAC_COLLECTION) --no-progress $(DRY_RUN) \
+		--content-type application/json --cache-control "no-cache"; \
+	$(S3) cp web/public/data/$(STAC_CATALOG) s3://$(R2_BUCKET)/$(R2_PREFIX)/$(STAC_CATALOG) --no-progress $(DRY_RUN) \
 		--content-type application/json --cache-control "no-cache"
 
 # GET every artifact of one uploaded run through the public hostname, with
@@ -279,10 +314,17 @@ upload-r2-showcase:
 	@set -e; \
 	[ -d web/public/data/showcase ] || { echo "no built cases at web/public/data/showcase"; exit 1; }; \
 	$(S3) sync web/public/data/showcase s3://$(R2_BUCKET)/$(R2_PREFIX)/showcase/ --no-progress $(DRY_RUN) \
+		--exclude "$(STAC_COLLECTION)" --exclude "*/$(STAC_ITEM)" \
 		--cache-control "public, max-age=31536000, immutable"; \
+	for item in web/public/data/showcase/*/$(STAC_ITEM); do \
+		[ -f "$$item" ] || continue; \
+		$(S3) cp "$$item" s3://$(R2_BUCKET)/$(R2_PREFIX)/showcase/$$(basename $$(dirname "$$item"))/$(STAC_ITEM) --no-progress $(DRY_RUN) \
+			--content-type application/geo+json --cache-control "no-cache"; \
+	done; \
 	echo "Uploading showcase.json (publishes the case list)..."; \
 	$(S3) cp web/public/data/showcase.json s3://$(R2_BUCKET)/$(R2_PREFIX)/showcase.json --no-progress $(DRY_RUN) \
-		--content-type application/json --cache-control "no-cache"
+		--content-type application/json --cache-control "no-cache"; \
+	$(MAKE) --no-print-directory upload-r2-stac-collection MODEL=showcase DRY_RUN=$(DRY_RUN)
 
 # The tropical cyclone product (docs/tc.md): agency and model tracks
 # aggregated once an hour into web/public/data/tc.<issue>/ and the mutable

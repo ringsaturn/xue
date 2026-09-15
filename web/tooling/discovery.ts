@@ -121,7 +121,8 @@ export function renderLlmsFull(docs: readonly DocSource[]): string {
     "",
     `> Concatenated from the repository (${REPO_URL}) at build time: the README, the`,
     "> normative format specification, the native encoder notes, the tropical",
-    `> cyclone product specification and the case authoring guide. The short index is ${SITE_ORIGIN}/llms.txt.`,
+    "> cyclone product specification, the STAC catalog contract and the case",
+    `> authoring guide. The short index is ${SITE_ORIGIN}/llms.txt.`,
     "",
   ].join("\n");
   const sections = docs.map(
@@ -137,6 +138,7 @@ export const LLMS_FULL_SOURCES: readonly string[] = [
   "docs/format.md",
   "docs/encoder.md",
   "docs/tc.md",
+  "docs/stac.md",
   "showcase/README.md",
 ];
 

@@ -488,6 +488,7 @@ class RollingWindowCliTests(DownloadTests):
             mock.patch("xuebuild.fetch._request", self.request),
             mock.patch("xuebuild.fetch.fetch_text", fetch_text),
             mock.patch("xuebuild.cli.convert_bin", convert_bin),
+            mock.patch("xuebuild.cli.write_run_documents", return_value={}) as stac,
             mock.patch("xuebuild.fetch.datetime", wraps=datetime) as clock,
             mock.patch("sys.stdout", new_callable=io.StringIO) as stdout,
         ):
@@ -510,6 +511,12 @@ class RollingWindowCliTests(DownloadTests):
                 ]
             )
         self.assertEqual(status, 0)
+        # The round's STAC Item derives from the round's manifest, one
+        # directory deeper than a forecast's (a stub here: the manifest the
+        # stubbed converter wrote is empty).
+        stac.assert_called_once_with(
+            out, source=source_spec("mrms"), manifest_path=out / "mrms.2026091300" / "0004" / "manifest.json"
+        )
         report = json.loads(stdout.getvalue())
         # The newest common slot is 00:02, so the one-hour live window is
         # the run at 00.

@@ -25,6 +25,7 @@ from xuebuild.showcase import (
     parse_case,
     refresh_sidecar,
     validate_catalog_entry,
+    write_catalog,
 )
 from xuebuild.sources import source_spec
 
@@ -414,6 +415,22 @@ class RefreshSidecarTest(unittest.TestCase):
         # And the catalog collects the refreshed row.
         catalog = collect_catalog(self.root)
         self.assertEqual(catalog["cases"][0]["summary"]["en"], "Demo summary")
+
+    def test_the_catalog_writes_its_stac_face(self) -> None:
+        # showcase.json and, beside it, the STAC documents derived from the
+        # same rows: one Item per case next to its manifest, the showcase
+        # Collection, the root catalog (docs/stac.md).
+        write_catalog(self.root)
+        item = json.loads((self.root / "showcase" / "demo-case" / "item.json").read_text(encoding="utf-8"))
+        collection = json.loads((self.root / "showcase" / "collection.json").read_text(encoding="utf-8"))
+        catalog = json.loads((self.root / "catalog.json").read_text(encoding="utf-8"))
+        self.assertEqual(item["id"], "demo-case")
+        self.assertEqual(item["bbox"], self.entry["dataBbox"])
+        self.assertEqual(item["assets"]["manifest"]["href"], f"manifest.json?v={self.entry['manifestCrc32']}")
+        self.assertEqual(
+            [link["href"] for link in collection["links"] if link["rel"] == "item"], ["demo-case/item.json"]
+        )
+        self.assertIn("showcase/collection.json", [link["href"] for link in catalog["links"]])
 
     def test_a_definition_that_moved_on_needs_a_rebuild(self) -> None:
         for overrides in ({"hours": 48}, {"bbox": [100.0, 20.0, 120.0, 40.0]}, {"variables": ["prate"]}, {"run": "2021071900"}):
