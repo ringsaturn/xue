@@ -488,7 +488,7 @@ at twenty past every hour, independent of the raster publishes:
 make live-tc-index                          # the live index, so ids carry over
 make tc-build                               # this hour, into web/public/data/
 make upload-r2-tc ISSUE=2026091301          # the directory, then the pointer
-make prune-r2-tc                            # issues older than 30 days
+make prune-r2-tc                            # issues older than two days
 .venv/bin/python -m xuebuild tc-build --issue 2026091206 --offline --raw-dir tests/fixtures/tc   # from the fixture
 ```
 

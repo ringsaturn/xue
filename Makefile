@@ -277,7 +277,7 @@ upload-r2-showcase:
 # (default: this one). The previous hour's index is what keeps an
 # unnumbered system's id stable, so a publish fetches the live one first.
 ISSUE ?= now
-TC_KEEP ?= 720
+TC_KEEP ?= 48
 
 tc-build:
 	$(PYTHON) -m xuebuild tc-build --issue $(ISSUE) $(FORCE)
@@ -316,10 +316,11 @@ upload-r2-tc:
 	$(S3) cp web/public/data/latest-tc.json s3://$(R2_BUCKET)/$(R2_PREFIX)/latest-tc.json --no-progress $(DRY_RUN) \
 		--content-type application/json --cache-control "no-cache"
 
-# Delete tc issue directories beyond the newest TC_KEEP (720 hours = 30
-# days) and never the one the live pointer names. No pointer yet (before
-# the first publish, or a dry run of it) means nothing is live to protect
-# and nothing to prune, not a reason to fail.
+# Delete tc issue directories beyond the newest TC_KEEP (48 hours = two
+# days; nothing reads an older issue — the shell and the next build both
+# start from the live pointer) and never the one the live pointer names.
+# No pointer yet (before the first publish, or a dry run of it) means
+# nothing is live to protect and nothing to prune, not a reason to fail.
 prune-r2-tc:
 	@set -e; \
 	live=$$($(S3) cp s3://$(R2_BUCKET)/$(R2_PREFIX)/latest-tc.json - --only-show-errors 2>/dev/null | jq -r .path | cut -d/ -f1 || true); \

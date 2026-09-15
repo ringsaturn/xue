@@ -35,7 +35,7 @@ run pointers (`latest.json`, `latest-<model>.json`) and `showcase.json`.
   names it nothing in it changes; a manual rebuild of an hour
   (`tc-build --issue … --force`) writes the directory again, and every
   file is addressed by its CRC, so a cache never serves one hour's bytes
-  under another's key. Directories are pruned after 30 days
+  under another's key. Directories are pruned after two days
   (`make prune-r2-tc`).
 - Paths inside `index.json` are file names beside it; request each as
   `<name>?v=<crc32>` with the CRC the index carries.

@@ -26,7 +26,7 @@ on:
       keep:
         description: "Issue directories to keep on R2 (hours)"
         type: string
-        default: "720"
+        default: "48"
       dry_run:
         description: "Build and report what would be uploaded and pruned, but write nothing to R2"
         type: boolean
@@ -53,7 +53,7 @@ jobs:
     timeout-minutes: 20
     env:
       ISSUE: ${{ inputs.issue || 'now' }}
-      TC_KEEP: ${{ inputs.keep || '720' }}
+      TC_KEEP: ${{ inputs.keep || '48' }}
       DRY_RUN: ${{ inputs.dry_run && '--dryrun' || '' }}
       FORCE: ${{ inputs.force && '--force' || '' }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
