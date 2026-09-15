@@ -422,17 +422,20 @@ A bundle can also be published as a **Zarr v3 store**, `<bundle>.zarr/`
 beside the `.xue` (`docs/zarr-profile.md` is normative): one group per
 bundle whose `attributes.xue` is the bundle's metadata JSON verbatim, one
 `uint8` array per variable (`tmp2m/`; `ugrd10m/` and `vgrd10m/` under
-`wind10m.zarr`), a regular six-frame time chunk with one `sharding_indexed`
-shard per chunk whose inner chunks are the bundle's tiles in the bundle's
-order, `[bytes, zstd{15, checksum}]` inside, `fill_value` = `nodataCode`,
-CF `scale_factor` / `add_offset` / `_FillValue` on linear codebooks, and
-`time` / `latitude` / `longitude` coordinate arrays for xarray, plus one
-object of the profile's own, `index.bin` — every shard's index verbatim,
-array by array and time chunk by time chunk, described by the group's
-`xue_index` attribute, so a reader holds every offset after one fetch at
-open (the way the container's prefix holds its index) and a series costs
-one request per time chunk instead of two; optional for a reader, ignored
-by a standard client. The store is
+`wind10m.zarr`), **one `sharding_indexed` shard per array** — the whole
+axis of the whole grid, one object read by range as the container was —
+whose inner chunks are regular six-frame time chunks of the bundle's
+tiles, time chunk by time chunk in the bundle's tile order, `[bytes,
+zstd{15, checksum}]` inside, `fill_value` = `nodataCode`, CF
+`scale_factor` / `add_offset` / `_FillValue` on linear codebooks, and
+`time` / `latitude` / `longitude` coordinate arrays for xarray. One shard
+per array is what keeps a store at a handful of objects (a bucket bills
+per object; cut per time chunk a GFS run was ~5 000 objects), and the
+shard's index — read once as a suffix range — is the whole index, so a
+series costs one request per time chunk, the container's shape. The
+reader takes the shard length from the array's chunk shape and still reads
+the earlier per-time-chunk stores on the bucket (whose `index.bin` /
+`xue_index` it ignores). The store is
 **derived from the finished `.xue`** by `zarrstore.export_bundle`
 (`read_bundle` → chunk by chunk → pad edge tiles → zstd → hand-written
 shard index + CRC-32C; NumPy only, no zarr-python at runtime), which is why
@@ -484,18 +487,18 @@ rebuilt — so `tests/e2e/app.spec.ts` runs on the fixture manifest with its
 stores stripped (`tests/e2e/artifacts.ts::withoutStores`, the shape of
 every run published before) while `zarr.spec.ts` drives the default and
 the store-only shape (`storeOnly`). A tab older than the data — one whose
-validator refuses a live manifest a newer shell reads — reloads itself
-once per manifest (`ManifestRejectedError`, `main.ts::reloadForNewerShell`,
-the crc32 kept in `sessionStorage`), which is what lets a store-only run go
-live without waiting for every open tab to be refreshed. `zarr/worker.ts` answers exactly the protocol
+validator refuses a live manifest a newer shell reads, or whose Zarr
+reader cannot open a live run's store — reloads itself once per manifest
+(`ManifestRejectedError` / `StoreRejectedError`,
+`main.ts::reloadForNewerShell`, the crc32 kept in `sessionStorage`), which
+is what lets a store-only run, or a store in a revised layout, go live
+without waiting for every open tab to be refreshed. `zarr/worker.ts` answers exactly the protocol
 `worker.ts` answers (`protocol.ts` spells its messages; `init-stream` gains
 `kind: "zarr"`, the root URL and the descriptor's crc32) over
 `zarr/session.ts`: `shard.ts` validates the group and array documents
-(`attributes.xue` goes straight through `parseBundleMetadata`, `xue_index`
-is held to the arrays' geometry), parses the CRC-32C-checked shard index —
-seeded for every shard from `index.bin` at open, a block that fails or an
-object that cannot be fetched falling back to the per-shard suffix read —
-and maps frame and tile to a byte span — a
+(`attributes.xue` goes straight through `parseBundleMetadata`), parses
+the CRC-32C-checked shard index — read once per shard as a suffix range
+and held — and maps frame and tile to a byte span (`shardOf`) — a
 Zarr time chunk is a fixed six frames and may straddle the container's
 groups, so nothing there consults a group — and `store.ts` appends the
 store's `?v=` and **coalesces** the ranges of one shard issued in one

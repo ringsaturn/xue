@@ -17,15 +17,12 @@
  * dropped when the read moves on, which keeps scrubbing inside six frames
  * free and memory at one time chunk's tiles.
  *
- * Opening also reads the whole-store index when the group declares one
- * (`xue_index` → `index.bin`): every shard's index in one object, fetched
- * whole like the documents and split into the per-shard index cache, each
- * block CRC-checked by the same parser a suffix read goes through. That is
- * what puts a series at one request per time chunk instead of two, the way
- * the container's structural prefix carries its whole index. It is a seed,
- * not a requirement: an object that cannot be fetched or is the wrong
- * length, or a block that fails to verify, leaves that shard's index to the
- * per-shard read it always had.
+ * A shard's index is read once, on the first chunk wanted from it — a
+ * suffix range, no object length needed — and held. On a store the
+ * exporter writes an array is one shard, so that one read is the whole
+ * index, the way the container's structural prefix carries its whole
+ * index: a series then costs one request per time chunk and a frame one
+ * per tile row, never a dependent index read in between.
  */
 
 import { frameOffsets } from "../manifest";
@@ -39,13 +36,11 @@ import {
   PREDICTOR_PREVIOUS,
   PREDICTOR_RAW,
   shardIndexLength,
+  shardOf,
   shardPath,
-  storeIndexBlock,
-  storeIndexLength,
   tileOf,
   tileOrigin,
   type ShardIndexEntry,
-  type StoreIndexDescriptor,
   type ZarrArrayLayout,
   type ZarrGroup,
 } from "./shard";
@@ -73,24 +68,14 @@ function chunkKey(key: ChunkKey): string {
   return `${key.variableId}:${key.timeChunk}:${key.tile}`;
 }
 
-function indexKey(variableId: number, timeChunk: number): string {
-  return `${variableId}:${timeChunk}`;
-}
-
-/** What the whole-store index gave at open: the object's size, how many
- * shard blocks it holds and how many of them verified and were seeded. */
-export interface StoreIndexReport {
-  bytes: number;
-  blocks: number;
-  seeded: number;
+function indexKey(variableId: number, shard: number): string {
+  return `${variableId}:${shard}`;
 }
 
 export class ZarrSession {
-  /** Bytes of shard indices and inner chunks held, for `progress`; the
-   * whole-store index counts here the way the container's prefix does. */
+  /** Bytes of shard indices and inner chunks held, for `progress`; an
+   * index counts here the way the container's prefix does. */
   residentBytes = 0;
-  /** The whole-store index, when the group declared one and it was read. */
-  storeIndex: StoreIndexReport | null = null;
 
   private readonly arrays = new Map<number, VariableArray>();
   private readonly indices = new Map<string, (ShardIndexEntry | null)[]>();
@@ -139,65 +124,16 @@ export class ZarrSession {
     const first = arrays[0]!.layout;
     for (const array of arrays) {
       const { layout } = array;
-      if (layout.tileHeight !== first.tileHeight || layout.tileWidth !== first.tileWidth || layout.timeChunk !== first.timeChunk) {
+      if (
+        layout.tileHeight !== first.tileHeight ||
+        layout.tileWidth !== first.tileWidth ||
+        layout.timeChunk !== first.timeChunk ||
+        layout.shardFrames !== first.shardFrames
+      ) {
         throw new Error("every array of a store must be cut the same way");
       }
     }
-    const session = new ZarrSession(store, decodeChunk, group, arrays);
-    if (group.index) {
-      // A declared index that does not describe these arrays is a malformed
-      // store, refused like a wrong outer chunk; one that does but cannot be
-      // read is merely absent.
-      const positions = ZarrSession.indexPositions(group.index, first, arrays);
-      let bytes: Uint8Array | null = null;
-      try {
-        bytes = await store.get(group.index.path);
-      } catch {
-        bytes = null;
-      }
-      if (bytes && bytes.byteLength === storeIndexLength(group.index)) session.seedIndices(group.index, positions, bytes);
-    }
-    return session;
-  }
-
-  /** Each variable's position in the index's `arrays`, once the descriptor
-   * is held to the arrays' geometry. */
-  private static indexPositions(
-    descriptor: StoreIndexDescriptor,
-    layout: ZarrArrayLayout,
-    arrays: { numericId: number; id: string }[],
-  ): Map<number, number> {
-    if (descriptor.shardIndexBytes !== shardIndexLength(layout.tileCount)) {
-      throw new Error("xue_index shardIndexBytes does not match the arrays' tiling");
-    }
-    if (descriptor.timeChunks !== layout.timeChunks) throw new Error("xue_index timeChunks does not match the arrays' axis");
-    const positions = new Map<number, number>();
-    for (const array of arrays) {
-      const position = descriptor.arrays.indexOf(array.id);
-      if (position < 0) throw new Error(`xue_index does not cover array ${array.id}`);
-      positions.set(array.numericId, position);
-    }
-    return positions;
-  }
-
-  /** Split the whole-store index into the per-shard cache. A block that
-   * fails its CRC-32C is skipped, and that shard reads its own index later. */
-  private seedIndices(descriptor: StoreIndexDescriptor, positions: Map<number, number>, bytes: Uint8Array): void {
-    const report: StoreIndexReport = { bytes: bytes.byteLength, blocks: 0, seeded: 0 };
-    for (const [variableId, position] of positions) {
-      const { layout } = this.array(variableId);
-      for (let timeChunk = 0; timeChunk < layout.timeChunks; timeChunk += 1) {
-        report.blocks += 1;
-        try {
-          this.indices.set(indexKey(variableId, timeChunk), parseShardIndex(storeIndexBlock(bytes, descriptor, position, timeChunk), layout.tileCount));
-          report.seeded += 1;
-        } catch {
-          // Left to the per-shard read.
-        }
-      }
-    }
-    this.residentBytes += bytes.byteLength;
-    this.storeIndex = report;
+    return new ZarrSession(store, decodeChunk, group, arrays);
   }
 
   get metadataJson(): string {
@@ -288,16 +224,16 @@ export class ZarrSession {
     return this.chunksFor(variableId, frameOffset, rects).every((key) => this.isResident(key));
   }
 
-  private ensureIndex(variableId: number, timeChunk: number): Promise<(ShardIndexEntry | null)[]> {
-    const key = indexKey(variableId, timeChunk);
+  private ensureIndex(variableId: number, shard: number): Promise<(ShardIndexEntry | null)[]> {
+    const key = indexKey(variableId, shard);
     const held = this.indices.get(key);
     if (held) return Promise.resolve(held);
     const running = this.indexFetches.get(key);
     if (running) return running;
     const { id, layout } = this.array(variableId);
-    if (timeChunk < 0 || timeChunk >= layout.timeChunks) throw new Error("time chunk is outside the array");
-    const length = shardIndexLength(layout.tileCount);
-    const path = shardPath(id, timeChunk);
+    if (shard < 0 || shard >= layout.shardCount) throw new Error("shard is outside the array");
+    const length = shardIndexLength(layout.chunksPerShard);
+    const path = shardPath(id, shard);
     // The index sits at whichever end the array declares; at the end it is
     // a suffix range, which needs no object length, and at the start a
     // prefix of known length.
@@ -307,7 +243,7 @@ export class ZarrSession {
           path,
           layout.indexLocation === "end" ? { suffixLength: length } : { offset: 0, length },
         );
-        const index = parseShardIndex(bytes, layout.tileCount);
+        const index = parseShardIndex(bytes, layout.chunksPerShard);
         this.indices.set(key, index);
         this.residentBytes += bytes.byteLength;
         return index;
@@ -327,17 +263,19 @@ export class ZarrSession {
     if (this.payloads.has(name)) return Promise.resolve();
     const running = this.chunkFetches.get(name);
     if (running) return running;
-    const { id } = this.array(key.variableId);
+    const { id, layout } = this.array(key.variableId);
+    if (key.timeChunk < 0 || key.timeChunk >= layout.timeChunks) throw new Error("time chunk is outside the array");
     const task = (async () => {
       try {
-        const index = await this.ensureIndex(key.variableId, key.timeChunk);
-        const entry = index[key.tile];
+        const { shard, position } = shardOf(layout, key.timeChunk);
+        const index = await this.ensureIndex(key.variableId, shard);
+        const entry = index[position + key.tile];
         if (entry === undefined) throw new Error("tile is outside the shard");
         if (entry === null) {
           this.payloads.set(name, null);
           return;
         }
-        const bytes = await this.store.getRange(shardPath(id, key.timeChunk), entry);
+        const bytes = await this.store.getRange(shardPath(id, shard), entry);
         this.payloads.set(name, bytes);
         this.residentBytes += bytes.byteLength;
       } finally {

@@ -4222,11 +4222,19 @@ function loadVariable(
     }
 
     if (!quiet) say(loadStatus, streaming ? "readingIndex" : "initializingDecoder");
-    const {
-      worker: sessionWorker,
-      metadata: bundleMetadata,
-      tiles,
-    } = await initializeChannel(channel, initMessage, transfer, sequence);
+    let opened: Awaited<ReturnType<typeof initializeChannel>>;
+    try {
+      opened = await initializeChannel(channel, initMessage, transfer, sequence);
+    } catch (error) {
+      // A store this shell cannot open on a run newer than itself is, like
+      // a manifest it refuses, most likely one a newer shell reads: the
+      // profile's shard layout changed once already. Same cure, same guard.
+      if (format.startsWith("Zarr") && role === "primary" && !activeCase) {
+        throw new StoreRejectedError(error instanceof Error ? error.message : String(error));
+      }
+      throw error;
+    }
+    const { worker: sessionWorker, metadata: bundleMetadata, tiles } = opened;
     if (sequence !== initializeSequence) {
       sessionWorker.terminate();
       throw new DOMException("aborted", "AbortError");
@@ -5676,7 +5684,18 @@ async function initialize({ frame = false }: { frame?: boolean } = {}): Promise<
     if (sequence !== initializeSequence) return;
     if (error instanceof DOMException && error.name === "AbortError") return;
     if (error instanceof ManifestRejectedError && reloadForNewerShell(error.manifestCrc32)) return;
+    if (error instanceof StoreRejectedError && currentManifestCrc !== null && reloadForNewerShell(currentManifestCrc)) return;
     showError(error instanceof Error ? error.message : t("bundleLoadFailed"));
+  }
+}
+
+/** A live run's store this shell could not open (`loadVariable`): carried
+ * to `initialize`'s recovery as its own kind so a tab older than the data
+ * reloads once, the way it does for a manifest it refuses. */
+class StoreRejectedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "StoreRejectedError";
   }
 }
 

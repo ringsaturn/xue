@@ -5,28 +5,29 @@
  * A store is one Zarr v3 group per bundle whose `attributes.xue` is the
  * bundle's metadata JSON verbatim — so the same `parseBundleMetadata` the
  * `.xue` path uses reads it — and one `uint8` array per variable, sharded:
- * the outer chunk is one regular time chunk of the whole grid, the inner
- * chunks are the bundle's tiles in the bundle's row-major order, each one
- * Zstandard frame, with a `(offset, nbytes)` table of little-endian `uint64`
- * pairs plus a CRC-32C at one end of every shard (docs/zarr-profile.md is
- * normative). Everything here validates before it trusts: an array that is
- * not `uint8`, not sharded, or chained through codecs this profile does not
- * name is refused at open, and an index whose checksum fails is refused
- * before any of its offsets are used.
+ * the inner chunk is one six-frame time chunk of one of the bundle's tiles,
+ * each one Zstandard frame, and the outer chunk — the shard, one object —
+ * is a whole number of time chunks of the whole grid, which the exporter
+ * makes the whole axis, so an array is one object read by range, as the
+ * container was. A shard's index is a `(offset, nbytes)` table of
+ * little-endian `uint64` pairs plus a CRC-32C at one end of it, one pair per
+ * inner chunk in row-major order over the shard's chunk grid: time chunk by
+ * time chunk, the bundle's tiles in row-major order within each
+ * (docs/zarr-profile.md is normative). Everything here validates before it
+ * trusts: an array that is not `uint8`, not sharded, or chained through
+ * codecs this profile does not name is refused at open, and an index whose
+ * checksum fails is refused before any of its offsets are used.
+ *
+ * The reader takes the shard's frame count from the array's own chunk shape
+ * and handles any multiple of the time chunk, so a store cut one shard per
+ * time chunk — the profile's earlier form, still on the bucket — reads
+ * too; a `xue_index` attribute such a store carries is ignored.
  *
  * The one thing a reader must not assume is that a time chunk is a
  * container group. The store cuts its time axis every six frames regardless
  * of the axis's step; the container restarts its groups where the step
  * changes; so the two coincide only up to the first change of step, and a
  * frame is located by dividing its axis index, never by consulting a group.
- *
- * A store may also carry a whole-store index, `index.bin`: every shard's
- * index verbatim, array by array and time chunk by time chunk, described by
- * the group's `xue_index` attribute. It is the profile's answer to the one
- * request the container's prefix never needs — the per-shard index read
- * before an inner chunk can be located — and it is optional: a reader that
- * finds it seeds every shard's index from it at open, and one that does
- * not, or a block that fails its CRC, falls back to the shard's own.
  */
 
 import { parseBundleMetadata, type BundleMetadata } from "../manifest";
@@ -42,33 +43,22 @@ export const INDEX_CHECKSUM_BYTES = 4;
 
 export type IndexLocation = "start" | "end";
 
-/** The group's `xue_index` attribute: where the whole-store index is and
- * how it is cut. Array `a` (its position in `arrays`), time chunk `t` is
- * the block at `(a × timeChunks + t) × shardIndexBytes`; every array of a
- * store shares one tiling and one axis, so one block size describes all. */
-export interface StoreIndexDescriptor {
-  path: string;
-  shardIndexBytes: number;
-  timeChunks: number;
-  arrays: string[];
-}
-
 export interface ZarrGroup {
   /** The bundle metadata, as the group's `attributes.xue` carries it. */
   metadata: BundleMetadata;
   /** That block re-serialized, for the `ready` message's `metadataJson`. */
   metadataJson: string;
   profile: number;
-  /** The whole-store index, when the group declares one. */
-  index?: StoreIndexDescriptor;
 }
 
 /** How one variable's array is cut. `frameCount`, `height` and `width` are
- * the array's shape; the tile is the inner chunk; the time chunk is the
- * outer chunk's frame count. Tile rows and columns round the grid up, so
- * the last row and column of tiles may be clipped, and the last time chunk
- * may hold fewer frames than the chunk shape — both are padding the
- * exporter fills with `fillValue` and a reader trims. */
+ * the array's shape; the tile and the time chunk are the inner chunk; the
+ * shard is `shardFrames` frames — a multiple of the time chunk, the whole
+ * axis rounded up on a store the exporter wrote — of the whole grid. Tile
+ * rows and columns round the grid up, so the last row and column of tiles
+ * may be clipped, and the last time chunk may hold fewer frames than the
+ * chunk shape — both are padding the exporter fills with `fillValue` and a
+ * reader trims. */
 export interface ZarrArrayLayout {
   frameCount: number;
   height: number;
@@ -80,6 +70,12 @@ export interface ZarrArrayLayout {
   tileColumns: number;
   tileCount: number;
   timeChunks: number;
+  /** Frames per shard: the outer chunk's time extent. */
+  shardFrames: number;
+  /** Shards along the axis: one on a store the exporter wrote. */
+  shardCount: number;
+  /** Inner chunks a shard's index names: its time chunks times the tiles. */
+  chunksPerShard: number;
   /** The inner chain carries `xue.delta` in front of `bytes`: decode as
    * the PREVIOUS predictor rather than RAW. */
   delta: boolean;
@@ -151,50 +147,14 @@ export function parseGroupMetadata(text: string): ZarrGroup {
   if (typeof profile !== "number" || !Number.isInteger(profile) || profile < 1) {
     throw new Error("group attributes carry no xue_profile version");
   }
-  const parsed: ZarrGroup = { metadata: parseBundleMetadata(metadataJson), metadataJson, profile };
-  if (attributes.xue_index !== undefined) parsed.index = parseStoreIndexDescriptor(attributes.xue_index);
-  return parsed;
-}
-
-/** The `xue_index` block, held to its own shape; whether its geometry is
- * the arrays' is checked once the arrays are known (`ZarrSession.open`). */
-export function parseStoreIndexDescriptor(value: unknown): StoreIndexDescriptor {
-  const block = object(value, "xue_index");
-  const { path, shardIndexBytes, timeChunks, arrays } = block;
-  if (typeof path !== "string" || path === "" || path.includes("/")) throw new Error("xue_index path must name one object at the store's root");
-  if (
-    typeof shardIndexBytes !== "number" ||
-    !Number.isInteger(shardIndexBytes) ||
-    shardIndexBytes <= INDEX_CHECKSUM_BYTES ||
-    (shardIndexBytes - INDEX_CHECKSUM_BYTES) % INDEX_ENTRY_BYTES !== 0
-  ) {
-    throw new Error("xue_index shardIndexBytes must be a pair per inner chunk plus the checksum");
-  }
-  if (typeof timeChunks !== "number" || !Number.isInteger(timeChunks) || timeChunks <= 0) throw new Error("xue_index timeChunks must be a positive integer");
-  if (!Array.isArray(arrays) || arrays.length === 0 || arrays.some((name) => typeof name !== "string" || name === "")) {
-    throw new Error("xue_index arrays must list the arrays it covers");
-  }
-  if (new Set(arrays).size !== arrays.length) throw new Error("xue_index arrays must be unique");
-  return { path, shardIndexBytes, timeChunks, arrays: arrays as string[] };
-}
-
-/** The whole object's expected length: one block per array and time chunk. */
-export function storeIndexLength(descriptor: StoreIndexDescriptor): number {
-  return descriptor.arrays.length * descriptor.timeChunks * descriptor.shardIndexBytes;
-}
-
-/** One shard's index block out of `index.bin` — the bytes `parseShardIndex`
- * takes, exactly as the shard stores them. */
-export function storeIndexBlock(bytes: Uint8Array, descriptor: StoreIndexDescriptor, arrayPosition: number, timeChunk: number): Uint8Array {
-  const start = (arrayPosition * descriptor.timeChunks + timeChunk) * descriptor.shardIndexBytes;
-  return bytes.subarray(start, start + descriptor.shardIndexBytes);
+  return { metadata: parseBundleMetadata(metadataJson), metadataJson, profile };
 }
 
 /** One variable array's `zarr.json`, held to the profile: a `uint8` array of
  * three dimensions on a regular chunk grid, exactly one `sharding_indexed`
  * codec whose inner chain is `[bytes, zstd]` or `[xue.delta{axis: 0}, bytes,
  * zstd]`, whose index chain is `[bytes, crc32c]`, and whose outer chunk is
- * one time chunk of whole tiles. */
+ * whole time chunks of whole tiles. */
 export function parseArrayMetadata(text: string): ZarrArrayLayout {
   const array = object(JSON.parse(text), "array metadata");
   if (array.zarr_format !== 3 || array.node_type !== "array") throw new Error("not a Zarr v3 array");
@@ -239,9 +199,11 @@ export function parseArrayMetadata(text: string): ZarrArrayLayout {
 
   const tileRows = Math.ceil(height / tileHeight);
   const tileColumns = Math.ceil(width / tileWidth);
-  if (!sameList(shardShape.map(String), [timeChunk, tileRows * tileHeight, tileColumns * tileWidth].map(String))) {
-    throw new Error("outer chunk must be one time chunk of whole tiles");
+  const shardFrames = shardShape[0]!;
+  if (shardFrames % timeChunk !== 0 || !sameList(shardShape.slice(1).map(String), [tileRows * tileHeight, tileColumns * tileWidth].map(String))) {
+    throw new Error("outer chunk must be whole time chunks of whole tiles");
   }
+  const tileCount = tileRows * tileColumns;
   return {
     frameCount,
     height,
@@ -251,8 +213,11 @@ export function parseArrayMetadata(text: string): ZarrArrayLayout {
     tileWidth,
     tileRows,
     tileColumns,
-    tileCount: tileRows * tileColumns,
+    tileCount,
     timeChunks: Math.ceil(frameCount / timeChunk),
+    shardFrames,
+    shardCount: Math.ceil(frameCount / shardFrames),
+    chunksPerShard: (shardFrames / timeChunk) * tileCount,
     delta,
     indexLocation,
     fillValue,
@@ -297,11 +262,19 @@ export function parseShardIndex(bytes: Uint8Array, chunkCount: number): (ShardIn
 
 // -- geometry ------------------------------------------------------------------
 
-/** The object holding time chunk `t` of a variable's array: the default
- * chunk key encoding with the `/` separator, and the two grid dimensions
- * always at chunk 0 because a shard spans the whole grid. */
-export function shardPath(variableId: string, timeChunk: number): string {
-  return `${variableId}/c/${timeChunk}/0/0`;
+/** The object holding shard `s` of a variable's array: the default chunk
+ * key encoding with the `/` separator, and the two grid dimensions always
+ * at chunk 0 because a shard spans the whole grid. */
+export function shardPath(variableId: string, shard: number): string {
+  return `${variableId}/c/${shard}/0/0`;
+}
+
+/** Where a time chunk lives: which shard, and the position of its first
+ * tile in that shard's index (row-major over the inner chunk grid, so a
+ * time chunk's tiles are `tileCount` consecutive entries). */
+export function shardOf(layout: ZarrArrayLayout, timeChunk: number): { shard: number; position: number } {
+  const perShard = layout.shardFrames / layout.timeChunk;
+  return { shard: Math.floor(timeChunk / perShard), position: (timeChunk % perShard) * layout.tileCount };
 }
 
 export function tileOrigin(layout: ZarrArrayLayout, tile: number): { row: number; column: number } {

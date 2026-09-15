@@ -44,12 +44,19 @@ the variables.
 ```text
 <model>.<run>/<bundle>.zarr/        tmp2m.zarr, wind10m.zarr, tmp2m.half.zarr
   zarr.json                         group; attributes.xue = the bundle's metadata JSON
-  index.bin                         every shard's index, concatenated (recommended; below)
   <variable id>/                    tmp2m/; under wind10m.zarr: ugrd10m/ and vgrd10m/
     zarr.json                       array metadata (below)
-    c/<t>/0/0                       one shard per time chunk t
+    c/0/0/0                         the array's one shard: the whole axis of the whole grid
   time/  latitude/  longitude/      coordinate arrays, one chunk each (c/0)
 ```
+
+A store is a handful of objects — three per scalar variable, two more per
+extra variable, six for the coordinates — whatever the length of its axis.
+That is deliberate: a bucket bills every object written, and a store cut
+one shard per time chunk cost a GFS run some five thousand objects where
+the container cost sixty. A shard the size of the array is what the
+container already was, one object read by range, and its index is the
+container's whole index, read once.
 
 A half-resolution rendition is its own store, `<bundle>.half.zarr`, derived
 from `<bundle>.half.xue` exactly as the full one is from `<bundle>.xue`.
@@ -64,7 +71,7 @@ west-to-east order) and carries exactly one codec, `sharding_indexed`.
 {
   "zarr_format": 3, "node_type": "array",
   "shape": [161, 721, 1440], "data_type": "uint8",
-  "chunk_grid": {"name": "regular", "configuration": {"chunk_shape": [6, 728, 1440]}},
+  "chunk_grid": {"name": "regular", "configuration": {"chunk_shape": [162, 728, 1440]}},
   "chunk_key_encoding": {"name": "default"},
   "fill_value": 255,
   "codecs": [{"name": "sharding_indexed", "configuration": {
@@ -79,21 +86,29 @@ west-to-east order) and carries exactly one codec, `sharding_indexed`.
 }
 ```
 
-- **Time chunk.** The outer chunk holds six frames on a *regular* grid:
-  chunk `t` covers frames `[6t, 6t + 6)`. The container cuts its groups
+- **Time chunk.** The inner chunk holds six frames on a *regular* grid:
+  time chunk `t` covers frames `[6t, 6t + 6)`. The container cuts its groups
   inside segments of constant step and restarts them where the step
   changes (GFS: a one-frame group at f120), so a store chunk may straddle
   two of the container's groups. The two layouts coincide up to the first
   change of step.
-- **Inner chunk** = the bundle's tile, `[6, tileHeight, tileWidth]`. The
-  inner chunks of a shard are the bundle's tiles in the bundle's row-major
-  order; their count is `tileRows × tileColumns`.
-- **Outer chunk (shard)** = one time chunk of the whole grid, rounded up to
-  whole inner chunks along each axis because the sharding codec requires
-  it: `[6, tileRows × tileHeight, tileColumns × tileWidth]` (GFS
-  `[6, 728, 1440]`). The chunk grid may run past the array's shape; the
-  cells beyond it, and the frames beyond the axis in the last time chunk,
-  are stored as `fill_value`.
+- **Inner chunk** = one time chunk of the bundle's tile, `[6, tileHeight,
+  tileWidth]`. Within a shard the inner chunks are ordered row-major over
+  the shard's chunk grid: time chunk by time chunk, and within each the
+  bundle's tiles in the bundle's row-major order, `tileRows × tileColumns`
+  of them — so one time chunk is one contiguous run of the object, as one
+  group is in the container.
+- **Outer chunk (shard)** = **the whole array**: the axis rounded up to
+  whole time chunks, the grid rounded up to whole tiles, because the
+  sharding codec requires whole inner chunks along each axis:
+  `[6 × timeChunks, tileRows × tileHeight, tileColumns × tileWidth]` (GFS
+  at 161 frames: `[162, 728, 1440]`). The chunk grid may run past the
+  array's shape; the cells beyond it, and the frames beyond the axis in
+  the last time chunk, are stored as `fill_value`. A reader takes the
+  shard's frame count from the array's own chunk shape and must accept any
+  multiple of the time chunk: stores written before this revision are cut
+  one shard per time chunk (`chunk_shape[0] = 6`, objects `c/<t>/0/0`),
+  and those stay readable.
 - **`fill_value`** is the variable's `nodataCode`. Padding, and any read
   past the grid, is explicitly nodata rather than a plausible low code.
 - **Inner codec chain.** The default is the standard `[bytes, zstd]` with
@@ -103,15 +118,18 @@ west-to-east order) and carries exactly one codec, `sharding_indexed`.
   bundle predicts from the previous frame, and never on a RAW one
   (precipitation, reflectivity).
 - **Shard index.** One `(offset, nbytes)` pair of little-endian `uint64`
-  per inner chunk, in inner-chunk row-major order, followed by the CRC-32C
-  of those pairs as four little-endian bytes. Offsets are from the start of
-  the shard. `index_location` is `end` by default — a client fetches the
-  index as an HTTP suffix range without knowing the object's length, and
-  zarrita reads only that form — and may be `start`. Both are written; a
-  reader must accept both. A pair of `2^64 − 1` marks a chunk that was
-  never written; the exporter writes every chunk.
-- **`chunk_key_encoding`** is `default` with the `/` separator, so shard `t`
-  is the object `c/<t>/0/0`.
+  per inner chunk of the shard's chunk grid, in row-major order (time
+  chunk, then tile), followed by the CRC-32C of those pairs as four
+  little-endian bytes: `16 × timeChunks × tileCount + 4` bytes (GFS,
+  27 × 420 chunks: 181,444). Offsets are from the start of the shard.
+  `index_location` is `end` by default — a client fetches the index as an
+  HTTP suffix range without knowing the object's length, and zarrita reads
+  only that form — and may be `start`. Both are written; a reader must
+  accept both. A pair of `2^64 − 1` marks a chunk that was never written;
+  the exporter writes every chunk, the padding time chunk past the axis
+  included (a few bytes of `fill_value` each).
+- **`chunk_key_encoding`** is `default` with the `/` separator, so the
+  shard is the object `c/0/0/0`.
 
 ## The `xue.delta` codec
 
@@ -133,17 +151,16 @@ The group's `zarr.json`:
 "attributes": {
   "xue": { "schemaVersion": 3, "model": "…", "product": "…", "runTime": "…",
            "profile": "…", "time": { "…" }, "grid": { "…" }, "variables": [ "…" ] },
-  "xue_profile": 1,
-  "xue_index": { "path": "index.bin", "shardIndexBytes": 6724, "timeChunks": 27,
-                 "arrays": ["tmp2m"] }
+  "xue_profile": 1
 }
 ```
 
 `xue` is the bundle's metadata JSON **verbatim** — the same document the
 container embeds ([`format.md`](format.md), "Metadata JSON") — so the parsers
 that read a bundle's metadata read a store's. `xue_profile` is this
-document's version. `xue_index` describes the whole-store index (below) and
-is present exactly when the store carries one.
+document's version. A store written before this revision also carries a
+`xue_index` attribute naming a whole-store index object, `index.bin`; a
+reader ignores both — the shard's own index is the whole index now.
 
 Each variable array's `zarr.json`:
 
@@ -172,78 +189,6 @@ Each variable array's `zarr.json`:
 - Dimensions are declared in the array metadata's `dimension_names`, the
   Zarr v3 field.
 
-## Whole-store index
-
-Recommended, not required. A `sharding_indexed` shard keeps its own index
-at one end of itself, so the first inner chunk of any shard costs two
-dependent requests — the index, then the chunk — and a point series, which
-touches every shard once, pays `2 × timeChunks` where the container pays
-one chunk per group over an index its structural prefix already holds.
-The store's answer is one object, `index.bin` at the store's root, that is
-**the verbatim concatenation of every shard's index**: for each variable
-array in the order the group's `xue.variables` lists them, for each time
-chunk `t` in order, the `16 × innerChunkCount + 4` bytes the shard stores
-(the `(offset, nbytes)` pairs and their CRC-32C, exactly as they sit at the
-shard's `index_location`, whichever end that is). Offsets remain relative
-to their shard. The group's `xue_index` attribute says how to cut it:
-
-```json
-"xue_index": { "path": "index.bin", "shardIndexBytes": 6724, "timeChunks": 27,
-               "arrays": ["ugrd10m", "vgrd10m"] }
-```
-
-Array `a` (its position in `arrays`), time chunk `t` is the block at
-`(a × timeChunks + t) × shardIndexBytes`. Every array of a store shares one
-tiling and one axis, so one block size and one time-chunk count describe
-all of them, and the object is exactly `arrays.length × timeChunks ×
-shardIndexBytes` long. The object counts in the manifest descriptor's
-`byteLength` like any other and is versioned by the store's `?v=`. A
-standard Zarr client never looks for it and is unaffected by it; the shards
-are unchanged, so a store without the object reads exactly as before.
-
-What it buys: a reader fetches the object whole at open — a few tens of
-kilobytes on a production grid: 6,724 bytes per shard on the 0.25° GFS
-tiling (420 tiles), 60,516 bytes for a 49-frame scalar and twice that for
-the wind pair, 181,548 bytes on the full 161-frame axis — verifies each
-block's CRC-32C with the
-same parser a shard's own index goes through, and holds every offset up
-front, the way the container holds its whole index in the prefix. A
-series is then opening plus one chunk per time chunk; a global view or a
-viewport is one request fewer per shard. The object is a seed, not a
-dependency: a reader that cannot fetch it, finds it the wrong length, or
-finds a block whose checksum fails, reads that shard's own index as it
-would have without it.
-
-## Coordinates
-
-`time` is `int32`, `units: "seconds since <runTime>"`, `calendar:
-"proleptic_gregorian"`, values `frameOffset × unitSeconds` for every frame
-of the axis. `latitude` and `longitude` are `float64` cell centres expanded
-from the metadata's `grid` (`first + i × step`, in the grid's row and column
-order). Each is one chunk, `bytes` little-endian, uncompressed. They are for
-xarray and its kind; the viewer reads the group's `xue.time` and `xue.grid`.
-
-## Manifest descriptor
-
-A bundle entry in `manifest.json` (schema 5, unchanged), and each entry in
-its `variants`, may carry:
-
-```json
-"zarr": { "path": "tmp2m.zarr", "byteLength": 12347075, "crc32": "760cef95" }
-```
-
-`path` is the store's root, relative to the manifest, under the same rules
-as the bundle path but ending in `.zarr` and colliding with no other path in
-the manifest; `byteLength` is the sum of every object in the store; `crc32`
-is the CRC-32 of the group's `zarr.json`, the one value a client appends as
-`?v=` to every object it fetches from the store. Every object under the run
-directory is immutable, as the bundles are. All three validators
-(`xuebuild/manifest.py`, `rust/xue/src/encode/manifest.rs`,
-`web/src/manifest.ts`) check the field only when present, and hold an entry
-to naming **at least one** delivery: the container's `path`, `byteLength`
-and `crc32` are one unit, present whole or absent whole, so an entry may
-carry the container, the store, or both, never neither.
-
 ## Reading
 
 What a player needs from a store, in the order it needs it. The frontend's
@@ -256,10 +201,7 @@ profile's.
    the same rules as the container's embedded metadata (`format.md`,
    "Metadata JSON"), so a player that reads bundles already reads this. A
    reader must refuse a group without the block or with an `xue_profile` it
-   does not implement, and — when `xue_index` is present — one whose
-   `shardIndexBytes` is not `16 × tileCount + 4` for the arrays' tiling,
-   whose `timeChunks` is not the arrays', or whose `arrays` omits a
-   variable: a store whose index describes other arrays is malformed.
+   does not implement.
 2. **Each array.** Fetch `<id>/zarr.json` for every variable the metadata
    lists (the array's name is the variable's `id`; `numericId` is the
    handle a player's own protocol uses). Validate before trusting: `uint8`,
@@ -267,8 +209,10 @@ profile's.
    codec, an inner chain of `[bytes, zstd]` or `[xue.delta{axis: 0},
    bytes, zstd]`, index codecs `[bytes, crc32c]` little-endian,
    `index_location` `start` or `end`, `fill_value` a byte, and an outer
-   chunk equal to `[timeChunk, tileRows × tileHeight, tileColumns ×
-   tileWidth]`. Every array of one store is cut the same way. The tiling
+   chunk equal to `[shardFrames, tileRows × tileHeight, tileColumns ×
+   tileWidth]` with `shardFrames` a positive multiple of the time chunk —
+   the whole axis rounded up on a store this revision writes, six on one
+   written before. Every array of one store is cut the same way. The tiling
    this yields — `tileWidth`, `tileHeight`, `tileColumns`, `tileRows` — is
    the same shape the container reports, and a viewport maps to a
    rectangle of inner chunks the same way.
@@ -278,21 +222,23 @@ profile's.
    chunk `index mod timeChunk`. The time chunk is fixed at six on a regular
    grid and **may straddle two of the container's groups** (GFS: from the
    change of step at 120 h on); a reader never consults the container's
-   grouping. Inner chunk `t` of shard `c/<time chunk>/0/0` is tile `t` in
-   row-major order, `tileColumns` per row.
-4. **The shard index.** With `xue_index` present, fetch `index.bin` whole
-   once at open and take each shard's index as the block at `(a ×
-   timeChunks + t) × shardIndexBytes`; without it, or for a block that
-   fails to verify, or an object that cannot be fetched or is not exactly
-   `arrays.length × timeChunks × shardIndexBytes` long, read the shard's
-   own: `16 × tileCount + 4` bytes at the end of the shard
-   (`index_location: "end"`, fetched as the HTTP suffix range
-   `bytes=-N` without knowing the object's length) or at its start
-   (`bytes=0-(N−1)`). Either way, verify the trailing CRC-32C over the
-   pairs before using any offset; a pair of `2^64 − 1` is a chunk the
-   shard never held, which reads as `fill_value` throughout. Cache the
-   index per shard: a frame's siblings in the same time chunk, and a
-   series, reuse it.
+   grouping. The time chunk lives in shard `floor(timeChunk × timeChunk /
+   shardFrames)` — shard 0 on a store this revision writes — as the
+   object `c/<shard>/0/0`, and its tiles are the `tileCount` consecutive
+   index entries from position `((timeChunk × timeChunk) mod shardFrames)
+   / timeChunk × tileCount`, tile `t` in row-major order, `tileColumns`
+   per row.
+4. **The shard index.** Read the shard's index once, on the first chunk
+   wanted from it: `16 × chunksPerShard + 4` bytes at the end of the shard
+   (`index_location: "end"`, fetched as the HTTP suffix range `bytes=-N`
+   without knowing the object's length) or at its start (`bytes=0-(N−1)`).
+   Verify the trailing CRC-32C over the pairs before using any offset; a
+   pair of `2^64 − 1` is a chunk the shard never held, which reads as
+   `fill_value` throughout. Hold the index for the session: on a store
+   this revision writes it is the array's whole index, so every later
+   frame, viewport and series locates its chunks without another
+   dependent request — the container's structural prefix, in Zarr's own
+   terms.
 5. **Inner chunks.** Fetch `[offset, offset + nbytes)` of the shard.
    Decompress the Zstandard frame to exactly `timeChunk × tileHeight ×
    tileWidth` bytes — refuse a frame without a content checksum, a checksum
@@ -314,15 +260,14 @@ profile's.
    read needs, sort them by offset, merge neighbours whose gap is small
    (the frontend uses 64 KB), and fetch each run as one range; the
    over-read of a merged gap is cheaper than the round trip it saves. With
-   that, a global view is one range per shard, a viewport one range per
-   tile row per shard, and a point series one chunk per time chunk — plus,
-   without the whole-store index, one index read per shard the reader has
-   not seen, the request the container's prefix-sum table never needs.
+   that, a global view is one range per time chunk, a viewport one range
+   per tile row per time chunk, and a point series one chunk per time
+   chunk — plus one index read per shard the reader has not seen, which on
+   a store this revision writes is one per array, at open.
 
-With the whole-store index a series costs opening plus `timeChunks`
-requests, the container's own shape (its prefix plus one chunk per group);
-without it `2 × timeChunks` (index and chunk per shard). Both are
-independent of the frame count.
+A series costs opening plus `timeChunks` requests, the container's own
+shape (its prefix plus one chunk per group), independent of the frame
+count.
 
 ## Equivalence with the container
 

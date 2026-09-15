@@ -11,9 +11,10 @@
  * Every frame and series the session assembles is compared byte for byte
  * to what the WASM `.xue` decoder gives for the same bundle, through the
  * same `decodeChunk` the worker uses, over a fetch that reads the fixture
- * directory with byte ranges. The whole-store index (`index.bin`) is walked
- * both ways: seeded, where a series costs one request per time chunk, and
- * missing or corrupt, where the per-shard index read takes over.
+ * directory with byte ranges. An array is one shard whose index is read
+ * once as a suffix range; the profile's earlier form, one shard per time
+ * chunk, is served out of the same fixture by a fetch that cuts the shard
+ * up, since stores of that shape are still on the bucket.
  */
 
 import { spawnSync } from "node:child_process";
@@ -29,9 +30,8 @@ import {
   parseArrayMetadata,
   parseGroupMetadata,
   parseShardIndex,
-  parseStoreIndexDescriptor,
   shardIndexLength,
-  storeIndexLength,
+  shardOf,
   tileOf,
   tileShape,
 } from "../../web/src/zarr/shard";
@@ -159,7 +159,7 @@ function arrayMetadata(overrides: (document: Record<string, unknown>) => void = 
     node_type: "array",
     shape: [121, 73, 144],
     data_type: "uint8",
-    chunk_grid: { name: "regular", configuration: { chunk_shape: [6, 80, 144] } },
+    chunk_grid: { name: "regular", configuration: { chunk_shape: [126, 80, 144] } },
     chunk_key_encoding: { name: "default" },
     fill_value: 255,
     codecs: [
@@ -198,12 +198,35 @@ describe("parseArrayMetadata", () => {
       tileColumns: 9,
       tileCount: 45,
       timeChunks: 21,
+      shardFrames: 126,
+      shardCount: 1,
+      chunksPerShard: 945,
       delta: false,
       indexLocation: "end",
       fillValue: 255,
     });
     expect(tileShape(layout, 44)).toEqual({ height: 9, width: 16 });
     expect(tileOf(layout, 72, 143)).toBe(44);
+    expect(shardOf(layout, 0)).toEqual({ shard: 0, position: 0 });
+    expect(shardOf(layout, 20)).toEqual({ shard: 0, position: 900 });
+  });
+
+  it("reads a store cut one shard per time chunk, and refuses a shard of partial time chunks", () => {
+    const legacy = parseArrayMetadata(
+      arrayMetadata((document) => ((document.chunk_grid as { configuration: { chunk_shape: number[] } }).configuration.chunk_shape = [6, 80, 144])),
+    );
+    expect(legacy).toMatchObject({ shardFrames: 6, shardCount: 21, chunksPerShard: 45 });
+    expect(shardOf(legacy, 20)).toEqual({ shard: 20, position: 0 });
+    const two = parseArrayMetadata(
+      arrayMetadata((document) => ((document.chunk_grid as { configuration: { chunk_shape: number[] } }).configuration.chunk_shape = [12, 80, 144])),
+    );
+    expect(two).toMatchObject({ shardFrames: 12, shardCount: 11, chunksPerShard: 90 });
+    expect(shardOf(two, 7)).toEqual({ shard: 3, position: 45 });
+    expect(() =>
+      parseArrayMetadata(
+        arrayMetadata((document) => ((document.chunk_grid as { configuration: { chunk_shape: number[] } }).configuration.chunk_shape = [9, 80, 144])),
+      ),
+    ).toThrow(/whole time chunks/);
   });
 
   it("accepts the delta chain and an index at the start", () => {
@@ -248,7 +271,7 @@ describe("parseArrayMetadata", () => {
     ).toThrow(/index location/);
     expect(() =>
       parseArrayMetadata(
-        arrayMetadata((document) => ((document.chunk_grid as { configuration: { chunk_shape: number[] } }).configuration.chunk_shape = [6, 73, 144])),
+        arrayMetadata((document) => ((document.chunk_grid as { configuration: { chunk_shape: number[] } }).configuration.chunk_shape = [126, 73, 144])),
       ),
     ).toThrow(/whole tiles/);
   });
@@ -272,33 +295,11 @@ describe("parseGroupMetadata", () => {
     ).toThrow();
   });
 
-  it("reads the whole-store index descriptor, and does without one", () => {
+  it("ignores the whole-store index an earlier store declares", () => {
     const text = readFileSync(`${FIXTURE_ROOT}/tmp2m.zarr/zarr.json`, "utf8");
-    const group = parseGroupMetadata(text);
-    expect(group.index).toEqual({ path: "index.bin", shardIndexBytes: 724, timeChunks: 21, arrays: ["tmp2m"] });
-    expect(storeIndexLength(group.index!)).toBe(21 * 724);
     const document = JSON.parse(text);
-    delete document.attributes.xue_index;
-    expect(parseGroupMetadata(JSON.stringify(document)).index).toBeUndefined();
-  });
-
-  it("rejects a malformed whole-store index descriptor", () => {
-    const sound = { path: "index.bin", shardIndexBytes: 724, timeChunks: 21, arrays: ["tmp2m"] };
-    expect(parseStoreIndexDescriptor(sound)).toEqual(sound);
-    for (const broken of [
-      { ...sound, path: "" },
-      { ...sound, path: "tmp2m/index.bin" },
-      { ...sound, shardIndexBytes: "724" },
-      { ...sound, shardIndexBytes: 725 },
-      { ...sound, shardIndexBytes: 4 },
-      { ...sound, timeChunks: 0 },
-      { ...sound, arrays: [] },
-      { ...sound, arrays: ["tmp2m", "tmp2m"] },
-      { ...sound, arrays: [1] },
-      "index.bin",
-    ]) {
-      expect(() => parseStoreIndexDescriptor(broken)).toThrow(/xue_index/);
-    }
+    document.attributes.xue_index = { path: "index.bin", shardIndexBytes: 724, timeChunks: 21, arrays: ["tmp2m"] };
+    expect(parseGroupMetadata(JSON.stringify(document)).metadataJson).toBe(parseGroupMetadata(text).metadataJson);
   });
 });
 
@@ -457,12 +458,13 @@ describe("ZarrSession", () => {
     const session = await ZarrSession.open(store, wasm.decodeChunk);
     const bundle = new wasm.WasmBundle(readFileSync(`${FIXTURE_ROOT}/tmp2m.xue`));
     const opened = log.requests;
-    for (const offset of [0, 5, 7]) {
+    for (const offset of [0, 5, 7, 120]) {
       expect(Buffer.from(await session.decodeFrame(1, offset))).toEqual(Buffer.from(bundle.decodeFrame(1, offset)));
     }
-    // Frames 0 and 5 share a shard, frame 7 is the next one: two objects,
-    // and every request went out without a Range header.
-    expect(log.requests - opened).toBe(2);
+    // The array is one shard: one object, fetched once for its index and
+    // held for every frame after, and every request went out without a
+    // Range header.
+    expect(log.requests - opened).toBe(1);
     expect(log.entries.every((entry) => entry.range === null)).toBe(true);
     expect(Buffer.from(await session.decodeSeries(1, 3, 4))).toEqual(Buffer.from(bundle.decodeSeries(1, 3, 4)));
   });
@@ -488,41 +490,41 @@ describe("ZarrSession", () => {
     expect(plane[0]).toBe(0);
   });
 
-  /** A fetch over the fixture directory whose answer for `index.bin` is
-   * rewritten, or refused, so the session's fallback paths can be walked. */
+  const TMP2M_INDEX_BYTES = shardIndexLength(21 * 45);
+
+  /** A fetch over the fixture directory whose answer for the tmp2m shard's
+   * index — the suffix range — is rewritten, so the session's index
+   * handling can be walked. */
   function fetchWithIndex(
     log: ReturnType<typeof newFetchLog>,
-    doctor: (bytes: Uint8Array<ArrayBuffer>) => Uint8Array<ArrayBuffer> | null,
+    doctor: (bytes: Uint8Array<ArrayBuffer>) => Uint8Array<ArrayBuffer>,
   ): FetchLike {
     const base = localFetch(FIXTURE_ROOT, log);
     return async (url, init) => {
       const response = await base(url, init);
-      if (!new URL(url).pathname.endsWith("/index.bin")) return response;
+      const range = new Headers(init?.headers).get("Range") ?? "";
+      if (!new URL(url).pathname.endsWith("/tmp2m/c/0/0/0") || !range.startsWith("bytes=-")) return response;
       const bytes = doctor(new Uint8Array(await response.arrayBuffer()));
-      return bytes ? new Response(bytes, { status: 200 }) : new Response("missing", { status: 404 });
+      return new Response(bytes, { status: 206, headers: { "content-range": `bytes 0-${bytes.byteLength - 1}/*` } });
     };
   }
 
-  /** Rewrite one block of `index.bin` in place and reseal its CRC-32C. */
-  function rewriteBlock(bytes: Uint8Array<ArrayBuffer>, timeChunk: number, edit: (block: Uint8Array) => void): Uint8Array<ArrayBuffer> {
-    const block = bytes.subarray(timeChunk * 724, (timeChunk + 1) * 724);
-    edit(block);
-    new DataView(block.buffer, block.byteOffset).setUint32(724 - 4, crc32c(block.subarray(0, 724 - 4)), true);
+  /** Edit the index in place and reseal its CRC-32C. */
+  function resealed(bytes: Uint8Array<ArrayBuffer>, edit: (index: Uint8Array) => void): Uint8Array<ArrayBuffer> {
+    edit(bytes);
+    new DataView(bytes.buffer, bytes.byteOffset).setUint32(bytes.byteLength - 4, crc32c(bytes.subarray(0, bytes.byteLength - 4)), true);
     return bytes;
   }
 
   it("fills a chunk the shard never held with the fill value", async () => {
     const { session } = await open("tmp2m.zarr", "tmp2m.xue");
     const metadata = parseBundleMetadata(session.metadataJson);
-    // Rewrite one shard index entry to the sentinel in the session's own
-    // cache by going through a store whose whole-store index is doctored:
-    // the first tile's pair of time chunk 0 becomes all ones.
+    // The first tile's pair of time chunk 0 becomes the all-ones sentinel.
     const log = newFetchLog();
     const doctored = new ZarrStore("local://tmp2m.zarr", "deadbeef", {
-      fetch: fetchWithIndex(log, (bytes) => rewriteBlock(bytes, 0, (block) => block.fill(0xff, 0, INDEX_ENTRY_BYTES))),
+      fetch: fetchWithIndex(log, (bytes) => resealed(bytes, (index) => index.fill(0xff, 0, INDEX_ENTRY_BYTES))),
     });
     const doctoredSession = await ZarrSession.open(doctored, wasm.decodeChunk);
-    expect(doctoredSession.storeIndex).toEqual({ bytes: 21 * 724, blocks: 21, seeded: 21 });
     const plane = await doctoredSession.decodeFrame(1, 0);
     const nodata = (metadata.variables[0]!.quantization as { nodataCode: number }).nodataCode;
     expect(plane[0]).toBe(nodata);
@@ -530,60 +532,7 @@ describe("ZarrSession", () => {
     expect(plane[16 * 144 + 15]).not.toBe(nodata);
   });
 
-  it("costs the requests the design predicts, before and after coalescing", async () => {
-    const merged = await open("tmp2m.zarr", "tmp2m.xue");
-    await merged.session.decodeFrame(1, 0);
-    // The group and the array document, the whole-store index, and the
-    // whole shard body in one merged range: no per-shard index read.
-    expect(merged.log.requests).toBe(4);
-    expect(merged.log.entries.map((entry) => entry.path)).toEqual([
-      "tmp2m.zarr/zarr.json",
-      "tmp2m.zarr/tmp2m/zarr.json",
-      "tmp2m.zarr/index.bin",
-      "tmp2m.zarr/tmp2m/c/0/0/0",
-    ]);
-    expect(merged.log.entries.some((entry) => entry.range?.startsWith("bytes=-"))).toBe(false);
-    expect(merged.session.storeIndex).toEqual({ bytes: 21 * 724, blocks: 21, seeded: 21 });
-    expect(merged.session.store.stats.ranges).toBe(45);
-    // Six tiles of one row are one request; a 3 x 2 rectangle two rows on,
-    // whose shard index the seed already holds.
-    const before = merged.log.requests;
-    await merged.session.decodeFrame(1, 6, [{ firstColumn: 2, firstRow: 1, lastColumn: 4, lastRow: 2 }]);
-    expect(merged.log.requests - before).toBe(1);
-
-    const separate = await open("tmp2m.zarr", "tmp2m.xue", -1);
-    await separate.session.decodeFrame(1, 0);
-    expect(separate.log.requests).toBe(3 + 45);
-
-    // A series is opening plus one chunk per time chunk — exactly what the
-    // container costs beyond its prefix — and nothing proportional to the
-    // frame count.
-    const series = await open("tmp2m.zarr", "tmp2m.xue");
-    await series.session.decodeSeries(1, 37, 20);
-    expect(series.log.requests).toBe(3 + 21);
-    expect(series.log.entries.filter((entry) => entry.range !== null)).toHaveLength(21);
-  });
-
-  it("falls back to the per-shard index when index.bin is missing", async () => {
-    const log = newFetchLog();
-    const store = new ZarrStore("local://tmp2m.zarr", "deadbeef", { fetch: fetchWithIndex(log, () => null) });
-    const session = await ZarrSession.open(store, wasm.decodeChunk);
-    expect(session.storeIndex).toBeNull();
-    const bundle = new wasm.WasmBundle(readFileSync(`${FIXTURE_ROOT}/tmp2m.xue`));
-    // The failed fetch is one request; the shard index then comes as a
-    // suffix range, and the body as one merged range.
-    const plane = await session.decodeFrame(1, 0);
-    expect(Buffer.from(plane)).toEqual(Buffer.from(bundle.decodeFrame(1, 0)));
-    expect(log.requests).toBe(3 + 1 + 1);
-    expect(log.entries[3]!.range).toBe("bytes=-724");
-    // A series is back to an index and a chunk per time chunk (the first
-    // time chunk's are already held from the plane).
-    const series = await session.decodeSeries(1, 37, 20);
-    expect(Buffer.from(series)).toEqual(Buffer.from(bundle.decodeSeries(1, 37, 20)));
-    expect(log.requests).toBe(5 + 20 * 2);
-  });
-
-  it("falls back to the shard's own index for a block that fails to verify, and only that one", async () => {
+  it("refuses a shard index that fails to verify", async () => {
     const log = newFetchLog();
     const store = new ZarrStore("local://tmp2m.zarr", "deadbeef", {
       fetch: fetchWithIndex(log, (bytes) => {
@@ -592,41 +541,111 @@ describe("ZarrSession", () => {
       }),
     });
     const session = await ZarrSession.open(store, wasm.decodeChunk);
-    expect(session.storeIndex).toEqual({ bytes: 21 * 724, blocks: 21, seeded: 20 });
-    const bundle = new wasm.WasmBundle(readFileSync(`${FIXTURE_ROOT}/tmp2m.xue`));
-    expect(Buffer.from(await session.decodeFrame(1, 0))).toEqual(Buffer.from(bundle.decodeFrame(1, 0)));
-    expect(log.requests).toBe(3 + 1 + 1);
-    expect(log.entries[3]!.range).toBe("bytes=-724");
-    expect(Buffer.from(await session.decodeFrame(1, 6))).toEqual(Buffer.from(bundle.decodeFrame(1, 6)));
-    expect(log.requests).toBe(5 + 1);
+    await expect(session.decodeFrame(1, 0)).rejects.toThrow(/CRC-32C/);
   });
 
-  it("ignores an index.bin of the wrong length", async () => {
+  it("costs the requests the design predicts, before and after coalescing", async () => {
+    const merged = await open("tmp2m.zarr", "tmp2m.xue");
+    await merged.session.decodeFrame(1, 0);
+    // The group and the array document, the shard's index as one suffix
+    // range — the whole array's index, since the array is one shard — and
+    // the time chunk's body in one merged range.
+    expect(merged.log.requests).toBe(4);
+    expect(merged.log.entries.map((entry) => [entry.path, entry.range?.startsWith("bytes=-") ?? false])).toEqual([
+      ["tmp2m.zarr/zarr.json", false],
+      ["tmp2m.zarr/tmp2m/zarr.json", false],
+      ["tmp2m.zarr/tmp2m/c/0/0/0", true],
+      ["tmp2m.zarr/tmp2m/c/0/0/0", false],
+    ]);
+    expect(merged.log.entries[2]!.range).toBe(`bytes=-${TMP2M_INDEX_BYTES}`);
+    expect(merged.session.store.stats.ranges).toBe(1 + 45);
+    // Six tiles of one row are one request; a 3 x 2 rectangle two rows on,
+    // whose index the session already holds.
+    const before = merged.log.requests;
+    await merged.session.decodeFrame(1, 6, [{ firstColumn: 2, firstRow: 1, lastColumn: 4, lastRow: 2 }]);
+    expect(merged.log.requests - before).toBe(1);
+
+    const separate = await open("tmp2m.zarr", "tmp2m.xue", -1);
+    await separate.session.decodeFrame(1, 0);
+    expect(separate.log.requests).toBe(2 + 1 + 45);
+
+    // A series is opening plus one chunk per time chunk — exactly what the
+    // container costs beyond its prefix — and nothing proportional to the
+    // frame count; on this small fixture neighbouring time chunks lie
+    // within the coalescing gap, so the requests are fewer still.
+    const series = await open("tmp2m.zarr", "tmp2m.xue");
+    await series.session.decodeSeries(1, 37, 20);
+    expect(series.session.store.stats.ranges).toBe(1 + 21);
+    expect(series.log.requests).toBeLessThanOrEqual(2 + 1 + 21);
+  });
+
+  /** A fetch that serves the fixture's tmp2m store in the profile's earlier
+   * form — one shard per time chunk — by cutting the single shard up on the
+   * way out, with the array document's chunk shape to match. */
+  function legacyFetch(log: ReturnType<typeof newFetchLog>): FetchLike {
+    const base = localFetch(FIXTURE_ROOT, log);
+    const shard = readFileSync(`${FIXTURE_ROOT}/tmp2m.zarr/tmp2m/c/0/0/0`);
+    const index = parseShardIndex(new Uint8Array(shard.subarray(shard.byteLength - TMP2M_INDEX_BYTES)), 21 * 45);
+    const shards = new Map<number, Buffer>();
+    for (let timeChunk = 0; timeChunk < 21; timeChunk += 1) {
+      const payloads = index.slice(timeChunk * 45, (timeChunk + 1) * 45).map((entry) => shard.subarray(entry!.offset, entry!.offset + entry!.length));
+      const table = new Uint8Array(shardIndexLength(45));
+      const view = new DataView(table.buffer);
+      let cursor = 0;
+      payloads.forEach((payload, tile) => {
+        view.setBigUint64(tile * INDEX_ENTRY_BYTES, BigInt(cursor), true);
+        view.setBigUint64(tile * INDEX_ENTRY_BYTES + 8, BigInt(payload.byteLength), true);
+        cursor += payload.byteLength;
+      });
+      view.setUint32(45 * INDEX_ENTRY_BYTES, crc32c(table.subarray(0, 45 * INDEX_ENTRY_BYTES)), true);
+      shards.set(timeChunk, Buffer.concat([...payloads, Buffer.from(table)]));
+    }
+    return async (url, init) => {
+      const pathname = new URL(url).pathname;
+      if (pathname.endsWith("/tmp2m/zarr.json")) {
+        const document = JSON.parse(await (await base(url, init)).text());
+        document.chunk_grid.configuration.chunk_shape = [6, 80, 144];
+        return new Response(JSON.stringify(document), { status: 200 });
+      }
+      const match = /\/tmp2m\/c\/(\d+)\/0\/0$/.exec(pathname);
+      if (!match) return base(url, init);
+      const body = shards.get(Number(match[1]));
+      if (!body) return new Response("missing", { status: 404 });
+      const range = new Headers(init?.headers).get("Range") ?? "";
+      log.requests += 1;
+      log.entries.push({ path: pathname.slice(1), range: range || null });
+      const suffix = /^bytes=-(\d+)$/.exec(range);
+      const span = /^bytes=(\d+)-(\d+)$/.exec(range);
+      const start = suffix ? Math.max(0, body.byteLength - Number(suffix[1])) : Number(span![1]);
+      const end = suffix ? body.byteLength - 1 : Math.min(Number(span![2]), body.byteLength - 1);
+      return new Response(new Uint8Array(body.subarray(start, end + 1)), { status: 206 });
+    };
+  }
+
+  it("reads a store cut one shard per time chunk as it reads the container", async () => {
     const log = newFetchLog();
-    const store = new ZarrStore("local://tmp2m.zarr", "deadbeef", { fetch: fetchWithIndex(log, (bytes) => bytes.subarray(1)) });
+    const store = new ZarrStore("local://tmp2m.zarr", "deadbeef", { fetch: legacyFetch(log) });
     const session = await ZarrSession.open(store, wasm.decodeChunk);
-    expect(session.storeIndex).toBeNull();
-    await session.decodeFrame(1, 0);
-    expect(log.entries[3]!.range).toBe("bytes=-724");
+    const bundle = new wasm.WasmBundle(readFileSync(`${FIXTURE_ROOT}/tmp2m.xue`));
+    for (const offset of [0, 5, 6, 64, 120]) {
+      expect(Buffer.from(await session.decodeFrame(1, offset))).toEqual(Buffer.from(bundle.decodeFrame(1, offset)));
+    }
+    expect(Buffer.from(await session.decodeSeries(1, 37, 20))).toEqual(Buffer.from(bundle.decodeSeries(1, 37, 20)));
+    // Every shard's index was read as its own suffix range.
+    expect(log.entries.filter((entry) => entry.range === `bytes=-${shardIndexLength(45)}`)).toHaveLength(21);
   });
 
-  it("refuses an index descriptor that does not describe the arrays", async () => {
+  it("refuses arrays of one store cut differently", async () => {
     const base = localFetch(FIXTURE_ROOT);
-    const withGroup = (edit: (index: Record<string, unknown>) => void): FetchLike => async (url, init) => {
+    const fetch: FetchLike = async (url, init) => {
       const response = await base(url, init);
-      if (!new URL(url).pathname.endsWith("/zarr.json") || new URL(url).pathname !== "/zarr.json") return response;
+      if (!new URL(url).pathname.endsWith("/vgrd10m/zarr.json")) return response;
       const document = JSON.parse(await response.text());
-      edit(document.attributes.xue_index);
+      document.chunk_grid.configuration.chunk_shape[0] = 6;
       return new Response(JSON.stringify(document), { status: 200 });
     };
-    for (const [edit, message] of [
-      [(index: Record<string, unknown>) => (index.shardIndexBytes = 724 + 16), /shardIndexBytes/],
-      [(index: Record<string, unknown>) => (index.timeChunks = 20), /timeChunks/],
-      [(index: Record<string, unknown>) => (index.arrays = ["prate"]), /cover/],
-    ] as const) {
-      const store = new ZarrStore("local://tmp2m.zarr", "deadbeef", { fetch: withGroup(edit) });
-      await expect(ZarrSession.open(store, wasm.decodeChunk)).rejects.toThrow(message);
-    }
+    const store = new ZarrStore("local://wind10m.zarr", "deadbeef", { fetch });
+    await expect(ZarrSession.open(store, wasm.decodeChunk)).rejects.toThrow(/cut the same way/);
   });
 
   it("refuses a cell or a frame outside the array", async () => {

@@ -86,8 +86,8 @@ byte-identical.
 The same bundle can also be published as a **Zarr v3 store**
 ([`docs/zarr-profile.md`](docs/zarr-profile.md)): a container v2 bundle is,
 to within its index format, a sharded Zarr `uint8` array — one shard per
-six-frame time chunk, the bundle's tiles as the inner chunks, one zstd
-frame each — so `build-bin --zarr` (or `XUE_ZARR=1`) derives a
+variable, six-frame time chunks of the bundle's tiles as its inner chunks,
+one zstd frame each — so `build-bin --zarr` (or `XUE_ZARR=1`) derives a
 `<bundle>.zarr/` beside every `.xue` and its half-resolution variant from
 the codes just written, and names it in the manifest (`zarr: {path,
 byteLength, crc32}`). The store carries the bundle's metadata verbatim in

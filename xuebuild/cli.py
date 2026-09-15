@@ -152,7 +152,7 @@ def parser() -> argparse.ArgumentParser:
     export_zarr_parser = commands.add_parser(
         "export-zarr",
         help="derive a Zarr v3 store from a Xue bundle: the same codes, re-chunked onto a regular six-frame time "
-        "grid, one shard per time chunk (docs/zarr-profile.md)",
+        "grid, one shard per array (docs/zarr-profile.md)",
     )
     export_zarr_parser.add_argument("bundle", type=Path)
     export_zarr_parser.add_argument(

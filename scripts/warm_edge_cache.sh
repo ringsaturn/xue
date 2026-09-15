@@ -20,13 +20,12 @@
 # The H.264 companions are skipped: they are opt-in (`?use_h264=true`) and
 # would double the bytes warmed for viewers that never request them.
 #
-# A Zarr store (`zarr` descriptor on a bundle or a variant) is warmed to its
-# first frame, not whole: the group and array documents, the whole-store
-# index and the first time chunk of each array are what a viewer opening
-# the run reads before it paints, and a GFS run's two tiers are some three
-# thousand shards — every later one is a range read the edge fills on
-# demand like the rest of a bundle. The objects are named off the local
-# group document (`xue_index.arrays`), since a chunk key is deterministic.
+# A Zarr store (`zarr` descriptor on a bundle or a variant) is a handful
+# of objects: the group and array documents, each array's one shard — the
+# whole array, read by range the way a bundle is, and warmed whole the way
+# a bundle is — and the coordinate arrays, which a viewer never reads. The
+# objects are named off the local group document (`xue.variables[].id`),
+# since a chunk key is deterministic.
 #
 # Usage: scripts/warm_edge_cache.sh <model> <run> [--artifacts-of <manifest>]
 #                                                [--manifest-only]
@@ -96,8 +95,8 @@ artifacts=$(
          | "\(.path)?v=\(.crc32)"' "$source"
   while read -r store crc; do
     [ -n "$store" ] || continue
-    printf '%s/zarr.json?v=%s\n%s/index.bin?v=%s\n' "$store" "$crc" "$store" "$crc"
-    jq -r '.attributes.xue_index.arrays[]' "$dir/$store/zarr.json" | while read -r array; do
+    printf '%s/zarr.json?v=%s\n' "$store" "$crc"
+    jq -r '.attributes.xue.variables[].id' "$dir/$store/zarr.json" | while read -r array; do
       printf '%s/%s/zarr.json?v=%s\n%s/%s/c/0/0/0?v=%s\n' "$store" "$array" "$crc" "$store" "$array" "$crc"
     done
   done <<STORES

@@ -175,9 +175,12 @@ class ExportTests(unittest.TestCase):
     def test_chunks_come_back_trimmed(self) -> None:
         store = self.stores[True, "end"].path
         geometry = zarrstore.ArrayGeometry.from_metadata(zarrstore.read_json(store / "tmp2m" / "zarr.json"))
-        self.assertEqual(geometry.shard_shape, (6, 12, 20))
+        # One shard per array: the axis of 21 frames rounded up to four
+        # time chunks of six, over the whole grid of whole tiles.
+        self.assertEqual(geometry.shard_shape, (24, 12, 20))
         self.assertEqual(geometry.inner_shape, (6, 4, 5))
         self.assertEqual((geometry.tile_rows, geometry.tile_columns, geometry.time_chunks), (3, 4, 4))
+        self.assertEqual((geometry.shard_count, geometry.chunks_per_shard, geometry.shard_of(3)), (1, 48, (0, 36)))
         # The south-east tile is clipped on both sides; the last time chunk
         # holds three of its six frames.
         last_tile = geometry.tile_count - 1
@@ -222,7 +225,7 @@ class ExportTests(unittest.TestCase):
                     variable = next(v for v in self.bundle.metadata["variables"] if v["id"] == name)
                     self.assertEqual(array["shape"], [21, 9, 17])
                     self.assertEqual(array["data_type"], "uint8")
-                    self.assertEqual(array["chunk_grid"]["configuration"]["chunk_shape"], [6, 12, 20])
+                    self.assertEqual(array["chunk_grid"]["configuration"]["chunk_shape"], [24, 12, 20])
                     self.assertEqual(array["chunk_key_encoding"], {"name": "default"})
                     self.assertEqual(array["fill_value"], variable["quantization"]["nodataCode"])
                     self.assertEqual(array["dimension_names"], ["time", "latitude", "longitude"])
@@ -245,7 +248,10 @@ class ExportTests(unittest.TestCase):
                     else:
                         self.assertNotIn("scale_factor", attributes)
                         self.assertNotIn("add_offset", attributes)
-                    self.assertEqual(sorted(p.name for p in (store / name / "c").iterdir()), ["0", "1", "2", "3"])
+                    # One object per array, whatever the axis: `c/0/0/0`.
+                    self.assertEqual([p.as_posix() for p in (store / name / "c").rglob("*") if p.is_file()], [f"{store / name}/c/0/0/0"])
+                    self.assertNotIn("xue_index", root["attributes"])
+                    self.assertFalse((store / "index.bin").exists())
                 time_axis = zarrstore.read_json(store / "time" / "zarr.json")
                 self.assertEqual(time_axis["attributes"]["units"], "seconds since 2026-08-14T06:00:00Z")
                 np.testing.assert_array_equal(
@@ -257,92 +263,56 @@ class ExportTests(unittest.TestCase):
                     90.0 - 20.0 * np.arange(9),
                 )
 
-    def test_the_store_index_is_every_shard_index_verbatim(self) -> None:
-        """`index.bin` is the shard indexes concatenated — array by array in
-        the group's `variables` order, time chunk by time chunk — copied
-        from whichever end of the shard the array keeps them at, and the
-        group's `xue_index` block says exactly how to cut it."""
-        arrays = ["tmp2m", "prate"]
-        block = 16 * 12 + 4
-        for (delta, location), report in self.stores.items():
-            with self.subTest(delta=delta, index_location=location):
-                store = report.path
-                root = zarrstore.read_json(store / "zarr.json")
-                self.assertEqual(
-                    root["attributes"]["xue_index"],
-                    {"path": "index.bin", "shardIndexBytes": block, "timeChunks": 4, "arrays": arrays},
-                )
-                shards = {
-                    (name, time_chunk): (store / name / "c" / str(time_chunk) / "0" / "0").read_bytes()
-                    for name in arrays
-                    for time_chunk in range(4)
-                }
-                expected = b"".join(
-                    zarrstore.shard_index_bytes(shards[name, time_chunk], 12, location)
-                    for name in arrays
-                    for time_chunk in range(4)
-                )
-                data = (store / "index.bin").read_bytes()
-                self.assertEqual(data, expected)
-                self.assertEqual(len(data), len(arrays) * 4 * block)
-                self.assertEqual(report.index_bytes, len(data))
-                self.assertNotIn("index.bin", report.arrays)
-                # Every block's CRC-32C verifies, and its pairs are the shard's.
-                index = zarrstore.read_store_index(store)
-                self.assertEqual((index.shard_index_bytes, index.time_chunks, index.arrays), (block, 4, tuple(arrays)))
-                for name in arrays:
-                    for time_chunk in range(4):
-                        self.assertEqual(
-                            index.entries(name, time_chunk, 12),
-                            zarrstore._shard_index(shards[name, time_chunk], 12, location),
-                        )
-        self.assertEqual(zarrstore.read_store_index(self.single_store.path).arrays, ("tmp2m",))
-
-    def test_a_read_through_the_store_index_equals_decode_plane(self) -> None:
-        for (delta, location), report in self.stores.items():
-            for numeric_id, name in self.bundle.variable_ids.items():
-                with self.subTest(delta=delta, index_location=location, variable=name):
-                    planes = np.stack(
-                        [
-                            zarrstore.read_plane(report.path, name, frame, through_index=True)
-                            for frame in range(self.bundle.frame_count)
-                        ]
-                    )
-                    np.testing.assert_array_equal(planes, expected_codes(self.bundle, numeric_id))
-                    np.testing.assert_array_equal(
-                        zarrstore.read_array_chunk(report.path, name, 3, 0, through_index=True),
-                        zarrstore.read_array_chunk(report.path, name, 3, 0),
-                    )
-
-    def test_the_store_index_is_held_to_its_description(self) -> None:
+    def test_the_shard_index_names_every_chunk_of_the_padded_axis(self) -> None:
+        """The index covers the shard's whole shape — four time chunks of
+        twelve tiles — and the time chunk past the axis is stored at the
+        fill value; a time chunk is one contiguous run of the object."""
         report = self.stores[False, "end"]
-        store = self.root / "corrupt-index.zarr"
+        store = report.path
+        geometry = zarrstore.ArrayGeometry.from_metadata(zarrstore.read_json(store / "prate" / "zarr.json"))
+        shard = (store / "prate" / "c" / "0" / "0" / "0").read_bytes()
+        entries = zarrstore._shard_index(shard, geometry.chunks_per_shard, "end")
+        self.assertEqual(len(entries), 48)
+        offsets = [offset for offset, _ in entries]
+        self.assertEqual(offsets, sorted(offsets))
+        self.assertEqual(offsets[0], 0)
+        for (offset, length), (next_offset, _) in zip(entries, entries[1:]):
+            self.assertEqual(offset + length, next_offset)
+        # Tile 1 of the last time chunk (frames 18–20) reads trimmed to
+        # three frames; nothing past the axis is readable.
+        self.assertEqual(zarrstore.read_array_chunk(store, "prate", 3, 1).shape, (3, 4, 5))
+        with self.assertRaises(BundleError):
+            zarrstore.read_array_chunk(store, "prate", 4, 0)
+
+    def test_a_store_cut_one_shard_per_time_chunk_still_reads(self) -> None:
+        """The reader takes the shard's frame count from the array's chunk
+        shape: a store written one shard per time chunk — the profile's
+        earlier form, still on the bucket — reads the same codes."""
+        report = self.stores[True, "start"]
+        store = self.root / "per-chunk.zarr"
         shutil.copytree(report.path, store)
-        # A flipped byte in prate's second block fails that block's CRC and
-        # no other; the shard's own index still reads the frame.
-        data = bytearray((store / "index.bin").read_bytes())
-        data[(1 * 4 + 1) * 196 + 3] ^= 0xFF
-        (store / "index.bin").write_bytes(bytes(data))
-        np.testing.assert_array_equal(
-            zarrstore.read_plane(store, "prate", 0, through_index=True), zarrstore.read_plane(store, "prate", 0)
-        )
-        np.testing.assert_array_equal(
-            zarrstore.read_plane(store, "tmp2m", 6, through_index=True), zarrstore.read_plane(store, "tmp2m", 6)
-        )
+        for name in ("tmp2m", "prate"):
+            geometry = zarrstore.ArrayGeometry.from_metadata(zarrstore.read_json(store / name / "zarr.json"))
+            shard = (store / name / "c" / "0" / "0" / "0").read_bytes()
+            entries = zarrstore._shard_index(shard, geometry.chunks_per_shard, "start")
+            (store / name / "c" / "0" / "0" / "0").unlink()
+            for time_chunk in range(geometry.time_chunks_per_shard):
+                payloads = [shard[o : o + n] for o, n in entries[time_chunk * 12 : (time_chunk + 1) * 12]]
+                (store / name / "c" / str(time_chunk) / "0").mkdir(parents=True, exist_ok=True)
+                (store / name / "c" / str(time_chunk) / "0" / "0").write_bytes(zarrstore._pack_shard(payloads, "start"))
+            metadata = zarrstore.read_json(store / name / "zarr.json")
+            metadata["chunk_grid"]["configuration"]["chunk_shape"] = [6, 12, 20]
+            (store / name / "zarr.json").write_bytes(zarrstore._dump_json(metadata))
+            geometry = zarrstore.ArrayGeometry.from_metadata(metadata)
+            self.assertEqual((geometry.shard_frames, geometry.shard_count, geometry.chunks_per_shard), (6, 4, 12))
+        for numeric_id, name in self.bundle.variable_ids.items():
+            np.testing.assert_array_equal(
+                read_back(store, name, self.bundle.frame_count), expected_codes(self.bundle, numeric_id)
+            )
+        broken = zarrstore.read_json(store / "prate" / "zarr.json")
+        broken["chunk_grid"]["configuration"]["chunk_shape"] = [9, 12, 20]
         with self.assertRaises(BundleError):
-            zarrstore.read_plane(store, "prate", 6, through_index=True)
-        np.testing.assert_array_equal(zarrstore.read_plane(store, "prate", 6), expected_codes(self.bundle, 2)[6])
-        # A description the object does not fit is refused before any block
-        # is trusted, and a missing object leaves only the shard path.
-        root = zarrstore.read_json(store / "zarr.json")
-        root["attributes"]["xue_index"]["shardIndexBytes"] = 196 + 16
-        (store / "zarr.json").write_text(json.dumps(root), encoding="utf-8")
-        with self.assertRaises(BundleError):
-            zarrstore.read_store_index(store)
-        (store / "index.bin").unlink()
-        with self.assertRaises(BundleError):
-            zarrstore.read_plane(store, "prate", 0, through_index=True)
-        np.testing.assert_array_equal(zarrstore.read_plane(store, "prate", 0), expected_codes(self.bundle, 2)[0])
+            zarrstore.ArrayGeometry.from_metadata(broken)
 
     def test_the_shard_index_is_verified(self) -> None:
         report = self.stores[False, "end"]

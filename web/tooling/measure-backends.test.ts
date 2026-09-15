@@ -17,8 +17,8 @@
  * question — one request per inner chunk — is on the table beside the fix.
  * Each read opens the reader afresh, so the numbers include what it costs
  * to open (the container's structural prefix; the store's group and array
- * documents plus its whole-store index, `index.bin`, when the store carries
- * one), and every count is what the browser would issue: the
+ * documents plus each array's shard index, read once as a suffix range),
+ * and every count is what the browser would issue: the
  * container's request set is exactly the spans its reader reports missing.
  */
 

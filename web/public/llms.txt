@@ -160,9 +160,9 @@ https://dataset.ringsaturn.me/xue/. The contract is two layers:
   container as `path` + `byteLength` + `crc32` (one unit, present whole or
   absent whole) and a `zarr` store descriptor). A `zarr` descriptor names
   the bundle as a Zarr v3 store (`<bundle>.zarr/`, a directory of objects:
-  uint8, one shard per six frames, sharded into the bundle's tiles, zstd,
-  plus `index.bin`, every shard's index in one object a standard client
-  ignores — `docs/zarr-profile.md`), readable with xarray or any Zarr v3
+  uint8, one shard per variable array holding the whole axis, its inner
+  chunks six-frame time chunks of the bundle's tiles, zstd —
+  `docs/zarr-profile.md`), readable with xarray or any Zarr v3
   client; its `crc32` is the `?v=` for every object in the store. HRRR
   publishes the store alone; the other models publish the container, and
   their older runs, the showcase cases and the MRMS rounds always will.

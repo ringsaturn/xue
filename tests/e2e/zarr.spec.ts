@@ -38,10 +38,7 @@ interface StoreCounters {
   /** Range requests against store objects, and every 206's length in order. */
   ranged: number;
   lengths: number[];
-  /** Whole-object requests against the whole-store index, `index.bin`,
-   * which is read whole at open like the documents. */
-  index: number;
-  /** Whole-object requests against any other store object but a zarr.json. */
+  /** Whole-object requests against any store object but a zarr.json. */
   full: number;
   /** Range requests against .xue bundles — the container path, which the
    * bundles without a store still take. */
@@ -72,9 +69,8 @@ async function routeArtifacts(page: Page, counters: StoreCounters, ranges = true
       counters.ranged += 1;
       counters.lengths.push(length);
     },
-    onFull: (relative) => {
-      if (relative.endsWith("/index.bin")) counters.index += 1;
-      else counters.full += 1;
+    onFull: () => {
+      counters.full += 1;
     },
   });
   await page.route("**/data/gfs.*/*.xue?*", (route) => {
@@ -98,7 +94,7 @@ async function routeArtifacts(page: Page, counters: StoreCounters, ranges = true
 }
 
 function newCounters(): StoreCounters {
-  return { ranged: 0, lengths: [], index: 0, full: 0, bundleRanged: 0, bundleFull: 0 };
+  return { ranged: 0, lengths: [], full: 0, bundleRanged: 0, bundleFull: 0 };
 }
 
 async function expectReadyOnStore(page: Page, format = "Zarr"): Promise<void> {
@@ -130,10 +126,8 @@ test("the default layer plays from its store without being asked", async ({ page
   await expectReadyOnStore(page);
   await expect(page.locator("#preload-state")).toHaveText("Streaming on demand");
   await scrubOneFrame(page);
-  // Beside the documents only the whole-store index was read whole; every
-  // inner chunk came by offset, never as a whole shard, and the seeded
-  // index left no per-shard suffix read to make.
-  expect(counters.index).toBeGreaterThan(0);
+  // Nothing but the documents was read whole: the shard's index came as a
+  // suffix range and every inner chunk by offset, never the whole shard.
   expect(counters.full).toBe(0);
   expect(counters.ranged).toBeGreaterThan(0);
   // The default layer has a store, so the container was never opened for it.
@@ -152,7 +146,6 @@ test("?backend=xue takes the container of a bundle that ships both", async ({ pa
   await scrubOneFrame(page);
   expect(counters.bundleRanged).toBeGreaterThan(0);
   expect(counters.ranged).toBe(0);
-  expect(counters.index).toBe(0);
 });
 
 test("a run published before the store existed plays from its container", async ({ page }) => {
@@ -165,7 +158,7 @@ test("a run published before the store existed plays from its container", async 
   await expectReadyOnStore(page, "Xue");
   await scrubOneFrame(page);
   expect(counters.bundleRanged).toBeGreaterThan(0);
-  expect(counters.ranged + counters.index + counters.full).toBe(0);
+  expect(counters.ranged + counters.full).toBe(0);
 });
 
 test("a bundle without a store stays on the container beside one that has it", async ({ page }, testInfo) => {
@@ -196,8 +189,8 @@ test("the wind pair decodes both components through the store", async ({ page },
   await expect(page.locator("#legend-unit")).toHaveText("m/s");
   await expectReadyOnStore(page);
   await scrubOneFrame(page);
-  expect(counters.index).toBeGreaterThan(0);
   expect(counters.full).toBe(0);
+  expect(counters.ranged).toBeGreaterThan(0);
 });
 
 test("a run that ships only stores is accepted and streamed", async ({ page }) => {
@@ -224,8 +217,8 @@ test("without ranges a store-only bundle is read by whole shards", async ({ page
   await expect(page.locator("body")).toHaveAttribute("data-variable", "prate");
   await expectReadyOnStore(page);
   await scrubOneFrame(page);
-  // Frames 0 and 1 share the first time chunk: one shard, fetched whole
-  // once, and never a range.
+  // The array is one shard, fetched whole once — the whole bundle, as the
+  // container's whole download was — and never a range.
   expect(counters.ranged).toBe(0);
   expect(counters.full).toBeGreaterThan(0);
   expect(counters.bundleRanged + counters.bundleFull).toBe(0);
