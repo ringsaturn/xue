@@ -444,10 +444,12 @@ each bundle job, `native.py::_zarr_reports` after the wheel has written, and
 `test_native.py` compares the objects byte for byte. `build-bin --zarr` /
 `convert-bin --zarr` or `XUE_ZARR=1` turns it on (off by default; the
 reusable `publish.yml` takes a `zarr` input, set by every per-model
-workflow but GFS's — a source is switched on one at a time, and a run
-built without it is still whole — and `make mvp` passes `--zarr`). `--no-xue` /
-`XUE_CONTAINER=0` (publish.yml's `container: false`, HRRR again) goes one
-step further and **retires the container**: the `.xue` is still written
+workflow — a run built without it is still whole — and `make mvp` passes
+`--zarr`). `--no-xue` /
+`XUE_CONTAINER=0` (publish.yml's `container: false` on every per-model
+workflow, the env pair on `publish-mrms.yml`, `showcase build --no-xue`
+for the cases — every live run and case is store-only since 2026-09-15)
+goes one step further and **retires the container**: the `.xue` is still written
 and the store derived from it, then the file is removed
 (`binconvert.retire_container`, on both encoder paths, after the video
 companions have been read out of it) and the manifest entry names the

@@ -16,11 +16,10 @@ plays a store **by default** wherever a bundle's manifest entry names one
 whose entries name only their stores — no `.xue` at all — is accepted; a
 run published without stores plays from its containers as before, and a
 reader that does not know the manifest field ignores it. The container is
-on its way to becoming a read-only legacy format: **HRRR, ECMWF, SFLUX and
-the MRMS rounds already publish the store alone** (`build-bin --zarr
+on its way to becoming a read-only legacy format: **every live run and
+every showcase case publishes the store alone** (`build-bin --zarr
 --no-xue`: the `.xue` is still written, the store derived from it, and the
-file retired before upload), GFS still publishes the container, and every
-decoder keeps reading it
+file retired before upload), and every decoder keeps reading it
 indefinitely, since runs, cases and rounds already published are never
 rebuilt.
 

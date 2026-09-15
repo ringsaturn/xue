@@ -96,8 +96,8 @@ linear codebooks and `time` / `latitude` / `longitude` coordinates, so
 `xarray.open_zarr` reads it as physical values with nothing installed
 beyond a Zarr client. `--no-xue` (or `XUE_CONTAINER=0`) publishes the store
 alone — the `.xue` is retired once the store has been derived from it and
-the manifest names no container — which is how HRRR, ECMWF, SFLUX and the
-MRMS rounds are published today.
+the manifest names no container — which is how every live run and every
+showcase case is published today.
 `xue export-zarr <bundle.xue>` derives one by hand;
 `--delta` swaps in the `xue.delta` codec (the container's temporal
 residual as a codec, `xuebuild/zarrcodec.py`), under which a chunk's
