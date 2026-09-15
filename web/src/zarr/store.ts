@@ -17,6 +17,13 @@
  * fetched as one range each and split back to their callers. A caller that
  * issues its requests synchronously — a loop over the tiles it needs —
  * gets the merged form without knowing.
+ *
+ * An origin that answers no range request at all (a static host without
+ * `Accept-Ranges`) is served in whole-object mode: every range of an object
+ * is cut from one GET of that object, kept for the store's life. A shard is
+ * one temporal group of one variable whole, so a global view then costs
+ * what the `.xue` path's whole download costs, group by group rather than
+ * all at once — the last resort `main.ts` takes when nothing streams.
  */
 
 export interface ByteRange {
@@ -82,6 +89,10 @@ export interface ZarrStoreOptions {
    * directory through one of their own. */
   fetch?: FetchLike;
   gap?: number;
+  /** False when the origin serves no ranges: every `getRange` is then cut
+   * from one whole GET of its object (see the module notes). True by
+   * default — the main thread probes range support before opening. */
+  ranges?: boolean;
 }
 
 export class ZarrStore {
@@ -92,8 +103,11 @@ export class ZarrStore {
   private readonly root: string;
   private readonly fetchImpl: FetchLike;
   private readonly gap: number;
+  private readonly ranges: boolean;
   private readonly pending = new Map<string, PendingRange[]>();
   private flushScheduled = false;
+  /** Whole objects in flight or held, in whole-object mode only. */
+  private readonly whole = new Map<string, Promise<Uint8Array>>();
 
   constructor(
     root: string,
@@ -103,6 +117,12 @@ export class ZarrStore {
     this.root = root.replace(/\/+$/, "");
     this.fetchImpl = options.fetch ?? ((url, init) => fetch(url, init));
     this.gap = options.gap ?? COALESCE_GAP;
+    this.ranges = options.ranges ?? true;
+  }
+
+  /** Whether the store reads by range or by whole object. */
+  get streams(): boolean {
+    return this.ranges;
   }
 
   /** The URL of one object, with the store's version. */
@@ -127,6 +147,7 @@ export class ZarrStore {
    * else can be merged with a span whose start is unknown. */
   getRange(path: string, range: ByteRange | SuffixRange): Promise<Uint8Array> {
     this.stats.ranges += 1;
+    if (!this.ranges) return this.sliceWhole(path, range);
     if ("suffixLength" in range) return this.fetchSuffix(path, range.suffixLength);
     return new Promise((resolve, reject) => {
       const queue = this.pending.get(path) ?? [];
@@ -164,6 +185,23 @@ export class ZarrStore {
     } catch (error) {
       for (const index of run.members) queue[index]!.reject(error);
     }
+  }
+
+  /** Whole-object mode: one GET per object, every range a view of it. A
+   * failed GET is forgotten so a retry can fetch again. */
+  private async sliceWhole(path: string, range: ByteRange | SuffixRange): Promise<Uint8Array> {
+    let object = this.whole.get(path);
+    if (!object) {
+      object = this.get(path);
+      this.whole.set(path, object);
+      object.catch(() => this.whole.delete(path));
+    }
+    const bytes = await object;
+    if ("suffixLength" in range) return bytes.subarray(Math.max(0, bytes.byteLength - range.suffixLength));
+    if (range.offset + range.length > bytes.byteLength) {
+      throw new Error(`range beyond object: ${range.offset}+${range.length} of ${bytes.byteLength}`);
+    }
+    return bytes.subarray(range.offset, range.offset + range.length);
   }
 
   private fetchSuffix(path: string, suffixLength: number): Promise<Uint8Array> {

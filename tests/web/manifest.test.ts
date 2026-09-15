@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import { CRC32_INITIAL, crc32Hex, crc32Of, crc32Update } from "../../web/src/crc32";
 import {
   axisUnitSeconds,
+  containerOf,
+  deliveryBytes,
   FORECAST_MODEL_IDS,
   FORECAST_MODELS,
   frameOffsets,
@@ -270,6 +272,43 @@ describe("validateManifest", () => {
     const empty = manifestFixture();
     empty.bundles[0]!.variants = [];
     expect(() => validateManifest(empty)).toThrow("variant");
+  });
+
+  it("accepts a bundle and a variant that ship only a zarr store, and rejects one with neither", () => {
+    const storeOnly = manifestFixture() as unknown as { bundles: Record<string, unknown>[] };
+    const bundle = storeOnly.bundles[0]!;
+    delete bundle.path;
+    delete bundle.byteLength;
+    delete bundle.crc32;
+    delete bundle.video;
+    bundle.zarr = zarrFixture();
+    bundle.variants = [{ width: 720, height: 361, bandwidth: 2_400_000, zarr: zarrFixture("gfs.2026081506/tmp2m.half.zarr") }];
+    const manifest = validateManifest(storeOnly);
+    expect(manifest.bundles[0]!.path).toBeUndefined();
+    expect(containerOf(manifest.bundles[0]!)).toBeNull();
+    expect(containerOf(manifest.bundles[1]!)).toEqual({
+      path: "gfs.2026081506/prate.xue",
+      byteLength: manifest.bundles[1]!.byteLength,
+      crc32: manifest.bundles[1]!.crc32,
+    });
+    expect(deliveryBytes(manifest.bundles[0]!)).toBe(12_347_075);
+    expect(deliveryBytes(manifest.bundles[0]!.variants![0]!)).toBe(12_347_075);
+    expect(deliveryBytes(manifest.bundles[1]!)).toBe(manifest.bundles[1]!.byteLength);
+
+    const neither = structuredClone(storeOnly);
+    delete neither.bundles[0]!.zarr;
+    expect(() => validateManifest(neither)).toThrow("neither a bundle path nor a zarr store");
+    const neitherVariant = structuredClone(storeOnly);
+    delete (neitherVariant.bundles[0]!.variants as Record<string, unknown>[])[0]!.zarr;
+    expect(() => validateManifest(neitherVariant)).toThrow("variant has neither");
+    const halfUnit = structuredClone(storeOnly);
+    halfUnit.bundles[0]!.crc32 = "760cef95";
+    expect(() => validateManifest(halfUnit)).toThrow("without a path");
+    const wrongSuffix = structuredClone(storeOnly);
+    wrongSuffix.bundles[0]!.path = "gfs.2026081506/tmp2m.zarr";
+    wrongSuffix.bundles[0]!.byteLength = 1;
+    wrongSuffix.bundles[0]!.crc32 = "760cef95";
+    expect(() => validateManifest(wrongSuffix)).toThrow("path");
   });
 
   it("accepts an optional zarr store on a bundle and on a variant, and rejects a broken one", () => {

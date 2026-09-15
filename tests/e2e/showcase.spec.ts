@@ -2,6 +2,8 @@ import { expect, test, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
+import { routeStores } from "./artifacts";
+
 // The Protomaps API key is origin-locked to the production domains, so from
 // 127.0.0.1 every tile request dies on CORS — and a map whose tiles never
 // settle occasionally never fires "load", which is what gates initialize().
@@ -38,6 +40,7 @@ async function routeShowcase(page: Page, catalog: unknown = CATALOG_FIXTURE): Pr
   await page.route("**/data/showcase/*/manifest.json*", (route) =>
     route.fulfill({ json: CASE_MANIFEST_FIXTURE }),
   );
+  await routeStores(page, "**/data/showcase/*/*.zarr/**", fileURLToPath(new URL("../fixtures/generated/web/showcase/demo-typhoon/", import.meta.url)));
   for (const pattern of ["**/data/showcase/*/*.poster.bin*", "**/data/showcase/*/*.xue*"]) {
     await page.route(pattern, (route) => {
       const body = artifact(route.request().url());

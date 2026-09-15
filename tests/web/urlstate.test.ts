@@ -182,26 +182,26 @@ describe("parseExperimentFromSearch", () => {
 });
 
 describe("parseBackendFromSearch", () => {
-  it("is the container unless the URL asks for the store", () => {
-    expect(parseBackendFromSearch("")).toBe("xue");
-    expect(parseBackendFromSearch("?model=gfs&type=temp")).toBe("xue");
-    expect(parseBackendFromSearch("?backend=xue")).toBe("xue");
-  });
-
-  it("accepts zarr case-insensitively", () => {
+  it("is the store unless the URL asks for the container", () => {
+    expect(parseBackendFromSearch("")).toBe("zarr");
+    expect(parseBackendFromSearch("?model=gfs&type=temp")).toBe("zarr");
     expect(parseBackendFromSearch("?backend=zarr")).toBe("zarr");
-    expect(parseBackendFromSearch("?backend=Zarr")).toBe("zarr");
-    expect(parseBackendFromSearch("?model=gfs&backend=zarr&type=temp")).toBe("zarr");
   });
 
-  it("treats any other value as the container rather than erroring", () => {
-    expect(parseBackendFromSearch("?backend=")).toBe("xue");
-    expect(parseBackendFromSearch("?backend=hdf5")).toBe("xue");
-    expect(parseBackendFromSearch("?backend=true")).toBe("xue");
+  it("accepts xue case-insensitively", () => {
+    expect(parseBackendFromSearch("?backend=xue")).toBe("xue");
+    expect(parseBackendFromSearch("?backend=Xue")).toBe("xue");
+    expect(parseBackendFromSearch("?model=gfs&backend=xue&type=temp")).toBe("xue");
+  });
+
+  it("treats any other value as the store rather than erroring", () => {
+    expect(parseBackendFromSearch("?backend=")).toBe("zarr");
+    expect(parseBackendFromSearch("?backend=hdf5")).toBe("zarr");
+    expect(parseBackendFromSearch("?backend=true")).toBe("zarr");
   });
 
   it("survives a layer switch, which preserves unrelated params", () => {
-    expect(parseBackendFromSearch(searchForVariable("tmp2m", "?backend=zarr&type=precip"))).toBe("zarr");
+    expect(parseBackendFromSearch(searchForVariable("tmp2m", "?backend=xue&type=precip"))).toBe("xue");
   });
 });
 

@@ -60,6 +60,44 @@ fn is_relative_artifact_path(path: &str, suffix: &str) -> bool {
         && !path.split('/').any(|part| part == "..")
 }
 
+/// The `.xue` container fields of a bundle or a variant — `path`,
+/// `byteLength` and `crc32`, one unit. Since the Zarr store the unit may be
+/// absent as a whole: an entry names the container, the store, or both,
+/// never neither. A `path` that is present is still held to `.xue`.
+fn validate_container_fields(entry: &Value, variable: &str, label: &str) -> Result<()> {
+    if entry["path"].is_null() {
+        if !entry["byteLength"].is_null() || !entry["crc32"].is_null() {
+            return Err(EncodeError::manifest(format!(
+                "manifest bundle{label} carries container fields without a path for {variable}"
+            )));
+        }
+        if entry["zarr"].is_null() {
+            return Err(EncodeError::manifest(format!(
+                "manifest bundle{label} must carry a .xue path or a zarr store for {variable}"
+            )));
+        }
+        return Ok(());
+    }
+    let path = entry["path"].as_str().unwrap_or_default();
+    if !is_relative_artifact_path(path, ".xue") {
+        return Err(EncodeError::manifest(format!(
+            "manifest bundle{label} path must be a relative .xue path for {variable}"
+        )));
+    }
+    if !entry["byteLength"].as_i64().is_some_and(|length| length > 0) {
+        return Err(EncodeError::manifest(format!(
+            "manifest bundle{label} byteLength must be a positive integer for {variable}"
+        )));
+    }
+    let crc32 = entry["crc32"].as_str().unwrap_or_default();
+    if crc32.len() != 8 || !crc32.bytes().all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)) {
+        return Err(EncodeError::manifest(format!(
+            "manifest bundle{label} crc32 must be 8 lowercase hex characters for {variable}"
+        )));
+    }
+    Ok(())
+}
+
 /// The optional `zarr` descriptor a bundle or a variant may carry: the
 /// bundle's Zarr store (`docs/zarr-profile.md`) as a relative `.zarr` root,
 /// the sum of its objects and the CRC-32 of its root `zarr.json`. The native
@@ -90,11 +128,13 @@ fn validate_zarr_descriptor(store: &Value, variable: &str) -> Result<()> {
     Ok(())
 }
 
-/// Build a schema v5 manifest describing one `.xue` bundle per variable.
+/// Build a schema v5 manifest describing one bundle per variable.
 ///
-/// Each entry in `bundles` carries `variable`, `path`, `byteLength` and
-/// `crc32`, and may carry `variants`, `video`, `poster` and `zarr`
-/// descriptors (a variant may carry a `zarr` descriptor of its own).
+/// Each entry in `bundles` carries `variable` and at least one of its two
+/// deliveries — the `.xue` container as `path`, `byteLength` and `crc32`
+/// (one unit), the Zarr store as a `zarr` descriptor — and may carry
+/// `variants`, `video` and `poster` descriptors (a variant may carry a
+/// `zarr` descriptor of its own).
 pub fn build_bin_manifest(
     run_time: OffsetDateTime,
     bundles: Vec<Value>,
@@ -130,15 +170,11 @@ fn validate_bin_manifest(payload: &Value, require_core_variables: bool) -> Resul
                 "manifest bundle variable is not a bundle name: {variable:?}"
             )));
         }
-        let path = bundle["path"].as_str().unwrap_or_default();
-        if !is_relative_artifact_path(path, ".xue") {
-            return Err(EncodeError::manifest(format!(
-                "manifest bundle path must be a relative .xue path for {variable}"
-            )));
-        }
+        validate_container_fields(bundle, variable, "")?;
         validate_zarr_descriptor(&bundle["zarr"], variable)?;
         if let Some(variants) = bundle["variants"].as_array() {
             for variant in variants {
+                validate_container_fields(variant, variable, " variant")?;
                 validate_zarr_descriptor(&variant["zarr"], variable)?;
             }
         }
@@ -266,6 +302,34 @@ mod tests {
         let payload = manifest(vec![bundle(Some(store))]).expect("valid manifest");
         assert_eq!(payload["bundles"][0]["zarr"]["path"], "tmp2m.zarr");
         assert_eq!(payload["bundles"][0]["variants"][0]["zarr"]["path"], "tmp2m.zarr");
+    }
+
+    #[test]
+    fn a_store_only_entry_is_accepted_and_neither_is_rejected() {
+        let store = json!({"path": "tmp2m.zarr", "byteLength": 12, "crc32": "deadbeef"});
+        let mut entry = bundle(Some(store));
+        for key in ["path", "byteLength", "crc32"] {
+            entry.as_object_mut().unwrap().remove(key);
+            entry["variants"][0].as_object_mut().unwrap().remove(key);
+        }
+        let payload = manifest(vec![entry.clone()]).expect("a store-only entry is valid");
+        assert!(payload["bundles"][0]["path"].is_null());
+        assert_eq!(payload["bundles"][0]["variants"][0]["zarr"]["path"], "tmp2m.zarr");
+
+        let mut neither = entry.clone();
+        neither.as_object_mut().unwrap().remove("zarr");
+        assert!(manifest(vec![neither]).is_err(), "an entry with neither delivery was accepted");
+        let mut neither_variant = entry.clone();
+        neither_variant["variants"][0].as_object_mut().unwrap().remove("zarr");
+        assert!(manifest(vec![neither_variant]).is_err(), "a variant with neither delivery was accepted");
+        let mut half_unit = entry.clone();
+        half_unit["byteLength"] = json!(10);
+        assert!(manifest(vec![half_unit]).is_err(), "container fields without a path were accepted");
+        let mut wrong_suffix = entry;
+        wrong_suffix["path"] = json!("tmp2m.zarr");
+        wrong_suffix["byteLength"] = json!(10);
+        wrong_suffix["crc32"] = json!("0123abcd");
+        assert!(manifest(vec![wrong_suffix]).is_err(), "a .zarr path was accepted as the container");
     }
 
     #[test]

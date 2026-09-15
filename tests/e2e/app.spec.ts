@@ -2,6 +2,8 @@ import { expect, test, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
+import { withoutStores } from "./artifacts";
+
 // The Protomaps API key is origin-locked to the production domains, so from
 // 127.0.0.1 every tile request dies on CORS — and a map whose tiles never
 // settle occasionally never fires "load", which is what gates initialize().
@@ -35,11 +37,14 @@ const HGT500_FIXTURE = readFileSync(
 const HGT500_HALF_FIXTURE = readFileSync(
   fileURLToPath(new URL("../fixtures/generated/web/hgt500.half.xue", import.meta.url)),
 );
-const MANIFEST_FIXTURE = JSON.parse(
-  readFileSync(
-    fileURLToPath(new URL("../fixtures/generated/web/manifest.json", import.meta.url)),
-    "utf8",
-  ),
+// The manifest of a run published before the Zarr store existed: the
+// fixture's `zarr` descriptors dropped, so every session here opens its
+// `.xue` container. That is the shape of every run the bucket holds from
+// before, of every showcase case and every MRMS round, none of which are
+// rebuilt — the container path is a permanent one and this suite is its
+// coverage. The default path, the store, is zarr.spec.ts's.
+const MANIFEST_FIXTURE = withoutStores(
+  JSON.parse(readFileSync(fileURLToPath(new URL("../fixtures/generated/web/manifest.json", import.meta.url)), "utf8")),
 );
 const LATEST_FIXTURE = JSON.parse(
   readFileSync(

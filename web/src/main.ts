@@ -52,6 +52,8 @@ import {
   KNOWN_BUNDLE_IDS,
   FORECAST_MODEL_IDS,
   FORECAST_MODELS,
+  containerOf,
+  deliveryBytes,
   fetchLatestPointer,
   fetchManifest,
   hasBundle,
@@ -1380,10 +1382,11 @@ const requestedCaseId: string | null = parseCaseFromSearch(window.location.searc
  * default — the Xue decoder is the everyday path, and the video artifacts
  * ride along only for `?use_h264=true`. */
 const h264Enabled = parseUseH264FromSearch(window.location.search);
-/** Which channel a session reads its bundle through. `xue` — the default —
- * is the container; `?backend=zarr` takes the Zarr store a run publishes
- * beside it, for the bundles that have one, and the container for the rest.
- * A comparison path: the same decoder over another index. */
+/** Which channel a session reads its bundle through. `zarr` — the default
+ * — is the Zarr store a run publishes, for the bundles that have one, and
+ * the container for the rest; `?backend=xue` takes the container wherever
+ * one is published. A comparison path: the same decoder over another
+ * index. */
 const dataBackend = parseBackendFromSearch(window.location.search);
 /** Resolution tier this session asks for. `auto` — the default — lets the
  * viewport and the connection pick; `?res=half` / `?res=full` pin one end of
@@ -4124,7 +4127,7 @@ function loadVariable(
     if (
       !variant &&
       video &&
-      video.byteLength <= descriptor.byteLength &&
+      video.byteLength <= deliveryBytes(descriptor) &&
       (await isWebCodecsSupported(video.codec, video.width, video.height))
     ) {
       const streamUrl = artifactUrl(video.streamPath, video.crc32);
@@ -4159,23 +4162,35 @@ function loadVariable(
       extraBytes = index.byteLength;
     } else {
       const target = variant ?? descriptor;
-      // The Zarr channel is taken only when asked for and only where the
-      // tier carries a store; it is streamed or nothing, so an origin that
-      // cannot serve ranges sends the session down the container path.
+      const container = containerOf(target);
+      // The store is the everyday path wherever the tier carries one
+      // (`?backend=xue` asks for the container instead), streamed over
+      // ranges. An origin that serves none sends the session to the
+      // container — streamed, else downloaded whole — and only an entry
+      // that ships no container at all opens its store by whole objects,
+      // one shard (one temporal group) per GET: what a whole bundle
+      // download costs, group by group. A probe session is streamed or
+      // nothing either way.
       const store = zarrStoreFor(dataBackend, descriptor, variant);
       const storeRoot = store && manifestUrl ? zarrRootUrl(store.path, manifestUrl) : null;
-      const zarr = store && storeRoot !== null && (await supportsRangeRequests(zarrObjectUrl(storeRoot, "zarr.json", store.crc32)));
+      const storeStreams =
+        store !== undefined &&
+        storeRoot !== null &&
+        (await supportsRangeRequests(zarrObjectUrl(storeRoot, "zarr.json", store.crc32)));
       if (sequence !== initializeSequence) throw new DOMException("aborted", "AbortError");
-      if (zarr) {
+      if (store !== undefined && storeRoot !== null && (storeStreams || !container)) {
+        if (!storeStreams && role === "probe") {
+          throw new Error("range requests unsupported; a probe session never downloads a whole shard");
+        }
         streaming = true;
         channel = spawnZarrWorker();
         channel.onerror = (event) => showError(event.message || t("workerStartFailed"));
-        initMessage = zarrInitMessage(storeRoot, store, variableId);
+        initMessage = zarrInitMessage(storeRoot, store, variableId, storeStreams);
         downloadedBytes = 0;
         format = variant ? "Zarr ½" : "Zarr";
         totalBytes = store.byteLength;
-      } else {
-        const url = artifactUrl(target.path, target.crc32);
+      } else if (container) {
+        const url = artifactUrl(container.path, container.crc32);
         streaming = await supportsRangeRequests(url);
         if (sequence !== initializeSequence) throw new DOMException("aborted", "AbortError");
         if (streaming) {
@@ -4183,22 +4198,25 @@ function loadVariable(
           initMessage = {
             type: "init-stream",
             url,
-            byteLength: target.byteLength,
+            byteLength: container.byteLength,
             variableKey: variableId,
           };
           downloadedBytes = 0;
         } else if (role === "probe") {
           throw new Error("range requests unsupported; a probe session never downloads a whole bundle");
         } else {
-          const initBuffer = await downloadBundle(target, sequence, quiet);
+          const initBuffer = await downloadBundle(container, sequence, quiet);
           if (sequence !== initializeSequence) throw new DOMException("aborted", "AbortError");
           channel = spawnWorker();
           initMessage = { type: "init", buffer: initBuffer };
           transfer = [initBuffer];
-          downloadedBytes = target.byteLength;
+          downloadedBytes = container.byteLength;
         }
         format = variant ? "Xue ½" : "Xue";
-        totalBytes = target.byteLength;
+        totalBytes = container.byteLength;
+      } else {
+        // The validator admits no entry without one delivery or the other.
+        throw new Error(t("manifestMissingBundle", { id: variableId }));
       }
     }
 

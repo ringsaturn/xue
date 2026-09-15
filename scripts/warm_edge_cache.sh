@@ -20,6 +20,14 @@
 # The H.264 companions are skipped: they are opt-in (`?use_h264=true`) and
 # would double the bytes warmed for viewers that never request them.
 #
+# A Zarr store (`zarr` descriptor on a bundle or a variant) is warmed to its
+# first frame, not whole: the group and array documents, the whole-store
+# index and the first time chunk of each array are what a viewer opening
+# the run reads before it paints, and a GFS run's two tiers are some three
+# thousand shards — every later one is a range read the edge fills on
+# demand like the rest of a bundle. The objects are named off the local
+# group document (`xue_index.arrays`), since a chunk key is deterministic.
+#
 # Usage: scripts/warm_edge_cache.sh <model> <run> [--artifacts-of <manifest>]
 #                                                [--manifest-only]
 # Without a flag: reads web/public/data/<model>.<run>/manifest.json and the
@@ -68,11 +76,33 @@ jobs=${WARM_JOBS:-6}
 
 # One `<path>?v=<crc32>` per line, the manifest first: it is the first thing
 # a viewer fetches, and the pointer is where its crc32 lives.
+# The stores the manifest names, one `<path> <crc32>` per line, each
+# checked to be on disk before anything is listed off it.
+stores=
+if [ "$scope" != manifest ]; then
+  stores=$(jq -r '.bundles[] | ., .variants[] | .zarr // empty | "\(.path) \(.crc32)"' "$source")
+  while read -r store crc; do
+    [ -z "$store" ] || [ -f "$dir/$store/zarr.json" ] || { echo "no store at $dir/$store/zarr.json" >&2; exit 1; }
+  done <<STORES
+$stores
+STORES
+fi
+
 artifacts=$(
   [ "$scope" = artifacts ] || printf 'manifest.json?v=%s\n' "$(jq -r .manifestCrc32 "$pointer")"
   [ "$scope" = manifest ] || jq -r '.bundles[]
          | ., .variants[], (.poster // empty)
+         | select(.path != null)
          | "\(.path)?v=\(.crc32)"' "$source"
+  while read -r store crc; do
+    [ -n "$store" ] || continue
+    printf '%s/zarr.json?v=%s\n%s/index.bin?v=%s\n' "$store" "$crc" "$store" "$crc"
+    jq -r '.attributes.xue_index.arrays[]' "$dir/$store/zarr.json" | while read -r array; do
+      printf '%s/%s/zarr.json?v=%s\n%s/%s/c/0/0/0?v=%s\n' "$store" "$array" "$crc" "$store" "$array" "$crc"
+    done
+  done <<STORES
+$stores
+STORES
 )
 
 # Status, bytes, seconds, edge cache status and the artifact, one line each.

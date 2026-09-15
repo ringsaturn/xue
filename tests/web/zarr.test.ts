@@ -353,6 +353,30 @@ describe("ZarrStore", () => {
     await expect(store.get("nope/zarr.json")).rejects.toThrow(/HTTP 404/);
     await expect(store.getRange("nope/zarr.json", { offset: 0, length: 4 })).rejects.toThrow(/HTTP 404/);
   });
+
+  it("in whole-object mode fetches each object once and cuts every range from it", async () => {
+    const log = newFetchLog();
+    const store = new ZarrStore("local://tmp2m.zarr", "deadbeef", { fetch: localFetch(FIXTURE_ROOT, log), ranges: false });
+    expect(store.streams).toBe(false);
+    const whole = readFileSync(`${FIXTURE_ROOT}/tmp2m.zarr/zarr.json`);
+    const [a, b] = await Promise.all([
+      store.getRange("zarr.json", { offset: 40, length: 10 }),
+      store.getRange("zarr.json", { offset: 0, length: 20 }),
+    ]);
+    const tail = await store.getRange("zarr.json", { suffixLength: 8 });
+    // One GET, no Range header, the object held for the later reads.
+    expect(log.requests).toBe(1);
+    expect(log.entries[0]!.range).toBeNull();
+    expect(store.stats).toEqual({ requests: 1, ranges: 3, bytes: whole.byteLength });
+    expect(Buffer.from(a)).toEqual(whole.subarray(40, 50));
+    expect(Buffer.from(b)).toEqual(whole.subarray(0, 20));
+    expect(Buffer.from(tail)).toEqual(whole.subarray(whole.byteLength - 8));
+    await expect(store.getRange("zarr.json", { offset: whole.byteLength - 2, length: 4 })).rejects.toThrow(/beyond/);
+    // A failed object is forgotten, so the next read tries again.
+    await expect(store.getRange("nope/zarr.json", { offset: 0, length: 4 })).rejects.toThrow(/HTTP 404/);
+    await expect(store.getRange("nope/zarr.json", { offset: 0, length: 4 })).rejects.toThrow(/HTTP 404/);
+    expect(log.requests).toBe(3);
+  });
 });
 
 // -- assembly against the container ---------------------------------------------
@@ -426,6 +450,22 @@ describe("ZarrSession", () => {
       }
     });
   }
+
+  it("assembles the same frames and series over whole objects, one GET per shard", async () => {
+    const log = newFetchLog();
+    const store = new ZarrStore("local://tmp2m.zarr", "deadbeef", { fetch: localFetch(FIXTURE_ROOT, log), ranges: false });
+    const session = await ZarrSession.open(store, wasm.decodeChunk);
+    const bundle = new wasm.WasmBundle(readFileSync(`${FIXTURE_ROOT}/tmp2m.xue`));
+    const opened = log.requests;
+    for (const offset of [0, 5, 7]) {
+      expect(Buffer.from(await session.decodeFrame(1, offset))).toEqual(Buffer.from(bundle.decodeFrame(1, offset)));
+    }
+    // Frames 0 and 5 share a shard, frame 7 is the next one: two objects,
+    // and every request went out without a Range header.
+    expect(log.requests - opened).toBe(2);
+    expect(log.entries.every((entry) => entry.range === null)).toBe(true);
+    expect(Buffer.from(await session.decodeSeries(1, 3, 4))).toEqual(Buffer.from(bundle.decodeSeries(1, 3, 4)));
+  });
 
   it("decodes only the tiles asked for, with the same coverage the container gives", async () => {
     const { session, bundle } = await open("tmp2m.zarr", "tmp2m.xue");

@@ -457,11 +457,23 @@ zarr`) is for the tests and for reading a delta store; `tests/test_zarr.py`
 skips its zarr-python / xarray cases without it.
 
 The frontend plays a store through a third `DecodeChannel`, `web/src/zarr/`,
-chosen in `main.ts::loadVariable` only when `?backend=zarr`
-(`urlstate.ts::parseBackendFromSearch`, default `xue`) *and* the bundle or
-its picked tier carries a `zarr` descriptor *and* the store's origin serves
-ranges — otherwise the `.xue` path runs untouched, so the channel is
-additive and off by default. `zarr/worker.ts` answers exactly the protocol
+which is the **default**: `main.ts::loadVariable` takes it whenever the
+bundle or its picked tier carries a `zarr` descriptor, unless
+`?backend=xue` (`urlstate.ts::parseBackendFromSearch`, default `zarr`)
+asks for the container. The order is store over ranges → `.xue` over
+ranges → `.xue` downloaded whole → store by **whole objects** (a
+`ZarrStore` with `ranges: false`, one GET per shard, taken only when the
+entry ships no container — a probe session is streamed or nothing on both
+paths), so an origin without ranges still plays. All three validators
+admit an entry that names only its store: the container's `path` /
+`byteLength` / `crc32` are one unit, present whole or absent whole, and an
+entry with neither delivery is refused (`containerOf` / `deliveryBytes` in
+`manifest.ts` are how the shell reads an entry). `.xue` reading stays in
+every decoder indefinitely — published runs, cases and rounds are never
+rebuilt — so `tests/e2e/app.spec.ts` runs on the fixture manifest with its
+stores stripped (`tests/e2e/artifacts.ts::withoutStores`, the shape of
+every run published before) while `zarr.spec.ts` drives the default and
+the store-only shape (`storeOnly`). `zarr/worker.ts` answers exactly the protocol
 `worker.ts` answers (`protocol.ts` spells its messages; `init-stream` gains
 `kind: "zarr"`, the root URL and the descriptor's crc32) over
 `zarr/session.ts`: `shard.ts` validates the group and array documents

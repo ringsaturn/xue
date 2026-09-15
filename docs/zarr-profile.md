@@ -11,9 +11,14 @@ changes nothing in it.
 Status: the store is **derived** from a bundle, never the other way round.
 A build writes the `.xue` first, reads its codes back and writes the store
 from them, so the two carry identical codes by construction. The frontend
-plays a store on request (`?backend=zarr`, see "Reading"); a run that
-carries one is complete without it, and a reader that does not know the
-manifest field ignores it.
+plays a store **by default** wherever a bundle's manifest entry names one
+(see "Reading"; `?backend=xue` asks for the container instead), and a run
+whose entries name only their stores — no `.xue` at all — is accepted; a
+run published without stores plays from its containers as before, and a
+reader that does not know the manifest field ignores it. The container is
+on its way to becoming a read-only legacy format: the encoders still write
+it, and every decoder keeps reading it indefinitely, since runs, cases and
+rounds already published are never rebuilt.
 
 ## Why a profile
 
@@ -229,9 +234,12 @@ as the bundle path but ending in `.zarr` and colliding with no other path in
 the manifest; `byteLength` is the sum of every object in the store; `crc32`
 is the CRC-32 of the group's `zarr.json`, the one value a client appends as
 `?v=` to every object it fetches from the store. Every object under the run
-directory is immutable, as the bundles are. The field is optional and all
-three validators (`xuebuild/manifest.py`, `rust/xue/src/encode/manifest.rs`,
-`web/src/manifest.ts`) check it only when present.
+directory is immutable, as the bundles are. All three validators
+(`xuebuild/manifest.py`, `rust/xue/src/encode/manifest.rs`,
+`web/src/manifest.ts`) check the field only when present, and hold an entry
+to naming **at least one** delivery: the container's `path`, `byteLength`
+and `crc32` are one unit, present whole or absent whole, so an entry may
+carry the container, the store, or both, never neither.
 
 ## Reading
 

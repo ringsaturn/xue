@@ -114,12 +114,13 @@ fall back to defaults rather than fail, so a constructed link always opens.
   instead of the Xue decoder (a comparison path, not the default; GFS and
   HRRR publish the companions for their surface fields, ECMWF and SFLUX
   publish none).
-- `?backend=zarr` — read each bundle through the Zarr v3 store a run may
-  publish beside it (`<bundle>.zarr/`, the same codes under standard
-  codecs; docs/zarr-profile.md), for the bundles whose manifest entry
-  carries a `zarr` descriptor, and the `.xue` container for the rest. A
-  comparison path, not the default; the data card reads `Zarr` when it is
-  in use.
+- `?backend=xue` — read each bundle through its `.xue` container where
+  the run publishes a Zarr v3 store beside it (`<bundle>.zarr/`, the same
+  codes under standard codecs; docs/zarr-profile.md). The store is the
+  default for every bundle whose manifest entry carries a `zarr`
+  descriptor, and the container is what the rest, and every run published
+  before stores, play from; the data card reads `Zarr` or `Xue` for the
+  path in use. A comparison switch, not shareable state.
 - `?x=true` — the experimental synoptic composite: the precipitation on a
   stepped 0.1/1/2/5/10/20/50 mm/h key, the sea level
   pressure lines with their H/L marks over it, the particles run by the

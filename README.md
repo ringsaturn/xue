@@ -308,9 +308,11 @@ metered link, and `full` (alias `high`) always loads the canonical bundle.
 A dataset that ships no reduced tier — every showcase case — is full
 resolution either way, and the data card names the tier in use (`Xue ½`).
 `?use_h264=true` opts into the WebCodecs H.264 companions, and
-`?backend=zarr` reads a bundle through the Zarr v3 store a run may publish
-beside it (`docs/zarr-profile.md`), where the manifest names one. All three
-are read once at load, so changing any of them means a reload.
+`?backend=xue` reads a bundle through its `.xue` container where the run
+publishes a Zarr v3 store beside it (`docs/zarr-profile.md`) — the store is
+what the viewer opens by default wherever the manifest names one, and the
+data card reads `Zarr` while it is in use. All three are read once at
+load, so changing any of them means a reload.
 
 ## Historical showcase
 

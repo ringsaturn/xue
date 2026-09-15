@@ -162,9 +162,10 @@ export const en = {
   bufferedFrames: "Buffered",
   downloadedBytes: "Downloaded",
   formatLabel: "Format",
-  // The data card's readout for a session on the Zarr channel
-  // (`?backend=zarr`). A format name is instrument text — "Xue", "H.264" —
-  // so it stays "Zarr" in every locale.
+  // The data card's readout for a session on the Zarr channel — the
+  // default wherever a run ships a store; "Xue" is the container a run
+  // published before, or `?backend=xue`. A format name is instrument text
+  // — "Xue", "H.264" — so it stays "Zarr" in every locale.
   formatZarr: "Zarr",
   preloadProgressAria: "Forecast data preload progress",
   statDataset: "Dataset",

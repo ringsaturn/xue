@@ -29,6 +29,10 @@ export interface ZarrInitStreamMessage {
   /** Echoed back in progress/resident messages so the main thread can
    * attribute them to the right variable session. */
   variableKey: string;
+  /** False when the main thread's probe found the origin serves no ranges:
+   * the store then reads whole objects — one GET per shard, which is one
+   * temporal group of one variable — instead of ranges. True by default. */
+  ranges?: boolean;
 }
 
 export interface ZarrDecodeMessage {

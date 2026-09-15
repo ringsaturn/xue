@@ -1,13 +1,14 @@
 /**
  * Choosing the Zarr channel.
  *
- * The channel is additive and off by default: it is taken only when the
- * session asked for it (`?backend=zarr`, read in urlstate.ts) *and* the
- * bundle — or the resolution tier picked for it — carries a `zarr`
- * descriptor in the manifest, and the store's origin honours range
- * requests, which is all the channel ever issues. Anything else leaves the
- * `.xue` path exactly as it was, so a run without stores, or a link without
- * the parameter, never touches this file's worker.
+ * The channel is the default: it is taken whenever the bundle — or the
+ * resolution tier picked for it — carries a `zarr` descriptor in the
+ * manifest, unless the session asked for the container (`?backend=xue`,
+ * read in urlstate.ts). Streamed where the store's origin honours range
+ * requests; where it does not, `main.ts` first tries the `.xue` container
+ * and comes back to the store in whole-object mode only when the entry
+ * ships no container at all. A run without stores, or a link with the
+ * parameter, never touches this file's worker.
  */
 
 import type { DataBackend } from "../urlstate";
@@ -15,14 +16,17 @@ import type { VariableBundleDescriptor, VariantDescriptor, ZarrStoreDescriptor }
 import type { ZarrInitStreamMessage } from "./protocol";
 
 /** The store a session would open: the tier's own when one was picked,
- * else the bundle's, and none unless the backend was asked for. */
+ * else the bundle's, and none when the container was asked for — except
+ * on an entry that ships nothing else, where the store is the only way to
+ * open it whatever the parameter says. */
 export function zarrStoreFor(
   backend: DataBackend,
   descriptor: VariableBundleDescriptor,
   variant: VariantDescriptor | null,
 ): ZarrStoreDescriptor | undefined {
-  if (backend !== "zarr") return undefined;
-  return (variant ?? descriptor).zarr;
+  const entry = variant ?? descriptor;
+  if (backend !== "zarr" && entry.path !== undefined) return undefined;
+  return entry.zarr;
 }
 
 /** The store's root URL, resolved against the manifest the way every
@@ -37,8 +41,21 @@ export function zarrObjectUrl(root: string, path: string, crc32: string): string
   return `${root}/${path}?v=${crc32}`;
 }
 
-export function zarrInitMessage(root: string, store: ZarrStoreDescriptor, variableKey: string): ZarrInitStreamMessage {
-  return { type: "init-stream", kind: "zarr", url: root, crc32: store.crc32, byteLength: store.byteLength, variableKey };
+export function zarrInitMessage(
+  root: string,
+  store: ZarrStoreDescriptor,
+  variableKey: string,
+  ranges = true,
+): ZarrInitStreamMessage {
+  return {
+    type: "init-stream",
+    kind: "zarr",
+    url: root,
+    crc32: store.crc32,
+    byteLength: store.byteLength,
+    variableKey,
+    ...(ranges ? {} : { ranges }),
+  };
 }
 
 export function spawnZarrWorker(): Worker {

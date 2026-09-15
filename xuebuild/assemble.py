@@ -327,7 +327,15 @@ def assemble_run(
         "built": fresh,
         "dropped": [] if base is None else [v for v in manifest_bundle_ids(base) if v not in published_bundle_ids(source)],
         "byteLength": sum(
-            bundle["byteLength"] + sum(variant["byteLength"] for variant in bundle.get("variants", []))
+            _delivery_bytes(bundle) + sum(_delivery_bytes(variant) for variant in bundle.get("variants", []))
             for bundle in payload["bundles"]
         ),
     }
+
+
+def _delivery_bytes(entry: dict[str, Any]) -> int:
+    """What an entry weighs on the bucket: the container's bytes, or the
+    store's on an entry that ships only the store."""
+    if "byteLength" in entry:
+        return int(entry["byteLength"])
+    return int(entry["zarr"]["byteLength"])

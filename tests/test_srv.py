@@ -27,6 +27,7 @@ from xuebuild.binconvert import (
 )
 from xuebuild.errors import ManifestError
 from xuebuild.manifest import (
+    build_bin_manifest,
     build_latest_pointer,
     validate_bin_manifest,
     validate_latest_pointer,
@@ -254,6 +255,79 @@ class ResolutionLadderTests(unittest.TestCase):
         broken["bundles"][1]["variants"][0]["path"] = broken["bundles"][0]["variants"][0]["path"]
         with self.assertRaisesRegex(ManifestError, "duplicate"):
             validate_bin_manifest(broken)
+
+    def test_store_only_entries_validate_and_neither_is_refused(self) -> None:
+        """A bundle or a variant may name its Zarr store alone: the ``.xue``
+        fields are one unit that is present whole or absent whole, and an
+        entry with neither delivery is refused — that is the shape the
+        encoder writes once the container is retired, and the validators
+        have to accept it before any encoder does."""
+
+        def store(name: str) -> dict[str, object]:
+            return {"path": f"{name}.zarr", "byteLength": 1200, "crc32": "760cef95"}
+
+        manifest = {
+            "schemaVersion": 5,
+            "model": "GFS",
+            "product": "pgrb2.0p25",
+            "runTime": "2026-08-16T00:00:00Z",
+            "forecastHours": 120,
+            "bundles": [
+                {
+                    "variable": "tmp2m",
+                    "zarr": store("tmp2m"),
+                    "variants": [
+                        {
+                            "width": 720,
+                            "height": 361,
+                            "bandwidth": 2_400_000,
+                            "zarr": store("tmp2m.half"),
+                        }
+                    ],
+                },
+                {
+                    "variable": "prate",
+                    "path": "prate.xue",
+                    "byteLength": 1000,
+                    "crc32": "0123abcd",
+                    "zarr": store("prate"),
+                    "variants": [
+                        {
+                            "path": "prate.half.xue",
+                            "width": 720,
+                            "height": 361,
+                            "byteLength": 300,
+                            "crc32": "deadbeef",
+                            "bandwidth": 2_400_000,
+                        }
+                    ],
+                },
+            ],
+        }
+        validate_bin_manifest(manifest)
+        built = build_bin_manifest(
+            datetime(2026, 8, 16, tzinfo=UTC),
+            bundles=manifest["bundles"],
+        )
+        self.assertNotIn("path", built["bundles"][0])
+        self.assertEqual(built["bundles"][1]["path"], "prate.xue")
+
+        neither = json.loads(json.dumps(manifest))
+        del neither["bundles"][0]["zarr"]
+        with self.assertRaisesRegex(ManifestError, "path or a zarr store"):
+            validate_bin_manifest(neither)
+        neither_variant = json.loads(json.dumps(manifest))
+        del neither_variant["bundles"][0]["variants"][0]["zarr"]
+        with self.assertRaisesRegex(ManifestError, "variant must carry"):
+            validate_bin_manifest(neither_variant)
+        half_unit = json.loads(json.dumps(manifest))
+        half_unit["bundles"][0]["byteLength"] = 1000
+        with self.assertRaisesRegex(ManifestError, "without a path"):
+            validate_bin_manifest(half_unit)
+        wrong_suffix = json.loads(json.dumps(manifest))
+        wrong_suffix["bundles"][0]["path"] = "tmp2m.zarr"
+        with self.assertRaisesRegex(ManifestError, "relative .xue path"):
+            validate_bin_manifest(wrong_suffix)
 
 
 class PrateVideoManifestTests(unittest.TestCase):

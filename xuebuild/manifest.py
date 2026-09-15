@@ -80,14 +80,16 @@ def build_bin_manifest(
     product: str = "pgrb2.0p25",
     require_core_variables: bool = True,
 ) -> dict[str, Any]:
-    """Build a schema v5 manifest describing one .xue bundle per variable.
+    """Build a schema v5 manifest describing one bundle per variable.
 
-    Each entry in ``bundles`` must carry ``variable``, ``path``, ``byteLength``
-    and ``crc32``, and may optionally carry a ``video`` object describing an
-    alternate WebCodecs-decodable artifact for that variable, a ``poster``
-    descriptor, and a ``variants`` list of reduced-resolution renditions
-    (HLS ``STREAM-INF`` semantics — the top-level path
-    stays the canonical full-resolution tier).
+    Each entry in ``bundles`` must carry ``variable`` and at least one of its
+    two deliveries — the ``.xue`` container as ``path``, ``byteLength`` and
+    ``crc32`` (one unit), the Zarr store as a ``zarr`` descriptor — and may
+    optionally carry a ``video`` object describing an alternate
+    WebCodecs-decodable artifact for that variable, a ``poster`` descriptor,
+    and a ``variants`` list of reduced-resolution renditions (HLS
+    ``STREAM-INF`` semantics — the top-level entry stays the canonical
+    full-resolution tier).
     """
     payload: dict[str, Any] = {
         "schemaVersion": 5,
@@ -98,9 +100,9 @@ def build_bin_manifest(
         "bundles": [
             {
                 "variable": bundle["variable"],
-                "path": bundle["path"],
-                "byteLength": bundle["byteLength"],
-                "crc32": bundle["crc32"],
+                **({"path": bundle["path"]} if "path" in bundle else {}),
+                **({"byteLength": bundle["byteLength"]} if "path" in bundle else {}),
+                **({"crc32": bundle["crc32"]} if "path" in bundle else {}),
                 **({"variants": bundle["variants"]} if "variants" in bundle else {}),
                 **({"video": bundle["video"]} if "video" in bundle else {}),
                 **({"poster": bundle["poster"]} if "poster" in bundle else {}),
@@ -111,6 +113,37 @@ def build_bin_manifest(
     }
     validate_bin_manifest(payload, expected_hours=expected_hours, require_core_variables=require_core_variables)
     return payload
+
+
+def _validate_container_fields(node: dict[str, Any], variable: str, paths: set[str], label: str) -> None:
+    """The ``.xue`` container of a bundle or a variant — ``path``,
+    ``byteLength`` and ``crc32``, one unit. Since the Zarr store the unit may
+    be absent as a whole: an entry names the container, the store, or both,
+    never neither, and a reader that knows only the container skips an entry
+    without one. A ``path`` that is present is still held to ``.xue``."""
+    if "path" not in node:
+        if "byteLength" in node or "crc32" in node:
+            raise ManifestError(f"manifest bundle{label} carries container fields without a path for {variable}")
+        if "zarr" not in node:
+            raise ManifestError(f"manifest bundle{label} must carry a .xue path or a zarr store for {variable}")
+        return
+    path = node.get("path")
+    if (
+        not isinstance(path, str)
+        or not path.endswith(".xue")
+        or path.startswith(("/", "http:", "https:"))
+        or ".." in Path(path).parts
+    ):
+        raise ManifestError(f"manifest bundle{label} path must be a relative .xue path for {variable}")
+    if path in paths:
+        raise ManifestError("manifest contains duplicate bundle paths")
+    paths.add(path)
+    byte_length = node.get("byteLength")
+    if not isinstance(byte_length, int) or byte_length <= 0:
+        raise ManifestError(f"manifest bundle{label} byteLength must be a positive integer for {variable}")
+    crc32 = node.get("crc32")
+    if not isinstance(crc32, str) or len(crc32) != 8 or any(ch not in "0123456789abcdef" for ch in crc32):
+        raise ManifestError(f"manifest bundle{label} crc32 must be 8 lowercase hex characters for {variable}")
 
 
 def _validate_zarr_descriptor(store: object, variable: str, paths: set[str]) -> None:
@@ -144,24 +177,11 @@ def _validate_zarr_descriptor(store: object, variable: str, paths: set[str]) -> 
 def _validate_variant_descriptor(variant: object, variable: str, paths: set[str]) -> None:
     if not isinstance(variant, dict):
         raise ManifestError(f"manifest bundle variant descriptor must be an object for {variable}")
-    path = variant.get("path")
-    if (
-        not isinstance(path, str)
-        or not path.endswith(".xue")
-        or path.startswith(("/", "http:", "https:"))
-        or ".." in Path(path).parts
-    ):
-        raise ManifestError(f"manifest bundle variant path must be a relative .xue path for {variable}")
-    if path in paths:
-        raise ManifestError("manifest contains duplicate bundle paths")
-    paths.add(path)
-    for key in ("width", "height", "byteLength", "bandwidth"):
+    _validate_container_fields(variant, variable, paths, " variant")
+    for key in ("width", "height", "bandwidth"):
         value = variant.get(key)
         if not isinstance(value, int) or value <= 0:
             raise ManifestError(f"manifest bundle variant {key} must be a positive integer for {variable}")
-    crc32 = variant.get("crc32")
-    if not isinstance(crc32, str) or len(crc32) != 8 or any(ch not in "0123456789abcdef" for ch in crc32):
-        raise ManifestError(f"manifest bundle variant crc32 must be 8 lowercase hex characters for {variable}")
     if "zarr" in variant:
         _validate_zarr_descriptor(variant["zarr"], variable, paths)
 
@@ -272,23 +292,7 @@ def validate_bin_manifest(
             raise ManifestError(f"manifest bundle variable is not a bundle name: {variable!r}")
         if variable in variables:
             raise ManifestError(f"manifest contains duplicate bundle variables: {variable}")
-        path = bundle.get("path")
-        if (
-            not isinstance(path, str)
-            or not path.endswith(".xue")
-            or path.startswith(("/", "http:", "https:"))
-            or ".." in Path(path).parts
-        ):
-            raise ManifestError(f"manifest bundle path must be a relative .xue path for {variable}")
-        if path in paths:
-            raise ManifestError("manifest contains duplicate bundle paths")
-        paths.add(path)
-        byte_length = bundle.get("byteLength")
-        if not isinstance(byte_length, int) or byte_length <= 0:
-            raise ManifestError(f"manifest bundle byteLength must be a positive integer for {variable}")
-        crc32 = bundle.get("crc32")
-        if not isinstance(crc32, str) or len(crc32) != 8 or any(ch not in "0123456789abcdef" for ch in crc32):
-            raise ManifestError(f"manifest bundle crc32 must be 8 lowercase hex characters for {variable}")
+        _validate_container_fields(bundle, variable, paths, "")
         if "variants" in bundle:
             variants = bundle["variants"]
             if not isinstance(variants, list) or not variants:

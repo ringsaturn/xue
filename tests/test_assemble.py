@@ -190,6 +190,42 @@ class MergePartialManifestTests(unittest.TestCase):
         self.assertEqual(entry["variants"][0]["zarr"], variant_store)
         self.assertTrue(all("zarr" not in bundle for bundle in merged["bundles"] if bundle["variable"] != "tmp2m"))
 
+    def test_a_store_only_part_merges_and_is_weighed_by_its_store(self) -> None:
+        """A part whose bundle ships only its Zarr store — no ``.xue`` — is
+        merged like any other, and the size report reads the store's bytes
+        where the container's are absent."""
+        store_only = {
+            "variable": "tmp2m",
+            "zarr": {"path": "tmp2m.zarr", "byteLength": 700, "crc32": "760cef95"},
+            "variants": [
+                {
+                    "width": 720,
+                    "height": 361,
+                    "bandwidth": 1,
+                    "zarr": {"path": "tmp2m.half.zarr", "byteLength": 300, "crc32": "0d3a2e6b"},
+                }
+            ],
+        }
+        part = build_bin_manifest(
+            datetime(2026, 8, 14, 6, tzinfo=UTC),
+            bundles=[store_only],
+            expected_hours=240,
+            model=self.source.manifest_model,
+            product=self.source.product,
+            require_core_variables=False,
+        )
+        merged = assemble.merge_partial_manifests(
+            [_part(self.source, ["wind10m", "prate", "dswrf"]), part],
+            source=self.source,
+            expected_hours=240,
+        )
+        entry = next(bundle for bundle in merged["bundles"] if bundle["variable"] == "tmp2m")
+        self.assertNotIn("path", entry)
+        self.assertEqual(entry["zarr"]["path"], "tmp2m.zarr")
+        self.assertEqual(assemble._delivery_bytes(entry), 700)
+        self.assertEqual(assemble._delivery_bytes(entry["variants"][0]), 300)
+        self.assertEqual(assemble._delivery_bytes(_entry("prate")), 10)
+
     def test_a_missing_bundle_is_an_error_not_a_shorter_run(self) -> None:
         with self.assertRaisesRegex(ManifestError, "missing \\['dswrf'\\]"):
             assemble.merge_partial_manifests(

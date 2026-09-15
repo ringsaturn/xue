@@ -2,6 +2,8 @@ import { expect, test, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
+import { routeStores } from "./artifacts";
+
 // The Protomaps API key is origin-locked to the production domains, so from
 // 127.0.0.1 every tile request dies on CORS — and a map whose tiles never
 // settle occasionally never fires "load", which is what gates initialize().
@@ -68,6 +70,10 @@ async function routeRun(page: Page): Promise<void> {
   await page.route("**/data/gfs.*/manifest.json*", (route) =>
     route.fulfill({ json: MANIFEST_FIXTURE }),
   );
+  // The run ships stores for its surface bundles, which is what the shell
+  // opens by default; the marks take no session, so which path the field
+  // came by is not this suite's concern.
+  await routeStores(page, "**/data/gfs.*/*.zarr/**", fileURLToPath(new URL("../fixtures/generated/web/", import.meta.url)));
   await page.route("**/data/gfs.*/*.xue?*", (route) => {
     const name = new URL(route.request().url()).pathname.split("/").pop() ?? "";
     const body = BUNDLES[name];

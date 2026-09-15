@@ -303,16 +303,39 @@ export interface PosterDescriptor {
  * canonical full-resolution tier; variants are alternates the client may pick
  * by viewport need and network quality. */
 export interface VariantDescriptor {
-  path: string;
   width: number;
   height: number;
-  byteLength: number;
-  crc32: string;
   /** Average bits per second needed to sustain 12 fps playback while
    * downloading the whole tier — the STREAM-INF BANDWIDTH analogue. */
   bandwidth: number;
-  /** This tier as a Zarr store, when the build derived one. */
+  /** This tier as a Zarr store, when the build wrote one. */
   zarr?: ZarrStoreDescriptor;
+  /** This tier as a `.xue` container — `path`, `byteLength` and `crc32`
+   * are one unit, present whole or absent whole. A tier ships the
+   * container, the store, or both; the validator refuses neither. */
+  path?: string;
+  byteLength?: number;
+  crc32?: string;
+}
+
+/** The `.xue` container of a bundle or a tier, once the validator has
+ * established the entry carries one. */
+export interface ContainerDescriptor {
+  path: string;
+  byteLength: number;
+  crc32: string;
+}
+
+/** The container fields of an entry, or null when it ships only its store. */
+export function containerOf(entry: { path?: string; byteLength?: number; crc32?: string }): ContainerDescriptor | null {
+  if (entry.path === undefined || entry.byteLength === undefined || entry.crc32 === undefined) return null;
+  return { path: entry.path, byteLength: entry.byteLength, crc32: entry.crc32 };
+}
+
+/** What an entry weighs on the wire: the container's bytes, or the store's
+ * on an entry that ships only the store. */
+export function deliveryBytes(entry: { byteLength?: number; zarr?: ZarrStoreDescriptor }): number {
+  return entry.byteLength ?? entry.zarr?.byteLength ?? 0;
 }
 
 /** The same bundle as a Zarr v3 store (docs/zarr-profile.md): `path` is the
@@ -329,9 +352,11 @@ export interface ZarrStoreDescriptor {
 
 export interface VariableBundleDescriptor {
   variable: ForecastBundleId;
-  path: string;
-  byteLength: number;
-  crc32: string;
+  /** The canonical full-resolution `.xue` container — one unit like a
+   * tier's, and absent as a whole on a bundle that ships only its store. */
+  path?: string;
+  byteLength?: number;
+  crc32?: string;
   /** Reduced-resolution renditions. */
   variants?: VariantDescriptor[];
   /** Alternate WebCodecs-decodable artifact, present per variable when the
@@ -396,6 +421,27 @@ function metadataJsonField(value: unknown, label: string): string {
   return value;
 }
 
+/** The `.xue` container fields of a bundle or a variant: `path`,
+ * `byteLength` and `crc32` are one unit. Since the Zarr store the unit may
+ * be absent as a whole — an entry names the container, the store, or both,
+ * never neither — and a `path` that is present is still held to `.xue`. */
+function validateContainerFields(entry: Record<string, unknown>, paths: Set<string>, label: string): void {
+  if (entry.path === undefined) {
+    if (entry.byteLength !== undefined || entry.crc32 !== undefined) {
+      throw new Error(`${label} carries container fields without a path`);
+    }
+    if (entry.zarr === undefined) throw new Error(`${label} has neither a bundle path nor a zarr store`);
+    return;
+  }
+  relativePath(entry.path, BUNDLE_SUFFIX, paths, label);
+  if (typeof entry.byteLength !== "number" || !Number.isInteger(entry.byteLength) || entry.byteLength <= 0) {
+    throw new Error(`invalid ${label} byteLength`);
+  }
+  if (typeof entry.crc32 !== "string" || !/^[0-9a-f]{8}$/.test(entry.crc32)) {
+    throw new Error(`invalid ${label} crc32`);
+  }
+}
+
 function validateZarrDescriptor(input: unknown, paths: Set<string>): ZarrStoreDescriptor {
   const store = object(input);
   relativePath(store.path, ".zarr", paths, "zarr store");
@@ -410,14 +456,11 @@ function validateZarrDescriptor(input: unknown, paths: Set<string>): ZarrStoreDe
 
 function validateVariantDescriptor(input: unknown, paths: Set<string>): VariantDescriptor {
   const variant = object(input);
-  relativePath(variant.path, BUNDLE_SUFFIX, paths, "variant");
-  for (const key of ["width", "height", "byteLength", "bandwidth"] as const) {
+  validateContainerFields(variant, paths, "variant");
+  for (const key of ["width", "height", "bandwidth"] as const) {
     if (typeof variant[key] !== "number" || !Number.isInteger(variant[key]) || (variant[key] as number) <= 0) {
       throw new Error(`invalid variant ${key}`);
     }
-  }
-  if (typeof variant.crc32 !== "string" || !/^[0-9a-f]{8}$/.test(variant.crc32)) {
-    throw new Error("invalid variant crc32");
   }
   if (variant.zarr !== undefined) validateZarrDescriptor(variant.zarr, paths);
   return variant as unknown as VariantDescriptor;
@@ -497,24 +540,7 @@ export function validateManifest(
     // not constrained either — the rail has its own.
     if (!isBundleVariableId(bundle.variable)) throw new Error("malformed bundle variable name");
     if (variables.includes(bundle.variable)) throw new Error("manifest contains duplicate variable bundles");
-    if (
-      typeof bundle.path !== "string" ||
-      !bundle.path.endsWith(BUNDLE_SUFFIX) ||
-      bundle.path.startsWith("/") ||
-      bundle.path.startsWith("http:") ||
-      bundle.path.startsWith("https:") ||
-      bundle.path.split("/").includes("..")
-    ) {
-      throw new Error("invalid bundle path");
-    }
-    if (paths.has(bundle.path)) throw new Error("duplicate bundle path");
-    paths.add(bundle.path);
-    if (typeof bundle.byteLength !== "number" || !Number.isInteger(bundle.byteLength) || bundle.byteLength <= 0) {
-      throw new Error("invalid bundle byteLength");
-    }
-    if (typeof bundle.crc32 !== "string" || !/^[0-9a-f]{8}$/.test(bundle.crc32)) {
-      throw new Error("invalid bundle crc32");
-    }
+    validateContainerFields(bundle, paths, "bundle");
     if (bundle.variants !== undefined) {
       if (!Array.isArray(bundle.variants) || bundle.variants.length === 0) {
         throw new Error("invalid bundle variant list");
