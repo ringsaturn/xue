@@ -6,7 +6,11 @@ encoder — the [Xue](https://github.com/ringsaturn/xue) Rust crate through PyO3
 A `.xue` file packs one variable of a global forecast run as quantized
 single-byte planes with temporal residual prediction and per-plane Zstandard,
 so a browser can animate a 240-hour run frame by frame. `docs/format.md` in the
-repository is the normative specification.
+repository is the normative specification. Since 2026-09-15 the service
+publishes the same bundles as Zarr v3 stores (`docs/zarr-profile.md`) rather
+than `.xue` files, which xarray reads without this package; the decoder here
+still reads every `.xue`, and the encoder still writes one as the
+intermediate the store is derived from.
 
 ## Installing
 

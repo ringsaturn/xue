@@ -6,7 +6,9 @@ published as a permanent dataset alongside the live feed. Cases are what
 `showcase.html` lists and what `/?case=<id>` plays back.
 
 Everything about a case comes out of the ordinary pipeline: same encoder, same
-`.xue` container, same schema v5 manifest. Only two knobs differ from a live
+Zarr stores (`showcase build --zarr --no-xue`, the way live runs are
+published; cases built before 2026-09-15 were `.xue` containers and have been
+rebuilt), same schema v5 manifest. Only two knobs differ from a live
 run — a bounding box (`--bbox`, `crop_grid`) and a subset of variables — and
 both keep the output small enough that a case can stay published forever.
 `make prune-r2` only ever deletes `<model>.<run>/` directories, so nothing

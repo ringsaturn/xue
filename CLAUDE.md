@@ -4,8 +4,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Xue packs global weather forecast runs into a custom per-variable binary
-container (`.xue`) and plays them back in a static browser page. Three
+Xue packs global weather forecast runs into per-variable Zarr v3 stores
+laid out for playback and plays them back in a static browser page. The
+layout was developed as a custom single-file container, `.xue`, which is
+**no longer published** (every live run, round and case has been store-only
+since 2026-09-15) but is still the encoders' intermediate — the store is
+derived from it — and is read by every decoder indefinitely. Three
 implementations of one format live here and must stay in agreement:
 
 - **Python encoder** — `xuebuild/` (fetch → GDAL extract → quantize → temporal

@@ -5,8 +5,12 @@ spatiotemporal container that packs global weather forecasts (quantized
 single-byte planes, temporal residual prediction, zstd) for streaming
 playback in the browser.
 
-Both container versions are read, and a decoder must keep reading v1:
-published runs carry those bytes and are never rebuilt. In v1 a payload is
+Since 2026-09-15 the Xue service publishes its runs as Zarr v3 stores rather
+than `.xue` files; this crate is still what decodes them (the store's
+chunks are the container's, decoded through `decode_chunk`), and it keeps
+reading the container itself. Both container versions are read, and a
+decoder must keep reading v1: runs and cases published before the switch
+carry those bytes and are never rebuilt. In v1 a payload is
 one whole plane of one frame; in v2 it is a chunk — one spatial tile of one
 temporal group for one variable — which is what makes a partial read cheap.
 

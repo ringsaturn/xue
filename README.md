@@ -11,12 +11,17 @@
 > Xue (雪, pronounced /ɕɥɛ/, roughly "shweh"), Chinese for snow.
 
 Xue packs global weather forecasts — 2 m temperature, precipitation rate,
-10 m wind, and solar radiation, out to 240 hours — into a custom
-per-variable spatiotemporal binary format (`.xue`), and renders them in the
-browser with a static MapLibre page: a Rust WebAssembly worker decodes
-frames on demand, a custom WebGL2 layer does inverse Web Mercator
-projection and palette lookup entirely on the GPU, and the 10 m wind
-renders through a GPU particle layer.
+10 m wind, and solar radiation, out to 240 hours — into per-variable
+**Zarr v3 stores laid out for playback** ([`docs/zarr-profile.md`](docs/zarr-profile.md):
+quantized single-byte planes, small spatial tiles × a few consecutive
+steps per chunk, one shard per variable), and renders them in the browser
+with a static MapLibre page: a Rust WebAssembly worker decodes chunks on
+demand, a custom WebGL2 layer does inverse Web Mercator projection and
+palette lookup entirely on the GPU, and the 10 m wind renders through a
+GPU particle layer. The layout was worked out in a custom single-file
+container, `.xue` ([`docs/format.md`](docs/format.md)); since 2026-09-15
+nothing online is published in it — see the status note under *Format
+rationale* — but every decoder still reads it.
 
 Live demo: <https://xue.ringsaturn.me>. The control in the top-left
 corner switches between three sources: NOAA GFS 0.25° (hourly to F120,
@@ -31,6 +36,21 @@ forecast hours). The three sources share the same format, the same
 decoder, and the same rendering pipeline.
 
 ## Format rationale
+
+> **Status (2026-09-15): the `.xue` container is retired from the live
+> service.** Every live run, every rolling-window round and every showcase
+> case is published as Zarr v3 stores alone (`build-bin --zarr --no-xue`,
+> what the scheduled workflows pass), listed in a [STAC
+> catalog](docs/stac.md). The container remains in three roles: it is the
+> intermediate both encoders still write and derive the store from (so the
+> store's codes are the container's by construction, and the two encoders
+> stay held byte-identical through it); it is what every decoder — the
+> Rust crate, the wasm worker, `xuepy`, `xuebuild` — keeps reading
+> indefinitely, for runs and cases published before the switch and for
+> anything built locally without `--no-xue`; and it is the format the
+> golden fixtures and the size argument below are stated in. The
+> rationale that follows is about the *layout*, which the store carries
+> unchanged; "`.xue`" in it reads as "a bundle".
 
 The access pattern is continuous playback of a complete global forecast
 with free timeline scrubbing. A map tile pyramid stores each frame as its
@@ -102,8 +122,10 @@ showcase case is published today.
 `--delta` swaps in the `xue.delta` codec (the container's temporal
 residual as a codec, `xuebuild/zarrcodec.py`), under which a chunk's
 compressed bytes equal the bundle's wherever the two chunkings coincide.
-The `.xue` stays the primary artifact and the viewer's format; the store is
-off by default.
+The store is the published artifact and the viewer's format; the `.xue` is
+the encoder's intermediate, off the bucket since 2026-09-15 and still read
+by every decoder. A plain `build-bin` (and `make mvp`, which passes
+`--zarr`) keeps both on disk for local work.
 
 ## Requirements
 
@@ -238,8 +260,10 @@ of its own (`--round HHMM` → `mrms.<run>/<HHMM>/`) that the pointer names
 requests the wrong bytes. A `window.json` beside the manifest says which
 frames the round holds; see Publishing below.
 
-`build-bin` writes one `.xue` per scalar variable (plus a half-resolution
-`.half.xue` rendition, a first-frame poster, and — on GFS and HRRR — a
+`build-bin` writes one bundle per scalar variable — a `.xue`, and with
+`--zarr` the `<bundle>.zarr/` store derived from it; with `--no-xue` the
+store alone, which is how the workflows publish — plus a half-resolution
+`.half` rendition, a first-frame poster, and — on GFS and HRRR — a
 per-variable lossless H.264 companion for the surface fields; disable with
 `--skip-variants` / `--skip-video`. ECMWF and sflux have the companion
 switched off in `xuebuild/sources.py`: the video path is opt-in and the
@@ -345,8 +369,9 @@ make upload-r2-showcase                  # publish cases + the catalog
 
 Cropping happens in the encoder (`--bbox` equivalents `crop_grid` /
 `convert_bin(bbox=...)`): the window is rounded outward to whole grid cells
-and may cross the antimeridian, and the resulting file is an ordinary `.xue`
-whose `grid` block names a window instead of the globe. That keeps a case to
+and may cross the antimeridian, and the resulting bundle is an ordinary one
+(a store, and a `.xue` unless `--no-xue`) whose `grid` block names a window
+instead of the globe. That keeps a case to
 a few megabytes, so cases stay published permanently while runs are pruned.
 
 Archive depth limits which forecast events are possible: NOAA GFS and sflux

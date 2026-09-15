@@ -5,9 +5,10 @@
 > temperature, precipitation rate, 10 m and upper-air wind, sea level
 > pressure, isobaric geopotential height, temperature, humidity and water
 > vapour flux, out to 240 hours (18 for HRRR) — as smooth animations over a
-> MapLibre basemap, decoding a custom
-> per-variable binary format (`.xue`) in a Rust/WebAssembly worker and
-> rendering on the GPU. Live at https://xue.ringsaturn.me. Code at
+> MapLibre basemap, decoding per-variable Zarr v3 stores laid out for
+> playback (quantized uint8, small tiles × six-frame chunks; the custom
+> `.xue` container they grew out of is no longer published, since
+> 2026-09-15) in a Rust/WebAssembly worker and rendering on the GPU. Live at https://xue.ringsaturn.me. Code at
 > https://github.com/ringsaturn/xue (MIT OR Apache-2.0).
 
 Facts worth getting right:

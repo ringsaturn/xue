@@ -5,6 +5,17 @@ a per-variable spatiotemporal binary format for packing a full forecast run
 of one gridded weather field into a single indexed file that a browser can
 decode frame by frame.
 
+> **Status (2026-09-15).** The container is no longer what the service
+> publishes: every live run, round and showcase case ships as a Zarr v3
+> store ([`zarr-profile.md`](zarr-profile.md)) alone. This specification
+> stays normative for what still depends on it — the metadata JSON and
+> its schema versions, the quantization codebooks and the residual
+> arithmetic, all of which the store carries unchanged; the container both
+> encoders still write as the intermediate the store is derived from; and
+> the files every decoder must keep reading, since runs and cases published
+> before the switch are never rebuilt. Nothing here is deprecated for a
+> reader; for a publisher, the container is a build artifact.
+
 Two container versions exist, and they differ in exactly one thing: what a
 payload *is*.
 
