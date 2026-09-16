@@ -1,0 +1,58 @@
+{
+ "schemaVersion": 1,
+ "id": "0-20000-0-47418",
+ "wmo": "47418",
+ "name": null,
+ "lat": 42.9531,
+ "lon": 144.438,
+ "elev": 14.1,
+ "soundings": [
+  {
+   "time": "2026-09-14T00:00:00Z",
+   "launched": "2026-09-13T23:32:00Z",
+   "sondeType": 135,
+   "bulletin": "IUSC01 RJTD 140000",
+   "gateway": "jp-jma-gts-to-wis2",
+   "arrived": "2026-09-14T01:23:50Z",
+   "n": 13,
+   "p": [101000, 100000, 92500, 85000, 70000, 50000, 40000, 30000, 25000, 20500, 20000, 15000, 10000],
+   "z": [-32768, 107, 777, 1494, 3113, 5790, 7480, 9560, 10820, -32768, 12300, 14100, 16570],
+   "t": [29315, 29215, 28975, 28575, 28015, 26285, 25425, 24045, 23225, -32768, 21925, 21185, 20505],
+   "td": [29275, 29195, 28965, 28325, 26715, 26215, 25155, 23565, -32768, -32768, -32768, -32768, -32768],
+   "wd": [120, 140, 195, 240, 240, 255, 250, 250, 250, 255, 255, 255, 255],
+   "ws": [41, 62, 41, 82, 159, 360, 422, 489, 540, 550, 550, 391, 288],
+   "sig": [131072, 65536, 65536, 65536, 65536, 65536, 65536, 65536, 65536, 16384, 65536, 65536, 65536],
+   "derived": {
+    "freezingLevel": 4196,
+    "pw": 40.0,
+    "lapse850_500": 5.3,
+    "tropopause": null
+   }
+  }
+ ],
+ "sources": [
+  {
+   "id": "jp-jma-gts-to-wis2",
+   "ok": true,
+   "fetched": "2026-09-14T02:04:00Z",
+   "url": "https://wis2globalcache.s3.us-east-1.amazonaws.com/data/jp-jma-gts-to-wis2/data/core/I/U/S/",
+   "watermark": "2026-09-14T02:34:41Z",
+   "listed": 3,
+   "objects": 3,
+   "reused": 0,
+   "bytes": 58106,
+   "bulletins": 3,
+   "unreadable": 0,
+   "subsets": 19,
+   "dropped": 0,
+   "soundings": 19
+  },
+  {
+   "id": "de-dwd-gts-to-wis2",
+   "ok": false,
+   "fetched": "2026-09-14T02:04:00Z",
+   "error": "request failed for https://wis2globalcache.s3.us-east-1.amazonaws.com/?list-type=2&prefix=data/de-dwd-gts-to-wis2/data/core/I/U/S/: HTTP Error 503: Service Unavailable",
+   "watermark": null
+  }
+ ]
+}

@@ -1,0 +1,8 @@
+{
+  "id": "de-dwd-gts-to-wis2",
+  "ok": false,
+  "fetched": "2026-09-14T02:04:00Z",
+  "error": "request failed for https://wis2globalcache.s3.us-east-1.amazonaws.com/?list-type=2&prefix=data/de-dwd-gts-to-wis2/data/core/I/U/S/: HTTP Error 503: Service Unavailable",
+  "watermark": null,
+  "files": []
+}

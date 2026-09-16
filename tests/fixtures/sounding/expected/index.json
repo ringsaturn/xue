@@ -1,0 +1,416 @@
+{
+ "schemaVersion": 1,
+ "issued": "2026-09-14T02:00:00Z",
+ "generated": "2026-09-14T02:05:00Z",
+ "watermark": {
+  "jp-jma-gts-to-wis2": "2026-09-14T02:34:41Z",
+  "de-dwd-gts-to-wis2": null
+ },
+ "stations": [
+  {
+   "id": "0-20000-0-47401",
+   "wmo": "47401",
+   "name": null,
+   "lat": 45.415,
+   "lon": 141.679,
+   "elev": 2.9,
+   "path": "0-20000-0-47401.json",
+   "byteLength": 1606,
+   "crc32": "86726c22",
+   "latest": "2026-09-14T00:00:00Z",
+   "times": ["2026-09-14T00:00:00Z"],
+   "headline": {
+    "t500": -13.7,
+    "td500": -40.7,
+    "freezingLevel": 3292,
+    "pw": 26.3,
+    "levels": 15
+   }
+  },
+  {
+   "id": "0-20000-0-47412",
+   "wmo": "47412",
+   "name": null,
+   "lat": 43.06,
+   "lon": 141.329,
+   "elev": 17.5,
+   "path": "0-20000-0-47412.json",
+   "byteLength": 1565,
+   "crc32": "99f76d07",
+   "latest": "2026-09-14T00:00:00Z",
+   "times": ["2026-09-14T00:00:00Z"],
+   "headline": {
+    "t500": -10.9,
+    "td500": -11.4,
+    "freezingLevel": 3902,
+    "pw": 42.6,
+    "levels": 14
+   }
+  },
+  {
+   "id": "0-20000-0-47418",
+   "wmo": "47418",
+   "name": null,
+   "lat": 42.9531,
+   "lon": 144.438,
+   "elev": 14.1,
+   "path": "0-20000-0-47418.json",
+   "byteLength": 1528,
+   "crc32": "d35807b4",
+   "latest": "2026-09-14T00:00:00Z",
+   "times": ["2026-09-14T00:00:00Z"],
+   "headline": {
+    "t500": -10.3,
+    "td500": -11.0,
+    "freezingLevel": 4196,
+    "pw": 40.0,
+    "levels": 13
+   }
+  },
+  {
+   "id": "0-20000-0-47582",
+   "wmo": "47582",
+   "name": null,
+   "lat": 39.7175,
+   "lon": 140.099,
+   "elev": 6.3,
+   "path": "0-20000-0-47582.json",
+   "byteLength": 1608,
+   "crc32": "5848a700",
+   "latest": "2026-09-14T00:00:00Z",
+   "times": ["2026-09-14T00:00:00Z"],
+   "headline": {
+    "t500": -6.3,
+    "td500": -6.3,
+    "freezingLevel": 4551,
+    "pw": 60.0,
+    "levels": 15
+   }
+  },
+  {
+   "id": "0-20000-0-47600",
+   "wmo": "47600",
+   "name": null,
+   "lat": 37.3914,
+   "lon": 136.895,
+   "elev": 5.2,
+   "path": "0-20000-0-47600.json",
+   "byteLength": 1526,
+   "crc32": "a2c2dfa9",
+   "latest": "2026-09-14T00:00:00Z",
+   "times": ["2026-09-14T00:00:00Z"],
+   "headline": {
+    "t500": -6.5,
+    "td500": -9.7,
+    "freezingLevel": 4677,
+    "pw": 58.3,
+    "levels": 13
+   }
+  },
+  {
+   "id": "0-20000-0-52533",
+   "wmo": "52533",
+   "name": null,
+   "lat": 39.77,
+   "lon": 98.48,
+   "elev": 1478.0,
+   "path": "0-20000-0-52533.json",
+   "byteLength": 6692,
+   "crc32": "f6911de4",
+   "latest": "2026-09-14T00:00:00Z",
+   "times": ["2026-09-14T00:00:00Z"],
+   "headline": {
+    "t500": -11.7,
+    "td500": -42.5,
+    "freezingLevel": 4100,
+    "pw": 13.7,
+    "levels": 159
+   }
+  },
+  {
+   "id": "0-20000-0-52983",
+   "wmo": "52983",
+   "name": null,
+   "lat": 35.87,
+   "lon": 104.15,
+   "elev": 1875.0,
+   "path": "0-20000-0-52983.json",
+   "byteLength": 7555,
+   "crc32": "e56aa700",
+   "latest": "2026-09-14T00:00:00Z",
+   "times": ["2026-09-14T00:00:00Z"],
+   "headline": {
+    "t500": -10.0,
+    "td500": -17.5,
+    "freezingLevel": 4174,
+    "pw": 20.1,
+    "levels": 183
+   }
+  },
+  {
+   "id": "0-20000-0-53463",
+   "wmo": "53463",
+   "name": null,
+   "lat": 40.85,
+   "lon": 111.57,
+   "elev": 1153.5,
+   "path": "0-20000-0-53463.json",
+   "byteLength": 7286,
+   "crc32": "af5aee72",
+   "latest": "2026-09-14T00:00:00Z",
+   "times": ["2026-09-14T00:00:00Z"],
+   "headline": {
+    "t500": -16.2,
+    "td500": -34.3,
+    "freezingLevel": 3548,
+    "pw": 12.6,
+    "levels": 174
+   }
+  },
+  {
+   "id": "0-20000-0-54340",
+   "wmo": "54340",
+   "name": null,
+   "lat": 41.54,
+   "lon": 123.61,
+   "elev": 77.1,
+   "path": "0-20000-0-54340.json",
+   "byteLength": 7481,
+   "crc32": "1cb5d44c",
+   "latest": "2026-09-14T00:00:00Z",
+   "times": ["2026-09-14T00:00:00Z"],
+   "headline": {
+    "t500": -16.2,
+    "td500": -44.5,
+    "freezingLevel": 2830,
+    "pw": 13.0,
+    "levels": 180
+   }
+  },
+  {
+   "id": "0-20000-0-54511",
+   "wmo": "54511",
+   "name": null,
+   "lat": 39.93,
+   "lon": 116.28,
+   "elev": 32.5,
+   "path": "0-20000-0-54511.json",
+   "byteLength": 7598,
+   "crc32": "4bcf1725",
+   "latest": "2026-09-14T00:00:00Z",
+   "times": ["2026-09-14T00:00:00Z"],
+   "headline": {
+    "t500": -14.8,
+    "td500": -59.4,
+    "freezingLevel": 3127,
+    "pw": 12.8,
+    "levels": 184
+   }
+  },
+  {
+   "id": "0-20000-0-54727",
+   "wmo": "54727",
+   "name": null,
+   "lat": 36.65,
+   "lon": 117.5,
+   "elev": 263.0,
+   "path": "0-20000-0-54727.json",
+   "byteLength": 7177,
+   "crc32": "8230eb0b",
+   "latest": "2026-09-14T00:00:00Z",
+   "times": ["2026-09-14T00:00:00Z"],
+   "headline": {
+    "t500": -13.5,
+    "td500": -35.9,
+    "freezingLevel": 3655,
+    "pw": 14.2,
+    "levels": 172
+   }
+  },
+  {
+   "id": "0-20000-0-57083",
+   "wmo": "57083",
+   "name": null,
+   "lat": 34.72,
+   "lon": 113.65,
+   "elev": 111.0,
+   "path": "0-20000-0-57083.json",
+   "byteLength": 8441,
+   "crc32": "4e4606fd",
+   "latest": "2026-09-14T00:00:00Z",
+   "times": ["2026-09-14T00:00:00Z"],
+   "headline": {
+    "t500": -11.1,
+    "td500": -28.4,
+    "freezingLevel": 3693,
+    "pw": 27.9,
+    "levels": 209
+   }
+  },
+  {
+   "id": "0-20000-0-57127",
+   "wmo": "57127",
+   "name": null,
+   "lat": 33.07,
+   "lon": 107.03,
+   "elev": 509.0,
+   "path": "0-20000-0-57127.json",
+   "byteLength": 8943,
+   "crc32": "0a5be4f9",
+   "latest": "2026-09-14T00:00:00Z",
+   "times": ["2026-09-14T00:00:00Z"],
+   "headline": {
+    "t500": -9.0,
+    "td500": -14.9,
+    "freezingLevel": 4308,
+    "pw": 34.3,
+    "levels": 224
+   }
+  },
+  {
+   "id": "0-20000-0-57131",
+   "wmo": "57131",
+   "name": null,
+   "lat": 34.43,
+   "lon": 108.97,
+   "elev": 411.0,
+   "path": "0-20000-0-57131.json",
+   "byteLength": 8328,
+   "crc32": "d49ab48e",
+   "latest": "2026-09-14T00:00:00Z",
+   "times": ["2026-09-14T00:00:00Z"],
+   "headline": {
+    "t500": -10.4,
+    "td500": -13.2,
+    "freezingLevel": 3923,
+    "pw": 31.4,
+    "levels": 206
+   }
+  },
+  {
+   "id": "0-20000-0-91212",
+   "wmo": "91212",
+   "name": null,
+   "lat": 13.46,
+   "lon": 144.78,
+   "elev": 75.0,
+   "path": "0-20000-0-91212.json",
+   "byteLength": 10053,
+   "crc32": "4ab22687",
+   "latest": "2026-09-14T00:00:00Z",
+   "times": ["2026-09-14T00:00:00Z"],
+   "headline": {
+    "t500": -2.9,
+    "td500": -8.9,
+    "freezingLevel": 5336,
+    "pw": 57.4,
+    "levels": 219
+   }
+  },
+  {
+   "id": "0-20001-0-51463",
+   "wmo": "51463",
+   "name": null,
+   "lat": 43.78,
+   "lon": 87.62,
+   "elev": 919.0,
+   "path": "0-20001-0-51463.json",
+   "byteLength": 6936,
+   "crc32": "160c4eea",
+   "latest": "2026-09-14T00:00:00Z",
+   "times": ["2026-09-14T00:00:00Z"],
+   "headline": {
+    "t500": -11.8,
+    "td500": -18.9,
+    "freezingLevel": 4257,
+    "pw": 19.2,
+    "levels": 166
+   }
+  },
+  {
+   "id": "0-20001-0-53772",
+   "wmo": "53772",
+   "name": null,
+   "lat": 37.62,
+   "lon": 112.58,
+   "elev": 776.0,
+   "path": "0-20001-0-53772.json",
+   "byteLength": 7378,
+   "crc32": "42c4f0c1",
+   "latest": "2026-09-14T00:00:00Z",
+   "times": ["2026-09-14T00:00:00Z"],
+   "headline": {
+    "t500": -16.1,
+    "td500": -28.7,
+    "freezingLevel": 3659,
+    "pw": 18.7,
+    "levels": 177
+   }
+  },
+  {
+   "id": "0-20001-0-53845",
+   "wmo": "53845",
+   "name": null,
+   "lat": 36.57,
+   "lon": 109.45,
+   "elev": 1180.0,
+   "path": "0-20001-0-53845.json",
+   "byteLength": 8049,
+   "crc32": "f460a4c3",
+   "latest": "2026-09-14T00:00:00Z",
+   "times": ["2026-09-14T00:00:00Z"],
+   "headline": {
+    "t500": -13.3,
+    "td500": -33.4,
+    "freezingLevel": 3733,
+    "pw": 13.8,
+    "levels": 197
+   }
+  },
+  {
+   "id": "0-20001-0-54218",
+   "wmo": "54218",
+   "name": null,
+   "lat": 42.3,
+   "lon": 118.83,
+   "elev": 668.6,
+   "path": "0-20001-0-54218.json",
+   "byteLength": 7668,
+   "crc32": "ffc5d1ac",
+   "latest": "2026-09-14T00:00:00Z",
+   "times": ["2026-09-14T00:00:00Z"],
+   "headline": {
+    "t500": -17.2,
+    "td500": -35.9,
+    "freezingLevel": 2393,
+    "pw": 9.2,
+    "levels": 185
+   }
+  }
+ ],
+ "sources": [
+  {
+   "id": "jp-jma-gts-to-wis2",
+   "ok": true,
+   "fetched": "2026-09-14T02:04:00Z",
+   "url": "https://wis2globalcache.s3.us-east-1.amazonaws.com/data/jp-jma-gts-to-wis2/data/core/I/U/S/",
+   "watermark": "2026-09-14T02:34:41Z",
+   "listed": 3,
+   "objects": 3,
+   "reused": 0,
+   "bytes": 58106,
+   "bulletins": 3,
+   "unreadable": 0,
+   "subsets": 19,
+   "dropped": 0,
+   "soundings": 19
+  },
+  {
+   "id": "de-dwd-gts-to-wis2",
+   "ok": false,
+   "fetched": "2026-09-14T02:04:00Z",
+   "error": "request failed for https://wis2globalcache.s3.us-east-1.amazonaws.com/?list-type=2&prefix=data/de-dwd-gts-to-wis2/data/core/I/U/S/: HTTP Error 503: Service Unavailable",
+   "watermark": null
+  }
+ ]
+}

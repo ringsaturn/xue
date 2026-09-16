@@ -21,3 +21,7 @@ class BundleError(XueError):
 
 class TcProductError(XueError):
     """The tropical cyclone product violates its versioned contract."""
+
+
+class SoundingProductError(XueError):
+    """The radiosonde sounding product violates its versioned contract."""
