@@ -66,8 +66,18 @@ jobs:
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
 
+      # A tag made through the web UI arrives with its release already
+      # created (the UI creates the two together), so the release is created
+      # only when the tag came alone; release-xuepy.yml attaches the wheels
+      # to whichever one exists.
       - name: Create GitHub release
         if: github.event_name == 'push'
-        run: gh release create "${GITHUB_REF_NAME}" --generate-notes --verify-tag
+        run: |
+          set -euo pipefail
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            echo "release ${GITHUB_REF_NAME} already exists; keeping it"
+          else
+            gh release create "${GITHUB_REF_NAME}" --generate-notes --verify-tag
+          fi
         env:
           GH_TOKEN: ${{ github.token }}
