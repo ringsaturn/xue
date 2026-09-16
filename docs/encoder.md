@@ -73,7 +73,14 @@ the build pipeline* for the path that does.
 
 `make check` reports which one a build would take. The scheduled `publish-*`
 workflows pin `native`: a run that fell back to the Python pipeline would
-take hours longer and look identical in the logs.
+take hours longer and look identical in the logs. `publish-jma.yml` is the
+exception: a wheel ships on the crate's tags, not with every source, so
+the wheel on PyPI can predate the model, and a scheduled run cannot pass an
+input. Its `Resolve the encoder` step asks `native.knows_source(model)`
+(an empty conversion, refused before any input is read) and sets
+`XUE_ENCODER=native` when the installed wheel has the source, else
+`python` with GDAL installed and a `::warning::` on the run, so the fall
+back is explicit rather than silent; a dispatch can still insist on either.
 
 The native encoder does not write two artifacts, and `xuebuild/native.py`
 supplies them:

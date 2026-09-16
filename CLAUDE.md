@@ -30,7 +30,13 @@ encoder by byte-for-byte identical output (`docs/encoder.md`).
 `xuebuild` depends on the `xuepy` wheel and converts through it by default:
 `xuebuild/encoder.py` dispatches, `XUE_ENCODER` (`auto` | `native` |
 `python`) overrides, and the scheduled `publish-*` workflows pin `native` so
-a fallback to the slow path fails instead of passing unnoticed. The native
+a fallback to the slow path fails instead of passing unnoticed. The one
+exception is `publish-jma.yml`: the wheel on PyPI may predate a source (a
+wheel ships on the crate's tags, a cron run takes no input), so its
+`Resolve the encoder` step asks `native.knows_source` and takes `native`
+when the installed wheel has the model, else the reference pipeline with
+GDAL and a `::warning::` on the run; a dispatch can still insist on either.
+The native
 encoder writes no video and no live pointer; `xuebuild/native.py` reads the
 codes back out of the bundles it wrote, hands them to the ffmpeg encoder,
 folds the descriptors into the manifest and then writes the pointer, whose

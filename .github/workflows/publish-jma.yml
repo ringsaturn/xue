@@ -40,10 +40,10 @@ on:
         type: string
         default: "3"
       encoder:
-        description: "native (the xuepy wheel; needs a release that knows the jma source) or python (the reference pipeline, installs GDAL)"
+        description: "auto (the xuepy wheel when its release knows the jma source, else the reference pipeline with GDAL), native (insist on the wheel) or python (insist on the reference pipeline)"
         type: choice
-        options: [native, python]
-        default: native
+        options: [auto, native, python]
+        default: auto
       profile:
         description: "Quantization/compression profile"
         type: choice
@@ -70,11 +70,15 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  # Convert through the native encoder (the xuepy wheel, a dependency of
-  # xuebuild) and insist on it, or through the reference pipeline when the
-  # dispatch asks: either way the choice is explicit, so a round never
-  # quietly falls back to a slower path.
-  XUE_ENCODER: ${{ inputs.encoder || 'native' }}
+  # Which encoder the rounds convert through. The other publish-* workflows
+  # pin XUE_ENCODER=native so a fall back to the reference pipeline fails
+  # instead of passing unnoticed; here the wheel on PyPI may predate the
+  # source (a scheduled run cannot pass an input, and a wheel is released
+  # on the crate's tags, not with every source), so `auto` resolves the
+  # choice in the job below — native when the installed wheel knows the
+  # model, else the reference pipeline with a ::warning:: on the run — and
+  # the dispatch can still insist on either.
+  ENCODER: ${{ inputs.encoder || 'auto' }}
   # Every round is published as Zarr stores alone (plan 017 phase 7): the
   # store is derived from the `.xue` the round wrote and the file retired
   # before upload. A round's export is a fraction of its build.
@@ -145,6 +149,30 @@ jobs:
 
       - name: Install the jma-radar tool
         run: uv pip install --python .venv/bin/python "git+https://github.com/ringsaturn/jma-radar"
+
+      # XUE_ENCODER is what xuebuild reads (auto | native | python); it is
+      # set here rather than at the workflow level so a wheel that predates
+      # the source resolves to the reference pipeline explicitly, once, and
+      # every later step (the GDAL install, the rounds) sees one answer.
+      # `auto` on the xuebuild side would take the wheel whenever it imports
+      # and only fail inside the round, as the scheduled runs did.
+      - name: Resolve the encoder
+        run: |
+          set -euo pipefail
+          case "$ENCODER" in
+            native|python) encoder="$ENCODER" ;;
+            auto)
+              if .venv/bin/python -c "import sys; from xuebuild import native; sys.exit(0 if native.knows_source('$MODEL') else 1)"; then
+                encoder=native
+              else
+                wheel=$(.venv/bin/python -c "from xuebuild import native; print(native.version() or 'unknown')")
+                echo "::warning::xuepy ${wheel} does not know the ${MODEL} source; converting through the reference pipeline (slower). Release a wheel that carries it and bump the pin in pyproject.toml."
+                encoder=python
+              fi ;;
+            *) echo "::error::encoder must be auto, native or python, not '$ENCODER'"; exit 1 ;;
+          esac
+          echo "XUE_ENCODER=$encoder" >> "$GITHUB_ENV"
+          echo "encoder: $encoder" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Install GDAL for the reference pipeline
         if: ${{ env.XUE_ENCODER == 'python' }}

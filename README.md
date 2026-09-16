@@ -431,7 +431,12 @@ pointer was written and each step's seconds. The JMA job runs with
 tool keeps (`data/raw/jma-frames/`) is pulled from the bucket before the
 first build (`make pull-r2-frames`, the window's hours only), pushed back
 after every upload and pruned to the last seven days once an hour, so the
-agency's tiles are fetched once whatever runner asks. By hand:
+agency's tiles are fetched once whatever runner asks. It also resolves its
+encoder at job time rather than pinning `native` like the other publish
+workflows: a `xuepy` wheel that predates the source (the wheels ship on the
+crate's tags) sends the rounds through the reference pipeline with GDAL and
+a warning on the run, and a wheel that knows it takes the native path
+again with no change to the workflow. By hand:
 
 ```sh
 ONCE=true scripts/window_rounds.sh                     # one round, as the job would run it
