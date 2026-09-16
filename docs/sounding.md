@@ -2,7 +2,7 @@
 
 The `.xue` container is a raster container. A radiosonde ascent — a few
 hundred levels of pressure, height, temperature, dew point and wind at one
-point — is not a raster, so soundings are a second, smaller product
+point — is not a raster, so soundings are another, smaller product
 published beside the runs: plain JSON, a few megabytes an hour, aggregated
 by `xue sounding-build` (`xuebuild/sounding/`) from the TEMP bulletins the
 world's weather services exchange, and taken live by the same pointer →
@@ -31,21 +31,36 @@ pointers (`latest.json`, `latest-<model>.json`), `latest-tc.json` and
   so it can be requested as `<path>?v=<crc32>` through an immutable cache.
 - `sounding.<YYYYMMDDHH>/` is one immutable directory per issue: the UTC
   hour the product was aggregated at, not any sounding's nominal time. It
-  holds `index.json` and one `<station id>.json` per station. Once the
+  holds exactly two files, `index.json` and `soundings.jsonl`. Once the
   pointer names it nothing in it changes; a manual rebuild of an hour
   (`sounding-build --issue … --force`) writes the directory again, and
-  every file is addressed by its CRC, so a cache never serves one hour's
-  bytes under another's key. Directories are pruned after two days
+  both files are addressed by their CRC, so a cache never serves one
+  hour's bytes under another's key. Directories are pruned after two days
   (`make prune-r2-sounding`).
-- Paths inside `index.json` are file names beside it; request each as
-  `<name>?v=<crc32>` with the CRC the index carries.
+- `soundings.jsonl` is every station's soundings, one JSON object per
+  line, sorted by station id. `index.json` spans it: the `soundings`
+  descriptor gives the whole file's `byteLength` and `crc32`, and each
+  `stations[]` row gives the `offset` and `length` of that station's
+  object. So there are two ways to read the product and both are cheap:
+
+  - **one station**, the way the viewer reads it — fetch
+    `soundings.jsonl?v=<crc32>` with
+    `Range: bytes=<offset>-<offset+length-1>`. The span excludes the
+    trailing newline, so what comes back parses as JSON on its own.
+  - **all of it**, the way an analyst reads it — fetch the one file and
+    stream it line by line. No directory traversal, no thousand small
+    objects.
+
+  One file per issue rather than one per station is deliberate: a bucket
+  full of small objects is slow and expensive to traverse for anyone doing
+  statistics over the archive, and it bills per object.
 
 The publisher builds every hour at a quarter past (`publish-sounding.yml`).
-A station with no new ascent this hour keeps the file it had, byte for
-byte and CRC for CRC, so a reader's cached copy stays valid across issues
-and the bucket's `sync` skips it. A gateway that is late or unreachable is
-recorded (see `sources`) and the hour publishes without it. The pointer is
-withheld only when neither gateway contributed *and* there was nothing to
+A station with no new ascent this hour is carried forward from the
+previous issue's `soundings.jsonl`, so its content is unchanged even
+though the file around it is rewritten. A gateway that is late or
+unreachable is recorded (see `sources`) and the hour publishes without it.
+The pointer is withheld only when neither gateway contributed *and* there was nothing to
 carry forward, in which case the previous hour stays live. An hour the
 pointer already names is finished: a run that resolves to it builds
 nothing, and the workflow's `force` input is the manual rebuild.
@@ -101,6 +116,28 @@ so bit 1 is `1 << 17`. The bits a reader is likely to want:
 | 6 | 4096 | significant humidity level |
 | 7 | 2048 | significant wind level |
 
+**Thinning.** The product publishes the classical TEMP set, not every
+sample. A modern sonde reports every second — seven thousand levels of an
+ascent whose mandatory-and-significant set is forty to a hundred and
+fifty — which is detail no skew-T or model-profile comparison draws, at
+two orders of magnitude of bytes. After the levels are ordered and levels
+at one pressure folded, a level is published when:
+
+- its `sig` has any of bits 1–7 set (surface, standard, tropopause,
+  maximum wind, significant temperature, significant humidity,
+  significant wind); or
+- it is the lowest or the highest level of the ascent; or
+- its pressure is at least **3 %** below the last published level's
+  pressure — `p_last_published / p >= 1.03`, walking upward, the last
+  published level being whichever was kept, flagged or not.
+
+A `sig` of `-32768` counts as unflagged. A properly flagged ascent passes
+through untouched; an unflagged run is capped at about 150 levels between
+1000 and 10 hPa. `n` is the published level count and `reported` beside it
+is what the bulletin held before thinning, so a reader can always see what
+was left out — and the three sample bulletins in the fixture lose one
+level between them.
+
 Times are ISO 8601, UTC, `Z` suffix. Numbers outside the level arrays are
 JSON numbers, and a value not reported is `null`. The files are written
 compactly with ASCII escaping, and a file's identity is its bytes: the
@@ -110,8 +147,8 @@ CRC32 in the index is of the file exactly as served.
 
 A station has one id for its whole life in the product, and it is a WIGOS
 identifier: `<series>-<issuer>-<issue number>-<local identifier>`, written
-out, which is digits and hyphens and needs no escaping in a URL. The file
-name is `<id>.json`.
+out, which is digits and hyphens and needs no escaping in a URL. It is
+what `soundings.jsonl` is sorted by and what the index's rows key on.
 
 - Two soundings are the same station when they carry the same five-digit
   WMO number, `block × 1000 + station`. That number is the identity key,
@@ -154,11 +191,12 @@ the longest part and loses the others; merging the parts is not in v1.
   "issued": "2026-09-14T02:00:00Z",
   "generated": "2026-09-14T02:05:00Z",
   "watermark": {"jp-jma-gts-to-wis2": "2026-09-14T02:34:41Z", "de-dwd-gts-to-wis2": null},
+  "soundings": {"path": "soundings.jsonl", "byteLength": 105657, "crc32": "…"},
   "stations": [
     {
       "id": "0-20000-0-47401", "wmo": "47401", "name": null,
       "lat": 45.415, "lon": 141.679, "elev": 2.9,
-      "path": "0-20000-0-47401.json", "byteLength": 1606, "crc32": "86726c22",
+      "offset": 0, "length": 1531,
       "latest": "2026-09-14T00:00:00Z",
       "times": ["2026-09-14T00:00:00Z", "2026-09-13T12:00:00Z"],
       "headline": {"t500": -13.7, "td500": -40.7, "freezingLevel": 3292, "pw": 26.3, "levels": 15}
@@ -174,8 +212,13 @@ the longest part and loses the others; merging the parts is not in v1.
   hour's fetch starts. `null` means the source has never been listed
   successfully. It is published because it is the product's own account of
   how current it is; a reader may ignore it.
-- `stations[]` is sorted by `id`. `path` is always `<id>.json`;
-  `byteLength` and `crc32` are that file's, for `?v=` addressing.
+- `soundings` describes the file beside the index: `path` is always
+  `soundings.jsonl`, `byteLength` its length and `crc32` the zlib CRC32 of
+  its bytes, which is its `?v=`.
+- `stations[]` is sorted by `id`, and so is `soundings.jsonl`. `offset`
+  and `length` are the byte span of that station's object in the file,
+  excluding the newline after it. The spans are strictly increasing, do
+  not overlap, and tile the file exactly: `Σ(length + 1) == byteLength`.
 - `lat`, `lon` and `elev` come from the newest sounding. `elev` is metres
   above mean sea level, the first of three heights the subset may carry,
   in this order: the ground under the station
@@ -183,23 +226,27 @@ the longest part and loses the others; merging the parts is not in v1.
   (`height`), the barometer's height; `null` when the bulletin gives none.
   `name` is `null` in v1: the bulletins carry no station names.
 - `latest` is the newest nominal time and equals `times[0]`; `times` lists
-  the nominal times the station file carries, newest first, at most four.
+  the nominal times the station's line carries, newest first, at most four.
 - `headline` summarises the newest sounding for a marker layer that has
-  not fetched the station file: `t500` and `td500` are the 500 hPa
+  not fetched the soundings file: `t500` and `td500` are the 500 hPa
   temperature and dew point **in °C** to a tenth (`null` when that level is
   absent), `freezingLevel` and `pw` repeat the derived values (§7), and
   `levels` is that sounding's `n`.
-- `sources[]` is the same list every station file carries (§6).
+- `sources[]` is the build's account of its two gateways (§6).
 
 A station whose newest sounding is more than 48 hours older than the issue
 hour is not carried forward any further: it has stopped reporting, or its
 identifier has changed.
 
-## 5. `<station id>.json`
+## 5. `soundings.jsonl`
+
+One line per station, sorted by station id, each line the compact JSON
+object below followed by `\n`. It carries no `schemaVersion` and no
+`sources`: the index it hangs off has both, and repeating them once per
+station would cost more than the stations do.
 
 ```
 {
-  schemaVersion: 1,
   id, wmo, name, lat, lon, elev,
   soundings: [                        — the newest four nominal times, newest first
     {
@@ -209,12 +256,12 @@ identifier has changed.
       bulletin:  "IUSC01 RJTD 140000" (plus " CCA" on a correction),
       gateway:   the source id the bytes came from,
       arrived:   when the gateway published the bulletin,
-      n:   the level count,
+      n:        the published level count,
+      reported: the levels the bulletin held before thinning (§2),
       p, z, t, td, wd, ws, sig:  n integers each (§2),
       derived: {freezingLevel, pw, lapse850_500, tropopause}   — §7
     }
-  ],
-  sources: [ … ]
+  ]
 }
 ```
 
@@ -223,7 +270,9 @@ most four nominal times — two days of the twice-daily cycle. Each hour's
 build merges what arrived into what the previous issue published for the
 station, under the same rule §3 gives: for one nominal time, the most
 levels wins, then the latest arrival. A station with nothing new this hour
-is not rewritten at all; its previous file is republished unchanged.
+is carried forward from the previous issue's file, its line re-encoded
+unchanged; the file around it is rewritten every hour, which at this size
+costs nothing worth saving.
 
 `bulletin` is the WMO abbreviated heading of the bulletin the sounding was
 decoded from, verbatim, and `arrived` the gateway's own timestamp for it.
@@ -231,12 +280,12 @@ Together they say exactly which message a value came from.
 
 **Size.** Every level the bulletin reports is published; nothing is
 thinned. Modern high-resolution TEMP is much longer than the classical
-mandatory-and-significant-levels ascent, so a station file is bigger than
-a reader might assume: over one issue of the live feed, 491 stations, the
-newest ascent had a median of 504 levels and a maximum of 7 553, the
-median station file was 69 KB and the largest 1.0 MB, and the issue as a
-whole was 94 MB with a 182 KB index. A client that wants a marker layer
-reads the index alone; only opening a station costs its file.
+mandatory-and-significant-levels ascent, so a station's line is bigger
+than a reader might assume: over one issue of the live feed, 491 stations,
+the newest ascent had a median of 504 levels and a maximum of 7 553, the
+median line was 69 KB and the largest 1.0 MB, and the issue as a whole was
+94 MB behind a 182 KB index. A client that wants a marker layer reads the
+index alone; opening one station costs one range request of its `length`.
 
 ## 6. `sources[]`
 
@@ -257,11 +306,9 @@ than the previous watermark), `reused` how many were carried over from the
 previous issue's download instead, `failed` how many the cache would not
 serve, `bulletins` how many decoded, `subsets` how many station subsets
 they held and `dropped` how many of those carried no usable station
-identity. The list is repeated in every station file so a station can be
-read on its own — except that a station file copied forward from an
-earlier issue keeps that issue's list, since copying forward is what
-keeps its bytes and its CRC32 unchanged. The index's list is always the
-current hour's.
+identity. The list lives in the index alone: a station's line does not
+repeat it, so it always describes the issue the reader is holding, even
+for a station whose soundings were carried forward from an earlier one.
 
 A source's `watermark` only advances when its bulletins were read. A
 listing that failed, and a download not one bulletin of which decoded,
@@ -352,5 +399,8 @@ Admission is structural, in the posture the manifests take: a station
 identifier the reader has never seen, a radiosonde type code it does not
 know and a source id that is not one of today's two are all admitted. What
 is checked is shape — the id pattern, coordinate ranges, arrays of one
-length, pressure strictly descending, timestamps in UTC, CRC32s, and paths
-relative and beside the index.
+length, pressure strictly descending, timestamps in UTC, CRC32s, the
+`soundings` descriptor, and the stations' byte spans: in order, not
+overlapping, and tiling `soundings.jsonl` exactly. Every line is validated
+as it is written, so a span the index advertises always slices out
+something that parses.

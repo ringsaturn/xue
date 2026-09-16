@@ -115,6 +115,7 @@ jobs:
             echo
             echo "- stations: $(jq -r .stations sounding-report.json) ($(jq -r .fresh sounding-report.json) with a new ascent, $(jq -r .copied sounding-report.json) carried forward)"
             echo "- soundings decoded: $(jq -r .soundings sounding-report.json)"
+            echo "- soundings.jsonl: $(jq -r .byteLength sounding-report.json) bytes"
             echo
             echo '```json'
             jq '{sources: [.sources[] | "\(.id): \(if .ok then "ok, \(.objects // 0) new object(s), \(.soundings // 0) sounding(s)" else .error end)"], watermark, pointer}' sounding-report.json

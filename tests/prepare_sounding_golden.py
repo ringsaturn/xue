@@ -9,8 +9,9 @@ and China's thirteen stations with their native WIGOS identifiers — and
 the DWD gateway with a ``fetch.json`` saying its listing failed, so the
 golden carries the one-source-down path. This script builds the product
 from it, offline, with a fixed generation time, and writes the result
-pretty-printed under ``tests/fixtures/sounding/expected/`` for
-``tests/test_sounding.py`` to hold the build to.
+under ``tests/fixtures/sounding/expected/`` for
+``tests/test_sounding.py`` to hold the build to — the index
+pretty-printed, ``soundings.jsonl`` exactly as it is published.
 
 Run it after a deliberate change to the parser, the derived quantities or
 the schema, and commit the diff with the change::
@@ -34,7 +35,7 @@ ISSUE = "2026091402"
 GENERATED = datetime(2026, 9, 14, 2, 5, tzinfo=UTC)
 
 
-def pretty(value: object, indent: int = 0) -> str:
+def pretty_index(value: object, indent: int = 0) -> str:
     """JSON with objects and lists of objects one entry per line and lists
     of scalars — the level arrays — kept on one line, so the golden diffs
     by field rather than by level."""
@@ -42,14 +43,14 @@ def pretty(value: object, indent: int = 0) -> str:
     if isinstance(value, dict):
         if not value:
             return "{}"
-        items = [f'{pad} "{key}": {pretty(item, indent + 1)}' for key, item in value.items()]
+        items = [f'{pad} "{key}": {pretty_index(item, indent + 1)}' for key, item in value.items()]
         return "{\n" + ",\n".join(items) + "\n" + pad + "}"
     if isinstance(value, list):
         if not value:
             return "[]"
         if all(not isinstance(item, (dict, list)) for item in value):
             return "[" + ", ".join(json.dumps(item) for item in value) + "]"
-        items = [f"{pad} {pretty(item, indent + 1)}" for item in value]
+        items = [f"{pad} {pretty_index(item, indent + 1)}" for item in value]
         return "[\n" + ",\n".join(items) + "\n" + pad + "]"
     return json.dumps(value, ensure_ascii=False)
 
@@ -61,14 +62,19 @@ def build_expected(destination: Path) -> dict[str, object]:
         if destination.exists():
             shutil.rmtree(destination)
         destination.mkdir(parents=True)
-        for path in sorted((output / f"sounding.{ISSUE}").iterdir()):
-            payload = json.loads(path.read_bytes())
-            (destination / path.name).write_text(pretty(payload) + "\n")
+        directory = output / f"sounding.{ISSUE}"
+        # The index is pretty-printed so the golden diffs by field; the
+        # soundings file is committed exactly as published, one line per
+        # station, which is diff-friendly already and is the thing a
+        # reader's byte offsets point into.
+        index = json.loads((directory / "index.json").read_bytes())
+        (destination / "index.json").write_text(pretty_index(index) + "\n")
+        shutil.copyfile(directory / "soundings.jsonl", destination / "soundings.jsonl")
         pointer = json.loads((output / "latest-sounding.json").read_bytes())
-        (destination / "latest-sounding.json").write_text(pretty(pointer) + "\n")
+        (destination / "latest-sounding.json").write_text(pretty_index(pointer) + "\n")
     return report
 
 
 if __name__ == "__main__":
     report = build_expected(FIXTURES / "expected")
-    print(json.dumps({key: report[key] for key in ("stations", "fresh", "copied", "soundings")}, indent=2))
+    print(json.dumps({key: report[key] for key in ("stations", "fresh", "copied", "soundings", "byteLength")}, indent=2))

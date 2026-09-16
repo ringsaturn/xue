@@ -4,16 +4,18 @@ where the sources meet.
 
 Every bulletin in the issue's raw directories is decoded, the station
 hours the two gateways and the corrections deliver more than once are
-deduplicated, and each station's file is rewritten with its newest four
+deduplicated, and each station's line is rewritten with its newest four
 nominal times — the new soundings merged onto what the previous issue
 published for it, since an hour's fetch carries only what arrived in that
 hour.
 
-A station nothing new arrived for is *copied forward*: its file from the
-previous issue's directory is written again byte for byte, so its CRC32,
-and with it its ``?v=``, does not change and the bucket's ``sync`` skips
-it. That is why the publish workflow pulls the live issue's directory,
-not just its index, before building.
+An issue writes two files. ``soundings.jsonl`` is one line per station,
+sorted by id, and ``index.json`` spans it: each station's row carries the
+byte offset and length of its line, so the shell reads one station with
+one range request and an analyst reads the whole file sequentially. A
+station nothing new arrived for is carried forward — its line from the
+previous issue's file, re-encoded — which is why the publish workflow
+pulls that file with the index before building.
 
 A gateway that failed to list is recorded in ``sources`` and the other
 one publishes. The pointer is withheld only when neither gateway
@@ -37,6 +39,7 @@ from .schema import (
     INDEX_FILENAME,
     POINTER_FILENAME,
     SCHEMA_VERSION,
+    SOUNDINGS_FILENAME,
     build_pointer,
     crc32_hex,
     encode_json,
@@ -44,7 +47,7 @@ from .schema import (
     issue_directory,
     read_index,
     validate_index,
-    validate_station,
+    validate_station_line,
     write_bytes_atomic,
 )
 
@@ -63,6 +66,7 @@ changed."""
 def _sounding_json(sounding: bufr.Sounding) -> dict[str, Any]:
     levels: dict[str, Any] = {
         "n": sounding.n,
+        "reported": sounding.reported,
         "p": list(sounding.p),
         "z": list(sounding.z),
         "t": list(sounding.t),
@@ -161,10 +165,11 @@ def _station_payload(
     wmo: str | None,
     position: dict[str, Any],
     soundings: list[dict[str, Any]],
-    statuses: list[SourceStatus],
 ) -> dict[str, Any]:
+    """One line of the soundings file. It carries no copy of ``sources``:
+    the index has that, and repeating it once per station would cost more
+    than the stations."""
     payload = {
-        "schemaVersion": SCHEMA_VERSION,
         "id": station_id,
         "wmo": wmo,
         "name": None,
@@ -172,28 +177,24 @@ def _station_payload(
         "lon": position["lon"],
         "elev": position.get("elev"),
         "soundings": soundings,
-        "sources": [status.to_json() for status in statuses],
     }
-    validate_station(payload)
+    validate_station_line(payload, f"soundings[{station_id}]")
     return payload
 
 
-def _entry(
-    station_id: str,
-    payload: dict[str, Any],
-    encoded: bytes,
-) -> dict[str, Any]:
+def _entry(payload: dict[str, Any], offset: int, length: int) -> dict[str, Any]:
+    """The index's row for one station: what a marker layer needs without
+    opening the soundings file, plus the byte span that opens it."""
     newest = payload["soundings"][0]
     return {
-        "id": station_id,
+        "id": payload["id"],
         "wmo": payload["wmo"],
         "name": payload["name"],
         "lat": payload["lat"],
         "lon": payload["lon"],
         "elev": payload["elev"],
-        "path": f"{station_id}.json",
-        "byteLength": len(encoded),
-        "crc32": crc32_hex(encoded),
+        "offset": offset,
+        "length": length,
         "latest": newest["time"],
         "times": [sounding["time"] for sounding in payload["soundings"]],
         "headline": derive.headline(newest, newest["derived"]),
@@ -201,9 +202,9 @@ def _entry(
 
 
 def previous_directory(previous_index: dict[str, Any] | None, output_root: Path) -> Path | None:
-    """Where the previous issue's station files are, when the build can
-    see them. ``make live-sounding-index`` pulls the whole directory, so
-    in the publish workflow it can."""
+    """Where the previous issue's soundings file is, when the build can
+    see it. ``make live-sounding-index`` pulls it with the index, so in
+    the publish workflow it can."""
     if not previous_index:
         return None
     try:
@@ -276,14 +277,10 @@ def build_product(
     for sounding in bufr.deduplicate(soundings):
         fresh.setdefault(sounding.key, []).append(sounding)
 
-    previous_root = previous_directory(previous_index, output_root)
-    previous_entries = {
-        entry["id"]: entry for entry in (previous_index or {}).get("stations", []) if isinstance(entry, dict)
-    }
+    previous = _read_previous_soundings(output_root, previous_index)
     stale_before = issue - timedelta(hours=STALE_HOURS)
 
-    entries: list[dict[str, Any]] = []
-    copied = 0
+    stations: dict[str, dict[str, Any]] = {}
     carried: set[str] = set()
     for key in sorted(fresh):
         group = fresh[key]
@@ -294,45 +291,53 @@ def build_product(
         # published under changes the day its centre starts filing a native
         # WIGOS identifier. Its history is looked for under both forms, and
         # both count as carried, so the hour does not publish the station
-        # twice — once rewritten and once copied forward under its old id.
+        # twice — once rewritten and once carried forward under its old id.
         known = {station_id} | {sounding.id for sounding in group}
         carried |= known
-        previous_entry = next((previous_entries[name] for name in sorted(known) if name in previous_entries), None)
-        history = _previous_soundings(previous_root, previous_entry)
+        history = next((previous[name]["soundings"] for name in sorted(known) if name in previous), [])
         merged = merge_soundings([_sounding_json(sounding) for sounding in group] + history)
         if datetime.fromisoformat(merged[0]["time"]) < stale_before:
             continue
         wmo = next((sounding.wmo for sounding in group if sounding.wmo is not None), None)
         position = {"lat": newest.lat, "lon": newest.lon, "elev": newest.elev}
-        payload = _station_payload(station_id, wmo, position, merged, statuses)
-        encoded = encode_json(payload)
-        write_bytes_atomic(directory / f"{station_id}.json", encoded)
-        entries.append(_entry(station_id, payload, encoded))
+        stations[station_id] = _station_payload(station_id, wmo, position, merged)
 
-    for station_id, entry in previous_entries.items():
-        if station_id in carried or previous_root is None:
+    copied = 0
+    for station_id, station in previous.items():
+        if station_id in carried or not station.get("soundings"):
             continue
-        if datetime.fromisoformat(entry["latest"]) < stale_before:
+        if datetime.fromisoformat(station["soundings"][0]["time"]) < stale_before:
             continue
-        source = previous_root / entry["path"]
-        try:
-            encoded = source.read_bytes()
-        except OSError:
-            LOG.warning("sounding: %s has no file in the previous issue; it drops out", station_id)
-            continue
-        if crc32_hex(encoded) != entry.get("crc32"):
-            LOG.warning("sounding: %s does not match the previous index's CRC32; it drops out", station_id)
-            continue
-        write_bytes_atomic(directory / entry["path"], encoded)
-        entries.append(dict(entry))
+        validate_station_line(station, f"soundings[{station_id}]")
+        stations[station_id] = station
         copied += 1
 
-    entries.sort(key=lambda entry: entry["id"])
+    # One line per station, sorted by id, and the index's row for it
+    # carries the span of the object alone — not the newline — so a
+    # reader's range request slices out something that parses as JSON on
+    # its own.
+    lines: list[bytes] = []
+    entries: list[dict[str, Any]] = []
+    offset = 0
+    for station_id in sorted(stations):
+        payload = stations[station_id]
+        line = encode_json(payload)
+        entries.append(_entry(payload, offset, len(line)))
+        lines.append(line)
+        offset += len(line) + 1  # the newline
+    soundings_bytes = b"\n".join(lines) + (b"\n" if lines else b"")
+    write_bytes_atomic(directory / SOUNDINGS_FILENAME, soundings_bytes)
+
     index = {
         "schemaVersion": SCHEMA_VERSION,
         "issued": iso_z(issue),
         "generated": iso_z(now),
         "watermark": watermark,
+        "soundings": {
+            "path": SOUNDINGS_FILENAME,
+            "byteLength": len(soundings_bytes),
+            "crc32": crc32_hex(soundings_bytes),
+        },
         "stations": entries,
         "sources": [status.to_json() for status in statuses],
     }
@@ -355,6 +360,7 @@ def build_product(
         "fresh": len(entries) - copied,
         "copied": copied,
         "soundings": sum(len(group) for group in fresh.values()),
+        "byteLength": len(soundings_bytes),
         "watermark": watermark,
         "sources": index["sources"],
         "pointer": None if pointer_path is None else str(pointer_path),
@@ -371,25 +377,48 @@ def _published_id(group: list[bufr.Sounding]) -> str:
     return group[0].id
 
 
-def _previous_soundings(
-    previous_root: Path | None, entry: dict[str, Any] | None
-) -> list[dict[str, Any]]:
-    """The station file the previous issue published, as a list of
-    soundings to merge the new ones onto. Missing (only the index was
-    pulled, or this is a first build) means the station starts again from
-    what arrived this hour — the older nominal times are lost until they
-    are refetched, which is why the workflow pulls the directory."""
-    if previous_root is None or entry is None:
-        return []
-    path = previous_root / entry["path"]
+def _read_previous_soundings(
+    output_root: Path, previous_index: dict[str, Any] | None
+) -> dict[str, dict[str, Any]]:
+    """The previous issue's stations, by id, read line by line out of the
+    ``soundings.jsonl`` its index names.
+
+    A file that cannot be read is not fatal: the issue publishes what
+    arrived this hour and every station's window starts again, which is
+    the state of a first build anyway. That is why the publish workflow
+    pulls the file with the index and checks its CRC32 before trusting
+    it."""
+    stations: dict[str, dict[str, Any]] = {}
+    directory = previous_directory(previous_index, output_root)
+    if directory is None or not previous_index:
+        return stations
+    named = (previous_index.get("soundings") or {}).get("path", SOUNDINGS_FILENAME)
+    path = directory / named
     try:
-        payload = json.loads(path.read_bytes())
-    except (OSError, json.JSONDecodeError):
-        return []
-    soundings = payload.get("soundings")
-    if not isinstance(soundings, list):
-        return []
-    return [item for item in soundings if isinstance(item, dict) and "time" in item and "n" in item]
+        text = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        LOG.warning("sounding: %s is not readable (%s); the window starts again", path, exc)
+        return stations
+    for number, line in enumerate(text.splitlines(), start=1):
+        if not line.strip():
+            continue
+        try:
+            station = json.loads(line)
+            station_id = station["id"]
+        except (json.JSONDecodeError, KeyError, TypeError) as exc:
+            LOG.warning("sounding: %s line %d is not a station (%s); it is skipped", path, number, exc)
+            continue
+        soundings = station.get("soundings")
+        if not isinstance(station_id, str) or not isinstance(soundings, list) or not soundings:
+            continue
+        station["soundings"] = [
+            item | {"reported": item.get("reported", item["n"])}
+            for item in soundings
+            if isinstance(item, dict) and "time" in item and "n" in item
+        ]
+        if station["soundings"]:
+            stations[station_id] = station
+    return stations
 
 
 def load_previous_index(path: Path | None, output_root: Path) -> dict[str, Any] | None:

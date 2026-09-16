@@ -1,0 +1,136 @@
+name: publish airport
+
+# The airport METAR / TAF product (docs/airport.md): the world's decoded
+# observations and current forecasts from the NOAA Aviation Weather Center,
+# merged every ten minutes onto the previous round's 24-hour history and
+# published as one immutable airport.<round>/ — a history file with a line
+# per station and the index that spans it. Independent of the raster
+# publishes — nothing here reads a run,
+# and a red run does not hold this back — and cheap: three GETs of a few
+# hundred kilobytes, no GDAL, no eccodes, no wheel, well under a minute.
+#
+# One round per job, no loop: at ten-minute cadence the schedule is the
+# loop, and a runner held for an hour would buy nothing.
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+    inputs:
+      round:
+        description: "Round to build: now or YYYYMMDDHHMM (the minute a multiple of ten)"
+        type: string
+        default: now
+      keep:
+        description: "Round directories to keep on R2 (ten-minute rounds)"
+        type: string
+        default: "18"
+      dry_run:
+        description: "Build and report what would be uploaded and pruned, but write nothing to R2"
+        type: boolean
+        default: false
+      force:
+        description: "Rebuild the round even when it is already live"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# One at a time: the pointer is the product's only mutable object, and the
+# previous round's history file is what this round is merged onto.
+concurrency:
+  group: publish-airport
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    # Scheduled runs on forks would publish into a bucket they cannot reach.
+    if: github.event_name != 'schedule' || github.repository == 'ringsaturn/xue'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      ROUND: ${{ inputs.round || 'now' }}
+      AIRPORT_KEEP: ${{ inputs.keep || '18' }}
+      DRY_RUN: ${{ inputs.dry_run && '--dryrun' || '' }}
+      FORCE: ${{ inputs.force && '--force' || '' }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          python-version: "3.14"
+
+      # Three cached text files and the stdlib: no GDAL, no eccodes, no wheel.
+      - name: Sync Python environment
+        run: uv sync
+
+      # The live index and its history file are this round's history:
+      # without them every station's 24 hours would start again from the
+      # ninety minutes the AWC cache holds.
+      - name: Fetch the live index and its history
+        run: make live-airport-index
+
+      # A round is immutable once the pointer names it (docs/airport.md), so
+      # a round that is already live — a dispatch landed in it, or the
+      # schedule ran late — is finished, not built again; `force` is the
+      # manual rebuild the spec allows. GitHub's ten-minute cron drifts by a
+      # minute or several, so the round is this minute floored to ten rather
+      # than whatever the clock says when the runner starts: two runs of the
+      # same round must name the same directory.
+      - name: Build the product
+        id: build
+        run: |
+          set -euo pipefail
+          round=$ROUND
+          if [ "$round" = "now" ]; then
+            round=$(date -u +%Y%m%d%H)$(printf '%02d' $(( 10 * ($(date -u +%M) / 10) )))
+          fi
+          live=""
+          if [ -f web/public/data/latest-airport.json ]; then
+            live=$(jq -r .path web/public/data/latest-airport.json | sed -n 's:^airport\.\([0-9]\{12\}\)/index\.json$:\1:p')
+          fi
+          if [ "$live" = "$round" ] && [ -z "$FORCE" ]; then
+            echo "airport $round is already live; nothing to build" | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "skipped=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          uv run python -m xuebuild -v airport-build --round "$round" $FORCE > airport-report.json
+          round=$(jq -r .round airport-report.json)
+          echo "round=$round" >> "$GITHUB_ENV"
+          {
+            echo "### airport $round"
+            echo
+            echo '```json'
+            jq '{stations, reports, tafs, history, sources: [.sources[] | "\(.id): \(if .ok then "ok \(.reports // 0)" else .error end)"], pointer}' airport-report.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: airport-report-${{ github.run_id }}
+          path: airport-report.json
+          retention-days: 14
+          if-no-files-found: ignore
+
+      # The history file and the index go up immutable, then the pointer
+      # takes them live. A build that withheld the pointer (neither
+      # observation source arrived) stops here with the previous round live.
+      - name: Upload and take the round live
+        if: steps.build.outputs.skipped != 'true'
+        run: |
+          set -euo pipefail
+          if [ "$(jq -r .pointer airport-report.json)" = "null" ]; then
+            echo "neither observation source arrived; the previous round stays live" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          make upload-r2-airport ROUND="$round" DRY_RUN="$DRY_RUN"
+
+      - name: Delete rounds older than the retention
+        if: steps.build.outputs.skipped != 'true'
+        run: make prune-r2-airport AIRPORT_KEEP="$AIRPORT_KEEP" DRY_RUN="$DRY_RUN"

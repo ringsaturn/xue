@@ -73,6 +73,36 @@ levels carrying 32768 alone sit at 109–164 hPa."""
 
 SURFACE_BIT = 1 << 17
 STANDARD_BIT = 1 << 16
+MAX_WIND_BIT = 1 << 14
+SIGNIFICANT_TEMPERATURE_BIT = 1 << 13
+SIGNIFICANT_HUMIDITY_BIT = 1 << 12
+SIGNIFICANT_WIND_BIT = 1 << 11
+
+SIGNIFICANT_BITS = (
+    SURFACE_BIT
+    | STANDARD_BIT
+    | TROPOPAUSE_BIT
+    | MAX_WIND_BIT
+    | SIGNIFICANT_TEMPERATURE_BIT
+    | SIGNIFICANT_HUMIDITY_BIT
+    | SIGNIFICANT_WIND_BIT
+)
+"""The levels the classical TEMP set is made of, and the ones a skew-T or
+a comparison against a model profile is drawn from. A level carrying any
+of these bits is always published."""
+
+THINNING_RATIO = 0.03
+"""How far apart two *unflagged* levels have to be in pressure to both be
+published: the higher one is kept only when the last kept level's pressure
+is at least 3 % above it.
+
+Modern sondes report every second, which is 7 000-odd levels of an ascent
+where the classical mandatory-and-significant set is 40 to 150 — detail
+far beyond what any viewer draws, and two orders of magnitude of bytes. A
+properly flagged ascent passes through this rule untouched; an unflagged
+run is capped at about 150 levels between 1000 and 10 hPa. The count
+before thinning is published as ``reported`` beside ``n``, so nothing is
+hidden."""
 
 LEVEL_KEYS = frozenset(
     {
@@ -190,6 +220,9 @@ class Sounding:
     bulletin: str
     gateway: str
     arrived: datetime
+    reported: int
+    """Levels the bulletin reported, before thinning (``THINNING_RATIO``).
+    ``n`` is how many are published."""
     p: tuple[int, ...]
     z: tuple[int, ...]
     t: tuple[int, ...]
@@ -381,6 +414,30 @@ def _fold_repeated_pressures(rows: list[dict[str, Any]]) -> list[dict[str, Any]]
     return folded
 
 
+def _thin(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Drop the levels a reader would never draw (``THINNING_RATIO``).
+
+    The rows arrive in descending pressure. The lowest and the highest are
+    always kept, and so is every level flagged as part of the classical
+    TEMP set. Anything else survives only if it stands at least
+    ``THINNING_RATIO`` below the last level kept — flagged levels included,
+    so a dense patch after a standard level is thinned from that level.
+    """
+    if len(rows) <= 2:
+        return rows
+    kept = [rows[0]]
+    last_pressure = float(_fixed(rows[0].get("pressure"), 1, "p"))
+    for row in rows[1:-1]:
+        flags = _fixed(row.get("extendedVerticalSoundingSignificance"), 1, "sig")
+        pressure = float(_fixed(row.get("pressure"), 1, "p"))
+        flagged = flags != MISSING and bool(flags & SIGNIFICANT_BITS)
+        if flagged or (pressure > 0 and last_pressure / pressure >= 1.0 + THINNING_RATIO):
+            kept.append(row)
+            last_pressure = pressure
+    kept.append(rows[-1])
+    return kept
+
+
 @dataclass(frozen=True)
 class BulletinResult:
     soundings: tuple[Sounding, ...]
@@ -431,6 +488,8 @@ def _parse_subset(walked: list[tuple[str, Any]], *, name: BulletinName, gateway:
     # stable, so two levels at one pressure keep the ascent's order.
     rows.sort(key=lambda level: -float(_number(level.get("pressure")) or 0.0))
     rows = _fold_repeated_pressures(rows)
+    reported = len(rows)
+    rows = _thin(rows)
     sonde = _number(header.get("radiosondeType"))
     return Sounding(
         key=key,
@@ -442,6 +501,7 @@ def _parse_subset(walked: list[tuple[str, Any]], *, name: BulletinName, gateway:
         lon=round(lon, 5),
         elev=_elevation(header),
         sonde=None if sonde is None else int(sonde),
+        reported=reported,
         bulletin=name.header,
         gateway=gateway,
         arrived=name.arrived,

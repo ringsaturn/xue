@@ -1,6 +1,6 @@
 """The ``sounding`` product, schema v1: construction and validation of the
 three files — the mutable pointer ``latest-sounding.json``, an issue's
-``index.json`` and one ``<station id>.json`` per station — in the posture
+``index.json`` and the ``soundings.jsonl`` beside it — in the posture
 ``xuebuild/tc/schema.py`` takes for the tracks and ``manifest.py`` for the
 raster runs: written *and* read through the validator. ``docs/sounding.md``
 is the normative description.
@@ -11,7 +11,8 @@ today's two: none of those is an error, because the gateways are a
 transitional arrangement and the station set changes weekly. What is
 checked is shape — the id pattern, coordinate ranges, arrays of one
 length, pressure strictly descending, timestamps in UTC, CRC32s and
-relative paths.
+relative paths — and the one rule the soundings file adds: the stations'
+byte spans are in order, do not overlap, and tile the file exactly.
 """
 
 from __future__ import annotations
@@ -39,6 +40,7 @@ SCHEMA_VERSION = 1
 PRODUCT = "sounding"
 POINTER_FILENAME = "latest-sounding.json"
 INDEX_FILENAME = "index.json"
+SOUNDINGS_FILENAME = "soundings.jsonl"
 
 STATION_ID = re.compile(r"^\d+-\d+-\d+-[0-9A-Za-z_]+$")
 """A WIGOS identifier written out: series, issuer, issue number and the
@@ -122,10 +124,16 @@ def validate_position(payload: dict[str, Any], label: str) -> None:
 def validate_levels(payload: dict[str, Any], label: str) -> None:
     """The seven parallel arrays: one length, in range, pressure strictly
     descending and always present (a level with no pressure has no place
-    on the axis and is never written)."""
+    on the axis and is never written). ``reported`` is what the bulletin
+    held before thinning and is never below ``n``."""
     count = payload.get("n")
     if isinstance(count, bool) or not isinstance(count, int) or count <= 0:
         raise SoundingProductError(f"{label}.n must be a positive integer")
+    reported = payload.get("reported")
+    if isinstance(reported, bool) or not isinstance(reported, int) or reported < count:
+        raise SoundingProductError(
+            f"{label}.reported must be an integer at least {label}.n: the levels the bulletin held before thinning"
+        )
     for key in LEVEL_ARRAYS:
         values = payload.get(key)
         if not isinstance(values, list) or len(values) != count:
@@ -211,28 +219,29 @@ def validate_sources(sources: object, label: str) -> None:
             _time(status["watermark"], f"{label}[{index}].watermark")
 
 
-def validate_station(payload: object) -> None:
+def validate_station_line(payload: object, label: str = "station") -> None:
+    """One line of ``soundings.jsonl``: a station with its whole window of
+    nominal times. It carries no ``schemaVersion`` and no ``sources`` — the
+    index it hangs off has both, and repeating them per station would cost
+    more than the stations do."""
     if not isinstance(payload, dict):
-        raise SoundingProductError("station must be an object")
-    if payload.get("schemaVersion") != SCHEMA_VERSION:
-        raise SoundingProductError(f"station schemaVersion must be {SCHEMA_VERSION}")
+        raise SoundingProductError(f"{label} must be an object")
     if not _station_id_ok(payload.get("id")):
-        raise SoundingProductError("station id must be a WIGOS identifier, series-issuer-issue-local")
-    _optional_string(payload.get("wmo"), "station.wmo", WMO_NUMBER)
-    _optional_string(payload.get("name"), "station.name")
-    validate_position(payload, "station")
+        raise SoundingProductError(f"{label}.id must be a WIGOS identifier, series-issuer-issue-local")
+    _optional_string(payload.get("wmo"), f"{label}.wmo", WMO_NUMBER)
+    _optional_string(payload.get("name"), f"{label}.name")
+    validate_position(payload, label)
     soundings = payload.get("soundings")
     if not isinstance(soundings, list) or not soundings:
-        raise SoundingProductError("station.soundings must be a non-empty list")
+        raise SoundingProductError(f"{label}.soundings must be a non-empty list")
     previous: datetime | None = None
     for position, sounding in enumerate(soundings):
-        label = f"station.soundings[{position}]"
-        validate_sounding(sounding, label)
-        time = _time(sounding["time"], f"{label}.time")
+        inner = f"{label}.soundings[{position}]"
+        validate_sounding(sounding, inner)
+        time = _time(sounding["time"], f"{inner}.time")
         if previous is not None and time >= previous:
-            raise SoundingProductError("station.soundings must be in strictly decreasing time, newest first")
+            raise SoundingProductError(f"{label}.soundings must be in strictly decreasing time, newest first")
         previous = time
-    validate_sources(payload.get("sources"), "station.sources")
 
 
 def validate_index(payload: object) -> None:
@@ -250,12 +259,24 @@ def validate_index(payload: object) -> None:
             raise SoundingProductError(f"index.watermark has a malformed source id {source_id!r}")
         if moment is not None:
             _time(moment, f"index.watermark[{source_id}]")
+    soundings = payload.get("soundings")
+    if not isinstance(soundings, dict):
+        raise SoundingProductError("index.soundings must be an object")
+    if soundings.get("path") != SOUNDINGS_FILENAME:
+        raise SoundingProductError(f"index.soundings.path must be {SOUNDINGS_FILENAME!r}, the file beside the index")
+    soundings_bytes = soundings.get("byteLength")
+    if isinstance(soundings_bytes, bool) or not isinstance(soundings_bytes, int) or soundings_bytes < 0:
+        raise SoundingProductError("index.soundings.byteLength must be a non-negative integer")
+    if not isinstance(soundings.get("crc32"), str) or not CRC32.match(soundings["crc32"]):
+        raise SoundingProductError("index.soundings.crc32 must be 8 lowercase hex characters")
     stations = payload.get("stations")
     if not isinstance(stations, list):
         raise SoundingProductError("index.stations must be a list")
     ids: set[str] = set()
-    paths: set[str] = set()
     previous: str | None = None
+    end = 0
+    """Where the previous station's line ended, newline included: the
+    spans are in order, do not overlap and tile the file exactly."""
     for position, entry in enumerate(stations):
         label = f"index.stations[{position}]"
         if not isinstance(entry, dict):
@@ -273,17 +294,19 @@ def validate_index(payload: object) -> None:
         _optional_string(entry.get("wmo"), f"{label}.wmo", WMO_NUMBER)
         _optional_string(entry.get("name"), f"{label}.name")
         validate_position(entry, label)
-        path = entry.get("path")
-        if not isinstance(path, str) or path.startswith(("/", "http:", "https:")) or "/" in path or path in paths:
-            raise SoundingProductError(f"{label}.path must be a unique file name beside the index")
-        if path != f"{station_id}.json":
-            raise SoundingProductError(f"{label}.path must be the station's id")
-        paths.add(path)
-        byte_length = entry.get("byteLength")
-        if isinstance(byte_length, bool) or not isinstance(byte_length, int) or byte_length <= 0:
-            raise SoundingProductError(f"{label}.byteLength must be a positive integer")
-        if not isinstance(entry.get("crc32"), str) or not CRC32.match(entry["crc32"]):
-            raise SoundingProductError(f"{label}.crc32 must be 8 lowercase hex characters")
+        offset = entry.get("offset")
+        length = entry.get("length")
+        if isinstance(offset, bool) or not isinstance(offset, int) or offset < 0:
+            raise SoundingProductError(f"{label}.offset must be a non-negative integer")
+        if isinstance(length, bool) or not isinstance(length, int) or length <= 0:
+            raise SoundingProductError(f"{label}.length must be a positive integer")
+        if offset != end:
+            raise SoundingProductError(
+                f"{label}.offset must continue the previous station's span: expected {end}, got {offset}"
+            )
+        if offset + length > soundings_bytes:
+            raise SoundingProductError(f"{label} spans past the end of {SOUNDINGS_FILENAME}")
+        end = offset + length + 1  # the newline the span excludes
         latest = _time(entry.get("latest"), f"{label}.latest")
         times = entry.get("times")
         if not isinstance(times, list) or not times:
@@ -294,6 +317,10 @@ def validate_index(payload: object) -> None:
         if parsed[0] != latest:
             raise SoundingProductError(f"{label}.latest must equal the first of {label}.times")
         validate_headline(entry.get("headline"), f"{label}.headline")
+    if end != soundings_bytes:
+        raise SoundingProductError(
+            f"index.stations must span {SOUNDINGS_FILENAME} exactly: the spans end at {end} of {soundings_bytes}"
+        )
     validate_sources(payload.get("sources"), "index.sources")
 
 

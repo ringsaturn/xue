@@ -6,6 +6,11 @@
   "jp-jma-gts-to-wis2": "2026-09-14T02:34:41Z",
   "de-dwd-gts-to-wis2": null
  },
+ "soundings": {
+  "path": "soundings.jsonl",
+  "byteLength": 105517,
+  "crc32": "06902ee6"
+ },
  "stations": [
   {
    "id": "0-20000-0-47401",
@@ -14,9 +19,8 @@
    "lat": 45.415,
    "lon": 141.679,
    "elev": 2.9,
-   "path": "0-20000-0-47401.json",
-   "byteLength": 1614,
-   "crc32": "7838a873",
+   "offset": 0,
+   "length": 1000,
    "latest": "2026-09-14T00:00:00Z",
    "times": ["2026-09-14T00:00:00Z"],
    "headline": {
@@ -34,9 +38,8 @@
    "lat": 43.06,
    "lon": 141.329,
    "elev": 17.5,
-   "path": "0-20000-0-47412.json",
-   "byteLength": 1573,
-   "crc32": "c3144acd",
+   "offset": 1001,
+   "length": 959,
    "latest": "2026-09-14T00:00:00Z",
    "times": ["2026-09-14T00:00:00Z"],
    "headline": {
@@ -54,9 +57,8 @@
    "lat": 42.9531,
    "lon": 144.438,
    "elev": 14.1,
-   "path": "0-20000-0-47418.json",
-   "byteLength": 1536,
-   "crc32": "4ea26bf1",
+   "offset": 1961,
+   "length": 922,
    "latest": "2026-09-14T00:00:00Z",
    "times": ["2026-09-14T00:00:00Z"],
    "headline": {
@@ -74,9 +76,8 @@
    "lat": 39.7175,
    "lon": 140.099,
    "elev": 6.3,
-   "path": "0-20000-0-47582.json",
-   "byteLength": 1616,
-   "crc32": "9e55e3da",
+   "offset": 2884,
+   "length": 1002,
    "latest": "2026-09-14T00:00:00Z",
    "times": ["2026-09-14T00:00:00Z"],
    "headline": {
@@ -94,9 +95,8 @@
    "lat": 37.3914,
    "lon": 136.895,
    "elev": 5.2,
-   "path": "0-20000-0-47600.json",
-   "byteLength": 1534,
-   "crc32": "497ffe73",
+   "offset": 3887,
+   "length": 920,
    "latest": "2026-09-14T00:00:00Z",
    "times": ["2026-09-14T00:00:00Z"],
    "headline": {
@@ -114,17 +114,16 @@
    "lat": 39.77,
    "lon": 98.48,
    "elev": 1478.0,
-   "path": "0-20000-0-52533.json",
-   "byteLength": 6700,
-   "crc32": "e7ecb4bf",
+   "offset": 4808,
+   "length": 6055,
    "latest": "2026-09-14T00:00:00Z",
    "times": ["2026-09-14T00:00:00Z"],
    "headline": {
     "t500": -11.7,
     "td500": -42.5,
-    "freezingLevel": 4100,
+    "freezingLevel": 4099,
     "pw": 13.7,
-    "levels": 159
+    "levels": 158
    }
   },
   {
@@ -134,9 +133,8 @@
    "lat": 35.87,
    "lon": 104.15,
    "elev": 1875.0,
-   "path": "0-20000-0-52983.json",
-   "byteLength": 7563,
-   "crc32": "3c668b42",
+   "offset": 10864,
+   "length": 6918,
    "latest": "2026-09-14T00:00:00Z",
    "times": ["2026-09-14T00:00:00Z"],
    "headline": {
@@ -144,7 +142,7 @@
     "td500": -17.5,
     "freezingLevel": 4174,
     "pw": 20.1,
-    "levels": 183
+    "levels": 182
    }
   },
   {
@@ -154,17 +152,16 @@
    "lat": 40.85,
    "lon": 111.57,
    "elev": 1153.5,
-   "path": "0-20000-0-53463.json",
-   "byteLength": 7294,
-   "crc32": "15b96a40",
+   "offset": 17783,
+   "length": 6648,
    "latest": "2026-09-14T00:00:00Z",
    "times": ["2026-09-14T00:00:00Z"],
    "headline": {
     "t500": -16.2,
     "td500": -34.3,
-    "freezingLevel": 3548,
+    "freezingLevel": 3561,
     "pw": 12.6,
-    "levels": 174
+    "levels": 173
    }
   },
   {
@@ -174,17 +171,16 @@
    "lat": 41.54,
    "lon": 123.61,
    "elev": 77.1,
-   "path": "0-20000-0-54340.json",
-   "byteLength": 7489,
-   "crc32": "39980a80",
+   "offset": 24432,
+   "length": 6843,
    "latest": "2026-09-14T00:00:00Z",
    "times": ["2026-09-14T00:00:00Z"],
    "headline": {
     "t500": -16.2,
     "td500": -44.5,
-    "freezingLevel": 2830,
+    "freezingLevel": 2831,
     "pw": 13.0,
-    "levels": 180
+    "levels": 179
    }
   },
   {
@@ -194,17 +190,16 @@
    "lat": 39.93,
    "lon": 116.28,
    "elev": 32.5,
-   "path": "0-20000-0-54511.json",
-   "byteLength": 7606,
-   "crc32": "2b43097a",
+   "offset": 31276,
+   "length": 6960,
    "latest": "2026-09-14T00:00:00Z",
    "times": ["2026-09-14T00:00:00Z"],
    "headline": {
     "t500": -14.8,
     "td500": -59.4,
-    "freezingLevel": 3127,
+    "freezingLevel": 3130,
     "pw": 12.8,
-    "levels": 184
+    "levels": 183
    }
   },
   {
@@ -214,17 +209,16 @@
    "lat": 36.65,
    "lon": 117.5,
    "elev": 263.0,
-   "path": "0-20000-0-54727.json",
-   "byteLength": 7185,
-   "crc32": "64a008d5",
+   "offset": 38237,
+   "length": 6539,
    "latest": "2026-09-14T00:00:00Z",
    "times": ["2026-09-14T00:00:00Z"],
    "headline": {
     "t500": -13.5,
     "td500": -35.9,
-    "freezingLevel": 3655,
+    "freezingLevel": 3654,
     "pw": 14.2,
-    "levels": 172
+    "levels": 171
    }
   },
   {
@@ -234,17 +228,16 @@
    "lat": 34.72,
    "lon": 113.65,
    "elev": 111.0,
-   "path": "0-20000-0-57083.json",
-   "byteLength": 8449,
-   "crc32": "ce4d39c9",
+   "offset": 44777,
+   "length": 7804,
    "latest": "2026-09-14T00:00:00Z",
    "times": ["2026-09-14T00:00:00Z"],
    "headline": {
     "t500": -11.1,
     "td500": -28.4,
-    "freezingLevel": 3693,
-    "pw": 27.9,
-    "levels": 209
+    "freezingLevel": 3691,
+    "pw": 27.8,
+    "levels": 208
    }
   },
   {
@@ -254,17 +247,16 @@
    "lat": 33.07,
    "lon": 107.03,
    "elev": 509.0,
-   "path": "0-20000-0-57127.json",
-   "byteLength": 8951,
-   "crc32": "cc036fc1",
+   "offset": 52582,
+   "length": 8306,
    "latest": "2026-09-14T00:00:00Z",
    "times": ["2026-09-14T00:00:00Z"],
    "headline": {
     "t500": -9.0,
     "td500": -14.9,
-    "freezingLevel": 4308,
+    "freezingLevel": 4298,
     "pw": 34.3,
-    "levels": 224
+    "levels": 223
    }
   },
   {
@@ -274,17 +266,16 @@
    "lat": 34.43,
    "lon": 108.97,
    "elev": 411.0,
-   "path": "0-20000-0-57131.json",
-   "byteLength": 8336,
-   "crc32": "a53212d6",
+   "offset": 60889,
+   "length": 7691,
    "latest": "2026-09-14T00:00:00Z",
    "times": ["2026-09-14T00:00:00Z"],
    "headline": {
     "t500": -10.4,
     "td500": -13.2,
-    "freezingLevel": 3923,
+    "freezingLevel": 3928,
     "pw": 31.4,
-    "levels": 206
+    "levels": 205
    }
   },
   {
@@ -294,9 +285,8 @@
    "lat": 13.46,
    "lon": 144.78,
    "elev": 75.0,
-   "path": "0-20000-0-91212.json",
-   "byteLength": 10061,
-   "crc32": "47e370c2",
+   "offset": 68581,
+   "length": 9448,
    "latest": "2026-09-14T00:00:00Z",
    "times": ["2026-09-14T00:00:00Z"],
    "headline": {
@@ -314,17 +304,16 @@
    "lat": 43.78,
    "lon": 87.62,
    "elev": 919.0,
-   "path": "0-20001-0-51463.json",
-   "byteLength": 6944,
-   "crc32": "697797e5",
+   "offset": 78030,
+   "length": 6299,
    "latest": "2026-09-14T00:00:00Z",
    "times": ["2026-09-14T00:00:00Z"],
    "headline": {
     "t500": -11.8,
     "td500": -18.9,
-    "freezingLevel": 4257,
+    "freezingLevel": 4255,
     "pw": 19.2,
-    "levels": 166
+    "levels": 165
    }
   },
   {
@@ -334,9 +323,8 @@
    "lat": 37.62,
    "lon": 112.58,
    "elev": 776.0,
-   "path": "0-20001-0-53772.json",
-   "byteLength": 7386,
-   "crc32": "8d0928ca",
+   "offset": 84330,
+   "length": 6741,
    "latest": "2026-09-14T00:00:00Z",
    "times": ["2026-09-14T00:00:00Z"],
    "headline": {
@@ -344,7 +332,7 @@
     "td500": -28.7,
     "freezingLevel": 3659,
     "pw": 18.7,
-    "levels": 177
+    "levels": 176
    }
   },
   {
@@ -354,17 +342,16 @@
    "lat": 36.57,
    "lon": 109.45,
    "elev": 1180.0,
-   "path": "0-20001-0-53845.json",
-   "byteLength": 8057,
-   "crc32": "05bc4c5f",
+   "offset": 91072,
+   "length": 7412,
    "latest": "2026-09-14T00:00:00Z",
    "times": ["2026-09-14T00:00:00Z"],
    "headline": {
     "t500": -13.3,
     "td500": -33.4,
-    "freezingLevel": 3733,
-    "pw": 13.8,
-    "levels": 197
+    "freezingLevel": 3731,
+    "pw": 13.7,
+    "levels": 196
    }
   },
   {
@@ -374,17 +361,16 @@
    "lat": 42.3,
    "lon": 118.83,
    "elev": 668.6,
-   "path": "0-20001-0-54218.json",
-   "byteLength": 7676,
-   "crc32": "8c26b088",
+   "offset": 98485,
+   "length": 7031,
    "latest": "2026-09-14T00:00:00Z",
    "times": ["2026-09-14T00:00:00Z"],
    "headline": {
     "t500": -17.2,
     "td500": -35.9,
-    "freezingLevel": 2393,
+    "freezingLevel": 2395,
     "pw": 9.2,
-    "levels": 185
+    "levels": 184
    }
   }
  ],

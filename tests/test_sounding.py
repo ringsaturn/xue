@@ -34,10 +34,11 @@ from xuebuild.sounding.schema import (
     crc32_hex,
     encode_json,
     parse_issue,
+    SOUNDINGS_FILENAME,
     validate_derived,
     validate_index,
     validate_pointer,
-    validate_station,
+    validate_station_line,
 )
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
@@ -91,6 +92,7 @@ def sounding(
         bulletin=bulletin,
         gateway=GATEWAY,
         arrived=arrived or utc(2026, 9, 14, 1, 23, 50),
+        reported=levels,
         p=pressures,
         z=tuple(80 * step for step in range(levels)),
         t=tuple(29315 - 65 * step for step in range(levels)),
@@ -183,7 +185,9 @@ class ParserTests(unittest.TestCase):
         urumqi = result.soundings[0]
         self.assertEqual(urumqi.wigos, "0-20001-0-51463")
         self.assertEqual((urumqi.key, urumqi.wmo, urumqi.id), ("51463", "51463", "0-20001-0-51463"))
-        self.assertEqual(urumqi.n, 166)
+        # One unflagged level sat inside the thinning ratio of its
+        # neighbour; the other 165 are the classical set and survive.
+        self.assertEqual((urumqi.reported, urumqi.n), (166, 165))
         self.assertEqual(
             [urumqi.p[0], urumqi.z[0], urumqi.t[0], urumqi.td[0], urumqi.wd[0], urumqi.ws[0], urumqi.sig[0]],
             [90560, 1008, 29465, 27414, 145, 34, 210944],
@@ -279,6 +283,67 @@ class LevelWalkTests(unittest.TestCase):
 
     def test_the_parser_never_emits_what_the_validator_refuses(self) -> None:
         self.assertEqual(sorted(bufr.VALUE_BOUNDS), sorted(("p", "z", "t", "td", "wd", "ws", "sig")))
+
+    def test_an_unflagged_ascent_is_thinned_to_the_pressure_ratio(self) -> None:
+        # A second-resolution sonde: a thousand unflagged levels from
+        # 1000 hPa to 10 hPa, none of them worth drawing on their own.
+        entries = self.header()
+        pressures = [100000.0 * (0.01 ** (step / 999)) for step in range(1000)]
+        for pressure in pressures:
+            entries += self.level(pressure, t=283.15, sig=0)
+        item = self.parse(entries).soundings[0]
+        self.assertEqual(item.reported, 1000)
+        self.assertLessEqual(item.n, 160)
+        self.assertEqual(item.p[0], bufr._fixed(pressures[0], 1, "p"))
+        self.assertEqual(item.p[-1], bufr._fixed(pressures[-1], 1, "p"))
+        # Every consecutive kept pair stands at least the ratio apart,
+        # the last one aside: the top level is kept unconditionally.
+        for earlier, later in zip(item.p[:-2], item.p[1:-1]):
+            self.assertGreaterEqual(earlier / later, 1.0 + bufr.THINNING_RATIO)
+
+    def test_a_flagged_level_is_never_thinned_away(self) -> None:
+        entries = self.header()
+        flags = [
+            bufr.SURFACE_BIT,
+            bufr.STANDARD_BIT,
+            bufr.TROPOPAUSE_BIT,
+            bufr.MAX_WIND_BIT,
+            bufr.SIGNIFICANT_TEMPERATURE_BIT,
+            bufr.SIGNIFICANT_HUMIDITY_BIT,
+            bufr.SIGNIFICANT_WIND_BIT,
+        ]
+        # Levels a hair apart in pressure — far inside the ratio — so only
+        # their flags can save them.
+        for step, flag in enumerate(flags):
+            entries += self.level(100000.0 - step, t=283.15, sig=flag)
+        entries += self.level(100000.0 - len(flags), t=283.15, sig=0)
+        item = self.parse(entries).soundings[0]
+        self.assertEqual(item.n, len(flags) + 1)  # the last is kept as the top
+        self.assertEqual(list(item.sig), flags + [0])
+
+    def test_an_unflagged_level_between_flagged_ones_is_dropped(self) -> None:
+        entries = self.header()
+        entries += self.level(100000.0, t=283.15, sig=bufr.SURFACE_BIT)
+        entries += self.level(99900.0, t=283.05, sig=0)  # 0.1 % below: too close
+        entries += self.level(92500.0, t=280.15, sig=bufr.STANDARD_BIT)
+        entries += self.level(50000.0, t=253.15, sig=bufr.STANDARD_BIT)
+        item = self.parse(entries).soundings[0]
+        self.assertEqual((item.reported, item.n), (4, 3))
+        self.assertEqual(item.p, (100000, 92500, 50000))
+
+    def test_a_missing_significance_counts_as_unflagged(self) -> None:
+        entries = self.header()
+        entries += self.level(100000.0, t=283.15, sig=None)
+        entries += self.level(99900.0, t=283.05, sig=None)
+        entries += self.level(50000.0, t=253.15, sig=None)
+        item = self.parse(entries).soundings[0]
+        self.assertEqual((item.reported, item.n), (3, 2))
+        self.assertEqual(item.p, (100000, 50000))
+
+    def test_a_short_ascent_is_never_thinned(self) -> None:
+        entries = self.header() + self.level(100000.0, t=283.15, sig=0) + self.level(99900.0, t=283.05, sig=0)
+        item = self.parse(entries).soundings[0]
+        self.assertEqual((item.reported, item.n), (2, 2))
 
     def test_a_subset_without_a_station_identity_is_dropped(self) -> None:
         entries = [entry for entry in self.header() if entry[0] not in ("blockNumber", "stationNumber")]
@@ -627,55 +692,63 @@ class ListingTests(unittest.TestCase):
 
 class ValidationTests(unittest.TestCase):
     def station(self) -> dict[str, object]:
-        return json.loads((EXPECTED / "0-20000-0-47401.json").read_text(encoding="utf-8"))
+        """The first line of the golden's soundings file."""
+        line = (EXPECTED / SOUNDINGS_FILENAME).read_bytes().split(b"\n")[0]
+        return json.loads(line)
 
     def index(self) -> dict[str, object]:
         return json.loads((EXPECTED / "index.json").read_text(encoding="utf-8"))
 
     def test_the_golden_files_validate(self) -> None:
-        validate_station(self.station())
+        validate_station_line(self.station())
         validate_index(self.index())
 
     def test_a_station_with_a_short_array_is_refused(self) -> None:
         payload = self.station()
         payload["soundings"][0]["t"] = payload["soundings"][0]["t"][:-1]
         with self.assertRaises(SoundingProductError):
-            validate_station(payload)
+            validate_station_line(payload)
 
     def test_pressure_must_be_descending_and_present(self) -> None:
         payload = self.station()
         payload["soundings"][0]["p"] = sorted(payload["soundings"][0]["p"])
         with self.assertRaises(SoundingProductError):
-            validate_station(payload)
+            validate_station_line(payload)
         payload = self.station()
         payload["soundings"][0]["p"][0] = bufr.MISSING
         with self.assertRaises(SoundingProductError):
-            validate_station(payload)
+            validate_station_line(payload)
 
     def test_an_out_of_range_value_is_refused_but_missing_is_not(self) -> None:
         payload = self.station()
         payload["soundings"][0]["wd"][0] = 400
         with self.assertRaises(SoundingProductError):
-            validate_station(payload)
+            validate_station_line(payload)
         payload = self.station()
         payload["soundings"][0]["wd"][0] = bufr.MISSING
-        validate_station(payload)
+        validate_station_line(payload)
 
     def test_a_malformed_station_id_is_refused(self) -> None:
         payload = self.station()
         payload["id"] = "47401"
         with self.assertRaises(SoundingProductError):
-            validate_station(payload)
+            validate_station_line(payload)
         payload = self.station()
         payload["id"] = "../etc/passwd"
         with self.assertRaises(SoundingProductError):
-            validate_station(payload)
+            validate_station_line(payload)
 
-    def test_a_schema_version_bump_is_refused(self) -> None:
+    def test_a_line_needs_at_least_one_sounding(self) -> None:
         payload = self.station()
+        payload["soundings"] = []
+        with self.assertRaises(SoundingProductError):
+            validate_station_line(payload)
+
+    def test_an_index_schema_version_bump_is_refused(self) -> None:
+        payload = self.index()
         payload["schemaVersion"] = 2
         with self.assertRaises(SoundingProductError):
-            validate_station(payload)
+            validate_index(payload)
 
     def test_the_index_must_be_sorted_by_id_and_name_its_files(self) -> None:
         payload = self.index()
@@ -683,11 +756,11 @@ class ValidationTests(unittest.TestCase):
         with self.assertRaises(SoundingProductError):
             validate_index(payload)
         payload = self.index()
-        payload["stations"][0]["path"] = "elsewhere.json"
+        payload["soundings"]["path"] = "elsewhere.jsonl"
         with self.assertRaises(SoundingProductError):
             validate_index(payload)
         payload = self.index()
-        payload["stations"][0]["crc32"] = "NOTHEX12"
+        payload["soundings"]["crc32"] = "NOTHEX12"
         with self.assertRaises(SoundingProductError):
             validate_index(payload)
 
@@ -802,25 +875,28 @@ class BuildFailureTests(unittest.TestCase):
 
 @unittest.skipUnless(HAS_BUFR_DUMP, "bufr_dump (eccodes) is not installed")
 class GoldenBuildTests(unittest.TestCase):
+    def build(self, output: Path) -> dict[str, object]:
+        return build_product(ISSUE, SOUNDING_FIXTURES, output, force=True, now=utc(2026, 9, 14, 2, 5))
+
     def test_build_matches_the_golden(self) -> None:
         with tempfile.TemporaryDirectory() as scratch:
             output = Path(scratch)
-            report = build_product(ISSUE, SOUNDING_FIXTURES, output, force=True, now=utc(2026, 9, 14, 2, 5))
+            report = self.build(output)
             directory = output / "sounding.2026091402"
-            built = {path.name: json.loads(path.read_bytes()) for path in directory.iterdir()}
-            expected = {
-                path.name: json.loads(path.read_text(encoding="utf-8"))
-                for path in EXPECTED.iterdir()
-                if path.name != "latest-sounding.json"
-            }
-            self.assertEqual(sorted(built), sorted(expected))
-            for name in sorted(expected):
-                with self.subTest(file=name):
-                    self.assertEqual(built[name], expected[name])
-            index = built["index.json"]
-            for entry in index["stations"]:
-                payload = (directory / entry["path"]).read_bytes()
-                self.assertEqual((len(payload), crc32_hex(payload)), (entry["byteLength"], entry["crc32"]))
+            self.assertEqual(
+                sorted(path.name for path in directory.iterdir()),
+                ["index.json", SOUNDINGS_FILENAME],
+            )
+            self.assertEqual(
+                json.loads((directory / "index.json").read_bytes()),
+                json.loads((EXPECTED / "index.json").read_text(encoding="utf-8")),
+            )
+            # The soundings file is committed exactly as published, so the
+            # golden pins the bytes the index's offsets point into.
+            self.assertEqual(
+                (directory / SOUNDINGS_FILENAME).read_bytes(),
+                (EXPECTED / SOUNDINGS_FILENAME).read_bytes(),
+            )
             pointer = json.loads((output / "latest-sounding.json").read_bytes())
             self.assertEqual(pointer, json.loads((EXPECTED / "latest-sounding.json").read_text(encoding="utf-8")))
             index_bytes = (directory / "index.json").read_bytes()
@@ -830,6 +906,49 @@ class GoldenBuildTests(unittest.TestCase):
             self.assertTrue(statuses["jp-jma-gts-to-wis2"]["ok"])
             self.assertFalse(statuses["de-dwd-gts-to-wis2"]["ok"])
             self.assertIn("503", statuses["de-dwd-gts-to-wis2"]["error"])
+
+    def test_every_span_slices_out_its_own_station(self) -> None:
+        with tempfile.TemporaryDirectory() as scratch:
+            output = Path(scratch)
+            self.build(output)
+            directory = output / "sounding.2026091402"
+            index = json.loads((directory / "index.json").read_bytes())
+            blob = (directory / SOUNDINGS_FILENAME).read_bytes()
+            descriptor = index["soundings"]
+            self.assertEqual(descriptor["path"], SOUNDINGS_FILENAME)
+            self.assertEqual((descriptor["byteLength"], descriptor["crc32"]), (len(blob), crc32_hex(blob)))
+            for entry in index["stations"]:
+                with self.subTest(station=entry["id"]):
+                    span = blob[entry["offset"] : entry["offset"] + entry["length"]]
+                    # The span excludes the newline, so it parses alone —
+                    # which is what a Range request hands a reader.
+                    station = json.loads(span)
+                    self.assertEqual(station["id"], entry["id"])
+                    self.assertEqual(station["lat"], entry["lat"])
+                    self.assertEqual([s["time"] for s in station["soundings"]], entry["times"])
+                    self.assertEqual(blob[entry["offset"] + entry["length"] : entry["offset"] + entry["length"] + 1], b"\n")
+                    validate_station_line(station, entry["id"])
+
+    def test_the_spans_are_contiguous_and_cover_the_file(self) -> None:
+        with tempfile.TemporaryDirectory() as scratch:
+            output = Path(scratch)
+            self.build(output)
+            directory = output / "sounding.2026091402"
+            index = json.loads((directory / "index.json").read_bytes())
+            blob = (directory / SOUNDINGS_FILENAME).read_bytes()
+            offset = 0
+            for entry in index["stations"]:
+                self.assertEqual(entry["offset"], offset)
+                offset += entry["length"] + 1
+            self.assertEqual(offset, len(blob))
+            self.assertEqual(sum(e["length"] + 1 for e in index["stations"]), index["soundings"]["byteLength"])
+            self.assertEqual(len(blob.splitlines()), len(index["stations"]))
+
+    def test_the_stations_are_sorted_and_one_line_each(self) -> None:
+        blob = (EXPECTED / SOUNDINGS_FILENAME).read_bytes()
+        ids = [json.loads(line)["id"] for line in blob.splitlines()]
+        self.assertEqual(ids, sorted(ids))
+        self.assertEqual(len(ids), 19)
 
     def test_the_watermark_carries_the_working_gateway_and_leaves_the_failed_one(self) -> None:
         index = json.loads((EXPECTED / "index.json").read_text(encoding="utf-8"))
@@ -852,16 +971,18 @@ class GoldenBuildTests(unittest.TestCase):
             )
             self.assertEqual((report["fresh"], report["copied"]), (0, 19))
             self.assertIsNotNone(report["pointer"])
-            for entry in previous["stations"]:
-                first = (output / "sounding.2026091402" / entry["path"]).read_bytes()
-                second = (output / "sounding.2026091403" / entry["path"]).read_bytes()
-                with self.subTest(station=entry["id"]):
-                    self.assertEqual(first, second)
+            # Nothing new arrived, so the file is rewritten identically —
+            # every station's line and its span included.
+            self.assertEqual(
+                (output / "sounding.2026091402" / SOUNDINGS_FILENAME).read_bytes(),
+                (output / "sounding.2026091403" / SOUNDINGS_FILENAME).read_bytes(),
+            )
             index = json.loads((output / "sounding.2026091403" / "index.json").read_bytes())
             self.assertEqual(
-                [(e["id"], e["crc32"]) for e in index["stations"]],
-                [(e["id"], e["crc32"]) for e in previous["stations"]],
+                [(e["id"], e["offset"], e["length"]) for e in index["stations"]],
+                [(e["id"], e["offset"], e["length"]) for e in previous["stations"]],
             )
+            self.assertEqual(index["soundings"], previous["soundings"])
             # The failed gateway keeps the watermark it had; nothing new
             # arrived to move it.
             self.assertEqual(index["watermark"], previous["watermark"])
@@ -882,11 +1003,10 @@ class GoldenBuildTests(unittest.TestCase):
                 now=utc(2026, 9, 14, 3, 5),
             )
             self.assertEqual((report["fresh"], report["copied"]), (19, 0))
-            for entry in previous["stations"]:
-                first = (output / "sounding.2026091402" / entry["path"]).read_bytes()
-                second = (output / "sounding.2026091403" / entry["path"]).read_bytes()
-                with self.subTest(station=entry["id"]):
-                    self.assertEqual(first, second)
+            self.assertEqual(
+                (output / "sounding.2026091402" / SOUNDINGS_FILENAME).read_bytes(),
+                (output / "sounding.2026091403" / SOUNDINGS_FILENAME).read_bytes(),
+            )
 
     def test_a_station_that_stops_reporting_drops_out_after_two_days(self) -> None:
         with tempfile.TemporaryDirectory() as scratch:

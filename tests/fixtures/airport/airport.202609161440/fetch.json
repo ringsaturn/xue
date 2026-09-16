@@ -1,0 +1,30 @@
+{
+  "round": "202609161440",
+  "sources": [
+    {
+      "id": "awc-metars",
+      "ok": true,
+      "fetched": "2026-09-16T14:45:32Z",
+      "url": "https://aviationweather.gov/data/cache/metars.cache.csv.gz",
+      "file": "airport.202609161440/metars.cache.csv",
+      "bytes": 45248
+    },
+    {
+      "id": "awc-tafs",
+      "ok": true,
+      "fetched": "2026-09-16T14:45:32Z",
+      "url": "https://aviationweather.gov/data/cache/tafs.cache.xml.gz",
+      "file": "airport.202609161440/tafs.cache.xml",
+      "bytes": 41321
+    },
+    {
+      "id": "awc-stations",
+      "ok": true,
+      "fetched": "2026-09-16T14:45:32Z",
+      "url": "https://aviationweather.gov/data/cache/stations.cache.json",
+      "file": "airport-stations.json",
+      "cached": true,
+      "modified": "Wed, 16 Sep 2026 00:15:05 GMT"
+    }
+  ]
+}

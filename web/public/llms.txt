@@ -234,22 +234,47 @@ https://dataset.ringsaturn.me/xue/. The contract is two layers:
   `50` / `64` (knots, the centres' names) as `[ne, se, sw, nw]` in km.
   Sources: NHC, JTWC, the NCEP GFS/GEFS tracker, ECMWF open data `tf`
   BUFR, IBTrACS. The viewer draws it as tracks over any layer (`?tc=`).
-- Radiosonde soundings are a third hourly JSON product under the same root
-  (schema 1, `docs/sounding.md`): the mutable pointer
+- Airport observations and forecasts are a separate, ten-minute JSON
+  product under the same root (schema 1, `docs/airport.md`): the mutable
+  pointer `latest-airport.json` names `airport.<YYYYMMDDHHMM>/index.json`,
+  which carries every station's position and newest observation as a
+  compact row (`icao`, `lat`, `lon`, `elev`, `obsTime`, `t`, `td`, `wd`,
+  `ws`, `gust`, `vis`, `qnh`, `category`, `tafPresent`, `offset`,
+  `length`) and names `history.jsonl` beside it with that file's length
+  and CRC32. The history file is one line per station, sorted by ICAO —
+  the station with its last 24 hours of METARs and its current TAF — so
+  one airport is one range request over the row's `offset` / `length`
+  (the span is the JSON object alone and parses by itself) and the whole
+  set is one streamed file. Units are SI (°C, m/s, metres, hPa; `vis`
+  10000 means ten kilometres or more; `wd` null means a variable
+  direction) and the report and the bulletin are kept verbatim in `raw`.
+  Source: the NOAA Aviation Weather Center's cache files (public domain),
+  the world's services' observations via WMO exchange.
+
+- Radiosonde soundings are a fourth JSON product under the same root,
+  hourly (schema 1, `docs/sounding.md`): the mutable pointer
   `latest-sounding.json` names `sounding.<YYYYMMDDHH>/index.json`, an
-  immutable directory per aggregation hour holding the index (`stations[]`
-  with the WIGOS `id`, `wmo`, `lat`, `lon`, `elev`, `path`, `byteLength`,
-  `crc32`, `latest`, `times` and a `headline` of `t500` / `td500` /
-  `freezingLevel` / `pw` / `levels`; a per-source `watermark`; `sources[]`)
-  and one `<station id>.json` per station carrying its newest four nominal
-  times as parallel fixed-point level arrays `p` (Pa), `z` (gpm), `t` and
-  `td` (K × 100), `wd` (°), `ws` (m/s × 10) and `sig` (BUFR flag table
-  0 08 042), −32768 missing, plus `derived` (`freezingLevel`, `pw`,
-  `lapse850_500`, `tropopause`). Sources: the TEMP bulletins of the WMO
-  WIS2 Global Cache's two GTS→WIS2 gateways, `jp-jma-gts-to-wis2` and
-  `de-dwd-gts-to-wis2` — WMO core data from the originating national
-  meteorological and hydrological services. The viewer does not read it
-  yet.
+  immutable directory per aggregation hour holding two files. `index.json`
+  carries a per-source `watermark`, `sources[]`, a `soundings` descriptor
+  (`path: "soundings.jsonl"`, `byteLength`, `crc32`) and `stations[]` —
+  the WIGOS `id`, `wmo`, `lat`, `lon`, `elev`, `latest`, `times`, a
+  `headline` of `t500` / `td500` / `freezingLevel` / `pw` / `levels`, and
+  the `offset` and `length` of that station's line in `soundings.jsonl`.
+  That file is one JSON object per line, sorted by id, each carrying the
+  station's newest four nominal times as parallel fixed-point level arrays
+  `p` (Pa), `z` (gpm), `t` and `td` (K × 100), `wd` (°), `ws` (m/s × 10)
+  and `sig` (BUFR flag table 0 08 042), −32768 missing, plus `n`,
+  `reported` (levels before thinning) and `derived` (`freezingLevel`,
+  `pw`, `lapse850_500`, `tropopause`). Ascents are thinned to the
+  classical TEMP set: every flagged level, the top and bottom, and
+  otherwise one level per 3 % of pressure. Read one station
+  with `Range: bytes=<offset>-<offset+length-1>` on
+  `soundings.jsonl?v=<crc32>` — the span excludes the newline, so it
+  parses alone — or stream the whole file for analysis. Sources: the TEMP
+  bulletins of the WMO WIS2 Global Cache's two GTS→WIS2 gateways,
+  `jp-jma-gts-to-wis2` and `de-dwd-gts-to-wis2` — WMO core data from the
+  originating national meteorological and hydrological services. The
+  viewer does not read it yet.
 
 A `.xue` bundle is one gridded variable (or a u/v pair) for a whole run:
 8-bit quantized planes on the native grid, temporal residual prediction in
@@ -278,6 +303,10 @@ format is specified in `docs/format.md` (link below). Decoders you can call:
 - [Tropical cyclone product](https://github.com/ringsaturn/xue/blob/main/docs/tc.md):
   the normative description of the hourly track product — delivery,
   units, identity rules, the index, storm and pointer files.
+- [Airport product](https://github.com/ringsaturn/xue/blob/main/docs/airport.md):
+  the normative description of the ten-minute METAR / TAF product —
+  delivery, units, identity, and the index, history and pointer files.
+
 - [Radiosonde sounding product](https://github.com/ringsaturn/xue/blob/main/docs/sounding.md):
   the normative description of the hourly sounding product — delivery, the
   fixed-point level arrays, station identity, the index, the station file,

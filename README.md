@@ -505,21 +505,50 @@ the agency forecasts (dashed ahead of the playhead, solid behind it, wind
 radii at the current position), best tracks and model tracks follow the
 timeline by valid time.
 
+### Airports
+
+Airport observations and forecasts are a third product beside the runs
+([`docs/airport.md`](docs/airport.md)). Every ten minutes `xue
+airport-build` fetches three cached files from the NOAA Aviation Weather
+Center (the world's decoded METARs of the last ninety minutes, every
+current TAF, and the station table at most once a day), converts them to
+SI, merges the observations onto the previous round's 24-hour history and
+writes `web/public/data/airport.<round>/` — `history.jsonl`, one line per
+station, and the `index.json` that carries each station's newest
+observation and the byte span of its line — plus the pointer
+`latest-airport.json`. So the browser reads one airport with one range
+request, and anyone wanting the whole day streams a single file instead of
+listing a thousand. Either observation source may fail on its own; the
+pointer is withheld only when both do.
+[`publish-airport.yml`](.github/workflows/publish-airport.yml) runs every
+ten minutes, independent of the raster publishes:
+
+```sh
+make live-airport-index                      # the live index and its history file
+make airport-build                           # this round, into web/public/data/
+make upload-r2-airport ROUND=202609161440    # the history, then the index, then the pointer
+make prune-r2-airport                        # rounds older than three hours
+.venv/bin/python -m xuebuild airport-build --round 202609161430 --offline --raw-dir tests/fixtures/airport   # from the fixture
+```
+
 ### Soundings
 
-Radiosonde ascents are a third product beside the runs
+Radiosonde ascents are a fourth product beside the runs
 ([`docs/sounding.md`](docs/sounding.md)). Every hour `xue sounding-build`
 lists the two GTS→WIS2 gateway directories in the WMO WIS2 Global Cache — a
 public bucket where the Japan Meteorological Agency and the Deutscher
 Wetterdienst republish every country's GTS bulletins — downloads the TEMP
 bulletins that have arrived since the last issue, decodes them with
 eccodes' `bufr_dump`, keeps one sounding per station and nominal time (the
-longest, then the latest correction), derives the freezing level,
-precipitable water, 850–500 hPa lapse rate and tropopause, and writes
+longest, then the latest correction), thins each ascent to the classical
+TEMP set, derives the freezing level, precipitable water, 850–500 hPa
+lapse rate and tropopause, and writes
 `web/public/data/sounding.<hour>/` plus the pointer `latest-sounding.json`.
-A station with no new ascent this hour keeps its previous file byte for
-byte. Each gateway fails on its own and is recorded in the product's
-`sources`. [`publish-sounding.yml`](.github/workflows/publish-sounding.yml)
+An issue is two files: `soundings.jsonl`, one line per station, and the
+`index.json` that spans it, so the viewer reads one station with one range
+request and an analyst streams the whole file. A station with no new
+ascent this hour is carried forward from the previous issue. Each gateway
+fails on its own and is recorded in the product's `sources`. [`publish-sounding.yml`](.github/workflows/publish-sounding.yml)
 runs at a quarter past every hour, independent of the raster publishes:
 
 ```sh

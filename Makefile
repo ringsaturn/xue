@@ -59,7 +59,7 @@ AWS_REQUEST_CHECKSUM_CALCULATION ?= when_required
 AWS_RESPONSE_CHECKSUM_VALIDATION ?= when_required
 export AWS_DEFAULT_REGION AWS_REQUEST_CHECKSUM_CALCULATION AWS_RESPONSE_CHECKSUM_VALIDATION
 
-.PHONY: check install wasm test test-rust test-e2e encoder-rust encoder-rust-test encoder-wheel bench bench-video bench-lossy mvp serve format-pdf deploy-build upload-r2 upload-r2-bundles upload-r2-manifest upload-r2-stac-item check-pointer upload-r2-pointer upload-r2-stac-collection warm-r2 prune-r2 prune-r2-rounds live-run live-manifest live-window pull-r2-frames push-r2-frames prune-r2-frames deploy-pages deploy showcase showcase-check showcase-refresh upload-r2-showcase tc-build live-tc-index upload-r2-tc prune-r2-tc sounding-build live-sounding-index upload-r2-sounding prune-r2-sounding clean
+.PHONY: check install wasm test test-rust test-e2e encoder-rust encoder-rust-test encoder-wheel bench bench-video bench-lossy mvp serve format-pdf deploy-build upload-r2 upload-r2-bundles upload-r2-manifest upload-r2-stac-item check-pointer upload-r2-pointer upload-r2-stac-collection warm-r2 prune-r2 prune-r2-rounds live-run live-manifest live-window pull-r2-frames push-r2-frames prune-r2-frames deploy-pages deploy showcase showcase-check showcase-refresh upload-r2-showcase tc-build live-tc-index upload-r2-tc prune-r2-tc airport-build live-airport-index upload-r2-airport prune-r2-airport sounding-build live-sounding-index upload-r2-sounding prune-r2-sounding clean
 
 check:
 	$(PYTHON) scripts/check_dependencies.py
@@ -406,38 +406,129 @@ prune-r2-tc:
 		fi; \
 	done
 
+# The airport METAR / TAF product (docs/airport.md): the Aviation Weather
+# Center's decoded observations and forecasts, merged every ten minutes into
+# web/public/data/airport.<round>/ — the index and the history file it spans
+# — and taken live by the mutable latest-airport.json beside the run
+# pointers. The round is a whole YYYYMMDDHHMM; the rolling window's ROUND
+# above is an HHMM inside a run, and the two share the variable, so an empty
+# ROUND here means the current round.
+AIRPORT_ROUND = $(if $(ROUND),$(ROUND),now)
+AIRPORT_KEEP ?= 18
+
+airport-build:
+	$(PYTHON) -m xuebuild airport-build --round $(AIRPORT_ROUND) $(FORCE)
+
+# The live product's pointer, index and history file, into web/public/data/
+# where airport-build looks for the previous round: the history file is this
+# round's history, so a publish without it would start every station's 24
+# hours again — and a truncated one would publish a hole, which is why the
+# CRC32 the index carries is checked here rather than trusted. Three
+# objects. Prints nothing and writes nothing when there is no live product
+# yet (the first publish).
+live-airport-index:
+	@set -e; mkdir -p web/public/data; \
+	pointer=$$($(S3) cp s3://$(R2_BUCKET)/$(R2_PREFIX)/latest-airport.json - --only-show-errors 2>/dev/null || true); \
+	[ -n "$$pointer" ] || { echo "no live airport pointer"; exit 0; }; \
+	path=$$(printf '%s' "$$pointer" | jq -r .path); \
+	directory=$$(dirname "$$path"); \
+	mkdir -p "web/public/data/$$directory"; \
+	$(S3) cp "s3://$(R2_BUCKET)/$(R2_PREFIX)/$$path" "web/public/data/$$path" --only-show-errors; \
+	printf '%s' "$$pointer" > web/public/data/latest-airport.json; \
+	history=$$(jq -r .history.path "web/public/data/$$path"); \
+	$(S3) cp "s3://$(R2_BUCKET)/$(R2_PREFIX)/$$directory/$$history" "web/public/data/$$directory/$$history" \
+		--no-progress --only-show-errors; \
+	crc=$$($(PYTHON) -c "import sys, zlib; print(f'{zlib.crc32(open(sys.argv[1], \"rb\").read()) & 0xFFFFFFFF:08x}')" "web/public/data/$$directory/$$history"); \
+	named=$$(jq -r .history.crc32 "web/public/data/$$path"); \
+	[ "$$crc" = "$$named" ] || { echo "the live $$history is CRC32 $$crc but its index says $$named"; exit 1; }; \
+	stations=$$(jq -r '.stations | length' "web/public/data/$$path"); \
+	bytes=$$(jq -r .history.byteLength "web/public/data/$$path"); \
+	echo "live airport round: $$path ($$stations stations, $$bytes bytes of history)"
+
+# Push the round's history file, then the index that spans it, then the
+# pointer that takes the round live — each object before the one that names
+# it, all immutable and ?v=<crc32>-addressed like a run's artifacts. The
+# pointer on disk must name the round being uploaded and carry its index's
+# CRC32, the way check-pointer holds a run's.
+upload-r2-airport:
+	@set -e; \
+	[ "$(AIRPORT_ROUND)" != "now" ] || { echo "pass ROUND=YYYYMMDDHHMM"; exit 1; }; \
+	dir=web/public/data/airport.$(AIRPORT_ROUND); \
+	[ -f "$$dir/index.json" ] || { echo "no built airport round at $$dir"; exit 1; }; \
+	[ -f web/public/data/latest-airport.json ] || { echo "no latest-airport.json: the build withheld the pointer (neither observation source arrived)"; exit 1; }; \
+	pointer_path=$$(jq -r .path web/public/data/latest-airport.json); \
+	[ "$$pointer_path" = "airport.$(AIRPORT_ROUND)/index.json" ] || { echo "latest-airport.json names $$pointer_path, not airport.$(AIRPORT_ROUND)"; exit 1; }; \
+	pointer_crc=$$(jq -r .crc32 web/public/data/latest-airport.json); \
+	index_crc=$$($(PYTHON) -c "import sys, zlib; print(f'{zlib.crc32(open(sys.argv[1], \"rb\").read()) & 0xFFFFFFFF:08x}')" $$dir/index.json); \
+	[ "$$pointer_crc" = "$$index_crc" ] || { echo "latest-airport.json carries CRC32 $$pointer_crc but $$dir/index.json is $$index_crc"; exit 1; }; \
+	history=$$(jq -r .history.path $$dir/index.json); \
+	$(S3) cp $$dir/$$history s3://$(R2_BUCKET)/$(R2_PREFIX)/airport.$(AIRPORT_ROUND)/$$history --no-progress $(DRY_RUN) \
+		--content-type application/x-ndjson --cache-control "public, max-age=31536000, immutable"; \
+	$(S3) cp $$dir/index.json s3://$(R2_BUCKET)/$(R2_PREFIX)/airport.$(AIRPORT_ROUND)/index.json --no-progress $(DRY_RUN) \
+		--content-type application/json --cache-control "public, max-age=31536000, immutable"; \
+	echo "Uploading latest-airport.json (takes airport round $(AIRPORT_ROUND) live)..."; \
+	$(S3) cp web/public/data/latest-airport.json s3://$(R2_BUCKET)/$(R2_PREFIX)/latest-airport.json --no-progress $(DRY_RUN) \
+		--content-type application/json --cache-control "no-cache"
+
+# Delete round directories beyond the newest AIRPORT_KEEP (three hours;
+# nothing reads an older round — the shell and the next build both start
+# from the live pointer) and never the one the live pointer names.
+prune-r2-airport:
+	@set -e; \
+	live=$$($(S3) cp s3://$(R2_BUCKET)/$(R2_PREFIX)/latest-airport.json - --only-show-errors 2>/dev/null | jq -r .path | cut -d/ -f1 || true); \
+	[ -n "$$live" ] || { echo "no live airport pointer, nothing to prune"; exit 0; }; \
+	echo "live airport round: $$live"; \
+	listing=$$($(S3) ls s3://$(R2_BUCKET)/$(R2_PREFIX)/) \
+		|| { echo "listing the bucket failed, refusing to prune"; exit 1; }; \
+	for round in $$(printf '%s\n' "$$listing" | awk '/ PRE /{print $$2}' \
+		| sed 's:/$$::' | grep "^airport\." | sort -r | tail -n +$$(($(AIRPORT_KEEP) + 1))); do \
+		if [ "$$round" != "$$live" ]; then \
+			echo "Deleting $$round..."; \
+			$(S3) rm s3://$(R2_BUCKET)/$(R2_PREFIX)/$$round/ --recursive --only-show-errors $(DRY_RUN); \
+		fi; \
+	done
+
 # The radiosonde sounding product (docs/sounding.md): the GTS→WIS2
 # gateways' TEMP bulletins aggregated once an hour into
-# web/public/data/sounding.<issue>/ and the mutable latest-sounding.json
-# beside the run pointers. ISSUE is shared with the tc targets. The live
-# issue is both the fetch's watermark and the source of the station files
-# an hour with no new ascent copies forward, so a publish pulls it first.
+# web/public/data/sounding.<issue>/ — the index and the one soundings file
+# it spans — and taken live by the mutable latest-sounding.json beside the
+# run pointers. ISSUE is shared with the tc targets.
 SOUNDING_KEEP ?= 48
 
 sounding-build:
 	$(PYTHON) -m xuebuild sounding-build --issue $(ISSUE) $(FORCE)
 
-# The live product's pointer, index *and station files*, into
-# web/public/data/ where sounding-build looks for the previous hour. The
-# whole directory is pulled (about 700 small objects): without the station
-# files an hour with no new ascent for a station could not copy it forward
-# unchanged. Prints nothing and writes nothing when there is no live
-# product yet (the first publish).
+# The live product's pointer, index and soundings file, into
+# web/public/data/ where sounding-build looks for the previous hour: the
+# soundings file holds every station's older nominal times, so a publish
+# without it would start each station's window again — and a truncated one
+# would publish a hole, which is why the CRC32 the index carries is checked
+# here rather than trusted. Three objects. Prints nothing and writes
+# nothing when there is no live product yet (the first publish).
 live-sounding-index:
 	@set -e; mkdir -p web/public/data; \
 	pointer=$$($(S3) cp s3://$(R2_BUCKET)/$(R2_PREFIX)/latest-sounding.json - --only-show-errors 2>/dev/null || true); \
 	[ -n "$$pointer" ] || { echo "no live sounding pointer"; exit 0; }; \
 	path=$$(printf '%s' "$$pointer" | jq -r .path); \
-	issue=$$(dirname "$$path"); \
-	mkdir -p "web/public/data/$$issue"; \
-	$(S3) sync "s3://$(R2_BUCKET)/$(R2_PREFIX)/$$issue/" "web/public/data/$$issue/" --only-show-errors; \
+	directory=$$(dirname "$$path"); \
+	mkdir -p "web/public/data/$$directory"; \
+	$(S3) cp "s3://$(R2_BUCKET)/$(R2_PREFIX)/$$path" "web/public/data/$$path" --only-show-errors; \
 	printf '%s' "$$pointer" > web/public/data/latest-sounding.json; \
-	echo "live sounding issue: $$path"
+	soundings=$$(jq -r .soundings.path "web/public/data/$$path"); \
+	$(S3) cp "s3://$(R2_BUCKET)/$(R2_PREFIX)/$$directory/$$soundings" "web/public/data/$$directory/$$soundings" \
+		--no-progress --only-show-errors; \
+	crc=$$($(PYTHON) -c "import sys, zlib; print(f'{zlib.crc32(open(sys.argv[1], \"rb\").read()) & 0xFFFFFFFF:08x}')" "web/public/data/$$directory/$$soundings"); \
+	named=$$(jq -r .soundings.crc32 "web/public/data/$$path"); \
+	[ "$$crc" = "$$named" ] || { echo "the live $$soundings is CRC32 $$crc but its index says $$named"; exit 1; }; \
+	stations=$$(jq -r '.stations | length' "web/public/data/$$path"); \
+	bytes=$$(jq -r .soundings.byteLength "web/public/data/$$path"); \
+	echo "live sounding issue: $$path ($$stations stations, $$bytes bytes of soundings)"
 
-# Push one issue's directory (immutable, ?v=<crc32>-addressed like a run)
-# and then the pointer that takes it live. The pointer on disk must name
-# the issue being uploaded and carry its index's CRC32, the way
-# check-pointer holds a run's.
+# Push the issue's soundings file, then the index that spans it, then the
+# pointer that takes the issue live — each object before the one that names
+# it, all immutable and ?v=<crc32>-addressed like a run's artifacts. The
+# pointer on disk must name the issue being uploaded and carry its index's
+# CRC32, the way check-pointer holds a run's.
 upload-r2-sounding:
 	@set -e; \
 	[ "$(ISSUE)" != "now" ] || { echo "pass ISSUE=YYYYMMDDHH"; exit 1; }; \
@@ -449,16 +540,19 @@ upload-r2-sounding:
 	pointer_crc=$$(jq -r .crc32 web/public/data/latest-sounding.json); \
 	index_crc=$$($(PYTHON) -c "import sys, zlib; print(f'{zlib.crc32(open(sys.argv[1], \"rb\").read()) & 0xFFFFFFFF:08x}')" $$dir/index.json); \
 	[ "$$pointer_crc" = "$$index_crc" ] || { echo "latest-sounding.json carries CRC32 $$pointer_crc but $$dir/index.json is $$index_crc"; exit 1; }; \
-	$(S3) sync $$dir s3://$(R2_BUCKET)/$(R2_PREFIX)/sounding.$(ISSUE)/ --no-progress $(DRY_RUN) \
+	soundings=$$(jq -r .soundings.path $$dir/index.json); \
+	$(S3) cp $$dir/$$soundings s3://$(R2_BUCKET)/$(R2_PREFIX)/sounding.$(ISSUE)/$$soundings --no-progress $(DRY_RUN) \
+		--content-type application/x-ndjson --cache-control "public, max-age=31536000, immutable"; \
+	$(S3) cp $$dir/index.json s3://$(R2_BUCKET)/$(R2_PREFIX)/sounding.$(ISSUE)/index.json --no-progress $(DRY_RUN) \
 		--content-type application/json --cache-control "public, max-age=31536000, immutable"; \
 	echo "Uploading latest-sounding.json (takes sounding issue $(ISSUE) live)..."; \
 	$(S3) cp web/public/data/latest-sounding.json s3://$(R2_BUCKET)/$(R2_PREFIX)/latest-sounding.json --no-progress $(DRY_RUN) \
 		--content-type application/json --cache-control "no-cache"
 
 # Delete sounding issue directories beyond the newest SOUNDING_KEEP (48
-# hours = two days, the window a station file's four nominal times cover)
-# and never the one the live pointer names. No pointer yet means nothing
-# is live to protect and nothing to prune, not a reason to fail.
+# hours = two days, the window a station's four nominal times cover) and
+# never the one the live pointer names. No pointer yet means nothing is
+# live to protect and nothing to prune, not a reason to fail.
 prune-r2-sounding:
 	@set -e; \
 	live=$$($(S3) cp s3://$(R2_BUCKET)/$(R2_PREFIX)/latest-sounding.json - --only-show-errors 2>/dev/null | jq -r .path | cut -d/ -f1 || true); \
