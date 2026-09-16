@@ -505,6 +505,37 @@ the agency forecasts (dashed ahead of the playhead, solid behind it, wind
 radii at the current position), best tracks and model tracks follow the
 timeline by valid time.
 
+### Soundings
+
+Radiosonde ascents are a third product beside the runs
+([`docs/sounding.md`](docs/sounding.md)). Every hour `xue sounding-build`
+lists the two GTS→WIS2 gateway directories in the WMO WIS2 Global Cache — a
+public bucket where the Japan Meteorological Agency and the Deutscher
+Wetterdienst republish every country's GTS bulletins — downloads the TEMP
+bulletins that have arrived since the last issue, decodes them with
+eccodes' `bufr_dump`, keeps one sounding per station and nominal time (the
+longest, then the latest correction), derives the freezing level,
+precipitable water, 850–500 hPa lapse rate and tropopause, and writes
+`web/public/data/sounding.<hour>/` plus the pointer `latest-sounding.json`.
+A station with no new ascent this hour keeps its previous file byte for
+byte. Each gateway fails on its own and is recorded in the product's
+`sources`. [`publish-sounding.yml`](.github/workflows/publish-sounding.yml)
+runs at a quarter past every hour, independent of the raster publishes:
+
+```sh
+make live-sounding-index                    # the live issue, for the watermark and the copy-forward
+make sounding-build                         # this hour, into web/public/data/
+make upload-r2-sounding ISSUE=2026091402    # the directory, then the pointer
+make prune-r2-sounding                      # issues older than two days
+.venv/bin/python -m xuebuild sounding-build --issue 2026091402 --offline --raw-dir tests/fixtures/sounding   # from the fixture
+.venv/bin/python tests/prepare_sounding_golden.py   # regenerate the golden after a deliberate change
+```
+
+The soundings are WMO core data under the WMO Unified Data Policy — free
+and unrestricted, attribution of the original source requested. The
+originating national meteorological and hydrological services are the
+source of every ascent; the WIS2 Global Cache is the distribution.
+
 ### The STAC catalog
 
 Beside the pointers, the manifests and `showcase.json`, which keep their

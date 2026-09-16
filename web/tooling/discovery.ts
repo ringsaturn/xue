@@ -138,6 +138,7 @@ export const LLMS_FULL_SOURCES: readonly string[] = [
   "docs/format.md",
   "docs/encoder.md",
   "docs/tc.md",
+  "docs/sounding.md",
   "docs/stac.md",
   "showcase/README.md",
 ];

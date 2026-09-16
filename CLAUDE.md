@@ -66,6 +66,7 @@ npm run dev                      # vite dev server
 
 make test                        # rust + python + web unit tests (incl. encoder parity)
 make tc-build [ISSUE=YYYYMMDDHH] # the tropical cyclone product for one hour (needs eccodes' bufr_dump)
+make sounding-build [ISSUE=YYYYMMDDHH] # the radiosonde sounding product for one hour (needs bufr_dump)
 make test-rust                   # regenerates the golden fixture, then cargo test
 make test-e2e                    # playwright (needs `npx playwright install chromium`)
 make encoder-rust                # build the native encoder from source (needs GDAL + libclang)
@@ -522,6 +523,35 @@ over any composition (`web/src/tc/`: `schema.ts`, `tracks.ts`, `layers.ts`,
 `main.ts::syncTcTime` hands them the frame's valid time, `loadTc` polls the
 pointer with the runs, and a case hides them. URL state is `?tc=<id>|off`,
 `?tcagency=`, `?tcmodel=`, `?tcmembers=`.
+
+### Radiosonde sounding product (`xuebuild/sounding/`)
+
+Observed vertical profiles are a third product beside the runs
+(`docs/sounding.md`, schema v1), the tc product's shape throughout.
+`xue sounding-build` lists the two GTS→WIS2 gateway directories of the
+public `wis2globalcache` S3 bucket (`fetch.py`: unsigned `list-type=2`
+under `data/<gateway>/data/core/I/U/S/`, `wis2:<centre>` reserved for the
+native topic directories), downloads only the objects newer than the
+previous index's per-gateway `watermark` into
+`data/raw/sounding.<issue>/<gateway>/` with a `fetch.json`, decodes each
+bulletin with `eccodescli.bufr_dump_json` (`bufr.py`: one `Sounding` per
+subset, levels closed by the first repeat of a level key, fixed point with
+`-32768` missing, nominal time from the bulletin's `<ddhhmm>`), derives
+four quantities in a fixed operation order (`derive.py`) and writes
+`web/public/data/sounding.<issue>/` plus `latest-sounding.json`
+(`schema.py` validates on write; `build.py` is the only place the sources
+meet). Identity is the five-digit WMO number, the published id the native
+WIGOS id where there is one else `0-20000-0-<wmo>`; one sounding survives
+per station-hour, the longest and then the latest arrival (a correction).
+A station with no new ascent is copied forward byte for byte from the
+previous issue's directory, which is why `make live-sounding-index` syncs
+the whole directory, not just the index. A gateway fails on its own into
+`sources[]`; the pointer is withheld only when nothing contributed and
+nothing carried forward. `tests/fixtures/sounding/` is a fetched hour with
+one gateway down and `expected/` the golden
+(`tests/prepare_sounding_golden.py` regenerates; needs `bufr_dump`).
+`publish-sounding.yml` runs at a quarter past every hour with no GDAL and
+no wheel. The frontend does not read it yet.
 
 ### External tools
 
