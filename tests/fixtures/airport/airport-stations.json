@@ -1,0 +1,4230 @@
+[
+ {
+  "id": "EGLL",
+  "icaoId": "EGLL",
+  "iataId": "LHR",
+  "faaId": null,
+  "wmoId": "03772",
+  "site": "London/Heathrow Intl",
+  "lat": 51.477,
+  "lon": -0.461,
+  "elev": 26,
+  "state": "EN",
+  "country": "GB",
+  "priority": 0,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "FABL",
+  "icaoId": "FABL",
+  "iataId": "BFN",
+  "faaId": null,
+  "wmoId": "68442",
+  "site": "Bloemfontein Intl",
+  "lat": -29.093,
+  "lon": 26.302,
+  "elev": 1348,
+  "state": "FS",
+  "country": "ZA",
+  "priority": 2,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "FACT",
+  "icaoId": "FACT",
+  "iataId": "CPT",
+  "faaId": null,
+  "wmoId": "68816",
+  "site": "Capetown Intl",
+  "lat": -33.965,
+  "lon": 18.602,
+  "elev": 48,
+  "state": "WC",
+  "country": "ZA",
+  "priority": 0,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "FAEL",
+  "icaoId": "FAEL",
+  "iataId": "ELS",
+  "faaId": null,
+  "wmoId": "68858",
+  "site": "East London Arpt",
+  "lat": -33.036,
+  "lon": 27.826,
+  "elev": 127,
+  "state": "EC",
+  "country": "ZA",
+  "priority": 3,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "FAGG",
+  "icaoId": "FAGG",
+  "iataId": "GRJ",
+  "faaId": null,
+  "wmoId": "68828",
+  "site": "George Arpt",
+  "lat": -34.006,
+  "lon": 22.379,
+  "elev": 196,
+  "state": "WC",
+  "country": "ZA",
+  "priority": 2,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "FAHS",
+  "icaoId": "FAHS",
+  "iataId": "HDS",
+  "faaId": null,
+  "wmoId": "68290",
+  "site": "Hoedspruit",
+  "lat": -24.381,
+  "lon": 31.044,
+  "elev": 532,
+  "state": "LP",
+  "country": "ZA",
+  "priority": 3,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "FAJB",
+  "icaoId": "FAJB",
+  "iataId": null,
+  "faaId": null,
+  "wmoId": null,
+  "site": "Johannesburg City",
+  "lat": -26.15,
+  "lon": 28,
+  "elev": 1626,
+  "state": "GT",
+  "country": "ZA",
+  "priority": 6,
+  "siteType": [
+   "METAR"
+  ]
+ },
+ {
+  "id": "FAKN",
+  "icaoId": "FAKN",
+  "iataId": "MQP",
+  "faaId": null,
+  "wmoId": null,
+  "site": "Kruger Mpumalang Intl",
+  "lat": -25.383,
+  "lon": 31.106,
+  "elev": 864,
+  "state": "MP",
+  "country": "ZA",
+  "priority": 3,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "FALA",
+  "icaoId": "FALA",
+  "iataId": "HLA",
+  "faaId": null,
+  "wmoId": null,
+  "site": "Lanseria Intl",
+  "lat": -25.939,
+  "lon": 27.926,
+  "elev": 1365,
+  "state": "GT",
+  "country": "ZA",
+  "priority": 5,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "FALE",
+  "icaoId": "FALE",
+  "iataId": "DUR",
+  "faaId": null,
+  "wmoId": "68592",
+  "site": "Durban/King Shaka Intl",
+  "lat": -29.602,
+  "lon": 31.13,
+  "elev": 109,
+  "state": "NL",
+  "country": "ZA",
+  "priority": 1,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "FALW",
+  "icaoId": "FALW",
+  "iataId": "SDB",
+  "faaId": null,
+  "wmoId": "68714",
+  "site": "Langebaanweg ",
+  "lat": -32.972,
+  "lon": 18.158,
+  "elev": 31,
+  "state": "WC",
+  "country": "ZA",
+  "priority": 3,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "FAMM",
+  "icaoId": "FAMM",
+  "iataId": "MBD",
+  "faaId": null,
+  "wmoId": "68242",
+  "site": "Mmabatho/Montshioa Intl",
+  "lat": -25.798,
+  "lon": 25.548,
+  "elev": 1280,
+  "state": "NW",
+  "country": "ZA",
+  "priority": 2,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "FAOR",
+  "icaoId": "FAOR",
+  "iataId": "JNB",
+  "faaId": null,
+  "wmoId": null,
+  "site": "Johannesburg/Tambo Intl",
+  "lat": -26.139,
+  "lon": 28.246,
+  "elev": 1684,
+  "state": "NP",
+  "country": "ZA",
+  "priority": 0,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "FAPE",
+  "icaoId": "FAPE",
+  "iataId": "PLZ",
+  "faaId": null,
+  "wmoId": "68842",
+  "site": "Port Elizabeth Arpt",
+  "lat": -33.985,
+  "lon": 25.617,
+  "elev": 58,
+  "state": "EC",
+  "country": "ZA",
+  "priority": 1,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "FAPP",
+  "icaoId": "FAPP",
+  "iataId": "PTG",
+  "faaId": null,
+  "wmoId": null,
+  "site": "Polokwane Arpt",
+  "lat": -23.845,
+  "lon": 29.459,
+  "elev": 1238,
+  "state": "LP",
+  "country": "ZA",
+  "priority": 3,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "FASI",
+  "icaoId": "FASI",
+  "iataId": null,
+  "faaId": null,
+  "wmoId": null,
+  "site": "Springs Arpt",
+  "lat": -26.248,
+  "lon": 28.398,
+  "elev": 1627,
+  "state": "GT",
+  "country": "ZA",
+  "priority": 6,
+  "siteType": [
+   "METAR"
+  ]
+ },
+ {
+  "id": "FAUP",
+  "icaoId": "FAUP",
+  "iataId": "UTN",
+  "faaId": null,
+  "wmoId": "68424",
+  "site": "Upington Arpt",
+  "lat": -28.399,
+  "lon": 21.26,
+  "elev": 845,
+  "state": "NC",
+  "country": "ZA",
+  "priority": 1,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "FAUT",
+  "icaoId": "FAUT",
+  "iataId": "UTT",
+  "faaId": null,
+  "wmoId": "68668",
+  "site": "Umtata/Mthatha Arpt",
+  "lat": -31.546,
+  "lon": 28.673,
+  "elev": 735,
+  "state": "EC",
+  "country": "ZA",
+  "priority": 3,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "FAVV",
+  "icaoId": "FAVV",
+  "iataId": null,
+  "faaId": null,
+  "wmoId": null,
+  "site": "Vereeniging Arpt",
+  "lat": -26.566,
+  "lon": 27.961,
+  "elev": 1480,
+  "state": "GT",
+  "country": "ZA",
+  "priority": 4,
+  "siteType": [
+   "METAR"
+  ]
+ },
+ {
+  "id": "FAWB",
+  "icaoId": "FAWB",
+  "iataId": "PRY",
+  "faaId": null,
+  "wmoId": null,
+  "site": "Pretoria/Wonderboom Arpt",
+  "lat": -25.654,
+  "lon": 28.224,
+  "elev": 1245,
+  "state": "GT",
+  "country": "ZA",
+  "priority": 5,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "FAWK",
+  "icaoId": "FAWK",
+  "iataId": "WKF",
+  "faaId": null,
+  "wmoId": "68264",
+  "site": "Waterkloof",
+  "lat": -25.83,
+  "lon": 28.223,
+  "elev": 1496,
+  "state": "GT",
+  "country": "ZA",
+  "priority": 6,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "HUEN",
+  "icaoId": "HUEN",
+  "iataId": "EBB",
+  "faaId": null,
+  "wmoId": "63705",
+  "site": "Entebbe Intl",
+  "lat": 0.036,
+  "lon": 32.437,
+  "elev": 1147,
+  "state": "C",
+  "country": "UG",
+  "priority": 2,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "HUKB",
+  "icaoId": "HUKB",
+  "iataId": null,
+  "faaId": null,
+  "wmoId": "63726",
+  "site": "Kabale",
+  "lat": -1.225,
+  "lon": 29.962,
+  "elev": 1812,
+  "state": "W",
+  "country": "UG",
+  "priority": 9,
+  "siteType": [
+   "METAR"
+  ]
+ },
+ {
+  "id": "HUKS",
+  "icaoId": "HUKS",
+  "iataId": "KSE",
+  "faaId": null,
+  "wmoId": "63674",
+  "site": "Kasese Arpt",
+  "lat": 0.183,
+  "lon": 30.1,
+  "elev": 962,
+  "state": "W",
+  "country": "UG",
+  "priority": 3,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "HULI",
+  "icaoId": "HULI",
+  "iataId": null,
+  "faaId": null,
+  "wmoId": null,
+  "site": "Lira Arpt",
+  "lat": 2.248,
+  "lon": 32.91,
+  "elev": 1091,
+  "state": "N",
+  "country": "UG",
+  "priority": 4,
+  "siteType": [
+   "METAR"
+  ]
+ },
+ {
+  "id": "HUMA",
+  "icaoId": "HUMA",
+  "iataId": "MBQ",
+  "faaId": null,
+  "wmoId": "63702",
+  "site": "Mbarara Arpt",
+  "lat": -0.555,
+  "lon": 30.6,
+  "elev": 1404,
+  "state": "W",
+  "country": "UG",
+  "priority": 9,
+  "siteType": [
+   "METAR"
+  ]
+ },
+ {
+  "id": "HUSO",
+  "icaoId": "HUSO",
+  "iataId": "SRT",
+  "faaId": null,
+  "wmoId": "63658",
+  "site": "Soroti Arpt",
+  "lat": 1.725,
+  "lon": 33.622,
+  "elev": 1126,
+  "state": "E",
+  "country": "UG",
+  "priority": 3,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "KABE",
+  "icaoId": "KABE",
+  "iataId": "ABE",
+  "faaId": "ABE",
+  "wmoId": "72517",
+  "site": "Allentown/Lehigh Valley Intl",
+  "lat": 40.65796,
+  "lon": -75.43472,
+  "elev": 117,
+  "state": "PA",
+  "country": "US",
+  "priority": 3,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "KABI",
+  "icaoId": "KABI",
+  "iataId": "ABI",
+  "faaId": "ABI",
+  "wmoId": "72266",
+  "site": "Abilene Rgnl",
+  "lat": 32.41062,
+  "lon": -99.68208,
+  "elev": 543,
+  "state": "TX",
+  "country": "US",
+  "priority": 2,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "KABQ",
+  "icaoId": "KABQ",
+  "iataId": "ABQ",
+  "faaId": "ABQ",
+  "wmoId": "72365",
+  "site": "Albuquerque Intl",
+  "lat": 35.04189,
+  "lon": -106.61544,
+  "elev": 1620,
+  "state": "NM",
+  "country": "US",
+  "priority": 1,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "KABR",
+  "icaoId": "KABR",
+  "iataId": "ABR",
+  "faaId": "ABR",
+  "wmoId": "72659",
+  "site": "Aberdeen Rgnl",
+  "lat": 45.44358,
+  "lon": -98.41384,
+  "elev": 397,
+  "state": "SD",
+  "country": "US",
+  "priority": 3,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "KABY",
+  "icaoId": "KABY",
+  "iataId": "ABY",
+  "faaId": "ABY",
+  "wmoId": "72216",
+  "site": "Albany/SW Georgia Rgnl",
+  "lat": 31.53642,
+  "lon": -84.1958,
+  "elev": 60,
+  "state": "GA",
+  "country": "US",
+  "priority": 3,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "KJFK",
+  "icaoId": "KJFK",
+  "iataId": "JFK",
+  "faaId": "JFK",
+  "wmoId": "74486",
+  "site": "New York/JF Kennedy Intl",
+  "lat": 40.63916,
+  "lon": -73.76394,
+  "elev": 3,
+  "state": "NY",
+  "country": "US",
+  "priority": 0,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "KSRB",
+  "icaoId": "KSRB",
+  "iataId": null,
+  "faaId": "SRB",
+  "wmoId": null,
+  "site": "Sparta/Upper Cumberland Rgnl",
+  "lat": 36.05287,
+  "lon": -85.53598,
+  "elev": 303,
+  "state": "TN",
+  "country": "US",
+  "priority": 4,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "KSRC",
+  "icaoId": "KSRC",
+  "iataId": "SRC",
+  "faaId": "SRC",
+  "wmoId": null,
+  "site": "Searcy Muni",
+  "lat": 35.21343,
+  "lon": -91.73926,
+  "elev": 80,
+  "state": "AR",
+  "country": "US",
+  "priority": 4,
+  "siteType": [
+   "METAR"
+  ]
+ },
+ {
+  "id": "KSRE",
+  "icaoId": "KSRE",
+  "iataId": null,
+  "faaId": "SRE",
+  "wmoId": null,
+  "site": "Seminole Muni",
+  "lat": 35.271,
+  "lon": -96.675,
+  "elev": 306,
+  "state": "OK",
+  "country": "US",
+  "priority": 6,
+  "siteType": [
+   "METAR"
+  ]
+ },
+ {
+  "id": "KSRQ",
+  "icaoId": "KSRQ",
+  "iataId": "SRQ",
+  "faaId": "SRQ",
+  "wmoId": null,
+  "site": "Sarasota-Bradenton Intl",
+  "lat": 27.40147,
+  "lon": -82.55965,
+  "elev": 5,
+  "state": "FL",
+  "country": "US",
+  "priority": 5,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "KSRR",
+  "icaoId": "KSRR",
+  "iataId": "RUI",
+  "faaId": "SRR",
+  "wmoId": null,
+  "site": "Ruidoso Rgnl",
+  "lat": 33.46674,
+  "lon": -105.52781,
+  "elev": 2063,
+  "state": "NM",
+  "country": "US",
+  "priority": 4,
+  "siteType": [
+   "METAR"
+  ]
+ },
+ {
+  "id": "LFAC",
+  "icaoId": "LFAC",
+  "iataId": "CQF",
+  "faaId": null,
+  "wmoId": null,
+  "site": "Calais Arpt",
+  "lat": 50.962,
+  "lon": 1.955,
+  "elev": 3,
+  "state": "HD",
+  "country": "FR",
+  "priority": 4,
+  "siteType": [
+   "METAR"
+  ]
+ },
+ {
+  "id": "LFAQ",
+  "icaoId": "LFAQ",
+  "iataId": "BYF",
+  "faaId": null,
+  "wmoId": null,
+  "site": "Albert/Picardie Arpt",
+  "lat": 49.972,
+  "lon": 2.704,
+  "elev": 107,
+  "state": "HD",
+  "country": "FR",
+  "priority": 3,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFAT",
+  "icaoId": "LFAT",
+  "iataId": "LTQ",
+  "faaId": null,
+  "wmoId": "07003",
+  "site": "Le Touquet Arpt",
+  "lat": 50.515,
+  "lon": 1.623,
+  "elev": 2,
+  "state": "HD",
+  "country": "FR",
+  "priority": 3,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFBA",
+  "icaoId": "LFBA",
+  "iataId": "AGF",
+  "faaId": null,
+  "wmoId": "07524",
+  "site": "Agen/La Garenne Arpt",
+  "lat": 44.176,
+  "lon": 0.593,
+  "elev": 68,
+  "state": "NA",
+  "country": "FR",
+  "priority": 3,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFBC",
+  "icaoId": "LFBC",
+  "iataId": null,
+  "faaId": null,
+  "wmoId": "07502",
+  "site": "Cazaux Pond",
+  "lat": 44.533,
+  "lon": -1.125,
+  "elev": 22,
+  "state": "NA",
+  "country": "FR",
+  "priority": 5,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFBD",
+  "icaoId": "LFBD",
+  "iataId": "BOD",
+  "faaId": null,
+  "wmoId": "07510",
+  "site": "Bordeaux/M\u00e9rignac Arpt",
+  "lat": 44.831,
+  "lon": -0.691,
+  "elev": 48,
+  "state": "NA",
+  "country": "FR",
+  "priority": 1,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFBE",
+  "icaoId": "LFBE",
+  "iataId": "EGC",
+  "faaId": null,
+  "wmoId": "07530",
+  "site": "Bergerac/Perigord Arpt",
+  "lat": 44.826,
+  "lon": 0.516,
+  "elev": 49,
+  "state": "NA",
+  "country": "FR",
+  "priority": 4,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFBG",
+  "icaoId": "LFBG",
+  "iataId": "CNG",
+  "faaId": null,
+  "wmoId": "07412",
+  "site": "Cognac/Parvaud Arpt",
+  "lat": 45.665,
+  "lon": -0.316,
+  "elev": 28,
+  "state": "NA",
+  "country": "FR",
+  "priority": 4,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFBH",
+  "icaoId": "LFBH",
+  "iataId": "LRH",
+  "faaId": null,
+  "wmoId": "07316",
+  "site": "La Rochelle\u2013\u00cele de R\u00e9",
+  "lat": 46.178,
+  "lon": -1.193,
+  "elev": 18,
+  "state": "NA",
+  "country": "FR",
+  "priority": 3,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFBI",
+  "icaoId": "LFBI",
+  "iataId": "PIS",
+  "faaId": null,
+  "wmoId": "07335",
+  "site": "Poitiers/Biard Arpt",
+  "lat": 46.584,
+  "lon": 0.309,
+  "elev": 117,
+  "state": "NA",
+  "country": "FR",
+  "priority": 3,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFBL",
+  "icaoId": "LFBL",
+  "iataId": "LIG",
+  "faaId": null,
+  "wmoId": "07434",
+  "site": "Limoges/Bellegarde Arpt",
+  "lat": 45.863,
+  "lon": 1.179,
+  "elev": 402,
+  "state": "NA",
+  "country": "FR",
+  "priority": 3,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFBM",
+  "icaoId": "LFBM",
+  "iataId": null,
+  "faaId": null,
+  "wmoId": "07607",
+  "site": "Mont-de-Marsan Arpt",
+  "lat": 43.912,
+  "lon": -0.507,
+  "elev": 56,
+  "state": "NA",
+  "country": "FR",
+  "priority": 4,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFBO",
+  "icaoId": "LFBO",
+  "iataId": "TLS",
+  "faaId": null,
+  "wmoId": "07630",
+  "site": "Toulouse/Blagnac Arpt",
+  "lat": 43.621,
+  "lon": 1.379,
+  "elev": 150,
+  "state": "OC",
+  "country": "FR",
+  "priority": 3,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFBP",
+  "icaoId": "LFBP",
+  "iataId": "PUF",
+  "faaId": null,
+  "wmoId": "07610",
+  "site": "Pau/Uzein Arpt",
+  "lat": 43.385,
+  "lon": -0.416,
+  "elev": 182,
+  "state": "NA",
+  "country": "FR",
+  "priority": 5,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFBS",
+  "icaoId": "LFBS",
+  "iataId": null,
+  "faaId": null,
+  "wmoId": "07503",
+  "site": "Biscarosse Arpt",
+  "lat": 44.368,
+  "lon": -1.132,
+  "elev": 30,
+  "state": "NA",
+  "country": "FR",
+  "priority": 9,
+  "siteType": [
+   "METAR"
+  ]
+ },
+ {
+  "id": "LFBT",
+  "icaoId": "LFBT",
+  "iataId": "LDE",
+  "faaId": null,
+  "wmoId": "07621",
+  "site": "Tarbes/Ossun Arpt",
+  "lat": 43.189,
+  "lon": 0,
+  "elev": 359,
+  "state": "OC",
+  "country": "FR",
+  "priority": 3,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFBU",
+  "icaoId": "LFBU",
+  "iataId": "ANG",
+  "faaId": null,
+  "wmoId": "07420",
+  "site": "Angouleme/Champniers",
+  "lat": 45.728,
+  "lon": 0.22,
+  "elev": 124,
+  "state": "NA",
+  "country": "FR",
+  "priority": 5,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFBX",
+  "icaoId": "LFBX",
+  "iataId": "PGX",
+  "faaId": null,
+  "wmoId": "07428",
+  "site": "Perigueux/Bassillac",
+  "lat": 45.196,
+  "lon": 0.815,
+  "elev": 97,
+  "state": "NA",
+  "country": "FR",
+  "priority": 5,
+  "siteType": [
+   "METAR"
+  ]
+ },
+ {
+  "id": "LFBY",
+  "icaoId": "LFBY",
+  "iataId": null,
+  "faaId": null,
+  "wmoId": "07603",
+  "site": "Dax/Seyresse Arpt",
+  "lat": 43.69,
+  "lon": -1.07,
+  "elev": 32,
+  "state": "NA",
+  "country": "FR",
+  "priority": 5,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFBZ",
+  "icaoId": "LFBZ",
+  "iataId": "BIQ",
+  "faaId": null,
+  "wmoId": "07602",
+  "site": "Biarritz/Parme Arpt",
+  "lat": 43.469,
+  "lon": -1.534,
+  "elev": 70,
+  "state": "NA",
+  "country": "FR",
+  "priority": 4,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFCK",
+  "icaoId": "LFCK",
+  "iataId": "DCM",
+  "faaId": null,
+  "wmoId": null,
+  "site": "Castres/Mazamet Arpt",
+  "lat": 43.556,
+  "lon": 2.289,
+  "elev": 223,
+  "state": "OC",
+  "country": "FR",
+  "priority": 5,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFCR",
+  "icaoId": "LFCR",
+  "iataId": "RDZ",
+  "faaId": null,
+  "wmoId": "07552",
+  "site": "Rodez/Marcillac Arpt",
+  "lat": 44.41,
+  "lon": 2.483,
+  "elev": 576,
+  "state": "OC",
+  "country": "FR",
+  "priority": 3,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFGA",
+  "icaoId": "LFGA",
+  "iataId": "CMR",
+  "faaId": null,
+  "wmoId": null,
+  "site": "Colmar/Houssen Arpt",
+  "lat": 48.11,
+  "lon": 7.359,
+  "elev": 191,
+  "state": "GE",
+  "country": "FR",
+  "priority": 4,
+  "siteType": [
+   "METAR"
+  ]
+ },
+ {
+  "id": "LFGJ",
+  "icaoId": "LFGJ",
+  "iataId": "DLE",
+  "faaId": null,
+  "wmoId": null,
+  "site": "Dole/Tavaux Arpt",
+  "lat": 47.044,
+  "lon": 5.427,
+  "elev": 191,
+  "state": "BF",
+  "country": "FR",
+  "priority": 5,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFHP",
+  "icaoId": "LFHP",
+  "iataId": "LPY",
+  "faaId": null,
+  "wmoId": "07471",
+  "site": "Le Puy/Loudes Arpt",
+  "lat": 45.075,
+  "lon": 3.764,
+  "elev": 829,
+  "state": "AR",
+  "country": "FR",
+  "priority": 3,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFJL",
+  "icaoId": "LFJL",
+  "iataId": "ETZ",
+  "faaId": null,
+  "wmoId": "07093",
+  "site": "Metz/Lorraine Arpt",
+  "lat": 48.982,
+  "lon": 6.251,
+  "elev": 259,
+  "state": "GE",
+  "country": "FR",
+  "priority": 5,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFJR",
+  "icaoId": "LFJR",
+  "iataId": "ANE",
+  "faaId": null,
+  "wmoId": null,
+  "site": "Anger/Loire Arpt",
+  "lat": 47.562,
+  "lon": -0.317,
+  "elev": 50,
+  "state": "PD",
+  "country": "FR",
+  "priority": 4,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFKB",
+  "icaoId": "LFKB",
+  "iataId": "BIA",
+  "faaId": null,
+  "wmoId": "07790",
+  "site": "Bastia/Poretta Arpt",
+  "lat": 42.553,
+  "lon": 9.484,
+  "elev": 7,
+  "state": "OC",
+  "country": "FR",
+  "priority": 2,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFKC",
+  "icaoId": "LFKC",
+  "iataId": "CLY",
+  "faaId": null,
+  "wmoId": "07754",
+  "site": "Calvi/St Catherine Arpt",
+  "lat": 42.531,
+  "lon": 8.793,
+  "elev": 38,
+  "state": "CO",
+  "country": "FR",
+  "priority": 4,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFKF",
+  "icaoId": "LFKF",
+  "iataId": "FSC",
+  "faaId": null,
+  "wmoId": "07780",
+  "site": "Figari/Corse Arpt",
+  "lat": 41.501,
+  "lon": 9.098,
+  "elev": 15,
+  "state": "CO",
+  "country": "FR",
+  "priority": 5,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFKJ",
+  "icaoId": "LFKJ",
+  "iataId": "AJA",
+  "faaId": null,
+  "wmoId": "07761",
+  "site": "Ajaccio/Oro Arpt",
+  "lat": 41.924,
+  "lon": 8.803,
+  "elev": 9,
+  "state": "CO",
+  "country": "FR",
+  "priority": 3,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFKS",
+  "icaoId": "LFKS",
+  "iataId": "SOZ",
+  "faaId": null,
+  "wmoId": "07765",
+  "site": "Solenzara",
+  "lat": 41.924,
+  "lon": 9.406,
+  "elev": 22,
+  "state": "CO",
+  "country": "FR",
+  "priority": 5,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFLB",
+  "icaoId": "LFLB",
+  "iataId": "CMF",
+  "faaId": null,
+  "wmoId": "07491",
+  "site": "Chambery Arpt",
+  "lat": 45.637,
+  "lon": 5.883,
+  "elev": 234,
+  "state": "AR",
+  "country": "FR",
+  "priority": 5,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFLC",
+  "icaoId": "LFLC",
+  "iataId": "CFE",
+  "faaId": null,
+  "wmoId": "07460",
+  "site": "Clermont-Ferrand/Auvergne Arpt",
+  "lat": 45.787,
+  "lon": 3.169,
+  "elev": 325,
+  "state": "AR",
+  "country": "FR",
+  "priority": 2,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFLL",
+  "icaoId": "LFLL",
+  "iataId": "LYS",
+  "faaId": null,
+  "wmoId": "07481",
+  "site": "Lyon/St-Exup\u00e9ry Arpt",
+  "lat": 45.726,
+  "lon": 5.078,
+  "elev": 234,
+  "state": "AR",
+  "country": "FR",
+  "priority": 3,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFLN",
+  "icaoId": "LFLN",
+  "iataId": "SYT",
+  "faaId": null,
+  "wmoId": "07379",
+  "site": "Saint Yan Arpt",
+  "lat": 46.412,
+  "lon": 4.025,
+  "elev": 238,
+  "state": "BF",
+  "country": "FR",
+  "priority": 4,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFLP",
+  "icaoId": "LFLP",
+  "iataId": "NCY",
+  "faaId": null,
+  "wmoId": "07490",
+  "site": "Annecy/Meythet Arpt",
+  "lat": 45.93,
+  "lon": 6.106,
+  "elev": 460,
+  "state": "AR",
+  "country": "FR",
+  "priority": 6,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFLS",
+  "icaoId": "LFLS",
+  "iataId": "GNB",
+  "faaId": null,
+  "wmoId": "07486",
+  "site": "Grenoble/Alpes\u2013Is\u00e8re Arpt",
+  "lat": 45.363,
+  "lon": 5.329,
+  "elev": 386,
+  "state": "AR",
+  "country": "FR",
+  "priority": 4,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFLU",
+  "icaoId": "LFLU",
+  "iataId": "VAF",
+  "faaId": null,
+  "wmoId": null,
+  "site": "Valence-Chabeuil Arpt",
+  "lat": 44.922,
+  "lon": 4.97,
+  "elev": 162,
+  "state": "AR",
+  "country": "FR",
+  "priority": 5,
+  "siteType": [
+   "METAR"
+  ]
+ },
+ {
+  "id": "LFLV",
+  "icaoId": "LFLV",
+  "iataId": "VHY",
+  "faaId": null,
+  "wmoId": "07374",
+  "site": "Vichy/Charmeil Arpt",
+  "lat": 46.167,
+  "lon": 3.399,
+  "elev": 248,
+  "state": "AR",
+  "country": "FR",
+  "priority": 5,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFLW",
+  "icaoId": "LFLW",
+  "iataId": "AUR",
+  "faaId": null,
+  "wmoId": "07549",
+  "site": "Aurillac Arpt",
+  "lat": 44.899,
+  "lon": 2.421,
+  "elev": 638,
+  "state": "AR",
+  "country": "FR",
+  "priority": 4,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFLX",
+  "icaoId": "LFLX",
+  "iataId": "CHR",
+  "faaId": null,
+  "wmoId": "07354",
+  "site": "Chateauroux/Deols Arpt",
+  "lat": 46.87,
+  "lon": 1.741,
+  "elev": 157,
+  "state": "CV",
+  "country": "FR",
+  "priority": 4,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFLY",
+  "icaoId": "LFLY",
+  "iataId": "LYN",
+  "faaId": null,
+  "wmoId": "07480",
+  "site": "Lyon/Bron Arpt",
+  "lat": 45.726,
+  "lon": 4.938,
+  "elev": 197,
+  "state": "AR",
+  "country": "FR",
+  "priority": 6,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFMC",
+  "icaoId": "LFMC",
+  "iataId": null,
+  "faaId": null,
+  "wmoId": "07675",
+  "site": "Le Luc Arpt",
+  "lat": 43.383,
+  "lon": 6.386,
+  "elev": 79,
+  "state": "PA",
+  "country": "FR",
+  "priority": 6,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFMD",
+  "icaoId": "LFMD",
+  "iataId": "CEQ",
+  "faaId": null,
+  "wmoId": "07684",
+  "site": "Cannes/Mandelieu Arpt",
+  "lat": 43.544,
+  "lon": 6.953,
+  "elev": 2,
+  "state": "PA",
+  "country": "FR",
+  "priority": 6,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFMH",
+  "icaoId": "LFMH",
+  "iataId": "EBU",
+  "faaId": null,
+  "wmoId": "07475",
+  "site": "St-\u00c9tienne/Bouth\u00e9on",
+  "lat": 45.533,
+  "lon": 4.293,
+  "elev": 400,
+  "state": "AR",
+  "country": "FR",
+  "priority": 5,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFMI",
+  "icaoId": "LFMI",
+  "iataId": null,
+  "faaId": null,
+  "wmoId": "07647",
+  "site": "Istres/Le Tube",
+  "lat": 43.516,
+  "lon": 4.935,
+  "elev": 20,
+  "state": "PA",
+  "country": "FR",
+  "priority": 6,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFMK",
+  "icaoId": "LFMK",
+  "iataId": "CCF",
+  "faaId": null,
+  "wmoId": "07635",
+  "site": "Carcassonne/Salvaza Arpt",
+  "lat": 43.214,
+  "lon": 2.31,
+  "elev": 124,
+  "state": "OC",
+  "country": "FR",
+  "priority": 4,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFML",
+  "icaoId": "LFML",
+  "iataId": "MRS",
+  "faaId": null,
+  "wmoId": "07650",
+  "site": "Marseille Arpt",
+  "lat": 43.438,
+  "lon": 5.216,
+  "elev": 20,
+  "state": "PA",
+  "country": "FR",
+  "priority": 2,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFMN",
+  "icaoId": "LFMN",
+  "iataId": "NCE",
+  "faaId": null,
+  "wmoId": "07690",
+  "site": "Nice/C\u00f4te d'Azur Arpt",
+  "lat": 43.658,
+  "lon": 7.216,
+  "elev": 4,
+  "state": "PA",
+  "country": "FR",
+  "priority": 3,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFMO",
+  "icaoId": "LFMO",
+  "iataId": null,
+  "faaId": null,
+  "wmoId": "07579",
+  "site": "Orange/Caritat",
+  "lat": 44.144,
+  "lon": 4.861,
+  "elev": 56,
+  "state": "PA",
+  "country": "FR",
+  "priority": 6,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFMP",
+  "icaoId": "LFMP",
+  "iataId": "PGF",
+  "faaId": null,
+  "wmoId": "07747",
+  "site": "Perpignan/Rivesaltes Arpt",
+  "lat": 42.737,
+  "lon": 2.873,
+  "elev": 41,
+  "state": "OC",
+  "country": "FR",
+  "priority": 3,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFMT",
+  "icaoId": "LFMT",
+  "iataId": "MPL",
+  "faaId": null,
+  "wmoId": "07643",
+  "site": "Montpellier/M\u00e9diterranee Arpt",
+  "lat": 43.577,
+  "lon": 3.963,
+  "elev": 1,
+  "state": "OC",
+  "country": "FR",
+  "priority": 3,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFMU",
+  "icaoId": "LFMU",
+  "iataId": "BZR",
+  "faaId": null,
+  "wmoId": null,
+  "site": "B\u00e9ziers/Cap d'Agde",
+  "lat": 43.322,
+  "lon": 3.353,
+  "elev": 14,
+  "state": "OC",
+  "country": "FR",
+  "priority": 4,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFMV",
+  "icaoId": "LFMV",
+  "iataId": "AVN",
+  "faaId": null,
+  "wmoId": "07476",
+  "site": "Avignon/Caumont Arpt",
+  "lat": 43.911,
+  "lon": 4.903,
+  "elev": 33,
+  "state": "PA",
+  "country": "FR",
+  "priority": 4,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFMY",
+  "icaoId": "LFMY",
+  "iataId": null,
+  "faaId": null,
+  "wmoId": "07648",
+  "site": "Salon de Provence",
+  "lat": 43.604,
+  "lon": 5.108,
+  "elev": 57,
+  "state": "PA",
+  "country": "FR",
+  "priority": 6,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFOA",
+  "icaoId": "LFOA",
+  "iataId": null,
+  "faaId": null,
+  "wmoId": null,
+  "site": "Avord",
+  "lat": 47.052,
+  "lon": 2.642,
+  "elev": 174,
+  "state": "CV",
+  "country": "FR",
+  "priority": 3,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFOB",
+  "icaoId": "LFOB",
+  "iataId": "BVA",
+  "faaId": null,
+  "wmoId": "07055",
+  "site": "Beauvais/Tille Arpt",
+  "lat": 49.454,
+  "lon": 2.113,
+  "elev": 99,
+  "state": "HD",
+  "country": "FR",
+  "priority": 4,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFOE",
+  "icaoId": "LFOE",
+  "iataId": "EVX",
+  "faaId": null,
+  "wmoId": "07038",
+  "site": "Evreux/De LEure",
+  "lat": 49.025,
+  "lon": 1.222,
+  "elev": 132,
+  "state": "NO",
+  "country": "FR",
+  "priority": 5,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFOH",
+  "icaoId": "LFOH",
+  "iataId": "LEH",
+  "faaId": null,
+  "wmoId": "07028",
+  "site": "Le Havre/Octeville Arpt",
+  "lat": 49.533,
+  "lon": 0.091,
+  "elev": 87,
+  "state": "NO",
+  "country": "FR",
+  "priority": 4,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFOJ",
+  "icaoId": "LFOJ",
+  "iataId": null,
+  "faaId": null,
+  "wmoId": "07249",
+  "site": "Orleans/Bricy",
+  "lat": 47.985,
+  "lon": 1.754,
+  "elev": 122,
+  "state": "CV",
+  "country": "FR",
+  "priority": 6,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFOK",
+  "icaoId": "LFOK",
+  "iataId": "XCR",
+  "faaId": null,
+  "wmoId": "07165",
+  "site": "Ch\u00e2lons-Vatry Arpt",
+  "lat": 48.777,
+  "lon": 4.165,
+  "elev": 166,
+  "state": "GE",
+  "country": "FR",
+  "priority": 3,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFOP",
+  "icaoId": "LFOP",
+  "iataId": "URO",
+  "faaId": null,
+  "wmoId": "07037",
+  "site": "Rouen/Boos Arpt",
+  "lat": 49.383,
+  "lon": 1.182,
+  "elev": 149,
+  "state": "NO",
+  "country": "FR",
+  "priority": 3,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFOT",
+  "icaoId": "LFOT",
+  "iataId": "TUF",
+  "faaId": null,
+  "wmoId": "07240",
+  "site": "Tours/Val de Loire Arpt",
+  "lat": 47.444,
+  "lon": 0.728,
+  "elev": 107,
+  "state": "CV",
+  "country": "FR",
+  "priority": 4,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFOV",
+  "icaoId": "LFOV",
+  "iataId": "LVA",
+  "faaId": null,
+  "wmoId": "07134",
+  "site": "Laval/Entrammes Arpt",
+  "lat": 48.031,
+  "lon": -0.746,
+  "elev": 99,
+  "state": "PD",
+  "country": "FR",
+  "priority": 4,
+  "siteType": [
+   "METAR"
+  ]
+ },
+ {
+  "id": "LFOZ",
+  "icaoId": "LFOZ",
+  "iataId": "ORE",
+  "faaId": null,
+  "wmoId": null,
+  "site": "Orl\u00e9ans/St-Denis Arpt",
+  "lat": 47.897,
+  "lon": 2.163,
+  "elev": 121,
+  "state": "",
+  "country": "FR",
+  "priority": 4,
+  "siteType": [
+   "METAR"
+  ]
+ },
+ {
+  "id": "LFPB",
+  "icaoId": "LFPB",
+  "iataId": "LBG",
+  "faaId": null,
+  "wmoId": "07150",
+  "site": "Paris/Le Bourge Arpt",
+  "lat": 48.967,
+  "lon": 2.428,
+  "elev": 50,
+  "state": "ID",
+  "country": "FR",
+  "priority": 6,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFPG",
+  "icaoId": "LFPG",
+  "iataId": "CDG",
+  "faaId": null,
+  "wmoId": "07157",
+  "site": "Paris/De Gaulle Arpt",
+  "lat": 49.015,
+  "lon": 2.534,
+  "elev": 107,
+  "state": "ID",
+  "country": "FR",
+  "priority": 5,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFPM",
+  "icaoId": "LFPM",
+  "iataId": null,
+  "faaId": null,
+  "wmoId": "07153",
+  "site": "Melun/Villaroche Arpt",
+  "lat": 48.611,
+  "lon": 2.68,
+  "elev": 91,
+  "state": "ID",
+  "country": "FR",
+  "priority": 6,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFPN",
+  "icaoId": "LFPN",
+  "iataId": "TNF",
+  "faaId": null,
+  "wmoId": "07146",
+  "site": "Toussus le Noble Arpt",
+  "lat": 48.752,
+  "lon": 2.114,
+  "elev": 152,
+  "state": "NO",
+  "country": "FR",
+  "priority": 6,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFPO",
+  "icaoId": "LFPO",
+  "iataId": "ORY",
+  "faaId": null,
+  "wmoId": "07149",
+  "site": "Paris/Orly Fld",
+  "lat": 48.717,
+  "lon": 2.384,
+  "elev": 88,
+  "state": "ID",
+  "country": "FR",
+  "priority": 1,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFPT",
+  "icaoId": "LFPT",
+  "iataId": "POX",
+  "faaId": null,
+  "wmoId": null,
+  "site": "Pontoise-Cormeilles",
+  "lat": 49.097,
+  "lon": 2.041,
+  "elev": 91,
+  "state": "ID",
+  "country": "FR",
+  "priority": 6,
+  "siteType": [
+   "METAR"
+  ]
+ },
+ {
+  "id": "LFPV",
+  "icaoId": "LFPV",
+  "iataId": "VIY",
+  "faaId": null,
+  "wmoId": "07147",
+  "site": "Villacoublay",
+  "lat": 48.77,
+  "lon": 2.205,
+  "elev": 171,
+  "state": "ID",
+  "country": "FR",
+  "priority": 6,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFQA",
+  "icaoId": "LFQA",
+  "iataId": null,
+  "faaId": null,
+  "wmoId": "07072",
+  "site": "Reims/Prunay Arpt",
+  "lat": 49.21,
+  "lon": 4.155,
+  "elev": 92,
+  "state": "GE",
+  "country": "FR",
+  "priority": 5,
+  "siteType": [
+   "METAR"
+  ]
+ },
+ {
+  "id": "LFQB",
+  "icaoId": "LFQB",
+  "iataId": null,
+  "faaId": null,
+  "wmoId": "07168",
+  "site": "Troyes/Barberey Arpt",
+  "lat": 48.325,
+  "lon": 4.02,
+  "elev": 107,
+  "state": "GE",
+  "country": "FR",
+  "priority": 4,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFQG",
+  "icaoId": "LFQG",
+  "iataId": "NVS",
+  "faaId": null,
+  "wmoId": "07260",
+  "site": "Nevers/Fourchambault",
+  "lat": 46.998,
+  "lon": 3.113,
+  "elev": 172,
+  "state": "BF",
+  "country": "FR",
+  "priority": 4,
+  "siteType": [
+   "METAR"
+  ]
+ },
+ {
+  "id": "LFQQ",
+  "icaoId": "LFQQ",
+  "iataId": "LIL",
+  "faaId": null,
+  "wmoId": "07015",
+  "site": "Lille/Lesquin Arpt",
+  "lat": 50.562,
+  "lon": 3.089,
+  "elev": 43,
+  "state": "HD",
+  "country": "FR",
+  "priority": 4,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFRB",
+  "icaoId": "LFRB",
+  "iataId": "BES",
+  "faaId": null,
+  "wmoId": "07110",
+  "site": "Brest/Guipavas Arpt",
+  "lat": 48.444,
+  "lon": -4.412,
+  "elev": 91,
+  "state": "BR",
+  "country": "FR",
+  "priority": 1,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFRC",
+  "icaoId": "LFRC",
+  "iataId": "CER",
+  "faaId": null,
+  "wmoId": "07024",
+  "site": "Cherbourg/Manche Arpt",
+  "lat": 49.65,
+  "lon": -1.47,
+  "elev": 137,
+  "state": "NO",
+  "country": "FR",
+  "priority": 4,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFRD",
+  "icaoId": "LFRD",
+  "iataId": "DNR",
+  "faaId": null,
+  "wmoId": "07125",
+  "site": "Dinard/Pleurtuit Arpt",
+  "lat": 48.589,
+  "lon": -2.075,
+  "elev": 56,
+  "state": "BR",
+  "country": "FR",
+  "priority": 5,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFRG",
+  "icaoId": "LFRG",
+  "iataId": "DOL",
+  "faaId": null,
+  "wmoId": "07031",
+  "site": "Deauville/Saint Gati",
+  "lat": 49.365,
+  "lon": 0.154,
+  "elev": 146,
+  "state": "NO",
+  "country": "FR",
+  "priority": 5,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFRH",
+  "icaoId": "LFRH",
+  "iataId": "LRT",
+  "faaId": null,
+  "wmoId": "07205",
+  "site": "Lorient/Bihoue Arpt",
+  "lat": 47.761,
+  "lon": -3.44,
+  "elev": 46,
+  "state": "BR",
+  "country": "FR",
+  "priority": 3,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFRI",
+  "icaoId": "LFRI",
+  "iataId": "EDM",
+  "faaId": null,
+  "wmoId": "07306",
+  "site": "La Roche/Les Ajoncs",
+  "lat": 46.702,
+  "lon": -1.379,
+  "elev": 89,
+  "state": "PD",
+  "country": "FR",
+  "priority": 5,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFRJ",
+  "icaoId": "LFRJ",
+  "iataId": "LDV",
+  "faaId": null,
+  "wmoId": "07106",
+  "site": "Landivisiau",
+  "lat": 48.527,
+  "lon": -4.138,
+  "elev": 109,
+  "state": "BR",
+  "country": "FR",
+  "priority": 6,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFRK",
+  "icaoId": "LFRK",
+  "iataId": "CFR",
+  "faaId": null,
+  "wmoId": "07027",
+  "site": "Caen/Carpiquet Arpt",
+  "lat": 49.18,
+  "lon": -0.456,
+  "elev": 66,
+  "state": "NO",
+  "country": "FR",
+  "priority": 3,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFRL",
+  "icaoId": "LFRL",
+  "iataId": null,
+  "faaId": null,
+  "wmoId": "07109",
+  "site": "Lanveoc/Poulmic Arpt",
+  "lat": 48.279,
+  "lon": -4.439,
+  "elev": 80,
+  "state": "BR",
+  "country": "FR",
+  "priority": 6,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFRM",
+  "icaoId": "LFRM",
+  "iataId": "LME",
+  "faaId": null,
+  "wmoId": "07235",
+  "site": "Le Mans/Arnage Arpt",
+  "lat": 47.949,
+  "lon": 0.202,
+  "elev": 51,
+  "state": "PD",
+  "country": "FR",
+  "priority": 3,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFRN",
+  "icaoId": "LFRN",
+  "iataId": "RNS",
+  "faaId": null,
+  "wmoId": "07130",
+  "site": "Rennes/St Jacques Arpt",
+  "lat": 48.069,
+  "lon": -1.734,
+  "elev": 35,
+  "state": "BR",
+  "country": "FR",
+  "priority": 2,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFRO",
+  "icaoId": "LFRO",
+  "iataId": "LAI",
+  "faaId": null,
+  "wmoId": "07118",
+  "site": "Lannion/Servel Arpt",
+  "lat": 48.755,
+  "lon": -3.469,
+  "elev": 86,
+  "state": "BR",
+  "country": "FR",
+  "priority": 5,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFRQ",
+  "icaoId": "LFRQ",
+  "iataId": "UIP",
+  "faaId": null,
+  "wmoId": "07201",
+  "site": "Quimper/Pluguffan Arpt",
+  "lat": 47.975,
+  "lon": -4.168,
+  "elev": 94,
+  "state": "BR",
+  "country": "FR",
+  "priority": 5,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFRS",
+  "icaoId": "LFRS",
+  "iataId": "NTE",
+  "faaId": null,
+  "wmoId": "07222",
+  "site": "Nantes/Atlantique Arpt",
+  "lat": 47.15,
+  "lon": -1.609,
+  "elev": 26,
+  "state": "PD",
+  "country": "FR",
+  "priority": 3,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFRT",
+  "icaoId": "LFRT",
+  "iataId": "SBK",
+  "faaId": null,
+  "wmoId": "07120",
+  "site": "Saint Brieuc/Armor Arpt",
+  "lat": 48.536,
+  "lon": -2.853,
+  "elev": 134,
+  "state": "BR",
+  "country": "FR",
+  "priority": 4,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFRU",
+  "icaoId": "LFRU",
+  "iataId": "MXN",
+  "faaId": null,
+  "wmoId": null,
+  "site": "Morlaix/Ploujean Arpt",
+  "lat": 48.601,
+  "lon": -3.814,
+  "elev": 85,
+  "state": "BR",
+  "country": "FR",
+  "priority": 5,
+  "siteType": [
+   "METAR"
+  ]
+ },
+ {
+  "id": "LFRV",
+  "icaoId": "LFRV",
+  "iataId": "VNE",
+  "faaId": null,
+  "wmoId": "07210",
+  "site": "Vannes/Meucon Arpt",
+  "lat": 47.722,
+  "lon": -2.727,
+  "elev": 132,
+  "state": "BR",
+  "country": "FR",
+  "priority": 4,
+  "siteType": [
+   "METAR"
+  ]
+ },
+ {
+  "id": "LFRZ",
+  "icaoId": "LFRZ",
+  "iataId": "SNR",
+  "faaId": null,
+  "wmoId": "07217",
+  "site": "St Nazaire/Montoir Arpt",
+  "lat": 47.312,
+  "lon": -2.163,
+  "elev": 2,
+  "state": "PD",
+  "country": "FR",
+  "priority": 5,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFSB",
+  "icaoId": "LFSB",
+  "iataId": "MLH",
+  "faaId": null,
+  "wmoId": "07299",
+  "site": "Basel/Euro Arpt",
+  "lat": 47.614,
+  "lon": 7.51,
+  "elev": 262,
+  "state": "GE",
+  "country": "FR",
+  "priority": 3,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFSD",
+  "icaoId": "LFSD",
+  "iataId": "DIJ",
+  "faaId": null,
+  "wmoId": "07280",
+  "site": "Dijon-Bourgogne Arpt",
+  "lat": 47.269,
+  "lon": 5.09,
+  "elev": 218,
+  "state": "BF",
+  "country": "FR",
+  "priority": 3,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFSG",
+  "icaoId": "LFSG",
+  "iataId": "EPL",
+  "faaId": null,
+  "wmoId": null,
+  "site": "\u00c9pinal/Mirecourt Arpt",
+  "lat": 48.325,
+  "lon": 6.07,
+  "elev": 320,
+  "state": "GE",
+  "country": "FR",
+  "priority": 5,
+  "siteType": [
+   "METAR"
+  ]
+ },
+ {
+  "id": "LFSI",
+  "icaoId": "LFSI",
+  "iataId": null,
+  "faaId": null,
+  "wmoId": "07169",
+  "site": "St Dizier",
+  "lat": 48.631,
+  "lon": 4.904,
+  "elev": 136,
+  "state": "GE",
+  "country": "FR",
+  "priority": 5,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFSL",
+  "icaoId": "LFSL",
+  "iataId": "BVE",
+  "faaId": null,
+  "wmoId": "07179",
+  "site": "Brive/Souillac Arpt",
+  "lat": 45.04,
+  "lon": 1.486,
+  "elev": 300,
+  "state": "GE",
+  "country": "FR",
+  "priority": 3,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFSM",
+  "icaoId": "LFSM",
+  "iataId": null,
+  "faaId": null,
+  "wmoId": null,
+  "site": "Montb\u00e9liard/Courcell",
+  "lat": 47.487,
+  "lon": 6.791,
+  "elev": 317,
+  "state": "BF",
+  "country": "FR",
+  "priority": 5,
+  "siteType": [
+   "METAR"
+  ]
+ },
+ {
+  "id": "LFSN",
+  "icaoId": "LFSN",
+  "iataId": "ENC",
+  "faaId": null,
+  "wmoId": "07180",
+  "site": "Nancy/Essey Arpt",
+  "lat": 48.692,
+  "lon": 6.231,
+  "elev": 214,
+  "state": "GE",
+  "country": "FR",
+  "priority": 2,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFSO",
+  "icaoId": "LFSO",
+  "iataId": null,
+  "faaId": null,
+  "wmoId": "07181",
+  "site": "Nancy/Ochey",
+  "lat": 48.583,
+  "lon": 5.955,
+  "elev": 328,
+  "state": "GE",
+  "country": "FR",
+  "priority": 6,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFST",
+  "icaoId": "LFST",
+  "iataId": "SXB",
+  "faaId": null,
+  "wmoId": "07190",
+  "site": "Strasbourg/Entzheim Arpt",
+  "lat": 48.549,
+  "lon": 7.64,
+  "elev": 149,
+  "state": "PD",
+  "country": "FR",
+  "priority": 3,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFSX",
+  "icaoId": "LFSX",
+  "iataId": null,
+  "faaId": null,
+  "wmoId": "07292",
+  "site": "Luxeuil Arpt",
+  "lat": 47.783,
+  "lon": 6.364,
+  "elev": 266,
+  "state": "HD",
+  "country": "FR",
+  "priority": 4,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFTH",
+  "icaoId": "LFTH",
+  "iataId": "TLN",
+  "faaId": null,
+  "wmoId": "07667",
+  "site": "Toulon/Hy\u00e8res Arpt",
+  "lat": 43.094,
+  "lon": 6.146,
+  "elev": 3,
+  "state": "PA",
+  "country": "FR",
+  "priority": 4,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFTW",
+  "icaoId": "LFTW",
+  "iataId": "FNI",
+  "faaId": null,
+  "wmoId": "07646",
+  "site": "Nimes/Garons Arpt",
+  "lat": 43.757,
+  "lon": 4.416,
+  "elev": 91,
+  "state": "OC",
+  "country": "FR",
+  "priority": 5,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "LFVP",
+  "icaoId": "LFVP",
+  "iataId": "FSP",
+  "faaId": null,
+  "wmoId": "71805",
+  "site": "St Pierre Arpt",
+  "lat": 46.764,
+  "lon": -56.169,
+  "elev": 5,
+  "state": "ML",
+  "country": "PM",
+  "priority": 3,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "NZAA",
+  "icaoId": "NZAA",
+  "iataId": "AKL",
+  "faaId": null,
+  "wmoId": "93119",
+  "site": "Auckland Intl",
+  "lat": -37.008,
+  "lon": 174.792,
+  "elev": 7,
+  "state": "AU",
+  "country": "NZ",
+  "priority": 0,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "NZCH",
+  "icaoId": "NZCH",
+  "iataId": "CHC",
+  "faaId": null,
+  "wmoId": "93780",
+  "site": "Christchurch Intl",
+  "lat": -43.489,
+  "lon": 172.528,
+  "elev": 36,
+  "state": "CA",
+  "country": "NZ",
+  "priority": 1,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "NZCM",
+  "icaoId": "NZCM",
+  "iataId": null,
+  "faaId": null,
+  "wmoId": "89664",
+  "site": "McMurdo/Williams Fld",
+  "lat": -77.85,
+  "lon": 166.667,
+  "elev": 24,
+  "state": "NZ",
+  "country": "AQ",
+  "priority": 6,
+  "siteType": [
+   "METAR"
+  ]
+ },
+ {
+  "id": "NZDN",
+  "icaoId": "NZDN",
+  "iataId": "DUD",
+  "faaId": null,
+  "wmoId": null,
+  "site": "Dunedin Arpt",
+  "lat": -45.928,
+  "lon": 170.198,
+  "elev": 2,
+  "state": "OT",
+  "country": "NZ",
+  "priority": 9,
+  "siteType": [
+   "METAR"
+  ]
+ },
+ {
+  "id": "NZOH",
+  "icaoId": "NZOH",
+  "iataId": "OHA",
+  "faaId": null,
+  "wmoId": "93401",
+  "site": "Ohakea Arpt",
+  "lat": -40.196,
+  "lon": 175.381,
+  "elev": 45,
+  "state": "MW",
+  "country": "NZ",
+  "priority": 3,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "NZQN",
+  "icaoId": "NZQN",
+  "iataId": "ZQN",
+  "faaId": null,
+  "wmoId": null,
+  "site": "Queenstown Arpt",
+  "lat": -45.021,
+  "lon": 168.739,
+  "elev": 356,
+  "state": "OT",
+  "country": "NZ",
+  "priority": 3,
+  "siteType": [
+   "TAF"
+  ]
+ },
+ {
+  "id": "NZWN",
+  "icaoId": "NZWN",
+  "iataId": "WLG",
+  "faaId": null,
+  "wmoId": "93436",
+  "site": "Wellington Intl",
+  "lat": -41.331,
+  "lon": 174.806,
+  "elev": 12,
+  "state": "WG",
+  "country": "NZ",
+  "priority": 2,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "RJAA",
+  "icaoId": "RJAA",
+  "iataId": "NRT",
+  "faaId": null,
+  "wmoId": "47686",
+  "site": "Narita Intl",
+  "lat": 35.765,
+  "lon": 140.386,
+  "elev": 36,
+  "state": "12",
+  "country": "JP",
+  "priority": 4,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "RJAH",
+  "icaoId": "RJAH",
+  "iataId": "IBR",
+  "faaId": null,
+  "wmoId": "47715",
+  "site": "Ibaraki Arpt",
+  "lat": 36.182,
+  "lon": 140.415,
+  "elev": 31,
+  "state": "8",
+  "country": "JP",
+  "priority": 5,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "RJBB",
+  "icaoId": "RJBB",
+  "iataId": "KIX",
+  "faaId": null,
+  "wmoId": "47774",
+  "site": "Osaka/Kansai Intl",
+  "lat": 34.434,
+  "lon": 135.233,
+  "elev": 8,
+  "state": "28",
+  "country": "JP",
+  "priority": 4,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "RJBD",
+  "icaoId": "RJBD",
+  "iataId": "SHM",
+  "faaId": null,
+  "wmoId": "47782",
+  "site": "Nanki-Shirahama Arpt",
+  "lat": 33.662,
+  "lon": 135.364,
+  "elev": 91,
+  "state": "30",
+  "country": "JP",
+  "priority": 3,
+  "siteType": [
+   "METAR"
+  ]
+ },
+ {
+  "id": "RJCC",
+  "icaoId": "RJCC",
+  "iataId": "CTS",
+  "faaId": null,
+  "wmoId": "47425",
+  "site": "Sapporo/Chitose Arpt",
+  "lat": 42.774,
+  "lon": 141.693,
+  "elev": 19,
+  "state": "1",
+  "country": "JP",
+  "priority": 1,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "RJCH",
+  "icaoId": "RJCH",
+  "iataId": "HKD",
+  "faaId": null,
+  "wmoId": "47488",
+  "site": "Hakodate Arpt",
+  "lat": 41.77,
+  "lon": 140.822,
+  "elev": 36,
+  "state": "1",
+  "country": "JP",
+  "priority": 3,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "RJCK",
+  "icaoId": "RJCK",
+  "iataId": "KUH",
+  "faaId": null,
+  "wmoId": "47489",
+  "site": "Kushiro Arpt",
+  "lat": 43.041,
+  "lon": 144.193,
+  "elev": 94,
+  "state": "1",
+  "country": "JP",
+  "priority": 4,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "RJDB",
+  "icaoId": "RJDB",
+  "iataId": "IKI",
+  "faaId": null,
+  "wmoId": "47858",
+  "site": "Iki Airport ",
+  "lat": 33.749,
+  "lon": 129.785,
+  "elev": 13,
+  "state": "43",
+  "country": "JP",
+  "priority": 4,
+  "siteType": [
+   "METAR"
+  ]
+ },
+ {
+  "id": "RJDC",
+  "icaoId": "RJDC",
+  "iataId": "UBJ",
+  "faaId": null,
+  "wmoId": "47786",
+  "site": "Yamaguchi/Ube Arpt",
+  "lat": 33.93,
+  "lon": 131.279,
+  "elev": 5,
+  "state": "35",
+  "country": "JP",
+  "priority": 3,
+  "siteType": [
+   "METAR"
+  ]
+ },
+ {
+  "id": "RJEC",
+  "icaoId": "RJEC",
+  "iataId": "AKJ",
+  "faaId": null,
+  "wmoId": "47476",
+  "site": "Asahikawa Arpt",
+  "lat": 43.671,
+  "lon": 142.447,
+  "elev": 209,
+  "state": "1",
+  "country": "JP",
+  "priority": 3,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "RJFF",
+  "icaoId": "RJFF",
+  "iataId": "FUK",
+  "faaId": null,
+  "wmoId": "47808",
+  "site": "Fukuoka Arpt",
+  "lat": 33.584,
+  "lon": 130.452,
+  "elev": 7,
+  "state": "40",
+  "country": "JP",
+  "priority": 3,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "RJFG",
+  "icaoId": "RJFG",
+  "iataId": "TNE",
+  "faaId": null,
+  "wmoId": "47870",
+  "site": "Tanegashima Arpt",
+  "lat": 30.605,
+  "lon": 130.992,
+  "elev": 234,
+  "state": "46",
+  "country": "JP",
+  "priority": 3,
+  "siteType": [
+   "METAR"
+  ]
+ },
+ {
+  "id": "RJFM",
+  "icaoId": "RJFM",
+  "iataId": "KMI",
+  "faaId": null,
+  "wmoId": "47857",
+  "site": "Miyazaki Arpt",
+  "lat": 31.877,
+  "lon": 131.449,
+  "elev": 10,
+  "state": "45",
+  "country": "JP",
+  "priority": 1,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "RJFO",
+  "icaoId": "RJFO",
+  "iataId": "OIT",
+  "faaId": null,
+  "wmoId": "47852",
+  "site": "Oita Arpt",
+  "lat": 33.479,
+  "lon": 131.737,
+  "elev": 3,
+  "state": "44",
+  "country": "JP",
+  "priority": 3,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "RJFR",
+  "icaoId": "RJFR",
+  "iataId": "KKJ",
+  "faaId": null,
+  "wmoId": "47853",
+  "site": "Kitakyushu Arpt",
+  "lat": 33.846,
+  "lon": 131.035,
+  "elev": 9,
+  "state": "40",
+  "country": "JP",
+  "priority": 5,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "RJFS",
+  "icaoId": "RJFS",
+  "iataId": "HSG",
+  "faaId": null,
+  "wmoId": "47810",
+  "site": "Saga Arpt",
+  "lat": 33.15,
+  "lon": 130.302,
+  "elev": 2,
+  "state": "25",
+  "country": "JP",
+  "priority": 6,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "RJFT",
+  "icaoId": "RJFT",
+  "iataId": "KMJ",
+  "faaId": null,
+  "wmoId": "47856",
+  "site": "Kumamoto Arpt",
+  "lat": 32.837,
+  "lon": 130.855,
+  "elev": 188,
+  "state": "43",
+  "country": "JP",
+  "priority": 3,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "RJGG",
+  "icaoId": "RJGG",
+  "iataId": "NGO",
+  "faaId": null,
+  "wmoId": null,
+  "site": "Nagoya/Chubu Intl",
+  "lat": 34.858,
+  "lon": 136.805,
+  "elev": 5,
+  "state": "23",
+  "country": "JP",
+  "priority": 2,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "RJKA",
+  "icaoId": "RJKA",
+  "iataId": "ASJ",
+  "faaId": null,
+  "wmoId": "47872",
+  "site": "Amami Arpt",
+  "lat": 28.431,
+  "lon": 129.713,
+  "elev": 7,
+  "state": "46",
+  "country": "JP",
+  "priority": 1,
+  "siteType": [
+   "METAR"
+  ]
+ },
+ {
+  "id": "RJKB",
+  "icaoId": "RJKB",
+  "iataId": "OKE",
+  "faaId": null,
+  "wmoId": "47942",
+  "site": "Okinoerabu Arpt",
+  "lat": 27.4322,
+  "lon": 128.7058,
+  "elev": 27,
+  "state": "47",
+  "country": "JP",
+  "priority": 3,
+  "siteType": [
+   "METAR"
+  ]
+ },
+ {
+  "id": "RJKI",
+  "icaoId": "RJKI",
+  "iataId": "KKX",
+  "faaId": null,
+  "wmoId": null,
+  "site": "Kikai Island Arpt",
+  "lat": 28.321,
+  "lon": 129.928,
+  "elev": 6,
+  "state": "47",
+  "country": "JP",
+  "priority": 5,
+  "siteType": [
+   "METAR"
+  ]
+ },
+ {
+  "id": "RJNK",
+  "icaoId": "RJNK",
+  "iataId": "KMQ",
+  "faaId": null,
+  "wmoId": "47704",
+  "site": "Komatsu Arpt",
+  "lat": 36.394,
+  "lon": 136.407,
+  "elev": 7,
+  "state": "17",
+  "country": "JP",
+  "priority": 3,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "RJNS",
+  "icaoId": "RJNS",
+  "iataId": "FSZ",
+  "faaId": null,
+  "wmoId": "47739",
+  "site": "Shizouka Arpt",
+  "lat": 34.796,
+  "lon": 138.189,
+  "elev": 133,
+  "state": "22",
+  "country": "JP",
+  "priority": 3,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "RJNT",
+  "icaoId": "RJNT",
+  "iataId": "TOY",
+  "faaId": null,
+  "wmoId": "47707",
+  "site": "Toyama Arpt",
+  "lat": 36.641,
+  "lon": 137.187,
+  "elev": 30,
+  "state": "16",
+  "country": "JP",
+  "priority": 4,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "RJNW",
+  "icaoId": "RJNW",
+  "iataId": "NTQ",
+  "faaId": null,
+  "wmoId": null,
+  "site": "Noto Arpt",
+  "lat": 37.293,
+  "lon": 136.962,
+  "elev": 222,
+  "state": "18",
+  "country": "JP",
+  "priority": 3,
+  "siteType": [
+   "METAR"
+  ]
+ },
+ {
+  "id": "RJOA",
+  "icaoId": "RJOA",
+  "iataId": "HIJ",
+  "faaId": null,
+  "wmoId": "47789",
+  "site": "Hiroshima Arpt",
+  "lat": 34.436,
+  "lon": 132.919,
+  "elev": 318,
+  "state": "34",
+  "country": "JP",
+  "priority": 1,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "RJOC",
+  "icaoId": "RJOC",
+  "iataId": "IZO",
+  "faaId": null,
+  "wmoId": "47790",
+  "site": "Izumo Arpt",
+  "lat": 35.414,
+  "lon": 132.89,
+  "elev": 2,
+  "state": "32",
+  "country": "JP",
+  "priority": 5,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "RJOH",
+  "icaoId": "RJOH",
+  "iataId": "YGJ",
+  "faaId": null,
+  "wmoId": "47743",
+  "site": "Miho/Yonago Arpt",
+  "lat": 35.493,
+  "lon": 133.239,
+  "elev": 6,
+  "state": "32",
+  "country": "JP",
+  "priority": 3,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "RJOI",
+  "icaoId": "RJOI",
+  "iataId": "IWK",
+  "faaId": null,
+  "wmoId": null,
+  "site": "Iwakuni Arpt",
+  "lat": 34.144,
+  "lon": 132.236,
+  "elev": 2,
+  "state": "35",
+  "country": "JP",
+  "priority": 4,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "RJOK",
+  "icaoId": "RJOK",
+  "iataId": "KCZ",
+  "faaId": null,
+  "wmoId": "47883",
+  "site": "Kochi Arpt",
+  "lat": 33.546,
+  "lon": 133.669,
+  "elev": 7,
+  "state": "39",
+  "country": "JP",
+  "priority": 3,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "RJOM",
+  "icaoId": "RJOM",
+  "iataId": "MYJ",
+  "faaId": null,
+  "wmoId": "47882",
+  "site": "Matsuyama Arpt",
+  "lat": 33.83,
+  "lon": 132.698,
+  "elev": 3,
+  "state": "38",
+  "country": "JP",
+  "priority": 3,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "RJOO",
+  "icaoId": "RJOO",
+  "iataId": "ITM",
+  "faaId": null,
+  "wmoId": "47771",
+  "site": "Osaka Intl",
+  "lat": 34.784,
+  "lon": 135.439,
+  "elev": 11,
+  "state": "27",
+  "country": "JP",
+  "priority": 3,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "RJOR",
+  "icaoId": "RJOR",
+  "iataId": "TTJ",
+  "faaId": null,
+  "wmoId": "47794",
+  "site": "Tottori Arpt",
+  "lat": 35.53,
+  "lon": 134.165,
+  "elev": 11,
+  "state": "31",
+  "country": "JP",
+  "priority": 4,
+  "siteType": [
+   "METAR"
+  ]
+ },
+ {
+  "id": "RJOS",
+  "icaoId": "RJOS",
+  "iataId": "TKS",
+  "faaId": null,
+  "wmoId": "47881",
+  "site": "Tokushima",
+  "lat": 34.132,
+  "lon": 134.609,
+  "elev": 3,
+  "state": "36",
+  "country": "JP",
+  "priority": 6,
+  "siteType": [
+   "METAR"
+  ]
+ },
+ {
+  "id": "RJOT",
+  "icaoId": "RJOT",
+  "iataId": "TAK",
+  "faaId": null,
+  "wmoId": "47880",
+  "site": "Takamatsu Arpt",
+  "lat": 34.214,
+  "lon": 134.016,
+  "elev": 181,
+  "state": "37",
+  "country": "JP",
+  "priority": 4,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "RJSA",
+  "icaoId": "RJSA",
+  "iataId": "AOJ",
+  "faaId": null,
+  "wmoId": "47542",
+  "site": "Aomori Arpt",
+  "lat": 40.733,
+  "lon": 140.689,
+  "elev": 196,
+  "state": "2",
+  "country": "JP",
+  "priority": 2,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "RJSF",
+  "icaoId": "RJSF",
+  "iataId": "FKS",
+  "faaId": null,
+  "wmoId": "47557",
+  "site": "Tamakawa/Fukushima Arpt",
+  "lat": 37.227,
+  "lon": 140.428,
+  "elev": 373,
+  "state": "7",
+  "country": "JP",
+  "priority": 3,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "RJSM",
+  "icaoId": "RJSM",
+  "iataId": "MSJ",
+  "faaId": null,
+  "wmoId": "47580",
+  "site": "Misawa ",
+  "lat": 40.705,
+  "lon": 141.372,
+  "elev": 31,
+  "state": "2",
+  "country": "JP",
+  "priority": 6,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "RJSN",
+  "icaoId": "RJSN",
+  "iataId": "KIJ",
+  "faaId": null,
+  "wmoId": "47573",
+  "site": "Niigata Arpt",
+  "lat": 37.956,
+  "lon": 139.121,
+  "elev": 4,
+  "state": "15",
+  "country": "JP",
+  "priority": 3,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "RJSS",
+  "icaoId": "RJSS",
+  "iataId": "SDJ",
+  "faaId": null,
+  "wmoId": "47569",
+  "site": "Sendai Arpt",
+  "lat": 38.14,
+  "lon": 140.917,
+  "elev": 5,
+  "state": "4",
+  "country": "JP",
+  "priority": 2,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "RJTR",
+  "icaoId": "RJTR",
+  "iataId": null,
+  "faaId": null,
+  "wmoId": "47680",
+  "site": "Kastner/Zama Fld",
+  "lat": 35.514,
+  "lon": 139.395,
+  "elev": 106,
+  "state": "14",
+  "country": "JP",
+  "priority": 6,
+  "siteType": [
+   "METAR"
+  ]
+ },
+ {
+  "id": "RJTT",
+  "icaoId": "RJTT",
+  "iataId": "HND",
+  "faaId": null,
+  "wmoId": "47671",
+  "site": "Tokyo/Haneda Intl",
+  "lat": 35.553,
+  "lon": 139.781,
+  "elev": 5,
+  "state": "13",
+  "country": "JP",
+  "priority": 0,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "RJTY",
+  "icaoId": "RJTY",
+  "iataId": "OKO",
+  "faaId": null,
+  "wmoId": "47642",
+  "site": "Yokota",
+  "lat": 35.749,
+  "lon": 139.349,
+  "elev": 136,
+  "state": "13",
+  "country": "JP",
+  "priority": 6,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "RKJB",
+  "icaoId": "RKJB",
+  "iataId": "MWX",
+  "faaId": null,
+  "wmoId": "47163",
+  "site": "Muan Intl",
+  "lat": 34.991,
+  "lon": 126.383,
+  "elev": 16,
+  "state": "46",
+  "country": "KR",
+  "priority": 3,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "RKJK",
+  "icaoId": "RKJK",
+  "iataId": "KUV",
+  "faaId": null,
+  "wmoId": "47141",
+  "site": "Kunsan ",
+  "lat": 35.9,
+  "lon": 126.618,
+  "elev": 8,
+  "state": "45",
+  "country": "KR",
+  "priority": 3,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "RKNY",
+  "icaoId": "RKNY",
+  "iataId": "YNY",
+  "faaId": null,
+  "wmoId": "47092",
+  "site": "Yangyang Intl",
+  "lat": 38.061,
+  "lon": 128.669,
+  "elev": 76,
+  "state": "42",
+  "country": "KR",
+  "priority": 3,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "RKPC",
+  "icaoId": "RKPC",
+  "iataId": "CJU",
+  "faaId": null,
+  "wmoId": "47182",
+  "site": "Jeju Intl",
+  "lat": 33.511,
+  "lon": 126.493,
+  "elev": 23,
+  "state": "49",
+  "country": "KR",
+  "priority": 2,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "RKPK",
+  "icaoId": "RKPK",
+  "iataId": "PUS",
+  "faaId": null,
+  "wmoId": "47153",
+  "site": "Busan/Gimhae Intl",
+  "lat": 35.179,
+  "lon": 128.938,
+  "elev": 3,
+  "state": "48",
+  "country": "KR",
+  "priority": 2,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "RKSG",
+  "icaoId": "RKSG",
+  "iataId": null,
+  "faaId": null,
+  "wmoId": "47127",
+  "site": "Pyongtaek Arpt",
+  "lat": 36.962,
+  "lon": 127.031,
+  "elev": 12,
+  "state": "41",
+  "country": "KR",
+  "priority": 6,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "RKSI",
+  "icaoId": "RKSI",
+  "iataId": "ICN",
+  "faaId": null,
+  "wmoId": null,
+  "site": "Seoul/Incheon Intl",
+  "lat": 37.469,
+  "lon": 126.451,
+  "elev": 7,
+  "state": "28",
+  "country": "KR",
+  "priority": 0,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "RKSM",
+  "icaoId": "RKSM",
+  "iataId": "SSN",
+  "faaId": null,
+  "wmoId": "47111",
+  "site": "Seoul",
+  "lat": 37.446,
+  "lon": 127.114,
+  "elev": 18,
+  "state": "41",
+  "country": "KR",
+  "priority": 6,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "RKSO",
+  "icaoId": "RKSO",
+  "iataId": "OSN",
+  "faaId": null,
+  "wmoId": "47122",
+  "site": "Osan Arpt",
+  "lat": 37.091,
+  "lon": 127.03,
+  "elev": 10,
+  "state": "41",
+  "country": "KR",
+  "priority": 4,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "RKSS",
+  "icaoId": "RKSS",
+  "iataId": "GMP",
+  "faaId": null,
+  "wmoId": "47110",
+  "site": "Seoul/Gimpo Intl",
+  "lat": 37.558,
+  "lon": 126.791,
+  "elev": 18,
+  "state": "41",
+  "country": "KR",
+  "priority": 5,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "RKTN",
+  "icaoId": "RKTN",
+  "iataId": "TAE",
+  "faaId": null,
+  "wmoId": "47142",
+  "site": "Daegu",
+  "lat": 35.894,
+  "lon": 128.659,
+  "elev": 25,
+  "state": "27",
+  "country": "KR",
+  "priority": 3,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "RKTU",
+  "icaoId": "RKTU",
+  "iataId": "CJJ",
+  "faaId": null,
+  "wmoId": "47128",
+  "site": "Cheonju Intl",
+  "lat": 36.717,
+  "lon": 127.499,
+  "elev": 46,
+  "state": "43",
+  "country": "KR",
+  "priority": 3,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "VHHH",
+  "icaoId": "VHHH",
+  "iataId": "HKG",
+  "faaId": null,
+  "wmoId": "45007",
+  "site": "Hong Kong Intl",
+  "lat": 22.309,
+  "lon": 113.922,
+  "elev": 9,
+  "state": "HK",
+  "country": "HK",
+  "priority": 0,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "WSAP",
+  "icaoId": "WSAP",
+  "iataId": "QPG",
+  "faaId": null,
+  "wmoId": "48694",
+  "site": "Singapore/Pays",
+  "lat": 1.36,
+  "lon": 103.909,
+  "elev": 20,
+  "state": "4",
+  "country": "SG",
+  "priority": 6,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "WSSL",
+  "icaoId": "WSSL",
+  "iataId": "XSP",
+  "faaId": null,
+  "wmoId": "48699",
+  "site": "Singapore/Seletar Arpt",
+  "lat": 1.417,
+  "lon": 103.866,
+  "elev": 11,
+  "state": "2",
+  "country": "SG",
+  "priority": 6,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "WSSS",
+  "icaoId": "WSSS",
+  "iataId": "SIN",
+  "faaId": null,
+  "wmoId": "48698",
+  "site": "Singapore/Changi Intl",
+  "lat": 1.368,
+  "lon": 103.982,
+  "elev": 17,
+  "state": "4",
+  "country": "SG",
+  "priority": 0,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "ZBAA",
+  "icaoId": "ZBAA",
+  "iataId": "PEK",
+  "faaId": null,
+  "wmoId": "54511",
+  "site": "Beijing Intl",
+  "lat": 40.082,
+  "lon": 116.603,
+  "elev": 31,
+  "state": "BJ",
+  "country": "CN",
+  "priority": 0,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "ZBAD",
+  "icaoId": "ZBAD",
+  "iataId": "PKX",
+  "faaId": null,
+  "wmoId": null,
+  "site": "Beijing/Daxing Arpt",
+  "lat": 39.501,
+  "lon": 116.412,
+  "elev": 25,
+  "state": "BJ",
+  "country": "CN",
+  "priority": 4,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "ZBHH",
+  "icaoId": "ZBHH",
+  "iataId": "HET",
+  "faaId": null,
+  "wmoId": "53463",
+  "site": "Hohhot/Baita Intl",
+  "lat": 40.854,
+  "lon": 111.827,
+  "elev": 1081,
+  "state": "NM",
+  "country": "CN",
+  "priority": 2,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "ZBSJ",
+  "icaoId": "ZBSJ",
+  "iataId": "SJW",
+  "faaId": null,
+  "wmoId": null,
+  "site": "Zhengding Arpt",
+  "lat": 38.281,
+  "lon": 114.697,
+  "elev": 70,
+  "state": "HA",
+  "country": "CN",
+  "priority": 3,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "ZBTJ",
+  "icaoId": "ZBTJ",
+  "iataId": "TSN",
+  "faaId": null,
+  "wmoId": null,
+  "site": "Tianjin/Binhai Intl",
+  "lat": 39.124,
+  "lon": 117.346,
+  "elev": 4,
+  "state": "TJ",
+  "country": "CN",
+  "priority": 3,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "ZBYN",
+  "icaoId": "ZBYN",
+  "iataId": "TYN",
+  "faaId": null,
+  "wmoId": "53772",
+  "site": "Taiyuan/Wusu Intl",
+  "lat": 37.747,
+  "lon": 112.628,
+  "elev": 778,
+  "state": "SX",
+  "country": "CN",
+  "priority": 1,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "ZGGG",
+  "icaoId": "ZGGG",
+  "iataId": "CAN",
+  "faaId": null,
+  "wmoId": "59287",
+  "site": "Guangzhou/Baiyun Intl",
+  "lat": 23.392,
+  "lon": 113.307,
+  "elev": 11,
+  "state": "GD",
+  "country": "CN",
+  "priority": 3,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "ZGHA",
+  "icaoId": "ZGHA",
+  "iataId": "CSX",
+  "faaId": null,
+  "wmoId": null,
+  "site": "Changsha/Huanghua Arpt",
+  "lat": 28.18,
+  "lon": 113.219,
+  "elev": 61,
+  "state": "HN",
+  "country": "CN",
+  "priority": 2,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "ZGKL",
+  "icaoId": "ZGKL",
+  "iataId": "KWL",
+  "faaId": null,
+  "wmoId": "57957",
+  "site": "Guilin/Liangjiang Intl",
+  "lat": 25.22,
+  "lon": 110.04,
+  "elev": 151,
+  "state": "GX",
+  "country": "CN",
+  "priority": 2,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "ZGNN",
+  "icaoId": "ZGNN",
+  "iataId": "NNG",
+  "faaId": null,
+  "wmoId": "59431",
+  "site": "Nanning/Wuwei Intl",
+  "lat": 22.609,
+  "lon": 108.173,
+  "elev": 128,
+  "state": "GX",
+  "country": "CN",
+  "priority": 1,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "ZGOW",
+  "icaoId": "ZGOW",
+  "iataId": "SWA",
+  "faaId": null,
+  "wmoId": "59316",
+  "site": "Jieyang/Chaoshan Intl",
+  "lat": 23.55,
+  "lon": 116.505,
+  "elev": 4,
+  "state": "GD",
+  "country": "CN",
+  "priority": 2,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "ZGSZ",
+  "icaoId": "ZGSZ",
+  "iataId": "SZX",
+  "faaId": null,
+  "wmoId": "59493",
+  "site": "Shenzhen/Boan Intl",
+  "lat": 22.639,
+  "lon": 113.803,
+  "elev": 18,
+  "state": "GD",
+  "country": "CN",
+  "priority": 5,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "ZSAM",
+  "icaoId": "ZSAM",
+  "iataId": "XMN",
+  "faaId": null,
+  "wmoId": "59134",
+  "site": "Xiamen-Gaoqi Intl",
+  "lat": 24.546,
+  "lon": 118.131,
+  "elev": 13,
+  "state": "FJ",
+  "country": "CN",
+  "priority": 1,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "ZSFZ",
+  "icaoId": "ZSFZ",
+  "iataId": "FOC",
+  "faaId": null,
+  "wmoId": null,
+  "site": "Fuzhou/Changle Intl",
+  "lat": 25.936,
+  "lon": 119.666,
+  "elev": 14,
+  "state": "FJ",
+  "country": "CN",
+  "priority": 3,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "ZSHC",
+  "icaoId": "ZSHC",
+  "iataId": "HGH",
+  "faaId": null,
+  "wmoId": "58457",
+  "site": "Hangzhou/Xiaoshan Intl",
+  "lat": 30.229,
+  "lon": 120.434,
+  "elev": 8,
+  "state": "ZJ",
+  "country": "CN",
+  "priority": 3,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "ZSNB",
+  "icaoId": "ZSNB",
+  "iataId": "NGB",
+  "faaId": null,
+  "wmoId": "58239",
+  "site": "Ningbo/Lishe Intl",
+  "lat": 29.827,
+  "lon": 121.462,
+  "elev": 5,
+  "state": "ZJ",
+  "country": "CN",
+  "priority": 4,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "ZSNJ",
+  "icaoId": "ZSNJ",
+  "iataId": "NKG",
+  "faaId": null,
+  "wmoId": "58238",
+  "site": "Nanjing/Lukou Intl",
+  "lat": 31.739,
+  "lon": 118.863,
+  "elev": 27,
+  "state": "JS",
+  "country": "CN",
+  "priority": 3,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "ZSOF",
+  "icaoId": "ZSOF",
+  "iataId": "HFE",
+  "faaId": null,
+  "wmoId": "58321",
+  "site": "Hefei/Xinqiao Intl",
+  "lat": 31.99,
+  "lon": 116.965,
+  "elev": 64,
+  "state": "AH",
+  "country": "CN",
+  "priority": 2,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "ZSPD",
+  "icaoId": "ZSPD",
+  "iataId": "PVG",
+  "faaId": null,
+  "wmoId": null,
+  "site": "Shanghai/Pudong Intl",
+  "lat": 31.146,
+  "lon": 121.8,
+  "elev": 4,
+  "state": "SH",
+  "country": "CN",
+  "priority": 6,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "ZSQD",
+  "icaoId": "ZSQD",
+  "iataId": "TAO",
+  "faaId": null,
+  "wmoId": "54857",
+  "site": "Qingdao/Jiaodong Arpt",
+  "lat": 36.362,
+  "lon": 120.087,
+  "elev": 2,
+  "state": "SD",
+  "country": "CN",
+  "priority": 1,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "ZSSS",
+  "icaoId": "ZSSS",
+  "iataId": "SHA",
+  "faaId": null,
+  "wmoId": "58367",
+  "site": "Shanghai/Hongqiao Intl",
+  "lat": 31.209,
+  "lon": 121.337,
+  "elev": 2,
+  "state": "SH",
+  "country": "CN",
+  "priority": 0,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "ZUCK",
+  "icaoId": "ZUCK",
+  "iataId": "CKG",
+  "faaId": null,
+  "wmoId": "57516",
+  "site": "Chongqing/Jiangbei Intl",
+  "lat": 29.718,
+  "lon": 106.639,
+  "elev": 416,
+  "state": "CQ",
+  "country": "CN",
+  "priority": 2,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "ZUGY",
+  "icaoId": "ZUGY",
+  "iataId": "KWE",
+  "faaId": null,
+  "wmoId": "57816",
+  "site": "Guizhou/Longdongbao Arpt",
+  "lat": 26.538,
+  "lon": 106.801,
+  "elev": 1130,
+  "state": "GZ",
+  "country": "CN",
+  "priority": 3,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ },
+ {
+  "id": "ZUTF",
+  "icaoId": "ZUTF",
+  "iataId": "TFU",
+  "faaId": null,
+  "wmoId": null,
+  "site": "Chengdu/Tianfu Arpt",
+  "lat": 30.304,
+  "lon": 104.436,
+  "elev": 443,
+  "state": "CQ",
+  "country": "CN",
+  "priority": 5,
+  "siteType": [
+   "METAR"
+  ]
+ },
+ {
+  "id": "ZUUU",
+  "icaoId": "ZUUU",
+  "iataId": "CTU",
+  "faaId": null,
+  "wmoId": "56294",
+  "site": "Chengdu/Shuangliu Intl",
+  "lat": 30.576,
+  "lon": 103.95,
+  "elev": 494,
+  "state": "CQ",
+  "country": "CN",
+  "priority": 1,
+  "siteType": [
+   "METAR",
+   "TAF"
+  ]
+ }
+]

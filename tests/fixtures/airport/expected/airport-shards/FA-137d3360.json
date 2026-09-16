@@ -1,0 +1,645 @@
+{
+ "schemaVersion": 1,
+ "shard": "FA",
+ "stations": {
+  "FABL": {
+   "name": "Bloemfontein Intl",
+   "lat": -29.093,
+   "lon": 26.302,
+   "elev": 1348.0,
+   "iata": "BFN",
+   "wmo": "68442",
+   "metars": [
+    {
+     "time": "2026-09-16T14:00:00Z",
+     "raw": "METAR FABL 161400Z 27009KT 230V320 9999 FEW030 23/05 Q1022 NOSIG",
+     "t": 23.0,
+     "td": 5.0,
+     "wd": 270,
+     "ws": 4.6,
+     "gust": null,
+     "vis": 10000,
+     "qnh": 1022.0,
+     "slp": null,
+     "wx": null,
+     "cloud": [
+      ["FEW", 910]
+     ],
+     "category": "VFR",
+     "auto": false,
+     "type": "METAR"
+    }
+   ],
+   "taf": null
+  },
+  "FACT": {
+   "name": "Capetown Intl",
+   "lat": -33.965,
+   "lon": 18.602,
+   "elev": 48.0,
+   "iata": "CPT",
+   "wmo": "68816",
+   "metars": [
+    {
+     "time": "2026-09-16T14:00:00Z",
+     "raw": "METAR FACT 161400Z 17024KT 9999 FEW033 16/09 Q1028 NOSIG",
+     "t": 16.0,
+     "td": 9.0,
+     "wd": 170,
+     "ws": 12.3,
+     "gust": null,
+     "vis": 10000,
+     "qnh": 1027.8,
+     "slp": null,
+     "wx": null,
+     "cloud": [
+      ["FEW", 1010]
+     ],
+     "category": "VFR",
+     "auto": false,
+     "type": "METAR"
+    }
+   ],
+   "taf": {
+    "issued": "2026-09-16T10:00:00Z",
+    "from": "2026-09-16T12:00:00Z",
+    "to": "2026-09-17T18:00:00Z",
+    "raw": "TAF FACT 161000Z 1612/1718 17021KT 9999 FEW035 TX18/1612Z TN11/1704Z PROB40 TEMPO 1614/1616 17025KT FM161800 17015KT 9999 FEW040 FM170900 17018KT 9999 SCT035",
+    "amended": false,
+    "periods": [
+     {
+      "from": "2026-09-16T12:00:00Z",
+      "to": "2026-09-16T18:00:00Z",
+      "change": null,
+      "prob": null,
+      "wd": 170,
+      "ws": 10.8,
+      "gust": null,
+      "vis": 10000,
+      "wx": null,
+      "cloud": [
+       ["FEW", 1070]
+      ]
+     },
+     {
+      "from": "2026-09-16T14:00:00Z",
+      "to": "2026-09-16T16:00:00Z",
+      "change": "TEMPO",
+      "prob": 40,
+      "wd": 170,
+      "ws": 12.9,
+      "gust": null,
+      "vis": null,
+      "wx": null,
+      "cloud": []
+     },
+     {
+      "from": "2026-09-16T18:00:00Z",
+      "to": "2026-09-17T09:00:00Z",
+      "change": "FM",
+      "prob": null,
+      "wd": 170,
+      "ws": 7.7,
+      "gust": null,
+      "vis": 10000,
+      "wx": null,
+      "cloud": [
+       ["FEW", 1220]
+      ]
+     },
+     {
+      "from": "2026-09-17T09:00:00Z",
+      "to": "2026-09-17T18:00:00Z",
+      "change": "FM",
+      "prob": null,
+      "wd": 170,
+      "ws": 9.3,
+      "gust": null,
+      "vis": 10000,
+      "wx": null,
+      "cloud": [
+       ["SCT", 1070]
+      ]
+     }
+    ]
+   }
+  },
+  "FAEL": {
+   "name": "East London Arpt",
+   "lat": -33.036,
+   "lon": 27.826,
+   "elev": 127.0,
+   "iata": "ELS",
+   "wmo": "68858",
+   "metars": [
+    {
+     "time": "2026-09-16T14:24:00Z",
+     "raw": "SPECI FAEL 161424Z 22012KT 3500 RA BKN018 OVC024 14/13 Q1027",
+     "t": 14.0,
+     "td": 13.0,
+     "wd": 220,
+     "ws": 6.2,
+     "gust": null,
+     "vis": 3500,
+     "qnh": 1026.8,
+     "slp": null,
+     "wx": "RA",
+     "cloud": [
+      ["BKN", 550],
+      ["OVC", 730]
+     ],
+     "category": "IFR",
+     "auto": false,
+     "type": "SPECI"
+    }
+   ],
+   "taf": null
+  },
+  "FAGG": {
+   "name": "George Arpt",
+   "lat": -34.006,
+   "lon": 22.379,
+   "elev": 196.0,
+   "iata": "GRJ",
+   "wmo": "68828",
+   "metars": [
+    {
+     "time": "2026-09-16T14:00:00Z",
+     "raw": "METAR FAGG 161400Z 17005KT 9999 FEW020 14/09 Q1029",
+     "t": 14.0,
+     "td": 9.0,
+     "wd": 170,
+     "ws": 2.6,
+     "gust": null,
+     "vis": 10000,
+     "qnh": 1028.8,
+     "slp": null,
+     "wx": null,
+     "cloud": [
+      ["FEW", 610]
+     ],
+     "category": "VFR",
+     "auto": false,
+     "type": "METAR"
+    }
+   ],
+   "taf": null
+  },
+  "FAHS": {
+   "name": "Hoedspruit",
+   "lat": -24.381,
+   "lon": 31.044,
+   "elev": 532.0,
+   "iata": "HDS",
+   "wmo": "68290",
+   "metars": [
+    {
+     "time": "2026-09-16T14:00:00Z",
+     "raw": "METAR FAHS 161400Z AUTO 04005KT //// // ////// 34/11 Q1017",
+     "t": 34.0,
+     "td": 11.0,
+     "wd": 40,
+     "ws": 2.6,
+     "gust": null,
+     "vis": null,
+     "qnh": 1016.9,
+     "slp": null,
+     "wx": null,
+     "cloud": [],
+     "category": null,
+     "auto": true,
+     "type": "METAR"
+    }
+   ],
+   "taf": null
+  },
+  "FAJB": {
+   "name": "Johannesburg City",
+   "lat": -26.15,
+   "lon": 28.0,
+   "elev": 1626.0,
+   "iata": null,
+   "wmo": null,
+   "metars": [
+    {
+     "time": "2026-09-16T14:00:00Z",
+     "raw": "METAR FAJB 161400Z AUTO /////KT //// // ////// 27/08 Q1024",
+     "t": 27.0,
+     "td": 8.0,
+     "wd": null,
+     "ws": null,
+     "gust": null,
+     "vis": null,
+     "qnh": 1024.0,
+     "slp": null,
+     "wx": null,
+     "cloud": [],
+     "category": null,
+     "auto": true,
+     "type": "METAR"
+    }
+   ],
+   "taf": null
+  },
+  "FAKN": {
+   "name": "Kruger Mpumalang Intl",
+   "lat": -25.383,
+   "lon": 31.106,
+   "elev": 864.0,
+   "iata": "MQP",
+   "wmo": null,
+   "metars": [
+    {
+     "time": "2026-09-16T14:00:00Z",
+     "raw": "METAR FAKN 161400Z 04012KT CAVOK 30/13 Q1020 NOSIG",
+     "t": 30.0,
+     "td": 13.0,
+     "wd": 40,
+     "ws": 6.2,
+     "gust": null,
+     "vis": 10000,
+     "qnh": 1020.0,
+     "slp": null,
+     "wx": null,
+     "cloud": [],
+     "category": "VFR",
+     "auto": false,
+     "type": "METAR"
+    }
+   ],
+   "taf": null
+  },
+  "FALA": {
+   "name": "Lanseria Intl",
+   "lat": -25.939,
+   "lon": 27.926,
+   "elev": 1365.0,
+   "iata": "HLA",
+   "wmo": null,
+   "metars": [
+    {
+     "time": "2026-09-16T14:00:00Z",
+     "raw": "METAR FALA 161400Z 25011KT 230V290 CAVOK 29/09 Q1023 NOSIG",
+     "t": 29.0,
+     "td": 9.0,
+     "wd": 250,
+     "ws": 5.7,
+     "gust": null,
+     "vis": 10000,
+     "qnh": 1023.0,
+     "slp": null,
+     "wx": null,
+     "cloud": [],
+     "category": "VFR",
+     "auto": false,
+     "type": "METAR"
+    }
+   ],
+   "taf": null
+  },
+  "FALE": {
+   "name": "Durban/King Shaka Intl",
+   "lat": -29.602,
+   "lon": 31.13,
+   "elev": 109.0,
+   "iata": "DUR",
+   "wmo": "68592",
+   "metars": [
+    {
+     "time": "2026-09-16T14:00:00Z",
+     "raw": "METAR FALE 161400Z 20017G27KT 9999 FEW020 SCT026 BKN036 21/18 Q1020 NOSIG",
+     "t": 21.0,
+     "td": 18.0,
+     "wd": 200,
+     "ws": 8.7,
+     "gust": 13.9,
+     "vis": 10000,
+     "qnh": 1020.0,
+     "slp": null,
+     "wx": null,
+     "cloud": [
+      ["FEW", 610],
+      ["SCT", 790],
+      ["BKN", 1100]
+     ],
+     "category": "VFR",
+     "auto": false,
+     "type": "METAR"
+    }
+   ],
+   "taf": null
+  },
+  "FALW": {
+   "name": "Langebaanweg",
+   "lat": -32.972,
+   "lon": 18.158,
+   "elev": 31.0,
+   "iata": "SDB",
+   "wmo": "68714",
+   "metars": [
+    {
+     "time": "2026-09-16T14:00:00Z",
+     "raw": "METAR FALW 161400Z AUTO 19019KT //// // ////// 19/06 Q1025",
+     "t": 19.0,
+     "td": 6.0,
+     "wd": 190,
+     "ws": 9.8,
+     "gust": null,
+     "vis": null,
+     "qnh": 1025.1,
+     "slp": null,
+     "wx": null,
+     "cloud": [],
+     "category": null,
+     "auto": true,
+     "type": "METAR"
+    }
+   ],
+   "taf": null
+  },
+  "FAMM": {
+   "name": "Mmabatho/Montshioa Intl",
+   "lat": -25.798,
+   "lon": 25.548,
+   "elev": 1280.0,
+   "iata": "MBD",
+   "wmo": "68242",
+   "metars": [
+    {
+     "time": "2026-09-16T14:00:00Z",
+     "raw": "METAR FAMM 161400Z 20006KT 9999 FEW030 30/10 Q1021 NOSIG",
+     "t": 30.0,
+     "td": 10.0,
+     "wd": 200,
+     "ws": 3.1,
+     "gust": null,
+     "vis": 10000,
+     "qnh": 1021.0,
+     "slp": null,
+     "wx": null,
+     "cloud": [
+      ["FEW", 910]
+     ],
+     "category": "VFR",
+     "auto": false,
+     "type": "METAR"
+    }
+   ],
+   "taf": null
+  },
+  "FAOR": {
+   "name": "Johannesburg/Tambo Intl",
+   "lat": -26.139,
+   "lon": 28.246,
+   "elev": 1684.0,
+   "iata": "JNB",
+   "wmo": null,
+   "metars": [
+    {
+     "time": "2026-09-16T14:30:00Z",
+     "raw": "METAR FAOR 161430Z 27009KT 230V310 CAVOK 26/07 Q1025 NOSIG",
+     "t": 26.0,
+     "td": 7.0,
+     "wd": 270,
+     "ws": 4.6,
+     "gust": null,
+     "vis": 10000,
+     "qnh": 1025.1,
+     "slp": null,
+     "wx": null,
+     "cloud": [],
+     "category": "VFR",
+     "auto": false,
+     "type": "METAR"
+    }
+   ],
+   "taf": null
+  },
+  "FAPE": {
+   "name": "Port Elizabeth Arpt",
+   "lat": -33.985,
+   "lon": 25.617,
+   "elev": 58.0,
+   "iata": "PLZ",
+   "wmo": "68842",
+   "metars": [
+    {
+     "time": "2026-09-16T14:00:00Z",
+     "raw": "METAR FAPE 161400Z 25006KT 220V280 9999 -RA BKN035 13/12 Q1028 NOSIG",
+     "t": 13.0,
+     "td": 12.0,
+     "wd": 250,
+     "ws": 3.1,
+     "gust": null,
+     "vis": 10000,
+     "qnh": 1027.8,
+     "slp": null,
+     "wx": "-RA",
+     "cloud": [
+      ["BKN", 1070]
+     ],
+     "category": "VFR",
+     "auto": false,
+     "type": "METAR"
+    }
+   ],
+   "taf": null
+  },
+  "FAPP": {
+   "name": "Polokwane Arpt",
+   "lat": -23.845,
+   "lon": 29.459,
+   "elev": 1238.0,
+   "iata": "PTG",
+   "wmo": null,
+   "metars": [
+    {
+     "time": "2026-09-16T14:00:00Z",
+     "raw": "METAR FAPP 161400Z 33006KT 8000 NSC 31/08 Q1023 NOSIG",
+     "t": 31.0,
+     "td": 8.0,
+     "wd": 330,
+     "ws": 3.1,
+     "gust": null,
+     "vis": 8000,
+     "qnh": 1023.0,
+     "slp": null,
+     "wx": null,
+     "cloud": [],
+     "category": "MVFR",
+     "auto": false,
+     "type": "METAR"
+    }
+   ],
+   "taf": null
+  },
+  "FASI": {
+   "name": "Springs Arpt",
+   "lat": -26.248,
+   "lon": 28.398,
+   "elev": 1627.0,
+   "iata": null,
+   "wmo": null,
+   "metars": [
+    {
+     "time": "2026-09-16T14:00:00Z",
+     "raw": "METAR FASI 161400Z AUTO 02006KT //// // ////// 27/09 Q1025",
+     "t": 27.0,
+     "td": 9.0,
+     "wd": 20,
+     "ws": 3.1,
+     "gust": null,
+     "vis": null,
+     "qnh": 1025.1,
+     "slp": null,
+     "wx": null,
+     "cloud": [],
+     "category": null,
+     "auto": true,
+     "type": "METAR"
+    }
+   ],
+   "taf": null
+  },
+  "FAUP": {
+   "name": "Upington Arpt",
+   "lat": -28.399,
+   "lon": 21.26,
+   "elev": 845.0,
+   "iata": "UTN",
+   "wmo": "68424",
+   "metars": [
+    {
+     "time": "2026-09-16T14:00:00Z",
+     "raw": "METAR FAUP 161400Z 21004KT CAVOK 24/08 Q1021 NOSIG",
+     "t": 24.0,
+     "td": 8.0,
+     "wd": 210,
+     "ws": 2.1,
+     "gust": null,
+     "vis": 10000,
+     "qnh": 1021.0,
+     "slp": null,
+     "wx": null,
+     "cloud": [],
+     "category": "VFR",
+     "auto": false,
+     "type": "METAR"
+    }
+   ],
+   "taf": null
+  },
+  "FAUT": {
+   "name": "Umtata/Mthatha Arpt",
+   "lat": -31.546,
+   "lon": 28.673,
+   "elev": 735.0,
+   "iata": "UTT",
+   "wmo": "68668",
+   "metars": [
+    {
+     "time": "2026-09-16T14:00:00Z",
+     "raw": "METAR FAUT 161400Z AUTO 20010KT //// // ////// 13/10 Q1024",
+     "t": 13.0,
+     "td": 10.0,
+     "wd": 200,
+     "ws": 5.1,
+     "gust": null,
+     "vis": null,
+     "qnh": 1024.0,
+     "slp": null,
+     "wx": null,
+     "cloud": [],
+     "category": null,
+     "auto": true,
+     "type": "METAR"
+    }
+   ],
+   "taf": null
+  },
+  "FAVV": {
+   "name": "Vereeniging Arpt",
+   "lat": -26.566,
+   "lon": 27.961,
+   "elev": 1480.0,
+   "iata": null,
+   "wmo": null,
+   "metars": [
+    {
+     "time": "2026-09-16T14:00:00Z",
+     "raw": "METAR FAVV 161400Z AUTO 22005KT //// // ////// 28/08 Q1024",
+     "t": 28.0,
+     "td": 8.0,
+     "wd": 220,
+     "ws": 2.6,
+     "gust": null,
+     "vis": null,
+     "qnh": 1024.0,
+     "slp": null,
+     "wx": null,
+     "cloud": [],
+     "category": null,
+     "auto": true,
+     "type": "METAR"
+    }
+   ],
+   "taf": null
+  },
+  "FAWB": {
+   "name": "Pretoria/Wonderboom Arpt",
+   "lat": -25.654,
+   "lon": 28.224,
+   "elev": 1245.0,
+   "iata": "PRY",
+   "wmo": null,
+   "metars": [
+    {
+     "time": "2026-09-16T14:00:00Z",
+     "raw": "METAR FAWB 161400Z AUTO 32006KT //// // ////// 30/03 Q1020",
+     "t": 30.0,
+     "td": 3.0,
+     "wd": 320,
+     "ws": 3.1,
+     "gust": null,
+     "vis": null,
+     "qnh": 1020.0,
+     "slp": null,
+     "wx": null,
+     "cloud": [],
+     "category": null,
+     "auto": true,
+     "type": "METAR"
+    }
+   ],
+   "taf": null
+  },
+  "FAWK": {
+   "name": "Waterkloof",
+   "lat": -25.83,
+   "lon": 28.223,
+   "elev": 1496.0,
+   "iata": "WKF",
+   "wmo": "68264",
+   "metars": [
+    {
+     "time": "2026-09-16T14:00:00Z",
+     "raw": "METAR FAWK 161400Z AUTO 30006G18KT //// // ////// 28/09 Q1024",
+     "t": 28.0,
+     "td": 9.0,
+     "wd": 300,
+     "ws": 3.1,
+     "gust": 9.3,
+     "vis": null,
+     "qnh": 1024.0,
+     "slp": null,
+     "wx": null,
+     "cloud": [],
+     "category": null,
+     "auto": true,
+     "type": "METAR"
+    }
+   ],
+   "taf": null
+  }
+ }
+}
