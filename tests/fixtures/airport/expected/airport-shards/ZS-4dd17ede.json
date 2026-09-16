@@ -1,0 +1,333 @@
+{
+ "schemaVersion": 1,
+ "shard": "ZS",
+ "stations": {
+  "ZSAM": {
+   "name": "Xiamen-Gaoqi Intl",
+   "lat": 24.546,
+   "lon": 118.131,
+   "elev": 13.0,
+   "iata": "XMN",
+   "wmo": "59134",
+   "metars": [
+    {
+     "time": "2026-09-16T14:00:00Z",
+     "raw": "METAR ZSAM 161400Z 07006MPS CAVOK 26/19 Q1014 NOSIG",
+     "t": 26.0,
+     "td": 19.0,
+     "wd": 70,
+     "ws": 6.2,
+     "gust": null,
+     "vis": 10000,
+     "qnh": 1013.9,
+     "slp": null,
+     "wx": null,
+     "cloud": [],
+     "category": "VFR",
+     "auto": false,
+     "type": "METAR"
+    }
+   ],
+   "taf": null
+  },
+  "ZSFZ": {
+   "name": "Fuzhou/Changle Intl",
+   "lat": 25.936,
+   "lon": 119.666,
+   "elev": 14.0,
+   "iata": "FOC",
+   "wmo": null,
+   "metars": [
+    {
+     "time": "2026-09-16T14:00:00Z",
+     "raw": "METAR ZSFZ 161400Z 03004MPS 9999 FEW030 25/19 Q1016 NOSIG",
+     "t": 25.0,
+     "td": 19.0,
+     "wd": 30,
+     "ws": 4.1,
+     "gust": null,
+     "vis": 10000,
+     "qnh": 1015.9,
+     "slp": null,
+     "wx": null,
+     "cloud": [
+      ["FEW", 910]
+     ],
+     "category": "VFR",
+     "auto": false,
+     "type": "METAR"
+    }
+   ],
+   "taf": null
+  },
+  "ZSHC": {
+   "name": "Hangzhou/Xiaoshan Intl",
+   "lat": 30.229,
+   "lon": 120.434,
+   "elev": 8.0,
+   "iata": "HGH",
+   "wmo": "58457",
+   "metars": [
+    {
+     "time": "2026-09-16T14:30:00Z",
+     "raw": "METAR ZSHC 161430Z 10002MPS CAVOK 24/18 Q1016 NOSIG",
+     "t": 24.0,
+     "td": 18.0,
+     "wd": 100,
+     "ws": 2.1,
+     "gust": null,
+     "vis": 10000,
+     "qnh": 1015.9,
+     "slp": null,
+     "wx": null,
+     "cloud": [],
+     "category": "VFR",
+     "auto": false,
+     "type": "METAR"
+    },
+    {
+     "time": "2026-09-16T14:00:00Z",
+     "raw": "METAR ZSHC 161400Z 09002MPS CAVOK 23/18 Q1017 NOSIG",
+     "t": 23.0,
+     "td": 18.0,
+     "wd": 90,
+     "ws": 2.1,
+     "gust": null,
+     "vis": 10000,
+     "qnh": 1016.9,
+     "slp": null,
+     "wx": null,
+     "cloud": [],
+     "category": "VFR",
+     "auto": false,
+     "type": "METAR"
+    }
+   ],
+   "taf": null
+  },
+  "ZSNB": {
+   "name": "Ningbo/Lishe Intl",
+   "lat": 29.827,
+   "lon": 121.462,
+   "elev": 5.0,
+   "iata": "NGB",
+   "wmo": "58239",
+   "metars": [
+    {
+     "time": "2026-09-16T14:00:00Z",
+     "raw": "METAR ZSNB 161400Z 33002MPS CAVOK 20/17 Q1016 NOSIG",
+     "t": 20.0,
+     "td": 17.0,
+     "wd": 330,
+     "ws": 2.1,
+     "gust": null,
+     "vis": 10000,
+     "qnh": 1015.9,
+     "slp": null,
+     "wx": null,
+     "cloud": [],
+     "category": "VFR",
+     "auto": false,
+     "type": "METAR"
+    }
+   ],
+   "taf": null
+  },
+  "ZSNJ": {
+   "name": "Nanjing/Lukou Intl",
+   "lat": 31.739,
+   "lon": 118.863,
+   "elev": 27.0,
+   "iata": "NKG",
+   "wmo": "58238",
+   "metars": [
+    {
+     "time": "2026-09-16T14:00:00Z",
+     "raw": "METAR ZSNJ 161400Z 00000MPS CAVOK 23/21 Q1016 NOSIG",
+     "t": 23.0,
+     "td": 21.0,
+     "wd": 0,
+     "ws": 0.0,
+     "gust": null,
+     "vis": 10000,
+     "qnh": 1015.9,
+     "slp": null,
+     "wx": null,
+     "cloud": [],
+     "category": "VFR",
+     "auto": false,
+     "type": "METAR"
+    }
+   ],
+   "taf": null
+  },
+  "ZSOF": {
+   "name": "Hefei/Xinqiao Intl",
+   "lat": 31.99,
+   "lon": 116.965,
+   "elev": 64.0,
+   "iata": "HFE",
+   "wmo": "58321",
+   "metars": [
+    {
+     "time": "2026-09-16T14:00:00Z",
+     "raw": "METAR ZSOF 161400Z 03003MPS CAVOK 23/17 Q1016 NOSIG",
+     "t": 23.0,
+     "td": 17.0,
+     "wd": 30,
+     "ws": 3.1,
+     "gust": null,
+     "vis": 10000,
+     "qnh": 1015.9,
+     "slp": null,
+     "wx": null,
+     "cloud": [],
+     "category": "VFR",
+     "auto": false,
+     "type": "METAR"
+    }
+   ],
+   "taf": null
+  },
+  "ZSPD": {
+   "name": "Shanghai/Pudong Intl",
+   "lat": 31.146,
+   "lon": 121.8,
+   "elev": 4.0,
+   "iata": "PVG",
+   "wmo": null,
+   "metars": [
+    {
+     "time": "2026-09-16T14:30:00Z",
+     "raw": "METAR ZSPD 161430Z 06004MPS 010V090 CAVOK 24/15 Q1016 NOSIG",
+     "t": 24.0,
+     "td": 15.0,
+     "wd": 60,
+     "ws": 4.1,
+     "gust": null,
+     "vis": 10000,
+     "qnh": 1015.9,
+     "slp": null,
+     "wx": null,
+     "cloud": [],
+     "category": "VFR",
+     "auto": false,
+     "type": "METAR"
+    },
+    {
+     "time": "2026-09-16T14:00:00Z",
+     "raw": "METAR ZSPD 161400Z 06004MPS 020V090 CAVOK 24/16 Q1017 NOSIG",
+     "t": 24.0,
+     "td": 16.0,
+     "wd": 60,
+     "ws": 4.1,
+     "gust": null,
+     "vis": 10000,
+     "qnh": 1016.9,
+     "slp": null,
+     "wx": null,
+     "cloud": [],
+     "category": "VFR",
+     "auto": false,
+     "type": "METAR"
+    }
+   ],
+   "taf": {
+    "issued": "2026-09-16T09:03:00Z",
+    "from": "2026-09-16T12:00:00Z",
+    "to": "2026-09-17T18:00:00Z",
+    "raw": "TAF ZSPD 160903Z 1612/1718 05004MPS 8000 SCT030 TX25/1612Z TX29/1706Z TN22/1621Z",
+    "amended": false,
+    "periods": [
+     {
+      "from": "2026-09-16T12:00:00Z",
+      "to": "2026-09-17T18:00:00Z",
+      "change": null,
+      "prob": null,
+      "wd": 50,
+      "ws": 4.1,
+      "gust": null,
+      "vis": 8000,
+      "wx": null,
+      "cloud": [
+       ["SCT", 910]
+      ]
+     }
+    ]
+   }
+  },
+  "ZSQD": {
+   "name": "Qingdao/Jiaodong Arpt",
+   "lat": 36.362,
+   "lon": 120.087,
+   "elev": 2.0,
+   "iata": "TAO",
+   "wmo": "54857",
+   "metars": [
+    {
+     "time": "2026-09-16T14:00:00Z",
+     "raw": "METAR ZSQD 161400Z 13003MPS 9000 NSC 23/20 Q1016 NOSIG",
+     "t": 23.0,
+     "td": 20.0,
+     "wd": 130,
+     "ws": 3.1,
+     "gust": null,
+     "vis": 9000,
+     "qnh": 1015.9,
+     "slp": null,
+     "wx": null,
+     "cloud": [],
+     "category": "VFR",
+     "auto": false,
+     "type": "METAR"
+    }
+   ],
+   "taf": null
+  },
+  "ZSSS": {
+   "name": "Shanghai/Hongqiao Intl",
+   "lat": 31.209,
+   "lon": 121.337,
+   "elev": 2.0,
+   "iata": "SHA",
+   "wmo": "58367",
+   "metars": [
+    {
+     "time": "2026-09-16T14:30:00Z",
+     "raw": "METAR ZSSS 161430Z 08002MPS CAVOK 24/17 Q1016 NOSIG",
+     "t": 24.0,
+     "td": 17.0,
+     "wd": 80,
+     "ws": 2.1,
+     "gust": null,
+     "vis": 10000,
+     "qnh": 1015.9,
+     "slp": null,
+     "wx": null,
+     "cloud": [],
+     "category": "VFR",
+     "auto": false,
+     "type": "METAR"
+    },
+    {
+     "time": "2026-09-16T14:00:00Z",
+     "raw": "METAR ZSSS 161400Z 08003MPS CAVOK 24/17 Q1017 NOSIG",
+     "t": 24.0,
+     "td": 17.0,
+     "wd": 80,
+     "ws": 3.1,
+     "gust": null,
+     "vis": 10000,
+     "qnh": 1016.9,
+     "slp": null,
+     "wx": null,
+     "cloud": [],
+     "category": "VFR",
+     "auto": false,
+     "type": "METAR"
+    }
+   ],
+   "taf": null
+  }
+ }
+}

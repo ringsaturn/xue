@@ -1,0 +1,428 @@
+{
+ "schemaVersion": 1,
+ "shard": "RK",
+ "stations": {
+  "RKJB": {
+   "name": "Muan Intl",
+   "lat": 34.991,
+   "lon": 126.383,
+   "elev": 16.0,
+   "iata": "MWX",
+   "wmo": "47163",
+   "metars": [
+    {
+     "time": "2026-09-16T14:00:00Z",
+     "raw": "METAR RKJB 161400Z AUTO 14001KT 8000 NCD 22/20 Q1018",
+     "t": 22.0,
+     "td": 20.0,
+     "wd": 140,
+     "ws": 0.5,
+     "gust": null,
+     "vis": 8000,
+     "qnh": 1017.9,
+     "slp": null,
+     "wx": null,
+     "cloud": [],
+     "category": "MVFR",
+     "auto": true,
+     "type": "METAR"
+    }
+   ],
+   "taf": null
+  },
+  "RKJK": {
+   "name": "Kunsan",
+   "lat": 35.9,
+   "lon": 126.618,
+   "elev": 8.0,
+   "iata": "KUV",
+   "wmo": "47141",
+   "metars": [
+    {
+     "time": "2026-09-16T13:55:00Z",
+     "raw": "METAR RKJK 161355Z 07005KT 10SM SCT075 21/15 A3005 RMK AO2A SLP180 T02080153 $",
+     "t": 20.8,
+     "td": 15.3,
+     "wd": 70,
+     "ws": 2.6,
+     "gust": null,
+     "vis": 10000,
+     "qnh": 1017.6,
+     "slp": 1018.0,
+     "wx": null,
+     "cloud": [
+      ["SCT", 2290]
+     ],
+     "category": "VFR",
+     "auto": false,
+     "type": "METAR"
+    }
+   ],
+   "taf": null
+  },
+  "RKNY": {
+   "name": "Yangyang Intl",
+   "lat": 38.061,
+   "lon": 128.669,
+   "elev": 76.0,
+   "iata": "YNY",
+   "wmo": "47092",
+   "metars": [
+    {
+     "time": "2026-09-16T14:00:00Z",
+     "raw": "METAR RKNY 161400Z AUTO 26007KT 9999 NCD 18/15 Q1021",
+     "t": 18.0,
+     "td": 15.0,
+     "wd": 260,
+     "ws": 3.6,
+     "gust": null,
+     "vis": 10000,
+     "qnh": 1021.0,
+     "slp": null,
+     "wx": null,
+     "cloud": [],
+     "category": "VFR",
+     "auto": true,
+     "type": "METAR"
+    }
+   ],
+   "taf": null
+  },
+  "RKPC": {
+   "name": "Jeju Intl",
+   "lat": 33.511,
+   "lon": 126.493,
+   "elev": 23.0,
+   "iata": "CJU",
+   "wmo": "47182",
+   "metars": [
+    {
+     "time": "2026-09-16T14:00:00Z",
+     "raw": "METAR RKPC 161400Z 12008KT CAVOK 23/16 Q1017 NOSIG",
+     "t": 23.0,
+     "td": 16.0,
+     "wd": 120,
+     "ws": 4.1,
+     "gust": null,
+     "vis": 10000,
+     "qnh": 1016.9,
+     "slp": null,
+     "wx": null,
+     "cloud": [],
+     "category": "VFR",
+     "auto": false,
+     "type": "METAR"
+    }
+   ],
+   "taf": null
+  },
+  "RKPK": {
+   "name": "Busan/Gimhae Intl",
+   "lat": 35.179,
+   "lon": 128.938,
+   "elev": 3.0,
+   "iata": "PUS",
+   "wmo": "47153",
+   "metars": [
+    {
+     "time": "2026-09-16T14:00:00Z",
+     "raw": "METAR RKPK 161400Z 33003KT 9999 FEW050 21/14 Q1019",
+     "t": 21.0,
+     "td": 14.0,
+     "wd": 330,
+     "ws": 1.5,
+     "gust": null,
+     "vis": 10000,
+     "qnh": 1019.0,
+     "slp": null,
+     "wx": null,
+     "cloud": [
+      ["FEW", 1520]
+     ],
+     "category": "VFR",
+     "auto": false,
+     "type": "METAR"
+    }
+   ],
+   "taf": null
+  },
+  "RKSG": {
+   "name": "Pyongtaek Arpt",
+   "lat": 36.962,
+   "lon": 127.031,
+   "elev": 12.0,
+   "iata": null,
+   "wmo": "47127",
+   "metars": [
+    {
+     "time": "2026-09-16T13:55:00Z",
+     "raw": "METAR RKSG 161355Z AUTO 11003KT 10SM BKN070 20/14 A3009 RMK AO2 SLP192 T02020136 $",
+     "t": 20.2,
+     "td": 13.6,
+     "wd": 110,
+     "ws": 1.5,
+     "gust": null,
+     "vis": 10000,
+     "qnh": 1019.0,
+     "slp": 1019.2,
+     "wx": null,
+     "cloud": [
+      ["BKN", 2130]
+     ],
+     "category": "VFR",
+     "auto": true,
+     "type": "METAR"
+    }
+   ],
+   "taf": null
+  },
+  "RKSI": {
+   "name": "Seoul/Incheon Intl",
+   "lat": 37.469,
+   "lon": 126.451,
+   "elev": 7.0,
+   "iata": "ICN",
+   "wmo": null,
+   "metars": [
+    {
+     "time": "2026-09-16T14:30:00Z",
+     "raw": "METAR RKSI 161430Z 04006KT CAVOK 21/13 Q1019 NOSIG",
+     "t": 21.0,
+     "td": 13.0,
+     "wd": 40,
+     "ws": 3.1,
+     "gust": null,
+     "vis": 10000,
+     "qnh": 1019.0,
+     "slp": null,
+     "wx": null,
+     "cloud": [],
+     "category": "VFR",
+     "auto": false,
+     "type": "METAR"
+    }
+   ],
+   "taf": {
+    "issued": "2026-09-16T11:00:00Z",
+    "from": "2026-09-16T12:00:00Z",
+    "to": "2026-09-17T18:00:00Z",
+    "raw": "TAF RKSI 161100Z 1612/1718 04006KT CAVOK TN18/1620Z TX27/1706Z BECMG 1614/1616 12006KT BECMG 1700/1702 06007KT BECMG 1705/1707 12007KT BECMG 1714/1716 06007KT",
+    "amended": false,
+    "periods": [
+     {
+      "from": "2026-09-16T12:00:00Z",
+      "to": "2026-09-16T14:00:00Z",
+      "change": null,
+      "prob": null,
+      "wd": 40,
+      "ws": 3.1,
+      "gust": null,
+      "vis": 10000,
+      "wx": null,
+      "cloud": [
+       ["NSC", null]
+      ]
+     },
+     {
+      "from": "2026-09-16T14:00:00Z",
+      "to": "2026-09-17T00:00:00Z",
+      "change": "BECMG",
+      "prob": null,
+      "wd": 120,
+      "ws": 3.1,
+      "gust": null,
+      "vis": 10000,
+      "wx": null,
+      "cloud": [
+       ["NSC", null]
+      ]
+     },
+     {
+      "from": "2026-09-17T00:00:00Z",
+      "to": "2026-09-17T05:00:00Z",
+      "change": "BECMG",
+      "prob": null,
+      "wd": 60,
+      "ws": 3.6,
+      "gust": null,
+      "vis": 10000,
+      "wx": null,
+      "cloud": [
+       ["NSC", null]
+      ]
+     },
+     {
+      "from": "2026-09-17T05:00:00Z",
+      "to": "2026-09-17T14:00:00Z",
+      "change": "BECMG",
+      "prob": null,
+      "wd": 120,
+      "ws": 3.6,
+      "gust": null,
+      "vis": 10000,
+      "wx": null,
+      "cloud": [
+       ["NSC", null]
+      ]
+     },
+     {
+      "from": "2026-09-17T14:00:00Z",
+      "to": "2026-09-17T18:00:00Z",
+      "change": "BECMG",
+      "prob": null,
+      "wd": 60,
+      "ws": 3.6,
+      "gust": null,
+      "vis": 10000,
+      "wx": null,
+      "cloud": [
+       ["NSC", null]
+      ]
+     }
+    ]
+   }
+  },
+  "RKSM": {
+   "name": "Seoul",
+   "lat": 37.446,
+   "lon": 127.114,
+   "elev": 18.0,
+   "iata": "SSN",
+   "wmo": "47111",
+   "metars": [
+    {
+     "time": "2026-09-16T14:00:00Z",
+     "raw": "METAR RKSM 161400Z 32001KT 9999 SKC 18/13 A3011",
+     "t": 18.0,
+     "td": 13.0,
+     "wd": 320,
+     "ws": 0.5,
+     "gust": null,
+     "vis": 10000,
+     "qnh": 1019.6,
+     "slp": null,
+     "wx": null,
+     "cloud": [],
+     "category": "VFR",
+     "auto": false,
+     "type": "METAR"
+    }
+   ],
+   "taf": null
+  },
+  "RKSO": {
+   "name": "Osan Arpt",
+   "lat": 37.091,
+   "lon": 127.03,
+   "elev": 10.0,
+   "iata": "OSN",
+   "wmo": "47122",
+   "metars": [
+    {
+     "time": "2026-09-16T13:55:00Z",
+     "raw": "METAR RKSO 161355Z AUTO 00000KT 10SM BKN070 18/15 A3008 RMK AO2 SLP190 T01840154 FZRANO $",
+     "t": 18.4,
+     "td": 15.4,
+     "wd": 0,
+     "ws": 0.0,
+     "gust": null,
+     "vis": 10000,
+     "qnh": 1018.6,
+     "slp": 1019.0,
+     "wx": null,
+     "cloud": [
+      ["BKN", 2130]
+     ],
+     "category": "VFR",
+     "auto": true,
+     "type": "METAR"
+    }
+   ],
+   "taf": null
+  },
+  "RKSS": {
+   "name": "Seoul/Gimpo Intl",
+   "lat": 37.558,
+   "lon": 126.791,
+   "elev": 18.0,
+   "iata": "GMP",
+   "wmo": "47110",
+   "metars": [
+    {
+     "time": "2026-09-16T14:00:00Z",
+     "raw": "METAR RKSS 161400Z 35004KT CAVOK 18/12 Q1019 NOSIG",
+     "t": 18.0,
+     "td": 12.0,
+     "wd": 350,
+     "ws": 2.1,
+     "gust": null,
+     "vis": 10000,
+     "qnh": 1019.0,
+     "slp": null,
+     "wx": null,
+     "cloud": [],
+     "category": "VFR",
+     "auto": false,
+     "type": "METAR"
+    }
+   ],
+   "taf": null
+  },
+  "RKTN": {
+   "name": "Daegu",
+   "lat": 35.894,
+   "lon": 128.659,
+   "elev": 25.0,
+   "iata": "TAE",
+   "wmo": "47142",
+   "metars": [
+    {
+     "time": "2026-09-16T14:00:00Z",
+     "raw": "METAR RKTN 161400Z 36001KT CAVOK 19/13 Q1020",
+     "t": 19.0,
+     "td": 13.0,
+     "wd": 360,
+     "ws": 0.5,
+     "gust": null,
+     "vis": 10000,
+     "qnh": 1020.0,
+     "slp": null,
+     "wx": null,
+     "cloud": [],
+     "category": "VFR",
+     "auto": false,
+     "type": "METAR"
+    }
+   ],
+   "taf": null
+  },
+  "RKTU": {
+   "name": "Cheonju Intl",
+   "lat": 36.717,
+   "lon": 127.499,
+   "elev": 46.0,
+   "iata": "CJJ",
+   "wmo": "47128",
+   "metars": [
+    {
+     "time": "2026-09-16T14:00:00Z",
+     "raw": "METAR RKTU 161400Z 10005KT CAVOK 21/11 Q1019",
+     "t": 21.0,
+     "td": 11.0,
+     "wd": 100,
+     "ws": 2.6,
+     "gust": null,
+     "vis": 10000,
+     "qnh": 1019.0,
+     "slp": null,
+     "wx": null,
+     "cloud": [],
+     "category": "VFR",
+     "auto": false,
+     "type": "METAR"
+    }
+   ],
+   "taf": null
+  }
+ }
+}
