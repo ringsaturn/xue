@@ -345,15 +345,21 @@ function drawObservations(
   context.fillStyle = ink.ink;
   context.lineWidth = 1;
   let pen = false;
+  let held = 0;
   context.beginPath();
   for (const mark of marks) {
     const x = xAt(mark.x);
     if (x === null || mark.kind !== "step") continue;
-    // A step holds its value until the next report, then jumps to it.
+    // A step holds its value until the next report, then jumps to it:
+    // across at the value held so far, then up or down at the report.
     const py = y(mark.y);
-    if (pen) context.lineTo(x, py);
-    else context.moveTo(x, py);
-    context.lineTo(x, py);
+    if (pen) {
+      context.lineTo(x, held);
+      context.lineTo(x, py);
+    } else {
+      context.moveTo(x, py);
+    }
+    held = py;
     pen = true;
   }
   if (pen) {
