@@ -26,6 +26,10 @@ RUN_DIR = $(MODEL).$(RUN)$(if $(ROUND),/$(ROUND))
 KEEP ?= 1
 # `--dryrun` to preview an upload or a prune.
 DRY_RUN ?=
+# WARM=false skips the edge-cache warm-up between the assets and the pointer
+# (a rolling window's round is a handful of small objects, replaced minutes
+# later; its first viewer fills the edge at little cost).
+WARM ?= true
 # Each model has its own mutable live pointer; GFS uses the bare latest.json,
 # the other models use latest-<model>.json.
 LATEST_FILE = $(if $(filter gfs,$(MODEL)),latest.json,latest-$(MODEL).json)
@@ -160,8 +164,8 @@ deploy-build:
 # afterwards, and uploading it is what takes the run live. Between the two,
 # `warm-r2` pulls every artifact through the CDN so the first viewer of the
 # new run finds it at the edge rather than waiting on the fill from R2; a
-# warm-up failure is reported but never holds the pointer back.
-# Pass a concrete RUN=YYYYMMDDHH.
+# warm-up failure is reported but never holds the pointer back, and
+# WARM=false leaves it out. Pass a concrete RUN=YYYYMMDDHH.
 #
 # This is the whole-run path for a run built in one go. The scheduled publish
 # builds a run in pieces — one job per bundle group, each syncing what it
@@ -181,7 +185,7 @@ upload-r2:
 		--exclude "manifest.part.*.json" --exclude "$(STAC_ITEM)" \
 		--cache-control "public, max-age=31536000, immutable"; \
 	$(MAKE) --no-print-directory upload-r2-stac-item MODEL=$(MODEL) RUN=$(RUN) ROUND=$(ROUND) DRY_RUN=$(DRY_RUN); \
-	[ -n "$(DRY_RUN)" ] || $(MAKE) --no-print-directory warm-r2 MODEL=$(MODEL) RUN=$(RUN) ROUND=$(ROUND) \
+	[ -n "$(DRY_RUN)" ] || [ "$(WARM)" != true ] || $(MAKE) --no-print-directory warm-r2 MODEL=$(MODEL) RUN=$(RUN) ROUND=$(ROUND) \
 		|| echo "warming the edge cache failed; the run goes live cold"; \
 	$(MAKE) --no-print-directory upload-r2-pointer MODEL=$(MODEL) RUN=$(RUN) DRY_RUN=$(DRY_RUN)
 

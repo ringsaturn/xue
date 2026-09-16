@@ -116,6 +116,9 @@ jobs:
       # never comes.
       UNTIL_MINUTE: "80"
       HANDOVER_CHECK: scripts/successor_queued.sh
+      # No edge-cache warm-up: a round is eight small objects replaced a few
+      # minutes later, and the shell's next poll fills the edge itself.
+      WARM: "false"
       HOURS: ${{ inputs.hours || '3' }}
       PROFILE: ${{ inputs.profile || 'balanced' }}
       KEEP: ${{ inputs.keep || '2' }}

@@ -11,7 +11,8 @@
 # frames already on disk are reused, those of the previous run linked
 # across — and converted from scratch, so a round's bytes depend on its
 # frames alone) → `make upload-r2` with the round (bundles, manifest and
-# window record synced into <model>.<run>/<HHMM>/, warmed, then the pointer)
+# window record synced into <model>.<run>/<HHMM>/, warmed unless WARM=false,
+# then the pointer)
 # → the rounds before the newest two of the run deleted, then the runs
 # before the newest two. The pointer is written last and only by a round
 # that got that far; a round that fails leaves the previous one live.
@@ -47,8 +48,9 @@
 # uploads and prunes), ONCE (true runs one round and exits — a manual
 # check), FRAME_CACHE (true syncs the decoded-frame cache with the bucket),
 # FRAMES_KEEP_DAYS (7), HANDOVER_CHECK (a command; empty runs to the
-# deadline). PYTHON names the interpreter (the Makefile's default is the
-# project's .venv).
+# deadline), WARM (false skips the edge-cache warm-up of each round).
+# PYTHON names the interpreter (the Makefile's default is the project's
+# .venv).
 set -u
 
 model=${MODEL:-mrms}
@@ -63,6 +65,7 @@ force=${FORCE:-false}
 dry_run=${DRY_RUN:-}
 once=${ONCE:-false}
 handover_check=${HANDOVER_CHECK:-}
+warm=${WARM:-true}
 python=${PYTHON:-.venv/bin/python}
 data=web/public/data
 raw=data/raw
@@ -117,7 +120,7 @@ while :; do
         # reload. Keep the live round and try again next round.
         echo "round $round: the fetch delivered nothing newer than the live round ($built); not publishing"
         rm -rf "$data/$model.$run/$round"
-      elif make upload-r2 MODEL=$model RUN="$run" ROUND="$round" DRY_RUN="$dry_run"; then
+      elif make upload-r2 MODEL=$model RUN="$run" ROUND="$round" DRY_RUN="$dry_run" WARM="$warm"; then
         upload_seconds=$(( $(date -u +%s) - t0 ))
         pointer_at=$(date -u +%s)
         t0=$pointer_at
