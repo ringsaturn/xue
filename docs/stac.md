@@ -1,25 +1,24 @@
 # The STAC catalog
 
-Everything Xue publishes is described twice. The shell reads the JSON it
-always has — a run's `manifest.json` (schema v5), the per-model live pointer
-(schema v1), `showcase.json` — and none of that changes here. Beside them the
-encoder now derives a static [SpatioTemporal Asset
-Catalog](https://stacspec.org/) (STAC 1.1.0), so the Zarr stores can be
-found the way that ecosystem finds data: `pystac` walks the catalog,
+The shell reads the JSON it always has: a run's `manifest.json` (schema v5),
+the per-model live pointer (schema v1), `showcase.json`. None of that
+changes here. Beside them the encoder derives a static [SpatioTemporal
+Asset Catalog](https://stacspec.org/) (STAC 1.1.0), so the Zarr stores can
+be found the way that ecosystem finds data: `pystac` walks the catalog,
 [`xpystac`](https://github.com/stac-utils/xpystac) / `odc-stac` open an
-Item's `application/vnd.zarr` asset straight into xarray, and a STAC
-browser lists the runs. This document is the contract: the layout, what each
-document carries, and where it comes from.
+Item's `application/vnd.zarr` asset into xarray, and a STAC browser lists
+the runs. This document is the contract: the layout, what each document
+carries, and where it comes from.
 
-The catalog is **derived, not authoritative**. Every document is a pure
+The catalog is derived, not authoritative. Every document is a pure
 function of a manifest, a `showcase.json` row and the source registry
-(`xuebuild/stac.py`) — no timestamps, no host names — which is what lets a
+(`xuebuild/stac.py`), with no timestamps and no host names, which lets a
 run built whole and a run built in pieces write the same bytes
-(`tests/test_assemble.py`) and lets any document be regenerated from what is
-on disk. The manifest stays what the shell validates and opens; a field the
-catalog has and the manifest lacks is a summary, never a second source of
-truth. Should the manifest itself become a STAC Item one day (plan: a schema
-v6), this layer is what it would become.
+(`tests/test_assemble.py`) and lets any document be regenerated from what
+is on disk. The manifest stays what the shell validates and opens; a field
+the catalog has and the manifest lacks is a summary. Should the manifest
+itself become a STAC Item (a possible schema v6), this layer is what it
+would become.
 
 ## Layout
 
@@ -28,28 +27,28 @@ pointers:
 
 | Path | STAC object | Mutable | Written by |
 |---|---|---|---|
-| `catalog.json` | the root **Catalog**: one `child` per source with a live feed, one for the showcase | yes (rarely changes; a pure function of the registry) | every publish, `showcase catalog` |
-| `<source>/collection.json` | one **Collection** per source (`gfs`, `ecmwf`, `sflux`, `hrrr`, `mrms`) | yes — the STAC face of the live pointer | `build-bin` (whole run), `assemble-run` |
-| `<source>/item.json` | the **live Item**: the run's Item relocated to a path that never changes | yes — replaced by every publish | same |
-| `<source>.<run>/item.json` | one **Item** per published run, beside its manifest | rewritten in place by a top-up, like the manifest | `build-bin` (whole run), `assemble-run` |
+| `catalog.json` | the root Catalog: one `child` per source with a live feed, one for the showcase | yes (a pure function of the registry) | every publish, `showcase catalog` |
+| `<source>/collection.json` | one Collection per source (`gfs`, `ecmwf`, `sflux`, `hrrr`, `mrms`), the STAC face of the live pointer | yes | `build-bin` (whole run), `assemble-run` |
+| `<source>/item.json` | the live Item: the run's Item relocated to a path that never changes | yes, replaced by every publish | same |
+| `<source>.<run>/item.json` | one Item per published run, beside its manifest | rewritten in place by a top-up, like the manifest | `build-bin` (whole run), `assemble-run` |
 | `<source>.<run>/<HHMM>/item.json` | the Item of one round of the MRMS rolling window | no | `build-bin --round` |
-| `showcase/collection.json` | the **Collection** of the historical cases | yes | `showcase build` / `refresh` / `catalog` |
+| `showcase/collection.json` | the Collection of the historical cases | yes | `showcase build` / `refresh` / `catalog` |
 | `showcase/<case>/item.json` | one Item per case, beside its manifest | rewritten by `showcase refresh` | same |
 
 Mutable documents are served `no-cache`, like the pointer; an Item is too,
 since a STAC client fetches it by its plain name rather than under a `?v=`
-and a top-up rewrites it. Links are **relative** — `../catalog.json`,
-`../gfs/collection.json`, `tmp2m.zarr` — so a client resolves them against
+and a top-up rewrites it. Links are relative (`../catalog.json`,
+`../gfs/collection.json`, `tmp2m.zarr`), so a client resolves them against
 whichever origin it read the document from, and no document names a host.
 There are no `self` links for the same reason.
 
-Only the newest run per source is kept on the bucket (`prune-r2`) — an
-hour for HRRR, minutes for an MRMS round — so a link into
-`<source>.<run>/` dies with the run, and a client that bookmarked one, or
-held a Collection in its cache, would land on a 404. The Collection
-therefore lists one Item at a **stable path**: `<source>/item.json`, the
-run's Item with every relative href rewritten to reach into the run
-directory (`../gfs.2026091512/tmp2m.zarr`) and nothing else changed
+Only the newest run per source is kept on the bucket (`prune-r2`), an hour
+for HRRR and minutes for an MRMS round, so a link into `<source>.<run>/`
+stops resolving when the run is pruned, and a client that bookmarked one,
+or held a Collection in its cache, would get a 404. The Collection
+therefore lists one Item at a stable path: `<source>/item.json`, the run's
+Item with every relative href rewritten to reach into the run directory
+(`../gfs.2026091512/tmp2m.zarr`) and nothing else changed
 (`relocate_item`). Its `item` and `latest-version` links both name it; an
 `alternate` link names the run's own copy beside its manifest. A client
 that wants the live run follows `item`; one that wants the pointer's own
@@ -67,17 +66,18 @@ directory and nothing else. Id: the directory with `/` as `.`
 sources only), [datacube v2.3.0](https://github.com/stac-extensions/datacube),
 [file v2.1.0](https://github.com/stac-extensions/file).
 
-**Time.** The Item covers the run's whole axis: `start_datetime` /
+Time. The Item covers the run's whole axis: `start_datetime` /
 `end_datetime` are the union of every axis the manifest's bundle metadata
 carries (a rate that starts at the first step widens nothing; f240 is the
 end), and `datetime` repeats the start so a client that sorts on it can.
 `forecast:reference_datetime` is the cycle (`runTime`), `forecast:horizon`
 the longest lead as an ISO 8601 duration (`PT240H`), `forecast:perturbed`
-`false` — every published run is a deterministic control. An observation
-(MRMS) declares no forecast fields; its `xue:observation` is `true`.
+`false`, since every published run is a deterministic control. An
+observation (MRMS) declares no forecast fields; its `xue:observation` is
+`true`.
 
-**Space.** The manifest names no grid; the Item reads one off the bundle
-metadata a run's core scalars always carry — the H.264 companion's when
+Space. The manifest names no grid; the Item reads one off the bundle
+metadata a run's core scalars always carry: the H.264 companion's when
 there is one (the full grid), else a poster's, which is the grid decimated
 two to one (`GridInfo.decimated`: same origin, doubled step). So the
 `cube:dimensions` `x` / `y` steps are exact, the origin is exact, and a
@@ -87,32 +87,32 @@ window crosses the antimeridian). The authoritative grid is the store's own
 `attributes.xue`; a manifest with no metadata at all (only the synthetic
 ones in tests) gets a null geometry and a time dimension alone.
 
-**Variables.** `cube:variables` has one entry per *array* the run
-publishes: a scalar bundle is one, a vector bundle its two components
-(`ugrd10m` / `vgrd10m` under `wind10m`, marked `xue:bundle`), each with the
-registry's label and unit. A bundle the registry does not know — a manifest
-admits any well-formed name — is listed by name alone.
+Variables. `cube:variables` has one entry per array the run publishes: a
+scalar bundle is one, a vector bundle its two components (`ugrd10m` /
+`vgrd10m` under `wind10m`, marked `xue:bundle`), each with the registry's
+label and unit. A bundle the registry does not know (a manifest admits any
+well-formed name) is listed by name alone.
 
-**Assets.** One per artifact, keyed by bundle:
+Assets. One per artifact, keyed by bundle:
 
 | Key | What | `type` | `roles` |
 |---|---|---|---|
-| `manifest` | `manifest.json?v=<crc32>` — the manifest under the `?v=` a viewer fetches it with | `application/json` | `metadata` |
+| `manifest` | `manifest.json?v=<crc32>`, the manifest under the `?v=` a viewer fetches it with | `application/json` | `metadata` |
 | `<bundle>` | the Zarr store (`<bundle>.zarr`), or the `.xue` container when the entry ships no store | `application/vnd.zarr` / `application/octet-stream` | `data` |
-| `<bundle>-xue` | the container, when it ships *beside* a store | `application/octet-stream` | `data` |
+| `<bundle>-xue` | the container, when it ships beside a store | `application/octet-stream` | `data` |
 | `<bundle>-half`, `-half-xue` | the half-resolution tier, likewise | | `data`, `overview` |
 | `<bundle>-poster` | the first-frame poster (`.poster.bin`) | `application/octet-stream` | `overview` |
 | `<bundle>-video`, `-video-index` | the H.264 companion and its index | `video/H264`, `application/json` | `data`, `metadata` |
 
-A store and a container beside it are *not* alternates in the
+A store and a container beside it are not alternates in the
 [alternate-assets](https://github.com/stac-extensions/alternate-assets)
-sense — different bytes, different checksums — so each is an asset of its
+sense (different bytes, different checksums), so each is an asset of its
 own. Every asset carries `xue:kind` (`store`, `container`, `poster`,
 `video`, `video-index`, `manifest`), data assets `xue:tier` (`full` /
 `half`), and reduced ones `xue:grid` (`width`, `height`). Sizes and
 checksums use the file extension: `file:size` is the manifest's
 `byteLength` (for a store, the sum of its objects), and `file:checksum` is
-the manifest's `crc32` as a multihash — the multicodec table gives CRC-32
+the manifest's `crc32` as a multihash: the multicodec table gives CRC-32
 the code `0x0132`, so the value is `b20204` + the eight hex digits. A store
 is many objects and its `crc32` is that of its root `zarr.json`, so it gets
 no `file:checksum`; the bare `xue:crc32` on every asset is the artifact's
@@ -125,7 +125,7 @@ catalogs carry is the same thing.
 ## The source Collection
 
 `<source>/collection.json`. Id: the source id. `title`, `description`,
-`license` (an SPDX id — `CC-BY-4.0` for ECMWF — or `other` with a `license`
+`license` (an SPDX id, `CC-BY-4.0` for ECMWF, or `other` with a `license`
 link, the NOAA open data policy) and `providers` come from a table in
 `xuebuild/stac.py`; `keywords` name the kind (`forecast` / `observation`)
 and the model. `extent` is the live run's: its bbox, its
@@ -140,40 +140,38 @@ repeats the Item id and `xue:pointer` the pointer's file name.
 `showcase/collection.json` lists one `item` link per case in
 `showcase.json`'s order (newest event first); its extent is the union of
 theirs (first) followed by each case's own, and its `license` is `other`
-because the cases come from several sources — each Item states its own
+because the cases come from several sources; each Item states its own
 under `license`. `showcase/<case>/item.json` derives from the case's
 `showcase.json` row and its manifest: `id` is the case id; `bbox` is the
-row's `dataBbox` (exact); `datetime` is the `eventTime` — what a search
-should find the case by — with the period in `start_datetime` /
+row's `dataBbox` (exact); `datetime` is the `eventTime`, what a search
+should find the case by, with the period in `start_datetime` /
 `end_datetime`; `title` and `description` are the English strings, and the
 whole eleven-locale maps sit under `xue:title` / `xue:summary`, with
-`xue:tags`, `xue:credit`, `xue:defaultVariable`, `xue:eventTime`. A forecast
-case declares the forecast fields like a run; an observation case does not.
-Assets are the same per-bundle set as a run's.
+`xue:tags`, `xue:credit`, `xue:defaultVariable`, `xue:eventTime`. A
+forecast case declares the forecast fields like a run; an observation case
+does not. Assets are the same per-bundle set as a run's.
 
 ## Producing it
 
-Nothing here is a separate step to remember. `xuebuild build-bin` for a
-whole run and `xuebuild assemble-run` for one built in pieces write the
-run's Item, the live Item, the Collection and the catalog right after the
-manifest and the pointer (the report's `stac` names the four files); a
-piece of a fanned-out
-publish (`build-bin --bundles`) writes none, since an Item describes a whole
-run. `showcase build`, `refresh` and `catalog` write the cases' documents
-whenever they rewrite `showcase.json`. On the way to the bucket, `make
-upload-r2` / `upload-r2-manifest` copy the run's Item with the manifest,
-`make upload-r2-pointer` copies the live Item, the Collection and the
-catalog with the pointer (the Item first, so the Collection never names a
-live Item that is not there yet),
-and `make upload-r2-showcase` the showcase's — all through the same targets
-the scheduled workflows call, so a publish that predates this document
-simply has no Item, and that is not an error.
+`xuebuild build-bin` for a whole run and `xuebuild assemble-run` for one
+built in pieces write the run's Item, the live Item, the Collection and the
+catalog right after the manifest and the pointer (the report's `stac` names
+the four files); a piece of a fanned-out publish (`build-bin --bundles`)
+writes none, since an Item describes a whole run. `showcase build`,
+`refresh` and `catalog` write the cases' documents whenever they rewrite
+`showcase.json`. `make upload-r2` / `upload-r2-manifest` copy the run's
+Item with the manifest, `make upload-r2-pointer` copies the live Item, the
+Collection and the catalog with the pointer (the Item first, so the
+Collection never names a live Item that is not there yet), and `make
+upload-r2-showcase` the showcase's, all through the same targets the
+scheduled workflows call. A publish that predates this document has no
+Item, and that is not an error.
 
 Every document is validated on write against a structural contract
 (`validate_item` / `validate_collection` / `validate_catalog` in
 `xuebuild/stac.py`: the required fields, the link rels, a bbox in range,
 the checksum matching the crc); the published JSON Schemas are not fetched
-in the pipeline. `tests/test_stac.py` holds the shapes above, and, when
+in the pipeline. `tests/test_stac.py` holds the shapes above and, when
 `pystac` is installed, round-trips them through it.
 
 ## Reading it

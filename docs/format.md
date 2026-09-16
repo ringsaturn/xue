@@ -5,89 +5,83 @@ a per-variable spatiotemporal binary format for packing a full forecast run
 of one gridded weather field into a single indexed file that a browser can
 decode frame by frame.
 
-> **Status (2026-09-15).** The container is no longer what the service
-> publishes: every live run, round and showcase case ships as a Zarr v3
-> store ([`zarr-profile.md`](zarr-profile.md)) alone. This specification
-> stays normative for what still depends on it — the metadata JSON and
-> its schema versions, the quantization codebooks and the residual
-> arithmetic, all of which the store carries unchanged; the container both
-> encoders still write as the intermediate the store is derived from; and
-> the files every decoder must keep reading, since runs and cases published
-> before the switch are never rebuilt. Nothing here is deprecated for a
-> reader; for a publisher, the container is a build artifact.
+Status (2026-09-15): the container is no longer what the service publishes.
+Every live run, round and showcase case ships as a Zarr v3 store
+([`zarr-profile.md`](zarr-profile.md)) alone. This specification stays
+normative for the metadata JSON and its schema versions, the quantization
+codebooks and the residual arithmetic, all of which the store carries
+unchanged; for the container both encoders write as the intermediate the
+store is derived from; and for the files every decoder must keep reading,
+since runs and cases published before the switch are never rebuilt. For a
+reader nothing here is deprecated; for a publisher the container is a build
+artifact.
 
-Two container versions exist, and they differ in exactly one thing: what a
-payload *is*.
+Two container versions exist, and they differ in what a payload is:
 
-- **v1** is plane-major — one payload is one whole plane of one frame.
-  Sections marked *(v1)* below describe it. Nothing writes it any more, and
-  every decoder must keep reading it: published runs and showcase cases carry
-  those bytes and are never rebuilt.
-- **v2** is tiled — one payload is a **chunk**: one spatial tile of one
-  temporal group for one variable, so a reader can fetch just the region it
-  is showing and read one cell's whole series cheaply. It is what both
-  encoders write, and it is specified in *[Container v2](#container-v2)*.
+- v1 is plane-major: one payload is one whole plane of one frame. Sections
+  marked *(v1)* describe it. Nothing writes it any more; every decoder must
+  keep reading it.
+- v2 is tiled: one payload is a chunk, one spatial tile of one temporal
+  group for one variable, so a reader can fetch the region it is showing
+  and read one cell's whole series at one chunk per group. Both encoders
+  write it. See *[Container v2](#container-v2)*.
 
-Everything else is shared and is specified once: the fixed header, the
+Everything else is shared and specified once: the fixed header, the
 metadata JSON and its schema versions, the quantization codebooks, and the
 modulo-256 residual arithmetic. A decoder rejects a container version it
 does not implement, so a v2-capable shell must be deployed before the first
 v2 run is published.
 
 The Python encoder (`xuebuild/binformat.py`, `xuebuild/quantize.py`,
-`xuebuild/temporal.py`) and the Rust decoder (`rust/xue`) are the two reference
-implementations, held byte-identical by cross-language golden tests.
+`xuebuild/temporal.py`) and the Rust decoder (`rust/xue`) are the two
+reference implementations, held byte-identical by cross-language golden
+tests.
 
 ## Design Summary
 
 The format targets a product that animates a complete global forecast
 (steps of one to six hours out to 240 hours, changing step partway through
-the range) with continuous playback and fast timeline scrubbing. Per-frame
-tile pyramids are larger under that access pattern: for one 121-frame GFS
-run, per-frame raster PMTiles for two variables measured 3,205.87 MB,
-against 137.73 MB of source GRIB. Xue instead stores each variable as
-quantized single-byte planes on the native grid — projection and coloring
-happen later, on the GPU — with bounded temporal prediction and per-plane
-Zstandard compression. The same two variables fit in roughly 65–71 MB for
-that run depending on profile, and grow roughly linearly with frame count
-(coarser-step frames span larger inter-frame differences, so their
-residuals compress slightly worse). Every
-frame is individually addressable, and the index makes HTTP-range streaming
-possible: a client can fetch only the structural prefix (a few KB) and then
-range-request one temporal group at a time.
+the range) with continuous playback and timeline scrubbing. For one
+121-frame GFS run, per-frame raster PMTiles for two variables measured
+3,205.87 MB against 137.73 MB of source GRIB. Xue stores each variable as
+quantized single-byte planes on the native grid (projection and coloring
+happen on the GPU) with bounded temporal prediction and per-payload
+Zstandard compression; the same two variables fit in 65–71 MB for that run
+depending on profile. Size grows roughly linearly with frame count;
+coarser-step frames have larger inter-frame differences and compress
+slightly worse. Every frame is individually addressable, and the index makes
+HTTP-range streaming possible: a client fetches the structural prefix (a few
+KB) and then range-requests one temporal group or one chunk at a time.
 
-Key decisions:
+Design decisions:
 
-- **Quantized uint8 planes.** Each decoded frame is a contiguous
-  single-channel plane that uploads directly to a WebGL2 `R8` texture.
-  Codebooks are visualization-oriented (0.25 °C temperature error budget, a
-  logarithmic precipitation codebook that preserves light-rain resolution).
-- **An axis that names its own unit and may change step.** No source
-  publishes one cadence all the way to 240 hours: GFS is hourly to f120 and
-  three-hourly beyond, ECMWF three-hourly to 144 hours and six-hourly
-  beyond. And not every dataset is hourly at all — the radar mosaic
-  publishes every six minutes. The axis therefore declares the seconds one
-  step unit is worth and either a uniform step or its offsets outright, so
-  it is always exact rather than approximated.
-- **Bounded temporal groups.** Smooth fields (temperature, wind, solar
-  radiation) are coded in six-frame groups with one-byte residuals; groups
-  are formed inside a segment of constant step, so no group straddles a
-  change of cadence. In v1 a group is a middle RAW anchor plus residuals
-  against it, capping random access at two plane decodes; in v2 a group is
-  packed whole into each tile's chunk and the residuals chain against the
-  previous frame, which is both smaller and, since the chunk decompresses
-  as a unit, no more expensive to seek into. Precipitation fields move with
-  weather systems, and temporal differencing increases their compressed
-  size; precipitation is stacked RAW in both versions.
-- **One independent Zstandard frame per payload** — a plane in v1, a chunk
-  in v2 — for direct indexing, sequential reads, and localized failure
+- Quantized uint8 planes. Each decoded frame is a contiguous single-channel
+  plane that uploads directly to a WebGL2 `R8` texture. Codebooks are
+  visualization-oriented (0.25 °C temperature error budget, a logarithmic
+  precipitation codebook that preserves light-rain resolution).
+- An axis that names its own unit and may change step. GFS is hourly to
+  f120 and three-hourly beyond, ECMWF three-hourly to 144 hours and
+  six-hourly beyond, and the radar mosaic publishes every six minutes. The
+  axis declares the seconds one step unit is worth and either a uniform
+  step or its offsets outright, so it is always exact.
+- Bounded temporal groups. Smooth fields are coded in six-frame groups with
+  one-byte residuals; groups are formed inside a segment of constant step,
+  so no group straddles a change of cadence. In v1 a group is a middle RAW
+  anchor plus residuals against it, capping random access at two plane
+  decodes; in v2 a group is packed whole into each tile's chunk and the
+  residuals chain against the previous frame, which is smaller and, since
+  the chunk decompresses as a unit, no more expensive to seek into.
+  Precipitation regions move with weather systems and temporal differencing
+  increases their compressed size, so precipitation is stacked RAW in both
+  versions.
+- One independent Zstandard frame per payload (a plane in v1, a chunk in
+  v2) for direct indexing, sequential reads, and localized failure
   isolation.
-- **Space is addressable too (v2).** A payload covers one tile of the grid,
-  so a zoomed-in viewport fetches only the tiles it shows, and one cell's
-  whole series costs one chunk per group rather than a decode of every
-  plane. The tiles are cut in grid space, not Web Mercator: reprojection
-  stays in the fragment shader.
-- **Strict parsing.** All offsets and lengths are validated with checked
+- Space is addressable in v2. A payload covers one tile of the grid, so a
+  zoomed-in viewport fetches only the tiles it shows, and one cell's whole
+  series costs one chunk per group. Tiles are cut in grid space, not Web
+  Mercator; reprojection stays in the fragment shader.
+- Strict parsing. All offsets and lengths are validated with checked
   arithmetic before any allocation; sections must be strictly adjacent with
   zero padding; every reconstructed plane carries a CRC-32.
 
@@ -107,7 +101,7 @@ Key decisions:
 ## Container Layout
 
 Both versions have the same five sections in the same order; the index and
-what the payloads are differ. This is v1 — see
+what the payloads are differ. This is v1; see
 *[Container v2](#container-v2)* for the tiled index.
 
 ```text
@@ -226,7 +220,7 @@ A bundle may declare more than one variable; the two 10 m wind components
 ship together in one two-variable `wind10m.xue` bundle. Every variable's
 quantization block must be one of the codebook types below.
 
-`numericId` is the variable's `variableId` — the handle the binary index
+`numericId` is the variable's `variableId`: the handle the binary index
 refers to it by, unique within the file and meaningless outside it (see
 *[`variableId` is file-local](#variableid-is-file-local)*). The encoders
 here number the variables 1…n in the order they are listed.
@@ -235,8 +229,7 @@ here number the variables 1…n in the order they are listed.
 
 `schemaVersion` is the lowest metadata schema a reader must implement to
 parse the file. It versions the metadata JSON only; the container layout is
-versioned by the FixedHeader `version` field, which stays 1 for every
-schema version below.
+versioned by the FixedHeader `version` field.
 
 | `schemaVersion` | Introduces | Recognized by |
 |---:|---|---|
@@ -248,35 +241,34 @@ An encoder must emit the lowest version that can express the file: the
 highest version any single feature of the metadata requires, and no higher.
 For the versions defined so far that is 3 when the variables carry
 `parameter`, otherwise 2 when the axis lists `hours`, otherwise 1. A
-schemaVersion 3 file with a uniform axis is still version 3 — the parameter
-block, not the axis, sets its floor — and a `parameter` block is invalid
-below version 3.
+schemaVersion 3 file with a uniform axis is still version 3, since the
+parameter block sets its floor, and a `parameter` block is invalid below
+version 3.
 
 Decoders enforce both sides of that rule: they must reject a schema version
-they do not implement, and must also reject a declared version higher than
-the lowest the metadata needs (see Error Handling). Rejecting unknown
-versions is what makes an older decoder reject a file it would otherwise
-misread — silently ignoring an unknown `parameter` block, or misreading a
-mixed-cadence axis — instead of guessing; rejecting overdeclared versions
-gives any given metadata exactly one valid encoding. Every already published
-bundle stays valid and byte-identical under both rules.
+they do not implement, and must reject a declared version higher than the
+lowest the metadata needs (see Error Handling). Rejecting unknown versions
+makes an older decoder reject a file it would otherwise misread; rejecting
+overdeclared versions gives any given metadata exactly one valid encoding.
+Every already published bundle stays valid and byte-identical under both
+rules.
 
-*Schema version 3 is what the reference encoder writes; versions 1 and 2
-remain readable and are still published by nothing. Because older decoders
-reject a version they do not implement, the schemaVersion-3-capable frontend
-must be deployed before the first version 3 run is published.*
+Schema version 3 is what the reference encoder writes; versions 1 and 2
+remain readable and are published by nothing. Because older decoders reject
+a version they do not implement, a decoder implementing a new version must
+be deployed before the first file at that version is published.
 
 #### Variable Identity
 
-From schemaVersion 3, every variable declares what it *is* in GRIB2's own
+From schemaVersion 3, every variable declares what it is in GRIB2's own
 terms, so a reader can recognize a field without matching on `id` strings.
 The block is required on every variable of a version 3 file and invalid
 below it.
 
-**The `parameter` block is a variable's identity.** Neither `variableId` —
-a file-local handle (see *[`variableId` is file-local](#variableid-is-file-local)*)
-— nor the `id` string carries it; the parameter triple and the fixed surface
-do, and two files describe the same field exactly when their blocks agree.
+The `parameter` block is a variable's identity. Neither `variableId` (a
+file-local handle) nor the `id` string carries it; the parameter triple and
+the fixed surface do, and two files describe the same field exactly when
+their blocks agree.
 
 | Field | GRIB2 origin | Rule |
 |---|---|---|
@@ -289,41 +281,39 @@ do, and two files describe the same field exactly when their blocks agree.
 | `typeOfStatisticalProcessing` | Section 4, code table 4.10 | 0–255, optional |
 
 The surface value is `scaledValueOfFirstFixedSurface × 10^−scaleFactorOfFirstFixedSurface`
-in that surface's own unit. A surface that carries no value — "entire
-atmosphere" (type 10), or a source that encodes the value as missing —
-writes **both** halves as `null`, which is how GRIB2 encodes it; one half
-alone describes nothing and is invalid. Both keys are always present.
+in that surface's own unit. A surface that carries no value ("entire
+atmosphere", type 10, or a source that encodes the value as missing) writes
+both halves as `null`, which is how GRIB2 encodes it; one half alone is
+invalid. Both keys are always present.
 
 `typeOfStatisticalProcessing` is absent for an instantaneous field and
-present when the values are a statistic over the step. It is what
-distinguishes a `prate` bundle whose source carried an instantaneous rate
-(GFS pgrb2) from one derived by de-accumulating or de-averaging (ECMWF,
-GFS sflux), which are otherwise the same parameter.
+present when the values are a statistic over the step. It distinguishes a
+`prate` bundle whose source carried an instantaneous rate (GFS pgrb2) from
+one derived by de-accumulating or de-averaging (ECMWF, GFS sflux), which are
+otherwise the same parameter.
 
 No other keys are allowed; a version 3 decoder must reject an unknown one,
 so any later addition is a new schema version. GRIB2's local-use ranges
-(parameter numbers and surface types 192–254) need no special treatment
-here — a local number is an ordinary number, and two of the variables below
-already use one.
+(parameter numbers and surface types 192–254) need no special treatment: a
+local number is an ordinary number, and several variables below use one.
 
 The identity written is the registered one, whatever record the encoder
-read. Centres disagree on how to write the same quantity — ECMWF encodes
-its mean sea level pressure as plain pressure on the mean sea level surface,
-its gust as an interval maximum on the 10 m surface, its skin temperature as
-a parameter of its own with no surface value — and the encoder's registry
-accepts such a record as an *alias* (another parameter number on the same
-surface) or an *alternate* (a whole other identity: surface, value,
+read. Centres write the same quantity differently (ECMWF encodes its mean
+sea level pressure as plain pressure on the mean sea level surface, its gust
+as an interval maximum on the 10 m surface, its skin temperature as a
+parameter of its own with no surface value), and the encoder's registry
+accepts such a record as an alias (another parameter number on the same
+surface) or an alternate (a whole other identity: surface, value,
 statistical process, unit) of the variable, so that GFS and ECMWF publish
 one chart under one `parameter` block. The table notes each such
 acceptance; none of them is ever written.
 
-The identities this pipeline produces are below. This is **not** an
-admission list: a decoder validates the shape of a `parameter` block, never
-its contents against this table, and a file naming a parameter that is not
-here is a well-formed file. The table says which fields a *chart-aware*
-reader — one that has a palette, a contour interval or a legend for the
-quantity — can recognize; anything else it can still decode, and simply has
-no chart for.
+The identities this pipeline produces are below. This is not an admission
+list: a decoder validates the shape of a `parameter` block, never its
+contents against this table, and a file naming a parameter not listed here
+is a well-formed file. The table says which fields a chart-aware reader (one
+with a palette, a contour interval or a legend for the quantity) can
+recognize; anything else it can still decode.
 
 | `id` | Parameter | Surface | Notes |
 |---|---|---|---|
@@ -332,73 +322,70 @@ no chart for.
 | `ugrd10m` | 0 / 2 / 2 | 103, 10 m | |
 | `vgrd10m` | 0 / 2 / 3 | 103, 10 m | |
 | `dswrf` | 0 / 4 / 192 | 1, 0 | NCEP local parameter |
-| `cref` | 0 / 16 / 5 | 10, no value | Composite reflectivity, entire atmosphere — observed (the radar mosaic) or forecast (HRRR's `REFC`, NCEP-local 0 / 16 / 196, accepted on input and never written) |
-| `gust` | 0 / 2 / 22 | 1, 0 | Instantaneous surface wind gust (GFS). ECMWF's `10fg` / `10fg3` — the same parameter on the 10 m surface (103, 10 m) as the *maximum* over the interval ending at the frame, product template 4.8 — is accepted on input under this identity and never written; on ECMWF the series starts at the first step |
-| `tcdc` | 0 / 6 / 1 | 10, no value | Total cloud cover, entire atmosphere; the instantaneous record, not the interval average. ECMWF's `tcc` — the ECMWF-local 0 / 6 / 192 on the ground surface, a 0–1 fraction — is accepted on input, scaled to percent, and never written |
-| `cape` | 0 / 7 / 6 | 1, 0 | Surface-based CAPE (not the mixed-layer variants on surface type 108). ECMWF's `mucape` — the same parameter departing from surface type 17, the most unstable parcel's level — is accepted on input and never written |
+| `cref` | 0 / 16 / 5 | 10, no value | Composite reflectivity, entire atmosphere; observed (the radar mosaic) or forecast (HRRR's `REFC`, NCEP-local 0 / 16 / 196, accepted on input and never written) |
+| `gust` | 0 / 2 / 22 | 1, 0 | Instantaneous surface wind gust (GFS). ECMWF's `10fg` / `10fg3`, the same parameter on the 10 m surface (103, 10 m) as the maximum over the interval ending at the frame, product template 4.8, is accepted on input under this identity and never written; on ECMWF the series starts at the first step |
+| `tcdc` | 0 / 6 / 1 | 10, no value | Total cloud cover, entire atmosphere; the instantaneous record, not the interval average. ECMWF's `tcc`, the ECMWF-local 0 / 6 / 192 on the ground surface as a 0–1 fraction, is accepted on input, scaled to percent, and never written |
+| `cape` | 0 / 7 / 6 | 1, 0 | Surface-based CAPE (not the mixed-layer variants on surface type 108). ECMWF's `mucape`, the same parameter departing from surface type 17, the most unstable parcel's level, is accepted on input and never written |
 | `lcdc` / `mcdc` / `hcdc` | 0 / 6 / 3, 0 / 6 / 4, 0 / 6 / 5 | 214 / 224 / 234, no value | Low / middle / high cloud cover, each its own parameter on its own layer surface; the instantaneous records |
 | `vis` | 0 / 19 / 0 | 1, 0 | Surface visibility, quantized in km |
 | `dpt2m` | 0 / 0 / 6 | 103, 2 m | 2 m dew point |
 | `aptmp2m` | 0 / 0 / 21 | 103, 2 m | NCEP's 2 m apparent temperature |
-| `tmpsfc` | 0 / 0 / 0 | 1, 0 | Surface (skin) temperature — the SST over water. ECMWF's `skt`, its own parameter 0 / 0 / 17 with no surface value, is accepted on input and never written |
+| `tmpsfc` | 0 / 0 / 0 | 1, 0 | Surface (skin) temperature, the SST over water. ECMWF's `skt`, its own parameter 0 / 0 / 17 with no surface value, is accepted on input and never written |
 | `icec` | 10 / 2 / 0 | 1, 0 | Sea ice cover, a 0–1 proportion quantized in percent (GFS only) |
 | `icetk` | 10 / 2 / 1 | 1, 0 | Sea ice thickness; ECMWF's `sithick` carries no surface value and a bitmap over land (GDAL's 9999, the bottom of the codebook), and is accepted on input |
 | `htsgw` | 10 / 0 / 3 | 1, no value | Significant height of combined wind waves and swell (GFS-Wave, ECMWF `swh`); WAVEWATCH III writes the surface value as 1 and ECMWF none, so none is declared and any is accepted |
 | `perpw` | 10 / 0 / 11 | 1, no value | Primary wave mean period (GFS-Wave); ECMWF's peak period `pp1d`, 10 / 0 / 34, is the nearest neighbour and accepted on input under this identity |
 | `dirpw` | 10 / 0 / 10 | 1, no value | Primary wave direction, degrees true the waves come from (GFS-Wave); ECMWF's mean wave direction `mwd`, 10 / 0 / 14, is accepted the same way; a record's 360 is reduced to 0 |
-| `uwave` / `vwave` | 10 / 0 / 250, 10 / 0 / 251 | 1, no value | Wave vector components in metres: the significant wave height laid along the direction the waves travel, derived by the encoder from `htsgw` and `dirpw` as the wind's `(-h sin θ, -h cos θ)` — Xue-local parameter numbers |
-| `prmsl` | 0 / 3 / 1 | 101, no value | Mean sea level pressure, the quantity ECMWF calls `msl` and encodes as 0 / 3 / 0 on this surface, and HRRR writes as its MAPS reduction `MSLMA`, 0 / 3 / 198 — both accepted on input, never written (not NCEP's MSLET, 0 / 3 / 192) |
+| `uwave` / `vwave` | 10 / 0 / 250, 10 / 0 / 251 | 1, no value | Wave vector components in metres: the significant wave height laid along the direction the waves travel, derived by the encoder from `htsgw` and `dirpw` as the wind's `(-h sin θ, -h cos θ)`; Xue-local parameter numbers |
+| `prmsl` | 0 / 3 / 1 | 101, no value | Mean sea level pressure, the quantity ECMWF calls `msl` and encodes as 0 / 3 / 0 on this surface, and HRRR writes as its MAPS reduction `MSLMA`, 0 / 3 / 198; both accepted on input, never written (not NCEP's MSLET, 0 / 3 / 192) |
 | `hgt<level>` | 0 / 3 / 5 | 100, `<level>` hPa in Pa | Geopotential height, one variable per isobaric surface |
 | `tmp<level>` | 0 / 0 / 0 | 100, `<level>` hPa in Pa | Temperature on the isobaric surface |
 | `rh<level>` | 0 / 1 / 1 | 100, `<level>` hPa in Pa | Relative humidity on the isobaric surface |
 | `spfh<level>` | 0 / 1 / 0 | 100, `<level>` hPa in Pa | Specific humidity on the isobaric surface, quantized in g/kg |
 | `ugrd<level>` / `vgrd<level>` | 0 / 2 / 2, 0 / 2 / 3 | 100, `<level>` hPa in Pa | Wind components on the isobaric surface |
-| `uqflx<level>` / `vqflx<level>` | 0 / 1 / 250, 0 / 1 / 251 | 100, `<level>` hPa in Pa | Water vapour flux components, `q·V/g` in g·cm⁻¹·hPa⁻¹·s⁻¹ — Xue-local parameter numbers |
+| `uqflx<level>` / `vqflx<level>` | 0 / 1 / 250, 0 / 1 / 251 | 100, `<level>` hPa in Pa | Water vapour flux components, `q·V/g` in g·cm⁻¹·hPa⁻¹·s⁻¹; Xue-local parameter numbers |
 | `vvel<level>` | 0 / 2 / 8 | 100, `<level>` hPa in Pa | Vertical velocity ω in Pa/s on the isobaric surface |
-| `thetae<level>` | 0 / 0 / 3 | 100, `<level>` hPa in Pa | Equivalent potential temperature in K, derived by the encoder (Bolton 1980) from the temperature and specific humidity on the surface — GRIB2's EPOT number |
+| `thetae<level>` | 0 / 0 / 3 | 100, `<level>` hPa in Pa | Equivalent potential temperature in K, derived by the encoder (Bolton 1980) from the temperature and specific humidity on the surface; GRIB2's EPOT number |
 
-The eight registered isobaric surfaces are 1000, 925, 850, 700, 500, 300, 250
-and 200 hPa, and every isobaric family is registered on all eight: `hgt1000`
-… `hgt200`, `tmp1000` … `tmp200`, and so on. Within a family the variables
-differ only in the surface value, which is written in the surface's own unit
-— pascals — so `hgt500` carries `scaleFactorOfFirstFixedSurface: 0`,
-`scaledValueOfFirstFixedSurface: 50000`.
+The eight registered isobaric surfaces are 1000, 925, 850, 700, 500, 300,
+250 and 200 hPa, and every isobaric family is registered on all eight.
+Within a family the variables differ only in the surface value, written in
+the surface's own unit, pascals: `hgt500` carries
+`scaleFactorOfFirstFixedSurface: 0`, `scaledValueOfFirstFixedSurface: 50000`.
 
-The water vapour flux is not a GRIB2 field at all: the encoder derives it on
-each surface as the specific humidity (g/kg) times the wind component (m/s)
-over standard gravity (9.80665 m/s²), the quantity a synoptic chart contours
-in g·cm⁻¹·hPa⁻¹·s⁻¹. GRIB2 has no standard parameter for a per-level
-horizontal vapour flux, so the two components take local-use numbers 250 and
-251 in the moisture category — an ordinary number in the format's terms, and
-one no centre this pipeline reads from uses.
+The water vapour flux is not a GRIB2 field: the encoder derives it on each
+surface as the specific humidity (g/kg) times the wind component (m/s) over
+standard gravity (9.80665 m/s²), in g·cm⁻¹·hPa⁻¹·s⁻¹. GRIB2 has no standard
+parameter for a per-level horizontal vapour flux, so the two components take
+local-use numbers 250 and 251 in the moisture category, which no centre this
+pipeline reads from uses.
 
 #### Time Axis
 
-The axis is a list of integer **frame offsets** from `runTime`, each worth
+The axis is a list of integer frame offsets from `runTime`, each worth
 `unitSeconds` seconds. The frame at offset `o` is valid at
-`runTime + o × unitSeconds`, and `o` is exactly what the index's
-`frameOffset` field carries.
+`runTime + o × unitSeconds`, and `o` is what the index's `frameOffset` field
+carries.
 
 From schemaVersion 3 the block is:
 
-- **`unitSeconds`** — seconds per offset unit. It must be a whole divisor of
-  3600, and it must be the **coarsest** unit that expresses every offset
-  exactly, so an axis has one encoding rather than one per divisor of its
-  step. Formally, `gcd(3600 / unitSeconds, offset₀, offset₁, …)` must be 1.
-  Every forecast source is hourly and declares 3600, which leaves its
-  offsets equal to its forecast hours; the radar mosaic publishes every six
-  minutes and declares 360.
-- **`firstFrameOffset`** and **`frameCount`** — always present.
-- Exactly one of **`frameStep`** (the axis is uniform, and frame `i` is at
-  `firstFrameOffset + i × frameStep`) and **`frameOffsets`** (the axis does
-  not hold one step throughout and is listed outright). A forecast run lists
+- `unitSeconds`: seconds per offset unit. It must be a whole divisor of
+  3600, and it must be the coarsest unit that expresses every offset
+  exactly, so an axis has one encoding. Formally,
+  `gcd(3600 / unitSeconds, offset₀, offset₁, …)` must be 1. Every forecast
+  source is hourly and declares 3600, which leaves its offsets equal to its
+  forecast hours; the radar mosaic declares 360.
+- `firstFrameOffset` and `frameCount`: always present.
+- Exactly one of `frameStep` (the axis is uniform, and frame `i` is at
+  `firstFrameOffset + i × frameStep`) and `frameOffsets` (the axis does not
+  hold one step throughout and is listed outright). A forecast run lists
   its offsets because the source changes cadence partway; an observation
   series lists them because the archive has gaps where a publication was
   missed.
 
 No other field may appear in the block.
 
-A miniature mixed axis, hourly then three-hourly:
+A mixed axis, hourly then three-hourly:
 
 ```json
 "time": {
@@ -414,55 +401,54 @@ The production GFS 240-hour axis is the same shape at full length: the
 
 A `frameOffsets` array must have exactly `frameCount` elements, must be
 strictly increasing, must begin with `firstFrameOffset`, and every element
-must be in `[0, 65534]` — the `frameOffset` field is a u16 and 65535 is the
+must be in `[0, 65534]`: the `frameOffset` field is a u16 and 65535 is the
 `dependencyOffset` sentinel. The same upper bound applies to a uniform
 axis's last offset, `firstFrameOffset + (frameCount − 1) × frameStep`. A
-`frameOffsets` array whose steps are all equal is invalid — a uniform axis
-has exactly one encoding, `frameStep` — which also rules out arrays of fewer
-than three elements, since any shorter axis is trivially uniform. Declaring
-both `frameStep` and `frameOffsets`, or neither, makes the file invalid.
+`frameOffsets` array whose steps are all equal is invalid, since a uniform
+axis has exactly one encoding, `frameStep`; this also rules out arrays of
+fewer than three elements. Declaring both `frameStep` and `frameOffsets`,
+or neither, makes the file invalid.
 
-**Schema versions 1 and 2** describe the same thing in whole hours only:
+Schema versions 1 and 2 describe the same thing in whole hours only:
 `firstForecastHour` plus one of `stepHours` (uniform, version 1) and `hours`
 (listed, version 2), with `unitSeconds` implicitly 3600. Those files remain
 valid and are read unchanged. The two shapes never mix: a version 1 or 2
 block carrying any version 3 field, or a version 3 block carrying any of the
 hour-named fields, is invalid.
 
-A **segment** is a maximal run of frames with a constant step. For frames
+A segment is a maximal run of frames with a constant step. For frames
 `h[0] < h[1] < … < h[n-1]` with steps `d[i] = h[i+1] - h[i]`, a segment
-boundary falls between `h[i]` and `h[i+1]` exactly where `d[i] != d[i-1]`
-— equivalently, the last frame of the old cadence closes the earlier
-segment and the first frame of the new cadence opens the next. A uniform
-axis is one segment. The GFS 240-hour axis is two: 121 hourly frames f000–f120,
-then 40 three-hourly frames f123–f240.
+boundary falls between `h[i]` and `h[i+1]` exactly where `d[i] != d[i-1]`:
+the last frame of the old cadence closes the earlier segment and the first
+frame of the new cadence opens the next. A uniform axis is one segment. The
+GFS 240-hour axis is two: 121 hourly frames f000–f120, then 40 three-hourly
+frames f123–f240.
 
-Segments are derived, never stored. They matter twice: they bound temporal
-grouping (see Temporal Prediction), and they are where the physical meaning
-of a derived field changes — past a step increase, a precipitation rate
-obtained by de-accumulating or de-averaging its source records is a mean
-over a longer window, so the field is smoother and its peaks lower on the
-far side of the boundary. That is a property of the source data, not of
-this container, but a renderer that labels units should not claim the two
-segments are the same measurement.
+Segments are derived, never stored. They bound temporal grouping (see
+Temporal Prediction), and they are where the physical meaning of a derived
+field changes: past a step increase, a precipitation rate obtained by
+de-accumulating or de-averaging its source records is a mean over a longer
+window, so the field is smoother and its peaks lower on the far side of the
+boundary. That is a property of the source data; a renderer that labels
+units should not present the two segments as the same measurement.
 
 The encoder rotates longitude columns so the first column is `-180`,
-preserving north-to-south row order. Grids that natively start at
-Greenwich (the GFS surface-flux Gaussian grid) are rolled by the encoder
-into the same `-180`-first layout, so every published grid shares it. A
-renderer applies inverse Web Mercator, converts longitude and latitude to
-grid coordinates, and samples this layout directly.
+preserving north-to-south row order. Grids that natively start at Greenwich
+(the GFS surface-flux Gaussian grid) are rolled by the encoder into the same
+`-180`-first layout. A renderer applies inverse Web Mercator, converts
+longitude and latitude to grid coordinates, and samples this layout
+directly.
 
 #### Regional Grids
 
-A grid need not cover the world. The `grid` block already says exactly what
-a file covers, and a regional file is an ordinary file whose origin and
-extent name a window rather than the globe — the container, the index, and
-every codebook are unchanged. The reference pipeline publishes such files
-for its historical showcase cases, cut out of a global run.
+A grid need not cover the world. The `grid` block says what a file covers,
+and a regional file is an ordinary file whose origin and extent name a
+window rather than the globe; the container, the index, and every codebook
+are unchanged. The reference pipeline publishes such files for its
+historical showcase cases, cut out of a global run.
 
-Two rules follow for readers, and both are properties a global grid
-satisfies trivially:
+Two rules follow for readers, both of which a global grid satisfies
+trivially:
 
 - `wrapLongitude` is true only when `width x longitudeStep` is 360 degrees.
   A reader must take the horizontal wrap from this field, not from the
@@ -470,34 +456,31 @@ satisfies trivially:
   true, and must clamp otherwise.
 - The grid coordinate of a longitude is
   `(longitude - firstLongitude) mod 360 / longitudeStep`. Taking the offset
-  modulo 360 is what keeps a window that crosses the antimeridian
-  contiguous — such a window declares a `firstLongitude` near +180 and runs
-  past it. Coordinates outside `[0, width)` or `[0, height)` are outside the
-  file; a renderer must draw nothing there rather than clamp, which would
-  smear the border across the map.
+  modulo 360 keeps a window that crosses the antimeridian contiguous: such a
+  window declares a `firstLongitude` near +180 and runs past it.
+  Coordinates outside `[0, width)` or `[0, height)` are outside the file; a
+  renderer must draw nothing there rather than clamp.
 
 #### Projected Sources
 
 A model computed on a map projection (HRRR, Lambert conformal conic) does
-not arrive on a grid this block can describe, and the block is not
-widened for it: the encoder resamples every plane onto a regular
-latitude/longitude grid before anything else reads it, and the file is an
-ordinary regional file of that grid. The rule for the target is fixed so a
-product lands on one grid for all time: the regular grid of the source's
-declared step whose origin is a whole multiple of the step and which
-covers the extremes of longitude and latitude the source's boundary cell
-centers reach; each target cell center is projected with the source's own
-forward formulas and the source plane is bilinearly interpolated there. A
-conic domain is a trapezoid on that rectangle, and the corners it never
-covered are neither gaps nor a reserved code — the format has neither —
-but the nearest source cell continued outwards (the sampling coordinate is
-clamped to the source grid), so the plane is complete, no filter or
-contour meets an edge, and the extension costs almost nothing compressed.
-Those cells are not a forecast: a reader that knows the source's
-projection clips to its footprint, and one that does not draws the
-extension. The reference pipeline documents the arithmetic in
-`xuebuild/reproject.py`; the native encoder repeats it and the two are
-held byte-identical.
+not arrive on a grid this block can describe, and the block is not widened
+for it: the encoder resamples every plane onto a regular latitude/longitude
+grid before anything else reads it, and the file is an ordinary regional
+file of that grid. The target is fixed so a product lands on one grid for
+all time: the regular grid of the source's declared step whose origin is a
+whole multiple of the step and which covers the extremes of longitude and
+latitude the source's boundary cell centers reach; each target cell center
+is projected with the source's own forward formulas and the source plane is
+bilinearly interpolated there. A conic domain is a trapezoid on that
+rectangle. The corners it never covered are neither gaps nor a reserved code
+(the format has neither) but the nearest source cell continued outwards (the
+sampling coordinate is clamped to the source grid), so the plane is
+complete and no filter or contour meets an edge. Those cells are not a
+forecast: a reader that knows the source's projection clips to its
+footprint, and one that does not draws the extension. The reference
+pipeline documents the arithmetic in `xuebuild/reproject.py`; the native
+encoder repeats it and the two are held byte-identical.
 
 `model` and `product` identify the source dataset. Registered pairs:
 
@@ -506,26 +489,26 @@ held byte-identical.
 | `GFS` | `pgrb2.0p25` | 1440 × 721, 0.25° | 1 h to f120, 3 h to f240 | All series include the analysis frame (f000). `prate` is an instantaneous rate at every step |
 | `ECMWF` | `ifs-0p25` | 1440 × 721, 0.25° | 3 h to 144 h, 6 h to 240 h | `prate` is de-accumulated from the run-total `tp`, so its series has no analysis frame and starts at `firstFrameOffset: 3`; so does `gust`, whose record (the maximum over the interval ending at the frame) is empty at the analysis. Its wave fields come from the cycle's `wave` stream; ships no H.264 companions |
 | `GFS-SFLUX` | `sfluxgrb` | 3072 × 1536 Gaussian, ~13 km | 1 h to f120, 3 h to f240 | `prate` is de-averaged from window-cumulative records and starts at `firstFrameOffset: 1`; the only source shipping `dswrf`; ships no H.264 companions |
-| `HRRR` | `wrfsfc` | 2441 × 1051, 0.03°, regional (134.10 W – 60.90 W, 52.62 N – 21.12 N) | 1 h to f18 | A new cycle every hour. Resampled by the encoder from the model's 3 km Lambert conformal grid (see "Projected sources" below); the rectangle's corners the conic domain never covered repeat the nearest source cell. Its `prmsl` is the MAPS reduction and its `cref` the model's forecast reflectivity |
+| `HRRR` | `wrfsfc` | 2441 × 1051, 0.03°, regional (134.10 W – 60.90 W, 52.62 N – 21.12 N) | 1 h to f18 | A new cycle every hour. Resampled by the encoder from the model's 3 km Lambert conformal grid (see "Projected sources" above); the rectangle's corners the conic domain never covered repeat the nearest source cell. Its `prmsl` is the MAPS reduction and its `cref` the model's forecast reflectivity |
 | `CMA-RADAR` | `l3-mst-cref` | tile grid, 360/(256·2^z) degrees | 6 min, as published | Observations, not a forecast: `runTime` is the first observation and offsets count from it. The only one whose `unitSeconds` is not 3600; the axis lists its offsets wherever a publication was missed |
 
-How far a run is published is a pipeline choice, not a format constraint;
-the steps above are what each source makes available. A uniform series
-declares a `frameStep`, while a series that runs to 240 hours crosses a step
-change on every forecast source above and therefore lists its `hours`; an
-observation series lists them wherever the archive has a gap.
+How far a run is published is a pipeline choice; the steps above are what
+each source makes available. A uniform series declares a `frameStep`; a
+series that runs to 240 hours crosses a step change on every forecast source
+above and lists its offsets; an observation series lists them wherever the
+archive has a gap.
 
-Not every source is a forecast. `CMA-RADAR` is a series of observed
-analyses, and the container describes it with no change: `runTime` is the
-first observation in the series and each frame's `frameOffset` counts
-six-minute units from it. A reader that labels the axis should take that
-from the dataset identity rather than assume every file is a forecast.
+`CMA-RADAR` is a series of observed analyses, and the container describes it
+with no change: `runTime` is the first observation in the series and each
+frame's `frameOffset` counts six-minute units from it. A reader that labels
+the axis should take that from the dataset identity rather than assume every
+file is a forecast.
 
-Time axes may therefore differ between bundles of one run, in both step and
-extent. The container layout is identical for every model — only the
-metadata identity, the grid, and the time axis differ. Readers must derive
-the frame list from `time` and the grid from `grid`, never from the model
-name, and must not assume two bundles of one run share an axis.
+Time axes may differ between bundles of one run, in both step and extent.
+The container layout is identical for every model; only the metadata
+identity, the grid, and the time axis differ. Readers must derive the frame
+list from `time` and the grid from `grid`, never from the model name, and
+must not assume two bundles of one run share an axis.
 
 ### IndexHeader (v1)
 
@@ -578,28 +561,28 @@ Residuals always use modulo-256 wrapping semantics, so no flag describes
 residual interpretation. Overflow presence is derivable from `maximumCode`,
 so no flag duplicates it.
 
-The `crc32` field uses CRC-32/IEEE — polynomial `0x04C11DB7`, reflected
+The `crc32` field uses CRC-32/IEEE (polynomial `0x04C11DB7`, reflected
 implementation `0xEDB88320`, initial value and final XOR `0xFFFFFFFF`,
-identical to zlib's `crc32` — computed over the reconstructed quantized
-plane. The Zstandard checksum validates the compressed payload, while CRC32
+identical to zlib's `crc32`), computed over the reconstructed quantized
+plane. The Zstandard checksum validates the compressed payload; the CRC32
 validates predictor reconstruction.
 
 #### `variableId` is file-local
 
-`variableId` is a **handle**, not a name: the whole of its meaning is that it
-ties an index entry to one variable descriptor in *this file's* metadata. It
-must be 1–255 and unique within the file, and every id an index entry names
-must appear in the file's `variables`; there is no global table to check it
-against, and a decoder must not carry one. What a variable *is* lives in the
-metadata: its `parameter` block (see
-*[Variable Identity](#variable-identity)*) and its `id` string.
+`variableId` is a handle, not a name: it ties an index entry to one variable
+descriptor in this file's metadata. It must be 1–255 and unique within the
+file, and every id an index entry names must appear in the file's
+`variables`; there is no global table to check it against, and a decoder
+must not carry one. What a variable is lives in the metadata: its
+`parameter` block (see *[Variable Identity](#variable-identity)*) and its
+`id` string.
 
-The encoders in this repository assign ids **positionally**: 1…n by the
+The encoders in this repository assign ids positionally: 1…n by the
 variable's order in the bundle's variable list, which is also the order the
-v2 chunk layout uses. A single-variable bundle is therefore always id 1, and
-a vector bundle is 1 for the U component and 2 for the V component.
+v2 chunk layout uses. A single-variable bundle is always id 1, and a vector
+bundle is 1 for the U component and 2 for the V component.
 
-*Historical assignment.* Encoders before this rule drew ids from a global
+Historical assignment: encoders before this rule drew ids from a global
 registry, and files already published carry those numbers: 1 `tmp2m`,
 2 `prate`, 3 `ugrd10m`, 4 `vgrd10m`, 5 `dswrf`, 6 `cref`, 7 `prmsl`,
 8–15 `hgt1000` … `hgt200`, 16–23 `tmp1000` … `tmp200`,
@@ -607,37 +590,33 @@ registry, and files already published carry those numbers: 1 `tmp2m`,
 40–47 `ugrd1000` … `ugrd200`, 48–55 `vgrd1000` … `vgrd200`,
 56–63 `uqflx1000` … `uqflx200`, 64–71 `vqflx1000` … `vqflx200` (each
 isobaric family in the level order 1000, 925, 850, 700, 500, 300, 250, 200).
-No decoder ever required those numbers — they were only ever matched against
-the file's own metadata — so every such file stays valid, and nothing needs
-rebuilding.
+No decoder required those numbers, so every such file stays valid.
 
 ### Payload Rules (v1)
 
 - Every non-ZERO entry maps to one independent Zstandard frame.
 - ZSTD_DICT frames decompress with the embedded dictionary, which the
   decoder loads once at open time. A ZSTD_DICT entry is invalid when
-  `dictionaryLength` is 0. (No production build currently embeds a
-  dictionary: trained dictionaries showed no gain on full ~1 MB planes.
-  The section and mode are reserved for smaller payloads, e.g. after
-  tiling.)
+  `dictionaryLength` is 0. No production build embeds a dictionary: trained
+  dictionaries showed no gain on full ~1 MB planes. The section and mode
+  are reserved for smaller payloads.
 - The decompressed payload length must equal `decodedLength`.
 - RAW decompresses directly to the quantized plane.
 - ANCHOR decompresses to a one-byte residual, then adds the dependency
   plane.
 - PREVIOUS decompresses to a one-byte residual, then adds the plane of the
   preceding frame on the time axis: `frameOffsets[i - 1]`, or
-  `frameOffset - frameStep` on a uniform axis. It is not `frameOffset - 1` —
-  on any axis whose step is not one unit, that plane does not exist. A
-  PREVIOUS entry on the first frame of the axis is invalid, and every
-  PREVIOUS entry must carry exactly that preceding offset in
-  `dependencyOffset` — like ANCHOR, the dependency is explicit in the index,
-  never the sentinel, never left to be derived, so the same file has only
-  one encoding. (No reference bundle uses PREVIOUS; the reference encoder
-  emits only RAW and ANCHOR.)
+  `frameOffset - frameStep` on a uniform axis (not `frameOffset - 1`, which
+  does not exist on an axis whose step is not one unit). A PREVIOUS entry
+  on the first frame of the axis is invalid, and every PREVIOUS entry must
+  carry exactly that preceding offset in `dependencyOffset`: like ANCHOR,
+  the dependency is explicit in the index, never the sentinel, never
+  derived, so the same file has only one encoding. No reference bundle uses
+  PREVIOUS in v1; the reference encoder emits only RAW and ANCHOR there.
 - The decoder must reject a frame when length, checksum, or dependency
   validation fails.
-- The decoder must not allocate an output larger than `width × height` or
-  a configured safety limit based on untrusted file values.
+- The decoder must not allocate an output larger than `width × height` or a
+  configured safety limit based on untrusted file values.
 
 ## Quantization Codebooks
 
@@ -652,8 +631,8 @@ Codes `0` through `maximumCode` are valid; `nodataCode` marks missing data;
 codes between `maximumCode + 1` and `nodataCode - 1` are reserved. The
 maximum in-range quantization error is `scale / 2`.
 
-Registered linear codebooks (the `quality` profile; `balanced` uses the
-same values unless noted):
+Registered linear codebooks (the `quality` profile; `balanced` uses the same
+values unless noted):
 
 | Variable | offset | scale | maximumCode | nodataCode | Error budget |
 |---|---:|---:|---:|---:|---|
@@ -715,18 +694,18 @@ The `compact` profile doubles each `scale` (temperature 1.0 → maximumCode
 cloud cover 1.0 → 100, cape 50 → 127, vis 0.2 → 127, dpt2m 1.0 → 110,
 aptmp2m 2 → 75, tmpsfc 1.0 → 127, icec 1.0 → 100, icetk 0.04 → 127, htsgw
 and perpw 0.2 → 127, and every pressure-family and isobaric codebook → half
-its maximumCode over the same range). The one exception to "the same range"
-is `dirpw`, whose compact codebook stops at 357° (3 → 119): 360 / 3 codes
-would put 360°, which is 0°, back on the grid — and the wave vector's, which
-stops at ±25.2 m (0.4 → 126) so that 0 stays on the grid: land is (0, 0) in
-the pair, and the middle code of both. `balanced` takes the compact `icec`
-beside the compact humidity and cloud cover.
+its maximumCode over the same range). Two codebooks do not keep the same
+range: `dirpw`'s compact codebook stops at 357° (3 → 119), because 360 / 3
+codes would put 360°, which is 0°, back on the grid; and the wave vector's
+stops at ±25.2 m (0.4 → 126) so that 0 stays on the grid, since land is
+(0, 0) in the pair and the middle code of both. `balanced` takes the compact
+`icec` beside the compact humidity and cloud cover.
 
 The wave fields are the first whose records do not cover the grid: GFS-Wave
-carries a bitmap, and land comes out of GDAL as its nodata value (9999). The
-encoder maps those points to code 0 — 0 m, 0 s, 0° — before quantization,
-the way the radar mosaic's fill is handled (see "Xue v1 requires complete
-input planes" below); the `nodataCode` is still never written.
+carries a bitmap, and land comes out of GDAL as its nodata value (9999).
+The encoder maps those points to code 0 (0 m, 0 s, 0°) before quantization,
+as the radar mosaic's fill is handled (see "Xue v1 requires complete input
+planes" below); the `nodataCode` is still never written.
 
 The isobaric temperature takes its range per level: the low end holds the
 Antarctic winter at every surface, the high end the below-ground
@@ -734,36 +713,34 @@ extrapolation the lowest surfaces take under high terrain, and no single
 127-degree window covers both 850 hPa in summer and 200 hPa in winter.
 Specific humidity spans two orders of magnitude between the surface and the
 upper troposphere, so its step follows the level. Relative humidity is the
-noisiest field published, so the `balanced` profile takes its `compact`
-codebook (1 %, maximumCode 100), and the cloud covers — the same kind of
-field on the same scale — follow it; those are the departures from quality
-in that profile besides precipitation. The equivalent potential temperature
-takes a 127 K window per level at the temperature's step, placed so the
-warm-moist tropical end fits (850 hPa runs to 357 K); only the 850 hPa
-window is verified against an analysis, the others follow the potential
-temperature's rise with height. None of the isobaric fills is contoured, so
-none carries the half-code rule below.
+noisiest field published, so the `balanced` profile
+takes its `compact` codebook (1 %, maximumCode 100), and the cloud covers
+follow it; those are the departures from `quality` in that profile besides
+precipitation. The equivalent potential temperature takes a 127 K window per
+level at the temperature's step, placed so the tropical end fits (850 hPa
+runs to 357 K); only the 850 hPa window is verified against an analysis,
+the others follow the potential temperature's rise with height. None of the
+isobaric fills is contoured, so none carries the half-code rule below.
 
-The pressure family's offsets are chosen so that every standard contour value
-lands exactly **half a code** off: `(contour − offset) / scale` has fractional
-part 0.5, for the level's own interval (4 hPa for `prmsl`, 30 m up to 700 hPa,
-40 m at 500, 120 m above) and for the emphasised lines a chart is read by
-(every 20 hPa on `prmsl`; 5840 and 5880 gpm on `hgt500`, the pair the
-subtropical high is defined by). This is an **encoder** rule, in the same
-sense as v1's segment grouping: a decoder must not assume it, and nothing in
-the container records it. It exists because a contour drawn where the code is
-flat covers a whole plateau instead of a line. The coverage is likewise fixed
-per variable for all time rather than fitted per run — byte-identical
-re-encoding, a stable legend, and comparable point series across runs all
-depend on it.
+The pressure family's offsets are chosen so that every standard contour
+value lands exactly half a code off: `(contour − offset) / scale` has
+fractional part 0.5, for the level's own interval (4 hPa for `prmsl`, 30 m
+up to 700 hPa, 40 m at 500, 120 m above) and for the emphasised lines
+(every 20 hPa on `prmsl`; 5840 and 5880 gpm on `hgt500`). This is an
+encoder rule, in the same sense as v1's segment grouping: a decoder must not
+assume it, and nothing in the container records it. It exists because a
+contour drawn where the code is flat covers a whole plateau instead of a
+line. The coverage is fixed per variable for all time rather than fitted per
+run; byte-identical re-encoding, a stable legend, and comparable point
+series across runs depend on it.
 
 `cref` code 0 is both "no echo" and "outside the radar network's coverage".
 A ground mosaic is a regional product on a rectangular grid, and this
 container carries no bitmap, so the bottom of the codebook is what a
-renderer paints as nothing. It is deliberately an ordinary in-range code
-rather than a reserved one: a renderer that interpolates codes before its
-palette lookup would otherwise colour the gap between a reserved code and
-its neighbour with a class the data never reached.
+renderer paints as nothing. It is an ordinary in-range code rather than a
+reserved one: a renderer that interpolates codes before its palette lookup
+would otherwise colour the gap between a reserved code and its neighbour
+with a class the data never reached.
 
 Values outside the range clamp to the range ends before quantization.
 
@@ -795,8 +772,8 @@ p = scale * (exp(lo + u * (hi - lo)) - 1)
 ```
 
 Code `maximumCode` decodes to exactly `maximum`. The overflow code decodes
-one codebook step above the maximum — the same formula evaluated at
-`q = maximumCode + 1` — extending the logarithmic grid by one step so
+one codebook step above the maximum (the same formula evaluated at
+`q = maximumCode + 1`), extending the logarithmic grid by one step so
 decoded values remain strictly increasing across all non-nodata codes, and
 overflow pixels stay distinguishable from the top in-range code in both a
 palette and scalar inspection.
@@ -816,7 +793,7 @@ alphabet improves entropy coding, and the GPU needs no bit unpacking.
 
 The predictors and the modulo-256 arithmetic below are shared by both
 container versions. Which of them a file may use, and what a residual is
-computed against, is the index's business: v1 allows all four per plane
+computed against, is defined by the index: v1 allows all four per plane
 (*[PlaneEntry (v1)](#planeentry-v1)*), v2 allows RAW and PREVIOUS per
 variable and chains inside a chunk (*[Container v2](#container-v2)*).
 
@@ -828,50 +805,48 @@ residual = (current - base) mod 256
 current  = (residual + base) mod 256
 ```
 
-Wrapping subtraction and addition are lossless for every byte pair, so
-there is no residual range check, no signed interpretation, and no RAW
-fallback for out-of-range differences.
+Wrapping subtraction and addition are lossless for every byte pair, so there
+is no residual range check, no signed interpretation, and no RAW fallback
+for out-of-range differences.
 
 Per-variable rules in v1:
 
-- **Linear-codebook fields (`tmp2m`, `ugrd10m`, `vgrd10m`, `dswrf`, the
+- Linear-codebook fields (`tmp2m`, `ugrd10m`, `vgrd10m`, `dswrf`, the
   surface diagnostics, the ocean fields, the isobaric fills and the pressure
-  family `prmsl` / `hgt<level>`)** are
-  smooth enough for temporal prediction. Each segment of the time axis
-  splits independently into groups of 6 frames, so a group never spans a
-  change of step. Within each group of `n` frames, the frame at zero-based
-  index `floor(n / 2)` is the anchor: it uses predictor RAW, and every
-  other frame in the group uses ANCHOR residuals against it. A trailing
-  single-frame group is its own anchor and uses RAW. Random access to any
-  frame therefore costs at most two plane decodes (anchor + target).
-  `groupId` counts groups sequentially across the whole variable and does
-  not restart at a segment boundary.
-- **Precipitation (`prate`)** uses independent RAW planes for every
-  frame, with `groupId` mirroring `frameOffset`. Precipitation
-  regions move with weather systems; fixed-grid differencing creates both
-  entering and leaving edges and measurably increases compressed size.
+  family `prmsl` / `hgt<level>`) use temporal prediction. Each segment of
+  the time axis splits independently into groups of 6 frames, so a group
+  never spans a change of step. Within each group of `n` frames, the frame
+  at zero-based index `floor(n / 2)` is the anchor: it uses predictor RAW,
+  and every other frame in the group uses ANCHOR residuals against it. A
+  trailing single-frame group is its own anchor and uses RAW. Random access
+  to any frame costs at most two plane decodes (anchor + target). `groupId`
+  counts groups sequentially across the whole variable and does not restart
+  at a segment boundary.
+- Precipitation (`prate`) uses independent RAW planes for every frame, with
+  `groupId` mirroring `frameOffset`. Precipitation regions move with
+  weather systems; fixed-grid differencing creates both entering and
+  leaving edges and measurably increases compressed size.
 
 Grouping per segment rather than across the whole timeline keeps every
 ANCHOR residual a difference between frames one step apart. A group
 straddling the GFS 120-hour transition would difference frames three hours
-apart against an anchor chosen among frames one hour apart — still
-lossless, since residuals wrap modulo 256, but a larger residual and a
+apart against an anchor chosen among frames one hour apart: still lossless,
+since residuals wrap modulo 256, but a larger residual and a
 worse-compressing one. Splitting costs at most one extra RAW anchor per
 segment boundary per variable.
 
-Segment-aligned grouping is an encoder rule, not a decode-time invariant.
-A decoder validates the dependency structure recorded in the index (see
-Error Handling) and never needs to derive segments to decode or to
-validate; a group that did straddle a boundary would still reconstruct
-exactly and is not rejected.
+Segment-aligned grouping is an encoder rule, not a decode-time invariant. A
+decoder validates the dependency structure recorded in the index (see Error
+Handling) and never needs to derive segments; a group that straddled a
+boundary would still reconstruct exactly and is not rejected.
 
 Xue v1 requires complete input planes: every point of every plane carries a
 code. The forecast grids satisfy that outright, and a source whose product
 does not cover its whole grid (the radar mosaic) resolves it before
 quantization by mapping absent points to the bottom of the variable's
-codebook — a value, not a gap. A future missing-data implementation should
-add a separate bitmap so residual bytes never conflict with the nodata
-code.
+codebook, a value rather than a gap. A future missing-data implementation
+should add a separate bitmap so residual bytes never conflict with the
+nodata code.
 
 ## Physical Payload Order (v1)
 
@@ -898,12 +873,12 @@ payloads contiguous means one HTTP range request fetches one decodable
 group.
 
 In the two-variable wind bundle the payloads interleave per temporal group
-— a `ugrd10m` group followed by the same `vgrd10m` group — so streaming one
+(a `ugrd10m` group followed by the same `vgrd10m` group), so streaming one
 wind frame touches two adjacent byte spans.
 
-Interleaving all forecast times per grid point would turn single-plane
-reads into wide file gathers, so Xue v1 keeps complete planes contiguous;
-temporal continuity is represented by residuals instead.
+Interleaving all forecast times per grid point would turn single-plane reads
+into wide file gathers, so Xue v1 keeps complete planes contiguous; temporal
+continuity is represented by residuals instead.
 
 ## Streaming
 
@@ -911,13 +886,12 @@ This section describes v1; *[Streaming (v2)](#streaming-v2)* covers the
 tiled container, which streams the same way with narrower spans.
 
 The format needs no side files to stream. The structural prefix
-`[0, dataOffset)` — header, metadata, index, optional dictionary, a few KB
-in production — validates exactly like a whole file minus the byte-content
-checks past the prefix. An explicit `hours` array costs roughly five bytes
-per frame, under 1 KB for a 240-hour axis, so the prefix stays small enough
-to fetch in one range request. A streaming reader then range-fetches
-payload spans on demand; the per-group contiguity above means the bytes for
-one frame form
+`[0, dataOffset)` (header, metadata, index, optional dictionary; a few KB in
+production) validates like a whole file minus the byte-content checks past
+the prefix. An explicit offsets array costs roughly five bytes per frame,
+under 1 KB for a 240-hour axis, so the prefix stays small enough to fetch in
+one range request. A streaming reader then range-fetches payload spans on
+demand; the per-group contiguity above means the bytes for one frame form
 one or two contiguous spans. Integrity comes from the per-plane CRC-32 and
 the Zstandard frame checksums, so a whole-file checksum is only meaningful
 for full downloads.
@@ -935,7 +909,7 @@ A decoder must reject:
 - Nonzero reserved fields in a known version.
 - Unknown predictor, compression, or flags values, and a `variableId` that
   is not one of the file's own metadata `variables` ("unknown" here means
-  absent from *this* file, not absent from any registry — there is none).
+  absent from this file, not absent from any registry; there is none).
 - ZSTD_DICT entries when `dictionaryLength` is 0.
 - Entries overlapping the header, metadata, index, or dictionary.
 - Overlapping payload ranges (ZERO entries may have zero length).
@@ -952,11 +926,11 @@ A decoder must reject:
   block carrying a version 3 field, or the reverse. The same rules apply to
   a version 1 or 2 axis under its own field names.
 - A `parameter` block in a file below schemaVersion 3, or a variable
-  without one in a schemaVersion 3 file; a parameter code outside 0–255;
-  a fixed surface with exactly one of its scale factor and scaled value
+  without one in a schemaVersion 3 file; a parameter code outside 0–255; a
+  fixed surface with exactly one of its scale factor and scaled value
   `null`; a key the block does not define.
 - A declared `schemaVersion` other than the lowest able to express the
-  metadata — a schemaVersion 2 file that declares `stepHours`, or a
+  metadata: a schemaVersion 2 file that declares `stepHours`, or a
   schemaVersion 1 or 2 file whose variables carry `parameter` or whose time
   block names a unit.
 - An incomplete frame sequence for any declared variable. The expected
@@ -972,13 +946,13 @@ A decoder must reject:
 
 ## Container v2
 
-Container v2 changes what a payload *is*: a **chunk** — one spatial **tile**
-of one **temporal group** for one variable — instead of one whole plane of
-one frame. A file holds the same set of quantized codes as its v1
-counterpart, cut into tiles and packed group by group, so a reader can fetch
-the region it is looking at, and read one cell's series by fetching one
-chunk per group instead of decoding every plane. An encoder writes one
-version or the other for a whole file; there is no mixing.
+Container v2 changes what a payload is: a chunk, one spatial tile of one
+temporal group for one variable, instead of one whole plane of one frame. A
+file holds the same set of quantized codes as its v1 counterpart, cut into
+tiles and packed group by group, so a reader can fetch the region it is
+looking at, and read one cell's series by fetching one chunk per group. An
+encoder writes one version or the other for a whole file; there is no
+mixing.
 
 The fixed header, the metadata JSON (schema versions 1–3, variable identity,
 the time axis, regional grids), the quantization codebooks and the
@@ -1002,7 +976,7 @@ modulo-256 residual arithmetic are shared with v1 and are not repeated here.
 +------------------------------+ fileSize
 ```
 
-Tiling is a *storage* property, not a dataset property: the grid, the time
+Tiling is a storage property, not a dataset property: the grid, the time
 axis, the variable identities and the codebooks are unchanged, so the
 metadata JSON is byte-for-byte what a v1 file of the same data would carry
 and the tiling appears only in the binary index.
@@ -1036,7 +1010,7 @@ metadata grid and never stored, so the geometry has one encoding.
 
 Tiles are cells, never degrees: the geographic footprint of a tile follows
 from the `grid` block, and the horizontal wrap of a global grid is a
-property of the grid, not of any tile — the last tile column does not wrap
+property of the grid, not of any tile; the last tile column does not wrap
 into the first.
 
 ### Temporal groups
@@ -1079,8 +1053,8 @@ metadata's `variables`.
 | 2 | 2 | u16 | reserved | 0 |
 
 The predictor applies to every chunk of the variable. ANCHOR (1) and ZERO
-(3) are not valid in v2: a chunk is decompressed whole, so an anchor buys no
-random access and would only give one chunk a second valid encoding.
+(3) are not valid in v2: a chunk is decompressed whole, so an anchor adds
+no random access and would only give one chunk a second valid encoding.
 
 ### GroupEntry
 
@@ -1108,19 +1082,19 @@ for group g in 0 .. groupCount
 | 0 | 4 | u32 | compressedLength | ≥ 1 |
 | 4 | 4 | u32 | crc32 | CRC-32/IEEE of the reconstructed chunk |
 
-A chunk's *offset* is not stored. Payloads are contiguous in position order
+A chunk's offset is not stored. Payloads are contiguous in position order
 starting at `dataOffset`: the offset of chunk 0 is `dataOffset` and the
 offset of chunk `p + 1` is the offset of chunk `p` plus its
 `compressedLength`. `fileSize = align8(end of the last chunk)`, and every
 padding byte is zero. All of this is checked arithmetic against `fileSize`
 before any allocation. Since the order is fixed by this specification and
-the chunks are strictly adjacent, an offset would be redundant — and would
-more than double the index.
+the chunks are strictly adjacent, a stored offset would be redundant and
+would more than double the index.
 
-This order is what makes the three access patterns cheap: a whole group is
-one contiguous span (a global view fetches exactly what v1 fetched); the
-tiles a viewport needs form one contiguous span per tile row per group; and
-one cell's series is one chunk per group, with the two components of a wind
+This order serves the three access patterns: a whole group is one
+contiguous span (a global view fetches what v1 fetched); the tiles a
+viewport needs form one contiguous span per tile row per group; and one
+cell's series is one chunk per group, with the two components of a wind
 bundle adjacent.
 
 ### Chunk contents
@@ -1132,19 +1106,19 @@ checksum, decompressing to exactly
 decodedLength = group.frameCount × tile.height × tile.width
 ```
 
-bytes (the tile's *clipped* height and width), laid out frame-major: the
+bytes (the tile's clipped height and width), laid out frame-major: the
 group's frames in axis order, each as the tile's rows top to bottom, each
-row west to east — the same orientation as the plane. With ZSTD_DICT the
+row west to east, the same orientation as the plane. With ZSTD_DICT the
 embedded dictionary applies, and a ZSTD_DICT file with `dictionaryLength = 0`
 is invalid.
 
 The reconstructed chunk is derived from the decompressed bytes by the
 variable's predictor:
 
-- **RAW** — the bytes are the codes.
-- **PREVIOUS** — the first frame's bytes are its codes; every later frame's
-  bytes are the modulo-256 residual against the reconstructed previous frame
-  *of the same chunk*, which is the preceding frame on the axis because
+- RAW: the bytes are the codes.
+- PREVIOUS: the first frame's bytes are its codes; every later frame's
+  bytes are the modulo-256 residual against the reconstructed previous
+  frame of the same chunk, which is the preceding frame on the axis because
   groups are contiguous. `residual = (current − previous) mod 256`,
   `current = (residual + previous) mod 256`.
 
@@ -1163,8 +1137,7 @@ state, and a renderer must not draw cells no tile has covered.
 
 One cell's series is the cell's byte from the frame block of the tile
 containing it, in every group's chunk of that tile. The cost of a series is
-therefore one chunk per group of one tile, independent of the number of
-frames.
+one chunk per group of one tile, independent of the number of frames.
 
 ### Streaming (v2)
 
@@ -1175,9 +1148,9 @@ may be coalesced across small gaps at the reader's discretion. Integrity is
 per chunk (Zstandard checksum plus CRC-32).
 
 The index is larger than v1's: the chunk count is the group count times the
-tile count times the variable count, at 8 bytes each — 94 KB for a
-420-tile, 28-group GFS bundle. That is one extra range request before the
-first frame, and it is what buys every later request its narrowness.
+tile count times the variable count, at 8 bytes each (94 KB for a 420-tile,
+28-group GFS bundle). That is one extra range request before the first
+frame.
 
 ### Error handling, additions for v2
 
@@ -1188,10 +1161,10 @@ overflow):
 - An IndexHeader whose magic, version or headerSize differ, or whose
   reserved words are nonzero.
 - `tileWidth` or `tileHeight` of zero or larger than the grid.
-- A `variableCount` or variable set that differs from the metadata's own —
-  every `variableId` here must be a `variableId` there, and the two sets must
-  be equal; unsorted or duplicate `variableId`s; a predictor other than RAW
-  or PREVIOUS; nonzero reserved fields.
+- A `variableCount` or variable set that differs from the metadata's own
+  (every `variableId` here must be a `variableId` there, and the two sets
+  must be equal); unsorted or duplicate `variableId`s; a predictor other
+  than RAW or PREVIOUS; nonzero reserved fields.
 - Groups that do not partition the axis: a first group not starting at 0, a
   gap or overlap between consecutive groups, a `frameCount` of 0, or a last
   group not ending at the axis's `frameCount`.
@@ -1216,25 +1189,24 @@ Normative for byte identity between the two encoders:
   `(ceil(tileWidth / 2), ceil(tileHeight / 2))`, so a tile with the same
   number covers the same ground in both tiers. A regional (cropped) file
   tiles its own grid from its own origin with the source's tile size.
-- **The tile is then clamped to the grid**: `min(tileWidth, width)` and
+- The tile is then clamped to the grid: `min(tileWidth, width)` and
   `min(tileHeight, height)`. The format requires `1 <= tile <= grid` so that
   a single-tile file states its grid size exactly, and a regional crop is
-  routinely smaller than its source's tile — a six-degree showcase window is
-  24 x 24 cells against the 0.25-degree grid's 48 x 52. Clamping makes such a
-  file one tile, which is the right answer: there is nothing left to
-  subdivide.
+  routinely smaller than its source's tile (a six-degree showcase window is
+  24 x 24 cells against the 0.25-degree grid's 48 x 52). Clamping makes such
+  a file one tile.
 - Compression is ZSTD at the production level with the content checksum; no
   dictionary.
 
 ## File Naming
 
 These conventions sit outside the container but are what the reference
-pipeline produces: one file per variable per run (`tmp2m.xue`,
-`prate.xue`, `dswrf.xue`, `cref.xue`), the two-variable `wind10m.xue`, and
-half-resolution renditions named `<variable>.half.xue` — structurally
+pipeline produces: one file per variable per run (`tmp2m.xue`, `prate.xue`,
+`dswrf.xue`, `cref.xue`), the two-variable `wind10m.xue`, and
+half-resolution renditions named `<variable>.half.xue`, structurally
 identical bundles whose metadata declares the decimated grid. A run
-directory also carries a `manifest.json` describing every bundle (path,
-byte length, whole-file CRC-32, resolution variants, optional poster and
-H.264 companion artifacts); the manifest and a tiny mutable `latest.json`
-pointer are delivery concerns defined by the reference implementations
+directory also carries a `manifest.json` describing every bundle (path, byte
+length, whole-file CRC-32, resolution variants, optional poster and H.264
+companion artifacts); the manifest and a small mutable `latest.json` pointer
+are delivery concerns defined by the reference implementations
 (`xuebuild/manifest.py`, `web/src/manifest.ts`), not by this container spec.

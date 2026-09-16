@@ -1,51 +1,50 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code (claude.ai/code) when working with
+code in this repository.
 
 ## What this is
 
-Xue packs global weather forecast runs into per-variable Zarr v3 stores
-laid out for playback and plays them back in a static browser page. The
-layout was developed as a custom single-file container, `.xue`, which is
-**no longer published** (every live run, round and case has been store-only
-since 2026-09-15) but is still the encoders' intermediate — the store is
-derived from it — and is read by every decoder indefinitely. Three
-implementations of one format live here and must stay in agreement:
+Xue packs global weather forecast runs into per-variable Zarr v3 stores laid
+out for playback and plays them back in a static browser page. The layout
+was developed as a single-file container, `.xue`, which is no longer
+published (every live run, round and case has been store-only since
+2026-09-15) but is still the encoders' intermediate, the store being derived
+from it, and is read by every decoder indefinitely. Three implementations of
+one format live here and must stay in agreement:
 
-- **Python encoder** — `xuebuild/` (fetch → GDAL extract → quantize → temporal
-  residuals → zstd → container → manifest). The name is deliberate: this is
-  the build pipeline, and `xue` on the Python side is the native binding.
-- **Rust decoder** — `rust/xue` (core crate) and `rust/xue-wasm`
-  (wasm-bindgen bindings, built into `web/src/wasm/`).
-- **TypeScript frontend** — `web/src/` (manifest resolution, decode worker,
-  WebGL2 layers, playback).
+- Python encoder: `xuebuild/` (fetch → GDAL extract → quantize → temporal
+  residuals → zstd → container → manifest). `xue` on the Python side is the
+  native binding, `xuebuild` the build pipeline.
+- Rust decoder: `rust/xue` (core crate) and `rust/xue-wasm` (wasm-bindgen
+  bindings, built into `web/src/wasm/`).
+- TypeScript frontend: `web/src/` (manifest resolution, decode worker, WebGL2
+  layers, playback).
 
-Beside them, a native port of `convert-bin` at `rust/xue/src/encode/`, behind
-the `xue` crate's off-by-default `encoder` feature, plus a PyO3 wrapper at
+A native port of `convert-bin` lives at `rust/xue/src/encode/`, behind the
+`xue` crate's off-by-default `encoder` feature, with a PyO3 wrapper at
 `rust/xue-py/` (distribution `xuepy`, imported as `xue`, carrying the decoder
-too). It links GDAL, grib-rs and zstd in process instead of shelling out, and
-is held to the Python encoder by byte-for-byte identical output — see
-`docs/encoder.md`.
+too). It links GDAL, grib-rs and zstd in process and is held to the Python
+encoder by byte-for-byte identical output (`docs/encoder.md`).
 
 `xuebuild` depends on the `xuepy` wheel and converts through it by default:
-`xuebuild/encoder.py` dispatches, `XUE_ENCODER` (`auto` | `native` | `python`)
-overrides, and the scheduled `publish-*` workflows pin `native` so a silent
-fall back to the slow path cannot happen unnoticed. The native encoder writes
-no video and no live pointer, so `xuebuild/native.py` supplies both: it reads
-the codes back out of the bundles it just wrote (with the decoder the same
-wheel carries), hands them to the existing ffmpeg encoder, folds the
-descriptors into the manifest and only then writes the pointer, whose CRC32
-covers the finished manifest. `tests/test_native.py` is what holds the two
-encoders together end to end — every artifact of one build compared byte for
-byte against the other.
+`xuebuild/encoder.py` dispatches, `XUE_ENCODER` (`auto` | `native` |
+`python`) overrides, and the scheduled `publish-*` workflows pin `native` so
+a fallback to the slow path fails instead of passing unnoticed. The native
+encoder writes no video and no live pointer; `xuebuild/native.py` reads the
+codes back out of the bundles it wrote, hands them to the ffmpeg encoder,
+folds the descriptors into the manifest and then writes the pointer, whose
+CRC32 covers the finished manifest. `tests/test_native.py` compares every
+artifact of one build against the other byte for byte.
 
-The Python encoder stays the reference; a format change goes there first, and
-the native side follows it.
+The Python encoder is the reference: a format change goes there first, and
+the native side follows.
 
-The feature is off by default because it links GDAL and the decoder does not,
-and the two are separated by cargo profile as well: `release` stays tuned for
-the wasm decoder, `encoder` inherits it at `opt-level = 3`. Profiles live in
-`rust/Cargo.toml` because Cargo reads them from the workspace root only.
+The `encoder` feature is off by default because it links GDAL and the
+decoder does not. The two are also separated by cargo profile: `release` is
+tuned for the wasm decoder, `encoder` inherits it at `opt-level = 3`.
+Profiles live in `rust/Cargo.toml` because Cargo reads them from the
+workspace root only.
 
 `docs/format.md` is the normative spec. `README.md` covers usage and
 publishing; `showcase/README.md` covers authoring historical cases.
@@ -86,7 +85,7 @@ Use `.venv/bin/python` (created by `uv sync`); the Makefile's `PYTHON`
 variable picks it automatically, but direct invocations must not rely on the
 system interpreter.
 
-`web/src/wasm/` is generated and gitignored — the frontend will not typecheck
+`web/src/wasm/` is generated and gitignored; the frontend will not typecheck
 or build until `make wasm` has run.
 
 ## Architecture
@@ -95,11 +94,11 @@ or build until `make wasm` has run.
 
 Two layers, both versioned:
 
-- The only **mutable** object per model is a tiny live pointer at the data
-  root (`latest.json` for GFS, `latest-<model>.json` otherwise, pointer schema
-  v1). Uploading it is what takes a run live.
-- Everything it names — the run's `manifest.json` (schema v5) and every
-  artifact — is **immutable**, addressed with `?v=<crc32>` cache busting, and
+- The only mutable object per model is a small live pointer at the data
+  root (`latest.json` for GFS, `latest-<model>.json` otherwise, pointer
+  schema v1). Uploading it is what takes a run live.
+- Everything it names, the run's `manifest.json` (schema v5) and every
+  artifact, is immutable, addressed with `?v=<crc32>` cache busting, and
   lives under `<model>.<run>/`.
 
 Manifest paths are resolved relative to the manifest URL, so a run directory
@@ -107,764 +106,566 @@ can be served from either the site origin or the R2 bucket
 (`VITE_DATA_BASE_URL`, see `web/.env.deploy`). The production hostnames
 appear in the frontend only through `web/src/site.ts`.
 
-### Discovery (search engines, language models, agents)
-
-The shell describes itself in three places that must stay in agreement with
-what the encoder publishes. `web/index.html` and `web/showcase.html` carry
-the static English metadata, the hreflang set and a JSON-LD graph (site,
-application, source code, the live dataset); `web/src/pagemeta.ts` rewrites
-title, description, canonical and og:url once the view is known — a case
-(`/?case=<id>`) is its own page, every live view is `/`, and a `?lang=`
-rendering is canonical to itself. `web/public/robots.txt` (allows every
-crawler, AI ones by name) and `web/public/llms.txt` (the llmstxt.org index:
-sources, published bundle set, URL grammar, the pointer → manifest → bundle
-contract, decoder packages) are static prose — **update `llms.txt` when
-`sources.py` changes what a model publishes or `urlstate.ts` gains a
-parameter**. `sitemap.xml` (the two pages plus one URL per case) and
-`llms-full.txt` (README + `docs/*.md` + `showcase/README.md`, links
-rewritten to the repository) are generated at build time by
-`web/tooling/discovery.ts`, which is why `deploy-pages.yml` also triggers on
-those documents. The sitemap's cases come from the *published* catalog
-(`showcase.json` at the build's `VITE_DATA_BASE_URL`), never from
-`showcase/cases/` — a definition may sit unbuilt for a long time — so a
-deploy build fails if the bucket does not answer, and a newly uploaded case
-reaches the sitemap at the next shell deploy.
-
 Manifest schema changes are a two-sided deploy: the new shell accepts old
-manifests, but an old cached shell rejects new ones — **deploy the Pages shell
-before publishing data in a widened schema**. The *set* of bundles is not a
-schema: a manifest's `variable` is admitted on its shape alone
-(`^[a-z][a-z0-9]*$`, unique; the dataset's own core set —
-`SourceSpec.core_bundle_ids`, the `tmp2m`/`prate` pair on a forecast, `cref`
-on a radar mosaic — still required on a live run) in all three validators,
-so a run may publish a bundle the shell has never heard of and the shell
-renders it generically instead of refusing the manifest. Adding a level of a
-known family is two source-table lines and no frontend change; a new
-quantity is an encoder registration plus, optionally, frontend chart
-knowledge.
+manifests, but an old cached shell rejects new ones. Deploy the Pages shell
+before publishing data in a widened schema. The same rule applies to a
+container version bump and to a bundle metadata version bump (below).
 
-Inside a bundle, `numericId` / `variableId` is a **file-local handle**: both
+The set of bundles is not part of the schema. All three validators admit a
+manifest's `variable` on its shape alone (`^[a-z][a-z0-9]*$`, unique), with
+the dataset's own core set (`SourceSpec.core_bundle_ids`: the `tmp2m` /
+`prate` pair on a forecast, `cref` on a radar mosaic) still required on a
+live run. A run may publish a bundle the shell has no chart for and the
+shell renders it generically. Adding a level of a known family is two
+source-table lines and no frontend change; a new quantity is an encoder
+registration plus, optionally, frontend chart knowledge.
+
+Inside a bundle, `numericId` / `variableId` is a file-local handle: both
 encoders number a bundle's variables 1..n in bundle order, so every scalar
 bundle carries variable 1 and every vector bundle 1 (u) and 2 (v). A
 variable's identity is its GRIB2 `parameter` block (`web/src/identity.ts`
 derives family, level and vector-ness from it once a session is open; the id
 string is only the naming convention the rail and `?type=` read before
-then). Nothing may key across sessions by `numericId` alone —
+then). Nothing may key across sessions by `numericId` alone:
 `web/src/sessionkeys.ts` scopes the frame cache and probe keys by session,
 and each session's worker is bound to it by closure.
 
+### Discovery (search engines, language models, agents)
+
+The shell describes itself in three places that must agree with what the
+encoder publishes. `web/index.html` and `web/showcase.html` carry the static
+English metadata, the hreflang set and a JSON-LD graph; `web/src/pagemeta.ts`
+rewrites title, description, canonical and og:url once the view is known (a
+case, `/?case=<id>`, is its own page; every live view is `/`; a `?lang=`
+rendering is canonical to itself). `web/public/robots.txt` and
+`web/public/llms.txt` are static prose. Update `llms.txt` when `sources.py`
+changes what a model publishes or `urlstate.ts` gains a parameter.
+`sitemap.xml` and `llms-full.txt` (README + `docs/*.md` + `showcase/README.md`,
+links rewritten to the repository) are generated at build time by
+`web/tooling/discovery.ts`, which is why `deploy-pages.yml` also triggers on
+those documents. The sitemap's cases come from the published catalog
+(`showcase.json` at the build's `VITE_DATA_BASE_URL`), never from
+`showcase/cases/`, so a deploy build fails if the bucket does not answer.
+
 ### Container versions
 
-Distinct from the metadata schema below: `FixedHeader.version` says what a
-*payload* is. **v1** is plane-major — one payload is one whole plane of one
-frame, indexed by `IDX1` + `PlaneEntry`, with a middle RAW anchor per
-temporal group. **v2** is tiled — one payload is a **chunk**: one spatial
-tile of one temporal group for one variable, indexed by `IDX2` plus three
-compact tables (variables with their predictor, groups partitioning the
-axis, and one 8-byte entry per chunk whose offset is a prefix sum rather
-than a stored field). Physical order is group → tile (row-major) → variable,
-which keeps a whole group one contiguous range (so a global view fetches
-exactly what v1 fetched), a viewport's tile row another, and one cell's
-whole series at one chunk per group. Tiling is a storage property: the
-metadata JSON, codebooks and residual arithmetic are unchanged, and the
-geometry appears only in the binary index. `docs/format.md` §"Container v2"
-is normative.
+`FixedHeader.version` says what a payload is. v1 is plane-major: one payload
+is one whole plane of one frame, indexed by `IDX1` + `PlaneEntry`, with a
+middle RAW anchor per temporal group. v2 is tiled: one payload is a chunk,
+one spatial tile of one temporal group for one variable, indexed by `IDX2`
+plus three compact tables (variables with their predictor, groups
+partitioning the axis, one 8-byte entry per chunk whose offset is a prefix
+sum). Physical order is group → tile (row-major) → variable, so a whole
+group is one contiguous range, a viewport's tile row another, and one cell's
+whole series is one chunk per group. Tiling is a storage property: the
+metadata JSON, codebooks and residual arithmetic are unchanged.
+`docs/format.md` §"Container v2" is normative.
 
-Status: both encoders write v2 and every decoder reads both versions. The
-frontend uses what tiling buys: a streaming session decodes and fetches only
-the tiles its viewport covers (`web/src/tiles.ts` turns the view into
-rectangles, the worker protocol carries them, `u_cover` in `layer.ts` clips
-to what a partial plane actually holds), and a pinned point reads its whole
-series in one round trip instead of waiting for playback to walk the axis.
-A narrowed session never fetches the rest of the grid, so "resident" means
-what the view needs, not the whole file — the worker says which, and the
-data card reads "Viewport fully buffered" for the narrow case. A decoder
-must always keep reading v1 — published runs and showcase cases carry those
-bytes and are never rebuilt. Like a manifest widening, the switch is a
-two-sided deploy: **ship the Pages shell before publishing v2 data.**
+Both encoders write v2 and every decoder reads both versions. A streaming
+session decodes and fetches only the tiles its viewport covers
+(`web/src/tiles.ts` turns the view into rectangles, the worker protocol
+carries them, `u_cover` in `layer.ts` clips to what a partial plane holds),
+and a pinned point reads its whole series in one round trip. A narrowed
+session never fetches the rest of the grid; the data card reads "Viewport
+fully buffered" for that case. A decoder must always keep reading v1:
+published runs and showcase cases carry those bytes and are never rebuilt.
 
 ### Bundle metadata schema versions
 
 Inside a `.xue` file, `schemaVersion` is the lowest version a reader must
 implement. v1 and v2 are the legacy whole-hour axes (`firstForecastHour`
-with `stepHours` or `hours`) that published runs still carry. **v3** — what
-the encoder writes now — changes two things: every variable declares its
-GRIB2 `parameter` block (discipline / category / number plus the fixed
-surface), and the time axis becomes unit-neutral (`unitSeconds` +
-`firstFrameOffset` + `frameStep` | `frameOffsets`), so a sub-hourly series
-has an exact axis. `unitSeconds` is 3600 for every forecast source, which
-leaves their offsets equal to their forecast hours; the radar mosaic
-declares 360. It must be the coarsest unit that fits, and a decoder rejects
+with `stepHours` or `hours`). v3, what the encoder writes now, adds a GRIB2
+`parameter` block to every variable and makes the time axis unit-neutral
+(`unitSeconds` + `firstFrameOffset` + `frameStep` | `frameOffsets`).
+`unitSeconds` is 3600 for every forecast source, 360 for the radar mosaic,
+120 for MRMS; it must be the coarsest unit that fits, and a decoder rejects
 both an unimplemented version and an overdeclared one, so each file has
 exactly one valid encoding.
 
-Within the container a plane's key is a **frame offset**, not a forecast
-hour: `PlaneEntry.frameOffset`, the worker protocol's `frameOffset`, and
+Within the container a plane's key is a frame offset, not a forecast hour:
+`PlaneEntry.frameOffset`, the worker protocol's `frameOffset`, and
 `SourceFrame.lead_seconds` upstream of the axis derivation.
 
 Encoder (`xuebuild/binconvert.py::build_metadata`), Python reader
 (`xuebuild/binformat.py::_parse_metadata`), Rust
 (`rust/xue/src/decode/metadata.rs`) and
-`web/src/manifest.ts::parseBundleMetadata` must agree. Do not conflate this
-with the manifest's schema v5 or the pointer's v1. Like a manifest widening,
-a metadata version bump is a two-sided deploy: **ship the Pages shell before
-publishing data at the new version.**
+`web/src/manifest.ts::parseBundleMetadata` must agree. This version is
+distinct from the manifest's schema v5 and the pointer's v1.
 
 ### Encoder pipeline (`xuebuild/`)
 
-- `sources.py` — the per-model registry (`SourceSpec`): where the data comes
-  from, the published time axis as `(last_hour, step)` segments (whose last
-  boundary is `horizon_hours`, the `--hours` default), the cycle cadence
-  (`cycle_hours`: 6 for the global models, 1 for HRRR — `parse_run` and
-  `resolve_run` read it), which input variables are fetched, which bundles
-  are published, the production grid, and fetch concurrency. **Adding or
-  changing a model starts here**, and the frontend mirror is
-  `FORECAST_MODELS` in `web/src/manifest.ts`. A source with
-  `observation=True` is not a forecast at all: no cycle, no lead time, an
-  axis that is whatever times the observations carry. `radar` is one local
-  NetCDF file per event, read by `observation.py`, with no pointer, no cron
-  job and no fetch. `mrms` is the other kind — a **fetched observation**
-  (`window_hours`, which is also its `--hours` default): a run is a window
-  named by its first hour, its frames are listed off the bucket rather than
-  computed (`fetch.py::mrms_window_frames` — one whole gzipped GRIB per
-  product per frame, the day's directory listed, each product's stamp
-  snapped down to its `cadence_seconds` slot, a slot kept only when every
-  product has it, `fetch.json` left beside the frames), and the converter
-  re-keys the frames onto the window's axis
-  (`binconvert.py::_snap_observation_frames`, mirrored in `convert.rs`: the
-  first slot's hour is the run time, a slot's distance from it the lead, so
-  `unitSeconds` is 120). Its records are matched under `cref` / `prate`
-  through `RecordAlternate`s for the MRMS-local discipline 209 (GDAL names
-  them by product from its centre-161 table; `_is_mrms_record`), with the
-  `-999` / `-99` / `-3` sentinels folded to the codebook bottom by
-  `fill_values` and the rate accepted already in mm/h. A source with a
-  `downsample` (`mrms`) is published coarser than it arrives: `_grid_info`
-  describes the block-maximum grid (`BlockReduction` on the `GridInfo`,
-  like `resample`) and `_extract_planes` thins each plane after the fill
-  rules and before the crop; `production_grid` and `tile` describe the
-  thinned grid. `_grid_info` also snaps a *regional* grid's steps to the
-  whole thousandth of a degree they were clearly published on
-  (`_snap_regional_steps`, the regional analogue of the global `360 /
-  width` rule, mirrored in `grid.rs`) — GDAL derives the step from the
-  first and last coordinates, and MRMS writes its last one a hair short.
-  MRMS is the one source that is an observation *and* live. `build-bin
-  --model mrms --run <hour> --hours 3` builds a past window into
-  `mrms.<run>/` (the showcase cases `ida-2021`, `quad-state-tornado-2021`
-  are cropped ones); the live feed is a **rolling window**: `--run latest`
-  resolves (`fetch.py::latest_mrms_slot`, `resolve_run`) to the run whose
-  last hour holds the bucket's newest frame, `--hours 4` (three whole
-  hours plus the hour in progress, `window_hours + 1`), and since the same
-  run is rebuilt every five minutes, each build takes `--round HHMM` and
-  lands in `mrms.<run>/<HHMM>/` with a `window.json` (`fetch.py::
-  window_summary`) beside its manifest and the pointer naming the round —
-  never overwrite an object under an unchanged `?v=`: a viewer's range
-  requests against it decode the wrong bytes. `publish-mrms.yml` is one
-  job an hour looping `scripts/mrms_rounds.sh` (a round every five
-  minutes to five to the hour: newest frame vs the live `window.json`
-  → build → `make upload-r2 … ROUND=` → `prune-r2-rounds` keeps the run's
-  newest two rounds, `prune-r2 KEEP=2` the previous run), not the
-  three-job `publish.yml`. The shell lists `mrms` among
-  `FORECAST_MODEL_IDS`, polls its pointer every two minutes instead of
-  five, treats a changed `manifestCrc32` (not a changed run id) as a new
-  run, and on a rolling window keeps the playhead by observation time —
-  or follows the end when it was at the end (`checkForNewRun` /
-  `resumeOnNewRun` in `main.ts`). `pickBundleVariant` scales the needed
-  width by the bundle's longitude span (read off the poster metadata), so
-  a regional grid can take its half tier on a far-out view.
-  A source with a `regrid` (`hrrr`) is computed on a map projection:
-  `_grid_info` reads
-  the Lambert conformal parameters out of GDAL's WKT (`reproject.py`, and
-  the wheel's `gdal_info` reports `coordinateSystem.wkt` for it), builds a
-  `Resampler` onto the regular grid of that step over the source's
-  footprint, and `_extract_planes` resamples each plane (bilinear, edge
-  cells continued into the corners the conic domain never covered) before
-  the crop; `production_grid` and `tile` describe the regular grid. The
-  arithmetic is repeated by `rust/xue/src/encode/reproject.rs` and held
-  byte-identical (`tests/test_hrrr.py`), so its op order is not free. The
-  shell knows the model's footprint (`web/src/domain.ts`,
-  `FORECAST_MODELS[].domain`): the raster shader, the particles, the probe
-  and the contour labels all clip to it, and `region` is where the camera
-  goes when a regional model is opened on a view showing none of it.
-- `variables.py` — the variable registry, in GRIB2's own terms: the parameter
-  triple, the fixed surface, the metadata label and unit, plus the GRIB
-  matching hints (element, `.idx` phrase and its alternates at another
-  centre — HRRR's `MSLMA` under `prmsl`, `REFC` under `cref` — ECMWF
-  param, and `ecmwf_alternate_params` where the open data spells one
-  field differently along the axis: the gust is `10fg` to 90 h and
-  `10fg3` on the 3-hourly steps beyond). Another centre's record is
-  accepted under a variable's identity two ways, both matched by the
-  GRIB2 header index and by GDAL's band metadata in both encoders and
-  never written: `grib2_aliases` (another triple on the same surface —
-  ECMWF `msl`, its `pp1d` / `mwd` under `perpw` / `dirpw`) and
-  `grib2_alternates` (a whole `RecordAlternate`: surface, value,
-  statistical process, GDAL unit — ECMWF's `10fg` as a template-4.8
-  maximum on the 10 m surface under `gust`, `tcc` as local 0/6/192 in a
-  0–1 fraction under `tcdc`, `mucape` on surface type 17 under `cape`,
-  `skt` 0/0/17 under `tmpsfc`, `sithick` with no surface value under
-  `icetk`). One entry per
-  variable feeds both record matching and the schema v3 metadata block; it
-  assigns no container id (see the delivery contract above). Some entries
-  are *input-only*: ECMWF `tp` de-accumulates into `prate`, sflux
-  `prate_ave` de-averages into `prate`; neither reaches a bundle. The
-  isobaric families (`hgt`, `tmp`, `rh`, `spfh`, `ugrd`/`vgrd`,
-  `uqflx`/`vqflx`) are generated from one table of eight levels; `isobaric_variable(id)` answers `(family, level)`, and the
-  vapour flux pair is derived in the converter (`q·V/g`), never fetched.
-  Registration is not publication: `SourceSpec.bundle_scalar_ids` and
-  `bundle_vector_ids` say what a source ships, and a vector bundle
-  (`wind10m`, `wind<level>`, `qflux<level>`) ships only when every input in
-  `binconvert.vector_input_ids` is fetched. `tests/fixtures/isobaric-registry.json`
-  holds the three implementations to one set of ids and codebooks, the way
-  `pressure-registry.json` does for the pressure family and
-  `surface-registry.json` for the surface diagnostics (`gust`, the four
-  cloud covers, `cape`, `vis`, `dpt2m`, `aptmp2m`). The isobaric families
-  also include `vvel` (fetched) and `thetae` — the first **derived scalar**:
-  `binconvert.DERIVED_SCALARS` names its inputs (`tmp<level>`,
-  `spfh<level>`), `derive_theta_e` is Bolton (1980) in a fixed operation
-  order the native encoder repeats, and like a vapour flux bundle it ships
-  only when its inputs are fetched. GFS publishes all of these; ECMWF
-  publishes what its open data carries (`gust`, `tcdc`, `cape`, `dpt2m`,
-  the three `vvel`, `thetae850`, `tmpsfc`, `icetk`, `htsgw`, `perpw`,
-  `wave` — not `lcdc`/`mcdc`/`hcdc`, `vis`, `icec`, `aptmp2m`), in GFS
-  order, so a model switch keeps the layer; sflux stays at its four. The
-  ECMWF gust is empty at the analysis, so it is `optional_at_analysis`
-  there and `binconvert.analysis_optional_ids` (mirrored in `convert.rs`)
-  starts its series at the first step the way the de-accumulated `prate`
-  does — the rule is generic now, not prate's alone. The **ocean set**
-  (`ocean-registry.json`: `tmpsfc` skin temperature / SST, `icec`,
-  `icetk`, `htsgw`, `perpw`, `dirpw`) brings two mechanisms: a source may
-  read a second **file family** of the same cycle
-  (`SourceSpec.companion_files`, the `wave` family = GFS's
-  `gfswave.*.global.0p25.fFFF.grib2` beside `atmos/`, ECMWF's `wave`
-  stream beside `oper` with an `.index` of its own — `fetch.py` knows the
-  object by family id and source; appended by the fetcher after the
-  primary records so a frame is still one GRIB — and a run is complete
-  only when its wave frames are up too, usually within minutes of pgrb2
-  f240, occasionally 20 min after),
-  and a record may not cover its grid (`VariableSpec.fill_values`: the
-  wave bitmap's GDAL nodata 9999 becomes the codebook bottom before unit
-  conversion, in both encoders — the format has no bitmap; ECMWF's
-  `sithick` carries one over land too). WAVEWATCH III
-  packs as JPEG 2000, which the wheel's GDAL reads through the OpenJPEG
-  `scripts/build-gdal-minimal.sh` links for that one purpose
-  (`tests/fixtures/gfswave.*.jp2.crop.grib2` holds it to the reference
-  GDAL); a family some GDAL cannot read can still be marked
-  `CompanionFile.repack`, which repacks it to `grid_simple` with `grib_set`
-  at fetch time the way ECMWF's CCSDS files are and makes `bundle-groups`
-  flag its jobs `eccodes` so `publish.yml` installs it — no family needs
-  that now. The **wave vector** `wave` (`uwave` / `vwave`, Xue-local
-  10/0/250–251) is the second derived vector after the vapour flux:
-  `binconvert.DERIVED_VECTORS` names its inputs (`htsgw`, `dirpw`),
-  `derive_wave_vector` lays the height along the direction of travel in
-  the wind's convention (`-h sin θ, -h cos θ`) so the frontend's vector
-  path — magnitude fill, particles, the probe's `atan2(-u, -v)` — draws
-  the sea as it draws the wind. `htsgw` stays published beside it; `dirpw`
-  is fetched as an input only (released after the derivation, like
-  `spfh850`), since a scalar direction is no chart and the vector carries
-  it.
-  Widening a source's input list means recutting its crop fixture —
-  `tests/fixtures/gfs.*.crop.grib2` (same run, same `-srcwin`), or the
-  two-frame `ecmwf.*.crop.grib2` pair over the Kara Sea that
-  `tests/test_ecmwf.py` matches both ways and builds through both
-  encoders — and regenerating the registry fixtures.
-- `fetch.py` → `idx.py` / `grib2.py` — byte-range fetches of exact GRIB
-  records, one `.idx` + range set per file family; ECMWF open data is
+`sources.py` is the per-model registry (`SourceSpec`): data location, the
+published time axis as `(last_hour, step)` segments (the last boundary is
+`horizon_hours`, the `--hours` default), the cycle cadence (`cycle_hours`: 6
+for the global models, 1 for HRRR), the fetched inputs, the published
+bundles, the production grid, and fetch concurrency. Adding or changing a
+model starts here; the frontend mirror is `FORECAST_MODELS` in
+`web/src/manifest.ts`. Source kinds:
+
+- Forecast (`gfs`, `ecmwf`, `sflux`, `hrrr`). `hrrr` has a `regrid`: the
+  model is computed on a Lambert conformal grid, `_grid_info` reads the
+  projection out of GDAL's WKT (`reproject.py`; the wheel's `gdal_info`
+  reports `coordinateSystem.wkt`), builds a `Resampler` onto the regular
+  0.03° grid over the source footprint, and `_extract_planes` resamples
+  each plane (bilinear, edge cells continued into the corners the conic
+  domain never covered) before the crop. `rust/xue/src/encode/reproject.rs`
+  repeats the arithmetic and `tests/test_hrrr.py` holds it byte-identical,
+  so the operation order is fixed. The shell clips the raster, particles,
+  probe and contour labels to the footprint (`web/src/domain.ts`,
+  `FORECAST_MODELS[].domain`), and `region` is where the camera goes when a
+  regional model is opened on a view showing none of it.
+- Local observation (`radar`): `observation=True`, no cycle, no lead time,
+  one NetCDF file per event read by `observation.py`, no pointer, no cron
+  job, no fetch. The axis is whatever times the observations carry.
+- Fetched observation (`mrms`): a run is a window named by its first hour
+  (`window_hours`, also its `--hours` default), its frames listed off the
+  bucket (`fetch.py::mrms_window_frames`: one gzipped GRIB per product per
+  frame, each product's stamp snapped down to its `cadence_seconds` slot, a
+  slot kept only when every product has it, `fetch.json` left beside the
+  frames), and the converter re-keys the frames onto the window's axis
+  (`binconvert.py::_snap_observation_frames`, mirrored in `convert.rs`).
+  Records are matched under `cref` / `prate` through `RecordAlternate`s for
+  the MRMS-local discipline 209 (`_is_mrms_record`); the `-999` / `-99` /
+  `-3` sentinels fold to the codebook bottom through `fill_values`. A
+  `downsample` publishes the grid coarser than it arrives (`BlockReduction`
+  on the `GridInfo`, applied in `_extract_planes` after the fill rules and
+  before the crop). `_grid_info` also snaps a regional grid's steps to the
+  thousandth of a degree (`_snap_regional_steps`, mirrored in `grid.rs`),
+  since GDAL derives the step from the first and last coordinates and MRMS
+  writes its last one short. The live feed is a rolling window: `--run
+  latest` resolves (`fetch.py::latest_mrms_slot`, `resolve_run`) to the run
+  whose last hour holds the bucket's newest frame, `--hours 4` covers three
+  whole hours plus the hour in progress, and since the same run is rebuilt
+  every five minutes each build takes `--round HHMM` and lands in
+  `mrms.<run>/<HHMM>/` with a `window.json` (`fetch.py::window_summary`).
+  Never overwrite an object under an unchanged `?v=`: a viewer's range
+  requests against it decode the wrong bytes. `publish-mrms.yml` is one job
+  an hour looping `scripts/mrms_rounds.sh` (a round every five minutes:
+  newest frame vs the live `window.json` → build → `make upload-r2 …
+  ROUND=` → `prune-r2-rounds` keeps the run's newest two rounds, `prune-r2
+  KEEP=2` the previous run). The shell polls the MRMS pointer every two
+  minutes, treats a changed `manifestCrc32` as a new run, and on a rolling
+  window keeps the playhead by observation time or follows the end when it
+  was at the end (`checkForNewRun` / `resumeOnNewRun` in `main.ts`).
+  `pickBundleVariant` scales the needed width by the bundle's longitude
+  span, so a regional grid can take its half tier on a far-out view.
+
+`variables.py` is the variable registry in GRIB2 terms: the parameter
+triple, the fixed surface, label and unit, plus the matching hints (element,
+`.idx` phrase and its alternates at another centre, ECMWF param, and
+`ecmwf_alternate_params` where the open data spells one field differently
+along the axis: the gust is `10fg` to 90 h and `10fg3` beyond). Another
+centre's record is accepted under a variable's identity two ways, matched by
+the GRIB2 header index and by GDAL's band metadata in both encoders and
+never written: `grib2_aliases` (another triple on the same surface) and
+`grib2_alternates` (a whole `RecordAlternate`: surface, value, statistical
+process, GDAL unit). One entry per variable feeds both record matching and
+the schema v3 metadata block; it assigns no container id. Some entries are
+input-only (ECMWF `tp` de-accumulates into `prate`, sflux `prate_ave`
+de-averages into `prate`; `dirpw` and `spfh<level>` feed derivations). The
+isobaric families (`hgt`, `tmp`, `rh`, `spfh`, `ugrd`/`vgrd`,
+`uqflx`/`vqflx`, `vvel`, `thetae`) are generated from one table of eight
+levels; `isobaric_variable(id)` answers `(family, level)`.
+
+Registration is not publication: `SourceSpec.bundle_scalar_ids` and
+`bundle_vector_ids` say what a source ships. A vector bundle (`wind10m`,
+`wind<level>`, `qflux<level>`, `wave`) ships only when every input in
+`binconvert.vector_input_ids` is fetched; a derived scalar (`thetae<level>`,
+`binconvert.DERIVED_SCALARS`, Bolton 1980 in a fixed operation order) and a
+derived vector (`binconvert.DERIVED_VECTORS`: `qflux` = `q·V/g`, `wave` =
+the significant height laid along the direction of travel in the wind's
+convention, `(-h sin θ, -h cos θ)`) ship only when their inputs are fetched.
+GFS publishes the full set; ECMWF publishes what its open data carries, in
+GFS order, so a model switch keeps the layer; sflux stays at its four. A
+variable empty at the analysis (`optional_at_analysis`, the ECMWF gust) is
+listed by `binconvert.analysis_optional_ids` (mirrored in `convert.rs`) and
+its series starts at the first step, as the de-accumulated `prate` does.
+
+Two mechanisms came with the ocean set: a source may read a second file
+family of the same cycle (`SourceSpec.companion_files`: GFS's `gfswave.*`
+beside `atmos/`, ECMWF's `wave` stream beside `oper`; the fetcher appends the
+records after the primary ones so a frame is still one GRIB, and a run is
+complete only when its wave frames are up, usually within minutes of pgrb2
+f240, occasionally 20 min after), and a record may not cover its grid
+(`VariableSpec.fill_values`: GDAL's nodata 9999 becomes the codebook bottom
+before unit conversion, in both encoders; the format has no bitmap).
+WAVEWATCH III packs as JPEG 2000, which the wheel's GDAL reads through the
+OpenJPEG that `scripts/build-gdal-minimal.sh` links;
+`tests/fixtures/gfswave.*.jp2.crop.grib2` holds it to the reference GDAL. A
+family some GDAL cannot read can be marked `CompanionFile.repack`, which
+repacks it to `grid_simple` with `grib_set` at fetch time and makes
+`bundle-groups` flag its jobs `eccodes`; no family needs that now.
+
+The registry fixtures (`tests/fixtures/isobaric-registry.json`,
+`pressure-registry.json`, `surface-registry.json`, `ocean-registry.json`)
+hold the three implementations to one set of ids and codebooks. Widening a
+source's input list means recutting its crop fixture
+(`tests/fixtures/gfs.*.crop.grib2`, same run, same `-srcwin`, or the
+two-frame `ecmwf.*.crop.grib2` pair that `tests/test_ecmwf.py` builds
+through both encoders) and regenerating the registry fixtures.
+
+Other modules:
+
+- `fetch.py` → `idx.py` / `grib2.py`: byte-range fetches of exact GRIB
+  records, one `.idx` + range set per file family. ECMWF open data is
   CCSDS-packed and is repacked to `grid_simple` with `grib_set` at fetch
   time.
-- `binconvert.py` — the whole conversion: grid discovery (a global grid is
-  snapped to `360 / width` — WAVEWATCH III writes the last longitude a hair
-  off, and a wave-only bundle group must land on the same grid as its
-  pgrb2 siblings; `grid.rs` repeats the rule), cropping (`crop_grid`,
-  showcase cases), unit conversion, de-accumulation / de-averaging,
-  quantization, temporal grouping, bundle writing, half-res variants,
-  posters, H.264 companions (for the surface fields of a source whose
-  `SourceSpec.video` is on — GFS and HRRR; ECMWF and sflux ship none, and
-  `bundle-groups` flags no ffmpeg job for them), manifest entries.
-- `quantize.py` / `temporal.py` / `binformat.py` — the format itself:
-  codebooks, modulo-256 residual prediction, container read/write.
-- `manifest.py` — manifest and live-pointer construction *and validation*;
+- `binconvert.py`: the whole conversion. Grid discovery (a global grid is
+  snapped to `360 / width`, since WAVEWATCH III writes the last longitude
+  off and a wave-only bundle group must land on the same grid as its pgrb2
+  siblings; `grid.rs` repeats the rule), cropping (`crop_grid`), unit
+  conversion, de-accumulation / de-averaging, quantization, temporal
+  grouping, bundle writing, half-res variants, posters, H.264 companions
+  (surface fields of a source whose `SourceSpec.video` is on: GFS and HRRR),
+  manifest entries.
+- `quantize.py` / `temporal.py` / `binformat.py`: codebooks, modulo-256
+  residual prediction, container read/write.
+- `manifest.py`: manifest and live-pointer construction and validation;
   both are validated on write.
-- `observation.py` — the NetCDF ingest: one `dataset_info` pass turns a file's
-  bands into the same `SourceFrame` list the GRIB inspectors return, plus the
-  `PlaneSource` saying to unscale the values and what its fill value means.
-- `showcase.py` — case definitions → cropped bundles → `showcase.json`. A
+- `observation.py`: the NetCDF ingest, producing the same `SourceFrame`
+  list the GRIB inspectors return plus a `PlaneSource` for unscaling and
+  the fill value.
+- `showcase.py`: case definitions → cropped bundles → `showcase.json`. A
   case's `title` / `summary` must carry all eleven UI locales
   (`showcase.LOCALES`, held to `web/src/i18n.ts` by
-  `tests/fixtures/locales.json`); `showcase refresh` (`make
-  showcase-refresh`) rewrites a built case's sidecar from its definition
-  without a rebuild, so prose reaches the catalog without a refetch. A
-  case has three shapes: a forecast case (`run` + `hours` on the published
-  axis), a local-file observation case (`radar`: a `dataset` file instead
-  of a `run`, `XUE_OBSERVATION_ROOT`), and a fetched-observation case
-  (`mrms`: `run` is the window's first hour, `hours` its length, no
-  `dataset`; `CaseSpec.from_dataset` tells the first two apart from the
-  third, and a window the archive cannot fill to its declared end is
-  refused rather than shortened).
-- `assemble.py` — a run built in pieces. The scheduled `publish.yml` fans a
-  run out over one job per **bundle group** (`bundle-groups` packs the
-  source's bundles into at most `max_jobs` jobs of roughly equal cost; the
-  matrix also says which jobs need ffmpeg): each job runs `build-bin
-  --bundles …`, which fetches only those bundles' inputs (into
-  `data/raw/partial/<group>/`, never mistaken for a full fetch), converts
-  with `bundle_ids` restricted and writes `manifest.part.<group>.json`
-  beside the bundles instead of `manifest.json`; the finalize job merges
-  the parts with `assemble-run` (every published bundle exactly once, in
-  publication order, core pair required) and only then writes the pointer.
-  `make upload-r2-bundles` / `upload-r2-manifest` are the two halves of
-  `upload-r2`; a part never reaches the bucket. The same independence gives
-  the **top-up**: when the resolved cycle is already live but lacks bundles
-  the source now publishes, `publish.yml` builds only those
-  (`bundle-groups --base-manifest`, against `make live-manifest`) and
-  `assemble-run --base-manifest` merges the parts onto the live manifest —
-  a new variable reaches the live run without a full rebuild; `force`
-  still rebuilds everything. `tests/test_assemble.py` holds a split build
-  and a top-up byte-identical to a whole one — a bundle's bytes must never
-  depend on what else was in the build, so nothing cross-variable may creep
-  into a bundle or its manifest entry.
+  `tests/fixtures/locales.json`); `showcase refresh` rewrites a built case's
+  sidecar from its definition without a rebuild. A case is a forecast case
+  (`run` + `hours`), a local-file observation case (`radar`: `dataset`
+  instead of `run`, `XUE_OBSERVATION_ROOT`) or a fetched-observation case
+  (`mrms`: `run` is the window's first hour, `hours` its length); a window
+  the archive cannot fill to its declared end is refused.
+- `assemble.py`: a run built in pieces. `publish.yml` fans a run out over
+  one job per bundle group (`bundle-groups` packs the source's bundles into
+  at most `max_jobs` jobs of roughly equal cost and says which need
+  ffmpeg). Each job runs `build-bin --bundles …`, fetching only those
+  bundles' inputs into `data/raw/partial/<group>/` and writing
+  `manifest.part.<group>.json`; the finalize job merges the parts with
+  `assemble-run` (every published bundle exactly once, core pair required)
+  and then writes the pointer. `make upload-r2-bundles` /
+  `upload-r2-manifest` are the two halves of `upload-r2`; a part never
+  reaches the bucket. The top-up uses the same pieces: when the resolved
+  cycle is live but lacks bundles the source now publishes, `publish.yml`
+  builds only those (`bundle-groups --base-manifest` against `make
+  live-manifest`) and `assemble-run --base-manifest` merges them onto the
+  live manifest; `force` rebuilds everything. `tests/test_assemble.py`
+  holds a split build and a top-up byte-identical to a whole one, so
+  nothing cross-variable may enter a bundle or its manifest entry.
 
 ### Zarr store (`xuebuild/zarrstore.py`)
 
-A bundle can also be published as a **Zarr v3 store**, `<bundle>.zarr/`
-beside the `.xue` (`docs/zarr-profile.md` is normative): one group per
-bundle whose `attributes.xue` is the bundle's metadata JSON verbatim, one
-`uint8` array per variable (`tmp2m/`; `ugrd10m/` and `vgrd10m/` under
-`wind10m.zarr`), **one `sharding_indexed` shard per array** — the whole
-axis of the whole grid, one object read by range as the container was —
-whose inner chunks are regular six-frame time chunks of the bundle's
-tiles, time chunk by time chunk in the bundle's tile order, `[bytes,
-zstd{15, checksum}]` inside, `fill_value` = `nodataCode`, CF
-`scale_factor` / `add_offset` / `_FillValue` on linear codebooks, and
-`time` / `latitude` / `longitude` coordinate arrays for xarray. One shard
-per array is what keeps a store at a handful of objects (a bucket bills
-per object; cut per time chunk a GFS run was ~5 000 objects), and the
-shard's index — read once as a suffix range — is the whole index, so a
-series costs one request per time chunk, the container's shape. The
-reader takes the shard length from the array's chunk shape and still reads
-the earlier per-time-chunk stores on the bucket (whose `index.bin` /
-`xue_index` it ignores). The store is
-**derived from the finished `.xue`** by `zarrstore.export_bundle`
-(`read_bundle` → chunk by chunk → pad edge tiles → zstd → hand-written
-shard index + CRC-32C; NumPy only, no zarr-python at runtime), which is why
-both encoder paths produce identical stores: `binconvert` exports inside
-each bundle job, `native.py::_zarr_reports` after the wheel has written, and
-`test_native.py` compares the objects byte for byte. `build-bin --zarr` /
-`convert-bin --zarr` or `XUE_ZARR=1` turns it on (off by default; the
-reusable `publish.yml` takes a `zarr` input, set by every per-model
-workflow — a run built without it is still whole — and `make mvp` passes
-`--zarr`). `--no-xue` /
-`XUE_CONTAINER=0` (publish.yml's `container: false` on every per-model
-workflow, the env pair on `publish-mrms.yml`, `showcase build --no-xue`
-for the cases — every live run and case is store-only since 2026-09-15)
-goes one step further and **retires the container**: the `.xue` is still written
-and the store derived from it, then the file is removed
-(`binconvert.retire_container`, on both encoder paths, after the video
-companions have been read out of it) and the manifest entry names the
-store alone — the transitional form of plan 017's phase 7 for one source,
-which `tests/test_native.py::NativeStoreOnlyParityTests` holds identical
-across the two encoders. `xue export-zarr <bundle>` derives one by hand, with
-`--delta` (the `xue.delta` codec in front of `bytes` on PREVIOUS variables,
-`xuebuild/zarrcodec.py` registers it for zarr-python) and
-`--index-location start|end` (`end` by default: the form zarrita fetches as
-a suffix range). The manifest gains an optional `zarr` descriptor
-`{path, byteLength, crc32}` on a bundle entry and on each variant — `crc32`
-is that of the group `zarr.json`, the store's `?v=` — validated when present
-by all three validators, ignored by a shell that predates it, and carried
-through `assemble-run` unchanged. The store's time chunks coincide with the
-bundle's groups only up to the first change of step, so every chunk is
-re-encoded from codes and the export report *measures* how many compressed
-payloads equal the bundle's (`comparableChunks` / `identicalChunks`) rather
-than copying them. The optional `zarr` dependency group (`uv sync --group
-zarr`) is for the tests and for reading a delta store; `tests/test_zarr.py`
-skips its zarr-python / xarray cases without it.
+A bundle is published as a Zarr v3 store, `<bundle>.zarr/`
+(`docs/zarr-profile.md` is normative): one group per bundle whose
+`attributes.xue` is the bundle's metadata JSON verbatim, one `uint8` array
+per variable, one `sharding_indexed` shard per array (the whole axis of the
+whole grid, read by range as the container was) whose inner chunks are
+regular six-frame time chunks of the bundle's tiles, `[bytes, zstd{15,
+checksum}]` inside, `fill_value` = `nodataCode`, CF `scale_factor` /
+`add_offset` / `_FillValue` on linear codebooks, and `time` / `latitude` /
+`longitude` coordinate arrays. One shard per array keeps a store at a
+handful of objects (a bucket bills per object; cut per time chunk a GFS run
+was ~5 000 objects), and the shard index, read once as a suffix range, is
+the whole index. The reader takes the shard length from the array's chunk
+shape and still reads the earlier per-time-chunk stores.
+
+The store is derived from the finished `.xue` by `zarrstore.export_bundle`
+(`read_bundle` → chunk by chunk → pad edge tiles → zstd → hand-written shard
+index + CRC-32C; NumPy only), so both encoder paths produce identical
+stores: `binconvert` exports inside each bundle job, `native.py::_zarr_reports`
+after the wheel has written, and `test_native.py` compares the objects byte
+for byte. `build-bin --zarr` / `XUE_ZARR=1` turns it on; `--no-xue` /
+`XUE_CONTAINER=0` (publish.yml's `container: false`, the env pair on
+`publish-mrms.yml`, `showcase build --no-xue`) retires the container after
+the store and the video companions have been derived from it
+(`binconvert.retire_container`, both encoder paths), and the manifest entry
+names the store alone (`tests/test_native.py::NativeStoreOnlyParityTests`).
+`xue export-zarr <bundle>` derives one by hand, with `--delta` (the
+`xue.delta` codec, `xuebuild/zarrcodec.py`) and `--index-location
+start|end`. The manifest's optional `zarr` descriptor `{path, byteLength,
+crc32}` on a bundle entry and each variant (`crc32` is that of the group
+`zarr.json`, the store's `?v=`) is validated when present by all three
+validators and carried through `assemble-run` unchanged. Store time chunks
+coincide with the bundle's groups only up to the first change of step, so
+every chunk is re-encoded from codes and the export report measures
+`comparableChunks` / `identicalChunks`. The `zarr` dependency group (`uv
+sync --group zarr`) is for the tests and for reading a delta store.
 
 The frontend plays a store through a third `DecodeChannel`, `web/src/zarr/`,
-which is the **default**: `main.ts::loadVariable` takes it whenever the
-bundle or its picked tier carries a `zarr` descriptor, unless
-`?backend=xue` (`urlstate.ts::parseBackendFromSearch`, default `zarr`)
-asks for the container. The order is store over ranges → `.xue` over
-ranges → `.xue` downloaded whole → store by **whole objects** (a
-`ZarrStore` with `ranges: false`, one GET per shard, taken only when the
-entry ships no container — a probe session is streamed or nothing on both
-paths), so an origin without ranges still plays. All three validators
+the default: `main.ts::loadVariable` takes it whenever the bundle or its
+picked tier carries a `zarr` descriptor, unless `?backend=xue`
+(`urlstate.ts::parseBackendFromSearch`). The order is store over ranges →
+`.xue` over ranges → `.xue` downloaded whole → store by whole objects (a
+`ZarrStore` with `ranges: false`, taken only when the entry ships no
+container; a probe session is streamed or nothing). All three validators
 admit an entry that names only its store: the container's `path` /
-`byteLength` / `crc32` are one unit, present whole or absent whole, and an
-entry with neither delivery is refused (`containerOf` / `deliveryBytes` in
-`manifest.ts` are how the shell reads an entry). `.xue` reading stays in
-every decoder indefinitely — published runs, cases and rounds are never
-rebuilt — so `tests/e2e/app.spec.ts` runs on the fixture manifest with its
-stores stripped (`tests/e2e/artifacts.ts::withoutStores`, the shape of
-every run published before) while `zarr.spec.ts` drives the default and
-the store-only shape (`storeOnly`). A tab older than the data — one whose
-validator refuses a live manifest a newer shell reads, or whose Zarr
-reader cannot open a live run's store — reloads itself once per manifest
-(`ManifestRejectedError` / `StoreRejectedError`,
-`main.ts::reloadForNewerShell`, the crc32 kept in `sessionStorage`), which
-is what lets a store-only run, or a store in a revised layout, go live
-without waiting for every open tab to be refreshed. `zarr/worker.ts` answers exactly the protocol
-`worker.ts` answers (`protocol.ts` spells its messages; `init-stream` gains
-`kind: "zarr"`, the root URL and the descriptor's crc32) over
-`zarr/session.ts`: `shard.ts` validates the group and array documents
-(`attributes.xue` goes straight through `parseBundleMetadata`), parses
-the CRC-32C-checked shard index — read once per shard as a suffix range
-and held — and maps frame and tile to a byte span (`shardOf`) — a
-Zarr time chunk is a fixed six frames and may straddle the container's
-groups, so nothing there consults a group — and `store.ts` appends the
-store's `?v=` and **coalesces** the ranges of one shard issued in one
-microtask (gap ≤ 64 KB) into one request, which is what keeps a viewport at
-one request per tile row. Decoding is the container's own chunk path
-exported as `decodeChunk` from `rust/xue-wasm` (`decode::core::decode_chunk`:
-zstd with a mandatory, verified content checksum, exact length, PREVIOUS as
-the modulo-256 running sum), so the comparison isolates the container and
-its index. The data card reads `Zarr` / `Zarr ½`. `tests/web/zarr.test.ts`
-holds every frame and series byte-identical to `WasmBundle` on the
-synthetic fixtures (`prepare_web_fixture.py` exports `tmp2m`, `prate`,
-`wind10m` stores and a delta/`start`-index `tmp2m.delta.zarr`),
-`tests/e2e/zarr.spec.ts` drives the shell, and `npm run measure:backends`
-(`web/tooling/measure-backends.test.ts`) prints requests and bytes per
-backend on a local run.
+`byteLength` / `crc32` are present whole or absent whole, and an entry with
+neither delivery is refused (`containerOf` / `deliveryBytes` in
+`manifest.ts`). `tests/e2e/app.spec.ts` runs on the fixture manifest with
+its stores stripped (`tests/e2e/artifacts.ts::withoutStores`) and
+`zarr.spec.ts` drives the default and the store-only shape. A tab whose
+validator refuses a live manifest, or whose Zarr reader cannot open a live
+store, reloads itself once per manifest (`ManifestRejectedError` /
+`StoreRejectedError`, `main.ts::reloadForNewerShell`, the crc32 kept in
+`sessionStorage`). `zarr/worker.ts` answers the same protocol as
+`worker.ts` (`init-stream` gains `kind: "zarr"`) over `zarr/session.ts`:
+`shard.ts` validates the group and array documents, parses the
+CRC-32C-checked shard index once per shard and maps frame and tile to a
+byte span (`shardOf`; a time chunk is a fixed six frames and may straddle
+the container's groups), and `store.ts` appends the store's `?v=` and
+coalesces the ranges of one shard issued in one microtask (gap ≤ 64 KB) into
+one request. Decoding is `decodeChunk` from `rust/xue-wasm`
+(`decode::core::decode_chunk`). `tests/web/zarr.test.ts` holds every frame
+and series byte-identical to `WasmBundle`; `npm run measure:backends` prints
+requests and bytes per backend on a local run.
 
 ### STAC catalog (`xuebuild/stac.py`)
 
-A static STAC 1.1.0 catalog is **derived** beside the JSON the shell reads
-— the manifests, the pointers and `showcase.json` keep their shape and the
-frontend never reads the catalog (`docs/stac.md` is the contract). Root
-`catalog.json` (one child per live source + the showcase, a pure function
-of the registry), `<source>/collection.json` (the pointer's STAC face: its
-`item` / `latest-version` links name the **live Item** `<source>/item.json`
-beside it — the run's Item with its hrefs relocated (`relocate_item`) to a
-path that outlives the run, since a link into `<source>.<run>/` dies with
-the run on prune; both mutable, uploaded with the pointer by
-`upload-r2-pointer`), `<source>.<run>/item.json` beside
-each manifest (`<run>/<HHMM>/item.json` for an MRMS round; uploaded
-no-cache with the manifest by `upload-r2` / `upload-r2-manifest`), and
-`showcase/collection.json` + `showcase/<case>/item.json` (written by
-`write_catalog`, uploaded by `upload-r2-showcase`). Every document is a
-pure function of the manifest, the catalog row and `sources.py` — no
-timestamps, no host names, relative links only — so the split-build and
-top-up identity tests cover them. An Item reads its grid off the poster
-(decimated two to one: steps halved back, far edge right to within a cell)
-or the video metadata, its axis as the union of every bundle's, one asset
-per artifact (`<bundle>` the store as `application/vnd.zarr` or the
-container, `-xue`, `-half`, `-poster`, `-video`, `manifest` under its
-`?v=`), `file:checksum` as the crc32 multihash (`b20204` + hex),
-`cube:variables` one per array from `variables.py`, the forecast extension
-on forecast sources only. The writer runs in the CLI, not the converter:
-`build-bin` for a whole live run (either encoder), `assemble-run`, and
-`xue stac --model … --run …` to regenerate by hand; a `--bundles` piece
-writes none. Licenses and provider prose live in `_source_prose`, held to
-the registry by `tests/test_stac.py`, which also round-trips through
-pystac when the `zarr` dependency group is installed.
+A static STAC 1.1.0 catalog is derived beside the JSON the shell reads; the
+frontend never reads it (`docs/stac.md` is the contract). Root
+`catalog.json`, `<source>/collection.json` (the pointer's STAC face, whose
+`item` / `latest-version` links name the live Item `<source>/item.json`
+beside it, the run's Item with hrefs relocated by `relocate_item` so the
+path outlives the run; both uploaded with the pointer by
+`upload-r2-pointer`), `<source>.<run>/item.json` beside each manifest
+(`<run>/<HHMM>/item.json` for an MRMS round; uploaded no-cache with the
+manifest), and `showcase/collection.json` + `showcase/<case>/item.json`
+(written by `write_catalog`, uploaded by `upload-r2-showcase`). Every
+document is a pure function of the manifest, the catalog row and
+`sources.py` (no timestamps, no host names, relative links only), so the
+split-build and top-up identity tests cover them. The writer runs in the
+CLI, not the converter: `build-bin` for a whole run, `assemble-run`, and
+`xue stac`; a `--bundles` piece writes none. Licenses and provider prose
+live in `_source_prose`, held to the registry by `tests/test_stac.py`.
 
 ### Tropical cyclone product (`xuebuild/tc/`)
 
-Storm tracks are a second product beside the runs, not inside the
-container: `docs/tc.md` is normative (schema v1). `xue tc-build` fetches
-each source into `data/raw/tc.<issue>/<source>/` with a `fetch.json`
-(`tc/fetch.py` — JTWC's RSS → `.tcw`, NHC's `CurrentStorms.json` → gzip
-a-deck + b-deck, the NCEP tracker's `avno` and GEFS member files, ECMWF
-`tf` BUFR through `eccodescli.bufr_dump_json`, IBTrACS), parses each with
-a parser that imports no other (`atcf.py`, `tcw.py`, `bufrtracks.py`,
-`ibtracs.py` → the shapes in `track.py`, SI units at the parser),
-resolves identities (`identity.py`: ATCF id first; invests and
-model-found systems get `x-<basin>-<hour>-<n>` ids that the **previous
-hour's index** carries forward by alias and by proximity, so
-`publish-tc.yml` runs `make live-tc-index` before building) and writes
-`web/public/data/tc.<issue>/` plus `latest-tc.json` (`schema.py`
-validates on write; `build.py` is the only place the sources meet). A
-source fails on its own into `sources[]`; the pointer is withheld only
-when no agency and no model contributed. `tests/fixtures/tc/` is a
-fetched hour and `tests/fixtures/tc/expected/` the golden built from it
-(`tests/prepare_tc_golden.py` regenerates; needs `bufr_dump`);
-`tc-registry.json` pins `registry.py` and `web/src/tc/agencies.ts` to
-one table (`tests/web/tc.test.ts`). The shell draws the product as
-**marks** over any composition (`web/src/tc/`): `schema.ts` validates
-what `schema.py` writes, `tracks.ts` fetches pointer → index → storm and
-interpolates a track by valid time, `layers.ts` is MapLibre GeoJSON
-layers (agency forecasts dashed ahead of the playhead and solid behind
-it, the wind radii at the current position, best tracks, model tracks,
-ensemble members off by default), `panel.ts` the storm sheet behind the
-rail's `#tc-tile`. The marks take no session and never gate the playhead;
-`main.ts::syncTcTime` hands them the frame's valid time, `loadTc` polls
-the pointer with the runs, and a case hides them. URL state is
-`?tc=<id>|off`, `?tcagency=`, `?tcmodel=`, `?tcmembers=`.
+Storm tracks are a second product beside the runs (`docs/tc.md`, schema v1).
+`xue tc-build` fetches each source into `data/raw/tc.<issue>/<source>/` with
+a `fetch.json` (`tc/fetch.py`), parses each with a parser that imports no
+other (`atcf.py`, `tcw.py`, `bufrtracks.py`, `ibtracs.py` → the shapes in
+`track.py`, SI units at the parser), resolves identities (`identity.py`:
+ATCF id first; invests and model-found systems get `x-<basin>-<hour>-<n>`
+ids that the previous hour's index carries forward by alias and proximity,
+so `publish-tc.yml` runs `make live-tc-index` before building) and writes
+`web/public/data/tc.<issue>/` plus `latest-tc.json` (`schema.py` validates
+on write; `build.py` is the only place the sources meet). A source fails on
+its own into `sources[]`; the pointer is withheld only when nothing
+contributed. `tests/fixtures/tc/` is a fetched hour and
+`tests/fixtures/tc/expected/` the golden (`tests/prepare_tc_golden.py`
+regenerates; needs `bufr_dump`); `tc-registry.json` pins `registry.py` and
+`web/src/tc/agencies.ts` to one table. The shell draws the product as marks
+over any composition (`web/src/tc/`: `schema.ts`, `tracks.ts`, `layers.ts`,
+`panel.ts`); the marks take no session and never gate the playhead.
+`main.ts::syncTcTime` hands them the frame's valid time, `loadTc` polls the
+pointer with the runs, and a case hides them. URL state is `?tc=<id>|off`,
+`?tcagency=`, `?tcmodel=`, `?tcmembers=`.
 
-External tools are invoked as CLI subprocesses (`gdal.py`, `zstdcli.py`,
-`ffmpegcli.py`, `eccodescli.py`) rather than added as binary Python
-dependencies; NumPy is the only runtime dependency. Two exceptions:
+### External tools
 
-- **zstd** runs in-process via the stdlib `compression.zstd` on Python ≥ 3.14
-  (subprocess overhead dominated bundle writing) and falls back to the CLI
-  below that — the two are interchangeable on decode but not byte-identical
-  on encode.
-- **`gdalinfo`** has a second source. `gdal.dataset_info` is the one entry
-  point for it, and reads through the `xuepy` wheel's linked GDAL
-  (`xue.gdal_info`, one reason for the `xuepy>=0.15` floor) when the build converts
-  natively, the subprocess otherwise — the choice follows `XUE_ENCODER`, so
-  a run never mixes two GDAL installs. That is what lets the scheduled
-  `publish-*` workflows install **no GDAL at all**: extraction was already
-  in the wheel, and inspection was the last caller left.
-  `tests/test_gdalinfo.py` diffs the two sources field by field. Extraction
-  (`gdal_translate`) has no such fallback, so the reference pipeline
-  (`XUE_ENCODER=python`) still needs a system GDAL.
+GDAL, zstd, ffmpeg and eccodes are invoked as CLI subprocesses (`gdal.py`,
+`zstdcli.py`, `ffmpegcli.py`, `eccodescli.py`); NumPy is the only runtime
+dependency. Two exceptions:
 
-Errors that are the user's to fix subclass `XueError` (`xuebuild/errors.py`); the
-CLI turns them into `error: …` and exit code 2. Anything else is a bug.
+- zstd runs in-process via the stdlib `compression.zstd` on Python ≥ 3.14
+  and falls back to the CLI below that. The two are interchangeable on
+  decode and not byte-identical on encode.
+- `gdalinfo` has a second source. `gdal.dataset_info` is the one entry
+  point and reads through the `xuepy` wheel's linked GDAL (`xue.gdal_info`,
+  one reason for the `xuepy>=0.15` floor) when the build converts natively,
+  the subprocess otherwise; the choice follows `XUE_ENCODER`, so a run never
+  mixes two GDAL installs. This is what lets the scheduled `publish-*`
+  workflows install no GDAL. `tests/test_gdalinfo.py` diffs the two sources
+  field by field. Extraction (`gdal_translate`) has no such fallback, so
+  `XUE_ENCODER=python` still needs a system GDAL.
 
-### Decoder and frontend
+Errors that are the user's to fix subclass `XueError` (`xuebuild/errors.py`);
+the CLI turns them into `error: …` and exit code 2. Anything else is a bug.
+
+### Decoder
 
 `rust/xue/src/decode/` exposes `Bundle` (whole file in memory) and
 `StreamingBundle` (structural prefix only, payload bytes fed in as range
-responses arrive) over shared validation and decode code, in four layers:
-`metadata.rs` (grid, time axis, variable set), `structure.rs` (header
-geometry, index, dependency chains), `core.rs` (payload residency and
-residual replay) and `bundle.rs` (the two public readers). All arithmetic on
-file values is checked, and nothing is allocated from a file value before
-validation.
+responses arrive) over shared code in four layers: `metadata.rs` (grid, time
+axis, variable set), `structure.rs` (header geometry, index, dependency
+chains), `core.rs` (payload residency and residual replay) and `bundle.rs`
+(the two public readers). All arithmetic on file values is checked, and
+nothing is allocated from a file value before validation.
 
-Under both directions sits `rust/xue/src/format.rs`: the container's byte
-layout and nothing else — the constants, the `Predictor`/`Compression` enums,
-and a `pack`/`unpack` pair for `FixedHeader`, `IndexHeader` and `PlaneEntry`.
-The decoder unpacks through it and the native encoder packs through it, so a
-field cannot drift between them; it validates only what a field's own
-encoding demands and never allocates from a file value. Everything semantic
-stays above it.
+`rust/xue/src/format.rs` holds the container's byte layout and nothing else:
+constants, the `Predictor` / `Compression` enums, and `pack` / `unpack` for
+`FixedHeader`, `IndexHeader` and `PlaneEntry`. The decoder unpacks through
+it and the native encoder packs through it, so a field cannot drift between
+them.
+
+### Frontend
 
 `web/src/worker.ts` owns the WASM decoder and speaks one message protocol
 (`booted` → `init`/`init-stream` → `ready`, then `decode` → `frame`) in both
-full and streaming modes. `web/src/webcodecs.ts` implements the same protocol
-over a native `VideoDecoder` for the H.264 companion artifacts, so `main.ts`
-holds either one in the same field without branching. Prefetch in both is
-windowed: the main thread sends `prefetch-window` with the hours just ahead of
-the playhead plus a concurrency cap.
+full and streaming modes. `web/src/webcodecs.ts` implements the same
+protocol over a native `VideoDecoder` for the H.264 companions, so `main.ts`
+holds either one in the same field. Prefetch is windowed: the main thread
+sends `prefetch-window` with the hours ahead of the playhead plus a
+concurrency cap.
 
-`main.ts` (large, deliberately central) composes the view from **slots**
-rather than holding one layer: a *fill* slot (temperature, precipitation,
-reflectivity, radiation, wind speed) and a *lines* slot (the pressure
-family), each a `ForecastLayer` instance of its own, each fed by its own
-bundle session with its own worker, grid, tiles and resolution tier.
-`ViewComposition {fill, lines}` says what is on screen; the **primary**
-session (the fill's, or the lines' when nothing is filled) drives the
-timeline, legend, data card and ground tone, and the lines slot as an
-overlay follows it by *lead seconds* on its own axis — a frame not decoded
-yet keeps the last one up, a lead time the overlay's axis lacks hides it.
-The primary gates the playhead; overlays never do. Prefetch fans out to every
-session on screen (the primary at the connection's concurrency, an overlay at
-one), an overlay takes the half-resolution tier unless `?res=full`, and every
-`?type=` of old is a composition with one slot filled, so the single-layer
-views run exactly the code they always did. It also picks the delivery path
-per session:
-WebCodecs only when `?use_h264=true` opts in and a video artifact exists and
-the browser supports it, otherwise streaming if a range probe succeeds,
-otherwise a whole-bundle download; and picks a resolution tier via
-`pickBundleVariant` from the viewport and connection, unless `?res=half` or
-`?res=full` pins one end of the ladder. The video path is off by
-default — the Xue decoder is the everyday path, and `use_h264` (parsed in
-`urlstate.ts` like the rest of the URL state) is what turns the companions
-back on.
+`main.ts` composes the view from slots: a fill slot (temperature,
+precipitation, reflectivity, radiation, wind speed) and a lines slot (the
+pressure family), each a `ForecastLayer` fed by its own bundle session with
+its own worker, grid, tiles and resolution tier. `ViewComposition {fill,
+lines}` says what is on screen; the primary session (the fill's, or the
+lines' when nothing is filled) drives the timeline, legend, data card and
+ground tone, and the lines overlay follows it by lead seconds on its own
+axis (a frame not decoded yet keeps the last one up; a lead time the
+overlay's axis lacks hides it). The primary gates the playhead; overlays
+never do. Prefetch fans out to every session on screen (the primary at the
+connection's concurrency, an overlay at one), an overlay takes the
+half-resolution tier unless `?res=full`, and every `?type=` is a composition
+with one slot filled. Delivery path per session: WebCodecs only when
+`?use_h264=true` opts in and a video artifact exists and the browser
+supports it, otherwise streaming if a range probe succeeds, otherwise a
+whole-bundle download; the resolution tier comes from `pickBundleVariant`
+(viewport and connection) unless `?res=half` or `?res=full` pins it.
+
 `layer.ts` renders one quantized R8 plane with inverse Web Mercator and a
-palette lookup in the fragment shader, blending two frames via `u_mix` (never
-animate raster opacity). The same shader also draws **10 m wind** as a filled
-speed field: `layer.ts::setVectorField` switches the data texture to RG8 (u
-codes in red, v in green — the packing `particles.ts` already builds, which
-`main.ts` interleaves once per frame and memoizes), reconstructs each channel
-on its own and looks the palette up by `magnitude / maxMagnitude` — the same
-path draws every **vector bundle** (`wind<level>`, `qflux<level>`), each with
-its own ceiling from `levels.ts::vectorMaxMagnitude`. `web/src/levels.ts` is
-the **family** registry: one rail tile per family (temperature from 2 m up,
-wind from 10 m up, relative humidity, specific humidity, vapour flux,
-vertical velocity, θe, pressure — and cloud cover, whose members are the
-total and the three layers rather than isobaric surfaces, listed outright
-in `FamilyInfo.members`), the level row on the capsule picks the member,
-and the fill's group sits beside the lines' group. Past ten visible rail
-tiles `main.ts` marks the rail dense and the stylesheet drops the tiles to
-36px with a smaller icon, the letter caption kept. The rail is a scroll column in a fixed
-box — under the zoom tile down to the capsule's bottom edge on desktop,
-under the round controls down to the capsule on phones, where `main.ts`
-publishes the capsule's measured height as `--capsule-height` — faded at a
-clipped end like the level row, and its tiles are grouped by quantity in
-`index.html` (temperature, water, wind and pressure, the remaining surface
-diagnostics, the upper-air dynamics), so a new tile goes into its group
-rather than onto the end. Over a field the lines group is on the
-row whenever the run publishes a pressure surface: a pressed member is the
-overlay (and pressing it again takes the lines off), none pressed means no
-lines, so the overlay is always one press away in either direction. The same
-shader draws the **pressure family** (mean
-sea level pressure and the eight isobaric geopotential heights) as contour
-lines instead of a filled field: `web/src/pressure.ts` holds the per-level
-contour intervals and emphasised lines, `layer.ts::setContours` turns the
-pass on, and the lines are found per pixel from the dequantized value and its
-screen gradient — no marching squares, no CPU. What makes that legal is an
-*encoder* rule: each pressure codebook's offset puts every standard contour
-exactly half a code off, so a line never coincides with a flat plateau. The
-8-bit staircase still shows in a weak gradient (1 hPa codes, 4 hPa lines),
-so before contouring, `layer.ts::prerender` smooths each uploaded plane in
-grid space — a separable Gaussian, coverage-renormalised, into a 16-bit RG8
-texture the same shader then samples; `CONTOUR_SMOOTHING_CELLS` in `main.ts`
-sets its width, and filled fields never go through it. The labels — a value on
-each line, an H/L (高/低) with its value on each closed center — are the one
-CPU step: `web/src/isolines.ts` reduces the displayed plane to the cells in
-view, smooths it the same way, runs marching squares and a windowed-extremum
-search, and `labels.worker.ts` runs that off the main thread; the result is a
-small GeoJSON that two MapLibre symbol layers place (along the line, at the
-point) with the basemap's own collision handling, a halo in the ground tone
-opening the gap in the line. Playback throttles the trace to once a second
-so labels do not crawl along moving lines; a stop, a step or a pan refreshes
-at once.
-`tests/fixtures/pressure-registry.json` is the committed golden that holds
-the codebooks, intervals and emphasised lines identical across the Python
-encoder, the Rust encoder and the frontend. `particles.ts` advects GPU
-particles through that same wind field, as an overlay over the colored field
-rather than the layer itself: it is on by default, drawn in one ink (a second
-speed ramp over the first reads as mud), and the viewer switches it off from
-the transport capsule — `?particles=off`, remembered in `localStorage`, and
-off by default under `prefers-reduced-motion`, where the simulation is frozen
-anyway. Wind narrows to the viewport like any other streaming scalar while
-the overlay is off; the particles respawn across the whole grid, so with them
-on the session takes the whole plane. `playback.ts` holds
-the frame-rate ladder and the per-frame dwell that keeps a mixed-step axis
-moving at one apparent speed.
+palette lookup in the fragment shader, blending two frames via `u_mix`
+(never animate raster opacity). `setVectorField` switches the data texture
+to RG8 (u codes in red, v in green, the packing `particles.ts` builds, which
+`main.ts` interleaves once per frame and memoizes) and looks the palette up
+by `magnitude / maxMagnitude`; every vector bundle takes this path with its
+own ceiling from `levels.ts::vectorMaxMagnitude`. `web/src/levels.ts` is the
+family registry: one rail tile per family, the level row on the capsule
+picks the member, and cloud cover lists its members outright in
+`FamilyInfo.members`. Past ten visible rail tiles `main.ts` marks the rail
+dense and the stylesheet drops the tiles to 36px. The rail is a scroll
+column in a fixed box (under the zoom tile down to the capsule on desktop;
+under the round controls on phones, where `main.ts` publishes the capsule's
+measured height as `--capsule-height`), and its tiles are grouped by
+quantity in `index.html`, so a new tile goes into its group. Over a field
+the lines group is on the row whenever the run publishes a pressure surface:
+a pressed member is the overlay, pressing it again takes the lines off.
 
-A click on the map pins a **point probe**: `probe.ts` turns the click into a
+The pressure family is drawn as contour lines: `web/src/pressure.ts` holds
+the per-level intervals and emphasised lines, `layer.ts::setContours` turns
+the pass on, and lines are found per pixel from the dequantized value and
+its screen gradient. This depends on an encoder rule: each pressure
+codebook's offset puts every standard contour exactly half a code off, so a
+line never coincides with a flat plateau. Before contouring,
+`layer.ts::prerender` smooths each uploaded plane in grid space (a separable
+Gaussian, coverage-renormalised, into a 16-bit RG8 texture;
+`CONTOUR_SMOOTHING_CELLS` in `main.ts` sets its width); filled fields never
+go through it. Labels (a value on each line, an H/L with its value on each
+closed center) are the one CPU step: `web/src/isolines.ts` reduces the
+displayed plane to the cells in view, smooths it the same way, runs marching
+squares and a windowed-extremum search in `labels.worker.ts`, and two
+MapLibre symbol layers place the result. Playback throttles the trace to
+once a second; a stop, a step or a pan refreshes at once.
+`tests/fixtures/pressure-registry.json` holds the codebooks, intervals and
+emphasised lines identical across the three implementations.
+
+`particles.ts` advects GPU particles through the wind field as an overlay in
+one ink, on by default, off from the capsule (`?particles=off`, remembered
+in `localStorage`, off by default under `prefers-reduced-motion`). Wind
+narrows to the viewport while the overlay is off; with it on the session
+takes the whole plane, since the particles respawn across the grid.
+`playback.ts` holds the frame-rate ladder and the per-frame dwell that keeps
+a mixed-step axis at one apparent speed.
+
+A click on the map pins a point probe: `probe.ts` turns the click into a
 grid cell, and on a v2 bundle the worker's `series` message reads that
-cell's whole axis in one round trip (one chunk per temporal group of one
-tile); a v1 bundle or the video path fills it in opportunistically from
-the planes decoded for the screen. The probe's panel docks over the
-transport capsule at the capsule's width — a ring on the map marks the
-point — and under the headline (the field on screen at the playhead) sit
-the **meteogram rows** (`meteogram.ts`): temperature with the dew point,
-precipitation, wind with the gust and direction arrows, the cloud layers
-(the total standing in when no layer is published), sea level pressure.
-Rows come from the manifest, not the model: a run publishes what it
-publishes and the rest are simply absent. Each row's bundle is opened as a
-*probe session* — `loadVariable(id, sequence, "probe")`, the primary's tier
-on the streaming path alone, never the video path and never a whole
-download (a host that cannot serve ranges leaves the row empty) — so the
-rows cost the structural prefix plus one tile's chunks apiece. Every row
-reads the primary axis by lead seconds (`alignSeries`), so a bundle whose
-axis lacks a frame leaves a gap rather than a shifted column; the row
-labels and readouts are DOM text on the same pitch as the canvas the
-traces are drawn on; a press on either chart scrubs the timeline. Only the
-numeric rows exist — no per-column weather icons. The panel and the
-capsule are laid out on the same two columns — `--probe-column` for the
-labels, the rest for the axis — so the sparkline's plot, the traces and
-the track run on one line and their three playheads coincide; the capsule
-reads down its label column the way a meteogram row does (caption, frame,
-valid time) and keeps the level chips and the transport buttons on the
-axis column, which is what holds it to two rows.
+cell's whole axis in one round trip; a v1 bundle or the video path fills it
+in from the planes decoded for the screen. The panel docks over the
+transport capsule at the capsule's width; under the headline sit the
+meteogram rows (`meteogram.ts`: temperature with dew point, precipitation,
+wind with gust and direction, cloud layers, sea level pressure). Rows come
+from the manifest: a run publishes what it publishes and the rest are
+absent. Each row's bundle is a probe session (`loadVariable(id, sequence,
+"probe")`, the primary's tier on the streaming path alone, never video and
+never a whole download). Every row reads the primary axis by lead seconds
+(`alignSeries`), so a missing frame leaves a gap rather than a shifted
+column. The panel and the capsule share two columns (`--probe-column` for
+the labels, the rest for the axis), so the sparkline, the traces and the
+track run on one line and their playheads coincide.
 
-The shell is a map with controls floating over it, not a map beside a panel:
-the display-serif title in the top-left corner names the layer *and* opens the
-run picker (`#model-sheet` — a panel under it on desktop, a bottom sheet on
-phones), three round buttons sit top-right (language, cases, appearance — the
-language one opening a picker of the eleven endonyms through the same sheet
-mechanism, `web/src/sheet.ts`, that `#model-sheet` and the sources sheet
-use), the color scale runs down the left edge, one 48px tile per layer down the right,
-and one capsule at the bottom (960px wide at most) holds the whole transport
-in two rows: the pressure family's level chips with the speed and play
-buttons, then the forecast hour and valid time beside a track whose tick
-marks, playhead, day labels and end labels *are* the slider's appearance
-(the `<input type=range>` itself is transparent and only carries the hit area,
-the keyboard and the accessible name). `src/theme.ts` resolves light/dark
-before the first render the way `i18n.ts` resolves the locale, and both
-switch **in place**, never by reload: `toggleTheme` / `setLocale` persist the
-choice, restamp the document and notify listeners (`onThemeChange`,
-`onLocaleChange`), and `main.ts::applyAppearance` / `applyLocale` repaint
-what the stylesheet cannot. The basemap is the delicate part — a Protomaps
-flavor and label language are baked into the style, and `map.setStyle`
-would drop the custom WebGL layers the forecast is drawn in — so
+Shell layout: a display-serif title top-left names the layer and opens the
+run picker (`#model-sheet`); three round buttons top-right (language, cases,
+appearance) share `web/src/sheet.ts` with the model and sources sheets; the
+color scale runs down the left edge, one 48px tile per layer down the right,
+and one capsule at the bottom (960px wide at most) holds the transport in
+two rows. The `<input type=range>` is transparent and carries only the hit
+area, the keyboard and the accessible name; the tick marks, playhead and
+labels are drawn beside it. `src/theme.ts` resolves light/dark before the
+first render as `i18n.ts` resolves the locale, and both switch in place,
+never by reload: `toggleTheme` / `setLocale` persist, restamp the document
+and notify listeners (`onThemeChange`, `onLocaleChange`), and
+`main.ts::applyAppearance` / `applyLocale` repaint what the stylesheet
+cannot. `map.setStyle` would drop the custom WebGL layers, so
 `syncBasemapStyle` builds the style again and applies the property-level
-diff (paint, layout, filter, sprite) to the layers already on the map.
-`isDark`, `locale`, `htmlLang` and `basemapLang` are live bindings: read
-them at use, never capture them in a module-level constant. `index.html`
-repeats the theme detection inline so the shell never paints on the wrong
-ground first.
+diff to the layers already on the map. `isDark`, `locale`, `htmlLang` and
+`basemapLang` are live bindings: read them at use, never capture them in a
+module-level constant. `index.html` repeats the theme detection inline so
+the shell never paints on the wrong ground first.
 
-Light does not mean a light map. Each layer keeps the ground its palette needs
-— a warm sheet under temperature, a dark slate under precipitation, wind,
-radar and solar (their palettes run translucent at the low end and vanish on
-paper), chart stock under the pressure family — so the chrome's tokens and the
-map's are two different things. The chrome (capsule, rail, sheet, cards) always
-uses the theme's own; anything floating *directly* on the map (the title, the
-color scale's numbers, the credits) uses `--map-ink` / `--map-ink-muted`, which
-follow `body[data-ground]` — stamped by `applyBasemapTheme` from the basemap
-tone's luminance. So do the basemap's own place labels and boundaries: a
-Protomaps flavor is baked into the style at construction and cannot be swapped
-without `setStyle`, so `applyBasemapInk` repaints their text and line colors
-instead. The coastline is the shell's own layer, not the flavor's: Protomaps
-draws no coast (it is only where the `earth` fill meets the `water` fill,
-which vanishes under a field), so `buildBasemapStyle` inserts a `coastline`
-line layer over the `earth` polygons just under the boundaries — it is the
-anchor the forecast layers insert themselves before — with a zoom-stepped
-width in the style and its ink set by `applyBasemapInk` like the borders'. There is no fade at the top or bottom of the map: the title carries
-its own text shadow and the capsule its own surface.
+Each layer keeps the ground its palette needs (a warm sheet under
+temperature, dark slate under precipitation, wind, radar and solar, chart
+stock under the pressure family), so the chrome's tokens and the map's are
+separate. The chrome uses the theme's own; anything floating directly on the
+map (title, color-scale numbers, credits) uses `--map-ink` /
+`--map-ink-muted`, which follow `body[data-ground]`, stamped by
+`applyBasemapTheme` from the basemap tone's luminance. `applyBasemapInk`
+repaints the basemap's label and line colors the same way. The coastline is
+the shell's own layer (`buildBasemapStyle` inserts a `coastline` line layer
+over the `earth` polygons under the boundaries; the forecast layers insert
+themselves before it). The round controls, the zoom tile, the layer rail and
+the credit mark share one 44px column at the same right offset (20px, 16px
+on phones); a control added to that edge keeps to it. The credit is a mark
+with the sources sheet behind it; the line beside it shows only above
+1400px.
 
-The round controls top-right, the zoom tile under them, the layer rail and
-the credit mark at the foot share one 44px column at the same right offset
-(20px, 16px on phones), so the four read as one vertical axis; a control
-added to that edge keeps to it. The credit is a mark, not a row: the capsule
-sits on the bottom edge, the sources sheet is behind the mark at every
-width, and the line beside it (basemap always; a dataset's own notice via
-`body[data-model]` only while that dataset is up) shows only where it fits
-next to the capsule — above 1400px.
-
-The Protomaps key is origin-locked to the production domains **and to
-`localhost`** — not to `127.0.0.1`, which is what `playwright.config.ts` serves
-from, so the e2e suite stubs tiles out. To see the app over the real basemap
-locally, browse `http://localhost:4173` rather than the loopback address.
+The Protomaps key is origin-locked to the production domains and to
+`localhost`, not `127.0.0.1`, which is what `playwright.config.ts` serves
+from, so the e2e suite stubs tiles out. To see the real basemap locally,
+browse `http://localhost:4173`.
 
 ## Conventions
 
-- Locale is one of eleven — `zh`, `zh-Hant`, `en`, `ja`, `ko`, `de`, `fr`,
-  `es`, `pt`, `tr`, `ru` — via `web/src/i18n.ts`, and appearance is `light`/`dark` via
-  `web/src/theme.ts`; both are resolved before the first render, and the
-  language picker and the appearance toggle each persist the choice and
-  switch in place (see the shell section above). Long-lived status copy in
-  `main.ts` goes through `say()` so a switch can restate it. The
-  dictionary is one module per language under `web/src/locales/`, each typed
-  `Record<MessageKey, string>` against `en.ts` — the source of truth, and the
-  only one carrying the design notes on what a string has to fit — so `tsc`
-  rejects a missing or stray key. Only human-facing copy is translated;
-  thrown `Error` messages, worker messages, instrument-panel codes (`F058`,
-  `12 FPS`, `PLAY`) and diagnostics stay English in every locale.
-- A layer nobody asked for follows the dataset: with no `?type=` and no
-  tile pressed this session (`main.ts::variableChosen`), opening or
-  switching to a model shows `FORECAST_MODELS[].defaultVariable` — the
-  reflectivity on the MRMS mosaic, whose precipitation rate is the derived
-  product — else `DEFAULT_VARIABLE` (precipitation); a chosen layer is kept
-  across a model switch as before.
-- Timeline copy follows the *kind* of dataset, not the locale:
-  `isObservationModel` (the frontend mirror of `SourceSpec.observation`)
-  swaps "FORECAST HOUR"/`F058`/模式周期/有效时间 for
-  "TIME ELAPSED"/`T+058:24`/观测起点/观测时间, on the viewer and on the
-  showcase cards. Observations have no run cycle and no lead time.
-- Valid times read in one **display zone** (`web/src/timezone.ts`): the
-  browser's own, or the pinned point's while a probe is open — `tzf-wasm`
-  answers the point → zone lookup, a 4 MB index loaded on the first pin and
-  never before, and `Etc/GMT±N` over open water. `displayZone` is a live
-  binding like `theme` and `locale` (`onDisplayZoneChange` repaints the
-  capsule readout, tooltip and day marks). The run cycle stays UTC wherever
-  it is stamped — 00Z is the cycle's name — and so do the showcase cards.
-  Offset labels (`UTC+9`) and zone ids are instrument text, English in
-  every locale.
+- Locale is one of eleven (`zh`, `zh-Hant`, `en`, `ja`, `ko`, `de`, `fr`,
+  `es`, `pt`, `tr`, `ru`) via `web/src/i18n.ts`; appearance is `light` /
+  `dark` via `web/src/theme.ts`. Long-lived status copy in `main.ts` goes
+  through `say()` so a switch can restate it. The dictionary is one module
+  per language under `web/src/locales/`, each typed `Record<MessageKey,
+  string>` against `en.ts`, the source of truth and the only one carrying
+  design notes. Only human-facing copy is translated; thrown `Error`
+  messages, worker messages, instrument-panel codes (`F058`, `12 FPS`,
+  `PLAY`) and diagnostics stay English.
+- With no `?type=` and no tile pressed this session
+  (`main.ts::variableChosen`), opening or switching to a model shows
+  `FORECAST_MODELS[].defaultVariable` (the reflectivity on MRMS) else
+  `DEFAULT_VARIABLE` (precipitation); a chosen layer is kept across a model
+  switch.
+- Timeline copy follows the kind of dataset: `isObservationModel` swaps
+  "FORECAST HOUR" / `F058` / 模式周期 / 有效时间 for "TIME ELAPSED" /
+  `T+058:24` / 观测起点 / 观测时间, on the viewer and the showcase cards.
+- Valid times read in one display zone (`web/src/timezone.ts`): the
+  browser's own, or the pinned point's while a probe is open (`tzf-wasm`, a
+  4 MB index loaded on the first pin, `Etc/GMT±N` over open water).
+  `displayZone` is a live binding (`onDisplayZoneChange`). The run cycle
+  stays UTC wherever it is stamped, and so do the showcase cards. Offset
+  labels (`UTC+9`) and zone ids are instrument text, English in every
+  locale.
 - URL state (`?model=`, `?type=`, `?lines=`, `?case=`, `?res=`,
-  `?use_h264=`, `?particles=`, `?tc=` with `?tcagency=` / `?tcmodel=` /
-  `?tcmembers=`) is parsed
-  in `urlstate.ts`; `?lang=` belongs to `i18n.ts` and `?theme=` to `theme.ts`,
-  since each is read before anything else renders. Unrecognized values fall
-  back to defaults rather than error. The camera is in the fragment, not the
-  query string — `#map=<zoom>/<lat>/<lon>`, MapLibre's own `hash: "map"`,
-  which reads it at construction and rewrites it on every `moveend` — so a
-  pan never touches the canonical URL. `urlstate.ts::parseCameraFromHash`
-  only says whether a link fixed the view: `initialize({ frame })` frames
-  the dataset's region (a case's box; `FORECAST_MODELS[].region` through
-  `frameModelRegion`, unless `regionShareOfView` says the map is already
-  over it) on a model switch and on a first open without a camera, and
-  never on a retry or a new run.
-- The Python encoder and Rust decoder are held byte-identical by golden tests
-  (`rust/xue/tests/golden.rs`) against fixtures built by
-  `tests/prepare_bin_fixture.py`. A format change means changing the spec, both
-  implementations, and the fixtures together.
+  `?use_h264=`, `?particles=`, `?backend=`, `?tc=` with `?tcagency=` /
+  `?tcmodel=` / `?tcmembers=`) is parsed in `urlstate.ts`; `?lang=` belongs
+  to `i18n.ts` and `?theme=` to `theme.ts`. Unrecognized values fall back
+  to defaults. The camera is in the fragment, `#map=<zoom>/<lat>/<lon>`
+  (MapLibre's own `hash: "map"`), so a pan never touches the query string.
+  `urlstate.ts::parseCameraFromHash` only says whether a link fixed the
+  view: `initialize({ frame })` frames the dataset's region on a model
+  switch and on a first open without a camera, never on a retry or a new
+  run.
+- The Python encoder and Rust decoder are held byte-identical by golden
+  tests (`rust/xue/tests/golden.rs`) against fixtures built by
+  `tests/prepare_bin_fixture.py`. A format change means changing the spec,
+  both implementations, and the fixtures together.
 - Playwright fixtures are synthetic and built by
-  `tests/prepare_web_fixture.py` from Playwright's global setup — no network,
+  `tests/prepare_web_fixture.py` from Playwright's global setup: no network,
   no GDAL.
 - Generated and fetched data (`data/raw/`, `data/work/`, `dist/`,
   `dist-deploy/`, `web/public/data/<model>.<run>/`, `web/src/wasm/`,

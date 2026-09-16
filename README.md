@@ -10,47 +10,95 @@
 
 > Xue (雪, pronounced /ɕɥɛ/, roughly "shweh"), Chinese for snow.
 
-Xue packs global weather forecasts — 2 m temperature, precipitation rate,
-10 m wind, and solar radiation, out to 240 hours — into per-variable
-**Zarr v3 stores laid out for playback** ([`docs/zarr-profile.md`](docs/zarr-profile.md):
-quantized single-byte planes, small spatial tiles × a few consecutive
-steps per chunk, one shard per variable), and renders them in the browser
-with a static MapLibre page: a Rust WebAssembly worker decodes chunks on
-demand, a custom WebGL2 layer does inverse Web Mercator projection and
-palette lookup entirely on the GPU, and the 10 m wind renders through a
-GPU particle layer. The layout was worked out in a custom single-file
-container, `.xue` ([`docs/format.md`](docs/format.md)); since 2026-09-15
-nothing online is published in it — see the status note under *Format
-rationale* — but every decoder still reads it.
+Xue packs weather forecast runs into per-variable Zarr v3 stores laid out
+for playback ([`docs/zarr-profile.md`](docs/zarr-profile.md): quantized
+single-byte planes, small spatial tiles × six consecutive steps per chunk,
+one shard per variable) and renders them in the browser with a static
+MapLibre page. A Rust WebAssembly worker decodes chunks on demand, a WebGL2
+layer does inverse Web Mercator projection and palette lookup on the GPU,
+and wind renders through a GPU particle layer. The layout was developed in
+a single-file container, `.xue` ([`docs/format.md`](docs/format.md)).
+Since 2026-09-15 nothing online is published in it; every decoder still
+reads it.
 
-Live demo: <https://xue.ringsaturn.me>. The control in the top-left
-corner switches between three sources: NOAA GFS 0.25° (hourly to F120,
-3-hourly to F240 — 161 frames), GFS surface flux on its native ~13 km
-Gaussian grid (same cadence as GFS, with a solar-radiation layer), and
-ECMWF IFS open data 0.25° (3-hourly to 144 h, 6-hourly to F240 — 65
-frames). No source publishes one cadence all the way out, so these
-mixed-step time axes are listed outright in the bundle metadata (schema
-version 3 in [`docs/format.md`](docs/format.md), whose time axis is
-unit-neutral: an offset list against a declared unit rather than whole
-forecast hours). The three sources share the same format, the same
-decoder, and the same rendering pipeline.
+Live demo: <https://xue.ringsaturn.me>. The control in the top-left corner
+switches between the sources below. No source publishes one cadence all the
+way out, so the mixed-step time axes are listed outright in the bundle
+metadata (schema version 3 in `docs/format.md`: an offset list against a
+declared unit). All sources share the same format, decoder and rendering
+pipeline.
+
+## Sources
+
+| Source | `--model` | Grid | Axis | Pointer |
+|---|---|---|---|---|
+| NOAA GFS 0.25° | `gfs` | 1440 × 721, 0.25° | hourly to F120, 3-hourly to F240 (161 frames) | `latest.json` |
+| GFS surface flux | `sflux` | 3072 × 1536 Gaussian, ~13 km | as GFS | `latest-sflux.json` |
+| ECMWF IFS open data 0.25° | `ecmwf` | 1440 × 721, 0.25° | 3-hourly to 144 h, 6-hourly to F240 (65 frames) | `latest-ecmwf.json` |
+| NOAA HRRR | `hrrr` | 2441 × 1051, 0.03°, contiguous US | hourly to F18, a cycle every hour | `latest-hrrr.json` |
+| NOAA MRMS | `mrms` | 3500 × 1750, 0.02°, contiguous US | one frame every two minutes, a rolling four-hour window | `latest-mrms.json` |
+| CMA radar mosaic | `radar` | tile grid | every six minutes | none: showcase cases only |
+
+Each model publishes as an independent dataset under `<model>.<run>/`, taken
+live by its pointer at the data root.
+
+Bundle sets:
+
+- GFS: 2 m temperature, precipitation rate, 10 m wind, the surface
+  diagnostics (gust, total / low / middle / high cloud cover, CAPE,
+  visibility, 2 m dew point and apparent temperature), 850 / 700 / 500 hPa
+  vertical velocity, 850 hPa equivalent potential temperature (derived from
+  temperature and specific humidity), the ocean fields (skin temperature,
+  sea ice cover and thickness, significant wave height and primary period
+  from the cycle's GFS-Wave file, plus the derived wave vector: the height
+  laid along the direction of travel as a u/v pair), mean sea level pressure
+  with the 850 / 700 / 500 / 250 hPa heights, 925 / 850 / 500 hPa
+  temperature, 850 / 700 / 500 hPa relative humidity, the 925 / 850 / 250
+  hPa winds and the 850 hPa water vapour flux (`q·V/g`, derived).
+- ECMWF: the subset of that set its open data carries, under the same
+  identities (`msl` as `prmsl`, `mucape` as `cape`, `skt` as `tmpsfc`,
+  wave fields from the `wave` stream). Open data has no precipitation-rate
+  field, so `tp` is differenced between frames into an interval-mean rate;
+  the series starts at F003 (64 frames). The gust is an interval maximum
+  that is empty at the analysis, so its series also starts at F003. Not in
+  the open data: the layer cloud covers, visibility, sea ice cover,
+  apparent temperature.
+- sflux: the core four (temperature, precipitation de-averaged from
+  window-cumulative records, from F001, wind) plus `dswrf`, instantaneous
+  surface downward shortwave radiation.
+- HRRR: the core pair, sea level pressure (`MSLMA`), 850 / 700 / 500 hPa
+  heights, 925 / 850 / 500 hPa temperature, the 10 m, 925, 850 and 250 hPa
+  winds, the surface diagnostics the surface file carries, and forecast
+  composite reflectivity under `cref`. The model runs on a Lambert
+  conformal grid, which the format does not describe, so the encoder
+  resamples every plane onto a regular 0.03° grid over the domain's
+  footprint (`xuebuild/reproject.py`, repeated bit for bit by the native
+  encoder); corners the conic domain never covered repeat the nearest cell
+  and the viewer clips to the model's footprint.
+- MRMS: composite reflectivity under `cref` and the radar-derived
+  precipitation rate under `prate`. A run is a window (`--run` names its
+  first hour, `--hours` its length) whose frames are listed off the
+  `noaa-mrms-pds` bucket, fetched one gzipped GRIB per product, and thinned
+  two to one by block maximum onto the 0.02° grid. A three-hour window is
+  about 90 frames and 20–40 MB of reflectivity.
+
+Every level of the isobaric families is registered; turning one on is a line
+in `xuebuild/sources.py` and its mirror in the native encoder, not a format
+change.
 
 ## Format rationale
 
-> **Status (2026-09-15): the `.xue` container is retired from the live
-> service.** Every live run, every rolling-window round and every showcase
-> case is published as Zarr v3 stores alone (`build-bin --zarr --no-xue`,
-> what the scheduled workflows pass), listed in a [STAC
-> catalog](docs/stac.md). The container remains in three roles: it is the
-> intermediate both encoders still write and derive the store from (so the
-> store's codes are the container's by construction, and the two encoders
-> stay held byte-identical through it); it is what every decoder — the
-> Rust crate, the wasm worker, `xuepy`, `xuebuild` — keeps reading
-> indefinitely, for runs and cases published before the switch and for
-> anything built locally without `--no-xue`; and it is the format the
-> golden fixtures and the size argument below are stated in. The
-> rationale that follows is about the *layout*, which the store carries
-> unchanged; "`.xue`" in it reads as "a bundle".
+The `.xue` container is retired from the live service as of 2026-09-15.
+Every live run, rolling-window round and showcase case is published as Zarr
+v3 stores alone (`build-bin --zarr --no-xue`, what the scheduled workflows
+pass), listed in a [STAC catalog](docs/stac.md). The container remains in
+three roles: the intermediate both encoders write and derive the store from
+(so the store's codes are the container's by construction, and the two
+encoders stay byte-identical through it); the format every decoder keeps
+reading, for runs and cases published before the switch and for anything
+built locally without `--no-xue`; and the format the golden fixtures and the
+size comparison below are stated in. The layout is what the rationale is
+about, and the store carries it unchanged.
 
 The access pattern is continuous playback of a complete global forecast
 with free timeline scrubbing. A map tile pyramid stores each frame as its
@@ -67,35 +115,30 @@ The tile-pyramid baseline is reproducible:
 [`scripts/pmtiles_size_assessment/`](scripts/pmtiles_size_assessment/)
 rebuilds it frame by frame and reports the byte totals.
 
-A `.xue` file stores each variable as quantized single-byte planes on the
-native forecast grid — no reprojection, no tiling, no baked-in colors —
-with bounded temporal prediction (six-frame anchor groups for smooth
-fields, independent frames for precipitation) and one Zstandard frame per
-plane. Every frame is individually addressable, so the page paints a
-first-frame poster before the rest of the bundle arrives, then
-range-requests only the container header and the temporal groups it
-actually needs, prefetching around the playhead into a byte-budgeted
-cache. Adjacent frames blend on the GPU during playback.
+A bundle stores each variable as quantized single-byte planes on the native
+forecast grid (no reprojection, no tiling, no baked-in colors) with bounded
+temporal prediction (six-frame groups for smooth fields, independent frames
+for precipitation) and one Zstandard frame per chunk. Every frame is
+individually addressable, so the page paints a first-frame poster before the
+rest of the bundle arrives, then range-requests only the index and the
+chunks it needs, prefetching around the playhead into a byte-budgeted cache.
+Adjacent frames blend on the GPU during playback.
 
-The format is specified in [`docs/format.md`](docs/format.md). Four
-implementations share it:
+Four implementations share the format:
 
-- **Python encoder** (`xuebuild/`): fetch → convert → quantize → temporal
-  residuals → zstd → container. GDAL and ffmpeg are invoked as CLI
-  subprocesses — no binary Python dependencies. zstd runs through the
-  standard library's `compression.zstd` on Python ≥ 3.14 (per-plane
-  subprocess overhead dominated the build otherwise) and falls back to
-  the zstd CLI on older interpreters. This is the reference: a format
-  change lands here first.
-- **Native encoder** (`rust/xue/src/encode/`, shipped as the `xuepy`
-  wheel): the same conversion with GDAL, grib-rs and zstd linked in
-  instead of shelled out. A build runs through it by default and it is
-  held to the reference by byte-for-byte identical output — bundles,
-  posters, variants, H.264 companions, manifest and live pointer. See
-  [`docs/encoder.md`](docs/encoder.md).
-- **Rust decoder** (`rust/xue` core crate, `rust/xue-wasm` bindings),
-  built into the frontend via `make wasm`.
-- **TypeScript frontend** (`web/src/`): manifest resolution with
+- Python encoder (`xuebuild/`): fetch → convert → quantize → temporal
+  residuals → zstd → container → store. GDAL and ffmpeg are CLI
+  subprocesses; zstd runs through the standard library's `compression.zstd`
+  on Python ≥ 3.14 and the zstd CLI on older interpreters. This is the
+  reference: a format change lands here first.
+- Native encoder (`rust/xue/src/encode/`, shipped as the `xuepy` wheel):
+  the same conversion with GDAL, grib-rs and zstd linked in. A build runs
+  through it by default and it is held to the reference by byte-for-byte
+  identical output: bundles, posters, variants, H.264 companions, manifest
+  and live pointer. See [`docs/encoder.md`](docs/encoder.md).
+- Rust decoder (`rust/xue` core crate, `rust/xue-wasm` bindings), built
+  into the frontend via `make wasm`.
+- TypeScript frontend (`web/src/`): manifest resolution with
   resolution-tier selection, a decode worker with windowed prefetch, the
   WebGL2 blend-playback layer, the wind particle layer, and an alternate
   WebCodecs H.264 path, opt-in per session with `?use_h264=true`.
@@ -103,41 +146,32 @@ implementations share it:
 Cross-language golden tests keep the Python encoder and Rust decoder
 byte-identical.
 
-The same bundle can also be published as a **Zarr v3 store**
-([`docs/zarr-profile.md`](docs/zarr-profile.md)): a container v2 bundle is,
-to within its index format, a sharded Zarr `uint8` array — one shard per
-variable, six-frame time chunks of the bundle's tiles as its inner chunks,
-one zstd frame each — so `build-bin --zarr` (or `XUE_ZARR=1`) derives a
-`<bundle>.zarr/` beside every `.xue` and its half-resolution variant from
-the codes just written, and names it in the manifest (`zarr: {path,
+The Zarr store ([`docs/zarr-profile.md`](docs/zarr-profile.md)) is the same
+codes in a layout any Zarr client reads: a container v2 bundle is, to within
+its index format, a sharded Zarr `uint8` array. `build-bin --zarr` (or
+`XUE_ZARR=1`) derives `<bundle>.zarr/` beside every `.xue` and its
+half-resolution variant and names it in the manifest (`zarr: {path,
 byteLength, crc32}`). The store carries the bundle's metadata verbatim in
 its root attributes plus CF `scale_factor` / `add_offset` / `_FillValue` on
 linear codebooks and `time` / `latitude` / `longitude` coordinates, so
-`xarray.open_zarr` reads it as physical values with nothing installed
-beyond a Zarr client. `--no-xue` (or `XUE_CONTAINER=0`) publishes the store
-alone — the `.xue` is retired once the store has been derived from it and
-the manifest names no container — which is how every live run and every
-showcase case is published today.
-`xue export-zarr <bundle.xue>` derives one by hand;
-`--delta` swaps in the `xue.delta` codec (the container's temporal
-residual as a codec, `xuebuild/zarrcodec.py`), under which a chunk's
-compressed bytes equal the bundle's wherever the two chunkings coincide.
-The store is the published artifact and the viewer's format; the `.xue` is
-the encoder's intermediate, off the bucket since 2026-09-15 and still read
-by every decoder. A plain `build-bin` (and `make mvp`, which passes
-`--zarr`) keeps both on disk for local work.
+`xarray.open_zarr` reads it as physical values with nothing installed beyond
+a Zarr client. `--no-xue` (or `XUE_CONTAINER=0`) publishes the store alone.
+`xue export-zarr <bundle.xue>` derives one by hand; `--delta` swaps in the
+`xue.delta` codec (the container's temporal residual as a codec,
+`xuebuild/zarrcodec.py`), under which a chunk's compressed bytes equal the
+bundle's wherever the two chunkings coincide. A plain `build-bin` (and `make
+mvp`, which passes `--zarr`) keeps both on disk for local work.
 
 ## Requirements
 
 - Python ≥ 3.12 (NumPy and the `xuepy` wheel; `uv sync` creates `.venv`)
 - GDAL ≥ 3.8 with the GRIB driver
-- zstd ≥ 1.5 (bundled with Python ≥ 3.14; the zstd CLI is required only
-  on older interpreters)
+- zstd ≥ 1.5 (bundled with Python ≥ 3.14; the zstd CLI is required only on
+  older interpreters)
 - Node.js ≥ 22
 - Rust toolchain + `wasm-pack` (builds the browser decoder)
-- eccodes (`grib_set`, ECMWF source only: open data is CCSDS/AEC-packed
-  and is repacked to `grid_simple` at fetch time so any GDAL build can
-  read it)
+- eccodes (`grib_set`, ECMWF source only: open data is CCSDS/AEC-packed and
+  is repacked to `grid_simple` at fetch time so any GDAL build can read it)
 - AWS CLI v2 and `jq` (publishing only: the R2 bucket is managed over its
   S3 API)
 
@@ -151,14 +185,14 @@ Build the latest run end to end and serve the frontend:
 ```sh
 make mvp                  # NOAA GFS (default)
 make mvp MODEL=ecmwf      # ECMWF IFS open data
-make mvp MODEL=sflux      # GFS surface flux (native ~13 km, adds solar radiation)
-make mvp MODEL=hrrr       # NOAA HRRR (3 km over the contiguous US, a cycle every hour)
+make mvp MODEL=sflux      # GFS surface flux
+make mvp MODEL=hrrr       # NOAA HRRR
 make serve
 ```
 
-Or step by step (`--model gfs|ecmwf|sflux|hrrr|mrms`, default `gfs`; `--hours`
-defaults to the whole axis the model publishes — 240 for the global models,
-18 for HRRR, and on MRMS the window length, 3):
+Or step by step (`--model gfs|ecmwf|sflux|hrrr|mrms`, default `gfs`;
+`--hours` defaults to the whole axis the model publishes: 240 for the global
+models, 18 for HRRR, and on MRMS the window length, 3):
 
 ```sh
 python -m xuebuild fetch --run latest --hours 240
@@ -174,192 +208,90 @@ python -m xuebuild build-bin --model mrms --run 2026091300 --hours 3   # a past 
 python -m xuebuild build-bin --model mrms --run latest --hours 4 --round now   # one round of the live window
 ```
 
-`XUE_ENCODER` picks which encoder converts: `auto` (the default — the
-`xuepy` wheel when it is installed), `native` (require it, and fail if it
-is missing), or `python` (the subprocess pipeline, which is the
-reference). `make check` reports which one a build would take. The two
-produce identical bytes, so the choice is only ever about speed.
+`XUE_ENCODER` picks which encoder converts: `auto` (the default: the `xuepy`
+wheel when it is installed), `native` (require it, fail if it is missing),
+or `python` (the subprocess pipeline, the reference). `make check` reports
+which one a build would take. The two produce identical bytes, so the choice
+is only about speed.
 
-Each model publishes as an independent dataset: GFS runs land in
-`gfs.<run>/` and go live via `latest.json` at the data root, ECMWF in
-`ecmwf.<run>/` via `latest-ecmwf.json`, GFS surface flux in
-`sflux.<run>/` via `latest-sflux.json`, and HRRR in `hrrr.<run>/` via
-`latest-hrrr.json`. ECMWF open data carries no
-precipitation-rate field, so the converter differences the run-total
-accumulation `tp` between consecutive frames into an interval-mean rate
-(mm/h); the analysis frame has no preceding interval, so the ECMWF
-precipitation series starts at F003 (64 frames) while other variables keep
-F000 (65 frames); the page's timeline follows the active variable. The
-sflux source uses the native ~13 km Gaussian grid (3072 × 1536), derives
-precipitation from window-cumulative mean-rate records (also without F000,
-160 frames from F001), and additionally publishes the `dswrf` layer
-(instantaneous surface downward shortwave radiation, W/m²). GFS also
-publishes the surface diagnostics (wind gust, total and low / middle /
-high cloud cover, CAPE, visibility, 2 m dew point and apparent
-temperature), the 850 / 700 / 500 hPa vertical velocity, the 850 hPa
-equivalent potential temperature the converter derives from the temperature
-and specific humidity there, and the ocean fields: the surface (skin)
-temperature, which is the SST over water, sea ice cover and thickness from
-pgrb2, and the significant wave height and primary wave period read from
-the cycle's GFS-Wave file (`wave/gridded/`, the same 0.25° grid and axis,
-JPEG 2000-packed, which both encoders' GDAL reads as published — a GFS run
-is complete only once its wave frames are up too, usually within minutes
-of the pgrb2 f240, occasionally twenty minutes after it), plus the wave
-vector `wave` the converter derives from the height and the primary
-direction: the height laid along the direction the waves travel, as a u/v
-pair, so the viewer draws the sea the way it draws the wind. ECMWF
-publishes as much of that set as its open data carries, each under the
-same identity as GFS's: the gust (`10fg`, the maximum over the interval
-ending at the frame rather than an instantaneous value — empty at the
-analysis, so like the precipitation its series starts at F003), the total
-cloud cover, CAPE (the most-unstable parcel's, `mucape`), the dew point,
-the three vertical velocities, the equivalent potential temperature, the
-skin temperature and the sea ice thickness, and from the cycle's `wave`
-stream the wave height, peak period and mean direction with the derived
-wave vector. Not in the open data, so GFS-only: the layer cloud covers,
-the visibility, the sea ice cover and the apparent temperature record.
-`--hours` may be any hour on the model's published axis, so shorter
-uniform builds (e.g. `--hours 120`) still work, and their axis is a plain
-step rather than a listed one.
+`--hours` may be any hour on the model's published axis; a shorter uniform
+build (`--hours 120`) has a plain-step axis rather than a listed one.
 
-HRRR is the one regional source: NOAA's 3 km convection-allowing model
-over the contiguous United States, a new cycle every hour, hourly to F18,
-read from the 2-D surface file. The model runs on a Lambert conformal
-conic grid, which the format does not describe, so the encoder resamples
-every plane onto a regular 0.03° grid over the domain's footprint
-(2441 × 1051; `xuebuild/reproject.py`, repeated bit for bit by the native
-encoder) and the bundles carry that grid; the rectangle's corners the
-conic domain never covered repeat the nearest cell, and the viewer clips
-them to the model's own footprint. It publishes the core pair, sea level
-pressure (the model's MAPS reduction, `MSLMA`), the 850 / 700 / 500 hPa
-heights, 925 / 850 / 500 hPa temperature, the 10 m, 925, 850 and 250 hPa
-winds, the surface diagnostics the surface file carries (gust, the cloud
-covers, CAPE, visibility, dew point) and the forecast composite radar
-reflectivity under the mosaic's own `cref`.
-
-MRMS (NOAA's Multi-Radar Multi-Sensor mosaic) is the one source that is
-an observation *and* fetched: the merged, quality-controlled radar
-composite over the contiguous United States, a frame every two minutes on
-a regular 0.01° grid, public domain, on its own bucket
-(`noaa-mrms-pds`) about a minute behind real time. There is no cycle: a
-run is a window — `--run` names its first hour and `--hours` its length —
-whose frames are listed off the bucket (the composites are stamped a
-jittered forty seconds past each two-minute mark and snapped to the
-mark), fetched one whole gzipped GRIB per product, and thinned two to one
-by block maximum onto a 0.02° grid (3500 × 1750) the bundles carry. It
-publishes the composite reflectivity under `cref` and the radar-derived
-precipitation rate under `prate`, with points outside radar coverage and
-points with no echo at the codebook bottom. A three-hour window is about
-90 frames and 20–40 MB of reflectivity. Its live feed is a **rolling
-window** under `latest-mrms.json`: `--run latest` resolves to the window
-whose last hour holds the bucket's newest frame (`--hours 4`: three whole
-hours plus the hour in progress), and because the same run is rebuilt
-every five minutes for an hour, each build goes into a round subdirectory
-of its own (`--round HHMM` → `mrms.<run>/<HHMM>/`) that the pointer names
-— a rewritten object under an unchanged `?v=` would hand a viewer's range
-requests the wrong bytes. A `window.json` beside the manifest says which
-frames the round holds; see Publishing below.
-
-`build-bin` writes one bundle per scalar variable — a `.xue`, and with
+`build-bin` writes one bundle per scalar variable (a `.xue`, and with
 `--zarr` the `<bundle>.zarr/` store derived from it; with `--no-xue` the
-store alone, which is how the workflows publish — plus a half-resolution
-`.half` rendition, a first-frame poster, and — on GFS and HRRR — a
-per-variable lossless H.264 companion for the surface fields; disable with
-`--skip-variants` / `--skip-video`. ECMWF and sflux have the companion
-switched off in `xuebuild/sources.py`: the video path is opt-in and the
-sflux encode alone was a third of that run's bytes). The
-pressure family — mean sea level pressure and geopotential height on the
-standard isobaric surfaces, one bundle per level — gets neither a poster nor
-a video companion: the page draws it as contour lines, which need the exact
-codes and never a filled first frame. GFS and ECMWF both publish `prmsl`
-with the 850, 700, 500 and 250 hPa heights. The upper-air fills —
-temperature, relative and specific humidity, wind and water vapour flux on
-the same eight isobaric surfaces — are registered in the format the same
-way, and the two models publish the same surfaces, the ones a synoptic
-chart is read on: 925, 850 and 500 hPa temperature (`tmp925`, `tmp850`,
-`tmp500`), 850, 700 and 500 hPa relative humidity (`rh850`, `rh700`,
-`rh500`), the 925 and 850 hPa winds (`wind925`, `wind850`), the 250 hPa
-wind for the jet (`wind250`) and the 850 hPa water vapour flux (`qflux850`,
-`q·V/g` derived from the specific humidity and the wind there). ECMWF's
-come from the open data pressure-level records; its `msl` is plain pressure
-on the mean sea level surface (GRIB2 0/3/0) where NCEP writes PRMSL
-(0/3/1), which the registry accepts as an alias so both carry one identity.
-Every other level is registered but not fetched, so turning one on is a
-line in `xuebuild/sources.py` (and its mirror in the native encoder) rather
-than a format change; the upper-air fills get a poster but no video
-companion. `build-bin` also adds each two-variable vector bundle
-(`wind10m.xue`, `wind850.xue`, `qflux850.xue` and so on) when the input
-GRIB carries its components
-(older cached GRIBs without them are skipped automatically — re-fetch with
-`--force-download` to pick them up), and generates `manifest.json`
-(per-bundle path, byte length, CRC-32, and the `variants` resolution
-ladder). `verify-bin` fully validates one file's
-structure and decodes every frame. Conversion runs one `gdalinfo` and one
-multi-band `gdal_translate` per GRIB file, parallelized across files: a
-full 121-frame run converts in about 43 seconds.
+store alone), a half-resolution `.half` rendition, a first-frame poster,
+and, on GFS and HRRR, a lossless H.264 companion for the surface fields
+(`--skip-variants` / `--skip-video` disable them; ECMWF and sflux have the
+companion switched off in `xuebuild/sources.py`, since the video path is
+opt-in and the sflux encode was a third of that run's bytes). The pressure
+family gets neither a poster nor a companion: the page draws it as contour
+lines, which need the exact codes. Each two-variable vector bundle
+(`wind10m.xue`, `wind850.xue`, `qflux850.xue`) is added when the input GRIB
+carries its components (older cached GRIBs without them are skipped;
+`--force-download` re-fetches). `manifest.json` carries per-bundle path,
+byte length, CRC-32 and the `variants` resolution ladder. `verify-bin`
+validates one file's structure and decodes every frame. Conversion runs one
+`gdalinfo` and one multi-band `gdal_translate` per GRIB file, parallelized
+across files: a 121-frame run converts in about 43 seconds.
 
 Raw GRIB fragments live in `data/raw/`, published data in
-`web/public/data/`, final static output in `dist/`. Overwriting an
-existing manifest requires `--force` (`make mvp FORCE=--force`).
+`web/public/data/`, final static output in `dist/`. Overwriting an existing
+manifest requires `--force` (`make mvp FORCE=--force`).
 
-The page supports shareable URLs per model and layer:
-`/?model=gfs&type=wind`, `/?model=ecmwf&type=temp`, and so on. `model`
-accepts `gfs` / `ecmwf` (alias `ifs`) / `sflux` / `hrrr`; `type` also accepts
-aliases like `tmp2m` / `prate` / `wind10m` / `solar` / `radar`, and each
-isobaric field names itself (`pressure` for sea level pressure, `hgt500`,
-`tmp850` / `t850`, `rh700`, `wind850`, `qflux850` / `vapor850` and so on —
-there is no separate `level` parameter); both are case-insensitive. In the
-page, one rail tile stands for a whole family (temperature from 2 m up, wind
-from 10 m up, humidity, vapour flux, pressure) and the level row on the
-transport capsule picks the surface. The address bar stays in sync when switching, and
-unrecognized values fall back to defaults. The view itself is in the
-fragment, `#map=<zoom>/<lat>/<lon>` (MapLibre's own spelling), kept current
-on every pan and zoom, so a copied address reopens on the same view; a link
-without one opens on the dataset's own region — a case's box, or a regional
-model's footprint — and switching to a regional model such as HRRR frames
-that footprint unless the map is already over it.
+### URL state
+
+`/?model=gfs&type=wind`, `/?model=ecmwf&type=temp`. `model` accepts `gfs` /
+`ecmwf` (alias `ifs`) / `sflux` / `hrrr` / `mrms`; `type` accepts aliases
+such as `tmp2m` / `prate` / `wind10m` / `solar` / `radar`, and each isobaric
+field names itself (`pressure`, `hgt500`, `tmp850` / `t850`, `rh700`,
+`wind850`, `qflux850` / `vapor850`; there is no separate `level`
+parameter). Both are case-insensitive, the address bar stays in sync, and
+unrecognized values fall back to defaults. In the page one rail tile stands
+for a whole family and the level row on the transport capsule picks the
+surface.
+
+The view is in the fragment, `#map=<zoom>/<lat>/<lon>` (MapLibre's own
+spelling), kept current on every pan and zoom. A link without one opens on
+the dataset's own region (a case's box, or a regional model's footprint),
+and switching to a regional model frames that footprint unless the map is
+already over it.
 
 Clicking the map pins a point and opens its forecast over the transport
-capsule: the field on screen at the playhead, and under it a meteogram —
-temperature and dew point, precipitation, wind with gusts and direction,
-cloud layers, sea level pressure — read from the same run at that grid
-cell, each row present when the run publishes its bundle. On a tiled
-bundle a whole series costs one small range request per temporal group, so
-the rows fill in moments after the click; a press on the chart scrubs the
-timeline to that frame.
+capsule: the field on screen at the playhead, and under it a meteogram
+(temperature and dew point, precipitation, wind with gusts and direction,
+cloud layers, sea level pressure) read from the same run at that grid cell,
+each row present when the run publishes its bundle. On a tiled bundle a
+whole series costs one range request per temporal group. A press on the
+chart scrubs the timeline.
 
-Two more parameters are session settings rather than shareable state.
-`?res=` pins the resolution tier the viewer would otherwise pick from the
-viewport and the connection: `half` (alias `low`) always loads the reduced
-rendition, which is the way to hold a session to the smaller download on a
-metered link, and `full` (alias `high`) always loads the canonical bundle.
-A dataset that ships no reduced tier — every showcase case — is full
-resolution either way, and the data card names the tier in use (`Xue ½`).
-`?use_h264=true` opts into the WebCodecs H.264 companions, and
-`?backend=xue` reads a bundle through its `.xue` container where the run
-publishes a Zarr v3 store beside it (`docs/zarr-profile.md`) — the store is
-what the viewer opens by default wherever the manifest names one, and the
-data card reads `Zarr` while it is in use. All three are read once at
-load, so changing any of them means a reload.
+Session settings, read once at load:
+
+- `?res=half` (alias `low`) always loads the reduced rendition; `?res=full`
+  (alias `high`) always loads the canonical bundle. A dataset that ships no
+  reduced tier (every showcase case) is full resolution either way; the
+  data card names the tier in use (`Xue ½`).
+- `?use_h264=true` opts into the WebCodecs H.264 companions.
+- `?backend=xue` reads a bundle through its `.xue` container where the run
+  publishes one beside the store. The store is what the viewer opens by
+  default wherever the manifest names one; the data card reads `Zarr`.
 
 ## Historical showcase
 
-Besides the live feed, the site publishes **cases**: one past weather event
-each, cropped to the region and hours it is about. They are listed at
+Besides the live feed, the site publishes cases: one past weather event
+each, cropped to the region and hours it is about, listed at
 `/showcase.html` and played back by the ordinary viewer at `/?case=<id>`,
 which pins the case's dataset and run and frames the map on its region.
 
 Most cases are archived forecast runs. A case can also be a series of
 observations: the `radar` source is the CMA level-3 radar mosaic (composite
-reflectivity, `cref`), which has no live feed and no scheduled job — it
-reaches the site only as a case someone builds from a local NetCDF file. Its
-frames come every six minutes rather than every hour, which the bundle time
-axis carries exactly (`unitSeconds`, see [`docs/format.md`](docs/format.md));
-a 212-hour case at that cadence is 2096 frames.
+reflectivity, `cref`), which has no live feed and reaches the site only as a
+case built from a local NetCDF file. Its frames come every six minutes,
+which the bundle time axis carries exactly (`unitSeconds`); a 212-hour case
+at that cadence is 2096 frames.
 
-A case is defined by a small checked-in JSON file
-(`showcase/cases/<id>.json`) naming the model, the run (or dataset file),
-the range, bounding box, and the subset of variables the event is about:
+A case is a checked-in JSON file (`showcase/cases/<id>.json`) naming the
+model, the run (or dataset file), the range, bounding box, and the subset of
+variables:
 
 ```sh
 make showcase-check                      # validate every definition
@@ -367,25 +299,23 @@ make showcase CASE=zhengzhou-2021        # fetch, crop, encode, index
 make upload-r2-showcase                  # publish cases + the catalog
 ```
 
-Cropping happens in the encoder (`--bbox` equivalents `crop_grid` /
-`convert_bin(bbox=...)`): the window is rounded outward to whole grid cells
-and may cross the antimeridian, and the resulting bundle is an ordinary one
-(a store, and a `.xue` unless `--no-xue`) whose `grid` block names a window
-instead of the globe. That keeps a case to
-a few megabytes, so cases stay published permanently while runs are pruned.
+Cropping happens in the encoder (`crop_grid` / `convert_bin(bbox=...)`): the
+window is rounded outward to whole grid cells, may cross the antimeridian,
+and the resulting bundle is an ordinary one whose `grid` block names a
+window instead of the globe. A case is a few megabytes, so cases stay
+published permanently while runs are pruned.
 
 Archive depth limits which forecast events are possible: NOAA GFS and sflux
 reach back to about 2021-01, ECMWF open data to about 2024-02. Radar cases
-depend on having the decoded file locally
-(`XUE_OBSERVATION_ROOT`). See [`showcase/README.md`](showcase/README.md) for
-the authoring guide.
+need the decoded file locally (`XUE_OBSERVATION_ROOT`). See
+[`showcase/README.md`](showcase/README.md) for the authoring guide.
 
 ## Publishing
 
-The live site is a static shell on Cloudflare Pages; forecast data lives on
-a public R2 bucket (`dataset.ringsaturn.me/xue/`), because bundles exceed
-the Pages 25 MB per-file limit. The bucket is managed over R2's S3 API with
-the AWS CLI:
+The live site is a static shell on Cloudflare Pages; data lives on a public
+R2 bucket (`dataset.ringsaturn.me/xue/`), because bundles exceed the Pages
+25 MB per-file limit. The bucket is managed over R2's S3 API with the AWS
+CLI:
 
 ```sh
 make upload-r2 MODEL=gfs RUN=2026081600   # run assets, warm the CDN, then the live pointer
@@ -393,50 +323,47 @@ make prune-r2  MODEL=gfs                  # delete the runs it superseded
 make upload-r2-showcase                   # showcase cases, then the catalog
 ```
 
-Pruning only ever considers `<model>.<run>/` directories, so showcase cases
-are never swept up by it.
+Pruning only considers `<model>.<run>/` directories, so showcase cases are
+never removed by it.
 
 Between the assets and the pointer, `upload-r2` runs `make warm-r2`
 (`scripts/warm_edge_cache.sh`): one full GET of every artifact through
-`dataset.ringsaturn.me` with the site's `Origin` header, so the edge — and,
-with the zone's Smart Tiered Cache, the upper tier every other data center
-fills from — already holds the run when its first viewer arrives. A cold
-fill from R2 runs at about 1 MB/s per object, so without it the first
-viewer of a new run waits tens of seconds per bundle. The H.264 companions
-are left cold: they are opt-in. A failed warm-up is reported and the pointer
-goes live anyway.
+`dataset.ringsaturn.me` with the site's `Origin` header, so the edge and the
+Smart Tiered Cache upper tier hold the run when its first viewer arrives. A
+cold fill from R2 runs at about 1 MB/s per object. The H.264 companions are
+left cold, since they are opt-in. A failed warm-up is reported and the
+pointer goes live anyway.
 
 Credentials are an R2 API token's key pair in `AWS_ACCESS_KEY_ID` /
 `AWS_SECRET_ACCESS_KEY`, plus `CLOUDFLARE_ACCOUNT_ID` for the endpoint.
 
-GitHub Actions runs the whole loop on a schedule — one workflow per source
+GitHub Actions runs the loop on a schedule, one workflow per source
 ([`publish-gfs.yml`](.github/workflows/publish-gfs.yml),
 [`publish-sflux.yml`](.github/workflows/publish-sflux.yml),
 [`publish-ecmwf.yml`](.github/workflows/publish-ecmwf.yml),
 [`publish-hrrr.yml`](.github/workflows/publish-hrrr.yml), the last every
-hour), all calling the
-reusable [`publish.yml`](.github/workflows/publish.yml) — using the
-`R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `CLOUDFLARE_ACCOUNT_ID`
-repository secrets. The bucket keeps only the live run per source (the
-MRMS window keeps the previous run too). Each workflow also takes a manual
-dispatch with a dry-run switch.
+hour), all calling the reusable
+[`publish.yml`](.github/workflows/publish.yml) with the `R2_ACCESS_KEY_ID`
+/ `R2_SECRET_ACCESS_KEY` / `CLOUDFLARE_ACCOUNT_ID` repository secrets. The
+bucket keeps only the live run per source (the MRMS window keeps the
+previous run too). Each workflow also takes a manual dispatch with a
+dry-run switch.
 
-The scheduled publish does not build a run in one go. A run's bundles are
-independent of one another, so `publish.yml` splits them into groups
-(`xuebuild bundle-groups`, at most `max_jobs` of roughly equal cost) and
-builds each group in a job of its own: that job fetches only its bundles'
-GRIB records, packs them (`xuebuild build-bin --bundles …`), syncs and
-warms what it built (`make upload-r2-bundles`) and hands on a partial
-manifest, `manifest.part.<group>.json`, as a workflow artifact. One last
-job merges the parts into the run's `manifest.json` and pointer (`xuebuild
-assemble-run`), uploads and warms the manifest and takes the run live
-(`make upload-r2-manifest`), then prunes. The wall time is one group's
-build rather than every bundle's in a row, and stays flat as bundles are
-added; `tests/test_assemble.py` holds a split build byte-identical to a
-whole one. The same pieces work by hand:
+The scheduled publish builds a run in pieces. Bundles are independent of one
+another, so `publish.yml` splits them into groups (`xuebuild
+bundle-groups`, at most `max_jobs` of roughly equal cost) and builds each in
+a job of its own: the job fetches only its bundles' GRIB records, packs them
+(`build-bin --bundles …`), syncs and warms what it built (`make
+upload-r2-bundles`) and hands on a partial manifest,
+`manifest.part.<group>.json`, as a workflow artifact. One last job merges
+the parts (`xuebuild assemble-run`), uploads and warms the manifest and
+takes the run live (`make upload-r2-manifest`), then prunes. Wall time is
+one group's build and stays flat as bundles are added;
+`tests/test_assemble.py` holds a split build byte-identical to a whole one.
+By hand:
 
 ```sh
-# on as many machines as you like, one group each
+# one group per machine
 .venv/bin/python -m xuebuild build-bin --model gfs --run 2026081600 --profile balanced --bundles tmp2m prate
 make upload-r2-bundles MODEL=gfs RUN=2026081600
 # then, with every manifest.part.*.json gathered into web/public/data/gfs.2026081600/
@@ -444,15 +371,12 @@ make upload-r2-bundles MODEL=gfs RUN=2026081600
 make upload-r2-manifest MODEL=gfs RUN=2026081600    # manifest, warm it, then the pointer
 ```
 
-When the cycle R2 already serves is still the newest one, the publish
-normally has nothing to do — unless the source has started publishing
-bundles that run does not carry (a variable landed between two cycles).
-Then it **tops the run up**: `bundle-groups --base-manifest` lists only the
-bundles the live manifest lacks, those groups are built and uploaded as
-above, and `assemble-run --base-manifest` merges their parts onto the live
-manifest, so the pointer flips to the manifest a whole build would have
-written today without rebuilding the thirty-odd bundles already there.
-`force` still rebuilds everything. By hand:
+When the cycle R2 already serves is still the newest one, the publish has
+nothing to do unless the source has started publishing bundles that run
+does not carry. Then it tops the run up: `bundle-groups --base-manifest`
+lists only the bundles the live manifest lacks, those groups are built and
+uploaded as above, and `assemble-run --base-manifest` merges their parts
+onto the live manifest. `force` rebuilds everything. By hand:
 
 ```sh
 make live-manifest MODEL=gfs > live-manifest.json
@@ -468,25 +392,24 @@ redeploying when frontend code changes.
 
 ### The MRMS rolling window
 
-The radar mosaic is published differently, because it is observations
-and never complete: [`publish-mrms.yml`](.github/workflows/publish-mrms.yml)
-runs one job an hour that loops through
-[`scripts/mrms_rounds.sh`](scripts/mrms_rounds.sh) — a round every five
-minutes until five to the hour, then the next hour's cron takes over
-(GitHub's cron is too coarse and too late for a five-minute cadence, so
-the job keeps its own time). A round compares the bucket's newest frame
-with the live round's `window.json` (`make live-window`) and, when there
-is something new, builds the whole window again (`build-bin --run latest
---hours 4 --round HHMM`; frames already on disk are reused and the
-previous run's are linked across when the window crosses an hour),
-uploads the round with `make upload-r2 … ROUND=HHMM` (the bundles,
-manifest and window record into `mrms.<run>/<HHMM>/`, warmed, then the
-pointer), and prunes: the rounds before the newest two of the run (`make
-prune-r2-rounds`, never the one the pointer names), then the runs before
+The radar mosaic is observations and never complete, so
+[`publish-mrms.yml`](.github/workflows/publish-mrms.yml) runs one job an
+hour that loops through [`scripts/mrms_rounds.sh`](scripts/mrms_rounds.sh),
+a round every five minutes until five to the hour (GitHub's cron is too
+coarse for a five-minute cadence). A round compares the bucket's newest
+frame with the live round's `window.json` (`make live-window`) and, when
+there is something new, builds the whole window again (`build-bin --run
+latest --hours 4 --round HHMM`; frames already on disk are reused, and the
+previous run's are linked across when the window crosses an hour), uploads
+the round with `make upload-r2 … ROUND=HHMM` into `mrms.<run>/<HHMM>/`
+(warmed, then the pointer), and prunes: rounds before the run's newest two
+(`make prune-r2-rounds`, never the one the pointer names), then runs before
 the newest two (`make prune-r2 KEEP=2`, so a viewer still on the previous
-window keeps its artifacts). One log line per round records the newest
-frame's age when the pointer was written and each step's seconds. By
-hand:
+window keeps its artifacts). Each round goes into its own subdirectory
+because the same run is rebuilt every five minutes and an object rewritten
+under an unchanged `?v=` would serve a viewer's range requests the wrong
+bytes. One log line per round records the newest frame's age when the
+pointer was written and each step's seconds. By hand:
 
 ```sh
 ONCE=true scripts/mrms_rounds.sh                     # one round, as the job would run it
@@ -497,17 +420,17 @@ make prune-r2-rounds MODEL=mrms && make prune-r2 MODEL=mrms KEEP=2
 
 ### Tropical cyclones
 
-Storm tracks are not rasters, so they are a second product beside the
-runs ([`docs/tc.md`](docs/tc.md)): every hour `xue tc-build` fetches the
-centres' and the models' own track files — JTWC's warnings, NHC's ATCF
-decks, the NCEP GFS and GEFS tracker output, ECMWF's `tf` BUFR (through
-eccodes' `bufr_dump`), IBTrACS — parses each, decides which sightings are
-one storm (ATCF ids first, invests and model-found systems by alias
-memory and proximity) and writes `web/public/data/tc.<hour>/` plus the
-pointer `latest-tc.json`. Each source fails on its own and is recorded in
-the product's `sources`; the pointer is withheld only when nothing
-contributed. [`publish-tc.yml`](.github/workflows/publish-tc.yml) runs it
-at twenty past every hour, independent of the raster publishes:
+Storm tracks are a second product beside the runs ([`docs/tc.md`](docs/tc.md)).
+Every hour `xue tc-build` fetches the centres' and the models' track files
+(JTWC's warnings, NHC's ATCF decks, the NCEP GFS and GEFS tracker output,
+ECMWF's `tf` BUFR through eccodes' `bufr_dump`, IBTrACS), parses each,
+resolves which sightings are one storm (ATCF ids first, invests and
+model-found systems by alias memory and proximity) and writes
+`web/public/data/tc.<hour>/` plus the pointer `latest-tc.json`. Each source
+fails on its own and is recorded in the product's `sources`; the pointer is
+withheld only when nothing contributed.
+[`publish-tc.yml`](.github/workflows/publish-tc.yml) runs at twenty past
+every hour, independent of the raster publishes:
 
 ```sh
 make live-tc-index                          # the live index, so ids carry over
@@ -517,31 +440,30 @@ make prune-r2-tc                            # issues older than two days
 .venv/bin/python -m xuebuild tc-build --issue 2026091206 --offline --raw-dir tests/fixtures/tc   # from the fixture
 ```
 
-The viewer draws it over any layer: the rail's storm tile opens a sheet of
-the systems the product carries, `?tc=<id>` deep-links one, and the agency
-forecasts (dashed ahead of the playhead, solid behind it, the wind radii
-at the current position), the best tracks and the model tracks follow the
+The viewer draws the product over any layer: the rail's storm tile opens a
+sheet of the systems the product carries, `?tc=<id>` deep-links one, and
+the agency forecasts (dashed ahead of the playhead, solid behind it, wind
+radii at the current position), best tracks and model tracks follow the
 timeline by valid time.
 
 ### The STAC catalog
 
-Beside the pointers, the manifests and `showcase.json` — all of which keep
-their shape — the encoder derives a static
-[STAC](https://stacspec.org/) catalog for clients that find data that way
-(`docs/stac.md`): `catalog.json` at the data root, one
+Beside the pointers, the manifests and `showcase.json`, which keep their
+shape, the encoder derives a static [STAC](https://stacspec.org/) catalog
+([`docs/stac.md`](docs/stac.md)): `catalog.json` at the data root, one
 `<source>/collection.json` per live source whose `item` / `latest-version`
-links name the live Item at the stable `<source>/item.json` (the run's
-Item with its hrefs relocated, so a bookmark outlives the run), one
-`<source>.<run>/item.json` per run beside its manifest with an asset per artifact (the Zarr store as
-`application/vnd.zarr`, sizes and CRCs under the file extension, the grid
-and axis as datacube dimensions, the cycle as
+links name the live Item at the stable `<source>/item.json` (the run's Item
+with its hrefs relocated, so a bookmark outlives the run), one
+`<source>.<run>/item.json` per run beside its manifest with an asset per
+artifact (the Zarr store as `application/vnd.zarr`, sizes and CRCs under
+the file extension, the grid and axis as datacube dimensions, the cycle as
 `forecast:reference_datetime`), and `showcase/collection.json` with an Item
-per case. Nothing is derived from anything but the manifest, the catalog
-row and the source registry, so the documents are the same whether a run
-was built whole or in pieces, and they are written wherever the manifest
-is: `build-bin`, `assemble-run`, `showcase build` / `refresh` / `catalog`.
-The upload targets carry them: an Item with its manifest, a Collection and
-the catalog with the pointer, the showcase's with `upload-r2-showcase`.
+per case. Every document is a function of the manifest, the catalog row and
+the source registry only, so it is the same whether a run was built whole
+or in pieces, and it is written wherever the manifest is: `build-bin`,
+`assemble-run`, `showcase build` / `refresh` / `catalog`. The upload
+targets carry them: an Item with its manifest, a Collection and the catalog
+with the pointer, the showcase's with `upload-r2-showcase`.
 
 ```python
 import pystac, xarray as xr
@@ -559,12 +481,11 @@ make test-e2e    # browser end-to-end tests
 
 Python tests cover the quantization codebooks, modulo-256 temporal
 residuals, container structure and rejection paths (truncation,
-out-of-range offsets, overlaps, gaps, nonzero padding, cyclic
-dependencies, checksum failures), the manifest contract, and the
-tropical cyclone product (each parser, the identity rules, the
-validators, and a build held to a committed golden). The Rust side
-adds cross-language golden tests decoding byte-identically against the
-Python reference, plus mutation fuzzing;
+out-of-range offsets, overlaps, gaps, nonzero padding, cyclic dependencies,
+checksum failures), the manifest contract, and the tropical cyclone product
+(each parser, the identity rules, the validators, and a build held to a
+committed golden). The Rust side adds cross-language golden tests decoding
+byte-identically against the Python reference, plus mutation fuzzing;
 `wasm-pack test --headless --chrome rust/xue-wasm` runs the decoder in a
 real browser. Browser tests cover bundle download and verification,
 on-demand loading and reuse, playback, scrubbing, and error recovery.
@@ -574,22 +495,21 @@ Fixture provenance and regeneration are documented in
 ## Data and Licensing
 
 Weather data comes from
-[NOAA GFS](https://registry.opendata.aws/noaa-gfs-bdp-pds/) (public
-domain) and
-[ECMWF open data](https://www.ecmwf.int/en/forecasts/datasets/open-data)
+[NOAA GFS](https://registry.opendata.aws/noaa-gfs-bdp-pds/) (public domain)
+and [ECMWF open data](https://www.ecmwf.int/en/forecasts/datasets/open-data)
 (CC BY 4.0, © European Centre for Medium-Range Weather Forecasts; this
-project distributes converted derivatives — "Contains modified ECMWF open
+project distributes converted derivatives: "Contains modified ECMWF open
 data"). The basemap is [Protomaps](https://protomaps.com)-hosted vector
 tiles, © [OpenStreetMap](https://www.openstreetmap.org/copyright)
 contributors.
 
 The code is dual-licensed under MIT and Apache-2.0
-([LICENSE-MIT](LICENSE-MIT) / [LICENSE-APACHE](LICENSE-APACHE)); use
-either at your option.
+([LICENSE-MIT](LICENSE-MIT) / [LICENSE-APACHE](LICENSE-APACHE)); use either
+at your option.
 
 ## Acknowledgments
 
 This project is built with [Claude Code](https://claude.com/claude-code),
 supported by a Claude Max (20x) subscription provided through Anthropic's
-[Claude for OSS](https://claude.com/contact-sales/claude-for-oss)
-program. Thank you.
+[Claude for OSS](https://claude.com/contact-sales/claude-for-oss) program.
+Thank you.
