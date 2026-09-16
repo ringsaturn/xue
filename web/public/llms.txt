@@ -239,15 +239,17 @@ https://dataset.ringsaturn.me/xue/. The contract is two layers:
   pointer `latest-airport.json` names `airport.<YYYYMMDDHHMM>/index.json`,
   which carries every station's position and newest observation as a
   compact row (`icao`, `lat`, `lon`, `elev`, `obsTime`, `t`, `td`, `wd`,
-  `ws`, `gust`, `vis`, `qnh`, `category`, `tafPresent`) and names the
-  shards, `airport-shards/<ICAO prefix>-<crc32>.json`, each holding its
-  stations' last 24 hours of METARs and their current TAF. Units are SI
-  (°C, m/s, metres, hPa; `vis` 10000 means ten kilometres or more), the
-  report and the bulletin are kept verbatim in `raw`, and a shard's file
-  name is the CRC32 of its own bytes, so only the shards that changed are
-  written each round. Source: the NOAA Aviation Weather Center's cache
-  files (public domain), the world's services' observations via WMO
-  exchange.
+  `ws`, `gust`, `vis`, `qnh`, `category`, `tafPresent`, `offset`,
+  `length`) and names `history.jsonl` beside it with that file's length
+  and CRC32. The history file is one line per station, sorted by ICAO —
+  the station with its last 24 hours of METARs and its current TAF — so
+  one airport is one range request over the row's `offset` / `length`
+  (the span is the JSON object alone and parses by itself) and the whole
+  set is one streamed file. Units are SI (°C, m/s, metres, hPa; `vis`
+  10000 means ten kilometres or more; `wd` null means a variable
+  direction) and the report and the bulletin are kept verbatim in `raw`.
+  Source: the NOAA Aviation Weather Center's cache files (public domain),
+  the world's services' observations via WMO exchange.
 
 A `.xue` bundle is one gridded variable (or a u/v pair) for a whole run:
 8-bit quantized planes on the native grid, temporal residual prediction in
@@ -278,8 +280,7 @@ format is specified in `docs/format.md` (link below). Decoders you can call:
   units, identity rules, the index, storm and pointer files.
 - [Airport product](https://github.com/ringsaturn/xue/blob/main/docs/airport.md):
   the normative description of the ten-minute METAR / TAF product —
-  delivery and its content-addressed shards, units, sharding, the index,
-  shard and pointer files.
+  delivery, units, identity, and the index, history and pointer files.
 - [STAC catalog](https://github.com/ringsaturn/xue/blob/main/docs/stac.md):
   the catalog / collection / item layout derived beside the manifests, what
   each document carries and where it comes from.

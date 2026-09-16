@@ -513,21 +513,21 @@ airport-build` fetches three cached files from the NOAA Aviation Weather
 Center (the world's decoded METARs of the last ninety minutes, every
 current TAF, and the station table at most once a day), converts them to
 SI, merges the observations onto the previous round's 24-hour history and
-writes `web/public/data/airport.<round>/index.json` plus the pointer
-`latest-airport.json`. The history lives in shards under
-`airport-shards/`, one per ICAO prefix, each named by the CRC32 of its own
-bytes — so a round rewrites only the hundred or so shards whose stations
-reported, and the index names the rest by the names they already have.
-Either observation source may fail on its own; the pointer is withheld only
-when both do.
+writes `web/public/data/airport.<round>/` — `history.jsonl`, one line per
+station, and the `index.json` that carries each station's newest
+observation and the byte span of its line — plus the pointer
+`latest-airport.json`. So the browser reads one airport with one range
+request, and anyone wanting the whole day streams a single file instead of
+listing a thousand. Either observation source may fail on its own; the
+pointer is withheld only when both do.
 [`publish-airport.yml`](.github/workflows/publish-airport.yml) runs every
 ten minutes, independent of the raster publishes:
 
 ```sh
-make live-airport-index                      # the live index and its shards: the history
+make live-airport-index                      # the live index and its history file
 make airport-build                           # this round, into web/public/data/
-make upload-r2-airport ROUND=202609161440    # shards, then the index, then the pointer
-make prune-r2-airport && make prune-r2-airport-shards   # rounds older than three hours, then the shards nothing names
+make upload-r2-airport ROUND=202609161440    # the history, then the index, then the pointer
+make prune-r2-airport                        # rounds older than three hours
 .venv/bin/python -m xuebuild airport-build --round 202609161430 --offline --raw-dir tests/fixtures/airport   # from the fixture
 ```
 

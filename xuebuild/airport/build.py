@@ -1,25 +1,27 @@
 """``airport-build``: one round's fetched files and the previous round's
-shards → one immutable round directory, the shards that changed, and the
-live pointer. The only module where the three sources meet.
+history → one immutable round directory and the live pointer. The only
+module where the three sources meet.
 
 The product is a rolling 24 hours of observations, and the AWC's cache
 holds ninety minutes of them, so each round is a merge rather than a
-snapshot: the previous round's shards are the history, this round's METARs
-are laid over it keyed by (station, observation time) with the new report
-winning, and anything older than :data:`~.schema.HISTORY_HOURS` before the
-round falls off the end. A station that did not report this round keeps
-its history untouched; a station that reported but is not in the station
-table gets an entry with a null name and the report's own position.
+snapshot: the previous round's ``history.jsonl`` is the history, this
+round's METARs are laid over it keyed by (station, observation time) with
+the new report winning, and anything older than
+:data:`~.schema.HISTORY_HOURS` before the round falls off the end. A
+station that did not report this round keeps its history untouched; a
+station that reported but is not in the station table gets an entry with a
+null name and the report's own position.
 
-Writing is content-addressed. Every shard is built, encoded and measured;
-one whose CRC32 equals what the previous index recorded is *not* written —
-the index simply names the file that is already there. A round in which
-forty stations reported therefore costs forty shard objects, not five
-thousand stations' worth of bytes (``docs/airport.md`` §1).
+A round writes two files. ``history.jsonl`` is one line per station,
+sorted by ICAO — the same compact JSON object the reader validates, then a
+newline — and ``index.json`` carries every station's newest observation
+plus the byte span of its line. So a browser reads one airport with one
+range request against a file it can address by CRC32, and an analyst reads
+the whole day by streaming one object rather than listing a thousand.
 
 The pointer is withheld only when both the METARs and the TAFs failed, in
 which case the previous round stays live: one of the two is enough to
-publish, and the history is in the shards either way.
+publish, and the history carries over either way.
 """
 
 from __future__ import annotations
@@ -35,22 +37,19 @@ from ..pointproduct import iso_z
 from .fetch import SOURCE_IDS, SourceStatus, read_fetch_record
 from .metar import MetarReport, parse_metars
 from .schema import (
+    HISTORY_FILENAME,
     HISTORY_HOURS,
     INDEX_FILENAME,
     POINTER_FILENAME,
     SCHEMA_VERSION,
-    SHARD_DIRECTORY,
     build_pointer,
     crc32_hex,
     encode_json,
     read_index,
     round_directory,
     round_name,
-    shard_filename,
-    shard_key,
-    shard_path,
+    validate_history_station,
     validate_index,
-    validate_shard,
     write_bytes_atomic,
 )
 from .stations import Station, parse_stations
@@ -65,12 +64,13 @@ def _published(status: SourceStatus) -> dict[str, Any]:
     return {key: value for key, value in status.to_json().items() if key != "file"}
 
 
-def _station_payload(entry: dict[str, Any], table: Station | None) -> dict[str, Any]:
-    """One station as a shard writes it. The station table wins over what
+def _station_payload(icao: str, entry: dict[str, Any], table: Station | None) -> dict[str, Any]:
+    """One station as a line of the history file. The station table wins over what
     a report carries — it does not change from report to report — and what
     the table does not know falls back to the report, then to what the
     previous round held."""
     payload = {
+        "icao": icao,
         "name": entry.get("name"),
         "lat": entry["lat"],
         "lon": entry["lon"],
@@ -89,52 +89,42 @@ def _station_payload(entry: dict[str, Any], table: Station | None) -> dict[str, 
     return payload
 
 
-def _read_previous_shards(output_root: Path, previous_index: dict[str, Any] | None) -> tuple[dict[str, dict[str, Any]], dict[str, str], list[str]]:
-    """The shards the previous index names, by shard key, with the CRC32 it
-    recorded for each and the keys whose file could not be read.
+def _read_previous_history(output_root: Path, previous_index: dict[str, Any] | None) -> dict[str, dict[str, Any]]:
+    """The previous round's stations, by ICAO id, read line by line out of
+    the ``history.jsonl`` its index names.
 
-    A shard is read from the one place the contract puts it — the shard
-    directory beside the round directories — under the name the index's
-    CRC32 makes: the index's ``path`` says the same thing relative to its
-    own round directory."""
-    payloads: dict[str, dict[str, Any]] = {}
-    crcs: dict[str, str] = {}
-    missing: list[str] = []
-    if not previous_index:
-        return payloads, crcs, missing
-    for shard, entry in sorted(previous_index.get("shards", {}).items()):
-        crc32 = entry["crc32"]
-        path = output_root / SHARD_DIRECTORY / shard_filename(shard, crc32)
-        try:
-            payload = json.loads(path.read_bytes())
-        except (OSError, json.JSONDecodeError) as exc:
-            LOG.warning("airport: shard %s is not readable (%s); its history starts again", shard, exc)
-            missing.append(shard)
-            continue
-        stations = payload.get("stations")
-        if not isinstance(stations, dict):
-            LOG.warning("airport: shard %s is malformed; its history starts again", shard)
-            missing.append(shard)
-            continue
-        payloads[shard] = payload
-        crcs[shard] = crc32
-    return payloads, crcs, missing
-
-
-def _entries_from_previous(shards: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    A history that cannot be read is not fatal: the round publishes what
+    the AWC cache holds and every station's window starts again, which is
+    the state of a first build anyway."""
     entries: dict[str, dict[str, Any]] = {}
-    for payload in shards.values():
-        for icao, station in payload["stations"].items():
-            entries[icao] = {
-                "name": station.get("name"),
-                "lat": station.get("lat"),
-                "lon": station.get("lon"),
-                "elev": station.get("elev"),
-                "iata": station.get("iata"),
-                "wmo": station.get("wmo"),
-                "reports": {report["time"]: report for report in station.get("metars", [])},
-                "taf": station.get("taf"),
-            }
+    if not previous_index:
+        return entries
+    issued = datetime.fromisoformat(previous_index["issued"])
+    path = output_root / round_directory(issued) / previous_index["history"]["path"]
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        LOG.warning("airport: %s is not readable (%s); the history starts again", path, exc)
+        return entries
+    for number, line in enumerate(text.splitlines(), start=1):
+        if not line.strip():
+            continue
+        try:
+            station = json.loads(line)
+            icao = station["icao"]
+        except (json.JSONDecodeError, KeyError, TypeError) as exc:
+            LOG.warning("airport: %s line %d is not a station (%s); skipping it", path, number, exc)
+            continue
+        entries[icao] = {
+            "name": station.get("name"),
+            "lat": station.get("lat"),
+            "lon": station.get("lon"),
+            "elev": station.get("elev"),
+            "iata": station.get("iata"),
+            "wmo": station.get("wmo"),
+            "reports": {report["time"]: report for report in station.get("metars", [])},
+            "taf": station.get("taf"),
+        }
     return entries
 
 
@@ -163,9 +153,9 @@ def build_product(
     force: bool = False,
     now: datetime | None = None,
 ) -> dict[str, Any]:
-    """Read the round's fetched files and the previous round's shards,
-    write ``airport.<round>/index.json``, the shards that changed and,
-    unless both observation sources failed, the pointer."""
+    """Read the round's fetched files and the previous round's history,
+    write ``airport.<round>/`` — the history file and the index over it —
+    and, unless both observation sources failed, the pointer."""
     now = now or datetime.now(UTC)
     directory = output_root / round_directory(moment)
     if (directory / INDEX_FILENAME).exists() and not force:
@@ -204,8 +194,7 @@ def build_product(
                 status = SourceStatus(source_id, False, fetched=status.fetched, url=status.url, error=f"parse: {exc}")
         statuses.append(status)
 
-    previous_shards, previous_crcs, missing = _read_previous_shards(output_root, previous_index)
-    entries = _entries_from_previous(previous_shards)
+    entries = _read_previous_history(output_root, previous_index)
     for report in reports:
         _add_report(entries, report)
 
@@ -224,31 +213,17 @@ def build_product(
             # round's forecast is kept rather than silently dropped.
             forecast = forecasts.get(icao)
             entry["taf"] = forecast.to_json() if forecast is not None else None
-        stations[icao] = _station_payload(entry, table.get(icao))
+        stations[icao] = _station_payload(icao, entry, table.get(icao))
 
-    shard_stations: dict[str, dict[str, Any]] = {}
-    for icao, station in stations.items():
-        shard_stations.setdefault(shard_key(icao), {})[icao] = station
-
-    shards: dict[str, dict[str, Any]] = {}
-    written = 0
-    unchanged = 0
-    for shard in sorted(shard_stations):
-        payload = {"schemaVersion": SCHEMA_VERSION, "shard": shard, "stations": shard_stations[shard]}
-        validate_shard(payload)
-        body = encode_json(payload)
-        crc32 = crc32_hex(body)
-        path = output_root / SHARD_DIRECTORY / shard_filename(shard, crc32)
-        if previous_crcs.get(shard) == crc32:
-            unchanged += 1
-        else:
-            written += 1
-        if not path.exists():
-            write_bytes_atomic(path, body)
-        shards[shard] = {"path": shard_path(shard, crc32), "byteLength": len(body), "crc32": crc32}
-
+    # One line per station, and the index's row for it carries the span of
+    # the object alone — not the newline — so a reader's range request
+    # slices out something that parses as JSON on its own.
+    lines: list[bytes] = []
     rows = []
+    offset = 0
     for icao, station in stations.items():
+        validate_history_station(station, f"history[{icao}]")
+        line = encode_json(station)
         newest = station["metars"][0]
         rows.append(
             [
@@ -266,14 +241,24 @@ def build_product(
                 newest["qnh"],
                 newest["category"],
                 1 if station["taf"] else 0,
+                offset,
+                len(line),
             ]
         )
+        lines.append(line)
+        offset += len(line) + 1  # the newline
+    history = b"\n".join(lines) + (b"\n" if lines else b"")
+    write_bytes_atomic(directory / HISTORY_FILENAME, history)
 
     index = {
         "schemaVersion": SCHEMA_VERSION,
         "issued": iso_z(moment),
         "generated": iso_z(now),
-        "shards": shards,
+        "history": {
+            "path": HISTORY_FILENAME,
+            "byteLength": len(history),
+            "crc32": crc32_hex(history),
+        },
         "stations": rows,
         "sources": [_published(status) for status in statuses],
     }
@@ -294,14 +279,14 @@ def build_product(
         "stations": len(rows),
         "reports": sum(len(station["metars"]) for station in stations.values()),
         "tafs": sum(1 for station in stations.values() if station["taf"]),
-        "shards": {"total": len(shards), "written": written, "unchanged": unchanged, "missing": missing},
+        "history": {"byteLength": len(history), "stations": len(rows)},
         "sources": index["sources"],
         "pointer": None if pointer_path is None else str(pointer_path),
     }
 
 
 def load_previous_index(path: Path | None, output_root: Path) -> dict[str, Any] | None:
-    """The previous round's index, whose shards are this round's history:
+    """The previous round's index, whose history file is this round's:
     the one given, else the one the local pointer names, else nothing (a
     first build, or a fresh checkout — the history then starts from the
     ninety minutes the AWC cache holds)."""

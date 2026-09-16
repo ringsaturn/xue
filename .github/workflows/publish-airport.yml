@@ -3,8 +3,9 @@ name: publish airport
 # The airport METAR / TAF product (docs/airport.md): the world's decoded
 # observations and current forecasts from the NOAA Aviation Weather Center,
 # merged every ten minutes onto the previous round's 24-hour history and
-# published as one immutable airport.<round>/ index plus the shards that
-# changed. Independent of the raster publishes — nothing here reads a run,
+# published as one immutable airport.<round>/ — a history file with a line
+# per station and the index that spans it. Independent of the raster
+# publishes — nothing here reads a run,
 # and a red run does not hold this back — and cheap: three GETs of a few
 # hundred kilobytes, no GDAL, no eccodes, no wheel, well under a minute.
 #
@@ -37,7 +38,7 @@ permissions:
   contents: read
 
 # One at a time: the pointer is the product's only mutable object, and the
-# previous round's shards are what this round's history is merged onto.
+# previous round's history file is what this round is merged onto.
 concurrency:
   group: publish-airport
   cancel-in-progress: false
@@ -68,10 +69,10 @@ jobs:
       - name: Sync Python environment
         run: uv sync
 
-      # The live index and the shards it names are the history: without them
-      # every station's 24 hours would start again from the ninety minutes
-      # the AWC cache holds.
-      - name: Fetch the live index and its shards
+      # The live index and its history file are this round's history:
+      # without them every station's 24 hours would start again from the
+      # ninety minutes the AWC cache holds.
+      - name: Fetch the live index and its history
         run: make live-airport-index
 
       # A round is immutable once the pointer names it (docs/airport.md), so
@@ -105,7 +106,7 @@ jobs:
             echo "### airport $round"
             echo
             echo '```json'
-            jq '{stations, reports, tafs, shards, sources: [.sources[] | "\(.id): \(if .ok then "ok \(.reports // 0)" else .error end)"], pointer}' airport-report.json
+            jq '{stations, reports, tafs, history, sources: [.sources[] | "\(.id): \(if .ok then "ok \(.reports // 0)" else .error end)"], pointer}' airport-report.json
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -117,7 +118,7 @@ jobs:
           retention-days: 14
           if-no-files-found: ignore
 
-      # The shards and the round directory go up immutable, then the pointer
+      # The history file and the index go up immutable, then the pointer
       # takes them live. A build that withheld the pointer (neither
       # observation source arrived) stops here with the previous round live.
       - name: Upload and take the round live
@@ -133,10 +134,3 @@ jobs:
       - name: Delete rounds older than the retention
         if: steps.build.outputs.skipped != 'true'
         run: make prune-r2-airport AIRPORT_KEEP="$AIRPORT_KEEP" DRY_RUN="$DRY_RUN"
-
-      # And then the shards no kept round names any more: the round
-      # directories are not where the history lives, so this is what bounds
-      # the product's size on the bucket.
-      - name: Delete shards no kept round names
-        if: steps.build.outputs.skipped != 'true'
-        run: make prune-r2-airport-shards AIRPORT_KEEP="$AIRPORT_KEEP" DRY_RUN="$DRY_RUN"

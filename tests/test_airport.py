@@ -1,7 +1,7 @@
 """The airport product (``xuebuild/airport``): the two readers on the
-fetched fixture and on constructed edge cases, the sharding and merge
-rules on rounds built to trip them, the validators on malformed input, and
-two consecutive rounds held to a committed golden.
+fetched fixture and on constructed edge cases, the merge and the history
+file's byte spans on rounds built to trip them, the validators on
+malformed input, and two consecutive rounds held to a committed golden.
 """
 
 from __future__ import annotations
@@ -16,8 +16,8 @@ from xuebuild.airport.build import build_product, load_previous_index
 from xuebuild.airport.fetch import FETCH_FILENAME, SOURCE_IDS
 from xuebuild.airport.metar import parse_metars
 from xuebuild.airport.schema import (
+    HISTORY_FILENAME,
     HISTORY_HOURS,
-    SHARD_DIRECTORY,
     build_pointer,
     crc32_hex,
     encode_json,
@@ -25,11 +25,9 @@ from xuebuild.airport.schema import (
     parse_round,
     read_index,
     round_directory,
-    shard_key,
-    shard_path,
+    validate_history_station,
     validate_index,
     validate_pointer,
-    validate_shard,
 )
 from xuebuild.airport.stations import parse_stations
 from xuebuild.airport.taf import parse_tafs
@@ -316,14 +314,26 @@ class StationTableTests(unittest.TestCase):
             parse_stations("{}")
 
 
-class ShardingTests(unittest.TestCase):
-    def test_the_key_is_two_letters_and_three_under_k(self) -> None:
-        self.assertEqual(shard_key("RJTT"), "RJ")
-        self.assertEqual(shard_key("ZBAA"), "ZB")
-        self.assertEqual(shard_key("KABQ"), "KAB")
-        self.assertEqual(shard_key("KJFK"), "KJF")
-        self.assertEqual(shard_path("RJ", "1f3a9c2e"), "../airport-shards/RJ-1f3a9c2e.json")
+def history_of(directory: Path) -> tuple[bytes, dict[str, dict]]:
+    """A round's history file and its stations by ICAO, read as a reader
+    would: the whole file, line by line."""
+    raw = (directory / HISTORY_FILENAME).read_bytes()
+    stations = {}
+    for line in raw.decode("ascii").splitlines():
+        station = json.loads(line)
+        stations[station["icao"]] = station
+    return raw, stations
 
+
+def slice_station(directory: Path, index: dict, icao: str) -> dict:
+    """One station, the way the browser reads it: the row's byte span out
+    of the history file, parsed on its own."""
+    raw = (directory / HISTORY_FILENAME).read_bytes()
+    row = next(row for row in index["stations"] if row[0] == icao)
+    return json.loads(raw[row[14] : row[14] + row[15]])
+
+
+class RoundTests(unittest.TestCase):
     def test_rounds_are_ten_minute_minutes(self) -> None:
         self.assertEqual(parse_round("202609161430"), datetime(2026, 9, 16, 14, 30, tzinfo=UTC))
         self.assertEqual(round_directory(parse_round("202609161430")), "airport.202609161430")
@@ -334,8 +344,8 @@ class ShardingTests(unittest.TestCase):
 
 
 class BuildTests(unittest.TestCase):
-    """The merge, the history window and the content-addressed shards, on
-    rounds small enough to reason about."""
+    """The merge, the history window and the index's byte spans, on rounds
+    small enough to reason about."""
 
     def scratch(self) -> tuple[Path, Path]:
         directory = Path(self.enterContext(tempfile.TemporaryDirectory()))
@@ -367,16 +377,17 @@ class BuildTests(unittest.TestCase):
             ),
         )
         report = self.build(raw, output, "202609161440")
-        index = read_index(output / "airport.202609161440" / "index.json")
-        shard = json.loads((output / SHARD_DIRECTORY / Path(index["shards"]["RJ"]["path"]).name).read_bytes())
-        times = [metar["time"] for metar in shard["stations"]["RJTT"]["metars"]]
+        directory = output / "airport.202609161440"
+        index = read_index(directory / "index.json")
+        haneda = slice_station(directory, index, "RJTT")
+        times = [metar["time"] for metar in haneda["metars"]]
         self.assertEqual(times, ["2026-09-16T14:40:00Z", "2026-09-16T14:30:00Z"])
-        self.assertEqual([metar["t"] for metar in shard["stations"]["RJTT"]["metars"]], [23.0, 22.0])
+        self.assertEqual([metar["t"] for metar in haneda["metars"]], [23.0, 22.0])
         self.assertEqual(report["stations"], 2)
         self.assertEqual([row[0] for row in index["stations"]], ["RJTT", "ZBAA"])
         self.assertEqual(index["stations"][0][4], "2026-09-16T14:40:00Z")
 
-    def test_a_station_that_did_not_report_keeps_its_history_and_its_shard(self) -> None:
+    def test_a_station_that_did_not_report_keeps_its_history(self) -> None:
         raw, output = self.scratch()
         write_round(
             raw,
@@ -387,29 +398,48 @@ class BuildTests(unittest.TestCase):
             ),
         )
         first = self.build(raw, output, "202609161430")
-        self.assertEqual(first["shards"], {"total": 2, "written": 2, "unchanged": 0, "missing": []})
+        self.assertEqual(first["history"]["stations"], 2)
         write_round(raw, "202609161440", csv_document(metar_row("ZBAA", "2026-09-16T14:40:00.000Z")))
-        second = self.build(raw, output, "202609161440")
-        self.assertEqual(second["shards"]["written"], 1)
-        self.assertEqual(second["shards"]["unchanged"], 1)
-        before = read_index(output / "airport.202609161430" / "index.json")
-        after = read_index(output / "airport.202609161440" / "index.json")
-        self.assertEqual(before["shards"]["RJ"], after["shards"]["RJ"])  # same name, not rewritten
-        self.assertNotEqual(before["shards"]["ZB"], after["shards"]["ZB"])
-        self.assertEqual(after["stations"][0][0], "RJTT")
+        self.build(raw, output, "202609161440")
+        directory = output / "airport.202609161440"
+        index = read_index(directory / "index.json")
+        self.assertEqual([row[0] for row in index["stations"]], ["RJTT", "ZBAA"])
+        untouched = slice_station(directory, index, "RJTT")
+        self.assertEqual([metar["time"] for metar in untouched["metars"]], ["2026-09-16T14:30:00Z"])
+        reported = slice_station(directory, index, "ZBAA")
+        self.assertEqual(
+            [metar["time"] for metar in reported["metars"]],
+            ["2026-09-16T14:40:00Z", "2026-09-16T14:30:00Z"],
+        )
 
-    def test_a_shard_is_named_by_the_crc32_of_its_own_bytes(self) -> None:
+    def test_every_row_spans_its_own_station_and_the_spans_cover_the_file(self) -> None:
         raw, output = self.scratch()
-        write_round(raw, "202609161430", csv_document(metar_row("RJTT", "2026-09-16T14:30:00.000Z")))
+        write_round(
+            raw,
+            "202609161430",
+            csv_document(
+                metar_row("RJTT", "2026-09-16T14:30:00.000Z"),
+                metar_row("ZBAA", "2026-09-16T14:30:00.000Z"),
+                metar_row("KABQ", "2026-09-16T14:30:00.000Z"),
+            ),
+        )
         self.build(raw, output, "202609161430")
-        index = read_index(output / "airport.202609161430" / "index.json")
-        for shard, entry in index["shards"].items():
-            path = output / "airport.202609161430" / entry["path"]
-            payload = path.read_bytes()
-            self.assertEqual(path.name, f"{shard}-{crc32_hex(payload)}.json")
-            self.assertEqual(len(payload), entry["byteLength"])
-            self.assertEqual(crc32_hex(payload), entry["crc32"])
-            validate_shard(json.loads(payload))
+        directory = output / "airport.202609161430"
+        index = read_index(directory / "index.json")
+        history, stations = history_of(directory)
+        self.assertEqual((len(history), crc32_hex(history)), (index["history"]["byteLength"], index["history"]["crc32"]))
+        self.assertEqual(index["history"]["path"], HISTORY_FILENAME)
+        covered = 0
+        for row in index["stations"]:
+            icao, offset, length = row[0], row[14], row[15]
+            station = json.loads(history[offset : offset + length])  # the object alone parses
+            self.assertEqual(station["icao"], icao)
+            self.assertEqual(station, stations[icao])
+            validate_history_station(station, f"history[{icao}]")
+            self.assertEqual(history[offset + length : offset + length + 1], b"\n")
+            self.assertEqual(offset, covered)  # contiguous, in row order
+            covered += length + 1
+        self.assertEqual(covered, len(history))  # and covering the file exactly
 
     def test_reports_older_than_the_window_fall_off(self) -> None:
         raw, output = self.scratch()
@@ -419,9 +449,10 @@ class BuildTests(unittest.TestCase):
         name = later.strftime("%Y%m%d%H%M")
         write_round(raw, name, csv_document(metar_row("RJTT", f"{later:%Y-%m-%dT%H:%M}:00.000Z")))
         self.build(raw, output, name)
-        index = read_index(output / f"airport.{name}" / "index.json")
-        shard = json.loads((output / SHARD_DIRECTORY / Path(index["shards"]["RJ"]["path"]).name).read_bytes())
-        self.assertEqual([metar["time"] for metar in shard["stations"]["RJTT"]["metars"]], [f"{later:%Y-%m-%dT%H:%M}:00Z"])
+        directory = output / f"airport.{name}"
+        index = read_index(directory / "index.json")
+        haneda = slice_station(directory, index, "RJTT")
+        self.assertEqual([metar["time"] for metar in haneda["metars"]], [f"{later:%Y-%m-%dT%H:%M}:00Z"])
 
     def test_a_station_leaves_when_nothing_is_left_in_the_window(self) -> None:
         raw, output = self.scratch()
@@ -447,18 +478,15 @@ class BuildTests(unittest.TestCase):
             ),
         )
         report = self.build(raw, output, name)
-        index = read_index(output / f"airport.{name}" / "index.json")
+        directory = output / f"airport.{name}"
+        index = read_index(directory / "index.json")
         self.assertEqual([row[0] for row in index["stations"]], ["RJAA", "ZBAA"])
         self.assertEqual(report["stations"], 2)
-        shard = json.loads((output / SHARD_DIRECTORY / Path(index["shards"]["RJ"]["path"]).name).read_bytes())
-        self.assertEqual(sorted(shard["stations"]), ["RJAA"])  # RJTT is gone from the shard too
-        # And a whole shard whose only station aged out is not named at all.
-        after = later + timedelta(hours=HISTORY_HOURS + 1)
-        write_round(raw, after.strftime("%Y%m%d%H%M"), csv_document(metar_row("ZBAA", f"{after:%Y-%m-%dT%H:%M}:00.000Z")))
-        self.build(raw, output, after.strftime("%Y%m%d%H%M"))
-        last = read_index(output / f"airport.{after:%Y%m%d%H%M}" / "index.json")
-        self.assertEqual([row[0] for row in last["stations"]], ["ZBAA"])
-        self.assertNotIn("RJ", last["shards"])
+        _, stations = history_of(directory)
+        self.assertEqual(sorted(stations), ["RJAA", "ZBAA"])  # RJTT left the history file too
+        # And the spans still cover the shortened file exactly.
+        history, _ = history_of(directory)
+        self.assertEqual(sum(row[15] + 1 for row in index["stations"]), len(history))
 
     def test_the_station_table_names_the_station_and_a_stranger_keeps_its_own_position(self) -> None:
         raw, output = self.scratch()
@@ -475,11 +503,12 @@ class BuildTests(unittest.TestCase):
             encoding="utf-8",
         )
         self.build(raw, output, "202609161430")
-        index = read_index(output / "airport.202609161430" / "index.json")
-        shard = json.loads((output / SHARD_DIRECTORY / Path(index["shards"]["RJ"]["path"]).name).read_bytes())
-        self.assertEqual(shard["stations"]["RJTT"]["name"], "Tokyo/Haneda Intl")
-        self.assertEqual(shard["stations"]["RJTT"]["iata"], "HND")
-        stranger = shard["stations"]["RJXX"]
+        directory = output / "airport.202609161430"
+        index = read_index(directory / "index.json")
+        haneda = slice_station(directory, index, "RJTT")
+        self.assertEqual(haneda["name"], "Tokyo/Haneda Intl")
+        self.assertEqual(haneda["iata"], "HND")
+        stranger = slice_station(directory, index, "RJXX")
         self.assertIsNone(stranger["name"])
         self.assertEqual((stranger["lat"], stranger["lon"], stranger["elev"]), (12.5, -70.25, 17.0))
 
@@ -559,21 +588,21 @@ class GoldenTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as scratch:
             output = Path(scratch)
             reports = self.build_both(output)
-            built = {
-                str(path.relative_to(output)): json.loads(path.read_bytes())
-                for path in sorted(output.rglob("*.json"))
-            }
-            expected = {
-                str(path.relative_to(EXPECTED)): json.loads(path.read_text(encoding="utf-8"))
-                for path in sorted(EXPECTED.rglob("*.json"))
-            }
+            built = {str(path.relative_to(output)): path for path in sorted(output.rglob("*")) if path.is_file()}
+            expected = {str(path.relative_to(EXPECTED)): path for path in sorted(EXPECTED.rglob("*")) if path.is_file()}
             self.assertEqual(sorted(built), sorted(expected))
             for name in sorted(expected):
                 with self.subTest(file=name):
-                    self.assertEqual(built[name], expected[name])
-            self.assertEqual(reports[0]["shards"]["unchanged"], 0)
-            self.assertGreater(reports[1]["shards"]["unchanged"], 0)
+                    if name.endswith(HISTORY_FILENAME):
+                        # Published as it is: the golden is these bytes.
+                        self.assertEqual(built[name].read_bytes(), expected[name].read_bytes())
+                    else:
+                        self.assertEqual(
+                            json.loads(built[name].read_bytes()),
+                            json.loads(expected[name].read_text(encoding="utf-8")),
+                        )
             self.assertGreater(reports[1]["reports"], reports[0]["reports"])
+            self.assertGreater(reports[1]["history"]["byteLength"], reports[0]["history"]["byteLength"])
             index_bytes = (output / f"airport.{ROUNDS[1]}" / "index.json").read_bytes()
             pointer = json.loads((output / "latest-airport.json").read_bytes())
             self.assertEqual((pointer["byteLength"], pointer["crc32"]), (len(index_bytes), crc32_hex(index_bytes)))
@@ -582,8 +611,8 @@ class GoldenTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as first, tempfile.TemporaryDirectory() as second:
             self.build_both(Path(first))
             self.build_both(Path(second))
-            left = {str(path.relative_to(first)): path.read_bytes() for path in sorted(Path(first).rglob("*.json"))}
-            right = {str(path.relative_to(second)): path.read_bytes() for path in sorted(Path(second).rglob("*.json"))}
+            left = {str(path.relative_to(first)): path.read_bytes() for path in sorted(Path(first).rglob("*")) if path.is_file()}
+            right = {str(path.relative_to(second)): path.read_bytes() for path in sorted(Path(second).rglob("*")) if path.is_file()}
             self.assertEqual(left, right)
 
 
@@ -591,13 +620,15 @@ class SchemaTests(unittest.TestCase):
     def index(self) -> dict[str, object]:
         return json.loads((EXPECTED / f"airport.{ROUNDS[1]}" / "index.json").read_text(encoding="utf-8"))
 
-    def shard(self) -> dict[str, object]:
-        path = next(path for path in sorted((EXPECTED / SHARD_DIRECTORY).iterdir()) if path.name.startswith("RJ-"))
-        return json.loads(path.read_text(encoding="utf-8"))
+    def station(self, icao: str = "RJTT") -> dict[str, object]:
+        directory = EXPECTED / f"airport.{ROUNDS[1]}"
+        return slice_station(directory, self.index(), icao)
 
     def test_the_golden_validates(self) -> None:
-        validate_index(self.index())
-        validate_shard(self.shard())
+        index = self.index()
+        validate_index(index)
+        for row in index["stations"]:
+            validate_history_station(self.station(row[0]), f"history[{row[0]}]")
         validate_pointer(json.loads((EXPECTED / "latest-airport.json").read_text(encoding="utf-8")))
 
     def test_rejects_a_malformed_index(self) -> None:
@@ -605,7 +636,8 @@ class SchemaTests(unittest.TestCase):
             ("schemaVersion", 2),
             ("issued", "2026-09-16T14:35:00Z"),  # not a round
             ("generated", "2026-09-16 14:46:20"),
-            ("shards", []),
+            ("history", []),
+            ("history", {"path": "../history.jsonl", "byteLength": 10, "crc32": "00000000"}),
             ("stations", {}),
             ("sources", [{"id": "awc-metars", "ok": False}]),
         ]
@@ -615,59 +647,61 @@ class SchemaTests(unittest.TestCase):
             with self.subTest(key=key), self.assertRaises(AirportProductError):
                 validate_index(payload)
 
-    def test_an_index_row_is_fourteen_values_in_order(self) -> None:
+    def test_an_index_row_is_sixteen_values_in_order(self) -> None:
         payload = self.index()
         rows = payload["stations"]
         assert isinstance(rows, list)
+        self.assertEqual(len(rows[0]), 16)
         with self.assertRaises(AirportProductError):
             validate_index({**payload, "stations": [rows[0][:-1]]})
         out_of_order = [rows[1], rows[0]]
         with self.assertRaises(AirportProductError):
             validate_index({**payload, "stations": out_of_order})
-        unnamed = list(rows[0])
-        unnamed[0] = "QQQQ"  # a shard the index does not carry
-        with self.assertRaises(AirportProductError):
-            validate_index({**payload, "stations": [unnamed]})
         wind = list(rows[0])
         wind[7] = 400
         with self.assertRaises(AirportProductError):
             validate_index({**payload, "stations": [wind]})
 
-    def test_a_shard_entry_must_name_its_own_bytes(self) -> None:
+    def test_a_row_span_must_lie_in_the_history_file(self) -> None:
         payload = self.index()
-        shards = payload["shards"]
-        assert isinstance(shards, dict)
-        moved = {key: dict(entry) for key, entry in shards.items()}
-        moved["RJ"]["path"] = "../airport-shards/RJ-00000000.json"
+        rows = payload["stations"]
+        assert isinstance(rows, list)
+        overlapping = [list(rows[0]), list(rows[1])]
+        overlapping[1][14] = overlapping[0][14]  # back over the first station
         with self.assertRaises(AirportProductError):
-            validate_index({**payload, "shards": moved})
-        absolute = {key: dict(entry) for key, entry in shards.items()}
-        absolute["RJ"]["path"] = f"/airport-shards/RJ-{absolute['RJ']['crc32']}.json"
+            validate_index({**payload, "stations": overlapping})
+        past_the_end = list(rows[-1])
+        # The last station's span ends one byte short of the file (its
+        # newline), so it takes two to reach past the end.
+        past_the_end[15] = past_the_end[15] + 2
         with self.assertRaises(AirportProductError):
-            validate_index({**payload, "shards": absolute})
+            validate_index({**payload, "stations": [*rows[:-1], past_the_end]})
+        negative = list(rows[0])
+        negative[14] = -1
+        with self.assertRaises(AirportProductError):
+            validate_index({**payload, "stations": [negative]})
+        empty = list(rows[0])
+        empty[15] = 0
+        with self.assertRaises(AirportProductError):
+            validate_index({**payload, "stations": [empty]})
 
-    def test_rejects_a_malformed_shard(self) -> None:
-        payload = self.shard()
-        stations = payload["stations"]
-        assert isinstance(stations, dict)
-        icao = next(iter(stations))
+    def test_rejects_a_malformed_history_station(self) -> None:
+        payload = self.station()
         with self.assertRaises(AirportProductError):
-            validate_shard({**payload, "shard": "ZB"})  # the stations do not belong to it
+            validate_history_station({**payload, "icao": "haneda"}, "line")
         with self.assertRaises(AirportProductError):
-            validate_shard({**payload, "stations": {icao: {**stations[icao], "metars": []}}})
-        reversed_history = dict(stations[icao])
-        reversed_history["metars"] = list(reversed(reversed_history["metars"]))
-        if len(reversed_history["metars"]) > 1:
+            validate_history_station({**payload, "metars": []}, "line")
+        with self.assertRaises(AirportProductError):
+            validate_history_station({**payload, "lat": 91.0}, "line")
+        metars = payload["metars"]
+        assert isinstance(metars, list)
+        if len(metars) > 1:
             with self.assertRaises(AirportProductError):
-                validate_shard({**payload, "stations": {icao: reversed_history}})
-        broken = dict(stations[icao])
-        broken["metars"] = [{**broken["metars"][0], "cloud": [["FEW"]]}]
+                validate_history_station({**payload, "metars": list(reversed(metars))}, "line")
         with self.assertRaises(AirportProductError):
-            validate_shard({**payload, "stations": {icao: broken}})
-        typed = dict(stations[icao])
-        typed["metars"] = [{**typed["metars"][0], "type": "TREND"}]
+            validate_history_station({**payload, "metars": [{**metars[0], "cloud": [["FEW"]]}]}, "line")
         with self.assertRaises(AirportProductError):
-            validate_shard({**payload, "stations": {icao: typed}})
+            validate_history_station({**payload, "metars": [{**metars[0], "type": "TREND"}]}, "line")
 
     def test_pointer(self) -> None:
         index = encode_json({"schemaVersion": 1})

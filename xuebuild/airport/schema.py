@@ -1,17 +1,16 @@
 """The ``airport`` product, schema v1: construction and validation of the
 three kinds of file — the mutable pointer ``latest-airport.json``, a
-round's ``index.json`` and the content-addressed
-``airport-shards/<XX>-<crc32>.json`` — in the posture ``manifest.py`` takes
-for the raster runs and ``tc/schema.py`` for the storm tracks: written
-*and* read through the validator. ``docs/airport.md`` is the normative
-description.
+round's ``index.json`` and the ``history.jsonl`` beside it — in the
+posture ``manifest.py`` takes for the raster runs and ``tc/schema.py`` for
+the storm tracks: written *and* read through the validator.
+``docs/airport.md`` is the normative description.
 
-Admission is structural. A station id, a shard key, a sky cover or a
-weather string the reader has never seen is not an error; what is checked
-is shape — the row length, the ranges, the ISO-8601 UTC times, the CRC32
-pattern, and the one rule content addressing adds: a shard's ``path`` names
-the shard's own key and its own CRC32, so an index cannot point at bytes
-that are not the ones it measured.
+Admission is structural. A station id, a sky cover or a weather string the
+reader has never seen is not an error; what is checked is shape — the row
+length, the ranges, the ISO-8601 UTC times, the CRC32 pattern — and the
+one rule the history file adds: the rows' byte spans are in order and lie
+inside the file the index measured, so a reader can slice one station out
+of it by range and parse the slice on its own.
 """
 
 from __future__ import annotations
@@ -36,17 +35,17 @@ from ..pointproduct import (  # noqa: F401 — re-exported: the airport modules 
 SCHEMA_VERSION = 1
 POINTER_FILENAME = "latest-airport.json"
 INDEX_FILENAME = "index.json"
-SHARD_DIRECTORY = "airport-shards"
-"""One directory beside the round directories, holding every live shard of
-every round that is still named. Not inside a round: a shard that did not
-change is not rewritten, and the round's index reaches it by ``../``."""
+HISTORY_FILENAME = "history.jsonl"
+"""One line per station, in the round directory beside the index: a
+reader with an index row slices one station out by byte range, and a
+reader without one streams the file."""
 
 ROUND_MINUTES = 10
 """The publishing cadence: a round is a UTC minute that is a multiple of
 this, so a schedule that drifts by a minute still names one round."""
 
 HISTORY_HOURS = 24
-"""How much of each station's past the shards carry."""
+"""How much of each station's past the history file carries."""
 
 LATITUDE_RANGE = (-90.0, 90.0)
 LONGITUDE_RANGE = (-180.0, 180.0)
@@ -78,12 +77,15 @@ STATION_ROW = (
     "qnh",
     "category",
     "tafPresent",
+    "offset",
+    "length",
 )
-"""The index's compact row, in order. A reader indexes it positionally."""
+"""The index's compact row, in order. A reader indexes it positionally;
+the last two are the byte span of the station's line in the history file,
+the JSON object alone without its newline."""
 
 ROUND = re.compile(r"^\d{12}$")
 ICAO = re.compile(r"^[A-Z0-9]{2,4}$")
-SHARD = re.compile(r"^[A-Z0-9]{2,3}$")
 SOURCE_KEY = re.compile(r"^[a-z][a-z0-9-]*$")
 COVER = re.compile(r"^[A-Z]{3,5}$")
 """A sky cover as the service spells it: the three-letter amounts, and
@@ -118,25 +120,9 @@ def round_name(moment: datetime) -> str:
 
 
 def round_directory(moment: datetime) -> str:
-    """``airport.202609161430``: one directory per round, holding only the
-    index — the history is in the shards beside it."""
+    """``airport.202609161430``: one immutable directory per round, the
+    index and the history file in it."""
     return f"airport.{round_name(moment)}"
-
-
-def shard_key(icao: str) -> str:
-    """Which shard a station belongs to: the first two letters of its ICAO
-    id, except the ``K`` block (the contiguous United States, about half of
-    every round) which is split by the first three."""
-    return icao[:3] if icao.startswith("K") else icao[:2]
-
-
-def shard_filename(shard: str, crc32: str) -> str:
-    return f"{shard}-{crc32}.json"
-
-
-def shard_path(shard: str, crc32: str) -> str:
-    """What an index writes: the shard, relative to the round directory."""
-    return f"../{SHARD_DIRECTORY}/{shard_filename(shard, crc32)}"
 
 
 # --- primitives --------------------------------------------------------
@@ -295,42 +281,31 @@ def validate_taf(payload: object, label: str) -> None:
         _cloud(period.get("cloud"), f"{where}.cloud")
 
 
-def validate_shard(payload: object) -> None:
+def validate_history_station(payload: object, label: str) -> None:
+    """One line of ``history.jsonl``: a station with its whole window of
+    observations and its current forecast."""
     if not isinstance(payload, dict):
-        raise AirportProductError("shard must be an object")
-    if payload.get("schemaVersion") != SCHEMA_VERSION:
-        raise AirportProductError(f"shard schemaVersion must be {SCHEMA_VERSION}")
-    shard = payload.get("shard")
-    if not isinstance(shard, str) or not SHARD.match(shard):
-        raise AirportProductError("shard key must be two or three uppercase characters")
-    stations = payload.get("stations")
-    if not isinstance(stations, dict) or not stations:
-        raise AirportProductError("shard.stations must be a non-empty object")
-    for icao, station in stations.items():
-        label = f"shard[{icao}]"
-        if not isinstance(icao, str) or not ICAO.match(icao):
-            raise AirportProductError(f"{label} is not an ICAO station id")
-        if shard_key(icao) != shard:
-            raise AirportProductError(f"{label} does not belong to shard {shard}")
-        if not isinstance(station, dict):
-            raise AirportProductError(f"{label} must be an object")
-        _optional_string(station.get("name"), f"{label}.name")
-        _number(station.get("lat"), f"{label}.lat", LATITUDE_RANGE)
-        _number(station.get("lon"), f"{label}.lon", LONGITUDE_RANGE)
-        _optional_number(station.get("elev"), f"{label}.elev", ELEVATION_RANGE)
-        _optional_string(station.get("iata"), f"{label}.iata")
-        _optional_string(station.get("wmo"), f"{label}.wmo")
-        metars = station.get("metars")
-        if not isinstance(metars, list) or not metars:
-            raise AirportProductError(f"{label}.metars must be a non-empty list")
-        previous: datetime | None = None
-        for position, metar in enumerate(metars):
-            time = validate_metar(metar, f"{label}.metars[{position}]")
-            if previous is not None and time >= previous:
-                raise AirportProductError(f"{label}.metars must be newest first, strictly decreasing")
-            previous = time
-        if station.get("taf") is not None:
-            validate_taf(station["taf"], f"{label}.taf")
+        raise AirportProductError(f"{label} must be an object")
+    icao = payload.get("icao")
+    if not isinstance(icao, str) or not ICAO.match(icao):
+        raise AirportProductError(f"{label}.icao is not an ICAO station id")
+    _optional_string(payload.get("name"), f"{label}.name")
+    _number(payload.get("lat"), f"{label}.lat", LATITUDE_RANGE)
+    _number(payload.get("lon"), f"{label}.lon", LONGITUDE_RANGE)
+    _optional_number(payload.get("elev"), f"{label}.elev", ELEVATION_RANGE)
+    _optional_string(payload.get("iata"), f"{label}.iata")
+    _optional_string(payload.get("wmo"), f"{label}.wmo")
+    metars = payload.get("metars")
+    if not isinstance(metars, list) or not metars:
+        raise AirportProductError(f"{label}.metars must be a non-empty list")
+    previous: datetime | None = None
+    for position, metar in enumerate(metars):
+        time = validate_metar(metar, f"{label}.metars[{position}]")
+        if previous is not None and time >= previous:
+            raise AirportProductError(f"{label}.metars must be newest first, strictly decreasing")
+        previous = time
+    if payload.get("taf") is not None:
+        validate_taf(payload["taf"], f"{label}.taf")
 
 
 def validate_index(payload: object) -> None:
@@ -342,41 +317,31 @@ def validate_index(payload: object) -> None:
     if issued.second or issued.microsecond or issued.minute % ROUND_MINUTES:
         raise AirportProductError(f"index.issued must be a round: a UTC minute divisible by {ROUND_MINUTES}")
     _time(payload.get("generated"), "index.generated")
-    shards = payload.get("shards")
-    if not isinstance(shards, dict):
-        raise AirportProductError("index.shards must be an object")
-    for shard, entry in shards.items():
-        label = f"index.shards[{shard}]"
-        if not isinstance(shard, str) or not SHARD.match(shard):
-            raise AirportProductError(f"{label} is not a shard key")
-        if not isinstance(entry, dict):
-            raise AirportProductError(f"{label} must be an object")
-        crc32 = entry.get("crc32")
-        if not isinstance(crc32, str) or not CRC32.match(crc32):
-            raise AirportProductError(f"{label}.crc32 must be 8 lowercase hex characters")
-        byte_length = entry.get("byteLength")
-        if isinstance(byte_length, bool) or not isinstance(byte_length, int) or byte_length <= 0:
-            raise AirportProductError(f"{label}.byteLength must be a positive integer")
-        # Content addressing is the contract: the path names the bytes the
-        # entry measured, so an index can never point at another version.
-        if entry.get("path") != shard_path(shard, crc32):
-            raise AirportProductError(f"{label}.path must be {shard_path(shard, crc32)!r}")
+    history = payload.get("history")
+    if not isinstance(history, dict):
+        raise AirportProductError("index.history must be an object")
+    if history.get("path") != HISTORY_FILENAME:
+        raise AirportProductError(f"index.history.path must be {HISTORY_FILENAME!r}, the file beside the index")
+    history_bytes = history.get("byteLength")
+    if isinstance(history_bytes, bool) or not isinstance(history_bytes, int) or history_bytes < 0:
+        raise AirportProductError("index.history.byteLength must be a non-negative integer")
+    if not isinstance(history.get("crc32"), str) or not CRC32.match(history["crc32"]):
+        raise AirportProductError("index.history.crc32 must be 8 lowercase hex characters")
     stations = payload.get("stations")
     if not isinstance(stations, list):
         raise AirportProductError("index.stations must be a list")
     previous: str | None = None
+    end = 0
     for position, row in enumerate(stations):
         label = f"index.stations[{position}]"
         if not isinstance(row, list) or len(row) != len(STATION_ROW):
             raise AirportProductError(f"{label} must be a row of {len(STATION_ROW)} values ({', '.join(STATION_ROW)})")
-        icao, lat, lon, elev, obs_time, t, td, wd, ws, gust, vis, qnh, category, taf_present = row
+        icao, lat, lon, elev, obs_time, t, td, wd, ws, gust, vis, qnh, category, taf_present, offset, length = row
         if not isinstance(icao, str) or not ICAO.match(icao):
             raise AirportProductError(f"{label}.icao is not an ICAO station id")
         if previous is not None and icao <= previous:
             raise AirportProductError("index.stations must be sorted by icao and unique")
         previous = icao
-        if shard_key(icao) not in shards:
-            raise AirportProductError(f"{label} belongs to shard {shard_key(icao)}, which the index does not name")
         _number(lat, f"{label}.lat", LATITUDE_RANGE)
         _number(lon, f"{label}.lon", LONGITUDE_RANGE)
         _optional_number(elev, f"{label}.elev", ELEVATION_RANGE)
@@ -391,6 +356,16 @@ def validate_index(payload: object) -> None:
         _category(category, f"{label}.category")
         if taf_present not in (0, 1) or isinstance(taf_present, bool):
             raise AirportProductError(f"{label}.tafPresent must be 0 or 1")
+        # The span is what makes one station one range request: in row
+        # order, inside the file the index measured, and the object alone,
+        # so the slice parses on its own.
+        _integer(offset, f"{label}.offset", (0, None))
+        _integer(length, f"{label}.length", (1, None))
+        if offset < end:
+            raise AirportProductError(f"{label}.offset must not precede the previous station's span")
+        if offset + length > history_bytes:
+            raise AirportProductError(f"{label} spans past the end of {HISTORY_FILENAME}")
+        end = offset + length
     validate_sources(payload.get("sources"), "index.sources")
 
 
@@ -416,13 +391,4 @@ def read_index(path: Path) -> dict[str, Any]:
     except (OSError, json.JSONDecodeError) as exc:
         raise AirportProductError(f"cannot read airport index {path}: {exc}") from exc
     validate_index(payload)
-    return payload
-
-
-def read_shard(path: Path) -> dict[str, Any]:
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise AirportProductError(f"cannot read airport shard {path}: {exc}") from exc
-    validate_shard(payload)
     return payload

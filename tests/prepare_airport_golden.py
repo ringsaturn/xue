@@ -4,19 +4,18 @@ directories.
 ``tests/fixtures/airport/airport.202609161430/`` and
 ``…1440/`` are two consecutive rounds' raw directories as ``xue
 airport-build`` fetches them — the Aviation Weather Center's decoded METAR
-CSV and TAF XML, cut to a set of stations that covers the sharding rule
-(``RJ``, ``ZB``, ``LF``, the ``K``-by-three block ``KAB`` and ``KSR``), with
-the ``fetch.json`` a fetch leaves — beside the station table the two rounds
-share. This script builds the first round, then the second on top of it,
-offline and with fixed generation times, and writes both pretty-printed
-under ``tests/fixtures/airport/expected/`` for ``tests/test_airport.py`` to
-hold the build to.
+CSV and TAF XML, cut to a couple of hundred stations across the world,
+with the ``fetch.json`` a fetch leaves — beside the station table the two
+rounds share. This script builds the first round, then the second on top
+of it, offline and with fixed generation times, and writes both under
+``tests/fixtures/airport/expected/`` for ``tests/test_airport.py`` to hold
+the build to: the index pretty-printed, and ``history.jsonl`` exactly as
+published, which is already one line per station and diffs that way.
 
 The second round is what makes the golden worth having: it carries the
 merge (a station's new observation joins its history, newest first), the
-stations that appear between rounds, and the content-addressed shards —
-the shards whose stations did not report again keep their names and are
-not written, and the index names the files that were already there.
+stations that appear between rounds, and the byte spans the index records
+over a history file that has grown.
 
 Run it after a deliberate change to a parser, the merge or the schema, and
 commit the diff with the change::
@@ -33,7 +32,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from xuebuild.airport.build import build_product, load_previous_index
-from xuebuild.airport.schema import SHARD_DIRECTORY, parse_round, round_directory
+from xuebuild.airport.schema import HISTORY_FILENAME, parse_round, round_directory
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "airport"
 ROUNDS = ("202609161430", "202609161440")
@@ -87,12 +86,15 @@ def build_expected(destination: Path) -> list[dict[str, object]]:
         for name in ROUNDS:
             directory = round_directory(parse_round(name))
             _copy(output / directory / "index.json", destination / directory / "index.json")
-        for shard in sorted((output / SHARD_DIRECTORY).iterdir()):
-            _copy(shard, destination / SHARD_DIRECTORY / shard.name)
+            # The history file is published as it is: one station per
+            # line, so a diff of the golden is a diff of the stations.
+            (destination / directory / HISTORY_FILENAME).write_bytes(
+                (output / directory / HISTORY_FILENAME).read_bytes()
+            )
         _copy(output / "latest-airport.json", destination / "latest-airport.json")
     return reports
 
 
 if __name__ == "__main__":
     reports = build_expected(FIXTURES / "expected")
-    print(json.dumps([{key: report[key] for key in ("round", "stations", "reports", "shards")} for report in reports], indent=2))
+    print(json.dumps([{key: report[key] for key in ("round", "stations", "reports", "history")} for report in reports], indent=2))
