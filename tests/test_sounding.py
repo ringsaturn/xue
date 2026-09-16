@@ -34,6 +34,7 @@ from xuebuild.sounding.schema import (
     crc32_hex,
     encode_json,
     parse_issue,
+    validate_derived,
     validate_index,
     validate_pointer,
     validate_station,
@@ -402,6 +403,16 @@ class DerivedTests(unittest.TestCase):
         self.assertIsNone(derive.derive(profile)["lapse850_500"])
         profile["p"] = [100000, 90000, 84950, 80000, 50000]
         self.assertEqual(derive.derive(profile)["lapse850_500"], 5.0)
+
+    def test_a_derived_height_may_be_negative_as_a_published_height_may(self) -> None:
+        # Live bulletins flag a tropopause at a height below sea level.
+        # That is a bad reading, not a schema violation: a derived height
+        # is a published `z`, and `z` goes down to −1000.
+        profile = self.profile()
+        profile["z"] = [-100, -50, 10, 200, -600]
+        derived = derive.derive(profile)
+        self.assertEqual(derived["tropopause"], -600)
+        validate_derived(derived, "derived")
 
     def test_the_tropopause_is_the_flagged_level(self) -> None:
         self.assertEqual(derive.derive(self.profile())["tropopause"], 5600)

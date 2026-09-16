@@ -143,13 +143,20 @@ def validate_levels(payload: dict[str, Any], label: str) -> None:
         raise SoundingProductError(f"{label}.p must be strictly descending")
 
 
+_HEIGHT_MIN, _HEIGHT_MAX = _BOUNDS["z"]
+"""A derived height is a published ``z``, interpolated or picked out, so
+it lives in ``z``'s range and not a narrower one: stations below sea level
+report negative geopotential heights, and a bulletin that flags a
+tropopause at one is reporting a bad height, not breaking the schema."""
+
+
 def validate_derived(payload: object, label: str) -> None:
     if not isinstance(payload, dict):
         raise SoundingProductError(f"{label} must be an object")
-    _optional_number(payload.get("freezingLevel"), f"{label}.freezingLevel", minimum=-1000, maximum=100000)
+    _optional_number(payload.get("freezingLevel"), f"{label}.freezingLevel", minimum=_HEIGHT_MIN, maximum=_HEIGHT_MAX)
     _optional_number(payload.get("pw"), f"{label}.pw", minimum=0, maximum=300)
     _optional_number(payload.get("lapse850_500"), f"{label}.lapse850_500", minimum=-30, maximum=30)
-    _optional_number(payload.get("tropopause"), f"{label}.tropopause", minimum=0, maximum=100000)
+    _optional_number(payload.get("tropopause"), f"{label}.tropopause", minimum=_HEIGHT_MIN, maximum=_HEIGHT_MAX)
 
 
 def validate_sounding(payload: object, label: str) -> None:
@@ -174,7 +181,7 @@ def validate_headline(payload: object, label: str) -> None:
         raise SoundingProductError(f"{label} must be an object")
     _optional_number(payload.get("t500"), f"{label}.t500", minimum=-120, maximum=60)
     _optional_number(payload.get("td500"), f"{label}.td500", minimum=-150, maximum=60)
-    _optional_number(payload.get("freezingLevel"), f"{label}.freezingLevel", minimum=-1000, maximum=100000)
+    _optional_number(payload.get("freezingLevel"), f"{label}.freezingLevel", minimum=_HEIGHT_MIN, maximum=_HEIGHT_MAX)
     _optional_number(payload.get("pw"), f"{label}.pw", minimum=0, maximum=300)
     levels = payload.get("levels")
     if isinstance(levels, bool) or not isinstance(levels, int) or levels <= 0:

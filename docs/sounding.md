@@ -229,6 +229,15 @@ is not rewritten at all; its previous file is republished unchanged.
 decoded from, verbatim, and `arrived` the gateway's own timestamp for it.
 Together they say exactly which message a value came from.
 
+**Size.** Every level the bulletin reports is published; nothing is
+thinned. Modern high-resolution TEMP is much longer than the classical
+mandatory-and-significant-levels ascent, so a station file is bigger than
+a reader might assume: over one issue of the live feed, 491 stations, the
+newest ascent had a median of 504 levels and a maximum of 7 553, the
+median station file was 69 KB and the largest 1.0 MB, and the issue as a
+whole was 94 MB with a 182 KB index. A client that wants a marker layer
+reads the index alone; only opening a station costs its file.
+
 ## 6. `sources[]`
 
 One entry per source the build was asked for, in build order:
@@ -282,6 +291,12 @@ the BUFR floats — in a fixed operation order, so a second implementation
 reading `<station>.json` reproduces them exactly. Heights are rounded to
 whole geopotential metres, the other two to a tenth. Any of them is `null`
 when the sounding does not support it.
+
+A derived height is a published `z`, interpolated or picked out, so it
+carries `z`'s range and may be negative: stations below sea level report
+negative geopotential heights, and a bulletin that flags a tropopause at
+one is reporting a bad height rather than breaking the contract. A reader
+sanity-checks derived values; the product does not silently drop them.
 
 **`freezingLevel`** (gpm). Walking up from the surface, the first pair of
 consecutive levels that both carry a temperature and a height and that
