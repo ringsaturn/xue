@@ -1,0 +1,120 @@
+<!doctype html>
+<!--
+  The skew-T workbench. A dev page, and only a dev page: it is not a rollup
+  input (vite.config.ts lists index.html and showcase.html), not a sitemap
+  entry (web/tooling/discovery.ts::STATIC_PAGES) and nothing the shell loads
+  imports its module, so it exists under `npm run dev` and in no build output.
+
+      npm run dev   →   http://localhost:5173/skewt.html
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>skew-T workbench</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --page: #f3efe6;
+        --ink: #1b1a17;
+        --muted: #6e6a60;
+        --line: rgba(27, 26, 23, 0.16);
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --page: #14140f;
+          --ink: #f3efe6;
+          --muted: rgba(243, 239, 230, 0.62);
+          --line: rgba(243, 239, 230, 0.18);
+        }
+      }
+      body {
+        margin: 0;
+        padding: 20px;
+        background: var(--page);
+        color: var(--ink);
+        font: 12px/1.5 "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
+      }
+      h1 {
+        font-size: 13px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        margin: 0 0 12px;
+      }
+      .controls {
+        display: flex;
+        gap: 16px;
+        align-items: center;
+        margin-bottom: 12px;
+      }
+      select {
+        font: inherit;
+        color: inherit;
+        background: transparent;
+        border: 1px solid var(--line);
+        border-radius: 4px;
+        padding: 3px 6px;
+      }
+      #meta {
+        white-space: pre;
+        color: var(--muted);
+        margin-bottom: 16px;
+      }
+      .panels {
+        display: flex;
+        gap: 24px;
+        flex-wrap: wrap;
+      }
+      .panel {
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        overflow: hidden;
+      }
+      .panel canvas {
+        display: block;
+      }
+      .panel figcaption {
+        white-space: pre;
+        padding: 8px 10px;
+        border-top: 1px solid var(--line);
+        min-height: 4.5em;
+      }
+      .panel.light {
+        background: #f3efe6;
+        color: #1b1a17;
+      }
+      .panel.dark {
+        background: #000;
+        color: #fff;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>skew-T workbench — web/src/sounding</h1>
+    <div class="controls">
+      <label>station <select id="station"></select></label>
+      <label>
+        top
+        <select id="top">
+          <option value="100" selected>100 hPa</option>
+          <option value="50">50 hPa</option>
+        </select>
+      </label>
+      <span>hover a chart for the readout</span>
+    </div>
+    <div id="meta"></div>
+    <div class="panels">
+      <figure class="panel light">
+        <canvas id="light"></canvas>
+        <figcaption id="light-readout"></figcaption>
+      </figure>
+      <figure class="panel dark">
+        <canvas id="dark"></canvas>
+        <figcaption id="dark-readout"></figcaption>
+      </figure>
+    </div>
+    <script type="module" src="/src/sounding/dev.ts"></script>
+  </body>
+</html>
