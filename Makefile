@@ -59,7 +59,7 @@ AWS_REQUEST_CHECKSUM_CALCULATION ?= when_required
 AWS_RESPONSE_CHECKSUM_VALIDATION ?= when_required
 export AWS_DEFAULT_REGION AWS_REQUEST_CHECKSUM_CALCULATION AWS_RESPONSE_CHECKSUM_VALIDATION
 
-.PHONY: check install wasm test test-rust test-e2e encoder-rust encoder-rust-test encoder-wheel bench bench-video bench-lossy mvp serve format-pdf deploy-build upload-r2 upload-r2-bundles upload-r2-manifest upload-r2-stac-item check-pointer upload-r2-pointer upload-r2-stac-collection warm-r2 prune-r2 prune-r2-rounds live-run live-manifest live-window pull-r2-frames push-r2-frames prune-r2-frames deploy-pages deploy showcase showcase-check showcase-refresh upload-r2-showcase tc-build live-tc-index upload-r2-tc prune-r2-tc clean
+.PHONY: check install wasm test test-rust test-e2e encoder-rust encoder-rust-test encoder-wheel bench bench-video bench-lossy mvp serve format-pdf deploy-build upload-r2 upload-r2-bundles upload-r2-manifest upload-r2-stac-item check-pointer upload-r2-pointer upload-r2-stac-collection warm-r2 prune-r2 prune-r2-rounds live-run live-manifest live-window pull-r2-frames push-r2-frames prune-r2-frames deploy-pages deploy showcase showcase-check showcase-refresh upload-r2-showcase tc-build live-tc-index upload-r2-tc prune-r2-tc airport-build live-airport-index upload-r2-airport prune-r2-airport prune-r2-airport-shards clean
 
 check:
 	$(PYTHON) scripts/check_dependencies.py
@@ -405,6 +405,119 @@ prune-r2-tc:
 			$(S3) rm s3://$(R2_BUCKET)/$(R2_PREFIX)/$$issue/ --recursive --only-show-errors $(DRY_RUN); \
 		fi; \
 	done
+
+# The airport METAR / TAF product (docs/airport.md): the Aviation Weather
+# Center's decoded observations and forecasts, merged every ten minutes into
+# web/public/data/airport.<round>/index.json, the shards that changed under
+# web/public/data/airport-shards/, and the mutable latest-airport.json beside
+# the run pointers. The round is a whole YYYYMMDDHHMM; the rolling window's
+# ROUND above is an HHMM inside a run, and the two share the variable, so an
+# empty ROUND here means the current round.
+AIRPORT_ROUND = $(if $(ROUND),$(ROUND),now)
+AIRPORT_KEEP ?= 18
+
+airport-build:
+	$(PYTHON) -m xuebuild airport-build --round $(AIRPORT_ROUND) $(FORCE)
+
+# The live product's pointer, index and shards, into web/public/data/ where
+# airport-build looks for the previous round: the shards are this round's
+# history, so a publish without them would restart every station's 24 hours.
+# The whole shard directory is synced in one call (a round names about a
+# thousand of them; one `cp` each would take longer than the round) and the
+# local files the live index does not name are then dropped, so the upload
+# that follows carries only the live set. Prints nothing and writes nothing
+# when there is no live product yet (the first publish).
+live-airport-index:
+	@set -e; mkdir -p web/public/data/airport-shards; \
+	pointer=$$($(S3) cp s3://$(R2_BUCKET)/$(R2_PREFIX)/latest-airport.json - --only-show-errors 2>/dev/null || true); \
+	[ -n "$$pointer" ] || { echo "no live airport pointer"; exit 0; }; \
+	path=$$(printf '%s' "$$pointer" | jq -r .path); \
+	mkdir -p "web/public/data/$$(dirname "$$path")"; \
+	$(S3) cp "s3://$(R2_BUCKET)/$(R2_PREFIX)/$$path" "web/public/data/$$path" --only-show-errors; \
+	printf '%s' "$$pointer" > web/public/data/latest-airport.json; \
+	$(S3) sync s3://$(R2_BUCKET)/$(R2_PREFIX)/airport-shards/ web/public/data/airport-shards/ \
+		--no-progress --only-show-errors --size-only; \
+	named=$$(jq -r '.shards[].path' "web/public/data/$$path" | sed 's:.*/::' | sort); \
+	missing=0; \
+	for shard in $$named; do \
+		[ -f "web/public/data/airport-shards/$$shard" ] || { echo "missing shard $$shard"; missing=$$((missing + 1)); }; \
+	done; \
+	for shard in $$(ls web/public/data/airport-shards); do \
+		printf '%s\n' "$$named" | grep -qx "$$shard" || rm -f "web/public/data/airport-shards/$$shard"; \
+	done; \
+	echo "live airport round: $$path ($$(printf '%s\n' "$$named" | wc -w | tr -d ' ') shards, $$missing missing)"
+
+# Push the shards first (content-addressed, so a name that is already on the
+# bucket is the same bytes and --size-only skips it), then the round's index,
+# then the pointer that takes it live. The pointer on disk must name the
+# round being uploaded and carry its index's CRC32, the way check-pointer
+# holds a run's.
+upload-r2-airport:
+	@set -e; \
+	[ "$(AIRPORT_ROUND)" != "now" ] || { echo "pass ROUND=YYYYMMDDHHMM"; exit 1; }; \
+	dir=web/public/data/airport.$(AIRPORT_ROUND); \
+	[ -f "$$dir/index.json" ] || { echo "no built airport round at $$dir"; exit 1; }; \
+	[ -f web/public/data/latest-airport.json ] || { echo "no latest-airport.json: the build withheld the pointer (neither observation source arrived)"; exit 1; }; \
+	pointer_path=$$(jq -r .path web/public/data/latest-airport.json); \
+	[ "$$pointer_path" = "airport.$(AIRPORT_ROUND)/index.json" ] || { echo "latest-airport.json names $$pointer_path, not airport.$(AIRPORT_ROUND)"; exit 1; }; \
+	pointer_crc=$$(jq -r .crc32 web/public/data/latest-airport.json); \
+	index_crc=$$($(PYTHON) -c "import sys, zlib; print(f'{zlib.crc32(open(sys.argv[1], \"rb\").read()) & 0xFFFFFFFF:08x}')" $$dir/index.json); \
+	[ "$$pointer_crc" = "$$index_crc" ] || { echo "latest-airport.json carries CRC32 $$pointer_crc but $$dir/index.json is $$index_crc"; exit 1; }; \
+	$(S3) sync web/public/data/airport-shards/ s3://$(R2_BUCKET)/$(R2_PREFIX)/airport-shards/ --no-progress --size-only $(DRY_RUN) \
+		--content-type application/json --cache-control "public, max-age=31536000, immutable"; \
+	$(S3) sync $$dir s3://$(R2_BUCKET)/$(R2_PREFIX)/airport.$(AIRPORT_ROUND)/ --no-progress $(DRY_RUN) \
+		--content-type application/json --cache-control "public, max-age=31536000, immutable"; \
+	echo "Uploading latest-airport.json (takes airport round $(AIRPORT_ROUND) live)..."; \
+	$(S3) cp web/public/data/latest-airport.json s3://$(R2_BUCKET)/$(R2_PREFIX)/latest-airport.json --no-progress $(DRY_RUN) \
+		--content-type application/json --cache-control "no-cache"
+
+# Delete round directories beyond the newest AIRPORT_KEEP (three hours; the
+# history is in the shards, so a round directory is only ever the latest
+# index) and never the one the live pointer names.
+prune-r2-airport:
+	@set -e; \
+	live=$$($(S3) cp s3://$(R2_BUCKET)/$(R2_PREFIX)/latest-airport.json - --only-show-errors 2>/dev/null | jq -r .path | cut -d/ -f1 || true); \
+	[ -n "$$live" ] || { echo "no live airport pointer, nothing to prune"; exit 0; }; \
+	echo "live airport round: $$live"; \
+	listing=$$($(S3) ls s3://$(R2_BUCKET)/$(R2_PREFIX)/) \
+		|| { echo "listing the bucket failed, refusing to prune"; exit 1; }; \
+	for round in $$(printf '%s\n' "$$listing" | awk '/ PRE /{print $$2}' \
+		| sed 's:/$$::' | grep "^airport\." | sort -r | tail -n +$$(($(AIRPORT_KEEP) + 1))); do \
+		if [ "$$round" != "$$live" ]; then \
+			echo "Deleting $$round..."; \
+			$(S3) rm s3://$(R2_BUCKET)/$(R2_PREFIX)/$$round/ --recursive --only-show-errors $(DRY_RUN); \
+		fi; \
+	done
+
+# Delete the shard objects no index among the newest AIRPORT_KEEP rounds
+# names any more. This is the recycling half of the content-addressed
+# extension of the delivery contract (docs/airport.md §1): a shard outlives
+# the round that first wrote it and is retired only when no round a reader
+# can still be holding refers to it. A listing or an index that cannot be
+# read means the keep set is incomplete, which is a reason to do nothing.
+prune-r2-airport-shards:
+	@set -e; \
+	listing=$$($(S3) ls s3://$(R2_BUCKET)/$(R2_PREFIX)/) \
+		|| { echo "listing the bucket failed, refusing to prune"; exit 1; }; \
+	rounds=$$(printf '%s\n' "$$listing" | awk '/ PRE /{print $$2}' \
+		| sed 's:/$$::' | grep "^airport\." | sort -r | head -n $(AIRPORT_KEEP)); \
+	[ -n "$$rounds" ] || { echo "no airport rounds on the bucket, refusing to prune"; exit 1; }; \
+	keep=$$(mktemp); \
+	for round in $$rounds; do \
+		index=$$($(S3) cp s3://$(R2_BUCKET)/$(R2_PREFIX)/$$round/index.json - --only-show-errors) \
+			|| { echo "cannot read $$round/index.json, refusing to prune"; rm -f $$keep; exit 1; }; \
+		printf '%s' "$$index" | jq -r '.shards[].path' | sed 's:.*/::' >> $$keep \
+			|| { echo "$$round/index.json is not readable JSON, refusing to prune"; rm -f $$keep; exit 1; }; \
+	done; \
+	sort -u $$keep -o $$keep; \
+	echo "$$(printf '%s\n' "$$rounds" | wc -w | tr -d ' ') round(s) name $$(wc -l < $$keep | tr -d ' ') shard(s)"; \
+	for object in $$($(S3) ls s3://$(R2_BUCKET)/$(R2_PREFIX)/airport-shards/ | awk '{print $$4}'); do \
+		if ! grep -qx "$$object" $$keep; then \
+			echo "Deleting airport-shards/$$object..."; \
+			$(S3) rm s3://$(R2_BUCKET)/$(R2_PREFIX)/airport-shards/$$object --only-show-errors $(DRY_RUN); \
+		fi; \
+	done; \
+	rm -f $$keep
 
 # Delete every published run of one model except the newest KEEP and the one
 # the live pointer names, so a new run retires the one it replaces. Listing
