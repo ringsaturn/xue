@@ -15,7 +15,7 @@
      "raw": "METAR KSRB 161415Z AUTO VRB05KT 10SM CLR 27/25 A3037 RMK AO2",
      "t": 27.0,
      "td": 25.0,
-     "wd": 0,
+     "wd": null,
      "ws": 2.6,
      "gust": null,
      "vis": 10000,

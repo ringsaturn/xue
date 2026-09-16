@@ -15,6 +15,11 @@ the forecast's first, prevailing period; a ``PROB40 TEMPO`` group is
 ``change: "TEMPO"`` with ``prob: 40``. The ``time_becoming`` of a
 ``BECMG`` group (when inside the period the change completes) is not
 carried in v1.
+
+A variable wind needs nothing here: the service writes
+``<wind_dir_degrees>VRB</wind_dir_degrees>``, which reads as no direction.
+(The METAR CSV is the one that decodes ``VRB`` to 0, and
+:mod:`.metar` takes the direction back out of the report.)
 """
 
 from __future__ import annotations

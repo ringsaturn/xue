@@ -178,6 +178,32 @@ class MetarTests(unittest.TestCase):
         self.assertEqual(report.qnh, 1025.1)  # 30.27 inHg × 33.8639 = 1025.06
         self.assertEqual(report.slp, 1013.2)  # half to even, as round() does
 
+    def test_a_variable_wind_has_no_direction(self) -> None:
+        reports = {
+            report.icao: report
+            for report in parse_metars((FIXTURES / f"airport.{ROUNDS[0]}" / "metars.cache.csv").read_text())
+        }
+        variable = reports["LFBU"]  # METAR LFBU 161430Z AUTO VRB04KT CAVOK …
+        self.assertIn("VRB04KT", variable.raw)
+        self.assertIsNone(variable.wd)  # the CSV decodes VRB as 0, which reads as north
+        self.assertEqual(variable.ws, 2.1)
+        calm = parse_metars(csv_document(metar_row("RJTT", "2026-09-16T14:30:00.000Z", wind_dir_degrees="0", wind_speed_kt="0")))[0]
+        self.assertEqual((calm.wd, calm.ws), (0, 0.0))
+        gusting = parse_metars(
+            csv_document(
+                metar_row(
+                    "RJTT",
+                    "2026-09-16T14:30:00.000Z",
+                    raw_text='"METAR RJTT 161430Z VRB05G18KT 9999 FEW020 21/20 Q1017"',
+                    wind_dir_degrees="0",
+                    wind_speed_kt="5",
+                    wind_gust_kt="18",
+                )
+            )
+        )[0]
+        self.assertIsNone(gusting.wd)
+        self.assertEqual(gusting.gust, 9.3)
+
     def test_visibility_conventions(self) -> None:
         self.assertEqual(visibility("6+"), 10000)
         self.assertEqual(visibility("10+"), 10000)
@@ -399,16 +425,40 @@ class BuildTests(unittest.TestCase):
 
     def test_a_station_leaves_when_nothing_is_left_in_the_window(self) -> None:
         raw, output = self.scratch()
-        write_round(raw, "202609161430", csv_document(metar_row("RJTT", "2026-09-16T14:30:00.000Z")))
+        write_round(
+            raw,
+            "202609161430",
+            csv_document(
+                metar_row("RJTT", "2026-09-16T14:30:00.000Z"),
+                metar_row("RJAA", "2026-09-16T14:30:00.000Z"),
+            ),
+        )
         self.build(raw, output, "202609161430")
         later = parse_round("202609161430") + timedelta(hours=HISTORY_HOURS + 1)
         name = later.strftime("%Y%m%d%H%M")
-        write_round(raw, name, csv_document(metar_row("ZBAA", f"{later:%Y-%m-%dT%H:%M}:00.000Z")))
+        # A day later only one of the two reports again, and the other's
+        # last observation is out of the window.
+        write_round(
+            raw,
+            name,
+            csv_document(
+                metar_row("RJAA", f"{later:%Y-%m-%dT%H:%M}:00.000Z"),
+                metar_row("ZBAA", f"{later:%Y-%m-%dT%H:%M}:00.000Z"),
+            ),
+        )
         report = self.build(raw, output, name)
         index = read_index(output / f"airport.{name}" / "index.json")
-        self.assertEqual([row[0] for row in index["stations"]], ["ZBAA"])
-        self.assertNotIn("RJ", index["shards"])
-        self.assertEqual(report["stations"], 1)
+        self.assertEqual([row[0] for row in index["stations"]], ["RJAA", "ZBAA"])
+        self.assertEqual(report["stations"], 2)
+        shard = json.loads((output / SHARD_DIRECTORY / Path(index["shards"]["RJ"]["path"]).name).read_bytes())
+        self.assertEqual(sorted(shard["stations"]), ["RJAA"])  # RJTT is gone from the shard too
+        # And a whole shard whose only station aged out is not named at all.
+        after = later + timedelta(hours=HISTORY_HOURS + 1)
+        write_round(raw, after.strftime("%Y%m%d%H%M"), csv_document(metar_row("ZBAA", f"{after:%Y-%m-%dT%H:%M}:00.000Z")))
+        self.build(raw, output, after.strftime("%Y%m%d%H%M"))
+        last = read_index(output / f"airport.{after:%Y%m%d%H%M}" / "index.json")
+        self.assertEqual([row[0] for row in last["stations"]], ["ZBAA"])
+        self.assertNotIn("RJ", last["shards"])
 
     def test_the_station_table_names_the_station_and_a_stranger_keeps_its_own_position(self) -> None:
         raw, output = self.scratch()

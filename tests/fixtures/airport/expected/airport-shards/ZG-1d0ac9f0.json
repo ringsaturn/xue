@@ -123,7 +123,7 @@
      "raw": "METAR ZGNN 161400Z VRB01MPS CAVOK 26/25 Q1012 NOSIG",
      "t": 26.0,
      "td": 25.0,
-     "wd": 0,
+     "wd": null,
      "ws": 1.0,
      "gust": null,
      "vis": 10000,

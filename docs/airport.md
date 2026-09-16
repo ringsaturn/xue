@@ -80,7 +80,7 @@ SI throughout, converted at the parser:
 |---|---|---|
 | temperature, dew point (`t`, `td`) | °C, to a tenth | as the service decodes them |
 | wind speed and gust (`ws`, `gust`) | m/s, to a tenth | knots × 0.514444 |
-| wind direction (`wd`) | degrees true, 0–360 | integer; a calm wind reports 0 |
+| wind direction (`wd`) | degrees true, 0–360 | integer; `null` when the direction is variable |
 | visibility (`vis`) | metres, to a hundred | statute miles × 1609.344 |
 | pressure (`qnh`, `slp`) | hPa, to a tenth | `qnh` is the altimeter setting, inHg × 33.8639; `slp` the reported sea-level pressure |
 | cloud base (`cloud`) | metres above ground, to ten | feet × 0.3048 |
@@ -93,6 +93,11 @@ as exactly **`10000`**. A `vis` of 10000 therefore means *at least* ten
 kilometres, not ten kilometres. Every other value is the reported distance
 converted, which is why a report of 7 statute miles reads 11300 — a
 measured 11.3 km, not the coded ceiling.
+
+`wd` has one too. A **variable** direction (`VRB04KT`, and a TAF group's
+`VRB`) is `null` with the speed kept: the direction is not known, and
+writing the zero the CSV decodes it to would publish a north wind. `wd: 0`
+therefore means due north, and `wd: 0` with `ws: 0` is calm.
 
 `qnh` comes from the altimeter setting in inches of mercury, which is
 itself a conversion of the `Qnnnn` hectopascals most of the world reports;

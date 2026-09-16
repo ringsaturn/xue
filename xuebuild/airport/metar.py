@@ -17,6 +17,7 @@ before it is preamble.
 from __future__ import annotations
 
 import csv
+import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -38,6 +39,12 @@ from .units import altimeter, bounded, cloud_layers, round_to, visibility, wind_
 HEADER_FIELD = "raw_text"
 CLOUD_LAYERS = 4
 """The CSV carries four fixed sky_cover / cloud_base_ft_agl column pairs."""
+
+VARIABLE_WIND = re.compile(r"\bVRB\d{2,3}(?:G\d{2,3})?(?:KT|MPS|KMH)\b")
+"""A variable wind direction in the report itself. The service decodes
+``VRB04KT`` into ``wind_dir_degrees`` 0, which is a north wind — the one
+place the decoded columns lose what the report said, so the direction is
+taken back out of ``raw``."""
 
 
 @dataclass(frozen=True)
@@ -189,6 +196,9 @@ def _report(row: list[str], positions: dict[str, list[int]]) -> MetarReport | No
         if cover is None:
             continue
         layers.append((cover.upper(), _float(row, bases[layer]) if layer < len(bases) else None))
+    wind_direction = _optional_int(bounded(_int(row, _first(positions, "wind_dir_degrees")), WIND_DIRECTION_RANGE))
+    if VARIABLE_WIND.search(raw):
+        wind_direction = None  # VRB is decoded as 0, which would read as north
     # The contract admits the two kinds and the four categories the
     # service publishes; anything else is read as the generic kind and as
     # no category rather than costing the round. `raw` keeps the truth.
@@ -204,7 +214,7 @@ def _report(row: list[str], positions: dict[str, list[int]]) -> MetarReport | No
         elev=bounded(_float(row, _first(positions, "elevation_m")), ELEVATION_RANGE),
         t=bounded(round_to(_float(row, _first(positions, "temp_c")), 1), TEMPERATURE_RANGE),
         td=bounded(round_to(_float(row, _first(positions, "dewpoint_c")), 1), TEMPERATURE_RANGE),
-        wd=_optional_int(bounded(_int(row, _first(positions, "wind_dir_degrees")), WIND_DIRECTION_RANGE)),
+        wd=wind_direction,
         ws=bounded(wind_speed(_float(row, _first(positions, "wind_speed_kt"))), WIND_SPEED_RANGE),
         gust=bounded(wind_speed(_float(row, _first(positions, "wind_gust_kt"))), WIND_SPEED_RANGE),
         vis=visibility(_text(row, _first(positions, "visibility_statute_mi"))),
