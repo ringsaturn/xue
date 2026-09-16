@@ -246,11 +246,14 @@ model starts here; the frontend mirror is `FORECAST_MODELS` in
   every five minutes each build takes `--round HHMM` and lands in
   `mrms.<run>/<HHMM>/` with a `window.json` (`fetch.py::window_summary`).
   Never overwrite an object under an unchanged `?v=`: a viewer's range
-  requests against it decode the wrong bytes. `publish-mrms.yml` is one job
-  an hour looping `scripts/window_rounds.sh` (a round every five minutes:
-  newest frame vs the live `window.json` → build → `make upload-r2 …
-  ROUND=` → `prune-r2-rounds` keeps the run's newest two rounds, `prune-r2
-  KEEP=2` the previous run). The shell polls the MRMS pointer every two
+  requests against it decode the wrong bytes. `publish-mrms.yml` runs one
+  round of `scripts/window_rounds.sh` per job on a five-minute cron
+  (`ONCE=true`, so no runner is held for an hour; a `loop` dispatch runs
+  rounds to twenty past the next hour and yields to the next scheduled
+  job through `scripts/successor_queued.sh`). A round is: newest frame vs
+  the live `window.json` → build → `make upload-r2 … ROUND=` →
+  `prune-r2-rounds` keeps the run's newest two rounds, `prune-r2 KEEP=2`
+  the previous run. The shell polls the MRMS pointer every two
   minutes, treats a changed `manifestCrc32` as a new run, and on a rolling
   window keeps the playhead by observation time or follows the end when it
   was at the end (`checkForNewRun` / `resumeOnNewRun` in `main.ts`).
@@ -258,12 +261,9 @@ model starts here; the frontend mirror is `FORECAST_MODELS` in
   span, so a regional grid can take its half tier on a far-out view.
 - Fetched series-file observation (`jma`): the JMA precipitation nowcast
   over Japan, fetched like MRMS (a rolling window, `latest-jma.json`,
-  `publish-jma.yml` running one round of the same `scripts/window_rounds.sh`
-  per job on a five-minute cron, `MODEL=jma HOURS=3 ONCE=true`, so no
-  runner is held for an hour; a `loop` dispatch runs rounds every two
-  minutes to twenty past the next hour and yields to the next scheduled
-  job through `scripts/successor_queued.sh`) but arriving as one NetCDF
-  series per window
+  `publish-jma.yml` the same shape as `publish-mrms.yml` with `MODEL=jma
+  HOURS=3`, a `loop` dispatch polling every two minutes) but arriving as
+  one NetCDF series per window
   (`SourceSpec.series_file`, also true of `radar`; `convert_bin` and
   `convert.rs` branch on it). The fetch is the `jma-radar` tool
   (`xuebuild/jmacli.py`: `python -m jma_radar window --json`, or

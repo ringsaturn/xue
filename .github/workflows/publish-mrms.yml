@@ -7,29 +7,33 @@ name: publish mrms
 # every five minutes into a round subdirectory of its run
 # (<model>.<run>/<HHMM>/) and pointed at by latest-mrms.json.
 #
-# Not the three-job pipeline of publish.yml: a cron here fires once a
-# minute at best and tens of minutes late under load, so one job an hour
-# runs the rounds itself (scripts/window_rounds.sh), sleeping to each
-# five-minute boundary until five to the hour, and the next hour's cron
-# takes over. The cron's lateness costs the first round of the hour only.
+# Not the three-job pipeline of publish.yml: one round per job
+# (scripts/window_rounds.sh, ONCE=true) on a five-minute cron, the finest
+# GitHub offers. A job is a few minutes of runner time and the listing
+# never shows a job in progress for an hour, which keeps the workflow
+# recognisably a publish step rather than a resident service (the Actions
+# terms rule out running "part of a serverless application" on hosted
+# runners). The cost is freshness: GitHub starts a scheduled run ten to
+# twenty minutes late and skips some under load, and each round is
+# published that much after its frame. A dispatch with `loop` on runs the
+# rounds until twenty past the next hour and yields to the next scheduled
+# job once it is waiting (scripts/successor_queued.sh), for catching up
+# by hand.
 #
-# Machine time: twenty-four jobs of up to fifty-five minutes a day, about
-# 660 hours a month — free on a public repository's standard runners, far
-# past the free allowance were this repository ever private (then the
-# round would have to stretch to twenty minutes, or the job move to a
-# self-hosted runner).
+# Machine time: twelve jobs an hour of two to three minutes each, roughly
+# 360 hours a month, free on a public repository's standard runners.
 
 on:
   schedule:
-    - cron: "0 * * * *"
+    - cron: "*/5 * * * *"
   workflow_dispatch:
     inputs:
-      once:
-        description: "Run one round and stop, instead of the rest of the hour"
+      loop:
+        description: "Keep running rounds until twenty past the next hour instead of one round"
         type: boolean
         default: false
       round_minutes:
-        description: "Minutes between rounds"
+        description: "Minutes between rounds when looping"
         type: string
         default: "5"
       hours:
@@ -56,9 +60,14 @@ on:
 
 permissions:
   contents: read
+  # scripts/successor_queued.sh lists this workflow's waiting runs, for a
+  # looping dispatch to yield to the next scheduled job.
+  actions: read
 
 concurrency:
   group: publish-mrms
+  # A late cron queues behind the job still running and then finds
+  # nothing new; a looping dispatch yields to it on its own.
   cancel-in-progress: false
 
 env:
@@ -77,12 +86,18 @@ jobs:
     # Scheduled runs on forks would publish into a bucket they cannot reach.
     if: github.event_name != 'schedule' || github.repository == 'ringsaturn/xue'
     runs-on: ubuntu-24.04
-    # The rounds stop at five to the hour on their own; this is the
-    # backstop for a round that hangs.
-    timeout-minutes: 65
+    # One round is a few minutes; a round that has to fetch a window's
+    # worth of frames after an outage takes longer. A looping dispatch
+    # stops at twenty past the next hour on its own (UNTIL_MINUTE below);
+    # this is the backstop for a round that hangs.
+    timeout-minutes: 90
     env:
-      ONCE: ${{ inputs.once || false }}
+      ONCE: ${{ !inputs.loop }}
       ROUND_MINUTES: ${{ inputs.round_minutes || '5' }}
+      # For a looping dispatch: run past the hour, and hand over to the next
+      # scheduled job as soon as it is waiting.
+      UNTIL_MINUTE: "80"
+      HANDOVER_CHECK: scripts/successor_queued.sh
       HOURS: ${{ inputs.hours || '4' }}
       PROFILE: ${{ inputs.profile || 'balanced' }}
       KEEP: ${{ inputs.keep || '2' }}
@@ -134,6 +149,7 @@ jobs:
 
       - name: Run the rounds
         env:
+          GH_TOKEN: ${{ github.token }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}

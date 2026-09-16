@@ -410,15 +410,14 @@ redeploying when frontend code changes.
 ### The rolling windows (MRMS, JMA)
 
 An observation feed is never complete, so
-[`publish-mrms.yml`](.github/workflows/publish-mrms.yml) runs one job an
-hour that loops through [`scripts/window_rounds.sh`](scripts/window_rounds.sh)
-(`MODEL=mrms`), a round every five minutes until five to the hour (GitHub's cron
-is too coarse for a five-minute cadence and fires ten to twenty minutes late).
-[`publish-jma.yml`](.github/workflows/publish-jma.yml) instead runs one round per
-job on a five-minute cron (`ONCE=true`): a job is a few minutes rather than a
-runner held for an hour, at the price of the cron's lateness; a dispatch with
-`loop` runs the rounds until twenty past the next hour and yields to the next
-scheduled job once it is waiting (`scripts/successor_queued.sh`). A round compares the bucket's newest
+[`publish-mrms.yml`](.github/workflows/publish-mrms.yml) and
+[`publish-jma.yml`](.github/workflows/publish-jma.yml) each run one round of
+[`scripts/window_rounds.sh`](scripts/window_rounds.sh) (`MODEL=mrms` or `jma`,
+`ONCE=true`) per job on a five-minute cron, the finest GitHub offers: a job is a
+few minutes rather than a runner held for an hour, at the price of the cron's
+ten to twenty minutes of lateness on every round. A dispatch with `loop` runs
+the rounds until twenty past the next hour and yields to the next scheduled job
+once it is waiting (`scripts/successor_queued.sh`), for catching up by hand. A round compares the bucket's newest
 frame with the live round's `window.json` (`make live-window`) and, when
 there is something new, builds the whole window again (`build-bin --run
 latest --hours 4 --round HHMM`; frames already on disk are reused, and the
