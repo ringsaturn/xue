@@ -809,9 +809,34 @@ function buildBasemapStyle(): BasemapStyle {
     // land stays a flat themed slate under the data.
     // Basemap labels follow the UI locale.
     layers: withCoastline(
-      basemapLayers("protomaps", flavor, { lang: basemapLang }).filter((layer) => layer.id !== "landcover"),
+      quietedUnderData(
+        basemapLayers("protomaps", flavor, { lang: basemapLang }).filter((layer) => layer.id !== "landcover"),
+      ),
     ),
   };
+}
+
+/** The flavor's street-level detail, toned down so a field stays the
+ * picture at a city zoom. The finest grids (the 0.005° JMA nowcast) earn
+ * zoom 12, where a flavor draws every street, the building footprints and
+ * the landuse fills; under a translucent field the street grid reads as
+ * bright patches over the data and the bridges and major roads as white
+ * bars across it. Buildings are dropped outright — a weather map has no
+ * use for footprints — and the roads keep a fraction of their opacity,
+ * the major ones more so the eye still has the arterials to hold on to.
+ * Water, coast, boundaries and labels are untouched. */
+function quietedUnderData(layers: BasemapStyle["layers"]): BasemapStyle["layers"] {
+  return layers.flatMap((layer) => {
+    if (layer.id === "buildings") return [];
+    if (layer.type === "line" && layer.id.startsWith("roads_")) {
+      const arterial = /highway|major/.test(layer.id);
+      return [{ ...layer, paint: { ...layer.paint, "line-opacity": arterial ? 0.55 : 0.3 } }];
+    }
+    if (layer.type === "fill" && layer.id.startsWith("landuse_")) {
+      return [{ ...layer, paint: { ...layer.paint, "fill-opacity": 0.5 } }];
+    }
+    return [layer];
+  });
 }
 
 /** The flavor's layers with the coastline inserted just under the country
