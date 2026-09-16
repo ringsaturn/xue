@@ -100,7 +100,7 @@ class SourceRegistryTests(unittest.TestCase):
         for model in ("ecmwf", "sflux"):
             self.assertFalse(source_spec(model).video, model)
             self.assertEqual(video_variable_ids(source_spec(model)), frozenset(), model)
-        for model in ("gfs", "hrrr", "radar"):
+        for model in ("gfs", "hrrr"):
             self.assertTrue(source_spec(model).video, model)
             self.assertEqual(video_variable_ids(source_spec(model)), binconvert.VIDEO_VARIABLE_IDS, model)
 

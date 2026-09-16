@@ -26,7 +26,7 @@
     "tr": "Shadel Tayfunu’nun (2026 yılının 18 numaralısı) tüm ömrü boyunca bileşik radar yansıtırlığı; kaynak verinin altı dakikalık adımıyla, 26 Ağustos 00 CST’den 3 Eylül 20 CST’ye — 2096 kare, 25 zaman dilimi arşivde eksik. 28 Ağustos 08:05 CST’de Zhejiang’daki Yuhuan’ın Kanmen bölgesine 35 m/s ve 975 hPa ile ilk kez karaya çıktı ve 30 Ağustos’ta kara üzerinde sona erdirildi. Artık dolaşımı güneye indi, 1 Eylül sabahın erken saatlerinde Güney Çin Denizi üzerinde yeniden tropikal fırtına şiddetine ulaştı, 2 Eylül’de doğu Guangdong kıyısını sıyırdı ve 3 Eylül 06:30 CST’de Fujian’daki Zhangpu’nun Gulei bölgesine 23 m/s ve 985 hPa ile üçüncü kez karaya çıktı. Veri, Çin Meteoroloji İdaresi’nin 3. seviye radar mozaiğidir (RADAR_L3_MST_CREF) — gözlem, tahmin değil.",
     "ru": "Композитная радарная отражаемость за всю жизнь тайфуна «Шадель» (№ 18 сезона 2026 года) с исходным шагом в шесть минут, с 00 CST 26 августа до 20 CST 3 сентября — 2096 кадров, 25 сроков в архиве отсутствуют. Первый выход на берег — 28 августа в 08:05 CST у Каньмэня (Юйхуань, Чжэцзян) при ветре 35 м/с и давлении 975 гПа; 30 августа над сушей тайфун был снят с учёта. Остаточная циркуляция ушла на юг, рано утром 1 сентября вновь усилилась до тропического шторма над Южно-Китайским морем, 2 сентября прошла вдоль восточного побережья Гуандуна и 3 сентября в 06:30 CST в третий раз вышла на берег у Гулэя (Чжанпу, Фуцзянь) при 23 м/с и 985 гПа. Данные — радарная мозаика 3-го уровня Метеорологического управления Китая (RADAR_L3_MST_CREF): наблюдения, не прогноз."
   },
-  "model": "radar",
+  "model": "cma",
   "dataset": "typhoon_shadel/shadel_full_nation_6min_z5.nc",
   "hours": 212,
   "bbox": [

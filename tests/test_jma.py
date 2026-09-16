@@ -102,8 +102,9 @@ class SourceRegistryTests(unittest.TestCase):
         self.assertEqual(JMA.production_grid, (round((east - west) / JMA_GRID_STEP), round((north - south) / JMA_GRID_STEP)))
 
     def test_the_series_file_sources_are_the_two_netcdf_ones(self) -> None:
-        self.assertEqual([spec.id for spec in SOURCES.values() if spec.series_file], ["radar", "jma"])
-        self.assertFalse(source_spec("radar").fetched)
+        self.assertEqual([spec.id for spec in SOURCES.values() if spec.series_file], ["cma", "jma"])
+        # Both fetched: the CMA window out of its archive (tests/test_cma.py).
+        self.assertTrue(source_spec("cma").fetched)
 
     def test_the_catalog_prose_names_the_agency_and_its_terms(self) -> None:
         prose = _source_prose(JMA)
@@ -218,23 +219,26 @@ class ObservationCadenceTests(unittest.TestCase):
         with self.assertRaisesRegex(ConversionError, "strictly increasing"):
             self._inspect(["20260916010500", "20260916010542"])
 
-    def test_the_archive_file_keeps_its_first_frame_as_the_run(self) -> None:
-        radar = source_spec("radar")
-        with mock.patch.object(observation, "variable_spec", wraps=observation.variable_spec):
-            info_times = ["20260916010500", "20260916011100"]
-            epoch_seconds = [int(stamp(t).timestamp()) for t in info_times]
-            info = {
-                "metadata": {"": {"time#units": "seconds since 1970-01-01T00:00:00+00:00"}},
-                "bands": [
-                    {"band": i + 1, "unit": "dBZ", "scale": 0.1, "offset": 0.0, "noDataValue": 32767, "metadata": {"": {"NETCDF_DIM_time": str(s)}}}
-                    for i, s in enumerate(epoch_seconds)
-                ],
-            }
-            with (
-                mock.patch.object(Path, "is_file", return_value=True),
-                mock.patch.object(observation, "dataset_info", return_value=info),
-            ):
-                series = observation.inspect_observation(Path("radar.nc"), radar)
+    def test_a_source_without_a_cadence_keeps_its_first_frame_as_the_run(self) -> None:
+        """The rule the archive files followed before the CMA source took a
+        cadence of its own: no snapping, the first frame is the run."""
+        import dataclasses
+
+        archive_file = dataclasses.replace(source_spec("cma"), cadence_seconds=None, window_hours=None)
+        info_times = ["20260916010500", "20260916011100"]
+        epoch_seconds = [int(stamp(t).timestamp()) for t in info_times]
+        info = {
+            "metadata": {"": {"time#units": "seconds since 1970-01-01T00:00:00+00:00"}},
+            "bands": [
+                {"band": i + 1, "unit": "dBZ", "scale": 0.1, "offset": 0.0, "noDataValue": 32767, "metadata": {"": {"NETCDF_DIM_time": str(s)}}}
+                for i, s in enumerate(epoch_seconds)
+            ],
+        }
+        with (
+            mock.patch.object(Path, "is_file", return_value=True),
+            mock.patch.object(observation, "dataset_info", return_value=info),
+        ):
+            series = observation.inspect_observation(Path("radar.nc"), archive_file)
         self.assertEqual(series.frames[0]["cref"].run_time, stamp("20260916010500"))
         self.assertEqual(series.lead_seconds, [0, 360])
 

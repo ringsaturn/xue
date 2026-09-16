@@ -4,7 +4,7 @@ A forecast source is a cycle on a bucket, fetched one record per forecast
 hour. An observation source is the opposite shape: one local file that
 already holds the whole series, one band per time, produced after the fact by
 whatever decoded the original product (for the CMA radar mosaic, the
-``radar-l3-mst`` tool turning published BIN tiles into NetCDF).
+``cma-radar`` tool turning published BIN tiles into NetCDF).
 
 This module is the ingest half of that shape. It reads the file's band and
 dimension metadata with one ``gdalinfo`` pass and returns the same

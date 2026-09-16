@@ -112,6 +112,9 @@ describe("parseModelFromSearch", () => {
     expect(parseModelFromSearch("?model=MRMS")).toBe("mrms");
     expect(parseModelFromSearch("?model=jma")).toBe("jma");
     expect(parseModelFromSearch("?model=hrpns")).toBe("jma");
+    expect(parseModelFromSearch("?model=cma")).toBe("cma");
+    expect(parseModelFromSearch("?model=CMA-RADAR")).toBe("cma");
+    expect(parseModelFromSearch("?model=radar")).toBe("cma");
   });
 
   it("falls back to the default on unknown or missing model", () => {

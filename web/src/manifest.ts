@@ -11,7 +11,7 @@ export type ForecastVariableId = "tmp2m" | "prate";
  * The CMA radar mosaic has no live feed: it is an observation archive that
  * reaches the app only as showcase cases. The MRMS mosaic and the JMA
  * nowcast are observations *and* live, each a rolling window. */
-export type ForecastModelId = "gfs" | "ecmwf" | "sflux" | "hrrr" | "radar" | "mrms" | "jma";
+export type ForecastModelId = "gfs" | "ecmwf" | "sflux" | "hrrr" | "cma" | "mrms" | "jma";
 
 export interface ForecastModelInfo {
   id: ForecastModelId;
@@ -69,9 +69,25 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
     region: [-134.1, 21.12, -60.9, 52.62],
     domain: HRRR_DOMAIN,
   },
-  // CMA weather radar level-3 mosaic composite reflectivity: observations,
-  // not a forecast, and published only as showcase cases.
-  radar: { id: "radar", label: "CMA-RADAR", product: "l3-mst-cref", observation: true, coreBundles: ["cref"] },
+  // CMA weather radar level-3 mosaic composite reflectivity: the national
+  // composite every six minutes on the data portal's plate carrée tile grid
+  // (0.0439°, 67.5°E–146.25°E and 11.25°N–56.25°N), read by the encoder out
+  // of the cma-radar tool's daily archive. Observations and live, like
+  // MRMS: a rolling window of the last two to three hours, some forty
+  // minutes behind real time (the portal publishes late and the archive
+  // syncs every twenty minutes). The region is where the camera goes when
+  // it is opened from elsewhere. The id was `radar` while the source was
+  // cases only; the manifest identity CMA-RADAR is unchanged.
+  cma: {
+    id: "cma",
+    label: "CMA-RADAR",
+    product: "l3-mst-cref",
+    latestFilename: "latest-cma.json",
+    observation: true,
+    coreBundles: ["cref"],
+    defaultVariable: "cref",
+    region: [67.5, 11.25, 146.25, 56.25],
+  },
   // NOAA MRMS, the national radar mosaic over the contiguous United States:
   // composite reflectivity and precipitation rate every two minutes on a
   // regular grid the encoder thins to 0.02°. Observations, and the one
@@ -117,10 +133,9 @@ export function isObservationModel(model: ForecastModelId): boolean {
   return FORECAST_MODELS[model].observation === true;
 }
 
-/** The live feeds, in model-switch order: the four forecasts and the two
- * rolling observation windows, MRMS and the JMA nowcast. The CMA radar
- * archive is cases only. */
-export const FORECAST_MODEL_IDS: readonly ForecastModelId[] = ["gfs", "sflux", "ecmwf", "hrrr", "mrms", "jma"];
+/** The live feeds, in model-switch order: the four forecasts and the three
+ * rolling observation windows, MRMS, the JMA nowcast and the CMA mosaic. */
+export const FORECAST_MODEL_IDS: readonly ForecastModelId[] = ["gfs", "sflux", "ecmwf", "hrrr", "mrms", "jma", "cma"];
 
 function modelForManifestString(model: unknown): ForecastModelInfo | null {
   for (const info of Object.values(FORECAST_MODELS)) {

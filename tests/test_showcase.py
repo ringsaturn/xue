@@ -43,7 +43,7 @@ def observation_payload(**overrides: object) -> dict[str, object]:
         "id": "demo-observation",
         "title": localized("Demo"),
         "summary": localized("Demo summary"),
-        "model": "radar",
+        "model": "cma",
         "dataset": "event/series.nc",
         "hours": 24,
         "bbox": [105.0, 14.0, 130.0, 34.0],
@@ -176,7 +176,7 @@ class BundleInputsTest(unittest.TestCase):
         self.assertNotIn("dswrf", published_bundle_ids(source_spec("gfs")))
 
     def test_a_source_without_wind_publishes_no_wind_bundle(self) -> None:
-        self.assertEqual(published_bundle_ids(source_spec("radar")), ("cref",))
+        self.assertEqual(published_bundle_ids(source_spec("cma")), ("cref",))
 
 
 class CaseDefinitionTest(unittest.TestCase):
@@ -243,7 +243,7 @@ class CaseDefinitionTest(unittest.TestCase):
 
     def test_parses_an_observation_definition(self) -> None:
         spec = parse_case(observation_payload())
-        self.assertEqual(spec.model, "radar")
+        self.assertEqual(spec.model, "cma")
         self.assertEqual(spec.variables, ("cref",))
         # No cycle to fetch: the dataset file says when the series starts.
         self.assertEqual(spec.run, "")

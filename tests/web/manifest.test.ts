@@ -428,21 +428,29 @@ describe("dataset kinds", () => {
   it("marks the radar mosaics as observations and the forecasts as forecasts", () => {
     // Mirrors SourceSpec.observation in xue/sources.py; the viewer titles its
     // timeline off this (run cycle and lead time vs. series start and elapsed).
-    expect(isObservationModel("radar")).toBe(true);
+    expect(isObservationModel("cma")).toBe(true);
     expect(isObservationModel("mrms")).toBe(true);
     expect(isObservationModel("jma")).toBe(true);
     for (const model of ["gfs", "sflux", "ecmwf", "hrrr"] as const) expect(isObservationModel(model)).toBe(false);
   });
 
-  it("lists the live feeds, the MRMS window among them, and not the CMA archive", () => {
-    // Every live feed has a pointer to poll; the CMA archive has none, so
-    // nothing may try to fetch one. MRMS is the one dataset that is
-    // observations and live (mirrors SourceSpec.latest_filename).
-    expect(FORECAST_MODEL_IDS).toEqual(["gfs", "sflux", "ecmwf", "hrrr", "mrms", "jma"]);
+  it("lists the live feeds, the three observation windows among them", () => {
+    // Every live feed has a pointer to poll (mirrors
+    // SourceSpec.latest_filename); the three observation windows are the
+    // last of the switch order.
+    expect(FORECAST_MODEL_IDS).toEqual(["gfs", "sflux", "ecmwf", "hrrr", "mrms", "jma", "cma"]);
     for (const model of FORECAST_MODEL_IDS) expect(FORECAST_MODELS[model].latestFilename).toBeDefined();
     expect(FORECAST_MODELS.mrms.latestFilename).toBe("latest-mrms.json");
     expect(FORECAST_MODELS.jma.latestFilename).toBe("latest-jma.json");
-    expect(FORECAST_MODELS.radar.latestFilename).toBeUndefined();
+    expect(FORECAST_MODELS.cma.latestFilename).toBe("latest-cma.json");
+  });
+
+  it("opens the CMA mosaic on its reflectivity over its own region", () => {
+    // Mirrors the `cma` entry of SOURCES: the mosaic ships cref alone, on
+    // the zoom-5 tile grid the archive keeps.
+    expect(modelDefaultVariable("cma", "tmp2m")).toBe("cref");
+    expect(FORECAST_MODELS.cma.coreBundles).toEqual(["cref"]);
+    expect(FORECAST_MODELS.cma.region).toEqual([67.5, 11.25, 146.25, 56.25]);
   });
 
   it("accepts a live pointer naming a round of a rolling window", () => {
@@ -459,7 +467,7 @@ describe("dataset kinds", () => {
       manifestCrc32: "0badf00d",
     };
     expect(validateLatestPointer(pointer, "mrms").manifestPath).toBe("mrms.2026091321/0035/manifest.json");
-    expect(() => validateLatestPointer(pointer, "radar")).toThrow();
+    expect(() => validateLatestPointer(pointer, "cma")).toThrow();
   });
 
   it("admits an mrms case manifest by its own identity and core set", () => {
@@ -481,7 +489,7 @@ describe("dataset kinds", () => {
     expect(validateManifest({ ...mrms, bundles: [mrms.bundles[0]!] }, "mrms").bundles).toHaveLength(1);
     expect(() => validateManifest({ ...mrms, bundles: [mrms.bundles[1]!] }, "mrms")).toThrow(/no bundle for variable cref/);
     // The two mosaics are not interchangeable.
-    expect(() => validateManifest(mrms, "radar")).toThrow();
+    expect(() => validateManifest(mrms, "cma")).toThrow();
     expect(FORECAST_MODELS.mrms.region).toEqual([-130, 20, -60, 55]);
   });
 
@@ -517,10 +525,10 @@ describe("dataset kinds", () => {
       forecastHours: 6,
       bundles: [{ variable: "cref", path: "showcase/x/cref.xue", byteLength: 1, crc32: "00000000" }],
     };
-    expect(validateManifest(radar, "radar").bundles).toHaveLength(1);
+    expect(validateManifest(radar, "cma").bundles).toHaveLength(1);
     const withoutReflectivity = { ...radar, bundles: [{ ...radar.bundles[0]!, variable: "prate" }] };
-    expect(() => validateManifest(withoutReflectivity, "radar")).toThrow(/no bundle for variable cref/);
-    expect(() => validateManifest(withoutReflectivity, "radar", { requireCoreVariables: false })).not.toThrow();
+    expect(() => validateManifest(withoutReflectivity, "cma")).toThrow(/no bundle for variable cref/);
+    expect(() => validateManifest(withoutReflectivity, "cma", { requireCoreVariables: false })).not.toThrow();
     for (const model of ["gfs", "sflux", "ecmwf", "hrrr"] as const) expect(FORECAST_MODELS[model].coreBundles).toBeUndefined();
     expect(FORECAST_MODELS.mrms.coreBundles).toEqual(["cref"]);
   });

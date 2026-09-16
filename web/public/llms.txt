@@ -22,9 +22,14 @@ Facts worth getting right:
   one regional source, resampled from its Lambert conformal grid onto a
   0.03° latitude/longitude grid (2441 × 1051) over the domain's footprint;
   the rectangle's corners the conic domain never covered repeat the nearest
-  cell and are not a forecast (the viewer clips them). Two more sources are
-  observations rather than forecasts: `radar` (CMA level-3 radar mosaic
-  composite reflectivity, six-minute frames), historical cases only, and
+  cell and are not a forecast (the viewer clips them). Three more sources are
+  observations rather than forecasts: `radar` (the CMA level-3 radar mosaic
+  composite reflectivity over China, six-minute frames on the data portal's
+  0.0439° plate carrée tile grid, 1792 × 1024 cells, 67.5°E–146.25°E and
+  11.25°N–56.25°N, read by the encoder out of the cma-radar tool's daily
+  Zarr archive; the seventh live source, a rolling window of the last two
+  to three hours some forty minutes behind real time, and historical cases
+  from the archive or from files the tool wrote), and
   `mrms` (NOAA MRMS, the national radar mosaic over the contiguous United
   States, two-minute frames on a 0.01° grid thinned by block maximum to
   0.02°, 130°W–60°W and 20°N–55°N; a radar volume scan takes four to six
@@ -67,7 +72,7 @@ Facts worth getting right:
   `hgt700`, `hgt500`, `tmp925`, `tmp850`, `tmp500`, `gust`, `tcdc`,
   `lcdc`, `mcdc`, `hcdc`, `cape`, `vis`, `dpt2m`, the forecast composite
   radar reflectivity `cref` (the same name and unit as the radar mosaics'),
-  and the vector pairs `wind10m`, `wind925`, `wind850`, `wind250`. RADAR:
+  and the vector pairs `wind10m`, `wind925`, `wind850`, `wind250`. CMA:
   `cref`. MRMS: `cref` (observed composite reflectivity, dBZ) and `prate`
   (the MRMS precipitation rate, mm/h; a case may ship the reflectivity
   alone). JMA: `prate` (precipitation intensity class representative rate,
@@ -81,8 +86,8 @@ Facts worth getting right:
   and no account.
 - Data licensing: NOAA GFS and HRRR are public domain; ECMWF open data is CC BY 4.0 and
   what is served is a converted derivative ("Contains modified ECMWF open
-  data"); `radar` cases are CMA products and `mrms` cases NOAA products
-  (public domain); `jma` is derived from the Japan Meteorological Agency
+  data"); `cma` is a CMA product (中国气象局国家气象中心, www.nmc.cn) and `mrms` a
+  NOAA product (public domain); `jma` is derived from the Japan Meteorological Agency
   website (出典：気象庁ホームページ; the agency's terms of use, compatible
   with CC BY 4.0, ask that the source be named and the processing —
   regridding and reclassification by jma-radar — be noted); the basemap is
@@ -162,7 +167,7 @@ https://dataset.ringsaturn.me/xue/. The contract is two layers:
 
 - One mutable live pointer per source (JSON, schema 1): `latest.json` (GFS),
   `latest-sflux.json`, `latest-ecmwf.json`, `latest-hrrr.json`,
-  `latest-mrms.json`, `latest-jma.json`. Fields: `schemaVersion`, `model`, `product`, `run`
+  `latest-mrms.json`, `latest-jma.json`, `latest-cma.json`. Fields: `schemaVersion`, `model`, `product`, `run`
   (YYYYMMDDHH, UTC), `runTime` (ISO 8601), `manifestPath` (relative),
   `manifestCrc32`. Fetch with cache disabled; it changes four times a day
   (every hour for HRRR, every five minutes for MRMS — compare
@@ -186,7 +191,7 @@ https://dataset.ringsaturn.me/xue/. The contract is two layers:
   axis, the variables' GRIB2 parameter blocks and the quantization codebooks
   are inside each bundle — a UTF-8 JSON metadata block after the container's
   header, the store group's `attributes.xue` verbatim.
-- The MRMS and JMA windows are one directory deeper: the `run` is the window's *first*
+- The MRMS, JMA and CMA radar windows are one directory deeper: the `run` is the window's *first*
   hour (three hours before the newest frame's, moving on every hour), and
   each five-minute rebuild of that run is a round of its own,
   `mrms.<run>/<HHMM>/manifest.json` (HHMM the round's UTC start), so a

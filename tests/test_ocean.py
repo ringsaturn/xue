@@ -238,7 +238,7 @@ class RegistryTests(unittest.TestCase):
         for variable_id in OCEAN_VARIABLE_IDS + (WAVE_BUNDLE_ID,):
             self.assertEqual(variable_id in ecmwf, variable_id not in ("icec", "dirpw"), variable_id)
         self.assertEqual(ecmwf[-1], WAVE_BUNDLE_ID)
-        for source in (source_spec("sflux"), source_spec("radar")):
+        for source in (source_spec("sflux"), source_spec("cma")):
             self.assertEqual(source.companion_files, ())
             for variable_id in OCEAN_VARIABLE_IDS + (WAVE_BUNDLE_ID,):
                 self.assertNotIn(variable_id, published_bundle_ids(source), source.id)

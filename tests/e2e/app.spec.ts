@@ -849,7 +849,7 @@ test("the credit mark opens the sources sheet, and the line folds into it on a p
   // The dataset notices stay in the markup and are hidden by the stylesheet,
   // so this is a visibility check, not a text one — textContent has them.
   await expect(page.locator('.source-credit[data-credit-model="ecmwf"]')).toBeHidden();
-  await expect(page.locator('.source-credit[data-credit-model="radar"]')).toBeHidden();
+  await expect(page.locator('.source-credit[data-credit-model="cma"]')).toBeHidden();
   const trigger = page.getByRole("button", { name: "SOURCES" });
   await expect(trigger).toBeVisible();
   await trigger.click();

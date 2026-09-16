@@ -233,15 +233,23 @@ def _source_prose(source: SourceSpec) -> dict[str, Any]:
                 }
             ],
         },
-        "radar": {
+        "cma": {
             "title": "CMA radar mosaic",
             "description": (
                 "The China Meteorological Administration level-3 composite reflectivity mosaic "
-                "(RADAR_L3_MST_CREF), six-minute observations; published as cases only."
+                "(RADAR_L3_MST_CREF) over China: a national composite every six minutes, decoded "
+                "from the agency's data portal tiles onto the portal's plate carrée grid at "
+                "0.0439° (1792 × 1024 cells, 67.5°E–146.25°E, 11.25°N–56.25°N) and published "
+                "under cref, as a rolling window rebuilt every few minutes. Source: China "
+                "Meteorological Administration, National Meteorological Centre (www.nmc.cn)."
             ),
             "license": "other",
             "providers": [
-                {"name": "China Meteorological Administration", "roles": ["producer", "licensor"]},
+                {
+                    "name": "China Meteorological Administration",
+                    "roles": ["producer", "licensor"],
+                    "url": "https://www.nmc.cn",
+                },
                 _XUE_PROVIDER,
             ],
             "links": [],

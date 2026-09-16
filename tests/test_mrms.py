@@ -147,14 +147,15 @@ class SourceRegistryTests(unittest.TestCase):
         self.assertFalse(MRMS.video)
         with self.assertRaisesRegex(DownloadError, "publishes no forecast axis"):
             MRMS.forecast_hours(3)
-        # The local-file observation is still not fetched, and a forecast is.
-        radar = source_spec("radar")
-        self.assertTrue(radar.observation)
-        self.assertFalse(radar.fetched)
-        self.assertIsNone(radar.window_hours)
+        # The CMA mosaic is fetched too, out of its archive, with a cadence
+        # of its own (tests/test_cma.py); the forecasts have neither.
+        radar = source_spec("cma")
+        self.assertTrue(radar.observation and radar.fetched)
+        self.assertEqual((radar.window_hours, radar.cadence_seconds), (3, 360))
         self.assertTrue(source_spec("hrrr").fetched)
-        for model in ("gfs", "ecmwf", "sflux", "hrrr", "radar"):
+        for model in ("gfs", "ecmwf", "sflux", "hrrr", "cma"):
             self.assertIsNone(source_spec(model).downsample, model)
+        for model in ("gfs", "ecmwf", "sflux", "hrrr"):
             self.assertIsNone(source_spec(model).cadence_seconds, model)
 
     def test_published_bundles_and_the_core_set(self) -> None:
@@ -295,8 +296,14 @@ class ListingTests(unittest.TestCase):
                 resolve_run("2026091300", hours=3, model="mrms")
         with self.assertRaisesRegex(DownloadError, "at least an hour"):
             resolve_run("2026091300", hours=0, model="mrms")
-        with self.assertRaisesRegex(DownloadError, "read from a local file"):
-            resolve_run("2026091300", hours=3, model="radar")
+        import dataclasses
+
+        from xuebuild import sources
+
+        archive_file = dataclasses.replace(source_spec("cma"), latest_filename=None, window_hours=None)
+        with mock.patch.dict(sources.SOURCES, {"cma": archive_file}):
+            with self.assertRaisesRegex(DownloadError, "read from a local file"):
+                resolve_run("2026091300", hours=3, model="cma")
 
     def test_the_live_window_ends_at_the_newest_common_slot(self) -> None:
         # The composite is a slot ahead of the rate; the window ends where

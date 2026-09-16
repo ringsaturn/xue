@@ -90,7 +90,11 @@ def knows_source(model: str) -> bool:
     The wheel carries a table of its own, and one that predates a source
     refuses the model before it looks at any input — so an empty input list
     is enough to ask, and nothing is read or written. What a test that
-    needs a wheel at least as new as some source skips on."""
+    needs a wheel at least as new as some source skips on. A source whose
+    shape changes takes a new id for the same reason (the CMA mosaic went
+    from ``radar``, a local file, to ``cma``, a fetched window): a wheel
+    that knows the old id must not be taken for one that knows the new
+    shape."""
     if not available():
         return False
     try:

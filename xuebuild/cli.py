@@ -72,16 +72,16 @@ def _common_run_arguments(parser: argparse.ArgumentParser, *, force_help: str) -
         help="last forecast hour, inclusive; must lie on the model's published axis "
         "(e.g. GFS: hourly to 120, then 3-hourly to 240); defaults to the whole axis "
         "the model publishes (240 for the global models, 18 for HRRR); on an observation "
-        "source, the window length in hours (3 for MRMS and JMA)",
+        "source, the window length in hours (3 for MRMS, JMA and the CMA mosaic)",
     )
     parser.add_argument("--force", action="store_true", help=force_help)
 
 
 def _model_argument(parser: argparse.ArgumentParser, *, fetched_only: bool = True) -> None:
     """The --model choice. Fetching and building are for the sources with a
-    bucket to fetch from — every forecast, and the MRMS mosaic; conversion
-    also takes the local-file observation source, whose input is one NetCDF
-    file rather than a fetched run."""
+    bucket to fetch from — every forecast and the three observation feeds;
+    conversion also takes any source's run directory or, for a series-file
+    observation, one NetCDF file."""
     choices = tuple(name for name, source in SOURCES.items() if source.fetched or not fetched_only)
     parser.add_argument(
         "--model",
@@ -93,9 +93,13 @@ def _model_argument(parser: argparse.ArgumentParser, *, fetched_only: bool = Tru
             "NOAA HRRR over the contiguous US (3 km, a cycle every hour, hourly to 18), "
             "NOAA MRMS, the radar mosaic over the contiguous US (an observation every "
             "two minutes; --run names the window's first hour and --hours its length, 3 by default), "
-            "or JMA, the precipitation nowcast over Japan (an observation every five minutes, "
-            "fetched through the jma-radar tool; a window the same way)"
-            + ("" if fetched_only else "; radar is the CMA mosaic, read from a local NetCDF file")
+            "JMA, the precipitation nowcast over Japan (an observation every five minutes, "
+            "fetched through the jma-radar tool; a window the same way), "
+            "or cma, the CMA composite reflectivity mosaic over China (an observation every "
+            "six minutes, read out of its daily Zarr archive through the cma-radar tool; "
+            "a window the same way"
+            + ("" if fetched_only else ", or one NetCDF file the tool wrote")
+            + ")"
         ),
     )
 

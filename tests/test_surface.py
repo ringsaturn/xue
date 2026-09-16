@@ -132,7 +132,7 @@ class RegistryTests(unittest.TestCase):
         ecmwf = published_bundle_ids(source_spec("ecmwf"))
         for variable_id in SURFACE_VARIABLE_IDS:
             self.assertEqual(variable_id in ecmwf, variable_id in ("gust", "tcdc", "cape", "dpt2m"), variable_id)
-        for source in (source_spec("sflux"), source_spec("radar")):
+        for source in (source_spec("sflux"), source_spec("cma")):
             published = published_bundle_ids(source)
             for variable_id in SURFACE_VARIABLE_IDS:
                 self.assertNotIn(variable_id, published, source.id)

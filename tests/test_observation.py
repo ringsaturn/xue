@@ -20,7 +20,7 @@ from xuebuild.errors import ConversionError
 from xuebuild.model import PlaneSource
 from xuebuild.sources import source_spec
 
-RADAR = source_spec("radar")
+RADAR = source_spec("cma")
 EPOCH_2026_08_25_16Z = 1787673600
 
 

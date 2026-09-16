@@ -311,7 +311,11 @@ class CollectionAndCatalogTests(unittest.TestCase):
         self.assertEqual(stac.relocate_item(live, from_dir="gfs", to_dir="gfs.2026081406/1455"), deep)
 
     def test_a_source_without_a_feed_has_no_collection(self) -> None:
-        source = source_spec("radar")
+        # Every registered source has a feed now; the rule is checked on a
+        # copy of the radar source with its pointer taken off.
+        import dataclasses
+
+        source = dataclasses.replace(source_spec("cma"), latest_filename=None)
         item = stac.run_item(_gfs_manifest(), "dbf3a790", source=source_spec("gfs"), manifest_relative_path="gfs.2026081406/manifest.json")
         with self.assertRaises(stac.StacError):
             stac.source_collection(source, item, "gfs.2026081406/item.json")
@@ -332,7 +336,7 @@ class CollectionAndCatalogTests(unittest.TestCase):
                 self.assertTrue(prose["title"] and prose["description"] and prose["license"])
                 if prose["license"] == "other":
                     self.assertTrue(
-                        any(link["rel"] == "license" for link in prose["links"]) or source.id == "radar",
+                        any(link["rel"] == "license" for link in prose["links"]) or source.id == "cma",
                         "an `other` license needs a link",
                     )
 

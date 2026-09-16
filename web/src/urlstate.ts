@@ -189,6 +189,9 @@ const MODEL_ALIASES: Record<string, ForecastModelId> = {
   mrms: "mrms",
   jma: "jma",
   hrpns: "jma",
+  cma: "cma",
+  "cma-radar": "cma",
+  radar: "cma",
 };
 
 /** Model requested by the page URL, or the default when the URL names none

@@ -54,7 +54,7 @@ describe("showcase catalog", () => {
       catalogFixture([
         caseFixture({
           id: "shadel-2026",
-          modelId: "radar",
+          modelId: "cma",
           model: "CMA-RADAR",
           product: "l3-mst-cref",
           run: "2026082516",
@@ -66,7 +66,7 @@ describe("showcase catalog", () => {
         }),
       ]),
     );
-    expect(catalog.cases[0]!.modelId).toBe("radar");
+    expect(catalog.cases[0]!.modelId).toBe("cma");
     expect(catalog.cases[0]!.variables).toEqual(["cref"]);
   });
 

@@ -220,10 +220,37 @@ model starts here; the frontend mirror is `FORECAST_MODELS` in
   probe and contour labels to the footprint (`web/src/domain.ts`,
   `FORECAST_MODELS[].domain`), and `region` is where the camera goes when a
   regional model is opened on a view showing none of it.
-- Local observation (`radar`): `observation=True`, `series_file=True`, no
-  cycle, no lead time, one NetCDF file per event read by `observation.py`,
-  no pointer, no cron job, no fetch. The axis is whatever times the
-  observations carry.
+- Archived series-file observation (`cma`, once `radar`): the CMA level-3 composite
+  reflectivity mosaic over China, `observation=True`, `series_file=True`,
+  a rolling window like `jma` (`latest-cma.json`, `publish-cma.yml`
+  the same shape as `publish-jma.yml` with `MODEL=cma HOURS=3` and no
+  frame cache) but read out of an archive rather than decoded from tiles:
+  a private sibling tool, invoked as `cma-radar` (never name its repository
+  or its bucket in this repo, its docs or any published metadata), keeps
+  the agency's six-minute mosaics as one Zarr v3 store per UTC day in an
+  archive named only by the `XUE_CMA_ARCHIVE` environment variable (no
+  default; an `s3://` prefix read with the tool's `R2_*` credentials, or a
+  local directory), each store with a complete 240-slot `time` axis and a
+  `slot_status`, and `cma-radar window --json` (`xuebuild/cmacli.py`,
+  `XUE_CMA_RADAR` overrides the command; `publish-cma.yml` installs the
+  tool from the `CMA_RADAR_INSTALL` secret) lists the written slots of a
+  UTC window or, with `--out`, reads them (one orthogonal read per day
+  store) and writes them as the NetCDF series `observation.py` has always
+  read (`fetch.py::_fetch_cma_run`, `latest_cma_slot` from the last
+  day's stores, `_cma_run_is_complete` when the archive has a slot at or
+  past the window's end). The grid is the portal's zoom-5 plate carrée
+  tile grid (`CMA_ZOOM`, 0.0439°, 1792 × 1024; the power-of-two step
+  passes `_snap_regional_steps` untouched), `cadence_seconds` is 360, so
+  `unitSeconds` is 360. The portal publishes twenty to thirty minutes
+  late and the archive syncs every twenty minutes, so the live window
+  ends some forty minutes behind real time. A showcase case names a
+  window of the archive by `run`, or a local file the tool wrote by
+  `dataset` (the cases cut before the archive); `showcase.py` admits
+  either on a series-file source. The id changed from `radar` with the
+  shape (the run directory and pointer on R2 are `cma.<run>/` and
+  `latest-cma.json`), so a wheel that knows `radar` is never taken by
+  `native.knows_source` for one that knows `cma`; the manifest identity
+  `CMA-RADAR` and the cases built under it are unchanged.
 - Fetched observation (`mrms`): a run is a window named by its first hour
   (`window_hours`, also its `--hours` default), its frames listed off the
   bucket (`fetch.py::mrms_window_frames`: one gzipped GRIB per product per
@@ -264,7 +291,7 @@ model starts here; the frontend mirror is `FORECAST_MODELS` in
   `publish-jma.yml` the same shape as `publish-mrms.yml` with `MODEL=jma
   HOURS=3`, a `loop` dispatch polling every two minutes) but arriving as
   one NetCDF series per window
-  (`SourceSpec.series_file`, also true of `radar`; `convert_bin` and
+  (`SourceSpec.series_file`, also true of `cma`; `convert_bin` and
   `convert.rs` branch on it). The fetch is the `jma-radar` tool
   (`xuebuild/jmacli.py`: `python -m jma_radar window --json`, or
   `XUE_JMA_RADAR`), which reads the agency's `targetTimes_N1.json` (the
@@ -365,10 +392,11 @@ Other modules:
   (`showcase.LOCALES`, held to `web/src/i18n.ts` by
   `tests/fixtures/locales.json`); `showcase refresh` rewrites a built case's
   sidecar from its definition without a rebuild. A case is a forecast case
-  (`run` + `hours`), a local-file observation case (`radar`: `dataset`
-  instead of `run`, `XUE_OBSERVATION_ROOT`) or a fetched-observation case
-  (`mrms`: `run` is the window's first hour, `hours` its length); a window
-  the archive cannot fill to its declared end is refused.
+  (`run` + `hours`), a local-file observation case (a series-file source
+  with `dataset` instead of `run`, `XUE_OBSERVATION_ROOT`; how the `cma`
+  cases were cut before the archive) or a fetched-observation case
+  (`mrms`, `cma`: `run` is the window's first hour, `hours` its length);
+  a window the archive cannot fill to its declared end is refused.
 - `assemble.py`: a run built in pieces. `publish.yml` fans a run out over
   one job per bundle group (`bundle-groups` packs the source's bundles into
   at most `max_jobs` jobs of roughly equal cost and says which need

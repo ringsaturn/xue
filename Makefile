@@ -9,10 +9,12 @@ PROFILE ?= balanced
 # Forecast source: gfs (NOAA 0.25°, hourly), ecmwf (IFS open data, 3-hourly),
 # sflux (GFS surface flux, native ~13 km, hourly, adds the dswrf layer), or
 # hrrr (NOAA HRRR, 3 km over the contiguous US, a cycle every hour, to F18);
-# mrms (the NOAA radar mosaic, an observation every two minutes) and jma
+# mrms (the NOAA radar mosaic, an observation every two minutes), jma
 # (the JMA precipitation nowcast over Japan, every five minutes, through the
-# jma-radar tool) build a window named by its first hour — `RUN=latest` the
-# live rolling window.
+# jma-radar tool) and cma (the CMA radar mosaic over China, every six
+# minutes, read out of its daily Zarr archive through the cma-radar tool)
+# build a window named by its first hour — `RUN=latest` the live rolling
+# window.
 MODEL ?= gfs
 # One round of a rolling window (`build-bin --round`): the run's artifacts
 # and manifest live in <model>.<run>/<ROUND>/ and the pointer names that

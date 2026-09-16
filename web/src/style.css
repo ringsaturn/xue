@@ -2353,7 +2353,7 @@ html[lang="ja"] .rail-glyph {
 }
 
 body[data-model="ecmwf"] .source-credit[data-credit-model="ecmwf"],
-body[data-model="radar"] .source-credit[data-credit-model="radar"],
+body[data-model="cma"] .source-credit[data-credit-model="cma"],
 body[data-model="mrms"] .source-credit[data-credit-model="mrms"],
 body[data-model="jma"] .source-credit[data-credit-model="jma"] {
   display: inline;

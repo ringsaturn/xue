@@ -15,6 +15,7 @@ web/public/data/sflux.*/
 web/public/data/hrrr.*/
 web/public/data/mrms.*/
 web/public/data/jma.*/
+web/public/data/cma.*/
 web/public/data/manifest.json
 web/public/data/latest.json
 web/public/data/latest-ecmwf.json
@@ -22,6 +23,7 @@ web/public/data/latest-sflux.json
 web/public/data/latest-hrrr.json
 web/public/data/latest-mrms.json
 web/public/data/latest-jma.json
+web/public/data/latest-cma.json
 web/public/data/tc.*/
 web/public/data/latest-tc.json
 web/public/data/showcase/
@@ -34,6 +36,7 @@ web/public/data/sflux/
 web/public/data/hrrr/
 web/public/data/mrms/
 web/public/data/jma/
+web/public/data/cma/
 # Scratch case definitions for local development; the curated set is
 # showcase/cases/ and is checked in.
 showcase/cases-local/

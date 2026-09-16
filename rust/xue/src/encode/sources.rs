@@ -4,11 +4,12 @@
 //! carry the same data variable ids, so the decoder and frontend never care
 //! which model produced them. Not every source is a forecast: an
 //! `observation` source holds a series of observed analyses with no cycle
-//! and an axis that is whatever times the observations carry — the CMA
-//! radar mosaic one local file per event, the NOAA MRMS mosaic one fetched
-//! GRIB per two-minute frame, thinned onto a coarser grid (`Downsample`),
-//! the JMA precipitation nowcast one fetched NetCDF series per window
-//! (`series_file`), assembled from the agency's tiles by the jma-radar tool.
+//! and an axis that is whatever times the observations carry — the NOAA
+//! MRMS mosaic one fetched GRIB per two-minute frame, thinned onto a
+//! coarser grid (`Downsample`), the JMA precipitation nowcast and the CMA
+//! radar mosaic one fetched NetCDF series per window (`series_file`),
+//! assembled from the agency's tiles by the jma-radar tool and read back
+//! out of its daily Zarr archive by the cma-radar tool respectively.
 
 use crate::encode::errors::{EncodeError, Result};
 use crate::encode::reproject::Regrid;
@@ -364,13 +365,20 @@ pub const SOURCES: &[SourceSpec] = &[
         series_file: false,
         downsample: None,
     },
-    // CMA weather radar level-3 mosaic composite reflectivity: an observation
-    // source, one local NetCDF file per event.
+    // CMA weather radar level-3 mosaic composite reflectivity: the national
+    // composite every six minutes, kept by the cma-radar tool as one Zarr
+    // store per UTC day and read back a window at a time as one NetCDF
+    // series, the shape the tool's own `fetch` writes. An observation
+    // source, live like MRMS and JMA: the window's first hour is the run
+    // and the six-minute slots the axis (`cadence_seconds`); a showcase case
+    // may still be built from a local file; the id changed from `radar`
+    // with the shape, so a wheel that knows one is never taken for the
+    // other. Mirrors `xuebuild/sources.py`.
     SourceSpec {
-        id: "radar",
+        id: "cma",
         manifest_model: "CMA-RADAR",
         product: "l3-mst-cref",
-        latest_filename: None,
+        latest_filename: Some("latest-cma.json"),
         steps: &[],
         input_variable_ids: &["cref"],
         companion_files: &[],
@@ -382,14 +390,14 @@ pub const SOURCES: &[SourceSpec] = &[
         bundle_scalar_ids: &["cref"],
         core_bundle_ids: &["cref"],
         bundle_vector_ids: &[],
-        // Tile-grid dependent: the file says what it covers, and nothing here
-        // is ever built with require_complete.
-        production_grid: (0, 0),
+        // The zoom-5 tile grid over the archive's bbox: 0.0439° cells from
+        // 67.5E to 146.25E and 56.25N to 11.25N.
+        production_grid: (1792, 1024),
         tile: (64, 64),
         regrid: None,
         observation: true,
-        window_hours: None,
-        cadence_seconds: None,
+        window_hours: Some(3),
+        cadence_seconds: Some(360),
         series_file: true,
         downsample: None,
     },
@@ -490,17 +498,21 @@ mod tests {
         // 121 is past the hourly segment and off the three-hourly one.
         assert!(gfs.forecast_hours(121).is_err());
         // An observation source publishes no forecast axis at all.
-        assert!(source_spec("radar").expect("radar").forecast_hours(1).is_err());
+        assert!(source_spec("cma").expect("cma").forecast_hours(1).is_err());
     }
 
     #[test]
     fn the_series_file_sources_are_the_two_netcdf_ones() {
-        // The CMA file is local, the JMA window is fetched; both are one
-        // NetCDF series per run, read through observation.rs.
-        let radar = source_spec("radar").expect("radar");
+        // The CMA window is read out of its archive, the JMA window decoded
+        // from tiles; both are one NetCDF series per run, fetched and live,
+        // read through observation.rs with the window's hour as the run.
+        let radar = source_spec("cma").expect("cma");
         let jma = source_spec("jma").expect("jma");
-        assert!(radar.series_file && !radar.fetched());
+        assert!(radar.series_file && radar.fetched() && radar.live());
         assert!(jma.series_file && jma.fetched() && jma.live());
+        assert_eq!(radar.cadence_seconds, Some(360));
+        assert_eq!(radar.production_grid, (1792, 1024));
+        assert_eq!(radar.core_bundle_ids, &["cref"]);
         assert_eq!(jma.cadence_seconds, Some(300));
         assert_eq!(jma.core_bundle_ids, &["prate"]);
         for model in ["gfs", "ecmwf", "sflux", "hrrr", "mrms"] {
@@ -530,7 +542,7 @@ mod tests {
             // Assembly order: the companion's records come last.
             assert_eq!(&source.input_variable_ids[source.input_variable_ids.len() - 3..], wave.variable_ids);
         }
-        for model in ["sflux", "hrrr", "radar"] {
+        for model in ["sflux", "hrrr", "cma"] {
             assert!(source_spec(model).expect(model).companion_files.is_empty(), "{model}");
         }
     }

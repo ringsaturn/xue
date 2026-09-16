@@ -149,7 +149,7 @@ class VectorBundleTests(unittest.TestCase):
         self.assertIn("thetae850", published)
         self.assertEqual(bundle_input_ids(gfs, "thetae850"), ("tmp850", "spfh850"))
         # A listed vector bundle without its inputs is not published.
-        self.assertEqual(published_bundle_ids(source_spec("radar")), ("cref",))
+        self.assertEqual(published_bundle_ids(source_spec("cma")), ("cref",))
         self.assertEqual(published_bundle_ids(source_spec("sflux"))[-1], "wind10m")
         # Scalars first, then vectors: the order build-bin writes them in.
         self.assertEqual(

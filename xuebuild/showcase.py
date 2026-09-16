@@ -20,16 +20,18 @@ and the ECMWF open data mirrors from about 2024-02. A case naming a run
 older than its source published simply fails to fetch.
 
 A case on an observation source is the same object built from a different
-input, and comes in two shapes. The CMA radar mosaic names a local
-``dataset`` file instead of a ``run`` to fetch, and its axis is whatever
-times that file carries; nothing fetches it, so such a case is only
-rebuildable by someone who has the dataset. The NOAA MRMS mosaic is a
-*fetched* observation (``SourceSpec.fetched``): like a forecast case it
-names a ``run`` — the first hour of its window, which the bucket holds from
-2020-10-14 — and ``hours`` is the window's length rather than a point on a
-published axis, since the frames come every two minutes with gaps wherever
-the archive skipped one. The built output is an ordinary case like any
-other.
+input, and comes in two shapes. A *fetched* observation
+(``SourceSpec.fetched``: the NOAA MRMS mosaic, the CMA radar mosaic out of
+its archive) is like a forecast case: it names a ``run`` — the first hour
+of its window, which the MRMS bucket holds from 2020-10-14 and the CMA
+archive from 2026-09-06 — and ``hours`` is the window's length rather than
+a point on a published axis, since the frames come every few minutes with
+gaps wherever the archive skipped one. A case on a series-file observation
+(``SourceSpec.series_file``) may instead name a local ``dataset`` file the
+source's tool wrote, and its axis is whatever times that file carries;
+nothing fetches it, so such a case is only rebuildable by someone who has
+the dataset — how the CMA cases were built before the archive. The built
+output is an ordinary case like any other.
 """
 
 from __future__ import annotations
@@ -86,11 +88,10 @@ OBSERVATION_ROOT_ENV = "XUE_OBSERVATION_ROOT"
 """Environment variable holding the root an observation case's ``dataset``
 path is resolved against."""
 
-DEFAULT_OBSERVATION_ROOT = Path("../radar-l3-mst/data")
-"""Where observation datasets live by default: the sibling checkout of the
-tool that produces them, relative to the working directory. These files are
-not published anywhere, so an observation case is only rebuildable by someone
-who has them."""
+DEFAULT_OBSERVATION_ROOT = Path("data/observations")
+"""Where observation datasets live by default, relative to the working
+directory. These files are not published anywhere, so an observation case
+built from one is only rebuildable by someone who has it."""
 
 _ID_CHARACTERS = set("abcdefghijklmnopqrstuvwxyz0123456789-")
 
@@ -137,9 +138,9 @@ class CaseSpec:
     @property
     def from_dataset(self) -> bool:
         """Whether the case is built from a local observation file rather
-        than fetched — the CMA mosaic, not MRMS."""
-        source = self.source
-        return source.observation and not source.fetched
+        than fetched — a series-file observation whose definition names a
+        ``dataset`` (the CMA cases cut before the archive), never MRMS."""
+        return self.source.observation and bool(self.dataset)
 
     @property
     def dataset_path(self) -> Path:
@@ -189,10 +190,12 @@ def parse_case(payload: dict[str, Any], *, source_name: str = "<case>") -> CaseS
     # A forecast case names an archived cycle to fetch, and so does a fetched
     # observation — the first hour of its window; a local-file observation
     # case names the file that already holds its series, and its start time
-    # comes out of that file rather than out of the definition.
+    # comes out of that file rather than out of the definition. A
+    # series-file observation with an archive (the CMA mosaic) takes either.
     run = payload.get("run", "")
     dataset = payload.get("dataset", "")
-    if source.observation and not source.fetched:
+    from_file = source.observation and (not source.fetched or (source.series_file and bool(dataset)))
+    if from_file:
         if run:
             raise ShowcaseError(f"case {case_id}: an observation case built from a file has no run to name")
         if not isinstance(dataset, str) or not dataset:

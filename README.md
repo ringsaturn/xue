@@ -38,7 +38,7 @@ pipeline.
 | NOAA HRRR | `hrrr` | 2441 × 1051, 0.03°, contiguous US | hourly to F18, a cycle every hour | `latest-hrrr.json` |
 | NOAA MRMS | `mrms` | 3500 × 1750, 0.02°, contiguous US | one frame every two minutes, a rolling four-hour window | `latest-mrms.json` |
 | JMA precipitation nowcast | `jma` | 5600 × 5000, 0.005°, Japan | one frame every five minutes, a rolling three-hour window | `latest-jma.json` |
-| CMA radar mosaic | `radar` | tile grid | every six minutes | none: showcase cases only |
+| CMA radar mosaic | `cma` | 1792 × 1024, 0.0439°, China | one frame every six minutes, a rolling three-hour window | `latest-cma.json` |
 
 Each model publishes as an independent dataset under `<model>.<run>/`, taken
 live by its pointer at the data root.
@@ -96,6 +96,24 @@ Bundle sets:
   the CMA file. The listing reaches three hours back, so a window is three
   hours; a whole window is a few megabytes. Source: Japan Meteorological Agency
   website (出典：気象庁ホームページ), regridded and reclassified.
+- CMA radar: the China Meteorological Administration's level-3 composite
+  reflectivity mosaic (RADAR_L3_MST_CREF, 雷达组合反射率拼图), a national
+  composite every six minutes published on the agency's data portal as BIN
+  tiles on a plate carrée tile grid, shipped under `cref`. A private
+  sibling tool, invoked as `cma-radar`, decodes the zoom-5 tiles (0.0439°,
+  1792 × 1024 cells over 67.5–146.25°E and 11.25–56.25°N) and keeps them as
+  one Zarr v3 store per UTC day in an archive of its own, synced every
+  twenty minutes; a run here is a window read back out of those stores
+  (`cma-radar window`, driven by `xuebuild/cmacli.py`; the tool is
+  installed into the project environment, and `XUE_CMA_RADAR` names its
+  command when it is elsewhere) as one NetCDF series, the shape the tool's
+  own `fetch` writes and the cases before the archive were built from.
+  `XUE_CMA_ARCHIVE` names the archive (an `s3://` base read with the tool's
+  `R2_*` credentials, or a local directory the stores were copied to) and
+  has no default; the portal publishes each mosaic twenty to thirty
+  minutes late and the archive syncs every twenty minutes, so the live
+  window ends some forty minutes behind real time. A three-hour window is
+  about thirty frames and one to two megabytes of reflectivity.
 
 Every level of the isobaric families is registered; turning one on is a line
 in `xuebuild/sources.py` and its mirror in the native encoder, not a format
@@ -222,6 +240,7 @@ python -m xuebuild build-bin --model hrrr --run latest
 python -m xuebuild build-bin --model mrms --run 2026091300 --hours 3   # a past window
 python -m xuebuild build-bin --model mrms --run latest --hours 4 --round now   # one round of the live window
 python -m xuebuild build-bin --model jma --run latest --hours 3 --round now    # the JMA nowcast, through jma-radar
+python -m xuebuild build-bin --model cma --run latest --hours 3 --round now    # the CMA mosaic, out of its archive through cma-radar
 ```
 
 `XUE_ENCODER` picks which encoder converts: `auto` (the default: the `xuepy`
@@ -299,9 +318,10 @@ each, cropped to the region and hours it is about, listed at
 which pins the case's dataset and run and frames the map on its region.
 
 Most cases are archived forecast runs. A case can also be a series of
-observations: the `radar` source is the CMA level-3 radar mosaic (composite
-reflectivity, `cref`), which has no live feed and reaches the site only as a
-case built from a local NetCDF file. Its frames come every six minutes,
+observations: the `cma` source is the CMA level-3 radar mosaic (composite
+reflectivity, `cref`), a case being a window of the tool's archive named by
+its first hour or, as the cases before the archive were, a local NetCDF file
+the tool wrote (`dataset`). Its frames come every six minutes,
 which the bundle time axis carries exactly (`unitSeconds`); a 212-hour case
 at that cadence is 2096 frames.
 
@@ -408,13 +428,14 @@ make upload-r2-manifest MODEL=gfs RUN=2026081600
 The Pages shell is deployed separately (`make deploy`) and only needs
 redeploying when frontend code changes.
 
-### The rolling windows (MRMS, JMA)
+### The rolling windows (MRMS, JMA, CMA radar)
 
 An observation feed is never complete, so
-[`publish-mrms.yml`](.github/workflows/publish-mrms.yml) and
-[`publish-jma.yml`](.github/workflows/publish-jma.yml) each run one round of
-[`scripts/window_rounds.sh`](scripts/window_rounds.sh) (`MODEL=mrms` or `jma`,
-`ONCE=true`) per job on a five-minute cron, the finest GitHub offers: a job is a
+[`publish-mrms.yml`](.github/workflows/publish-mrms.yml),
+[`publish-jma.yml`](.github/workflows/publish-jma.yml) and
+[`publish-cma.yml`](.github/workflows/publish-cma.yml) each run one round of
+[`scripts/window_rounds.sh`](scripts/window_rounds.sh) (`MODEL=mrms`, `jma` or
+`cma`, `ONCE=true`) per job on a five-minute cron, the finest GitHub offers: a job is a
 few minutes rather than a runner held for an hour, at the price of the cron's
 ten to twenty minutes of lateness on every round. A dispatch with `loop` runs
 the rounds until twenty past the next hour and yields to the next scheduled job
@@ -441,11 +462,17 @@ encoder at job time rather than pinning `native` like the other publish
 workflows: a `xuepy` wheel that predates the source (the wheels ship on the
 crate's tags) sends the rounds through the reference pipeline with GDAL and
 a warning on the run, and a wheel that knows it takes the native path
-again with no change to the workflow. By hand:
+again with no change to the workflow. The CMA radar job is the same shape
+without the frame cache: the tool is installed from the `CMA_RADAR_INSTALL`
+secret (a pip requirement), the archive is named by the `XUE_CMA_ARCHIVE`
+secret and read with the `R2_*` credentials the tool takes
+(`CMA_ARCHIVE_ACCESS_KEY_ID` / `CMA_ARCHIVE_SECRET_ACCESS_KEY` when the
+dataset bucket's token cannot read it, else that token). By hand:
 
 ```sh
 ONCE=true scripts/window_rounds.sh                     # one round, as the job would run it
 MODEL=jma HOURS=3 FRAME_CACHE=true ONCE=true scripts/window_rounds.sh
+MODEL=cma HOURS=3 ONCE=true scripts/window_rounds.sh   # needs XUE_CMA_ARCHIVE and the tool's R2_* credentials
 .venv/bin/python -m xuebuild build-bin --model mrms --run latest --hours 4 --round now
 make upload-r2 MODEL=mrms RUN=2026091321 ROUND=1405  # the round the build named
 make prune-r2-rounds MODEL=mrms && make prune-r2 MODEL=mrms KEEP=2

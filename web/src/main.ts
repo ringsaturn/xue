@@ -1052,7 +1052,7 @@ const MODEL_EYEBROW: Record<ForecastModelId, string> = {
   ecmwf: "ECMWF / IFS (0.25°)",
   sflux: "NOAA / GFS SFLUX (13 KM)",
   hrrr: "NOAA / HRRR CONUS (3 KM)",
-  radar: "CMA / RADAR MOSAIC (L3 MST)",
+  cma: "CMA / RADAR MOSAIC (0.044°)",
   mrms: "NOAA / MRMS CONUS (0.02°)",
   jma: "JMA / NOWCAST JAPAN (0.005°)",
 };

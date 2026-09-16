@@ -136,7 +136,7 @@
             "@type": "Dataset",
             "@id": "https://xue.ringsaturn.me/#data",
             "name": "Xue live forecast bundles",
-            "description": "The current NOAA GFS, GFS surface-flux, ECMWF IFS and NOAA HRRR runs, the last three to four hours of the NOAA MRMS radar mosaic and the last two to three hours of the JMA precipitation nowcast over Japan, each a rolling window rebuilt every five minutes, converted into the .xue container: 8-bit quantized planes on the native grid with temporal residual prediction and Zstandard compression, one file per variable, streamable by HTTP range request. Only the newest run per source is kept.",
+            "description": "The current NOAA GFS, GFS surface-flux, ECMWF IFS and NOAA HRRR runs, the last three to four hours of the NOAA MRMS radar mosaic and the last two to three hours of the JMA precipitation nowcast over Japan and of the CMA radar mosaic over China, each a rolling window rebuilt every five minutes, converted into the .xue container: 8-bit quantized planes on the native grid with temporal residual prediction and Zstandard compression, one file per variable, streamable by HTTP range request. Only the newest run per source is kept.",
             "url": "https://dataset.ringsaturn.me/xue/",
             "isAccessibleForFree": true,
             "creator": { "@id": "https://github.com/ringsaturn#person" },
@@ -145,6 +145,7 @@
               { "@type": "Dataset", "name": "NOAA High-Resolution Rapid Refresh (HRRR)", "url": "https://registry.opendata.aws/noaa-hrrr-pds/" },
               { "@type": "Dataset", "name": "NOAA Multi-Radar/Multi-Sensor System (MRMS)", "url": "https://registry.opendata.aws/noaa-mrms-pds/" },
               { "@type": "Dataset", "name": "JMA High-resolution Precipitation Nowcast (気象庁 高解像度降水ナウキャスト)", "url": "https://www.jma.go.jp/bosai/en_nowc/", "license": "https://www.jma.go.jp/jma/kishou/info/coment.html" },
+              { "@type": "Dataset", "name": "CMA weather radar level-3 mosaic composite reflectivity (中国气象局雷达组合反射率拼图, RADAR_L3_MST_CREF)", "url": "https://www.nmc.cn" },
               { "@type": "Dataset", "name": "ECMWF Open Data (real-time)", "url": "https://www.ecmwf.int/en/forecasts/datasets/open-data", "license": "https://creativecommons.org/licenses/by/4.0/" }
             ],
             "spatialCoverage": { "@type": "Place", "geo": { "@type": "GeoShape", "box": "-90 -180 90 180" } },
@@ -168,6 +169,7 @@
               { "@type": "DataDownload", "name": "HRRR live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-hrrr.json" },
               { "@type": "DataDownload", "name": "MRMS radar live pointer (rolling window of the last three to four hours)", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-mrms.json" },
               { "@type": "DataDownload", "name": "JMA precipitation nowcast live pointer (rolling window of the last two to three hours)", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-jma.json" },
+              { "@type": "DataDownload", "name": "CMA radar mosaic live pointer (rolling window of the last two to three hours)", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-cma.json" },
               { "@type": "DataDownload", "name": "Historical case catalog", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/showcase.json" }
             ]
           },
@@ -584,6 +586,11 @@
               <small>JAPAN RADAR</small>
               <span class="model-check" aria-hidden="true"></span>
             </button>
+            <button type="button" data-model="cma" aria-pressed="false">
+              <span class="model-name">CMA</span>
+              <small>CHINA RADAR</small>
+              <span class="model-check" aria-hidden="true"></span>
+            </button>
           </div>
         </div>
       </div>
@@ -634,7 +641,7 @@
       <footer class="source-note">
         <span class="source-line">
           <span class="source-credit" data-credit-model="ecmwf">CONTAINS MODIFIED <a href="https://www.ecmwf.int/en/forecasts/datasets/open-data" target="_blank" rel="noreferrer">ECMWF OPEN DATA</a> (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">CC BY 4.0</a>) ·</span>
-          <span class="source-credit" data-credit-model="radar">RADAR <a href="https://data.cma.cn" target="_blank" rel="noreferrer">CMA</a> ·</span>
+          <span class="source-credit" data-credit-model="cma">RADAR <a href="https://www.nmc.cn" target="_blank" rel="noreferrer">CMA</a> ·</span>
           <span class="source-credit" data-credit-model="mrms">RADAR <a href="https://registry.opendata.aws/noaa-mrms-pds/" target="_blank" rel="noreferrer">NOAA MRMS</a> ·</span>
           <span class="source-credit" data-credit-model="jma">SOURCE <a href="https://www.jma.go.jp/bosai/en_nowc/" target="_blank" rel="noreferrer">JMA WEBSITE</a> (REGRIDDED) ·</span>
           © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OPENSTREETMAP</a>
@@ -692,7 +699,7 @@
               </a>
             </li>
             <li>
-              <a href="https://data.cma.cn" target="_blank" rel="noreferrer">
+              <a href="https://www.nmc.cn" target="_blank" rel="noreferrer">
                 <span class="credits-name">CMA</span>
                 <small data-i18n="creditsRadar">RADAR MOSAIC</small>
                 <span class="credits-arrow" aria-hidden="true">↗</span>
