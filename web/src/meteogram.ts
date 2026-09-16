@@ -25,10 +25,12 @@
 
 import type { ProbeValue } from "./probe";
 
-export type MeteogramRowId = "temperature" | "precipitation" | "wind" | "cloud" | "pressure";
+export type MeteogramRowId = "temperature" | "precipitation" | "wind" | "cloud" | "pressure" | "taf";
 
 /** How a row draws its series: traces, bars from a baseline, or one shaded
- * band per series (the cloud layers, high over middle over low). */
+ * band per series (the cloud layers, high over middle over low; and the
+ * aerodrome forecast's periods, which are bands laid along the axis by
+ * their own clock rather than per frame). */
 export type MeteogramRowKind = "line" | "bars" | "bands";
 
 export interface MeteogramRowSpec {
@@ -100,9 +102,24 @@ export function meteogramRows(published: (bundleId: string) => boolean): Meteogr
   return rows;
 }
 
+/** The aerodrome forecast's own row, under the model's. It reads no bundle
+ * — a TAF is the airport product's, not the run's — so it is appended to
+ * the rows a manifest fills rather than derived from one, and it exists
+ * only while a pinned point has an airport with a current forecast inside
+ * its radius. */
+export const TAF_ROW_SPEC: MeteogramRowSpec = {
+  id: "taf",
+  kind: "bands",
+  bundles: [],
+  range: null,
+  baseline: null,
+};
+
 /** The row's label: its bundles' codes joined, the surface once at the end
- * where every bundle shares it ("TMP · DPT 2M", "WIND · GUST 10M"). */
+ * where every bundle shares it ("TMP · DPT 2M", "WIND · GUST 10M"). A row
+ * with no bundle is named for itself. */
 export function meteogramRowCode(spec: MeteogramRowSpec): string {
+  if (spec.bundles.length === 0) return spec.id.toUpperCase();
   const codes = spec.bundles.map((id) => BUNDLE_CODES[id] ?? id.toUpperCase());
   const surface = spec.id === "temperature" ? "2M" : spec.id === "wind" ? "10M" : null;
   return surface ? `${codes.join(" · ")} ${surface}` : codes.join(" · ");
@@ -193,6 +210,67 @@ export function frameIndexAtX(x: number, count: number, width: number): number {
   return Math.max(0, Math.min(count - 1, Math.round((x / width) * (count - 1))));
 }
 
+/**
+ * Where an instant falls on the axis, as a *fractional* frame index, or
+ * null when it is off the axis at either end.
+ *
+ * The frames themselves are placed by index rather than by lead time — a
+ * three-hourly tail draws at the same column pitch as the hourly head, the
+ * way the transport track draws it — so anything placed by its own clock
+ * has to be placed the same way: between the two frames that bracket it, at
+ * the fraction of the way it lies between their lead times. An observation
+ * or a forecast period outside the run's span is not drawn, since there is
+ * no column for it: the axis is what the chart is, and extending it would
+ * move every frame.
+ *
+ * `leadSeconds` is the axis's own, ascending, one per frame.
+ */
+export function axisPosition(leadSeconds: readonly number[], seconds: number): number | null {
+  const count = leadSeconds.length;
+  if (count === 0 || !Number.isFinite(seconds)) return null;
+  const first = leadSeconds[0]!;
+  const last = leadSeconds[count - 1]!;
+  if (seconds < first || seconds > last) return null;
+  if (count === 1) return 0;
+  for (let index = 1; index < count; index += 1) {
+    const upper = leadSeconds[index]!;
+    if (seconds > upper) continue;
+    const lower = leadSeconds[index - 1]!;
+    const span = upper - lower;
+    return span <= 0 ? index : index - 1 + (seconds - lower) / span;
+  }
+  return count - 1;
+}
+
+/** How one observation mark is drawn: a filled dot for a measured value, a
+ * hollow one for the companion the row draws dashed (the dew point), a
+ * short tick for a gust, a stepped line for a cover that holds until the
+ * next report. */
+export type ObservationKind = "dot" | "hollow" | "tick" | "step";
+
+/** One observed value on a row: `x` is lead seconds from the run time — the
+ * observation's own clock, not a frame index — and `y` the value in the
+ * row's units. */
+export interface MeteogramObservation {
+  x: number;
+  y: number;
+  kind: ObservationKind;
+}
+
+/** One period of an aerodrome forecast, laid along the axis by its own
+ * validity. `from` and `to` are lead seconds, already clipped to the axis;
+ * a `TEMPO` or `PROB` group is hatched rather than solid, because it is a
+ * possibility within the prevailing forecast and not a change to it. */
+export interface MeteogramBand {
+  from: number;
+  to: number;
+  style: "solid" | "hatched";
+  /** The decoded wind and weather, short enough for the row's height. */
+  label: string;
+  /** The probability a `PROB` group carries, shown as `PROB40`. */
+  prob: number | null;
+}
+
 /** A day boundary on the axis: the frame a whole forecast day falls on,
  * labelled with that instant's weekday in the display zone. */
 export interface DayMark {
@@ -207,6 +285,14 @@ export interface MeteogramRowData {
   /** Meteorological wind direction per frame (degrees the wind comes from),
    * on a wind row whose bundle is a component pair. */
   directions?: readonly (number | null)[];
+  /** What the nearest airport actually reported, over the model's trace:
+   * placed by each observation's own clock (`stations/observations.ts`),
+   * never by frame index, and scaled on the row's own fitted range so a
+   * mark sits where the trace would if the model had been right. */
+  observations?: readonly MeteogramObservation[];
+  /** The aerodrome forecast's periods, on the `taf` row. A row that carries
+   * them draws them instead of its series, which it has none of. */
+  bands?: readonly MeteogramBand[];
 }
 
 export interface MeteogramGeometry {
@@ -224,6 +310,13 @@ export interface MeteogramInk {
   muted: string;
 }
 
+/** The radius of an observation mark, CSS pixels. Small enough that a
+ * half-hourly METAR over a 240-frame axis is a texture rather than a wall,
+ * large enough to read at the row's 30 px. */
+const OBSERVATION_RADIUS = 1.6;
+/** The half-height of a gust tick. */
+const OBSERVATION_TICK = 3;
+
 /** Vertical room inside a row: the trace never touches the separator. */
 const ROW_PADDING = 4;
 /** The strip at the foot of a wind row holding its direction arrows. */
@@ -231,14 +324,144 @@ const ARROW_STRIP = 10;
 /** The least horizontal room between two direction arrows. */
 const ARROW_SPACING = 16;
 
+/**
+ * What the airport actually reported, over the model's trace.
+ *
+ * The marks are drawn in the row's own ink and told apart by shape rather
+ * than by hue, the way the two series of a row are: a filled dot for the
+ * measured quantity, a hollow one for its companion, a tick for a gust
+ * (which is a peak and not a value the trace could pass through), and a
+ * stepped line for a cover that holds until the next report.
+ */
+function drawObservations(
+  context: CanvasRenderingContext2D,
+  marks: readonly MeteogramObservation[],
+  xAt: (seconds: number) => number | null,
+  y: (value: number) => number,
+  ink: MeteogramInk,
+): void {
+  context.save();
+  context.strokeStyle = ink.ink;
+  context.fillStyle = ink.ink;
+  context.lineWidth = 1;
+  let pen = false;
+  context.beginPath();
+  for (const mark of marks) {
+    const x = xAt(mark.x);
+    if (x === null || mark.kind !== "step") continue;
+    // A step holds its value until the next report, then jumps to it.
+    const py = y(mark.y);
+    if (pen) context.lineTo(x, py);
+    else context.moveTo(x, py);
+    context.lineTo(x, py);
+    pen = true;
+  }
+  if (pen) {
+    context.globalAlpha = 0.55;
+    context.stroke();
+    context.globalAlpha = 1;
+  }
+  for (const mark of marks) {
+    const x = xAt(mark.x);
+    if (x === null || mark.kind === "step") continue;
+    const py = y(mark.y);
+    if (mark.kind === "tick") {
+      context.beginPath();
+      context.moveTo(x, py - OBSERVATION_TICK);
+      context.lineTo(x, py + OBSERVATION_TICK);
+      context.stroke();
+      continue;
+    }
+    context.beginPath();
+    context.arc(x, py, OBSERVATION_RADIUS, 0, Math.PI * 2);
+    if (mark.kind === "dot") context.fill();
+    else context.stroke();
+  }
+  context.restore();
+}
+
+/**
+ * The aerodrome forecast as bands along the axis.
+ *
+ * Each band is a period's validity, drawn as a filled strip carrying its
+ * decoded wind and weather. A `TEMPO` or `PROB` group is hatched — diagonal
+ * strokes over a fainter fill — because it does not replace what runs under
+ * it, and the hatch reads as "some of this time" at the row's height where
+ * a second hue would only read as a different subject.
+ */
+function drawBands(
+  context: CanvasRenderingContext2D,
+  bands: readonly MeteogramBand[],
+  xAt: (seconds: number) => number | null,
+  geometry: { top: number; rowHeight: number; ink: MeteogramInk },
+): void {
+  const { top, rowHeight, ink } = geometry;
+  const bandTop = top + ROW_PADDING;
+  const bandHeight = rowHeight - 2 * ROW_PADDING;
+  context.save();
+  context.textBaseline = "middle";
+  context.textAlign = "left";
+  for (const band of bands) {
+    const left = xAt(band.from);
+    const right = xAt(band.to);
+    if (left === null || right === null) continue;
+    const bandWidth = Math.max(1, right - left);
+    context.fillStyle = ink.ink;
+    context.globalAlpha = band.style === "solid" ? 0.16 : 0.08;
+    context.fillRect(left, bandTop, bandWidth, bandHeight);
+    context.globalAlpha = 1;
+    context.strokeStyle = ink.muted;
+    context.lineWidth = 1;
+    context.globalAlpha = 0.5;
+    context.strokeRect(left + 0.5, bandTop + 0.5, Math.max(0, bandWidth - 1), bandHeight - 1);
+    if (band.style === "hatched") {
+      // Diagonals inside the band, clipped to it.
+      context.save();
+      context.beginPath();
+      context.rect(left, bandTop, bandWidth, bandHeight);
+      context.clip();
+      context.globalAlpha = 0.35;
+      for (let x = left - bandHeight; x < left + bandWidth; x += 5) {
+        context.beginPath();
+        context.moveTo(x, bandTop + bandHeight);
+        context.lineTo(x + bandHeight, bandTop);
+        context.stroke();
+      }
+      context.restore();
+    }
+    context.globalAlpha = 1;
+    const prefix = band.prob === null ? "" : `PROB${band.prob} `;
+    const text = `${prefix}${band.label}`.trim();
+    if (text && bandWidth > 22) {
+      context.save();
+      context.beginPath();
+      context.rect(left, bandTop, bandWidth - 2, bandHeight);
+      context.clip();
+      context.fillStyle = ink.ink;
+      context.fillText(text, left + 3, bandTop + bandHeight / 2);
+      context.restore();
+    }
+  }
+  context.restore();
+}
+
 export function drawMeteogram(
   context: CanvasRenderingContext2D,
   geometry: MeteogramGeometry,
   rows: readonly MeteogramRowData[],
-  options: { count: number; selected: number; dayMarks: readonly DayMark[]; ink: MeteogramInk; font: string },
+  options: {
+    count: number;
+    selected: number;
+    dayMarks: readonly DayMark[];
+    ink: MeteogramInk;
+    font: string;
+    /** The axis's lead seconds, one per frame: what anything placed by its
+     * own clock — an observation, a forecast period — is placed against. */
+    leadSeconds: readonly number[];
+  },
 ): void {
   const { width, headerHeight, rowHeight } = geometry;
-  const { count, selected, dayMarks, ink } = options;
+  const { count, selected, dayMarks, ink, leadSeconds } = options;
   const height = headerHeight + rows.length * rowHeight;
   context.clearRect(0, 0, width, height);
   context.font = options.font;
@@ -275,15 +498,31 @@ export function drawMeteogram(
   }
   context.globalAlpha = 1;
 
+  /** The horizontal position of an instant on the axis, in pixels, or null
+   * when it falls outside the run. */
+  const xAt = (seconds: number): number | null => {
+    const position = axisPosition(leadSeconds, seconds);
+    return position === null ? null : columnX(position, count, width);
+  };
+
   for (const [rowIndex, row] of rows.entries()) {
     const top = headerHeight + rowIndex * rowHeight;
     const arrows = row.spec.id === "wind" && row.directions !== undefined;
     const plotTop = top + ROW_PADDING;
     const plotBottom = top + rowHeight - ROW_PADDING - (arrows ? ARROW_STRIP : 0);
-    const [low, high] = fitRange(row.series, row.spec.range, row.spec.baseline);
+    // Observations share the row's scale, so the range has to hold them:
+    // a gust the model never forecast would otherwise be drawn off the row.
+    const observed = row.observations?.map((mark) => mark.y) ?? [];
+    const [low, high] = fitRange(
+      observed.length ? [...row.series, observed] : row.series,
+      row.spec.range,
+      row.spec.baseline,
+    );
     const y = (value: number): number => plotBottom - ((value - low) / (high - low)) * (plotBottom - plotTop);
 
-    if (row.spec.kind === "bands") {
+    if (row.bands) {
+      drawBands(context, row.bands, xAt, { top, rowHeight, ink });
+    } else if (row.spec.kind === "bands") {
       // One band per layer, shaded by its cover: nothing at clear sky, the
       // ink at overcast.
       const bandHeight = (plotBottom - plotTop) / row.series.length;
@@ -357,6 +596,10 @@ export function drawMeteogram(
         context.closePath();
         context.fill();
       }
+    }
+
+    if (row.observations?.length) {
+      drawObservations(context, row.observations, xAt, y, ink);
     }
   }
 
