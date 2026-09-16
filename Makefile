@@ -422,9 +422,12 @@ airport-build:
 # The live product's pointer, index and shards, into web/public/data/ where
 # airport-build looks for the previous round: the shards are this round's
 # history, so a publish without them would restart every station's 24 hours.
-# The whole shard directory is synced in one call (a round names about a
-# thousand of them; one `cp` each would take longer than the round) and the
-# local files the live index does not name are then dropped, so the upload
+# Only the shards the live index names are fetched, and in one `cp
+# --recursive` whose --include list is built from the index: syncing the
+# whole prefix would download every version the kept rounds still name
+# (thousands of objects, thousands of Class B operations) for the thousand
+# the build reads, and a `cp` per shard would take longer than the round.
+# The local files the index does not name are then dropped, so the upload
 # that follows carries only the live set. Prints nothing and writes nothing
 # when there is no live product yet (the first publish).
 live-airport-index:
@@ -435,9 +438,13 @@ live-airport-index:
 	mkdir -p "web/public/data/$$(dirname "$$path")"; \
 	$(S3) cp "s3://$(R2_BUCKET)/$(R2_PREFIX)/$$path" "web/public/data/$$path" --only-show-errors; \
 	printf '%s' "$$pointer" > web/public/data/latest-airport.json; \
-	$(S3) sync s3://$(R2_BUCKET)/$(R2_PREFIX)/airport-shards/ web/public/data/airport-shards/ \
-		--no-progress --only-show-errors --size-only; \
 	named=$$(jq -r '.shards[].path' "web/public/data/$$path" | sed 's:.*/::' | sort); \
+	if [ -n "$$named" ]; then \
+		set -- ; \
+		for shard in $$named; do set -- "$$@" --include "$$shard"; done; \
+		$(S3) cp s3://$(R2_BUCKET)/$(R2_PREFIX)/airport-shards/ web/public/data/airport-shards/ \
+			--recursive --no-progress --only-show-errors --exclude '*' "$$@"; \
+	fi; \
 	missing=0; \
 	for shard in $$named; do \
 		[ -f "web/public/data/airport-shards/$$shard" ] || { echo "missing shard $$shard"; missing=$$((missing + 1)); }; \
