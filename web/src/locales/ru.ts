@@ -82,6 +82,7 @@ export const ru: Record<MessageKey, string> = {
   creditsHrrr: "ПРОГНОСТИЧЕСКИЕ ДАННЫЕ · HRRR 3 КМ, КОНТИНЕНТАЛЬНЫЕ США",
   creditsEcmwf: "СОДЕРЖИТ ИЗМЕНЁННЫЕ ДАННЫЕ ECMWF · CC BY 4.0",
   creditsMrms: "РАДАРНЫЕ НАБЛЮДЕНИЯ · MRMS, КОНТИНЕНТАЛЬНЫЕ США",
+  creditsJma: "РАДАРНЫЕ ОСАДКИ · НАУКАСТ JMA, ЯПОНИЯ (ПЕРЕСЕТКА)",
   creditsRadar: "РАДАРНАЯ МОЗАИКА",
   creditsBasemap: "ПОДЛОЖКА · © УЧАСТНИКИ OPENSTREETMAP",
   creditsCode: "ИСХОДНЫЙ КОД · RINGSATURN/XUE",

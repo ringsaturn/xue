@@ -168,6 +168,7 @@ The public archives do not go back forever:
 | `ecmwf` | about 2024-02 | Only the 00z and 12z oper cycles reach far enough for a long case |
 | `hrrr` | about 2014-08 | Every hour's cycle, hourly to f18 |
 | `mrms` | 2020-10-14 | Every two minutes; a case is a window from any hour |
+| `jma` | — | No archive: the agency lists three hours and its tiles expire after days. A window can only be built from the decoded-frame cache the live feed keeps on the bucket (`make pull-r2-frames`), and cases are not wired up yet |
 | `radar` | — | Not an archive to reach back into: whatever event someone has already decoded into a local NetCDF |
 
 Pick a cycle a day or two before the event peaks, so the case is a *forecast*

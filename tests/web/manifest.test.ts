@@ -416,6 +416,8 @@ describe("crc32", () => {
 describe("modelDefaultVariable", () => {
   it("opens the radar mosaic on its reflectivity and a forecast on the app's default", () => {
     expect(modelDefaultVariable("mrms", "prate")).toBe("cref");
+    // The JMA nowcast publishes rate classes, not a reflectivity.
+    expect(modelDefaultVariable("jma", "tmp2m")).toBe("prate");
     for (const model of ["gfs", "sflux", "ecmwf", "hrrr"] as const) {
       expect(modelDefaultVariable(model, "prate")).toBe("prate");
     }
@@ -428,6 +430,7 @@ describe("dataset kinds", () => {
     // timeline off this (run cycle and lead time vs. series start and elapsed).
     expect(isObservationModel("radar")).toBe(true);
     expect(isObservationModel("mrms")).toBe(true);
+    expect(isObservationModel("jma")).toBe(true);
     for (const model of ["gfs", "sflux", "ecmwf", "hrrr"] as const) expect(isObservationModel(model)).toBe(false);
   });
 
@@ -435,9 +438,10 @@ describe("dataset kinds", () => {
     // Every live feed has a pointer to poll; the CMA archive has none, so
     // nothing may try to fetch one. MRMS is the one dataset that is
     // observations and live (mirrors SourceSpec.latest_filename).
-    expect(FORECAST_MODEL_IDS).toEqual(["gfs", "sflux", "ecmwf", "hrrr", "mrms"]);
+    expect(FORECAST_MODEL_IDS).toEqual(["gfs", "sflux", "ecmwf", "hrrr", "mrms", "jma"]);
     for (const model of FORECAST_MODEL_IDS) expect(FORECAST_MODELS[model].latestFilename).toBeDefined();
     expect(FORECAST_MODELS.mrms.latestFilename).toBe("latest-mrms.json");
+    expect(FORECAST_MODELS.jma.latestFilename).toBe("latest-jma.json");
     expect(FORECAST_MODELS.radar.latestFilename).toBeUndefined();
   });
 
@@ -479,6 +483,26 @@ describe("dataset kinds", () => {
     // The two mosaics are not interchangeable.
     expect(() => validateManifest(mrms, "radar")).toThrow();
     expect(FORECAST_MODELS.mrms.region).toEqual([-130, 20, -60, 55]);
+  });
+
+  it("admits a jma manifest by its own identity, with the rate as its core", () => {
+    // Mirrors the `jma` entry of SOURCES: the nowcast is precipitation
+    // intensity classes under prate, the one bundle a live window must ship.
+    const jma = {
+      schemaVersion: 5,
+      model: "JMA-HRPNS",
+      product: "japan-prate",
+      runTime: "2026-09-16T00:00:00Z",
+      forecastHours: 3,
+      bundles: [{ variable: "prate", path: "prate.xue", byteLength: 1, crc32: "00000000" }],
+    };
+    expect(validateManifest(jma, "jma").bundles).toHaveLength(1);
+    expect(() => validateManifest({ ...jma, bundles: [{ ...jma.bundles[0]!, variable: "cref" }] }, "jma")).toThrow(
+      /no bundle for variable prate/,
+    );
+    expect(() => validateManifest(jma, "mrms")).toThrow();
+    expect(FORECAST_MODELS.jma.region).toEqual([121, 20.5, 149, 45.5]);
+    expect(FORECAST_MODELS.jma.coreBundles).toEqual(["prate"]);
   });
 
   it("requires each dataset's own core bundles of a live manifest", () => {

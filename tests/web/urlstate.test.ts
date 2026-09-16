@@ -110,6 +110,8 @@ describe("parseModelFromSearch", () => {
     expect(parseModelFromSearch("?model=GFS-SFLUX")).toBe("sflux");
     expect(parseModelFromSearch("?model=hrrr")).toBe("hrrr");
     expect(parseModelFromSearch("?model=MRMS")).toBe("mrms");
+    expect(parseModelFromSearch("?model=jma")).toBe("jma");
+    expect(parseModelFromSearch("?model=hrpns")).toBe("jma");
   });
 
   it("falls back to the default on unknown or missing model", () => {

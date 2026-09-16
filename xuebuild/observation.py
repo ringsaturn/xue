@@ -21,8 +21,13 @@ returned :class:`~xue.model.PlaneSource`:
 The time axis is whatever the file carries. Observation series have gaps
 (a publication missed, an outage), so the axis is *not* validated against a
 published cadence the way a forecast run's is; it only has to be strictly
-increasing on whole hours. Hour 0 is the first frame, which is also the
-series' ``runTime``.
+increasing on whole seconds. For a local archive file (the CMA mosaic) the
+first frame is the series' ``runTime``. For a fetched window
+(:attr:`~xuebuild.sources.SourceSpec.cadence_seconds` set: the JMA nowcast)
+the window is the axis, the same rule the MRMS frames follow
+(``binconvert._snap_observation_frames``): each time is snapped down to its
+cadence slot, the run time is the whole hour the first slot falls in — the
+hour the run id names — and a frame's offset is its slot's distance from it.
 """
 
 from __future__ import annotations
@@ -129,7 +134,12 @@ def inspect_observation(path: Path, source: SourceSpec) -> ObservationSeries:
         raise ConversionError(f"{dataset} reports unit {unit or '<missing>'}, expected {spec.output_unit}")
 
     times = [_band_time(band, epoch, scale, path) for band in bands]
-    run_time = times[0]
+    if source.cadence_seconds:
+        cadence = source.cadence_seconds
+        times = [datetime.fromtimestamp(int(time.timestamp()) // cadence * cadence, tz=UTC) for time in times]
+        run_time = times[0].replace(minute=0, second=0, microsecond=0)
+    else:
+        run_time = times[0]
     frames: list[dict[str, SourceFrame]] = []
     for band, valid_time in zip(bands, times):
         delta = (valid_time - run_time).total_seconds()

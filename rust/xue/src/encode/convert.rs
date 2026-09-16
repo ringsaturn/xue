@@ -32,7 +32,7 @@ use crate::encode::inspect::{
 use crate::encode::manifest::{build_bin_manifest, build_latest_pointer, serialize_json, write_json};
 use crate::encode::metadata::{axis_unit_seconds, build_metadata, lead_hours, to_spaced_json};
 use crate::encode::model::{PlaneSource, SourceFrame};
-use crate::encode::observation::inspect_observation;
+use crate::encode::observation::{inspect_observation, NETCDF_EXTENSIONS};
 use crate::encode::parallel::for_each_ordered;
 use crate::encode::poster::encode_poster;
 use crate::encode::quantize::{codebook, Codebook};
@@ -228,6 +228,34 @@ macro_rules! log {
 
 /// The GRIB files a conversion reads: one file, every file in a directory, or
 /// exactly the files given.
+/// The one NetCDF series a fetched observation's run directory holds — the
+/// port of `_series_input` in `xuebuild/binconvert.py`.
+fn series_input(directory: &Path, source: &SourceSpec) -> Result<PathBuf> {
+    let mut files: Vec<PathBuf> = std::fs::read_dir(directory)
+        .map_err(|error| {
+            EncodeError::conversion(format!("cannot list {}: {error}", directory.display()))
+        })?
+        .filter_map(std::result::Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.is_file()
+                && path.extension().is_some_and(|extension| {
+                    NETCDF_EXTENSIONS.contains(&extension.to_string_lossy().to_lowercase().as_str())
+                })
+        })
+        .collect();
+    files.sort();
+    if files.len() != 1 {
+        return Err(EncodeError::conversion(format!(
+            "a {} run directory holds exactly one NetCDF series, {} holds {}",
+            source.manifest_model,
+            directory.display(),
+            files.len()
+        )));
+    }
+    Ok(files.remove(0))
+}
+
 pub fn discover_inputs(inputs: &[PathBuf]) -> Result<Vec<PathBuf>> {
     if inputs.is_empty() {
         return Err(EncodeError::conversion("no GRIB files given"));
@@ -1223,26 +1251,33 @@ pub fn convert_bin(
     let grid_path: PathBuf;
     let plane_source: PlaneSource;
 
-    if source.observation && !source.fetched() {
-        // A local-file observation source is one NetCDF file holding the
-        // whole series, one band per time. There are no records to match, no
-        // wind pair, and no published cadence to validate the axis against —
-        // the file's own times are the axis, gaps included. (A fetched
-        // observation is one GRIB per frame and takes the record path
-        // below, re-keyed onto its window's axis.)
+    if source.series_file {
+        // A series-file observation source is one NetCDF file holding the
+        // whole series, one band per time: the CMA mosaic's local archive
+        // file, or the window the JMA fetch wrote. There are no records to
+        // match, no wind pair, and no published cadence to validate the axis
+        // against — the file's own times are the axis, gaps included. (The
+        // MRMS observation is one GRIB per frame and takes the record path
+        // below, re-keyed onto its window's axis.) A run directory holds
+        // exactly one such file.
         if inputs.len() != 1 {
             return Err(EncodeError::conversion(format!(
                 "a {} build takes exactly one NetCDF file",
                 source.manifest_model
             )));
         }
-        if options.require_complete {
+        let input = if inputs[0].is_dir() {
+            series_input(&inputs[0], source)?
+        } else {
+            inputs[0].clone()
+        };
+        if options.require_complete && !source.fetched() {
             return Err(EncodeError::conversion(format!(
                 "{} has no complete run to require",
                 source.manifest_model
             )));
         }
-        let series = inspect_observation(&inputs[0], source)?;
+        let series = inspect_observation(&input, source)?;
         per_file = series.frames;
         // `last_hour` trims the series to a leading window of the file, and
         // the frame it stops on must exist — a case's declared range is never

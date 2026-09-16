@@ -8,9 +8,10 @@ export type ForecastVariableId = "tmp2m" | "prate";
  * immutable run directories and its own manifest identity, and — when it has
  * a live feed — its own mutable live pointer at the data root. GFS uses the
  * bare ``latest.json``; the other live models use ``latest-<model>.json``.
- * The two radar mosaics have no live feed (yet): they are observation
- * archives that reach the app only as showcase cases. */
-export type ForecastModelId = "gfs" | "ecmwf" | "sflux" | "hrrr" | "radar" | "mrms";
+ * The CMA radar mosaic has no live feed: it is an observation archive that
+ * reaches the app only as showcase cases. The MRMS mosaic and the JMA
+ * nowcast are observations *and* live, each a rolling window. */
+export type ForecastModelId = "gfs" | "ecmwf" | "sflux" | "hrrr" | "radar" | "mrms" | "jma";
 
 export interface ForecastModelInfo {
   id: ForecastModelId;
@@ -87,6 +88,23 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
     defaultVariable: "cref",
     region: [-130, 20, -60, 55],
   },
+  // JMA 高解像度降水ナウキャスト, the Japan Meteorological Agency's
+  // precipitation nowcast analysis: precipitation intensity classes every
+  // five minutes, decoded by the encoder from the agency's map tiles onto
+  // a 0.01° grid over the radar coverage envelope. Not a reflectivity —
+  // the agency publishes rate classes — so it ships `prate` alone, at each
+  // class's representative rate, and opens on it. Observations and live,
+  // like MRMS: a rolling window of the last two to three hours.
+  jma: {
+    id: "jma",
+    label: "JMA-HRPNS",
+    product: "japan-prate",
+    latestFilename: "latest-jma.json",
+    observation: true,
+    coreBundles: ["prate"],
+    defaultVariable: "prate",
+    region: [121, 20.5, 149, 45.5],
+  },
 };
 
 /** The layer a dataset opens on when nothing asked for one. */
@@ -99,9 +117,10 @@ export function isObservationModel(model: ForecastModelId): boolean {
   return FORECAST_MODELS[model].observation === true;
 }
 
-/** The live feeds, in model-switch order: the four forecasts and the MRMS
- * mosaic's rolling window. The CMA radar archive is cases only. */
-export const FORECAST_MODEL_IDS: readonly ForecastModelId[] = ["gfs", "sflux", "ecmwf", "hrrr", "mrms"];
+/** The live feeds, in model-switch order: the four forecasts and the two
+ * rolling observation windows, MRMS and the JMA nowcast. The CMA radar
+ * archive is cases only. */
+export const FORECAST_MODEL_IDS: readonly ForecastModelId[] = ["gfs", "sflux", "ecmwf", "hrrr", "mrms", "jma"];
 
 function modelForManifestString(model: unknown): ForecastModelInfo | null {
   for (const info of Object.values(FORECAST_MODELS)) {

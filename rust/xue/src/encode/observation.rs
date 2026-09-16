@@ -11,7 +11,13 @@
 //!
 //! The time axis is whatever the file carries. Observation series have gaps,
 //! so the axis is *not* validated against a published cadence the way a
-//! forecast run's is.
+//! forecast run's is. For a local archive file (the CMA mosaic) the first
+//! frame is the series' run time. For a fetched window (`cadence_seconds`
+//! set: the JMA nowcast) the window is the axis, the rule the MRMS frames
+//! follow (`convert::snap_observation_frames`): each time is snapped down to
+//! its cadence slot, the run time is the whole hour the first slot falls in
+//! — the hour the run id names — and a frame's offset is its slot's distance
+//! from it.
 
 use std::path::{Path, PathBuf};
 
@@ -168,7 +174,27 @@ pub fn inspect_observation(path: &Path, source: &SourceSpec) -> Result<Observati
         times.push(epoch + Duration::seconds_f64(raw * scale as f64));
     }
 
-    let run_time = times[0];
+    let times: Vec<OffsetDateTime> = match source.cadence_seconds {
+        Some(cadence) => times
+            .into_iter()
+            .map(|time| {
+                let slot = time.unix_timestamp().div_euclid(cadence) * cadence;
+                OffsetDateTime::from_unix_timestamp(slot).map_err(|error| {
+                    EncodeError::conversion(format!("invalid observation time: {error}"))
+                })
+            })
+            .collect::<Result<Vec<_>>>()?,
+        None => times,
+    };
+    let run_time = match source.cadence_seconds {
+        Some(_) => {
+            let hour = times[0].unix_timestamp().div_euclid(3600) * 3600;
+            OffsetDateTime::from_unix_timestamp(hour).map_err(|error| {
+                EncodeError::conversion(format!("invalid observation time: {error}"))
+            })?
+        }
+        None => times[0],
+    };
     let mut frames: Vec<Vec<(String, SourceFrame)>> = Vec::with_capacity(bands.len());
     for (band, valid_time) in bands.iter().zip(&times) {
         let delta = (*valid_time - run_time).as_seconds_f64();

@@ -6,7 +6,9 @@
 //! `observation` source holds a series of observed analyses with no cycle
 //! and an axis that is whatever times the observations carry — the CMA
 //! radar mosaic one local file per event, the NOAA MRMS mosaic one fetched
-//! GRIB per two-minute frame, thinned onto a coarser grid (`Downsample`).
+//! GRIB per two-minute frame, thinned onto a coarser grid (`Downsample`),
+//! the JMA precipitation nowcast one fetched NetCDF series per window
+//! (`series_file`), assembled from the agency's tiles by the jma-radar tool.
 
 use crate::encode::errors::{EncodeError, Result};
 use crate::encode::reproject::Regrid;
@@ -112,6 +114,12 @@ pub struct SourceSpec {
     /// seconds past the mark). Mirrors `cadence_seconds` in
     /// `xuebuild/sources.py`.
     pub cadence_seconds: Option<i64>,
+    /// True when a run of the source is one NetCDF file holding the whole
+    /// series, one band per time, read through `observation.rs` (the CMA
+    /// mosaic's local file; the JMA window the fetch writes), rather than
+    /// one GRIB per frame. Orthogonal to `fetched`. Mirrors `series_file`
+    /// in `xuebuild/sources.py`.
+    pub series_file: bool,
     /// Set when the source is published on a grid coarser than it arrives
     /// on ([`Downsample`]). Mirrors `downsample` in `xuebuild/sources.py`.
     pub downsample: Option<Downsample>,
@@ -232,6 +240,7 @@ pub const SOURCES: &[SourceSpec] = &[
         observation: false,
         window_hours: None,
         cadence_seconds: None,
+        series_file: false,
         downsample: None,
     },
     SourceSpec {
@@ -282,6 +291,7 @@ pub const SOURCES: &[SourceSpec] = &[
         observation: false,
         window_hours: None,
         cadence_seconds: None,
+        series_file: false,
         downsample: None,
     },
     // GFS surface flux files on the native ~13 km T1534 Gaussian grid. Adds
@@ -308,6 +318,7 @@ pub const SOURCES: &[SourceSpec] = &[
         observation: false,
         window_hours: None,
         cadence_seconds: None,
+        series_file: false,
         downsample: None,
     },
     // NOAA HRRR: the 3 km convection-allowing model over the contiguous
@@ -350,6 +361,7 @@ pub const SOURCES: &[SourceSpec] = &[
         observation: false,
         window_hours: None,
         cadence_seconds: None,
+        series_file: false,
         downsample: None,
     },
     // CMA weather radar level-3 mosaic composite reflectivity: an observation
@@ -378,6 +390,7 @@ pub const SOURCES: &[SourceSpec] = &[
         observation: true,
         window_hours: None,
         cadence_seconds: None,
+        series_file: true,
         downsample: None,
     },
     // NOAA MRMS: the national radar mosaic over the contiguous United
@@ -413,7 +426,45 @@ pub const SOURCES: &[SourceSpec] = &[
         observation: true,
         window_hours: Some(3),
         cadence_seconds: Some(120),
+        series_file: false,
         downsample: Some(Downsample { factor: 2 }),
+    },
+    // JMA 高解像度降水ナウキャスト: the agency's precipitation intensity
+    // analysis over Japan, a frame every five minutes, published as map
+    // tiles whose palette encodes ten intensity classes. Not a
+    // reflectivity, so published under `prate` at each class's
+    // representative rate; the jma-radar tool decodes the zoom-8 tiles onto
+    // a regular 0.01° grid (the strongest class in each cell) over the
+    // radar coverage envelope and writes a window's frames as one NetCDF
+    // series, which is read the way the CMA file is, with the window's
+    // first hour as the run and the five-minute slots as the axis
+    // (`cadence_seconds`). Mirrors `xuebuild/sources.py`.
+    SourceSpec {
+        id: "jma",
+        manifest_model: "JMA-HRPNS",
+        product: "japan-prate",
+        latest_filename: Some("latest-jma.json"),
+        steps: &[],
+        input_variable_ids: &["prate"],
+        companion_files: &[],
+        accumulated_precipitation: false,
+        averaged_precipitation: false,
+        average_window_hours: 6,
+        optional_at_analysis: &[],
+        statistical_processes: &[],
+        bundle_scalar_ids: &["prate"],
+        core_bundle_ids: &["prate"],
+        bundle_vector_ids: &[],
+        // The 0.01° grid over the coverage envelope: 121E to 149E, 45.5N to
+        // 20.5N.
+        production_grid: (2800, 2500),
+        tile: (64, 64),
+        regrid: None,
+        observation: true,
+        window_hours: Some(3),
+        cadence_seconds: Some(300),
+        series_file: true,
+        downsample: None,
     },
 ];
 
@@ -440,6 +491,21 @@ mod tests {
         assert!(gfs.forecast_hours(121).is_err());
         // An observation source publishes no forecast axis at all.
         assert!(source_spec("radar").expect("radar").forecast_hours(1).is_err());
+    }
+
+    #[test]
+    fn the_series_file_sources_are_the_two_netcdf_ones() {
+        // The CMA file is local, the JMA window is fetched; both are one
+        // NetCDF series per run, read through observation.rs.
+        let radar = source_spec("radar").expect("radar");
+        let jma = source_spec("jma").expect("jma");
+        assert!(radar.series_file && !radar.fetched());
+        assert!(jma.series_file && jma.fetched() && jma.live());
+        assert_eq!(jma.cadence_seconds, Some(300));
+        assert_eq!(jma.core_bundle_ids, &["prate"]);
+        for model in ["gfs", "ecmwf", "sflux", "hrrr", "mrms"] {
+            assert!(!source_spec(model).expect(model).series_file, "{model}");
+        }
     }
 
     #[test]

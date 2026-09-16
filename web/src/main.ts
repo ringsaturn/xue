@@ -1021,6 +1021,7 @@ const MODEL_EYEBROW: Record<ForecastModelId, string> = {
   hrrr: "NOAA / HRRR CONUS (3 KM)",
   radar: "CMA / RADAR MOSAIC (L3 MST)",
   mrms: "NOAA / MRMS CONUS (0.02°)",
+  jma: "JMA / NOWCAST JAPAN (0.01°)",
 };
 
 /** The member to open when a family's one rail tile is picked: whichever

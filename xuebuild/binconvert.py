@@ -49,7 +49,7 @@ from .manifest import (
     write_latest_pointer,
 )
 from .model import GRIB_PLANE_SOURCE, PlaneSource, SourceFrame
-from .observation import inspect_observation
+from .observation import NETCDF_EXTENSIONS, inspect_observation
 from .quantize import PRESSURE_VARIABLE_IDS, PROFILES, PrecipitationCodebook, TemperatureCodebook
 from .reproject import ProjectedGrid, Resampler, build_resampler, lambert_conformal_from_wkt
 from .sources import Downsample, SourceSpec, source_spec
@@ -330,6 +330,17 @@ def analysis_optional_ids(source: SourceSpec, scalar_ids: tuple[str, ...]) -> tu
         if (variable_id == "prate" and (source.accumulated_precipitation or source.averaged_precipitation))
         or any(input_id in source.optional_at_analysis for input_id in bundle_input_ids(source, variable_id))
     )
+
+
+def _series_input(directory: Path, source: SourceSpec) -> Path:
+    """The one NetCDF series a fetched observation's run directory holds."""
+    files = sorted(path for path in directory.iterdir() if path.is_file() and path.suffix.lower() in NETCDF_EXTENSIONS)
+    if len(files) != 1:
+        raise ConversionError(
+            f"a {source.manifest_model} run directory holds exactly one NetCDF series, "
+            f"{directory} holds {len(files)}"
+        )
+    return files[0]
 
 
 def series_lead_seconds(frames: dict[str, SourceFrame]) -> int:
@@ -1493,16 +1504,20 @@ def convert_bin(
     zstd_version = zstdcli.zstd_version()
     codebooks = PROFILES[profile]
 
-    if source.observation and not source.fetched:
-        # A local-file observation source is one NetCDF file holding the
-        # whole series, one band per time (xue/observation.py). There are no
-        # records to match, no wind pair, and no published cadence to
-        # validate the axis against — the file's own times are the axis,
-        # gaps included. (A fetched observation is one GRIB per frame and
-        # takes the record path below, re-keyed onto its window's axis.)
+    if source.series_file:
+        # A series-file observation source is one NetCDF file holding the
+        # whole series, one band per time (xue/observation.py): the CMA
+        # mosaic's local archive file, or the window the JMA fetch wrote.
+        # There are no records to match, no wind pair, and no published
+        # cadence to validate the axis against — the file's own times are
+        # the axis, gaps included. (The MRMS observation is one GRIB per
+        # frame and takes the record path below, re-keyed onto its window's
+        # axis.) A run directory holds exactly one such file.
+        if isinstance(input_path, Path) and input_path.is_dir():
+            input_path = _series_input(input_path, source)
         if not isinstance(input_path, Path):
             raise ConversionError(f"a {source.manifest_model} build takes exactly one NetCDF file")
-        if require_complete:
+        if require_complete and not source.fetched:
             raise ConversionError(f"{source.manifest_model} has no complete run to require")
         series = inspect_observation(input_path, source)
         # ``last_hour`` trims the series to a leading window of the file, and

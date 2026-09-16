@@ -9,8 +9,10 @@ PROFILE ?= balanced
 # Forecast source: gfs (NOAA 0.25°, hourly), ecmwf (IFS open data, 3-hourly),
 # sflux (GFS surface flux, native ~13 km, hourly, adds the dswrf layer), or
 # hrrr (NOAA HRRR, 3 km over the contiguous US, a cycle every hour, to F18);
-# mrms (the NOAA radar mosaic, an observation every two minutes) builds a
-# window named by its first hour — `RUN=latest` the live rolling window.
+# mrms (the NOAA radar mosaic, an observation every two minutes) and jma
+# (the JMA precipitation nowcast over Japan, every five minutes, through the
+# jma-radar tool) build a window named by its first hour — `RUN=latest` the
+# live rolling window.
 MODEL ?= gfs
 # One round of a rolling window (`build-bin --round`): the run's artifacts
 # and manifest live in <model>.<run>/<ROUND>/ and the pointer names that
@@ -51,7 +53,7 @@ AWS_REQUEST_CHECKSUM_CALCULATION ?= when_required
 AWS_RESPONSE_CHECKSUM_VALIDATION ?= when_required
 export AWS_DEFAULT_REGION AWS_REQUEST_CHECKSUM_CALCULATION AWS_RESPONSE_CHECKSUM_VALIDATION
 
-.PHONY: check install wasm test test-rust test-e2e encoder-rust encoder-rust-test encoder-wheel bench bench-video bench-lossy mvp serve format-pdf deploy-build upload-r2 upload-r2-bundles upload-r2-manifest upload-r2-stac-item check-pointer upload-r2-pointer upload-r2-stac-collection warm-r2 prune-r2 prune-r2-rounds live-run live-manifest live-window deploy-pages deploy showcase showcase-check showcase-refresh upload-r2-showcase tc-build live-tc-index upload-r2-tc prune-r2-tc clean
+.PHONY: check install wasm test test-rust test-e2e encoder-rust encoder-rust-test encoder-wheel bench bench-video bench-lossy mvp serve format-pdf deploy-build upload-r2 upload-r2-bundles upload-r2-manifest upload-r2-stac-item check-pointer upload-r2-pointer upload-r2-stac-collection warm-r2 prune-r2 prune-r2-rounds live-run live-manifest live-window pull-r2-frames push-r2-frames prune-r2-frames deploy-pages deploy showcase showcase-check showcase-refresh upload-r2-showcase tc-build live-tc-index upload-r2-tc prune-r2-tc clean
 
 check:
 	$(PYTHON) scripts/check_dependencies.py
@@ -461,6 +463,40 @@ live-window:
 	@set -e; path=$$($(S3) cp s3://$(R2_BUCKET)/$(R2_PREFIX)/$(LATEST_FILE) - --only-show-errors 2>/dev/null | jq -r .manifestPath || true); \
 	[ -n "$$path" ] || exit 0; \
 	$(S3) cp s3://$(R2_BUCKET)/$(R2_PREFIX)/$$(dirname $$path)/window.json - --only-show-errors 2>/dev/null || true
+
+# The decoded-frame cache of a source whose frames are decoded from a
+# tile service (JMA, through the jma-radar tool): one NetCDF per frame
+# under data/raw/<model>-frames/<grid>/, mirrored under <prefix>/<model>-frames/
+# on the bucket so every runner shares one copy and the agency serves each
+# frame once. Frames are immutable and named by their time
+# (`hrpns_<YYYYMMDDHHMMSS>.nc`), so a pull takes the hours of the window
+# about to be built (the last HOURS + 1 hours), a push sends what is new,
+# and a prune drops the days older than FRAMES_KEEP_DAYS (a case can be
+# built from what is kept). None of this is served to the viewer.
+FRAMES_DIR = data/raw/$(MODEL)-frames
+FRAMES_PREFIX = s3://$(R2_BUCKET)/$(R2_PREFIX)/$(MODEL)-frames
+FRAMES_KEEP_DAYS ?= 7
+pull-r2-frames:
+	@set -e; mkdir -p $(FRAMES_DIR); \
+	includes=$$($(PYTHON) -c "from datetime import datetime, timedelta, UTC; now = datetime.now(UTC); \
+	print(' '.join('--include */*_' + (now - timedelta(hours=h)).strftime('%Y%m%d%H') + '*' for h in range(int('$(if $(HOURS),$(HOURS),3)') + 1, -1, -1)))"); \
+	$(S3) sync $(FRAMES_PREFIX)/ $(FRAMES_DIR)/ --exclude "*" --include "*/grid.json" $$includes --only-show-errors; \
+	echo "frame cache: $$(find $(FRAMES_DIR) -name '*.nc' | wc -l | tr -d ' ') frames on disk"
+
+push-r2-frames:
+	@set -e; [ -d $(FRAMES_DIR) ] || { echo "no frame cache at $(FRAMES_DIR)"; exit 0; }; \
+	$(S3) sync $(FRAMES_DIR)/ $(FRAMES_PREFIX)/ --size-only --only-show-errors $(DRY_RUN)
+
+prune-r2-frames:
+	@set -e; \
+	cutoff=$$($(PYTHON) -c "from datetime import datetime, timedelta, UTC; print((datetime.now(UTC) - timedelta(days=$(FRAMES_KEEP_DAYS))).strftime('%Y%m%d'))"); \
+	listing=$$($(S3) ls $(FRAMES_PREFIX)/ --recursive) || { echo "listing the frame cache failed, refusing to prune"; exit 1; }; \
+	for day in $$(printf '%s\n' "$$listing" | awk '{print $$4}' | sed -n 's:.*/[a-z]*_\([0-9]\{8\}\)[0-9]\{6\}\.nc$$:\1:p' | sort -u); do \
+		if [ "$$day" \< "$$cutoff" ]; then \
+			echo "Deleting frames of $$day..."; \
+			$(S3) rm $(FRAMES_PREFIX)/ --recursive --exclude "*" --include "*/*_$$day*" --only-show-errors $(DRY_RUN); \
+		fi; \
+	done
 
 # Publish dist-deploy/ (built via deploy-build) to the Cloudflare Pages project.
 deploy-pages:

@@ -187,6 +187,8 @@ const MODEL_ALIASES: Record<string, ForecastModelId> = {
   "gfs-sflux": "sflux",
   hrrr: "hrrr",
   mrms: "mrms",
+  jma: "jma",
+  hrpns: "jma",
 };
 
 /** Model requested by the page URL, or the default when the URL names none

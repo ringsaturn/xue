@@ -77,6 +77,7 @@ export const zh: Record<MessageKey, string> = {
   creditsHrrr: "预报数据 · HRRR 3 公里，美国本土",
   creditsEcmwf: "含经修改的 ECMWF 数据 · CC BY 4.0",
   creditsMrms: "雷达观测 · MRMS，美国本土",
+  creditsJma: "雷达降水 · 气象厅临近预报，日本（重采样）",
   creditsRadar: "雷达拼图",
   creditsBasemap: "底图 · © OPENSTREETMAP 贡献者",
   creditsCode: "源代码 · RINGSATURN/XUE",

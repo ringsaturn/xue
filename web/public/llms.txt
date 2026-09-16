@@ -31,9 +31,18 @@ Facts worth getting right:
   minutes, so a frame with no new scan behind it repeats the last one over
   that radar's coverage), which is also the fifth live source: a rolling
   window of the last three to four hours, rebuilt every five minutes and
-  reaching to within about three minutes of real time. An observation
-  dataset has no run cycle and no lead time: its `run` is the hour its
-  series starts and a frame's offset is time elapsed since.
+  reaching to within about three minutes of real time. `jma` is the sixth
+  live source and the third observation: the Japan Meteorological Agency's
+  high-resolution precipitation nowcast analysis (高解像度降水ナウキャスト)
+  over Japan, five-minute frames decoded from the agency's map tiles onto a
+  0.01° grid (2800 × 2500, 121°E–149°E and 20.5°N–45.5°N) by the strongest
+  class in each cell, a rolling window of the last two to three hours. The
+  agency publishes precipitation intensity *classes* (0.25–1, 1–5, 5–10,
+  10–20, 20–30, 30–50, 50–80 and ≥ 80 mm/h), not radar reflectivity, so the
+  dataset ships `prate` alone at each class's representative rate (0.5, 3,
+  7.5, 15, 25, 40, 65 and 100 mm/h); a value is a class, not a measured
+  rate. An observation dataset has no run cycle and no lead time: its `run`
+  is the hour its series starts and a frame's offset is time elapsed since.
 - Bundles published per run. GFS and ECMWF: `tmp2m`, `prate`, `prmsl`,
   `hgt850`, `hgt700`, `hgt500`, `hgt250`, `tmp925`, `tmp850`, `tmp500`,
   `rh850`, `rh700`, `rh500`, the surface diagnostics `gust`, `tcdc` (total
@@ -61,7 +70,8 @@ Facts worth getting right:
   and the vector pairs `wind10m`, `wind925`, `wind850`, `wind250`. RADAR:
   `cref`. MRMS: `cref` (observed composite reflectivity, dBZ) and `prate`
   (the MRMS precipitation rate, mm/h; a case may ship the reflectivity
-  alone). Names
+  alone). JMA: `prate` (precipitation intensity class representative rate,
+  mm/h). Names
   are `<family><level>`; the level is in hPa, `2m`/`10m` are heights above
   ground, `prmsl` is mean sea level pressure.
 - Only the newest run per source is kept online. Runs are pruned when
@@ -72,7 +82,11 @@ Facts worth getting right:
 - Data licensing: NOAA GFS and HRRR are public domain; ECMWF open data is CC BY 4.0 and
   what is served is a converted derivative ("Contains modified ECMWF open
   data"); `radar` cases are CMA products and `mrms` cases NOAA products
-  (public domain); the basemap is Protomaps © OpenStreetMap contributors.
+  (public domain); `jma` is derived from the Japan Meteorological Agency
+  website (出典：気象庁ホームページ; the agency's terms of use, compatible
+  with CC BY 4.0, ask that the source be named and the processing —
+  regridding and reclassification by jma-radar — be noted); the basemap is
+  Protomaps © OpenStreetMap contributors.
 
 ## Pages and URL parameters
 
@@ -148,7 +162,7 @@ https://dataset.ringsaturn.me/xue/. The contract is two layers:
 
 - One mutable live pointer per source (JSON, schema 1): `latest.json` (GFS),
   `latest-sflux.json`, `latest-ecmwf.json`, `latest-hrrr.json`,
-  `latest-mrms.json`. Fields: `schemaVersion`, `model`, `product`, `run`
+  `latest-mrms.json`, `latest-jma.json`. Fields: `schemaVersion`, `model`, `product`, `run`
   (YYYYMMDDHH, UTC), `runTime` (ISO 8601), `manifestPath` (relative),
   `manifestCrc32`. Fetch with cache disabled; it changes four times a day
   (every hour for HRRR, every five minutes for MRMS — compare
@@ -172,7 +186,7 @@ https://dataset.ringsaturn.me/xue/. The contract is two layers:
   axis, the variables' GRIB2 parameter blocks and the quantization codebooks
   are inside each bundle — a UTF-8 JSON metadata block after the container's
   header, the store group's `attributes.xue` verbatim.
-- The MRMS window is one directory deeper: its `run` is the window's *first*
+- The MRMS and JMA windows are one directory deeper: the `run` is the window's *first*
   hour (three hours before the newest frame's, moving on every hour), and
   each five-minute rebuild of that run is a round of its own,
   `mrms.<run>/<HHMM>/manifest.json` (HHMM the round's UTC start), so a

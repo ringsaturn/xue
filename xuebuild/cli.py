@@ -72,7 +72,7 @@ def _common_run_arguments(parser: argparse.ArgumentParser, *, force_help: str) -
         help="last forecast hour, inclusive; must lie on the model's published axis "
         "(e.g. GFS: hourly to 120, then 3-hourly to 240); defaults to the whole axis "
         "the model publishes (240 for the global models, 18 for HRRR); on an observation "
-        "source, the window length in hours (3 for MRMS)",
+        "source, the window length in hours (3 for MRMS and JMA)",
     )
     parser.add_argument("--force", action="store_true", help=force_help)
 
@@ -91,8 +91,10 @@ def _model_argument(parser: argparse.ArgumentParser, *, fetched_only: bool = Tru
             "data source: NOAA GFS 0.25 degree (hourly), ECMWF IFS open data "
             "(3-hourly), GFS surface flux on the native ~13 km grid (hourly, adds dswrf), "
             "NOAA HRRR over the contiguous US (3 km, a cycle every hour, hourly to 18), "
-            "or NOAA MRMS, the radar mosaic over the contiguous US (an observation every "
-            "two minutes; --run names the window's first hour and --hours its length, 3 by default)"
+            "NOAA MRMS, the radar mosaic over the contiguous US (an observation every "
+            "two minutes; --run names the window's first hour and --hours its length, 3 by default), "
+            "or JMA, the precipitation nowcast over Japan (an observation every five minutes, "
+            "fetched through the jma-radar tool; a window the same way)"
             + ("" if fetched_only else "; radar is the CMA mosaic, read from a local NetCDF file")
         ),
     )

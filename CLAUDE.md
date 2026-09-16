@@ -214,9 +214,10 @@ model starts here; the frontend mirror is `FORECAST_MODELS` in
   probe and contour labels to the footprint (`web/src/domain.ts`,
   `FORECAST_MODELS[].domain`), and `region` is where the camera goes when a
   regional model is opened on a view showing none of it.
-- Local observation (`radar`): `observation=True`, no cycle, no lead time,
-  one NetCDF file per event read by `observation.py`, no pointer, no cron
-  job, no fetch. The axis is whatever times the observations carry.
+- Local observation (`radar`): `observation=True`, `series_file=True`, no
+  cycle, no lead time, one NetCDF file per event read by `observation.py`,
+  no pointer, no cron job, no fetch. The axis is whatever times the
+  observations carry.
 - Fetched observation (`mrms`): a run is a window named by its first hour
   (`window_hours`, also its `--hours` default), its frames listed off the
   bucket (`fetch.py::mrms_window_frames`: one gzipped GRIB per product per
@@ -240,7 +241,7 @@ model starts here; the frontend mirror is `FORECAST_MODELS` in
   `mrms.<run>/<HHMM>/` with a `window.json` (`fetch.py::window_summary`).
   Never overwrite an object under an unchanged `?v=`: a viewer's range
   requests against it decode the wrong bytes. `publish-mrms.yml` is one job
-  an hour looping `scripts/mrms_rounds.sh` (a round every five minutes:
+  an hour looping `scripts/window_rounds.sh` (a round every five minutes:
   newest frame vs the live `window.json` → build → `make upload-r2 …
   ROUND=` → `prune-r2-rounds` keeps the run's newest two rounds, `prune-r2
   KEEP=2` the previous run). The shell polls the MRMS pointer every two
@@ -249,6 +250,29 @@ model starts here; the frontend mirror is `FORECAST_MODELS` in
   was at the end (`checkForNewRun` / `resumeOnNewRun` in `main.ts`).
   `pickBundleVariant` scales the needed width by the bundle's longitude
   span, so a regional grid can take its half tier on a far-out view.
+- Fetched series-file observation (`jma`): the JMA precipitation nowcast
+  over Japan, fetched like MRMS (a rolling window, `latest-jma.json`,
+  `publish-jma.yml` looping the same `scripts/window_rounds.sh` with
+  `MODEL=jma HOURS=3`) but arriving as one NetCDF series per window
+  (`SourceSpec.series_file`, also true of `radar`; `convert_bin` and
+  `convert.rs` branch on it). The fetch is the `jma-radar` tool
+  (`xuebuild/jmacli.py`: `python -m jma_radar window --json`, or
+  `XUE_JMA_RADAR`), which reads the agency's `targetTimes_N1.json` (the
+  last three hours of five-minute analyses), decodes the palette tiles and
+  writes the series (`fetch.py::_fetch_jma_run`, the grid constants
+  `JMA_ZOOM` / `JMA_GRID_STEP` / `JMA_BBOX` / `JMA_RESAMPLING` beside it);
+  `latest_jma_slot` reads the listing itself and `latest_observation_slot`
+  dispatches by source. The agency publishes intensity classes, not dBZ, so
+  the source ships `prate` alone at each class's representative rate (all
+  nine distinct in the codebook) and its core set is `prate`. On the NetCDF
+  path a `cadence_seconds` means the window is the axis: `observation.py`
+  (mirrored in `observation.rs`) snaps each time to its slot and takes the
+  first slot's whole hour as the run, so `unitSeconds` is 300. The tool's
+  decoded-frame cache (`data/raw/jma-frames/`, one file per frame) is
+  mirrored on the bucket by `make pull-r2-frames` / `push-r2-frames` /
+  `prune-r2-frames` (`FRAME_CACHE=true` in the rounds script), so the
+  agency serves each frame once; the tiles expire after days and there is
+  no archive, so a case can only be cut from what that cache keeps.
 
 `variables.py` is the variable registry in GRIB2 terms: the parameter
 triple, the fixed surface, label and unit, plus the matching hints (element,

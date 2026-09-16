@@ -204,6 +204,35 @@ def _source_prose(source: SourceSpec) -> dict[str, Any]:
             "providers": [_NOAA_PROVIDER, _XUE_PROVIDER],
             "links": [_NOAA_LICENSE_LINK],
         },
+        "jma": {
+            "title": "JMA precipitation nowcast (hrpns)",
+            "description": (
+                "The Japan Meteorological Agency's high-resolution precipitation nowcast analysis "
+                "(高解像度降水ナウキャスト) over Japan: precipitation intensity classes every five "
+                "minutes, decoded from the agency's map tiles onto a regular 0.01° grid by the "
+                "strongest class in each cell and published under prate at each class's "
+                "representative rate (0.5, 3, 7.5, 15, 25, 40, 65 and 100 mm/h), as a rolling "
+                "window rebuilt every five minutes. Source: Japan Meteorological Agency website "
+                "(出典：気象庁ホームページ), regridded and reclassified by jma-radar."
+            ),
+            "license": "other",
+            "providers": [
+                {
+                    "name": "Japan Meteorological Agency",
+                    "roles": ["producer", "licensor"],
+                    "url": "https://www.jma.go.jp/bosai/en_nowc/",
+                },
+                _XUE_PROVIDER,
+            ],
+            "links": [
+                {
+                    "rel": "license",
+                    "href": "https://www.jma.go.jp/jma/kishou/info/coment.html",
+                    "type": "text/html",
+                    "title": "気象庁ホームページ利用規約 (compatible with CC BY 4.0)",
+                }
+            ],
+        },
         "radar": {
             "title": "CMA radar mosaic",
             "description": (

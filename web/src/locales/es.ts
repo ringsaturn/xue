@@ -80,6 +80,7 @@ export const es: Record<MessageKey, string> = {
   creditsHrrr: "DATOS DE PREDICCIÓN · HRRR 3 KM, EE. UU. CONTIGUOS",
   creditsEcmwf: "CONTIENE DATOS ECMWF MODIFICADOS · CC BY 4.0",
   creditsMrms: "OBSERVACIONES DE RADAR · MRMS, EE. UU. CONTIGUOS",
+  creditsJma: "PRECIPITACIÓN RADAR · NOWCAST JMA, JAPÓN (REMALLADO)",
   creditsRadar: "MOSAICO RADAR",
   creditsBasemap: "MAPA BASE · © COLABORADORES DE OPENSTREETMAP",
   creditsCode: "CÓDIGO FUENTE · RINGSATURN/XUE",

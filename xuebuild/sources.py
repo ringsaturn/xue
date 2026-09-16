@@ -20,8 +20,13 @@ observations carry. The CMA radar mosaic is one local file per event, with
 nothing to fetch and no live pointer; the NOAA MRMS mosaic is fetched from
 its bucket a window at a time (``window_hours``), one whole GRIB per
 two-minute frame, thinned onto a coarser grid (``downsample``) before
-anything else reads it, and — the one source that is an observation *and*
-live — published as a rolling window its pointer follows.
+anything else reads it, and — the first source that is an observation *and*
+live — published as a rolling window its pointer follows. The JMA
+precipitation nowcast is the third shape: fetched like MRMS, a rolling
+window with a pointer, but its frames arrive as one NetCDF series per
+window (``series_file``), assembled from the agency's map tiles by the
+``jma-radar`` tool (:mod:`xuebuild.jmacli`) rather than read record by
+record.
 ECMWF has no native rate field; its accumulated ``tp`` input is de-accumulated
 into prate by the converter. GFS sflux has only interval-averaged PRATE (the
 averaging window resets every 6 hours); the converter de-averages consecutive
@@ -93,7 +98,7 @@ class Downsample:
 @dataclass(frozen=True)
 class SourceSpec:
     id: str
-    """CLI / URL / directory id: "gfs", "ecmwf", "sflux", "hrrr", "radar" or "mrms"."""
+    """CLI / URL / directory id: "gfs", "ecmwf", "sflux", "hrrr", "radar", "mrms" or "jma"."""
     manifest_model: str
     """The manifest and bundle-metadata ``model`` string."""
     product: str
@@ -208,6 +213,13 @@ class SourceSpec:
     has no room for the seconds: the frame at ``00:02:41`` is the frame at
     ``00:02``. It is also the ``unitSeconds`` such a bundle declares, since
     no coarser unit fits its axis."""
+    series_file: bool = False
+    """True when a run of the source is one NetCDF file holding the whole
+    series, one band per time, read through :mod:`xuebuild.observation`
+    (the CMA mosaic decoded by ``radar-l3-mst``; the JMA nowcast assembled
+    by ``jma-radar``), rather than one GRIB per frame matched record by
+    record. Orthogonal to :attr:`fetched`: the CMA file is local, the JMA
+    file is written by the fetch."""
     downsample: Downsample | None = None
     """Set when the source is published on a grid coarser than it arrives
     on (:class:`Downsample`). Like ``regrid``, ``production_grid`` and
@@ -622,6 +634,7 @@ SOURCES: dict[str, SourceSpec] = {
         # forecast sources whatever z the event carries.
         tile=(64, 64),
         observation=True,
+        series_file=True,
     ),
     # NOAA MRMS (Multi-Radar Multi-Sensor): the national radar mosaic over
     # the contiguous United States, already merged and quality-controlled,
@@ -667,6 +680,50 @@ SOURCES: dict[str, SourceSpec] = {
         window_hours=3,
         cadence_seconds=120,
         downsample=Downsample(factor=2),
+        video=False,
+    ),
+    # JMA 高解像度降水ナウキャスト (high-resolution precipitation nowcast,
+    # ``hrpns``): the Japan Meteorological Agency's radar-and-gauge analysis
+    # of precipitation intensity over Japan, a frame every five minutes,
+    # published on its website as Web Mercator map tiles whose palette
+    # encodes ten intensity classes (no data, 0 mm/h, then 0.25–1, 1–5,
+    # 5–10, 10–20, 20–30, 30–50, 50–80 and ≥ 80 mm/h). Not a reflectivity —
+    # the agency publishes the rate classes, not dBZ — so it is published
+    # under ``prate`` at each class's representative value (0.5, 3, 7.5,
+    # 15, 25, 40, 65, 100 mm/h; the codebook reaches 128, so every class
+    # keeps its own code) and the core bundle is ``prate``. The ``jma-radar``
+    # tool (:mod:`xuebuild.jmacli`) decodes the zoom-8 tiles (624 a frame,
+    # about 0.0055° a pixel) onto a regular 0.01° grid by the strongest
+    # class in each cell, over the radar coverage envelope 121–149°E and
+    # 20.5–45.5°N, and writes a window's frames as one NetCDF series
+    # (``series_file``), the shape the CMA mosaic arrives in. The tile
+    # service lists the last three hours of analyses, so a window is three
+    # hours (``window_hours``) and ``--run latest`` starts two hours before
+    # the newest frame's hour; a rolling publish rebuilds it every five
+    # minutes into a round (.github/workflows/publish-jma.yml), reusing the
+    # frames already decoded (the tool caches one file per frame, synced
+    # with the bucket so the agency's tiles are fetched once).
+    "jma": SourceSpec(
+        id="jma",
+        manifest_model="JMA-HRPNS",
+        product="japan-prate",
+        latest_filename="latest-jma.json",
+        steps=(),
+        input_variable_ids=("prate",),
+        accumulated_precipitation=False,
+        bundle_scalar_ids=("prate",),
+        core_bundle_ids=("prate",),
+        # The 0.01° grid over the coverage envelope: 121E to 149E, 45.5N to
+        # 20.5N (xuebuild/fetch.py, JMA_BBOX / JMA_GRID_STEP).
+        production_grid=(2800, 2500),
+        # 64 x 64 cells is 0.64° at this step — 44 x 40 = 1760 tiles, each
+        # a series of thirty-seven 4 KB planes over a three-hour window.
+        tile=(64, 64),
+        observation=True,
+        series_file=True,
+        cycle_hours=1,
+        window_hours=3,
+        cadence_seconds=300,
         video=False,
     ),
 }

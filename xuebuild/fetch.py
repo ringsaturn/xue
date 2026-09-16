@@ -21,6 +21,7 @@ from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
 from pathlib import Path
 
+from . import jmacli
 from .errors import DownloadError
 from .idx import (
     ByteRange,
@@ -96,6 +97,26 @@ MRMS_FETCH_FILENAME = "fetch.json"
 # What a built window holds, written beside its manifest by `build-bin` for
 # an observation source (`xuebuild.cli`), from the fetch record below.
 WINDOW_FILENAME = "window.json"
+# The JMA precipitation nowcast tile service (xuebuild/sources.py, `jma`):
+# `targetTimes_N1.json` lists the last three hours of five-minute analyses
+# and is the one document this module reads itself; the tiles are fetched
+# and decoded by the jma-radar tool (xuebuild/jmacli.py).
+JMA_BASE_URL = os.environ.get("XUE_JMA_BASE_URL", "https://www.jma.go.jp/bosai/jmatile/data/nowc").rstrip("/")
+JMA_TARGET_TIMES_URL = f"{JMA_BASE_URL}/targetTimes_N1.json"
+JMA_ELEMENT = "hrpns"
+# What the tool is asked for, and what `production_grid` describes: the
+# zoom-8 tiles onto a square 0.01° grid over the radar coverage envelope,
+# each cell the strongest class of the pixels it holds.
+JMA_ZOOM = 8
+JMA_GRID_STEP = 0.01
+JMA_BBOX = (121.0, 20.5, 149.0, 45.5)
+JMA_RESAMPLING = "max"
+# The tool's frame cache — one file per decoded frame, keyed by the grid —
+# shared by every run under the raw root so a rolling rebuild fetches one
+# frame and a rotation none. `make pull-r2-frames` / `push-r2-frames` keep a
+# copy on the bucket, so a fresh runner does not ask the agency again.
+JMA_FRAMES_DIRNAME = "jma-frames"
+JMA_FETCH_CONCURRENCY = 6
 CONTENT_RANGE_RE = re.compile(r"^bytes (\d+)-(\d+)/(\d+|\*)$")
 USER_AGENT = "xue/0.1 (+https://registry.opendata.aws/noaa-gfs-bdp-pds/)"
 _ECMWF_PACING_LOCK = threading.Lock()
@@ -545,6 +566,163 @@ def latest_mrms_slot(
     return max(common)
 
 
+# -- JMA ----------------------------------------------------------------------
+#
+# The agency's page lists its analyses in `targetTimes_N1.json` as
+# `{"basetime": "YYYYMMDDHHMMSS", "validtime": ..., "elements": [...]}`,
+# newest first, an analysis being an entry whose two times agree; the
+# listing reaches three hours back. Everything else — the tiles, their
+# decoding, the grid — is the jma-radar tool's (xuebuild/jmacli.py), which
+# reads the same listing itself.
+
+_JMA_TIME_FORMAT = "%Y%m%d%H%M%S"
+
+
+def parse_jma_listing(payload: str, element: str = JMA_ELEMENT) -> list[datetime]:
+    """The analysis times a `targetTimes` document lists for `element`,
+    oldest first: entries whose basetime and validtime agree (a forecast's
+    validtime is later). Entries that are not that shape are skipped."""
+    try:
+        entries = json.loads(payload)
+    except json.JSONDecodeError as exc:
+        raise DownloadError(f"JMA listing is not JSON: {exc}") from exc
+    if not isinstance(entries, list):
+        raise DownloadError("JMA listing is not a JSON array")
+    times: set[datetime] = set()
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        basetime, validtime = entry.get("basetime"), entry.get("validtime")
+        if not isinstance(basetime, str) or basetime != validtime or element not in entry.get("elements", []):
+            continue
+        try:
+            times.add(datetime.strptime(basetime, _JMA_TIME_FORMAT).replace(tzinfo=UTC))
+        except ValueError:
+            continue
+    return sorted(times)
+
+
+def jma_analysis_times(*, fetch: Callable[[str], str] | None = None) -> list[datetime]:
+    """Every analysis the tile service lists now, oldest first."""
+    return parse_jma_listing((fetch or fetch_text)(JMA_TARGET_TIMES_URL))
+
+
+def jma_window_slots(
+    spec: SourceSpec, run: GfsRun, hours: int, *, fetch: Callable[[str], str] | None = None
+) -> list[datetime]:
+    """The listed analyses of one window: from the run's hour through
+    ``hours`` past it, inclusive. Each is already on the five-minute mark,
+    so the slot is the time itself."""
+    start, end = run.time, run.time + timedelta(hours=hours)
+    return [slot for slot in jma_analysis_times(fetch=fetch) if start <= slot <= end]
+
+
+def latest_jma_slot(
+    spec: SourceSpec, *, now: datetime | None = None, fetch: Callable[[str], str] | None = None
+) -> datetime:
+    """The newest analysis the tile service lists — the end of the live
+    window. A listing with no analysis at all is a feed that is down."""
+    times = jma_analysis_times(fetch=fetch)
+    if not times:
+        raise DownloadError(f"{spec.manifest_model} lists no analysis on the tile service")
+    return times[-1]
+
+
+def _jma_run_is_complete(
+    spec: SourceSpec, run: GfsRun, hours: int, *, fetch: Callable[[str], str] | None = None
+) -> bool:
+    """Whether a named window has fully landed: the listing reaches past
+    the window's end. The listing is three hours deep, so a window older
+    than that cannot be fetched either way — the tiles outlive the listing
+    by days, but this pipeline never guesses tile URLs."""
+    times = jma_analysis_times(fetch=fetch)
+    end = run.time + timedelta(hours=hours)
+    return bool(times) and times[-1] >= end and times[0] <= run.time
+
+
+def jma_frame_name(spec: SourceSpec, run: GfsRun) -> str:
+    """The local name of a window's series file: ``jma.<run>.nc``."""
+    return f"{spec.id}.{run.id}.nc"
+
+
+def _fetch_jma_run(
+    spec: SourceSpec,
+    run: GfsRun,
+    hours: int,
+    raw_root: Path,
+    *,
+    force: bool,
+    input_ids: tuple[str, ...] | None,
+) -> list[Path]:
+    """Fetch one window of the JMA nowcast through the jma-radar tool: the
+    analyses the listing holds between the run's hour and ``hours`` past it,
+    decoded onto the published grid and written as one NetCDF series, with
+    a ``fetch.json`` beside it in the shape the MRMS fetch leaves (one
+    entry per frame with its slot) so ``window_summary`` and the rolling
+    publish read both alike. The tool keeps one file per decoded frame
+    under ``raw_root/jma-frames``; ``force`` discards the window's cached
+    frames first so they are decoded from fresh tiles."""
+    if input_ids is not None and any(variable_id not in spec.input_variable_ids for variable_id in input_ids):
+        raise DownloadError(f"{spec.manifest_model} publishes {list(spec.input_variable_ids)}, not {list(input_ids)}")
+    jmacli.version()
+    destination = raw_root / f"{spec.id}.{run.id}"
+    frames_dir = raw_root / JMA_FRAMES_DIRNAME
+    output = destination / jma_frame_name(spec, run)
+    if force and frames_dir.is_dir():
+        for slot in jma_window_slots(spec, run, hours):
+            for cached in frames_dir.glob(f"*/{JMA_ELEMENT}_{slot:{_JMA_TIME_FORMAT}}.nc"):
+                LOG.info("discarding cached frame %s", cached)
+                cached.unlink()
+    summary = jmacli.fetch_window(
+        start=run.id,
+        hours=hours,
+        zoom=JMA_ZOOM,
+        step=JMA_GRID_STEP,
+        bbox=JMA_BBOX,
+        method=JMA_RESAMPLING,
+        frames_dir=frames_dir,
+        output=output,
+        variable=spec.input_variable_ids[0],
+        concurrency=JMA_FETCH_CONCURRENCY,
+    )
+    frames = summary["frames"]
+    if not frames:
+        raise DownloadError(f"{spec.manifest_model} lists no analysis for run {run.id} through +{hours} h")
+    if not output.is_file():
+        raise DownloadError(f"jma-radar reported a window but wrote no series at {output}")
+    record = {
+        "model": spec.id,
+        "run": run.id,
+        "hours": hours,
+        "cadenceSeconds": spec.cadence_seconds,
+        "grid": summary.get("grid"),
+        "series": output.name,
+        "frames": [
+            {
+                "path": output.name,
+                "slot": datetime.strptime(frame["validtime"], _JMA_TIME_FORMAT).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "basetime": frame["basetime"],
+                "frame": frame.get("path"),
+            }
+            for frame in frames
+        ],
+    }
+    (destination / MRMS_FETCH_FILENAME).write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
+    LOG.info("%s run %s: %d frames in %s", spec.manifest_model, run.id, len(frames), output)
+    return [output]
+
+
+def latest_observation_slot(spec: SourceSpec, *, now: datetime | None = None) -> datetime:
+    """The newest frame a live observation source's feed holds — what the
+    rolling publish compares the live window against, and what
+    ``resolve_run("latest")`` ends the window at."""
+    if spec.id == "mrms":
+        return latest_mrms_slot(spec, now=now)
+    if spec.id == "jma":
+        return latest_jma_slot(spec, now=now)
+    raise DownloadError(f"{spec.manifest_model} is not a live observation source")
+
+
 def model_object_url(run: GfsRun, forecast_hour: int, model: str) -> str:
     if model == "ecmwf":
         return ecmwf_object_url(run, forecast_hour)
@@ -674,6 +852,8 @@ def _run_is_complete(
 ) -> bool:
     if model == "mrms":
         return _mrms_run_is_complete(source_spec(model), run, hours)
+    if model == "jma":
+        return _jma_run_is_complete(source_spec(model), run, hours)
     if model == "hrrr":
         # Every hour, on one mirror: the hours of a cycle land out of order
         # and the two copies disagree for a while, so the ends prove nothing.
@@ -744,7 +924,7 @@ def resolve_run(
         if value == "latest":
             if not spec.live:
                 raise DownloadError(f"{label} has no live feed: name the window's first hour with --run YYYYMMDDHH")
-            newest = latest_mrms_slot(spec, now=now)
+            newest = latest_observation_slot(spec, now=now)
             start = newest.replace(minute=0, second=0, microsecond=0) - timedelta(hours=hours - 1)
             LOG.info("%s newest frame %s, live window from %s", label, newest.isoformat(), start.isoformat())
             return GfsRun(start)
@@ -1052,6 +1232,8 @@ def fetch_run(
     spec = source_spec(model)
     if spec.id == "mrms":
         return _fetch_mrms_run(spec, run, hours, raw_root, force=force, input_ids=input_ids)
+    if spec.id == "jma":
+        return _fetch_jma_run(spec, run, hours, raw_root, force=force, input_ids=input_ids)
     destination = raw_root / f"{spec.id}.{run.id}"
     forecast_hours = spec.forecast_hours(hours)
     frame_attempts = ECMWF_FRAME_ATTEMPTS if model == "ecmwf" else 1

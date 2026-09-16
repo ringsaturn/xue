@@ -83,6 +83,7 @@ export const tr: Record<MessageKey, string> = {
   creditsHrrr: "TAHMİN VERİSİ · HRRR 3 KM, ABD ANAKARASI",
   creditsEcmwf: "DEĞİŞTİRİLMİŞ ECMWF VERİSİ İÇERİR · CC BY 4.0",
   creditsMrms: "RADAR GÖZLEMLERİ · MRMS, ABD ANAKARASI",
+  creditsJma: "RADAR YAĞIŞI · JMA NOWCAST, JAPONYA (YENİDEN IZGARALANMIŞ)",
   creditsRadar: "RADAR MOZAİĞİ",
   creditsBasemap: "ALTLIK HARİTA · © OPENSTREETMAP KATKIDA BULUNANLAR",
   creditsCode: "KAYNAK KODU · RINGSATURN/XUE",

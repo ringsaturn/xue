@@ -146,6 +146,10 @@ export const en = {
   creditsHrrr: "FORECAST DATA · HRRR 3 KM, CONTIGUOUS US",
   creditsEcmwf: "CONTAINS MODIFIED ECMWF DATA · CC BY 4.0",
   creditsMrms: "RADAR OBSERVATIONS · MRMS, CONTIGUOUS US",
+  /** The JMA line carries the attribution its terms of use ask for (a
+   * source named and the processing noted); the sheet row's name is the
+   * agency's website, as the terms spell it. */
+  creditsJma: "RADAR PRECIPITATION · JMA NOWCAST, JAPAN (REGRIDDED)",
   creditsRadar: "RADAR MOSAIC",
   creditsBasemap: "BASEMAP · © OPENSTREETMAP CONTRIBUTORS",
   creditsCode: "SOURCE CODE · RINGSATURN/XUE",

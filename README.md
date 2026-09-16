@@ -37,6 +37,7 @@ pipeline.
 | ECMWF IFS open data 0.25° | `ecmwf` | 1440 × 721, 0.25° | 3-hourly to 144 h, 6-hourly to F240 (65 frames) | `latest-ecmwf.json` |
 | NOAA HRRR | `hrrr` | 2441 × 1051, 0.03°, contiguous US | hourly to F18, a cycle every hour | `latest-hrrr.json` |
 | NOAA MRMS | `mrms` | 3500 × 1750, 0.02°, contiguous US | one frame every two minutes, a rolling four-hour window | `latest-mrms.json` |
+| JMA precipitation nowcast | `jma` | 2800 × 2500, 0.01°, Japan | one frame every five minutes, a rolling three-hour window | `latest-jma.json` |
 | CMA radar mosaic | `radar` | tile grid | every six minutes | none: showcase cases only |
 
 Each model publishes as an independent dataset under `<model>.<run>/`, taken
@@ -81,6 +82,20 @@ Bundle sets:
   `noaa-mrms-pds` bucket, fetched one gzipped GRIB per product, and thinned
   two to one by block maximum onto the 0.02° grid. A three-hour window is
   about 90 frames and 20–40 MB of reflectivity.
+- JMA: the agency's 高解像度降水ナウキャスト (high-resolution precipitation
+  nowcast) analysis over Japan, published on its website as map tiles whose
+  palette encodes ten precipitation intensity classes. Not a reflectivity,
+  so it ships `prate` alone, at each class's representative rate (0.5, 3,
+  7.5, 15, 25, 40, 65 and 100 mm/h; the codebook keeps every class
+  distinct). The [jma-radar](https://github.com/ringsaturn/jma-radar) tool
+  (`uv pip install git+https://github.com/ringsaturn/jma-radar`, driven by
+  `xuebuild/jmacli.py`) lists the agency's `targetTimes`, decodes the
+  zoom-8 tiles onto a 0.01° grid over the radar coverage envelope
+  (121–149°E, 20.5–45.5°N) by the strongest class in each cell, and writes
+  a window as one NetCDF series, which both encoders read the way they read
+  the CMA file. The listing reaches three hours back, so a window is three
+  hours; a whole window is under 3 MB. Source: Japan Meteorological Agency
+  website (出典：気象庁ホームページ), regridded and reclassified.
 
 Every level of the isobaric families is registered; turning one on is a line
 in `xuebuild/sources.py` and its mirror in the native encoder, not a format
@@ -206,6 +221,7 @@ python -m xuebuild build-bin --model sflux --run latest --hours 240
 python -m xuebuild build-bin --model hrrr --run latest
 python -m xuebuild build-bin --model mrms --run 2026091300 --hours 3   # a past window
 python -m xuebuild build-bin --model mrms --run latest --hours 4 --round now   # one round of the live window
+python -m xuebuild build-bin --model jma --run latest --hours 3 --round now    # the JMA nowcast, through jma-radar
 ```
 
 `XUE_ENCODER` picks which encoder converts: `auto` (the default: the `xuepy`
@@ -390,13 +406,14 @@ make upload-r2-manifest MODEL=gfs RUN=2026081600
 The Pages shell is deployed separately (`make deploy`) and only needs
 redeploying when frontend code changes.
 
-### The MRMS rolling window
+### The rolling windows (MRMS, JMA)
 
-The radar mosaic is observations and never complete, so
-[`publish-mrms.yml`](.github/workflows/publish-mrms.yml) runs one job an
-hour that loops through [`scripts/mrms_rounds.sh`](scripts/mrms_rounds.sh),
-a round every five minutes until five to the hour (GitHub's cron is too
-coarse for a five-minute cadence). A round compares the bucket's newest
+An observation feed is never complete, so
+[`publish-mrms.yml`](.github/workflows/publish-mrms.yml) and
+[`publish-jma.yml`](.github/workflows/publish-jma.yml) each run one job an
+hour that loops through [`scripts/window_rounds.sh`](scripts/window_rounds.sh)
+(`MODEL=mrms` or `jma`), a round every five minutes until five to the hour
+(GitHub's cron is too coarse for a five-minute cadence). A round compares the bucket's newest
 frame with the live round's `window.json` (`make live-window`) and, when
 there is something new, builds the whole window again (`build-bin --run
 latest --hours 4 --round HHMM`; frames already on disk are reused, and the
@@ -409,10 +426,16 @@ window keeps its artifacts). Each round goes into its own subdirectory
 because the same run is rebuilt every five minutes and an object rewritten
 under an unchanged `?v=` would serve a viewer's range requests the wrong
 bytes. One log line per round records the newest frame's age when the
-pointer was written and each step's seconds. By hand:
+pointer was written and each step's seconds. The JMA job runs with
+`FRAME_CACHE=true` and `HOURS=3`: the decoded-frame cache the jma-radar
+tool keeps (`data/raw/jma-frames/`) is pulled from the bucket before the
+first build (`make pull-r2-frames`, the window's hours only), pushed back
+after every upload and pruned to the last seven days once an hour, so the
+agency's tiles are fetched once whatever runner asks. By hand:
 
 ```sh
-ONCE=true scripts/mrms_rounds.sh                     # one round, as the job would run it
+ONCE=true scripts/window_rounds.sh                     # one round, as the job would run it
+MODEL=jma HOURS=3 FRAME_CACHE=true ONCE=true scripts/window_rounds.sh
 .venv/bin/python -m xuebuild build-bin --model mrms --run latest --hours 4 --round now
 make upload-r2 MODEL=mrms RUN=2026091321 ROUND=1405  # the round the build named
 make prune-r2-rounds MODEL=mrms && make prune-r2 MODEL=mrms KEEP=2

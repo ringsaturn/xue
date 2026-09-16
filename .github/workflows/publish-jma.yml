@@ -1,23 +1,26 @@
-name: publish mrms
+name: publish jma
 
-# NOAA MRMS, the radar mosaic over the contiguous United States: an
-# observation every two minutes, about a minute behind real time on its
-# bucket. The live feed is a rolling window — the last three whole hours
-# plus the hour in progress, 0.02°, the native two-minute step — rebuilt
-# every five minutes into a round subdirectory of its run
-# (<model>.<run>/<HHMM>/) and pointed at by latest-mrms.json.
+# The JMA precipitation nowcast (高解像度降水ナウキャスト): the agency's
+# precipitation intensity analysis over Japan, a frame every five minutes,
+# published on its website as map tiles. The live feed is a rolling window
+# — the last two whole hours plus the hour in progress, the three hours
+# the agency's listing reaches back, on a 0.01° grid, the native
+# five-minute step — rebuilt every five minutes into a round subdirectory
+# of its run (<model>.<run>/<HHMM>/) and pointed at by latest-jma.json.
 #
-# Not the three-job pipeline of publish.yml: a cron here fires once a
-# minute at best and tens of minutes late under load, so one job an hour
-# runs the rounds itself (scripts/window_rounds.sh), sleeping to each
-# five-minute boundary until five to the hour, and the next hour's cron
-# takes over. The cron's lateness costs the first round of the hour only.
+# The same shape as publish-mrms.yml: one job an hour runs the rounds
+# itself (scripts/window_rounds.sh, MODEL=jma), sleeping to each
+# five-minute boundary until five to the hour. Two things differ. The
+# frames are fetched and decoded by the jma-radar tool
+# (https://github.com/ringsaturn/jma-radar, installed into the project
+# environment here; xuebuild/jmacli.py drives it), and its decoded-frame
+# cache is mirrored on the bucket (`make pull-r2-frames` / `push-r2-frames`)
+# so the agency's tiles are fetched once, not once per runner: a round
+# asks it for one new frame. And the window is three hours rather than
+# four, since the listing is three hours deep.
 #
-# Machine time: twenty-four jobs of up to fifty-five minutes a day, about
-# 660 hours a month — free on a public repository's standard runners, far
-# past the free allowance were this repository ever private (then the
-# round would have to stretch to twenty minutes, or the job move to a
-# self-hosted runner).
+# Machine time: as publish-mrms.yml, about 660 hours a month, free on a
+# public repository's standard runners.
 
 on:
   schedule:
@@ -33,9 +36,14 @@ on:
         type: string
         default: "5"
       hours:
-        description: "Window length in hours (the whole hours on screen plus the one in progress)"
+        description: "Window length in hours (the whole hours on screen plus the one in progress; the listing reaches three hours back)"
         type: string
-        default: "4"
+        default: "3"
+      encoder:
+        description: "native (the xuepy wheel; needs a release that knows the jma source) or python (the reference pipeline, installs GDAL)"
+        type: choice
+        options: [native, python]
+        default: native
       profile:
         description: "Quantization/compression profile"
         type: choice
@@ -58,14 +66,15 @@ permissions:
   contents: read
 
 concurrency:
-  group: publish-mrms
+  group: publish-jma
   cancel-in-progress: false
 
 env:
   # Convert through the native encoder (the xuepy wheel, a dependency of
-  # xuebuild) and insist on it: a round that quietly fell back to the
-  # subprocess pipeline would overrun its five minutes.
-  XUE_ENCODER: native
+  # xuebuild) and insist on it, or through the reference pipeline when the
+  # dispatch asks: either way the choice is explicit, so a round never
+  # quietly falls back to a slower path.
+  XUE_ENCODER: ${{ inputs.encoder || 'native' }}
   # Every round is published as Zarr stores alone (plan 017 phase 7): the
   # store is derived from the `.xue` the round wrote and the file retired
   # before upload. A round's export is a fraction of its build.
@@ -81,9 +90,11 @@ jobs:
     # backstop for a round that hangs.
     timeout-minutes: 65
     env:
+      MODEL: jma
+      FRAME_CACHE: "true"
       ONCE: ${{ inputs.once || false }}
       ROUND_MINUTES: ${{ inputs.round_minutes || '5' }}
-      HOURS: ${{ inputs.hours || '4' }}
+      HOURS: ${{ inputs.hours || '3' }}
       PROFILE: ${{ inputs.profile || 'balanced' }}
       KEEP: ${{ inputs.keep || '2' }}
       FORCE: ${{ inputs.force || false }}
@@ -126,11 +137,21 @@ jobs:
           enable-cache: true
           python-version: "3.14"
 
-      # No GDAL and no ffmpeg: the source ships no video, and the xuepy
-      # wheel carries the GDAL the native encoder extracts and inspects
-      # with (`xuepy>=0.15`, the first wheel that knows the source).
+      # No ffmpeg: the source ships no video. The xuepy wheel carries the
+      # GDAL the native encoder extracts and inspects with; the reference
+      # pipeline needs the system one.
       - name: Sync Python environment
         run: uv sync
+
+      - name: Install the jma-radar tool
+        run: uv pip install --python .venv/bin/python "git+https://github.com/ringsaturn/jma-radar"
+
+      - name: Install GDAL for the reference pipeline
+        if: ${{ env.XUE_ENCODER == 'python' }}
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq gdal-bin
+          gdalinfo --version
 
       - name: Run the rounds
         env:
@@ -142,7 +163,7 @@ jobs:
           scripts/window_rounds.sh 2>&1 | tee rounds.log
           status=$?
           {
-            echo "### mrms rounds"
+            echo "### jma rounds"
             echo
             echo '```'
             grep -E '^round [0-9]{4}:|rounds this hour' rounds.log || true
@@ -157,8 +178,8 @@ jobs:
         if: ${{ !inputs.dry_run }}
         run: |
           set -uo pipefail
-          [ -f web/public/data/latest-mrms.json ] || { echo "No round built this hour." >> "$GITHUB_STEP_SUMMARY"; exit 0; }
-          url="https://dataset.ringsaturn.me/xue/latest-mrms.json"
+          [ -f web/public/data/latest-jma.json ] || { echo "No round built this hour." >> "$GITHUB_STEP_SUMMARY"; exit 0; }
+          url="https://dataset.ringsaturn.me/xue/latest-jma.json"
           published=$(curl -fsSL "$url" | jq -r '.manifestPath' || true)
           if [ -n "$published" ] && [ -f "web/public/data/$published" ]; then
             echo "$url serves $published." >> "$GITHUB_STEP_SUMMARY"
@@ -169,10 +190,10 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
-          name: publish-report-mrms
+          name: publish-report-jma
           path: |
             rounds.log
             build-report.json
-            web/public/data/latest-mrms.json
+            web/public/data/latest-jma.json
           retention-days: 14
           if-no-files-found: ignore

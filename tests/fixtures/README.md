@@ -124,6 +124,24 @@ cat crop.MRMS_MergedReflectivityQCComposite_00.50_20260913-000242.grib2 \
     crop.MRMS_PrecipRate_00.00_20260913-000200.grib2 > tests/fixtures/mrms.2026091300.t0002.crop.grib2
 ```
 
+`jma.2026091601.crop.nc` is a NetCDF series of three frames of the JMA
+precipitation nowcast (01:05, 01:10 and 01:20 UTC on 2026-09-16; 01:15 left
+out so the axis lists its offsets) cropped to 200 by 150 cells of the
+published 0.01° grid over the Kii Peninsula and Shikoku (135E to 137E,
+34.5N to 33N) on a rainy morning: every intensity class from 0 mm/h to the
+50–80 mm/h band is present, and a corner is outside radar coverage (the
+255 fill). The shape is exactly what `jma-radar window --variable prate`
+writes — `prate(time, lat, lon)` as a byte with `scale_factor` 0.5 and
+`_FillValue` 255, `level(time, lat, lon)`, `time` in seconds since the
+epoch — so the cadence snapping, the run-hour rule, the unscaling and the
+byte-identity parity test all run against real frames. Cut from the
+tool's frame cache with a few lines of NumPy: `jma_radar.fetch_window(
+"2026091601", 1, zoom=8, step=0.01, bbox=(121, 20.5, 149, 45.5),
+method="max", frames_dir=...)`, the three frames sliced to rows 1100–1250
+and columns 1400–1600 of the 2500 x 2800 grid, and
+`jma_radar.to_series_dataset(..., variable="prate")` written with
+`jma_radar.write_netcdf`.
+
 # Xue fixtures
 
 `tests/prepare_bin_fixture.py` encodes the same cropped GRIB into per-variable
