@@ -31,6 +31,7 @@ from typing import Any
 
 from ..errors import SoundingProductError, XueError
 from . import bufr, derive
+from .bufr import BUFR_MAGIC
 from .fetch import SOURCE_IDS, FetchResult, SourceStatus, issue_raw_directory, read_fetch_record
 from .schema import (
     INDEX_FILENAME,
@@ -102,6 +103,19 @@ def merge_soundings(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return ordered[:KEEP_TIMES]
 
 
+def _is_bufr(path: Path) -> bool:
+    """Whether the object is a BUFR message at all, by its magic. The
+    gateways republish the GTS stream verbatim, so the ``I/U/S/`` subtree
+    also carries plain-text NIL bulletins — a few dozen bytes saying a
+    station had nothing to send. They were 7% of the objects the two
+    gateways held when this was written."""
+    try:
+        with path.open("rb") as handle:
+            return BUFR_MAGIC in handle.read(256)
+    except OSError:
+        return False
+
+
 def _parse_gateway(
     directory: Path, gateway: str, files: list[str]
 ) -> tuple[list[bufr.Sounding], dict[str, int], str | None]:
@@ -113,7 +127,7 @@ def _parse_gateway(
     from ..eccodescli import bufr_dump_json  # eccodes is only needed on this path
 
     soundings: list[bufr.Sounding] = []
-    counts = {"bulletins": 0, "unreadable": 0, "subsets": 0, "dropped": 0}
+    counts = {"bulletins": 0, "nil": 0, "unreadable": 0, "subsets": 0, "dropped": 0}
     error: str | None = None
     for name in sorted(files):
         path = directory / name
@@ -121,6 +135,12 @@ def _parse_gateway(
         if parsed_name is None or not path.is_file():
             counts["unreadable"] += 1
             error = error or f"{name} is not a bulletin this build can read"
+            continue
+        if not _is_bufr(path):
+            # A NIL bulletin: the station had nothing to report and the
+            # GTS carries a line of text saying so. Normal traffic, and
+            # not worth a bufr_dump.
+            counts["nil"] += 1
             continue
         try:
             result = bufr.parse_bulletin(bufr_dump_json(path), name=parsed_name, gateway=gateway)

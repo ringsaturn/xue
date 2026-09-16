@@ -34,6 +34,37 @@ from typing import Any
 MISSING = -32768
 """The missing value of every fixed-point level array."""
 
+BUFR_MAGIC = b"BUFR"
+"""What a BUFR message starts with, after the GTS text header the
+gateways leave in front of it (``IUSC01 RJTD 140000\\r\\r\\n``). An object
+without it somewhere near the front is not BUFR at all: the gateways
+republish the GTS stream as it is, and a station with nothing to report
+sends a plain-text NIL bulletin of a few dozen bytes. Those are normal
+traffic, not corruption, and are counted apart from what fails to
+decode."""
+
+VALUE_BOUNDS = {
+    "p": (1, 120000),
+    "z": (-1000, 100000),
+    "t": (10000, 40000),
+    "td": (10000, 40000),
+    "wd": (0, 360),
+    "ws": (0, 3000),
+    "sig": (0, 262143),
+}
+"""The fixed-point range each level array stays inside — pressure in
+pascals, geopotential height in metres, temperature and dew point in
+centikelvin, direction in degrees, speed in decimetres per second, and the
+18-bit significance flags.
+
+The parser enforces these, so a value it emits is always one the validator
+admits. Live GTS data needs it: bulletins carry wind directions of 504°
+and the like, and one such value must not take down the hour's other
+seven hundred stations. A value outside its range is not a measurement, so
+it becomes ``MISSING``; a *pressure* outside its range costs the level,
+since pressure is the vertical axis and a level without one has no place
+on it. ``schema.py`` validates against this same table."""
+
 TROPOPAUSE_BIT = 1 << 15
 """``extendedVerticalSoundingSignificance`` (BUFR flag table 0 08 042) is
 an 18-bit field numbered left to right, so bit 1 (surface) is 1 << 17 and
@@ -230,15 +261,18 @@ def _number(value: Any) -> float | None:
     return float(value)
 
 
-def _fixed(value: Any, scale: float) -> int:
-    """A BUFR value as the product's fixed point, ``MISSING`` when absent.
-    Half-up on the magnitude, so −0.5 and 0.5 round away from zero and a
-    second implementation does not have to know Python's banker's rule."""
+def _fixed(value: Any, scale: float, array: str) -> int:
+    """A BUFR value as the product's fixed point, ``MISSING`` when absent
+    or outside ``VALUE_BOUNDS[array]``. Half-up on the magnitude, so −0.5
+    and 0.5 round away from zero and a second implementation does not have
+    to know Python's banker's rule."""
     number = _number(value)
     if number is None:
         return MISSING
     scaled = number * scale
-    return int(math.floor(scaled + 0.5)) if scaled >= 0 else -int(math.floor(-scaled + 0.5))
+    fixed = int(math.floor(scaled + 0.5)) if scaled >= 0 else -int(math.floor(-scaled + 0.5))
+    low, high = VALUE_BOUNDS[array]
+    return fixed if low <= fixed <= high else MISSING
 
 
 @dataclass
@@ -389,7 +423,7 @@ def _parse_subset(walked: list[tuple[str, Any]], *, name: BulletinName, gateway:
     if lat is None or lon is None or not -90.0 <= lat <= 90.0 or not -180.0 <= lon <= 180.0:
         return None
     nominal = name.nominal
-    rows = [level for level in _levels(walked) if _number(level.get("pressure")) not in (None, 0.0)]
+    rows = [level for level in _levels(walked) if _fixed(level.get("pressure"), 1, "p") != MISSING]
     if not rows:
         return None
     # The subset's own order first (it is the ascent), then by pressure
@@ -411,13 +445,13 @@ def _parse_subset(walked: list[tuple[str, Any]], *, name: BulletinName, gateway:
         bulletin=name.header,
         gateway=gateway,
         arrived=name.arrived,
-        p=tuple(_fixed(level.get("pressure"), 1) for level in rows),
-        z=tuple(_fixed(level.get("nonCoordinateGeopotentialHeight"), 1) for level in rows),
-        t=tuple(_fixed(level.get("airTemperature"), 100) for level in rows),
-        td=tuple(_fixed(level.get("dewpointTemperature"), 100) for level in rows),
-        wd=tuple(_fixed(level.get("windDirection"), 1) for level in rows),
-        ws=tuple(_fixed(level.get("windSpeed"), 10) for level in rows),
-        sig=tuple(_fixed(level.get("extendedVerticalSoundingSignificance"), 1) for level in rows),
+        p=tuple(_fixed(level.get("pressure"), 1, "p") for level in rows),
+        z=tuple(_fixed(level.get("nonCoordinateGeopotentialHeight"), 1, "z") for level in rows),
+        t=tuple(_fixed(level.get("airTemperature"), 100, "t") for level in rows),
+        td=tuple(_fixed(level.get("dewpointTemperature"), 100, "td") for level in rows),
+        wd=tuple(_fixed(level.get("windDirection"), 1, "wd") for level in rows),
+        ws=tuple(_fixed(level.get("windSpeed"), 10, "ws") for level in rows),
+        sig=tuple(_fixed(level.get("extendedVerticalSoundingSignificance"), 1, "sig") for level in rows),
     )
 
 

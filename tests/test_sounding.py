@@ -260,6 +260,25 @@ class LevelWalkTests(unittest.TestCase):
         self.assertEqual(item.ws, (100,))
         self.assertEqual(item.sig, (8192 | 2048,))
 
+    def test_a_value_outside_its_range_is_missing_not_published(self) -> None:
+        # Live GTS bulletins carry wind directions like 504°; one must not
+        # take down the hour, and it is not a measurement either.
+        entries = self.header() + self.level(100000.0, t=283.15, wd=504.0, ws=5.0)
+        item = self.parse(entries).soundings[0]
+        self.assertEqual(item.wd, (bufr.MISSING,))
+        self.assertEqual(item.ws, (50,))
+        entries = self.header() + self.level(100000.0, t=999.0)
+        self.assertEqual(self.parse(entries).soundings[0].t, (bufr.MISSING,))
+
+    def test_a_level_whose_pressure_is_out_of_range_is_dropped(self) -> None:
+        entries = self.header() + self.level(0.0, t=283.15) + self.level(100000.0, t=284.15)
+        item = self.parse(entries).soundings[0]
+        self.assertEqual(item.p, (100000,))
+        self.assertEqual(item.t, (28415,))
+
+    def test_the_parser_never_emits_what_the_validator_refuses(self) -> None:
+        self.assertEqual(sorted(bufr.VALUE_BOUNDS), sorted(("p", "z", "t", "td", "wd", "ws", "sig")))
+
     def test_a_subset_without_a_station_identity_is_dropped(self) -> None:
         entries = [entry for entry in self.header() if entry[0] not in ("blockNumber", "stationNumber")]
         result = self.parse(entries + self.level(100000.0, t=283.15))
@@ -726,6 +745,40 @@ class BuildFailureTests(unittest.TestCase):
             self.assertIsNone(report["watermark"][GATEWAY])
             self.assertEqual(report["stations"], 0)
             self.assertIsNone(report["pointer"])
+
+    def test_a_nil_bulletin_is_counted_apart_from_what_fails_to_decode(self) -> None:
+        # The gateways republish the GTS stream verbatim, so the sounding
+        # subtree also carries plain-text "nothing to report" bulletins.
+        with tempfile.TemporaryDirectory() as scratch:
+            raw = Path(scratch) / "raw" / "sounding.2026091402" / GATEWAY
+            raw.mkdir(parents=True)
+            nil = "A_IUSN02DAMM140000_C_EDZW_20260914004803_51548070"
+            (raw / nil).write_bytes(b"IUSN02 DAMM 140000\r\r\n\r\r\nNIL=")
+            (raw / "fetch.json").write_text(
+                json.dumps(
+                    {
+                        "id": GATEWAY,
+                        "ok": True,
+                        "fetched": "2026-09-14T02:04:00Z",
+                        "watermark": "2026-09-14T02:34:41Z",
+                        "files": [nil],
+                    }
+                )
+            )
+            report = build_product(
+                ISSUE,
+                Path(scratch) / "raw",
+                Path(scratch) / "out",
+                sources=(GATEWAY,),
+                force=True,
+                now=utc(2026, 9, 14, 2, 5),
+            )
+            status = report["sources"][0]
+            # Nothing decoded, but nothing failed either: the source is ok
+            # and its watermark advances.
+            self.assertTrue(status["ok"])
+            self.assertEqual((status["nil"], status["unreadable"], status["bulletins"]), (1, 0, 0))
+            self.assertEqual(report["watermark"][GATEWAY], "2026-09-14T02:34:41Z")
 
     def test_a_gateway_that_was_never_fetched_is_recorded(self) -> None:
         with tempfile.TemporaryDirectory() as scratch:

@@ -33,7 +33,7 @@ from ..pointproduct import (  # noqa: F401 — re-exported: the sounding modules
     pointer_shape_error,
     write_bytes_atomic,
 )
-from .bufr import MISSING
+from .bufr import MISSING, VALUE_BOUNDS
 
 SCHEMA_VERSION = 1
 PRODUCT = "sounding"
@@ -54,19 +54,11 @@ ISSUE = re.compile(r"^\d{10}$")
 
 LEVEL_ARRAYS = ("p", "z", "t", "td", "wd", "ws", "sig")
 
-_BOUNDS = {
-    "p": (1, 120000),
-    "z": (-1000, 100000),
-    "t": (10000, 40000),
-    "td": (10000, 40000),
-    "wd": (0, 360),
-    "ws": (0, 3000),
-    "sig": (0, 262143),
-}
-"""Fixed-point ranges a level array's values stay inside, ``MISSING``
-aside: pressure in pascals, geopotential height in metres, temperature and
-dew point in centikelvin, direction in degrees, speed in decimetres per
-second, and the 18-bit significance flags."""
+_BOUNDS = VALUE_BOUNDS
+"""The fixed-point ranges a level array's values stay inside, ``MISSING``
+aside. The parser owns the table (``bufr.VALUE_BOUNDS``) and enforces it
+as it writes, so the two cannot drift: anything the parser emits is
+something this validator admits."""
 
 
 def issue_directory(issue: datetime) -> str:
