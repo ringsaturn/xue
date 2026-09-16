@@ -23,6 +23,12 @@
 # frames nobody has fetched yet, and the frames older than FRAMES_KEEP_DAYS
 # are pruned once an hour.
 #
+# With HANDOVER_CHECK set to a command (scripts/successor_queued.sh: is a
+# newer run of this workflow waiting on the concurrency group?), the loop
+# runs it before each round and ends the job normally when it answers yes,
+# so the hour's job hands the feed to the next one the moment it arrives
+# and the deadline is only the backstop for a cron that never comes.
+#
 # Three consecutive failed rounds end the job — a broken feed or a broken
 # runner is not helped by trying every five minutes for an hour — and the
 # next hour's cron starts over.
@@ -40,8 +46,9 @@
 # round even when the live one is current), DRY_RUN (--dryrun previews the
 # uploads and prunes), ONCE (true runs one round and exits — a manual
 # check), FRAME_CACHE (true syncs the decoded-frame cache with the bucket),
-# FRAMES_KEEP_DAYS (7). PYTHON names the interpreter (the Makefile's
-# default is the project's .venv).
+# FRAMES_KEEP_DAYS (7), HANDOVER_CHECK (a command; empty runs to the
+# deadline). PYTHON names the interpreter (the Makefile's default is the
+# project's .venv).
 set -u
 
 model=${MODEL:-mrms}
@@ -55,6 +62,7 @@ keep=${KEEP:-2}
 force=${FORCE:-false}
 dry_run=${DRY_RUN:-}
 once=${ONCE:-false}
+handover_check=${HANDOVER_CHECK:-}
 python=${PYTHON:-.venv/bin/python}
 data=web/public/data
 raw=data/raw
@@ -76,6 +84,10 @@ failures=0
 rounds=0
 pruned_frames=false
 while :; do
+  if [ -n "$handover_check" ] && sh -c "$handover_check"; then
+    echo "the next job is waiting; handing the feed over"
+    break
+  fi
   round=$(date -u +%H%M)
   started=$(date -u +%s)
   ok=true

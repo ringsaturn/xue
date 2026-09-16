@@ -10,16 +10,17 @@ name: publish jma
 #
 # The same shape as publish-mrms.yml: one job an hour runs the rounds
 # itself (scripts/window_rounds.sh, MODEL=jma). Three things differ. The
-# rounds come every two minutes rather than five, and a job runs on to
-# twenty past the next hour instead of stopping at five to: GitHub starts
+# rounds come every two minutes rather than five, and a job runs on until
+# the next one has arrived instead of stopping at five to: GitHub starts
 # an hourly cron ten to twenty minutes late, and a job that stopped at :55
-# left the feed unattended until the next one arrived. A scheduled run
-# cancels the job still running (the concurrency group below), so the
-# hand-off happens whenever the cron actually fires; a round cut off
-# mid-way costs nothing, since the pointer is the last thing a round
-# writes and the previous round stays live. A manual dispatch waits its
-# turn instead of cancelling anything. The frames are fetched and decoded
-# by the jma-radar tool
+# left the feed unattended until the next one arrived. The next run waits
+# on the concurrency group, and the running job asks before each round
+# whether one is waiting (scripts/successor_queued.sh) and ends normally
+# when it is, so the hand-off happens whenever the cron actually fires,
+# every job finishes green with its summary and artifact, and the
+# deadline at twenty past the next hour is only the backstop for a cron
+# that never comes. The frames are fetched and decoded by the jma-radar
+# tool
 # (https://github.com/ringsaturn/jma-radar, installed into the project
 # environment here; xuebuild/jmacli.py drives it), and its decoded-frame
 # cache is mirrored on the bucket (`make pull-r2-frames` / `push-r2-frames`)
@@ -72,12 +73,13 @@ on:
 
 permissions:
   contents: read
+  # scripts/successor_queued.sh lists this workflow's waiting runs.
+  actions: read
 
 concurrency:
   group: publish-jma
-  # The hourly cron takes over from the job still running, whenever it
-  # fires; a dispatch queues behind whatever is running.
-  cancel-in-progress: ${{ github.event_name == 'schedule' }}
+  # Never cancel: the running job yields to the waiting one on its own.
+  cancel-in-progress: false
 
 env:
   # Which encoder the rounds convert through. The other publish-* workflows
@@ -101,17 +103,19 @@ jobs:
     if: github.event_name != 'schedule' || github.repository == 'ringsaturn/xue'
     runs-on: ubuntu-24.04
     # The rounds stop at twenty past the next hour on their own (UNTIL_MINUTE
-    # below) and the next cron normally cancels the job before that; this is
-    # the backstop for a round that hangs.
+    # below) and normally hand over to the next cron's job before that; this
+    # is the backstop for a round that hangs.
     timeout-minutes: 90
     env:
       MODEL: jma
       FRAME_CACHE: "true"
       ONCE: ${{ inputs.once || false }}
       ROUND_MINUTES: ${{ inputs.round_minutes || '2' }}
-      # Past the hour: the next cron's job cancels this one when it starts,
-      # and this deadline only matters when that cron is later than usual.
+      # Past the hour: the job hands over to the next cron's job as soon as
+      # that one is waiting, and this deadline only matters when the cron
+      # never comes.
       UNTIL_MINUTE: "80"
+      HANDOVER_CHECK: scripts/successor_queued.sh
       HOURS: ${{ inputs.hours || '3' }}
       PROFILE: ${{ inputs.profile || 'balanced' }}
       KEEP: ${{ inputs.keep || '2' }}
@@ -197,6 +201,7 @@ jobs:
 
       - name: Run the rounds
         env:
+          GH_TOKEN: ${{ github.token }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
