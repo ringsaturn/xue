@@ -15,15 +15,21 @@ from __future__ import annotations
 
 import json
 import math
-import os
 import re
-import zlib
 from datetime import UTC, datetime
 from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
 from ..errors import TcProductError
+from ..pointproduct import (  # noqa: F401 — re-exported: the tc modules import them from here
+    CRC32,
+    crc32_hex,
+    encode_json,
+    pointer_payload,
+    pointer_shape_error,
+    write_bytes_atomic,
+)
 from .track import MISSING, QUADRANTS, RADII_THRESHOLDS
 
 SCHEMA_VERSION = 1
@@ -35,7 +41,6 @@ ATCF_ID = re.compile(r"^[A-Z]{2}\d{2}\d{4}$")
 SYNTHETIC_ID = re.compile(r"^x-[a-z]{2}-\d{10}-\d+$")
 SOURCE_KEY = re.compile(r"^[a-z][a-z0-9]*$")
 ALIAS = re.compile(r"^[A-Za-z0-9:._-]+$")
-CRC32 = re.compile(r"^[0-9a-f]{8}$")
 ISSUE = re.compile(r"^\d{10}$")
 
 
@@ -347,61 +352,19 @@ def validate_index(payload: object) -> None:
 
 
 def build_pointer(issue: datetime, index_path: str, index_bytes: bytes) -> dict[str, Any]:
-    payload = {
-        "schemaVersion": SCHEMA_VERSION,
-        "product": "tc",
-        "issued": issue.astimezone(UTC).isoformat(timespec="seconds").replace("+00:00", "Z"),
-        "path": index_path,
-        "byteLength": len(index_bytes),
-        "crc32": crc32_hex(index_bytes),
-    }
+    payload = pointer_payload("tc", issue, index_path, index_bytes)
     validate_pointer(payload)
     return payload
 
 
 def validate_pointer(payload: object) -> None:
-    if not isinstance(payload, dict):
-        raise TcProductError("tc pointer must be an object")
-    if payload.get("schemaVersion") != SCHEMA_VERSION:
-        raise TcProductError(f"tc pointer schemaVersion must be {SCHEMA_VERSION}")
-    if payload.get("product") != "tc":
-        raise TcProductError("tc pointer product must be 'tc'")
+    error = pointer_shape_error(payload, "tc")
+    if error is not None:
+        raise TcProductError(error)
+    assert isinstance(payload, dict)
     issued = _time(payload.get("issued"), "pointer.issued")
-    path = payload.get("path")
-    if (
-        not isinstance(path, str)
-        or not path.endswith("/" + INDEX_FILENAME)
-        or path.startswith(("/", "http:", "https:"))
-        or ".." in Path(path).parts
-    ):
-        raise TcProductError("tc pointer path must be a relative <issue directory>/index.json path")
-    if Path(path).parts[0] != issue_directory(issued):
+    if Path(payload["path"]).parts[0] != issue_directory(issued):
         raise TcProductError("tc pointer path does not name the issued hour's directory")
-    byte_length = payload.get("byteLength")
-    if isinstance(byte_length, bool) or not isinstance(byte_length, int) or byte_length <= 0:
-        raise TcProductError("tc pointer byteLength must be a positive integer")
-    if not isinstance(payload.get("crc32"), str) or not CRC32.match(payload["crc32"]):
-        raise TcProductError("tc pointer crc32 must be 8 lowercase hex characters")
-
-
-def crc32_hex(payload: bytes) -> str:
-    return f"{zlib.crc32(payload) & 0xFFFFFFFF:08x}"
-
-
-def encode_json(payload: dict[str, Any]) -> bytes:
-    """The one serialisation — compact separators, keys as built, ASCII
-    escaped — so a file's CRC32 is a function of its content alone."""
-    return json.dumps(payload, separators=(",", ":"), ensure_ascii=True, allow_nan=False).encode("ascii")
-
-
-def write_bytes_atomic(path: Path, payload: bytes) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(path.suffix + ".part")
-    with temporary.open("wb") as handle:
-        handle.write(payload)
-        handle.flush()
-        os.fsync(handle.fileno())
-    temporary.replace(path)
 
 
 def read_index(path: Path) -> dict[str, Any]:
