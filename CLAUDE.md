@@ -556,7 +556,8 @@ pointer, `prune-r2-airport` keeps `AIRPORT_KEEP` rounds. The pointer is
 withheld only when both the METARs and the TAFs failed.
 `tests/fixtures/airport/` holds two consecutive fetched rounds and
 `expected/` the golden (`tests/prepare_airport_golden.py` regenerates; no
-network, no eccodes). The frontend does not read the product yet.
+network, no eccodes). The shell draws the round as station marks
+(`web/src/stations/`, below).
 
 ### Radiosonde sounding product (`xuebuild/sounding/`)
 
@@ -590,7 +591,35 @@ nothing carried forward. `tests/fixtures/sounding/` is a fetched hour with
 one gateway down and `expected/` the golden
 (`tests/prepare_sounding_golden.py` regenerates; needs `bufr_dump`).
 `publish-sounding.yml` runs at a quarter past every hour with no GDAL and
-no wheel. The frontend does not read it yet.
+no wheel. The shell draws the issue as station marks (`web/src/stations/`,
+below).
+
+### Station marks (`web/src/stations/`)
+
+The sounding and airport products are drawn the same way, from one module
+shaped like `web/src/tc/`: `schema.ts` validates both indexes, both
+pointers and one line of either `.jsonl` (structurally, refusing a
+`schemaVersion` above 1, a row that is not the airport index's sixteen
+values, a span past the file it indexes and a value outside the contract's
+ranges); `fetch.ts` reads the pointer no-cache and the index through
+`fetchImmutable` with its `?v=`, resolves to null on a 404 so a root
+without the product costs nothing, and reads one station with one
+`Range: bytes=<offset>-<offset+length-1>` against the `.jsonl` (a 206 must
+answer the span asked for, a 200 is sliced at the same offsets);
+`layers.ts` is two MapLibre GeoJSON circle sources — soundings filled by
+`headline.t500` through a fixed cool→warm ramp, hollow where the ascent
+never reached 500 hPa, and airports in the four flight-category colours
+with one hex set per ground tone, thinned below zoom 6 to the stations
+carrying a TAF; `card.ts` builds the popup a clicked mark opens. The marks
+take no session, fetch nothing per frame and never gate the playhead: the
+playhead's valid time only sets a paint expression that draws a station
+observed more than three hours (airports) or fifteen hours (soundings)
+from it faint, so a playhead move is two paint properties rather than five
+thousand rebuilt features. `main.ts::loadStations` polls both pointers
+with the runs, each product independently, `syncStationTime` follows the
+readout, a case hides both, and each product is its own rail tile
+(`#sounding-tile`, `#airport-tile`), off until pressed. URL state is
+`?stations=snd|apt|snd,apt|off`, in the link alone — nothing is stored.
 
 ### External tools
 
@@ -788,8 +817,8 @@ browse `http://localhost:4173`.
   locale.
 - URL state (`?model=`, `?type=`, `?lines=`, `?case=`, `?res=`,
   `?use_h264=`, `?particles=`, `?backend=`, `?tc=` with `?tcagency=` /
-  `?tcmodel=` / `?tcmembers=`) is parsed in `urlstate.ts`; `?lang=` belongs
-  to `i18n.ts` and `?theme=` to `theme.ts`. Unrecognized values fall back
+  `?tcmodel=` / `?tcmembers=`, `?stations=`) is parsed in `urlstate.ts`;
+  `?lang=` belongs to `i18n.ts` and `?theme=` to `theme.ts`. Unrecognized values fall back
   to defaults. The camera is in the fragment, `#map=<zoom>/<lat>/<lon>`
   (MapLibre's own `hash: "map"`), so a pan never touches the query string.
   `urlstate.ts::parseCameraFromHash` only says whether a link fixed the
