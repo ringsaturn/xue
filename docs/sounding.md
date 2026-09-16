@@ -278,14 +278,13 @@ costs nothing worth saving.
 decoded from, verbatim, and `arrived` the gateway's own timestamp for it.
 Together they say exactly which message a value came from.
 
-**Size.** Every level the bulletin reports is published; nothing is
-thinned. Modern high-resolution TEMP is much longer than the classical
-mandatory-and-significant-levels ascent, so a station's line is bigger
-than a reader might assume: over one issue of the live feed, 491 stations,
-the newest ascent had a median of 504 levels and a maximum of 7 553, the
-median line was 69 KB and the largest 1.0 MB, and the issue as a whole was
-94 MB behind a 182 KB index. A client that wants a marker layer reads the
-index alone; opening one station costs one range request of its `length`.
+**Size.** Measured over one issue of the live feed, 491 stations: the
+newest ascent held a median of 504 reported levels and a maximum of 7 553,
+of which the thinning rule (§2) publishes a median of 169 and a maximum of
+383 — 9.7 % of the samples. The median station line is 23 KB and the
+largest 46 KB; the issue is 10.6 MB behind a 160 KB index, in two objects.
+A client that wants a marker layer reads the index alone; opening one
+station costs one range request of its `length`.
 
 ## 6. `sources[]`
 
