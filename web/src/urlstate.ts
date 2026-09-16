@@ -482,6 +482,64 @@ export function parseTcFromSearch(search: string): TcUrlState {
 
 /** The given query string carrying the marks state. Only what differs
  * from the default is written, so the everyday link stays as it was. */
+/** The station marks a link carries: `?stations=snd` for the radiosonde
+ * soundings, `?stations=apt` for the airports, `?stations=snd,apt` for
+ * both, and `?stations=off` — or no parameter at all — for neither.
+ * `sounding`, `soundings`, `airport`, `airports`, `on` and `all` are
+ * accepted spellings, so a link typed out by hand still opens.
+ *
+ * Off is the default because on is not a neutral choice: five thousand
+ * airport marks on the default view are a texture over the field, not a
+ * reading of it. A viewer who wants them presses the tile, and the press
+ * is what the link then carries. */
+export interface StationsUrlState {
+  soundings: boolean;
+  airports: boolean;
+}
+
+export const STATIONS_OFF: StationsUrlState = { soundings: false, airports: false };
+
+const STATION_ALIASES: Record<string, keyof StationsUrlState> = {
+  snd: "soundings",
+  sonde: "soundings",
+  sounding: "soundings",
+  soundings: "soundings",
+  apt: "airports",
+  metar: "airports",
+  airport: "airports",
+  airports: "airports",
+};
+
+export function parseStationsFromSearch(search: string): StationsUrlState {
+  const value = new URLSearchParams(search).get("stations");
+  if (value === null) return { ...STATIONS_OFF };
+  const state = { ...STATIONS_OFF };
+  for (const part of value.split(",")) {
+    const name = part.trim().toLowerCase();
+    if (name === "on" || name === "all") {
+      state.soundings = true;
+      state.airports = true;
+      continue;
+    }
+    const key = STATION_ALIASES[name];
+    if (key) state[key] = true;
+  }
+  return state;
+}
+
+/** The given query string carrying the station marks. Nothing is written
+ * for the default (neither product), so an ordinary shared link stays as
+ * short as it was. */
+export function searchWithStations(search: string, state: StationsUrlState): string {
+  const params = new URLSearchParams(search);
+  const parts: string[] = [];
+  if (state.soundings) parts.push("snd");
+  if (state.airports) parts.push("apt");
+  if (parts.length) params.set("stations", parts.join(","));
+  else params.delete("stations");
+  return `?${params.toString()}`;
+}
+
 export function searchWithTc(search: string, state: TcUrlState): string {
   const params = new URLSearchParams(search);
   if (state.off) params.set("tc", "off");

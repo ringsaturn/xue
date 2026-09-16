@@ -298,6 +298,16 @@ each row present when the run publishes its bundle. On a tiled bundle a
 whole series costs one range request per temporal group. A press on the
 chart scrubs the timeline.
 
+The two station products are marks over whatever layer is on screen, each
+behind its own rail tile and off until pressed: `?stations=snd` draws the
+radiosonde soundings (a circle per station, filled by its 500 hPa
+temperature), `?stations=apt` the airports (a circle per station, coloured
+by its flight category, thinned below zoom 6 to the stations with a current
+TAF), `?stations=snd,apt` both, and nothing at all draws neither. A click on
+a mark opens its card; a station observed far from the playhead is drawn
+faint. Neither product takes a session, fetches per frame or holds up
+playback.
+
 Session settings, read once at load:
 
 - `?res=half` (alias `low`) always loads the reduced rendition; `?res=full`
@@ -531,6 +541,9 @@ make prune-r2-airport                        # rounds older than three hours
 .venv/bin/python -m xuebuild airport-build --round 202609161430 --offline --raw-dir tests/fixtures/airport   # from the fixture
 ```
 
+The viewer draws the round as marks over any layer (`?stations=apt`), each
+in its flight category's colour; clicking one reads its newest observation.
+
 ### Soundings
 
 Radiosonde ascents are a fourth product beside the runs
@@ -559,6 +572,11 @@ make prune-r2-sounding                      # issues older than two days
 .venv/bin/python -m xuebuild sounding-build --issue 2026091402 --offline --raw-dir tests/fixtures/sounding   # from the fixture
 .venv/bin/python tests/prepare_sounding_golden.py   # regenerate the golden after a deliberate change
 ```
+
+The viewer draws the issue as marks over any layer (`?stations=snd`), each
+filled by its 500 hPa temperature; clicking one reads the headline the
+index carries — the 500 hPa temperature and dew point, the freezing level,
+the precipitable water and the level count.
 
 The soundings are WMO core data under the WMO Unified Data Policy — free
 and unrestricted, attribution of the original source requested. The

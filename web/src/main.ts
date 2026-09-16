@@ -129,6 +129,7 @@ import {
   parseModelFromSearch,
   parseParticlesFromSearch,
   parseResolutionFromSearch,
+  parseStationsFromSearch,
   parseTcFromSearch,
   parseUseH264FromSearch,
   parseVariableFromSearch,
@@ -137,7 +138,9 @@ import {
   searchWithExperiment,
   searchWithLines,
   searchWithParticles,
+  searchWithStations,
   searchWithTc,
+  type StationsUrlState,
 } from "./urlstate";
 import { TC_MODELS } from "./tc/agencies";
 import { buildTcCard } from "./tc/card";
@@ -145,6 +148,19 @@ import { pointDataOf, StormLayers, TC_CLICKABLE_LAYERS, type StormView, type TcP
 import { renderTcPanel } from "./tc/panel";
 import type { TcIndexEntry, TcStorm } from "./tc/schema";
 import { fetchTcIndex, fetchTcStorm, resolveTcStormId, stormBounds, type LoadedTcIndex } from "./tc/tracks";
+import { buildAirportCard, buildSoundingCard } from "./stations/card";
+import {
+  fetchAirportIndex,
+  fetchSoundingIndex,
+  type LoadedAirportIndex,
+  type LoadedSoundingIndex,
+} from "./stations/fetch";
+import {
+  StationLayers,
+  STATION_CLICKABLE_LAYERS,
+  stationDataOf,
+  type StationPointData,
+} from "./stations/layers";
 import { WindParticleLayer } from "./particles";
 import { domainContains, lambertCone, regionShareOfView, type LambertDomain } from "./domain";
 import type { Feature, FeatureCollection } from "geojson";
@@ -715,6 +731,7 @@ function applyBasemapTheme(): void {
   if (map.getLayer("earth")) map.setPaintProperty("earth", "fill-color", theme.land);
   applyBasemapInk(darkGround);
   tcLayers?.setInk(darkGround);
+  stationLayers?.setInk(darkGround);
 }
 
 /** Repaint the basemap's labels and boundaries for the current ground.
@@ -1023,6 +1040,8 @@ const creditsSheet = required<HTMLElement>("credits-sheet");
 const langTrigger = required<HTMLButtonElement>("lang-toggle");
 const langSheet = required<HTMLElement>("lang-sheet");
 const tcTile = required<HTMLButtonElement>("tc-tile");
+const soundingTile = required<HTMLButtonElement>("sounding-tile");
+const airportTile = required<HTMLButtonElement>("airport-tile");
 const tcSheet = required<HTMLElement>("tc-sheet");
 const tcList = required<HTMLElement>("tc-list");
 // Scoped to buttons: <body> carries data-variable/data-model too (styling
@@ -2909,6 +2928,7 @@ function updateFrameReadout(index: number): void {
   updateForecastDay(index);
   scheduleProbeRender();
   syncTcTime();
+  syncStationTime();
 }
 
 /** Reconfigure a slot's layer for its session's own bundle grid (poster
@@ -3906,7 +3926,8 @@ function syncUrl(): void {
     inflow: derivedShown.inflow,
     front: derivedShown.front,
   });
-  const search = searchWithTc(withExperiment, {
+  const withStations = searchWithStations(withExperiment, stationsShown);
+  const search = searchWithTc(withStations, {
     storm: tcSelected,
     off: tcHidden,
     agencies: tcAgencies ? [...tcAgencies] : null,
@@ -4921,6 +4942,141 @@ function renderTcSheet(): void {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Station marks: the two point products beside the runs and the storms
+// (docs/sounding.md, docs/airport.md), drawn as MapLibre circle layers
+// over whatever fill and lines are on screen. Like the storm tracks they
+// take no session and no worker and never gate the playhead — the
+// playhead's valid time only decides which marks are drawn faint — and
+// like them, a root that publishes neither costs one 404 per poll and
+// nothing else.
+//
+// Both are off until asked for: five thousand airport marks on the
+// default view are a texture over the field rather than a reading of it,
+// so each is its own rail tile, and the press is what `?stations=` then
+// carries. Nothing is remembered in storage: the link is the memory.
+
+let stationsShown: StationsUrlState = parseStationsFromSearch(window.location.search);
+let soundingLoaded: LoadedSoundingIndex | null = null;
+let airportLoaded: LoadedAirportIndex | null = null;
+/** Whether a poll has run at all, so a tab that opened hidden still loads
+ * the products once while a later poll on a hidden one does not. */
+let stationsPolled = false;
+let stationLayers: StationLayers | null = null;
+/** The card open on a clicked mark, one at a time — and the storm card's
+ * sibling: opening either closes the other. */
+let stationCard: Popup | null = null;
+
+/** The live indexes, or none. Each product is fetched on its own: one
+ * that is not published yet, or an hour that failed, leaves the other
+ * drawn. */
+async function loadStations(): Promise<void> {
+  if (document.hidden && stationsPolled) return;
+  const base = dataBaseUrl();
+  const [soundings, airports] = await Promise.allSettled([fetchSoundingIndex(base), fetchAirportIndex(base)]);
+  stationsPolled = true;
+  // A poll that fails leaves the previous issue drawn; only an answer
+  // replaces it.
+  if (soundings.status === "fulfilled") soundingLoaded = soundings.value;
+  if (airports.status === "fulfilled") airportLoaded = airports.value;
+  applyStationView();
+}
+
+function ensureStationLayers(): StationLayers | null {
+  if (!mapStyleReady) return null;
+  if (!stationLayers) stationLayers = new StationLayers(map);
+  const before = (map.getStyle().layers ?? []).find((entry) => entry.type === "symbol")?.id;
+  stationLayers.ensure(before);
+  stationLayers.setInk(document.body.dataset.ground === "dark");
+  return stationLayers;
+}
+
+/** The tiles, the marks and the card, from what has loaded and what is
+ * switched on. A case is a fixed past over one region; the live stations
+ * have no place over it, so both tiles go away with it. */
+function applyStationView(): void {
+  const hidden = activeCase !== null;
+  const soundingAvailable = soundingLoaded !== null && !hidden;
+  const airportAvailable = airportLoaded !== null && !hidden;
+  let railChanged = false;
+  if (soundingTile.hidden === soundingAvailable) {
+    soundingTile.hidden = !soundingAvailable;
+    railChanged = true;
+  }
+  if (airportTile.hidden === airportAvailable) {
+    airportTile.hidden = !airportAvailable;
+    railChanged = true;
+  }
+  if (railChanged) syncRailFade();
+  const drawSoundings = soundingAvailable && stationsShown.soundings;
+  const drawAirports = airportAvailable && stationsShown.airports;
+  soundingTile.setAttribute("aria-pressed", String(drawSoundings));
+  airportTile.setAttribute("aria-pressed", String(drawAirports));
+  // Nothing on screen and nothing on the map: the layers are never added,
+  // so a viewer who asks for no station pays nothing for the products
+  // existing.
+  if (!drawSoundings && !drawAirports && stationLayers === null) return;
+  const layers = ensureStationLayers();
+  if (!layers) return;
+  layers.setSoundings(drawSoundings ? soundingLoaded!.index : null);
+  layers.setAirports(drawAirports ? airportLoaded!.index : null);
+  syncStationTime();
+  closeStationCard();
+}
+
+/** The valid time the marks are dimmed against: the playhead's, or now
+ * before a run has loaded. */
+function syncStationTime(): void {
+  if (!stationLayers) return;
+  const index = activeFrameIndex ?? requestedFrameIndex;
+  stationLayers.setTime(metadata && index !== null ? frameValidTime(index) : Date.now());
+}
+
+function stationPointAt(point: { x: number; y: number }): { data: StationPointData; lngLat: [number, number] } | null {
+  if (!stationLayers) return null;
+  const layers = STATION_CLICKABLE_LAYERS.filter((id) => map.getLayer(id) !== undefined);
+  if (!layers.length) return null;
+  const box: [[number, number], [number, number]] = [
+    [point.x - 6, point.y - 6],
+    [point.x + 6, point.y + 6],
+  ];
+  for (const feature of map.queryRenderedFeatures(box, { layers })) {
+    const data = stationDataOf(feature);
+    if (data) return { data, lngLat: [data.station.lon, data.station.lat] };
+  }
+  return null;
+}
+
+function showStationCard(data: StationPointData, lngLat: [number, number]): void {
+  closeStationCard();
+  const options = {
+    formatTime: (time: string) => formatDate(time),
+    darkGround: document.body.dataset.ground === "dark",
+  };
+  const content =
+    data.kind === "sounding" ? buildSoundingCard(data.station, options) : buildAirportCard(data.station, options);
+  stationCard = new Popup({ closeButton: false, closeOnClick: false, className: "station-popup", maxWidth: "280px", offset: 10 })
+    .setLngLat(lngLat)
+    .setDOMContent(content)
+    .addTo(map);
+}
+
+function closeStationCard(): void {
+  stationCard?.remove();
+  stationCard = null;
+}
+
+/** Each tile is its own switch: pressing it draws that product, pressing
+ * it again takes it off, and the address bar carries what is on. */
+function toggleStationProduct(product: keyof StationsUrlState): void {
+  stationsShown = { ...stationsShown, [product]: !stationsShown[product] };
+  syncUrl();
+  applyStationView();
+}
+
+soundingTile.addEventListener("click", () => toggleStationProduct("soundings"));
+airportTile.addEventListener("click", () => toggleStationProduct("airports"));
+
 function ensureLayers(): void {
   if (layersAdded) return;
   map.addLayer(slots.fill.layer, FORECAST_ANCHOR_LAYER);
@@ -5671,8 +5827,10 @@ async function initialize({ frame = false }: { frame?: boolean } = {}): Promise<
     // The dataset is settled here (a case pins its own), so the timeline can
     // be titled for what it actually shows.
     applyDatasetWording();
-    // A case is a fixed past; the live storms have no place over it.
+    // A case is a fixed past; the live storms and stations have no place
+    // over it.
     void applyTcView();
+    applyStationView();
     // The cycle is named in UTC wherever it is stamped (00Z is its name),
     // whatever zone the valid times below read in. An observation window's
     // runTime is only where it starts; its line is stamped with the newest
@@ -5919,15 +6077,29 @@ map.on("click", (event) => {
   // the field.
   const hit = tcPointAt(event.point);
   if (hit) {
+    closeStationCard();
     showTcCard(hit.data, hit.lngLat);
     return;
   }
   closeTcCard();
+  // A station mark under the pointer opens its card instead of pinning the
+  // field: the storm marks take precedence, the stations come next, and the
+  // probe is what a click on the field itself does.
+  const station = stationPointAt(event.point);
+  if (station) {
+    showStationCard(station.data, station.lngLat);
+    return;
+  }
+  closeStationCard();
   setProbe(event.lngLat.lng, event.lngLat.lat);
 });
 map.on("mousemove", (event) => {
-  if (!tcLayers) return;
-  map.getCanvas().style.cursor = tcPointAt(event.point) ? "pointer" : "";
+  if (!tcLayers && !stationLayers) return;
+  const station = stationPointAt(event.point);
+  // The mark under the pointer grows by a pixel, which is the only feature
+  // state either product keeps.
+  stationLayers?.setHover(station?.data ?? null);
+  map.getCanvas().style.cursor = tcPointAt(event.point) || station ? "pointer" : "";
 });
 window.addEventListener("pointerdown", (event) => {
   if (!contextMenu.hidden && !contextMenu.contains(event.target as Node)) hideContextMenu();
@@ -5939,6 +6111,7 @@ window.addEventListener("keydown", (event) => {
   hideContextMenu();
   closeProbe();
   closeTcCard();
+  closeStationCard();
 });
 window.addEventListener("blur", hideContextMenu);
 map.on("movestart", hideContextMenu);
@@ -6008,11 +6181,13 @@ function schedulePointerPoll(): void {
 }
 schedulePointerPoll();
 window.setInterval(() => void loadTc(), LATEST_POLL_MS);
+window.setInterval(() => void loadStations(), LATEST_POLL_MS);
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) stopPlayback();
   else {
     void checkForNewRun();
     void loadTc();
+    void loadStations();
   }
 });
 // A narrower window fits less of the case, so its limits move with it.
@@ -6054,4 +6229,5 @@ map.once("load", () => {
   // on the dataset's own region.
   void initialize({ frame: urlCamera === null });
   void loadTc();
+  void loadStations();
 });

@@ -1814,7 +1814,8 @@ html[lang="ja"] .rail-glyph {
    chrome removed and the sheet's put on — the same surface, line and
    lift the capsule has — the centre's color on the code and the class.
    The tip is MapLibre's; it is inked to match the surface. */
-.tc-popup .maplibregl-popup-content {
+.tc-popup .maplibregl-popup-content,
+.station-popup .maplibregl-popup-content {
   padding: 10px 14px 9px;
   border: 1px solid var(--line);
   border-radius: 16px;
@@ -1824,16 +1825,19 @@ html[lang="ja"] .rail-glyph {
   font-family: var(--font-ui);
 }
 
-.tc-popup .maplibregl-popup-tip {
+.tc-popup .maplibregl-popup-tip,
+.station-popup .maplibregl-popup-tip {
   border-top-color: var(--sheet);
   border-bottom-color: var(--sheet);
 }
 
-.tc-popup.maplibregl-popup-anchor-left .maplibregl-popup-tip {
+.tc-popup.maplibregl-popup-anchor-left .maplibregl-popup-tip,
+.station-popup.maplibregl-popup-anchor-left .maplibregl-popup-tip {
   border-right-color: var(--sheet);
 }
 
-.tc-popup.maplibregl-popup-anchor-right .maplibregl-popup-tip {
+.tc-popup.maplibregl-popup-anchor-right .maplibregl-popup-tip,
+.station-popup.maplibregl-popup-anchor-right .maplibregl-popup-tip {
   border-left-color: var(--sheet);
 }
 
@@ -1935,6 +1939,87 @@ html[lang="ja"] .rail-glyph {
 .tc-card-extra,
 .tc-card-position {
   color: var(--muted);
+}
+
+/* The station cards (a sounding, an airport) take the storm card's shape:
+   a name and what kind of station it is, the observation time under it,
+   the headline values, then the labelled rows the index carries. */
+
+.station-card {
+  --card-ink: var(--text);
+  display: flex;
+  min-width: 190px;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.station-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.station-card-name {
+  font-family: var(--font-display);
+  font-size: 19px;
+  line-height: 1.1;
+}
+
+.station-card-kind,
+.station-card-code,
+.station-card-position,
+.station-card-rows dt {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+.station-card-time {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.station-card-headline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  font-size: 13px;
+}
+
+.station-card-category {
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--card-ink);
+  color: var(--sheet);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+
+.station-card-dew,
+.station-card-wind {
+  color: var(--muted);
+}
+
+.station-card-rows {
+  display: grid;
+  margin: 2px 0 0;
+  gap: 2px 12px;
+  grid-template-columns: auto auto;
+}
+
+.station-card-rows dd {
+  margin: 0;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
 }
 
 /* ---------------------------------------------------------------------------

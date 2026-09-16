@@ -130,6 +130,17 @@ fall back to defaults rather than fail, so a constructed link always opens.
   named system is drawn over whatever layer is on screen. `?tcagency=nhc,jtwc`
   and `?tcmodel=gfs,ecmwf` narrow the official and model tracks drawn
   (absent means all); `?tcmembers=on` adds the ensemble members.
+- `?stations=snd|apt|snd,apt` — draw the station marks over whatever layer
+  is on screen: `snd` the radiosonde soundings (one circle per station,
+  filled by its 500 hPa temperature; the card reads the headline the index
+  carries), `apt` the airports (one circle per station, coloured by its
+  flight category; below zoom 6 only the stations with a current TAF).
+  Absent, or `?stations=off`, draws neither — the default, since five
+  thousand airport marks on a world view read as texture rather than data.
+  `sounding`, `soundings`, `airport`, `airports`, `on` and `all` are
+  accepted spellings. The marks follow the playhead's valid time only in
+  that a station observed far from it is drawn faint; they load nothing
+  per frame and never hold up playback.
 - `?use_h264=true` — opt into the H.264 companion artifacts via WebCodecs
   instead of the Xue decoder (a comparison path, not the default; GFS and
   HRRR publish the companions for their surface fields, ECMWF and SFLUX
@@ -158,7 +169,8 @@ fall back to defaults rather than fail, so a constructed link always opens.
 
 Examples: `/?model=ecmwf&type=wind850`, `/?type=temp&lines=hgt500`,
 `/?case=pnw-heat-dome-2021`, `/?case=ida-2021&type=radar`,
-`/?model=hrrr&type=radar#map=6/32.8/-96.8`, `/?type=wind&tc=EP142026`.
+`/?model=hrrr&type=radar#map=6/32.8/-96.8`, `/?type=wind&tc=EP142026`,
+`/?type=temp&stations=snd`.
 
 ## Data access
 

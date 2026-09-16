@@ -364,6 +364,31 @@ export const en = {
   tcBest: "Best track",
   tcHide: "Hide tracks",
   tcShow: "Show tracks",
+
+  /** The two point products drawn as station marks over whatever is on
+   * screen (`docs/sounding.md`, `docs/airport.md`): the two rail tiles —
+   * their gloss and glyph, the CJK locales using their own character the
+   * way the storm tile does — and the card a clicked mark opens. A
+   * station's identifiers (an ICAO id, a WMO number), the flight
+   * categories (`VFR`, `LIFR`), `METAR` and every unit (`hPa`, `gpm`,
+   * `m/s`) are instrument text and stay as they are; these are the words
+   * around them. "Precipitable water" is the depth of the vapour column,
+   * "Levels" the number of levels the published ascent carries. */
+  soundingTileTip: "Radiosonde soundings",
+  varSounding: "UPPER AIR",
+  glyphSounding: "S",
+  airportTileTip: "Airport observations",
+  varAirport: "METAR",
+  glyphAirport: "A",
+  stationSounding: "Sounding",
+  stationAirport: "Airport",
+  stationObserved: "Observed",
+  stationFreezingLevel: "Freezing level",
+  stationPw: "Precipitable water",
+  stationCategory: "Flight category",
+  stationVisibility: "Visibility",
+  stationQnh: "QNH",
+  stationLevels: "Levels",
 } as const;
 
 /** Every key the UI can ask for. Each locale module is typed against this,
