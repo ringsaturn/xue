@@ -265,4 +265,14 @@ export const tr: Record<MessageKey, string> = {
   stationVisibility: "Görüş",
   stationQnh: "QNH",
   stationLevels: "Seviye",
+
+  soundingObserved: "GÖZLEM",
+  soundingModel: "MODEL",
+  soundingNoModel: "3 sa içinde model yok",
+  soundingLoading: "Sondaj okunuyor…",
+  soundingUnavailable: "Sondaj kullanılamıyor",
+  soundingExpand: "Tam grafik",
+  soundingClose: "Kapat",
+  soundingSheetHeading: "SONDAJ",
+  soundingSheetAria: "Sondaj grafiği",
 };

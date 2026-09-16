@@ -262,4 +262,14 @@ export const pt: Record<MessageKey, string> = {
   stationVisibility: "Visibilidade",
   stationQnh: "QNH",
   stationLevels: "Níveis",
+
+  soundingObserved: "OBS",
+  soundingModel: "MODELO",
+  soundingNoModel: "sem modelo em 3 h",
+  soundingLoading: "A ler a sondagem…",
+  soundingUnavailable: "Sondagem indisponível",
+  soundingExpand: "Gráfico completo",
+  soundingClose: "Fechar",
+  soundingSheetHeading: "SONDAGEM",
+  soundingSheetAria: "Gráfico da sondagem",
 };

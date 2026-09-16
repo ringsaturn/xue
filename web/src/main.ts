@@ -151,6 +151,7 @@ import { fetchTcIndex, fetchTcStorm, resolveTcStormId, stormBounds, type LoadedT
 import { buildAirportCard, buildSoundingCard } from "./stations/card";
 import {
   fetchAirportIndex,
+  fetchAirportStation,
   fetchSoundingIndex,
   type LoadedAirportIndex,
   type LoadedSoundingIndex,
@@ -158,9 +159,22 @@ import {
 import {
   StationLayers,
   STATION_CLICKABLE_LAYERS,
+  categoryColor,
   stationDataOf,
   type StationPointData,
 } from "./stations/layers";
+import { nearestAirport, nearestSounding } from "./stations/nearest";
+import {
+  nearestObservation,
+  rowObservations,
+  rowObservedValue,
+  tafBands,
+  type ObservationAxis,
+} from "./stations/observations";
+import type { AirportStation, AirportStationHistory } from "./stations/schema";
+import { createSoundingSection, type SoundingSection } from "./sounding/section";
+import { modelProfileBundles, nearestFrameForTime } from "./sounding/model";
+import { profileFromModel, type ModelLevel, type Profile } from "./sounding/profile";
 import { WindParticleLayer } from "./particles";
 import { domainContains, lambertCone, regionShareOfView, type LambertDomain } from "./domain";
 import type { Feature, FeatureCollection } from "geojson";
@@ -182,6 +196,7 @@ import {
   meteogramRowCode,
   meteogramRows,
   seriesState,
+  TAF_ROW_SPEC,
   type DayMark,
   type MeteogramRowData,
   type MeteogramRowSpec,
@@ -2060,6 +2075,29 @@ let probePinSequence = 0;
  * twice for the same cell. Keyed by `variableId:column:row`. */
 const probeSeriesRequests = new Set<string>();
 
+// The two point products answer a pinned point too, and not as marks: the
+// nearest radiosonde ascent becomes a skew-T under the rows, and the
+// nearest airport's last day of reports is laid over the rows themselves.
+// Both are resolved from whatever indexes have loaded — a pin reads them
+// whether or not the rail tile is pressed — and both are bounded by a
+// radius (`stations/nearest.ts`), because a station far enough away is
+// somebody else's weather rather than a faint reading of this one.
+//
+// The sounding station a pin resolved to is state of the section that
+// draws it (`soundingSection`), which owns the ascent it fetched and the
+// nominal time selected on it; `closeProbe` hands it none. The airport has
+// no such owner, so its state is here.
+/** The airport this pin resolved to, its distance, and its history once the
+ * one range request has answered. */
+let probeAirport: {
+  station: AirportStation;
+  distanceKm: number;
+  history: AirportStationHistory | null;
+} | null = null;
+/** The pin the airport history in flight belongs to; an answer for a pin
+ * since replaced must not land on the new one. */
+let probeAirportSequence = 0;
+
 /** The day strip and the row pitch of the meteogram, shared by the canvas
  * and the DOM rows beside it so the two stay aligned. A row is two lines of
  * text — the code, then the readout with its unit — and the pitch is what
@@ -2067,7 +2105,65 @@ const probeSeriesRequests = new Set<string>();
 const METEOGRAM_HEADER_HEIGHT = 12;
 const METEOGRAM_ROW_HEIGHT = 30;
 
+/** The skew-T under the rows. Built before the panel, since the panel puts
+ * its root in place; it reads the model column back out of main.ts at
+ * draw time rather than being handed one. */
+const soundingSection: SoundingSection = createSoundingSection({
+  modelProfile: () => modelProfileForSounding(),
+  formatTime: (time) => formatCompactDate(Date.parse(time)),
+  onChange: () => {
+    // A newly opened section, or another ascent selected, wants the run's
+    // isobaric levels at the pinned cell.
+    ensureProbeSessions();
+    paintSkewtSheet();
+  },
+});
+
 const probePanel = buildProbePanel();
+
+// The full-height copy of the chart, one of the shell's sheets: the panel's
+// 320 px is a reading, and a sheet is what a forecaster actually works the
+// profile in. The section owns the trigger, so the press, the focus and the
+// Escape are `sheet.ts`'s as they are for the model and sources sheets.
+const skewtSheet = document.getElementById("skewt-sheet");
+const skewtSheetCanvas = document.getElementById("skewt-sheet-chart") as HTMLCanvasElement | null;
+const skewtSheetTitle = document.getElementById("skewt-sheet-title");
+const skewtSheetController = skewtSheet
+  ? createSheet({
+      trigger: soundingSection.expandButton,
+      sheet: skewtSheet,
+      canOpen: () => soundingSection.isOpen(),
+    })
+  : null;
+
+/** Paint the sheet's canvas, if it is open, at whatever room the viewport
+ * gives it. */
+function paintSkewtSheet(): void {
+  if (!skewtSheetController?.isOpen() || !skewtSheetCanvas) return;
+  if (skewtSheetTitle) skewtSheetTitle.textContent = soundingSection.headline();
+  const width = skewtSheetCanvas.clientWidth;
+  const height = Math.max(320, Math.min(window.innerHeight - 160, Math.round(width * 1.25)));
+  soundingSection.drawInto(skewtSheetCanvas, width, height);
+}
+
+soundingSection.expandButton.addEventListener("click", () => {
+  // After `sheet.ts`'s own listener, so the sheet is already open here.
+  window.requestAnimationFrame(paintSkewtSheet);
+});
+window.addEventListener("resize", () => paintSkewtSheet());
+
+/** Whether the Escape now being handled found the chart sheet open. The
+ * sheet closes itself on Escape (`sheet.ts`), and the shell's own handler —
+ * which unpins the probe — runs after it and would otherwise see a closed
+ * sheet and take the panel down with it. One Escape closes one thing. */
+let skewtSheetTookEscape = false;
+window.addEventListener(
+  "keydown",
+  (event) => {
+    if (event.key === "Escape") skewtSheetTookEscape = skewtSheetController?.isOpen() ?? false;
+  },
+  true,
+);
 
 /** The panel docks over the transport capsule at the capsule's own width,
  * so the rows get the track's length. Built once, hidden until a point is
@@ -2093,6 +2189,18 @@ function buildProbePanel() {
   const code = document.createElement("span");
   code.className = "probe-code";
   code.id = "probe-code";
+  // The nearest airport, beside the code the panel is reading: its ICAO id
+  // and the flight category chip the station card uses, in the category's
+  // own color. Empty — and out of the layout — when no airport is in range.
+  const airport = document.createElement("span");
+  airport.className = "probe-airport";
+  airport.id = "probe-airport";
+  airport.hidden = true;
+  const airportId = document.createElement("b");
+  airportId.className = "probe-airport-id";
+  const airportCategory = document.createElement("span");
+  airportCategory.className = "probe-airport-category";
+  airport.append(airportId, airportCategory);
   const value = document.createElement("output");
   value.className = "probe-value";
   value.id = "probe-value";
@@ -2125,7 +2233,10 @@ function buildProbePanel() {
   const canvas = document.createElement("canvas");
   canvas.className = "probe-chart";
   canvas.setAttribute("aria-hidden", "true");
-  headline.append(code, value);
+  const codeLine = document.createElement("span");
+  codeLine.className = "probe-code-line";
+  codeLine.append(code, airport);
+  headline.append(codeLine, value);
   metaLine.append(meta, coords, zone, footer, close);
   axis.append(metaLine, canvas);
   head.append(headline, axis);
@@ -2142,9 +2253,28 @@ function buildProbePanel() {
   rowsChart.className = "probe-rows-chart";
   rowsChart.setAttribute("aria-hidden", "true");
   rows.append(rowList, rowsChart);
-  root.append(head, rows);
+  // The sounding section is the last thing in the panel: the rows are the
+  // point's own forecast, and the ascent beside it is context under them.
+  root.append(head, rows, soundingSection.root);
   timelinePanel.parentElement!.insertBefore(root, timelinePanel);
-  return { root, code, coords, zone, value, meta, canvas, count, hint, close, rows, rowList, rowsChart };
+  return {
+    root,
+    code,
+    airport,
+    airportId,
+    airportCategory,
+    coords,
+    zone,
+    value,
+    meta,
+    canvas,
+    count,
+    hint,
+    close,
+    rows,
+    rowList,
+    rowsChart,
+  };
 }
 
 /** One meteogram row's DOM: its code, its readout at the playhead, and the
@@ -2236,6 +2366,7 @@ function setProbe(longitude: number, latitude: number): void {
   // and keeping them would suppress the series read when a point is pinned
   // again later.
   probeSeriesRequests.clear();
+  resolveProbeStations(longitude, latitude);
   void resolveProbeZone(longitude, latitude);
   seedProbeFromCache();
   requestAllProbeSeries();
@@ -2247,10 +2378,46 @@ function setProbe(longitude: number, latitude: number): void {
   renderProbe();
 }
 
+/** The two point products at the pinned point: the nearest ascent for the
+ * chart, the nearest airport for the rows. Both are resolved from the
+ * indexes already loaded — a product not published, or not polled yet, is
+ * simply absent — and neither depends on its rail tile being pressed.
+ *
+ * The airport's day of reports is one range request, made here rather than
+ * at draw time so the rows fill in once rather than per frame. */
+function resolveProbeStations(longitude: number, latitude: number): void {
+  const sounding = soundingLoaded ? nearestSounding(soundingLoaded.index, longitude, latitude) : null;
+  soundingSection.setStation(soundingLoaded, sounding?.station ?? null, sounding?.distanceKm ?? 0);
+
+  const airport = airportLoaded ? nearestAirport(airportLoaded.index, longitude, latitude) : null;
+  probeAirport = airport
+    ? { station: airport.station, distanceKm: airport.distanceKm, history: null }
+    : null;
+  const sequence = ++probeAirportSequence;
+  if (!airport || !airportLoaded) return;
+  const source = airportLoaded;
+  void fetchAirportStation(source, airport.station)
+    .then((history) => {
+      if (sequence !== probeAirportSequence || !probeAirport) return;
+      probeAirport.history = history;
+      scheduleProbeRender();
+    })
+    .catch((error: unknown) => {
+      // Diagnostics stay English: the rows simply carry no observations.
+      console.warn(
+        `airport: ${airport.station.icao} history not read:`,
+        error instanceof Error ? error.message : error,
+      );
+    });
+}
+
 function closeProbe(): void {
   if (!probe) return;
   probe = null;
   probeSeriesRequests.clear();
+  probeAirport = null;
+  probeAirportSequence += 1;
+  soundingSection.setStation(null, null, 0);
   probeMarker?.remove();
   probePanel.root.hidden = true;
   // Unpinned, the clock is the viewer's own again.
@@ -2277,13 +2444,31 @@ async function resolveProbeZone(longitude: number, latitude: number): Promise<vo
  * meteogram's, resident or still opening. */
 function probeSessions(): VariableSession[] {
   const list = slotSessions();
-  for (const spec of currentMeteogramRows()) {
-    for (const id of spec.bundles) {
-      const session = sessions.get(id);
-      if (session && !list.includes(session)) list.push(session);
-    }
+  for (const id of probeBundleIds()) {
+    const session = sessions.get(id);
+    if (session && !list.includes(session)) list.push(session);
   }
   return list;
+}
+
+/**
+ * The bundles a pinned point reads: the meteogram's rows always, and the
+ * run's isobaric levels while the sounding section is open — the model
+ * column laid over the ascent is the same kind of read as a row, one probe
+ * session per bundle, a few dozen kilobytes each.
+ *
+ * Nothing is opened for a section that is closed or has no station: a pin
+ * with no sonde within 150 km costs exactly what it did before.
+ */
+function probeBundleIds(): string[] {
+  const ids: string[] = [];
+  for (const spec of currentMeteogramRows()) ids.push(...spec.bundles);
+  if (manifest && soundingSection.isOpen()) {
+    for (const bundle of modelProfileBundles(manifest.bundles.map((entry) => entry.variable))) {
+      ids.push(bundle.id);
+    }
+  }
+  return ids;
 }
 
 /** Open the meteogram's bundles for the pinned point, quietly and without
@@ -2294,26 +2479,24 @@ function probeSessions(): VariableSession[] {
 function ensureProbeSessions(): void {
   if (!probe || !manifest || !ready) return;
   const sequence = initializeSequence;
-  for (const spec of currentMeteogramRows()) {
-    for (const id of spec.bundles) {
-      const resident = sessions.get(id);
-      if (resident) {
-        requestProbeSeries(resident);
-        continue;
-      }
-      void loadVariable(id, sequence, "probe")
-        .then((session) => {
-          if (sequence !== initializeSequence || !probe) return;
-          requestProbeSeries(session);
-          scheduleProbeRender();
-        })
-        .catch((error: unknown) => {
-          if (error instanceof DOMException && error.name === "AbortError") return;
-          // Diagnostics stay English: a row that cannot open is a console
-          // note, never an error panel over the map.
-          console.warn(`meteogram: ${id} not opened:`, error instanceof Error ? error.message : error);
-        });
+  for (const id of probeBundleIds()) {
+    const resident = sessions.get(id);
+    if (resident) {
+      requestProbeSeries(resident);
+      continue;
     }
+    void loadVariable(id, sequence, "probe")
+      .then((session) => {
+        if (sequence !== initializeSequence || !probe) return;
+        requestProbeSeries(session);
+        scheduleProbeRender();
+      })
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        // Diagnostics stay English: a row that cannot open is a console
+        // note, never an error panel over the map.
+        console.warn(`meteogram: ${id} not opened:`, error instanceof Error ? error.message : error);
+      });
   }
 }
 
@@ -2405,11 +2588,14 @@ function renderProbe(): void {
     probePanel.hint.textContent = "";
     probePanel.canvas.getContext("2d")?.clearRect(0, 0, probePanel.canvas.width, probePanel.canvas.height);
     syncProbeRowElements([]);
+    renderProbeAirportChip();
+    soundingSection.render();
     return;
   }
   const variable = session.variable;
   const cell = series.cellFor(session.metadata);
   probePanel.code.textContent = variableUi(session).code;
+  renderProbeAirportChip();
   const point = cell ?? { longitude: series.longitude, latitude: series.latitude };
   probePanel.coords.textContent =
     `${formatProbeDegrees(point.latitude, "NS")} ${formatProbeDegrees(point.longitude, "EW")}`;
@@ -2445,6 +2631,39 @@ function renderProbe(): void {
   probePanel.hint.textContent = !cell ? "" : sampled >= offsets.length ? t("probeComplete") : t("probeHint");
   drawProbeChart(values, index, variable);
   renderProbeRows(series, index);
+  // The ascent under the rows: its own time, never the playhead's, but the
+  // model column laid over it comes from the series just read.
+  soundingSection.render();
+  paintSkewtSheet();
+}
+
+/** The nearest airport beside the panel's code: its ICAO id and the flight
+ * category in the category's own color, the chip the station card uses. An
+ * id and a category are instrument text and are never translated. */
+function renderProbeAirportChip(): void {
+  const airport = probeAirport;
+  probePanel.airport.hidden = airport === null;
+  if (!airport) return;
+  probePanel.airportId.textContent = airport.station.icao;
+  const category = airport.history?.metars[0]?.category ?? airport.station.category;
+  probePanel.airportCategory.textContent = category ?? "";
+  probePanel.airportCategory.hidden = category === null;
+  probePanel.airport.style.setProperty(
+    "--card-ink",
+    categoryColor(category, document.body.dataset.ground === "dark"),
+  );
+}
+
+/** The axis observations and forecast periods are placed against: the run
+ * on screen, and the lead seconds of its first and last frame. Null before
+ * a run is up. */
+function probeObservationAxis(leads: readonly number[]): ObservationAxis | null {
+  if (!metadata || leads.length === 0) return null;
+  return {
+    runTimeMs: Date.parse(metadata.runTime),
+    firstLead: leads[0]!,
+    lastLead: leads[leads.length - 1]!,
+  };
 }
 
 /** One bundle's series at the pinned point on the *primary* axis: a lead
@@ -2462,6 +2681,68 @@ function probeSessionSeries(
   const offsetFor = (lead: number) => sessionOffsetForLead(session, lead);
   const values = alignSeries(leads, offsetFor, (offset) => probeSeriesValues(series, variables, [offset])[0]);
   return { values, state: seriesState(leads, offsetFor, values) };
+}
+
+/**
+ * The model column at the selected ascent's time, for the skew-T.
+ *
+ * The frame is chosen by valid time, not by the playhead: the chart is
+ * showing an ascent released at a synoptic hour, and what belongs over it
+ * is the forecast *for that hour*, whichever frame that is. Past three
+ * hours (`MODEL_PROFILE_TOLERANCE_MS`) there is no frame near enough and
+ * the chart draws the sonde alone, with the legend saying so.
+ *
+ * Every level comes out of the probe series the sessions have already read
+ * at the pinned cell — the same one round trip per bundle the rows use — so
+ * the column costs nothing beyond those sessions. A wind bundle is read as
+ * its two components rather than as the magnitude the rows draw: a profile
+ * wants the barb, which needs the direction.
+ */
+function modelProfileForSounding(): { profile: Profile; run: string } | null {
+  const series = probe;
+  if (!series || !manifest || !metadata) return null;
+  const time = soundingSection.selectedTime();
+  if (time === null) return null;
+  const offsets = frameAxis();
+  const index = nearestFrameForTime(
+    offsets.map((_, position) => frameValidTime(position)),
+    Date.parse(time),
+  );
+  if (index === null) return null;
+  const lead = frameLeadSeconds(index);
+  const levels = new Map<number, ModelLevel>();
+  for (const bundle of modelProfileBundles(manifest.bundles.map((entry) => entry.variable))) {
+    const session = sessions.get(bundle.id);
+    if (!session || !series.cellFor(session.metadata)) continue;
+    const offset = sessionOffsetForLead(session, lead);
+    if (offset === null) continue;
+    const variables = probeVariables(session);
+    const level = levels.get(bundle.level) ?? { p: bundle.level, t: null };
+    if (bundle.field === "wind") {
+      if (variables.length < 2) continue;
+      const u = probeSeriesValues(series, [variables[0]!], [offset])[0];
+      const v = probeSeriesValues(series, [variables[1]!], [offset])[0];
+      if (typeof u === "number" && typeof v === "number") {
+        level.u = u;
+        level.v = v;
+      }
+    } else {
+      const value = probeSeriesValues(series, variables, [offset])[0];
+      if (typeof value === "number") {
+        if (bundle.field === "tmp") level.t = value;
+        else level.rh = value;
+      }
+    }
+    levels.set(bundle.level, level);
+  }
+  const column = [...levels.values()].filter(
+    (level) => level.t !== null || level.u !== undefined,
+  );
+  if (column.length === 0) return null;
+  return {
+    profile: profileFromModel(column),
+    run: currentRun ? `${manifest.model} ${currentRun}` : manifest.model,
+  };
 }
 
 /** The row's readout at the playhead: every series' value in row order
@@ -2497,6 +2778,11 @@ function meteogramDayMarks(): DayMark[] {
  * readouts, draw the traces. */
 function renderProbeRows(series: ProbeSeries, index: number): void {
   const specs = currentMeteogramRows();
+  // The aerodrome forecast is a row of the airport product, not of the run,
+  // so it is appended rather than derived from the manifest — and only
+  // while the pinned point has an airport with a current TAF.
+  const taf = probeAirport?.history?.taf ?? null;
+  if (specs.length > 0 && taf) specs.push(TAF_ROW_SPEC);
   syncProbeRowElements(specs);
   // The sparkline repeats a row when the field on screen is one of the
   // rows' bundles; then the row stands for it, marked, and the sparkline
@@ -2510,11 +2796,35 @@ function renderProbeRows(series: ProbeSeries, index: number): void {
   if (specs.length === 0) return;
   const offsets = frameAxis();
   const leads = offsets.map((_, position) => frameLeadSeconds(position));
+  const axis = probeObservationAxis(leads);
+  const history = probeAirport?.history ?? null;
+  // What the airport reported at the frame on screen, for the readouts: one
+  // lookup for every row rather than one per row.
+  const observedNow =
+    history && axis ? nearestObservation(history.metars, frameValidTime(index)) : null;
   const rows: MeteogramRowData[] = [];
   for (const [position, spec] of specs.entries()) {
     const element = probeRowElements[position]!;
+    if (spec.id === "taf") {
+      const bands = taf && axis ? tafBands(taf, axis) : [];
+      rows.push({ spec, series: [], bands });
+      element.root.dataset.state = bands.length ? "complete" : "empty";
+      // The row's readout is the period covering the frame on screen: what
+      // the aerodrome is forecast to have at the valid time.
+      const lead = frameLeadSeconds(index);
+      const covering = bands.find((band) => lead >= band.from && lead <= band.to);
+      element.value.value = covering?.label || "--";
+      element.note.textContent = covering?.prob === null || covering === undefined
+        ? ""
+        : `PROB${covering.prob}`;
+      continue;
+    }
     const read = spec.bundles.map((id) => probeSessionSeries(series, sessions.get(id), leads));
     const row: MeteogramRowData = { spec, series: read.map((item) => item.values) };
+    if (history && axis) {
+      const marks = rowObservations(spec.id, history.metars, axis);
+      if (marks.length) row.observations = marks;
+    }
     let direction: number | null = null;
     const wind = spec.id === "wind" ? sessions.get(spec.bundles[0]!) : undefined;
     if (wind?.vector && series.cellFor(wind.metadata)) {
@@ -2533,8 +2843,25 @@ function renderProbeRows(series: ProbeSeries, index: number): void {
     element.value.value = readout.values;
     // The unit sits under the numbers, and the wind's direction beside it
     // the way it rides the lead line above: degrees the wind comes from.
-    element.note.textContent =
-      direction === null ? readout.unit : `${readout.unit} · ${String(Math.round(direction)).padStart(3, "0")}°`;
+    // Last comes what the airport measured within ninety minutes of this
+    // frame, so the forecast and the observation read on one line.
+    const observed = observedNow === null ? null : rowObservedValue(spec.id, observedNow);
+    const session = sessions.get(spec.bundles[0]!);
+    const reported =
+      observed === null || !session
+        ? null
+        : `${t("soundingObserved")} ${formatProbeValue(session.variable, observed)}`;
+    // The label column is the capsule's and cannot grow, so the line holds
+    // two things at most. Where an observation is in hand it takes the
+    // wind's direction's place: the direction is already drawn as an arrow
+    // under every column of the row, and the measurement is nowhere else.
+    const parts = [
+      readout.unit,
+      reported !== null || direction === null
+        ? reported
+        : `${String(Math.round(direction)).padStart(3, "0")}°`,
+    ].filter((part): part is string => part !== null && part !== "");
+    element.note.textContent = parts.join(" · ");
   }
   drawProbeRowsChart(rows, index, offsets.length);
 }
@@ -2562,6 +2889,7 @@ function drawProbeRowsChart(rows: MeteogramRowData[], selected: number, count: n
       count,
       selected,
       dayMarks: meteogramDayMarks(),
+      leadSeconds: frameAxis().map((_, position) => frameLeadSeconds(position)),
       ink: {
         ink: styles.getPropertyValue("--accent").trim() || "#54d6c7",
         muted: styles.getPropertyValue("--muted").trim() || "#8ca6b2",
@@ -6109,7 +6437,7 @@ window.addEventListener("keydown", (event) => {
   // The sheets close themselves on Escape (createSheet wires that); this
   // handler carries the surfaces that have no sheet of their own.
   hideContextMenu();
-  closeProbe();
+  if (!skewtSheetTookEscape) closeProbe();
   closeTcCard();
   closeStationCard();
 });

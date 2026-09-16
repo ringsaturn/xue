@@ -257,4 +257,14 @@ export const zh: Record<MessageKey, string> = {
   stationVisibility: "能见度",
   stationQnh: "QNH",
   stationLevels: "层数",
+
+  soundingObserved: "实测",
+  soundingModel: "模式",
+  soundingNoModel: "3 小时内无模式数据",
+  soundingLoading: "正在读取探空…",
+  soundingUnavailable: "探空不可用",
+  soundingExpand: "完整图表",
+  soundingClose: "关闭",
+  soundingSheetHeading: "探空曲线",
+  soundingSheetAria: "探空曲线图",
 };

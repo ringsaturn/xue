@@ -262,4 +262,14 @@ export const de: Record<MessageKey, string> = {
   stationVisibility: "Sichtweite",
   stationQnh: "QNH",
   stationLevels: "Niveaus",
+
+  soundingObserved: "BEOB",
+  soundingModel: "MODELL",
+  soundingNoModel: "kein Modell binnen 3 h",
+  soundingLoading: "Aufstieg wird gelesen…",
+  soundingUnavailable: "Aufstieg nicht verfügbar",
+  soundingExpand: "Gesamtes Diagramm",
+  soundingClose: "Schließen",
+  soundingSheetHeading: "RADIOSONDE",
+  soundingSheetAria: "Radiosondendiagramm",
 };

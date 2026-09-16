@@ -262,4 +262,14 @@ export const es: Record<MessageKey, string> = {
   stationVisibility: "Visibilidad",
   stationQnh: "QNH",
   stationLevels: "Niveles",
+
+  soundingObserved: "OBS",
+  soundingModel: "MODELO",
+  soundingNoModel: "sin modelo en 3 h",
+  soundingLoading: "Leyendo el sondeo…",
+  soundingUnavailable: "Sondeo no disponible",
+  soundingExpand: "Gráfico completo",
+  soundingClose: "Cerrar",
+  soundingSheetHeading: "SONDEO",
+  soundingSheetAria: "Gráfico del sondeo",
 };

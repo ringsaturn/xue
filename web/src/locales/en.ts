@@ -389,6 +389,33 @@ export const en = {
   stationVisibility: "Visibility",
   stationQnh: "QNH",
   stationLevels: "Levels",
+
+  /** The sounding section of the pinned point's panel: the nearest ascent
+   * drawn as a skew-T under the meteogram rows, and the full-height sheet
+   * the chart opens into.
+   *
+   * `soundingObserved` and `soundingModel` are the two words the chart's
+   * legend and every readout tell the curves apart by — the solid trace the
+   * sonde measured and the dotted one the run forecast — and the same
+   * `soundingObserved` labels the airport's measurement beside a row's
+   * readout. Keep both to four or five characters: they sit inside a legend
+   * line that also carries the run's name, and beside a number in a row
+   * 30 px tall. Everything around them is instrument text and is not
+   * translated — the station's WMO number, the distance in kilometres, the
+   * pressure in hPa, the flight category (`VFR`), `PROB40`.
+   *
+   * `soundingNoModel` is why there is only one curve: the run has no frame
+   * within three hours of the ascent, so laying its forecast over the sonde
+   * would be two different air masses drawn as one. */
+  soundingObserved: "OBS",
+  soundingModel: "MODEL",
+  soundingNoModel: "no model within 3 h",
+  soundingLoading: "Reading the ascent…",
+  soundingUnavailable: "Ascent unavailable",
+  soundingExpand: "Full chart",
+  soundingClose: "Close",
+  soundingSheetHeading: "SOUNDING",
+  soundingSheetAria: "Sounding chart",
 } as const;
 
 /** Every key the UI can ask for. Each locale module is typed against this,

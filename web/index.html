@@ -635,6 +635,20 @@
         </div>
       </div>
 
+      <!-- The skew-T sheet, opened from the sounding section of the probe
+           panel: the same chart the panel draws, given the height a
+           forecaster actually reads a profile at. The canvas is painted by
+           main.ts; the heading names the station. -->
+      <div id="skewt-sheet" class="model-sheet skewt-sheet" hidden>
+        <div class="model-sheet-scrim" data-sheet-dismiss></div>
+        <div class="model-sheet-panel skewt-panel" role="dialog" aria-modal="true" data-i18n-aria="soundingSheetAria" aria-label="Sounding chart">
+          <span class="sheet-grip" aria-hidden="true"></span>
+          <p class="sheet-heading"><span data-i18n="soundingSheetHeading">SOUNDING</span> <span id="skewt-sheet-title"></span></p>
+          <canvas id="skewt-sheet-chart" class="skewt-sheet-chart" aria-hidden="true"></canvas>
+          <button type="button" class="skewt-sheet-close" data-sheet-dismiss data-i18n="soundingClose">Close</button>
+        </div>
+      </div>
+
       <div id="context-menu" class="context-menu" role="menu" data-i18n-aria="mapMenuAria" aria-label="Map options" hidden>
         <button id="stats-menu-toggle" type="button" role="menuitemcheckbox" aria-checked="false" data-i18n="menuStats">Stats for nerds</button>
         <button id="copy-debug" type="button" role="menuitem" data-i18n="menuCopyDebug">Copy debug info</button>

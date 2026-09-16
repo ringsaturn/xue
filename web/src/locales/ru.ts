@@ -264,4 +264,14 @@ export const ru: Record<MessageKey, string> = {
   stationVisibility: "Видимость",
   stationQnh: "QNH",
   stationLevels: "Уровни",
+
+  soundingObserved: "НАБЛ",
+  soundingModel: "МОДЕЛЬ",
+  soundingNoModel: "нет модели в пределах 3 ч",
+  soundingLoading: "Чтение зондирования…",
+  soundingUnavailable: "Зондирование недоступно",
+  soundingExpand: "Полный график",
+  soundingClose: "Закрыть",
+  soundingSheetHeading: "ЗОНДИРОВАНИЕ",
+  soundingSheetAria: "График зондирования",
 };

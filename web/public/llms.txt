@@ -140,7 +140,12 @@ fall back to defaults rather than fail, so a constructed link always opens.
   `sounding`, `soundings`, `airport`, `airports`, `on` and `all` are
   accepted spellings. The marks follow the playhead's valid time only in
   that a station observed far from it is drawn faint; they load nothing
-  per frame and never hold up playback.
+  per frame and never hold up playback. Both products also answer a pinned
+  point whatever this parameter says: clicking the map draws the nearest
+  ascent within 150 km as a skew-T under the meteogram rows, with the run's
+  own isobaric levels dotted over it, and lays the nearest airport's last
+  day of METARs — and its TAF, as a row of forecast periods — over the rows
+  themselves.
 - `?use_h264=true` — opt into the H.264 companion artifacts via WebCodecs
   instead of the Xue decoder (a comparison path, not the default; GFS and
   HRRR publish the companions for their surface fields, ECMWF and SFLUX

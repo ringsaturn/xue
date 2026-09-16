@@ -9,6 +9,7 @@ import {
   meteogramRowCode,
   meteogramRows,
   seriesState,
+  TAF_ROW_SPEC,
 } from "../../web/src/meteogram";
 
 function published(...ids: string[]): (id: string) => boolean {
@@ -157,5 +158,19 @@ describe("columns", () => {
     expect(frameIndexAtX(160, 161, 320)).toBe(80);
     expect(frameIndexAtX(50, 1, 320)).toBe(0);
     expect(frameIndexAtX(50, 5, 0)).toBe(0);
+  });
+});
+
+describe("the aerodrome forecast row", () => {
+  it("is never derived from a manifest: it belongs to the airport product", () => {
+    const rows = meteogramRows(published("tmp2m", "prate", "wind10m", "prmsl", "tcdc"));
+    expect(rows.map((row) => row.id)).not.toContain("taf");
+    expect(TAF_ROW_SPEC.bundles).toEqual([]);
+    expect(METEOGRAM_BUNDLE_IDS).not.toContain("taf");
+  });
+
+  it("is a band row, and names itself where it has no bundle to name", () => {
+    expect(TAF_ROW_SPEC.kind).toBe("bands");
+    expect(meteogramRowCode(TAF_ROW_SPEC)).toBe("TAF");
   });
 });

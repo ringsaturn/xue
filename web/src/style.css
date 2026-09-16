@@ -42,6 +42,15 @@
   --tick-off: rgba(27, 26, 23, 0.25);
   --label-shadow: 0 0 3px rgba(243, 239, 230, 0.95), 0 0 9px rgba(243, 239, 230, 0.85);
   --scrim: rgba(27, 26, 23, 0.28);
+  /* The skew-T's own ink (sounding/section.ts reads these at every draw):
+     a paper it is drawn on, the two weights its background families use,
+     and the model profile and lifted parcel, which are told apart from the
+     ascent by dash and weight rather than by hue. */
+  --skewt-paper: rgba(27, 26, 23, 0.04);
+  --skewt-grid: rgba(27, 26, 23, 0.2);
+  --skewt-grid-strong: rgba(27, 26, 23, 0.45);
+  --skewt-model: #6e6a60;
+  --skewt-parcel: rgba(27, 26, 23, 0.5);
   /* A lift belongs to what covers the map — the model sheet, the context
      menu, an error — not to the controls affixed to it, the probe panel now
      among them: the capsule and the data card sit on the map, and a shadow under them
@@ -112,6 +121,11 @@
     --tick-off: rgba(255, 255, 255, 0.3);
     --label-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
     --scrim: rgba(0, 0, 0, 0.45);
+    --skewt-paper: rgba(255, 255, 255, 0.05);
+    --skewt-grid: rgba(255, 255, 255, 0.2);
+    --skewt-grid-strong: rgba(255, 255, 255, 0.5);
+    --skewt-model: rgba(255, 255, 255, 0.62);
+    --skewt-parcel: rgba(255, 255, 255, 0.5);
     --lift: 0 20px 60px rgba(0, 0, 0, 0.5);
     --lift-small: 0 10px 30px rgba(0, 0, 0, 0.45);
   }
@@ -135,6 +149,11 @@
   --tick-off: rgba(255, 255, 255, 0.3);
   --label-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
   --scrim: rgba(0, 0, 0, 0.45);
+  --skewt-paper: rgba(255, 255, 255, 0.05);
+  --skewt-grid: rgba(255, 255, 255, 0.2);
+  --skewt-grid-strong: rgba(255, 255, 255, 0.5);
+  --skewt-model: rgba(255, 255, 255, 0.62);
+  --skewt-parcel: rgba(255, 255, 255, 0.5);
   --lift: 0 20px 60px rgba(0, 0, 0, 0.5);
   --lift-small: 0 10px 30px rgba(0, 0, 0, 0.45);
 }
@@ -2317,6 +2336,235 @@ html[lang="ja"] .rail-glyph {
 .probe-chart {
   touch-action: none;
   cursor: ew-resize;
+}
+
+/* The nearest airport beside the code the panel is reading: its ICAO id and
+   the flight category in the category's own ink, the chip the station card
+   uses. Both are instrument text and never wrap. */
+.probe-code-line {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.probe-airport {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  overflow: hidden;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+
+.probe-airport[hidden] {
+  display: none;
+}
+
+.probe-airport-id {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.probe-airport-category {
+  padding: 0 3px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--card-ink, var(--muted)) 22%, transparent);
+  color: var(--card-ink, var(--muted));
+}
+
+.probe-airport-category[hidden] {
+  display: none;
+}
+
+/* ---------------------------------------------------------------------------
+   The sounding section: the nearest ascent as a skew-T under the meteogram
+   rows, behind a disclosure whose header reads like one more row — the code
+   in the label column, the station and its distance on the axis column. */
+
+.sounding-section {
+  margin-top: 4px;
+  border-top: 1px solid var(--line);
+}
+
+.sounding-section[hidden] {
+  display: none;
+}
+
+.sounding-head {
+  display: grid;
+  width: 100%;
+  grid-template-columns: var(--probe-column) minmax(0, 1fr) 16px;
+  align-items: center;
+  padding: 5px 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-align: left;
+}
+
+.sounding-head:hover,
+.sounding-head:focus-visible {
+  color: var(--text);
+}
+
+.sounding-head-code {
+  padding-right: 8px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.sounding-head-line {
+  overflow: hidden;
+  color: var(--text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sounding-chevron {
+  display: flex;
+  justify-content: flex-end;
+  transition: transform 120ms ease;
+}
+
+.sounding-head[aria-expanded="true"] .sounding-chevron {
+  transform: rotate(180deg);
+}
+
+.sounding-body {
+  padding-bottom: 6px;
+}
+
+.sounding-body[hidden] {
+  display: none;
+}
+
+/* The station's nominal times, newest first: one press swaps the ascent on
+   the chart and nothing else — the playhead is the run's and stays put. */
+.sounding-times {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding-bottom: 4px;
+}
+
+.sounding-times[hidden] {
+  display: none;
+}
+
+.sounding-time {
+  padding: 2px 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+}
+
+.sounding-time[aria-current="true"] {
+  border-color: color-mix(in srgb, var(--text) 40%, transparent);
+  color: var(--text);
+}
+
+.sounding-chart {
+  display: block;
+  width: 100%;
+  border-radius: 10px;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.sounding-readout {
+  display: block;
+  padding-top: 3px;
+  overflow: hidden;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.sounding-footer {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding-top: 2px;
+}
+
+.sounding-legend {
+  overflow: hidden;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+
+.sounding-expand {
+  flex: none;
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+}
+
+.sounding-expand:hover,
+.sounding-expand:focus-visible {
+  color: var(--text);
+}
+
+/* The full-height copy: the sheet mechanism the model and sources sheets
+   use, centred rather than hung under a trigger, since the chart wants the
+   viewport's height. */
+.skewt-panel {
+  top: 50%;
+  left: 50%;
+  width: min(560px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  transform: translate(-50%, -50%);
+}
+
+.skewt-sheet-chart {
+  display: block;
+  width: 100%;
+  border-radius: 10px;
+}
+
+.skewt-sheet-close {
+  width: 100%;
+  margin-top: 10px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
 }
 
 /* ---------------------------------------------------------------------------
