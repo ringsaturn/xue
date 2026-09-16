@@ -234,6 +234,20 @@ https://dataset.ringsaturn.me/xue/. The contract is two layers:
   `50` / `64` (knots, the centres' names) as `[ne, se, sw, nw]` in km.
   Sources: NHC, JTWC, the NCEP GFS/GEFS tracker, ECMWF open data `tf`
   BUFR, IBTrACS. The viewer draws it as tracks over any layer (`?tc=`).
+- Airport observations and forecasts are a separate, ten-minute JSON
+  product under the same root (schema 1, `docs/airport.md`): the mutable
+  pointer `latest-airport.json` names `airport.<YYYYMMDDHHMM>/index.json`,
+  which carries every station's position and newest observation as a
+  compact row (`icao`, `lat`, `lon`, `elev`, `obsTime`, `t`, `td`, `wd`,
+  `ws`, `gust`, `vis`, `qnh`, `category`, `tafPresent`) and names the
+  shards, `airport-shards/<ICAO prefix>-<crc32>.json`, each holding its
+  stations' last 24 hours of METARs and their current TAF. Units are SI
+  (°C, m/s, metres, hPa; `vis` 10000 means ten kilometres or more), the
+  report and the bulletin are kept verbatim in `raw`, and a shard's file
+  name is the CRC32 of its own bytes, so only the shards that changed are
+  written each round. Source: the NOAA Aviation Weather Center's cache
+  files (public domain), the world's services' observations via WMO
+  exchange.
 
 A `.xue` bundle is one gridded variable (or a u/v pair) for a whole run:
 8-bit quantized planes on the native grid, temporal residual prediction in
@@ -262,6 +276,10 @@ format is specified in `docs/format.md` (link below). Decoders you can call:
 - [Tropical cyclone product](https://github.com/ringsaturn/xue/blob/main/docs/tc.md):
   the normative description of the hourly track product — delivery,
   units, identity rules, the index, storm and pointer files.
+- [Airport product](https://github.com/ringsaturn/xue/blob/main/docs/airport.md):
+  the normative description of the ten-minute METAR / TAF product —
+  delivery and its content-addressed shards, units, sharding, the index,
+  shard and pointer files.
 - [STAC catalog](https://github.com/ringsaturn/xue/blob/main/docs/stac.md):
   the catalog / collection / item layout derived beside the manifests, what
   each document carries and where it comes from.

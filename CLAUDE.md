@@ -66,6 +66,7 @@ npm run dev                      # vite dev server
 
 make test                        # rust + python + web unit tests (incl. encoder parity)
 make tc-build [ISSUE=YYYYMMDDHH] # the tropical cyclone product for one hour (needs eccodes' bufr_dump)
+make airport-build [ROUND=YYYYMMDDHHMM]  # the airport METAR / TAF product for one ten-minute round
 make test-rust                   # regenerates the golden fixture, then cargo test
 make test-e2e                    # playwright (needs `npx playwright install chromium`)
 make encoder-rust                # build the native encoder from source (needs GDAL + libclang)
@@ -522,6 +523,39 @@ over any composition (`web/src/tc/`: `schema.ts`, `tracks.ts`, `layers.ts`,
 `main.ts::syncTcTime` hands them the frame's valid time, `loadTc` polls the
 pointer with the runs, and a case hides them. URL state is `?tc=<id>|off`,
 `?tcagency=`, `?tcmodel=`, `?tcmembers=`.
+
+### Airport product (`xuebuild/airport/`)
+
+Airport observations and forecasts are a third product beside the runs
+(`docs/airport.md`, schema v1), the point-product contract again with one
+extension. `xue airport-build` fetches the NOAA Aviation Weather Center's
+three cache files into `data/raw/airport.<round>/` with a `fetch.json`
+(`fetch.py`; the station table is fetched at most once a day with
+`If-Modified-Since` and lives at `data/raw/airport-stations.json`, the
+required custom User-Agent and the hundred-a-minute budget are honoured
+here), parses each with a parser that imports no other (`metar.py` the
+decoded CSV, `taf.py` the decoded XML, `stations.py` the table; SI at the
+parser through `units.py`, a value outside the contract's ranges written
+null rather than raised on) and writes `web/public/data/airport.<round>/`
+plus `latest-airport.json` (`schema.py` validates on write; `build.py` is
+the only place the sources meet). A round is a UTC minute floored to ten.
+
+The extension is content addressing: a round directory holds only
+`index.json` (every station's position and newest observation as a
+fourteen-value row), and the 24-hour history lives in
+`web/public/data/airport-shards/<XX>-<crc32>.json`, one shard per ICAO
+prefix (`K` by three letters, the rest by two; about a thousand of them).
+Each round merges this round's METARs onto the previous round's shards by
+(station, time) with the new report winning, drops what is older than 24 h,
+and writes only the shards whose CRC32 changed — the index names the others
+by the file name they already have. `make live-airport-index` pulls the
+live index and its shards (the history), `upload-r2-airport` pushes shards
+→ index → pointer, and `prune-r2-airport-shards` deletes the shards no
+index among the newest `AIRPORT_KEEP` rounds names. The pointer is withheld
+only when both the METARs and the TAFs failed. `tests/fixtures/airport/`
+holds two consecutive fetched rounds and `expected/` the golden
+(`tests/prepare_airport_golden.py` regenerates; no network, no eccodes).
+The frontend does not read the product yet.
 
 ### External tools
 

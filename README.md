@@ -505,6 +505,32 @@ the agency forecasts (dashed ahead of the playhead, solid behind it, wind
 radii at the current position), best tracks and model tracks follow the
 timeline by valid time.
 
+### Airports
+
+Airport observations and forecasts are a third product beside the runs
+([`docs/airport.md`](docs/airport.md)). Every ten minutes `xue
+airport-build` fetches three cached files from the NOAA Aviation Weather
+Center (the world's decoded METARs of the last ninety minutes, every
+current TAF, and the station table at most once a day), converts them to
+SI, merges the observations onto the previous round's 24-hour history and
+writes `web/public/data/airport.<round>/index.json` plus the pointer
+`latest-airport.json`. The history lives in shards under
+`airport-shards/`, one per ICAO prefix, each named by the CRC32 of its own
+bytes — so a round rewrites only the hundred or so shards whose stations
+reported, and the index names the rest by the names they already have.
+Either observation source may fail on its own; the pointer is withheld only
+when both do.
+[`publish-airport.yml`](.github/workflows/publish-airport.yml) runs every
+ten minutes, independent of the raster publishes:
+
+```sh
+make live-airport-index                      # the live index and its shards: the history
+make airport-build                           # this round, into web/public/data/
+make upload-r2-airport ROUND=202609161440    # shards, then the index, then the pointer
+make prune-r2-airport && make prune-r2-airport-shards   # rounds older than three hours, then the shards nothing names
+.venv/bin/python -m xuebuild airport-build --round 202609161430 --offline --raw-dir tests/fixtures/airport   # from the fixture
+```
+
 ### The STAC catalog
 
 Beside the pointers, the manifests and `showcase.json`, which keep their
