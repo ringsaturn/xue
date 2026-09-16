@@ -260,7 +260,8 @@ model starts here; the frontend mirror is `FORECAST_MODELS` in
   `XUE_JMA_RADAR`), which reads the agency's `targetTimes_N1.json` (the
   last three hours of five-minute analyses), decodes the palette tiles and
   writes the series (`fetch.py::_fetch_jma_run`, the grid constants
-  `JMA_ZOOM` / `JMA_GRID_STEP` / `JMA_BBOX` / `JMA_RESAMPLING` beside it);
+  `JMA_ZOOM` / `JMA_GRID_STEP` / `JMA_BBOX` / `JMA_RESAMPLING` beside it:
+  0.005°, the finest grid the zoom-8 tiles support);
   `latest_jma_slot` reads the listing itself and `latest_observation_slot`
   dispatches by source. The agency publishes intensity classes, not dBZ, so
   the source ships `prate` alone at each class's representative rate (all

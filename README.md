@@ -37,7 +37,7 @@ pipeline.
 | ECMWF IFS open data 0.25° | `ecmwf` | 1440 × 721, 0.25° | 3-hourly to 144 h, 6-hourly to F240 (65 frames) | `latest-ecmwf.json` |
 | NOAA HRRR | `hrrr` | 2441 × 1051, 0.03°, contiguous US | hourly to F18, a cycle every hour | `latest-hrrr.json` |
 | NOAA MRMS | `mrms` | 3500 × 1750, 0.02°, contiguous US | one frame every two minutes, a rolling four-hour window | `latest-mrms.json` |
-| JMA precipitation nowcast | `jma` | 2800 × 2500, 0.01°, Japan | one frame every five minutes, a rolling three-hour window | `latest-jma.json` |
+| JMA precipitation nowcast | `jma` | 5600 × 5000, 0.005°, Japan | one frame every five minutes, a rolling three-hour window | `latest-jma.json` |
 | CMA radar mosaic | `radar` | tile grid | every six minutes | none: showcase cases only |
 
 Each model publishes as an independent dataset under `<model>.<run>/`, taken
@@ -90,11 +90,11 @@ Bundle sets:
   distinct). The [jma-radar](https://github.com/ringsaturn/jma-radar) tool
   (`uv pip install git+https://github.com/ringsaturn/jma-radar`, driven by
   `xuebuild/jmacli.py`) lists the agency's `targetTimes`, decodes the
-  zoom-8 tiles onto a 0.01° grid over the radar coverage envelope
+  zoom-8 tiles onto a 0.005° grid over the radar coverage envelope
   (121–149°E, 20.5–45.5°N) by the strongest class in each cell, and writes
   a window as one NetCDF series, which both encoders read the way they read
   the CMA file. The listing reaches three hours back, so a window is three
-  hours; a whole window is under 3 MB. Source: Japan Meteorological Agency
+  hours; a whole window is a few megabytes. Source: Japan Meteorological Agency
   website (出典：気象庁ホームページ), regridded and reclassified.
 
 Every level of the isobaric families is registered; turning one on is a line

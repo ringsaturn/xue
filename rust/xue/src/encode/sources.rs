@@ -434,7 +434,7 @@ pub const SOURCES: &[SourceSpec] = &[
     // tiles whose palette encodes ten intensity classes. Not a
     // reflectivity, so published under `prate` at each class's
     // representative rate; the jma-radar tool decodes the zoom-8 tiles onto
-    // a regular 0.01° grid (the strongest class in each cell) over the
+    // a regular 0.005° grid (the strongest class in each cell) over the
     // radar coverage envelope and writes a window's frames as one NetCDF
     // series, which is read the way the CMA file is, with the window's
     // first hour as the run and the five-minute slots as the axis
@@ -455,10 +455,10 @@ pub const SOURCES: &[SourceSpec] = &[
         bundle_scalar_ids: &["prate"],
         core_bundle_ids: &["prate"],
         bundle_vector_ids: &[],
-        // The 0.01° grid over the coverage envelope: 121E to 149E, 45.5N to
+        // The 0.005° grid over the coverage envelope: 121E to 149E, 45.5N to
         // 20.5N.
-        production_grid: (2800, 2500),
-        tile: (64, 64),
+        production_grid: (5600, 5000),
+        tile: (128, 128),
         regrid: None,
         observation: true,
         window_hours: Some(3),

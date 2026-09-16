@@ -105,10 +105,14 @@ JMA_BASE_URL = os.environ.get("XUE_JMA_BASE_URL", "https://www.jma.go.jp/bosai/j
 JMA_TARGET_TIMES_URL = f"{JMA_BASE_URL}/targetTimes_N1.json"
 JMA_ELEMENT = "hrpns"
 # What the tool is asked for, and what `production_grid` describes: the
-# zoom-8 tiles onto a square 0.01° grid over the radar coverage envelope,
-# each cell the strongest class of the pixels it holds.
+# zoom-8 tiles onto a square 0.005° grid over the radar coverage envelope,
+# each cell the strongest class of the pixels it holds. A zoom-8 pixel is
+# about 0.0055° of longitude (and 0.004-0.005° of latitude over Japan), so
+# 0.005° is the finest grid the tiles support without a coarser zoom's
+# nearest pick or a finer zoom's fifteenfold tile count; 0.01° read as
+# blocks a kilometre wide at a city zoom.
 JMA_ZOOM = 8
-JMA_GRID_STEP = 0.01
+JMA_GRID_STEP = 0.005
 JMA_BBOX = (121.0, 20.5, 149.0, 45.5)
 JMA_RESAMPLING = "max"
 # The tool's frame cache — one file per decoded frame, keyed by the grid —

@@ -693,7 +693,7 @@ SOURCES: dict[str, SourceSpec] = {
     # 15, 25, 40, 65, 100 mm/h; the codebook reaches 128, so every class
     # keeps its own code) and the core bundle is ``prate``. The ``jma-radar``
     # tool (:mod:`xuebuild.jmacli`) decodes the zoom-8 tiles (624 a frame,
-    # about 0.0055° a pixel) onto a regular 0.01° grid by the strongest
+    # about 0.0055° a pixel) onto a regular 0.005° grid by the strongest
     # class in each cell, over the radar coverage envelope 121–149°E and
     # 20.5–45.5°N, and writes a window's frames as one NetCDF series
     # (``series_file``), the shape the CMA mosaic arrives in. The tile
@@ -713,12 +713,13 @@ SOURCES: dict[str, SourceSpec] = {
         accumulated_precipitation=False,
         bundle_scalar_ids=("prate",),
         core_bundle_ids=("prate",),
-        # The 0.01° grid over the coverage envelope: 121E to 149E, 45.5N to
+        # The 0.005° grid over the coverage envelope: 121E to 149E, 45.5N to
         # 20.5N (xuebuild/fetch.py, JMA_BBOX / JMA_GRID_STEP).
-        production_grid=(2800, 2500),
-        # 64 x 64 cells is 0.64° at this step — 44 x 40 = 1760 tiles, each
-        # a series of thirty-seven 4 KB planes over a three-hour window.
-        tile=(64, 64),
+        production_grid=(5600, 5000),
+        # 128 x 128 cells is 0.64° at this step — 44 x 40 = 1760 tiles, each
+        # a series of thirty-seven 16 KB planes over a three-hour window,
+        # mostly the codebook bottom and compressing to little.
+        tile=(128, 128),
         observation=True,
         series_file=True,
         cycle_hours=1,

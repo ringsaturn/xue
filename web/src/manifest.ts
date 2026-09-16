@@ -91,7 +91,7 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
   // JMA 高解像度降水ナウキャスト, the Japan Meteorological Agency's
   // precipitation nowcast analysis: precipitation intensity classes every
   // five minutes, decoded by the encoder from the agency's map tiles onto
-  // a 0.01° grid over the radar coverage envelope. Not a reflectivity —
+  // a 0.005° grid over the radar coverage envelope. Not a reflectivity —
   // the agency publishes rate classes — so it ships `prate` alone, at each
   // class's representative rate, and opens on it. Observations and live,
   // like MRMS: a rolling window of the last two to three hours.

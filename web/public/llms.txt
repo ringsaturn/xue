@@ -35,7 +35,7 @@ Facts worth getting right:
   live source and the third observation: the Japan Meteorological Agency's
   high-resolution precipitation nowcast analysis (高解像度降水ナウキャスト)
   over Japan, five-minute frames decoded from the agency's map tiles onto a
-  0.01° grid (2800 × 2500, 121°E–149°E and 20.5°N–45.5°N) by the strongest
+  0.005° grid (5600 × 5000, 121°E–149°E and 20.5°N–45.5°N) by the strongest
   class in each cell, a rolling window of the last two to three hours. The
   agency publishes precipitation intensity *classes* (0.25–1, 1–5, 5–10,
   10–20, 20–30, 30–50, 50–80 and ≥ 80 mm/h), not radar reflectivity, so the

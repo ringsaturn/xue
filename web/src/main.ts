@@ -850,17 +850,24 @@ const urlCamera = parseCameraFromHash(window.location.hash);
  * data, since past the point where a cell is `ZOOM_CEILING_CELL_PIXELS`
  * wide the map only magnifies the interpolation. */
 const BASE_MAX_ZOOM = 7;
-/** How wide a grid cell may get on screen before the zoom stops — 16 CSS
- * px puts a 0.02° radar mosaic at zoom 9 and the 0.03° HRRR grid at 8.5,
- * while the 0.25° models stay at the base ceiling. */
-const ZOOM_CEILING_CELL_PIXELS = 16;
+/** How wide a grid cell may get on screen before the zoom stops — 32 CSS
+ * px puts the 0.005° JMA nowcast at zoom 12, a 0.02° radar mosaic at 10
+ * and the 0.03° HRRR grid at 9.5, while the 0.25° models stay at the base
+ * ceiling. */
+const ZOOM_CEILING_CELL_PIXELS = 32;
+/** How far a link's camera is honoured before any dataset has said what
+ * its grid earns: the ceiling of the finest grid published. A link into a
+ * regional dataset at a city zoom opens where it points instead of at the
+ * base ceiling; the dataset's own ceiling (`applyZoomCeiling`) settles it
+ * once the manifest is in. */
+const DEEP_LINK_MAX_ZOOM = 12.5;
 
 const map = new MaplibreMap({
   container: "map",
   center: [128, 28],
   zoom: 1.65,
   minZoom: 0,
-  maxZoom: BASE_MAX_ZOOM,
+  maxZoom: urlCamera ? Math.max(BASE_MAX_ZOOM, Math.min(urlCamera.zoom, DEEP_LINK_MAX_ZOOM)) : BASE_MAX_ZOOM,
   // The view lives in the fragment, `#map=<zoom>/<lat>/<lon>`, kept
   // current on every move — so a copied address reproduces the view, and
   // the query string, which is what names the page, never changes on a pan.
@@ -1021,7 +1028,7 @@ const MODEL_EYEBROW: Record<ForecastModelId, string> = {
   hrrr: "NOAA / HRRR CONUS (3 KM)",
   radar: "CMA / RADAR MOSAIC (L3 MST)",
   mrms: "NOAA / MRMS CONUS (0.02°)",
-  jma: "JMA / NOWCAST JAPAN (0.01°)",
+  jma: "JMA / NOWCAST JAPAN (0.005°)",
 };
 
 /** The member to open when a family's one rail tile is picked: whichever

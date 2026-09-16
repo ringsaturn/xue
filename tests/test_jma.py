@@ -17,7 +17,8 @@ all sit inside the precipitation codebook.
 01Z hour (01:05, 01:10 and 01:20; 01:15 left out, so the axis lists its
 offsets) cropped to 200 x 150 cells over the Kii Peninsula and Shikoku
 (135E to 137E, 34.5N to 33N) on a rainy morning: every class from 0 mm/h to
-the 50-80 mm/h band is present, plus a corner of no data.
+the 50-80 mm/h band is present, plus a corner of no data. 400 x 300 cells
+of the published 0.005° grid.
 """
 
 from __future__ import annotations
@@ -180,8 +181,8 @@ class ObservationCadenceTests(unittest.TestCase):
     def _inspect(self, times: list[str], source=JMA) -> observation.ObservationSeries:
         epoch_seconds = [int(stamp(t).timestamp()) for t in times]
         info = {
-            "size": [200, 150],
-            "geoTransform": [135.0, 0.01, 0.0, 34.5, 0.0, -0.01],
+            "size": [400, 300],
+            "geoTransform": [135.0, 0.005, 0.0, 34.5, 0.0, -0.005],
             "metadata": {"": {"time#units": "seconds since 1970-01-01T00:00:00+00:00"}},
             "bands": [
                 {
@@ -324,7 +325,7 @@ class FetchTests(unittest.TestCase):
         if write_output is not None:
             write_output.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy(SERIES, write_output)
-        return {"start": "2026091601", "hours": 3, "variable": "prate", "grid": {"nlat": 150, "nlon": 200}, "frames": frames}
+        return {"start": "2026091601", "hours": 3, "variable": "prate", "grid": {"nlat": 300, "nlon": 400}, "frames": frames}
 
     def test_the_fetch_writes_the_series_and_a_fetch_record(self) -> None:
         output = self.root / "jma.2026091601" / jma_frame_name(JMA, self.run)
@@ -410,24 +411,24 @@ class ConversionTests(unittest.TestCase):
         validate_bin_manifest(manifest, expected_hours=1, require_core_variables=True)
         bundle = read_bundle(self.root / "out" / "prate.xue")
         # 01:05, 01:10 and 01:20 from the 01:00 run: offsets listed, since
-        # 01:15 is not there.
+        # 01:15 is not there. Three 128-cell tiles across four rows.
         self.assertEqual(
             bundle.metadata["time"],
             {"unitSeconds": 300, "firstFrameOffset": 1, "frameCount": 3, "frameOffsets": [1, 2, 4]},
         )
         grid = bundle.metadata["grid"]
-        self.assertEqual((grid["width"], grid["height"]), (200, 150))
-        self.assertEqual((grid["longitudeStep"], grid["latitudeStep"]), (0.01, -0.01))
-        self.assertEqual((grid["firstLongitude"], grid["firstLatitude"]), (135.005, 34.495))
+        self.assertEqual((grid["width"], grid["height"]), (400, 300))
+        self.assertEqual((grid["longitudeStep"], grid["latitudeStep"]), (0.005, -0.005))
+        self.assertEqual((grid["firstLongitude"], grid["firstLatitude"]), (135.0025, 34.4975))
         variable = bundle.metadata["variables"][0]
         self.assertEqual(variable["unit"], "mm/h")
         self.assertEqual(variable["parameter"]["parameterCategory"], 1)
         # The gap at 01:15 ends a temporal group: two groups for three frames.
-        self.assertEqual((bundle.frame_count, len(bundle.groups)), (3, 2))
+        self.assertEqual((bundle.frame_count, len(bundle.groups), bundle.tiles.count), (3, 2, 12))
         # The classes come through as their representative rates: decoding a
         # plane gives the codebook's nearest rate to each, and nothing else.
         codebook = PROFILES["quality"]["prate"]
-        rates = codebook.decode(np.asarray(bundle.decode_plane(1, 1)).reshape(150, 200))
+        rates = codebook.decode(np.asarray(bundle.decode_plane(1, 1)).reshape(300, 400))
         representative = np.array([0.0, 0.5, 3.0, 7.5, 15.0, 25.0, 40.0, 65.0, 100.0])
         nearest = representative[np.abs(rates[:, :, None] - representative[None, None, :]).argmin(axis=2)]
         self.assertLess(float(np.abs(rates - nearest).max() / representative.max()), 0.05)
@@ -438,7 +439,7 @@ class ConversionTests(unittest.TestCase):
 
     def test_a_complete_build_wants_the_production_grid(self) -> None:
         with mock.patch.dict(os.environ, {"XUE_ENCODER": "python"}):
-            with self.assertRaisesRegex(ConversionError, "2800x2500 grid"):
+            with self.assertRaisesRegex(ConversionError, "5600x5000 grid"):
                 binconvert.convert_bin(
                     self.inputs, self.root / "complete", model="jma", skip_video=True, require_complete=True, expected_hours=3
                 )

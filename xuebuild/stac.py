@@ -209,7 +209,7 @@ def _source_prose(source: SourceSpec) -> dict[str, Any]:
             "description": (
                 "The Japan Meteorological Agency's high-resolution precipitation nowcast analysis "
                 "(高解像度降水ナウキャスト) over Japan: precipitation intensity classes every five "
-                "minutes, decoded from the agency's map tiles onto a regular 0.01° grid by the "
+                "minutes, decoded from the agency's map tiles onto a regular 0.005° grid by the "
                 "strongest class in each cell and published under prate at each class's "
                 "representative rate (0.5, 3, 7.5, 15, 25, 40, 65 and 100 mm/h), as a rolling "
                 "window rebuilt every five minutes. Source: Japan Meteorological Agency website "
