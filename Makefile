@@ -59,7 +59,7 @@ AWS_REQUEST_CHECKSUM_CALCULATION ?= when_required
 AWS_RESPONSE_CHECKSUM_VALIDATION ?= when_required
 export AWS_DEFAULT_REGION AWS_REQUEST_CHECKSUM_CALCULATION AWS_RESPONSE_CHECKSUM_VALIDATION
 
-.PHONY: check install wasm test test-rust test-e2e encoder-rust encoder-rust-test encoder-wheel bench bench-video bench-lossy mvp serve format-pdf deploy-build upload-r2 upload-r2-bundles upload-r2-manifest upload-r2-stac-item check-pointer upload-r2-pointer upload-r2-stac-collection warm-r2 prune-r2 prune-r2-rounds live-run live-manifest live-window pull-r2-frames push-r2-frames prune-r2-frames deploy-pages deploy showcase showcase-check showcase-refresh upload-r2-showcase tc-build live-tc-index upload-r2-tc prune-r2-tc clean
+.PHONY: check install wasm test test-rust test-e2e encoder-rust encoder-rust-test encoder-wheel bench bench-video bench-lossy mvp serve format-pdf deploy-build upload-r2 upload-r2-bundles upload-r2-manifest upload-r2-stac-item check-pointer upload-r2-pointer upload-r2-stac-collection warm-r2 prune-r2 prune-r2-rounds live-run live-manifest live-window pull-r2-frames push-r2-frames prune-r2-frames deploy-pages deploy showcase showcase-check showcase-refresh upload-r2-showcase tc-build live-tc-index upload-r2-tc prune-r2-tc sounding-build live-sounding-index upload-r2-sounding prune-r2-sounding clean
 
 check:
 	$(PYTHON) scripts/check_dependencies.py
@@ -400,6 +400,74 @@ prune-r2-tc:
 		|| { echo "listing the bucket failed, refusing to prune"; exit 1; }; \
 	for issue in $$(printf '%s\n' "$$listing" | awk '/ PRE /{print $$2}' \
 		| sed 's:/$$::' | grep "^tc\." | sort -r | tail -n +$$(($(TC_KEEP) + 1))); do \
+		if [ "$$issue" != "$$live" ]; then \
+			echo "Deleting $$issue..."; \
+			$(S3) rm s3://$(R2_BUCKET)/$(R2_PREFIX)/$$issue/ --recursive --only-show-errors $(DRY_RUN); \
+		fi; \
+	done
+
+# The radiosonde sounding product (docs/sounding.md): the GTS→WIS2
+# gateways' TEMP bulletins aggregated once an hour into
+# web/public/data/sounding.<issue>/ and the mutable latest-sounding.json
+# beside the run pointers. ISSUE is shared with the tc targets. The live
+# issue is both the fetch's watermark and the source of the station files
+# an hour with no new ascent copies forward, so a publish pulls it first.
+SOUNDING_KEEP ?= 48
+
+sounding-build:
+	$(PYTHON) -m xuebuild sounding-build --issue $(ISSUE) $(FORCE)
+
+# The live product's pointer, index *and station files*, into
+# web/public/data/ where sounding-build looks for the previous hour. The
+# whole directory is pulled (about 700 small objects): without the station
+# files an hour with no new ascent for a station could not copy it forward
+# unchanged. Prints nothing and writes nothing when there is no live
+# product yet (the first publish).
+live-sounding-index:
+	@set -e; mkdir -p web/public/data; \
+	pointer=$$($(S3) cp s3://$(R2_BUCKET)/$(R2_PREFIX)/latest-sounding.json - --only-show-errors 2>/dev/null || true); \
+	[ -n "$$pointer" ] || { echo "no live sounding pointer"; exit 0; }; \
+	path=$$(printf '%s' "$$pointer" | jq -r .path); \
+	issue=$$(dirname "$$path"); \
+	mkdir -p "web/public/data/$$issue"; \
+	$(S3) sync "s3://$(R2_BUCKET)/$(R2_PREFIX)/$$issue/" "web/public/data/$$issue/" --only-show-errors; \
+	printf '%s' "$$pointer" > web/public/data/latest-sounding.json; \
+	echo "live sounding issue: $$path"
+
+# Push one issue's directory (immutable, ?v=<crc32>-addressed like a run)
+# and then the pointer that takes it live. The pointer on disk must name
+# the issue being uploaded and carry its index's CRC32, the way
+# check-pointer holds a run's.
+upload-r2-sounding:
+	@set -e; \
+	[ "$(ISSUE)" != "now" ] || { echo "pass ISSUE=YYYYMMDDHH"; exit 1; }; \
+	dir=web/public/data/sounding.$(ISSUE); \
+	[ -f "$$dir/index.json" ] || { echo "no built sounding issue at $$dir"; exit 1; }; \
+	[ -f web/public/data/latest-sounding.json ] || { echo "no latest-sounding.json: the build withheld the pointer (nothing contributed)"; exit 1; }; \
+	pointer_path=$$(jq -r .path web/public/data/latest-sounding.json); \
+	[ "$$pointer_path" = "sounding.$(ISSUE)/index.json" ] || { echo "latest-sounding.json names $$pointer_path, not sounding.$(ISSUE)"; exit 1; }; \
+	pointer_crc=$$(jq -r .crc32 web/public/data/latest-sounding.json); \
+	index_crc=$$($(PYTHON) -c "import sys, zlib; print(f'{zlib.crc32(open(sys.argv[1], \"rb\").read()) & 0xFFFFFFFF:08x}')" $$dir/index.json); \
+	[ "$$pointer_crc" = "$$index_crc" ] || { echo "latest-sounding.json carries CRC32 $$pointer_crc but $$dir/index.json is $$index_crc"; exit 1; }; \
+	$(S3) sync $$dir s3://$(R2_BUCKET)/$(R2_PREFIX)/sounding.$(ISSUE)/ --no-progress $(DRY_RUN) \
+		--content-type application/json --cache-control "public, max-age=31536000, immutable"; \
+	echo "Uploading latest-sounding.json (takes sounding issue $(ISSUE) live)..."; \
+	$(S3) cp web/public/data/latest-sounding.json s3://$(R2_BUCKET)/$(R2_PREFIX)/latest-sounding.json --no-progress $(DRY_RUN) \
+		--content-type application/json --cache-control "no-cache"
+
+# Delete sounding issue directories beyond the newest SOUNDING_KEEP (48
+# hours = two days, the window a station file's four nominal times cover)
+# and never the one the live pointer names. No pointer yet means nothing
+# is live to protect and nothing to prune, not a reason to fail.
+prune-r2-sounding:
+	@set -e; \
+	live=$$($(S3) cp s3://$(R2_BUCKET)/$(R2_PREFIX)/latest-sounding.json - --only-show-errors 2>/dev/null | jq -r .path | cut -d/ -f1 || true); \
+	[ -n "$$live" ] || { echo "no live sounding pointer, nothing to prune"; exit 0; }; \
+	echo "live sounding issue: $$live"; \
+	listing=$$($(S3) ls s3://$(R2_BUCKET)/$(R2_PREFIX)/) \
+		|| { echo "listing the bucket failed, refusing to prune"; exit 1; }; \
+	for issue in $$(printf '%s\n' "$$listing" | awk '/ PRE /{print $$2}' \
+		| sed 's:/$$::' | grep "^sounding\." | sort -r | tail -n +$$(($(SOUNDING_KEEP) + 1))); do \
 		if [ "$$issue" != "$$live" ]; then \
 			echo "Deleting $$issue..."; \
 			$(S3) rm s3://$(R2_BUCKET)/$(R2_PREFIX)/$$issue/ --recursive --only-show-errors $(DRY_RUN); \
