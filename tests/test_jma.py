@@ -332,6 +332,7 @@ class FetchTests(unittest.TestCase):
         summary = self._summary("20260916010500", "20260916011000", write_output=output)
         with (
             mock.patch.object(jmacli, "version", return_value="0.2.0"),
+            mock.patch.object(fetch, "jma_window_slots", return_value=[stamp("20260916010500"), stamp("20260916011000")]),
             mock.patch.object(jmacli, "fetch_window", return_value=summary) as window,
         ):
             paths = fetch.fetch_run(self.run, 3, self.root, model="jma")
@@ -346,7 +347,11 @@ class FetchTests(unittest.TestCase):
         self.assertEqual((window_record["frameCount"], window_record["latestSlot"]), (2, "2026-09-16T01:10:00Z"))
 
     def test_an_empty_window_and_a_missing_series_are_errors(self) -> None:
-        with mock.patch.object(jmacli, "version", return_value="0.2.0"):
+        with (
+            mock.patch.object(jmacli, "version", return_value="0.2.0"),
+            mock.patch.object(fetch, "jma_window_slots", return_value=[stamp("20260916010500")]),
+            mock.patch.object(fetch.time, "sleep"),
+        ):
             with mock.patch.object(jmacli, "fetch_window", return_value=self._summary()):
                 with self.assertRaisesRegex(DownloadError, "lists no analysis"):
                     _fetch_jma_run(JMA, self.run, 3, self.root, force=False, input_ids=None)
@@ -376,6 +381,54 @@ class FetchTests(unittest.TestCase):
             with mock.patch.object(jmacli, "fetch_window", side_effect=refetch):
                 _fetch_jma_run(JMA, self.run, 3, self.root, force=True, input_ids=None)
         self.assertTrue(stale.exists())
+
+    def test_the_tool_is_asked_again_while_its_listing_lags_the_build_s(self) -> None:
+        """The build read a listing reaching 01:10; the tool's copy, a CDN
+        edge of its own, still ends at 01:05. It is asked again after a
+        wait, and the window published is the one with 01:10 in it."""
+        output = self.root / "jma.2026091601" / jma_frame_name(JMA, self.run)
+        short = self._summary("20260916010500", write_output=output)
+        full = self._summary("20260916010500", "20260916011000", write_output=output)
+        with (
+            mock.patch.object(jmacli, "version", return_value="0.2.0"),
+            mock.patch.object(fetch, "jma_window_slots", return_value=[stamp("20260916010500"), stamp("20260916011000")]),
+            mock.patch.object(jmacli, "fetch_window", side_effect=[short, short, full]) as window,
+            mock.patch.object(fetch.time, "sleep") as sleep,
+        ):
+            _fetch_jma_run(JMA, self.run, 3, self.root, force=False, input_ids=None)
+        self.assertEqual(window.call_count, 3)
+        self.assertEqual(sleep.call_args_list, [mock.call(fetch.JMA_LISTING_RETRY_SECONDS)] * 2)
+        record = json.loads((output.parent / "fetch.json").read_text())
+        self.assertEqual([frame["slot"] for frame in record["frames"]], ["2026-09-16T01:05:00Z", "2026-09-16T01:10:00Z"])
+
+    def test_a_tool_that_never_catches_up_still_delivers_its_window(self) -> None:
+        output = self.root / "jma.2026091601" / jma_frame_name(JMA, self.run)
+        short = self._summary("20260916010500", write_output=output)
+        with (
+            mock.patch.object(jmacli, "version", return_value="0.2.0"),
+            mock.patch.object(fetch, "jma_window_slots", return_value=[stamp("20260916010500"), stamp("20260916011000")]),
+            mock.patch.object(jmacli, "fetch_window", return_value=short) as window,
+            mock.patch.object(fetch.time, "sleep") as sleep,
+            self.assertLogs(fetch.LOG.name, level="WARNING") as logs,
+        ):
+            _fetch_jma_run(JMA, self.run, 3, self.root, force=False, input_ids=None)
+        self.assertEqual(window.call_count, 1 + fetch.JMA_LISTING_RETRIES)
+        self.assertEqual(sleep.call_count, fetch.JMA_LISTING_RETRIES)
+        self.assertTrue(any("still delivers" in line for line in logs.output))
+        record = json.loads((output.parent / "fetch.json").read_text())
+        self.assertEqual([frame["slot"] for frame in record["frames"]], ["2026-09-16T01:05:00Z"])
+
+    def test_a_listing_behind_the_tool_s_does_not_hold_the_fetch_up(self) -> None:
+        output = self.root / "jma.2026091601" / jma_frame_name(JMA, self.run)
+        full = self._summary("20260916010500", "20260916011000", write_output=output)
+        with (
+            mock.patch.object(jmacli, "version", return_value="0.2.0"),
+            mock.patch.object(fetch, "jma_window_slots", return_value=[stamp("20260916010500")]),
+            mock.patch.object(jmacli, "fetch_window", return_value=full) as window,
+            mock.patch.object(fetch.time, "sleep") as sleep,
+        ):
+            _fetch_jma_run(JMA, self.run, 3, self.root, force=False, input_ids=None)
+        self.assertEqual((window.call_count, sleep.call_count), (1, 0))
 
 
 @requires_gdal

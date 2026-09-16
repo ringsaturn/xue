@@ -109,7 +109,15 @@ while :; do
       built=$(jq -r .window.latestSlot build-report.json)
       build_seconds=$(( $(date -u +%s) - t0 ))
       t0=$(date -u +%s)
-      if make upload-r2 MODEL=$model RUN="$run" ROUND="$round" DRY_RUN="$dry_run"; then
+      if [ -n "$live" ] && [ -z "$dry_run" ] && [ "$force" != true ] && ! $python -c "import sys; sys.exit(0 if '$built' > '$live' else 1)"; then
+        # The feed's listing said there was a newer frame, but the fetch
+        # delivered a window ending where the live round already ends (a
+        # CDN edge behind the one the check read): publishing it would
+        # flip the pointer to identical content and make every viewer
+        # reload. Keep the live round and try again next round.
+        echo "round $round: the fetch delivered nothing newer than the live round ($built); not publishing"
+        rm -rf "$data/$model.$run/$round"
+      elif make upload-r2 MODEL=$model RUN="$run" ROUND="$round" DRY_RUN="$dry_run"; then
         upload_seconds=$(( $(date -u +%s) - t0 ))
         pointer_at=$(date -u +%s)
         t0=$pointer_at

@@ -649,6 +649,16 @@ def jma_frame_name(spec: SourceSpec, run: GfsRun) -> str:
     return f"{spec.id}.{run.id}.nc"
 
 
+#: How long, and how often, a fetch waits for the jma-radar tool's copy of
+#: the listing to catch up with this build's. The listing is served through
+#: a CDN that caches it for a minute per edge, and the tool reads it over a
+#: connection of its own: the analysis this build was started for is on the
+#: copy the build read and, a second later, not yet on the tool's. Three
+#: waits of twenty seconds cover one cache lifetime.
+JMA_LISTING_RETRIES = 3
+JMA_LISTING_RETRY_SECONDS = 20.0
+
+
 def _fetch_jma_run(
     spec: SourceSpec,
     run: GfsRun,
@@ -657,6 +667,7 @@ def _fetch_jma_run(
     *,
     force: bool,
     input_ids: tuple[str, ...] | None,
+    fetch: Callable[[str], str] | None = None,
 ) -> list[Path]:
     """Fetch one window of the JMA nowcast through the jma-radar tool: the
     analyses the listing holds between the run's hour and ``hours`` past it,
@@ -665,7 +676,12 @@ def _fetch_jma_run(
     entry per frame with its slot) so ``window_summary`` and the rolling
     publish read both alike. The tool keeps one file per decoded frame
     under ``raw_root/jma-frames``; ``force`` discards the window's cached
-    frames first so they are decoded from fresh tiles."""
+    frames first so they are decoded from fresh tiles. The tool's copy of
+    the listing may lag the one this build read (``fetch``, the network by
+    default) by up to the CDN's minute; while it delivers less than that
+    listing holds for the window, the tool is asked again, so a rolling
+    publish started for a new analysis does not publish a window without
+    it."""
     if input_ids is not None and any(variable_id not in spec.input_variable_ids for variable_id in input_ids):
         raise DownloadError(f"{spec.manifest_model} publishes {list(spec.input_variable_ids)}, not {list(input_ids)}")
     jmacli.version()
@@ -677,18 +693,49 @@ def _fetch_jma_run(
             for cached in frames_dir.glob(f"*/{JMA_ELEMENT}_{slot:{_JMA_TIME_FORMAT}}.nc"):
                 LOG.info("discarding cached frame %s", cached)
                 cached.unlink()
-    summary = jmacli.fetch_window(
-        start=run.id,
-        hours=hours,
-        zoom=JMA_ZOOM,
-        step=JMA_GRID_STEP,
-        bbox=JMA_BBOX,
-        method=JMA_RESAMPLING,
-        frames_dir=frames_dir,
-        output=output,
-        variable=spec.input_variable_ids[0],
-        concurrency=JMA_FETCH_CONCURRENCY,
-    )
+    def window() -> dict:
+        return jmacli.fetch_window(
+            start=run.id,
+            hours=hours,
+            zoom=JMA_ZOOM,
+            step=JMA_GRID_STEP,
+            bbox=JMA_BBOX,
+            method=JMA_RESAMPLING,
+            frames_dir=frames_dir,
+            output=output,
+            variable=spec.input_variable_ids[0],
+            concurrency=JMA_FETCH_CONCURRENCY,
+        )
+
+    def delivered(summary: dict) -> datetime | None:
+        stamps = [frame["validtime"] for frame in summary["frames"]]
+        return datetime.strptime(max(stamps), _JMA_TIME_FORMAT).replace(tzinfo=UTC) if stamps else None
+
+    listed = jma_window_slots(spec, run, hours, fetch=fetch)
+    expected = listed[-1] if listed else None
+    summary = window()
+    for attempt in range(JMA_LISTING_RETRIES):
+        newest = delivered(summary)
+        if expected is None or (newest is not None and newest >= expected):
+            break
+        LOG.info(
+            "jma-radar delivered %s while the listing reaches %s; asking again in %.0f s (%d of %d)",
+            newest.strftime("%Y-%m-%dT%H:%M:%SZ") if newest else "nothing",
+            expected.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            JMA_LISTING_RETRY_SECONDS,
+            attempt + 1,
+            JMA_LISTING_RETRIES,
+        )
+        time.sleep(JMA_LISTING_RETRY_SECONDS)
+        summary = window()
+    else:
+        newest = delivered(summary)
+        if expected is not None and (newest is None or newest < expected):
+            LOG.warning(
+                "jma-radar still delivers %s while the listing reaches %s; building what it delivered",
+                newest.strftime("%Y-%m-%dT%H:%M:%SZ") if newest else "nothing",
+                expected.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            )
     frames = summary["frames"]
     if not frames:
         raise DownloadError(f"{spec.manifest_model} lists no analysis for run {run.id} through +{hours} h")
