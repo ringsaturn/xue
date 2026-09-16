@@ -26,11 +26,11 @@ dependencies = [
     # `gdalinfo` on PATH, which the scheduled publish workflows no longer
     # install. The floor tracks the current release because the wheel's
     # source table must match sources.py (a wheel that publishes a different
-    # bundle set refuses to build), and 0.15 is the first wheel that knows
-    # the MRMS radar mosaic: a fetched observation on a 120 s axis, thinned
-    # by block maximum, its regional grid steps snapped, its records matched
-    # under the MRMS-local discipline.
-    "xuepy>=0.15,<0.16",
+    # bundle set refuses to build), and 0.16 is the first wheel that knows
+    # the JMA precipitation nowcast: a fetched observation arriving as one
+    # NetCDF series per window, its five-minute times snapped to a 300 s
+    # axis and the window's first hour taken as the run.
+    "xuepy>=0.16,<0.17",
 ]
 
 [project.scripts]
