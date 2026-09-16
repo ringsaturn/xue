@@ -259,7 +259,9 @@ model starts here; the frontend mirror is `FORECAST_MODELS` in
 - Fetched series-file observation (`jma`): the JMA precipitation nowcast
   over Japan, fetched like MRMS (a rolling window, `latest-jma.json`,
   `publish-jma.yml` looping the same `scripts/window_rounds.sh` with
-  `MODEL=jma HOURS=3`) but arriving as one NetCDF series per window
+  `MODEL=jma HOURS=3 ROUND_MINUTES=2 UNTIL_MINUTE=80`, a scheduled run
+  cancelling the job still running so the hourly hand-off has no gap) but
+  arriving as one NetCDF series per window
   (`SourceSpec.series_file`, also true of `radar`; `convert_bin` and
   `convert.rs` branch on it). The fetch is the `jma-radar` tool
   (`xuebuild/jmacli.py`: `python -m jma_radar window --json`, or

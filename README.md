@@ -413,7 +413,10 @@ An observation feed is never complete, so
 [`publish-jma.yml`](.github/workflows/publish-jma.yml) each run one job an
 hour that loops through [`scripts/window_rounds.sh`](scripts/window_rounds.sh)
 (`MODEL=mrms` or `jma`), a round every five minutes until five to the hour
-(GitHub's cron is too coarse for a five-minute cadence). A round compares the bucket's newest
+(GitHub's cron is too coarse for a five-minute cadence; the JMA job polls every two
+minutes and runs on to twenty past the next hour, since the cron that should relieve
+it fires ten to twenty minutes late, and a scheduled run cancels the job still
+running so the hand-off is wherever the cron lands). A round compares the bucket's newest
 frame with the live round's `window.json` (`make live-window`) and, when
 there is something new, builds the whole window again (`build-bin --run
 latest --hours 4 --round HHMM`; frames already on disk are reused, and the

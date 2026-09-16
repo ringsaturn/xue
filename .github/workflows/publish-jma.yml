@@ -9,9 +9,17 @@ name: publish jma
 # of its run (<model>.<run>/<HHMM>/) and pointed at by latest-jma.json.
 #
 # The same shape as publish-mrms.yml: one job an hour runs the rounds
-# itself (scripts/window_rounds.sh, MODEL=jma), sleeping to each
-# five-minute boundary until five to the hour. Two things differ. The
-# frames are fetched and decoded by the jma-radar tool
+# itself (scripts/window_rounds.sh, MODEL=jma). Three things differ. The
+# rounds come every two minutes rather than five, and a job runs on to
+# twenty past the next hour instead of stopping at five to: GitHub starts
+# an hourly cron ten to twenty minutes late, and a job that stopped at :55
+# left the feed unattended until the next one arrived. A scheduled run
+# cancels the job still running (the concurrency group below), so the
+# hand-off happens whenever the cron actually fires; a round cut off
+# mid-way costs nothing, since the pointer is the last thing a round
+# writes and the previous round stays live. A manual dispatch waits its
+# turn instead of cancelling anything. The frames are fetched and decoded
+# by the jma-radar tool
 # (https://github.com/ringsaturn/jma-radar, installed into the project
 # environment here; xuebuild/jmacli.py drives it), and its decoded-frame
 # cache is mirrored on the bucket (`make pull-r2-frames` / `push-r2-frames`)
@@ -19,8 +27,8 @@ name: publish jma
 # asks it for one new frame. And the window is three hours rather than
 # four, since the listing is three hours deep.
 #
-# Machine time: as publish-mrms.yml, about 660 hours a month, free on a
-# public repository's standard runners.
+# Machine time: a job an hour, each about eighty minutes, so roughly 960
+# hours a month, free on a public repository's standard runners.
 
 on:
   schedule:
@@ -34,7 +42,7 @@ on:
       round_minutes:
         description: "Minutes between rounds"
         type: string
-        default: "5"
+        default: "2"
       hours:
         description: "Window length in hours (the whole hours on screen plus the one in progress; the listing reaches three hours back)"
         type: string
@@ -67,7 +75,9 @@ permissions:
 
 concurrency:
   group: publish-jma
-  cancel-in-progress: false
+  # The hourly cron takes over from the job still running, whenever it
+  # fires; a dispatch queues behind whatever is running.
+  cancel-in-progress: ${{ github.event_name == 'schedule' }}
 
 env:
   # Which encoder the rounds convert through. The other publish-* workflows
@@ -90,14 +100,18 @@ jobs:
     # Scheduled runs on forks would publish into a bucket they cannot reach.
     if: github.event_name != 'schedule' || github.repository == 'ringsaturn/xue'
     runs-on: ubuntu-24.04
-    # The rounds stop at five to the hour on their own; this is the
-    # backstop for a round that hangs.
-    timeout-minutes: 65
+    # The rounds stop at twenty past the next hour on their own (UNTIL_MINUTE
+    # below) and the next cron normally cancels the job before that; this is
+    # the backstop for a round that hangs.
+    timeout-minutes: 90
     env:
       MODEL: jma
       FRAME_CACHE: "true"
       ONCE: ${{ inputs.once || false }}
-      ROUND_MINUTES: ${{ inputs.round_minutes || '5' }}
+      ROUND_MINUTES: ${{ inputs.round_minutes || '2' }}
+      # Past the hour: the next cron's job cancels this one when it starts,
+      # and this deadline only matters when that cron is later than usual.
+      UNTIL_MINUTE: "80"
       HOURS: ${{ inputs.hours || '3' }}
       PROFILE: ${{ inputs.profile || 'balanced' }}
       KEEP: ${{ inputs.keep || '2' }}

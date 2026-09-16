@@ -32,7 +32,9 @@
 # step's seconds.
 #
 # Environment: MODEL (mrms), ROUND_MINUTES (5), UNTIL_MINUTE (55: the last
-# round of the hour starts no later than this minute), HOURS (4: the
+# round of the hour starts no later than this minute past the hour the job
+# started in; past 60 it runs into the next hour, for a workflow whose next
+# job cancels this one when it starts), HOURS (4: the
 # three-hour window plus the hour in progress; 3 for JMA, whose listing is
 # three hours deep), PROFILE (balanced), KEEP (2), FORCE (true builds a
 # round even when the live one is current), DRY_RUN (--dryrun previews the
