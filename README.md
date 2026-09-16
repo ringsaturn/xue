@@ -296,7 +296,12 @@ capsule: the field on screen at the playhead, and under it a meteogram
 cloud layers, sea level pressure) read from the same run at that grid cell,
 each row present when the run publishes its bundle. On a tiled bundle a
 whole series costs one range request per temporal group. A press on the
-chart scrubs the timeline.
+chart scrubs the timeline. The pin reads the two station products as well,
+whether or not their marks are switched on: a radiosonde ascent within
+150 km is drawn under the rows as a skew-T with the run's own isobaric
+levels dotted over it (and a full-height chart a button away), and an
+airport within 40 km lays its last day of METARs over the rows themselves,
+its TAF along the bottom as a row of forecast periods.
 
 The two station products are marks over whatever layer is on screen, each
 behind its own rail tile and off until pressed: `?stations=snd` draws the

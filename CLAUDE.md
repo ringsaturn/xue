@@ -746,6 +746,28 @@ column. The panel and the capsule share two columns (`--probe-column` for
 the labels, the rest for the axis), so the sparkline, the traces and the
 track run on one line and their playheads coincide.
 
+A pin also reads the two point products, whether or not their rail tiles are
+pressed: `stations/nearest.ts` resolves the nearest ascent (150 km) and the
+nearest airport (40 km) out of the loaded indexes. The ascent becomes a
+skew-T under the rows (`sounding/section.ts` over `sounding/skewt.ts`, its
+`SkewTInk` read from the panel's `--skewt-*` custom properties at every
+draw, so a theme switch repaints in place), behind a disclosure that is open
+above phone width and closed below it; opening it is what fetches the
+station's line (one range request) and opens a probe session per isobaric
+`tmp`/`rh`/`wind` bundle the run publishes (`sounding/model.ts`, joined to
+the rows in `probeBundleIds`). The model column is read at the frame nearest
+the *ascent's* nominal time, within three hours, and is `profileFromModel`
+of whatever levels answered; further than that the legend says there is
+none. A time button per nominal time swaps the ascent, and `#skewt-sheet`
+(`sheet.ts`) is the same chart at full height. The airport's day of reports
+is laid over the rows themselves: `stations/observations.ts` turns each
+METAR into marks at its own lead seconds (`axisPosition` places them between
+frames; anything outside the run is dropped), the sky's codes into oktas,
+and the TAF into a `taf` row of bands — hatched for `TEMPO`/`PROB` — while
+the headline gains the ICAO and its category chip and each row's readout
+gains the nearest report within ninety minutes. None of it moves the
+playhead; the playhead only decides which readouts are shown.
+
 Shell layout: a display-serif title top-left names the layer and opens the
 run picker (`#model-sheet`); three round buttons top-right (language, cases,
 appearance) share `web/src/sheet.ts` with the model and sources sheets; the
