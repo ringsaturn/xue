@@ -147,15 +147,14 @@ radar mosaic (09:00, 09:06 and 09:18 UTC on 2026-09-16; 09:12 left out so
 the axis lists its offsets) cropped to 128 by 128 cells of the zoom-5 tile
 grid over Hubei and Hunan (112.5E to 118.1E, 33.75N to 28.1N), a
 convective afternoon with returns to 62.5 dBZ and no cell outside radar
-coverage. The shape is exactly what `cma-radar window --out` writes —
+coverage. The shape is exactly what `xuebuild.cmaarchive.write_series` writes —
 `cref(time, lat, lon)` as int16 with `scale_factor` 0.1 and `_FillValue`
 32767, `time` in seconds since the epoch — so the six-minute cadence
 snapping, the run-hour rule and the byte-identity parity test all run
 against real frames. Cut from a copy of the archive's 2026-09-16 store:
-`cma-radar window --source <archive> --start 2026091609 --hours 3
---out window.nc`, then `xarray.open_dataset("window.nc").isel(time=[0, 1,
-3], lat=slice(512, 640), lon=slice(1024, 1152))` written with
-the tool's `save_netcdf`.
+the 09Z window read with `cmaarchive.read_window` and written with
+`write_series`, then `xarray.open_dataset("window.nc").isel(time=[0, 1,
+3], lat=slice(512, 640), lon=slice(1024, 1152))` written back the same way.
 
 # Xue fixtures
 

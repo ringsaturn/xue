@@ -100,20 +100,19 @@ Bundle sets:
   reflectivity mosaic (RADAR_L3_MST_CREF, 雷达组合反射率拼图), a national
   composite every six minutes published on the agency's data portal as BIN
   tiles on a plate carrée tile grid, shipped under `cref`. A private
-  sibling tool, invoked as `cma-radar`, decodes the zoom-5 tiles (0.0439°,
-  1792 × 1024 cells over 67.5–146.25°E and 11.25–56.25°N) and keeps them as
-  one Zarr v3 store per UTC day in an archive of its own, synced every
-  twenty minutes; a run here is a window read back out of those stores
-  (`cma-radar window`, driven by `xuebuild/cmacli.py`; the tool is
-  installed into the project environment, and `XUE_CMA_RADAR` names its
-  command when it is elsewhere) as one NetCDF series, the shape the tool's
-  own `fetch` writes and the cases before the archive were built from.
-  `XUE_CMA_ARCHIVE` names the archive (an `s3://` base read with the tool's
-  `R2_*` credentials, or a local directory the stores were copied to) and
-  has no default; the portal publishes each mosaic twenty to thirty
-  minutes late and the archive syncs every twenty minutes, so the live
-  window ends some forty minutes behind real time. A three-hour window is
-  about thirty frames and one to two megabytes of reflectivity.
+  sync job decodes the zoom-5 tiles (0.0439°, 1792 × 1024 cells over
+  67.5–146.25°E and 11.25–56.25°N) and keeps them as one plain Zarr v3
+  store per UTC day in an archive of its own, every twenty minutes; a run
+  here is a window read back out of those stores by `xuebuild/cmaarchive.py`
+  (zarr-python over s3fs, the `cma` dependency group: `uv sync --group
+  cma`) and handed to the converter as one NetCDF series, the shape the
+  cases before the archive were built from. `XUE_CMA_ARCHIVE` names the
+  archive (an `s3://` base read with the `R2_*` credentials, or a local
+  directory the stores were copied to) and has no default; the portal
+  publishes each mosaic twenty to thirty minutes late and the archive
+  syncs every twenty minutes, so the live window ends some forty minutes
+  behind real time. A three-hour window is about thirty frames and one to
+  two megabytes of reflectivity.
 
 Every level of the isobaric families is registered; turning one on is a line
 in `xuebuild/sources.py` and its mirror in the native encoder, not a format
@@ -240,7 +239,7 @@ python -m xuebuild build-bin --model hrrr --run latest
 python -m xuebuild build-bin --model mrms --run 2026091300 --hours 3   # a past window
 python -m xuebuild build-bin --model mrms --run latest --hours 4 --round now   # one round of the live window
 python -m xuebuild build-bin --model jma --run latest --hours 3 --round now    # the JMA nowcast, through jma-radar
-python -m xuebuild build-bin --model cma --run latest --hours 3 --round now    # the CMA mosaic, out of its archive through cma-radar
+python -m xuebuild build-bin --model cma --run latest --hours 3 --round now    # the CMA mosaic, out of its archive
 ```
 
 `XUE_ENCODER` picks which encoder converts: `auto` (the default: the `xuepy`
@@ -463,16 +462,16 @@ workflows: a `xuepy` wheel that predates the source (the wheels ship on the
 crate's tags) sends the rounds through the reference pipeline with GDAL and
 a warning on the run, and a wheel that knows it takes the native path
 again with no change to the workflow. The CMA radar job is the same shape
-without the frame cache: the tool is installed from the `CMA_RADAR_INSTALL`
-secret (a pip requirement), the archive is named by the `XUE_CMA_ARCHIVE`
-secret and read with the `R2_*` credentials the tool takes
+without the frame cache: the archive is named by the `XUE_CMA_ARCHIVE`
+secret and read in process with the `R2_*` credentials
 (`CMA_ARCHIVE_ACCESS_KEY_ID` / `CMA_ARCHIVE_SECRET_ACCESS_KEY` when the
-dataset bucket's token cannot read it, else that token). By hand:
+dataset bucket's token cannot read it, else that token), with the `cma`
+dependency group synced. By hand:
 
 ```sh
 ONCE=true scripts/window_rounds.sh                     # one round, as the job would run it
 MODEL=jma HOURS=3 FRAME_CACHE=true ONCE=true scripts/window_rounds.sh
-MODEL=cma HOURS=3 ONCE=true scripts/window_rounds.sh   # needs XUE_CMA_ARCHIVE and the tool's R2_* credentials
+MODEL=cma HOURS=3 ONCE=true scripts/window_rounds.sh   # needs XUE_CMA_ARCHIVE and the R2_* credentials
 .venv/bin/python -m xuebuild build-bin --model mrms --run latest --hours 4 --round now
 make upload-r2 MODEL=mrms RUN=2026091321 ROUND=1405  # the round the build named
 make prune-r2-rounds MODEL=mrms && make prune-r2 MODEL=mrms KEEP=2

@@ -1,19 +1,22 @@
 """The CMA source (``cma``, the source once called ``radar``): the
 agency's level-3 composite reflectivity mosaic over China, an observation
-that is fetched — through the cma-radar tool — out of the tool's own
-archive, one Zarr store per UTC day, as one NetCDF series per window.
+that is fetched out of a private archive — one plain Zarr v3 store per UTC
+day, read with zarr-python (``xuebuild/cmaarchive.py``) — as one NetCDF
+series per window.
 
 What is new with it against the JMA source it is shaped like: the fetch is
-a read of an archive rather than a decode of tiles (``cma-radar
-window``, ``xuebuild/cmacli.py``), so nothing is cached between rounds
-and the newest frame is whatever the archive has written; a named window
-is complete when the archive has moved past its end; the six-minute
-cadence (``cadence_seconds`` 360, ``unitSeconds`` 360) on a source that
-was, before the archive, a local file whose first frame was the run — a
-new id for the new shape, so a wheel that knows ``radar`` is never taken
-for one that knows ``cma``; and a showcase case that takes either a
-window of the archive or a local file.
+a read of an archive rather than a decode of tiles, so nothing is cached
+between rounds and the newest frame is whatever the archive has written; a
+named window is complete when the archive has moved past its end; the
+six-minute cadence (``cadence_seconds`` 360, ``unitSeconds`` 360) on a
+source that was, before the archive, a local file whose first frame was
+the run — a new id for the new shape, so a wheel that knows ``radar`` is
+never taken for one that knows ``cma``; and a showcase case that takes
+either a window of the archive or a local file.
 
+The archive tests build two small day stores in a temporary directory in
+the archive's own layout (a complete 240-slot time axis, a slot_status,
+the pixel-centre coordinates, one int16 cref array) and read them back.
 ``tests/fixtures/cma.2026091609.crop.nc`` is three frames of the
 2026-09-16 09Z hour (09:00, 09:06 and 09:18; 09:12 left out, so the axis
 lists its offsets) cropped to 128 x 128 cells over Hubei and Hunan (112.5E
@@ -24,6 +27,7 @@ from __future__ import annotations
 
 import dataclasses
 import filecmp
+import importlib.util
 import json
 import os
 import shutil
@@ -34,7 +38,9 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest import mock
 
-from xuebuild import binconvert, fetch, native, observation, cmacli, zstdcli
+import numpy as np
+
+from xuebuild import binconvert, cmaarchive, fetch, native, observation, zstdcli
 from xuebuild.binformat import read_bundle
 from xuebuild.errors import ConversionError, DownloadError
 from xuebuild.fetch import (
@@ -84,22 +90,15 @@ def slots(start: datetime, end: datetime, *, missing: tuple[datetime, ...] = ())
 
 
 def archive(*written: str) -> mock.Mock:
-    """A stand-in for ``cmacli.window``: an archive holding ``written``,
-    answering the slots inside whatever window it is asked for."""
+    """A stand-in for ``cmaarchive.written_slots``: an archive holding
+    ``written``, answering the slots inside whatever window it is asked
+    for."""
     held = sorted(stamp(text) for text in written)
 
-    def window(*, source: str, start: str, hours: int, zoom: int, product: str, output: Path | None) -> dict:
-        first = datetime.strptime(start, "%Y%m%d%H").replace(tzinfo=UTC)
-        last = first + timedelta(hours=hours)
-        inside = [slot for slot in held if first <= slot <= last]
-        return {
-            "frames": [slot.strftime("%Y-%m-%dT%H:%M:%SZ") for slot in inside],
-            "slots": [{"time": slot.strftime("%Y-%m-%dT%H:%M:%SZ"), "status": 1, "index": 0} for slot in inside],
-            "grid": None,
-            "output": None if output is None else str(output),
-        }
+    def lookup(base: str, start: datetime, end: datetime) -> list[datetime]:
+        return [slot for slot in held if start <= slot <= end]
 
-    return mock.Mock(side_effect=window)
+    return mock.Mock(side_effect=lookup)
 
 
 ARCHIVE = "s3://a-bucket/an-archive"
@@ -124,17 +123,6 @@ class SourceRegistryTests(unittest.TestCase):
         self.assertEqual(CMA.production_grid, (7 * 256, 4 * 256))
         self.assertEqual(CMA_PRODUCT, "RADAR_L3_MST_CREF_GISJPG_Tiles_CR")
 
-    def test_the_archive_is_named_by_the_environment_alone(self) -> None:
-        """The location is private: no default, and an unset variable is
-        the operator's error before the tool is asked anything."""
-        with mock.patch.dict(os.environ, {CMA_ARCHIVE_VARIABLE: ""}):
-            with self.assertRaisesRegex(DownloadError, CMA_ARCHIVE_VARIABLE):
-                cma_archive()
-            with self.assertRaisesRegex(DownloadError, CMA_ARCHIVE_VARIABLE):
-                cma_archive_slots(stamp("2026-09-16T09:00:00Z"), 1, window=mock.Mock())
-        with mock.patch.dict(os.environ, {CMA_ARCHIVE_VARIABLE: "s3://bucket/prefix/"}):
-            self.assertEqual(cma_archive(), "s3://bucket/prefix")
-
     def test_the_series_file_sources_are_both_fetched_now(self) -> None:
         self.assertEqual([spec.id for spec in SOURCES.values() if spec.series_file], ["cma", "jma"])
         self.assertEqual([spec.id for spec in SOURCES.values() if spec.observation], ["cma", "mrms", "jma"])
@@ -143,10 +131,10 @@ class SourceRegistryTests(unittest.TestCase):
     def test_the_catalog_prose_names_the_agency_and_the_archive(self) -> None:
         prose = _source_prose(CMA)
         self.assertEqual(prose["providers"][0]["name"], "China Meteorological Administration")
-        # Public prose names the data and the agency, never the tooling
-        # or the archive behind it.
+        # Public prose names the data and the agency, never the archive
+        # behind it.
         self.assertNotIn("cases only", prose["description"])
-        for private in ("archive", "bucket", "cma-radar"):
+        for private in ("archive", "bucket"):
             self.assertNotIn(private, prose["description"], private)
 
 
@@ -160,45 +148,38 @@ class ArchiveTests(unittest.TestCase):
 
     def test_the_slots_of_a_window_are_what_the_archive_wrote_in_it(self) -> None:
         window = archive(*THREE_HOURS)
-        held = cma_archive_slots(stamp("2026-09-15T23:00:00Z"), 2, window=window)
+        held = cma_archive_slots(stamp("2026-09-15T23:00:00Z"), 2, written=window)
         self.assertEqual((held[0], held[-1], len(held)), (stamp("2026-09-15T23:00:00Z"), stamp("2026-09-16T01:00:00Z"), 20))
         self.assertNotIn(stamp("2026-09-16T00:30:00Z"), held)
-        self.assertEqual(
-            window.call_args.kwargs,
-            dict(source=ARCHIVE, start="2026091523", hours=2, zoom=CMA_ZOOM, product=CMA_PRODUCT, output=None),
-        )
+        self.assertEqual(window.call_args.args, (ARCHIVE, stamp("2026-09-15T23:00:00Z"), stamp("2026-09-16T01:00:00Z")))
         # The same, keyed by a run.
-        self.assertEqual(cma_window_slots(CMA, GfsRun(stamp("2026-09-15T23:00:00Z")), 2, window=window), held)
-        # A slot the tool spells otherwise is an error, not a guess.
-        bad = mock.Mock(return_value={"frames": ["20260916010000"], "slots": []})
-        with self.assertRaisesRegex(DownloadError, "not YYYY-MM-DDTHH:MM:SSZ"):
-            cma_archive_slots(stamp("2026-09-16T01:00:00Z"), 1, window=bad)
+        self.assertEqual(cma_window_slots(CMA, GfsRun(stamp("2026-09-15T23:00:00Z")), 2, written=window), held)
 
     def test_the_newest_written_slot_ends_the_live_window(self) -> None:
         window = archive(*THREE_HOURS)
         now = stamp("2026-09-16T01:40:00Z")
-        self.assertEqual(latest_cma_slot(CMA, now=now, window=window), stamp("2026-09-16T01:06:00Z"))
+        self.assertEqual(latest_cma_slot(CMA, now=now, written=window), stamp("2026-09-16T01:06:00Z"))
         # The stores of the last day are asked: from 25 hours before this
         # hour, through the hour after it.
-        self.assertEqual((window.call_args.kwargs["start"], window.call_args.kwargs["hours"]), ("2026091500", 26))
+        self.assertEqual(window.call_args.args[1:], (stamp("2026-09-15T00:00:00Z"), stamp("2026-09-16T02:00:00Z")))
         with self.assertRaisesRegex(DownloadError, "no written slot"):
-            latest_cma_slot(CMA, now=now, window=archive())
+            latest_cma_slot(CMA, now=now, written=archive())
 
     def test_a_named_window_is_complete_when_the_archive_has_passed_its_end(self) -> None:
         window = archive(*THREE_HOURS)
         run = GfsRun(stamp("2026-09-15T23:00:00Z"))
-        self.assertTrue(_cma_run_is_complete(CMA, run, 2, window=window))
+        self.assertTrue(_cma_run_is_complete(CMA, run, 2, written=window))
         # The live window's end (02:00) is ahead of the newest slot (01:06).
-        self.assertFalse(_cma_run_is_complete(CMA, run, 3, window=window))
+        self.assertFalse(_cma_run_is_complete(CMA, run, 3, written=window))
         # A window whose end slot was never published still completes once
         # the archive has moved past it: the hour after the end is asked.
         gap = archive(*slots(stamp("2026-09-15T23:00:00Z"), stamp("2026-09-16T00:30:00Z"), missing=(stamp("2026-09-16T00:00:00Z"),)))
-        self.assertTrue(_cma_run_is_complete(CMA, run, 1, window=gap))
-        self.assertEqual(gap.call_args.kwargs["hours"], 2)
-        self.assertFalse(_cma_run_is_complete(CMA, run, 1, window=archive()))
+        self.assertTrue(_cma_run_is_complete(CMA, run, 1, written=gap))
+        self.assertEqual(gap.call_args.args[2], stamp("2026-09-16T01:00:00Z"))
+        self.assertFalse(_cma_run_is_complete(CMA, run, 1, written=archive()))
 
     def test_resolve_run_latest_starts_two_hours_before_the_newest_slot(self) -> None:
-        with mock.patch.object(cmacli, "window", archive(*THREE_HOURS)):
+        with mock.patch.object(cmaarchive, "written_slots", archive(*THREE_HOURS)):
             with mock.patch.object(fetch, "datetime", wraps=datetime) as clock:
                 clock.now.return_value = stamp("2026-09-16T01:40:00Z")
                 self.assertEqual(resolve_run("latest", hours=3, model="cma").id, "2026091523")
@@ -252,130 +233,164 @@ class ObservationCadenceTests(unittest.TestCase):
         self.assertEqual(series.lead_seconds, [3240, 3600, 3960])
 
 
-class ToolTests(unittest.TestCase):
-    def test_the_command_defaults_to_this_interpreter_and_takes_an_override(self) -> None:
-        with mock.patch.dict(os.environ, {cmacli.COMMAND_VARIABLE: ""}):
-            # The script beside this interpreter when it is installed, else the bare name.
-            command = cmacli.command()
-            self.assertEqual(len(command), 1)
-            self.assertTrue(command[0] == "cma-radar" or command[0].endswith("/cma-radar"))
-        with mock.patch.dict(os.environ, {cmacli.COMMAND_VARIABLE: "uv run --quiet cma-radar"}):
-            self.assertEqual(cmacli.command(), ["uv", "run", "--quiet", "cma-radar"])
-
-    def test_a_missing_tool_says_how_to_install_it(self) -> None:
-        with mock.patch.dict(os.environ, {cmacli.COMMAND_VARIABLE: "/nonexistent/cma-radar"}):
-            with self.assertRaisesRegex(DownloadError, "XUE_CMA_RADAR"):
-                cmacli.version()
-        failed = subprocess.CompletedProcess([], 1, stdout="", stderr="No module named cma_radar\n")
-        with mock.patch.object(subprocess, "run", return_value=failed):
-            with self.assertRaisesRegex(DownloadError, "No module named cma_radar"):
-                cmacli.version()
-
-    def test_the_window_command_is_built_from_the_source_parameters(self) -> None:
-        summary = {"frames": ["2026-09-16T09:00:00Z"], "slots": [{"time": "2026-09-16T09:00:00Z", "status": 1, "index": 90}], "grid": {}, "output": "x"}
-        completed = subprocess.CompletedProcess([], 0, stdout=json.dumps(summary), stderr="")
-        with tempfile.TemporaryDirectory() as root:
-            output = Path(root) / "cma.2026091609" / "cma.2026091609.nc"
-            with mock.patch.object(subprocess, "run", return_value=completed) as run, mock.patch.dict(
-                os.environ, {cmacli.COMMAND_VARIABLE: "cma-radar"}
-            ):
-                result = cmacli.window(source="s3://archive/radar", start="2026091609", hours=3, zoom=5, product="P", output=output)
-                listed = cmacli.window(source="s3://archive/radar", start="2026091609", hours=3, zoom=5, product="P", output=None)
-            self.assertEqual(result, summary)
-            self.assertEqual(listed, summary)
-            arguments = run.call_args_list[0].args[0]
-            self.assertEqual(arguments[:2], ["cma-radar", "window"])
-            for flag, value in (
-                ("--source", "s3://archive/radar"),
-                ("--start", "2026091609"),
-                ("--hours", "3"),
-                ("--zoom", "5"),
-                ("--product", "P"),
-                ("--out", str(output)),
-            ):
-                self.assertEqual(arguments[arguments.index(flag) + 1], value, flag)
-            self.assertIn("--json", arguments)
-            # A listing asks for no series and reads nothing but the index.
-            self.assertNotIn("--out", run.call_args_list[1].args[0])
-            # The directory the tool writes into exists before it runs.
-            self.assertTrue(output.parent.is_dir())
-
-    def test_a_failed_or_silent_tool_is_a_download_error(self) -> None:
-        arguments = dict(source="s3://archive/radar", start="2026091609", hours=3, zoom=5, product="P", output=None)
-        for completed, reason in (
-            (subprocess.CompletedProcess([], 1, stdout="", stderr="no written slot between ...\n"), "no written slot"),
-            (subprocess.CompletedProcess([], 0, stdout="not json", stderr=""), "no JSON summary"),
-            (subprocess.CompletedProcess([], 0, stdout="[]", stderr=""), "unexpected summary"),
-            (subprocess.CompletedProcess([], 0, stdout='{"frames": []}', stderr=""), "unexpected summary"),
-        ):
-            with mock.patch.object(subprocess, "run", return_value=completed):
-                with self.assertRaisesRegex(DownloadError, reason):
-                    cmacli.window(**arguments)
+requires_zarr = unittest.skipUnless(
+    all(importlib.util.find_spec(name) for name in ("zarr", "xarray", "netCDF4")),
+    "the cma dependency group is not installed",
+)
 
 
+def make_day_store(base: Path, day: datetime, *, written: dict[int, float], unpublished: tuple[int, ...] = (), size: int = 16) -> str:
+    """One day of the archive in its own layout, on a ``size`` x ``size``
+    corner of the zoom-5 grid: ``written`` maps a slot index to the dBZ
+    value its frame carries in its top-left cell (missing elsewhere)."""
+    import zarr
+
+    url = cmaarchive.store_url(str(base), day.date())
+    root = zarr.create_group(store=zarr.storage.LocalStore(url), overwrite=True)
+    times = np.array([int(day.timestamp()) + index * cmaarchive.SLOT_SECONDS for index in range(240)], dtype=np.int64)
+    root.create_array("time", shape=(240,), chunks=(240,), dtype="int64", dimension_names=("time",))[:] = times
+    latitudes = 56.25 - (np.arange(size) + 0.5) * cmaarchive.GRID_STEP
+    longitudes = 67.5 + (np.arange(size) + 0.5) * cmaarchive.GRID_STEP
+    root.create_array("lat", shape=(size,), chunks=(size,), dtype="float64", dimension_names=("lat",))[:] = latitudes
+    root.create_array("lon", shape=(size,), chunks=(size,), dtype="float64", dimension_names=("lon",))[:] = longitudes
+    cref = root.create_array(
+        "cref", shape=(240, size, size), chunks=(1, size, size), dtype="int16", fill_value=np.int16(32767), dimension_names=("time", "lat", "lon")
+    )
+    status = np.zeros(240, dtype=np.int8)
+    for index, value in written.items():
+        frame = np.full((size, size), 32767, dtype=np.int16)
+        frame[0, 0] = np.int16(round(value / cmaarchive.SCALE))
+        cref[index] = frame
+        status[index] = cmaarchive.STATUS_WRITTEN
+    for index in unpublished:
+        status[index] = cmaarchive.STATUS_UNPUBLISHED
+    root.create_array("slot_status", shape=(240,), chunks=(240,), dtype="int8", dimension_names=("time",))[:] = status
+    return url
+
+
+@requires_zarr
+class StoreTests(unittest.TestCase):
+    """The archive reader against two day stores in a directory."""
+
+    def setUp(self) -> None:
+        self.base = Path(tempfile.mkdtemp(prefix="xue-cma-archive-"))
+        self.addCleanup(shutil.rmtree, self.base, ignore_errors=True)
+        # 23:48 and 23:54 of the 15th; 00:00 and 00:12 of the 16th, 00:06 unpublished.
+        self.first = make_day_store(self.base, stamp("2026-09-15T00:00:00Z"), written={238: 24.8, 239: 25.4})
+        self.second = make_day_store(self.base, stamp("2026-09-16T00:00:00Z"), written={0: 30.0, 2: 31.2}, unpublished=(1,))
+
+    def test_the_archive_is_named_by_the_environment_alone(self) -> None:
+        """The location is private: no default, and an unset variable is
+        the operator's error before the archive is asked anything."""
+        with mock.patch.dict(os.environ, {CMA_ARCHIVE_VARIABLE: ""}):
+            with self.assertRaisesRegex(DownloadError, CMA_ARCHIVE_VARIABLE):
+                cma_archive()
+            with self.assertRaisesRegex(DownloadError, CMA_ARCHIVE_VARIABLE):
+                cma_archive_slots(stamp("2026-09-16T09:00:00Z"), 1, written=mock.Mock())
+        with mock.patch.dict(os.environ, {CMA_ARCHIVE_VARIABLE: "s3://bucket/prefix/"}):
+            self.assertEqual(cma_archive(), "s3://bucket/prefix")
+        self.assertEqual(
+            cmaarchive.store_url("s3://bucket/prefix", stamp("2026-09-05T00:00:00Z").date()),
+            f"s3://bucket/prefix/{CMA_PRODUCT}/z5/2026/2026-09-05.zarr",
+        )
+
+    def test_the_stores_are_listed_across_midnight(self) -> None:
+        start, end = stamp("2026-09-15T23:48:00Z"), stamp("2026-09-16T00:12:00Z")
+        listed = cmaarchive.stored_slots(str(self.base), start, end)
+        self.assertEqual([slot.time.strftime("%H:%M") for slot in listed], ["23:48", "23:54", "00:00", "00:06", "00:12"])
+        self.assertEqual([slot.status for slot in listed], [1, 1, 1, 2, 1])
+        self.assertEqual([slot.store for slot in listed], [self.first, self.first, self.second, self.second, self.second])
+        self.assertEqual([slot.index for slot in listed], [238, 239, 0, 1, 2])
+        self.assertEqual(
+            cmaarchive.written_slots(str(self.base), start, end),
+            [stamp("2026-09-15T23:48:00Z"), stamp("2026-09-15T23:54:00Z"), stamp("2026-09-16T00:00:00Z"), stamp("2026-09-16T00:12:00Z")],
+        )
+        # A day without a store contributes nothing.
+        self.assertEqual(cmaarchive.stored_slots(str(self.base), stamp("2026-09-17T00:00:00Z"), stamp("2026-09-17T03:00:00Z")), [])
+        with mock.patch.dict(os.environ, {CMA_ARCHIVE_VARIABLE: str(self.base)}):
+            self.assertEqual(latest_cma_slot(CMA, now=stamp("2026-09-16T01:40:00Z")), stamp("2026-09-16T00:12:00Z"))
+            self.assertTrue(_cma_run_is_complete(CMA, GfsRun(stamp("2026-09-15T23:00:00Z")), 1))
+            self.assertFalse(_cma_run_is_complete(CMA, GfsRun(stamp("2026-09-16T00:00:00Z")), 3))
+
+    def test_a_window_is_the_written_frames_in_dbz(self) -> None:
+        window = cmaarchive.read_window(str(self.base), stamp("2026-09-15T23:48:00Z"), stamp("2026-09-16T00:48:00Z"))
+        assert window is not None
+        self.assertEqual(window.frames.shape, (4, 16, 16))
+        self.assertEqual(window.frames.dtype, np.float32)
+        self.assertEqual([time.strftime("%H:%M") for time in window.times], ["23:48", "23:54", "00:00", "00:12"])
+        self.assertEqual([round(float(frame[0, 0]), 4) for frame in window.frames], [24.8, 25.4, 30.0, 31.2])
+        self.assertTrue(np.isnan(window.frames[:, 1:, :]).all())
+        self.assertEqual((window.grid["nlat"], window.grid["nlon"], window.grid["step"]), (16, 16, CMA_GRID_STEP))
+        self.assertAlmostEqual(window.grid["north"], 56.25 - CMA_GRID_STEP / 2)
+        self.assertIsNone(cmaarchive.read_window(str(self.base), stamp("2026-09-16T01:00:00Z"), stamp("2026-09-16T02:00:00Z")))
+
+    def test_the_series_is_what_the_ingest_reads(self) -> None:
+        window = cmaarchive.read_window(str(self.base), stamp("2026-09-15T23:48:00Z"), stamp("2026-09-16T00:48:00Z"))
+        assert window is not None
+        series = self.base / "window.nc"
+        cmaarchive.write_series(window, series)
+        import xarray as xr
+
+        with xr.open_dataset(series) as dataset:
+            self.assertEqual(dataset.cref.encoding["dtype"], np.dtype("int16"))
+            self.assertEqual((dataset.cref.encoding["scale_factor"], dataset.cref.encoding["_FillValue"]), (0.1, 32767))
+            self.assertEqual(dataset.cref.attrs["units"], "dBZ")
+            self.assertEqual(
+                list(dataset.time.values.astype("datetime64[m]").astype(str)),
+                ["2026-09-15T23:48", "2026-09-15T23:54", "2026-09-16T00:00", "2026-09-16T00:12"],
+            )
+            self.assertAlmostEqual(float(dataset.cref[3, 0, 0]), 31.2, places=5)
+            self.assertTrue(bool(np.isnan(dataset.cref[3, 1, 1])))
+            self.assertTrue(np.all(np.diff(dataset.lat.values) < 0))
+        if shutil.which("gdalinfo"):
+            with mock.patch.dict(os.environ, {"XUE_ENCODER": "python"}):
+                inspected = observation.inspect_observation(series, CMA)
+            self.assertEqual(inspected.frames[0]["cref"].run_time, stamp("2026-09-15T23:00:00Z"))
+            self.assertEqual(inspected.lead_seconds, [2880, 3240, 3600, 4320])
+            self.assertEqual(inspected.plane_source.fill_values, (32767.0, 32767.0 * 0.1))
+
+
+@requires_zarr
 class FetchTests(unittest.TestCase):
     def setUp(self) -> None:
         self.root = Path(tempfile.mkdtemp(prefix="xue-cma-"))
         self.addCleanup(shutil.rmtree, self.root, ignore_errors=True)
+        self.base = self.root / "archive"
+        make_day_store(self.base, stamp("2026-09-16T00:00:00Z"), written={90: 10.0, 91: 11.0, 93: 13.0})
         self.run = GfsRun(stamp("2026-09-16T09:00:00Z"))
-        patcher = mock.patch.dict(os.environ, {CMA_ARCHIVE_VARIABLE: ARCHIVE})
+        patcher = mock.patch.dict(os.environ, {CMA_ARCHIVE_VARIABLE: str(self.base)})
         patcher.start()
         self.addCleanup(patcher.stop)
 
-    def _window(self, *times: str, write: bool = True) -> mock.Mock:
-        def window(*, source: str, start: str, hours: int, zoom: int, product: str, output: Path | None) -> dict:
-            if output is not None and write and times:
-                output.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy(SERIES, output)
-            return {
-                "frames": list(times),
-                "slots": [{"time": text, "status": 1, "index": index} for index, text in enumerate(times)],
-                "grid": {"nlat": 1024, "nlon": 1792, "step": CMA_GRID_STEP},
-                "output": None if output is None else str(output),
-            }
-
-        return mock.Mock(side_effect=window)
-
     def test_the_fetch_writes_the_series_and_a_fetch_record(self) -> None:
         output = self.root / "cma.2026091609" / cma_frame_name(CMA, self.run)
-        window = self._window("2026-09-16T09:06:00Z", "2026-09-16T09:00:00Z", "2026-09-16T09:18:00Z")
-        with mock.patch.object(cmacli, "version", return_value="0.2.0"), mock.patch.object(cmacli, "window", window):
-            paths = fetch.fetch_run(self.run, 3, self.root, model="cma")
+        paths = fetch.fetch_run(self.run, 3, self.root, model="cma")
         self.assertEqual(paths, [output])
-        self.assertEqual(window.call_args.kwargs, dict(source=ARCHIVE, start="2026091609", hours=3, zoom=CMA_ZOOM, product=CMA_PRODUCT, output=output))
         record = json.loads((output.parent / "fetch.json").read_text())
         self.assertEqual((record["model"], record["run"], record["cadenceSeconds"]), ("cma", "2026091609", 360))
         self.assertNotIn("archive", record)
-        # In time order whatever the tool's order, each frame naming the series.
         self.assertEqual([frame["slot"] for frame in record["frames"]], ["2026-09-16T09:00:00Z", "2026-09-16T09:06:00Z", "2026-09-16T09:18:00Z"])
         self.assertEqual({frame["path"] for frame in record["frames"]}, {output.name})
-        self.assertEqual(record["grid"]["nlon"], 1792)
+        self.assertEqual(record["grid"]["nlon"], 16)
         # What the rolling publish reads, the same shape as an MRMS window's.
         window_record = window_summary(output.parent)
         self.assertEqual((window_record["frameCount"], window_record["firstSlot"], window_record["latestSlot"]), (3, "2026-09-16T09:00:00Z", "2026-09-16T09:18:00Z"))
 
-    def test_a_stale_series_is_replaced_and_every_round_reads_afresh(self) -> None:
+    def test_every_round_reads_afresh(self) -> None:
         output = self.root / "cma.2026091609" / cma_frame_name(CMA, self.run)
         output.parent.mkdir(parents=True)
         output.write_bytes(b"the previous round's window")
-        with mock.patch.object(cmacli, "version", return_value="0.2.0"):
-            with mock.patch.object(cmacli, "window", self._window("2026-09-16T09:00:00Z")) as window:
-                _fetch_cma_run(CMA, self.run, 3, self.root, force=False, input_ids=None)
-                _fetch_cma_run(CMA, self.run, 3, self.root, force=True, input_ids=None)
-        self.assertEqual(window.call_count, 2)
-        self.assertTrue(filecmp.cmp(SERIES, output, shallow=False))
+        _fetch_cma_run(CMA, self.run, 3, self.root, force=False, input_ids=None)
+        first = output.read_bytes()
+        self.assertNotEqual(first, b"the previous round's window")
+        _fetch_cma_run(CMA, self.run, 3, self.root, force=True, input_ids=None)
+        self.assertEqual(output.stat().st_size, len(first))
 
-    def test_an_empty_window_and_a_missing_series_are_errors(self) -> None:
-        with mock.patch.object(cmacli, "version", return_value="0.2.0"):
-            with mock.patch.object(cmacli, "window", self._window()):
-                with self.assertRaisesRegex(DownloadError, "no written slot"):
-                    _fetch_cma_run(CMA, self.run, 3, self.root, force=False, input_ids=None)
-            with mock.patch.object(cmacli, "window", self._window("2026-09-16T09:00:00Z", write=False)):
-                with self.assertRaisesRegex(DownloadError, "wrote no series"):
-                    _fetch_cma_run(CMA, self.run, 3, self.root, force=False, input_ids=None)
+    def test_an_empty_window_and_a_wrong_input_are_errors(self) -> None:
+        with self.assertRaisesRegex(DownloadError, "no written slot"):
+            _fetch_cma_run(CMA, GfsRun(stamp("2026-09-16T12:00:00Z")), 3, self.root, force=False, input_ids=None)
         with self.assertRaisesRegex(DownloadError, "publishes"):
             _fetch_cma_run(CMA, self.run, 3, self.root, force=False, input_ids=("prate",))
-
 
 class ShowcaseTests(unittest.TestCase):
     def _payload(self, **overrides: object) -> dict[str, object]:

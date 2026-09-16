@@ -96,7 +96,7 @@ def _model_argument(parser: argparse.ArgumentParser, *, fetched_only: bool = Tru
             "JMA, the precipitation nowcast over Japan (an observation every five minutes, "
             "fetched through the jma-radar tool; a window the same way), "
             "or cma, the CMA composite reflectivity mosaic over China (an observation every "
-            "six minutes, read out of its daily Zarr archive through the cma-radar tool; "
+            "six minutes, read out of its daily Zarr archive; "
             "a window the same way"
             + ("" if fetched_only else ", or one NetCDF file the tool wrote")
             + ")"

@@ -12,7 +12,7 @@ PROFILE ?= balanced
 # mrms (the NOAA radar mosaic, an observation every two minutes), jma
 # (the JMA precipitation nowcast over Japan, every five minutes, through the
 # jma-radar tool) and cma (the CMA radar mosaic over China, every six
-# minutes, read out of its daily Zarr archive through the cma-radar tool)
+# minutes, read out of its private daily Zarr archive)
 # build a window named by its first hour — `RUN=latest` the live rolling
 # window.
 MODEL ?= gfs

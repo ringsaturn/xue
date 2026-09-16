@@ -9,7 +9,7 @@
 //! coarser grid (`Downsample`), the JMA precipitation nowcast and the CMA
 //! radar mosaic one fetched NetCDF series per window (`series_file`),
 //! assembled from the agency's tiles by the jma-radar tool and read back
-//! out of its daily Zarr archive by the cma-radar tool respectively.
+//! out of a daily Zarr archive of the mosaics respectively.
 
 use crate::encode::errors::{EncodeError, Result};
 use crate::encode::reproject::Regrid;
@@ -366,9 +366,9 @@ pub const SOURCES: &[SourceSpec] = &[
         downsample: None,
     },
     // CMA weather radar level-3 mosaic composite reflectivity: the national
-    // composite every six minutes, kept by the cma-radar tool as one Zarr
-    // store per UTC day and read back a window at a time as one NetCDF
-    // series, the shape the tool's own `fetch` writes. An observation
+    // composite every six minutes, kept as one Zarr store per UTC day in a
+    // private archive and read back a window at a time as one NetCDF
+    // series (xuebuild/cmaarchive.py). An observation
     // source, live like MRMS and JMA: the window's first hour is the run
     // and the six-minute slots the axis (`cadence_seconds`); a showcase case
     // may still be built from a local file; the id changed from `radar`

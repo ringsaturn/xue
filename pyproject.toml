@@ -52,3 +52,8 @@ xuebuild = ["palette.txt", "precipitation_palette.txt"]
 # would — pystac likewise reads the STAC catalog (xuebuild/stac.py, also
 # hand-written) the way a catalog client would, in tests/test_stac.py.
 zarr = ["zarr>=3.1", "numcodecs>=0.16", "xarray>=2025.1", "pystac>=1.14"]
+# What the CMA radar feed's fetch reads its archive with (xuebuild/cmaarchive.py):
+# one plain Zarr v3 store per day on a private bucket, opened with zarr-python
+# over s3fs and handed to the converter as the NetCDF series xarray writes.
+# Only the `publish cma` workflow syncs it; every other build stays NumPy.
+cma = ["zarr>=3.1", "numcodecs>=0.16", "s3fs>=2024.10", "xarray>=2025.1", "netcdf4>=1.7"]

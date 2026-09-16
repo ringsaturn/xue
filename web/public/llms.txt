@@ -26,7 +26,7 @@ Facts worth getting right:
   observations rather than forecasts: `radar` (the CMA level-3 radar mosaic
   composite reflectivity over China, six-minute frames on the data portal's
   0.0439° plate carrée tile grid, 1792 × 1024 cells, 67.5°E–146.25°E and
-  11.25°N–56.25°N, read by the encoder out of the cma-radar tool's daily
+  11.25°N–56.25°N, read by the encoder out of a daily
   Zarr archive; the seventh live source, a rolling window of the last two
   to three hours some forty minutes behind real time, and historical cases
   from the archive or from files the tool wrote), and

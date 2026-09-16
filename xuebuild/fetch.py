@@ -21,7 +21,7 @@ from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
 from pathlib import Path
 
-from . import cmacli, jmacli
+from . import cmaarchive, jmacli
 from .errors import DownloadError
 from .idx import (
     ByteRange,
@@ -121,18 +121,12 @@ JMA_RESAMPLING = "max"
 # copy on the bucket, so a fresh runner does not ask the agency again.
 JMA_FRAMES_DIRNAME = "jma-frames"
 JMA_FETCH_CONCURRENCY = 6
-# The CMA radar mosaic's archive: where the cma-radar tool keeps one Zarr
-# store per UTC day (``<archive>/<product>/z<zoom>/<YYYY>/<YYYY-MM-DD>.zarr``),
-# on a private bucket read with the tool's own credentials, or a local
-# directory the stores were copied to (the tests, a build by hand from a
-# downloaded day). The location is private and comes from the environment
-# alone (``cma_archive``); nothing here names a bucket.
-CMA_ARCHIVE_VARIABLE = "XUE_CMA_ARCHIVE"
-CMA_PRODUCT = "RADAR_L3_MST_CREF_GISJPG_Tiles_CR"
-# The finest zoom the service publishes; 360 / (256 * 2^5) = 0.0439° a
-# cell, 1792 x 1024 cells over the archive's bbox (``production_grid``).
-CMA_ZOOM = 5
-CMA_GRID_STEP = 360.0 / (256 * 2**CMA_ZOOM)
+# The CMA radar mosaic's archive (xuebuild/cmaarchive.py): one Zarr store
+# per UTC day on a private bucket, named by the environment alone.
+CMA_ARCHIVE_VARIABLE = cmaarchive.ARCHIVE_VARIABLE
+CMA_PRODUCT = cmaarchive.PRODUCT
+CMA_ZOOM = cmaarchive.ZOOM
+CMA_GRID_STEP = cmaarchive.GRID_STEP
 CONTENT_RANGE_RE = re.compile(r"^bytes (\d+)-(\d+)/(\d+|\*)$")
 USER_AGENT = "xue/0.1 (+https://registry.opendata.aws/noaa-gfs-bdp-pds/)"
 _ECMWF_PACING_LOCK = threading.Lock()
@@ -790,11 +784,10 @@ def latest_observation_slot(spec: SourceSpec, *, now: datetime | None = None) ->
 
 # -- CMA radar mosaic ---------------------------------------------------------
 #
-# The archive is the cma-radar tool's: one Zarr store per UTC day, each
-# with a complete 240-slot ``time`` axis and a ``slot_status`` saying which
-# slots were written (1), never fetched (0) or never published by the
-# service (2). Everything below asks the tool (xuebuild/cmacli.py), which
-# reads the stores with its own credentials: a listing reads the two small
+# The archive is one Zarr store per UTC day, each with a complete 240-slot
+# ``time`` axis and a ``slot_status`` saying which slots were written (1),
+# never fetched (0) or never published by the portal (2). Everything below
+# reads it through xuebuild/cmaarchive.py: a listing reads the two small
 # index arrays of each day the window touches, a fetch reads the written
 # frames as well and writes them as one NetCDF series.
 
@@ -802,49 +795,31 @@ _CMA_TIME_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 
 
 def cma_archive() -> str:
-    """The archive base the tool reads (an ``s3://bucket/prefix`` or a
-    directory), from :data:`CMA_ARCHIVE_VARIABLE`. Unset is an error the
-    operator fixes, not a default: the location is private."""
-    archive = os.environ.get(CMA_ARCHIVE_VARIABLE, "").strip().rstrip("/")
-    if not archive:
-        raise DownloadError(f"set {CMA_ARCHIVE_VARIABLE} to the CMA archive base (an s3:// prefix or a directory)")
-    return archive
-
-
-def _cma_time(text: str) -> datetime:
-    try:
-        return datetime.strptime(text, _CMA_TIME_FORMAT).replace(tzinfo=UTC)
-    except ValueError as exc:
-        raise DownloadError(f"cma-radar reported a slot as {text!r}, not YYYY-MM-DDTHH:MM:SSZ") from exc
+    """The archive base (an ``s3://bucket/prefix`` or a directory), from
+    :data:`CMA_ARCHIVE_VARIABLE`; unset is the operator's error."""
+    return cmaarchive.archive_base()
 
 
 def cma_archive_slots(
-    start: datetime, hours: int, *, window: Callable[..., dict] | None = None
+    start: datetime, hours: int, *, written: Callable[[str, datetime, datetime], list[datetime]] | None = None
 ) -> list[datetime]:
     """The written slots the archive holds from ``start`` through ``hours``
     past it, inclusive, in time order — the frames a window from there
-    would hold. ``window`` is the tool call (the network by default)."""
-    summary = (window or cmacli.window)(
-        source=cma_archive(),
-        start=start.strftime("%Y%m%d%H"),
-        hours=hours,
-        zoom=CMA_ZOOM,
-        product=CMA_PRODUCT,
-        output=None,
-    )
-    return sorted(_cma_time(text) for text in summary["frames"])
+    would hold. ``written`` is the archive lookup (the bucket by default)."""
+    base = cma_archive()
+    return sorted((written or cmaarchive.written_slots)(base, start, start + timedelta(hours=hours)))
 
 
 def cma_window_slots(
-    spec: SourceSpec, run: GfsRun, hours: int, *, window: Callable[..., dict] | None = None
+    spec: SourceSpec, run: GfsRun, hours: int, *, written: Callable[..., list[datetime]] | None = None
 ) -> list[datetime]:
     """The written slots of one window: from the run's hour through
     ``hours`` past it, inclusive. Each is on the six-minute mark."""
-    return cma_archive_slots(run.time, hours, window=window)
+    return cma_archive_slots(run.time, hours, written=written)
 
 
 def latest_cma_slot(
-    spec: SourceSpec, *, now: datetime | None = None, window: Callable[..., dict] | None = None
+    spec: SourceSpec, *, now: datetime | None = None, written: Callable[..., list[datetime]] | None = None
 ) -> datetime:
     """The newest slot the archive has written — the end of the live
     window. The stores of today and yesterday are asked (the day the
@@ -853,21 +828,21 @@ def latest_cma_slot(
     day is a feed that is down."""
     current = (now or datetime.now(UTC)).astimezone(UTC).replace(minute=0, second=0, microsecond=0)
     start = current - timedelta(hours=25)
-    slots = cma_archive_slots(start, 26, window=window)
+    slots = cma_archive_slots(start, 26, written=written)
     if not slots:
         raise DownloadError(f"{spec.manifest_model} has no written slot in the archive since {start.isoformat()}")
     return slots[-1]
 
 
 def _cma_run_is_complete(
-    spec: SourceSpec, run: GfsRun, hours: int, *, window: Callable[..., dict] | None = None
+    spec: SourceSpec, run: GfsRun, hours: int, *, written: Callable[..., list[datetime]] | None = None
 ) -> bool:
     """Whether a named window has fully landed: the archive has written a
     slot at or past the window's end. The hour after the end is asked for
-    too, so a window whose last slot the service never published still
+    too, so a window whose last slot the portal never published still
     counts once the archive has moved past it."""
     end = run.time + timedelta(hours=hours)
-    slots = cma_archive_slots(run.time, hours + 1, window=window)
+    slots = cma_archive_slots(run.time, hours + 1, written=written)
     return any(slot >= end for slot in slots)
 
 
@@ -885,47 +860,39 @@ def _fetch_cma_run(
     force: bool,
     input_ids: tuple[str, ...] | None,
 ) -> list[Path]:
-    """Fetch one window of the CMA mosaic through the cma-radar tool:
-    the written slots of the archive between the run's hour and ``hours``
-    past it, read out of the daily stores and written as one NetCDF series,
-    with a ``fetch.json`` beside it in the shape the MRMS fetch leaves (one
-    entry per frame with its slot) so ``window_summary`` and the rolling
-    publish read both alike. Nothing is cached between rounds: a window is
-    a few megabytes of range reads and the archive's newest frames change
-    every round, so the series is always read afresh (``force`` changes
-    nothing)."""
+    """Fetch one window of the CMA mosaic out of its archive: the written
+    slots between the run's hour and ``hours`` past it, read out of the
+    daily stores and written as one NetCDF series, with a ``fetch.json``
+    beside it in the shape the MRMS fetch leaves (one entry per frame with
+    its slot) so ``window_summary`` and the rolling publish read both
+    alike. Nothing is cached between rounds: a window is a few megabytes
+    of range reads and the archive's newest frames change every round, so
+    the series is always read afresh (``force`` changes nothing)."""
     if input_ids is not None and any(variable_id not in spec.input_variable_ids for variable_id in input_ids):
         raise DownloadError(f"{spec.manifest_model} publishes {list(spec.input_variable_ids)}, not {list(input_ids)}")
-    cmacli.version()
+    base = cma_archive()
     destination = raw_root / f"{spec.id}.{run.id}"
     output = destination / cma_frame_name(spec, run)
     if output.exists():
         output.unlink()
-    summary = cmacli.window(
-        source=cma_archive(),
-        start=run.id,
-        hours=hours,
-        zoom=CMA_ZOOM,
-        product=CMA_PRODUCT,
-        output=output,
-    )
-    frames = sorted(_cma_time(text) for text in summary["frames"])
-    if not frames:
+    window = cmaarchive.read_window(base, run.time, run.time + timedelta(hours=hours))
+    if window is None:
         raise DownloadError(f"{spec.manifest_model} has no written slot for run {run.id} through +{hours} h")
+    cmaarchive.write_series(window, output)
     if not output.is_file():
-        raise DownloadError(f"cma-radar reported a window but wrote no series at {output}")
+        raise DownloadError(f"the CMA series was not written at {output}")
     record = {
         "model": spec.id,
         "run": run.id,
         "hours": hours,
         "cadenceSeconds": spec.cadence_seconds,
-        "grid": summary.get("grid"),
+        "grid": window.grid,
         "series": output.name,
-        "frames": [{"path": output.name, "slot": slot.strftime(_CMA_TIME_FORMAT)} for slot in frames],
-        "slots": summary.get("slots"),
+        "frames": [{"path": output.name, "slot": slot.strftime(_CMA_TIME_FORMAT)} for slot in window.times],
     }
+    destination.mkdir(parents=True, exist_ok=True)
     (destination / MRMS_FETCH_FILENAME).write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
-    LOG.info("%s run %s: %d frames in %s", spec.manifest_model, run.id, len(frames), output)
+    LOG.info("%s run %s: %d frames in %s", spec.manifest_model, run.id, len(window.times), output)
     return [output]
 
 

@@ -169,7 +169,7 @@ The public archives do not go back forever:
 | `hrrr` | about 2014-08 | Every hour's cycle, hourly to f18 |
 | `mrms` | 2020-10-14 | Every two minutes; a case is a window from any hour |
 | `jma` | — | No archive: the agency lists three hours and its tiles expire after days. A window can only be built from the decoded-frame cache the live feed keeps on the bucket (`make pull-r2-frames`), and cases are not wired up yet |
-| `cma` | 2026-09-06 | Every six minutes from the cma-radar tool's daily Zarr archive (`XUE_CMA_ARCHIVE`, read with the tool's `R2_*` credentials); a case is a window from any hour, like `mrms`. A case may instead name a local NetCDF the tool wrote (`dataset`), which is how the cases before the archive were cut |
+| `cma` | 2026-09-06 | Every six minutes from a private daily Zarr archive (`XUE_CMA_ARCHIVE`, read with the `R2_*` credentials, `uv sync --group cma`); a case is a window from any hour, like `mrms`. A case may instead name a local NetCDF series (`dataset`), which is how the cases before the archive were cut |
 
 Pick a cycle a day or two before the event peaks, so the case is a *forecast*
 of the event rather than an analysis of it, and give it enough `hours` to run

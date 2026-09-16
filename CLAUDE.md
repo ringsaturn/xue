@@ -225,20 +225,21 @@ model starts here; the frontend mirror is `FORECAST_MODELS` in
   a rolling window like `jma` (`latest-cma.json`, `publish-cma.yml`
   the same shape as `publish-jma.yml` with `MODEL=cma HOURS=3` and no
   frame cache) but read out of an archive rather than decoded from tiles:
-  a private sibling tool, invoked as `cma-radar` (never name its repository
-  or its bucket in this repo, its docs or any published metadata), keeps
-  the agency's six-minute mosaics as one Zarr v3 store per UTC day in an
-  archive named only by the `XUE_CMA_ARCHIVE` environment variable (no
-  default; an `s3://` prefix read with the tool's `R2_*` credentials, or a
-  local directory), each store with a complete 240-slot `time` axis and a
-  `slot_status`, and `cma-radar window --json` (`xuebuild/cmacli.py`,
-  `XUE_CMA_RADAR` overrides the command; `publish-cma.yml` installs the
-  tool from the `CMA_RADAR_INSTALL` secret) lists the written slots of a
-  UTC window or, with `--out`, reads them (one orthogonal read per day
-  store) and writes them as the NetCDF series `observation.py` has always
-  read (`fetch.py::_fetch_cma_run`, `latest_cma_slot` from the last
-  day's stores, `_cma_run_is_complete` when the archive has a slot at or
-  past the window's end). The grid is the portal's zoom-5 plate carrée
+  a private sync job (never name its repository or its bucket in this
+  repo, its docs or any published metadata) keeps the agency's six-minute
+  mosaics as one plain Zarr v3 store per UTC day in an archive named only
+  by the `XUE_CMA_ARCHIVE` environment variable (no default; an `s3://`
+  prefix read with the `R2_*` credentials, or a local directory), each
+  store with a complete 240-slot `time` axis and a `slot_status`, and
+  `xuebuild/cmaarchive.py` reads it in process with zarr-python over s3fs
+  (the `cma` dependency group, imported nowhere else; `publish-cma.yml`
+  runs `uv sync --group cma`): `stored_slots` reads the two small index
+  arrays of each day the window touches, `read_window` the written frames
+  (one orthogonal read per day store), and `write_series` hands them to
+  the converter as the NetCDF series `observation.py` has always read
+  (`fetch.py::_fetch_cma_run`, `latest_cma_slot` from the last day's
+  stores, `_cma_run_is_complete` when the archive has a slot at or past
+  the window's end). The grid is the portal's zoom-5 plate carrée
   tile grid (`CMA_ZOOM`, 0.0439°, 1792 × 1024; the power-of-two step
   passes `_snap_regional_steps` untouched), `cadence_seconds` is 360, so
   `unitSeconds` is 360. The portal publishes twenty to thirty minutes

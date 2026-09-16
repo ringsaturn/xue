@@ -72,7 +72,7 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
   // CMA weather radar level-3 mosaic composite reflectivity: the national
   // composite every six minutes on the data portal's plate carrée tile grid
   // (0.0439°, 67.5°E–146.25°E and 11.25°N–56.25°N), read by the encoder out
-  // of the cma-radar tool's daily archive. Observations and live, like
+  // of a daily Zarr archive of the mosaics. Observations and live, like
   // MRMS: a rolling window of the last two to three hours, some forty
   // minutes behind real time (the portal publishes late and the archive
   // syncs every twenty minutes). The region is where the camera goes when

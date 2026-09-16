@@ -25,11 +25,11 @@ precipitation nowcast is the second shape: fetched like MRMS, a rolling
 window with a pointer, but its frames arrive as one NetCDF series per
 window (``series_file``), assembled from the agency's map tiles by the
 ``jma-radar`` tool (:mod:`xuebuild.jmacli`) rather than read record by
-record. The CMA radar mosaic is that shape too: the ``cma-radar`` tool
-keeps the agency's six-minute mosaics as one Zarr store per UTC day on a
-bucket of its own, and a window is read back out of those stores as one
-NetCDF series (:mod:`xuebuild.cmacli`); a showcase case may still be
-built from a local file the same tool wrote.
+record. The CMA radar mosaic is that shape too: a private archive keeps
+the agency's six-minute mosaics as one Zarr store per UTC day, and a
+window is read back out of those stores as one NetCDF series
+(:mod:`xuebuild.cmaarchive`); a showcase case may still be built from a
+local file cut from the same mosaics.
 ECMWF has no native rate field; its accumulated ``tp`` input is de-accumulated
 into prate by the converter. GFS sflux has only interval-averaged PRATE (the
 averaging window resets every 6 hours); the converter de-averages consecutive
@@ -218,11 +218,11 @@ class SourceSpec:
     series_file: bool = False
     """True when a run of the source is one NetCDF file holding the whole
     series, one band per time, read through :mod:`xuebuild.observation`
-    (the CMA mosaic read out of its archive by ``cma-radar``; the JMA
+    (the CMA mosaic read out of its archive; the JMA
     nowcast assembled by ``jma-radar``), rather than one GRIB per frame
     matched record by record. Orthogonal to :attr:`fetched`: both are
     written by the fetch, and a showcase case of the CMA mosaic may name a
-    local file the tool wrote instead."""
+    local file cut from the same mosaics instead."""
     downsample: Downsample | None = None
     """Set when the source is published on a grid coarser than it arrives
     on (:class:`Downsample`). Like ``regrid``, ``production_grid`` and
@@ -616,20 +616,20 @@ SOURCES: dict[str, SourceSpec] = {
     # CMA weather radar level-3 mosaic composite reflectivity
     # (RADAR_L3_MST_CREF): the China Meteorological Administration's national
     # composite, a mosaic every six minutes, published on its data portal as
-    # BIN tiles on a plate carrée tile grid. The cma-radar tool decodes
+    # BIN tiles on a plate carrée tile grid. A private sync job decodes
     # the zoom-5 tiles (0.0439°, 1792 x 1024 cells from 67.5E to 146.25E and
     # 56.25N to 11.25N) and keeps them as one Zarr v3 store per UTC day on a
     # private bucket (``sync``, every twenty minutes); a run of this source
     # is a window read back out of those stores as one NetCDF series
-    # (``cma-radar window``, xuebuild/cmacli.py), the shape the tool's
-    # ``fetch`` writes and the observation ingest has always read. An
+    # (xuebuild/cmaarchive.py), the shape the observation ingest has
+    # always read. An
     # observation source, live like MRMS and JMA: ``--run latest`` is the
     # window ending at the archive's newest written slot, rebuilt every few
     # minutes into a round (.github/workflows/publish-cma.yml), and the
     # six-minute slots are the axis (``cadence_seconds``: the source stamps
     # each mosaic on the mark, so the snap is a formality). A showcase case
     # may name a window of the archive by its first hour, or a local file
-    # the tool wrote (``dataset``), as the cases before the archive did.
+    # cut from the mosaics (``dataset``), as the cases before the archive did.
     "cma": SourceSpec(
         id="cma",
         manifest_model="CMA-RADAR",

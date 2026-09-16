@@ -3,9 +3,9 @@ name: publish cma
 # The CMA weather radar level-3 mosaic (RADAR_L3_MST_CREF): the China
 # Meteorological Administration's national composite reflectivity, a mosaic
 # every six minutes, published on its data portal as BIN tiles. A private
-# sibling tool, invoked as cma-radar, decodes the zoom-5 tiles and keeps
-# them as one Zarr store per UTC day in an archive of its own, syncing
-# every twenty minutes; the live feed
+# sync job decodes the zoom-5 tiles and keeps them as one plain Zarr v3
+# store per UTC day in an archive of its own, every twenty minutes; the
+# live feed
 # here is a rolling window read back out of that archive — the last two
 # whole hours plus the hour in progress, on the portal's 0.0439° tile grid,
 # the native six-minute step — rebuilt every five minutes into a round
@@ -14,12 +14,13 @@ name: publish cma
 # five-minute cron: a round that finds nothing new (the archive moves in
 # twenty-minute steps) is a minute of runner time, and a round with new
 # slots reads a few megabytes of the day's shard and converts thirty
-# frames. Everything about the tool and its archive is a repository
-# secret: CMA_RADAR_INSTALL is the pip requirement the tool is installed
-# from, XUE_CMA_ARCHIVE the archive's s3:// prefix, and the tool reads it
-# with R2_ACCOUNT_ID / R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY (the
-# dataset bucket's token when it can read the archive too, else the
-# CMA_ARCHIVE_* pair). None of them has a default in the code.
+# frames. The archive is read in process (xuebuild/cmaarchive.py, the
+# `cma` dependency group: zarr-python over s3fs, xarray for the series
+# the converter reads), so nothing beyond this repository is installed.
+# Everything about the archive is a repository secret: XUE_CMA_ARCHIVE is
+# its s3:// prefix, read with R2_ACCOUNT_ID / R2_ACCESS_KEY_ID /
+# R2_SECRET_ACCESS_KEY (the dataset bucket's token when it can read the
+# archive too, else the CMA_ARCHIVE_* pair). None has a default in code.
 #
 # Machine time: twelve jobs an hour of one to three minutes each, roughly
 # 300 hours a month, free on a public repository's standard runners.
@@ -138,7 +139,7 @@ jobs:
       # actions never see them; the listings prove they work before the
       # first round rather than at its fetch or its upload. Two buckets:
       # the dataset bucket the rounds publish into, and the archive bucket
-      # the cma-radar tool reads the window from.
+      # the archive reader takes the window from.
       - name: Check R2 credentials
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -147,11 +148,10 @@ jobs:
           ARCHIVE_ACCESS_KEY_ID: ${{ secrets.CMA_ARCHIVE_ACCESS_KEY_ID || secrets.R2_ACCESS_KEY_ID }}
           ARCHIVE_SECRET_ACCESS_KEY: ${{ secrets.CMA_ARCHIVE_SECRET_ACCESS_KEY || secrets.R2_SECRET_ACCESS_KEY }}
           XUE_CMA_ARCHIVE: ${{ secrets.XUE_CMA_ARCHIVE }}
-          CMA_RADAR_INSTALL: ${{ secrets.CMA_RADAR_INSTALL }}
           AWS_REQUEST_CHECKSUM_CALCULATION: when_required
           AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
         run: |
-          for name in CLOUDFLARE_ACCOUNT_ID AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY XUE_CMA_ARCHIVE CMA_RADAR_INSTALL; do
+          for name in CLOUDFLARE_ACCOUNT_ID AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY XUE_CMA_ARCHIVE; do
             [ -n "${!name}" ] || { echo "::error::$name is empty; set the repository secrets"; exit 1; }
           done
           aws --version
@@ -169,18 +169,10 @@ jobs:
 
       # No ffmpeg: the source ships no video. The xuepy wheel carries the
       # GDAL the native encoder extracts and inspects with; the reference
-      # pipeline needs the system one.
+      # pipeline needs the system one. The `cma` group is what reads the
+      # archive: zarr-python, s3fs, xarray and netCDF4.
       - name: Sync Python environment
-        run: uv sync
-
-      # The requirement (a private package with its `r2` extra, from a
-      # source the secret names) is never echoed.
-      - name: Install the cma-radar tool
-        env:
-          CMA_RADAR_INSTALL: ${{ secrets.CMA_RADAR_INSTALL }}
-        run: |
-          uv pip install --python .venv/bin/python --quiet "$CMA_RADAR_INSTALL"
-          .venv/bin/cma-radar version
+        run: uv sync --group cma
 
       # XUE_ENCODER is what xuebuild reads (auto | native | python); it is
       # set here rather than at the workflow level so a wheel that predates
@@ -219,7 +211,7 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          # What the cma-radar tool reads the archive with.
+          # What the archive reader opens the bucket with.
           R2_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           R2_ACCESS_KEY_ID: ${{ secrets.CMA_ARCHIVE_ACCESS_KEY_ID || secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.CMA_ARCHIVE_SECRET_ACCESS_KEY || secrets.R2_SECRET_ACCESS_KEY }}
