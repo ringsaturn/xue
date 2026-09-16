@@ -36,6 +36,12 @@ from .airport.build import load_previous_index as load_previous_airport_index
 from .airport.fetch import fetch_round as fetch_airport_round
 from .airport.schema import floor_round as floor_airport_round
 from .airport.schema import parse_round as parse_airport_round
+from .sounding.build import build_product as build_sounding_product
+from .sounding.build import load_previous_index as load_previous_sounding_index
+from .sounding.build import previous_watermarks as sounding_watermarks
+from .sounding.fetch import SOURCE_IDS as SOUNDING_SOURCE_IDS
+from .sounding.fetch import fetch_sources as fetch_sounding_sources
+from .sounding.schema import parse_issue as parse_sounding_issue
 from .tc.build import build_product as build_tc_product
 from .tc.build import load_previous_index as load_previous_tc_index
 from .tc.fetch import SOURCE_IDS as TC_SOURCE_IDS
@@ -390,6 +396,36 @@ def parser() -> argparse.ArgumentParser:
     airport_build.add_argument("--offline", action="store_true", help="build from what is already fetched; touch no network")
     airport_build.add_argument("--force", action="store_true", help="rebuild a round whose index exists")
     airport_build.add_argument("--force-download", action="store_true", help="fetch every source again, station table included")
+
+    sounding_build = commands.add_parser(
+        "sounding-build",
+        help="fetch the radiosonde bulletins and write one sounding.<issue>/ product directory and its pointer",
+    )
+    sounding_build.add_argument(
+        "--issue",
+        default="now",
+        help="the aggregation hour, YYYYMMDDHH in UTC, or now (the current hour); one directory per hour",
+    )
+    sounding_build.add_argument("--raw-dir", type=Path, default=Path("data/raw"))
+    sounding_build.add_argument("--output-dir", type=Path, default=Path("web/public/data"))
+    sounding_build.add_argument(
+        "--sources",
+        help=f"comma-separated subset of the gateways to build from (default: all of {','.join(SOUNDING_SOURCE_IDS)})",
+    )
+    sounding_build.add_argument(
+        "--previous-index",
+        type=Path,
+        help="the previous hour's index.json, whose watermark bounds the fetch and whose station files are copied "
+        "forward (default: the one the local latest-sounding.json names, if any; `make live-sounding-index` "
+        "fetches the live one and its station files)",
+    )
+    sounding_build.add_argument(
+        "--offline", action="store_true", help="build from what is already fetched; touch no network"
+    )
+    sounding_build.add_argument("--force", action="store_true", help="rebuild an issue whose directory exists")
+    sounding_build.add_argument(
+        "--force-download", action="store_true", help="list and fetch each gateway again, ignoring the watermark"
+    )
     return root
 
 
@@ -634,6 +670,37 @@ def main(argv: list[str] | None = None) -> int:
                 moment,
                 arguments.raw_dir,
                 arguments.output_dir,
+                previous_index=previous,
+                force=arguments.force,
+            )
+            print(json.dumps(report, indent=2))
+        elif arguments.command == "sounding-build":
+            if arguments.issue == "now":
+                issue = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
+            else:
+                issue = parse_sounding_issue(arguments.issue)
+            sources = SOUNDING_SOURCE_IDS
+            if arguments.sources:
+                sources = tuple(dict.fromkeys(item.strip() for item in arguments.sources.split(",") if item.strip()))
+                unknown = [item for item in sources if item not in SOUNDING_SOURCE_IDS]
+                if unknown:
+                    raise XueError(
+                        f"unknown sounding sources {unknown}; choose from {', '.join(SOUNDING_SOURCE_IDS)}"
+                    )
+            previous = load_previous_sounding_index(arguments.previous_index, arguments.output_dir)
+            if not arguments.offline:
+                fetch_sounding_sources(
+                    arguments.raw_dir,
+                    issue,
+                    sources,
+                    watermarks=None if arguments.force_download else sounding_watermarks(previous),
+                    force=arguments.force_download,
+                )
+            report = build_sounding_product(
+                issue,
+                arguments.raw_dir,
+                arguments.output_dir,
+                sources=sources,
                 previous_index=previous,
                 force=arguments.force,
             )

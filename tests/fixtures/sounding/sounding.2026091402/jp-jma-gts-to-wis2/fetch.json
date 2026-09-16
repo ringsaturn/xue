@@ -1,0 +1,16 @@
+{
+  "id": "jp-jma-gts-to-wis2",
+  "ok": true,
+  "fetched": "2026-09-14T02:04:00Z",
+  "url": "https://wis2globalcache.s3.us-east-1.amazonaws.com/data/jp-jma-gts-to-wis2/data/core/I/U/S/",
+  "watermark": "2026-09-14T02:34:41Z",
+  "listed": 3,
+  "objects": 3,
+  "reused": 0,
+  "bytes": 58106,
+  "files": [
+    "A_IUSC01RJTD140000_C_RJTD_20260914012350_137.bufr",
+    "A_IUSC01KWBC140000CCA_C_RJTD_20260914015222_129.bufr",
+    "A_IUSN01BABJ140000_C_RJTD_20260914023429_185.bufr"
+  ]
+}

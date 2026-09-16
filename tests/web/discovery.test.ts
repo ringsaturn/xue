@@ -128,6 +128,7 @@ describe("llms-full", () => {
       "docs/format.md",
       "docs/encoder.md",
       "docs/tc.md",
+      "docs/sounding.md",
       "docs/stac.md",
       "showcase/README.md",
     ]);

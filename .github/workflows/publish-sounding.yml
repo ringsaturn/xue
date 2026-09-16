@@ -1,0 +1,147 @@
+name: publish sounding
+
+# The radiosonde sounding product (docs/sounding.md): the TEMP bulletins
+# the two GTS→WIS2 gateways republish, aggregated once an hour into an
+# immutable sounding.<issue>/ directory on R2 and taken live by the
+# mutable latest-sounding.json beside the run pointers. Independent of
+# the raster publishes — nothing here reads a run, and a red run does not
+# hold this back — and cheap: two bucket listings, a few dozen small BUFR
+# files and a few hundred bufr_dump calls, one job, one to three minutes.
+#
+# Fifteen past the hour is arbitrary; the bulletins arrive on their own
+# schedule (half of a cycle's within 90 minutes of launch, the Chinese
+# stations at about 2.5 hours), and every hour picks up whatever has
+# landed since the last one. A gateway that is late or down is recorded
+# in the product's `sources` and the hour publishes without it; the
+# pointer is withheld only when neither gateway contributed and there was
+# nothing to carry forward.
+
+on:
+  schedule:
+    - cron: "15 * * * *"
+  workflow_dispatch:
+    inputs:
+      issue:
+        description: "Aggregation hour to build: now or YYYYMMDDHH"
+        type: string
+        default: now
+      keep:
+        description: "Issue directories to keep on R2 (hours)"
+        type: string
+        default: "48"
+      dry_run:
+        description: "Build and report what would be uploaded and pruned, but write nothing to R2"
+        type: boolean
+        default: false
+      force:
+        description: "Rebuild the issue even when it is already live"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# One at a time: the pointer is the product's only mutable object, and the
+# live issue is both the fetch's watermark and where an unchanged station
+# file is copied forward from.
+concurrency:
+  group: publish-sounding
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    # Scheduled runs on forks would publish into a bucket they cannot reach.
+    if: github.event_name != 'schedule' || github.repository == 'ringsaturn/xue'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      ISSUE: ${{ inputs.issue || 'now' }}
+      SOUNDING_KEEP: ${{ inputs.keep || '48' }}
+      DRY_RUN: ${{ inputs.dry_run && '--dryrun' || '' }}
+      FORCE: ${{ inputs.force && '--force' || '' }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # The bulletins are BUFR; bufr_dump turns them into JSON. No GDAL,
+      # no wheel: this pipeline touches no raster.
+      - name: Install eccodes
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libeccodes-tools
+          bufr_dump -V
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          python-version: "3.14"
+
+      - name: Sync Python environment
+        run: uv sync
+
+      # The live issue is this build's memory twice over: its `watermark`
+      # says which objects have already been read, and its station files
+      # are what a station with no new ascent this hour is copied forward
+      # from. Both the index and the directory are pulled.
+      - name: Fetch the live issue
+        run: make live-sounding-index
+
+      # An issue is immutable once the pointer names it
+      # (docs/sounding.md), so an hour that is already live — a dispatch
+      # landed in it, or the schedule ran late — is finished, not built
+      # again; `force` is the manual rebuild the spec allows.
+      - name: Build the product
+        id: build
+        run: |
+          set -euo pipefail
+          issue=$ISSUE
+          [ "$issue" != "now" ] || issue=$(date -u +%Y%m%d%H)
+          live=""
+          if [ -f web/public/data/latest-sounding.json ]; then
+            live=$(jq -r .path web/public/data/latest-sounding.json | sed -n 's:^sounding\.\([0-9]\{10\}\)/index\.json$:\1:p')
+          fi
+          if [ "$live" = "$issue" ] && [ -z "$FORCE" ]; then
+            echo "sounding $issue is already live; nothing to build" | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "skipped=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          uv run python -m xuebuild -v sounding-build --issue "$issue" $FORCE > sounding-report.json
+          issue=$(jq -r .issue sounding-report.json)
+          echo "issue=$issue" >> "$GITHUB_ENV"
+          {
+            echo "### sounding $issue"
+            echo
+            echo "- stations: $(jq -r .stations sounding-report.json) ($(jq -r .fresh sounding-report.json) with a new ascent, $(jq -r .copied sounding-report.json) carried forward)"
+            echo "- soundings decoded: $(jq -r .soundings sounding-report.json)"
+            echo "- soundings.jsonl: $(jq -r .byteLength sounding-report.json) bytes"
+            echo
+            echo '```json'
+            jq '{sources: [.sources[] | "\(.id): \(if .ok then "ok, \(.objects // 0) new object(s), \(.soundings // 0) sounding(s)" else .error end)"], watermark, pointer}' sounding-report.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: sounding-report-${{ github.run_id }}
+          path: sounding-report.json
+          retention-days: 14
+          if-no-files-found: ignore
+
+      # The directory goes up immutable, then the pointer takes it live.
+      # A build that withheld the pointer (nothing contributed and nothing
+      # to carry forward) stops here with the previous hour still live.
+      - name: Upload and take the issue live
+        if: steps.build.outputs.skipped != 'true'
+        run: |
+          set -euo pipefail
+          if [ "$(jq -r .pointer sounding-report.json)" = "null" ]; then
+            echo "nothing contributed; the previous hour stays live" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          make upload-r2-sounding ISSUE="$issue" DRY_RUN="$DRY_RUN"
+
+      - name: Delete issues older than the retention
+        run: make prune-r2-sounding SOUNDING_KEEP="$SOUNDING_KEEP" DRY_RUN="$DRY_RUN"

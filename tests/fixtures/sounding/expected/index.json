@@ -1,0 +1,403 @@
+{
+ "schemaVersion": 1,
+ "issued": "2026-09-14T02:00:00Z",
+ "generated": "2026-09-14T02:05:00Z",
+ "watermark": {
+  "jp-jma-gts-to-wis2": "2026-09-14T02:34:41Z",
+  "de-dwd-gts-to-wis2": null
+ },
+ "soundings": {
+  "path": "soundings.jsonl",
+  "byteLength": 105517,
+  "crc32": "06902ee6"
+ },
+ "stations": [
+  {
+   "id": "0-20000-0-47401",
+   "wmo": "47401",
+   "name": null,
+   "lat": 45.415,
+   "lon": 141.679,
+   "elev": 2.9,
+   "offset": 0,
+   "length": 1000,
+   "latest": "2026-09-14T00:00:00Z",
+   "times": ["2026-09-14T00:00:00Z"],
+   "headline": {
+    "t500": -13.7,
+    "td500": -40.7,
+    "freezingLevel": 3292,
+    "pw": 26.3,
+    "levels": 15
+   }
+  },
+  {
+   "id": "0-20000-0-47412",
+   "wmo": "47412",
+   "name": null,
+   "lat": 43.06,
+   "lon": 141.329,
+   "elev": 17.5,
+   "offset": 1001,
+   "length": 959,
+   "latest": "2026-09-14T00:00:00Z",
+   "times": ["2026-09-14T00:00:00Z"],
+   "headline": {
+    "t500": -10.9,
+    "td500": -11.4,
+    "freezingLevel": 3902,
+    "pw": 42.6,
+    "levels": 14
+   }
+  },
+  {
+   "id": "0-20000-0-47418",
+   "wmo": "47418",
+   "name": null,
+   "lat": 42.9531,
+   "lon": 144.438,
+   "elev": 14.1,
+   "offset": 1961,
+   "length": 922,
+   "latest": "2026-09-14T00:00:00Z",
+   "times": ["2026-09-14T00:00:00Z"],
+   "headline": {
+    "t500": -10.3,
+    "td500": -11.0,
+    "freezingLevel": 4196,
+    "pw": 40.0,
+    "levels": 13
+   }
+  },
+  {
+   "id": "0-20000-0-47582",
+   "wmo": "47582",
+   "name": null,
+   "lat": 39.7175,
+   "lon": 140.099,
+   "elev": 6.3,
+   "offset": 2884,
+   "length": 1002,
+   "latest": "2026-09-14T00:00:00Z",
+   "times": ["2026-09-14T00:00:00Z"],
+   "headline": {
+    "t500": -6.3,
+    "td500": -6.3,
+    "freezingLevel": 4551,
+    "pw": 60.0,
+    "levels": 15
+   }
+  },
+  {
+   "id": "0-20000-0-47600",
+   "wmo": "47600",
+   "name": null,
+   "lat": 37.3914,
+   "lon": 136.895,
+   "elev": 5.2,
+   "offset": 3887,
+   "length": 920,
+   "latest": "2026-09-14T00:00:00Z",
+   "times": ["2026-09-14T00:00:00Z"],
+   "headline": {
+    "t500": -6.5,
+    "td500": -9.7,
+    "freezingLevel": 4677,
+    "pw": 58.3,
+    "levels": 13
+   }
+  },
+  {
+   "id": "0-20000-0-52533",
+   "wmo": "52533",
+   "name": null,
+   "lat": 39.77,
+   "lon": 98.48,
+   "elev": 1478.0,
+   "offset": 4808,
+   "length": 6055,
+   "latest": "2026-09-14T00:00:00Z",
+   "times": ["2026-09-14T00:00:00Z"],
+   "headline": {
+    "t500": -11.7,
+    "td500": -42.5,
+    "freezingLevel": 4099,
+    "pw": 13.7,
+    "levels": 158
+   }
+  },
+  {
+   "id": "0-20000-0-52983",
+   "wmo": "52983",
+   "name": null,
+   "lat": 35.87,
+   "lon": 104.15,
+   "elev": 1875.0,
+   "offset": 10864,
+   "length": 6918,
+   "latest": "2026-09-14T00:00:00Z",
+   "times": ["2026-09-14T00:00:00Z"],
+   "headline": {
+    "t500": -10.0,
+    "td500": -17.5,
+    "freezingLevel": 4174,
+    "pw": 20.1,
+    "levels": 182
+   }
+  },
+  {
+   "id": "0-20000-0-53463",
+   "wmo": "53463",
+   "name": null,
+   "lat": 40.85,
+   "lon": 111.57,
+   "elev": 1153.5,
+   "offset": 17783,
+   "length": 6648,
+   "latest": "2026-09-14T00:00:00Z",
+   "times": ["2026-09-14T00:00:00Z"],
+   "headline": {
+    "t500": -16.2,
+    "td500": -34.3,
+    "freezingLevel": 3561,
+    "pw": 12.6,
+    "levels": 173
+   }
+  },
+  {
+   "id": "0-20000-0-54340",
+   "wmo": "54340",
+   "name": null,
+   "lat": 41.54,
+   "lon": 123.61,
+   "elev": 77.1,
+   "offset": 24432,
+   "length": 6843,
+   "latest": "2026-09-14T00:00:00Z",
+   "times": ["2026-09-14T00:00:00Z"],
+   "headline": {
+    "t500": -16.2,
+    "td500": -44.5,
+    "freezingLevel": 2831,
+    "pw": 13.0,
+    "levels": 179
+   }
+  },
+  {
+   "id": "0-20000-0-54511",
+   "wmo": "54511",
+   "name": null,
+   "lat": 39.93,
+   "lon": 116.28,
+   "elev": 32.5,
+   "offset": 31276,
+   "length": 6960,
+   "latest": "2026-09-14T00:00:00Z",
+   "times": ["2026-09-14T00:00:00Z"],
+   "headline": {
+    "t500": -14.8,
+    "td500": -59.4,
+    "freezingLevel": 3130,
+    "pw": 12.8,
+    "levels": 183
+   }
+  },
+  {
+   "id": "0-20000-0-54727",
+   "wmo": "54727",
+   "name": null,
+   "lat": 36.65,
+   "lon": 117.5,
+   "elev": 263.0,
+   "offset": 38237,
+   "length": 6539,
+   "latest": "2026-09-14T00:00:00Z",
+   "times": ["2026-09-14T00:00:00Z"],
+   "headline": {
+    "t500": -13.5,
+    "td500": -35.9,
+    "freezingLevel": 3654,
+    "pw": 14.2,
+    "levels": 171
+   }
+  },
+  {
+   "id": "0-20000-0-57083",
+   "wmo": "57083",
+   "name": null,
+   "lat": 34.72,
+   "lon": 113.65,
+   "elev": 111.0,
+   "offset": 44777,
+   "length": 7804,
+   "latest": "2026-09-14T00:00:00Z",
+   "times": ["2026-09-14T00:00:00Z"],
+   "headline": {
+    "t500": -11.1,
+    "td500": -28.4,
+    "freezingLevel": 3691,
+    "pw": 27.8,
+    "levels": 208
+   }
+  },
+  {
+   "id": "0-20000-0-57127",
+   "wmo": "57127",
+   "name": null,
+   "lat": 33.07,
+   "lon": 107.03,
+   "elev": 509.0,
+   "offset": 52582,
+   "length": 8306,
+   "latest": "2026-09-14T00:00:00Z",
+   "times": ["2026-09-14T00:00:00Z"],
+   "headline": {
+    "t500": -9.0,
+    "td500": -14.9,
+    "freezingLevel": 4298,
+    "pw": 34.3,
+    "levels": 223
+   }
+  },
+  {
+   "id": "0-20000-0-57131",
+   "wmo": "57131",
+   "name": null,
+   "lat": 34.43,
+   "lon": 108.97,
+   "elev": 411.0,
+   "offset": 60889,
+   "length": 7691,
+   "latest": "2026-09-14T00:00:00Z",
+   "times": ["2026-09-14T00:00:00Z"],
+   "headline": {
+    "t500": -10.4,
+    "td500": -13.2,
+    "freezingLevel": 3928,
+    "pw": 31.4,
+    "levels": 205
+   }
+  },
+  {
+   "id": "0-20000-0-91212",
+   "wmo": "91212",
+   "name": null,
+   "lat": 13.46,
+   "lon": 144.78,
+   "elev": 75.0,
+   "offset": 68581,
+   "length": 9448,
+   "latest": "2026-09-14T00:00:00Z",
+   "times": ["2026-09-14T00:00:00Z"],
+   "headline": {
+    "t500": -2.9,
+    "td500": -8.9,
+    "freezingLevel": 5336,
+    "pw": 57.4,
+    "levels": 219
+   }
+  },
+  {
+   "id": "0-20001-0-51463",
+   "wmo": "51463",
+   "name": null,
+   "lat": 43.78,
+   "lon": 87.62,
+   "elev": 919.0,
+   "offset": 78030,
+   "length": 6299,
+   "latest": "2026-09-14T00:00:00Z",
+   "times": ["2026-09-14T00:00:00Z"],
+   "headline": {
+    "t500": -11.8,
+    "td500": -18.9,
+    "freezingLevel": 4255,
+    "pw": 19.2,
+    "levels": 165
+   }
+  },
+  {
+   "id": "0-20001-0-53772",
+   "wmo": "53772",
+   "name": null,
+   "lat": 37.62,
+   "lon": 112.58,
+   "elev": 776.0,
+   "offset": 84330,
+   "length": 6741,
+   "latest": "2026-09-14T00:00:00Z",
+   "times": ["2026-09-14T00:00:00Z"],
+   "headline": {
+    "t500": -16.1,
+    "td500": -28.7,
+    "freezingLevel": 3659,
+    "pw": 18.7,
+    "levels": 176
+   }
+  },
+  {
+   "id": "0-20001-0-53845",
+   "wmo": "53845",
+   "name": null,
+   "lat": 36.57,
+   "lon": 109.45,
+   "elev": 1180.0,
+   "offset": 91072,
+   "length": 7412,
+   "latest": "2026-09-14T00:00:00Z",
+   "times": ["2026-09-14T00:00:00Z"],
+   "headline": {
+    "t500": -13.3,
+    "td500": -33.4,
+    "freezingLevel": 3731,
+    "pw": 13.7,
+    "levels": 196
+   }
+  },
+  {
+   "id": "0-20001-0-54218",
+   "wmo": "54218",
+   "name": null,
+   "lat": 42.3,
+   "lon": 118.83,
+   "elev": 668.6,
+   "offset": 98485,
+   "length": 7031,
+   "latest": "2026-09-14T00:00:00Z",
+   "times": ["2026-09-14T00:00:00Z"],
+   "headline": {
+    "t500": -17.2,
+    "td500": -35.9,
+    "freezingLevel": 2395,
+    "pw": 9.2,
+    "levels": 184
+   }
+  }
+ ],
+ "sources": [
+  {
+   "id": "jp-jma-gts-to-wis2",
+   "ok": true,
+   "fetched": "2026-09-14T02:04:00Z",
+   "url": "https://wis2globalcache.s3.us-east-1.amazonaws.com/data/jp-jma-gts-to-wis2/data/core/I/U/S/",
+   "watermark": "2026-09-14T02:34:41Z",
+   "listed": 3,
+   "objects": 3,
+   "reused": 0,
+   "bytes": 58106,
+   "bulletins": 3,
+   "nil": 0,
+   "unreadable": 0,
+   "subsets": 19,
+   "dropped": 0,
+   "soundings": 19
+  },
+  {
+   "id": "de-dwd-gts-to-wis2",
+   "ok": false,
+   "fetched": "2026-09-14T02:04:00Z",
+   "error": "request failed for https://wis2globalcache.s3.us-east-1.amazonaws.com/?list-type=2&prefix=data/de-dwd-gts-to-wis2/data/core/I/U/S/: HTTP Error 503: Service Unavailable",
+   "watermark": null
+  }
+ ]
+}
