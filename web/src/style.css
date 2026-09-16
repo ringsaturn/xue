@@ -2480,9 +2480,14 @@ html[lang="ja"] .rail-glyph {
   color: var(--text);
 }
 
+/* The chart keeps a chart's proportions: the panel is the capsule's 960 px
+   at most, and an ascent drawn across all of it at 320 px tall lies flat.
+   Capped and centred, the plot is a little wider than it is tall, which is
+   the shape a skew-T is read in. */
 .sounding-chart {
   display: block;
-  width: 100%;
+  width: min(100%, 540px);
+  margin: 0 auto;
   border-radius: 10px;
   cursor: crosshair;
   touch-action: none;
