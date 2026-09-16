@@ -8,19 +8,17 @@ name: publish jma
 # five-minute step — rebuilt every five minutes into a round subdirectory
 # of its run (<model>.<run>/<HHMM>/) and pointed at by latest-jma.json.
 #
-# The same shape as publish-mrms.yml: one job an hour runs the rounds
-# itself (scripts/window_rounds.sh, MODEL=jma). Three things differ. The
-# rounds come every two minutes rather than five, and a job runs on until
-# the next one has arrived instead of stopping at five to: GitHub starts
-# an hourly cron ten to twenty minutes late, and a job that stopped at :55
-# left the feed unattended until the next one arrived. The next run waits
-# on the concurrency group, and the running job asks before each round
-# whether one is waiting (scripts/successor_queued.sh) and ends normally
-# when it is, so the hand-off happens whenever the cron actually fires,
-# every job finishes green with its summary and artifact, and the
-# deadline at twenty past the next hour is only the backstop for a cron
-# that never comes. The frames are fetched and decoded by the jma-radar
-# tool
+# Unlike publish-mrms.yml, which keeps one job an hour looping the rounds
+# itself, this runs one round per job on a five-minute cron (the finest
+# GitHub offers): a job is a few minutes of runner time and the listing
+# never shows a job in progress for an hour, which keeps the workflow
+# recognisably a publish step rather than a resident service (the Actions
+# terms rule out running "part of a serverless application" on hosted
+# runners). The cost is freshness: GitHub starts a scheduled run ten to
+# twenty minutes late and skips some under load, and each round is
+# published that much after its frame. A dispatch with `loop` on runs the
+# rounds until the deadline, as the hourly shape did. The frames are
+# fetched and decoded by the jma-radar tool
 # (https://github.com/ringsaturn/jma-radar, installed into the project
 # environment here; xuebuild/jmacli.py drives it), and its decoded-frame
 # cache is mirrored on the bucket (`make pull-r2-frames` / `push-r2-frames`)
@@ -28,20 +26,20 @@ name: publish jma
 # asks it for one new frame. And the window is three hours rather than
 # four, since the listing is three hours deep.
 #
-# Machine time: a job an hour, each about eighty minutes, so roughly 960
-# hours a month, free on a public repository's standard runners.
+# Machine time: twelve jobs an hour of two to three minutes each, roughly
+# 360 hours a month, free on a public repository's standard runners.
 
 on:
   schedule:
-    - cron: "0 * * * *"
+    - cron: "*/5 * * * *"
   workflow_dispatch:
     inputs:
-      once:
-        description: "Run one round and stop, instead of the rest of the hour"
+      loop:
+        description: "Keep running rounds until twenty past the next hour instead of one round"
         type: boolean
         default: false
       round_minutes:
-        description: "Minutes between rounds"
+        description: "Minutes between rounds when looping"
         type: string
         default: "2"
       hours:
@@ -73,12 +71,14 @@ on:
 
 permissions:
   contents: read
-  # scripts/successor_queued.sh lists this workflow's waiting runs.
+  # scripts/successor_queued.sh lists this workflow's waiting runs, for a
+  # looping dispatch to yield to the next scheduled job.
   actions: read
 
 concurrency:
   group: publish-jma
-  # Never cancel: the running job yields to the waiting one on its own.
+  # A late cron queues behind the job still running and then finds
+  # nothing new; a looping dispatch yields to it on its own.
   cancel-in-progress: false
 
 env:
@@ -102,18 +102,18 @@ jobs:
     # Scheduled runs on forks would publish into a bucket they cannot reach.
     if: github.event_name != 'schedule' || github.repository == 'ringsaturn/xue'
     runs-on: ubuntu-24.04
-    # The rounds stop at twenty past the next hour on their own (UNTIL_MINUTE
-    # below) and normally hand over to the next cron's job before that; this
-    # is the backstop for a round that hangs.
+    # One round is a few minutes; a round that has to decode a window's
+    # worth of frames after an outage takes up to half an hour. A looping
+    # dispatch stops at twenty past the next hour on its own (UNTIL_MINUTE
+    # below); this is the backstop for a round that hangs.
     timeout-minutes: 90
     env:
       MODEL: jma
       FRAME_CACHE: "true"
-      ONCE: ${{ inputs.once || false }}
+      ONCE: ${{ !inputs.loop }}
       ROUND_MINUTES: ${{ inputs.round_minutes || '2' }}
-      # Past the hour: the job hands over to the next cron's job as soon as
-      # that one is waiting, and this deadline only matters when the cron
-      # never comes.
+      # For a looping dispatch: run past the hour, and hand over to the next
+      # scheduled job as soon as it is waiting.
       UNTIL_MINUTE: "80"
       HANDOVER_CHECK: scripts/successor_queued.sh
       # No edge-cache warm-up: a round is eight small objects replaced a few

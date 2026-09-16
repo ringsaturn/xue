@@ -258,11 +258,12 @@ model starts here; the frontend mirror is `FORECAST_MODELS` in
   span, so a regional grid can take its half tier on a far-out view.
 - Fetched series-file observation (`jma`): the JMA precipitation nowcast
   over Japan, fetched like MRMS (a rolling window, `latest-jma.json`,
-  `publish-jma.yml` looping the same `scripts/window_rounds.sh` with
-  `MODEL=jma HOURS=3 ROUND_MINUTES=2 UNTIL_MINUTE=80`, the running job
-  yielding to the next run once it is waiting on the concurrency group,
-  `scripts/successor_queued.sh`, so the hourly hand-off has no gap and
-  every job ends green) but arriving as one NetCDF series per window
+  `publish-jma.yml` running one round of the same `scripts/window_rounds.sh`
+  per job on a five-minute cron, `MODEL=jma HOURS=3 ONCE=true`, so no
+  runner is held for an hour; a `loop` dispatch runs rounds every two
+  minutes to twenty past the next hour and yields to the next scheduled
+  job through `scripts/successor_queued.sh`) but arriving as one NetCDF
+  series per window
   (`SourceSpec.series_file`, also true of `radar`; `convert_bin` and
   `convert.rs` branch on it). The fetch is the `jma-radar` tool
   (`xuebuild/jmacli.py`: `python -m jma_radar window --json`, or
