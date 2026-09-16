@@ -31,6 +31,11 @@ from .zarrstore import (
     export_bundle,
     store_path_for,
 )
+from .airport.build import build_product as build_airport_product
+from .airport.build import load_previous_index as load_previous_airport_index
+from .airport.fetch import fetch_round as fetch_airport_round
+from .airport.schema import floor_round as floor_airport_round
+from .airport.schema import parse_round as parse_airport_round
 from .tc.build import build_product as build_tc_product
 from .tc.build import load_previous_index as load_previous_tc_index
 from .tc.fetch import SOURCE_IDS as TC_SOURCE_IDS
@@ -364,6 +369,27 @@ def parser() -> argparse.ArgumentParser:
     tc_build.add_argument("--offline", action="store_true", help="build from what is already fetched; touch no network")
     tc_build.add_argument("--force", action="store_true", help="rebuild an issue whose directory exists")
     tc_build.add_argument("--force-download", action="store_true", help="fetch every source again")
+
+    airport_build = commands.add_parser(
+        "airport-build",
+        help="fetch the airport METAR and TAF caches and write one airport.<round>/ index, the shards that changed and the pointer",
+    )
+    airport_build.add_argument(
+        "--round",
+        default="now",
+        help="the round, YYYYMMDDHHMM in UTC with the minute a multiple of ten, or now (this minute floored to ten)",
+    )
+    airport_build.add_argument("--raw-dir", type=Path, default=Path("data/raw"))
+    airport_build.add_argument("--output-dir", type=Path, default=Path("web/public/data"))
+    airport_build.add_argument(
+        "--previous-index",
+        type=Path,
+        help="the previous round's index.json, whose shards are this round's history (default: the one the "
+        "local latest-airport.json names, if any; `make live-airport-index` fetches the live one and its shards)",
+    )
+    airport_build.add_argument("--offline", action="store_true", help="build from what is already fetched; touch no network")
+    airport_build.add_argument("--force", action="store_true", help="rebuild a round whose index exists")
+    airport_build.add_argument("--force-download", action="store_true", help="fetch every source again, station table included")
     return root
 
 
@@ -592,6 +618,22 @@ def main(argv: list[str] | None = None) -> int:
                 arguments.raw_dir,
                 arguments.output_dir,
                 sources=sources,
+                previous_index=previous,
+                force=arguments.force,
+            )
+            print(json.dumps(report, indent=2))
+        elif arguments.command == "airport-build":
+            if arguments.round == "now":
+                moment = floor_airport_round(datetime.now(UTC))
+            else:
+                moment = parse_airport_round(arguments.round)
+            if not arguments.offline:
+                fetch_airport_round(arguments.raw_dir, moment, force=arguments.force_download)
+            previous = load_previous_airport_index(arguments.previous_index, arguments.output_dir)
+            report = build_airport_product(
+                moment,
+                arguments.raw_dir,
+                arguments.output_dir,
                 previous_index=previous,
                 force=arguments.force,
             )
