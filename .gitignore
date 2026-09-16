@@ -26,6 +26,9 @@ web/public/data/latest-jma.json
 web/public/data/latest-cma.json
 web/public/data/tc.*/
 web/public/data/latest-tc.json
+web/public/data/airport.*/
+web/public/data/airport-shards/
+web/public/data/latest-airport.json
 web/public/data/showcase/
 # The STAC catalog a build derives beside the manifests (docs/stac.md): the
 # root catalog and one collection directory per source.
