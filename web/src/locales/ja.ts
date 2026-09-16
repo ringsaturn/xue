@@ -259,4 +259,14 @@ export const ja: Record<MessageKey, string> = {
   stationVisibility: "視程",
   stationQnh: "QNH",
   stationLevels: "層数",
+
+  soundingObserved: "実測",
+  soundingModel: "モデル",
+  soundingNoModel: "3 時間以内にモデルなし",
+  soundingLoading: "ゾンデを読み込み中…",
+  soundingUnavailable: "ゾンデを取得できません",
+  soundingExpand: "全体図",
+  soundingClose: "閉じる",
+  soundingSheetHeading: "高層観測",
+  soundingSheetAria: "高層観測グラフ",
 };

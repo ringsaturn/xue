@@ -264,4 +264,14 @@ export const ko: Record<MessageKey, string> = {
   stationVisibility: "시정",
   stationQnh: "QNH",
   stationLevels: "층수",
+
+  soundingObserved: "관측",
+  soundingModel: "모델",
+  soundingNoModel: "3시간 내 모델 없음",
+  soundingLoading: "관측 자료를 읽는 중…",
+  soundingUnavailable: "관측 자료 없음",
+  soundingExpand: "전체 차트",
+  soundingClose: "닫기",
+  soundingSheetHeading: "고층 관측",
+  soundingSheetAria: "고층 관측 차트",
 };
