@@ -348,8 +348,9 @@ Between the assets and the pointer, `upload-r2` runs `make warm-r2`
 Smart Tiered Cache upper tier hold the run when its first viewer arrives. A
 cold fill from R2 runs at about 1 MB/s per object. The H.264 companions are
 left cold, since they are opt-in. A failed warm-up is reported and the
-pointer goes live anyway, and `WARM=false` skips it: the JMA rounds do,
-since a round is a handful of small objects replaced minutes later.
+pointer goes live anyway, and `WARM=false` skips it: the rolling-window
+rounds (MRMS, JMA) do, since a round is a handful of small objects replaced
+minutes later.
 
 Credentials are an R2 API token's key pair in `AWS_ACCESS_KEY_ID` /
 `AWS_SECRET_ACCESS_KEY`, plus `CLOUDFLARE_ACCOUNT_ID` for the endpoint.

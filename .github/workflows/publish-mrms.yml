@@ -98,6 +98,10 @@ jobs:
       # scheduled job as soon as it is waiting.
       UNTIL_MINUTE: "80"
       HANDOVER_CHECK: scripts/successor_queued.sh
+      # No edge-cache warm-up: a round is a handful of small objects
+      # replaced a few minutes later, and the shell's next poll fills the
+      # edge itself.
+      WARM: "false"
       HOURS: ${{ inputs.hours || '4' }}
       PROFILE: ${{ inputs.profile || 'balanced' }}
       KEEP: ${{ inputs.keep || '2' }}
