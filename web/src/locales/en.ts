@@ -16,10 +16,9 @@ export const en = {
    * model with its horizon (`{hours}H` stays as the instrument reads it).
    * `· Xue` is appended by pagemeta.ts. */
   pageTitleLive: "{variable} forecast map · {model} {hours}H",
-  /** The same for a live observation dataset (the MRMS window): no
-   * forecast, and the horizon is how far back the window reaches, in the
-   * elapsed-time form the instrument reads (`T+003`). */
-  pageTitleLiveObservation: "{variable} observation map · {model} T+{hours}H",
+  /** The same for a live observation dataset (a rolling window): no
+   * forecast, and `{hours}` is how far back the window reaches. */
+  pageTitleLiveObservation: "{variable} observation map · {model} · last {hours}H",
   mapAria: "Global temperature and precipitation forecast map",
   modelSwitchAria: "Forecast model",
   variableSwitchAria: "Weather variable",
@@ -155,9 +154,10 @@ export const en = {
   creditsCode: "SOURCE CODE · RINGSATURN/XUE",
   caseTag: "CASE",
   runCycle: "Model run",
-  // An observation dataset has no run cycle and no lead time: its runTime is
-  // when the series starts, and a frame is an observation, not a forecast.
-  seriesStart: "Series start",
+  // An observation dataset has no run cycle and no lead time: the line that
+  // names a forecast's cycle names the window's newest observation instead,
+  // and a frame is an observation, not a forecast.
+  latestObservation: "Latest observation",
   awaitingData: "Awaiting data",
   validTimeLabel: "Valid time",
   observationTimeLabel: "Observation time",
@@ -189,7 +189,6 @@ export const en = {
   playbackSpeed: "Playback speed",
   readingManifest: "Loading manifest",
   forecastHourAria: "Forecast hour",
-  elapsedAria: "Time elapsed",
   forecastDaysAria: "Daily forecast segments",
   observationDaysAria: "Daily segments",
   mapMenuAria: "Map options",

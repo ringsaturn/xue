@@ -676,8 +676,11 @@ browse `http://localhost:4173`.
   `DEFAULT_VARIABLE` (precipitation); a chosen layer is kept across a model
   switch.
 - Timeline copy follows the kind of dataset: `isObservationModel` swaps
-  "FORECAST HOUR" / `F058` / 模式周期 / 有效时间 for "TIME ELAPSED" /
-  `T+058:24` / 观测起点 / 观测时间, on the viewer and the showcase cards.
+  "FORECAST HOUR" / `F058` / 模式周期 / 有效时间 for "OBSERVED" / the
+  frame's clock time in the display zone (`09:50`) / 最新观测 (the window's
+  newest frame, UTC) / 观测时间, on the viewer, and the showcase cards name
+  a case's start and span. An observation has no run to count from, so
+  nothing reads as an offset from the window's start.
 - Valid times read in one display zone (`web/src/timezone.ts`): the
   browser's own, or the pinned point's while a probe is open (`tzf-wasm`, a
   4 MB index loaded on the first pin, `Etc/GMT±N` over open water).

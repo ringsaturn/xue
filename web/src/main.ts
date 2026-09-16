@@ -176,6 +176,7 @@ import { frameCacheKey, parseFrameCacheKey, variableKey } from "./sessionkeys";
 import { applyTheme, isDark, onThemeChange, toggleTheme } from "./theme";
 import {
   displayZone,
+  formatClockStamp,
   formatCompactStamp,
   formatDayMark as formatDayMarkIn,
   formatStamp,
@@ -1638,9 +1639,9 @@ function loopUnits(): number {
 const DAY_SECONDS = 24 * HOUR_SECONDS;
 
 /** Whether the dataset on screen is observations rather than a forecast.
- * A radar mosaic has no run cycle and no lead time: its runTime is when the
- * series starts, each frame is an observation, and the timeline reads as
- * time elapsed rather than forecast hour. */
+ * A radar mosaic has no run cycle and no lead time: its runTime is only
+ * where the window starts, each frame is an observation, and the timeline
+ * reads as the observation's clock time rather than a forecast hour. */
 function showingObservations(): boolean {
   return isObservationModel(activeCase ? activeCase.modelId : selectedModelId);
 }
@@ -1650,10 +1651,10 @@ function showingObservations(): boolean {
  * every other one. */
 function applyDatasetWording(): void {
   const observations = showingObservations();
-  leadLabel.textContent = observations ? "TIME ELAPSED" : "FORECAST HOUR";
-  runTimeLabel.textContent = t(observations ? "seriesStart" : "runCycle");
+  leadLabel.textContent = observations ? "OBSERVED" : "FORECAST HOUR";
+  runTimeLabel.textContent = t(observations ? "latestObservation" : "runCycle");
   validTimeLabel.textContent = t(observations ? "observationTimeLabel" : "validTimeLabel");
-  slider.setAttribute("aria-label", t(observations ? "elapsedAria" : "forecastHourAria"));
+  slider.setAttribute("aria-label", t(observations ? "observationTimeLabel" : "forecastHourAria"));
   forecastDays.setAttribute("aria-label", t(observations ? "observationDaysAria" : "forecastDaysAria"));
 }
 
@@ -1700,18 +1701,27 @@ function nearestFrameIndexForValidTime(validTime: number): number {
   return nearestFrameIndex((validTime - base) / 1000);
 }
 
-/** The lead-time readout. A forecast reads as the forecast hour it has
- * always been ("F058"); observations read as time elapsed from the start of
- * the series ("T+058"). A sub-hourly axis carries the minutes too
- * ("T+058:06"), because on the radar mosaic ten frames share an hour. */
+/** The instrument readout. A forecast reads as the forecast hour it has
+ * always been ("F058"; a sub-hourly axis carries the minutes too,
+ * "F058:06"). An observation has no run to count from, so it reads as the
+ * frame's clock time in the display zone ("09:50"). */
 function formatLead(index: number): string {
+  if (showingObservations()) return formatClockStamp(frameValidTime(index), displayZone);
   const seconds = frameLeadSeconds(index);
   const hours = Math.floor(seconds / HOUR_SECONDS);
-  const label = `${showingObservations() ? "T+" : "F"}${String(hours).padStart(3, "0")}`;
+  const label = `F${String(hours).padStart(3, "0")}`;
   const minutes = Math.floor((seconds % HOUR_SECONDS) / 60);
   return minutes === 0 && frameUnitSeconds >= HOUR_SECONDS
     ? label
     : `${label}:${String(minutes).padStart(2, "0")}`;
+}
+
+/** The readout with the frame's date beside it, for the tooltip and the
+ * probe: a forecast's hour and valid time, an observation's stamp alone
+ * (its readout is already that stamp's clock). */
+function frameStampLine(index: number): string {
+  const stamp = formatCompactDate(frameValidTime(index));
+  return showingObservations() ? stamp : `${formatLead(index)} · ${stamp}`;
 }
 
 /** The frame cache's key. A numericId is file-local — the encoder numbers a
@@ -2398,7 +2408,7 @@ function renderProbe(): void {
   } else {
     probePanel.value.value =
       typeof current === "number" ? `${formatProbeValue(variable, current)} ${variable.unit}` : "--";
-    const lead = `${formatLead(index)} · ${formatCompactDate(frameValidTime(index))}`;
+    const lead = frameStampLine(index);
     if (current === undefined) probePanel.meta.textContent = `${lead} · ${t("probeAwaiting")}`;
     else if (current === null) probePanel.meta.textContent = `${lead} · ${t("probeNoData")}`;
     else {
@@ -2887,11 +2897,11 @@ function updateFrameReadout(index: number): void {
   const lead = formatLead(index);
   const valid = frameValidTime(index);
   slider.value = String(index);
-  slider.setAttribute("aria-valuetext", `${lead}, ${formatDate(valid)}`);
+  slider.setAttribute("aria-valuetext", showingObservations() ? formatDate(valid) : `${lead}, ${formatDate(valid)}`);
   forecastLead.value = lead;
   validTime.textContent = formatDate(valid);
   validTime.dateTime = new Date(valid).toISOString();
-  frameTooltip.value = `${lead} · ${formatCompactDate(valid)}`;
+  frameTooltip.value = frameStampLine(index);
   // Read by the tooltip and by the track's playhead, so it is set on the
   // capsule both of them sit in.
   timelinePanel.style.setProperty("--frame-progress", `${(index / Math.max(1, frameCount() - 1)) * 100}%`);
@@ -5120,6 +5130,10 @@ function syncTimeline(session: VariableSession): void {
     : null;
   metadata = session.metadata;
   const time = metadata.time;
+  // An observation window is named by its newest frame, not by where it
+  // starts: that is what a viewer of a live feed wants to know. Stamped in
+  // UTC like a run cycle.
+  if (showingObservations()) sayText(runTime, formatStamp(frameValidTime(frameCount() - 1), "UTC"));
   if (previous && sameTimeAxis(previous, time)) {
     return;
   }
@@ -5660,8 +5674,10 @@ async function initialize({ frame = false }: { frame?: boolean } = {}): Promise<
     // A case is a fixed past; the live storms have no place over it.
     void applyTcView();
     // The cycle is named in UTC wherever it is stamped (00Z is its name),
-    // whatever zone the valid times below read in.
-    sayText(runTime, formatStamp(loadedManifest.runTime, "UTC"));
+    // whatever zone the valid times below read in. An observation window's
+    // runTime is only where it starts; its line is stamped with the newest
+    // frame once the session's axis is known (syncTimeline).
+    if (!showingObservations()) sayText(runTime, formatStamp(loadedManifest.runTime, "UTC"));
 
     // Each variable button appears only when the manifest actually ships its
     // bundle. On the live feed that is wind10m everywhere and dswrf on the
