@@ -190,9 +190,9 @@ function empty(): FeatureCollection {
 }
 
 const RADII_OPACITY: Record<string, number> = {
-  "34": 0.12,
-  "50": 0.18,
-  "64": 0.26,
+  "34": 0.22,
+  "50": 0.3,
+  "64": 0.4,
 };
 
 export class StormLayers {
@@ -257,8 +257,8 @@ export class StormLayers {
         filter: kind("radii"),
         paint: {
           "line-color": ["get", "color"],
-          "line-width": 0.8,
-          "line-opacity": 0.6,
+          "line-width": 1.2,
+          "line-opacity": 0.85,
         },
       },
       before,
