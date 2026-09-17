@@ -15,7 +15,7 @@ use crate::encode::reproject::Resampler;
 /// `column_start` may run past the source's last column: a window crossing the
 /// antimeridian continues from column 0, so columns are always taken modulo
 /// `source_width`. Rows never wrap — the grid ends at the poles.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CropWindow {
     pub source_width: usize,
     pub source_height: usize,
@@ -402,11 +402,15 @@ pub fn crop_grid(grid: GridInfo, bbox: (f64, f64, f64, f64)) -> Result<GridInfo>
         span = 360.0;
     }
 
-    let offset = if grid.wraps() {
-        (west - grid.first_longitude).rem_euclid(360.0)
-    } else {
-        west - grid.first_longitude
-    };
+    // Degrees east of the grid's origin. A wrapping grid has every longitude
+    // on some column. A regional grid is taken in the copy of the world it
+    // lies in: a satellite disk over the Pacific runs from 80.7 to 200.7, and
+    // a box spelled -170 is at 190 on it, while a box a few degrees west of
+    // the origin is west of it, not most of the way around the world.
+    let mut offset = (west - grid.first_longitude).rem_euclid(360.0);
+    if !grid.wraps() && offset > (grid.width - 1) as f64 * grid.longitude_step + 1e-9 {
+        offset -= 360.0;
+    }
     let mut column_start = (offset / grid.longitude_step + 1e-9).floor() as i64;
     let mut column_end = ((offset + span) / grid.longitude_step - 1e-9).ceil() as i64;
     let width: i64;
@@ -471,11 +475,32 @@ pub fn crop_grid(grid: GridInfo, bbox: (f64, f64, f64, f64)) -> Result<GridInfo>
 
 #[cfg(test)]
 mod tests {
-    use super::{snap_global_longitudes, snap_regional_steps, BlockReduction, GridInfo};
+    use super::{crop_grid, snap_global_longitudes, snap_regional_steps, BlockReduction, GridInfo};
     use std::path::Path;
 
     const WAVE_STEP: f64 = 0.2500000111188325;
     const WAVE_ORIGIN: f64 = -180.12500000555943;
+
+    #[test]
+    fn a_regional_grid_past_the_antimeridian_is_cropped_in_its_own_copy_of_the_world() {
+        // A Himawari disk on plate carrée: 80.7 to 200.7 at 0.04°, not wrapping.
+        let disk = GridInfo::new(3000, 3000, 80.7, 60.0, 0.04, -0.04);
+        assert!(!disk.wraps());
+        // A box spelled west of -180 lands on the disk's eastern columns...
+        let east = crop_grid(disk.clone(), (-170.0, 0.0, -160.0, 10.0)).unwrap();
+        assert_eq!(east.crop.as_ref().unwrap().column_start, 2732);
+        assert_eq!(east.width, 252);
+        assert_eq!(east.first_longitude, -170.02);
+        // ...the same box spelled past 180 is the same window...
+        let same = crop_grid(disk.clone(), (190.0, 0.0, 200.0, 10.0)).unwrap();
+        assert_eq!(same.crop, east.crop);
+        // ...a box just west of the origin clamps to it rather than reading
+        // as almost a whole world east, and one east of the disk misses it.
+        let west = crop_grid(disk.clone(), (70.0, 0.0, 90.0, 10.0)).unwrap();
+        assert_eq!(west.crop.as_ref().unwrap().column_start, 0);
+        assert_eq!(west.first_longitude, 80.7);
+        assert!(crop_grid(disk, (-150.0, 0.0, -100.0, 10.0)).is_err());
+    }
 
     #[test]
     fn the_wave_grid_snaps_to_the_pgrb2_grid() {

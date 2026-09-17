@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import re
 import struct
 import zlib
 from concurrent.futures import ThreadPoolExecutor
@@ -94,6 +95,20 @@ _PARAMETER_NULLABLE_FIELDS = frozenset(
         "typeOfStatisticalProcessing",
     }
 )
+
+# The optional blocks beside ``parameter`` (docs/format.md §"Band and
+# Producer"): the spectral band a satellite image was taken in, in the fields
+# of GRIB2 product definition template 4.31 with their byte widths, and the
+# algorithm that derived a composite field. Each is present whole or absent.
+_BAND_FIELDS: dict[str, tuple[int, int]] = {
+    "satelliteSeries": (0, 0xFFFF),
+    "satelliteNumber": (0, 0xFFFF),
+    "instrumentType": (0, 0xFFFF),
+    "scaleFactorOfCentralWaveNumber": (-127, 127),
+    "scaledValueOfCentralWaveNumber": (0, 0xFFFFFFFE),
+}
+_PRODUCER_FIELDS = frozenset({"id", "version"})
+_PRODUCER_ID = re.compile(r"^[a-z][a-z0-9]*$")
 
 _HEADER_STRUCT = struct.Struct("<8sHHIQQQQQQQQ")
 _INDEX_HEADER_STRUCT = struct.Struct("<4sHHII")
@@ -623,6 +638,8 @@ class Bundle:
                 raise BundleError("metadata contains duplicate variable numericId values")
             self._parse_parameter(variable.get("parameter"), schema_version)
             parameters += "parameter" in variable
+            self._parse_band(variable, schema_version)
+            self._parse_producer(variable, schema_version)
             variable_ids[numeric_id] = name
         if not variable_ids:
             raise BundleError("metadata must declare at least one variable")
@@ -684,6 +701,44 @@ class Bundle:
             not isinstance(statistical, int) or isinstance(statistical, bool) or not 0 <= statistical <= 255
         ):
             raise BundleError("parameter typeOfStatisticalProcessing is invalid")
+
+    @staticmethod
+    def _parse_band(variable: dict[str, Any], schema_version: int) -> None:
+        """Validate a variable's optional spectral band block. Absent on
+        every variable a GRIB source produces; present, it is whole and
+        within template 4.31's byte widths, and it needs schemaVersion 3
+        without raising the version a file must declare."""
+        if "band" not in variable:
+            return
+        band = variable["band"]
+        if schema_version < 3:
+            raise BundleError("a band block requires schemaVersion 3")
+        if not isinstance(band, dict):
+            raise BundleError("band must be an object")
+        if set(band) != set(_BAND_FIELDS):
+            raise BundleError("band block must carry exactly its five fields")
+        for field, (low, high) in _BAND_FIELDS.items():
+            value = band[field]
+            if not isinstance(value, int) or isinstance(value, bool) or not low <= value <= high:
+                raise BundleError(f"band {field} is invalid")
+
+    @staticmethod
+    def _parse_producer(variable: dict[str, Any], schema_version: int) -> None:
+        """Validate a variable's optional producer block: the algorithm
+        that derived a composite field, named by id and version."""
+        if "producer" not in variable:
+            return
+        producer = variable["producer"]
+        if schema_version < 3:
+            raise BundleError("a producer block requires schemaVersion 3")
+        if not isinstance(producer, dict):
+            raise BundleError("producer must be an object")
+        if set(producer) != _PRODUCER_FIELDS:
+            raise BundleError("producer block must carry exactly id and version")
+        if not isinstance(producer["id"], str) or not _PRODUCER_ID.match(producer["id"]):
+            raise BundleError("producer id is invalid")
+        if not isinstance(producer["version"], str) or not producer["version"]:
+            raise BundleError("producer version is invalid")
 
     @classmethod
     def _parse_time_axis(

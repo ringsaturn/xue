@@ -240,6 +240,70 @@ fn parse_parameter(
     Ok(())
 }
 
+/// The optional blocks beside `parameter` (docs/format.md §"Band and
+/// Producer"): the spectral band a satellite image was taken in, in the
+/// fields of GRIB2 product definition template 4.31 with their byte widths,
+/// and the algorithm that derived a composite field. Each is present whole
+/// or absent, needs schemaVersion 3, and raises no version floor.
+const BAND_FIELDS: [(&str, i64, i64); 5] = [
+    ("satelliteSeries", 0, 0xFFFF),
+    ("satelliteNumber", 0, 0xFFFF),
+    ("instrumentType", 0, 0xFFFF),
+    ("scaleFactorOfCentralWaveNumber", -127, 127),
+    ("scaledValueOfCentralWaveNumber", 0, 0xFFFF_FFFE),
+];
+
+fn parse_band(variable: &serde_json::Value, schema_version: u64) -> Result<(), DecodeError> {
+    let Some(band) = variable.get("band") else {
+        return Ok(());
+    };
+    if schema_version < 3 {
+        return Err(err("a band block requires schemaVersion 3"));
+    }
+    let band = band.as_object().ok_or_else(|| err("metadata band must be an object"))?;
+    if band.len() != BAND_FIELDS.len() {
+        return Err(err("metadata band block must carry exactly its five fields"));
+    }
+    for (field, low, high) in BAND_FIELDS {
+        band.get(field)
+            .and_then(|value| value.as_i64())
+            .filter(|value| (low..=high).contains(value))
+            .ok_or_else(|| err("metadata band field is invalid"))?;
+    }
+    Ok(())
+}
+
+fn parse_producer(variable: &serde_json::Value, schema_version: u64) -> Result<(), DecodeError> {
+    let Some(producer) = variable.get("producer") else {
+        return Ok(());
+    };
+    if schema_version < 3 {
+        return Err(err("a producer block requires schemaVersion 3"));
+    }
+    let producer = producer
+        .as_object()
+        .ok_or_else(|| err("metadata producer must be an object"))?;
+    if producer.len() != 2 {
+        return Err(err("metadata producer block must carry exactly id and version"));
+    }
+    let id = producer
+        .get("id")
+        .and_then(|value| value.as_str())
+        .ok_or_else(|| err("metadata producer id is invalid"))?;
+    let mut chars = id.chars();
+    let well_formed = chars.next().is_some_and(|c| c.is_ascii_lowercase())
+        && chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit());
+    if !well_formed {
+        return Err(err("metadata producer id is invalid"));
+    }
+    producer
+        .get("version")
+        .and_then(|value| value.as_str())
+        .filter(|version| !version.is_empty())
+        .ok_or_else(|| err("metadata producer version is invalid"))?;
+    Ok(())
+}
+
 pub(crate) fn parse_metadata(raw: &[u8]) -> Result<Metadata, DecodeError> {
     let text = std::str::from_utf8(raw).map_err(|_| err("metadata is not UTF-8"))?;
     let value: serde_json::Value =
@@ -293,6 +357,8 @@ pub(crate) fn parse_metadata(raw: &[u8]) -> Result<Metadata, DecodeError> {
         let parameter = variable.get("parameter");
         parse_parameter(parameter, schema_version)?;
         parameters += usize::from(parameter.is_some());
+        parse_band(variable, schema_version)?;
+        parse_producer(variable, schema_version)?;
         variable_ids.push(numeric as u8);
     }
     if variable_ids.is_empty() {
@@ -494,6 +560,64 @@ mod parameter_tests {
                 "scaledValueOfFirstFixedSurface": null, "levelValue": 2}"#,
         ] {
             assert!(parse_parameter(Some(&parameter(json)), 3).is_err(), "{json}");
+        }
+    }
+}
+
+#[cfg(test)]
+mod band_tests {
+    use super::{parse_band, parse_producer};
+
+    fn variable(json: &str) -> serde_json::Value {
+        serde_json::from_str(json).unwrap()
+    }
+
+    const IR104: &str = r#"{"band": {
+        "satelliteSeries": 0, "satelliteNumber": 174, "instrumentType": 297,
+        "scaleFactorOfCentralWaveNumber": 0, "scaledValueOfCentralWaveNumber": 96061}}"#;
+
+    #[test]
+    fn a_band_is_optional_and_needs_version_3() {
+        assert!(parse_band(&variable("{}"), 1).is_ok());
+        assert!(parse_band(&variable("{}"), 3).is_ok());
+        assert!(parse_band(&variable(IR104), 3).is_ok());
+        assert!(parse_band(&variable(IR104), 2).is_err());
+    }
+
+    #[test]
+    fn malformed_bands_rejected() {
+        for json in [
+            // Null, a missing field, one out of range, one of the wrong type,
+            // and a key the block does not define.
+            r#"{"band": null}"#,
+            r#"{"band": {"satelliteSeries": 0, "satelliteNumber": 174, "instrumentType": 297,
+                "scaleFactorOfCentralWaveNumber": 0}}"#,
+            r#"{"band": {"satelliteSeries": 0, "satelliteNumber": 65536, "instrumentType": 297,
+                "scaleFactorOfCentralWaveNumber": 0, "scaledValueOfCentralWaveNumber": 96061}}"#,
+            r#"{"band": {"satelliteSeries": 0, "satelliteNumber": "174", "instrumentType": 297,
+                "scaleFactorOfCentralWaveNumber": 0, "scaledValueOfCentralWaveNumber": 96061}}"#,
+            r#"{"band": {"satelliteSeries": 0, "satelliteNumber": 174, "instrumentType": 297,
+                "scaleFactorOfCentralWaveNumber": 0, "scaledValueOfCentralWaveNumber": 96061,
+                "channel": 13}}"#,
+        ] {
+            assert!(parse_band(&variable(json), 3).is_err(), "{json}");
+        }
+    }
+
+    #[test]
+    fn producer_is_an_id_and_a_version() {
+        assert!(parse_producer(&variable("{}"), 3).is_ok());
+        let dust = r#"{"producer": {"id": "shachen", "version": "0.3.1"}}"#;
+        assert!(parse_producer(&variable(dust), 3).is_ok());
+        assert!(parse_producer(&variable(dust), 2).is_err());
+        for json in [
+            r#"{"producer": null}"#,
+            r#"{"producer": {"id": "shachen"}}"#,
+            r#"{"producer": {"id": "Shachen", "version": "0.3.1"}}"#,
+            r#"{"producer": {"id": "shachen", "version": ""}}"#,
+            r#"{"producer": {"id": "shachen", "version": "0.3.1", "url": "x"}}"#,
+        ] {
+            assert!(parse_producer(&variable(json), 3).is_err(), "{json}");
         }
     }
 }

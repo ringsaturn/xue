@@ -803,6 +803,29 @@ export interface BundleParameter {
   typeOfStatisticalProcessing?: number;
 }
 
+/** The spectral band a satellite image variable was measured in, in the
+ * fields of GRIB2 product definition template 4.31: the spacecraft and
+ * instrument by their WMO common code table numbers (C-5 and C-8) and the
+ * band's central wave number, `scaledValue × 10^-scaleFactor` m⁻¹. Optional
+ * beside `parameter` from schemaVersion 3; a chart classifies a channel by
+ * its wave number, never by the spacecraft (docs/format.md §"Band and
+ * Producer"). */
+export interface BundleBand {
+  satelliteSeries: number;
+  satelliteNumber: number;
+  instrumentType: number;
+  scaleFactorOfCentralWaveNumber: number;
+  scaledValueOfCentralWaveNumber: number;
+}
+
+/** The algorithm that derived a composite field from other variables; its
+ * `parameter` is a local-use number that means something only together
+ * with `id`. Optional beside `parameter` from schemaVersion 3. */
+export interface BundleProducer {
+  id: string;
+  version: string;
+}
+
 export interface BundleVariable {
   numericId: number;
   id: DataVariableId;
@@ -810,6 +833,10 @@ export interface BundleVariable {
   unit: string;
   /** Present from schemaVersion 3 onwards. */
   parameter?: BundleParameter;
+  /** A satellite channel's band, when the variable is one. */
+  band?: BundleBand;
+  /** The producer of a derived (composite) field, when the variable is one. */
+  producer?: BundleProducer;
   quantization: LinearQuantization | LogQuantization;
 }
 
@@ -1037,6 +1064,47 @@ function validateParameter(parameter: unknown, schemaVersion: number): void {
   }
 }
 
+// The optional blocks beside `parameter`, each present whole or absent,
+// valid from schemaVersion 3 and raising no version floor.
+const BAND_FIELDS: ReadonlyArray<readonly [keyof BundleBand, number, number]> = [
+  ["satelliteSeries", 0, 0xffff],
+  ["satelliteNumber", 0, 0xffff],
+  ["instrumentType", 0, 0xffff],
+  ["scaleFactorOfCentralWaveNumber", -127, 127],
+  ["scaledValueOfCentralWaveNumber", 0, 0xfffffffe],
+];
+const PRODUCER_ID = /^[a-z][a-z0-9]*$/;
+
+function validateBand(variable: Record<string, unknown>, schemaVersion: number): void {
+  if (!("band" in variable)) return;
+  if (schemaVersion < 3) throw new Error("a band block requires schema version 3");
+  const band = object(variable.band);
+  if (Object.keys(band).length !== BAND_FIELDS.length) {
+    throw new Error("bundle band block must carry exactly its five fields");
+  }
+  for (const [field, low, high] of BAND_FIELDS) {
+    const value = band[field];
+    if (typeof value !== "number" || !Number.isInteger(value) || value < low || value > high) {
+      throw new Error(`invalid bundle band ${field}`);
+    }
+  }
+}
+
+function validateProducer(variable: Record<string, unknown>, schemaVersion: number): void {
+  if (!("producer" in variable)) return;
+  if (schemaVersion < 3) throw new Error("a producer block requires schema version 3");
+  const producer = object(variable.producer);
+  if (Object.keys(producer).length !== 2) {
+    throw new Error("bundle producer block must carry exactly id and version");
+  }
+  if (typeof producer.id !== "string" || !PRODUCER_ID.test(producer.id)) {
+    throw new Error("invalid bundle producer id");
+  }
+  if (typeof producer.version !== "string" || producer.version.length === 0) {
+    throw new Error("invalid bundle producer version");
+  }
+}
+
 export function parseBundleMetadata(json: string): BundleMetadata {
   const value = object(JSON.parse(json));
   const schemaVersion = value.schemaVersion;
@@ -1059,6 +1127,8 @@ export function parseBundleMetadata(json: string): BundleMetadata {
     }
     validateParameter(variable.parameter, schemaVersion);
     if (variable.parameter !== undefined) parameters += 1;
+    validateBand(variable, schemaVersion);
+    validateProducer(variable, schemaVersion);
     const quantization = object(variable.quantization);
     if (quantization.type !== "linear" && quantization.type !== "log1p") {
       throw new Error("unsupported bundle quantization");

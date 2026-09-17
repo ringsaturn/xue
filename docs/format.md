@@ -235,7 +235,7 @@ versioned by the FixedHeader `version` field.
 |---:|---|---|
 | 1 | — | a uniform whole-hour `time` axis declaring `stepHours` |
 | 2 | Explicitly listed forecast hours | a whole-hour `time` axis listing `hours` |
-| 3 | Per-variable GRIB2 identity, and a time axis in units it names | a `parameter` block on every variable, and a `time` block declaring `unitSeconds` |
+| 3 | Per-variable GRIB2 identity, and a time axis in units it names | a `parameter` block on every variable (optionally with `band` / `producer` beside it), and a `time` block declaring `unitSeconds` |
 
 An encoder must emit the lowest version that can express the file: the
 highest version any single feature of the metadata requires, and no higher.
@@ -359,6 +359,82 @@ standard gravity (9.80665 m/s²), in g·cm⁻¹·hPa⁻¹·s⁻¹. GRIB2 has no 
 parameter for a per-level horizontal vapour flux, so the two components take
 local-use numbers 250 and 251 in the moisture category, which no centre this
 pipeline reads from uses.
+
+#### Band and Producer
+
+A `parameter` block names a quantity on a surface, which is a satellite
+image's whole identity only together with the channel it was taken in:
+brightness temperature at the top of the atmosphere (0 / 4 / 4 on surface
+8) is one parameter for every infrared channel of every imager, and a
+composite computed from several channels has no GRIB2 parameter at all. Two
+optional blocks may sit beside `parameter` on a variable, at the same level
+as it and never inside it, to carry what the parameter does not:
+
+- `band`: the spectral band and the instrument that measured it, in the
+  fields of GRIB2 product definition templates 4.31 and 4.32 for one
+  contributing band (the templates' band count is 1 and is not written);
+- `producer`: the algorithm that derived the field from other variables.
+
+```json
+{
+  "numericId": 1,
+  "id": "ir104",
+  "label": "Brightness temperature, 10.4 µm",
+  "unit": "K",
+  "parameter": {
+    "discipline": 0, "parameterCategory": 4, "parameterNumber": 4,
+    "typeOfFirstFixedSurface": 8,
+    "scaleFactorOfFirstFixedSurface": null, "scaledValueOfFirstFixedSurface": null
+  },
+  "band": {
+    "satelliteSeries": 0,
+    "satelliteNumber": 174,
+    "instrumentType": 297,
+    "scaleFactorOfCentralWaveNumber": 0,
+    "scaledValueOfCentralWaveNumber": 96061
+  },
+  "quantization": { "type": "linear", "offset": 180.0, "scale": 0.6,
+                    "minimumCode": 0, "maximumCode": 253, "nodataCode": 255 }
+}
+```
+
+| `band` field | GRIB2 origin | Rule |
+|---|---|---|
+| `satelliteSeries` | Template 4.31, Common Code Table C-5 | 0–65535 |
+| `satelliteNumber` | Template 4.31, Common Code Table C-5 | 0–65535 |
+| `instrumentType` | Template 4.31, Common Code Table C-8 | 0–65535 |
+| `scaleFactorOfCentralWaveNumber` | Template 4.31 | −127…127 |
+| `scaledValueOfCentralWaveNumber` | Template 4.31 | 0…4294967294 |
+
+The central wave number is
+`scaledValueOfCentralWaveNumber × 10^−scaleFactorOfCentralWaveNumber` in
+m⁻¹. All five keys are required when the block is present and no other key
+is allowed. `parameter` stays the identity a reader keys on; `band` says
+which channel of which instrument measured it, and a chart-aware reader
+classifies a channel by its central wave number (an infrared window, a
+water vapour band), not by the spacecraft: the satellite succeeding at an
+orbital slot changes `satelliteNumber` and nothing else.
+
+| `producer` field | Rule |
+|---|---|
+| `id` | `^[a-z][a-z0-9]*$`, the algorithm's name |
+| `version` | a non-empty string, the algorithm's version as it names it |
+
+Both keys are required when the block is present and no other key is
+allowed. A produced field's `parameter` uses GRIB2's local-use ranges
+(category 192 and above in the discipline that fits); a reader that charts
+such fields tells them apart by `producer.id` and the parameter number
+together, since local numbers mean nothing across producers.
+
+Either block is optional and either may appear without the other; a file
+that carries neither is unchanged from before they were defined. Both are
+valid only from schemaVersion 3, like `parameter`, and neither raises the
+version a file must declare: a version 3 reader that predates them reads
+the keys it knows on a variable object and ignores the rest, which is what
+lets them widen version 3 rather than open a version 4. A block that is
+present must be well formed; a reader that implements this section rejects
+a malformed one (see Error Handling). A block is present or absent, never
+`null`, so a variable has exactly one encoding.
 
 #### Time Axis
 
@@ -929,6 +1005,12 @@ A decoder must reject:
   without one in a schemaVersion 3 file; a parameter code outside 0–255; a
   fixed surface with exactly one of its scale factor and scaled value
   `null`; a key the block does not define.
+- A `band` or `producer` block in a file below schemaVersion 3; a block
+  that is not an object (`null` included); a `band` block missing one of
+  its five fields, carrying a value outside its range, or carrying a key it
+  does not define; a `producer` block missing `id` or `version`, whose `id`
+  does not match `^[a-z][a-z0-9]*$`, whose `version` is not a non-empty
+  string, or carrying a key it does not define.
 - A declared `schemaVersion` other than the lowest able to express the
   metadata: a schemaVersion 2 file that declares `stepHours`, or a
   schemaVersion 1 or 2 file whose variables carry `parameter` or whose time

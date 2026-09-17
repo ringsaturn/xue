@@ -99,6 +99,12 @@ fn variable_metadata(
     block.insert("label".into(), json!(spec.label));
     block.insert("unit".into(), json!(spec.output_unit));
     block.insert("parameter".into(), Value::Object(parameter));
+    if let Some((_, band)) = source.bands.iter().find(|(band_id, _)| *band_id == variable_id) {
+        // A satellite channel: the brightness temperature parameter is the
+        // same for every infrared band, so the band block beside it says
+        // which channel of which instrument this one is.
+        block.insert("band".into(), Value::Object(band.metadata()));
+    }
     block.insert(
         "quantization".into(),
         Value::Object(codebook(profile, variable_id)?.metadata()),
@@ -216,7 +222,7 @@ impl serde_json::ser::Formatter for SpacedFormatter {
 mod tests {
     use super::{axis_unit_seconds, build_metadata, lead_hours, to_spaced_json};
     use crate::encode::grid::GridInfo;
-    use crate::encode::sources::source_spec;
+    use crate::encode::sources::{source_spec, SatelliteBand};
 
     #[test]
     fn the_axis_unit_is_the_coarsest_that_fits() {
@@ -246,6 +252,28 @@ mod tests {
         let text = serde_json::to_string(&mixed).expect("json");
         assert!(text.contains(r#""frameOffsets":[0,1,2,5]"#));
         assert!(!text.contains("frameStep"));
+    }
+
+    #[test]
+    fn a_satellite_channel_writes_its_band_beside_the_parameter() {
+        // No registered source images from a spacecraft yet; the block is
+        // written from the source table's `bands` and decoded back by the
+        // reader, whose own tests hold its shape.
+        let mut source = *source_spec("cma").expect("cma");
+        source.bands = &[(
+            "cref",
+            SatelliteBand { satellite_series: 0, satellite_number: 174, instrument_type: 297, central_wavenumber: 96061 },
+        )];
+        let grid = GridInfo::new(16, 8, -180.0, 90.0, 22.5, -22.5);
+        let run_time = time::macros::datetime!(2026-08-14 06:00:00 UTC);
+        let metadata = build_metadata(run_time, &[0, 1], &grid, "quality", &["cref"], &source, 360)
+            .expect("metadata");
+        let text = serde_json::to_string(&metadata).expect("json");
+        assert!(text.contains(r#"},"band":{"satelliteSeries":0,"satelliteNumber":174,"instrumentType":297,"scaleFactorOfCentralWaveNumber":0,"scaledValueOfCentralWaveNumber":96061},"quantization":{"#));
+        crate::decode::metadata::parse_metadata(text.as_bytes()).expect("the decoder reads it back");
+        let plain = build_metadata(run_time, &[0, 1], &grid, "quality", &["cref"], source_spec("cma").unwrap(), 360)
+            .expect("metadata");
+        assert!(!serde_json::to_string(&plain).unwrap().contains("band"));
     }
 
     #[test]

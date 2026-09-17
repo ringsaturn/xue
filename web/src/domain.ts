@@ -155,8 +155,18 @@ export function regionShareOfView(region: GeoBox, view: GeoBox): number {
   const [viewWest, viewSouth, viewEast, viewNorth] = view;
   const viewArea = (viewEast - viewWest) * (viewNorth - viewSouth);
   if (!(viewArea > 0)) return 0;
-  const width = Math.min(east, viewEast) - Math.max(west, viewWest);
   const height = Math.min(north, viewNorth) - Math.max(south, viewSouth);
-  if (width <= 0 || height <= 0) return 0;
+  if (height <= 0) return 0;
+  // The region and the view each spell their longitudes in some copy of the
+  // world: a satellite disk runs from 80.7 to 200.7, and the map reports a
+  // view over the same water as [-185, -165] or [175, 195] depending on
+  // which way it was panned there. Every copy of the region the view shows
+  // counts, which is also what a view wider than the world needs.
+  let width = 0;
+  for (const shift of [-360, 0, 360]) {
+    const overlap = Math.min(east + shift, viewEast) - Math.max(west + shift, viewWest);
+    if (overlap > 0) width += overlap;
+  }
+  if (width <= 0) return 0;
   return (width * height) / viewArea;
 }

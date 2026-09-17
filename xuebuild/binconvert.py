@@ -604,7 +604,14 @@ def crop_grid(grid: GridInfo, bbox: tuple[float, float, float, float]) -> GridIn
             raise ConversionError(f"bbox must have a positive longitude span: {bbox}")
         span = 360.0
 
-    offset = (west - grid.first_longitude) % 360.0 if grid.wraps else west - grid.first_longitude
+    # Degrees east of the grid's origin. A wrapping grid has every longitude
+    # on some column. A regional grid is taken in the copy of the world it
+    # lies in: a satellite disk over the Pacific runs from 80.7 to 200.7,
+    # and a box spelled -170 is at 190 on it, while a box a few degrees west
+    # of the origin is west of it, not most of the way around the world.
+    offset = (west - grid.first_longitude) % 360.0
+    if not grid.wraps and offset > (grid.width - 1) * grid.longitude_step + 1e-9:
+        offset -= 360.0
     column_start = math.floor(offset / grid.longitude_step + 1e-9)
     column_end = math.ceil((offset + span) / grid.longitude_step - 1e-9)
     if grid.wraps:
@@ -1080,14 +1087,21 @@ def _variable_metadata(variable_id: str, numeric_id: int, source: SourceSpec, pr
             # a run-total accumulation (ECMWF) or a window average (sflux)
             # is a mean, ECMWF's gust a maximum.
             parameter["typeOfStatisticalProcessing"] = process
-    return {
+    block = {
         "numericId": numeric_id,
         "id": variable_id,
         "label": spec.label,
         "unit": spec.output_unit,
         "parameter": parameter,
-        "quantization": PROFILES[profile][variable_id].metadata(),
     }
+    for band_id, band in source.bands:
+        if band_id == variable_id:
+            # A satellite channel: the brightness temperature parameter is
+            # the same for every infrared band, so the band block beside it
+            # says which channel of which instrument this one is.
+            block["band"] = band.metadata()
+    block["quantization"] = PROFILES[profile][variable_id].metadata()
+    return block
 
 
 def build_metadata(

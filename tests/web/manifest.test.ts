@@ -719,6 +719,52 @@ describe("parseBundleMetadata", () => {
     ).toThrow();
   });
 
+  it("reads the optional band and producer blocks beside the parameter", () => {
+    const band = {
+      satelliteSeries: 0,
+      satelliteNumber: 174,
+      instrumentType: 297,
+      scaleFactorOfCentralWaveNumber: 0,
+      scaledValueOfCentralWaveNumber: 96061,
+    };
+    const producer = { id: "shachen", version: "0.3.1" };
+    const withBlocks = (extra: Record<string, unknown>, schemaVersion = 3) =>
+      JSON.stringify({
+        ...v3Metadata,
+        schemaVersion,
+        variables: [{ ...metadata.variables[0], parameter, ...extra }],
+      });
+    const parsed = parseBundleMetadata(withBlocks({ band, producer }));
+    expect(parsed.schemaVersion).toBe(3);
+    expect(parsed.variables[0]!.band?.scaledValueOfCentralWaveNumber).toBe(96061);
+    expect(parsed.variables[0]!.producer?.id).toBe("shachen");
+    expect(parseBundleMetadata(withBlocks({ band })).variables[0]!.producer).toBeUndefined();
+    // Valid only at schema version 3, like the parameter block they sit beside.
+    expect(() =>
+      parseBundleMetadata(JSON.stringify({ ...metadata, variables: [{ ...metadata.variables[0], band }] })),
+    ).toThrow();
+    expect(() =>
+      parseBundleMetadata(JSON.stringify({ ...metadata, variables: [{ ...metadata.variables[0], producer }] })),
+    ).toThrow();
+    // Present whole or absent: null, a missing field, a value out of range,
+    // a wrong type and an extra key are all refused.
+    const { instrumentType: _dropped, ...incompleteBand } = band;
+    for (const broken of [
+      { band: null },
+      { band: incompleteBand },
+      { band: { ...band, satelliteNumber: 65536 } },
+      { band: { ...band, satelliteNumber: "174" } },
+      { band: { ...band, channel: 13 } },
+      { producer: null },
+      { producer: { id: "shachen" } },
+      { producer: { id: "Shachen", version: "0.3.1" } },
+      { producer: { id: "shachen", version: "" } },
+      { producer: { ...producer, url: "x" } },
+    ]) {
+      expect(() => parseBundleMetadata(withBlocks(broken))).toThrow();
+    }
+  });
+
   it("rejects unsupported schema versions and broken time axes", () => {
     expect(() => parseBundleMetadata(JSON.stringify({ ...metadata, schemaVersion: 4 }))).toThrow();
     expect(() =>

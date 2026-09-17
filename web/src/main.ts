@@ -4955,7 +4955,12 @@ function viewportCellWindow(grid: ReturnType<typeof geoGrid>): CellWindow | null
   const centerLatitude = (north + south) / 2;
   const columnSpan = Math.ceil(spanLongitude / grid.longitudeStep) + 1;
   const rowSpan = Math.ceil(spanLatitude / Math.abs(grid.latitudeStep)) + 1;
-  let column0 = Math.floor((centerLongitude - spanLongitude / 2 - grid.firstLongitude) / grid.longitudeStep);
+  // Degrees east of the grid origin, signed: a view west of a regional
+  // window is at a negative cell, not most of the way around the world, and
+  // a window past the antimeridian (a satellite disk to 200.7) takes a view
+  // spelled at -170 as one at 190 (`tiles.ts` does the same).
+  const offset = wrap(centerLongitude - spanLongitude / 2 - grid.firstLongitude + 180, 360) - 180;
+  let column0 = Math.floor(offset / grid.longitudeStep);
   let columns = columnSpan;
   if (grid.wraps) {
     column0 = wrap(column0, grid.width);

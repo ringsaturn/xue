@@ -146,6 +146,30 @@ describe("viewportTileRects", () => {
     ).toBeNull();
   });
 
+  it("takes a view past the antimeridian onto a regional grid that runs past it", () => {
+    // A Himawari disk on plate carrée: 80.7 to 200.7 at 0.04°, not wrapping,
+    // tiled 64 x 64. The map spells a view over the same water as [-185,
+    // -165] or [175, 195]; both are the disk's eastern tiles.
+    const disk = globalGrid({
+      width: 3000,
+      height: 3000,
+      firstLongitude: 80.7,
+      firstLatitude: 60,
+      longitudeStep: 0.04,
+      latitudeStep: -0.04,
+      wrapLongitude: false,
+    });
+    const tiles: TileGeometry = { tileWidth: 64, tileHeight: 64, columns: 47, rows: 47 };
+    const spelledWest = viewportTileRects(disk, tiles, { west: -185, east: -165, south: 0, north: 10 }, 0);
+    const spelledEast = viewportTileRects(disk, tiles, { west: 175, east: 195, south: 0, north: 10 }, 0);
+    expect(spelledWest).toEqual(spelledEast);
+    expect(spelledWest?.[0]?.firstColumn).toBe(Math.floor(((175 - 80.7) / 0.04) / 64));
+    expect(spelledWest?.[0]?.lastColumn).toBe(Math.floor(Math.ceil((195 - 80.7) / 0.04) / 64));
+    // East of the disk there is nothing; just west of it the view clamps.
+    expect(viewportTileRects(disk, tiles, { west: -150, east: -130, south: 0, north: 10 })).toBeNull();
+    expect(viewportTileRects(disk, tiles, { west: 70, east: 90, south: 0, north: 10 }, 0)?.[0]?.firstColumn).toBe(0);
+  });
+
   it("is null for a degenerate grid or an unusable span", () => {
     const noGrid = globalGrid({ width: 0 });
     expect(viewportTileRects(noGrid, GFS_TILES, { west: 0, east: 1, south: 0, north: 1 })).toBeNull();

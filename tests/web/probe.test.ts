@@ -99,6 +99,25 @@ describe("probeCell", () => {
     expect(probeCell(grid, 120, 10)).toBeNull();
   });
 
+  it("finds a point past the antimeridian on a regional grid that runs past it", () => {
+    // A Himawari disk on plate carrée: 80.7 to 200.7 at 0.04°, not wrapping.
+    const disk = globalGrid({
+      width: 3000,
+      height: 3000,
+      firstLongitude: 80.7,
+      firstLatitude: 60,
+      longitudeStep: 0.04,
+      latitudeStep: -0.04,
+      wrapLongitude: false,
+    });
+    const cell = probeCell(disk, -170, 0)!;
+    expect(cell.column).toBe(Math.round((190 - 80.7) / 0.04));
+    expect(cell.longitude).toBeCloseTo(-169.98, 6);
+    expect(probeCell(disk, 190, 0)!.column).toBe(cell.column);
+    expect(probeCell(disk, -150, 0)).toBeNull();
+    expect(probeCell(disk, 70, 0)).toBeNull();
+  });
+
   it("rejects a grid with no extent", () => {
     expect(probeCell(globalGrid({ width: 0 }), 0, 0)).toBeNull();
     expect(probeCell(globalGrid({ longitudeStep: 0 }), 0, 0)).toBeNull();

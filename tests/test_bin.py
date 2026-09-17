@@ -1096,6 +1096,84 @@ class ParameterMetadataTests(unittest.TestCase):
             mutate(metadata["variables"][0]["parameter"])
             self._reject(metadata)
 
+    BAND = {
+        "satelliteSeries": 0,
+        "satelliteNumber": 174,
+        "instrumentType": 297,
+        "scaleFactorOfCentralWaveNumber": 0,
+        "scaledValueOfCentralWaveNumber": 96061,
+    }
+    PRODUCER = {"id": "shachen", "version": "0.3.1"}
+
+    def test_band_and_producer_blocks_are_optional_beside_the_parameter(self) -> None:
+        """The satellite widening of schema v3 (docs/format.md §"Band and
+        Producer"): either block may sit beside ``parameter``, neither
+        raises the version, and a file without them is unchanged."""
+        metadata = self._metadata()
+        variable = metadata["variables"][0]
+        variable["band"] = dict(self.BAND)
+        variable["producer"] = dict(self.PRODUCER)
+        self._write(metadata)
+        read = binformat.read_bundle(self.path)
+        self.assertEqual(read.variable_ids, {1: "tmp2m"})
+        self.assertEqual(read.metadata["variables"][0]["band"], self.BAND)
+        self.assertEqual(read.metadata["variables"][0]["producer"], self.PRODUCER)
+        for block in ("band", "producer"):
+            metadata = self._metadata()
+            metadata["schemaVersion"] = 1
+            del metadata["variables"][0]["parameter"]
+            metadata["variables"][0][block] = dict(getattr(self, block.upper()))
+            self._reject(metadata)
+
+    def test_malformed_band_and_producer_blocks_rejected(self) -> None:
+        incomplete = dict(self.BAND)
+        del incomplete["instrumentType"]
+        for block, broken in (
+            ("band", None),
+            ("band", incomplete),
+            ("band", {**self.BAND, "satelliteNumber": 65536}),
+            ("band", {**self.BAND, "satelliteNumber": "174"}),
+            ("band", {**self.BAND, "satelliteNumber": True}),
+            ("band", {**self.BAND, "channel": 13}),
+            ("producer", None),
+            ("producer", {"id": "shachen"}),
+            ("producer", {"id": "Shachen", "version": "0.3.1"}),
+            ("producer", {"id": "shachen", "version": ""}),
+            ("producer", {**self.PRODUCER, "url": "x"}),
+        ):
+            metadata = self._metadata()
+            metadata["variables"][0][block] = broken
+            self._reject(metadata)
+
+    def test_encoder_writes_a_source_band_beside_the_parameter(self) -> None:
+        """No registered source images from a spacecraft yet; the block
+        comes from ``SourceSpec.bands`` and lands between ``parameter`` and
+        ``quantization``, where the native encoder puts it too."""
+        from dataclasses import replace
+
+        from xuebuild.binconvert import build_metadata, GridInfo
+        from xuebuild.sources import SatelliteBand, source_spec
+
+        grid = GridInfo(width=4, height=3, first_longitude=-180.0, first_latitude=90.0,
+                        longitude_step=0.25, latitude_step=-0.25)
+        band = SatelliteBand(satellite_series=0, satellite_number=174, instrument_type=297,
+                             central_wavenumber=96061)
+        source = replace(source_spec("cma"), bands=(("cref", band),))
+        metadata = build_metadata(
+            datetime(2026, 8, 15, 6, tzinfo=UTC), [0, 1], grid, "quality", ("cref",),
+            source=source, unit_seconds=360,
+        )
+        variable = metadata["variables"][0]
+        self.assertEqual(variable["band"], self.BAND)
+        self.assertEqual(list(variable), ["numericId", "id", "label", "unit", "parameter", "band", "quantization"])
+        self._write(metadata)
+        self.assertEqual(binformat.read_bundle(self.path).metadata["variables"][0]["band"], self.BAND)
+        plain = build_metadata(
+            datetime(2026, 8, 15, 6, tzinfo=UTC), [0, 1], grid, "quality", ("cref",),
+            source=source_spec("cma"), unit_seconds=360,
+        )
+        self.assertNotIn("band", plain["variables"][0])
+
 
 def video_descriptor() -> dict:
     return {

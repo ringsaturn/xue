@@ -132,6 +132,24 @@ class CropGridTest(unittest.TestCase):
         self.assertEqual((grid.first_longitude, grid.first_latitude), (100.0, 40.0))
         self.assertEqual((grid.width, grid.height), (41, 50))
 
+    def test_regional_grid_past_the_antimeridian_is_cropped_in_its_own_copy_of_the_world(self) -> None:
+        # A Himawari disk on plate carrée: 80.7 to 200.7 at 0.04°, not wrapping.
+        disk = GridInfo(3000, 3000, 80.7, 60.0, 0.04, -0.04)
+        self.assertFalse(disk.wraps)
+        # A box spelled west of -180 lands on the disk's eastern columns...
+        east = crop_grid(disk, (-170.0, 0.0, -160.0, 10.0))
+        self.assertEqual(east.crop.column_start, 2732)
+        self.assertEqual(east.width, 252)
+        self.assertEqual(east.first_longitude, -170.02)
+        # ...the same box spelled past 180 is the same window...
+        self.assertEqual(crop_grid(disk, (190.0, 0.0, 200.0, 10.0)).crop, east.crop)
+        # ...a box just west of the origin clamps to it rather than reading
+        # as almost a whole world east, and one east of the disk misses it.
+        west = crop_grid(disk, (70.0, 0.0, 90.0, 10.0))
+        self.assertEqual((west.crop.column_start, west.first_longitude), (0, 80.7))
+        with self.assertRaises(ConversionError):
+            crop_grid(disk, (-150.0, 0.0, -100.0, 10.0))
+
     def test_column_roll_survives_the_crop(self) -> None:
         gaussian = GridInfo(3072, 1536, -180.0, 89.91, 360 / 3072, -0.1171875, column_roll=1536)
         grid = crop_grid(gaussian, (-100.0, 20.0, -60.0, 50.0))

@@ -76,6 +76,32 @@ class CompanionFile:
 
 
 @dataclass(frozen=True)
+class SatelliteBand:
+    """The spectral band a satellite image variable was measured in, in the
+    fields of GRIB2 product definition template 4.31: the spacecraft and
+    instrument by their WMO common code table numbers (C-5 and C-8) and the
+    band's central wave number in m⁻¹ as a scaled value. Written verbatim as
+    the variable's ``band`` block (docs/format.md §"Band and Producer")."""
+
+    satellite_series: int
+    satellite_number: int
+    instrument_type: int
+    central_wavenumber: int
+    """``scaledValueOfCentralWaveNumber``; the scale factor written is 0,
+    since a wave number in whole m⁻¹ places any imager band to a tenth of
+    a nanometre."""
+
+    def metadata(self) -> dict[str, int]:
+        return {
+            "satelliteSeries": self.satellite_series,
+            "satelliteNumber": self.satellite_number,
+            "instrumentType": self.instrument_type,
+            "scaleFactorOfCentralWaveNumber": 0,
+            "scaledValueOfCentralWaveNumber": self.central_wavenumber,
+        }
+
+
+@dataclass(frozen=True)
 class Downsample:
     """How a source's planes are thinned onto the grid its bundles carry:
     every ``factor`` x ``factor`` block of source cells becomes one cell.
@@ -148,6 +174,12 @@ class SourceSpec:
     ``typeOfStatisticalProcessing`` (docs/format.md), which is what tells a
     reader that ECMWF's ``prate`` or ``gust`` and GFS's are not quite the
     same field under the same parameter."""
+    bands: tuple[tuple[str, SatelliteBand], ...] = ()
+    """Published variables that are satellite image channels, each with
+    the band it was measured in; written into the bundle's metadata as the
+    variable's ``band`` block beside ``parameter``. A source that images
+    from a spacecraft lists one per channel it publishes; every other source
+    lists none."""
     bundle_scalar_ids: tuple[str, ...] = ("tmp2m", "prate")
     """Scalar variables published as single-variable bundles, in manifest
     order."""

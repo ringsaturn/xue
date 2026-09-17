@@ -30,6 +30,33 @@ pub struct CompanionFile {
     pub variable_ids: &'static [&'static str],
 }
 
+/// The spectral band a satellite image variable was measured in, in the
+/// fields of GRIB2 product definition template 4.31: the spacecraft and
+/// instrument by their WMO common code table numbers (C-5 and C-8) and the
+/// band's central wave number in m⁻¹. Written verbatim as the variable's
+/// `band` block (docs/format.md §"Band and Producer"). Mirrors
+/// `SatelliteBand` in `xuebuild/sources.py`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SatelliteBand {
+    pub satellite_series: u16,
+    pub satellite_number: u16,
+    pub instrument_type: u16,
+    /// `scaledValueOfCentralWaveNumber`; the scale factor written is 0.
+    pub central_wavenumber: u32,
+}
+
+impl SatelliteBand {
+    pub fn metadata(&self) -> serde_json::Map<String, serde_json::Value> {
+        let mut block = serde_json::Map::new();
+        block.insert("satelliteSeries".into(), self.satellite_series.into());
+        block.insert("satelliteNumber".into(), self.satellite_number.into());
+        block.insert("instrumentType".into(), self.instrument_type.into());
+        block.insert("scaleFactorOfCentralWaveNumber".into(), 0.into());
+        block.insert("scaledValueOfCentralWaveNumber".into(), self.central_wavenumber.into());
+        block
+    }
+}
+
 /// How a source's planes are thinned onto the grid its bundles carry: every
 /// `factor` x `factor` block of source cells becomes its **maximum** — a
 /// composite reflectivity is already the column maximum, and keeping the
@@ -79,6 +106,10 @@ pub struct SourceSpec {
     /// as `typeOfStatisticalProcessing`. Mirrors `statistical_processes` in
     /// `xuebuild/sources.py`.
     pub statistical_processes: &'static [(&'static str, u8)],
+    /// Published variables that are satellite image channels, each with the
+    /// band it was measured in, written as the variable's `band` block
+    /// beside `parameter`. Mirrors `bands` in `xuebuild/sources.py`.
+    pub bands: &'static [(&'static str, SatelliteBand)],
     /// Scalar variables published as single-variable bundles, in manifest
     /// order.
     pub bundle_scalar_ids: &'static [&'static str],
@@ -227,6 +258,7 @@ pub const SOURCES: &[SourceSpec] = &[
         average_window_hours: 6,
         optional_at_analysis: &[],
         statistical_processes: &[],
+        bands: &[],
         bundle_scalar_ids: &[
             "tmp2m", "prate", "prmsl", "hgt850", "hgt700", "hgt500", "hgt250", "tmp925", "tmp850",
             "tmp500", "rh850", "rh700", "rh500", "gust", "tcdc", "lcdc", "mcdc", "hcdc", "cape",
@@ -279,6 +311,7 @@ pub const SOURCES: &[SourceSpec] = &[
         average_window_hours: 6,
         optional_at_analysis: &["gust"],
         statistical_processes: &[("prate", 0), ("gust", 2)],
+        bands: &[],
         bundle_scalar_ids: &[
             "tmp2m", "prate", "prmsl", "hgt850", "hgt700", "hgt500", "hgt250", "tmp925", "tmp850",
             "tmp500", "rh850", "rh700", "rh500", "gust", "tcdc", "cape", "dpt2m", "vvel850",
@@ -323,6 +356,7 @@ pub const SOURCES: &[SourceSpec] = &[
         average_window_hours: 6,
         optional_at_analysis: &[],
         statistical_processes: &[("prate", 0)],
+        bands: &[],
         bundle_scalar_ids: &[
             "tmp2m", "prate", "prmsl", "hgt850", "hgt700", "hgt500", "hgt250", "tmp925", "tmp850",
             "tmp500", "tcdc", "lcdc", "mcdc", "hcdc", "dpt2m", "vvel850", "vvel700", "vvel500",
@@ -354,6 +388,7 @@ pub const SOURCES: &[SourceSpec] = &[
         average_window_hours: 6,
         optional_at_analysis: &["prate_ave"],
         statistical_processes: &[("prate", 0)],
+        bands: &[],
         bundle_scalar_ids: &["tmp2m", "prate", "dswrf"],
         core_bundle_ids: &["tmp2m", "prate"],
         bundle_vector_ids: &["wind10m"],
@@ -392,6 +427,7 @@ pub const SOURCES: &[SourceSpec] = &[
         average_window_hours: 6,
         optional_at_analysis: &[],
         statistical_processes: &[],
+        bands: &[],
         bundle_scalar_ids: &[
             "tmp2m", "prate", "prmsl", "hgt850", "hgt700", "hgt500", "tmp925", "tmp850", "tmp500",
             "gust", "tcdc", "lcdc", "mcdc", "hcdc", "cape", "vis", "dpt2m", "cref",
@@ -431,6 +467,7 @@ pub const SOURCES: &[SourceSpec] = &[
         average_window_hours: 6,
         optional_at_analysis: &[],
         statistical_processes: &[],
+        bands: &[],
         bundle_scalar_ids: &["cref"],
         core_bundle_ids: &["cref"],
         bundle_vector_ids: &[],
@@ -468,6 +505,7 @@ pub const SOURCES: &[SourceSpec] = &[
         average_window_hours: 6,
         optional_at_analysis: &[],
         statistical_processes: &[],
+        bands: &[],
         bundle_scalar_ids: &["cref", "prate"],
         core_bundle_ids: &["cref"],
         bundle_vector_ids: &[],
@@ -504,6 +542,7 @@ pub const SOURCES: &[SourceSpec] = &[
         average_window_hours: 6,
         optional_at_analysis: &[],
         statistical_processes: &[],
+        bands: &[],
         bundle_scalar_ids: &["prate"],
         core_bundle_ids: &["prate"],
         bundle_vector_ids: &[],

@@ -66,6 +66,16 @@ describe("regionShareOfView", () => {
     expect(share).toBeCloseTo(0.5, 12);
   });
 
+  it("finds a region past the antimeridian whichever way the view spells it", () => {
+    // A Himawari disk on plate carrée runs from 80.7 to 200.7; the map
+    // reports a view over the same water as [-185, -165] or [175, 195].
+    const disk = [80.7, -60, 200.7, 60] as const;
+    expect(regionShareOfView(disk, [175, 0, 195, 10])).toBe(1);
+    expect(regionShareOfView(disk, [-185, 0, -165, 10])).toBe(1);
+    expect(regionShareOfView(disk, [-170, 0, -150, 10])).toBeCloseTo(0.535, 3);
+    expect(regionShareOfView(disk, [-140, 0, -120, 10])).toBe(0);
+  });
+
   it("is small on a world view, wide as that view is in every direction", () => {
     // The map reports a world view's bounds past ±180 and the poles clamped.
     const share = regionShareOfView(conus, [-260, -85, 260, 85]);

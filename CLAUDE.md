@@ -191,6 +191,14 @@ with `stepHours` or `hours`). v3, what the encoder writes now, adds a GRIB2
 both an unimplemented version and an overdeclared one, so each file has
 exactly one valid encoding.
 
+v3 also admits two optional blocks beside a variable's `parameter`,
+`band` (the spectral band a satellite image was measured in, GRIB2 template
+4.31's fields, written from `SourceSpec.bands`) and `producer` (the
+algorithm behind a composite field); both are validated when present by all
+three readers, need v3 and raise no floor, and are ignored by readers that
+predate them, so adding them was one-sided (`docs/format.md` §"Band and
+Producer"). No source writes either yet.
+
 Within the container a plane's key is a frame offset, not a forecast hour:
 `PlaneEntry.frameOffset`, the worker protocol's `frameOffset`, and
 `SourceFrame.lead_seconds` upstream of the axis derivation.
