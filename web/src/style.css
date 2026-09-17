@@ -2538,6 +2538,7 @@ html[lang="ja"] .rail-glyph {
 
 .sounding-readout {
   display: block;
+  min-height: 1.6em; /* one line, kept even when there is nothing to read */
   padding-top: 3px;
   overflow: hidden;
   color: var(--muted);

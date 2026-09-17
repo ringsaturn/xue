@@ -316,8 +316,12 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
     }
     const model = options.modelProfile();
     const profiles = model ? [observed, model.profile] : [observed];
-    const at = pointer ?? toXY(layout, 500, 0);
-    const reading = readoutAt(layout, profiles, at.x, at.y);
+    // Off the plot — over an axis, the barb column, the margin — the line
+    // reads 500 hPa as it does before any hover, rather than going blank:
+    // an empty line collapses and the panel under it jumps.
+    const home = toXY(layout, 500, 0);
+    const at = pointer ?? home;
+    const reading = readoutAt(layout, profiles, at.x, at.y) ?? readoutAt(layout, profiles, home.x, home.y);
     if (!reading) {
       readout.value = "";
       return;
