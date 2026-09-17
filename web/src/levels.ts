@@ -58,11 +58,25 @@ export interface FamilyInfo {
   /** The rail tile's visually hidden gloss, which the surface member's level
    * button repeats; null for a family the shell writes no tile for. */
   glossKey: MessageKey | null;
-  /** A family whose members are not the eight isobaric surfaces lists them
-   * outright, in level-row order, each with its level-row label. A member
-   * may stand in for another: it is offered only while the run does not
-   * ship the one it stands in for (`familyMembers`). */
-  members?: readonly { id: ForecastBundleId; code: string; standInFor?: ForecastBundleId }[];
+  /** The same quantity on different surfaces, for a family whose surfaces
+   * are not the eight isobaric ones (the cloud layers: total, low, middle,
+   * high), in level-row order, each with its level-row label. Absent, the
+   * levels are the surface member and the eight isobaric surfaces. */
+  levels?: readonly FamilyMember[];
+  /** Related but different quantities behind one tile, each with its own
+   * legend and unit (sea ice cover and thickness; wave height and period).
+   * Never on the level row: the field sheet lists them beside the family,
+   * and pressing the pressed tile again cycles through them. A variant may
+   * stand in for another: it is offered only while the run does not ship
+   * the one it stands in for (`familyVariants`). */
+  variants?: readonly FamilyMember[];
+}
+
+export interface FamilyMember {
+  id: ForecastBundleId;
+  /** The level row's or the chip's label. */
+  code: string;
+  standInFor?: ForecastBundleId;
 }
 
 export const FAMILIES: Record<IsobaricFamily, FamilyInfo> = {
@@ -84,7 +98,7 @@ export const FAMILIES: Record<IsobaricFamily, FamilyInfo> = {
   vvel: { id: "vvel", kind: "scalar", surface: null, code: "OMEGA", surfaceCode: "", glossKey: "varOmega" },
   thetae: { id: "thetae", kind: "scalar", surface: null, code: "THETAE", surfaceCode: "", glossKey: "varThetaE" },
   // Cloud cover: the total heads the family and the three layers are its
-  // members, so one rail tile and the level row serve all four.
+  // levels, so one rail tile and the level row serve all four.
   cloud: {
     id: "cloud",
     kind: "scalar",
@@ -92,14 +106,15 @@ export const FAMILIES: Record<IsobaricFamily, FamilyInfo> = {
     code: "CLOUD",
     surfaceCode: "TOTAL",
     glossKey: "varCloud",
-    members: [
+    levels: [
       { id: "tcdc", code: "TOTAL" },
       { id: "lcdc", code: "LOW" },
       { id: "mcdc", code: "MID" },
       { id: "hcdc", code: "HIGH" },
     ],
   },
-  // Sea ice: concentration heads the family, thickness is its other member.
+  // Sea ice: concentration heads the family, thickness is its other
+  // variant — a different quantity, so it is not on the level row.
   ice: {
     id: "ice",
     kind: "scalar",
@@ -107,7 +122,7 @@ export const FAMILIES: Record<IsobaricFamily, FamilyInfo> = {
     code: "ICE",
     surfaceCode: "COVER",
     glossKey: "varIce",
-    members: [
+    variants: [
       { id: "icec", code: "COVER" },
       { id: "icetk", code: "THICK" },
     ],
@@ -130,7 +145,7 @@ export const FAMILIES: Record<IsobaricFamily, FamilyInfo> = {
     code: "WAVE",
     surfaceCode: "HEIGHT",
     glossKey: "varWave",
-    members: [
+    variants: [
       { id: "wave", code: "HEIGHT" },
       { id: "htsgw", code: "HEIGHT", standInFor: "wave" },
       { id: "perpw", code: "PERIOD" },
@@ -156,7 +171,7 @@ export const UNTILED_BUNDLE_IDS: readonly ForecastBundleId[] = ["dirpw"];
 export function familyOf(id: ForecastBundleId): IsobaricFamily | null {
   for (const family of ISOBARIC_FAMILIES) {
     const info = FAMILIES[family];
-    if (info.surface === id || info.members?.some((member) => member.id === id)) return family;
+    if (info.surface === id || listedMembers(info).some((member) => member.id === id)) return family;
   }
   const match = /^([a-z]+)(\d+)$/.exec(id);
   if (!match) return null;
@@ -174,30 +189,58 @@ export function bundleLevel(id: ForecastBundleId): IsobaricLevel | null {
   return (ISOBARIC_LEVELS as readonly number[]).includes(level) ? (level as IsobaricLevel) : null;
 }
 
-/** Every member of a family in level-row order: the surface first, then the
- * isobaric surfaces from the ground up. `published` says what the run at
- * hand ships: a listed member that stands in for another is left out once
- * the one it stands in for is published (the scalar wave height beside the
- * wave vector); without it every listed member is returned. */
-export function familyMembers(family: IsobaricFamily, published?: (id: ForecastBundleId) => boolean): ForecastBundleId[] {
-  const info = FAMILIES[family];
-  if (info.members) {
-    return info.members
-      .filter((member) => !(published && member.standInFor !== undefined && published(member.standInFor)))
-      .map((member) => member.id);
-  }
-  const members: ForecastBundleId[] = info.surface ? [info.surface] : [];
-  for (const level of ISOBARIC_LEVELS) members.push(`${family}${level}` as ForecastBundleId);
-  return members;
+/** The members a family lists outright: its levels and its variants. */
+function listedMembers(info: FamilyInfo): readonly FamilyMember[] {
+  return [...(info.levels ?? []), ...(info.variants ?? [])];
 }
 
-/** The level row's label for one member: "MSL" / "2M" / "10M" for a surface
- * member, the pressure in hPa otherwise — or the member's own label in a
- * family that lists its members ("TOTAL", "LOW", "MID", "HIGH"). */
+/** A listed member that stands in for another is left out once the one it
+ * stands in for is published (the scalar wave height beside the wave
+ * vector); without a run to ask, every listed member is offered. */
+function offered(members: readonly FamilyMember[], published?: (id: ForecastBundleId) => boolean): ForecastBundleId[] {
+  return members
+    .filter((member) => !(published && member.standInFor !== undefined && published(member.standInFor)))
+    .map((member) => member.id);
+}
+
+/** The surfaces of a family in level-row order: the listed levels, else
+ * the surface member first and the isobaric surfaces from the ground up.
+ * A family of variants alone (sea ice, the waves) has its surface member
+ * as its one level, so the level row has nothing to offer for it. */
+export function familyLevels(family: IsobaricFamily, published?: (id: ForecastBundleId) => boolean): ForecastBundleId[] {
+  const info = FAMILIES[family];
+  if (info.levels) return offered(info.levels, published);
+  if (info.variants) return info.surface ? [info.surface] : [];
+  const levels: ForecastBundleId[] = info.surface ? [info.surface] : [];
+  for (const level of ISOBARIC_LEVELS) levels.push(`${family}${level}` as ForecastBundleId);
+  return levels;
+}
+
+/** The variants of a family, in the order they are listed; none for a
+ * family of surfaces. `published` leaves out a stand-in whose quantity is
+ * published (`offered`). */
+export function familyVariants(family: IsobaricFamily, published?: (id: ForecastBundleId) => boolean): ForecastBundleId[] {
+  const info = FAMILIES[family];
+  return info.variants ? offered(info.variants, published) : [];
+}
+
+/** Every member of a family: its levels, then its variants (the surface
+ * member of a family of variants heads the variants and is not repeated).
+ * `published` says what the run at hand ships, as for `familyLevels`. */
+export function familyMembers(family: IsobaricFamily, published?: (id: ForecastBundleId) => boolean): ForecastBundleId[] {
+  const info = FAMILIES[family];
+  if (info.variants && !info.levels) return familyVariants(family, published);
+  return [...familyLevels(family, published), ...familyVariants(family, published)];
+}
+
+/** The level row's or the chip's label for one member: "MSL" / "2M" /
+ * "10M" for a surface member, the pressure in hPa otherwise — or the
+ * member's own label in a family that lists it ("TOTAL", "LOW", "MID",
+ * "HIGH"; "COVER", "THICK"). */
 export function levelCode(id: ForecastBundleId): string {
   const family = familyOf(id);
   if (family === null) return id.toUpperCase();
-  const listed = FAMILIES[family].members?.find((member) => member.id === id);
+  const listed = listedMembers(FAMILIES[family]).find((member) => member.id === id);
   if (listed) return listed.code;
   const level = bundleLevel(id);
   return level === null ? FAMILIES[family].surfaceCode : String(level);

@@ -7,7 +7,9 @@ import {
   ISOBARIC_FAMILIES,
   ISOBARIC_FILL_IDS,
   bundleLevel,
+  familyLevels,
   familyMembers,
+  familyVariants,
   familyOf,
   isobaricCode,
   isobaricLegend,
@@ -87,14 +89,21 @@ describe("the isobaric family registry", () => {
     expect(familyOf("dswrf")).toBeNull();
     for (const family of ISOBARIC_FAMILIES) {
       const members = familyMembers(family);
-      const listed = FAMILIES[family].members;
+      const listed = FAMILIES[family].levels ?? FAMILIES[family].variants;
       expect(members[0]).toBe(FAMILIES[family].surface ?? `${family}1000`);
-      // A family that lists its members (cloud cover) has exactly those;
-      // an isobaric one has the eight surfaces plus its surface member.
+      // A family that lists its members (cloud cover, sea ice) has exactly
+      // those; an isobaric one has the eight surfaces plus its surface
+      // member.
       expect(members.length).toBe(listed ? listed.length : ISOBARIC_LEVELS.length + (FAMILIES[family].surface ? 1 : 0));
       for (const member of members) expect(familyOf(member)).toBe(family);
     }
     expect(familyMembers("cloud")).toEqual(["tcdc", "lcdc", "mcdc", "hcdc"]);
+    // The cloud layers are surfaces of one quantity: on the level row, and
+    // no variants beside them.
+    expect(familyLevels("cloud")).toEqual(["tcdc", "lcdc", "mcdc", "hcdc"]);
+    expect(familyVariants("cloud")).toEqual([]);
+    expect(familyLevels("tmp")).toEqual(["tmp2m", "tmp1000", "tmp925", "tmp850", "tmp700", "tmp500", "tmp300", "tmp250", "tmp200"]);
+    expect(familyVariants("tmp")).toEqual([]);
     expect(levelCode("lcdc")).toBe("LOW");
     expect(levelCode("tcdc")).toBe("TOTAL");
     expect(bundleLevel("lcdc")).toBeNull();

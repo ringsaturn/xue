@@ -49,7 +49,6 @@ import {
   warmMoistInflow,
 } from "./composite";
 import {
-  KNOWN_BUNDLE_IDS,
   FORECAST_MODEL_IDS,
   FORECAST_MODELS,
   containerOf,
@@ -60,6 +59,7 @@ import {
   hasBundle,
   isBundleVariableId,
   modelDefaultVariable,
+  modelRailCore,
   parseBundleMetadata,
   pickBundleVariant,
   axisUnitSeconds,
@@ -87,8 +87,10 @@ import {
   ISOBARIC_FILL_IDS,
   bundleLevel,
   familyLabel,
+  familyLevels,
   familyMembers,
   familyOf,
+  familyVariants,
   isobaricCode,
   isobaricLegend,
   levelCode,
@@ -125,23 +127,19 @@ import {
   parseCameraFromHash,
   parseCaseFromSearch,
   parseExperimentFromSearch,
-  parseLinesFromSearch,
   parseModelFromSearch,
-  parseParticlesFromSearch,
   parseResolutionFromSearch,
-  parseStationsFromSearch,
-  parseTcFromSearch,
   parseUseH264FromSearch,
-  parseVariableFromSearch,
-  searchForCaseVariable,
-  searchForVariable,
-  searchWithExperiment,
-  searchWithLines,
-  searchWithParticles,
-  searchWithStations,
-  searchWithTc,
   type StationsUrlState,
 } from "./urlstate";
+import {
+  compositionForPrimary,
+  compositionPrimary,
+  parseView,
+  searchForView,
+  type ViewComposition,
+  type ViewState,
+} from "./viewstate";
 import { TC_MODELS } from "./tc/agencies";
 import { buildTcCard } from "./tc/card";
 import { pointDataOf, StormLayers, TC_CLICKABLE_LAYERS, type StormView, type TcPointData } from "./tc/layers";
@@ -259,8 +257,6 @@ applyTheme();
  * far the published data goes, not a product. */
 const experiment = parseExperimentFromSearch(window.location.search);
 const experimentEnabled = experiment.enabled;
-/** Which derived layers are drawn; the rail's two toggle tiles flip them. */
-const derivedShown: Record<"inflow" | "front", boolean> = { inflow: experiment.inflow, front: experiment.front };
 /** What the experiment opens when the URL names nothing else. */
 const EXPERIMENT_FILL: ForecastBundleId = "prate";
 const EXPERIMENT_LINES: PressureBundleId = "prmsl";
@@ -1068,16 +1064,28 @@ const soundingTile = required<HTMLButtonElement>("sounding-tile");
 const airportTile = required<HTMLButtonElement>("airport-tile");
 const tcSheet = required<HTMLElement>("tc-sheet");
 const tcList = required<HTMLElement>("tc-list");
+const fieldMore = required<HTMLButtonElement>("field-more");
+const fieldSheet = required<HTMLElement>("field-sheet");
+const fieldList = required<HTMLElement>("field-list");
 // Scoped to buttons: <body> carries data-variable/data-model too (styling
 // state), and must never be hidden or aria-pressed like a switch button.
 const variableRail = document.querySelector<HTMLElement>(".variable-rail");
-/** The layer rail's tiles. Read live rather than snapshotted: the shell
- * writes one tile per family it knows, and a run publishing a bundle this
- * build has never heard of gets a generic tile appended here
- * (`syncUnknownRailTiles`) — a layer nobody can reach is the same as one
- * nobody can see. */
+/** The rail's field section: the core tiles, the tile of the field on
+ * screen, MORE. */
+const fieldSection = variableRail?.querySelector<HTMLElement>('.rail-section[data-section="field"]') ?? null;
+/** The layer rail's tiles that name a bundle: the field section's, and the
+ * pressure switch in the overlay section. Read live rather than
+ * snapshotted: the shell writes one tile per field it knows, and a field on
+ * screen this build has never heard of gets a generic tile written for it
+ * (`syncFieldTiles`) — a layer nobody can see is the same as one nobody
+ * can reach. */
 function variableButtons(): HTMLButtonElement[] {
   return variableRail ? [...variableRail.querySelectorAll<HTMLButtonElement>("button[data-variable]")] : [];
+}
+/** The field section's written tiles — every field this build has an icon
+ * for, whether or not the run ships it or the rail shows it. */
+function fieldTiles(): HTMLButtonElement[] {
+  return fieldSection ? [...fieldSection.querySelectorAll<HTMLButtonElement>("button[data-variable]:not([data-unknown])")] : [];
 }
 /** The experiment's toggle tiles for its derived layers. */
 function derivedButtons(): HTMLButtonElement[] {
@@ -1105,6 +1113,11 @@ const MODEL_EYEBROW: Record<ForecastModelId, string> = {
  * member where the family has one (2 m temperature, 10 m wind, sea level
  * pressure), the lowest isobaric surface otherwise. */
 const lastFamilyMember = new Map<IsobaricFamily, ForecastBundleId>();
+/** The field last on screen, for the way back from the lines-alone view:
+ * the level row's ALONE member and the rail's pressure switch both put it
+ * back. Null until a field has been drawn, in which case the dataset's own
+ * default stands in. */
+let lastField: ForecastBundleId | null = null;
 
 function preferredFamilyMember(family: IsobaricFamily): ForecastBundleId {
   const run = manifest;
@@ -1144,6 +1157,16 @@ const langSheetControl = createSheet({
   trigger: langTrigger,
   sheet: langSheet,
   initialFocus: (sheet) => sheet.querySelector<HTMLButtonElement>("button[aria-current]"),
+});
+
+/** The field sheet: every field the run publishes, hung from the rail's
+ * MORE tile; its rows are written by `renderFieldSheet` whenever the run
+ * or the field on screen changes. */
+const fieldSheetControl = createSheet({
+  trigger: fieldMore,
+  sheet: fieldSheet,
+  canOpen: () => manifest !== null && !switchingVariable,
+  initialFocus: (sheet) => sheet.querySelector<HTMLButtonElement>('button[aria-pressed="true"]'),
 });
 /** The picker's rows, with the language in force checked; rebuilt after a
  * switch so the check moves. */
@@ -1271,19 +1294,12 @@ let currentRun: string | null = null;
 let currentManifestCrc: string | null = null;
 let metadata: BundleMetadata | null = null;
 
-/** What is on screen, as slots rather than as one layer: a filled field
- * (temperature, precipitation, reflectivity, radiation, wind speed) and the
- * contour lines drawn over it (the pressure family). Either may be empty but
- * not both. Every `?type=` of old is a composition with one slot filled; the
- * pressure views are `{fill: null, lines: X}`; `?type=precip&lines=pressure`
- * fills both. Each slot's bundle is its own session — own worker, own grid,
- * own tiles, own resolution tier — and the **primary** session (the fill's,
- * or the lines' when there is no fill) drives the timeline, the legend, the
- * data card and the ground tone. The lines follow it by lead time. */
-interface ViewComposition {
-  fill: ForecastBundleId | null;
-  lines: PressureBundleId | null;
-}
+// What is on screen is `view` (viewstate.ts): the composition — a filled
+// field and the contour lines over it, each slot its own session (own
+// worker, own grid, own tiles, own resolution tier), the **primary** (the
+// fill's, or the lines' when there is no fill) driving the timeline, the
+// legend, the data card and the ground tone, the lines following it by
+// lead time — plus the overlays and the marks.
 
 /** A slot's raster layer and what it is showing. Two exist for the life of
  * the page — one per slot — and a session takes the slot its kind belongs
@@ -1419,35 +1435,6 @@ function compositeSessions(): VariableSession[] {
 /** Shareable URL entry (e.g. /?model=ecmwf&type=wind) picks the initial model
  * and layer; a missing or unrecognized param falls back to the default. */
 let selectedModelId: ForecastModelId = parseModelFromSearch(window.location.search);
-/** Layer the URL asked for, or null when it named none — which is what lets
- * a showcase case's own default win over the app-wide one. */
-const requestedVariableId: ForecastBundleId | null = parseVariableFromSearch(window.location.search);
-/** Contour lines the URL asked for over the filled field, or none. */
-const requestedLines: PressureBundleId | null = parseLinesFromSearch(window.location.search);
-/** Whether the layer on screen was asked for — by `?type=` or by a press
- * on the rail — rather than defaulted. A defaulted layer follows the
- * dataset: opening or switching to the radar mosaic shows its
- * reflectivity, a forecast its precipitation; a chosen layer is kept
- * across a model switch as it always was. */
-let variableChosen = requestedVariableId !== null;
-/** The primary bundle: the fill's, or the lines' when nothing is filled. */
-let selectedVariableId: ForecastBundleId = requestedVariableId ?? (experimentEnabled ? EXPERIMENT_FILL : DEFAULT_VARIABLE);
-/** The composition on screen, or being switched to. */
-let composition: ViewComposition = compositionForPrimary(
-  selectedVariableId,
-  requestedLines ?? (experimentEnabled && requestedVariableId === null ? EXPERIMENT_LINES : null),
-);
-
-/** The composition whose primary is `primary`: a pressure surface is the
- * lines alone, anything else is the fill with `lines` kept over it. */
-function compositionForPrimary(primary: ForecastBundleId, lines: PressureBundleId | null): ViewComposition {
-  return isPressureBundle(primary) ? { fill: null, lines: primary } : { fill: primary, lines };
-}
-
-function compositionPrimary(view: ViewComposition): ForecastBundleId {
-  return view.fill ?? view.lines ?? DEFAULT_VARIABLE;
-}
-
 /** The composition the manifest can actually serve. A slot the run does not
  * ship empties rather than errors — a showcase case carries only the layers
  * its event is about — and if that empties both, the dataset's own default
@@ -1560,13 +1547,39 @@ function storedParticles(): boolean | null {
  * the system asks for reduced motion: the simulation is frozen there, and now
  * that the field carries the layer on its own, a still scatter of dots is
  * worse than no overlay at all. An explicit `?particles=on` still wins. */
-const requestedParticles = parseParticlesFromSearch(window.location.search);
-let particlesEnabled = requestedParticles ?? storedParticles() ?? !reducedMotion.matches;
+const requestedView = parseView(window.location.search, {
+  field: experimentEnabled ? EXPERIMENT_FILL : DEFAULT_VARIABLE,
+  lines: experimentEnabled ? EXPERIMENT_LINES : null,
+  particles: storedParticles() ?? !reducedMotion.matches,
+});
+/** What is on screen, or being switched to: the field and the lines (the
+ * composition), the overlays, the marks. One object, mutated in place;
+ * the rail's pressed states (`syncRail`), the level row and the address
+ * bar (`syncUrl`) are projections of it. */
+const view: ViewState = requestedView.view;
+/** Whether the layer on screen was asked for — by `?type=` or by a press
+ * on the rail — rather than defaulted. A defaulted layer follows the
+ * dataset: opening or switching to the radar mosaic shows its
+ * reflectivity, a forecast its precipitation; a chosen layer is kept
+ * across a model switch as it always was. */
+let variableChosen = requestedView.fieldRequested;
 /** Whether the overlay's state is a choice — the URL's or the viewer's —
  * rather than this device's default. Only a choice is written back into the
  * address bar: a reduced-motion visitor who never touched the switch would
  * otherwise hand out links that turn the overlay off for everyone. */
-let particlesChosen = requestedParticles !== null;
+let particlesChosen = requestedView.particlesRequested;
+/** The primary bundle: the fill's, or the lines' when nothing is filled. */
+let selectedVariableId: ForecastBundleId = compositionPrimary(viewComposition(), DEFAULT_VARIABLE);
+
+/** The view's two slots, as the overlay and session code reads them. */
+function viewComposition(): ViewComposition {
+  return { fill: view.field, lines: view.lines };
+}
+
+function setComposition(next: ViewComposition): void {
+  view.field = next.fill;
+  view.lines = next.lines;
+}
 
 /** The tone the particles are drawn in over the speed field: a bright trace
  * on the dark theme, the paper theme's own ink on white. Partly transparent
@@ -2120,8 +2133,8 @@ const METEOGRAM_ROW_HEIGHT = 30;
 const soundingSection: SoundingSection = createSoundingSection({
   modelProfile: () => modelProfileForSounding(),
   formatTime: (time) => formatCompactDate(Date.parse(time)),
-  // Read at pin time, never captured: `stationsShown` follows the rail.
-  wantsOpen: () => stationsShown.soundings,
+  // Read at pin time, never captured: `view.marks.stations` follows the rail.
+  wantsOpen: () => view.marks.stations.soundings,
   modelPossible: () =>
     manifest !== null &&
     !showingObservations() &&
@@ -3322,7 +3335,7 @@ function ensureWindGrid(session: VariableSession): void {
 function sessionViewportTiles(session: VariableSession): TileRect[] | null {
   if (!session.tiles || !session.streaming) return null;
   if (session.resident && session.residentScope === "bundle") return null;
-  if (session.vector && particlesEnabled) return null;
+  if (session.vector && view.particles) return null;
   if (isCompositeInput(session)) return null;
   const bounds = map.getBounds();
   return viewportTileRects(session.metadata, session.tiles, {
@@ -3796,6 +3809,7 @@ function setVariableButtonsDisabled(disabled: boolean): void {
   for (const button of variableButtons()) button.disabled = disabled;
   for (const button of modelButtons) button.disabled = disabled;
   for (const button of levelRow.querySelectorAll("button")) button.disabled = disabled;
+  for (const button of fieldList.querySelectorAll("button")) button.disabled = disabled;
 }
 
 /** One group of the level row: the members of a family the run publishes,
@@ -3807,32 +3821,55 @@ interface LevelGroup {
   /** The pressed member; null for the lines group over a field with no
    * lines on it. */
   active: ForecastBundleId | null;
+  /** The lines group's ALONE switch: pressed while the lines are the whole
+   * view, and the way there and back. */
+  alone?: boolean;
 }
 
 /** The level row's groups for the composition on screen: the fill's family
- * when it has more than one published member, then the lines. Over a field
- * the lines group is on the row whenever the run has a surface to chart,
- * with no member pressed while the lines are off — so the overlay is one
- * press away, and one press back after it was taken off. As the view itself
- * the lines are the one group, under the generic caption. */
+ * when it has more than one published surface, then the lines. The lines
+ * group is on the row whenever the run has a surface to chart, with no
+ * member pressed while the lines are off — so the overlay is one press
+ * away, and one press back after it was taken off — and ALONE after the
+ * surfaces, pressed while the lines are the view itself. */
 function levelGroups(): LevelGroup[] {
   if (!manifest) return [];
   const run = manifest;
   const groups: LevelGroup[] = [];
-  const fill = composition.fill;
+  const fill = view.field;
   const fillFamily = fill === null ? null : familyOf(fill);
   if (fill !== null && fillFamily !== null) {
-    const members = familyMembers(fillFamily, (id) => hasBundle(run, id)).filter((id) => hasBundle(run, id));
-    if (members.length > 1) groups.push({ caption: FAMILIES[fillFamily].code, slot: "fill", members, active: fill });
+    // The row answers one question — which surface — so a family's
+    // variants (sea ice cover and thickness) are not on it; the field
+    // sheet lists those.
+    const levels = familyLevels(fillFamily, (id) => hasBundle(run, id)).filter((id) => hasBundle(run, id));
+    if (levels.length > 1 && levels.includes(fill)) {
+      groups.push({ caption: t("levelCaption"), slot: "fill", members: levels, active: fill });
+    }
   }
   const surfaces = PRESSURE_BUNDLE_IDS.filter((id) => hasBundle(run, id));
-  if (fill !== null) {
-    if (surfaces.length > 0) groups.push({ caption: t("linesCaption"), slot: "lines", members: surfaces, active: composition.lines });
-  } else if (composition.lines !== null) {
-    groups.push({ caption: t("levelCaption"), slot: "lines", members: surfaces, active: composition.lines });
+  if (surfaces.length > 0 || view.lines !== null) {
+    groups.push({ caption: t("linesCaption"), slot: "lines", members: surfaces, active: view.lines, alone: fill === null });
   }
-  if (groups.length === 1 && groups[0]!.slot === "fill") groups[0]!.caption = t("levelCaption");
   return groups;
+}
+
+/** The field to put back when the lines-alone view is left: the one last
+ * on screen, else the dataset's own default. */
+function fieldToRestore(): ForecastBundleId {
+  return lastField ?? activeCase?.defaultVariable ?? modelDefaultVariable(selectedModelId, DEFAULT_VARIABLE);
+}
+
+/** Leave the lines-alone view with the field put back under the lines. */
+function restoreField(): void {
+  void activateComposition({ fill: fieldToRestore(), lines: view.lines });
+}
+
+/** Drop the field and leave the lines by themselves, charting the surface
+ * on screen or the preferred one when none is drawn yet. */
+function showLinesAlone(): void {
+  if (view.field !== null) lastField = view.field;
+  void activateComposition({ fill: null, lines: view.lines ?? preferredPressureVariable() });
 }
 
 /** The visually hidden name of one level button: the instrument code and its
@@ -3843,10 +3880,10 @@ function levelButtonName(id: ForecastBundleId): [string, string] {
   }
   const family = familyOf(id);
   if (family !== null && bundleLevel(id) === null) {
-    const { code, glossKey, members } = FAMILIES[family];
+    const { code, glossKey, levels, variants } = FAMILIES[family];
     // A listed member (the cloud layers) is named for itself; a surface
     // member repeats its family tile's gloss.
-    const gloss = members || glossKey === null ? familyLabel(id) : t(glossKey);
+    const gloss = levels || variants || glossKey === null ? familyLabel(id) : t(glossKey);
     return [`${code} ${levelCode(id)}`, gloss];
   }
   return [isobaricCode(id), familyLabel(id)];
@@ -3890,7 +3927,7 @@ function renderLevelRow(): void {
       // Over a filled field the lines are an overlay, and the pressed member
       // is also its off switch: pressing it again takes the lines away. As
       // the view itself the lines cannot be switched off, only changed.
-      const removable = group.slot === "lines" && id === group.active && composition.fill !== null;
+      const removable = group.slot === "lines" && id === group.active && view.field !== null;
       if (removable) {
         button.classList.add("is-removable");
         button.title = t("linesRemoveTitle");
@@ -3899,11 +3936,39 @@ function renderLevelRow(): void {
         // A level changes its own slot: the fill's family member, or the
         // lines wherever they are — the view, or the chart over a field.
         if (group.slot === "lines") {
-          if (removable) void activateComposition({ fill: composition.fill, lines: null });
-          else if (isPressureBundle(id)) void activateComposition({ ...composition, lines: id });
+          if (removable) void activateComposition({ fill: view.field, lines: null });
+          else if (isPressureBundle(id)) void activateComposition({ fill: view.field, lines: id });
         } else {
-          void activateComposition({ fill: id, lines: composition.lines });
+          void activateComposition({ fill: id, lines: view.lines });
         }
+      });
+      container.append(button);
+    }
+    if (group.alone !== undefined) {
+      // ALONE: a switch after the surfaces, not a surface. On, the field
+      // goes and the lines are the view; off, the field last on screen
+      // comes back under them (the two slots are never both empty).
+      const button = document.createElement("button");
+      button.type = "button";
+      button.dataset.alone = "";
+      button.dataset.slot = group.slot;
+      button.disabled = switchingVariable;
+      button.setAttribute("aria-pressed", String(group.alone));
+      button.title = t("levelAloneTitle");
+      const glyph = document.createElement("b");
+      glyph.setAttribute("aria-hidden", "true");
+      glyph.textContent = "ALONE";
+      const name = document.createElement("span");
+      name.className = "rail-name";
+      const codeSpan = document.createElement("span");
+      codeSpan.textContent = "ALONE";
+      const glossSmall = document.createElement("small");
+      glossSmall.textContent = t("levelAlone");
+      name.append(codeSpan, " ", glossSmall);
+      button.append(glyph, name);
+      button.addEventListener("click", () => {
+        if (view.field === null) restoreField();
+        else showLinesAlone();
       });
       container.append(button);
     }
@@ -3965,43 +4030,245 @@ function unknownRailIcon(): SVGSVGElement {
   return svg;
 }
 
-/** Give every bundle the run publishes a way onto the screen, including the
- * ones this build has no tile written for. The shell's own tiles stand for
- * the families they name; anything else gets a plain one in manifest order,
- * lettered with the id's initial. Rebuilt per run, so a dataset that ships
- * nothing unusual carries no extra chrome. */
-function syncUnknownRailTiles(run: ForecastManifest): void {
-  if (!variableRail) return;
-  for (const stale of variableRail.querySelectorAll("button[data-unknown]")) stale.remove();
+/** A generic tile for a field on screen that this build has no tile
+ * written for: the stacked-layers icon, lettered with the id's initial. */
+function unknownRailTile(id: ForecastBundleId): HTMLButtonElement {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.dataset.variable = id;
+  button.dataset.unknown = "";
+  button.disabled = variableButtonsDisabled || switchingVariable;
+  button.setAttribute("aria-pressed", "false");
+  // The id is all the tooltip can say before the bundle is open.
+  button.dataset.tip = id;
+  button.append(unknownRailIcon());
+  const glyph = document.createElement("b");
+  glyph.className = "rail-glyph";
+  glyph.setAttribute("aria-hidden", "true");
+  glyph.textContent = id.slice(0, 1).toUpperCase();
+  const name = document.createElement("span");
+  name.className = "rail-name";
+  const code = document.createElement("span");
+  code.textContent = id.toUpperCase();
+  const gloss = document.createElement("small");
+  gloss.textContent = t("varUnknownLayer");
+  name.append(code, " ", gloss);
+  button.append(glyph, name);
+  button.addEventListener("click", () => {
+    void activateComposition({ fill: id, lines: view.lines });
+  });
+  return button;
+}
+
+/** Whether a written field tile has anything to show on a run: the family's
+ * published members for a family tile, the bundle itself otherwise. */
+function fieldTileShipped(button: HTMLButtonElement, run: ForecastManifest): boolean {
+  const id = button.dataset.variable!;
+  const family = button.dataset.family as IsobaricFamily | undefined;
+  if (family === undefined) return hasBundle(run, id);
+  return familyMembers(family, (member) => hasBundle(run, member)).some((member) => hasBundle(run, member));
+}
+
+/** Whether a written field tile stands for the field on screen: its
+ * family's member, or the bundle itself. */
+function fieldTileCurrent(button: HTMLButtonElement): boolean {
+  const fill = view.field;
+  if (fill === null) return false;
+  const family = button.dataset.family as IsobaricFamily | undefined;
+  return family === undefined ? button.dataset.variable === fill : familyOf(fill) === family;
+}
+
+/** A family tile's gloss follows the member on screen: TEMP reads 2M on
+ * the surface and 850 on the 850 hPa member, ICE reads COVER or THICK.
+ * The gloss is the localized word (the markup's, restored here) while the
+ * family is not on screen or its surface member is, and the member's
+ * instrument code otherwise — English in every locale, as the level row
+ * is. The sheet's rows read it off the tile. */
+function syncFamilyGloss(button: HTMLButtonElement, current: boolean): void {
+  const family = button.dataset.family as IsobaricFamily | undefined;
+  const gloss = button.querySelector<HTMLElement>(".rail-name > small");
+  if (family === undefined || !gloss) return;
+  const fill = view.field;
+  const info = FAMILIES[family];
+  const followed = current && fill !== null && fill !== info.surface ? levelCode(fill) : null;
+  const key = gloss.dataset.i18n as MessageKey | undefined;
+  gloss.textContent = followed ?? (key ? t(key) : gloss.textContent);
+}
+
+/** The rail's field section for the run and the field on screen: a core
+ * tile (`FORECAST_MODELS[].railCore`) shows whenever the run ships it, any
+ * other written tile only while its field is on screen, a field this build
+ * has no tile for gets a generic one while it is, and MORE shows when the
+ * sheet reaches a field the core tiles do not. The sheet's rows are
+ * rebuilt with it. */
+function syncFieldTiles(run: ForecastManifest): void {
+  if (!fieldSection) return;
+  const core = modelRailCore(selectedModelId);
+  for (const button of fieldTiles()) {
+    const isCore = core.includes(button.dataset.variable!);
+    if (isCore) button.dataset.core = "";
+    else delete button.dataset.core;
+    const current = fieldTileCurrent(button);
+    button.hidden = !fieldTileShipped(button, run) || !(isCore || current);
+    syncFamilyGloss(button, current);
+  }
+  const fill = view.field;
+  for (const stale of fieldSection.querySelectorAll<HTMLButtonElement>("button[data-unknown]")) {
+    if (stale.dataset.variable !== fill) stale.remove();
+  }
+  if (fill !== null && !railTileStandsFor(fill) && !fieldSection.querySelector(`button[data-unknown][data-variable="${fill}"]`)) {
+    fieldSection.append(unknownRailTile(fill));
+  }
+  const rows = fieldSheetRows(run);
+  fieldMore.hidden = rows.every((row) => row.core);
+  if (fieldMore.hidden) fieldSheetControl.close();
+  renderFieldSheet(rows);
+  syncRailDensity();
+}
+
+/** The sheet's groups, in the order they are listed: one quantity each,
+ * the written tiles that belong to it in order; the last takes every
+ * bundle the run publishes that no tile stands for. A stopgap until the
+ * variable table carries each field's group. */
+type FieldGroup = "temperature" | "moisture" | "wind" | "dynamics" | "radiation" | "ocean" | "other";
+const FIELD_GROUP_TILES: Record<Exclude<FieldGroup, "other">, readonly string[]> = {
+  temperature: ["tmp2m", "aptmp2m", "dpt2m", "tmpsfc"],
+  moisture: ["rh850", "prate", "cref", "tcdc"],
+  wind: ["wind10m", "gust"],
+  dynamics: ["cape", "vvel700", "thetae850", "qflux850"],
+  radiation: ["vis", "dswrf"],
+  ocean: ["icec", "wave"],
+};
+const FIELD_GROUP_LABEL: Record<FieldGroup, MessageKey> = {
+  temperature: "fieldGroupTemperature",
+  moisture: "fieldGroupMoisture",
+  wind: "fieldGroupWind",
+  dynamics: "fieldGroupDynamics",
+  radiation: "fieldGroupRadiation",
+  ocean: "fieldGroupOcean",
+  other: "fieldGroupOther",
+};
+
+interface FieldSheetRow {
+  group: FieldGroup;
+  /** The bundle a press opens: the family's preferred member for a family
+   * tile, the bundle itself otherwise. */
+  id: ForecastBundleId;
+  /** A family's published surfaces and variants, one chip each; none for
+   * a single field or a family with one member on this run. */
+  members: ForecastBundleId[];
+  /** The written tile the row is drawn from; null for a field this build
+   * has no tile for. */
+  tile: HTMLButtonElement | null;
+  /** Whether the rail carries the field's tile whatever is on screen. */
+  core: boolean;
+  current: boolean;
+}
+
+/** One row per field the run publishes, grouped and ordered as the sheet
+ * lists them. */
+function fieldSheetRows(run: ForecastManifest): FieldSheetRow[] {
+  const core = modelRailCore(selectedModelId);
+  const tiles = new Map(fieldTiles().map((button) => [button.dataset.variable!, button]));
+  const rows: FieldSheetRow[] = [];
+  for (const [group, ids] of Object.entries(FIELD_GROUP_TILES) as [Exclude<FieldGroup, "other">, readonly string[]][]) {
+    for (const id of ids) {
+      const tile = tiles.get(id);
+      if (!tile || !fieldTileShipped(tile, run)) continue;
+      const family = tile.dataset.family as IsobaricFamily | undefined;
+      const members = family === undefined ? [] : familyMembers(family, (member) => hasBundle(run, member)).filter((member) => hasBundle(run, member));
+      rows.push({
+        group,
+        id: family === undefined ? id : preferredFamilyMember(family),
+        members: members.length > 1 ? members : [],
+        tile,
+        core: core.includes(id),
+        current: fieldTileCurrent(tile),
+      });
+    }
+  }
   for (const bundle of run.bundles) {
     const id = bundle.variable;
     if (railTileStandsFor(id)) continue;
+    rows.push({ group: "other", id, members: [], tile: null, core: false, current: view.field === id });
+  }
+  return rows;
+}
+
+/** Write the sheet's rows: a heading per group that has one, then each
+ * field as its rail icon, its code with its gloss, and its full name, the
+ * one on screen checked — and under a family, a chip per surface and
+ * variant the run publishes, the one on screen pressed: the second way
+ * onto a level, and the main way onto a variant. */
+function renderFieldSheet(rows: FieldSheetRow[]): void {
+  const nodes: HTMLElement[] = [];
+  let heading: FieldGroup | null = null;
+  for (const row of rows) {
+    if (row.group !== heading) {
+      heading = row.group;
+      const title = document.createElement("p");
+      title.className = "field-group-heading";
+      title.textContent = t(FIELD_GROUP_LABEL[row.group]);
+      nodes.push(title);
+    }
     const button = document.createElement("button");
     button.type = "button";
-    button.dataset.variable = id;
-    button.dataset.unknown = "";
+    button.dataset.field = row.id;
     button.disabled = variableButtonsDisabled || switchingVariable;
-    button.setAttribute("aria-pressed", "false");
-    // The id is all the tooltip can say before the bundle is open.
-    button.dataset.tip = id;
-    button.append(unknownRailIcon());
-    const glyph = document.createElement("b");
-    glyph.className = "rail-glyph";
-    glyph.setAttribute("aria-hidden", "true");
-    glyph.textContent = id.slice(0, 1).toUpperCase();
-    const name = document.createElement("span");
-    name.className = "rail-name";
+    button.setAttribute("aria-pressed", String(row.current));
+    const icon = document.createElement("span");
+    icon.className = "field-row-icon";
+    icon.setAttribute("aria-hidden", "true");
+    const drawn = row.tile?.querySelector("svg.rail-icon");
+    icon.append(drawn ? (drawn.cloneNode(true) as SVGSVGElement) : unknownRailIcon());
+    const text = document.createElement("span");
+    text.className = "field-row-text";
     const code = document.createElement("span");
-    code.textContent = id.toUpperCase();
+    code.className = "field-row-code";
+    const codeWord = document.createElement("span");
+    codeWord.textContent = row.tile?.querySelector(".rail-name > span")?.textContent ?? row.id.toUpperCase();
     const gloss = document.createElement("small");
-    gloss.textContent = t("varUnknownLayer");
-    name.append(code, " ", gloss);
-    button.append(glyph, name);
+    gloss.textContent = row.tile?.querySelector(".rail-name > small")?.textContent ?? t("varUnknownLayer");
+    code.append(codeWord, gloss);
+    const label = document.createElement("span");
+    label.className = "field-row-label";
+    label.textContent = row.tile?.dataset.tip ?? row.id;
+    text.append(code, label);
+    const check = document.createElement("span");
+    check.className = "model-check";
+    check.setAttribute("aria-hidden", "true");
+    button.append(icon, text, check);
     button.addEventListener("click", () => {
-      void activateComposition({ fill: id, lines: composition.lines });
+      fieldSheetControl.close();
+      void activateComposition({ fill: row.id, lines: view.lines });
     });
-    variableRail.append(button);
+    if (row.members.length === 0) {
+      nodes.push(button);
+      continue;
+    }
+    const wrapper = document.createElement("div");
+    wrapper.className = "field-row";
+    const chips = document.createElement("div");
+    chips.className = "field-chips";
+    chips.setAttribute("role", "group");
+    for (const member of row.members) {
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.dataset.member = member;
+      chip.disabled = variableButtonsDisabled || switchingVariable;
+      chip.setAttribute("aria-pressed", String(member === view.field));
+      chip.textContent = levelCode(member);
+      chip.title = familyLabel(member);
+      chip.addEventListener("click", () => {
+        fieldSheetControl.close();
+        void activateComposition({ fill: member, lines: view.lines });
+      });
+      chips.append(chip);
+    }
+    wrapper.append(button, chips);
+    nodes.push(wrapper);
   }
+  fieldList.replaceChildren(...nodes);
 }
 
 /** The layers whose legend bar is a hand-written gradient in the stylesheet
@@ -4010,17 +4277,68 @@ function syncUnknownRailTiles(run: ForecastManifest): void {
  * with. */
 const STYLESHEET_LEGEND_IDS: ReadonlySet<string> = new Set(["tmp2m", "prate", "cref", "wind10m"]);
 
-/** Past ten visible tiles the rail no longer fits a laptop screen at full
- * size, so the stylesheet's dense variant takes over (see `.variable-rail`).
- * Nothing about which tiles show changes — only their height and icon. */
-const DENSE_RAIL_TILES = 10;
+/** A rail section with nothing to show is hidden whole, and the rule
+ * between sections goes with it. */
+function syncRailSections(): void {
+  if (!variableRail) return;
+  for (const section of variableRail.querySelectorAll<HTMLElement>(".rail-section")) {
+    section.hidden = ![...section.querySelectorAll<HTMLButtonElement>("button")].some((button) => !button.hidden);
+  }
+}
 
+/** A tile's height and the gap under it at the rail's full size, and the
+ * rule between two sections with its margins: what the rail would need for
+ * its visible tiles, against the box it has. */
+const RAIL_TILE_PITCH = 44 + 6;
+const RAIL_RULE_PITCH = 1 + 2 + 6;
+
+/** Whether the rail's visible tiles fit its box at full size; past that
+ * the stylesheet's dense variant takes over (see `.variable-rail`).
+ * Measured from the count rather than the rendered height, so the dense
+ * tiles fitting never argues the rail back out of dense. Nothing about
+ * which tiles show changes — only their height and icon. */
 function syncRailDensity(): void {
   if (!variableRail) return;
-  const visible = [...variableButtons(), ...derivedButtons()].filter((button) => !button.hidden).length;
-  if (visible > DENSE_RAIL_TILES) variableRail.dataset.dense = "";
+  syncRailSections();
+  const sections = [...variableRail.querySelectorAll<HTMLElement>(".rail-section")].filter((section) => !section.hidden);
+  const visible = sections.reduce(
+    (count, section) => count + [...section.querySelectorAll<HTMLButtonElement>("button")].filter((button) => !button.hidden).length,
+    0,
+  );
+  const needed = visible * RAIL_TILE_PITCH + Math.max(0, sections.length - 1) * RAIL_RULE_PITCH;
+  const box = variableRail.clientHeight - 8;
+  if (box > 0 && needed > box) variableRail.dataset.dense = "";
   else delete variableRail.dataset.dense;
   syncRailFade();
+}
+
+/** Every pressed state on the rail, from the view: a field tile for the
+ * field on screen (its family's, for a family tile), the pressure switch
+ * while lines are drawn, the particles, the experiment's derived layers,
+ * and the two station products where their tiles show. The one exception
+ * is the storm tile, pressed while tracks are drawn, which `applyTcView`
+ * sets from what actually loaded. */
+function syncRail(): void {
+  const fill = view.field;
+  const fillFamily = fill === null ? null : familyOf(fill);
+  for (const button of variableButtons()) {
+    const family = button.dataset.family as IsobaricFamily | undefined;
+    const pressed = button.dataset.group === "pressure"
+      ? view.lines !== null
+      : family !== undefined
+        ? fillFamily === family
+        : button.dataset.variable === fill;
+    button.setAttribute("aria-pressed", String(pressed));
+    // A rail taller than its box scrolls, and the tile on screen belongs in
+    // view — clear of the fade, which is what the rail's scroll padding is.
+    if (pressed && !button.hidden) button.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }
+  particlesToggle.setAttribute("aria-pressed", String(view.particles));
+  for (const button of derivedButtons()) {
+    button.setAttribute("aria-pressed", String(view.derived[button.dataset.derived as "inflow" | "front"]));
+  }
+  soundingTile.setAttribute("aria-pressed", String(!soundingTile.hidden && view.marks.stations.soundings));
+  airportTile.setAttribute("aria-pressed", String(!airportTile.hidden && view.marks.stations.airports));
 }
 
 /** How far the rail is clipped at each end, as the two lengths the
@@ -4056,7 +4374,7 @@ new ResizeObserver(() => {
   forecastDaysWidth = width;
   if (metadata) buildForecastDays();
 }).observe(forecastDays);
-if (variableRail) new ResizeObserver(syncRailFade).observe(variableRail);
+if (variableRail) new ResizeObserver(syncRailDensity).observe(variableRail);
 
 /** The legend bar's gradient for a field whose key is not in the stylesheet:
  * the upper-air fills, the surface diagnostics, solar radiation and every
@@ -4168,31 +4486,25 @@ function updateVariablePresentation(session: VariableSession): void {
     }));
   }
   // Each family remembers the member last on screen, so its rail tile
-  // reopens it.
-  const lines = composition.lines;
+  // reopens it; the field itself is remembered for the way back from the
+  // lines-alone view.
+  const lines = view.lines;
   if (lines !== null) lastFamilyMember.set("hgt", lines);
-  const fillFamily = composition.fill === null ? null : familyOf(composition.fill);
-  if (composition.fill !== null && fillFamily !== null) lastFamilyMember.set(fillFamily, composition.fill);
+  const fillFamily = view.field === null ? null : familyOf(view.field);
+  if (view.field !== null && fillFamily !== null) lastFamilyMember.set(fillFamily, view.field);
+  if (view.field !== null) lastField = view.field;
   // The level row: the fill's surfaces when its family has several, and the
-  // lines' whenever a surface is drawn — alone or over a field; the rail's
-  // one pressure tile stands for the lines-alone view.
+  // lines' whenever the run has a surface to chart, with ALONE for the
+  // lines-alone view.
   renderLevelRow();
   // The particle overlay belongs to the vector fields, so its switch appears
   // with them.
   particlesToggle.hidden = !session.vector && !compositeFlowPublished();
-  for (const button of variableButtons()) {
-    const family = button.dataset.family as IsobaricFamily | undefined;
-    const pressed = button.dataset.group === "pressure"
-      ? pressure
-      : family !== undefined
-        ? fillFamily === family
-        : button.dataset.variable === composition.fill;
-    button.setAttribute("aria-pressed", String(pressed));
-    // A rail taller than its box scrolls, and the tile on screen belongs in
-    // view — clear of the fade, which is what the rail's scroll padding is.
-    if (pressed && !button.hidden) button.scrollIntoView({ block: "nearest", inline: "nearest" });
-  }
-  syncRailFade();
+  // The field section follows the field on screen: its tile shows beside
+  // the core ones while it is there.
+  if (manifest) syncFieldTiles(manifest);
+  syncRail();
+  syncRailDensity();
 }
 
 /** Hold the camera to a case's own region. A case is the whole dataset, so
@@ -4262,27 +4574,12 @@ function formatDegrees(value: number, axis: "NS" | "EW"): string {
  * entries). `type` names the primary; `lines` the surface over a filled
  * field, and nothing when the lines are the view. */
 function syncUrl(): void {
-  const variableId = compositionPrimary(composition);
-  const base = activeCase
-    ? searchForCaseVariable(variableId, window.location.search, activeCase.id)
-    : searchForVariable(variableId, window.location.search, selectedModelId);
-  const withLines = searchWithLines(base, composition.fill !== null ? composition.lines : null);
-  // Only a chosen, switched-off overlay is written; on is the default and
-  // says nothing, so an ordinary shared link stays as short as it was.
-  const withParticles = searchWithParticles(withLines, particlesEnabled || !particlesChosen);
-  const withExperiment = searchWithExperiment(withParticles, {
-    enabled: experimentEnabled,
-    inflow: derivedShown.inflow,
-    front: derivedShown.front,
-  });
-  const withStations = searchWithStations(withExperiment, stationsShown);
-  const search = searchWithTc(withStations, {
-    storm: tcSelected,
-    off: tcHidden,
-    agencies: tcAgencies ? [...tcAgencies] : null,
-    models: tcModels ? [...tcModels] : null,
-    members: tcMembers,
-  });
+  const search = searchForView(
+    view,
+    window.location.search,
+    { model: selectedModelId, caseId: activeCase?.id ?? null, experimentEnabled, particlesChosen },
+    DEFAULT_VARIABLE,
+  );
   if (search === window.location.search) return;
   window.history.replaceState(null, "", `${window.location.pathname}${search}${window.location.hash}`);
 }
@@ -5057,18 +5354,13 @@ function handleLabels(response: LabelsWorkerResponse): void {
 // They take no session and no worker and never gate the playhead; the
 // playhead's valid time is what they follow.
 
-const requestedTc = parseTcFromSearch(window.location.search);
 let tcLoaded: LoadedTcIndex | null = null;
-/** The focused storm's id, or null for every named system. */
-let tcSelected: string | null = requestedTc.storm;
-let tcHidden = requestedTc.off;
 /** Whether the C-level systems — found by a model, tracked by no centre —
  * are listed and drawn. A session choice, not carried in the URL. */
 let tcPotential = false;
-/** The agency / model keys switched on; null means all of them. */
-let tcAgencies: Set<string> | null = requestedTc.agencies ? new Set(requestedTc.agencies) : null;
-let tcModels: Set<string> | null = requestedTc.models ? new Set(requestedTc.models) : null;
-let tcMembers = requestedTc.members;
+/** Whether the best track is drawn beside the forecasts. A session choice,
+ * not carried in the URL; the focused storm, the hidden switch, the agency
+ * and model keys switched on and the members are `view.marks.tc`. */
 let tcBest = true;
 const tcStorms = new Map<string, { crc32: string; storm: TcStorm }>();
 /** Storm files in flight, keyed by id and crc, so two views asked for at
@@ -5092,11 +5384,11 @@ async function loadTc(): Promise<void> {
     // A poll that fails leaves the previous hour drawn.
     if (tcLoaded === null) return;
   }
-  if (tcLoaded && tcSelected !== null) {
-    const resolved = resolveTcStormId(tcLoaded.index, tcSelected);
+  if (tcLoaded && view.marks.tc.storm !== null) {
+    const resolved = resolveTcStormId(tcLoaded.index, view.marks.tc.storm);
     // A storm that has left the product falls back to the overview rather
     // than to an empty map.
-    tcSelected = resolved;
+    view.marks.tc.storm = resolved;
     if (resolved === null) syncUrl();
   }
   void applyTcView();
@@ -5146,9 +5438,9 @@ function ensureTcLayers(): StormLayers | null {
  * and every tracked-but-unnumbered system, plus the model-only ones when
  * asked for. */
 function tcEntriesToDraw(): TcIndexEntry[] {
-  if (!tcLoaded || tcHidden || activeCase !== null) return [];
+  if (!tcLoaded || view.marks.tc.off || activeCase !== null) return [];
   const storms = tcLoaded.index.storms;
-  if (tcSelected !== null) return storms.filter((entry) => entry.id === tcSelected);
+  if (view.marks.tc.storm !== null) return storms.filter((entry) => entry.id === view.marks.tc.storm);
   return storms.filter((entry) => entry.level !== "C" || tcPotential);
 }
 
@@ -5179,7 +5471,7 @@ async function applyTcView(): Promise<void> {
   const hidden = activeCase !== null || !tcLoaded || tcLoaded.index.storms.length === 0;
   if (tcTile.hidden !== hidden) {
     tcTile.hidden = hidden;
-    syncRailFade();
+    syncRailDensity();
   }
   const loaded = tcLoaded;
   if (loaded) {
@@ -5211,9 +5503,9 @@ async function applyTcView(): Promise<void> {
   const layers = ensureTcLayers();
   const views: StormView[] = tcDrawn.map((storm) => ({
     storm,
-    agencies: new Set(Object.keys(storm.agencies).filter((key) => tcAgencies === null || tcAgencies.has(key))),
-    models: new Set(Object.keys(storm.models).filter((key) => tcModels === null || tcModels.has(key))),
-    members: tcMembers,
+    agencies: new Set(Object.keys(storm.agencies).filter((key) => view.marks.tc.agencies === null || view.marks.tc.agencies.includes(key))),
+    models: new Set(Object.keys(storm.models).filter((key) => view.marks.tc.models === null || view.marks.tc.models.includes(key))),
+    members: view.marks.tc.members,
     best: tcBest,
   }));
   layers?.setViews(views);
@@ -5221,19 +5513,19 @@ async function applyTcView(): Promise<void> {
   closeTcCard();
   tcTile.setAttribute("aria-pressed", String(views.length > 0));
   renderTcSheet();
-  if (tcSelected !== null && tcFramed !== tcSelected && tcDrawn.length === 1) {
-    tcFramed = tcSelected;
+  if (view.marks.tc.storm !== null && tcFramed !== view.marks.tc.storm && tcDrawn.length === 1) {
+    tcFramed = view.marks.tc.storm;
     const bounds = stormBounds(tcDrawn[0]!);
     if (bounds) map.fitBounds(bounds, { padding: 80, maxZoom: 6, duration: 900 });
   }
 }
 
 /** Turn one key on or off within a "null means all" set. */
-function tcToggleKey(current: Set<string> | null, available: string[], key: string, on: boolean): Set<string> | null {
+function tcToggleKey(current: readonly string[] | null, available: string[], key: string, on: boolean): readonly string[] | null {
   const next = new Set(current ?? available);
   if (on) next.add(key);
   else next.delete(key);
-  return available.every((item) => next.has(item)) ? null : next;
+  return available.every((item) => next.has(item)) ? null : [...next];
 }
 
 function renderTcSheet(): void {
@@ -5241,36 +5533,36 @@ function renderTcSheet(): void {
     tcList,
     {
       index: tcLoaded?.index ?? null,
-      selected: tcSelected,
-      hidden: tcHidden,
+      selected: view.marks.tc.storm,
+      hidden: view.marks.tc.off,
       potential: tcPotential,
-      agencies: new Set(tcAgencyKeys().filter((key) => tcAgencies === null || tcAgencies.has(key))),
-      models: new Set(tcModelKeys().filter((key) => tcModels === null || tcModels.has(key))),
-      members: tcMembers,
+      agencies: new Set(tcAgencyKeys().filter((key) => view.marks.tc.agencies === null || view.marks.tc.agencies.includes(key))),
+      models: new Set(tcModelKeys().filter((key) => view.marks.tc.models === null || view.marks.tc.models.includes(key))),
+      members: view.marks.tc.members,
       best: tcBest,
     },
     { agencies: tcAgencyKeys(), models: tcModelKeys() },
     {
       onSelect(id) {
-        tcSelected = id;
-        tcHidden = false;
+        view.marks.tc.storm = id;
+        view.marks.tc.off = false;
         tcFramed = null;
         syncUrl();
         tcSheetControl.close();
         void applyTcView();
       },
       onAgency(id, on) {
-        tcAgencies = tcToggleKey(tcAgencies, tcAgencyKeys(), id, on);
+        view.marks.tc.agencies = tcToggleKey(view.marks.tc.agencies, tcAgencyKeys(), id, on);
         syncUrl();
         void applyTcView();
       },
       onModel(id, on) {
-        tcModels = tcToggleKey(tcModels, tcModelKeys(), id, on);
+        view.marks.tc.models = tcToggleKey(view.marks.tc.models, tcModelKeys(), id, on);
         syncUrl();
         void applyTcView();
       },
       onMembers(on) {
-        tcMembers = on;
+        view.marks.tc.members = on;
         syncUrl();
         void applyTcView();
       },
@@ -5283,7 +5575,7 @@ function renderTcSheet(): void {
         void applyTcView();
       },
       onHidden(hidden) {
-        tcHidden = hidden;
+        view.marks.tc.off = hidden;
         syncUrl();
         void applyTcView();
       },
@@ -5305,7 +5597,6 @@ function renderTcSheet(): void {
 // so each is its own rail tile, and the press is what `?stations=` then
 // carries. Nothing is remembered in storage: the link is the memory.
 
-let stationsShown: StationsUrlState = parseStationsFromSearch(window.location.search);
 let soundingLoaded: LoadedSoundingIndex | null = null;
 let airportLoaded: LoadedAirportIndex | null = null;
 /** Whether a poll has run at all, so a tab that opened hidden still loads
@@ -5356,11 +5647,10 @@ function applyStationView(): void {
     airportTile.hidden = !airportAvailable;
     railChanged = true;
   }
-  if (railChanged) syncRailFade();
-  const drawSoundings = soundingAvailable && stationsShown.soundings;
-  const drawAirports = airportAvailable && stationsShown.airports;
-  soundingTile.setAttribute("aria-pressed", String(drawSoundings));
-  airportTile.setAttribute("aria-pressed", String(drawAirports));
+  if (railChanged) syncRailDensity();
+  const drawSoundings = soundingAvailable && view.marks.stations.soundings;
+  const drawAirports = airportAvailable && view.marks.stations.airports;
+  syncRail();
   syncZoomCeiling();
   // Nothing on screen and nothing on the map: the layers are never added,
   // so a viewer who asks for no station pays nothing for the products
@@ -5427,7 +5717,7 @@ function closeStationCard(): void {
 /** Each tile is its own switch: pressing it draws that product, pressing
  * it again takes it off, and the address bar carries what is on. */
 function toggleStationProduct(product: keyof StationsUrlState): void {
-  stationsShown = { ...stationsShown, [product]: !stationsShown[product] };
+  view.marks.stations = { ...view.marks.stations, [product]: !view.marks.stations[product] };
   syncUrl();
   applyStationView();
 }
@@ -5544,10 +5834,10 @@ function windVectorField(session: VariableSession): VectorField | null {
  * any other streaming scalar; on, it needs the whole grid again because the
  * particles respawn across all of it. */
 function setParticlesEnabled(next: boolean): void {
-  if (particlesEnabled === next) return;
-  particlesEnabled = next;
+  if (view.particles === next) return;
+  view.particles = next;
   particlesChosen = true;
-  particlesToggle.setAttribute("aria-pressed", String(next));
+  syncRail();
   try {
     localStorage.setItem(PARTICLES_KEY, next ? "1" : "0");
   } catch {
@@ -5699,7 +5989,7 @@ function applyZoomCeiling(session: VariableSession): void {
  * let go. A product that never loads leaves a ceiling nothing needs, which
  * costs nothing. */
 function syncZoomCeiling(): void {
-  const marks = stationsShown.soundings || stationsShown.airports;
+  const marks = view.marks.stations.soundings || view.marks.stations.airports;
   const ceiling = Math.max(dataZoomCeiling, marks && activeCase === null ? STATION_MAX_ZOOM : 0);
   if (map.getMaxZoom() === ceiling) return;
   map.setMaxZoom(ceiling);
@@ -5718,7 +6008,7 @@ function applyVariable(session: VariableSession): void {
   selectedVariableId = session.id;
   // The composition follows the session that actually landed: a slot the
   // run could not fill has already emptied by now.
-  composition = compositionForPrimary(session.id, composition.lines);
+  setComposition(compositionForPrimary(session.id, view.lines));
   applyZoomCeiling(session);
   syncTimeline(session);
   const slot = slotFor(session.id);
@@ -5727,13 +6017,13 @@ function applyVariable(session: VariableSession): void {
   // dark. The lines slot is reconciled against the composition below.
   if (slot !== slots.fill) detachSlot(slots.fill);
   const wind = session.vector;
-  if (wind && particlesEnabled) {
+  if (wind && view.particles) {
     ensureWindLayer();
     ensureWindGrid(session);
     // Back from the experiment's flow, if it was on: the wind's own ink.
     windLayer?.setInk(particleInk());
   }
-  windLayer?.setVisible(wind && particlesEnabled);
+  windLayer?.setVisible(wind && view.particles);
   applyOverlays();
   applyComposite();
   updateVariablePresentation(session);
@@ -5767,7 +6057,7 @@ function applyVariable(session: VariableSession): void {
 function applyOverlays(): void {
   const slot = slots.lines;
   if (slot === primarySlot()) return;
-  const wanted = composition.fill !== null ? composition.lines : null;
+  const wanted = view.field !== null ? view.lines : null;
   if (wanted === null) {
     // The lines go, and their labels with them: the label source is fed by
     // the slot's frames, so nothing else would ever empty it.
@@ -5789,7 +6079,7 @@ function applyOverlays(): void {
     .then((session) => {
       if (sequence !== initializeSequence || !ready) return;
       // The composition may have moved on while this loaded.
-      if (composition.fill === null || composition.lines !== wanted) return;
+      if (view.field === null || view.lines !== wanted) return;
       attachOverlay(slot, session);
     })
     .catch((error: unknown) => {
@@ -5817,8 +6107,8 @@ function attachOverlay(slot: RasterSlot, session: VariableSession): void {
 function syncDerivedLegend(): void {
   const warmth = experimentEnabled && manifest !== null && hasBundle(manifest, EXPERIMENT_WARMTH_ID);
   const flow = warmth && compositeFlowPublished();
-  legendInflow.hidden = !(flow && derivedShown.inflow);
-  legendFront.hidden = !(warmth && derivedShown.front);
+  legendInflow.hidden = !(flow && view.derived.inflow);
+  legendFront.hidden = !(warmth && view.derived.front);
   legendDerived.hidden = legendInflow.hidden && legendFront.hidden;
 }
 
@@ -5830,18 +6120,16 @@ function syncDerivedTiles(run: ForecastManifest): void {
   for (const button of derivedButtons()) {
     const id = button.dataset.derived as "inflow" | "front";
     button.hidden = id === "inflow" ? !flow : !warmth;
-    button.setAttribute("aria-pressed", String(derivedShown[id]));
   }
+  syncRail();
 }
 
 /** Flip one derived layer: off hides it at once, on shows it from the
  * frame on screen (computing it if its inputs are decoded). */
 function setDerivedShown(id: "inflow" | "front", shown: boolean): void {
-  if (derivedShown[id] === shown) return;
-  derivedShown[id] = shown;
-  for (const button of derivedButtons()) {
-    if (button.dataset.derived === id) button.setAttribute("aria-pressed", String(shown));
-  }
+  if (view.derived[id] === shown) return;
+  view.derived[id] = shown;
+  syncRail();
   syncDerivedLegend();
   syncUrl();
   if (!composite) return;
@@ -5877,7 +6165,10 @@ function applyComposite(): void {
         sendPrefetchWindow(index);
         if (activeFrameIndex !== null) trySelectComposite(activeFrameIndex);
         else requestCompositeDecode(session, index);
-        if (activeSession) particlesToggle.hidden = !activeSession.vector && !compositeFlowPublished();
+        if (activeSession) {
+          particlesToggle.hidden = !activeSession.vector && !compositeFlowPublished();
+          syncRailDensity();
+        }
       })
       .catch((error: unknown) => {
         if (sequence !== initializeSequence) return;
@@ -6003,14 +6294,14 @@ function trySelectComposite(index: number): void {
   const warmth = composite.warmth ? compositeInputPlanes(composite.warmth, lead) : null;
   composite.shownKeys = [...(flow?.keys ?? []), ...(warmth?.keys ?? [])];
   for (const key of composite.shownKeys) composite.wantedKeys.delete(key);
-  if (warmth && composite.warmth && derivedShown.front) {
+  if (warmth && composite.warmth && view.derived.front) {
     const session = composite.warmth;
     const plane = warmth.frames[0]!.plane;
     showDerived(composite.layers.front, session, warmth.keys.join("|"), () =>
       thermalFrontZone({ grid: geoGrid(session.metadata), variable: session.variable, plane }),
     );
   }
-  if (flow && warmth && composite.flow && composite.warmth && derivedShown.inflow) {
+  if (flow && warmth && composite.flow && composite.warmth && view.derived.inflow) {
     const flowSession = composite.flow;
     const warmthSession = composite.warmth;
     const [u, v] = flowSession.variables;
@@ -6023,7 +6314,7 @@ function trySelectComposite(index: number): void {
       );
     }
   }
-  if (flow && composite.flow && flow.frames.length >= 2 && particlesEnabled && activeSession && !activeSession.vector) {
+  if (flow && composite.flow && flow.frames.length >= 2 && view.particles && activeSession && !activeSession.vector) {
     ensureWindLayer();
     ensureWindGrid(composite.flow);
     windLayer!.setInk(experimentFlowInk());
@@ -6039,8 +6330,8 @@ async function activateComposition(next: ViewComposition): Promise<void> {
   variableChosen = true;
   if (!manifest || !layersAdded || switchingVariable) return;
   const resolved = resolveComposition(next, manifest, activeCase?.defaultVariable ?? DEFAULT_VARIABLE);
-  const primary = compositionPrimary(resolved);
-  composition = resolved;
+  const primary = compositionPrimary(resolved, DEFAULT_VARIABLE);
+  setComposition(resolved);
   if (primary !== activeSession?.id) {
     await activateVariable(primary);
     return;
@@ -6138,6 +6429,7 @@ async function initialize({ frame = false }: { frame?: boolean } = {}): Promise<
   windLayer?.setVisible(false);
   resetComposite();
   particlesToggle.hidden = true;
+  syncRailDensity();
   clearLabels();
   activeSession = null;
   activeVariable = null;
@@ -6173,8 +6465,8 @@ async function initialize({ frame = false }: { frame?: boolean } = {}): Promise<
       // The case names the layer its event is about — a heat dome opens on
       // temperature, not on the app's usual precipitation. Only an explicit
       // ?type= overrides it.
-      if (!caseDefaultApplied && requestedVariableId === null) {
-        composition = compositionForPrimary(found.defaultVariable, composition.lines);
+      if (!caseDefaultApplied && !requestedView.fieldRequested) {
+        setComposition(compositionForPrimary(found.defaultVariable, view.lines));
       }
       caseDefaultApplied = true;
       document.body.classList.add("is-showcase");
@@ -6213,37 +6505,31 @@ async function initialize({ frame = false }: { frame?: boolean } = {}): Promise<
     // frame once the session's axis is known (syncTimeline).
     if (!showingObservations()) sayText(runTime, formatStamp(loadedManifest.runTime, "UTC"));
 
-    // Each variable button appears only when the manifest actually ships its
-    // bundle. On the live feed that is wind10m everywhere and dswrf on the
-    // sflux source; a showcase case additionally ships only the variables
-    // its event is about, so the core pair can be missing too.
-    for (const button of variableButtons()) {
-      const bundleId = button.dataset.variable;
-      if (!bundleId || !(KNOWN_BUNDLE_IDS as readonly string[]).includes(bundleId)) continue;
-      const family = button.dataset.family as IsobaricFamily | undefined;
-      button.hidden =
-        button.dataset.group === "pressure"
-          ? !PRESSURE_BUNDLE_IDS.some((id) => hasBundle(loadedManifest, id))
-          : family !== undefined
-            ? !familyMembers(family, (id) => hasBundle(loadedManifest, id)).some((id) => hasBundle(loadedManifest, id))
-            : !hasBundle(loadedManifest, bundleId);
-    }
-    syncUnknownRailTiles(loadedManifest);
-    syncDerivedTiles(loadedManifest);
-    syncRailDensity();
     // A slot this run does not ship empties; a case names its own default
     // for when that leaves nothing, and a live run always carries its core
     // set — the forecast pair, or the reflectivity on a radar mosaic, which
     // is what a switch onto one opens.
     if (!activeCase && !variableChosen && !experimentEnabled) {
-      composition = compositionForPrimary(modelDefaultVariable(selectedModelId, DEFAULT_VARIABLE), composition.lines);
+      setComposition(compositionForPrimary(modelDefaultVariable(selectedModelId, DEFAULT_VARIABLE), view.lines));
     }
-    composition = resolveComposition(
-      composition,
-      loadedManifest,
-      activeCase?.defaultVariable ?? FORECAST_MODELS[selectedModelId].coreBundles?.[0] ?? DEFAULT_VARIABLE,
+    setComposition(
+      resolveComposition(
+        viewComposition(),
+        loadedManifest,
+        activeCase?.defaultVariable ?? FORECAST_MODELS[selectedModelId].coreBundles?.[0] ?? DEFAULT_VARIABLE,
+      ),
     );
-    selectedVariableId = compositionPrimary(composition);
+    selectedVariableId = compositionPrimary(viewComposition(), DEFAULT_VARIABLE);
+    // The rail for this run: the field section from what it ships and what
+    // is about to be on screen (a showcase case ships only the fields its
+    // event is about, so even the core can be missing), the pressure switch
+    // when it has a surface to chart, the experiment's tiles on its inputs.
+    for (const button of variableButtons()) {
+      if (button.dataset.group !== "pressure") continue;
+      button.hidden = !PRESSURE_BUNDLE_IDS.some((id) => hasBundle(loadedManifest, id));
+    }
+    syncFieldTiles(loadedManifest);
+    syncDerivedTiles(loadedManifest);
 
     // Paint the poster while the bundle opens (never blocks the load).
     void showPoster(selectedVariableId, sequence);
@@ -6336,23 +6622,33 @@ for (const button of variableButtons()) {
     if (!isBundleVariableId(id)) return;
     const family = button.dataset.family as IsobaricFamily | undefined;
     if (button.dataset.group === "pressure") {
-      // The pressure tile is the lines-alone view; from a field with lines
-      // over it, this is the way out to the chart itself.
-      void activateComposition({ fill: null, lines: preferredPressureVariable() });
+      // The pressure tile is the lines' switch: on over the field, off
+      // again; from the lines-alone view it puts the field back rather
+      // than leaving the screen empty.
+      if (view.lines === null) void activateComposition({ fill: view.field, lines: preferredPressureVariable() });
+      else if (view.field === null) restoreField();
+      else void activateComposition({ fill: view.field, lines: null });
     } else if (family !== undefined) {
       // A family tile opens the member last on screen; the level row then
-      // moves between its surfaces. Lines over it stay.
-      void activateComposition({ fill: preferredFamilyMember(family), lines: composition.lines });
+      // moves between its surfaces. Pressed already, a family of variants
+      // (sea ice, the waves) cycles to the next one the run publishes — a
+      // shortcut beside the sheet's chips, read back off the tile's gloss.
+      // Lines over it stay.
+      const run = manifest;
+      const variants = run ? familyVariants(family, (member) => hasBundle(run, member)).filter((member) => hasBundle(run, member)) : [];
+      const at = view.field === null ? -1 : variants.indexOf(view.field);
+      const next = at >= 0 && variants.length > 1 ? variants[(at + 1) % variants.length]! : preferredFamilyMember(family);
+      void activateComposition({ fill: next, lines: view.lines });
     } else {
       // A fill tile changes the field alone; lines over it stay.
-      void activateComposition({ fill: id, lines: composition.lines });
+      void activateComposition({ fill: id, lines: view.lines });
     }
   });
 }
 for (const button of derivedButtons()) {
   button.addEventListener("click", () => {
     const id = button.dataset.derived as "inflow" | "front";
-    setDerivedShown(id, !derivedShown[id]);
+    setDerivedShown(id, !view.derived[id]);
   });
 }
 for (const button of modelButtons) {
@@ -6514,7 +6810,7 @@ playButton.addEventListener("click", () => {
 // One button cycling the ladder: at four rungs a menu would cost more taps
 // than it saves, and the label always reads the rate in force.
 speedButton.addEventListener("click", () => setPlaybackFps(nextFps(playbackFps), true));
-particlesToggle.addEventListener("click", () => setParticlesEnabled(!particlesEnabled));
+particlesToggle.addEventListener("click", () => setParticlesEnabled(!view.particles));
 /** Poll the live pointer; a changed manifest re-initializes onto the new
  * run ("排播型电视直播" — the client tunes itself to the newest broadcast).
  * The manifest's crc is what says "new": a forecast's changes with its run
@@ -6593,7 +6889,7 @@ try {
 }
 
 updateTransport();
-particlesToggle.setAttribute("aria-pressed", String(particlesEnabled));
+syncRail();
 buildTicks(FRAME_COUNT);
 resetPreloadCard(FRAME_COUNT);
 map.once("load", () => {

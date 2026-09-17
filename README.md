@@ -283,9 +283,13 @@ such as `tmp2m` / `prate` / `wind10m` / `solar` / `radar`, and each isobaric
 field names itself (`pressure`, `hgt500`, `tmp850` / `t850`, `rh700`,
 `wind850`, `qflux850` / `vapor850`; there is no separate `level`
 parameter). Both are case-insensitive, the address bar stays in sync, and
-unrecognized values fall back to defaults. In the page one rail tile stands
-for a whole family and the level row on the transport capsule picks the
-surface.
+unrecognized values fall back to defaults. In the page the rail carries a
+tile for each core field (temperature, precipitation, wind, cloud on a
+forecast model) and a MORE tile opening the list of every field the run
+publishes; one tile stands for a whole family and the level row on the
+transport capsule picks the surface. The pressure lines are a switch in the
+rail's overlay section, and the level row's ALONE member leaves them by
+themselves.
 
 The view is in the fragment, `#map=<zoom>/<lat>/<lon>` (MapLibre's own
 spelling), kept current on every pan and zoom. A link without one opens on

@@ -170,9 +170,11 @@ test("a bundle without a store stays on the container beside one that has it", a
   await page.goto("/?type=temp");
   await expect(page.locator("body")).toHaveAttribute("data-variable", "tmp2m");
   await expectReadyOnStore(page);
-  // The pressure family's tile opens the 500 hPa height, which ships no
-  // store in the fixture, so it opens its .xue and the card says so.
-  await page.getByRole("button", { name: "PRESSURE FIELD" }).click();
+  // The pressure switch draws the 500 hPa height over the field, and the
+  // level row's ALONE member leaves it by itself; it ships no store in the
+  // fixture, so it opens its .xue and the card says so.
+  await page.getByRole("button", { name: "PRESSURE LINES" }).click();
+  await page.locator("#level-row button[data-alone]").click();
   await expect(page.locator("body")).toHaveAttribute("data-variable", "hgt500");
   await expect(page.locator("#preload-format")).toHaveText("Xue");
   expect(counters.bundleRanged).toBeGreaterThan(0);

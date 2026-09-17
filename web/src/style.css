@@ -971,12 +971,89 @@ body.is-pressure .legend {
   display: none;
 }
 
-/* A run that ships the whole GFS set puts sixteen tiles on the rail, which
-   no laptop screen fits at 44px: past ten visible tiles main.ts marks the
-   rail dense and the tiles drop to 36px with a smaller icon. The letter
-   caption stays — on a phone it is the only name a tile has, there being
-   no hover — and what still does not fit its box scrolls. */
-.variable-rail[data-dense] {
+/* The three sections — the fields, the overlays, the marks — each a
+   column of tiles, a short rule between two that show. A section with
+   nothing to show is hidden by main.ts (syncRailSections), and the rule
+   goes with it. In the field section the core tiles come first, the tile
+   of a field on screen that is not a core one after them, and MORE last,
+   whatever order the markup keeps them in. */
+.rail-section {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.rail-section[hidden] {
+  display: none;
+}
+
+.rail-section + .rail-section::before {
+  width: 18px;
+  height: 1px;
+  flex: none;
+  align-self: center;
+  margin: 1px 0;
+  background: var(--map-ink-muted);
+  content: "";
+  opacity: 0.6;
+}
+
+.rail-section[data-section="field"] button {
+  order: 1;
+}
+
+.rail-section[data-section="field"] button[data-core] {
+  order: 0;
+}
+
+#field-more {
+  order: 2;
+}
+
+/* A switch tile (an overlay or a mark) carries a small ring in its top
+   right corner, filled while it is on; a sheet trigger (MORE, the storms)
+   a corner chevron in its bottom right. A field tile carries nothing: it
+   is the radio, and pressed is the whole of its state. Neither mark relies
+   on color. */
+.variable-rail button[data-toggle]::before {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 5px;
+  height: 5px;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  content: "";
+  opacity: 0.55;
+}
+
+.variable-rail button[data-toggle][aria-pressed="true"]::before {
+  background: currentColor;
+  opacity: 1;
+}
+
+.variable-rail button[data-dialog]::before {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  width: 4px;
+  height: 4px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  content: "";
+  opacity: 0.55;
+}
+
+/* A rail taller than its box (a laptop's 768px holds ten tiles at 44px,
+   and a run with every product up puts a dozen on it) is marked dense by
+   main.ts, from the tile count against the box's height, and the tiles
+   drop to 36px with a smaller icon. The letter caption stays — on a phone
+   it is the only name a tile has, there being no hover — and what still
+   does not fit its box scrolls. */
+.variable-rail[data-dense],
+.variable-rail[data-dense] .rail-section {
   gap: 4px;
 }
 
@@ -1184,6 +1261,31 @@ html[lang="ja"] .rail-glyph {
   opacity: 0.7;
 }
 
+/* The lines group's ALONE member is a switch, not a surface: it drops the
+   field and leaves the chart by itself, and pressing it again puts the
+   field back. It carries the rail's switch ring so it does not read as a
+   fifth surface, and sits a step apart from them. */
+.level-row button[data-alone] {
+  margin-left: 6px;
+}
+
+.level-row button[data-alone]::before {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin-right: 6px;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  content: "";
+  opacity: 0.6;
+  vertical-align: 1px;
+}
+
+.level-row button[data-alone][aria-pressed="true"]::before {
+  background: currentColor;
+  opacity: 1;
+}
+
 .level-row button:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
@@ -1298,30 +1400,6 @@ html[lang="ja"] .rail-glyph {
   font-size: 11px;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
-}
-
-/* The wind layer's particle switch. Icon-only and square-ish so it costs the
-   transport row as little as the play button does, pressed-state filled like
-   the level row's buttons. */
-.particles-toggle {
-  display: flex;
-  width: 36px;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-}
-
-.particles-toggle[hidden] {
-  display: none;
-}
-
-.particles-toggle[aria-pressed="true"],
-/* The shared pill hover below is more specific than the pressed state, and
-   would paint the glyph in the very tone it sits on. */
-.particles-toggle[aria-pressed="true"]:hover:not(:disabled) {
-  border-color: var(--text);
-  background: var(--text);
-  color: var(--bg);
 }
 
 .pill-button:hover:not(:disabled) {
@@ -1718,6 +1796,173 @@ html[lang="ja"] .rail-glyph {
   right: 72px;
   left: auto;
   width: 300px;
+}
+
+/* The field sheet: the same shape, hung from the rail's MORE tile. One
+   heading per group of quantities, one row per field the run publishes —
+   its rail icon, its code and its full name — with the field on screen
+   checked the way the model sheet checks the model. */
+.field-sheet .model-sheet-panel {
+  top: 80px;
+  right: 72px;
+  left: auto;
+  width: 320px;
+}
+
+.field-list {
+  display: flex;
+  max-height: min(64vh, 560px);
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.field-group-heading {
+  margin: 10px 0 2px;
+  padding: 0 12px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+}
+
+.field-group-heading:first-child {
+  margin-top: 0;
+}
+
+.field-list button {
+  display: grid;
+  min-height: 44px;
+  align-items: center;
+  gap: 0 12px;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  padding: 4px 12px;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.field-list button:hover,
+.field-list button[aria-pressed="true"] {
+  background: var(--row-hover);
+}
+
+.field-list button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.field-list button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.field-row-icon {
+  display: flex;
+  justify-content: center;
+}
+
+.field-row-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.field-row-text {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.field-row-code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+}
+
+.field-row-code small {
+  margin-left: 6px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.field-row-label {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A family's row carries a strip of chips under it — its surfaces and
+   variants on this run, the one on screen pressed — indented to the text
+   column. */
+.field-row {
+  display: flex;
+  flex-direction: column;
+}
+
+.field-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 0 12px 8px 48px;
+}
+
+/* Under `.field-list button`, so the row's grid and height are undone. */
+.field-chips button {
+  display: inline-flex;
+  height: 24px;
+  min-height: 0;
+  align-items: center;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.field-chips button:hover {
+  color: var(--text);
+}
+
+.field-chips button[aria-pressed="true"] {
+  border-color: var(--text);
+  background: var(--text);
+  color: var(--bg);
+}
+
+.field-chips button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.field-chips button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+/* The check has the model sheet's look but this grid's own cell: the
+   third column, centred on the row. */
+.field-list .model-check {
+  align-self: center;
+  grid-area: auto;
+}
+
+.field-list button[aria-pressed="true"] .model-check::before {
+  content: "✓";
 }
 
 .tc-list {
@@ -3100,7 +3345,8 @@ body[data-model="jma"] .source-credit[data-credit-model="jma"] {
      than the one above, so they are undone by name. */
   .lang-sheet .model-sheet-panel,
   .showcase-page .lang-sheet .model-sheet-panel,
-  .tc-sheet .model-sheet-panel {
+  .tc-sheet .model-sheet-panel,
+  .field-sheet .model-sheet-panel {
     top: auto;
     right: 0;
     left: 0;

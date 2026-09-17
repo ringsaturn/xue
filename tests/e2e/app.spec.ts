@@ -26,6 +26,14 @@ const WIND_FIXTURE = readFileSync(
 const TMP850_FIXTURE = readFileSync(
   fileURLToPath(new URL("../fixtures/generated/web/tmp850.xue", import.meta.url)),
 );
+// A field outside the rail's core tiles: reached through the MORE sheet,
+// and on the rail only while on screen.
+const GUST_FIXTURE = readFileSync(
+  fileURLToPath(new URL("../fixtures/generated/web/gust.xue", import.meta.url)),
+);
+const GUST_HALF_FIXTURE = readFileSync(
+  fileURLToPath(new URL("../fixtures/generated/web/gust.half.xue", import.meta.url)),
+);
 // One level of the pressure family: the viewer draws it as contour lines,
 // and it ships no poster, so switching to it exercises the path where nothing
 // paints until the first real plane decodes.
@@ -159,6 +167,10 @@ async function routeBundle(
           ? TMP2M_FIXTURE
           : name === "tmp850.xue"
             ? TMP850_FIXTURE
+          : name === "gust.xue"
+            ? GUST_FIXTURE
+          : name === "gust.half.xue"
+            ? GUST_HALF_FIXTURE
           : name === "wind10m.xue"
             ? WIND_FIXTURE
             : name === "hgt500.xue"
@@ -390,12 +402,19 @@ test("a pressure level loads as its own contour session", async ({ page }, testI
   await routeBundle(page);
   await page.goto("/");
   await waitForReady(page);
-  // The rail carries one tile for the whole pressure family; the surface
-  // itself is picked on the capsule's level row. Over a field the row offers
-  // the surfaces as lines, none pressed until one is.
+  // The rail's pressure tile is the lines' switch in its overlay section;
+  // the surface itself is picked on the capsule's level row. Over a field
+  // the row offers the surfaces as lines, none pressed until one is, and
+  // ALONE after them, which is the chart by itself.
   await expect(page.locator("#level-row")).toBeVisible();
   await expect(page.locator('#level-row [data-slot="lines"] button[aria-pressed="true"]')).toHaveCount(0);
-  await page.getByRole("button", { name: "PRESSURE FIELD" }).click();
+  const pressureTile = page.getByRole("button", { name: "PRESSURE LINES" });
+  await expect(pressureTile).toHaveAttribute("aria-pressed", "false");
+  await pressureTile.click();
+  await expect(page.locator("body")).toHaveAttribute("data-variable", "prate");
+  await expect(pressureTile).toHaveAttribute("aria-pressed", "true");
+  await expect(page).toHaveURL(/lines=hgt500/);
+  await page.locator("#level-row button[data-alone]").click();
   await expect(page.locator("body")).toHaveAttribute("data-variable", "hgt500");
   await expect(page.locator("#level-row")).toBeVisible();
   const heightButton = page.getByRole("button", { name: "500MB HEIGHT" });
@@ -433,7 +452,8 @@ test("?lines= draws a pressure surface over the filled field", async ({ page }, 
   await expect(page.locator("#level-row")).toBeVisible();
   await expect(page.getByRole("button", { name: "500MB HEIGHT" })).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByRole("button", { name: "PRECIP RATE" })).toHaveAttribute("aria-pressed", "true");
-  await expect(page.getByRole("button", { name: "PRESSURE FIELD" })).toHaveAttribute("aria-pressed", "false");
+  // The rail's pressure switch reads on while the lines are drawn.
+  await expect(page.getByRole("button", { name: "PRESSURE LINES" })).toHaveAttribute("aria-pressed", "true");
   // The lines follow the timeline of the field.
   const slider = page.getByRole("slider", { name: "Forecast hour" });
   await slider.focus();
@@ -446,14 +466,25 @@ test("?lines= draws a pressure surface over the filled field", async ({ page }, 
   await expect(page).toHaveURL(/type=temp/);
   await expect(page).toHaveURL(/lines=hgt500/);
   expect(counters).toEqual({ tmp2m: 1, prate: 1, hgt500: 1 });
-  // The pressure tile is the chart alone: the level names itself in `type`
-  // and `lines` goes, so the two never contradict each other.
-  await page.getByRole("button", { name: "PRESSURE FIELD" }).click();
+  // The level row's ALONE member is the chart alone: the field goes, the
+  // level names itself in `type` and `lines` goes, so the two never
+  // contradict each other. The rail's switch stays on: the lines are drawn.
+  const alone = page.locator("#level-row button[data-alone]");
+  await expect(alone).toHaveAttribute("aria-pressed", "false");
+  await alone.click();
   await expect(page.locator("body")).toHaveAttribute("data-variable", "hgt500");
+  await expect(alone).toHaveAttribute("aria-pressed", "true");
   await expect(page).toHaveURL(/type=hgt500/);
   await expect(page).not.toHaveURL(/lines=/);
   await expect(page.locator("#legend")).toBeHidden();
-  // Back to a field from the chart, and the lines stay over it.
+  await expect(page.getByRole("button", { name: "PRESSURE LINES" })).toHaveAttribute("aria-pressed", "true");
+  // ALONE again puts the field last on screen back under the lines.
+  await alone.click();
+  await expect(page.locator("body")).toHaveAttribute("data-variable", "tmp2m");
+  await expect(page).toHaveURL(/type=temp/);
+  await expect(page).toHaveURL(/lines=hgt500/);
+  await expect(page.locator("#legend")).toBeVisible();
+  // Back to another field, and the lines stay over it.
   await page.getByRole("button", { name: "PRECIP RATE" }).click();
   await expect(page.locator("body")).toHaveAttribute("data-variable", "prate");
   await expect(page).toHaveURL(/type=precip/);
@@ -469,7 +500,8 @@ test("?lines= draws a pressure surface over the filled field", async ({ page }, 
   await linesButton.click();
   await expect(page).not.toHaveURL(/lines=/);
   await expect(page.locator("body")).toHaveAttribute("data-variable", "prate");
-  await expect(page.getByRole("button", { name: "PRESSURE FIELD" })).toHaveAttribute("aria-pressed", "false");
+  const pressureTile = page.getByRole("button", { name: "PRESSURE LINES" });
+  await expect(pressureTile).toHaveAttribute("aria-pressed", "false");
   // The group stays on the row with nothing pressed, so a slip is undone
   // with one press rather than a trip through the chart view.
   await expect(page.locator("#level-row")).toBeVisible();
@@ -480,12 +512,26 @@ test("?lines= draws a pressure surface over the filled field", async ({ page }, 
   await expect(linesButton).toHaveAttribute("aria-pressed", "true");
   await expect(linesButton).toHaveClass(/is-removable/);
   expect(counters).toEqual({ tmp2m: 1, prate: 1, hgt500: 1 });
-  // As the view itself the lines cannot be switched off, only changed.
-  await page.getByRole("button", { name: "PRESSURE FIELD" }).click();
+  // The rail's switch is the same off switch, and on again brings back the
+  // surface last drawn.
+  await pressureTile.click();
+  await expect(page).not.toHaveURL(/lines=/);
+  await expect(pressureTile).toHaveAttribute("aria-pressed", "false");
+  await pressureTile.click();
+  await expect(page).toHaveURL(/lines=hgt500/);
+  await expect(pressureTile).toHaveAttribute("aria-pressed", "true");
+  // As the view itself the lines cannot be switched off, only changed; the
+  // rail's switch from there puts the field back rather than emptying the
+  // screen.
+  await alone.click();
   await expect(page.locator("body")).toHaveAttribute("data-variable", "hgt500");
   await expect(page.locator('#level-row button[data-variable="hgt500"]')).not.toHaveClass(/is-removable/);
   await page.locator('#level-row button[data-variable="hgt500"]').click();
   await expect(page.locator("body")).toHaveAttribute("data-variable", "hgt500");
+  await pressureTile.click();
+  await expect(page.locator("body")).toHaveAttribute("data-variable", "prate");
+  await expect(page).toHaveURL(/lines=hgt500/);
+  expect(counters).toEqual({ tmp2m: 1, prate: 1, hgt500: 1 });
 });
 
 test("playback keeps moving with lines over the field", async ({ page }, testInfo) => {
@@ -526,10 +572,13 @@ test("the temperature tile opens a family whose level row picks the surface", as
   const upperButton = page.locator('#level-row button[data-variable="tmp850"]');
   await expect(surfaceButton).toHaveAttribute("aria-pressed", "true");
   await expect(upperButton).toHaveAttribute("aria-pressed", "false");
-  // 850 hPa is its own session with its own codebook, palette and title.
+  // 850 hPa is its own session with its own codebook, palette and title,
+  // and the family tile's gloss follows the member.
+  await expect(temperatureTile.locator("small")).toHaveText("2M");
   await upperButton.click();
   await expect(page.locator("body")).toHaveAttribute("data-variable", "tmp850");
   await expect(upperButton).toHaveAttribute("aria-pressed", "true");
+  await expect(temperatureTile.locator("small")).toHaveText("850");
   await expect(page.locator("#variable-title")).toContainText("850 hPa");
   await expect(page.locator("#legend-unit")).toHaveText("°C");
   await expect(page.locator("#legend")).toBeVisible();
@@ -538,14 +587,88 @@ test("the temperature tile opens a family whose level row picks the surface", as
   await expect(temperatureTile).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByRole("slider", { name: "Forecast hour" })).toBeEnabled();
   // Lines over the upper-air field put a second group beside the family's.
-  await page.getByRole("button", { name: "PRESSURE FIELD" }).click();
-  await expect(page.locator("body")).toHaveAttribute("data-variable", "hgt500");
-  await temperatureTile.click();
-  // The family reopens the member last on screen.
+  await page.getByRole("button", { name: "PRESSURE LINES" }).click();
   await expect(page.locator("body")).toHaveAttribute("data-variable", "tmp850");
   await expect(page).toHaveURL(/lines=hgt500/);
   await expect(page.locator("#level-row .level-group")).toHaveCount(2);
   await expect(page.locator('#level-row button[data-variable="hgt500"]')).toHaveAttribute("aria-pressed", "true");
+  // Through the chart alone and back: the family reopens the member last
+  // on screen, with the lines still over it.
+  await page.locator("#level-row button[data-alone]").click();
+  await expect(page.locator("body")).toHaveAttribute("data-variable", "hgt500");
+  await expect(temperatureTile).toHaveAttribute("aria-pressed", "false");
+  await temperatureTile.click();
+  await expect(page.locator("body")).toHaveAttribute("data-variable", "tmp850");
+  await expect(page).toHaveURL(/lines=hgt500/);
+  await expect(page.locator("#level-row .level-group")).toHaveCount(2);
+  await expect(page.locator('#level-row button[data-variable="hgt500"]')).toHaveAttribute("aria-pressed", "true");
+});
+
+test("the rail is three sections, and MORE lists the fields the core tiles do not", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop", "desktop interaction coverage");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await routeManifest(page);
+  await routeBundle(page);
+  await page.goto("/");
+  await waitForReady(page);
+  // The field section: the core tiles the run ships (temperature,
+  // precipitation, wind — no cloud on this fixture) and MORE; the gust is
+  // published but not core, so it has no tile until it is on screen.
+  const rail = page.locator(".variable-rail");
+  const fieldSection = rail.locator('.rail-section[data-section="field"]');
+  await expect(fieldSection.locator("button:visible")).toHaveCount(4);
+  await expect(fieldSection.locator('button[data-variable="tmp2m"]')).toBeVisible();
+  await expect(fieldSection.locator('button[data-variable="prate"]')).toBeVisible();
+  await expect(fieldSection.locator('button[data-variable="wind10m"]')).toBeVisible();
+  const gustTile = fieldSection.locator('button[data-variable="gust"]');
+  await expect(gustTile).toBeHidden();
+  const more = page.locator("#field-more");
+  await expect(more).toBeVisible();
+  await expect(more).toHaveAttribute("aria-expanded", "false");
+  // The overlay section carries the pressure switch; the marks section has
+  // nothing to show on this fixture and is hidden with its rule.
+  await expect(rail.locator('.rail-section[data-section="overlay"] button:visible')).toHaveCount(1);
+  await expect(rail.locator('.rail-section[data-section="mark"]')).toBeHidden();
+  // MORE opens the sheet: every field the run publishes, in its group, the
+  // one on screen checked.
+  await more.click();
+  const sheet = page.locator("#field-sheet");
+  await expect(sheet).toBeVisible();
+  await expect(more).toHaveAttribute("aria-expanded", "true");
+  await expect(sheet.locator("button[data-field]")).toHaveCount(4);
+  await expect(sheet.locator('button[data-field="prate"]')).toHaveAttribute("aria-pressed", "true");
+  await expect(sheet.locator(".field-group-heading")).toHaveText(["TEMPERATURE", "MOISTURE", "WIND"]);
+  // A family's row carries a chip per surface the run publishes, the
+  // second way onto a level; a chip opens its member and the tile's gloss
+  // follows it.
+  await expect(sheet.locator("button[data-member]")).toHaveText(["2M", "850"]);
+  await sheet.locator('button[data-member="tmp850"]').click();
+  await expect(sheet).toBeHidden();
+  await expect(page.locator("body")).toHaveAttribute("data-variable", "tmp850");
+  await expect(fieldSection.locator('button[data-variable="tmp2m"] small')).toHaveText("850");
+  await expect(fieldSection.locator('button[data-variable="tmp2m"]')).toHaveAttribute("aria-pressed", "true");
+  await more.click();
+  await expect(sheet.locator('button[data-member="tmp850"]')).toHaveAttribute("aria-pressed", "true");
+  // A row closes the sheet and opens its field, which then has a tile on
+  // the rail beside the core ones.
+  await sheet.locator('button[data-field="gust"]').click();
+  await expect(sheet).toBeHidden();
+  await expect(page.locator("body")).toHaveAttribute("data-variable", "gust");
+  await expect(page).toHaveURL(/type=gust/);
+  await expect(gustTile).toBeVisible();
+  await expect(gustTile).toHaveAttribute("aria-pressed", "true");
+  await expect(fieldSection.locator("button:visible")).toHaveCount(5);
+  // Back on a core field the extra tile goes.
+  await page.getByRole("button", { name: "TEMP 2M" }).click();
+  await expect(page.locator("body")).toHaveAttribute("data-variable", "tmp2m");
+  await expect(gustTile).toBeHidden();
+  await expect(fieldSection.locator("button:visible")).toHaveCount(4);
+  // Escape closes the sheet and hands focus back to MORE.
+  await more.click();
+  await expect(sheet).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(sheet).toBeHidden();
+  await expect(more).toBeFocused();
 });
 
 test("?type=tmp850 opens the upper-air field straight from the URL", async ({ page }, testInfo) => {

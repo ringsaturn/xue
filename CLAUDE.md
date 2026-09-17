@@ -710,16 +710,45 @@ to RG8 (u codes in red, v in green, the packing `particles.ts` builds, which
 `main.ts` interleaves once per frame and memoizes) and looks the palette up
 by `magnitude / maxMagnitude`; every vector bundle takes this path with its
 own ceiling from `levels.ts::vectorMaxMagnitude`. `web/src/levels.ts` is the
-family registry: one rail tile per family, the level row on the capsule
-picks the member, and cloud cover lists its members outright in
-`FamilyInfo.members`. Past ten visible rail tiles `main.ts` marks the rail
-dense and the stylesheet drops the tiles to 36px. The rail is a scroll
-column in a fixed box (under the zoom tile down to the capsule on desktop;
-under the round controls on phones, where `main.ts` publishes the capsule's
-measured height as `--capsule-height`), and its tiles are grouped by
-quantity in `index.html`, so a new tile goes into its group. Over a field
-the lines group is on the row whenever the run publishes a pressure surface:
-a pressed member is the overlay, pressing it again takes the lines off.
+family registry: one rail tile per family, and a family's members are
+two kinds. `FamilyInfo.levels` are the same quantity on other surfaces
+(the isobaric set, or the cloud layers listed outright): the level row on
+the capsule picks among them. `FamilyInfo.variants` are related but
+different quantities behind one tile (sea ice cover and thickness, wave
+height and period), never on the level row: the field sheet lists them as
+chips under the family's row, and pressing the pressed tile again cycles
+through them. A family tile's gloss follows the member on screen
+(`syncFamilyGloss`: TEMP 2M, TEMP 850, ICE THICK).
+
+The layer rail is three sections, one kind of press each (`index.html`,
+`.rail-section`): the fields (a radio: the dataset's core tiles,
+`FORECAST_MODELS[].railCore`, the tile of the field on screen when it is
+not a core one, and MORE, which opens `#field-sheet`, every field the run
+publishes grouped by quantity, written by `main.ts::renderFieldSheet` from
+the rail's own tiles and a stopgap group table), the overlays (switches
+drawn over the field and following the playhead: the pressure lines, the
+particles, the experiment's derived layers) and the marks (the storm sheet
+trigger, the soundings and the airports). A switch tile carries
+`data-toggle` and a ring in its corner, a sheet trigger `data-dialog` and a
+chevron. `syncFieldTiles` hides every field tile the run does not ship or
+the screen does not show, and writes a generic tile for a field this build
+has no tile for while it is on screen; the rail is marked dense
+(`syncRailDensity`, tiles at 36px) when its visible tiles would not fit its
+box at full size. The rail is a scroll column in a fixed box (under the
+zoom tile down to the capsule on desktop; under the round controls on
+phones, where `main.ts` publishes the capsule's measured height as
+`--capsule-height`). A new field with an icon is a tile in the field
+section plus a line in `FIELD_GROUP_TILES`; without one it is a row of the
+sheet's last group. What is on screen is one object, `view: ViewState`
+(`web/src/viewstate.ts`: the field and the lines, the particles, the
+experiment's derived layers, the storm and station marks); the rail's
+pressed states (`syncRail`), the level row and the address bar
+(`syncUrl` over `searchForView`, the inverse of `parseView`) are
+projections of it, and nothing else holds a copy. The lines group is on the level row whenever the run
+publishes a pressure surface: a pressed member is the overlay, pressing it
+again takes the lines off, as does the rail's pressure switch, and the
+group's ALONE member drops the field to leave the chart by itself (the
+field last on screen, `lastField`, comes back on the next press).
 
 The pressure family is drawn as contour lines: `web/src/pressure.ts` holds
 the per-level intervals and emphasised lines, `layer.ts::setContours` turns
@@ -740,10 +769,11 @@ once a second; a stop, a step or a pan refreshes at once.
 emphasised lines identical across the three implementations.
 
 `particles.ts` advects GPU particles through the wind field as an overlay in
-one ink, on by default, off from the capsule (`?particles=off`, remembered
-in `localStorage`, off by default under `prefers-reduced-motion`). Wind
-narrows to the viewport while the overlay is off; with it on the session
-takes the whole plane, since the particles respawn across the grid.
+one ink, on by default, off from the rail's overlay section
+(`?particles=off`, remembered in `localStorage`, off by default under
+`prefers-reduced-motion`). Wind narrows to the viewport while the overlay
+is off; with it on the session takes the whole plane, since the particles
+respawn across the grid.
 `playback.ts` holds the frame-rate ladder and the per-frame dwell that keeps
 a mixed-step axis at one apparent speed.
 

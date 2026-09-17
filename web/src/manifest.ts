@@ -41,6 +41,13 @@ export interface ForecastModelInfo {
    * mosaic, whose precipitation rate is the derived product. Absent means
    * the app's default, precipitation. */
   defaultVariable?: ForecastBundleId;
+  /** The fields the layer rail always carries a tile for, in rail order
+   * (each shown only when the run ships it): the forecast core of
+   * temperature, precipitation, wind and cloud, the reflectivity and rate
+   * on a radar mosaic. Every other field is reached through the rail's
+   * MORE sheet and takes a tile of its own only while on screen. Absent
+   * means `FORECAST_RAIL_CORE`. */
+  railCore?: readonly ForecastBundleId[];
   /** The part of the world a regional model covers, as [west, south, east,
    * north] in degrees: where the camera goes when the model is opened on a
    * view that shows none of it. A global model has none. */
@@ -52,11 +59,21 @@ export interface ForecastModelInfo {
   domain?: LambertDomain;
 }
 
+/** The rail's core tiles on a forecast model (`ForecastModelInfo.railCore`). */
+export const FORECAST_RAIL_CORE: readonly ForecastBundleId[] = ["tmp2m", "prate", "wind10m", "tcdc"];
+
 export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
   gfs: { id: "gfs", label: "GFS", product: "pgrb2.0p25", latestFilename: "latest.json" },
-  // GFS surface flux on the native ~13 km grid; the
-  // only source that ships the dswrf solar-radiation bundle.
-  sflux: { id: "sflux", label: "GFS-SFLUX", product: "sfluxgrb", latestFilename: "latest-sflux.json" },
+  // GFS surface flux on the native ~13 km grid; the only source that ships
+  // the dswrf solar-radiation bundle, which takes the cloud's place among
+  // its core tiles: it publishes exactly four fields.
+  sflux: {
+    id: "sflux",
+    label: "GFS-SFLUX",
+    product: "sfluxgrb",
+    latestFilename: "latest-sflux.json",
+    railCore: ["tmp2m", "prate", "wind10m", "dswrf"],
+  },
   ecmwf: { id: "ecmwf", label: "ECMWF", product: "ifs-0p25", latestFilename: "latest-ecmwf.json" },
   // NOAA HRRR, 3 km over the contiguous United States, a new cycle every
   // hour: a regional model, resampled by the encoder from its Lambert
@@ -86,6 +103,7 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
     observation: true,
     coreBundles: ["cref"],
     defaultVariable: "cref",
+    railCore: ["cref"],
     region: [67.5, 11.25, 146.25, 56.25],
   },
   // NOAA MRMS, the national radar mosaic over the contiguous United States:
@@ -102,6 +120,7 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
     observation: true,
     coreBundles: ["cref"],
     defaultVariable: "cref",
+    railCore: ["cref", "prate"],
     region: [-130, 20, -60, 55],
   },
   // JMA 高解像度降水ナウキャスト, the Japan Meteorological Agency's
@@ -119,6 +138,7 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
     observation: true,
     coreBundles: ["prate"],
     defaultVariable: "prate",
+    railCore: ["prate"],
     region: [121, 20.5, 149, 45.5],
   },
 };
@@ -126,6 +146,11 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
 /** The layer a dataset opens on when nothing asked for one. */
 export function modelDefaultVariable(model: ForecastModelId, fallback: ForecastBundleId): ForecastBundleId {
   return FORECAST_MODELS[model].defaultVariable ?? fallback;
+}
+
+/** The fields the rail always carries a tile for on a dataset. */
+export function modelRailCore(model: ForecastModelId): readonly ForecastBundleId[] {
+  return FORECAST_MODELS[model].railCore ?? FORECAST_RAIL_CORE;
 }
 
 /** True when a dataset is observations, not a forecast. */

@@ -48,7 +48,7 @@ FIXTURE_TILE = (16, 16)
 # The GFS fixture's bundles in the order a real run writes them: every scalar,
 # then every vector. The manifest no longer validates an order, so the fixture
 # states its own.
-FIXTURE_BUNDLE_ORDER = ("tmp2m", "prate", "hgt500", "tmp850", "wind10m")
+FIXTURE_BUNDLE_ORDER = ("tmp2m", "prate", "gust", "hgt500", "tmp850", "wind10m")
 # The bundles that also ship as Zarr stores (docs/zarr-profile.md), so the
 # manifest carries `zarr` descriptors for the `?backend=zarr` channel to
 # take and leaves the rest on the container path — both are exercised. The
@@ -134,6 +134,16 @@ def _upper_temperature_plane(hour: int) -> np.ndarray:
     return PROFILES["quality"]["tmp850"].quantize(values.ravel())
 
 
+def _gust_plane(hour: int) -> np.ndarray:
+    """Wind gust: a single-layer surface diagnostic the rail carries no core
+    tile for, so the fixture has a field reached through the MORE sheet."""
+    longitude = np.linspace(-180, 177.5, WIDTH)
+    latitude = np.linspace(90, -90, HEIGHT)
+    lon_grid, lat_grid = np.meshgrid(longitude, latitude)
+    values = 18 + 14 * np.sin(np.radians(lat_grid * 2)) ** 2 + 6 * np.cos(np.radians(lon_grid - hour * 4))
+    return PROFILES["quality"]["gust"].quantize(values.ravel())
+
+
 def _precipitation_plane(hour: int) -> np.ndarray:
     longitude = np.linspace(-180, 177.5, WIDTH)
     latitude = np.linspace(90, -90, HEIGHT)
@@ -215,15 +225,22 @@ def prepare_web_fixture() -> Path:
     # mutable latest.json pointer at the data root names it.
     bundles = []
     # tmp850 is one upper-air fill: the temperature family's second member,
-    # which is what puts a level row under the temperature tile.
+    # which is what puts a level row under the temperature tile. gust is a
+    # field outside the rail's core tiles, reached through its MORE sheet.
     first_planes = {
         "tmp2m": _temperature_plane(HOURS[0]),
         "prate": _precipitation_plane(HOURS[0]),
+        "gust": _gust_plane(HOURS[0]),
         "tmp850": _upper_temperature_plane(HOURS[0]),
     }
-    plane_builders = {"tmp2m": _temperature_plane, "prate": _precipitation_plane, "tmp850": _upper_temperature_plane}
+    plane_builders = {
+        "tmp2m": _temperature_plane,
+        "prate": _precipitation_plane,
+        "gust": _gust_plane,
+        "tmp850": _upper_temperature_plane,
+    }
     half_grid = grid.decimated()
-    for variable_id in ("tmp2m", "prate", "tmp850"):
+    for variable_id in ("tmp2m", "prate", "gust", "tmp850"):
         metadata = build_metadata(RUN_TIME, HOURS, grid, "quality", (variable_id,))
         bundle_path = WEB_FIXTURE_ROOT / f"{variable_id}.xue"
         planes_by_hour = {hour: {variable_id: plane_builders[variable_id](hour)} for hour in HOURS}

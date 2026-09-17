@@ -13,7 +13,9 @@ import {
   ICE_THICKNESS_CHART_MAX,
   WAVE_HEIGHT_CHART_MAX,
   WAVE_PERIOD_CHART_MAX,
+  familyLevels,
   familyMembers,
+  familyVariants,
   familyOf,
   isobaricLegend,
   levelCode,
@@ -103,6 +105,12 @@ describe("the ocean registry", () => {
     expect(familyOf("tmpsfc")).toBeNull();
     expect(familyOf("dirpw")).toBeNull();
     expect(familyMembers("ice")).toEqual(["icec", "icetk"]);
+    // Cover and thickness are different quantities: variants, so the level
+    // row has only the surface member to offer and lists nothing.
+    expect(familyVariants("ice")).toEqual(["icec", "icetk"]);
+    expect(familyLevels("ice")).toEqual(["icec"]);
+    expect(familyVariants("wave")).toEqual(["wave", "htsgw", "perpw"]);
+    expect(familyLevels("wave")).toEqual(["wave"]);
     expect(FAMILIES.ice.surface).toBe("icec");
     expect(FAMILIES.wave.surface).toBe("wave");
     expect(FAMILIES.wave.kind).toBe("vector");

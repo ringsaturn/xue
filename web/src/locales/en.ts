@@ -132,6 +132,39 @@ export const en = {
   /** The pressed lines member over a filled field is the overlay's off
    * switch; the tooltip says so, since the × alone is a hint. */
   linesRemoveTitle: "Press again to remove the lines",
+  /** The layer rail's three sections, each a group with a name: the
+   * fields (one on screen at a time), the overlays drawn over it, the
+   * marks of the point products. */
+  fieldSectionAria: "Field",
+  overlaySectionAria: "Overlays",
+  markSectionAria: "Marks",
+  /** The rail's MORE tile, which opens the field sheet: its tooltip, its
+   * gloss (visually hidden after the code MORE) and its glyph, a plus in
+   * every script. The sheet's name and heading (a sheet heading, so the
+   * uppercase code-word style of the model sheet's); the group headings
+   * inside it, in the same style. */
+  tipMore: "All layers of this run",
+  varMore: "LAYERS",
+  glyphMore: "+",
+  fieldSheetAria: "Layers",
+  fieldSheetHeading: "LAYERS",
+  fieldGroupTemperature: "TEMPERATURE",
+  fieldGroupMoisture: "MOISTURE",
+  fieldGroupWind: "WIND",
+  fieldGroupDynamics: "DYNAMICS",
+  fieldGroupRadiation: "RADIATION & VISIBILITY",
+  fieldGroupOcean: "OCEAN",
+  fieldGroupOther: "OTHER",
+  /** The particle switch as a rail tile in the overlay section: the gloss
+   * after the code PARTICLES, and its glyph (the tooltip and accessible
+   * name are `particlesToggle` / `particlesToggleAria` below). */
+  varParticles: "FLOW",
+  glyphParticles: "≈",
+  /** The level row's ALONE member, a switch after the lines' surfaces:
+   * its gloss (the visually hidden word after the instrument code ALONE,
+   * which stays English) and its tooltip. */
+  levelAlone: "LINES ONLY",
+  levelAloneTitle: "Lines alone: the field goes; press again to put it back",
   /** The credits: a round mark at the foot of the right-hand column opening
    * a sheet with one row per source, with the map's own credit line beside
    * it where the screen has room. The trigger's string is the mark's
