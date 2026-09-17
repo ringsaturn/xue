@@ -270,7 +270,7 @@ export const tr: Record<MessageKey, string> = {
 
   soundingObserved: "GÖZLEM",
   soundingModel: "MODEL",
-  soundingNoModel: "3 sa içinde model yok",
+  soundingNoModel: "12 sa içinde model yok",
   soundingLoading: "Sondaj okunuyor…",
   soundingUnavailable: "Sondaj kullanılamıyor",
   soundingExpand: "Tam grafik",

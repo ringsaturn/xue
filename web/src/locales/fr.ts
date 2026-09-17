@@ -267,7 +267,7 @@ export const fr: Record<MessageKey, string> = {
 
   soundingObserved: "OBS",
   soundingModel: "MODÈLE",
-  soundingNoModel: "aucun modèle à moins de 3 h",
+  soundingNoModel: "aucun modèle à moins de 12 h",
   soundingLoading: "Lecture du sondage…",
   soundingUnavailable: "Sondage indisponible",
   soundingExpand: "Diagramme complet",

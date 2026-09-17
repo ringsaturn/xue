@@ -264,7 +264,7 @@ export const ja: Record<MessageKey, string> = {
 
   soundingObserved: "実測",
   soundingModel: "モデル",
-  soundingNoModel: "3 時間以内にモデルなし",
+  soundingNoModel: "12 時間以内にモデルなし",
   soundingLoading: "ゾンデを読み込み中…",
   soundingUnavailable: "ゾンデを取得できません",
   soundingExpand: "全体図",

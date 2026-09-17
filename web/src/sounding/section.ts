@@ -44,7 +44,7 @@ export interface SoundingSectionOptions {
   /** The model column at the selected ascent's time, with the run it came
    * from, or null when the run publishes no isobaric levels or has no
    * frame near enough. Called at draw time, never cached. */
-  modelProfile(): { profile: Profile; run: string } | null;
+  modelProfile(): { profile: Profile; run: string; validTime: number } | null;
   /** A nominal time, formatted the way the panel formats a valid time. */
   formatTime(time: string): string;
   /** Something the caller has to react to changed: the station, the
@@ -154,6 +154,15 @@ function layoutFor(width: number, height: number): SkewTLayout {
     },
     { tMin: SPAN_CENTRE - span / 2, tMax: SPAN_CENTRE + span / 2 },
   );
+}
+
+/** The gap between the model frame and the ascent, as instrument text:
+ * `+6 h` for a forecast hour after the launch, `−3 h` before it, `0 h` on
+ * it. Whole hours, since both clocks are. */
+function gapLabel(deltaMs: number): string {
+  const hours = Math.round(deltaMs / 3600000);
+  if (hours === 0) return "0 h";
+  return `${hours > 0 ? "+" : "−"}${Math.abs(hours)} h`;
 }
 
 /** A station's name for the header: the WMO number a sounding is called by
@@ -430,7 +439,7 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
       : station === null
         ? t("soundingLoading")
         : model
-          ? `— ${t("soundingObserved")}   ··· ${t("soundingModel")} ${model.run}`
+          ? `— ${t("soundingObserved")} ${options.formatTime(time)}   ··· ${t("soundingModel")} ${model.run} ${options.formatTime(new Date(model.validTime).toISOString())} (${gapLabel(model.validTime - Date.parse(time))})`
           : `— ${t("soundingObserved")}   ${t("soundingNoModel")}`;
     const width = canvas.clientWidth;
     const mark = signature(width, CHART_HEIGHT);

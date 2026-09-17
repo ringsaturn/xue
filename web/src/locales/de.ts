@@ -267,7 +267,7 @@ export const de: Record<MessageKey, string> = {
 
   soundingObserved: "BEOB",
   soundingModel: "MODELL",
-  soundingNoModel: "kein Modell binnen 3 h",
+  soundingNoModel: "kein Modell binnen 12 h",
   soundingLoading: "Aufstieg wird gelesen…",
   soundingUnavailable: "Aufstieg nicht verfügbar",
   soundingExpand: "Gesamtes Diagramm",

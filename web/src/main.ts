@@ -2698,7 +2698,7 @@ function probeSessionSeries(
  * its two components rather than as the magnitude the rows draw: a profile
  * wants the barb, which needs the direction.
  */
-function modelProfileForSounding(): { profile: Profile; run: string } | null {
+function modelProfileForSounding(): { profile: Profile; run: string; validTime: number } | null {
   const series = probe;
   if (!series || !manifest || !metadata) return null;
   const time = soundingSection.selectedTime();
@@ -2742,6 +2742,7 @@ function modelProfileForSounding(): { profile: Profile; run: string } | null {
   return {
     profile: profileFromModel(column),
     run: currentRun ? `${manifest.model} ${currentRun}` : manifest.model,
+    validTime: frameValidTime(index),
   };
 }
 

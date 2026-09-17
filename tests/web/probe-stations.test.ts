@@ -156,13 +156,15 @@ describe("nearestFrameForTime", () => {
     expect(nearestFrameForTime(validTimes, Date.parse("2026-09-16T02:30:00Z"))).toBe(2);
   });
 
-  it("reaches three hours past the end of the axis and no further", () => {
-    expect(MODEL_PROFILE_TOLERANCE_MS).toBe(3 * HOUR);
-    expect(nearestFrameForTime(validTimes, Date.parse("2026-09-16T09:00:00Z"))).toBe(6);
-    expect(nearestFrameForTime(validTimes, Date.parse("2026-09-16T09:00:01Z"))).toBeNull();
-    // And the same before the analysis: a 12Z ascent under a 00Z run of
-    // the previous day is nobody's model column.
-    expect(nearestFrameForTime(validTimes, Date.parse("2026-09-15T12:00:00Z"))).toBeNull();
+  it("reaches one sounding interval past the end of the axis and no further", () => {
+    expect(MODEL_PROFILE_TOLERANCE_MS).toBe(12 * HOUR);
+    expect(nearestFrameForTime(validTimes, Date.parse("2026-09-16T18:00:00Z"))).toBe(6);
+    expect(nearestFrameForTime(validTimes, Date.parse("2026-09-16T18:00:01Z"))).toBeNull();
+    // The everyday case: the 12Z ascent under the 18Z run is the run's
+    // first frame, six hours on, and the legend says so.
+    expect(nearestFrameForTime(validTimes, Date.parse("2026-09-15T18:00:00Z"))).toBe(0);
+    // And a whole day away is nobody's model column.
+    expect(nearestFrameForTime(validTimes, Date.parse("2026-09-15T00:00:00Z"))).toBeNull();
   });
 
   it("answers nothing on an empty axis", () => {

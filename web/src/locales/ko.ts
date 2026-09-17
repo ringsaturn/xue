@@ -269,7 +269,7 @@ export const ko: Record<MessageKey, string> = {
 
   soundingObserved: "관측",
   soundingModel: "모델",
-  soundingNoModel: "3시간 내 모델 없음",
+  soundingNoModel: "12시간 내 모델 없음",
   soundingLoading: "관측 자료를 읽는 중…",
   soundingUnavailable: "관측 자료 없음",
   soundingExpand: "전체 차트",

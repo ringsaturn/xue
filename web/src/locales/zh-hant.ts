@@ -262,7 +262,7 @@ export const zhHant: Record<MessageKey, string> = {
 
   soundingObserved: "實測",
   soundingModel: "模式",
-  soundingNoModel: "3 小時內無模式資料",
+  soundingNoModel: "12 小時內無模式資料",
   soundingLoading: "正在讀取探空…",
   soundingUnavailable: "探空無法取得",
   soundingExpand: "完整圖表",

@@ -66,16 +66,18 @@ export function modelProfileLevels(bundleIds: readonly string[]): number[] {
 
 /**
  * How far a model frame may be from an ascent's nominal time and still be
- * laid over it: three hours, half a synoptic interval.
+ * laid over it: twelve hours, one sounding interval.
  *
- * The bound exists because the two axes are unrelated. A sonde is released
- * at 00 and 12 UTC and the panel shows the newest one it has; the playhead
- * is wherever the viewer left it, and a run's own frames are three- or
- * six-hourly out in the tail. Past three hours the dotted curve would be a
- * different air mass drawn as though it were the same one, which is worse
- * than no curve — so there is none, and the legend says why.
+ * The two axes are unrelated. A sonde is released at 00 and 12 UTC and the
+ * panel shows the newest one it has; the run on screen is the newest
+ * cycle, whose first frame is routinely six hours after that ascent (the
+ * 18Z run over the 12Z sonde), and a tighter bound left the chart with
+ * one curve most of the day. So the nearest frame within a sounding
+ * interval is drawn, and the legend states both times and the gap between
+ * them — the reader sees exactly which forecast hour is being compared
+ * with which ascent, rather than being denied the comparison.
  */
-export const MODEL_PROFILE_TOLERANCE_MS = 3 * 3600 * 1000;
+export const MODEL_PROFILE_TOLERANCE_MS = 12 * 3600 * 1000;
 
 /**
  * The frame of an axis whose valid time is nearest `targetMs`, or null when

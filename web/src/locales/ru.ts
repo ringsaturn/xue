@@ -269,7 +269,7 @@ export const ru: Record<MessageKey, string> = {
 
   soundingObserved: "НАБЛ",
   soundingModel: "МОДЕЛЬ",
-  soundingNoModel: "нет модели в пределах 3 ч",
+  soundingNoModel: "нет модели в пределах 12 ч",
   soundingLoading: "Чтение зондирования…",
   soundingUnavailable: "Зондирование недоступно",
   soundingExpand: "Полный график",

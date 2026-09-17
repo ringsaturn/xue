@@ -409,11 +409,11 @@ export const en = {
    * pressure in hPa, the flight category (`VFR`), `PROB40`.
    *
    * `soundingNoModel` is why there is only one curve: the run has no frame
-   * within three hours of the ascent, so laying its forecast over the sonde
-   * would be two different air masses drawn as one. */
+   * within twelve hours of the ascent. Within that, the legend names both
+   * times and the gap (`+6 h`), so the comparison is always labelled. */
   soundingObserved: "OBS",
   soundingModel: "MODEL",
-  soundingNoModel: "no model within 3 h",
+  soundingNoModel: "no model within 12 h",
   soundingLoading: "Reading the ascent…",
   soundingUnavailable: "Ascent unavailable",
   soundingExpand: "Full chart",
