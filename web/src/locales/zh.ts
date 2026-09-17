@@ -102,6 +102,7 @@ export const zh: Record<MessageKey, string> = {
   creditsMrms: "雷达观测 · MRMS，美国本土",
   creditsJma: "雷达降水 · 气象厅临近预报，日本（重采样）",
   creditsHimawari: "卫星影像 · 向日葵 9 号 AHI，日本气象厅，经 NOAA 开放数据（重投影）",
+  creditsGoes: "卫星影像 · GOES-19 东、GOES-18 西 ABI，NOAA NESDIS，经 NOAA 开放数据（重投影）",
   creditsSounding: "探空观测 · GTS TEMP 报文经 WIS2 转发，各国气象部门",
   creditsAirport: "机场 METAR 与 TAF · 各国气象部门经 NOAA/NWS 航空气象中心转发",
   creditsRadar: "雷达拼图",

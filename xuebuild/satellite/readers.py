@@ -5,9 +5,9 @@ with a geostationary CRS whose values are the physical quantity or carry a
 scale and offset to it. Putting it on a regular grid is the projector's
 job (:mod:`projector`), and nothing downstream of the projector knows
 which reader produced the frame. That is the seam a second file format
-goes through: the ISatSS tiles are the first reader, the GOES ``CMIPF``
-single file the second, and the raw HSD segments a third if the ISatSS
-product ever stops — each a class here, chosen by
+goes through: the ISatSS tiles are one reader, the GOES ``CMIPF`` single
+file another, and the raw HSD segments a third if the ISatSS product
+ever stops — each a class here, chosen by
 :attr:`~platforms.Platform.reader`.
 
 The bucket listing and the downloads go through the pipeline's own HTTP
@@ -24,7 +24,7 @@ import xml.etree.ElementTree as ET
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Protocol
 
@@ -124,6 +124,15 @@ class Reader(Protocol):
     def list_slots(self, platform: Platform, day: datetime, *, fetch: Callable[[str], str] | None = None) -> list[datetime]:
         """The scan slots the bucket has a directory for on one UTC day,
         in time order; a slot listed may still be incomplete."""
+        ...
+
+    def recent_slots(
+        self, platform: Platform, now: datetime, *, limit: int, fetch: Callable[[str], str] | None = None
+    ) -> list[datetime]:
+        """The newest ``limit`` slots at or before ``now`` that the bucket
+        lists, newest first, in as few requests as the product's layout
+        allows; a slot listed may still be incomplete. Nothing in the last
+        day is a feed that is down."""
         ...
 
     def list_slot(
@@ -243,6 +252,20 @@ class ISatSSReader:
                 continue
         return sorted(slots)
 
+    def recent_slots(
+        self, platform: Platform, now: datetime, *, limit: int, fetch: Callable[[str], str] | None = None
+    ) -> list[datetime]:
+        """A day's slot directories are one listing: today's, and
+        yesterday's when today has too few (the answer is the same either
+        side of midnight)."""
+        day = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        slots: list[datetime] = []
+        for listed_day in (day, day - timedelta(days=1)):
+            slots += [slot for slot in reversed(self.list_slots(platform, listed_day, fetch=fetch)) if slot <= now]
+            if len(slots) >= limit:
+                break
+        return slots[:limit]
+
     def list_slot(
         self, platform: Platform, channel: Channel, slot: datetime, *, fetch: Callable[[str], str] | None = None
     ) -> list[SlotObject]:
@@ -336,7 +359,192 @@ def _mask_below(vrt: str, floor: int, nodata: int) -> str:
     return ET.tostring(root, encoding="unicode") + "\n"
 
 
-READERS: dict[str, Reader] = {"isatss": ISatSSReader()}
+# OR_ABI-L2-CMIPF-M<mode>C<channel>_G<spacecraft>_s<start>_e<end>_c<created>.nc
+_CMIPF_KEY = re.compile(
+    r"OR_ABI-L2-CMIPF-M(?P<mode>\d)C(?P<channel>\d{2})_G(?P<spacecraft>\d{2})"
+    r"_s(?P<start>\d{14})_e(?P<end>\d{14})_c(?P<created>\d{14})\.nc$"
+)
+_CMIPF_HOUR_DIRECTORY = re.compile(r"/(?P<year>\d{4})/(?P<day>\d{3})/(?P<hour>\d{2})/$")
+
+
+@dataclass(frozen=True)
+class CMIPFKey:
+    mode: int
+    """The ABI scan mode the file was taken in (6 today: a full disk every
+    ten minutes); the listing accepts any, so a mode change never hides
+    the files."""
+    channel: int
+    spacecraft: int
+    """The number in ``G19``."""
+    start: datetime
+    end: datetime
+    created: datetime
+
+
+def parse_cmipf_key(key: str) -> CMIPFKey | None:
+    match = _CMIPF_KEY.search(key)
+    if not match:
+        return None
+    try:
+        return CMIPFKey(
+            mode=int(match.group("mode")),
+            channel=int(match.group("channel")),
+            spacecraft=int(match.group("spacecraft")),
+            start=_stamp(match.group("start")),
+            end=_stamp(match.group("end")),
+            created=_stamp(match.group("created")),
+        )
+    except ValueError:
+        return None
+
+
+class CMIPFReader:
+    """NOAA's ``ABI-L2-CMIPF`` product: each channel of each full-disk
+    scan as one netCDF-4 file (``CMI``, 5424 x 5424 at 2 km for the
+    infrared channels, unsigned 16-bit with the band's scale and offset
+    to kelvin, 65535 where the disk is not), under
+    ``ABI-L2-CMIPF/<year>/<day of year>/<hour>/``. GDAL opens
+    ``NETCDF:"<file>":CMI`` on the geostationary projection (sweep x)
+    with a metre geotransform straight off the file's radian coordinates;
+    its warning about the radian axis unit is about the SRS's axis and
+    not the georeference. A scan starts twenty seconds past the
+    ten-minute mark and its slot is that mark; the file lands some ten
+    minutes after the scan starts."""
+
+    VARIABLE = "CMI"
+
+    def hour_prefix(self, platform: Platform, hour: datetime) -> str:
+        return f"{platform.prefix}/{hour:%Y/%j/%H}/"
+
+    def slot_of(self, platform: Platform, start: datetime) -> datetime:
+        """The slot a scan belongs to: its start, floored to the cadence."""
+        seconds = int(start.timestamp()) // platform.cadence_seconds * platform.cadence_seconds
+        return datetime.fromtimestamp(seconds, tz=UTC)
+
+    def list_hour(
+        self, platform: Platform, channel: Channel, hour: datetime, *, fetch: Callable[[str], str] | None = None
+    ) -> dict[datetime, SlotObject]:
+        """The channel's files under one hour directory, by slot, a
+        reissued file resolving to the later ``c`` stamp."""
+        prefix = f"{self.hour_prefix(platform, hour)}OR_ABI-L2-CMIPF-M"
+        objects, _ = list_prefix(platform.bucket, prefix, fetch=fetch)
+        by_slot: dict[datetime, SlotObject] = {}
+        for key, size in objects:
+            parsed = parse_cmipf_key(key)
+            if parsed is None or parsed.channel != channel.band:
+                continue
+            slot = self.slot_of(platform, parsed.start)
+            candidate = SlotObject(key=key, size=size, tile=1, created=parsed.created)
+            held = by_slot.get(slot)
+            if held is None or candidate.created > held.created:
+                by_slot[slot] = candidate
+        return by_slot
+
+    def list_hours(self, platform: Platform, day: datetime, *, fetch: Callable[[str], str] | None = None) -> list[datetime]:
+        """The hour directories the bucket lists for one UTC day, one
+        request, in time order."""
+        _, prefixes = list_prefix(platform.bucket, f"{platform.prefix}/{day:%Y/%j}/", delimiter="/", fetch=fetch)
+        hours: list[datetime] = []
+        for prefix in prefixes:
+            match = _CMIPF_HOUR_DIRECTORY.search(prefix)
+            if not match:
+                continue
+            try:
+                hours.append(
+                    datetime.strptime(f"{match.group('year')}{match.group('day')}{match.group('hour')}", "%Y%j%H").replace(tzinfo=UTC)
+                )
+            except ValueError:
+                continue
+        return sorted(hours)
+
+    def list_slots(self, platform: Platform, day: datetime, *, fetch: Callable[[str], str] | None = None) -> list[datetime]:
+        """The day's slots: every hour directory the bucket lists for the
+        day, each listed for the platform's reference channel — up to
+        twenty-five requests, so the live window's end asks
+        :meth:`recent_slots`, which walks the hours newest first and
+        stops."""
+        channel = platform.channel(platform.reference_channel)
+        slots: list[datetime] = []
+        for hour in self.list_hours(platform, day, fetch=fetch):
+            slots += list(self.list_hour(platform, channel, hour, fetch=fetch))
+        return sorted(slots)
+
+    def recent_slots(
+        self, platform: Platform, now: datetime, *, limit: int, fetch: Callable[[str], str] | None = None
+    ) -> list[datetime]:
+        """One listing of the day's hour directories, then the hours
+        newest first until ``limit`` slots are in hand: two or three
+        requests in the ordinary case, yesterday's directory as well just
+        after midnight or when the feed has stalled."""
+        channel = platform.channel(platform.reference_channel)
+        day = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        slots: list[datetime] = []
+        for listed_day in (day, day - timedelta(days=1)):
+            for hour in reversed(self.list_hours(platform, listed_day, fetch=fetch)):
+                if hour > now:
+                    continue
+                slots += sorted((slot for slot in self.list_hour(platform, channel, hour, fetch=fetch) if slot <= now), reverse=True)
+                if len(slots) >= limit:
+                    return slots[:limit]
+        return slots
+
+    def list_slot(
+        self, platform: Platform, channel: Channel, slot: datetime, *, fetch: Callable[[str], str] | None = None
+    ) -> list[SlotObject]:
+        held = self.list_hour(platform, channel, slot.replace(minute=0, second=0, microsecond=0), fetch=fetch).get(slot)
+        return [held] if held is not None else []
+
+    def download(
+        self,
+        platform: Platform,
+        objects: list[SlotObject],
+        into: Path,
+        *,
+        download: Callable[[str], bytes] | None = None,
+        concurrency: int = 8,
+    ) -> SlotFiles:
+        if len(objects) != 1:
+            raise DownloadError(f"{platform.spacecraft}: a CMIPF slot is one file, not {len(objects)}")
+        download = download or _download_bytes
+        into.mkdir(parents=True, exist_ok=True)
+        item = objects[0]
+        parsed = parse_cmipf_key(item.key)
+        if parsed is None:
+            raise DownloadError(f"{item.key} is not a CMIPF key")
+        target = into / item.key.rsplit("/", 1)[-1]
+        if not (target.is_file() and target.stat().st_size == item.size):
+            payload = download(f"{bucket_url(platform.bucket)}/{item.key}")
+            if item.size and len(payload) != item.size:
+                raise DownloadError(f"{item.key}: received {len(payload)} bytes, listed {item.size}")
+            temporary = target.with_suffix(target.suffix + ".part")
+            temporary.write_bytes(payload)
+            temporary.replace(target)
+        return SlotFiles(slot=self.slot_of(platform, parsed.start), paths=(target,))
+
+    def open(self, files: SlotFiles, workdir: Path, *, missing_below: float | None = None) -> Path:
+        """A one-source VRT over the file's ``CMI`` variable, so the
+        no-data floor is applied the way it is to a mosaic; the product's
+        fill is already proper, so the floor only guards against a
+        segment written as zero."""
+        workdir.mkdir(parents=True, exist_ok=True)
+        vrt = workdir / f"{files.slot:%Y%m%d%H%M%S}.vrt"
+        run_command(
+            ["gdalbuildvrt", "-q", "-overwrite", str(vrt), str(self.packing_source(files))],
+            description=f"gdalbuildvrt {vrt.name}",
+        )
+        if missing_below is not None:
+            from .assemble import NODATA, dataset_packing  # noqa: PLC0415 - assemble imports nothing from here
+
+            packing = dataset_packing(self.packing_source(files))
+            floor = int(math.floor((missing_below - packing.offset) / packing.scale))
+            vrt.write_text(_mask_below(vrt.read_text(encoding="utf-8"), floor, NODATA), encoding="utf-8")
+        return vrt
+
+    def packing_source(self, files: SlotFiles) -> Path:
+        return Path(f'NETCDF:"{files.paths[0]}":{self.VARIABLE}')
+
+
+READERS: dict[str, Reader] = {"isatss": ISatSSReader(), "cmipf": CMIPFReader()}
 
 
 def reader_for(platform: Platform) -> Reader:

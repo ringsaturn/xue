@@ -339,17 +339,27 @@ model starts here; the frontend mirror is `FORECAST_MODELS` in
   agency serves each frame once; the tiles expire after days and there is
   no archive, so a case can only be cut from what that cache keeps.
 
-- Satellite (`himawari`): Himawari-9's infrared windows as NOAA
-  redistributes them (the ISatSS tiles on `noaa-himawari9`), a `series_file`
-  observation like `jma` / `cma` whose fetch stage is `xuebuild/satellite/`
-  (`docs/satellite.md`): `platforms.py` is the registry (one row per
-  spacecraft at an orbital slot, its channels, bucket and reader; the
-  source id is the **role**, `himawari`, and the spacecraft is the `band`
-  block on the variable, from `SourceSpec.bands` via `Platform.bands`),
-  `readers.py` lists and mosaics a slot's tiles (`ISatSSReader`,
-  `gdalbuildvrt`), `projector.py` warps the mosaic onto the platform's
-  region at `SourceSpec.grid_step` (`GdalWarpProjector`; 80.7–200.7°E at
-  0.04°, 3000 × 3000, past the antimeridian), `assemble.py` caches the
+- Satellite (`himawari`, `goeseast`, `goeswest`): Himawari-9's infrared
+  windows as NOAA redistributes them (the ISatSS tiles on
+  `noaa-himawari9`) and GOES-19's / GOES-18's from NOAA's own buckets (the
+  CMIPF full-disk files on `noaa-goes19` / `noaa-goes18`), each a
+  `series_file` observation like `jma` / `cma` whose fetch stage is
+  `xuebuild/satellite/` (`docs/satellite.md`): `platforms.py` is the
+  registry (one row per spacecraft at an orbital slot, its channels,
+  bucket and reader; the source id is the **role**, and the spacecraft is
+  the `band` block on the variable, from `SourceSpec.bands` via
+  `Platform.bands`; `Platform.region` spells a disk that crosses the
+  antimeridian with the east edge past 180 — Himawari 80.7–200.7,
+  GOES-West 163–283 — and GOES-East on negative longitudes; `reference_channel`
+  is the one a listing walks), `readers.py` lists and opens a slot
+  (`ISatSSReader`: 88 tiles mosaicked with `gdalbuildvrt`; `CMIPFReader`:
+  one file per channel under `YYYY/DDD/HH/`, the scan start floored to
+  the cadence as the slot, `recent_slots` walking hour directories newest
+  first so `latest_slot` costs two to four requests), `projector.py` warps
+  it onto the platform's region at `SourceSpec.grid_step`
+  (`GdalWarpProjector`; 120° × 120° at 0.04°, 3000 × 3000; a scene wholly
+  outside the grid is refused, since a blank warp is also a lost
+  projection), `assemble.py` caches the
   frame (`data/raw/himawari-frames/<variable>/*.tif`, mirrored like the JMA
   frames) and writes the window series with `gdal_translate -of netCDF`
   through a VRT carrying `NETCDF_DIM_*` metadata, `fetch.py` runs a window
@@ -359,8 +369,10 @@ model starts here; the frontend mirror is `FORECAST_MODELS` in
   has no GeoTIFF driver); `publish-himawari.yml` is `publish-jma.yml` on a
   ten-minute cron with `gdal-bin` installed unconditionally, a six-hour
   window (`window_hours=6`, `HOURS=6`) and the `satellite` dependency
-  group. The source fetches four channels (`ir086`, `ir104`, `ir112`,
-  `ir123`: AHI bands 11, 13, 14, 15, all `variables.py` rows with the one
+  group, and `publish-goeseast.yml` / `publish-goeswest.yml` are it with
+  `MODEL` swapped. Each source fetches four channels (`ir086`, `ir104`,
+  `ir112`, `ir123`: AHI bands / ABI channels 11, 13, 14, 15, all
+  `variables.py` rows with the one
   parameter GRIB2 0/4/4 on surface 8, 180–331.8 K at 0.6) and publishes
   `ir104` as a scalar plus the **Dust RGB composite** `dustrgb`
   (`SourceSpec.bundle_composite_ids`, `binconvert.COMPOSITE_BUNDLES`: the
@@ -398,7 +410,9 @@ model starts here; the frontend mirror is `FORECAST_MODELS` in
   shows it in Celsius (legend ticks and readouts only).
   `tests/test_satellite.py` runs the sixteen fixture tiles in
   `tests/fixtures/himawari/` (four bands, two scans) through the whole
-  stage, the producer and both encoders.
+  stage, the producer and both encoders; `tests/test_goes.py` the eight
+  cut CMIPF windows in `tests/fixtures/goes/`
+  (`tests/prepare_goes_fixture.py`) under `goeseast` the same way.
 
 `variables.py` is the variable registry in GRIB2 terms: the parameter
 triple, the fixed surface, label and unit, plus the matching hints (element,

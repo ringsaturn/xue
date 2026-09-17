@@ -42,6 +42,8 @@ pipeline.
 | JMA precipitation nowcast | `jma` | 5600 × 5000, 0.005°, Japan | one frame every five minutes, a rolling three-hour window | `latest-jma.json` |
 | CMA radar mosaic | `cma` | 1792 × 1024, 0.0439°, China | one frame every six minutes, a rolling three-hour window | `latest-cma.json` |
 | Himawari-9 infrared and Dust RGB | `himawari` | 3000 × 3000, 0.04°, the disk 80.7–200.7°E, ±60° | one scan every ten minutes, a rolling six-hour window | `latest-himawari.json` |
+| GOES-19 (East) infrared and Dust RGB | `goeseast` | 3000 × 3000, 0.04°, the disk 135.2–15.2°W, ±60° | one scan every ten minutes, a rolling six-hour window | `latest-goeseast.json` |
+| GOES-18 (West) infrared and Dust RGB | `goeswest` | 3000 × 3000, 0.04°, the disk 163°E–77°W, ±60° | one scan every ten minutes, a rolling six-hour window | `latest-goeswest.json` |
 
 Each model publishes as an independent dataset under `<model>.<run>/`, taken
 live by its pointer at the data root.
@@ -153,6 +155,18 @@ Bundle sets:
   of tiles, a warped frame about 8 MB, the six-hour window (37 frames)
   some 200 MB of stores at full and half resolution. Needs a system
   GDAL with `gdalwarp` on PATH whichever encoder converts.
+- GOES-East and GOES-West: NOAA's GOES-19 at 75.2°W and GOES-18 at
+  137.0°W, from the `noaa-goes19` and `noaa-goes18` buckets — the CMIPF
+  full-disk product, each channel of each ten-minute scan as one
+  calibrated netCDF on the geostationary projection (sweep x), landing
+  about ten minutes after the scan starts. Everything above applies with
+  the platform row swapped: the same four ABI channels (11, 13, 14, 15),
+  `ir104` and `dustrgb` published — the composite with the GOES-R Quick
+  Guide's ABI stretches, which the producer picks by instrument — the same
+  0.04° step and six-hour window, a frame cache per role
+  (`data/raw/goeseast-frames/`). The East disk is 135.2°W–15.2°W; the West
+  disk crosses the antimeridian and is spelled 163°E–283°E, as Himawari's
+  is. A scan is four 24 MB files rather than 88 tiles.
 
 Every level of the isobaric families is registered; turning one on is a line
 in `xuebuild/sources.py` and its mirror in the native encoder, not a format
@@ -283,6 +297,7 @@ python -m xuebuild build-bin --model mrms --run latest --hours 4 --round now   #
 python -m xuebuild build-bin --model jma --run latest --hours 3 --round now    # the JMA nowcast, through jma-radar
 python -m xuebuild build-bin --model cma --run latest --hours 3 --round now    # the CMA mosaic, out of its archive
 python -m xuebuild build-bin --model himawari --run latest --hours 6 --round now  # Himawari-9 infrared, warped from NOAA's tiles
+python -m xuebuild build-bin --model goeseast --run latest --hours 6 --round now  # GOES-19 the same (goeswest for GOES-18)
 ```
 
 `XUE_ENCODER` picks which encoder converts: `auto` (the default: the `xuepy`
@@ -501,16 +516,18 @@ make upload-r2-manifest MODEL=gfs RUN=2026081600
 The Pages shell is deployed separately (`make deploy`) and only needs
 redeploying when frontend code changes.
 
-### The rolling windows (MRMS, JMA, CMA radar, Himawari)
+### The rolling windows (MRMS, JMA, CMA radar, Himawari, GOES)
 
 An observation feed is never complete, so
 [`publish-mrms.yml`](.github/workflows/publish-mrms.yml),
 [`publish-jma.yml`](.github/workflows/publish-jma.yml),
-[`publish-cma.yml`](.github/workflows/publish-cma.yml) and
-[`publish-himawari.yml`](.github/workflows/publish-himawari.yml) each run one round of
+[`publish-cma.yml`](.github/workflows/publish-cma.yml),
+[`publish-himawari.yml`](.github/workflows/publish-himawari.yml),
+[`publish-goeseast.yml`](.github/workflows/publish-goeseast.yml) and
+[`publish-goeswest.yml`](.github/workflows/publish-goeswest.yml) each run one round of
 [`scripts/window_rounds.sh`](scripts/window_rounds.sh) (`MODEL=mrms`, `jma`,
-`cma` or `himawari`, `ONCE=true`) per job on a five-minute cron (ten for
-Himawari, whose scans are ten minutes apart), the finest GitHub offers: a job is a
+`cma`, `himawari`, `goeseast` or `goeswest`, `ONCE=true`) per job on a five-minute cron (ten for
+the satellites, whose scans are ten minutes apart), the finest GitHub offers: a job is a
 few minutes rather than a runner held for an hour, at the price of the cron's
 ten to twenty minutes of lateness on every round. A dispatch with `loop` runs
 the rounds until twenty past the next hour and yields to the next scheduled job
@@ -548,13 +565,15 @@ one directory per channel and per Dust RGB gun, kept three days on the
 bucket), a six-hour window (`HOURS=6`), the `satellite` dependency group
 (the shachen package the Dust RGB is composed with) and installs
 `gdal-bin` whichever encoder converts, since the fetch stage warps through
-the system GDAL. By hand:
+the system GDAL; the two GOES jobs are that workflow with `MODEL` swapped.
+By hand:
 
 ```sh
 ONCE=true scripts/window_rounds.sh                     # one round, as the job would run it
 MODEL=jma HOURS=3 FRAME_CACHE=true ONCE=true scripts/window_rounds.sh
 MODEL=cma HOURS=3 ONCE=true scripts/window_rounds.sh   # needs XUE_CMA_ARCHIVE and the R2_* credentials
 MODEL=himawari HOURS=6 FRAME_CACHE=true ONCE=true scripts/window_rounds.sh   # needs gdalwarp on PATH
+MODEL=goeseast HOURS=6 FRAME_CACHE=true ONCE=true scripts/window_rounds.sh   # or goeswest; the same
 .venv/bin/python -m xuebuild build-bin --model mrms --run latest --hours 4 --round now
 make upload-r2 MODEL=mrms RUN=2026091321 ROUND=1405  # the round the build named
 make prune-r2-rounds MODEL=mrms && make prune-r2 MODEL=mrms KEEP=2

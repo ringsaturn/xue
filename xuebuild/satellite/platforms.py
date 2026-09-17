@@ -124,6 +124,10 @@ class Platform:
     """How long after a scan starts its files usually land, for the log."""
     satellite_series: int = 0
     """Template 4.31's satellite series; 0 unless a table says otherwise."""
+    reference_channel: str = "ir104"
+    """The channel a listing walks to find the slots the bucket holds
+    (a reader that lists per channel asks for this one): the 10.4 µm
+    window, which every imager here has and every scan delivers."""
 
     def channel(self, channel_id: str) -> Channel:
         for channel in self.channels:
@@ -150,8 +154,16 @@ class Platform:
         """The disk's useful extent on plate carrée as ``(west, south, east,
         north)``: 60° either side of the sub-satellite longitude and 60°
         of latitude, past which the viewing angle is too oblique to read.
-        Longitudes may run past 180 (Himawari's disk ends at 200.7°E)."""
-        return (round(self.sub_longitude - 60.0, 6), -60.0, round(self.sub_longitude + 60.0, 6), 60.0)
+        A disk that crosses the antimeridian is spelled in the grid's own
+        copy of the world with the west edge inside −180 … 180 and the
+        east edge past 180 (Himawari's 80.7 … 200.7, GOES-West's 163 …
+        283): the one shape the encoders' ``crop_grid`` and the shell's
+        viewport arithmetic take. GOES-East, −135.2 … −15.2, stays on
+        negative longitudes like the regional radar grids."""
+        west = self.sub_longitude - 60.0
+        if west < -180.0:
+            west += 360.0
+        return (round(west, 6), -60.0, round(west + 120.0, 6), 60.0)
 
 
 # Himawari-8/9 AHI: sixteen bands, central wavelengths as JMA publishes

@@ -1,8 +1,9 @@
 # Geostationary satellite imagery
 
-How a geostationary imager's channels become Xue bundles: the `himawari`
-source today, its Dust RGB composite, and the seams a second satellite, a
-second channel and another composite product go through. The bundle
+How a geostationary imager's channels become Xue bundles: the `himawari`,
+`goeseast` and `goeswest` sources, their Dust RGB composite, and the seams
+a further satellite, a second channel and another composite product go
+through. The bundle
 format is unchanged (`format.md`); what this document fixes is the fetch
 stage, `xuebuild/satellite/`, and the metadata a satellite variable
 carries.
@@ -35,29 +36,41 @@ encoder reads the series the Python stage wrote, and
 `xuebuild/satellite/platforms.py` is one row per spacecraft at an orbital
 slot:
 
-| Field | Himawari-9 |
-|---|---|
-| `role` (the source id) | `himawari` |
-| `spacecraft` | Himawari-9 |
-| `satellite_number` (WMO C-5) | 174 |
-| `instrument` / `instrument_type` (WMO C-8) | AHI / 297 |
-| `sub_longitude` | 140.7 |
-| `sweep_axis` | `y` |
-| `channels` | the sixteen AHI bands |
-| `reader` | `isatss` |
-| `bucket` / `prefix` | `noaa-himawari9` / `AHI-L2-FLDK-ISatSS` |
-| `tile_count` | 88 |
-| `cadence_seconds` | 600 |
+| Field | Himawari-9 | GOES-19 | GOES-18 |
+|---|---|---|---|
+| `role` (the source id) | `himawari` | `goeseast` | `goeswest` |
+| `spacecraft` | Himawari-9 | GOES-19 | GOES-18 |
+| `satellite_number` (WMO C-5) | 174 | 273 | 272 |
+| `instrument` / `instrument_type` (WMO C-8) | AHI / 297 | ABI / 617 | ABI / 617 |
+| `sub_longitude` | 140.7 | −75.2 | −137.0 |
+| `sweep_axis` | `y` | `x` | `x` |
+| `channels` | the sixteen AHI bands | the sixteen ABI channels | the sixteen ABI channels |
+| `reader` | `isatss` | `cmipf` | `cmipf` |
+| `bucket` / `prefix` | `noaa-himawari9` / `AHI-L2-FLDK-ISatSS` | `noaa-goes19` / `ABI-L2-CMIPF` | `noaa-goes18` / `ABI-L2-CMIPF` |
+| `tile_count` | 88 | 1 | 1 |
+| `cadence_seconds` | 600 | 600 | 600 |
+| `region` (west … east) | 80.7 … 200.7 | −135.2 … −15.2 | 163 … 283 |
 
 A source is named by the **orbital role**, never by the spacecraft: the
-pointer (`latest-himawari.json`), the run directories (`himawari.<run>/`)
-and the manifest `model` (`HIMAWARI`) outlive a handover. When Himawari-10
-takes the slot, the platform row changes (`spacecraft`,
-`satellite_number`, `bucket`) and nothing published does; the spacecraft
-is in each file, as the `band` block below. The GOES-East and GOES-West
-platforms are registered (GOES-19 at 75.2°W, GOES-18 at 137.0°W, ABI) and
-unpublished: publishing one is a `SourceSpec`, a reader for the single-file
-`CMIPF` product, a workflow and a shell entry.
+pointer (`latest-himawari.json`, `latest-goeseast.json`), the run
+directories (`himawari.<run>/`) and the manifest `model` (`HIMAWARI`,
+`GOES-EAST`, `GOES-WEST`) outlive a handover. When Himawari-10 takes the
+slot, or GOES-19 hands East to its successor, the platform row changes
+(`spacecraft`, `satellite_number`, `bucket`) and nothing published does;
+the spacecraft is in each file, as the `band` block below. The
+`reference_channel` (`ir104`, which every imager here has) is the one a
+listing walks to find a bucket's slots.
+
+`Platform.region` is 60° either side of the sub-satellite longitude and
+±60° of latitude. A disk that crosses the antimeridian is spelled with the
+west edge inside −180 … 180 and the east edge past 180 — Himawari's 80.7 …
+200.7, GOES-West's 163 … 283 — the one shape the encoders' `crop_grid` and
+the shell's viewport arithmetic take; GOES-East stays on negative
+longitudes like the regional radar grids. The three sources publish the
+same variables from the same four channels (`ir104` and `dustrgb`; the ABI
+composite takes the Quick Guide's stretches), and every seam below is
+shared: what differs between Himawari and GOES is the platform row and the
+reader.
 
 A **channel** is a bundle. Its id is the nominal wavelength,
 instrument-neutral: `ir104` is AHI band 13 and ABI channel 13 alike, an
@@ -171,10 +184,31 @@ directory listing (`delimiter=/`), a slot's tiles one listing under the
 channel's prefix, a reissued tile the later `c` stamp. The slot opens as a
 `gdalbuildvrt` mosaic of the tiles by georeference.
 
-A second reader is a class here: `CMIPFReader` for the GOES `ABI-L2-CMIPF`
-product (one 5424² file per channel per slot, `CMI`, sweep x), and an
-`HSDReader` for the raw Himawari Standard Data segments should the ISatSS
-product ever stop.
+`CMIPFReader` is NOAA's `ABI-L2-CMIPF` product, the GOES-R full disk:
+each channel of each scan as **one** netCDF-4 file under
+`ABI-L2-CMIPF/YYYY/DDD/HH/` (year, day of year, hour), named
+`OR_ABI-L2-CMIPF-M<mode>C<channel>_G<nn>_s<start>_e<end>_c<created>.nc`
+with `YYYYDDDHHMMSSs` stamps. `CMI` is unsigned 16-bit, 5424 × 5424 at
+2 km for the infrared channels, with the band's own scale and offset to
+kelvin (C13: 0.06145332 and 89.62) and 65535 where the disk is not; the
+`goes_imager_projection` is the CF `geostationary` mapping with sweep `x`
+and x/y in radians, which GDAL turns into a metre geotransform on its own
+(its warning about the radian axis unit concerns the SRS's axis, not the
+georeference). A scan in mode 6 starts twenty seconds past every ten-minute
+mark and its **slot is that mark** (the start floored to the cadence); the
+listing accepts any mode digit. A slot is complete once its file is listed
+(`tile_count` 1), the file lands some ten minutes after the scan starts,
+and a reissue is the later `c` stamp. The slot opens as a one-source VRT
+over the `CMI` variable, so the no-data floor is applied the way it is to
+a mosaic. Listing is per hour directory: `list_hours` reads a day's hour
+prefixes in one request, `list_hour` one hour's files for a channel, and
+`recent_slots` walks the hours newest first and stops once it has the few
+slots `latest_slot` asks about — two or three requests a round rather
+than a whole day's twenty-four. The `DQF` quality flags are not read
+(99.9996 % of a sampled disk is flag 0).
+
+A third reader would be `HSDReader`, for the raw Himawari Standard Data
+segments should the ISatSS product ever stop.
 
 ### Projector
 
@@ -193,7 +227,11 @@ which the view is too oblique to read. For Himawari that is 80.7°E to
 200.7°E at 0.04°, 3000 × 3000 cells, first cell centre 80.72°E, 59.98°N —
 a grid that crosses the antimeridian, which the encoders' `crop_grid` and
 the shell's viewport arithmetic take in the grid's own copy of the world
-(a box spelled `-170` is at 190 on it).
+(a box spelled `-170` is at 190 on it); GOES-West's is 163°E to 283°E the
+same way (first cell centre 163.02°E), GOES-East's 135.2°W to 15.2°W
+(first cell centre 135.18°W). A scene that lies wholly outside the grid is
+refused rather than written blank, since a blank warp is also what a lost
+projection produces.
 
 ### Frames and the cache
 
@@ -252,16 +290,20 @@ past it: a cached frame is read back, a complete slot on the bucket is
 fetched and warped, an incomplete or absent slot is left out (the axis
 allows the gap, and the next round takes it if it lands). The live
 window's end is the newest slot whose tiles have all landed
-(`latest_slot`: today's directory listing, then yesterday's; the newest
-three slots asked for their tiles, the rest trusted). `resolve_run("latest")`
-is the six whole hours (`window_hours`) ending with that slot's hour, as
-for MRMS and JMA with their own lengths. The tiles of a scan are generated about eight minutes after it
-starts and listed some fifteen after; a round is a listing, one scan's
-tiles, one warp, one stack and a conversion, three to four minutes, so the
-live window ends fifteen to twenty minutes behind real time.
-`.github/workflows/publish-himawari.yml` runs one round per job on a
-ten-minute cron and installs `gdal-bin` whichever encoder converts,
-since the wheel's GDAL is a library with no GeoTIFF driver.
+(`latest_slot`: the reader's `recent_slots` — a day's slot directories at
+once for ISatSS, the newest hour directory for CMIPF, yesterday's as well
+around midnight — then the newest three slots asked for their tiles, the
+rest trusted). `resolve_run("latest")` is the six whole hours
+(`window_hours`) ending with that slot's hour, as for MRMS and JMA with
+their own lengths. The tiles of a Himawari scan are generated about eight
+minutes after it starts and listed some fifteen after, a GOES file lands
+some ten minutes after its scan starts; a round is a listing, one scan's
+files, one warp per channel, one composition, one stack per variable and
+a conversion, three to four minutes, so the live window ends fifteen to
+twenty minutes behind real time. `.github/workflows/publish-himawari.yml`,
+`publish-goeseast.yml` and `publish-goeswest.yml` each run one round per
+job on a ten-minute cron and install `gdal-bin` whichever encoder
+converts, since the wheel's GDAL is a library with no GeoTIFF driver.
 
 ## Producers
 
@@ -311,3 +353,16 @@ gun's label, unit, parameter block, band block or producer id and
 codebooks; `bundles`: each composite's components in order) holds them
 identical across the Python encoder, the Rust encoder and the shell;
 `tests/prepare_satellite_registry.py` regenerates it.
+
+`tests/fixtures/goes/` is eight 220 × 220 windows cut from real GOES-19
+CMIPF files (`tests/prepare_goes_fixture.py`: the four Dust RGB channels
+of two consecutive scans, cut with `gdal_translate -of netCDF -srcwin`,
+which keeps the `geostationary` mapping, the band's packing and fill — the
+Venezuelan coast and Trinidad, 66–62°W, 7–11°N), and `tests/test_goes.py`
+runs them the same way under the `goeseast` source: the hour-directory
+listing and its request count, the slot rule, the reissue rule, the
+single-file download, the warp, the producer with the ABI stretches
+(and that they differ from the SEVIRI set on the scene), the series, the
+ingest, the conversion on the East disk with the ABI band block, and the
+native encoder byte for byte. GOES-West is the same reader on its own
+bucket and grid; its tests are the registry's.

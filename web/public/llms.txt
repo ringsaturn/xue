@@ -67,7 +67,12 @@ Facts worth getting right:
   fifteen to twenty minutes behind real time. The source is named by its
   orbital slot: the spacecraft (WMO 174), the instrument (297) and the
   band's central wave number are the `band` block beside the variable's
-  parameter block in each bundle's metadata. An observation dataset has no
+  parameter block in each bundle's metadata. `goeseast` and `goeswest`
+  are the same two variables from NOAA's GOES-19 (ABI, 75.2°W, WMO 273)
+  and GOES-18 (137.0°W, WMO 272), read from NOAA's CMIPF full-disk files,
+  the Dust RGB with the GOES-R Quick Guide's ABI stretches; the East disk
+  is 135.2°W–15.2°W, the West disk 163°E–283°E across the antimeridian.
+  An observation dataset has no
   run cycle and no lead time: its `run` is the hour its series starts and
   a frame's offset is time elapsed since.
 - Bundles published per run. GFS and ECMWF: `tmp2m`, `prate`, `prmsl`,
@@ -120,7 +125,9 @@ Facts worth getting right:
   with CC BY 4.0, ask that the source be named and the processing —
   regridding and reclassification by jma-radar — be noted); `himawari` is
   JMA's Himawari-9 imagery distributed by NOAA (attribution required, the
-  reprojection noted, no endorsement implied by either agency); the basemap
+  reprojection noted, no endorsement implied by either agency); `goeseast`
+  and `goeswest` are NOAA GOES-R imagery (public domain, attribution
+  requested, no endorsement implied); the basemap
   is Protomaps © OpenStreetMap contributors.
 
 ## Pages and URL parameters
@@ -130,9 +137,10 @@ fall back to defaults rather than fail, so a constructed link always opens.
 
 - https://xue.ringsaturn.me/ — the live viewer. Defaults to GFS precipitation.
 - https://xue.ringsaturn.me/showcase.html — the list of historical cases.
-- `?model=gfs|sflux|ecmwf|aifs|hrrr|mrms|jma|cma|himawari` — which live
-  source (`ifs` is an alias of `ecmwf`, `aifs-single` of `aifs`, `hrpns`
-  of `jma`, `radar` of `cma`, `himawari-9` / `ahi` of `himawari`).
+- `?model=gfs|sflux|ecmwf|aifs|hrrr|mrms|jma|cma|himawari|goeseast|goeswest`
+  — which live source (`ifs` is an alias of `ecmwf`, `aifs-single` of
+  `aifs`, `hrpns` of `jma`, `radar` of `cma`, `himawari-9` / `ahi` of
+  `himawari`).
 - `?type=` — the filled layer: `temp` (2 m temperature), `precip`, `wind`
   (10 m), `solar` (sflux only), `pressure` (sea level pressure as isobars),
   `radar` (composite reflectivity: the radar cases, and the HRRR forecast), the GFS
@@ -217,7 +225,7 @@ https://dataset.ringsaturn.me/xue/. The contract is two layers:
 - One mutable live pointer per source (JSON, schema 1): `latest.json` (GFS),
   `latest-sflux.json`, `latest-ecmwf.json`, `latest-aifs.json`,
   `latest-hrrr.json`, `latest-mrms.json`, `latest-jma.json`, `latest-cma.json`,
-  `latest-himawari.json`. Fields: `schemaVersion`, `model`, `product`, `run`
+  `latest-himawari.json`, `latest-goeseast.json`, `latest-goeswest.json`. Fields: `schemaVersion`, `model`, `product`, `run`
   (YYYYMMDDHH, UTC), `runTime` (ISO 8601), `manifestPath` (relative),
   `manifestCrc32`. Fetch with cache disabled; it changes four times a day
   (every hour for HRRR, every five minutes for MRMS — compare

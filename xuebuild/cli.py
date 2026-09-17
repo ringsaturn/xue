@@ -111,8 +111,9 @@ def _model_argument(parser: argparse.ArgumentParser, *, fetched_only: bool = Tru
             "six minutes, read out of its daily Zarr archive; "
             "a window the same way"
             + ("" if fetched_only else ", or one NetCDF file the tool wrote")
-            + "), or himawari, the Himawari-9 10.4 µm infrared window (an observation every ten "
-            "minutes, warped from NOAA's ISatSS tiles onto a 0.04° grid; a window the same way)"
+            + "), himawari, the Himawari-9 10.4 µm infrared window and Dust RGB (an observation every ten "
+            "minutes, warped from NOAA's ISatSS tiles onto a 0.04° grid; a window the same way), "
+            "or goeseast / goeswest, the same from GOES-19 and GOES-18 (NOAA's CMIPF full-disk files)"
         ),
     )
 

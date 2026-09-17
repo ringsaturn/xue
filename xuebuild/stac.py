@@ -530,6 +530,65 @@ def _source_prose(source: SourceSpec) -> dict[str, Any]:
             ],
         },
     }
+    for role, spacecraft, longitude, extent in (
+        ("goeseast", "GOES-19", "75.2°W", "135.2°W–15.2°W"),
+        ("goeswest", "GOES-18", "137.0°W", "163°E–77°W, across the antimeridian"),
+    ):
+        prose[role] = {
+            "title": f"{spacecraft} ABI full disk",
+            "description": (
+                f"NOAA's {spacecraft} Advanced Baseline Imager at {longitude}, from its open data bucket "
+                "(the CMIPF full-disk product, one calibrated file per channel per ten-minute scan): the "
+                "10.4 µm infrared window as brightness temperature, reprojected from the geostationary view "
+                f"onto a regular 0.04° grid over the useful disk (3000 × 3000 cells, {extent}, 60°S–60°N) "
+                "and published under ir104, as a rolling window rebuilt every ten minutes; and the classic "
+                "Dust RGB composite (dustrgb: the 12.3 − 10.4 µm split window, 11.2 − 8.6 µm with a gamma, "
+                "and the 10.4 µm window, stretched to three guns in 0–1 with the GOES-R Quick Guide's ABI "
+                "values), computed from the 8.6, 10.4, 11.2 and 12.3 µm windows by the shachen package "
+                "(Apache-2.0), whose id and version each gun carries as its producer block. Source: NOAA "
+                "NESDIS; the data are unaltered but reprojected and composited, and NOAA does not endorse "
+                "this site."
+            ),
+            "license": "other",
+            "providers": [
+                {
+                    "name": "NOAA NESDIS",
+                    "roles": ["producer", "licensor"],
+                    "url": "https://www.goes-r.gov/",
+                },
+                {
+                    "name": "NOAA Open Data Dissemination",
+                    "roles": ["host"],
+                    "url": "https://registry.opendata.aws/noaa-goes/",
+                },
+                {
+                    "name": "shachen",
+                    "roles": ["processor"],
+                    "url": "https://github.com/ringsaturn/shachen",
+                },
+                _XUE_PROVIDER,
+            ],
+            "links": [
+                {
+                    "rel": "license",
+                    "href": "https://registry.opendata.aws/noaa-goes/",
+                    "type": "text/html",
+                    "title": "NOAA GOES on AWS: terms of use (attribution requested, no endorsement)",
+                },
+                {
+                    "rel": "cite-as",
+                    "href": "https://doi.org/10.5194/acp-8-6739-2008",
+                    "type": "text/html",
+                    "title": "Lensky and Rosenfeld (2008): the SEVIRI RGB suite the Dust RGB comes from",
+                },
+                {
+                    "rel": "describedby",
+                    "href": "https://rammb.cira.colostate.edu/training/visit/quick_guides/Dust_RGB_Quick_Guide.pdf",
+                    "type": "application/pdf",
+                    "title": "GOES-R Quick Guide: Dust RGB (the band mix and the ABI stretches applied here)",
+                },
+            ],
+        }
     try:
         return prose[source.id]
     except KeyError as exc:  # pragma: no cover - the table is held to the registry by a test

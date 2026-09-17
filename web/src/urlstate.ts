@@ -109,6 +109,14 @@ const MODEL_ALIASES: Record<string, ForecastModelId> = {
   "himawari-9": "himawari",
   himawari9: "himawari",
   ahi: "himawari",
+  goeseast: "goeseast",
+  "goes-east": "goeseast",
+  "goes-19": "goeseast",
+  goes19: "goeseast",
+  goeswest: "goeswest",
+  "goes-west": "goeswest",
+  "goes-18": "goeswest",
+  goes18: "goeswest",
 };
 
 /** Model requested by the page URL, or the default when the URL names none

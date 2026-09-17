@@ -35,6 +35,9 @@ LOG = logging.getLogger(__name__)
 #: Tiles fetched at once from the bucket; S3 answers bursts without
 #: throttling and a tile is a few hundred kilobytes.
 FETCH_CONCURRENCY = 8
+#: How many of the newest listed slots `latest_slot` asks for their tiles
+#: before trusting the listing.
+RECENT_SLOTS = 3
 #: Bilinear for a continuous quantity (brightness temperature,
 #: reflectance); a categorical product would take ``near``.
 RESAMPLING = "bilinear"
@@ -69,22 +72,21 @@ def latest_slot(
     fetch: Callable[[str], str] | None = None,
 ) -> datetime:
     """The newest slot whose tiles have all landed for the channel: the
-    end of the live window. The bucket lists a day's slot directories in
-    one request; the newest few are asked for their tiles, since a slot
-    appears while its tiles are still being written. Today's day is
-    tried, then yesterday's (the answer is the same either side of
-    midnight); nothing in two days is a feed that is down."""
+    end of the live window. The reader lists the newest few slots in as
+    few requests as its product allows (a day's slot directories at once
+    for ISatSS, the newest hour directory for CMIPF; yesterday's as well
+    around midnight), and each is asked for its tiles, since a slot
+    appears while its tiles are still being written. Nothing in the last
+    day is a feed that is down."""
     reader = reader_for(platform)
     current = (now or datetime.now(UTC)).astimezone(UTC)
-    day = current.replace(hour=0, minute=0, second=0, microsecond=0)
-    for listed_day in (day, day - timedelta(days=1)):
-        slots = [slot for slot in reader.list_slots(platform, listed_day, fetch=fetch) if slot <= current]
-        # A slot's tiles land within a minute or two of the directory
-        # appearing; a few slots back is as far as an incomplete run of
-        # them plausibly reaches, and the listing beyond that is trusted.
-        for index, slot in enumerate(reversed(slots)):
-            if index >= 3 or slot_is_complete(platform, reader.list_slot(platform, channel, slot, fetch=fetch)):
-                return slot
+    # A slot's tiles land within a minute or two of the directory
+    # appearing; a few slots back is as far as an incomplete run of them
+    # plausibly reaches, and the listing beyond that is trusted.
+    slots = reader.recent_slots(platform, current, limit=RECENT_SLOTS, fetch=fetch)
+    for index, slot in enumerate(slots):
+        if index + 1 >= RECENT_SLOTS or slot_is_complete(platform, reader.list_slot(platform, channel, slot, fetch=fetch)):
+            return slot
     raise DownloadError(f"{platform.spacecraft} lists no complete {channel.id} slot in the last two days")
 
 

@@ -107,6 +107,7 @@ export const ru: Record<MessageKey, string> = {
   creditsMrms: "РАДАРНЫЕ НАБЛЮДЕНИЯ · MRMS, КОНТИНЕНТАЛЬНЫЕ США",
   creditsJma: "РАДАРНЫЕ ОСАДКИ · НАУКАСТ JMA, ЯПОНИЯ (ПЕРЕСЕТКА)",
   creditsHimawari: "СПУТНИКОВЫЕ СНИМКИ · HIMAWARI-9 AHI, JMA, ЧЕРЕЗ NOAA OPEN DATA (ПЕРЕПРОЕЦИРОВАНО)",
+  creditsGoes: "СПУТНИКОВЫЕ СНИМКИ · GOES-19 ВОСТОК И GOES-18 ЗАПАД ABI, NOAA NESDIS, ЧЕРЕЗ NOAA OPEN DATA (ПЕРЕПРОЕЦИРОВАНО)",
   creditsSounding: "РАДИОЗОНДИРОВАНИЕ · GTS TEMP ЧЕРЕЗ WIS2, НАЦИОНАЛЬНЫЕ МЕТЕОСЛУЖБЫ",
   creditsAirport: "METAR И TAF АЭРОПОРТОВ · МЕТЕОСЛУЖБЫ МИРА ЧЕРЕЗ NOAA/NWS AWC",
   creditsRadar: "РАДАРНАЯ МОЗАИКА",

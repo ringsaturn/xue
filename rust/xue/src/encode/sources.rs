@@ -636,6 +636,109 @@ pub const SOURCES: &[SourceSpec] = &[
         series_file: true,
         downsample: None,
     },
+    // The two GOES-R imagers, GOES-19 at 75.2°W (East) and GOES-18 at
+    // 137.0°W (West), from NOAA's own buckets: the CMIPF product, each
+    // channel of each ten-minute full-disk scan as one calibrated netCDF
+    // on the geostationary projection (sweep x), read by the same Python
+    // stage through `CMIPFReader`. Each source is the himawari one on its
+    // own disk: the same four windows fetched, ir104 and the Dust RGB
+    // published (the GOES-R Quick Guide's ABI stretches, picked by the
+    // producer by instrument), the same grid step and window. The East
+    // disk sits on negative longitudes (−135.2 … −15.2); the West disk
+    // crosses the antimeridian and is spelled 163 … 283, the shape
+    // Himawari's grid already takes. Mirrors `xuebuild/sources.py`.
+    SourceSpec {
+        id: "goeseast",
+        manifest_model: "GOES-EAST",
+        product: "abi-fldk-0p04",
+        latest_filename: Some("latest-goeseast.json"),
+        steps: &[],
+        input_variable_ids: &["ir086", "ir104", "ir112", "ir123"],
+        companion_files: &[],
+        accumulated_precipitation: false,
+        averaged_precipitation: false,
+        average_window_hours: 6,
+        optional_at_analysis: &[],
+        statistical_processes: &[],
+        // ABI channels 11, 13, 14, 15 at 8.50, 10.35, 11.2, 12.3 µm; WMO C-5
+        // 273, C-8 617.
+        bands: &[
+            (
+                "ir086",
+                SatelliteBand { satellite_series: 0, satellite_number: 273, instrument_type: 617, central_wavenumber: 117647 },
+            ),
+            (
+                "ir104",
+                SatelliteBand { satellite_series: 0, satellite_number: 273, instrument_type: 617, central_wavenumber: 96618 },
+            ),
+            (
+                "ir112",
+                SatelliteBand { satellite_series: 0, satellite_number: 273, instrument_type: 617, central_wavenumber: 89286 },
+            ),
+            (
+                "ir123",
+                SatelliteBand { satellite_series: 0, satellite_number: 273, instrument_type: 617, central_wavenumber: 81301 },
+            ),
+        ],
+        bundle_scalar_ids: &["ir104"],
+        core_bundle_ids: &["ir104"],
+        bundle_vector_ids: &[],
+        bundle_composite_ids: &["dustrgb"],
+        production_grid: (3000, 3000),
+        tile: (64, 64),
+        regrid: None,
+        observation: true,
+        window_hours: Some(6),
+        cadence_seconds: Some(600),
+        series_file: true,
+        downsample: None,
+    },
+    SourceSpec {
+        id: "goeswest",
+        manifest_model: "GOES-WEST",
+        product: "abi-fldk-0p04",
+        latest_filename: Some("latest-goeswest.json"),
+        steps: &[],
+        input_variable_ids: &["ir086", "ir104", "ir112", "ir123"],
+        companion_files: &[],
+        accumulated_precipitation: false,
+        averaged_precipitation: false,
+        average_window_hours: 6,
+        optional_at_analysis: &[],
+        statistical_processes: &[],
+        // ABI channels 11, 13, 14, 15 at 8.50, 10.35, 11.2, 12.3 µm; WMO C-5
+        // 272, C-8 617.
+        bands: &[
+            (
+                "ir086",
+                SatelliteBand { satellite_series: 0, satellite_number: 272, instrument_type: 617, central_wavenumber: 117647 },
+            ),
+            (
+                "ir104",
+                SatelliteBand { satellite_series: 0, satellite_number: 272, instrument_type: 617, central_wavenumber: 96618 },
+            ),
+            (
+                "ir112",
+                SatelliteBand { satellite_series: 0, satellite_number: 272, instrument_type: 617, central_wavenumber: 89286 },
+            ),
+            (
+                "ir123",
+                SatelliteBand { satellite_series: 0, satellite_number: 272, instrument_type: 617, central_wavenumber: 81301 },
+            ),
+        ],
+        bundle_scalar_ids: &["ir104"],
+        core_bundle_ids: &["ir104"],
+        bundle_vector_ids: &[],
+        bundle_composite_ids: &["dustrgb"],
+        production_grid: (3000, 3000),
+        tile: (64, 64),
+        regrid: None,
+        observation: true,
+        window_hours: Some(6),
+        cadence_seconds: Some(600),
+        series_file: true,
+        downsample: None,
+    },
 ];
 
 pub fn source_spec(model: &str) -> Result<&'static SourceSpec> {
@@ -677,6 +780,21 @@ mod tests {
         assert_eq!(radar.core_bundle_ids, &["cref"]);
         assert_eq!(jma.cadence_seconds, Some(300));
         assert_eq!(jma.core_bundle_ids, &["prate"]);
+        // The three satellite disks are the same shape on their own grids.
+        let himawari = source_spec("himawari").expect("himawari");
+        for (model, number) in [("goeseast", 273), ("goeswest", 272)] {
+            let source = source_spec(model).expect(model);
+            assert!(source.series_file && source.fetched() && source.live(), "{model}");
+            assert_eq!(source.input_variable_ids, himawari.input_variable_ids, "{model}");
+            assert_eq!(source.bundle_scalar_ids, himawari.bundle_scalar_ids, "{model}");
+            assert_eq!(source.bundle_composite_ids, himawari.bundle_composite_ids, "{model}");
+            assert_eq!(source.production_grid, himawari.production_grid, "{model}");
+            assert_eq!(source.cadence_seconds, Some(600), "{model}");
+            assert_eq!(source.bands.len(), 4, "{model}");
+            for (_, band) in source.bands {
+                assert_eq!((band.satellite_number, band.instrument_type), (number, 617), "{model}");
+            }
+        }
         for model in ["gfs", "ecmwf", "aifs", "sflux", "hrrr", "mrms"] {
             assert!(!source_spec(model).expect(model).series_file, "{model}");
         }

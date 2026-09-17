@@ -194,6 +194,9 @@ export const en = {
   /** The Himawari line names the agency, the spacecraft and the host, and
    * notes the processing, as NOAA's terms ask. */
   creditsHimawari: "SATELLITE IMAGERY · HIMAWARI-9 AHI, JMA, ON NOAA OPEN DATA (REPROJECTED)",
+  /** The GOES line names the programme, the two spacecraft by slot and
+   * the host; NOAA's open data asks for the source to be named. */
+  creditsGoes: "SATELLITE IMAGERY · GOES-19 EAST & GOES-18 WEST ABI, NOAA NESDIS, ON NOAA OPEN DATA (REPROJECTED)",
   creditsSounding: "RADIOSONDE SOUNDINGS · GTS TEMP VIA WIS2, NATIONAL MET SERVICES",
   creditsAirport: "AIRPORT METAR & TAF · WORLD MET SERVICES VIA NOAA/NWS AWC",
   creditsRadar: "RADAR MOSAIC",

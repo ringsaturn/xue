@@ -231,7 +231,7 @@ class RegistryTests(unittest.TestCase):
         fewer = dataclasses.replace(SPEC, input_variable_ids=("ir104",))
         self.assertEqual(binconvert.published_bundle_ids(fewer), ("ir104",))
         self.assertEqual((SPEC.manifest_model, SPEC.latest_filename), ("HIMAWARI", "latest-himawari.json"))
-        self.assertEqual([spec.id for spec in SOURCES.values() if spec.platform], ["himawari"])
+        self.assertEqual([spec.id for spec in SOURCES.values() if spec.platform], ["himawari", "goeseast", "goeswest"])
 
     def test_the_source_band_is_the_platform_s(self) -> None:
         self.assertEqual([band_id for band_id, _ in SPEC.bands], ["ir086", "ir104", "ir112", "ir123"])

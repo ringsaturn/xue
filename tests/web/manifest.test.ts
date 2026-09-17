@@ -434,17 +434,41 @@ describe("dataset kinds", () => {
     for (const model of ["gfs", "sflux", "ecmwf", "aifs", "hrrr"] as const) expect(isObservationModel(model)).toBe(false);
   });
 
-  it("lists the live feeds, the four observation windows among them", () => {
+  it("lists the live feeds, the six observation windows among them", () => {
     // Every live feed has a pointer to poll (mirrors
-    // SourceSpec.latest_filename); the four observation windows are the
+    // SourceSpec.latest_filename); the six observation windows are the
     // last of the switch order.
-    expect(FORECAST_MODEL_IDS).toEqual(["gfs", "sflux", "ecmwf", "aifs", "hrrr", "mrms", "jma", "cma", "himawari"]);
+    expect(FORECAST_MODEL_IDS).toEqual(["gfs", "sflux", "ecmwf", "aifs", "hrrr", "mrms", "jma", "cma", "himawari", "goeseast", "goeswest"]);
     for (const model of FORECAST_MODEL_IDS) expect(FORECAST_MODELS[model].latestFilename).toBeDefined();
     expect(FORECAST_MODELS.aifs).toMatchObject({ label: "AIFS", product: "aifs-single-0p25", latestFilename: "latest-aifs.json" });
     expect(FORECAST_MODELS.mrms.latestFilename).toBe("latest-mrms.json");
     expect(FORECAST_MODELS.jma.latestFilename).toBe("latest-jma.json");
     expect(FORECAST_MODELS.cma.latestFilename).toBe("latest-cma.json");
     expect(FORECAST_MODELS.himawari.latestFilename).toBe("latest-himawari.json");
+    expect(FORECAST_MODELS.goeseast.latestFilename).toBe("latest-goeseast.json");
+    expect(FORECAST_MODELS.goeswest.latestFilename).toBe("latest-goeswest.json");
+  });
+
+  it("opens the two GOES disks on the infrared channel, the West one past the antimeridian", () => {
+    // Mirrors the `goeseast` / `goeswest` entries of SOURCES: the same
+    // channel and product as Himawari, each disk 60° either side of its
+    // slot; GOES-West's region is spelled past 180 so it crosses the
+    // antimeridian the way Himawari's does.
+    for (const id of ["goeseast", "goeswest"] as const) {
+      expect(FORECAST_MODELS[id]).toMatchObject({
+        id,
+        product: "abi-fldk-0p04",
+        observation: true,
+        coreBundles: ["ir104"],
+        defaultVariable: "ir104",
+        railCore: ["ir104"],
+      });
+      expect(isObservationModel(id)).toBe(true);
+    }
+    expect(FORECAST_MODELS.goeseast.label).toBe("GOES-EAST");
+    expect(FORECAST_MODELS.goeseast.region).toEqual([-135.2, -60, -15.2, 60]);
+    expect(FORECAST_MODELS.goeswest.label).toBe("GOES-WEST");
+    expect(FORECAST_MODELS.goeswest.region).toEqual([163, -60, 283, 60]);
   });
 
   it("opens the Himawari imagery on its infrared channel over the disk", () => {

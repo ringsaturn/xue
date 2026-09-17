@@ -41,7 +41,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .errors import DownloadError
-from .satellite.platforms import HIMAWARI, SatelliteBand
+from .satellite.platforms import GOES_EAST, GOES_WEST, HIMAWARI, SatelliteBand
 from .reproject import Regrid
 
 
@@ -102,7 +102,8 @@ class Downsample:
 @dataclass(frozen=True)
 class SourceSpec:
     id: str
-    """CLI / URL / directory id: "gfs", "ecmwf", "aifs", "sflux", "hrrr", "cma", "mrms", "jma" or "himawari"."""
+    """CLI / URL / directory id: "gfs", "ecmwf", "aifs", "sflux", "hrrr", "cma", "mrms", "jma", "himawari",
+    "goeseast" or "goeswest"."""
     manifest_model: str
     """The manifest and bundle-metadata ``model`` string."""
     product: str
@@ -913,6 +914,64 @@ SOURCES: dict[str, SourceSpec] = {
         # Six hours: long enough to watch a system develop, at 37 frames
         # some 170 MB of stores a round at full resolution, which a runner
         # uploads in a minute.
+        window_hours=6,
+        cadence_seconds=600,
+        video=False,
+    ),
+    # The two GOES-R imagers, GOES-19 at 75.2°W (East) and GOES-18 at
+    # 137.0°W (West), from NOAA's own buckets: the CMIPF product, each
+    # channel of each ten-minute full-disk scan as one calibrated netCDF
+    # on the geostationary projection (sweep x), read by the same stage
+    # through ``CMIPFReader`` — a slot is one file, the file lands some
+    # ten minutes after the scan starts. Each source is the himawari one on
+    # its own disk: the same four windows fetched, ir104 and the Dust RGB
+    # published (with the GOES-R Quick Guide's ABI stretches, which the
+    # producer picks by instrument), the same grid step and window. The
+    # East disk sits on negative longitudes (−135.2 … −15.2); the West
+    # disk crosses the antimeridian and is spelled 163 … 283, the shape
+    # Himawari's grid already takes.
+    "goeseast": SourceSpec(
+        id="goeseast",
+        manifest_model="GOES-EAST",
+        product="abi-fldk-0p04",
+        latest_filename="latest-goeseast.json",
+        steps=(),
+        input_variable_ids=("ir086", "ir104", "ir112", "ir123"),
+        accumulated_precipitation=False,
+        bands=GOES_EAST.bands(("ir086", "ir104", "ir112", "ir123")),
+        bundle_scalar_ids=("ir104",),
+        bundle_composite_ids=("dustrgb",),
+        core_bundle_ids=("ir104",),
+        production_grid=(3000, 3000),
+        tile=(64, 64),
+        observation=True,
+        series_file=True,
+        platform="goeseast",
+        grid_step=0.04,
+        cycle_hours=1,
+        window_hours=6,
+        cadence_seconds=600,
+        video=False,
+    ),
+    "goeswest": SourceSpec(
+        id="goeswest",
+        manifest_model="GOES-WEST",
+        product="abi-fldk-0p04",
+        latest_filename="latest-goeswest.json",
+        steps=(),
+        input_variable_ids=("ir086", "ir104", "ir112", "ir123"),
+        accumulated_precipitation=False,
+        bands=GOES_WEST.bands(("ir086", "ir104", "ir112", "ir123")),
+        bundle_scalar_ids=("ir104",),
+        bundle_composite_ids=("dustrgb",),
+        core_bundle_ids=("ir104",),
+        production_grid=(3000, 3000),
+        tile=(64, 64),
+        observation=True,
+        series_file=True,
+        platform="goeswest",
+        grid_step=0.04,
+        cycle_hours=1,
         window_hours=6,
         cadence_seconds=600,
         video=False,

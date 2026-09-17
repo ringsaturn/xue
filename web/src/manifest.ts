@@ -11,7 +11,7 @@ export type ForecastVariableId = "tmp2m" | "prate";
  * The CMA radar mosaic has no live feed: it is an observation archive that
  * reaches the app only as showcase cases. The MRMS mosaic and the JMA
  * nowcast are observations *and* live, each a rolling window. */
-export type ForecastModelId = "gfs" | "ecmwf" | "aifs" | "sflux" | "hrrr" | "cma" | "mrms" | "jma" | "himawari";
+export type ForecastModelId = "gfs" | "ecmwf" | "aifs" | "sflux" | "hrrr" | "cma" | "mrms" | "jma" | "himawari" | "goeseast" | "goeswest";
 
 export interface ForecastModelInfo {
   id: ForecastModelId;
@@ -165,6 +165,36 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
     railCore: ["ir104"],
     region: [80.7, -60, 200.7, 60],
   },
+  // The two GOES-R imagers NOAA flies, read from NOAA's own buckets: the
+  // same 10.4 µm window and the same Dust RGB as Himawari, one full-disk
+  // scan every ten minutes, warped by the encoder onto a 0.04° grid over
+  // each disk's useful extent. Named by the orbital slot (GOES-East at
+  // 75.2°W is GOES-19 today, GOES-West at 137.0°W is GOES-18), never the
+  // spacecraft, for the same reason as Himawari. GOES-West's region runs
+  // past the antimeridian too — spelled 163…283 so it crosses 180 the
+  // way Himawari's does, in the grid's own copy of the world.
+  goeseast: {
+    id: "goeseast",
+    label: "GOES-EAST",
+    product: "abi-fldk-0p04",
+    latestFilename: "latest-goeseast.json",
+    observation: true,
+    coreBundles: ["ir104"],
+    defaultVariable: "ir104",
+    railCore: ["ir104"],
+    region: [-135.2, -60, -15.2, 60],
+  },
+  goeswest: {
+    id: "goeswest",
+    label: "GOES-WEST",
+    product: "abi-fldk-0p04",
+    latestFilename: "latest-goeswest.json",
+    observation: true,
+    coreBundles: ["ir104"],
+    defaultVariable: "ir104",
+    railCore: ["ir104"],
+    region: [163, -60, 283, 60],
+  },
 };
 
 /** The layer a dataset opens on when nothing asked for one. */
@@ -182,10 +212,10 @@ export function isObservationModel(model: ForecastModelId): boolean {
   return FORECAST_MODELS[model].observation === true;
 }
 
-/** The live feeds, in model-switch order: the five forecasts and the four
+/** The live feeds, in model-switch order: the five forecasts and the six
  * rolling observation windows, MRMS, the JMA nowcast, the CMA mosaic and
- * the Himawari imagery. */
-export const FORECAST_MODEL_IDS: readonly ForecastModelId[] = ["gfs", "sflux", "ecmwf", "aifs", "hrrr", "mrms", "jma", "cma", "himawari"];
+ * the three geostationary imagers. */
+export const FORECAST_MODEL_IDS: readonly ForecastModelId[] = ["gfs", "sflux", "ecmwf", "aifs", "hrrr", "mrms", "jma", "cma", "himawari", "goeseast", "goeswest"];
 
 function modelForManifestString(model: unknown): ForecastModelInfo | null {
   for (const info of Object.values(FORECAST_MODELS)) {

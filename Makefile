@@ -13,10 +13,11 @@ PROFILE ?= balanced
 # mrms (the NOAA radar mosaic, an observation every two minutes), jma
 # (the JMA precipitation nowcast over Japan, every five minutes, through the
 # jma-radar tool), cma (the CMA radar mosaic over China, every six
-# minutes, read out of its private daily Zarr archive) and himawari (the
-# Himawari-9 10.4 µm infrared window, every ten minutes, warped from NOAA's
-# ISatSS tiles by the fetch stage) build a window named by its first hour —
-# `RUN=latest` the live rolling window.
+# minutes, read out of its private daily Zarr archive), himawari (the
+# Himawari-9 10.4 µm infrared window and Dust RGB, every ten minutes, warped
+# from NOAA's ISatSS tiles by the fetch stage), goeseast and goeswest (the
+# same from GOES-19 and GOES-18, NOAA's CMIPF files) build a window named
+# by its first hour — `RUN=latest` the live rolling window.
 MODEL ?= gfs
 # One round of a rolling window (`build-bin --round`): the run's artifacts
 # and manifest live in <model>.<run>/<ROUND>/ and the pointer names that
