@@ -5689,7 +5689,13 @@ function applyZoomCeiling(session: VariableSession): void {
  * costs nothing. */
 function syncZoomCeiling(): void {
   const marks = stationsShown.soundings || stationsShown.airports;
-  map.setMaxZoom(Math.max(dataZoomCeiling, marks && activeCase === null ? STATION_MAX_ZOOM : 0));
+  const ceiling = Math.max(dataZoomCeiling, marks && activeCase === null ? STATION_MAX_ZOOM : 0);
+  if (map.getMaxZoom() === ceiling) return;
+  map.setMaxZoom(ceiling);
+  // The navigation control greys its + only on zoom events, so a ceiling
+  // lifted while the camera sits at the old one would leave the button
+  // dead until the next pinch; a zoom event with nothing moved refreshes it.
+  map.fire("zoom");
 }
 
 function applyVariable(session: VariableSession): void {
