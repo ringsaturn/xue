@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -26,9 +27,16 @@ def require_command(command: str) -> str:
     return resolved
 
 
-def run_command(arguments: list[str], *, description: str) -> subprocess.CompletedProcess[str]:
+def run_command(
+    arguments: list[str], *, description: str, env: dict[str, str] | None = None
+) -> subprocess.CompletedProcess[str]:
+    """Run one tool, its stderr becoming the error's text when it fails.
+    ``env`` adds to (or overrides in) this process's environment for that
+    one command — how a reader hands GDAL an HDF5 filter plugin path
+    without setting it for every tool the build runs."""
+    environment = {**os.environ, **env} if env else None
     try:
-        return subprocess.run(arguments, check=True, text=True, capture_output=True)
+        return subprocess.run(arguments, check=True, text=True, capture_output=True, env=environment)
     except FileNotFoundError as exc:
         raise ConversionError(f"required command is missing: {arguments[0]}") from exc
     except subprocess.CalledProcessError as exc:

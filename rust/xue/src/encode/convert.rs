@@ -85,14 +85,23 @@ pub fn composite_components(bundle_id: &str) -> Option<Vec<String>> {
         .then(|| DUST_RGB_COMPONENT_IDS.iter().map(|id| (*id).to_string()).collect())
 }
 
-/// The channels a composite's producer reads: what the fetch must download
-/// for the composite to be composed, since the components themselves are
-/// never fetched. Mirrors `PRODUCERS[bundle_id].inputs` in
-/// `xuebuild/satellite/producers.py` — the Dust RGB reads the four infrared
-/// windows.
-fn composite_input_ids(bundle_id: &str) -> Option<Vec<String>> {
-    (bundle_id == DUST_RGB_BUNDLE_ID)
-        .then(|| SATELLITE_CHANNEL_IDS.iter().map(|id| (*id).to_string()).collect())
+/// The channels a composite's producer reads on the source's platform: what
+/// the fetch must download for the composite to be composed, since the
+/// components themselves are never fetched. Mirrors
+/// `DustRGBProducer.inputs_for` in `xuebuild/satellite/producers.py`
+/// through `binconvert.bundle_input_ids` — the Dust RGB reads the four
+/// infrared windows, or three on an imager without an 11.2 µm one (FCI),
+/// where the 10.4 µm window stands in for the green gun's minuend. The
+/// platform's channel table lives on the Python side; here a source whose
+/// inputs lack `ir112` is one whose imager lacks it.
+fn composite_input_ids(source: &SourceSpec, bundle_id: &str) -> Option<Vec<String>> {
+    (bundle_id == DUST_RGB_BUNDLE_ID).then(|| {
+        SATELLITE_CHANNEL_IDS
+            .iter()
+            .filter(|id| **id != "ir112" || source.input_variable_ids.contains(id))
+            .map(|id| (*id).to_string())
+            .collect()
+    })
 }
 
 /// The variables one bundle carries, in bundle order: a scalar's own, a
@@ -320,7 +329,7 @@ pub fn bundle_input_ids(source: &SourceSpec, bundle_id: &str) -> Vec<String> {
     if vector_components(bundle_id).is_some() {
         return vector_input_ids(bundle_id);
     }
-    if let Some(inputs) = composite_input_ids(bundle_id) {
+    if let Some(inputs) = composite_input_ids(source, bundle_id) {
         return inputs;
     }
     if let Some(inputs) = derived_scalar_inputs(bundle_id) {
@@ -2273,4 +2282,29 @@ fn check_reference_frames(
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod composite_tests {
+    use super::{bundle_input_ids, bundle_variable_ids, published_bundle_ids};
+    use crate::encode::sources::source_spec;
+
+    #[test]
+    fn the_dust_rgb_reads_four_windows_or_three_without_the_11_2_one() {
+        // Mirrors `DustRGBProducer.inputs_for`: AHI and ABI carry the 11.2 µm
+        // window, FCI does not and the 10.4 µm one stands in.
+        for model in ["himawari", "goeseast", "goeswest"] {
+            let source = source_spec(model).expect(model);
+            assert_eq!(bundle_input_ids(source, "dustrgb"), ["ir086", "ir104", "ir112", "ir123"], "{model}");
+        }
+        let meteosat = source_spec("meteosat").expect("meteosat");
+        assert_eq!(bundle_input_ids(meteosat, "dustrgb"), ["ir086", "ir104", "ir123"]);
+        // The components are the same three guns everywhere, and every
+        // satellite source publishes ir104 then the composite.
+        for model in ["himawari", "goeseast", "goeswest", "meteosat"] {
+            let source = source_spec(model).expect(model);
+            assert_eq!(bundle_variable_ids("dustrgb"), ["dustr", "dustg", "dustb"]);
+            assert_eq!(published_bundle_ids(source), ["ir104", "dustrgb"], "{model}");
+        }
+    }
 }

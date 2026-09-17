@@ -137,7 +137,7 @@
             "@type": "Dataset",
             "@id": "https://xue.ringsaturn.me/#data",
             "name": "Xue live forecast bundles",
-            "description": "The current NOAA GFS, GFS surface-flux, ECMWF IFS, ECMWF AIFS and NOAA HRRR runs, the last three to four hours of the NOAA MRMS radar mosaic, the last two to three hours of the JMA precipitation nowcast over Japan and of the CMA radar mosaic over China, and the last five to six hours of Himawari-9, GOES-19 and GOES-18 infrared imagery and Dust RGB composites over the three geostationary disks, each a rolling window rebuilt every few minutes, converted into the .xue container: 8-bit quantized planes on the native grid with temporal residual prediction and Zstandard compression, one file per variable, streamable by HTTP range request. Only the newest run per source is kept.",
+            "description": "The current NOAA GFS, GFS surface-flux, ECMWF IFS, ECMWF AIFS and NOAA HRRR runs, the last three to four hours of the NOAA MRMS radar mosaic, the last two to three hours of the JMA precipitation nowcast over Japan and of the CMA radar mosaic over China, the last five to six hours of Himawari-9, GOES-19 and GOES-18 infrared imagery and Dust RGB composites over the three geostationary disks, and the last day of hourly Meteosat-12 imagery and Dust RGB over the 0° disk, each a rolling window rebuilt every few minutes, converted into the .xue container: 8-bit quantized planes on the native grid with temporal residual prediction and Zstandard compression, one file per variable, streamable by HTTP range request. Only the newest run per source is kept.",
             "url": "https://dataset.ringsaturn.me/xue/",
             "isAccessibleForFree": true,
             "creator": { "@id": "https://github.com/ringsaturn#person" },
@@ -149,6 +149,7 @@
               { "@type": "Dataset", "name": "CMA weather radar level-3 mosaic composite reflectivity (中国气象局雷达组合反射率拼图, RADAR_L3_MST_CREF)", "url": "https://www.nmc.cn" },
               { "@type": "Dataset", "name": "NOAA Himawari-9 AHI full-disk imagery (JMA ひまわり9号, ISatSS)", "url": "https://registry.opendata.aws/noaa-himawari/" },
               { "@type": "Dataset", "name": "NOAA GOES-R series ABI full-disk imagery (GOES-19 East, GOES-18 West, ABI-L2-CMIPF)", "url": "https://registry.opendata.aws/noaa-goes/" },
+              { "@type": "Dataset", "name": "EUMETSAT Meteosat-12 (MTG-I1) FCI Level 1c full-disk imagery, hourly repeat cycle (EO:EUM:DAT:0662; contains modified EUMETSAT Meteosat data)", "url": "https://data.eumetsat.int/product/EO:EUM:DAT:0662", "license": "https://creativecommons.org/licenses/by/4.0/" },
               { "@type": "Dataset", "name": "ECMWF Open Data (real-time)", "url": "https://www.ecmwf.int/en/forecasts/datasets/open-data", "license": "https://creativecommons.org/licenses/by/4.0/" }
             ],
             "spatialCoverage": { "@type": "Place", "geo": { "@type": "GeoShape", "box": "-90 -180 90 180" } },
@@ -164,7 +165,7 @@
               "sea surface (skin) temperature, sea ice cover and thickness, significant wave height, primary wave period, and the wave vector (height along the direction of travel) with particle animation",
               "composite radar reflectivity (observed by the CMA and NOAA MRMS mosaics, forecast by HRRR)",
               "radar precipitation intensity classes (the JMA nowcast over Japan, as representative rates)",
-              "10.4 µm infrared brightness temperature (Himawari-9 AHI band 13 over the western Pacific, GOES-19 and GOES-18 ABI channel 13 over the Americas and the Pacific; cloud-top temperature)",
+              "10.4 µm infrared brightness temperature (Himawari-9 AHI band 13 over the western Pacific, GOES-19 and GOES-18 ABI channel 13 over the Americas and the Pacific, Meteosat-12 FCI IR 10.5 over Europe, Africa and the Atlantic; cloud-top temperature)",
               "Dust RGB composite (the 12.3−10.4 µm, 11.2−8.6 µm and 10.4 µm stretches of the classic EUMETSAT / GOES-R recipe, computed by shachen; lofted mineral dust in magenta)"
             ],
             "distribution": [
@@ -179,6 +180,7 @@
               { "@type": "DataDownload", "name": "Himawari-9 infrared imagery live pointer (rolling window of the last five to six hours)", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-himawari.json" },
               { "@type": "DataDownload", "name": "GOES-East imagery live pointer (rolling window of the last five to six hours)", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-goeseast.json" },
               { "@type": "DataDownload", "name": "GOES-West imagery live pointer (rolling window of the last five to six hours)", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-goeswest.json" },
+              { "@type": "DataDownload", "name": "Meteosat imagery live pointer (rolling window of the last day, hourly)", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-meteosat.json" },
               { "@type": "DataDownload", "name": "Historical case catalog", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/showcase.json" }
             ]
           },
@@ -674,6 +676,11 @@
               <small>SATELLITE IR</small>
               <span class="model-check" aria-hidden="true"></span>
             </button>
+            <button type="button" data-model="meteosat" aria-pressed="false">
+              <span class="model-name">METEOSAT</span>
+              <small>SATELLITE IR</small>
+              <span class="model-check" aria-hidden="true"></span>
+            </button>
           </div>
         </div>
       </div>
@@ -756,6 +763,7 @@
           <span class="source-credit" data-credit-model="jma">SOURCE <a href="https://www.jma.go.jp/bosai/en_nowc/" target="_blank" rel="noreferrer">JMA WEBSITE</a> (REGRIDDED) ·</span>
           <span class="source-credit" data-credit-model="himawari">IMAGERY <a href="https://www.data.jma.go.jp/mscweb/en/himawari89/" target="_blank" rel="noreferrer">JMA HIMAWARI-9</a> VIA <a href="https://registry.opendata.aws/noaa-himawari/" target="_blank" rel="noreferrer">NOAA</a> (REPROJECTED) ·</span>
           <span class="source-credit" data-credit-model="goes">IMAGERY <a href="https://registry.opendata.aws/noaa-goes/" target="_blank" rel="noreferrer">NOAA GOES-R</a> (REPROJECTED) ·</span>
+          <span class="source-credit" data-credit-model="meteosat">CONTAINS MODIFIED <a href="https://www.eumetsat.int" target="_blank" rel="noreferrer">EUMETSAT</a> METEOSAT DATA (REPROJECTED) ·</span>
           © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OPENSTREETMAP</a>
           · <a href="https://protomaps.com" target="_blank" rel="noreferrer">PROTOMAPS</a>
         </span>
@@ -828,6 +836,13 @@
               <a href="https://registry.opendata.aws/noaa-goes/" target="_blank" rel="noreferrer">
                 <span class="credits-name">NOAA GOES-R</span>
                 <small data-i18n="creditsGoes">SATELLITE IMAGERY · GOES-19 EAST &amp; GOES-18 WEST ABI, NOAA NESDIS, ON NOAA OPEN DATA (REPROJECTED)</small>
+                <span class="credits-arrow" aria-hidden="true">↗</span>
+              </a>
+            </li>
+            <li>
+              <a href="https://www.eumetsat.int/legal-framework/data-policy" target="_blank" rel="noreferrer">
+                <span class="credits-name">EUMETSAT Meteosat</span>
+                <small data-i18n="creditsMeteosat">SATELLITE IMAGERY · CONTAINS MODIFIED EUMETSAT METEOSAT DATA · METEOSAT-12 FCI, HOURLY CYCLE, CC-BY-4.0 (REPROJECTED)</small>
                 <span class="credits-arrow" aria-hidden="true">↗</span>
               </a>
             </li>

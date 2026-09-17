@@ -62,4 +62,4 @@ cma = ["zarr>=3.1", "numcodecs>=0.16", "s3fs>=2024.10", "xarray>=2025.1", "netcd
 # `shachen.dustrgb.dust_rgb` on an xarray scene, called per slot in the
 # fetch stage. Only the satellite publish workflows and the satellite tests
 # need it; the converter reads the produced frames like any channel.
-satellite = ["shachen>=0.3.0", "xarray>=2025.1"]
+satellite = ["shachen>=0.3.0", "xarray>=2025.1", "hdf5plugin>=5.0"]

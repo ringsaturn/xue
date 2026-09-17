@@ -51,6 +51,7 @@ from .manifest import (
 )
 from .model import GRIB_PLANE_SOURCE, PlaneSource, SourceFrame
 from .observation import inspect_observation
+from .satellite.platforms import platform as satellite_platform
 from .satellite.producers import PRODUCERS
 from .quantize import PRESSURE_VARIABLE_IDS, PROFILES, PrecipitationCodebook, TemperatureCodebook
 from .reproject import ProjectedGrid, Resampler, build_resampler, lambert_conformal_from_wkt
@@ -335,10 +336,14 @@ def bundle_input_ids(source: SourceSpec, bundle_id: str) -> tuple[str, ...]:
     if bundle_id in VECTOR_BUNDLES:
         return vector_input_ids(bundle_id)
     if bundle_id in COMPOSITE_BUNDLES:
-        # The channels its producer reads: what the fetch must download for
-        # the composite to be composed, since the components themselves are
-        # never fetched.
-        return PRODUCERS[bundle_id].inputs
+        # The channels its producer reads on the source's platform: what the
+        # fetch must download for the composite to be composed, since the
+        # components themselves are never fetched. (The Rust encoder keys
+        # the same answer by source in `convert.rs::composite_input_ids`.)
+        producer = PRODUCERS[bundle_id]
+        if source.platform is None:
+            return producer.inputs
+        return producer.inputs_for(satellite_platform(source.platform))
     if bundle_id in DERIVED_SCALARS:
         return DERIVED_SCALARS[bundle_id]
     if bundle_id == "prate":

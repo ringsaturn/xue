@@ -1,0 +1,283 @@
+name: publish meteosat
+
+# Meteosat-12's 10.5 µm infrared window (FCI channel IR 10.5) and its Dust
+# RGB, from the EUMETSAT Data Store: the FCI Level 1c full-disk product,
+# one repeat cycle every ten minutes cut into forty netCDF chunk files that
+# carry every channel as radiances. The live feed is a rolling window of
+# the last 24 hours — **the cycle on each hour alone**, since the EUMETSAT
+# data policy releases the hourly Level 1 cycle as Core data under
+# CC-BY-4.0 and the cycles between under terms that do not allow this use
+# (xuebuild/sources.py, docs/satellite.md) — rebuilt whenever a new hourly
+# cycle has landed into a round subdirectory of its run
+# (<model>.<run>/<HHMM>/) and pointed at by latest-meteosat.json.
+#
+# The shape is publish-himawari.yml's: one round per job on a ten-minute
+# cron (a cycle lands in the store some five minutes after its sensing
+# ends; most rounds find nothing new and exit), a dispatch with `loop` on
+# running rounds until the deadline. A round searches the store
+# (anonymous), downloads the cycle's 38 chunks that reach the ±60° grid
+# (~900 MB, with the account's token — the EUMETSAT_CONSUMER_KEY /
+# EUMETSAT_CONSUMER_SECRET secrets, without which the job warns and does
+# nothing), converts each chunk's radiances to brightness temperature and
+# georeferences the strips itself (xuebuild/satellite/readers.py, the
+# FCIReader: GDAL needs the hdf5plugin JPEG-LS filter for the files and
+# cannot place a chunk from its grouped grid mapping), warps them once
+# with the system GDAL, caches the frames on the bucket, and stacks the
+# window's frames into the NetCDF series the converter reads.
+#
+# Machine time: six jobs an hour, five of them a listing and an exit; the
+# one that builds is five to ten minutes. Roughly 40 hours a month.
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+    inputs:
+      loop:
+        description: "Keep running rounds until twenty past the next hour instead of one round"
+        type: boolean
+        default: false
+      round_minutes:
+        description: "Minutes between rounds when looping"
+        type: string
+        default: "5"
+      hours:
+        description: "Window length in hours (hourly frames: 24 is a day)"
+        type: string
+        default: "24"
+      encoder:
+        description: "auto (the xuepy wheel when its release knows the meteosat source, else the reference pipeline), native (insist on the wheel) or python (insist on the reference pipeline)"
+        type: choice
+        options: [auto, native, python]
+        default: auto
+      profile:
+        description: "Quantization/compression profile"
+        type: choice
+        options: [balanced, quality, compact]
+        default: balanced
+      keep:
+        description: "Published runs to keep on R2 (2 = the live run and the one before it)"
+        type: string
+        default: "2"
+      force:
+        description: "Build a round even when the live one already ends at the bucket's newest frame"
+        type: boolean
+        default: false
+      dry_run:
+        description: "Build and report what the uploads and prunes would do, but write nothing to R2"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  # scripts/successor_queued.sh lists this workflow's waiting runs, for a
+  # looping dispatch to yield to the next scheduled job.
+  actions: read
+
+concurrency:
+  group: publish-meteosat
+  # A late cron queues behind the job still running and then finds
+  # nothing new; a looping dispatch yields to it on its own.
+  cancel-in-progress: false
+
+env:
+  # Which encoder the rounds convert through. The other publish-* workflows
+  # pin XUE_ENCODER=native so a fall back to the reference pipeline fails
+  # instead of passing unnoticed; here the wheel on PyPI may predate the
+  # source (a scheduled run cannot pass an input, and a wheel is released
+  # on the crate's tags, not with every source), so `auto` resolves the
+  # choice in the job below — native when the installed wheel knows the
+  # model, else the reference pipeline with a ::warning:: on the run — and
+  # the dispatch can still insist on either.
+  ENCODER: ${{ inputs.encoder || 'auto' }}
+  # Every round is published as Zarr stores alone (plan 017 phase 7): the
+  # store is derived from the `.xue` the round wrote and the file retired
+  # before upload. A round's export is a fraction of its build.
+  XUE_ZARR: "1"
+  XUE_CONTAINER: "0"
+
+jobs:
+  publish:
+    # Scheduled runs on forks would publish into a bucket they cannot reach.
+    if: github.event_name != 'schedule' || github.repository == 'ringsaturn/xue'
+    runs-on: ubuntu-24.04
+    # One round is a few minutes; a round that has to decode a window's
+    # worth of frames after an outage takes up to half an hour. A looping
+    # dispatch stops at twenty past the next hour on its own (UNTIL_MINUTE
+    # below); this is the backstop for a round that hangs.
+    timeout-minutes: 90
+    env:
+      MODEL: meteosat
+      FRAME_CACHE: "true"
+      # A warped frame is some 8 MB and a day is 24 of them per variable;
+      # three days covers a case cut from the cache.
+      FRAMES_KEEP_DAYS: "3"
+      ONCE: ${{ !inputs.loop }}
+      ROUND_MINUTES: ${{ inputs.round_minutes || '5' }}
+      # For a looping dispatch: run past the hour, and hand over to the next
+      # scheduled job as soon as it is waiting.
+      UNTIL_MINUTE: "80"
+      HANDOVER_CHECK: scripts/successor_queued.sh
+      # No edge-cache warm-up: a round's objects are replaced ten minutes
+      # later, and the shell's next poll fills the edge itself.
+      WARM: "false"
+      HOURS: ${{ inputs.hours || '24' }}
+      PROFILE: ${{ inputs.profile || 'balanced' }}
+      KEEP: ${{ inputs.keep || '2' }}
+      FORCE: ${{ inputs.force || false }}
+      DRY_RUN: ${{ inputs.dry_run && '--dryrun' || '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate inputs
+        run: |
+          set -euo pipefail
+          printf '%s' "$ROUND_MINUTES" | grep -Eq '^[1-9][0-9]?$' \
+            || { echo "::error::round_minutes must be a positive integer of minutes"; exit 1; }
+          printf '%s' "$HOURS" | grep -Eq '^[1-9][0-9]?$' \
+            || { echo "::error::hours must be a positive integer"; exit 1; }
+          printf '%s' "$KEEP" | grep -Eq '^[1-9][0-9]*$' \
+            || { echo "::error::keep must be a positive integer"; exit 1; }
+
+      # The AWS CLI is preinstalled on the runner; R2 is its S3 endpoint.
+      # The credentials are step-scoped rather than job env, so third-party
+      # actions never see them; the listing proves they work before the
+      # first round rather than at its upload.
+      - name: Check R2 credentials
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+          AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+        run: |
+          for name in CLOUDFLARE_ACCOUNT_ID AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY; do
+            [ -n "${!name}" ] || { echo "::error::$name is empty; set the R2 repository secrets"; exit 1; }
+          done
+          aws --version
+          aws s3 ls "s3://dataset/xue/" --region auto \
+            --endpoint-url "https://${CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com" > /dev/null \
+            || { echo "::error::R2 credentials failed a test listing of the dataset bucket"; exit 1; }
+
+      # The Data Store's search is anonymous; its downloads take a
+      # registered account's consumer key and secret. A repository without
+      # them (a fork) warns and builds nothing rather than failing every
+      # ten minutes.
+      - name: Check EUMETSAT credentials
+        id: eumetsat
+        env:
+          EUMETSAT_CONSUMER_KEY: ${{ secrets.EUMETSAT_CONSUMER_KEY }}
+          EUMETSAT_CONSUMER_SECRET: ${{ secrets.EUMETSAT_CONSUMER_SECRET }}
+        run: |
+          if [ -z "$EUMETSAT_CONSUMER_KEY" ] || [ -z "$EUMETSAT_CONSUMER_SECRET" ]; then
+            echo "::warning::EUMETSAT_CONSUMER_KEY / EUMETSAT_CONSUMER_SECRET are not set; the Data Store cannot be read, so no round is built. Register at https://api.eumetsat.int/api-key and add the two repository secrets."
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: astral-sh/setup-uv@v5
+        if: steps.eumetsat.outputs.present == 'true'
+        with:
+          enable-cache: true
+          python-version: "3.14"
+
+      # No ffmpeg: the source ships no video. The `satellite` group is the
+      # shachen package the Dust RGB producer runs in the fetch stage
+      # (xuebuild/satellite/producers.py) and hdf5plugin, whose JPEG-LS
+      # filter GDAL needs to read an FCI chunk; both needed whichever
+      # encoder converts.
+      - name: Sync Python environment
+        if: steps.eumetsat.outputs.present == 'true'
+        run: uv sync --group satellite
+
+      # The fetch stage reads the chunks with gdal_translate and
+      # gdalmdiminfo and warps the strips with gdalwarp, whichever encoder
+      # converts the series afterwards: the wheel's GDAL is a library with
+      # no GeoTIFF driver. The fixture chunk proves the runner's GDAL loads
+      # the filter plugin before a round spends a download on it.
+      - name: Install GDAL for the fetch stage
+        if: steps.eumetsat.outputs.present == 'true'
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq gdal-bin
+          gdalinfo --version
+          export HDF5_PLUGIN_PATH="$(.venv/bin/python -c 'import hdf5plugin; print(hdf5plugin.PLUGIN_PATH)')"
+          chunk=$(ls tests/fixtures/meteosat/*.nc | head -n 1)
+          gdalinfo -stats "NETCDF:\"$chunk\":/data/ir_105/measured/effective_radiance" | grep -q STATISTICS_MAXIMUM \
+            || { echo "::error::this runner's GDAL cannot read an FCI chunk through hdf5plugin's JPEG-LS filter (HDF5_PLUGIN_PATH=$HDF5_PLUGIN_PATH)"; exit 1; }
+
+      # XUE_ENCODER is what xuebuild reads (auto | native | python); it is
+      # set here rather than at the workflow level so a wheel that predates
+      # the source resolves to the reference pipeline explicitly, once, and
+      # every later step (the GDAL install, the rounds) sees one answer.
+      # `auto` on the xuebuild side would take the wheel whenever it imports
+      # and only fail inside the round, as the scheduled runs did.
+      - name: Resolve the encoder
+        if: steps.eumetsat.outputs.present == 'true'
+        run: |
+          set -euo pipefail
+          case "$ENCODER" in
+            native|python) encoder="$ENCODER" ;;
+            auto)
+              if .venv/bin/python -c "import sys; from xuebuild import native; sys.exit(0 if native.knows_source('$MODEL') else 1)"; then
+                encoder=native
+              else
+                wheel=$(.venv/bin/python -c "from xuebuild import native; print(native.version() or 'unknown')")
+                echo "::warning::xuepy ${wheel} does not know the ${MODEL} source with every bundle it publishes; converting through the reference pipeline (slower). Release a wheel that carries it and bump the pin in pyproject.toml."
+                encoder=python
+              fi ;;
+            *) echo "::error::encoder must be auto, native or python, not '$ENCODER'"; exit 1 ;;
+          esac
+          echo "XUE_ENCODER=$encoder" >> "$GITHUB_ENV"
+          echo "encoder: $encoder" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Run the rounds
+        if: steps.eumetsat.outputs.present == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          EUMETSAT_CONSUMER_KEY: ${{ secrets.EUMETSAT_CONSUMER_KEY }}
+          EUMETSAT_CONSUMER_SECRET: ${{ secrets.EUMETSAT_CONSUMER_SECRET }}
+        run: |
+          set -o pipefail
+          scripts/window_rounds.sh 2>&1 | tee rounds.log
+          status=$?
+          {
+            echo "### meteosat rounds"
+            echo
+            echo '```'
+            grep -E '^round [0-9]{4}:|rounds this hour' rounds.log || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit $status
+
+      # The pointer is served with no-cache, so the edge revalidates it; a
+      # stale read here means the last flip has not propagated rather than
+      # failed, so it warns instead of failing an otherwise complete hour.
+      - name: Verify the live pointer
+        if: ${{ !inputs.dry_run && steps.eumetsat.outputs.present == 'true' }}
+        run: |
+          set -uo pipefail
+          [ -f web/public/data/latest-meteosat.json ] || { echo "No round built this hour." >> "$GITHUB_STEP_SUMMARY"; exit 0; }
+          url="https://dataset.ringsaturn.me/xue/latest-meteosat.json"
+          published=$(curl -fsSL "$url" | jq -r '.manifestPath' || true)
+          if [ -n "$published" ] && [ -f "web/public/data/$published" ]; then
+            echo "$url serves $published." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::$url serves '${published:-nothing}', not the round this job last built"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: publish-report-meteosat
+          path: |
+            rounds.log
+            build-report.json
+            web/public/data/latest-meteosat.json
+          retention-days: 14
+          if-no-files-found: ignore

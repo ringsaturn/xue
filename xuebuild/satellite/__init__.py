@@ -11,7 +11,8 @@ what comes after the first satellite and channel:
 - :mod:`platforms` — the registry: one row per spacecraft at an orbital
   slot, its instrument's channels, its files' bucket and reader;
 - :mod:`readers` — how a product family's files are listed, fetched and
-  opened as one GDAL dataset (the ISatSS tiles, the GOES CMIPF file);
+  opened as one GDAL dataset (the ISatSS tiles, the GOES CMIPF file, the
+  MTG FCI chunks through :mod:`eumetsat`, the Data Store client);
 - :mod:`projector` — how that dataset lands on the regular grid
   (``gdalwarp`` first);
 - :mod:`producers` — how a composite is derived from a slot's channels
@@ -21,6 +22,28 @@ what comes after the first satellite and channel:
 frames and writes the series.
 """
 
-from .platforms import GOES_EAST, GOES_WEST, HIMAWARI, PLATFORMS, Channel, Platform, SatelliteBand, platform
+from .platforms import (
+    GOES_EAST,
+    GOES_WEST,
+    HIMAWARI,
+    METEOSAT,
+    METEOSAT_IODC,
+    PLATFORMS,
+    Channel,
+    Platform,
+    SatelliteBand,
+    platform,
+)
 
-__all__ = ["GOES_EAST", "GOES_WEST", "HIMAWARI", "PLATFORMS", "Channel", "Platform", "SatelliteBand", "platform"]
+__all__ = [
+    "GOES_EAST",
+    "GOES_WEST",
+    "HIMAWARI",
+    "METEOSAT",
+    "METEOSAT_IODC",
+    "PLATFORMS",
+    "Channel",
+    "Platform",
+    "SatelliteBand",
+    "platform",
+]

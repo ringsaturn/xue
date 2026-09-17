@@ -102,7 +102,7 @@ class SourceRegistryTests(unittest.TestCase):
         self.assertEqual(JMA.production_grid, (round((east - west) / JMA_GRID_STEP), round((north - south) / JMA_GRID_STEP)))
 
     def test_the_series_file_sources_are_the_netcdf_ones(self) -> None:
-        self.assertEqual([spec.id for spec in SOURCES.values() if spec.series_file], ["cma", "jma", "himawari", "goeseast", "goeswest"])
+        self.assertEqual([spec.id for spec in SOURCES.values() if spec.series_file], ["cma", "jma", "himawari", "goeseast", "goeswest", "meteosat"])
         # All fetched: the CMA window out of its archive (tests/test_cma.py),
         # the satellite window warped from the agency's tiles
         # (tests/test_satellite.py).

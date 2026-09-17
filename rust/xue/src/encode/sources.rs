@@ -739,6 +739,61 @@ pub const SOURCES: &[SourceSpec] = &[
         series_file: true,
         downsample: None,
     },
+    // Meteosat-12 (MTG-I1) FCI at 0°, EUMETSAT's prime full-disk service,
+    // from the EUMETSAT Data Store rather than a public bucket (the Python
+    // stage's `FCIReader` turns each chunk's radiances into brightness
+    // temperature and georeferences the strips itself). FCI has no 11.2 µm
+    // window, so three channels feed the Dust RGB and the green gun reads
+    // 10.5 − 8.7 µm, the original SEVIRI recipe (`composite_input_ids`).
+    // The imager scans every ten minutes; this source publishes the cycle
+    // on the hour alone (`cadence_seconds` 3600 against the platform's
+    // 600), because the EUMETSAT data policy releases the hourly Level 1
+    // cycle as Core data under CC-BY-4.0 and keeps the sub-hourly cycles
+    // under a licence that forbids operational use within an hour of
+    // sensing and redistribution of the numbers after it. A 24-hour window
+    // at that cadence is 25 frames. Mirrors `xuebuild/sources.py`.
+    SourceSpec {
+        id: "meteosat",
+        manifest_model: "METEOSAT",
+        product: "fci-fldk-0p04",
+        latest_filename: Some("latest-meteosat.json"),
+        steps: &[],
+        input_variable_ids: &["ir086", "ir104", "ir123"],
+        companion_files: &[],
+        accumulated_precipitation: false,
+        averaged_precipitation: false,
+        average_window_hours: 6,
+        optional_at_analysis: &[],
+        statistical_processes: &[],
+        // FCI IR_87, IR_105, IR_123 at 8.70, 10.50, 12.30 µm; WMO C-5 71
+        // (Meteosat-12), C-8 210 (FCI).
+        bands: &[
+            (
+                "ir086",
+                SatelliteBand { satellite_series: 0, satellite_number: 71, instrument_type: 210, central_wavenumber: 114943 },
+            ),
+            (
+                "ir104",
+                SatelliteBand { satellite_series: 0, satellite_number: 71, instrument_type: 210, central_wavenumber: 95238 },
+            ),
+            (
+                "ir123",
+                SatelliteBand { satellite_series: 0, satellite_number: 71, instrument_type: 210, central_wavenumber: 81301 },
+            ),
+        ],
+        bundle_scalar_ids: &["ir104"],
+        core_bundle_ids: &["ir104"],
+        bundle_vector_ids: &[],
+        bundle_composite_ids: &["dustrgb"],
+        production_grid: (3000, 3000),
+        tile: (64, 64),
+        regrid: None,
+        observation: true,
+        window_hours: Some(24),
+        cadence_seconds: Some(3600),
+        series_file: true,
+        downsample: None,
+    },
 ];
 
 pub fn source_spec(model: &str) -> Result<&'static SourceSpec> {
@@ -794,6 +849,20 @@ mod tests {
             for (_, band) in source.bands {
                 assert_eq!((band.satellite_number, band.instrument_type), (number, 617), "{model}");
             }
+        }
+        // Meteosat publishes the hourly cycle alone (the CC-BY-4.0 one) and
+        // has no 11.2 µm window: three inputs, and the composite still
+        // resolves to its three components.
+        let meteosat = source_spec("meteosat").expect("meteosat");
+        assert!(meteosat.series_file && meteosat.fetched() && meteosat.live());
+        assert_eq!(meteosat.input_variable_ids, &["ir086", "ir104", "ir123"]);
+        assert_eq!(meteosat.bundle_scalar_ids, himawari.bundle_scalar_ids);
+        assert_eq!(meteosat.bundle_composite_ids, himawari.bundle_composite_ids);
+        assert_eq!(meteosat.cadence_seconds, Some(3600));
+        assert_eq!(meteosat.window_hours, Some(24));
+        assert_eq!(meteosat.bands.len(), 3);
+        for (_, band) in meteosat.bands {
+            assert_eq!((band.satellite_number, band.instrument_type), (71, 210));
         }
         for model in ["gfs", "ecmwf", "aifs", "sflux", "hrrr", "mrms"] {
             assert!(!source_spec(model).expect(model).series_file, "{model}");

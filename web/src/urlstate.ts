@@ -117,6 +117,12 @@ const MODEL_ALIASES: Record<string, ForecastModelId> = {
   "goes-west": "goeswest",
   "goes-18": "goeswest",
   goes18: "goeswest",
+  meteosat: "meteosat",
+  "meteosat-12": "meteosat",
+  meteosat12: "meteosat",
+  mtg: "meteosat",
+  "mtg-i1": "meteosat",
+  fci: "meteosat",
 };
 
 /** Model requested by the page URL, or the default when the URL names none

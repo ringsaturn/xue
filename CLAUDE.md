@@ -339,10 +339,12 @@ model starts here; the frontend mirror is `FORECAST_MODELS` in
   agency serves each frame once; the tiles expire after days and there is
   no archive, so a case can only be cut from what that cache keeps.
 
-- Satellite (`himawari`, `goeseast`, `goeswest`): Himawari-9's infrared
-  windows as NOAA redistributes them (the ISatSS tiles on
-  `noaa-himawari9`) and GOES-19's / GOES-18's from NOAA's own buckets (the
-  CMIPF full-disk files on `noaa-goes19` / `noaa-goes18`), each a
+- Satellite (`himawari`, `goeseast`, `goeswest`, `meteosat`): Himawari-9's
+  infrared windows as NOAA redistributes them (the ISatSS tiles on
+  `noaa-himawari9`), GOES-19's / GOES-18's from NOAA's own buckets (the
+  CMIPF full-disk files on `noaa-goes19` / `noaa-goes18`) and
+  Meteosat-12's from the EUMETSAT Data Store (the FCI Level 1c chunks of
+  collection `EO:EUM:DAT:0662`), each a
   `series_file` observation like `jma` / `cma` whose fetch stage is
   `xuebuild/satellite/` (`docs/satellite.md`): `platforms.py` is the
   registry (one row per spacecraft at an orbital slot, its channels,
@@ -350,12 +352,27 @@ model starts here; the frontend mirror is `FORECAST_MODELS` in
   the `band` block on the variable, from `SourceSpec.bands` via
   `Platform.bands`; `Platform.region` spells a disk that crosses the
   antimeridian with the east edge past 180 — Himawari 80.7–200.7,
-  GOES-West 163–283 — and GOES-East on negative longitudes; `reference_channel`
-  is the one a listing walks), `readers.py` lists and opens a slot
+  GOES-West 163–283 — and GOES-East on negative longitudes, Meteosat on
+  −60–60; `reference_channel` is the one a listing walks; `bucket` /
+  `prefix` are a bucket and key prefix or a store's host and collection
+  id), `readers.py` lists and opens a slot
   (`ISatSSReader`: 88 tiles mosaicked with `gdalbuildvrt`; `CMIPFReader`:
   one file per channel under `YYYY/DDD/HH/`, the scan start floored to
   the cadence as the slot, `recent_slots` walking hour directories newest
-  first so `latest_slot` costs two to four requests), `projector.py` warps
+  first so `latest_slot` costs two to four requests; `FCIReader`: forty
+  chunk files carrying every channel, so a slot's files are shared across
+  channels (`Reader.files_per_channel` false) and the outermost two chunks
+  at either end never fetched (`needed_chunks`), each chunk's radiance
+  band read with `gdal_translate` under `HDF5_PLUGIN_PATH` from
+  `hdf5plugin` (the JPEG-LS filter a stock GDAL lacks), converted to
+  brightness temperature with the group's Planck coefficients read by
+  `gdalmdiminfo`, and written as an Int16 strip whose VRT carries the
+  geostationary SRS and extent the reader builds itself since GDAL does
+  not connect the grouped grid mapping; `satellite/eumetsat.py` is the
+  store: anonymous OpenSearch, a bearer token from `POST /token` with the
+  `EUMETSAT_CONSUMER_KEY` / `EUMETSAT_CONSUMER_SECRET` environment
+  variables, renewed on 401 and `retryAfter` honoured on 429, and a named
+  error without them), `projector.py` warps
   it onto the platform's region at `SourceSpec.grid_step`
   (`GdalWarpProjector`; 120° × 120° at 0.04°, 3000 × 3000; a scene wholly
   outside the grid is refused, since a blank warp is also a lost
@@ -369,9 +386,22 @@ model starts here; the frontend mirror is `FORECAST_MODELS` in
   has no GeoTIFF driver); `publish-himawari.yml` is `publish-jma.yml` on a
   ten-minute cron with `gdal-bin` installed unconditionally, a six-hour
   window (`window_hours=6`, `HOURS=6`) and the `satellite` dependency
-  group, and `publish-goeseast.yml` / `publish-goeswest.yml` are it with
-  `MODEL` swapped. Each source fetches four channels (`ir086`, `ir104`,
-  `ir112`, `ir123`: AHI bands / ABI channels 11, 13, 14, 15, all
+  group, `publish-goeseast.yml` / `publish-goeswest.yml` are it with
+  `MODEL` swapped, and `publish-meteosat.yml` adds the two EUMETSAT
+  secrets (warning and building nothing without them), `HOURS=24`, and a
+  step that proves the runner's GDAL reads the fixture chunk through the
+  plugin. **Meteosat is hourly**: the imager scans every ten minutes, but
+  the source's `cadence_seconds` is 3600 against the platform's 600
+  (`window_slots` / `latest_slot` keep the slots on the source's cadence,
+  `source_cadence` / `on_cadence` in `satellite/fetch.py`) and its window
+  24 h, because the EUMETSAT data policy releases the Level 1 cycle on
+  each hour as Core data under CC-BY-4.0 and the cycles between under a
+  licence that does not allow this use; the attribution "Contains
+  modified EUMETSAT Meteosat data" is required. Each source fetches the
+  windows its imager has (`ir086`, `ir104`,
+  `ir112`, `ir123`: AHI bands / ABI channels 11, 13, 14, 15; FCI's IR 8.7,
+  IR 10.5 and IR 12.3 under `ir086`, `ir104`, `ir123` — an FCI channel
+  takes the id of the nearest window, and FCI has no 11.2 µm one — all
   `variables.py` rows with the one
   parameter GRIB2 0/4/4 on surface 8, 180–331.8 K at 0.6) and publishes
   `ir104` as a scalar plus the **Dust RGB composite** `dustrgb`
@@ -383,7 +413,11 @@ model starts here; the frontend mirror is `FORECAST_MODELS` in
   every gun** and black stays a value). The composite is computed in the
   fetch stage, not the converter: `producers.py::DustRGBProducer` runs
   `shachen.dustrgb.dust_rgb` (the `satellite` group; SEVIRI stretches for
-  AHI, the Quick Guide's for ABI) once per slot on the four warped
+  AHI and FCI, the Quick Guide's for ABI; `inputs_for(platform)` is the
+  four windows or, without 11.2 µm, three with the 10.4 µm window as the
+  green gun's minuend — `bundle_input_ids` asks it for the source's
+  platform, and `convert.rs::composite_input_ids` must answer the same by
+  source) once per slot on the warped
   channels and caches each gun as a frame of its own (`assemble.read_frame`
   / `write_frame`, Int16 at 1e-4, the sidecar carrying the producer id and
   version), so a round composes one slot. The window is then one series
@@ -412,7 +446,12 @@ model starts here; the frontend mirror is `FORECAST_MODELS` in
   `tests/fixtures/himawari/` (four bands, two scans) through the whole
   stage, the producer and both encoders; `tests/test_goes.py` the eight
   cut CMIPF windows in `tests/fixtures/goes/`
-  (`tests/prepare_goes_fixture.py`) under `goeseast` the same way.
+  (`tests/prepare_goes_fixture.py`) under `goeseast` the same way;
+  `tests/test_meteosat.py` one real FCI chunk from EUMETSAT's public test
+  data in `tests/fixtures/meteosat/` (standing for every chunk, the
+  reader's selection narrowed to it) and a trimmed real search response
+  under `meteosat`, hourly, against a stand-in store and a fake token
+  opener (the GDAL cases skip without `hdf5plugin`).
 
 `variables.py` is the variable registry in GRIB2 terms: the parameter
 triple, the fixed surface, label and unit, plus the matching hints (element,

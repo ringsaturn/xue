@@ -197,6 +197,12 @@ export const en = {
   /** The GOES line names the programme, the two spacecraft by slot and
    * the host; NOAA's open data asks for the source to be named. */
   creditsGoes: "SATELLITE IMAGERY · GOES-19 EAST & GOES-18 WEST ABI, NOAA NESDIS, ON NOAA OPEN DATA (REPROJECTED)",
+  /** The Meteosat line carries the attribution EUMETSAT's data policy
+   * asks for on redistributed data ("Contains modified EUMETSAT Meteosat
+   * data"), the licence, and the hourly cadence that licence allows; the
+   * year the policy's sentence admits is left out rather than stamped
+   * stale into static copy. */
+  creditsMeteosat: "SATELLITE IMAGERY · CONTAINS MODIFIED EUMETSAT METEOSAT DATA · METEOSAT-12 FCI, HOURLY CYCLE, CC-BY-4.0 (REPROJECTED)",
   creditsSounding: "RADIOSONDE SOUNDINGS · GTS TEMP VIA WIS2, NATIONAL MET SERVICES",
   creditsAirport: "AIRPORT METAR & TAF · WORLD MET SERVICES VIA NOAA/NWS AWC",
   creditsRadar: "RADAR MOSAIC",

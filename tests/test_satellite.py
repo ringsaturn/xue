@@ -231,7 +231,7 @@ class RegistryTests(unittest.TestCase):
         fewer = dataclasses.replace(SPEC, input_variable_ids=("ir104",))
         self.assertEqual(binconvert.published_bundle_ids(fewer), ("ir104",))
         self.assertEqual((SPEC.manifest_model, SPEC.latest_filename), ("HIMAWARI", "latest-himawari.json"))
-        self.assertEqual([spec.id for spec in SOURCES.values() if spec.platform], ["himawari", "goeseast", "goeswest"])
+        self.assertEqual([spec.id for spec in SOURCES.values() if spec.platform], ["himawari", "goeseast", "goeswest", "meteosat"])
 
     def test_the_source_band_is_the_platform_s(self) -> None:
         self.assertEqual([band_id for band_id, _ in SPEC.bands], ["ir086", "ir104", "ir112", "ir123"])
@@ -287,12 +287,12 @@ class PlatformTests(unittest.TestCase):
             HIMAWARI.band("ir999")
 
     def test_the_registry_is_keyed_by_orbital_role(self) -> None:
-        self.assertEqual(sorted(PLATFORMS), ["goeseast", "goeswest", "himawari"])
+        self.assertEqual(sorted(PLATFORMS), ["goeseast", "goeswest", "himawari", "meteosat", "meteosatiodc"])
         self.assertIs(platform("himawari"), HIMAWARI)
         self.assertEqual(HIMAWARI.region, (80.7, -60.0, 200.7, 60.0))
         self.assertEqual(GOES_EAST.region, (-135.2, -60.0, -15.2, 60.0))
         with self.assertRaises(KeyError):
-            platform("meteosat")
+            platform("mtg")
 
 
 class KeyTests(unittest.TestCase):

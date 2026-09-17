@@ -434,11 +434,11 @@ describe("dataset kinds", () => {
     for (const model of ["gfs", "sflux", "ecmwf", "aifs", "hrrr"] as const) expect(isObservationModel(model)).toBe(false);
   });
 
-  it("lists the live feeds, the six observation windows among them", () => {
+  it("lists the live feeds, the seven observation windows among them", () => {
     // Every live feed has a pointer to poll (mirrors
-    // SourceSpec.latest_filename); the six observation windows are the
+    // SourceSpec.latest_filename); the seven observation windows are the
     // last of the switch order.
-    expect(FORECAST_MODEL_IDS).toEqual(["gfs", "sflux", "ecmwf", "aifs", "hrrr", "mrms", "jma", "cma", "himawari", "goeseast", "goeswest"]);
+    expect(FORECAST_MODEL_IDS).toEqual(["gfs", "sflux", "ecmwf", "aifs", "hrrr", "mrms", "jma", "cma", "himawari", "goeseast", "goeswest", "meteosat"]);
     for (const model of FORECAST_MODEL_IDS) expect(FORECAST_MODELS[model].latestFilename).toBeDefined();
     expect(FORECAST_MODELS.aifs).toMatchObject({ label: "AIFS", product: "aifs-single-0p25", latestFilename: "latest-aifs.json" });
     expect(FORECAST_MODELS.mrms.latestFilename).toBe("latest-mrms.json");
@@ -447,6 +447,25 @@ describe("dataset kinds", () => {
     expect(FORECAST_MODELS.himawari.latestFilename).toBe("latest-himawari.json");
     expect(FORECAST_MODELS.goeseast.latestFilename).toBe("latest-goeseast.json");
     expect(FORECAST_MODELS.goeswest.latestFilename).toBe("latest-goeswest.json");
+    expect(FORECAST_MODELS.meteosat.latestFilename).toBe("latest-meteosat.json");
+  });
+
+  it("opens the Meteosat disk on the infrared channel, 60° either side of 0°", () => {
+    // Mirrors the `meteosat` entry of SOURCES: the same channel and the
+    // same composite as the other disks, the region centred on the prime
+    // meridian; the hourly cadence is the series' own axis (unitSeconds
+    // 3600) and nothing here, so the entry is an ordinary observation.
+    expect(FORECAST_MODELS.meteosat).toMatchObject({
+      id: "meteosat",
+      label: "METEOSAT",
+      product: "fci-fldk-0p04",
+      observation: true,
+      coreBundles: ["ir104"],
+      defaultVariable: "ir104",
+      railCore: ["ir104"],
+      region: [-60, -60, 60, 60],
+    });
+    expect(isObservationModel("meteosat")).toBe(true);
   });
 
   it("opens the two GOES disks on the infrared channel, the West one past the antimeridian", () => {

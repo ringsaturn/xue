@@ -1,12 +1,11 @@
 # Geostationary satellite imagery
 
 How a geostationary imager's channels become Xue bundles: the `himawari`,
-`goeseast` and `goeswest` sources, their Dust RGB composite, and the seams
-a further satellite, a second channel and another composite product go
-through. The bundle
-format is unchanged (`format.md`); what this document fixes is the fetch
-stage, `xuebuild/satellite/`, and the metadata a satellite variable
-carries.
+`goeseast`, `goeswest` and `meteosat` sources, their Dust RGB composite,
+and the seams a further satellite, a second channel and another composite
+product go through. The bundle format is unchanged (`format.md`); what
+this document fixes is the fetch stage, `xuebuild/satellite/`, and the
+metadata a satellite variable carries.
 
 ## Shape
 
@@ -17,8 +16,8 @@ downstream — cropping, quantization, temporal grouping, the container,
 the Zarr store, the manifest — is the observation path unchanged in both
 encoders. What the fetch stage does is:
 
-1. list the scan's files on the agency's public bucket (a *slot*: one
-   scan of one channel);
+1. list the scan's files on the agency's public bucket or data store (a
+   *slot*: one scan of one channel);
 2. fetch them when the slot is complete (every tile has landed);
 3. open them as one GDAL dataset on the geostationary projection;
 4. warp that dataset onto the published grid, once, into a cached frame;
@@ -36,41 +35,50 @@ encoder reads the series the Python stage wrote, and
 `xuebuild/satellite/platforms.py` is one row per spacecraft at an orbital
 slot:
 
-| Field | Himawari-9 | GOES-19 | GOES-18 |
-|---|---|---|---|
-| `role` (the source id) | `himawari` | `goeseast` | `goeswest` |
-| `spacecraft` | Himawari-9 | GOES-19 | GOES-18 |
-| `satellite_number` (WMO C-5) | 174 | 273 | 272 |
-| `instrument` / `instrument_type` (WMO C-8) | AHI / 297 | ABI / 617 | ABI / 617 |
-| `sub_longitude` | 140.7 | −75.2 | −137.0 |
-| `sweep_axis` | `y` | `x` | `x` |
-| `channels` | the sixteen AHI bands | the sixteen ABI channels | the sixteen ABI channels |
-| `reader` | `isatss` | `cmipf` | `cmipf` |
-| `bucket` / `prefix` | `noaa-himawari9` / `AHI-L2-FLDK-ISatSS` | `noaa-goes19` / `ABI-L2-CMIPF` | `noaa-goes18` / `ABI-L2-CMIPF` |
-| `tile_count` | 88 | 1 | 1 |
-| `cadence_seconds` | 600 | 600 | 600 |
-| `region` (west … east) | 80.7 … 200.7 | −135.2 … −15.2 | 163 … 283 |
+| Field | Himawari-9 | GOES-19 | GOES-18 | Meteosat-12 | Meteosat-9 |
+|---|---|---|---|---|---|
+| `role` (the source id) | `himawari` | `goeseast` | `goeswest` | `meteosat` | `meteosatiodc` |
+| `spacecraft` | Himawari-9 | GOES-19 | GOES-18 | Meteosat-12 (MTG-I1) | Meteosat-9 (MSG2) |
+| `satellite_number` (WMO C-5) | 174 | 273 | 272 | 71 | 56 |
+| `instrument` / `instrument_type` (WMO C-8) | AHI / 297 | ABI / 617 | ABI / 617 | FCI / 210 | SEVIRI / 207 |
+| `sub_longitude` | 140.7 | −75.2 | −137.0 | 0.0 | 45.5 |
+| `sweep_axis` | `y` | `x` | `x` | `y` | `y` |
+| `channels` | the sixteen AHI bands | the sixteen ABI channels | the sixteen ABI channels | the sixteen FCI channels | the twelve SEVIRI channels |
+| `reader` | `isatss` | `cmipf` | `cmipf` | `fci` | `seviri` (none) |
+| `bucket` / `prefix` | `noaa-himawari9` / `AHI-L2-FLDK-ISatSS` | `noaa-goes19` / `ABI-L2-CMIPF` | `noaa-goes18` / `ABI-L2-CMIPF` | `api.eumetsat.int` / `EO:EUM:DAT:0662` | `api.eumetsat.int` / `EO:EUM:DAT:MSG:HRSEVIRI-IODC` |
+| `tile_count` | 88 | 1 | 1 | 40 | 1 |
+| `cadence_seconds` (the scans') | 600 | 600 | 600 | 600 | 900 |
+| `region` (west … east) | 80.7 … 200.7 | −135.2 … −15.2 | 163 … 283 | −60 … 60 | −14.5 … 105.5 |
 
 A source is named by the **orbital role**, never by the spacecraft: the
-pointer (`latest-himawari.json`, `latest-goeseast.json`), the run
-directories (`himawari.<run>/`) and the manifest `model` (`HIMAWARI`,
-`GOES-EAST`, `GOES-WEST`) outlive a handover. When Himawari-10 takes the
-slot, or GOES-19 hands East to its successor, the platform row changes
-(`spacecraft`, `satellite_number`, `bucket`) and nothing published does;
-the spacecraft is in each file, as the `band` block below. The
-`reference_channel` (`ir104`, which every imager here has) is the one a
-listing walks to find a bucket's slots.
+pointer (`latest-himawari.json`, `latest-goeseast.json`,
+`latest-meteosat.json`), the run directories (`himawari.<run>/`) and the
+manifest `model` (`HIMAWARI`, `GOES-EAST`, `GOES-WEST`, `METEOSAT`)
+outlive a handover. When Himawari-10 takes the slot, or GOES-19 hands
+East to its successor, the platform row changes (`spacecraft`,
+`satellite_number`, `bucket`) and nothing published does; the spacecraft
+is in each file, as the `band` block below. The `reference_channel`
+(`ir104`, which every imager here has) is the one a listing walks to find
+a bucket's slots. `bucket` and `prefix` name where the files are in the
+terms of the reader: a public bucket and a key prefix, or a data store's
+host and a collection id. Meteosat-9 at 45.5°E (the Indian Ocean service)
+is a row and nothing more: its SEVIRI Level 1.5 native file has no reader
+yet (GDAL's `MSGN` driver gives radiances and the brightness temperatures
+would be a Planck fit per channel, as for FCI below), and no source names
+it.
 
 `Platform.region` is 60° either side of the sub-satellite longitude and
 ±60° of latitude. A disk that crosses the antimeridian is spelled with the
 west edge inside −180 … 180 and the east edge past 180 — Himawari's 80.7 …
 200.7, GOES-West's 163 … 283 — the one shape the encoders' `crop_grid` and
 the shell's viewport arithmetic take; GOES-East stays on negative
-longitudes like the regional radar grids. The three sources publish the
-same variables from the same four channels (`ir104` and `dustrgb`; the ABI
-composite takes the Quick Guide's stretches), and every seam below is
-shared: what differs between Himawari and GOES is the platform row and the
-reader.
+longitudes like the regional radar grids; Meteosat's −60 … 60 sits on
+the prime meridian. The four sources publish the same variables (`ir104`
+and `dustrgb`; the ABI composite takes the Quick Guide's stretches, FCI
+has no 11.2 µm window and its green gun reads the 10.5 µm one), and every
+seam below is shared: what differs between them is the platform row and
+the reader — and, for Meteosat, the cadence the source publishes at,
+which the data policy sets (§"Rounds").
 
 A **channel** is a bundle. Its id is the nominal wavelength,
 instrument-neutral: `ir104` is AHI band 13 and ABI channel 13 alike, an
@@ -79,13 +87,18 @@ infrared window at 10.4 µm; the exact central wave number is in the
 `sources.py` says which a source publishes (`bundle_scalar_ids`) and
 carries their `band` blocks (`bands`, from `Platform.bands`).
 
-| id | wavelength | AHI | ABI | quantity | codebook |
-|---|---|---|---|---|---|
-| `ir104` | 10.4 µm | 13 | 13 | brightness temperature, K (the shell reads it in °C) | 180–331.8 at 0.6 |
-| `ir086`, `ir112`, `ir123` | 8.6, 11.2, 12.3 µm | 11, 14, 15 | 11, 14, 15 | brightness temperature; fetched for the Dust RGB, registered variables, not published by any source | 180–331.8 at 0.6 |
-| `ir039`, `ir096`, `ir133` | 3.9, 9.6, 13.3 µm | 7, 12, 16 | 7, 12, 16 | brightness temperature | registered on the platform; not yet a variable |
-| `wv062`, `wv069`, `wv073` | 6.2, 6.9, 7.3 µm | 8, 9, 10 | 8, 9, 10 | brightness temperature | same |
-| `vis064`, `nir086`, `nir161`, … | 0.64, 0.86, 1.61 µm | 3, 4, 5 | 2, 3, 5 | reflectance | same |
+| id | wavelength | AHI | ABI | FCI | quantity | codebook |
+|---|---|---|---|---|---|---|
+| `ir104` | 10.4 µm (FCI 10.5) | 13 | 13 | 14 (IR 10.5) | brightness temperature, K (the shell reads it in °C) | 180–331.8 at 0.6 |
+| `ir086`, `ir112`, `ir123` | 8.6, 11.2, 12.3 µm (FCI 8.7, —, 12.3) | 11, 14, 15 | 11, 14, 15 | 12, —, 15 | brightness temperature; fetched for the Dust RGB, registered variables, not published by any source | 180–331.8 at 0.6 |
+| `ir039`, `ir096`, `ir133` | 3.9, 9.6, 13.3 µm | 7, 12, 16 | 7, 12, 16 | 9, 13, 16 | brightness temperature | registered on the platform; not yet a variable |
+| `wv062`, `wv069`, `wv073` | 6.2, 6.9, 7.3 µm | 8, 9, 10 | 8, 9, 10 | 10, —, 11 | brightness temperature | same |
+| `vis064`, `nir086`, `nir161`, … | 0.64, 0.86, 1.61 µm | 3, 4, 5 | 2, 3, 5 | 3, 4, 7 | reflectance | same |
+
+An FCI channel takes the id of the window it is nearest to (IR 10.5 is
+`ir104`, IR 8.7 `ir086`; the exact wave number is in the band block, and
+the shell classifies by it), so the Dust RGB's inputs keep their ids
+across the three imagers.
 
 Adding a channel is: a `VariableSpec` in `variables.py` and its mirror in
 `encode/variables.rs` (parameter block, codebook, label), the id in the
@@ -104,11 +117,17 @@ lofted mineral dust reads pink to magenta over dark blue-green surfaces,
 day and night; thick ice cloud dark red, thin cirrus near black, mid-level
 cloud ochre.
 
-| gun | recipe | stretch (AHI: the SEVIRI set) | stretch (ABI: the Quick Guide's) |
+| gun | recipe | stretch (AHI and FCI: the SEVIRI set) | stretch (ABI: the Quick Guide's) |
 |---|---|---|---|
 | `dustr` | BT 12.3 − BT 10.4 µm | −4 … +2 K, γ 1 | −6.7 … +2.6 K |
-| `dustg` | BT 11.2 − BT 8.6 µm | 0 … +15 K, γ 2.5 | −0.5 … +20 K, γ 2.5 |
+| `dustg` | BT 11.2 − BT 8.6 µm (FCI: BT 10.5 − BT 8.7, the imager has no 11.2 µm window; the original SEVIRI `IR10.8 − IR8.7`) | 0 … +15 K, γ 2.5 | −0.5 … +20 K, γ 2.5 |
 | `dustb` | BT 10.4 µm | 261 … 289 K, γ 1 | 261.2 … 288.7 K |
+
+Which channels a platform feeds the recipe is `Producer.inputs_for`
+(`DustRGBProducer`: the four windows, or three where 11.2 µm is missing
+and 10.4 µm stands in for it); `bundle_input_ids` asks it for the
+source's platform, so a `--bundles dustrgb` build and the workflow fetch
+what that imager has.
 
 Each gun is a number in 0–1 and the three are one bundle, variables 1, 2
 and 3 in that order (`binconvert.COMPOSITE_BUNDLES`,
@@ -207,8 +226,75 @@ slots `latest_slot` asks about — two or three requests a round rather
 than a whole day's twenty-four. The `DQF` quality flags are not read
 (99.9996 % of a sampled disk is flag 0).
 
-A third reader would be `HSDReader`, for the raw Himawari Standard Data
-segments should the ISatSS product ever stop.
+`FCIReader` is EUMETSAT's MTG FCI Level 1c full-disk product (FDHSI, the
+Data Store collection `EO:EUM:DAT:0662`): one product per ten-minute
+repeat cycle, cut into forty netCDF-4 chunk files, each a strip of some
+140 rows of the 5568 × 5568 2 km grid carrying **every channel** as
+12-bit radiance codes with a scale and offset
+(`/data/<channel>/measured/effective_radiance`, mW m⁻² sr⁻¹ (cm⁻¹)⁻¹, fill
+65535). Three things stop GDAL opening a chunk as the other readers'
+files are opened, and the reader does them itself:
+
+- the chunks are compressed with an HDF5 filter (JPEG-LS, filter 32018)
+  a stock GDAL cannot decode: the plugin comes with the `hdf5plugin`
+  distribution (the `satellite` dependency group) and is handed to each
+  GDAL subprocess the reader runs as `HDF5_PLUGIN_PATH`
+  (`hdf5_plugin_environment`; an environment that already names one is
+  left alone);
+- the values are radiances: the reader reads the channel's codes with
+  `gdal_translate`, unpacks them, and converts them with the channel's
+  own Planck coefficients, scalar variables of its `measured` group read
+  through `gdalmdiminfo` — `BT = (c2 ν / ln(1 + c1 ν³ / L) − b) / a`, the
+  conversion the product documents — then writes an Int16 strip in
+  steps of 1/128 K above 100 K (`FCI_BT_SCALE` / `FCI_BT_OFFSET`; a raw
+  file and a VRT that carries the packing and the unit). The step is a
+  binary fraction on purpose: a decimal one such as 0.01 K puts some
+  values an ulp either side of a codebook half-step depending on whether
+  a platform fuses `code × scale + offset`, and the two encoders then
+  disagree by one code on one cell;
+- the grid mapping (`/data/mtg_geos_projection`: sweep `y`, height
+  35786400 m, WGS84, longitude 0) sits in a parent group GDAL does not
+  connect to the variable, so the strip's VRT carries the geostationary
+  SRS built from those fields and an extent from GDAL's own reading of
+  the chunk's scan-angle coordinates (radians, a column or row number
+  packed with a scale and offset) times the height; the strip is written
+  west to east and north to south whichever way GDAL read the file. The
+  reader checks the packing of the rows and the grid's width against the
+  constants it plans chunks with (`FCI_IR_GRID`, `FCI_IR_ANGLE_STEP`,
+  `FCI_IR_ANGLE_OFFSET`), so a product change is an error.
+
+The strips of a channel are mosaicked with `gdalbuildvrt`; the projector
+warps that. A chunk carries every channel, so a slot's files are shared
+by its channels (`Reader.files_per_channel` is false: `fetch_frame` puts
+them under the slot's directory rather than a channel's, and the window
+removes the directory once the slot's channels are done), and only the
+chunks whose rows reach into ±60° of latitude are downloaded
+(`needed_chunks`: 60° on the sub-satellite meridian is seen 0.1402 rad up
+from the disk's centre, against the disk's 0.1556, so the outermost two
+chunks at either end — 2 through 39 remain — are never fetched, some
+900 MB a cycle). A slot is complete when the product lists all forty
+chunks; a cycle's slot is its sensing start floored to the ten-minute
+cadence (15:20:07 is 15:20).
+
+The store is `eumetsat.py`: `search` is the anonymous OpenSearch query
+(`…/search-products/1.0.0/os?format=json&pi=<collection>&dtstart=…&dtend=…`,
+each product's `date` interval, `updated` stamp and `sip-entries` — one
+link per file, `entry?name=<file>`), `list_slots` one search over a day,
+`recent_slots` one search back over six hours, `list_slot` one over the
+cycle. `download_bytes` fetches one file with a bearer token minted by
+`POST https://api.eumetsat.int/token` from a registered account's
+consumer key and secret — `EUMETSAT_CONSUMER_KEY` /
+`EUMETSAT_CONSUMER_SECRET` in the environment, the workflow's secrets of
+the same names — renewing it when the store refuses it, waiting out a
+rate limit as the store's `retryAfter` asks (capped at two minutes), and
+failing by name when the two variables are unset, so a build without an
+account stops at the first download. The listing gives no file sizes; a
+file present on disk at all is taken as complete, since a download lands
+under a `.part` name until it is.
+
+A further reader would be `HSDReader`, for the raw Himawari Standard
+Data segments should the ISatSS product ever stop, or `SEVIRIReader` for
+Meteosat-9's Level 1.5 native file.
 
 ### Projector
 
@@ -286,24 +372,43 @@ unpublished channels are never quantized.
 ### Rounds
 
 `fetch.fetch_window` walks every slot from the run's hour through `hours`
-past it: a cached frame is read back, a complete slot on the bucket is
-fetched and warped, an incomplete or absent slot is left out (the axis
-allows the gap, and the next round takes it if it lands). The live
-window's end is the newest slot whose tiles have all landed
-(`latest_slot`: the reader's `recent_slots` — a day's slot directories at
-once for ISatSS, the newest hour directory for CMIPF, yesterday's as well
-around midnight — then the newest three slots asked for their tiles, the
-rest trusted). `resolve_run("latest")` is the six whole hours
-(`window_hours`) ending with that slot's hour, as for MRMS and JMA with
-their own lengths. The tiles of a Himawari scan are generated about eight
+past it at the source's cadence: a cached frame is read back, a complete
+slot on the bucket is fetched and warped, an incomplete or absent slot is
+left out (the axis allows the gap, and the next round takes it if it
+lands). The live window's end is the newest slot whose tiles have all
+landed (`latest_slot`: the reader's `recent_slots` — a day's slot
+directories at once for ISatSS, the newest hour directory for CMIPF, one
+search for FCI, yesterday's as well around midnight — then the newest
+three slots asked for their tiles, the rest trusted). `resolve_run("latest")`
+is the six whole hours (`window_hours`) ending with that slot's hour, as
+for MRMS and JMA with their own lengths.
+
+**Meteosat is hourly.** The imager scans every ten minutes and the store
+lists every cycle, but the `meteosat` source's `cadence_seconds` is 3600
+against the platform's 600, its window 24 hours (25 frames), and
+`window_slots` and `latest_slot` keep the slots on the source's cadence:
+the cycle on each hour alone. The reason is the EUMETSAT data policy
+(2025): the Level 1 repeat cycle referenced to each clock hour is Core
+data, released under CC-BY-4.0 and redistributable at any latency; the
+cycles between are licensed data whose operational use within an hour of
+sensing is not free and whose numbers may not be redistributed after it.
+A store with hourly frames is what that policy allows this site to
+publish. The attribution it requires ("Contains modified EUMETSAT
+Meteosat data") is in the shell's credit and the catalog prose. The tiles of a Himawari scan are generated about eight
 minutes after it starts and listed some fifteen after, a GOES file lands
 some ten minutes after its scan starts; a round is a listing, one scan's
 files, one warp per channel, one composition, one stack per variable and
 a conversion, three to four minutes, so the live window ends fifteen to
-twenty minutes behind real time. `.github/workflows/publish-himawari.yml`,
-`publish-goeseast.yml` and `publish-goeswest.yml` each run one round per
+twenty minutes behind real time; an FCI cycle is in the store some five
+minutes after its sensing ends, and its round downloads 900 MB and
+converts 38 strips per channel, five to ten minutes once an hour.
+`.github/workflows/publish-himawari.yml`, `publish-goeseast.yml`,
+`publish-goeswest.yml` and `publish-meteosat.yml` each run one round per
 job on a ten-minute cron and install `gdal-bin` whichever encoder
-converts, since the wheel's GDAL is a library with no GeoTIFF driver.
+converts, since the wheel's GDAL is a library with no GeoTIFF driver; the
+Meteosat one also proves the runner's GDAL loads the JPEG-LS plugin on the
+fixture chunk before a round spends a download, and warns and builds
+nothing when the two `EUMETSAT_*` secrets are absent.
 
 ## Producers
 
@@ -325,13 +430,15 @@ registered on the variable, the version taken from the frames the
 producer wrote.
 
 `DustRGBProducer` is the first: `id` `shachen`, `bundle_id` `dustrgb`,
-inputs `ir086`, `ir104`, `ir112`, `ir123`, outputs `dustr`, `dustg`,
-`dustb`, no ancillaries, `version` the installed shachen distribution's.
-It builds an xarray scene of the four planes and calls
+inputs `ir086`, `ir104`, `ir112`, `ir123` (`inputs_for(platform)`: the
+three without `ir112` on an imager that lacks it), outputs `dustr`,
+`dustg`, `dustb`, no ancillaries, `version` the installed shachen
+distribution's. It builds an xarray scene of the planes (the 10.4 µm one
+standing in for 11.2 µm where there is none) and calls
 `shachen.dustrgb.dust_rgb` with the stretch set the platform's instrument
-takes (`DUST_RGB` for AHI, `DUST_RGB_ABI` for ABI — the rule shachen
-applies by satpy reader, made here by `Platform.instrument`), then marks
-every cell any input lacked as no data in all three guns. `PRODUCERS` is
+takes (`DUST_RGB` for AHI and FCI, `DUST_RGB_ABI` for ABI — the rule
+shachen applies by satpy reader, made here by `Platform.instrument`), then
+marks every cell any input lacked as no data in all three guns. `PRODUCERS` is
 keyed by the bundle produced; `SourceSpec.bundle_composite_ids` lists what
 a source publishes, and `_fetch_satellite_run` runs every listed producer
 whose channels the window fetches. shachen is the `satellite` dependency
@@ -366,3 +473,21 @@ single-file download, the warp, the producer with the ABI stretches
 ingest, the conversion on the East disk with the ABI band block, and the
 native encoder byte for byte. GOES-West is the same reader on its own
 bucket and grid; its tests are the registry's.
+
+`tests/fixtures/meteosat/` is one real FCI chunk (chunk 20 of a full-disk
+cycle from EUMETSAT's public MTG test data, the spectrally representative
+FDHSI cycle of May 2022: simulated 2017 radiances in the operational
+format, rows 2645–2784 of the grid, the strip from the equator to 2.5°S)
+and a trimmed real search response, and `tests/test_meteosat.py` runs
+them under the `meteosat` source with the chunk standing for every chunk
+of every slot (the reader's `needed_chunks` narrowed to it): the store's
+own response parsed, the token minted, refused and renewed and a rate
+limit waited out against a fake opener, the chunk names, the cycle's
+slot, the needed chunks and the elevation angle behind them, the Planck
+conversion against the formula, the strip's footprint and its numbers
+read back through GDAL's own unscaling, the producer with three inputs
+held to `dust_rgb` with the 10.5 µm plane as the green minuend, the
+hourly slots against a store that lists ten-minute cycles, the series,
+the ingest, the conversion with the FCI band block and the hourly axis,
+and the native encoder byte for byte when the wheel knows the source.
+The GDAL-backed cases skip without `hdf5plugin`.

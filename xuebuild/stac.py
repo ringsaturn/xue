@@ -589,6 +589,57 @@ def _source_prose(source: SourceSpec) -> dict[str, Any]:
                 },
             ],
         }
+    prose["meteosat"] = {
+        "title": "Meteosat-12 FCI full disk, hourly",
+        "description": (
+            "EUMETSAT's Meteosat-12 (MTG-I1) Flexible Combined Imager at 0°, from the EUMETSAT Data Store "
+            "(the FCI Level 1c full-disk product, one repeat cycle per ten minutes in forty chunk files): the "
+            "10.5 µm infrared window, converted from the product's radiances to brightness temperature with "
+            "its own Planck coefficients, reprojected from the geostationary view onto a regular 0.04° grid "
+            "over the useful disk (3000 × 3000 cells, 60°W–60°E, 60°S–60°N) and published under ir104, as a "
+            "rolling 24-hour window; and the classic Dust RGB composite (dustrgb: the 12.3 − 10.5 µm split "
+            "window, 10.5 − 8.7 µm with a gamma, and the 10.5 µm window, stretched to three guns in 0–1 with "
+            "the SEVIRI recipe's values), computed from the 8.7, 10.5 and 12.3 µm windows by the shachen "
+            "package (Apache-2.0), whose id and version each gun carries as its producer block. Only the "
+            "repeat cycle on each hour is published: the EUMETSAT data policy releases that cycle of Level 1 "
+            "data as Core data under CC-BY-4.0, and the cycles between under a licence that does not allow "
+            "this use. Contains modified EUMETSAT Meteosat data; EUMETSAT does not endorse this site."
+        ),
+        "license": "CC-BY-4.0",
+        "providers": [
+            {
+                "name": "EUMETSAT",
+                "roles": ["producer", "licensor", "host"],
+                "url": "https://www.eumetsat.int/",
+            },
+            {
+                "name": "shachen",
+                "roles": ["processor"],
+                "url": "https://github.com/ringsaturn/shachen",
+            },
+            _XUE_PROVIDER,
+        ],
+        "links": [
+            {
+                "rel": "license",
+                "href": "https://www.eumetsat.int/legal-framework/data-policy",
+                "type": "text/html",
+                "title": "EUMETSAT data policy: the hourly Level 1 cycle is Core data under CC-BY-4.0, attribution required",
+            },
+            {
+                "rel": "cite-as",
+                "href": "https://doi.org/10.5194/acp-8-6739-2008",
+                "type": "text/html",
+                "title": "Lensky and Rosenfeld (2008): the SEVIRI RGB suite the Dust RGB comes from",
+            },
+            {
+                "rel": "describedby",
+                "href": "https://user.eumetsat.int/resources/user-guides/mtg-fci-l1-data-guide",
+                "type": "text/html",
+                "title": "EUMETSAT MTG FCI Level 1 data guide (the product, its channels and the radiance-to-temperature conversion)",
+            },
+        ],
+    }
     try:
         return prose[source.id]
     except KeyError as exc:  # pragma: no cover - the table is held to the registry by a test

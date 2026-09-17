@@ -814,6 +814,7 @@ const MODEL_EYEBROW: Record<ForecastModelId, string> = {
   himawari: "JMA / HIMAWARI-9 AHI (0.04°)",
   goeseast: "NOAA / GOES-19 ABI EAST (0.04°)",
   goeswest: "NOAA / GOES-18 ABI WEST (0.04°)",
+  meteosat: "EUMETSAT / METEOSAT-12 FCI (0.04°, HOURLY)",
 };
 
 /** The member to open when a family's one rail tile is picked: whichever

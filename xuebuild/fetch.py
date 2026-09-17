@@ -956,7 +956,9 @@ def latest_satellite_slot(
     """The newest slot whose tiles have all landed for the source's first
     channel — the end of the live window."""
     platform = satellite_platform(spec)
-    return satellite_fetch.latest_slot(platform, platform.channel(spec.input_variable_ids[0]), now=now, fetch=fetch)
+    return satellite_fetch.latest_slot(
+        platform, platform.channel(spec.input_variable_ids[0]), now=now, fetch=fetch, cadence_seconds=spec.cadence_seconds
+    )
 
 
 def _satellite_run_is_complete(
@@ -1002,7 +1004,7 @@ def _fetch_satellite_run(
     producers = tuple(
         satellite_producers.producer_for(bundle_id)
         for bundle_id in spec.bundle_composite_ids
-        if all(channel_id in channel_ids for channel_id in satellite_producers.producer_for(bundle_id).inputs)
+        if all(channel_id in channel_ids for channel_id in satellite_producers.producer_for(bundle_id).inputs_for(platform))
     )
     grid = satellite_grid(spec)
     destination = raw_root / f"{spec.id}.{run.id}"
@@ -1017,6 +1019,7 @@ def _fetch_satellite_run(
         series_stem=satellite_series_stem(spec, run),
         units={channel.id: VARIABLES[channel.id].output_unit for channel in channels},
         producers=producers,
+        cadence_seconds=spec.cadence_seconds,
         force=force,
         fetch=fetch,
         download=download,
@@ -1037,7 +1040,7 @@ def _fetch_satellite_run(
         },
         "series": {variable_id: path.name for variable_id, path in window.series.items()},
         "producers": [
-            {"bundle": producer.bundle_id, "id": producer.id, "version": producer.version, "inputs": list(producer.inputs)}
+            {"bundle": producer.bundle_id, "id": producer.id, "version": producer.version, "inputs": list(producer.inputs_for(platform))}
             for producer in producers
         ],
         "frames": [

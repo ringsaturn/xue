@@ -113,7 +113,9 @@ def _model_argument(parser: argparse.ArgumentParser, *, fetched_only: bool = Tru
             + ("" if fetched_only else ", or one NetCDF file the tool wrote")
             + "), himawari, the Himawari-9 10.4 µm infrared window and Dust RGB (an observation every ten "
             "minutes, warped from NOAA's ISatSS tiles onto a 0.04° grid; a window the same way), "
-            "or goeseast / goeswest, the same from GOES-19 and GOES-18 (NOAA's CMIPF full-disk files)"
+            "goeseast / goeswest, the same from GOES-19 and GOES-18 (NOAA's CMIPF full-disk files), "
+            "or meteosat, the same from Meteosat-12 FCI on the hour alone (the EUMETSAT Data Store, an "
+            "account's EUMETSAT_CONSUMER_KEY / EUMETSAT_CONSUMER_SECRET in the environment)"
         ),
     )
 

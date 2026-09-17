@@ -94,30 +94,35 @@ class Platform:
     nothing published."""
 
     role: str
-    """The source id: ``himawari``, ``goeseast``, ``goeswest``."""
+    """The source id: ``himawari``, ``goeseast``, ``goeswest``, ``meteosat``."""
     spacecraft: str
     """``Himawari-9``: the human-readable name the shell shows."""
     satellite_number: int
     """WMO Common Code Table C-5."""
     instrument: str
-    """``AHI``, ``ABI``."""
+    """``AHI``, ``ABI``, ``FCI``, ``SEVIRI``."""
     instrument_type: int
     """WMO Common Code Table C-8."""
     sub_longitude: float
     """The sub-satellite longitude, degrees east."""
     sweep_axis: Literal["x", "y"]
     """The CF ``sweep_angle_axis`` of the geostationary projection: ``y``
-    for AHI, ``x`` for ABI."""
+    for AHI, FCI and SEVIRI, ``x`` for ABI."""
     channels: tuple[Channel, ...]
     reader: str
-    """Which :mod:`readers` implementation opens its files: ``isatss``."""
+    """Which :mod:`readers` implementation opens its files: ``isatss``,
+    ``cmipf``, ``fci``."""
     bucket: str
-    """The public bucket the files are on (``noaa-himawari9``)."""
+    """Where the files are: the public bucket (``noaa-himawari9``), or the
+    host of the store a reader searches (``api.eumetsat.int``)."""
     prefix: str
-    """The product prefix inside it (``AHI-L2-FLDK-ISatSS``)."""
+    """The product inside it: the key prefix on a bucket
+    (``AHI-L2-FLDK-ISatSS``), the collection id in a store
+    (``EO:EUM:DAT:0662``)."""
     tile_count: int
     """How many files one channel of one slot is cut into: a slot is
-    complete when all of them have landed."""
+    complete when all of them have landed (a reader may download fewer
+    of them, the ones that reach into the published region)."""
     cadence_seconds: int
     """The scan cadence: 600 for a full disk."""
     typical_lag_seconds: int
@@ -268,7 +273,107 @@ GOES_WEST = Platform(
     typical_lag_seconds=5 * 60,
 )
 
-PLATFORMS: dict[str, Platform] = {platform.role: platform for platform in (HIMAWARI, GOES_EAST, GOES_WEST)}
+# MTG FCI: sixteen channels, central wavelengths as EUMETSAT's FCI L1 data
+# guide lists them (VIS 0.4 through NIR 2.2 at 1 km in the full-disk
+# product, the infrared at 2 km). The ids are the instrument-neutral ones
+# by nearest window — IR 10.5 is the 10.4 µm window ``ir104`` that AHI band
+# 13 and ABI channel 13 are, IR 8.7 the ``ir086`` window, and the band block
+# carries the exact wave number — so the Dust RGB's inputs keep their ids
+# across imagers; FCI has no 11.2 µm channel, which the producer allows
+# for. ``band`` is the FCI channel index in the product's own order
+# (vis_04 … ir_133), which the reader maps to the file's group names; the
+# bit depth is not a name field (0).
+FCI_CHANNELS: tuple[Channel, ...] = (
+    Channel("vis047", 1, 0.444, "reflectance", 1.0, 0),
+    Channel("vis051", 2, 0.510, "reflectance", 1.0, 0),
+    Channel("vis064", 3, 0.640, "reflectance", 1.0, 0),
+    Channel("nir086", 4, 0.865, "reflectance", 1.0, 0),
+    Channel("nir091", 5, 0.914, "reflectance", 1.0, 0),
+    Channel("nir137", 6, 1.380, "reflectance", 1.0, 0),
+    Channel("nir161", 7, 1.610, "reflectance", 1.0, 0),
+    Channel("nir226", 8, 2.250, "reflectance", 1.0, 0),
+    Channel("ir039", 9, 3.80, "bt", 2.0, 0),
+    Channel("wv062", 10, 6.30, "bt", 2.0, 0),
+    Channel("wv073", 11, 7.35, "bt", 2.0, 0),
+    Channel("ir086", 12, 8.70, "bt", 2.0, 0),
+    Channel("ir096", 13, 9.66, "bt", 2.0, 0),
+    Channel("ir104", 14, 10.50, "bt", 2.0, 0),
+    Channel("ir123", 15, 12.30, "bt", 2.0, 0),
+    Channel("ir133", 16, 13.30, "bt", 2.0, 0),
+)
+
+# MSG SEVIRI: twelve channels (the high-resolution visible last), central
+# wavelengths per EUMETSAT's SEVIRI channel table; 3 km at nadir, HRV 1 km.
+# Registered for the Indian Ocean platform below; no reader opens the
+# Level 1.5 native format yet.
+SEVIRI_CHANNELS: tuple[Channel, ...] = (
+    Channel("vis064", 1, 0.635, "reflectance", 3.0, 0),
+    Channel("nir086", 2, 0.81, "reflectance", 3.0, 0),
+    Channel("nir161", 3, 1.64, "reflectance", 3.0, 0),
+    Channel("ir039", 4, 3.92, "bt", 3.0, 0),
+    Channel("wv062", 5, 6.25, "bt", 3.0, 0),
+    Channel("wv073", 6, 7.35, "bt", 3.0, 0),
+    Channel("ir086", 7, 8.70, "bt", 3.0, 0),
+    Channel("ir096", 8, 9.66, "bt", 3.0, 0),
+    Channel("ir104", 9, 10.80, "bt", 3.0, 0),
+    Channel("ir123", 10, 12.00, "bt", 3.0, 0),
+    Channel("ir133", 11, 13.40, "bt", 3.0, 0),
+    Channel("vis075", 12, 0.75, "reflectance", 1.0, 0),
+)
+
+# Meteosat-12 (MTG-I1) at 0°, EUMETSAT's prime full-disk service since
+# December 2024: the FCI Level 1c FDHSI product on the EUMETSAT Data Store
+# (collection EO:EUM:DAT:0662), one product per ten-minute repeat cycle cut
+# into forty chunk files, each a strip of rows carrying every channel, that
+# a registered account downloads (``xuebuild/satellite/eumetsat.py``). The
+# scan cadence is ten minutes; the source publishes the cycle on the hour
+# alone, the one the EUMETSAT data policy releases as Core data under
+# CC-BY-4.0 (``sources.py``). WMO C-5 71 (METEOSAT 12), C-8 210 (FCI), both
+# from the wmo-im/CCT tables C05.csv and C08.csv.
+METEOSAT = Platform(
+    role="meteosat",
+    spacecraft="Meteosat-12",
+    satellite_number=71,
+    instrument="FCI",
+    instrument_type=210,
+    sub_longitude=0.0,
+    sweep_axis="y",
+    channels=FCI_CHANNELS,
+    reader="fci",
+    bucket="api.eumetsat.int",
+    prefix="EO:EUM:DAT:0662",
+    tile_count=40,
+    cadence_seconds=600,
+    typical_lag_seconds=15 * 60,
+)
+
+# Meteosat-9 (MSG2) at 45.5°E, the Indian Ocean Data Coverage service:
+# SEVIRI Level 1.5 as one native-format file per fifteen-minute scan
+# (collection EO:EUM:DAT:MSG:HRSEVIRI-IODC). Registered so the platform is
+# a row; its reader (GDAL's MSGN driver gives radiances, the brightness
+# temperatures are a Planck fit per channel) is not implemented and no
+# source publishes it. WMO C-5 56 (METEOSAT 9), C-8 207 (SEVIRI), from
+# the same tables.
+METEOSAT_IODC = Platform(
+    role="meteosatiodc",
+    spacecraft="Meteosat-9",
+    satellite_number=56,
+    instrument="SEVIRI",
+    instrument_type=207,
+    sub_longitude=45.5,
+    sweep_axis="y",
+    channels=SEVIRI_CHANNELS,
+    reader="seviri",
+    bucket="api.eumetsat.int",
+    prefix="EO:EUM:DAT:MSG:HRSEVIRI-IODC",
+    tile_count=1,
+    cadence_seconds=900,
+    typical_lag_seconds=5 * 60,
+)
+
+PLATFORMS: dict[str, Platform] = {
+    platform.role: platform for platform in (HIMAWARI, GOES_EAST, GOES_WEST, METEOSAT, METEOSAT_IODC)
+}
 
 
 def platform(role: str) -> Platform:

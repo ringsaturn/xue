@@ -12,6 +12,11 @@ channel) however long the window. A producer (:mod:`producers`) runs on a
 slot the same way: once, on the slot's warped channels, its outputs cached
 as frames of their own; so a window of four channels and a composite costs
 a round four channels' tiles and one composition.
+
+The window's slots are every ``cadence_seconds`` of the *source*, which
+may be coarser than the platform's scan cadence: Meteosat scans every ten
+minutes and the source publishes the cycle on the hour alone, the one the
+agency's data policy releases openly.
 """
 
 from __future__ import annotations
@@ -49,15 +54,34 @@ def target_grid(platform: Platform, step: float) -> TargetGrid:
     return TargetGrid(west=west, south=south, east=east, north=north, step=step)
 
 
-def window_slots(platform: Platform, start: datetime, hours: int) -> list[datetime]:
-    """Every scan slot from ``start`` through ``hours`` past it, inclusive."""
+def window_slots(platform: Platform, start: datetime, hours: int, *, cadence_seconds: int | None = None) -> list[datetime]:
+    """Every slot from ``start`` through ``hours`` past it, inclusive, at
+    the source's cadence (the platform's scan cadence by default; a
+    coarser one must be a whole number of scans)."""
+    cadence = source_cadence(platform, cadence_seconds)
     end = start + timedelta(hours=hours)
     slots: list[datetime] = []
     slot = start
     while slot <= end:
         slots.append(slot)
-        slot += timedelta(seconds=platform.cadence_seconds)
+        slot += timedelta(seconds=cadence)
     return slots
+
+
+def source_cadence(platform: Platform, cadence_seconds: int | None) -> int:
+    """The cadence a source publishes a platform at: the platform's own
+    unless the source names a coarser one that is a multiple of it."""
+    if cadence_seconds is None:
+        return platform.cadence_seconds
+    if cadence_seconds < platform.cadence_seconds or cadence_seconds % platform.cadence_seconds:
+        raise ConversionError(
+            f"{platform.spacecraft} scans every {platform.cadence_seconds} s; a source cannot publish it every {cadence_seconds} s"
+        )
+    return cadence_seconds
+
+
+def on_cadence(slot: datetime, cadence_seconds: int) -> bool:
+    return int(slot.timestamp()) % cadence_seconds == 0
 
 
 def slot_is_complete(platform: Platform, objects: list[SlotObject]) -> bool:
@@ -70,20 +94,25 @@ def latest_slot(
     *,
     now: datetime | None = None,
     fetch: Callable[[str], str] | None = None,
+    cadence_seconds: int | None = None,
 ) -> datetime:
     """The newest slot whose tiles have all landed for the channel: the
     end of the live window. The reader lists the newest few slots in as
     few requests as its product allows (a day's slot directories at once
-    for ISatSS, the newest hour directory for CMIPF; yesterday's as well
-    around midnight), and each is asked for its tiles, since a slot
-    appears while its tiles are still being written. Nothing in the last
-    day is a feed that is down."""
+    for ISatSS, the newest hour directory for CMIPF, one search for FCI;
+    yesterday's as well around midnight), and each is asked for its
+    tiles, since a slot appears while its tiles are still being written.
+    A source on a coarser cadence than the scans' asks for more and keeps
+    the slots on its cadence. Nothing in the last day is a feed that is
+    down."""
     reader = reader_for(platform)
     current = (now or datetime.now(UTC)).astimezone(UTC)
+    cadence = source_cadence(platform, cadence_seconds)
     # A slot's tiles land within a minute or two of the directory
     # appearing; a few slots back is as far as an incomplete run of them
     # plausibly reaches, and the listing beyond that is trusted.
-    slots = reader.recent_slots(platform, current, limit=RECENT_SLOTS, fetch=fetch)
+    listed = reader.recent_slots(platform, current, limit=RECENT_SLOTS * (cadence // platform.cadence_seconds), fetch=fetch)
+    slots = [slot for slot in listed if on_cadence(slot, cadence)][:RECENT_SLOTS]
     for index, slot in enumerate(slots):
         if index + 1 >= RECENT_SLOTS or slot_is_complete(platform, reader.list_slot(platform, channel, slot, fetch=fetch)):
             return slot
@@ -133,13 +162,17 @@ def fetch_frame(
                 platform.tile_count,
             )
         return None
-    slot_dir = tiles_dir / f"{slot:%Y%m%d%H%M}" / channel.id
+    # A slot's files are fetched under a directory per channel when each
+    # channel is its own files, and shared when one file carries them all;
+    # the directory is the window's to remove once the slot is done
+    # (`fetch_window`), so a second channel finds the shared files there.
+    slot_dir = slot_directory(tiles_dir, slot) / (channel.id if reader.files_per_channel else "shared")
     files = reader.download(platform, objects, slot_dir, download=download, concurrency=concurrency)
-    source = reader.open(files, slot_dir, missing_below=channel.missing_below)
+    source = reader.open(files, slot_dir, channel=channel, missing_below=channel.missing_below)
     # The packing is the source's, read off one tile before the warp: a
     # mosaic or a warp carries a band's scale, offset and unit through only
     # on some GDAL versions (3.13 does, Ubuntu 24.04's 3.8 loses the unit).
-    packing = assemble.dataset_packing(reader.packing_source(files))
+    packing = assemble.dataset_packing(reader.packing_source(files, channel=channel))
     PROJECTORS[projector].to_grid(source, grid, nodata=assemble.NODATA, resampling=RESAMPLING, out=frame)
     assemble.write_packing(
         frame,
@@ -149,9 +182,15 @@ def fetch_frame(
         keys=[item.key for item in objects],
         projector=projector,
     )
-    shutil.rmtree(slot_dir, ignore_errors=True)
+    if reader.files_per_channel:
+        shutil.rmtree(slot_dir, ignore_errors=True)
     LOG.info("%s %s: warped %s from %d tiles", platform.spacecraft, channel.id, frame.name, len(objects))
     return FetchedFrame(slot=slot, path=frame, tiles=len(objects))
+
+
+def slot_directory(tiles_dir: Path, slot: datetime) -> Path:
+    """Where a slot's downloaded files live while it is being warped."""
+    return tiles_dir / f"{slot:%Y%m%d%H%M}"
 
 
 def produce_frames(
@@ -174,10 +213,11 @@ def produce_frames(
         if all(assemble.frame_packing(path).producer == (producer.id, version) for path in outputs.values()):
             return outputs
         LOG.info("%s %s: the cached %s frames are another version's, recomposing", platform.spacecraft, slot.strftime("%Y-%m-%dT%H:%M:%SZ"), producer.bundle_id)
-    missing = [channel_id for channel_id in producer.inputs if channel_id not in inputs]
+    needed = producer.inputs_for(platform)
+    missing = [channel_id for channel_id in needed if channel_id not in inputs]
     if missing:
-        raise ConversionError(f"the {producer.bundle_id} producer needs {list(producer.inputs)}; the slot lacks {missing}")
-    planes = {channel_id: assemble.read_frame(inputs[channel_id], grid) for channel_id in producer.inputs}
+        raise ConversionError(f"the {producer.bundle_id} producer needs {list(needed)}; the slot lacks {missing}")
+    planes = {channel_id: assemble.read_frame(inputs[channel_id], grid) for channel_id in needed}
     produced = producer.run(platform, planes, {})
     if tuple(produced) != producer.outputs:
         raise ConversionError(f"the {producer.bundle_id} producer returned {list(produced)}, not {list(producer.outputs)}")
@@ -189,9 +229,9 @@ def produce_frames(
             packing,
             outputs[output_id],
             slot=slot.strftime("%Y-%m-%dT%H:%M:%SZ"),
-            inputs=[inputs[channel_id].name for channel_id in producer.inputs],
+            inputs=[inputs[channel_id].name for channel_id in needed],
         )
-    LOG.info("%s %s: composed %s from %s", platform.spacecraft, producer.bundle_id, slot.strftime("%Y-%m-%dT%H:%M:%SZ"), ", ".join(producer.inputs))
+    LOG.info("%s %s: composed %s from %s", platform.spacecraft, producer.bundle_id, slot.strftime("%Y-%m-%dT%H:%M:%SZ"), ", ".join(needed))
     return outputs
 
 
@@ -232,6 +272,7 @@ def fetch_window(
     series_stem: str,
     units: dict[str, str],
     producers: tuple[Producer, ...] = (),
+    cadence_seconds: int | None = None,
     force: bool = False,
     fetch: Callable[[str], str] | None = None,
     download: Callable[[str], bytes] | None = None,
@@ -243,34 +284,41 @@ def fetch_window(
     ``destination / <series_stem>.<variable>.nc``. A slot is in the window
     only when every channel is there whole, so every series carries the
     same axis. ``units`` is each channel's declared unit (the registry's
-    output unit), which its frames must agree with."""
+    output unit), which its frames must agree with; ``cadence_seconds`` the
+    source's, when coarser than the platform's scans."""
     for producer in producers:
-        missing = [channel_id for channel_id in producer.inputs if channel_id not in {channel.id for channel in channels}]
+        missing = [channel_id for channel_id in producer.inputs_for(platform) if channel_id not in {channel.id for channel in channels}]
         if missing:
             raise ConversionError(f"the {producer.bundle_id} producer reads {missing}, which the window does not fetch")
     frames_dir = raw_root / assemble.frames_dirname(platform)
     tiles_dir = destination / "tiles"
     fetched: list[FetchedSlot] = []
-    for slot in window_slots(platform, run_time, hours):
+    for slot in window_slots(platform, run_time, hours, cadence_seconds=cadence_seconds):
         frames: dict[str, Path] = {}
         tiles = 0
-        for channel in channels:
-            frame = fetch_frame(
-                platform,
-                channel,
-                slot,
-                grid=grid,
-                frames_dir=frames_dir,
-                tiles_dir=tiles_dir,
-                force=force,
-                fetch=fetch,
-                download=download,
-                concurrency=concurrency,
-            )
-            if frame is None:
-                break
-            frames[channel.id] = frame.path
-            tiles += frame.tiles
+        try:
+            for channel in channels:
+                frame = fetch_frame(
+                    platform,
+                    channel,
+                    slot,
+                    grid=grid,
+                    frames_dir=frames_dir,
+                    tiles_dir=tiles_dir,
+                    force=force,
+                    fetch=fetch,
+                    download=download,
+                    concurrency=concurrency,
+                )
+                if frame is None:
+                    break
+                frames[channel.id] = frame.path
+                tiles += frame.tiles
+        finally:
+            # The slot's downloads (shared by its channels, or what a
+            # failed channel left) go before the next slot's arrive: a
+            # window of chunks would not fit a runner otherwise.
+            shutil.rmtree(slot_directory(tiles_dir, slot), ignore_errors=True)
         if len(frames) != len(channels):
             continue
         for producer in producers:

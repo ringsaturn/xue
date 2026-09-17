@@ -43,8 +43,9 @@ class Producer(Protocol):
     bundle_id: str
     """The composite bundle the outputs are the components of."""
     inputs: tuple[str, ...]
-    """The channel ids a slot must carry, in the order :meth:`run` takes
-    them."""
+    """The channel ids the recipe reads on an imager that has them all,
+    in the order :meth:`run` takes them; :meth:`inputs_for` is what one
+    platform must carry."""
     outputs: tuple[str, ...]
     """The variable ids it adds, in bundle order."""
     ancillaries: tuple[str, ...]
@@ -55,6 +56,11 @@ class Producer(Protocol):
     def version(self) -> str:
         """The ``producer.version`` written into the metadata: the
         algorithm's own, as installed."""
+        ...
+
+    def inputs_for(self, platform: Platform) -> tuple[str, ...]:
+        """The channel ids the recipe reads on this platform — ``inputs``
+        unless the imager lacks one and the recipe has a stand-in."""
         ...
 
     def run(self, platform: Platform, inputs: dict[str, np.ndarray], ancillary: dict[str, Path]) -> dict[str, np.ndarray]:
@@ -76,9 +82,13 @@ class DustRGBProducer:
     re-tuned for ABI): ``shachen`` picks them from a satpy reader name,
     which the fetch stage has none of, so the choice is made here by the
     platform's instrument — the Quick Guide's values for ABI, the SEVIRI
-    ones for AHI, the same rule as ``shachen.constants.DUST_RGB_BY_READER``.
-    ``shachen`` is the ``satellite`` dependency group, imported here and
-    nowhere else."""
+    ones for AHI and FCI, the same rule as
+    ``shachen.constants.DUST_RGB_BY_READER``. The green gun's minuend is
+    per imager too: the 11.2 µm window on AHI and ABI, and on an imager
+    without one (FCI, SEVIRI) the 10.4 µm window stands in, which is the
+    original SEVIRI recipe's ``IR10.8 − IR8.7`` and what satpy's generic
+    composite does by nearest wavelength. ``shachen`` is the ``satellite``
+    dependency group, imported here and nowhere else."""
 
     id: str = "shachen"
     bundle_id: str = "dustrgb"
@@ -93,6 +103,20 @@ class DustRGBProducer:
         except PackageNotFoundError as exc:
             raise ConversionError("the Dust RGB producer needs the shachen package: uv sync --group satellite") from exc
 
+    #: The 11.2 µm window's stand-in on an imager without one.
+    GREEN_STAND_IN: str = "ir104"
+
+    def inputs_for(self, platform: Platform) -> tuple[str, ...]:
+        """The four windows on AHI and ABI; three on FCI, whose green gun
+        reads the 10.4 µm window in place of the 11.2 µm one."""
+        channel_ids = {channel.id for channel in platform.channels}
+        missing = [channel_id for channel_id in self.inputs if channel_id not in channel_ids]
+        if missing == ["ir112"]:
+            return tuple(channel_id for channel_id in self.inputs if channel_id != "ir112")
+        if missing:
+            raise ConversionError(f"{platform.spacecraft} {platform.instrument} has no {missing} for the Dust RGB")
+        return self.inputs
+
     def run(self, platform: Platform, inputs: dict[str, np.ndarray], ancillary: dict[str, Path]) -> dict[str, np.ndarray]:
         try:
             import xarray as xr  # noqa: PLC0415 - the satellite dependency group
@@ -100,17 +124,19 @@ class DustRGBProducer:
             from shachen.dustrgb import dust_rgb  # noqa: PLC0415
         except ImportError as exc:
             raise ConversionError("the Dust RGB producer needs the shachen package: uv sync --group satellite") from exc
-        missing = [channel_id for channel_id in self.inputs if channel_id not in inputs]
+        needed = self.inputs_for(platform)
+        missing = [channel_id for channel_id in needed if channel_id not in inputs]
         if missing:
-            raise ConversionError(f"the Dust RGB producer needs {list(self.inputs)}; missing {missing}")
-        shape = inputs[self.inputs[0]].shape
-        if any(inputs[channel_id].shape != shape for channel_id in self.inputs):
+            raise ConversionError(f"the Dust RGB producer needs {list(needed)}; missing {missing}")
+        shape = inputs[needed[0]].shape
+        if any(inputs[channel_id].shape != shape for channel_id in needed):
             raise ConversionError("the Dust RGB producer's inputs are not on one grid")
+        green_minuend = "ir112" if "ir112" in needed else self.GREEN_STAND_IN
         scene = xr.Dataset(
             {
                 "bt_tir_86": xr.DataArray(np.asarray(inputs["ir086"], dtype=np.float64), dims=("y", "x")),
                 "bt_tir_104": xr.DataArray(np.asarray(inputs["ir104"], dtype=np.float64), dims=("y", "x")),
-                "bt_tir_112": xr.DataArray(np.asarray(inputs["ir112"], dtype=np.float64), dims=("y", "x")),
+                "bt_tir_112": xr.DataArray(np.asarray(inputs[green_minuend], dtype=np.float64), dims=("y", "x")),
                 "bt_tir_123": xr.DataArray(np.asarray(inputs["ir123"], dtype=np.float64), dims=("y", "x")),
             }
         )
@@ -123,7 +149,7 @@ class DustRGBProducer:
         # through per gun, and a gun whose own inputs happen to be present
         # must not colour a cell the others cannot.
         missing_cells = np.zeros(shape, dtype=bool)
-        for channel_id in self.inputs:
+        for channel_id in needed:
             missing_cells |= ~np.isfinite(inputs[channel_id])
         planes: dict[str, np.ndarray] = {}
         for index, output_id in enumerate(self.outputs):

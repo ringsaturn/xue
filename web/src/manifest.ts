@@ -11,7 +11,7 @@ export type ForecastVariableId = "tmp2m" | "prate";
  * The CMA radar mosaic has no live feed: it is an observation archive that
  * reaches the app only as showcase cases. The MRMS mosaic and the JMA
  * nowcast are observations *and* live, each a rolling window. */
-export type ForecastModelId = "gfs" | "ecmwf" | "aifs" | "sflux" | "hrrr" | "cma" | "mrms" | "jma" | "himawari" | "goeseast" | "goeswest";
+export type ForecastModelId = "gfs" | "ecmwf" | "aifs" | "sflux" | "hrrr" | "cma" | "mrms" | "jma" | "himawari" | "goeseast" | "goeswest" | "meteosat";
 
 export interface ForecastModelInfo {
   id: ForecastModelId;
@@ -195,6 +195,25 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
     railCore: ["ir104"],
     region: [163, -60, 283, 60],
   },
+  // Meteosat-12 (MTG-I1) at 0°, EUMETSAT's FCI imager, read from the
+  // EUMETSAT Data Store: the same 10.4 µm window (FCI's 10.5 µm channel)
+  // and the same Dust RGB, warped onto a 0.04° grid over the disk's useful
+  // extent. The source publishes the hourly repeat cycle alone — the one
+  // EUMETSAT's data policy releases under CC-BY-4.0 for redistribution —
+  // so its window is a day of hourly frames rather than hours of
+  // ten-minute ones. Named by the slot (0° is Meteosat-12 today), never
+  // the spacecraft, as the other disks are.
+  meteosat: {
+    id: "meteosat",
+    label: "METEOSAT",
+    product: "fci-fldk-0p04",
+    latestFilename: "latest-meteosat.json",
+    observation: true,
+    coreBundles: ["ir104"],
+    defaultVariable: "ir104",
+    railCore: ["ir104"],
+    region: [-60, -60, 60, 60],
+  },
 };
 
 /** The layer a dataset opens on when nothing asked for one. */
@@ -212,10 +231,10 @@ export function isObservationModel(model: ForecastModelId): boolean {
   return FORECAST_MODELS[model].observation === true;
 }
 
-/** The live feeds, in model-switch order: the five forecasts and the six
+/** The live feeds, in model-switch order: the five forecasts and the seven
  * rolling observation windows, MRMS, the JMA nowcast, the CMA mosaic and
- * the three geostationary imagers. */
-export const FORECAST_MODEL_IDS: readonly ForecastModelId[] = ["gfs", "sflux", "ecmwf", "aifs", "hrrr", "mrms", "jma", "cma", "himawari", "goeseast", "goeswest"];
+ * the four geostationary imagers. */
+export const FORECAST_MODEL_IDS: readonly ForecastModelId[] = ["gfs", "sflux", "ecmwf", "aifs", "hrrr", "mrms", "jma", "cma", "himawari", "goeseast", "goeswest", "meteosat"];
 
 function modelForManifestString(model: unknown): ForecastModelInfo | null {
   for (const info of Object.values(FORECAST_MODELS)) {

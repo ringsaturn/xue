@@ -44,6 +44,7 @@ pipeline.
 | Himawari-9 infrared and Dust RGB | `himawari` | 3000 × 3000, 0.04°, the disk 80.7–200.7°E, ±60° | one scan every ten minutes, a rolling six-hour window | `latest-himawari.json` |
 | GOES-19 (East) infrared and Dust RGB | `goeseast` | 3000 × 3000, 0.04°, the disk 135.2–15.2°W, ±60° | one scan every ten minutes, a rolling six-hour window | `latest-goeseast.json` |
 | GOES-18 (West) infrared and Dust RGB | `goeswest` | 3000 × 3000, 0.04°, the disk 163°E–77°W, ±60° | one scan every ten minutes, a rolling six-hour window | `latest-goeswest.json` |
+| Meteosat-12 infrared and Dust RGB | `meteosat` | 3000 × 3000, 0.04°, the disk 60°W–60°E, ±60° | the scan on each hour (the cycle EUMETSAT releases openly), a rolling 24-hour window | `latest-meteosat.json` |
 
 Each model publishes as an independent dataset under `<model>.<run>/`, taken
 live by its pointer at the data root.
@@ -167,6 +168,22 @@ Bundle sets:
   (`data/raw/goeseast-frames/`). The East disk is 135.2°W–15.2°W; the West
   disk crosses the antimeridian and is spelled 163°E–283°E, as Himawari's
   is. A scan is four 24 MB files rather than 88 tiles.
+- Meteosat: EUMETSAT's Meteosat-12 (MTG-I1) at 0°, from the EUMETSAT Data
+  Store rather than a public bucket — the FCI Level 1c full-disk product,
+  each ten-minute cycle as forty netCDF chunk files that carry every
+  channel as radiances. The search is anonymous; the download takes a
+  registered account's consumer key and secret (`EUMETSAT_CONSUMER_KEY` /
+  `EUMETSAT_CONSUMER_SECRET`, free at https://api.eumetsat.int/api-key),
+  and a runner without them builds nothing. The reader converts the
+  radiances to brightness temperature with the product's own Planck
+  coefficients and georeferences the strips itself (GDAL needs the
+  `hdf5plugin` JPEG-LS filter for the files and cannot place a chunk from
+  its grouped grid mapping); FCI has no 11.2 µm window, so the Dust RGB's
+  green gun reads 10.5 − 8.7 µm, the original SEVIRI recipe. **Only the
+  cycle on each hour is published**, a 24-hour window of 25 frames: the
+  EUMETSAT data policy releases the hourly Level 1 cycle as Core data
+  under CC-BY-4.0 and the cycles between under terms that do not allow
+  this use. Contains modified EUMETSAT Meteosat data.
 
 Every level of the isobaric families is registered; turning one on is a line
 in `xuebuild/sources.py` and its mirror in the native encoder, not a format
@@ -298,6 +315,7 @@ python -m xuebuild build-bin --model jma --run latest --hours 3 --round now    #
 python -m xuebuild build-bin --model cma --run latest --hours 3 --round now    # the CMA mosaic, out of its archive
 python -m xuebuild build-bin --model himawari --run latest --hours 6 --round now  # Himawari-9 infrared, warped from NOAA's tiles
 python -m xuebuild build-bin --model goeseast --run latest --hours 6 --round now  # GOES-19 the same (goeswest for GOES-18)
+python -m xuebuild build-bin --model meteosat --run latest --hours 24 --round now  # Meteosat-12, hourly (needs the EUMETSAT_* credentials)
 ```
 
 `XUE_ENCODER` picks which encoder converts: `auto` (the default: the `xuepy`
@@ -523,11 +541,12 @@ An observation feed is never complete, so
 [`publish-jma.yml`](.github/workflows/publish-jma.yml),
 [`publish-cma.yml`](.github/workflows/publish-cma.yml),
 [`publish-himawari.yml`](.github/workflows/publish-himawari.yml),
-[`publish-goeseast.yml`](.github/workflows/publish-goeseast.yml) and
-[`publish-goeswest.yml`](.github/workflows/publish-goeswest.yml) each run one round of
+[`publish-goeseast.yml`](.github/workflows/publish-goeseast.yml),
+[`publish-goeswest.yml`](.github/workflows/publish-goeswest.yml) and
+[`publish-meteosat.yml`](.github/workflows/publish-meteosat.yml) each run one round of
 [`scripts/window_rounds.sh`](scripts/window_rounds.sh) (`MODEL=mrms`, `jma`,
-`cma`, `himawari`, `goeseast` or `goeswest`, `ONCE=true`) per job on a five-minute cron (ten for
-the satellites, whose scans are ten minutes apart), the finest GitHub offers: a job is a
+`cma`, `himawari`, `goeseast`, `goeswest` or `meteosat`, `ONCE=true`) per job on a five-minute cron (ten for
+the satellites, whose scans are ten minutes apart; the Meteosat job finds a new hourly cycle once in six), the finest GitHub offers: a job is a
 few minutes rather than a runner held for an hour, at the price of the cron's
 ten to twenty minutes of lateness on every round. A dispatch with `loop` runs
 the rounds until twenty past the next hour and yields to the next scheduled job
@@ -574,6 +593,7 @@ MODEL=jma HOURS=3 FRAME_CACHE=true ONCE=true scripts/window_rounds.sh
 MODEL=cma HOURS=3 ONCE=true scripts/window_rounds.sh   # needs XUE_CMA_ARCHIVE and the R2_* credentials
 MODEL=himawari HOURS=6 FRAME_CACHE=true ONCE=true scripts/window_rounds.sh   # needs gdalwarp on PATH
 MODEL=goeseast HOURS=6 FRAME_CACHE=true ONCE=true scripts/window_rounds.sh   # or goeswest; the same
+MODEL=meteosat HOURS=24 FRAME_CACHE=true ONCE=true scripts/window_rounds.sh  # needs the EUMETSAT_* credentials and hdf5plugin
 .venv/bin/python -m xuebuild build-bin --model mrms --run latest --hours 4 --round now
 make upload-r2 MODEL=mrms RUN=2026091321 ROUND=1405  # the round the build named
 make prune-r2-rounds MODEL=mrms && make prune-r2 MODEL=mrms KEEP=2
