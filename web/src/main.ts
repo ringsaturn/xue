@@ -5681,11 +5681,14 @@ function applyZoomCeiling(session: VariableSession): void {
   syncZoomCeiling();
 }
 
-/** The data's ceiling, or the station marks' when either product is on
- * screen — whichever lets the camera deeper. */
+/** The data's ceiling, or the station marks' when either product is asked
+ * for — whichever lets the camera deeper. Asked for, not loaded: the run
+ * usually lands before the indexes do, and a ceiling that followed the
+ * indexes would first pull a deep link at zoom 9 back to 7 and only then
+ * let go. A product that never loads leaves a ceiling nothing needs, which
+ * costs nothing. */
 function syncZoomCeiling(): void {
-  const marks =
-    (stationsShown.soundings && soundingLoaded !== null) || (stationsShown.airports && airportLoaded !== null);
+  const marks = stationsShown.soundings || stationsShown.airports;
   map.setMaxZoom(Math.max(dataZoomCeiling, marks && activeCase === null ? STATION_MAX_ZOOM : 0));
 }
 
