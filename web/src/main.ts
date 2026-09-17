@@ -2120,6 +2120,8 @@ const METEOGRAM_ROW_HEIGHT = 30;
 const soundingSection: SoundingSection = createSoundingSection({
   modelProfile: () => modelProfileForSounding(),
   formatTime: (time) => formatCompactDate(Date.parse(time)),
+  // Read at pin time, never captured: `stationsShown` follows the rail.
+  wantsOpen: () => stationsShown.soundings,
   onChange: () => {
     // A newly opened section, or another ascent selected, wants the run's
     // isobaric levels at the pinned cell.

@@ -50,6 +50,11 @@ export interface SoundingSectionOptions {
   modelProfile(): { profile: Profile; run: string; validTime: number } | null;
   /** A nominal time, formatted the way the panel formats a valid time. */
   formatTime(time: string): string;
+  /** Whether a fresh pin should open the chart on its own: true while the
+   * sounding marks are switched on, since a viewer who asked to see the
+   * stations wants the ascent; false otherwise, when the section waits
+   * folded under the rows and a card's button or the header opens it. */
+  wantsOpen(): boolean;
   /** Something the caller has to react to changed: the station, the
    * selected time, or whether the section is open. main.ts opens or drops
    * the model sessions on this and redraws. */
@@ -506,12 +511,13 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
         station = null;
         selected = 0;
         pointer = null;
-        // A section is open by default where there is room for it: the
-        // chart is the reason a forecaster pinned the point. On a phone
-        // it starts closed, since 320 px of chart over the capsule is the
+        // A section is open by default where there is room for it and the
+        // viewer has the sounding marks on: then the chart is the reason
+        // the point was pinned. With the marks off it starts folded, and on
+        // a phone always, since 320 px of chart over the capsule is the
         // whole screen.
         const wide = window.innerWidth > PHONE_WIDTH && window.innerHeight > SHORT_HEIGHT;
-        open = wide;
+        open = wide && options.wantsOpen();
         head.setAttribute("aria-expanded", String(open));
         body.hidden = !open;
         ensureStation();
