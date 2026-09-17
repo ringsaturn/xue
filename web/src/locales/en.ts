@@ -33,6 +33,9 @@ export const en = {
   varWind: "10M",
   varSolar: "FLUX",
   varRadar: "CREF",
+  /** The satellite tile: the channel's nominal wavelength in µm after the
+   * code (SAT IR 10.4). */
+  varInfrared: "IR 10.4",
   /** The surface diagnostics: gust and CAPE are surface fields (SFC,
    * the same detail the codes carry), cloud cover is the whole column. */
   varGust: "SFC",
@@ -82,6 +85,8 @@ export const en = {
   glyphWind10m: "W",
   glyphDswrf: "S",
   glyphCref: "Z",
+  // I for the infrared imagery.
+  glyphIr104: "I",
   // N is the synoptic-code letter for total cloud amount; the gust and CAPE
   // take their initials.
   glyphGust: "G",
@@ -154,6 +159,7 @@ export const en = {
   fieldGroupDynamics: "DYNAMICS",
   fieldGroupRadiation: "RADIATION & VISIBILITY",
   fieldGroupOcean: "OCEAN",
+  fieldGroupSatellite: "SATELLITE",
   fieldGroupOther: "OTHER",
   /** The particle switch as a rail tile in the overlay section: the gloss
    * after the code PARTICLES, and its glyph (the tooltip and accessible
@@ -182,6 +188,9 @@ export const en = {
    * source named and the processing noted); the sheet row's name is the
    * agency's website, as the terms spell it. */
   creditsJma: "RADAR PRECIPITATION · JMA NOWCAST, JAPAN (REGRIDDED)",
+  /** The Himawari line names the agency, the spacecraft and the host, and
+   * notes the processing, as NOAA's terms ask. */
+  creditsHimawari: "SATELLITE IMAGERY · HIMAWARI-9 AHI, JMA, ON NOAA OPEN DATA (REPROJECTED)",
   creditsSounding: "RADIOSONDE SOUNDINGS · GTS TEMP VIA WIS2, NATIONAL MET SERVICES",
   creditsAirport: "AIRPORT METAR & TAF · WORLD MET SERVICES VIA NOAA/NWS AWC",
   creditsRadar: "RADAR MOSAIC",
@@ -279,6 +288,7 @@ export const en = {
   varLabelDswrf: "Solar radiation",
   varLabelWind10m: "10 m wind",
   varLabelCref: "Composite radar reflectivity",
+  varLabelIr104: "Infrared imagery (10.4 µm brightness temperature)",
   varLabelGust: "Wind gust",
   varLabelTcdc: "Total cloud cover",
   varLabelCape: "Convective available potential energy",

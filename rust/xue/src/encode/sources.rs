@@ -70,9 +70,11 @@ pub struct Downsample {
     pub factor: usize,
 }
 
-/// Mirrors `SourceSpec` in `xuebuild/sources.py`, field for field but one:
-/// its `video` switch is read where ffmpeg runs, and the native encoder
-/// writes no video.
+/// Mirrors `SourceSpec` in `xuebuild/sources.py`, field for field but
+/// three: its `video` switch is read where ffmpeg runs, and the native
+/// encoder writes no video; its `platform` and `grid_step` name the
+/// satellite registry the Python fetch stage warps a window through, and
+/// the native encoder reads the series that stage wrote.
 #[derive(Debug, Clone, Copy)]
 pub struct SourceSpec {
     /// CLI / URL / directory id.
@@ -554,6 +556,45 @@ pub const SOURCES: &[SourceSpec] = &[
         observation: true,
         window_hours: Some(3),
         cadence_seconds: Some(300),
+        series_file: true,
+        downsample: None,
+    },
+    // Himawari-9 AHI at 140.7°E as NOAA redistributes it (the ISatSS
+    // tiles), warped by the Python fetch stage onto a 0.04° plate carrée
+    // grid over the disk's useful extent — 80.7°E to 200.7°E, ±60°, which
+    // crosses the antimeridian — and stacked into one NetCDF series per
+    // window (`xuebuild/satellite/`), so a satellite source is a
+    // `series_file` observation like the JMA nowcast here. The source id is
+    // the orbital role; the spacecraft and channel are the `band` block on
+    // the variable (`bands`, docs/format.md): WMO C-5 174, C-8 297, AHI
+    // band 13 at 10.4073 µm. One channel to start.
+    SourceSpec {
+        id: "himawari",
+        manifest_model: "HIMAWARI",
+        product: "ahi-fldk-0p04",
+        latest_filename: Some("latest-himawari.json"),
+        steps: &[],
+        input_variable_ids: &["ir104"],
+        companion_files: &[],
+        accumulated_precipitation: false,
+        averaged_precipitation: false,
+        average_window_hours: 6,
+        optional_at_analysis: &[],
+        statistical_processes: &[],
+        bands: &[(
+            "ir104",
+            SatelliteBand { satellite_series: 0, satellite_number: 174, instrument_type: 297, central_wavenumber: 96086 },
+        )],
+        bundle_scalar_ids: &["ir104"],
+        core_bundle_ids: &["ir104"],
+        bundle_vector_ids: &[],
+        // The platform's region at 0.04°: 120° x 120°.
+        production_grid: (3000, 3000),
+        tile: (64, 64),
+        regrid: None,
+        observation: true,
+        window_hours: Some(3),
+        cadence_seconds: Some(600),
         series_file: true,
         downsample: None,
     },

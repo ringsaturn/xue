@@ -1,0 +1,39 @@
+{
+  "ir104": {
+    "label": "Brightness temperature, 10.4 \u00b5m",
+    "unit": "K",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 4,
+      "parameterNumber": 4,
+      "typeOfFirstFixedSurface": 8,
+      "scaleFactorOfFirstFixedSurface": null,
+      "scaledValueOfFirstFixedSurface": null
+    },
+    "band": {
+      "himawari": {
+        "satelliteSeries": 0,
+        "satelliteNumber": 174,
+        "instrumentType": 297,
+        "scaleFactorOfCentralWaveNumber": 0,
+        "scaledValueOfCentralWaveNumber": 96086
+      }
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 180.0,
+      "scale": 0.6,
+      "minimumCode": 0,
+      "maximumCode": 253,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 180.0,
+      "scale": 1.2,
+      "minimumCode": 0,
+      "maximumCode": 126,
+      "nodataCode": 255
+    }
+  }
+}

@@ -22,6 +22,8 @@ from email.utils import parsedate_to_datetime
 from pathlib import Path
 
 from . import cmaarchive, jmacli
+from . import satellite
+from .satellite import fetch as satellite_fetch
 from .errors import DownloadError
 from .idx import (
     ByteRange,
@@ -797,6 +799,8 @@ def latest_observation_slot(spec: SourceSpec, *, now: datetime | None = None) ->
         return latest_jma_slot(spec, now=now)
     if spec.id == "cma":
         return latest_cma_slot(spec, now=now)
+    if spec.platform is not None:
+        return latest_satellite_slot(spec, now=now)
     raise DownloadError(f"{spec.manifest_model} is not a live observation source")
 
 
@@ -912,6 +916,129 @@ def _fetch_cma_run(
     (destination / MRMS_FETCH_FILENAME).write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
     LOG.info("%s run %s: %d frames in %s", spec.manifest_model, run.id, len(window.times), output)
     return [output]
+
+
+# -- Geostationary satellites ------------------------------------------------
+#
+# A satellite source (``SourceSpec.platform``) is fetched through
+# xuebuild/satellite/: a window's slots are listed on the agency's bucket,
+# each new slot's tiles fetched, mosaicked and warped onto the published
+# plate carrée grid as one cached frame, and the window's frames stacked
+# into one NetCDF series — the shape the JMA and CMA feeds arrive in, so
+# the converter downstream is the observation path unchanged.
+
+
+def satellite_platform(spec: SourceSpec) -> satellite.Platform:
+    if spec.platform is None:
+        raise DownloadError(f"{spec.manifest_model} is not a satellite source")
+    return satellite.platform(spec.platform)
+
+
+def satellite_grid(spec: SourceSpec) -> satellite_fetch.TargetGrid:
+    """The grid a satellite source is warped onto, held to the source
+    table's ``production_grid`` so a build's completeness check and the
+    fetch agree."""
+    if spec.grid_step is None:
+        raise DownloadError(f"{spec.manifest_model} declares no grid step")
+    grid = satellite_fetch.target_grid(satellite_platform(spec), spec.grid_step)
+    if (grid.width, grid.height) != spec.production_grid:
+        raise DownloadError(
+            f"{spec.manifest_model}: the platform's region at {spec.grid_step}° is {grid.width} x {grid.height}, "
+            f"not the production grid {spec.production_grid}"
+        )
+    return grid
+
+
+def latest_satellite_slot(
+    spec: SourceSpec, *, now: datetime | None = None, fetch: Callable[[str], str] | None = None
+) -> datetime:
+    """The newest slot whose tiles have all landed for the source's first
+    channel — the end of the live window."""
+    platform = satellite_platform(spec)
+    return satellite_fetch.latest_slot(platform, platform.channel(spec.input_variable_ids[0]), now=now, fetch=fetch)
+
+
+def _satellite_run_is_complete(
+    spec: SourceSpec, run: GfsRun, hours: int, *, fetch: Callable[[str], str] | None = None
+) -> bool:
+    """Whether a named window has fully landed: the bucket's newest
+    complete slot is at or past the window's end."""
+    return latest_satellite_slot(spec, fetch=fetch) >= run.time + timedelta(hours=hours)
+
+
+def satellite_frame_name(spec: SourceSpec, run: GfsRun) -> str:
+    """The local name of a window's series file: ``himawari.<run>.nc``."""
+    return f"{spec.id}.{run.id}.nc"
+
+
+def _fetch_satellite_run(
+    spec: SourceSpec,
+    run: GfsRun,
+    hours: int,
+    raw_root: Path,
+    *,
+    force: bool,
+    input_ids: tuple[str, ...] | None,
+    fetch: Callable[[str], str] | None = None,
+    download: Callable[[str], bytes] | None = None,
+) -> list[Path]:
+    """Fetch one window of a satellite source: every slot from the run's
+    hour through ``hours`` past it that the bucket holds whole, warped onto
+    the published grid (or read back from the frame cache under
+    ``raw_root/<role>-frames``, which ``force`` bypasses) and stacked into
+    one NetCDF series, with a ``fetch.json`` beside it in the shape the
+    MRMS fetch leaves so ``window_summary`` and the rolling publish read
+    both alike."""
+    if input_ids is not None and any(variable_id not in spec.input_variable_ids for variable_id in input_ids):
+        raise DownloadError(f"{spec.manifest_model} publishes {list(spec.input_variable_ids)}, not {list(input_ids)}")
+    if len(spec.input_variable_ids) != 1:
+        raise DownloadError(f"{spec.manifest_model} must publish exactly one channel for now")
+    platform = satellite_platform(spec)
+    channel = platform.channel(spec.input_variable_ids[0])
+    grid = satellite_grid(spec)
+    destination = raw_root / f"{spec.id}.{run.id}"
+    window = satellite_fetch.fetch_window(
+        platform,
+        channel,
+        run.time,
+        hours,
+        grid=grid,
+        raw_root=raw_root,
+        destination=destination,
+        series_name=satellite_frame_name(spec, run),
+        unit=VARIABLES[channel.id].output_unit,
+        force=force,
+        fetch=fetch,
+        download=download,
+        concurrency=spec.fetch_concurrency,
+    )
+    record = {
+        "model": spec.id,
+        "run": run.id,
+        "hours": hours,
+        "cadenceSeconds": spec.cadence_seconds,
+        "platform": platform.spacecraft,
+        "grid": {
+            "step": grid.step,
+            "width": grid.width,
+            "height": grid.height,
+            "firstLongitude": grid.first_longitude,
+            "firstLatitude": grid.first_latitude,
+        },
+        "series": window.series.name,
+        "frames": [
+            {
+                "path": window.series.name,
+                "slot": frame.slot.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "frame": frame.path.name,
+                "tilesFetched": frame.tiles,
+            }
+            for frame in window.frames
+        ],
+    }
+    (destination / MRMS_FETCH_FILENAME).write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
+    LOG.info("%s run %s: %d frames in %s", spec.manifest_model, run.id, len(window.frames), window.series)
+    return [window.series]
 
 
 def model_object_url(run: GfsRun, forecast_hour: int, model: str) -> str:
@@ -1047,6 +1174,8 @@ def _run_is_complete(
         return _jma_run_is_complete(source_spec(model), run, hours)
     if model == "cma":
         return _cma_run_is_complete(source_spec(model), run, hours)
+    if source_spec(model).platform is not None:
+        return _satellite_run_is_complete(source_spec(model), run, hours)
     if model == "hrrr":
         # Every hour, on one mirror: the hours of a cycle land out of order
         # and the two copies disagree for a while, so the ends prove nothing.
@@ -1436,6 +1565,8 @@ def fetch_run(
         return _fetch_jma_run(spec, run, hours, raw_root, force=force, input_ids=input_ids)
     if spec.id == "cma":
         return _fetch_cma_run(spec, run, hours, raw_root, force=force, input_ids=input_ids)
+    if spec.platform is not None:
+        return _fetch_satellite_run(spec, run, hours, raw_root, force=force, input_ids=input_ids)
     destination = raw_root / f"{spec.id}.{run.id}"
     forecast_hours = spec.forecast_hours(hours)
     frame_attempts = ECMWF_FRAME_ATTEMPTS if model in ECMWF_OPEN_DATA_MODELS else 1

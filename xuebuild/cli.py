@@ -107,11 +107,12 @@ def _model_argument(parser: argparse.ArgumentParser, *, fetched_only: bool = Tru
             "two minutes; --run names the window's first hour and --hours its length, 3 by default), "
             "JMA, the precipitation nowcast over Japan (an observation every five minutes, "
             "fetched through the jma-radar tool; a window the same way), "
-            "or cma, the CMA composite reflectivity mosaic over China (an observation every "
+            "cma, the CMA composite reflectivity mosaic over China (an observation every "
             "six minutes, read out of its daily Zarr archive; "
             "a window the same way"
             + ("" if fetched_only else ", or one NetCDF file the tool wrote")
-            + ")"
+            + "), or himawari, the Himawari-9 10.4 µm infrared window (an observation every ten "
+            "minutes, warped from NOAA's ISatSS tiles onto a 0.04° grid; a window the same way)"
         ),
     )
 

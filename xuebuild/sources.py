@@ -41,6 +41,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .errors import DownloadError
+from .satellite.platforms import HIMAWARI, SatelliteBand
 from .reproject import Regrid
 
 
@@ -76,32 +77,6 @@ class CompanionFile:
 
 
 @dataclass(frozen=True)
-class SatelliteBand:
-    """The spectral band a satellite image variable was measured in, in the
-    fields of GRIB2 product definition template 4.31: the spacecraft and
-    instrument by their WMO common code table numbers (C-5 and C-8) and the
-    band's central wave number in m⁻¹ as a scaled value. Written verbatim as
-    the variable's ``band`` block (docs/format.md §"Band and Producer")."""
-
-    satellite_series: int
-    satellite_number: int
-    instrument_type: int
-    central_wavenumber: int
-    """``scaledValueOfCentralWaveNumber``; the scale factor written is 0,
-    since a wave number in whole m⁻¹ places any imager band to a tenth of
-    a nanometre."""
-
-    def metadata(self) -> dict[str, int]:
-        return {
-            "satelliteSeries": self.satellite_series,
-            "satelliteNumber": self.satellite_number,
-            "instrumentType": self.instrument_type,
-            "scaleFactorOfCentralWaveNumber": 0,
-            "scaledValueOfCentralWaveNumber": self.central_wavenumber,
-        }
-
-
-@dataclass(frozen=True)
 class Downsample:
     """How a source's planes are thinned onto the grid its bundles carry:
     every ``factor`` x ``factor`` block of source cells becomes one cell.
@@ -127,7 +102,7 @@ class Downsample:
 @dataclass(frozen=True)
 class SourceSpec:
     id: str
-    """CLI / URL / directory id: "gfs", "ecmwf", "aifs", "sflux", "hrrr", "cma", "mrms" or "jma"."""
+    """CLI / URL / directory id: "gfs", "ecmwf", "aifs", "sflux", "hrrr", "cma", "mrms", "jma" or "himawari"."""
     manifest_model: str
     """The manifest and bundle-metadata ``model`` string."""
     product: str
@@ -177,9 +152,19 @@ class SourceSpec:
     bands: tuple[tuple[str, SatelliteBand], ...] = ()
     """Published variables that are satellite image channels, each with
     the band it was measured in; written into the bundle's metadata as the
-    variable's ``band`` block beside ``parameter``. A source that images
-    from a spacecraft lists one per channel it publishes; every other source
-    lists none."""
+    variable's ``band`` block beside ``parameter``. A satellite source lists
+    one per channel it publishes (:meth:`~xuebuild.satellite.platforms.Platform.bands`);
+    every other source lists none."""
+    platform: str | None = None
+    """For a satellite source, the orbital role its files are read under
+    in the platform registry (``xuebuild/satellite/platforms.py``):
+    ``himawari``. The fetch lists, warps and stacks a window through that
+    platform's reader and the source is otherwise a ``series_file``
+    observation like the JMA nowcast. None for every other source."""
+    grid_step: float | None = None
+    """For a satellite source, the step of the plate carrée grid the
+    frames are warped onto, in degrees; the extent is the platform's
+    region. ``production_grid`` must be that extent at this step."""
     bundle_scalar_ids: tuple[str, ...] = ("tmp2m", "prate")
     """Scalar variables published as single-variable bundles, in manifest
     order."""
@@ -858,6 +843,60 @@ SOURCES: dict[str, SourceSpec] = {
         cycle_hours=1,
         window_hours=3,
         cadence_seconds=300,
+        video=False,
+    ),
+    # Himawari-9 AHI, the JMA geostationary imager at 140.7°E, as NOAA
+    # redistributes it on its own bucket: the ISatSS product, each channel
+    # of each ten-minute full-disk scan already calibrated and cut into 88
+    # NetCDF tiles on the geostationary projection. A satellite source is a
+    # ``series_file`` observation like the JMA nowcast: the fetch
+    # (``xuebuild/satellite/``) lists a slot's tiles, mosaics them, warps
+    # them with ``gdalwarp`` onto a 0.04° plate carrée grid over the disk's
+    # useful extent (80.7–200.7°E, ±60°: it crosses the antimeridian, and
+    # the encoders' ``crop_grid`` and the shell take the grid in its own
+    # copy of the world), caches the frame and stacks the window's frames
+    # into one NetCDF series, so the converter downstream never learns the
+    # geostationary arithmetic. The source id is the orbital role, not the
+    # spacecraft (Himawari-10 takes the slot around 2029 and changes the
+    # platform row alone); the spacecraft and channel are the ``band``
+    # block on the variable (``bands``, docs/format.md). One channel to
+    # start, the 10.4 µm infrared window as brightness temperature
+    # (``ir104``, AHI band 13); the other fifteen are platform-registry rows
+    # a source-table line publishes. The tiles are generated about eight
+    # minutes after a scan starts and listed some fifteen minutes after it,
+    # so the live window ends fifteen to twenty minutes behind real time; a
+    # rolling publish rebuilds it every ten minutes into a round
+    # (.github/workflows/publish-himawari.yml), each round warping one new
+    # slot and reading the rest from the frame cache mirrored on the
+    # bucket.
+    "himawari": SourceSpec(
+        id="himawari",
+        manifest_model="HIMAWARI",
+        product="ahi-fldk-0p04",
+        latest_filename="latest-himawari.json",
+        steps=(),
+        input_variable_ids=("ir104",),
+        accumulated_precipitation=False,
+        bands=HIMAWARI.bands(("ir104",)),
+        bundle_scalar_ids=("ir104",),
+        core_bundle_ids=("ir104",),
+        # The platform's region at 0.04°: 120° x 120° is 3000 x 3000 cells,
+        # 9 M a frame, 4.6 MB quantized and compressed (measured 2026-09-17
+        # on six slots: an infrared image has texture everywhere, and cloud
+        # motion between ten-minute frames leaves the temporal residual
+        # little to save).
+        production_grid=(3000, 3000),
+        # 64 x 64 cells is 2.56° at this step — 47 x 47 = 2209 tiles, each
+        # a series of nineteen 4 KB planes over a three-hour window; a
+        # phone over Tokyo takes thirty of them.
+        tile=(64, 64),
+        observation=True,
+        series_file=True,
+        platform="himawari",
+        grid_step=0.04,
+        cycle_hours=1,
+        window_hours=3,
+        cadence_seconds=600,
         video=False,
     ),
 }

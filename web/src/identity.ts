@@ -1,4 +1,4 @@
-import type { BundleParameter, BundleVariable, KnownBundleId } from "./manifest";
+import type { BundleBand, BundleParameter, BundleVariable, KnownBundleId } from "./manifest";
 import { isobaricChartFamily, specForIdentity, variableSpec } from "./variables";
 
 /**
@@ -26,7 +26,10 @@ import { isobaricChartFamily, specForIdentity, variableSpec } from "./variables"
  * gust, the four cloud covers, CAPE, visibility, dew point, apparent
  * temperature — and the ocean set: skin temperature, sea ice cover and
  * thickness, wave height, period and direction, and the wave vector, the
- * height laid along the direction of travel as a u/v pair). */
+ * height laid along the direction of travel as a u/v pair — and the
+ * satellite channels, one family per nominal wavelength: the brightness
+ * temperature parameter is the same for every infrared band, and the
+ * `band` block beside it says which). */
 export type ChartFamily =
   | "hgt"
   | "tmp"
@@ -54,7 +57,8 @@ export type ChartFamily =
   | "htsgw"
   | "perpw"
   | "dirpw"
-  | "wave";
+  | "wave"
+  | "ir104";
 
 export interface VariableIdentity {
   family: ChartFamily;
@@ -125,12 +129,19 @@ function isTriple(parameter: BundleParameter, discipline: number, category: numb
  * cover, (10,2,1) @1 sea ice thickness, (10,0,3) / (10,0,11) / (10,0,10)
  * @1 significant wave height, primary wave period and direction — the
  * oceanographic discipline's surface, whose value (0 from pgrb2, 1 from
- * WAVEWATCH III, none once declared) is not part of the identity.
+ * WAVEWATCH III, none once declared) is not part of the identity; (0,4,4)
+ * @8 brightness temperature, a satellite channel told apart by the
+ * `band` block's central wave number (10–11 µm is the infrared window,
+ * `ir104`).
  */
-export function identityForParameter(parameter: BundleParameter): VariableIdentity | null {
+export function identityForParameter(parameter: BundleParameter, band?: BundleBand): VariableIdentity | null {
   const surface = parameter.typeOfFirstFixedSurface;
   const level = isobaricLevel(parameter);
   const value = surfaceValue(parameter);
+  if (isTriple(parameter, 0, 4, 4) && surface === 8) {
+    const channel = satelliteChannel(band);
+    return channel === null ? null : scalar(channel, null);
+  }
   if (isTriple(parameter, 0, 3, 5) && level !== null) return scalar("hgt", level);
   if (isTriple(parameter, 0, 3, 1) && surface === 101) return scalar("hgt", null);
   if (isTriple(parameter, 0, 0, 0)) {
@@ -159,6 +170,29 @@ export function identityForParameter(parameter: BundleParameter): VariableIdenti
   if (isTriple(parameter, 0, 6, 5) && surface === 234) return scalar("hcdc", null);
   if (isTriple(parameter, 0, 7, 6) && surface === 1) return scalar("cape", null);
   if (isTriple(parameter, 0, 19, 0) && surface === 1) return scalar("vis", null);
+  return null;
+}
+
+/** The satellite channel a brightness temperature belongs to, by the
+ * central wave number of its `band` block: the chart is the same for AHI
+ * band 13 (10.41 µm) and ABI channel 13 (10.35 µm), so a channel is a
+ * wavelength interval, never a spacecraft or an exact number. A
+ * brightness temperature with no band, or one in a band this build has no
+ * chart for (the water vapour bands, until they ship), is an unknown
+ * field and renders generically. */
+const SATELLITE_CHANNELS: readonly { family: ChartFamily; wavelengthMicrons: readonly [number, number] }[] = [
+  { family: "ir104", wavelengthMicrons: [10.0, 11.0] },
+];
+
+function satelliteChannel(band: BundleBand | undefined): ChartFamily | null {
+  if (band === undefined) return null;
+  const wavenumber = band.scaledValueOfCentralWaveNumber * 10 ** -band.scaleFactorOfCentralWaveNumber;
+  if (!(wavenumber > 0)) return null;
+  const microns = 1e6 / wavenumber;
+  for (const channel of SATELLITE_CHANNELS) {
+    const [low, high] = channel.wavelengthMicrons;
+    if (microns >= low && microns < high) return channel.family;
+  }
   return null;
 }
 
@@ -247,7 +281,7 @@ export function identifyBundle(variables: readonly BundleVariable[]): BundleIden
   // Not a pair: the bundle reads as whatever its first variable is.
   const first = variables[0]!;
   const identity = first.parameter
-    ? identityForParameter(first.parameter)
+    ? identityForParameter(first.parameter, first.band)
     : (LEGACY_IDENTITIES[first.id] ?? null);
   return identity === null ? null : { identity, variables: [first] };
 }

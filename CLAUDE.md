@@ -68,6 +68,7 @@ make test                        # rust + python + web unit tests (incl. encoder
 make tc-build [ISSUE=YYYYMMDDHH] # the tropical cyclone product for one hour (needs eccodes' bufr_dump)
 make airport-build [ROUND=YYYYMMDDHHMM]  # the airport METAR / TAF product for one ten-minute round
 make sounding-build [ISSUE=YYYYMMDDHH] # the radiosonde sounding product for one hour (needs bufr_dump)
+.venv/bin/python -m xuebuild build-bin --model himawari --run latest --hours 3 --round now  # one Himawari round (needs gdalwarp)
 make test-rust                   # regenerates the golden fixture, then cargo test
 make test-e2e                    # playwright (needs `npx playwright install chromium`)
 make encoder-rust                # build the native encoder from source (needs GDAL + libclang)
@@ -337,6 +338,34 @@ model starts here; the frontend mirror is `FORECAST_MODELS` in
   `prune-r2-frames` (`FRAME_CACHE=true` in the rounds script), so the
   agency serves each frame once; the tiles expire after days and there is
   no archive, so a case can only be cut from what that cache keeps.
+
+- Satellite (`himawari`): Himawari-9's 10.4 µm infrared window as NOAA
+  redistributes it (the ISatSS tiles on `noaa-himawari9`), a `series_file`
+  observation like `jma` / `cma` whose fetch stage is `xuebuild/satellite/`
+  (`docs/satellite.md`): `platforms.py` is the registry (one row per
+  spacecraft at an orbital slot, its channels, bucket and reader; the
+  source id is the **role**, `himawari`, and the spacecraft is the `band`
+  block on the variable, from `SourceSpec.bands` via `Platform.bands`),
+  `readers.py` lists and mosaics a slot's tiles (`ISatSSReader`,
+  `gdalbuildvrt`), `projector.py` warps the mosaic onto the platform's
+  region at `SourceSpec.grid_step` (`GdalWarpProjector`; 80.7–200.7°E at
+  0.04°, 3000 × 3000, past the antimeridian), `assemble.py` caches the
+  frame (`data/raw/himawari-frames/<channel>/*.tif`, mirrored like the JMA
+  frames) and writes the window series with `gdal_translate -of netCDF`
+  through a VRT carrying `NETCDF_DIM_*` metadata, `fetch.py` runs a window
+  (`fetch.py::_fetch_satellite_run` in the top-level module dispatches on
+  `SourceSpec.platform`). The reference pipeline and the workflow need a
+  system GDAL with `gdalwarp` whichever encoder converts (the wheel's GDAL
+  has no GeoTIFF driver); `publish-himawari.yml` is `publish-jma.yml` on a
+  ten-minute cron with `gdal-bin` installed unconditionally.
+  `variables.py::ir104` (GRIB2 0/4/4 on surface 8, 180–331.8 K at 0.6),
+  `SATELLITE_VARIABLE_IDS`, `tests/fixtures/satellite-registry.json`; the
+  shell classifies the channel by the band's wave number
+  (`identity.ts::satelliteChannel`), `ChartFamily` `ir104`, the `satellite`
+  sheet group, the `cloudtop` meteogram row. `producers.py` is the
+  composite-product interface, empty. `tests/test_satellite.py` runs the
+  four fixture tiles in `tests/fixtures/himawari/` through the whole stage
+  and both encoders.
 
 `variables.py` is the variable registry in GRIB2 terms: the parameter
 triple, the fixed surface, label and unit, plus the matching hints (element,

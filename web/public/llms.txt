@@ -50,8 +50,21 @@ Facts worth getting right:
   10–20, 20–30, 30–50, 50–80 and ≥ 80 mm/h), not radar reflectivity, so the
   dataset ships `prate` alone at each class's representative rate (0.5, 3,
   7.5, 15, 25, 40, 65 and 100 mm/h); a value is a class, not a measured
-  rate. An observation dataset has no run cycle and no lead time: its `run`
-  is the hour its series starts and a frame's offset is time elapsed since.
+  rate. `himawari` is the ninth live source and the fourth observation:
+  the Japan Meteorological Agency's Himawari-9 geostationary imager (AHI)
+  at 140.7°E as NOAA redistributes it, the 10.4 µm infrared window as
+  brightness temperature in kelvin (`ir104`, AHI band 13: cloud tops read
+  cold, clear sea and land warm), one full-disk scan every ten minutes,
+  reprojected from the geostationary view onto a 0.04° latitude/longitude
+  grid over the useful disk (3000 × 3000, 80.7°E–200.7°E — past the
+  antimeridian — and 60°S–60°N; cells outside the disk carry the codebook
+  bottom, 180 K), a rolling window of the last two to three hours some
+  fifteen to twenty minutes behind real time. The source is named by its
+  orbital slot: the spacecraft (WMO 174), the instrument (297) and the
+  band's central wave number are the `band` block beside the variable's
+  parameter block in each bundle's metadata. An observation dataset has no
+  run cycle and no lead time: its `run` is the hour its series starts and
+  a frame's offset is time elapsed since.
 - Bundles published per run. GFS and ECMWF: `tmp2m`, `prate`, `prmsl`,
   `hgt850`, `hgt700`, `hgt500`, `hgt250`, `tmp925`, `tmp850`, `tmp500`,
   `rh850`, `rh700`, `rh500`, the surface diagnostics `gust`, `tcdc` (total
@@ -84,7 +97,7 @@ Facts worth getting right:
   `cref`. MRMS: `cref` (observed composite reflectivity, dBZ) and `prate`
   (the MRMS precipitation rate, mm/h; a case may ship the reflectivity
   alone). JMA: `prate` (precipitation intensity class representative rate,
-  mm/h). Names
+  mm/h). HIMAWARI: `ir104` (10.4 µm brightness temperature, K). Names
   are `<family><level>`; the level is in hPa, `2m`/`10m` are heights above
   ground, `prmsl` is mean sea level pressure.
 - Only the newest run per source is kept online. Runs are pruned when
@@ -98,8 +111,10 @@ Facts worth getting right:
   NOAA product (public domain); `jma` is derived from the Japan Meteorological Agency
   website (出典：気象庁ホームページ; the agency's terms of use, compatible
   with CC BY 4.0, ask that the source be named and the processing —
-  regridding and reclassification by jma-radar — be noted); the basemap is
-  Protomaps © OpenStreetMap contributors.
+  regridding and reclassification by jma-radar — be noted); `himawari` is
+  JMA's Himawari-9 imagery distributed by NOAA (attribution required, the
+  reprojection noted, no endorsement implied by either agency); the basemap
+  is Protomaps © OpenStreetMap contributors.
 
 ## Pages and URL parameters
 
@@ -108,8 +123,9 @@ fall back to defaults rather than fail, so a constructed link always opens.
 
 - https://xue.ringsaturn.me/ — the live viewer. Defaults to GFS precipitation.
 - https://xue.ringsaturn.me/showcase.html — the list of historical cases.
-- `?model=gfs|sflux|ecmwf|aifs|hrrr` — which live source (`ifs` is an alias
-  of `ecmwf`, `aifs-single` of `aifs`).
+- `?model=gfs|sflux|ecmwf|aifs|hrrr|mrms|jma|cma|himawari` — which live
+  source (`ifs` is an alias of `ecmwf`, `aifs-single` of `aifs`, `hrpns`
+  of `jma`, `radar` of `cma`, `himawari-9` / `ahi` of `himawari`).
 - `?type=` — the filled layer: `temp` (2 m temperature), `precip`, `wind`
   (10 m), `solar` (sflux only), `pressure` (sea level pressure as isobars),
   `radar` (composite reflectivity: the radar cases, and the HRRR forecast), the GFS
@@ -119,7 +135,8 @@ fall back to defaults rather than fail, so a constructed link always opens.
   skin temperature, `tmpsfc`), `seaice` (`icec`; `icethickness` for
   `icetk`), `waves` (the `wave` vector — height as the fill, direction as
   particles; `waveheight` for the scalar `htsgw`, `waveperiod` for
-  `perpw`), or a bundle name such as `tmp850`,
+  `perpw`), the Himawari `infrared` (`ir104`; `ir`, `satellite` and `sat`
+  are accepted spellings), or a bundle name such as `tmp850`,
   `rh700`, `wind850`, `qflux850`, `hgt500`, `vvel700`, `thetae850`; `t850`,
   `z500`, `humidity700`, `vapour850`, `omega700`, `subtropicalhigh`
   (= `hgt500`) are accepted spellings.
@@ -183,7 +200,7 @@ fall back to defaults rather than fail, so a constructed link always opens.
 Examples: `/?model=ecmwf&type=wind850`, `/?type=temp&lines=hgt500`,
 `/?case=pnw-heat-dome-2021`, `/?case=ida-2021&type=radar`,
 `/?model=hrrr&type=radar#map=6/32.8/-96.8`, `/?type=wind&tc=EP142026`,
-`/?type=temp&stations=snd`.
+`/?type=temp&stations=snd`, `/?model=himawari&type=infrared#map=5/25/140`.
 
 ## Data access
 
@@ -192,7 +209,8 @@ https://dataset.ringsaturn.me/xue/. The contract is two layers:
 
 - One mutable live pointer per source (JSON, schema 1): `latest.json` (GFS),
   `latest-sflux.json`, `latest-ecmwf.json`, `latest-aifs.json`,
-  `latest-hrrr.json`, `latest-mrms.json`, `latest-jma.json`, `latest-cma.json`. Fields: `schemaVersion`, `model`, `product`, `run`
+  `latest-hrrr.json`, `latest-mrms.json`, `latest-jma.json`, `latest-cma.json`,
+  `latest-himawari.json`. Fields: `schemaVersion`, `model`, `product`, `run`
   (YYYYMMDDHH, UTC), `runTime` (ISO 8601), `manifestPath` (relative),
   `manifestCrc32`. Fetch with cache disabled; it changes four times a day
   (every hour for HRRR, every five minutes for MRMS — compare
@@ -216,7 +234,7 @@ https://dataset.ringsaturn.me/xue/. The contract is two layers:
   axis, the variables' GRIB2 parameter blocks and the quantization codebooks
   are inside each bundle — a UTF-8 JSON metadata block after the container's
   header, the store group's `attributes.xue` verbatim.
-- The MRMS, JMA and CMA radar windows are one directory deeper: the `run` is the window's *first*
+- The MRMS, JMA and CMA radar windows and the Himawari window are one directory deeper: the `run` is the window's *first*
   hour (three hours before the newest frame's, moving on every hour), and
   each five-minute rebuild of that run is a round of its own,
   `mrms.<run>/<HHMM>/manifest.json` (HHMM the round's UTC start), so a

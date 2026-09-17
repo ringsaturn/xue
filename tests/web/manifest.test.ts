@@ -434,16 +434,32 @@ describe("dataset kinds", () => {
     for (const model of ["gfs", "sflux", "ecmwf", "aifs", "hrrr"] as const) expect(isObservationModel(model)).toBe(false);
   });
 
-  it("lists the live feeds, the three observation windows among them", () => {
+  it("lists the live feeds, the four observation windows among them", () => {
     // Every live feed has a pointer to poll (mirrors
-    // SourceSpec.latest_filename); the three observation windows are the
+    // SourceSpec.latest_filename); the four observation windows are the
     // last of the switch order.
-    expect(FORECAST_MODEL_IDS).toEqual(["gfs", "sflux", "ecmwf", "aifs", "hrrr", "mrms", "jma", "cma"]);
+    expect(FORECAST_MODEL_IDS).toEqual(["gfs", "sflux", "ecmwf", "aifs", "hrrr", "mrms", "jma", "cma", "himawari"]);
     for (const model of FORECAST_MODEL_IDS) expect(FORECAST_MODELS[model].latestFilename).toBeDefined();
     expect(FORECAST_MODELS.aifs).toMatchObject({ label: "AIFS", product: "aifs-single-0p25", latestFilename: "latest-aifs.json" });
     expect(FORECAST_MODELS.mrms.latestFilename).toBe("latest-mrms.json");
     expect(FORECAST_MODELS.jma.latestFilename).toBe("latest-jma.json");
     expect(FORECAST_MODELS.cma.latestFilename).toBe("latest-cma.json");
+    expect(FORECAST_MODELS.himawari.latestFilename).toBe("latest-himawari.json");
+  });
+
+  it("opens the Himawari imagery on its infrared channel over the disk", () => {
+    // Mirrors the `himawari` entry of SOURCES: one channel, on a grid that
+    // runs past the antimeridian.
+    expect(FORECAST_MODELS.himawari).toMatchObject({
+      label: "HIMAWARI",
+      product: "ahi-fldk-0p04",
+      observation: true,
+      coreBundles: ["ir104"],
+      defaultVariable: "ir104",
+      railCore: ["ir104"],
+      region: [80.7, -60, 200.7, 60],
+    });
+    expect(isObservationModel("himawari")).toBe(true);
   });
 
   it("opens the CMA mosaic on its reflectivity over its own region", () => {

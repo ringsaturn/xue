@@ -391,7 +391,7 @@ as it and never inside it, to carry what the parameter does not:
     "satelliteNumber": 174,
     "instrumentType": 297,
     "scaleFactorOfCentralWaveNumber": 0,
-    "scaledValueOfCentralWaveNumber": 96061
+    "scaledValueOfCentralWaveNumber": 96086
   },
   "quantization": { "type": "linear", "offset": 180.0, "scale": 0.6,
                     "minimumCode": 0, "maximumCode": 253, "nodataCode": 255 }

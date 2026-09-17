@@ -37,8 +37,8 @@ import { PRESSURE_BUNDLE_IDS, PRESSURE_LEVELS, pressureCode, pressureLabel, pres
  * group is chart knowledge — what a forecaster would file it under — and
  * the sheet's last group, for bundles no entry stands for, is the sheet's
  * own. */
-export type FieldGroup = "temperature" | "moisture" | "wind" | "dynamics" | "radiation" | "ocean";
-export const FIELD_GROUPS: readonly FieldGroup[] = ["temperature", "moisture", "wind", "dynamics", "radiation", "ocean"];
+export type FieldGroup = "temperature" | "moisture" | "wind" | "dynamics" | "radiation" | "ocean" | "satellite";
+export const FIELD_GROUPS: readonly FieldGroup[] = ["temperature", "moisture", "wind", "dynamics", "radiation", "ocean", "satellite"];
 
 /** The ground a field is drawn on, by what its palette needs (main.ts
  * maps each to its tones per theme): an opaque coat's near-void, a
@@ -525,6 +525,26 @@ function buildSpecs(): readonly VariableSpec[] {
     urlName: "wavedirection",
     urlAliases: ["wavedir"],
     showcaseCode: "WAVE DIR",
+  }),
+  // The satellite infrared window: cloud tops read cold and bright on an
+  // inverted grey scale, the coldest enhanced in colour; clear sea and
+  // land read dark, so the picture is the one every weather bulletin
+  // shows. Outside the disk is the codebook bottom, painted as nothing.
+  // The legend reads in kelvin, the channel's own unit.
+  surface({
+    id: "ir104",
+    chart: "ir104",
+    group: "satellite",
+    code: "IR 10.4",
+    title: ["Infrared", "Imagery"],
+    bufferTitle: "Imagery buffer",
+    labelKey: "varLabelIr104",
+    legend: ["330", "300", "270", "240", "210", "180"],
+    ground: "slate",
+    urlName: "infrared",
+    urlAliases: ["ir", "satellite", "sat", "bt"],
+    meteogramCode: "IR",
+    showcaseCode: "IR",
   }),
   // The lines.
   ...pressure(),

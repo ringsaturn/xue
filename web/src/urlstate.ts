@@ -105,6 +105,10 @@ const MODEL_ALIASES: Record<string, ForecastModelId> = {
   cma: "cma",
   "cma-radar": "cma",
   radar: "cma",
+  himawari: "himawari",
+  "himawari-9": "himawari",
+  himawari9: "himawari",
+  ahi: "himawari",
 };
 
 /** Model requested by the page URL, or the default when the URL names none

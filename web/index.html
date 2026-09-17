@@ -137,7 +137,7 @@
             "@type": "Dataset",
             "@id": "https://xue.ringsaturn.me/#data",
             "name": "Xue live forecast bundles",
-            "description": "The current NOAA GFS, GFS surface-flux, ECMWF IFS, ECMWF AIFS and NOAA HRRR runs, the last three to four hours of the NOAA MRMS radar mosaic and the last two to three hours of the JMA precipitation nowcast over Japan and of the CMA radar mosaic over China, each a rolling window rebuilt every five minutes, converted into the .xue container: 8-bit quantized planes on the native grid with temporal residual prediction and Zstandard compression, one file per variable, streamable by HTTP range request. Only the newest run per source is kept.",
+            "description": "The current NOAA GFS, GFS surface-flux, ECMWF IFS, ECMWF AIFS and NOAA HRRR runs, the last three to four hours of the NOAA MRMS radar mosaic, the last two to three hours of the JMA precipitation nowcast over Japan and of the CMA radar mosaic over China, and the last two to three hours of Himawari-9 infrared imagery over the western Pacific, each a rolling window rebuilt every few minutes, converted into the .xue container: 8-bit quantized planes on the native grid with temporal residual prediction and Zstandard compression, one file per variable, streamable by HTTP range request. Only the newest run per source is kept.",
             "url": "https://dataset.ringsaturn.me/xue/",
             "isAccessibleForFree": true,
             "creator": { "@id": "https://github.com/ringsaturn#person" },
@@ -147,6 +147,7 @@
               { "@type": "Dataset", "name": "NOAA Multi-Radar/Multi-Sensor System (MRMS)", "url": "https://registry.opendata.aws/noaa-mrms-pds/" },
               { "@type": "Dataset", "name": "JMA High-resolution Precipitation Nowcast (気象庁 高解像度降水ナウキャスト)", "url": "https://www.jma.go.jp/bosai/en_nowc/", "license": "https://www.jma.go.jp/jma/kishou/info/coment.html" },
               { "@type": "Dataset", "name": "CMA weather radar level-3 mosaic composite reflectivity (中国气象局雷达组合反射率拼图, RADAR_L3_MST_CREF)", "url": "https://www.nmc.cn" },
+              { "@type": "Dataset", "name": "NOAA Himawari-9 AHI full-disk imagery (JMA ひまわり9号, ISatSS)", "url": "https://registry.opendata.aws/noaa-himawari/" },
               { "@type": "Dataset", "name": "ECMWF Open Data (real-time)", "url": "https://www.ecmwf.int/en/forecasts/datasets/open-data", "license": "https://creativecommons.org/licenses/by/4.0/" }
             ],
             "spatialCoverage": { "@type": "Place", "geo": { "@type": "GeoShape", "box": "-90 -180 90 180" } },
@@ -161,7 +162,8 @@
               "wind gust, total and low / middle / high cloud cover, CAPE, visibility, 2 m dew point and apparent temperature",
               "sea surface (skin) temperature, sea ice cover and thickness, significant wave height, primary wave period, and the wave vector (height along the direction of travel) with particle animation",
               "composite radar reflectivity (observed by the CMA and NOAA MRMS mosaics, forecast by HRRR)",
-              "radar precipitation intensity classes (the JMA nowcast over Japan, as representative rates)"
+              "radar precipitation intensity classes (the JMA nowcast over Japan, as representative rates)",
+              "10.4 µm infrared brightness temperature (Himawari-9 AHI band 13, cloud-top temperature over the western Pacific)"
             ],
             "distribution": [
               { "@type": "DataDownload", "name": "GFS live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest.json" },
@@ -172,6 +174,7 @@
               { "@type": "DataDownload", "name": "MRMS radar live pointer (rolling window of the last three to four hours)", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-mrms.json" },
               { "@type": "DataDownload", "name": "JMA precipitation nowcast live pointer (rolling window of the last two to three hours)", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-jma.json" },
               { "@type": "DataDownload", "name": "CMA radar mosaic live pointer (rolling window of the last two to three hours)", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-cma.json" },
+              { "@type": "DataDownload", "name": "Himawari-9 infrared imagery live pointer (rolling window of the last two to three hours)", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-himawari.json" },
               { "@type": "DataDownload", "name": "Historical case catalog", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/showcase.json" }
             ]
           },
@@ -391,6 +394,12 @@
           <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4" /><path d="M12 2.5V5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8" /></svg>
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphDswrf">S</b>
           <span class="rail-name"><span>SOLAR</span> <small data-i18n="varSolar">FLUX</small></span>
+        </button>
+        <!-- The satellite imagery: the disk with a cloud over it. -->
+        <button type="button" data-variable="ir104" data-i18n-tip="varLabelIr104" aria-pressed="false" hidden>
+          <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5" /><path d="M6.5 14.5h8a2.5 2.5 0 0 0 .3-5A3.8 3.8 0 0 0 7.6 9.4 2.6 2.6 0 0 0 6.5 14.5z" fill="currentColor" stroke="none" /><path d="M3.5 12h2M18.5 12h2" /></svg>
+          <b class="rail-glyph" aria-hidden="true" data-i18n="glyphIr104">I</b>
+          <span class="rail-name"><span>SAT</span> <small data-i18n="varInfrared">IR 10.4</small></span>
         </button>
         <!-- The rest of the fields, in the sheet's own groups: shown on
              the rail only while on screen, reached through MORE otherwise.
@@ -639,6 +648,11 @@
               <small>CHINA RADAR</small>
               <span class="model-check" aria-hidden="true"></span>
             </button>
+            <button type="button" data-model="himawari" aria-pressed="false">
+              <span class="model-name">HIMAWARI</span>
+              <small>SATELLITE IR</small>
+              <span class="model-check" aria-hidden="true"></span>
+            </button>
           </div>
         </div>
       </div>
@@ -719,6 +733,7 @@
           <span class="source-credit" data-credit-model="cma">RADAR <a href="https://www.nmc.cn" target="_blank" rel="noreferrer">CMA</a> ·</span>
           <span class="source-credit" data-credit-model="mrms">RADAR <a href="https://registry.opendata.aws/noaa-mrms-pds/" target="_blank" rel="noreferrer">NOAA MRMS</a> ·</span>
           <span class="source-credit" data-credit-model="jma">SOURCE <a href="https://www.jma.go.jp/bosai/en_nowc/" target="_blank" rel="noreferrer">JMA WEBSITE</a> (REGRIDDED) ·</span>
+          <span class="source-credit" data-credit-model="himawari">IMAGERY <a href="https://www.data.jma.go.jp/mscweb/en/himawari89/" target="_blank" rel="noreferrer">JMA HIMAWARI-9</a> VIA <a href="https://registry.opendata.aws/noaa-himawari/" target="_blank" rel="noreferrer">NOAA</a> (REPROJECTED) ·</span>
           © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OPENSTREETMAP</a>
           · <a href="https://protomaps.com" target="_blank" rel="noreferrer">PROTOMAPS</a>
         </span>
@@ -777,6 +792,13 @@
               <a href="https://www.nmc.cn" target="_blank" rel="noreferrer">
                 <span class="credits-name">CMA</span>
                 <small data-i18n="creditsRadar">RADAR MOSAIC</small>
+                <span class="credits-arrow" aria-hidden="true">↗</span>
+              </a>
+            </li>
+            <li>
+              <a href="https://registry.opendata.aws/noaa-himawari/" target="_blank" rel="noreferrer">
+                <span class="credits-name">JMA Himawari-9 via NOAA</span>
+                <small data-i18n="creditsHimawari">SATELLITE IMAGERY · HIMAWARI-9 AHI, JMA, ON NOAA OPEN DATA (REPROJECTED)</small>
                 <span class="credits-arrow" aria-hidden="true">↗</span>
               </a>
             </li>

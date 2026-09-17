@@ -672,6 +672,31 @@ VARIABLES: dict[str, VariableSpec] = {
         grib2_number=251,
         grib2_level_type=1,
     ),
+    # The satellite channels: brightness temperature at the top of the
+    # atmosphere (GRIB2 0/4/4 on surface 8, "nominal top of the
+    # atmosphere"), one parameter for every infrared band of every imager,
+    # so the ``band`` block beside it (xuebuild/satellite/platforms.py,
+    # written from ``SourceSpec.bands``) is what says which channel of which
+    # instrument this is. Not fetched from GRIB at all: a satellite source
+    # arrives as the NetCDF series the fetch stage warps and stacks
+    # (xuebuild/satellite/), read by xuebuild/observation.py, so the record
+    # matching fields stay empty. The infrared window at 10.4 µm first
+    # (AHI band 13, ABI channel 13): the cloud-top temperature every
+    # weather picture is drawn from. Cells the disk never covers arrive as
+    # the product's fill and become the bottom of the codebook, 180 K —
+    # below any cloud top a 10 µm channel reports — which the renderer
+    # paints as nothing, the way it paints the radar mosaic's no-coverage
+    # cells.
+    "ir104": VariableSpec(
+        id="ir104",
+        label="Brightness temperature, 10.4 µm",
+        output_unit="K",
+        value_range=(180, 332),
+        grib2_discipline=0,
+        grib2_category=4,
+        grib2_number=4,
+        grib2_level_type=8,
+    ),
 }
 
 # The ocean set: the three pgrb2 fields and the three GFS-Wave fields above,
@@ -680,6 +705,9 @@ VARIABLES: dict[str, VariableSpec] = {
 # also carries the two derived wave vector components.
 OCEAN_VARIABLE_IDS: tuple[str, ...] = ("tmpsfc", "icec", "icetk", "htsgw", "perpw", "dirpw")
 WAVE_VECTOR_COMPONENT_IDS: tuple[str, str] = ("uwave", "vwave")
+# The satellite channels, held to the Rust encoder and the frontend by
+# tests/fixtures/satellite-registry.json the same way.
+SATELLITE_VARIABLE_IDS: tuple[str, ...] = ("ir104",)
 # The ids the Celsius rule applies to at the surface: GDAL normalizes every
 # GRIB temperature to Celsius, and the converter accepts K and F as well.
 SURFACE_TEMPERATURE_IDS: tuple[str, ...] = ("tmp2m", "dpt2m", "aptmp2m", "tmpsfc")

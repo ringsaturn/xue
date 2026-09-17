@@ -26,7 +26,7 @@
 import type { ProbeValue } from "./probe";
 import { variableSpec } from "./variables";
 
-export type MeteogramRowId = "temperature" | "precipitation" | "wind" | "cloud" | "pressure" | "taf";
+export type MeteogramRowId = "temperature" | "precipitation" | "wind" | "cloud" | "pressure" | "cloudtop" | "taf";
 
 /** How a row draws its series: traces, bars from a baseline, or one shaded
  * band per series (the cloud layers, high over middle over low; and the
@@ -67,6 +67,9 @@ const ROW_TEMPLATES: readonly RowTemplate[] = [
   { id: "wind", kind: "line", bundles: ["wind10m", "gust"], range: null, baseline: 0 },
   { id: "cloud", kind: "bands", bundles: ["hcdc", "mcdc", "lcdc"], fallback: ["tcdc"], range: [0, 100], baseline: null },
   { id: "pressure", kind: "line", bundles: ["prmsl"], range: null, baseline: null },
+  // The satellite's cloud-top brightness temperature: the one row an
+  // imagery window fills, a trace like the pressure's.
+  { id: "cloudtop", kind: "line", bundles: ["ir104"], range: null, baseline: null },
 ];
 
 /** Every bundle any row could read; what a pinned point opens sessions for

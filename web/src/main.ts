@@ -806,6 +806,7 @@ const MODEL_EYEBROW: Record<ForecastModelId, string> = {
   cma: "CMA / RADAR MOSAIC (0.044°)",
   mrms: "NOAA / MRMS CONUS (0.02°)",
   jma: "JMA / NOWCAST JAPAN (0.005°)",
+  himawari: "JMA / HIMAWARI-9 AHI (0.04°)",
 };
 
 /** The member to open when a family's one rail tile is picked: whichever
@@ -3837,6 +3838,7 @@ const FIELD_GROUP_LABEL: Record<SheetGroup, MessageKey> = {
   dynamics: "fieldGroupDynamics",
   radiation: "fieldGroupRadiation",
   ocean: "fieldGroupOcean",
+  satellite: "fieldGroupSatellite",
   other: "fieldGroupOther",
 };
 

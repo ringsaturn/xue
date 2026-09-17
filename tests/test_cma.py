@@ -123,9 +123,9 @@ class SourceRegistryTests(unittest.TestCase):
         self.assertEqual(CMA.production_grid, (7 * 256, 4 * 256))
         self.assertEqual(CMA_PRODUCT, "RADAR_L3_MST_CREF_GISJPG_Tiles_CR")
 
-    def test_the_series_file_sources_are_both_fetched_now(self) -> None:
-        self.assertEqual([spec.id for spec in SOURCES.values() if spec.series_file], ["cma", "jma"])
-        self.assertEqual([spec.id for spec in SOURCES.values() if spec.observation], ["cma", "mrms", "jma"])
+    def test_the_series_file_sources_are_all_fetched_now(self) -> None:
+        self.assertEqual([spec.id for spec in SOURCES.values() if spec.series_file], ["cma", "jma", "himawari"])
+        self.assertEqual([spec.id for spec in SOURCES.values() if spec.observation], ["cma", "mrms", "jma", "himawari"])
         self.assertTrue(all(spec.fetched and spec.live for spec in SOURCES.values()))
 
     def test_the_catalog_prose_names_the_agency_and_the_archive(self) -> None:

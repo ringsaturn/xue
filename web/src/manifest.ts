@@ -11,7 +11,7 @@ export type ForecastVariableId = "tmp2m" | "prate";
  * The CMA radar mosaic has no live feed: it is an observation archive that
  * reaches the app only as showcase cases. The MRMS mosaic and the JMA
  * nowcast are observations *and* live, each a rolling window. */
-export type ForecastModelId = "gfs" | "ecmwf" | "aifs" | "sflux" | "hrrr" | "cma" | "mrms" | "jma";
+export type ForecastModelId = "gfs" | "ecmwf" | "aifs" | "sflux" | "hrrr" | "cma" | "mrms" | "jma" | "himawari";
 
 export interface ForecastModelInfo {
   id: ForecastModelId;
@@ -144,6 +144,27 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
     railCore: ["prate"],
     region: [121, 20.5, 149, 45.5],
   },
+  // Himawari-9, the JMA geostationary imager at 140.7°E, as NOAA
+  // redistributes it: the 10.4 µm infrared window as brightness
+  // temperature, one full-disk scan every ten minutes, warped by the
+  // encoder from the geostationary view onto a 0.04° grid over the useful
+  // disk. The source is named by its orbital slot, not the spacecraft —
+  // the file's `band` block carries that — so a successor changes nothing
+  // here. Observations and live, like MRMS: a rolling window of the last
+  // two to three hours, some fifteen to twenty minutes behind real time.
+  // The region runs past the antimeridian (200.7°E), which `domain.ts` and
+  // `tiles.ts` take in the grid's own copy of the world.
+  himawari: {
+    id: "himawari",
+    label: "HIMAWARI",
+    product: "ahi-fldk-0p04",
+    latestFilename: "latest-himawari.json",
+    observation: true,
+    coreBundles: ["ir104"],
+    defaultVariable: "ir104",
+    railCore: ["ir104"],
+    region: [80.7, -60, 200.7, 60],
+  },
 };
 
 /** The layer a dataset opens on when nothing asked for one. */
@@ -161,9 +182,10 @@ export function isObservationModel(model: ForecastModelId): boolean {
   return FORECAST_MODELS[model].observation === true;
 }
 
-/** The live feeds, in model-switch order: the five forecasts and the three
- * rolling observation windows, MRMS, the JMA nowcast and the CMA mosaic. */
-export const FORECAST_MODEL_IDS: readonly ForecastModelId[] = ["gfs", "sflux", "ecmwf", "aifs", "hrrr", "mrms", "jma", "cma"];
+/** The live feeds, in model-switch order: the five forecasts and the four
+ * rolling observation windows, MRMS, the JMA nowcast, the CMA mosaic and
+ * the Himawari imagery. */
+export const FORECAST_MODEL_IDS: readonly ForecastModelId[] = ["gfs", "sflux", "ecmwf", "aifs", "hrrr", "mrms", "jma", "cma", "himawari"];
 
 function modelForManifestString(model: unknown): ForecastModelInfo | null {
   for (const info of Object.values(FORECAST_MODELS)) {
@@ -221,6 +243,7 @@ export type KnownBundleId =
   | "cref"
   | SurfaceDiagnosticId
   | OceanId
+  | SatelliteId
   | PressureBundleId
   | IsobaricScalarBundleId
   | VectorBundleId;
@@ -250,6 +273,14 @@ export const SURFACE_DIAGNOSTIC_IDS: readonly SurfaceDiagnosticId[] = [
  * from the height and direction (`WAVE_COMPONENT_IDS`). */
 export type OceanId = "tmpsfc" | "icec" | "icetk" | "htsgw" | "perpw" | "dirpw";
 export const OCEAN_IDS: readonly OceanId[] = ["tmpsfc", "icec", "icetk", "htsgw", "perpw", "dirpw"];
+
+/** The satellite channels — brightness temperature in the 10.4 µm infrared
+ * window, one bundle per channel, named by nominal wavelength and
+ * instrument-neutral (AHI band 13 and ABI channel 13 are both `ir104`; the
+ * file's `band` block says which) — held to the encoders by
+ * `tests/fixtures/satellite-registry.json`. */
+export type SatelliteId = "ir104";
+export const SATELLITE_IDS: readonly SatelliteId[] = ["ir104"];
 
 /** A well-formed bundle/variable name: lowercase alphanumeric, starting with
  * a letter. This is the whole admission rule — a manifest is rejected for
@@ -303,6 +334,7 @@ export const KNOWN_BUNDLE_IDS: readonly KnownBundleId[] = [
   "cref",
   ...SURFACE_DIAGNOSTIC_IDS,
   ...OCEAN_IDS,
+  ...SATELLITE_IDS,
   "prmsl",
   ...perLevel("hgt"),
   ...perLevel("tmp"),

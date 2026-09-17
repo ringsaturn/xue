@@ -181,6 +181,22 @@ the 09Z window read with `cmaarchive.read_window` and written with
 `write_series`, then `xarray.open_dataset("window.nc").isel(time=[0, 1,
 3], lat=slice(512, 640), lon=slice(1024, 1152))` written back the same way.
 
+`himawari/` holds four ISatSS tiles of the Himawari-9 AHI 10.4 µm channel
+(band 13) exactly as NOAA's `noaa-himawari9` bucket serves them: tiles
+T020 and T021 of the 03:00 and 03:10 UTC full-disk scans of 2026-09-17
+(`AHI-L2-FLDK-ISatSS/2026/09/17/0300/` and `0310/`), the two 550 x 550
+tiles east of the sub-satellite point between 20.7N and 32.5N, 140.7E and
+162.9E — the western Pacific south of Japan, with cold cloud tops down to
+188 K and clear sea near 301 K. Untouched (1.3 MB) rather than cropped so
+that the reader (`xuebuild/satellite/readers.py`) sees the real file: the
+`Sectorized_CMI` variable packed as Int16 with `scale_factor`
+0.064208984375 and `add_offset` 69, the CF `geostationary` projection whose
+x/y are in microradians (GDAL warns about the unit and computes the
+geotransform correctly; a GDAL that stopped would fail `tests/test_satellite.py`
+here), and the file-name fields the listing filters on. The tests mosaic
+them, warp them onto the 0.04° grid, stack them into the window series and
+convert that through both encoders.
+
 # Xue fixtures
 
 `tests/prepare_bin_fixture.py` encodes the same cropped GRIB into per-variable

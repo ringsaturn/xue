@@ -106,6 +106,34 @@ const REFLECTIVITY_STOPS: Stop[] = [
   [80, 240, 233, 255, 255],
 ];
 
+// The satellite infrared window, brightness temperature in kelvin: the
+// inverted grey scale every infrared picture is drawn in — warm sea and
+// land dark, cloud brighter the colder its top — with the coldest tops,
+// below 240 K, enhanced in colour the way a convective IR product is
+// (cyan to blue to green to yellow to red to magenta, and white at the
+// very coldest). Alpha rises from nothing at the codebook bottom, 180 K,
+// which is also what the cells outside the disk carry; the warm end stays
+// short of black and fully opaque, so the picture reads as a picture and
+// the coastline drawn over it still shows.
+const BRIGHTNESS_TEMPERATURE_STOPS: Stop[] = [
+  [180, 255, 255, 255, 0],
+  [181.5, 255, 255, 255, 255],
+  [190, 250, 250, 250, 255],
+  [200, 232, 60, 232, 255],
+  [210, 224, 32, 32, 255],
+  [220, 250, 220, 40, 255],
+  [228, 60, 200, 60, 255],
+  [235, 40, 90, 235, 255],
+  [240, 90, 220, 235, 255],
+  [243, 236, 236, 236, 255],
+  [255, 214, 214, 214, 255],
+  [270, 168, 168, 168, 255],
+  [285, 112, 112, 112, 255],
+  [300, 58, 58, 58, 255],
+  [315, 30, 30, 30, 255],
+  [332, 14, 14, 14, 255],
+];
+
 // The pressure family shares one ramp, given in fractions of the level's own
 // codebook range rather than absolute values: a fill under contour lines is
 // read as "low here, high there", and every level would otherwise need its
@@ -567,6 +595,7 @@ function stopsFor(variable: BundleVariable, identity: VariableIdentity | null): 
   if (family === "htsgw") return WAVE_HEIGHT_STOPS;
   if (family === "perpw") return WAVE_PERIOD_STOPS;
   if (family === "dirpw") return WAVE_DIRECTION_STOPS;
+  if (family === "ir104") return BRIGHTNESS_TEMPERATURE_STOPS;
   if (family === "hgt" && linear) return pressureStops(linear);
   if (family === "tmp") return remapStops(TEMPERATURE_STOPS, [-60, 50], temperaturePaletteDomain(level));
   if (family === "rh") return HUMIDITY_STOPS;

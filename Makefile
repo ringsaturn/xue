@@ -12,10 +12,11 @@ PROFILE ?= balanced
 # hrrr (NOAA HRRR, 3 km over the contiguous US, a cycle every hour, to F18);
 # mrms (the NOAA radar mosaic, an observation every two minutes), jma
 # (the JMA precipitation nowcast over Japan, every five minutes, through the
-# jma-radar tool) and cma (the CMA radar mosaic over China, every six
-# minutes, read out of its private daily Zarr archive)
-# build a window named by its first hour — `RUN=latest` the live rolling
-# window.
+# jma-radar tool), cma (the CMA radar mosaic over China, every six
+# minutes, read out of its private daily Zarr archive) and himawari (the
+# Himawari-9 10.4 µm infrared window, every ten minutes, warped from NOAA's
+# ISatSS tiles by the fetch stage) build a window named by its first hour —
+# `RUN=latest` the live rolling window.
 MODEL ?= gfs
 # One round of a rolling window (`build-bin --round`): the run's artifacts
 # and manifest live in <model>.<run>/<ROUND>/ and the pointer names that
@@ -650,14 +651,17 @@ live-window:
 	$(S3) cp s3://$(R2_BUCKET)/$(R2_PREFIX)/$$(dirname $$path)/window.json - --only-show-errors 2>/dev/null || true
 
 # The decoded-frame cache of a source whose frames are decoded from a
-# tile service (JMA, through the jma-radar tool): one NetCDF per frame
-# under data/raw/<model>-frames/<grid>/, mirrored under <prefix>/<model>-frames/
+# tile service (JMA, through the jma-radar tool: one NetCDF per frame under
+# data/raw/<model>-frames/<grid>/) or warped from an agency's tiles (the
+# satellite sources, xuebuild/satellite/: one GeoTIFF per frame under
+# data/raw/<model>-frames/<channel>/), mirrored under <prefix>/<model>-frames/
 # on the bucket so every runner shares one copy and the agency serves each
 # frame once. Frames are immutable and named by their time
-# (`hrpns_<YYYYMMDDHHMMSS>.nc`), so a pull takes the hours of the window
-# about to be built (the last HOURS + 1 hours), a push sends what is new,
-# and a prune drops the days older than FRAMES_KEEP_DAYS (a case can be
-# built from what is kept). None of this is served to the viewer.
+# (`hrpns_<YYYYMMDDHHMMSS>.nc`, `ir104_<YYYYMMDDHHMMSS>.tif`), so a pull
+# takes the hours of the window about to be built (the last HOURS + 1
+# hours), a push sends what is new, and a prune drops the days older than
+# FRAMES_KEEP_DAYS (a case can be built from what is kept). None of this is
+# served to the viewer.
 FRAMES_DIR = data/raw/$(MODEL)-frames
 FRAMES_PREFIX = s3://$(R2_BUCKET)/$(R2_PREFIX)/$(MODEL)-frames
 FRAMES_KEEP_DAYS ?= 7
@@ -666,7 +670,7 @@ pull-r2-frames:
 	includes=$$($(PYTHON) -c "from datetime import datetime, timedelta, UTC; now = datetime.now(UTC); \
 	print(' '.join('--include */*_' + (now - timedelta(hours=h)).strftime('%Y%m%d%H') + '*' for h in range(int('$(if $(HOURS),$(HOURS),3)') + 1, -1, -1)))"); \
 	$(S3) sync $(FRAMES_PREFIX)/ $(FRAMES_DIR)/ --exclude "*" --include "*/grid.json" $$includes --only-show-errors; \
-	echo "frame cache: $$(find $(FRAMES_DIR) -name '*.nc' | wc -l | tr -d ' ') frames on disk"
+	echo "frame cache: $$(find $(FRAMES_DIR) \( -name '*.nc' -o -name '*.tif' \) | wc -l | tr -d ' ') frames on disk"
 
 push-r2-frames:
 	@set -e; [ -d $(FRAMES_DIR) ] || { echo "no frame cache at $(FRAMES_DIR)"; exit 0; }; \
@@ -676,7 +680,7 @@ prune-r2-frames:
 	@set -e; \
 	cutoff=$$($(PYTHON) -c "from datetime import datetime, timedelta, UTC; print((datetime.now(UTC) - timedelta(days=$(FRAMES_KEEP_DAYS))).strftime('%Y%m%d'))"); \
 	listing=$$($(S3) ls $(FRAMES_PREFIX)/ --recursive) || { echo "listing the frame cache failed, refusing to prune"; exit 1; }; \
-	for day in $$(printf '%s\n' "$$listing" | awk '{print $$4}' | sed -n 's:.*/[a-z]*_\([0-9]\{8\}\)[0-9]\{6\}\.nc$$:\1:p' | sort -u); do \
+	for day in $$(printf '%s\n' "$$listing" | awk '{print $$4}' | sed -n 's:.*/[a-z0-9]*_\([0-9]\{8\}\)[0-9]\{6\}\.\(nc\|tif\)$$:\1:p' | sort -u); do \
 		if [ "$$day" \< "$$cutoff" ]; then \
 			echo "Deleting frames of $$day..."; \
 			$(S3) rm $(FRAMES_PREFIX)/ --recursive --exclude "*" --include "*/*_$$day*" --only-show-errors $(DRY_RUN); \

@@ -389,8 +389,14 @@ export function scalarLegendRange(identity: VariableIdentity): readonly [number,
   if (family === "htsgw") return [0, WAVE_HEIGHT_CHART_MAX];
   if (family === "perpw") return [0, WAVE_PERIOD_CHART_MAX];
   if (family === "dirpw") return [0, 360];
+  if (family === "ir104") return BRIGHTNESS_TEMPERATURE_CHART_RANGE;
   return null;
 }
+
+/** The infrared window's domain, in kelvin: the codebook's own, from the
+ * 180 K that is also the fill outside the disk to the hottest surface a
+ * 10 µm channel sees. */
+export const BRIGHTNESS_TEMPERATURE_CHART_RANGE: readonly [number, number] = [180, 330];
 
 /** Visibility reads to 25 km — the codebook's 25.4 without the odd tenth;
  * the ramp is transparent long before that. */
@@ -522,6 +528,7 @@ export function isobaricLegend(identity: VariableIdentity): string[] | null {
   if (family === "htsgw") return rangeLegend([0, WAVE_HEIGHT_CHART_MAX], 2);
   if (family === "perpw") return rangeLegend([0, WAVE_PERIOD_CHART_MAX], 4);
   if (family === "dirpw") return rangeLegend([0, 360], 45);
+  if (family === "ir104") return rangeLegend(BRIGHTNESS_TEMPERATURE_CHART_RANGE, 30);
   if (family === "vvel" && isRegisteredLevel(level)) return rangeLegend([-OMEGA_PALETTE_MAX, OMEGA_PALETTE_MAX], 0.5);
   if (family === "thetae" && isRegisteredLevel(level)) return rangeLegend(thetaEPaletteDomain(level), 5);
   if (family === "tmp" && isRegisteredLevel(level)) return rangeLegend(temperatureLegendRange(level), 5);

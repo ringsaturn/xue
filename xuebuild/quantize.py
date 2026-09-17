@@ -223,6 +223,18 @@ COMPACT_WAVE_DIRECTION = TemperatureCodebook(minimum=0.0, maximum=357.0, step=3.
 # magnitude palette must paint as nothing, a fifth of a metre off it.
 QUALITY_WAVE_VECTOR = TemperatureCodebook(minimum=-25.4, maximum=25.4, step=0.2, name="wave vector")
 COMPACT_WAVE_VECTOR = TemperatureCodebook(minimum=-25.2, maximum=25.2, step=0.4, name="wave vector")
+# The satellite infrared window: brightness temperature from 180 K, which
+# is also what the cells outside the disk become (variables.py), to 331.8 K
+# at 0.6 K — 254 codes, the full space; the hottest desert surface a 10 µm
+# channel sees is in the 330s and the coldest overshooting top near 180.
+# 0.6 K is a display precision: a composite algorithm that needs the
+# split-window difference to a tenth reads the fetch stage's packed series,
+# not the codes. The compact profile doubles the step and stops a code
+# short (331.2) like the other linear codebooks.
+QUALITY_BRIGHTNESS_TEMPERATURE = TemperatureCodebook(minimum=180.0, maximum=331.8, step=0.6, name="ir104")
+COMPACT_BRIGHTNESS_TEMPERATURE = TemperatureCodebook(minimum=180.0, maximum=331.2, step=1.2, name="ir104")
+QUALITY_SATELLITE = {"ir104": QUALITY_BRIGHTNESS_TEMPERATURE}
+COMPACT_SATELLITE = {"ir104": COMPACT_BRIGHTNESS_TEMPERATURE}
 QUALITY_OCEAN = {
     "tmpsfc": QUALITY_SURFACE_TEMPERATURE,
     "icec": QUALITY_ICE_COVER,
@@ -484,6 +496,7 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
         "aptmp2m": QUALITY_APPARENT,
         **QUALITY_CLOUD_LAYER,
         **QUALITY_OCEAN,
+        **QUALITY_SATELLITE,
         **QUALITY_PRESSURE,
         **QUALITY_ISOBARIC,
     },
@@ -502,6 +515,7 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
         "aptmp2m": COMPACT_APPARENT,
         **COMPACT_CLOUD_LAYER,
         **COMPACT_OCEAN,
+        **COMPACT_SATELLITE,
         **COMPACT_PRESSURE,
         **COMPACT_ISOBARIC,
     },
@@ -532,6 +546,7 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
         **COMPACT_CLOUD_LAYER,
         **QUALITY_OCEAN,
         "icec": COMPACT_ICE_COVER,
+        **QUALITY_SATELLITE,
         **QUALITY_PRESSURE,
         **QUALITY_ISOBARIC,
         **{variable_id: COMPACT_HUMIDITY for variable_id in QUALITY_ISOBARIC if variable_id.startswith("rh")},

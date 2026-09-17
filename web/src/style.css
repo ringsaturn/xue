@@ -2990,7 +2990,8 @@ body[data-model="ecmwf"] .source-credit[data-credit-model="ecmwf"],
 body[data-model="aifs"] .source-credit[data-credit-model="ecmwf"],
 body[data-model="cma"] .source-credit[data-credit-model="cma"],
 body[data-model="mrms"] .source-credit[data-credit-model="mrms"],
-body[data-model="jma"] .source-credit[data-credit-model="jma"] {
+body[data-model="jma"] .source-credit[data-credit-model="jma"],
+body[data-model="himawari"] .source-credit[data-credit-model="himawari"] {
   display: inline;
 }
 

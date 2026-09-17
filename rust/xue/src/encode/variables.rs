@@ -146,6 +146,11 @@ pub const OCEAN_VARIABLE_IDS: &[&str] = &["tmpsfc", "icec", "icetk", "htsgw", "p
 /// The two components of the derived wave vector bundle, in the same
 /// fixture. Mirrors `WAVE_VECTOR_COMPONENT_IDS` in `xuebuild/variables.py`.
 pub const WAVE_VECTOR_COMPONENT_IDS: [&str; 2] = ["uwave", "vwave"];
+/// The satellite channels, held to the Python encoder by
+/// `tests/fixtures/satellite-registry.json`. Mirrors
+/// `SATELLITE_VARIABLE_IDS` in `xuebuild/variables.py`.
+#[allow(dead_code)] // read by the registry test; the Python side keys its fixture on it
+pub const SATELLITE_VARIABLE_IDS: &[&str] = &["ir104"];
 
 /// The ids the Celsius rule applies to at the surface: GDAL normalizes every
 /// GRIB temperature to Celsius, and the converter accepts K and F as well.
@@ -858,6 +863,32 @@ pub const VARIABLES: &[VariableSpec] = &[
         gdal_unit: "",
         fill_values: &[],
     },
+    // The satellite channels: brightness temperature at the nominal top of
+    // the atmosphere (0/4/4 on surface 8), one parameter for every infrared
+    // band of every imager, so the `band` block beside it (written from the
+    // source table's `bands`) says which channel of which instrument this
+    // is. Never a GRIB record: a satellite source arrives as the NetCDF
+    // series the Python fetch stage warps and stacks, read by
+    // `observation.rs`. Cells outside the disk arrive as the product's fill
+    // and become the codebook bottom, 180 K, which the renderer paints as
+    // nothing. Mirrors `ir104` in `xuebuild/variables.py`.
+    VariableSpec {
+        id: "ir104",
+        label: "Brightness temperature, 10.4 µm",
+        output_unit: "K",
+        value_range: (180, 332),
+        grib_element: "",
+        grib2_discipline: 0,
+        grib2_category: 4,
+        grib2_number: 4,
+        grib2_level_type: 8,
+        grib2_level_value: None,
+        grib2_statistical: None,
+        grib2_aliases: &[],
+        grib2_alternates: &[],
+        gdal_unit: "",
+        fill_values: &[],
+    },
     // Mean sea level pressure. NCEP publishes two reductions; PRMSL (0/3/1)
     // is the same quantity ECMWF calls `msl` — encoded there as plain
     // pressure (0/3/0) on the mean sea level surface, hence the alias — so
@@ -979,7 +1010,7 @@ pub fn variable_spec(variable_id: &str) -> Result<&'static VariableSpec> {
 mod tests {
     use super::{
         isobaric_variable, variable_spec, ISOBARIC_FAMILIES, ISOBARIC_LEVELS_HPA, OCEAN_VARIABLE_IDS,
-        WAVE_VECTOR_COMPONENT_IDS,
+        SATELLITE_VARIABLE_IDS, WAVE_VECTOR_COMPONENT_IDS,
     };
     use crate::encode::quantize::codebook;
     use serde_json::{json, Value};
@@ -1132,6 +1163,49 @@ mod tests {
             );
             assert_eq!(spec.grib_element.is_empty(), derived, "{variable_id}: derived, never matched");
         }
+    }
+
+    /// `tests/fixtures/satellite-registry.json`: the satellite channels,
+    /// held to the Python encoder the same way — with the `band` block the
+    /// Himawari source writes beside the parameter, read off the source
+    /// table here.
+    #[test]
+    fn the_satellite_registry_matches_the_shared_fixture() {
+        let entries = registry("satellite-registry.json");
+        assert_eq!(entries.keys().collect::<Vec<_>>(), SATELLITE_VARIABLE_IDS, "one channel, in the fixture's order");
+        let himawari = crate::encode::sources::source_spec("himawari").expect("himawari");
+        for (variable_id, entry) in entries {
+            let spec = variable_spec(&variable_id).unwrap_or_else(|_| panic!("{variable_id}"));
+            assert_eq!(json!(spec.label), entry["label"], "{variable_id}");
+            assert_eq!(json!(spec.output_unit), entry["unit"], "{variable_id}");
+            assert_eq!(
+                Value::Object(spec.parameter_metadata()),
+                entry["parameter"],
+                "{variable_id} GRIB2 identity"
+            );
+            let (_, band) = himawari
+                .bands
+                .iter()
+                .find(|(band_id, _)| *band_id == variable_id)
+                .unwrap_or_else(|| panic!("{variable_id}: the himawari source publishes it"));
+            assert_eq!(Value::Object(band.metadata()), entry["band"]["himawari"], "{variable_id} band");
+            for (profile, key) in [("quality", "quality"), ("compact", "compact"), ("balanced", "quality")] {
+                let book = codebook(profile, &variable_id)
+                    .unwrap_or_else(|error| panic!("{variable_id} {profile}: {error}"));
+                assert_eq!(Value::Object(book.metadata()), entry[key], "{variable_id} {profile} codebook");
+                // The cells outside the disk become the bottom of the
+                // codebook, so that must be the value the registry says.
+                let linear = book.as_linear().expect("linear");
+                assert_eq!(linear.minimum, f64::from(spec.value_range.0), "{variable_id}");
+            }
+            // Never a GRIB record: nothing to match on.
+            assert!(spec.grib_element.is_empty() && spec.grib2_aliases.is_empty(), "{variable_id}");
+        }
+        // The published grid is the platform's region at the step, past
+        // the antimeridian.
+        assert_eq!(himawari.production_grid, (3000, 3000));
+        assert!(himawari.series_file && himawari.observation);
+        assert_eq!(himawari.cadence_seconds, Some(600));
     }
 
     /// `tests/fixtures/pressure-registry.json`, the committed golden the

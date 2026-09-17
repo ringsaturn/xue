@@ -41,6 +41,7 @@ pipeline.
 | NOAA MRMS | `mrms` | 3500 × 1750, 0.02°, contiguous US | one frame every two minutes, a rolling four-hour window | `latest-mrms.json` |
 | JMA precipitation nowcast | `jma` | 5600 × 5000, 0.005°, Japan | one frame every five minutes, a rolling three-hour window | `latest-jma.json` |
 | CMA radar mosaic | `cma` | 1792 × 1024, 0.0439°, China | one frame every six minutes, a rolling three-hour window | `latest-cma.json` |
+| Himawari-9 infrared | `himawari` | 3000 × 3000, 0.04°, the disk 80.7–200.7°E, ±60° | one scan every ten minutes, a rolling three-hour window | `latest-himawari.json` |
 
 Each model publishes as an independent dataset under `<model>.<run>/`, taken
 live by its pointer at the data root.
@@ -118,6 +119,29 @@ Bundle sets:
   syncs every ten minutes, so the live window ends twenty to thirty
   minutes behind real time. A three-hour window is about thirty frames and one to
   two megabytes of reflectivity.
+- Himawari: the Japan Meteorological Agency's Himawari-9 geostationary
+  imager at 140.7°E, as NOAA redistributes it on the `noaa-himawari9`
+  bucket — the ISatSS product, every channel of every ten-minute full-disk
+  scan already calibrated and cut into 88 NetCDF tiles on the geostationary
+  projection. One channel to start, the 10.4 µm infrared window as
+  brightness temperature under `ir104` (AHI band 13, at 0.6 K over 180–332
+  K; the cloud-top picture). The fetch stage (`xuebuild/satellite/`,
+  [docs/satellite.md](docs/satellite.md)) lists a slot's tiles, mosaics
+  them with `gdalbuildvrt`, warps them with `gdalwarp` onto a 0.04° plate
+  carrée grid over the useful disk (3000 × 3000 cells, 80.7–200.7°E — past
+  the antimeridian — and 60°S–60°N), caches the frame (a GeoTIFF, mirrored
+  on the bucket like the JMA frames) and stacks the window's frames into
+  one NetCDF series with `gdal_translate`, which both encoders read the way
+  they read the JMA file; the geostationary arithmetic lives in GDAL alone.
+  The source is named by its orbital slot, not the spacecraft: the
+  spacecraft, instrument and band are the `band` block beside the
+  variable's parameter block (docs/format.md), so Himawari-10 will change a
+  registry row and nothing published. The tiles are generated about eight
+  minutes after a scan starts and listed about fifteen after, so the live
+  window ends fifteen to twenty minutes behind real time; a scan is 26 MB
+  of tiles, a warped frame about 8 MB, a three-hour window (nineteen
+  frames) some 80 MB of stores at full and half resolution. Needs a system
+  GDAL with `gdalwarp` on PATH whichever encoder converts.
 
 Every level of the isobaric families is registered; turning one on is a line
 in `xuebuild/sources.py` and its mirror in the native encoder, not a format
@@ -247,6 +271,7 @@ python -m xuebuild build-bin --model mrms --run 2026091300 --hours 3   # a past 
 python -m xuebuild build-bin --model mrms --run latest --hours 4 --round now   # one round of the live window
 python -m xuebuild build-bin --model jma --run latest --hours 3 --round now    # the JMA nowcast, through jma-radar
 python -m xuebuild build-bin --model cma --run latest --hours 3 --round now    # the CMA mosaic, out of its archive
+python -m xuebuild build-bin --model himawari --run latest --hours 3 --round now  # Himawari-9 infrared, warped from NOAA's tiles
 ```
 
 `XUE_ENCODER` picks which encoder converts: `auto` (the default: the `xuepy`
@@ -455,14 +480,16 @@ make upload-r2-manifest MODEL=gfs RUN=2026081600
 The Pages shell is deployed separately (`make deploy`) and only needs
 redeploying when frontend code changes.
 
-### The rolling windows (MRMS, JMA, CMA radar)
+### The rolling windows (MRMS, JMA, CMA radar, Himawari)
 
 An observation feed is never complete, so
 [`publish-mrms.yml`](.github/workflows/publish-mrms.yml),
-[`publish-jma.yml`](.github/workflows/publish-jma.yml) and
-[`publish-cma.yml`](.github/workflows/publish-cma.yml) each run one round of
-[`scripts/window_rounds.sh`](scripts/window_rounds.sh) (`MODEL=mrms`, `jma` or
-`cma`, `ONCE=true`) per job on a five-minute cron, the finest GitHub offers: a job is a
+[`publish-jma.yml`](.github/workflows/publish-jma.yml),
+[`publish-cma.yml`](.github/workflows/publish-cma.yml) and
+[`publish-himawari.yml`](.github/workflows/publish-himawari.yml) each run one round of
+[`scripts/window_rounds.sh`](scripts/window_rounds.sh) (`MODEL=mrms`, `jma`,
+`cma` or `himawari`, `ONCE=true`) per job on a five-minute cron (ten for
+Himawari, whose scans are ten minutes apart), the finest GitHub offers: a job is a
 few minutes rather than a runner held for an hour, at the price of the cron's
 ten to twenty minutes of lateness on every round. A dispatch with `loop` runs
 the rounds until twenty past the next hour and yields to the next scheduled job
@@ -494,12 +521,16 @@ without the frame cache: the archive is named by the `XUE_CMA_ARCHIVE`
 secret and read in process with the `R2_*` credentials
 (`CMA_ARCHIVE_ACCESS_KEY_ID` / `CMA_ARCHIVE_SECRET_ACCESS_KEY` when the
 dataset bucket's token cannot read it, else that token), with the `cma`
-dependency group synced. By hand:
+dependency group synced. The Himawari job is the JMA shape with a
+frame cache of warped GeoTIFFs (`data/raw/himawari-frames/ir104/`, kept
+three days on the bucket) and installs `gdal-bin` whichever encoder
+converts, since the fetch stage warps through the system GDAL. By hand:
 
 ```sh
 ONCE=true scripts/window_rounds.sh                     # one round, as the job would run it
 MODEL=jma HOURS=3 FRAME_CACHE=true ONCE=true scripts/window_rounds.sh
 MODEL=cma HOURS=3 ONCE=true scripts/window_rounds.sh   # needs XUE_CMA_ARCHIVE and the R2_* credentials
+MODEL=himawari HOURS=3 FRAME_CACHE=true ONCE=true scripts/window_rounds.sh   # needs gdalwarp on PATH
 .venv/bin/python -m xuebuild build-bin --model mrms --run latest --hours 4 --round now
 make upload-r2 MODEL=mrms RUN=2026091321 ROUND=1405  # the round the build named
 make prune-r2-rounds MODEL=mrms && make prune-r2 MODEL=mrms KEEP=2

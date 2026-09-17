@@ -214,6 +214,22 @@ const COMPACT_REFLECTIVITY: LinearCodebook = LinearCodebook {
     step: 1.0,
     ..QUALITY_REFLECTIVITY
 };
+// The satellite infrared window: brightness temperature from 180 K (also
+// what the cells outside the disk become) to 331.8 K at 0.6 K, the full
+// code space; the compact profile doubles the step and stops a code short.
+// Mirrors `QUALITY_BRIGHTNESS_TEMPERATURE` in `xuebuild/quantize.py`.
+const QUALITY_BRIGHTNESS_TEMPERATURE: LinearCodebook = LinearCodebook {
+    minimum: 180.0,
+    maximum: 331.8,
+    step: 0.6,
+    nodata_code: 255,
+    name: "ir104",
+};
+const COMPACT_BRIGHTNESS_TEMPERATURE: LinearCodebook = LinearCodebook {
+    maximum: 331.2,
+    step: 1.2,
+    ..QUALITY_BRIGHTNESS_TEMPERATURE
+};
 // Wind gust: one-sided, at the 10 m components' step over the isobaric
 // wind's 127 m/s ceiling, spending the full 0..254 code space.
 const QUALITY_GUST: LinearCodebook = LinearCodebook {
@@ -656,6 +672,8 @@ pub fn codebook(profile: &str, variable_id: &str) -> Result<Codebook> {
         (_, "dirpw") => Codebook::Linear(COMPACT_WAVE_DIRECTION),
         (_, "uwave" | "vwave") if quality => Codebook::Linear(QUALITY_WAVE_VECTOR),
         (_, "uwave" | "vwave") => Codebook::Linear(COMPACT_WAVE_VECTOR),
+        (_, "ir104") if quality => Codebook::Linear(QUALITY_BRIGHTNESS_TEMPERATURE),
+        (_, "ir104") => Codebook::Linear(COMPACT_BRIGHTNESS_TEMPERATURE),
         _ if pressure_codebook(variable_id, !quality).is_some() => Codebook::Linear(
             pressure_codebook(variable_id, !quality).expect("checked just above"),
         ),
