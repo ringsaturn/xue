@@ -20,7 +20,7 @@ export const en = {
    * forecast, and `{hours}` is how far back the window reaches. */
   pageTitleLiveObservation: "{variable} observation map · {model} · last {hours}H",
   mapAria: "Global temperature and precipitation forecast map",
-  modelSwitchAria: "Forecast model",
+  modelSwitchAria: "Dataset",
   variableSwitchAria: "Weather variable",
   /** The variable buttons' small label, carried visually hidden beside the
    * code for the accessible name: in Chinese it glosses the English code
@@ -128,7 +128,7 @@ export const en = {
   /** The level row's caption for the lines' group when the fill has a level
    * row of its own beside it. */
   linesCaption: "LINES",
-  modelHeading: "FORECAST MODEL",
+  modelHeading: "DATASETS",
   /** The pressed lines member over a filled field is the overlay's off
    * switch; the tooltip says so, since the × alone is a hint. */
   linesRemoveTitle: "Press again to remove the lines",
