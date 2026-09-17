@@ -3353,6 +3353,14 @@ body[data-model="jma"] .source-credit[data-credit-model="jma"] {
     width: auto;
   }
 
+  /* The skew-T sheet is centred by a transform on desktop; docked to the
+     bottom it must lose that shift or it lands half off the top-left. Its
+     height is what the viewport leaves above the safe area. */
+  .skewt-panel {
+    max-height: calc(100vh - 24px - env(safe-area-inset-bottom));
+    transform: none;
+  }
+
   .sheet-grip {
     display: block;
   }
