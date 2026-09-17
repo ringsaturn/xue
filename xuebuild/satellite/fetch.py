@@ -130,7 +130,18 @@ def fetch_frame(
     slot_dir = tiles_dir / f"{slot:%Y%m%d%H%M}" / channel.id
     files = reader.download(platform, objects, slot_dir, download=download, concurrency=concurrency)
     source = reader.open(files, slot_dir)
+    # The packing is the source's, read before the warp: a warp carries a
+    # band's scale, offset and unit through only on some GDAL versions.
+    packing = assemble.dataset_packing(source)
     PROJECTORS[projector].to_grid(source, grid, nodata=assemble.NODATA, resampling=RESAMPLING, out=frame)
+    assemble.write_packing(
+        frame,
+        packing,
+        slot=slot.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        tiles=len(objects),
+        keys=[item.key for item in objects],
+        projector=projector,
+    )
     shutil.rmtree(slot_dir, ignore_errors=True)
     LOG.info("%s %s: warped %s from %d tiles", platform.spacecraft, channel.id, frame.name, len(objects))
     return FetchedFrame(slot=slot, path=frame, tiles=len(objects))

@@ -346,8 +346,22 @@ class FetchTests(unittest.TestCase):
         self.assertEqual([(frame.slot, frame.tiles) for frame in window.frames], [(SLOT_0300, 2), (SLOT_0310, 2)])
         self.assertEqual(len(self.downloads), 4)
         frames = sorted(path.name for path in (self.root / "himawari-frames" / "ir104").iterdir())
-        self.assertEqual(frames, ["ir104_20260917030000.tif", "ir104_20260917031000.tif"])
+        self.assertEqual(
+            frames,
+            [
+                "ir104_20260917030000.json",
+                "ir104_20260917030000.tif",
+                "ir104_20260917031000.json",
+                "ir104_20260917031000.tif",
+            ],
+        )
         self.assertFalse((self.root / "himawari.2026091703" / "tiles").exists())
+        # The packing beside each frame is the source's, so the series never
+        # depends on what a given GDAL's warp carries through to the band.
+        packing = json.loads((self.root / "himawari-frames" / "ir104" / "ir104_20260917030000.json").read_text())
+        self.assertEqual((packing["scale"], packing["offset"], packing["unit"]), (0.064208984375, 69.0, "kelvin"))
+        self.assertEqual((packing["tiles"], len(packing["keys"]), packing["projector"]), (2, 2, "gdalwarp"))
+        self.assertEqual(assemble.frame_packing(window.frames[0].path), assemble.Packing(0.064208984375, 69.0, "kelvin"))
         # The tiles are gone, the frames stay, and the next round downloads
         # nothing.
         again = self.fetch_window()
@@ -382,6 +396,19 @@ class FetchTests(unittest.TestCase):
         self.assertEqual(len(self.downloads), 2)
         with self.assertRaisesRegex(DownloadError, "no complete ir104 slot"):
             self.fetch_window(listing=bucket({})[0], force=True)
+
+    def test_a_frame_cached_before_sidecars_is_read_off_its_band(self) -> None:
+        window = self.fetch_window()
+        sidecar = assemble.packing_path(window.frames[0].path)
+        sidecar.unlink()
+        # With the sidecar gone the band's own scale and offset stand in
+        # (GDAL 3.13 carries them through the warp; the unit may be missing
+        # on another version, which is what the sidecar exists for).
+        packing = assemble.frame_packing(window.frames[0].path)
+        self.assertEqual((packing.scale, packing.offset), (0.064208984375, 69.0))
+        sidecar.write_text('{"scale": 1}', encoding="utf-8")
+        with self.assertRaisesRegex(ConversionError, "not a packing sidecar"):
+            assemble.frame_packing(window.frames[0].path)
 
     def test_the_series_is_what_the_observation_ingest_reads(self) -> None:
         window = self.fetch_window()

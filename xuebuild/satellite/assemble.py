@@ -35,6 +35,11 @@ from .projector import TargetGrid
 LOG = logging.getLogger(__name__)
 
 FRAME_SUFFIX = ".tif"
+#: Beside every frame, the packing the projector read off the source: which
+#: GDAL carries a band's scale, offset and unit through a warp is a matter
+#: of version (3.13 does, Ubuntu 24.04's 3.8 drops the unit), and the
+#: series must not depend on it.
+PACKING_SUFFIX = ".json"
 #: The fill of every frame and of the series: ISatSS's own ``_FillValue``,
 #: kept so a frame's raw codes are the product's.
 NODATA = -32767
@@ -54,6 +59,10 @@ def frame_path(frames_dir: Path, channel: Channel, slot: datetime) -> Path:
     return frames_dir / channel.id / frame_name(channel, slot)
 
 
+def packing_path(frame: Path) -> Path:
+    return frame.with_suffix(PACKING_SUFFIX)
+
+
 @dataclass(frozen=True)
 class Frame:
     slot: datetime
@@ -63,31 +72,60 @@ class Frame:
 @dataclass(frozen=True)
 class Packing:
     """How a frame's Int16 codes map to the quantity: the product's own
-    scale and offset, read off the first frame and required of the rest."""
+    scale and offset and its unit, read off the source before the warp and
+    written beside the frame (:func:`write_packing`); the first frame's is
+    required of the rest."""
 
     scale: float
     offset: float
     unit: str
 
+    def metadata(self) -> dict[str, object]:
+        return {"scale": self.scale, "offset": self.offset, "unit": self.unit}
 
-def frame_packing(path: Path) -> Packing:
+
+def dataset_packing(name: Path) -> Packing:
+    """The one band's scale, offset and unit as the system GDAL reports
+    them for a dataset — the reader's VRT over the source tiles, or a frame
+    written before packing sidecars existed."""
     # The system GDAL's gdalinfo, not `gdal.dataset_info`: the fetch side
     # runs on the GDAL that warped the frame (the wheel's carries no GeoTIFF
     # driver), and which encoder converts the series is a separate choice.
-    result = run_command([require_command("gdalinfo"), "-json", str(path)], description=f"inspect {path}")
+    result = run_command([require_command("gdalinfo"), "-json", str(name)], description=f"inspect {name}")
     try:
         info = json.loads(result.stdout)
     except json.JSONDecodeError as exc:
-        raise ConversionError(f"GDAL returned invalid JSON for {path}") from exc
+        raise ConversionError(f"GDAL returned invalid JSON for {name}") from exc
     bands = info.get("bands") or []
     if len(bands) != 1:
-        raise ConversionError(f"{path} must carry exactly one band")
+        raise ConversionError(f"{name} must carry exactly one band")
     band = bands[0]
     return Packing(
         scale=float(band.get("scale", 1.0) or 1.0),
         offset=float(band.get("offset", 0.0) or 0.0),
         unit=str(band.get("unit", "") or band.get("metadata", {}).get("", {}).get("units", "")).strip(),
     )
+
+
+def write_packing(frame: Path, packing: Packing, **extra: object) -> Path:
+    """The packing sidecar beside a frame, with whatever the fetch wants
+    to note (the tiles the frame came from, the GDAL that warped it)."""
+    path = packing_path(frame)
+    path.write_text(json.dumps({**packing.metadata(), **extra}, indent=2) + "\n", encoding="utf-8")
+    return path
+
+
+def frame_packing(frame: Path) -> Packing:
+    """A frame's packing: the sidecar written with it, else — for a frame
+    cached before sidecars — what the GeoTIFF band itself carries."""
+    sidecar = packing_path(frame)
+    if sidecar.is_file():
+        try:
+            payload = json.loads(sidecar.read_text(encoding="utf-8"))
+            return Packing(scale=float(payload["scale"]), offset=float(payload["offset"]), unit=str(payload["unit"]))
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            raise ConversionError(f"{sidecar} is not a packing sidecar: {exc}") from exc
+    return dataset_packing(frame)
 
 
 def write_series(

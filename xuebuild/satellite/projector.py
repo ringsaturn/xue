@@ -13,12 +13,13 @@ with another class, and ``assemble.py`` would not change.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
 from ..errors import ConversionError
-from ..gdal import run_command
+from ..gdal import require_command, run_command
 
 
 @dataclass(frozen=True)
@@ -111,6 +112,23 @@ class GdalWarpProjector:
             ],
             description=f"gdalwarp {out.name}",
         )
+        # A warp that lands nothing on the grid is a wrong projection (a GDAL
+        # whose netCDF driver read the source's geostationary axes as
+        # something else), not a frame: refuse it rather than cache and
+        # publish a blank.
+        # Exact statistics (a sample misses a disk edge on the big grid),
+        # with the sidecar GDAL would otherwise leave beside the frame off.
+        result = run_command(
+            [require_command("gdalinfo"), "--config", "GDAL_PAM_ENABLED", "NO", "-json", "-stats", str(temporary)],
+            description=f"inspect {out.name}",
+        )
+        try:
+            band = json.loads(result.stdout)["bands"][0]
+            valid = float(band.get("metadata", {}).get("", {}).get("STATISTICS_VALID_PERCENT", 0.0))
+        except (json.JSONDecodeError, KeyError, IndexError, TypeError, ValueError) as exc:
+            raise ConversionError(f"cannot read the statistics of {temporary}: {exc}") from exc
+        if not valid > 0.0:
+            raise ConversionError(f"gdalwarp put no data on the grid for {source}: the source's projection was not read")
         temporary.replace(out)
 
 
