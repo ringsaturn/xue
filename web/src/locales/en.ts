@@ -149,6 +149,8 @@ export const en = {
    * source named and the processing noted); the sheet row's name is the
    * agency's website, as the terms spell it. */
   creditsJma: "RADAR PRECIPITATION · JMA NOWCAST, JAPAN (REGRIDDED)",
+  creditsSounding: "RADIOSONDE SOUNDINGS · GTS TEMP VIA WIS2, NATIONAL MET SERVICES",
+  creditsAirport: "AIRPORT METAR & TAF · WORLD MET SERVICES VIA NOAA/NWS AWC",
   creditsRadar: "RADAR MOSAIC",
   creditsBasemap: "BASEMAP · © OPENSTREETMAP CONTRIBUTORS",
   creditsCode: "SOURCE CODE · RINGSATURN/XUE",

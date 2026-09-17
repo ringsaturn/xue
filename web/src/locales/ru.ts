@@ -83,6 +83,8 @@ export const ru: Record<MessageKey, string> = {
   creditsEcmwf: "СОДЕРЖИТ ИЗМЕНЁННЫЕ ДАННЫЕ ECMWF · CC BY 4.0",
   creditsMrms: "РАДАРНЫЕ НАБЛЮДЕНИЯ · MRMS, КОНТИНЕНТАЛЬНЫЕ США",
   creditsJma: "РАДАРНЫЕ ОСАДКИ · НАУКАСТ JMA, ЯПОНИЯ (ПЕРЕСЕТКА)",
+  creditsSounding: "РАДИОЗОНДИРОВАНИЕ · GTS TEMP ЧЕРЕЗ WIS2, НАЦИОНАЛЬНЫЕ МЕТЕОСЛУЖБЫ",
+  creditsAirport: "METAR И TAF АЭРОПОРТОВ · МЕТЕОСЛУЖБЫ МИРА ЧЕРЕЗ NOAA/NWS AWC",
   creditsRadar: "РАДАРНАЯ МОЗАИКА",
   creditsBasemap: "ПОДЛОЖКА · © УЧАСТНИКИ OPENSTREETMAP",
   creditsCode: "ИСХОДНЫЙ КОД · RINGSATURN/XUE",

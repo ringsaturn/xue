@@ -83,6 +83,8 @@ export const ko: Record<MessageKey, string> = {
   creditsEcmwf: "수정된 ECMWF 자료 포함 · CC BY 4.0",
   creditsMrms: "레이더 관측 · MRMS, 미국 본토",
   creditsJma: "레이더 강수 · 기상청 실황예보, 일본 (재격자화)",
+  creditsSounding: "라디오존데 관측 · GTS TEMP 전문 (WIS2 경유), 각국 기상기관",
+  creditsAirport: "공항 METAR·TAF · 각국 기상기관 (NOAA/NWS AWC 경유)",
   creditsRadar: "레이더 합성도",
   creditsBasemap: "배경지도 · © OPENSTREETMAP 기여자",
   creditsCode: "소스 코드 · RINGSATURN/XUE",

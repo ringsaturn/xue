@@ -84,6 +84,8 @@ export const tr: Record<MessageKey, string> = {
   creditsEcmwf: "DEĞİŞTİRİLMİŞ ECMWF VERİSİ İÇERİR · CC BY 4.0",
   creditsMrms: "RADAR GÖZLEMLERİ · MRMS, ABD ANAKARASI",
   creditsJma: "RADAR YAĞIŞI · JMA NOWCAST, JAPONYA (YENİDEN IZGARALANMIŞ)",
+  creditsSounding: "RADYOSONDA GÖZLEMLERİ · WIS2 ÜZERİNDEN GTS TEMP, ULUSAL METEOROLOJİ SERVİSLERİ",
+  creditsAirport: "HAVALİMANI METAR VE TAF · DÜNYA METEOROLOJİ SERVİSLERİ, NOAA/NWS AWC ÜZERİNDEN",
   creditsRadar: "RADAR MOZAİĞİ",
   creditsBasemap: "ALTLIK HARİTA · © OPENSTREETMAP KATKIDA BULUNANLAR",
   creditsCode: "KAYNAK KODU · RINGSATURN/XUE",
