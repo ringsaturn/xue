@@ -27,6 +27,12 @@ The layout, at the data root:
   ``metadata`` asset under its ``?v=``, the grid as ``bbox`` /
   ``cube:dimensions``, the variables as ``cube:variables``, the cycle as
   ``forecast:reference_datetime``.
+- ``<product>/collection.json``, ``<product>/item.json`` and
+  ``<product>.<issue>/item.json`` — the same three documents for each of
+  the point products published beside the runs (``sounding``, ``airport``,
+  ``tc``), derived from the issue's ``index.json`` alone: where the
+  stations are, what period the issue covers, and one asset per file it
+  ships.
 - ``showcase/collection.json`` and ``showcase/<case>/item.json`` — the
   cases, from ``showcase.json``'s rows and their manifests.
 
@@ -74,6 +80,7 @@ CATALOG_ID = "xue"
 CATALOG_FILENAME = "catalog.json"
 COLLECTION_FILENAME = "collection.json"
 ITEM_FILENAME = "item.json"
+INDEX_FILENAME = "index.json"
 SHOWCASE_COLLECTION_ID = "showcase"
 
 FORECAST_EXTENSION = "https://stac-extensions.github.io/forecast/v0.2.0/schema.json"
@@ -131,6 +138,185 @@ _XUE_PROVIDER = {
     "roles": ["processor", "host"],
     "url": "https://github.com/ringsaturn/xue",
 }
+
+
+# The point products published beside the runs (`docs/sounding.md`,
+# `docs/airport.md`, `docs/tc.md`): a fixed list rather than a registry,
+# since each is its own pipeline under one delivery contract
+# (`xuebuild/pointproduct.py`). They are the root catalog's other children.
+POINT_PRODUCTS = ("sounding", "airport", "tc")
+
+NDJSON_MEDIA_TYPE = "application/x-ndjson"
+
+
+def _point_product_prose(product: str) -> dict[str, Any]:
+    """`_source_prose` for the three point products.
+
+    None of the three has an SPDX identifier to name. The soundings are
+    WMO core data under the Unified Data Policy (Resolution 1,
+    Cg-Ext(2021)) — free and unrestricted with attribution of the original
+    source requested, which no SPDX id spells — so the license is `other`
+    with the resolution linked. The airport reports are decoded by a work
+    of the United States government, which is in the public domain rather
+    than under CC0 (`CC0-1.0` would claim a waiver nobody granted), so
+    that too is `other`, with the service's own terms linked. The tracks
+    come from several centres at once — US government works, ECMWF open
+    data under CC BY 4.0, IBTrACS — so the Collection is `other` and the
+    links name each.
+    """
+    prose: dict[str, dict[str, Any]] = {
+        "sounding": {
+            "title": "Radiosonde soundings (WIS2)",
+            "description": (
+                "The world's radiosonde ascents, aggregated every hour from the TEMP bulletins the "
+                "national meteorological services exchange over the WMO Information System: one station "
+                "per line of a single NDJSON file, spanned by the index beside it, each ascent thinned to "
+                "the classical mandatory and significant levels in fixed point with four derived "
+                "quantities. A rolling window with no fixed start — only the newest issue is published, "
+                "and a station carries its newest four nominal times."
+            ),
+            "license": "other",
+            "keywords": ["weather", "observation", "radiosonde", "sounding", "upper air", "wis2"],
+            "providers": [
+                {
+                    "name": "WMO WIS2 Global Cache",
+                    "description": (
+                        "The GTS-to-WIS2 gateways run by the Japan Meteorological Agency and the "
+                        "Deutscher Wetterdienst, which republish every centre's bulletins."
+                    ),
+                    "roles": ["producer"],
+                    "url": "https://wis2.wmo.int/",
+                },
+                {
+                    "name": "The originating national meteorological and hydrological services",
+                    "description": "Every ascent is theirs; attribution of the original source is requested.",
+                    "roles": ["producer", "licensor"],
+                    "url": "https://community.wmo.int/en/members",
+                },
+                _XUE_PROVIDER,
+            ],
+            "links": [
+                {
+                    "rel": "license",
+                    "href": "https://library.wmo.int/idurl/4/58009",
+                    "type": "text/html",
+                    "title": (
+                        "WMO Unified Data Policy (Resolution 1, Cg-Ext(2021)): core data, free and "
+                        "unrestricted, attribution of the original source requested"
+                    ),
+                }
+            ],
+        },
+        "airport": {
+            "title": "Airport observations and forecasts (METAR / TAF)",
+            "description": (
+                "The world's airport weather, aggregated every ten minutes from the NOAA Aviation "
+                "Weather Center's decoded caches: about five thousand stations with their newest "
+                "observation in the index, and each station's last 24 hours of METARs with its current "
+                "TAF on one line of the history file beside it. A rolling window with no fixed start — "
+                "only the newest round is published, and each round carries the whole window."
+            ),
+            "license": "other",
+            "keywords": ["weather", "observation", "aviation", "metar", "taf", "airport"],
+            "providers": [
+                {
+                    "name": "NOAA / NWS Aviation Weather Center",
+                    "description": (
+                        "The decoded METAR and TAF cache files, a work of the United States government "
+                        "and in the public domain."
+                    ),
+                    "roles": ["producer", "licensor"],
+                    "url": "https://aviationweather.gov/data/cache/",
+                },
+                {
+                    "name": "The world's meteorological services",
+                    "description": "The reports themselves, exchanged under WMO and ICAO arrangements.",
+                    "roles": ["producer"],
+                    "url": "https://community.wmo.int/en/members",
+                },
+                _XUE_PROVIDER,
+            ],
+            "links": [
+                {
+                    "rel": "license",
+                    "href": "https://www.weather.gov/disclaimer",
+                    "type": "text/html",
+                    "title": "NWS disclaimer: a work of the US government, in the public domain",
+                },
+                {
+                    "rel": "about",
+                    "href": "https://aviationweather.gov/data/api/",
+                    "type": "text/html",
+                    "title": "Aviation Weather Center data services",
+                },
+            ],
+        },
+        "tc": {
+            "title": "Tropical cyclone tracks",
+            "description": (
+                "Every tropical cyclone the warning centres and the models are tracking, aggregated "
+                "every hour: the official forecasts of the National Hurricane Center and the Joint "
+                "Typhoon Warning Center, the multi-agency best tracks, the NCEP tracker's GFS and GEFS "
+                "tracks and ECMWF's deterministic and ensemble tracks — one JSON file per system beside "
+                "an index that names the systems and their headline positions. A rolling window with no "
+                "fixed start: only the newest issue is published."
+            ),
+            "license": "other",
+            "keywords": ["weather", "forecast", "tropical cyclone", "hurricane", "typhoon", "track"],
+            "providers": [
+                {
+                    "name": "NOAA / NWS National Hurricane Center",
+                    "roles": ["producer", "licensor"],
+                    "url": "https://www.nhc.noaa.gov/",
+                },
+                {
+                    "name": "Joint Typhoon Warning Center",
+                    "roles": ["producer", "licensor"],
+                    "url": "https://www.metoc.navy.mil/jtwc/jtwc.html",
+                },
+                {
+                    "name": "NOAA / NCEP",
+                    "description": "The objective tracker's GFS and GEFS tracks.",
+                    "roles": ["producer", "licensor"],
+                    "url": "https://www.nco.ncep.noaa.gov/pmb/products/hur/",
+                },
+                {
+                    "name": "ECMWF",
+                    "description": "The open data deterministic and ensemble cyclone tracks, CC BY 4.0.",
+                    "roles": ["producer", "licensor"],
+                    "url": "https://www.ecmwf.int/en/forecasts/datasets/open-data",
+                },
+                {
+                    "name": "NOAA NCEI / IBTrACS",
+                    "description": "The international best track archive for climate stewardship.",
+                    "roles": ["producer", "licensor"],
+                    "url": "https://www.ncei.noaa.gov/products/international-best-track-archive",
+                },
+                _XUE_PROVIDER,
+            ],
+            "links": [
+                {
+                    "rel": "license",
+                    "href": "https://www.weather.gov/disclaimer",
+                    "type": "text/html",
+                    "title": (
+                        "NWS disclaimer: the US agencies' products are works of the US government, "
+                        "in the public domain"
+                    ),
+                },
+                {
+                    "rel": "license",
+                    "href": "https://creativecommons.org/licenses/by/4.0/",
+                    "type": "text/html",
+                    "title": "Creative Commons Attribution 4.0, for the ECMWF open data tracks",
+                },
+            ],
+        },
+    }
+    try:
+        return prose[product]
+    except KeyError as exc:  # pragma: no cover - the table is held to POINT_PRODUCTS by a test
+        raise StacError(f"no catalog prose for point product {product}") from exc
 
 
 def _source_prose(source: SourceSpec) -> dict[str, Any]:
@@ -259,6 +445,25 @@ def _source_prose(source: SourceSpec) -> dict[str, Any]:
         return prose[source.id]
     except KeyError as exc:  # pragma: no cover - the table is held to the registry by a test
         raise StacError(f"no catalog prose for source {source.id}") from exc
+
+
+def prose_document() -> dict[str, Any]:
+    """Every title, licence, provider and licence link the catalog
+    publishes, as ``tests/fixtures/stac-prose.json`` pins it — the way
+    ``tc-registry.json`` pins the agency table. What a Collection says about
+    who owns the data and under which terms is not something to change by
+    accident, so it is committed rather than only asserted about.
+
+    Regenerate it with the change that meant it::
+
+        .venv/bin/python -c "import json; from xuebuild import stac; \\
+            print(json.dumps(stac.prose_document(), indent=2, ensure_ascii=False))" \\
+            > tests/fixtures/stac-prose.json
+    """
+    return {
+        "sources": {source.id: _source_prose(source) for source in SOURCES.values()},
+        "pointProducts": {product: _point_product_prose(product) for product in POINT_PRODUCTS},
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -700,6 +905,246 @@ def case_item(entry: dict[str, Any], manifest: dict[str, Any], manifest_crc32: s
 
 
 # ---------------------------------------------------------------------------
+# The point products
+
+
+def _point_product_directory(product: str, index_relative_path: str) -> str:
+    """The issue directory an index lives in (``sounding.2026091402``),
+    checked against the product it is claimed to belong to. The directory
+    name is the Item's id, the way a run's is."""
+    path = Path(index_relative_path)
+    if path.name != INDEX_FILENAME or len(path.parts) != 2:
+        raise StacError(f"a {product} item derives from <issue>/index.json, not {index_relative_path}")
+    directory = path.parts[0]
+    if not re.fullmatch(rf"{re.escape(product)}\.\d+", directory):
+        raise StacError(f"{directory} is not a {product} issue directory")
+    return directory
+
+
+def _point_product_positions(index: dict[str, Any], product: str) -> list[tuple[float, float]]:
+    """Every station's (longitude, latitude): the soundings' and the
+    airports' own, a storm's headline position. A storm with nothing
+    observed has none, and an index of such storms alone has no geometry
+    at all — which STAC allows, geometry null and no bbox."""
+    if product == "sounding":
+        return [(float(station["lon"]), float(station["lat"])) for station in index["stations"]]
+    if product == "airport":
+        return [(float(row[2]), float(row[1])) for row in index["stations"]]
+    return [
+        (float(storm["position"]["lon"]), float(storm["position"]["lat"]))
+        for storm in index["storms"]
+        if storm.get("position")
+    ]
+
+
+def _point_product_period(index: dict[str, Any], product: str, issued: datetime) -> tuple[str, str]:
+    """What the issue covers, out of the index alone: a sounding issue from
+    the oldest nominal time any station still carries to the newest ascent
+    in it; an airport round from 24 hours before it (the history window) to
+    the newest observation; a tc issue across the headline positions. An
+    index with nothing in it is the instant it was issued."""
+    default = iso_z(issued)
+    if product == "sounding":
+        stations = index["stations"]
+        bounds = (
+            min((station["times"][-1] for station in stations), default=default),
+            max((station["latest"] for station in stations), default=default),
+        )
+    elif product == "airport":
+        bounds = (
+            iso_z(issued - timedelta(hours=24)),
+            max((row[4] for row in index["stations"]), default=default),
+        )
+    else:
+        times = [storm["position"]["time"] for storm in index["storms"] if storm.get("position")]
+        bounds = (min(times, default=default), max(times, default=default))
+    start, end = (iso_z(_parse_time(value)) for value in bounds)
+    return min(start, end), max(start, end)
+
+
+def _point_product_assets(
+    index: dict[str, Any], product: str, index_byte_length: int, index_crc32: str
+) -> dict[str, Any]:
+    """The issue's files as assets: the index itself, then what it names —
+    the one NDJSON file the soundings and the airports publish, or one JSON
+    file per storm. Every href carries the ``?v=`` the reader fetches it
+    under, which for the index is the pointer's own CRC32 (the index does
+    not state its own length, so the caller, which has the bytes, does)."""
+    assets: dict[str, Any] = {
+        "index": {
+            "href": f"{INDEX_FILENAME}?v={index_crc32}",
+            "type": JSON_MEDIA_TYPE,
+            "title": f"{product} index (schema v{index['schemaVersion']})",
+            "roles": ["metadata"],
+            "xue:kind": "index",
+            **_file_fields(index_byte_length, index_crc32, single_file=True),
+        }
+    }
+    if product in ("sounding", "airport"):
+        key, descriptor = ("soundings", index["soundings"]) if product == "sounding" else ("history", index["history"])
+        assets[key] = {
+            "href": f"{descriptor['path']}?v={descriptor['crc32']}",
+            "type": NDJSON_MEDIA_TYPE,
+            "title": "Soundings by station" if product == "sounding" else "Observations and forecasts by station",
+            "description": (
+                "One station per line, sorted by id. A station's `offset` and `length` in the index are "
+                "the byte span of its line's JSON object, excluding the newline, so one station is one "
+                "`Range: bytes=<offset>-<offset+length-1>` request and the whole file streams line by line."
+            ),
+            "roles": ["data"],
+            "xue:kind": "series",
+            **_file_fields(descriptor["byteLength"], descriptor["crc32"], single_file=True),
+        }
+        return assets
+    for storm in index["storms"]:
+        name = storm.get("name")
+        assets[storm["id"]] = {
+            "href": f"{storm['path']}?v={storm['crc32']}",
+            "type": JSON_MEDIA_TYPE,
+            "title": f"{name} ({storm['id']})" if name else storm["id"],
+            "roles": ["data"],
+            "xue:kind": "storm",
+            "xue:level": storm["level"],
+            "xue:basin": storm["basin"],
+            **_file_fields(storm["byteLength"], storm["crc32"], single_file=True),
+        }
+    return assets
+
+
+def _point_product_label(product: str, issued: datetime) -> str:
+    if product == "airport":
+        return f"{issued.strftime('%Y-%m-%d %H:%MZ')} round"
+    return f"{issued.strftime('%Y-%m-%d %HZ')} issue"
+
+
+def point_product_item(
+    index: dict[str, Any],
+    index_byte_length: int,
+    index_crc32: str,
+    *,
+    product: str,
+    index_relative_path: str,
+) -> dict[str, Any]:
+    """The Item for one issue of a point product, from its ``index.json``
+    alone (``docs/stac.md`` §"Point products").
+
+    ``index_relative_path`` is the index's path from the data root
+    (``tc.2026091301/index.json``) — what the product's pointer carries —
+    and its directory is the Item's id. There is no grid and no forecast
+    axis here: a point product is a set of stations, so the Item states
+    where they are, what period the issue covers and which files carry
+    it."""
+    directory = _point_product_directory(product, index_relative_path)
+    issued = _parse_time(index["issued"])
+    positions = _point_product_positions(index, product)
+    bbox = (
+        [
+            round(min(lon for lon, _ in positions), 6),
+            round(min(lat for _, lat in positions), 6),
+            round(max(lon for lon, _ in positions), 6),
+            round(max(lat for _, lat in positions), 6),
+        ]
+        if positions
+        else None
+    )
+    start, end = _point_product_period(index, product, issued)
+    prose = _point_product_prose(product)
+    count_key = "xue:storms" if product == "tc" else "xue:stations"
+    properties: dict[str, Any] = {
+        "title": f"{prose['title']} · {_point_product_label(product, issued)}",
+        # The issue is one instant a client sorts on; the period it covers
+        # is the two bounds, as a run's Item states them.
+        "datetime": iso_z(issued),
+        "start_datetime": start,
+        "end_datetime": end,
+        "xue:product": product,
+        "xue:schemaVersion": index["schemaVersion"],
+        "xue:issued": iso_z(issued),
+        count_key: len(index["storms"] if product == "tc" else index["stations"]),
+        "xue:sources": [{"id": source["id"], "ok": bool(source["ok"])} for source in index["sources"]],
+    }
+    if product == "sounding":
+        # The product's own account of how current it is, per gateway.
+        properties["xue:watermark"] = index["watermark"]
+    item: dict[str, Any] = {
+        "type": "Feature",
+        "stac_version": STAC_VERSION,
+        "stac_extensions": [FILE_EXTENSION],
+        "id": directory,
+        "collection": product,
+        "geometry": _bbox_geometry(bbox) if bbox is not None else None,
+        **({"bbox": bbox} if bbox is not None else {}),
+        "properties": properties,
+        "links": [
+            {"rel": "root", "href": f"../{CATALOG_FILENAME}", "type": STAC_JSON_MEDIA_TYPE},
+            {"rel": "parent", "href": f"../{product}/{COLLECTION_FILENAME}", "type": STAC_JSON_MEDIA_TYPE},
+            {"rel": "collection", "href": f"../{product}/{COLLECTION_FILENAME}", "type": STAC_JSON_MEDIA_TYPE},
+        ],
+        "assets": _point_product_assets(index, product, index_byte_length, index_crc32),
+    }
+    validate_item(item)
+    return item
+
+
+def point_product_collection(product: str, item: dict[str, Any], item_relative_path: str) -> dict[str, Any]:
+    """The Collection of one point product, at ``<product>/collection.json``
+    — the STAC face of ``latest-<product>.json``, in the posture
+    `source_collection` takes for a run: its ``item`` and ``latest-version``
+    links both name the live Item beside it, and the issue's own copy is the
+    ``alternate`` that dies with the issue.
+
+    The extent is the whole world and an open interval: every issue is a
+    rolling window whose start moves, so a Collection stating the live
+    issue's bounds would be wrong the moment the next one lands."""
+    prose = _point_product_prose(product)
+    properties = item["properties"]
+    collection: dict[str, Any] = {
+        "type": "Collection",
+        "stac_version": STAC_VERSION,
+        "stac_extensions": [],
+        "id": product,
+        "title": prose["title"],
+        "description": prose["description"],
+        "license": prose["license"],
+        "keywords": prose["keywords"],
+        "providers": prose["providers"],
+        "extent": {
+            "spatial": {"bbox": [[-180.0, -90.0, 180.0, 90.0]]},
+            "temporal": {"interval": [[None, None]]},
+        },
+        "xue:pointer": f"latest-{product}.json",
+        "xue:live": item["id"],
+        "links": [
+            {"rel": "root", "href": f"../{CATALOG_FILENAME}", "type": STAC_JSON_MEDIA_TYPE},
+            {"rel": "parent", "href": f"../{CATALOG_FILENAME}", "type": STAC_JSON_MEDIA_TYPE},
+            {"rel": "item", "href": ITEM_FILENAME, "type": GEOJSON_MEDIA_TYPE, "title": properties["title"]},
+            {"rel": "latest-version", "href": ITEM_FILENAME, "type": GEOJSON_MEDIA_TYPE, "title": properties["title"]},
+            {
+                "rel": "alternate",
+                "href": f"../{item_relative_path}",
+                "type": GEOJSON_MEDIA_TYPE,
+                "title": f"{properties['title']} (beside its index; gone when the issue is)",
+            },
+            {
+                "rel": "xue:pointer",
+                "href": f"../latest-{product}.json",
+                "type": JSON_MEDIA_TYPE,
+                "title": "live pointer (schema v1)",
+            },
+            {
+                "rel": "describedby",
+                "href": f"https://github.com/ringsaturn/xue/blob/main/docs/{product}.md",
+                "type": "text/markdown",
+                "title": f"The {product} product, schema v{properties['xue:schemaVersion']}",
+            },
+            *prose["links"],
+        ],
+    }
+    validate_collection(collection)
+    return collection
+
+
+# ---------------------------------------------------------------------------
 # Collections and the catalog
 
 
@@ -818,8 +1263,9 @@ def _union_bbox(bboxes: list[list[float]]) -> list[float]:
 
 def root_catalog() -> dict[str, Any]:
     """The root Catalog: one child per source with a live feed, in registry
-    order, and the showcase. A pure function of the registry, so every
-    publish rewrites the same bytes."""
+    order, then one per point product and the showcase. A pure function of
+    the registry and that fixed list, so every publish — of a run, of an
+    hour of soundings, of a round of airports — rewrites the same bytes."""
     catalog: dict[str, Any] = {
         "type": "Catalog",
         "stac_version": STAC_VERSION,
@@ -827,9 +1273,10 @@ def root_catalog() -> dict[str, Any]:
         "title": "Xue",
         "description": (
             "Global and regional weather forecast runs and radar observations, packed by Xue into "
-            "Zarr v3 stores (docs/zarr-profile.md) for playback in a browser and reading with xarray. "
-            "One Collection per source, whose Item is the newest run; the showcase Collection keeps "
-            "historical cases."
+            "Zarr v3 stores (docs/zarr-profile.md) for playback in a browser and reading with xarray, "
+            "beside three point products in plain JSON: radiosonde soundings, airport reports and "
+            "tropical cyclone tracks. One Collection per source or product, whose Item is the newest "
+            "run or issue; the showcase Collection keeps historical cases."
         ),
         "links": [
             {"rel": "root", "href": f"./{CATALOG_FILENAME}", "type": STAC_JSON_MEDIA_TYPE},
@@ -842,6 +1289,15 @@ def root_catalog() -> dict[str, Any]:
                 }
                 for source in SOURCES.values()
                 if source.live
+            ),
+            *(
+                {
+                    "rel": "child",
+                    "href": f"{product}/{COLLECTION_FILENAME}",
+                    "type": STAC_JSON_MEDIA_TYPE,
+                    "title": _point_product_prose(product)["title"],
+                }
+                for product in POINT_PRODUCTS
             ),
             {
                 "rel": "child",
@@ -916,12 +1372,20 @@ def validate_item(item: dict[str, Any]) -> None:
     for key in ("datetime", "start_datetime", "end_datetime"):
         _require(isinstance(properties.get(key), str), f"properties.{key} must be a timestamp")
     _require(properties["start_datetime"] <= properties["end_datetime"], "start_datetime must not follow end_datetime")
-    _require(isinstance(properties.get("cube:dimensions"), dict), "cube:dimensions must be an object")
+    if DATACUBE_EXTENSION in item["stac_extensions"]:
+        # A raster run or case is a cube; a point product's issue is a set
+        # of stations and declares no dimensions.
+        _require(isinstance(properties.get("cube:dimensions"), dict), "cube:dimensions must be an object")
     if FORECAST_EXTENSION in item["stac_extensions"]:
         _require(isinstance(properties.get("forecast:reference_datetime"), str), "forecast:reference_datetime is required")
     _validate_links(item, "root", "parent", "collection")
     assets = item.get("assets")
-    _require(isinstance(assets, dict) and "manifest" in assets, "assets must include the manifest")
+    # A run's Item names the manifest it derives from, a point product's
+    # the index; either way the document it was derived from is an asset.
+    _require(
+        isinstance(assets, dict) and ("manifest" in assets or "index" in assets),
+        "assets must include the manifest or the index",
+    )
     for key, asset in assets.items():
         _require(isinstance(asset, dict) and isinstance(asset.get("href"), str), f"asset {key} needs an href")
         _require(not asset["href"].startswith(("/", "http:", "https:")), f"asset {key} href must be relative")
@@ -1025,6 +1489,52 @@ def write_run_documents(output_dir: Path, *, source: SourceSpec, manifest_path: 
     _write_json(catalog_path, root_catalog())
     return {
         "item": str(item_path),
+        "liveItem": str(live_item_path),
+        "collection": str(collection_path),
+        "catalog": str(catalog_path),
+    }
+
+
+def write_point_product_documents(
+    output_dir: Path, *, product: str, index_path: Path, live: bool = True
+) -> dict[str, str]:
+    """Write the STAC documents one issue of a point product needs, from
+    the ``index.json`` at ``index_path`` under ``output_dir`` (the data
+    root): the issue's ``item.json`` beside the index and, when the issue
+    is the live one, the same Item relocated to the product's stable
+    ``<product>/item.json``, the product's ``collection.json`` and the root
+    ``catalog.json``. Returns their paths by name.
+
+    Called by ``sounding-build`` / ``airport-build`` / ``tc-build`` once
+    the index is final, and by ``xue stac --product``. ``live`` is false
+    when the build withheld the pointer: the issue still gets its Item —
+    the directory is complete — but nothing names it, the way a Collection
+    never names a run the pointer does not."""
+    if product not in POINT_PRODUCTS:
+        raise StacError(f"unknown point product {product!r}; choose from {', '.join(POINT_PRODUCTS)}")
+    index_bytes = index_path.read_bytes()
+    index = json.loads(index_bytes)
+    relative = index_path.relative_to(output_dir).as_posix()
+    item = point_product_item(
+        index,
+        len(index_bytes),
+        _crc32_of(index_bytes),
+        product=product,
+        index_relative_path=relative,
+    )
+    item_path = index_path.with_name(ITEM_FILENAME)
+    _write_json(item_path, item)
+    written = {"item": str(item_path)}
+    if not live:
+        return written
+    item_relative = item_path.relative_to(output_dir).as_posix()
+    live_item_path = output_dir / product / ITEM_FILENAME
+    collection_path = output_dir / product / COLLECTION_FILENAME
+    catalog_path = output_dir / CATALOG_FILENAME
+    _write_json(live_item_path, relocate_item(item, from_dir=posixpath.dirname(item_relative), to_dir=product))
+    _write_json(collection_path, point_product_collection(product, item, item_relative))
+    _write_json(catalog_path, root_catalog())
+    return written | {
         "liveItem": str(live_item_path),
         "collection": str(collection_path),
         "catalog": str(catalog_path),

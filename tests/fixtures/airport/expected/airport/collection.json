@@ -1,0 +1,97 @@
+{
+ "type": "Collection",
+ "stac_version": "1.1.0",
+ "stac_extensions": [],
+ "id": "airport",
+ "title": "Airport observations and forecasts (METAR / TAF)",
+ "description": "The world's airport weather, aggregated every ten minutes from the NOAA Aviation Weather Center's decoded caches: about five thousand stations with their newest observation in the index, and each station's last 24 hours of METARs with its current TAF on one line of the history file beside it. A rolling window with no fixed start — only the newest round is published, and each round carries the whole window.",
+ "license": "other",
+ "keywords": ["weather", "observation", "aviation", "metar", "taf", "airport"],
+ "providers": [
+  {
+   "name": "NOAA / NWS Aviation Weather Center",
+   "description": "The decoded METAR and TAF cache files, a work of the United States government and in the public domain.",
+   "roles": ["producer", "licensor"],
+   "url": "https://aviationweather.gov/data/cache/"
+  },
+  {
+   "name": "The world's meteorological services",
+   "description": "The reports themselves, exchanged under WMO and ICAO arrangements.",
+   "roles": ["producer"],
+   "url": "https://community.wmo.int/en/members"
+  },
+  {
+   "name": "Xue",
+   "roles": ["processor", "host"],
+   "url": "https://github.com/ringsaturn/xue"
+  }
+ ],
+ "extent": {
+  "spatial": {
+   "bbox": [
+    [-180.0, -90.0, 180.0, 90.0]
+   ]
+  },
+  "temporal": {
+   "interval": [
+    [null, null]
+   ]
+  }
+ },
+ "xue:pointer": "latest-airport.json",
+ "xue:live": "airport.202609161440",
+ "links": [
+  {
+   "rel": "root",
+   "href": "../catalog.json",
+   "type": "application/json"
+  },
+  {
+   "rel": "parent",
+   "href": "../catalog.json",
+   "type": "application/json"
+  },
+  {
+   "rel": "item",
+   "href": "item.json",
+   "type": "application/geo+json",
+   "title": "Airport observations and forecasts (METAR / TAF) · 2026-09-16 14:40Z round"
+  },
+  {
+   "rel": "latest-version",
+   "href": "item.json",
+   "type": "application/geo+json",
+   "title": "Airport observations and forecasts (METAR / TAF) · 2026-09-16 14:40Z round"
+  },
+  {
+   "rel": "alternate",
+   "href": "../airport.202609161440/item.json",
+   "type": "application/geo+json",
+   "title": "Airport observations and forecasts (METAR / TAF) · 2026-09-16 14:40Z round (beside its index; gone when the issue is)"
+  },
+  {
+   "rel": "xue:pointer",
+   "href": "../latest-airport.json",
+   "type": "application/json",
+   "title": "live pointer (schema v1)"
+  },
+  {
+   "rel": "describedby",
+   "href": "https://github.com/ringsaturn/xue/blob/main/docs/airport.md",
+   "type": "text/markdown",
+   "title": "The airport product, schema v1"
+  },
+  {
+   "rel": "license",
+   "href": "https://www.weather.gov/disclaimer",
+   "type": "text/html",
+   "title": "NWS disclaimer: a work of the US government, in the public domain"
+  },
+  {
+   "rel": "about",
+   "href": "https://aviationweather.gov/data/api/",
+   "type": "text/html",
+   "title": "Aviation Weather Center data services"
+  }
+ ]
+}

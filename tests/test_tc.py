@@ -542,6 +542,9 @@ class GoldenBuildTests(unittest.TestCase):
                 if path.name != "latest-tc.json"
             }
             self.assertEqual(sorted(built), sorted(expected))
+            # The issue's STAC Item is one of them: written beside the
+            # index and derived from it (docs/stac.md "Point products").
+            self.assertIn("item.json", built)
             for name in sorted(expected):
                 with self.subTest(file=name):
                     self.assertEqual(built[name], expected[name])

@@ -19,8 +19,14 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from xuebuild import stac
+from xuebuild.airport import schema as airport_schema
 from xuebuild.manifest import build_bin_manifest
+from xuebuild.pointproduct import crc32_hex, encode_json
+from xuebuild.sounding import schema as sounding_schema
 from xuebuild.sources import SOURCES, source_spec
+from xuebuild.tc import schema as tc_schema
+
+FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
 try:
     import pystac
@@ -325,7 +331,9 @@ class CollectionAndCatalogTests(unittest.TestCase):
         children = [link["href"] for link in catalog["links"] if link["rel"] == "child"]
         self.assertEqual(
             children,
-            [f"{source.id}/collection.json" for source in SOURCES.values() if source.live] + ["showcase/collection.json"],
+            [f"{source.id}/collection.json" for source in SOURCES.values() if source.live]
+            + [f"{product}/collection.json" for product in stac.POINT_PRODUCTS]
+            + ["showcase/collection.json"],
         )
         self.assertEqual(stac.root_catalog(), catalog, "a pure function of the registry")
 
@@ -450,6 +458,267 @@ class WritingTests(unittest.TestCase):
             stac.write_run_documents(self.root, source=source_spec("gfs"), manifest_path=part)
 
 
+class PointProductTests(unittest.TestCase):
+    """The three point products (`docs/stac.md` §"Point products"), built
+    from the goldens the products' own tests hold their builds to. The
+    goldens are pretty-printed; re-encoded the way the product writes them
+    they are the published bytes exactly, so the Item's `?v=` here is the
+    one the live pointer carries."""
+
+    def index(self, relative: str) -> tuple[dict, bytes]:
+        payload = json.loads((FIXTURES / relative).read_text(encoding="utf-8"))
+        return payload, encode_json(payload)
+
+    def item(self, product: str, directory: str, relative: str) -> dict:
+        index, encoded = self.index(relative)
+        return stac.point_product_item(
+            index,
+            len(encoded),
+            crc32_hex(encoded),
+            product=product,
+            index_relative_path=f"{directory}/index.json",
+        )
+
+    def sounding_item(self) -> dict:
+        return self.item("sounding", "sounding.2026091402", "sounding/expected/index.json")
+
+    def airport_item(self) -> dict:
+        return self.item("airport", "airport.202609161440", "airport/expected/airport.202609161440/index.json")
+
+    def tc_item(self) -> dict:
+        return self.item("tc", "tc.2026091206", "tc/expected/index.json")
+
+    def test_an_issue_is_an_item_of_its_product(self) -> None:
+        item = self.sounding_item()
+        self.assertEqual(item["id"], "sounding.2026091402")
+        self.assertEqual(item["collection"], "sounding")
+        self.assertEqual(item["stac_extensions"], [stac.FILE_EXTENSION])
+        properties = item["properties"]
+        self.assertEqual(properties["xue:product"], "sounding")
+        self.assertEqual(properties["xue:schemaVersion"], 1)
+        self.assertEqual(properties["datetime"], "2026-09-14T02:00:00Z")
+        self.assertEqual(properties["xue:stations"], 19)
+        # The index's own account of its gateways, reduced to the two
+        # fields a catalog client can act on.
+        self.assertEqual(
+            properties["xue:sources"],
+            [{"id": "jp-jma-gts-to-wis2", "ok": True}, {"id": "de-dwd-gts-to-wis2", "ok": False}],
+        )
+        self.assertEqual(properties["xue:watermark"]["de-dwd-gts-to-wis2"], None)
+        # A set of stations is not a cube and not a forecast.
+        self.assertNotIn("cube:dimensions", properties)
+        self.assertNotIn("forecast:reference_datetime", properties)
+        rels = {link["rel"]: link["href"] for link in item["links"]}
+        self.assertEqual(rels["root"], "../catalog.json")
+        self.assertEqual(rels["parent"], "../sounding/collection.json")
+        self.assertEqual(rels["collection"], "../sounding/collection.json")
+
+    def test_the_box_is_the_stations(self) -> None:
+        index, _ = self.index("sounding/expected/index.json")
+        item = self.sounding_item()
+        self.assertEqual(
+            item["bbox"],
+            [
+                min(station["lon"] for station in index["stations"]),
+                min(station["lat"] for station in index["stations"]),
+                max(station["lon"] for station in index["stations"]),
+                max(station["lat"] for station in index["stations"]),
+            ],
+        )
+        self.assertEqual(item["geometry"]["type"], "Polygon")
+        airport = self.airport_item()
+        rows = json.loads((FIXTURES / "airport/expected/airport.202609161440/index.json").read_text(encoding="utf-8"))
+        self.assertEqual(airport["bbox"][1], min(row[1] for row in rows["stations"]))
+        self.assertEqual(airport["bbox"][2], max(row[2] for row in rows["stations"]))
+        # A storm's headline position is its point; the box is the plain
+        # minimum and maximum over them.
+        storms = json.loads((FIXTURES / "tc/expected/index.json").read_text(encoding="utf-8"))["storms"]
+        self.assertEqual(
+            self.tc_item()["bbox"],
+            [
+                min(storm["position"]["lon"] for storm in storms),
+                min(storm["position"]["lat"] for storm in storms),
+                max(storm["position"]["lon"] for storm in storms),
+                max(storm["position"]["lat"] for storm in storms),
+            ],
+        )
+
+    def test_an_issue_with_nothing_placed_has_no_geometry(self) -> None:
+        index, _ = self.index("tc/expected/index.json")
+        for storm in index["storms"]:
+            storm["position"] = None
+        encoded = encode_json(index)
+        item = stac.point_product_item(
+            index,
+            len(encoded),
+            crc32_hex(encoded),
+            product="tc",
+            index_relative_path="tc.2026091206/index.json",
+        )
+        self.assertIsNone(item["geometry"])
+        self.assertNotIn("bbox", item)
+        # Nothing observed, so the period is the issue itself.
+        self.assertEqual(item["properties"]["start_datetime"], "2026-09-12T06:00:00Z")
+        self.assertEqual(item["properties"]["end_datetime"], "2026-09-12T06:00:00Z")
+
+    def test_the_period_is_what_the_issue_covers(self) -> None:
+        index, _ = self.index("sounding/expected/index.json")
+        properties = self.sounding_item()["properties"]
+        # The oldest nominal time any station still carries, to the newest
+        # ascent in the issue.
+        self.assertEqual(properties["start_datetime"], min(s["times"][-1] for s in index["stations"]))
+        self.assertEqual(properties["end_datetime"], max(s["latest"] for s in index["stations"]))
+        rows = json.loads((FIXTURES / "airport/expected/airport.202609161440/index.json").read_text(encoding="utf-8"))
+        airport = self.airport_item()["properties"]
+        # A round carries 24 hours of history behind it.
+        self.assertEqual(airport["start_datetime"], "2026-09-15T14:40:00Z")
+        self.assertEqual(airport["end_datetime"], max(row[4] for row in rows["stations"]))
+        self.assertLessEqual(airport["end_datetime"], airport["datetime"])
+        storms = json.loads((FIXTURES / "tc/expected/index.json").read_text(encoding="utf-8"))["storms"]
+        tc = self.tc_item()["properties"]
+        self.assertEqual(tc["start_datetime"], min(storm["position"]["time"] for storm in storms))
+        self.assertEqual(tc["end_datetime"], max(storm["position"]["time"] for storm in storms))
+        self.assertEqual(tc["xue:storms"], len(storms))
+
+    def test_assets_are_the_files_the_issue_ships(self) -> None:
+        index, encoded = self.index("sounding/expected/index.json")
+        pointer = json.loads((FIXTURES / "sounding/expected/latest-sounding.json").read_text(encoding="utf-8"))
+        assets = self.sounding_item()["assets"]
+        self.assertEqual(assets["index"]["href"], f"index.json?v={pointer['crc32']}")
+        self.assertEqual(assets["index"]["file:size"], pointer["byteLength"])
+        self.assertEqual(assets["index"]["roles"], ["metadata"])
+        self.assertEqual(assets["index"]["file:checksum"], stac.CRC32_MULTIHASH_PREFIX + pointer["crc32"])
+        series = assets["soundings"]
+        self.assertEqual(series["href"], f"soundings.jsonl?v={index['soundings']['crc32']}")
+        self.assertEqual(series["type"], stac.NDJSON_MEDIA_TYPE)
+        self.assertEqual(series["roles"], ["data"])
+        self.assertEqual(series["file:size"], index["soundings"]["byteLength"])
+        # The addressing rule is the point of the layout, so the asset says it.
+        self.assertIn("Range", series["description"])
+        self.assertIn("offset", series["description"])
+        history = self.airport_item()["assets"]["history"]
+        self.assertEqual(history["type"], stac.NDJSON_MEDIA_TYPE)
+        self.assertTrue(history["href"].startswith("history.jsonl?v="))
+        # One asset per storm file, under the CRC the index carries.
+        storms = json.loads((FIXTURES / "tc/expected/index.json").read_text(encoding="utf-8"))["storms"]
+        assets = self.tc_item()["assets"]
+        self.assertEqual(sorted(assets), sorted(["index", *(storm["id"] for storm in storms)]))
+        first = storms[0]
+        self.assertEqual(assets[first["id"]]["href"], f"{first['path']}?v={first['crc32']}")
+        self.assertEqual(assets[first["id"]]["xue:level"], first["level"])
+        self.assertEqual(assets[first["id"]]["file:size"], first["byteLength"])
+        self.assertEqual(len(encoded), pointer["byteLength"])
+
+    def test_an_index_elsewhere_is_not_an_issue(self) -> None:
+        index, encoded = self.index("tc/expected/index.json")
+        for path in ("index.json", "tc.2026091206/1455/index.json", "sounding.2026091402/index.json"):
+            with self.subTest(path=path), self.assertRaises(stac.StacError):
+                stac.point_product_item(
+                    index, len(encoded), crc32_hex(encoded), product="tc", index_relative_path=path
+                )
+
+    def test_the_collection_mirrors_the_pointer(self) -> None:
+        item = self.tc_item()
+        collection = stac.point_product_collection("tc", item, "tc.2026091206/item.json")
+        self.assertEqual(collection["id"], "tc")
+        self.assertEqual(collection["license"], "other")
+        self.assertEqual(collection["xue:live"], "tc.2026091206")
+        self.assertEqual(collection["xue:pointer"], "latest-tc.json")
+        # A rolling window has no fixed start, and the world is the extent.
+        self.assertEqual(collection["extent"]["spatial"]["bbox"], [[-180.0, -90.0, 180.0, 90.0]])
+        self.assertEqual(collection["extent"]["temporal"]["interval"], [[None, None]])
+        links = {link["rel"]: link["href"] for link in collection["links"]}
+        self.assertEqual(links["item"], "item.json")
+        self.assertEqual(links["latest-version"], "item.json")
+        self.assertEqual(links["alternate"], "../tc.2026091206/item.json")
+        self.assertEqual(links["xue:pointer"], "../latest-tc.json")
+        self.assertEqual(links["root"], "../catalog.json")
+        self.assertEqual(links["describedby"], "https://github.com/ringsaturn/xue/blob/main/docs/tc.md")
+        self.assertIn("license", links)
+
+    def test_the_live_item_is_the_issue_item_relocated(self) -> None:
+        item = self.sounding_item()
+        live = stac.relocate_item(item, from_dir="sounding.2026091402", to_dir="sounding")
+        self.assertEqual(live["id"], item["id"])
+        self.assertEqual(live["properties"], item["properties"])
+        self.assertTrue(live["assets"]["index"]["href"].startswith("../sounding.2026091402/index.json?v="))
+        self.assertEqual(live["assets"]["soundings"]["href"].split("?")[0], "../sounding.2026091402/soundings.jsonl")
+        links = {link["rel"]: link["href"] for link in live["links"]}
+        self.assertEqual(links, {"root": "../catalog.json", "parent": "collection.json", "collection": "collection.json"})
+        self.assertEqual(stac.relocate_item(live, from_dir="sounding", to_dir="sounding.2026091402"), item)
+
+    def test_the_catalog_lists_every_product(self) -> None:
+        children = [link["href"] for link in stac.root_catalog()["links"] if link["rel"] == "child"]
+        self.assertEqual(
+            children[-4:],
+            ["sounding/collection.json", "airport/collection.json", "tc/collection.json", "showcase/collection.json"],
+        )
+
+    def test_the_products_are_the_ones_that_publish_a_pointer(self) -> None:
+        # The fixed list in stac.py against each product's own schema: an
+        # id it does not spell the same way would leave a Collection
+        # pointing at a pointer nobody writes.
+        schemas = (sounding_schema, airport_schema, tc_schema)
+        self.assertEqual(sorted(stac.POINT_PRODUCTS), sorted(schema.PRODUCT for schema in schemas))
+        items = {"sounding": self.sounding_item, "airport": self.airport_item, "tc": self.tc_item}
+        for schema in schemas:
+            with self.subTest(product=schema.PRODUCT):
+                item = items[schema.PRODUCT]()
+                collection = stac.point_product_collection(schema.PRODUCT, item, f"{item['id']}/item.json")
+                self.assertEqual(collection["xue:pointer"], schema.POINTER_FILENAME)
+                self.assertEqual(collection["id"], schema.PRODUCT)
+                self.assertEqual(item["properties"]["xue:schemaVersion"], schema.SCHEMA_VERSION)
+
+    def test_the_prose_is_pinned(self) -> None:
+        pinned = json.loads((FIXTURES / "stac-prose.json").read_text(encoding="utf-8"))
+        self.assertEqual(stac.prose_document(), pinned)
+        for product in stac.POINT_PRODUCTS:
+            with self.subTest(product=product):
+                prose = pinned["pointProducts"][product]
+                self.assertTrue(prose["title"] and prose["description"] and prose["providers"])
+                # None of the three has an SPDX id, so each names its terms.
+                self.assertEqual(prose["license"], "other")
+                self.assertTrue(any(link["rel"] == "license" for link in prose["links"]))
+
+
+class PointProductWritingTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.root = Path(tempfile.mkdtemp(prefix="xue-stac-point-"))
+        self.addCleanup(shutil.rmtree, self.root, True)
+        self.index_path = self.root / "sounding.2026091402" / "index.json"
+        self.index_path.parent.mkdir()
+        payload = json.loads((FIXTURES / "sounding/expected/index.json").read_text(encoding="utf-8"))
+        self.index_path.write_bytes(encode_json(payload))
+
+    def test_the_documents_land_beside_the_index_and_at_the_root(self) -> None:
+        written = stac.write_point_product_documents(self.root, product="sounding", index_path=self.index_path)
+        self.assertEqual(Path(written["item"]), self.index_path.with_name("item.json"))
+        self.assertEqual(Path(written["liveItem"]), self.root / "sounding" / "item.json")
+        self.assertEqual(Path(written["collection"]), self.root / "sounding" / "collection.json")
+        self.assertEqual(Path(written["catalog"]), self.root / "catalog.json")
+        collection = json.loads(Path(written["collection"]).read_text(encoding="utf-8"))
+        self.assertEqual(collection["xue:live"], "sounding.2026091402")
+        # Writing again from the same index changes nothing.
+        before = {name: Path(path).read_bytes() for name, path in written.items()}
+        stamps = {name: Path(path).stat().st_mtime_ns for name, path in written.items()}
+        stac.write_point_product_documents(self.root, product="sounding", index_path=self.index_path)
+        self.assertEqual({name: Path(path).read_bytes() for name, path in written.items()}, before)
+        self.assertEqual({name: Path(path).stat().st_mtime_ns for name, path in written.items()}, stamps)
+
+    def test_an_issue_that_is_not_live_gets_its_item_alone(self) -> None:
+        written = stac.write_point_product_documents(
+            self.root, product="sounding", index_path=self.index_path, live=False
+        )
+        self.assertEqual(list(written), ["item"])
+        self.assertTrue(Path(written["item"]).is_file())
+        self.assertFalse((self.root / "sounding").exists())
+        self.assertFalse((self.root / "catalog.json").exists())
+
+    def test_an_unknown_product_is_refused(self) -> None:
+        with self.assertRaises(stac.StacError):
+            stac.write_point_product_documents(self.root, product="soundings", index_path=self.index_path)
+
+
 @unittest.skipIf(pystac is None, "pystac is not installed")
 class PystacRoundTripTests(unittest.TestCase):
     def test_pystac_reads_what_is_written(self) -> None:
@@ -470,6 +739,25 @@ class PystacRoundTripTests(unittest.TestCase):
         # assets resolve into the run directory.
         self.assertEqual(items[0].get_self_href(), str(root / "gfs" / "item.json"))
         self.assertEqual(items[0].assets["tmp2m"].get_absolute_href(), str(root / "gfs.2026081406" / "tmp2m.zarr"))
+
+    def test_pystac_reads_a_point_product(self) -> None:
+        root = Path(tempfile.mkdtemp(prefix="xue-stac-pystac-point-"))
+        self.addCleanup(shutil.rmtree, root, True)
+        index_path = root / "tc.2026091206" / "index.json"
+        index_path.parent.mkdir()
+        index_path.write_bytes(encode_json(json.loads((FIXTURES / "tc/expected/index.json").read_text(encoding="utf-8"))))
+        stac.write_point_product_documents(root, product="tc", index_path=index_path)
+        catalog = pystac.Catalog.from_file(str(root / "catalog.json"))
+        collection = catalog.get_child("tc")
+        assert collection is not None
+        self.assertEqual(collection.license, "other")
+        items = list(collection.get_items())
+        self.assertEqual([item.id for item in items], ["tc.2026091206"])
+        self.assertEqual(items[0].assets["index"].media_type, stac.JSON_MEDIA_TYPE)
+        self.assertEqual(
+            items[0].assets["index"].get_absolute_href().split("?")[0],
+            str(root / "tc.2026091206" / "index.json"),
+        )
 
 
 if __name__ == "__main__":

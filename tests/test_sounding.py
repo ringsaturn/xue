@@ -885,11 +885,18 @@ class GoldenBuildTests(unittest.TestCase):
             directory = output / "sounding.2026091402"
             self.assertEqual(
                 sorted(path.name for path in directory.iterdir()),
-                ["index.json", SOUNDINGS_FILENAME],
+                ["index.json", "item.json", SOUNDINGS_FILENAME],
             )
             self.assertEqual(
                 json.loads((directory / "index.json").read_bytes()),
                 json.loads((EXPECTED / "index.json").read_text(encoding="utf-8")),
+            )
+            # The issue's STAC Item beside the index, derived from it
+            # (docs/stac.md); the Collection and the live Item follow the
+            # pointer and are held by tests/test_stac.py.
+            self.assertEqual(
+                json.loads((directory / "item.json").read_bytes()),
+                json.loads((EXPECTED / "item.json").read_text(encoding="utf-8")),
             )
             # The soundings file is committed exactly as published, so the
             # golden pins the bytes the index's offsets point into.

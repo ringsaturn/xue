@@ -588,7 +588,15 @@ class GoldenTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as scratch:
             output = Path(scratch)
             reports = self.build_both(output)
-            built = {str(path.relative_to(output)): path for path in sorted(output.rglob("*")) if path.is_file()}
+            built = {
+                str(path.relative_to(output)): path
+                for path in sorted(output.rglob("*"))
+                # The root catalog the build also rewrites is a function of
+                # the source registry, not of this product; tests/test_stac.py
+                # pins it, and pinning it here would make a new weather
+                # source a failure of the airport golden.
+                if path.is_file() and path.name != "catalog.json"
+            }
             expected = {str(path.relative_to(EXPECTED)): path for path in sorted(EXPECTED.rglob("*")) if path.is_file()}
             self.assertEqual(sorted(built), sorted(expected))
             for name in sorted(expected):

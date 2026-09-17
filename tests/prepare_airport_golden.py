@@ -9,8 +9,11 @@ with the ``fetch.json`` a fetch leaves — beside the station table the two
 rounds share. This script builds the first round, then the second on top
 of it, offline and with fixed generation times, and writes both under
 ``tests/fixtures/airport/expected/`` for ``tests/test_airport.py`` to hold
-the build to: the index pretty-printed, and ``history.jsonl`` exactly as
-published, which is already one line per station and diffs that way.
+the build to: the index and the STAC documents pretty-printed, and
+``history.jsonl`` exactly as published, which is already one line per
+station and diffs that way. The root ``catalog.json`` the build also
+writes is a function of the source registry rather than of this product
+and is pinned by ``tests/test_stac.py`` instead.
 
 The second round is what makes the golden worth having: it carries the
 merge (a station's new observation joins its history, newest first), the
@@ -91,6 +94,13 @@ def build_expected(destination: Path) -> list[dict[str, object]]:
             (destination / directory / HISTORY_FILENAME).write_bytes(
                 (output / directory / HISTORY_FILENAME).read_bytes()
             )
+            # The round's STAC Item, written beside the index by the build
+            # and a pure function of it (docs/stac.md "Point products").
+            _copy(output / directory / "item.json", destination / directory / "item.json")
+        # The product's Collection and its live Item, which the newest
+        # round leaves at the stable path the pointer's readers follow.
+        _copy(output / "airport" / "collection.json", destination / "airport" / "collection.json")
+        _copy(output / "airport" / "item.json", destination / "airport" / "item.json")
         _copy(output / "latest-airport.json", destination / "latest-airport.json")
     return reports
 

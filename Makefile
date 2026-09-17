@@ -42,6 +42,11 @@ LATEST_FILE = $(if $(filter gfs,$(MODEL)),latest.json,latest-$(MODEL).json)
 STAC_CATALOG = catalog.json
 STAC_COLLECTION = collection.json
 STAC_ITEM = item.json
+# Which catalog directory `upload-r2-stac-collection` pushes: a model's by
+# default, `showcase`, or one of the point products (docs/stac.md
+# "Point products"), each of which holds a collection.json and the live
+# item.json beside it.
+STAC_DIR ?= $(MODEL)
 
 # R2 is S3-compatible, so the dataset bucket is managed with the AWS CLI
 # rather than anything of ours. Needs an R2 API token's key pair in
@@ -275,7 +280,8 @@ upload-r2-pointer:
 		--content-type application/json --cache-control "no-cache" \
 	&& $(MAKE) --no-print-directory upload-r2-stac-collection MODEL=$(MODEL) DRY_RUN=$(DRY_RUN)
 
-# The pointer's STAC face: the live Item at the source's stable path
+# The pointer's STAC face, for a source, the showcase or a point product
+# (STAC_DIR): the live Item at the directory's stable path
 # (the run's Item relocated, so a bookmark outlives the run), the source's
 # Collection, whose `item` and `latest-version` links name it, and the root
 # catalog listing every source. All mutable like the pointer, so all
@@ -285,12 +291,12 @@ upload-r2-pointer:
 # not there yet.
 upload-r2-stac-collection:
 	@set -e; \
-	[ -f web/public/data/$(MODEL)/$(STAC_COLLECTION) ] || { echo "no $(MODEL)/$(STAC_COLLECTION); nothing built the catalog"; exit 0; }; \
-	echo "Uploading $(MODEL)/$(STAC_ITEM), $(MODEL)/$(STAC_COLLECTION) and $(STAC_CATALOG)..."; \
-	[ ! -f web/public/data/$(MODEL)/$(STAC_ITEM) ] || \
-	$(S3) cp web/public/data/$(MODEL)/$(STAC_ITEM) s3://$(R2_BUCKET)/$(R2_PREFIX)/$(MODEL)/$(STAC_ITEM) --no-progress $(DRY_RUN) \
+	[ -f web/public/data/$(STAC_DIR)/$(STAC_COLLECTION) ] || { echo "no $(STAC_DIR)/$(STAC_COLLECTION); nothing built the catalog"; exit 0; }; \
+	echo "Uploading $(STAC_DIR)/$(STAC_ITEM), $(STAC_DIR)/$(STAC_COLLECTION) and $(STAC_CATALOG)..."; \
+	[ ! -f web/public/data/$(STAC_DIR)/$(STAC_ITEM) ] || \
+	$(S3) cp web/public/data/$(STAC_DIR)/$(STAC_ITEM) s3://$(R2_BUCKET)/$(R2_PREFIX)/$(STAC_DIR)/$(STAC_ITEM) --no-progress $(DRY_RUN) \
 		--content-type application/geo+json --cache-control "no-cache"; \
-	$(S3) cp web/public/data/$(MODEL)/$(STAC_COLLECTION) s3://$(R2_BUCKET)/$(R2_PREFIX)/$(MODEL)/$(STAC_COLLECTION) --no-progress $(DRY_RUN) \
+	$(S3) cp web/public/data/$(STAC_DIR)/$(STAC_COLLECTION) s3://$(R2_BUCKET)/$(R2_PREFIX)/$(STAC_DIR)/$(STAC_COLLECTION) --no-progress $(DRY_RUN) \
 		--content-type application/json --cache-control "no-cache"; \
 	$(S3) cp web/public/data/$(STAC_CATALOG) s3://$(R2_BUCKET)/$(R2_PREFIX)/$(STAC_CATALOG) --no-progress $(DRY_RUN) \
 		--content-type application/json --cache-control "no-cache"
@@ -380,11 +386,14 @@ upload-r2-tc:
 	pointer_crc=$$(jq -r .crc32 web/public/data/latest-tc.json); \
 	index_crc=$$($(PYTHON) -c "import sys, zlib; print(f'{zlib.crc32(open(sys.argv[1], \"rb\").read()) & 0xFFFFFFFF:08x}')" $$dir/index.json); \
 	[ "$$pointer_crc" = "$$index_crc" ] || { echo "latest-tc.json carries CRC32 $$pointer_crc but $$dir/index.json is $$index_crc"; exit 1; }; \
-	$(S3) sync $$dir s3://$(R2_BUCKET)/$(R2_PREFIX)/tc.$(ISSUE)/ --no-progress $(DRY_RUN) \
+	$(S3) sync $$dir s3://$(R2_BUCKET)/$(R2_PREFIX)/tc.$(ISSUE)/ --no-progress $(DRY_RUN) --exclude "$(STAC_ITEM)" \
 		--content-type application/json --cache-control "public, max-age=31536000, immutable"; \
+	[ ! -f "$$dir/$(STAC_ITEM)" ] || $(S3) cp $$dir/$(STAC_ITEM) s3://$(R2_BUCKET)/$(R2_PREFIX)/tc.$(ISSUE)/$(STAC_ITEM) \
+		--no-progress $(DRY_RUN) --content-type application/geo+json --cache-control "no-cache"; \
 	echo "Uploading latest-tc.json (takes tc issue $(ISSUE) live)..."; \
 	$(S3) cp web/public/data/latest-tc.json s3://$(R2_BUCKET)/$(R2_PREFIX)/latest-tc.json --no-progress $(DRY_RUN) \
-		--content-type application/json --cache-control "no-cache"
+		--content-type application/json --cache-control "no-cache"; \
+	$(MAKE) --no-print-directory upload-r2-stac-collection STAC_DIR=tc DRY_RUN=$(DRY_RUN)
 
 # Delete tc issue directories beyond the newest TC_KEEP (48 hours = two
 # days; nothing reads an older issue — the shell and the next build both
@@ -466,9 +475,12 @@ upload-r2-airport:
 		--content-type application/x-ndjson --cache-control "public, max-age=31536000, immutable"; \
 	$(S3) cp $$dir/index.json s3://$(R2_BUCKET)/$(R2_PREFIX)/airport.$(AIRPORT_ROUND)/index.json --no-progress $(DRY_RUN) \
 		--content-type application/json --cache-control "public, max-age=31536000, immutable"; \
+	[ ! -f "$$dir/$(STAC_ITEM)" ] || $(S3) cp $$dir/$(STAC_ITEM) s3://$(R2_BUCKET)/$(R2_PREFIX)/airport.$(AIRPORT_ROUND)/$(STAC_ITEM) \
+		--no-progress $(DRY_RUN) --content-type application/geo+json --cache-control "no-cache"; \
 	echo "Uploading latest-airport.json (takes airport round $(AIRPORT_ROUND) live)..."; \
 	$(S3) cp web/public/data/latest-airport.json s3://$(R2_BUCKET)/$(R2_PREFIX)/latest-airport.json --no-progress $(DRY_RUN) \
-		--content-type application/json --cache-control "no-cache"
+		--content-type application/json --cache-control "no-cache"; \
+	$(MAKE) --no-print-directory upload-r2-stac-collection STAC_DIR=airport DRY_RUN=$(DRY_RUN)
 
 # Delete round directories beyond the newest AIRPORT_KEEP (three hours;
 # nothing reads an older round — the shell and the next build both start
@@ -545,9 +557,12 @@ upload-r2-sounding:
 		--content-type application/x-ndjson --cache-control "public, max-age=31536000, immutable"; \
 	$(S3) cp $$dir/index.json s3://$(R2_BUCKET)/$(R2_PREFIX)/sounding.$(ISSUE)/index.json --no-progress $(DRY_RUN) \
 		--content-type application/json --cache-control "public, max-age=31536000, immutable"; \
+	[ ! -f "$$dir/$(STAC_ITEM)" ] || $(S3) cp $$dir/$(STAC_ITEM) s3://$(R2_BUCKET)/$(R2_PREFIX)/sounding.$(ISSUE)/$(STAC_ITEM) \
+		--no-progress $(DRY_RUN) --content-type application/geo+json --cache-control "no-cache"; \
 	echo "Uploading latest-sounding.json (takes sounding issue $(ISSUE) live)..."; \
 	$(S3) cp web/public/data/latest-sounding.json s3://$(R2_BUCKET)/$(R2_PREFIX)/latest-sounding.json --no-progress $(DRY_RUN) \
-		--content-type application/json --cache-control "no-cache"
+		--content-type application/json --cache-control "no-cache"; \
+	$(MAKE) --no-print-directory upload-r2-stac-collection STAC_DIR=sounding DRY_RUN=$(DRY_RUN)
 
 # Delete sounding issue directories beyond the newest SOUNDING_KEEP (48
 # hours = two days, the window a station's four nominal times cover) and

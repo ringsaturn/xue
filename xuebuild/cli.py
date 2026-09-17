@@ -22,7 +22,7 @@ from .errors import ConversionError, XueError
 from .fetch import WINDOW_FILENAME, fetch_run, parse_run, resolve_run, window_summary
 from .showcase import CASE_SIDECAR, build_case, load_cases, refresh_sidecar, write_catalog
 from .sources import SOURCES, source_spec
-from .stac import write_run_documents
+from .stac import POINT_PRODUCTS, write_point_product_documents, write_run_documents
 from .zarrstore import (
     DEFAULT_INDEX_LOCATION,
     INDEX_LOCATIONS,
@@ -267,12 +267,23 @@ def parser() -> argparse.ArgumentParser:
 
     stac_parser = commands.add_parser(
         "stac",
-        help="rewrite a published run's STAC documents (docs/stac.md) from the manifest on disk: "
-        "its item.json, the model's collection.json and the root catalog.json",
+        help="rewrite a published run's or point product issue's STAC documents (docs/stac.md) from the "
+        "manifest or index on disk: its item.json, the source's or product's collection.json and live "
+        "item.json, and the root catalog.json",
     )
-    stac_parser.add_argument("--run", required=True, help="the run whose manifest is on disk, YYYYMMDDHH")
+    stac_parser.add_argument("--run", help="the run whose manifest is on disk, YYYYMMDDHH")
     stac_parser.add_argument("--round", type=round_name, metavar="HHMM", help="the round of a rolling window")
     _model_argument(stac_parser)
+    stac_parser.add_argument(
+        "--product",
+        choices=POINT_PRODUCTS,
+        help="a point product instead of a run (docs/sounding.md, docs/airport.md, docs/tc.md); needs --issue",
+    )
+    stac_parser.add_argument(
+        "--issue",
+        help="the point product issue whose index.json is on disk: YYYYMMDDHH for sounding and tc, "
+        "YYYYMMDDHHMM for an airport round",
+    )
     stac_parser.add_argument("--output-dir", type=Path, default=Path("web/public/data"))
 
     groups_parser = commands.add_parser(
@@ -619,7 +630,23 @@ def main(argv: list[str] | None = None) -> int:
                 arguments.output_dir, source=source_spec(arguments.model), manifest_path=Path(report["manifest"])
             )
             print(json.dumps(report, indent=2))
+        elif arguments.command == "stac" and arguments.product is not None:
+            if arguments.issue is None:
+                raise XueError(f"stac --product {arguments.product} needs the issue it describes: --issue YYYYMMDDHH")
+            index_path = arguments.output_dir / f"{arguments.product}.{arguments.issue}" / "index.json"
+            if not index_path.is_file():
+                raise XueError(f"no index at {index_path}")
+            print(
+                json.dumps(
+                    write_point_product_documents(
+                        arguments.output_dir, product=arguments.product, index_path=index_path
+                    ),
+                    indent=2,
+                )
+            )
         elif arguments.command == "stac":
+            if arguments.run is None:
+                raise XueError("stac takes a run (--model/--run) or a point product issue (--product/--issue)")
             source = source_spec(arguments.model)
             run = parse_run(arguments.run, arguments.model)
             run_directory = arguments.output_dir / f"{source.id}.{run.id}"

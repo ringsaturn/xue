@@ -1,0 +1,125 @@
+{
+ "type": "Feature",
+ "stac_version": "1.1.0",
+ "stac_extensions": ["https://stac-extensions.github.io/file/v2.1.0/schema.json"],
+ "id": "tc.2026091206",
+ "collection": "tc",
+ "geometry": {
+  "type": "Polygon",
+  "coordinates": [
+   [
+    [-126.0, 12.9],
+    [109.6, 12.9],
+    [109.6, 16.8],
+    [-126.0, 16.8],
+    [-126.0, 12.9]
+   ]
+  ]
+ },
+ "bbox": [-126.0, 12.9, 109.6, 16.8],
+ "properties": {
+  "title": "Tropical cyclone tracks · 2026-09-12 06Z issue",
+  "datetime": "2026-09-12T06:00:00Z",
+  "start_datetime": "2026-09-11T18:00:00Z",
+  "end_datetime": "2026-09-12T00:00:00Z",
+  "xue:product": "tc",
+  "xue:schemaVersion": 1,
+  "xue:issued": "2026-09-12T06:00:00Z",
+  "xue:storms": 3,
+  "xue:sources": [
+   {
+    "id": "jtwc",
+    "ok": true
+   },
+   {
+    "id": "nhc",
+    "ok": true
+   },
+   {
+    "id": "gfs",
+    "ok": true
+   },
+   {
+    "id": "gefs",
+    "ok": true
+   },
+   {
+    "id": "ecmwf",
+    "ok": true
+   },
+   {
+    "id": "ecmwfens",
+    "ok": true
+   },
+   {
+    "id": "ibtracs",
+    "ok": true
+   }
+  ]
+ },
+ "links": [
+  {
+   "rel": "root",
+   "href": "../catalog.json",
+   "type": "application/json"
+  },
+  {
+   "rel": "parent",
+   "href": "../tc/collection.json",
+   "type": "application/json"
+  },
+  {
+   "rel": "collection",
+   "href": "../tc/collection.json",
+   "type": "application/json"
+  }
+ ],
+ "assets": {
+  "index": {
+   "href": "index.json?v=5c0d1654",
+   "type": "application/json",
+   "title": "tc index (schema v1)",
+   "roles": ["metadata"],
+   "xue:kind": "index",
+   "file:size": 2679,
+   "xue:crc32": "5c0d1654",
+   "file:checksum": "b202045c0d1654"
+  },
+  "EP142026": {
+   "href": "EP142026.json?v=3d613283",
+   "type": "application/json",
+   "title": "NORBERT (EP142026)",
+   "roles": ["data"],
+   "xue:kind": "storm",
+   "xue:level": "A",
+   "xue:basin": "EP",
+   "file:size": 100903,
+   "xue:crc32": "3d613283",
+   "file:checksum": "b202043d613283"
+  },
+  "x-ep-2026091012-1": {
+   "href": "x-ep-2026091012-1.json?v=24eebb54",
+   "type": "application/json",
+   "title": "x-ep-2026091012-1",
+   "roles": ["data"],
+   "xue:kind": "storm",
+   "xue:level": "B",
+   "xue:basin": "EP",
+   "file:size": 19155,
+   "xue:crc32": "24eebb54",
+   "file:checksum": "b2020424eebb54"
+  },
+  "x-wp-2026091200-1": {
+   "href": "x-wp-2026091200-1.json?v=95419395",
+   "type": "application/json",
+   "title": "x-wp-2026091200-1",
+   "roles": ["data"],
+   "xue:kind": "storm",
+   "xue:level": "B",
+   "xue:basin": "WP",
+   "file:size": 12766,
+   "xue:crc32": "95419395",
+   "file:checksum": "b2020495419395"
+  }
+ }
+}

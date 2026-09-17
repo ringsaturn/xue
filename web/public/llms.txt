@@ -227,7 +227,12 @@ https://dataset.ringsaturn.me/xue/. The contract is two layers:
   manifest itself under its `?v=`), the grid and axis as `cube:dimensions`,
   every array as `cube:variables`, the cycle as
   `forecast:reference_datetime` — and `showcase/collection.json` with an
-  Item per case. Links are relative; the mutable documents are served
+  Item per case. The three point products below are in it on the same
+  terms: `sounding/`, `airport/` and `tc/` each carry a `collection.json`
+  and the live `item.json`, with one `<product>.<issue>/item.json` beside
+  each index naming its files as assets (the `?v=`-addressed index, the
+  NDJSON file or one JSON file per storm) and the stations' bounding box as
+  its geometry. Links are relative; the mutable documents are served
   no-cache like the pointer.
 - The historical catalog is `showcase.json` at the same root (schema 1,
   `generatedAt`, `cases[]`); each case carries `id`, `title` and `summary`

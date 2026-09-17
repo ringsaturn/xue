@@ -205,3 +205,22 @@ The BUFR crops were cut with:
 printf 'set unpack=1;\nif (stormIdentifier is "14E" || stormIdentifier is "70W") { write; }\n' > sel.filter
 bufr_filter -o 2026091200-oper-tf.bufr sel.filter 20260912000000-360h-oper-tf.bufr
 ```
+
+`stac-prose.json` pins what the STAC catalog says about who owns the data
+and under which terms: every source's and every point product's title,
+description, licence, providers and licence links
+(`xuebuild.stac.prose_document`, `tests/test_stac.py`). Regenerate it with
+the change that meant it:
+
+```sh
+.venv/bin/python -c "import json; from xuebuild import stac; \
+    print(json.dumps(stac.prose_document(), indent=2, ensure_ascii=False))" \
+    > tests/fixtures/stac-prose.json
+```
+
+The three point products' goldens carry the STAC documents their builds
+write beside the data: `<product>.<issue>/item.json` in each, and for the
+airport rounds also `airport/collection.json` and the live
+`airport/item.json`. The root `catalog.json` is a function of the source
+registry rather than of any one product and is pinned in
+`tests/test_stac.py` instead.

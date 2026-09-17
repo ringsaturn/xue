@@ -31,7 +31,10 @@ pointers (`latest.json`, `latest-<model>.json`), `latest-tc.json` and
   so it can be requested as `<path>?v=<crc32>` through an immutable cache.
 - `sounding.<YYYYMMDDHH>/` is one immutable directory per issue: the UTC
   hour the product was aggregated at, not any sounding's nominal time. It
-  holds exactly two files, `index.json` and `soundings.jsonl`. Once the
+  holds the product's two files, `index.json` and `soundings.jsonl`, and
+  beside them `item.json`, the issue's STAC Item — a pure function of the
+  index, read by a catalog client and by nothing in the product
+  (`docs/stac.md` §"Point products"). Once the
   pointer names it nothing in it changes; a manual rebuild of an hour
   (`sounding-build --issue … --force`) writes the directory again, and
   both files are addressed by their CRC, so a cache never serves one
