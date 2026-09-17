@@ -31,7 +31,10 @@ pointers (`latest.json`, `latest-<model>.json`), `latest-tc.json` and
   requested as `<path>?v=<crc32>` through an immutable cache.
 - `airport.<YYYYMMDDHHMM>/` is one immutable directory per round: the UTC
   minute the product was aggregated at, always a multiple of ten. It holds
-  `index.json` (§4) and `history.jsonl` (§5), and nothing in it changes
+  `index.json` (§4) and `history.jsonl` (§5) — and beside them `item.json`,
+  the round's STAC Item, a pure function of the index read by a catalog
+  client and by nothing in the product (`docs/stac.md` §"Point
+  products") — and nothing in it changes
   once the pointer names it. Every file is addressed by its CRC, so a cache
   never serves one round's bytes under another's key. Directories are
   pruned after three hours (`make prune-r2-airport`, `AIRPORT_KEEP=18`);

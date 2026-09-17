@@ -1,0 +1,84 @@
+{
+ "type": "Feature",
+ "stac_version": "1.1.0",
+ "stac_extensions": ["https://stac-extensions.github.io/file/v2.1.0/schema.json"],
+ "id": "airport.202609161440",
+ "collection": "airport",
+ "geometry": {
+  "type": "Polygon",
+  "coordinates": [
+   [
+    [-106.61544, -77.85],
+    [175.381, -77.85],
+    [175.381, 50.962],
+    [-106.61544, 50.962],
+    [-106.61544, -77.85]
+   ]
+  ]
+ },
+ "bbox": [-106.61544, -77.85, 175.381, 50.962],
+ "properties": {
+  "title": "Airport observations and forecasts (METAR / TAF) · 2026-09-16 14:40Z round",
+  "datetime": "2026-09-16T14:40:00Z",
+  "start_datetime": "2026-09-15T14:40:00Z",
+  "end_datetime": "2026-09-16T14:35:00Z",
+  "xue:product": "airport",
+  "xue:schemaVersion": 1,
+  "xue:issued": "2026-09-16T14:40:00Z",
+  "xue:stations": 234,
+  "xue:sources": [
+   {
+    "id": "awc-metars",
+    "ok": true
+   },
+   {
+    "id": "awc-tafs",
+    "ok": true
+   },
+   {
+    "id": "awc-stations",
+    "ok": true
+   }
+  ]
+ },
+ "links": [
+  {
+   "rel": "root",
+   "href": "../catalog.json",
+   "type": "application/json"
+  },
+  {
+   "rel": "parent",
+   "href": "../airport/collection.json",
+   "type": "application/json"
+  },
+  {
+   "rel": "collection",
+   "href": "../airport/collection.json",
+   "type": "application/json"
+  }
+ ],
+ "assets": {
+  "index": {
+   "href": "index.json?v=ca823538",
+   "type": "application/json",
+   "title": "airport index (schema v1)",
+   "roles": ["metadata"],
+   "xue:kind": "index",
+   "file:size": 25261,
+   "xue:crc32": "ca823538",
+   "file:checksum": "b20204ca823538"
+  },
+  "history": {
+   "href": "history.jsonl?v=c34fab6d",
+   "type": "application/x-ndjson",
+   "title": "Observations and forecasts by station",
+   "description": "One station per line, sorted by id. A station's `offset` and `length` in the index are the byte span of its line's JSON object, excluding the newline, so one station is one `Range: bytes=<offset>-<offset+length-1>` request and the whole file streams line by line.",
+   "roles": ["data"],
+   "xue:kind": "series",
+   "file:size": 114742,
+   "xue:crc32": "c34fab6d",
+   "file:checksum": "b20204c34fab6d"
+  }
+ }
+}

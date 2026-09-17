@@ -76,6 +76,7 @@ make encoder-wheel               # a self-contained wheel carrying a minimal GDA
 npm run build                    # tsc --noEmit && vite build
 .venv/bin/python -m xuebuild export-zarr <bundle.xue> [--delta] [--index-location start|end]
 .venv/bin/python -m xuebuild stac --model gfs --run YYYYMMDDHH [--round HHMM]   # rewrite a run's STAC documents
+.venv/bin/python -m xuebuild stac --product sounding|airport|tc --issue YYYYMMDDHH[MM]  # a point product's
 ```
 
 Single tests:
@@ -501,6 +502,22 @@ split-build and top-up identity tests cover them. The writer runs in the
 CLI, not the converter: `build-bin` for a whole run, `assemble-run`, and
 `xue stac`; a `--bundles` piece writes none. Licenses and provider prose
 live in `_source_prose`, held to the registry by `tests/test_stac.py`.
+
+The three point products (`sounding`, `airport`, `tc`, `POINT_PRODUCTS`)
+are in it on the same terms, derived from an issue's `index.json` alone by
+`write_point_product_documents`: `<product>/collection.json`,
+`<product>/item.json` (the issue's Item relocated) and
+`<product>.<issue>/item.json` beside the index, with one asset per file the
+issue ships (`index`, the NDJSON `soundings` / `history`, or one per
+storm), the stations' bounding box as the geometry, and no `cube:` or
+`forecast:` fields. Here the product's own build writes them (after the
+index and the pointer; the Collection and the live Item only when the
+pointer was written), `xue stac --product <p> --issue <i>` rewrites them,
+and `upload-r2-<product>` pushes the issue's Item with the index and then
+`upload-r2-stac-collection STAC_DIR=<product>`. Their prose is
+`_point_product_prose` (every licence `other` with a link; see
+`docs/stac.md` §"Point products"), and the goldens of the three products
+carry the Items they write.
 
 ### Tropical cyclone product (`xuebuild/tc/`)
 

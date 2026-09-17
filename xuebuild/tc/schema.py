@@ -33,6 +33,7 @@ from ..pointproduct import (  # noqa: F401 — re-exported: the tc modules impor
 from .track import MISSING, QUADRANTS, RADII_THRESHOLDS
 
 SCHEMA_VERSION = 1
+PRODUCT = "tc"
 POINTER_FILENAME = "latest-tc.json"
 INDEX_FILENAME = "index.json"
 LEVELS = ("A", "B", "C")
@@ -352,13 +353,13 @@ def validate_index(payload: object) -> None:
 
 
 def build_pointer(issue: datetime, index_path: str, index_bytes: bytes) -> dict[str, Any]:
-    payload = pointer_payload("tc", issue, index_path, index_bytes)
+    payload = pointer_payload(PRODUCT, issue, index_path, index_bytes)
     validate_pointer(payload)
     return payload
 
 
 def validate_pointer(payload: object) -> None:
-    error = pointer_shape_error(payload, "tc")
+    error = pointer_shape_error(payload, PRODUCT)
     if error is not None:
         raise TcProductError(error)
     assert isinstance(payload, dict)

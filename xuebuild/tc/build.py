@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any
 
 from ..errors import TcProductError, XueError
+from ..stac import write_point_product_documents
 from . import atcf, bufrtracks, ibtracs, tcw
 from .fetch import SOURCE_IDS, FetchResult, issue_raw_directory, read_fetch_record
 from .identity import PreviousSystem, Sighting, System, resolve, sighting_kind
@@ -29,6 +30,7 @@ from .registry import MODELS, basin_of_letter
 from .schema import (
     INDEX_FILENAME,
     POINTER_FILENAME,
+    PRODUCT,
     SCHEMA_VERSION,
     build_pointer,
     crc32_hex,
@@ -577,6 +579,16 @@ def build_product(
         write_bytes_atomic(pointer_path, encode_json(pointer))
     else:
         LOG.warning("tc: no agency or model contributed; the pointer is not written")
+    # The STAC face of the issue just written (docs/stac.md §"Point
+    # products"), a pure function of the index on disk. The Collection and
+    # the live Item follow the pointer: an issue nothing took live gets its
+    # own Item and nothing else names it.
+    stac_paths = write_point_product_documents(
+        output_root,
+        product=PRODUCT,
+        index_path=directory / INDEX_FILENAME,
+        live=pointer_path is not None,
+    )
     return {
         "issue": issue.strftime("%Y%m%d%H"),
         "directory": str(directory),
@@ -584,6 +596,7 @@ def build_product(
         "crosswalk": crosswalk,
         "sources": index["sources"],
         "pointer": None if pointer_path is None else str(pointer_path),
+        "stac": stac_paths,
     }
 
 

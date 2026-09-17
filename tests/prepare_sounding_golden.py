@@ -10,8 +10,8 @@ the DWD gateway with a ``fetch.json`` saying its listing failed, so the
 golden carries the one-source-down path. This script builds the product
 from it, offline, with a fixed generation time, and writes the result
 under ``tests/fixtures/sounding/expected/`` for
-``tests/test_sounding.py`` to hold the build to — the index
-pretty-printed, ``soundings.jsonl`` exactly as it is published.
+``tests/test_sounding.py`` to hold the build to — the index and the STAC
+Item pretty-printed, ``soundings.jsonl`` exactly as it is published.
 
 Run it after a deliberate change to the parser, the derived quantities or
 the schema, and commit the diff with the change::
@@ -70,6 +70,10 @@ def build_expected(destination: Path) -> dict[str, object]:
         index = json.loads((directory / "index.json").read_bytes())
         (destination / "index.json").write_text(pretty_index(index) + "\n")
         shutil.copyfile(directory / "soundings.jsonl", destination / "soundings.jsonl")
+        # The issue's STAC Item, written beside the index by the build and
+        # a pure function of it (docs/stac.md §"Point products").
+        item = json.loads((directory / "item.json").read_bytes())
+        (destination / "item.json").write_text(pretty_index(item) + "\n")
         pointer = json.loads((output / "latest-sounding.json").read_bytes())
         (destination / "latest-sounding.json").write_text(pretty_index(pointer) + "\n")
     return report

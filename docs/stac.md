@@ -11,7 +11,8 @@ the runs. This document is the contract: the layout, what each document
 carries, and where it comes from.
 
 The catalog is derived, not authoritative. Every document is a pure
-function of a manifest, a `showcase.json` row and the source registry
+function of a manifest, a point product's `index.json`, a `showcase.json`
+row and the source registry
 (`xuebuild/stac.py`), with no timestamps and no host names, which lets a
 run built whole and a run built in pieces write the same bytes
 (`tests/test_assemble.py`) and lets any document be regenerated from what
@@ -27,11 +28,14 @@ pointers:
 
 | Path | STAC object | Mutable | Written by |
 |---|---|---|---|
-| `catalog.json` | the root Catalog: one `child` per source with a live feed, one for the showcase | yes (a pure function of the registry) | every publish, `showcase catalog` |
+| `catalog.json` | the root Catalog: one `child` per source with a live feed, one per point product, one for the showcase | yes (a pure function of the registry) | every publish, `showcase catalog` |
 | `<source>/collection.json` | one Collection per source (`gfs`, `ecmwf`, `sflux`, `hrrr`, `mrms`, `jma`, `cma`), the STAC face of the live pointer | yes | `build-bin` (whole run), `assemble-run` |
 | `<source>/item.json` | the live Item: the run's Item relocated to a path that never changes | yes, replaced by every publish | same |
 | `<source>.<run>/item.json` | one Item per published run, beside its manifest | rewritten in place by a top-up, like the manifest | `build-bin` (whole run), `assemble-run` |
 | `<source>.<run>/<HHMM>/item.json` | the Item of one round of a rolling window (MRMS, JMA, CMA radar) | no | `build-bin --round` |
+| `<product>/collection.json` | one Collection per point product (`sounding`, `airport`, `tc`), the STAC face of its live pointer | yes | the product's build, `xue stac --product` |
+| `<product>/item.json` | the live Item: the newest issue's Item relocated to a path that never changes | yes, replaced by every issue | same |
+| `<product>.<issue>/item.json` | one Item per issue, beside its `index.json` | no | same |
 | `showcase/collection.json` | the Collection of the historical cases | yes | `showcase build` / `refresh` / `catalog` |
 | `showcase/<case>/item.json` | one Item per case, beside its manifest | rewritten by `showcase refresh` | same |
 
@@ -41,6 +45,9 @@ and a top-up rewrites it. Links are relative (`../catalog.json`,
 `../gfs/collection.json`, `tmp2m.zarr`), so a client resolves them against
 whichever origin it read the document from, and no document names a host.
 There are no `self` links for the same reason.
+
+The point products' documents are the same three shapes over an
+`index.json` instead of a manifest; §"Point products" below.
 
 Only the newest run per source is kept on the bucket (`prune-r2`), an hour
 for HRRR and minutes for an MRMS round, so a link into `<source>.<run>/`
@@ -135,6 +142,86 @@ and the model. `extent` is the live run's: its bbox, its
 run's own Item, `xue:pointer` to the live pointer, `license`. `xue:live`
 repeats the Item id and `xue:pointer` the pointer's file name.
 
+## Point products
+
+Three products beside the runs are not rasters and have no manifest: the
+radiosonde soundings (`docs/sounding.md`), the airport reports
+(`docs/airport.md`) and the tropical cyclone tracks (`docs/tc.md`). Each
+publishes a mutable `latest-<product>.json` naming an immutable
+`<product>.<issue>/index.json`, and each gets the same three documents a
+source does — a Collection, a live Item, an Item per issue — derived from
+that `index.json` alone and from nothing else.
+
+`<product>/collection.json`. Id: the product id. `title`, `description`,
+`license`, `keywords` and `providers` come from `_point_product_prose` in
+`xuebuild/stac.py`; none of the three has an SPDX identifier to name, so
+all three are `other` with the terms linked: the WMO Unified Data Policy
+(Resolution 1, Cg-Ext(2021)) for the soundings, the NWS disclaimer for the
+airport caches (a work of the US government is in the public domain, which
+is not CC0), and both of those plus CC BY 4.0 for the tracks, whose
+sources are several agencies at once. `extent` is the whole world and
+`[[null, null]]`: every issue is a rolling window whose start moves, so a
+Collection stating the live issue's bounds would be wrong as soon as the
+next one lands, and the description says so. Links: `root` and `parent` to
+the catalog, `item` and `latest-version` to the live Item beside it,
+`alternate` to the issue's own copy, `xue:pointer` to the live pointer,
+`describedby` to the product's document, and the `license` links.
+`xue:live` repeats the Item id and `xue:pointer` the pointer's file name.
+
+`<product>.<issue>/item.json`. Id: the directory
+(`sounding.2026091402`, `airport.202609161430`, `tc.2026091301`).
+Extensions: [file v2.1.0](https://github.com/stac-extensions/file) alone —
+a point product is a set of stations, not a cube, and declares no
+`cube:dimensions` and no forecast fields.
+
+Space. `geometry` and `bbox` are the box around the stations the index
+lists: the soundings' and the airports' own positions, a storm's headline
+position. It is the plain minimum and maximum over those points, so two
+storms either side of the Pacific make a box the long way round rather
+than one across the antimeridian. An index whose storms have nothing
+observed has no positions at all, and then `geometry` is `null` with no
+`bbox`, which STAC allows.
+
+Time. `datetime` is the issue (`issued`), what a client sorts on, and the
+period it covers is in the two bounds: for a sounding issue the oldest
+nominal time any station still carries to the newest ascent in it, for an
+airport round the 24 hours of history it holds (`issued − 24 h` to the
+newest observation), for a tc issue the earliest and latest headline
+position. An empty index is the instant it was issued.
+
+Properties. `xue:product`, `xue:schemaVersion`, `xue:issued`,
+`xue:stations` (`xue:storms` for the tracks) and `xue:sources`, the
+index's own `sources[]` reduced to `{id, ok}` so a client sees which
+gateway or centre was down without reading the index. A sounding issue
+also carries `xue:watermark`, the product's account per gateway of how
+current it is.
+
+Assets. One per file the issue publishes, each under the `?v=<crc32>` a
+reader fetches it with, with `file:size` and `file:checksum` (the crc32 as
+a multihash, as a run's artifacts carry):
+
+| Key | What | `type` | `roles` |
+|---|---|---|---|
+| `index` | `index.json?v=<crc32>`, under the CRC the pointer carries | `application/json` | `metadata` |
+| `soundings` / `history` | the product's one NDJSON file | `application/x-ndjson` | `data` |
+| `<storm id>` | one JSON file per system a tc issue lists | `application/json` | `data` |
+
+The NDJSON asset's `description` states the addressing rule, which is the
+point of the layout: one station per line, sorted by id, and a station's
+`offset` and `length` in the index are the byte span of its line's object
+(the newline excluded), so one station is one `Range` request and the
+whole file still streams. Assets carry `xue:kind` (`index`, `series`,
+`storm`), and a storm's also `xue:level` and `xue:basin`.
+
+The live Item at `<product>/item.json` is that Item relocated
+(`relocate_item`), every href reaching into `../<product>.<issue>/`, so
+the URL a client bookmarks still resolves after the issue it named is
+pruned — two days for the soundings and the tracks, three hours for the
+airport rounds.
+An issue whose build withheld the pointer (no gateway contributed, both
+observation sources failed) gets its own Item and nothing else: the
+Collection and the live Item follow the pointer, as a source's do.
+
 ## The showcase
 
 `showcase/collection.json` lists one `item` link per case in
@@ -166,6 +253,17 @@ Collection never names a live Item that is not there yet), and `make
 upload-r2-showcase` the showcase's, all through the same targets the
 scheduled workflows call. A publish that predates this document has no
 Item, and that is not an error.
+
+A point product's build (`xue sounding-build`, `airport-build`,
+`tc-build`) writes the same four documents right after its index and
+pointer, from the index on disk, and reports them the same way;
+`xue stac --product sounding|airport|tc --issue <YYYYMMDDHH|YYYYMMDDHHMM>`
+rewrites them for an issue already built. `make upload-r2-sounding`,
+`upload-r2-airport` and `upload-r2-tc` copy the issue's Item with its
+index (`no-cache`, `application/geo+json`, held out of the immutable
+sync), then the pointer, then the live Item, the Collection and the
+catalog through `upload-r2-stac-collection STAC_DIR=<product>` — the same
+target and the same order as a run's.
 
 Every document is validated on write against a structural contract
 (`validate_item` / `validate_collection` / `validate_catalog` in

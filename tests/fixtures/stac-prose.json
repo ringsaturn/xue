@@ -1,0 +1,398 @@
+{
+  "sources": {
+    "gfs": {
+      "title": "NOAA GFS 0.25°",
+      "description": "The NOAA Global Forecast System at 0.25° (pgrb2.0p25), hourly to 120 hours and three-hourly to 240, with the GFS-Wave fields of the same cycle. Four cycles a day; only the newest is kept.",
+      "license": "other",
+      "providers": [
+        {
+          "name": "NOAA / NCEP",
+          "roles": [
+            "producer",
+            "licensor"
+          ],
+          "url": "https://www.ncei.noaa.gov/"
+        },
+        {
+          "name": "Xue",
+          "roles": [
+            "processor",
+            "host"
+          ],
+          "url": "https://github.com/ringsaturn/xue"
+        }
+      ],
+      "links": [
+        {
+          "rel": "license",
+          "href": "https://www.noaa.gov/information-technology/open-data-dissemination",
+          "type": "text/html",
+          "title": "NOAA open data dissemination"
+        }
+      ]
+    },
+    "ecmwf": {
+      "title": "ECMWF IFS open data 0.25°",
+      "description": "The ECMWF Integrated Forecasting System open data at 0.25°, three-hourly to 144 hours and six-hourly to 240, with the wave stream of the same cycle. Contains modified ECMWF open data; the published bundles are a quantized derivative.",
+      "license": "CC-BY-4.0",
+      "providers": [
+        {
+          "name": "ECMWF",
+          "roles": [
+            "producer",
+            "licensor"
+          ],
+          "url": "https://www.ecmwf.int/en/forecasts/datasets/open-data"
+        },
+        {
+          "name": "Xue",
+          "roles": [
+            "processor",
+            "host"
+          ],
+          "url": "https://github.com/ringsaturn/xue"
+        }
+      ],
+      "links": [
+        {
+          "rel": "license",
+          "href": "https://creativecommons.org/licenses/by/4.0/",
+          "type": "text/html",
+          "title": "Creative Commons Attribution 4.0"
+        }
+      ]
+    },
+    "sflux": {
+      "title": "NOAA GFS surface fluxes",
+      "description": "The GFS surface flux files (sfluxgrb) on the model's native T1534 Gaussian grid: the surface fields and the downward shortwave radiation, hourly to 120 hours and three-hourly to 240.",
+      "license": "other",
+      "providers": [
+        {
+          "name": "NOAA / NCEP",
+          "roles": [
+            "producer",
+            "licensor"
+          ],
+          "url": "https://www.ncei.noaa.gov/"
+        },
+        {
+          "name": "Xue",
+          "roles": [
+            "processor",
+            "host"
+          ],
+          "url": "https://github.com/ringsaturn/xue"
+        }
+      ],
+      "links": [
+        {
+          "rel": "license",
+          "href": "https://www.noaa.gov/information-technology/open-data-dissemination",
+          "type": "text/html",
+          "title": "NOAA open data dissemination"
+        }
+      ]
+    },
+    "hrrr": {
+      "title": "NOAA HRRR 3 km",
+      "description": "The NOAA High-Resolution Rapid Refresh over the contiguous United States, resampled from its 3 km Lambert conformal grid onto a regular 0.03° one, hourly to 18 hours, a new cycle every hour.",
+      "license": "other",
+      "providers": [
+        {
+          "name": "NOAA / NCEP",
+          "roles": [
+            "producer",
+            "licensor"
+          ],
+          "url": "https://www.ncei.noaa.gov/"
+        },
+        {
+          "name": "Xue",
+          "roles": [
+            "processor",
+            "host"
+          ],
+          "url": "https://github.com/ringsaturn/xue"
+        }
+      ],
+      "links": [
+        {
+          "rel": "license",
+          "href": "https://www.noaa.gov/information-technology/open-data-dissemination",
+          "type": "text/html",
+          "title": "NOAA open data dissemination"
+        }
+      ]
+    },
+    "cma": {
+      "title": "CMA radar mosaic",
+      "description": "The China Meteorological Administration level-3 composite reflectivity mosaic (RADAR_L3_MST_CREF) over China: a national composite every six minutes, decoded from the agency's data portal tiles onto the portal's plate carrée grid at 0.0439° (1792 × 1024 cells, 67.5°E–146.25°E, 11.25°N–56.25°N) and published under cref, as a rolling window rebuilt every few minutes. Source: China Meteorological Administration, National Meteorological Centre (www.nmc.cn).",
+      "license": "other",
+      "providers": [
+        {
+          "name": "China Meteorological Administration",
+          "roles": [
+            "producer",
+            "licensor"
+          ],
+          "url": "https://www.nmc.cn"
+        },
+        {
+          "name": "Xue",
+          "roles": [
+            "processor",
+            "host"
+          ],
+          "url": "https://github.com/ringsaturn/xue"
+        }
+      ],
+      "links": []
+    },
+    "mrms": {
+      "title": "NOAA MRMS radar mosaic",
+      "description": "The NOAA Multi-Radar/Multi-Sensor composite reflectivity and precipitation rate over the contiguous United States, observed every two minutes and published as a rolling window rebuilt every five minutes, thinned to 0.02° by block maximum.",
+      "license": "other",
+      "providers": [
+        {
+          "name": "NOAA / NCEP",
+          "roles": [
+            "producer",
+            "licensor"
+          ],
+          "url": "https://www.ncei.noaa.gov/"
+        },
+        {
+          "name": "Xue",
+          "roles": [
+            "processor",
+            "host"
+          ],
+          "url": "https://github.com/ringsaturn/xue"
+        }
+      ],
+      "links": [
+        {
+          "rel": "license",
+          "href": "https://www.noaa.gov/information-technology/open-data-dissemination",
+          "type": "text/html",
+          "title": "NOAA open data dissemination"
+        }
+      ]
+    },
+    "jma": {
+      "title": "JMA precipitation nowcast (hrpns)",
+      "description": "The Japan Meteorological Agency's high-resolution precipitation nowcast analysis (高解像度降水ナウキャスト) over Japan: precipitation intensity classes every five minutes, decoded from the agency's map tiles onto a regular 0.005° grid by the strongest class in each cell and published under prate at each class's representative rate (0.5, 3, 7.5, 15, 25, 40, 65 and 100 mm/h), as a rolling window rebuilt every five minutes. Source: Japan Meteorological Agency website (出典：気象庁ホームページ), regridded and reclassified by jma-radar.",
+      "license": "other",
+      "providers": [
+        {
+          "name": "Japan Meteorological Agency",
+          "roles": [
+            "producer",
+            "licensor"
+          ],
+          "url": "https://www.jma.go.jp/bosai/en_nowc/"
+        },
+        {
+          "name": "Xue",
+          "roles": [
+            "processor",
+            "host"
+          ],
+          "url": "https://github.com/ringsaturn/xue"
+        }
+      ],
+      "links": [
+        {
+          "rel": "license",
+          "href": "https://www.jma.go.jp/jma/kishou/info/coment.html",
+          "type": "text/html",
+          "title": "気象庁ホームページ利用規約 (compatible with CC BY 4.0)"
+        }
+      ]
+    }
+  },
+  "pointProducts": {
+    "sounding": {
+      "title": "Radiosonde soundings (WIS2)",
+      "description": "The world's radiosonde ascents, aggregated every hour from the TEMP bulletins the national meteorological services exchange over the WMO Information System: one station per line of a single NDJSON file, spanned by the index beside it, each ascent thinned to the classical mandatory and significant levels in fixed point with four derived quantities. A rolling window with no fixed start — only the newest issue is published, and a station carries its newest four nominal times.",
+      "license": "other",
+      "keywords": [
+        "weather",
+        "observation",
+        "radiosonde",
+        "sounding",
+        "upper air",
+        "wis2"
+      ],
+      "providers": [
+        {
+          "name": "WMO WIS2 Global Cache",
+          "description": "The GTS-to-WIS2 gateways run by the Japan Meteorological Agency and the Deutscher Wetterdienst, which republish every centre's bulletins.",
+          "roles": [
+            "producer"
+          ],
+          "url": "https://wis2.wmo.int/"
+        },
+        {
+          "name": "The originating national meteorological and hydrological services",
+          "description": "Every ascent is theirs; attribution of the original source is requested.",
+          "roles": [
+            "producer",
+            "licensor"
+          ],
+          "url": "https://community.wmo.int/en/members"
+        },
+        {
+          "name": "Xue",
+          "roles": [
+            "processor",
+            "host"
+          ],
+          "url": "https://github.com/ringsaturn/xue"
+        }
+      ],
+      "links": [
+        {
+          "rel": "license",
+          "href": "https://library.wmo.int/idurl/4/58009",
+          "type": "text/html",
+          "title": "WMO Unified Data Policy (Resolution 1, Cg-Ext(2021)): core data, free and unrestricted, attribution of the original source requested"
+        }
+      ]
+    },
+    "airport": {
+      "title": "Airport observations and forecasts (METAR / TAF)",
+      "description": "The world's airport weather, aggregated every ten minutes from the NOAA Aviation Weather Center's decoded caches: about five thousand stations with their newest observation in the index, and each station's last 24 hours of METARs with its current TAF on one line of the history file beside it. A rolling window with no fixed start — only the newest round is published, and each round carries the whole window.",
+      "license": "other",
+      "keywords": [
+        "weather",
+        "observation",
+        "aviation",
+        "metar",
+        "taf",
+        "airport"
+      ],
+      "providers": [
+        {
+          "name": "NOAA / NWS Aviation Weather Center",
+          "description": "The decoded METAR and TAF cache files, a work of the United States government and in the public domain.",
+          "roles": [
+            "producer",
+            "licensor"
+          ],
+          "url": "https://aviationweather.gov/data/cache/"
+        },
+        {
+          "name": "The world's meteorological services",
+          "description": "The reports themselves, exchanged under WMO and ICAO arrangements.",
+          "roles": [
+            "producer"
+          ],
+          "url": "https://community.wmo.int/en/members"
+        },
+        {
+          "name": "Xue",
+          "roles": [
+            "processor",
+            "host"
+          ],
+          "url": "https://github.com/ringsaturn/xue"
+        }
+      ],
+      "links": [
+        {
+          "rel": "license",
+          "href": "https://www.weather.gov/disclaimer",
+          "type": "text/html",
+          "title": "NWS disclaimer: a work of the US government, in the public domain"
+        },
+        {
+          "rel": "about",
+          "href": "https://aviationweather.gov/data/api/",
+          "type": "text/html",
+          "title": "Aviation Weather Center data services"
+        }
+      ]
+    },
+    "tc": {
+      "title": "Tropical cyclone tracks",
+      "description": "Every tropical cyclone the warning centres and the models are tracking, aggregated every hour: the official forecasts of the National Hurricane Center and the Joint Typhoon Warning Center, the multi-agency best tracks, the NCEP tracker's GFS and GEFS tracks and ECMWF's deterministic and ensemble tracks — one JSON file per system beside an index that names the systems and their headline positions. A rolling window with no fixed start: only the newest issue is published.",
+      "license": "other",
+      "keywords": [
+        "weather",
+        "forecast",
+        "tropical cyclone",
+        "hurricane",
+        "typhoon",
+        "track"
+      ],
+      "providers": [
+        {
+          "name": "NOAA / NWS National Hurricane Center",
+          "roles": [
+            "producer",
+            "licensor"
+          ],
+          "url": "https://www.nhc.noaa.gov/"
+        },
+        {
+          "name": "Joint Typhoon Warning Center",
+          "roles": [
+            "producer",
+            "licensor"
+          ],
+          "url": "https://www.metoc.navy.mil/jtwc/jtwc.html"
+        },
+        {
+          "name": "NOAA / NCEP",
+          "description": "The objective tracker's GFS and GEFS tracks.",
+          "roles": [
+            "producer",
+            "licensor"
+          ],
+          "url": "https://www.nco.ncep.noaa.gov/pmb/products/hur/"
+        },
+        {
+          "name": "ECMWF",
+          "description": "The open data deterministic and ensemble cyclone tracks, CC BY 4.0.",
+          "roles": [
+            "producer",
+            "licensor"
+          ],
+          "url": "https://www.ecmwf.int/en/forecasts/datasets/open-data"
+        },
+        {
+          "name": "NOAA NCEI / IBTrACS",
+          "description": "The international best track archive for climate stewardship.",
+          "roles": [
+            "producer",
+            "licensor"
+          ],
+          "url": "https://www.ncei.noaa.gov/products/international-best-track-archive"
+        },
+        {
+          "name": "Xue",
+          "roles": [
+            "processor",
+            "host"
+          ],
+          "url": "https://github.com/ringsaturn/xue"
+        }
+      ],
+      "links": [
+        {
+          "rel": "license",
+          "href": "https://www.weather.gov/disclaimer",
+          "type": "text/html",
+          "title": "NWS disclaimer: the US agencies' products are works of the US government, in the public domain"
+        },
+        {
+          "rel": "license",
+          "href": "https://creativecommons.org/licenses/by/4.0/",
+          "type": "text/html",
+          "title": "Creative Commons Attribution 4.0, for the ECMWF open data tracks"
+        }
+      ]
+    }
+  }
+}

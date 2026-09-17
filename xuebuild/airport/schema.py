@@ -33,6 +33,7 @@ from ..pointproduct import (  # noqa: F401 — re-exported: the airport modules 
 )
 
 SCHEMA_VERSION = 1
+PRODUCT = "airport"
 POINTER_FILENAME = "latest-airport.json"
 INDEX_FILENAME = "index.json"
 HISTORY_FILENAME = "history.jsonl"
@@ -370,13 +371,13 @@ def validate_index(payload: object) -> None:
 
 
 def build_pointer(issued: datetime, index_path: str, index_bytes: bytes) -> dict[str, Any]:
-    payload = pointer_payload("airport", issued, index_path, index_bytes)
+    payload = pointer_payload(PRODUCT, issued, index_path, index_bytes)
     validate_pointer(payload)
     return payload
 
 
 def validate_pointer(payload: object) -> None:
-    error = pointer_shape_error(payload, "airport")
+    error = pointer_shape_error(payload, PRODUCT)
     if error is not None:
         raise AirportProductError(error)
     assert isinstance(payload, dict)

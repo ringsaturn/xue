@@ -34,6 +34,7 @@ from typing import Any
 
 from ..errors import AirportProductError, XueError
 from ..pointproduct import iso_z
+from ..stac import write_point_product_documents
 from .fetch import SOURCE_IDS, SourceStatus, read_fetch_record
 from .metar import MetarReport, parse_metars
 from .schema import (
@@ -41,6 +42,7 @@ from .schema import (
     HISTORY_HOURS,
     INDEX_FILENAME,
     POINTER_FILENAME,
+    PRODUCT,
     SCHEMA_VERSION,
     build_pointer,
     crc32_hex,
@@ -273,6 +275,16 @@ def build_product(
         write_bytes_atomic(pointer_path, encode_json(pointer))
     else:
         LOG.warning("airport: neither the METARs nor the TAFs arrived; the pointer is not written")
+    # The STAC face of the round just written (docs/stac.md §"Point
+    # products"), a pure function of the index on disk. The Collection and
+    # the live Item follow the pointer: a round nothing took live gets its
+    # own Item and nothing else names it.
+    stac_paths = write_point_product_documents(
+        output_root,
+        product=PRODUCT,
+        index_path=directory / INDEX_FILENAME,
+        live=pointer_path is not None,
+    )
     return {
         "round": round_name(moment),
         "directory": str(directory),
@@ -282,6 +294,7 @@ def build_product(
         "history": {"byteLength": len(history), "stations": len(rows)},
         "sources": index["sources"],
         "pointer": None if pointer_path is None else str(pointer_path),
+        "stac": stac_paths,
     }
 
 

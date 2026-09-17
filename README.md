@@ -610,6 +610,15 @@ or in pieces, and it is written wherever the manifest is: `build-bin`,
 targets carry them: an Item with its manifest, a Collection and the catalog
 with the pointer, the showcase's with `upload-r2-showcase`.
 
+The three point products are in it on the same terms, derived from an
+issue's `index.json` instead of a manifest: `sounding/`, `airport/` and
+`tc/` each carry a `collection.json` and the live `item.json`, and
+`<product>.<issue>/item.json` sits beside each index with the stations'
+bounding box as its geometry and one asset per file the issue ships — the
+index under its `?v=`, the one NDJSON file, or one JSON file per storm.
+Each product's build writes them and `upload-r2-<product>` carries them;
+`xue stac --product <p> --issue <i>` rewrites them for an issue on disk.
+
 ```python
 import pystac, xarray as xr
 run = next(pystac.Catalog.from_file("https://dataset.ringsaturn.me/xue/catalog.json").get_child("gfs").get_items())

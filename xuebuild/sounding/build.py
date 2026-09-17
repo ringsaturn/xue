@@ -32,12 +32,14 @@ from pathlib import Path
 from typing import Any
 
 from ..errors import SoundingProductError, XueError
+from ..stac import write_point_product_documents
 from . import bufr, derive
 from .bufr import BUFR_MAGIC
 from .fetch import SOURCE_IDS, FetchResult, SourceStatus, issue_raw_directory, read_fetch_record
 from .schema import (
     INDEX_FILENAME,
     POINTER_FILENAME,
+    PRODUCT,
     SCHEMA_VERSION,
     SOUNDINGS_FILENAME,
     build_pointer,
@@ -353,6 +355,16 @@ def build_product(
         write_bytes_atomic(pointer_path, encode_json(pointer))
     else:
         LOG.warning("sounding: no gateway contributed and nothing carried forward; the pointer is not written")
+    # The STAC face of the issue just written (docs/stac.md §"Point
+    # products"), a pure function of the index on disk. The Collection and
+    # the live Item follow the pointer: an issue nothing took live gets its
+    # own Item and nothing else names it.
+    stac_paths = write_point_product_documents(
+        output_root,
+        product=PRODUCT,
+        index_path=directory / INDEX_FILENAME,
+        live=pointer_path is not None,
+    )
     return {
         "issue": issue.strftime("%Y%m%d%H"),
         "directory": str(directory),
@@ -364,6 +376,7 @@ def build_product(
         "watermark": watermark,
         "sources": index["sources"],
         "pointer": None if pointer_path is None else str(pointer_path),
+        "stac": stac_paths,
     }
 
 
