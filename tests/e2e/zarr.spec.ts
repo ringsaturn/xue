@@ -176,7 +176,10 @@ test("a bundle without a store stays on the container beside one that has it", a
   await page.getByRole("button", { name: "PRESSURE LINES" }).click();
   await page.locator("#level-row button[data-alone]").click();
   await expect(page.locator("body")).toHaveAttribute("data-variable", "hgt500");
-  await expect(page.locator("#preload-format")).toHaveText("Xue");
+  // The lines' session, opened at the overlay's half tier, stays resident
+  // as the view: still the container, whichever tier.
+  await expect(page.locator("#preload-format")).toContainText("Xue");
+  await expect(page.locator("#preload-format")).not.toContainText("Zarr");
   expect(counters.bundleRanged).toBeGreaterThan(0);
 });
 

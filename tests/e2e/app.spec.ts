@@ -212,7 +212,9 @@ async function routeBundleWithRanges(
       ? TMP2M_FIXTURE
       : pathname.endsWith("wind10m.xue")
         ? WIND_FIXTURE
-        : PRATE_FIXTURE;
+        : pathname.endsWith("gust.xue")
+          ? GUST_FIXTURE
+          : PRATE_FIXTURE;
     const match = /^bytes=(\d+)-(\d+)$/.exec(route.request().headers()["range"] ?? "");
     if (match) {
       const start = Number(match[1]);
@@ -434,6 +436,9 @@ test("a pressure level loads as its own contour session", async ({ page }, testI
 
 test("?lines= draws a pressure surface over the filled field", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop", "desktop interaction coverage");
+  // Every way onto and off the lines in one sitting: more than the default
+  // budget holds.
+  test.slow();
   await page.emulateMedia({ reducedMotion: "reduce" });
   const counters: BundleCounters = { tmp2m: 0, prate: 0, hgt500: 0 };
   await routeManifest(page);
@@ -658,9 +663,11 @@ test("the rail is three sections, and MORE lists the fields the core tiles do no
   await expect(gustTile).toBeVisible();
   await expect(gustTile).toHaveAttribute("aria-pressed", "true");
   await expect(fieldSection.locator("button:visible")).toHaveCount(5);
-  // Back on a core field the extra tile goes.
+  // Back on a core tile the extra tile goes; the family reopens the member
+  // last on screen, and its gloss follows.
   await page.getByRole("button", { name: "TEMP 2M" }).click();
-  await expect(page.locator("body")).toHaveAttribute("data-variable", "tmp2m");
+  await expect(page.locator("body")).toHaveAttribute("data-variable", "tmp850");
+  await expect(fieldSection.locator('button[data-variable="tmp2m"] small')).toHaveText("850");
   await expect(gustTile).toBeHidden();
   await expect(fieldSection.locator("button:visible")).toHaveCount(4);
   // Escape closes the sheet and hands focus back to MORE.
@@ -1149,7 +1156,7 @@ test("clicking the map pins a point and reads its whole series at once", async (
   await expect(rows.nth(1)).toHaveAttribute("data-row", "precipitation");
   await expect(rows.nth(2)).toHaveAttribute("data-row", "wind");
   await expect(rows.nth(0).locator(".probe-row-code")).toHaveText("TMP 2M");
-  await expect(rows.nth(2).locator(".probe-row-code")).toHaveText("WIND 10M");
+  await expect(rows.nth(2).locator(".probe-row-code")).toHaveText("WIND · GUST 10M");
   await expect(rows.nth(1)).toHaveAttribute("data-state", "complete");
   await expect(rows.nth(1).locator(".probe-row-value")).toHaveText(/^\d+\.\d+$/);
   await expect(rows.nth(1).locator(".probe-row-note")).toHaveText("mm/h");
@@ -1316,8 +1323,9 @@ test("a streaming session reads a pinned series with a few range requests", asyn
     });
   }
   await expect(page.locator('#probe-rows .probe-row[data-row="temperature"] .probe-row-note')).toHaveText("°C");
-  // The wind row reads the speed, with the unit and the direction under it.
-  await expect(page.locator('#probe-rows .probe-row[data-row="wind"] .probe-row-value')).toHaveText(/^\d+\.\d+$/);
+  // The wind row reads the speed and the gust, with the unit and the
+  // direction under it.
+  await expect(page.locator('#probe-rows .probe-row[data-row="wind"] .probe-row-value')).toHaveText(/^\d+\.\d+ · \d+\.\d+$/);
   await expect(page.locator('#probe-rows .probe-row[data-row="wind"] .probe-row-note')).toHaveText(/^m\/s · \d{3}°$/);
   expect(counters.full).toBe(0);
   // A press on the rows scrubs the timeline to the frame under it.
