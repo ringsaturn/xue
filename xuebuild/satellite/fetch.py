@@ -8,7 +8,10 @@ out — the axis allows the gap, and the next round takes it if it lands.
 What is new is the frame cache: a slot is fetched and warped once, into
 ``<raw_root>/<role>-frames/<channel>/``, and every round after that reads
 the frame back, so a round costs one slot's tiles (26 MB for a Himawari
-channel) however long the window.
+channel) however long the window. A producer (:mod:`producers`) runs on a
+slot the same way: once, on the slot's warped channels, its outputs cached
+as frames of their own; so a window of four channels and a composite costs
+a round four channels' tiles and one composition.
 """
 
 from __future__ import annotations
@@ -20,9 +23,10 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from ..errors import DownloadError
+from ..errors import ConversionError, DownloadError
 from . import assemble
 from .platforms import Channel, Platform
+from .producers import Producer
 from .projector import PROJECTORS, TargetGrid
 from .readers import SlotObject, reader_for
 
@@ -148,64 +152,153 @@ def fetch_frame(
     return FetchedFrame(slot=slot, path=frame, tiles=len(objects))
 
 
+def produce_frames(
+    platform: Platform,
+    producer: Producer,
+    slot: datetime,
+    inputs: dict[str, Path],
+    *,
+    grid: TargetGrid,
+    frames_dir: Path,
+    force: bool = False,
+) -> dict[str, Path]:
+    """One slot's outputs of one producer as frames, from the cache when
+    every output is there (and carries this producer's version), else
+    computed from the slot's input frames and written beside them. The
+    inputs must be every channel the producer reads."""
+    outputs = {output_id: assemble.frame_path(frames_dir, output_id, slot) for output_id in producer.outputs}
+    version = producer.version
+    if not force and all(path.is_file() for path in outputs.values()):
+        if all(assemble.frame_packing(path).producer == (producer.id, version) for path in outputs.values()):
+            return outputs
+        LOG.info("%s %s: the cached %s frames are another version's, recomposing", platform.spacecraft, slot.strftime("%Y-%m-%dT%H:%M:%SZ"), producer.bundle_id)
+    missing = [channel_id for channel_id in producer.inputs if channel_id not in inputs]
+    if missing:
+        raise ConversionError(f"the {producer.bundle_id} producer needs {list(producer.inputs)}; the slot lacks {missing}")
+    planes = {channel_id: assemble.read_frame(inputs[channel_id], grid) for channel_id in producer.inputs}
+    produced = producer.run(platform, planes, {})
+    if tuple(produced) != producer.outputs:
+        raise ConversionError(f"the {producer.bundle_id} producer returned {list(produced)}, not {list(producer.outputs)}")
+    packing = assemble.Packing(scale=PRODUCED_SCALE, offset=0.0, unit=PRODUCED_UNIT, producer=(producer.id, version))
+    for output_id, plane in produced.items():
+        assemble.write_frame(
+            plane,
+            grid,
+            packing,
+            outputs[output_id],
+            slot=slot.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            inputs=[inputs[channel_id].name for channel_id in producer.inputs],
+        )
+    LOG.info("%s %s: composed %s from %s", platform.spacecraft, producer.bundle_id, slot.strftime("%Y-%m-%dT%H:%M:%SZ"), ", ".join(producer.inputs))
+    return outputs
+
+
+#: How a produced frame is packed: every producer's output is a plain
+#: number in 0–1 (a gun, a confidence), stored to four decimals.
+PRODUCED_SCALE = 0.0001
+PRODUCED_UNIT = "1"
+
+
+@dataclass(frozen=True)
+class FetchedSlot:
+    slot: datetime
+    frames: dict[str, Path]
+    """Every variable's frame for the slot, channels and produced alike."""
+    tiles: int
+    """How many tiles were fetched for it this round, over every channel:
+    0 for a cache hit."""
+
+
 @dataclass(frozen=True)
 class FetchedWindow:
-    series: Path
-    frames: list[FetchedFrame]
+    series: dict[str, Path]
+    """One series file per variable, by id, in the order the channels and
+    then the producers' outputs were asked for."""
+    slots: list[FetchedSlot]
     grid: TargetGrid
 
 
 def fetch_window(
     platform: Platform,
-    channel: Channel,
+    channels: tuple[Channel, ...],
     run_time: datetime,
     hours: int,
     *,
     grid: TargetGrid,
     raw_root: Path,
     destination: Path,
-    series_name: str,
-    unit: str,
+    series_stem: str,
+    units: dict[str, str],
+    producers: tuple[Producer, ...] = (),
     force: bool = False,
     fetch: Callable[[str], str] | None = None,
     download: Callable[[str], bytes] | None = None,
     concurrency: int = FETCH_CONCURRENCY,
 ) -> FetchedWindow:
-    """The window's frames, each from the cache or the bucket, stacked
-    into the NetCDF series at ``destination / series_name``."""
+    """The window's frames of every channel, each from the cache or the
+    bucket, the producers' outputs composed from them per slot, and every
+    variable stacked into its own NetCDF series at
+    ``destination / <series_stem>.<variable>.nc``. A slot is in the window
+    only when every channel is there whole, so every series carries the
+    same axis. ``units`` is each channel's declared unit (the registry's
+    output unit), which its frames must agree with."""
+    for producer in producers:
+        missing = [channel_id for channel_id in producer.inputs if channel_id not in {channel.id for channel in channels}]
+        if missing:
+            raise ConversionError(f"the {producer.bundle_id} producer reads {missing}, which the window does not fetch")
     frames_dir = raw_root / assemble.frames_dirname(platform)
     tiles_dir = destination / "tiles"
-    fetched: list[FetchedFrame] = []
+    fetched: list[FetchedSlot] = []
     for slot in window_slots(platform, run_time, hours):
-        frame = fetch_frame(
-            platform,
-            channel,
-            slot,
-            grid=grid,
-            frames_dir=frames_dir,
-            tiles_dir=tiles_dir,
-            force=force,
-            fetch=fetch,
-            download=download,
-            concurrency=concurrency,
-        )
-        if frame is not None:
-            fetched.append(frame)
+        frames: dict[str, Path] = {}
+        tiles = 0
+        for channel in channels:
+            frame = fetch_frame(
+                platform,
+                channel,
+                slot,
+                grid=grid,
+                frames_dir=frames_dir,
+                tiles_dir=tiles_dir,
+                force=force,
+                fetch=fetch,
+                download=download,
+                concurrency=concurrency,
+            )
+            if frame is None:
+                break
+            frames[channel.id] = frame.path
+            tiles += frame.tiles
+        if len(frames) != len(channels):
+            continue
+        for producer in producers:
+            frames.update(produce_frames(platform, producer, slot, frames, grid=grid, frames_dir=frames_dir, force=force))
+        fetched.append(FetchedSlot(slot=slot, frames=frames, tiles=tiles))
     shutil.rmtree(tiles_dir, ignore_errors=True)
     if not fetched:
         raise DownloadError(
-            f"{platform.spacecraft} holds no complete {channel.id} slot for the window from "
+            f"{platform.spacecraft} holds no complete {', '.join(channel.id for channel in channels)} slot for the window from "
             f"{run_time.strftime('%Y-%m-%dT%H:%M:%SZ')} through +{hours} h"
         )
     destination.mkdir(parents=True, exist_ok=True)
-    series = destination / series_name
-    assemble.write_series(
-        [assemble.Frame(slot=frame.slot, path=frame.path) for frame in fetched],
-        channel=channel,
-        platform=platform,
-        grid=grid,
-        run_time=run_time,
-        unit=unit,
-        out=series,
-    )
-    return FetchedWindow(series=series, frames=fetched, grid=grid)
+    variables = [assemble.SeriesVariable.channel(platform, channel, units[channel.id]) for channel in channels]
+    for producer in producers:
+        variables += [
+            assemble.SeriesVariable(
+                id=output_id, unit=PRODUCED_UNIT, long_name=f"{producer.bundle_id} {output_id}, {producer.id} {producer.version}"
+            )
+            for output_id in producer.outputs
+        ]
+    series: dict[str, Path] = {}
+    for variable in variables:
+        out = assemble.series_path(destination, series_stem, variable.id)
+        assemble.write_series(
+            [assemble.Frame(slot=item.slot, path=item.frames[variable.id]) for item in fetched],
+            variable=variable,
+            platform=platform,
+            grid=grid,
+            run_time=run_time,
+            out=out,
+        )
+        series[variable.id] = out
+    return FetchedWindow(series=series, slots=fetched, grid=grid)

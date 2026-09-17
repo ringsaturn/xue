@@ -160,9 +160,11 @@ jobs:
           enable-cache: true
           python-version: "3.14"
 
-      # No ffmpeg: the source ships no video.
+      # No ffmpeg: the source ships no video. The `satellite` group is the
+      # shachen package the Dust RGB producer runs in the fetch stage
+      # (xuebuild/satellite/producers.py), needed whichever encoder converts.
       - name: Sync Python environment
-        run: uv sync
+        run: uv sync --group satellite
 
       # The fetch stage mosaics and warps the tiles with gdalbuildvrt,
       # gdalwarp and gdal_translate, whichever encoder converts the series
@@ -189,7 +191,7 @@ jobs:
                 encoder=native
               else
                 wheel=$(.venv/bin/python -c "from xuebuild import native; print(native.version() or 'unknown')")
-                echo "::warning::xuepy ${wheel} does not know the ${MODEL} source; converting through the reference pipeline (slower). Release a wheel that carries it and bump the pin in pyproject.toml."
+                echo "::warning::xuepy ${wheel} does not know the ${MODEL} source with every bundle it publishes; converting through the reference pipeline (slower). Release a wheel that carries it and bump the pin in pyproject.toml."
                 encoder=python
               fi ;;
             *) echo "::error::encoder must be auto, native or python, not '$ENCODER'"; exit 1 ;;

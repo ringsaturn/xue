@@ -55,7 +55,11 @@ Facts worth getting right:
   at 140.7°E as NOAA redistributes it, the 10.4 µm infrared window as
   brightness temperature in kelvin in the file, shown in Celsius on the
   page (`ir104`, AHI band 13: cloud tops read cold, clear sea and land
-  warm), one full-disk scan every ten minutes,
+  warm), and the classic Dust RGB composite (`dustrgb`: three guns in
+  0–1 from the 8.6, 10.4, 11.2 and 12.3 µm windows, the EUMETSAT recipe
+  as the shachen package computes it; lofted dust reads pink to magenta,
+  thick ice cloud dark red, sea and vegetated land blue), one full-disk
+  scan every ten minutes,
   reprojected from the geostationary view onto a 0.04° latitude/longitude
   grid over the useful disk (3000 × 3000, 80.7°E–200.7°E — past the
   antimeridian — and 60°S–60°N; cells outside the disk carry the codebook
@@ -98,7 +102,9 @@ Facts worth getting right:
   `cref`. MRMS: `cref` (observed composite reflectivity, dBZ) and `prate`
   (the MRMS precipitation rate, mm/h; a case may ship the reflectivity
   alone). JMA: `prate` (precipitation intensity class representative rate,
-  mm/h). HIMAWARI: `ir104` (10.4 µm brightness temperature, K). Names
+  mm/h). HIMAWARI: `ir104` (10.4 µm brightness temperature, K) and
+  `dustrgb` (the Dust RGB's red, green and blue guns, 0–1, a composite
+  with no physical unit). Names
   are `<family><level>`; the level is in hPa, `2m`/`10m` are heights above
   ground, `prmsl` is mean sea level pressure.
 - Only the newest run per source is kept online. Runs are pruned when
@@ -137,7 +143,7 @@ fall back to defaults rather than fail, so a constructed link always opens.
   `icetk`), `waves` (the `wave` vector — height as the fill, direction as
   particles; `waveheight` for the scalar `htsgw`, `waveperiod` for
   `perpw`), the Himawari `infrared` (`ir104`; `ir`, `satellite` and `sat`
-  are accepted spellings), or a bundle name such as `tmp850`,
+  are accepted spellings) and `dustrgb` (`dust`), or a bundle name such as `tmp850`,
   `rh700`, `wind850`, `qflux850`, `hgt500`, `vvel700`, `thetae850`; `t850`,
   `z500`, `humidity700`, `vapour850`, `omega700`, `subtropicalhigh`
   (= `hgt500`) are accepted spellings.

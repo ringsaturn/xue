@@ -96,9 +96,12 @@ jobs:
           enable-cache: true
           python-version: "3.14"
 
-      # No ffmpeg: a case ships no video.
+      # No ffmpeg: a case ships no video. The `satellite` group is the
+      # producer a satellite case's composite (the Dust RGB) is composed
+      # with in the fetch stage; a case that asks for a channel alone never
+      # imports it.
       - name: Sync Python environment
-        run: uv sync
+        run: uv sync --group satellite
 
       # The case's source decides the encoder, as publish-jma.yml does for
       # its feed: native when the installed wheel knows the source, else the

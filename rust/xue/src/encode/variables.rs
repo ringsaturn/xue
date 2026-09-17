@@ -47,7 +47,7 @@ pub struct VariableSpec {
     pub label: &'static str,
     /// Unit of the values a bundle's codebook quantizes.
     pub output_unit: &'static str,
-    pub value_range: (i32, i32),
+    pub value_range: (f64, f64),
     pub grib_element: &'static str,
     pub grib2_discipline: u8,
     pub grib2_category: u8,
@@ -81,6 +81,16 @@ pub struct VariableSpec {
     /// the variable's codebook (`value_range.0`) before anything else touches
     /// the plane. Empty for a field that covers its whole grid.
     pub fill_values: &'static [f64],
+    /// For a field an algorithm derived from other variables rather than an
+    /// instrument measured — a satellite composite — the `producer.id` of
+    /// the block written beside its `parameter` (docs/format.md §"Band and
+    /// Producer"): `shachen` for the Dust RGB guns. The algorithm's
+    /// *version* is not registered: the fetch stage stamps it on the series
+    /// it produced, the converters read it off the series, and a series
+    /// whose producer is not this one is refused. Such a variable's
+    /// parameter is in GRIB2's local-use range and means nothing without
+    /// the producer. Mirrors `producer_id` in `xuebuild/variables.py`.
+    pub producer_id: Option<&'static str>,
 }
 
 impl VariableSpec {
@@ -146,11 +156,19 @@ pub const OCEAN_VARIABLE_IDS: &[&str] = &["tmpsfc", "icec", "icetk", "htsgw", "p
 /// The two components of the derived wave vector bundle, in the same
 /// fixture. Mirrors `WAVE_VECTOR_COMPONENT_IDS` in `xuebuild/variables.py`.
 pub const WAVE_VECTOR_COMPONENT_IDS: [&str; 2] = ["uwave", "vwave"];
-/// The satellite channels, held to the Python encoder by
-/// `tests/fixtures/satellite-registry.json`. Mirrors
-/// `SATELLITE_VARIABLE_IDS` in `xuebuild/variables.py`.
+/// The satellite channels and the composite guns, held to the Python
+/// encoder by `tests/fixtures/satellite-registry.json`. The channels are
+/// what a platform's imager measures (a `band` block each when
+/// published); the guns are what the Dust RGB producer derives from four
+/// of them, the three variables of the `dustrgb` bundle in bundle order.
+/// Mirror `SATELLITE_CHANNEL_IDS`, `DUST_RGB_BUNDLE_ID`,
+/// `DUST_RGB_COMPONENT_IDS` and `SATELLITE_VARIABLE_IDS` in
+/// `xuebuild/variables.py`.
+pub const SATELLITE_CHANNEL_IDS: &[&str] = &["ir086", "ir104", "ir112", "ir123"];
+pub const DUST_RGB_BUNDLE_ID: &str = "dustrgb";
+pub const DUST_RGB_COMPONENT_IDS: [&str; 3] = ["dustr", "dustg", "dustb"];
 #[allow(dead_code)] // read by the registry test; the Python side keys its fixture on it
-pub const SATELLITE_VARIABLE_IDS: &[&str] = &["ir104"];
+pub const SATELLITE_VARIABLE_IDS: &[&str] = &["ir086", "ir104", "ir112", "ir123", "dustr", "dustg", "dustb"];
 
 /// The ids the Celsius rule applies to at the surface: GDAL normalizes every
 /// GRIB temperature to Celsius, and the converter accepts K and F as well.
@@ -195,6 +213,7 @@ macro_rules! isobaric_spec {
             grib2_alternates: &[],
             gdal_unit: $gdal_unit,
             fill_values: &[],
+            producer_id: None,
         }
     };
 }
@@ -212,7 +231,7 @@ macro_rules! temperature_spec {
 }
 macro_rules! humidity_spec {
     ($id:literal, $label:literal, $level_pa:literal) => {
-        isobaric_spec!($id, $label, $level_pa, (0, 100), "%", "RH", 1, 1, "%")
+        isobaric_spec!($id, $label, $level_pa, (0.0, 100.0), "%", "RH", 1, 1, "%")
     };
 }
 // GRIB2 carries kg/kg; the codebook quantizes g/kg.
@@ -223,12 +242,12 @@ macro_rules! specific_humidity_spec {
 }
 macro_rules! u_wind_spec {
     ($id:literal, $label:literal, $level_pa:literal) => {
-        isobaric_spec!($id, $label, $level_pa, (-127, 127), "m/s", "UGRD", 2, 2, "m/s")
+        isobaric_spec!($id, $label, $level_pa, (-127.0, 127.0), "m/s", "UGRD", 2, 2, "m/s")
     };
 }
 macro_rules! v_wind_spec {
     ($id:literal, $label:literal, $level_pa:literal) => {
-        isobaric_spec!($id, $label, $level_pa, (-127, 127), "m/s", "VGRD", 2, 3, "m/s")
+        isobaric_spec!($id, $label, $level_pa, (-127.0, 127.0), "m/s", "VGRD", 2, 3, "m/s")
     };
 }
 // Water vapour flux, q·V/g in g·cm⁻¹·hPa⁻¹·s⁻¹ — derived by the converter
@@ -238,13 +257,13 @@ macro_rules! v_wind_spec {
 // our own in the moisture category.
 macro_rules! vapour_flux_spec {
     ($id:literal, $label:literal, $level_pa:literal, $number:literal) => {
-        isobaric_spec!($id, $label, $level_pa, (-64, 64), "g/(cm·hPa·s)", "", 1, $number, "")
+        isobaric_spec!($id, $label, $level_pa, (-64.0, 64.0), "g/(cm·hPa·s)", "", 1, $number, "")
     };
 }
 // Vertical velocity in pressure coordinates, ω = dp/dt: negative is ascent.
 macro_rules! vertical_velocity_spec {
     ($id:literal, $label:literal, $level_pa:literal) => {
-        isobaric_spec!($id, $label, $level_pa, (-6, 6), "Pa/s", "VVEL", 2, 8, "Pa/s")
+        isobaric_spec!($id, $label, $level_pa, (-6.0, 6.0), "Pa/s", "VVEL", 2, 8, "Pa/s")
     };
 }
 // Equivalent potential temperature, Bolton (1980), derived by the converter
@@ -261,7 +280,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         id: "tmp2m",
         label: "2 meter temperature",
         output_unit: "°C",
-        value_range: (-60, 50),
+        value_range: (-60.0, 50.0),
         grib_element: "TMP",
         grib2_discipline: 0,
         grib2_category: 0,
@@ -273,12 +292,13 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_alternates: &[],
         gdal_unit: "C",
         fill_values: &[],
+        producer_id: None,
     },
     VariableSpec {
         id: "prate",
         label: "Precipitation rate",
         output_unit: "mm/h",
-        value_range: (0, 50),
+        value_range: (0.0, 50.0),
         grib_element: "PRATE",
         grib2_discipline: 0,
         grib2_category: 1,
@@ -302,6 +322,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         }],
         gdal_unit: "kg/(m^2 s)",
         fill_values: &[-3.0],
+        producer_id: None,
     },
     // ECMWF open data has no rate field: tp is the run-total accumulation
     // (metres, ECMWF-local GRIB2 parameter 0/1/193). Input-only — the
@@ -314,7 +335,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         id: "tp",
         label: "Total precipitation",
         output_unit: "m",
-        value_range: (0, 1),
+        value_range: (0.0, 1.0),
         grib_element: "unknown",
         grib2_discipline: 0,
         grib2_category: 1,
@@ -334,6 +355,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         }],
         gdal_unit: "-",
         fill_values: &[],
+        producer_id: None,
     },
     // GFS sflux PRATE is the mean rate over an averaging window that resets
     // every 6 hours. Input-only — the converter de-averages it into prate.
@@ -341,7 +363,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         id: "prate_ave",
         label: "Window-averaged precipitation rate",
         output_unit: "kg/m^2s",
-        value_range: (0, 1),
+        value_range: (0.0, 1.0),
         grib_element: "PRATE",
         grib2_discipline: 0,
         grib2_category: 1,
@@ -353,12 +375,13 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_alternates: &[],
         gdal_unit: "kg/(m^2 s)",
         fill_values: &[],
+        producer_id: None,
     },
     VariableSpec {
         id: "dswrf",
         label: "Downward shortwave radiation flux",
         output_unit: "W/m²",
-        value_range: (0, 1270),
+        value_range: (0.0, 1270.0),
         grib_element: "DSWRF",
         grib2_discipline: 0,
         grib2_category: 4,
@@ -370,12 +393,13 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_alternates: &[],
         gdal_unit: "W/(m^2)",
         fill_values: &[],
+        producer_id: None,
     },
     VariableSpec {
         id: "ugrd10m",
         label: "10 meter U wind component",
         output_unit: "m/s",
-        value_range: (-64, 64),
+        value_range: (-64.0, 64.0),
         grib_element: "UGRD",
         grib2_discipline: 0,
         grib2_category: 2,
@@ -387,12 +411,13 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_alternates: &[],
         gdal_unit: "m/s",
         fill_values: &[],
+        producer_id: None,
     },
     VariableSpec {
         id: "vgrd10m",
         label: "10 meter V wind component",
         output_unit: "m/s",
-        value_range: (-64, 64),
+        value_range: (-64.0, 64.0),
         grib_element: "VGRD",
         grib2_discipline: 0,
         grib2_category: 2,
@@ -404,6 +429,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_alternates: &[],
         gdal_unit: "m/s",
         fill_values: &[],
+        producer_id: None,
     },
     // Composite reflectivity: the column maximum, so its fixed surface is
     // the entire atmosphere (type 10, which carries no value). It arrives
@@ -414,7 +440,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         id: "cref",
         label: "Composite radar reflectivity",
         output_unit: "dBZ",
-        value_range: (0, 80),
+        value_range: (0.0, 80.0),
         grib_element: "REFC",
         grib2_discipline: 0,
         grib2_category: 16,
@@ -438,6 +464,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         }],
         gdal_unit: "dB",
         fill_values: &[-999.0, -99.0],
+        producer_id: None,
     },
     // Three more surface diagnostics, each a GRIB record of its own with no
     // unit conversion. Registered from the GFS pgrb2 set; ECMWF open data
@@ -454,7 +481,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         id: "gust",
         label: "Wind gust",
         output_unit: "m/s",
-        value_range: (0, 127),
+        value_range: (0.0, 127.0),
         grib_element: "GUST",
         grib2_discipline: 0,
         grib2_category: 2,
@@ -474,6 +501,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         }],
         gdal_unit: "m/s",
         fill_values: &[],
+        producer_id: None,
     },
     // Total cloud cover over the whole column, 0/6/1 on the entire
     // atmosphere (surface type 10, no value); the identity's missing
@@ -487,7 +515,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         id: "tcdc",
         label: "Total cloud cover",
         output_unit: "%",
-        value_range: (0, 100),
+        value_range: (0.0, 100.0),
         grib_element: "TCDC",
         grib2_discipline: 0,
         grib2_category: 6,
@@ -518,6 +546,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         ],
         gdal_unit: "%",
         fill_values: &[],
+        producer_id: None,
     },
     // Surface-based convective available potential energy, 0/7/6 on the
     // ground surface — not the mixed-layer variants on surface type 108.
@@ -527,7 +556,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         id: "cape",
         label: "Convective available potential energy",
         output_unit: "J/kg",
-        value_range: (0, 6350),
+        value_range: (0.0, 6350.0),
         grib_element: "CAPE",
         grib2_discipline: 0,
         grib2_category: 7,
@@ -547,6 +576,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         }],
         gdal_unit: "J/kg",
         fill_values: &[],
+        producer_id: None,
     },
     // Surface visibility, 0/19/0 on the ground surface: GRIB2 carries metres,
     // the codebook quantizes kilometres.
@@ -554,7 +584,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         id: "vis",
         label: "Visibility",
         output_unit: "km",
-        value_range: (0, 25),
+        value_range: (0.0, 25.0),
         grib_element: "VIS",
         grib2_discipline: 0,
         grib2_category: 19,
@@ -566,6 +596,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_alternates: &[],
         gdal_unit: "m",
         fill_values: &[],
+        producer_id: None,
     },
     // 2 m dew point, 0/0/6 on the 2 m surface — the 2 m temperature's own
     // matching and unit rules.
@@ -573,7 +604,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         id: "dpt2m",
         label: "2 meter dew point temperature",
         output_unit: "°C",
-        value_range: (-70, 40),
+        value_range: (-70.0, 40.0),
         grib_element: "DPT",
         grib2_discipline: 0,
         grib2_category: 0,
@@ -585,13 +616,14 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_alternates: &[],
         gdal_unit: "C",
         fill_values: &[],
+        producer_id: None,
     },
     // NCEP's apparent temperature, 0/0/21 on the 2 m surface.
     VariableSpec {
         id: "aptmp2m",
         label: "2 meter apparent temperature",
         output_unit: "°C",
-        value_range: (-90, 60),
+        value_range: (-90.0, 60.0),
         grib_element: "APTMP",
         grib2_discipline: 0,
         grib2_category: 0,
@@ -603,6 +635,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_alternates: &[],
         gdal_unit: "C",
         fill_values: &[],
+        producer_id: None,
     },
     // The cloud layers: three parameters of their own (0/6/3, 0/6/4, 0/6/5),
     // each on its own layer surface (214 low, 224 middle, 234 high), which
@@ -614,7 +647,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         id: "lcdc",
         label: "Low cloud cover",
         output_unit: "%",
-        value_range: (0, 100),
+        value_range: (0.0, 100.0),
         grib_element: "LCDC",
         grib2_discipline: 0,
         grib2_category: 6,
@@ -634,12 +667,13 @@ pub const VARIABLES: &[VariableSpec] = &[
         }],
         gdal_unit: "%",
         fill_values: &[],
+        producer_id: None,
     },
     VariableSpec {
         id: "mcdc",
         label: "Middle cloud cover",
         output_unit: "%",
-        value_range: (0, 100),
+        value_range: (0.0, 100.0),
         grib_element: "MCDC",
         grib2_discipline: 0,
         grib2_category: 6,
@@ -659,12 +693,13 @@ pub const VARIABLES: &[VariableSpec] = &[
         }],
         gdal_unit: "%",
         fill_values: &[],
+        producer_id: None,
     },
     VariableSpec {
         id: "hcdc",
         label: "High cloud cover",
         output_unit: "%",
-        value_range: (0, 100),
+        value_range: (0.0, 100.0),
         grib_element: "HCDC",
         grib2_discipline: 0,
         grib2_category: 6,
@@ -684,6 +719,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         }],
         gdal_unit: "%",
         fill_values: &[],
+        producer_id: None,
     },
     // The ocean fields of the pgrb2 set (see `xuebuild/variables.py`): the
     // ground-or-water skin temperature, 0/0/0 on surface type 1 — the SST
@@ -697,7 +733,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         id: "tmpsfc",
         label: "Surface temperature",
         output_unit: "°C",
-        value_range: (-60, 67),
+        value_range: (-60.0, 67.0),
         grib_element: "TMP",
         grib2_discipline: 0,
         grib2_category: 0,
@@ -717,12 +753,13 @@ pub const VARIABLES: &[VariableSpec] = &[
         }],
         gdal_unit: "C",
         fill_values: &[],
+        producer_id: None,
     },
     VariableSpec {
         id: "icec",
         label: "Sea ice cover",
         output_unit: "%",
-        value_range: (0, 100),
+        value_range: (0.0, 100.0),
         grib_element: "ICEC",
         grib2_discipline: 10,
         grib2_category: 2,
@@ -734,12 +771,13 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_alternates: &[],
         gdal_unit: "Proportion",
         fill_values: &[],
+        producer_id: None,
     },
     VariableSpec {
         id: "icetk",
         label: "Sea ice thickness",
         output_unit: "m",
-        value_range: (0, 5),
+        value_range: (0.0, 5.0),
         grib_element: "ICETK",
         grib2_discipline: 10,
         grib2_category: 2,
@@ -759,6 +797,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         }],
         gdal_unit: "m",
         fill_values: &[9999.0],
+        producer_id: None,
     },
     // The wave fields, appended to the frame from the cycle's second file
     // family (GFS-Wave, or the `wave` stream of ECMWF open data):
@@ -774,7 +813,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         id: "htsgw",
         label: "Significant wave height",
         output_unit: "m",
-        value_range: (0, 25),
+        value_range: (0.0, 25.0),
         grib_element: "HTSGW",
         grib2_discipline: 10,
         grib2_category: 0,
@@ -786,12 +825,13 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_alternates: &[],
         gdal_unit: "m",
         fill_values: &[9999.0],
+        producer_id: None,
     },
     VariableSpec {
         id: "perpw",
         label: "Primary wave mean period",
         output_unit: "s",
-        value_range: (0, 25),
+        value_range: (0.0, 25.0),
         grib_element: "PERPW",
         grib2_discipline: 10,
         grib2_category: 0,
@@ -803,12 +843,13 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_alternates: &[],
         gdal_unit: "s",
         fill_values: &[9999.0],
+        producer_id: None,
     },
     VariableSpec {
         id: "dirpw",
         label: "Primary wave direction",
         output_unit: "°",
-        value_range: (0, 358),
+        value_range: (0.0, 358.0),
         grib_element: "DIRPW",
         grib2_discipline: 10,
         grib2_category: 0,
@@ -820,6 +861,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_alternates: &[],
         gdal_unit: "Degree true",
         fill_values: &[9999.0],
+        producer_id: None,
     },
     // The wave vector: the significant wave height laid along the direction
     // the waves travel, as an eastward and a northward component in metres,
@@ -833,7 +875,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         id: "uwave",
         label: "U wave vector component",
         output_unit: "m",
-        value_range: (-25, 25),
+        value_range: (-25.0, 25.0),
         grib_element: "",
         grib2_discipline: 10,
         grib2_category: 0,
@@ -845,12 +887,13 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_alternates: &[],
         gdal_unit: "",
         fill_values: &[],
+        producer_id: None,
     },
     VariableSpec {
         id: "vwave",
         label: "V wave vector component",
         output_unit: "m",
-        value_range: (-25, 25),
+        value_range: (-25.0, 25.0),
         grib_element: "",
         grib2_discipline: 10,
         grib2_category: 0,
@@ -862,6 +905,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_alternates: &[],
         gdal_unit: "",
         fill_values: &[],
+        producer_id: None,
     },
     // The satellite channels: brightness temperature at the nominal top of
     // the atmosphere (0/4/4 on surface 8), one parameter for every infrared
@@ -876,7 +920,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         id: "ir104",
         label: "Brightness temperature, 10.4 µm",
         output_unit: "K",
-        value_range: (180, 332),
+        value_range: (180.0, 332.0),
         grib_element: "",
         grib2_discipline: 0,
         grib2_category: 4,
@@ -888,6 +932,133 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_alternates: &[],
         gdal_unit: "",
         fill_values: &[],
+        producer_id: None,
+    },
+    // The three other infrared windows the Dust RGB reads (AHI bands 11, 14
+    // and 15; ABI channels 11, 14 and 15), the same parameter and codebook
+    // as `ir104`: registered so a source can fetch them for a composite
+    // (`SourceSpec::input_variable_ids`) or publish them by a source-table
+    // line, and unpublished by every source today. Mirror `ir086`, `ir112`
+    // and `ir123` in `xuebuild/variables.py`.
+    VariableSpec {
+        id: "ir086",
+        label: "Brightness temperature, 8.6 µm",
+        output_unit: "K",
+        value_range: (180.0, 332.0),
+        grib_element: "",
+        grib2_discipline: 0,
+        grib2_category: 4,
+        grib2_number: 4,
+        grib2_level_type: 8,
+        grib2_level_value: None,
+        grib2_statistical: None,
+        grib2_aliases: &[],
+        grib2_alternates: &[],
+        gdal_unit: "",
+        fill_values: &[],
+        producer_id: None,
+    },
+    VariableSpec {
+        id: "ir112",
+        label: "Brightness temperature, 11.2 µm",
+        output_unit: "K",
+        value_range: (180.0, 332.0),
+        grib_element: "",
+        grib2_discipline: 0,
+        grib2_category: 4,
+        grib2_number: 4,
+        grib2_level_type: 8,
+        grib2_level_value: None,
+        grib2_statistical: None,
+        grib2_aliases: &[],
+        grib2_alternates: &[],
+        gdal_unit: "",
+        fill_values: &[],
+        producer_id: None,
+    },
+    VariableSpec {
+        id: "ir123",
+        label: "Brightness temperature, 12.3 µm",
+        output_unit: "K",
+        value_range: (180.0, 332.0),
+        grib_element: "",
+        grib2_discipline: 0,
+        grib2_category: 4,
+        grib2_number: 4,
+        grib2_level_type: 8,
+        grib2_level_value: None,
+        grib2_statistical: None,
+        grib2_aliases: &[],
+        grib2_alternates: &[],
+        gdal_unit: "",
+        fill_values: &[],
+        producer_id: None,
+    },
+    // The classic Dust RGB, the three guns of one composite bundle,
+    // `dustrgb`: red is the 12.3 − 10.4 µm split window, green 11.2 − 8.6 µm
+    // with a gamma, blue the 10.4 µm window, each stretched to 0–1 by the
+    // `shachen` package in the fetch stage and stored as a plain number. A
+    // composite has no GRIB2 parameter: each gun takes a local-use number
+    // (discipline 3 space products, category 192, numbers 1–3) that means
+    // nothing without the `producer` block beside it, which is why the
+    // producer id is registered here. The codebook keeps code 0 below the
+    // gun's range so a cell the disk does not cover — or one an input
+    // channel lacked — is "no data" for all three guns at once, and black
+    // stays a value. Mirror `dustr`, `dustg`, `dustb` in
+    // `xuebuild/variables.py`.
+    VariableSpec {
+        id: "dustr",
+        label: "Dust RGB, red gun",
+        output_unit: "1",
+        value_range: (-0.004, 1.0),
+        grib_element: "",
+        grib2_discipline: 3,
+        grib2_category: 192,
+        grib2_number: 1,
+        grib2_level_type: 8,
+        grib2_level_value: None,
+        grib2_statistical: None,
+        grib2_aliases: &[],
+        grib2_alternates: &[],
+        gdal_unit: "",
+        fill_values: &[],
+        producer_id: Some("shachen"),
+    },
+    VariableSpec {
+        id: "dustg",
+        label: "Dust RGB, green gun",
+        output_unit: "1",
+        value_range: (-0.004, 1.0),
+        grib_element: "",
+        grib2_discipline: 3,
+        grib2_category: 192,
+        grib2_number: 2,
+        grib2_level_type: 8,
+        grib2_level_value: None,
+        grib2_statistical: None,
+        grib2_aliases: &[],
+        grib2_alternates: &[],
+        gdal_unit: "",
+        fill_values: &[],
+        producer_id: Some("shachen"),
+    },
+    VariableSpec {
+        id: "dustb",
+        label: "Dust RGB, blue gun",
+        output_unit: "1",
+        value_range: (-0.004, 1.0),
+        grib_element: "",
+        grib2_discipline: 3,
+        grib2_category: 192,
+        grib2_number: 3,
+        grib2_level_type: 8,
+        grib2_level_value: None,
+        grib2_statistical: None,
+        grib2_aliases: &[],
+        grib2_alternates: &[],
+        gdal_unit: "",
+        fill_values: &[],
+        producer_id: Some("shachen"),
     },
     // Mean sea level pressure. NCEP publishes two reductions; PRMSL (0/3/1)
     // is the same quantity ECMWF calls `msl` — encoded there as plain
@@ -901,7 +1072,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         id: "prmsl",
         label: "Mean sea level pressure",
         output_unit: "hPa",
-        value_range: (870, 1125),
+        value_range: (870.0, 1125.0),
         grib_element: "PRMSL",
         grib2_discipline: 0,
         grib2_category: 3,
@@ -913,25 +1084,26 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_alternates: &[],
         gdal_unit: "Pa",
         fill_values: &[],
+        producer_id: None,
     },
     // The isobaric families, eight levels each. Value ranges are the level's
     // codebook coverage (quantize.rs), truncated to integers.
-    height_spec!("hgt1000", "1000 hPa geopotential height", 100000.0, (-905, 1635)),
-    height_spec!("hgt925", "925 hPa geopotential height", 92500.0, (-249, 1275)),
-    height_spec!("hgt850", "850 hPa geopotential height", 85000.0, (423, 1947)),
-    height_spec!("hgt700", "700 hPa geopotential height", 70000.0, (1911, 3435)),
-    height_spec!("hgt500", "500 hPa geopotential height", 50000.0, (4252, 6284)),
-    height_spec!("hgt300", "300 hPa geopotential height", 30000.0, (7505, 10045)),
-    height_spec!("hgt250", "250 hPa geopotential height", 25000.0, (8598, 11646)),
-    height_spec!("hgt200", "200 hPa geopotential height", 20000.0, (10086, 13134)),
-    temperature_spec!("tmp1000", "1000 hPa temperature", 100000.0, (-60, 60)),
-    temperature_spec!("tmp925", "925 hPa temperature", 92500.0, (-65, 50)),
-    temperature_spec!("tmp850", "850 hPa temperature", 85000.0, (-70, 45)),
-    temperature_spec!("tmp700", "700 hPa temperature", 70000.0, (-75, 35)),
-    temperature_spec!("tmp500", "500 hPa temperature", 50000.0, (-85, 15)),
-    temperature_spec!("tmp300", "300 hPa temperature", 30000.0, (-95, 0)),
-    temperature_spec!("tmp250", "250 hPa temperature", 25000.0, (-100, -5)),
-    temperature_spec!("tmp200", "200 hPa temperature", 20000.0, (-100, -10)),
+    height_spec!("hgt1000", "1000 hPa geopotential height", 100000.0, (-905.0, 1635.0)),
+    height_spec!("hgt925", "925 hPa geopotential height", 92500.0, (-249.0, 1275.0)),
+    height_spec!("hgt850", "850 hPa geopotential height", 85000.0, (423.0, 1947.0)),
+    height_spec!("hgt700", "700 hPa geopotential height", 70000.0, (1911.0, 3435.0)),
+    height_spec!("hgt500", "500 hPa geopotential height", 50000.0, (4252.0, 6284.0)),
+    height_spec!("hgt300", "300 hPa geopotential height", 30000.0, (7505.0, 10045.0)),
+    height_spec!("hgt250", "250 hPa geopotential height", 25000.0, (8598.0, 11646.0)),
+    height_spec!("hgt200", "200 hPa geopotential height", 20000.0, (10086.0, 13134.0)),
+    temperature_spec!("tmp1000", "1000 hPa temperature", 100000.0, (-60.0, 60.0)),
+    temperature_spec!("tmp925", "925 hPa temperature", 92500.0, (-65.0, 50.0)),
+    temperature_spec!("tmp850", "850 hPa temperature", 85000.0, (-70.0, 45.0)),
+    temperature_spec!("tmp700", "700 hPa temperature", 70000.0, (-75.0, 35.0)),
+    temperature_spec!("tmp500", "500 hPa temperature", 50000.0, (-85.0, 15.0)),
+    temperature_spec!("tmp300", "300 hPa temperature", 30000.0, (-95.0, 0.0)),
+    temperature_spec!("tmp250", "250 hPa temperature", 25000.0, (-100.0, -5.0)),
+    temperature_spec!("tmp200", "200 hPa temperature", 20000.0, (-100.0, -10.0)),
     humidity_spec!("rh1000", "1000 hPa relative humidity", 100000.0),
     humidity_spec!("rh925", "925 hPa relative humidity", 92500.0),
     humidity_spec!("rh850", "850 hPa relative humidity", 85000.0),
@@ -940,14 +1112,14 @@ pub const VARIABLES: &[VariableSpec] = &[
     humidity_spec!("rh300", "300 hPa relative humidity", 30000.0),
     humidity_spec!("rh250", "250 hPa relative humidity", 25000.0),
     humidity_spec!("rh200", "200 hPa relative humidity", 20000.0),
-    specific_humidity_spec!("spfh1000", "1000 hPa specific humidity", 100000.0, (0, 50)),
-    specific_humidity_spec!("spfh925", "925 hPa specific humidity", 92500.0, (0, 50)),
-    specific_humidity_spec!("spfh850", "850 hPa specific humidity", 85000.0, (0, 25)),
-    specific_humidity_spec!("spfh700", "700 hPa specific humidity", 70000.0, (0, 25)),
-    specific_humidity_spec!("spfh500", "500 hPa specific humidity", 50000.0, (0, 5)),
-    specific_humidity_spec!("spfh300", "300 hPa specific humidity", 30000.0, (0, 2)),
-    specific_humidity_spec!("spfh250", "250 hPa specific humidity", 25000.0, (0, 1)),
-    specific_humidity_spec!("spfh200", "200 hPa specific humidity", 20000.0, (0, 1)),
+    specific_humidity_spec!("spfh1000", "1000 hPa specific humidity", 100000.0, (0.0, 50.0)),
+    specific_humidity_spec!("spfh925", "925 hPa specific humidity", 92500.0, (0.0, 50.0)),
+    specific_humidity_spec!("spfh850", "850 hPa specific humidity", 85000.0, (0.0, 25.0)),
+    specific_humidity_spec!("spfh700", "700 hPa specific humidity", 70000.0, (0.0, 25.0)),
+    specific_humidity_spec!("spfh500", "500 hPa specific humidity", 50000.0, (0.0, 5.0)),
+    specific_humidity_spec!("spfh300", "300 hPa specific humidity", 30000.0, (0.0, 2.0)),
+    specific_humidity_spec!("spfh250", "250 hPa specific humidity", 25000.0, (0.0, 1.0)),
+    specific_humidity_spec!("spfh200", "200 hPa specific humidity", 20000.0, (0.0, 1.0)),
     u_wind_spec!("ugrd1000", "1000 hPa U wind component", 100000.0),
     u_wind_spec!("ugrd925", "925 hPa U wind component", 92500.0),
     u_wind_spec!("ugrd850", "850 hPa U wind component", 85000.0),
@@ -989,14 +1161,14 @@ pub const VARIABLES: &[VariableSpec] = &[
     vertical_velocity_spec!("vvel250", "250 hPa vertical velocity", 25000.0),
     vertical_velocity_spec!("vvel200", "200 hPa vertical velocity", 20000.0),
     // Value ranges are the level's codebook coverage (quantize.rs).
-    theta_e_spec!("thetae1000", "1000 hPa equivalent potential temperature", 100000.0, (235, 362)),
-    theta_e_spec!("thetae925", "925 hPa equivalent potential temperature", 92500.0, (232, 359)),
-    theta_e_spec!("thetae850", "850 hPa equivalent potential temperature", 85000.0, (230, 357)),
-    theta_e_spec!("thetae700", "700 hPa equivalent potential temperature", 70000.0, (235, 362)),
-    theta_e_spec!("thetae500", "500 hPa equivalent potential temperature", 50000.0, (250, 377)),
-    theta_e_spec!("thetae300", "300 hPa equivalent potential temperature", 30000.0, (285, 412)),
-    theta_e_spec!("thetae250", "250 hPa equivalent potential temperature", 25000.0, (295, 422)),
-    theta_e_spec!("thetae200", "200 hPa equivalent potential temperature", 20000.0, (305, 432)),
+    theta_e_spec!("thetae1000", "1000 hPa equivalent potential temperature", 100000.0, (235.0, 362.0)),
+    theta_e_spec!("thetae925", "925 hPa equivalent potential temperature", 92500.0, (232.0, 359.0)),
+    theta_e_spec!("thetae850", "850 hPa equivalent potential temperature", 85000.0, (230.0, 357.0)),
+    theta_e_spec!("thetae700", "700 hPa equivalent potential temperature", 70000.0, (235.0, 362.0)),
+    theta_e_spec!("thetae500", "500 hPa equivalent potential temperature", 50000.0, (250.0, 377.0)),
+    theta_e_spec!("thetae300", "300 hPa equivalent potential temperature", 30000.0, (285.0, 412.0)),
+    theta_e_spec!("thetae250", "250 hPa equivalent potential temperature", 25000.0, (295.0, 422.0)),
+    theta_e_spec!("thetae200", "200 hPa equivalent potential temperature", 20000.0, (305.0, 432.0)),
 ];
 
 pub fn variable_spec(variable_id: &str) -> Result<&'static VariableSpec> {
@@ -1010,7 +1182,8 @@ pub fn variable_spec(variable_id: &str) -> Result<&'static VariableSpec> {
 mod tests {
     use super::{
         isobaric_variable, variable_spec, ISOBARIC_FAMILIES, ISOBARIC_LEVELS_HPA, OCEAN_VARIABLE_IDS,
-        SATELLITE_VARIABLE_IDS, WAVE_VECTOR_COMPONENT_IDS,
+        DUST_RGB_BUNDLE_ID, DUST_RGB_COMPONENT_IDS, SATELLITE_CHANNEL_IDS, SATELLITE_VARIABLE_IDS,
+        WAVE_VECTOR_COMPONENT_IDS,
     };
     use crate::encode::quantize::codebook;
     use serde_json::{json, Value};
@@ -1149,7 +1322,7 @@ mod tests {
                     // A bitmap-masked point becomes the bottom of the
                     // codebook, so that must be the value the registry says
                     // it is.
-                    assert_eq!(linear.minimum, f64::from(spec.value_range.0), "{variable_id}");
+                    assert_eq!(linear.minimum, spec.value_range.0, "{variable_id}");
                 }
             }
             // The wave records carry a bitmap, and so does ECMWF's ice
@@ -1165,17 +1338,29 @@ mod tests {
         }
     }
 
-    /// `tests/fixtures/satellite-registry.json`: the satellite channels,
-    /// held to the Python encoder the same way — with the `band` block the
-    /// Himawari source writes beside the parameter, read off the source
-    /// table here.
+    /// `tests/fixtures/satellite-registry.json`: the satellite channels and
+    /// the Dust RGB guns, held to the Python encoder the same way — a
+    /// channel with the `band` block the Himawari source writes beside the
+    /// parameter, read off the source table here; a gun with the
+    /// `producer` id registered on it and no band — plus the composite
+    /// bundle's component list.
     #[test]
     fn the_satellite_registry_matches_the_shared_fixture() {
-        let entries = registry("satellite-registry.json");
-        assert_eq!(entries.keys().collect::<Vec<_>>(), SATELLITE_VARIABLE_IDS, "one channel, in the fixture's order");
+        let fixture = registry("satellite-registry.json");
+        let entries = fixture["variables"].as_object().expect("variables");
+        assert_eq!(
+            entries.keys().collect::<Vec<_>>(),
+            SATELLITE_VARIABLE_IDS,
+            "the channels then the guns, in the fixture's order"
+        );
+        assert_eq!(
+            fixture["bundles"],
+            json!({ DUST_RGB_BUNDLE_ID: DUST_RGB_COMPONENT_IDS }),
+            "the composite bundle's components"
+        );
         let himawari = crate::encode::sources::source_spec("himawari").expect("himawari");
         for (variable_id, entry) in entries {
-            let spec = variable_spec(&variable_id).unwrap_or_else(|_| panic!("{variable_id}"));
+            let spec = variable_spec(variable_id).unwrap_or_else(|_| panic!("{variable_id}"));
             assert_eq!(json!(spec.label), entry["label"], "{variable_id}");
             assert_eq!(json!(spec.output_unit), entry["unit"], "{variable_id}");
             assert_eq!(
@@ -1183,29 +1368,43 @@ mod tests {
                 entry["parameter"],
                 "{variable_id} GRIB2 identity"
             );
-            let (_, band) = himawari
-                .bands
-                .iter()
-                .find(|(band_id, _)| *band_id == variable_id)
-                .unwrap_or_else(|| panic!("{variable_id}: the himawari source publishes it"));
-            assert_eq!(Value::Object(band.metadata()), entry["band"]["himawari"], "{variable_id} band");
+            let gun = DUST_RGB_COMPONENT_IDS.contains(&variable_id.as_str());
+            assert_eq!(SATELLITE_CHANNEL_IDS.contains(&variable_id.as_str()), !gun, "{variable_id}");
+            if gun {
+                assert_eq!(json!({ "id": spec.producer_id }), entry["producer"], "{variable_id} producer");
+                assert!(entry.get("band").is_none(), "{variable_id}: a composite has no band");
+                assert!(himawari.bands.iter().all(|(band_id, _)| band_id != variable_id));
+            } else {
+                assert!(spec.producer_id.is_none(), "{variable_id}: measured, not produced");
+                assert!(entry.get("producer").is_none(), "{variable_id}");
+                let (_, band) = himawari
+                    .bands
+                    .iter()
+                    .find(|(band_id, _)| band_id == variable_id)
+                    .unwrap_or_else(|| panic!("{variable_id}: the himawari source fetches it"));
+                assert_eq!(Value::Object(band.metadata()), entry["band"]["himawari"], "{variable_id} band");
+            }
             for (profile, key) in [("quality", "quality"), ("compact", "compact"), ("balanced", "quality")] {
-                let book = codebook(profile, &variable_id)
+                let book = codebook(profile, variable_id)
                     .unwrap_or_else(|error| panic!("{variable_id} {profile}: {error}"));
                 assert_eq!(Value::Object(book.metadata()), entry[key], "{variable_id} {profile} codebook");
                 // The cells outside the disk become the bottom of the
                 // codebook, so that must be the value the registry says.
                 let linear = book.as_linear().expect("linear");
-                assert_eq!(linear.minimum, f64::from(spec.value_range.0), "{variable_id}");
+                assert_eq!(linear.minimum, spec.value_range.0, "{variable_id}");
             }
             // Never a GRIB record: nothing to match on.
             assert!(spec.grib_element.is_empty() && spec.grib2_aliases.is_empty(), "{variable_id}");
         }
         // The published grid is the platform's region at the step, past
-        // the antimeridian.
+        // the antimeridian; the four channels are fetched, one is published
+        // as a scalar and the composite beside it.
         assert_eq!(himawari.production_grid, (3000, 3000));
         assert!(himawari.series_file && himawari.observation);
         assert_eq!(himawari.cadence_seconds, Some(600));
+        assert_eq!(himawari.input_variable_ids, SATELLITE_CHANNEL_IDS);
+        assert_eq!(himawari.bundle_scalar_ids, &["ir104"]);
+        assert_eq!(himawari.bundle_composite_ids, &[DUST_RGB_BUNDLE_ID]);
     }
 
     /// `tests/fixtures/pressure-registry.json`, the committed golden the

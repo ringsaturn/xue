@@ -326,6 +326,10 @@
             <span>128</span><span>40</span><span>20</span><span>5</span><span>1</span><span>0</span>
           </div>
         </div>
+        <!-- A picture's key (the Dust RGB): one swatch per thing the
+             composite makes a colour of, in place of the bar and its ticks;
+             written by main.ts, hidden for every ramp. -->
+        <ul id="legend-key" class="legend-key" hidden></ul>
         <!-- The experimental composite's derived layers (?x=true), each a
              swatch in its own tint beside its name; hidden otherwise. -->
         <ul id="legend-derived" class="legend-derived" hidden>
@@ -395,8 +399,11 @@
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphDswrf">S</b>
           <span class="rail-name"><span>SOLAR</span> <small data-i18n="varSolar">FLUX</small></span>
         </button>
-        <!-- The satellite imagery: the disk with a cloud over it. -->
-        <button type="button" data-variable="ir104" data-i18n-tip="varLabelIr104" aria-pressed="false" hidden>
+        <!-- The satellite pictures: the disk with a cloud over it. A family
+             tile — the infrared window heads it and the Dust RGB composite
+             is its variant, so a second press cycles between the two
+             (levels.ts). -->
+        <button type="button" data-variable="ir104" data-family="satellite" data-i18n-tip="tipSatellite" aria-pressed="false" hidden>
           <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5" /><path d="M6.5 14.5h8a2.5 2.5 0 0 0 .3-5A3.8 3.8 0 0 0 7.6 9.4 2.6 2.6 0 0 0 6.5 14.5z" fill="currentColor" stroke="none" /><path d="M3.5 12h2M18.5 12h2" /></svg>
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphIr104">I</b>
           <span class="rail-name"><span>SAT</span> <small data-i18n="varInfrared">IR 10.4</small></span>

@@ -10,7 +10,7 @@ use serde_json::{json, Map, Value};
 use time::OffsetDateTime;
 
 use crate::encode::binformat::HOUR_SECONDS;
-use crate::encode::errors::Result;
+use crate::encode::errors::{EncodeError, Result};
 use crate::encode::grid::GridInfo;
 use crate::encode::quantize::codebook;
 use crate::encode::sources::SourceSpec;
@@ -74,11 +74,15 @@ fn time_metadata(offsets: &[i64], unit_seconds: i64) -> Map<String, Value> {
 /// `numeric_id` is the file-local `variableId` handle that ties this
 /// descriptor to the index (docs/format.md): the variable's 1-based position
 /// in the bundle's variable list, assigned by [`build_metadata`].
+/// `producers` is what the observation series was stamped with, by variable
+/// id: a produced variable's `producer` block is its registered id and that
+/// version (docs/format.md §"Band and Producer").
 fn variable_metadata(
     variable_id: &str,
     numeric_id: u8,
     source: &SourceSpec,
     profile: &str,
+    producers: &[(String, (String, String))],
 ) -> Result<Value> {
     let spec = variable_spec(variable_id)?;
     let mut parameter = spec.parameter_metadata();
@@ -105,6 +109,21 @@ fn variable_metadata(
         // which channel of which instrument this one is.
         block.insert("band".into(), Value::Object(band.metadata()));
     }
+    if let Some(registered) = spec.producer_id {
+        // A composite's gun: the algorithm that derived it, whose version is
+        // the series' stamp (the fetch stage ran it; the converter did not).
+        let stamp = producers
+            .iter()
+            .find(|(id, _)| id == variable_id)
+            .map(|(_, stamp)| stamp)
+            .filter(|(id, _)| id == registered)
+            .ok_or_else(|| {
+                EncodeError::conversion(format!(
+                    "{variable_id} must be stamped by producer '{registered}' to be written"
+                ))
+            })?;
+        block.insert("producer".into(), json!({ "id": stamp.0, "version": stamp.1 }));
+    }
     block.insert(
         "quantization".into(),
         Value::Object(codebook(profile, variable_id)?.metadata()),
@@ -112,6 +131,7 @@ fn variable_metadata(
     Ok(Value::Object(block))
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn build_metadata(
     run_time: OffsetDateTime,
     offsets: &[i64],
@@ -120,6 +140,7 @@ pub fn build_metadata(
     variable_ids: &[&str],
     source: &SourceSpec,
     unit_seconds: i64,
+    producers: &[(String, (String, String))],
 ) -> Result<Value> {
     let mut block = Map::new();
     block.insert("schemaVersion".into(), json!(METADATA_SCHEMA_VERSION));
@@ -140,7 +161,7 @@ pub fn build_metadata(
                 .iter()
                 .enumerate()
                 .map(|(index, variable_id)| {
-                    variable_metadata(variable_id, index as u8 + 1, source, profile)
+                    variable_metadata(variable_id, index as u8 + 1, source, profile, producers)
                 })
                 .collect::<Result<Vec<_>>>()?,
         ),
@@ -239,7 +260,7 @@ mod tests {
         let source = source_spec("gfs").expect("gfs");
         let grid = GridInfo::new(16, 8, -180.0, 90.0, 22.5, -22.5);
         let run_time = time::macros::datetime!(2026-08-14 06:00:00 UTC);
-        let uniform = build_metadata(run_time, &[0, 1, 2], &grid, "quality", &["tmp2m"], source, 3600)
+        let uniform = build_metadata(run_time, &[0, 1, 2], &grid, "quality", &["tmp2m"], source, 3600, &[])
             .expect("metadata");
         let text = serde_json::to_string(&uniform).expect("json");
         assert!(text.starts_with(r#"{"schemaVersion":3,"model":"GFS","product":"pgrb2.0p25""#));
@@ -247,7 +268,7 @@ mod tests {
         assert!(text.contains(r#""parameter":{"discipline":0,"parameterCategory":0,"parameterNumber":0,"typeOfFirstFixedSurface":103,"scaleFactorOfFirstFixedSurface":0,"scaledValueOfFirstFixedSurface":2}"#));
 
         // A mixed-cadence axis lists its offsets rather than declaring a step.
-        let mixed = build_metadata(run_time, &[0, 1, 2, 5], &grid, "quality", &["tmp2m"], source, 3600)
+        let mixed = build_metadata(run_time, &[0, 1, 2, 5], &grid, "quality", &["tmp2m"], source, 3600, &[])
             .expect("metadata");
         let text = serde_json::to_string(&mixed).expect("json");
         assert!(text.contains(r#""frameOffsets":[0,1,2,5]"#));
@@ -266,12 +287,12 @@ mod tests {
         )];
         let grid = GridInfo::new(16, 8, -180.0, 90.0, 22.5, -22.5);
         let run_time = time::macros::datetime!(2026-08-14 06:00:00 UTC);
-        let metadata = build_metadata(run_time, &[0, 1], &grid, "quality", &["cref"], &source, 360)
+        let metadata = build_metadata(run_time, &[0, 1], &grid, "quality", &["cref"], &source, 360, &[])
             .expect("metadata");
         let text = serde_json::to_string(&metadata).expect("json");
         assert!(text.contains(r#"},"band":{"satelliteSeries":0,"satelliteNumber":174,"instrumentType":297,"scaleFactorOfCentralWaveNumber":0,"scaledValueOfCentralWaveNumber":96061},"quantization":{"#));
         crate::decode::metadata::parse_metadata(text.as_bytes()).expect("the decoder reads it back");
-        let plain = build_metadata(run_time, &[0, 1], &grid, "quality", &["cref"], source_spec("cma").unwrap(), 360)
+        let plain = build_metadata(run_time, &[0, 1], &grid, "quality", &["cref"], source_spec("cma").unwrap(), 360, &[])
             .expect("metadata");
         assert!(!serde_json::to_string(&plain).unwrap().contains("band"));
     }
@@ -283,7 +304,7 @@ mod tests {
         for (model, expected) in [("gfs", false), ("ecmwf", true), ("sflux", true)] {
             let source = source_spec(model).expect("source");
             let metadata =
-                build_metadata(run_time, &[3], &grid, "quality", &["prate"], source, 3600)
+                build_metadata(run_time, &[3], &grid, "quality", &["prate"], source, 3600, &[])
                     .expect("metadata");
             let text = serde_json::to_string(&metadata).expect("json");
             assert_eq!(

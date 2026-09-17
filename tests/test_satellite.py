@@ -1,6 +1,6 @@
-"""The satellite source: Himawari-9's 10.4 µm infrared window, an
-observation fetched from NOAA's bucket as ISatSS tiles and reprojected in
-the fetch stage.
+"""The satellite source: Himawari-9's infrared windows, an observation
+fetched from NOAA's bucket as ISatSS tiles and reprojected in the fetch
+stage, and the Dust RGB composed from four of them there.
 
 What is new with it. A source named by its orbital role, whose spacecraft
 and channel are the optional ``band`` block beside the variable's
@@ -13,9 +13,18 @@ source is a ``series_file`` observation like the JMA nowcast, and both
 encoders read it unchanged. A published grid that crosses the
 antimeridian (80.7°E to 200.7°E).
 
-``tests/fixtures/himawari/`` is four real tiles: T020 and T021 of the
-03:00 and 03:10 UTC scans of 2026-09-17, the western Pacific south of Japan.
-The bucket is stood in for by a listing and a download built from them.
+What came with the composite. A window of several channels, each warped
+and cached per slot; a producer (``xuebuild/satellite/producers.py``) run
+per slot on the warped channels, its outputs cached as frames of their
+own; one series file per variable, the produced ones stamped with the
+producer's id and version; an observation ingest that reads several
+variables with their own packing; a composite bundle of three variables
+whose ``producer`` block sits beside a local-use ``parameter``.
+
+``tests/fixtures/himawari/`` is sixteen real tiles: T020 and T021 of the
+03:00 and 03:10 UTC scans of 2026-09-17 in bands 11, 13, 14 and 15 (8.6,
+10.4, 11.2 and 12.3 µm), the western Pacific south of Japan. The bucket
+is stood in for by a listing and a download built from them.
 """
 
 from __future__ import annotations
@@ -56,17 +65,27 @@ from xuebuild.satellite import HIMAWARI, PLATFORMS, platform
 from xuebuild.satellite import assemble, readers
 from xuebuild.satellite import fetch as satellite_fetch
 from xuebuild.satellite.platforms import ABI_CHANNELS, AHI_CHANNELS, GOES_EAST
+from xuebuild.satellite.producers import PRODUCERS, DustRGBProducer
 from xuebuild.satellite.projector import GdalWarpProjector, TargetGrid
 from xuebuild.satellite.readers import ISatSSReader, parse_isatss_key
 from xuebuild.sources import SOURCES, SatelliteBand, source_spec
 from xuebuild.stac import _source_prose
-from xuebuild.variables import SATELLITE_VARIABLE_IDS, variable_spec
+from xuebuild.variables import (
+    DUST_RGB_BUNDLE_ID,
+    DUST_RGB_COMPONENT_IDS,
+    SATELLITE_CHANNEL_IDS,
+    SATELLITE_VARIABLE_IDS,
+    variable_spec,
+)
 
 FIXTURES = Path(__file__).parent / "fixtures"
 TILES = FIXTURES / "himawari"
 REGISTRY = FIXTURES / "satellite-registry.json"
 SPEC = source_spec("himawari")
 IR104 = HIMAWARI.channel("ir104")
+#: The four channels the source fetches, in source order.
+CHANNELS = tuple(HIMAWARI.channel(channel_id) for channel_id in SPEC.input_variable_ids)
+DUST = PRODUCERS[DUST_RGB_BUNDLE_ID]
 #: The fixture's two slots.
 SLOT_0300 = datetime(2026, 9, 17, 3, 0, tzinfo=UTC)
 SLOT_0310 = datetime(2026, 9, 17, 3, 10, tzinfo=UTC)
@@ -90,6 +109,29 @@ def fixture_keys() -> dict[str, Path]:
         assert parsed is not None, path.name
         keys[f"{HIMAWARI.prefix}/{parsed.start:%Y/%m/%d/%H%M}/{path.name}"] = path
     return keys
+
+
+def registry_document() -> dict[str, object]:
+    """The satellite registry as this encoder describes it: every channel
+    and gun with its label, unit, parameter, band (channels, per platform)
+    or producer id (guns), and codebooks; then each composite bundle's
+    components in order. tests/fixtures/satellite-registry.json is this."""
+    variables: dict[str, object] = {}
+    for variable_id in SATELLITE_VARIABLE_IDS:
+        spec = variable_spec(variable_id)
+        entry: dict[str, object] = {
+            "label": spec.label,
+            "unit": spec.output_unit,
+            "parameter": spec.parameter_metadata(),
+        }
+        if spec.producer_id is not None:
+            entry["producer"] = {"id": spec.producer_id}
+        else:
+            entry["band"] = {"himawari": HIMAWARI.band(variable_id).metadata()}
+        entry["quality"] = PROFILES["quality"][variable_id].metadata()
+        entry["compact"] = PROFILES["compact"][variable_id].metadata()
+        variables[variable_id] = entry
+    return {"variables": variables, "bundles": {bundle_id: list(ids) for bundle_id, ids in binconvert.COMPOSITE_BUNDLES.items()}}
 
 
 def bucket(keys: dict[str, Path], *, sizes: dict[str, int] | None = None) -> tuple[Callable[[str], str], Callable[[str], bytes]]:
@@ -124,22 +166,9 @@ def bucket(keys: dict[str, Path], *, sizes: dict[str, int] | None = None) -> tup
 class RegistryTests(unittest.TestCase):
     def test_the_committed_registry_still_describes_this_encoder(self) -> None:
         expected = json.loads(REGISTRY.read_text(encoding="utf-8"))
-        actual = {}
-        for variable_id in SATELLITE_VARIABLE_IDS:
-            spec = variable_spec(variable_id)
-            actual[variable_id] = {
-                "label": spec.label,
-                "unit": spec.output_unit,
-                "parameter": spec.parameter_metadata(),
-                "band": {"himawari": HIMAWARI.band(variable_id).metadata()},
-                "quality": PROFILES["quality"][variable_id].metadata(),
-                "compact": PROFILES["compact"][variable_id].metadata(),
-            }
-        self.assertEqual(
-            actual,
-            expected,
+        self.assertEqual(registry_document(), expected,
             "the satellite registry moved; the Rust encoder and the frontend read the same "
-            "fixture, so regenerate it deliberately and change all three",
+            "fixture, so regenerate it deliberately (tests/prepare_satellite_registry.py) and change all three",
         )
 
     def test_brightness_temperature_is_the_top_of_atmosphere_parameter(self) -> None:
@@ -149,7 +178,7 @@ class RegistryTests(unittest.TestCase):
         self.assertIsNone(parameter["scaledValueOfFirstFixedSurface"])
 
     def test_the_code_space_is_spent_and_the_bottom_is_the_fill(self) -> None:
-        for variable_id in SATELLITE_VARIABLE_IDS:
+        for variable_id in SATELLITE_CHANNEL_IDS:
             quality = PROFILES["quality"][variable_id]
             compact = PROFILES["compact"][variable_id]
             self.assertEqual(compact.step, quality.step * 2)
@@ -162,18 +191,54 @@ class RegistryTests(unittest.TestCase):
         codes = PROFILES["quality"]["ir104"].quantize(np.array([180.0, 185.0, 330.0, 331.8]))
         self.assertEqual(codes.tolist(), [0, 8, 250, 253])
 
+    def test_a_gun_is_a_local_use_parameter_with_the_producer_registered(self) -> None:
+        """A composite has no GRIB2 parameter: each gun takes a local-use
+        number (discipline 3, category 192) that means nothing without the
+        producer, so the producer id is on the registry row and the block
+        beside the parameter (written from the series' stamp) is what a
+        reader keys on. One codebook for every profile, with code 0 one
+        step below zero: "no data" for all three guns at once, so that
+        black stays a value."""
+        for number, gun_id in enumerate(DUST_RGB_COMPONENT_IDS, start=1):
+            spec = variable_spec(gun_id)
+            parameter = spec.parameter_metadata()
+            self.assertEqual((parameter["discipline"], parameter["parameterCategory"], parameter["parameterNumber"]), (3, 192, number))
+            self.assertEqual(parameter["typeOfFirstFixedSurface"], 8)
+            self.assertEqual((spec.producer_id, spec.output_unit, spec.value_range), ("shachen", "1", (-0.004, 1)))
+            for profile in PROFILES:
+                codebook = PROFILES[profile][gun_id]
+                self.assertEqual(
+                    codebook.metadata(),
+                    {"type": "linear", "offset": -0.004, "scale": 0.004, "minimumCode": 0, "maximumCode": 251, "nodataCode": 255},
+                )
+        self.assertIsNone(variable_spec("ir104").producer_id)
+        codes = PROFILES["quality"]["dustr"].quantize(np.array([-0.004, 0.0, 0.5, 1.0]))
+        self.assertEqual(codes.tolist(), [0, 1, 126, 251])
+        self.assertEqual(PROFILES["quality"]["dustr"].decode(np.array([1, 251], dtype=np.uint8)).tolist(), [0.0, 1.0])
+        self.assertEqual(binconvert.COMPOSITE_BUNDLES, {"dustrgb": ("dustr", "dustg", "dustb")})
+        self.assertEqual(binconvert.bundle_variable_ids("dustrgb"), DUST_RGB_COMPONENT_IDS)
+        self.assertEqual(binconvert.bundle_variable_ids("ir104"), ("ir104",))
+
     def test_the_source_is_a_satellite_series_file_observation(self) -> None:
         self.assertTrue(SPEC.observation and SPEC.series_file and SPEC.fetched and SPEC.live)
         self.assertEqual((SPEC.platform, SPEC.grid_step, SPEC.cadence_seconds, SPEC.window_hours), ("himawari", 0.04, 600, 6))
-        self.assertEqual((SPEC.input_variable_ids, SPEC.bundle_scalar_ids, SPEC.core_bundle_ids), (("ir104",),) * 3)
+        self.assertEqual(SPEC.input_variable_ids, ("ir086", "ir104", "ir112", "ir123"))
+        self.assertEqual((SPEC.bundle_scalar_ids, SPEC.bundle_composite_ids, SPEC.core_bundle_ids), (("ir104",), ("dustrgb",), ("ir104",)))
+        self.assertEqual(binconvert.published_bundle_ids(SPEC), ("ir104", "dustrgb"))
+        # The composite's inputs, for the fetch, are the channels its
+        # producer reads; a source that fetched fewer would not publish it.
+        self.assertEqual(binconvert.bundle_input_ids(SPEC, "dustrgb"), ("ir086", "ir104", "ir112", "ir123"))
+        fewer = dataclasses.replace(SPEC, input_variable_ids=("ir104",))
+        self.assertEqual(binconvert.published_bundle_ids(fewer), ("ir104",))
         self.assertEqual((SPEC.manifest_model, SPEC.latest_filename), ("HIMAWARI", "latest-himawari.json"))
         self.assertEqual([spec.id for spec in SOURCES.values() if spec.platform], ["himawari"])
 
     def test_the_source_band_is_the_platform_s(self) -> None:
-        self.assertEqual(SPEC.bands, (("ir104", HIMAWARI.band("ir104")),))
-        band = SPEC.bands[0][1]
+        self.assertEqual([band_id for band_id, _ in SPEC.bands], ["ir086", "ir104", "ir112", "ir123"])
+        band = dict(SPEC.bands)["ir104"]
         self.assertEqual(band, SatelliteBand(satellite_series=0, satellite_number=174, instrument_type=297, central_wavenumber=96086))
         self.assertEqual(round(1e6 / band.central_wavenumber, 2), 10.41)
+        self.assertEqual(dict(SPEC.bands)["ir123"].central_wavenumber, 80772)
 
     def test_the_production_grid_is_the_platform_region_at_the_step(self) -> None:
         grid = satellite_grid(SPEC)
@@ -264,7 +329,7 @@ class ListingTests(unittest.TestCase):
         objects = self.reader.list_slot(HIMAWARI, IR104, SLOT_0300, fetch=self.listing)
         self.assertEqual([item.tile for item in objects], [20, 21])
         reissued = dict(self.keys)
-        key = next(k for k in self.keys if "0300/" in k and "-T020_" in k)
+        key = next(k for k in self.keys if "0300/" in k and "-M1C13-T020_" in k)
         later = key.replace("_c20262600308160", "_c20262600309000")
         reissued[later] = self.keys[key]
         listing, _ = bucket(reissued)
@@ -326,17 +391,26 @@ class FetchTests(unittest.TestCase):
         self.downloads.append(url)
         return self.download(url)
 
-    def fetch_window(self, *, force: bool = False, listing: Callable[[str], str] | None = None, grid: TargetGrid = TILE_GRID):
+    def fetch_window(
+        self,
+        *,
+        force: bool = False,
+        listing: Callable[[str], str] | None = None,
+        grid: TargetGrid = TILE_GRID,
+        channels: tuple = (IR104,),
+        producers: tuple = (),
+    ):
         return satellite_fetch.fetch_window(
             TWO_TILES,
-            IR104,
+            channels,
             SLOT_0300,
             1,
             grid=grid,
             raw_root=self.root,
             destination=self.root / "himawari.2026091703",
-            series_name="himawari.2026091703.nc",
-            unit="K",
+            series_stem="himawari.2026091703",
+            units={channel.id: "K" for channel in channels},
+            producers=producers,
             force=force,
             fetch=listing or self.listing,
             download=self.download_counting,
@@ -344,7 +418,9 @@ class FetchTests(unittest.TestCase):
 
     def test_a_slot_is_warped_once_and_read_from_the_cache_after(self) -> None:
         window = self.fetch_window()
-        self.assertEqual([(frame.slot, frame.tiles) for frame in window.frames], [(SLOT_0300, 2), (SLOT_0310, 2)])
+        self.assertEqual([(item.slot, item.tiles) for item in window.slots], [(SLOT_0300, 2), (SLOT_0310, 2)])
+        self.assertEqual(list(window.series), ["ir104"])
+        self.assertEqual(window.series["ir104"], self.root / "himawari.2026091703" / "himawari.2026091703.ir104.nc")
         self.assertEqual(len(self.downloads), 4)
         frames = sorted(path.name for path in (self.root / "himawari-frames" / "ir104").iterdir())
         self.assertEqual(
@@ -362,21 +438,72 @@ class FetchTests(unittest.TestCase):
         packing = json.loads((self.root / "himawari-frames" / "ir104" / "ir104_20260917030000.json").read_text())
         self.assertEqual((packing["scale"], packing["offset"], packing["unit"]), (0.064208984375, 69.0, "kelvin"))
         self.assertEqual((packing["tiles"], len(packing["keys"]), packing["projector"]), (2, 2, "gdalwarp"))
-        self.assertEqual(assemble.frame_packing(window.frames[0].path), assemble.Packing(0.064208984375, 69.0, "kelvin"))
+        self.assertEqual(assemble.frame_packing(window.slots[0].frames["ir104"]), assemble.Packing(0.064208984375, 69.0, "kelvin"))
         # The tiles are gone, the frames stay, and the next round downloads
         # nothing.
         again = self.fetch_window()
-        self.assertEqual([frame.tiles for frame in again.frames], [0, 0])
+        self.assertEqual([item.tiles for item in again.slots], [0, 0])
         self.assertEqual(len(self.downloads), 4)
         # Forced, the frames are warped again from fresh tiles.
         forced = self.fetch_window(force=True)
-        self.assertEqual([frame.tiles for frame in forced.frames], [2, 2])
+        self.assertEqual([item.tiles for item in forced.slots], [2, 2])
         self.assertEqual(len(self.downloads), 8)
-        self.assertTrue(filecmp.cmp(window.series, forced.series, shallow=False), "a frame is a pure function of its tiles")
+        self.assertTrue(filecmp.cmp(window.series["ir104"], forced.series["ir104"], shallow=False), "a frame is a pure function of its tiles")
+
+    def test_a_window_of_four_channels_composes_the_dust_rgb_per_slot(self) -> None:
+        """Every channel of a slot is warped and cached on its own; the
+        producer then runs once on the slot's four planes and its three
+        guns are cached as frames beside them, so the next round reads
+        everything back and composes nothing. A slot one channel lacks is
+        left out whole, and every series carries the same axis."""
+        window = self.fetch_window(channels=CHANNELS, producers=(DUST,))
+        self.assertEqual([(item.slot, item.tiles) for item in window.slots], [(SLOT_0300, 8), (SLOT_0310, 8)])
+        self.assertEqual(len(self.downloads), 16)
+        self.assertEqual(list(window.series), ["ir086", "ir104", "ir112", "ir123", "dustr", "dustg", "dustb"])
+        self.assertEqual(list(window.slots[0].frames), list(window.series))
+        self.assertEqual(sorted(path.name for path in (self.root / "himawari-frames").iterdir()), sorted(window.series))
+        gun = window.slots[0].frames["dustg"]
+        self.assertEqual(gun, self.root / "himawari-frames" / "dustg" / "dustg_20260917030000.tif")
+        packing = json.loads(assemble.packing_path(gun).read_text(encoding="utf-8"))
+        self.assertEqual((packing["scale"], packing["offset"], packing["unit"]), (0.0001, 0.0, "1"))
+        self.assertEqual(packing["producer"], {"id": "shachen", "version": DUST.version})
+        self.assertEqual(packing["inputs"], [f"{channel.id}_20260917030000.tif" for channel in CHANNELS])
+        self.assertEqual(assemble.frame_packing(gun).producer, ("shachen", DUST.version))
+        # The guns are shachen's, cell for cell: the frame holds them to four
+        # decimals, and the cells the disk does not cover are no data in all
+        # three.
+        planes = {channel.id: assemble.read_frame(window.slots[0].frames[channel.id], TILE_GRID) for channel in CHANNELS}
+        expected = DUST.run(HIMAWARI, planes, {})
+        covered = np.isfinite(planes["ir104"])
+        self.assertGreater(float(covered.mean()), 0.5)
+        for gun_id in DUST_RGB_COMPONENT_IDS:
+            actual = assemble.read_frame(window.slots[0].frames[gun_id], TILE_GRID)
+            self.assertEqual(np.isfinite(actual).tolist(), covered.tolist())
+            np.testing.assert_allclose(actual[covered], expected[gun_id][covered], atol=0.00005 + 1e-12)
+            self.assertGreaterEqual(float(actual[covered].min()), 0.0)
+            self.assertLessEqual(float(actual[covered].max()), 1.0)
+        # Composed once: the next round reads the cache and runs no producer.
+        with mock.patch.object(DustRGBProducer, "run", side_effect=AssertionError("recomposed")):
+            again = self.fetch_window(channels=CHANNELS, producers=(DUST,))
+        self.assertEqual([item.tiles for item in again.slots], [0, 0])
+        for variable_id, path in window.series.items():
+            self.assertTrue(filecmp.cmp(path, again.series[variable_id], shallow=False), variable_id)
+        # A slot one channel lacks is left out of every series.
+        partial = {k: v for k, v in self.keys.items() if not ("0310/" in k and "-M1C15-T021_" in k)}
+        listing, _ = bucket(partial)
+        shutil.rmtree(self.root / "himawari-frames")
+        short = self.fetch_window(channels=CHANNELS, producers=(DUST,), listing=listing)
+        self.assertEqual([item.slot for item in short.slots], [SLOT_0300])
+        series = observation.inspect_observation(self.root / "himawari.2026091703", SPEC, ("ir104", *DUST_RGB_COMPONENT_IDS))
+        self.assertEqual(series.lead_seconds, [0])
+        # A producer whose channels the window does not fetch is refused
+        # before anything is downloaded.
+        with self.assertRaisesRegex(ConversionError, "does not fetch"):
+            self.fetch_window(channels=(IR104,), producers=(DUST,))
 
     def test_a_frame_is_the_tiles_on_the_target_grid(self) -> None:
         window = self.fetch_window()
-        info = json.loads(subprocess.run(["gdalinfo", "-json", "-stats", str(window.frames[0].path)], check=True, capture_output=True, text=True).stdout)
+        info = json.loads(subprocess.run(["gdalinfo", "-json", "-stats", str(window.slots[0].frames["ir104"])], check=True, capture_output=True, text=True).stdout)
         self.assertEqual(info["size"], [600, 325])
         self.assertEqual(info["geoTransform"][:2], [140.0, 0.04])
         band = info["bands"][0]
@@ -393,50 +520,101 @@ class FetchTests(unittest.TestCase):
         partial = {k: v for k, v in self.keys.items() if not ("0310/" in k and "-T021_" in k)}
         listing, _ = bucket(partial)
         window = self.fetch_window(listing=listing)
-        self.assertEqual([frame.slot for frame in window.frames], [SLOT_0300])
+        self.assertEqual([item.slot for item in window.slots], [SLOT_0300])
         self.assertEqual(len(self.downloads), 2)
         with self.assertRaisesRegex(DownloadError, "no complete ir104 slot"):
             self.fetch_window(listing=bucket({})[0], force=True)
 
     def test_a_frame_cached_before_sidecars_is_read_off_its_band(self) -> None:
         window = self.fetch_window()
-        sidecar = assemble.packing_path(window.frames[0].path)
+        frame = window.slots[0].frames["ir104"]
+        sidecar = assemble.packing_path(frame)
         sidecar.unlink()
         # With the sidecar gone the band's own scale and offset stand in
         # (GDAL 3.13 carries them through the warp; the unit may be missing
         # on another version, which is what the sidecar exists for).
-        packing = assemble.frame_packing(window.frames[0].path)
+        packing = assemble.frame_packing(frame)
         self.assertEqual((packing.scale, packing.offset), (0.064208984375, 69.0))
         sidecar.write_text('{"scale": 1}', encoding="utf-8")
         with self.assertRaisesRegex(ConversionError, "not a packing sidecar"):
-            assemble.frame_packing(window.frames[0].path)
+            assemble.frame_packing(frame)
 
     def test_the_series_is_what_the_observation_ingest_reads(self) -> None:
-        window = self.fetch_window()
-        series = observation.inspect_observation(window.series, SPEC)
+        window = self.fetch_window(channels=CHANNELS, producers=(DUST,))
+        wanted = ("ir104", *DUST_RGB_COMPONENT_IDS)
+        # The run directory, one file per variable, resolved by id; or the
+        # one file, for a source with one variable.
+        series = observation.inspect_observation(self.root / "himawari.2026091703", SPEC, wanted)
+        self.assertEqual(list(series.datasets), list(wanted))
+        self.assertEqual(series.datasets["dustr"], observation.netcdf_dataset(window.series["dustr"], "dustr"))
         self.assertEqual(series.lead_seconds, [0, 600])
+        self.assertEqual([list(frames) for frames in series.frames], [list(wanted)] * 2)
         frame = series.frames[0]["ir104"]
         self.assertEqual((frame.run_time, frame.valid_time, frame.unit), (SLOT_0300, SLOT_0300, "K"))
-        self.assertEqual(series.plane_source.fill_replacement, 180)
-        self.assertEqual(series.plane_source.fill_values[0], -32767.0)
-        self.assertTrue(series.plane_source.unscale)
+        self.assertEqual(series.plane_sources["ir104"].fill_replacement, 180)
+        self.assertEqual(series.plane_sources["ir104"].fill_values[0], -32767.0)
+        self.assertTrue(series.plane_sources["ir104"].unscale)
+        # Each variable's own packing and fill: a gun's fill lands one code
+        # below zero, and its producer stamp is read back.
+        gun = series.plane_sources["dustg"]
+        self.assertEqual((gun.fill_replacement, gun.fill_values[0], gun.unscale), (-0.004, -32767.0, True))
+        self.assertAlmostEqual(gun.fill_values[1], -3.2767)
+        self.assertEqual(series.producers, {gun_id: ("shachen", DUST.version) for gun_id in DUST_RGB_COMPONENT_IDS})
+        self.assertEqual(series.frames[1]["dustb"].unit, "1")
+        alone = observation.inspect_observation(window.series["ir104"], SPEC, ("ir104",))
+        self.assertEqual((list(alone.datasets), alone.lead_seconds, alone.producers), (["ir104"], [0, 600], {}))
+        self.assertEqual(observation.series_files(self.root / "himawari.2026091703", ("ir112",)), {"ir112": window.series["ir112"]})
+        # A gun the series does not stamp (or stamps as another producer's)
+        # is refused.
+        unstamped_dir = self.root / "unstamped"
+        for slot in window.slots:
+            frame = slot.frames["dustr"]
+            copy = unstamped_dir / "dustr" / frame.name
+            copy.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy(frame, copy)
+            assemble.write_packing(copy, assemble.Packing(0.0001, 0.0, "1"))
+        unstamped = unstamped_dir / "x.dustr.nc"
+        assemble.write_series(
+            [assemble.Frame(slot=slot.slot, path=unstamped_dir / "dustr" / slot.frames["dustr"].name) for slot in window.slots],
+            variable=assemble.SeriesVariable(id="dustr", unit="1", long_name="unstamped"),
+            platform=HIMAWARI, grid=TILE_GRID, run_time=SLOT_0300, out=unstamped,
+        )
+        with self.assertRaisesRegex(ConversionError, "produced by <nothing>"):
+            observation.inspect_observation(unstamped, SPEC, ("dustr",))
+        with self.assertRaisesRegex(ConversionError, "exactly one series file for prate"):
+            observation.series_files(self.root / "himawari.2026091703", ("ir086", "prate"))
+        with self.assertRaisesRegex(ConversionError, "holds 0"):
+            observation.series_files(self.root, ("ir086",))
 
     def test_the_source_fetch_writes_the_series_and_a_fetch_record(self) -> None:
         with mock.patch.dict(PLATFORMS, {"himawari": TWO_TILES}):
             written = _fetch_satellite_run(
                 SPEC, GfsRun(SLOT_0300), 3, self.root, force=False, input_ids=None, fetch=self.listing, download=self.download
             )
-        self.assertEqual(written, [self.root / "himawari.2026091703" / "himawari.2026091703.nc"])
-        record = json.loads((self.root / "himawari.2026091703" / "fetch.json").read_text(encoding="utf-8"))
+        run_dir = self.root / "himawari.2026091703"
+        self.assertEqual(written, [run_dir / f"himawari.2026091703.{variable_id}.nc" for variable_id in ("ir086", "ir104", "ir112", "ir123", "dustr", "dustg", "dustb")])
+        record = json.loads((run_dir / "fetch.json").read_text(encoding="utf-8"))
         self.assertEqual((record["model"], record["run"], record["hours"], record["cadenceSeconds"]), ("himawari", "2026091703", 3, 600))
         self.assertEqual(record["platform"], "Himawari-9")
         self.assertEqual(record["grid"], {"step": 0.04, "width": 3000, "height": 3000, "firstLongitude": 80.72, "firstLatitude": 59.98})
+        self.assertEqual(record["series"], {variable_id: path.name for variable_id, path in zip(("ir086", "ir104", "ir112", "ir123", "dustr", "dustg", "dustb"), written)})
+        self.assertEqual(record["producers"], [{"bundle": "dustrgb", "id": "shachen", "version": DUST.version, "inputs": ["ir086", "ir104", "ir112", "ir123"]}])
         self.assertEqual([frame["slot"] for frame in record["frames"]], ["2026-09-17T03:00:00Z", "2026-09-17T03:10:00Z"])
-        self.assertEqual([frame["tilesFetched"] for frame in record["frames"]], [2, 2])
-        summary = window_summary(self.root / "himawari.2026091703")
+        self.assertEqual([frame["tilesFetched"] for frame in record["frames"]], [8, 8])
+        self.assertEqual(record["frames"][0]["frames"]["dustr"], "dustr_20260917030000.tif")
+        summary = window_summary(run_dir)
         self.assertEqual((summary["frameCount"], summary["latestSlot"]), (2, "2026-09-17T03:10:00Z"))
         with self.assertRaisesRegex(DownloadError, "publishes"):
             _fetch_satellite_run(SPEC, GfsRun(SLOT_0300), 3, self.root, force=False, input_ids=("cref",), fetch=self.listing)
+        # Asked for one channel, the fetch composes nothing and writes that
+        # channel's series alone.
+        shutil.rmtree(run_dir)
+        with mock.patch.dict(PLATFORMS, {"himawari": TWO_TILES}):
+            alone = _fetch_satellite_run(
+                SPEC, GfsRun(SLOT_0300), 3, self.root, force=False, input_ids=("ir104",), fetch=self.listing, download=self.download
+            )
+        self.assertEqual(alone, [run_dir / "himawari.2026091703.ir104.nc"])
+        self.assertEqual(json.loads((run_dir / "fetch.json").read_text(encoding="utf-8"))["producers"], [])
 
     def test_a_scan_segment_the_product_wrote_as_zero_kelvin_is_no_data(self) -> None:
         """ISatSS writes a segment the instrument never delivered as 0 K,
@@ -503,7 +681,7 @@ class ConversionTests(unittest.TestCase):
         shutil.rmtree(cls.root, ignore_errors=True)
 
     def test_the_bundle_is_the_disk_grid_with_the_band_beside_the_parameter(self) -> None:
-        self.assertEqual([bundle["variable"] for bundle in self.report["bundles"]], ["ir104"])
+        self.assertEqual([bundle["variable"] for bundle in self.report["bundles"]], ["ir104", "dustrgb"])
         manifest = json.loads((self.root / "out" / "manifest.json").read_text(encoding="utf-8"))
         self.assertEqual((manifest["model"], manifest["product"]), ("HIMAWARI", "ahi-fldk-0p04"))
         self.assertEqual(manifest["runTime"], "2026-09-17T03:00:00Z")
@@ -520,6 +698,56 @@ class ConversionTests(unittest.TestCase):
         self.assertEqual(variable["band"], HIMAWARI.band("ir104").metadata())
         self.assertEqual(variable["parameter"]["typeOfFirstFixedSurface"], 8)
         self.assertEqual(bundle.tiles.count, 47 * 47)
+
+    def test_the_composite_is_three_guns_with_the_producer_beside_the_parameter(self) -> None:
+        """The Dust RGB bundle: the three guns as variables 1, 2 and 3 in
+        bundle order, each a local-use parameter with the producer block
+        beside it (the registered id, the version the series was stamped
+        with) and no band; the same axis and grid as the channel; a
+        half-resolution variant and no poster or video."""
+        manifest = json.loads((self.root / "out" / "manifest.json").read_text(encoding="utf-8"))
+        entry = next(bundle for bundle in manifest["bundles"] if bundle["variable"] == "dustrgb")
+        self.assertNotIn("poster", entry)
+        self.assertNotIn("video", entry)
+        self.assertEqual(len(entry["variants"]), 1)
+        self.assertFalse((self.root / "out" / "dustrgb.poster.bin").exists())
+        bundle = read_bundle(self.root / "out" / "dustrgb.xue")
+        self.assertEqual(bundle.metadata["time"], {"unitSeconds": 600, "firstFrameOffset": 0, "frameCount": 2, "frameStep": 1})
+        self.assertEqual(bundle.metadata["grid"], read_bundle(self.root / "out" / "ir104.xue").metadata["grid"])
+        variables = bundle.metadata["variables"]
+        self.assertEqual([(variable["numericId"], variable["id"]) for variable in variables], [(1, "dustr"), (2, "dustg"), (3, "dustb")])
+        for number, variable in enumerate(variables, start=1):
+            self.assertEqual(list(variable), ["numericId", "id", "label", "unit", "parameter", "producer", "quantization"])
+            self.assertEqual(variable["unit"], "1")
+            parameter = variable["parameter"]
+            self.assertEqual((parameter["discipline"], parameter["parameterCategory"], parameter["parameterNumber"]), (3, 192, number))
+            self.assertEqual(parameter["typeOfFirstFixedSurface"], 8)
+            self.assertEqual(variable["producer"], {"id": "shachen", "version": DUST.version})
+            self.assertEqual(variable["quantization"], PROFILES["quality"]["dustr"].metadata())
+        self.assertEqual(bundle.tiles.count, 47 * 47)
+        # Code 0 is no data in every gun exactly where the channel has none,
+        # and inside the disk every gun is a value in 1..251.
+        ir104 = np.asarray(read_bundle(self.root / "out" / "ir104.xue").decode_plane(1, 0)).reshape(3000, 3000)
+        guns = [np.asarray(bundle.decode_plane(number, 0)).reshape(3000, 3000) for number in (1, 2, 3)]
+        for codes in guns:
+            self.assertEqual((codes == 0).tolist() == (ir104 == 0).tolist(), True)
+            inside = codes[ir104 > 0]
+            self.assertGreaterEqual(int(inside.min()), 1)
+            self.assertLessEqual(int(inside.max()), 251)
+        # The guns are shachen's: one covered cell recomputed from the
+        # channel frames the fetch cached agrees to a code.
+        frames_dir = self.root / "himawari-frames"
+        planes = {
+            channel_id: assemble.read_frame(frames_dir / channel_id / f"{channel_id}_20260917030000.tif", satellite_grid(SPEC))
+            for channel_id in SPEC.input_variable_ids
+        }
+        expected = DUST.run(HIMAWARI, planes, {})
+        row, column = 800, 1800
+        self.assertTrue(np.isfinite(planes["ir104"][row, column]))
+        for codes, gun_id in zip(guns, DUST_RGB_COMPONENT_IDS):
+            decoded = PROFILES["quality"][gun_id].decode(codes[row : row + 1, column : column + 1])[0, 0]
+            self.assertAlmostEqual(decoded, float(expected[gun_id][row, column]), delta=0.0021, msg=gun_id)
+        validate_bin_manifest(manifest, expected_hours=1, require_core_variables=True)
 
     def test_the_planes_are_kelvin_with_the_uncovered_disk_at_the_bottom(self) -> None:
         bundle = read_bundle(self.root / "out" / "ir104.xue")
@@ -549,13 +777,33 @@ class ConversionTests(unittest.TestCase):
                 work_root=self.root / "crop-work",
                 bbox=(-175.0, 0.0, -160.0, 10.0),
             )
-        self.assertEqual([bundle["variable"] for bundle in report["bundles"]], ["ir104"])
+        self.assertEqual([bundle["variable"] for bundle in report["bundles"]], ["ir104", "dustrgb"])
         grid = read_bundle(self.root / "crop" / "ir104.xue").metadata["grid"]
         self.assertEqual((grid["width"], grid["height"]), (376, 252))
         self.assertEqual(grid["firstLongitude"], -175.0)
         self.assertFalse(grid["wrapLongitude"])
+        self.assertEqual(read_bundle(self.root / "crop" / "dustrgb.xue").metadata["grid"], grid)
 
-    @unittest.skipUnless(native.knows_source("himawari"), f"the installed {native.DISTRIBUTION} wheel predates the himawari source")
+    def test_a_restricted_build_reads_only_the_bundles_it_was_asked_for(self) -> None:
+        """``--bundles ir104`` reads the channel's series alone — the guns'
+        files may as well not exist — and ``--bundles dustrgb`` the guns'
+        alone, so a build never quantizes a channel nothing publishes."""
+        with mock.patch.dict(os.environ, {"XUE_ENCODER": "python"}):
+            with mock.patch.object(observation, "dataset_info", wraps=observation.dataset_info) as inspected:
+                report = binconvert.convert_bin(
+                    self.inputs, self.root / "only-ir", model="himawari", skip_video=True, skip_variants=True,
+                    work_root=self.root / "only-ir-work", bundle_ids=("ir104",),
+                )
+            self.assertEqual([bundle["variable"] for bundle in report["bundles"]], ["ir104"])
+            self.assertEqual([str(call.args[0]) for call in inspected.call_args_list], [str(observation.netcdf_dataset(self.inputs / "himawari.2026091703.ir104.nc", "ir104"))])
+            report = binconvert.convert_bin(
+                self.inputs, self.root / "only-dust", model="himawari", skip_video=True, skip_variants=True,
+                work_root=self.root / "only-dust-work", bundle_ids=("dustrgb",),
+            )
+        self.assertEqual([bundle["variable"] for bundle in report["bundles"]], ["dustrgb"])
+        self.assertTrue(filecmp.cmp(self.root / "only-dust" / "dustrgb.xue", self.root / "out" / "dustrgb.xue", shallow=False))
+
+    @unittest.skipUnless(native.knows_source("himawari"), f"the installed {native.DISTRIBUTION} wheel predates the himawari source's bundle set")
     def test_the_native_encoder_writes_the_same_bytes(self) -> None:
         if not zstdcli.compresses_in_process():
             self.skipTest("the reference encoder compresses through the zstd CLI")

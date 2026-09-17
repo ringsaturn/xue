@@ -1,4 +1,4 @@
-import type { BundleBand, BundleParameter, BundleVariable, KnownBundleId } from "./manifest";
+import type { BundleBand, BundleParameter, BundleProducer, BundleVariable, KnownBundleId } from "./manifest";
 import { isobaricChartFamily, specForIdentity, variableSpec } from "./variables";
 
 /**
@@ -29,7 +29,9 @@ import { isobaricChartFamily, specForIdentity, variableSpec } from "./variables"
  * height laid along the direction of travel as a u/v pair — and the
  * satellite channels, one family per nominal wavelength: the brightness
  * temperature parameter is the same for every infrared band, and the
- * `band` block beside it says which). */
+ * `band` block beside it says which — and the satellite composites, a
+ * three-gun colour picture a producer derived from several channels, told
+ * apart by the `producer` block and the local-use parameter numbers). */
 export type ChartFamily =
   | "hgt"
   | "tmp"
@@ -58,7 +60,8 @@ export type ChartFamily =
   | "perpw"
   | "dirpw"
   | "wave"
-  | "ir104";
+  | "ir104"
+  | "dustrgb";
 
 export interface VariableIdentity {
   family: ChartFamily;
@@ -75,6 +78,17 @@ function scalar(family: ChartFamily, level: number | null): VariableIdentity {
 
 function vector(family: ChartFamily, level: number | null): VariableIdentity {
   return { family, level, vector: true };
+}
+
+/** The composites: a family whose bundle is three colour guns rather than
+ * one scalar or a u/v pair, drawn straight as red, green and blue. An
+ * identity's `vector` flag is false for them; this is what says the third
+ * texture mode is theirs. */
+const COMPOSITE_FAMILIES: readonly ChartFamily[] = ["dustrgb"];
+
+/** True when an identity names a colour composite (three guns). */
+export function isCompositeIdentity(identity: VariableIdentity | null): boolean {
+  return identity !== null && !identity.vector && COMPOSITE_FAMILIES.includes(identity.family);
 }
 
 export function sameIdentity(a: VariableIdentity | null, b: VariableIdentity | null): boolean {
@@ -228,6 +242,60 @@ export function identityForParameterPair(u: BundleParameter, v: BundleParameter)
   return null;
 }
 
+/** The composites by producer: a produced field's `parameter` is in
+ * GRIB2's local-use range (category 192 and above, docs/format.md §"Band
+ * and Producer"), where a number means nothing without the `producer.id`
+ * beside it, so a composite is named by the producer and the parameter
+ * numbers of its guns together. The Dust RGB is shachen's local numbers
+ * 1, 2 and 3 in the space-products discipline, at the top of the
+ * atmosphere like the channels it is made of. */
+const COMPOSITE_TRIPLES: readonly {
+  family: ChartFamily;
+  producer: string;
+  discipline: number;
+  category: number;
+  guns: readonly [number, number, number];
+}[] = [{ family: "dustrgb", producer: "shachen", discipline: 3, category: 192, guns: [1, 2, 3] }];
+
+/** Whether a parameter is in a local-use category, where only a producer
+ * can say what it is. */
+function isLocalUse(parameter: BundleParameter): boolean {
+  return parameter.parameterCategory >= 192;
+}
+
+/**
+ * The identity of a three-variable bundle whose variables are the guns of
+ * a composite this shell knows, in red, green, blue order, or null. Each
+ * gun must carry the same producer id and sit on the same surface; the
+ * producer's version is not part of the identity.
+ */
+export function identityForProducedTriple(
+  variables: readonly { parameter?: BundleParameter; producer?: BundleProducer }[],
+): VariableIdentity | null {
+  if (variables.length !== 3) return null;
+  const guns: { parameter: BundleParameter; producer: BundleProducer }[] = [];
+  for (const variable of variables) {
+    if (!variable.parameter || !variable.producer) return null;
+    guns.push({ parameter: variable.parameter, producer: variable.producer });
+  }
+  const [r, g, b] = guns as [(typeof guns)[number], (typeof guns)[number], (typeof guns)[number]];
+  const producer = r.producer.id;
+  for (const gun of [g, b]) {
+    if (gun.producer.id !== producer) return null;
+    if (gun.parameter.typeOfFirstFixedSurface !== r.parameter.typeOfFirstFixedSurface) return null;
+    if (surfaceValue(gun.parameter) !== surfaceValue(r.parameter)) return null;
+  }
+  for (const triple of COMPOSITE_TRIPLES) {
+    if (triple.producer !== producer) continue;
+    const matches = [r, g, b].every(
+      (gun, at) =>
+        isLocalUse(gun.parameter) && isTriple(gun.parameter, triple.discipline, triple.category, triple.guns[at]!),
+    );
+    if (matches) return scalar(triple.family, null);
+  }
+  return null;
+}
+
 /**
  * The ids a schemaVersion 1 or 2 file can carry, and what they are. Those
  * files predate the parameter block and are never rebuilt, so this is a
@@ -246,7 +314,8 @@ const LEGACY_IDENTITIES: Record<string, VariableIdentity> = {
 const LEGACY_WIND_COMPONENTS: readonly [string, string] = ["ugrd10m", "vgrd10m"];
 
 /** One bundle's identity plus its variables in the order the renderer wants
- * them (u then v for a vector field, the single variable otherwise). */
+ * them (u then v for a vector field, red, green, blue for a composite, the
+ * single variable otherwise). */
 export interface BundleIdentity {
   identity: VariableIdentity;
   variables: BundleVariable[];
@@ -260,6 +329,13 @@ export interface BundleIdentity {
  */
 export function identifyBundle(variables: readonly BundleVariable[]): BundleIdentity | null {
   if (variables.length === 0) return null;
+  if (variables.length === 3) {
+    // A composite is its three guns in the file's own order: the encoders
+    // number them red, green, blue, and a file that did not could not be
+    // drawn as a picture.
+    const composite = identityForProducedTriple(variables);
+    if (composite) return { identity: composite, variables: [...variables] };
+  }
   if (variables.length >= 2) {
     const [a, b] = variables as [BundleVariable, BundleVariable];
     if (a.parameter && b.parameter) {

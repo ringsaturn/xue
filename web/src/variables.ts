@@ -75,6 +75,11 @@ export interface VariableSpec {
   /** Whether the legend bar is the stylesheet's hand-written gradient
    * (`body[data-variable=…] .legend-bar`) or read off the palette. */
   legendGradient: "stylesheet" | "palette";
+  /** A key of named swatches in place of the bar and its ticks, for a
+   * field that is a picture rather than a ramp (the Dust RGB: what each
+   * colour is a sign of). Localized, so read at use like `label`. Null for
+   * every field whose legend is a gradient. */
+  legendKey: (() => readonly LegendSwatch[]) | null;
   ground: GroundId;
   /** The canonical `?type=` spelling; the id itself is always accepted. */
   urlName: string;
@@ -85,6 +90,26 @@ export interface VariableSpec {
   /** The code a showcase card names the field by. */
   showcaseCode: string;
 }
+
+/** One entry of a swatch key: the colour as CSS and what it stands for. */
+export interface LegendSwatch {
+  color: string;
+  label: string;
+}
+
+/** The Dust RGB's key, the GOES-R Quick Guide's approximate colours: what
+ * the composite makes each thing look like, since the guns are band
+ * differences with no unit to tick. The order is the one a forecaster
+ * reads it in — the signal first, then what it is told apart from. */
+const DUST_RGB_KEY: readonly { color: string; labelKey: MessageKey }[] = [
+  { color: "#e34fb8", labelKey: "legendDustDust" },
+  { color: "#7a1a1a", labelKey: "legendDustThickHigh" },
+  { color: "#141414", labelKey: "legendDustThinHigh" },
+  { color: "#b98b3c", labelKey: "legendDustMid" },
+  { color: "#c8d64a", labelKey: "legendDustLow" },
+  { color: "#9fc0e6", labelKey: "legendDustDesert" },
+  { color: "#2653a8", labelKey: "legendDustSurface" },
+];
 
 interface SurfaceEntry {
   id: KnownBundleId;
@@ -99,6 +124,8 @@ interface SurfaceEntry {
   /** Six fixed ticks, else the chart ceiling's (`isobaricLegend`). */
   legend?: readonly string[];
   legendGradient?: "stylesheet";
+  /** A swatch key in place of the bar (`VariableSpec.legendKey`). */
+  legendKey?: readonly { color: string; labelKey: MessageKey }[];
   floorIsNoData?: boolean;
   ground: GroundId;
   urlName: string;
@@ -121,8 +148,11 @@ function surface(entry: SurfaceEntry): VariableSpec {
     title: entry.title,
     bufferTitle: entry.bufferTitle,
     label: () => t(entry.labelKey),
-    legend: entry.legend ? () => entry.legend! : () => isobaricLegend(identity) ?? [],
+    legend: entry.legend ? () => entry.legend! : entry.legendKey ? () => [] : () => isobaricLegend(identity) ?? [],
     legendGradient: entry.legendGradient ?? "palette",
+    legendKey: entry.legendKey
+      ? () => entry.legendKey!.map((swatch) => ({ color: swatch.color, label: t(swatch.labelKey) }))
+      : null,
     ground: entry.ground,
     urlName: entry.urlName,
     urlAliases: entry.urlAliases ?? [],
@@ -163,6 +193,7 @@ function isobaric(entry: IsobaricEntry): VariableSpec[] {
       label: () => familyLabel(id),
       legend: () => isobaricLegend(identity) ?? [],
       legendGradient: "palette",
+      legendKey: null,
       ground: entry.ground,
       urlName: id,
       urlAliases: entry.urlAliases?.[level] ?? [],
@@ -191,6 +222,7 @@ function pressure(): VariableSpec[] {
       label: () => pressureLabel(id),
       legend: () => pressureLegend(id),
       legendGradient: "palette",
+      legendKey: null,
       ground: "chart",
       urlName: id === "prmsl" ? "pressure" : id,
       // The subtropical high is read off the 500 hPa chart, so the view has
@@ -541,9 +573,11 @@ function buildSpecs(): readonly VariableSpec[] {
   // shows. Outside the disk is the codebook bottom, painted as nothing.
   // The file is in kelvin, the channel's own unit; the legend and every
   // readout show it in Celsius (`units.ts`), like the other temperatures.
+  // It heads the satellite family: one tile, the Dust RGB its variant.
   surface({
     id: "ir104",
     chart: "ir104",
+    family: "satellite",
     group: "satellite",
     code: "IR 10.4",
     title: ["Infrared", "Imagery"],
@@ -556,6 +590,28 @@ function buildSpecs(): readonly VariableSpec[] {
     urlAliases: ["ir", "satellite", "sat", "bt"],
     meteogramCode: "IR",
     showcaseCode: "IR",
+  }),
+  // The Dust RGB: the classic three-gun infrared composite (12.3 − 10.4 µm
+  // as red, 11.2 − 8.6 µm as green, 10.4 µm as blue, each stretched and
+  // the green gamma'd by the producer), drawn straight as colour, so lofted
+  // dust reads pink to magenta over blue-green ground day and night. A
+  // picture, not a ramp: its legend is a key of what each colour is a sign
+  // of, and its guns are unitless stretches with nothing to read at a pin.
+  // Outside the disk every gun is code 0, painted as nothing.
+  surface({
+    id: "dustrgb",
+    chart: "dustrgb",
+    family: "satellite",
+    group: "satellite",
+    code: "DUST RGB",
+    title: ["Dust", "RGB"],
+    bufferTitle: "Imagery buffer",
+    labelKey: "varLabelDustrgb",
+    legendKey: DUST_RGB_KEY,
+    ground: "slate",
+    urlName: "dustrgb",
+    urlAliases: ["dust"],
+    showcaseCode: "DUST RGB",
   }),
   // The lines.
   ...pressure(),

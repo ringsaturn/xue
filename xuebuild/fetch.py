@@ -24,6 +24,7 @@ from pathlib import Path
 from . import cmaarchive, jmacli
 from . import satellite
 from .satellite import fetch as satellite_fetch
+from .satellite import producers as satellite_producers
 from .errors import DownloadError
 from .idx import (
     ByteRange,
@@ -966,9 +967,10 @@ def _satellite_run_is_complete(
     return latest_satellite_slot(spec, fetch=fetch) >= run.time + timedelta(hours=hours)
 
 
-def satellite_frame_name(spec: SourceSpec, run: GfsRun) -> str:
-    """The local name of a window's series file: ``himawari.<run>.nc``."""
-    return f"{spec.id}.{run.id}.nc"
+def satellite_series_stem(spec: SourceSpec, run: GfsRun) -> str:
+    """The stem of a window's series files, one per variable:
+    ``himawari.<run>`` → ``himawari.<run>.ir104.nc``."""
+    return f"{spec.id}.{run.id}"
 
 
 def _fetch_satellite_run(
@@ -991,22 +993,30 @@ def _fetch_satellite_run(
     both alike."""
     if input_ids is not None and any(variable_id not in spec.input_variable_ids for variable_id in input_ids):
         raise DownloadError(f"{spec.manifest_model} publishes {list(spec.input_variable_ids)}, not {list(input_ids)}")
-    if len(spec.input_variable_ids) != 1:
-        raise DownloadError(f"{spec.manifest_model} must publish exactly one channel for now")
     platform = satellite_platform(spec)
-    channel = platform.channel(spec.input_variable_ids[0])
+    channel_ids = spec.input_variable_ids if input_ids is None else tuple(vid for vid in spec.input_variable_ids if vid in input_ids)
+    channels = tuple(platform.channel(channel_id) for channel_id in channel_ids)
+    # A composite is produced when every channel it reads is fetched: the
+    # rule `published_bundle_ids` applies to the source table, applied to
+    # what this fetch was asked for.
+    producers = tuple(
+        satellite_producers.producer_for(bundle_id)
+        for bundle_id in spec.bundle_composite_ids
+        if all(channel_id in channel_ids for channel_id in satellite_producers.producer_for(bundle_id).inputs)
+    )
     grid = satellite_grid(spec)
     destination = raw_root / f"{spec.id}.{run.id}"
     window = satellite_fetch.fetch_window(
         platform,
-        channel,
+        channels,
         run.time,
         hours,
         grid=grid,
         raw_root=raw_root,
         destination=destination,
-        series_name=satellite_frame_name(spec, run),
-        unit=VARIABLES[channel.id].output_unit,
+        series_stem=satellite_series_stem(spec, run),
+        units={channel.id: VARIABLES[channel.id].output_unit for channel in channels},
+        producers=producers,
         force=force,
         fetch=fetch,
         download=download,
@@ -1025,20 +1035,23 @@ def _fetch_satellite_run(
             "firstLongitude": grid.first_longitude,
             "firstLatitude": grid.first_latitude,
         },
-        "series": window.series.name,
+        "series": {variable_id: path.name for variable_id, path in window.series.items()},
+        "producers": [
+            {"bundle": producer.bundle_id, "id": producer.id, "version": producer.version, "inputs": list(producer.inputs)}
+            for producer in producers
+        ],
         "frames": [
             {
-                "path": window.series.name,
-                "slot": frame.slot.strftime("%Y-%m-%dT%H:%M:%SZ"),
-                "frame": frame.path.name,
-                "tilesFetched": frame.tiles,
+                "slot": item.slot.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "frames": {variable_id: path.name for variable_id, path in item.frames.items()},
+                "tilesFetched": item.tiles,
             }
-            for frame in window.frames
+            for item in window.slots
         ],
     }
     (destination / MRMS_FETCH_FILENAME).write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
-    LOG.info("%s run %s: %d frames in %s", spec.manifest_model, run.id, len(window.frames), window.series)
-    return [window.series]
+    LOG.info("%s run %s: %d slots in %d series under %s", spec.manifest_model, run.id, len(window.slots), len(window.series), destination)
+    return list(window.series.values())
 
 
 def model_object_url(run: GfsRun, forecast_hour: int, model: str) -> str:

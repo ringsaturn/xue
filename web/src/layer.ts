@@ -27,6 +27,14 @@ import { WHOLE_PLANE_COVERAGE, type CoverageBox } from "./tiles";
  * is looked up by speed / `maxMagnitude` instead of by code. Every scalar
  * field takes the single-channel path exactly as before.
  *
+ * A third mode draws a colour composite: the Dust RGB arrives as three
+ * planes, one per gun, already stretched by the producer, and the picture
+ * is those guns as red, green and blue with no palette at all. The data
+ * texture is RGB8 (the three guns interleaved, the way the u/v pair is),
+ * each gun reconstructed on its own through the same filter and clamp, and
+ * a cell whose guns sit at the codebook's bottom code — outside the disk,
+ * or where a channel was missing — is painted as nothing.
+ *
  * A plane need not be whole. A container v2 bundle can be decoded for just
  * the tiles a viewport covers, and everything outside them is stale bytes
  * from whatever the decoder held before — so `u_cover` names the part of the
@@ -113,6 +121,14 @@ uniform vec2 u_vector_offset;
 uniform vec2 u_vector_scale;
 uniform float u_vector_max;
 uniform float u_vector_nodata;
+// Composite mode, off (0) for every other field. The data texture then
+// holds three guns (red, green, blue), each with its own linear codebook —
+// gun = offset + code * 255 * scale, clamped to [0, 1] — and the fragment is
+// that colour, opaque. A gun at the bottom code is no data (the codebooks
+// put 0.0 one code above it), and a cell with any gun there is not painted.
+uniform float u_composite;
+uniform vec3 u_composite_offset;
+uniform vec3 u_composite_scale;
 // A regional model's own footprint on its map projection (domain.ts): the
 // encoder's regular grid extends past a conic domain's corners with the
 // nearest cell, and those corners are not a forecast, so they are clipped
@@ -225,6 +241,38 @@ vec2 sampleCodes(sampler2D data, vec2 uv, out bool missing) {
   return clamp(codes, lo, hi);
 }
 
+// The same reconstruction for a composite plane: three guns in three
+// channels, each filtered and clamped on its own from one texture read per
+// tap, and a bottom-code texel in the bilinear support of any gun makes the
+// sample missing, the rule the scalar path applies with u_floor_nodata.
+vec3 sampleGuns(sampler2D data, vec2 uv, out bool missing) {
+  vec2 position = uv * u_size - 0.5;
+  vec2 base = floor(position);
+  vec2 fraction = position - base;
+  vec4 wx = cubicWeights(fraction.x);
+  vec4 wy = cubicWeights(fraction.y);
+  vec3 codes = vec3(0.0);
+  vec3 lo = vec3(1.0);
+  vec3 hi = vec3(0.0);
+  missing = false;
+  for (int row = 0; row < 4; row += 1) {
+    vec3 rowSum = vec3(0.0);
+    for (int column = 0; column < 4; column += 1) {
+      vec2 texel = (base + vec2(float(column - 1), float(row - 1)) + 0.5) / u_size;
+      vec3 value = texture(data, texel).rgb;
+      rowSum += wx[column] * value;
+      if (row >= 1 && row <= 2 && column >= 1 && column <= 2) {
+        lo = min(lo, value);
+        hi = max(hi, value);
+        float weight = (column == 1 ? 1.0 - fraction.x : fraction.x) * (row == 1 ? 1.0 - fraction.y : fraction.y);
+        if (weight > 1.0 / 64.0 && min(value.r, min(value.g, value.b)) < 0.5 / 255.0) missing = true;
+      }
+    }
+    codes += wy[row] * rowSum;
+  }
+  return clamp(codes, lo, hi);
+}
+
 // Coverage of one contour line, anti-aliased to a pixel.
 //
 // "distance" is how far this fragment is from the line in the field's own
@@ -281,7 +329,21 @@ void main() {
   if (!coveredU || v < u_cover.z || v > u_cover.w) discard;
   float code = 0.0;
   vec4 color;
-  if (u_vector > 0.5) {
+  if (u_composite > 0.5) {
+    // The guns are the colour: no palette, and the blend between frames
+    // mixes the reconstructed codes like every other mode does.
+    bool missing = false;
+    vec3 codes = sampleGuns(u_data, vec2(u, v), missing);
+    if (missing) discard;
+    if (u_mix > 0.0) {
+      bool missingB = false;
+      vec3 codesB = sampleGuns(u_data_b, vec2(u, v), missingB);
+      if (missingB) discard;
+      codes = mix(codes, codesB, u_mix);
+    }
+    vec3 guns = clamp(u_composite_offset + codes * 255.0 * u_composite_scale, 0.0, 1.0);
+    color = vec4(guns, 1.0);
+  } else if (u_vector > 0.5) {
     // u and v are reconstructed separately and only then combined, so what
     // the bicubic filter interpolates is the wind vector rather than a speed:
     // two opposing 10 m/s cells read as the calm between them, which is what
@@ -450,6 +512,17 @@ export interface VectorField {
   maxMagnitude: number;
 }
 
+/** A three-gun colour composite drawn as itself: the Dust RGB, whose plane
+ * carries the red, green and blue guns interleaved, each with its own
+ * linear codebook. The shader clamps each dequantized gun to [0, 1] and
+ * paints the colour; the codebooks' bottom code is no data in every gun. */
+export interface CompositeField {
+  /** Dequantization per gun: `value = offset + code * scale`, straight off
+   * each gun's linear codebook. */
+  offset: readonly [number, number, number];
+  scale: readonly [number, number, number];
+}
+
 /** The two textures one frame slot owns, and what each currently holds. The
  * raw plane is what the decoder produced; the smoothed one is derived from
  * it by the prerender pass, and is only as current as its bookkeeping says. */
@@ -506,6 +579,8 @@ export class ForecastLayer implements CustomLayerInterface {
   /** Magnitude mode, off by default: a plane is one code per cell unless a
    * vector field says otherwise. */
   private vector: VectorField | null = null;
+  /** Composite mode, off by default: three guns per cell, drawn as colour. */
+  private composite: CompositeField | null = null;
 
   private width = 0;
   private height = 0;
@@ -575,6 +650,7 @@ export class ForecastLayer implements CustomLayerInterface {
       "u_mix", "u_wrap", "u_cover", "u_decode", "u_floor_nodata", "u_contour", "u_contour_values",
       "u_contour_value_count", "u_line_color", "u_fill_alpha",
       "u_vector", "u_vector_offset", "u_vector_scale", "u_vector_max", "u_vector_nodata",
+      "u_composite", "u_composite_offset", "u_composite_scale",
       ...DOMAIN_UNIFORM_NAMES,
     ]) {
       this.uniforms[name] = gl.getUniformLocation(program, name);
@@ -711,17 +787,40 @@ export class ForecastLayer implements CustomLayerInterface {
    * plane arrives, the same as it does before the first frame of a session. */
   setVectorField(field: VectorField | null): void {
     if (this.vector === field) return;
-    const formatChanged = (this.vector === null) !== (field === null);
+    const before = this.textureFormat();
     this.vector = field;
-    if (formatChanged) {
-      this.forgetPlanes();
-      this.hasFrame = false;
-    }
+    if (field) this.composite = null;
+    this.noteFormatChange(before);
     this.map?.triggerRepaint();
   }
 
+  /** Draw planes as three colour guns instead of as single codes, or pass
+   * null to go back to the scalar path. As with `setVectorField`, the data
+   * texture's format changes, so the slots forget what they hold and the
+   * layer holds its fire until a plane in the new shape arrives. */
+  setCompositeField(field: CompositeField | null): void {
+    if (this.composite === field) return;
+    const before = this.textureFormat();
+    this.composite = field;
+    if (field) this.vector = null;
+    this.noteFormatChange(before);
+    this.map?.triggerRepaint();
+  }
+
+  /** Bytes per cell the data texture takes in the current mode. */
+  private textureFormat(): 1 | 2 | 3 {
+    return this.composite ? 3 : this.vector ? 2 : 1;
+  }
+
+  private noteFormatChange(before: 1 | 2 | 3): void {
+    if (this.textureFormat() === before) return;
+    this.forgetPlanes();
+    this.hasFrame = false;
+  }
+
   /** Show a single plane (slot A, blend weight 0). Interleaved RG bytes while
-   * a vector field is set, one code per cell otherwise. */
+   * a vector field is set, interleaved RGB bytes while a composite is, one
+   * code per cell otherwise. */
   setFrame(plane: Uint8Array, coverage: CoverageBox = WHOLE_PLANE_COVERAGE): void {
     this.setBlend(plane, null, 0, coverage);
   }
@@ -758,8 +857,13 @@ export class ForecastLayer implements CustomLayerInterface {
     gl.bindTexture(gl.TEXTURE_2D, slot.raw);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, this.wraps ? gl.REPEAT : gl.CLAMP_TO_EDGE);
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
-    // Two bytes per cell in magnitude mode (u, v), one otherwise.
-    const [internal, format] = this.vector ? [gl.RG8, gl.RG] : [gl.R8, gl.RED];
+    // Three bytes per cell in composite mode (r, g, b), two in magnitude
+    // mode (u, v), one otherwise.
+    const [internal, format] = this.composite
+      ? [gl.RGB8, gl.RGB]
+      : this.vector
+        ? [gl.RG8, gl.RG]
+        : [gl.R8, gl.RED];
     gl.texImage2D(gl.TEXTURE_2D, 0, internal, this.width, this.height, 0, format, gl.UNSIGNED_BYTE, plane);
     slot.plane = plane;
   }
@@ -901,6 +1005,10 @@ export class ForecastLayer implements CustomLayerInterface {
     gl.uniform1f(this.uniforms.u_vector_max!, vector?.maxMagnitude || 1);
     // Off the code space entirely when no field is set, so nothing matches.
     gl.uniform1f(this.uniforms.u_vector_nodata!, vector ? vector.nodataCode / 255 : -1);
+    const composite = this.composite;
+    gl.uniform1f(this.uniforms.u_composite!, composite ? 1 : 0);
+    gl.uniform3f(this.uniforms.u_composite_offset!, composite?.offset[0] ?? 0, composite?.offset[1] ?? 0, composite?.offset[2] ?? 0);
+    gl.uniform3f(this.uniforms.u_composite_scale!, composite?.scale[0] ?? 0, composite?.scale[1] ?? 0, composite?.scale[2] ?? 0);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, textureOf(this.slots[0]));
     gl.uniform1i(this.uniforms.u_data!, 0);

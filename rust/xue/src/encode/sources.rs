@@ -125,6 +125,15 @@ pub struct SourceSpec {
     /// water vapour flux the converter derives on that surface. One ships
     /// only when every input it is built from is in `input_variable_ids`.
     pub bundle_vector_ids: &'static [&'static str],
+    /// Composite bundles published after the vectors, in manifest order: a
+    /// bundle of three or more variables an algorithm derived from the
+    /// source's channels in the fetch stage — `dustrgb`, the Dust RGB's
+    /// three guns (`convert::COMPOSITE_BUNDLES`). Listing one publishes it
+    /// only when every channel its producer reads is in
+    /// `input_variable_ids`; the converter reads the produced components
+    /// off the series the fetch stage wrote and never derives them itself.
+    /// Mirrors `bundle_composite_ids` in `xuebuild/sources.py`.
+    pub bundle_composite_ids: &'static [&'static str],
     /// Grid a complete (`require_complete`) build must arrive on.
     pub production_grid: (usize, usize),
     /// Container v2 tile size as `(width, height)` in grid cells. Mirrors
@@ -269,6 +278,7 @@ pub const SOURCES: &[SourceSpec] = &[
         ],
         core_bundle_ids: &["tmp2m", "prate"],
         bundle_vector_ids: &["wind10m", "wind925", "wind850", "wind250", "qflux850", "wave"],
+        bundle_composite_ids: &[],
         production_grid: (1440, 721),
         tile: (48, 52),
         regrid: None,
@@ -321,6 +331,7 @@ pub const SOURCES: &[SourceSpec] = &[
         ],
         core_bundle_ids: &["tmp2m", "prate"],
         bundle_vector_ids: &["wind10m", "wind925", "wind850", "wind250", "qflux850", "wave"],
+        bundle_composite_ids: &[],
         production_grid: (1440, 721),
         tile: (48, 52),
         regrid: None,
@@ -366,6 +377,7 @@ pub const SOURCES: &[SourceSpec] = &[
         ],
         core_bundle_ids: &["tmp2m", "prate"],
         bundle_vector_ids: &["wind10m", "wind925", "wind850", "wind250", "qflux850", "wave"],
+        bundle_composite_ids: &[],
         production_grid: (1440, 721),
         tile: (48, 52),
         regrid: None,
@@ -394,6 +406,7 @@ pub const SOURCES: &[SourceSpec] = &[
         bundle_scalar_ids: &["tmp2m", "prate", "dswrf"],
         core_bundle_ids: &["tmp2m", "prate"],
         bundle_vector_ids: &["wind10m"],
+        bundle_composite_ids: &[],
         production_grid: (3072, 1536),
         tile: (96, 96),
         regrid: None,
@@ -436,6 +449,7 @@ pub const SOURCES: &[SourceSpec] = &[
         ],
         core_bundle_ids: &["tmp2m", "prate"],
         bundle_vector_ids: &["wind10m", "wind925", "wind850", "wind250"],
+        bundle_composite_ids: &[],
         // The 0.03° grid over the footprint of the 1799 x 1059 domain, from
         // 134.10 W, 52.62 N to 60.90 W, 21.12 N.
         production_grid: (2441, 1051),
@@ -473,6 +487,7 @@ pub const SOURCES: &[SourceSpec] = &[
         bundle_scalar_ids: &["cref"],
         core_bundle_ids: &["cref"],
         bundle_vector_ids: &[],
+        bundle_composite_ids: &[],
         // The zoom-5 tile grid over the archive's bbox: 0.0439° cells from
         // 67.5E to 146.25E and 56.25N to 11.25N.
         production_grid: (1792, 1024),
@@ -511,6 +526,7 @@ pub const SOURCES: &[SourceSpec] = &[
         bundle_scalar_ids: &["cref", "prate"],
         core_bundle_ids: &["cref"],
         bundle_vector_ids: &[],
+        bundle_composite_ids: &[],
         // The thinned 0.02° grid: 130W to 60W, 55N to 20N.
         production_grid: (3500, 1750),
         tile: (64, 64),
@@ -548,6 +564,7 @@ pub const SOURCES: &[SourceSpec] = &[
         bundle_scalar_ids: &["prate"],
         core_bundle_ids: &["prate"],
         bundle_vector_ids: &[],
+        bundle_composite_ids: &[],
         // The 0.005° grid over the coverage envelope: 121E to 149E, 45.5N to
         // 20.5N.
         production_grid: (5600, 5000),
@@ -574,20 +591,41 @@ pub const SOURCES: &[SourceSpec] = &[
         product: "ahi-fldk-0p04",
         latest_filename: Some("latest-himawari.json"),
         steps: &[],
-        input_variable_ids: &["ir104"],
+        input_variable_ids: &["ir086", "ir104", "ir112", "ir123"],
         companion_files: &[],
         accumulated_precipitation: false,
         averaged_precipitation: false,
         average_window_hours: 6,
         optional_at_analysis: &[],
         statistical_processes: &[],
-        bands: &[(
-            "ir104",
-            SatelliteBand { satellite_series: 0, satellite_number: 174, instrument_type: 297, central_wavenumber: 96086 },
-        )],
+        // The four infrared windows fetched (AHI bands 11, 13, 14, 15), each
+        // with its band block; the central wave numbers are round(1e6 / µm)
+        // of the AHI's central wavelengths (8.5926, 10.4073, 11.2395,
+        // 12.3806 µm), as `Platform::band` computes them.
+        bands: &[
+            (
+                "ir086",
+                SatelliteBand { satellite_series: 0, satellite_number: 174, instrument_type: 297, central_wavenumber: 116379 },
+            ),
+            (
+                "ir104",
+                SatelliteBand { satellite_series: 0, satellite_number: 174, instrument_type: 297, central_wavenumber: 96086 },
+            ),
+            (
+                "ir112",
+                SatelliteBand { satellite_series: 0, satellite_number: 174, instrument_type: 297, central_wavenumber: 88972 },
+            ),
+            (
+                "ir123",
+                SatelliteBand { satellite_series: 0, satellite_number: 174, instrument_type: 297, central_wavenumber: 80772 },
+            ),
+        ],
         bundle_scalar_ids: &["ir104"],
         core_bundle_ids: &["ir104"],
         bundle_vector_ids: &[],
+        // The Dust RGB, composed per slot in the fetch stage from all four
+        // channels and read off the series like any channel.
+        bundle_composite_ids: &["dustrgb"],
         // The platform's region at 0.04°: 120° x 120°.
         production_grid: (3000, 3000),
         tile: (64, 64),

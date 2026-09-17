@@ -10,12 +10,13 @@ import { PRESSURE_BUNDLE_IDS, pressureLabel } from "./pressure";
  * A family is one physical quantity registered on the eight standard isobaric
  * surfaces (manifest.ts `ISOBARIC_LEVELS`), possibly with a near-surface
  * member of its own — 2 m temperature heads the temperature family, 10 m wind
- * the wind family, mean sea level pressure the pressure family. Three
+ * the wind family, mean sea level pressure the pressure family. Four
  * families are not isobaric at all and list their members outright: cloud
- * cover (the total and the three layers), sea ice (cover and thickness) and
+ * cover (the total and the three layers), sea ice (cover and thickness),
  * waves (the wave vector — significant height along the direction of
- * travel — and the primary period), and the level row picks among those
- * the same way. Precipitation, radiation, reflectivity, the
+ * travel — and the primary period) and the satellite pictures (the
+ * infrared window and the Dust RGB composite), and the level row picks
+ * among those the same way. Precipitation, radiation, reflectivity, the
  * other surface diagnostics (gust, CAPE, visibility, dew point, apparent
  * temperature) and the skin temperature are single layers and belong to no
  * family.
@@ -27,7 +28,7 @@ import { PRESSURE_BUNDLE_IDS, pressureLabel } from "./pressure";
  * `tests/fixtures/ocean-registry.json` (`tests/web/ocean.test.ts`), the way
  * pressure.ts is held by its own registry.
  */
-export type IsobaricFamily = "hgt" | "tmp" | "rh" | "spfh" | "wind" | "qflux" | "vvel" | "thetae" | "cloud" | "ice" | "wave";
+export type IsobaricFamily = "hgt" | "tmp" | "rh" | "spfh" | "wind" | "qflux" | "vvel" | "thetae" | "cloud" | "ice" | "wave" | "satellite";
 
 export const ISOBARIC_FAMILIES: readonly IsobaricFamily[] = [
   "hgt",
@@ -41,6 +42,7 @@ export const ISOBARIC_FAMILIES: readonly IsobaricFamily[] = [
   "cloud",
   "ice",
   "wave",
+  "satellite",
 ];
 
 export interface FamilyInfo {
@@ -149,6 +151,22 @@ export const FAMILIES: Record<IsobaricFamily, FamilyInfo> = {
       { id: "wave", code: "HEIGHT" },
       { id: "htsgw", code: "HEIGHT", standInFor: "wave" },
       { id: "perpw", code: "PERIOD" },
+    ],
+  },
+  // The satellite pictures: the infrared window heads the family, and the
+  // Dust RGB — a colour composite of four infrared channels, a different
+  // quantity with a key of its own rather than a legend — is its other
+  // variant, so one tile cycles between the two.
+  satellite: {
+    id: "satellite",
+    kind: "scalar",
+    surface: "ir104",
+    code: "SAT",
+    surfaceCode: "IR",
+    glossKey: "varInfrared",
+    variants: [
+      { id: "ir104", code: "IR 10.4" },
+      { id: "dustrgb", code: "DUST RGB" },
     ],
   },
 };
@@ -452,6 +470,7 @@ export function familyLabel(id: ForecastBundleId): string {
     cloud: "varLabelTcdc",
     ice: "varLabelIcec",
     wave: "varLabelHtsgw",
+    satellite: "varLabelIr104",
   }[family!] as MessageKey;
   return t(key).replace("{level}", String(level));
 }
@@ -467,6 +486,8 @@ const MEMBER_LABEL_KEYS: Record<string, MessageKey> = {
   icetk: "varLabelIcetk",
   htsgw: "varLabelHtsgw",
   perpw: "varLabelPerpw",
+  ir104: "varLabelIr104",
+  dustrgb: "varLabelDustrgb",
 };
 
 /** The instrument-panel code of one isobaric member: "TMP 850MB", "RH
@@ -487,6 +508,7 @@ export function isobaricCode(id: ForecastBundleId): string {
     cloud: "CLOUD",
     ice: "ICE",
     wave: "WAVE",
+    satellite: "SAT",
   }[family];
   return `${word} ${level}MB`;
 }

@@ -816,6 +816,41 @@ body.is-pressure .legend {
   text-shadow: var(--label-shadow);
 }
 
+/* A picture's key (the Dust RGB): stacked swatches with what each colour is
+   a sign of, in the bar's place — the bar, its ticks and the unit line are
+   hidden while the legend carries a key, since a gun has no unit to tick. */
+.legend.has-key .legend-scale,
+.legend.has-key .legend-unit {
+  display: none;
+}
+
+.legend-key {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  align-self: flex-start;
+  list-style: none;
+  color: var(--map-ink);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  text-shadow: var(--label-shadow);
+}
+
+.legend-key li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.legend-key[hidden] {
+  display: none;
+}
+
 /* The experimental composite's key: the two derived layers named beside
    their tints, under the fill's bar, in the same ink as the bar's labels.
    Left-aligned so the swatches line up under the bar. */

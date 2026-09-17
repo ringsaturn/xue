@@ -35,6 +35,14 @@ interface VectorOptions {
   cells: [number, number][];
 }
 
+/** Composite-mode uniforms, in the same terms the layer's CompositeField
+ * uses, plus the (r, g, b) code triple each column carries. */
+interface CompositeOptions {
+  offset: [number, number, number];
+  scale: [number, number, number];
+  cells: [number, number, number][];
+}
+
 /** Contour uniforms, in the same terms the layer's ContourStyle uses. */
 interface ContourOptions {
   offset: number;
@@ -64,6 +72,9 @@ interface StripOptions {
    * every scalar field renders. Turns the palette into a ramp whose red
    * channel reports the index the shader looked up. */
   vector?: VectorOptions;
+  /** Three-gun composite plane; omitted leaves u_composite at zero. The
+   * pixel is then the guns themselves, so the read-back is the colour. */
+  composite?: CompositeOptions;
 }
 
 /** RGBA of every pixel across one horizontal strip of a world copy. */
@@ -72,7 +83,7 @@ async function renderStripPixels(
   options: StripOptions,
 ): Promise<number[][]> {
   return page.evaluate(
-    ({ vertexSource, fragmentSource, width, height, wrap, cover, firstLongitude, longitudeStep, columnCodes, contour, vector }) => {
+    ({ vertexSource, fragmentSource, width, height, wrap, cover, firstLongitude, longitudeStep, columnCodes, contour, vector, composite }) => {
       const canvas = document.createElement("canvas");
       canvas.width = 256;
       canvas.height = 16;
@@ -147,13 +158,18 @@ async function renderStripPixels(
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
       gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
       // A vector plane spends the two channels on the u and v codes instead
-      // of on one code, which is what magnitude mode reads.
-      const channels = vector ? 2 : 1;
-      const plane = new Uint8Array(width * height * channels).fill(vector ? 0 : 128);
+      // of on one code, which is what magnitude mode reads; a composite
+      // plane spends three on its guns.
+      const channels = composite ? 3 : vector ? 2 : 1;
+      const plane = new Uint8Array(width * height * channels).fill(vector || composite ? 0 : 128);
       for (let row = 0; row < height; row += 1) {
         for (let column = 0; column < width; column += 1) {
           const cell = row * width + column;
-          if (vector) {
+          if (composite) {
+            plane[cell * 3] = composite.cells[column]![0];
+            plane[cell * 3 + 1] = composite.cells[column]![1];
+            plane[cell * 3 + 2] = composite.cells[column]![2];
+          } else if (vector) {
             plane[cell * 2] = vector.cells[column]![0];
             plane[cell * 2 + 1] = vector.cells[column]![1];
           } else if (columnCodes) {
@@ -161,7 +177,12 @@ async function renderStripPixels(
           }
         }
       }
-      if (vector) {
+      if (composite) {
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB8, width, height, 0, gl.RGB, gl.UNSIGNED_BYTE, plane);
+        gl.uniform1f(uniform("u_composite"), 1);
+        gl.uniform3f(uniform("u_composite_offset"), composite.offset[0], composite.offset[1], composite.offset[2]);
+        gl.uniform3f(uniform("u_composite_scale"), composite.scale[0], composite.scale[1], composite.scale[2]);
+      } else if (vector) {
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RG8, width, height, 0, gl.RG, gl.UNSIGNED_BYTE, plane);
         gl.uniform1f(uniform("u_vector"), 1);
         gl.uniform2f(uniform("u_vector_offset"), vector.offset[0], vector.offset[1]);
@@ -218,6 +239,7 @@ async function renderStripPixels(
       columnCodes: options.columnCodes ?? null,
       contour: options.contour ?? null,
       vector: options.vector ?? null,
+      composite: options.composite ?? null,
     },
   );
 }
@@ -336,6 +358,57 @@ test("a reserved code in either wind channel paints nothing", async ({ page }) =
   expect(alphaAt(6)).toBe(0);
   expect(alphaAt(3)).toBeGreaterThan(0);
   expect(alphaAt(4)).toBeGreaterThan(0);
+  expect(alphaAt(5)).toBeGreaterThan(0);
+  expect(alphaAt(7)).toBeGreaterThan(0);
+});
+
+test("a composite paints its three guns straight as colour", async ({ page }) => {
+  // The Dust RGB's codebooks: code 1 is 0.0 and code 251 is 1.0 in every
+  // gun (offset -0.004, scale 0.004). The columns are black, pure red at
+  // full stretch, a mid grey (code 126 is 0.5), and a dust-pink mix — and
+  // each pixel is that colour, since there is no palette between them. The
+  // premultiplied output is opaque, so the channels come back as written.
+  const pixels = await renderStripPixels(page, {
+    wrap: true,
+    cover: [0, 1, 0, 1],
+    composite: {
+      offset: [-0.004, -0.004, -0.004],
+      scale: [0.004, 0.004, 0.004],
+      cells: [[1, 1, 1], [251, 1, 1], [126, 126, 126], [251, 76, 201], [1, 1, 1], [251, 1, 1], [126, 126, 126], [251, 76, 201]],
+    },
+  });
+  const at = (column: number): number[] => pixels[column * 32]!;
+  const near = (pixel: number[], expected: number[]) =>
+    expected.every((value, channel) => Math.abs(pixel[channel]! - value) < 8);
+  expect(near(at(0), [0, 0, 0, 255])).toBe(true);
+  expect(near(at(1), [255, 0, 0, 255])).toBe(true);
+  expect(near(at(2), [128, 128, 128, 255])).toBe(true);
+  // 0.3 and 0.8 of the green and blue stretch: 76 and 204 of 255.
+  expect(near(at(3), [255, 76, 204, 255])).toBe(true);
+  expect(pixels.every((pixel) => pixel[3]! > 0)).toBe(true);
+});
+
+test("a gun at the bottom code paints nothing, in whichever gun it sits", async ({ page }) => {
+  // Code 0 is no data in every gun — outside the disk, or a channel the
+  // scan lacked — and one code is all that separates it from black (code
+  // 1), so the test reads at each cell's own centre, the one place a
+  // no-data neighbour never reaches.
+  const pixels = await renderStripPixels(page, {
+    wrap: true,
+    cover: [0, 1, 0, 1],
+    composite: {
+      offset: [-0.004, -0.004, -0.004],
+      scale: [0.004, 0.004, 0.004],
+      cells: [[0, 126, 126], [126, 0, 126], [126, 126, 0], [1, 1, 1], [0, 0, 0], [251, 251, 251], [0, 251, 0], [126, 126, 126]],
+    },
+  });
+  const alphaAt = (column: number): number => pixels[column * 32]![3]!;
+  expect(alphaAt(0)).toBe(0);
+  expect(alphaAt(1)).toBe(0);
+  expect(alphaAt(2)).toBe(0);
+  expect(alphaAt(4)).toBe(0);
+  expect(alphaAt(6)).toBe(0);
+  expect(alphaAt(3)).toBeGreaterThan(0);
   expect(alphaAt(5)).toBeGreaterThan(0);
   expect(alphaAt(7)).toBeGreaterThan(0);
 });

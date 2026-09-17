@@ -9,7 +9,7 @@
 use serde_json::{json, Map, Value};
 
 use crate::encode::errors::{EncodeError, Result};
-use crate::encode::variables::isobaric_variable;
+use crate::encode::variables::{isobaric_variable, SATELLITE_CHANNEL_IDS};
 
 /// Linear uint8 codebook. Not temperature-specific: it quantizes any linear
 /// field; the wind components reuse it with a symmetric m/s range.
@@ -229,6 +229,29 @@ const COMPACT_BRIGHTNESS_TEMPERATURE: LinearCodebook = LinearCodebook {
     maximum: 331.2,
     step: 1.2,
     ..QUALITY_BRIGHTNESS_TEMPERATURE
+};
+/// Every infrared window shares the two brightness-temperature codebooks;
+/// the name is the channel's own. Mirrors `_brightness_temperature` in
+/// `xuebuild/quantize.py`.
+fn brightness_temperature(channel_id: &'static str, compact: bool) -> LinearCodebook {
+    let base = if compact { COMPACT_BRIGHTNESS_TEMPERATURE } else { QUALITY_BRIGHTNESS_TEMPERATURE };
+    LinearCodebook { name: channel_id, ..base }
+}
+// A Dust RGB gun is a stretched, gamma-corrected number in 0–1 (the
+// `shachen` producer in the fetch stage): 250 steps of 0.004 across the
+// range, more than a display resolves. The codebook starts one step
+// *below* zero so that code 0 is "no data" — a cell the disk does not
+// cover, or one an input channel lacked, which the shell leaves unpainted
+// when any gun carries it — while black (0, 0, 0) stays a value at code 1.
+// One codebook for every profile: the quantity is already a display value,
+// and a coarser one would band the picture. Mirrors `DUST_RGB_GUN` in
+// `xuebuild/quantize.py`.
+const DUST_RGB_GUN: LinearCodebook = LinearCodebook {
+    minimum: -0.004,
+    maximum: 1.0,
+    step: 0.004,
+    nodata_code: 255,
+    name: "dustrgb",
 };
 // Wind gust: one-sided, at the 10 m components' step over the isobaric
 // wind's 127 m/s ceiling, spending the full 0..254 code space.
@@ -672,8 +695,15 @@ pub fn codebook(profile: &str, variable_id: &str) -> Result<Codebook> {
         (_, "dirpw") => Codebook::Linear(COMPACT_WAVE_DIRECTION),
         (_, "uwave" | "vwave") if quality => Codebook::Linear(QUALITY_WAVE_VECTOR),
         (_, "uwave" | "vwave") => Codebook::Linear(COMPACT_WAVE_VECTOR),
-        (_, "ir104") if quality => Codebook::Linear(QUALITY_BRIGHTNESS_TEMPERATURE),
-        (_, "ir104") => Codebook::Linear(COMPACT_BRIGHTNESS_TEMPERATURE),
+        (_, "ir086" | "ir104" | "ir112" | "ir123") => {
+            let channel_id = SATELLITE_CHANNEL_IDS
+                .iter()
+                .copied()
+                .find(|id| *id == variable_id)
+                .expect("matched just above");
+            Codebook::Linear(brightness_temperature(channel_id, !quality))
+        }
+        (_, "dustr" | "dustg" | "dustb") => Codebook::Linear(DUST_RGB_GUN),
         _ if pressure_codebook(variable_id, !quality).is_some() => Codebook::Linear(
             pressure_codebook(variable_id, !quality).expect("checked just above"),
         ),

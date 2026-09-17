@@ -69,7 +69,7 @@ from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
-from .binconvert import VECTOR_BUNDLES
+from .binconvert import VECTOR_BUNDLES, bundle_variable_ids
 from .errors import XueError
 from .manifest import iso_z
 from .sources import SOURCES, SourceSpec, source_spec
@@ -474,8 +474,13 @@ def _source_prose(source: SourceSpec) -> dict[str, Any]:
                 "the 10.4 µm infrared window as brightness temperature, one scan every ten minutes, "
                 "reprojected from the geostationary view onto a regular 0.04° grid over the useful "
                 "disk (3000 × 3000 cells, 80.7°E–200.7°E, 60°S–60°N) and published under ir104, as a "
-                "rolling window rebuilt every ten minutes. Source: Japan Meteorological Agency, "
-                "distributed by NOAA; the data are unaltered but reprojected, and neither JMA nor "
+                "rolling window rebuilt every ten minutes; and the classic Dust RGB composite "
+                "(dustrgb: the 12.3 − 10.4 µm split window, 11.2 − 8.6 µm with a gamma, and the "
+                "10.4 µm window, stretched to three guns in 0–1 with the SEVIRI recipe of Lensky and "
+                "Rosenfeld 2008 as EUMeTrain formalised it), computed from the 8.6, 10.4, 11.2 and "
+                "12.3 µm windows by the shachen package (Apache-2.0), whose id and version each gun "
+                "carries as its producer block. Source: Japan Meteorological Agency, distributed by "
+                "NOAA; the data are unaltered but reprojected and composited, and neither JMA nor "
                 "NOAA endorses this site."
             ),
             "license": "other",
@@ -490,6 +495,11 @@ def _source_prose(source: SourceSpec) -> dict[str, Any]:
                     "roles": ["host"],
                     "url": "https://registry.opendata.aws/noaa-himawari/",
                 },
+                {
+                    "name": "shachen",
+                    "roles": ["processor"],
+                    "url": "https://github.com/ringsaturn/shachen",
+                },
                 _XUE_PROVIDER,
             ],
             "links": [
@@ -498,7 +508,25 @@ def _source_prose(source: SourceSpec) -> dict[str, Any]:
                     "href": "https://registry.opendata.aws/noaa-himawari/",
                     "type": "text/html",
                     "title": "NOAA Himawari on AWS: terms of use (attribution required, no endorsement)",
-                }
+                },
+                {
+                    "rel": "cite-as",
+                    "href": "https://doi.org/10.5194/acp-8-6739-2008",
+                    "type": "text/html",
+                    "title": "Lensky and Rosenfeld (2008): the SEVIRI RGB suite the Dust RGB comes from",
+                },
+                {
+                    "rel": "describedby",
+                    "href": "https://eumetrain.org/sites/default/files/2020-05/RGB_recipes.pdf",
+                    "type": "application/pdf",
+                    "title": "EUMeTrain: Compilation of RGB Recipes (the Dust RGB stretches applied to AHI)",
+                },
+                {
+                    "rel": "describedby",
+                    "href": "https://rammb.cira.colostate.edu/training/visit/quick_guides/Dust_RGB_Quick_Guide.pdf",
+                    "type": "application/pdf",
+                    "title": "GOES-R Quick Guide: Dust RGB (the band mix, and the ABI stretches)",
+                },
             ],
         },
     }
@@ -672,14 +700,14 @@ def _spatial_dimensions(grid: dict[str, Any], bbox: list[float]) -> dict[str, An
 
 def _variables_of(manifest: dict[str, Any], dimensions: list[str]) -> dict[str, Any]:
     """One ``cube:variables`` entry per array the run publishes: a scalar
-    bundle is one, a vector bundle its two components (the arrays its store
-    holds). The label and unit come from the registry; a bundle the
-    registry does not know — a manifest admits any well-formed name — is
-    listed by name alone."""
+    bundle is one, a vector bundle its two components, a composite its
+    three (the arrays its store holds). The label and unit come from the
+    registry; a bundle the registry does not know — a manifest admits any
+    well-formed name — is listed by name alone."""
     variables: dict[str, Any] = {}
     for bundle in manifest["bundles"]:
         bundle_id = bundle["variable"]
-        for variable_id in VECTOR_BUNDLES.get(bundle_id, (bundle_id,)):
+        for variable_id in bundle_variable_ids(bundle_id):
             entry: dict[str, Any] = {"dimensions": dimensions, "type": "data"}
             spec = VARIABLES.get(variable_id)
             if spec is not None:
@@ -741,6 +769,8 @@ def _bundle_title(bundle_id: str) -> str:
         u, v = VECTOR_BUNDLES[bundle_id]
         labels = [VARIABLES[c].label for c in (u, v) if c in VARIABLES]
         return " / ".join(labels) if labels else bundle_id
+    if bundle_id == "dustrgb":
+        return "Dust RGB (red, green and blue guns)"
     spec = VARIABLES.get(bundle_id)
     return spec.label if spec is not None else bundle_id
 

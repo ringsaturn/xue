@@ -128,6 +128,9 @@ export const en = {
    * its data-card label. */
   tipIce: "Sea ice",
   tipWave: "Waves",
+  /** The satellite tile: a family tile, the infrared window and the
+   * Dust RGB composite behind it. */
+  tipSatellite: "Satellite imagery",
   levelSwitchAria: "Level",
   levelCaption: "LEVEL",
   /** The level row's caption for the lines' group when the fill has a level
@@ -283,12 +286,23 @@ export const en = {
   // that fits on one line at 10px mono next to a 10px square.
   legendInflow: "Warm moist inflow",
   legendFront: "Frontal zone (θe gradient)",
+  /** The Dust RGB's key: what each colour of the composite is a sign
+   * of, one row per swatch in place of the bar (the GOES-R Quick Guide's
+   * reading). Short noun phrases, one line at 10px mono. */
+  legendDustDust: "Dust",
+  legendDustThickHigh: "Thick high cloud",
+  legendDustThinHigh: "Thin high cloud",
+  legendDustMid: "Mid-level cloud",
+  legendDustLow: "Low warm cloud",
+  legendDustDesert: "Hot desert surface",
+  legendDustSurface: "Sea and vegetated land",
   varLabelTmp2m: "2 m temperature",
   varLabelPrate: "Precipitation rate",
   varLabelDswrf: "Solar radiation",
   varLabelWind10m: "10 m wind",
   varLabelCref: "Composite radar reflectivity",
   varLabelIr104: "Infrared imagery (10.4 µm brightness temperature)",
+  varLabelDustrgb: "Dust RGB (infrared composite)",
   varLabelGust: "Wind gust",
   varLabelTcdc: "Total cloud cover",
   varLabelCape: "Convective available potential energy",

@@ -41,7 +41,7 @@ pipeline.
 | NOAA MRMS | `mrms` | 3500 × 1750, 0.02°, contiguous US | one frame every two minutes, a rolling four-hour window | `latest-mrms.json` |
 | JMA precipitation nowcast | `jma` | 5600 × 5000, 0.005°, Japan | one frame every five minutes, a rolling three-hour window | `latest-jma.json` |
 | CMA radar mosaic | `cma` | 1792 × 1024, 0.0439°, China | one frame every six minutes, a rolling three-hour window | `latest-cma.json` |
-| Himawari-9 infrared | `himawari` | 3000 × 3000, 0.04°, the disk 80.7–200.7°E, ±60° | one scan every ten minutes, a rolling six-hour window | `latest-himawari.json` |
+| Himawari-9 infrared and Dust RGB | `himawari` | 3000 × 3000, 0.04°, the disk 80.7–200.7°E, ±60° | one scan every ten minutes, a rolling six-hour window | `latest-himawari.json` |
 
 Each model publishes as an independent dataset under `<model>.<run>/`, taken
 live by its pointer at the data root.
@@ -123,15 +123,26 @@ Bundle sets:
   imager at 140.7°E, as NOAA redistributes it on the `noaa-himawari9`
   bucket — the ISatSS product, every channel of every ten-minute full-disk
   scan already calibrated and cut into 88 NetCDF tiles on the geostationary
-  projection. One channel to start, the 10.4 µm infrared window as
-  brightness temperature under `ir104` (AHI band 13, at 0.6 K over 180–332
-  K; the cloud-top picture). The fetch stage (`xuebuild/satellite/`,
-  [docs/satellite.md](docs/satellite.md)) lists a slot's tiles, mosaics
-  them with `gdalbuildvrt`, warps them with `gdalwarp` onto a 0.04° plate
-  carrée grid over the useful disk (3000 × 3000 cells, 80.7–200.7°E — past
-  the antimeridian — and 60°S–60°N), caches the frame (a GeoTIFF, mirrored
-  on the bucket like the JMA frames) and stacks the window's frames into
-  one NetCDF series with `gdal_translate`, which both encoders read the way
+  projection. Four infrared windows are fetched (8.6, 10.4, 11.2 and
+  12.3 µm: AHI bands 11, 13, 14, 15); the 10.4 µm one is published as
+  brightness temperature under `ir104` (at 0.6 K over 180–332 K; the
+  cloud-top picture), and all four feed the classic **Dust RGB**
+  (`dustrgb`: red the 12.3 − 10.4 µm split window, green 11.2 − 8.6 µm
+  with a gamma, blue the 10.4 µm window, each stretched to 0–1 — lofted
+  mineral dust reads pink to magenta over dark blue-green surfaces, day
+  and night), computed per scan in the fetch stage by the
+  [shachen](https://github.com/ringsaturn/shachen) package's
+  `dust_rgb` with the SEVIRI stretches (no AHI retune has been published)
+  and shipped as one three-variable bundle whose guns carry the producer's
+  id and version beside a local-use parameter. The fetch stage
+  (`xuebuild/satellite/`, [docs/satellite.md](docs/satellite.md)) lists a
+  slot's tiles, mosaics them with `gdalbuildvrt`, warps them with
+  `gdalwarp` onto a 0.04° plate carrée grid over the useful disk (3000 ×
+  3000 cells, 80.7–200.7°E — past the antimeridian — and 60°S–60°N),
+  caches each channel's frame (a GeoTIFF, mirrored on the bucket like the
+  JMA frames), composes the guns from the slot's four frames and caches
+  them the same way, and stacks the window's frames into one NetCDF series
+  per variable with `gdal_translate`, which both encoders read the way
   they read the JMA file; the geostationary arithmetic lives in GDAL alone.
   The source is named by its orbital slot, not the spacecraft: the
   spacecraft, instrument and band are the `band` block beside the
@@ -532,8 +543,10 @@ secret and read in process with the `R2_*` credentials
 (`CMA_ARCHIVE_ACCESS_KEY_ID` / `CMA_ARCHIVE_SECRET_ACCESS_KEY` when the
 dataset bucket's token cannot read it, else that token), with the `cma`
 dependency group synced. The Himawari job is the JMA shape with a
-frame cache of warped GeoTIFFs (`data/raw/himawari-frames/ir104/`, kept
-three days on the bucket), a six-hour window (`HOURS=6`) and installs
+frame cache of warped GeoTIFFs (`data/raw/himawari-frames/<variable>/`,
+one directory per channel and per Dust RGB gun, kept three days on the
+bucket), a six-hour window (`HOURS=6`), the `satellite` dependency group
+(the shachen package the Dust RGB is composed with) and installs
 `gdal-bin` whichever encoder converts, since the fetch stage warps through
 the system GDAL. By hand:
 

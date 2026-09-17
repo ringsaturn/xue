@@ -18,7 +18,8 @@ use crate::encode::binformat::{self, ChunkPayload, ChunkTables, HOUR_SECONDS};
 use crate::format::{ChunkEntry, Predictor, TileGeometry, VariableEntry, NO_DEPENDENCY};
 use crate::encode::errors::{EncodeError, Result};
 use crate::encode::variables::{
-    isobaric_variable, variable_spec, ISOBARIC_LEVELS_HPA, STANDARD_GRAVITY, WAVE_VECTOR_COMPONENT_IDS,
+    isobaric_variable, variable_spec, DUST_RGB_BUNDLE_ID, DUST_RGB_COMPONENT_IDS, ISOBARIC_LEVELS_HPA,
+    SATELLITE_CHANNEL_IDS, STANDARD_GRAVITY, WAVE_VECTOR_COMPONENT_IDS,
 };
 use crate::encode::gdalio::{needs_serial_access, netcdf_guard, Dataset};
 use crate::encode::grid::{
@@ -32,7 +33,7 @@ use crate::encode::inspect::{
 use crate::encode::manifest::{build_bin_manifest, build_latest_pointer, serialize_json, write_json};
 use crate::encode::metadata::{axis_unit_seconds, build_metadata, lead_hours, to_spaced_json};
 use crate::encode::model::{PlaneSource, SourceFrame};
-use crate::encode::observation::{inspect_observation, NETCDF_EXTENSIONS};
+use crate::encode::observation::inspect_observation;
 use crate::encode::parallel::for_each_ordered;
 use crate::encode::poster::encode_poster;
 use crate::encode::quantize::{codebook, Codebook};
@@ -72,6 +73,39 @@ pub fn vector_components(bundle_id: &str) -> Option<(String, String)> {
         }
     }
     None
+}
+
+/// Composite bundles: three or more variables an algorithm derived from a
+/// source's channels in the *fetch stage* (`xuebuild/satellite/producers.py`),
+/// read off the observation series as more variables and written as one
+/// bundle in this order — the converter never derives them. The Dust RGB's
+/// three guns first. Mirrors `COMPOSITE_BUNDLES` in `xuebuild/binconvert.py`.
+pub fn composite_components(bundle_id: &str) -> Option<Vec<String>> {
+    (bundle_id == DUST_RGB_BUNDLE_ID)
+        .then(|| DUST_RGB_COMPONENT_IDS.iter().map(|id| (*id).to_string()).collect())
+}
+
+/// The channels a composite's producer reads: what the fetch must download
+/// for the composite to be composed, since the components themselves are
+/// never fetched. Mirrors `PRODUCERS[bundle_id].inputs` in
+/// `xuebuild/satellite/producers.py` — the Dust RGB reads the four infrared
+/// windows.
+fn composite_input_ids(bundle_id: &str) -> Option<Vec<String>> {
+    (bundle_id == DUST_RGB_BUNDLE_ID)
+        .then(|| SATELLITE_CHANNEL_IDS.iter().map(|id| (*id).to_string()).collect())
+}
+
+/// The variables one bundle carries, in bundle order: a scalar's own, a
+/// vector's pair, a composite's components. Mirrors `bundle_variable_ids`
+/// in `xuebuild/binconvert.py`.
+pub fn bundle_variable_ids(bundle_id: &str) -> Vec<String> {
+    if let Some((u, v)) = vector_components(bundle_id) {
+        return vec![u, v];
+    }
+    if let Some(components) = composite_components(bundle_id) {
+        return components;
+    }
+    vec![bundle_id.to_string()]
 }
 
 /// The isobaric surface of a `thetae<level>` bundle — the equivalent
@@ -228,34 +262,6 @@ macro_rules! log {
 
 /// The GRIB files a conversion reads: one file, every file in a directory, or
 /// exactly the files given.
-/// The one NetCDF series a fetched observation's run directory holds — the
-/// port of `_series_input` in `xuebuild/binconvert.py`.
-fn series_input(directory: &Path, source: &SourceSpec) -> Result<PathBuf> {
-    let mut files: Vec<PathBuf> = std::fs::read_dir(directory)
-        .map_err(|error| {
-            EncodeError::conversion(format!("cannot list {}: {error}", directory.display()))
-        })?
-        .filter_map(std::result::Result::ok)
-        .map(|entry| entry.path())
-        .filter(|path| {
-            path.is_file()
-                && path.extension().is_some_and(|extension| {
-                    NETCDF_EXTENSIONS.contains(&extension.to_string_lossy().to_lowercase().as_str())
-                })
-        })
-        .collect();
-    files.sort();
-    if files.len() != 1 {
-        return Err(EncodeError::conversion(format!(
-            "a {} run directory holds exactly one NetCDF series, {} holds {}",
-            source.manifest_model,
-            directory.display(),
-            files.len()
-        )));
-    }
-    Ok(files.remove(0))
-}
-
 pub fn discover_inputs(inputs: &[PathBuf]) -> Result<Vec<PathBuf>> {
     if inputs.is_empty() {
         return Err(EncodeError::conversion("no GRIB files given"));
@@ -314,6 +320,9 @@ pub fn bundle_input_ids(source: &SourceSpec, bundle_id: &str) -> Vec<String> {
     if vector_components(bundle_id).is_some() {
         return vector_input_ids(bundle_id);
     }
+    if let Some(inputs) = composite_input_ids(bundle_id) {
+        return inputs;
+    }
     if let Some(inputs) = derived_scalar_inputs(bundle_id) {
         return inputs;
     }
@@ -331,8 +340,9 @@ pub fn bundle_input_ids(source: &SourceSpec, bundle_id: &str) -> Vec<String> {
 }
 
 /// Every bundle a source can publish, in manifest order: its scalars, then
-/// each listed vector bundle whose inputs the source fetches. A derived
-/// scalar counts the same way — listed, it ships only when its inputs are.
+/// each listed vector bundle whose inputs the source fetches, then each
+/// listed composite whose producer's channels it fetches. A derived scalar
+/// counts the same way — listed, it ships only when its inputs are.
 pub fn published_bundle_ids(source: &SourceSpec) -> Vec<&'static str> {
     let mut ids: Vec<&'static str> = source
         .bundle_scalar_ids
@@ -347,6 +357,14 @@ pub fn published_bundle_ids(source: &SourceSpec) -> Vec<&'static str> {
     for bundle_id in source.bundle_vector_ids {
         let inputs = vector_input_ids(bundle_id);
         if inputs
+            .iter()
+            .all(|id| source.input_variable_ids.contains(&id.as_str()))
+        {
+            ids.push(bundle_id);
+        }
+    }
+    for bundle_id in source.bundle_composite_ids {
+        if bundle_input_ids(source, bundle_id)
             .iter()
             .all(|id| source.input_variable_ids.contains(&id.as_str()))
         {
@@ -680,36 +698,83 @@ pub fn derive_wave_vector(height: &[f64], direction: &[f64]) -> (Vec<f64>, Vec<f
     (u, v)
 }
 
-/// Extract every requested band of one file, as float64 planes in physical
-/// units, cropped and rolled into the published layout.
+/// How the planes of a frame are read: one file's plane source (GRIB: the
+/// same for every record) or an observation window's per-variable ones.
+/// Mirrors `_plane_source_for` in `xuebuild/binconvert.py`.
+pub enum PlaneSources {
+    Uniform(PlaneSource),
+    PerVariable(Vec<(String, PlaneSource)>),
+}
+
+impl PlaneSources {
+    fn for_variable(&self, variable_id: &str) -> Result<&PlaneSource> {
+        match self {
+            PlaneSources::Uniform(source) => Ok(source),
+            PlaneSources::PerVariable(sources) => sources
+                .iter()
+                .find(|(id, _)| id == variable_id)
+                .map(|(_, source)| source)
+                .ok_or_else(|| {
+                    EncodeError::conversion(format!("no plane source for {variable_id}"))
+                }),
+        }
+    }
+}
+
+/// Extract every requested band of one frame, as float64 planes in physical
+/// units, cropped and rolled into the published layout: one dataset open
+/// per file the frame's variables live in — one for a GRIB record set, one
+/// per variable for a satellite window whose series are one file each
+/// (mirrors `_extract_planes` in `xuebuild/binconvert.py`).
 fn extract_planes(
     frames: &FileFrames,
     grid: &GridInfo,
-    plane_source: &PlaneSource,
+    plane_sources: &PlaneSources,
 ) -> Result<Vec<(String, Vec<f64>)>> {
-    let source = &frames[0].1.path;
-    // The netCDF driver is not thread-safe; the guard is held for the whole
-    // extraction, open included, and is a no-op for every GRIB source.
-    let _serial = needs_serial_access(source).then(netcdf_guard);
-    let dataset = Dataset::open(source)?;
     let (source_height, source_width) = grid.source_shape();
-    if dataset.size() != (source_width, source_height) {
-        return Err(EncodeError::conversion(format!(
-            "extracted plane size mismatch for {}",
-            source.display()
-        )));
+    // The files in first-seen order, each with the variables it holds.
+    let mut by_file: Vec<(&PathBuf, Vec<&(String, SourceFrame)>)> = Vec::new();
+    for entry in frames {
+        match by_file.iter_mut().find(|(path, _)| **path == entry.1.path) {
+            Some((_, held)) => held.push(entry),
+            None => by_file.push((&entry.1.path, vec![entry])),
+        }
+    }
+    let mut raw_planes: Vec<(String, Vec<f64>)> = Vec::with_capacity(frames.len());
+    for (source, file_frames) in by_file {
+        // The netCDF driver is not thread-safe; the guard is held for the
+        // whole extraction, open included, and is a no-op for every GRIB
+        // source.
+        let _serial = needs_serial_access(source).then(netcdf_guard);
+        let dataset = Dataset::open(source)?;
+        if dataset.size() != (source_width, source_height) {
+            return Err(EncodeError::conversion(format!(
+                "extracted plane size mismatch for {}",
+                source.display()
+            )));
+        }
+        let unscale = plane_sources.for_variable(&file_frames[0].0)?.unscale;
+        for (variable_id, frame) in file_frames {
+            let mut plane = dataset.read_band_f64(frame.band)?;
+            if unscale {
+                let band = dataset.band_info(frame.band)?;
+                if band.scale != 1.0 || band.offset != 0.0 {
+                    for value in &mut plane {
+                        *value = *value * band.scale + band.offset;
+                    }
+                }
+            }
+            raw_planes.push((variable_id.clone(), plane));
+        }
     }
     let mut planes = Vec::with_capacity(frames.len());
     for (variable_id, frame) in frames {
-        let mut plane = dataset.read_band_f64(frame.band)?;
-        if plane_source.unscale {
-            let band = dataset.band_info(frame.band)?;
-            if band.scale != 1.0 || band.offset != 0.0 {
-                for value in &mut plane {
-                    *value = *value * band.scale + band.offset;
-                }
-            }
-        }
+        let source = &frame.path;
+        let position = raw_planes
+            .iter()
+            .position(|(id, _)| id == variable_id)
+            .expect("read just above");
+        let (_, mut plane) = raw_planes.swap_remove(position);
         if grid.column_roll > 0 {
             let roll = grid.column_roll;
             let mut rolled = vec![0f64; plane.len()];
@@ -725,7 +790,7 @@ fn extract_planes(
         // Missing data becomes a value before the plane is resampled, so a
         // fill never blends into its neighbours; then the projected plane
         // lands on the regular grid, and only then is a regional window cut.
-        plane_source.apply_fill(&mut plane);
+        plane_sources.for_variable(variable_id)?.apply_fill(&mut plane);
         fill_missing(variable_id, &mut plane)?;
         if let Some(resample) = &grid.resample {
             plane = resample.take(&plane)?;
@@ -762,7 +827,7 @@ fn fill_missing(variable_id: &str, plane: &mut [f64]) -> Result<()> {
     PlaneSource {
         unscale: false,
         fill_values: spec.fill_values.to_vec(),
-        fill_replacement: f64::from(spec.value_range.0),
+        fill_replacement: spec.value_range.0,
     }
     .apply_fill(plane);
     Ok(())
@@ -812,7 +877,7 @@ fn quantize_file(
     frames: &FileFrames,
     grid: &GridInfo,
     profile: &str,
-    plane_source: &PlaneSource,
+    plane_source: &PlaneSources,
     average_window_hours: i64,
     previous: Option<(i64, Arc<PlaneSlot>)>,
     own: Option<Arc<PlaneSlot>>,
@@ -1251,9 +1316,11 @@ pub fn convert_bin(
     let variable_ids: Vec<String>;
     let available_vector_ids: Vec<&'static str>;
     let available_derived_ids: Vec<&'static str>;
+    let available_composite_ids: Vec<&'static str>;
     let drop_ids: Vec<String>;
     let grid_path: PathBuf;
-    let plane_source: PlaneSource;
+    let plane_source: PlaneSources;
+    let producer_versions: Vec<(String, (String, String))>;
 
     if source.series_file {
         // A series-file observation source is one NetCDF file holding the
@@ -1262,26 +1329,46 @@ pub fn convert_bin(
         // match, no wind pair, and no published cadence to validate the axis
         // against — the file's own times are the axis, gaps included. (The
         // MRMS observation is one GRIB per frame and takes the record path
-        // below, re-keyed onto its window's axis.) A run directory holds
-        // exactly one such file.
+        // below, re-keyed onto its window's axis.) A run directory holds one
+        // such file per variable — or one file for its one variable
+        // (`observation::series_files`). Only the variables the requested
+        // bundles carry are read: a satellite window's unpublished channels
+        // feed its composite in the fetch stage and are never quantized
+        // here.
         if inputs.len() != 1 {
             return Err(EncodeError::conversion(format!(
-                "a {} build takes exactly one NetCDF file",
+                "a {} build takes one NetCDF series, or the directory holding them",
                 source.manifest_model
             )));
         }
-        let input = if inputs[0].is_dir() {
-            series_input(&inputs[0], source)?
-        } else {
-            inputs[0].clone()
-        };
+        let input = inputs[0].clone();
         if options.require_complete && !source.fetched() {
             return Err(EncodeError::conversion(format!(
                 "{} has no complete run to require",
                 source.manifest_model
             )));
         }
-        let series = inspect_observation(&input, source)?;
+        let requested_bundle_ids: Vec<&'static str> = published
+            .iter()
+            .copied()
+            .filter(|bundle_id| {
+                options
+                    .bundle_ids
+                    .as_ref()
+                    .is_none_or(|wanted| wanted.iter().any(|id| id == bundle_id))
+            })
+            .collect();
+        let mut series_variable_ids: Vec<String> = Vec::new();
+        for bundle_id in &requested_bundle_ids {
+            for variable_id in bundle_variable_ids(bundle_id) {
+                if !series_variable_ids.contains(&variable_id) {
+                    series_variable_ids.push(variable_id);
+                }
+            }
+        }
+        let series_variable_refs: Vec<&str> = series_variable_ids.iter().map(String::as_str).collect();
+        let series = inspect_observation(&input, source, Some(&series_variable_refs))?;
+        grid_path = series.dataset().to_path_buf();
         per_file = series.frames;
         // `last_hour` trims the series to a leading window of the file, and
         // the frame it stops on must exist — a case's declared range is never
@@ -1300,16 +1387,17 @@ pub fn convert_bin(
                 )));
             }
         }
-        variable_ids = source
-            .input_variable_ids
-            .iter()
-            .map(|id| (*id).to_string())
-            .collect();
+        variable_ids = series_variable_ids;
         available_vector_ids = Vec::new();
         available_derived_ids = Vec::new();
+        available_composite_ids = requested_bundle_ids
+            .iter()
+            .copied()
+            .filter(|bundle_id| composite_components(bundle_id).is_some())
+            .collect();
         drop_ids = Vec::new();
-        grid_path = series.dataset;
-        plane_source = series.plane_source;
+        plane_source = PlaneSources::PerVariable(series.plane_sources);
+        producer_versions = series.producers;
     } else {
         let paths = discover_inputs(inputs)?;
         // One real GDAL inspection pass over the first file: it probes which
@@ -1441,8 +1529,10 @@ pub fn convert_bin(
             source.cadence_seconds,
             options,
         )?;
+        available_composite_ids = Vec::new();
         grid_path = paths[0].clone();
-        plane_source = PlaneSource::grib();
+        plane_source = PlaneSources::Uniform(PlaneSource::grib());
+        producer_versions = Vec::new();
     }
 
     // -- the time axis ------------------------------------------------------
@@ -1576,10 +1666,8 @@ pub fn convert_bin(
     }
     let mut encoded_variable_ids: Vec<String> =
         scalar_variable_ids.iter().map(|id| (*id).to_string()).collect();
-    for bundle_id in &available_vector_ids {
-        let (u, v) = vector_components(bundle_id).expect("a vector bundle");
-        encoded_variable_ids.push(u);
-        encoded_variable_ids.push(v);
+    for bundle_id in available_vector_ids.iter().chain(&available_composite_ids) {
+        encoded_variable_ids.extend(bundle_variable_ids(bundle_id));
     }
     // Scalars that also ship a poster — every published scalar but the
     // contour-drawn pressure family, which a filled first-frame poster would
@@ -1632,6 +1720,7 @@ pub fn convert_bin(
             &[variable_id],
             source,
             unit_seconds,
+            &producer_versions,
         )?;
         poster_reports.insert(
             variable_id,
@@ -1671,20 +1760,20 @@ pub fn convert_bin(
             .collect()
     };
 
-    // Vector bundles first (the largest), scalars after; reports keep the
-    // scalars-then-vectors manifest order regardless.
-    let mut submit_order: Vec<&str> = available_vector_ids.clone();
+    // Composite and vector bundles first (the largest), scalars after;
+    // reports keep the scalars-then-vectors-then-composites manifest order
+    // regardless.
+    let mut submit_order: Vec<&str> = available_composite_ids.clone();
+    submit_order.extend_from_slice(&available_vector_ids);
     submit_order.extend_from_slice(&scalar_variable_ids);
     let mut report_order: Vec<&str> = scalar_variable_ids.clone();
     report_order.extend_from_slice(&available_vector_ids);
+    report_order.extend_from_slice(&available_composite_ids);
 
     let mut full_reports: BTreeMap<&str, Value> = BTreeMap::new();
     let mut variant_reports: BTreeMap<&str, Vec<Value>> = BTreeMap::new();
     for bundle_id in &submit_order {
-        let bundle_variables: Vec<String> = match vector_components(bundle_id) {
-            Some((u, v)) => vec![u, v],
-            None => vec![(*bundle_id).to_string()],
-        };
+        let bundle_variables: Vec<String> = bundle_variable_ids(bundle_id);
         let variables: Vec<&str> = bundle_variables.iter().map(String::as_str).collect();
         let bundle_offsets: Vec<i64> = variable_offsets[variables[0]].clone();
         for (suffix, bundle_grid, codes) in [
@@ -1702,6 +1791,7 @@ pub fn convert_bin(
                 &variables,
                 source,
                 unit_seconds,
+                &producer_versions,
             )?;
             let tile = bundle_tile(source.tile, &bundle_grid, !suffix.is_empty());
             let geometry = TileGeometry::new(

@@ -38,7 +38,7 @@ import {
   type MessageKey,
 } from "./i18n";
 import { createSheet, fillLanguageList } from "./sheet";
-import { ForecastLayer, MAX_NAMED_CONTOURS, type ContourStyle, type VectorField } from "./layer";
+import { ForecastLayer, MAX_NAMED_CONTOURS, type CompositeField, type ContourStyle, type VectorField } from "./layer";
 import {
   DERIVED_MAX_CODE,
   frontPalette,
@@ -78,6 +78,7 @@ import {
 import {
   identifyBundle,
   identityForBundleId,
+  isCompositeIdentity,
   registeredBundleId,
   sameIdentity,
   type VariableIdentity,
@@ -99,7 +100,7 @@ import {
   type IsobaricFamily,
   UNTILED_BUNDLE_IDS,
 } from "./levels";
-import { buildPalette, buildVapourFluxPalette, buildWaveFieldPalette, buildWindFieldPalette, legendGradient } from "./palettes";
+import { buildPalette, buildVapourFluxPalette, buildWaveFieldPalette, buildWindFieldPalette, decodeValue, legendGradient } from "./palettes";
 import {
   PRESSURE_BUNDLE_IDS,
   isPressureBundle,
@@ -134,7 +135,7 @@ import {
   type ViewComposition,
   type ViewState,
 } from "./viewstate";
-import { FIELD_GROUPS, variableIds, variableSpec, type FieldGroup, type GroundId } from "./variables";
+import { FIELD_GROUPS, variableIds, variableSpec, type FieldGroup, type GroundId, type LegendSwatch } from "./variables";
 import { TC_MODELS } from "./tc/agencies";
 import { buildTcCard } from "./tc/card";
 import { pointDataOf, StormLayers, TC_CLICKABLE_LAYERS, type StormView, type TcPointData } from "./tc/layers";
@@ -357,6 +358,8 @@ interface VariableUi {
   bufferTitle: string;
   label: string;
   legend: readonly string[];
+  /** A swatch key in place of the bar, for a picture (the Dust RGB). */
+  legendKey: readonly LegendSwatch[] | null;
 }
 
 interface BasemapTones {
@@ -745,6 +748,7 @@ const legendBar = legend.querySelector<HTMLElement>(".legend-bar")!;
 const legendUnit = required<HTMLElement>("legend-unit");
 const legendLabels = required<HTMLElement>("legend-labels");
 const legendDerived = required<HTMLElement>("legend-derived");
+const legendKey = required<HTMLElement>("legend-key");
 const legendInflow = required<HTMLElement>("legend-inflow");
 const legendFront = required<HTMLElement>("legend-front");
 const trackStart = required<HTMLElement>("track-start");
@@ -927,11 +931,14 @@ interface VariableSession {
   /** True when the bundle carries a u/v component pair — read from the
    * parameter blocks, not from the id string. */
   vector: boolean;
+  /** True when the bundle carries three colour guns drawn as a picture —
+   * read from the parameter and producer blocks, like `vector`. */
+  composite: boolean;
   /** Primary data variable (drives palette/unit for scalars; the u component
-   * for wind). */
+   * for wind; the red gun for a composite). */
   variable: BundleVariable;
   /** Every data variable a frame of this session needs decoded — one for
-   * scalars, the u and v pair for wind. */
+   * scalars, the u and v pair for wind, the three guns for a composite. */
   variables: BundleVariable[];
   /** Delivery format actually in use for this variable ("Xue ½" is the
    * half-resolution variant tier; "Zarr" and "Zarr ½" the same tiers read
@@ -2296,6 +2303,23 @@ function seedProbeFromCache(): void {
   }
 }
 
+/** The three guns of a composite at one frame as the panel's value line —
+ * `R .62 G .40 B .71`, each in [0, 1] — or null until all three are
+ * sampled or where any is no data. Instrument text, English in every
+ * locale. */
+function compositeProbeReadout(series: ProbeSeries, variables: readonly ProbeVariable[], offset: number): string | null {
+  if (variables.length < 3) return null;
+  const parts: string[] = [];
+  for (const [at, { key, variable }] of variables.slice(0, 3).entries()) {
+    const code = series.code(key, offset);
+    if (code === undefined) return null;
+    const value = decodeValue(variable, code);
+    if (value === null || value < 0) return null;
+    parts.push(`${"RGB"[at]} ${Math.min(1, value).toFixed(2).replace(/^0/, "")}`);
+  }
+  return parts.join(" ");
+}
+
 /** Coalesce the redraws that decode completions and frame steps both trigger
  * into one per animation frame. */
 function scheduleProbeRender(): void {
@@ -2335,12 +2359,17 @@ function renderProbe(): void {
   const index = activeFrameIndex ?? Number(slider.value);
   const offsets = frameAxis();
   const probed = probeVariables(session);
-  const values = cell ? probeSeriesValues(series, probed, offsets) : [];
+  // A composite's guns are unitless stretches with no magnitude between
+  // them: the readout names the three as they are and draws no trace.
+  const values = cell ? (session.composite ? [] : probeSeriesValues(series, probed, offsets)) : [];
   const current = values[index];
 
   if (!cell) {
     probePanel.value.value = "--";
     probePanel.meta.textContent = t("probeOutside");
+  } else if (session.composite) {
+    probePanel.value.value = compositeProbeReadout(series, probed, frameOffset(index)) ?? "--";
+    probePanel.meta.textContent = frameStampLine(index);
   } else {
     probePanel.value.value =
       typeof current === "number"
@@ -2360,8 +2389,8 @@ function renderProbe(): void {
   }
 
   const sampled = values.reduce<number>((total, value) => total + (value === undefined ? 0 : 1), 0);
-  probePanel.count.textContent = cell ? `${sampled} / ${offsets.length}` : "";
-  probePanel.hint.textContent = !cell ? "" : sampled >= offsets.length ? t("probeComplete") : t("probeHint");
+  probePanel.count.textContent = cell && !session.composite ? `${sampled} / ${offsets.length}` : "";
+  probePanel.hint.textContent = !cell || session.composite ? "" : sampled >= offsets.length ? t("probeComplete") : t("probeHint");
   drawProbeChart(values, index, variable);
   renderProbeRows(series, index);
   // The ascent under the rows: its own time, never the playhead's, but the
@@ -3110,31 +3139,34 @@ function framePlanes(session: VariableSession, index: number): DecodedFrame[] | 
   return planes;
 }
 
-/** Interleaved wind planes, keyed by the frame they belong to. Packing a
- * 1440x721 pair copies two megabytes, and a blend sweep asks for the same two
- * frames on every animation frame, so the result is kept and reused as long
- * as it was built from the very planes still in the cache. Four is the blend's
- * two plus the step moving onto the next pair. */
+/** Interleaved wind (or composite) planes, keyed by the frame they belong
+ * to. Packing a 1440x721 pair copies two megabytes, and a blend sweep asks
+ * for the same two frames on every animation frame, so the result is kept
+ * and reused as long as it was built from the very planes still in the
+ * cache. Four is the blend's two plus the step moving onto the next pair. */
 const vectorPlanes = new Map<string, { sources: Uint8Array[]; packed: Uint8Array }>();
 const VECTOR_PLANE_CACHE = 4;
 
 /** The bytes the scalar layer draws for one frame: the plane itself for a
- * scalar session, and for wind the u/v pair interleaved into one RG plane —
- * u codes in red, v in green, the same packing the particle layer builds for
- * its own texture, which is what the layer's magnitude mode reads. */
+ * scalar session; for wind the u/v pair interleaved into one RG plane — u
+ * codes in red, v in green, the same packing the particle layer builds for
+ * its own texture, which is what the layer's magnitude mode reads; and for
+ * a composite the three guns interleaved into one RGB plane, which is what
+ * its composite mode reads. */
 function displayPlane(session: VariableSession, index: number, planes: DecodedFrame[]): Uint8Array {
-  if (!session.vector || planes.length < 2) return planes[0]!.plane;
+  const channels = session.composite && planes.length >= 3 ? 3 : session.vector && planes.length >= 2 ? 2 : 1;
+  if (channels === 1) return planes[0]!.plane;
   const key = cacheKey(session, session.variables[0]!, frameOffset(index));
-  const sources = planes.map((frame) => frame.plane);
+  const sources = planes.slice(0, channels).map((frame) => frame.plane);
   const held = vectorPlanes.get(key);
   if (held && held.sources.length === sources.length && held.sources.every((plane, at) => plane === sources[at])) {
     return held.packed;
   }
-  const [u, v] = sources as [Uint8Array, Uint8Array];
-  const packed = new Uint8Array(u.length * 2);
-  for (let cell = 0; cell < u.length; cell += 1) {
-    packed[cell * 2] = u[cell]!;
-    packed[cell * 2 + 1] = v[cell]!;
+  const length = sources[0]!.length;
+  const packed = new Uint8Array(length * channels);
+  for (let channel = 0; channel < channels; channel += 1) {
+    const source = sources[channel]!;
+    for (let cell = 0; cell < length; cell += 1) packed[cell * channels + channel] = source[cell]!;
   }
   vectorPlanes.set(key, { sources, packed });
   // Oldest first, and never the one just built.
@@ -3196,7 +3228,14 @@ function trySelectFrame(index: number): boolean {
       planeCache.set(key, planes[position]!);
     }
     ensureSlotGrid(slot, session);
-    if (session.vector) {
+    if (session.composite) {
+      // One coverage box serves the three guns, so it has to be a box all
+      // three planes hold: their own tiles when they agree, the view's
+      // otherwise — cachedFrame has already proved every plane covers that.
+      const agreed = planes.every((plane) => sameTileRects(planes[0]!.tiles, plane!.tiles));
+      const tiles = agreed ? planes[0]!.tiles : session.viewTiles;
+      slot.layer.setFrame(displayPlane(session, index, planes as DecodedFrame[]), sessionCoverage(session, tiles));
+    } else if (session.vector) {
       // One coverage box serves both channels, so it has to be a box both
       // planes hold: their own tiles when the pair agrees, and the view's
       // otherwise — cachedFrame has already proved every plane covers that.
@@ -4073,6 +4112,27 @@ new ResizeObserver(() => {
 }).observe(forecastDays);
 if (variableRail) new ResizeObserver(syncRailDensity).observe(variableRail);
 
+/** The swatch key a picture shows in place of the bar and its ticks (the
+ * Dust RGB: what each colour is a sign of), or the bar again when the
+ * field has none. A gun is a unitless stretch, so the unit line goes too. */
+function renderLegendKey(key: readonly LegendSwatch[] | null): void {
+  legend.classList.toggle("has-key", key !== null);
+  legendKey.hidden = key === null;
+  legendKey.replaceChildren(
+    ...(key ?? []).map((swatch) => {
+      const item = document.createElement("li");
+      const chip = document.createElement("span");
+      chip.className = "legend-swatch";
+      chip.setAttribute("aria-hidden", "true");
+      chip.style.background = swatch.color;
+      const label = document.createElement("span");
+      label.textContent = swatch.label;
+      item.append(chip, label);
+      return item;
+    }),
+  );
+}
+
 /** The legend bar's gradient for a field whose key is not in the stylesheet:
  * the upper-air fills, the surface diagnostics, solar radiation and every
  * unrecognized field read theirs off the palette they are actually drawn
@@ -4083,6 +4143,8 @@ function legendGradientFor(session: VariableSession): string {
   // its bar off the palette it is actually drawn with.
   const chartId = session.chartId;
   if (chartId !== null && variableSpec(chartId)?.legendGradient === "stylesheet") return "";
+  // A composite's legend is a key of swatches, not a bar.
+  if (session.composite) return "";
   if (session.vector) return legendGradient(vectorPalette(session));
   const variable = session.variable;
   if (variable.quantization.type !== "linear") return "";
@@ -4109,7 +4171,14 @@ function legendGradientFor(session: VariableSession): string {
 function variableUi(session: VariableSession): VariableUi {
   const spec = session.chartId === null ? null : variableSpec(session.chartId);
   if (spec) {
-    return { code: spec.code, title: spec.title, bufferTitle: spec.bufferTitle, label: spec.label(), legend: spec.legend() };
+    return {
+      code: spec.code,
+      title: spec.title,
+      bufferTitle: spec.bufferTitle,
+      label: spec.label(),
+      legend: spec.legend(),
+      legendKey: spec.legendKey?.() ?? null,
+    };
   }
   const variable = session.variable;
   const quantization = variable.quantization;
@@ -4123,6 +4192,7 @@ function variableUi(session: VariableSession): VariableUi {
     bufferTitle: "Data buffer",
     label: variable.label,
     legend: rangeLegend(range, niceStep(range[1] - range[0])),
+    legendKey: null,
   };
 }
 
@@ -4177,6 +4247,7 @@ function updateVariablePresentation(session: VariableSession): void {
     return span;
   }));
   legendBar.style.background = legendGradientFor(session);
+  renderLegendKey(ui.legendKey);
   syncDerivedLegend();
   if (experimentEnabled && session.chartId === "prate") {
     const key = steppedPrecipitationLegend();
@@ -4683,6 +4754,7 @@ function loadVariable(
       identity,
       chartId: registeredBundleId(identity),
       vector: identity?.vector === true && sessionVariables.length >= 2,
+      composite: isCompositeIdentity(identity) && sessionVariables.length >= 3,
       variable: sessionVariables[0]!,
       variables: sessionVariables,
       format,
@@ -5469,18 +5541,34 @@ function floorIsNoData(chartId: KnownBundleId | null): boolean {
 function configureSlotLayer(slot: RasterSlot, session: VariableSession, overlay: boolean): void {
   slot.session = session;
   const { layer } = slot;
-  if (session.vector) {
+  if (session.composite) {
+    // A composite is a picture: its three guns drawn straight as colour
+    // through the same projection, blend and coverage clip, no palette.
+    const field = compositeField(session);
+    layer.setContours(null);
+    layer.setVectorField(null);
+    layer.setCompositeField(field);
+    layer.setFloorNoData(false);
+    // The shader reads no palette in this mode, but the layer draws
+    // nothing until it holds one; the red gun's own will do.
+    layer.setPalette(buildPalette(session.variable, null));
+    // Without linear codebooks on all three guns there is no colour to
+    // reconstruct, and a gun on its own would be a false picture.
+    layer.setVisible(field !== null);
+  } else if (session.vector) {
     // A vector field is a filled field like every other layer — the
     // magnitude, colored through the same shader from the u/v pair in one
     // pass — and the particles ride over it as an optional overlay.
     const field = windVectorField(session);
     layer.setContours(null);
+    layer.setCompositeField(null);
     layer.setVectorField(field);
     layer.setPalette(vectorPalette(session));
     // Without linear codebooks on both components there is no speed to
     // color; the overlay is then the whole layer, as it used to be.
     layer.setVisible(field !== null);
   } else {
+    layer.setCompositeField(null);
     layer.setVectorField(null);
     layer.setPalette(
       experimentEnabled && session.chartId === "prate"
@@ -5539,6 +5627,18 @@ function windVectorField(session: VariableSession): VectorField | null {
     scale: [u.quantization.scale, v.quantization.scale],
     nodataCode: u.quantization.nodataCode,
     maxMagnitude: sessionMaxMagnitude(session),
+  };
+}
+
+/** A composite bundle's own decode for the layer's colour mode: each gun's
+ * linear codebook. Null when any gun is not linearly quantized — nothing
+ * published is, and a picture has no meaning without all three. */
+function compositeField(session: VariableSession): CompositeField | null {
+  const [r, g, b] = session.variables;
+  if (r?.quantization.type !== "linear" || g?.quantization.type !== "linear" || b?.quantization.type !== "linear") return null;
+  return {
+    offset: [r.quantization.offset, g.quantization.offset, b.quantization.offset],
+    scale: [r.quantization.scale, g.quantization.scale, b.quantization.scale],
   };
 }
 

@@ -664,8 +664,9 @@ live-window:
 # The decoded-frame cache of a source whose frames are decoded from a
 # tile service (JMA, through the jma-radar tool: one NetCDF per frame under
 # data/raw/<model>-frames/<grid>/) or warped from an agency's tiles (the
-# satellite sources, xuebuild/satellite/: one GeoTIFF per frame under
-# data/raw/<model>-frames/<channel>/), mirrored under <prefix>/<model>-frames/
+# satellite sources, xuebuild/satellite/: one GeoTIFF per frame and per
+# variable, channel or composed gun, under data/raw/<model>-frames/<variable>/),
+# mirrored under <prefix>/<model>-frames/
 # on the bucket so every runner shares one copy and the agency serves each
 # frame once. Frames are immutable and named by their time
 # (`hrpns_<YYYYMMDDHHMMSS>.nc`, `ir104_<YYYYMMDDHHMMSS>.tif`), so a pull

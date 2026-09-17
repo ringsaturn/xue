@@ -221,6 +221,11 @@ export type IsobaricScalarBundleId =
  * and the water vapour flux the encoder derives there. */
 export type VectorBundleId = "wind10m" | `wind${IsobaricLevel}` | `qflux${IsobaricLevel}` | "wave";
 
+/** The three-variable bundles: a colour composite a producer derived from
+ * several satellite channels, whose variables are the three guns the viewer
+ * draws straight as red, green and blue (the classic Dust RGB). */
+export type CompositeBundleId = "dustrgb";
+
 /** A bundle-level id in a manifest.
  *
  * Deliberately a plain string: the manifest is not a registry. What a bundle
@@ -274,13 +279,14 @@ export const SURFACE_DIAGNOSTIC_IDS: readonly SurfaceDiagnosticId[] = [
 export type OceanId = "tmpsfc" | "icec" | "icetk" | "htsgw" | "perpw" | "dirpw";
 export const OCEAN_IDS: readonly OceanId[] = ["tmpsfc", "icec", "icetk", "htsgw", "perpw", "dirpw"];
 
-/** The satellite channels — brightness temperature in the 10.4 µm infrared
+/** The satellite bundles — brightness temperature in the 10.4 µm infrared
  * window, one bundle per channel, named by nominal wavelength and
  * instrument-neutral (AHI band 13 and ABI channel 13 are both `ir104`; the
- * file's `band` block says which) — held to the encoders by
- * `tests/fixtures/satellite-registry.json`. */
-export type SatelliteId = "ir104";
-export const SATELLITE_IDS: readonly SatelliteId[] = ["ir104"];
+ * file's `band` block says which), and the Dust RGB composite a producer
+ * derives from four infrared channels (`dustrgb`, a `CompositeBundleId`) —
+ * held to the encoders by `tests/fixtures/satellite-registry.json`. */
+export type SatelliteId = "ir104" | CompositeBundleId;
+export const SATELLITE_IDS: readonly SatelliteId[] = ["ir104", "dustrgb"];
 
 /** A well-formed bundle/variable name: lowercase alphanumeric, starting with
  * a letter. This is the whole admission rule — a manifest is rejected for
@@ -300,6 +306,10 @@ export type VectorComponentId =
   | "uwave"
   | "vwave";
 
+/** The component variables a composite bundle carries: the three guns of
+ * the Dust RGB, in the order the renderer draws them. */
+export type CompositeComponentId = "dustr" | "dustg" | "dustb";
+
 /** Data-level variable ids that can appear inside bundle metadata. A plain
  * string for the same reason `ForecastBundleId` is: a file names its own
  * variables, and the parameter block — not the name — says what they are. */
@@ -315,7 +325,8 @@ export type KnownDataVariableId =
   | OceanId
   | PressureBundleId
   | IsobaricScalarBundleId
-  | VectorComponentId;
+  | VectorComponentId
+  | CompositeComponentId;
 
 export const FORECAST_VARIABLE_IDS: readonly ForecastVariableId[] = ["tmp2m", "prate"];
 
@@ -373,6 +384,27 @@ export function isVectorBundle(id: ForecastBundleId): id is VectorBundleId {
  * components. */
 export function vectorComponents(id: ForecastBundleId): readonly [VectorComponentId, VectorComponentId] | null {
   return isVectorBundle(id) ? VECTOR_BUNDLES[id] : null;
+}
+
+/** The three guns of every composite bundle, red, green, blue — the order
+ * the encoders number them (1, 2, 3) and the renderer's RGB texture takes
+ * them in. */
+export const COMPOSITE_BUNDLES: Record<CompositeBundleId, readonly [CompositeComponentId, CompositeComponentId, CompositeComponentId]> = {
+  dustrgb: ["dustr", "dustg", "dustb"],
+};
+
+/** True when a bundle *named* by the convention carries three colour guns
+ * rather than one scalar or a u/v pair. A guess from the id string like
+ * `isVectorBundle`; an open session answers from its variables' parameter
+ * and producer blocks instead (`VariableSession.composite`). */
+export function isCompositeBundle(id: ForecastBundleId): id is CompositeBundleId {
+  return id in COMPOSITE_BUNDLES;
+}
+
+/** The three components a conventionally named composite bundle carries,
+ * or null for anything else. */
+export function compositeComponents(id: ForecastBundleId): readonly [CompositeComponentId, CompositeComponentId, CompositeComponentId] | null {
+  return isCompositeBundle(id) ? COMPOSITE_BUNDLES[id] : null;
 }
 
 export interface VideoBundleDescriptor {

@@ -14,7 +14,14 @@ from dataclasses import dataclass
 import numpy as np
 
 from .errors import ConversionError
-from .variables import ISOBARIC_LEVELS_HPA, OCEAN_VARIABLE_IDS, WAVE_VECTOR_COMPONENT_IDS, isobaric_variable_id
+from .variables import (
+    DUST_RGB_COMPONENT_IDS,
+    ISOBARIC_LEVELS_HPA,
+    OCEAN_VARIABLE_IDS,
+    SATELLITE_CHANNEL_IDS,
+    WAVE_VECTOR_COMPONENT_IDS,
+    isobaric_variable_id,
+)
 
 
 @dataclass(frozen=True)
@@ -231,10 +238,33 @@ COMPACT_WAVE_VECTOR = TemperatureCodebook(minimum=-25.2, maximum=25.2, step=0.4,
 # split-window difference to a tenth reads the fetch stage's packed series,
 # not the codes. The compact profile doubles the step and stops a code
 # short (331.2) like the other linear codebooks.
-QUALITY_BRIGHTNESS_TEMPERATURE = TemperatureCodebook(minimum=180.0, maximum=331.8, step=0.6, name="ir104")
-COMPACT_BRIGHTNESS_TEMPERATURE = TemperatureCodebook(minimum=180.0, maximum=331.2, step=1.2, name="ir104")
-QUALITY_SATELLITE = {"ir104": QUALITY_BRIGHTNESS_TEMPERATURE}
-COMPACT_SATELLITE = {"ir104": COMPACT_BRIGHTNESS_TEMPERATURE}
+# Every infrared window shares the two (the name is the channel's own).
+def _brightness_temperature(channel_id: str) -> tuple[TemperatureCodebook, TemperatureCodebook]:
+    return (
+        TemperatureCodebook(minimum=180.0, maximum=331.8, step=0.6, name=channel_id),
+        TemperatureCodebook(minimum=180.0, maximum=331.2, step=1.2, name=channel_id),
+    )
+
+
+QUALITY_BRIGHTNESS_TEMPERATURE, COMPACT_BRIGHTNESS_TEMPERATURE = _brightness_temperature("ir104")
+# A Dust RGB gun is a stretched, gamma-corrected number in 0–1 (the
+# ``shachen`` producer, xuebuild/satellite/producers.py): 250 steps of
+# 0.004 across the range, more than a display resolves. The codebook
+# starts one step *below* zero so that code 0 is "no data" — a cell the
+# disk does not cover, or one an input channel lacked, which the shell
+# leaves unpainted when any gun carries it — while black (0, 0, 0) stays a
+# value at code 1. One codebook for every profile: the quantity is already
+# a display value, and a coarser one would band the picture.
+DUST_RGB_GUN = TemperatureCodebook(minimum=-0.004, maximum=1.0, step=0.004, name="dustrgb")
+QUALITY_SATELLITE = {
+    **{channel_id: _brightness_temperature(channel_id)[0] for channel_id in SATELLITE_CHANNEL_IDS},
+    **{gun_id: DUST_RGB_GUN for gun_id in DUST_RGB_COMPONENT_IDS},
+}
+COMPACT_SATELLITE = {
+    **{channel_id: _brightness_temperature(channel_id)[1] for channel_id in SATELLITE_CHANNEL_IDS},
+    **{gun_id: DUST_RGB_GUN for gun_id in DUST_RGB_COMPONENT_IDS},
+}
+assert tuple(QUALITY_SATELLITE) == SATELLITE_CHANNEL_IDS + DUST_RGB_COMPONENT_IDS
 QUALITY_OCEAN = {
     "tmpsfc": QUALITY_SURFACE_TEMPERATURE,
     "icec": QUALITY_ICE_COVER,

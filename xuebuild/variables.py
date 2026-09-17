@@ -60,7 +60,7 @@ class VariableSpec:
     """English label carried in bundle metadata."""
     output_unit: str
     """Unit of the values a bundle's codebook quantizes, carried in metadata."""
-    value_range: tuple[int, int]
+    value_range: tuple[float, float]
     grib_element: str = ""
     index_field: str = ""
     excluded_index_phrases: tuple[str, ...] = ()
@@ -113,6 +113,16 @@ class VariableSpec:
     """Unit string GDAL's GRIB driver reports for this record (it normalizes
     temperatures to Celsius); carried by header-indexed frames and
     cross-checked against a real gdalinfo pass once per run."""
+    producer_id: str | None = None
+    """For a field an algorithm derived from other variables rather than an
+    instrument measured — a satellite composite — the ``producer.id`` of the
+    block written beside its ``parameter`` (docs/format.md §"Band and
+    Producer"): ``shachen`` for the Dust RGB guns. The algorithm's
+    *version* is not registered: the fetch stage stamps it on the series
+    it produced (:mod:`xuebuild.satellite.producers`), the converters read
+    it off the series, and a series whose producer is not this one is
+    refused. Such a variable's parameter is in GRIB2's local-use range and
+    means nothing without the producer."""
     fill_values: tuple[float, ...] = ()
     """Values GDAL hands back where the record carries no data. A GRIB2
     record with a bitmap (the GFS-Wave fields, which cover water only) comes
@@ -697,6 +707,87 @@ VARIABLES: dict[str, VariableSpec] = {
         grib2_number=4,
         grib2_level_type=8,
     ),
+    # The three other infrared windows the Dust RGB reads (AHI bands 11, 14
+    # and 15; ABI channels 11, 14 and 15), the same parameter and codebook
+    # as ``ir104``: registered so a source can fetch them for a composite
+    # (``SourceSpec.input_variable_ids``) or publish them by a source-table
+    # line, and unpublished by every source today.
+    "ir086": VariableSpec(
+        id="ir086",
+        label="Brightness temperature, 8.6 µm",
+        output_unit="K",
+        value_range=(180, 332),
+        grib2_discipline=0,
+        grib2_category=4,
+        grib2_number=4,
+        grib2_level_type=8,
+    ),
+    "ir112": VariableSpec(
+        id="ir112",
+        label="Brightness temperature, 11.2 µm",
+        output_unit="K",
+        value_range=(180, 332),
+        grib2_discipline=0,
+        grib2_category=4,
+        grib2_number=4,
+        grib2_level_type=8,
+    ),
+    "ir123": VariableSpec(
+        id="ir123",
+        label="Brightness temperature, 12.3 µm",
+        output_unit="K",
+        value_range=(180, 332),
+        grib2_discipline=0,
+        grib2_category=4,
+        grib2_number=4,
+        grib2_level_type=8,
+    ),
+    # The classic Dust RGB (Lensky and Rosenfeld 2008; EUMeTrain's recipe
+    # compilation; the GOES-R Quick Guide), the three guns of one composite
+    # bundle, ``dustrgb``: red is the 12.3 − 10.4 µm split window, green
+    # 11.2 − 8.6 µm with a gamma, blue the 10.4 µm window, each stretched
+    # to 0–1 by the ``shachen`` package in the fetch stage
+    # (xuebuild/satellite/producers.py) and stored as a plain number. A
+    # composite has no GRIB2 parameter: each gun takes a local-use number
+    # (discipline 3 space products, category 192, numbers 1–3) that means
+    # nothing without the ``producer`` block beside it, which is why the
+    # producer id is registered here and the shell keys on both. The
+    # codebook keeps code 0 below the gun's range so a cell the disk does
+    # not cover — or one an input channel lacked — is "no data" for all
+    # three guns at once, and black stays a value.
+    "dustr": VariableSpec(
+        id="dustr",
+        label="Dust RGB, red gun",
+        output_unit="1",
+        value_range=(-0.004, 1),
+        grib2_discipline=3,
+        grib2_category=192,
+        grib2_number=1,
+        grib2_level_type=8,
+        producer_id="shachen",
+    ),
+    "dustg": VariableSpec(
+        id="dustg",
+        label="Dust RGB, green gun",
+        output_unit="1",
+        value_range=(-0.004, 1),
+        grib2_discipline=3,
+        grib2_category=192,
+        grib2_number=2,
+        grib2_level_type=8,
+        producer_id="shachen",
+    ),
+    "dustb": VariableSpec(
+        id="dustb",
+        label="Dust RGB, blue gun",
+        output_unit="1",
+        value_range=(-0.004, 1),
+        grib2_discipline=3,
+        grib2_category=192,
+        grib2_number=3,
+        grib2_level_type=8,
+        producer_id="shachen",
+    ),
 }
 
 # The ocean set: the three pgrb2 fields and the three GFS-Wave fields above,
@@ -705,9 +796,16 @@ VARIABLES: dict[str, VariableSpec] = {
 # also carries the two derived wave vector components.
 OCEAN_VARIABLE_IDS: tuple[str, ...] = ("tmpsfc", "icec", "icetk", "htsgw", "perpw", "dirpw")
 WAVE_VECTOR_COMPONENT_IDS: tuple[str, str] = ("uwave", "vwave")
-# The satellite channels, held to the Rust encoder and the frontend by
-# tests/fixtures/satellite-registry.json the same way.
-SATELLITE_VARIABLE_IDS: tuple[str, ...] = ("ir104",)
+# The satellite channels and the composite guns, held to the Rust encoder
+# and the frontend by tests/fixtures/satellite-registry.json the same way.
+# The channels are what a platform's imager measures (a ``band`` block
+# each when published); the guns are what the Dust RGB producer derives
+# from four of them, the three variables of the ``dustrgb`` bundle in
+# bundle order.
+SATELLITE_CHANNEL_IDS: tuple[str, ...] = ("ir086", "ir104", "ir112", "ir123")
+DUST_RGB_BUNDLE_ID = "dustrgb"
+DUST_RGB_COMPONENT_IDS: tuple[str, str, str] = ("dustr", "dustg", "dustb")
+SATELLITE_VARIABLE_IDS: tuple[str, ...] = SATELLITE_CHANNEL_IDS + DUST_RGB_COMPONENT_IDS
 # The ids the Celsius rule applies to at the surface: GDAL normalizes every
 # GRIB temperature to Celsius, and the converter accepts K and F as well.
 SURFACE_TEMPERATURE_IDS: tuple[str, ...] = ("tmp2m", "dpt2m", "aptmp2m", "tmpsfc")

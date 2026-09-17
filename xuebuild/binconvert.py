@@ -19,7 +19,7 @@ import math
 import os
 import tempfile
 import zlib
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
@@ -50,11 +50,14 @@ from .manifest import (
     write_latest_pointer,
 )
 from .model import GRIB_PLANE_SOURCE, PlaneSource, SourceFrame
-from .observation import NETCDF_EXTENSIONS, inspect_observation
+from .observation import inspect_observation
+from .satellite.producers import PRODUCERS
 from .quantize import PRESSURE_VARIABLE_IDS, PROFILES, PrecipitationCodebook, TemperatureCodebook
 from .reproject import ProjectedGrid, Resampler, build_resampler, lambert_conformal_from_wkt
 from .sources import Downsample, SourceSpec, source_spec
 from .variables import (
+    DUST_RGB_BUNDLE_ID,
+    DUST_RGB_COMPONENT_IDS,
     ISOBARIC_LEVELS_HPA,
     STANDARD_GRAVITY,
     SURFACE_TEMPERATURE_IDS,
@@ -98,6 +101,24 @@ DERIVED_VECTORS: dict[str, tuple[str, ...]] = {
     **{f"qflux{level}": (f"spfh{level}", f"ugrd{level}", f"vgrd{level}") for level in ISOBARIC_LEVELS_HPA},
     WAVE_BUNDLE_ID: ("htsgw", "dirpw"),
 }
+
+
+# Composite bundles: three or more variables an algorithm derived from a
+# source's channels in the *fetch stage* (xuebuild/satellite/producers.py),
+# read off the observation series as more variables and written as one
+# bundle in this order — the converter never derives them. The Dust RGB's
+# three guns first. Mirrored in encode/convert.rs.
+COMPOSITE_BUNDLES: dict[str, tuple[str, ...]] = {DUST_RGB_BUNDLE_ID: DUST_RGB_COMPONENT_IDS}
+
+
+def bundle_variable_ids(bundle_id: str) -> tuple[str, ...]:
+    """The variables one bundle carries, in bundle order: a scalar's own,
+    a vector's pair, a composite's components."""
+    if bundle_id in VECTOR_BUNDLES:
+        return VECTOR_BUNDLES[bundle_id]
+    if bundle_id in COMPOSITE_BUNDLES:
+        return COMPOSITE_BUNDLES[bundle_id]
+    return (bundle_id,)
 
 
 # Scalar bundles the converter derives rather than reads: the equivalent
@@ -313,6 +334,11 @@ def bundle_input_ids(source: SourceSpec, bundle_id: str) -> tuple[str, ...]:
     """The source input variables one published bundle is built from."""
     if bundle_id in VECTOR_BUNDLES:
         return vector_input_ids(bundle_id)
+    if bundle_id in COMPOSITE_BUNDLES:
+        # The channels its producer reads: what the fetch must download for
+        # the composite to be composed, since the components themselves are
+        # never fetched.
+        return PRODUCERS[bundle_id].inputs
     if bundle_id in DERIVED_SCALARS:
         return DERIVED_SCALARS[bundle_id]
     if bundle_id == "prate":
@@ -333,17 +359,6 @@ def analysis_optional_ids(source: SourceSpec, scalar_ids: tuple[str, ...]) -> tu
     )
 
 
-def _series_input(directory: Path, source: SourceSpec) -> Path:
-    """The one NetCDF series a fetched observation's run directory holds."""
-    files = sorted(path for path in directory.iterdir() if path.is_file() and path.suffix.lower() in NETCDF_EXTENSIONS)
-    if len(files) != 1:
-        raise ConversionError(
-            f"a {source.manifest_model} run directory holds exactly one NetCDF series, "
-            f"{directory} holds {len(files)}"
-        )
-    return files[0]
-
-
 def series_lead_seconds(frames: dict[str, SourceFrame]) -> int:
     """The lead time one file's frames all share, in seconds from the run."""
     return next(iter(frames.values())).lead_seconds
@@ -351,9 +366,10 @@ def series_lead_seconds(frames: dict[str, SourceFrame]) -> int:
 
 def published_bundle_ids(source: SourceSpec) -> tuple[str, ...]:
     """Every bundle a source can publish, in manifest order: its scalars,
-    then each listed vector bundle whose inputs the source fetches. A
-    derived scalar counts the same way — listed, it ships only when its
-    inputs are."""
+    then each listed vector bundle whose inputs the source fetches, then
+    each listed composite whose producer's channels it fetches. A derived
+    scalar counts the same way — listed, it ships only when its inputs
+    are."""
     scalars = tuple(
         bundle_id
         for bundle_id in source.bundle_scalar_ids
@@ -364,7 +380,12 @@ def published_bundle_ids(source: SourceSpec) -> tuple[str, ...]:
         for bundle_id in source.bundle_vector_ids
         if all(variable_id in source.input_variable_ids for variable_id in vector_input_ids(bundle_id))
     )
-    return scalars + vectors
+    composites = tuple(
+        bundle_id
+        for bundle_id in source.bundle_composite_ids
+        if all(variable_id in source.input_variable_ids for variable_id in bundle_input_ids(source, bundle_id))
+    )
+    return scalars + vectors + composites
 
 
 def _grid_info(path: Path, source: SourceSpec | None = None) -> GridInfo:
@@ -825,41 +846,59 @@ def _extract_plane(frame: SourceFrame, grid: GridInfo, work: Path) -> np.ndarray
     return _extract_planes({frame.variable_id: frame}, grid, work)[frame.variable_id]
 
 
+def _plane_source_for(plane_source: PlaneSource | Mapping[str, PlaneSource], variable_id: str) -> PlaneSource:
+    """One file's plane source (GRIB: the same for every record) or an
+    observation window's per-variable ones."""
+    if isinstance(plane_source, PlaneSource):
+        return plane_source
+    return plane_source[variable_id]
+
+
 def _extract_planes(
     frames: dict[str, SourceFrame],
     grid: GridInfo,
     work: Path,
-    plane_source: PlaneSource = GRIB_PLANE_SOURCE,
+    plane_source: PlaneSource | Mapping[str, PlaneSource] = GRIB_PLANE_SOURCE,
 ) -> dict[str, np.ndarray]:
-    """Extract every requested band of one file in a single gdal_translate."""
+    """Extract every requested band of one frame: a single gdal_translate
+    per file the frame's variables live in — one for a GRIB record set,
+    one per variable for a satellite window whose series are one file
+    each (mirrored in encode/convert.rs)."""
     order = list(frames)
-    source = frames[order[0]].path
     hour = frames[order[0]].lead_seconds
-    # Named by the band set's hash rather than the ids joined: a GFS frame
-    # now carries over thirty of them, past a filesystem's 255-byte name.
-    band_set = zlib.crc32("-".join(order).encode("ascii")) & 0xFFFFFFFF
-    raw = work / f"planes.f{hour:03d}.{os.getpid()}.{band_set:08x}.bin"
-    command = [require_command("gdal_translate"), "-q"]
-    if plane_source.unscale:
-        command.append("-unscale")
-    for variable_id in order:
-        command += ["-b", str(frames[variable_id].band)]
-    command += ["-of", "ENVI", "-ot", "Float64", "-co", "INTERLEAVE=BSQ", str(source), str(raw)]
-    run_command(command, description=f"extract {', '.join(order)} f{hour:03d}")
-    values = np.fromfile(raw, dtype="<f8")
+    values_by_id: dict[str, np.ndarray] = {}
     source_height, source_width = grid.source_shape
     plane_size = source_width * source_height
-    if values.size != plane_size * len(order):
-        raise ConversionError(f"extracted plane size mismatch for {source}")
+    # The files in first-seen order, each with the variables it holds.
+    by_file: dict[Path, list[str]] = {}
+    for variable_id in order:
+        by_file.setdefault(frames[variable_id].path, []).append(variable_id)
+    for source, file_order in by_file.items():
+        # Named by the band set's hash rather than the ids joined: a GFS frame
+        # now carries over thirty of them, past a filesystem's 255-byte name.
+        band_set = zlib.crc32("-".join(file_order).encode("ascii")) & 0xFFFFFFFF
+        raw = work / f"planes.f{hour:03d}.{os.getpid()}.{band_set:08x}.bin"
+        command = [require_command("gdal_translate"), "-q"]
+        if _plane_source_for(plane_source, file_order[0]).unscale:
+            command.append("-unscale")
+        for variable_id in file_order:
+            command += ["-b", str(frames[variable_id].band)]
+        command += ["-of", "ENVI", "-ot", "Float64", "-co", "INTERLEAVE=BSQ", str(source), str(raw)]
+        run_command(command, description=f"extract {', '.join(file_order)} f{hour:03d}")
+        values = np.fromfile(raw, dtype="<f8")
+        if values.size != plane_size * len(file_order):
+            raise ConversionError(f"extracted plane size mismatch for {source}")
+        for index, variable_id in enumerate(file_order):
+            values_by_id[variable_id] = values[index * plane_size : (index + 1) * plane_size].copy()
     planes: dict[str, np.ndarray] = {}
-    for index, variable_id in enumerate(order):
-        plane = values[index * plane_size : (index + 1) * plane_size].copy().reshape(source_height, source_width)
+    for variable_id in order:
+        plane = values_by_id[variable_id].reshape(source_height, source_width)
         if grid.column_roll:
             plane = np.roll(plane, grid.column_roll, axis=1)
         # Missing data becomes a value before the plane is resampled, so a
         # fill never blends into its neighbours; then the projected plane
         # lands on the regular grid, and only then is a regional window cut.
-        plane = plane_source.apply_fill(plane)
+        plane = _plane_source_for(plane_source, variable_id).apply_fill(plane)
         plane = _fill_missing(variable_id, plane)
         if grid.resample is not None:
             plane = grid.resample.take(plane)
@@ -1071,13 +1110,22 @@ def _time_metadata(offsets: list[int], unit_seconds: int) -> dict[str, Any]:
     return block
 
 
-def _variable_metadata(variable_id: str, numeric_id: int, source: SourceSpec, profile: str) -> dict[str, Any]:
+def _variable_metadata(
+    variable_id: str,
+    numeric_id: int,
+    source: SourceSpec,
+    profile: str,
+    producers: Mapping[str, tuple[str, str]] | None = None,
+) -> dict[str, Any]:
     """One schema v3 variable descriptor: what the field is (GRIB2 parameter
     and fixed surface), what its values mean, and how they are quantized.
 
     ``numeric_id`` is the file-local ``variableId`` handle that ties this
     descriptor to the index (docs/format.md): the variable's 1-based position
-    in the bundle's variable list, assigned by :func:`build_metadata`."""
+    in the bundle's variable list, assigned by :func:`build_metadata`.
+    ``producers`` is what the observation series was stamped with, by
+    variable id: a produced variable's ``producer`` block is its registered
+    id and that version (docs/format.md §"Band and Producer")."""
     spec = variable_spec(variable_id)
     parameter = spec.parameter_metadata()
     for statistical_id, process in source.statistical_processes:
@@ -1100,6 +1148,13 @@ def _variable_metadata(variable_id: str, numeric_id: int, source: SourceSpec, pr
             # the same for every infrared band, so the band block beside it
             # says which channel of which instrument this one is.
             block["band"] = band.metadata()
+    if spec.producer_id is not None:
+        # A composite's gun: the algorithm that derived it, whose version is
+        # the series' stamp (the fetch stage ran it; the converter did not).
+        stamp = (producers or {}).get(variable_id)
+        if stamp is None or stamp[0] != spec.producer_id:
+            raise ConversionError(f"{variable_id} must be stamped by producer {spec.producer_id!r} to be written")
+        block["producer"] = {"id": stamp[0], "version": stamp[1]}
     block["quantization"] = PROFILES[profile][variable_id].metadata()
     return block
 
@@ -1113,6 +1168,7 @@ def build_metadata(
     *,
     source: SourceSpec | None = None,
     unit_seconds: int = binformat.HOUR_SECONDS,
+    producers: Mapping[str, tuple[str, str]] | None = None,
 ) -> dict[str, Any]:
     resolved = source or source_spec("gfs")
     return {
@@ -1128,7 +1184,7 @@ def build_metadata(
         # _bundle_chunks. Nothing outside one file reads these numbers — a
         # variable's identity is its GRIB2 parameter block.
         "variables": [
-            _variable_metadata(variable_id, numeric_id, resolved, profile)
+            _variable_metadata(variable_id, numeric_id, resolved, profile, producers)
             for numeric_id, variable_id in enumerate(variable_ids, start=1)
         ],
     }
@@ -1164,7 +1220,7 @@ def _quantize_file(
     previous_precipitation: tuple[int, Future] | None = None,
     average_window_hours: int = 6,
     own_precipitation: Future | None = None,
-    plane_source: PlaneSource = GRIB_PLANE_SOURCE,
+    plane_source: PlaneSource | Mapping[str, PlaneSource] = GRIB_PLANE_SOURCE,
     derived_vector_ids: tuple[str, ...] = (),
     drop_ids: frozenset[str] = frozenset(),
     derived_scalar_ids: tuple[str, ...] = (),
@@ -1528,14 +1584,22 @@ def convert_bin(
         # cadence to validate the axis against — the file's own times are
         # the axis, gaps included. (The MRMS observation is one GRIB per
         # frame and takes the record path below, re-keyed onto its window's
-        # axis.) A run directory holds exactly one such file.
-        if isinstance(input_path, Path) and input_path.is_dir():
-            input_path = _series_input(input_path, source)
+        # axis.) A run directory holds one such file per variable — or one
+        # file for its one variable (observation.series_files). Only the
+        # variables the requested bundles carry are read: a satellite
+        # window's unpublished channels feed its composite in the fetch
+        # stage and are never quantized here.
         if not isinstance(input_path, Path):
-            raise ConversionError(f"a {source.manifest_model} build takes exactly one NetCDF file")
+            raise ConversionError(f"a {source.manifest_model} build takes one NetCDF series, or the directory holding them")
         if require_complete and not source.fetched:
             raise ConversionError(f"{source.manifest_model} has no complete run to require")
-        series = inspect_observation(input_path, source)
+        requested_bundle_ids = tuple(
+            bundle_id for bundle_id in published_bundle_ids(source) if bundle_ids is None or bundle_id in bundle_ids
+        )
+        series_variable_ids = tuple(
+            dict.fromkeys(variable_id for bundle_id in requested_bundle_ids for variable_id in bundle_variable_ids(bundle_id))
+        )
+        series = inspect_observation(input_path, source, series_variable_ids)
         # ``last_hour`` trims the series to a leading window of the file, and
         # the frame it stops on must exist — a case's declared range is never
         # silently shortened.
@@ -1548,12 +1612,14 @@ def convert_bin(
                     f"{input_path} has no frame exactly at hour {last_hour}; its series ends at "
                     f"hour {series_lead_seconds(series.frames[-1]) / binformat.HOUR_SECONDS:g}"
                 )
-        variable_ids = source.input_variable_ids
+        variable_ids = series_variable_ids
         available_vector_ids: tuple[str, ...] = ()
         available_derived_ids: tuple[str, ...] = ()
+        available_composite_ids = tuple(bundle_id for bundle_id in requested_bundle_ids if bundle_id in COMPOSITE_BUNDLES)
         drop_ids: frozenset[str] = frozenset()
         grid_path = series.dataset
-        plane_source = series.plane_source
+        plane_source: PlaneSource | dict[str, PlaneSource] = series.plane_sources
+        producer_versions = series.producers
     else:
         paths = discover_inputs(input_path)
         # One real gdalinfo pass over the first file: it probes which vector
@@ -1652,8 +1718,10 @@ def convert_bin(
         per_file = _prepare_frames_all(
             paths, variable_ids, source.optional_at_analysis, reference_frames, source.cadence_seconds
         )
+        available_composite_ids = ()
         grid_path = paths[0]
         plane_source = GRIB_PLANE_SOURCE
+        producer_versions = {}
 
     # The bundle's time axis: the coarsest unit that expresses every frame
     # exactly, and each frame's offset in it. An hour for every forecast
@@ -1786,7 +1854,9 @@ def convert_bin(
             variable_id for variable_id in scalar_variable_ids if variable_id in bundle_ids
         )
     encoded_variable_ids = scalar_variable_ids + tuple(
-        variable_id for bundle_id in available_vector_ids for variable_id in VECTOR_BUNDLES[bundle_id]
+        variable_id
+        for bundle_id in available_vector_ids + available_composite_ids
+        for variable_id in bundle_variable_ids(bundle_id)
     )
     # Scalars that also ship a poster — every published scalar but the
     # contour-drawn pressure family — and, among those, the surface fields
@@ -1904,23 +1974,24 @@ def convert_bin(
             bundle_grid: GridInfo,
             codes: dict[int, dict[str, np.ndarray]],
         ) -> Future:
-            bundle_variable_ids = VECTOR_BUNDLES.get(bundle_id, (bundle_id,))
-            bundle_offsets = variable_offsets[bundle_variable_ids[0]]
+            bundle_variables = bundle_variable_ids(bundle_id)
+            bundle_offsets = variable_offsets[bundle_variables[0]]
             metadata = build_metadata(
                 run_time,
                 bundle_offsets,
                 bundle_grid,
                 profile,
-                bundle_variable_ids,
+                bundle_variables,
                 source=source,
                 unit_seconds=unit_seconds,
+                producers=producer_versions,
             )
 
             tile = _bundle_tile(source.tile, bundle_grid, half=bool(suffix))
             tiles = binformat.TileGeometry(bundle_grid.width, bundle_grid.height, *tile)
 
             def job() -> dict[str, Any]:
-                tables = _bundle_chunks(bundle_variable_ids, bundle_offsets, codes, tiles)
+                tables = _bundle_chunks(bundle_variables, bundle_offsets, codes, tiles)
                 report = _write_variable_bundle(
                     bundle_id,
                     output_dir / f"{bundle_id}{suffix}.xue",
@@ -1953,11 +2024,11 @@ def convert_bin(
 
             return writers.submit(job)
 
-        # Submit largest first so the vector bundles' long compression starts
-        # at once; reports keep the scalars-then-vectors manifest order
-        # regardless.
-        submit_order = available_vector_ids + scalar_variable_ids
-        report_order = scalar_variable_ids + available_vector_ids
+        # Submit largest first so the vector and composite bundles' long
+        # compression starts at once; reports keep the
+        # scalars-then-vectors-then-composites manifest order regardless.
+        submit_order = available_composite_ids + available_vector_ids + scalar_variable_ids
+        report_order = scalar_variable_ids + available_vector_ids + available_composite_ids
         full_futures = {bundle_id: submit_bundle(bundle_id, "", grid, codes_by_offset) for bundle_id in submit_order}
         half_futures = (
             {bundle_id: submit_bundle(bundle_id, ".half", half_grid, half_codes_by_offset) for bundle_id in submit_order}

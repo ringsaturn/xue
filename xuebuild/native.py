@@ -85,22 +85,27 @@ def available() -> bool:
 
 
 def knows_source(model: str) -> bool:
-    """Whether the installed wheel's source table has ``model``.
+    """Whether the installed wheel's source table has ``model`` with every
+    bundle this source table publishes for it.
 
     The wheel carries a table of its own, and one that predates a source
-    refuses the model before it looks at any input — so an empty input list
+    refuses the model — and one that predates a bundle refuses the
+    ``bundle_ids`` — before it looks at any input, so an empty input list
     is enough to ask, and nothing is read or written. What a test that
-    needs a wheel at least as new as some source skips on. A source whose
+    needs a wheel at least as new as some source skips on, and what the
+    scheduled builds ask before taking the native path. A source whose
     shape changes takes a new id for the same reason (the CMA mosaic went
     from ``radar``, a local file, to ``cma``, a fetched window): a wheel
     that knows the old id must not be taken for one that knows the new
-    shape."""
+    shape; a source that gains a bundle (the Dust RGB on Himawari) is
+    caught by the bundle list."""
     if not available():
         return False
     try:
-        require().convert_bin([], Path(os.devnull), model=model)
+        require().convert_bin([], Path(os.devnull), model=model, bundle_ids=list(published_bundle_ids(source_spec(model))))
     except Exception as exc:  # noqa: BLE001 - the wheel raises a plain RuntimeError
-        return "unsupported model" not in str(exc)
+        message = str(exc)
+        return "unsupported model" not in message and "publishes" not in message
     return True
 
 

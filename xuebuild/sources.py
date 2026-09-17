@@ -185,6 +185,15 @@ class SourceSpec:
     (:func:`xuebuild.binconvert.vector_input_ids`) is in
     :attr:`input_variable_ids`, and a run whose files turn out to lack them
     builds without it and says so."""
+    bundle_composite_ids: tuple[str, ...] = ()
+    """Composite bundles published after the vectors, in manifest order: a
+    bundle of three or more variables an algorithm derived from the
+    source's channels in the fetch stage — ``dustrgb``, the Dust RGB's
+    three guns (:data:`xuebuild.binconvert.COMPOSITE_BUNDLES`, produced by
+    :mod:`xuebuild.satellite.producers`). Listing one publishes it only
+    when every channel its producer reads is in :attr:`input_variable_ids`;
+    the converter reads the produced components off the series the fetch
+    stage wrote and never derives them itself."""
     production_grid: tuple[int, int] = (1440, 721)
     """Grid a complete (``require_complete``) build must arrive on."""
     tile: tuple[int, int] = (48, 52)
@@ -859,10 +868,15 @@ SOURCES: dict[str, SourceSpec] = {
     # geostationary arithmetic. The source id is the orbital role, not the
     # spacecraft (Himawari-10 takes the slot around 2029 and changes the
     # platform row alone); the spacecraft and channel are the ``band``
-    # block on the variable (``bands``, docs/format.md). One channel to
-    # start, the 10.4 µm infrared window as brightness temperature
-    # (``ir104``, AHI band 13); the other fifteen are platform-registry rows
-    # a source-table line publishes. The tiles are generated about eight
+    # block on the variable (``bands``, docs/format.md). Four channels are
+    # fetched, the infrared windows at 8.6, 10.4, 11.2 and 12.3 µm (AHI
+    # bands 11, 13, 14, 15); the 10.4 µm one is published as brightness
+    # temperature (``ir104``), and all four feed the Dust RGB composite
+    # (``dustrgb``: the classic three-gun dust picture, computed per slot in
+    # the fetch stage by the ``shachen`` producer,
+    # xuebuild/satellite/producers.py, and read off the series like any
+    # channel). The other twelve channels are platform-registry rows a
+    # source-table line publishes. The tiles are generated about eight
     # minutes after a scan starts and listed some fifteen minutes after it,
     # so the live window ends fifteen to twenty minutes behind real time; a
     # rolling publish rebuilds the six-hour window every ten minutes into a round
@@ -875,10 +889,11 @@ SOURCES: dict[str, SourceSpec] = {
         product="ahi-fldk-0p04",
         latest_filename="latest-himawari.json",
         steps=(),
-        input_variable_ids=("ir104",),
+        input_variable_ids=("ir086", "ir104", "ir112", "ir123"),
         accumulated_precipitation=False,
-        bands=HIMAWARI.bands(("ir104",)),
+        bands=HIMAWARI.bands(("ir086", "ir104", "ir112", "ir123")),
         bundle_scalar_ids=("ir104",),
+        bundle_composite_ids=("dustrgb",),
         core_bundle_ids=("ir104",),
         # The platform's region at 0.04°: 120° x 120° is 3000 x 3000 cells,
         # 9 M a frame, 4.6 MB quantized and compressed (measured 2026-09-17
