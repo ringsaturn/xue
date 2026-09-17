@@ -26,11 +26,11 @@ dependencies = [
     # `gdalinfo` on PATH, which the scheduled publish workflows no longer
     # install. The floor tracks the current release because the wheel's
     # source table must match sources.py (a wheel that publishes a different
-    # bundle set refuses to build), and 0.16 is the first wheel that knows
-    # the JMA precipitation nowcast: a fetched observation arriving as one
-    # NetCDF series per window, its five-minute times snapped to a 300 s
-    # axis and the window's first hour taken as the run.
-    "xuepy>=0.16,<0.17",
+    # bundle set refuses to build), and 0.17 is the first wheel that knows
+    # the AIFS source: ECMWF's data-driven model from the open data service,
+    # its run-total precipitation in millimetres and its cloud covers on
+    # surfaces of their own, each accepted under the GFS identity.
+    "xuepy>=0.17,<0.18",
 ]
 
 [project.scripts]
