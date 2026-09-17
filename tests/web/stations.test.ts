@@ -174,6 +174,13 @@ describe("the station product schemas", () => {
     sounding.stations[0]!.lat = 120;
     expect(() => parseSoundingIndex(sounding)).toThrow(/lat is outside/);
   });
+
+  it("admits a visibility beyond ten kilometres, which the contract does not cap", () => {
+    // KWHP reports 99 statute miles: 159 300 m, and the row is genuine.
+    const payload = copy(airportIndexJson) as { stations: unknown[][] };
+    payload.stations[0]![10] = 159300;
+    expect(parseAirportIndex(payload).stations[0]!.vis).toBe(159300);
+  });
 });
 
 describe("what the marks are drawn from", () => {
