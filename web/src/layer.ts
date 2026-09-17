@@ -89,6 +89,13 @@ uniform vec4 u_cover;
 // u_contour_value_count saying how many are real, and u_fill_alpha scales
 // the palette fill under the lines — 0 draws lines alone.
 uniform vec2 u_decode;
+// 1 when the codebook's bottom code is no data rather than a value: a
+// satellite image's cells outside the disk, or a scan segment the
+// instrument never delivered, sit at code 0, and a sample reconstructed
+// between such a cell and a real one would sweep every colour below the
+// real value (the cold-top enhancement, for an infrared picture) along the
+// edge. The radar mosaic's 0 is "no echo", an ordinary value, and stays 0.
+uniform float u_floor_nodata;
 uniform vec4 u_contour;
 uniform vec4 u_contour_values;
 uniform float u_contour_value_count;
@@ -139,7 +146,13 @@ float fetchCode(sampler2D data, vec2 texel) {
 // overshot code would color a peak with a rain class the data never reached,
 // so the result is clamped to the value range of the central 2x2 texels —
 // the same envelope bilinear filtering can produce.
-float sampleCode(sampler2D data, vec2 uv) {
+//
+// With u_floor_nodata set, a bottom-code texel in the bilinear support
+// makes the sample missing once its weight is more than a sliver, the rule
+// the vector path applies to its reserved code (sampleCodes below): the
+// half of a data cell facing a no-data neighbour is eroded, and the cell's
+// own centre still paints.
+float sampleCode(sampler2D data, vec2 uv, out bool missing) {
   vec2 position = uv * u_size - 0.5;
   vec2 base = floor(position);
   vec2 fraction = position - base;
@@ -148,6 +161,7 @@ float sampleCode(sampler2D data, vec2 uv) {
   float code = 0.0;
   float lo = 1.0;
   float hi = 0.0;
+  missing = false;
   for (int row = 0; row < 4; row += 1) {
     float rowSum = 0.0;
     for (int column = 0; column < 4; column += 1) {
@@ -157,6 +171,8 @@ float sampleCode(sampler2D data, vec2 uv) {
       if (row >= 1 && row <= 2 && column >= 1 && column <= 2) {
         lo = min(lo, value);
         hi = max(hi, value);
+        float weight = (column == 1 ? 1.0 - fraction.x : fraction.x) * (row == 1 ? 1.0 - fraction.y : fraction.y);
+        if (u_floor_nodata > 0.5 && weight > 1.0 / 64.0 && value < 0.5 / 255.0) missing = true;
       }
     }
     code += wy[row] * rowSum;
@@ -285,9 +301,14 @@ void main() {
     float speed = clamp(length(wind) / u_vector_max, 0.0, 1.0);
     color = texture(u_palette, vec2((speed * 255.0 + 0.5) / 256.0, 0.5));
   } else {
-    code = sampleCode(u_data, vec2(u, v));
+    bool missing = false;
+    code = sampleCode(u_data, vec2(u, v), missing);
+    if (missing) discard;
     if (u_mix > 0.0) {
-      code = mix(code, sampleCode(u_data_b, vec2(u, v)), u_mix);
+      bool missingB = false;
+      float codeB = sampleCode(u_data_b, vec2(u, v), missingB);
+      if (missingB) discard;
+      code = mix(code, codeB, u_mix);
     }
     color = texture(u_palette, vec2((code * 255.0 + 0.5) / 256.0, 0.5));
   }
@@ -481,6 +502,7 @@ export class ForecastLayer implements CustomLayerInterface {
   /** Contour drawing, off by default: every filled field renders exactly as
    * it did before this existed. */
   private contours: ContourStyle | null = null;
+  private floorNoData = false;
   /** Magnitude mode, off by default: a plane is one code per cell unless a
    * vector field says otherwise. */
   private vector: VectorField | null = null;
@@ -550,7 +572,7 @@ export class ForecastLayer implements CustomLayerInterface {
     this.program = program;
     for (const name of [
       "u_matrix", "u_data", "u_data_b", "u_palette", "u_first", "u_step", "u_size",
-      "u_mix", "u_wrap", "u_cover", "u_decode", "u_contour", "u_contour_values",
+      "u_mix", "u_wrap", "u_cover", "u_decode", "u_floor_nodata", "u_contour", "u_contour_values",
       "u_contour_value_count", "u_line_color", "u_fill_alpha",
       "u_vector", "u_vector_offset", "u_vector_scale", "u_vector_max", "u_vector_nodata",
       ...DOMAIN_UNIFORM_NAMES,
@@ -666,6 +688,16 @@ export class ForecastLayer implements CustomLayerInterface {
    */
   setContours(style: ContourStyle | null): void {
     this.contours = style;
+    this.map?.triggerRepaint();
+  }
+
+  /** Whether the codebook's bottom code is no data rather than a value
+   * (`VariableSpec.floorIsNoData`): a sample next to such a cell is then
+   * not painted rather than reconstructed through every colour below its
+   * neighbour. Off for every field whose 0 is a value. */
+  setFloorNoData(flag: boolean): void {
+    if (this.floorNoData === flag) return;
+    this.floorNoData = flag;
     this.map?.triggerRepaint();
   }
 
@@ -841,6 +873,7 @@ export class ForecastLayer implements CustomLayerInterface {
     setDomainUniforms(gl, this.uniforms, this.domain);
     const contours = this.contours;
     gl.uniform2f(this.uniforms.u_decode!, contours?.offset ?? 0, contours?.scale ?? 0);
+    gl.uniform1f(this.uniforms.u_floor_nodata!, this.floorNoData ? 1 : 0);
     gl.uniform4f(
       this.uniforms.u_contour!,
       contours?.interval ?? 0,

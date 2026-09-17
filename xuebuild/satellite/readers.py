@@ -18,6 +18,7 @@ dispatches to this package; every function takes a ``fetch`` /
 
 from __future__ import annotations
 
+import math
 import re
 import xml.etree.ElementTree as ET
 from collections.abc import Callable
@@ -145,9 +146,10 @@ class Reader(Protocol):
         at their listed size."""
         ...
 
-    def open(self, files: SlotFiles, workdir: Path) -> Path:
+    def open(self, files: SlotFiles, workdir: Path, *, missing_below: float | None = None) -> Path:
         """One GDAL-openable dataset over the slot's files — a connection
-        string, not necessarily a file — written under ``workdir``."""
+        string, not necessarily a file — written under ``workdir``. Cells
+        below ``missing_below`` (in the quantity's unit) read as no data."""
         ...
 
     def packing_source(self, files: SlotFiles) -> Path:
@@ -288,9 +290,13 @@ class ISatSSReader:
         slot = min(parse_isatss_key(item.key).start for item in objects)  # type: ignore[union-attr]
         return SlotFiles(slot=slot, paths=paths)
 
-    def open(self, files: SlotFiles, workdir: Path) -> Path:
+    def open(self, files: SlotFiles, workdir: Path, *, missing_below: float | None = None) -> Path:
         """A VRT mosaicking the tiles' ``Sectorized_CMI`` subdatasets by
-        their georeference — the whole disk, or whatever tiles there are."""
+        their georeference — the whole disk, or whatever tiles there are.
+        With ``missing_below``, every source gets a lookup table that turns
+        a raw code below that value into the fill, so a scan segment the
+        product wrote as 0 K is no data to the warp rather than a cold
+        edge the resampling smears into the neighbouring cells."""
         workdir.mkdir(parents=True, exist_ok=True)
         vrt = workdir / f"{files.slot:%Y%m%d%H%M%S}.vrt"
         sources = [f'NETCDF:"{path}":{self.VARIABLE}' for path in files.paths]
@@ -298,10 +304,36 @@ class ISatSSReader:
             ["gdalbuildvrt", "-q", "-overwrite", "-resolution", "highest", str(vrt), *sources],
             description=f"gdalbuildvrt {vrt.name}",
         )
+        if missing_below is not None:
+            from .assemble import NODATA, dataset_packing  # noqa: PLC0415 - assemble imports nothing from here
+
+            packing = dataset_packing(self.packing_source(files))
+            floor = int(math.floor((missing_below - packing.offset) / packing.scale))
+            vrt.write_text(_mask_below(vrt.read_text(encoding="utf-8"), floor, NODATA), encoding="utf-8")
         return vrt
 
     def packing_source(self, files: SlotFiles) -> Path:
         return Path(f'NETCDF:"{files.paths[0]}":{self.VARIABLE}')
+
+
+def _mask_below(vrt: str, floor: int, nodata: int) -> str:
+    """Rewrite a VRT's sources as ComplexSources whose lookup table maps a
+    raw code at or below ``floor`` to ``nodata`` and leaves the rest as
+    they are (GDAL interpolates a LUT linearly between its entries, so the
+    identity is two entries and the fill one step below them)."""
+    root = ET.fromstring(vrt)
+    for band in root.iter("VRTRasterBand"):
+        for source in list(band):
+            if source.tag not in ("SimpleSource", "ComplexSource"):
+                continue
+            source.tag = "ComplexSource"
+            if source.find("NODATA") is None:
+                ET.SubElement(source, "NODATA").text = str(nodata)
+            lut = source.find("LUT")
+            if lut is None:
+                lut = ET.SubElement(source, "LUT")
+            lut.text = f"-32768:{nodata},{floor}:{nodata},{floor + 1}:{floor + 1},32767:32767"
+    return ET.tostring(root, encoding="unicode") + "\n"
 
 
 READERS: dict[str, Reader] = {"isatss": ISatSSReader()}

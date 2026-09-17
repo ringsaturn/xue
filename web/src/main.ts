@@ -5457,6 +5457,12 @@ function detachSlot(slot: RasterSlot): void {
   slot.layer.setVisible(false);
 }
 
+/** Whether a chart's bottom code is no data (`VariableSpec.floorIsNoData`):
+ * the satellite imagery's, and no other field's. */
+function floorIsNoData(chartId: KnownBundleId | null): boolean {
+  return chartId !== null && (variableSpec(chartId)?.floorIsNoData ?? false);
+}
+
 /** Point a slot's layer at a session: its palette, its contour style (the
  * chart's own when the lines are the view, the overlay's over a field), and
  * magnitude mode for wind. */
@@ -5482,6 +5488,7 @@ function configureSlotLayer(slot: RasterSlot, session: VariableSession, overlay:
         : buildPalette(session.variable, session.identity),
     );
     layer.setContours(contourStyleFor(session.variable, session.identity, overlay));
+    layer.setFloorNoData(floorIsNoData(session.chartId));
     // An overlay shows nothing until its first plane lands: the slot may
     // still hold another surface's plane, and lines of the wrong level over
     // the field would be worse than none.
@@ -5623,6 +5630,7 @@ async function showPoster(variableId: ForecastBundleId, sequence: number): Promi
     target.setVectorField(null);
     target.setPalette(buildPalette(variable));
     target.setContours(contourStyleFor(variable));
+    target.setFloorNoData(floorIsNoData(registeredBundleId(identityForBundleId(variable.id))));
     target.setFrame(plane);
     target.setVisible(true);
   } catch (error) {

@@ -129,7 +129,7 @@ def fetch_frame(
         return None
     slot_dir = tiles_dir / f"{slot:%Y%m%d%H%M}" / channel.id
     files = reader.download(platform, objects, slot_dir, download=download, concurrency=concurrency)
-    source = reader.open(files, slot_dir)
+    source = reader.open(files, slot_dir, missing_below=channel.missing_below)
     # The packing is the source's, read off one tile before the warp: a
     # mosaic or a warp carries a band's scale, offset and unit through only
     # on some GDAL versions (3.13 does, Ubuntu 24.04's 3.8 loses the unit).

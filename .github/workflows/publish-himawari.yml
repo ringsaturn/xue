@@ -4,7 +4,7 @@ name: publish himawari
 # JMA's imager on its open data bucket: the ISatSS full-disk product, one
 # scan every ten minutes cut into 88 calibrated NetCDF tiles on the
 # geostationary projection. The live feed is a rolling window — the last
-# two whole hours plus the hour in progress, the disk warped onto a 0.04°
+# five whole hours plus the hour in progress, the disk warped onto a 0.04°
 # plate carrée grid, the native ten-minute step — rebuilt every ten minutes
 # into a round subdirectory of its run (<model>.<run>/<HHMM>/) and pointed
 # at by latest-himawari.json.
@@ -19,7 +19,7 @@ name: publish himawari
 # installs gdal-bin whichever encoder converts), caches the frame on the
 # bucket beside the JMA frames (`make pull-r2-frames` / `push-r2-frames`),
 # and stacks the window's frames into the NetCDF series the converter
-# reads. A frame is about 8 MB; a round uploads some 35 MB of stores.
+# reads. A frame is about 8 MB; a round uploads some 200 MB of stores.
 #
 # Machine time: six jobs an hour of three to four minutes each, roughly
 # 220 hours a month, free on a public repository's standard runners.
@@ -40,7 +40,7 @@ on:
       hours:
         description: "Window length in hours (the whole hours on screen plus the one in progress)"
         type: string
-        default: "3"
+        default: "6"
       encoder:
         description: "auto (the xuepy wheel when its release knows the himawari source, else the reference pipeline), native (insist on the wheel) or python (insist on the reference pipeline)"
         type: choice
@@ -117,7 +117,7 @@ jobs:
       # No edge-cache warm-up: a round's objects are replaced ten minutes
       # later, and the shell's next poll fills the edge itself.
       WARM: "false"
-      HOURS: ${{ inputs.hours || '3' }}
+      HOURS: ${{ inputs.hours || '6' }}
       PROFILE: ${{ inputs.profile || 'balanced' }}
       KEEP: ${{ inputs.keep || '2' }}
       FORCE: ${{ inputs.force || false }}

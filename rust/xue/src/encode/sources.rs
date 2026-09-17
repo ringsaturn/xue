@@ -593,7 +593,7 @@ pub const SOURCES: &[SourceSpec] = &[
         tile: (64, 64),
         regrid: None,
         observation: true,
-        window_hours: Some(3),
+        window_hours: Some(6),
         cadence_seconds: Some(600),
         series_file: true,
         downsample: None,

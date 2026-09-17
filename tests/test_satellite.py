@@ -53,7 +53,7 @@ from xuebuild.manifest import validate_bin_manifest
 from xuebuild.model import GfsRun
 from xuebuild.quantize import PROFILES
 from xuebuild.satellite import HIMAWARI, PLATFORMS, platform
-from xuebuild.satellite import assemble
+from xuebuild.satellite import assemble, readers
 from xuebuild.satellite import fetch as satellite_fetch
 from xuebuild.satellite.platforms import ABI_CHANNELS, AHI_CHANNELS, GOES_EAST
 from xuebuild.satellite.projector import GdalWarpProjector, TargetGrid
@@ -164,7 +164,7 @@ class RegistryTests(unittest.TestCase):
 
     def test_the_source_is_a_satellite_series_file_observation(self) -> None:
         self.assertTrue(SPEC.observation and SPEC.series_file and SPEC.fetched and SPEC.live)
-        self.assertEqual((SPEC.platform, SPEC.grid_step, SPEC.cadence_seconds, SPEC.window_hours), ("himawari", 0.04, 600, 3))
+        self.assertEqual((SPEC.platform, SPEC.grid_step, SPEC.cadence_seconds, SPEC.window_hours), ("himawari", 0.04, 600, 6))
         self.assertEqual((SPEC.input_variable_ids, SPEC.bundle_scalar_ids, SPEC.core_bundle_ids), (("ir104",),) * 3)
         self.assertEqual((SPEC.manifest_model, SPEC.latest_filename), ("HIMAWARI", "latest-himawari.json"))
         self.assertEqual([spec.id for spec in SOURCES.values() if spec.platform], ["himawari"])
@@ -297,10 +297,11 @@ class ListingTests(unittest.TestCase):
             self.assertEqual(latest_satellite_slot(SPEC, now=now, fetch=self.listing), SLOT_0310)
             with mock.patch("xuebuild.satellite.readers._fetch_text", self.listing):
                 self.assertEqual(latest_observation_slot(SPEC, now=now), SLOT_0310)
-                # The live window is the three hours ending with the newest
-                # slot's hour; a named window must have fully landed.
+                # The live window is the hours ending with the newest slot's
+                # hour (six by default); a named window must have fully landed.
                 run = resolve_run("latest", hours=3, now=now, model="himawari")
                 self.assertEqual(run.id, "2026091701")
+                self.assertEqual(resolve_run("latest", hours=SPEC.window_hours, now=now, model="himawari").id, "2026091622")
                 self.assertFalse(_satellite_run_is_complete(SPEC, GfsRun(SLOT_0300), 3))
                 self.assertTrue(_satellite_run_is_complete(SPEC, GfsRun(datetime(2026, 9, 17, 0, tzinfo=UTC)), 3))
                 with self.assertRaisesRegex(DownloadError, "has not fully landed"):
@@ -436,6 +437,37 @@ class FetchTests(unittest.TestCase):
         self.assertEqual((summary["frameCount"], summary["latestSlot"]), (2, "2026-09-17T03:10:00Z"))
         with self.assertRaisesRegex(DownloadError, "publishes"):
             _fetch_satellite_run(SPEC, GfsRun(SLOT_0300), 3, self.root, force=False, input_ids=("cref",), fetch=self.listing)
+
+    def test_a_scan_segment_the_product_wrote_as_zero_kelvin_is_no_data(self) -> None:
+        """ISatSS writes a segment the instrument never delivered as 0 K,
+        not as its fill (tile T036 of the 13:50Z scan of 2026-09-17, four
+        fifths of it missing). Left as a value, bilinear resampling smears a
+        cold edge into the neighbouring cells and the codebook folds the
+        rest to its bottom; the reader's lookup table makes it no data."""
+        tile = TILES / "partial" / "OR_HFD-020-B12-M1C13-T036_GH9_s20262601350000_c20262601358150.nc"
+        files = readers.SlotFiles(slot=datetime(2026, 9, 17, 13, 50, tzinfo=UTC), paths=(tile,))
+        grid = TargetGrid(west=80.0, south=0.0, east=110.0, north=30.0, step=0.04)
+        reader = ISatSSReader()
+        valid: dict[str, float] = {}
+        minimum: dict[str, float] = {}
+        for name, floor in (("raw", None), ("masked", IR104.missing_below)):
+            vrt = reader.open(files, self.root / name, missing_below=floor)
+            out = self.root / name / "frame.tif"
+            GdalWarpProjector().to_grid(vrt, grid, nodata=assemble.NODATA, resampling="bilinear", out=out)
+            info = json.loads(
+                subprocess.run(
+                    ["gdalinfo", "--config", "GDAL_PAM_ENABLED", "NO", "-json", "-stats", str(out)],
+                    check=True, capture_output=True, text=True,
+                ).stdout
+            )["bands"][0]["metadata"][""]
+            valid[name] = float(info["STATISTICS_VALID_PERCENT"])
+            minimum[name] = float(info["STATISTICS_MINIMUM"]) * 0.064208984375 + 69
+        self.assertEqual(IR104.missing_below, 100.0)
+        self.assertIsNone(HIMAWARI.channel("vis064").missing_below)
+        self.assertLess(minimum["raw"], 1.0)
+        self.assertGreater(minimum["masked"], 180.0)
+        self.assertLess(valid["masked"], valid["raw"] / 3)
+        self.assertGreater(valid["masked"], 1.0)
 
     def test_the_projector_refuses_a_grid_that_is_not_whole_cells(self) -> None:
         with self.assertRaisesRegex(ConversionError, "whole number"):

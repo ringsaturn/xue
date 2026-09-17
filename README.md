@@ -41,7 +41,7 @@ pipeline.
 | NOAA MRMS | `mrms` | 3500 × 1750, 0.02°, contiguous US | one frame every two minutes, a rolling four-hour window | `latest-mrms.json` |
 | JMA precipitation nowcast | `jma` | 5600 × 5000, 0.005°, Japan | one frame every five minutes, a rolling three-hour window | `latest-jma.json` |
 | CMA radar mosaic | `cma` | 1792 × 1024, 0.0439°, China | one frame every six minutes, a rolling three-hour window | `latest-cma.json` |
-| Himawari-9 infrared | `himawari` | 3000 × 3000, 0.04°, the disk 80.7–200.7°E, ±60° | one scan every ten minutes, a rolling three-hour window | `latest-himawari.json` |
+| Himawari-9 infrared | `himawari` | 3000 × 3000, 0.04°, the disk 80.7–200.7°E, ±60° | one scan every ten minutes, a rolling six-hour window | `latest-himawari.json` |
 
 Each model publishes as an independent dataset under `<model>.<run>/`, taken
 live by its pointer at the data root.
@@ -139,8 +139,8 @@ Bundle sets:
   registry row and nothing published. The tiles are generated about eight
   minutes after a scan starts and listed about fifteen after, so the live
   window ends fifteen to twenty minutes behind real time; a scan is 26 MB
-  of tiles, a warped frame about 8 MB, a three-hour window (nineteen
-  frames) some 80 MB of stores at full and half resolution. Needs a system
+  of tiles, a warped frame about 8 MB, the six-hour window (37 frames)
+  some 200 MB of stores at full and half resolution. Needs a system
   GDAL with `gdalwarp` on PATH whichever encoder converts.
 
 Every level of the isobaric families is registered; turning one on is a line
@@ -271,7 +271,7 @@ python -m xuebuild build-bin --model mrms --run 2026091300 --hours 3   # a past 
 python -m xuebuild build-bin --model mrms --run latest --hours 4 --round now   # one round of the live window
 python -m xuebuild build-bin --model jma --run latest --hours 3 --round now    # the JMA nowcast, through jma-radar
 python -m xuebuild build-bin --model cma --run latest --hours 3 --round now    # the CMA mosaic, out of its archive
-python -m xuebuild build-bin --model himawari --run latest --hours 3 --round now  # Himawari-9 infrared, warped from NOAA's tiles
+python -m xuebuild build-bin --model himawari --run latest --hours 6 --round now  # Himawari-9 infrared, warped from NOAA's tiles
 ```
 
 `XUE_ENCODER` picks which encoder converts: `auto` (the default: the `xuepy`
@@ -391,8 +391,8 @@ case id (or several) by dispatch, pulls the live cases' catalog rows first
 (`make live-showcase-catalog`, so the rewritten `showcase.json` still lists
 every case), builds and uploads. The archives sit in AWS us-east-1, which is
 where a runner is fastest; a satellite case (`himawari`, a window of the
-ISatSS archive named by its first hour, three hours being the live feed's
-own shape) is minutes there.
+ISatSS archive named by its first hour; a few hours is a case, six the
+live feed's own window) is minutes there.
 
 Cropping happens in the encoder (`crop_grid` / `convert_bin(bbox=...)`): the
 window is rounded outward to whole grid cells, may cross the antimeridian,
@@ -533,14 +533,15 @@ secret and read in process with the `R2_*` credentials
 dataset bucket's token cannot read it, else that token), with the `cma`
 dependency group synced. The Himawari job is the JMA shape with a
 frame cache of warped GeoTIFFs (`data/raw/himawari-frames/ir104/`, kept
-three days on the bucket) and installs `gdal-bin` whichever encoder
-converts, since the fetch stage warps through the system GDAL. By hand:
+three days on the bucket), a six-hour window (`HOURS=6`) and installs
+`gdal-bin` whichever encoder converts, since the fetch stage warps through
+the system GDAL. By hand:
 
 ```sh
 ONCE=true scripts/window_rounds.sh                     # one round, as the job would run it
 MODEL=jma HOURS=3 FRAME_CACHE=true ONCE=true scripts/window_rounds.sh
 MODEL=cma HOURS=3 ONCE=true scripts/window_rounds.sh   # needs XUE_CMA_ARCHIVE and the R2_* credentials
-MODEL=himawari HOURS=3 FRAME_CACHE=true ONCE=true scripts/window_rounds.sh   # needs gdalwarp on PATH
+MODEL=himawari HOURS=6 FRAME_CACHE=true ONCE=true scripts/window_rounds.sh   # needs gdalwarp on PATH
 .venv/bin/python -m xuebuild build-bin --model mrms --run latest --hours 4 --round now
 make upload-r2 MODEL=mrms RUN=2026091321 ROUND=1405  # the round the build named
 make prune-r2-rounds MODEL=mrms && make prune-r2 MODEL=mrms KEEP=2

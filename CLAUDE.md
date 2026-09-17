@@ -357,7 +357,8 @@ model starts here; the frontend mirror is `FORECAST_MODELS` in
   `SourceSpec.platform`). The reference pipeline and the workflow need a
   system GDAL with `gdalwarp` whichever encoder converts (the wheel's GDAL
   has no GeoTIFF driver); `publish-himawari.yml` is `publish-jma.yml` on a
-  ten-minute cron with `gdal-bin` installed unconditionally.
+  ten-minute cron with `gdal-bin` installed unconditionally, a six-hour
+  window (`window_hours=6`, `HOURS=6`).
   `variables.py::ir104` (GRIB2 0/4/4 on surface 8, 180–331.8 K at 0.6),
   `SATELLITE_VARIABLE_IDS`, `tests/fixtures/satellite-registry.json`; the
   shell classifies the channel by the band's wave number

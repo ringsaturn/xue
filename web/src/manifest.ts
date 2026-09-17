@@ -151,7 +151,7 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
   // disk. The source is named by its orbital slot, not the spacecraft —
   // the file's `band` block carries that — so a successor changes nothing
   // here. Observations and live, like MRMS: a rolling window of the last
-  // two to three hours, some fifteen to twenty minutes behind real time.
+  // five to six hours, some fifteen to twenty minutes behind real time.
   // The region runs past the antimeridian (200.7°E), which `domain.ts` and
   // `tiles.ts` take in the grid's own copy of the world.
   himawari: {

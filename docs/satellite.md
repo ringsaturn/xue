@@ -188,8 +188,8 @@ allows the gap, and the next round takes it if it lands). The live
 window's end is the newest slot whose tiles have all landed
 (`latest_slot`: today's directory listing, then yesterday's; the newest
 three slots asked for their tiles, the rest trusted). `resolve_run("latest")`
-is the three whole hours ending with that slot's hour, as for MRMS and
-JMA. The tiles of a scan are generated about eight minutes after it
+is the six whole hours (`window_hours`) ending with that slot's hour, as
+for MRMS and JMA with their own lengths. The tiles of a scan are generated about eight minutes after it
 starts and listed some fifteen after; a round is a listing, one scan's
 tiles, one warp, one stack and a conversion, three to four minutes, so the
 live window ends fifteen to twenty minutes behind real time.

@@ -865,7 +865,7 @@ SOURCES: dict[str, SourceSpec] = {
     # a source-table line publishes. The tiles are generated about eight
     # minutes after a scan starts and listed some fifteen minutes after it,
     # so the live window ends fifteen to twenty minutes behind real time; a
-    # rolling publish rebuilds it every ten minutes into a round
+    # rolling publish rebuilds the six-hour window every ten minutes into a round
     # (.github/workflows/publish-himawari.yml), each round warping one new
     # slot and reading the rest from the frame cache mirrored on the
     # bucket.
@@ -887,7 +887,7 @@ SOURCES: dict[str, SourceSpec] = {
         # little to save).
         production_grid=(3000, 3000),
         # 64 x 64 cells is 2.56° at this step — 47 x 47 = 2209 tiles, each
-        # a series of nineteen 4 KB planes over a three-hour window; a
+        # a series of thirty-seven 4 KB planes over a six-hour window; a
         # phone over Tokyo takes thirty of them.
         tile=(64, 64),
         observation=True,
@@ -895,7 +895,10 @@ SOURCES: dict[str, SourceSpec] = {
         platform="himawari",
         grid_step=0.04,
         cycle_hours=1,
-        window_hours=3,
+        # Six hours: long enough to watch a system develop, at 37 frames
+        # some 170 MB of stores a round at full resolution, which a runner
+        # uploads in a minute.
+        window_hours=6,
         cadence_seconds=600,
         video=False,
     ),

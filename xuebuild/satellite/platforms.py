@@ -77,6 +77,15 @@ class Channel:
         """The band's central wave number in whole m⁻¹."""
         return round(1e6 / self.wavelength_um)
 
+    @property
+    def missing_below(self) -> float | None:
+        """The value below which a cell is missing, not measured: ISatSS
+        writes a scan segment the instrument never delivered as 0 K rather
+        than as its fill value, and no brightness temperature a 10 µm channel
+        measures is below 100 K. A reflectance can be 0 (the night side), so
+        it has no such floor."""
+        return 100.0 if self.kind == "bt" else None
+
 
 @dataclass(frozen=True)
 class Platform:

@@ -59,7 +59,7 @@ Facts worth getting right:
   reprojected from the geostationary view onto a 0.04° latitude/longitude
   grid over the useful disk (3000 × 3000, 80.7°E–200.7°E — past the
   antimeridian — and 60°S–60°N; cells outside the disk carry the codebook
-  bottom, 180 K), a rolling window of the last two to three hours some
+  bottom, 180 K), a rolling window of the last five to six hours some
   fifteen to twenty minutes behind real time. The source is named by its
   orbital slot: the spacecraft (WMO 174), the instrument (297) and the
   band's central wave number are the `band` block beside the variable's

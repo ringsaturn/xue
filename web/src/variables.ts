@@ -54,6 +54,11 @@ export interface VariableSpec {
   vector: boolean;
   /** The rail tile the field is behind, or null for a tile of its own. */
   family: IsobaricFamily | null;
+  /** True when the codebook's bottom code is no data rather than a value —
+   * a satellite image outside the disk or where a scan segment is missing
+   * — so the renderer erodes rather than interpolates across it
+   * (`layer.ts::setFloorNoData`). The radar mosaic's 0 dBZ is a value. */
+  floorIsNoData: boolean;
   /** The field sheet's group; null for the lines, which are no field. */
   group: FieldGroup | null;
   /** The instrument code, after the model's ("GFS / TMP 2M"). */
@@ -94,6 +99,7 @@ interface SurfaceEntry {
   /** Six fixed ticks, else the chart ceiling's (`isobaricLegend`). */
   legend?: readonly string[];
   legendGradient?: "stylesheet";
+  floorIsNoData?: boolean;
   ground: GroundId;
   urlName: string;
   urlAliases?: readonly string[];
@@ -109,6 +115,7 @@ function surface(entry: SurfaceEntry): VariableSpec {
     level: null,
     vector: entry.vector ?? false,
     family: entry.family ?? null,
+    floorIsNoData: entry.floorIsNoData ?? false,
     group: entry.group,
     code: entry.code,
     title: entry.title,
@@ -148,6 +155,7 @@ function isobaric(entry: IsobaricEntry): VariableSpec[] {
       level,
       vector: entry.vector ?? false,
       family: entry.family,
+      floorIsNoData: false,
       group: entry.group,
       code: isobaricCode(id),
       title: [`${level} hPa`, entry.word],
@@ -175,6 +183,7 @@ function pressure(): VariableSpec[] {
       level,
       vector: false,
       family: "hgt",
+      floorIsNoData: false,
       group: null,
       code: pressureCode(id),
       title: level === null ? ["Sea Level", "Pressure"] : [`${level} hPa`, "Height"],
@@ -541,6 +550,7 @@ function buildSpecs(): readonly VariableSpec[] {
     bufferTitle: "Imagery buffer",
     labelKey: "varLabelIr104",
     legend: ["60", "30", "0", "-30", "-60", "-90"],
+    floorIsNoData: true,
     ground: "slate",
     urlName: "infrared",
     urlAliases: ["ir", "satellite", "sat", "bt"],

@@ -195,7 +195,10 @@ x/y are in microradians (GDAL warns about the unit and computes the
 geotransform correctly; a GDAL that stopped would fail `tests/test_satellite.py`
 here), and the file-name fields the listing filters on. The tests mosaic
 them, warp them onto the 0.04° grid, stack them into the window series and
-convert that through both encoders.
+convert that through both encoders. `himawari/partial/` holds one more
+tile, T036 of the 13:50 UTC scan, four fifths of which the instrument never
+delivered: ISatSS writes such a segment as 0 K rather than as its fill
+value, and the reader's lookup table is tested on it.
 
 # Xue fixtures
 
