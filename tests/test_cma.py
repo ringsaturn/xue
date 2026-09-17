@@ -289,6 +289,13 @@ class StoreTests(unittest.TestCase):
                 cma_archive_slots(stamp("2026-09-16T09:00:00Z"), 1, written=mock.Mock())
         with mock.patch.dict(os.environ, {CMA_ARCHIVE_VARIABLE: "s3://bucket/prefix/"}):
             self.assertEqual(cma_archive(), "s3://bucket/prefix")
+        # A bucket path without its scheme would be read as a directory
+        # and every day would look absent; a directory must exist.
+        with mock.patch.dict(os.environ, {CMA_ARCHIVE_VARIABLE: "bucket/prefix"}):
+            with self.assertRaisesRegex(DownloadError, "names no directory .*s3://bucket/prefix"):
+                cma_archive()
+        with mock.patch.dict(os.environ, {CMA_ARCHIVE_VARIABLE: str(self.base)}):
+            self.assertEqual(cma_archive(), str(self.base))
         self.assertEqual(
             cmaarchive.store_url("s3://bucket/prefix", stamp("2026-09-05T00:00:00Z").date()),
             f"s3://bucket/prefix/{CMA_PRODUCT}/z5/2026/2026-09-05.zarr",
@@ -305,9 +312,21 @@ class StoreTests(unittest.TestCase):
             cmaarchive.written_slots(str(self.base), start, end),
             [stamp("2026-09-15T23:48:00Z"), stamp("2026-09-15T23:54:00Z"), stamp("2026-09-16T00:00:00Z"), stamp("2026-09-16T00:12:00Z")],
         )
-        # A day without a store contributes nothing.
-        self.assertEqual(cmaarchive.stored_slots(str(self.base), stamp("2026-09-17T00:00:00Z"), stamp("2026-09-17T03:00:00Z")), [])
+        # A day without a store contributes nothing while another day of
+        # the range has one (the hour past midnight a completeness check
+        # asks for); a range without any store is not an empty archive but
+        # a base that is not the archive, and the error says what was
+        # looked for without naming where.
+        self.assertEqual(
+            [slot.time.strftime("%H:%M") for slot in cmaarchive.stored_slots(str(self.base), stamp("2026-09-16T23:48:00Z"), stamp("2026-09-17T00:12:00Z"))],
+            ["23:48", "23:54"],
+        )
+        with self.assertRaisesRegex(DownloadError, rf"no day store at {CMA_PRODUCT}/z5/2026/2026-09-17.zarr; {CMA_ARCHIVE_VARIABLE}") as caught:
+            cmaarchive.stored_slots(str(self.base), stamp("2026-09-17T00:00:00Z"), stamp("2026-09-17T03:00:00Z"))
+        self.assertNotIn(str(self.base), str(caught.exception))
         with mock.patch.dict(os.environ, {CMA_ARCHIVE_VARIABLE: str(self.base)}):
+            with self.assertRaisesRegex(DownloadError, "2026-09-17.zarr or .*2026-09-18.zarr"):
+                latest_cma_slot(CMA, now=stamp("2026-09-18T01:40:00Z"))
             self.assertEqual(latest_cma_slot(CMA, now=stamp("2026-09-16T01:40:00Z")), stamp("2026-09-16T00:12:00Z"))
             self.assertTrue(_cma_run_is_complete(CMA, GfsRun(stamp("2026-09-15T23:00:00Z")), 1))
             self.assertFalse(_cma_run_is_complete(CMA, GfsRun(stamp("2026-09-16T00:00:00Z")), 3))

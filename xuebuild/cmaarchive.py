@@ -65,6 +65,12 @@ def archive_base() -> str:
     base = os.environ.get(ARCHIVE_VARIABLE, "").strip().rstrip("/")
     if not base:
         raise DownloadError(f"set {ARCHIVE_VARIABLE} to the CMA archive base (an s3:// prefix or a directory)")
+    if "://" not in base and not os.path.isdir(base):
+        # A bucket path spelled without its scheme would be read as a
+        # directory and every day store would look absent.
+        raise DownloadError(
+            f"{ARCHIVE_VARIABLE} names no directory ({base!r}); a bucket archive is an s3://bucket/prefix, the prefix holding {PRODUCT}/z{ZOOM}/"
+        )
     return base
 
 
@@ -164,14 +170,17 @@ class StoredSlot:
 def stored_slots(base: str, start: datetime, end: datetime) -> list[StoredSlot]:
     """Every slot the daily stores hold between ``start`` and ``end``
     inclusive (UTC), written or not, in time order. A day without a store
-    contributes nothing; only the two small ``time`` and ``slot_status``
-    arrays of each store are read."""
+    contributes nothing, but a range without a single store is an error:
+    the archive is not where the base says. Only the two small ``time``
+    and ``slot_status`` arrays of each store are read."""
     start, end = _utc(start), _utc(end)
     slots: list[StoredSlot] = []
+    missing: list[str] = []
     for day in window_days(start, end):
         url = store_url(base, day)
         root = _open_day(url)
         if root is None:
+            missing.append(store_url("", day).lstrip("/"))
             continue
         times = np.asarray(root["time"][:], dtype=np.int64)
         status = np.asarray(root["slot_status"][:], dtype=np.int8)
@@ -179,6 +188,15 @@ def stored_slots(base: str, start: datetime, end: datetime) -> list[StoredSlot]:
             time = datetime.fromtimestamp(seconds, tz=UTC)
             if start <= time <= end:
                 slots.append(StoredSlot(time=time, status=int(flag), store=url, index=index))
+    if missing and len(missing) == len(window_days(start, end)):
+        # Not one day of the range has a store: the base is not the archive
+        # (a prefix above or below the product directory) or the sync has
+        # stopped. Either is the operator's to fix and neither reads as
+        # "nothing written yet".
+        raise DownloadError(
+            f"the CMA archive has no day store at {' or '.join(missing)}; "
+            f"{ARCHIVE_VARIABLE} must name the prefix holding {PRODUCT}/z{ZOOM}/, and the sync job must be writing"
+        )
     return slots
 
 

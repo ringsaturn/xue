@@ -108,7 +108,10 @@ Bundle sets:
   cma`) and handed to the converter as one NetCDF series, the shape the
   cases before the archive were built from. `XUE_CMA_ARCHIVE` names the
   archive (an `s3://` base read with the `R2_*` credentials, or a local
-  directory the stores were copied to) and has no default; the portal
+  directory the stores were copied to; either way the prefix holding
+  `RADAR_L3_MST_CREF_GISJPG_Tiles_CR/z5/<year>/<date>.zarr`, and a base
+  none of whose days has a store is refused rather than read as an
+  archive with nothing written) and has no default; the portal
   publishes each mosaic twenty to thirty minutes late and the archive
   syncs every twenty minutes, so the live window ends some forty minutes
   behind real time. A three-hour window is about thirty frames and one to
