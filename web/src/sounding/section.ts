@@ -50,6 +50,10 @@ export interface SoundingSectionOptions {
   modelProfile(): { profile: Profile; run: string; validTime: number } | null;
   /** A nominal time, formatted the way the panel formats a valid time. */
   formatTime(time: string): string;
+  /** Whether the dataset on screen could supply a model column at all: a
+   * forecast run with isobaric levels. A radar mosaic cannot, and the
+   * legend then says nothing about a model rather than that none is near. */
+  modelPossible(): boolean;
   /** Whether a fresh pin should open the chart on its own: true while the
    * sounding marks are switched on, since a viewer who asked to see the
    * stations wants the ascent; false otherwise, when the section waits
@@ -476,7 +480,7 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
           swatch("···", "--skewt-model-dew"),
           ` ${t("soundingModel")} ${model.run} ${options.formatTime(new Date(model.validTime).toISOString())} (${gapLabel(model.validTime - Date.parse(time))})`,
         );
-      } else {
+      } else if (options.modelPossible()) {
         items.push(`   ${t("soundingNoModel")}`);
       }
       legend.replaceChildren(...items);

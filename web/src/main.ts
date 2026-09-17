@@ -2122,6 +2122,10 @@ const soundingSection: SoundingSection = createSoundingSection({
   formatTime: (time) => formatCompactDate(Date.parse(time)),
   // Read at pin time, never captured: `stationsShown` follows the rail.
   wantsOpen: () => stationsShown.soundings,
+  modelPossible: () =>
+    manifest !== null &&
+    !showingObservations() &&
+    modelProfileBundles(manifest.bundles.map((entry) => entry.variable)).length > 0,
   onChange: () => {
     // A newly opened section, or another ascent selected, wants the run's
     // isobaric levels at the pinned cell.
