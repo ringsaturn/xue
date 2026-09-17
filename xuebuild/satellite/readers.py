@@ -150,6 +150,12 @@ class Reader(Protocol):
         string, not necessarily a file — written under ``workdir``."""
         ...
 
+    def packing_source(self, files: SlotFiles) -> Path:
+        """One of the slot's files as GDAL opens it, for the band's scale,
+        offset and unit: read off a source file directly, since a mosaic
+        carries them through only on some GDAL versions."""
+        ...
+
 
 # OR_HFD-<res>-B<bits>-M1C<channel>-T<tile>_<spacecraft>_s<start>_c<created>.nc
 _ISATSS_KEY = re.compile(
@@ -293,6 +299,9 @@ class ISatSSReader:
             description=f"gdalbuildvrt {vrt.name}",
         )
         return vrt
+
+    def packing_source(self, files: SlotFiles) -> Path:
+        return Path(f'NETCDF:"{files.paths[0]}":{self.VARIABLE}')
 
 
 READERS: dict[str, Reader] = {"isatss": ISatSSReader()}

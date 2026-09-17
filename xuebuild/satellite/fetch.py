@@ -130,9 +130,10 @@ def fetch_frame(
     slot_dir = tiles_dir / f"{slot:%Y%m%d%H%M}" / channel.id
     files = reader.download(platform, objects, slot_dir, download=download, concurrency=concurrency)
     source = reader.open(files, slot_dir)
-    # The packing is the source's, read before the warp: a warp carries a
-    # band's scale, offset and unit through only on some GDAL versions.
-    packing = assemble.dataset_packing(source)
+    # The packing is the source's, read off one tile before the warp: a
+    # mosaic or a warp carries a band's scale, offset and unit through only
+    # on some GDAL versions (3.13 does, Ubuntu 24.04's 3.8 loses the unit).
+    packing = assemble.dataset_packing(reader.packing_source(files))
     PROJECTORS[projector].to_grid(source, grid, nodata=assemble.NODATA, resampling=RESAMPLING, out=frame)
     assemble.write_packing(
         frame,
