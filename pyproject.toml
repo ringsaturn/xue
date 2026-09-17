@@ -26,11 +26,11 @@ dependencies = [
     # `gdalinfo` on PATH, which the scheduled publish workflows no longer
     # install. The floor tracks the current release because the wheel's
     # source table must match sources.py (a wheel that publishes a different
-    # bundle set refuses to build), and 0.17 is the first wheel that knows
-    # the AIFS source: ECMWF's data-driven model from the open data service,
-    # its run-total precipitation in millimetres and its cloud covers on
-    # surfaces of their own, each accepted under the GFS identity.
-    "xuepy>=0.17,<0.18",
+    # bundle set refuses to build), and 0.18 is the first wheel that knows
+    # the himawari source: a satellite window warped onto a plate carrée
+    # grid by the fetch stage and read as one NetCDF series, whose variable
+    # carries the band block beside its parameter block.
+    "xuepy>=0.18,<0.19",
 ]
 
 [project.scripts]
