@@ -84,7 +84,6 @@ import {
 } from "./identity";
 import {
   FAMILIES,
-  ISOBARIC_FILL_IDS,
   bundleLevel,
   familyLabel,
   familyLevels,
@@ -92,7 +91,6 @@ import {
   familyOf,
   familyVariants,
   isobaricCode,
-  isobaricLegend,
   levelCode,
   niceStep,
   rangeLegend,
@@ -104,11 +102,7 @@ import {
 import { buildPalette, buildVapourFluxPalette, buildWaveFieldPalette, buildWindFieldPalette, legendGradient } from "./palettes";
 import {
   PRESSURE_BUNDLE_IDS,
-  PRESSURE_LEVELS,
   isPressureBundle,
-  pressureCode,
-  pressureLabel,
-  pressureLegend,
   pressureLevelForIdentity,
   type PressureBundleId,
 } from "./pressure";
@@ -140,6 +134,7 @@ import {
   type ViewComposition,
   type ViewState,
 } from "./viewstate";
+import { FIELD_GROUPS, variableIds, variableSpec, type FieldGroup, type GroundId } from "./variables";
 import { TC_MODELS } from "./tc/agencies";
 import { buildTcCard } from "./tc/card";
 import { pointDataOf, StormLayers, TC_CLICKABLE_LAYERS, type StormView, type TcPointData } from "./tc/layers";
@@ -353,7 +348,8 @@ function prefetchConcurrency(): number {
 }
 
 /** Per-variable UI copy; the `code` is prefixed with the active model's label
- * ("GFS / TMP 2M", "ECMWF / TMP 2M"). */
+ * ("GFS / TMP 2M", "ECMWF / TMP 2M"). A registered field's is read off the
+ * variable table (`variableUi`); an unknown field's off its own metadata. */
 interface VariableUi {
   code: string;
   title: readonly string[];
@@ -361,219 +357,6 @@ interface VariableUi {
   label: string;
   legend: readonly string[];
 }
-
-/** The pressure family's nine entries, built from the level registry rather
- * than written out: they differ only in the level, and the instrument panel's
- * code and legend are already derived there. */
-function pressureVariableUi(): Record<PressureBundleId, VariableUi> {
-  const entries = {} as Record<PressureBundleId, VariableUi>;
-  for (const id of PRESSURE_BUNDLE_IDS) {
-    const level = PRESSURE_LEVELS[id];
-    entries[id] = {
-      code: pressureCode(id),
-      title: level.levelHpa === null ? ["Sea Level", "Pressure"] : [`${level.levelHpa} hPa`, "Height"],
-      bufferTitle: level.levelHpa === null ? "Pressure buffer" : "Height buffer",
-      label: pressureLabel(id),
-      legend: pressureLegend(id),
-    };
-  }
-  return entries;
-}
-
-/** The upper-air fills, built from the family registry the same way: the
- * code, title and legend all follow from the family and the level. */
-function isobaricVariableUi(): Record<string, VariableUi> {
-  const words: Record<IsobaricFamily, string> = {
-    hgt: "Height",
-    tmp: "Temperature",
-    rh: "Humidity",
-    spfh: "Specific Humidity",
-    wind: "Wind",
-    qflux: "Vapour Flux",
-    vvel: "Vertical Velocity",
-    thetae: "Theta-e",
-    cloud: "Cloud Cover",
-    ice: "Sea Ice",
-    wave: "Waves",
-  };
-  const entries: Record<string, VariableUi> = {};
-  for (const id of ISOBARIC_FILL_IDS) {
-    const word = words[familyOf(id)!];
-    entries[id] = {
-      code: isobaricCode(id),
-      title: [`${bundleLevel(id)} hPa`, word],
-      bufferTitle: `${word} buffer`,
-      label: familyLabel(id),
-      legend: isobaricLegend(identityForBundleId(id)!) ?? [],
-    };
-  }
-  return entries;
-}
-
-/** The whole table, built rather than written so that the translated
- * labels in it follow a language switch: `VARIABLE_UI` is rebuilt from
- * here on every `onLocaleChange`. */
-function buildVariableUi(): Record<string, VariableUi> {
-  return {
-    tmp2m: {
-      code: "TMP 2M",
-      title: ["Surface", "Temperature"],
-      bufferTitle: "Temperature buffer",
-      label: t("varLabelTmp2m"),
-      legend: ["50", "30", "10", "-10", "-30", "-60"],
-    },
-    prate: {
-      code: "PRATE SFC",
-      title: ["Precipitation", "Rate"],
-      bufferTitle: "Precipitation buffer",
-      label: t("varLabelPrate"),
-      legend: ["128", "40", "20", "5", "1", "0"],
-    },
-    dswrf: {
-      code: "DSWRF SFC",
-      title: ["Solar", "Radiation"],
-      bufferTitle: "Radiation buffer",
-      label: t("varLabelDswrf"),
-      legend: ["1200", "900", "600", "300", "100", "0"],
-    },
-    cref: {
-      code: "CREF EATM",
-      title: ["Composite", "Reflectivity"],
-      bufferTitle: "Reflectivity buffer",
-      label: t("varLabelCref"),
-      legend: ["75", "60", "45", "30", "15", "0"],
-    },
-    wind10m: {
-      code: "WIND 10M",
-      title: ["Surface", "Wind"],
-      bufferTitle: "Wind buffer",
-      label: t("varLabelWind10m"),
-      legend: ["40", "30", "20", "10", "5", "0"],
-    },
-    // The surface diagnostics' legends read off their chart ceilings
-    // (levels.ts), the way the upper-air fills' do.
-    gust: {
-      code: "GUST SFC",
-      title: ["Wind", "Gust"],
-      bufferTitle: "Gust buffer",
-      label: t("varLabelGust"),
-      legend: isobaricLegend(identityForBundleId("gust")!) ?? [],
-    },
-    tcdc: {
-      code: "TCDC EATM",
-      title: ["Cloud", "Cover"],
-      bufferTitle: "Cloud buffer",
-      label: t("varLabelTcdc"),
-      legend: isobaricLegend(identityForBundleId("tcdc")!) ?? [],
-    },
-    cape: {
-      code: "CAPE SFC",
-      title: ["Convective", "Energy"],
-      bufferTitle: "CAPE buffer",
-      label: t("varLabelCape"),
-      legend: isobaricLegend(identityForBundleId("cape")!) ?? [],
-    },
-    lcdc: {
-      code: "LCDC LOW",
-      title: ["Low", "Cloud"],
-      bufferTitle: "Cloud buffer",
-      label: t("varLabelLcdc"),
-      legend: isobaricLegend(identityForBundleId("lcdc")!) ?? [],
-    },
-    mcdc: {
-      code: "MCDC MID",
-      title: ["Middle", "Cloud"],
-      bufferTitle: "Cloud buffer",
-      label: t("varLabelMcdc"),
-      legend: isobaricLegend(identityForBundleId("mcdc")!) ?? [],
-    },
-    hcdc: {
-      code: "HCDC HIGH",
-      title: ["High", "Cloud"],
-      bufferTitle: "Cloud buffer",
-      label: t("varLabelHcdc"),
-      legend: isobaricLegend(identityForBundleId("hcdc")!) ?? [],
-    },
-    vis: {
-      code: "VIS SFC",
-      title: ["Surface", "Visibility"],
-      bufferTitle: "Visibility buffer",
-      label: t("varLabelVis"),
-      legend: isobaricLegend(identityForBundleId("vis")!) ?? [],
-    },
-    dpt2m: {
-      code: "DPT 2M",
-      title: ["Dew", "Point"],
-      bufferTitle: "Dew point buffer",
-      label: t("varLabelDpt2m"),
-      legend: isobaricLegend(identityForBundleId("dpt2m")!) ?? [],
-    },
-    aptmp2m: {
-      code: "APTMP 2M",
-      title: ["Apparent", "Temperature"],
-      bufferTitle: "Apparent temperature buffer",
-      label: t("varLabelAptmp2m"),
-      legend: isobaricLegend(identityForBundleId("aptmp2m")!) ?? [],
-    },
-    // The ocean set: the skin temperature reads as the SST it is over
-    // water, the ice and wave fields over their chart ceilings.
-    tmpsfc: {
-      code: "TMP SFC",
-      title: ["Sea Surface", "Temperature"],
-      bufferTitle: "Surface temperature buffer",
-      label: t("varLabelTmpsfc"),
-      legend: isobaricLegend(identityForBundleId("tmpsfc")!) ?? [],
-    },
-    icec: {
-      code: "ICEC SFC",
-      title: ["Sea Ice", "Cover"],
-      bufferTitle: "Sea ice buffer",
-      label: t("varLabelIcec"),
-      legend: isobaricLegend(identityForBundleId("icec")!) ?? [],
-    },
-    icetk: {
-      code: "ICETK SFC",
-      title: ["Sea Ice", "Thickness"],
-      bufferTitle: "Sea ice buffer",
-      label: t("varLabelIcetk"),
-      legend: isobaricLegend(identityForBundleId("icetk")!) ?? [],
-    },
-    // The wave vector: the height as the fill, the direction as particles,
-    // so its legend is the height's.
-    wave: {
-      code: "WAVE SFC",
-      title: ["Waves", "Height · Direction"],
-      bufferTitle: "Wave buffer",
-      label: t("varLabelWave"),
-      legend: isobaricLegend(identityForBundleId("wave")!) ?? [],
-    },
-    htsgw: {
-      code: "HTSGW SFC",
-      title: ["Significant", "Wave Height"],
-      bufferTitle: "Wave buffer",
-      label: t("varLabelHtsgw"),
-      legend: isobaricLegend(identityForBundleId("htsgw")!) ?? [],
-    },
-    perpw: {
-      code: "PERPW SFC",
-      title: ["Primary", "Wave Period"],
-      bufferTitle: "Wave buffer",
-      label: t("varLabelPerpw"),
-      legend: isobaricLegend(identityForBundleId("perpw")!) ?? [],
-    },
-    dirpw: {
-      code: "DIRPW SFC",
-      title: ["Primary", "Wave Direction"],
-      bufferTitle: "Wave buffer",
-      label: t("varLabelDirpw"),
-      legend: isobaricLegend(identityForBundleId("dirpw")!) ?? [],
-    },
-    ...pressureVariableUi(),
-    ...isobaricVariableUi(),
-  } as unknown as Record<string, VariableUi>;
-}
-
-let VARIABLE_UI: Record<string, VariableUi> = buildVariableUi();
 
 interface BasemapTones {
   ocean: string;
@@ -584,81 +367,6 @@ interface BasemapTones {
    * flavor alone names the flavor's own background instead. */
   background?: string;
 }
-
-function pressureBasemapTheme(tones: BasemapTones): Record<PressureBundleId, BasemapTones> {
-  const themes = {} as Record<PressureBundleId, BasemapTones>;
-  for (const id of PRESSURE_BUNDLE_IDS) themes[id] = tones;
-  return themes;
-}
-
-/** The upper-air fills take the ground of the surface field they read like:
- * the opaque temperatures the 2 m temperature's, the winds the 10 m wind's,
- * and the translucent moisture fields (relative and specific humidity, vapour
- * flux) the precipitation's slate. */
-function isobaricBasemapTheme(pick: (family: IsobaricFamily) => BasemapTones): Record<string, BasemapTones> {
-  const themes: Record<string, BasemapTones> = {};
-  for (const id of ISOBARIC_FILL_IDS) themes[id] = pick(familyOf(id)!);
-  return themes;
-}
-
-/** Basemap tones per variable, per theme. tmp2m paints an opaque field so its
- * base is nearly invisible; prate and wind composite semi-transparent data
- * over the base, so those get a base with enough contrast of its own to keep
- * the page from reading as a flat void (dark) or a blank sheet (light).
- *
- * The pressure family is drawn as thin lines over a nearly bare map, which is
- * what a chart looks like: the base has to carry the geography on its own, so
- * it is the plainest of the set — on paper, the design's own chart stock. */
-const DARK_BASEMAP: Record<string, BasemapTones> = {
-  tmp2m: { ocean: "#0b1826", land: "#182c3d" },
-  prate: { ocean: "#16344a", land: "#28495f" },
-  dswrf: { ocean: "#0d1b2b", land: "#1c3242" },
-  // Radar echoes are small and bright; the base stays dark enough for a
-  // 5 dBZ edge to read against it.
-  cref: { ocean: "#0c1a26", land: "#1a2f3d" },
-  wind10m: { ocean: "#0e2131", land: "#1d3849" },
-  // Translucent at the low end like the wind field, and on its ground.
-  gust: { ocean: "#0e2131", land: "#1d3849" },
-  // A grey veil over a slate: clear sky has to read as the map, so the
-  // ground carries the geography and stays dark enough for thin cloud to
-  // show against it.
-  tcdc: { ocean: "#16344a", land: "#28495f" },
-  // Stable air is the map; the ramp starts in pale straw, which needs the
-  // precipitation slate under it rather than the temperature's near-void.
-  cape: { ocean: "#16344a", land: "#28495f" },
-  lcdc: { ocean: "#16344a", land: "#28495f" },
-  mcdc: { ocean: "#16344a", land: "#28495f" },
-  hcdc: { ocean: "#16344a", land: "#28495f" },
-  // Clear air is the map, and the reduced-visibility ramp comes in
-  // translucent: the same slate.
-  vis: { ocean: "#16344a", land: "#28495f" },
-  // Opaque fields on the temperature's near-void.
-  dpt2m: { ocean: "#0b1826", land: "#182c3d" },
-  aptmp2m: { ocean: "#0b1826", land: "#182c3d" },
-  // The skin temperature is a coat like the 2 m temperature. The ice and
-  // wave fields leave open water and land to the map — the ice ramp starts
-  // pale and translucent, the wave ramps at nothing — so they take the
-  // precipitation slate, dark enough for the ice edge and a half-metre sea
-  // to show against it.
-  tmpsfc: { ocean: "#0b1826", land: "#182c3d" },
-  icec: { ocean: "#16344a", land: "#28495f" },
-  icetk: { ocean: "#16344a", land: "#28495f" },
-  htsgw: { ocean: "#16344a", land: "#28495f" },
-  perpw: { ocean: "#16344a", land: "#28495f" },
-  dirpw: { ocean: "#16344a", land: "#28495f" },
-  wave: { ocean: "#16344a", land: "#28495f" },
-  ...pressureBasemapTheme({ ocean: "#101f2c", land: "#22384a" }),
-  // Relative humidity is a light wash, not a coat, and goes with the
-  // moisture fields on the precipitation slate rather than with the
-  // temperature's near-void; θe is a coat like the temperature.
-  ...isobaricBasemapTheme((family) =>
-    family === "wind"
-      ? { ocean: "#0e2131", land: "#1d3849" }
-      : family === "tmp" || family === "thetae"
-        ? { ocean: "#0b1826", land: "#182c3d" }
-        : { ocean: "#16344a", land: "#28495f" },
-  ),
-} as Record<string, BasemapTones>;
 
 /** Protomaps' data-viz flavor for the light theme: white land, pale grey
  * water, and no landcover tinting the continents — a base that stays out of
@@ -674,50 +382,41 @@ const PAPER_GROUND: BasemapTones = {
   background: namedFlavor(LIGHT_FLAVOR).background,
 };
 
-/** Light means a light map: every layer sits on that same white ground, the
- * four whose palettes run translucent at the low end included, so the page
- * is one sheet rather than paper chrome floating over a dark map. Drizzle,
- * the faintest wind and a 5 dBZ edge read weaker on white than they do on
- * the dark theme's slate — the accepted cost of one palette serving both
- * themes (see PRECIPITATION_STOPS in palettes.ts).
+/** The grounds, per theme (`VariableSpec.ground` says which a field takes).
  *
- * The pressure family keeps its chart stock. Contours are a weather chart,
- * and the warm sheet is the design's own paper for one. */
-const LIGHT_BASEMAP: Record<string, BasemapTones> = {
-  tmp2m: PAPER_GROUND,
-  prate: PAPER_GROUND,
-  dswrf: PAPER_GROUND,
-  cref: PAPER_GROUND,
-  wind10m: PAPER_GROUND,
-  gust: PAPER_GROUND,
-  tcdc: PAPER_GROUND,
-  lcdc: PAPER_GROUND,
-  mcdc: PAPER_GROUND,
-  hcdc: PAPER_GROUND,
-  cape: PAPER_GROUND,
-  vis: PAPER_GROUND,
-  dpt2m: PAPER_GROUND,
-  aptmp2m: PAPER_GROUND,
-  tmpsfc: PAPER_GROUND,
-  icec: PAPER_GROUND,
-  icetk: PAPER_GROUND,
-  htsgw: PAPER_GROUND,
-  perpw: PAPER_GROUND,
-  dirpw: PAPER_GROUND,
-  wave: PAPER_GROUND,
-  ...pressureBasemapTheme({ ocean: "#dcd6c8", land: "#c9c2b2" }),
-  ...isobaricBasemapTheme(() => PAPER_GROUND),
-} as Record<string, BasemapTones>;
+ * On the dark theme each is a slate the field's palette needs: an opaque
+ * coat (the temperatures, θe) paints over its ground, so that one is nearly
+ * a void; the translucent washes (precipitation, humidity, cloud, CAPE,
+ * visibility, the ice and wave fields) composite over theirs, which has to
+ * carry the geography and keep the low end of the ramp readable, so it is
+ * lighter; the wind's is between; the radiation's and the radar's are their
+ * own — radar echoes are small and bright, and the ground stays dark enough
+ * for a 5 dBZ edge to read against it. The contour lines are drawn thin
+ * over a nearly bare map, which is what a chart looks like: the base
+ * carries the geography on its own, so it is the plainest of the set.
+ *
+ * Light means a light map: every field sits on the same white ground, the
+ * translucent ones included, so the page is one sheet rather than paper
+ * chrome floating over a dark map. Drizzle, the faintest wind and a 5 dBZ
+ * edge read weaker on white than on the dark slate — the accepted cost of
+ * one palette serving both themes (see PRECIPITATION_STOPS in palettes.ts).
+ * The lines keep their chart stock: contours are a weather chart, and the
+ * warm sheet is the design's own paper for one. */
+const GROUND_TONES: Record<GroundId, { dark: BasemapTones; light: BasemapTones }> = {
+  coat: { dark: { ocean: "#0b1826", land: "#182c3d" }, light: PAPER_GROUND },
+  slate: { dark: { ocean: "#16344a", land: "#28495f" }, light: PAPER_GROUND },
+  wind: { dark: { ocean: "#0e2131", land: "#1d3849" }, light: PAPER_GROUND },
+  solar: { dark: { ocean: "#0d1b2b", land: "#1c3242" }, light: PAPER_GROUND },
+  radar: { dark: { ocean: "#0c1a26", land: "#1a2f3d" }, light: PAPER_GROUND },
+  chart: { dark: { ocean: "#101f2c", land: "#22384a" }, light: { ocean: "#dcd6c8", land: "#c9c2b2" } },
+};
 
-/** Read at every use rather than once: the theme toggles in place. */
-function basemapThemes(): Record<string, BasemapTones> {
-  return isDark ? DARK_BASEMAP : LIGHT_BASEMAP;
-}
-
+/** The ground under the field on screen. Read at every use rather than
+ * once: the theme toggles in place. An unregistered field takes the coat's. */
 function currentBasemapTheme(): BasemapTones {
-  const themes = basemapThemes();
   const id = document.body.dataset.variable;
-  return themes[id ?? "tmp2m"] ?? themes.tmp2m!;
+  const ground = (id === undefined ? null : variableSpec(id)?.ground) ?? "coat";
+  return isDark ? GROUND_TONES[ground].dark : GROUND_TONES[ground].light;
 }
 
 /** Relative luminance of a `#rrggbb` tone. */
@@ -4126,20 +3825,11 @@ function syncFieldTiles(run: ForecastManifest): void {
   syncRailDensity();
 }
 
-/** The sheet's groups, in the order they are listed: one quantity each,
- * the written tiles that belong to it in order; the last takes every
- * bundle the run publishes that no tile stands for. A stopgap until the
- * variable table carries each field's group. */
-type FieldGroup = "temperature" | "moisture" | "wind" | "dynamics" | "radiation" | "ocean" | "other";
-const FIELD_GROUP_TILES: Record<Exclude<FieldGroup, "other">, readonly string[]> = {
-  temperature: ["tmp2m", "aptmp2m", "dpt2m", "tmpsfc"],
-  moisture: ["rh850", "prate", "cref", "tcdc"],
-  wind: ["wind10m", "gust"],
-  dynamics: ["cape", "vvel700", "thetae850", "qflux850"],
-  radiation: ["vis", "dswrf"],
-  ocean: ["icec", "wave"],
-};
-const FIELD_GROUP_LABEL: Record<FieldGroup, MessageKey> = {
+/** The sheet's groups, in the order they are listed (`FIELD_GROUPS`, from
+ * the variable table, which also says which group each field is in), then
+ * a last one for every bundle the run publishes that no tile stands for. */
+type SheetGroup = FieldGroup | "other";
+const FIELD_GROUP_LABEL: Record<SheetGroup, MessageKey> = {
   temperature: "fieldGroupTemperature",
   moisture: "fieldGroupMoisture",
   wind: "fieldGroupWind",
@@ -4150,7 +3840,7 @@ const FIELD_GROUP_LABEL: Record<FieldGroup, MessageKey> = {
 };
 
 interface FieldSheetRow {
-  group: FieldGroup;
+  group: SheetGroup;
   /** The bundle a press opens: the family's preferred member for a family
    * tile, the bundle itself otherwise. */
   id: ForecastBundleId;
@@ -4171,10 +3861,13 @@ function fieldSheetRows(run: ForecastManifest): FieldSheetRow[] {
   const core = modelRailCore(selectedModelId);
   const tiles = new Map(fieldTiles().map((button) => [button.dataset.variable!, button]));
   const rows: FieldSheetRow[] = [];
-  for (const [group, ids] of Object.entries(FIELD_GROUP_TILES) as [Exclude<FieldGroup, "other">, readonly string[]][]) {
-    for (const id of ids) {
-      const tile = tiles.get(id);
-      if (!tile || !fieldTileShipped(tile, run)) continue;
+  // The written tiles, in the table's order, each under its field's group.
+  const tileIds = variableIds().filter((id) => tiles.has(id));
+  for (const group of FIELD_GROUPS) {
+    for (const id of tileIds) {
+      if (variableSpec(id)?.group !== group) continue;
+      const tile = tiles.get(id)!;
+      if (!fieldTileShipped(tile, run)) continue;
       const family = tile.dataset.family as IsobaricFamily | undefined;
       const members = family === undefined ? [] : familyMembers(family, (member) => hasBundle(run, member)).filter((member) => hasBundle(run, member));
       rows.push({
@@ -4202,7 +3895,7 @@ function fieldSheetRows(run: ForecastManifest): FieldSheetRow[] {
  * onto a level, and the main way onto a variant. */
 function renderFieldSheet(rows: FieldSheetRow[]): void {
   const nodes: HTMLElement[] = [];
-  let heading: FieldGroup | null = null;
+  let heading: SheetGroup | null = null;
   for (const row of rows) {
     if (row.group !== heading) {
       heading = row.group;
@@ -4270,12 +3963,6 @@ function renderFieldSheet(rows: FieldSheetRow[]): void {
   }
   fieldList.replaceChildren(...nodes);
 }
-
-/** The layers whose legend bar is a hand-written gradient in the stylesheet
- * (`body[data-variable=…] .legend-bar`, and the default for temperature);
- * every other field reads its bar off the palette it is actually drawn
- * with. */
-const STYLESHEET_LEGEND_IDS: ReadonlySet<string> = new Set(["tmp2m", "prate", "cref", "wind10m"]);
 
 /** A rail section with nothing to show is hidden whole, and the rule
  * between sections goes with it. */
@@ -4381,8 +4068,11 @@ if (variableRail) new ResizeObserver(syncRailDensity).observe(variableRail);
  * unrecognized field read theirs off the palette they are actually drawn
  * with, over the range the legend's ticks span. */
 function legendGradientFor(session: VariableSession): string {
+  // A field whose legend bar is a hand-written gradient in the stylesheet
+  // (`body[data-variable=…] .legend-bar`) leaves it there; every other reads
+  // its bar off the palette it is actually drawn with.
   const chartId = session.chartId;
-  if (chartId !== null && STYLESHEET_LEGEND_IDS.has(chartId)) return "";
+  if (chartId !== null && variableSpec(chartId)?.legendGradient === "stylesheet") return "";
   if (session.vector) return legendGradient(vectorPalette(session));
   const variable = session.variable;
   if (variable.quantization.type !== "linear") return "";
@@ -4407,8 +4097,10 @@ function legendGradientFor(session: VariableSession): string {
  * nothing this build knows. The title and unit are then the encoder's own
  * label and unit, and the legend spans the codebook. */
 function variableUi(session: VariableSession): VariableUi {
-  const known = session.chartId === null ? undefined : VARIABLE_UI[session.chartId];
-  if (known) return known;
+  const spec = session.chartId === null ? null : variableSpec(session.chartId);
+  if (spec) {
+    return { code: spec.code, title: spec.title, bufferTitle: spec.bufferTitle, label: spec.label(), legend: spec.legend() };
+  }
   const variable = session.variable;
   const quantization = variable.quantization;
   const range: readonly [number, number] =
@@ -6690,7 +6382,6 @@ function applyAppearance(): void {
  * level row and legend, the page's own metadata, the long-lived status
  * lines — and the basemap's label language. */
 function applyLocale(): void {
-  VARIABLE_UI = buildVariableUi();
   renderLanguageList();
   probePanel.root.setAttribute("aria-label", t("probeAria"));
   probePanel.close.setAttribute("aria-label", t("probeCloseAria"));

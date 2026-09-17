@@ -25,6 +25,7 @@ import { fetchPoster, isPosterSupported } from "./poster";
 import { applyPageMeta, pageUrl } from "./pagemeta";
 import { fetchCaseManifest, fetchCatalog, localizedText, type ShowcaseCase } from "./showcase-catalog";
 import { SITE_NAME } from "./site";
+import { variableSpec } from "./variables";
 
 /**
  * The historical showcase list.
@@ -76,43 +77,12 @@ function dataBaseUrl(): string {
   return import.meta.env.VITE_DATA_BASE_URL || "data/";
 }
 
-/** Variable codes, matching the viewer's own switch labels. */
-const VARIABLE_CODE: Partial<Record<ForecastBundleId, string>> = {
-  tmp2m: "TEMP",
-  prate: "PRECIP",
-  dswrf: "SOLAR",
-  cref: "RADAR",
-  prmsl: "MSLP",
-  wind10m: "WIND",
-  gust: "GUST",
-  tcdc: "CLOUD",
-  lcdc: "CLOUD LOW",
-  mcdc: "CLOUD MID",
-  hcdc: "CLOUD HIGH",
-  cape: "CAPE",
-  vis: "VIS",
-  dpt2m: "DEWPT",
-  aptmp2m: "FEELS",
-  tmpsfc: "SST",
-  icec: "ICE",
-  icetk: "ICE THK",
-  wave: "WAVE",
-  htsgw: "WAVE HS",
-  perpw: "WAVE TP",
-  dirpw: "WAVE DIR",
-};
-
-/** The contact-sheet code of one bundle: the surface fields have a word,
- * every isobaric field is its family and level ("HGT 500MB", "T 850MB"). */
+/** The contact-sheet code of one bundle (`VariableSpec.showcaseCode`,
+ * matching the viewer's own switch labels): the surface fields have a
+ * word, every isobaric field is its family and level ("HGT 500MB",
+ * "T 850MB"); a bundle the table lacks is written under its own id. */
 function variableCode(id: ForecastBundleId): string {
-  const fixed = VARIABLE_CODE[id];
-  if (fixed) return fixed;
-  const match = /^([a-z]+)(\d+)$/.exec(id);
-  if (!match) return id.toUpperCase();
-  const family =
-    { hgt: "HGT", tmp: "T", rh: "RH", spfh: "Q", wind: "WIND", qflux: "QFLUX", vvel: "OMEGA", thetae: "THETAE" }[match[1]!] ??
-    match[1]!.toUpperCase();
-  return `${family} ${match[2]}MB`;
+  return variableSpec(id)?.showcaseCode ?? id.toUpperCase();
 }
 
 /** Compact UTC stamp. Cards line several of these up in narrow columns, so

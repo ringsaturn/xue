@@ -737,9 +737,9 @@ has no tile for while it is on screen; the rail is marked dense
 box at full size. The rail is a scroll column in a fixed box (under the
 zoom tile down to the capsule on desktop; under the round controls on
 phones, where `main.ts` publishes the capsule's measured height as
-`--capsule-height`). A new field with an icon is a tile in the field
-section plus a line in `FIELD_GROUP_TILES`; without one it is a row of the
-sheet's last group. What is on screen is one object, `view: ViewState`
+`--capsule-height`). A new field is a row of `web/src/variables.ts`
+and, if it gets an icon, a tile in the field section; without one it is a
+row of the sheet's last group. What is on screen is one object, `view: ViewState`
 (`web/src/viewstate.ts`: the field and the lines, the particles, the
 experiment's derived layers, the storm and station marks); the rail's
 pressed states (`syncRail`), the level row and the address bar
@@ -749,6 +749,27 @@ publishes a pressure surface: a pressed member is the overlay, pressing it
 again takes the lines off, as does the rail's pressure switch, and the
 group's ALONE member drops the field to leave the chart by itself (the
 field last on screen, `lastField`, comes back on the next press).
+
+`web/src/variables.ts` is the variable table: one `VariableSpec` per
+registered bundle id (`KnownBundleId`, a complete record), carrying what
+the shell shows for it — the instrument code, headline and buffer title,
+the localized label and legend (closures, so they follow the locale), the
+legend's gradient source, the ground (`GroundId`, mapped to tones per theme
+by `main.ts::GROUND_TONES`), the `?type=` name and aliases, the meteogram
+and showcase codes, the rail family (`IsobaricFamily`, which tile stands
+for it) and the field sheet's group. `chart` (a `ChartFamily`, what the
+field is) and `family` (which tile) are different questions and both are
+kept. The surface rows are written out in the sheet's order; the isobaric
+rows are generated from the family registry and the pressure rows from
+the level registry. Every id-keyed table derives from it: `identity.ts`
+resolves id ↔ identity through `variableSpec` / `specForIdentity`,
+`urlstate.ts` builds its alias table from it, `meteogram.ts` and
+`showcase.ts` read their codes, `main.ts` its copy, legends, grounds and
+sheet rows. The table is built on first use, never at load: it sits on an
+import cycle (identity → variables → levels → pressure → identity), so
+nothing in it may run while those registries are initialising.
+`tests/web/variables.test.ts` holds the markup's tiles, the identity maps,
+the family registry and the alias set to it.
 
 The pressure family is drawn as contour lines: `web/src/pressure.ts` holds
 the per-level intervals and emphasised lines, `layer.ts::setContours` turns

@@ -6,6 +6,7 @@ import {
   type ResolutionPreference,
 } from "./manifest";
 import { isPressureBundle, type PressureBundleId } from "./pressure";
+import { variableIds, variableSpec } from "./variables";
 
 /** Default model when the URL names none (or names one this app does not
  * serve — a bad link falls back rather than erroring). */
@@ -16,120 +17,30 @@ export const DEFAULT_MODEL: ForecastModelId = "gfs";
  * the core tmp2m/prate pair, so this is always available there. */
 export const DEFAULT_VARIABLE: ForecastBundleId = "prate";
 
-/** Canonical `type` value for the surface members, which have short names of
- * their own. Everything else names itself — an isobaric field's level *is*
- * the layer, so there is no separate `?level=` parameter to keep in step
- * with `?type=`, and a bundle this build has never heard of is written out
- * under its own id. */
-const CANONICAL_TYPE: Record<string, string> = {
-  tmp2m: "temp",
-  prate: "precip",
-  dswrf: "solar",
-  cref: "radar",
-  prmsl: "pressure",
-  wind10m: "wind",
-  gust: "gust",
-  tcdc: "cloud",
-  lcdc: "lowcloud",
-  mcdc: "midcloud",
-  hcdc: "highcloud",
-  cape: "cape",
-  vis: "visibility",
-  dpt2m: "dewpoint",
-  aptmp2m: "feelslike",
-  tmpsfc: "sst",
-  icec: "seaice",
-  icetk: "icethickness",
-  wave: "waves",
-  htsgw: "waveheight",
-  perpw: "waveperiod",
-  dirpw: "wavedirection",
-};
-
+/** Canonical `type` value for a registered layer (`VariableSpec.urlName`):
+ * the surface members have short names of their own, an isobaric field
+ * names itself — its level *is* the layer, so there is no separate
+ * `?level=` parameter to keep in step with `?type=` — and a bundle this
+ * build has never heard of is written out under its own id. */
 function canonicalType(id: ForecastBundleId): string {
-  return CANONICAL_TYPE[id] ?? id;
+  return variableSpec(id)?.urlName ?? id;
 }
 
-/** Accepted spellings for the named layers — canonical name, bundle id, and
- * a few common aliases. Matching is case-insensitive. */
-const TYPE_ALIASES: Record<string, ForecastBundleId> = {
-  temp: "tmp2m",
-  temperature: "tmp2m",
-  tmp: "tmp2m",
-  tmp2m: "tmp2m",
-  t2m: "tmp2m",
-  precip: "prate",
-  precipitation: "prate",
-  rain: "prate",
-  prate: "prate",
-  wind: "wind10m",
-  wind10m: "wind10m",
-  solar: "dswrf",
-  radiation: "dswrf",
-  dswrf: "dswrf",
-  radar: "cref",
-  reflectivity: "cref",
-  cref: "cref",
-  pressure: "prmsl",
-  mslp: "prmsl",
-  msl: "prmsl",
-  prmsl: "prmsl",
-  gust: "gust",
-  gusts: "gust",
-  cloud: "tcdc",
-  clouds: "tcdc",
-  cloudcover: "tcdc",
-  tcdc: "tcdc",
-  cape: "cape",
-  instability: "cape",
-  lowcloud: "lcdc",
-  lcdc: "lcdc",
-  midcloud: "mcdc",
-  middlecloud: "mcdc",
-  mcdc: "mcdc",
-  highcloud: "hcdc",
-  hcdc: "hcdc",
-  visibility: "vis",
-  vis: "vis",
-  fog: "vis",
-  dewpoint: "dpt2m",
-  dew: "dpt2m",
-  td: "dpt2m",
-  dpt2m: "dpt2m",
-  feelslike: "aptmp2m",
-  apparent: "aptmp2m",
-  aptmp: "aptmp2m",
-  aptmp2m: "aptmp2m",
-  // The ocean set. `sst` is what the skin temperature is searched for,
-  // though over land it is the ground's skin.
-  sst: "tmpsfc",
-  skin: "tmpsfc",
-  skintemp: "tmpsfc",
-  tsfc: "tmpsfc",
-  tmpsfc: "tmpsfc",
-  seaice: "icec",
-  ice: "icec",
-  icecover: "icec",
-  iceconcentration: "icec",
-  icec: "icec",
-  icethickness: "icetk",
-  icetk: "icetk",
-  waves: "wave",
-  wave: "wave",
-  waveheight: "htsgw",
-  swh: "htsgw",
-  hs: "htsgw",
-  htsgw: "htsgw",
-  waveperiod: "perpw",
-  period: "perpw",
-  perpw: "perpw",
-  wavedirection: "dirpw",
-  wavedir: "dirpw",
-  dirpw: "dirpw",
-  // The subtropical high is read off the 500 hPa chart, so the view has the
-  // name people look for as well as the level's own.
-  subtropicalhigh: "hgt500",
-};
+/** Accepted spellings for the registered layers — each one's canonical
+ * name, its bundle id and its aliases, from the variable table. Matching
+ * is case-insensitive. Built on first use, after the table is. */
+let typeAliasTable: Record<string, ForecastBundleId> | null = null;
+
+function typeAliases(): Record<string, ForecastBundleId> {
+  if (typeAliasTable) return typeAliasTable;
+  typeAliasTable = Object.fromEntries(
+    variableIds().flatMap((id) => {
+      const spec = variableSpec(id)!;
+      return [spec.urlName, id, ...spec.urlAliases].map((alias) => [alias, id] as const);
+    }),
+  );
+  return typeAliasTable;
+}
 
 /** The family an isobaric spelling names: the id's own prefix, plus the
  * spellings a chart reader types — `t850`, `z500`, `humidity700`, `q850`,
@@ -175,7 +86,7 @@ function isobaricType(value: string): ForecastBundleId | null {
  * the manifest does not ship what came back. */
 function resolveType(value: string): ForecastBundleId | null {
   const lower = value.trim().toLowerCase();
-  return TYPE_ALIASES[lower] ?? isobaricType(lower) ?? (isBundleVariableId(lower) ? lower : null);
+  return typeAliases()[lower] ?? isobaricType(lower) ?? (isBundleVariableId(lower) ? lower : null);
 }
 
 /** Accepted spellings for each model. Matching is case-insensitive. */

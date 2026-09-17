@@ -1,4 +1,5 @@
-import { ISOBARIC_LEVELS, type BundleParameter, type BundleVariable, type KnownBundleId } from "./manifest";
+import type { BundleParameter, BundleVariable, KnownBundleId } from "./manifest";
+import { isobaricChartFamily, specForIdentity, variableSpec } from "./variables";
 
 /**
  * What a variable *is*, read off the file rather than off its name.
@@ -251,94 +252,26 @@ export function identifyBundle(variables: readonly BundleVariable[]): BundleIden
   return identity === null ? null : { identity, variables: [first] };
 }
 
-/** The surface member of each family, by the naming convention. */
-const SURFACE_IDS: Record<string, VariableIdentity> = {
-  tmp2m: scalar("tmp", null),
-  wind10m: vector("wind", null),
-  prmsl: scalar("hgt", null),
-  prate: scalar("prate", null),
-  dswrf: scalar("dswrf", null),
-  cref: scalar("cref", null),
-  gust: scalar("gust", null),
-  tcdc: scalar("tcdc", null),
-  lcdc: scalar("lcdc", null),
-  mcdc: scalar("mcdc", null),
-  hcdc: scalar("hcdc", null),
-  cape: scalar("cape", null),
-  vis: scalar("vis", null),
-  dpt2m: scalar("dpt2m", null),
-  aptmp2m: scalar("aptmp2m", null),
-  tmpsfc: scalar("tmpsfc", null),
-  icec: scalar("icec", null),
-  icetk: scalar("icetk", null),
-  htsgw: scalar("htsgw", null),
-  perpw: scalar("perpw", null),
-  dirpw: scalar("dirpw", null),
-  wave: vector("wave", null),
-};
-
-const ISOBARIC_PREFIXES: Record<string, ChartFamily> = {
-  hgt: "hgt",
-  tmp: "tmp",
-  rh: "rh",
-  spfh: "spfh",
-  wind: "wind",
-  qflux: "qflux",
-  vvel: "vvel",
-  thetae: "thetae",
-};
-
 /**
  * What a bundle id *looks* like it is, by the naming convention alone. This
  * is all the shell has before a bundle is open — the rail tiles, the level
  * row, `?type=` resolution and the legend prepared from the manifest — and
  * it is a guess: once the session is ready, the parameter block wins and
- * main.ts warns if the two disagree. Null for a name the convention does not
- * describe.
+ * main.ts warns if the two disagree. A registered id answers from the
+ * variable table; `<family><level>` on a level nothing is registered on
+ * still reads as that family, by the convention. Null for a name the
+ * convention does not describe.
  */
 export function identityForBundleId(id: string): VariableIdentity | null {
-  const surface = SURFACE_IDS[id];
-  if (surface) return surface;
+  const spec = variableSpec(id);
+  if (spec) return { family: spec.chart, level: spec.level, vector: spec.vector };
   const match = /^([a-z]+)(\d+)$/.exec(id);
   if (!match) return null;
-  const family = ISOBARIC_PREFIXES[match[1]!];
-  if (family === undefined) return null;
-  return family === "wind" || family === "qflux"
-    ? vector(family, Number(match[2]))
-    : scalar(family, Number(match[2]));
+  const family = match[1] as ChartFamily;
+  const isVector = isobaricChartFamily(family);
+  if (isVector === undefined) return null;
+  return isVector ? vector(family, Number(match[2])) : scalar(family, Number(match[2]));
 }
-
-/** The surface member's id for each family, or null where the family has
- * none (relative and specific humidity, the vapour flux). */
-const FAMILY_SURFACE_ID: Record<ChartFamily, KnownBundleId | null> = {
-  hgt: "prmsl",
-  tmp: "tmp2m",
-  rh: null,
-  spfh: null,
-  wind: "wind10m",
-  qflux: null,
-  prate: "prate",
-  dswrf: "dswrf",
-  cref: "cref",
-  vvel: null,
-  thetae: null,
-  gust: "gust",
-  tcdc: "tcdc",
-  lcdc: "lcdc",
-  mcdc: "mcdc",
-  hcdc: "hcdc",
-  cape: "cape",
-  vis: "vis",
-  dpt2m: "dpt2m",
-  aptmp2m: "aptmp2m",
-  tmpsfc: "tmpsfc",
-  icec: "icec",
-  icetk: "icetk",
-  htsgw: "htsgw",
-  perpw: "perpw",
-  dirpw: "dirpw",
-  wave: "wave",
-};
 
 /**
  * The registered bundle id for an identity — the name the shell's chart
@@ -349,9 +282,5 @@ const FAMILY_SURFACE_ID: Record<ChartFamily, KnownBundleId | null> = {
  * nothing is registered on.
  */
 export function registeredBundleId(identity: VariableIdentity | null): KnownBundleId | null {
-  if (identity === null) return null;
-  if (identity.level === null) return FAMILY_SURFACE_ID[identity.family];
-  if (!(ISOBARIC_LEVELS as readonly number[]).includes(identity.level)) return null;
-  if (identity.family in ISOBARIC_PREFIXES) return `${identity.family}${identity.level}` as KnownBundleId;
-  return null;
+  return specForIdentity(identity)?.id ?? null;
 }

@@ -24,6 +24,7 @@
  */
 
 import type { ProbeValue } from "./probe";
+import { variableSpec } from "./variables";
 
 export type MeteogramRowId = "temperature" | "precipitation" | "wind" | "cloud" | "pressure" | "taf";
 
@@ -68,20 +69,6 @@ const ROW_TEMPLATES: readonly RowTemplate[] = [
   { id: "pressure", kind: "line", bundles: ["prmsl"], range: null, baseline: null },
 ];
 
-/** The instrument code each bundle is labelled by in a row. */
-const BUNDLE_CODES: Record<string, string> = {
-  tmp2m: "TMP",
-  dpt2m: "DPT",
-  prate: "PRATE",
-  wind10m: "WIND",
-  gust: "GUST",
-  hcdc: "HIGH",
-  mcdc: "MID",
-  lcdc: "LOW",
-  tcdc: "TCDC",
-  prmsl: "PRMSL",
-};
-
 /** Every bundle any row could read; what a pinned point opens sessions for
  * when the run publishes it. */
 export const METEOGRAM_BUNDLE_IDS: readonly string[] = ROW_TEMPLATES.flatMap((row) => [
@@ -120,7 +107,8 @@ export const TAF_ROW_SPEC: MeteogramRowSpec = {
  * with no bundle is named for itself. */
 export function meteogramRowCode(spec: MeteogramRowSpec): string {
   if (spec.bundles.length === 0) return spec.id.toUpperCase();
-  const codes = spec.bundles.map((id) => BUNDLE_CODES[id] ?? id.toUpperCase());
+  // The instrument code each bundle is labelled by (`VariableSpec.meteogramCode`).
+  const codes = spec.bundles.map((id) => variableSpec(id)?.meteogramCode ?? id.toUpperCase());
   const surface = spec.id === "temperature" ? "2M" : spec.id === "wind" ? "10M" : null;
   return surface ? `${codes.join(" · ")} ${surface}` : codes.join(" · ");
 }
