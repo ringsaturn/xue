@@ -90,7 +90,7 @@
             "url": "https://xue.ringsaturn.me/",
             "name": "Xue",
             "alternateName": "雪",
-            "description": "Global weather forecast maps: whole NOAA GFS and ECMWF IFS runs played back as smooth animations in the browser.",
+            "description": "Global weather forecast maps: whole NOAA GFS, ECMWF IFS and ECMWF AIFS runs played back as smooth animations in the browser.",
             "inLanguage": ["zh-CN", "zh-TW", "en", "ja", "ko", "de", "fr", "es", "pt", "tr", "ru"],
             "publisher": { "@id": "https://github.com/ringsaturn#person" }
           },
@@ -109,6 +109,7 @@
             "featureList": [
               "NOAA GFS 0.25° and GFS surface-flux 13 km runs, hourly to 120 h and 3-hourly to 240 h",
               "ECMWF IFS 0.25° open data runs, 3-hourly to 144 h and 6-hourly to 240 h",
+              "ECMWF AIFS Single 0.25° open data runs, the centre's data-driven model, 6-hourly to 360 h",
               "NOAA HRRR 3 km runs over the contiguous United States, a new cycle every hour, hourly to 18 h, with the model's forecast radar reflectivity",
               "2 m temperature, precipitation rate, 10 m wind with particle animation, downward shortwave radiation",
               "Sea level pressure isobars and 850/700/500/250 hPa geopotential height contours with labelled highs and lows",
@@ -136,7 +137,7 @@
             "@type": "Dataset",
             "@id": "https://xue.ringsaturn.me/#data",
             "name": "Xue live forecast bundles",
-            "description": "The current NOAA GFS, GFS surface-flux, ECMWF IFS and NOAA HRRR runs, the last three to four hours of the NOAA MRMS radar mosaic and the last two to three hours of the JMA precipitation nowcast over Japan and of the CMA radar mosaic over China, each a rolling window rebuilt every five minutes, converted into the .xue container: 8-bit quantized planes on the native grid with temporal residual prediction and Zstandard compression, one file per variable, streamable by HTTP range request. Only the newest run per source is kept.",
+            "description": "The current NOAA GFS, GFS surface-flux, ECMWF IFS, ECMWF AIFS and NOAA HRRR runs, the last three to four hours of the NOAA MRMS radar mosaic and the last two to three hours of the JMA precipitation nowcast over Japan and of the CMA radar mosaic over China, each a rolling window rebuilt every five minutes, converted into the .xue container: 8-bit quantized planes on the native grid with temporal residual prediction and Zstandard compression, one file per variable, streamable by HTTP range request. Only the newest run per source is kept.",
             "url": "https://dataset.ringsaturn.me/xue/",
             "isAccessibleForFree": true,
             "creator": { "@id": "https://github.com/ringsaturn#person" },
@@ -166,6 +167,7 @@
               { "@type": "DataDownload", "name": "GFS live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest.json" },
               { "@type": "DataDownload", "name": "GFS surface-flux live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-sflux.json" },
               { "@type": "DataDownload", "name": "ECMWF live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-ecmwf.json" },
+              { "@type": "DataDownload", "name": "ECMWF AIFS live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-aifs.json" },
               { "@type": "DataDownload", "name": "HRRR live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-hrrr.json" },
               { "@type": "DataDownload", "name": "MRMS radar live pointer (rolling window of the last three to four hours)", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-mrms.json" },
               { "@type": "DataDownload", "name": "JMA precipitation nowcast live pointer (rolling window of the last two to three hours)", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-jma.json" },
@@ -190,9 +192,9 @@
     <noscript>
       <div class="noscript-note">
         <p>
-          <strong>Xue</strong> plays whole NOAA GFS, ECMWF IFS and NOAA HRRR weather model runs — 2 m temperature,
+          <strong>Xue</strong> plays whole NOAA GFS, ECMWF IFS, ECMWF AIFS and NOAA HRRR weather model runs — 2 m temperature,
           precipitation, 10 m wind, sea level pressure isobars, 500 and 850 hPa charts and other upper-air fields
-          out to 240 hours (18 for HRRR) — as animated forecast maps, decoding them in the browser with WebAssembly and WebGL2.
+          out to 240 hours (360 for AIFS, 18 for HRRR) — as animated forecast maps, decoding them in the browser with WebAssembly and WebGL2.
           It needs JavaScript to run.
         </p>
         <p>
@@ -610,6 +612,11 @@
             <button type="button" data-model="ecmwf" aria-pressed="false">
               <span class="model-name">ECMWF</span>
               <small>IFS 0.25°</small>
+              <span class="model-check" aria-hidden="true"></span>
+            </button>
+            <button type="button" data-model="aifs" aria-pressed="false">
+              <span class="model-name">AIFS</span>
+              <small>ECMWF AI 0.25°</small>
               <span class="model-check" aria-hidden="true"></span>
             </button>
             <button type="button" data-model="hrrr" aria-pressed="false">

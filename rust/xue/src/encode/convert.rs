@@ -26,8 +26,8 @@ use crate::encode::grid::{
 };
 use crate::encode::gribindex::inspect_grib_fast;
 use crate::encode::inspect::{
-    inspect_grib_multi, normalize_unit, precipitation_rate_is_mm_per_hour, raster_expression,
-    SUPPORTED_EXTENSIONS,
+    inspect_grib_multi, normalize_unit, precipitation_accumulation_is_mm,
+    precipitation_rate_is_mm_per_hour, raster_expression, SUPPORTED_EXTENSIONS,
 };
 use crate::encode::manifest::{build_bin_manifest, build_latest_pointer, serialize_json, write_json};
 use crate::encode::metadata::{axis_unit_seconds, build_metadata, lead_hours, to_spaced_json};
@@ -555,9 +555,13 @@ fn convert_units(variable_id: &str, unit: &str, values: &mut [f64]) -> Result<()
             values.iter_mut().for_each(|value| *value *= 3600.0)
         }
         "prate" => {}
-        // ECMWF run-total precipitation accumulation, metres -> mm; the rate
-        // derivation happens later against the previous frame.
-        "tp" => values.iter_mut().for_each(|value| *value *= 1000.0),
+        // ECMWF run-total precipitation accumulation, metres -> mm (AIFS
+        // writes it in mm already); the rate derivation happens later
+        // against the previous frame.
+        "tp" if !precipitation_accumulation_is_mm(unit) => {
+            values.iter_mut().for_each(|value| *value *= 1000.0)
+        }
+        "tp" => {}
         // GRIB2 carries mean sea level pressure in pascals; the codebook
         // quantizes hectopascals.
         "prmsl" => values.iter_mut().for_each(|value| *value /= 100.0),

@@ -110,18 +110,27 @@ class RegistryTests(unittest.TestCase):
         # ECMWF open data carries the dew point under the same identity, and
         # the gust, the total cloud cover and the CAPE as neighbours accepted
         # through a whole alternate identity each; the layer cloud covers,
-        # the visibility and the apparent temperature it does not carry.
-        ecmwf_params = {"dpt2m": "2d", "gust": "10fg", "tcdc": "tcc", "cape": "mucape"}
+        # the visibility and the apparent temperature IFS open data does not
+        # carry. AIFS open data carries the layers (``lcc`` / ``mcc`` /
+        # ``hcc``) on surfaces of its own and the total under the WMO 0/6/1
+        # from the ground surface up, each an alternate too.
+        ecmwf_params = {"dpt2m": "2d", "gust": "10fg", "tcdc": "tcc", "cape": "mucape", "lcdc": "lcc", "mcdc": "mcc", "hcdc": "hcc"}
+        with_alternates = ("gust", "tcdc", "cape", "lcdc", "mcdc", "hcdc")
         for variable_id in SURFACE_VARIABLE_IDS:
             spec = variable_spec(variable_id)
             self.assertIsNone(spec.grib2_statistical, f"{variable_id} is an instantaneous product")
             self.assertEqual(spec.ecmwf_param, ecmwf_params.get(variable_id, ""), variable_id)
-            self.assertEqual(bool(spec.grib2_alternates), variable_id in ("gust", "tcdc", "cape"), variable_id)
+            self.assertEqual(bool(spec.grib2_alternates), variable_id in with_alternates, variable_id)
         self.assertEqual(variable_spec("gust").ecmwf_alternate_params, ("10fg3",))
         gust, tcdc, cape = (variable_spec(variable_id).grib2_alternates[0] for variable_id in ("gust", "tcdc", "cape"))
         self.assertEqual((gust.triple, gust.level_type, gust.level_value, gust.statistical), ((0, 2, 22), 103, 10.0, 2))
         self.assertEqual((tcdc.triple, tcdc.level_type, tcdc.level_value, tcdc.gdal_unit), ((0, 6, 192), 1, None, "-"))
         self.assertEqual((cape.triple, cape.level_type, cape.level_value), ((0, 7, 6), 17, None))
+        aifs_tcdc = variable_spec("tcdc").grib2_alternates[1]
+        self.assertEqual((aifs_tcdc.triple, aifs_tcdc.level_type, aifs_tcdc.level_value, aifs_tcdc.gdal_unit), ((0, 6, 1), 1, None, ""))
+        for layer, number, surface, value in (("lcdc", 3, 1, None), ("mcdc", 4, 100, 80000.0), ("hcdc", 5, 100, 45000.0)):
+            (alternate,) = variable_spec(layer).grib2_alternates
+            self.assertEqual((alternate.triple, alternate.level_type, alternate.level_value, alternate.statistical), ((0, 6, number), surface, value, None))
 
     def test_gfs_publishes_them_all_and_ecmwf_what_the_open_data_carries(self) -> None:
         gfs = published_bundle_ids(source_spec("gfs"))

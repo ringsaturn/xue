@@ -54,6 +54,18 @@ pub fn precipitation_rate_is_mm_per_hour(unit: &str) -> bool {
     matches!(compact_unit(unit).as_str(), "mm/hr" | "mm/h")
 }
 
+/// Whether a run-total precipitation record is already in millimetres
+/// (kg/m²): AIFS writes its total that way, under the WMO 0/1/52 whose
+/// GDAL table entry is a rate, so the unit GDAL reports carries a
+/// per-second the values do not have. IFS open data carries metres.
+/// Mirrors `precipitation_accumulation_is_mm` in `xuebuild/gdal.py`.
+pub fn precipitation_accumulation_is_mm(unit: &str) -> bool {
+    matches!(
+        compact_unit(unit).as_str(),
+        "kg/m^2" | "kg/m2" | "kgm^-2" | "kgm-2" | "mm" | "kg/m^2s" | "kg/m^2*s" | "kg/m2s" | "kg/m2*s"
+    )
+}
+
 fn compact_unit(unit: &str) -> String {
     unit.trim()
         .to_lowercase()
@@ -101,7 +113,9 @@ pub fn raster_expression(variable_id: &str, unit: &str) -> Result<String> {
                 .trim()
                 .trim_matches(|character| "[]()".contains(character))
                 .to_lowercase();
-            if !matches!(compact.as_str(), "-" | "m" | "") {
+            if !matches!(compact.as_str(), "-" | "m" | "")
+                && !precipitation_accumulation_is_mm(unit)
+            {
                 return Err(EncodeError::conversion(format!(
                     "unsupported precipitation accumulation unit: {}",
                     if unit.is_empty() { "<missing>" } else { unit }
@@ -425,13 +439,15 @@ fn band_matches(variable_id: &str, band: &BandInfo) -> Result<bool> {
         }
         // ECMWF open data tp: GDAL's tables do not know the local parameter
         // 0/1/193, so GRIB_ELEMENT is "unknown" and the comment carries the
-        // raw triple.
+        // raw triple. AIFS writes its run total under the WMO 0/1/52, which
+        // GDAL's tables name TPRATE ("Total precipitation rate"); the
+        // fetched files carry no other record of that element.
         "tp" => {
             let comment = band.item("GRIB_COMMENT").to_string();
             let text = [comment.as_str(), band.item("GRIB_LEVEL"), &band.description]
                 .join(" ")
                 .to_lowercase();
-            matches!(element.to_lowercase().as_str(), "unknown" | "tp" | "apcp")
+            matches!(element.to_lowercase().as_str(), "unknown" | "tp" | "apcp" | "tprate")
                 && (short_name == "0-SFC" || text.contains("surface"))
                 && (comment.contains("cat 1, subcat 193")
                     || text.contains("total precipitation"))
@@ -476,7 +492,11 @@ fn band_matches(variable_id: &str, band: &BandInfo) -> Result<bool> {
         }
         // One cloud cover element on its own layer surface (code table 4.5
         // types 214 / 224 / 234, which GDAL spells `0-LCY` / `0-MCY` /
-        // `0-HCY`); the interval averages are never downloaded.
+        // `0-HCY`); the interval averages are never downloaded. AIFS writes
+        // the layers on surfaces of their own (the ground, 800 hPa, 450 hPa;
+        // the registry's alternates), which GDAL spells `0-80000-SFC`,
+        // `80000-45000-ISBL` and `45000-ISBL`: those match on the layer's
+        // name in the comment.
         "lcdc" | "mcdc" | "hcdc" => {
             let (token, phrases): (&str, &[&str]) = match variable_id {
                 "lcdc" => ("0-LCY", &["low cloud"]),
@@ -491,7 +511,9 @@ fn band_matches(variable_id: &str, band: &BandInfo) -> Result<bool> {
         // `0-EATM`; the per-layer cloud covers are never downloaded. ECMWF
         // `tcc` is the ECMWF-local 0/6/192 on the ground surface — GDAL's
         // tables do not know it, so GRIB_ELEMENT is "unknown" and the
-        // comment carries the raw triple, the way it does for `tp`.
+        // comment carries the raw triple, the way it does for `tp`. AIFS
+        // writes the WMO TCDC as a layer from the ground surface up, which
+        // GDAL spells `0-SFC` like any surface record.
         "tcdc" | "cref" => {
             let text = searchable(band).to_lowercase();
             let comment = band.item("GRIB_COMMENT");
@@ -501,6 +523,11 @@ fn band_matches(variable_id: &str, band: &BandInfo) -> Result<bool> {
                     && element.to_lowercase() == "unknown"
                     && (short_name == "0-SFC" || text.contains("ground or water surface"))
                     && comment.contains("cat 6, subcat 192"))
+                || (variable_id == "tcdc"
+                    && element == "TCDC"
+                    && (short_name.ends_with("-SFC")
+                        || text.contains("sfc=\"")
+                        || text.contains("ground or water surface")))
                 || (variable_id == "cref" && is_mrms_record(band, "MERGEDREFLECTIVITYQCCOMPOSITE"))
         }
         "ugrd10m" | "vgrd10m" => {

@@ -300,7 +300,11 @@ pub const VARIABLES: &[VariableSpec] = &[
     },
     // ECMWF open data has no rate field: tp is the run-total accumulation
     // (metres, ECMWF-local GRIB2 parameter 0/1/193). Input-only — the
-    // converter de-accumulates it into prate.
+    // converter de-accumulates it into prate. AIFS writes the same run total
+    // under the WMO 0/1/52 (TPRATE to GDAL's tables, in kg/(m^2*s)) as an
+    // accumulation in kg/m², a millimetre: the alternate carries that unit
+    // so the converter leaves the values alone where the IFS record's
+    // metres are scaled up.
     VariableSpec {
         id: "tp",
         label: "Total precipitation",
@@ -314,7 +318,15 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_level_value: None,
         grib2_statistical: Some(1),
         grib2_aliases: &[],
-        grib2_alternates: &[],
+        grib2_alternates: &[RecordAlternate {
+            discipline: 0,
+            category: 1,
+            number: 52,
+            level_type: 1,
+            level_value: None,
+            statistical: Some(1),
+            gdal_unit: "kg/(m^2*s)",
+        }],
         gdal_unit: "-",
         fill_values: &[],
     },
@@ -463,7 +475,9 @@ pub const VARIABLES: &[VariableSpec] = &[
     // statistical process is what rejects pgrb2's interval average of the
     // same field. ECMWF `tcc` is the ECMWF-local 0/6/192 as a 0–1 fraction
     // on the ground surface (GDAL reports its unit as "-"), scaled to
-    // percent by the converter.
+    // percent by the converter; AIFS writes it under the WMO 0/6/1 in
+    // percent as a layer from the ground surface to the top of the
+    // atmosphere.
     VariableSpec {
         id: "tcdc",
         label: "Total cloud cover",
@@ -477,15 +491,26 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_level_value: None,
         grib2_statistical: None,
         grib2_aliases: &[],
-        grib2_alternates: &[RecordAlternate {
-            discipline: 0,
-            category: 6,
-            number: 192,
-            level_type: 1,
-            level_value: None,
-            statistical: None,
-            gdal_unit: "-",
-        }],
+        grib2_alternates: &[
+            RecordAlternate {
+                discipline: 0,
+                category: 6,
+                number: 192,
+                level_type: 1,
+                level_value: None,
+                statistical: None,
+                gdal_unit: "-",
+            },
+            RecordAlternate {
+                discipline: 0,
+                category: 6,
+                number: 1,
+                level_type: 1,
+                level_value: None,
+                statistical: None,
+                gdal_unit: "",
+            },
+        ],
         gdal_unit: "%",
         fill_values: &[],
     },
@@ -576,7 +601,10 @@ pub const VARIABLES: &[VariableSpec] = &[
     },
     // The cloud layers: three parameters of their own (0/6/3, 0/6/4, 0/6/5),
     // each on its own layer surface (214 low, 224 middle, 234 high), which
-    // carries no value.
+    // carries no value. AIFS open data carries the three (`lcc` / `mcc` /
+    // `hcc`, in percent) on surfaces of its own — the low layer from the
+    // ground surface, the middle from the 800 hPa isobaric surface, the high
+    // from 450 hPa — the ECMWF layer boundaries as first fixed surfaces.
     VariableSpec {
         id: "lcdc",
         label: "Low cloud cover",
@@ -590,7 +618,15 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_level_value: None,
         grib2_statistical: None,
         grib2_aliases: &[],
-        grib2_alternates: &[],
+        grib2_alternates: &[RecordAlternate {
+            discipline: 0,
+            category: 6,
+            number: 3,
+            level_type: 1,
+            level_value: None,
+            statistical: None,
+            gdal_unit: "",
+        }],
         gdal_unit: "%",
         fill_values: &[],
     },
@@ -607,7 +643,15 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_level_value: None,
         grib2_statistical: None,
         grib2_aliases: &[],
-        grib2_alternates: &[],
+        grib2_alternates: &[RecordAlternate {
+            discipline: 0,
+            category: 6,
+            number: 4,
+            level_type: 100,
+            level_value: Some(80000.0),
+            statistical: None,
+            gdal_unit: "",
+        }],
         gdal_unit: "%",
         fill_values: &[],
     },
@@ -624,7 +668,15 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_level_value: None,
         grib2_statistical: None,
         grib2_aliases: &[],
-        grib2_alternates: &[],
+        grib2_alternates: &[RecordAlternate {
+            discipline: 0,
+            category: 6,
+            number: 5,
+            level_type: 100,
+            level_value: Some(45000.0),
+            statistical: None,
+            gdal_unit: "",
+        }],
         gdal_unit: "%",
         fill_values: &[],
     },

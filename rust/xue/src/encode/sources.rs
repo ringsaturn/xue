@@ -295,6 +295,50 @@ pub const SOURCES: &[SourceSpec] = &[
         series_file: false,
         downsample: None,
     },
+    // ECMWF's data-driven model, AIFS Single, from the same open data
+    // service: an `oper` and a `wave` stream on the same 0.25° grid, every
+    // cycle six-hourly to 360 hours. What the IFS source publishes less what
+    // AIFS does not carry (no isobaric relative humidity, gust, CAPE, sea
+    // ice thickness or peak wave period) plus the three layer cloud covers;
+    // its `tp`, `tcc` and cloud layers arrive under identities of their own
+    // that the registry's alternates accept. Mirrors `xuebuild/sources.py`.
+    SourceSpec {
+        id: "aifs",
+        manifest_model: "AIFS",
+        product: "aifs-single-0p25",
+        latest_filename: Some("latest-aifs.json"),
+        steps: &[(360, 6)],
+        input_variable_ids: &[
+            "tmp2m", "tp", "ugrd10m", "vgrd10m", "prmsl", "hgt850", "hgt700", "hgt500", "hgt250",
+            "tmp925", "tmp850", "tmp500", "spfh850", "ugrd925", "vgrd925", "ugrd850", "vgrd850",
+            "ugrd250", "vgrd250", "tcdc", "lcdc", "mcdc", "hcdc", "dpt2m", "vvel850", "vvel700",
+            "vvel500", "tmpsfc", "htsgw", "dirpw",
+        ],
+        companion_files: &[CompanionFile {
+            id: "wave",
+            variable_ids: &["htsgw", "dirpw"],
+        }],
+        accumulated_precipitation: true,
+        averaged_precipitation: false,
+        average_window_hours: 6,
+        optional_at_analysis: &[],
+        statistical_processes: &[("prate", 0)],
+        bundle_scalar_ids: &[
+            "tmp2m", "prate", "prmsl", "hgt850", "hgt700", "hgt500", "hgt250", "tmp925", "tmp850",
+            "tmp500", "tcdc", "lcdc", "mcdc", "hcdc", "dpt2m", "vvel850", "vvel700", "vvel500",
+            "thetae850", "tmpsfc", "htsgw",
+        ],
+        core_bundle_ids: &["tmp2m", "prate"],
+        bundle_vector_ids: &["wind10m", "wind925", "wind850", "wind250", "qflux850", "wave"],
+        production_grid: (1440, 721),
+        tile: (48, 52),
+        regrid: None,
+        observation: false,
+        window_hours: None,
+        cadence_seconds: None,
+        series_file: false,
+        downsample: None,
+    },
     // GFS surface flux files on the native ~13 km T1534 Gaussian grid. Adds
     // the dswrf layer; prate is de-averaged from window-cumulative averages.
     SourceSpec {
@@ -515,7 +559,7 @@ mod tests {
         assert_eq!(radar.core_bundle_ids, &["cref"]);
         assert_eq!(jma.cadence_seconds, Some(300));
         assert_eq!(jma.core_bundle_ids, &["prate"]);
-        for model in ["gfs", "ecmwf", "sflux", "hrrr", "mrms"] {
+        for model in ["gfs", "ecmwf", "aifs", "sflux", "hrrr", "mrms"] {
             assert!(!source_spec(model).expect(model).series_file, "{model}");
         }
     }

@@ -210,27 +210,45 @@ def companion_object_url(run: GfsRun, forecast_hour: int, family: str) -> str:
 # and axis.
 ECMWF_COMPANION_STREAMS: dict[str, str] = {"wave": "wave"}
 
+# The sources served by the ECMWF open data service, by the model directory
+# each is published under (``<date>/<cycle>z/<model>/0p25/<stream>/``): the
+# IFS and the data-driven AIFS Single share the mirrors, the ``.index``
+# shape, the CCSDS packing and the two streams, and are fetched by one
+# path.
+ECMWF_OPEN_DATA_MODELS: dict[str, str] = {"ecmwf": "ifs", "aifs": "aifs-single"}
+
 
 def ecmwf_object_url(
-    run: GfsRun, forecast_hour: int, *, base_url: str | None = None, stream: str = "oper"
+    run: GfsRun,
+    forecast_hour: int,
+    *,
+    base_url: str | None = None,
+    stream: str = "oper",
+    model: str = "ecmwf",
 ) -> str:
     """ECMWF open data with an unpadded ``-{h}h-`` step in the object name:
-    the ``oper`` atmosphere by default, or a companion family's stream."""
+    the ``oper`` atmosphere by default, or a companion family's stream, of
+    the IFS by default or of another source the service carries
+    (:data:`ECMWF_OPEN_DATA_MODELS`)."""
+    try:
+        directory = ECMWF_OPEN_DATA_MODELS[model]
+    except KeyError:
+        raise DownloadError(f"{model} is not served by the ECMWF open data service") from None
     filename = f"{run.date}{run.cycle}0000-{forecast_hour}h-{stream}-fc.grib2"
     base = (base_url or ECMWF_BASE_URLS[0]).rstrip("/")
-    return f"{base}/{run.date}/{run.cycle}z/ifs/0p25/{stream}/{filename}"
+    return f"{base}/{run.date}/{run.cycle}z/{directory}/0p25/{stream}/{filename}"
 
 
 def ecmwf_companion_object_url(
-    run: GfsRun, forecast_hour: int, family: str, *, base_url: str | None = None
+    run: GfsRun, forecast_hour: int, family: str, *, base_url: str | None = None, model: str = "ecmwf"
 ) -> str:
-    """The object one companion family of the ECMWF source publishes for one
-    forecast hour, on one mirror."""
+    """The object one companion family of an ECMWF open data source
+    publishes for one forecast hour, on one mirror."""
     try:
         stream = ECMWF_COMPANION_STREAMS[family]
     except KeyError:
         raise DownloadError(f"unknown ECMWF companion file family: {family}") from None
-    return ecmwf_object_url(run, forecast_hour, base_url=base_url, stream=stream)
+    return ecmwf_object_url(run, forecast_hour, base_url=base_url, stream=stream, model=model)
 
 
 # -- MRMS ---------------------------------------------------------------------
@@ -897,8 +915,8 @@ def _fetch_cma_run(
 
 
 def model_object_url(run: GfsRun, forecast_hour: int, model: str) -> str:
-    if model == "ecmwf":
-        return ecmwf_object_url(run, forecast_hour)
+    if model in ECMWF_OPEN_DATA_MODELS:
+        return ecmwf_object_url(run, forecast_hour, model=model)
     if model == "sflux":
         return sflux_object_url(run, forecast_hour)
     if model == "hrrr":
@@ -1043,7 +1061,7 @@ def _run_is_complete(
             except DownloadError as exc:
                 LOG.warning("could not probe HRRR mirror %s: %s", base_url, exc)
         return False
-    if model != "ecmwf":
+    if model not in ECMWF_OPEN_DATA_MODELS:
         urls = [model_object_url(run, 0, model), model_object_url(run, hours, model)]
         for companion in source_spec(model).companion_files:
             urls += [companion_object_url(run, 0, companion.id), companion_object_url(run, hours, companion.id)]
@@ -1051,22 +1069,27 @@ def _run_is_complete(
 
     # Both ends of every family, on one mirror: the wave stream lands on
     # its own schedule, and a run is complete only when it is there too.
+    label = source_spec(model).manifest_model
     transient_error: DownloadError | None = None
     for base_url in ECMWF_BASE_URLS:
-        urls = [ecmwf_object_url(run, 0, base_url=base_url), ecmwf_object_url(run, hours, base_url=base_url)]
+        urls = [
+            ecmwf_object_url(run, 0, base_url=base_url, model=model),
+            ecmwf_object_url(run, hours, base_url=base_url, model=model),
+        ]
         for companion in source_spec(model).companion_files:
             urls += [
-                ecmwf_companion_object_url(run, hour, companion.id, base_url=base_url) for hour in (0, hours)
+                ecmwf_companion_object_url(run, hour, companion.id, base_url=base_url, model=model)
+                for hour in (0, hours)
             ]
         try:
             if all(exists(url) for url in urls):
                 return True
         except DownloadError as exc:
             transient_error = exc
-            LOG.warning("could not probe ECMWF mirror %s: %s", base_url, exc)
+            LOG.warning("could not probe %s mirror %s: %s", label, base_url, exc)
     if transient_error is not None:
         raise DownloadError(
-            f"could not establish whether ECMWF run {run.id} is complete"
+            f"could not establish whether {label} run {run.id} is complete"
         ) from transient_error
     return False
 
@@ -1306,12 +1329,12 @@ def _download_ecmwf_payload(
     for base_url in ECMWF_BASE_URLS:
         try:
             payload = _download_ecmwf_records(
-                ecmwf_object_url(run, forecast_hour, base_url=base_url),
+                ecmwf_object_url(run, forecast_hour, base_url=base_url, model=spec.id),
                 tuple(variable_id for variable_id in wanted if spec.companion_of(variable_id) is None),
             )
             for companion in spec.companion_files:
                 payload += _download_ecmwf_records(
-                    ecmwf_companion_object_url(run, forecast_hour, companion.id, base_url=base_url),
+                    ecmwf_companion_object_url(run, forecast_hour, companion.id, base_url=base_url, model=spec.id),
                     tuple(variable_id for variable_id in wanted if variable_id in companion.variable_ids),
                 )
             # Index offsets are scoped to a particular replica. Restart the
@@ -1320,12 +1343,13 @@ def _download_ecmwf_payload(
         except DownloadError as exc:
             errors.append(f"{base_url}: {exc}")
             LOG.warning(
-                "ECMWF mirror failed for f%03d, switching source: %s",
+                "%s mirror failed for f%03d, switching source: %s",
+                spec.manifest_model,
                 forecast_hour,
                 base_url,
             )
     raise DownloadError(
-        f"all ECMWF mirrors failed for run {run.id} f{forecast_hour:03d}: "
+        f"all {spec.manifest_model} mirrors failed for run {run.id} f{forecast_hour:03d}: "
         + "; ".join(errors)
     )
 
@@ -1359,15 +1383,16 @@ def fetch_frame(
             )
     LOG.info("downloading GRIB %s", output)
     url = model_object_url(run, forecast_hour, model)
-    if spec.id == "ecmwf":
+    if spec.id in ECMWF_OPEN_DATA_MODELS:
         payload = _download_ecmwf_payload(run, forecast_hour, spec, input_ids)
     elif spec.id == "hrrr":
         payload = _download_hrrr_payload(run, forecast_hour, spec, input_ids)
     else:
         payload = _download_noaa_payload(run, forecast_hour, spec, input_ids)
-    if spec.id == "ecmwf":
-        # Open data messages are CCSDS/AEC packed (DRS 5.42); repack to
-        # grid_simple so any GDAL build can read the stored file.
+    if spec.id in ECMWF_OPEN_DATA_MODELS:
+        # Open data messages are CCSDS/AEC packed (DRS 5.42), the IFS's and
+        # the AIFS's alike; repack to grid_simple so any GDAL build can read
+        # the stored file.
         raw = output.with_suffix(".ccsds.grib2")
         repacked = output.with_suffix(".repack.grib2")
         _atomic_write(raw, payload)
@@ -1375,7 +1400,7 @@ def fetch_frame(
             repack_grid_simple(raw, repacked)
             repacked.replace(output)
         except Exception as exc:
-            raise DownloadError(f"could not repack ECMWF GRIB {url}: {exc}") from exc
+            raise DownloadError(f"could not repack {spec.manifest_model} GRIB {url}: {exc}") from exc
         finally:
             raw.unlink(missing_ok=True)
             repacked.unlink(missing_ok=True)
@@ -1413,7 +1438,7 @@ def fetch_run(
         return _fetch_cma_run(spec, run, hours, raw_root, force=force, input_ids=input_ids)
     destination = raw_root / f"{spec.id}.{run.id}"
     forecast_hours = spec.forecast_hours(hours)
-    frame_attempts = ECMWF_FRAME_ATTEMPTS if model == "ecmwf" else 1
+    frame_attempts = ECMWF_FRAME_ATTEMPTS if model in ECMWF_OPEN_DATA_MODELS else 1
 
     def fetch_with_retries(hour: int) -> Path:
         for attempt in range(frame_attempts):
@@ -1425,7 +1450,8 @@ def fetch_run(
                 delay_cap = min(180.0, 60.0 * (2**attempt))
                 delay = random.uniform(60.0, delay_cap)
                 LOG.warning(
-                    "ECMWF frame f%03d failed (%s), retrying in %.1fs",
+                    "%s frame f%03d failed (%s), retrying in %.1fs",
+                    spec.manifest_model,
                     hour,
                     exc,
                     delay,

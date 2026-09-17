@@ -300,12 +300,26 @@ def wave_direction_expression(unit: str) -> str:
     return "A"
 
 
+# The spellings of a precipitation accumulation already in millimetres
+# (kg/m²): AIFS writes its run total that way, under the WMO 0/1/52 whose
+# GDAL table entry is a rate, so the unit GDAL reports carries a per-second
+# the values do not have.
+_MM_ACCUMULATION_UNITS = {"kg/m^2", "kg/m2", "kgm^-2", "kgm-2", "mm", "kg/m^2s", "kg/m^2*s", "kg/m2s", "kg/m2*s"}
+
+
+def precipitation_accumulation_is_mm(unit: str) -> bool:
+    """Whether a run-total precipitation record is already in millimetres
+    (AIFS ``tp``), as opposed to the metres IFS open data carries."""
+    return re.sub(r"[\s*()\[\]]", "", unit.strip().lower()).replace("²", "^2") in _MM_ACCUMULATION_UNITS
+
+
 def accumulation_expression(unit: str) -> str:
-    """ECMWF tp arrives in metres of accumulated water; GDAL reports the
-    ECMWF-local parameter's unit as "-". The expression is identity — the
-    converter de-accumulates consecutive planes itself."""
+    """ECMWF tp arrives in metres of accumulated water (GDAL reports the
+    ECMWF-local parameter's unit as "-"), AIFS tp in millimetres. The
+    expression is identity either way — the converter scales the metres and
+    de-accumulates consecutive planes itself."""
     compact = unit.strip().strip("[]()").lower()
-    if compact not in {"-", "m", ""}:
+    if compact not in {"-", "m", ""} and not precipitation_accumulation_is_mm(unit):
         raise ConversionError(f"unsupported precipitation accumulation unit: {unit or '<missing>'}")
     return "A"
 
@@ -454,8 +468,10 @@ def _is_surface_precipitation_rate(metadata: dict[str, str], description: str) -
 def _is_total_precipitation(metadata: dict[str, str], description: str) -> bool:
     """ECMWF open data tp: GRIB2 discipline 0, category 1, local parameter
     193 — GDAL's tables do not know it, so GRIB_ELEMENT is "unknown" and the
-    comment carries the raw triple."""
-    if metadata.get("GRIB_ELEMENT", "").lower() not in {"unknown", "tp", "apcp"}:
+    comment carries the raw triple. AIFS writes its run total under the WMO
+    0/1/52, which GDAL's tables name TPRATE ("Total precipitation rate");
+    the fetched files carry no other record of that element."""
+    if metadata.get("GRIB_ELEMENT", "").lower() not in {"unknown", "tp", "apcp", "tprate"}:
         return False
     short_name = metadata.get("GRIB_SHORT_NAME", "").upper()
     comment = metadata.get("GRIB_COMMENT", "")
@@ -562,7 +578,12 @@ _CLOUD_LAYER_SURFACES: dict[str, tuple[str, tuple[str, ...]]] = {
 def _is_cloud_layer_record(metadata: dict[str, str], description: str, element: str) -> bool:
     """One cloud cover element on its own layer surface. The fetched pgrb2
     files carry the instantaneous record of each layer alone — the interval
-    averages are never downloaded — so element + surface is unambiguous."""
+    averages are never downloaded — so element + surface is unambiguous.
+    AIFS writes the layers on surfaces of their own (the ground, 800 hPa,
+    450 hPa; the registry's alternates), which GDAL spells ``0-80000-SFC``,
+    ``80000-45000-ISBL`` and ``45000-ISBL``: those match on the layer's
+    name in the comment ("Low cloud cover", "Medium cloud cover", "High
+    cloud cover")."""
     if metadata.get("GRIB_ELEMENT", "").upper() != element:
         return False
     short_name_token, phrases = _CLOUD_LAYER_SURFACES[element]
@@ -681,8 +702,12 @@ def _band_matches(variable_id: str, metadata: dict[str, str], description: str) 
     if variable_id in ("dswrf", "vis", "tmpsfc", "icec", "icetk", "htsgw", "perpw", "dirpw"):
         return _is_surface_record(metadata, description, variable_spec(variable_id).grib_element)
     if variable_id == "tcdc":
-        return _is_entire_atmosphere_record(metadata, description, "TCDC") or _is_ecmwf_total_cloud_cover(
-            metadata, description
+        # pgrb2's entire-atmosphere record, IFS open data's local fraction,
+        # or AIFS's WMO record as a layer from the ground surface up.
+        return (
+            _is_entire_atmosphere_record(metadata, description, "TCDC")
+            or _is_ecmwf_total_cloud_cover(metadata, description)
+            or _is_surface_record(metadata, description, "TCDC")
         )
     if variable_id == "cref":
         return _is_entire_atmosphere_record(

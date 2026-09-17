@@ -5,6 +5,7 @@
 [![GFS/0p25 run](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest.json&query=%24.run&label=GFS/0p25&color=0b7cbd&cacheSeconds=600)](https://dataset.ringsaturn.me/xue/latest.json)
 [![GFS/SFLUX run](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-sflux.json&query=%24.run&label=GFS/SFLUX&color=2b6cb0&cacheSeconds=600)](https://dataset.ringsaturn.me/xue/latest-sflux.json)
 [![ECMWF/IFS 0p25 run](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-ecmwf.json&query=%24.run&label=ECMWF/IFS%200p25&color=1f6f8b&cacheSeconds=600)](https://dataset.ringsaturn.me/xue/latest-ecmwf.json)
+[![ECMWF/AIFS 0p25 run](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-aifs.json&query=%24.run&label=ECMWF/AIFS%200p25&color=2f8f6b&cacheSeconds=600)](https://dataset.ringsaturn.me/xue/latest-aifs.json)
 [![HRRR run](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-hrrr.json&query=%24.run&label=HRRR&color=7b4ea3&cacheSeconds=600)](https://dataset.ringsaturn.me/xue/latest-hrrr.json)
 [![MRMS window](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-mrms.json&query=%24.run&label=MRMS&color=b7472a&cacheSeconds=300)](https://dataset.ringsaturn.me/xue/latest-mrms.json)
 
@@ -35,6 +36,7 @@ pipeline.
 | NOAA GFS 0.25° | `gfs` | 1440 × 721, 0.25° | hourly to F120, 3-hourly to F240 (161 frames) | `latest.json` |
 | GFS surface flux | `sflux` | 3072 × 1536 Gaussian, ~13 km | as GFS | `latest-sflux.json` |
 | ECMWF IFS open data 0.25° | `ecmwf` | 1440 × 721, 0.25° | 3-hourly to 144 h, 6-hourly to F240 (65 frames) | `latest-ecmwf.json` |
+| ECMWF AIFS Single open data 0.25° | `aifs` | 1440 × 721, 0.25° | 6-hourly to F360 from every cycle (61 frames) | `latest-aifs.json` |
 | NOAA HRRR | `hrrr` | 2441 × 1051, 0.03°, contiguous US | hourly to F18, a cycle every hour | `latest-hrrr.json` |
 | NOAA MRMS | `mrms` | 3500 × 1750, 0.02°, contiguous US | one frame every two minutes, a rolling four-hour window | `latest-mrms.json` |
 | JMA precipitation nowcast | `jma` | 5600 × 5000, 0.005°, Japan | one frame every five minutes, a rolling three-hour window | `latest-jma.json` |
@@ -220,14 +222,15 @@ Build the latest run end to end and serve the frontend:
 ```sh
 make mvp                  # NOAA GFS (default)
 make mvp MODEL=ecmwf      # ECMWF IFS open data
+make mvp MODEL=aifs       # ECMWF AIFS Single open data
 make mvp MODEL=sflux      # GFS surface flux
 make mvp MODEL=hrrr       # NOAA HRRR
 make serve
 ```
 
-Or step by step (`--model gfs|ecmwf|sflux|hrrr|mrms`, default `gfs`;
+Or step by step (`--model gfs|ecmwf|aifs|sflux|hrrr|mrms`, default `gfs`;
 `--hours` defaults to the whole axis the model publishes: 240 for the global
-models, 18 for HRRR, and on MRMS the window length, 3):
+models, 360 for AIFS, 18 for HRRR, and on MRMS the window length, 3):
 
 ```sh
 python -m xuebuild fetch --run latest --hours 240
@@ -237,6 +240,7 @@ python -m xuebuild convert-bin data/raw/gfs.YYYYMMDDHH \
 python -m xuebuild verify-bin web/public/data/gfs.YYYYMMDDHH/tmp2m.xue
 python -m xuebuild build-bin --run latest --hours 240
 python -m xuebuild build-bin --model ecmwf --run latest --hours 240
+python -m xuebuild build-bin --model aifs --run latest --hours 360
 python -m xuebuild build-bin --model sflux --run latest --hours 240
 python -m xuebuild build-bin --model hrrr --run latest
 python -m xuebuild build-bin --model mrms --run 2026091300 --hours 3   # a past window
@@ -278,7 +282,8 @@ manifest requires `--force` (`make mvp FORCE=--force`).
 ### URL state
 
 `/?model=gfs&type=wind`, `/?model=ecmwf&type=temp`. `model` accepts `gfs` /
-`ecmwf` (alias `ifs`) / `sflux` / `hrrr` / `mrms`; `type` accepts aliases
+`ecmwf` (alias `ifs`) / `aifs` (alias `aifs-single`) / `sflux` / `hrrr` /
+`mrms`; `type` accepts aliases
 such as `tmp2m` / `prate` / `wind10m` / `solar` / `radar`, and each isobaric
 field names itself (`pressure`, `hgt500`, `tmp850` / `t850`, `rh700`,
 `wind850`, `qflux850` / `vapor850`; there is no separate `level`
@@ -400,6 +405,7 @@ GitHub Actions runs the loop on a schedule, one workflow per source
 ([`publish-gfs.yml`](.github/workflows/publish-gfs.yml),
 [`publish-sflux.yml`](.github/workflows/publish-sflux.yml),
 [`publish-ecmwf.yml`](.github/workflows/publish-ecmwf.yml),
+[`publish-aifs.yml`](.github/workflows/publish-aifs.yml),
 [`publish-hrrr.yml`](.github/workflows/publish-hrrr.yml), the last every
 hour), all calling the reusable
 [`publish.yml`](.github/workflows/publish.yml) with the `R2_ACCESS_KEY_ID`
@@ -654,8 +660,8 @@ Fixture provenance and regeneration are documented in
 
 Weather data comes from
 [NOAA GFS](https://registry.opendata.aws/noaa-gfs-bdp-pds/) (public domain)
-and [ECMWF open data](https://www.ecmwf.int/en/forecasts/datasets/open-data)
-(CC BY 4.0, © European Centre for Medium-Range Weather Forecasts; this
+and [ECMWF open data](https://www.ecmwf.int/en/forecasts/datasets/open-data),
+the IFS and the AIFS (CC BY 4.0, © European Centre for Medium-Range Weather Forecasts; this
 project distributes converted derivatives: "Contains modified ECMWF open
 data"). The basemap is [Protomaps](https://protomaps.com)-hosted vector
 tiles, © [OpenStreetMap](https://www.openstreetmap.org/copyright)

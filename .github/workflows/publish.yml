@@ -1,8 +1,8 @@
 name: publish run
 
 # Reusable publishing pipeline, one call per source. Callers
-# (publish-gfs.yml, publish-sflux.yml, publish-ecmwf.yml, publish-hrrr.yml)
-# own the schedule
+# (publish-gfs.yml, publish-sflux.yml, publish-ecmwf.yml, publish-aifs.yml,
+# publish-hrrr.yml) own the schedule
 # and the manual dispatch; this file owns the work, fanned out over three
 # jobs:
 #
@@ -39,7 +39,7 @@ on:
   workflow_call:
     inputs:
       model:
-        description: "Forecast source: gfs, sflux, ecmwf or hrrr"
+        description: "Forecast source: gfs, sflux, ecmwf, aifs or hrrr"
         required: true
         type: string
       run:
@@ -160,7 +160,7 @@ jobs:
         run: |
           set -euo pipefail
           case "$MODEL" in
-            gfs|sflux|ecmwf|hrrr) ;;
+            gfs|sflux|ecmwf|aifs|hrrr) ;;
             *) echo "::error::unknown source: $MODEL"; exit 1 ;;
           esac
           case "$PROFILE" in
@@ -299,15 +299,15 @@ jobs:
       # and only the groups carrying a surface field with a companion need
       # it: the encoder skips the companion with a warning when ffmpeg is
       # missing, which is why the matrix says rather than the job guessing.
-      # ECMWF open data is CCSDS packed; xue repacks it with eccodes at fetch
-      # time because GDAL builds usually lack libaec, so every ECMWF job
-      # installs the tools — and so would any job whose group reads a
+      # ECMWF open data (the IFS and the AIFS alike) is CCSDS packed; xue
+      # repacks it with eccodes at fetch time because GDAL builds usually
+      # lack libaec, so every ECMWF and AIFS job installs the tools — and so would any job whose group reads a
       # companion family marked for the same repack (the matrix's
       # `eccodes`; none is now that the wheel's GDAL reads the JPEG
       # 2000-packed GFS-Wave file as published). zstd is only reached below
       # Python 3.14.
       - name: Install ffmpeg / eccodes
-        if: ${{ matrix.video || matrix.eccodes || inputs.model == 'ecmwf' }}
+        if: ${{ matrix.video || matrix.eccodes || inputs.model == 'ecmwf' || inputs.model == 'aifs' }}
         env:
           VIDEO: ${{ matrix.video }}
           ECCODES: ${{ matrix.eccodes }}
@@ -315,7 +315,7 @@ jobs:
           set -euo pipefail
           packages=""
           [ "$VIDEO" != "true" ] || packages="$packages ffmpeg"
-          [ "$MODEL" != "ecmwf" ] && [ "$ECCODES" != "true" ] || packages="$packages libeccodes-tools"
+          [ "$MODEL" != "ecmwf" ] && [ "$MODEL" != "aifs" ] && [ "$ECCODES" != "true" ] || packages="$packages libeccodes-tools"
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends $packages
 

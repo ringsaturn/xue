@@ -60,7 +60,7 @@ publishing; `showcase/README.md` covers authoring historical cases.
 ```sh
 make check                       # verify GDAL / zstd / node / wasm-pack versions
 make wasm                        # build the WASM decoder into web/src/wasm/ (generated, gitignored)
-make mvp [MODEL=gfs|ecmwf|sflux] # check + install + wasm + build a run + vite build
+make mvp [MODEL=gfs|ecmwf|aifs|sflux] # check + install + wasm + build a run + vite build
 make serve                       # vite preview on 127.0.0.1
 npm run dev                      # vite dev server
 
@@ -211,7 +211,21 @@ bundles, the production grid, and fetch concurrency. Adding or changing a
 model starts here; the frontend mirror is `FORECAST_MODELS` in
 `web/src/manifest.ts`. Source kinds:
 
-- Forecast (`gfs`, `ecmwf`, `sflux`, `hrrr`). `hrrr` has a `regrid`: the
+- Forecast (`gfs`, `ecmwf`, `aifs`, `sflux`, `hrrr`). `aifs` is ECMWF's
+  data-driven AIFS Single from the same open data service, fetched by the
+  IFS path under another model directory (`fetch.py::ECMWF_OPEN_DATA_MODELS`,
+  `ifs` | `aifs-single`), six-hourly to 360 h from every cycle, landing
+  ~5.5 h after it (`publish-aifs.yml`). Its open data encodes five fields
+  unlike the IFS — `tp` as the WMO 0/1/52 accumulated in **kg/m² (mm)**
+  rather than the local 0/1/193 in metres, `tcc` as the WMO 0/6/1 in
+  percent from the ground surface up, and the three layer clouds (which
+  IFS open data lacks) on the ECMWF layer boundaries (ground, 800 hPa,
+  450 hPa) — each a `RecordAlternate` under the GFS identity, the
+  millimetre total a unit rule (`gdal.precipitation_accumulation_is_mm`,
+  mirrored in `inspect.rs`) read off the alternate's unit. It carries no
+  isobaric `r`, gust, CAPE, ice thickness or peak wave period, so those
+  bundles are absent. `tests/test_aifs.py` holds the two-frame
+  `aifs.*.crop.grib2` pair through both encoders. `hrrr` has a `regrid`: the
   model is computed on a Lambert conformal grid, `_grid_info` reads the
   projection out of GDAL's WKT (`reproject.py`; the wheel's `gdal_info`
   reports `coordinateSystem.wkt`), builds a `Resampler` onto the regular
@@ -367,8 +381,9 @@ The registry fixtures (`tests/fixtures/isobaric-registry.json`,
 hold the three implementations to one set of ids and codebooks. Widening a
 source's input list means recutting its crop fixture
 (`tests/fixtures/gfs.*.crop.grib2`, same run, same `-srcwin`, or the
-two-frame `ecmwf.*.crop.grib2` pair that `tests/test_ecmwf.py` builds
-through both encoders) and regenerating the registry fixtures.
+two-frame `ecmwf.*.crop.grib2` / `aifs.*.crop.grib2` pairs that
+`tests/test_ecmwf.py` / `tests/test_aifs.py` build through both encoders)
+and regenerating the registry fixtures.
 
 Other modules:
 

@@ -368,6 +368,32 @@ def _source_prose(source: SourceSpec) -> dict[str, Any]:
                 }
             ],
         },
+        "aifs": {
+            "title": "ECMWF AIFS Single open data 0.25°",
+            "description": (
+                "The ECMWF Artificial Intelligence Forecasting System, its deterministic AIFS Single "
+                "open data at 0.25°, six-hourly to 360 hours from every cycle, with the wave stream of "
+                "the same cycle. Contains modified ECMWF open data; the published bundles are a "
+                "quantized derivative."
+            ),
+            "license": "CC-BY-4.0",
+            "providers": [
+                {
+                    "name": "ECMWF",
+                    "roles": ["producer", "licensor"],
+                    "url": "https://www.ecmwf.int/en/forecasts/datasets/open-data",
+                },
+                _XUE_PROVIDER,
+            ],
+            "links": [
+                {
+                    "rel": "license",
+                    "href": "https://creativecommons.org/licenses/by/4.0/",
+                    "type": "text/html",
+                    "title": "Creative Commons Attribution 4.0",
+                }
+            ],
+        },
         "hrrr": {
             "title": "NOAA HRRR 3 km",
             "description": (

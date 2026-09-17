@@ -101,7 +101,7 @@ class Downsample:
 @dataclass(frozen=True)
 class SourceSpec:
     id: str
-    """CLI / URL / directory id: "gfs", "ecmwf", "sflux", "hrrr", "cma", "mrms" or "jma"."""
+    """CLI / URL / directory id: "gfs", "ecmwf", "aifs", "sflux", "hrrr", "cma", "mrms" or "jma"."""
     manifest_model: str
     """The manifest and bundle-metadata ``model`` string."""
     product: str
@@ -500,6 +500,89 @@ SOURCES: dict[str, SourceSpec] = {
             "icetk",
             "htsgw",
             "perpw",
+        ),
+        bundle_vector_ids=("wind10m", "wind925", "wind850", "wind250", "qflux850", "wave"),
+        video=False,
+    ),
+    # ECMWF's data-driven model, AIFS Single, from the same open data
+    # service under ``aifs-single/0p25/`` — an ``oper`` and a ``wave``
+    # stream with the IFS ``.index`` shape, CCSDS-packed on the same 0.25°
+    # grid, every cycle six-hourly to 360 hours (no short cycles), landing
+    # about five and a half hours after the cycle.
+    "aifs": SourceSpec(
+        id="aifs",
+        manifest_model="AIFS",
+        product="aifs-single-0p25",
+        latest_filename="latest-aifs.json",
+        steps=((360, 6),),
+        # What the IFS source publishes, less what AIFS does not carry — no
+        # relative humidity on the pressure levels (``q`` only, so the
+        # ``rh`` fills are absent while the 850 hPa specific humidity still
+        # feeds the vapour flux and the equivalent potential temperature),
+        # no gust, no CAPE, no sea ice thickness, and a mean rather than a
+        # peak wave period, which is not the same field and is left out —
+        # plus the three layer cloud covers IFS open data lacks. Its run
+        # total ``tp`` is in millimetres under the WMO 0/1/52, its ``tcc``
+        # the WMO 0/6/1 in percent from the ground surface up, and the
+        # layers sit on the ECMWF layer boundaries; the registry's
+        # alternates accept all five under the GFS identities.
+        input_variable_ids=(
+            "tmp2m",
+            "tp",
+            "ugrd10m",
+            "vgrd10m",
+            "prmsl",
+            "hgt850",
+            "hgt700",
+            "hgt500",
+            "hgt250",
+            "tmp925",
+            "tmp850",
+            "tmp500",
+            "spfh850",
+            "ugrd925",
+            "vgrd925",
+            "ugrd850",
+            "vgrd850",
+            "ugrd250",
+            "vgrd250",
+            "tcdc",
+            "lcdc",
+            "mcdc",
+            "hcdc",
+            "dpt2m",
+            "vvel850",
+            "vvel700",
+            "vvel500",
+            "tmpsfc",
+            "htsgw",
+            "dirpw",
+        ),
+        accumulated_precipitation=True,
+        companion_files=(CompanionFile(id="wave", variable_ids=("htsgw", "dirpw")),),
+        statistical_processes=(("prate", 0),),
+        bundle_scalar_ids=(
+            "tmp2m",
+            "prate",
+            "prmsl",
+            "hgt850",
+            "hgt700",
+            "hgt500",
+            "hgt250",
+            "tmp925",
+            "tmp850",
+            "tmp500",
+            "tcdc",
+            "lcdc",
+            "mcdc",
+            "hcdc",
+            "dpt2m",
+            "vvel850",
+            "vvel700",
+            "vvel500",
+            "thetae850",
+            "tmpsfc",
+            "htsgw",
         ),
         bundle_vector_ids=("wind10m", "wind925", "wind850", "wind250", "qflux850", "wave"),
         video=False,

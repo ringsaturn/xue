@@ -29,7 +29,7 @@ pointers:
 | Path | STAC object | Mutable | Written by |
 |---|---|---|---|
 | `catalog.json` | the root Catalog: one `child` per source with a live feed, one per point product, one for the showcase | yes (a pure function of the registry) | every publish, `showcase catalog` |
-| `<source>/collection.json` | one Collection per source (`gfs`, `ecmwf`, `sflux`, `hrrr`, `mrms`, `jma`, `cma`), the STAC face of the live pointer | yes | `build-bin` (whole run), `assemble-run` |
+| `<source>/collection.json` | one Collection per source (`gfs`, `ecmwf`, `aifs`, `sflux`, `hrrr`, `mrms`, `jma`, `cma`), the STAC face of the live pointer | yes | `build-bin` (whole run), `assemble-run` |
 | `<source>/item.json` | the live Item: the run's Item relocated to a path that never changes | yes, replaced by every publish | same |
 | `<source>.<run>/item.json` | one Item per published run, beside its manifest | rewritten in place by a top-up, like the manifest | `build-bin` (whole run), `assemble-run` |
 | `<source>.<run>/<HHMM>/item.json` | the Item of one round of a rolling window (MRMS, JMA, CMA radar) | no | `build-bin --round` |

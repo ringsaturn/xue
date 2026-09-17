@@ -100,7 +100,8 @@ def _model_argument(parser: argparse.ArgumentParser, *, fetched_only: bool = Tru
         default="gfs",
         help=(
             "data source: NOAA GFS 0.25 degree (hourly), ECMWF IFS open data "
-            "(3-hourly), GFS surface flux on the native ~13 km grid (hourly, adds dswrf), "
+            "(3-hourly), ECMWF AIFS Single open data (6-hourly to 360), "
+            "GFS surface flux on the native ~13 km grid (hourly, adds dswrf), "
             "NOAA HRRR over the contiguous US (3 km, a cycle every hour, hourly to 18), "
             "NOAA MRMS, the radar mosaic over the contiguous US (an observation every "
             "two minutes; --run names the window's first hour and --hours its length, 3 by default), "

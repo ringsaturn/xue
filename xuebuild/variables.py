@@ -194,7 +194,11 @@ VARIABLES: dict[str, VariableSpec] = {
     # ECMWF open data has no rate field: tp is the run-total precipitation
     # accumulation (metres, ECMWF-local GRIB2 parameter 0/1/193). It is an
     # input-only variable — the converter de-accumulates it into prate and tp
-    # itself never reaches a bundle.
+    # itself never reaches a bundle. AIFS writes the same run total under
+    # the WMO 0/1/52 (which GDAL's tables call a rate, TPRATE, in
+    # kg/(m^2*s)) as an accumulation in kg/m², a millimetre: the alternate
+    # carries that unit so the converter leaves the values alone where the
+    # IFS record's metres are scaled up.
     "tp": VariableSpec(
         id="tp",
         label="Total precipitation",
@@ -207,6 +211,7 @@ VARIABLES: dict[str, VariableSpec] = {
         grib2_number=193,
         grib2_level_type=1,
         grib2_statistical=1,
+        grib2_alternates=(RecordAlternate(0, 1, 52, 1, statistical=1, gdal_unit="kg/(m^2*s)"),),
         gdal_unit="-",
     ),
     # GFS sflux has no instantaneous precipitation rate: PRATE arrives as the
@@ -371,7 +376,9 @@ VARIABLES: dict[str, VariableSpec] = {
     # statistical process rejects the average at the GRIB2 header too.
     # ECMWF ``tcc`` is the ECMWF-local 0/6/192 as a 0–1 fraction on the
     # ground surface (GDAL reports its unit as "-"), which the converter
-    # scales to percent.
+    # scales to percent; AIFS writes the same ``tcc`` under the WMO 0/6/1 in
+    # percent, but as a layer from the ground surface to the top of the
+    # atmosphere rather than on the entire-atmosphere surface.
     "tcdc": VariableSpec(
         id="tcdc",
         label="Total cloud cover",
@@ -384,7 +391,7 @@ VARIABLES: dict[str, VariableSpec] = {
         grib2_category=6,
         grib2_number=1,
         grib2_level_type=10,
-        grib2_alternates=(RecordAlternate(0, 6, 192, 1, gdal_unit="-"),),
+        grib2_alternates=(RecordAlternate(0, 6, 192, 1, gdal_unit="-"), RecordAlternate(0, 6, 1, 1)),
         gdal_unit="%",
     ),
     # Surface-based convective available potential energy, 0/7/6 on the
@@ -462,7 +469,11 @@ VARIABLES: dict[str, VariableSpec] = {
     # table 4.5's cloud layers, which carry no value). pgrb2 writes an
     # instantaneous record beside an interval average of each; the average
     # is excluded by phrase and rejected by its statistical process, as for
-    # the total.
+    # the total. AIFS open data carries the three (``lcc`` / ``mcc`` /
+    # ``hcc``, in percent) on surfaces of its own: the low layer from the
+    # ground surface, the middle from the 800 hPa isobaric surface, the high
+    # from 450 hPa — the ECMWF layer boundaries as first fixed surfaces.
+    # IFS open data carries none of them.
     "lcdc": VariableSpec(
         id="lcdc",
         label="Low cloud cover",
@@ -471,9 +482,11 @@ VARIABLES: dict[str, VariableSpec] = {
         grib_element="LCDC",
         index_field=":LCDC:low cloud layer:",
         excluded_index_phrases=("ave fcst",),
+        ecmwf_param="lcc",
         grib2_category=6,
         grib2_number=3,
         grib2_level_type=214,
+        grib2_alternates=(RecordAlternate(0, 6, 3, 1),),
         gdal_unit="%",
     ),
     "mcdc": VariableSpec(
@@ -484,9 +497,11 @@ VARIABLES: dict[str, VariableSpec] = {
         grib_element="MCDC",
         index_field=":MCDC:middle cloud layer:",
         excluded_index_phrases=("ave fcst",),
+        ecmwf_param="mcc",
         grib2_category=6,
         grib2_number=4,
         grib2_level_type=224,
+        grib2_alternates=(RecordAlternate(0, 6, 4, 100, 80000.0),),
         gdal_unit="%",
     ),
     "hcdc": VariableSpec(
@@ -497,9 +512,11 @@ VARIABLES: dict[str, VariableSpec] = {
         grib_element="HCDC",
         index_field=":HCDC:high cloud layer:",
         excluded_index_phrases=("ave fcst",),
+        ecmwf_param="hcc",
         grib2_category=6,
         grib2_number=5,
         grib2_level_type=234,
+        grib2_alternates=(RecordAlternate(0, 6, 5, 100, 45000.0),),
         gdal_unit="%",
     ),
     # The ocean fields of the pgrb2 set. The surface temperature is the

@@ -36,6 +36,7 @@ from .gdal import (
     inspect_grib,
     inspect_grib_multi,
     normalize_unit,
+    precipitation_accumulation_is_mm,
     precipitation_rate_is_mm_per_hour,
     raster_expression,
     require_command,
@@ -660,9 +661,10 @@ def _convert_units(frame: SourceFrame, values: np.ndarray) -> np.ndarray:
         # kg m⁻² s⁻¹ (a millimetre per second) to mm/h; the MRMS rate is
         # already mm/h.
         values *= 3600.0
-    elif frame.variable_id == "tp":
-        # ECMWF run-total precipitation accumulation, metres -> mm; the rate
-        # derivation (de-accumulation) happens later against the previous frame.
+    elif frame.variable_id == "tp" and not precipitation_accumulation_is_mm(frame.unit):
+        # ECMWF run-total precipitation accumulation, metres -> mm (AIFS
+        # writes it in mm already); the rate derivation (de-accumulation)
+        # happens later against the previous frame.
         values *= 1000.0
     elif frame.variable_id == "prmsl":
         # GRIB2 carries mean sea level pressure in pascals; the codebook

@@ -11,7 +11,7 @@ export type ForecastVariableId = "tmp2m" | "prate";
  * The CMA radar mosaic has no live feed: it is an observation archive that
  * reaches the app only as showcase cases. The MRMS mosaic and the JMA
  * nowcast are observations *and* live, each a rolling window. */
-export type ForecastModelId = "gfs" | "ecmwf" | "sflux" | "hrrr" | "cma" | "mrms" | "jma";
+export type ForecastModelId = "gfs" | "ecmwf" | "aifs" | "sflux" | "hrrr" | "cma" | "mrms" | "jma";
 
 export interface ForecastModelInfo {
   id: ForecastModelId;
@@ -75,6 +75,9 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
     railCore: ["tmp2m", "prate", "wind10m", "dswrf"],
   },
   ecmwf: { id: "ecmwf", label: "ECMWF", product: "ifs-0p25", latestFilename: "latest-ecmwf.json" },
+  // ECMWF's data-driven model, AIFS Single, from the same open data service
+  // on the same 0.25° grid: six-hourly to 360 hours from every cycle.
+  aifs: { id: "aifs", label: "AIFS", product: "aifs-single-0p25", latestFilename: "latest-aifs.json" },
   // NOAA HRRR, 3 km over the contiguous United States, a new cycle every
   // hour: a regional model, resampled by the encoder from its Lambert
   // conformal grid onto a 0.03° one over the domain's footprint.
@@ -158,9 +161,9 @@ export function isObservationModel(model: ForecastModelId): boolean {
   return FORECAST_MODELS[model].observation === true;
 }
 
-/** The live feeds, in model-switch order: the four forecasts and the three
+/** The live feeds, in model-switch order: the five forecasts and the three
  * rolling observation windows, MRMS, the JMA nowcast and the CMA mosaic. */
-export const FORECAST_MODEL_IDS: readonly ForecastModelId[] = ["gfs", "sflux", "ecmwf", "hrrr", "mrms", "jma", "cma"];
+export const FORECAST_MODEL_IDS: readonly ForecastModelId[] = ["gfs", "sflux", "ecmwf", "aifs", "hrrr", "mrms", "jma", "cma"];
 
 function modelForManifestString(model: unknown): ForecastModelInfo | null {
   for (const info of Object.values(FORECAST_MODELS)) {

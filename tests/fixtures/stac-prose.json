@@ -62,6 +62,37 @@
         }
       ]
     },
+    "aifs": {
+      "title": "ECMWF AIFS Single open data 0.25°",
+      "description": "The ECMWF Artificial Intelligence Forecasting System, its deterministic AIFS Single open data at 0.25°, six-hourly to 360 hours from every cycle, with the wave stream of the same cycle. Contains modified ECMWF open data; the published bundles are a quantized derivative.",
+      "license": "CC-BY-4.0",
+      "providers": [
+        {
+          "name": "ECMWF",
+          "roles": [
+            "producer",
+            "licensor"
+          ],
+          "url": "https://www.ecmwf.int/en/forecasts/datasets/open-data"
+        },
+        {
+          "name": "Xue",
+          "roles": [
+            "processor",
+            "host"
+          ],
+          "url": "https://github.com/ringsaturn/xue"
+        }
+      ],
+      "links": [
+        {
+          "rel": "license",
+          "href": "https://creativecommons.org/licenses/by/4.0/",
+          "type": "text/html",
+          "title": "Creative Commons Attribution 4.0"
+        }
+      ]
+    },
     "sflux": {
       "title": "NOAA GFS surface fluxes",
       "description": "The GFS surface flux files (sfluxgrb) on the model's native T1534 Gaussian grid: the surface fields and the downward shortwave radiation, hourly to 120 hours and three-hourly to 240.",

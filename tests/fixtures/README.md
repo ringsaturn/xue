@@ -94,6 +94,31 @@ for h in 000 003; do
 done
 ```
 
+`aifs.2026091700.f000.crop.grib2` and `aifs.2026091700.f006.crop.grib2`
+are the same 80 by 80 cell Kara Sea window (`-srcwin 960 20 80 80`) of the
+analysis and the first step of the 2026-09-17 00:00 UTC ECMWF AIFS Single
+open data cycle, every record the AIFS source fetches in
+`xuebuild/sources.py` order — the `oper` stream's twenty-eight, then the
+two `wave` records (the significant height and the mean direction; the
+AIFS wave stream carries a mean, not a peak, period, which the source
+leaves out): thirty at each frame, the run total being an all-zero
+record at the analysis. They hold the four encodings the AIFS open data
+writes differently from the IFS — the run-total precipitation as the WMO
+0/1/52 (GDAL's TPRATE) accumulated in kg/m², the total cloud cover as the
+WMO 0/6/1 in percent from the ground surface up, and the low / middle /
+high cloud covers on the ground, 800 hPa and 450 hPa surfaces, none of
+which IFS open data carries — matched by both matchers under the GFS
+identities and built by both encoders (`tests/test_aifs.py`). Cut with:
+
+```sh
+python -m xuebuild fetch --model aifs --run 2026091700 --hours 6 --raw-dir /tmp/raw
+for h in 000 006; do
+  gdal_translate -srcwin 960 20 80 80 -of GRIB -co DATA_ENCODING=COMPLEX_PACKING \
+    /tmp/raw/aifs.2026091700/aifs.2026091700.f$h.grib2 \
+    tests/fixtures/aifs.2026091700.f$h.crop.grib2
+done
+```
+
 `mrms.2026091300.t0000.crop.grib2` and `mrms.2026091300.t0002.crop.grib2`
 are a 160 by 160 cell window of two consecutive frames of the MRMS mosaic,
 each the composite reflectivity (`MergedReflectivityQCComposite_00.50`,

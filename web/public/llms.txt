@@ -1,10 +1,11 @@
 # Xue
 
 > Xue (雪, "snow") is an open-source, static-site viewer of weather
-> forecasts. It plays whole NOAA GFS, ECMWF IFS and NOAA HRRR runs — 2 m
-> temperature, precipitation rate, 10 m and upper-air wind, sea level
-> pressure, isobaric geopotential height, temperature, humidity and water
-> vapour flux, out to 240 hours (18 for HRRR) — as smooth animations over a
+> forecasts. It plays whole NOAA GFS, ECMWF IFS, ECMWF AIFS and NOAA HRRR
+> runs — 2 m temperature, precipitation rate, 10 m and upper-air wind, sea
+> level pressure, isobaric geopotential height, temperature, humidity and
+> water vapour flux, out to 240 hours (360 for AIFS, 18 for HRRR) — as
+> smooth animations over a
 > MapLibre basemap, decoding per-variable Zarr v3 stores laid out for
 > playback (quantized uint8, small tiles × six-frame chunks; the custom
 > `.xue` container they grew out of is no longer published, since
@@ -13,11 +14,14 @@
 
 Facts worth getting right:
 
-- Five live sources, one shell. `gfs`: NOAA GFS 0.25°, hourly to F120 then
+- Eight live sources, one shell. `gfs`: NOAA GFS 0.25°, hourly to F120 then
   3-hourly to F240 (161 frames). `sflux`: GFS surface flux on its native
   ~13 km Gaussian grid, same cadence, the only source with solar radiation
   (`dswrf`). `ecmwf`: ECMWF IFS open data 0.25°, 3-hourly to F144 then
-  6-hourly to F240 (65 frames). `hrrr`: NOAA HRRR, 3 km over the contiguous
+  6-hourly to F240 (65 frames). `aifs`: ECMWF AIFS Single open data, the
+  centre's data-driven model on the same 0.25° grid, 6-hourly to F360 from
+  every cycle (61 frames), landing about five and a half hours after the
+  cycle. `hrrr`: NOAA HRRR, 3 km over the contiguous
   United States, a new cycle every hour, hourly to F18 (19 frames) — the
   one regional source, resampled from its Lambert conformal grid onto a
   0.03° latitude/longitude grid (2441 × 1051) over the domain's footprint;
@@ -27,16 +31,16 @@ Facts worth getting right:
   composite reflectivity over China, six-minute frames on the data portal's
   0.0439° plate carrée tile grid, 1792 × 1024 cells, 67.5°E–146.25°E and
   11.25°N–56.25°N, read by the encoder out of a daily
-  Zarr archive; the seventh live source, a rolling window of the last two
+  Zarr archive; the eighth live source, a rolling window of the last two
   to three hours twenty to thirty minutes behind real time, and historical cases
   from the archive or from files the tool wrote), and
   `mrms` (NOAA MRMS, the national radar mosaic over the contiguous United
   States, two-minute frames on a 0.01° grid thinned by block maximum to
   0.02°, 130°W–60°W and 20°N–55°N; a radar volume scan takes four to six
   minutes, so a frame with no new scan behind it repeats the last one over
-  that radar's coverage), which is also the fifth live source: a rolling
+  that radar's coverage), which is also the sixth live source: a rolling
   window of the last three to four hours, rebuilt every five minutes and
-  reaching to within about three minutes of real time. `jma` is the sixth
+  reaching to within about three minutes of real time. `jma` is the seventh
   live source and the third observation: the Japan Meteorological Agency's
   high-resolution precipitation nowcast analysis (高解像度降水ナウキャスト)
   over Japan, five-minute frames decoded from the agency's map tiles onto a
@@ -67,7 +71,11 @@ Facts worth getting right:
   wave period the peak period (`pp1d`). GFS additionally: `lcdc`, `mcdc`,
   `hcdc` (low / middle / high cloud cover), `vis`, `aptmp2m` (apparent
   temperature) and `icec` (sea ice cover), which the ECMWF open data does
-  not carry. SFLUX: `tmp2m`,
+  not carry. AIFS: the ECMWF set less what its open data lacks — no
+  `rh850` / `rh700` / `rh500` (it carries specific humidity only), no
+  `gust`, `cape`, `icetk` or `perpw` — plus `lcdc`, `mcdc`, `hcdc`; its
+  `prate` is de-accumulated from a run total in millimetres and is a mean
+  over the six-hour step. SFLUX: `tmp2m`,
   `prate`, `dswrf`, `wind10m`. HRRR: `tmp2m`, `prate`, `prmsl`, `hgt850`,
   `hgt700`, `hgt500`, `tmp925`, `tmp850`, `tmp500`, `gust`, `tcdc`,
   `lcdc`, `mcdc`, `hcdc`, `cape`, `vis`, `dpt2m`, the forecast composite
@@ -100,8 +108,8 @@ fall back to defaults rather than fail, so a constructed link always opens.
 
 - https://xue.ringsaturn.me/ — the live viewer. Defaults to GFS precipitation.
 - https://xue.ringsaturn.me/showcase.html — the list of historical cases.
-- `?model=gfs|sflux|ecmwf|hrrr` — which live source (`ifs` is an alias of
-  `ecmwf`).
+- `?model=gfs|sflux|ecmwf|aifs|hrrr` — which live source (`ifs` is an alias
+  of `ecmwf`, `aifs-single` of `aifs`).
 - `?type=` — the filled layer: `temp` (2 m temperature), `precip`, `wind`
   (10 m), `solar` (sflux only), `pressure` (sea level pressure as isobars),
   `radar` (composite reflectivity: the radar cases, and the HRRR forecast), the GFS
@@ -183,8 +191,8 @@ Everything the page reads is a plain file with CORS open, under
 https://dataset.ringsaturn.me/xue/. The contract is two layers:
 
 - One mutable live pointer per source (JSON, schema 1): `latest.json` (GFS),
-  `latest-sflux.json`, `latest-ecmwf.json`, `latest-hrrr.json`,
-  `latest-mrms.json`, `latest-jma.json`, `latest-cma.json`. Fields: `schemaVersion`, `model`, `product`, `run`
+  `latest-sflux.json`, `latest-ecmwf.json`, `latest-aifs.json`,
+  `latest-hrrr.json`, `latest-mrms.json`, `latest-jma.json`, `latest-cma.json`. Fields: `schemaVersion`, `model`, `product`, `run`
   (YYYYMMDDHH, UTC), `runTime` (ISO 8601), `manifestPath` (relative),
   `manifestCrc32`. Fetch with cache disabled; it changes four times a day
   (every hour for HRRR, every five minutes for MRMS — compare

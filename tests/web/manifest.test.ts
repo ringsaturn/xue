@@ -431,15 +431,16 @@ describe("dataset kinds", () => {
     expect(isObservationModel("cma")).toBe(true);
     expect(isObservationModel("mrms")).toBe(true);
     expect(isObservationModel("jma")).toBe(true);
-    for (const model of ["gfs", "sflux", "ecmwf", "hrrr"] as const) expect(isObservationModel(model)).toBe(false);
+    for (const model of ["gfs", "sflux", "ecmwf", "aifs", "hrrr"] as const) expect(isObservationModel(model)).toBe(false);
   });
 
   it("lists the live feeds, the three observation windows among them", () => {
     // Every live feed has a pointer to poll (mirrors
     // SourceSpec.latest_filename); the three observation windows are the
     // last of the switch order.
-    expect(FORECAST_MODEL_IDS).toEqual(["gfs", "sflux", "ecmwf", "hrrr", "mrms", "jma", "cma"]);
+    expect(FORECAST_MODEL_IDS).toEqual(["gfs", "sflux", "ecmwf", "aifs", "hrrr", "mrms", "jma", "cma"]);
     for (const model of FORECAST_MODEL_IDS) expect(FORECAST_MODELS[model].latestFilename).toBeDefined();
+    expect(FORECAST_MODELS.aifs).toMatchObject({ label: "AIFS", product: "aifs-single-0p25", latestFilename: "latest-aifs.json" });
     expect(FORECAST_MODELS.mrms.latestFilename).toBe("latest-mrms.json");
     expect(FORECAST_MODELS.jma.latestFilename).toBe("latest-jma.json");
     expect(FORECAST_MODELS.cma.latestFilename).toBe("latest-cma.json");

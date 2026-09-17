@@ -1,0 +1,67 @@
+name: publish aifs
+
+# ECMWF AIFS Single open data (oper, 0.25°), six-hourly to F360 from every
+# cycle. The pipeline lives in the reusable publish.yml; this file only owns
+# the schedule and the manual knobs.
+
+on:
+  schedule:
+    # Every cycle reaches F360 and dissemination completes about five and a
+    # half hours after the cycle (measured 2026-09-17: the 00z run's last
+    # file landed 05:33Z, the 06z run's 11:26Z). `--run latest` walks back
+    # over the cycle grid, so a late cycle is skipped rather than
+    # half-published and picked up by the next pass.
+    - cron: "0 0,6,12,18 * * *"
+    # A second idempotent pass recovers from a temporary upstream outage.
+    # publish.yml exits early when the first pass already made the run live.
+    - cron: "0 1,7,13,19 * * *"
+  workflow_dispatch:
+    inputs:
+      run:
+        description: "Cycle to publish: latest or YYYYMMDDHH"
+        type: string
+        default: latest
+      profile:
+        description: "Quantization/compression profile"
+        type: choice
+        options: [balanced, quality, compact]
+        default: balanced
+      keep:
+        description: "Published runs to keep on R2 (1 = live run only)"
+        type: string
+        default: "1"
+      force:
+        description: "Rebuild even when R2 already serves this run"
+        type: boolean
+        default: false
+      dry_run:
+        description: "Build and report what pruning would delete, but write nothing to R2"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-aifs
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    # Scheduled runs on forks would publish into a bucket they cannot reach.
+    if: github.event_name != 'schedule' || github.repository == 'ringsaturn/xue'
+    uses: ./.github/workflows/publish.yml
+    with:
+      model: aifs
+      run: ${{ inputs.run || 'latest' }}
+      profile: ${{ inputs.profile || 'balanced' }}
+      keep: ${{ inputs.keep || '1' }}
+      force: ${{ inputs.force || false }}
+      dry_run: ${{ inputs.dry_run || false }}
+      # The same mirrors as the IFS, which answer bursts with 503 Slow Down;
+      # the request pacing in xuebuild.fetch is per process, so fewer jobs.
+      max_jobs: 8
+      # Published as Zarr stores alone (plan 017 phase 7).
+      zarr: true
+      container: false
+    secrets: inherit

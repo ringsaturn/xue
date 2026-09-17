@@ -7,6 +7,7 @@ HOURS ?=
 FORCE ?=
 PROFILE ?= balanced
 # Forecast source: gfs (NOAA 0.25°, hourly), ecmwf (IFS open data, 3-hourly),
+# aifs (ECMWF AIFS Single open data, 6-hourly to F360),
 # sflux (GFS surface flux, native ~13 km, hourly, adds the dswrf layer), or
 # hrrr (NOAA HRRR, 3 km over the contiguous US, a cycle every hour, to F18);
 # mrms (the NOAA radar mosaic, an observation every two minutes), jma
@@ -135,6 +136,7 @@ spike-webcodecs:
 
 # Default build: per-variable Xue bundles plus the WebGL2 frontend.
 # MODEL=ecmwf builds the ECMWF IFS open data feed instead of GFS;
+# MODEL=aifs builds the ECMWF AIFS Single open data feed;
 # MODEL=sflux builds the native-resolution GFS surface flux feed;
 # MODEL=hrrr builds the hourly 3 km HRRR feed over the contiguous US.
 mvp: check install wasm

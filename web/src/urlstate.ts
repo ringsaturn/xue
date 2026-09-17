@@ -94,6 +94,8 @@ const MODEL_ALIASES: Record<string, ForecastModelId> = {
   gfs: "gfs",
   ecmwf: "ecmwf",
   ifs: "ecmwf",
+  aifs: "aifs",
+  "aifs-single": "aifs",
   sflux: "sflux",
   "gfs-sflux": "sflux",
   hrrr: "hrrr",
