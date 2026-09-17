@@ -2294,6 +2294,7 @@ function buildProbePanel() {
 interface ProbeRowElements {
   spec: MeteogramRowSpec;
   root: HTMLElement;
+  code: HTMLElement;
   value: HTMLOutputElement;
   /** The line under the value: the unit, and the wind row's direction. */
   note: HTMLElement;
@@ -2330,7 +2331,7 @@ function syncProbeRowElements(specs: MeteogramRowSpec[]): void {
     line.className = "probe-row-line";
     line.append(value, note);
     root.append(code, line);
-    return { spec, root, value, note };
+    return { spec, root, code, value, note };
   });
   probePanel.rowList.replaceChildren(...probeRowElements.map((row) => row.root));
   probePanel.rows.hidden = specs.length === 0;
@@ -2865,10 +2866,14 @@ function renderProbeRows(series: ProbeSeries, index: number): void {
         : `${t("soundingObserved")} ${formatProbeValue(session.variable, observed)}`;
     // The label column is the capsule's and cannot grow, so the line holds
     // two things at most. Where an observation is in hand it takes the
-    // wind's direction's place: the direction is already drawn as an arrow
-    // under every column of the row, and the measurement is nowhere else.
+    // place of both the unit and the wind's direction: the unit moves up
+    // to the code line for that row, and the direction is already drawn
+    // as an arrow under every column of the row. The measurement is
+    // nowhere else, so it is what the line keeps.
+    const code = meteogramRowCode(spec);
+    element.code.textContent = reported !== null && readout.unit ? `${code} · ${readout.unit}` : code;
     const parts = [
-      readout.unit,
+      reported !== null ? null : readout.unit,
       reported !== null || direction === null
         ? reported
         : `${String(Math.round(direction)).padStart(3, "0")}°`,
