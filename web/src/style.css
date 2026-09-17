@@ -2145,6 +2145,12 @@ html[lang="ja"] .rail-glyph {
   color: var(--text);
   transform: translateX(-50%);
   backdrop-filter: blur(18px);
+  /* With an ascent and an aerodrome forecast under the rows the panel can
+     outgrow a short viewport; it scrolls inside its own box rather than
+     pushing its header — and the close button on it — above the screen. */
+  max-height: calc(100vh - 40px - var(--capsule-height, 90px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .probe-panel[hidden] {
@@ -2157,9 +2163,17 @@ html[lang="ja"] .rail-glyph {
    axis column — wrapping to two where the panel is narrow — with the
    sparkline under them. */
 .probe-head {
+  /* Sticky, so the point's code and the close button stay in view while a
+     tall panel scrolls under them. */
+  position: sticky;
+  top: -8px;
+  z-index: 1;
   display: grid;
   grid-template-columns: var(--probe-column) minmax(0, 1fr);
   align-items: center;
+  margin-top: -8px;
+  padding-top: 8px;
+  background: var(--surface);
 }
 
 .probe-headline {
@@ -3009,6 +3023,7 @@ body[data-model="jma"] .source-credit[data-credit-model="jma"] {
     bottom: calc(20px + env(safe-area-inset-bottom) + var(--capsule-height, 90px));
     width: calc(100% - 24px);
     max-width: none;
+    max-height: calc(100vh - 36px - env(safe-area-inset-bottom) - var(--capsule-height, 90px));
   }
 
   /* The label column costs the axis a third of a phone's width, so it

@@ -39,6 +39,9 @@ const MARGIN = { left: 32, top: 12, right: 44, bottom: 22 } as const;
 const FONT = '9px "IBM Plex Mono", ui-monospace, monospace';
 /** Below this the panel is a phone's, and the section starts closed. */
 const PHONE_WIDTH = 720;
+/** Below this viewport height the chart would take the panel past the top
+ * of the screen, so the section starts closed there too. */
+const SHORT_HEIGHT = 760;
 
 export interface SoundingSectionOptions {
   /** The model column at the selected ascent's time, with the run it came
@@ -503,7 +506,7 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
         // chart is the reason a forecaster pinned the point. On a phone
         // it starts closed, since 320 px of chart over the capsule is the
         // whole screen.
-        const wide = window.innerWidth > PHONE_WIDTH;
+        const wide = window.innerWidth > PHONE_WIDTH && window.innerHeight > SHORT_HEIGHT;
         open = wide;
         head.setAttribute("aria-expanded", String(open));
         body.hidden = !open;
