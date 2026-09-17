@@ -264,6 +264,8 @@ export const ru: Record<MessageKey, string> = {
   stationVisibility: "Видимость",
   stationQnh: "QNH",
   stationLevels: "Уровни",
+  stationOpenSounding: "Открыть зондирование",
+  stationPinHere: "Закрепить здесь",
 
   soundingObserved: "НАБЛ",
   soundingModel: "МОДЕЛЬ",

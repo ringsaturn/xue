@@ -257,6 +257,8 @@ export const zhHant: Record<MessageKey, string> = {
   stationVisibility: "能見度",
   stationQnh: "QNH",
   stationLevels: "層數",
+  stationOpenSounding: "查看探空",
+  stationPinHere: "釘在此處",
 
   soundingObserved: "實測",
   soundingModel: "模式",

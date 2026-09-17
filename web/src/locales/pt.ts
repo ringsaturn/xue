@@ -262,6 +262,8 @@ export const pt: Record<MessageKey, string> = {
   stationVisibility: "Visibilidade",
   stationQnh: "QNH",
   stationLevels: "Níveis",
+  stationOpenSounding: "Abrir a sondagem",
+  stationPinHere: "Fixar aqui",
 
   soundingObserved: "OBS",
   soundingModel: "MODELO",

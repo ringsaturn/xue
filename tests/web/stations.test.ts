@@ -357,6 +357,17 @@ describe("reading one station by range", () => {
     await expect(fetchSoundingStation(soundingLoaded, station)).rejects.toThrow(/does not match the span/);
   });
 
+  it("accepts a 206 whose Content-Range the browser cannot read, by its length", async () => {
+    // Cross-origin, the header is hidden unless the bucket's CORS policy
+    // exposes it; the span is still the one asked for when it is as long.
+    const station = soundingIndex.stations[1]!;
+    const span = SOUNDINGS_JSONL.subarray(station.offset, station.offset + station.length);
+    vi.stubGlobal("fetch", () => Promise.resolve(answer(206, span)));
+    expect((await fetchSoundingStation(soundingLoaded, station)).id).toBe(station.id);
+    vi.stubGlobal("fetch", () => Promise.resolve(answer(206, span.subarray(0, span.length - 1))));
+    await expect(fetchSoundingStation(soundingLoaded, station)).rejects.toThrow(/length mismatch/);
+  });
+
   it("reads a Content-Range, and refuses one it cannot", () => {
     expect(parseContentRange("bytes 100-199/1000")).toEqual({ offset: 100, length: 100 });
     expect(parseContentRange("bytes 0-0/*")).toEqual({ offset: 0, length: 1 });

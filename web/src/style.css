@@ -2027,6 +2027,24 @@ html[lang="ja"] .rail-glyph {
   color: var(--muted);
 }
 
+/* The card's one action, in the panel buttons' voice. */
+.station-card-action {
+  margin-top: 4px;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: none;
+  color: var(--text);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+}
+
+.station-card-action:hover {
+  border-color: color-mix(in srgb, var(--text) 40%, transparent);
+}
+
 .station-card-rows {
   display: grid;
   margin: 2px 0 0;

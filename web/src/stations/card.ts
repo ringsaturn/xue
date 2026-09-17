@@ -20,6 +20,10 @@ export interface StationCardOptions {
   formatTime(time: string): string;
   /** Which ground the map is on, for the category's own color. */
   darkGround?: boolean;
+  /** Pin the probe at this station: the card's one action, which is how a
+   * viewer gets from a mark to the full ascent under the panel, or to the
+   * airport's observations laid over the rows. Absent, no button. */
+  onPin?: () => void;
 }
 
 function element<K extends keyof HTMLElementTagNameMap>(
@@ -44,6 +48,19 @@ function rows(entries: readonly (readonly [string, string | null])[]): HTMLEleme
     list.append(element("dd", "", value));
   }
   return list;
+}
+
+/** The card's one button. A mark's card is a headline; the whole of what
+ * the product holds for the station is read in the probe panel, and this
+ * is the way there. */
+function action(label: string, onPin: () => void): HTMLElement {
+  const button = element("button", "station-card-action", label);
+  button.type = "button";
+  button.addEventListener("click", (event) => {
+    event.stopPropagation();
+    onPin();
+  });
+  return button;
 }
 
 function position(lat: number, lon: number): HTMLElement {
@@ -121,6 +138,7 @@ export function buildSoundingCard(
   if (table) root.append(table);
 
   root.append(position(station.lat, station.lon));
+  if (options.onPin) root.append(action(t("stationOpenSounding"), options.onPin));
   return root;
 }
 
@@ -162,5 +180,6 @@ export function buildAirportCard(
   if (table) root.append(table);
 
   root.append(position(station.lat, station.lon));
+  if (options.onPin) root.append(action(t("stationPinHere"), options.onPin));
   return root;
 }

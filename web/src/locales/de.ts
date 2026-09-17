@@ -262,6 +262,8 @@ export const de: Record<MessageKey, string> = {
   stationVisibility: "Sichtweite",
   stationQnh: "QNH",
   stationLevels: "Niveaus",
+  stationOpenSounding: "Sondierung öffnen",
+  stationPinHere: "Hier anheften",
 
   soundingObserved: "BEOB",
   soundingModel: "MODELL",

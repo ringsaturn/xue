@@ -132,9 +132,16 @@ async function fetchSpan(url: string, offset: number, length: number): Promise<u
   const body = new Uint8Array(await response.arrayBuffer());
   let slice: Uint8Array;
   if (response.status === 206) {
-    const range = parseContentRange(response.headers.get("Content-Range"));
-    if (range === null || range.offset !== offset || range.length !== length)
-      throw new Error("station range response does not match the span asked for");
+    // Across origins the header is readable only when the bucket's CORS
+    // policy exposes it, and the data origin's does not; a 206 the browser
+    // shows without one is still the span asked for when it is exactly as
+    // long, and the caller checks the id the slice names on top.
+    const header = response.headers.get("Content-Range");
+    if (header !== null) {
+      const range = parseContentRange(header);
+      if (range === null || range.offset !== offset || range.length !== length)
+        throw new Error("station range response does not match the span asked for");
+    }
     if (body.length !== length)
       throw new Error("station range response length mismatch");
     slice = body;

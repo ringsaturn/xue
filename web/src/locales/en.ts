@@ -389,6 +389,10 @@ export const en = {
   stationVisibility: "Visibility",
   stationQnh: "QNH",
   stationLevels: "Levels",
+  /** The card's button: pins the probe on the station, and for a sounding
+   * also opens the chart under the panel. */
+  stationOpenSounding: "Open sounding",
+  stationPinHere: "Pin here",
 
   /** The sounding section of the pinned point's panel: the nearest ascent
    * drawn as a skew-T under the meteogram rows, and the full-height sheet

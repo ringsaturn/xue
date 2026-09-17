@@ -257,6 +257,8 @@ export const zh: Record<MessageKey, string> = {
   stationVisibility: "能见度",
   stationQnh: "QNH",
   stationLevels: "层数",
+  stationOpenSounding: "查看探空",
+  stationPinHere: "钉在此处",
 
   soundingObserved: "实测",
   soundingModel: "模式",

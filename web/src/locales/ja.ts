@@ -259,6 +259,8 @@ export const ja: Record<MessageKey, string> = {
   stationVisibility: "視程",
   stationQnh: "QNH",
   stationLevels: "層数",
+  stationOpenSounding: "探空図を開く",
+  stationPinHere: "ここにピン",
 
   soundingObserved: "実測",
   soundingModel: "モデル",

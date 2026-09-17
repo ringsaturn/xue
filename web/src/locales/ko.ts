@@ -264,6 +264,8 @@ export const ko: Record<MessageKey, string> = {
   stationVisibility: "시정",
   stationQnh: "QNH",
   stationLevels: "층수",
+  stationOpenSounding: "탐공 열기",
+  stationPinHere: "여기에 고정",
 
   soundingObserved: "관측",
   soundingModel: "모델",

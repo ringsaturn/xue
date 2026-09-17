@@ -265,6 +265,8 @@ export const tr: Record<MessageKey, string> = {
   stationVisibility: "Görüş",
   stationQnh: "QNH",
   stationLevels: "Seviye",
+  stationOpenSounding: "Sondajı aç",
+  stationPinHere: "Buraya sabitle",
 
   soundingObserved: "GÖZLEM",
   soundingModel: "MODEL",

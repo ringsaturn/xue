@@ -5380,6 +5380,14 @@ function showStationCard(data: StationPointData, lngLat: [number, number]): void
   const options = {
     formatTime: (time: string) => formatDate(time),
     darkGround: document.body.dataset.ground === "dark",
+    // The card's button pins the probe on the station itself, which is
+    // where the whole ascent, or the airport's day of reports, is read;
+    // a sounding's card also opens the chart, since that is what was asked.
+    onPin: () => {
+      closeStationCard();
+      setProbe(data.station.lon, data.station.lat);
+      if (data.kind === "sounding") soundingSection.open();
+    },
   };
   const content =
     data.kind === "sounding" ? buildSoundingCard(data.station, options) : buildAirportCard(data.station, options);

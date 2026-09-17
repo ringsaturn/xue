@@ -72,6 +72,9 @@ export interface SoundingSection {
   /** Whether the chart is showing — what decides if a model column is
    * worth opening sessions for. */
   isOpen(): boolean;
+  /** Show the chart, as a card's "open sounding" does after pinning the
+   * probe at the station; a no-op when it is already showing. */
+  open(): void;
   /** Repaint from the current state (a new frame, a new run, a theme or a
    * locale switch). */
   render(): void;
@@ -476,6 +479,9 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
     },
     isOpen() {
       return open && entry !== null;
+    },
+    open() {
+      setOpen(true);
     },
     render,
     drawInto(target, width, height) {
