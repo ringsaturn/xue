@@ -30,6 +30,8 @@ web/public/data/airport.*/
 web/public/data/latest-airport.json
 web/public/data/sounding.*/
 web/public/data/latest-sounding.json
+web/public/data/himawari.*/
+web/public/data/latest-himawari.json
 web/public/data/showcase/
 # The STAC catalog a build derives beside the manifests (docs/stac.md): the
 # root catalog and one collection directory per source.
