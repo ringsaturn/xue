@@ -123,6 +123,10 @@ const MODEL_ALIASES: Record<string, ForecastModelId> = {
   mtg: "meteosat",
   "mtg-i1": "meteosat",
   fci: "meteosat",
+  // The geostationary mosaic, a view over the imagers above.
+  geo: "geo",
+  mosaic: "geo",
+  geostationary: "geo",
 };
 
 /** Model requested by the page URL, or the default when the URL names none

@@ -137,7 +137,7 @@
             "@type": "Dataset",
             "@id": "https://xue.ringsaturn.me/#data",
             "name": "Xue live forecast bundles",
-            "description": "The current NOAA GFS, GFS surface-flux, ECMWF IFS, ECMWF AIFS and NOAA HRRR runs, the last three to four hours of the NOAA MRMS radar mosaic, the last two to three hours of the JMA precipitation nowcast over Japan and of the CMA radar mosaic over China, the last five to six hours of Himawari-9, GOES-19 and GOES-18 infrared imagery and Dust RGB composites over the three geostationary disks, and the last day of hourly Meteosat-12 imagery and Dust RGB over the 0° disk, each a rolling window rebuilt every few minutes, converted into the .xue container: 8-bit quantized planes on the native grid with temporal residual prediction and Zstandard compression, one file per variable, streamable by HTTP range request. Only the newest run per source is kept.",
+            "description": "The current NOAA GFS, GFS surface-flux, ECMWF IFS, ECMWF AIFS and NOAA HRRR runs, the last three to four hours of the NOAA MRMS radar mosaic, the last two to three hours of the JMA precipitation nowcast over Japan and of the CMA radar mosaic over China, the last five to six hours of Himawari-9, GOES-19 and GOES-18 infrared imagery and Dust RGB composites over the three geostationary disks, and the last day of hourly Meteosat-12 imagery and Dust RGB over the 0° disk (which the viewer also shows as one geostationary mosaic, each disk clipped to the longitudes it sees least obliquely, at /?model=geo), each a rolling window rebuilt every few minutes, converted into the .xue container: 8-bit quantized planes on the native grid with temporal residual prediction and Zstandard compression, one file per variable, streamable by HTTP range request. Only the newest run per source is kept.",
             "url": "https://dataset.ringsaturn.me/xue/",
             "isAccessibleForFree": true,
             "creator": { "@id": "https://github.com/ringsaturn#person" },
@@ -679,6 +679,9 @@
             <button type="button" data-model="meteosat" aria-pressed="false">
               <span class="model-name">METEOSAT</span>
               <small>SATELLITE IR</small>
+            <button type="button" data-model="geo" aria-pressed="false">
+              <span class="model-name">GEO MOSAIC</span>
+              <small>SATELLITE IR · ALL DISKS</small>
               <span class="model-check" aria-hidden="true"></span>
             </button>
           </div>

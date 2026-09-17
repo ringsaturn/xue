@@ -11,7 +11,7 @@ export type ForecastVariableId = "tmp2m" | "prate";
  * The CMA radar mosaic has no live feed: it is an observation archive that
  * reaches the app only as showcase cases. The MRMS mosaic and the JMA
  * nowcast are observations *and* live, each a rolling window. */
-export type ForecastModelId = "gfs" | "ecmwf" | "aifs" | "sflux" | "hrrr" | "cma" | "mrms" | "jma" | "himawari" | "goeseast" | "goeswest" | "meteosat";
+export type ForecastModelId = "gfs" | "ecmwf" | "aifs" | "sflux" | "hrrr" | "cma" | "mrms" | "jma" | "himawari" | "goeseast" | "goeswest" | "meteosat" | "geo";
 
 export interface ForecastModelInfo {
   id: ForecastModelId;
@@ -57,6 +57,20 @@ export interface ForecastModelInfo {
    * renderers clip to it, since the rectangle around a conic footprint
    * holds corners the model never forecast. */
   domain?: LambertDomain;
+  /** For a geostationary imager, its sub-satellite longitude in degrees
+   * east, 0–360: where the mosaic (`mosaic.ts`) draws the seam between it
+   * and its neighbours. */
+  subLongitude?: number;
+  /** For an observation window, the step between its frames in seconds
+   * (mirrors `SourceSpec.cadence_seconds`): what says which member of a
+   * mosaic drives the timeline. */
+  cadenceSeconds?: number;
+  /** A mosaic is not a dataset but a view over several: it has no pointer
+   * and no manifest of its own, and opens the published run of each member
+   * that answers. */
+  mosaic?: boolean;
+  /** The datasets a mosaic composes, each clipped to its own band. */
+  members?: readonly ForecastModelId[];
 }
 
 /** The rail's core tiles on a forecast model (`ForecastModelInfo.railCore`). */
@@ -164,6 +178,8 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
     defaultVariable: "ir104",
     railCore: ["ir104"],
     region: [80.7, -60, 200.7, 60],
+    subLongitude: 140.7,
+    cadenceSeconds: 600,
   },
   // The two GOES-R imagers NOAA flies, read from NOAA's own buckets: the
   // same 10.4 µm window and the same Dust RGB as Himawari, one full-disk
@@ -183,6 +199,8 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
     defaultVariable: "ir104",
     railCore: ["ir104"],
     region: [-135.2, -60, -15.2, 60],
+    subLongitude: 284.8,
+    cadenceSeconds: 600,
   },
   goeswest: {
     id: "goeswest",
@@ -194,6 +212,25 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
     defaultVariable: "ir104",
     railCore: ["ir104"],
     region: [163, -60, 283, 60],
+    subLongitude: 223,
+    cadenceSeconds: 600,
+  },
+  // The four disks as one picture (`mosaic.ts`): a view, not a dataset. It
+  // opens whichever members' pointers answer, clips each to the longitudes
+  // it sees least obliquely, and follows one timeline by valid time. A
+  // member absent from the data root leaves the basemap between its
+  // neighbours' disk edges rather than failing the view.
+  geo: {
+    id: "geo",
+    label: "GEO MOSAIC",
+    product: "geo-mosaic",
+    observation: true,
+    coreBundles: ["ir104"],
+    defaultVariable: "ir104",
+    railCore: ["ir104"],
+    region: [-180, -60, 180, 60],
+    mosaic: true,
+    members: ["meteosat", "himawari", "goeswest", "goeseast"],
   },
   // Meteosat-12 (MTG-I1) at 0°, EUMETSAT's FCI imager, read from the
   // EUMETSAT Data Store: the same 10.4 µm window (FCI's 10.5 µm channel)
@@ -213,6 +250,8 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
     defaultVariable: "ir104",
     railCore: ["ir104"],
     region: [-60, -60, 60, 60],
+    subLongitude: 0,
+    cadenceSeconds: 3600,
   },
 };
 
@@ -231,10 +270,25 @@ export function isObservationModel(model: ForecastModelId): boolean {
   return FORECAST_MODELS[model].observation === true;
 }
 
-/** The live feeds, in model-switch order: the five forecasts and the seven
- * rolling observation windows, MRMS, the JMA nowcast, the CMA mosaic and
- * the four geostationary imagers. */
-export const FORECAST_MODEL_IDS: readonly ForecastModelId[] = ["gfs", "sflux", "ecmwf", "aifs", "hrrr", "mrms", "jma", "cma", "himawari", "goeseast", "goeswest", "meteosat"];
+/** The model switch's entries, in order: the five forecasts, the seven
+ * rolling observation windows (MRMS, the JMA nowcast, the CMA mosaic and
+ * the four geostationary imagers) and the geostationary mosaic, a view
+ * over the imagers with no feed of its own. */
+export const FORECAST_MODEL_IDS: readonly ForecastModelId[] = ["gfs", "sflux", "ecmwf", "aifs", "hrrr", "mrms", "jma", "cma", "himawari", "goeseast", "goeswest", "meteosat", "geo"];
+
+/** The members of a mosaic this build knows, in the mosaic's order; a
+ * member id the table lacks (a dataset this shell predates) is skipped the
+ * way a member whose pointer is missing is. */
+export function mosaicMembers(model: ForecastModelId): ForecastModelInfo[] {
+  const info = FORECAST_MODELS[model];
+  if (!info.mosaic || !info.members) return [];
+  const members: ForecastModelInfo[] = [];
+  for (const id of info.members) {
+    const member = (FORECAST_MODELS as Record<string, ForecastModelInfo | undefined>)[id];
+    if (member && !member.mosaic && member.latestFilename !== undefined) members.push(member);
+  }
+  return members;
+}
 
 function modelForManifestString(model: unknown): ForecastModelInfo | null {
   for (const info of Object.values(FORECAST_MODELS)) {

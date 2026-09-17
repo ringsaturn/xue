@@ -51,6 +51,7 @@ import {
 import {
   FORECAST_MODEL_IDS,
   FORECAST_MODELS,
+  mosaicMembers,
   containerOf,
   deliveryBytes,
   fetchLatestPointer,
@@ -171,6 +172,7 @@ import { modelProfileBundles, nearestFrameForTime } from "./sounding/model";
 import { profileFromModel, type ModelLevel, type Profile } from "./sounding/profile";
 import { WindParticleLayer } from "./particles";
 import { domainContains, lambertCone, regionShareOfView, type LambertDomain } from "./domain";
+import { axisCadenceMs, bandContains, mosaicBands, offsetNotLater, primaryMember, type LongitudeBand } from "./mosaic";
 import type { Feature, FeatureCollection } from "geojson";
 import { strideFor, type CellWindow, type LabelRequest } from "./isolines";
 import type { LabelsWorkerRequest, LabelsWorkerResponse } from "./labels.worker";
@@ -815,6 +817,7 @@ const MODEL_EYEBROW: Record<ForecastModelId, string> = {
   goeseast: "NOAA / GOES-19 ABI EAST (0.04°)",
   goeswest: "NOAA / GOES-18 ABI WEST (0.04°)",
   meteosat: "EUMETSAT / METEOSAT-12 FCI (0.04°, HOURLY)",
+  geo: "GEO MOSAIC",
 };
 
 /** The member to open when a family's one rail tile is picked: whichever
@@ -990,6 +993,43 @@ function sessionOffsetForLead(session: VariableSession, seconds: number): number
   return session.leadOffsets.get(seconds) ?? null;
 }
 
+/** A member session's axis as valid times (ms), with its frame keys and
+ * the step it holds a frame for, built on first use. */
+const memberAxes = new WeakMap<VariableSession, { validTimes: number[]; offsets: number[]; cadenceMs: number }>();
+
+/** A mosaic member's frame offset for the primary's frame at `index`: its
+ * latest frame not later than that valid time, held for one of its own
+ * steps (`offsetNotLater`); null when it has none there. */
+function memberOffsetForFrame(session: VariableSession, index: number): number | null {
+  let axis = memberAxes.get(session);
+  if (!axis) {
+    const time = session.metadata.time;
+    const unit = axisUnitSeconds(time);
+    const offsets = frameOffsets(time);
+    const base = Date.parse(session.metadata.runTime);
+    const validTimes = offsets.map((offset) => base + offset * unit * 1000);
+    axis = { validTimes, offsets, cadenceMs: axisCadenceMs(validTimes, unit * 1000) };
+    memberAxes.set(session, axis);
+  }
+  return offsetNotLater(axis.validTimes, axis.offsets, frameValidTime(index), axis.cadenceMs);
+}
+
+/** A slot's frame offset for the primary's frame at `index`: a member
+ * follows by valid time, the lines by lead seconds on their own axis. */
+function slotOffsetForFrame(slot: RasterSlot, index: number): number | null {
+  if (!slot.session) return null;
+  if (slot.member) return memberOffsetForFrame(slot.session, index);
+  return sessionOffsetForLead(slot.session, frameLeadSeconds(index));
+}
+
+/** The slot a session is drawing in, or null when it is off screen. */
+function slotOfSession(session: VariableSession): RasterSlot | null {
+  for (const slot of [slots.fill, slots.lines, ...memberSlots()]) {
+    if (slot.session === session) return slot;
+  }
+  return null;
+}
+
 /** Streaming progress that arrived before its session finished registering. */
 const pendingStream = new Map<
   string,
@@ -1018,7 +1058,7 @@ let metadata: BundleMetadata | null = null;
  * to: a pressure surface always draws in `lines`, everything else in
  * `fill`, whichever of them is primary at the time. */
 interface RasterSlot {
-  role: "fill" | "lines";
+  role: "fill" | "lines" | "member";
   layer: ForecastLayer;
   /** The session feeding this slot, or null while it is empty. */
   session: VariableSession | null;
@@ -1035,21 +1075,72 @@ interface RasterSlot {
    * primary's lead time, not decoded yet. The overlay keeps its last frame
    * up meanwhile and swaps when this one lands. */
   wantedKey: string | null;
+  /** The longitudes this slot draws in: a mosaic member's band, or null
+   * for the whole grid. The primary's slot takes its member's band while
+   * a mosaic is the view. */
+  band: LongitudeBand | null;
+  /** A member slot follows the playhead by valid time (`mosaic.ts`), not
+   * by lead seconds as the lines do; null for the two fixed slots. */
+  member: MosaicMember | null;
 }
 
-function makeSlot(role: RasterSlot["role"]): RasterSlot {
+function makeSlot(role: RasterSlot["role"], name: string = role): RasterSlot {
   return {
     role,
-    layer: new ForecastLayer((message) => showError(message), `forecast-${role}`),
+    layer: new ForecastLayer((message) => showError(message), `forecast-${name}`),
     session: null,
     gridSource: null,
     displayedReal: null,
     shownKey: null,
     wantedKey: null,
+    band: null,
+    member: null,
   };
 }
 
-const slots: Record<RasterSlot["role"], RasterSlot> = { fill: makeSlot("fill"), lines: makeSlot("lines") };
+/** One dataset of the geostationary mosaic that answered: its own run
+ * (manifest, pointer crc) and, unless it is the primary — whose session
+ * takes the fill slot like any dataset's — a slot of its own, clipped to
+ * its band and following the primary by valid time. */
+interface MosaicMember {
+  id: ForecastModelId;
+  manifest: ForecastManifest;
+  manifestUrl: string;
+  run: string;
+  manifestCrc: string;
+  band: LongitudeBand;
+  slot: RasterSlot | null;
+  /** The bundle the member's slot is opening or showing, so a repeat of
+   * the same request is a no-op. */
+  wantedVariable: ForecastBundleId | null;
+}
+
+/** The mosaic on screen (a `FORECAST_MODELS` entry with `mosaic`), or null
+ * for an ordinary dataset. `primary` is the member whose run is the
+ * global `manifest`, and whose session is `activeSession`. */
+let mosaic: { members: MosaicMember[]; primary: ForecastModelId } | null = null;
+
+/** Sessions opened for the mosaic's other members, keyed by member and
+ * bundle: they read other runs than `manifest`, so they live beside
+ * `sessions` rather than in it. */
+const memberSessions = new Map<string, VariableSession>();
+const memberSessionLoads = new Map<string, Promise<VariableSession>>();
+
+function memberSessionKey(member: ForecastModelId, variableId: ForecastBundleId): string {
+  return `${member}:${variableId}`;
+}
+
+/** The member slots holding a session. */
+function memberSlots(): RasterSlot[] {
+  if (!mosaic) return [];
+  const list: RasterSlot[] = [];
+  for (const member of mosaic.members) {
+    if (member.slot?.session) list.push(member.slot);
+  }
+  return list;
+}
+
+const slots: Record<"fill" | "lines", RasterSlot> = { fill: makeSlot("fill"), lines: makeSlot("lines") };
 let layersAdded = false;
 
 /** The slot a bundle draws in, by its kind. */
@@ -1062,9 +1153,10 @@ function primarySlot(): RasterSlot | null {
   return activeSession ? slotFor(activeSession.id) : null;
 }
 
-/** Slots showing a session other than the primary — the overlays. */
+/** Slots showing a session other than the primary — the overlays: the
+ * lines over a field, and the mosaic's other members beside it. */
 function overlaySlots(): RasterSlot[] {
-  return [slots.fill, slots.lines].filter((slot) => slot.session !== null && slot.session !== activeSession);
+  return [slots.fill, slots.lines, ...memberSlots()].filter((slot) => slot.session !== null && slot.session !== activeSession);
 }
 
 /** Every session with a slot on screen, the primary first: prefetch fans
@@ -1233,7 +1325,7 @@ function decodeRateBytesPerSec(): number {
   return sum / 2;
 }
 /** Last prefetch window sent per session, to skip redundant messages. */
-const lastPrefetchWindow = new Map<ForecastBundleId, string>();
+const lastPrefetchWindow = new Map<number, string>();
 const inflight = new Map<number, string>();
 let nextRequestId = 1;
 let desiredKey: string | null = null;
@@ -1490,6 +1582,16 @@ function formatLead(index: number): string {
 function frameStampLine(index: number): string {
   const stamp = formatCompactDate(frameValidTime(index));
   return showingObservations() ? stamp : `${formatLead(index)} · ${stamp}`;
+}
+
+/** The pin's time line: the playhead's stamp, and on a mosaic the
+ * spacecraft the reading comes from. */
+function probeStampLine(index: number, member: VariableSession | null): string {
+  const line = frameStampLine(index);
+  if (!member || !mosaic) return line;
+  const owner = mosaic.members.find((item) => item.slot?.session === member);
+  const name = owner ? (MOSAIC_MEMBER_NAMES[owner.id] ?? FORECAST_MODELS[owner.id].label) : null;
+  return name ? `${line} · ${name}` : line;
 }
 
 /** The frame cache's key. A numericId is file-local — the encoder numbers a
@@ -2336,7 +2438,10 @@ function scheduleProbeRender(): void {
 function renderProbe(): void {
   const series = probe;
   if (!series) return;
-  const session = activeSession;
+  // On a mosaic the pin reads the member whose band it sits in; its axis is
+  // another run's, so its frames are found by the playhead's valid time.
+  const session = probeSession();
+  const member = session !== null && session !== activeSession;
   if (!session) {
     // Between datasets (a model switch, a new run) there is nothing to read:
     // blank the panel rather than leave the previous dataset's numbers up.
@@ -2360,7 +2465,8 @@ function renderProbe(): void {
   probePanel.zone.textContent = probeZone ? zoneDisplayName(probeZone, frameValidTime(activeFrameIndex ?? Number(slider.value))) : "";
 
   const index = activeFrameIndex ?? Number(slider.value);
-  const offsets = frameAxis();
+  const offsets = member ? memberProbeOffsets(session) : frameAxis();
+  const shownOffset = member ? (memberOffsetForFrame(session, index) ?? -1) : frameOffset(index);
   const probed = probeVariables(session);
   // A composite's guns are unitless stretches with no magnitude between
   // them: the readout names the three as they are and draws no trace.
@@ -2371,20 +2477,20 @@ function renderProbe(): void {
     probePanel.value.value = "--";
     probePanel.meta.textContent = t("probeOutside");
   } else if (session.composite) {
-    probePanel.value.value = compositeProbeReadout(series, probed, frameOffset(index)) ?? "--";
-    probePanel.meta.textContent = frameStampLine(index);
+    probePanel.value.value = compositeProbeReadout(series, probed, shownOffset) ?? "--";
+    probePanel.meta.textContent = probeStampLine(index, member ? session : null);
   } else {
     probePanel.value.value =
       typeof current === "number"
         ? `${formatProbeValue(variable, displayValue(variable.unit, current))} ${displayUnit(variable.unit)}`
         : "--";
-    const lead = frameStampLine(index);
+    const lead = probeStampLine(index, member ? session : null);
     if (current === undefined) probePanel.meta.textContent = `${lead} · ${t("probeAwaiting")}`;
     else if (current === null) probePanel.meta.textContent = `${lead} · ${t("probeNoData")}`;
     else {
       // Wind's series is the speed; the direction only means anything for the
       // frame on screen, so it rides the lead-time line.
-      const direction = session.vector ? probeWindDirection(series, probed, frameOffset(index)) : null;
+      const direction = session.vector ? probeWindDirection(series, probed, shownOffset) : null;
       probePanel.meta.textContent = direction === null
         ? lead
         : `${lead} · ${String(Math.round(direction)).padStart(3, "0")}°`;
@@ -2849,17 +2955,18 @@ function handleStreamMessage(message: {
   scope?: unknown;
 }): void {
   const id = message.variableKey;
-  if (!isBundleVariableId(id)) return;
-  const bundleId = id;
-  const session = sessions.get(bundleId);
+  if (typeof id !== "string") return;
+  // A run's own session is keyed by its bundle id, a mosaic member's by
+  // member and bundle (`memberSessionKey`).
+  const session = isBundleVariableId(id) ? sessions.get(id) : memberSessions.get(id);
   if (!session) {
-    const entry = pendingStream.get(bundleId) ?? { bytes: 0, resident: false, scope: "bundle" as const };
+    const entry = pendingStream.get(id) ?? { bytes: 0, resident: false, scope: "bundle" as const };
     if (message.type === "progress" && typeof message.bytes === "number") entry.bytes = message.bytes;
     if (message.type === "resident") {
       entry.resident = true;
       entry.scope = message.scope === "viewport" ? "viewport" : "bundle";
     }
-    pendingStream.set(bundleId, entry);
+    pendingStream.set(id, entry);
     return;
   }
   if (message.type === "progress" && typeof message.bytes === "number") {
@@ -2871,7 +2978,7 @@ function handleStreamMessage(message: {
     // With the whole bundle local, narrowing to the view buys nothing any more.
     if (session.residentScope === "bundle" && slotSessions().includes(session)) refreshViewportTiles();
   }
-  if (activeSession?.id === bundleId) refreshDataCard(session);
+  if (activeSession === session) refreshDataCard(session);
 }
 
 function updateTransport(): void {
@@ -2993,8 +3100,8 @@ function blendTowardNext(timestamp: number): void {
 function blendOverlay(slot: RasterSlot, index: number, next: number, weight: number): void {
   const session = slot.session;
   if (!session || slot.displayedReal !== session.id) return;
-  const offsetA = sessionOffsetForLead(session, frameLeadSeconds(index));
-  const offsetB = sessionOffsetForLead(session, frameLeadSeconds(next));
+  const offsetA = slotOffsetForFrame(slot, index);
+  const offsetB = slotOffsetForFrame(slot, next);
   if (offsetA === null || offsetB === null) return;
   const keyA = cacheKey(session, session.variable, offsetA);
   if (slot.shownKey !== keyA) return;
@@ -3040,6 +3147,7 @@ function ensureSlotGrid(slot: RasterSlot, session: VariableSession): void {
   if (slot.gridSource === session.metadata) return;
   slot.layer.configureGrid(session.metadata);
   slot.layer.setDomain(modelDomain());
+  slot.layer.setBand(slot.band);
   slot.gridSource = session.metadata;
 }
 
@@ -3097,7 +3205,7 @@ function refreshViewportTiles(): void {
     session.viewTiles = next;
     changed = true;
     // The window is keyed by its first hour alone, so force the next send.
-    lastPrefetchWindow.delete(session.id);
+    lastPrefetchWindow.delete(session.key);
     if (session.resident && session.residentScope === "viewport") {
       // The view moved, so what it needs is no longer all local.
       session.resident = false;
@@ -3193,16 +3301,21 @@ function sendPrefetchWindow(index: number): void {
     if (!session.streaming || session.resident) continue;
     const overlay = session !== activeSession;
     if (overlay && playing && constrainedConnection()) continue;
+    const slot = overlay ? slotOfSession(session) : null;
     const hours: number[] = [];
     for (let step = 0; step <= prefetchWindowFrames(); step += 1) {
       const frame = (index + step) % total;
-      const offset = overlay ? sessionOffsetForLead(session, frameLeadSeconds(frame)) : frameOffset(frame);
-      if (offset !== null) hours.push(offset);
+      const offset = overlay
+        ? slot
+          ? slotOffsetForFrame(slot, frame)
+          : sessionOffsetForLead(session, frameLeadSeconds(frame))
+        : frameOffset(frame);
+      if (offset !== null && !hours.includes(offset)) hours.push(offset);
     }
     if (hours.length === 0) continue;
     const key = String(hours[0]);
-    if (lastPrefetchWindow.get(session.id) === key) continue;
-    lastPrefetchWindow.set(session.id, key);
+    if (lastPrefetchWindow.get(session.key) === key) continue;
+    lastPrefetchWindow.set(session.key, key);
     session.worker.postMessage({
       type: "prefetch-window",
       hours,
@@ -3283,7 +3396,7 @@ function trySelectFrame(index: number): boolean {
 /** The overlay's frame offset for a primary frame, or null when its axis has
  * no frame at that lead time. */
 function overlayOffset(slot: RasterSlot, index: number): number | null {
-  return slot.session ? sessionOffsetForLead(slot.session, frameLeadSeconds(index)) : null;
+  return slotOffsetForFrame(slot, index);
 }
 
 /** Show an overlay's plane for the primary frame at `index` if it is
@@ -4202,6 +4315,16 @@ function variableUi(session: VariableSession): VariableUi {
 function updateModelPresentation(): void {
   document.body.dataset.model = selectedModelId;
   modelEyebrow.textContent = MODEL_EYEBROW[selectedModelId];
+  if (mosaic) {
+    // The eyebrow names the disks actually on screen, and the credit line
+    // carries each one's notice (`body[data-credits~=…]` in the stylesheet).
+    const names = mosaic.members.map((member) => MOSAIC_MEMBER_NAMES[member.id] ?? FORECAST_MODELS[member.id].label);
+    modelEyebrow.textContent = `${MODEL_EYEBROW[selectedModelId]} / ${names.join(" · ")} (0.04°)`;
+    const credits = new Set(mosaic.members.map((member) => MOSAIC_MEMBER_CREDITS[member.id]).filter((credit): credit is string => credit !== undefined));
+    document.body.dataset.credits = [...credits].join(" ");
+  } else {
+    delete document.body.dataset.credits;
+  }
   for (const button of modelButtons) {
     button.setAttribute("aria-pressed", String(button.dataset.model === selectedModelId));
   }
@@ -4369,9 +4492,9 @@ function dataBaseUrl(): string {
  * per run, but their content can be re-encoded (e.g. a codebook change);
  * keying the URL on the artifact CRC keeps a returning visitor's HTTP cache
  * from serving bytes the integrity checks reject. */
-function artifactUrl(path: string, crc32: string): string {
-  if (!manifestUrl) throw new Error("manifest not loaded");
-  const url = new URL(path, manifestUrl);
+function artifactUrl(path: string, crc32: string, base: string | null = manifestUrl): string {
+  if (!base) throw new Error("manifest not loaded");
+  const url = new URL(path, base);
   url.searchParams.set("v", crc32);
   return url.href;
 }
@@ -4396,9 +4519,10 @@ async function downloadBundle(
   descriptor: { path: string; byteLength: number; crc32: string },
   sequence: number,
   quiet = false,
+  base: string | null = manifestUrl,
 ): Promise<ArrayBuffer> {
   if (!quiet) say(preloadState, "receivingBundle");
-  const response = await fetchImmutable(artifactUrl(descriptor.path, descriptor.crc32));
+  const response = await fetchImmutable(artifactUrl(descriptor.path, descriptor.crc32, base));
   if (!response.ok) throw new Error(t("bundleRequestFailed", { status: response.status }));
   const total = descriptor.byteLength;
   const data = new Uint8Array(total);
@@ -4581,14 +4705,21 @@ function loadVariable(
   variableId: ForecastBundleId,
   sequence: number,
   role: "primary" | "overlay" | "probe" = "primary",
+  member: MosaicMember | null = null,
 ): Promise<VariableSession> {
-  const resident = sessions.get(variableId);
+  // A mosaic member's session reads that member's run, not `manifest`,
+  // and is filed beside the run's own sessions under the member's key.
+  const memberKey = member ? memberSessionKey(member.id, variableId) : null;
+  const resident = memberKey !== null ? memberSessions.get(memberKey) : sessions.get(variableId);
   if (resident) return Promise.resolve(resident);
-  const pending = sessionLoads.get(variableId);
+  const pending = memberKey !== null ? memberSessionLoads.get(memberKey) : sessionLoads.get(variableId);
   if (pending) return pending;
+  const run = member?.manifest ?? manifest;
+  const runUrl = member?.manifestUrl ?? manifestUrl;
+  const variableKey = memberKey ?? variableId;
   const load = (async () => {
-    if (!manifest) throw new Error("manifest not loaded");
-    const descriptor = manifest.bundles.find((bundle) => bundle.variable === variableId);
+    if (!run) throw new Error("manifest not loaded");
+    const descriptor = run.bundles.find((bundle) => bundle.variable === variableId);
     if (!descriptor) throw new Error(t("manifestMissingBundle", { id: variableId }));
 
     let channel: DecodeChannel;
@@ -4624,20 +4755,21 @@ function loadVariable(
       video.byteLength <= deliveryBytes(descriptor) &&
       (await isWebCodecsSupported(video.codec, video.width, video.height))
     ) {
-      const streamUrl = artifactUrl(video.streamPath, video.crc32);
+      const streamUrl = artifactUrl(video.streamPath, video.crc32, runUrl);
       streaming = await supportsRangeRequests(streamUrl);
       if (sequence !== initializeSequence) throw new DOMException("aborted", "AbortError");
       const index = await downloadVideoIndex(video);
       if (sequence !== initializeSequence) throw new DOMException("aborted", "AbortError");
       let source: VideoStreamSource;
       if (streaming) {
-        source = { kind: "url", url: streamUrl, byteLength: video.byteLength, variableKey: variableId };
+        source = { kind: "url", url: streamUrl, byteLength: video.byteLength, variableKey };
         downloadedBytes = index.byteLength;
       } else {
         const streamBuffer = await downloadBundle(
           { path: video.streamPath, byteLength: video.byteLength, crc32: video.crc32 },
           sequence,
           quiet,
+          runUrl,
         );
         if (sequence !== initializeSequence) throw new DOMException("aborted", "AbortError");
         source = { kind: "buffer", buffer: streamBuffer };
@@ -4666,7 +4798,7 @@ function loadVariable(
       // download costs, group by group. A probe session is streamed or
       // nothing either way.
       const store = zarrStoreFor(dataBackend, descriptor, variant);
-      const storeRoot = store && manifestUrl ? zarrRootUrl(store.path, manifestUrl) : null;
+      const storeRoot = store && runUrl ? zarrRootUrl(store.path, runUrl) : null;
       const storeStreams =
         store !== undefined &&
         storeRoot !== null &&
@@ -4679,12 +4811,12 @@ function loadVariable(
         streaming = true;
         channel = spawnZarrWorker();
         channel.onerror = (event) => showError(event.message || t("workerStartFailed"));
-        initMessage = zarrInitMessage(storeRoot, store, variableId, storeStreams);
+        initMessage = zarrInitMessage(storeRoot, store, variableKey, storeStreams);
         downloadedBytes = 0;
         format = variant ? "Zarr ½" : "Zarr";
         totalBytes = store.byteLength;
       } else if (container) {
-        const url = artifactUrl(container.path, container.crc32);
+        const url = artifactUrl(container.path, container.crc32, runUrl);
         streaming = await supportsRangeRequests(url);
         if (sequence !== initializeSequence) throw new DOMException("aborted", "AbortError");
         if (streaming) {
@@ -4693,13 +4825,13 @@ function loadVariable(
             type: "init-stream",
             url,
             byteLength: container.byteLength,
-            variableKey: variableId,
+            variableKey,
           };
           downloadedBytes = 0;
         } else if (role === "probe") {
           throw new Error("range requests unsupported; a probe session never downloads a whole bundle");
         } else {
-          const initBuffer = await downloadBundle(container, sequence, quiet);
+          const initBuffer = await downloadBundle(container, sequence, quiet, runUrl);
           if (sequence !== initializeSequence) throw new DOMException("aborted", "AbortError");
           channel = spawnWorker();
           initMessage = { type: "init", buffer: initBuffer };
@@ -4732,7 +4864,7 @@ function loadVariable(
       sessionWorker.terminate();
       throw new DOMException("aborted", "AbortError");
     }
-    if (manifest && Date.parse(bundleMetadata.runTime) !== Date.parse(manifest.runTime)) {
+    if (run && Date.parse(bundleMetadata.runTime) !== Date.parse(run.runTime)) {
       throw new Error(t("bundleRunMismatch"));
     }
     // Grids may differ between sessions (resolution tiers), and time
@@ -4772,19 +4904,24 @@ function loadVariable(
       leadOffsets: null,
     };
     // Streaming progress may have raced ahead of session registration.
-    const early = pendingStream.get(variableId);
+    const early = pendingStream.get(variableKey);
     if (early) {
-      pendingStream.delete(variableId);
+      pendingStream.delete(variableKey);
       if (early.bytes > 0) session.bytes = Math.min(totalBytes, extraBytes + early.bytes);
       if (early.resident) {
         session.resident = true;
         session.residentScope = early.scope;
       }
     }
-    sessions.set(variableId, session);
+    if (memberKey !== null) memberSessions.set(memberKey, session);
+    else sessions.set(variableId, session);
     bindChannel(session, sequence);
     return session;
   })();
+  if (memberKey !== null) {
+    memberSessionLoads.set(memberKey, load);
+    return load.finally(() => memberSessionLoads.delete(memberKey));
+  }
   sessionLoads.set(variableId, load);
   return load.finally(() => sessionLoads.delete(variableId));
 }
@@ -5520,6 +5657,11 @@ function ensureLayers(): void {
   }
   map.addLayer(slots.lines.layer, FORECAST_ANCHOR_LAYER);
   layersAdded = true;
+  // Member slots made before the layers were: under the lines, like every
+  // one made after.
+  for (const member of mosaic?.members ?? []) {
+    if (member.slot && !map.getLayer(member.slot.layer.id)) map.addLayer(member.slot.layer, slots.lines.layer.id);
+  }
 }
 
 /** Empty a slot: nothing drawn, no session, and nothing waited on. The
@@ -5843,6 +5985,7 @@ function applyVariable(session: VariableSession): void {
   }
   windLayer?.setVisible(wind && view.particles);
   applyOverlays();
+  applyMosaicMembers();
   applyComposite();
   updateVariablePresentation(session);
   syncUrl();
@@ -5866,6 +6009,242 @@ function applyVariable(session: VariableSession): void {
     ensureProbeSessions();
     scheduleProbeRender();
   }
+}
+
+// ---------------------------------------------------------------------------
+// The geostationary mosaic (mosaic.ts): a view over several satellite
+// datasets. The primary member's run is `manifest` and its session the
+// fill slot's, as for any dataset; every other member that answered has a
+// slot of its own, clipped to its band and following the playhead by valid
+// time, opened for whichever bundle the primary shows.
+
+/** The spacecraft a member's run comes from, for the eyebrow. */
+const MOSAIC_MEMBER_NAMES: Partial<Record<ForecastModelId, string>> = {
+  himawari: "HIMAWARI-9",
+  goeswest: "GOES-18",
+  goeseast: "GOES-19",
+  meteosat: "METEOSAT-12",
+} as Partial<Record<ForecastModelId, string>>;
+
+/** The credit line's notice for a member (`data-credit-model`). */
+const MOSAIC_MEMBER_CREDITS: Partial<Record<ForecastModelId, string>> = {
+  himawari: "himawari",
+  goeswest: "goes",
+  goeseast: "goes",
+  meteosat: "meteosat",
+} as Partial<Record<ForecastModelId, string>>;
+
+/** Read every member's pointer and manifest at once; a member whose
+ * pointer is missing, whose manifest this shell refuses, or whose feed
+ * fails outright is left out — the mosaic never fails on one disk. */
+async function openMosaicMembers(model: ForecastModelId): Promise<MosaicMember[]> {
+  const infos = mosaicMembers(model);
+  const settled = await Promise.allSettled(infos.map((info) => fetchManifest(dataBaseUrl(), info.id)));
+  const members: MosaicMember[] = [];
+  for (const [index, result] of settled.entries()) {
+    const info = infos[index]!;
+    if (result.status === "rejected") {
+      // Diagnostics stay English: an absent disk is a console note.
+      console.warn(`mosaic: ${info.id} not opened:`, result.reason instanceof Error ? result.reason.message : result.reason);
+      continue;
+    }
+    members.push({
+      id: info.id,
+      manifest: result.value.manifest,
+      manifestUrl: result.value.manifestUrl,
+      run: result.value.latest.run,
+      manifestCrc: result.value.latest.manifestCrc32,
+      band: { start: 0, width: 360 },
+      slot: null,
+      wantedVariable: null,
+    });
+  }
+  return members;
+}
+
+/** Which member drives the timeline (`primaryMember`): the finest cadence,
+ * then the newest window. */
+function mosaicPrimaryId(members: readonly MosaicMember[]): ForecastModelId | null {
+  return primaryMember(
+    members.map((member) => ({
+      id: member.id,
+      cadenceSeconds: FORECAST_MODELS[member.id].cadenceSeconds ?? 600,
+      runTime: Date.parse(member.manifest.runTime),
+    })),
+  );
+}
+
+/** Cut the globe between the present members and hand each its band: the
+ * primary's to the fill slot, the others' to their own. */
+function applyMosaicBands(): void {
+  if (!mosaic) return;
+  const bands = mosaicBands(
+    mosaic.members.map((member) => ({ id: member.id, subLongitude: FORECAST_MODELS[member.id].subLongitude ?? 0 })),
+  );
+  for (const member of mosaic.members) {
+    member.band = bands.get(member.id) ?? { start: 0, width: 360 };
+    if (member.id === mosaic.primary) {
+      slots.fill.band = member.band;
+      slots.fill.layer.setBand(member.band);
+    } else if (member.slot) {
+      member.slot.band = member.band;
+      member.slot.layer.setBand(member.band);
+    }
+  }
+}
+
+/** Forget the mosaic: its member slots leave the map, their sessions end,
+ * and the fill slot draws the whole grid again. */
+function resetMosaic(): void {
+  if (mosaic) {
+    for (const member of mosaic.members) {
+      if (!member.slot) continue;
+      detachSlot(member.slot);
+      if (map.getLayer(member.slot.layer.id)) map.removeLayer(member.slot.layer.id);
+      member.slot = null;
+    }
+  }
+  for (const session of memberSessions.values()) session.worker.terminate();
+  memberSessions.clear();
+  memberSessionLoads.clear();
+  mosaic = null;
+  slots.fill.band = null;
+  slots.fill.layer.setBand(null);
+  delete document.body.dataset.credits;
+}
+
+/** The member slot for a non-primary member, made on first use and put on
+ * the map under the lines, so a chart drawn over the mosaic stays on top. */
+function ensureMemberSlot(member: MosaicMember): RasterSlot {
+  if (member.slot) return member.slot;
+  const slot = makeSlot("member", `member-${member.id}`);
+  slot.member = member;
+  slot.band = member.band;
+  slot.layer.setBand(member.band);
+  member.slot = slot;
+  if (layersAdded) map.addLayer(slot.layer, slots.lines.layer.id);
+  return slot;
+}
+
+/** Reconcile every other member with the primary: each opens the bundle
+ * the primary shows — after it, never blocking it — and a member whose
+ * run does not ship that bundle empties for it. */
+function applyMosaicMembers(): void {
+  if (!mosaic || !activeSession || !layersAdded) return;
+  const wanted = activeSession.id;
+  const sequence = initializeSequence;
+  for (const member of mosaic.members) {
+    if (member.id === mosaic.primary) continue;
+    const slot = ensureMemberSlot(member);
+    if (member.wantedVariable === wanted && slot.session?.id === wanted) continue;
+    member.wantedVariable = wanted;
+    if (slot.session) detachSlot(slot);
+    if (!hasBundle(member.manifest, wanted)) continue;
+    loadVariable(wanted, sequence, "overlay", member)
+      .then((session) => {
+        if (sequence !== initializeSequence || !ready) return;
+        if (member.wantedVariable !== wanted || member.slot !== slot) return;
+        attachMember(slot, session);
+      })
+      .catch((error: unknown) => {
+        if (sequence !== initializeSequence) return;
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        console.warn(`mosaic: ${member.id} ${wanted} not opened:`, error instanceof Error ? error.message : error);
+      });
+  }
+}
+
+/** Put a member's session in its slot and hand it the frame on screen. */
+function attachMember(slot: RasterSlot, session: VariableSession): void {
+  configureSlotLayer(slot, session, true);
+  refreshViewportTiles();
+  const index = activeFrameIndex ?? requestedFrameIndex ?? Number(slider.value);
+  sendPrefetchWindow(index);
+  if (activeFrameIndex !== null) trySelectOverlayFrame(slot, activeFrameIndex);
+  else requestOverlayDecode(slot, index);
+  if (probe) requestProbeSeries(session);
+}
+
+/** The session the pinned point reads on a mosaic: the member whose band
+ * holds the pin's longitude, else the primary's as on any dataset. */
+function probeSession(): VariableSession | null {
+  if (!mosaic || !probe) return activeSession;
+  for (const member of mosaic.members) {
+    if (member.id === mosaic.primary || !member.slot?.session) continue;
+    if (bandContains(member.band, probe.longitude)) return member.slot.session;
+  }
+  return activeSession;
+}
+
+/** A member's frame keys for every primary frame, by valid time, -1 where
+ * it has none: what the pinned point's series is read by. */
+function memberProbeOffsets(session: VariableSession): number[] {
+  return frameAxis().map((_, index) => memberOffsetForFrame(session, index) ?? -1);
+}
+
+/** Poll the members' pointers: a changed primary reopens the view as any
+ * new run does; a changed other member swaps its own sessions alone; a
+ * member that has appeared changes the bands. */
+async function checkMosaicForNewRuns(): Promise<void> {
+  if (!mosaic || document.hidden || switchingVariable) return;
+  const current = mosaic;
+  const infos = mosaicMembers(selectedModelId);
+  const settled = await Promise.allSettled(infos.map((info) => fetchLatestPointer(dataBaseUrl(), info.id)));
+  if (mosaic !== current || !ready) return;
+  let bandsChanged = false;
+  for (const [index, result] of settled.entries()) {
+    const info = infos[index]!;
+    const member = current.members.find((item) => item.id === info.id);
+    if (result.status === "rejected") continue;
+    const latest = result.value;
+    if (member && latest.manifestCrc32 === member.manifestCrc) continue;
+    if (member?.id === current.primary) {
+      // The primary's run moved: the ordinary new-run path, keeping the
+      // playhead by observation time.
+      if (metadata) {
+        const frame = activeFrameIndex ?? Number(slider.value);
+        resumeOnNewRun = { validTime: frameValidTime(frame), atEnd: frame >= frameCount() - 1, playing };
+      }
+      void initialize();
+      return;
+    }
+    try {
+      const loaded = await fetchManifest(dataBaseUrl(), info.id);
+      if (mosaic !== current || !ready) return;
+      if (member) {
+        member.manifest = loaded.manifest;
+        member.manifestUrl = loaded.manifestUrl;
+        member.run = loaded.latest.run;
+        member.manifestCrc = loaded.latest.manifestCrc32;
+        member.wantedVariable = null;
+        for (const [key, session] of memberSessions) {
+          if (!key.startsWith(`${member.id}:`)) continue;
+          session.worker.terminate();
+          memberSessions.delete(key);
+        }
+        if (member.slot) detachSlot(member.slot);
+      } else {
+        current.members.push({
+          id: info.id,
+          manifest: loaded.manifest,
+          manifestUrl: loaded.manifestUrl,
+          run: loaded.latest.run,
+          manifestCrc: loaded.latest.manifestCrc32,
+          band: { start: 0, width: 360 },
+          slot: null,
+          wantedVariable: null,
+        });
+        bandsChanged = true;
+      }
+    } catch {
+      // A member that cannot be read stays as it was until the next poll.
+    }
+  }
+  if (bandsChanged) {
+    applyMosaicBands();
+    updateModelPresentation();
+  }
+  applyMosaicMembers();
 }
 
 /** Reconcile the lines slot with the composition: over a filled field it
@@ -6243,6 +6622,7 @@ async function initialize({ frame = false }: { frame?: boolean } = {}): Promise<
     detachSlot(slot);
     slot.gridSource = null;
   }
+  resetMosaic();
   windLayerGridSource = null;
   windLayer?.setVisible(false);
   resetComposite();
@@ -6297,6 +6677,23 @@ async function initialize({ frame = false }: { frame?: boolean } = {}): Promise<
       loadedManifest = loadedCase.manifest;
       manifestUrl = loadedCase.manifestUrl;
       currentRun = found.run;
+    } else if (FORECAST_MODELS[selectedModelId].mosaic) {
+      // A view over several datasets: whichever members answer are opened,
+      // the one with the finest cadence is the run below, and the rest
+      // follow it from slots of their own (applyMosaicMembers).
+      if (frame) frameModelRegion();
+      const members = await openMosaicMembers(selectedModelId);
+      if (sequence !== initializeSequence) return;
+      const primary = mosaicPrimaryId(members);
+      if (primary === null) throw new Error(t("mosaicNoMembers"));
+      const lead = members.find((member) => member.id === primary)!;
+      loadedManifest = lead.manifest;
+      manifestUrl = lead.manifestUrl;
+      currentRun = lead.run;
+      currentManifestCrc = lead.manifestCrc;
+      mosaic = { members, primary };
+      applyMosaicBands();
+      updateModelPresentation();
     } else {
       // A regional model opened on a view showing little of it would paint
       // nothing worth the name: frame its region first, the way a case is
@@ -6635,6 +7032,14 @@ particlesToggle.addEventListener("click", () => setParticlesEnabled(!view.partic
 async function checkForNewRun(): Promise<void> {
   // A case is a fixed historical run; there is no newer one to move to.
   if (activeCase || !currentRun || currentManifestCrc === null || document.hidden || switchingVariable) return;
+  if (mosaic) {
+    try {
+      await checkMosaicForNewRuns();
+    } catch {
+      // Transient poll failures never disturb the running app.
+    }
+    return;
+  }
   try {
     const model = selectedModelId;
     const latest = await fetchLatestPointer(dataBaseUrl(), model);

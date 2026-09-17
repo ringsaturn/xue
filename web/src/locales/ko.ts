@@ -228,6 +228,7 @@ export const ko: Record<MessageKey, string> = {
   bundleRunMismatch: "번들 초기시각이 매니페스트와 다릅니다",
   bundleMissingVariable: "번들에 변수 {id}가 없습니다",
   manifestMissingBundle: "매니페스트에 변수 {id}의 번들이 없습니다",
+  mosaicNoMembers: "모자이크를 이루는 위성 데이터를 하나도 사용할 수 없습니다",
 
   probeAria: "지점 자료 시계열",
   probeHint: "재생하거나 시간축을 끌어 시계열을 채우세요",

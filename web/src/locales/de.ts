@@ -226,6 +226,7 @@ export const de: Record<MessageKey, string> = {
   bundleRunMismatch: "Modelllauf des Bündels stimmt nicht mit dem Manifest überein",
   bundleMissingVariable: "Im Bündel fehlt die Größe {id}",
   manifestMissingBundle: "Das Manifest hat kein Bündel für die Größe {id}",
+  mosaicNoMembers: "Kein Satellitendatensatz des Mosaiks ist verfügbar",
 
   probeAria: "Zeitreihe am Punkt",
   probeHint: "Abspielen oder scrubben, um die Reihe zu füllen",

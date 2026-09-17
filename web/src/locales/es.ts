@@ -226,6 +226,7 @@ export const es: Record<MessageKey, string> = {
   bundleRunMismatch: "La pasada del paquete no coincide con el manifiesto",
   bundleMissingVariable: "Al paquete le falta la variable {id}",
   manifestMissingBundle: "El manifiesto no tiene paquete para la variable {id}",
+  mosaicNoMembers: "Ningún conjunto de datos de satélite del mosaico está disponible",
 
   probeAria: "Serie temporal del punto",
   probeHint: "Reproduce o arrastra para completar la serie",

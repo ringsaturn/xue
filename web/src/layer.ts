@@ -1,6 +1,7 @@
 import type { CustomLayerInterface, Map as MaplibreMap } from "maplibre-gl";
 
 import { DOMAIN_GLSL, DOMAIN_UNIFORM_NAMES, setDomainUniforms, type LambertDomain } from "./domain";
+import type { LongitudeBand } from "./mosaic";
 import { t } from "./i18n";
 import type { BundleMetadata } from "./manifest";
 import { WHOLE_PLANE_COVERAGE, type CoverageBox } from "./tiles";
@@ -104,6 +105,12 @@ uniform vec2 u_decode;
 // real value (the cold-top enhancement, for an infrared picture) along the
 // edge. The radar mosaic's 0 is "no echo", an ordinary value, and stays 0.
 uniform float u_floor_nodata;
+// A band of longitude the layer is clipped to (the mosaic's seam between
+// two disks): on (x > 0.5), its western edge in degrees (y) and its width
+// eastward (z). A point is inside when its eastward distance from the
+// edge, wrapped, is within the width — so the band reads the same in
+// every copy of the world, the shader's and the grid's alike.
+uniform vec3 u_band;
 uniform vec4 u_contour;
 uniform vec4 u_contour_values;
 uniform float u_contour_value_count;
@@ -317,6 +324,7 @@ void main() {
   // without this the edge texels would smear across the whole map.
   if (v < 0.0 || v > 1.0 || (u_wrap < 0.5 && (u < 0.0 || u > 1.0))) discard;
   if (outsideDomain(longitude, latitude)) discard;
+  if (u_band.x > 0.5 && mod(longitude - u_band.y, 360.0) > u_band.z) discard;
   // The coverage test runs on the wrapped coordinate. On a global grid the
   // half-cell before the antimeridian lands just past u = 1 (the cell center
   // is half a step east of 360 degrees) and the texture's own REPEAT resolves
@@ -594,6 +602,8 @@ export class ForecastLayer implements CustomLayerInterface {
   /** The model's own footprint, when the grid extends past it (domain.ts);
    * the shader draws nothing outside. */
   private domain: LambertDomain | null = null;
+  /** The longitudes the layer draws in, or null for all of them. */
+  private band: LongitudeBand | null = null;
   private hasFrame = false;
   /** Hidden while no weather layer is on screen. */
   private visible = true;
@@ -636,6 +646,15 @@ export class ForecastLayer implements CustomLayerInterface {
     this.map?.triggerRepaint();
   }
 
+  /** Clip to a band of longitude — a mosaic member's share of the globe —
+   * or to none. */
+  setBand(band: LongitudeBand | null): void {
+    if (this.band === band) return;
+    if (this.band && band && this.band.start === band.start && this.band.width === band.width) return;
+    this.band = band;
+    this.map?.triggerRepaint();
+  }
+
   onAdd(map: MaplibreMap, gl: WebGLRenderingContext | WebGL2RenderingContext): void {
     if (!(gl instanceof WebGL2RenderingContext)) {
       this.onUnsupported(t("webglUnavailable"));
@@ -652,6 +671,7 @@ export class ForecastLayer implements CustomLayerInterface {
       "u_vector", "u_vector_offset", "u_vector_scale", "u_vector_max", "u_vector_nodata",
       "u_composite", "u_composite_offset", "u_composite_scale",
       ...DOMAIN_UNIFORM_NAMES,
+      "u_band",
     ]) {
       this.uniforms[name] = gl.getUniformLocation(program, name);
     }
@@ -975,6 +995,7 @@ export class ForecastLayer implements CustomLayerInterface {
       this.coverage.vEnd,
     );
     setDomainUniforms(gl, this.uniforms, this.domain);
+    gl.uniform3f(this.uniforms.u_band!, this.band ? 1 : 0, this.band?.start ?? 0, this.band?.width ?? 360);
     const contours = this.contours;
     gl.uniform2f(this.uniforms.u_decode!, contours?.offset ?? 0, contours?.scale ?? 0);
     gl.uniform1f(this.uniforms.u_floor_nodata!, this.floorNoData ? 1 : 0);
