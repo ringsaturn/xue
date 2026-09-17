@@ -66,7 +66,7 @@ AWS_REQUEST_CHECKSUM_CALCULATION ?= when_required
 AWS_RESPONSE_CHECKSUM_VALIDATION ?= when_required
 export AWS_DEFAULT_REGION AWS_REQUEST_CHECKSUM_CALCULATION AWS_RESPONSE_CHECKSUM_VALIDATION
 
-.PHONY: check install wasm test test-rust test-e2e encoder-rust encoder-rust-test encoder-wheel bench bench-video bench-lossy mvp serve format-pdf deploy-build upload-r2 upload-r2-bundles upload-r2-manifest upload-r2-stac-item check-pointer upload-r2-pointer upload-r2-stac-collection warm-r2 prune-r2 prune-r2-rounds live-run live-manifest live-window pull-r2-frames push-r2-frames prune-r2-frames deploy-pages deploy showcase showcase-check showcase-refresh upload-r2-showcase tc-build live-tc-index upload-r2-tc prune-r2-tc airport-build live-airport-index upload-r2-airport prune-r2-airport sounding-build live-sounding-index upload-r2-sounding prune-r2-sounding clean
+.PHONY: check install wasm test test-rust test-e2e encoder-rust encoder-rust-test encoder-wheel bench bench-video bench-lossy mvp serve format-pdf deploy-build upload-r2 upload-r2-bundles upload-r2-manifest upload-r2-stac-item check-pointer upload-r2-pointer upload-r2-stac-collection warm-r2 prune-r2 prune-r2-rounds live-run live-manifest live-window pull-r2-frames push-r2-frames prune-r2-frames deploy-pages deploy showcase showcase-check showcase-refresh live-showcase-catalog upload-r2-showcase tc-build live-tc-index upload-r2-tc prune-r2-tc airport-build live-airport-index upload-r2-airport prune-r2-airport sounding-build live-sounding-index upload-r2-sounding prune-r2-sounding clean
 
 check:
 	$(PYTHON) scripts/check_dependencies.py
@@ -324,6 +324,17 @@ showcase:
 
 showcase-check:
 	$(PYTHON) -m xuebuild showcase check --cases-dir $(CASES_DIR) $(CASE)
+
+# The published cases' sidecars and manifests (two small objects each), so a
+# build on a fresh runner regenerates showcase.json from every case that is
+# live rather than from the one it just built: the catalog is collected
+# from what is on disk (xuebuild/showcase.py::collect_catalog), and an
+# upload of a one-case catalog would unlist the rest.
+live-showcase-catalog:
+	@set -e; mkdir -p web/public/data/showcase; \
+	$(S3) sync s3://$(R2_BUCKET)/$(R2_PREFIX)/showcase/ web/public/data/showcase/ \
+		--exclude "*" --include "*/case.json" --include "*/manifest.json" --only-show-errors; \
+	echo "live cases: $$(ls web/public/data/showcase/*/case.json 2>/dev/null | wc -l | tr -d ' ')"
 
 # A built case's catalog row (title, summary, tags, credit) rewritten from
 # its definition without a rebuild — a translation or a corrected summary

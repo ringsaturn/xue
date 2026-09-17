@@ -1,0 +1,173 @@
+name: showcase
+
+# Build one historical case (showcase/cases/<id>.json) on a runner and
+# publish it: a case is a past run or observation window cropped to one
+# event, fetched from the source's archive, converted like a run and kept
+# for good under showcase/<id>/ on the bucket (nothing prunes it; README
+# "Historical cases", showcase/README.md).
+#
+# On a runner because the archives sit in AWS us-east-1: a Himawari window
+# is 26 MB of tiles per ten-minute scan, which the runner takes in seconds
+# and a home connection in minutes. The published catalog (showcase.json)
+# is collected from every case on disk, so the job first pulls the live
+# cases' sidecars and manifests (`make live-showcase-catalog`) — an upload
+# from a runner that only knew the case it built would unlist the rest.
+#
+# Dispatch only: a case is a decision, not a schedule.
+
+on:
+  workflow_dispatch:
+    inputs:
+      case:
+        description: "Case id (the file name under showcase/cases/ without .json); several separated by spaces"
+        type: string
+        required: true
+      encoder:
+        description: "auto (the xuepy wheel when its release knows the case's source, else the reference pipeline with GDAL), native (insist on the wheel) or python (insist on the reference pipeline)"
+        type: choice
+        options: [auto, native, python]
+        default: auto
+      force:
+        description: "Rebuild the case even when it is already built in this checkout"
+        type: boolean
+        default: false
+      dry_run:
+        description: "Build and report what the upload would do, but write nothing to R2"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: showcase
+  cancel-in-progress: false
+
+env:
+  ENCODER: ${{ inputs.encoder }}
+  # A case is published as Zarr stores alone, like every live run (plan
+  # 017 phase 7): the store is derived from the `.xue` the build wrote and
+  # the file retired before upload.
+  XUE_ZARR: "1"
+  XUE_CONTAINER: "0"
+
+jobs:
+  build:
+    if: github.repository == 'ringsaturn/xue'
+    runs-on: ubuntu-24.04
+    # A three-hour satellite window is a few minutes; a ten-day global run
+    # fetched from the archive can be an hour.
+    timeout-minutes: 180
+    env:
+      CASE: ${{ inputs.case }}
+      FORCE: ${{ inputs.force && '--force' || '' }}
+      DRY_RUN: ${{ inputs.dry_run && '--dryrun' || '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate inputs
+        run: |
+          set -euo pipefail
+          for case in $CASE; do
+            printf '%s' "$case" | grep -Eq '^[a-z0-9-]+$' \
+              || { echo "::error::case ids are lowercase letters, digits and hyphens, not '$case'"; exit 1; }
+            [ -f "showcase/cases/$case.json" ] \
+              || { echo "::error::no case definition at showcase/cases/$case.json"; exit 1; }
+          done
+
+      - name: Check R2 credentials
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+          AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+        run: |
+          for name in CLOUDFLARE_ACCOUNT_ID AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY; do
+            [ -n "${!name}" ] || { echo "::error::$name is empty; set the R2 repository secrets"; exit 1; }
+          done
+          aws --version
+          aws s3 ls "s3://dataset/xue/" --region auto \
+            --endpoint-url "https://${CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com" > /dev/null \
+            || { echo "::error::R2 credentials failed a test listing of the dataset bucket"; exit 1; }
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          python-version: "3.14"
+
+      # No ffmpeg: a case ships no video.
+      - name: Sync Python environment
+        run: uv sync
+
+      # The case's source decides the encoder, as publish-jma.yml does for
+      # its feed: native when the installed wheel knows the source, else the
+      # reference pipeline with a warning. Every case in one dispatch takes
+      # the stricter answer.
+      - name: Resolve the encoder
+        run: |
+          set -euo pipefail
+          case "$ENCODER" in
+            native|python) encoder="$ENCODER" ;;
+            auto)
+              encoder=native
+              for case in $CASE; do
+                model=$(jq -r .model "showcase/cases/$case.json")
+                if ! .venv/bin/python -c "import sys; from xuebuild import native; sys.exit(0 if native.knows_source('$model') else 1)"; then
+                  wheel=$(.venv/bin/python -c "from xuebuild import native; print(native.version() or 'unknown')")
+                  echo "::warning::xuepy ${wheel} does not know the ${model} source of case ${case}; converting through the reference pipeline (slower)."
+                  encoder=python
+                fi
+              done ;;
+            *) echo "::error::encoder must be auto, native or python, not '$ENCODER'"; exit 1 ;;
+          esac
+          echo "XUE_ENCODER=$encoder" >> "$GITHUB_ENV"
+          echo "encoder: $encoder" >> "$GITHUB_STEP_SUMMARY"
+
+      # The reference pipeline extracts with the system GDAL, and a
+      # satellite case's fetch stage warps with it whichever encoder
+      # converts (the wheel's GDAL carries no GeoTIFF driver).
+      - name: Install GDAL
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq gdal-bin
+          gdalinfo --version
+
+      - name: Pull the live cases' catalog rows
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: make live-showcase-catalog
+
+      - name: Build the case
+        run: |
+          set -o pipefail
+          make showcase CASE="$CASE" FORCE="$FORCE" 2>&1 | tee showcase.log
+
+      - name: Upload the case and the catalog
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: |
+          set -euo pipefail
+          make upload-r2-showcase DRY_RUN="$DRY_RUN"
+          {
+            echo "### showcase"
+            echo
+            for case in $CASE; do
+              echo "- \`$case\`: $(jq -c '{model, run, forecastHours, manifestCrc32}' "web/public/data/showcase/$case/case.json")"
+            done
+            echo "- catalog: $(jq '.cases | length' web/public/data/showcase.json) cases"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: showcase-${{ github.run_id }}
+          path: |
+            showcase.log
+            web/public/data/showcase.json
+          retention-days: 14
+          if-no-files-found: ignore

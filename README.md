@@ -386,6 +386,14 @@ make showcase CASE=zhengzhou-2021        # fetch, crop, encode, index
 make upload-r2-showcase                  # publish cases + the catalog
 ```
 
+Or on a runner: [`showcase.yml`](.github/workflows/showcase.yml) takes a
+case id (or several) by dispatch, pulls the live cases' catalog rows first
+(`make live-showcase-catalog`, so the rewritten `showcase.json` still lists
+every case), builds and uploads. The archives sit in AWS us-east-1, which is
+where a runner is fastest; a satellite case (`himawari`, a window of the
+ISatSS archive named by its first hour, three hours being the live feed's
+own shape) is minutes there.
+
 Cropping happens in the encoder (`crop_grid` / `convert_bin(bbox=...)`): the
 window is rounded outward to whole grid cells, may cross the antimeridian,
 and the resulting bundle is an ordinary one whose `grid` block names a
@@ -393,8 +401,10 @@ window instead of the globe. A case is a few megabytes, so cases stay
 published permanently while runs are pruned.
 
 Archive depth limits which forecast events are possible: NOAA GFS and sflux
-reach back to about 2021-01, ECMWF open data to about 2024-02. Radar cases
-need the decoded file locally (`XUE_OBSERVATION_ROOT`). See
+reach back to about 2021-01, ECMWF open data to about 2024-02, Himawari-9's
+ISatSS tiles to 2022-12 (Himawari-8's bucket holds 2019–2022, not yet a
+platform here). Radar cases need the decoded file locally
+(`XUE_OBSERVATION_ROOT`). See
 [`showcase/README.md`](showcase/README.md) for the authoring guide.
 
 ## Publishing

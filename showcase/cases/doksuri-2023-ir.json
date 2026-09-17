@@ -1,0 +1,49 @@
+{
+  "id": "doksuri-2023-ir",
+  "title": {
+    "zh": "台风杜苏芮登陆：葵花 9 号红外",
+    "en": "Typhoon Doksuri landfall in Himawari-9 infrared",
+    "zh-Hant": "颱風杜蘇芮登陸：向日葵 9 號紅外",
+    "ja": "台風トクスリ上陸：ひまわり9号赤外画像",
+    "ko": "태풍 독수리 상륙: 히마와리 9호 적외 영상",
+    "de": "Landgang von Taifun Doksuri im Himawari-9-Infrarot",
+    "fr": "Le typhon Doksuri touche terre, en infrarouge Himawari-9",
+    "es": "La llegada a tierra del tifón Doksuri en infrarrojo Himawari-9",
+    "pt": "A chegada do tufão Doksuri em infravermelho Himawari-9",
+    "tr": "Doksuri Tayfunu’nun karaya çıkışı, Himawari-9 kızılötesi",
+    "ru": "Выход тайфуна «Токсури» на берег в ИК-диапазоне Himawari-9"
+  },
+  "summary": {
+    "zh": "台风杜苏芮于 2023 年 7 月 28 日 09:55（北京时）在福建晋江沿海登陆，登陆时中心附近最大风力 15 级（50 m/s）。此处是葵花 9 号 AHI 10.4 µm 红外窗区亮温，00Z 至 03Z 三小时、10 分钟一帧：眼区、眼墙与外围雨带的云顶温度在 −80 °C 上下。数据为 NOAA 转发的 ISatSS 全圆盘产品，重投影到 0.04° 经纬网格，非预报产品。",
+    "en": "Typhoon Doksuri made landfall on the Jinjiang coast of Fujian at 09:55 CST on 28 July 2023 with maximum sustained winds near 50 m/s. This is the Himawari-9 AHI 10.4 µm infrared window as brightness temperature, three hours from 00Z to 03Z at the ten-minute scan cadence: the eye, the eyewall and the outer rainbands with cloud tops around −80 °C. The data is NOAA's redistribution of the ISatSS full-disk product, reprojected onto a 0.04° grid — observations, not a forecast.",
+    "zh-Hant": "颱風杜蘇芮於 2023 年 7 月 28 日 09:55（北京時）在福建晉江沿海登陸，登陸時中心附近最大風力 15 級（50 m/s）。此處是向日葵 9 號 AHI 10.4 µm 紅外窗區亮溫，00Z 至 03Z 三小時、10 分鐘一幀：眼區、眼牆與外圍雨帶的雲頂溫度在 −80 °C 上下。資料為 NOAA 轉發的 ISatSS 全圓盤產品，重投影到 0.04° 經緯網格，非預報產品。",
+    "ja": "台風トクスリは 2023 年 7 月 28 日 09:55（中国標準時）に福建省晋江の沿岸へ上陸し、中心付近の最大風速は約 50 m/s だった。これはひまわり9号 AHI の 10.4 µm 赤外窓領域の輝度温度で、00Z から 03Z までの 3 時間を 10 分ごとの観測で追う：眼、眼の壁雲、外側の降雨帯の雲頂温度は −80 °C 前後。データは NOAA が再配信する ISatSS 全球円盤プロダクトを 0.04° 格子へ再投影したもので、予報ではなく観測である。",
+    "ko": "태풍 독수리는 2023년 7월 28일 09:55(중국 표준시) 푸젠성 진장 연안에 상륙했으며 중심 부근 최대풍속은 약 50 m/s였다. 이 사례는 히마와리 9호 AHI 10.4 µm 적외 창 영역의 휘도 온도로, 00Z부터 03Z까지 세 시간을 10분 간격으로 담았다: 눈, 눈벽, 바깥 강수대의 구름 꼭대기 온도는 −80 °C 안팎이다. 자료는 NOAA가 재배포하는 ISatSS 전구 원반 산출물을 0.04° 격자로 재투영한 것으로, 예보가 아닌 관측이다.",
+    "de": "Taifun Doksuri ging am 28. Juli 2023 um 09:55 CST an der Küste von Jinjiang, Fujian, an Land, mit Spitzenwinden nahe 50 m/s. Dies ist das 10,4-µm-Infrarotfenster des Himawari-9 AHI als Helligkeitstemperatur, drei Stunden von 00Z bis 03Z im Zehn-Minuten-Takt der Abtastung: das Auge, die Augenwand und die äußeren Regenbänder mit Wolkenoberkanten um −80 °C. Die Daten sind NOAAs Weiterverbreitung des ISatSS-Vollscheibenprodukts, auf ein 0,04°-Gitter umprojiziert — Beobachtungen, keine Vorhersage.",
+    "fr": "Le typhon Doksuri a touché terre sur la côte de Jinjiang (Fujian) le 28 juillet 2023 à 09 h 55 CST, avec des vents soutenus proches de 50 m/s. Voici la fenêtre infrarouge à 10,4 µm de l’AHI de Himawari-9 en température de brillance, trois heures de 00Z à 03Z à la cadence de balayage de dix minutes : l’œil, le mur de l’œil et les bandes de pluie externes, avec des sommets nuageux vers −80 °C. Les données sont la rediffusion par la NOAA du produit disque complet ISatSS, reprojeté sur une grille de 0,04° — des observations, pas une prévision.",
+    "es": "El tifón Doksuri tocó tierra en la costa de Jinjiang (Fujian) el 28 de julio de 2023 a las 09:55 CST, con vientos sostenidos cercanos a 50 m/s. Esta es la ventana infrarroja de 10,4 µm del AHI de Himawari-9 como temperatura de brillo, tres horas de 00Z a 03Z a la cadencia de barrido de diez minutos: el ojo, la pared del ojo y las bandas de lluvia exteriores con topes nubosos en torno a −80 °C. Los datos son la redistribución por la NOAA del producto de disco completo ISatSS, reproyectado a una malla de 0,04°: observaciones, no un pronóstico.",
+    "pt": "O tufão Doksuri chegou à costa de Jinjiang (Fujian) em 28 de julho de 2023 às 09:55 CST, com ventos sustentados perto de 50 m/s. Esta é a janela infravermelha de 10,4 µm do AHI do Himawari-9 como temperatura de brilho, três horas das 00Z às 03Z na cadência de varredura de dez minutos: o olho, a parede do olho e as bandas de chuva externas com topos de nuvem em torno de −80 °C. Os dados são a redistribuição pela NOAA do produto de disco completo ISatSS, reprojetado numa grade de 0,04° — observações, não uma previsão.",
+    "tr": "Doksuri Tayfunu 28 Temmuz 2023 09:55 CST’de Fujian’ın Jinjiang kıyısına, 50 m/s’ye yakın sürekli rüzgârlarla karaya çıktı. Bu, Himawari-9 AHI’nin 10,4 µm kızılötesi penceresinin parlaklık sıcaklığıdır; 00Z’den 03Z’ye üç saat, on dakikalık tarama adımıyla: göz, göz duvarı ve dış yağış bantları, bulut tepeleri −80 °C civarında. Veri, NOAA’nın yeniden dağıttığı ISatSS tam disk ürününün 0,04° ızgaraya yeniden projeksiyonudur — gözlem, tahmin değil.",
+    "ru": "Тайфун «Токсури» вышел на берег у Цзиньцзяна (Фуцзянь) 28 июля 2023 года в 09:55 CST при устойчивом ветре около 50 м/с. Это инфракрасное окно 10,4 мкм прибора AHI спутника Himawari-9 в виде яркостной температуры, три часа с 00Z до 03Z с десятиминутным шагом сканирования: глаз, стена глаза и внешние дождевые полосы с верхней границей облаков около −80 °C. Данные — ретрансляция NOAA полнодискового продукта ISatSS, перепроецированного на сетку 0,04°: наблюдения, не прогноз."
+  },
+  "model": "himawari",
+  "run": "2023072800",
+  "hours": 3,
+  "bbox": [
+    110.0,
+    12.0,
+    135.0,
+    35.0
+  ],
+  "variables": [
+    "ir104"
+  ],
+  "defaultVariable": "ir104",
+  "eventTime": "2023-07-28T01:55:00Z",
+  "tags": [
+    "typhoon",
+    "satellite",
+    "asia"
+  ],
+  "credit": "JMA HIMAWARI-9 AHI VIA NOAA"
+}

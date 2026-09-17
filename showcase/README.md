@@ -169,6 +169,7 @@ The public archives do not go back forever:
 | `hrrr` | about 2014-08 | Every hour's cycle, hourly to f18 |
 | `mrms` | 2020-10-14 | Every two minutes; a case is a window from any hour |
 | `jma` | — | No archive: the agency lists three hours and its tiles expire after days. A window can only be built from the decoded-frame cache the live feed keeps on the bucket (`make pull-r2-frames`), and cases are not wired up yet |
+| `himawari` | 2022-12-13 | Every ten minutes from NOAA's `noaa-himawari9` bucket (the ISatSS tiles); a case is a window from any hour, like `mrms`, each scan 26 MB of tiles fetched and warped on the spot, so build it on a runner (`showcase.yml`). Crop with `bbox`: the whole disk is 4.6 MB a frame. Himawari-8's bucket (2019–2022) needs a platform row not written yet |
 | `cma` | 2026-09-06 | Every six minutes from a private daily Zarr archive (`XUE_CMA_ARCHIVE`, read with the `R2_*` credentials, `uv sync --group cma`); a case is a window from any hour, like `mrms`. A case may instead name a local NetCDF series (`dataset`), which is how the cases before the archive were cut |
 
 Pick a cycle a day or two before the event peaks, so the case is a *forecast*
