@@ -271,11 +271,16 @@ const GROW_FROM_ZOOM = 7;
 const GROW_TO_ZOOM = 10;
 const GROWTH = 2.5;
 
+// `zoom` may only drive the outermost expression, so the hover case sits
+// inside the zoom curve rather than around it.
 const RADIUS_EXPRESSION: ExpressionSpecification = [
-  "case",
-  ["boolean", ["feature-state", "hover"], false],
-  ["interpolate", ["linear"], ["zoom"], GROW_FROM_ZOOM, HOVER_RADIUS, GROW_TO_ZOOM, HOVER_RADIUS + GROWTH],
-  ["interpolate", ["linear"], ["zoom"], GROW_FROM_ZOOM, RADIUS, GROW_TO_ZOOM, RADIUS + GROWTH],
+  "interpolate",
+  ["linear"],
+  ["zoom"],
+  GROW_FROM_ZOOM,
+  ["case", ["boolean", ["feature-state", "hover"], false], HOVER_RADIUS, RADIUS],
+  GROW_TO_ZOOM,
+  ["case", ["boolean", ["feature-state", "hover"], false], HOVER_RADIUS + GROWTH, RADIUS + GROWTH],
 ];
 
 /** How far the playhead must move before the dimming is recomputed. The
