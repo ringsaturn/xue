@@ -4,7 +4,7 @@ name: publish cma
 # Meteorological Administration's national composite reflectivity, a mosaic
 # every six minutes, published on its data portal as BIN tiles. A private
 # sync job decodes the zoom-5 tiles and keeps them as one plain Zarr v3
-# store per UTC day in an archive of its own, every twenty minutes; the
+# store per UTC day in an archive of its own, every ten minutes; the
 # live feed
 # here is a rolling window read back out of that archive — the last two
 # whole hours plus the hour in progress, on the portal's 0.0439° tile grid,
@@ -12,7 +12,7 @@ name: publish cma
 # subdirectory of its run (<model>.<run>/<HHMM>/) and pointed at by
 # latest-cma.json. Like publish-jma.yml, one round per job on a
 # five-minute cron: a round that finds nothing new (the archive moves in
-# twenty-minute steps) is a minute of runner time, and a round with new
+# ten-minute steps) is a minute of runner time, and a round with new
 # slots reads a few megabytes of the day's shard and converts thirty
 # frames. The archive is read in process (xuebuild/cmaarchive.py, the
 # `cma` dependency group: zarr-python over s3fs, xarray for the series

@@ -619,7 +619,7 @@ SOURCES: dict[str, SourceSpec] = {
     # BIN tiles on a plate carrée tile grid. A private sync job decodes
     # the zoom-5 tiles (0.0439°, 1792 x 1024 cells from 67.5E to 146.25E and
     # 56.25N to 11.25N) and keeps them as one Zarr v3 store per UTC day on a
-    # private bucket (``sync``, every twenty minutes); a run of this source
+    # private bucket (``sync``, every ten minutes); a run of this source
     # is a window read back out of those stores as one NetCDF series
     # (xuebuild/cmaarchive.py), the shape the observation ingest has
     # always read. An

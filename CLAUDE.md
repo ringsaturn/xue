@@ -245,9 +245,9 @@ model starts here; the frontend mirror is `FORECAST_MODELS` in
   the window's end). The grid is the portal's zoom-5 plate carrée
   tile grid (`CMA_ZOOM`, 0.0439°, 1792 × 1024; the power-of-two step
   passes `_snap_regional_steps` untouched), `cadence_seconds` is 360, so
-  `unitSeconds` is 360. The portal publishes twenty to thirty minutes
-  late and the archive syncs every twenty minutes, so the live window
-  ends some forty minutes behind real time. A showcase case names a
+  `unitSeconds` is 360. The portal publishes fifteen to twenty minutes
+  late and the archive syncs every ten minutes, so the live window
+  ends twenty to thirty minutes behind real time. A showcase case names a
   window of the archive by `run`, or a local file the tool wrote by
   `dataset` (the cases cut before the archive); `showcase.py` admits
   either on a series-file source. The id changed from `radar` with the

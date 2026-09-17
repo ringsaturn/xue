@@ -102,7 +102,7 @@ Bundle sets:
   tiles on a plate carrée tile grid, shipped under `cref`. A private
   sync job decodes the zoom-5 tiles (0.0439°, 1792 × 1024 cells over
   67.5–146.25°E and 11.25–56.25°N) and keeps them as one plain Zarr v3
-  store per UTC day in an archive of its own, every twenty minutes; a run
+  store per UTC day in an archive of its own, every ten minutes; a run
   here is a window read back out of those stores by `xuebuild/cmaarchive.py`
   (zarr-python over s3fs, the `cma` dependency group: `uv sync --group
   cma`) and handed to the converter as one NetCDF series, the shape the
@@ -112,9 +112,9 @@ Bundle sets:
   `RADAR_L3_MST_CREF_GISJPG_Tiles_CR/z5/<year>/<date>.zarr`, and a base
   none of whose days has a store is refused rather than read as an
   archive with nothing written) and has no default; the portal
-  publishes each mosaic twenty to thirty minutes late and the archive
-  syncs every twenty minutes, so the live window ends some forty minutes
-  behind real time. A three-hour window is about thirty frames and one to
+  publishes each mosaic fifteen to twenty minutes late and the archive
+  syncs every ten minutes, so the live window ends twenty to thirty
+  minutes behind real time. A three-hour window is about thirty frames and one to
   two megabytes of reflectivity.
 
 Every level of the isobaric families is registered; turning one on is a line
