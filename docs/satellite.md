@@ -65,7 +65,7 @@ carries their `band` blocks (`bands`, from `Platform.bands`).
 
 | id | wavelength | AHI | ABI | quantity | codebook |
 |---|---|---|---|---|---|
-| `ir104` | 10.4 µm | 13 | 13 | brightness temperature, K | 180–331.8 at 0.6 |
+| `ir104` | 10.4 µm | 13 | 13 | brightness temperature, K (the shell reads it in °C) | 180–331.8 at 0.6 |
 | `ir112`, `ir123`, `ir039`, `ir086`, `ir096`, `ir133` | 11.2, 12.3, 3.9, 8.6, 9.6, 13.3 µm | 14, 15, 7, 11, 12, 16 | 14, 15, 7, 11, 12, 16 | brightness temperature | registered on the platform; not yet a variable |
 | `wv062`, `wv069`, `wv073` | 6.2, 6.9, 7.3 µm | 8, 9, 10 | 8, 9, 10 | brightness temperature | same |
 | `vis064`, `nir086`, `nir161`, … | 0.64, 0.86, 1.61 µm | 3, 4, 5 | 2, 3, 5 | reflectance | same |

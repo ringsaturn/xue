@@ -53,8 +53,9 @@ Facts worth getting right:
   rate. `himawari` is the ninth live source and the fourth observation:
   the Japan Meteorological Agency's Himawari-9 geostationary imager (AHI)
   at 140.7°E as NOAA redistributes it, the 10.4 µm infrared window as
-  brightness temperature in kelvin (`ir104`, AHI band 13: cloud tops read
-  cold, clear sea and land warm), one full-disk scan every ten minutes,
+  brightness temperature in kelvin in the file, shown in Celsius on the
+  page (`ir104`, AHI band 13: cloud tops read cold, clear sea and land
+  warm), one full-disk scan every ten minutes,
   reprojected from the geostationary view onto a 0.04° latitude/longitude
   grid over the useful disk (3000 × 3000, 80.7°E–200.7°E — past the
   antimeridian — and 60°S–60°N; cells outside the disk carry the codebook

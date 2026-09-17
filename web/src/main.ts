@@ -195,6 +195,7 @@ import {
   type MeteogramRowSpec,
 } from "./meteogram";
 import { zoomCeilingForStep } from "./mercator";
+import { displayUnit, displayValue } from "./units";
 import { fetchPoster, isPosterSupported } from "./poster";
 import { frameCacheKey, parseFrameCacheKey, variableKey } from "./sessionkeys";
 import { applyTheme, isDark, onThemeChange, toggleTheme } from "./theme";
@@ -2342,7 +2343,9 @@ function renderProbe(): void {
     probePanel.meta.textContent = t("probeOutside");
   } else {
     probePanel.value.value =
-      typeof current === "number" ? `${formatProbeValue(variable, current)} ${variable.unit}` : "--";
+      typeof current === "number"
+        ? `${formatProbeValue(variable, displayValue(variable.unit, current))} ${displayUnit(variable.unit)}`
+        : "--";
     const lead = frameStampLine(index);
     if (current === undefined) probePanel.meta.textContent = `${lead} · ${t("probeAwaiting")}`;
     else if (current === null) probePanel.meta.textContent = `${lead} · ${t("probeNoData")}`;
@@ -2483,9 +2486,13 @@ function formatRowReadout(row: MeteogramRowData, index: number): { values: strin
   let unit = "";
   for (const [position, id] of row.spec.bundles.entries()) {
     const session = sessions.get(id);
-    if (session) unit ||= session.variable.unit;
+    if (session) unit ||= displayUnit(session.variable.unit);
     const value = row.series[position]![index];
-    parts.push(session && typeof value === "number" ? formatProbeValue(session.variable, value) : "--");
+    parts.push(
+      session && typeof value === "number"
+        ? formatProbeValue(session.variable, displayValue(session.variable.unit, value))
+        : "--",
+    );
   }
   return { values: parts.join(" · "), unit };
 }
@@ -4163,7 +4170,7 @@ function updateVariablePresentation(session: VariableSession): void {
   // serif headline there fights the data underneath it.
   variableTitle.textContent = ui.title.join(" ");
   legend.setAttribute("aria-label", t("legendAria", { label: ui.label }));
-  legendUnit.textContent = session.variable.unit;
+  legendUnit.textContent = displayUnit(session.variable.unit);
   legendLabels.replaceChildren(...ui.legend.map((label) => {
     const span = document.createElement("span");
     span.textContent = label;

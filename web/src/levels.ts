@@ -393,10 +393,13 @@ export function scalarLegendRange(identity: VariableIdentity): readonly [number,
   return null;
 }
 
-/** The infrared window's domain, in kelvin: the codebook's own, from the
- * 180 K that is also the fill outside the disk to the hottest surface a
- * 10 µm channel sees. */
-export const BRIGHTNESS_TEMPERATURE_CHART_RANGE: readonly [number, number] = [180, 330];
+/** The infrared window's domain, in the file's kelvin: −90 °C to 60 °C,
+ * which is what the legend reads in (`units.ts`), from just above the
+ * 180 K fill outside the disk to the hottest surface a 10 µm channel
+ * sees. */
+export const BRIGHTNESS_TEMPERATURE_CHART_RANGE: readonly [number, number] = [183.15, 333.15];
+/** The same domain in Celsius, for the legend's ticks. */
+export const BRIGHTNESS_TEMPERATURE_LEGEND_RANGE: readonly [number, number] = [-90, 60];
 
 /** Visibility reads to 25 km — the codebook's 25.4 without the odd tenth;
  * the ramp is transparent long before that. */
@@ -528,7 +531,8 @@ export function isobaricLegend(identity: VariableIdentity): string[] | null {
   if (family === "htsgw") return rangeLegend([0, WAVE_HEIGHT_CHART_MAX], 2);
   if (family === "perpw") return rangeLegend([0, WAVE_PERIOD_CHART_MAX], 4);
   if (family === "dirpw") return rangeLegend([0, 360], 45);
-  if (family === "ir104") return rangeLegend(BRIGHTNESS_TEMPERATURE_CHART_RANGE, 30);
+  // The one legend not in the file's unit: kelvin reads in Celsius.
+  if (family === "ir104") return rangeLegend(BRIGHTNESS_TEMPERATURE_LEGEND_RANGE, 30);
   if (family === "vvel" && isRegisteredLevel(level)) return rangeLegend([-OMEGA_PALETTE_MAX, OMEGA_PALETTE_MAX], 0.5);
   if (family === "thetae" && isRegisteredLevel(level)) return rangeLegend(thetaEPaletteDomain(level), 5);
   if (family === "tmp" && isRegisteredLevel(level)) return rangeLegend(temperatureLegendRange(level), 5);

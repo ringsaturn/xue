@@ -530,7 +530,8 @@ function buildSpecs(): readonly VariableSpec[] {
   // inverted grey scale, the coldest enhanced in colour; clear sea and
   // land read dark, so the picture is the one every weather bulletin
   // shows. Outside the disk is the codebook bottom, painted as nothing.
-  // The legend reads in kelvin, the channel's own unit.
+  // The file is in kelvin, the channel's own unit; the legend and every
+  // readout show it in Celsius (`units.ts`), like the other temperatures.
   surface({
     id: "ir104",
     chart: "ir104",
@@ -539,7 +540,7 @@ function buildSpecs(): readonly VariableSpec[] {
     title: ["Infrared", "Imagery"],
     bufferTitle: "Imagery buffer",
     labelKey: "varLabelIr104",
-    legend: ["330", "300", "270", "240", "210", "180"],
+    legend: ["60", "30", "0", "-30", "-60", "-90"],
     ground: "slate",
     urlName: "infrared",
     urlAliases: ["ir", "satellite", "sat", "bt"],

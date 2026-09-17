@@ -362,7 +362,8 @@ model starts here; the frontend mirror is `FORECAST_MODELS` in
   `SATELLITE_VARIABLE_IDS`, `tests/fixtures/satellite-registry.json`; the
   shell classifies the channel by the band's wave number
   (`identity.ts::satelliteChannel`), `ChartFamily` `ir104`, the `satellite`
-  sheet group, the `cloudtop` meteogram row. `producers.py` is the
+  sheet group, the `cloudtop` meteogram row; the file stays in kelvin and
+  `web/src/units.ts` shows it in Celsius (legend ticks and readouts only). `producers.py` is the
   composite-product interface, empty. `tests/test_satellite.py` runs the
   four fixture tiles in `tests/fixtures/himawari/` through the whole stage
   and both encoders.

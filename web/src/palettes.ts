@@ -106,31 +106,40 @@ const REFLECTIVITY_STOPS: Stop[] = [
   [80, 240, 233, 255, 255],
 ];
 
-// The satellite infrared window, brightness temperature in kelvin: the
-// inverted grey scale every infrared picture is drawn in — warm sea and
-// land dark, cloud brighter the colder its top — with the coldest tops,
-// below 240 K, enhanced in colour the way a convective IR product is
-// (cyan to blue to green to yellow to red to magenta, and white at the
-// very coldest). Alpha rises from nothing at the codebook bottom, 180 K,
-// which is also what the cells outside the disk carry; the warm end stays
-// short of black and fully opaque, so the picture reads as a picture and
-// the coastline drawn over it still shows.
+// The satellite infrared window, brightness temperature in the file's
+// kelvin: the inverted grey scale every infrared picture is drawn in —
+// warm sea and land dark, cloud brighter the colder its top — with the
+// cold tops enhanced in colour the way the common convective IR products
+// (and Windy's "Infra+") do it: the colour starts near -30 °C and runs
+// light blue, blue, green, yellow, orange, red, purple and finally white
+// at the coldest overshooting tops near -90 °C, so a reader tells a
+// -50 °C anvil from a -75 °C core at a glance. Alpha rises from nothing
+// at the codebook bottom, 180 K, which is also what the cells outside the
+// disk carry; the warm end stays short of black and fully opaque, so the
+// picture reads as a picture and the coastline drawn over it still shows.
+// The stops are the shell's own, not another product's table.
 const BRIGHTNESS_TEMPERATURE_STOPS: Stop[] = [
   [180, 255, 255, 255, 0],
   [181.5, 255, 255, 255, 255],
-  [190, 250, 250, 250, 255],
-  [200, 232, 60, 232, 255],
-  [210, 224, 32, 32, 255],
-  [220, 250, 220, 40, 255],
-  [228, 60, 200, 60, 255],
-  [235, 40, 90, 235, 255],
-  [240, 90, 220, 235, 255],
-  [243, 236, 236, 236, 255],
-  [255, 214, 214, 214, 255],
-  [270, 168, 168, 168, 255],
-  [285, 112, 112, 112, 255],
-  [300, 58, 58, 58, 255],
-  [315, 30, 30, 30, 255],
+  [183.15, 250, 250, 255, 255],
+  [188.15, 215, 170, 245, 255],
+  [193.15, 140, 40, 200, 255],
+  [198.15, 190, 20, 90, 255],
+  [203.15, 225, 30, 30, 255],
+  [208.15, 255, 100, 0, 255],
+  [213.15, 255, 170, 0, 255],
+  [218.15, 250, 235, 40, 255],
+  [223.15, 70, 200, 70, 255],
+  [228.15, 40, 150, 110, 255],
+  [233.15, 40, 110, 230, 255],
+  [238.15, 100, 180, 240, 255],
+  [243.15, 190, 225, 240, 255],
+  [246.15, 236, 236, 236, 255],
+  [258.15, 205, 205, 205, 255],
+  [273.15, 155, 155, 155, 255],
+  [288.15, 100, 100, 100, 255],
+  [300.15, 56, 56, 56, 255],
+  [315.15, 32, 32, 32, 255],
   [332, 14, 14, 14, 255],
 ];
 
