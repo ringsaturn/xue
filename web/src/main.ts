@@ -908,6 +908,15 @@ const urlCamera = parseCameraFromHash(window.location.hash);
  * data, since past the point where a cell is `ZOOM_CEILING_CELL_PIXELS`
  * wide the map only magnifies the interpolation. */
 const BASE_MAX_ZOOM = 7;
+/** The ceiling while station marks are drawn. Airports sit a few
+ * kilometres apart — a city's civil and military fields, a pair of
+ * regional strips — and at the models' ceiling those are one dot; the
+ * marks are worth three more levels even where the field under them is
+ * only being magnified. */
+const STATION_MAX_ZOOM = 10;
+/** What the data on screen is worth, kept so the station switch can be
+ * folded in without reading the grid again. */
+let dataZoomCeiling = BASE_MAX_ZOOM;
 /** How wide a grid cell may get on screen before the zoom stops — 32 CSS
  * px puts the 0.005° JMA nowcast at zoom 12, a 0.02° radar mosaic at 10
  * and the 0.03° HRRR grid at 9.5, while the 0.25° models stay at the base
@@ -5341,6 +5350,7 @@ function applyStationView(): void {
   const drawAirports = airportAvailable && stationsShown.airports;
   soundingTile.setAttribute("aria-pressed", String(drawSoundings));
   airportTile.setAttribute("aria-pressed", String(drawAirports));
+  syncZoomCeiling();
   // Nothing on screen and nothing on the map: the layers are never added,
   // so a viewer who asks for no station pays nothing for the products
   // existing.
@@ -5667,7 +5677,16 @@ function formatTrackEnd(leadSeconds: number): string {
  * below it, which is what a switch back to a coarser dataset wants. */
 function applyZoomCeiling(session: VariableSession): void {
   const grid = geoGrid(session.metadata);
-  map.setMaxZoom(zoomCeilingForStep(grid.longitudeStep, ZOOM_CEILING_CELL_PIXELS, BASE_MAX_ZOOM));
+  dataZoomCeiling = zoomCeilingForStep(grid.longitudeStep, ZOOM_CEILING_CELL_PIXELS, BASE_MAX_ZOOM);
+  syncZoomCeiling();
+}
+
+/** The data's ceiling, or the station marks' when either product is on
+ * screen — whichever lets the camera deeper. */
+function syncZoomCeiling(): void {
+  const marks =
+    (stationsShown.soundings && soundingLoaded !== null) || (stationsShown.airports && airportLoaded !== null);
+  map.setMaxZoom(Math.max(dataZoomCeiling, marks && activeCase === null ? STATION_MAX_ZOOM : 0));
 }
 
 function applyVariable(session: VariableSession): void {

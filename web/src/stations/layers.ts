@@ -264,11 +264,18 @@ export function categoryColorExpression(darkGround: boolean): ExpressionSpecific
   ];
 }
 
+/** The zoom past which the marks grow: the models' ceiling, where the
+ * shell used to stop, up to the station ceiling three levels deeper, where
+ * a dot that read at 4.5 px over a continent wants more against a city. */
+const GROW_FROM_ZOOM = 7;
+const GROW_TO_ZOOM = 10;
+const GROWTH = 2.5;
+
 const RADIUS_EXPRESSION: ExpressionSpecification = [
   "case",
   ["boolean", ["feature-state", "hover"], false],
-  HOVER_RADIUS,
-  RADIUS,
+  ["interpolate", ["linear"], ["zoom"], GROW_FROM_ZOOM, HOVER_RADIUS, GROW_TO_ZOOM, HOVER_RADIUS + GROWTH],
+  ["interpolate", ["linear"], ["zoom"], GROW_FROM_ZOOM, RADIUS, GROW_TO_ZOOM, RADIUS + GROWTH],
 ];
 
 /** How far the playhead must move before the dimming is recomputed. The
