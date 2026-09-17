@@ -117,6 +117,10 @@ const MODEL_ALIASES: Record<string, ForecastModelId> = {
   "goes-west": "goeswest",
   "goes-18": "goeswest",
   goes18: "goeswest",
+  // The geostationary mosaic, a view over the imagers above.
+  geo: "geo",
+  mosaic: "geo",
+  geostationary: "geo",
 };
 
 /** Model requested by the page URL, or the default when the URL names none

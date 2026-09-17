@@ -437,9 +437,13 @@ describe("dataset kinds", () => {
   it("lists the live feeds, the six observation windows among them", () => {
     // Every live feed has a pointer to poll (mirrors
     // SourceSpec.latest_filename); the six observation windows are the
-    // last of the switch order.
-    expect(FORECAST_MODEL_IDS).toEqual(["gfs", "sflux", "ecmwf", "aifs", "hrrr", "mrms", "jma", "cma", "himawari", "goeseast", "goeswest"]);
-    for (const model of FORECAST_MODEL_IDS) expect(FORECAST_MODELS[model].latestFilename).toBeDefined();
+    // last of the switch order, and the mosaic — a view over the imagers
+    // with no feed of its own — closes it.
+    expect(FORECAST_MODEL_IDS).toEqual(["gfs", "sflux", "ecmwf", "aifs", "hrrr", "mrms", "jma", "cma", "himawari", "goeseast", "goeswest", "geo"]);
+    for (const model of FORECAST_MODEL_IDS) {
+      if (FORECAST_MODELS[model].mosaic) expect(FORECAST_MODELS[model].latestFilename).toBeUndefined();
+      else expect(FORECAST_MODELS[model].latestFilename).toBeDefined();
+    }
     expect(FORECAST_MODELS.aifs).toMatchObject({ label: "AIFS", product: "aifs-single-0p25", latestFilename: "latest-aifs.json" });
     expect(FORECAST_MODELS.mrms.latestFilename).toBe("latest-mrms.json");
     expect(FORECAST_MODELS.jma.latestFilename).toBe("latest-jma.json");

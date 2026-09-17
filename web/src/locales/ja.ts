@@ -222,6 +222,7 @@ export const ja: Record<MessageKey, string> = {
   bundleRunMismatch: "バンドルの初期時刻がマニフェストと一致しません",
   bundleMissingVariable: "バンドルに変数 {id} がありません",
   manifestMissingBundle: "マニフェストに変数 {id} のバンドルがありません",
+  mosaicNoMembers: "モザイクを構成する衛星データがひとつも利用できません",
 
   probeAria: "地点データの時系列",
   probeHint: "再生またはスクラブで時系列を埋めてください",

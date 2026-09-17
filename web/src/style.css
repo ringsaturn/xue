@@ -3028,7 +3028,10 @@ body[data-model="mrms"] .source-credit[data-credit-model="mrms"],
 body[data-model="jma"] .source-credit[data-credit-model="jma"],
 body[data-model="himawari"] .source-credit[data-credit-model="himawari"],
 body[data-model="goeseast"] .source-credit[data-credit-model="goes"],
-body[data-model="goeswest"] .source-credit[data-credit-model="goes"] {
+body[data-model="goeswest"] .source-credit[data-credit-model="goes"],
+body[data-credits~="himawari"] .source-credit[data-credit-model="himawari"],
+body[data-credits~="goes"] .source-credit[data-credit-model="goes"],
+body[data-credits~="meteosat"] .source-credit[data-credit-model="meteosat"] {
   display: inline;
 }
 

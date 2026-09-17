@@ -225,6 +225,7 @@ export const fr: Record<MessageKey, string> = {
   bundleRunMismatch: "Le réseau du lot ne correspond pas au manifeste",
   bundleMissingVariable: "Le lot ne contient pas le paramètre {id}",
   manifestMissingBundle: "Le manifeste n'a aucun lot pour le paramètre {id}",
+  mosaicNoMembers: "Aucun jeu de données satellite de la mosaïque n'est disponible",
 
   probeAria: "Série temporelle au point",
   probeHint: "Lancez la lecture ou déplacez le curseur pour compléter la série",

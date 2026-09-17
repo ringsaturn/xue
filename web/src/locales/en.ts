@@ -351,6 +351,9 @@ export const en = {
   bundleRunMismatch: "Bundle run cycle does not match the manifest",
   bundleMissingVariable: "Bundle is missing variable {id}",
   manifestMissingBundle: "Manifest has no bundle for variable {id}",
+  // The geostationary mosaic could open none of its members: every pointer
+  // missing or every manifest refused.
+  mosaicNoMembers: "No satellite dataset of the mosaic is available",
 
   // The point probe: click the map to read one grid cell across the axis.
   // Its heading ("POINT") and every number stay English, like the rest of

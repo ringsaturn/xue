@@ -222,6 +222,7 @@ export const zhHant: Record<MessageKey, string> = {
   bundleRunMismatch: "資料包執行週期與清單不一致",
   bundleMissingVariable: "資料包缺少變數 {id}",
   manifestMissingBundle: "清單缺少變數 {id} 的資料包",
+  mosaicNoMembers: "拼圖中沒有任何衛星資料可用",
 
   probeAria: "點位資料序列",
   probeHint: "播放或拖曳時間軸補全序列",

@@ -222,6 +222,7 @@ export const zh: Record<MessageKey, string> = {
   bundleRunMismatch: "数据包运行周期与清单不一致",
   bundleMissingVariable: "数据包缺少变量 {id}",
   manifestMissingBundle: "清单缺少变量 {id} 的数据包",
+  mosaicNoMembers: "拼图中没有任何卫星数据可用",
 
   probeAria: "点位数据序列",
   probeHint: "播放或拖动时间轴补全序列",

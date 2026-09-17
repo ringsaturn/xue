@@ -46,7 +46,12 @@ pipeline.
 | GOES-18 (West) infrared and Dust RGB | `goeswest` | 3000 × 3000, 0.04°, the disk 163°E–77°W, ±60° | one scan every ten minutes, a rolling six-hour window | `latest-goeswest.json` |
 
 Each model publishes as an independent dataset under `<model>.<run>/`, taken
-live by its pointer at the data root.
+live by its pointer at the data root. The geostationary mosaic
+(`?model=geo`) is a view over the imagers and not a dataset: the shell opens
+whichever of their runs answer, clips each disk to the longitudes it sees
+least obliquely — a partition at the midpoints between sub-satellite
+longitudes — and follows one timeline by valid time; nothing is published
+for it.
 
 Bundle sets:
 

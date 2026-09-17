@@ -130,6 +130,17 @@ Facts worth getting right:
   requested, no endorsement implied); the basemap
   is Protomaps © OpenStreetMap contributors.
 
+## The geostationary mosaic
+
+`/?model=geo` is a view, not a dataset: the shell opens the published run of
+every geostationary imager that answers (Himawari-9, GOES-18, GOES-19 and,
+when published, Meteosat-12), clips each layer to the longitudes it sees least
+obliquely (a partition at the midpoints between sub-satellite longitudes,
+since every imager sits over the equator) and follows one timeline by valid
+time, the ten-minute disks driving it and an hourly member holding its frame
+for the hour. Nothing is uploaded for it and no pointer names it; a disk
+whose pointer is missing leaves the basemap between its neighbours' edges.
+
 ## Pages and URL parameters
 
 The viewer is one page whose state is in the query string. Unknown values
@@ -137,10 +148,11 @@ fall back to defaults rather than fail, so a constructed link always opens.
 
 - https://xue.ringsaturn.me/ — the live viewer. Defaults to GFS precipitation.
 - https://xue.ringsaturn.me/showcase.html — the list of historical cases.
-- `?model=gfs|sflux|ecmwf|aifs|hrrr|mrms|jma|cma|himawari|goeseast|goeswest`
+- `?model=gfs|sflux|ecmwf|aifs|hrrr|mrms|jma|cma|himawari|goeseast|goeswest|geo`
   — which live source (`ifs` is an alias of `ecmwf`, `aifs-single` of
   `aifs`, `hrpns` of `jma`, `radar` of `cma`, `himawari-9` / `ahi` of
-  `himawari`).
+  `himawari`, `mosaic` / `geostationary` of `geo`, the mosaic of every
+  geostationary disk).
 - `?type=` — the filled layer: `temp` (2 m temperature), `precip`, `wind`
   (10 m), `solar` (sflux only), `pressure` (sea level pressure as isobars),
   `radar` (composite reflectivity: the radar cases, and the HRRR forecast), the GFS

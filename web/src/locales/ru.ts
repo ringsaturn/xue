@@ -227,6 +227,7 @@ export const ru: Record<MessageKey, string> = {
   bundleRunMismatch: "Исходный срок пакета не совпадает с манифестом",
   bundleMissingVariable: "В пакете нет величины {id}",
   manifestMissingBundle: "В манифесте нет пакета для величины {id}",
+  mosaicNoMembers: "Ни один спутниковый набор данных мозаики недоступен",
 
   probeAria: "Временной ряд в точке",
   probeHint: "Запустите воспроизведение или перетащите ползунок, чтобы заполнить ряд",

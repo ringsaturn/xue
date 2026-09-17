@@ -228,6 +228,7 @@ export const tr: Record<MessageKey, string> = {
   bundleRunMismatch: "Paketin model koşusu manifestle eşleşmiyor",
   bundleMissingVariable: "Pakette {id} değişkeni eksik",
   manifestMissingBundle: "Manifestte {id} değişkeni için paket yok",
+  mosaicNoMembers: "Mozaiğin hiçbir uydu veri kümesi kullanılamıyor",
 
   probeAria: "Nokta veri serisi",
   probeHint: "Seriyi doldurmak için oynatın ya da kaydırın",
