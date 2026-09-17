@@ -31,8 +31,11 @@ const LIGHT: SkewTInk = {
   grid: "rgba(27, 26, 23, 0.20)",
   gridStrong: "rgba(27, 26, 23, 0.45)",
   paper: "#f3efe6",
-  model: "#6e6a60",
+  model: "#e8763a",
   parcel: "rgba(27, 26, 23, 0.5)",
+  temperature: "#b4441a",
+  dew: "#0e7c72",
+  modelDew: "#3bb8a8",
 };
 
 /** And the void palette. */
@@ -42,8 +45,11 @@ const DARK: SkewTInk = {
   grid: "rgba(255, 255, 255, 0.20)",
   gridStrong: "rgba(255, 255, 255, 0.5)",
   paper: "#000000",
-  model: "rgba(255, 255, 255, 0.62)",
+  model: "#f6a26b",
   parcel: "rgba(255, 255, 255, 0.5)",
+  temperature: "#ff8a4c",
+  dew: "#3fd6c4",
+  modelDew: "#8de6da",
 };
 
 /**

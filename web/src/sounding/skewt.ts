@@ -164,18 +164,27 @@ export interface SkewTInk {
   gridStrong: string;
   /** The chart's ground. */
   paper: string;
-  /** A second, model profile. */
+  /** A second, model profile: its temperature. */
   model: string;
   /** The lifted parcel. */
   parcel: string;
+  /** The observed temperature trace, when it has a hue of its own; the
+   * plain ink otherwise. Hue tells the quantities apart (temperature warm,
+   * dew point cool) and dash tells the sources apart (the sonde solid, the
+   * model dotted), so a reader has two cues and a colour-blind one still
+   * has the second. */
+  temperature?: string;
+  /** The observed dew-point trace. */
+  dew?: string;
+  /** The model's dew-point trace. */
+  modelDew?: string;
 }
 
 export interface SkewTOptions {
   /** The observed ascent: `t` solid, `td` dashed. */
   profile?: Profile | null;
-  /** A second profile — a model column at the same point — in the same ink,
-   * dotted and thinner, because the chart tells series apart by dash and
-   * weight rather than by hue. */
+  /** A second profile — a model column at the same point — dotted, in the
+   * model's own hues: dash says which source, hue says which quantity. */
   model?: Profile | null;
   /** A lifted parcel, thin and muted. */
   parcel?: ParcelPath | null;
@@ -486,11 +495,12 @@ export function drawSkewT(
 
   // --- the data ------------------------------------------------------------
   if (model) {
-    context.strokeStyle = ink.model;
-    context.lineWidth = 1;
-    context.setLineDash([1.5, 2.5]);
-    strokeProfile(context, layout, model, model.t);
+    context.lineWidth = 1.4;
+    context.setLineDash([2, 2.5]);
+    context.strokeStyle = ink.modelDew ?? ink.model;
     strokeProfile(context, layout, model, model.td);
+    context.strokeStyle = ink.model;
+    strokeProfile(context, layout, model, model.t);
     context.setLineDash([]);
   }
   if (parcel) {
@@ -517,12 +527,13 @@ export function drawSkewT(
     context.setLineDash([]);
   }
   if (profile) {
-    context.strokeStyle = ink.ink;
-    context.lineWidth = 1;
+    context.strokeStyle = ink.dew ?? ink.ink;
+    context.lineWidth = 1.4;
     context.setLineDash([4, 3]);
     strokeProfile(context, layout, profile, profile.td);
     context.setLineDash([]);
-    context.lineWidth = 1.8;
+    context.strokeStyle = ink.temperature ?? ink.ink;
+    context.lineWidth = 1.9;
     strokeProfile(context, layout, profile, profile.t);
   }
   context.restore();

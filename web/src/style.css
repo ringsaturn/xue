@@ -49,8 +49,13 @@
   --skewt-paper: rgba(27, 26, 23, 0.04);
   --skewt-grid: rgba(27, 26, 23, 0.2);
   --skewt-grid-strong: rgba(27, 26, 23, 0.45);
-  --skewt-model: #6e6a60;
+  --skewt-model: #e8763a;
   --skewt-parcel: rgba(27, 26, 23, 0.5);
+  /* The two quantities' hues: temperature warm, dew point cool; the model's
+     traces are the same hues a step lighter, and dotted. */
+  --skewt-temperature: #b4441a;
+  --skewt-dew: #0e7c72;
+  --skewt-model-dew: #3bb8a8;
   /* A lift belongs to what covers the map — the model sheet, the context
      menu, an error — not to the controls affixed to it, the probe panel now
      among them: the capsule and the data card sit on the map, and a shadow under them
@@ -124,8 +129,11 @@
     --skewt-paper: rgba(255, 255, 255, 0.05);
     --skewt-grid: rgba(255, 255, 255, 0.2);
     --skewt-grid-strong: rgba(255, 255, 255, 0.5);
-    --skewt-model: rgba(255, 255, 255, 0.62);
+    --skewt-model: #f6a26b;
     --skewt-parcel: rgba(255, 255, 255, 0.5);
+    --skewt-temperature: #ff8a4c;
+    --skewt-dew: #3fd6c4;
+    --skewt-model-dew: #8de6da;
     --lift: 0 20px 60px rgba(0, 0, 0, 0.5);
     --lift-small: 0 10px 30px rgba(0, 0, 0, 0.45);
   }
@@ -152,8 +160,11 @@
   --skewt-paper: rgba(255, 255, 255, 0.05);
   --skewt-grid: rgba(255, 255, 255, 0.2);
   --skewt-grid-strong: rgba(255, 255, 255, 0.5);
-  --skewt-model: rgba(255, 255, 255, 0.62);
+  --skewt-model: #f6a26b;
   --skewt-parcel: rgba(255, 255, 255, 0.5);
+  --skewt-temperature: #ff8a4c;
+  --skewt-dew: #3fd6c4;
+  --skewt-model-dew: #8de6da;
   --lift: 0 20px 60px rgba(0, 0, 0, 0.5);
   --lift-small: 0 10px 30px rgba(0, 0, 0, 0.45);
 }
@@ -2528,6 +2539,13 @@ html[lang="ja"] .rail-glyph {
   justify-content: space-between;
   gap: 10px;
   padding-top: 2px;
+}
+
+.sounding-swatch {
+  font-style: normal;
+  font-weight: 700;
+  letter-spacing: 0;
+  margin-right: 3px;
 }
 
 .sounding-legend {

@@ -115,8 +115,11 @@ export function skewTInkFrom(node: Element): SkewTInk {
     grid: read("--skewt-grid", "rgba(27, 26, 23, 0.20)"),
     gridStrong: read("--skewt-grid-strong", "rgba(27, 26, 23, 0.45)"),
     paper: read("--skewt-paper", "#f3efe6"),
-    model: read("--skewt-model", "#6e6a60"),
+    model: read("--skewt-model", "#e8763a"),
     parcel: read("--skewt-parcel", "rgba(27, 26, 23, 0.5)"),
+    temperature: read("--skewt-temperature", "#b4441a"),
+    dew: read("--skewt-dew", "#0e7c72"),
+    modelDew: read("--skewt-model-dew", "#3bb8a8"),
   };
 }
 
@@ -154,6 +157,15 @@ function layoutFor(width: number, height: number): SkewTLayout {
     },
     { tMin: SPAN_CENTRE - span / 2, tMax: SPAN_CENTRE + span / 2 },
   );
+}
+
+/** A legend swatch: the line's own mark in the line's own hue. */
+function swatch(mark: string, token: string): HTMLElement {
+  const node = document.createElement("i");
+  node.className = "sounding-swatch";
+  node.style.color = `var(${token})`;
+  node.textContent = mark;
+  return node;
 }
 
 /** The gap between the model frame and the ascent, as instrument text:
@@ -434,13 +446,29 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
     if (!open) return;
     syncTimes();
     const model = options.modelProfile();
-    legend.textContent = failed
-      ? t("soundingUnavailable")
-      : station === null
-        ? t("soundingLoading")
-        : model
-          ? `— ${t("soundingObserved")} ${options.formatTime(time)}   ··· ${t("soundingModel")} ${model.run} ${options.formatTime(new Date(model.validTime).toISOString())} (${gapLabel(model.validTime - Date.parse(time))})`
-          : `— ${t("soundingObserved")}   ${t("soundingNoModel")}`;
+    if (failed) legend.textContent = t("soundingUnavailable");
+    else if (station === null) legend.textContent = t("soundingLoading");
+    else {
+      // Each source's words sit beside a swatch in its own two hues, so the
+      // legend reads the way the chart does: T warm, Td cool, the sonde
+      // solid and the model dotted.
+      const items: (string | Node)[] = [
+        swatch("—", "--skewt-temperature"),
+        swatch("- -", "--skewt-dew"),
+        ` ${t("soundingObserved")} ${options.formatTime(time)}`,
+      ];
+      if (model) {
+        items.push(
+          "   ",
+          swatch("···", "--skewt-model"),
+          swatch("···", "--skewt-model-dew"),
+          ` ${t("soundingModel")} ${model.run} ${options.formatTime(new Date(model.validTime).toISOString())} (${gapLabel(model.validTime - Date.parse(time))})`,
+        );
+      } else {
+        items.push(`   ${t("soundingNoModel")}`);
+      }
+      legend.replaceChildren(...items);
+    }
     const width = canvas.clientWidth;
     const mark = signature(width, CHART_HEIGHT);
     if (panelLayout === null || painted.get(canvas) !== mark) {
