@@ -251,6 +251,13 @@ class ISatSSReader:
         )
 
     def list_slots(self, platform: Platform, day: datetime, *, fetch: Callable[[str], str] | None = None) -> list[datetime]:
+        """The day's full-disk slots. The prefix also holds the rapid
+        scans (``OR_HR3-*``, the target area every two and a half minutes)
+        under directories of their own — ``0002``, ``0004``, ``0007``,
+        ``0009`` between ``0000`` and ``0010`` — so a directory counts only
+        on the imager's full-disk cadence; the others never hold a full
+        disk, and four of every five directories are theirs, so a newest-
+        few listing that kept them would rarely reach a full disk."""
         _, prefixes = list_prefix(platform.bucket, f"{platform.prefix}/{day:%Y/%m/%d}/", delimiter="/", fetch=fetch)
         slots: list[datetime] = []
         for prefix in prefixes:
@@ -258,18 +265,18 @@ class ISatSSReader:
             if not match:
                 continue
             try:
-                slots.append(
-                    datetime(
-                        int(match.group("year")),
-                        int(match.group("month")),
-                        int(match.group("day")),
-                        int(match.group("hhmm")[:2]),
-                        int(match.group("hhmm")[2:]),
-                        tzinfo=UTC,
-                    )
+                slot = datetime(
+                    int(match.group("year")),
+                    int(match.group("month")),
+                    int(match.group("day")),
+                    int(match.group("hhmm")[:2]),
+                    int(match.group("hhmm")[2:]),
+                    tzinfo=UTC,
                 )
             except ValueError:
                 continue
+            if int(slot.timestamp()) % platform.cadence_seconds == 0:
+                slots.append(slot)
         return sorted(slots)
 
     def recent_slots(

@@ -325,6 +325,25 @@ class ListingTests(unittest.TestCase):
         self.assertEqual(self.reader.list_slots(HIMAWARI, day, fetch=self.listing), [SLOT_0300, SLOT_0310])
         self.assertEqual(self.reader.list_slots(HIMAWARI, day - timedelta(days=1), fetch=self.listing), [])
 
+    def test_the_rapid_scan_directories_between_the_full_disks_are_not_slots(self) -> None:
+        # The prefix carries the target-area rapid scans (OR_HR3-*) under
+        # two-and-a-half-minute directories of their own, four between
+        # each pair of full disks. They are not slots: a listing that took
+        # them would have latest_slot look at the newest three of them
+        # and find no full disk, as the live rounds did at every minute
+        # but the one right after a full-disk directory appeared.
+        keys = dict(self.keys)
+        for hhmm in ("0302", "0304", "0307", "0309", "0312", "0314"):
+            keys[f"{HIMAWARI.prefix}/2026/09/17/{hhmm}/OR_HR3-020-B12-M1C13-T001_GH9_s2026260{hhmm}160_c2026260{hhmm}410.nc"] = self.keys[
+                next(iter(self.keys))
+            ]
+        listing, _ = bucket(keys)
+        day = datetime(2026, 9, 17, tzinfo=UTC)
+        self.assertEqual(self.reader.list_slots(HIMAWARI, day, fetch=listing), [SLOT_0300, SLOT_0310])
+        now = datetime(2026, 9, 17, 3, 15, tzinfo=UTC)
+        self.assertEqual(self.reader.recent_slots(HIMAWARI, now, limit=3, fetch=listing), [SLOT_0310, SLOT_0300])
+        self.assertEqual(satellite_fetch.latest_slot(TWO_TILES, IR104, now=now, fetch=listing), SLOT_0310)
+
     def test_a_slot_s_tiles_are_listed_in_tile_order_and_a_reissue_wins(self) -> None:
         objects = self.reader.list_slot(HIMAWARI, IR104, SLOT_0300, fetch=self.listing)
         self.assertEqual([item.tile for item in objects], [20, 21])
