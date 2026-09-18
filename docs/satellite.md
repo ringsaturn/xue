@@ -400,7 +400,9 @@ cycles between are licensed data whose operational use within an hour of
 sensing is not free and whose numbers may not be redistributed after it.
 A store with hourly frames is what that policy allows this site to
 publish. The attribution it requires ("Contains modified EUMETSAT
-Meteosat data") is in the shell's credit and the catalog prose. The tiles of a Himawari scan are generated about eight
+Meteosat data [year of publication or distribution]") is in the shell's
+credit, the year stamped at render time, and in the catalog prose, the
+year of the run's first frame filled in when the Collection is written. The tiles of a Himawari scan are generated about eight
 minutes after it starts and listed some fifteen after, a GOES file lands
 some ten minutes after its scan starts; a round is a listing, one scan's
 files, one warp per channel, one composition, one stack per variable and

@@ -207,10 +207,11 @@ export const en = {
   creditsGoes: "SATELLITE IMAGERY · GOES-19 EAST & GOES-18 WEST ABI, NOAA NESDIS, ON NOAA OPEN DATA (REPROJECTED)",
   /** The Meteosat line carries the attribution EUMETSAT's data policy
    * asks for on redistributed data ("Contains modified EUMETSAT Meteosat
-   * data"), the licence, and the hourly cadence that licence allows; the
-   * year the policy's sentence admits is left out rather than stamped
-   * stale into static copy. */
-  creditsMeteosat: "SATELLITE IMAGERY · CONTAINS MODIFIED EUMETSAT METEOSAT DATA · METEOSAT-12 FCI, HOURLY CYCLE, CC-BY-4.0 (REPROJECTED)",
+   * data [year]"), the licence, and the hourly cadence that licence
+   * allows. `{year}` is the year of distribution, the current one, which
+   * `applyStaticMessages` stamps at render time so the copy never goes
+   * stale. */
+  creditsMeteosat: "SATELLITE IMAGERY · CONTAINS MODIFIED EUMETSAT METEOSAT DATA {year} · METEOSAT-12 FCI, HOURLY CYCLE, CC-BY-4.0 (REPROJECTED)",
   creditsSounding: "RADIOSONDE SOUNDINGS · GTS TEMP VIA WIS2, NATIONAL MET SERVICES",
   creditsAirport: "AIRPORT METAR & TAF · WORLD MET SERVICES VIA NOAA/NWS AWC",
   creditsRadar: "RADAR MOSAIC",

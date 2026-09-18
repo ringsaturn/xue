@@ -208,7 +208,8 @@ Bundle sets:
   cycle on each hour is published**, a 24-hour window of 25 frames: the
   EUMETSAT data policy releases the hourly Level 1 cycle as Core data
   under CC-BY-4.0 and the cycles between under terms that do not allow
-  this use. Contains modified EUMETSAT Meteosat data.
+  this use. Contains modified EUMETSAT Meteosat data 2026 (the year of
+  distribution is stamped wherever the attribution is shown).
 
 Every level of the isobaric families is registered; turning one on is a line
 in `xuebuild/sources.py` and its mirror in the native encoder, not a format

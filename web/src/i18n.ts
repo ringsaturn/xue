@@ -157,8 +157,13 @@ export function t(key: MessageKey, params?: Record<string, string | number>): st
  * pre-JS fallback. */
 export function applyStaticMessages(): void {
   document.documentElement.lang = htmlLang;
+  // The one parameter static copy takes: the year of distribution, which
+  // EUMETSAT's attribution sentence carries (`creditsMeteosat`). Read at
+  // each call so a tab left open across New Year restates it on the next
+  // locale switch.
+  const params = { year: new Date().getUTCFullYear() };
   for (const element of document.querySelectorAll<HTMLElement>("[data-i18n]")) {
-    element.textContent = t(element.dataset.i18n as MessageKey);
+    element.textContent = t(element.dataset.i18n as MessageKey, params);
   }
   for (const element of document.querySelectorAll<HTMLElement>("[data-i18n-aria]")) {
     element.setAttribute("aria-label", t(element.dataset.i18nAria as MessageKey));

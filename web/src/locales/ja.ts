@@ -106,7 +106,7 @@ export const ja: Record<MessageKey, string> = {
   creditsJma: "レーダー降水 · 気象庁ナウキャスト、日本（再格子化）",
   creditsHimawari: "衛星画像 · ひまわり9号 AHI、気象庁、NOAA オープンデータ経由（再投影）",
   creditsGoes: "衛星画像 · GOES-19 東・GOES-18 西 ABI、NOAA NESDIS、NOAA オープンデータ経由（再投影）",
-  creditsMeteosat: "衛星画像 · EUMETSAT Meteosat データを加工して使用 · Meteosat-12 FCI、毎正時の走査、CC-BY-4.0（再投影）",
+  creditsMeteosat: "衛星画像 · EUMETSAT Meteosat データを加工して使用 {year} · Meteosat-12 FCI、毎正時の走査、CC-BY-4.0（再投影）",
   creditsSounding: "ラジオゾンデ観測 · GTS TEMP 電文（WIS2 経由）、各国気象機関",
   creditsAirport: "空港 METAR・TAF · 各国気象機関（NOAA/NWS AWC 経由）",
   creditsRadar: "レーダー合成図",

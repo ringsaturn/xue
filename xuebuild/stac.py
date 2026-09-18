@@ -641,7 +641,7 @@ def _source_prose(source: SourceSpec) -> dict[str, Any]:
             "package (Apache-2.0), whose id and version each gun carries as its producer block. Only the "
             "repeat cycle on each hour is published: the EUMETSAT data policy releases that cycle of Level 1 "
             "data as Core data under CC-BY-4.0, and the cycles between under a licence that does not allow "
-            "this use. Contains modified EUMETSAT Meteosat data; EUMETSAT does not endorse this site."
+            "this use. Contains modified EUMETSAT Meteosat data {year}; EUMETSAT does not endorse this site."
         ),
         "license": "CC-BY-4.0",
         "providers": [
@@ -682,6 +682,16 @@ def _source_prose(source: SourceSpec) -> dict[str, Any]:
         return prose[source.id]
     except KeyError as exc:  # pragma: no cover - the table is held to the registry by a test
         raise StacError(f"no catalog prose for source {source.id}") from exc
+
+
+def _stamp_year(text: str, start_datetime: str) -> str:
+    """Fill the one placeholder the prose admits, ``{year}``: the year an
+    attribution sentence names ("Contains modified EUMETSAT Meteosat data
+    2026", the policy's "[Year of publication or distribution]"). It is the
+    year of the run's first frame, ``start_datetime``'s leading four digits,
+    so the document stays a function of the manifest and never of the
+    clock."""
+    return text.replace("{year}", start_datetime[:4])
 
 
 def prose_document() -> dict[str, Any]:
@@ -1426,7 +1436,7 @@ def source_collection(source: SourceSpec, item: dict[str, Any], item_relative_pa
         "stac_extensions": [extension for extension in item["stac_extensions"] if extension == FORECAST_EXTENSION],
         "id": source.id,
         "title": prose["title"],
-        "description": prose["description"],
+        "description": _stamp_year(prose["description"], properties["start_datetime"]),
         "license": prose["license"],
         "keywords": ["weather", "observation" if source.observation else "forecast", source.manifest_model, "zarr"],
         "providers": prose["providers"],

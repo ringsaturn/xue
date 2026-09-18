@@ -111,7 +111,7 @@ export const ru: Record<MessageKey, string> = {
   creditsJma: "РАДАРНЫЕ ОСАДКИ · НАУКАСТ JMA, ЯПОНИЯ (ПЕРЕСЕТКА)",
   creditsHimawari: "СПУТНИКОВЫЕ СНИМКИ · HIMAWARI-9 AHI, JMA, ЧЕРЕЗ NOAA OPEN DATA (ПЕРЕПРОЕЦИРОВАНО)",
   creditsGoes: "СПУТНИКОВЫЕ СНИМКИ · GOES-19 ВОСТОК И GOES-18 ЗАПАД ABI, NOAA NESDIS, ЧЕРЕЗ NOAA OPEN DATA (ПЕРЕПРОЕЦИРОВАНО)",
-  creditsMeteosat: "СПУТНИКОВЫЕ СНИМКИ · СОДЕРЖИТ ИЗМЕНЁННЫЕ ДАННЫЕ EUMETSAT METEOSAT · METEOSAT-12 FCI, ЕЖЕЧАСНЫЙ ЦИКЛ, CC-BY-4.0 (ПЕРЕПРОЕЦИРОВАНО)",
+  creditsMeteosat: "СПУТНИКОВЫЕ СНИМКИ · СОДЕРЖИТ ИЗМЕНЁННЫЕ ДАННЫЕ EUMETSAT METEOSAT {year} · METEOSAT-12 FCI, ЕЖЕЧАСНЫЙ ЦИКЛ, CC-BY-4.0 (ПЕРЕПРОЕЦИРОВАНО)",
   creditsSounding: "РАДИОЗОНДИРОВАНИЕ · GTS TEMP ЧЕРЕЗ WIS2, НАЦИОНАЛЬНЫЕ МЕТЕОСЛУЖБЫ",
   creditsAirport: "METAR И TAF АЭРОПОРТОВ · МЕТЕОСЛУЖБЫ МИРА ЧЕРЕЗ NOAA/NWS AWC",
   creditsRadar: "РАДАРНАЯ МОЗАИКА",

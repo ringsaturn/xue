@@ -152,7 +152,8 @@ Facts worth getting right:
   and `goeswest` are NOAA GOES-R imagery (public domain, attribution
   requested, no endorsement implied); `meteosat` is EUMETSAT Meteosat
   data, the hourly Level 1 cycle, CC-BY-4.0 ("Contains modified EUMETSAT
-  Meteosat data"; no endorsement implied); `ifshres` is ECMWF IFS HRES
+  Meteosat data <year>", the year of distribution stamped where the
+  attribution is shown; no endorsement implied); `ifshres` is ECMWF IFS HRES
   forwarded by Open-Meteo, CC BY 4.0 ("Adapted from ECMWF IFS by ECMWF,
   licensed under CC BY 4.0", via Open-Meteo, open-meteo.com — neither
   ECMWF nor Open-Meteo endorses this use); the basemap
