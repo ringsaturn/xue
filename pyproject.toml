@@ -26,12 +26,12 @@ dependencies = [
     # `gdalinfo` on PATH, which the scheduled publish workflows no longer
     # install. The floor tracks the current release because the wheel's
     # source table must match sources.py (a wheel that publishes a different
-    # bundle set refuses to build), and 0.19 is the first wheel that knows
-    # the GOES and Meteosat sources, composes the Dust RGB (three guns of one
-    # bundle with a producer block) and writes the resolution ladder below
-    # the half tier (`SourceSpec.variant_factors`: the quarter and eighth of
-    # a satellite disk).
-    "xuepy>=0.19,<0.20",
+    # bundle set refuses to build), and 0.20 is the first wheel that knows
+    # the ifshres source: a forecast read as one NetCDF series per variable
+    # (the run time from the time coordinate's epoch, an analysis-optional
+    # variable short of its lead-zero frame), the interval precipitation
+    # total divided into a rate, and a NaN nodata taken as a fill.
+    "xuepy>=0.20,<0.21",
 ]
 
 [project.scripts]

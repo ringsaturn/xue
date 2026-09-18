@@ -147,7 +147,7 @@ jobs:
 
       # No GDAL and no ffmpeg: the source ships no video, and the xuepy
       # wheel carries the GDAL the native encoder extracts and inspects
-      # with (`xuepy>=0.19`; 0.15 was the first wheel that knew the source).
+      # with (`xuepy>=0.20`; 0.15 was the first wheel that knew the source).
       - name: Sync Python environment
         run: uv sync
 
