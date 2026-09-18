@@ -10,10 +10,11 @@ import {
   isCompositeIdentity,
   registeredBundleId,
 } from "../../web/src/identity";
-import { BRIGHTNESS_TEMPERATURE_CHART_RANGE, FAMILIES, familyMembers, familyOf, familyVariants, isobaricLegend, levelCode, scalarLegendRange } from "../../web/src/levels";
+import { BRIGHTNESS_TEMPERATURE_CHART_RANGE, ISOBARIC_FAMILIES, familyOf, isobaricLegend, scalarLegendRange } from "../../web/src/levels";
 import { displayUnit, displayValue } from "../../web/src/units";
 import {
   COMPOSITE_BUNDLES,
+  FORECAST_MODELS,
   KNOWN_BUNDLE_IDS,
   SATELLITE_IDS,
   compositeComponents,
@@ -125,9 +126,10 @@ describe("the satellite registry", () => {
     for (const id of SATELLITE_IDS) {
       expect(KNOWN_BUNDLE_IDS).toContain(id);
       expect(isVectorBundle(id)).toBe(false);
-      // Both behind the satellite family's one tile, in the sheet's
+      // Two single fields, each with a tile of its own, in the sheet's
       // satellite group.
-      expect(familyOf(id)).toBe("satellite");
+      expect(familyOf(id)).toBeNull();
+      expect(variableSpec(id)?.family).toBeNull();
       expect(variableSpec(id)?.group).toBe("satellite");
     }
     expect(isCompositeBundle("dustrgb")).toBe(true);
@@ -136,17 +138,14 @@ describe("the satellite registry", () => {
     expect(COMPOSITE_BUNDLES.dustrgb).toEqual(GUN_IDS);
   });
 
-  it("puts the composite behind the infrared tile as its variant", () => {
-    expect(FAMILIES.satellite.surface).toBe("ir104");
-    expect(familyVariants("satellite")).toEqual(["ir104", "dustrgb"]);
-    expect(familyMembers("satellite")).toEqual(["ir104", "dustrgb"]);
-    // A run that ships the infrared alone offers no cycle; one that ships
-    // both cycles between the two.
-    expect(familyVariants("satellite", (id) => id === "ir104")).toEqual(["ir104", "dustrgb"]);
-    expect(levelCode("dustrgb")).toBe("DUST RGB");
-    expect(levelCode("ir104")).toBe("IR 10.4");
-    expect(variableSpec("dustrgb")?.family).toBe("satellite");
+  it("gives the composite a core tile beside the infrared on every satellite source", () => {
+    // No family: the two are different pictures, and a source with two
+    // fields has room for two tiles, so neither hides behind the other.
+    expect(ISOBARIC_FAMILIES).not.toContain("satellite");
     expect(variableSpec("dustrgb")?.code).toBe("DUST RGB");
+    for (const model of ["himawari", "goeseast", "goeswest", "meteosat", "geo"] as const) {
+      expect(FORECAST_MODELS[model].railCore).toEqual(["ir104", "dustrgb"]);
+    }
   });
 
   it("reads the channel off the band block, not the parameter alone", () => {

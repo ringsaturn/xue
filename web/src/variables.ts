@@ -573,11 +573,11 @@ function buildSpecs(): readonly VariableSpec[] {
   // shows. Outside the disk is the codebook bottom, painted as nothing.
   // The file is in kelvin, the channel's own unit; the legend and every
   // readout show it in Celsius (`units.ts`), like the other temperatures.
-  // It heads the satellite family: one tile, the Dust RGB its variant.
+  // A tile of its own, beside the Dust RGB's: the satellite sources
+  // publish two fields, and both are on the rail.
   surface({
     id: "ir104",
     chart: "ir104",
-    family: "satellite",
     group: "satellite",
     code: "IR 10.4",
     title: ["Infrared", "Imagery"],
@@ -601,7 +601,6 @@ function buildSpecs(): readonly VariableSpec[] {
   surface({
     id: "dustrgb",
     chart: "dustrgb",
-    family: "satellite",
     group: "satellite",
     code: "DUST RGB",
     title: ["Dust", "RGB"],

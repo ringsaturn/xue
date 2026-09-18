@@ -28,7 +28,7 @@ import { PRESSURE_BUNDLE_IDS, pressureLabel } from "./pressure";
  * `tests/fixtures/ocean-registry.json` (`tests/web/ocean.test.ts`), the way
  * pressure.ts is held by its own registry.
  */
-export type IsobaricFamily = "hgt" | "tmp" | "rh" | "spfh" | "wind" | "qflux" | "vvel" | "thetae" | "cloud" | "ice" | "wave" | "satellite";
+export type IsobaricFamily = "hgt" | "tmp" | "rh" | "spfh" | "wind" | "qflux" | "vvel" | "thetae" | "cloud" | "ice" | "wave";
 
 export const ISOBARIC_FAMILIES: readonly IsobaricFamily[] = [
   "hgt",
@@ -42,7 +42,6 @@ export const ISOBARIC_FAMILIES: readonly IsobaricFamily[] = [
   "cloud",
   "ice",
   "wave",
-  "satellite",
 ];
 
 export interface FamilyInfo {
@@ -151,22 +150,6 @@ export const FAMILIES: Record<IsobaricFamily, FamilyInfo> = {
       { id: "wave", code: "HEIGHT" },
       { id: "htsgw", code: "HEIGHT", standInFor: "wave" },
       { id: "perpw", code: "PERIOD" },
-    ],
-  },
-  // The satellite pictures: the infrared window heads the family, and the
-  // Dust RGB — a colour composite of four infrared channels, a different
-  // quantity with a key of its own rather than a legend — is its other
-  // variant, so one tile cycles between the two.
-  satellite: {
-    id: "satellite",
-    kind: "scalar",
-    surface: "ir104",
-    code: "SAT",
-    surfaceCode: "IR",
-    glossKey: "varInfrared",
-    variants: [
-      { id: "ir104", code: "IR 10.4" },
-      { id: "dustrgb", code: "DUST RGB" },
     ],
   },
 };
@@ -486,8 +469,6 @@ const MEMBER_LABEL_KEYS: Record<string, MessageKey> = {
   icetk: "varLabelIcetk",
   htsgw: "varLabelHtsgw",
   perpw: "varLabelPerpw",
-  ir104: "varLabelIr104",
-  dustrgb: "varLabelDustrgb",
 };
 
 /** The instrument-panel code of one isobaric member: "TMP 850MB", "RH

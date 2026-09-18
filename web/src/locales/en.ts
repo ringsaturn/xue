@@ -36,6 +36,8 @@ export const en = {
   /** The satellite tile: the channel's nominal wavelength in µm after the
    * code (SAT IR 10.4). */
   varInfrared: "IR 10.4",
+  // The composite's gloss: RGB is the term in every language.
+  varDustRgb: "RGB",
   /** The surface diagnostics: gust and CAPE are surface fields (SFC,
    * the same detail the codes carry), cloud cover is the whole column. */
   varGust: "SFC",
@@ -87,6 +89,8 @@ export const en = {
   glyphCref: "Z",
   // I for the infrared imagery.
   glyphIr104: "I",
+  // D for the dust composite.
+  glyphDustrgb: "D",
   // N is the synoptic-code letter for total cloud amount; the gust and CAPE
   // take their initials.
   glyphGust: "G",
