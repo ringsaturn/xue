@@ -624,9 +624,21 @@ prune-r2:
 # before the newest ROUNDS_KEEP are deleted — never the one the pointer
 # names, whatever its name sorts as. A viewer on a replaced round has the
 # next round plus a poll interval to be brought forward before its objects
-# go; the top-level prune (`prune-r2`, KEEP=2 for this source) is what
-# keeps the previous run's last round alongside.
+# go. The runs the top-level prune (`prune-r2`, KEEP=2 for these sources)
+# still keeps beside the live one are trimmed to their newest round: their
+# viewers have long moved on, and a satellite round is most of a gigabyte.
+# Rounds are named by the clock minute they were built at (HHMM), so a run
+# whose rounds straddle midnight sorts wrong lexically; `round_order`
+# folds a round more than twelve hours before the newest into the next day.
 ROUNDS_KEEP ?= 2
+define round_order
+from sys import argv
+rounds = argv[1].split()
+newest = max(rounds)
+def key(r): return int(r) + (2400 if int(newest) - int(r) > 1200 else 0)
+print(' '.join(sorted(rounds, key=key, reverse=True)))
+endef
+export round_order
 prune-r2-rounds:
 	@set -e; \
 	pointer=$$($(S3) cp s3://$(R2_BUCKET)/$(R2_PREFIX)/$(LATEST_FILE) - --only-show-errors 2>/dev/null || true); \
@@ -634,14 +646,19 @@ prune-r2-rounds:
 	live=$$(printf '%s' "$$pointer" | jq -r .manifestPath | xargs dirname); \
 	run=$$(printf '%s' "$$pointer" | jq -r .run); \
 	echo "live $(MODEL) round: $$live"; \
-	listing=$$($(S3) ls s3://$(R2_BUCKET)/$(R2_PREFIX)/$(MODEL).$$run/) \
-		|| { echo "listing the run failed, refusing to prune"; exit 1; }; \
-	for round in $$(printf '%s\n' "$$listing" | awk '/ PRE /{print $$2}' \
-		| sed 's:/$$::' | sort -r | tail -n +$$(($(ROUNDS_KEEP) + 1))); do \
-		if [ "$(MODEL).$$run/$$round" != "$$live" ]; then \
-			echo "Deleting $(MODEL).$$run/$$round..."; \
-			$(S3) rm s3://$(R2_BUCKET)/$(R2_PREFIX)/$(MODEL).$$run/$$round/ --recursive --only-show-errors $(DRY_RUN); \
-		fi; \
+	runs=$$($(S3) ls s3://$(R2_BUCKET)/$(R2_PREFIX)/ | awk '/ PRE /{print $$2}' | sed 's:/$$::' | grep "^$(MODEL)\." || true); \
+	for dir in $$runs; do \
+		listing=$$($(S3) ls s3://$(R2_BUCKET)/$(R2_PREFIX)/$$dir/) \
+			|| { echo "listing $$dir failed, refusing to prune"; exit 1; }; \
+		rounds=$$(printf '%s\n' "$$listing" | awk '/ PRE /{print $$2}' | sed 's:/$$::' | grep -E '^[0-9]{4}$$' || true); \
+		[ -n "$$rounds" ] || continue; \
+		if [ "$$dir" = "$(MODEL).$$run" ]; then keep=$(ROUNDS_KEEP); else keep=1; fi; \
+		for round in $$($(PYTHON) -c "$$round_order" "$$rounds" | tr ' ' '\n' | tail -n +$$((keep + 1))); do \
+			if [ "$$dir/$$round" != "$$live" ]; then \
+				echo "Deleting $$dir/$$round..."; \
+				$(S3) rm s3://$(R2_BUCKET)/$(R2_PREFIX)/$$dir/$$round/ --recursive --only-show-errors $(DRY_RUN); \
+			fi; \
+		done; \
 	done
 
 # Print the run the live pointer names, or nothing when there is no pointer.
@@ -674,12 +691,15 @@ live-window:
 # frame once. Frames are immutable and named by their time
 # (`hrpns_<YYYYMMDDHHMMSS>.nc`, `ir104_<YYYYMMDDHHMMSS>.tif`), so a pull
 # takes the hours of the window about to be built (the last HOURS + 1
-# hours), a push sends what is new, and a prune drops the days older than
-# FRAMES_KEEP_DAYS (a case can be built from what is kept). None of this is
-# served to the viewer.
+# hours), a push sends what is new, and a prune drops the hours older than
+# FRAMES_KEEP_HOURS. The default keeps a week, for a feed whose tiles expire
+# at the agency (JMA: a case can only be cut from what is kept); a satellite
+# source keeps its window and a little slack, since NOAA's buckets hold the
+# scans for years and a six-hour window of one imager is two gigabytes of
+# frames a day. None of this is served to the viewer.
 FRAMES_DIR = data/raw/$(MODEL)-frames
 FRAMES_PREFIX = s3://$(R2_BUCKET)/$(R2_PREFIX)/$(MODEL)-frames
-FRAMES_KEEP_DAYS ?= 7
+FRAMES_KEEP_HOURS ?= 168
 pull-r2-frames:
 	@set -e; mkdir -p $(FRAMES_DIR); \
 	includes=$$($(PYTHON) -c "from datetime import datetime, timedelta, UTC; now = datetime.now(UTC); \
@@ -691,14 +711,25 @@ push-r2-frames:
 	@set -e; [ -d $(FRAMES_DIR) ] || { echo "no frame cache at $(FRAMES_DIR)"; exit 0; }; \
 	$(S3) sync $(FRAMES_DIR)/ $(FRAMES_PREFIX)/ --size-only --only-show-errors $(DRY_RUN)
 
+# A stale hour is deleted by its `YYYYMMDDHH` stamp (one rm per hour, the
+# sidecars beside the frames share the stamp); whole stale days go in one
+# rm each, so a cache that has never been pruned costs a listing per day
+# rather than per hour.
 prune-r2-frames:
 	@set -e; \
-	cutoff=$$($(PYTHON) -c "from datetime import datetime, timedelta, UTC; print((datetime.now(UTC) - timedelta(days=$(FRAMES_KEEP_DAYS))).strftime('%Y%m%d'))"); \
+	cutoff=$$($(PYTHON) -c "from datetime import datetime, timedelta, UTC; print((datetime.now(UTC) - timedelta(hours=$(FRAMES_KEEP_HOURS))).strftime('%Y%m%d%H'))"); \
 	listing=$$($(S3) ls $(FRAMES_PREFIX)/ --recursive) || { echo "listing the frame cache failed, refusing to prune"; exit 1; }; \
-	for day in $$(printf '%s\n' "$$listing" | awk '{print $$4}' | sed -n 's:.*/[a-z0-9]*_\([0-9]\{8\}\)[0-9]\{6\}\.\(nc\|tif\)$$:\1:p' | sort -u); do \
-		if [ "$$day" \< "$$cutoff" ]; then \
+	hours=$$(printf '%s\n' "$$listing" | awk '{print $$4}' | sed -n -E 's:.*/[a-z0-9]*_([0-9]{10})[0-9]{4}\.(nc|tif)$$:\1:p' | sort -u); \
+	for day in $$(printf '%s\n' "$$hours" | cut -c1-8 | sort -u); do \
+		if [ "$$day" \< "$$(printf '%s' "$$cutoff" | cut -c1-8)" ]; then \
 			echo "Deleting frames of $$day..."; \
 			$(S3) rm $(FRAMES_PREFIX)/ --recursive --exclude "*" --include "*/*_$$day*" --only-show-errors $(DRY_RUN); \
+		fi; \
+	done; \
+	for hour in $$hours; do \
+		if [ "$$(printf '%s' "$$hour" | cut -c1-8)" = "$$(printf '%s' "$$cutoff" | cut -c1-8)" ] && [ "$$hour" \< "$$cutoff" ]; then \
+			echo "Deleting frames of $$hour..."; \
+			$(S3) rm $(FRAMES_PREFIX)/ --recursive --exclude "*" --include "*/*_$$hour*" --only-show-errors $(DRY_RUN); \
 		fi; \
 	done
 

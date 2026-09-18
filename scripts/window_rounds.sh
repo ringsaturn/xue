@@ -21,7 +21,7 @@
 # agency's tiles), the decoded-frame cache is pulled from the bucket before
 # the first build and pushed back after every upload (`make pull-r2-frames`
 # / `push-r2-frames`), so a fresh runner asks the agency only for the
-# frames nobody has fetched yet, and the frames older than FRAMES_KEEP_DAYS
+# frames nobody has fetched yet, and the frames older than FRAMES_KEEP_HOURS
 # are pruned once an hour.
 #
 # With HANDOVER_CHECK set to a command (scripts/successor_queued.sh: is a
@@ -47,7 +47,8 @@
 # round even when the live one is current), DRY_RUN (--dryrun previews the
 # uploads and prunes), ONCE (true runs one round and exits — a manual
 # check), FRAME_CACHE (true syncs the decoded-frame cache with the bucket),
-# FRAMES_KEEP_DAYS (7), HANDOVER_CHECK (a command; empty runs to the
+# FRAMES_KEEP_HOURS (168: a week; the satellite workflows keep a window and a
+# little slack, since their agencies archive the scans), HANDOVER_CHECK (a command; empty runs to the
 # deadline), WARM (false skips the edge-cache warm-up of each round).
 # PYTHON names the interpreter (the Makefile's default is the project's
 # .venv).
@@ -55,7 +56,7 @@ set -u
 
 model=${MODEL:-mrms}
 frame_cache=${FRAME_CACHE:-false}
-frames_keep_days=${FRAMES_KEEP_DAYS:-7}
+frames_keep_hours=${FRAMES_KEEP_HOURS:-168}
 round_minutes=${ROUND_MINUTES:-5}
 until_minute=${UNTIL_MINUTE:-55}
 hours=${HOURS:-4}
@@ -127,7 +128,7 @@ while :; do
         if [ "$frame_cache" = true ]; then
           make push-r2-frames MODEL=$model DRY_RUN="$dry_run" || echo "::warning::pushing the frame cache failed; the next round tries again"
           if [ "$pruned_frames" != true ]; then
-            make prune-r2-frames MODEL=$model FRAMES_KEEP_DAYS="$frames_keep_days" DRY_RUN="$dry_run" && pruned_frames=true \
+            make prune-r2-frames MODEL=$model FRAMES_KEEP_HOURS="$frames_keep_hours" DRY_RUN="$dry_run" && pruned_frames=true \
               || echo "::warning::pruning the frame cache failed; the next round tries again"
           fi
         fi

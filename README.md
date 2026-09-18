@@ -589,8 +589,10 @@ secret and read in process with the `R2_*` credentials
 dataset bucket's token cannot read it, else that token), with the `cma`
 dependency group synced. The Himawari job is the JMA shape with a
 frame cache of warped GeoTIFFs (`data/raw/himawari-frames/<variable>/`,
-one directory per channel and per Dust RGB gun, kept three days on the
-bucket), a six-hour window (`HOURS=6`), the `satellite` dependency group
+one directory per channel and per Dust RGB gun, kept twelve hours on the
+bucket — the window plus slack, since NOAA archives the scans and a day of
+the cache is some 4.5 GB; `FRAMES_KEEP_HOURS`), a six-hour window
+(`HOURS=6`), the `satellite` dependency group
 (the shachen package the Dust RGB is composed with) and installs
 `gdal-bin` whichever encoder converts, since the fetch stage warps through
 the system GDAL; the two GOES jobs are that workflow with `MODEL` swapped.

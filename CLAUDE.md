@@ -306,8 +306,10 @@ model starts here; the frontend mirror is `FORECAST_MODELS` in
   rounds to twenty past the next hour and yields to the next scheduled
   job through `scripts/successor_queued.sh`). A round is: newest frame vs
   the live `window.json` → build → `make upload-r2 … ROUND=` →
-  `prune-r2-rounds` keeps the run's newest two rounds, `prune-r2 KEEP=2`
-  the previous run. The shell polls the MRMS pointer every two
+  `prune-r2-rounds` keeps the live run's newest two rounds (in clock
+  order: a round is named by its build minute and a run's rounds may
+  straddle midnight) and trims every other run to its newest one,
+  `prune-r2 KEEP=2` the previous run. The shell polls the MRMS pointer every two
   minutes, treats a changed `manifestCrc32` as a new run, and on a rolling
   window keeps the playhead by observation time or follows the end when it
   was at the end (`checkForNewRun` / `resumeOnNewRun` in `main.ts`).
@@ -378,7 +380,8 @@ model starts here; the frontend mirror is `FORECAST_MODELS` in
   outside the grid is refused, since a blank warp is also a lost
   projection), `assemble.py` caches the
   frame (`data/raw/himawari-frames/<variable>/*.tif`, mirrored like the JMA
-  frames) and writes the window series with `gdal_translate -of netCDF`
+  frames but kept twelve hours, `FRAMES_KEEP_HOURS`, since the agencies
+  archive the scans and a day of seven variables is ~4.5 GB) and writes the window series with `gdal_translate -of netCDF`
   through a VRT carrying `NETCDF_DIM_*` metadata, `fetch.py` runs a window
   (`fetch.py::_fetch_satellite_run` in the top-level module dispatches on
   `SourceSpec.platform`). The reference pipeline and the workflow need a
