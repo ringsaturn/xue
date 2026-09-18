@@ -79,6 +79,17 @@ class VariableSpec:
     ``10fg`` while the model post-processes hourly and ``10fg3`` where the
     3-hourly steps beyond 90 hours carry a 3-hour maximum. The pair with
     :attr:`alternate_index_fields` on the NOAA side."""
+    open_meteo: str = ""
+    """The name Open-Meteo gives this quantity in its open data
+    (``temperature_2m``, ``wind_gusts_10m``), empty when the variable is not
+    fetched from there. It is another centre's spelling, like
+    :attr:`ecmwf_param` and :attr:`mrms_product`, and it is used twice: the
+    fetch names the variable with it (``om2nc fetch --var``), and the
+    converter opens the series it wrote by it, since the NetCDF variable
+    inside the file keeps the Open-Meteo name while the file itself is
+    named by the Xue id (:func:`xuebuild.observation.series_files`).
+    Mirrored in the native encoder's ``variables.rs``, which reads the
+    series too."""
     mrms_product: str = ""
     """The MRMS product directory the variable is fetched from
     (``CONUS/<product>/<day>/`` on the ``noaa-mrms-pds`` bucket, one whole
@@ -174,6 +185,7 @@ VARIABLES: dict[str, VariableSpec] = {
         grib_element="TMP",
         index_field=":TMP:2 m above ground:",
         ecmwf_param="2t",
+        open_meteo="temperature_2m",
         grib2_category=0,
         grib2_number=0,
         grib2_level_type=103,
@@ -224,6 +236,31 @@ VARIABLES: dict[str, VariableSpec] = {
         grib2_alternates=(RecordAlternate(0, 1, 52, 1, statistical=1, gdal_unit="kg/(m^2*s)"),),
         gdal_unit="-",
     ),
+    # Open-Meteo's ``precipitation`` is a third arrival shape: the total that
+    # fell over the interval since the model's *previous native output time*
+    # (one hour to +90 h on IFS HRES, three to +144, six beyond), in
+    # millimetres. That is GRIB2's APCP, 0/1/8 accumulated (statistical
+    # process 1) on the ground surface — an accumulation over an interval
+    # rather than over the run, which is why it is not ECMWF's ``tp``. Like
+    # tp and prate_ave it is an input-only variable: the converter divides it
+    # by the interval into prate (``SourceSpec.interval_precipitation``) and
+    # apcp itself never reaches a bundle. GFS pgrb2 carries APCP records too;
+    # no source fetches them.
+    "apcp": VariableSpec(
+        id="apcp",
+        label="Total precipitation",
+        output_unit="mm",
+        value_range=(0, 1000),
+        grib_element="APCP",
+        index_field=":APCP:surface:",
+        open_meteo="precipitation",
+        grib2_category=1,
+        grib2_number=8,
+        grib2_level_type=1,
+        grib2_level_value=0.0,
+        grib2_statistical=1,
+        gdal_unit="kg/(m^2)",
+    ),
     # GFS sflux has no instantaneous precipitation rate: PRATE arrives as the
     # mean rate over an averaging window that resets every 6 hours. It is an
     # input-only variable — the converter de-averages consecutive frames into
@@ -252,6 +289,7 @@ VARIABLES: dict[str, VariableSpec] = {
         grib_element="DSWRF",
         index_field=":DSWRF:surface:",
         excluded_index_phrases=("ave fcst",),
+        open_meteo="shortwave_radiation",
         grib2_category=4,
         grib2_number=192,
         grib2_level_type=1,
@@ -268,6 +306,7 @@ VARIABLES: dict[str, VariableSpec] = {
         grib_element="UGRD",
         index_field=":UGRD:10 m above ground:",
         ecmwf_param="10u",
+        open_meteo="wind_u_component_10m",
         grib2_category=2,
         grib2_number=2,
         grib2_level_type=103,
@@ -282,6 +321,7 @@ VARIABLES: dict[str, VariableSpec] = {
         grib_element="VGRD",
         index_field=":VGRD:10 m above ground:",
         ecmwf_param="10v",
+        open_meteo="wind_v_component_10m",
         grib2_category=2,
         grib2_number=3,
         grib2_level_type=103,
@@ -307,6 +347,7 @@ VARIABLES: dict[str, VariableSpec] = {
         index_field=":PRMSL:mean sea level:",
         alternate_index_fields=(":MSLMA:mean sea level:",),
         ecmwf_param="msl",
+        open_meteo="pressure_msl",
         grib2_category=3,
         grib2_number=1,
         grib2_aliases=((0, 3, 0), (0, 3, 198)),
@@ -372,6 +413,7 @@ VARIABLES: dict[str, VariableSpec] = {
         index_field=":GUST:surface:",
         ecmwf_param="10fg",
         ecmwf_alternate_params=("10fg3",),
+        open_meteo="wind_gusts_10m",
         grib2_category=2,
         grib2_number=22,
         grib2_level_type=1,
@@ -398,6 +440,7 @@ VARIABLES: dict[str, VariableSpec] = {
         index_field=":TCDC:entire atmosphere:",
         excluded_index_phrases=("ave fcst",),
         ecmwf_param="tcc",
+        open_meteo="cloud_cover",
         grib2_category=6,
         grib2_number=1,
         grib2_level_type=10,
@@ -419,6 +462,7 @@ VARIABLES: dict[str, VariableSpec] = {
         grib_element="CAPE",
         index_field=":CAPE:surface:",
         ecmwf_param="mucape",
+        open_meteo="cape",
         grib2_category=7,
         grib2_number=6,
         grib2_level_type=1,
@@ -435,6 +479,7 @@ VARIABLES: dict[str, VariableSpec] = {
         value_range=(0, 25),
         grib_element="VIS",
         index_field=":VIS:surface:",
+        open_meteo="visibility",
         grib2_category=19,
         grib2_number=0,
         grib2_level_type=1,
@@ -452,6 +497,7 @@ VARIABLES: dict[str, VariableSpec] = {
         grib_element="DPT",
         index_field=":DPT:2 m above ground:",
         ecmwf_param="2d",
+        open_meteo="dew_point_2m",
         grib2_category=0,
         grib2_number=6,
         grib2_level_type=103,
@@ -493,6 +539,7 @@ VARIABLES: dict[str, VariableSpec] = {
         index_field=":LCDC:low cloud layer:",
         excluded_index_phrases=("ave fcst",),
         ecmwf_param="lcc",
+        open_meteo="cloud_cover_low",
         grib2_category=6,
         grib2_number=3,
         grib2_level_type=214,
@@ -508,6 +555,7 @@ VARIABLES: dict[str, VariableSpec] = {
         index_field=":MCDC:middle cloud layer:",
         excluded_index_phrases=("ave fcst",),
         ecmwf_param="mcc",
+        open_meteo="cloud_cover_mid",
         grib2_category=6,
         grib2_number=4,
         grib2_level_type=224,
@@ -523,6 +571,7 @@ VARIABLES: dict[str, VariableSpec] = {
         index_field=":HCDC:high cloud layer:",
         excluded_index_phrases=("ave fcst",),
         ecmwf_param="hcc",
+        open_meteo="cloud_cover_high",
         grib2_category=6,
         grib2_number=5,
         grib2_level_type=234,
@@ -551,6 +600,7 @@ VARIABLES: dict[str, VariableSpec] = {
         grib_element="TMP",
         index_field=":TMP:surface:",
         ecmwf_param="skt",
+        open_meteo="surface_temperature",
         grib2_category=0,
         grib2_number=0,
         grib2_level_type=1,
@@ -580,6 +630,7 @@ VARIABLES: dict[str, VariableSpec] = {
         grib_element="ICETK",
         index_field=":ICETK:surface:",
         ecmwf_param="sithick",
+        open_meteo="sea_ice_thickness",
         grib2_discipline=10,
         grib2_category=2,
         grib2_number=1,

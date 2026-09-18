@@ -2,12 +2,14 @@ PYTHON ?= $(shell test -x .venv/bin/python && echo .venv/bin/python || echo pyth
 # RUN ?= 2026081506
 RUN ?= latest
 # Last forecast hour to build; empty takes the whole axis the model publishes
-# (240 for the global models, 18 for HRRR).
+# (240 for the global models, 360 for AIFS and IFS HRES, 18 for HRRR).
 HOURS ?=
 FORCE ?=
 PROFILE ?= balanced
 # Forecast source: gfs (NOAA 0.25°, hourly), ecmwf (IFS open data, 3-hourly),
 # aifs (ECMWF AIFS Single open data, 6-hourly to F360),
+# ifshres (ECMWF IFS HRES at 0.1° through Open-Meteo, hourly to F090 and on
+# to F360, 00Z and 12Z only, fetched with the om2nc binary),
 # sflux (GFS surface flux, native ~13 km, hourly, adds the dswrf layer), or
 # hrrr (NOAA HRRR, 3 km over the contiguous US, a cycle every hour, to F18);
 # mrms (the NOAA radar mosaic, an observation every two minutes), jma
@@ -141,6 +143,8 @@ spike-webcodecs:
 # Default build: per-variable Xue bundles plus the WebGL2 frontend.
 # MODEL=ecmwf builds the ECMWF IFS open data feed instead of GFS;
 # MODEL=aifs builds the ECMWF AIFS Single open data feed;
+# MODEL=ifshres builds the ECMWF IFS HRES 0.1° feed through Open-Meteo
+# (needs the om2nc binary on PATH; see README's Requirements);
 # MODEL=sflux builds the native-resolution GFS surface flux feed;
 # MODEL=hrrr builds the hourly 3 km HRRR feed over the contiguous US.
 mvp: check install wasm

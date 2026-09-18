@@ -124,7 +124,12 @@ class SourceRegistryTests(unittest.TestCase):
         self.assertEqual(CMA_PRODUCT, "RADAR_L3_MST_CREF_GISJPG_Tiles_CR")
 
     def test_the_series_file_sources_are_all_fetched_now(self) -> None:
-        self.assertEqual([spec.id for spec in SOURCES.values() if spec.series_file], ["cma", "jma", "himawari", "goeseast", "goeswest", "meteosat"])
+        # The IFS HRES run is a series-file source too, and the one that is
+        # a forecast rather than an observation (tests/test_ifshres.py).
+        self.assertEqual(
+            [spec.id for spec in SOURCES.values() if spec.series_file],
+            ["ifshres", "cma", "jma", "himawari", "goeseast", "goeswest", "meteosat"],
+        )
         self.assertEqual([spec.id for spec in SOURCES.values() if spec.observation], ["cma", "mrms", "jma", "himawari", "goeseast", "goeswest", "meteosat"])
         self.assertTrue(all(spec.fetched and spec.live for spec in SOURCES.values()))
 

@@ -1,0 +1,85 @@
+name: publish ifshres
+
+# ECMWF IFS HRES, the centre's deterministic high-resolution forecast on its
+# native ~9 km grid, as Open-Meteo forwards the real-time archive: surface
+# fields only, resampled once on the fetch side onto a 0.1° global grid
+# (3600 × 1801), hourly to F090, 3-hourly to F144 and 6-hourly to F360 —
+# 145 frames from the 00Z and 12Z cycles alone (the 06Z and 18Z cycles stop
+# at F144 and a source carries one horizon). The pipeline lives in the
+# reusable publish.yml; this file only owns the schedule and the manual
+# knobs.
+#
+# The fetch stage is om2nc, a standalone binary publish.yml installs for
+# this source alone, pinned by version and sha256. It reads the `.om` files
+# byte range by byte range and writes one CF NetCDF series per variable, the
+# same series-file input the JMA and CMA sources arrive as; xuebuild runs it
+# as a subprocess, the way it runs gdal_translate and ffmpeg. That boundary
+# is also a licence boundary: om2nc is GPL-2.0-only and lives in its own
+# repository (ringsaturn/om2nc), and nothing in this tree imports, links or
+# vendors it.
+
+on:
+  schedule:
+    # The 00Z run's first step lands about 05:26Z and its `meta.json`
+    # completion marker about 06:25Z (measured 2026-09-18), so a cycle is
+    # ready some six and a half hours after it; these times leave a quarter
+    # of an hour of slack. `--run latest` walks back over the 12-hourly
+    # cycle grid, so a late cycle is skipped rather than half-published and
+    # picked up by the next pass.
+    - cron: "40 6,18 * * *"
+    # A second idempotent pass recovers from a temporary upstream outage.
+    # publish.yml exits early when the first pass already made the run live.
+    - cron: "40 7,19 * * *"
+  workflow_dispatch:
+    inputs:
+      run:
+        description: "Cycle to publish: latest or YYYYMMDDHH (00Z or 12Z)"
+        type: string
+        default: latest
+      profile:
+        description: "Quantization/compression profile"
+        type: choice
+        options: [balanced, quality, compact]
+        default: balanced
+      keep:
+        description: "Published runs to keep on R2 (1 = live run only)"
+        type: string
+        default: "1"
+      force:
+        description: "Rebuild even when R2 already serves this run"
+        type: boolean
+        default: false
+      dry_run:
+        description: "Build and report what pruning would delete, but write nothing to R2"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-ifshres
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    # Scheduled runs on forks would publish into a bucket they cannot reach.
+    if: github.event_name != 'schedule' || github.repository == 'ringsaturn/xue'
+    uses: ./.github/workflows/publish.yml
+    with:
+      model: ifshres
+      run: ${{ inputs.run || 'latest' }}
+      profile: ${{ inputs.profile || 'balanced' }}
+      keep: ${{ inputs.keep || '1' }}
+      force: ${{ inputs.force || false }}
+      dry_run: ${{ inputs.dry_run || false }}
+      # Fifteen bundles, one job each: the Open-Meteo bucket is read by byte
+      # range and a job downloads only its own variables, so the wall time is
+      # one bundle's fetch plus its 145 frames of 6.5 M cells rather than
+      # every bundle's in a row.
+      max_jobs: 16
+      # Published as Zarr stores alone (docs/zarr-profile.md); the .xue
+      # container is retired once the store is derived from it.
+      zarr: true
+      container: false
+    secrets: inherit

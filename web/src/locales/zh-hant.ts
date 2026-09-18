@@ -101,6 +101,7 @@ export const zhHant: Record<MessageKey, string> = {
   creditsGfs: "預報資料 · GFS 0.25° 與 SFLUX",
   creditsHrrr: "預報資料 · HRRR 3 公里，美國本土",
   creditsEcmwf: "含經修改的 ECMWF 資料 · CC BY 4.0",
+  creditsIfsHres: "改編自 ECMWF IFS，由 ECMWF 提供，依 CC BY 4.0 授權 · 經 Open-Meteo 轉發 · IFS HRES 約 9 公里，重新取樣至 0.1°",
   creditsMrms: "雷達觀測 · MRMS，美國本土",
   creditsJma: "雷達降水 · 氣象廳臨近預報，日本（重採樣）",
   creditsHimawari: "衛星影像 · 向日葵 9 號 AHI，日本氣象廳，經 NOAA 開放資料（重投影）",

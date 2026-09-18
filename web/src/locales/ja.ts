@@ -101,6 +101,7 @@ export const ja: Record<MessageKey, string> = {
   creditsGfs: "予報データ · GFS 0.25° および SFLUX",
   creditsHrrr: "予報データ · HRRR 3 KM、米国本土",
   creditsEcmwf: "改変した ECMWF データを含む · CC BY 4.0",
+  creditsIfsHres: "ECMWF IFS を ECMWF が提供、CC BY 4.0 に基づき改変 · Open-Meteo 経由 · IFS HRES 約 9 km、0.1° に再サンプリング",
   creditsMrms: "レーダー観測 · MRMS、米国本土",
   creditsJma: "レーダー降水 · 気象庁ナウキャスト、日本（再格子化）",
   creditsHimawari: "衛星画像 · ひまわり9号 AHI、気象庁、NOAA オープンデータ経由（再投影）",

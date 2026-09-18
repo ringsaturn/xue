@@ -14,7 +14,7 @@ export type ForecastVariableId = "tmp2m" | "prate";
  * The CMA radar mosaic has no live feed: it is an observation archive that
  * reaches the app only as showcase cases. The MRMS mosaic and the JMA
  * nowcast are observations *and* live, each a rolling window. */
-export type ForecastModelId = "gfs" | "ecmwf" | "aifs" | "sflux" | "hrrr" | "cma" | "mrms" | "jma" | "himawari" | "goeseast" | "goeswest" | "meteosat" | "geo";
+export type ForecastModelId = "gfs" | "ecmwf" | "aifs" | "ifshres" | "sflux" | "hrrr" | "cma" | "mrms" | "jma" | "himawari" | "goeseast" | "goeswest" | "meteosat" | "geo";
 
 export interface ForecastModelInfo {
   id: ForecastModelId;
@@ -95,6 +95,11 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
   // ECMWF's data-driven model, AIFS Single, from the same open data service
   // on the same 0.25° grid: six-hourly to 360 hours from every cycle.
   aifs: { id: "aifs", label: "AIFS", product: "aifs-single-0p25", latestFilename: "latest-aifs.json" },
+  // ECMWF's operational IFS HRES on its native ~9 km grid, resampled to
+  // 0.1° by Open-Meteo's forwarding of the centre's real-time archive:
+  // surface fields only, hourly to F090 and out to F360, from the 00Z and
+  // 12Z cycles alone.
+  ifshres: { id: "ifshres", label: "ECMWF-HRES", product: "ifs-hres-0p1", latestFilename: "latest-ifshres.json" },
   // NOAA HRRR, 3 km over the contiguous United States, a new cycle every
   // hour: a regional model, resampled by the encoder from its Lambert
   // conformal grid onto a 0.03° one over the domain's footprint.
@@ -273,11 +278,11 @@ export function isObservationModel(model: ForecastModelId): boolean {
   return FORECAST_MODELS[model].observation === true;
 }
 
-/** The model switch's entries, in order: the five forecasts, the seven
+/** The model switch's entries, in order: the six forecasts, the seven
  * rolling observation windows (MRMS, the JMA nowcast, the CMA mosaic and
  * the four geostationary imagers) and the geostationary mosaic, a view
  * over the imagers with no feed of its own. */
-export const FORECAST_MODEL_IDS: readonly ForecastModelId[] = ["gfs", "sflux", "ecmwf", "aifs", "hrrr", "mrms", "jma", "cma", "himawari", "goeseast", "goeswest", "meteosat", "geo"];
+export const FORECAST_MODEL_IDS: readonly ForecastModelId[] = ["gfs", "sflux", "ecmwf", "aifs", "ifshres", "hrrr", "mrms", "jma", "cma", "himawari", "goeseast", "goeswest", "meteosat", "geo"];
 
 /** The members of a mosaic this build knows, in the mosaic's order; a
  * member id the table lacks (a dataset this shell predates) is skipped the

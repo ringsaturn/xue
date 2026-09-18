@@ -62,7 +62,7 @@ class PlaneSource:
     """How gdal_translate must read one file's bands.
 
     GRIB records arrive already in physical units with every point valid, so
-    the defaults do nothing. A packed NetCDF observation file needs its
+    the defaults do nothing. A packed NetCDF series needs its
     ``scale_factor``/``add_offset`` applied (``-unscale``) and its fill value
     turned into a real number the codebook can quantize — the format carries
     no bitmap, so missing data has to become a value."""
@@ -73,15 +73,22 @@ class PlaneSource:
     band's nodata value through ``-unscale`` untouched, so the fill can arrive
     either raw or scaled; both are listed, and neither is a value the variable
     can physically take."""
+    fill_nan: bool = False
+    """True when the file marks missing data with NaN itself (a CF
+    ``_FillValue`` of NaN, which is how the Open-Meteo series spell the land
+    under ``sea_ice_thickness``). A NaN equals nothing, not even itself, so
+    it can never be a :attr:`fill_values` entry; it is tested for on its own
+    and replaced the same way. Mirrored by ``encode/model.rs``
+    (``f64::is_nan``)."""
     fill_replacement: float = 0.0
     """What missing data becomes; the bottom of the variable's codebook."""
 
     def apply_fill(self, values: np.ndarray) -> np.ndarray:
-        if not self.fill_values:
+        if not self.fill_values and not self.fill_nan:
             return values
         # Scaling is float arithmetic, so match with a relative tolerance
-        # rather than for equality.
-        missing = np.zeros(values.shape, dtype=bool)
+        # rather than for equality; a NaN fill matches by being one.
+        missing = np.isnan(values) if self.fill_nan else np.zeros(values.shape, dtype=bool)
         for fill in self.fill_values:
             missing |= np.isclose(values, fill, rtol=1e-6, atol=1e-6)
         return np.where(missing, self.fill_replacement, values)

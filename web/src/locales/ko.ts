@@ -106,6 +106,7 @@ export const ko: Record<MessageKey, string> = {
   creditsGfs: "예보 자료 · GFS 0.25° 및 SFLUX",
   creditsHrrr: "예보 자료 · HRRR 3 KM, 미국 본토",
   creditsEcmwf: "수정된 ECMWF 자료 포함 · CC BY 4.0",
+  creditsIfsHres: "ECMWF IFS를 각색, 제공 ECMWF, CC BY 4.0 라이선스 · OPEN-METEO 경유 · IFS HRES 약 9 KM, 0.1°로 재샘플링",
   creditsMrms: "레이더 관측 · MRMS, 미국 본토",
   creditsJma: "레이더 강수 · 기상청 실황예보, 일본 (재격자화)",
   creditsHimawari: "위성 영상 · 히마와리 9호 AHI, 일본 기상청, NOAA 오픈 데이터 경유 (재투영)",

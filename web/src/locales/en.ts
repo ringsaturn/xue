@@ -190,6 +190,10 @@ export const en = {
   creditsGfs: "FORECAST DATA · GFS 0.25° AND SFLUX",
   creditsHrrr: "FORECAST DATA · HRRR 3 KM, CONTIGUOUS US",
   creditsEcmwf: "CONTAINS MODIFIED ECMWF DATA · CC BY 4.0",
+  /** The IFS HRES line carries the attribution ECMWF's licence asks for on
+   * an adapted work, and names Open-Meteo, which forwards the centre's
+   * real-time archive and is where the resampling to 0.1° happens. */
+  creditsIfsHres: "ADAPTED FROM ECMWF IFS BY ECMWF, LICENSED UNDER CC BY 4.0 · VIA OPEN-METEO · IFS HRES ~9 KM, RESAMPLED TO 0.1°",
   creditsMrms: "RADAR OBSERVATIONS · MRMS, CONTIGUOUS US",
   /** The JMA line carries the attribution its terms of use ask for (a
    * source named and the processing noted); the sheet row's name is the

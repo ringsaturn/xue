@@ -970,7 +970,10 @@ class SourceLadderTests(unittest.TestCase):
         self.assertEqual(satellites, {"himawari", "goeseast", "goeswest", "meteosat"})
         for source_id, factors in ladders.items():
             with self.subTest(source=source_id):
-                self.assertEqual(factors, (2, 4, 8) if source_id in satellites else (2,))
+                # The 0.1° IFS HRES plane is 6.5 M cells, past the shell's frame
+                # budget, so it takes two rungs; every other grid the half.
+                expected = (2, 4, 8) if source_id in satellites else (2, 4) if source_id == "ifshres" else (2,)
+                self.assertEqual(factors, expected)
 
 
 class TimeMetadataTests(unittest.TestCase):

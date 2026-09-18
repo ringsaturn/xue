@@ -101,6 +101,8 @@ def _model_argument(parser: argparse.ArgumentParser, *, fetched_only: bool = Tru
         help=(
             "data source: NOAA GFS 0.25 degree (hourly), ECMWF IFS open data "
             "(3-hourly), ECMWF AIFS Single open data (6-hourly to 360), "
+            "ifshres, ECMWF IFS HRES at 0.1 degree from its native 9 km grid via Open-Meteo "
+            "(hourly to 90, 3-hourly to 144, 6-hourly to 360; 00Z and 12Z, fetched through the om2nc tool), "
             "GFS surface flux on the native ~13 km grid (hourly, adds dswrf), "
             "NOAA HRRR over the contiguous US (3 km, a cycle every hour, hourly to 18), "
             "NOAA MRMS, the radar mosaic over the contiguous US (an observation every "

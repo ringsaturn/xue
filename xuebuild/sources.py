@@ -30,10 +30,16 @@ the agency's six-minute mosaics as one Zarr store per UTC day, and a
 window is read back out of those stores as one NetCDF series
 (:mod:`xuebuild.cmaarchive`); a showcase case may still be built from a
 local file cut from the same mosaics.
+A ``series_file`` source need not be an observation: ECMWF's IFS HRES on its
+native 9 km grid arrives as one NetCDF series per variable too, resampled off
+the Open-Meteo bucket by the ``om2nc`` tool (:mod:`xuebuild.om2nccli`), and is
+an ordinary forecast cycle in every other respect.
 ECMWF has no native rate field; its accumulated ``tp`` input is de-accumulated
 into prate by the converter. GFS sflux has only interval-averaged PRATE (the
 averaging window resets every 6 hours); the converter de-averages consecutive
-frames into hourly rates.
+frames into hourly rates. Open-Meteo's ``precipitation`` is a third shape, the
+total over the interval since the previous step (``interval_precipitation``),
+which becomes a rate by one division.
 """
 
 from __future__ import annotations
@@ -102,8 +108,8 @@ class Downsample:
 @dataclass(frozen=True)
 class SourceSpec:
     id: str
-    """CLI / URL / directory id: "gfs", "ecmwf", "aifs", "sflux", "hrrr", "cma", "mrms", "jma", "himawari",
-    "goeseast", "goeswest" or "meteosat"."""
+    """CLI / URL / directory id: "gfs", "ecmwf", "aifs", "ifshres", "sflux", "hrrr", "cma", "mrms", "jma",
+    "himawari", "goeseast", "goeswest" or "meteosat"."""
     manifest_model: str
     """The manifest and bundle-metadata ``model`` string."""
     product: str
@@ -134,6 +140,15 @@ class SourceSpec:
     """True when precipitation arrives as an interval-averaged rate whose
     averaging window resets every :attr:`average_window_hours` (GFS sflux
     ``PRATE ave``) and must be de-averaged into per-step mean rates."""
+    interval_precipitation: bool = False
+    """True when precipitation arrives as the total that fell over the
+    interval since the previous frame (Open-Meteo's ``precipitation``, in
+    millimetres, which every ``.om`` file describes since the model's last
+    native output time) and becomes a rate by one division
+    (:func:`xuebuild.binconvert.interval_rate`). The third arrival shape
+    beside :attr:`accumulated_precipitation` (a run total, differenced) and
+    :attr:`averaged_precipitation` (a window average, de-averaged); a source
+    declares at most one."""
     average_window_hours: int = 6
     """Length of the averaging-window reset cycle for averaged precipitation."""
     optional_at_analysis: tuple[str, ...] = ()
@@ -162,6 +177,14 @@ class SourceSpec:
     ``himawari``. The fetch lists, warps and stacks a window through that
     platform's reader and the source is otherwise a ``series_file``
     observation like the JMA nowcast. None for every other source."""
+    open_meteo: str | None = None
+    """For a source fetched from the Open-Meteo open data bucket, the model
+    directory under ``data_spatial/`` its runs live in (``ecmwf_ifs``). The
+    fetch dispatches on it (:func:`xuebuild.fetch.fetch_run`), asks the
+    ``om2nc`` tool for one CF NetCDF series per variable
+    (:mod:`xuebuild.om2nccli`) and names each variable with the registry's
+    :attr:`~xuebuild.variables.VariableSpec.open_meteo`. None for every
+    other source."""
     grid_step: float | None = None
     """For a satellite source, the step of the plate carrée grid the
     frames are warped onto, in degrees; the extent is the platform's
@@ -259,13 +282,17 @@ class SourceSpec:
     ``00:02``. It is also the ``unitSeconds`` such a bundle declares, since
     no coarser unit fits its axis."""
     series_file: bool = False
-    """True when a run of the source is one NetCDF file holding the whole
-    series, one band per time, read through :mod:`xuebuild.observation`
-    (the CMA mosaic read out of its archive; the JMA
-    nowcast assembled by ``jma-radar``), rather than one GRIB per frame
-    matched record by record. Orthogonal to :attr:`fetched`: both are
-    written by the fetch, and a showcase case of the CMA mosaic may name a
-    local file cut from the same mosaics instead."""
+    """True when a run of the source is one NetCDF file per variable holding
+    that variable's whole series, one band per time, read through
+    :mod:`xuebuild.observation` (the CMA mosaic read out of its archive; the
+    JMA nowcast assembled by ``jma-radar``; a satellite window; the IFS HRES
+    run ``om2nc`` resampled off the Open-Meteo bucket), rather than one GRIB
+    per frame matched record by record. Orthogonal to :attr:`observation`:
+    ``ifshres`` is a forecast whose frames arrive this way, so its series
+    carry a run time and lead times like any cycle's. Orthogonal to
+    :attr:`fetched` too: both are written by the fetch, and a showcase case
+    of the CMA mosaic may name a local file cut from the same mosaics
+    instead."""
     downsample: Downsample | None = None
     """Set when the source is published on a grid coarser than it arrives
     on (:class:`Downsample`). Like ``regrid``, ``production_grid`` and
@@ -628,6 +655,94 @@ SOURCES: dict[str, SourceSpec] = {
             "htsgw",
         ),
         bundle_vector_ids=("wind10m", "wind925", "wind850", "wind250", "qflux850", "wave"),
+        video=False,
+    ),
+    # ECMWF IFS HRES, the deterministic high-resolution forecast on its
+    # native O1280 grid (~9 km), as Open-Meteo redistributes it: one ``.om``
+    # file per time step on ``s3://openmeteo/data_spatial/ecmwf_ifs/``, every
+    # variable of a step in one file. The ``om2nc`` tool
+    # (:mod:`xuebuild.om2nccli`) reads the byte ranges of the variables asked
+    # for, resamples the reduced Gaussian grid onto a regular 0.1° one by
+    # nearest neighbour — the cell selection the Open-Meteo API itself makes
+    # — and writes one CF NetCDF series per variable, so this is a
+    # ``series_file`` source (the first that is not an observation) and
+    # neither encoder ever learns the Gaussian arithmetic. Two cycles a day
+    # (00Z and 12Z, ``cycle_hours`` 12: the 06/18Z cycles reach only 144
+    # hours, which one ``horizon_hours`` cannot express), landing about six
+    # and a half hours after the cycle. The variable set is the GFS surface
+    # diagnostics and the sflux radiation, so a layer survives a switch
+    # between the models; Open-Meteo carries no pressure levels, no waves and
+    # no ice cover, which is what the 0.25° ``ecmwf`` source keeps providing.
+    # Precipitation arrives as the total over the interval since the previous
+    # native step (``interval_precipitation``, the registry's ``apcp``), the
+    # radiation as that interval's mean and the gust as its maximum, which is
+    # what ``statistical_processes`` declares; none of the three exists at
+    # the analysis.
+    "ifshres": SourceSpec(
+        id="ifshres",
+        manifest_model="ECMWF-HRES",
+        product="ifs-hres-0p1",
+        latest_filename="latest-ifshres.json",
+        # Hourly through 90 hours, three-hourly to 144, six-hourly to 360:
+        # 145 frames, the run's own native output cadence.
+        steps=((90, 1), (144, 3), (360, 6)),
+        input_variable_ids=(
+            "tmp2m",
+            "apcp",
+            "ugrd10m",
+            "vgrd10m",
+            "dswrf",
+            "prmsl",
+            "gust",
+            "tcdc",
+            "lcdc",
+            "mcdc",
+            "hcdc",
+            "cape",
+            "dpt2m",
+            "vis",
+            "tmpsfc",
+            "icetk",
+        ),
+        accumulated_precipitation=False,
+        interval_precipitation=True,
+        optional_at_analysis=("apcp", "dswrf", "gust"),
+        statistical_processes=(("prate", 0), ("dswrf", 0), ("gust", 2)),
+        bundle_scalar_ids=(
+            "tmp2m",
+            "prate",
+            "dswrf",
+            "prmsl",
+            "gust",
+            "tcdc",
+            "lcdc",
+            "mcdc",
+            "hcdc",
+            "cape",
+            "vis",
+            "dpt2m",
+            "tmpsfc",
+            "icetk",
+        ),
+        bundle_vector_ids=("wind10m",),
+        # The 0.1° global grid om2nc resamples onto: −180 to 179.9 and both
+        # poles, the 0.25° grid's shape at two and a half times its step.
+        production_grid=(3600, 1801),
+        # 90 x 95 cells is 9° x 9.5° — 40 x 19 = 760 tiles, the last row 91
+        # cells high (1801 = 18 x 95 + 91). The tidy divisors of 1800 leave a
+        # one-row tile at the south pole instead, which is why the height is
+        # not one of them.
+        tile=(90, 95),
+        # Two rungs: a full plane is 6.5 M cells, past the shell's frame
+        # budget, so a view of the whole world plays the half (1800 x 901,
+        # about a full GFS plane) or the quarter on a small device.
+        variant_factors=(2, 4),
+        # om2nc fetches the steps of one variable in parallel; the bucket is
+        # S3 and answers a burst.
+        fetch_concurrency=8,
+        series_file=True,
+        open_meteo="ecmwf_ifs",
+        cycle_hours=12,
         video=False,
     ),
     # GFS surface flux files on the native ~13 km T1534 Gaussian grid

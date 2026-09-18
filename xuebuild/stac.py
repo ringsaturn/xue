@@ -394,6 +394,44 @@ def _source_prose(source: SourceSpec) -> dict[str, Any]:
                 }
             ],
         },
+        "ifshres": {
+            "title": "ECMWF IFS HRES 0.1° (via Open-Meteo)",
+            "description": (
+                "The ECMWF Integrated Forecasting System's deterministic high-resolution forecast on "
+                "its native O1280 grid (about 9 km), as Open-Meteo redistributes it: the surface "
+                "fields, resampled by nearest neighbour onto a regular 0.1° global grid (3600 × 1801 "
+                "cells), hourly to 90 hours, three-hourly to 144 and six-hourly to 360, from the 00Z "
+                "and 12Z cycles. Adapted from ECMWF IFS by ECMWF, licensed under CC BY 4.0, via "
+                "Open-Meteo (open-meteo.com); the published bundles are a quantized derivative."
+            ),
+            "license": "CC-BY-4.0",
+            "providers": [
+                {
+                    "name": "ECMWF",
+                    "description": "The forecast itself, from the real-time open data catalogue.",
+                    "roles": ["producer", "licensor"],
+                    "url": "https://www.ecmwf.int/en/forecasts/datasets/open-data",
+                },
+                {
+                    "name": "Open-Meteo",
+                    "description": (
+                        "Redistributes the run on its native grid as one .om file per time step, "
+                        "under CC BY 4.0."
+                    ),
+                    "roles": ["host", "processor"],
+                    "url": "https://open-meteo.com/en/docs/open-data",
+                },
+                _XUE_PROVIDER,
+            ],
+            "links": [
+                {
+                    "rel": "license",
+                    "href": "https://creativecommons.org/licenses/by/4.0/",
+                    "type": "text/html",
+                    "title": "Creative Commons Attribution 4.0",
+                }
+            ],
+        },
         "hrrr": {
             "title": "NOAA HRRR 3 km",
             "description": (

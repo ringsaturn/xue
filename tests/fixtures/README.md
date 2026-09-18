@@ -200,6 +200,40 @@ tile, T036 of the 13:50 UTC scan, four fifths of which the instrument never
 delivered: ISatSS writes such a segment as 0 K rather than as its fill
 value, and the reader's lookup table is tested on it.
 
+`ifshres.2026091800/` holds the first four steps of the ECMWF IFS HRES
+2026-09-18 00Z cycle as `om2nc` writes them: one CF NetCDF per variable,
+`ifshres.2026091800.<xue id>.nc`, the variable inside keeping Open-Meteo's
+own name (`temperature_2m`), 81 by 81 cells of the published 0.1° grid over
+the East China Sea, Kyushu and western Honshu (130E to 138E, 30N to 38N).
+Sixteen files, the source's whole input list. The thirteen instantaneous
+quantities carry steps 0 to 3; `apcp`, `dswrf` and `gust` carry 1 to 3,
+because the `.om` files hold no interval quantity at the analysis — which
+is the axis rule (`optional_at_analysis`) the fixture exists to exercise.
+The box was chosen for what it holds: a typhoon's rain band (`precipitation`
+to 42.9 mm in an hour), visibilities from 420 m to 60 km — past the top of
+the codebook — and land under about a quarter of it, which
+`sea_ice_thickness` writes as NaN, so the NaN fill rule runs against real
+points. Cut with om2nc 0.1.0 on the day of the run (the bucket keeps
+`data_spatial/` for about seven days), one call per variable:
+
+```sh
+om2nc -q fetch --model ecmwf_ifs --init 2026-09-18T00Z --step 0,1,2,3 \
+  --var temperature_2m --bbox 130,30,138,38 --resolution 0.1 \
+  --deflate 6 --overwrite -o tests/fixtures/ifshres.2026091800/ifshres.2026091800.tmp2m.nc
+```
+
+and the same for `precipitation` (apcp), `wind_u_component_10m` /
+`wind_v_component_10m` (ugrd10m / vgrd10m), `shortwave_radiation` (dswrf),
+`pressure_msl` (prmsl), `wind_gusts_10m` (gust), `cloud_cover` /
+`cloud_cover_low` / `cloud_cover_mid` / `cloud_cover_high` (tcdc / lcdc /
+mcdc / hcdc), `cape`, `dew_point_2m` (dpt2m), `visibility` (vis),
+`surface_temperature` (tmpsfc) and `sea_ice_thickness` (icetk), with
+`--step 1,2,3` for `precipitation`, `shortwave_radiation` and
+`wind_gusts_10m`. `--deflate 6` keeps the sixteen files under a megabyte
+together; the pipeline itself writes at `--deflate 1`, which changes
+nothing a decoder sees. Widening the source's input list means cutting the
+new variable the same way, against whichever run is still on the bucket.
+
 # Xue fixtures
 
 `tests/prepare_bin_fixture.py` encodes the same cropped GRIB into per-variable

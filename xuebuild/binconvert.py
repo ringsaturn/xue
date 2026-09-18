@@ -333,9 +333,9 @@ class PlaneStats:
 
 
 # Every source names its precipitation input differently (GFS prate, ECMWF
-# tp, sflux prate_ave), so a bundle's inputs are resolved off the source's own
-# input list rather than hard-coded per model.
-PRECIPITATION_INPUT_IDS = ("prate", "tp", "prate_ave")
+# tp, sflux prate_ave, Open-Meteo apcp), so a bundle's inputs are resolved off
+# the source's own input list rather than hard-coded per model.
+PRECIPITATION_INPUT_IDS = ("prate", "tp", "prate_ave", "apcp")
 
 
 def bundle_input_ids(source: SourceSpec, bundle_id: str) -> tuple[str, ...]:
@@ -362,7 +362,9 @@ def analysis_optional_ids(source: SourceSpec, scalar_ids: tuple[str, ...]) -> tu
     """The published scalars of ``scalar_ids`` whose series has no analysis
     frame: the precipitation rate a source derives by de-accumulating or
     de-averaging, and any scalar read from a record the source lists under
-    ``optional_at_analysis``."""
+    ``optional_at_analysis`` (which is how the interval-precipitation
+    sources' rate, radiation and gust qualify — their inputs describe an
+    interval that would precede the run)."""
     return tuple(
         variable_id
         for variable_id in scalar_ids
@@ -814,6 +816,25 @@ def deaccumulate_precipitation(
     return np.maximum(current_mm - previous_mm, 0.0) / step_hours
 
 
+def interval_rate(total_mm: np.ndarray, step_hours: int) -> np.ndarray:
+    """Mean precipitation rate (mm/h) over the step ending at the current
+    frame, from the total that fell over that step, in mm.
+
+    The third arrival shape of precipitation, and the simplest: Open-Meteo's
+    ``precipitation`` already describes the interval since the model's
+    previous native output time, so there is nothing to difference against
+    and no predecessor plane to share — one float64 division by the hours
+    that interval spans, which is this frame's lead less the previous
+    frame's on the axis being built (1, 3 or 6 hours on IFS HRES). The
+    operation order around it is the one every source follows
+    (:func:`_extract_planes`): the NaN fill first, then unit conversion —
+    none, for a variable already in millimetres — and only then this
+    division. Mirrored, division for division, in ``encode/convert.rs``."""
+    if step_hours <= 0:
+        raise ConversionError(f"an interval precipitation total spans {step_hours} hours")
+    return total_mm / step_hours
+
+
 def average_window_start(hour: int, window_hours: int) -> int:
     """First hour of the averaging window whose interval ends at ``hour``.
 
@@ -1229,7 +1250,7 @@ def _quantize_file(
     grid: GridInfo,
     work: Path,
     codebooks: dict[str, TemperatureCodebook | PrecipitationCodebook],
-    previous_precipitation: tuple[int, Future] | None = None,
+    previous_precipitation: tuple[int, Future | None] | None = None,
     average_window_hours: int = 6,
     own_precipitation: Future | None = None,
     plane_source: PlaneSource | Mapping[str, PlaneSource] = GRIB_PLANE_SOURCE,
@@ -1251,7 +1272,9 @@ def _quantize_file(
     publishes its own converted raw plane into ``own_precipitation`` and reads
     the predecessor's from ``previous_precipitation`` (its hour and future).
     The pool runs files in submission (hour) order, so the awaited predecessor
-    is always already running or done. Shared planes are never mutated.
+    is always already running or done. Shared planes are never mutated. An
+    interval total (Open-Meteo apcp) needs no predecessor plane at all — only
+    the hour beside the future, which is then None.
     """
     lead = next(iter(frames.values())).lead_seconds
     # The precipitation derivations below are GRIB-only, and every GRIB record
@@ -1264,14 +1287,14 @@ def _quantize_file(
         if own_precipitation is not None:
             own_precipitation.set_exception(exc)
         raise
-    raw_precipitation_id = next((vid for vid in ("tp", "prate_ave") if vid in values), None)
+    raw_precipitation_id = next((vid for vid in ("tp", "prate_ave", "apcp") if vid in values), None)
     if own_precipitation is not None:
         own_precipitation.set_result(values[raw_precipitation_id])
     previous_plane: np.ndarray | None = None
     previous_hour: int | None = None
     if previous_precipitation is not None:
         previous_hour, previous_future = previous_precipitation
-        previous_plane = previous_future.result()
+        previous_plane = previous_future.result() if previous_future is not None else None
     if raw_precipitation_id == "tp":
         # ECMWF: replace the run-total accumulation (already mm) with the
         # mean rate over the step that ends at this frame (mm/h). The step is
@@ -1279,6 +1302,14 @@ def _quantize_file(
         # 144-hour cadence change, three before it.
         step = hour - previous_hour if previous_hour is not None else 1
         values["prate"] = deaccumulate_precipitation(values.pop("tp"), previous_plane, step)
+    elif raw_precipitation_id == "apcp":
+        # Open-Meteo: the file already holds the total that fell over the
+        # interval since the model's previous native output time, so the
+        # rate is that total over the interval's length in hours — the
+        # distance to the frame before this one on the axis.
+        if previous_hour is None:
+            raise ConversionError(f"the interval precipitation frame at hour {hour} names no interval")
+        values["prate"] = interval_rate(values.pop("apcp"), hour - previous_hour)
     elif raw_precipitation_id == "prate_ave":
         # sflux: PRATE is the window-cumulative mean rate (kg/m^2 s); derive
         # the per-step rate against the previous frame of the same averaging
@@ -1616,12 +1647,14 @@ def convert_bin(
     codebooks = PROFILES[profile]
 
     if source.series_file:
-        # A series-file observation source is one NetCDF file holding the
-        # whole series, one band per time (xue/observation.py): the CMA
-        # mosaic's local archive file, or the window the JMA fetch wrote.
-        # There are no records to match, no wind pair, and no published
-        # cadence to validate the axis against — the file's own times are
-        # the axis, gaps included. (The MRMS observation is one GRIB per
+        # A series-file source is one NetCDF file holding a whole variable's
+        # series, one band per time (xue/observation.py): the CMA mosaic's
+        # local archive file, the window the JMA fetch wrote, a satellite
+        # window's channels, or the forecast run om2nc resampled off the
+        # Open-Meteo bucket. There are no records to match. An observation's
+        # own times are the axis, gaps included, with no published cadence to
+        # validate against; a forecast's are its lead times and are validated
+        # below like any cycle's. (The MRMS observation is one GRIB per
         # frame and takes the record path below, re-keyed onto its window's
         # axis.) A run directory holds one such file per variable — or one
         # file for its one variable (observation.series_files). Only the
@@ -1635,8 +1668,27 @@ def convert_bin(
         requested_bundle_ids = tuple(
             bundle_id for bundle_id in published_bundle_ids(source) if bundle_ids is None or bundle_id in bundle_ids
         )
+        # What the series must carry: a composite's components, which the
+        # fetch stage produced and wrote as series of their own, and every
+        # other bundle's *inputs* — the question the GRIB path asks too, and
+        # the one that matters on a forecast series, where `prate` is
+        # derived from an `apcp` series (`interval_precipitation`). Then the
+        # analysis-optional inputs sort to the back, so the first variable
+        # is one no frame of the run can lack and can key the axis; the GRIB
+        # path sorts its own the same way.
         series_variable_ids = tuple(
-            dict.fromkeys(variable_id for bundle_id in requested_bundle_ids for variable_id in bundle_variable_ids(bundle_id))
+            sorted(
+                dict.fromkeys(
+                    variable_id
+                    for bundle_id in requested_bundle_ids
+                    for variable_id in (
+                        bundle_variable_ids(bundle_id)
+                        if bundle_id in COMPOSITE_BUNDLES
+                        else bundle_input_ids(source, bundle_id)
+                    )
+                ),
+                key=lambda variable_id: variable_id in source.optional_at_analysis,
+            )
         )
         series = inspect_observation(input_path, source, series_variable_ids)
         # ``last_hour`` trims the series to a leading window of the file, and
@@ -1652,7 +1704,15 @@ def convert_bin(
                     f"hour {series_lead_seconds(series.frames[-1]) / binformat.HOUR_SECONDS:g}"
                 )
         variable_ids = series_variable_ids
-        available_vector_ids: tuple[str, ...] = ()
+        # A vector bundle ships when the series carries every input it is
+        # built from — the same rule the GRIB path applies to a run's first
+        # file, asked of the files the fetch wrote.
+        available_vector_ids = tuple(
+            bundle_id
+            for bundle_id in requested_bundle_ids
+            if bundle_id in VECTOR_BUNDLES
+            and all(variable_id in series.datasets for variable_id in vector_input_ids(bundle_id))
+        )
         available_derived_ids: tuple[str, ...] = ()
         available_composite_ids = tuple(bundle_id for bundle_id in requested_bundle_ids if bundle_id in COMPOSITE_BUNDLES)
         drop_ids: frozenset[str] = frozenset()
@@ -1823,25 +1883,44 @@ def convert_bin(
         # futures (see _quantize_file): ECMWF tp differences against the
         # previous frame unconditionally; sflux prate_ave only against the
         # previous frame of the same averaging window (the window's first
-        # frame differences against zero).
-        raw_precipitation_id = next((vid for vid in ("tp", "prate_ave") if vid in variable_ids), None)
+        # frame differences against zero). An Open-Meteo apcp total needs no
+        # predecessor plane, only the length of the interval it covers.
+        raw_precipitation_id = next((vid for vid in ("tp", "prate_ave", "apcp") if vid in variable_ids), None)
 
         def sharing_plan():
-            """Yield (frames, previous (hour, future) | None, own future | None)
-            per file. A future is created only when the next file will
+            """Yield (frames, previous (hour, future | None) | None, own future
+            | None) per file. A future is created only when the next file will
             difference against this file's raw plane; no reference is kept
             here, so each shared plane is freed once its consumer finishes."""
             previous_future: Future | None = None
             for index, frames in enumerate(per_file):
                 frame = frames.get(raw_precipitation_id) if raw_precipitation_id else None
-                previous: tuple[int, Future] | None = None
-                if previous_future is not None and frame is not None:
+                previous: tuple[int, Future | None] | None = None
+                own: Future | None = None
+                if frame is not None and source.interval_precipitation:
+                    # The interval this total covers is the distance to the
+                    # frame before it on the axis being built. A series that
+                    # starts at a step of its own — the rate's, whose analysis
+                    # frame does not exist — takes the distance from the
+                    # previous step of the source's published axis instead,
+                    # which is the interval the model itself accumulated over.
+                    hour = frame.lead_seconds // binformat.HOUR_SECONDS
+                    if index:
+                        interval_start = series_lead_seconds(per_file[index - 1]) // binformat.HOUR_SECONDS
+                    else:
+                        axis = source.forecast_hours(hour)
+                        if len(axis) < 2:
+                            raise ConversionError(
+                                f"the interval precipitation frame at hour {hour} names no interval"
+                            )
+                        interval_start = axis[-2]
+                    previous = (interval_start, None)
+                elif previous_future is not None and frame is not None:
                     previous = (
                         per_file[index - 1][raw_precipitation_id].lead_seconds // binformat.HOUR_SECONDS,
                         previous_future,
                     )
-                own: Future | None = None
-                if frame is not None and index + 1 < len(per_file):
+                if frame is not None and not source.interval_precipitation and index + 1 < len(per_file):
                     successor = per_file[index + 1].get(raw_precipitation_id)
                     if successor is not None and (
                         raw_precipitation_id == "tp"
@@ -1916,7 +1995,11 @@ def convert_bin(
     # interval maximum with an empty interval there). All other variables
     # keep the full run axis.
     variable_offsets: dict[str, list[int]] = {variable_id: offsets for variable_id in encoded_variable_ids}
-    if len(offsets) > 1:
+    if len(offsets) > 1 and offsets[0] == 0:
+        # Only a run that starts at the analysis has an analysis frame to be
+        # missing from: a build whose axis already starts at the first step
+        # (a job for the rate alone on a source whose precipitation input has
+        # no analysis file) carries every frame it read.
         for variable_id in analysis_optional_ids(source, scalar_variable_ids):
             variable_offsets[variable_id] = offsets[1:]
 

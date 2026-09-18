@@ -928,6 +928,7 @@ const MODEL_EYEBROW: Record<ForecastModelId, string> = {
   gfs: "NOAA / GFS (0.25°)",
   ecmwf: "ECMWF / IFS (0.25°)",
   aifs: "ECMWF / AIFS SINGLE (0.25°)",
+  ifshres: "ECMWF / IFS HRES (0.1°)",
   sflux: "NOAA / GFS SFLUX (13 KM)",
   hrrr: "NOAA / HRRR CONUS (3 KM)",
   cma: "CMA / RADAR MOSAIC (0.044°)",

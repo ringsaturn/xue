@@ -26,7 +26,7 @@ pub struct SourceFrame {
 /// How the extraction must read one file's bands.
 ///
 /// GRIB records arrive already in physical units with every point valid, so
-/// the defaults do nothing. A packed NetCDF observation file needs its
+/// the defaults do nothing. A packed NetCDF series needs its
 /// `scale_factor`/`add_offset` applied and its fill value turned into a real
 /// number the codebook can quantize — the format carries no bitmap, so missing
 /// data has to become a value.
@@ -38,6 +38,13 @@ pub struct PlaneSource {
     /// either raw or scaled; both are listed, and neither is a value the
     /// variable can physically take.
     pub fill_values: Vec<f64>,
+    /// True when the file marks missing data with NaN itself (a CF
+    /// `_FillValue` of NaN, which is how the Open-Meteo series spell the land
+    /// under `sea_ice_thickness`). A NaN equals nothing, not even itself, so
+    /// it can never be a `fill_values` entry; it is tested for on its own and
+    /// replaced the same way. Mirrors `PlaneSource.fill_nan` in
+    /// `xuebuild/model.py`.
+    pub fill_nan: bool,
     /// What missing data becomes; the bottom of the variable's codebook.
     pub fill_replacement: f64,
 }
@@ -48,16 +55,18 @@ impl PlaneSource {
     }
 
     pub fn apply_fill(&self, values: &mut [f64]) {
-        if self.fill_values.is_empty() {
+        if self.fill_values.is_empty() && !self.fill_nan {
             return;
         }
         for value in values.iter_mut() {
             // Scaling is float arithmetic, so match with a relative tolerance
-            // rather than for equality (numpy.isclose semantics).
-            if self
-                .fill_values
-                .iter()
-                .any(|fill| (*value - fill).abs() <= 1e-6 + 1e-6 * fill.abs())
+            // rather than for equality (numpy.isclose semantics); a NaN fill
+            // matches by being one.
+            if (self.fill_nan && value.is_nan())
+                || self
+                    .fill_values
+                    .iter()
+                    .any(|fill| (*value - fill).abs() <= 1e-6 + 1e-6 * fill.abs())
             {
                 *value = self.fill_replacement;
             }

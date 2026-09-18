@@ -549,7 +549,7 @@ describe("dataset kinds", () => {
     expect(isObservationModel("cma")).toBe(true);
     expect(isObservationModel("mrms")).toBe(true);
     expect(isObservationModel("jma")).toBe(true);
-    for (const model of ["gfs", "sflux", "ecmwf", "aifs", "hrrr"] as const) expect(isObservationModel(model)).toBe(false);
+    for (const model of ["gfs", "sflux", "ecmwf", "aifs", "ifshres", "hrrr"] as const) expect(isObservationModel(model)).toBe(false);
   });
 
   it("lists the live feeds, the seven observation windows among them", () => {
@@ -557,12 +557,13 @@ describe("dataset kinds", () => {
     // SourceSpec.latest_filename); the seven observation windows are the
     // last of the switch order, and the mosaic — a view over the imagers
     // with no feed of its own — closes it.
-    expect(FORECAST_MODEL_IDS).toEqual(["gfs", "sflux", "ecmwf", "aifs", "hrrr", "mrms", "jma", "cma", "himawari", "goeseast", "goeswest", "meteosat", "geo"]);
+    expect(FORECAST_MODEL_IDS).toEqual(["gfs", "sflux", "ecmwf", "aifs", "ifshres", "hrrr", "mrms", "jma", "cma", "himawari", "goeseast", "goeswest", "meteosat", "geo"]);
     for (const model of FORECAST_MODEL_IDS) {
       if (FORECAST_MODELS[model].mosaic) expect(FORECAST_MODELS[model].latestFilename).toBeUndefined();
       else expect(FORECAST_MODELS[model].latestFilename).toBeDefined();
     }
     expect(FORECAST_MODELS.aifs).toMatchObject({ label: "AIFS", product: "aifs-single-0p25", latestFilename: "latest-aifs.json" });
+    expect(FORECAST_MODELS.ifshres).toMatchObject({ label: "ECMWF-HRES", product: "ifs-hres-0p1", latestFilename: "latest-ifshres.json" });
     expect(FORECAST_MODELS.mrms.latestFilename).toBe("latest-mrms.json");
     expect(FORECAST_MODELS.jma.latestFilename).toBe("latest-jma.json");
     expect(FORECAST_MODELS.cma.latestFilename).toBe("latest-cma.json");

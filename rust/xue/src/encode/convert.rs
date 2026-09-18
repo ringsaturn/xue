@@ -197,10 +197,13 @@ const RAW_VARIABLE_IDS: [&str; 2] = ["prate", "cref"];
 const PRESSURE_BUNDLE_IDS: [&str; 9] = [
     "prmsl", "hgt1000", "hgt925", "hgt850", "hgt700", "hgt500", "hgt300", "hgt250", "hgt200",
 ];
-/// Every source names its precipitation input differently.
-const PRECIPITATION_INPUT_IDS: [&str; 3] = ["prate", "tp", "prate_ave"];
-/// The raw precipitation inputs a frame differences against its predecessor.
-const DERIVED_PRECIPITATION_IDS: [&str; 2] = ["tp", "prate_ave"];
+/// Every source names its precipitation input differently (GFS `prate`,
+/// ECMWF `tp`, sflux `prate_ave`, Open-Meteo `apcp`).
+const PRECIPITATION_INPUT_IDS: [&str; 4] = ["prate", "tp", "prate_ave", "apcp"];
+/// The raw precipitation inputs the per-file stage replaces with a rate: the
+/// two a frame differences against its predecessor, and the interval total
+/// that only needs the interval's length.
+const DERIVED_PRECIPITATION_IDS: [&str; 3] = ["tp", "prate_ave", "apcp"];
 
 pub const DEFAULT_ZSTD_LEVEL: i32 = 15;
 
@@ -507,6 +510,28 @@ pub fn deaccumulate_precipitation(
         .zip(previous_mm)
         .map(|(current, previous)| (current - previous).max(0.0) / step_hours as f64)
         .collect()
+}
+
+/// Mean precipitation rate (mm/h) over the step ending at the current frame,
+/// from the total that fell over that step, in mm.
+///
+/// The third arrival shape of precipitation, and the simplest: Open-Meteo's
+/// `precipitation` already describes the interval since the model's previous
+/// native output time, so there is nothing to difference against and no
+/// predecessor plane to share — one f64 division by the hours that interval
+/// spans, which is this frame's lead less the previous frame's on the axis
+/// being built (1, 3 or 6 hours on IFS HRES). The operation order around it
+/// is the one every source follows (`extract_planes`): the NaN fill first,
+/// then unit conversion — none, for a variable already in millimetres — and
+/// only then this division. Mirrors `interval_rate` in
+/// `xuebuild/binconvert.py`, division for division.
+pub fn interval_rate(total_mm: &[f64], step_hours: i64) -> Result<Vec<f64>> {
+    if step_hours <= 0 {
+        return Err(EncodeError::conversion(format!(
+            "an interval precipitation total spans {step_hours} hours"
+        )));
+    }
+    Ok(total_mm.iter().map(|total| total / step_hours as f64).collect())
 }
 
 /// First hour of the averaging window whose interval ends at `hour`.
@@ -836,6 +861,7 @@ fn fill_missing(variable_id: &str, plane: &mut [f64]) -> Result<()> {
     PlaneSource {
         unscale: false,
         fill_values: spec.fill_values.to_vec(),
+        fill_nan: false,
         fill_replacement: spec.value_range.0,
     }
     .apply_fill(plane);
@@ -888,7 +914,7 @@ fn quantize_file(
     profile: &str,
     plane_source: &PlaneSources,
     average_window_hours: i64,
-    previous: Option<(i64, Arc<PlaneSlot>)>,
+    previous: Option<(i64, Option<Arc<PlaneSlot>>)>,
     own: Option<Arc<PlaneSlot>>,
     derived_vector_ids: &[&str],
     drop_ids: &[String],
@@ -927,7 +953,12 @@ fn quantize_file(
     let mut previous_hour: Option<i64> = None;
     if let Some((hour, slot)) = previous {
         previous_hour = Some(hour);
-        previous_plane = Some(slot.wait()?);
+        // An interval total names its interval's start without a plane
+        // behind it (`sharing_plan`).
+        previous_plane = match slot {
+            Some(slot) => Some(slot.wait()?),
+            None => None,
+        };
     }
 
     if let Some(raw_id) = raw_precipitation_id {
@@ -942,6 +973,17 @@ fn quantize_file(
             // is the actual distance to the previous frame.
             let step = previous_hour.map_or(1, |previous| hour - previous);
             deaccumulate_precipitation(&raw, previous_plane.as_deref().map(Vec::as_slice), step)
+        } else if raw_id == "apcp" {
+            // Open-Meteo: the file already holds the total that fell over the
+            // interval since the model's previous native output time, so the
+            // rate is that total over the interval's length in hours — the
+            // distance to the frame before this one on the axis.
+            let previous_hour = previous_hour.ok_or_else(|| {
+                EncodeError::conversion(format!(
+                    "the interval precipitation frame at hour {hour} names no interval"
+                ))
+            })?;
+            interval_rate(&raw, hour - previous_hour)?
         } else {
             // sflux: PRATE is the window-cumulative mean rate (kg/m^2 s);
             // derive the per-step rate against the previous frame of the same
@@ -1369,18 +1411,20 @@ pub fn convert_bin(
     let producer_versions: Vec<(String, (String, String))>;
 
     if source.series_file {
-        // A series-file observation source is one NetCDF file holding the
-        // whole series, one band per time: the CMA mosaic's local archive
-        // file, or the window the JMA fetch wrote. There are no records to
-        // match, no wind pair, and no published cadence to validate the axis
-        // against — the file's own times are the axis, gaps included. (The
-        // MRMS observation is one GRIB per frame and takes the record path
-        // below, re-keyed onto its window's axis.) A run directory holds one
-        // such file per variable — or one file for its one variable
-        // (`observation::series_files`). Only the variables the requested
-        // bundles carry are read: a satellite window's unpublished channels
-        // feed its composite in the fetch stage and are never quantized
-        // here.
+        // A series-file source is one NetCDF file holding a whole variable's
+        // series, one band per time: the CMA mosaic's local archive file, the
+        // window the JMA fetch wrote, a satellite window's channels, or the
+        // forecast run om2nc resampled off the Open-Meteo bucket. There are
+        // no records to match. An observation's own times are the axis, gaps
+        // included, with no published cadence to validate against; a
+        // forecast's are its lead times and are validated below like any
+        // cycle's. (The MRMS observation is one GRIB per frame and takes the
+        // record path below, re-keyed onto its window's axis.) A run
+        // directory holds one such file per variable — or one file for its
+        // one variable (`observation::series_files`). Only the variables the
+        // requested bundles carry are read: a satellite window's unpublished
+        // channels feed its composite in the fetch stage and are never
+        // quantized here.
         if inputs.len() != 1 {
             return Err(EncodeError::conversion(format!(
                 "a {} build takes one NetCDF series, or the directory holding them",
@@ -1404,14 +1448,28 @@ pub fn convert_bin(
                     .is_none_or(|wanted| wanted.iter().any(|id| id == bundle_id))
             })
             .collect();
+        // What the series must carry: a composite's components, which the
+        // fetch stage produced and wrote as series of their own, and every
+        // other bundle's *inputs* — the question the GRIB path asks too, and
+        // the one that matters on a forecast series, where `prate` is derived
+        // from an `apcp` series (`interval_precipitation`). Then the
+        // analysis-optional inputs sort to the back, so the first variable is
+        // one no frame of the run can lack and can key the axis; the GRIB
+        // path sorts its own the same way.
         let mut series_variable_ids: Vec<String> = Vec::new();
         for bundle_id in &requested_bundle_ids {
-            for variable_id in bundle_variable_ids(bundle_id) {
+            let carried = if composite_components(bundle_id).is_some() {
+                bundle_variable_ids(bundle_id)
+            } else {
+                bundle_input_ids(source, bundle_id)
+            };
+            for variable_id in carried {
                 if !series_variable_ids.contains(&variable_id) {
                     series_variable_ids.push(variable_id);
                 }
             }
         }
+        series_variable_ids.sort_by_key(|id| source.optional_at_analysis.contains(&id.as_str()));
         let series_variable_refs: Vec<&str> = series_variable_ids.iter().map(String::as_str).collect();
         let series = inspect_observation(&input, source, Some(&series_variable_refs))?;
         grid_path = series.dataset().to_path_buf();
@@ -1434,7 +1492,19 @@ pub fn convert_bin(
             }
         }
         variable_ids = series_variable_ids;
-        available_vector_ids = Vec::new();
+        // A vector bundle ships when the series carries every input it is
+        // built from — the same rule the GRIB path applies to a run's first
+        // file, asked of the files the fetch wrote.
+        available_vector_ids = requested_bundle_ids
+            .iter()
+            .copied()
+            .filter(|bundle_id| vector_components(bundle_id).is_some())
+            .filter(|bundle_id| {
+                vector_input_ids(bundle_id)
+                    .iter()
+                    .all(|id| series.datasets.iter().any(|(name, _)| name == id))
+            })
+            .collect();
         available_derived_ids = Vec::new();
         available_composite_ids = requested_bundle_ids
             .iter()
@@ -1735,7 +1805,11 @@ pub fn convert_bin(
         .iter()
         .map(|id| (id.clone(), offsets.clone()))
         .collect();
-    if offsets.len() > 1 {
+    // Only a run that starts at the analysis has an analysis frame to be
+    // missing from: a build whose axis already starts at the first step (a
+    // job for the rate alone on a source whose precipitation input has no
+    // analysis file) carries every frame it read.
+    if offsets.len() > 1 && offsets[0] == 0 {
         for variable_id in analysis_optional_ids(source, &scalar_variable_ids) {
             variable_offsets.insert(variable_id.to_string(), offsets[1..].to_vec());
         }
@@ -2112,8 +2186,11 @@ fn bundle_manifest_entry(
 
 /// Yield `(previous (hour, slot), own slot)` per file. A slot is created only
 /// when the next file will difference against this file's raw plane, so each
-/// shared plane is freed once its consumer finishes.
-type SharingPlan = Vec<(Option<(i64, Arc<PlaneSlot>)>, Option<Arc<PlaneSlot>>)>;
+/// shared plane is freed once its consumer finishes. An interval total
+/// (Open-Meteo apcp) needs no predecessor plane at all — only the hour beside
+/// the slot, which is then `None`. Mirrors `sharing_plan` in
+/// `xuebuild/binconvert.py`.
+type SharingPlan = Vec<(Option<(i64, Option<Arc<PlaneSlot>>)>, Option<Arc<PlaneSlot>>)>;
 
 fn sharing_plan(
     per_file: &[FileFrames],
@@ -2125,18 +2202,38 @@ fn sharing_plan(
     for (index, frames) in per_file.iter().enumerate() {
         let frame = raw_precipitation_id.and_then(|id| frame_of(frames, id));
         let previous = match (&previous_slot, frame) {
+            _ if frame.is_some() && source.interval_precipitation => {
+                // The interval this total covers is the distance to the frame
+                // before it on the axis being built. A series that starts at a
+                // step of its own — the rate's, whose analysis frame does not
+                // exist — takes the distance from the previous step of the
+                // source's published axis instead, which is the interval the
+                // model itself accumulated over.
+                let hour = frame.expect("a frame").lead_seconds / HOUR_SECONDS;
+                let interval_start = if index > 0 {
+                    per_file[index - 1][0].1.lead_seconds / HOUR_SECONDS
+                } else {
+                    let axis = source.forecast_hours(hour)?;
+                    *axis
+                        .get(axis.len().wrapping_sub(2))
+                        .ok_or_else(|| EncodeError::conversion(format!(
+                            "the interval precipitation frame at hour {hour} names no interval"
+                        )))?
+                };
+                Some((interval_start, None))
+            }
             (Some(slot), Some(_)) => Some((
                 frame_of(&per_file[index - 1], raw_precipitation_id.expect("id"))
                     .expect("predecessor frame")
                     .lead_seconds
                     / HOUR_SECONDS,
-                Arc::clone(slot),
+                Some(Arc::clone(slot)),
             )),
             _ => None,
         };
         let mut own = None;
         if let (Some(frame), Some(raw_id)) = (frame, raw_precipitation_id) {
-            if index + 1 < per_file.len() {
+            if !source.interval_precipitation && index + 1 < per_file.len() {
                 if let Some(successor) = frame_of(&per_file[index + 1], raw_id) {
                     let hour = frame.lead_seconds / HOUR_SECONDS;
                     let shares = raw_id == "tp"
@@ -2430,6 +2527,29 @@ mod composite_tests {
             let source = source_spec(model).expect(model);
             assert_eq!(bundle_variable_ids("dustrgb"), ["dustr", "dustg", "dustb"]);
             assert_eq!(published_bundle_ids(source), ["ir104", "dustrgb"], "{model}");
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::interval_rate;
+
+    /// `prate` from an interval total: one division, whatever the step.
+    /// Mirrors `IntervalRateTests` in `tests/test_ifshres.py`.
+    #[test]
+    fn the_interval_rate_is_the_total_over_the_hours_it_covers() {
+        let total = [0.0, 1.5, 12.0];
+        assert_eq!(interval_rate(&total, 1).expect("an hour"), vec![0.0, 1.5, 12.0]);
+        assert_eq!(interval_rate(&total, 3).expect("three hours"), vec![0.0, 0.5, 4.0]);
+        assert_eq!(interval_rate(&total, 6).expect("six hours"), vec![0.0, 0.25, 2.0]);
+    }
+
+    #[test]
+    fn an_interval_of_no_hours_is_a_conversion_error() {
+        for step in [0, -3] {
+            let error = interval_rate(&[0.0; 4], step).expect_err("no interval");
+            assert!(error.to_string().contains("spans"), "{error}");
         }
     }
 }

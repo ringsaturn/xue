@@ -9,7 +9,11 @@
 //! coarser grid (`Downsample`), the JMA precipitation nowcast and the CMA
 //! radar mosaic one fetched NetCDF series per window (`series_file`),
 //! assembled from the agency's tiles by the jma-radar tool and read back
-//! out of a daily Zarr archive of the mosaics respectively.
+//! out of a daily Zarr archive of the mosaics respectively. A `series_file`
+//! source need not be an observation: ECMWF's IFS HRES on its native 9 km
+//! grid (`ifshres`) arrives as one NetCDF series per variable too, resampled
+//! off the Open-Meteo bucket by the `om2nc` tool, and is an ordinary
+//! forecast cycle in every other respect.
 
 use crate::encode::errors::{EncodeError, Result};
 use crate::encode::reproject::Regrid;
@@ -99,6 +103,15 @@ pub struct SourceSpec {
     /// True when precipitation arrives as an interval-averaged rate whose
     /// window resets every `average_window_hours` (GFS sflux `PRATE ave`).
     pub averaged_precipitation: bool,
+    /// True when precipitation arrives as the total that fell over the
+    /// interval since the previous frame (Open-Meteo's `precipitation`, in
+    /// millimetres) and becomes a rate by one division
+    /// (`convert::interval_rate`). The third arrival shape beside
+    /// `accumulated_precipitation` (a run total, differenced) and
+    /// `averaged_precipitation` (a window average, de-averaged); a source
+    /// declares at most one. Mirrors `interval_precipitation` in
+    /// `xuebuild/sources.py`.
+    pub interval_precipitation: bool,
     pub average_window_hours: i64,
     /// Input variables absent from the analysis (f000) file.
     pub optional_at_analysis: &'static [&'static str],
@@ -167,9 +180,19 @@ pub struct SourceSpec {
     /// True when a run of the source is one NetCDF file holding the whole
     /// series, one band per time, read through `observation.rs` (the CMA
     /// mosaic's local file; the JMA window the fetch writes), rather than
-    /// one GRIB per frame. Orthogonal to `fetched`. Mirrors `series_file`
-    /// in `xuebuild/sources.py`.
+    /// one GRIB per frame. Orthogonal to `observation`: `ifshres` is a
+    /// forecast whose frames arrive this way, so its series carry a run time
+    /// and lead times like any cycle's. Orthogonal to `fetched` too. Mirrors
+    /// `series_file` in `xuebuild/sources.py`.
     pub series_file: bool,
+    /// For a source fetched from the Open-Meteo open data bucket, the model
+    /// directory under `data_spatial/` its runs live in (`ecmwf_ifs`). The
+    /// Python fetch stage dispatches on it and asks the `om2nc` tool for one
+    /// CF NetCDF series per variable, each named with the registry's
+    /// `VariableSpec::open_meteo`, which is what this encoder reads the
+    /// series by (`observation::series_variable_name`). None for every other
+    /// source. Mirrors `open_meteo` in `xuebuild/sources.py`.
+    pub open_meteo: Option<&'static str>,
     /// Set when the source is published on a grid coarser than it arrives
     /// on ([`Downsample`]). Mirrors `downsample` in `xuebuild/sources.py`.
     pub downsample: Option<Downsample>,
@@ -273,6 +296,7 @@ pub const SOURCES: &[SourceSpec] = &[
         }],
         accumulated_precipitation: false,
         averaged_precipitation: false,
+        interval_precipitation: false,
         average_window_hours: 6,
         optional_at_analysis: &[],
         statistical_processes: &[],
@@ -294,6 +318,7 @@ pub const SOURCES: &[SourceSpec] = &[
         window_hours: None,
         cadence_seconds: None,
         series_file: false,
+        open_meteo: None,
         downsample: None,
     },
     SourceSpec {
@@ -328,6 +353,7 @@ pub const SOURCES: &[SourceSpec] = &[
         }],
         accumulated_precipitation: true,
         averaged_precipitation: false,
+        interval_precipitation: false,
         average_window_hours: 6,
         optional_at_analysis: &["gust"],
         statistical_processes: &[("prate", 0), ("gust", 2)],
@@ -348,6 +374,7 @@ pub const SOURCES: &[SourceSpec] = &[
         window_hours: None,
         cadence_seconds: None,
         series_file: false,
+        open_meteo: None,
         downsample: None,
     },
     // ECMWF's data-driven model, AIFS Single, from the same open data
@@ -375,6 +402,7 @@ pub const SOURCES: &[SourceSpec] = &[
         }],
         accumulated_precipitation: true,
         averaged_precipitation: false,
+        interval_precipitation: false,
         average_window_hours: 6,
         optional_at_analysis: &[],
         statistical_processes: &[("prate", 0)],
@@ -395,6 +423,73 @@ pub const SOURCES: &[SourceSpec] = &[
         window_hours: None,
         cadence_seconds: None,
         series_file: false,
+        open_meteo: None,
+        downsample: None,
+    },
+    // ECMWF IFS HRES, the deterministic high-resolution forecast on its
+    // native O1280 grid (~9 km), as Open-Meteo redistributes it: one `.om`
+    // file per time step on `s3://openmeteo/data_spatial/ecmwf_ifs/`, every
+    // variable of a step in one file. The Python fetch stage's `om2nc` tool
+    // reads the byte ranges of the variables asked for, resamples the
+    // reduced Gaussian grid onto a regular 0.1° one by nearest neighbour and
+    // writes one CF NetCDF series per variable, so this is a `series_file`
+    // source (the first that is not an observation) and neither encoder ever
+    // learns the Gaussian arithmetic. Two cycles a day (00Z and 12Z,
+    // `cycle_hours` 12 on the Python side: the 06/18Z cycles reach only 144
+    // hours, which one horizon cannot express). The variable set is the GFS
+    // surface diagnostics and the sflux radiation, so a layer survives a
+    // switch between the models; Open-Meteo carries no pressure levels, no
+    // waves and no ice cover, which is what the 0.25° `ecmwf` source keeps
+    // providing. Precipitation arrives as the total over the interval since
+    // the previous native step (`interval_precipitation`, the registry's
+    // `apcp`), the radiation as that interval's mean and the gust as its
+    // maximum, which is what `statistical_processes` declares; none of the
+    // three exists at the analysis. Mirrors `xuebuild/sources.py`.
+    SourceSpec {
+        id: "ifshres",
+        manifest_model: "ECMWF-HRES",
+        product: "ifs-hres-0p1",
+        latest_filename: Some("latest-ifshres.json"),
+        // Hourly through 90 hours, three-hourly to 144, six-hourly to 360:
+        // 145 frames, the run's own native output cadence.
+        steps: &[(90, 1), (144, 3), (360, 6)],
+        input_variable_ids: &[
+            "tmp2m", "apcp", "ugrd10m", "vgrd10m", "dswrf", "prmsl", "gust", "tcdc", "lcdc",
+            "mcdc", "hcdc", "cape", "dpt2m", "vis", "tmpsfc", "icetk",
+        ],
+        companion_files: &[],
+        accumulated_precipitation: false,
+        averaged_precipitation: false,
+        interval_precipitation: true,
+        average_window_hours: 6,
+        optional_at_analysis: &["apcp", "dswrf", "gust"],
+        statistical_processes: &[("prate", 0), ("dswrf", 0), ("gust", 2)],
+        bands: &[],
+        bundle_scalar_ids: &[
+            "tmp2m", "prate", "dswrf", "prmsl", "gust", "tcdc", "lcdc", "mcdc", "hcdc", "cape",
+            "vis", "dpt2m", "tmpsfc", "icetk",
+        ],
+        core_bundle_ids: &["tmp2m", "prate"],
+        bundle_vector_ids: &["wind10m"],
+        bundle_composite_ids: &[],
+        // The 0.1° global grid om2nc resamples onto: −180 to 179.9 and both
+        // poles, the 0.25° grid's shape at two and a half times its step.
+        production_grid: (3600, 1801),
+        // 90 x 95 cells is 9° x 9.5° — 40 x 19 = 760 tiles, the last row 91
+        // cells high (1801 = 18 x 95 + 91). The tidy divisors of 1800 leave a
+        // one-row tile at the south pole instead, which is why the height is
+        // not one of them.
+        tile: (90, 95),
+        // Two rungs: a full plane is 6.5 M cells, past the shell's frame
+        // budget, so a view of the whole world plays the half (1800 x 901,
+        // about a full GFS plane) or the quarter on a small device.
+        variant_factors: &[2, 4],
+        regrid: None,
+        observation: false,
+        window_hours: None,
+        cadence_seconds: None,
+        series_file: true,
+        open_meteo: Some("ecmwf_ifs"),
         downsample: None,
     },
     // GFS surface flux files on the native ~13 km T1534 Gaussian grid. Adds
@@ -409,6 +504,7 @@ pub const SOURCES: &[SourceSpec] = &[
         companion_files: &[],
         accumulated_precipitation: false,
         averaged_precipitation: true,
+        interval_precipitation: false,
         average_window_hours: 6,
         optional_at_analysis: &["prate_ave"],
         statistical_processes: &[("prate", 0)],
@@ -425,6 +521,7 @@ pub const SOURCES: &[SourceSpec] = &[
         window_hours: None,
         cadence_seconds: None,
         series_file: false,
+        open_meteo: None,
         downsample: None,
     },
     // NOAA HRRR: the 3 km convection-allowing model over the contiguous
@@ -450,6 +547,7 @@ pub const SOURCES: &[SourceSpec] = &[
         companion_files: &[],
         accumulated_precipitation: false,
         averaged_precipitation: false,
+        interval_precipitation: false,
         average_window_hours: 6,
         optional_at_analysis: &[],
         statistical_processes: &[],
@@ -471,6 +569,7 @@ pub const SOURCES: &[SourceSpec] = &[
         window_hours: None,
         cadence_seconds: None,
         series_file: false,
+        open_meteo: None,
         downsample: None,
     },
     // CMA weather radar level-3 mosaic composite reflectivity: the national
@@ -492,6 +591,7 @@ pub const SOURCES: &[SourceSpec] = &[
         companion_files: &[],
         accumulated_precipitation: false,
         averaged_precipitation: false,
+        interval_precipitation: false,
         average_window_hours: 6,
         optional_at_analysis: &[],
         statistical_processes: &[],
@@ -510,6 +610,7 @@ pub const SOURCES: &[SourceSpec] = &[
         window_hours: Some(3),
         cadence_seconds: Some(360),
         series_file: true,
+        open_meteo: None,
         downsample: None,
     },
     // NOAA MRMS: the national radar mosaic over the contiguous United
@@ -532,6 +633,7 @@ pub const SOURCES: &[SourceSpec] = &[
         companion_files: &[],
         accumulated_precipitation: false,
         averaged_precipitation: false,
+        interval_precipitation: false,
         average_window_hours: 6,
         optional_at_analysis: &[],
         statistical_processes: &[],
@@ -549,6 +651,7 @@ pub const SOURCES: &[SourceSpec] = &[
         window_hours: Some(3),
         cadence_seconds: Some(120),
         series_file: false,
+        open_meteo: None,
         downsample: Some(Downsample { factor: 2 }),
     },
     // JMA 高解像度降水ナウキャスト: the agency's precipitation intensity
@@ -571,6 +674,7 @@ pub const SOURCES: &[SourceSpec] = &[
         companion_files: &[],
         accumulated_precipitation: false,
         averaged_precipitation: false,
+        interval_precipitation: false,
         average_window_hours: 6,
         optional_at_analysis: &[],
         statistical_processes: &[],
@@ -589,6 +693,7 @@ pub const SOURCES: &[SourceSpec] = &[
         window_hours: Some(3),
         cadence_seconds: Some(300),
         series_file: true,
+        open_meteo: None,
         downsample: None,
     },
     // Himawari-9 AHI at 140.7°E as NOAA redistributes it (the ISatSS
@@ -610,6 +715,7 @@ pub const SOURCES: &[SourceSpec] = &[
         companion_files: &[],
         accumulated_precipitation: false,
         averaged_precipitation: false,
+        interval_precipitation: false,
         average_window_hours: 6,
         optional_at_analysis: &[],
         statistical_processes: &[],
@@ -652,6 +758,7 @@ pub const SOURCES: &[SourceSpec] = &[
         window_hours: Some(6),
         cadence_seconds: Some(600),
         series_file: true,
+        open_meteo: None,
         downsample: None,
     },
     // The two GOES-R imagers, GOES-19 at 75.2°W (East) and GOES-18 at
@@ -675,6 +782,7 @@ pub const SOURCES: &[SourceSpec] = &[
         companion_files: &[],
         accumulated_precipitation: false,
         averaged_precipitation: false,
+        interval_precipitation: false,
         average_window_hours: 6,
         optional_at_analysis: &[],
         statistical_processes: &[],
@@ -710,6 +818,7 @@ pub const SOURCES: &[SourceSpec] = &[
         window_hours: Some(6),
         cadence_seconds: Some(600),
         series_file: true,
+        open_meteo: None,
         downsample: None,
     },
     SourceSpec {
@@ -722,6 +831,7 @@ pub const SOURCES: &[SourceSpec] = &[
         companion_files: &[],
         accumulated_precipitation: false,
         averaged_precipitation: false,
+        interval_precipitation: false,
         average_window_hours: 6,
         optional_at_analysis: &[],
         statistical_processes: &[],
@@ -757,6 +867,7 @@ pub const SOURCES: &[SourceSpec] = &[
         window_hours: Some(6),
         cadence_seconds: Some(600),
         series_file: true,
+        open_meteo: None,
         downsample: None,
     },
     // Meteosat-12 (MTG-I1) FCI at 0°, EUMETSAT's prime full-disk service,
@@ -782,6 +893,7 @@ pub const SOURCES: &[SourceSpec] = &[
         companion_files: &[],
         accumulated_precipitation: false,
         averaged_precipitation: false,
+        interval_precipitation: false,
         average_window_hours: 6,
         optional_at_analysis: &[],
         statistical_processes: &[],
@@ -813,6 +925,7 @@ pub const SOURCES: &[SourceSpec] = &[
         window_hours: Some(24),
         cadence_seconds: Some(3600),
         series_file: true,
+        open_meteo: None,
         downsample: None,
     },
 ];
@@ -885,8 +998,29 @@ mod tests {
         for (_, band) in meteosat.bands {
             assert_eq!((band.satellite_number, band.instrument_type), (71, 210));
         }
+        // The IFS HRES run om2nc resamples off the Open-Meteo bucket is the
+        // one series-file source that is not an observation: a cycle with a
+        // run time and lead times, whose frames happen to arrive as one
+        // NetCDF series per variable.
+        let ifshres = source_spec("ifshres").expect("ifshres");
+        assert!(ifshres.series_file && ifshres.fetched() && ifshres.live());
+        assert!(!ifshres.observation && ifshres.cadence_seconds.is_none());
+        assert_eq!(ifshres.open_meteo, Some("ecmwf_ifs"));
+        assert!(ifshres.interval_precipitation);
+        assert_eq!(ifshres.forecast_hours(3).expect("axis"), vec![0, 1, 2, 3]);
+        assert_eq!(ifshres.production_grid, (3600, 1801));
+        assert_eq!(ifshres.core_bundle_ids, &["tmp2m", "prate"]);
+        // Every other forecast source is read record by record.
         for model in ["gfs", "ecmwf", "aifs", "sflux", "hrrr", "mrms"] {
             assert!(!source_spec(model).expect(model).series_file, "{model}");
+        }
+        // One arrival shape for precipitation per source.
+        for source in SOURCES {
+            let shapes = u8::from(source.accumulated_precipitation)
+                + u8::from(source.averaged_precipitation)
+                + u8::from(source.interval_precipitation);
+            assert!(shapes <= 1, "{} declares {shapes} precipitation shapes", source.id);
+            assert_eq!(source.open_meteo.is_some(), source.id == "ifshres", "{}", source.id);
         }
     }
 
@@ -946,6 +1080,9 @@ mod tests {
         for model in ["himawari", "goeseast", "goeswest", "meteosat"] {
             assert_eq!(source_spec(model).expect(model).variant_factors, &[2, 4, 8], "{model}");
         }
+        // A 6.5 M cell global plane takes two rungs, the way a 9 M cell
+        // satellite disk takes three.
+        assert_eq!(source_spec("ifshres").expect("ifshres").variant_factors, &[2, 4]);
         for model in ["gfs", "ecmwf", "aifs", "sflux", "hrrr", "cma", "mrms", "jma"] {
             assert_eq!(source_spec(model).expect(model).variant_factors, &[2], "{model}");
         }

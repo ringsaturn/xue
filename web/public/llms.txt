@@ -1,10 +1,12 @@
 # Xue
 
 > Xue (雪, "snow") is an open-source, static-site viewer of weather
-> forecasts. It plays whole NOAA GFS, ECMWF IFS, ECMWF AIFS and NOAA HRRR
+> forecasts. It plays whole NOAA GFS, ECMWF IFS, ECMWF AIFS, ECMWF IFS HRES
+> and NOAA HRRR
 > runs — 2 m temperature, precipitation rate, 10 m and upper-air wind, sea
 > level pressure, isobaric geopotential height, temperature, humidity and
-> water vapour flux, out to 240 hours (360 for AIFS, 18 for HRRR) — as
+> water vapour flux, out to 240 hours (360 for AIFS and IFS HRES, 18 for
+> HRRR) — as
 > smooth animations over a
 > MapLibre basemap, decoding per-variable Zarr v3 stores laid out for
 > playback (quantized uint8, small tiles × six-frame chunks; the custom
@@ -14,14 +16,21 @@
 
 Facts worth getting right:
 
-- Eight live sources, one shell. `gfs`: NOAA GFS 0.25°, hourly to F120 then
+- Thirteen live sources, one shell. `gfs`: NOAA GFS 0.25°, hourly to F120 then
   3-hourly to F240 (161 frames). `sflux`: GFS surface flux on its native
   ~13 km Gaussian grid, same cadence, the only source with solar radiation
   (`dswrf`). `ecmwf`: ECMWF IFS open data 0.25°, 3-hourly to F144 then
   6-hourly to F240 (65 frames). `aifs`: ECMWF AIFS Single open data, the
   centre's data-driven model on the same 0.25° grid, 6-hourly to F360 from
   every cycle (61 frames), landing about five and a half hours after the
-  cycle. `hrrr`: NOAA HRRR, 3 km over the contiguous
+  cycle. `ifshres`: ECMWF's operational IFS HRES — the deterministic
+  high-resolution forecast on its native ~9 km grid — as Open-Meteo
+  forwards the centre's real-time archive, resampled (nearest neighbour)
+  to a 0.1° global grid (3600 × 1801), surface fields only: hourly to
+  F090, 3-hourly to F144 then 6-hourly to F360 (145 frames), from the 00Z
+  and 12Z cycles alone, complete about six and a half hours after the
+  cycle. It is the thirteenth live source and carries no isobaric levels,
+  which the 0.25° `ecmwf` open data keeps. `hrrr`: NOAA HRRR, 3 km over the contiguous
   United States, a new cycle every hour, hourly to F18 (19 frames) — the
   one regional source, resampled from its Lambert conformal grid onto a
   0.03° latitude/longitude grid (2441 × 1051) over the domain's footprint;
@@ -107,7 +116,13 @@ Facts worth getting right:
   `gust`, `cape`, `icetk` or `perpw` — plus `lcdc`, `mcdc`, `hcdc`; its
   `prate` is de-accumulated from a run total in millimetres and is a mean
   over the six-hour step. SFLUX: `tmp2m`,
-  `prate`, `dswrf`, `wind10m`. HRRR: `tmp2m`, `prate`, `prmsl`, `hgt850`,
+  `prate`, `dswrf`, `wind10m`. IFS HRES (`ifshres`): the GFS surface set its
+  9 km product carries — `tmp2m`, `prate`, `dswrf`, `prmsl`, `gust`,
+  `tcdc`, `lcdc`, `mcdc`, `hcdc`, `cape`, `vis`, `dpt2m`, `tmpsfc`,
+  `icetk` and the vector pair `wind10m`, fifteen in all; no isobaric
+  levels, no waves, no sea ice cover. Its `prate` is the interval total
+  divided by the step and, like `dswrf` and `gust`, has no analysis
+  frame. HRRR: `tmp2m`, `prate`, `prmsl`, `hgt850`,
   `hgt700`, `hgt500`, `tmp925`, `tmp850`, `tmp500`, `gust`, `tcdc`,
   `lcdc`, `mcdc`, `hcdc`, `cape`, `vis`, `dpt2m`, the forecast composite
   radar reflectivity `cref` (the same name and unit as the radar mosaics'),
@@ -137,7 +152,10 @@ Facts worth getting right:
   and `goeswest` are NOAA GOES-R imagery (public domain, attribution
   requested, no endorsement implied); `meteosat` is EUMETSAT Meteosat
   data, the hourly Level 1 cycle, CC-BY-4.0 ("Contains modified EUMETSAT
-  Meteosat data"; no endorsement implied); the basemap
+  Meteosat data"; no endorsement implied); `ifshres` is ECMWF IFS HRES
+  forwarded by Open-Meteo, CC BY 4.0 ("Adapted from ECMWF IFS by ECMWF,
+  licensed under CC BY 4.0", via Open-Meteo, open-meteo.com — neither
+  ECMWF nor Open-Meteo endorses this use); the basemap
   is Protomaps © OpenStreetMap contributors.
 
 ## The geostationary mosaic
@@ -158,9 +176,9 @@ fall back to defaults rather than fail, so a constructed link always opens.
 
 - https://xue.ringsaturn.me/ — the live viewer. Defaults to GFS precipitation.
 - https://xue.ringsaturn.me/showcase.html — the list of historical cases.
-- `?model=gfs|sflux|ecmwf|aifs|hrrr|mrms|jma|cma|himawari|goeseast|goeswest|meteosat|geo`
+- `?model=gfs|sflux|ecmwf|aifs|ifshres|hrrr|mrms|jma|cma|himawari|goeseast|goeswest|meteosat|geo`
   — which live source (`ifs` is an alias of `ecmwf`, `aifs-single` of
-  `aifs`, `hrpns` of `jma`, `radar` of `cma`, `himawari-9` / `ahi` of
+  `aifs`, `hres` / `ifs9km` of `ifshres`, `hrpns` of `jma`, `radar` of `cma`, `himawari-9` / `ahi` of
   `himawari`, `goes-19` / `goes-18` of `goeseast` / `goeswest`, `mtg` /
   `meteosat-12` of `meteosat`, `mosaic` / `geostationary` of `geo`, the
   mosaic of every geostationary disk).
@@ -247,7 +265,7 @@ https://dataset.ringsaturn.me/xue/. The contract is two layers:
 
 - One mutable live pointer per source (JSON, schema 1): `latest.json` (GFS),
   `latest-sflux.json`, `latest-ecmwf.json`, `latest-aifs.json`,
-  `latest-hrrr.json`, `latest-mrms.json`, `latest-jma.json`, `latest-cma.json`,
+  `latest-ifshres.json`, `latest-hrrr.json`, `latest-mrms.json`, `latest-jma.json`, `latest-cma.json`,
   `latest-himawari.json`, `latest-goeseast.json`, `latest-goeswest.json`,
   `latest-meteosat.json`. Fields: `schemaVersion`, `model`, `product`, `run`
   (YYYYMMDDHH, UTC), `runTime` (ISO 8601), `manifestPath` (relative),

@@ -21,7 +21,7 @@ from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
 from pathlib import Path
 
-from . import cmaarchive, jmacli
+from . import cmaarchive, jmacli, om2nccli
 from . import satellite
 from .satellite import fetch as satellite_fetch
 from .satellite import producers as satellite_producers
@@ -124,6 +124,14 @@ JMA_RESAMPLING = "max"
 # copy on the bucket, so a fresh runner does not ask the agency again.
 JMA_FRAMES_DIRNAME = "jma-frames"
 JMA_FETCH_CONCURRENCY = 6
+# The Open-Meteo open data bucket (xuebuild/sources.py, `ifshres`): one
+# directory per model under `data_spatial/`, one `.om` file per time step
+# under a run, and a `meta.json` written after the last step — the run's
+# completion marker, and the one document this module reads itself. The
+# steps are read by the om2nc tool (xuebuild/om2nccli.py), which takes a
+# mirror through its own `OM2NC_ENDPOINT`.
+OPEN_METEO_BASE_URL = os.environ.get("XUE_OPEN_METEO_BASE_URL", "https://openmeteo.s3.amazonaws.com").rstrip("/")
+OPEN_METEO_META_FILENAME = "meta.json"
 # The CMA radar mosaic's archive (xuebuild/cmaarchive.py): one Zarr store
 # per UTC day on a private bucket, named by the environment alone.
 CMA_ARCHIVE_VARIABLE = cmaarchive.ARCHIVE_VARIABLE
@@ -929,6 +937,141 @@ def _fetch_cma_run(
 # the converter downstream is the observation path unchanged.
 
 
+def open_meteo_run_url(spec: SourceSpec, run: GfsRun) -> str:
+    """The directory one run of an Open-Meteo model lives in, with its
+    trailing slash: ``data_spatial/<model>/YYYY/MM/DD/HH00Z/``."""
+    if spec.open_meteo is None:
+        raise DownloadError(f"{spec.manifest_model} is not an Open-Meteo source")
+    return f"{OPEN_METEO_BASE_URL}/data_spatial/{spec.open_meteo}/{run.time:%Y/%m/%d/%H00Z}/"
+
+
+def open_meteo_resolution(spec: SourceSpec) -> float:
+    """The grid step om2nc resamples the reduced Gaussian grid onto, read
+    off the grid the source publishes rather than declared twice: a global
+    grid of ``width`` columns is ``360 / width`` degrees, and the fetch and
+    a complete build's grid check can then only agree."""
+    width, height = spec.production_grid
+    step = 360.0 / width
+    if round(180.0 / step) + 1 != height:
+        raise DownloadError(
+            f"{spec.manifest_model}: a {width} x {height} grid is not a global {step:g}° one"
+        )
+    return step
+
+
+def _open_meteo_run_is_complete(
+    spec: SourceSpec, run: GfsRun, *, fetch: Callable[[str], str] | None = None
+) -> bool:
+    """Whether a run has fully landed: Open-Meteo writes its ``meta.json``
+    after the last time step, so the document existing, naming this run and
+    saying ``completed`` is the whole test — one request per candidate
+    cycle, and no listing. A missing document is a run that is still being
+    written (or was never written), which is a False rather than an error;
+    anything else about the response is an error, so a bucket that cannot be
+    read never reads as an incomplete run."""
+    url = f"{open_meteo_run_url(spec, run)}{OPEN_METEO_META_FILENAME}"
+    try:
+        payload = (fetch or fetch_text)(url)
+    except DownloadError as exc:
+        if _http_error_code(exc) == 404 or "received 404" in str(exc):
+            return False
+        raise
+    try:
+        meta = json.loads(payload)
+    except json.JSONDecodeError as exc:
+        raise DownloadError(f"{url} is not JSON: {exc}") from exc
+    reference = str(meta.get("reference_time", "")).replace("Z", "+00:00")
+    try:
+        reference_time = datetime.fromisoformat(reference).astimezone(UTC)
+    except ValueError:
+        raise DownloadError(f"{url} names no readable reference_time") from None
+    return bool(meta.get("completed")) and reference_time == run.time
+
+
+def open_meteo_series_name(spec: SourceSpec, run: GfsRun, variable_id: str) -> str:
+    """The local name of one variable's series:
+    ``ifshres.<run>.<variable>.nc`` — the ``<stem>.<variable>.nc`` layout
+    ``observation.series_files`` resolves a run directory by, with the Xue
+    id in the name even though the variable inside keeps Open-Meteo's."""
+    return f"{spec.id}.{run.id}.{variable_id}.nc"
+
+
+def _fetch_open_meteo_run(
+    spec: SourceSpec,
+    run: GfsRun,
+    hours: int,
+    raw_root: Path,
+    *,
+    force: bool,
+    input_ids: tuple[str, ...] | None,
+) -> list[Path]:
+    """Fetch one run of an Open-Meteo model through the om2nc tool: one CF
+    NetCDF series per variable under ``raw_root/<id>.<run>/``, with a
+    ``fetch.json`` beside them recording what was asked for.
+
+    One call of the tool per variable, run in order: the tool fetches a
+    variable's steps in parallel itself, and one file per variable is what
+    the converter reads (and what a fanned-out publish needs, since a job
+    fetches only its own bundles' inputs). A variable the source lists as
+    optional at the analysis is asked for its own steps — the analysis hour
+    dropped — because its ``.om`` files simply do not carry it there. A
+    series already on disk is left alone unless ``force``: the tool writes
+    ``<name>.part`` and renames on success, so a file that exists is whole.
+    """
+    if spec.open_meteo is None:
+        raise DownloadError(f"{spec.manifest_model} is not an Open-Meteo source")
+    if input_ids is not None and any(variable_id not in spec.input_variable_ids for variable_id in input_ids):
+        raise DownloadError(f"{spec.manifest_model} publishes {list(spec.input_variable_ids)}, not {list(input_ids)}")
+    tool_version = om2nccli.version()
+    variable_ids = tuple(
+        variable_id
+        for variable_id in spec.input_variable_ids
+        if input_ids is None or variable_id in input_ids
+    )
+    if not variable_ids:
+        raise DownloadError(f"a {spec.manifest_model} fetch needs at least one variable")
+    unnamed = [variable_id for variable_id in variable_ids if not VARIABLES[variable_id].open_meteo]
+    if unnamed:
+        # A registry mistake rather than a run's problem: the tool takes the
+        # Open-Meteo name and there is nothing to ask it for.
+        raise DownloadError(f"the variable registry gives {unnamed} no Open-Meteo name")
+    destination = raw_root / f"{spec.id}.{run.id}"
+    destination.mkdir(parents=True, exist_ok=True)
+    hours_axis = spec.forecast_hours(hours)
+    resolution = open_meteo_resolution(spec)
+    written: list[Path] = []
+    record_variables: list[dict[str, object]] = []
+    for variable_id in variable_ids:
+        steps = [hour for hour in hours_axis if hour or variable_id not in spec.optional_at_analysis]
+        output = destination / open_meteo_series_name(spec, run, variable_id)
+        if output.is_file() and not force:
+            LOG.info("reusing %s", output)
+        else:
+            om2nccli.fetch_variable(
+                model=spec.open_meteo,
+                init=f"{run.time:%Y-%m-%dT%H}Z",
+                steps=steps,
+                variable=VARIABLES[variable_id].open_meteo,
+                resolution=resolution,
+                output=output,
+                concurrency=spec.fetch_concurrency,
+            )
+        written.append(output)
+        record_variables.append({"variable": variable_id, "series": output.name, "steps": len(steps)})
+    record = {
+        "model": spec.id,
+        "run": run.id,
+        "hours": hours,
+        "openMeteoModel": spec.open_meteo,
+        "resolution": resolution,
+        "om2nc": tool_version,
+        "variables": record_variables,
+    }
+    (destination / MRMS_FETCH_FILENAME).write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
+    LOG.info("%s run %s: %d series in %s", spec.manifest_model, run.id, len(written), destination)
+    return written
+
+
 def satellite_platform(spec: SourceSpec) -> satellite.Platform:
     if spec.platform is None:
         raise DownloadError(f"{spec.manifest_model} is not a satellite source")
@@ -1194,6 +1337,8 @@ def _run_is_complete(
         return _jma_run_is_complete(source_spec(model), run, hours)
     if model == "cma":
         return _cma_run_is_complete(source_spec(model), run, hours)
+    if source_spec(model).open_meteo is not None:
+        return _open_meteo_run_is_complete(source_spec(model), run)
     if source_spec(model).platform is not None:
         return _satellite_run_is_complete(source_spec(model), run, hours, now=now)
     if model == "hrrr":
@@ -1587,6 +1732,8 @@ def fetch_run(
         return _fetch_cma_run(spec, run, hours, raw_root, force=force, input_ids=input_ids)
     if spec.platform is not None:
         return _fetch_satellite_run(spec, run, hours, raw_root, force=force, input_ids=input_ids)
+    if spec.open_meteo is not None:
+        return _fetch_open_meteo_run(spec, run, hours, raw_root, force=force, input_ids=input_ids)
     destination = raw_root / f"{spec.id}.{run.id}"
     forecast_hours = spec.forecast_hours(hours)
     frame_attempts = ECMWF_FRAME_ATTEMPTS if model in ECMWF_OPEN_DATA_MODELS else 1

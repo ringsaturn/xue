@@ -110,6 +110,7 @@
               "NOAA GFS 0.25° and GFS surface-flux 13 km runs, hourly to 120 h and 3-hourly to 240 h",
               "ECMWF IFS 0.25° open data runs, 3-hourly to 144 h and 6-hourly to 240 h",
               "ECMWF AIFS Single 0.25° open data runs, the centre's data-driven model, 6-hourly to 360 h",
+              "ECMWF IFS HRES 0.1° surface runs from the centre's ~9 km operational forecast as Open-Meteo forwards it, hourly to 90 h and out to 360 h",
               "NOAA HRRR 3 km runs over the contiguous United States, a new cycle every hour, hourly to 18 h, with the model's forecast radar reflectivity",
               "2 m temperature, precipitation rate, 10 m wind with particle animation, downward shortwave radiation",
               "Sea level pressure isobars and 850/700/500/250 hPa geopotential height contours with labelled highs and lows",
@@ -137,7 +138,7 @@
             "@type": "Dataset",
             "@id": "https://xue.ringsaturn.me/#data",
             "name": "Xue live forecast bundles",
-            "description": "The current NOAA GFS, GFS surface-flux, ECMWF IFS, ECMWF AIFS and NOAA HRRR runs, the last three to four hours of the NOAA MRMS radar mosaic, the last two to three hours of the JMA precipitation nowcast over Japan and of the CMA radar mosaic over China, the last five to six hours of Himawari-9, GOES-19 and GOES-18 infrared imagery and Dust RGB composites over the three geostationary disks, and the last day of hourly Meteosat-12 imagery and Dust RGB over the 0° disk (which the viewer also shows as one geostationary mosaic, each disk clipped to the longitudes it sees least obliquely, at /?model=geo), each a rolling window rebuilt every few minutes, converted into the .xue container: 8-bit quantized planes on the native grid with temporal residual prediction and Zstandard compression, one file per variable, streamable by HTTP range request. Only the newest run per source is kept.",
+            "description": "The current NOAA GFS, GFS surface-flux, ECMWF IFS, ECMWF AIFS, ECMWF IFS HRES 0.1° and NOAA HRRR runs, the last three to four hours of the NOAA MRMS radar mosaic, the last two to three hours of the JMA precipitation nowcast over Japan and of the CMA radar mosaic over China, the last five to six hours of Himawari-9, GOES-19 and GOES-18 infrared imagery and Dust RGB composites over the three geostationary disks, and the last day of hourly Meteosat-12 imagery and Dust RGB over the 0° disk (which the viewer also shows as one geostationary mosaic, each disk clipped to the longitudes it sees least obliquely, at /?model=geo), each a rolling window rebuilt every few minutes, converted into the .xue container: 8-bit quantized planes on the native grid with temporal residual prediction and Zstandard compression, one file per variable, streamable by HTTP range request. Only the newest run per source is kept.",
             "url": "https://dataset.ringsaturn.me/xue/",
             "isAccessibleForFree": true,
             "creator": { "@id": "https://github.com/ringsaturn#person" },
@@ -150,7 +151,8 @@
               { "@type": "Dataset", "name": "NOAA Himawari-9 AHI full-disk imagery (JMA ひまわり9号, ISatSS)", "url": "https://registry.opendata.aws/noaa-himawari/" },
               { "@type": "Dataset", "name": "NOAA GOES-R series ABI full-disk imagery (GOES-19 East, GOES-18 West, ABI-L2-CMIPF)", "url": "https://registry.opendata.aws/noaa-goes/" },
               { "@type": "Dataset", "name": "EUMETSAT Meteosat-12 (MTG-I1) FCI Level 1c full-disk imagery, hourly repeat cycle (EO:EUM:DAT:0662; contains modified EUMETSAT Meteosat data)", "url": "https://data.eumetsat.int/product/EO:EUM:DAT:0662", "license": "https://creativecommons.org/licenses/by/4.0/" },
-              { "@type": "Dataset", "name": "ECMWF Open Data (real-time)", "url": "https://www.ecmwf.int/en/forecasts/datasets/open-data", "license": "https://creativecommons.org/licenses/by/4.0/" }
+              { "@type": "Dataset", "name": "ECMWF Open Data (real-time)", "url": "https://www.ecmwf.int/en/forecasts/datasets/open-data", "license": "https://creativecommons.org/licenses/by/4.0/" },
+              { "@type": "Dataset", "name": "ECMWF IFS HRES surface fields forwarded by Open-Meteo (adapted from ECMWF IFS by ECMWF, licensed under CC BY 4.0, via Open-Meteo)", "url": "https://open-meteo.com", "license": "https://creativecommons.org/licenses/by/4.0/" }
             ],
             "spatialCoverage": { "@type": "Place", "geo": { "@type": "GeoShape", "box": "-90 -180 90 180" } },
             "variableMeasured": [
@@ -173,6 +175,7 @@
               { "@type": "DataDownload", "name": "GFS surface-flux live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-sflux.json" },
               { "@type": "DataDownload", "name": "ECMWF live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-ecmwf.json" },
               { "@type": "DataDownload", "name": "ECMWF AIFS live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-aifs.json" },
+              { "@type": "DataDownload", "name": "ECMWF IFS HRES 0.1° live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-ifshres.json" },
               { "@type": "DataDownload", "name": "HRRR live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-hrrr.json" },
               { "@type": "DataDownload", "name": "MRMS radar live pointer (rolling window of the last three to four hours)", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-mrms.json" },
               { "@type": "DataDownload", "name": "JMA precipitation nowcast live pointer (rolling window of the last two to three hours)", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-jma.json" },
@@ -646,6 +649,11 @@
               <small>ECMWF AI 0.25°</small>
               <span class="model-check" aria-hidden="true"></span>
             </button>
+            <button type="button" data-model="ifshres" aria-pressed="false">
+              <span class="model-name">ECMWF-HRES</span>
+              <small>IFS 9KM &rarr; 0.1°</small>
+              <span class="model-check" aria-hidden="true"></span>
+            </button>
             <button type="button" data-model="hrrr" aria-pressed="false">
               <span class="model-name">HRRR</span>
               <small>CONUS 3KM</small>
@@ -766,6 +774,7 @@
       <footer class="source-note">
         <span class="source-line">
           <span class="source-credit" data-credit-model="ecmwf">CONTAINS MODIFIED <a href="https://www.ecmwf.int/en/forecasts/datasets/open-data" target="_blank" rel="noreferrer">ECMWF OPEN DATA</a> (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">CC BY 4.0</a>) ·</span>
+          <span class="source-credit" data-credit-model="ifshres">ADAPTED FROM <a href="https://www.ecmwf.int/en/forecasts/datasets/open-data" target="_blank" rel="noreferrer">ECMWF IFS</a> BY ECMWF, LICENSED UNDER <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">CC BY 4.0</a> · VIA <a href="https://open-meteo.com" target="_blank" rel="noreferrer">OPEN-METEO</a> ·</span>
           <span class="source-credit" data-credit-model="cma">RADAR <a href="https://www.nmc.cn" target="_blank" rel="noreferrer">CMA</a> ·</span>
           <span class="source-credit" data-credit-model="mrms">RADAR <a href="https://registry.opendata.aws/noaa-mrms-pds/" target="_blank" rel="noreferrer">NOAA MRMS</a> ·</span>
           <span class="source-credit" data-credit-model="jma">SOURCE <a href="https://www.jma.go.jp/bosai/en_nowc/" target="_blank" rel="noreferrer">JMA WEBSITE</a> (REGRIDDED) ·</span>
@@ -809,6 +818,13 @@
               <a href="https://www.ecmwf.int/en/forecasts/datasets/open-data" target="_blank" rel="noreferrer">
                 <span class="credits-name">ECMWF Open Data</span>
                 <small data-i18n="creditsEcmwf">CONTAINS MODIFIED ECMWF DATA · CC BY 4.0</small>
+                <span class="credits-arrow" aria-hidden="true">↗</span>
+              </a>
+            </li>
+            <li>
+              <a href="https://open-meteo.com" target="_blank" rel="noreferrer">
+                <span class="credits-name">Open-Meteo</span>
+                <small data-i18n="creditsIfsHres">ADAPTED FROM ECMWF IFS BY ECMWF, LICENSED UNDER CC BY 4.0 · VIA OPEN-METEO · IFS HRES ~9 KM, RESAMPLED TO 0.1°</small>
                 <span class="credits-arrow" aria-hidden="true">↗</span>
               </a>
             </li>

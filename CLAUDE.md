@@ -60,7 +60,7 @@ publishing; `showcase/README.md` covers authoring historical cases.
 ```sh
 make check                       # verify GDAL / zstd / node / wasm-pack versions
 make wasm                        # build the WASM decoder into web/src/wasm/ (generated, gitignored)
-make mvp [MODEL=gfs|ecmwf|aifs|sflux] # check + install + wasm + build a run + vite build
+make mvp [MODEL=gfs|ecmwf|aifs|ifshres|sflux] # check + install + wasm + build a run + vite build
 make serve                       # vite preview on 127.0.0.1
 npm run dev                      # vite dev server
 
@@ -246,6 +246,38 @@ model starts here; the frontend mirror is `FORECAST_MODELS` in
   probe and contour labels to the footprint (`web/src/domain.ts`,
   `FORECAST_MODELS[].domain`), and `region` is where the camera goes when a
   regional model is opened on a view showing none of it.
+- Series-file forecast (`ifshres`): ECMWF's IFS HRES, the deterministic
+  high-resolution forecast on its native ~9 km grid, as Open-Meteo
+  forwards the centre's real-time archive — the first source that is
+  `series_file=True` and not an observation. The fetch stage is om2nc
+  (`xuebuild/om2nccli.py`), which reads the `.om` files under
+  `SourceSpec.open_meteo`'s model directory (`ecmwf_ifs`) one variable's
+  byte ranges at a time and resamples the reduced Gaussian O1280 grid onto
+  the regular 0.1° one (3600 × 1801, nearest neighbour) as one CF NetCDF
+  series per variable, so the projection has exactly one implementation
+  and it is on the fetch side: neither encoder does Gaussian arithmetic.
+  Downstream it is the `observation.py` / `observation.rs` NetCDF path
+  widened to a forecast — the run time is the epoch in the `time` unit
+  rather than the first frame, an `optional_at_analysis` variable may lack
+  its lead 0 frame, and a vector bundle ships when its inputs are in the
+  series — and cropping, quantization, grouping, the store, the manifest
+  and the STAC documents are unchanged. `VariableSpec.open_meteo` is the
+  Open-Meteo spelling of a variable (the `--var` argument and the
+  subdataset name), beside `ecmwf_param` and the MRMS hints. Precipitation
+  arrives in a third form: the total since the previous step, which
+  `SourceSpec.interval_precipitation` divides by the step into `prate`
+  (ECMWF's `tp` is a run accumulation, sflux's `prate_ave` a window mean),
+  and its input `apcp` is registered like `tp` — read, never published. A
+  NaN nodata is a fill rather than an error here
+  (`PlaneSource.fill_nan` → the codebook bottom, which is how sea ice
+  thickness over land arrives). The axis is hourly to F090, 3-hourly to
+  F144 and 6-hourly to F360 (145 frames) from the 00Z and 12Z cycles alone
+  (`cycle_hours` 12: the short cycles stop at F144 and a source carries one
+  horizon), complete some six and a half hours after the cycle;
+  `publish-ifshres.yml` installs the pinned om2nc release in the build job.
+  Fifteen bundles, every id already registered, so the shell needed only a
+  model row — and, as with every new source, the shell deploys before the
+  data, since an older `FORECAST_MODELS` does not know the model id.
 - Archived series-file observation (`cma`, once `radar`): the CMA level-3 composite
   reflectivity mosaic over China, `observation=True`, `series_file=True`,
   a rolling window like `jma` (`latest-cma.json`, `publish-cma.yml`
@@ -788,9 +820,13 @@ readout, a case hides both, and each product is its own rail tile
 
 ### External tools
 
-GDAL, zstd, ffmpeg and eccodes are invoked as CLI subprocesses (`gdal.py`,
-`zstdcli.py`, `ffmpegcli.py`, `eccodescli.py`); NumPy is the only runtime
-dependency. Two exceptions:
+GDAL, zstd, ffmpeg, eccodes and om2nc are invoked as CLI subprocesses
+(`gdal.py`, `zstdcli.py`, `ffmpegcli.py`, `eccodescli.py`, `om2nccli.py`);
+NumPy is the only runtime dependency. om2nc (the `ifshres` fetch stage,
+`XUE_OM2NC`) is also a licence boundary: it is a GPL-2.0-only standalone
+binary in its own repository, so it appears here only as an executable on
+the PATH, and no om dependency reaches `pyproject.toml`, `Cargo.toml` or
+`web/`. Two exceptions:
 
 - zstd runs in-process via the stdlib `compression.zstd` on Python ≥ 3.14
   and falls back to the CLI below that. The two are interchangeable on

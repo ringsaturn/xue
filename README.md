@@ -6,6 +6,7 @@
 [![GFS/SFLUX run](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-sflux.json&query=%24.run&label=GFS/SFLUX&color=2b6cb0&cacheSeconds=600)](https://dataset.ringsaturn.me/xue/latest-sflux.json)
 [![ECMWF/IFS 0p25 run](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-ecmwf.json&query=%24.run&label=ECMWF/IFS%200p25&color=1f6f8b&cacheSeconds=600)](https://dataset.ringsaturn.me/xue/latest-ecmwf.json)
 [![ECMWF/AIFS 0p25 run](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-aifs.json&query=%24.run&label=ECMWF/AIFS%200p25&color=2f8f6b&cacheSeconds=600)](https://dataset.ringsaturn.me/xue/latest-aifs.json)
+[![ECMWF/HRES 0p1 run](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-ifshres.json&query=%24.run&label=ECMWF/HRES%200p1&color=1f8f8b&cacheSeconds=600)](https://dataset.ringsaturn.me/xue/latest-ifshres.json)
 [![HRRR run](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-hrrr.json&query=%24.run&label=HRRR&color=7b4ea3&cacheSeconds=600)](https://dataset.ringsaturn.me/xue/latest-hrrr.json)
 [![MRMS window](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-mrms.json&query=%24.run&label=MRMS&color=b7472a&cacheSeconds=300)](https://dataset.ringsaturn.me/xue/latest-mrms.json)
 
@@ -37,6 +38,7 @@ pipeline.
 | GFS surface flux | `sflux` | 3072 × 1536 Gaussian, ~13 km | as GFS | `latest-sflux.json` |
 | ECMWF IFS open data 0.25° | `ecmwf` | 1440 × 721, 0.25° | 3-hourly to 144 h, 6-hourly to F240 (65 frames) | `latest-ecmwf.json` |
 | ECMWF AIFS Single open data 0.25° | `aifs` | 1440 × 721, 0.25° | 6-hourly to F360 from every cycle (61 frames) | `latest-aifs.json` |
+| ECMWF IFS HRES via Open-Meteo | `ifshres` | 3600 × 1801, 0.1° | hourly to F090, 3-hourly to F144, 6-hourly to F360 (145 frames), 00Z and 12Z only | `latest-ifshres.json` |
 | NOAA HRRR | `hrrr` | 2441 × 1051, 0.03°, contiguous US | hourly to F18, a cycle every hour | `latest-hrrr.json` |
 | NOAA MRMS | `mrms` | 3500 × 1750, 0.02°, contiguous US | one frame every two minutes, a rolling four-hour window | `latest-mrms.json` |
 | JMA precipitation nowcast | `jma` | 5600 × 5000, 0.005°, Japan | one frame every five minutes, a rolling three-hour window | `latest-jma.json` |
@@ -78,6 +80,22 @@ Bundle sets:
 - sflux: the core four (temperature, precipitation de-averaged from
   window-cumulative records, from F001, wind) plus `dswrf`, instantaneous
   surface downward shortwave radiation.
+- IFS HRES (`ifshres`): the surface set the centre's ~9 km operational
+  forecast carries where Open-Meteo forwards it — 2 m temperature and dew
+  point, precipitation rate, 10 m wind, downward shortwave radiation, sea
+  level pressure, gust, total / low / middle / high cloud cover, CAPE,
+  visibility, skin temperature and sea ice thickness: fifteen bundles, the
+  same ids, codebooks and charts as GFS, so switching between the two keeps
+  the layer. No isobaric levels (the 9 km product has none; `ecmwf` keeps
+  them at 0.25°) and no waves. The source is the one forecast that arrives
+  as a NetCDF series rather than GRIB: `om2nc` reads the Open-Meteo `.om`
+  files by byte range and resamples the reduced Gaussian O1280 grid onto
+  the regular 0.1° one (nearest neighbour) once, on the fetch side, so
+  neither encoder does Gaussian-grid arithmetic. Precipitation arrives as
+  the total over the interval since the previous step and is divided by the
+  step into a rate, which — like the radiation and the gust — has no
+  analysis frame. Only the 00Z and 12Z cycles reach F360 and only those are
+  published; a cycle is complete about six and a half hours after it.
 - HRRR: the core pair, sea level pressure (`MSLMA`), 850 / 700 / 500 hPa
   heights, 925 / 850 / 500 hPa temperature, the 10 m, 925, 850 and 250 hPa
   winds, the surface diagnostics the surface file carries, and forecast
@@ -282,6 +300,14 @@ mvp`, which passes `--zarr`) keeps both on disk for local work.
 - Rust toolchain + `wasm-pack` (builds the browser decoder)
 - eccodes (`grib_set`, ECMWF source only: open data is CCSDS/AEC-packed and
   is repacked to `grid_simple` at fetch time so any GDAL build can read it)
+- [om2nc](https://github.com/ringsaturn/om2nc) (`ifshres` source only: it
+  reads Open-Meteo's `.om` files and writes the NetCDF series the encoders
+  ingest). A standalone binary under GPL-2.0-only, run as a subprocess the
+  way GDAL, ffmpeg and eccodes are — nothing in this tree imports, links or
+  vendors it, and no om dependency appears in `pyproject.toml`,
+  `Cargo.toml` or `web/`. Install a pinned release from its GitHub
+  Releases (the publish workflow verifies the sha256) or set `XUE_OM2NC`
+  to the command.
 - AWS CLI v2 and `jq` (publishing only: the R2 bucket is managed over its
   S3 API)
 
@@ -296,14 +322,16 @@ Build the latest run end to end and serve the frontend:
 make mvp                  # NOAA GFS (default)
 make mvp MODEL=ecmwf      # ECMWF IFS open data
 make mvp MODEL=aifs       # ECMWF AIFS Single open data
+make mvp MODEL=ifshres    # ECMWF IFS HRES 0.1° via Open-Meteo (needs om2nc)
 make mvp MODEL=sflux      # GFS surface flux
 make mvp MODEL=hrrr       # NOAA HRRR
 make serve
 ```
 
-Or step by step (`--model gfs|ecmwf|aifs|sflux|hrrr|mrms`, default `gfs`;
+Or step by step (`--model gfs|ecmwf|aifs|ifshres|sflux|hrrr|mrms`, default `gfs`;
 `--hours` defaults to the whole axis the model publishes: 240 for the global
-models, 360 for AIFS, 18 for HRRR, and on MRMS the window length, 3):
+models, 360 for AIFS and IFS HRES, 18 for HRRR, and on MRMS the window
+length, 3):
 
 ```sh
 python -m xuebuild fetch --run latest --hours 240
@@ -314,6 +342,7 @@ python -m xuebuild verify-bin web/public/data/gfs.YYYYMMDDHH/tmp2m.xue
 python -m xuebuild build-bin --run latest --hours 240
 python -m xuebuild build-bin --model ecmwf --run latest --hours 240
 python -m xuebuild build-bin --model aifs --run latest --hours 360
+python -m xuebuild build-bin --model ifshres --run latest --hours 360
 python -m xuebuild build-bin --model sflux --run latest --hours 240
 python -m xuebuild build-bin --model hrrr --run latest
 python -m xuebuild build-bin --model mrms --run 2026091300 --hours 3   # a past window
@@ -360,8 +389,8 @@ manifest requires `--force` (`make mvp FORCE=--force`).
 ### URL state
 
 `/?model=gfs&type=wind`, `/?model=ecmwf&type=temp`. `model` accepts `gfs` /
-`ecmwf` (alias `ifs`) / `aifs` (alias `aifs-single`) / `sflux` / `hrrr` /
-`mrms`; `type` accepts aliases
+`ecmwf` (alias `ifs`) / `aifs` (alias `aifs-single`) / `ifshres` (aliases
+`hres`, `ifs9km`) / `sflux` / `hrrr` / `mrms`; `type` accepts aliases
 such as `tmp2m` / `prate` / `wind10m` / `solar` / `radar`, and each isobaric
 field names itself (`pressure`, `hgt500`, `tmp850` / `t850`, `rh700`,
 `wind850`, `qflux850` / `vapor850`; there is no separate `level`
@@ -494,6 +523,7 @@ GitHub Actions runs the loop on a schedule, one workflow per source
 [`publish-sflux.yml`](.github/workflows/publish-sflux.yml),
 [`publish-ecmwf.yml`](.github/workflows/publish-ecmwf.yml),
 [`publish-aifs.yml`](.github/workflows/publish-aifs.yml),
+[`publish-ifshres.yml`](.github/workflows/publish-ifshres.yml),
 [`publish-hrrr.yml`](.github/workflows/publish-hrrr.yml), the last every
 hour), all calling the reusable
 [`publish.yml`](.github/workflows/publish.yml) with the `R2_ACCESS_KEY_ID`
@@ -768,7 +798,10 @@ Weather data comes from
 and [ECMWF open data](https://www.ecmwf.int/en/forecasts/datasets/open-data),
 the IFS and the AIFS (CC BY 4.0, © European Centre for Medium-Range Weather Forecasts; this
 project distributes converted derivatives: "Contains modified ECMWF open
-data"). The basemap is [Protomaps](https://protomaps.com)-hosted vector
+data"). The IFS HRES surface fields (`ifshres`) are ECMWF's ~9 km
+operational forecast as [Open-Meteo](https://open-meteo.com) forwards it
+under CC BY 4.0: "Adapted from ECMWF IFS by ECMWF, licensed under CC BY
+4.0", via Open-Meteo. Neither ECMWF nor Open-Meteo endorses this use. The basemap is [Protomaps](https://protomaps.com)-hosted vector
 tiles, © [OpenStreetMap](https://www.openstreetmap.org/copyright)
 contributors.
 
