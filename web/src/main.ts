@@ -68,12 +68,15 @@ import {
   HOUR_SECONDS,
   isObservationModel,
   sameTimeAxis,
+  visibleGridShare,
   type BundleMetadata,
   type BundleVariable,
   type ForecastBundleId,
   type ForecastManifest,
   type ForecastModelId,
   type KnownBundleId,
+  type VariantBudget,
+  type VariantDescriptor,
   type VideoBundleDescriptor,
 } from "./manifest";
 import {
@@ -321,31 +324,148 @@ function neededGridWidth(): number {
   return worldCssWidth * Math.min(2, window.devicePixelRatio || 1);
 }
 
-/** The degrees of longitude a bundle's grid covers, read off its poster's
- * metadata — the same grid at a coarser step, and in the manifest before
- * any bundle byte is — or the world's when the bundle ships no poster. */
-function bundleLongitudeSpan(descriptor: ForecastManifest["bundles"][number]): number {
-  if (!descriptor.poster) return 360;
+/** A bundle's grid as a poster's metadata describes it — the same grid at
+ * a coarser step, and in the manifest before any bundle byte is — or null
+ * when there is no poster to read (or an unreadable one). Given the run's
+ * bundles, a bundle without a poster of its own (a vector, a composite,
+ * the pressure family) reads a sibling's: every bundle of a run is cut on
+ * the run's one grid, so the extent is the same wherever it is read. */
+function posterGrid(
+  descriptor: ForecastManifest["bundles"][number],
+  siblings: readonly ForecastManifest["bundles"][number][] = [],
+): ReturnType<typeof geoGrid> | null {
+  const poster = descriptor.poster ?? siblings.find((bundle) => bundle.poster)?.poster;
+  if (!poster) return null;
   try {
-    const grid = geoGrid(parseBundleMetadata(descriptor.poster.metadataJson));
-    return Math.min(360, Math.abs(grid.width * grid.longitudeStep));
+    return geoGrid(parseBundleMetadata(poster.metadataJson));
   } catch {
-    return 360;
+    return null;
   }
+}
+
+/** The degrees of longitude a bundle's grid covers, read off its poster,
+ * or the world's when the bundle ships none. */
+function bundleLongitudeSpan(descriptor: ForecastManifest["bundles"][number]): number {
+  const grid = posterGrid(descriptor);
+  if (!grid) return 360;
+  return Math.min(360, Math.abs(grid.width * grid.longitudeStep));
+}
+
+/** True on a device that reports four gigabytes of memory or less. Only
+ * Chromium exposes the figure; a browser that keeps it to itself is taken
+ * for a roomy one, as it always has been. */
+function lowMemoryDevice(): boolean {
+  const memory = (navigator as { deviceMemory?: number }).deviceMemory;
+  return typeof memory === "number" && memory <= 4;
+}
+
+/** Grid cells one plane of the primary session may hold, the ceiling
+ * `pickBundleVariant` steps down the resolution ladder against: 2.5 M, so a
+ * full global 0.25° plane (1440 × 721 = 1.04 M) always fits, a full
+ * satellite disk (3000 × 3000 = 9 M) never does zoomed out, its half
+ * (2.25 M) does on a desktop, and a four-gigabyte phone lands on the
+ * quarter (0.56 M). A constrained connection quarters it again, since the
+ * bytes the cells cost on the wire are the scarcer resource there. */
+function planeCellBudget(): number {
+  let cells = 2_500_000;
+  if (lowMemoryDevice()) cells /= 2;
+  if (constrainedConnection()) cells /= 4;
+  return cells;
+}
+
+/** What `pickBundleVariant` needs to weigh a bundle's tiers against
+ * `planeCellBudget()`, or undefined when the run has no poster and the
+ * bundle no variants, in which case there is nothing to choose between.
+ * The full grid's dimensions are not in the manifest: the poster is the
+ * full grid decimated 2:1 (width = ⌈full / 2⌉, `GridInfo.decimated`), so
+ * twice its size is at most one row and one column over, noise against a
+ * cell budget; the widest variant is the same decimation when there is no
+ * poster. The visible share is read at session open against the poster's
+ * extent — the bundle's own or a sibling's, since the Dust RGB composite,
+ * the bundle the budget is for, ships none itself and must take the full
+ * tier over a storm exactly as the window beside it does — and a run with
+ * no poster at all is taken as wholly in view. */
+function bundleVariantBudget(
+  descriptor: ForecastManifest["bundles"][number],
+  siblings: readonly ForecastManifest["bundles"][number][],
+): VariantBudget | undefined {
+  const grid = posterGrid(descriptor, siblings);
+  const widest = (descriptor.variants ?? []).reduce<{ width: number; height: number } | null>(
+    (best, variant) => (best && best.width >= variant.width ? best : variant),
+    null,
+  );
+  const decimated = grid ?? widest;
+  if (!decimated) return undefined;
+  const fullGrid = { width: decimated.width * 2, height: decimated.height * 2 };
+  let visibleShare = 1;
+  if (grid) {
+    const bounds = map.getBounds();
+    visibleShare = visibleGridShare(grid, {
+      west: bounds.getWest(),
+      east: bounds.getEast(),
+      south: bounds.getSouth(),
+      north: bounds.getNorth(),
+    });
+  }
+  return { cells: planeCellBudget(), fullGrid, visibleShare };
 }
 
 // The plane cache is byte-budgeted (not frame-count-limited) and the
 // background prefetch is windowed — a handful of frames ahead of the
 // playhead, a few fetches at a time, narrower on constrained connections.
-function planeCacheBudgetBytes(): number {
-  return (constrainedConnection() ? 24 : 64) * 1024 * 1024;
+// The two agree with the frame size of the primary session: the cache
+// grows to hold the window plus the two frames on screen, up to a cap, and
+// the window shrinks to what the cache can hold when the cap is hit. A
+// frame's planes are always allocated at the tier's whole grid, even when
+// the session decodes only the viewport's tiles into them, so the frame
+// size is the grid's cells times the variables a frame needs, whatever the
+// view shows.
+
+/** Bytes one frame of the primary session occupies in the plane cache, or
+ * null before a session is open. */
+function primaryFrameBytes(): number | null {
+  if (!activeSession) return null;
+  const grid = activeSession.metadata.grid;
+  return grid.width * grid.height * activeSession.variables.length;
 }
-function prefetchWindowFrames(): number {
-  // The window is runway in time, not in frames: faster playback burns
-  // through the same number of frames sooner, so it needs proportionally
-  // more of them resident ahead of the playhead.
+
+/** The frames the window would keep ahead of the playhead if memory were
+ * no object. The window is runway in time, not in frames: faster playback
+ * burns through the same number of frames sooner, so it needs
+ * proportionally more of them resident ahead of the playhead. */
+function prefetchWindowWanted(): number {
   const base = constrainedConnection() ? 4 : 10;
   return Math.max(3, Math.round((base * playbackFps) / DEFAULT_FPS));
+}
+
+const MEBIBYTE = 1024 * 1024;
+
+/** The plane cache's ceiling: the floor it has always had (64 MB, 24 MB
+ * on a constrained connection, where the floor is also the ceiling — the
+ * budget there is the network's, not the device's), raised to hold the
+ * wanted window plus two frames of the primary session, and capped at
+ * 256 MB (128 MB on a four-gigabyte device). A GFS run never leaves the
+ * floor; a full satellite disk (9 MB a plane, 27 MB a Dust RGB frame)
+ * fills the cap, and the window below gives way to it. */
+function planeCacheBudgetBytes(): number {
+  if (constrainedConnection()) return 24 * MEBIBYTE;
+  const floor = 64 * MEBIBYTE;
+  const cap = (lowMemoryDevice() ? 128 : 256) * MEBIBYTE;
+  const frame = primaryFrameBytes();
+  if (frame === null) return floor;
+  return Math.min(cap, Math.max(floor, frame * (prefetchWindowWanted() + 2)));
+}
+
+/** The frames to keep resident ahead of the playhead: the wanted window,
+ * clamped so that it and the two frames on screen fit the cache — never
+ * below two, since the blend needs the next frame and playback the one
+ * after it. */
+function prefetchWindowFrames(): number {
+  const wanted = prefetchWindowWanted();
+  const frame = primaryFrameBytes();
+  if (frame === null) return wanted;
+  const fits = Math.floor(planeCacheBudgetBytes() / frame) - 2;
+  return Math.max(2, Math.min(wanted, fits));
 }
 function prefetchConcurrency(): number {
   return constrainedConnection() ? 1 : 3;
@@ -946,10 +1066,13 @@ interface VariableSession {
   /** Every data variable a frame of this session needs decoded — one for
    * scalars, the u and v pair for wind, the three guns for a composite. */
   variables: BundleVariable[];
-  /** Delivery format actually in use for this variable ("Xue ½" is the
-   * half-resolution variant tier; "Zarr" and "Zarr ½" the same tiers read
-   * through the Zarr channel). */
-  format: "H.264" | "Xue" | "Xue ½" | "Zarr" | "Zarr ½";
+  /** Delivery format actually in use for this variable: the container,
+   * the same bytes read through the Zarr channel, or the video companion. */
+  format: "H.264" | "Xue" | "Zarr";
+  /** The resolution tier in use, as the data card names it beside the
+   * format: empty at full resolution, else the rung's fraction of the
+   * canonical grid ("½", "¼", "⅛"). */
+  tier: string;
   /** Network bytes downloaded for this variable's artifacts only. */
   bytes: number;
   /** Total bytes of this variable's artifacts (stream + index). */
@@ -1837,12 +1960,12 @@ function debugInfoText(): string {
     `xue-debug ${new Date().toISOString()}`,
     `dataset: ${currentRun ? `${selectedModelId}.${currentRun}` : "--"}`,
     `variable: ${session ? `${session.id} (${session.variable.unit})` : "--"}`,
-    `format: ${session?.format ?? "--"}`,
-    `lines: ${overlaySlots().map((slot) => `${slot.session!.id} (${slot.session!.format})`).join(", ") || "--"}`,
+    `format: ${session ? formatReadout(session) : "--"}`,
+    `lines: ${overlaySlots().map((slot) => `${slot.session!.id} (${formatReadout(slot.session!)})`).join(", ") || "--"}`,
     `grid: ${session ? `${session.metadata.grid.width} × ${session.metadata.grid.height}` : "--"}`,
     `time: ${time ? `${time.frameCount}F · first ${time.firstForecastHour}h · ${time.stepHours !== undefined ? `step ${time.stepHours}h` : "mixed step"}` : "--"}`,
     `frame: ${activeFrameIndex === null ? "--" : formatLead(activeFrameIndex)} · ${playbackFps} fps`,
-    `planes: ${cachedFrameCount()} / ${frameCount()} · ${formatBytes(planeCacheBytes)} / ${formatBytes(planeCacheBudgetBytes())}`,
+    `planes: ${cachedFrameCount()} / ${frameCount()} · ${formatBytes(planeCacheBytes)} / ${formatBytes(planeCacheBudgetBytes())} · window ${prefetchWindowFrames()}F`,
     `network: ${session ? `${formatBytes(session.bytes)} / ${formatBytes(session.totalBytes)}${session.resident ? " · resident" : session.streaming ? " · streaming" : ""}` : "--"}`,
     `decode: ${lastDecodeMs === null ? "--" : `${lastDecodeMs.toFixed(1)} ms`} · ${formatBytes(decodeRateBytesPerSec())}/s`,
     `viewport: ${Math.round(neededGridWidth())} col${tileShare()} · zoom ${map.getZoom().toFixed(2)} · dpr ${window.devicePixelRatio || 1}`,
@@ -2924,13 +3047,22 @@ function drawProbeChart(values: ProbeValue[], selected: number, variable: Bundle
 }
 
 
-/** The data card's format readout. The container's names are literals the
- * card has always shown; the store's goes through the dictionary like the
- * rest of the card, though as instrument text it reads "Zarr" everywhere. */
-function formatReadout(format: VariableSession["format"]): string {
-  if (format === "Zarr") return t("formatZarr");
-  if (format === "Zarr ½") return `${t("formatZarr")} ½`;
-  return format;
+/** The data card's format readout, the tier's fraction beside it below
+ * full resolution. The container's name is a literal the card has always
+ * shown; the store's goes through the dictionary like the rest of the
+ * card, though as instrument text it reads "Zarr" everywhere. */
+function formatReadout(session: Pick<VariableSession, "format" | "tier">): string {
+  const name = session.format === "Zarr" ? t("formatZarr") : session.format;
+  return session.tier ? `${name} ${session.tier}` : name;
+}
+
+/** The rung's fraction of the canonical grid, read off the ladder itself:
+ * the widest rung is the half tier, so the canonical width is twice it. */
+function tierGlyph(variant: VariantDescriptor | null, variants: VariantDescriptor[] | undefined): string {
+  if (!variant || !variants?.length) return "";
+  const widest = Math.max(...variants.map((rung) => rung.width));
+  const factor = Math.round((widest * 2) / variant.width);
+  return { 2: "½", 4: "¼", 8: "⅛" }[factor] ?? `1/${factor}`;
 }
 
 /** Sync the data card with one session's delivery state. The card only reads
@@ -4733,7 +4865,8 @@ function loadVariable(
     // Pick a resolution tier before choosing the decode path. A selected
     // variant always rides the Xue path — the video artifacts are full
     // resolution, so whenever a reduced tier suffices the half bundle is
-    // strictly cheaper.
+    // strictly cheaper. The view's pixels say which tier it could show;
+    // the cell budget says which tier a frame of it can afford to hold.
     const overlay = role === "overlay";
     const quiet = role !== "primary";
     const variant = pickBundleVariant(
@@ -4742,6 +4875,7 @@ function loadVariable(
       slowConnection(),
       overlay && resolutionPreference !== "full" ? "half" : resolutionPreference,
       bundleLongitudeSpan(descriptor),
+      bundleVariantBudget(descriptor, run.bundles),
     );
     const video = h264Enabled && role !== "probe" ? descriptor.video : undefined;
     // Opted in, the video path must still earn its bytes — prefer it only
@@ -4813,7 +4947,7 @@ function loadVariable(
         channel.onerror = (event) => showError(event.message || t("workerStartFailed"));
         initMessage = zarrInitMessage(storeRoot, store, variableKey, storeStreams);
         downloadedBytes = 0;
-        format = variant ? "Zarr ½" : "Zarr";
+        format = "Zarr";
         totalBytes = store.byteLength;
       } else if (container) {
         const url = artifactUrl(container.path, container.crc32, runUrl);
@@ -4838,7 +4972,7 @@ function loadVariable(
           transfer = [initBuffer];
           downloadedBytes = container.byteLength;
         }
-        format = variant ? "Xue ½" : "Xue";
+        format = "Xue";
         totalBytes = container.byteLength;
       } else {
         // The validator admits no entry without one delivery or the other.
@@ -4893,6 +5027,7 @@ function loadVariable(
       variable: sessionVariables[0]!,
       variables: sessionVariables,
       format,
+      tier: tierGlyph(variant, descriptor.variants),
       bytes: downloadedBytes,
       totalBytes,
       extraBytes,
@@ -5993,7 +6128,7 @@ function applyVariable(session: VariableSession): void {
   // The data card reflects only the variable on screen: its own delivery
   // format, its own downloaded bytes, and its own delivery state — never a
   // cross-variable total.
-  preloadFormat.value = formatReadout(session.format);
+  preloadFormat.value = formatReadout(session);
   refreshDataCard(session);
   // Sessions differ in grid, tiling and delivery, so the view's tiles are the
   // new session's to answer.

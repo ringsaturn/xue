@@ -941,6 +941,38 @@ class SourceAxisTests(unittest.TestCase):
         self.assertEqual(source_spec("sflux").forecast_hours(240), source_spec("gfs").forecast_hours(240))
 
 
+class SourceLadderTests(unittest.TestCase):
+    """Every source's resolution ladder is a named, ascending run of powers
+    of two — what the tier names and the repeated-halving tile rule rely on,
+    and what the native encoder's source table mirrors."""
+
+    def test_every_source_s_factors_are_ascending_powers_of_two_with_a_tier_name(self) -> None:
+        from xuebuild.binconvert import VARIANT_TIERS, variant_tier
+        from xuebuild.sources import SOURCES
+
+        for source_id, spec in SOURCES.items():
+            with self.subTest(source=source_id):
+                factors = spec.variant_factors
+                self.assertIsInstance(factors, tuple)
+                self.assertTrue(factors, "a source publishes at least the half tier")
+                self.assertEqual(list(factors), sorted(set(factors)), "ascending, no repeats")
+                for factor in factors:
+                    self.assertGreaterEqual(factor, 2)
+                    self.assertEqual(factor & (factor - 1), 0, f"{factor} is not a power of two")
+                    self.assertIn(factor, VARIANT_TIERS)
+                    self.assertEqual(variant_tier(factor), VARIANT_TIERS[factor])
+
+    def test_the_satellite_disks_take_three_rungs_and_every_other_grid_the_half(self) -> None:
+        from xuebuild.sources import SOURCES
+
+        ladders = {source_id: spec.variant_factors for source_id, spec in SOURCES.items()}
+        satellites = {source_id for source_id, spec in SOURCES.items() if spec.platform is not None}
+        self.assertEqual(satellites, {"himawari", "goeseast", "goeswest", "meteosat"})
+        for source_id, factors in ladders.items():
+            with self.subTest(source=source_id):
+                self.assertEqual(factors, (2, 4, 8) if source_id in satellites else (2,))
+
+
 class TimeMetadataTests(unittest.TestCase):
     def test_uniform_axis_declares_a_frame_step(self) -> None:
         from xuebuild.binconvert import _time_metadata

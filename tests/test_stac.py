@@ -274,6 +274,59 @@ class RunItemTests(unittest.TestCase):
         with self.assertRaises(stac.StacError):
             stac.run_item(self.manifest, "dbf3a790", source=self.source, manifest_relative_path="manifest.json")
 
+    def test_a_ladder_of_three_is_three_assets_named_by_tier(self) -> None:
+        """A satellite bundle's variants — half, quarter, eighth, in the
+        manifest's ascending-factor order — are one asset each, keyed and
+        tiered by the name read off the file's suffix, whether the tier
+        ships its container, its store or both."""
+        rungs = [("half", 1500, "ce1cd9ce"), ("quarter", 750, "8b5eb9d7"), ("eighth", 375, "56f4ea0b")]
+        entry = {
+            "variable": "ir104",
+            "zarr": {"path": "ir104.zarr", "byteLength": 170_000_000, "crc32": "760cef95"},
+            "variants": [
+                {"width": side, "height": side, "bandwidth": 1_000_000 * side, "zarr": {"path": f"ir104.{tier}.zarr", "byteLength": 1000 * side, "crc32": crc32}}
+                for tier, side, crc32 in rungs
+            ],
+        }
+        entry["variants"][0]["zarr"]["path"] = "ir104.half.zarr"
+        entry["variants"][1].update({"path": "ir104.quarter.xue", "byteLength": 750_000, "crc32": "0badf00d"})
+        del entry["variants"][2]["zarr"]
+        entry["variants"][2].update({"path": "ir104.eighth.xue", "byteLength": 375_000, "crc32": "0badf00d"})
+        item = stac.run_item(
+            _manifest([entry], model="himawari", hours=6),
+            "0badf00d",
+            source=source_spec("himawari"),
+            manifest_relative_path="himawari.2026091703/manifest.json",
+        )
+        assets = item["assets"]
+        self.assertEqual(
+            [key for key in assets if key.startswith("ir104")],
+            ["ir104", "ir104-half", "ir104-quarter", "ir104-quarter-xue", "ir104-eighth"],
+        )
+        self.assertEqual(assets["ir104"]["xue:tier"], "full")
+        for tier, side, crc32 in rungs:
+            with self.subTest(tier=tier):
+                asset = assets[f"ir104-{tier}"]
+                self.assertEqual(asset["xue:tier"], tier)
+                self.assertEqual(asset["roles"], ["data", "overview"])
+                self.assertEqual(asset["xue:grid"], {"width": side, "height": side})
+                self.assertEqual(asset["title"], f"{stac._bundle_title('ir104')} ({tier} resolution)")
+        self.assertEqual(assets["ir104-half"]["href"], "ir104.half.zarr")
+        self.assertEqual(assets["ir104-half"]["xue:crc32"], "ce1cd9ce")
+        self.assertEqual((assets["ir104-quarter"]["xue:kind"], assets["ir104-quarter-xue"]["xue:kind"]), ("store", "container"))
+        self.assertEqual(assets["ir104-quarter-xue"]["xue:tier"], "quarter")
+        self.assertEqual(assets["ir104-quarter-xue"]["xue:grid"], {"width": 750, "height": 750})
+        self.assertEqual((assets["ir104-eighth"]["href"], assets["ir104-eighth"]["xue:kind"]), ("ir104.eighth.xue", "container"))
+
+    def test_a_variant_not_named_by_a_tier_is_the_writer_s_own_bug(self) -> None:
+        from xuebuild.errors import ManifestError
+
+        for path in ("tmp2m.third.zarr", "tmp2m.zarr", "tmp2m.half.xue.zarr", "tmp2m.HALF.zarr"):
+            manifest = _gfs_manifest()
+            manifest["bundles"][0]["variants"][0]["zarr"]["path"] = path
+            with self.subTest(path=path), self.assertRaisesRegex(ManifestError, "resolution tier"):
+                stac.run_item(manifest, "dbf3a790", source=self.source, manifest_relative_path="gfs.2026081406/manifest.json")
+
 
 class CollectionAndCatalogTests(unittest.TestCase):
     def test_the_collection_mirrors_the_pointer(self) -> None:

@@ -1267,10 +1267,12 @@ Normative for byte identity between the two encoders:
   per file to the shared axis. A trailing short group is its own group.
 - Predictor: RAW for `prate` and `cref`; PREVIOUS for every linear-codebook
   field.
-- Tile size is a per-source registry value; a half-resolution variant uses
-  `(ceil(tileWidth / 2), ceil(tileHeight / 2))`, so a tile with the same
-  number covers the same ground in both tiers. A regional (cropped) file
-  tiles its own grid from its own origin with the source's tile size.
+- Tile size is a per-source registry value; a reduced-resolution variant
+  decimated by `f` (2, 4 or 8: every `f`-th row and column of the canonical
+  plane, from row and column 0) uses `(ceil(tileWidth / f), ceil(tileHeight
+  / f))`, so a tile with the same number covers the same ground in every
+  tier. A regional (cropped) file tiles its own grid from its own origin
+  with the source's tile size.
 - The tile is then clamped to the grid: `min(tileWidth, width)` and
   `min(tileHeight, height)`. The format requires `1 <= tile <= grid` so that
   a single-tile file states its grid size exactly, and a regional crop is
@@ -1285,8 +1287,11 @@ Normative for byte identity between the two encoders:
 These conventions sit outside the container but are what the reference
 pipeline produces: one file per variable per run (`tmp2m.xue`, `prate.xue`,
 `dswrf.xue`, `cref.xue`), the two-variable `wind10m.xue`, and
-half-resolution renditions named `<variable>.half.xue`, structurally
-identical bundles whose metadata declares the decimated grid. A run
+reduced-resolution renditions named `<variable>.half.xue`,
+`<variable>.quarter.xue` and `<variable>.eighth.xue` (decimated by 2, 4 and
+8; which rungs a source ships is a registry value, every source at least the
+half), structurally identical bundles whose metadata declares the decimated
+grid. A run
 directory also carries a `manifest.json` describing every bundle (path, byte
 length, whole-file CRC-32, resolution variants, optional poster and H.264
 companion artifacts); the manifest and a small mutable `latest.json` pointer

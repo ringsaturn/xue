@@ -17,6 +17,7 @@ import {
   sameTimeAxis,
   validateLatestPointer,
   validateManifest,
+  visibleGridShare,
 } from "../../web/src/manifest";
 import { buildPalette, buildWindSpeedPalette, decodeLinear, decodeLog } from "../../web/src/palettes";
 import type { BundleVariable, LogQuantization, VariantDescriptor, ZarrStoreDescriptor } from "../../web/src/manifest";
@@ -394,6 +395,123 @@ describe("pickBundleVariant", () => {
     // The pins and the constrained network still outrank the view.
     expect(pickBundleVariant([regionalHalf], 14000, true, "auto", 70)).toEqual(regionalHalf);
     expect(pickBundleVariant([regionalHalf], 512, false, "full", 70)).toBeNull();
+  });
+
+  describe("cell budget", () => {
+    // The satellite ladder: a 3000 × 3000 disk over 120° of longitude
+    // with half, quarter and eighth rungs (9 M, 2.25 M, 0.56 M and 0.14 M
+    // cells a plane).
+    const diskHalf = { ...half, path: "himawari.2026091800/ir104.half.xue", width: 1500, height: 1500 };
+    const diskQuarter = { ...half, path: "himawari.2026091800/ir104.quarter.xue", width: 750, height: 750 };
+    const diskEighth = { ...half, path: "himawari.2026091800/ir104.eighth.xue", width: 375, height: 375 };
+    // The manifest lists the rungs widest first; the picker must not care.
+    const ladder = [diskHalf, diskQuarter, diskEighth];
+    const fullGrid = { width: 3000, height: 3000 };
+    const budget = (cells: number, visibleShare = 1) => ({ cells, fullGrid, visibleShare });
+    // A retina phone over the whole disk: 512 × 2^3 × 2 = 8192 px across the
+    // world, which the picker scales to 2731 columns of the disk's 120° —
+    // more than the half rung, so the view alone asks for the full tier.
+    const zoomedOut = 8192;
+    // Two zooms out: 667 columns of the disk, the quarter rung.
+    const midway = 2000;
+    // One zoom in from that: 1000 columns, the half rung.
+    const closer = 3000;
+
+    it("changes nothing without a budget", () => {
+      expect(pickBundleVariant(ladder, zoomedOut, false, "auto", 120)).toBeNull();
+      expect(pickBundleVariant(ladder, closer, false, "auto", 120)).toEqual(diskHalf);
+      expect(pickBundleVariant(ladder, midway, false, "auto", 120)).toEqual(diskQuarter);
+    });
+
+    it("keeps the view's choice when a frame of it fits", () => {
+      // A full GFS plane is 1.04 M cells: under the desktop budget.
+      expect(
+        pickBundleVariant([half], 1607, false, "auto", 360, { cells: 2_500_000, fullGrid: { width: 1440, height: 721 }, visibleShare: 1 }),
+      ).toBeNull();
+      expect(pickBundleVariant(ladder, midway, false, "auto", 120, budget(2_500_000))).toEqual(diskQuarter);
+    });
+
+    it("steps down to the largest rung that fits when the choice is over budget", () => {
+      // The full disk (9 M) is over the desktop budget; its half (2.25 M) fits.
+      expect(pickBundleVariant(ladder, zoomedOut, false, "auto", 120, budget(2_500_000))).toEqual(diskHalf);
+      // A four-gigabyte phone (1.25 M): the quarter.
+      expect(pickBundleVariant(ladder, zoomedOut, false, "auto", 120, budget(1_250_000))).toEqual(diskQuarter);
+      // The half rung chosen by the view, over a budget it does not fit:
+      // the quarter, never a rung wider than the choice.
+      expect(pickBundleVariant(ladder, closer, false, "auto", 120, budget(1_000_000))).toEqual(diskQuarter);
+    });
+
+    it("takes the smallest rung when nothing fits", () => {
+      expect(pickBundleVariant(ladder, zoomedOut, false, "auto", 120, budget(100_000))).toEqual(diskEighth);
+      expect(pickBundleVariant([half], 1607, false, "auto", 360, { cells: 1, fullGrid: { width: 1440, height: 721 }, visibleShare: 1 })).toEqual(half);
+    });
+
+    it("leaves a pinned preference alone", () => {
+      expect(pickBundleVariant(ladder, zoomedOut, false, "full", 120, budget(100_000))).toBeNull();
+      expect(pickBundleVariant(ladder, 100, false, "half", 120, budget(1e12))).toEqual(diskEighth);
+      // A slow connection still takes the smallest rung outright.
+      expect(pickBundleVariant(ladder, 100, true, "auto", 120, budget(1e12))).toEqual(diskEighth);
+    });
+
+    it("scales a tier's cost by the share of the grid in view", () => {
+      // Zoomed in on a storm covering a tenth of the disk, the full tier's
+      // 9 M cells cost 0.9 M: under budget, and the streaming session only
+      // decodes those tiles anyway.
+      expect(pickBundleVariant(ladder, zoomedOut, false, "auto", 120, budget(2_500_000, 0.1))).toBeNull();
+      // A quarter of it: 2.25 M, still under; a third: 3 M, the half rung.
+      expect(pickBundleVariant(ladder, zoomedOut, false, "auto", 120, budget(2_500_000, 0.25))).toBeNull();
+      expect(pickBundleVariant(ladder, zoomedOut, false, "auto", 120, budget(2_500_000, 1 / 3))).toEqual(diskHalf);
+      // The share is clamped: more than the whole grid costs the whole grid,
+      // and a view showing none of it costs nothing.
+      expect(pickBundleVariant(ladder, zoomedOut, false, "auto", 120, budget(2_500_000, 4))).toEqual(diskHalf);
+      expect(pickBundleVariant(ladder, zoomedOut, false, "auto", 120, budget(100_000, 0))).toBeNull();
+    });
+  });
+});
+
+describe("visibleGridShare", () => {
+  // The global 0.25° grid, 1440 × 721 from 180°W and 90°N.
+  const global = { width: 1440, height: 721, firstLongitude: -180, firstLatitude: 90, longitudeStep: 0.25, latitudeStep: -0.25 };
+  // The Himawari disk: 120° from 80.7°E across the antimeridian, 60°N to 60°S.
+  const disk = { width: 3000, height: 3000, firstLongitude: 80.7, firstLatitude: 60, longitudeStep: 0.04, latitudeStep: -0.04 };
+
+  it("is the product of the longitude and latitude overlaps over the grid's extent", () => {
+    // A grid's extent is its cells' (`width × step`, as `tiles.ts` places
+    // them), so the 721-row global grid reaches a quarter degree past the
+    // south pole and a pole-to-pole view shows 180 / 180.25 of it.
+    expect(visibleGridShare(global, { west: -180, east: 180, south: -90, north: 90 })).toBeCloseTo(180 / 180.25, 10);
+    expect(visibleGridShare(global, { west: -180, east: 180, south: -91, north: 91 })).toBe(1);
+    expect(visibleGridShare(global, { west: 0, east: 90, south: 0, north: 45.0625 })).toBeCloseTo(0.25 * 0.25, 10);
+    expect(visibleGridShare(disk, { west: 120, east: 180, south: -30, north: 30 })).toBeCloseTo(0.5 * 0.5, 10);
+  });
+
+  it("measures longitude on the circle", () => {
+    // The map panned across the antimeridian: MapLibre unwraps the east
+    // edge past 180 rather than wrapping it, and the disk lies on both sides.
+    expect(visibleGridShare(disk, { west: 170, east: 200.7, south: -60, north: 60 })).toBeCloseTo(30.7 / 120, 10);
+    // The same view spelled on the far side of the circle.
+    expect(visibleGridShare(disk, { west: -190, east: -159.3, south: -60, north: 60 })).toBeCloseTo(30.7 / 120, 10);
+    // The disk's eastern third read at −160 to −180 with the west edge over
+    // Japan: the view straddles the grid's own crossing.
+    expect(visibleGridShare(disk, { west: 140, east: 220, south: -60, north: 60 })).toBeCloseTo(60.7 / 120, 10);
+    // A view a turn or wider shows every longitude, however zoomed out.
+    expect(visibleGridShare(disk, { west: -400, east: 400, south: -60, north: 60 })).toBe(1);
+    expect(visibleGridShare(global, { west: -540, east: 180, south: -85, north: 85 })).toBeCloseTo(170 / 180.25, 10);
+    // A wide view meets the grid from both ends at once: 80.7° to 100° on
+    // one side, 190° to 200.7° on the other.
+    expect(visibleGridShare(disk, { west: -170, east: 100, south: -60, north: 60 })).toBeCloseTo((19.3 + 10.7) / 120, 10);
+  });
+
+  it("is zero where the view misses the grid and clamped to one", () => {
+    expect(visibleGridShare(disk, { west: -100, east: -50, south: -30, north: 30 })).toBe(0);
+    expect(visibleGridShare(disk, { west: 100, east: 150, south: 70, north: 80 })).toBe(0);
+    expect(visibleGridShare(disk, { west: 0, east: 300, south: -85, north: 85 })).toBeCloseTo(1, 10);
+  });
+
+  it("takes a degenerate grid or bounds as wholly in view", () => {
+    expect(visibleGridShare({ ...global, width: 0 }, { west: 0, east: 10, south: 0, north: 10 })).toBe(1);
+    expect(visibleGridShare(global, { west: 10, east: 0, south: 0, north: 10 })).toBe(1);
+    expect(visibleGridShare(global, { west: 0, east: Number.NaN, south: 0, north: 10 })).toBe(1);
   });
 });
 

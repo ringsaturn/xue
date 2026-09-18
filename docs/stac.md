@@ -107,7 +107,7 @@ Assets. One per artifact, keyed by bundle:
 | `manifest` | `manifest.json?v=<crc32>`, the manifest under the `?v=` a viewer fetches it with | `application/json` | `metadata` |
 | `<bundle>` | the Zarr store (`<bundle>.zarr`), or the `.xue` container when the entry ships no store | `application/vnd.zarr` / `application/octet-stream` | `data` |
 | `<bundle>-xue` | the container, when it ships beside a store | `application/octet-stream` | `data` |
-| `<bundle>-half`, `-half-xue` | the half-resolution tier, likewise | | `data`, `overview` |
+| `<bundle>-<tier>`, `-<tier>-xue` | each reduced-resolution tier, likewise: `-half` on every source, `-quarter` and `-eighth` too on the satellite disks (`SourceSpec.variant_factors`) | | `data`, `overview` |
 | `<bundle>-poster` | the first-frame poster (`.poster.bin`) | `application/octet-stream` | `overview` |
 | `<bundle>-video`, `-video-index` | the H.264 companion and its index | `video/H264`, `application/json` | `data`, `metadata` |
 
@@ -115,8 +115,10 @@ A store and a container beside it are not alternates in the
 [alternate-assets](https://github.com/stac-extensions/alternate-assets)
 sense (different bytes, different checksums), so each is an asset of its
 own. Every asset carries `xue:kind` (`store`, `container`, `poster`,
-`video`, `video-index`, `manifest`), data assets `xue:tier` (`full` /
-`half`), and reduced ones `xue:grid` (`width`, `height`). Sizes and
+`video`, `video-index`, `manifest`), data assets `xue:tier` (`full`, or
+the rung's name `half` / `quarter` / `eighth`, read off the variant's
+file suffix; the manifest lists a bundle's rungs in ascending factor
+order), and reduced ones `xue:grid` (`width`, `height`). Sizes and
 checksums use the file extension: `file:size` is the manifest's
 `byteLength` (for a store, the sum of its objects), and `file:checksum` is
 the manifest's `crc32` as a multihash: the multicodec table gives CRC-32

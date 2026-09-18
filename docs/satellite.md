@@ -148,8 +148,14 @@ one an input channel lacked, is code 0 in all three guns at once, and
 black (0, 0, 0) stays a value at code 1. The shell paints nothing where
 any gun is code 0 and otherwise shows the three guns straight as the
 pixel's colour; there is no palette. The composite has no poster and no
-video companion; it has the half-resolution variant and the Zarr store
-(three arrays) like a vector bundle.
+video companion; it has the reduced-resolution variants and the Zarr store
+(three arrays) like a vector bundle. A satellite source publishes three
+rungs where the other sources publish one (`SourceSpec.variant_factors`
+`(2, 4, 8)`): `.half`, `.quarter` and `.eighth` (1500, 750 and 375 cells
+a side, tiles 32, 16 and 8), each decimated from the full plane — every
+f-th row and column from the origin, the poster's own sampling — because
+the half of a 3000 × 3000 disk is still twice a full GFS plane and a shell
+with a frame budget needs a rung it can hold.
 
 ## Metadata
 

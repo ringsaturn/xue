@@ -23,7 +23,7 @@ The layout, at the data root:
 - ``<source>.<run>/item.json`` (a rolling window's
   ``<source>.<run>/<HHMM>/item.json``) — one **Item** per published run,
   beside its manifest and derived from it alone: one asset per artifact
-  (store, container, half tier, poster, video), the manifest itself as a
+  (store, container, each reduced tier, poster, video), the manifest itself as a
   ``metadata`` asset under its ``?v=``, the grid as ``bbox`` /
   ``cube:dimensions``, the variables as ``cube:variables``, the cycle as
   ``forecast:reference_datetime``.
@@ -69,8 +69,8 @@ from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
-from .binconvert import VECTOR_BUNDLES, bundle_variable_ids
-from .errors import XueError
+from .binconvert import VARIANT_TIERS, VECTOR_BUNDLES, bundle_variable_ids
+from .errors import ManifestError, XueError
 from .manifest import iso_z
 from .sources import SOURCES, SourceSpec, source_spec
 from .variables import VARIABLES
@@ -874,6 +874,22 @@ def _data_assets(entry: dict[str, Any], key: str, *, tier: str, title: str, role
     return assets
 
 
+def _variant_tier(variant: dict[str, Any], bundle_id: str) -> str:
+    """The tier name of one variant descriptor, read off the suffix of its
+    path (``<bundle>.<tier>.xue``, or the store's ``<bundle>.<tier>.zarr``
+    when the container was retired): ``half``, ``quarter`` or ``eighth``.
+    The manifest does not spell the tier — the descriptors are in ascending
+    factor order and carry the grid — and the writer names every file it
+    writes by its tier, so a suffix that is not one is the writer's own
+    bug, and refused as a manifest the contract does not cover."""
+    path = variant["path"] if "path" in variant else variant["zarr"]["path"]
+    name = posixpath.basename(path).split(".")
+    tier = name[-2] if len(name) >= 3 else None
+    if tier not in VARIANT_TIERS.values():
+        raise ManifestError(f"variant {path} of {bundle_id} is not named by a resolution tier ({', '.join(VARIANT_TIERS.values())})")
+    return tier
+
+
 def _bundle_title(bundle_id: str) -> str:
     if bundle_id in VECTOR_BUNDLES:
         u, v = VECTOR_BUNDLES[bundle_id]
@@ -887,8 +903,9 @@ def _bundle_title(bundle_id: str) -> str:
 
 def manifest_assets(manifest: dict[str, Any], manifest_crc32: str) -> dict[str, Any]:
     """Every artifact a manifest names, as STAC assets keyed by bundle:
-    ``<bundle>`` (and ``<bundle>-xue``) for the full tier, ``<bundle>-half``
-    for the reduced one, ``<bundle>-poster``, ``<bundle>-video`` with its
+    ``<bundle>`` (and ``<bundle>-xue``) for the full tier, ``<bundle>-<tier>``
+    for each reduced one (``-half``; on the satellite disks ``-quarter``
+    and ``-eighth`` too), ``<bundle>-poster``, ``<bundle>-video`` with its
     ``-video-index``, and ``manifest`` for the manifest itself under the
     ``?v=`` a viewer fetches it with. Hrefs are relative to the Item, which
     sits beside the manifest."""
@@ -907,10 +924,11 @@ def manifest_assets(manifest: dict[str, Any], manifest_crc32: str) -> dict[str, 
         title = _bundle_title(bundle_id)
         assets.update(_data_assets(bundle, bundle_id, tier="full", title=title, roles=["data"]))
         for variant in bundle.get("variants", []):
-            half = _data_assets(variant, f"{bundle_id}-half", tier="half", title=f"{title} (half resolution)", roles=["data", "overview"])
-            for asset in half.values():
+            tier = _variant_tier(variant, bundle_id)
+            reduced = _data_assets(variant, f"{bundle_id}-{tier}", tier=tier, title=f"{title} ({tier} resolution)", roles=["data", "overview"])
+            for asset in reduced.values():
                 asset["xue:grid"] = {"width": variant["width"], "height": variant["height"]}
-            assets.update(half)
+            assets.update(reduced)
         poster = bundle.get("poster")
         if poster is not None:
             assets[f"{bundle_id}-poster"] = {

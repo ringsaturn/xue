@@ -159,7 +159,9 @@ Bundle sets:
   minutes after a scan starts and listed about fifteen after, so the live
   window ends fifteen to twenty minutes behind real time; a scan is 26 MB
   of tiles, a warped frame about 8 MB, the six-hour window (37 frames)
-  some 200 MB of stores at full and half resolution. Needs a system
+  some 200 MB of stores across the ladder (full, half, quarter and
+  eighth: the satellite sources publish three reduced tiers where the
+  others publish the half). Needs a system
   GDAL with `gdalwarp` on PATH whichever encoder converts.
 - GOES-East and GOES-West: NOAA's GOES-19 at 75.2°W and GOES-18 at
   137.0°W, from the `noaa-goes19` and `noaa-goes18` buckets — the CMIPF
@@ -257,8 +259,8 @@ byte-identical.
 The Zarr store ([`docs/zarr-profile.md`](docs/zarr-profile.md)) is the same
 codes in a layout any Zarr client reads: a container v2 bundle is, to within
 its index format, a sharded Zarr `uint8` array. `build-bin --zarr` (or
-`XUE_ZARR=1`) derives `<bundle>.zarr/` beside every `.xue` and its
-half-resolution variant and names it in the manifest (`zarr: {path,
+`XUE_ZARR=1`) derives `<bundle>.zarr/` beside every `.xue` and each of its
+reduced-resolution variants and names it in the manifest (`zarr: {path,
 byteLength, crc32}`). The store carries the bundle's metadata verbatim in
 its root attributes plus CF `scale_factor` / `add_offset` / `_FillValue` on
 linear codebooks and `time` / `latitude` / `longitude` coordinates, so
@@ -334,7 +336,9 @@ build (`--hours 120`) has a plain-step axis rather than a listed one.
 
 `build-bin` writes one bundle per scalar variable (a `.xue`, and with
 `--zarr` the `<bundle>.zarr/` store derived from it; with `--no-xue` the
-store alone), a half-resolution `.half` rendition, a first-frame poster,
+store alone), the source's reduced-resolution renditions (a `.half` on
+every source; `.quarter` and `.eighth` too on the satellite sources,
+`SourceSpec.variant_factors`), a first-frame poster,
 and, on GFS and HRRR, a lossless H.264 companion for the surface fields
 (`--skip-variants` / `--skip-video` disable them; ECMWF and sflux have the
 companion switched off in `xuebuild/sources.py`, since the video path is
@@ -401,10 +405,10 @@ playback.
 
 Session settings, read once at load:
 
-- `?res=half` (alias `low`) always loads the reduced rendition; `?res=full`
+- `?res=half` (alias `low`) always loads the smallest reduced rendition; `?res=full`
   (alias `high`) always loads the canonical bundle. A dataset that ships no
   reduced tier (every showcase case) is full resolution either way; the
-  data card names the tier in use (`Xue ½`).
+  data card names the tier in use (`Xue ½`, `Zarr ¼`).
 - `?use_h264=true` opts into the WebCodecs H.264 companions.
 - `?backend=xue` reads a bundle through its `.xue` container where the run
   publishes one beside the store. The store is what the viewer opens by

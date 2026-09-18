@@ -182,6 +182,13 @@ RAW_VARIABLE_IDS = {"prate", "cref"}
 # show. Everything else about them is an ordinary linear scalar bundle.
 PRESSURE_BUNDLE_IDS = frozenset(PRESSURE_VARIABLE_IDS)
 
+# The resolution ladder's tier names by decimation factor: the suffix of
+# the rendition's files (`<bundle>.half.xue`, `<bundle>.half.zarr`) and its
+# STAC `xue:tier`. A source's `SourceSpec.variant_factors` picks its rungs
+# (the half alone for every grid but the satellite disks, which take all
+# three); any other factor is a registry bug, not a runtime case.
+VARIANT_TIERS: dict[int, str] = {2: "half", 4: "quarter", 8: "eighth"}
+
 # gdal_translate decodes GRIB packing on the CPU: one worker per core.
 _EXTRACT_WORKERS = min(16, os.cpu_count() or 4)
 # gdalinfo inspection is a ~1 s subprocess per file; oversubscribe mildly.
@@ -1305,20 +1312,42 @@ def _quantize_file(
     return lead, codes, stats
 
 
-def _bundle_tile(tile: tuple[int, int], grid: GridInfo, *, half: bool) -> tuple[int, int]:
-    """The tile size one bundle is cut with.
+def variant_tier(factor: int) -> str:
+    """The tier name of the rendition decimated by ``factor``: ``half``,
+    ``quarter`` or ``eighth`` (:data:`VARIANT_TIERS`). A factor the ladder
+    has no name for is a registry bug, and raised as one."""
+    try:
+        return VARIANT_TIERS[factor]
+    except KeyError:
+        raise ValueError(f"no resolution tier is decimated by {factor}") from None
 
-    A half-resolution variant halves the source tile, so tile number n covers
-    the same ground in both tiers and a viewport keeps its tile rectangle
-    across a tier switch. Either size is then clamped to the grid, because the
-    format requires ``1 <= tile <= grid`` so that a single-tile file states its
-    grid size exactly — and a regional crop is routinely smaller than the
-    source's tile (a six-degree showcase window is 24 x 24 cells against the
-    0.25-degree grid's 48 x 52 tile). Clamping makes such a file one tile,
-    which is the right answer: there is nothing left to subdivide.
+
+def _variant_grid(grid: GridInfo, factor: int) -> GridInfo:
+    """The grid of the rendition decimated by ``factor``: :meth:`GridInfo.decimated`
+    applied log2(factor) times, so 3000 rows go 1500, 750, 375 and the
+    721-row production grid 361, 181, 91 (a ceiling at every halving)."""
+    for _ in range(factor.bit_length() - 1):
+        grid = grid.decimated()
+    return grid
+
+
+def _bundle_tile(tile: tuple[int, int], grid: GridInfo, *, factor: int) -> tuple[int, int]:
+    """The tile size one bundle is cut with: the source tile divided by the
+    rendition's decimation ``factor`` (1 for the full tier), rounded up.
+
+    A reduced-resolution variant divides the source tile by its factor, so
+    tile number n covers the same ground in every tier and a viewport keeps
+    its tile rectangle across a tier switch; the ceiling at each rung is the
+    ceiling of the rung before halved (``ceil(ceil(n / 2) / 2) == ceil(n /
+    4)``), so the quarter's tile is the half's halved. Either size is then
+    clamped to the grid, because the format requires ``1 <= tile <= grid``
+    so that a single-tile file states its grid size exactly — and a regional
+    crop is routinely smaller than the source's tile (a six-degree showcase
+    window is 24 x 24 cells against the 0.25-degree grid's 48 x 52 tile).
+    Clamping makes such a file one tile, which is the right answer: there is
+    nothing left to subdivide.
     """
-    if half:
-        tile = ((tile[0] + 1) // 2, (tile[1] + 1) // 2)
+    tile = ((tile[0] + factor - 1) // factor, (tile[1] + factor - 1) // factor)
     return min(tile[0], grid.width), min(tile[1], grid.height)
 
 
@@ -1362,10 +1391,13 @@ def _bundle_chunks(
     return temporal.build_chunks(offsets, planes, tiles, predictors)
 
 
-def _decimate_codes(codes: np.ndarray, grid: GridInfo) -> np.ndarray:
-    """Half-resolution copy of one quantized plane (rows/columns 0, 2, 4, ...),
-    matching the poster decimation so every tier shares the same sample sites."""
-    return np.ascontiguousarray(codes.reshape(grid.height, grid.width)[::2, ::2]).ravel()
+def _decimate_codes(codes: np.ndarray, grid: GridInfo, factor: int = 2) -> np.ndarray:
+    """Reduced-resolution copy of one quantized plane: every ``factor``-th
+    row and column from the origin (rows/columns 0, 2, 4, ... at the half),
+    matching the poster decimation so every tier shares the same sample
+    sites. Decimating by 4 is decimating by 2 twice, so a rung is always
+    taken from the full plane and never from the rung before."""
+    return np.ascontiguousarray(codes.reshape(grid.height, grid.width)[::factor, ::factor]).ravel()
 
 
 def _playback_bandwidth(byte_length: int, frame_count: int, *, fps: float = 12.0) -> int:
@@ -1544,8 +1576,10 @@ def convert_bin(
 
     Writes ``<output_dir>/<variable>.xue`` for every scalar variable plus the
     two-variable ``wind10m.xue`` bundle when the input
-    files carry the 10 m wind components, per-variable posters,
-    half-resolution ``.half.xue`` variants, the optional per-variable
+    files carry the 10 m wind components, per-variable posters, the
+    reduced-resolution variants of the source's ladder (``.half.xue``, and
+    on the satellite disks ``.quarter.xue`` and ``.eighth.xue``,
+    ``SourceSpec.variant_factors``), the optional per-variable
     video artifacts and their debug playlists, and returns build
     statistics. When ``latest_path`` and ``run_id`` are given, also
     (re)writes the mutable ``latest.json`` live pointer aimed at the freshly
@@ -1948,26 +1982,33 @@ def convert_bin(
         LOG.info("wrote %s (%.1f KB)", poster_path, len(payload) / 1e3)
 
     # Full-resolution canonical bundles (one per scalar variable plus one per
-    # two-variable vector bundle) and the half-resolution ladder
-    # (decimated from the already-quantized codes exactly like the posters,
-    # same temporal structure; the half grid is embedded in the variant
-    # bundle's own metadata, the manifest carries the tier list).
+    # two-variable vector bundle) and the resolution ladder: one rendition
+    # per factor of the source's `variant_factors` (the half alone for most
+    # sources; half, quarter and eighth on the satellite disks), each
+    # decimated from the already-quantized full codes exactly like the
+    # posters, same temporal structure; the rung's grid is embedded in the
+    # variant bundle's own metadata, the manifest carries the tier list in
+    # ascending factor order.
     #
     # All bundles are written concurrently: compression funnels through one
     # shared machine-sized zstd pool, while the writer pool lets one bundle's
     # serial tail (container write, read-back verify) overlap another's
     # compression. Each job materializes its raw payloads itself, so at most
     # _BUNDLE_WRITERS bundles' payloads are alive at once.
-    half_grid = grid.decimated()
+    variant_factors = source.variant_factors if not skip_variants else ()
+    variant_grids = {factor: _variant_grid(grid, factor) for factor in variant_factors}
     # Iterate the codes actually present per hour: derived prate has no
     # analysis-frame plane on ECMWF/sflux.
-    half_codes_by_offset = {
-        offset: {
-            variable_id: _decimate_codes(codes, grid)
-            for variable_id, codes in codes_by_offset[offset].items()
+    variant_codes_by_offset = {
+        factor: {
+            offset: {
+                variable_id: _decimate_codes(codes, grid, factor)
+                for variable_id, codes in codes_by_offset[offset].items()
+            }
+            for offset in offsets
         }
-        for offset in offsets
-    } if not skip_variants else {}
+        for factor in variant_factors
+    }
 
     with ThreadPoolExecutor(max_workers=os.cpu_count() or 4) as compressor, ThreadPoolExecutor(
         max_workers=_BUNDLE_WRITERS
@@ -1975,10 +2016,13 @@ def convert_bin(
 
         def submit_bundle(
             bundle_id: str,
-            suffix: str,
+            factor: int,
             bundle_grid: GridInfo,
             codes: dict[int, dict[str, np.ndarray]],
         ) -> Future:
+            # ``factor`` 1 is the full tier, bare-named; a rung takes its
+            # tier's suffix and the tile the rung's grid is cut with.
+            suffix = f".{variant_tier(factor)}" if factor > 1 else ""
             bundle_variables = bundle_variable_ids(bundle_id)
             bundle_offsets = variable_offsets[bundle_variables[0]]
             metadata = build_metadata(
@@ -1992,7 +2036,7 @@ def convert_bin(
                 producers=producer_versions,
             )
 
-            tile = _bundle_tile(source.tile, bundle_grid, half=bool(suffix))
+            tile = _bundle_tile(source.tile, bundle_grid, factor=factor)
             tiles = binformat.TileGeometry(bundle_grid.width, bundle_grid.height, *tile)
 
             def job() -> dict[str, Any]:
@@ -2006,7 +2050,7 @@ def convert_bin(
                     zstd_level,
                     compressor,
                 )
-                if suffix:
+                if factor > 1:
                     report["width"] = bundle_grid.width
                     report["height"] = bundle_grid.height
                     report["bandwidth"] = _playback_bandwidth(report["byteLength"], len(bundle_offsets))
@@ -2029,20 +2073,26 @@ def convert_bin(
 
             return writers.submit(job)
 
-        # Submit largest first so the vector and composite bundles' long
+        # Submit largest first — the full tier, then each rung of the
+        # ladder in turn — so the vector and composite bundles' long
         # compression starts at once; reports keep the
-        # scalars-then-vectors-then-composites manifest order regardless.
+        # scalars-then-vectors-then-composites manifest order and, within a
+        # bundle, the ladder's ascending factor order regardless.
         submit_order = available_composite_ids + available_vector_ids + scalar_variable_ids
         report_order = scalar_variable_ids + available_vector_ids + available_composite_ids
-        full_futures = {bundle_id: submit_bundle(bundle_id, "", grid, codes_by_offset) for bundle_id in submit_order}
-        half_futures = (
-            {bundle_id: submit_bundle(bundle_id, ".half", half_grid, half_codes_by_offset) for bundle_id in submit_order}
-            if not skip_variants
-            else {}
-        )
+        full_futures = {bundle_id: submit_bundle(bundle_id, 1, grid, codes_by_offset) for bundle_id in submit_order}
+        variant_futures = {
+            factor: {
+                bundle_id: submit_bundle(bundle_id, factor, variant_grids[factor], variant_codes_by_offset[factor])
+                for bundle_id in submit_order
+            }
+            for factor in variant_factors
+        }
         bundle_reports = [full_futures[bundle_id].result() for bundle_id in report_order]
         variant_reports: dict[str, list[dict[str, Any]]] = {
-            bundle_id: [half_futures[bundle_id].result()] for bundle_id in report_order if bundle_id in half_futures
+            bundle_id: [variant_futures[factor][bundle_id].result() for factor in variant_factors]
+            for bundle_id in report_order
+            if variant_factors
         }
 
     report = {

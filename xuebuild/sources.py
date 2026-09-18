@@ -206,11 +206,27 @@ class SourceSpec:
     that every published variable still compresses at or below what the
     plane-major container achieved. The last row is clipped (721 = 13 x 52 +
     45), which the format allows precisely because no tidy power of two
-    divides 721. A half-resolution variant halves it (``ceil``), so a tile
-    with the same number covers the same ground in both tiers.
+    divides 721. A reduced-resolution variant divides it by its factor
+    (``ceil``, :attr:`variant_factors`), so a tile with the same number
+    covers the same ground in every tier.
 
     Changing this is a data format change, not a runtime knob: the golden
     fixtures and the encoder-parity test are regenerated with it."""
+    variant_factors: tuple[int, ...] = (2,)
+    """The resolution ladder: the decimation factor of every reduced-
+    resolution rendition of a bundle, ascending. Each factor is a power of
+    two of at least 2 and names its tier (``2`` → ``.half``, ``4`` →
+    ``.quarter``, ``8`` → ``.eighth``, :func:`xuebuild.binconvert.variant_tier`);
+    the variant's grid is the source grid decimated that many times over
+    (every ``f``-th row and column from the origin, the same sample sites
+    as the poster) and its tile the source tile divided by it (``ceil``).
+    One rung, the half, for every grid a full plane of which is a million
+    cells; three for the satellite disks, whose 3000 x 3000 grid is nine
+    million a plane and whose half is still twice a full GFS plane, so a
+    shell with a frame budget can land on a quarter or an eighth.
+
+    Every existing rendition is unchanged by a longer ladder; a source
+    only ever gains files. Mirrored in the native encoder's source table."""
     fetch_concurrency: int = 4
     """Frames fetched in parallel. Each frame costs several fresh HTTPS
     round-trips, so sequential fetching is latency-bound. NOAA's bucket and
@@ -906,6 +922,11 @@ SOURCES: dict[str, SourceSpec] = {
         # a series of thirty-seven 4 KB planes over a six-hour window; a
         # phone over Tokyo takes thirty of them.
         tile=(64, 64),
+        # Three rungs (1500, 750 and 375 cells a side): the half is still
+        # twice the cells of a full GFS plane, and a full Dust RGB frame
+        # is three 9 MB planes, so a shell zoomed out to the whole disk
+        # needs a quarter or an eighth to keep its frame budget.
+        variant_factors=(2, 4, 8),
         observation=True,
         series_file=True,
         platform="himawari",
@@ -944,6 +965,7 @@ SOURCES: dict[str, SourceSpec] = {
         core_bundle_ids=("ir104",),
         production_grid=(3000, 3000),
         tile=(64, 64),
+        variant_factors=(2, 4, 8),
         observation=True,
         series_file=True,
         platform="goeseast",
@@ -967,6 +989,7 @@ SOURCES: dict[str, SourceSpec] = {
         core_bundle_ids=("ir104",),
         production_grid=(3000, 3000),
         tile=(64, 64),
+        variant_factors=(2, 4, 8),
         observation=True,
         series_file=True,
         platform="goeswest",
@@ -1006,6 +1029,7 @@ SOURCES: dict[str, SourceSpec] = {
         core_bundle_ids=("ir104",),
         production_grid=(3000, 3000),
         tile=(64, 64),
+        variant_factors=(2, 4, 8),
         observation=True,
         series_file=True,
         platform="meteosat",

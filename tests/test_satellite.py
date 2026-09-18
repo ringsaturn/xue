@@ -722,13 +722,13 @@ class ConversionTests(unittest.TestCase):
         """The Dust RGB bundle: the three guns as variables 1, 2 and 3 in
         bundle order, each a local-use parameter with the producer block
         beside it (the registered id, the version the series was stamped
-        with) and no band; the same axis and grid as the channel; a
-        half-resolution variant and no poster or video."""
+        with) and no band; the same axis and grid as the channel; the
+        three-rung ladder and no poster or video."""
         manifest = json.loads((self.root / "out" / "manifest.json").read_text(encoding="utf-8"))
         entry = next(bundle for bundle in manifest["bundles"] if bundle["variable"] == "dustrgb")
         self.assertNotIn("poster", entry)
         self.assertNotIn("video", entry)
-        self.assertEqual(len(entry["variants"]), 1)
+        self.assertEqual(len(entry["variants"]), 3)
         self.assertFalse((self.root / "out" / "dustrgb.poster.bin").exists())
         bundle = read_bundle(self.root / "out" / "dustrgb.xue")
         self.assertEqual(bundle.metadata["time"], {"unitSeconds": 600, "firstFrameOffset": 0, "frameCount": 2, "frameStep": 1})
@@ -784,6 +784,51 @@ class ConversionTests(unittest.TestCase):
         self.assertGreater(float(inside.max()), 295.0)
         for name in ("ir104.half.xue", "ir104.poster.bin"):
             self.assertTrue((self.root / "out" / name).is_file(), name)
+
+    def test_the_ladder_is_half_quarter_and_eighth_in_that_order(self) -> None:
+        """A satellite source publishes three rungs (``variant_factors`` 2,
+        4, 8): each bundle's ``variants`` run half, quarter, eighth — the
+        manifest's ascending-factor, descending-width order — every rung
+        decimated from the full plane (so the eighth is every eighth row
+        and column, and equally the quarter's every second), cut with the
+        source tile over its factor, and reported per bundle in the same
+        order; the GFS-shaped sources still publish the half alone."""
+        manifest = json.loads((self.root / "out" / "manifest.json").read_text(encoding="utf-8"))
+        rungs = [("half", 2, 1500, 32), ("quarter", 4, 750, 16), ("eighth", 8, 375, 8)]
+        for entry in manifest["bundles"]:
+            bundle_id = entry["variable"]
+            with self.subTest(bundle=bundle_id):
+                self.assertEqual([variant["path"] for variant in entry["variants"]], [f"{bundle_id}.{tier}.xue" for tier, _, _, _ in rungs])
+                self.assertEqual([(variant["width"], variant["height"]) for variant in entry["variants"]], [(side, side) for _, _, side, _ in rungs])
+                self.assertTrue(all(variant["bandwidth"] > 0 for variant in entry["variants"]))
+                self.assertGreater(entry["variants"][0]["byteLength"], entry["variants"][1]["byteLength"])
+                self.assertGreater(entry["variants"][1]["byteLength"], entry["variants"][2]["byteLength"])
+                full = read_bundle(self.root / "out" / f"{bundle_id}.xue")
+                for tier, factor, side, tile in rungs:
+                    rung = read_bundle(self.root / "out" / f"{bundle_id}.{tier}.xue")
+                    grid = rung.metadata["grid"]
+                    self.assertEqual((grid["width"], grid["height"]), (side, side))
+                    self.assertEqual((grid["longitudeStep"], grid["latitudeStep"]), (0.04 * factor, -0.04 * factor))
+                    self.assertEqual((grid["firstLongitude"], grid["firstLatitude"]), (80.72, 59.98))
+                    self.assertEqual((rung.tiles.tile_width, rung.tiles.tile_height), (tile, tile))
+                    # 1500 / 32, 750 / 16 and 375 / 8 are all 46.875: the
+                    # same 47 x 47 tiles as the full tier, so tile n covers
+                    # the same ground at every rung.
+                    self.assertEqual(rung.tiles.count, full.tiles.count)
+                    self.assertEqual(rung.metadata["time"], full.metadata["time"])
+                    self.assertEqual(rung.metadata["variables"], full.metadata["variables"])
+                    for numeric_id in full.variable_ids:
+                        for offset in full.frame_offsets:
+                            expected = np.asarray(full.decode_plane(numeric_id, offset)).reshape(3000, 3000)[::factor, ::factor]
+                            np.testing.assert_array_equal(np.asarray(rung.decode_plane(numeric_id, offset)).reshape(side, side), expected)
+        # The build report lists the rungs per bundle, ascending, in the
+        # bundles' own order.
+        self.assertEqual(
+            [Path(variant["output"]).name for variant in self.report["variants"]],
+            [f"{bundle_id}.{tier}.xue" for bundle_id in ("ir104", "dustrgb") for tier, _, _, _ in rungs],
+        )
+        self.assertEqual(sorted(path.name for path in (self.root / "out").glob("*.xue")), sorted(f"{b}{s}.xue" for b in ("ir104", "dustrgb") for s in ("", ".half", ".quarter", ".eighth")))
+        self.assertEqual(source_spec("gfs").variant_factors, (2,))
 
     def test_a_crop_past_the_antimeridian_reads_the_disk_s_eastern_columns(self) -> None:
         with mock.patch.dict(os.environ, {"XUE_ENCODER": "python"}):

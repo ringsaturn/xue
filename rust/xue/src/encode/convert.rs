@@ -1041,24 +1041,54 @@ fn quantize_file(
 // -- payload assembly --------------------------------------------------------
 
 
+/// The file suffix and STAC tier name of one rung of the resolution ladder:
+/// `half` for factor 2, `quarter` for 4, `eighth` for 8. Any other factor is
+/// a registry bug (`SourceSpec::variant_factors`), reported with the factor.
+///
+/// Mirrors `variant_tier` in `xuebuild/binconvert.py`.
+fn tier_name(factor: usize) -> Result<&'static str> {
+    match factor {
+        2 => Ok("half"),
+        4 => Ok("quarter"),
+        8 => Ok("eighth"),
+        _ => Err(EncodeError::conversion(format!(
+            "no tier name for a resolution factor of {factor}"
+        ))),
+    }
+}
+
+/// The grid a ladder rung is published on: the full grid decimated
+/// log2(factor) times (3000 → 1500 → 750 → 375; 721 rows → 361 → 181 → 91),
+/// which is the arithmetic `GridInfo::decimated` repeats rather than one
+/// division by the factor, so a rung's origin and step are exactly the
+/// posters' and the tier above it. Factor 1 is the full grid.
+///
+/// Mirrors `_variant_grid` in `xuebuild/binconvert.py`.
+fn variant_grid(grid: &GridInfo, factor: usize) -> GridInfo {
+    let mut rung = grid.clone();
+    for _ in 0..factor.trailing_zeros() {
+        rung = rung.decimated();
+    }
+    rung
+}
+
 /// The tile size one bundle is cut with.
 ///
-/// A half-resolution variant halves the source tile, so tile number n covers
-/// the same ground in both tiers and a viewport keeps its tile rectangle
-/// across a tier switch. Either size is then clamped to the grid, because the
-/// format requires `1 <= tile <= grid` so that a single-tile file states its
-/// grid size exactly — and a regional crop is routinely smaller than the
-/// source's tile (a six-degree showcase window is 24 x 24 cells against the
-/// 0.25-degree grid's 48 x 52 tile). Clamping makes such a file one tile,
-/// which is the right answer: there is nothing left to subdivide.
+/// A reduced variant divides the source tile by its factor, rounding up, so
+/// tile number n covers the same ground in every tier and a viewport keeps
+/// its tile rectangle across a tier switch (`ceil(ceil(n / 2) / 2) ==
+/// ceil(n / 4)`, so the eighth tier's tile is the half tier's halved twice).
+/// The size is then clamped to the grid, because the format requires
+/// `1 <= tile <= grid` so that a single-tile file states its grid size
+/// exactly — and a regional crop is routinely smaller than the source's tile
+/// (a six-degree showcase window is 24 x 24 cells against the 0.25-degree
+/// grid's 48 x 52 tile). Clamping makes such a file one tile, which is the
+/// right answer: there is nothing left to subdivide. Factor 1 is the full
+/// tier.
 ///
-/// Mirrors `_bundle_tile` in `xuebuild/binconvert.py`.
-fn bundle_tile(tile: (usize, usize), grid: &GridInfo, half: bool) -> (usize, usize) {
-    let tile = if half {
-        (tile.0.div_ceil(2), tile.1.div_ceil(2))
-    } else {
-        tile
-    };
+/// Mirrors `_bundle_tile(tile, grid, factor=…)` in `xuebuild/binconvert.py`.
+fn bundle_tile(tile: (usize, usize), grid: &GridInfo, factor: usize) -> (usize, usize) {
+    let tile = (tile.0.div_ceil(factor), tile.1.div_ceil(factor));
     (tile.0.min(grid.width), tile.1.min(grid.height))
 }
 
@@ -1122,16 +1152,22 @@ fn bundle_chunks(
     })
 }
 
-/// Half-resolution copy of one quantized plane (rows/columns 0, 2, 4, …),
-/// matching the poster decimation so every tier shares the same sample sites.
-fn decimate_codes(codes: &[u8], grid: &GridInfo) -> Vec<u8> {
-    let mut half = Vec::with_capacity(grid.width.div_ceil(2) * grid.height.div_ceil(2));
-    for row in (0..grid.height).step_by(2) {
-        for column in (0..grid.width).step_by(2) {
-            half.push(codes[row * grid.width + column]);
+/// Reduced copy of one quantized plane: every `factor`-th row and column of
+/// the full plane from row and column 0 (rows/columns 0, 2, 4, … for the
+/// half tier), matching the poster decimation so every tier shares the same
+/// sample sites — sampling the full plane by 4 or 8 is the same as halving
+/// it twice or three times. `grid` is the full plane's grid.
+///
+/// Mirrors `_decimate_codes(codes, grid, factor)` in `xuebuild/binconvert.py`.
+fn decimate_codes(codes: &[u8], grid: &GridInfo, factor: usize) -> Vec<u8> {
+    let mut reduced =
+        Vec::with_capacity(grid.width.div_ceil(factor) * grid.height.div_ceil(factor));
+    for row in (0..grid.height).step_by(factor) {
+        for column in (0..grid.width).step_by(factor) {
+            reduced.push(codes[row * grid.width + column]);
         }
     }
-    half
+    reduced
 }
 
 /// HLS `STREAM-INF` style bandwidth hint: average bits per second needed to
@@ -1284,8 +1320,9 @@ fn verify_bundle_bytes(bytes: &[u8]) -> Result<()> {
 ///
 /// Writes `<output_dir>/<variable>.xue` for every scalar variable plus the
 /// two-variable `wind10m.xue` bundle when the input files carry the 10 m wind
-/// components, per-variable posters, half-resolution `.half.xue` variants, and
-/// returns build statistics. When `latest_path` and `run_id` are given, also
+/// components, per-variable posters, the reduced `<bundle>.<tier>.xue`
+/// variants of the source's resolution ladder (`.half.xue`, and `.quarter` /
+/// `.eighth` on the satellite disks), and returns build statistics. When `latest_path` and `run_id` are given, also
 /// (re)writes the mutable live pointer aimed at the freshly written manifest.
 ///
 /// `bbox` crops every plane to a region and `bundle_ids` restricts which
@@ -1750,23 +1787,45 @@ pub fn convert_bin(
         );
     }
 
-    // -- bundles and the half-resolution ladder --------------------------------
-    let half_grid = grid.decimated();
-    let half_codes_by_offset: BTreeMap<i64, Vec<(String, Vec<u8>)>> = if options.skip_variants {
-        BTreeMap::new()
+    // -- bundles and the resolution ladder -------------------------------------
+    // One rung per factor of the source's ladder, in ascending factor order
+    // (half, quarter, eighth): its file suffix, factor, grid and the codes of
+    // every plane sampled from the full ones. `skip_variants` skips every
+    // rung.
+    struct Rung {
+        suffix: String,
+        factor: usize,
+        grid: GridInfo,
+        codes_by_offset: BTreeMap<i64, Vec<(String, Vec<u8>)>>,
+    }
+    let ladder: Vec<Rung> = if options.skip_variants {
+        Vec::new()
     } else {
-        codes_by_offset
+        source
+            .variant_factors
             .iter()
-            .map(|(offset, planes)| {
-                (
-                    *offset,
-                    planes
+            .map(|&factor| {
+                Ok(Rung {
+                    suffix: format!(".{}", tier_name(factor)?),
+                    factor,
+                    grid: variant_grid(&grid, factor),
+                    codes_by_offset: codes_by_offset
                         .iter()
-                        .map(|(name, codes)| (name.clone(), decimate_codes(codes, &grid)))
+                        .map(|(offset, planes)| {
+                            (
+                                *offset,
+                                planes
+                                    .iter()
+                                    .map(|(name, codes)| {
+                                        (name.clone(), decimate_codes(codes, &grid, factor))
+                                    })
+                                    .collect(),
+                            )
+                        })
                         .collect(),
-                )
+                })
             })
-            .collect()
+            .collect::<Result<_>>()?
     };
 
     // Composite and vector bundles first (the largest), scalars after;
@@ -1785,24 +1844,26 @@ pub fn convert_bin(
         let bundle_variables: Vec<String> = bundle_variable_ids(bundle_id);
         let variables: Vec<&str> = bundle_variables.iter().map(String::as_str).collect();
         let bundle_offsets: Vec<i64> = variable_offsets[variables[0]].clone();
-        for (suffix, bundle_grid, codes) in [
-            ("", &grid, &codes_by_offset),
-            (".half", &half_grid, &half_codes_by_offset),
-        ] {
-            if suffix == ".half" && options.skip_variants {
-                continue;
-            }
+        // The full tier first, then each rung of the ladder the way the
+        // half tier was submitted alone; a bundle's variant reports come
+        // out in the ladder's ascending factor order.
+        let tiers = std::iter::once(("", 1usize, &grid, &codes_by_offset)).chain(
+            ladder
+                .iter()
+                .map(|rung| (rung.suffix.as_str(), rung.factor, &rung.grid, &rung.codes_by_offset)),
+        );
+        for (suffix, factor, bundle_grid, codes) in tiers {
             let metadata = build_metadata(
                 run_time,
                 &bundle_offsets,
-                &bundle_grid,
+                bundle_grid,
                 &options.profile,
                 &variables,
                 source,
                 unit_seconds,
                 &producer_versions,
             )?;
-            let tile = bundle_tile(source.tile, &bundle_grid, !suffix.is_empty());
+            let tile = bundle_tile(source.tile, bundle_grid, factor);
             let geometry = TileGeometry::new(
                 bundle_grid.width as u32,
                 bundle_grid.height as u32,
@@ -2282,6 +2343,70 @@ fn check_reference_frames(
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod ladder_tests {
+    use super::{bundle_tile, decimate_codes, tier_name, variant_grid};
+    use crate::encode::grid::GridInfo;
+
+    #[test]
+    fn a_rung_halves_the_tile_once_per_doubling() {
+        // The satellite tile against the disk, and the 0.25° tile against
+        // the GFS grid: `ceil(n / f)` is `ceil` applied once per halving.
+        let disk = GridInfo::new(3000, 3000, 80.7, 60.0, 0.04, -0.04);
+        assert_eq!(bundle_tile((64, 64), &disk, 1), (64, 64));
+        assert_eq!(bundle_tile((64, 64), &variant_grid(&disk, 2), 2), (32, 32));
+        assert_eq!(bundle_tile((64, 64), &variant_grid(&disk, 4), 4), (16, 16));
+        assert_eq!(bundle_tile((64, 64), &variant_grid(&disk, 8), 8), (8, 8));
+        let world = GridInfo::new(1440, 721, -180.0, 90.0, 0.25, -0.25);
+        assert_eq!(bundle_tile((48, 52), &world, 1), (48, 52));
+        assert_eq!(bundle_tile((48, 52), &variant_grid(&world, 2), 2), (24, 26));
+        assert_eq!(bundle_tile((48, 52), &variant_grid(&world, 4), 4), (12, 13));
+        assert_eq!(bundle_tile((48, 52), &variant_grid(&world, 8), 8), (6, 7));
+        // A grid smaller than the tile clamps to itself in every tier.
+        let window = GridInfo::new(24, 24, 0.0, 6.0, 0.25, -0.25);
+        assert_eq!(bundle_tile((48, 52), &window, 1), (24, 24));
+        assert_eq!(bundle_tile((48, 52), &variant_grid(&window, 8), 8), (3, 3));
+    }
+
+    #[test]
+    fn the_rung_grids_are_the_full_grid_decimated_once_per_doubling() {
+        let world = GridInfo::new(1440, 721, -180.0, 90.0, 0.25, -0.25);
+        for (factor, width, height) in [(1, 1440, 721), (2, 720, 361), (4, 360, 181), (8, 180, 91)] {
+            let rung = variant_grid(&world, factor);
+            assert_eq!((rung.width, rung.height), (width, height), "factor {factor}");
+            assert_eq!(rung.longitude_step, 0.25 * factor as f64, "factor {factor}");
+            assert_eq!(rung.first_latitude, 90.0);
+        }
+        let disk = GridInfo::new(3000, 3000, 80.7, 60.0, 0.04, -0.04);
+        assert_eq!(variant_grid(&disk, 8).width, 375);
+        assert_eq!(tier_name(2).unwrap(), "half");
+        assert_eq!(tier_name(4).unwrap(), "quarter");
+        assert_eq!(tier_name(8).unwrap(), "eighth");
+        assert!(tier_name(16).unwrap_err().to_string().contains("16"));
+        assert!(tier_name(3).is_err());
+    }
+
+    #[test]
+    fn sampling_by_four_or_eight_is_repeated_halving() {
+        // An odd-sized plane, so every rung keeps its ceiling row and column.
+        let grid = GridInfo::new(13, 11, 0.0, 10.0, 1.0, -1.0);
+        let codes: Vec<u8> = (0..(13 * 11) as u32).map(|index| (index * 7 % 251) as u8).collect();
+        let half = decimate_codes(&codes, &grid, 2);
+        assert_eq!(half.len(), 7 * 6);
+        let half_grid = variant_grid(&grid, 2);
+        let quarter = decimate_codes(&half, &half_grid, 2);
+        assert_eq!(decimate_codes(&codes, &grid, 4), quarter);
+        assert_eq!(quarter.len(), 4 * 3);
+        let eighth = decimate_codes(&quarter, &variant_grid(&half_grid, 2), 2);
+        assert_eq!(decimate_codes(&codes, &grid, 8), eighth);
+        assert_eq!(eighth.len(), 2 * 2);
+        // Row and column 0 of the full plane head every rung.
+        assert_eq!(eighth[0], codes[0]);
+        assert_eq!(eighth[1], codes[8]);
+        assert_eq!(eighth[2], codes[8 * 13]);
+    }
 }
 
 #[cfg(test)]

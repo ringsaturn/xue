@@ -245,8 +245,9 @@ const RESOLUTION_ALIASES: Record<string, ResolutionPreference> = {
   high: "full",
 };
 
-/** Resolution tier this session asks for: `?res=half` pins the reduced
- * rendition (the "Xue ½" tier) however wide the view is, `?res=full` pins the
+/** Resolution tier this session asks for: `?res=half` pins the smallest
+ * reduced rendition the run ships (the "Xue ½" tier, or the "⅛" of a
+ * satellite source) however wide the view is, `?res=full` pins the
  * canonical bundle even on a metered connection, and anything else — an
  * unknown value included — leaves the choice to viewport and network.
  *

@@ -89,7 +89,7 @@ def write_v2_bundle(
     """One synthetic container v2 bundle, cut and packed the way the real
     encoder cuts and packs — same tile policy, same grouping, same physical
     order — so what Playwright drives is what production serves."""
-    tile = _bundle_tile(tile or (source or source_spec("gfs")).tile, grid, half=half)
+    tile = _bundle_tile(tile or (source or source_spec("gfs")).tile, grid, factor=2 if half else 1)
     tiles = binformat.TileGeometry(grid.width, grid.height, *tile)
     variables, groups, raw = _bundle_chunks(variable_ids, hours, planes_by_hour, tiles)
     chunks = [

@@ -57,8 +57,13 @@ cost a GFS run some five thousand objects where the container cost sixty. A
 shard the size of the array is one object read by range, as the container
 was, and its index is the whole index, read once.
 
-A half-resolution rendition is its own store, `<bundle>.half.zarr`, derived
-from `<bundle>.half.xue` exactly as the full one is from `<bundle>.xue`.
+A reduced-resolution rendition is its own store, `<bundle>.<tier>.zarr`,
+derived from `<bundle>.<tier>.xue` exactly as the full one is from
+`<bundle>.xue`. The ladder is per source (`SourceSpec.variant_factors`):
+every source has the half (`tmp2m.half.zarr`, the grid decimated by two),
+and the satellite disks add the quarter and the eighth (`ir104.quarter.zarr`,
+`ir104.eighth.zarr`; 3000 → 1500 → 750 → 375 cells a side, the tile 64 →
+32 → 16 → 8), each decimated from the full plane.
 
 ## Array metadata
 

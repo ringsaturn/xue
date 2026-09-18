@@ -25,7 +25,7 @@ usage: xue-encode convert-bin <input>... --output <dir> [options]
   --require-complete       reject anything but a full production run
   --bbox <w,s,e,n>         crop every plane to this window, in degrees
   --bundles <a,b>          build only these bundles
-  --skip-variants          do not build the half-resolution .half.xue tiers
+  --skip-variants          do not build the reduced .half / .quarter / .eighth tiers
   --zstd-level <n>         zstd compression level               (default 15)
   --extract-workers <n>    files extracted in parallel
   --compress-workers <n>   planes compressed in parallel

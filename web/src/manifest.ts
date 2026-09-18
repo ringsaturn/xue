@@ -1,6 +1,9 @@
 import { HRRR_DOMAIN, type LambertDomain } from "./domain";
 import { fetchImmutable } from "./fetchimmutable";
 import { t } from "./i18n";
+// Type-only: both modules import this one at runtime.
+import type { GeoGrid } from "./probe";
+import type { ViewportBounds } from "./tiles";
 
 export type ForecastVariableId = "tmp2m" | "prate";
 
@@ -821,6 +824,19 @@ export function hasWindBundle(manifest: ForecastManifest): boolean {
  * this; see urlstate.ts. */
 export type ResolutionPreference = "auto" | "half" | "full";
 
+/** What one frame of a tier may cost in memory, for `pickBundleVariant`:
+ * `cells` is the ceiling in grid cells per plane, `fullGrid` the canonical
+ * tier's dimensions (the descriptor names those of every variant but not
+ * of the bundle itself), and `visibleShare` the fraction of the grid the
+ * view shows, in [0, 1] — a streaming session decodes only the viewport's
+ * tiles, so what a frame costs on a zoomed-in view is that share of the
+ * plane, though the plane itself is always allocated whole. */
+export interface VariantBudget {
+  cells: number;
+  fullGrid: { width: number; height: number };
+  visibleShare: number;
+}
+
 /** Tier selection (pure so it can be unit-tested): pick the reduced
  * rendition to load instead of the canonical full-resolution bundle, or null
  * to stay on full resolution.
@@ -838,20 +854,93 @@ export type ResolutionPreference = "auto" | "half" | "full";
  *   longitude span — 360° on a global grid, 70° on the MRMS mosaic — so
  *   the need is scaled to `longitudeSpan` before the comparison: a
  *   regional grid compared against the world's width would never take the
- *   half tier, however far out the view. */
+ *   half tier, however far out the view.
+ * - Then, given a `budget`, the choice must also fit in memory: a tier
+ *   costs `width × height × visibleShare` cells per plane, and one that
+ *   costs more than `budget.cells` gives way to the largest rung that
+ *   fits, or to the smallest rung when none does. The satellite sources
+ *   are why: a 3000 × 3000 disk is nine million cells a plane, three
+ *   planes a Dust RGB frame, and the view's pixel count alone would take
+ *   the full tier at any zoom a phone can show — but zoomed in on a storm
+ *   the view covers a sliver of the grid, the session decodes only that
+ *   sliver's tiles, and the full tier is still the right answer. */
 export function pickBundleVariant(
   variants: VariantDescriptor[] | undefined,
   neededGridWidth: number,
   constrained: boolean,
   preference: ResolutionPreference = "auto",
   longitudeSpan = 360,
+  budget?: VariantBudget,
 ): VariantDescriptor | null {
   if (preference === "full") return null;
   if (!variants || variants.length === 0) return null;
   const sorted = [...variants].sort((a, b) => a.width - b.width);
   if (preference === "half" || constrained) return sorted[0] ?? null;
   const needed = (neededGridWidth * Math.min(360, Math.max(0, longitudeSpan))) / 360;
-  return sorted.find((variant) => variant.width >= needed) ?? null;
+  const choice = sorted.find((variant) => variant.width >= needed) ?? null;
+  if (!budget) return choice;
+  const share = Math.min(1, Math.max(0, budget.visibleShare));
+  const cost = (tier: VariantDescriptor | null): number =>
+    (tier ? tier.width * tier.height : budget.fullGrid.width * budget.fullGrid.height) * share;
+  if (cost(choice) <= budget.cells) return choice;
+  // Only the rungs no wider than the choice are candidates: a wider one
+  // was already more than the view could show.
+  const candidates = choice ? sorted.filter((variant) => variant.width <= choice.width) : sorted;
+  for (let index = candidates.length - 1; index >= 0; index -= 1) {
+    const rung = candidates[index]!;
+    if (cost(rung) <= budget.cells) return rung;
+  }
+  return sorted[0] ?? null;
+}
+
+/** The fraction of a grid the map bounds show, in [0, 1] — the longitude
+ * overlap times the latitude overlap, each over the grid's own extent — for
+ * `VariantBudget.visibleShare`. The bounds are MapLibre's: `east ≥ west`,
+ * and either may lie outside −180..180 once the map has been panned across
+ * the antimeridian or zoomed out past one world; a grid may cross it too
+ * (Himawari runs 80.7° to 200.7°). Longitude is therefore measured on the
+ * circle: the view arc is laid down at every whole-turn offset that can
+ * touch the grid arc and the overlaps summed, which is exact because a view
+ * narrower than a turn never meets its own copy. A view a turn or wider
+ * shows every longitude. A degenerate grid or bounds count as fully shown,
+ * the answer that spends the least memory. */
+export function visibleGridShare(
+  grid: Pick<GeoGrid, "width" | "height" | "firstLongitude" | "firstLatitude" | "longitudeStep" | "latitudeStep">,
+  bounds: ViewportBounds,
+): number {
+  const longitudeSpan = Math.abs(grid.width * grid.longitudeStep);
+  const latitudeSpan = Math.abs(grid.height * grid.latitudeStep);
+  const viewSpan = bounds.east - bounds.west;
+  const viewHeight = bounds.north - bounds.south;
+  if (
+    !(longitudeSpan > 0) ||
+    !(latitudeSpan > 0) ||
+    !Number.isFinite(viewSpan) ||
+    !Number.isFinite(viewHeight) ||
+    viewSpan < 0 ||
+    viewHeight < 0
+  ) {
+    return 1;
+  }
+  const gridWest = Math.min(grid.firstLongitude, grid.firstLongitude + grid.width * grid.longitudeStep);
+  const gridEast = gridWest + longitudeSpan;
+  let longitudeVisible = 0;
+  if (viewSpan >= 360) {
+    longitudeVisible = longitudeSpan;
+  } else {
+    const firstTurn = Math.floor((gridWest - bounds.east) / 360);
+    const lastTurn = Math.ceil((gridEast - bounds.west) / 360);
+    for (let turn = firstTurn; turn <= lastTurn; turn += 1) {
+      const overlap =
+        Math.min(gridEast, bounds.east + turn * 360) - Math.max(gridWest, bounds.west + turn * 360);
+      if (overlap > 0) longitudeVisible += overlap;
+    }
+  }
+  const gridSouth = Math.min(grid.firstLatitude, grid.firstLatitude + grid.height * grid.latitudeStep);
+  const gridNorth = gridSouth + latitudeSpan;
+  const latitudeVisible = Math.max(0, Math.min(gridNorth, bounds.north) - Math.max(gridSouth, bounds.south));
+  const share = (longitudeVisible / Math.min(360, longitudeSpan)) * (latitudeVisible / latitudeSpan);
+  return Math.min(1, Math.max(0, share));
 }
 
 // ---------------------------------------------------------------------------

@@ -519,7 +519,14 @@ Other modules:
   off and a wave-only bundle group must land on the same grid as its pgrb2
   siblings; `grid.rs` repeats the rule), cropping (`crop_grid`), unit
   conversion, de-accumulation / de-averaging, quantization, temporal
-  grouping, bundle writing, half-res variants, posters, H.264 companions
+  grouping, bundle writing, the reduced-resolution ladder
+  (`SourceSpec.variant_factors`, `(2,)` by default — the `.half` tier —
+  and `(2, 4, 8)` on the satellite sources, `.quarter` and `.eighth`
+  beside it: each rung every f-th row and column of the quantized codes
+  with the tile divided by f, `binconvert.variant_tier` / `_variant_grid`
+  / `_bundle_tile(factor=)`, mirrored in `convert.rs`; the manifest's
+  `variants` list is in ascending factor order and nothing keys on the
+  suffix), posters, H.264 companions
   (surface fields of a source whose `SourceSpec.video` is on: GFS and HRRR),
   manifest entries.
 - `quantize.py` / `temporal.py` / `binformat.py`: codebooks, modulo-256
@@ -839,7 +846,18 @@ with one slot filled. Delivery path per session: WebCodecs only when
 `?use_h264=true` opts in and a video artifact exists and the browser
 supports it, otherwise streaming if a range probe succeeds, otherwise a
 whole-bundle download; the resolution tier comes from `pickBundleVariant`
-(viewport and connection) unless `?res=half` or `?res=full` pins it.
+(viewport and connection, then a per-frame cell budget:
+`main.ts::planeCellBudget`, 2.5 M cells, halved on a ≤ 4 GB device and
+quartered on a constrained connection, against the rung's cells times the
+share of the grid in view at session open, `manifest.ts::visibleGridShare`
+— a full 3000² satellite plane never fits zoomed out, so the ladder's
+lower rungs are what the disk plays at, while a view on a storm still
+takes the full tier since a streaming session decodes only its viewport's
+tiles) unless `?res=half` (the smallest rung shipped) or `?res=full` pins
+it. The plane cache budget grows with the primary session's frame size to
+hold the prefetch window (capped at 256 MB, 128 MB on a ≤ 4 GB device) and
+the window shrinks to what the cache holds; the data card names the rung
+(`Xue ½`, `Zarr ¼`).
 
 `layer.ts` renders one quantized R8 plane with inverse Web Mercator and a
 palette lookup in the fragment shader, blending two frames via `u_mix`

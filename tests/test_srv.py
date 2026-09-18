@@ -16,14 +16,18 @@ import numpy as np
 from xuebuild import binformat
 
 from xuebuild.binconvert import (
+    VARIANT_TIERS,
     WIND_COMPONENT_IDS,
     GridInfo,
     _bundle_chunks,
+    _bundle_tile,
     _decimate_codes,
     _playback_bandwidth,
+    _variant_grid,
     build_metadata,
     decode_poster,
     encode_poster,
+    variant_tier,
 )
 from xuebuild.errors import ManifestError
 from xuebuild.manifest import (
@@ -161,7 +165,63 @@ class PosterTests(unittest.TestCase):
 
 
 class ResolutionLadderTests(unittest.TestCase):
-    """Half-resolution variant bundles."""
+    """Reduced-resolution variant bundles: the half rung every source
+    publishes, and the quarter and eighth the satellite disks add."""
+
+    def test_a_tier_is_named_by_its_factor_and_nothing_else_has_a_name(self) -> None:
+        self.assertEqual(VARIANT_TIERS, {2: "half", 4: "quarter", 8: "eighth"})
+        self.assertEqual([variant_tier(factor) for factor in (2, 4, 8)], ["half", "quarter", "eighth"])
+        for factor in (0, 1, 3, 6, 16):
+            with self.subTest(factor=factor), self.assertRaisesRegex(ValueError, str(factor)):
+                variant_tier(factor)
+
+    def test_a_rung_s_grid_is_the_full_grid_decimated_once_per_halving(self) -> None:
+        production = GridInfo(1440, 721, -179.875, 89.875, 0.25, -0.25)
+        disk = GridInfo(3000, 3000, 80.72, 59.98, 0.04, -0.04)
+        self.assertEqual([(_variant_grid(production, f).width, _variant_grid(production, f).height) for f in (2, 4, 8)], [(720, 361), (360, 181), (180, 91)])
+        self.assertEqual([(_variant_grid(disk, f).width, _variant_grid(disk, f).height) for f in (2, 4, 8)], [(1500, 1500), (750, 750), (375, 375)])
+        self.assertEqual(_variant_grid(production, 1), production)
+        self.assertEqual(_variant_grid(production, 2), production.decimated())
+        self.assertEqual(_variant_grid(production, 8), production.decimated().decimated().decimated())
+        eighth = _variant_grid(disk, 8)
+        self.assertEqual((eighth.longitude_step, eighth.latitude_step), (0.32, -0.32))
+        self.assertEqual((eighth.first_longitude, eighth.first_latitude), (80.72, 59.98))
+
+    def test_a_rung_s_tile_is_the_source_tile_over_its_factor_rounded_up(self) -> None:
+        """The satellite tile 64 x 64 goes 32, 16, 8; the production
+        48 x 52 goes 24 x 26, 12 x 13, 6 x 7 — each rung the rung before
+        halved, so tile number n covers the same ground in every tier."""
+        disk = GridInfo(3000, 3000, 80.72, 59.98, 0.04, -0.04)
+        production = GridInfo(1440, 721, -179.875, 89.875, 0.25, -0.25)
+        self.assertEqual([_bundle_tile((64, 64), _variant_grid(disk, f), factor=f) for f in (1, 2, 4, 8)], [(64, 64), (32, 32), (16, 16), (8, 8)])
+        self.assertEqual([_bundle_tile((48, 52), _variant_grid(production, f), factor=f) for f in (1, 2, 4, 8)], [(48, 52), (24, 26), (12, 13), (6, 7)])
+        # ceil(ceil(n / 2) / 2) == ceil(n / 4): the quarter is the half halved.
+        for width in range(1, 130):
+            half = _bundle_tile((width, width), disk, factor=2)
+            self.assertEqual(_bundle_tile((width, width), disk, factor=4), _bundle_tile(half, disk, factor=2))
+            self.assertEqual(_bundle_tile((width, width), disk, factor=8), _bundle_tile(_bundle_tile(half, disk, factor=2), disk, factor=2))
+        # Every rung is clamped to its own grid: a crop smaller than the
+        # tile is one tile at every resolution.
+        crop = GridInfo(24, 24, 130.0, 40.0, 0.25, -0.25)
+        self.assertEqual(_bundle_tile((48, 52), crop, factor=1), (24, 24))
+        self.assertEqual(_bundle_tile((48, 52), _variant_grid(crop, 2), factor=2), (12, 12))
+        self.assertEqual(_bundle_tile((48, 52), _variant_grid(crop, 8), factor=8), (3, 3))
+
+    def test_decimation_by_a_larger_factor_is_repeated_halving(self) -> None:
+        grid = GridInfo(37, 23, -180.0, 90.0, 9.7297, -8.1818)
+        codes = np.arange(37 * 23, dtype=np.int32).astype(np.uint8)
+        half = _decimate_codes(codes, grid, 2)
+        np.testing.assert_array_equal(half, _decimate_codes(codes, grid))
+        quarter = _decimate_codes(codes, grid, 4)
+        eighth = _decimate_codes(codes, grid, 8)
+        np.testing.assert_array_equal(quarter, _decimate_codes(half, grid.decimated(), 2))
+        np.testing.assert_array_equal(eighth, _decimate_codes(quarter, grid.decimated().decimated(), 2))
+        np.testing.assert_array_equal(quarter, codes.reshape(23, 37)[::4, ::4].ravel())
+        np.testing.assert_array_equal(eighth, codes.reshape(23, 37)[::8, ::8].ravel())
+        self.assertEqual((quarter.size, eighth.size), (10 * 6, 5 * 3))
+        self.assertEqual((_variant_grid(grid, 4).width * _variant_grid(grid, 4).height, _variant_grid(grid, 8).width * _variant_grid(grid, 8).height), (quarter.size, eighth.size))
+        for rung in (half, quarter, eighth):
+            self.assertTrue(rung.flags["C_CONTIGUOUS"])
 
     def test_production_grid_decimates_to_720x361(self) -> None:
         grid = GridInfo(

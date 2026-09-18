@@ -140,6 +140,13 @@ pub struct SourceSpec {
     /// `SourceSpec.tile` in `xuebuild/sources.py`; the two tables must agree
     /// or the encoders stop being byte-identical.
     pub tile: (usize, usize),
+    /// The resolution ladder below the full tier: one reduced variant per
+    /// factor, the grid decimated log2(factor) times and named `half` (2),
+    /// `quarter` (4) or `eighth` (8). Ascending powers of two, 2 or more;
+    /// every forecast and radar source publishes the half tier alone, the
+    /// 3000 x 3000 satellite disks three rungs. Mirrors
+    /// `SourceSpec.variant_factors` in `xuebuild/sources.py`.
+    pub variant_factors: &'static [usize],
     /// True for a source that is not a forecast at all: a series of
     /// observed analyses with no cycle and no lead time. Read from one local
     /// file through `observation.rs` when `window_hours` is `None`, fetched
@@ -281,6 +288,7 @@ pub const SOURCES: &[SourceSpec] = &[
         bundle_composite_ids: &[],
         production_grid: (1440, 721),
         tile: (48, 52),
+        variant_factors: &[2],
         regrid: None,
         observation: false,
         window_hours: None,
@@ -334,6 +342,7 @@ pub const SOURCES: &[SourceSpec] = &[
         bundle_composite_ids: &[],
         production_grid: (1440, 721),
         tile: (48, 52),
+        variant_factors: &[2],
         regrid: None,
         observation: false,
         window_hours: None,
@@ -380,6 +389,7 @@ pub const SOURCES: &[SourceSpec] = &[
         bundle_composite_ids: &[],
         production_grid: (1440, 721),
         tile: (48, 52),
+        variant_factors: &[2],
         regrid: None,
         observation: false,
         window_hours: None,
@@ -409,6 +419,7 @@ pub const SOURCES: &[SourceSpec] = &[
         bundle_composite_ids: &[],
         production_grid: (3072, 1536),
         tile: (96, 96),
+        variant_factors: &[2],
         regrid: None,
         observation: false,
         window_hours: None,
@@ -454,6 +465,7 @@ pub const SOURCES: &[SourceSpec] = &[
         // 134.10 W, 52.62 N to 60.90 W, 21.12 N.
         production_grid: (2441, 1051),
         tile: (64, 64),
+        variant_factors: &[2],
         regrid: Some(Regrid { step: 0.03 }),
         observation: false,
         window_hours: None,
@@ -492,6 +504,7 @@ pub const SOURCES: &[SourceSpec] = &[
         // 67.5E to 146.25E and 56.25N to 11.25N.
         production_grid: (1792, 1024),
         tile: (64, 64),
+        variant_factors: &[2],
         regrid: None,
         observation: true,
         window_hours: Some(3),
@@ -530,6 +543,7 @@ pub const SOURCES: &[SourceSpec] = &[
         // The thinned 0.02° grid: 130W to 60W, 55N to 20N.
         production_grid: (3500, 1750),
         tile: (64, 64),
+        variant_factors: &[2],
         regrid: None,
         observation: true,
         window_hours: Some(3),
@@ -569,6 +583,7 @@ pub const SOURCES: &[SourceSpec] = &[
         // 20.5N.
         production_grid: (5600, 5000),
         tile: (128, 128),
+        variant_factors: &[2],
         regrid: None,
         observation: true,
         window_hours: Some(3),
@@ -629,6 +644,9 @@ pub const SOURCES: &[SourceSpec] = &[
         // The platform's region at 0.04°: 120° x 120°.
         production_grid: (3000, 3000),
         tile: (64, 64),
+        // A 9 M cell disk: the half tier is still twice a GFS plane, so
+        // the ladder runs to the eighth (375 x 375).
+        variant_factors: &[2, 4, 8],
         regrid: None,
         observation: true,
         window_hours: Some(6),
@@ -686,6 +704,7 @@ pub const SOURCES: &[SourceSpec] = &[
         bundle_composite_ids: &["dustrgb"],
         production_grid: (3000, 3000),
         tile: (64, 64),
+        variant_factors: &[2, 4, 8],
         regrid: None,
         observation: true,
         window_hours: Some(6),
@@ -732,6 +751,7 @@ pub const SOURCES: &[SourceSpec] = &[
         bundle_composite_ids: &["dustrgb"],
         production_grid: (3000, 3000),
         tile: (64, 64),
+        variant_factors: &[2, 4, 8],
         regrid: None,
         observation: true,
         window_hours: Some(6),
@@ -787,6 +807,7 @@ pub const SOURCES: &[SourceSpec] = &[
         bundle_composite_ids: &["dustrgb"],
         production_grid: (3000, 3000),
         tile: (64, 64),
+        variant_factors: &[2, 4, 8],
         regrid: None,
         observation: true,
         window_hours: Some(24),
@@ -805,7 +826,7 @@ pub fn source_spec(model: &str) -> Result<&'static SourceSpec> {
 
 #[cfg(test)]
 mod tests {
-    use super::source_spec;
+    use super::{source_spec, SOURCES};
 
     #[test]
     fn a_cap_must_land_on_the_published_axis() {
@@ -904,5 +925,29 @@ mod tests {
         let ecmwf = source_spec("ecmwf").expect("ecmwf");
         assert_eq!(ecmwf.optional_at_analysis, &["gust"]);
         assert!(ecmwf.bundle_scalar_ids.contains(&"gust"));
+    }
+
+    /// The resolution ladder is powers of two from the half tier down,
+    /// strictly ascending, so each rung is the one above decimated once more
+    /// and the tier names (`half`, `quarter`, `eighth`) are unambiguous.
+    /// Mirrors the test over `SourceSpec.variant_factors` in the Python
+    /// suite.
+    #[test]
+    fn every_ladder_is_ascending_powers_of_two_from_the_half_tier() {
+        for source in SOURCES {
+            assert!(!source.variant_factors.is_empty(), "{} publishes no ladder", source.id);
+            let mut previous = 1;
+            for &factor in source.variant_factors {
+                assert!(factor >= 2 && factor.is_power_of_two(), "{} factor {factor}", source.id);
+                assert!(factor > previous, "{} ladder is not ascending", source.id);
+                previous = factor;
+            }
+        }
+        for model in ["himawari", "goeseast", "goeswest", "meteosat"] {
+            assert_eq!(source_spec(model).expect(model).variant_factors, &[2, 4, 8], "{model}");
+        }
+        for model in ["gfs", "ecmwf", "aifs", "sflux", "hrrr", "cma", "mrms", "jma"] {
+            assert_eq!(source_spec(model).expect(model).variant_factors, &[2], "{model}");
+        }
     }
 }

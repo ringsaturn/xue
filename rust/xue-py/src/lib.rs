@@ -335,22 +335,36 @@ fn encode_residual<'py>(
     Ok(residual.to_pyarray(python))
 }
 
-/// Half-resolution copy of one quantized plane (rows/columns 0, 2, 4, …).
+/// Reduced copy of one quantized plane: every `factor`-th row and column
+/// from row and column 0 (the half tier's rows/columns 0, 2, 4, … by
+/// default), the sampling `_decimate_codes(codes, grid, factor)` in
+/// `xuebuild/binconvert.py` applies for every rung of the resolution ladder.
 #[pyfunction]
+#[pyo3(signature = (codes, width, height, factor = 2))]
 fn decimate<'py>(
     python: Python<'py>,
     codes: PyReadonlyArray1<'py, u8>,
     width: usize,
     height: usize,
+    factor: usize,
 ) -> PyResult<Bound<'py, PyArray1<u8>>> {
+    if factor == 0 {
+        return Err(PyValueError::new_err("decimation factor must be positive"));
+    }
     let codes = codes.as_slice()?;
-    let mut half = Vec::with_capacity(width.div_ceil(2) * height.div_ceil(2));
-    for row in (0..height).step_by(2) {
-        for column in (0..width).step_by(2) {
-            half.push(codes[row * width + column]);
+    if codes.len() < width * height {
+        return Err(PyValueError::new_err(format!(
+            "plane holds {} codes, fewer than {width} x {height}",
+            codes.len()
+        )));
+    }
+    let mut reduced = Vec::with_capacity(width.div_ceil(factor) * height.div_ceil(factor));
+    for row in (0..height).step_by(factor) {
+        for column in (0..width).step_by(factor) {
+            reduced.push(codes[row * width + column]);
         }
     }
-    Ok(half.to_pyarray(python))
+    Ok(reduced.to_pyarray(python))
 }
 
 /// The subset of `gdalinfo -json` that `xuebuild` reads, from the GDAL linked

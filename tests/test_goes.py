@@ -417,6 +417,27 @@ class ConversionTests(unittest.TestCase):
             self.assertGreaterEqual(int(gun[codes > 0].min()), 1)
             self.assertLessEqual(int(gun[codes > 0].max()), 251)
 
+    def test_the_ladder_is_three_rungs_in_ascending_factor_order(self) -> None:
+        """The satellite ladder: half, quarter and eighth per bundle, in
+        that order, each decimated from the full plane and cut with the
+        source tile over its factor."""
+        manifest = json.loads((self.root / "out" / "manifest.json").read_text(encoding="utf-8"))
+        rungs = [("half", 2, 1500, 32), ("quarter", 4, 750, 16), ("eighth", 8, 375, 8)]
+        for entry in manifest["bundles"]:
+            bundle_id = entry["variable"]
+            with self.subTest(bundle=bundle_id):
+                self.assertEqual([variant["path"] for variant in entry["variants"]], [f"{bundle_id}.{tier}.xue" for tier, _, _, _ in rungs])
+                self.assertEqual([variant["width"] for variant in entry["variants"]], [side for _, _, side, _ in rungs])
+                full = read_bundle(self.root / "out" / f"{bundle_id}.xue")
+                for tier, factor, side, tile in rungs:
+                    rung = read_bundle(self.root / "out" / f"{bundle_id}.{tier}.xue")
+                    self.assertEqual((rung.width, rung.height, rung.tiles.tile_width, rung.tiles.tile_height), (side, side, tile, tile))
+                    self.assertEqual(rung.metadata["time"], full.metadata["time"])
+                    offset = full.frame_offsets[-1]
+                    expected = np.asarray(full.decode_plane(1, offset)).reshape(3000, 3000)[::factor, ::factor]
+                    np.testing.assert_array_equal(np.asarray(rung.decode_plane(1, offset)).reshape(side, side), expected)
+        self.assertEqual([Path(variant["output"]).name for variant in self.report["variants"]], [f"{b}.{t}.xue" for b in ("ir104", "dustrgb") for t, _, _, _ in rungs])
+
     @unittest.skipUnless(native.knows_source("goeseast"), f"the installed {native.DISTRIBUTION} wheel predates the goeseast source")
     def test_the_native_encoder_writes_the_same_bytes(self) -> None:
         if not zstdcli.compresses_in_process():
