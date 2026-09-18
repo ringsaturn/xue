@@ -611,6 +611,9 @@ prune-r2-sounding:
 prune-r2:
 	@set -e; \
 	live=$$($(MAKE) -s --no-print-directory live-run MODEL=$(MODEL)); \
+	if [ -z "$$live" ] && [ -n "$(DRY_RUN)" ]; then \
+		echo "no live pointer for $(MODEL); a dry run of a source's first publish has nothing to prune"; exit 0; \
+	fi; \
 	[ -n "$$live" ] || { echo "no live pointer for $(MODEL), refusing to prune"; exit 1; }; \
 	echo "live $(MODEL) run: $$live"; \
 	listing=$$($(S3) ls s3://$(R2_BUCKET)/$(R2_PREFIX)/) \

@@ -662,6 +662,20 @@ class ConversionTests(unittest.TestCase):
                     float(np.abs(decoded - source).max()), codebook.metadata()["scale"] / 2 + 1e-9
                 )
 
+    def test_the_radiation_is_the_daytime_the_box_had(self) -> None:
+        # 01Z is ten in the morning over this box, so the interval mean of
+        # the shortwave radiation is hundreds of watts. A fetch of a run
+        # that latest.json no longer describes once came back all zero
+        # (om2nc gave an interval of unknown length a weight of nothing),
+        # which every other check here passed: this one holds the fixture,
+        # and any recut of it, to the daylight.
+        bundle = self.bundle("dswrf")
+        codebook = PROFILES["quality"]["dswrf"]
+        decoded = codebook.decode(np.asarray(bundle.decode_plane(1, 1)).reshape(81, 81))
+        source = np.clip(source_plane("dswrf", 1), codebook.minimum, codebook.maximum)
+        self.assertGreater(float(source.max()), 500.0)
+        self.assertLessEqual(float(np.abs(decoded - source).max()), codebook.metadata()["scale"] / 2 + 1e-9)
+
     def test_the_rate_is_the_interval_total_over_its_hour(self) -> None:
         bundle = self.bundle("prate")
         codebook = PROFILES["quality"]["prate"]
