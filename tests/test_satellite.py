@@ -386,8 +386,8 @@ class ListingTests(unittest.TestCase):
                 run = resolve_run("latest", hours=3, now=now, model="himawari")
                 self.assertEqual(run.id, "2026091701")
                 self.assertEqual(resolve_run("latest", hours=SPEC.window_hours, now=now, model="himawari").id, "2026091622")
-                self.assertFalse(_satellite_run_is_complete(SPEC, GfsRun(SLOT_0300), 3))
-                self.assertTrue(_satellite_run_is_complete(SPEC, GfsRun(datetime(2026, 9, 17, 0, tzinfo=UTC)), 3))
+                self.assertFalse(_satellite_run_is_complete(SPEC, GfsRun(SLOT_0300), 3, now=now))
+                self.assertTrue(_satellite_run_is_complete(SPEC, GfsRun(datetime(2026, 9, 17, 0, tzinfo=UTC)), 3, now=now))
                 with self.assertRaisesRegex(DownloadError, "has not fully landed"):
                     resolve_run("2026091703", hours=3, now=now, model="himawari")
 

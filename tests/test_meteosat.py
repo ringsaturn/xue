@@ -419,8 +419,8 @@ class ListingTests(unittest.TestCase):
             # Two whole hours and the one in progress; a day the same way.
             self.assertEqual(run.id, "2026091711")
             self.assertEqual(resolve_run("latest", hours=SPEC.window_hours, now=now, model="meteosat").id, "2026091614")
-            self.assertTrue(_satellite_run_is_complete(SPEC, GfsRun(SLOT_1200), 1))
-            self.assertFalse(_satellite_run_is_complete(SPEC, GfsRun(SLOT_1200), 2))
+            self.assertTrue(_satellite_run_is_complete(SPEC, GfsRun(SLOT_1200), 1, now=now))
+            self.assertFalse(_satellite_run_is_complete(SPEC, GfsRun(SLOT_1200), 2, now=now))
         with self.assertRaisesRegex(DownloadError, "Meteosat-12 lists no complete ir104 slot"):
             satellite_fetch.latest_slot(METEOSAT, IR104, now=DAY + timedelta(days=3), fetch=self.listing, cadence_seconds=3600)
 

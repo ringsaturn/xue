@@ -962,11 +962,13 @@ def latest_satellite_slot(
 
 
 def _satellite_run_is_complete(
-    spec: SourceSpec, run: GfsRun, hours: int, *, fetch: Callable[[str], str] | None = None
+    spec: SourceSpec, run: GfsRun, hours: int, *, now: datetime | None = None, fetch: Callable[[str], str] | None = None
 ) -> bool:
     """Whether a named window has fully landed: the bucket's newest
-    complete slot is at or past the window's end."""
-    return latest_satellite_slot(spec, fetch=fetch) >= run.time + timedelta(hours=hours)
+    complete slot is at or past the window's end. ``now`` is where the
+    reader's newest-few listing starts from (a day's directories, an
+    hour's, a six-hour search), so a test on a fixture passes its own."""
+    return latest_satellite_slot(spec, now=now, fetch=fetch) >= run.time + timedelta(hours=hours)
 
 
 def satellite_series_stem(spec: SourceSpec, run: GfsRun) -> str:
@@ -1183,6 +1185,8 @@ def _run_is_complete(
     hours: int,
     model: str,
     exists: Callable[[str], bool],
+    *,
+    now: datetime | None = None,
 ) -> bool:
     if model == "mrms":
         return _mrms_run_is_complete(source_spec(model), run, hours)
@@ -1191,7 +1195,7 @@ def _run_is_complete(
     if model == "cma":
         return _cma_run_is_complete(source_spec(model), run, hours)
     if source_spec(model).platform is not None:
-        return _satellite_run_is_complete(source_spec(model), run, hours)
+        return _satellite_run_is_complete(source_spec(model), run, hours, now=now)
     if model == "hrrr":
         # Every hour, on one mirror: the hours of a cycle land out of order
         # and the two copies disagree for a while, so the ends prove nothing.
@@ -1272,7 +1276,7 @@ def resolve_run(
             LOG.info("%s newest frame %s, live window from %s", label, newest.isoformat(), start.isoformat())
             return GfsRun(start)
         run = parse_run(value, model)
-        if not _run_is_complete(run, hours, model, exists):
+        if not _run_is_complete(run, hours, model, exists, now=now):
             raise DownloadError(f"{label} run {run.id} has not fully landed on the bucket through +{hours} h")
         return run
     # Validate the horizon against the model's published axis up front, so an
@@ -1280,7 +1284,7 @@ def resolve_run(
     spec.forecast_hours(hours)
     if value != "latest":
         run = parse_run(value, model)
-        if not _run_is_complete(run, hours, model, exists):
+        if not _run_is_complete(run, hours, model, exists, now=now):
             raise DownloadError(f"{label} run {run.id} is incomplete for f000 through f{hours:03d}")
         return run
 
@@ -1292,7 +1296,7 @@ def resolve_run(
             candidate -= cycle
             continue
         LOG.info("checking %s run %s", label, run.id)
-        if _run_is_complete(run, hours, model, exists):
+        if _run_is_complete(run, hours, model, exists, now=now):
             return run
         candidate -= cycle
     raise DownloadError(f"could not find a complete {label} cycle in the last {max_cycles} runs")

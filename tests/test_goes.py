@@ -233,8 +233,8 @@ class ListingTests(unittest.TestCase):
             run = resolve_run("latest", hours=3, now=now, model="goeseast")
             self.assertEqual(run.id, "2026091713")
             self.assertEqual(resolve_run("latest", hours=EAST.window_hours, now=now, model="goeseast").id, "2026091710")
-            self.assertFalse(_satellite_run_is_complete(EAST, GfsRun(HOUR), 3))
-            self.assertTrue(_satellite_run_is_complete(EAST, GfsRun(datetime(2026, 9, 17, 12, tzinfo=UTC)), 3))
+            self.assertFalse(_satellite_run_is_complete(EAST, GfsRun(HOUR), 3, now=now))
+            self.assertTrue(_satellite_run_is_complete(EAST, GfsRun(datetime(2026, 9, 17, 12, tzinfo=UTC)), 3, now=now))
             with self.assertRaisesRegex(DownloadError, "has not fully landed"):
                 resolve_run("2026091715", hours=3, now=now, model="goeseast")
         # GOES-West is the same reader on its own bucket, which the
