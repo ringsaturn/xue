@@ -111,8 +111,8 @@ jobs:
       FRAME_CACHE: "true"
       # A warped frame is 3-6 MB and a day is 24 slots of six variables. The
       # viewer plays a day and the store archives the scans, so the mirror
-      # keeps that window and a little slack: a round pulls HOURS + 1 hours.
-      FRAMES_KEEP_HOURS: "30"
+      # keeps that window and an hour of slack: a round pulls HOURS + 1 hours.
+      FRAMES_KEEP_HOURS: "26"
       ONCE: ${{ !inputs.loop }}
       ROUND_MINUTES: ${{ inputs.round_minutes || '5' }}
       # For a looping dispatch: run past the hour, and hand over to the next

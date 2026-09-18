@@ -380,7 +380,7 @@ model starts here; the frontend mirror is `FORECAST_MODELS` in
   outside the grid is refused, since a blank warp is also a lost
   projection), `assemble.py` caches the
   frame (`data/raw/himawari-frames/<variable>/*.tif`, mirrored like the JMA
-  frames but kept twelve hours, `FRAMES_KEEP_HOURS`, since the agencies
+  frames but kept eight hours, `FRAMES_KEEP_HOURS`, since the agencies
   archive the scans and a day of seven variables is ~4.5 GB) and writes the window series with `gdal_translate -of netCDF`
   through a VRT carrying `NETCDF_DIM_*` metadata, `fetch.py` runs a window
   (`fetch.py::_fetch_satellite_run` in the top-level module dispatches on
