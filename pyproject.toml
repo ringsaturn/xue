@@ -26,11 +26,12 @@ dependencies = [
     # `gdalinfo` on PATH, which the scheduled publish workflows no longer
     # install. The floor tracks the current release because the wheel's
     # source table must match sources.py (a wheel that publishes a different
-    # bundle set refuses to build), and 0.18 is the first wheel that knows
-    # the himawari source: a satellite window warped onto a plate carrée
-    # grid by the fetch stage and read as one NetCDF series, whose variable
-    # carries the band block beside its parameter block.
-    "xuepy>=0.18,<0.19",
+    # bundle set refuses to build), and 0.19 is the first wheel that knows
+    # the GOES and Meteosat sources, composes the Dust RGB (three guns of one
+    # bundle with a producer block) and writes the resolution ladder below
+    # the half tier (`SourceSpec.variant_factors`: the quarter and eighth of
+    # a satellite disk).
+    "xuepy>=0.19,<0.20",
 ]
 
 [project.scripts]

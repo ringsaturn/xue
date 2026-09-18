@@ -797,7 +797,7 @@ dependency. Two exceptions:
   decode and not byte-identical on encode.
 - `gdalinfo` has a second source. `gdal.dataset_info` is the one entry
   point and reads through the `xuepy` wheel's linked GDAL (`xue.gdal_info`,
-  one reason for the `xuepy>=0.18` floor) when the build converts natively,
+  one reason for the `xuepy>=0.19` floor) when the build converts natively,
   the subprocess otherwise; the choice follows `XUE_ENCODER`, so a run never
   mixes two GDAL installs. This is what lets the scheduled `publish-*`
   workflows install no GDAL. `tests/test_gdalinfo.py` diffs the two sources
