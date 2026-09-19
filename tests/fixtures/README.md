@@ -3,15 +3,16 @@
 `gfs.2026081406.f000.crop.grib2` is an 80 by 80 cell crop of every record
 the GFS source fetches from the 2026-08-14 06:00 UTC analysis: 2 m
 temperature, surface precipitation rate, the 10 m wind pair, mean sea level
-pressure, the 850 / 700 / 500 / 250 hPa geopotential heights, 925, 850 and
-500 hPa temperature, 850, 700 and 500 hPa relative humidity, 850 hPa
-specific humidity, the 925, 850 and 250 hPa wind pairs, then the surface
-diagnostics (gust, total / low / middle / high cloud cover, CAPE,
-visibility, 2 m dew point and apparent temperature), the 850 / 700 /
-500 hPa vertical velocity, the surface temperature and the two sea ice
-fields, and — appended by the fetcher from the cycle's GFS-Wave file — the
-significant wave height, primary wave period and direction: forty records,
-in the order `xuebuild/sources.py` lists them. It covers
+pressure, the geopotential height, temperature and relative humidity on
+the eight registered isobaric surfaces (1000 / 925 / 850 / 700 / 500 /
+300 / 250 / 200 hPa), 850 hPa specific humidity, the wind pair on the same
+eight surfaces, then the surface diagnostics (gust, total / low / middle /
+high cloud cover, CAPE, visibility, 2 m dew point and apparent
+temperature), the 850 / 700 / 500 hPa vertical velocity, the surface
+temperature and the two sea ice fields, and — appended by the fetcher from
+the cycle's GFS-Wave file — the significant wave height, primary wave
+period and direction: sixty-four records, in the order
+`xuebuild/sources.py` lists them. It covers
 approximately 118E to 138E and 18N to 38N, including the browser test's
 initial viewport, so the record matchers, the GRIB2 header index, the vapour
 flux derivation and the byte-identity parity test all run against real
@@ -69,9 +70,9 @@ gdal_translate -srcwin 1220 800 120 120 -of GRIB -co DATA_ENCODING=COMPLEX_PACKI
 are an 80 by 80 cell window of the analysis and the first step of the
 2026-09-12 12:00 UTC ECMWF open data cycle, every record the ECMWF source
 fetches in `xuebuild/sources.py` order — the `oper` stream's, then the
-three `wave` stream records the fetcher appends: thirty-three records at
+three `wave` stream records the fetcher appends: fifty-seven records at
 the analysis, which carries no gust (the interval maximum is empty there
-and the source lists it as optional), thirty-four at F003. The window is
+and the source lists it as optional), fifty-eight at F003. The window is
 the Kara Sea, 60E to 80E and 65N to 85N: sea ice (the ice thickness
 carries a bitmap over land), open water (the wave records' bitmap covers
 the ice and the land) and Novaya Zemlya and Yamal, so every fill rule meets

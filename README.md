@@ -66,9 +66,11 @@ Bundle sets:
   sea ice cover and thickness, significant wave height and primary period
   from the cycle's GFS-Wave file, plus the derived wave vector: the height
   laid along the direction of travel as a u/v pair), mean sea level pressure
-  with the 850 / 700 / 500 / 250 hPa heights, 925 / 850 / 500 hPa
-  temperature, 850 / 700 / 500 hPa relative humidity, the 925 / 850 / 250
-  hPa winds and the 850 hPa water vapour flux (`q·V/g`, derived).
+  with the geopotential height, temperature, relative humidity and wind on
+  all eight registered isobaric surfaces (1000 / 925 / 850 / 700 / 500 /
+  300 / 250 / 200 hPa — the mandatory levels of a radiosonde ascent, so the
+  model column beside a sounding is complete) and the 850 hPa water vapour
+  flux (`q·V/g`, derived).
 - ECMWF: the subset of that set its open data carries, under the same
   identities (`msl` as `prmsl`, `mucape` as `cape`, `skt` as `tmpsfc`,
   wave fields from the `wave` stream). Open data has no precipitation-rate

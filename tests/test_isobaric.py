@@ -119,19 +119,15 @@ class VectorBundleTests(unittest.TestCase):
     def test_gfs_and_ecmwf_publish_the_same_upper_air_set(self) -> None:
         gfs = source_spec("gfs")
         published = published_bundle_ids(gfs)
-        for bundle_id in (
-            "tmp925",
-            "tmp850",
-            "tmp500",
-            "rh850",
-            "rh700",
-            "rh500",
-            "wind10m",
-            "wind925",
-            "wind850",
-            "wind250",
-            "qflux850",
-        ):
+        # The height, temperature, humidity and wind on every registered
+        # surface — the mandatory levels of a radiosonde ascent, so the
+        # model column the skew-T lays over a sounding has every level the
+        # sonde reports — and the 850 hPa vapour flux.
+        for level in ISOBARIC_LEVELS_HPA:
+            for family in ("hgt", "tmp", "rh"):
+                self.assertIn(isobaric_variable_id(family, level), published)
+            self.assertIn(f"wind{level}", published)
+        for bundle_id in ("wind10m", "qflux850"):
             self.assertIn(bundle_id, published)
         self.assertNotIn("spfh850", published, "the specific humidity is an input only")
         self.assertEqual(bundle_input_ids(gfs, "qflux850"), ("spfh850", "ugrd850", "vgrd850"))

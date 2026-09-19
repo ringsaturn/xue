@@ -25,12 +25,13 @@ class IndexMessagesTests(unittest.TestCase):
         # surface diagnostics and the vertical velocity, then the ocean —
         # three pgrb2 records and, appended from the cycle's GFS-Wave file,
         # three wave records.
-        self.assertEqual(len(messages), 40)
+        self.assertEqual(len(messages), 64)
         temperature, precipitation, u_wind, v_wind, pressure = messages[:5]
-        heights = messages[5:9]
-        upper_air = messages[9:22]
-        diagnostics = messages[22:34]
-        ocean = messages[34:]
+        heights = messages[5:13]
+        upper_air = messages[13:46]
+        diagnostics = messages[46:58]
+        ocean = messages[58:]
+        levels = [100000.0, 92500.0, 85000.0, 70000.0, 50000.0, 30000.0, 25000.0, 20000.0]
         self.assertEqual(temperature.band, 1)
         self.assertEqual(
             (temperature.discipline, temperature.parameter_category, temperature.parameter_number),
@@ -56,33 +57,28 @@ class IndexMessagesTests(unittest.TestCase):
             (5, 3, 1),
         )
         self.assertEqual((pressure.level_type, pressure.level_value), (101, 0.0))
-        # The four published isobaric surfaces, whose value is the level in
+        # The eight published isobaric surfaces, whose value is the level in
         # pascals — the same number variables.py declares for each level.
         self.assertEqual(
             [(message.band, message.level_type, message.level_value) for message in heights],
-            [(6, 100, 85000.0), (7, 100, 70000.0), (8, 100, 50000.0), (9, 100, 25000.0)],
+            [(6 + index, 100, level) for index, level in enumerate(levels)],
         )
         for height in heights:
             self.assertEqual(
                 (height.discipline, height.parameter_category, height.parameter_number),
                 (0, 3, 5),
             )
+        # Temperature and relative humidity on the eight surfaces, the 850 hPa
+        # specific humidity (an input only), then the wind pair on each.
         self.assertEqual(
             [(m.band, m.parameter_category, m.parameter_number, m.level_value) for m in upper_air],
-            [
-                (10, 0, 0, 92500.0),
-                (11, 0, 0, 85000.0),
-                (12, 0, 0, 50000.0),
-                (13, 1, 1, 85000.0),
-                (14, 1, 1, 70000.0),
-                (15, 1, 1, 50000.0),
-                (16, 1, 0, 85000.0),
-                (17, 2, 2, 92500.0),
-                (18, 2, 3, 92500.0),
-                (19, 2, 2, 85000.0),
-                (20, 2, 3, 85000.0),
-                (21, 2, 2, 25000.0),
-                (22, 2, 3, 25000.0),
+            [(14 + index, 0, 0, level) for index, level in enumerate(levels)]
+            + [(22 + index, 1, 1, level) for index, level in enumerate(levels)]
+            + [(30, 1, 0, 85000.0)]
+            + [
+                (31 + 2 * index + component, 2, 2 + component, level)
+                for index, level in enumerate(levels)
+                for component in (0, 1)
             ],
         )
         self.assertTrue(all(message.level_type == 100 for message in upper_air))
@@ -93,18 +89,18 @@ class IndexMessagesTests(unittest.TestCase):
         self.assertEqual(
             [(m.band, m.parameter_category, m.parameter_number, m.level_type, m.level_value) for m in diagnostics],
             [
-                (23, 2, 22, 1, 0.0),
-                (24, 6, 1, 10, 0.0),
-                (25, 6, 3, 214, 0.0),
-                (26, 6, 4, 224, 0.0),
-                (27, 6, 5, 234, 0.0),
-                (28, 7, 6, 1, 0.0),
-                (29, 19, 0, 1, 0.0),
-                (30, 0, 6, 103, 2.0),
-                (31, 0, 21, 103, 2.0),
-                (32, 2, 8, 100, 85000.0),
-                (33, 2, 8, 100, 70000.0),
-                (34, 2, 8, 100, 50000.0),
+                (47, 2, 22, 1, 0.0),
+                (48, 6, 1, 10, 0.0),
+                (49, 6, 3, 214, 0.0),
+                (50, 6, 4, 224, 0.0),
+                (51, 6, 5, 234, 0.0),
+                (52, 7, 6, 1, 0.0),
+                (53, 19, 0, 1, 0.0),
+                (54, 0, 6, 103, 2.0),
+                (55, 0, 21, 103, 2.0),
+                (56, 2, 8, 100, 85000.0),
+                (57, 2, 8, 100, 70000.0),
+                (58, 2, 8, 100, 50000.0),
             ],
         )
         self.assertTrue(all(message.statistical_process is None for message in diagnostics))
@@ -116,12 +112,12 @@ class IndexMessagesTests(unittest.TestCase):
         self.assertEqual(
             [(m.band, m.discipline, m.parameter_category, m.parameter_number, m.level_type, m.level_value) for m in ocean],
             [
-                (35, 0, 0, 0, 1, 0.0),
-                (36, 10, 2, 0, 1, 0.0),
-                (37, 10, 2, 1, 1, 0.0),
-                (38, 10, 0, 3, 1, 1.0),
-                (39, 10, 0, 11, 1, 1.0),
-                (40, 10, 0, 10, 1, 1.0),
+                (59, 0, 0, 0, 1, 0.0),
+                (60, 10, 2, 0, 1, 0.0),
+                (61, 10, 2, 1, 1, 0.0),
+                (62, 10, 0, 3, 1, 1.0),
+                (63, 10, 0, 11, 1, 1.0),
+                (64, 10, 0, 10, 1, 1.0),
             ],
         )
         self.assertTrue(all(message.statistical_process is None for message in ocean))

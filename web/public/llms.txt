@@ -101,16 +101,18 @@ Facts worth getting right:
   run cycle and no lead time: its `run` is the hour its series starts and
   a frame's offset is time elapsed since.
 - Bundles published per run. GFS and ECMWF: `tmp2m`, `prate`, `prmsl`,
-  `hgt850`, `hgt700`, `hgt500`, `hgt250`, `tmp925`, `tmp850`, `tmp500`,
-  `rh850`, `rh700`, `rh500`, the surface diagnostics `gust`, `tcdc` (total
+  the geopotential height `hgt<level>`, temperature `tmp<level>` and
+  relative humidity `rh<level>` on each of the eight isobaric surfaces
+  (`<level>` one of 1000, 925, 850, 700, 500, 300, 250, 200 hPa — the
+  mandatory radiosonde levels), the surface diagnostics `gust`, `tcdc` (total
   cloud cover), `cape`, `dpt2m`, the vertical velocity `vvel850`,
   `vvel700`, `vvel500`, the 850 hPa equivalent potential temperature
   `thetae850`, the ocean fields `tmpsfc` (surface / skin temperature, the
   SST over water), `icetk` (sea ice thickness), `htsgw` and `perpw`
   (significant wave height and primary wave period, from the wave model of
   the same cycle — GFS-Wave, ECMWF's `wave` stream; land is 0 in both), and
-  the vector pairs `wind10m`, `wind925`, `wind850`, `wind250`, `qflux850`
-  and `wave` (the height laid along the direction the waves travel, u/v in
+  the vector pairs `wind10m`, `wind<level>` on the same eight surfaces,
+  `qflux850` and `wave` (the height laid along the direction the waves travel, u/v in
   metres — the viewer's wave layer; the primary direction is read from it
   as `atan2(-u, -v)`, degrees true the waves come from, and is not
   published as a scalar). On ECMWF the gust is the maximum over the

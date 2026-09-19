@@ -3,10 +3,10 @@
  *
  * The skew-T draws two profiles: the sonde's, out of the sounding product,
  * and the model's, out of whatever isobaric levels the run on screen
- * happens to publish. The second is not a fixed list — GFS ships
- * tmp925/850/500, rh850/700/500 and wind925/850/250 today and something
- * else tomorrow, ECMWF ships its own set — so the panel takes what is
- * there and draws a column of however many levels that is. A run with no
+ * happens to publish. The second is not a fixed list — GFS and ECMWF ship
+ * tmp, rh and wind on all eight registered surfaces today, HRRR three
+ * temperatures and three winds, AIFS no humidity at all — so the panel
+ * takes what is there and draws a column of however many levels that is. A run with no
  * isobaric bundle at all simply has no model profile, and the chart says
  * so rather than drawing an empty dotted line.
  *

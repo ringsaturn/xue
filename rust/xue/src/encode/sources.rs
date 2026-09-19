@@ -272,24 +272,27 @@ pub const SOURCES: &[SourceSpec] = &[
         latest_filename: Some("latest.json"),
         // Hourly through f120, then three-hourly through f240.
         steps: &[(120, 1), (240, 3)],
-        // The pressure family ships mean sea level pressure and the four
-        // isobaric levels a synoptic chart is read on (850 / 700 / 500 /
-        // 250); the upper-air fills the surfaces those charts carry — 925,
-        // 850 and 500 hPa temperature, 850, 700 and 500 hPa relative
-        // humidity, the 925 and 850 hPa winds with the vapour flux derived
-        // from the 850 hPa one and the specific humidity there (fetched as
-        // an input only — it also feeds the 850 hPa equivalent potential
-        // temperature), and the 250 hPa wind for the jet; then the surface
+        // The pressure family ships mean sea level pressure and the height
+        // on all eight registered isobaric surfaces (1000 / 925 / 850 / 700 /
+        // 500 / 300 / 250 / 200 hPa); the upper-air fills the temperature,
+        // relative humidity and wind on the same eight — the mandatory
+        // levels of a radiosonde ascent, so the skew-T's model column is
+        // complete — with the vapour flux derived from the 850 hPa wind and
+        // the specific humidity there (fetched as an input only — it also
+        // feeds the 850 hPa equivalent potential temperature); then the surface
         // diagnostics and the vertical velocity on three surfaces; then the
         // ocean — the skin temperature and the sea ice fields from pgrb2,
         // the wave fields from the cycle's GFS-Wave file. Mirrors
         // `xuebuild/sources.py`.
         input_variable_ids: &[
-            "tmp2m", "prate", "ugrd10m", "vgrd10m", "prmsl", "hgt850", "hgt700", "hgt500",
-            "hgt250", "tmp925", "tmp850", "tmp500", "rh850", "rh700", "rh500", "spfh850",
-            "ugrd925", "vgrd925", "ugrd850", "vgrd850", "ugrd250", "vgrd250", "gust", "tcdc",
-            "lcdc", "mcdc", "hcdc", "cape", "vis", "dpt2m", "aptmp2m", "vvel850", "vvel700",
-            "vvel500", "tmpsfc", "icec", "icetk", "htsgw", "perpw", "dirpw",
+            "tmp2m", "prate", "ugrd10m", "vgrd10m", "prmsl", "hgt1000", "hgt925", "hgt850",
+            "hgt700", "hgt500", "hgt300", "hgt250", "hgt200", "tmp1000", "tmp925", "tmp850",
+            "tmp700", "tmp500", "tmp300", "tmp250", "tmp200", "rh1000", "rh925", "rh850", "rh700",
+            "rh500", "rh300", "rh250", "rh200", "spfh850", "ugrd1000", "vgrd1000", "ugrd925",
+            "vgrd925", "ugrd850", "vgrd850", "ugrd700", "vgrd700", "ugrd500", "vgrd500", "ugrd300",
+            "vgrd300", "ugrd250", "vgrd250", "ugrd200", "vgrd200", "gust", "tcdc", "lcdc", "mcdc",
+            "hcdc", "cape", "vis", "dpt2m", "aptmp2m", "vvel850", "vvel700", "vvel500", "tmpsfc",
+            "icec", "icetk", "htsgw", "perpw", "dirpw",
         ],
         companion_files: &[CompanionFile {
             id: "wave",
@@ -303,13 +306,18 @@ pub const SOURCES: &[SourceSpec] = &[
         statistical_processes: &[],
         bands: &[],
         bundle_scalar_ids: &[
-            "tmp2m", "prate", "prmsl", "hgt850", "hgt700", "hgt500", "hgt250", "tmp925", "tmp850",
-            "tmp500", "rh850", "rh700", "rh500", "gust", "tcdc", "lcdc", "mcdc", "hcdc", "cape",
-            "vis", "dpt2m", "aptmp2m", "vvel850", "vvel700", "vvel500", "thetae850", "tmpsfc",
-            "icec", "icetk", "htsgw", "perpw",
+            "tmp2m", "prate", "prmsl", "hgt1000", "hgt925", "hgt850", "hgt700", "hgt500", "hgt300",
+            "hgt250", "hgt200", "tmp1000", "tmp925", "tmp850", "tmp700", "tmp500", "tmp300",
+            "tmp250", "tmp200", "rh1000", "rh925", "rh850", "rh700", "rh500", "rh300", "rh250",
+            "rh200", "gust", "tcdc", "lcdc", "mcdc", "hcdc", "cape", "vis", "dpt2m", "aptmp2m",
+            "vvel850", "vvel700", "vvel500", "thetae850", "tmpsfc", "icec", "icetk", "htsgw",
+            "perpw",
         ],
         core_bundle_ids: &["tmp2m", "prate"],
-        bundle_vector_ids: &["wind10m", "wind925", "wind850", "wind250", "qflux850", "wave"],
+        bundle_vector_ids: &[
+            "wind10m", "wind1000", "wind925", "wind850", "wind700", "wind500", "wind300", "wind250",
+            "wind200", "qflux850", "wave",
+        ],
         bundle_composite_ids: &[],
         production_grid: (1440, 721),
         tile: (48, 52),
@@ -342,11 +350,13 @@ pub const SOURCES: &[SourceSpec] = &[
         // peak period and mean direction — the direction an input only,
         // carried by the derived wave vector. Mirrors `xuebuild/sources.py`.
         input_variable_ids: &[
-            "tmp2m", "tp", "ugrd10m", "vgrd10m", "prmsl", "hgt850", "hgt700", "hgt500", "hgt250",
-            "tmp925", "tmp850", "tmp500", "rh850", "rh700", "rh500", "spfh850", "ugrd925",
-            "vgrd925", "ugrd850", "vgrd850", "ugrd250", "vgrd250", "gust", "tcdc", "cape",
-            "dpt2m", "vvel850", "vvel700", "vvel500", "tmpsfc", "icetk", "htsgw", "perpw",
-            "dirpw",
+            "tmp2m", "tp", "ugrd10m", "vgrd10m", "prmsl", "hgt1000", "hgt925", "hgt850", "hgt700",
+            "hgt500", "hgt300", "hgt250", "hgt200", "tmp1000", "tmp925", "tmp850", "tmp700",
+            "tmp500", "tmp300", "tmp250", "tmp200", "rh1000", "rh925", "rh850", "rh700", "rh500",
+            "rh300", "rh250", "rh200", "spfh850", "ugrd1000", "vgrd1000", "ugrd925", "vgrd925",
+            "ugrd850", "vgrd850", "ugrd700", "vgrd700", "ugrd500", "vgrd500", "ugrd300", "vgrd300",
+            "ugrd250", "vgrd250", "ugrd200", "vgrd200", "gust", "tcdc", "cape", "dpt2m", "vvel850",
+            "vvel700", "vvel500", "tmpsfc", "icetk", "htsgw", "perpw", "dirpw",
         ],
         companion_files: &[CompanionFile {
             id: "wave",
@@ -360,12 +370,17 @@ pub const SOURCES: &[SourceSpec] = &[
         statistical_processes: &[("prate", 0), ("gust", 2)],
         bands: &[],
         bundle_scalar_ids: &[
-            "tmp2m", "prate", "prmsl", "hgt850", "hgt700", "hgt500", "hgt250", "tmp925", "tmp850",
-            "tmp500", "rh850", "rh700", "rh500", "gust", "tcdc", "cape", "dpt2m", "vvel850",
-            "vvel700", "vvel500", "thetae850", "tmpsfc", "icetk", "htsgw", "perpw",
+            "tmp2m", "prate", "prmsl", "hgt1000", "hgt925", "hgt850", "hgt700", "hgt500", "hgt300",
+            "hgt250", "hgt200", "tmp1000", "tmp925", "tmp850", "tmp700", "tmp500", "tmp300",
+            "tmp250", "tmp200", "rh1000", "rh925", "rh850", "rh700", "rh500", "rh300", "rh250",
+            "rh200", "gust", "tcdc", "cape", "dpt2m", "vvel850", "vvel700", "vvel500", "thetae850",
+            "tmpsfc", "icetk", "htsgw", "perpw",
         ],
         core_bundle_ids: &["tmp2m", "prate"],
-        bundle_vector_ids: &["wind10m", "wind925", "wind850", "wind250", "qflux850", "wave"],
+        bundle_vector_ids: &[
+            "wind10m", "wind1000", "wind925", "wind850", "wind700", "wind500", "wind300", "wind250",
+            "wind200", "qflux850", "wave",
+        ],
         bundle_composite_ids: &[],
         production_grid: (1440, 721),
         tile: (48, 52),

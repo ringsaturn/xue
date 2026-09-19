@@ -67,8 +67,17 @@ FIXTURE_FRAMES = [FIXTURES / "aifs.2026091700.f000.crop.grib2", FIXTURES / "aifs
 AIFS = source_spec("aifs")
 ECMWF = source_spec("ecmwf")
 GFS = source_spec("gfs")
-# What AIFS open data does not carry of the IFS set, and what it adds.
-DROPPED = ("rh850", "rh700", "rh500", "gust", "cape", "icetk", "perpw")
+# What AIFS open data does not carry of the IFS set (no relative humidity on
+# any pressure level, no gust, CAPE, ice thickness or peak period), what the
+# IFS source publishes on the isobaric surfaces the AIFS source has not
+# taken up yet (the heights, temperatures and winds beyond the synoptic
+# levels; the records exist in the AIFS open data), and what AIFS adds.
+DROPPED = tuple(f"rh{level}" for level in (1000, 925, 850, 700, 500, 300, 250, 200)) + ("gust", "cape", "icetk", "perpw")
+NOT_TAKEN_UP = (
+    "hgt1000", "hgt925", "hgt300", "hgt200",
+    "tmp1000", "tmp700", "tmp300", "tmp250", "tmp200",
+    "wind1000", "wind700", "wind500", "wind300", "wind200",
+)
 ADDED = ("lcdc", "mcdc", "hcdc")
 
 requires_gdalinfo = unittest.skipUnless(shutil.which("gdalinfo") is not None, "gdalinfo is not on PATH")
@@ -87,7 +96,7 @@ class SourceRegistryTests(unittest.TestCase):
             self.assertNotIn(bundle_id, ecmwf)
             self.assertIn(bundle_id, aifs)
         self.assertEqual(set(aifs) - set(ecmwf), set(ADDED))
-        self.assertEqual(set(ecmwf) - set(aifs), set(DROPPED))
+        self.assertEqual(set(ecmwf) - set(aifs), set(DROPPED) | set(NOT_TAKEN_UP))
         self.assertEqual(len(aifs), 27)
         # The 850 hPa specific humidity still feeds the two derivations.
         self.assertIn("qflux850", aifs)

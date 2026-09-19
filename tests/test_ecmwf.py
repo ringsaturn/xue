@@ -20,7 +20,7 @@ a source that has switched the H.264 companion off (``SourceSpec.video``).
 80 cell window of the 2026-09-12 12Z cycle over the Kara Sea (60–80E,
 65–85N: sea ice, open water and land, so every bitmap and fill rule meets
 real masked points), every record the source fetches in source order —
-thirty-three at the analysis, which has no gust, thirty-four at the first
+fifty-seven at the analysis, which has no gust, fifty-eight at the first
 step — from the ``oper`` and ``wave`` streams as the fetcher assembles them.
 """
 
@@ -76,7 +76,7 @@ class SourceRegistryTests(unittest.TestCase):
         for bundle_id in ("lcdc", "mcdc", "hcdc", "vis", "icec", "aptmp2m"):
             self.assertIn(bundle_id, gfs)
             self.assertNotIn(bundle_id, ecmwf)
-        self.assertEqual(len(ecmwf), 31)
+        self.assertEqual(len(ecmwf), 50)
 
     def test_every_added_input_names_its_ecmwf_record(self) -> None:
         for variable_id in ECMWF.input_variable_ids:
@@ -157,7 +157,7 @@ class FetchTests(unittest.TestCase):
 
 class MatcherTests(unittest.TestCase):
     def test_the_header_index_finds_every_input_in_source_order(self) -> None:
-        for path, expected in zip(FIXTURE_FRAMES, (33, 34)):
+        for path, expected in zip(FIXTURE_FRAMES, (57, 58)):
             frames = grib2.inspect_grib_fast(path, ECMWF.input_variable_ids, optional_ids=ECMWF.optional_at_analysis)
             self.assertEqual(len(frames), expected, path.name)
             present = [variable_id for variable_id in ECMWF.input_variable_ids if variable_id in frames]
