@@ -1,0 +1,239 @@
+<!doctype html>
+<!--
+  The landing page of the data root, https://dataset.ringsaturn.me/xue/index.html.
+  A human's entry to the STAC catalog beside it: what is here, where the
+  contract is written (the repository's docs/), and a table of the live
+  sources read out of catalog.json and each Collection on the same origin.
+  Uploaded by `make upload-r2-index`; nothing in the shell or the encoder
+  reads it, and no document of the catalog links to it.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Xue dataset</title>
+  <meta name="description" content="The data root of Xue: live weather forecast runs, radar and satellite windows and point products as Zarr v3 stores and JSON, described by a static STAC catalog.">
+  <link rel="canonical" href="https://dataset.ringsaturn.me/xue/index.html">
+  <link rel="icon" href="https://xue.ringsaturn.me/favicon-32.png" sizes="32x32">
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #fbfaf7;
+      --ink: #1f2226;
+      --muted: #676b70;
+      --line: #e1ddd4;
+      --accent: #0b5f8a;
+      --code-bg: #f1eee7;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #16181b;
+        --ink: #e6e3dc;
+        --muted: #9a9ea3;
+        --line: #33373c;
+        --accent: #7cc0e6;
+        --code-bg: #1f2225;
+      }
+    }
+    html { background: var(--bg); }
+    body {
+      margin: 0 auto;
+      padding: 40px 20px 64px;
+      max-width: 860px;
+      color: var(--ink);
+      font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    }
+    h1 { font-size: 28px; margin: 0 0 4px; }
+    h1 small { font-size: 14px; font-weight: 400; color: var(--muted); margin-left: 8px; }
+    h2 { font-size: 19px; margin: 36px 0 10px; }
+    p { margin: 8px 0; }
+    a { color: var(--accent); }
+    code, pre { font: 13.5px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+    pre { background: var(--code-bg); padding: 12px 14px; border-radius: 6px; overflow-x: auto; }
+    pre code { background: none; padding: 0; }
+    .lead { color: var(--muted); }
+    table { border-collapse: collapse; width: 100%; font-size: 14.5px; }
+    th, td { text-align: left; vertical-align: top; padding: 7px 10px 7px 0; border-bottom: 1px solid var(--line); }
+    th { font-weight: 600; color: var(--muted); }
+    td.links { white-space: nowrap; }
+    td.links a + a { margin-left: 8px; }
+    .at { white-space: nowrap; }
+    .status { color: var(--muted); font-size: 14px; }
+    dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 8px 0; }
+    dt { font-weight: 600; }
+    dd { margin: 0; }
+    footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; }
+    @media (max-width: 600px) {
+      dl { grid-template-columns: 1fr; gap: 2px; }
+      dd { margin-bottom: 8px; }
+      td.links { white-space: normal; }
+    }
+  </style>
+</head>
+<body>
+  <h1>Xue dataset <small>dataset.ringsaturn.me/xue/</small></h1>
+  <p class="lead">
+    The data root of <a href="https://xue.ringsaturn.me">Xue</a>, a static-site
+    weather viewer: live forecast runs, radar and satellite windows and three
+    point products, published as Zarr v3 stores and plain JSON and described by
+    a static <a href="https://stacspec.org/">STAC</a> 1.1.0 catalog. Everything
+    here is served as-is from an object store; there is no API.
+  </p>
+
+  <h2>Start here</h2>
+  <dl>
+    <dt><a href="catalog.json">catalog.json</a></dt>
+    <dd>The root Catalog: one <code>child</code> Collection per live source and
+      point product, one for the historical showcase cases. Each Collection's
+      <code>item</code> link is the newest run or issue at a path that never
+      changes; every link is relative.</dd>
+    <dt><a href="https://github.com/ringsaturn/xue/blob/main/docs/stac.md">docs/stac.md</a></dt>
+    <dd>The catalog's contract: the layout, what each Catalog, Collection and
+      Item carries, and how every document is derived from a run's manifest.</dd>
+    <dt><a href="https://github.com/ringsaturn/xue/blob/main/docs/zarr-profile.md">docs/zarr-profile.md</a></dt>
+    <dd>The Zarr v3 profile of a store (<code>&lt;bundle&gt;.zarr/</code>): one
+      <code>uint8</code> array per variable, one shard, six-frame time chunks,
+      CF scaling attributes, so <code>xarray.open_zarr</code> reads it.</dd>
+    <dt><a href="https://github.com/ringsaturn/xue/blob/main/docs/format.md">docs/format.md</a></dt>
+    <dd>The quantization, codebooks and temporal residual coding behind the
+      stores (the <code>.xue</code> container they are derived from).</dd>
+    <dt>Point products</dt>
+    <dd><a href="https://github.com/ringsaturn/xue/blob/main/docs/sounding.md">docs/sounding.md</a>
+      (radiosonde soundings),
+      <a href="https://github.com/ringsaturn/xue/blob/main/docs/airport.md">docs/airport.md</a>
+      (METAR / TAF) and
+      <a href="https://github.com/ringsaturn/xue/blob/main/docs/tc.md">docs/tc.md</a>
+      (tropical cyclone tracks): each issue is an <code>index.json</code> plus
+      one NDJSON file read by byte range.</dd>
+    <dt><a href="https://github.com/ringsaturn/xue#readme">README</a></dt>
+    <dd>The project, the sources and their cadence, publishing, and the data
+      licences.</dd>
+  </dl>
+
+  <h2>Reading it</h2>
+  <p>With <a href="https://pystac.readthedocs.io/">pystac</a> and xarray:</p>
+<pre><code>import pystac, xarray as xr
+
+catalog = pystac.Catalog.from_file("https://dataset.ringsaturn.me/xue/catalog.json")
+run = next(catalog.get_child("gfs").get_items())    # the live Item, gfs/item.json
+ds = xr.open_zarr(run.assets["tmp2m"].get_absolute_href())</code></pre>
+  <p>
+    <code>run.properties["cube:variables"]</code> lists what else the run
+    carries and in which unit. Only the newest run per source is kept, so hold
+    an Item no longer than the source's cadence; a link into a run directory
+    (<code>gfs.&lt;run&gt;/</code>) stops resolving when the run is pruned.
+  </p>
+
+  <h2>Live sources</h2>
+  <p class="status" id="status">Reading <a href="catalog.json">catalog.json</a>…</p>
+  <noscript><p>The table below fills from <a href="catalog.json">catalog.json</a> with JavaScript; without it, start from the catalog.</p></noscript>
+  <table id="sources" hidden>
+    <thead>
+      <tr><th>Source</th><th>Live</th><th>Covers (UTC)</th><th>Links</th></tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <h2>Layout</h2>
+  <dl>
+    <dt><code>latest.json</code>, <code>latest-&lt;source&gt;.json</code></dt>
+    <dd>The live pointer per source, the only mutable object the viewer
+      reads (<code>no-cache</code>); its STAC face is
+      <code>&lt;source&gt;/collection.json</code>.</dd>
+    <dt><code>&lt;source&gt;.&lt;run&gt;/</code></dt>
+    <dd>One immutable run: <code>manifest.json</code>, one
+      <code>&lt;bundle&gt;.zarr/</code> store per variable with its reduced
+      tiers, posters, and <code>item.json</code>. A rolling window (radar,
+      satellite) adds a round directory, <code>&lt;HHMM&gt;/</code>.</dd>
+    <dt><code>&lt;product&gt;.&lt;issue&gt;/</code></dt>
+    <dd>One issue of a point product: <code>index.json</code>, the NDJSON file
+      it indexes by byte offset, and <code>item.json</code>.</dd>
+    <dt><code>showcase/</code>, <code>showcase.json</code></dt>
+    <dd>Historical cases, kept indefinitely, with their own Collection.</dd>
+  </dl>
+
+  <h2>Licences</h2>
+  <p>
+    The data belongs to its producers; each Collection carries a
+    <code>license</code> link and names the producer under
+    <code>providers</code>. NOAA data is public domain. ECMWF open data and
+    the IFS HRES fields are CC BY 4.0 (© ECMWF; "Contains modified ECMWF open
+    data"); Meteosat imagery "Contains modified EUMETSAT Meteosat data"
+    (CC BY 4.0). The other agencies' terms are linked from their Collections.
+    Xue's own code is MIT OR Apache-2.0.
+  </p>
+
+  <footer>
+    Xue · <a href="https://github.com/ringsaturn/xue">github.com/ringsaturn/xue</a>
+    · <a href="https://xue.ringsaturn.me">the viewer</a>
+  </footer>
+
+  <script>
+    (async () => {
+      const status = document.getElementById("status");
+      const table = document.getElementById("sources");
+      const body = table.querySelector("tbody");
+      const get = async (path) => {
+        const response = await fetch(path, { cache: "no-cache" });
+        if (!response.ok) throw new Error(`${path}: HTTP ${response.status}`);
+        return response.json();
+      };
+      const stamp = (iso) => (iso ? iso.replace("T", " ").replace(/:00Z$/, "Z") : "");
+      const cell = (text) => { const td = document.createElement("td"); td.textContent = text; return td; };
+      const link = (href, text) => { const a = document.createElement("a"); a.href = href; a.textContent = text; return a; };
+      try {
+        const catalog = await get("catalog.json");
+        const children = catalog.links.filter((l) => l.rel === "child");
+        const collections = await Promise.all(children.map((l) =>
+          get(l.href).then((c) => ({ href: l.href, collection: c }), (error) => ({ href: l.href, error }))));
+        for (const { href, collection, error } of collections) {
+          const dir = href.replace(/\/collection\.json$/, "");
+          const tr = document.createElement("tr");
+          const title = document.createElement("td");
+          if (collection) {
+            title.appendChild(link(href, collection.title || collection.id));
+          } else {
+            title.textContent = dir;
+          }
+          tr.appendChild(title);
+          if (!collection) {
+            const td = cell(String(error.message || error));
+            td.colSpan = 3;
+            tr.appendChild(td);
+            body.appendChild(tr);
+            continue;
+          }
+          tr.appendChild(cell(collection["xue:live"] || (collection["xue:catalog"] ? "cases" : "")));
+          const intervals = collection.extent?.temporal?.interval || [];
+          const [start, end] = intervals[0] || [];
+          const covers = document.createElement("td");
+          for (const [i, at] of [start, end].entries()) {
+            if (!at) continue;
+            const span = document.createElement("span");
+            span.className = "at";
+            span.textContent = i === 0 ? stamp(at) + (end ? " –" : "") : stamp(at);
+            covers.appendChild(span);
+            covers.appendChild(document.createTextNode(" "));
+          }
+          tr.appendChild(covers);
+          const links = document.createElement("td");
+          links.className = "links";
+          const item = collection.links.find((l) => l.rel === "item");
+          if (item && collection["xue:live"]) links.appendChild(link(`${dir}/${item.href}`, "item"));
+          const pointer = collection.links.find((l) => l.rel === "xue:pointer");
+          if (pointer) links.appendChild(link(`${dir}/${pointer.href}`, "pointer"));
+          const licence = collection.links.find((l) => l.rel === "license");
+          if (licence) links.appendChild(link(licence.href, "licence"));
+          tr.appendChild(links);
+          body.appendChild(tr);
+        }
+        table.hidden = false;
+        status.textContent = `${children.length} Collections in the catalog, read just now.`;
+      } catch (error) {
+        status.textContent = `Could not read the catalog: ${error.message || error}`;
+      }
+    })();
+  </script>
+</body>
+</html>

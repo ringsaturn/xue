@@ -71,7 +71,7 @@ AWS_REQUEST_CHECKSUM_CALCULATION ?= when_required
 AWS_RESPONSE_CHECKSUM_VALIDATION ?= when_required
 export AWS_DEFAULT_REGION AWS_REQUEST_CHECKSUM_CALCULATION AWS_RESPONSE_CHECKSUM_VALIDATION
 
-.PHONY: check install wasm test test-rust test-e2e encoder-rust encoder-rust-test encoder-wheel bench bench-video bench-lossy mvp serve format-pdf deploy-build upload-r2 upload-r2-bundles upload-r2-manifest upload-r2-stac-item check-pointer upload-r2-pointer upload-r2-stac-collection warm-r2 prune-r2 prune-r2-rounds live-run live-manifest live-window pull-r2-frames push-r2-frames prune-r2-frames pull-r2-ancillary deploy-pages deploy showcase showcase-check showcase-refresh live-showcase-catalog upload-r2-showcase tc-build live-tc-index upload-r2-tc prune-r2-tc airport-build live-airport-index upload-r2-airport prune-r2-airport sounding-build live-sounding-index upload-r2-sounding prune-r2-sounding clean
+.PHONY: check install wasm test test-rust test-e2e encoder-rust encoder-rust-test encoder-wheel bench bench-video bench-lossy mvp serve format-pdf deploy-build upload-r2 upload-r2-bundles upload-r2-manifest upload-r2-stac-item check-pointer upload-r2-pointer upload-r2-stac-collection upload-r2-index warm-r2 prune-r2 prune-r2-rounds live-run live-manifest live-window pull-r2-frames push-r2-frames prune-r2-frames pull-r2-ancillary deploy-pages deploy showcase showcase-check showcase-refresh live-showcase-catalog upload-r2-showcase tc-build live-tc-index upload-r2-tc prune-r2-tc airport-build live-airport-index upload-r2-airport prune-r2-airport sounding-build live-sounding-index upload-r2-sounding prune-r2-sounding clean
 
 check:
 	$(PYTHON) scripts/check_dependencies.py
@@ -310,6 +310,15 @@ upload-r2-stac-collection:
 		--content-type application/json --cache-control "no-cache"; \
 	$(S3) cp web/public/data/$(STAC_CATALOG) s3://$(R2_BUCKET)/$(R2_PREFIX)/$(STAC_CATALOG) --no-progress $(DRY_RUN) \
 		--content-type application/json --cache-control "no-cache"
+
+# The data root's landing page (web/dataroot/index.html): a human's entry
+# to the STAC catalog, naming catalog.json and the repository's docs. Not
+# read by the shell or any catalog document, uploaded by hand when it
+# changes; no-cache like the catalog beside it.
+upload-r2-index:
+	@echo "Uploading index.html..."; \
+	$(S3) cp web/dataroot/index.html s3://$(R2_BUCKET)/$(R2_PREFIX)/index.html --no-progress $(DRY_RUN) \
+		--content-type "text/html; charset=utf-8" --cache-control "no-cache"
 
 # GET every artifact of one uploaded run through the public hostname, with
 # the site's Origin header, so the edge (and, with tiered cache, the upper

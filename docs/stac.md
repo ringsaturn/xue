@@ -38,6 +38,7 @@ pointers:
 | `<product>.<issue>/item.json` | one Item per issue, beside its `index.json` | no | same |
 | `showcase/collection.json` | the Collection of the historical cases | yes | `showcase build` / `refresh` / `catalog` |
 | `showcase/<case>/item.json` | one Item per case, beside its manifest | rewritten by `showcase refresh` | same |
+| `index.html` | not a STAC object: the root's landing page for a reader arriving in a browser, naming `catalog.json` and these documents, with a table of the live Collections filled from the catalog (`web/dataroot/index.html`) | yes | `make upload-r2-index`, by hand |
 
 Mutable documents are served `no-cache`, like the pointer; an Item is too,
 since a STAC client fetches it by its plain name rather than under a `?v=`

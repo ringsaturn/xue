@@ -785,6 +785,12 @@ or in pieces, and it is written wherever the manifest is: `build-bin`,
 targets carry them: an Item with its manifest, a Collection and the catalog
 with the pointer, the showcase's with `upload-r2-showcase`.
 
+The root also carries a plain `index.html`
+([`web/dataroot/index.html`](web/dataroot/index.html), `make
+upload-r2-index`): the same entry for a person, naming `catalog.json` and
+these documents, with a table of the live Collections read from the catalog
+in the browser.
+
 The three point products are in it on the same terms, derived from an
 issue's `index.json` instead of a manifest: `sounding/`, `airport/` and
 `tc/` each carry a `collection.json` and the live `item.json`, and
