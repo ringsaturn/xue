@@ -338,10 +338,10 @@ make mvp MODEL=hrrr       # NOAA HRRR
 make serve
 ```
 
-Or step by step (`--model gfs|ecmwf|aifs|ifshres|sflux|hrrr|mrms`, default `gfs`;
-`--hours` defaults to the whole axis the model publishes: 240 for the global
-models, 360 for AIFS and IFS HRES, 18 for HRRR, and on MRMS the window
-length, 3):
+Or step by step (`--model gfs|sflux|ecmwf|aifs|ifshres|hrrr|mrms|jma|cma|himawari|goeseast|goeswest|meteosat`,
+default `gfs`; `--hours` defaults to the whole axis the model publishes: 240
+for the global models, 360 for AIFS and IFS HRES, 18 for HRRR, and on the
+rolling windows their length):
 
 ```sh
 python -m xuebuild fetch --run latest --hours 240
