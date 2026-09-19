@@ -28,7 +28,7 @@ from unittest import mock
 
 import numpy as np
 
-from tests.test_satellite import bucket, requires_gdal
+from tests.test_satellite import bucket, requires_gdal, stage_ancillary
 from xuebuild import binconvert, native, observation, zstdcli
 from xuebuild.binformat import read_bundle
 from xuebuild.errors import DownloadError
@@ -51,7 +51,7 @@ from xuebuild.satellite.projector import TargetGrid
 from xuebuild.satellite.readers import CMIPFReader, parse_cmipf_key, reader_for
 from xuebuild.sources import SatelliteBand, source_spec
 from xuebuild.stac import _source_prose
-from xuebuild.variables import DUST_RGB_BUNDLE_ID, DUST_RGB_COMPONENT_IDS
+from xuebuild.variables import DUST_CF_BUNDLE_ID, DUST_RGB_BUNDLE_ID, DUST_RGB_COMPONENT_IDS
 
 FIXTURES = Path(__file__).parent / "fixtures" / "goes"
 EAST = source_spec("goeseast")
@@ -99,17 +99,17 @@ class RegistryTests(unittest.TestCase):
                 self.assertEqual((spec.platform, spec.manifest_model, spec.latest_filename, spec.product), (platform, model, pointer, "abi-fldk-0p04"))
                 self.assertEqual(spec.input_variable_ids, himawari.input_variable_ids)
                 self.assertEqual((spec.bundle_scalar_ids, spec.bundle_composite_ids, spec.core_bundle_ids), (himawari.bundle_scalar_ids, himawari.bundle_composite_ids, himawari.core_bundle_ids))
-                self.assertEqual(binconvert.published_bundle_ids(spec), ("ir104", "dustrgb"))
+                self.assertEqual(binconvert.published_bundle_ids(spec), ("ir104", "dustrgb", "dustcf"))
                 self.assertEqual((spec.grid_step, spec.cadence_seconds, spec.window_hours, spec.production_grid, spec.tile), (0.04, 600, 6, (3000, 3000), (64, 64)))
                 self.assertFalse(spec.video)
 
     def test_the_bands_are_the_abi_s(self) -> None:
         for spec, number in ((EAST, 273), (WEST, 272)):
             with self.subTest(source=spec.id):
-                self.assertEqual([band_id for band_id, _ in spec.bands], ["ir086", "ir104", "ir112", "ir123"])
+                self.assertEqual([band_id for band_id, _ in spec.bands], ["ir039", "wv062", "ir086", "ir104", "ir112", "ir123"])
                 bands = dict(spec.bands)
                 self.assertEqual(bands["ir104"], SatelliteBand(satellite_series=0, satellite_number=number, instrument_type=617, central_wavenumber=96618))
-                self.assertEqual([bands[band_id].central_wavenumber for band_id in ("ir086", "ir104", "ir112", "ir123")], [117647, 96618, 89286, 81301])
+                self.assertEqual([bands[band_id].central_wavenumber for band_id in ("ir039", "wv062", "ir086", "ir104", "ir112", "ir123")], [256410, 161551, 117647, 96618, 89286, 81301])
                 # An ABI window and its AHI counterpart share the id and differ
                 # in the band block alone.
                 self.assertNotEqual(bands["ir104"], dict(source_spec("himawari").bands)["ir104"])
@@ -135,7 +135,7 @@ class RegistryTests(unittest.TestCase):
             self.assertEqual((platform.reader, platform.bucket, platform.prefix, platform.tile_count), ("cmipf", bucket_name, "ABI-L2-CMIPF", 1))
             self.assertIsInstance(reader_for(platform), CMIPFReader)
             self.assertEqual(platform.channel("ir104").band, 13)
-            self.assertEqual([platform.channel(channel_id).band for channel_id in EAST.input_variable_ids], [11, 13, 14, 15])
+            self.assertEqual([platform.channel(channel_id).band for channel_id in EAST.input_variable_ids], [7, 8, 11, 13, 14, 15])
 
     def test_the_catalog_prose_names_noaa_and_the_recipe(self) -> None:
         for spec, spacecraft in ((EAST, "GOES-19"), (WEST, "GOES-18")):
@@ -145,7 +145,8 @@ class RegistryTests(unittest.TestCase):
             self.assertEqual(prose["providers"][1]["roles"], ["host"])
             self.assertEqual(prose["providers"][2]["name"], "shachen")
             self.assertIn("endorse", prose["description"])
-            self.assertEqual([link["rel"] for link in prose["links"]], ["license", "cite-as", "describedby"])
+            self.assertEqual([link["rel"] for link in prose["links"]], ["license", "cite-as", "describedby", "cite-as", "describedby"])
+            self.assertIn("dustcf", prose["description"])
 
 
 class KeyTests(unittest.TestCase):
@@ -184,7 +185,7 @@ class ListingTests(unittest.TestCase):
         self.assertEqual((objects[0].tile, objects[0].key.rsplit("/", 1)[-1][:28]), (1, "OR_ABI-L2-CMIPF-M6C13_G19_s2"))
         self.assertTrue(satellite_fetch.slot_is_complete(GOES_EAST, objects))
         # Another channel's file, or a slot the hour lacks, is not this slot.
-        self.assertEqual(self.reader.list_slot(GOES_EAST, GOES_EAST.channel("wv062"), SLOT_1510, fetch=self.listing), [])
+        self.assertEqual(self.reader.list_slot(GOES_EAST, GOES_EAST.channel("vis064"), SLOT_1510, fetch=self.listing), [])
         self.assertEqual(self.reader.list_slot(GOES_EAST, IR104, datetime(2026, 9, 17, 15, 30, tzinfo=UTC), fetch=self.listing), [])
         self.assertFalse(satellite_fetch.slot_is_complete(GOES_EAST, []))
 
@@ -269,6 +270,7 @@ class FetchTests(unittest.TestCase):
             series_stem="goeseast.2026091715",
             units={channel.id: "K" for channel in channels},
             producers=producers,
+            ancillary_root=stage_ancillary(self.root, (SLOT_1510, SLOT_1520), skin="gfs.tmpsfc.caribbean.grib2"),
             force=force,
             fetch=self.listing,
             download=self.download_counting,
@@ -320,8 +322,8 @@ class FetchTests(unittest.TestCase):
         import xarray as xr  # noqa: PLC0415
 
         window = self.fetch_window(channels=CHANNELS, producers=(DUST,))
-        self.assertEqual([(item.slot, item.tiles) for item in window.slots], [(SLOT_1510, 4), (SLOT_1520, 4)])
-        self.assertEqual(list(window.series), ["ir086", "ir104", "ir112", "ir123", "dustr", "dustg", "dustb"])
+        self.assertEqual([(item.slot, item.tiles) for item in window.slots], [(SLOT_1510, 6), (SLOT_1520, 6)])
+        self.assertEqual(list(window.series), ["ir039", "wv062", "ir086", "ir104", "ir112", "ir123", "dustr", "dustg", "dustb"])
         planes = {channel.id: assemble.read_frame(window.slots[0].frames[channel.id], TILE_GRID) for channel in CHANNELS}
         scene = xr.Dataset({name: xr.DataArray(planes[channel_id], dims=("y", "x")) for name, channel_id in (("bt_tir_86", "ir086"), ("bt_tir_104", "ir104"), ("bt_tir_112", "ir112"), ("bt_tir_123", "ir123"))})
         abi = np.asarray(dust_rgb(scene, DUST_RGB_ABI).values)
@@ -339,15 +341,16 @@ class FetchTests(unittest.TestCase):
         self.assertEqual(json.loads(assemble.packing_path(gun).read_text(encoding="utf-8"))["producer"], {"id": "shachen", "version": DUST.version})
 
     def test_the_source_fetch_writes_the_series_and_a_fetch_record(self) -> None:
+        stage_ancillary(self.root, (SLOT_1510, SLOT_1520), skin="gfs.tmpsfc.caribbean.grib2")
         written = _fetch_satellite_run(EAST, GfsRun(HOUR), 3, self.root, force=False, input_ids=None, fetch=self.listing, download=self.download)
         run_dir = self.root / "goeseast.2026091715"
-        self.assertEqual(written, [run_dir / f"goeseast.2026091715.{variable_id}.nc" for variable_id in ("ir086", "ir104", "ir112", "ir123", "dustr", "dustg", "dustb")])
+        self.assertEqual(written, [run_dir / f"goeseast.2026091715.{variable_id}.nc" for variable_id in (*EAST.input_variable_ids, *DUST_RGB_COMPONENT_IDS, DUST_CF_BUNDLE_ID)])
         record = json.loads((run_dir / "fetch.json").read_text(encoding="utf-8"))
         self.assertEqual((record["model"], record["run"], record["hours"], record["cadenceSeconds"]), ("goeseast", "2026091715", 3, 600))
         self.assertEqual(record["platform"], "GOES-19")
         self.assertEqual(record["grid"], {"step": 0.04, "width": 3000, "height": 3000, "firstLongitude": -135.18, "firstLatitude": 59.98})
         self.assertEqual([frame["slot"] for frame in record["frames"]], ["2026-09-17T15:10:00Z", "2026-09-17T15:20:00Z"])
-        self.assertEqual([frame["tilesFetched"] for frame in record["frames"]], [4, 4])
+        self.assertEqual([frame["tilesFetched"] for frame in record["frames"]], [6, 6])
         summary = window_summary(run_dir)
         self.assertEqual((summary["frameCount"], summary["latestSlot"]), (2, "2026-09-17T15:20:00Z"))
         series = observation.inspect_observation(run_dir, EAST, ("ir104", *DUST_RGB_COMPONENT_IDS))
@@ -361,6 +364,7 @@ class ConversionTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.root = Path(tempfile.mkdtemp(prefix="xue-goes-convert-"))
         listing, download = bucket(fixture_keys())
+        stage_ancillary(cls.root, (SLOT_1510, SLOT_1520), skin="gfs.tmpsfc.caribbean.grib2")
         _fetch_satellite_run(EAST, GfsRun(HOUR), 3, cls.root, force=False, input_ids=None, fetch=listing, download=download)
         cls.inputs = cls.root / "goeseast.2026091715"
         with mock.patch.dict(os.environ, {"XUE_ENCODER": "python"}):
@@ -380,7 +384,7 @@ class ConversionTests(unittest.TestCase):
         shutil.rmtree(cls.root, ignore_errors=True)
 
     def test_the_bundles_are_the_east_disk_with_the_abi_band(self) -> None:
-        self.assertEqual([bundle["variable"] for bundle in self.report["bundles"]], ["ir104", "dustrgb"])
+        self.assertEqual([bundle["variable"] for bundle in self.report["bundles"]], ["ir104", "dustrgb", "dustcf"])
         manifest = json.loads((self.root / "out" / "manifest.json").read_text(encoding="utf-8"))
         self.assertEqual((manifest["model"], manifest["product"]), ("GOES-EAST", "abi-fldk-0p04"))
         self.assertEqual(manifest["runTime"], "2026-09-17T15:00:00Z")
@@ -436,7 +440,7 @@ class ConversionTests(unittest.TestCase):
                     offset = full.frame_offsets[-1]
                     expected = np.asarray(full.decode_plane(1, offset)).reshape(3000, 3000)[::factor, ::factor]
                     np.testing.assert_array_equal(np.asarray(rung.decode_plane(1, offset)).reshape(side, side), expected)
-        self.assertEqual([Path(variant["output"]).name for variant in self.report["variants"]], [f"{b}.{t}.xue" for b in ("ir104", "dustrgb") for t, _, _, _ in rungs])
+        self.assertEqual([Path(variant["output"]).name for variant in self.report["variants"]], [f"{b}.{t}.xue" for b in ("ir104", "dustrgb", "dustcf") for t, _, _, _ in rungs])
 
     @unittest.skipUnless(native.knows_source("goeseast"), f"the installed {native.DISTRIBUTION} wheel predates the goeseast source")
     def test_the_native_encoder_writes_the_same_bytes(self) -> None:

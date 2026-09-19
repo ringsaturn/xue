@@ -184,7 +184,7 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
     observation: true,
     coreBundles: ["ir104"],
     defaultVariable: "ir104",
-    railCore: ["ir104", "dustrgb"],
+    railCore: ["ir104", "dustrgb", "dustcf"],
     region: [80.7, -60, 200.7, 60],
     subLongitude: 140.7,
     cadenceSeconds: 600,
@@ -205,7 +205,7 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
     observation: true,
     coreBundles: ["ir104"],
     defaultVariable: "ir104",
-    railCore: ["ir104", "dustrgb"],
+    railCore: ["ir104", "dustrgb", "dustcf"],
     region: [-135.2, -60, -15.2, 60],
     subLongitude: 284.8,
     cadenceSeconds: 600,
@@ -218,7 +218,7 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
     observation: true,
     coreBundles: ["ir104"],
     defaultVariable: "ir104",
-    railCore: ["ir104", "dustrgb"],
+    railCore: ["ir104", "dustrgb", "dustcf"],
     region: [163, -60, 283, 60],
     subLongitude: 223,
     cadenceSeconds: 600,
@@ -235,7 +235,7 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
     observation: true,
     coreBundles: ["ir104"],
     defaultVariable: "ir104",
-    railCore: ["ir104", "dustrgb"],
+    railCore: ["ir104", "dustrgb", "dustcf"],
     region: [-180, -60, 180, 60],
     mosaic: true,
     members: ["meteosat", "himawari", "goeswest", "goeseast"],
@@ -393,11 +393,14 @@ export const OCEAN_IDS: readonly OceanId[] = ["tmpsfc", "icec", "icetk", "htsgw"
 /** The satellite bundles — brightness temperature in the 10.4 µm infrared
  * window, one bundle per channel, named by nominal wavelength and
  * instrument-neutral (AHI band 13 and ABI channel 13 are both `ir104`; the
- * file's `band` block says which), and the Dust RGB composite a producer
- * derives from four infrared channels (`dustrgb`, a `CompositeBundleId`) —
- * held to the encoders by `tests/fixtures/satellite-registry.json`. */
-export type SatelliteId = "ir104" | CompositeBundleId;
-export const SATELLITE_IDS: readonly SatelliteId[] = ["ir104", "dustrgb"];
+ * file's `band` block says which), the Dust RGB composite a producer
+ * derives from four infrared channels (`dustrgb`, a `CompositeBundleId`),
+ * and the DEBRA dust confidence the same producer derives from five
+ * (`dustcf`: one scalar in 0–1, painted with a ramp like a channel, not a
+ * composite) — held to the encoders by
+ * `tests/fixtures/satellite-registry.json`. */
+export type SatelliteId = "ir104" | CompositeBundleId | "dustcf";
+export const SATELLITE_IDS: readonly SatelliteId[] = ["ir104", "dustrgb", "dustcf"];
 
 /** A well-formed bundle/variable name: lowercase alphanumeric, starting with
  * a letter. This is the whole admission rule — a manifest is rejected for

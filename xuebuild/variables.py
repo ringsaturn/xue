@@ -793,6 +793,34 @@ VARIABLES: dict[str, VariableSpec] = {
         grib2_number=4,
         grib2_level_type=8,
     ),
+    # The two further windows DEBRA reads (Miller et al. 2017: the 3.9 µm
+    # window for the night thin-cirrus test and the 6.2 µm water vapour
+    # band for the deep-convection test; AHI bands 7 and 8, ABI channels 7
+    # and 8), the same parameter and codebook again — the 3.9 µm window
+    # by day carries reflected sunlight on top of the emission and can
+    # read above the top of the codebook over desert, which only the test
+    # that saturates at 8 K of contrast ever sees. Fetched for the
+    # confidence field, registered variables, published by no source.
+    "ir039": VariableSpec(
+        id="ir039",
+        label="Brightness temperature, 3.9 µm",
+        output_unit="K",
+        value_range=(180, 332),
+        grib2_discipline=0,
+        grib2_category=4,
+        grib2_number=4,
+        grib2_level_type=8,
+    ),
+    "wv062": VariableSpec(
+        id="wv062",
+        label="Brightness temperature, 6.2 µm",
+        output_unit="K",
+        value_range=(180, 332),
+        grib2_discipline=0,
+        grib2_category=4,
+        grib2_number=4,
+        grib2_level_type=8,
+    ),
     # The classic Dust RGB (Lensky and Rosenfeld 2008; EUMeTrain's recipe
     # compilation; the GOES-R Quick Guide), the three guns of one composite
     # bundle, ``dustrgb``: red is the 12.3 − 10.4 µm split window, green
@@ -839,6 +867,29 @@ VARIABLES: dict[str, VariableSpec] = {
         grib2_level_type=8,
         producer_id="shachen",
     ),
+    # The DEBRA dust confidence (Miller et al. 2017, Eqs. 1–22, as the
+    # ``shachen`` package implements them with its ABI retune), the one
+    # variable of the ``dustcf`` bundle: the combined confidence factor in
+    # 0–1 with the split-window gate applied — a cell where neither
+    # split-window test responded reads 0, since cloud has no split-window
+    # signal and dust nearly always does — computed per slot in the fetch
+    # stage (xuebuild/satellite/producers.py) from five infrared windows,
+    # a GFS skin temperature and the CAMEL emissivity climatology. A
+    # produced field like the guns: the next local-use number under the
+    # same producer, and the guns' codebook, so code 0 — a cell the disk
+    # does not cover, an input lacked, or no emissivity is staged for over
+    # land — is "no data" and 0.0 confidence stays a value at code 1.
+    "dustcf": VariableSpec(
+        id="dustcf",
+        label="DEBRA dust confidence",
+        output_unit="1",
+        value_range=(-0.004, 1),
+        grib2_discipline=3,
+        grib2_category=192,
+        grib2_number=4,
+        grib2_level_type=8,
+        producer_id="shachen",
+    ),
 }
 
 # The ocean set: the three pgrb2 fields and the three GFS-Wave fields above,
@@ -847,16 +898,21 @@ VARIABLES: dict[str, VariableSpec] = {
 # also carries the two derived wave vector components.
 OCEAN_VARIABLE_IDS: tuple[str, ...] = ("tmpsfc", "icec", "icetk", "htsgw", "perpw", "dirpw")
 WAVE_VECTOR_COMPONENT_IDS: tuple[str, str] = ("uwave", "vwave")
-# The satellite channels and the composite guns, held to the Rust encoder
+# The satellite channels, the composite guns and the confidence, held to the Rust encoder
 # and the frontend by tests/fixtures/satellite-registry.json the same way.
 # The channels are what a platform's imager measures (a ``band`` block
 # each when published); the guns are what the Dust RGB producer derives
 # from four of them, the three variables of the ``dustrgb`` bundle in
 # bundle order.
-SATELLITE_CHANNEL_IDS: tuple[str, ...] = ("ir086", "ir104", "ir112", "ir123")
+SATELLITE_CHANNEL_IDS: tuple[str, ...] = ("ir039", "wv062", "ir086", "ir104", "ir112", "ir123")
 DUST_RGB_BUNDLE_ID = "dustrgb"
 DUST_RGB_COMPONENT_IDS: tuple[str, str, str] = ("dustr", "dustg", "dustb")
-SATELLITE_VARIABLE_IDS: tuple[str, ...] = SATELLITE_CHANNEL_IDS + DUST_RGB_COMPONENT_IDS
+# The DEBRA confidence is a composite bundle of one variable: produced in
+# the fetch stage like the guns, read off the series as a variable of its
+# own, never derived by a converter.
+DUST_CF_BUNDLE_ID = "dustcf"
+DUST_CF_COMPONENT_IDS: tuple[str] = ("dustcf",)
+SATELLITE_VARIABLE_IDS: tuple[str, ...] = SATELLITE_CHANNEL_IDS + DUST_RGB_COMPONENT_IDS + DUST_CF_COMPONENT_IDS
 # The ids the Celsius rule applies to at the surface: GDAL normalizes every
 # GRIB temperature to Celsius, and the converter accepts K and F as well.
 SURFACE_TEMPERATURE_IDS: tuple[str, ...] = ("tmp2m", "dpt2m", "aptmp2m", "tmpsfc")

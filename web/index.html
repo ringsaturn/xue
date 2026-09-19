@@ -408,10 +408,11 @@
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphDswrf">S</b>
           <span class="rail-name"><span>SOLAR</span> <small data-i18n="varSolar">FLUX</small></span>
         </button>
-        <!-- The satellite pictures, two tiles: the infrared window is the
+        <!-- The satellite pictures, three tiles: the infrared window is the
              disk with a cloud over it, the Dust RGB composite the disk with
-             its three guns. Both are core on the satellite sources, which
-             publish nothing else. -->
+             its three guns, the DEBRA dust confidence the disk with dust
+             lofting off its floor. All three are core on the ten-minute
+             disks; Meteosat publishes the first two. -->
         <button type="button" data-variable="ir104" data-i18n-tip="tipSatellite" aria-pressed="false" hidden>
           <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5" /><path d="M6.5 14.5h8a2.5 2.5 0 0 0 .3-5A3.8 3.8 0 0 0 7.6 9.4 2.6 2.6 0 0 0 6.5 14.5z" fill="currentColor" stroke="none" /><path d="M3.5 12h2M18.5 12h2" /></svg>
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphIr104">I</b>
@@ -421,6 +422,11 @@
           <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5" /><circle cx="12" cy="9.2" r="2.6" /><circle cx="9.3" cy="13.8" r="2.6" /><circle cx="14.7" cy="13.8" r="2.6" /></svg>
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphDustrgb">D</b>
           <span class="rail-name"><span>DUST</span> <small data-i18n="varDustRgb">RGB</small></span>
+        </button>
+        <button type="button" data-variable="dustcf" data-i18n-tip="varLabelDustcf" aria-pressed="false" hidden>
+          <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5" /><path d="M6.5 16.2c1.6-1.4 3.4-1.4 5.5 0s3.9 1.4 5.5 0" /><path d="M8 12.4c1.3-1.1 2.7-1.1 4 0s2.7 1.1 4 0" /><path d="M9.5 8.8c1-.8 2-.8 3 0s2 .8 2.5 0" /></svg>
+          <b class="rail-glyph" aria-hidden="true" data-i18n="glyphDustcf">C</b>
+          <span class="rail-name"><span>DUST</span> <small data-i18n="varDustCf">DEBRA</small></span>
         </button>
         <!-- The rest of the fields, in the sheet's own groups: shown on
              the rail only while on screen, reached through MORE otherwise.

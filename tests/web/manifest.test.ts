@@ -643,9 +643,10 @@ describe("dataset kinds", () => {
 
   it("opens the Meteosat disk on the infrared channel, 60° either side of 0°", () => {
     // Mirrors the `meteosat` entry of SOURCES: the same channel and the
-    // same composite as the other disks, the region centred on the prime
-    // meridian; the hourly cadence is the series' own axis (unitSeconds
-    // 3600) and nothing here, so the entry is an ordinary observation.
+    // same composite as the other disks but not the dust confidence, the
+    // region centred on the prime meridian; the hourly cadence is the
+    // series' own axis (unitSeconds 3600) and nothing here, so the entry
+    // is an ordinary observation.
     expect(FORECAST_MODELS.meteosat).toMatchObject({
       id: "meteosat",
       label: "METEOSAT",
@@ -671,7 +672,7 @@ describe("dataset kinds", () => {
         observation: true,
         coreBundles: ["ir104"],
         defaultVariable: "ir104",
-        railCore: ["ir104", "dustrgb"],
+        railCore: ["ir104", "dustrgb", "dustcf"],
       });
       expect(isObservationModel(id)).toBe(true);
     }
@@ -690,7 +691,7 @@ describe("dataset kinds", () => {
       observation: true,
       coreBundles: ["ir104"],
       defaultVariable: "ir104",
-      railCore: ["ir104", "dustrgb"],
+      railCore: ["ir104", "dustrgb", "dustcf"],
       region: [80.7, -60, 200.7, 60],
     });
     expect(isObservationModel("himawari")).toBe(true);

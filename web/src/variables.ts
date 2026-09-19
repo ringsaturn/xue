@@ -612,6 +612,29 @@ function buildSpecs(): readonly VariableSpec[] {
     urlAliases: ["dust"],
     showcaseCode: "DUST RGB",
   }),
+  // The DEBRA dust confidence (Miller et al. 2017): one scalar in 0–1,
+  // how confidently the split-window tests against a modelled clear-sky
+  // background say a cell holds lofted mineral dust, the gate applied so
+  // a cell with no split-window signal reads 0. A ramp, not a picture:
+  // nothing painted below the noise floor, then the yellow the operational
+  // product paints dust in, deepening to orange with the confidence, so
+  // clear sky is the map. Code 0 — outside the disk, an input the slot
+  // lacked, land with no emissivity staged — is no data; 0.0 is code 1.
+  surface({
+    id: "dustcf",
+    chart: "dustcf",
+    group: "satellite",
+    code: "DEBRA",
+    title: ["Dust", "Confidence"],
+    bufferTitle: "Imagery buffer",
+    labelKey: "varLabelDustcf",
+    legend: ["1", "0.8", "0.6", "0.4", "0.2", "0"],
+    floorIsNoData: true,
+    ground: "slate",
+    urlName: "debra",
+    urlAliases: ["dustcf", "dustconfidence"],
+    showcaseCode: "DEBRA",
+  }),
   // The lines.
   ...pressure(),
   ];

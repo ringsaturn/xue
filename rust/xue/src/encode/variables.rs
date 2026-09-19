@@ -165,19 +165,26 @@ pub const OCEAN_VARIABLE_IDS: &[&str] = &["tmpsfc", "icec", "icetk", "htsgw", "p
 /// The two components of the derived wave vector bundle, in the same
 /// fixture. Mirrors `WAVE_VECTOR_COMPONENT_IDS` in `xuebuild/variables.py`.
 pub const WAVE_VECTOR_COMPONENT_IDS: [&str; 2] = ["uwave", "vwave"];
-/// The satellite channels and the composite guns, held to the Python
-/// encoder by `tests/fixtures/satellite-registry.json`. The channels are
-/// what a platform's imager measures (a `band` block each when
-/// published); the guns are what the Dust RGB producer derives from four
-/// of them, the three variables of the `dustrgb` bundle in bundle order.
-/// Mirror `SATELLITE_CHANNEL_IDS`, `DUST_RGB_BUNDLE_ID`,
-/// `DUST_RGB_COMPONENT_IDS` and `SATELLITE_VARIABLE_IDS` in
-/// `xuebuild/variables.py`.
-pub const SATELLITE_CHANNEL_IDS: &[&str] = &["ir086", "ir104", "ir112", "ir123"];
+/// The satellite channels, the composite guns and the confidence, held to
+/// the Python encoder by `tests/fixtures/satellite-registry.json`. The
+/// channels are what a platform's imager measures (a `band` block each
+/// when published); the guns are what the Dust RGB producer derives from
+/// four of them, the three variables of the `dustrgb` bundle in bundle
+/// order. Mirror `SATELLITE_CHANNEL_IDS`, `DUST_RGB_BUNDLE_ID`,
+/// `DUST_RGB_COMPONENT_IDS`, `DUST_CF_BUNDLE_ID`, `DUST_CF_COMPONENT_IDS`
+/// and `SATELLITE_VARIABLE_IDS` in `xuebuild/variables.py`.
+pub const SATELLITE_CHANNEL_IDS: &[&str] = &["ir039", "wv062", "ir086", "ir104", "ir112", "ir123"];
 pub const DUST_RGB_BUNDLE_ID: &str = "dustrgb";
 pub const DUST_RGB_COMPONENT_IDS: [&str; 3] = ["dustr", "dustg", "dustb"];
+/// The DEBRA confidence is a composite bundle of one variable: produced in
+/// the fetch stage like the guns, read off the series as a variable of its
+/// own, never derived by a converter.
+pub const DUST_CF_BUNDLE_ID: &str = "dustcf";
+pub const DUST_CF_COMPONENT_IDS: [&str; 1] = ["dustcf"];
 #[allow(dead_code)] // read by the registry test; the Python side keys its fixture on it
-pub const SATELLITE_VARIABLE_IDS: &[&str] = &["ir086", "ir104", "ir112", "ir123", "dustr", "dustg", "dustb"];
+pub const SATELLITE_VARIABLE_IDS: &[&str] = &[
+    "ir039", "wv062", "ir086", "ir104", "ir112", "ir123", "dustr", "dustg", "dustb", "dustcf",
+];
 
 /// The ids the Celsius rule applies to at the surface: GDAL normalizes every
 /// GRIB temperature to Celsius, and the converter accepts K and F as well.
@@ -1062,6 +1069,53 @@ pub const VARIABLES: &[VariableSpec] = &[
         fill_values: &[],
         producer_id: None,
     },
+    // The two further windows DEBRA reads (Miller et al. 2017: the 3.9 µm
+    // window for the night thin-cirrus test and the 6.2 µm water vapour
+    // band for the deep-convection test; AHI bands 7 and 8, ABI channels 7
+    // and 8), the same parameter and codebook again — the 3.9 µm window
+    // by day carries reflected sunlight on top of the emission and can
+    // read above the top of the codebook over desert, which only the test
+    // that saturates at 8 K of contrast ever sees. Fetched for the
+    // confidence field, registered variables, published by no source.
+    // Mirror `ir039` and `wv062` in `xuebuild/variables.py`.
+    VariableSpec {
+        id: "ir039",
+        label: "Brightness temperature, 3.9 µm",
+        output_unit: "K",
+        value_range: (180.0, 332.0),
+        grib_element: "",
+        open_meteo: "",
+        grib2_discipline: 0,
+        grib2_category: 4,
+        grib2_number: 4,
+        grib2_level_type: 8,
+        grib2_level_value: None,
+        grib2_statistical: None,
+        grib2_aliases: &[],
+        grib2_alternates: &[],
+        gdal_unit: "",
+        fill_values: &[],
+        producer_id: None,
+    },
+    VariableSpec {
+        id: "wv062",
+        label: "Brightness temperature, 6.2 µm",
+        output_unit: "K",
+        value_range: (180.0, 332.0),
+        grib_element: "",
+        open_meteo: "",
+        grib2_discipline: 0,
+        grib2_category: 4,
+        grib2_number: 4,
+        grib2_level_type: 8,
+        grib2_level_value: None,
+        grib2_statistical: None,
+        grib2_aliases: &[],
+        grib2_alternates: &[],
+        gdal_unit: "",
+        fill_values: &[],
+        producer_id: None,
+    },
     // The classic Dust RGB, the three guns of one composite bundle,
     // `dustrgb`: red is the 12.3 − 10.4 µm split window, green 11.2 − 8.6 µm
     // with a gamma, blue the 10.4 µm window, each stretched to 0–1 by the
@@ -1122,6 +1176,38 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_discipline: 3,
         grib2_category: 192,
         grib2_number: 3,
+        grib2_level_type: 8,
+        grib2_level_value: None,
+        grib2_statistical: None,
+        grib2_aliases: &[],
+        grib2_alternates: &[],
+        gdal_unit: "",
+        fill_values: &[],
+        producer_id: Some("shachen"),
+    },
+    // The DEBRA dust confidence (Miller et al. 2017, Eqs. 1–22, as the
+    // `shachen` package implements them with its ABI retune), the one
+    // variable of the `dustcf` bundle: the combined confidence factor in
+    // 0–1 with the split-window gate applied — a cell where neither
+    // split-window test responded reads 0, since cloud has no split-window
+    // signal and dust nearly always does — computed per slot in the fetch
+    // stage (`xuebuild/satellite/producers.py`) from five infrared windows,
+    // a GFS skin temperature and the CAMEL emissivity climatology. A
+    // produced field like the guns: the next local-use number under the
+    // same producer, and the guns' codebook, so code 0 — a cell the disk
+    // does not cover, an input lacked, or no emissivity is staged for over
+    // land — is "no data" and 0.0 confidence stays a value at code 1.
+    // Mirror `dustcf` in `xuebuild/variables.py`.
+    VariableSpec {
+        id: "dustcf",
+        label: "DEBRA dust confidence",
+        output_unit: "1",
+        value_range: (-0.004, 1.0),
+        grib_element: "",
+        open_meteo: "",
+        grib2_discipline: 3,
+        grib2_category: 192,
+        grib2_number: 4,
         grib2_level_type: 8,
         grib2_level_value: None,
         grib2_statistical: None,
@@ -1253,9 +1339,9 @@ pub fn variable_spec(variable_id: &str) -> Result<&'static VariableSpec> {
 #[cfg(test)]
 mod tests {
     use super::{
-        isobaric_variable, variable_spec, ISOBARIC_FAMILIES, ISOBARIC_LEVELS_HPA, OCEAN_VARIABLE_IDS,
-        DUST_RGB_BUNDLE_ID, DUST_RGB_COMPONENT_IDS, SATELLITE_CHANNEL_IDS, SATELLITE_VARIABLE_IDS,
-        WAVE_VECTOR_COMPONENT_IDS,
+        isobaric_variable, variable_spec, DUST_CF_BUNDLE_ID, DUST_CF_COMPONENT_IDS, DUST_RGB_BUNDLE_ID,
+        DUST_RGB_COMPONENT_IDS, ISOBARIC_FAMILIES, ISOBARIC_LEVELS_HPA, OCEAN_VARIABLE_IDS,
+        SATELLITE_CHANNEL_IDS, SATELLITE_VARIABLE_IDS, WAVE_VECTOR_COMPONENT_IDS,
     };
     use crate::encode::quantize::codebook;
     use serde_json::{json, Value};
@@ -1410,12 +1496,13 @@ mod tests {
         }
     }
 
-    /// `tests/fixtures/satellite-registry.json`: the satellite channels and
-    /// the Dust RGB guns, held to the Python encoder the same way — a
-    /// channel with the `band` block the Himawari source writes beside the
-    /// parameter, read off the source table here; a gun with the
-    /// `producer` id registered on it and no band — plus the composite
-    /// bundle's component list.
+    /// `tests/fixtures/satellite-registry.json`: the satellite channels,
+    /// the Dust RGB guns and the DEBRA confidence, held to the Python
+    /// encoder the same way — a channel with the `band` block the Himawari
+    /// source writes beside the parameter, read off the source table here;
+    /// a produced variable (a gun, the confidence) with the `producer` id
+    /// registered on it and no band — plus each composite bundle's
+    /// component list.
     #[test]
     fn the_satellite_registry_matches_the_shared_fixture() {
         let fixture = registry("satellite-registry.json");
@@ -1423,12 +1510,12 @@ mod tests {
         assert_eq!(
             entries.keys().collect::<Vec<_>>(),
             SATELLITE_VARIABLE_IDS,
-            "the channels then the guns, in the fixture's order"
+            "the channels, then the guns, then the confidence, in the fixture's order"
         );
         assert_eq!(
             fixture["bundles"],
-            json!({ DUST_RGB_BUNDLE_ID: DUST_RGB_COMPONENT_IDS }),
-            "the composite bundle's components"
+            json!({ DUST_RGB_BUNDLE_ID: DUST_RGB_COMPONENT_IDS, DUST_CF_BUNDLE_ID: DUST_CF_COMPONENT_IDS }),
+            "each composite bundle's components"
         );
         let himawari = crate::encode::sources::source_spec("himawari").expect("himawari");
         for (variable_id, entry) in entries {
@@ -1440,9 +1527,10 @@ mod tests {
                 entry["parameter"],
                 "{variable_id} GRIB2 identity"
             );
-            let gun = DUST_RGB_COMPONENT_IDS.contains(&variable_id.as_str());
-            assert_eq!(SATELLITE_CHANNEL_IDS.contains(&variable_id.as_str()), !gun, "{variable_id}");
-            if gun {
+            let produced = DUST_RGB_COMPONENT_IDS.contains(&variable_id.as_str())
+                || DUST_CF_COMPONENT_IDS.contains(&variable_id.as_str());
+            assert_eq!(SATELLITE_CHANNEL_IDS.contains(&variable_id.as_str()), !produced, "{variable_id}");
+            if produced {
                 assert_eq!(json!({ "id": spec.producer_id }), entry["producer"], "{variable_id} producer");
                 assert!(entry.get("band").is_none(), "{variable_id}: a composite has no band");
                 assert!(himawari.bands.iter().all(|(band_id, _)| band_id != variable_id));
@@ -1469,14 +1557,14 @@ mod tests {
             assert!(spec.grib_element.is_empty() && spec.grib2_aliases.is_empty(), "{variable_id}");
         }
         // The published grid is the platform's region at the step, past
-        // the antimeridian; the four channels are fetched, one is published
-        // as a scalar and the composite beside it.
+        // the antimeridian; the six channels are fetched, one is published
+        // as a scalar and the two composites beside it.
         assert_eq!(himawari.production_grid, (3000, 3000));
         assert!(himawari.series_file && himawari.observation);
         assert_eq!(himawari.cadence_seconds, Some(600));
         assert_eq!(himawari.input_variable_ids, SATELLITE_CHANNEL_IDS);
         assert_eq!(himawari.bundle_scalar_ids, &["ir104"]);
-        assert_eq!(himawari.bundle_composite_ids, &[DUST_RGB_BUNDLE_ID]);
+        assert_eq!(himawari.bundle_composite_ids, &[DUST_RGB_BUNDLE_ID, DUST_CF_BUNDLE_ID]);
     }
 
     /// `tests/fixtures/pressure-registry.json`, the committed golden the

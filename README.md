@@ -43,9 +43,9 @@ pipeline.
 | NOAA MRMS | `mrms` | 3500 × 1750, 0.02°, contiguous US | one frame every two minutes, a rolling four-hour window | `latest-mrms.json` |
 | JMA precipitation nowcast | `jma` | 5600 × 5000, 0.005°, Japan | one frame every five minutes, a rolling three-hour window | `latest-jma.json` |
 | CMA radar mosaic | `cma` | 1792 × 1024, 0.0439°, China | one frame every six minutes, a rolling three-hour window | `latest-cma.json` |
-| Himawari-9 infrared and Dust RGB | `himawari` | 3000 × 3000, 0.04°, the disk 80.7–200.7°E, ±60° | one scan every ten minutes, a rolling six-hour window | `latest-himawari.json` |
-| GOES-19 (East) infrared and Dust RGB | `goeseast` | 3000 × 3000, 0.04°, the disk 135.2–15.2°W, ±60° | one scan every ten minutes, a rolling six-hour window | `latest-goeseast.json` |
-| GOES-18 (West) infrared and Dust RGB | `goeswest` | 3000 × 3000, 0.04°, the disk 163°E–77°W, ±60° | one scan every ten minutes, a rolling six-hour window | `latest-goeswest.json` |
+| Himawari-9 infrared, Dust RGB and DEBRA dust confidence | `himawari` | 3000 × 3000, 0.04°, the disk 80.7–200.7°E, ±60° | one scan every ten minutes, a rolling six-hour window | `latest-himawari.json` |
+| GOES-19 (East) infrared, Dust RGB and DEBRA dust confidence | `goeseast` | 3000 × 3000, 0.04°, the disk 135.2–15.2°W, ±60° | one scan every ten minutes, a rolling six-hour window | `latest-goeseast.json` |
+| GOES-18 (West) infrared, Dust RGB and DEBRA dust confidence | `goeswest` | 3000 × 3000, 0.04°, the disk 163°E–77°W, ±60° | one scan every ten minutes, a rolling six-hour window | `latest-goeswest.json` |
 | Meteosat-12 infrared and Dust RGB | `meteosat` | 3000 × 3000, 0.04°, the disk 60°W–60°E, ±60° | the scan on each hour (the cycle EUMETSAT releases openly), a rolling 24-hour window | `latest-meteosat.json` |
 
 Each model publishes as an independent dataset under `<model>.<run>/`, taken
@@ -149,25 +149,34 @@ Bundle sets:
   imager at 140.7°E, as NOAA redistributes it on the `noaa-himawari9`
   bucket — the ISatSS product, every channel of every ten-minute full-disk
   scan already calibrated and cut into 88 NetCDF tiles on the geostationary
-  projection. Four infrared windows are fetched (8.6, 10.4, 11.2 and
-  12.3 µm: AHI bands 11, 13, 14, 15); the 10.4 µm one is published as
-  brightness temperature under `ir104` (at 0.6 K over 180–332 K; the
-  cloud-top picture), and all four feed the classic **Dust RGB**
-  (`dustrgb`: red the 12.3 − 10.4 µm split window, green 11.2 − 8.6 µm
-  with a gamma, blue the 10.4 µm window, each stretched to 0–1 — lofted
-  mineral dust reads pink to magenta over dark blue-green surfaces, day
-  and night), computed per scan in the fetch stage by the
+  projection. Six infrared channels are fetched (3.9, 6.2, 8.6, 10.4,
+  11.2 and 12.3 µm: AHI bands 7, 8, 11, 13, 14, 15); the 10.4 µm one is
+  published as brightness temperature under `ir104` (at 0.6 K over
+  180–332 K; the cloud-top picture), four of them feed the classic
+  **Dust RGB** (`dustrgb`: red the 12.3 − 10.4 µm split window, green
+  11.2 − 8.6 µm with a gamma, blue the 10.4 µm window, each stretched to
+  0–1 — lofted mineral dust reads pink to magenta over dark blue-green
+  surfaces, day and night), computed per scan in the fetch stage by the
   [shachen](https://github.com/ringsaturn/shachen) package's
   `dust_rgb` with the SEVIRI stretches (no AHI retune has been published)
   and shipped as one three-variable bundle whose guns carry the producer's
-  id and version beside a local-use parameter. The fetch stage
+  id and version beside a local-use parameter, and five of them feed
+  **DEBRA** (`dustcf`: Miller et al. 2017's dust confidence factor in
+  0–1, the same package's cloud mask, dust tests and confidence against
+  a clear-sky background modelled from a GFS skin temperature and the
+  CAMEL emissivity climatology, with a split-window gate; computed
+  wherever the ground is water or inside a staged emissivity region,
+  which today are the Gobi through Japan, the US Southwest and the
+  Saharan transport corridor — the CAMEL months the operational DEBRA
+  pipeline stages on the bucket, pulled by `make pull-r2-ancillary`;
+  [docs/satellite.md](docs/satellite.md) §"The DEBRA confidence"). The fetch stage
   (`xuebuild/satellite/`, [docs/satellite.md](docs/satellite.md)) lists a
   slot's tiles, mosaics them with `gdalbuildvrt`, warps them with
   `gdalwarp` onto a 0.04° plate carrée grid over the useful disk (3000 ×
   3000 cells, 80.7–200.7°E — past the antimeridian — and 60°S–60°N),
   caches each channel's frame (a GeoTIFF, mirrored on the bucket like the
-  JMA frames), composes the guns from the slot's four frames and caches
-  them the same way, and stacks the window's frames into one NetCDF series
+  JMA frames), composes the guns and the confidence from the slot's
+  frames and caches them the same way, and stacks the window's frames into one NetCDF series
   per variable with `gdal_translate`, which both encoders read the way
   they read the JMA file; the geostationary arithmetic lives in GDAL alone.
   The source is named by its orbital slot, not the spacecraft: the
@@ -186,13 +195,14 @@ Bundle sets:
   full-disk product, each channel of each ten-minute scan as one
   calibrated netCDF on the geostationary projection (sweep x), landing
   about ten minutes after the scan starts. Everything above applies with
-  the platform row swapped: the same four ABI channels (11, 13, 14, 15),
-  `ir104` and `dustrgb` published — the composite with the GOES-R Quick
-  Guide's ABI stretches, which the producer picks by instrument — the same
+  the platform row swapped: the same six ABI channels (7, 8, 11, 13, 14,
+  15), `ir104`, `dustrgb` and `dustcf` published — the composite with the
+  GOES-R Quick Guide's ABI stretches, which the producer picks by
+  instrument — the same
   0.04° step and six-hour window, a frame cache per role
   (`data/raw/goeseast-frames/`). The East disk is 135.2°W–15.2°W; the West
   disk crosses the antimeridian and is spelled 163°E–283°E, as Himawari's
-  is. A scan is four 24 MB files rather than 88 tiles.
+  is. A scan is six 24 MB files rather than 88 tiles.
 - Meteosat: EUMETSAT's Meteosat-12 (MTG-I1) at 0°, from the EUMETSAT Data
   Store rather than a public bucket — the FCI Level 1c full-disk product,
   each ten-minute cycle as forty netCDF chunk files that carry every
@@ -624,7 +634,9 @@ one directory per channel and per Dust RGB gun, kept eight hours on the
 bucket — the window plus slack, since NOAA archives the scans and a day of
 the cache is some 4.5 GB; `FRAMES_KEEP_HOURS`), a six-hour window
 (`HOURS=6`), the `satellite` dependency group
-(the shachen package the Dust RGB is composed with) and installs
+(the shachen package the Dust RGB and DEBRA are computed with), the
+staged CAMEL months pulled before the first build (`ANCILLARY=true`,
+`make pull-r2-ancillary`) and installs
 `gdal-bin` whichever encoder converts, since the fetch stage warps through
 the system GDAL; the two GOES jobs are that workflow with `MODEL` swapped.
 By hand:

@@ -29,9 +29,11 @@ import { isobaricChartFamily, specForIdentity, variableSpec } from "./variables"
  * height laid along the direction of travel as a u/v pair — and the
  * satellite channels, one family per nominal wavelength: the brightness
  * temperature parameter is the same for every infrared band, and the
- * `band` block beside it says which — and the satellite composites, a
+ * `band` block beside it says which — the satellite composites, a
  * three-gun colour picture a producer derived from several channels, told
- * apart by the `producer` block and the local-use parameter numbers). */
+ * apart by the `producer` block and the local-use parameter numbers — and
+ * the produced scalars, one field a producer derived from several channels
+ * (the DEBRA dust confidence), told apart the same way). */
 export type ChartFamily =
   | "hgt"
   | "tmp"
@@ -61,7 +63,8 @@ export type ChartFamily =
   | "dirpw"
   | "wave"
   | "ir104"
-  | "dustrgb";
+  | "dustrgb"
+  | "dustcf";
 
 export interface VariableIdentity {
   family: ChartFamily;
@@ -263,6 +266,38 @@ function isLocalUse(parameter: BundleParameter): boolean {
   return parameter.parameterCategory >= 192;
 }
 
+/** The produced scalars by producer: one local-use parameter that is a
+ * field of its own rather than a gun, named by the producer and the
+ * number together like the composites. The DEBRA dust confidence (Miller
+ * et al. 2017) is shachen's local number 4 in the space-products
+ * discipline, at the top of the atmosphere with the guns it is derived
+ * beside. */
+const PRODUCED_SCALARS: readonly {
+  family: ChartFamily;
+  producer: string;
+  discipline: number;
+  category: number;
+  number: number;
+}[] = [{ family: "dustcf", producer: "shachen", discipline: 3, category: 192, number: 4 }];
+
+/**
+ * The identity of a one-variable bundle whose variable is a produced
+ * scalar this shell knows, or null: a local-use parameter with no
+ * `producer` block, or under a producer or number this build has no chart
+ * for, is unknown. A parameter outside the local-use range is not this
+ * function's to answer (`identityForParameter`), and the producer's
+ * version is not part of the identity.
+ */
+export function identityForProducedScalar(variable: { parameter?: BundleParameter; producer?: BundleProducer }): VariableIdentity | null {
+  const { parameter, producer } = variable;
+  if (!parameter || !producer || !isLocalUse(parameter)) return null;
+  for (const entry of PRODUCED_SCALARS) {
+    if (entry.producer !== producer.id) continue;
+    if (isTriple(parameter, entry.discipline, entry.category, entry.number)) return scalar(entry.family, null);
+  }
+  return null;
+}
+
 /**
  * The identity of a three-variable bundle whose variables are the guns of
  * a composite this shell knows, in red, green, blue order, or null. Each
@@ -354,10 +389,14 @@ export function identifyBundle(variables: readonly BundleVariable[]): BundleIden
       return { identity: vector("wind", null), variables: [u, v] };
     }
   }
-  // Not a pair: the bundle reads as whatever its first variable is.
+  // Not a pair: the bundle reads as whatever its first variable is. A
+  // local-use parameter is the producer's to name (a produced scalar); any
+  // other is the WMO table's.
   const first = variables[0]!;
   const identity = first.parameter
-    ? identityForParameter(first.parameter, first.band)
+    ? isLocalUse(first.parameter)
+      ? identityForProducedScalar(first)
+      : identityForParameter(first.parameter, first.band)
     : (LEGACY_IDENTITIES[first.id] ?? null);
   return identity === null ? null : { identity, variables: [first] };
 }

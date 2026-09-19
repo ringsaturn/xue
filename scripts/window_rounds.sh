@@ -24,6 +24,12 @@
 # frames nobody has fetched yet, and the frames older than FRAMES_KEEP_HOURS
 # are pruned once an hour.
 #
+# With ANCILLARY=true (the satellite feeds, whose DEBRA confidence reads
+# the CAMEL emissivity months staged on the bucket), the staged months are
+# pulled once before the first build (`make pull-r2-ancillary`); a pull
+# that fails is a warning, and the first round to compose a slot without
+# them fails on its own.
+#
 # With HANDOVER_CHECK set to a command (scripts/successor_queued.sh: is a
 # newer run of this workflow waiting on the concurrency group?), the loop
 # runs it before each round and ends the job normally when it answers yes,
@@ -48,8 +54,10 @@
 # uploads and prunes), ONCE (true runs one round and exits — a manual
 # check), FRAME_CACHE (true syncs the decoded-frame cache with the bucket),
 # FRAMES_KEEP_HOURS (168: a week; the satellite workflows keep a window and a
-# little slack, since their agencies archive the scans), HANDOVER_CHECK (a command; empty runs to the
-# deadline), WARM (false skips the edge-cache warm-up of each round).
+# little slack, since their agencies archive the scans), ANCILLARY (true
+# pulls the staged CAMEL months before the first build), HANDOVER_CHECK (a
+# command; empty runs to the deadline), WARM (false skips the edge-cache
+# warm-up of each round).
 # PYTHON names the interpreter (the Makefile's default is the project's
 # .venv).
 set -u
@@ -57,6 +65,7 @@ set -u
 model=${MODEL:-mrms}
 frame_cache=${FRAME_CACHE:-false}
 frames_keep_hours=${FRAMES_KEEP_HOURS:-168}
+ancillary=${ANCILLARY:-false}
 round_minutes=${ROUND_MINUTES:-5}
 until_minute=${UNTIL_MINUTE:-55}
 hours=${HOURS:-4}
@@ -82,6 +91,9 @@ if [ "$frame_cache" = true ]; then
   # The frames of the window's hours, as far as the bucket has them; a
   # pull that fails only costs tile requests, so it is not a failed round.
   make pull-r2-frames MODEL=$model HOURS="$hours" || echo "::warning::pulling the frame cache failed; frames will be fetched from the source"
+fi
+if [ "$ancillary" = true ]; then
+  make pull-r2-ancillary || echo "::warning::pulling the staged ancillary failed; a slot's confidence cannot be composed without it"
 fi
 
 failures=0

@@ -71,7 +71,7 @@ AWS_REQUEST_CHECKSUM_CALCULATION ?= when_required
 AWS_RESPONSE_CHECKSUM_VALIDATION ?= when_required
 export AWS_DEFAULT_REGION AWS_REQUEST_CHECKSUM_CALCULATION AWS_RESPONSE_CHECKSUM_VALIDATION
 
-.PHONY: check install wasm test test-rust test-e2e encoder-rust encoder-rust-test encoder-wheel bench bench-video bench-lossy mvp serve format-pdf deploy-build upload-r2 upload-r2-bundles upload-r2-manifest upload-r2-stac-item check-pointer upload-r2-pointer upload-r2-stac-collection warm-r2 prune-r2 prune-r2-rounds live-run live-manifest live-window pull-r2-frames push-r2-frames prune-r2-frames deploy-pages deploy showcase showcase-check showcase-refresh live-showcase-catalog upload-r2-showcase tc-build live-tc-index upload-r2-tc prune-r2-tc airport-build live-airport-index upload-r2-airport prune-r2-airport sounding-build live-sounding-index upload-r2-sounding prune-r2-sounding clean
+.PHONY: check install wasm test test-rust test-e2e encoder-rust encoder-rust-test encoder-wheel bench bench-video bench-lossy mvp serve format-pdf deploy-build upload-r2 upload-r2-bundles upload-r2-manifest upload-r2-stac-item check-pointer upload-r2-pointer upload-r2-stac-collection warm-r2 prune-r2 prune-r2-rounds live-run live-manifest live-window pull-r2-frames push-r2-frames prune-r2-frames pull-r2-ancillary deploy-pages deploy showcase showcase-check showcase-refresh live-showcase-catalog upload-r2-showcase tc-build live-tc-index upload-r2-tc prune-r2-tc airport-build live-airport-index upload-r2-airport prune-r2-airport sounding-build live-sounding-index upload-r2-sounding prune-r2-sounding clean
 
 check:
 	$(PYTHON) scripts/check_dependencies.py
@@ -717,6 +717,21 @@ pull-r2-frames:
 push-r2-frames:
 	@set -e; [ -d $(FRAMES_DIR) ] || { echo "no frame cache at $(FRAMES_DIR)"; exit 0; }; \
 	$(S3) sync $(FRAMES_DIR)/ $(FRAMES_PREFIX)/ --size-only --only-show-errors $(DRY_RUN)
+
+# The ancillary fields the DEBRA producer reads beside a slot's channels
+# (xuebuild/satellite/ancillary.py): the CAMEL emissivity months the
+# operational DEBRA pipeline stages on this bucket, one NetCDF per region
+# and month under its own prefix, mirrored whole (a few megabytes per
+# region-month) into data/raw/ancillary/camel/<region>/<YYYYMM>.nc before a
+# satellite round. Read only: nothing here writes to that prefix, and the
+# GFS skin-temperature records the producer fetches per slot are cached
+# beside it under data/raw/ancillary/gfs/ and never mirrored.
+ANCILLARY_DIR = data/raw/ancillary
+CAMEL_PREFIX ?= s3://$(R2_BUCKET)/shachen-ops/ancillary/camel
+pull-r2-ancillary:
+	@set -e; mkdir -p $(ANCILLARY_DIR)/camel; \
+	$(S3) sync $(CAMEL_PREFIX)/ $(ANCILLARY_DIR)/camel/ --exclude "*" --include "*/*.nc" --only-show-errors; \
+	echo "ancillary: $$(find $(ANCILLARY_DIR)/camel -name '*.nc' | wc -l | tr -d ' ') staged CAMEL months on disk"
 
 # A stale hour is deleted by its `YYYYMMDDHH` stamp (one rm per hour, the
 # sidecars beside the frames share the stamp); whole stale days go in one

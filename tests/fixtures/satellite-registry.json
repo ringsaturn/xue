@@ -1,5 +1,79 @@
 {
   "variables": {
+    "ir039": {
+      "label": "Brightness temperature, 3.9 \u00b5m",
+      "unit": "K",
+      "parameter": {
+        "discipline": 0,
+        "parameterCategory": 4,
+        "parameterNumber": 4,
+        "typeOfFirstFixedSurface": 8,
+        "scaleFactorOfFirstFixedSurface": null,
+        "scaledValueOfFirstFixedSurface": null
+      },
+      "band": {
+        "himawari": {
+          "satelliteSeries": 0,
+          "satelliteNumber": 174,
+          "instrumentType": 297,
+          "scaleFactorOfCentralWaveNumber": 0,
+          "scaledValueOfCentralWaveNumber": 257380
+        }
+      },
+      "quality": {
+        "type": "linear",
+        "offset": 180.0,
+        "scale": 0.6,
+        "minimumCode": 0,
+        "maximumCode": 253,
+        "nodataCode": 255
+      },
+      "compact": {
+        "type": "linear",
+        "offset": 180.0,
+        "scale": 1.2,
+        "minimumCode": 0,
+        "maximumCode": 126,
+        "nodataCode": 255
+      }
+    },
+    "wv062": {
+      "label": "Brightness temperature, 6.2 \u00b5m",
+      "unit": "K",
+      "parameter": {
+        "discipline": 0,
+        "parameterCategory": 4,
+        "parameterNumber": 4,
+        "typeOfFirstFixedSurface": 8,
+        "scaleFactorOfFirstFixedSurface": null,
+        "scaledValueOfFirstFixedSurface": null
+      },
+      "band": {
+        "himawari": {
+          "satelliteSeries": 0,
+          "satelliteNumber": 174,
+          "instrumentType": 297,
+          "scaleFactorOfCentralWaveNumber": 0,
+          "scaledValueOfCentralWaveNumber": 160182
+        }
+      },
+      "quality": {
+        "type": "linear",
+        "offset": 180.0,
+        "scale": 0.6,
+        "minimumCode": 0,
+        "maximumCode": 253,
+        "nodataCode": 255
+      },
+      "compact": {
+        "type": "linear",
+        "offset": 180.0,
+        "scale": 1.2,
+        "minimumCode": 0,
+        "maximumCode": 126,
+        "nodataCode": 255
+      }
+    },
     "ir086": {
       "label": "Brightness temperature, 8.6 \u00b5m",
       "unit": "K",
@@ -240,6 +314,37 @@
         "maximumCode": 251,
         "nodataCode": 255
       }
+    },
+    "dustcf": {
+      "label": "DEBRA dust confidence",
+      "unit": "1",
+      "parameter": {
+        "discipline": 3,
+        "parameterCategory": 192,
+        "parameterNumber": 4,
+        "typeOfFirstFixedSurface": 8,
+        "scaleFactorOfFirstFixedSurface": null,
+        "scaledValueOfFirstFixedSurface": null
+      },
+      "producer": {
+        "id": "shachen"
+      },
+      "quality": {
+        "type": "linear",
+        "offset": -0.004,
+        "scale": 0.004,
+        "minimumCode": 0,
+        "maximumCode": 251,
+        "nodataCode": 255
+      },
+      "compact": {
+        "type": "linear",
+        "offset": -0.004,
+        "scale": 0.004,
+        "minimumCode": 0,
+        "maximumCode": 251,
+        "nodataCode": 255
+      }
     }
   },
   "bundles": {
@@ -247,6 +352,9 @@
       "dustr",
       "dustg",
       "dustb"
+    ],
+    "dustcf": [
+      "dustcf"
     ]
   }
 }

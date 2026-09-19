@@ -110,6 +110,11 @@ jobs:
       # six-hour window and the agency archives the scans, so the mirror
       # keeps that window and an hour of slack: a round pulls HOURS + 1 hours.
       FRAMES_KEEP_HOURS: "8"
+      # The DEBRA confidence (dustcf) reads the CAMEL emissivity months the
+      # operational DEBRA pipeline stages on this bucket; a round pulls
+      # them once (`make pull-r2-ancillary`, a few megabytes) and fetches a
+      # slot's GFS skin temperature itself.
+      ANCILLARY: "true"
       ONCE: ${{ !inputs.loop }}
       ROUND_MINUTES: ${{ inputs.round_minutes || '5' }}
       # For a looping dispatch: run past the hour, and hand over to the next
@@ -163,8 +168,9 @@ jobs:
           python-version: "3.14"
 
       # No ffmpeg: the source ships no video. The `satellite` group is the
-      # shachen package the Dust RGB producer runs in the fetch stage
-      # (xuebuild/satellite/producers.py), needed whichever encoder converts.
+      # shachen package the Dust RGB and DEBRA producers run in the fetch
+      # stage (xuebuild/satellite/producers.py), needed whichever encoder
+      # converts.
       - name: Sync Python environment
         run: uv sync --group satellite
 

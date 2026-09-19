@@ -192,7 +192,10 @@ class RegistryTests(unittest.TestCase):
         self.assertEqual((SPEC.platform, SPEC.manifest_model, SPEC.latest_filename, SPEC.product), ("meteosat", "METEOSAT", "latest-meteosat.json", "fci-fldk-0p04"))
         # FCI has no 11.2 µm window: three channels feed the composite.
         self.assertEqual(SPEC.input_variable_ids, ("ir086", "ir104", "ir123"))
-        self.assertEqual((SPEC.bundle_scalar_ids, SPEC.bundle_composite_ids, SPEC.core_bundle_ids), (himawari.bundle_scalar_ids, himawari.bundle_composite_ids, himawari.core_bundle_ids))
+        # The same scalars and core; the Dust RGB alone of the composites,
+        # since no emissivity is staged on this disk for the DEBRA confidence.
+        self.assertEqual((SPEC.bundle_scalar_ids, SPEC.bundle_composite_ids, SPEC.core_bundle_ids), (himawari.bundle_scalar_ids, ("dustrgb",), himawari.core_bundle_ids))
+        self.assertEqual(himawari.bundle_composite_ids, ("dustrgb", "dustcf"))
         self.assertEqual(binconvert.published_bundle_ids(SPEC), ("ir104", "dustrgb"))
         self.assertEqual(binconvert.bundle_input_ids(SPEC, "dustrgb"), ("ir086", "ir104", "ir123"))
         self.assertEqual(binconvert.bundle_input_ids(himawari, "dustrgb"), ("ir086", "ir104", "ir112", "ir123"))

@@ -1114,6 +1114,14 @@ def _satellite_run_is_complete(
     return latest_satellite_slot(spec, now=now, fetch=fetch) >= run.time + timedelta(hours=hours)
 
 
+def satellite_ancillary_root(raw_root: Path) -> Path:
+    """Where a producer's ancillary fields live, beside the run and frame
+    directories: the staged CAMEL months ``make pull-r2-ancillary``
+    mirrors under ``ancillary/camel/`` and the GFS records the DEBRA
+    producer caches under ``ancillary/gfs/``."""
+    return raw_root / "ancillary"
+
+
 def satellite_series_stem(spec: SourceSpec, run: GfsRun) -> str:
     """The stem of a window's series files, one per variable:
     ``himawari.<run>`` → ``himawari.<run>.ir104.nc``."""
@@ -1164,6 +1172,7 @@ def _fetch_satellite_run(
         series_stem=satellite_series_stem(spec, run),
         units={channel.id: VARIABLES[channel.id].output_unit for channel in channels},
         producers=producers,
+        ancillary_root=satellite_ancillary_root(raw_root),
         cadence_seconds=spec.cadence_seconds,
         force=force,
         fetch=fetch,

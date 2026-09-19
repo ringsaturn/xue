@@ -85,14 +85,18 @@ instrument-neutral: `ir104` is AHI band 13 and ABI channel 13 alike, an
 infrared window at 10.4 µm; the exact central wave number is in the
 `band` block. The registry carries every channel the instrument has;
 `sources.py` says which a source publishes (`bundle_scalar_ids`) and
-carries their `band` blocks (`bands`, from `Platform.bands`).
+carries their `band` blocks (`bands`, from `Platform.bands`). The three
+NOAA-hosted sources fetch six channels and publish `ir104`, the Dust RGB
+and the DEBRA confidence; Meteosat fetches three and publishes the first
+two (§"The DEBRA confidence" says why not the third).
 
 | id | wavelength | AHI | ABI | FCI | quantity | codebook |
 |---|---|---|---|---|---|---|
 | `ir104` | 10.4 µm (FCI 10.5) | 13 | 13 | 14 (IR 10.5) | brightness temperature, K (the shell reads it in °C) | 180–331.8 at 0.6 |
-| `ir086`, `ir112`, `ir123` | 8.6, 11.2, 12.3 µm (FCI 8.7, —, 12.3) | 11, 14, 15 | 11, 14, 15 | 12, —, 15 | brightness temperature; fetched for the Dust RGB, registered variables, not published by any source | 180–331.8 at 0.6 |
-| `ir039`, `ir096`, `ir133` | 3.9, 9.6, 13.3 µm | 7, 12, 16 | 7, 12, 16 | 9, 13, 16 | brightness temperature | registered on the platform; not yet a variable |
-| `wv062`, `wv069`, `wv073` | 6.2, 6.9, 7.3 µm | 8, 9, 10 | 8, 9, 10 | 10, —, 11 | brightness temperature | same |
+| `ir086`, `ir112`, `ir123` | 8.6, 11.2, 12.3 µm (FCI 8.7, —, 12.3) | 11, 14, 15 | 11, 14, 15 | 12, —, 15 | brightness temperature; fetched for the Dust RGB (and, but for 11.2 µm, for DEBRA), registered variables, not published by any source | 180–331.8 at 0.6 |
+| `ir039`, `wv062` | 3.9, 6.2 µm | 7, 8 | 7, 8 | 9, 10 | brightness temperature; fetched for DEBRA's cloud mask, registered variables, not published by any source | 180–331.8 at 0.6 |
+| `ir096`, `ir133` | 9.6, 13.3 µm | 12, 16 | 12, 16 | 13, 16 | brightness temperature | registered on the platform; not yet a variable |
+| `wv069`, `wv073` | 6.9, 7.3 µm | 9, 10 | 9, 10 | —, 11 | brightness temperature | same |
 | `vis064`, `nir086`, `nir161`, … | 0.64, 0.86, 1.61 µm | 3, 4, 5 | 2, 3, 5 | 3, 4, 7 | reflectance | same |
 
 An FCI channel takes the id of the window it is nearest to (IR 10.5 is
@@ -156,6 +160,125 @@ a side, tiles 32, 16 and 8), each decimated from the full plane — every
 f-th row and column from the origin, the poster's own sampling — because
 the half of a 3000 × 3000 disk is still twice a full GFS plane and a shell
 with a frame budget needs a rung it can hold.
+
+### The DEBRA confidence
+
+`dustcf` is DEBRA (Miller et al. 2017, doi:10.1002/2017JD027365 — the
+Dynamic Enhancement Background Reduction Algorithm for dust), Eqs. 1–22
+as the `shachen` package implements them: an infrared cloud mask, three
+dust tests against a clear-sky background, and a confidence factor in
+0–1 blended across the terminator, which reads high where lofted mineral
+dust is likely and 0 where nothing suggests it. It is the second product
+of the producer seam (`DebraProducer`), computed per slot in the fetch
+stage like the guns, and it is what the operational DEBRA pipeline
+publishes as its enhanced picture, brought into these stores as one
+scalar field the shell paints with a ramp.
+
+| input | what it feeds |
+|---|---|
+| `ir039`, `wv062` | the cloud mask's night thin-cirrus and deep-convection tests (Eqs. 4, 6) |
+| `ir086`, `ir104`, `ir123` | the mask's split-window tests and restorals, the dust tests DT1 (12.3 − 10.4 µm) and DT2 (8.6 − 10.4 µm) against the background, the thermal contrast DT3 |
+| a skin temperature | CM1 and DT3 (how cold the window reads against the ground), and the Planck curve of the background |
+| an infrared emissivity | the background: `BT_bg = B⁻¹(ε · B(T_skin))` per window, whose differences are what DT1 and DT2 measure against |
+
+The two ancillary fields are not what the algorithm was built against
+(MERRA-2 skin temperature, which lands weeks late, and the CAMEL
+climatology behind Earthdata credentials), so `ancillary.py` takes the
+stand-ins the operational pipeline settled on, in the same shape:
+
+- **Skin temperature** is GFS `TMP:surface`, the one record of NOAA's
+  0.25° file nearest the slot's whole hour, located through the file's
+  `.idx` and fetched by byte range (a megabyte) from the newest cycle
+  that reaches the hour, walking back over the cycles the bucket does
+  not have yet (a cycle lands some four hours after its analysis, so
+  the walk back is the normal path). Cached under
+  `data/raw/ancillary/gfs/gfs_tmpsfc_<cycle>_f<hhh>.grib2`; a later slot
+  of the same hour asks nothing. Read through GDAL with the unit left in
+  kelvin (`GRIB_NORMALIZE_UNITS=NO`; GDAL would hand the field back in
+  Celsius) and the raster shifted onto −180 … 180 as GDAL does itself.
+- **Emissivity** is the CAMEL monthly climatology (CAM5K30EM V003) as
+  the operational pipeline stages it on this bucket: one NetCDF per
+  region and operational month, already interpolated to the DEBRA band
+  centres (`emis_tir_86` … `emis_tir_123`), cropped to the region's box
+  with a degree of margin, named for the month it serves (the record
+  ends in 2023; the file's `source_month` says which year's same
+  calendar month it carries). `make pull-r2-ancillary` mirrors that
+  prefix whole into `data/raw/ancillary/camel/<region>/<YYYYMM>.nc`
+  (the rounds script does it before the first build under
+  `ANCILLARY=true`); nothing here touches Earthdata, and nothing writes
+  to the staging prefix. A region with no file for the slot's month is
+  served by its newest staged month with a warning — the product is a
+  climatology, and a region dropping out at a month's turn would be the
+  worse failure; a region with nothing staged is not a region; nothing
+  staged at all is an error, since DEBRA over water alone is not the
+  product.
+
+Both are put on the target grid by one bilinear interpolation
+(`ancillary.regrid`) done in the grid's own copy of the world: a global
+field is re-based column by column onto a grid that runs past 180° and
+wrapped (its first column repeated a turn later), a regional file is
+moved whole by the turn that lays it over the grid, and nothing is
+extrapolated. The chain is composed here from shachen's per-equation
+modules (`background_signals`, `cloud_mask`, `dust_tests`, `confidence`)
+rather than through `shachen.pipeline.run_debra`, because that entry
+point takes a pyresample area and does the regrid, the sun and the land
+mask itself; on these grids those three are this module's (the regrid
+above, pyorbital's zenith on the grid's own coordinates, the land mask on
+wrapped ones), and `tests/test_debra.py` holds the composition equal to
+`run_debra` on a plate carrée area cell for cell. The constants are
+shachen's ABI retune on every imager (the Eq. 19 daytime floor at 0.40
+rather than the printed 0.25, which keeps clear-sky DT3 noise over
+vegetation from colouring, and the night branch on an interval of its
+own), as the operational pipeline runs both AHI and ABI.
+
+**Where the confidence is defined.** A cell is computed wherever every
+input channel and the skin temperature have data and the ground is
+either water — DEBRA takes the water surface's emissivity as unity and
+needs no climatology there — or inside the extent of a staged CAMEL
+file. Land no staged file reaches is no data (code 0), never a
+confidence computed against an emissivity that was never read: staging a
+region is what extends the product over it, and a whole-disk staging
+would fill the disk with no code change. Today the staged regions are the
+operational pipeline's three — the Gobi and Taklamakan through the North
+China Plain to Japan (Himawari), the Chihuahuan Desert and the US
+Southwest (GOES-East and GOES-West both see it), and the Saharan
+transport corridor from the Cape Verde longitudes to the Caribbean and
+the Gulf (GOES-East) — plus every sea the three disks cover. Meteosat
+publishes no confidence: no staged region lies on its disk, the Sahara
+itself is exactly what a climatology is for, and its window is hourly
+besides.
+
+**The gate.** What is published is `cf_comb` with the operational
+pipeline's split-window gate applied (`producers.split_window_gate`): a
+cell where neither split-window test responded (`dt1 = dt2 = 0`) reads
+0, since cloud has no split-window signal and dust nearly always does.
+The failure it removes is mid-level cloud too warm for CM1 and too thin
+for CM3, which the thermal-contrast test alone reads as dust; on 42 dust
+days of East Asian station data it costs a daytime detection rate at
+confidence 0.1 of 0.411 → 0.373 for a false-alarm ratio of 0.422 → 0.23.
+It is not part of DEBRA (Eqs. 1–29) and not in shachen. The pipeline's
+second gate, on the 0.64 µm reflectance, is not applied: it would cost a
+0.5 km visible channel per slot for a false-alarm ratio of 0.23 → 0.21,
+and there is no reflectance at night, where the split-window gate is
+the only gate anyway.
+
+The result is one bundle of one variable, `dustcf`, on the channel's
+axis and grid: a *composite* bundle in the encoders' terms
+(`binconvert.COMPOSITE_BUNDLES`, `SourceSpec.bundle_composite_ids`) —
+produced in the fetch stage, read off the series with its producer stamp,
+never derived by a converter — whose one component is the bundle itself.
+Its identity is the guns' pattern: a local-use parameter, discipline 3,
+category 192, **number 4**, on surface 8, meaningful only with the
+`producer` block beside it (`{"id": "shachen", "version": …}`, the id
+registered on the variable, the version whatever ran), no band. Its
+codebook is the guns' (linear, offset −0.004, step 0.004, codes 0–251,
+code 0 no data, 0.0 at code 1, 1.0 at code 251), the same ladder, no
+poster and no video. A produced frame's sidecar names, beside the
+producer and the input frames, the ancillary it was computed against
+(the staged directory and the GFS record by name, whose name is the
+cycle and forecast hour). Like every produced frame it is composed once:
+a slot's confidence is the first computation's, and a GFS cycle landing
+later for the same hour does not recompute a cached slot.
 
 ## Metadata
 
@@ -339,13 +462,17 @@ composed once: the rounds script pulls the window's hours of frames from
 the bucket before the first build and pushes new ones after every upload
 (`make pull-r2-frames` / `push-r2-frames` / `prune-r2-frames`, `MODEL=himawari`;
 the targets take every variable directory), so a round downloads one
-slot's tiles (26 MB per channel) and runs the producer on one slot
+slot's tiles (26 MB per channel) and runs the producers on one slot
 whatever the window's length. A channel's frame is a pure function of its
-tiles and the GDAL version, a produced one of its input frames and the
-producer's version (`produce_frames` recomposes a cached slot whose
-sidecar names another version); a GDAL upgrade may resample the next
-frame differently, and the cached older frames stay as they are, each
-under its own `?v=` once published.
+tiles and the GDAL version, a produced one of its input frames, its
+ancillary and the producer's version (`produce_frames` recomposes a
+cached slot whose sidecar names another version); a GDAL upgrade may
+resample the next frame differently, and the cached older frames stay as
+they are, each under its own `?v=` once published. A producer's ancillary
+fields live beside the frames under `data/raw/ancillary/` (the staged
+CAMEL months, mirrored from the bucket by `make pull-r2-ancillary`; the
+GFS records the DEBRA producer fetches per slot, never mirrored), which
+`_fetch_satellite_run` hands to `fetch_window` as the ancillary root.
 
 ### The series
 
@@ -372,7 +499,7 @@ file per variable, or to the one file the radar sources write;
 `inspect_observation` reads each variable with its own packing and fill,
 holds the axes equal, returns the producer stamps), which snaps each time
 to its 600 s slot and takes the first slot's hour as the run. The
-converter reads only the variables the requested bundles carry: the three
+converter reads only the variables the requested bundles carry: the five
 unpublished channels are never quantized.
 
 ### Rounds
@@ -414,6 +541,8 @@ converts 38 strips per channel, five to ten minutes once an hour.
 `publish-goeswest.yml` and `publish-meteosat.yml` each run one round per
 job on a ten-minute cron and install `gdal-bin` whichever encoder
 converts, since the wheel's GDAL is a library with no GeoTIFF driver; the
+three NOAA ones pull the staged CAMEL months before the first build
+(`ANCILLARY=true` in the rounds script, `make pull-r2-ancillary`); the
 Meteosat one also proves the runner's GDAL loads the JPEG-LS plugin on the
 fixture chunk before a round spends a download, and warns and builds
 nothing when the two `EUMETSAT_*` secrets are absent.
@@ -423,10 +552,12 @@ nothing when the two `EUMETSAT_*` secrets are absent.
 A composite product (a dust index, a split-window difference, an RGB) is
 a `Producer` (`producers.py`): its input is one slot's channels, already
 warped — float planes in the channel's unit with NaN where no data — plus
-the ancillary objects it names, its output one or more new planes on the
-same grid, each written as a frame of its own and cached beside the
-channels' (`fetch.produce_frames`), so a round composes the slot it
-warped and reads the rest back. It never touches quantization, the
+the ancillary fields it names (`ancillaries`, resolved and fetched per
+slot by `ancillary_for(platform, slot, root)` under the fetch's
+ancillary root), the slot and the grid, its output one or more new
+planes on the same grid, each written as a frame of its own and cached
+beside the channels' (`fetch.produce_frames`), so a round composes the
+slot it warped and reads the rest back. It never touches quantization, the
 container, the store or the manifest: its outputs are stacked into series
 like channels and the converter reads them as the components of one
 composite bundle. Two kinds share the interface: an in-process NumPy
@@ -446,23 +577,43 @@ standing in for 11.2 µm where there is none) and calls
 `shachen.dustrgb.dust_rgb` with the stretch set the platform's instrument
 takes (`DUST_RGB` for AHI and FCI, `DUST_RGB_ABI` for ABI — the rule
 shachen applies by satpy reader, made here by `Platform.instrument`), then
-marks every cell any input lacked as no data in all three guns. `PRODUCERS` is
-keyed by the bundle produced; `SourceSpec.bundle_composite_ids` lists what
-a source publishes, and `_fetch_satellite_run` runs every listed producer
-whose channels the window fetches. shachen is the `satellite` dependency
-group (`uv sync --group satellite`), imported inside the producer and
-nowhere else.
+marks every cell any input lacked as no data in all three guns.
+
+`DebraProducer` is the second (§"The DEBRA confidence"): `id` `shachen`,
+`bundle_id` `dustcf`, inputs `ir039`, `wv062`, `ir086`, `ir104`, `ir123`
+(all five required; no stand-in), output `dustcf`, ancillaries `camel`
+(the staged months' directory) and `skin` (the slot's GFS record, fetched
+by `ancillary_for` when not cached), `version` shachen's. `run` regrids
+the two fields, finds the sun and the ground, composes shachen's
+per-equation modules with the ABI retune, gates the result and leaves
+NaN wherever the confidence is not defined. `PRODUCERS` is keyed by the
+bundle produced; `SourceSpec.bundle_composite_ids` lists what a source
+publishes, and `_fetch_satellite_run` runs every listed producer whose
+channels the window fetches (asked for the Dust RGB's four alone, it
+composes that and not the confidence). shachen is the `satellite`
+dependency group (`uv sync --group satellite`), imported inside the
+producers and nowhere else.
 
 ## Fixtures and tests
 
-`tests/fixtures/himawari/` is sixteen real tiles (T020 and T021 of two
-consecutive scans in bands 11, 13, 14 and 15) and `tests/test_satellite.py`
-runs them through the whole stage — listing, completeness, download,
-mosaic, warp, cache, the producer (held cell for cell to
-`shachen.dustrgb.dust_rgb` called directly), series, ingest, conversion on
-the production grid with the composite bundle, a crop past the
-antimeridian, a `--bundles` build that reads one series alone — against a
-stand-in for the bucket, then through both encoders.
+`tests/fixtures/himawari/` is twenty-four real tiles (T020 and T021 of
+two consecutive scans in bands 7, 8, 11, 13, 14 and 15) and
+`tests/test_satellite.py` runs them through the whole stage — listing,
+completeness, download, mosaic, warp, cache, the producers (the Dust RGB
+held cell for cell to `shachen.dustrgb.dust_rgb` called directly),
+series, ingest, conversion on the production grid with both composite
+bundles, a crop past the antimeridian, a `--bundles` build that reads one
+series alone — against a stand-in for the bucket, then through both
+encoders. `tests/fixtures/debra/` is two crops of a staged CAMEL month
+(the Gobi, land; a box of water south of Japan inside the tiles' grid)
+and four crops of one cached GFS record, and `tests/test_debra.py` holds
+the ancillary readers, the regrid across 180°, the GFS candidate walk and
+byte-range fetch against fakes, the composed chain equal to
+`shachen.pipeline.run_debra` on the same grid, the definition and gate
+rules, and the producer in the fetch stage (composed once, the sidecar
+naming its ancillary); the satellite and GOES suites stage the same
+fixtures under the raw root (`stage_ancillary`) so no test reaches the
+GFS bucket.
 `tests/fixtures/satellite-registry.json` (`variables`: each channel's and
 gun's label, unit, parameter block, band block or producer id and
 codebooks; `bundles`: each composite's components in order) holds them

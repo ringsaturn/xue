@@ -201,12 +201,17 @@ def produce_frames(
     *,
     grid: TargetGrid,
     frames_dir: Path,
+    ancillary_root: Path | None = None,
     force: bool = False,
 ) -> dict[str, Path]:
     """One slot's outputs of one producer as frames, from the cache when
     every output is there (and carries this producer's version), else
     computed from the slot's input frames and written beside them. The
-    inputs must be every channel the producer reads."""
+    inputs must be every channel the producer reads; a producer that
+    reads ancillary fields resolves them under ``ancillary_root`` first
+    (:meth:`Producer.ancillary_for`), and what it read is named in the
+    frames' sidecars. A cached frame is never recomputed for a newer
+    ancillary: the first computation of a slot is the slot's."""
     outputs = {output_id: assemble.frame_path(frames_dir, output_id, slot) for output_id in producer.outputs}
     version = producer.version
     if not force and all(path.is_file() for path in outputs.values()):
@@ -217,20 +222,20 @@ def produce_frames(
     missing = [channel_id for channel_id in needed if channel_id not in inputs]
     if missing:
         raise ConversionError(f"the {producer.bundle_id} producer needs {list(needed)}; the slot lacks {missing}")
+    ancillary = producer.ancillary_for(platform, slot, ancillary_root) if producer.ancillaries else {}
     planes = {channel_id: assemble.read_frame(inputs[channel_id], grid) for channel_id in needed}
-    produced = producer.run(platform, planes, {})
+    produced = producer.run(platform, planes, ancillary, slot=slot, grid=grid)
     if tuple(produced) != producer.outputs:
         raise ConversionError(f"the {producer.bundle_id} producer returned {list(produced)}, not {list(producer.outputs)}")
     packing = assemble.Packing(scale=PRODUCED_SCALE, offset=0.0, unit=PRODUCED_UNIT, producer=(producer.id, version))
+    extra: dict[str, object] = {
+        "slot": slot.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "inputs": [inputs[channel_id].name for channel_id in needed],
+    }
+    if ancillary:
+        extra["ancillary"] = {name: path.name for name, path in ancillary.items()}
     for output_id, plane in produced.items():
-        assemble.write_frame(
-            plane,
-            grid,
-            packing,
-            outputs[output_id],
-            slot=slot.strftime("%Y-%m-%dT%H:%M:%SZ"),
-            inputs=[inputs[channel_id].name for channel_id in needed],
-        )
+        assemble.write_frame(plane, grid, packing, outputs[output_id], **extra)
     LOG.info("%s %s: composed %s from %s", platform.spacecraft, producer.bundle_id, slot.strftime("%Y-%m-%dT%H:%M:%SZ"), ", ".join(needed))
     return outputs
 
@@ -272,6 +277,7 @@ def fetch_window(
     series_stem: str,
     units: dict[str, str],
     producers: tuple[Producer, ...] = (),
+    ancillary_root: Path | None = None,
     cadence_seconds: int | None = None,
     force: bool = False,
     fetch: Callable[[str], str] | None = None,
@@ -285,7 +291,9 @@ def fetch_window(
     only when every channel is there whole, so every series carries the
     same axis. ``units`` is each channel's declared unit (the registry's
     output unit), which its frames must agree with; ``cadence_seconds`` the
-    source's, when coarser than the platform's scans."""
+    source's, when coarser than the platform's scans; ``ancillary_root``
+    where a producer's ancillary fields are staged and cached
+    (``<raw root>/ancillary``)."""
     for producer in producers:
         missing = [channel_id for channel_id in producer.inputs_for(platform) if channel_id not in {channel.id for channel in channels}]
         if missing:
@@ -322,7 +330,9 @@ def fetch_window(
         if len(frames) != len(channels):
             continue
         for producer in producers:
-            frames.update(produce_frames(platform, producer, slot, frames, grid=grid, frames_dir=frames_dir, force=force))
+            frames.update(
+                produce_frames(platform, producer, slot, frames, grid=grid, frames_dir=frames_dir, ancillary_root=ancillary_root, force=force)
+            )
         fetched.append(FetchedSlot(slot=slot, frames=frames, tiles=tiles))
     shutil.rmtree(tiles_dir, ignore_errors=True)
     if not fetched:

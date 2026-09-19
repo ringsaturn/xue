@@ -38,6 +38,9 @@ export const en = {
   varInfrared: "IR 10.4",
   // The composite's gloss: RGB is the term in every language.
   varDustRgb: "RGB",
+  // The confidence field's gloss: the algorithm's name, an instrument code
+  // in every language.
+  varDustCf: "DEBRA",
   /** The surface diagnostics: gust and CAPE are surface fields (SFC,
    * the same detail the codes carry), cloud cover is the whole column. */
   varGust: "SFC",
@@ -91,6 +94,8 @@ export const en = {
   glyphIr104: "I",
   // D for the dust composite.
   glyphDustrgb: "D",
+  // C for the dust confidence.
+  glyphDustcf: "C",
   // N is the synoptic-code letter for total cloud amount; the gust and CAPE
   // take their initials.
   glyphGust: "G",
@@ -321,6 +326,7 @@ export const en = {
   varLabelCref: "Composite radar reflectivity",
   varLabelIr104: "Infrared imagery (10.4 µm brightness temperature)",
   varLabelDustrgb: "Dust RGB (infrared composite)",
+  varLabelDustcf: "DEBRA dust confidence",
   varLabelGust: "Wind gust",
   varLabelTcdc: "Total cloud cover",
   varLabelCape: "Convective available potential energy",

@@ -139,9 +139,10 @@ pub struct SourceSpec {
     /// only when every input it is built from is in `input_variable_ids`.
     pub bundle_vector_ids: &'static [&'static str],
     /// Composite bundles published after the vectors, in manifest order: a
-    /// bundle of three or more variables an algorithm derived from the
-    /// source's channels in the fetch stage — `dustrgb`, the Dust RGB's
-    /// three guns (`convert::COMPOSITE_BUNDLES`). Listing one publishes it
+    /// bundle of the variables an algorithm derived from the source's
+    /// channels in the fetch stage — `dustrgb`, the Dust RGB's three guns,
+    /// and `dustcf`, the DEBRA confidence, a bundle of one variable
+    /// (`convert::composite_components`). Listing one publishes it
     /// only when every channel its producer reads is in
     /// `input_variable_ids`; the converter reads the produced components
     /// off the series the fetch stage wrote and never derives them itself.
@@ -704,14 +705,14 @@ pub const SOURCES: &[SourceSpec] = &[
     // `series_file` observation like the JMA nowcast here. The source id is
     // the orbital role; the spacecraft and channel are the `band` block on
     // the variable (`bands`, docs/format.md): WMO C-5 174, C-8 297, AHI
-    // band 13 at 10.4073 µm. One channel to start.
+    // band 13 at 10.4073 µm.
     SourceSpec {
         id: "himawari",
         manifest_model: "HIMAWARI",
         product: "ahi-fldk-0p04",
         latest_filename: Some("latest-himawari.json"),
         steps: &[],
-        input_variable_ids: &["ir086", "ir104", "ir112", "ir123"],
+        input_variable_ids: &["ir039", "wv062", "ir086", "ir104", "ir112", "ir123"],
         companion_files: &[],
         accumulated_precipitation: false,
         averaged_precipitation: false,
@@ -719,11 +720,20 @@ pub const SOURCES: &[SourceSpec] = &[
         average_window_hours: 6,
         optional_at_analysis: &[],
         statistical_processes: &[],
-        // The four infrared windows fetched (AHI bands 11, 13, 14, 15), each
-        // with its band block; the central wave numbers are round(1e6 / µm)
-        // of the AHI's central wavelengths (8.5926, 10.4073, 11.2395,
-        // 12.3806 µm), as `Platform::band` computes them.
+        // The six infrared windows fetched (AHI bands 7, 8, 11, 13, 14, 15),
+        // each with its band block; the central wave numbers are
+        // round(1e6 / µm) of the AHI's central wavelengths (3.8853, 6.2429,
+        // 8.5926, 10.4073, 11.2395, 12.3806 µm), as `Platform::band`
+        // computes them.
         bands: &[
+            (
+                "ir039",
+                SatelliteBand { satellite_series: 0, satellite_number: 174, instrument_type: 297, central_wavenumber: 257380 },
+            ),
+            (
+                "wv062",
+                SatelliteBand { satellite_series: 0, satellite_number: 174, instrument_type: 297, central_wavenumber: 160182 },
+            ),
             (
                 "ir086",
                 SatelliteBand { satellite_series: 0, satellite_number: 174, instrument_type: 297, central_wavenumber: 116379 },
@@ -744,9 +754,10 @@ pub const SOURCES: &[SourceSpec] = &[
         bundle_scalar_ids: &["ir104"],
         core_bundle_ids: &["ir104"],
         bundle_vector_ids: &[],
-        // The Dust RGB, composed per slot in the fetch stage from all four
-        // channels and read off the series like any channel.
-        bundle_composite_ids: &["dustrgb"],
+        // The Dust RGB, composed per slot in the fetch stage from four of
+        // the channels, and the DEBRA confidence from five, each read off
+        // the series like any channel.
+        bundle_composite_ids: &["dustrgb", "dustcf"],
         // The platform's region at 0.04°: 120° x 120°.
         production_grid: (3000, 3000),
         tile: (64, 64),
@@ -778,7 +789,7 @@ pub const SOURCES: &[SourceSpec] = &[
         product: "abi-fldk-0p04",
         latest_filename: Some("latest-goeseast.json"),
         steps: &[],
-        input_variable_ids: &["ir086", "ir104", "ir112", "ir123"],
+        input_variable_ids: &["ir039", "wv062", "ir086", "ir104", "ir112", "ir123"],
         companion_files: &[],
         accumulated_precipitation: false,
         averaged_precipitation: false,
@@ -786,9 +797,17 @@ pub const SOURCES: &[SourceSpec] = &[
         average_window_hours: 6,
         optional_at_analysis: &[],
         statistical_processes: &[],
-        // ABI channels 11, 13, 14, 15 at 8.50, 10.35, 11.2, 12.3 µm; WMO C-5
-        // 273, C-8 617.
+        // ABI channels 7, 8, 11, 13, 14, 15 at 3.90, 6.19, 8.50, 10.35,
+        // 11.2, 12.3 µm; WMO C-5 273, C-8 617.
         bands: &[
+            (
+                "ir039",
+                SatelliteBand { satellite_series: 0, satellite_number: 273, instrument_type: 617, central_wavenumber: 256410 },
+            ),
+            (
+                "wv062",
+                SatelliteBand { satellite_series: 0, satellite_number: 273, instrument_type: 617, central_wavenumber: 161551 },
+            ),
             (
                 "ir086",
                 SatelliteBand { satellite_series: 0, satellite_number: 273, instrument_type: 617, central_wavenumber: 117647 },
@@ -809,7 +828,7 @@ pub const SOURCES: &[SourceSpec] = &[
         bundle_scalar_ids: &["ir104"],
         core_bundle_ids: &["ir104"],
         bundle_vector_ids: &[],
-        bundle_composite_ids: &["dustrgb"],
+        bundle_composite_ids: &["dustrgb", "dustcf"],
         production_grid: (3000, 3000),
         tile: (64, 64),
         variant_factors: &[2, 4, 8],
@@ -827,7 +846,7 @@ pub const SOURCES: &[SourceSpec] = &[
         product: "abi-fldk-0p04",
         latest_filename: Some("latest-goeswest.json"),
         steps: &[],
-        input_variable_ids: &["ir086", "ir104", "ir112", "ir123"],
+        input_variable_ids: &["ir039", "wv062", "ir086", "ir104", "ir112", "ir123"],
         companion_files: &[],
         accumulated_precipitation: false,
         averaged_precipitation: false,
@@ -835,9 +854,17 @@ pub const SOURCES: &[SourceSpec] = &[
         average_window_hours: 6,
         optional_at_analysis: &[],
         statistical_processes: &[],
-        // ABI channels 11, 13, 14, 15 at 8.50, 10.35, 11.2, 12.3 µm; WMO C-5
-        // 272, C-8 617.
+        // ABI channels 7, 8, 11, 13, 14, 15 at 3.90, 6.19, 8.50, 10.35,
+        // 11.2, 12.3 µm; WMO C-5 272, C-8 617.
         bands: &[
+            (
+                "ir039",
+                SatelliteBand { satellite_series: 0, satellite_number: 272, instrument_type: 617, central_wavenumber: 256410 },
+            ),
+            (
+                "wv062",
+                SatelliteBand { satellite_series: 0, satellite_number: 272, instrument_type: 617, central_wavenumber: 161551 },
+            ),
             (
                 "ir086",
                 SatelliteBand { satellite_series: 0, satellite_number: 272, instrument_type: 617, central_wavenumber: 117647 },
@@ -858,7 +885,7 @@ pub const SOURCES: &[SourceSpec] = &[
         bundle_scalar_ids: &["ir104"],
         core_bundle_ids: &["ir104"],
         bundle_vector_ids: &[],
-        bundle_composite_ids: &["dustrgb"],
+        bundle_composite_ids: &["dustrgb", "dustcf"],
         production_grid: (3000, 3000),
         tile: (64, 64),
         variant_factors: &[2, 4, 8],
@@ -979,19 +1006,20 @@ mod tests {
             assert_eq!(source.bundle_composite_ids, himawari.bundle_composite_ids, "{model}");
             assert_eq!(source.production_grid, himawari.production_grid, "{model}");
             assert_eq!(source.cadence_seconds, Some(600), "{model}");
-            assert_eq!(source.bands.len(), 4, "{model}");
+            assert_eq!(source.bands.len(), 6, "{model}");
             for (_, band) in source.bands {
                 assert_eq!((band.satellite_number, band.instrument_type), (number, 617), "{model}");
             }
         }
         // Meteosat publishes the hourly cycle alone (the CC-BY-4.0 one) and
-        // has no 11.2 µm window: three inputs, and the composite still
-        // resolves to its three components.
+        // has no 11.2 µm window: three inputs, the Dust RGB still resolves
+        // to its three components, and the DEBRA confidence — five inputs,
+        // no stand-in — is not listed.
         let meteosat = source_spec("meteosat").expect("meteosat");
         assert!(meteosat.series_file && meteosat.fetched() && meteosat.live());
         assert_eq!(meteosat.input_variable_ids, &["ir086", "ir104", "ir123"]);
         assert_eq!(meteosat.bundle_scalar_ids, himawari.bundle_scalar_ids);
-        assert_eq!(meteosat.bundle_composite_ids, himawari.bundle_composite_ids);
+        assert_eq!(meteosat.bundle_composite_ids, &["dustrgb"]);
         assert_eq!(meteosat.cadence_seconds, Some(3600));
         assert_eq!(meteosat.window_hours, Some(24));
         assert_eq!(meteosat.bands.len(), 3);

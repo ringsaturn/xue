@@ -517,9 +517,10 @@ def _source_prose(source: SourceSpec) -> dict[str, Any]:
                 "10.4 µm window, stretched to three guns in 0–1 with the SEVIRI recipe of Lensky and "
                 "Rosenfeld 2008 as EUMeTrain formalised it), computed from the 8.6, 10.4, 11.2 and "
                 "12.3 µm windows by the shachen package (Apache-2.0), whose id and version each gun "
-                "carries as its producer block. Source: Japan Meteorological Agency, distributed by "
-                "NOAA; the data are unaltered but reprojected and composited, and neither JMA nor "
-                "NOAA endorses this site."
+                "carries as its producer block;"
+                " and the DEBRA dust confidence (dustcf: the combined confidence factor of Miller et al. 2017, Eqs. 1–22, in 0–1, computed by the same package from the 3.9, 6.2, 8.6, 10.4 and 12.3 µm channels against a clear-sky background modelled from the GFS surface temperature (NOAA NCEP, one record per hour) and the CAMEL emissivity climatology (NASA LP DAAC, CAM5K30EM V003), with a split-window gate; defined over water and over the land an emissivity month is staged for, no data over other land). Source: Japan Meteorological Agency, "
+                "distributed by NOAA; the data are unaltered but reprojected, composited and scored, and "
+                "neither JMA nor NOAA endorses this site."
             ),
             "license": "other",
             "providers": [
@@ -565,6 +566,18 @@ def _source_prose(source: SourceSpec) -> dict[str, Any]:
                     "type": "application/pdf",
                     "title": "GOES-R Quick Guide: Dust RGB (the band mix, and the ABI stretches)",
                 },
+                {
+                    "rel": "cite-as",
+                    "href": "https://doi.org/10.1002/2017JD027365",
+                    "type": "text/html",
+                    "title": "Miller et al. (2017): DEBRA-Dust, the algorithm the dust confidence is",
+                },
+                {
+                    "rel": "describedby",
+                    "href": "https://doi.org/10.5067/MEaSUREs/LSTE/CAM5K30EM.003",
+                    "type": "text/html",
+                    "title": "CAMEL CAM5K30EM V003: the monthly emissivity climatology behind the background",
+                },
             ],
         },
     }
@@ -583,9 +596,9 @@ def _source_prose(source: SourceSpec) -> dict[str, Any]:
                 "Dust RGB composite (dustrgb: the 12.3 − 10.4 µm split window, 11.2 − 8.6 µm with a gamma, "
                 "and the 10.4 µm window, stretched to three guns in 0–1 with the GOES-R Quick Guide's ABI "
                 "values), computed from the 8.6, 10.4, 11.2 and 12.3 µm windows by the shachen package "
-                "(Apache-2.0), whose id and version each gun carries as its producer block. Source: NOAA "
-                "NESDIS; the data are unaltered but reprojected and composited, and NOAA does not endorse "
-                "this site."
+                "(Apache-2.0), whose id and version each gun carries as its producer block;"
+                " and the DEBRA dust confidence (dustcf: the combined confidence factor of Miller et al. 2017, Eqs. 1–22, in 0–1, computed by the same package from the 3.9, 6.2, 8.6, 10.4 and 12.3 µm channels against a clear-sky background modelled from the GFS surface temperature (NOAA NCEP, one record per hour) and the CAMEL emissivity climatology (NASA LP DAAC, CAM5K30EM V003), with a split-window gate; defined over water and over the land an emissivity month is staged for, no data over other land). Source: NOAA NESDIS; the data are "
+                "unaltered but reprojected, composited and scored, and NOAA does not endorse this site."
             ),
             "license": "other",
             "providers": [
@@ -624,6 +637,18 @@ def _source_prose(source: SourceSpec) -> dict[str, Any]:
                     "href": "https://rammb.cira.colostate.edu/training/visit/quick_guides/Dust_RGB_Quick_Guide.pdf",
                     "type": "application/pdf",
                     "title": "GOES-R Quick Guide: Dust RGB (the band mix and the ABI stretches applied here)",
+                },
+                {
+                    "rel": "cite-as",
+                    "href": "https://doi.org/10.1002/2017JD027365",
+                    "type": "text/html",
+                    "title": "Miller et al. (2017): DEBRA-Dust, the algorithm the dust confidence is",
+                },
+                {
+                    "rel": "describedby",
+                    "href": "https://doi.org/10.5067/MEaSUREs/LSTE/CAM5K30EM.003",
+                    "type": "text/html",
+                    "title": "CAMEL CAM5K30EM V003: the monthly emissivity climatology behind the background",
                 },
             ],
         }

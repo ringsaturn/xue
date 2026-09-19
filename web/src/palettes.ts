@@ -143,6 +143,25 @@ const BRIGHTNESS_TEMPERATURE_STOPS: Stop[] = [
   [332, 14, 14, 14, 255],
 ];
 
+// The DEBRA dust confidence, in [0, 1]: nothing under 0.1, where the
+// combined factor is noise, then the yellow the operational product paints
+// dust in — a translucent pale straw at the first evidence, the saturated
+// golden yellow of a confident plume, orange where the tests all agree —
+// with the alpha rising to opaque, so a plume reads as a plume and clear
+// sky is the map beneath. Code 0 is no data (outside the disk, an input
+// the slot lacked, land with no emissivity staged) and never reaches the
+// ramp: the shell erodes it (`floorIsNoData`).
+const DUST_CONFIDENCE_STOPS: Stop[] = [
+  [0, 255, 240, 170, 0],
+  [0.1, 255, 240, 170, 0],
+  [0.2, 255, 234, 150, 120],
+  [0.3, 255, 226, 122, 175],
+  [0.45, 255, 200, 70, 215],
+  [0.6, 255, 176, 0, 240],
+  [0.8, 255, 130, 0, 255],
+  [1, 255, 106, 0, 255],
+];
+
 // The pressure family shares one ramp, given in fractions of the level's own
 // codebook range rather than absolute values: a fill under contour lines is
 // read as "low here, high there", and every level would otherwise need its
@@ -605,6 +624,7 @@ function stopsFor(variable: BundleVariable, identity: VariableIdentity | null): 
   if (family === "perpw") return WAVE_PERIOD_STOPS;
   if (family === "dirpw") return WAVE_DIRECTION_STOPS;
   if (family === "ir104") return BRIGHTNESS_TEMPERATURE_STOPS;
+  if (family === "dustcf") return DUST_CONFIDENCE_STOPS;
   if (family === "hgt" && linear) return pressureStops(linear);
   if (family === "tmp") return remapStops(TEMPERATURE_STOPS, [-60, 50], temperaturePaletteDomain(level));
   if (family === "rh") return HUMIDITY_STOPS;

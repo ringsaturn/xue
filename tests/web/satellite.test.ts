@@ -6,6 +6,7 @@ import {
   identifyBundle,
   identityForBundleId,
   identityForParameter,
+  identityForProducedScalar,
   identityForProducedTriple,
   isCompositeIdentity,
   registeredBundleId,
@@ -35,8 +36,9 @@ import { variableSpec } from "../../web/src/variables";
 /** The committed registry both encoders are held to
  * (`tests/test_satellite.py`, and the Rust encoder's unit tests): one entry
  * per data variable under `variables` — the channels with their `band` per
- * platform, the composite's guns with their `producer` id — and the
- * composite bundles' component lists under `bundles`. */
+ * platform, the composite's guns and the produced scalar with their
+ * `producer` id — and the produced bundles' component lists under
+ * `bundles` (the composite's three guns, the confidence's one variable). */
 interface RegistryEntry {
   label: string;
   unit: string;
@@ -96,6 +98,24 @@ function gunVariables(order: readonly number[] = [1, 2, 3], producer: BundleProd
 
 const DUST_IDENTITY = { family: "dustrgb" as const, level: null, vector: false };
 
+/** The confidence's contract: shachen's local number 4 beside the guns,
+ * one variable of its own bundle, the guns' codebook (code 0 no data,
+ * code 1 = 0.0, code 251 = 1.0). */
+const CONFIDENCE_IDENTITY = { family: "dustcf" as const, level: null, vector: false };
+
+/** The confidence's variable; `null` for a producer leaves the block off. */
+function confidenceVariable(producer: BundleProducer | null = PRODUCER): BundleVariable {
+  return {
+    numericId: 1,
+    id: "dustcf",
+    label: "DEBRA dust confidence",
+    unit: "1",
+    parameter: gunParameter(4),
+    ...(producer === null ? {} : { producer }),
+    quantization: GUN_QUANTIZATION,
+  };
+}
+
 function rgba(palette: Uint8Array, code: number): [number, number, number, number] {
   return [...palette.subarray(code * 4, code * 4 + 4)] as [number, number, number, number];
 }
@@ -103,13 +123,16 @@ function rgba(palette: Uint8Array, code: number): [number, number, number, numbe
 describe("the satellite registry", () => {
   it("knows the bundles the encoders register", () => {
     // Every registry entry is a channel (a brightness temperature with a
-    // band per platform) or a gun of the composite (a produced field); the
-    // shell's bundle ids are the published channel and the composite.
+    // band per platform) or a produced field — a gun of the composite, or
+    // the dust confidence, the next local number under the same producer;
+    // the shell's bundle ids are the published channel, the composite and
+    // the confidence.
     for (const [id, entry] of Object.entries(registry)) {
       if (entry.producer) {
-        expect(GUN_IDS).toContain(id);
+        expect([...GUN_IDS, "dustcf"]).toContain(id);
         expect(entry.producer).toEqual({ id: "shachen" });
-        expect(entry.parameter).toEqual(gunParameter(GUN_IDS.indexOf(id as (typeof GUN_IDS)[number]) + 1));
+        const number = id === "dustcf" ? 4 : GUN_IDS.indexOf(id as (typeof GUN_IDS)[number]) + 1;
+        expect(entry.parameter).toEqual(gunParameter(number));
         expect(entry.unit).toBe("1");
         expect(entry.quality).toEqual(GUN_QUANTIZATION);
         expect(entry.compact).toEqual(GUN_QUANTIZATION);
@@ -120,13 +143,17 @@ describe("the satellite registry", () => {
       }
     }
     expect(Object.keys(registry)).toContain("ir104");
-    // The composite's components, in bundle order, are the registry's.
-    expect(COMPOSITE_BUNDLES).toEqual(registryFile.bundles);
-    expect(SATELLITE_IDS).toEqual(["ir104", "dustrgb"]);
+    expect(Object.keys(registry)).toContain("dustcf");
+    // The composite's components, in bundle order, are the registry's;
+    // the confidence bundle is its one variable and no composite.
+    const { dustcf: confidenceBundle, ...compositeBundles } = registryFile.bundles;
+    expect(COMPOSITE_BUNDLES).toEqual(compositeBundles);
+    expect(confidenceBundle).toEqual(["dustcf"]);
+    expect(SATELLITE_IDS).toEqual(["ir104", "dustrgb", "dustcf"]);
     for (const id of SATELLITE_IDS) {
       expect(KNOWN_BUNDLE_IDS).toContain(id);
       expect(isVectorBundle(id)).toBe(false);
-      // Two single fields, each with a tile of its own, in the sheet's
+      // Three single fields, each with a tile of its own, in the sheet's
       // satellite group.
       expect(familyOf(id)).toBeNull();
       expect(variableSpec(id)?.family).toBeNull();
@@ -134,18 +161,25 @@ describe("the satellite registry", () => {
     }
     expect(isCompositeBundle("dustrgb")).toBe(true);
     expect(isCompositeBundle("ir104")).toBe(false);
+    expect(isCompositeBundle("dustcf")).toBe(false);
+    expect(compositeComponents("dustcf")).toBeNull();
     expect(compositeComponents("dustrgb")).toEqual(GUN_IDS);
     expect(COMPOSITE_BUNDLES.dustrgb).toEqual(GUN_IDS);
   });
 
-  it("gives the composite a core tile beside the infrared on every satellite source", () => {
-    // No family: the two are different pictures, and a source with two
-    // fields has room for two tiles, so neither hides behind the other.
+  it("gives the composite and the confidence core tiles beside the infrared on every satellite source", () => {
+    // No family: the three are different pictures, and a source with three
+    // fields has room for three tiles, so none hides behind another. The
+    // confidence ships on the ten-minute disks and on the mosaic (a member
+    // whose run lacks the bundle empties for it, `applyMosaicMembers`),
+    // not on Meteosat's hourly cycle.
     expect(ISOBARIC_FAMILIES).not.toContain("satellite");
     expect(variableSpec("dustrgb")?.code).toBe("DUST RGB");
-    for (const model of ["himawari", "goeseast", "goeswest", "meteosat", "geo"] as const) {
-      expect(FORECAST_MODELS[model].railCore).toEqual(["ir104", "dustrgb"]);
+    expect(variableSpec("dustcf")?.code).toBe("DEBRA");
+    for (const model of ["himawari", "goeseast", "goeswest", "geo"] as const) {
+      expect(FORECAST_MODELS[model].railCore).toEqual(["ir104", "dustrgb", "dustcf"]);
     }
+    expect(FORECAST_MODELS.meteosat.railCore).toEqual(["ir104", "dustrgb"]);
   });
 
   it("reads the channel off the band block, not the parameter alone", () => {
@@ -235,9 +269,12 @@ describe("the satellite registry", () => {
     expect(rows.map((row) => row.id)).toEqual(["cloudtop"]);
     expect(rows[0]!.bundles).toEqual(["ir104"]);
     expect(meteogramRowCode(rows[0]!)).toBe("IR");
-    // The composite reads at no pin: no row of its own.
+    // The composite reads at no pin: no row of its own; nor does the
+    // confidence, a diagnostic with no place among the meteogram's rows.
     expect(meteogramRows((id) => id === "dustrgb")).toEqual([]);
     expect(variableSpec("dustrgb")?.meteogramCode).toBeNull();
+    expect(meteogramRows((id) => id === "dustcf")).toEqual([]);
+    expect(variableSpec("dustcf")?.meteogramCode).toBeNull();
   });
 });
 
@@ -321,5 +358,110 @@ describe("the Dust RGB composite", () => {
     expect(parseVariableFromSearch("?type=dustrgb")).toBe("dustrgb");
     expect(parseVariableFromSearch("?type=dust")).toBe("dustrgb");
     expect(searchForVariable("dustrgb", "")).toBe("?model=gfs&type=dustrgb");
+  });
+});
+
+describe("the DEBRA dust confidence", () => {
+  it("is named by its producer and its local number together, as one variable", () => {
+    // A produced scalar: shachen's local number 4 beside the guns.
+    expect(identityForProducedScalar(confidenceVariable())).toEqual(CONFIDENCE_IDENTITY);
+    expect(isCompositeIdentity(CONFIDENCE_IDENTITY)).toBe(false);
+    // The version is not part of the identity.
+    expect(identityForProducedScalar(confidenceVariable({ id: "shachen", version: "9.9.9" }))).toEqual(CONFIDENCE_IDENTITY);
+    // Local numbers mean nothing under another producer, and nothing
+    // without one: a local-range parameter on its own is unknown, and the
+    // WMO table has no row for it either.
+    expect(identityForProducedScalar(confidenceVariable({ id: "other", version: "1" }))).toBeNull();
+    expect(identityForProducedScalar(confidenceVariable(null))).toBeNull();
+    expect(identityForParameter(gunParameter(4))).toBeNull();
+    // A gun's number is a gun, not a scalar of its own; a WMO parameter is
+    // not the producer's to name.
+    expect(identityForProducedScalar({ parameter: gunParameter(1), producer: PRODUCER })).toBeNull();
+    expect(identityForProducedScalar({ parameter: registry.ir104!.parameter, producer: PRODUCER })).toBeNull();
+    expect(identityForProducedScalar({ producer: PRODUCER })).toBeNull();
+  });
+
+  it("is the whole one-variable bundle, and unknown without its producer", () => {
+    const bundle = identifyBundle([confidenceVariable()]);
+    expect(bundle?.identity).toEqual(CONFIDENCE_IDENTITY);
+    expect(bundle?.variables.map((variable) => variable.id)).toEqual(["dustcf"]);
+    expect(identifyBundle([confidenceVariable(null)])).toBeNull();
+    expect(identifyBundle([confidenceVariable({ id: "other", version: "1" })])).toBeNull();
+    expect(registeredBundleId(CONFIDENCE_IDENTITY)).toBe("dustcf");
+    expect(identityForBundleId("dustcf")).toEqual(CONFIDENCE_IDENTITY);
+    // The other one-variable bundles still read off the WMO table.
+    expect(identifyBundle([bundleVariable("ir104")])?.identity).toEqual({ family: "ir104", level: null, vector: false });
+  });
+
+  it("is parsed with its producer by the metadata validator", () => {
+    const metadata = {
+      schemaVersion: 3,
+      model: "HIMAWARI",
+      runTime: "2026-09-17T03:00:00Z",
+      time: { unitSeconds: 600, firstFrameOffset: 0, frameCount: 2, frameStep: 1 },
+      grid: { width: 3000, height: 3000, firstLongitude: 80.72, firstLatitude: 59.98, longitudeStep: 0.04, latitudeStep: -0.04, wrapLongitude: false },
+      variables: [confidenceVariable()],
+    };
+    const parsed = parseBundleMetadata(JSON.stringify(metadata));
+    expect(parsed.variables.length).toBe(1);
+    expect(parsed.variables[0]!.producer).toEqual(PRODUCER);
+    expect(parsed.variables[0]!.band).toBeUndefined();
+    expect(identifyBundle(parsed.variables)?.identity).toEqual(CONFIDENCE_IDENTITY);
+  });
+
+  it("paints nothing below the noise floor and dust in deepening yellow", () => {
+    const variable = confidenceVariable();
+    expect(decodeValue(variable, 0)).toBeCloseTo(-0.004, 9);
+    expect(decodeValue(variable, 1)).toBeCloseTo(0, 9);
+    expect(decodeValue(variable, 251)).toBeCloseTo(1, 9);
+    expect(decodeValue(variable, 255)).toBeNull();
+    expect(variableSpec("dustcf")?.floorIsNoData).toBe(true);
+    const palette = buildPalette(variable);
+    const at = (confidence: number) => rgba(palette, Math.round((confidence + 0.004) / 0.004));
+    // Code 0 (no data) and every cell under 0.1 are the map.
+    expect(rgba(palette, 0)[3]).toBe(0);
+    expect(at(0)[3]).toBe(0);
+    expect(at(0.1)[3]).toBe(0);
+    // From there the yellow thickens with the confidence, orange at the top.
+    const [r3, g3, b3, a3] = at(0.3);
+    expect(a3).toBeGreaterThan(100);
+    expect(a3).toBeLessThan(255);
+    expect(r3).toBeGreaterThan(240);
+    expect(g3).toBeGreaterThan(200);
+    expect(b3).toBeLessThan(140);
+    const [r6, g6, b6, a6] = at(0.6);
+    expect(a6).toBeGreaterThan(a3);
+    expect(r6).toBe(255);
+    expect(g6).toBeGreaterThan(150);
+    expect(b6).toBeLessThan(20);
+    const [r1, g1, b1, a1] = at(1);
+    expect(a1).toBe(255);
+    expect(r1).toBe(255);
+    expect(g1).toBeLessThan(g6);
+    expect(b1).toBe(0);
+    expect(rgba(palette, 255)[3]).toBe(0);
+  });
+
+  it("reads over [0, 1] with a bar of its own", () => {
+    expect(scalarLegendRange(CONFIDENCE_IDENTITY)).toEqual([0, 1]);
+    expect(isobaricLegend(CONFIDENCE_IDENTITY)).toEqual(["1", "0.8", "0.6", "0.4", "0.2", "0"]);
+    const spec = variableSpec("dustcf")!;
+    expect(spec.legend()).toEqual(["1", "0.8", "0.6", "0.4", "0.2", "0"]);
+    expect(spec.legendKey).toBeNull();
+    expect(spec.legendGradient).toBe("palette");
+    expect(spec.title.join(" ")).toBe("Dust Confidence");
+    expect(spec.label()).toBe("DEBRA dust confidence");
+    expect(spec.ground).toBe("slate");
+    expect(spec.showcaseCode).toBe("DEBRA");
+    expect(spec.group).toBe("satellite");
+    expect(registry.dustcf!.unit).toBe("1");
+    expect(displayUnit("1")).toBe("1");
+  });
+
+  it("is reached by its own type names", () => {
+    expect(parseVariableFromSearch("?type=debra")).toBe("dustcf");
+    expect(parseVariableFromSearch("?type=dustcf")).toBe("dustcf");
+    expect(parseVariableFromSearch("?type=dustconfidence")).toBe("dustcf");
+    expect(searchForVariable("dustcf", "")).toBe("?model=gfs&type=debra");
   });
 });

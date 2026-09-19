@@ -57,6 +57,8 @@ from .quantize import PRESSURE_VARIABLE_IDS, PROFILES, PrecipitationCodebook, Te
 from .reproject import ProjectedGrid, Resampler, build_resampler, lambert_conformal_from_wkt
 from .sources import Downsample, SourceSpec, source_spec
 from .variables import (
+    DUST_CF_BUNDLE_ID,
+    DUST_CF_COMPONENT_IDS,
     DUST_RGB_BUNDLE_ID,
     DUST_RGB_COMPONENT_IDS,
     ISOBARIC_LEVELS_HPA,
@@ -104,12 +106,16 @@ DERIVED_VECTORS: dict[str, tuple[str, ...]] = {
 }
 
 
-# Composite bundles: three or more variables an algorithm derived from a
-# source's channels in the *fetch stage* (xuebuild/satellite/producers.py),
-# read off the observation series as more variables and written as one
-# bundle in this order — the converter never derives them. The Dust RGB's
-# three guns first. Mirrored in encode/convert.rs.
-COMPOSITE_BUNDLES: dict[str, tuple[str, ...]] = {DUST_RGB_BUNDLE_ID: DUST_RGB_COMPONENT_IDS}
+# Composite bundles: the variables an algorithm derived from a source's
+# channels in the *fetch stage* (xuebuild/satellite/producers.py), read off
+# the observation series as more variables and written as one bundle in
+# this order — the converter never derives them. The Dust RGB's three guns,
+# then the DEBRA confidence, a produced bundle of one variable. Mirrored in
+# encode/convert.rs.
+COMPOSITE_BUNDLES: dict[str, tuple[str, ...]] = {
+    DUST_RGB_BUNDLE_ID: DUST_RGB_COMPONENT_IDS,
+    DUST_CF_BUNDLE_ID: DUST_CF_COMPONENT_IDS,
+}
 
 
 def bundle_variable_ids(bundle_id: str) -> tuple[str, ...]:

@@ -18,8 +18,8 @@ use crate::encode::binformat::{self, ChunkPayload, ChunkTables, HOUR_SECONDS};
 use crate::format::{ChunkEntry, Predictor, TileGeometry, VariableEntry, NO_DEPENDENCY};
 use crate::encode::errors::{EncodeError, Result};
 use crate::encode::variables::{
-    isobaric_variable, variable_spec, DUST_RGB_BUNDLE_ID, DUST_RGB_COMPONENT_IDS, ISOBARIC_LEVELS_HPA,
-    SATELLITE_CHANNEL_IDS, STANDARD_GRAVITY, WAVE_VECTOR_COMPONENT_IDS,
+    isobaric_variable, variable_spec, DUST_CF_BUNDLE_ID, DUST_CF_COMPONENT_IDS, DUST_RGB_BUNDLE_ID,
+    DUST_RGB_COMPONENT_IDS, ISOBARIC_LEVELS_HPA, STANDARD_GRAVITY, WAVE_VECTOR_COMPONENT_IDS,
 };
 use crate::encode::gdalio::{needs_serial_access, netcdf_guard, Dataset};
 use crate::encode::grid::{
@@ -75,33 +75,50 @@ pub fn vector_components(bundle_id: &str) -> Option<(String, String)> {
     None
 }
 
-/// Composite bundles: three or more variables an algorithm derived from a
-/// source's channels in the *fetch stage* (`xuebuild/satellite/producers.py`),
-/// read off the observation series as more variables and written as one
-/// bundle in this order — the converter never derives them. The Dust RGB's
-/// three guns first. Mirrors `COMPOSITE_BUNDLES` in `xuebuild/binconvert.py`.
+/// Composite bundles: the variables an algorithm derived from a source's
+/// channels in the *fetch stage* (`xuebuild/satellite/producers.py`), read
+/// off the observation series as more variables and written as one bundle
+/// in this order — the converter never derives them. The Dust RGB's three
+/// guns, then the DEBRA confidence, a produced bundle of one variable.
+/// Mirrors `COMPOSITE_BUNDLES` in `xuebuild/binconvert.py`.
 pub fn composite_components(bundle_id: &str) -> Option<Vec<String>> {
-    (bundle_id == DUST_RGB_BUNDLE_ID)
-        .then(|| DUST_RGB_COMPONENT_IDS.iter().map(|id| (*id).to_string()).collect())
+    let components: &[&str] = match bundle_id {
+        DUST_RGB_BUNDLE_ID => &DUST_RGB_COMPONENT_IDS,
+        DUST_CF_BUNDLE_ID => &DUST_CF_COMPONENT_IDS,
+        _ => return None,
+    };
+    Some(components.iter().map(|id| (*id).to_string()).collect())
 }
+
+/// The Dust RGB's inputs: the 8.6, 10.4, 11.2 and 12.3 µm windows.
+const DUST_RGB_INPUT_IDS: [&str; 4] = ["ir086", "ir104", "ir112", "ir123"];
+/// The DEBRA confidence's inputs: the 3.9 µm window, the 6.2 µm water
+/// vapour band and the 8.6, 10.4 and 12.3 µm windows, all five required.
+const DUST_CF_INPUT_IDS: [&str; 5] = ["ir039", "wv062", "ir086", "ir104", "ir123"];
 
 /// The channels a composite's producer reads on the source's platform: what
 /// the fetch must download for the composite to be composed, since the
-/// components themselves are never fetched. Mirrors
-/// `DustRGBProducer.inputs_for` in `xuebuild/satellite/producers.py`
-/// through `binconvert.bundle_input_ids` — the Dust RGB reads the four
-/// infrared windows, or three on an imager without an 11.2 µm one (FCI),
-/// where the 10.4 µm window stands in for the green gun's minuend. The
-/// platform's channel table lives on the Python side; here a source whose
-/// inputs lack `ir112` is one whose imager lacks it.
+/// components themselves are never fetched. Mirrors each producer's
+/// `inputs_for` in `xuebuild/satellite/producers.py` through
+/// `binconvert.bundle_input_ids` — the Dust RGB reads the four infrared
+/// windows, or three on an imager without an 11.2 µm one (FCI), where the
+/// 10.4 µm window stands in for the green gun's minuend; the DEBRA
+/// confidence reads its five with no stand-in, so a source that fetches
+/// fewer cannot publish it (`published_bundle_ids`). The platform's channel
+/// table lives on the Python side; here a source whose inputs lack `ir112`
+/// is one whose imager lacks it.
 fn composite_input_ids(source: &SourceSpec, bundle_id: &str) -> Option<Vec<String>> {
-    (bundle_id == DUST_RGB_BUNDLE_ID).then(|| {
-        SATELLITE_CHANNEL_IDS
-            .iter()
-            .filter(|id| **id != "ir112" || source.input_variable_ids.contains(id))
-            .map(|id| (*id).to_string())
-            .collect()
-    })
+    match bundle_id {
+        DUST_RGB_BUNDLE_ID => Some(
+            DUST_RGB_INPUT_IDS
+                .iter()
+                .filter(|id| **id != "ir112" || source.input_variable_ids.contains(id))
+                .map(|id| (*id).to_string())
+                .collect(),
+        ),
+        DUST_CF_BUNDLE_ID => Some(DUST_CF_INPUT_IDS.iter().map(|id| (*id).to_string()).collect()),
+        _ => None,
+    }
 }
 
 /// The variables one bundle carries, in bundle order: a scalar's own, a
@@ -2526,8 +2543,28 @@ mod composite_tests {
         for model in ["himawari", "goeseast", "goeswest", "meteosat"] {
             let source = source_spec(model).expect(model);
             assert_eq!(bundle_variable_ids("dustrgb"), ["dustr", "dustg", "dustb"]);
-            assert_eq!(published_bundle_ids(source), ["ir104", "dustrgb"], "{model}");
+            assert!(published_bundle_ids(source).starts_with(&["ir104", "dustrgb"]), "{model}");
         }
+    }
+
+    #[test]
+    fn the_debra_confidence_reads_five_windows_and_is_one_variable() {
+        // The DEBRA confidence has no stand-in: the same five inputs on
+        // every platform, and a source that fetches fewer (Meteosat) does
+        // not publish it.
+        assert_eq!(bundle_variable_ids("dustcf"), ["dustcf"]);
+        for model in ["himawari", "goeseast", "goeswest"] {
+            let source = source_spec(model).expect(model);
+            assert_eq!(
+                bundle_input_ids(source, "dustcf"),
+                ["ir039", "wv062", "ir086", "ir104", "ir123"],
+                "{model}"
+            );
+            assert_eq!(published_bundle_ids(source), ["ir104", "dustrgb", "dustcf"], "{model}");
+        }
+        let meteosat = source_spec("meteosat").expect("meteosat");
+        assert_eq!(bundle_input_ids(meteosat, "dustcf"), ["ir039", "wv062", "ir086", "ir104", "ir123"]);
+        assert_eq!(published_bundle_ids(meteosat), ["ir104", "dustrgb"]);
     }
 }
 

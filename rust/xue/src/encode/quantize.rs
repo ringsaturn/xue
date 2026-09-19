@@ -253,6 +253,16 @@ const DUST_RGB_GUN: LinearCodebook = LinearCodebook {
     nodata_code: 255,
     name: "dustrgb",
 };
+// The DEBRA confidence is a number in 0–1 too, and takes the guns'
+// codebook for the same reasons: code 0 is "no data", 0.0 confidence is
+// code 1. Mirrors `DUST_CF` in `xuebuild/quantize.py`.
+const DUST_CF: LinearCodebook = LinearCodebook {
+    minimum: -0.004,
+    maximum: 1.0,
+    step: 0.004,
+    nodata_code: 255,
+    name: "dustcf",
+};
 // Wind gust: one-sided, at the 10 m components' step over the isobaric
 // wind's 127 m/s ceiling, spending the full 0..254 code space.
 const QUALITY_GUST: LinearCodebook = LinearCodebook {
@@ -695,7 +705,7 @@ pub fn codebook(profile: &str, variable_id: &str) -> Result<Codebook> {
         (_, "dirpw") => Codebook::Linear(COMPACT_WAVE_DIRECTION),
         (_, "uwave" | "vwave") if quality => Codebook::Linear(QUALITY_WAVE_VECTOR),
         (_, "uwave" | "vwave") => Codebook::Linear(COMPACT_WAVE_VECTOR),
-        (_, "ir086" | "ir104" | "ir112" | "ir123") => {
+        (_, "ir039" | "wv062" | "ir086" | "ir104" | "ir112" | "ir123") => {
             let channel_id = SATELLITE_CHANNEL_IDS
                 .iter()
                 .copied()
@@ -704,6 +714,7 @@ pub fn codebook(profile: &str, variable_id: &str) -> Result<Codebook> {
             Codebook::Linear(brightness_temperature(channel_id, !quality))
         }
         (_, "dustr" | "dustg" | "dustb") => Codebook::Linear(DUST_RGB_GUN),
+        (_, "dustcf") => Codebook::Linear(DUST_CF),
         _ if pressure_codebook(variable_id, !quality).is_some() => Codebook::Linear(
             pressure_codebook(variable_id, !quality).expect("checked just above"),
         ),
