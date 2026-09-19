@@ -77,6 +77,13 @@ precision highp float;
 in vec2 v_mercator;
 uniform sampler2D u_data;
 uniform sampler2D u_data_b;
+// The green and blue guns of a composite, one R8 texture each beside the
+// red in u_data / u_data_b: three planes uploaded as the decoder made
+// them, never interleaved on the CPU.
+uniform sampler2D u_green;
+uniform sampler2D u_blue;
+uniform sampler2D u_green_b;
+uniform sampler2D u_blue_b;
 uniform sampler2D u_palette;
 uniform vec2 u_first;
 uniform vec2 u_step;
@@ -248,11 +255,11 @@ vec2 sampleCodes(sampler2D data, vec2 uv, out bool missing) {
   return clamp(codes, lo, hi);
 }
 
-// The same reconstruction for a composite plane: three guns in three
-// channels, each filtered and clamped on its own from one texture read per
-// tap, and a bottom-code texel in the bilinear support of any gun makes the
+// The same reconstruction for a composite: three guns in three textures,
+// each filtered and clamped on its own from one read per texture per tap,
+// and a bottom-code texel in the bilinear support of any gun makes the
 // sample missing, the rule the scalar path applies with u_floor_nodata.
-vec3 sampleGuns(sampler2D data, vec2 uv, out bool missing) {
+vec3 sampleGuns(sampler2D red, sampler2D green, sampler2D blue, vec2 uv, out bool missing) {
   vec2 position = uv * u_size - 0.5;
   vec2 base = floor(position);
   vec2 fraction = position - base;
@@ -266,7 +273,7 @@ vec3 sampleGuns(sampler2D data, vec2 uv, out bool missing) {
     vec3 rowSum = vec3(0.0);
     for (int column = 0; column < 4; column += 1) {
       vec2 texel = (base + vec2(float(column - 1), float(row - 1)) + 0.5) / u_size;
-      vec3 value = texture(data, texel).rgb;
+      vec3 value = vec3(texture(red, texel).r, texture(green, texel).r, texture(blue, texel).r);
       rowSum += wx[column] * value;
       if (row >= 1 && row <= 2 && column >= 1 && column <= 2) {
         lo = min(lo, value);
@@ -341,11 +348,11 @@ void main() {
     // The guns are the colour: no palette, and the blend between frames
     // mixes the reconstructed codes like every other mode does.
     bool missing = false;
-    vec3 codes = sampleGuns(u_data, vec2(u, v), missing);
+    vec3 codes = sampleGuns(u_data, u_green, u_blue, vec2(u, v), missing);
     if (missing) discard;
     if (u_mix > 0.0) {
       bool missingB = false;
-      vec3 codesB = sampleGuns(u_data_b, vec2(u, v), missingB);
+      vec3 codesB = sampleGuns(u_data_b, u_green_b, u_blue_b, vec2(u, v), missingB);
       if (missingB) discard;
       codes = mix(codes, codesB, u_mix);
     }
@@ -520,8 +527,8 @@ export interface VectorField {
   maxMagnitude: number;
 }
 
-/** A three-gun colour composite drawn as itself: the Dust RGB, whose plane
- * carries the red, green and blue guns interleaved, each with its own
+/** A three-gun colour composite drawn as itself: the Dust RGB, whose frame
+ * is the red, green and blue guns as three planes, each with its own
  * linear codebook. The shader clamps each dequantized gun to [0, 1] and
  * paints the colour; the codebooks' bottom code is no data in every gun. */
 export interface CompositeField {
@@ -537,9 +544,15 @@ export interface CompositeField {
 interface FrameSlot {
   raw: WebGLTexture;
   smooth: WebGLTexture;
-  /** Plane uploaded to `raw`, compared by identity so redundant per-rAF
-   * uploads are skipped during blend sweeps. */
+  /** The green and blue guns of a composite frame, R8 each; `raw` holds
+   * the red. Allocated with the slot, filled only in composite mode. */
+  guns: [WebGLTexture, WebGLTexture];
+  /** Plane uploaded to `raw` (the first of a composite's three), compared
+   * by identity so redundant per-rAF uploads are skipped during blend
+   * sweeps. */
   plane: Uint8Array | null;
+  /** The three planes a composite frame was uploaded from, or null. */
+  planes: readonly Uint8Array[] | null;
   /** Plane `smooth` was built from, and the coverage and kernel it was built
    * with; a mismatch on either means the pass has to run again. */
   smoothedPlane: Uint8Array | null;
@@ -555,6 +568,17 @@ export function gaussianWeights(sigma: number): number[] {
     weights.push(Math.exp(-(offset * offset) / (2 * sigma * sigma)));
   }
   return weights;
+}
+
+/** What one frame is handed to the layer as: one plane of codes (two
+ * channels interleaved for a vector field), or a composite's three guns as
+ * the three planes the decoder produced. */
+export type FramePlanes = Uint8Array | readonly Uint8Array[];
+
+/** The plane a frame's identity is read from: the first gun of a
+ * composite, the plane itself otherwise. */
+function firstPlane(planes: FramePlanes): Uint8Array | null {
+  return planes instanceof Uint8Array ? planes : (planes[0] ?? null);
 }
 
 export class ForecastLayer implements CustomLayerInterface {
@@ -609,8 +633,8 @@ export class ForecastLayer implements CustomLayerInterface {
   private visible = true;
 
   // Pending state survives context loss and is re-applied in onAdd.
-  private pendingPlaneA: Uint8Array | null = null;
-  private pendingPlaneB: Uint8Array | null = null;
+  private pendingPlaneA: FramePlanes | null = null;
+  private pendingPlaneB: FramePlanes | null = null;
   private pendingPalette: Uint8Array | null = null;
 
   /** One instance per raster slot on the map — the filled field and the
@@ -665,7 +689,7 @@ export class ForecastLayer implements CustomLayerInterface {
     const program = buildProgram(gl, VERTEX_SHADER, FRAGMENT_SHADER);
     this.program = program;
     for (const name of [
-      "u_matrix", "u_data", "u_data_b", "u_palette", "u_first", "u_step", "u_size",
+      "u_matrix", "u_data", "u_data_b", "u_green", "u_blue", "u_green_b", "u_blue_b", "u_palette", "u_first", "u_step", "u_size",
       "u_mix", "u_wrap", "u_cover", "u_decode", "u_floor_nodata", "u_contour", "u_contour_values",
       "u_contour_value_count", "u_line_color", "u_fill_alpha",
       "u_vector", "u_vector_offset", "u_vector_scale", "u_vector_max", "u_vector_nodata",
@@ -720,7 +744,9 @@ export class ForecastLayer implements CustomLayerInterface {
     return {
       raw: this.createDataTexture(gl),
       smooth: this.createDataTexture(gl),
+      guns: [this.createDataTexture(gl), this.createDataTexture(gl)],
       plane: null,
+      planes: null,
       smoothedPlane: null,
       smoothedKey: "",
     };
@@ -731,6 +757,7 @@ export class ForecastLayer implements CustomLayerInterface {
   private forgetPlanes(): void {
     for (const slot of this.slots ?? []) {
       slot.plane = null;
+      slot.planes = null;
       slot.smoothedPlane = null;
       slot.smoothedKey = "";
     }
@@ -838,10 +865,10 @@ export class ForecastLayer implements CustomLayerInterface {
     this.hasFrame = false;
   }
 
-  /** Show a single plane (slot A, blend weight 0). Interleaved RG bytes while
-   * a vector field is set, interleaved RGB bytes while a composite is, one
-   * code per cell otherwise. */
-  setFrame(plane: Uint8Array, coverage: CoverageBox = WHOLE_PLANE_COVERAGE): void {
+  /** Show a single frame (slot A, blend weight 0). Interleaved RG bytes
+   * while a vector field is set, the three guns as three planes while a
+   * composite is, one code per cell otherwise. */
+  setFrame(plane: FramePlanes, coverage: CoverageBox = WHOLE_PLANE_COVERAGE): void {
     this.setBlend(plane, null, 0, coverage);
   }
 
@@ -849,8 +876,8 @@ export class ForecastLayer implements CustomLayerInterface {
    * Uploads are skipped when a slot already holds the given plane, so calling
    * this every animation frame with a sweeping weight is cheap. */
   setBlend(
-    planeA: Uint8Array,
-    planeB: Uint8Array | null,
+    planeA: FramePlanes,
+    planeB: FramePlanes | null,
     mix: number,
     coverage: CoverageBox = WHOLE_PLANE_COVERAGE,
   ): void {
@@ -863,7 +890,8 @@ export class ForecastLayer implements CustomLayerInterface {
     // A frame step promotes the upcoming plane to the current one; swap the
     // slots so the promotion costs a pointer flip, not a re-upload of
     // megabytes of texels (and a re-smoothing) inside one animation frame.
-    if (this.slots[0].plane !== planeA && this.slots[1].plane === planeA) {
+    const first = firstPlane(planeA);
+    if (first && this.slots[0].plane !== first && this.slots[1].plane === first) {
       this.slots = [this.slots[1], this.slots[0]];
     }
     this.uploadPlane(gl, this.slots[0], planeA);
@@ -872,20 +900,46 @@ export class ForecastLayer implements CustomLayerInterface {
     this.map?.triggerRepaint();
   }
 
-  private uploadPlane(gl: WebGL2RenderingContext, slot: FrameSlot, plane: Uint8Array): void {
-    if (slot.plane === plane) return;
+  private uploadPlane(gl: WebGL2RenderingContext, slot: FrameSlot, planes: FramePlanes): void {
+    if (!(planes instanceof Uint8Array)) {
+      // A composite's guns: three R8 uploads straight from the decoder's
+      // planes. Interleaving them on the CPU cost a pass over 27 MB per
+      // frame of a full satellite disk; the shader reads three textures
+      // instead. The same three planes are already up when each is the
+      // one uploaded before.
+      if (
+        slot.planes &&
+        slot.planes.length === planes.length &&
+        slot.planes.every((plane, at) => plane === planes[at])
+      ) {
+        return;
+      }
+      const targets = [slot.raw, slot.guns[0], slot.guns[1]];
+      gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+      for (const [at, plane] of planes.slice(0, 3).entries()) {
+        gl.bindTexture(gl.TEXTURE_2D, targets[at]!);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, this.wraps ? gl.REPEAT : gl.CLAMP_TO_EDGE);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, this.width, this.height, 0, gl.RED, gl.UNSIGNED_BYTE, plane);
+      }
+      slot.plane = planes[0] ?? null;
+      slot.planes = [...planes];
+      return;
+    }
+    if (slot.plane === planes && slot.planes === null) return;
     gl.bindTexture(gl.TEXTURE_2D, slot.raw);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, this.wraps ? gl.REPEAT : gl.CLAMP_TO_EDGE);
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
-    // Three bytes per cell in composite mode (r, g, b), two in magnitude
-    // mode (u, v), one otherwise.
+    // Two bytes per cell in magnitude mode (u, v), one otherwise; a single
+    // plane handed over in composite mode is the guns interleaved, the
+    // shape the mode first took.
     const [internal, format] = this.composite
       ? [gl.RGB8, gl.RGB]
       : this.vector
         ? [gl.RG8, gl.RG]
         : [gl.R8, gl.RED];
-    gl.texImage2D(gl.TEXTURE_2D, 0, internal, this.width, this.height, 0, format, gl.UNSIGNED_BYTE, plane);
-    slot.plane = plane;
+    gl.texImage2D(gl.TEXTURE_2D, 0, internal, this.width, this.height, 0, format, gl.UNSIGNED_BYTE, planes);
+    slot.plane = planes;
+    slot.planes = null;
   }
 
   /** What the smoothing pass would be built from right now, or null when
@@ -1039,6 +1093,19 @@ export class ForecastLayer implements CustomLayerInterface {
     gl.activeTexture(gl.TEXTURE2);
     gl.bindTexture(gl.TEXTURE_2D, this.paletteTexture);
     gl.uniform1i(this.uniforms.u_palette!, 2);
+    // The guns are bound whatever the mode: an unbound sampler is a
+    // draw-time error on some drivers, and the textures exist regardless.
+    const guns = [
+      ["u_green", this.slots[0].guns[0]],
+      ["u_blue", this.slots[0].guns[1]],
+      ["u_green_b", this.slots[1].guns[0]],
+      ["u_blue_b", this.slots[1].guns[1]],
+    ] as const;
+    for (const [at, [name, texture]] of guns.entries()) {
+      gl.activeTexture(gl.TEXTURE3 + at);
+      gl.bindTexture(gl.TEXTURE_2D, texture);
+      gl.uniform1i(this.uniforms[name]!, 3 + at);
+    }
 
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);

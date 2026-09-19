@@ -898,6 +898,45 @@ export function pickBundleVariant(
   return sorted[0] ?? null;
 }
 
+/** The tier a session already open on `current` should be on now that the
+ * view has moved: `pickBundleVariant` again, with a dead band so a camera
+ * resting near a boundary does not reopen the session on every nudge.
+ * A change is taken only when it survives the inputs leaning against it
+ * by `margin`: a finer rung must still be picked with the view needing
+ * fewer columns and the budget tighter, a coarser one with the view
+ * needing more and the budget looser. The pins and a constrained
+ * connection pick a constant, so they never move. `current` is the
+ * session's own descriptor, or null on the full tier; the answer is the
+ * rung to be on, `current` itself when nothing changes. */
+export function settleBundleVariant(
+  current: VariantDescriptor | null,
+  variants: VariantDescriptor[] | undefined,
+  neededGridWidth: number,
+  constrained: boolean,
+  preference: ResolutionPreference = "auto",
+  longitudeSpan = 360,
+  budget?: VariantBudget,
+  margin = 0.2,
+): VariantDescriptor | null {
+  const pick = (lean: number): VariantDescriptor | null =>
+    pickBundleVariant(
+      variants,
+      neededGridWidth * lean,
+      constrained,
+      preference,
+      longitudeSpan,
+      budget ? { ...budget, cells: budget.cells * lean } : undefined,
+    );
+  // The full tier is the widest of all; a rung is as fine as it is wide.
+  const width = (tier: VariantDescriptor | null): number => (tier ? tier.width : Number.POSITIVE_INFINITY);
+  const plain = pick(1);
+  if (width(plain) === width(current)) return current;
+  const finer = width(plain) > width(current);
+  const confirmed = pick(finer ? 1 - margin : 1 + margin);
+  if (finer ? width(confirmed) > width(current) : width(confirmed) < width(current)) return confirmed;
+  return current;
+}
+
 /** The fraction of a grid the map bounds show, in [0, 1] — the longitude
  * overlap times the latitude overlap, each over the grid's own extent — for
  * `VariantBudget.visibleShare`. The bounds are MapLibre's: `east ≥ west`,

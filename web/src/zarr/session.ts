@@ -76,6 +76,19 @@ export class ZarrSession {
   /** Bytes of shard indices and inner chunks held, for `progress`; an
    * index counts here the way the container's prefix does. */
   residentBytes = 0;
+  /** The most compressed chunk bytes the session keeps. A full satellite
+   * disk's Dust RGB window is some 400 MB of chunks, and a session that
+   * held every chunk it ever fetched would hold all of it after one pass
+   * of the axis; instead the chunks are a least-recently-used cache under
+   * this budget (`payloadBytes` counts them), so the worker's memory is
+   * bounded by the window ahead of the playhead, not by the axis. A chunk
+   * a decode is assembling is never in danger: `decodeFrame` re-fetches
+   * what an eviction took between its fetch and its assembly. Infinity
+   * keeps everything, as the session always did. */
+  payloadBudgetBytes = Number.POSITIVE_INFINITY;
+  /** Compressed chunk bytes held right now, the part of `residentBytes`
+   * the budget governs. */
+  payloadBytes = 0;
 
   private readonly arrays = new Map<number, VariableArray>();
   private readonly indices = new Map<string, (ShardIndexEntry | null)[]>();
@@ -106,7 +119,11 @@ export class ZarrSession {
   /** Read the group and every variable array's metadata. Every array must
    * describe the grid and axis the group's metadata declares, cut the same
    * way — one tiling per bundle, as the container has. */
-  static async open(store: ZarrStore, decodeChunk: DecodeChunkFn): Promise<ZarrSession> {
+  static async open(
+    store: ZarrStore,
+    decodeChunk: DecodeChunkFn,
+    options: { payloadBudgetBytes?: number } = {},
+  ): Promise<ZarrSession> {
     const group = parseGroupMetadata(new TextDecoder().decode(await store.get("zarr.json")));
     const { metadata } = group;
     const arrays = await Promise.all(
@@ -133,7 +150,11 @@ export class ZarrSession {
         throw new Error("every array of a store must be cut the same way");
       }
     }
-    return new ZarrSession(store, decodeChunk, group, arrays);
+    const session = new ZarrSession(store, decodeChunk, group, arrays);
+    if (options.payloadBudgetBytes !== undefined && options.payloadBudgetBytes > 0) {
+      session.payloadBudgetBytes = options.payloadBudgetBytes;
+    }
+    return session;
   }
 
   get metadataJson(): string {
@@ -260,7 +281,10 @@ export class ZarrSession {
    * by the store, so a caller asking for a tile row asks in a loop. */
   ensureChunk(key: ChunkKey): Promise<void> {
     const name = chunkKey(key);
-    if (this.payloads.has(name)) return Promise.resolve();
+    if (this.payloads.has(name)) {
+      this.touchPayload(name);
+      return Promise.resolve();
+    }
     const running = this.chunkFetches.get(name);
     if (running) return running;
     const { id, layout } = this.array(key.variableId);
@@ -278,6 +302,8 @@ export class ZarrSession {
         const bytes = await this.store.getRange(shardPath(id, shard), entry);
         this.payloads.set(name, bytes);
         this.residentBytes += bytes.byteLength;
+        this.payloadBytes += bytes.byteLength;
+        this.evictPayloads(name);
       } finally {
         this.chunkFetches.delete(name);
       }
@@ -288,6 +314,30 @@ export class ZarrSession {
 
   ensureChunks(keys: readonly ChunkKey[]): Promise<void> {
     return Promise.all(keys.map((key) => this.ensureChunk(key))).then(() => undefined);
+  }
+
+  /** Move a held chunk to the newest end of the cache's order. A `Map`
+   * iterates in insertion order, so re-inserting is the whole LRU. */
+  private touchPayload(name: string): void {
+    const held = this.payloads.get(name);
+    if (held === undefined) return;
+    this.payloads.delete(name);
+    this.payloads.set(name, held);
+  }
+
+  /** Drop the least recently used chunks until the rest fit the budget,
+   * never the one just inserted (`keep`). A chunk the shard never held is
+   * a `null` entry that costs nothing and is left alone: it is what says
+   * "no data here" without a request. */
+  private evictPayloads(keep: string): void {
+    if (this.payloadBytes <= this.payloadBudgetBytes) return;
+    for (const [name, bytes] of this.payloads) {
+      if (this.payloadBytes <= this.payloadBudgetBytes) break;
+      if (name === keep || bytes === null) continue;
+      this.payloads.delete(name);
+      this.payloadBytes -= bytes.byteLength;
+      this.residentBytes -= bytes.byteLength;
+    }
   }
 
   /** One inner chunk decoded to codes at the full inner shape, or `null`
@@ -326,7 +376,17 @@ export class ZarrSession {
     const { layout } = array;
     const index = this.frameIndex(frameOffset);
     const keys = this.chunksFor(variableId, frameOffset, rects);
-    await this.ensureChunks(keys);
+    // Every chunk local, then the assembly in one synchronous pass, so no
+    // other decode's writes to the shared plane interleave with this one.
+    // A concurrent insert may have evicted one of these between its fetch
+    // and now, when the budget is tighter than what is being asked for at
+    // once; those are fetched again, a bounded number of times.
+    for (let attempt = 0; ; attempt += 1) {
+      await this.ensureChunks(keys);
+      const missing = keys.filter((key) => !this.payloads.has(chunkKey(key)));
+      if (missing.length === 0) break;
+      if (attempt >= 3) throw new Error("chunks evicted faster than a frame assembles; raise the payload budget");
+    }
     const frameInChunk = index % layout.timeChunk;
     for (const key of keys) placeTile(array.plane, layout, key.tile, this.decodedChunk(array, key), frameInChunk);
     return array.plane;
@@ -352,6 +412,10 @@ export class ZarrSession {
     const series = new Uint8Array(layout.frameCount);
     for (const key of keys) {
       const frames = framesInTimeChunk(layout, key.timeChunk);
+      // A series touches every time chunk of one tile, more than a tight
+      // budget may hold at once; a chunk evicted since the fetch above is
+      // fetched again here, one at a time.
+      if (!this.payloads.has(chunkKey(key))) await this.ensureChunk(key);
       const chunk = array.decodedTimeChunk === key.timeChunk ? this.decodedChunk(array, key) : this.buildChunk(array, key);
       for (let frame = 0; frame < frames; frame += 1) {
         series[key.timeChunk * layout.timeChunk + frame] = chunk === null ? layout.fillValue : chunk[frame * stride + cell]!;

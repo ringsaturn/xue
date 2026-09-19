@@ -46,6 +46,7 @@ export function zarrInitMessage(
   store: ZarrStoreDescriptor,
   variableKey: string,
   ranges = true,
+  payloadBudgetBytes?: number,
 ): ZarrInitStreamMessage {
   return {
     type: "init-stream",
@@ -55,6 +56,7 @@ export function zarrInitMessage(
     byteLength: store.byteLength,
     variableKey,
     ...(ranges ? {} : { ranges }),
+    ...(payloadBudgetBytes === undefined ? {} : { payloadBudgetBytes }),
   };
 }
 

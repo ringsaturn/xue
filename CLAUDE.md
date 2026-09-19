@@ -660,7 +660,13 @@ byte span (`shardOf`; a time chunk is a fixed six frames and may straddle
 the container's groups), and `store.ts` appends the store's `?v=` and
 coalesces the ranges of one shard issued in one microtask (gap ≤ 64 KB) into
 one request. Decoding is `decodeChunk` from `rust/xue-wasm`
-(`decode::core::decode_chunk`). `tests/web/zarr.test.ts` holds every frame
+(`decode::core::decode_chunk`). The compressed chunks a session holds are
+a least-recently-used cache under `payloadBudgetBytes` (`init-stream`
+carries it; `main.ts::zarrPayloadBudgetBytes`: 192 MB, 96 MB on a ≤ 4 GB
+device, 64 MB on a constrained connection), so a worker's memory is
+bounded by the window ahead of the playhead rather than by the axis — a
+full-disk Dust RGB window is some 400 MB of chunks — and a decode
+re-fetches what an eviction took between its fetch and its assembly. `tests/web/zarr.test.ts` holds every frame
 and series byte-identical to `WasmBundle`; `npm run measure:backends` prints
 requests and bytes per backend on a local run.
 
@@ -893,10 +899,22 @@ share of the grid in view at session open, `manifest.ts::visibleGridShare`
 lower rungs are what the disk plays at, while a view on a storm still
 takes the full tier since a streaming session decodes only its viewport's
 tiles) unless `?res=half` (the smallest rung shipped) or `?res=full` pins
-it. The plane cache budget grows with the primary session's frame size to
-hold the prefetch window (capped at 256 MB, 128 MB on a ≤ 4 GB device) and
-the window shrinks to what the cache holds; the data card names the rung
-(`Xue ½`, `Zarr ¼`).
+it. The rung follows the camera: once it rests (`moveend` / `resize`,
+settled 400 ms), `main.ts::retierPrimary` weighs the primary session's rung
+again through `manifest.ts::settleBundleVariant` (the same pick with a
+20 % dead band on both the column need and the cell budget, so a camera
+resting on a boundary stays put) and, when it changes, opens a session at
+the new rung beside the old one with `loadVariable(…, { replace, tier })`,
+disposes the old (`disposeSession`: worker, cached planes, in-flight
+requests) and adopts the new through `applyVariable`; the old frame stays
+on screen until the new rung's first frame lands. Overlays and mosaic
+members are pinned to the smallest rung and never move. The plane cache
+budget grows with the primary session's frame size to hold the prefetch
+window (capped at 256 MB, 128 MB on a ≤ 4 GB device) and the window
+shrinks to what the cache holds; the data card names the rung (`Xue ½`,
+`Zarr ¼`). A composite's three guns reach the layer as three planes and
+three R8 textures (`FramePlanes`), never interleaved on the CPU; only the
+wind pair is packed (RG8), since the particles need it so.
 
 `layer.ts` renders one quantized R8 plane with inverse Web Mercator and a
 palette lookup in the fragment shader, blending two frames via `u_mix`

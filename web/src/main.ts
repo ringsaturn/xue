@@ -38,7 +38,7 @@ import {
   type MessageKey,
 } from "./i18n";
 import { createSheet, fillLanguageList } from "./sheet";
-import { ForecastLayer, MAX_NAMED_CONTOURS, type CompositeField, type ContourStyle, type VectorField } from "./layer";
+import { ForecastLayer, MAX_NAMED_CONTOURS, type CompositeField, type ContourStyle, type VectorField, type FramePlanes } from "./layer";
 import {
   DERIVED_MAX_CODE,
   frontPalette,
@@ -63,6 +63,7 @@ import {
   modelRailCore,
   parseBundleMetadata,
   pickBundleVariant,
+  settleBundleVariant,
   axisUnitSeconds,
   frameOffsets,
   HOUR_SECONDS,
@@ -454,6 +455,20 @@ function planeCacheBudgetBytes(): number {
   const frame = primaryFrameBytes();
   if (frame === null) return floor;
   return Math.min(cap, Math.max(floor, frame * (prefetchWindowWanted() + 2)));
+}
+
+/** Compressed chunk bytes one Zarr worker may hold
+ * (`ZarrSession.payloadBudgetBytes`), beyond which it drops the least
+ * recently used. The window ahead of the playhead is what has to fit: a
+ * full satellite disk's Dust RGB is some 12 MB of chunks a frame, so
+ * 192 MB holds the desktop window (twelve frames) with room for the pair
+ * on screen, and the whole 400 MB axis no longer accumulates in the
+ * worker over one pass of playback. A four-gigabyte device keeps half of
+ * that; a constrained connection, already on the smallest tier, needs
+ * far less. */
+function zarrPayloadBudgetBytes(): number {
+  if (constrainedConnection()) return 64 * MEBIBYTE;
+  return (lowMemoryDevice() ? 96 : 192) * MEBIBYTE;
 }
 
 /** The frames to keep resident ahead of the playhead: the wanted window,
@@ -1074,6 +1089,13 @@ interface VariableSession {
    * format: empty at full resolution, else the rung's fraction of the
    * canonical grid ("½", "¼", "⅛"). */
   tier: string;
+  /** The rung the session reads, or null on the canonical bundle: what a
+   * later view is weighed against (`retierPrimary`). */
+  variant: VariantDescriptor | null;
+  /** The key its channel stamps on `progress` / `resident` messages,
+   * unique to this session — a replacement opened for the same bundle at
+   * another tier must not be credited to the session it replaces. */
+  streamKey: string;
   /** Network bytes downloaded for this variable's artifacts only. */
   bytes: number;
   /** Total bytes of this variable's artifacts (stream + index). */
@@ -1415,6 +1437,9 @@ let switchingVariable = false;
 
 const sessions = new Map<ForecastBundleId, VariableSession>();
 const sessionLoads = new Map<ForecastBundleId, Promise<VariableSession>>();
+/** Every open session by its `streamKey`, for routing the channel's
+ * progress: a run's own sessions and the mosaic members' alike. */
+const streamSessions = new Map<string, VariableSession>();
 /** Hands out `VariableSession.key`. Monotonic for the life of the page, so a
  * reloaded session never inherits a stale session's cache entries. */
 let nextSessionKey = 1;
@@ -3089,9 +3114,7 @@ function handleStreamMessage(message: {
 }): void {
   const id = message.variableKey;
   if (typeof id !== "string") return;
-  // A run's own session is keyed by its bundle id, a mosaic member's by
-  // member and bundle (`memberSessionKey`).
-  const session = isBundleVariableId(id) ? sessions.get(id) : memberSessions.get(id);
+  const session = streamSessions.get(id);
   if (!session) {
     const entry = pendingStream.get(id) ?? { bytes: 0, resident: false, scope: "bundle" as const };
     if (message.type === "progress" && typeof message.bytes === "number") entry.bytes = message.bytes;
@@ -3351,6 +3374,106 @@ function refreshViewportTiles(): void {
   if (target !== null) trySelectFrame(target);
 }
 
+// The resolution tier follows the camera. A session picks its rung when it
+// opens, against the zoom and the share of the grid in view at that
+// moment; a session opened on a storm at the full tier and then zoomed out
+// to the whole disk would otherwise decode nine million cells a plane for
+// the rest of its life, and one opened zoomed out would stay coarse over
+// the storm. So once the camera rests, the primary session's rung is
+// weighed again (`settleBundleVariant`, with a dead band against a camera
+// resting on a boundary) and, when it should change, a session at the new
+// rung is opened beside the old one, takes its place under the bundle id,
+// and the old one is disposed: its frame stays on screen until the first
+// frame of the new one is decoded, so the swap shows as a change of detail,
+// never as a blank. Overlays are pinned to the smallest rung and members
+// of the mosaic open as overlays, so only the primary moves.
+
+const RETIER_SETTLE_MS = 400;
+let retierTimer: ReturnType<typeof setTimeout> | null = null;
+let retiering = false;
+let retierAgain = false;
+
+/** Weigh the primary's tier again once the camera has rested. */
+function scheduleRetier(): void {
+  if (retierTimer !== null) clearTimeout(retierTimer);
+  retierTimer = setTimeout(() => {
+    retierTimer = null;
+    void retierPrimary();
+  }, RETIER_SETTLE_MS);
+}
+
+function sameTier(a: VariantDescriptor | null, b: VariantDescriptor | null): boolean {
+  return (a?.width ?? null) === (b?.width ?? null);
+}
+
+/** End a session the view no longer holds: its worker, its planes in the
+ * cache, and every entry keyed by it. Its buffers are not recycled — the
+ * worker they belong to is gone. */
+function disposeSession(session: VariableSession): void {
+  session.worker.terminate();
+  streamSessions.delete(session.streamKey);
+  lastPrefetchWindow.delete(session.key);
+  for (const [key, frame] of [...planeCache]) {
+    if (frame.session !== session) continue;
+    planeCache.delete(key);
+    planeCacheBytes -= frame.plane.byteLength;
+  }
+  for (const [requestId, key] of [...inflight]) {
+    if (key.startsWith(`${session.key}:`)) inflight.delete(requestId);
+  }
+  if (queuedRequest?.session === session) queuedRequest = null;
+  vectorPlanes.clear();
+  updateCacheReadout();
+}
+
+async function retierPrimary(): Promise<void> {
+  const session = activeSession;
+  if (!session || !manifest || !ready || switchingVariable) return;
+  if (retiering) {
+    retierAgain = true;
+    return;
+  }
+  if (sessionLoads.has(session.id)) return;
+  const descriptor = manifest.bundles.find((bundle) => bundle.variable === session.id);
+  if (!descriptor?.variants?.length) return;
+  const wanted = settleBundleVariant(
+    session.variant,
+    descriptor.variants,
+    neededGridWidth(),
+    slowConnection(),
+    resolutionPreference,
+    bundleLongitudeSpan(descriptor),
+    bundleVariantBudget(descriptor, manifest.bundles),
+  );
+  if (sameTier(wanted, session.variant)) return;
+  retiering = true;
+  const sequence = initializeSequence;
+  try {
+    const replacement = await loadVariable(session.id, sequence, "primary", null, { replace: true, tier: wanted });
+    if (sequence !== initializeSequence) return;
+    // Whatever the view did meanwhile, the replacement now stands under
+    // the bundle id, and the session it replaced is nowhere else.
+    if (sessions.get(session.id) === replacement) disposeSession(session);
+    if (activeSession !== session) return;
+    const wasPlaying = playing;
+    stopPlayback();
+    applyVariable(replacement);
+    if (wasPlaying && !reducedMotion.matches) startPlayback();
+  } catch (error) {
+    if (sequence !== initializeSequence) return;
+    if (error instanceof DOMException && error.name === "AbortError") return;
+    // Diagnostics stay English: the session on screen keeps working at
+    // the rung it has.
+    console.warn(`retier: ${session.id} not reopened:`, error instanceof Error ? error.message : error);
+  } finally {
+    retiering = false;
+    if (retierAgain) {
+      retierAgain = false;
+      scheduleRetier();
+    }
+  }
+}
+
 /** The texture box a plane's tiles fill on its own session grid — what the
  * shader clips to, so the stale bytes outside them are never painted. */
 function sessionCoverage(session: VariableSession, tiles: TileRect[] | null): CoverageBox {
@@ -3383,11 +3506,12 @@ function framePlanes(session: VariableSession, index: number): DecodedFrame[] | 
   return planes;
 }
 
-/** Interleaved wind (or composite) planes, keyed by the frame they belong
- * to. Packing a 1440x721 pair copies two megabytes, and a blend sweep asks
- * for the same two frames on every animation frame, so the result is kept
- * and reused as long as it was built from the very planes still in the
- * cache. Four is the blend's two plus the step moving onto the next pair. */
+/** Interleaved wind planes, keyed by the frame they belong to. Packing a
+ * 1440x721 pair copies two megabytes, and a blend sweep asks for the same
+ * two frames on every animation frame, so the result is kept and reused as
+ * long as it was built from the very planes still in the cache. Four is the
+ * blend's two plus the step moving onto the next pair. A composite is never
+ * packed: its guns go to the layer as the three planes they are. */
 const vectorPlanes = new Map<string, { sources: Uint8Array[]; packed: Uint8Array }>();
 const VECTOR_PLANE_CACHE = 4;
 
@@ -3397,8 +3521,9 @@ const VECTOR_PLANE_CACHE = 4;
  * its own texture, which is what the layer's magnitude mode reads; and for
  * a composite the three guns interleaved into one RGB plane, which is what
  * its composite mode reads. */
-function displayPlane(session: VariableSession, index: number, planes: DecodedFrame[]): Uint8Array {
-  const channels = session.composite && planes.length >= 3 ? 3 : session.vector && planes.length >= 2 ? 2 : 1;
+function displayPlane(session: VariableSession, index: number, planes: DecodedFrame[]): FramePlanes {
+  if (session.composite && planes.length >= 3) return planes.slice(0, 3).map((frame) => frame.plane);
+  const channels = session.vector && planes.length >= 2 ? 2 : 1;
   if (channels === 1) return planes[0]!.plane;
   const key = cacheKey(session, session.variables[0]!, frameOffset(index));
   const sources = planes.slice(0, channels).map((frame) => frame.plane);
@@ -4839,17 +4964,29 @@ function loadVariable(
   sequence: number,
   role: "primary" | "overlay" | "probe" = "primary",
   member: MosaicMember | null = null,
+  options: {
+    /** Open a fresh session even where one is resident, which the new
+     * one then replaces under the bundle id; the old one is the caller's
+     * to dispose (`retierPrimary`). */
+    replace?: boolean;
+    /** The rung to open, null for the canonical bundle, instead of what
+     * the view would pick now. */
+    tier?: VariantDescriptor | null;
+  } = {},
 ): Promise<VariableSession> {
   // A mosaic member's session reads that member's run, not `manifest`,
   // and is filed beside the run's own sessions under the member's key.
   const memberKey = member ? memberSessionKey(member.id, variableId) : null;
-  const resident = memberKey !== null ? memberSessions.get(memberKey) : sessions.get(variableId);
+  const resident = options.replace ? undefined : memberKey !== null ? memberSessions.get(memberKey) : sessions.get(variableId);
   if (resident) return Promise.resolve(resident);
   const pending = memberKey !== null ? memberSessionLoads.get(memberKey) : sessionLoads.get(variableId);
   if (pending) return pending;
   const run = member?.manifest ?? manifest;
   const runUrl = member?.manifestUrl ?? manifestUrl;
-  const variableKey = memberKey ?? variableId;
+  // The session's cache identity, taken now so the channel's progress can
+  // carry it from the first byte: the key names this session alone.
+  const sessionKey = nextSessionKey++;
+  const variableKey = `${memberKey ?? variableId}#${sessionKey}`;
   const load = (async () => {
     if (!run) throw new Error("manifest not loaded");
     const descriptor = run.bundles.find((bundle) => bundle.variable === variableId);
@@ -4870,14 +5007,17 @@ function loadVariable(
     // the cell budget says which tier a frame of it can afford to hold.
     const overlay = role === "overlay";
     const quiet = role !== "primary";
-    const variant = pickBundleVariant(
-      descriptor.variants,
-      neededGridWidth(),
-      slowConnection(),
-      overlay && resolutionPreference !== "full" ? "half" : resolutionPreference,
-      bundleLongitudeSpan(descriptor),
-      bundleVariantBudget(descriptor, run.bundles),
-    );
+    const variant =
+      options.tier !== undefined
+        ? options.tier
+        : pickBundleVariant(
+            descriptor.variants,
+            neededGridWidth(),
+            slowConnection(),
+            overlay && resolutionPreference !== "full" ? "half" : resolutionPreference,
+            bundleLongitudeSpan(descriptor),
+            bundleVariantBudget(descriptor, run.bundles),
+          );
     const video = h264Enabled && role !== "probe" ? descriptor.video : undefined;
     // Opted in, the video path must still earn its bytes — prefer it only
     // when the stream is not larger than the bundle it replaces (lossless
@@ -4946,7 +5086,7 @@ function loadVariable(
         streaming = true;
         channel = spawnZarrWorker();
         channel.onerror = (event) => showError(event.message || t("workerStartFailed"));
-        initMessage = zarrInitMessage(storeRoot, store, variableKey, storeStreams);
+        initMessage = zarrInitMessage(storeRoot, store, variableKey, storeStreams, zarrPayloadBudgetBytes());
         downloadedBytes = 0;
         format = "Zarr";
         totalBytes = store.byteLength;
@@ -5018,7 +5158,7 @@ function loadVariable(
     warnOnIdentityMismatch(variableId, identity);
     const session: VariableSession = {
       id: variableId,
-      key: nextSessionKey++,
+      key: sessionKey,
       worker: sessionWorker,
       metadata: bundleMetadata,
       identity,
@@ -5029,6 +5169,8 @@ function loadVariable(
       variables: sessionVariables,
       format,
       tier: tierGlyph(variant, descriptor.variants),
+      variant,
+      streamKey: variableKey,
       bytes: downloadedBytes,
       totalBytes,
       extraBytes,
@@ -5051,6 +5193,7 @@ function loadVariable(
     }
     if (memberKey !== null) memberSessions.set(memberKey, session);
     else sessions.set(variableId, session);
+    streamSessions.set(variableKey, session);
     bindChannel(session, sequence);
     return session;
   })();
@@ -6749,6 +6892,7 @@ async function initialize({ frame = false }: { frame?: boolean } = {}): Promise<
   for (const session of sessions.values()) session.worker.terminate();
   sessions.clear();
   sessionLoads.clear();
+  streamSessions.clear();
   manifest = null;
   manifestUrl = null;
   currentRun = null;
@@ -7151,7 +7295,10 @@ map.on("moveend", () => {
   refreshViewportTiles();
   updateStatsReadout();
   refreshLabels();
+  scheduleRetier();
 });
+// A resize changes the share of the grid in view without moving the camera.
+map.on("resize", scheduleRetier);
 window.addEventListener("resize", () => updateStatsReadout());
 playButton.addEventListener("click", () => {
   if (playing) stopPlayback();

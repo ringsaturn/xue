@@ -33,6 +33,10 @@ export interface ZarrInitStreamMessage {
    * the store then reads whole objects — one GET per shard, which is one
    * temporal group of one variable — instead of ranges. True by default. */
   ranges?: boolean;
+  /** The most compressed chunk bytes the worker keeps
+   * (`ZarrSession.payloadBudgetBytes`): a least-recently-used cache bounded
+   * by the device rather than by the axis. Absent keeps every chunk. */
+  payloadBudgetBytes?: number;
 }
 
 export interface ZarrDecodeMessage {

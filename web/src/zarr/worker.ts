@@ -119,6 +119,7 @@ async function initStream(message: ZarrInitStreamMessage): Promise<void> {
   const opened = await ZarrSession.open(
     new ZarrStore(message.url, message.crc32, { ranges: message.ranges ?? true }),
     decodeChunk,
+    { payloadBudgetBytes: message.payloadBudgetBytes },
   );
   session = opened;
   post({

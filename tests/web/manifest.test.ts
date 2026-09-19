@@ -14,6 +14,7 @@ import {
   isObservationModel,
   parseBundleMetadata,
   pickBundleVariant,
+  settleBundleVariant,
   sameTimeAxis,
   validateLatestPointer,
   validateManifest,
@@ -466,6 +467,73 @@ describe("pickBundleVariant", () => {
       expect(pickBundleVariant(ladder, zoomedOut, false, "auto", 120, budget(2_500_000, 4))).toEqual(diskHalf);
       expect(pickBundleVariant(ladder, zoomedOut, false, "auto", 120, budget(100_000, 0))).toBeNull();
     });
+  });
+});
+
+describe("settleBundleVariant", () => {
+  const half = variantFixture();
+  const diskHalf = { ...half, path: "himawari.2026091800/ir104.half.xue", width: 1500, height: 1500 };
+  const diskQuarter = { ...half, path: "himawari.2026091800/ir104.quarter.xue", width: 750, height: 750 };
+  const diskEighth = { ...half, path: "himawari.2026091800/ir104.eighth.xue", width: 375, height: 375 };
+  const ladder = [diskHalf, diskQuarter, diskEighth];
+  const fullGrid = { width: 3000, height: 3000 };
+  const budget = (cells: number, visibleShare = 1) => ({ cells, fullGrid, visibleShare });
+  // Columns of the disk the view can show: 512 × 2^zoom × dpr × 120 / 360.
+  const columns = (zoom: number, dpr = 2) => 512 * 2 ** zoom * dpr;
+
+  it("keeps the rung the plain pick agrees with", () => {
+    // Zoom 1 on a retina display: 2048 px across the world, 683 columns
+    // of the disk — the quarter rung, where the session already is.
+    expect(settleBundleVariant(diskQuarter, ladder, columns(1), false, "auto", 120)).toBe(diskQuarter);
+    expect(settleBundleVariant(null, ladder, columns(5), false, "auto", 120, budget(2_500_000, 0.1))).toBeNull();
+  });
+
+  it("moves a session opened on the storm down the ladder once the whole disk is in view", () => {
+    // Opened zoomed in at the full tier, the camera now on the whole disk
+    // showing 600 of its columns: the quarter rung, the one a fresh open
+    // would take. (At 683 columns, zoom 1 on a retina display, the pick
+    // lands one rung finer — the half — because the change is confirmed
+    // with the need leaned a fifth up, 819 columns, which is over the
+    // quarter's 750; the band is what keeps a resting camera still.)
+    expect(settleBundleVariant(null, ladder, 600 * 3, false, "auto", 120, budget(2_500_000, 1))).toEqual(diskQuarter);
+    expect(settleBundleVariant(null, ladder, columns(1), false, "auto", 120, budget(2_500_000, 1))).toEqual(diskHalf);
+    // At zoom 2 (1365 columns) the half rung, which fits the budget whole.
+    expect(settleBundleVariant(null, ladder, columns(2), false, "auto", 120, budget(2_500_000, 1))).toEqual(diskHalf);
+    // The same view on a session opened coarse, zoomed in on a storm: up
+    // to the full tier, since a tenth of the disk fits the budget.
+    expect(settleBundleVariant(diskEighth, ladder, columns(5), false, "auto", 120, budget(2_500_000, 0.1))).toBeNull();
+  });
+
+  it("holds a rung inside the dead band around a boundary", () => {
+    // Zoom 3 needs 1365 columns: the half rung. A camera resting a hair
+    // past the boundary from the quarter (683 columns at zoom 2) asks for
+    // 751 — over the quarter's 750 by a sliver — and the session stays.
+    expect(settleBundleVariant(diskQuarter, ladder, 751 * 3, false, "auto", 120)).toBe(diskQuarter);
+    // A fifth further and the half rung is taken.
+    expect(settleBundleVariant(diskQuarter, ladder, 751 * 3 * 1.3, false, "auto", 120)).toEqual(diskHalf);
+    // Coming down: at 749 columns the half session stays, at 600 it steps
+    // to the quarter.
+    expect(settleBundleVariant(diskHalf, ladder, 749 * 3, false, "auto", 120)).toBe(diskHalf);
+    expect(settleBundleVariant(diskHalf, ladder, 600 * 3, false, "auto", 120)).toEqual(diskQuarter);
+    // The budget's boundary has the same band: the full tier costs 9 M ×
+    // share, so at a share of 0.27 (2.43 M, under 2.5 M) a coarse session
+    // does not step up, and at 0.22 (1.98 M, under the tightened 2.0 M) it
+    // does.
+    expect(settleBundleVariant(diskHalf, ladder, columns(5), false, "auto", 120, budget(2_500_000, 0.27))).toBe(diskHalf);
+    expect(settleBundleVariant(diskHalf, ladder, columns(5), false, "auto", 120, budget(2_500_000, 0.22))).toBeNull();
+    // And a full session over 0.29 of the disk (2.61 M, over 2.5 M but
+    // under the loosened 3 M) holds, over 0.34 (3.06 M) steps down.
+    expect(settleBundleVariant(null, ladder, columns(5), false, "auto", 120, budget(2_500_000, 0.29))).toBeNull();
+    expect(settleBundleVariant(null, ladder, columns(5), false, "auto", 120, budget(2_500_000, 0.34))).toEqual(diskHalf);
+  });
+
+  it("never moves a pinned or constrained session", () => {
+    expect(settleBundleVariant(diskEighth, ladder, columns(6), false, "half", 120)).toBe(diskEighth);
+    expect(settleBundleVariant(null, ladder, columns(0), false, "full", 120, budget(100))).toBeNull();
+    expect(settleBundleVariant(diskEighth, ladder, columns(6), true, "auto", 120)).toBe(diskEighth);
+    // A dataset without a ladder has nothing to move to.
+    expect(settleBundleVariant(null, undefined, columns(6), false, "auto", 120)).toBeNull();
+    expect(settleBundleVariant(null, [], columns(0), false, "auto", 120)).toBeNull();
   });
 });
 

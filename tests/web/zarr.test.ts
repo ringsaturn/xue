@@ -452,10 +452,38 @@ describe("ZarrSession", () => {
     });
   }
 
+  it("drops the least recently used chunks under a payload budget and fetches them again on demand", async () => {
+    const { session, bundle, log } = await open("tmp2m.zarr", "tmp2m.xue");
+    expect(session.payloadBudgetBytes).toBe(Number.POSITIVE_INFINITY);
+    // One whole time chunk's worth of chunks, measured rather than assumed.
+    await session.decodeFrame(1, 0);
+    const oneTimeChunk = session.payloadBytes;
+    expect(oneTimeChunk).toBeGreaterThan(0);
+    session.payloadBudgetBytes = 2 * oneTimeChunk;
+    for (const offset of [6, 12, 18, 24]) {
+      expect(Buffer.from(await session.decodeFrame(1, offset))).toEqual(Buffer.from(bundle.decodeFrame(1, offset)));
+      expect(session.payloadBytes).toBeLessThanOrEqual(session.payloadBudgetBytes);
+    }
+    // The first time chunk went; asking for it again fetches it again,
+    // and the frame is still the container's byte for byte.
+    const before = log.requests;
+    expect(Buffer.from(await session.decodeFrame(1, 0))).toEqual(Buffer.from(bundle.decodeFrame(1, 0)));
+    expect(log.requests).toBeGreaterThan(before);
+    expect(session.payloadBytes).toBeLessThanOrEqual(session.payloadBudgetBytes);
+    // A series touches every time chunk of one tile — more than this budget
+    // holds at once — and still reads as the container does.
+    session.payloadBudgetBytes = 1;
+    expect(Buffer.from(await session.decodeSeries(1, 3, 4))).toEqual(Buffer.from(bundle.decodeSeries(1, 3, 4)));
+    // The budget also governs what `residentBytes` reports: nothing held
+    // is counted twice, and nothing evicted is still counted.
+    expect(session.residentBytes).toBeGreaterThanOrEqual(session.payloadBytes);
+  });
+
   it("assembles the same frames and series over whole objects, one GET per shard", async () => {
     const log = newFetchLog();
     const store = new ZarrStore("local://tmp2m.zarr", "deadbeef", { fetch: localFetch(FIXTURE_ROOT, log), ranges: false });
-    const session = await ZarrSession.open(store, wasm.decodeChunk);
+    const session = await ZarrSession.open(store, wasm.decodeChunk, { payloadBudgetBytes: 64 * 1024 * 1024 });
+    expect(session.payloadBudgetBytes).toBe(64 * 1024 * 1024);
     const bundle = new wasm.WasmBundle(readFileSync(`${FIXTURE_ROOT}/tmp2m.xue`));
     const opened = log.requests;
     for (const offset of [0, 5, 7, 120]) {
