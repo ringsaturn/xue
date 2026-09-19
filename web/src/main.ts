@@ -3519,8 +3519,8 @@ const VECTOR_PLANE_CACHE = 4;
  * scalar session; for wind the u/v pair interleaved into one RG plane — u
  * codes in red, v in green, the same packing the particle layer builds for
  * its own texture, which is what the layer's magnitude mode reads; and for
- * a composite the three guns interleaved into one RGB plane, which is what
- * its composite mode reads. */
+ * a composite the three guns as the three planes the decoder made, which
+ * its composite mode uploads as three textures. */
 function displayPlane(session: VariableSession, index: number, planes: DecodedFrame[]): FramePlanes {
   if (session.composite && planes.length >= 3) return planes.slice(0, 3).map((frame) => frame.plane);
   const channels = session.vector && planes.length >= 2 ? 2 : 1;

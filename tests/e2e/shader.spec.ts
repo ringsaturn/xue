@@ -158,17 +158,19 @@ async function renderStripPixels(
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
       gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
       // A vector plane spends the two channels on the u and v codes instead
-      // of on one code, which is what magnitude mode reads; a composite
-      // plane spends three on its guns.
-      const channels = composite ? 3 : vector ? 2 : 1;
+      // of on one code, which is what magnitude mode reads; a composite is
+      // three R8 planes, one per gun, the red in u_data and the other two
+      // in the gun samplers, the way the layer uploads the decoder's planes.
+      const channels = vector ? 2 : 1;
       const plane = new Uint8Array(width * height * channels).fill(vector || composite ? 0 : 128);
+      const guns = [new Uint8Array(width * height), new Uint8Array(width * height)];
       for (let row = 0; row < height; row += 1) {
         for (let column = 0; column < width; column += 1) {
           const cell = row * width + column;
           if (composite) {
-            plane[cell * 3] = composite.cells[column]![0];
-            plane[cell * 3 + 1] = composite.cells[column]![1];
-            plane[cell * 3 + 2] = composite.cells[column]![2];
+            plane[cell] = composite.cells[column]![0];
+            guns[0]![cell] = composite.cells[column]![1];
+            guns[1]![cell] = composite.cells[column]![2];
           } else if (vector) {
             plane[cell * 2] = vector.cells[column]![0];
             plane[cell * 2 + 1] = vector.cells[column]![1];
@@ -178,7 +180,7 @@ async function renderStripPixels(
         }
       }
       if (composite) {
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB8, width, height, 0, gl.RGB, gl.UNSIGNED_BYTE, plane);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, width, height, 0, gl.RED, gl.UNSIGNED_BYTE, plane);
         gl.uniform1f(uniform("u_composite"), 1);
         gl.uniform3f(uniform("u_composite_offset"), composite.offset[0], composite.offset[1], composite.offset[2]);
         gl.uniform3f(uniform("u_composite_scale"), composite.scale[0], composite.scale[1], composite.scale[2]);
@@ -197,6 +199,30 @@ async function renderStripPixels(
       gl.activeTexture(gl.TEXTURE1);
       gl.bindTexture(gl.TEXTURE_2D, data);
       gl.uniform1i(uniform("u_data_b"), 1);
+      // The green and blue guns, bound whatever the mode as the layer binds
+      // them (an unbound sampler is a draw-time error on some drivers); the
+      // same texture serves frame A and frame B, as u_data does above.
+      const gunNames = [
+        ["u_green", 0],
+        ["u_blue", 1],
+        ["u_green_b", 0],
+        ["u_blue_b", 1],
+      ] as const;
+      const gunTextures = guns.map((codes) => {
+        const texture = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, wrap ? gl.REPEAT : gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, width, height, 0, gl.RED, gl.UNSIGNED_BYTE, codes);
+        return texture;
+      });
+      for (const [at, [name, gun]] of gunNames.entries()) {
+        gl.activeTexture(gl.TEXTURE3 + at);
+        gl.bindTexture(gl.TEXTURE_2D, gunTextures[gun]!);
+        gl.uniform1i(uniform(name), 3 + at);
+      }
 
       const palette = gl.createTexture();
       gl.activeTexture(gl.TEXTURE2);

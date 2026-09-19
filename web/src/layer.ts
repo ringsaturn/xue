@@ -30,8 +30,10 @@ import { WHOLE_PLANE_COVERAGE, type CoverageBox } from "./tiles";
  *
  * A third mode draws a colour composite: the Dust RGB arrives as three
  * planes, one per gun, already stretched by the producer, and the picture
- * is those guns as red, green and blue with no palette at all. The data
- * texture is RGB8 (the three guns interleaved, the way the u/v pair is),
+ * is those guns as red, green and blue with no palette at all. The guns
+ * are three R8 textures (the red in the data texture, the green and blue
+ * in samplers of their own; never interleaved on the CPU, which cost a
+ * pass over 27 MB per frame of a full satellite disk),
  * each gun reconstructed on its own through the same filter and clamp, and
  * a cell whose guns sit at the codebook's bottom code — outside the disk,
  * or where a channel was missing — is painted as nothing.
@@ -926,17 +928,16 @@ export class ForecastLayer implements CustomLayerInterface {
       return;
     }
     if (slot.plane === planes && slot.planes === null) return;
+    if (this.composite) {
+      // The shader reads a composite's guns from three textures; one
+      // interleaved plane would leave two of them stale.
+      throw new Error("a composite frame is three planes, one per gun");
+    }
     gl.bindTexture(gl.TEXTURE_2D, slot.raw);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, this.wraps ? gl.REPEAT : gl.CLAMP_TO_EDGE);
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
-    // Two bytes per cell in magnitude mode (u, v), one otherwise; a single
-    // plane handed over in composite mode is the guns interleaved, the
-    // shape the mode first took.
-    const [internal, format] = this.composite
-      ? [gl.RGB8, gl.RGB]
-      : this.vector
-        ? [gl.RG8, gl.RG]
-        : [gl.R8, gl.RED];
+    // Two bytes per cell in magnitude mode (u, v), one otherwise.
+    const [internal, format] = this.vector ? [gl.RG8, gl.RG] : [gl.R8, gl.RED];
     gl.texImage2D(gl.TEXTURE_2D, 0, internal, this.width, this.height, 0, format, gl.UNSIGNED_BYTE, planes);
     slot.plane = planes;
     slot.planes = null;
