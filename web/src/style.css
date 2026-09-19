@@ -3870,11 +3870,17 @@ html:has(.showcase-page) {
 }
 
 .compare-scroll {
+  --compare-gutter: clamp(16px, 4vw, 40px);
   overflow-x: auto;
   overscroll-behavior-x: contain;
-  margin: 0 calc(-1 * clamp(16px, 4vw, 40px));
-  padding: 0 clamp(16px, 4vw, 40px);
+  margin: 0 calc(-1 * var(--compare-gutter));
+  padding: 0 var(--compare-gutter);
   scrollbar-width: thin;
+  /* The gutters are padding of the scroller, so the blocks scroll through
+     them, while a sticky child sticks at the content edge: without this
+     clip the cells that have scrolled under the gutter show to the left of
+     the label column. */
+  clip-path: inset(0 var(--compare-gutter));
 }
 
 .compare-blocks {
@@ -3901,7 +3907,7 @@ html:has(.showcase-page) {
   gap: 6px 14px;
   align-items: baseline;
   width: fit-content;
-  max-width: calc(100vw - 2 * clamp(16px, 4vw, 40px));
+  max-width: calc(100vw - 2 * var(--compare-gutter));
   padding: 0 0 8px;
 }
 
