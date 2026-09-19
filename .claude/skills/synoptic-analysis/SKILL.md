@@ -14,7 +14,10 @@ routine diagnostics so the analysis, not the plumbing, gets the effort.
 ## Setup
 
 Python 3.11+ with `numpy xarray "zarr>=3" fsspec aiohttp requests`
-(`uv pip install …` or `pip install …`). `pystac` is optional. Check with:
+(`uv pip install …` or `pip install …`), plus `matplotlib` for the figures.
+`pystac` is optional. In this repository install into `.venv` and run with
+`.venv/bin/python`; a `uv sync` drops these extras, so reinstall after one.
+Check with:
 
 ```sh
 python scripts/xue_stac.py sources        # every Collection, its live run and axis
@@ -81,6 +84,46 @@ Anything else is a few lines of xarray through `xue_stac.open_bundle`,
 store facts: latitude runs north→south, `prate` needs the log codebook,
 disks past the antimeridian, cost per read). Read the `full` tier for
 numbers.
+
+### 2b. Save the case and run the diagnostics offline
+
+For anything beyond a quick look (a written report, figures, a second pass
+later) fetch once into a directory and work from it; every diagnostic and
+figure below then costs no network and the numbers stay consistent across
+the report:
+
+```sh
+python scripts/case_data.py fetch /tmp/case --box 22 48 125 155 \
+    --times 2026-09-19T00Z,2026-09-21T06Z,2026-09-21T12Z --sources gfs,ecmwf \
+    --point 35.553 139.781 --point-sources gfs,ecmwf,ifshres \
+    --storm WP242026 --soundings-near 35.55,139.78,10 --soundings 47971,54857 \
+    --airport RJTT --satellite himawari --radar jma --nowcast-box 30 40 132 146
+python scripts/case_data.py soundings /tmp/case --tendency      # mandatory levels per station + 12 h changes
+python scripts/case_data.py verify /tmp/case                    # model analysis at the stations vs the ascents
+python scripts/case_data.py ensemble /tmp/case 35.553 139.781 --times 2026-09-21T06Z,2026-09-21T12Z \
+    --from 2026-09-20T12Z --to 2026-09-22T12Z                   # member spread and closest approach
+python scripts/case_data.py point /tmp/case --tz 9 --day 2026-09-21   # daily summary + one day hourly, local zone
+python scripts/case_plots.py /tmp/case --tz 9 --lang zh --point-name 羽田 \
+    --map-times 2026-09-21T06Z,2026-09-21T12Z --map-box 26 44 130 150 \
+    --mark 2026-09-21T08Z --window 2026-09-21T03Z,2026-09-21T08Z --span 2026-09-19T00Z,2026-09-22T12Z \
+    --skewt 47646,47678,47971 --ens-from 2026-09-20T12Z --ens-to 2026-09-22T12Z
+```
+
+The first valid time should be the run's analysis frame (or the ascents'
+time) so `verify` and the `verify` figure compare like with like; the map
+figures use `--map-times` (default: the first and last fetched). The
+directory layout and the importable functions (`level`, `ascent_at`,
+`profile`, `decode_ensembles`, `ensemble_spread`, `point_frame`, `daily`,
+`accumulate`) are documented in `case_data.py`'s docstring. `case_plots.py`
+writes `fig_tracks`, `fig_upper`, `fig_verify`, `fig_surface`,
+`fig_moisture_gust`, `fig_meteogram`, `fig_skewt`, `fig_nowcast` and
+`fig_ensemble` (PNG) into `<dir>/figures/`, each only when the directory
+holds what it needs; labels are Chinese (`--lang zh`, default) or English,
+times in the `--tz` zone. A Markdown report that references those files
+compiles with `pandoc report.md -o report.pdf --pdf-engine=xelatex`; for
+Chinese text put `documentclass: ctexart` in the YAML header (ctex's default
+fonts) and map the few glyphs Latin Modern lacks with `newunicodechar`
+(`→ ≥ ≤ θ µ ½`).
 
 ### 3. Analyse top-down, then attribute every claim
 
@@ -170,3 +213,5 @@ Viewer links let the reader see the maps: `https://xue.ringsaturn.me/?model=ecmw
 - `references/stac-access.md` — the document layout, Item fields, opening stores by hand, Range reads of the point products
 - `scripts/xue_stac.py` — catalog + store + point-product reader (library and CLI)
 - `scripts/synoptic_report.py` — `region`, `meteogram`, `compare` diagnostics
+- `scripts/case_data.py` — fetch one case into a directory; `soundings`, `verify`, `ensemble`, `point` diagnostics on it
+- `scripts/case_plots.py` — the standard figure set from a case directory
