@@ -1,0 +1,23 @@
+{
+  "skill_name": "synoptic-analysis",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I'm in Tokyo. There's supposedly a typhoon coming this weekend — can you give me a proper synoptic briefing for Japan for the next 3 days: the upper pattern, where the storm goes, how much rain and wind to expect here, and how much the models agree?",
+      "expected_output": "A structured report (overview, upper pattern, surface systems, moisture/forcing, day-by-day table, Tokyo outlook, confidence, sources) built from the live GFS and ECMWF runs and the tc product, with the storm's headline from the tc index, the 5880 line and steering discussed, rain totals from accumulated prate, times in UTC and JST, attribution lines.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "compare what gfs, ecmwf and the ai model say for shanghai (31.2N 121.5E) over the next 5 days - temps, rain totals and wind. which one should I trust and why",
+      "expected_output": "A per-model table of Tmin/Tmax, 0–120 h precipitation and max wind at the nearest cell from gfs, ecmwf and aifs, with run cycles named, differences explained by the synoptic pattern, and a reasoned recommendation with the caveats (run age, precipitation semantics, codebook precision).",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "What is the weather pattern over the contiguous US right now? Use the radar and satellite too, not just the model, and tell me where the severe weather risk is today.",
+      "expected_output": "An analysis over a CONUS box from the live GFS/HRRR runs (500 hPa trough/ridge, jet, surface centres and fronts, CAPE and moisture flux) checked against the MRMS composite reflectivity window and the GOES-East IR window, naming where convection is now and where CAPE/forcing overlap later today, with valid times and sources.",
+      "files": []
+    }
+  ]
+}
