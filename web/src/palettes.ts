@@ -8,6 +8,7 @@ import {
   VISIBILITY_CHART_MAX,
   WAVE_HEIGHT_CHART_MAX,
   WAVE_PERIOD_CHART_MAX,
+  aerosolChart,
   isobaricRange,
   temperaturePaletteDomain,
   thetaEPaletteDomain,
@@ -434,6 +435,51 @@ const WAVE_PERIOD_STOPS: Stop[] = [
   [WAVE_PERIOD_CHART_MAX, 225, 80, 60, 255],
 ];
 
+// Aerosol optical depth at 550 nm, one ramp for the whole column and for
+// every species: clear air under 0.05 is the map, haze comes in as a
+// translucent straw and deepens through amber and orange to the brown of
+// a dust plume at 1, then a violet at the thickest storms, so the darker
+// the thicker, the way an AOD map is read. The codebook is logarithmic,
+// so the stops crowd the low end where most of the world's sky is.
+const AEROSOL_OPTICAL_DEPTH_STOPS: Stop[] = [
+  [0, 245, 225, 150, 0],
+  [0.05, 245, 225, 150, 60],
+  [0.1, 240, 205, 110, 120],
+  [0.2, 235, 175, 75, 170],
+  [0.5, 220, 130, 50, 210],
+  [1, 175, 85, 35, 235],
+  [2, 120, 50, 40, 250],
+  [5, 80, 25, 70, 255],
+];
+
+// Surface particulate matter in µg/m³, in the US AQI's bands: green while
+// the air is good, yellow when moderate, orange when unhealthy for the
+// sensitive, red when unhealthy, purple when very unhealthy and maroon
+// past hazardous — the colours every air quality index map paints, so a
+// reader who knows one knows this. The breakpoints are PM2.5's
+// (12 / 35 / 55 / 150 / 250) and PM10's (54 / 154 / 254 / 354 / 424); clean
+// air is the map, and a band blends into the next at its breakpoint.
+const FINE_PARTICULATE_STOPS: Stop[] = [
+  [0, 80, 190, 80, 0],
+  [4, 80, 190, 80, 90],
+  [12, 120, 200, 70, 160],
+  [35, 240, 220, 60, 200],
+  [55, 245, 145, 40, 225],
+  [150, 225, 50, 50, 245],
+  [250, 140, 60, 160, 255],
+  [500, 120, 20, 60, 255],
+];
+const COARSE_PARTICULATE_STOPS: Stop[] = [
+  [0, 80, 190, 80, 0],
+  [15, 80, 190, 80, 90],
+  [54, 120, 200, 70, 160],
+  [154, 240, 220, 60, 200],
+  [254, 245, 145, 40, 225],
+  [354, 225, 50, 50, 245],
+  [424, 140, 60, 160, 255],
+  [1000, 120, 20, 60, 255],
+];
+
 // Primary wave direction, degrees true the waves come from, on a hue wheel
 // that closes: north red, east yellow, south cyan, west blue, north red
 // again. Not a fill the rail offers (levels.ts) — the file's 0 is both
@@ -483,6 +529,21 @@ export function decodeLog(quantization: LogQuantization, code: number): number |
   const hi = Math.log1p(quantization.maximum / quantization.scale);
   const unit = (code - quantization.minimumCode) / (quantization.maximumCode - quantization.minimumCode);
   return quantization.scale * Math.expm1(lo + unit * (hi - lo));
+}
+
+/** The code a logarithmic codebook holds a value at — the encoder's
+ * rounding, so a legend's range lands on the codes the bar spans. Zero and
+ * anything under the trace take the zero code; a value that rounds past
+ * the last code takes the overflow code (the maximum itself, decoded and
+ * encoded again, lands back on the last code). */
+export function encodeLog(quantization: LogQuantization, value: number): number {
+  if (!(value >= quantization.trace)) return quantization.zeroCode;
+  const lo = Math.log1p(quantization.trace / quantization.scale);
+  const hi = Math.log1p(quantization.maximum / quantization.scale);
+  const span = quantization.maximumCode - quantization.minimumCode;
+  const unit = (Math.log1p(value / quantization.scale) - lo) / (hi - lo);
+  const code = quantization.minimumCode + Math.floor(span * unit + 0.5);
+  return code > quantization.maximumCode ? quantization.overflowCode : code;
 }
 
 /** The speed field's own transparency, by speed: the ramp above was drawn
@@ -596,13 +657,20 @@ function codebookRange(quantization: LinearQuantization): readonly [number, numb
  * ramp, the pressure family reads its codebook, and the isobaric fills take
  * theirs from the family and the level. A field this build does not
  * recognize gets the temperature ramp spread over its own codebook, so it
- * is at least legible. */
+ * is at least legible — or, on a logarithmic codebook, the precipitation
+ * ramp, the one ramp drawn in that shape before the aerosols. */
 function stopsFor(variable: BundleVariable, identity: VariableIdentity | null): Stop[] {
   const linear = variable.quantization.type === "linear" ? variable.quantization : null;
   if (identity === null) {
-    return linear ? remapStops(TEMPERATURE_STOPS, [-60, 50], codebookRange(linear)) : TEMPERATURE_STOPS;
+    return linear ? remapStops(TEMPERATURE_STOPS, [-60, 50], codebookRange(linear)) : PRECIPITATION_STOPS;
   }
   const { family, level } = identity;
+  if (family === "prate") return PRECIPITATION_STOPS;
+  if (aerosolChart(family)) {
+    if (family === "pm25") return FINE_PARTICULATE_STOPS;
+    if (family === "pm10" || family === "pm10dust") return COARSE_PARTICULATE_STOPS;
+    return AEROSOL_OPTICAL_DEPTH_STOPS;
+  }
   if (family === "dswrf") return SOLAR_STOPS;
   if (family === "cref") return REFLECTIVITY_STOPS;
   if (family === "gust") return windFieldStops(GUST_SPEED_MAX);
@@ -632,7 +700,7 @@ function stopsFor(variable: BundleVariable, identity: VariableIdentity | null): 
     const range = isobaricRange("spfh", level);
     if (range) return remapStops(SPECIFIC_HUMIDITY_UNIT_STOPS, [0, 1], [0, range[1]]);
   }
-  return TEMPERATURE_STOPS;
+  return linear ? TEMPERATURE_STOPS : PRECIPITATION_STOPS;
 }
 
 /** One code in a variable's own codebook, or null for the reserved codes
@@ -666,9 +734,9 @@ export function buildPalette(
     let color: [number, number, number, number] = [0, 0, 0, 0];
     const value = decodeValue(variable, code);
     if (value !== null) {
-      // A logarithmic codebook's zero code is dry, and dry is not painted.
-      if (variable.quantization.type === "linear") color = interpolate(stops, value);
-      else if (value > 0) color = interpolate(PRECIPITATION_STOPS, value);
+      // A logarithmic codebook's zero code is dry — or clean — and is not
+      // painted.
+      if (variable.quantization.type === "linear" || value > 0) color = interpolate(stops, value);
     }
     palette.set(color, code * 4);
   }

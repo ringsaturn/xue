@@ -1,4 +1,4 @@
-import type { BundleBand, BundleParameter, BundleProducer, BundleVariable, KnownBundleId } from "./manifest";
+import type { BundleAerosol, BundleBand, BundleParameter, BundleProducer, BundleVariable, KnownBundleId } from "./manifest";
 import { isobaricChartFamily, specForIdentity, variableSpec } from "./variables";
 
 /**
@@ -33,7 +33,11 @@ import { isobaricChartFamily, specForIdentity, variableSpec } from "./variables"
  * three-gun colour picture a producer derived from several channels, told
  * apart by the `producer` block and the local-use parameter numbers — and
  * the produced scalars, one field a producer derived from several channels
- * (the DEBRA dust confidence), told apart the same way). */
+ * (the DEBRA dust confidence), told apart the same way — and the aerosol
+ * set: the optical depth at 550 nm, one family for the whole column and one
+ * per species, and the surface particulate matter by size cut, told apart
+ * by the `aerosol` block beside a parameter that is the same for every
+ * species). */
 export type ChartFamily =
   | "hgt"
   | "tmp"
@@ -64,7 +68,16 @@ export type ChartFamily =
   | "wave"
   | "ir104"
   | "dustrgb"
-  | "dustcf";
+  | "dustcf"
+  | "aod"
+  | "aoddust"
+  | "aodsalt"
+  | "aodsulf"
+  | "aodorg"
+  | "aodbc"
+  | "pm25"
+  | "pm10"
+  | "pm10dust";
 
 export interface VariableIdentity {
   family: ChartFamily;
@@ -149,15 +162,26 @@ function isTriple(parameter: BundleParameter, discipline: number, category: numb
  * WAVEWATCH III, none once declared) is not part of the identity; (0,4,4)
  * @8 brightness temperature, a satellite channel told apart by the
  * `band` block's central wave number (10–11 µm is the infrared window,
- * `ir104`).
+ * `ir104`); (0,20,102) @10 aerosol optical thickness and (0,13,193) /
+ * (0,13,192) @1 fine / coarse particulate matter (NCEP-local numbers), each
+ * told apart by the `aerosol` block's species, size and wavelength
+ * (`aerosolField`).
  */
-export function identityForParameter(parameter: BundleParameter, band?: BundleBand): VariableIdentity | null {
+export function identityForParameter(parameter: BundleParameter, band?: BundleBand, aerosol?: BundleAerosol): VariableIdentity | null {
   const surface = parameter.typeOfFirstFixedSurface;
   const level = isobaricLevel(parameter);
   const value = surfaceValue(parameter);
   if (isTriple(parameter, 0, 4, 4) && surface === 8) {
     const channel = satelliteChannel(band);
     return channel === null ? null : scalar(channel, null);
+  }
+  if (isTriple(parameter, 0, 20, 102) && surface === 10) {
+    const field = aerosolField(AEROSOL_OPTICAL_DEPTHS, aerosol);
+    return field === null ? null : scalar(field, null);
+  }
+  if ((isTriple(parameter, 0, 13, 193) || isTriple(parameter, 0, 13, 192)) && surface === 1) {
+    const field = aerosolField(parameter.parameterNumber === 193 ? FINE_PARTICULATES : COARSE_PARTICULATES, aerosol);
+    return field === null ? null : scalar(field, null);
   }
   if (isTriple(parameter, 0, 3, 5) && level !== null) return scalar("hgt", level);
   if (isTriple(parameter, 0, 3, 1) && surface === 101) return scalar("hgt", null);
@@ -209,6 +233,104 @@ function satelliteChannel(band: BundleBand | undefined): ChartFamily | null {
   for (const channel of SATELLITE_CHANNELS) {
     const [low, high] = channel.wavelengthMicrons;
     if (microns >= low && microns < high) return channel.family;
+  }
+  return null;
+}
+
+/** One aerosol field's `aerosol` block, as the chart tells it apart: the
+ * species (GRIB2 code table 4.233: 62000 the total, 62001 dust, 62006
+ * sulphate, 62008 sea salt, 62009 black carbon, 62010 organic matter), the
+ * size interval and, for an optical depth, the wavelength interval. Each
+ * interval is its code table 4.91 type and its two limits in metres as
+ * `[scaleFactor, scaledValue]`, or null for the limits of an interval the
+ * record does not carry (type 255). Everything in the block is compared:
+ * an optical depth at another wavelength, or a size cut this build has no
+ * chart for, is an unknown field and renders generically. */
+interface AerosolField {
+  family: ChartFamily;
+  aerosolType: number;
+  size: AerosolInterval;
+  wavelength: AerosolInterval;
+}
+
+interface AerosolInterval {
+  type: number;
+  first: readonly [number, number] | null;
+  second: readonly [number, number] | null;
+}
+
+/** Code table 4.91's "missing", with no limits. */
+const NO_INTERVAL: AerosolInterval = { type: 255, first: null, second: null };
+/** "Smaller than the first limit": particles under 20 µm, 2.5 µm, 10 µm. */
+const UNDER_20_MICRONS: AerosolInterval = { type: 0, first: [6, 20], second: [0, 0] };
+const UNDER_2P5_MICRONS: AerosolInterval = { type: 0, first: [7, 25], second: [0, 0] };
+const UNDER_10_MICRONS: AerosolInterval = { type: 0, first: [6, 10], second: [0, 0] };
+/** "Between the two limits": the 545–565 nm band the 550 nm depth is
+ * reported over. */
+const AT_550_NANOMETRES: AerosolInterval = { type: 7, first: [9, 545], second: [9, 565] };
+
+/** The optical depths: (0,20,102) on the entire atmosphere, the whole
+ * aerosol column under 20 µm at 550 nm, one family per species. */
+const AEROSOL_OPTICAL_DEPTHS: readonly AerosolField[] = [
+  { family: "aod", aerosolType: 62000, size: UNDER_20_MICRONS, wavelength: AT_550_NANOMETRES },
+  { family: "aoddust", aerosolType: 62001, size: UNDER_20_MICRONS, wavelength: AT_550_NANOMETRES },
+  { family: "aodsalt", aerosolType: 62008, size: UNDER_20_MICRONS, wavelength: AT_550_NANOMETRES },
+  { family: "aodsulf", aerosolType: 62006, size: UNDER_20_MICRONS, wavelength: AT_550_NANOMETRES },
+  { family: "aodorg", aerosolType: 62010, size: UNDER_20_MICRONS, wavelength: AT_550_NANOMETRES },
+  { family: "aodbc", aerosolType: 62009, size: UNDER_20_MICRONS, wavelength: AT_550_NANOMETRES },
+];
+/** The fine particulates, (0,13,193) on the ground: the total under 2.5 µm. */
+const FINE_PARTICULATES: readonly AerosolField[] = [
+  { family: "pm25", aerosolType: 62000, size: UNDER_2P5_MICRONS, wavelength: NO_INTERVAL },
+];
+/** The coarse particulates, (0,13,192) on the ground: the total and the
+ * dust under 10 µm. */
+const COARSE_PARTICULATES: readonly AerosolField[] = [
+  { family: "pm10", aerosolType: 62000, size: UNDER_10_MICRONS, wavelength: NO_INTERVAL },
+  { family: "pm10dust", aerosolType: 62001, size: UNDER_10_MICRONS, wavelength: NO_INTERVAL },
+];
+
+function sameLimit(a: readonly [number, number] | null, scale: number | null, value: number | null): boolean {
+  return a === null ? scale === null && value === null : a[0] === scale && a[1] === value;
+}
+
+function sameInterval(
+  interval: AerosolInterval,
+  type: number,
+  first: readonly [number | null, number | null],
+  second: readonly [number | null, number | null],
+): boolean {
+  return interval.type === type && sameLimit(interval.first, ...first) && sameLimit(interval.second, ...second);
+}
+
+/** The aerosol field a block names among `fields`, or null: a parameter
+ * with no block, or a block naming a species, size or wavelength none of
+ * them has, is an unknown field. */
+function aerosolField(fields: readonly AerosolField[], aerosol: BundleAerosol | undefined): ChartFamily | null {
+  if (aerosol === undefined) return null;
+  for (const field of fields) {
+    if (field.aerosolType !== aerosol.aerosolType) continue;
+    if (
+      !sameInterval(
+        field.size,
+        aerosol.typeOfSizeInterval,
+        [aerosol.scaleFactorOfFirstSize, aerosol.scaledValueOfFirstSize],
+        [aerosol.scaleFactorOfSecondSize, aerosol.scaledValueOfSecondSize],
+      )
+    ) {
+      continue;
+    }
+    if (
+      !sameInterval(
+        field.wavelength,
+        aerosol.typeOfWavelengthInterval,
+        [aerosol.scaleFactorOfFirstWavelength, aerosol.scaledValueOfFirstWavelength],
+        [aerosol.scaleFactorOfSecondWavelength, aerosol.scaledValueOfSecondWavelength],
+      )
+    ) {
+      continue;
+    }
+    return field.family;
   }
   return null;
 }
@@ -396,7 +518,7 @@ export function identifyBundle(variables: readonly BundleVariable[]): BundleIden
   const identity = first.parameter
     ? isLocalUse(first.parameter)
       ? identityForProducedScalar(first)
-      : identityForParameter(first.parameter, first.band)
+      : identityForParameter(first.parameter, first.band, first.aerosol)
     : (LEGACY_IDENTITIES[first.id] ?? null);
   return identity === null ? null : { identity, variables: [first] };
 }

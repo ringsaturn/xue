@@ -58,24 +58,33 @@ def field_byte_range(
     file_size: int | None = None,
     excluded_phrases: tuple[str, ...] = (),
     alternate_fields: tuple[str, ...] = (),
+    qualifier: str = "",
 ) -> ByteRange:
     """Byte range of the one record ``target_field`` names. When it names
     none, each of ``alternate_fields`` is tried in turn — the same quantity
     under another product's spelling — and the first that names exactly one
-    record wins; a phrase that names several is an error whichever it is."""
+    record wins; a phrase that names several is an error whichever it is.
+    A ``qualifier`` is a second phrase the line must carry as well, for a
+    record the field and surface do not name alone (the aerosol type and
+    wavelength a GEFS-Aerosols line spells out after the forecast hour),
+    compared without regard to case: the sidecars of one file differ in
+    the case of the aerosol type between NOAA's bucket and Google's copy
+    (``Dust dry`` and ``Dust Dry``), the offsets being the same."""
     records = parse_index(text)
+    qualifier = qualifier.lower()
     for field in (target_field, *alternate_fields):
         matches = [
             index
             for index, record in enumerate(records)
             if field in f":{record.description}"
+            and qualifier in f":{record.description}".lower()
             and not any(phrase in record.description for phrase in excluded_phrases)
         ]
         if matches:
             break
     if len(matches) != 1:
         raise DownloadError(
-            f"expected exactly one {target_field} record in .idx, found {len(matches)}"
+            f"expected exactly one {target_field}{qualifier} record in .idx, found {len(matches)}"
         )
     index = matches[0]
     start = records[index].offset

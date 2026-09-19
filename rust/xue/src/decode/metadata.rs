@@ -240,10 +240,11 @@ fn parse_parameter(
     Ok(())
 }
 
-/// The optional blocks beside `parameter` (docs/format.md §"Band and
-/// Producer"): the spectral band a satellite image was taken in, in the
+/// The optional blocks beside `parameter` (docs/format.md §"Band, Producer
+/// and Aerosol"): the spectral band a satellite image was taken in, in the
 /// fields of GRIB2 product definition template 4.31 with their byte widths,
-/// and the algorithm that derived a composite field. Each is present whole
+/// the algorithm that derived a composite field, and an aerosol product's
+/// type and intervals in the fields of template 4.48. Each is present whole
 /// or absent, needs schemaVersion 3, and raises no version floor.
 const BAND_FIELDS: [(&str, i64, i64); 5] = [
     ("satelliteSeries", 0, 0xFFFF),
@@ -304,6 +305,86 @@ fn parse_producer(variable: &serde_json::Value, schema_version: u64) -> Result<(
     Ok(())
 }
 
+/// The aerosol block's type fields, plain integers with their byte widths;
+/// each interval is a code table 4.91 type and two limits, a limit a
+/// (scale factor, scaled value) pair that is whole or null like the fixed
+/// surface's, and null throughout when the interval's type is 255
+/// (missing).
+const AEROSOL_MISSING_INTERVAL: i64 = 255;
+const AEROSOL_TYPE_FIELDS: [(&str, i64); 3] = [
+    ("aerosolType", 0xFFFF),
+    ("typeOfSizeInterval", 0xFF),
+    ("typeOfWavelengthInterval", 0xFF),
+];
+const AEROSOL_INTERVALS: [(&str, [(&str, &str); 2]); 2] = [
+    (
+        "typeOfSizeInterval",
+        [
+            ("scaleFactorOfFirstSize", "scaledValueOfFirstSize"),
+            ("scaleFactorOfSecondSize", "scaledValueOfSecondSize"),
+        ],
+    ),
+    (
+        "typeOfWavelengthInterval",
+        [
+            ("scaleFactorOfFirstWavelength", "scaledValueOfFirstWavelength"),
+            ("scaleFactorOfSecondWavelength", "scaledValueOfSecondWavelength"),
+        ],
+    ),
+];
+
+fn parse_aerosol(variable: &serde_json::Value, schema_version: u64) -> Result<(), DecodeError> {
+    let Some(aerosol) = variable.get("aerosol") else {
+        return Ok(());
+    };
+    if schema_version < 3 {
+        return Err(err("an aerosol block requires schemaVersion 3"));
+    }
+    let aerosol = aerosol
+        .as_object()
+        .ok_or_else(|| err("metadata aerosol must be an object"))?;
+    // Exactly the eleven fields: the three types and the four limits.
+    if aerosol.len() != AEROSOL_TYPE_FIELDS.len() + 4 * 2 {
+        return Err(err("metadata aerosol block must carry exactly its eleven fields"));
+    }
+    for (field, high) in AEROSOL_TYPE_FIELDS {
+        aerosol
+            .get(field)
+            .and_then(|value| value.as_i64())
+            .filter(|value| (0..=high).contains(value))
+            .ok_or_else(|| err("metadata aerosol type field is invalid"))?;
+    }
+    for (type_field, pairs) in AEROSOL_INTERVALS {
+        let missing = aerosol[type_field].as_i64() == Some(AEROSOL_MISSING_INTERVAL);
+        for (scale_field, value_field) in pairs {
+            let scale_factor = aerosol
+                .get(scale_field)
+                .ok_or_else(|| err("metadata aerosol limit is incomplete"))?;
+            let scaled_value = aerosol
+                .get(value_field)
+                .ok_or_else(|| err("metadata aerosol limit is incomplete"))?;
+            if scale_factor.is_null() != scaled_value.is_null() {
+                return Err(err("metadata aerosol limit must be wholly present or wholly null"));
+            }
+            if scale_factor.is_null() != missing {
+                return Err(err("metadata aerosol limit must be null exactly when its interval is missing"));
+            }
+            if missing {
+                continue;
+            }
+            scale_factor
+                .as_i64()
+                .filter(|factor| (-127..=127).contains(factor))
+                .ok_or_else(|| err("metadata aerosol scale factor is invalid"))?;
+            scaled_value
+                .as_u64()
+                .filter(|&value| value <= 0xFFFF_FFFE)
+                .ok_or_else(|| err("metadata aerosol scaled value is invalid"))?;
+        }
+    }
+    Ok(())
+}
+
 pub(crate) fn parse_metadata(raw: &[u8]) -> Result<Metadata, DecodeError> {
     let text = std::str::from_utf8(raw).map_err(|_| err("metadata is not UTF-8"))?;
     let value: serde_json::Value =
@@ -359,6 +440,7 @@ pub(crate) fn parse_metadata(raw: &[u8]) -> Result<Metadata, DecodeError> {
         parameters += usize::from(parameter.is_some());
         parse_band(variable, schema_version)?;
         parse_producer(variable, schema_version)?;
+        parse_aerosol(variable, schema_version)?;
         variable_ids.push(numeric as u8);
     }
     if variable_ids.is_empty() {
@@ -566,7 +648,7 @@ mod parameter_tests {
 
 #[cfg(test)]
 mod band_tests {
-    use super::{parse_band, parse_producer};
+    use super::{parse_aerosol, parse_band, parse_producer};
 
     fn variable(json: &str) -> serde_json::Value {
         serde_json::from_str(json).unwrap()
@@ -618,6 +700,59 @@ mod band_tests {
             r#"{"producer": {"id": "shachen", "version": "0.3.1", "url": "x"}}"#,
         ] {
             assert!(parse_producer(&variable(json), 3).is_err(), "{json}");
+        }
+    }
+
+    const DUST_AOD: &str = r#"{"aerosol": {
+        "aerosolType": 62001, "typeOfSizeInterval": 0,
+        "scaleFactorOfFirstSize": 6, "scaledValueOfFirstSize": 20,
+        "scaleFactorOfSecondSize": 0, "scaledValueOfSecondSize": 0,
+        "typeOfWavelengthInterval": 7,
+        "scaleFactorOfFirstWavelength": 9, "scaledValueOfFirstWavelength": 545,
+        "scaleFactorOfSecondWavelength": 9, "scaledValueOfSecondWavelength": 565}}"#;
+    const PM25: &str = r#"{"aerosol": {
+        "aerosolType": 62000, "typeOfSizeInterval": 0,
+        "scaleFactorOfFirstSize": 7, "scaledValueOfFirstSize": 25,
+        "scaleFactorOfSecondSize": 0, "scaledValueOfSecondSize": 0,
+        "typeOfWavelengthInterval": 255,
+        "scaleFactorOfFirstWavelength": null, "scaledValueOfFirstWavelength": null,
+        "scaleFactorOfSecondWavelength": null, "scaledValueOfSecondWavelength": null}}"#;
+
+    #[test]
+    fn an_aerosol_block_is_optional_and_needs_version_3() {
+        assert!(parse_aerosol(&variable("{}"), 1).is_ok());
+        assert!(parse_aerosol(&variable("{}"), 3).is_ok());
+        assert!(parse_aerosol(&variable(DUST_AOD), 3).is_ok());
+        assert!(parse_aerosol(&variable(PM25), 3).is_ok());
+        assert!(parse_aerosol(&variable(DUST_AOD), 2).is_err());
+    }
+
+    #[test]
+    fn malformed_aerosol_blocks_rejected() {
+        let with = |edit: &str| DUST_AOD.replacen(r#""scaleFactorOfFirstWavelength": 9"#, edit, 1);
+        let pm_with = |edit: &str| PM25.replacen(r#""scaleFactorOfFirstWavelength": null"#, edit, 1);
+        for json in [
+            // Null, a missing field, a key the block does not define, a
+            // type out of range or of the wrong type, one half of a limit
+            // null, a scale factor or scaled value out of range, and a
+            // limit that is present under a missing interval or null under
+            // a present one.
+            r#"{"aerosol": null}"#.to_string(),
+            DUST_AOD.replacen(r#""scaleFactorOfSecondSize": 0, "#, "", 1),
+            DUST_AOD.replacen(r#""aerosolType": 62001,"#, r#""aerosolType": 62001, "species": "dust","#, 1),
+            DUST_AOD.replacen(r#""aerosolType": 62001"#, r#""aerosolType": 65536"#, 1),
+            DUST_AOD.replacen(r#""typeOfSizeInterval": 0"#, r#""typeOfSizeInterval": 256"#, 1),
+            DUST_AOD.replacen(r#""aerosolType": 62001"#, r#""aerosolType": "62001""#, 1),
+            with(r#""scaleFactorOfFirstWavelength": null"#),
+            with(r#""scaleFactorOfFirstWavelength": 128"#),
+            with(r#""scaleFactorOfFirstWavelength": -128"#),
+            DUST_AOD.replacen(r#""scaledValueOfFirstWavelength": 545"#, r#""scaledValueOfFirstWavelength": 4294967295"#, 1),
+            DUST_AOD.replacen(r#""scaledValueOfFirstWavelength": 545"#, r#""scaledValueOfFirstWavelength": -1"#, 1),
+            DUST_AOD.replacen(r#""typeOfWavelengthInterval": 7"#, r#""typeOfWavelengthInterval": 255"#, 1),
+            PM25.replacen(r#""typeOfWavelengthInterval": 255"#, r#""typeOfWavelengthInterval": 7"#, 1),
+            pm_with(r#""scaleFactorOfFirstWavelength": 9"#),
+        ] {
+            assert!(parse_aerosol(&variable(&json), 3).is_err(), "{json}");
         }
     }
 }

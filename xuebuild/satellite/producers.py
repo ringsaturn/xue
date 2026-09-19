@@ -12,7 +12,7 @@ like channels (:func:`assemble.write_series`), and the converter reads
 them as more variables — the components of one composite bundle
 (:data:`xuebuild.binconvert.COMPOSITE_BUNDLES`). A produced variable's
 identity is a local-use GRIB2 parameter with the ``producer`` block beside
-it (docs/format.md §"Band and Producer"): the id is registered on the
+it (docs/format.md §"Band, Producer and Aerosol"): the id is registered on the
 variable (:attr:`xuebuild.variables.VariableSpec.producer_id`), the
 version is stamped on the series by the producer that ran, and both
 converters read it off the series.

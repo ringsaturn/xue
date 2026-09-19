@@ -151,6 +151,7 @@
               { "@type": "Dataset", "name": "NOAA Himawari-9 AHI full-disk imagery (JMA ひまわり9号, ISatSS)", "url": "https://registry.opendata.aws/noaa-himawari/" },
               { "@type": "Dataset", "name": "NOAA GOES-R series ABI full-disk imagery (GOES-19 East, GOES-18 West, ABI-L2-CMIPF)", "url": "https://registry.opendata.aws/noaa-goes/" },
               { "@type": "Dataset", "name": "EUMETSAT Meteosat-12 (MTG-I1) FCI Level 1c full-disk imagery, hourly repeat cycle (EO:EUM:DAT:0662; contains modified EUMETSAT Meteosat data)", "url": "https://data.eumetsat.int/product/EO:EUM:DAT:0662", "license": "https://creativecommons.org/licenses/by/4.0/" },
+              { "@type": "Dataset", "name": "NOAA GEFS-Aerosols (Global Ensemble Forecast System aerosol member, 0.25°)", "url": "https://registry.opendata.aws/noaa-gefs/" },
               { "@type": "Dataset", "name": "ECMWF Open Data (real-time)", "url": "https://www.ecmwf.int/en/forecasts/datasets/open-data", "license": "https://creativecommons.org/licenses/by/4.0/" },
               { "@type": "Dataset", "name": "ECMWF IFS HRES surface fields forwarded by Open-Meteo (adapted from ECMWF IFS by ECMWF, licensed under CC BY 4.0, via Open-Meteo)", "url": "https://open-meteo.com", "license": "https://creativecommons.org/licenses/by/4.0/" }
             ],
@@ -165,6 +166,7 @@
               "temperature, relative humidity, wind, water vapour flux, vertical velocity and equivalent potential temperature on isobaric surfaces",
               "wind gust, total and low / middle / high cloud cover, CAPE, visibility, 2 m dew point and apparent temperature",
               "sea surface (skin) temperature, sea ice cover and thickness, significant wave height, primary wave period, and the wave vector (height along the direction of travel) with particle animation",
+              "aerosol optical depth at 550 nm (total, dust, sea salt, sulphate, organic carbon, black carbon) and surface PM2.5, PM10 and dust PM10 concentrations (GEFS-Aerosols)",
               "composite radar reflectivity (observed by the CMA and NOAA MRMS mosaics, forecast by HRRR)",
               "radar precipitation intensity classes (the JMA nowcast over Japan, as representative rates)",
               "10.4 µm infrared brightness temperature (Himawari-9 AHI band 13 over the western Pacific, GOES-19 and GOES-18 ABI channel 13 over the Americas and the Pacific, Meteosat-12 FCI IR 10.5 over Europe, Africa and the Atlantic; cloud-top temperature)",
@@ -177,6 +179,7 @@
               { "@type": "DataDownload", "name": "ECMWF AIFS live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-aifs.json" },
               { "@type": "DataDownload", "name": "ECMWF IFS HRES 0.1° live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-ifshres.json" },
               { "@type": "DataDownload", "name": "HRRR live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-hrrr.json" },
+              { "@type": "DataDownload", "name": "GEFS-Aerosols live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-gefsaero.json" },
               { "@type": "DataDownload", "name": "MRMS radar live pointer (rolling window of the last three to four hours)", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-mrms.json" },
               { "@type": "DataDownload", "name": "JMA precipitation nowcast live pointer (rolling window of the last two to three hours)", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-jma.json" },
               { "@type": "DataDownload", "name": "CMA radar mosaic live pointer (rolling window of the last two to three hours)", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-cma.json" },
@@ -494,6 +497,22 @@
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphVis">V</b>
           <span class="rail-name"><span>VIS</span> <small data-i18n="varVis">SFC</small></span>
         </button>
+        <!-- The aerosols, the GEFS-Aerosols run's two families: the optical
+             depth at 550 nm (a sun behind a haze band; the whole column
+             heads it and the five species are the sheet's chips) and the
+             surface particulate matter (particles in the air; PM2.5 heads
+             it, PM10 and its dust part are the chips). τ is the optical
+             depth's own symbol. -->
+        <button type="button" data-variable="aod" data-family="aod" data-i18n-tip="tipAod" aria-pressed="false" hidden>
+          <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="9" r="3.5" /><path d="M12 2.5v1.5M17.2 4.8l-1 1M6.8 4.8l1 1M20 9h-1.5M5.5 9H4" /><path d="M3.5 15h17M5.5 18.5h13M8 22h8" /></svg>
+          <b class="rail-glyph" aria-hidden="true" data-i18n="glyphAod">τ</b>
+          <span class="rail-name"><span>AOD</span> <small data-i18n="varAod">TOTAL</small></span>
+        </button>
+        <button type="button" data-variable="pm25" data-family="pm" data-i18n-tip="tipPm" aria-pressed="false" hidden>
+          <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7" cy="8" r="2.2" /><circle cx="15.5" cy="6.5" r="1.5" /><circle cx="17" cy="14.5" r="2.4" /><circle cx="9" cy="16.5" r="1.6" /><circle cx="12.5" cy="11" r="1" fill="currentColor" stroke="none" /><circle cx="5" cy="13" r="0.9" fill="currentColor" stroke="none" /><circle cx="13" cy="19.5" r="0.9" fill="currentColor" stroke="none" /></svg>
+          <b class="rail-glyph" aria-hidden="true" data-i18n="glyphPm">µ</b>
+          <span class="rail-name"><span>PM</span> <small data-i18n="varPm">2.5</small></span>
+        </button>
         <!-- The ocean, GFS-only for now: sea ice (a six-armed ice crystal;
              cover and thickness on the level row) and the waves (two
              swells; the wave vector — height as the fill, direction as
@@ -675,6 +694,11 @@
               <small>CONUS 3KM</small>
               <span class="model-check" aria-hidden="true"></span>
             </button>
+            <button type="button" data-model="gefsaero" aria-pressed="false">
+              <span class="model-name">GEFS-AEROSOLS</span>
+              <small>NOAA AEROSOL 0.25°</small>
+              <span class="model-check" aria-hidden="true"></span>
+            </button>
             <button type="button" data-model="mrms" aria-pressed="false">
               <span class="model-name">MRMS</span>
               <small>CONUS RADAR</small>
@@ -830,6 +854,13 @@
                 <span class="credits-name">NOAA HRRR</span>
                 <small data-i18n="creditsHrrr">FORECAST DATA · HRRR 3 KM, CONTIGUOUS US</small>
                 <span class="credits-arrow" aria-hidden="true"></span>
+              </a>
+            </li>
+            <li>
+              <a href="https://registry.opendata.aws/noaa-gefs/" target="_blank" rel="noreferrer">
+                <span class="credits-name">NOAA GEFS-Aerosols</span>
+                <small data-i18n="creditsGefsAero">AEROSOL FORECAST · GEFS-AEROSOLS 0.25°, AOD AND SURFACE PM</small>
+                <span class="credits-arrow" aria-hidden="true">↗</span>
               </a>
             </li>
             <li>

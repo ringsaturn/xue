@@ -9,12 +9,13 @@ not be used; it changes codes for values landing exactly on a half step.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 
 from .errors import ConversionError
 from .variables import (
+    AEROSOL_VARIABLE_IDS,
     DUST_CF_COMPONENT_IDS,
     DUST_RGB_COMPONENT_IDS,
     ISOBARIC_LEVELS_HPA,
@@ -67,12 +68,18 @@ class TemperatureCodebook:
 
 @dataclass(frozen=True)
 class PrecipitationCodebook:
+    """Logarithmic (``log1p``) uint8 codebook. Not precipitation-specific
+    either: it quantizes any one-sided field whose interesting range spans
+    orders of magnitude — the aerosol optical depth and the particulate
+    matter concentrations reuse it with their own trace, scale and maximum."""
+
     trace: float = 0.01
     scale: float = 0.05
     maximum: float = 128.0
     maximum_code: int = 253
     overflow_code: int = 254
     nodata_code: int = 255
+    name: str = "precipitation"
 
     @property
     def _lo(self) -> float:
@@ -101,7 +108,7 @@ class PrecipitationCodebook:
 
     def quantize(self, values: np.ndarray) -> np.ndarray:
         if not np.isfinite(values).all():
-            raise ConversionError("precipitation plane contains non-finite values")
+            raise ConversionError(f"{self.name} plane contains non-finite values")
         rates = values.astype(np.float64)
         unit = (np.log1p(np.clip(rates, 0.0, self.maximum) / self.scale) - self._lo) / (self._hi - self._lo)
         codes = 1 + np.floor(self._span * unit + 0.5)
@@ -112,7 +119,7 @@ class PrecipitationCodebook:
 
     def decode(self, codes: np.ndarray) -> np.ndarray:
         if (codes == self.nodata_code).any():
-            raise ConversionError("precipitation plane contains nodata codes")
+            raise ConversionError(f"{self.name} plane contains nodata codes")
         # The overflow code extends the logarithmic grid one step past the
         # maximum, so codes 253 and 254 decode to distinct, increasing values.
         unit = (codes.astype(np.float64) - 1) / self._span
@@ -260,6 +267,50 @@ DUST_RGB_GUN = TemperatureCodebook(minimum=-0.004, maximum=1.0, step=0.004, name
 # The DEBRA confidence is a number in 0–1 too, and takes the guns' codebook
 # for the same reasons: code 0 is "no data", 0.0 confidence is code 1.
 DUST_CF = TemperatureCodebook(minimum=-0.004, maximum=1.0, step=0.004, name="dustcf")
+# The aerosol fields, three log1p codebooks. Their interesting range spans
+# orders of magnitude the way a rain rate's does — a clear sky reads an
+# optical depth of 0.05, a dust plume 2, and a linear step fine enough for
+# the haze would spend the codes on the plume — so each takes the
+# precipitation codebook's shape with its own numbers. The optical depth
+# runs to 5 (a severe dust storm's ceiling; the converter clamps there, so
+# the overflow code is never written) at a scale of 0.05, which resolves
+# 0.003 at 0.1 and 0.02 at 1. PM2.5 runs to 1000 µg/m³ and the two PM10
+# fields to 2000, at a scale of 5 µg/m³ — a step below 1 µg/m³ through
+# the air quality classes and 2.5 at 100 — with a trace of half a
+# microgram, below the least concentration a model reports over the
+# open ocean. The compact profile halves the code space as it does for
+# precipitation; the balanced profile takes the quality codebooks, since
+# the fields are smooth.
+QUALITY_AOD = PrecipitationCodebook(trace=0.005, scale=0.05, maximum=5.0, name="aod")
+COMPACT_AOD = PrecipitationCodebook(
+    trace=0.005, scale=0.05, maximum=5.0, maximum_code=125, overflow_code=126, nodata_code=127, name="aod"
+)
+QUALITY_PM25 = PrecipitationCodebook(trace=0.5, scale=5.0, maximum=1000.0, name="pm25")
+COMPACT_PM25 = PrecipitationCodebook(
+    trace=0.5, scale=5.0, maximum=1000.0, maximum_code=125, overflow_code=126, nodata_code=127, name="pm25"
+)
+QUALITY_PM10 = PrecipitationCodebook(trace=0.5, scale=5.0, maximum=2000.0, name="pm10")
+COMPACT_PM10 = PrecipitationCodebook(
+    trace=0.5, scale=5.0, maximum=2000.0, maximum_code=125, overflow_code=126, nodata_code=127, name="pm10"
+)
+
+
+def _aerosol_codebooks(*, compact: bool) -> dict[str, PrecipitationCodebook]:
+    aod, pm25, pm10 = (COMPACT_AOD, COMPACT_PM25, COMPACT_PM10) if compact else (QUALITY_AOD, QUALITY_PM25, QUALITY_PM10)
+    books: dict[str, PrecipitationCodebook] = {}
+    for variable_id in AEROSOL_VARIABLE_IDS:
+        if variable_id.startswith("aod"):
+            books[variable_id] = replace(aod, name=variable_id)
+        elif variable_id == "pm25":
+            books[variable_id] = replace(pm25, name=variable_id)
+        else:
+            books[variable_id] = replace(pm10, name=variable_id)
+    return books
+
+
+QUALITY_AEROSOL = _aerosol_codebooks(compact=False)
+COMPACT_AEROSOL = _aerosol_codebooks(compact=True)
+assert tuple(QUALITY_AEROSOL) == AEROSOL_VARIABLE_IDS
 QUALITY_SATELLITE = {
     **{channel_id: _brightness_temperature(channel_id)[0] for channel_id in SATELLITE_CHANNEL_IDS},
     **{gun_id: DUST_RGB_GUN for gun_id in DUST_RGB_COMPONENT_IDS},
@@ -533,6 +584,7 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
         **QUALITY_CLOUD_LAYER,
         **QUALITY_OCEAN,
         **QUALITY_SATELLITE,
+        **QUALITY_AEROSOL,
         **QUALITY_PRESSURE,
         **QUALITY_ISOBARIC,
     },
@@ -552,6 +604,7 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
         **COMPACT_CLOUD_LAYER,
         **COMPACT_OCEAN,
         **COMPACT_SATELLITE,
+        **COMPACT_AEROSOL,
         **COMPACT_PRESSURE,
         **COMPACT_ISOBARIC,
     },
@@ -583,6 +636,7 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
         **QUALITY_OCEAN,
         "icec": COMPACT_ICE_COVER,
         **QUALITY_SATELLITE,
+        **QUALITY_AEROSOL,
         **QUALITY_PRESSURE,
         **QUALITY_ISOBARIC,
         **{variable_id: COMPACT_HUMIDITY for variable_id in QUALITY_ISOBARIC if variable_id.startswith("rh")},

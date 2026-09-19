@@ -31,7 +31,7 @@ class SatelliteBand:
     fields of GRIB2 product definition template 4.31: the spacecraft and
     instrument by their WMO common code table numbers (C-5 and C-8) and the
     band's central wave number in m⁻¹ as a scaled value. Written verbatim as
-    the variable's ``band`` block (docs/format.md §"Band and Producer")."""
+    the variable's ``band`` block (docs/format.md §"Band, Producer and Aerosol")."""
 
     satellite_series: int
     satellite_number: int

@@ -19,7 +19,7 @@ from typing import BinaryIO
 
 from .errors import ConversionError
 from .model import SourceFrame
-from .variables import VariableSpec, variable_spec
+from .variables import AerosolIdentity, VariableSpec, variable_spec
 
 # Code table 4.4 (indicator of unit of time range) for the units our
 # products use; anything else is rejected and triggers the gdalinfo fallback.
@@ -33,9 +33,16 @@ _TIME_UNIT = {
     13: timedelta(seconds=1),
 }
 # Product definition templates whose octets 10-34 share the 4.0 layout and
-# that we know how to time-stamp. 4.8 adds the statistical interval.
+# that we know how to time-stamp. 4.8 adds the statistical interval. 4.48
+# (aerosol optical properties: GEFS-Aerosols' whole output) inserts the
+# aerosol type and two intervals — 24 octets — between the parameter number
+# and the generating process, so its time and surface octets sit that much
+# further along; 4.44 and 4.46, the aerosol templates without the optical
+# fields, are its subsets and are not read by any source yet.
 _INSTANTANEOUS_TEMPLATES = {0, 1, 2}
 _STATISTICAL_TEMPLATES = {8, 11, 12}
+_AEROSOL_TEMPLATES = {48}
+_AEROSOL_SHIFT = 24
 _MISSING_UINT32 = 0xFFFFFFFF
 
 
@@ -54,6 +61,9 @@ class MessageInfo:
     statistical_process: int | None
     """Code table 4.10 process (0 average, 1 accumulation) for statistical
     templates (4.8 family); None for instantaneous products."""
+    aerosol: AerosolIdentity | None = None
+    """The aerosol type and intervals of an aerosol product (template 4.48);
+    None for every other template, which no aerosol variable matches."""
 
 
 def _read_exact(handle: BinaryIO, count: int, path: Path, label: str) -> bytes:
@@ -71,27 +81,65 @@ def _parse_time(body: bytes, offset: int, path: Path) -> datetime:
         raise ConversionError(f"invalid GRIB2 timestamp in {path}: {exc}") from exc
 
 
-def _parse_product(body: bytes, reference_time: datetime, path: Path) -> tuple[int, int, int, float | None, datetime, int | None]:
-    """Parse a section 4 body (header included) into
-    (category, number, level_type, level_value, valid_time, statistical_process)."""
+def _parse_limit(body: bytes, offset: int) -> tuple[int, int] | None:
+    """One ``(scaleFactor, scaledValue)`` limit of an aerosol interval at
+    ``offset``, None when the value is the missing pattern."""
+    scale = struct.unpack_from(">b", body, offset)[0]
+    scaled_value = struct.unpack_from(">I", body, offset + 1)[0]
+    return None if scaled_value == _MISSING_UINT32 else (scale, scaled_value)
+
+
+def _parse_aerosol(body: bytes) -> AerosolIdentity:
+    """The aerosol fields of a template 4.48 body: octets 12-35, the type
+    then the size and wavelength intervals, each a code table 4.91 type and
+    two limits. An interval of the missing type carries no limits whatever
+    the octets hold (docs/format.md §"Band, Producer and Aerosol")."""
+    aerosol_type = struct.unpack_from(">H", body, 11)[0]
+    size_type = body[13]
+    wavelength_type = body[24]
+    missing = AerosolIdentity.MISSING_TYPE
+    return AerosolIdentity(
+        aerosol_type,
+        size_type=size_type,
+        size_first=None if size_type == missing else _parse_limit(body, 14),
+        size_second=None if size_type == missing else _parse_limit(body, 19),
+        wavelength_type=wavelength_type,
+        wavelength_first=None if wavelength_type == missing else _parse_limit(body, 25),
+        wavelength_second=None if wavelength_type == missing else _parse_limit(body, 30),
+    )
+
+
+def _parse_product(
+    body: bytes, reference_time: datetime, path: Path
+) -> tuple[int, int, int, float | None, datetime, int | None, AerosolIdentity | None]:
+    """Parse a section 4 body (header included) into (category, number,
+    level_type, level_value, valid_time, statistical_process, aerosol)."""
     template = struct.unpack_from(">H", body, 7)[0]
+    shift = 0
+    aerosol: AerosolIdentity | None = None
     if template in _INSTANTANEOUS_TEMPLATES:
         statistical: int | None = None
         minimum_length = 34
     elif template in _STATISTICAL_TEMPLATES:
         minimum_length = 47
+    elif template in _AEROSOL_TEMPLATES:
+        statistical = None
+        shift = _AEROSOL_SHIFT
+        minimum_length = 34 + shift
     else:
         raise ConversionError(f"unsupported GRIB2 product definition template 4.{template} in {path}")
     if len(body) < minimum_length:
         raise ConversionError(f"GRIB2 product definition section is too short in {path}")
     category, number = body[9], body[10]
-    unit_code = body[17]
+    if shift:
+        aerosol = _parse_aerosol(body)
+    unit_code = body[17 + shift]
     if unit_code not in _TIME_UNIT:
         raise ConversionError(f"unsupported GRIB2 time unit {unit_code} in {path}")
-    forecast_time = struct.unpack_from(">i", body, 18)[0]
-    level_type = body[22]
-    scale = struct.unpack_from(">b", body, 23)[0]
-    scaled_value = struct.unpack_from(">I", body, 24)[0]
+    forecast_time = struct.unpack_from(">i", body, 18 + shift)[0]
+    level_type = body[22 + shift]
+    scale = struct.unpack_from(">b", body, 23 + shift)[0]
+    scaled_value = struct.unpack_from(">I", body, 24 + shift)[0]
     level_value = None if scaled_value == _MISSING_UINT32 else scaled_value / (10.0**scale)
     if template in _STATISTICAL_TEMPLATES:
         # Statistical products are valid at the end of the overall interval
@@ -100,7 +148,7 @@ def _parse_product(body: bytes, reference_time: datetime, path: Path) -> tuple[i
         statistical = body[46]
     else:
         valid_time = reference_time + forecast_time * _TIME_UNIT[unit_code]
-    return category, number, level_type, level_value, valid_time, statistical
+    return category, number, level_type, level_value, valid_time, statistical, aerosol
 
 
 def index_messages(path: Path) -> list[MessageInfo]:
@@ -127,7 +175,7 @@ def index_messages(path: Path) -> list[MessageInfo]:
             if total_length < 16 + 4 or offset + total_length > size:
                 raise ConversionError(f"GRIB2 message length is out of bounds in {path}")
             reference_time: datetime | None = None
-            product: tuple[int, int, int, float | None, datetime, int | None] | None = None
+            product: tuple[int, int, int, float | None, datetime, int | None, AerosolIdentity | None] | None = None
             position = 16
             while product is None:
                 if position + 5 > total_length - 4:
@@ -150,7 +198,7 @@ def index_messages(path: Path) -> list[MessageInfo]:
                     handle.seek(section_length - 5, 1)
                 position += section_length
             assert reference_time is not None
-            category, number, level_type, level_value, valid_time, statistical = product
+            category, number, level_type, level_value, valid_time, statistical, aerosol = product
             messages.append(
                 MessageInfo(
                     band=len(messages) + 1,
@@ -162,6 +210,7 @@ def index_messages(path: Path) -> list[MessageInfo]:
                     reference_time=reference_time,
                     valid_time=valid_time,
                     statistical_process=statistical,
+                    aerosol=aerosol,
                 )
             )
             offset += total_length
@@ -177,15 +226,19 @@ def _matching_unit(spec: VariableSpec, message: MessageInfo) -> str | None:
     surface, the same statistical process), or under one of its whole
     alternate identities — and None when it does not. The unit is the
     identity's own: an alternate may spell it differently (ECMWF's cloud
-    cover fraction)."""
+    cover fraction). An aerosol product matches on its aerosol identity
+    too, whole, and only a variable registered with one matches it."""
     triple = (message.discipline, message.parameter_category, message.parameter_number)
     if (
         (triple == (spec.grib2_discipline, spec.grib2_category, spec.grib2_number) or triple in spec.grib2_aliases)
         and message.level_type == spec.grib2_level_type
         and (spec.grib2_level_value is None or message.level_value == spec.grib2_level_value)
         and message.statistical_process == spec.grib2_statistical
+        and message.aerosol == spec.grib2_aerosol
     ):
         return spec.gdal_unit
+    if message.aerosol is not None:
+        return None
     for alternate in spec.grib2_alternates:
         if (
             triple == alternate.triple

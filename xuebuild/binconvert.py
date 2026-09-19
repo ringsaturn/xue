@@ -1164,7 +1164,7 @@ def _variable_metadata(
     in the bundle's variable list, assigned by :func:`build_metadata`.
     ``producers`` is what the observation series was stamped with, by
     variable id: a produced variable's ``producer`` block is its registered
-    id and that version (docs/format.md §"Band and Producer")."""
+    id and that version (docs/format.md §"Band, Producer and Aerosol")."""
     spec = variable_spec(variable_id)
     parameter = spec.parameter_metadata()
     for statistical_id, process in source.statistical_processes:
@@ -1194,6 +1194,11 @@ def _variable_metadata(
         if stamp is None or stamp[0] != spec.producer_id:
             raise ConversionError(f"{variable_id} must be stamped by producer {spec.producer_id!r} to be written")
         block["producer"] = {"id": stamp[0], "version": stamp[1]}
+    if spec.grib2_aerosol is not None:
+        # An aerosol product: the parameter names the quantity, the block
+        # beside it the species and the intervals it was computed over —
+        # the rest of the identity a template 4.48 record carries.
+        block["aerosol"] = spec.grib2_aerosol.metadata()
     block["quantization"] = PROFILES[profile][variable_id].metadata()
     return block
 

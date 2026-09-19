@@ -9,7 +9,7 @@
 use serde_json::{json, Map, Value};
 
 use crate::encode::errors::{EncodeError, Result};
-use crate::encode::variables::{isobaric_variable, SATELLITE_CHANNEL_IDS};
+use crate::encode::variables::{isobaric_variable, AEROSOL_VARIABLE_IDS, SATELLITE_CHANNEL_IDS};
 
 /// Linear uint8 codebook. Not temperature-specific: it quantizes any linear
 /// field; the wind components reuse it with a symmetric m/s range.
@@ -58,8 +58,11 @@ impl LinearCodebook {
     }
 }
 
-/// Logarithmic precipitation codebook: sparse, long-tailed fields keep their
-/// light-rain resolution.
+/// Logarithmic (`log1p`) codebook: sparse, long-tailed fields keep their
+/// light-rain resolution. Not precipitation-specific either: it quantizes
+/// any one-sided field whose interesting range spans orders of magnitude —
+/// the aerosol optical depth and the particulate matter concentrations
+/// reuse it with their own trace, scale and maximum.
 #[derive(Debug, Clone, Copy)]
 pub struct PrecipitationCodebook {
     pub trace: f64,
@@ -68,6 +71,7 @@ pub struct PrecipitationCodebook {
     pub maximum_code: u16,
     pub overflow_code: u16,
     pub nodata_code: u16,
+    pub name: &'static str,
 }
 
 impl PrecipitationCodebook {
@@ -102,9 +106,10 @@ impl PrecipitationCodebook {
         let (lo, hi, span) = (self.lo(), self.hi(), self.span());
         for (rate, code) in values.iter().zip(codes.iter_mut()) {
             if !rate.is_finite() {
-                return Err(EncodeError::conversion(
-                    "precipitation plane contains non-finite values",
-                ));
+                return Err(EncodeError::conversion(format!(
+                    "{} plane contains non-finite values",
+                    self.name
+                )));
             }
             let unit = ((rate.clamp(0.0, self.maximum) / self.scale).ln_1p() - lo) / (hi - lo);
             let quantized = 1.0 + (span * unit + 0.5).floor();
@@ -168,6 +173,7 @@ const QUALITY_PRECIPITATION: PrecipitationCodebook = PrecipitationCodebook {
     maximum_code: 253,
     overflow_code: 254,
     nodata_code: 255,
+    name: "precipitation",
 };
 const COMPACT_PRECIPITATION: PrecipitationCodebook = PrecipitationCodebook {
     maximum_code: 125,
@@ -175,6 +181,35 @@ const COMPACT_PRECIPITATION: PrecipitationCodebook = PrecipitationCodebook {
     nodata_code: 127,
     ..QUALITY_PRECIPITATION
 };
+// The aerosol fields, three log1p codebooks. Their interesting range spans
+// orders of magnitude the way a rain rate's does — a clear sky reads an
+// optical depth of 0.05, a dust plume 2, and a linear step fine enough for
+// the haze would spend the codes on the plume — so each takes the
+// precipitation codebook's shape with its own numbers. The optical depth
+// runs to 5 (a severe dust storm's ceiling; the converter clamps there, so
+// the overflow code is never written) at a scale of 0.05; PM2.5 runs to
+// 1000 µg/m³ and the two PM10 fields to 2000, at a scale of 5 µg/m³ with a
+// trace of half a microgram. The compact profile halves the code space as
+// it does for precipitation; the balanced profile takes the quality
+// codebooks, since the fields are smooth. Mirror `QUALITY_AOD` /
+// `QUALITY_PM25` / `QUALITY_PM10` and their compact twins in
+// `xuebuild/quantize.py`; the name is the variable's own there, as here.
+const fn aerosol_codebook(variable_id: &'static str, compact: bool) -> PrecipitationCodebook {
+    let (trace, scale, maximum) = match variable_id.as_bytes() {
+        [b'a', b'o', b'd', ..] => (0.005, 0.05, 5.0),
+        b"pm25" => (0.5, 5.0, 1000.0),
+        _ => (0.5, 5.0, 2000.0),
+    };
+    PrecipitationCodebook {
+        trace,
+        scale,
+        maximum,
+        maximum_code: if compact { 125 } else { 253 },
+        overflow_code: if compact { 126 } else { 254 },
+        nodata_code: if compact { 127 } else { 255 },
+        name: variable_id,
+    }
+}
 // ±63.5 m/s covers every 10 m wind with headroom; the 0.5 m/s step is far
 // below what a particle animation can resolve.
 const QUALITY_WIND: LinearCodebook = LinearCodebook {
@@ -715,6 +750,14 @@ pub fn codebook(profile: &str, variable_id: &str) -> Result<Codebook> {
         }
         (_, "dustr" | "dustg" | "dustb") => Codebook::Linear(DUST_RGB_GUN),
         (_, "dustcf") => Codebook::Linear(DUST_CF),
+        (_, "aod" | "aoddust" | "aodsalt" | "aodsulf" | "aodorg" | "aodbc" | "pm25" | "pm10" | "pm10dust") => {
+            let variable_id = AEROSOL_VARIABLE_IDS
+                .iter()
+                .copied()
+                .find(|id| *id == variable_id)
+                .expect("matched just above");
+            Codebook::Precipitation(aerosol_codebook(variable_id, !quality))
+        }
         _ if pressure_codebook(variable_id, !quality).is_some() => Codebook::Linear(
             pressure_codebook(variable_id, !quality).expect("checked just above"),
         ),

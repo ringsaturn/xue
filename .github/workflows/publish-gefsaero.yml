@@ -1,0 +1,66 @@
+name: publish gefsaero
+
+# GEFS-Aerosols, the aerosol member of NOAA's GEFS (chem, a2d_0p25),
+# three-hourly to F120 from every cycle: the aerosol optical depth at 550 nm
+# in total and by species, and the surface PM2.5 and PM10. The pipeline lives
+# in the reusable publish.yml; this file only owns the schedule and the
+# manual knobs.
+
+on:
+  schedule:
+    # The member's files land from about three and three-quarter hours
+    # after the cycle and reach F120 some six hours after it (measured
+    # 2026-09-19: the 00z run's f120 landed 06:11Z, the 06z run's 12:07Z).
+    # `--run latest` walks back over the cycle grid, so a late cycle is
+    # skipped rather than half-published and picked up by the next pass.
+    - cron: "20 0,6,12,18 * * *"
+    # A second idempotent pass recovers from a temporary upstream outage.
+    # publish.yml exits early when the first pass already made the run live.
+    - cron: "20 1,7,13,19 * * *"
+  workflow_dispatch:
+    inputs:
+      run:
+        description: "Cycle to publish: latest or YYYYMMDDHH"
+        type: string
+        default: latest
+      profile:
+        description: "Quantization/compression profile"
+        type: choice
+        options: [balanced, quality, compact]
+        default: balanced
+      keep:
+        description: "Published runs to keep on R2 (1 = live run only)"
+        type: string
+        default: "1"
+      force:
+        description: "Rebuild even when R2 already serves this run"
+        type: boolean
+        default: false
+      dry_run:
+        description: "Build and report what pruning would delete, but write nothing to R2"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-gefsaero
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    # Scheduled runs on forks would publish into a bucket they cannot reach.
+    if: github.event_name != 'schedule' || github.repository == 'ringsaturn/xue'
+    uses: ./.github/workflows/publish.yml
+    with:
+      model: gefsaero
+      run: ${{ inputs.run || 'latest' }}
+      profile: ${{ inputs.profile || 'balanced' }}
+      keep: ${{ inputs.keep || '1' }}
+      force: ${{ inputs.force || false }}
+      dry_run: ${{ inputs.dry_run || false }}
+      # Published as Zarr stores alone (plan 017 phase 7).
+      zarr: true
+      container: false
+    secrets: inherit

@@ -455,7 +455,8 @@ describe("the DEBRA dust confidence", () => {
     expect(spec.showcaseCode).toBe("DEBRA");
     expect(spec.group).toBe("satellite");
     expect(registry.dustcf!.unit).toBe("1");
-    expect(displayUnit("1")).toBe("1");
+    // A dimensionless quantity shows no unit at all: "0.24", not "0.24 1".
+    expect(displayUnit("1")).toBe("");
   });
 
   it("is reached by its own type names", () => {

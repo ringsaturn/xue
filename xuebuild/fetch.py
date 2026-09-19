@@ -45,6 +45,13 @@ LOG = logging.getLogger(__name__)
 BASE_URL = os.environ.get(
     "XUE_GFS_BASE_URL", "https://storage.googleapis.com/global-forecast-system"
 )
+# GEFS is mirrored the same way (registry.opendata.aws/noaa-gefs-bdp-pds; the
+# chem member's aerosol files under it, ``.idx`` sidecars included), so the
+# aerosol source takes Google's copy too; override with XUE_GEFS_BASE_URL
+# (e.g. https://noaa-gefs-pds.s3.amazonaws.com).
+GEFS_BASE_URL = os.environ.get(
+    "XUE_GEFS_BASE_URL", "https://storage.googleapis.com/gfs-ensemble-forecast-system"
+).rstrip("/")
 # HRRR is mirrored the same way (registry.opendata.aws/noaa-hrrr-pds), and
 # neither copy of a cycle fills in a whole run at once: the hours land one
 # by one, not always in order, and one mirror can hold an hour the other
@@ -194,6 +201,15 @@ def hrrr_object_url(run: GfsRun, forecast_hour: int, *, base_url: str | None = N
     the model never runs past F48."""
     base = (base_url or HRRR_BASE_URLS[0]).rstrip("/")
     return f"{base}/hrrr.{run.date}/conus/hrrr.t{run.cycle}z.wrfsfcf{forecast_hour:02d}.grib2"
+
+
+def gefsaero_object_url(run: GfsRun, forecast_hour: int) -> str:
+    """The GEFS-Aerosols two-dimensional file of one forecast hour: the
+    GEFS cycle's ``chem`` member, its 0.25° product directory (the only
+    one the aerosol run publishes at that resolution), every field of the
+    frame in one object with an ``.idx`` beside it — the NOAA layout, so
+    the pgrb2 record path reads it."""
+    return f"{GEFS_BASE_URL}/gefs.{run.date}/{run.cycle}/chem/pgrb2ap25/gefs.chem.t{run.cycle}z.a2d_0p25.f{forecast_hour:03d}.grib2"
 
 
 def wave_object_url(run: GfsRun, forecast_hour: int) -> str:
@@ -1218,6 +1234,8 @@ def model_object_url(run: GfsRun, forecast_hour: int, model: str) -> str:
         return sflux_object_url(run, forecast_hour)
     if model == "hrrr":
         return hrrr_object_url(run, forecast_hour)
+    if model == "gefsaero":
+        return gefsaero_object_url(run, forecast_hour)
     return object_url(run, forecast_hour)
 
 
@@ -1532,6 +1550,7 @@ def _download_noaa_records(url: str, variable_ids: tuple[str, ...]) -> bytes:
             variable.index_field,
             excluded_phrases=variable.excluded_index_phrases,
             alternate_fields=variable.alternate_index_fields,
+            qualifier=variable.index_qualifier,
         )
         for variable in (VARIABLES[variable_id] for variable_id in variable_ids)
     ]

@@ -1,0 +1,425 @@
+{
+  "aod": {
+    "label": "Aerosol optical depth at 550 nm",
+    "unit": "1",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 20,
+      "parameterNumber": 102,
+      "typeOfFirstFixedSurface": 10,
+      "scaleFactorOfFirstFixedSurface": null,
+      "scaledValueOfFirstFixedSurface": null
+    },
+    "aerosol": {
+      "aerosolType": 62000,
+      "typeOfSizeInterval": 0,
+      "scaleFactorOfFirstSize": 6,
+      "scaledValueOfFirstSize": 20,
+      "scaleFactorOfSecondSize": 0,
+      "scaledValueOfSecondSize": 0,
+      "typeOfWavelengthInterval": 7,
+      "scaleFactorOfFirstWavelength": 9,
+      "scaledValueOfFirstWavelength": 545,
+      "scaleFactorOfSecondWavelength": 9,
+      "scaledValueOfSecondWavelength": 565
+    },
+    "quality": {
+      "type": "log1p",
+      "trace": 0.005,
+      "scale": 0.05,
+      "maximum": 5.0,
+      "minimumCode": 1,
+      "maximumCode": 253,
+      "zeroCode": 0,
+      "overflowCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "log1p",
+      "trace": 0.005,
+      "scale": 0.05,
+      "maximum": 5.0,
+      "minimumCode": 1,
+      "maximumCode": 125,
+      "zeroCode": 0,
+      "overflowCode": 126,
+      "nodataCode": 127
+    }
+  },
+  "aoddust": {
+    "label": "Dust aerosol optical depth at 550 nm",
+    "unit": "1",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 20,
+      "parameterNumber": 102,
+      "typeOfFirstFixedSurface": 10,
+      "scaleFactorOfFirstFixedSurface": null,
+      "scaledValueOfFirstFixedSurface": null
+    },
+    "aerosol": {
+      "aerosolType": 62001,
+      "typeOfSizeInterval": 0,
+      "scaleFactorOfFirstSize": 6,
+      "scaledValueOfFirstSize": 20,
+      "scaleFactorOfSecondSize": 0,
+      "scaledValueOfSecondSize": 0,
+      "typeOfWavelengthInterval": 7,
+      "scaleFactorOfFirstWavelength": 9,
+      "scaledValueOfFirstWavelength": 545,
+      "scaleFactorOfSecondWavelength": 9,
+      "scaledValueOfSecondWavelength": 565
+    },
+    "quality": {
+      "type": "log1p",
+      "trace": 0.005,
+      "scale": 0.05,
+      "maximum": 5.0,
+      "minimumCode": 1,
+      "maximumCode": 253,
+      "zeroCode": 0,
+      "overflowCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "log1p",
+      "trace": 0.005,
+      "scale": 0.05,
+      "maximum": 5.0,
+      "minimumCode": 1,
+      "maximumCode": 125,
+      "zeroCode": 0,
+      "overflowCode": 126,
+      "nodataCode": 127
+    }
+  },
+  "aodsalt": {
+    "label": "Sea salt aerosol optical depth at 550 nm",
+    "unit": "1",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 20,
+      "parameterNumber": 102,
+      "typeOfFirstFixedSurface": 10,
+      "scaleFactorOfFirstFixedSurface": null,
+      "scaledValueOfFirstFixedSurface": null
+    },
+    "aerosol": {
+      "aerosolType": 62008,
+      "typeOfSizeInterval": 0,
+      "scaleFactorOfFirstSize": 6,
+      "scaledValueOfFirstSize": 20,
+      "scaleFactorOfSecondSize": 0,
+      "scaledValueOfSecondSize": 0,
+      "typeOfWavelengthInterval": 7,
+      "scaleFactorOfFirstWavelength": 9,
+      "scaledValueOfFirstWavelength": 545,
+      "scaleFactorOfSecondWavelength": 9,
+      "scaledValueOfSecondWavelength": 565
+    },
+    "quality": {
+      "type": "log1p",
+      "trace": 0.005,
+      "scale": 0.05,
+      "maximum": 5.0,
+      "minimumCode": 1,
+      "maximumCode": 253,
+      "zeroCode": 0,
+      "overflowCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "log1p",
+      "trace": 0.005,
+      "scale": 0.05,
+      "maximum": 5.0,
+      "minimumCode": 1,
+      "maximumCode": 125,
+      "zeroCode": 0,
+      "overflowCode": 126,
+      "nodataCode": 127
+    }
+  },
+  "aodsulf": {
+    "label": "Sulphate aerosol optical depth at 550 nm",
+    "unit": "1",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 20,
+      "parameterNumber": 102,
+      "typeOfFirstFixedSurface": 10,
+      "scaleFactorOfFirstFixedSurface": null,
+      "scaledValueOfFirstFixedSurface": null
+    },
+    "aerosol": {
+      "aerosolType": 62006,
+      "typeOfSizeInterval": 0,
+      "scaleFactorOfFirstSize": 6,
+      "scaledValueOfFirstSize": 20,
+      "scaleFactorOfSecondSize": 0,
+      "scaledValueOfSecondSize": 0,
+      "typeOfWavelengthInterval": 7,
+      "scaleFactorOfFirstWavelength": 9,
+      "scaledValueOfFirstWavelength": 545,
+      "scaleFactorOfSecondWavelength": 9,
+      "scaledValueOfSecondWavelength": 565
+    },
+    "quality": {
+      "type": "log1p",
+      "trace": 0.005,
+      "scale": 0.05,
+      "maximum": 5.0,
+      "minimumCode": 1,
+      "maximumCode": 253,
+      "zeroCode": 0,
+      "overflowCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "log1p",
+      "trace": 0.005,
+      "scale": 0.05,
+      "maximum": 5.0,
+      "minimumCode": 1,
+      "maximumCode": 125,
+      "zeroCode": 0,
+      "overflowCode": 126,
+      "nodataCode": 127
+    }
+  },
+  "aodorg": {
+    "label": "Organic carbon aerosol optical depth at 550 nm",
+    "unit": "1",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 20,
+      "parameterNumber": 102,
+      "typeOfFirstFixedSurface": 10,
+      "scaleFactorOfFirstFixedSurface": null,
+      "scaledValueOfFirstFixedSurface": null
+    },
+    "aerosol": {
+      "aerosolType": 62010,
+      "typeOfSizeInterval": 0,
+      "scaleFactorOfFirstSize": 6,
+      "scaledValueOfFirstSize": 20,
+      "scaleFactorOfSecondSize": 0,
+      "scaledValueOfSecondSize": 0,
+      "typeOfWavelengthInterval": 7,
+      "scaleFactorOfFirstWavelength": 9,
+      "scaledValueOfFirstWavelength": 545,
+      "scaleFactorOfSecondWavelength": 9,
+      "scaledValueOfSecondWavelength": 565
+    },
+    "quality": {
+      "type": "log1p",
+      "trace": 0.005,
+      "scale": 0.05,
+      "maximum": 5.0,
+      "minimumCode": 1,
+      "maximumCode": 253,
+      "zeroCode": 0,
+      "overflowCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "log1p",
+      "trace": 0.005,
+      "scale": 0.05,
+      "maximum": 5.0,
+      "minimumCode": 1,
+      "maximumCode": 125,
+      "zeroCode": 0,
+      "overflowCode": 126,
+      "nodataCode": 127
+    }
+  },
+  "aodbc": {
+    "label": "Black carbon aerosol optical depth at 550 nm",
+    "unit": "1",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 20,
+      "parameterNumber": 102,
+      "typeOfFirstFixedSurface": 10,
+      "scaleFactorOfFirstFixedSurface": null,
+      "scaledValueOfFirstFixedSurface": null
+    },
+    "aerosol": {
+      "aerosolType": 62009,
+      "typeOfSizeInterval": 0,
+      "scaleFactorOfFirstSize": 6,
+      "scaledValueOfFirstSize": 20,
+      "scaleFactorOfSecondSize": 0,
+      "scaledValueOfSecondSize": 0,
+      "typeOfWavelengthInterval": 7,
+      "scaleFactorOfFirstWavelength": 9,
+      "scaledValueOfFirstWavelength": 545,
+      "scaleFactorOfSecondWavelength": 9,
+      "scaledValueOfSecondWavelength": 565
+    },
+    "quality": {
+      "type": "log1p",
+      "trace": 0.005,
+      "scale": 0.05,
+      "maximum": 5.0,
+      "minimumCode": 1,
+      "maximumCode": 253,
+      "zeroCode": 0,
+      "overflowCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "log1p",
+      "trace": 0.005,
+      "scale": 0.05,
+      "maximum": 5.0,
+      "minimumCode": 1,
+      "maximumCode": 125,
+      "zeroCode": 0,
+      "overflowCode": 126,
+      "nodataCode": 127
+    }
+  },
+  "pm25": {
+    "label": "PM2.5 surface concentration",
+    "unit": "µg/m³",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 13,
+      "parameterNumber": 193,
+      "typeOfFirstFixedSurface": 1,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 0
+    },
+    "aerosol": {
+      "aerosolType": 62000,
+      "typeOfSizeInterval": 0,
+      "scaleFactorOfFirstSize": 7,
+      "scaledValueOfFirstSize": 25,
+      "scaleFactorOfSecondSize": 0,
+      "scaledValueOfSecondSize": 0,
+      "typeOfWavelengthInterval": 255,
+      "scaleFactorOfFirstWavelength": null,
+      "scaledValueOfFirstWavelength": null,
+      "scaleFactorOfSecondWavelength": null,
+      "scaledValueOfSecondWavelength": null
+    },
+    "quality": {
+      "type": "log1p",
+      "trace": 0.5,
+      "scale": 5.0,
+      "maximum": 1000.0,
+      "minimumCode": 1,
+      "maximumCode": 253,
+      "zeroCode": 0,
+      "overflowCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "log1p",
+      "trace": 0.5,
+      "scale": 5.0,
+      "maximum": 1000.0,
+      "minimumCode": 1,
+      "maximumCode": 125,
+      "zeroCode": 0,
+      "overflowCode": 126,
+      "nodataCode": 127
+    }
+  },
+  "pm10": {
+    "label": "PM10 surface concentration",
+    "unit": "µg/m³",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 13,
+      "parameterNumber": 192,
+      "typeOfFirstFixedSurface": 1,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 0
+    },
+    "aerosol": {
+      "aerosolType": 62000,
+      "typeOfSizeInterval": 0,
+      "scaleFactorOfFirstSize": 6,
+      "scaledValueOfFirstSize": 10,
+      "scaleFactorOfSecondSize": 0,
+      "scaledValueOfSecondSize": 0,
+      "typeOfWavelengthInterval": 255,
+      "scaleFactorOfFirstWavelength": null,
+      "scaledValueOfFirstWavelength": null,
+      "scaleFactorOfSecondWavelength": null,
+      "scaledValueOfSecondWavelength": null
+    },
+    "quality": {
+      "type": "log1p",
+      "trace": 0.5,
+      "scale": 5.0,
+      "maximum": 2000.0,
+      "minimumCode": 1,
+      "maximumCode": 253,
+      "zeroCode": 0,
+      "overflowCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "log1p",
+      "trace": 0.5,
+      "scale": 5.0,
+      "maximum": 2000.0,
+      "minimumCode": 1,
+      "maximumCode": 125,
+      "zeroCode": 0,
+      "overflowCode": 126,
+      "nodataCode": 127
+    }
+  },
+  "pm10dust": {
+    "label": "Dust PM10 surface concentration",
+    "unit": "µg/m³",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 13,
+      "parameterNumber": 192,
+      "typeOfFirstFixedSurface": 1,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 0
+    },
+    "aerosol": {
+      "aerosolType": 62001,
+      "typeOfSizeInterval": 0,
+      "scaleFactorOfFirstSize": 6,
+      "scaledValueOfFirstSize": 10,
+      "scaleFactorOfSecondSize": 0,
+      "scaledValueOfSecondSize": 0,
+      "typeOfWavelengthInterval": 255,
+      "scaleFactorOfFirstWavelength": null,
+      "scaledValueOfFirstWavelength": null,
+      "scaleFactorOfSecondWavelength": null,
+      "scaledValueOfSecondWavelength": null
+    },
+    "quality": {
+      "type": "log1p",
+      "trace": 0.5,
+      "scale": 5.0,
+      "maximum": 2000.0,
+      "minimumCode": 1,
+      "maximumCode": 253,
+      "zeroCode": 0,
+      "overflowCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "log1p",
+      "trace": 0.5,
+      "scale": 5.0,
+      "maximum": 2000.0,
+      "minimumCode": 1,
+      "maximumCode": 125,
+      "zeroCode": 0,
+      "overflowCode": 126,
+      "nodataCode": 127
+    }
+  }
+}

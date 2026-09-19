@@ -198,7 +198,13 @@ v3 also admits two optional blocks beside a variable's `parameter`,
 algorithm behind a composite field); both are validated when present by all
 three readers, need v3 and raise no floor, and are ignored by readers that
 predate them, so adding them was one-sided (`docs/format.md` §"Band and
-Producer"). No source writes either yet.
+Producer"). The satellite sources write both. A third block of the same
+kind, `aerosol`, carries product definition template 4.48's aerosol type
+and size / wavelength intervals (eleven keys; an interval of type 255 has
+null limits): the six 550 nm AOD species of GEFS-Aerosols share one
+parameter triple and surface, so a variable's identity there is
+`parameter` + `aerosol`, and all three readers validate the block
+(`docs/format.md` §"Band, Producer and Aerosol").
 
 Within the container a plane's key is a frame offset, not a forecast hour:
 `PlaneEntry.frameOffset`, the worker protocol's `frameOffset`, and
@@ -246,6 +252,28 @@ model starts here; the frontend mirror is `FORECAST_MODELS` in
   probe and contour labels to the footprint (`web/src/domain.ts`,
   `FORECAST_MODELS[].domain`), and `region` is where the camera goes when a
   regional model is opened on a view showing none of it.
+- Aerosol forecast (`gefsaero`): NOAA's GEFS-Aerosols chemistry member,
+  the `chem/pgrb2ap25/gefs.chem.tHHz.a2d_0p25.fFFF.grib2` files of every
+  cycle (Google mirror `gfs-ensemble-forecast-system` by default,
+  `XUE_GEFS_BASE_URL`), 3-hourly to F120 (41 frames), landing ~6 h after
+  the cycle (`publish-gefsaero.yml`, cron at 20 past). Nine scalar bundles:
+  the 550 nm AOD as a total and by species (`aod`, `aoddust`, `aodsalt`,
+  `aodsulf`, `aodorg`, `aodbc`, WMO 0/20/102 on the entire atmosphere)
+  and the surface PM in µg/m³ as GDAL already reports it (`pm25`, `pm10`,
+  `pm10dust`; NCEP-local 0/13/193 and 0/13/192). Every record is template
+  4.48, which `grib2.py` / `gribindex.rs` parse (the 24-octet shift) and
+  `gdal.py` / `inspect.rs` match on `GRIB_PDS_PDTN` +
+  `GRIB_PDS_TEMPLATE_ASSEMBLED_VALUES`; the `.idx` line spells the species
+  after the forecast hour, so `VariableSpec.index_qualifier` is a second
+  phrase the line must carry (matched case-insensitively: Google's sidecar
+  capitalises `Dust Dry`). The codebooks are `log1p`
+  (`PrecipitationCodebook`, parameterised: AOD 0.005 / 0.05 / 5, PM
+  0.5 / 5 / 1000, PM10 to 2000). Core bundle `aod`; the shell's rail has
+  an AOD tile and a PM tile with the species and sizes as variants.
+  `tests/fixtures/aerosol-registry.json` holds the three implementations
+  to one set of identities and codebooks; `tests/test_aerosol.py` runs the
+  two-frame `gefsaero.2026091900.f00{0,3}.crop.grib2` pair (Sahara / Gulf
+  of Guinea) through both encoders.
 - Series-file forecast (`ifshres`): ECMWF's IFS HRES, the deterministic
   high-resolution forecast on its native ~9 km grid, as Open-Meteo
   forwards the centre's real-time archive — the first source that is

@@ -12,7 +12,7 @@ from typing import Any
 
 from .errors import ConversionError
 from .model import SourceFrame
-from .variables import SURFACE_TEMPERATURE_IDS, isobaric_variable, variable_spec
+from .variables import AEROSOL_VARIABLE_IDS, SURFACE_TEMPERATURE_IDS, AerosolIdentity, isobaric_variable, variable_spec
 
 
 SUPPORTED_EXTENSIONS = {".grb", ".grb2", ".grib2"}
@@ -315,6 +315,25 @@ def wave_direction_expression(unit: str) -> str:
 _MM_ACCUMULATION_UNITS = {"kg/m^2", "kg/m2", "kgm^-2", "kgm-2", "mm", "kg/m^2s", "kg/m^2*s", "kg/m2s", "kg/m2*s"}
 
 
+def aerosol_optical_depth_expression(unit: str) -> str:
+    """Aerosol optical depth, a dimensionless number GDAL reports as
+    ``[Numeric]``, clamped to the aod codebook range."""
+    compact = re.sub(r"[\s*()\[\]]", "", unit.strip().lower())
+    if compact not in {"numeric", "1", "-", ""}:
+        raise ConversionError(f"unsupported aerosol optical depth unit: {unit or '<missing>'}")
+    return "maximum(0,minimum(5,A))"
+
+
+def particulate_matter_expression(unit: str, *, maximum: int) -> str:
+    """A particulate matter concentration in µg/m³ (GDAL spells NCEP's
+    PMTF / PMTC unit ``10^-6g/m^3``), clamped to the codebook range: 1000
+    for PM2.5, 2000 for PM10."""
+    compact = re.sub(r"[\s*()\[\]]", "", unit.strip().lower())
+    if compact not in {"10^-6g/m^3", "10^-6g/m3", "ug/m^3", "ug/m3", "µg/m^3", "µg/m3", "µg/m³"}:
+        raise ConversionError(f"unsupported particulate matter unit: {unit or '<missing>'}")
+    return f"maximum(0,minimum({maximum},A))"
+
+
 def precipitation_accumulation_is_mm(unit: str) -> bool:
     """Whether a run-total precipitation record is already in millimetres
     (AIFS ``tp``), as opposed to the metres IFS open data carries."""
@@ -436,6 +455,10 @@ def raster_expression(variable_id: str, unit: str) -> str:
         return wave_period_expression(unit)
     if variable_id == "dirpw":
         return wave_direction_expression(unit)
+    if variable_id in AEROSOL_VARIABLE_IDS:
+        if variable_id.startswith("aod"):
+            return aerosol_optical_depth_expression(unit)
+        return particulate_matter_expression(unit, maximum=int(variable_spec(variable_id).value_range[1]))
     if isobaric_variable(variable_id) is not None:
         return isobaric_expression(variable_id, unit)
     raise ConversionError(f"unsupported variable: {variable_id}")
@@ -691,7 +714,63 @@ def _is_mrms_record(metadata: dict[str, str], variable_id: str) -> bool:
     return metadata.get("GRIB_ELEMENT", "") == element and metadata.get("GRIB_DISCIPLINE", "") == "209"
 
 
+def _is_aerosol_record(metadata: dict[str, str], variable_id: str) -> bool:
+    """One GRIB2 aerosol product (template 4.48) under the registry's
+    parameter *and* aerosol identity for ``variable_id``. The driver's
+    tables name the fields by element (``AOTK``, ``PMTF``) and surface, which
+    a dozen of GEFS-Aerosols' records share; what tells them apart is in the
+    template itself, which GDAL exposes whole as
+    ``GRIB_PDS_TEMPLATE_ASSEMBLED_VALUES`` (the template's fields in order,
+    space-separated) beside ``GRIB_PDS_PDTN``. A record of another template,
+    or one the driver did not assemble, is not this record."""
+    spec = variable_spec(variable_id)
+    identity = spec.grib2_aerosol
+    if identity is None or metadata.get("GRIB_PDS_PDTN") != "48":
+        return False
+    try:
+        values = [int(field) for field in metadata.get("GRIB_PDS_TEMPLATE_ASSEMBLED_VALUES", "").split()]
+        discipline = int(metadata.get("GRIB_DISCIPLINE", "").split("(", 1)[0])
+    except ValueError:
+        return False
+    if len(values) < 23:
+        return False
+    if (discipline, values[0], values[1]) != (spec.grib2_discipline, spec.grib2_category, spec.grib2_number):
+        return False
+    if values[20] != spec.grib2_level_type:
+        return False
+    if spec.grib2_level_value is not None:
+        scale, scaled_value = values[21], values[22]
+        if scaled_value == 0xFFFFFFFF or scaled_value / (10.0**scale) != spec.grib2_level_value:
+            return False
+    return _assembled_aerosol(values) == identity
+
+
+def _assembled_aerosol(values: list[int]) -> AerosolIdentity:
+    """The aerosol identity of template 4.48's assembled values: type at
+    index 2, the size interval at 3–7, the wavelength interval at 8–12. An
+    interval of the missing type carries no limits, as the header index
+    reads it (:mod:`xuebuild.grib2`)."""
+    missing = AerosolIdentity.MISSING_TYPE
+
+    def limit(index: int) -> tuple[int, int] | None:
+        scale, scaled_value = values[index], values[index + 1]
+        return None if scaled_value == 0xFFFFFFFF else (scale, scaled_value)
+
+    size_type, wavelength_type = values[3], values[8]
+    return AerosolIdentity(
+        values[2],
+        size_type=size_type,
+        size_first=None if size_type == missing else limit(4),
+        size_second=None if size_type == missing else limit(6),
+        wavelength_type=wavelength_type,
+        wavelength_first=None if wavelength_type == missing else limit(9),
+        wavelength_second=None if wavelength_type == missing else limit(11),
+    )
+
+
 def _band_matches(variable_id: str, metadata: dict[str, str], description: str) -> bool:
+    if variable_id in AEROSOL_VARIABLE_IDS:
+        return _is_aerosol_record(metadata, variable_id)
     if variable_id in ("tmp2m", "dpt2m", "aptmp2m"):
         return _is_two_metre_record(metadata, description, variable_spec(variable_id).grib_element)
     if variable_id == "prate":

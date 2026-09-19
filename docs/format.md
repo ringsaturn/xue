@@ -235,7 +235,7 @@ versioned by the FixedHeader `version` field.
 |---:|---|---|
 | 1 | — | a uniform whole-hour `time` axis declaring `stepHours` |
 | 2 | Explicitly listed forecast hours | a whole-hour `time` axis listing `hours` |
-| 3 | Per-variable GRIB2 identity, and a time axis in units it names | a `parameter` block on every variable (optionally with `band` / `producer` beside it), and a `time` block declaring `unitSeconds` |
+| 3 | Per-variable GRIB2 identity, and a time axis in units it names | a `parameter` block on every variable (optionally with `band` / `producer` / `aerosol` beside it), and a `time` block declaring `unitSeconds` |
 
 An encoder must emit the lowest version that can express the file: the
 highest version any single feature of the metadata requires, and no higher.
@@ -346,6 +346,10 @@ recognize; anything else it can still decode.
 | `uqflx<level>` / `vqflx<level>` | 0 / 1 / 250, 0 / 1 / 251 | 100, `<level>` hPa in Pa | Water vapour flux components, `q·V/g` in g·cm⁻¹·hPa⁻¹·s⁻¹; Xue-local parameter numbers |
 | `vvel<level>` | 0 / 2 / 8 | 100, `<level>` hPa in Pa | Vertical velocity ω in Pa/s on the isobaric surface |
 | `thetae<level>` | 0 / 0 / 3 | 100, `<level>` hPa in Pa | Equivalent potential temperature in K, derived by the encoder (Bolton 1980) from the temperature and specific humidity on the surface; GRIB2's EPOT number |
+| `aod` | 0 / 20 / 102 | 10, no value | Aerosol optical thickness at 550 nm, total aerosol (GEFS-Aerosols), dimensionless. An aerosol product (template 4.48): the `aerosol` block beside the parameter (below) is part of the identity — type 62000, particles smaller than 20 µm, 545–565 nm — and tells it from the other six wavelengths and five species the same parameter carries in one file |
+| `aoddust` / `aodsalt` / `aodsulf` / `aodorg` / `aodbc` | 0 / 20 / 102 | 10, no value | The same optical thickness for dust, sea salt, sulphate, particulate organic matter and black carbon: the same parameter and intervals, `aerosolType` 62001 / 62008 / 62006 / 62010 / 62009 |
+| `pm25` | 0 / 13 / 193 | 1, 0 | PM2.5 surface concentration in µg/m³, NCEP's local PMTF number; `aerosol` type 62000, particles smaller than 2.5 µm, no wavelength interval |
+| `pm10` / `pm10dust` | 0 / 13 / 192 | 1, 0 | PM10 surface concentration in µg/m³ (NCEP's local PMTC), total aerosol and dust alone: one parameter, `aerosolType` 62000 / 62001, particles smaller than 10 µm, no wavelength interval |
 
 The eight registered isobaric surfaces are 1000, 925, 850, 700, 500, 300,
 250 and 200 hPa, and every isobaric family is registered on all eight.
@@ -360,20 +364,27 @@ parameter for a per-level horizontal vapour flux, so the two components take
 local-use numbers 250 and 251 in the moisture category, which no centre this
 pipeline reads from uses.
 
-#### Band and Producer
+#### Band, Producer and Aerosol
 
 A `parameter` block names a quantity on a surface, which is a satellite
 image's whole identity only together with the channel it was taken in:
 brightness temperature at the top of the atmosphere (0 / 4 / 4 on surface
 8) is one parameter for every infrared channel of every imager, and a
-composite computed from several channels has no GRIB2 parameter at all. Two
-optional blocks may sit beside `parameter` on a variable, at the same level
-as it and never inside it, to carry what the parameter does not:
+composite computed from several channels has no GRIB2 parameter at all. Nor
+is it an aerosol product's whole identity: aerosol optical thickness
+(0 / 20 / 102 on the entire atmosphere) is one parameter for every species
+at every wavelength, and GRIB2 puts what tells them apart in the product
+definition template rather than the parameter. Three optional blocks may
+sit beside `parameter` on a variable, at the same level as it and never
+inside it, to carry what the parameter does not:
 
 - `band`: the spectral band and the instrument that measured it, in the
   fields of GRIB2 product definition templates 4.31 and 4.32 for one
   contributing band (the templates' band count is 1 and is not written);
-- `producer`: the algorithm that derived the field from other variables.
+- `producer`: the algorithm that derived the field from other variables;
+- `aerosol`: the aerosol type and the size and wavelength intervals of an
+  aerosol product, in the fields of GRIB2 product definition template 4.48
+  (of which 4.44 and 4.46 are subsets).
 
 ```json
 {
@@ -426,9 +437,60 @@ allowed. A produced field's `parameter` uses GRIB2's local-use ranges
 such fields tells them apart by `producer.id` and the parameter number
 together, since local numbers mean nothing across producers.
 
-Either block is optional and either may appear without the other; a file
-that carries neither is unchanged from before they were defined. Both are
-valid only from schemaVersion 3, like `parameter`, and neither raises the
+```json
+{
+  "numericId": 1,
+  "id": "aoddust",
+  "label": "Dust aerosol optical depth at 550 nm",
+  "unit": "1",
+  "parameter": {
+    "discipline": 0, "parameterCategory": 20, "parameterNumber": 102,
+    "typeOfFirstFixedSurface": 10,
+    "scaleFactorOfFirstFixedSurface": null, "scaledValueOfFirstFixedSurface": null
+  },
+  "aerosol": {
+    "aerosolType": 62001,
+    "typeOfSizeInterval": 0,
+    "scaleFactorOfFirstSize": 6, "scaledValueOfFirstSize": 20,
+    "scaleFactorOfSecondSize": 0, "scaledValueOfSecondSize": 0,
+    "typeOfWavelengthInterval": 7,
+    "scaleFactorOfFirstWavelength": 9, "scaledValueOfFirstWavelength": 545,
+    "scaleFactorOfSecondWavelength": 9, "scaledValueOfSecondWavelength": 565
+  },
+  "quantization": { "type": "log1p", "trace": 0.005, "scale": 0.05, "maximum": 5.0,
+                    "minimumCode": 1, "maximumCode": 253, "zeroCode": 0,
+                    "overflowCode": 254, "nodataCode": 255 }
+}
+```
+
+| `aerosol` field | GRIB2 origin | Rule |
+|---|---|---|
+| `aerosolType` | Template 4.48 octets 12–13, code table 4.233 | 0–65535 |
+| `typeOfSizeInterval` | Octet 14, code table 4.91 | 0–255 |
+| `scaleFactorOfFirstSize` / `scaledValueOfFirstSize` | Octets 15 / 16–19 | −127…127 / 0…4294967294, or both `null` |
+| `scaleFactorOfSecondSize` / `scaledValueOfSecondSize` | Octets 20 / 21–24 | as above |
+| `typeOfWavelengthInterval` | Octet 25, code table 4.91 | 0–255 |
+| `scaleFactorOfFirstWavelength` / `scaledValueOfFirstWavelength` | Octets 26 / 27–30 | as above |
+| `scaleFactorOfSecondWavelength` / `scaledValueOfSecondWavelength` | Octets 31 / 32–35 | as above |
+
+All eleven keys are required when the block is present and no other key is
+allowed. A limit is `scaledValue × 10^−scaleFactor` metres, and each of the
+four is a pair whose two halves are both integers or both `null`, the way
+the parameter's fixed surface value is. An interval whose type is 255
+(missing) carries no limits: its two pairs are `null`, whatever a record
+wrote in the octets (NCEP writes zeros there for a particulate matter
+record, and they never reach the file); an interval of any other type
+carries all four limits as integers. `parameter` stays the identity a
+reader keys on together with this block: two aerosol variables are the same
+field exactly when both blocks agree, and a reader that charts such fields
+recognizes a species by `aerosolType` and a band by the wavelength interval.
+A record is accepted under a registered aerosol variable only when its
+template carries this whole identity — the encoder compares every field —
+and an aerosol variable takes no aliases or alternates.
+
+Each block is optional and any may appear without the others; a file that
+carries none is unchanged from before they were defined. All three are
+valid only from schemaVersion 3, like `parameter`, and none raises the
 version a file must declare: a version 3 reader that predates them reads
 the keys it knows on a variable object and ignores the rest, which is what
 lets them widen version 3 rather than open a version 4. A block that is
@@ -1005,12 +1067,16 @@ A decoder must reject:
   without one in a schemaVersion 3 file; a parameter code outside 0–255; a
   fixed surface with exactly one of its scale factor and scaled value
   `null`; a key the block does not define.
-- A `band` or `producer` block in a file below schemaVersion 3; a block
-  that is not an object (`null` included); a `band` block missing one of
-  its five fields, carrying a value outside its range, or carrying a key it
-  does not define; a `producer` block missing `id` or `version`, whose `id`
-  does not match `^[a-z][a-z0-9]*$`, whose `version` is not a non-empty
-  string, or carrying a key it does not define.
+- A `band`, `producer` or `aerosol` block in a file below schemaVersion 3;
+  a block that is not an object (`null` included); a `band` block missing
+  one of its five fields, carrying a value outside its range, or carrying a
+  key it does not define; a `producer` block missing `id` or `version`,
+  whose `id` does not match `^[a-z][a-z0-9]*$`, whose `version` is not a
+  non-empty string, or carrying a key it does not define; an `aerosol`
+  block missing one of its eleven fields or carrying a key it does not
+  define, a type outside its range, a limit with exactly one of its scale
+  factor and scaled value `null`, a `null` limit under an interval type
+  other than 255, or a non-`null` limit under type 255.
 - A declared `schemaVersion` other than the lowest able to express the
   metadata: a schemaVersion 2 file that declares `stepHours`, or a
   schemaVersion 1 or 2 file whose variables carry `parameter` or whose time

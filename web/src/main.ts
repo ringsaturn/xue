@@ -105,7 +105,7 @@ import {
   type IsobaricFamily,
   UNTILED_BUNDLE_IDS,
 } from "./levels";
-import { buildPalette, buildVapourFluxPalette, buildWaveFieldPalette, buildWindFieldPalette, decodeValue, legendGradient } from "./palettes";
+import { buildPalette, buildVapourFluxPalette, buildWaveFieldPalette, buildWindFieldPalette, decodeValue, encodeLog, legendGradient } from "./palettes";
 import {
   PRESSURE_BUNDLE_IDS,
   isPressureBundle,
@@ -945,6 +945,7 @@ const MODEL_EYEBROW: Record<ForecastModelId, string> = {
   ifshres: "ECMWF / IFS HRES (0.1°)",
   sflux: "NOAA / GFS SFLUX (13 KM)",
   hrrr: "NOAA / HRRR CONUS (3 KM)",
+  gefsaero: "NOAA / GEFS-AEROSOLS (0.25°)",
   cma: "CMA / RADAR MOSAIC (0.044°)",
   mrms: "NOAA / MRMS CONUS (0.02°)",
   jma: "JMA / NOWCAST JAPAN (0.005°)",
@@ -2661,7 +2662,7 @@ function renderProbe(): void {
   } else {
     probePanel.value.value =
       typeof current === "number"
-        ? `${formatProbeValue(variable, displayValue(variable.unit, current))} ${displayUnit(variable.unit)}`
+        ? `${formatProbeValue(variable, displayValue(variable.unit, current))} ${displayUnit(variable.unit)}`.trimEnd()
         : "--";
     const lead = probeStampLine(index, member ? session : null);
     if (current === undefined) probePanel.meta.textContent = `${lead} · ${t("probeAwaiting")}`;
@@ -4287,6 +4288,7 @@ const FIELD_GROUP_LABEL: Record<SheetGroup, MessageKey> = {
   wind: "fieldGroupWind",
   dynamics: "fieldGroupDynamics",
   radiation: "fieldGroupRadiation",
+  aerosol: "fieldGroupAerosol",
   ocean: "fieldGroupOcean",
   satellite: "fieldGroupSatellite",
   other: "fieldGroupOther",
@@ -4551,19 +4553,28 @@ function legendGradientFor(session: VariableSession): string {
   if (session.composite) return "";
   if (session.vector) return legendGradient(vectorPalette(session));
   const variable = session.variable;
-  if (variable.quantization.type !== "linear") return "";
-  const { offset, scale, maximumCode } = variable.quantization;
-  let from = 0;
-  let to = maximumCode;
   // A registered field may read over less than its codebook — a windowed
   // temperature surface, a diagnostic whose ramp saturates before the
   // codebook ends; an unrecognized field's bar spans the codebook, which is
   // exactly what its legend's ticks say.
   const range = chartId !== null && session.identity ? scalarLegendRange(session.identity) : null;
-  if (range) {
-    const [low, high] = range;
-    from = Math.max(0, Math.round((low - offset) / scale));
-    to = Math.min(maximumCode, Math.round((high - offset) / scale));
+  let from = 0;
+  let to: number;
+  if (variable.quantization.type === "linear") {
+    const { offset, scale, maximumCode } = variable.quantization;
+    to = maximumCode;
+    if (range) {
+      const [low, high] = range;
+      from = Math.max(0, Math.round((low - offset) / scale));
+      to = Math.min(maximumCode, Math.round((high - offset) / scale));
+    }
+  } else {
+    // A logarithmic codebook (the aerosols; the precipitation's bar is the
+    // stylesheet's) spans from its zero code, so the bar's foot is the
+    // unpainted clean air the ticks start at.
+    const quantization = variable.quantization;
+    to = range ? encodeLog(quantization, range[1]) : quantization.maximumCode;
+    if (range) from = encodeLog(quantization, range[0]);
   }
   return legendGradient(buildPalette(variable, session.identity), from, to);
 }

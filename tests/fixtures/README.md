@@ -120,6 +120,37 @@ for h in 000 006; do
 done
 ```
 
+`gefsaero.2026091900.f000.crop.grib2` and `gefsaero.2026091900.f003.crop.grib2`
+are an 80 by 80 cell window over the Sahara and the Gulf of Guinea
+(`-srcwin 680 240 80 80`: 10W to 10E, 10N to 30N) of the analysis and the
+first step of the 2026-09-19 00:00 UTC GEFS-Aerosols cycle (the GEFS
+`chem` member's `a2d_0p25` file), the nine records the source fetches in
+`xuebuild/sources.py` order: the aerosol optical depth at 550 nm in total
+and for dust, sea salt, sulphate, organic carbon and black carbon, then
+the surface PM2.5, PM10 and dust PM10. Every record is GRIB2 product
+definition template 4.48, whose aerosol type and size and wavelength
+intervals are the rest of a variable's identity, and `gdal_translate`
+carries the template through the crop, so the header index, the band
+matcher's read of `GRIB_PDS_TEMPLATE_ASSEMBLED_VALUES`, the `aerosol`
+metadata block and the byte-identity parity test all run against real
+template 4.48 records (`tests/test_aerosol.py`). The window holds a
+Saharan plume (dust AOD to 0.96, dust PM10 to 1600 µg/m³), sea salt over
+the gulf and the sulphate haze off the coast, so every codebook meets a
+real gradient. Cut with:
+
+```sh
+python -m xuebuild fetch --model gefsaero --run 2026091900 --hours 3 --raw-dir /tmp/raw
+for h in 000 003; do
+  gdal_translate -srcwin 680 240 80 80 -of GRIB -co DATA_ENCODING=COMPLEX_PACKING \
+    /tmp/raw/gefsaero.2026091900/gefsaero.2026091900.f$h.grib2 \
+    tests/fixtures/gefsaero.2026091900.f$h.crop.grib2
+done
+```
+
+`aerosol-registry.json` is the registry golden for the nine, with each
+variable's `aerosol` block beside its parameter (`tests/test_aerosol.py`;
+the Rust encoder and the frontend read the same file).
+
 `mrms.2026091300.t0000.crop.grib2` and `mrms.2026091300.t0002.crop.grib2`
 are a 160 by 160 cell window of two consecutive frames of the MRMS mosaic,
 each the composite reflectivity (`MergedReflectivityQCComposite_00.50`,

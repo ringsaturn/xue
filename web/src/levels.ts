@@ -10,12 +10,13 @@ import { PRESSURE_BUNDLE_IDS, pressureLabel } from "./pressure";
  * A family is one physical quantity registered on the eight standard isobaric
  * surfaces (manifest.ts `ISOBARIC_LEVELS`), possibly with a near-surface
  * member of its own — 2 m temperature heads the temperature family, 10 m wind
- * the wind family, mean sea level pressure the pressure family. Four
+ * the wind family, mean sea level pressure the pressure family. Five
  * families are not isobaric at all and list their members outright: cloud
  * cover (the total and the three layers), sea ice (cover and thickness),
  * waves (the wave vector — significant height along the direction of
- * travel — and the primary period) and the satellite pictures (the
- * infrared window and the Dust RGB composite), and the level row picks
+ * travel — and the primary period), the aerosol optical depth (the whole
+ * column and five species) and the particulate matter (PM2.5, PM10 and
+ * the dust part of PM10), and the level row or the sheet's chips pick
  * among those the same way. Precipitation, radiation, reflectivity, the
  * other surface diagnostics (gust, CAPE, visibility, dew point, apparent
  * temperature) and the skin temperature are single layers and belong to no
@@ -25,10 +26,11 @@ import { PRESSURE_BUNDLE_IDS, pressureLabel } from "./pressure";
  * ranges are copied from the encoders and held to them by
  * `tests/fixtures/isobaric-registry.json` (`tests/web/levels.test.ts`),
  * `tests/fixtures/surface-registry.json` (`tests/web/surface.test.ts`) and
- * `tests/fixtures/ocean-registry.json` (`tests/web/ocean.test.ts`), the way
- * pressure.ts is held by its own registry.
+ * `tests/fixtures/ocean-registry.json` (`tests/web/ocean.test.ts`) and
+ * `tests/fixtures/aerosol-registry.json` (`tests/web/aerosol.test.ts`), the
+ * way pressure.ts is held by its own registry.
  */
-export type IsobaricFamily = "hgt" | "tmp" | "rh" | "spfh" | "wind" | "qflux" | "vvel" | "thetae" | "cloud" | "ice" | "wave";
+export type IsobaricFamily = "hgt" | "tmp" | "rh" | "spfh" | "wind" | "qflux" | "vvel" | "thetae" | "cloud" | "ice" | "wave" | "aod" | "pm";
 
 export const ISOBARIC_FAMILIES: readonly IsobaricFamily[] = [
   "hgt",
@@ -42,6 +44,8 @@ export const ISOBARIC_FAMILIES: readonly IsobaricFamily[] = [
   "cloud",
   "ice",
   "wave",
+  "aod",
+  "pm",
 ];
 
 export interface FamilyInfo {
@@ -150,6 +154,42 @@ export const FAMILIES: Record<IsobaricFamily, FamilyInfo> = {
       { id: "wave", code: "HEIGHT" },
       { id: "htsgw", code: "HEIGHT", standInFor: "wave" },
       { id: "perpw", code: "PERIOD" },
+    ],
+  },
+  // The aerosol optical depth at 550 nm: the whole column heads the
+  // family and the five species are its variants — each the same
+  // quantity, but of one aerosol, and read on the same legend; they are
+  // chips rather than levels because a species is not a surface.
+  aod: {
+    id: "aod",
+    kind: "scalar",
+    surface: "aod",
+    code: "AOD",
+    surfaceCode: "TOTAL",
+    glossKey: "varAod",
+    variants: [
+      { id: "aod", code: "TOTAL" },
+      { id: "aoddust", code: "DUST" },
+      { id: "aodsalt", code: "SALT" },
+      { id: "aodsulf", code: "SULF" },
+      { id: "aodorg", code: "ORG" },
+      { id: "aodbc", code: "BC" },
+    ],
+  },
+  // The surface particulate matter: PM2.5 heads the family, PM10 and the
+  // dust part of PM10 are its variants — three size cuts and one species,
+  // each with a ceiling of its own.
+  pm: {
+    id: "pm",
+    kind: "scalar",
+    surface: "pm25",
+    code: "PM",
+    surfaceCode: "2.5",
+    glossKey: "varPm",
+    variants: [
+      { id: "pm25", code: "2.5" },
+      { id: "pm10", code: "10" },
+      { id: "pm10dust", code: "10 DUST" },
     ],
   },
 };
@@ -394,7 +434,68 @@ export function scalarLegendRange(identity: VariableIdentity): readonly [number,
   // The dust confidence reads over [0, 1], its codebook less the code
   // under 0.0 that is no data.
   if (family === "dustcf") return [0, 1];
+  const aerosol = aerosolChart(family);
+  if (aerosol) return [0, aerosol.chartMax];
   return null;
+}
+
+/** The aerosol set's codebooks and chart ceilings. The codebooks are
+ * logarithmic (`log1p`, the precipitation's shape), copied from
+ * xuebuild/quantize.py and held to it by `tests/fixtures/aerosol-registry.json`:
+ * the optical depths to 5, the fine particulates to 1000 µg/m³, the
+ * coarse to 2000. The chart reads over less where the codebook keeps
+ * headroom a legend does not need: an optical depth of 5 is the thickest
+ * dust storm, and the ramp runs the whole way; PM2.5 saturates at 500
+ * µg/m³ (the top of the US AQI's hazardous band is 500) and the PM10
+ * fields at 1000, past which the codebook keeps a plume distinct in a
+ * probe. Because the codebook is logarithmic, the legend's evenly spaced
+ * ticks fall on values that are not round (`logLegend`). */
+export interface AerosolChart {
+  trace: number;
+  scale: number;
+  maximum: number;
+  chartMax: number;
+}
+const AEROSOL_OPTICAL_DEPTH_CHART: AerosolChart = { trace: 0.005, scale: 0.05, maximum: 5, chartMax: 5 };
+const FINE_PARTICULATE_CHART: AerosolChart = { trace: 0.5, scale: 5, maximum: 1000, chartMax: 500 };
+const COARSE_PARTICULATE_CHART: AerosolChart = { trace: 0.5, scale: 5, maximum: 2000, chartMax: 1000 };
+export const AEROSOL_CHARTS: Readonly<Record<AerosolChartFamily, AerosolChart>> = {
+  aod: AEROSOL_OPTICAL_DEPTH_CHART,
+  aoddust: AEROSOL_OPTICAL_DEPTH_CHART,
+  aodsalt: AEROSOL_OPTICAL_DEPTH_CHART,
+  aodsulf: AEROSOL_OPTICAL_DEPTH_CHART,
+  aodorg: AEROSOL_OPTICAL_DEPTH_CHART,
+  aodbc: AEROSOL_OPTICAL_DEPTH_CHART,
+  pm25: FINE_PARTICULATE_CHART,
+  pm10: COARSE_PARTICULATE_CHART,
+  pm10dust: COARSE_PARTICULATE_CHART,
+};
+export type AerosolChartFamily = "aod" | "aoddust" | "aodsalt" | "aodsulf" | "aodorg" | "aodbc" | "pm25" | "pm10" | "pm10dust";
+
+/** The aerosol chart of a family, or null for any other. */
+export function aerosolChart(family: ChartFamily): AerosolChart | null {
+  return (AEROSOL_CHARTS as Partial<Record<ChartFamily, AerosolChart>>)[family] ?? null;
+}
+
+/** Whether a family is one of the aerosol set. */
+export function isAerosolFamily(family: ChartFamily): family is AerosolChartFamily {
+  return family in AEROSOL_CHARTS;
+}
+
+/** Six legend ticks, coarsest first, across a logarithmic codebook from
+ * zero to `chartMax`: the values at the bar's five even divisions, each
+ * rounded to two significant figures, so a tick sits where the colour it
+ * labels is — on a log ramp the round values do not. */
+export function logLegend(chart: AerosolChart): string[] {
+  const lo = Math.log1p(chart.trace / chart.scale);
+  const hi = Math.log1p(chart.chartMax / chart.scale);
+  const ticks: string[] = [];
+  for (let index = 0; index < 6; index += 1) {
+    const unit = 1 - index / 5;
+    const value = unit === 0 ? 0 : chart.scale * Math.expm1(lo + unit * (hi - lo));
+    ticks.push(value === 0 ? "0" : String(Number(value.toPrecision(value >= 100 ? 2 : 1))));
+  }
+  return ticks;
 }
 
 /** The infrared window's domain, in the file's kelvin: −90 °C to 60 °C,
@@ -456,7 +557,8 @@ export function familyLabel(id: ForecastBundleId): string {
     cloud: "varLabelTcdc",
     ice: "varLabelIcec",
     wave: "varLabelHtsgw",
-    satellite: "varLabelIr104",
+    aod: "varLabelAod",
+    pm: "varLabelPm25",
   }[family!] as MessageKey;
   return t(key).replace("{level}", String(level));
 }
@@ -472,6 +574,15 @@ const MEMBER_LABEL_KEYS: Record<string, MessageKey> = {
   icetk: "varLabelIcetk",
   htsgw: "varLabelHtsgw",
   perpw: "varLabelPerpw",
+  aod: "varLabelAod",
+  aoddust: "varLabelAoddust",
+  aodsalt: "varLabelAodsalt",
+  aodsulf: "varLabelAodsulf",
+  aodorg: "varLabelAodorg",
+  aodbc: "varLabelAodbc",
+  pm25: "varLabelPm25",
+  pm10: "varLabelPm10",
+  pm10dust: "varLabelPm10dust",
 };
 
 /** The instrument-panel code of one isobaric member: "TMP 850MB", "RH
@@ -492,7 +603,8 @@ export function isobaricCode(id: ForecastBundleId): string {
     cloud: "CLOUD",
     ice: "ICE",
     wave: "WAVE",
-    satellite: "SAT",
+    aod: "AOD",
+    pm: "PM",
   }[family];
   return `${word} ${level}MB`;
 }
@@ -540,6 +652,8 @@ export function isobaricLegend(identity: VariableIdentity): string[] | null {
   // The one legend not in the file's unit: kelvin reads in Celsius.
   if (family === "ir104") return rangeLegend(BRIGHTNESS_TEMPERATURE_LEGEND_RANGE, 30);
   if (family === "dustcf") return rangeLegend([0, 1], 0.2);
+  const aerosol = aerosolChart(family);
+  if (aerosol) return logLegend(aerosol);
   if (family === "vvel" && isRegisteredLevel(level)) return rangeLegend([-OMEGA_PALETTE_MAX, OMEGA_PALETTE_MAX], 0.5);
   if (family === "thetae" && isRegisteredLevel(level)) return rangeLegend(thetaEPaletteDomain(level), 5);
   if (family === "tmp" && isRegisteredLevel(level)) return rangeLegend(temperatureLegendRange(level), 5);

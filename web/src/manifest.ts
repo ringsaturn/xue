@@ -14,7 +14,22 @@ export type ForecastVariableId = "tmp2m" | "prate";
  * The CMA radar mosaic has no live feed: it is an observation archive that
  * reaches the app only as showcase cases. The MRMS mosaic and the JMA
  * nowcast are observations *and* live, each a rolling window. */
-export type ForecastModelId = "gfs" | "ecmwf" | "aifs" | "ifshres" | "sflux" | "hrrr" | "cma" | "mrms" | "jma" | "himawari" | "goeseast" | "goeswest" | "meteosat" | "geo";
+export type ForecastModelId =
+  | "gfs"
+  | "ecmwf"
+  | "aifs"
+  | "ifshres"
+  | "sflux"
+  | "hrrr"
+  | "gefsaero"
+  | "cma"
+  | "mrms"
+  | "jma"
+  | "himawari"
+  | "goeseast"
+  | "goeswest"
+  | "meteosat"
+  | "geo";
 
 export interface ForecastModelInfo {
   id: ForecastModelId;
@@ -110,6 +125,22 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
     latestFilename: "latest-hrrr.json",
     region: [-134.1, 21.12, -60.9, 52.62],
     domain: HRRR_DOMAIN,
+  },
+  // NOAA GEFS-Aerosols, the global aerosol member of the GEFS: aerosol
+  // optical depth at 550 nm for the whole column and by species, and the
+  // surface PM2.5 / PM10 concentrations, on the GFS's 0.25° grid,
+  // three-hourly to F120 from every cycle. No temperature and no
+  // precipitation: the run's core is the total optical depth, and the rail
+  // carries the two family tiles (optical depth, particulate matter) whose
+  // species and size cuts are the sheet's chips.
+  gefsaero: {
+    id: "gefsaero",
+    label: "GEFS-AEROSOLS",
+    product: "chem-a2d-0p25",
+    latestFilename: "latest-gefsaero.json",
+    coreBundles: ["aod"],
+    defaultVariable: "aod",
+    railCore: ["aod", "pm25"],
   },
   // CMA weather radar level-3 mosaic composite reflectivity: the national
   // composite every six minutes on the data portal's plate carrée tile grid
@@ -278,11 +309,27 @@ export function isObservationModel(model: ForecastModelId): boolean {
   return FORECAST_MODELS[model].observation === true;
 }
 
-/** The model switch's entries, in order: the six forecasts, the seven
+/** The model switch's entries, in order: the seven forecasts, the seven
  * rolling observation windows (MRMS, the JMA nowcast, the CMA mosaic and
  * the four geostationary imagers) and the geostationary mosaic, a view
  * over the imagers with no feed of its own. */
-export const FORECAST_MODEL_IDS: readonly ForecastModelId[] = ["gfs", "sflux", "ecmwf", "aifs", "ifshres", "hrrr", "mrms", "jma", "cma", "himawari", "goeseast", "goeswest", "meteosat", "geo"];
+export const FORECAST_MODEL_IDS: readonly ForecastModelId[] = [
+  "gfs",
+  "sflux",
+  "ecmwf",
+  "aifs",
+  "ifshres",
+  "hrrr",
+  "gefsaero",
+  "mrms",
+  "jma",
+  "cma",
+  "himawari",
+  "goeseast",
+  "goeswest",
+  "meteosat",
+  "geo",
+];
 
 /** The members of a mosaic this build knows, in the mosaic's order; a
  * member id the table lacks (a dataset this shell predates) is skipped the
@@ -360,6 +407,7 @@ export type KnownBundleId =
   | SurfaceDiagnosticId
   | OceanId
   | SatelliteId
+  | AerosolId
   | PressureBundleId
   | IsobaricScalarBundleId
   | VectorBundleId;
@@ -402,6 +450,18 @@ export const OCEAN_IDS: readonly OceanId[] = ["tmpsfc", "icec", "icetk", "htsgw"
 export type SatelliteId = "ir104" | CompositeBundleId | "dustcf";
 export const SATELLITE_IDS: readonly SatelliteId[] = ["ir104", "dustrgb", "dustcf"];
 
+/** The aerosol set — the aerosol optical depth at 550 nm, for the whole
+ * column and for each of five species, and the surface particulate matter
+ * concentrations (PM2.5, PM10, and the dust part of PM10) — single layers
+ * whose parameter block alone does not tell them apart: every optical
+ * depth is one WMO parameter on the entire atmosphere, and the two PM10
+ * fields one NCEP-local number on the ground, so each carries the
+ * `aerosol` block beside its parameter (`BundleAerosol`), the species and
+ * the size cut. Held to the encoders by
+ * `tests/fixtures/aerosol-registry.json`. */
+export type AerosolId = "aod" | "aoddust" | "aodsalt" | "aodsulf" | "aodorg" | "aodbc" | "pm25" | "pm10" | "pm10dust";
+export const AEROSOL_IDS: readonly AerosolId[] = ["aod", "aoddust", "aodsalt", "aodsulf", "aodorg", "aodbc", "pm25", "pm10", "pm10dust"];
+
 /** A well-formed bundle/variable name: lowercase alphanumeric, starting with
  * a letter. This is the whole admission rule — a manifest is rejected for
  * naming a bundle badly, never for naming one this build does not know. */
@@ -437,6 +497,7 @@ export type KnownDataVariableId =
   | "cref"
   | SurfaceDiagnosticId
   | OceanId
+  | AerosolId
   | PressureBundleId
   | IsobaricScalarBundleId
   | VectorComponentId
@@ -460,6 +521,7 @@ export const KNOWN_BUNDLE_IDS: readonly KnownBundleId[] = [
   ...SURFACE_DIAGNOSTIC_IDS,
   ...OCEAN_IDS,
   ...SATELLITE_IDS,
+  ...AEROSOL_IDS,
   "prmsl",
   ...perLevel("hgt"),
   ...perLevel("tmp"),
@@ -1129,6 +1191,30 @@ export interface BundleProducer {
   version: string;
 }
 
+/** What kind of aerosol a variable is a measure of, in the fields of GRIB2
+ * product definition template 4.48: the species (code table 4.233), the
+ * particle size interval and the wavelength interval, each interval a type
+ * (code table 4.91) with two limits as `scaledValue × 10^-scaleFactor`
+ * metres. A limit pair is both integers or both null, and an interval of
+ * type 255 (missing — the particulate matter fields have no wavelength)
+ * has both its pairs null. Optional beside `parameter` from schemaVersion
+ * 3; the parameter alone is one number for every species' optical depth,
+ * so this block is the rest of such a variable's identity (docs/format.md,
+ * the aerosol block beside `band` and `producer`). */
+export interface BundleAerosol {
+  aerosolType: number;
+  typeOfSizeInterval: number;
+  scaleFactorOfFirstSize: number | null;
+  scaledValueOfFirstSize: number | null;
+  scaleFactorOfSecondSize: number | null;
+  scaledValueOfSecondSize: number | null;
+  typeOfWavelengthInterval: number;
+  scaleFactorOfFirstWavelength: number | null;
+  scaledValueOfFirstWavelength: number | null;
+  scaleFactorOfSecondWavelength: number | null;
+  scaledValueOfSecondWavelength: number | null;
+}
+
 export interface BundleVariable {
   numericId: number;
   id: DataVariableId;
@@ -1140,6 +1226,9 @@ export interface BundleVariable {
   band?: BundleBand;
   /** The producer of a derived (composite) field, when the variable is one. */
   producer?: BundleProducer;
+  /** The species, size and wavelength of an aerosol field, when the
+   * variable is one. */
+  aerosol?: BundleAerosol;
   quantization: LinearQuantization | LogQuantization;
 }
 
@@ -1408,6 +1497,78 @@ function validateProducer(variable: Record<string, unknown>, schemaVersion: numb
   }
 }
 
+/** The interval types of the aerosol block, each with the two limit pairs
+ * it governs, in the block's own order. */
+const AEROSOL_INTERVALS: ReadonlyArray<
+  readonly [type: keyof BundleAerosol, pairs: ReadonlyArray<readonly [scale: keyof BundleAerosol, value: keyof BundleAerosol]>]
+> = [
+  [
+    "typeOfSizeInterval",
+    [
+      ["scaleFactorOfFirstSize", "scaledValueOfFirstSize"],
+      ["scaleFactorOfSecondSize", "scaledValueOfSecondSize"],
+    ],
+  ],
+  [
+    "typeOfWavelengthInterval",
+    [
+      ["scaleFactorOfFirstWavelength", "scaledValueOfFirstWavelength"],
+      ["scaleFactorOfSecondWavelength", "scaledValueOfSecondWavelength"],
+    ],
+  ],
+];
+const AEROSOL_FIELD_COUNT = 11;
+/** Code table 4.91's "missing": an interval the record does not carry. */
+const MISSING_INTERVAL = 255;
+
+function validateAerosol(variable: Record<string, unknown>, schemaVersion: number): void {
+  if (!("aerosol" in variable)) return;
+  if (schemaVersion < 3) throw new Error("an aerosol block requires schema version 3");
+  const aerosol = object(variable.aerosol);
+  if (Object.keys(aerosol).length !== AEROSOL_FIELD_COUNT) {
+    throw new Error("bundle aerosol block must carry exactly its eleven fields");
+  }
+  const code = (field: keyof BundleAerosol, high: number): number => {
+    const value = aerosol[field];
+    if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > high) {
+      throw new Error(`invalid bundle aerosol ${field}`);
+    }
+    return value;
+  };
+  code("aerosolType", 0xffff);
+  for (const [typeField, pairs] of AEROSOL_INTERVALS) {
+    const type = code(typeField, 0xff);
+    for (const [scaleField, valueField] of pairs) {
+      if (!(scaleField in aerosol) || !(valueField in aerosol)) {
+        throw new Error(`bundle aerosol ${scaleField} pair is incomplete`);
+      }
+      const scale = aerosol[scaleField];
+      const value = aerosol[valueField];
+      // A limit is written the way GRIB2 writes a missing one: both halves
+      // at once — and an interval the record does not carry has none.
+      if ((scale === null) !== (value === null)) {
+        throw new Error(`bundle aerosol ${scaleField} pair must be wholly present or wholly null`);
+      }
+      if (type === MISSING_INTERVAL) {
+        if (scale !== null) throw new Error(`bundle aerosol ${typeField} is missing but carries limits`);
+        continue;
+      }
+      if (
+        typeof scale !== "number" ||
+        !Number.isInteger(scale) ||
+        scale < -127 ||
+        scale > 127 ||
+        typeof value !== "number" ||
+        !Number.isInteger(value) ||
+        value < 0 ||
+        value > 0xfffffffe
+      ) {
+        throw new Error(`invalid bundle aerosol ${scaleField} pair`);
+      }
+    }
+  }
+}
+
 export function parseBundleMetadata(json: string): BundleMetadata {
   const value = object(JSON.parse(json));
   const schemaVersion = value.schemaVersion;
@@ -1432,6 +1593,7 @@ export function parseBundleMetadata(json: string): BundleMetadata {
     if (variable.parameter !== undefined) parameters += 1;
     validateBand(variable, schemaVersion);
     validateProducer(variable, schemaVersion);
+    validateAerosol(variable, schemaVersion);
     const quantization = object(variable.quantization);
     if (quantization.type !== "linear" && quantization.type !== "log1p") {
       throw new Error("unsupported bundle quantization");

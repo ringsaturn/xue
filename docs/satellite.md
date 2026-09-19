@@ -285,7 +285,7 @@ later for the same hour does not recompute a cached slot.
 A satellite variable's identity is its `parameter` block, brightness
 temperature at the nominal top of the atmosphere (GRIB2 0 / 4 / 4 on
 surface 8), which every infrared band of every imager shares, plus the
-`band` block beside it (`format.md` §"Band and Producer"), template
+`band` block beside it (`format.md` §"Band, Producer and Aerosol"), template
 4.31's five fields:
 
 ```json

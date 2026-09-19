@@ -76,7 +76,7 @@ fn time_metadata(offsets: &[i64], unit_seconds: i64) -> Map<String, Value> {
 /// in the bundle's variable list, assigned by [`build_metadata`].
 /// `producers` is what the observation series was stamped with, by variable
 /// id: a produced variable's `producer` block is its registered id and that
-/// version (docs/format.md §"Band and Producer").
+/// version (docs/format.md §"Band, Producer and Aerosol").
 fn variable_metadata(
     variable_id: &str,
     numeric_id: u8,
@@ -123,6 +123,12 @@ fn variable_metadata(
                 ))
             })?;
         block.insert("producer".into(), json!({ "id": stamp.0, "version": stamp.1 }));
+    }
+    if let Some(aerosol) = spec.grib2_aerosol {
+        // An aerosol product: the parameter names the quantity, the block
+        // beside it the species and the intervals it was computed over —
+        // the rest of the identity a template 4.48 record carries.
+        block.insert("aerosol".into(), Value::Object(aerosol.metadata()));
     }
     block.insert(
         "quantization".into(),
@@ -295,6 +301,29 @@ mod tests {
         let plain = build_metadata(run_time, &[0, 1], &grid, "quality", &["cref"], source_spec("cma").unwrap(), 360, &[])
             .expect("metadata");
         assert!(!serde_json::to_string(&plain).unwrap().contains("band"));
+    }
+
+    /// An aerosol variable writes its `aerosol` block between the parameter
+    /// and the quantization, the registered identity whole, and the
+    /// decoder reads it back; an ordinary variable writes none.
+    #[test]
+    fn an_aerosol_product_writes_its_identity_beside_the_parameter() {
+        let source = source_spec("gefsaero").expect("gefsaero");
+        let grid = GridInfo::new(16, 8, -180.0, 90.0, 22.5, -22.5);
+        let run_time = time::macros::datetime!(2026-09-19 00:00:00 UTC);
+        let metadata = build_metadata(run_time, &[0, 3], &grid, "balanced", &["aoddust", "pm25"], source, 3600, &[])
+            .expect("metadata");
+        let text = serde_json::to_string(&metadata).expect("json");
+        assert!(text.contains(
+            r#"},"aerosol":{"aerosolType":62001,"typeOfSizeInterval":0,"scaleFactorOfFirstSize":6,"scaledValueOfFirstSize":20,"scaleFactorOfSecondSize":0,"scaledValueOfSecondSize":0,"typeOfWavelengthInterval":7,"scaleFactorOfFirstWavelength":9,"scaledValueOfFirstWavelength":545,"scaleFactorOfSecondWavelength":9,"scaledValueOfSecondWavelength":565},"quantization":{"type":"log1p","#
+        ));
+        assert!(text.contains(
+            r#""aerosolType":62000,"typeOfSizeInterval":0,"scaleFactorOfFirstSize":7,"scaledValueOfFirstSize":25,"scaleFactorOfSecondSize":0,"scaledValueOfSecondSize":0,"typeOfWavelengthInterval":255,"scaleFactorOfFirstWavelength":null,"scaledValueOfFirstWavelength":null,"scaleFactorOfSecondWavelength":null,"scaledValueOfSecondWavelength":null}"#
+        ));
+        crate::decode::metadata::parse_metadata(text.as_bytes()).expect("the decoder reads it back");
+        let plain = build_metadata(run_time, &[0, 3], &grid, "balanced", &["tmp2m"], source_spec("gfs").unwrap(), 3600, &[])
+            .expect("metadata");
+        assert!(!serde_json::to_string(&plain).unwrap().contains("aerosol"));
     }
 
     #[test]

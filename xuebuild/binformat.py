@@ -109,6 +109,30 @@ _BAND_FIELDS: dict[str, tuple[int, int]] = {
 }
 _PRODUCER_FIELDS = frozenset({"id", "version"})
 _PRODUCER_ID = re.compile(r"^[a-z][a-z0-9]*$")
+# The third optional block: an aerosol product's type and intervals, in the
+# fields of product definition template 4.48. The type fields are plain
+# integers; each interval is a code table 4.91 type and two limits, a limit
+# a (scale factor, scaled value) pair that is whole or null like the fixed
+# surface's, and null throughout when the interval's type is 255 (missing).
+_AEROSOL_MISSING_INTERVAL = 255
+_AEROSOL_TYPE_FIELDS: dict[str, tuple[int, int]] = {
+    "aerosolType": (0, 0xFFFF),
+    "typeOfSizeInterval": (0, 0xFF),
+    "typeOfWavelengthInterval": (0, 0xFF),
+}
+_AEROSOL_INTERVALS: dict[str, tuple[tuple[str, str], ...]] = {
+    "typeOfSizeInterval": (
+        ("scaleFactorOfFirstSize", "scaledValueOfFirstSize"),
+        ("scaleFactorOfSecondSize", "scaledValueOfSecondSize"),
+    ),
+    "typeOfWavelengthInterval": (
+        ("scaleFactorOfFirstWavelength", "scaledValueOfFirstWavelength"),
+        ("scaleFactorOfSecondWavelength", "scaledValueOfSecondWavelength"),
+    ),
+}
+_AEROSOL_FIELDS = frozenset(_AEROSOL_TYPE_FIELDS) | frozenset(
+    field for pairs in _AEROSOL_INTERVALS.values() for pair in pairs for field in pair
+)
 
 _HEADER_STRUCT = struct.Struct("<8sHHIQQQQQQQQ")
 _INDEX_HEADER_STRUCT = struct.Struct("<4sHHII")
@@ -640,6 +664,7 @@ class Bundle:
             parameters += "parameter" in variable
             self._parse_band(variable, schema_version)
             self._parse_producer(variable, schema_version)
+            self._parse_aerosol(variable, schema_version)
             variable_ids[numeric_id] = name
         if not variable_ids:
             raise BundleError("metadata must declare at least one variable")
@@ -739,6 +764,45 @@ class Bundle:
             raise BundleError("producer id is invalid")
         if not isinstance(producer["version"], str) or not producer["version"]:
             raise BundleError("producer version is invalid")
+
+    @staticmethod
+    def _parse_aerosol(variable: dict[str, Any], schema_version: int) -> None:
+        """Validate a variable's optional aerosol block: template 4.48's
+        type and two intervals, every field present, each limit a whole
+        pair, null exactly when its interval's type is missing
+        (docs/format.md §"Band, Producer and Aerosol")."""
+        if "aerosol" not in variable:
+            return
+        aerosol = variable["aerosol"]
+        if schema_version < 3:
+            raise BundleError("an aerosol block requires schemaVersion 3")
+        if not isinstance(aerosol, dict):
+            raise BundleError("aerosol must be an object")
+        if set(aerosol) != _AEROSOL_FIELDS:
+            raise BundleError("aerosol block must carry exactly its eleven fields")
+        for field, (low, high) in _AEROSOL_TYPE_FIELDS.items():
+            value = aerosol[field]
+            if not isinstance(value, int) or isinstance(value, bool) or not low <= value <= high:
+                raise BundleError(f"aerosol {field} is invalid")
+        for type_field, pairs in _AEROSOL_INTERVALS.items():
+            missing = aerosol[type_field] == _AEROSOL_MISSING_INTERVAL
+            for scale_field, value_field in pairs:
+                scale_factor, scaled_value = aerosol[scale_field], aerosol[value_field]
+                if (scale_factor is None) != (scaled_value is None):
+                    raise BundleError(f"aerosol {scale_field} and {value_field} must both be present or both null")
+                if (scale_factor is None) != missing:
+                    raise BundleError(f"aerosol {value_field} must be null exactly when {type_field} is missing")
+                if missing:
+                    continue
+                if (
+                    not isinstance(scale_factor, int)
+                    or isinstance(scale_factor, bool)
+                    or not -127 <= scale_factor <= 127
+                    or not isinstance(scaled_value, int)
+                    or isinstance(scaled_value, bool)
+                    or not 0 <= scaled_value <= 0xFFFFFFFE
+                ):
+                    raise BundleError(f"aerosol {value_field} is invalid")
 
     @classmethod
     def _parse_time_axis(

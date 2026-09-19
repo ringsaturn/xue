@@ -446,6 +446,18 @@ def _source_prose(source: SourceSpec) -> dict[str, Any]:
             "providers": [_NOAA_PROVIDER, _XUE_PROVIDER],
             "links": [_NOAA_LICENSE_LINK],
         },
+        "gefsaero": {
+            "title": "NOAA GEFS-Aerosols 0.25°",
+            "description": (
+                "The aerosol member of the NOAA Global Ensemble Forecast System (GEFS-Aerosols, the "
+                "GOCART model coupled to the GFS) at 0.25°: aerosol optical depth at 550 nm, in total "
+                "and by species, and the surface concentrations of fine and coarse particulate matter, "
+                "three-hourly to 120 hours. Four cycles a day; only the newest is kept."
+            ),
+            "license": "other",
+            "providers": [_NOAA_PROVIDER, _XUE_PROVIDER],
+            "links": [_NOAA_LICENSE_LINK],
+        },
         "mrms": {
             "title": "NOAA MRMS radar mosaic",
             "description": (

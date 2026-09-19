@@ -82,7 +82,7 @@ def _common_run_arguments(parser: argparse.ArgumentParser, *, force_help: str) -
         default=None,
         help="last forecast hour, inclusive; must lie on the model's published axis "
         "(e.g. GFS: hourly to 120, then 3-hourly to 240); defaults to the whole axis "
-        "the model publishes (240 for the global models, 18 for HRRR); on an observation "
+        "the model publishes (240 for the global models, 18 for HRRR, 120 for GEFS-Aerosols); on an observation "
         "source, the window length in hours (3 for MRMS, JMA and the CMA mosaic)",
     )
     parser.add_argument("--force", action="store_true", help=force_help)
@@ -105,6 +105,8 @@ def _model_argument(parser: argparse.ArgumentParser, *, fetched_only: bool = Tru
             "(hourly to 90, 3-hourly to 144, 6-hourly to 360; 00Z and 12Z, fetched through the om2nc tool), "
             "GFS surface flux on the native ~13 km grid (hourly, adds dswrf), "
             "NOAA HRRR over the contiguous US (3 km, a cycle every hour, hourly to 18), "
+            "gefsaero, NOAA GEFS-Aerosols at 0.25 degree (3-hourly to 120: aerosol optical "
+            "depth by species and the surface PM2.5 / PM10), "
             "NOAA MRMS, the radar mosaic over the contiguous US (an observation every "
             "two minutes; --run names the window's first hour and --hours its length, 3 by default), "
             "JMA, the precipitation nowcast over Japan (an observation every five minutes, "

@@ -62,6 +62,11 @@ export const en = {
   varSst: "SKIN",
   varIce: "COVER",
   varWave: "HEIGHT",
+  /** The aerosol families' tiles: the optical depth heads with the whole
+   * column (its species are the sheet's chips), the particulate matter
+   * with the 2.5 µm cut — a size, so the same in every language. */
+  varAod: "TOTAL",
+  varPm: "2.5",
   /** The upper-air families' tiles: relative humidity and the water vapour
    * flux have no surface member, so the gloss names the field rather than a
    * level. */
@@ -116,6 +121,10 @@ export const en = {
   glyphTmpsfc: "S",
   glyphIce: "I",
   glyphWave: "H",
+  // τ is the optical depth's own symbol in every script; µ, of the
+  // microgram per cubic metre a particulate concentration is read in.
+  glyphAod: "τ",
+  glyphPm: "µ",
   glyphPressure: "P",
   // U is the WMO symbol for relative humidity; the vapour flux takes the F
   // of flux.
@@ -137,6 +146,10 @@ export const en = {
    * its data-card label. */
   tipIce: "Sea ice",
   tipWave: "Waves",
+  /** The aerosol families' tiles: the optical depth and the particulate
+   * matter, each a family whose species and size cuts are chips. */
+  tipAod: "Aerosol optical depth",
+  tipPm: "Particulate matter",
   /** The satellite tile: a family tile, the infrared window and the
    * Dust RGB composite behind it. */
   tipSatellite: "Satellite imagery",
@@ -170,6 +183,7 @@ export const en = {
   fieldGroupWind: "WIND",
   fieldGroupDynamics: "DYNAMICS",
   fieldGroupRadiation: "RADIATION & VISIBILITY",
+  fieldGroupAerosol: "AEROSOLS & AIR QUALITY",
   fieldGroupOcean: "OCEAN",
   fieldGroupSatellite: "SATELLITE",
   fieldGroupOther: "OTHER",
@@ -194,6 +208,7 @@ export const en = {
   creditsHeading: "DATA & CREDITS",
   creditsGfs: "FORECAST DATA · GFS 0.25° AND SFLUX",
   creditsHrrr: "FORECAST DATA · HRRR 3 KM, CONTIGUOUS US",
+  creditsGefsAero: "AEROSOL FORECAST · GEFS-AEROSOLS 0.25°, AOD AND SURFACE PM",
   creditsEcmwf: "CONTAINS MODIFIED ECMWF DATA · CC BY 4.0",
   /** The IFS HRES line carries the attribution ECMWF's licence asks for on
    * an adapted work, and names Open-Meteo, which forwards the centre's
@@ -348,6 +363,17 @@ export const en = {
   varLabelHtsgw: "Significant wave height",
   varLabelPerpw: "Primary wave period",
   varLabelDirpw: "Primary wave direction",
+  // The aerosol set: the optical depth at 550 nm for the whole column and
+  // by species, and the surface particulate concentrations by size cut.
+  varLabelAod: "Aerosol optical depth at 550 nm",
+  varLabelAoddust: "Dust optical depth",
+  varLabelAodsalt: "Sea salt optical depth",
+  varLabelAodsulf: "Sulphate optical depth",
+  varLabelAodorg: "Organic carbon optical depth",
+  varLabelAodbc: "Black carbon optical depth",
+  varLabelPm25: "PM2.5 surface concentration",
+  varLabelPm10: "PM10 surface concentration",
+  varLabelPm10dust: "Dust PM10 surface concentration",
   varLabelPrmsl: "Mean sea level pressure",
   // One string for eight levels: pressure.ts and levels.ts substitute {level}.
   varLabelHeightAtLevel: "{level} hPa geopotential height",

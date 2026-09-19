@@ -100,6 +100,115 @@ pub struct VariableSpec {
     /// parameter is in GRIB2's local-use range and means nothing without
     /// the producer. Mirrors `producer_id` in `xuebuild/variables.py`.
     pub producer_id: Option<&'static str>,
+    /// For a GRIB2 aerosol product (template 4.48 and its subsets), the
+    /// rest of its identity: the aerosol type and the size and wavelength
+    /// intervals ([`AerosolIdentity`]), matched whole beside the parameter
+    /// and written as the `aerosol` block beside it. `None` for every
+    /// other variable, which matches no aerosol record. An aerosol
+    /// variable takes no aliases and no alternates. Mirrors
+    /// `grib2_aerosol` in `xuebuild/variables.py`.
+    pub grib2_aerosol: Option<AerosolIdentity>,
+}
+
+/// What a GRIB2 aerosol product carries beyond its parameter: the fields of
+/// product definition template 4.48 (and of 4.44 / 4.46, its subsets)
+/// between the parameter number and the generating process — the aerosol
+/// type (code table 4.233), a size interval and a wavelength interval (each
+/// a code table 4.91 type with two limits). A parameter triple on a surface
+/// names every one of GEFS-Aerosols' optical thicknesses at once (0/20/102
+/// on the entire atmosphere is the total, the dust, the sea salt, ... at
+/// seven wavelengths), so for such a record the identity is the parameter
+/// block *and* this one, written beside it as the metadata's `aerosol`
+/// block (docs/format.md §"Band, Producer and Aerosol") and compared whole
+/// when matching a record.
+///
+/// A limit is a `(scaleFactor, scaledValue)` pair, the value being
+/// `scaledValue × 10^−scaleFactor` metres, or `None` where GRIB2 encodes it
+/// as missing. An interval whose type is 255 (missing) carries no limits:
+/// both pairs are `None` here whatever the record wrote — NCEP writes zeros
+/// rather than the missing pattern for the wavelength of a particulate
+/// matter record — so the record matches the registered identity and the
+/// file never carries the zeros. Mirrors `AerosolIdentity` in
+/// `xuebuild/variables.py`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AerosolIdentity {
+    /// Code table 4.233: 62000 total aerosol, 62001 dust, 62006 sulphate,
+    /// 62008 sea salt, 62009 black carbon, 62010 particulate organic matter.
+    pub aerosol_type: u16,
+    /// Code table 4.91 type of the size interval: 0 "smaller than first
+    /// limit", 7 "between first and second limit", 255 missing.
+    pub size_type: u8,
+    pub size_first: Option<(i8, u32)>,
+    pub size_second: Option<(i8, u32)>,
+    pub wavelength_type: u8,
+    pub wavelength_first: Option<(i8, u32)>,
+    pub wavelength_second: Option<(i8, u32)>,
+}
+
+impl AerosolIdentity {
+    /// Code table 4.91's missing interval type.
+    pub const MISSING_TYPE: u8 = 255;
+
+    /// The identity as the schema v3 `aerosol` block: every field of
+    /// template 4.48, a missing limit written as GRIB2 encodes it, `null`
+    /// for both halves.
+    pub fn metadata(&self) -> Map<String, Value> {
+        fn pair(limit: Option<(i8, u32)>) -> (Value, Value) {
+            match limit {
+                Some((scale_factor, scaled_value)) => (json!(scale_factor), json!(scaled_value)),
+                None => (Value::Null, Value::Null),
+            }
+        }
+        let (size_first_scale, size_first_value) = pair(self.size_first);
+        let (size_second_scale, size_second_value) = pair(self.size_second);
+        let (wavelength_first_scale, wavelength_first_value) = pair(self.wavelength_first);
+        let (wavelength_second_scale, wavelength_second_value) = pair(self.wavelength_second);
+        let mut block = Map::new();
+        block.insert("aerosolType".into(), json!(self.aerosol_type));
+        block.insert("typeOfSizeInterval".into(), json!(self.size_type));
+        block.insert("scaleFactorOfFirstSize".into(), size_first_scale);
+        block.insert("scaledValueOfFirstSize".into(), size_first_value);
+        block.insert("scaleFactorOfSecondSize".into(), size_second_scale);
+        block.insert("scaledValueOfSecondSize".into(), size_second_value);
+        block.insert("typeOfWavelengthInterval".into(), json!(self.wavelength_type));
+        block.insert("scaleFactorOfFirstWavelength".into(), wavelength_first_scale);
+        block.insert("scaledValueOfFirstWavelength".into(), wavelength_first_value);
+        block.insert("scaleFactorOfSecondWavelength".into(), wavelength_second_scale);
+        block.insert("scaledValueOfSecondWavelength".into(), wavelength_second_value);
+        block
+    }
+}
+
+/// The identity every GEFS-Aerosols optical thickness at 550 nm shares but
+/// for the species: particles smaller than 20 µm (size type 0, the first
+/// limit 20 × 10⁻⁶ m, the unused second limit written 0 / 0 as NCEP does),
+/// between 545 and 565 nm (wavelength type 7, both limits in 10⁻⁹ m).
+/// Mirrors `_aod_550nm_identity` in `xuebuild/variables.py`.
+const fn aod_550nm_identity(aerosol_type: u16) -> AerosolIdentity {
+    AerosolIdentity {
+        aerosol_type,
+        size_type: 0,
+        size_first: Some((6, 20)),
+        size_second: Some((0, 0)),
+        wavelength_type: 7,
+        wavelength_first: Some((9, 545)),
+        wavelength_second: Some((9, 565)),
+    }
+}
+
+/// A particulate matter record's identity: the species and particles
+/// smaller than the size limit, with no wavelength interval (type 255,
+/// no limits).
+const fn particulate_identity(aerosol_type: u16, size_first: (i8, u32)) -> AerosolIdentity {
+    AerosolIdentity {
+        aerosol_type,
+        size_type: 0,
+        size_first: Some(size_first),
+        size_second: Some((0, 0)),
+        wavelength_type: AerosolIdentity::MISSING_TYPE,
+        wavelength_first: None,
+        wavelength_second: None,
+    }
 }
 
 impl VariableSpec {
@@ -186,6 +295,15 @@ pub const SATELLITE_VARIABLE_IDS: &[&str] = &[
     "ir039", "wv062", "ir086", "ir104", "ir112", "ir123", "dustr", "dustg", "dustb", "dustcf",
 ];
 
+/// The aerosol set, in the order GEFS-Aerosols publishes it: the six optical
+/// thicknesses, then the three surface concentrations. Held to the Python
+/// encoder and the frontend by `tests/fixtures/aerosol-registry.json`, which
+/// carries each variable's `aerosol` block beside its parameter. Mirrors
+/// `AEROSOL_VARIABLE_IDS` in `xuebuild/variables.py`.
+pub const AEROSOL_VARIABLE_IDS: &[&str] = &[
+    "aod", "aoddust", "aodsalt", "aodsulf", "aodorg", "aodbc", "pm25", "pm10", "pm10dust",
+];
+
 /// The ids the Celsius rule applies to at the surface: GDAL normalizes every
 /// GRIB temperature to Celsius, and the converter accepts K and F as well.
 /// Mirrors `SURFACE_TEMPERATURE_IDS` in `xuebuild/variables.py`.
@@ -231,6 +349,7 @@ macro_rules! isobaric_spec {
             gdal_unit: $gdal_unit,
             fill_values: &[],
             producer_id: None,
+            grib2_aerosol: None,
         }
     };
 }
@@ -311,6 +430,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         gdal_unit: "C",
         fill_values: &[],
         producer_id: None,
+        grib2_aerosol: None,
     },
     VariableSpec {
         id: "prate",
@@ -342,6 +462,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         gdal_unit: "kg/(m^2 s)",
         fill_values: &[-3.0],
         producer_id: None,
+        grib2_aerosol: None,
     },
     // ECMWF open data has no rate field: tp is the run-total accumulation
     // (metres, ECMWF-local GRIB2 parameter 0/1/193). Input-only — the
@@ -376,6 +497,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         gdal_unit: "-",
         fill_values: &[],
         producer_id: None,
+        grib2_aerosol: None,
     },
     // Open-Meteo's `precipitation` is a third arrival shape: the total that
     // fell over the interval since the model's *previous native output time*
@@ -405,6 +527,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         gdal_unit: "kg/(m^2)",
         fill_values: &[],
         producer_id: None,
+        grib2_aerosol: None,
     },
     // GFS sflux PRATE is the mean rate over an averaging window that resets
     // every 6 hours. Input-only — the converter de-averages it into prate.
@@ -426,6 +549,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         gdal_unit: "kg/(m^2 s)",
         fill_values: &[],
         producer_id: None,
+        grib2_aerosol: None,
     },
     VariableSpec {
         id: "dswrf",
@@ -445,6 +569,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         gdal_unit: "W/(m^2)",
         fill_values: &[],
         producer_id: None,
+        grib2_aerosol: None,
     },
     VariableSpec {
         id: "ugrd10m",
@@ -464,6 +589,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         gdal_unit: "m/s",
         fill_values: &[],
         producer_id: None,
+        grib2_aerosol: None,
     },
     VariableSpec {
         id: "vgrd10m",
@@ -483,6 +609,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         gdal_unit: "m/s",
         fill_values: &[],
         producer_id: None,
+        grib2_aerosol: None,
     },
     // Composite reflectivity: the column maximum, so its fixed surface is
     // the entire atmosphere (type 10, which carries no value). It arrives
@@ -519,6 +646,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         gdal_unit: "dB",
         fill_values: &[-999.0, -99.0],
         producer_id: None,
+        grib2_aerosol: None,
     },
     // Three more surface diagnostics, each a GRIB record of its own with no
     // unit conversion. Registered from the GFS pgrb2 set; ECMWF open data
@@ -557,6 +685,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         gdal_unit: "m/s",
         fill_values: &[],
         producer_id: None,
+        grib2_aerosol: None,
     },
     // Total cloud cover over the whole column, 0/6/1 on the entire
     // atmosphere (surface type 10, no value); the identity's missing
@@ -603,6 +732,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         gdal_unit: "%",
         fill_values: &[],
         producer_id: None,
+        grib2_aerosol: None,
     },
     // Surface-based convective available potential energy, 0/7/6 on the
     // ground surface — not the mixed-layer variants on surface type 108.
@@ -634,6 +764,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         gdal_unit: "J/kg",
         fill_values: &[],
         producer_id: None,
+        grib2_aerosol: None,
     },
     // Surface visibility, 0/19/0 on the ground surface: GRIB2 carries metres,
     // the codebook quantizes kilometres.
@@ -655,6 +786,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         gdal_unit: "m",
         fill_values: &[],
         producer_id: None,
+        grib2_aerosol: None,
     },
     // 2 m dew point, 0/0/6 on the 2 m surface — the 2 m temperature's own
     // matching and unit rules.
@@ -676,6 +808,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         gdal_unit: "C",
         fill_values: &[],
         producer_id: None,
+        grib2_aerosol: None,
     },
     // NCEP's apparent temperature, 0/0/21 on the 2 m surface.
     VariableSpec {
@@ -696,6 +829,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         gdal_unit: "C",
         fill_values: &[],
         producer_id: None,
+        grib2_aerosol: None,
     },
     // The cloud layers: three parameters of their own (0/6/3, 0/6/4, 0/6/5),
     // each on its own layer surface (214 low, 224 middle, 234 high), which
@@ -729,6 +863,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         gdal_unit: "%",
         fill_values: &[],
         producer_id: None,
+        grib2_aerosol: None,
     },
     VariableSpec {
         id: "mcdc",
@@ -756,6 +891,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         gdal_unit: "%",
         fill_values: &[],
         producer_id: None,
+        grib2_aerosol: None,
     },
     VariableSpec {
         id: "hcdc",
@@ -783,6 +919,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         gdal_unit: "%",
         fill_values: &[],
         producer_id: None,
+        grib2_aerosol: None,
     },
     // The ocean fields of the pgrb2 set (see `xuebuild/variables.py`): the
     // ground-or-water skin temperature, 0/0/0 on surface type 1 — the SST
@@ -818,6 +955,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         gdal_unit: "C",
         fill_values: &[],
         producer_id: None,
+        grib2_aerosol: None,
     },
     VariableSpec {
         id: "icec",
@@ -837,6 +975,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         gdal_unit: "Proportion",
         fill_values: &[],
         producer_id: None,
+        grib2_aerosol: None,
     },
     VariableSpec {
         id: "icetk",
@@ -864,6 +1003,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         gdal_unit: "m",
         fill_values: &[9999.0],
         producer_id: None,
+        grib2_aerosol: None,
     },
     // The wave fields, appended to the frame from the cycle's second file
     // family (GFS-Wave, or the `wave` stream of ECMWF open data):
@@ -893,6 +1033,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         gdal_unit: "m",
         fill_values: &[9999.0],
         producer_id: None,
+        grib2_aerosol: None,
     },
     VariableSpec {
         id: "perpw",
@@ -912,6 +1053,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         gdal_unit: "s",
         fill_values: &[9999.0],
         producer_id: None,
+        grib2_aerosol: None,
     },
     VariableSpec {
         id: "dirpw",
@@ -931,6 +1073,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         gdal_unit: "Degree true",
         fill_values: &[9999.0],
         producer_id: None,
+        grib2_aerosol: None,
     },
     // The wave vector: the significant wave height laid along the direction
     // the waves travel, as an eastward and a northward component in metres,
@@ -958,6 +1101,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         gdal_unit: "",
         fill_values: &[],
         producer_id: None,
+        grib2_aerosol: None,
     },
     VariableSpec {
         id: "vwave",
@@ -977,6 +1121,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         gdal_unit: "",
         fill_values: &[],
         producer_id: None,
+        grib2_aerosol: None,
     },
     // The satellite channels: brightness temperature at the nominal top of
     // the atmosphere (0/4/4 on surface 8), one parameter for every infrared
@@ -1005,6 +1150,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         gdal_unit: "",
         fill_values: &[],
         producer_id: None,
+        grib2_aerosol: None,
     },
     // The three other infrared windows the Dust RGB reads (AHI bands 11, 14
     // and 15; ABI channels 11, 14 and 15), the same parameter and codebook
@@ -1030,6 +1176,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         gdal_unit: "",
         fill_values: &[],
         producer_id: None,
+        grib2_aerosol: None,
     },
     VariableSpec {
         id: "ir112",
@@ -1049,6 +1196,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         gdal_unit: "",
         fill_values: &[],
         producer_id: None,
+        grib2_aerosol: None,
     },
     VariableSpec {
         id: "ir123",
@@ -1068,6 +1216,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         gdal_unit: "",
         fill_values: &[],
         producer_id: None,
+        grib2_aerosol: None,
     },
     // The two further windows DEBRA reads (Miller et al. 2017: the 3.9 µm
     // window for the night thin-cirrus test and the 6.2 µm water vapour
@@ -1096,6 +1245,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         gdal_unit: "",
         fill_values: &[],
         producer_id: None,
+        grib2_aerosol: None,
     },
     VariableSpec {
         id: "wv062",
@@ -1115,6 +1265,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         gdal_unit: "",
         fill_values: &[],
         producer_id: None,
+        grib2_aerosol: None,
     },
     // The classic Dust RGB, the three guns of one composite bundle,
     // `dustrgb`: red is the 12.3 − 10.4 µm split window, green 11.2 − 8.6 µm
@@ -1146,6 +1297,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         gdal_unit: "",
         fill_values: &[],
         producer_id: Some("shachen"),
+        grib2_aerosol: None,
     },
     VariableSpec {
         id: "dustg",
@@ -1165,6 +1317,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         gdal_unit: "",
         fill_values: &[],
         producer_id: Some("shachen"),
+        grib2_aerosol: None,
     },
     VariableSpec {
         id: "dustb",
@@ -1184,6 +1337,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         gdal_unit: "",
         fill_values: &[],
         producer_id: Some("shachen"),
+        grib2_aerosol: None,
     },
     // The DEBRA dust confidence (Miller et al. 2017, Eqs. 1–22, as the
     // `shachen` package implements them with its ABI retune), the one
@@ -1216,6 +1370,203 @@ pub const VARIABLES: &[VariableSpec] = &[
         gdal_unit: "",
         fill_values: &[],
         producer_id: Some("shachen"),
+        grib2_aerosol: None,
+    },
+    // The GEFS-Aerosols fields (NOAA's GEFS `chem` member, the GOCART
+    // aerosol model coupled to the GFS), the first aerosol products this
+    // pipeline reads: GRIB2 product definition template 4.48, whose
+    // identity is the parameter block plus an `AerosolIdentity`. Six
+    // optical thicknesses at 550 nm (WMO 0/20/102, "aerosol optical
+    // thickness", on the entire atmosphere, dimensionless), the total and
+    // five species, each told apart by the aerosol type alone: the file
+    // carries every species over the same size interval (particles smaller
+    // than 20 µm) and the same band (545–565 nm, the visible window an AOD
+    // is quoted at). Then three surface concentrations under NCEP's local
+    // PMTF / PMTC numbers (0/13/193 fine, 0/13/192 coarse), which GDAL
+    // reports in µg/m³ already, so no conversion applies: PM2.5 (particles
+    // under 2.5 µm) and PM10 (under 10 µm), and the PM10 of dust alone,
+    // since a dust storm's surface concentration is what a dust forecast is
+    // read for. A PM record's wavelength interval is missing (type 255) and
+    // carries no limits. Mirror the nine entries in `xuebuild/variables.py`.
+    VariableSpec {
+        id: "aod",
+        label: "Aerosol optical depth at 550 nm",
+        output_unit: "1",
+        value_range: (0.0, 5.0),
+        grib_element: "AOTK",
+        open_meteo: "",
+        grib2_discipline: 0,
+        grib2_category: 20,
+        grib2_number: 102,
+        grib2_level_type: 10,
+        grib2_level_value: None,
+        grib2_statistical: None,
+        grib2_aliases: &[],
+        grib2_alternates: &[],
+        gdal_unit: "Numeric",
+        fill_values: &[],
+        producer_id: None,
+        grib2_aerosol: Some(aod_550nm_identity(62000)),
+    },
+    VariableSpec {
+        id: "aoddust",
+        label: "Dust aerosol optical depth at 550 nm",
+        output_unit: "1",
+        value_range: (0.0, 5.0),
+        grib_element: "AOTK",
+        open_meteo: "",
+        grib2_discipline: 0,
+        grib2_category: 20,
+        grib2_number: 102,
+        grib2_level_type: 10,
+        grib2_level_value: None,
+        grib2_statistical: None,
+        grib2_aliases: &[],
+        grib2_alternates: &[],
+        gdal_unit: "Numeric",
+        fill_values: &[],
+        producer_id: None,
+        grib2_aerosol: Some(aod_550nm_identity(62001)),
+    },
+    VariableSpec {
+        id: "aodsalt",
+        label: "Sea salt aerosol optical depth at 550 nm",
+        output_unit: "1",
+        value_range: (0.0, 5.0),
+        grib_element: "AOTK",
+        open_meteo: "",
+        grib2_discipline: 0,
+        grib2_category: 20,
+        grib2_number: 102,
+        grib2_level_type: 10,
+        grib2_level_value: None,
+        grib2_statistical: None,
+        grib2_aliases: &[],
+        grib2_alternates: &[],
+        gdal_unit: "Numeric",
+        fill_values: &[],
+        producer_id: None,
+        grib2_aerosol: Some(aod_550nm_identity(62008)),
+    },
+    VariableSpec {
+        id: "aodsulf",
+        label: "Sulphate aerosol optical depth at 550 nm",
+        output_unit: "1",
+        value_range: (0.0, 5.0),
+        grib_element: "AOTK",
+        open_meteo: "",
+        grib2_discipline: 0,
+        grib2_category: 20,
+        grib2_number: 102,
+        grib2_level_type: 10,
+        grib2_level_value: None,
+        grib2_statistical: None,
+        grib2_aliases: &[],
+        grib2_alternates: &[],
+        gdal_unit: "Numeric",
+        fill_values: &[],
+        producer_id: None,
+        grib2_aerosol: Some(aod_550nm_identity(62006)),
+    },
+    VariableSpec {
+        id: "aodorg",
+        label: "Organic carbon aerosol optical depth at 550 nm",
+        output_unit: "1",
+        value_range: (0.0, 5.0),
+        grib_element: "AOTK",
+        open_meteo: "",
+        grib2_discipline: 0,
+        grib2_category: 20,
+        grib2_number: 102,
+        grib2_level_type: 10,
+        grib2_level_value: None,
+        grib2_statistical: None,
+        grib2_aliases: &[],
+        grib2_alternates: &[],
+        gdal_unit: "Numeric",
+        fill_values: &[],
+        producer_id: None,
+        grib2_aerosol: Some(aod_550nm_identity(62010)),
+    },
+    VariableSpec {
+        id: "aodbc",
+        label: "Black carbon aerosol optical depth at 550 nm",
+        output_unit: "1",
+        value_range: (0.0, 5.0),
+        grib_element: "AOTK",
+        open_meteo: "",
+        grib2_discipline: 0,
+        grib2_category: 20,
+        grib2_number: 102,
+        grib2_level_type: 10,
+        grib2_level_value: None,
+        grib2_statistical: None,
+        grib2_aliases: &[],
+        grib2_alternates: &[],
+        gdal_unit: "Numeric",
+        fill_values: &[],
+        producer_id: None,
+        grib2_aerosol: Some(aod_550nm_identity(62009)),
+    },
+    VariableSpec {
+        id: "pm25",
+        label: "PM2.5 surface concentration",
+        output_unit: "µg/m³",
+        value_range: (0.0, 1000.0),
+        grib_element: "PMTF",
+        open_meteo: "",
+        grib2_discipline: 0,
+        grib2_category: 13,
+        grib2_number: 193,
+        grib2_level_type: 1,
+        grib2_level_value: Some(0.0),
+        grib2_statistical: None,
+        grib2_aliases: &[],
+        grib2_alternates: &[],
+        gdal_unit: "10^-6g/m^3",
+        fill_values: &[],
+        producer_id: None,
+        grib2_aerosol: Some(particulate_identity(62000, (7, 25))),
+    },
+    VariableSpec {
+        id: "pm10",
+        label: "PM10 surface concentration",
+        output_unit: "µg/m³",
+        value_range: (0.0, 2000.0),
+        grib_element: "PMTC",
+        open_meteo: "",
+        grib2_discipline: 0,
+        grib2_category: 13,
+        grib2_number: 192,
+        grib2_level_type: 1,
+        grib2_level_value: Some(0.0),
+        grib2_statistical: None,
+        grib2_aliases: &[],
+        grib2_alternates: &[],
+        gdal_unit: "10^-6g/m^3",
+        fill_values: &[],
+        producer_id: None,
+        grib2_aerosol: Some(particulate_identity(62000, (6, 10))),
+    },
+    VariableSpec {
+        id: "pm10dust",
+        label: "Dust PM10 surface concentration",
+        output_unit: "µg/m³",
+        value_range: (0.0, 2000.0),
+        grib_element: "PMTC",
+        open_meteo: "",
+        grib2_discipline: 0,
+        grib2_category: 13,
+        grib2_number: 192,
+        grib2_level_type: 1,
+        grib2_level_value: Some(0.0),
+        grib2_statistical: None,
+        grib2_aliases: &[],
+        grib2_alternates: &[],
+        gdal_unit: "10^-6g/m^3",
+        fill_values: &[],
+        producer_id: None,
+        grib2_aerosol: Some(particulate_identity(62001, (6, 10))),
     },
     // Mean sea level pressure. NCEP publishes two reductions; PRMSL (0/3/1)
     // is the same quantity ECMWF calls `msl` — encoded there as plain
@@ -1243,6 +1594,7 @@ pub const VARIABLES: &[VariableSpec] = &[
         gdal_unit: "Pa",
         fill_values: &[],
         producer_id: None,
+        grib2_aerosol: None,
     },
     // The isobaric families, eight levels each. Value ranges are the level's
     // codebook coverage (quantize.rs), truncated to integers.
@@ -1339,9 +1691,10 @@ pub fn variable_spec(variable_id: &str) -> Result<&'static VariableSpec> {
 #[cfg(test)]
 mod tests {
     use super::{
-        isobaric_variable, variable_spec, DUST_CF_BUNDLE_ID, DUST_CF_COMPONENT_IDS, DUST_RGB_BUNDLE_ID,
-        DUST_RGB_COMPONENT_IDS, ISOBARIC_FAMILIES, ISOBARIC_LEVELS_HPA, OCEAN_VARIABLE_IDS,
-        SATELLITE_CHANNEL_IDS, SATELLITE_VARIABLE_IDS, WAVE_VECTOR_COMPONENT_IDS,
+        isobaric_variable, variable_spec, AerosolIdentity, AEROSOL_VARIABLE_IDS, DUST_CF_BUNDLE_ID,
+        DUST_CF_COMPONENT_IDS, DUST_RGB_BUNDLE_ID, DUST_RGB_COMPONENT_IDS, ISOBARIC_FAMILIES,
+        ISOBARIC_LEVELS_HPA, OCEAN_VARIABLE_IDS, SATELLITE_CHANNEL_IDS, SATELLITE_VARIABLE_IDS,
+        WAVE_VECTOR_COMPONENT_IDS,
     };
     use crate::encode::quantize::codebook;
     use serde_json::{json, Value};
@@ -1565,6 +1918,50 @@ mod tests {
         assert_eq!(himawari.input_variable_ids, SATELLITE_CHANNEL_IDS);
         assert_eq!(himawari.bundle_scalar_ids, &["ir104"]);
         assert_eq!(himawari.bundle_composite_ids, &[DUST_RGB_BUNDLE_ID, DUST_CF_BUNDLE_ID]);
+    }
+
+    /// `tests/fixtures/aerosol-registry.json`: the GEFS-Aerosols fields,
+    /// held to the Python encoder and the frontend the same way — each with
+    /// the `aerosol` block beside its parameter, the rest of a template
+    /// 4.48 record's identity, and a log1p codebook.
+    #[test]
+    fn the_aerosol_registry_matches_the_shared_fixture() {
+        let entries = registry("aerosol-registry.json");
+        assert_eq!(
+            entries.keys().collect::<Vec<_>>(),
+            AEROSOL_VARIABLE_IDS,
+            "nine variables, in the fixture's order"
+        );
+        for (variable_id, entry) in entries {
+            let spec = variable_spec(&variable_id).unwrap_or_else(|_| panic!("{variable_id}"));
+            assert_eq!(json!(spec.label), entry["label"], "{variable_id}");
+            assert_eq!(json!(spec.output_unit), entry["unit"], "{variable_id}");
+            assert_eq!(
+                Value::Object(spec.parameter_metadata()),
+                entry["parameter"],
+                "{variable_id} GRIB2 identity"
+            );
+            let aerosol = spec.grib2_aerosol.unwrap_or_else(|| panic!("{variable_id}: an aerosol product"));
+            assert_eq!(Value::Object(aerosol.metadata()), entry["aerosol"], "{variable_id} aerosol identity");
+            // An interval of the missing type carries no limits, and one
+            // that is present carries both: the PM records have no
+            // wavelength, the optical depths every field.
+            let wavelength_missing = aerosol.wavelength_type == AerosolIdentity::MISSING_TYPE;
+            assert_eq!(wavelength_missing, variable_id.starts_with("pm"), "{variable_id}");
+            assert_eq!(aerosol.wavelength_first.is_none(), wavelength_missing, "{variable_id}");
+            assert_eq!(aerosol.wavelength_second.is_none(), wavelength_missing, "{variable_id}");
+            assert!(aerosol.size_first.is_some() && aerosol.size_second.is_some(), "{variable_id}");
+            // Neither an alias nor an alternate: the aerosol block is the
+            // whole of what tells the records apart.
+            assert!(spec.grib2_aliases.is_empty() && spec.grib2_alternates.is_empty(), "{variable_id}");
+            // Balanced takes the quality codebook: the fields are smooth.
+            for (profile, key) in [("quality", "quality"), ("compact", "compact"), ("balanced", "quality")] {
+                let book = codebook(profile, &variable_id)
+                    .unwrap_or_else(|error| panic!("{variable_id} {profile}: {error}"));
+                assert_eq!(Value::Object(book.metadata()), entry[key], "{variable_id} {profile} codebook");
+                assert!(book.as_linear().is_none(), "{variable_id}: a log1p codebook");
+            }
+        }
     }
 
     /// `tests/fixtures/pressure-registry.json`, the committed golden the

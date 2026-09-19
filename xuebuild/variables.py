@@ -54,6 +54,75 @@ class RecordAlternate:
 
 
 @dataclass(frozen=True)
+class AerosolIdentity:
+    """What a GRIB2 aerosol product carries beyond its parameter: the
+    fields of product definition template 4.48 (and of 4.44 / 4.46, its
+    subsets) between the parameter number and the generating process — the
+    aerosol type (code table 4.233), a size interval and a wavelength
+    interval (each a code table 4.91 type with two limits). A parameter
+    triple on a surface names every one of GEFS-Aerosols' optical
+    thicknesses at once (0/20/102 on the entire atmosphere is the total,
+    the dust, the sea salt, ... at seven wavelengths), so for such a record
+    the identity is the parameter block *and* this one, written beside it
+    as the metadata's ``aerosol`` block (docs/format.md §"Band, Producer
+    and Aerosol") and compared whole when matching a record.
+
+    A limit is a ``(scaleFactor, scaledValue)`` pair, the value being
+    ``scaledValue × 10^−scaleFactor`` metres, or None where GRIB2 encodes
+    it as missing. An interval whose type is 255 (missing) carries no
+    limits: both pairs are None here whatever the record wrote — NCEP
+    writes zeros rather than the missing pattern for the wavelength of a
+    particulate matter record — so the record matches the registered
+    identity and the file never carries the zeros."""
+
+    aerosol_type: int
+    """Code table 4.233: 62000 total aerosol, 62001 dust, 62006 sulphate,
+    62008 sea salt, 62009 black carbon, 62010 particulate organic matter."""
+    size_type: int = 255
+    """Code table 4.91 type of the size interval: 0 "smaller than first
+    limit", 7 "between first and second limit", 255 missing."""
+    size_first: tuple[int, int] | None = None
+    size_second: tuple[int, int] | None = None
+    wavelength_type: int = 255
+    wavelength_first: tuple[int, int] | None = None
+    wavelength_second: tuple[int, int] | None = None
+
+    MISSING_TYPE = 255
+
+    def __post_init__(self) -> None:
+        for interval_type, first, second in (
+            (self.size_type, self.size_first, self.size_second),
+            (self.wavelength_type, self.wavelength_first, self.wavelength_second),
+        ):
+            if interval_type == self.MISSING_TYPE and (first is not None or second is not None):
+                raise ValueError("an aerosol interval of the missing type carries no limits")
+
+    def metadata(self) -> dict[str, object]:
+        """The identity as the schema v3 ``aerosol`` block: every field of
+        template 4.48, a missing limit written as GRIB2 encodes it, ``null``
+        for both halves."""
+
+        def pair(limit: tuple[int, int] | None) -> tuple[int | None, int | None]:
+            return (None, None) if limit is None else limit
+
+        size_first, size_second = pair(self.size_first), pair(self.size_second)
+        wavelength_first, wavelength_second = pair(self.wavelength_first), pair(self.wavelength_second)
+        return {
+            "aerosolType": self.aerosol_type,
+            "typeOfSizeInterval": self.size_type,
+            "scaleFactorOfFirstSize": size_first[0],
+            "scaledValueOfFirstSize": size_first[1],
+            "scaleFactorOfSecondSize": size_second[0],
+            "scaledValueOfSecondSize": size_second[1],
+            "typeOfWavelengthInterval": self.wavelength_type,
+            "scaleFactorOfFirstWavelength": wavelength_first[0],
+            "scaledValueOfFirstWavelength": wavelength_first[1],
+            "scaleFactorOfSecondWavelength": wavelength_second[0],
+            "scaledValueOfSecondWavelength": wavelength_second[1],
+        }
+
+
+@dataclass(frozen=True)
 class VariableSpec:
     id: str
     label: str
@@ -64,6 +133,15 @@ class VariableSpec:
     grib_element: str = ""
     index_field: str = ""
     excluded_index_phrases: tuple[str, ...] = ()
+    index_qualifier: str = ""
+    """A second phrase the ``.idx`` line must also carry, for a record the
+    element and surface do not name alone: GEFS-Aerosols lists a dozen
+    ``:AOTK:entire atmosphere:`` records per frame, told apart by the
+    aerosol type and wavelength the line spells out after the forecast
+    hour (``:aerosol=Dust dry:aerosol_size <2e-05:aerosol_wavelength
+    >=5.45e-07,<=5.65e-07``), matched without regard to case since the two
+    mirrors of the GEFS bucket capitalise the type differently. Empty for
+    a record its :attr:`index_field` names outright."""
     alternate_index_fields: tuple[str, ...] = ()
     """Other ``.idx`` phrases the same quantity goes by at another centre or
     in another product, tried when ``index_field`` finds no record: HRRR
@@ -120,6 +198,13 @@ class VariableSpec:
     """Whole other record identities the same quantity arrives as, when an
     alias triple is not enough (:class:`RecordAlternate`): accepted when
     matching, never written."""
+    grib2_aerosol: AerosolIdentity | None = None
+    """For a GRIB2 aerosol product (template 4.48 and its subsets), the
+    rest of its identity: the aerosol type and the size and wavelength
+    intervals (:class:`AerosolIdentity`), matched whole beside the
+    parameter and written as the ``aerosol`` block beside it. None for
+    every other variable, which matches no aerosol record. An aerosol
+    variable takes no aliases and no alternates."""
     gdal_unit: str = ""
     """Unit string GDAL's GRIB driver reports for this record (it normalizes
     temperatures to Celsius); carried by header-indexed frames and
@@ -174,6 +259,23 @@ def _scaled_surface_value(value: float) -> tuple[int, int]:
         if abs(scaled - round(scaled)) < 1e-9:
             return scale_factor, round(scaled)
     raise ValueError(f"fixed surface value is not representable: {value}")
+
+
+def _aod_550nm_identity(aerosol_type: int) -> AerosolIdentity:
+    """The identity every GEFS-Aerosols optical thickness at 550 nm shares
+    but for the species: particles smaller than 20 µm (size type 0, the
+    first limit 20 × 10⁻⁶ m, the unused second limit written 0 / 0 as NCEP
+    does), between 545 and 565 nm (wavelength type 7, both limits in
+    10⁻⁹ m)."""
+    return AerosolIdentity(
+        aerosol_type,
+        size_type=0,
+        size_first=(6, 20),
+        size_second=(0, 0),
+        wavelength_type=7,
+        wavelength_first=(9, 545),
+        wavelength_second=(9, 565),
+    )
 
 
 VARIABLES: dict[str, VariableSpec] = {
@@ -890,6 +992,153 @@ VARIABLES: dict[str, VariableSpec] = {
         grib2_level_type=8,
         producer_id="shachen",
     ),
+    # The GEFS-Aerosols fields (NOAA's GEFS ``chem`` member, the
+    # GOCART aerosol model coupled to the GFS), the first aerosol products
+    # this pipeline reads: GRIB2 product definition template 4.48, whose
+    # identity is the parameter block plus an ``AerosolIdentity``. Six
+    # optical thicknesses at 550 nm (WMO 0/20/102, "aerosol optical
+    # thickness", on the entire atmosphere, dimensionless), the total and
+    # five species, each told apart by the aerosol type alone: the file
+    # carries every species over the same size interval (particles
+    # smaller than 20 µm) and the same band (545–565 nm, the visible
+    # window an AOD is quoted at). Then three surface concentrations
+    # under NCEP's local PMTF / PMTC numbers (0/13/193 fine, 0/13/192
+    # coarse), which GDAL reports in µg/m³ already, so no conversion
+    # applies: PM2.5 (particles under 2.5 µm) and PM10 (under 10 µm), and
+    # the PM10 of dust alone, since a dust storm's surface concentration
+    # is what a dust forecast is read for. A PM record's wavelength
+    # interval is missing (type 255) and carries no limits. The ``.idx``
+    # phrase names the element and surface, and the qualifier the species
+    # and interval, since a dozen AOTK lines share the surface.
+    "aod": VariableSpec(
+        id="aod",
+        label="Aerosol optical depth at 550 nm",
+        output_unit="1",
+        value_range=(0, 5),
+        grib_element="AOTK",
+        index_field=":AOTK:entire atmosphere:",
+        index_qualifier=":aerosol=Total aerosol:aerosol_size <2e-05:aerosol_wavelength >=5.45e-07,<=5.65e-07",
+        grib2_category=20,
+        grib2_number=102,
+        grib2_level_type=10,
+        grib2_aerosol=_aod_550nm_identity(62000),
+        gdal_unit="Numeric",
+    ),
+    "aoddust": VariableSpec(
+        id="aoddust",
+        label="Dust aerosol optical depth at 550 nm",
+        output_unit="1",
+        value_range=(0, 5),
+        grib_element="AOTK",
+        index_field=":AOTK:entire atmosphere:",
+        index_qualifier=":aerosol=Dust dry:aerosol_size <2e-05:aerosol_wavelength >=5.45e-07,<=5.65e-07",
+        grib2_category=20,
+        grib2_number=102,
+        grib2_level_type=10,
+        grib2_aerosol=_aod_550nm_identity(62001),
+        gdal_unit="Numeric",
+    ),
+    "aodsalt": VariableSpec(
+        id="aodsalt",
+        label="Sea salt aerosol optical depth at 550 nm",
+        output_unit="1",
+        value_range=(0, 5),
+        grib_element="AOTK",
+        index_field=":AOTK:entire atmosphere:",
+        index_qualifier=":aerosol=Sea salt dry:aerosol_size <2e-05:aerosol_wavelength >=5.45e-07,<=5.65e-07",
+        grib2_category=20,
+        grib2_number=102,
+        grib2_level_type=10,
+        grib2_aerosol=_aod_550nm_identity(62008),
+        gdal_unit="Numeric",
+    ),
+    "aodsulf": VariableSpec(
+        id="aodsulf",
+        label="Sulphate aerosol optical depth at 550 nm",
+        output_unit="1",
+        value_range=(0, 5),
+        grib_element="AOTK",
+        index_field=":AOTK:entire atmosphere:",
+        index_qualifier=":aerosol=Sulphate dry:aerosol_size <2e-05:aerosol_wavelength >=5.45e-07,<=5.65e-07",
+        grib2_category=20,
+        grib2_number=102,
+        grib2_level_type=10,
+        grib2_aerosol=_aod_550nm_identity(62006),
+        gdal_unit="Numeric",
+    ),
+    "aodorg": VariableSpec(
+        id="aodorg",
+        label="Organic carbon aerosol optical depth at 550 nm",
+        output_unit="1",
+        value_range=(0, 5),
+        grib_element="AOTK",
+        index_field=":AOTK:entire atmosphere:",
+        index_qualifier=":aerosol=Particulate organic matter dry:aerosol_size <2e-05:aerosol_wavelength >=5.45e-07,<=5.65e-07",
+        grib2_category=20,
+        grib2_number=102,
+        grib2_level_type=10,
+        grib2_aerosol=_aod_550nm_identity(62010),
+        gdal_unit="Numeric",
+    ),
+    "aodbc": VariableSpec(
+        id="aodbc",
+        label="Black carbon aerosol optical depth at 550 nm",
+        output_unit="1",
+        value_range=(0, 5),
+        grib_element="AOTK",
+        index_field=":AOTK:entire atmosphere:",
+        index_qualifier=":aerosol=Black carbon dry:aerosol_size <2e-05:aerosol_wavelength >=5.45e-07,<=5.65e-07",
+        grib2_category=20,
+        grib2_number=102,
+        grib2_level_type=10,
+        grib2_aerosol=_aod_550nm_identity(62009),
+        gdal_unit="Numeric",
+    ),
+    "pm25": VariableSpec(
+        id="pm25",
+        label="PM2.5 surface concentration",
+        output_unit="µg/m³",
+        value_range=(0, 1000),
+        grib_element="PMTF",
+        index_field=":PMTF:surface:",
+        index_qualifier=":aerosol=Total aerosol:aerosol_size <2.5e-06:",
+        grib2_category=13,
+        grib2_number=193,
+        grib2_level_type=1,
+        grib2_level_value=0.0,
+        grib2_aerosol=AerosolIdentity(62000, size_type=0, size_first=(7, 25), size_second=(0, 0)),
+        gdal_unit="10^-6g/m^3",
+    ),
+    "pm10": VariableSpec(
+        id="pm10",
+        label="PM10 surface concentration",
+        output_unit="µg/m³",
+        value_range=(0, 2000),
+        grib_element="PMTC",
+        index_field=":PMTC:surface:",
+        index_qualifier=":aerosol=Total aerosol:aerosol_size <1e-05:",
+        grib2_category=13,
+        grib2_number=192,
+        grib2_level_type=1,
+        grib2_level_value=0.0,
+        grib2_aerosol=AerosolIdentity(62000, size_type=0, size_first=(6, 10), size_second=(0, 0)),
+        gdal_unit="10^-6g/m^3",
+    ),
+    "pm10dust": VariableSpec(
+        id="pm10dust",
+        label="Dust PM10 surface concentration",
+        output_unit="µg/m³",
+        value_range=(0, 2000),
+        grib_element="PMTC",
+        index_field=":PMTC:surface:",
+        index_qualifier=":aerosol=Dust dry:aerosol_size <1e-05:",
+        grib2_category=13,
+        grib2_number=192,
+        grib2_level_type=1,
+        grib2_level_value=0.0,
+        grib2_aerosol=AerosolIdentity(62001, size_type=0, size_first=(6, 10), size_second=(0, 0)),
+        gdal_unit="10^-6g/m^3",
+    ),
 }
 
 # The ocean set: the three pgrb2 fields and the three GFS-Wave fields above,
@@ -913,6 +1162,21 @@ DUST_RGB_COMPONENT_IDS: tuple[str, str, str] = ("dustr", "dustg", "dustb")
 DUST_CF_BUNDLE_ID = "dustcf"
 DUST_CF_COMPONENT_IDS: tuple[str] = ("dustcf",)
 SATELLITE_VARIABLE_IDS: tuple[str, ...] = SATELLITE_CHANNEL_IDS + DUST_RGB_COMPONENT_IDS + DUST_CF_COMPONENT_IDS
+# The aerosol set, in the order GEFS-Aerosols publishes it: the six optical
+# thicknesses, then the three surface concentrations. Held to the Rust
+# encoder and the frontend by tests/fixtures/aerosol-registry.json, which
+# carries each variable's ``aerosol`` block beside its parameter.
+AEROSOL_VARIABLE_IDS: tuple[str, ...] = (
+    "aod",
+    "aoddust",
+    "aodsalt",
+    "aodsulf",
+    "aodorg",
+    "aodbc",
+    "pm25",
+    "pm10",
+    "pm10dust",
+)
 # The ids the Celsius rule applies to at the surface: GDAL normalizes every
 # GRIB temperature to Celsius, and the converter accepts K and F as well.
 SURFACE_TEMPERATURE_IDS: tuple[str, ...] = ("tmp2m", "dpt2m", "aptmp2m", "tmpsfc")

@@ -77,12 +77,14 @@ export function seriesDirections(series: PointSeries): (number | null)[] {
 }
 
 /** The forecast models the page compares: every live source that is a
- * forecast (observations and the satellite mosaic have no lead time to
- * compare), in the registry's order. */
+ * weather forecast (observations and the satellite mosaic have no lead
+ * time to compare; a forecast whose core is another quantity — the
+ * aerosol run, with no temperature or precipitation — has nothing on the
+ * page's rows), in the registry's order. */
 export function comparableModels(): ForecastModelId[] {
   return (Object.keys(FORECAST_MODELS) as ForecastModelId[]).filter((id) => {
     const info = FORECAST_MODELS[id];
-    return info.latestFilename !== undefined && !info.observation && !info.mosaic;
+    return info.latestFilename !== undefined && !info.observation && !info.mosaic && info.coreBundles === undefined;
   });
 }
 

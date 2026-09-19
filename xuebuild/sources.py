@@ -49,6 +49,7 @@ from dataclasses import dataclass
 from .errors import DownloadError
 from .satellite.platforms import GOES_EAST, GOES_WEST, HIMAWARI, METEOSAT, SatelliteBand
 from .reproject import Regrid
+from .variables import AEROSOL_VARIABLE_IDS
 
 
 @dataclass(frozen=True)
@@ -108,8 +109,8 @@ class Downsample:
 @dataclass(frozen=True)
 class SourceSpec:
     id: str
-    """CLI / URL / directory id: "gfs", "ecmwf", "aifs", "ifshres", "sflux", "hrrr", "cma", "mrms", "jma",
-    "himawari", "goeseast", "goeswest" or "meteosat"."""
+    """CLI / URL / directory id: "gfs", "ecmwf", "aifs", "ifshres", "sflux", "hrrr", "gefsaero", "cma",
+    "mrms", "jma", "himawari", "goeseast", "goeswest" or "meteosat"."""
     manifest_model: str
     """The manifest and bundle-metadata ``model`` string."""
     product: str
@@ -955,6 +956,32 @@ SOURCES: dict[str, SourceSpec] = {
         tile=(64, 64),
         cycle_hours=1,
         regrid=Regrid(step=0.03),
+    ),
+    # GEFS-Aerosols: the GEFS cycle's ``chem`` member, the GOCART aerosol
+    # model coupled to the GFS, whose two-dimensional output sits beside the
+    # ensemble on NOAA's GEFS bucket at 0.25° (``chem/pgrb2ap25/``,
+    # ``a2d_0p25``: the only product of the member at that resolution),
+    # three-hourly to 120 hours from every cycle, complete some six hours
+    # after it. Every record is GRIB2 template 4.48, an aerosol product
+    # whose identity is the parameter block plus the aerosol block beside
+    # it (variables.py ``AerosolIdentity``); the ``.idx`` sidecar and the
+    # pgrb2 record path read it. The aerosol optical depth at 550 nm, total
+    # and by species, and the surface concentrations of fine and coarse
+    # particulate matter — the forecast that pairs with the satellite
+    # sources' Dust RGB and DEBRA confidence. No temperature and no rain,
+    # so the core set is the total optical depth alone; no video companion
+    # either.
+    "gefsaero": SourceSpec(
+        id="gefsaero",
+        manifest_model="GEFS-AEROSOLS",
+        product="chem-a2d-0p25",
+        latest_filename="latest-gefsaero.json",
+        steps=((120, 3),),
+        input_variable_ids=AEROSOL_VARIABLE_IDS,
+        accumulated_precipitation=False,
+        bundle_scalar_ids=AEROSOL_VARIABLE_IDS,
+        core_bundle_ids=("aod",),
+        video=False,
     ),
     # CMA weather radar level-3 mosaic composite reflectivity
     # (RADAR_L3_MST_CREF): the China Meteorological Administration's national

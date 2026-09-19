@@ -17,12 +17,20 @@ use time::{Date, Duration, Month, OffsetDateTime, Time, UtcOffset};
 
 use crate::encode::errors::{EncodeError, Result};
 use crate::encode::model::SourceFrame;
-use crate::encode::variables::{variable_spec, VariableSpec};
+use crate::encode::variables::{variable_spec, AerosolIdentity, VariableSpec};
 
 /// Product definition templates whose octets 10-34 share the 4.0 layout and
-/// that we know how to time-stamp. 4.8 adds the statistical interval.
+/// that we know how to time-stamp. 4.8 adds the statistical interval. 4.48
+/// (aerosol optical properties: GEFS-Aerosols' whole output) inserts the
+/// aerosol type and two intervals — 24 octets — between the parameter
+/// number and the generating process; grib-rs knows where its time and
+/// surface octets sit, and the aerosol octets are read here. 4.44 and 4.46,
+/// the aerosol templates without the optical fields, are its subsets and
+/// are not read by any source yet.
 const INSTANTANEOUS_TEMPLATES: &[u16] = &[0, 1, 2];
 const STATISTICAL_TEMPLATES: &[u16] = &[8, 11, 12];
+const AEROSOL_TEMPLATES: &[u16] = &[48];
+const MISSING_U32: u32 = 0xFFFF_FFFF;
 /// Section 4 payload starts at octet 6, so the template's first octet (10)
 /// sits at payload index 4.
 const START_OF_PROD_TEMPLATE: usize = 4;
@@ -41,6 +49,47 @@ pub struct MessageInfo {
     /// Code table 4.10 process (0 average, 1 accumulation) for statistical
     /// templates (the 4.8 family); `None` for instantaneous products.
     pub statistical_process: Option<u8>,
+    /// The aerosol type and intervals of an aerosol product (template
+    /// 4.48); `None` for every other template, which no aerosol variable
+    /// matches.
+    pub aerosol: Option<AerosolIdentity>,
+}
+
+/// One `(scaleFactor, scaledValue)` limit of an aerosol interval at
+/// `offset` into the section payload, `None` when the value is the missing
+/// pattern. Mirrors `_parse_limit` in `xuebuild/grib2.py`.
+fn parse_limit(payload: &[u8], offset: usize) -> Option<(i8, u32)> {
+    let scale = payload[offset] as i8;
+    let scaled_value = u32::from_be_bytes([
+        payload[offset + 1],
+        payload[offset + 2],
+        payload[offset + 3],
+        payload[offset + 4],
+    ]);
+    (scaled_value != MISSING_U32).then_some((scale, scaled_value))
+}
+
+/// The aerosol fields of a template 4.48 payload: octets 12-35, the type
+/// then the size and wavelength intervals, each a code table 4.91 type and
+/// two limits. An interval of the missing type carries no limits whatever
+/// the octets hold (docs/format.md §"Band, Producer and Aerosol"). Mirrors
+/// `_parse_aerosol` in `xuebuild/grib2.py`; the payload starts at octet 6,
+/// so octet `n` is index `n - 6`.
+fn parse_aerosol(payload: &[u8]) -> AerosolIdentity {
+    let at = |octet: usize| octet - 6;
+    let aerosol_type = u16::from_be_bytes([payload[at(12)], payload[at(13)]]);
+    let size_type = payload[at(14)];
+    let wavelength_type = payload[at(25)];
+    let missing = AerosolIdentity::MISSING_TYPE;
+    AerosolIdentity {
+        aerosol_type,
+        size_type,
+        size_first: (size_type != missing).then(|| parse_limit(payload, at(15))).flatten(),
+        size_second: (size_type != missing).then(|| parse_limit(payload, at(20))).flatten(),
+        wavelength_type,
+        wavelength_first: (wavelength_type != missing).then(|| parse_limit(payload, at(26))).flatten(),
+        wavelength_second: (wavelength_type != missing).then(|| parse_limit(payload, at(31))).flatten(),
+    }
 }
 
 /// Code table 4.4 (indicator of unit of time range) for the units our products
@@ -104,7 +153,9 @@ pub fn index_messages(path: &Path) -> Result<Vec<MessageInfo>> {
 
         let product = submessage.prod_def();
         let template = product.prod_tmpl_num();
-        let statistical = if INSTANTANEOUS_TEMPLATES.contains(&template) {
+        let statistical = if INSTANTANEOUS_TEMPLATES.contains(&template)
+            || AEROSOL_TEMPLATES.contains(&template)
+        {
             None
         } else if STATISTICAL_TEMPLATES.contains(&template) {
             Some(())
@@ -115,6 +166,19 @@ pub fn index_messages(path: &Path) -> Result<Vec<MessageInfo>> {
             )));
         };
         let payload: Vec<u8> = product.iter().copied().collect();
+        let aerosol = if AEROSOL_TEMPLATES.contains(&template) {
+            // Octets 12-35 hold the aerosol fields, then the 4.0 layout
+            // resumes 24 octets on: the section must reach the surface.
+            if payload.len() < START_OF_PROD_TEMPLATE + 24 + 25 {
+                return Err(EncodeError::conversion(format!(
+                    "GRIB2 product definition section is too short in {}",
+                    path.display()
+                )));
+            }
+            Some(parse_aerosol(&payload))
+        } else {
+            None
+        };
 
         let (category, number) = (
             product.parameter_category(),
@@ -188,6 +252,7 @@ pub fn index_messages(path: &Path) -> Result<Vec<MessageInfo>> {
             reference_time,
             valid_time,
             statistical_process,
+            aerosol,
         });
     }
     if messages.is_empty() {
@@ -204,7 +269,9 @@ pub fn index_messages(path: &Path) -> Result<Vec<MessageInfo>> {
 /// same statistical process), or under one of its whole alternate
 /// identities — and `None` when it does not. The unit is the identity's own:
 /// an alternate may spell it differently (ECMWF's cloud cover fraction).
-/// Mirrors `_matching_unit` in `xuebuild/grib2.py`.
+/// An aerosol product matches on its aerosol identity too, whole, and only
+/// a variable registered with one matches it. Mirrors `_matching_unit` in
+/// `xuebuild/grib2.py`.
 fn matching_unit(spec: &VariableSpec, message: &MessageInfo) -> Option<&'static str> {
     let triple = (
         message.discipline,
@@ -217,9 +284,13 @@ fn matching_unit(spec: &VariableSpec, message: &MessageInfo) -> Option<&'static 
         && spec
             .grib2_level_value
             .is_none_or(|expected| message.level_value == Some(expected))
-        && message.statistical_process == spec.grib2_statistical;
+        && message.statistical_process == spec.grib2_statistical
+        && message.aerosol == spec.grib2_aerosol;
     if primary {
         return Some(spec.gdal_unit);
+    }
+    if message.aerosol.is_some() {
+        return None;
     }
     spec.grib2_alternates
         .iter()
@@ -309,7 +380,7 @@ pub fn inspect_grib_fast(
 #[cfg(test)]
 mod tests {
     use super::{matches, matching_unit, MessageInfo};
-    use crate::encode::variables::variable_spec;
+    use crate::encode::variables::{variable_spec, AerosolIdentity};
     use time::OffsetDateTime;
 
     fn message(category: u8, number: u8, level_type: u8) -> MessageInfo {
@@ -323,7 +394,42 @@ mod tests {
             reference_time: OffsetDateTime::UNIX_EPOCH,
             valid_time: OffsetDateTime::UNIX_EPOCH,
             statistical_process: None,
+            aerosol: None,
         }
+    }
+
+    /// An aerosol record is its parameter *and* its aerosol identity: the
+    /// dust optical depth and the total are the same triple on the same
+    /// surface, told apart by the type; a PM record under another size
+    /// limit is another field; and an ordinary variable never matches an
+    /// aerosol product, nor an aerosol variable an ordinary record.
+    #[test]
+    fn an_aerosol_record_matches_on_its_aerosol_identity_whole() {
+        let aod = variable_spec("aod").unwrap();
+        let dust = variable_spec("aoddust").unwrap();
+        let mut total = message(20, 102, 10);
+        total.aerosol = aod.grib2_aerosol;
+        assert_eq!(matching_unit(&aod, &total), Some("Numeric"));
+        assert_eq!(matching_unit(&dust, &total), None);
+        total.aerosol = dust.grib2_aerosol;
+        assert_eq!(matching_unit(&dust, &total), Some("Numeric"));
+        assert_eq!(matching_unit(&aod, &total), None);
+        total.aerosol = None;
+        assert_eq!(matching_unit(&aod, &total), None);
+        let tcdc = variable_spec("tcdc").unwrap();
+        let mut cloud = message(6, 1, 10);
+        cloud.aerosol = aod.grib2_aerosol;
+        assert_eq!(matching_unit(&tcdc, &cloud), None);
+
+        let pm10 = variable_spec("pm10").unwrap();
+        let pm10dust = variable_spec("pm10dust").unwrap();
+        let mut coarse = message(13, 192, 1);
+        coarse.level_value = Some(0.0);
+        coarse.aerosol = pm10.grib2_aerosol;
+        assert_eq!(matching_unit(&pm10, &coarse), Some("10^-6g/m^3"));
+        assert_eq!(matching_unit(&pm10dust, &coarse), None);
+        coarse.aerosol = Some(AerosolIdentity { size_first: Some((7, 25)), ..pm10.grib2_aerosol.unwrap() });
+        assert_eq!(matching_unit(&pm10, &coarse), None);
     }
 
     /// ECMWF `msl`: plain pressure (0/3/0) on the mean sea level surface is

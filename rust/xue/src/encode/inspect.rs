@@ -15,7 +15,9 @@ use time::OffsetDateTime;
 use crate::encode::errors::{EncodeError, Result};
 use crate::encode::gdalio::{BandInfo, Dataset};
 use crate::encode::model::SourceFrame;
-use crate::encode::variables::{isobaric_variable, variable_spec, SURFACE_TEMPERATURE_IDS};
+use crate::encode::variables::{
+    isobaric_variable, variable_spec, AerosolIdentity, AEROSOL_VARIABLE_IDS, SURFACE_TEMPERATURE_IDS,
+};
 
 static HEIGHT_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i)(?:^|[^0-9])2(?:\.0+)?\s*m(?:eter)?s?\s+above\s+ground").expect("valid regex")
@@ -283,6 +285,40 @@ pub fn raster_expression(variable_id: &str, unit: &str) -> Result<String> {
         // temperature's rule, the wind components the 10 m pair's, relative
         // humidity is percent, and specific humidity is a kg/kg mass ratio
         // the codebook quantizes in g/kg.
+        // The aerosol fields: an optical depth is a dimensionless number
+        // GDAL reports as `[Numeric]`, a particulate matter concentration
+        // is in µg/m³ already (GDAL spells NCEP's PMTF / PMTC unit
+        // `10^-6g/m^3`); each is clamped to its codebook range (1000 for
+        // PM2.5, 2000 for PM10). Mirror `aerosol_optical_depth_expression`
+        // and `particulate_matter_expression` in `xuebuild/gdal.py`.
+        other if AEROSOL_VARIABLE_IDS.contains(&other) => {
+            let compact: String = unit
+                .trim()
+                .to_lowercase()
+                .chars()
+                .filter(|character| !" *()[]".contains(*character))
+                .collect();
+            if other.starts_with("aod") {
+                if !["numeric", "1", "-", ""].contains(&compact.as_str()) {
+                    return Err(EncodeError::conversion(format!(
+                        "unsupported aerosol optical depth unit: {}",
+                        if unit.is_empty() { "<missing>" } else { unit }
+                    )));
+                }
+                Ok("maximum(0,minimum(5,A))".into())
+            } else {
+                if !["10^-6g/m^3", "10^-6g/m3", "ug/m^3", "ug/m3", "µg/m^3", "µg/m3", "µg/m³"]
+                    .contains(&compact.as_str())
+                {
+                    return Err(EncodeError::conversion(format!(
+                        "unsupported particulate matter unit: {}",
+                        if unit.is_empty() { "<missing>" } else { unit }
+                    )));
+                }
+                let maximum = variable_spec(other)?.value_range.1 as i64;
+                Ok(format!("maximum(0,minimum({maximum},A))"))
+            }
+        }
         other if isobaric_variable(other).is_some() => {
             let (family, _) = isobaric_variable(other).expect("checked");
             let compact = unit.trim().trim_matches(|character| "[]()".contains(character));
@@ -417,10 +453,93 @@ fn is_mrms_record(band: &BandInfo, element: &str) -> bool {
     band.item("GRIB_ELEMENT").to_uppercase() == element && band.item("GRIB_DISCIPLINE") == "209"
 }
 
+/// One GRIB2 aerosol product (template 4.48) under the registry's parameter
+/// *and* aerosol identity for `variable_id`. The driver's tables name the
+/// fields by element (`AOTK`, `PMTF`) and surface, which a dozen of
+/// GEFS-Aerosols' records share; what tells them apart is in the template
+/// itself, which GDAL exposes whole as `GRIB_PDS_TEMPLATE_ASSEMBLED_VALUES`
+/// (the template's fields in order, space-separated) beside
+/// `GRIB_PDS_PDTN`. A record of another template, or one the driver did not
+/// assemble, is not this record. Mirrors `_is_aerosol_record` in
+/// `xuebuild/gdal.py`.
+fn is_aerosol_record(band: &BandInfo, variable_id: &str) -> Result<bool> {
+    let spec = variable_spec(variable_id)?;
+    let Some(identity) = spec.grib2_aerosol else {
+        return Ok(false);
+    };
+    if band.item("GRIB_PDS_PDTN") != "48" {
+        return Ok(false);
+    }
+    let Ok(values) = band
+        .item("GRIB_PDS_TEMPLATE_ASSEMBLED_VALUES")
+        .split_whitespace()
+        .map(str::parse::<i64>)
+        .collect::<std::result::Result<Vec<_>, _>>()
+    else {
+        return Ok(false);
+    };
+    let Ok(discipline) = band
+        .item("GRIB_DISCIPLINE")
+        .split_once('(')
+        .map_or(band.item("GRIB_DISCIPLINE"), |(number, _)| number)
+        .parse::<i64>()
+    else {
+        return Ok(false);
+    };
+    if values.len() < 23 {
+        return Ok(false);
+    }
+    if (discipline, values[0], values[1])
+        != (
+            i64::from(spec.grib2_discipline),
+            i64::from(spec.grib2_category),
+            i64::from(spec.grib2_number),
+        )
+    {
+        return Ok(false);
+    }
+    if values[20] != i64::from(spec.grib2_level_type) {
+        return Ok(false);
+    }
+    if let Some(expected) = spec.grib2_level_value {
+        let (scale, scaled_value) = (values[21], values[22]);
+        if scaled_value == i64::from(u32::MAX) || scaled_value as f64 / 10f64.powi(scale as i32) != expected {
+            return Ok(false);
+        }
+    }
+    Ok(assembled_aerosol(&values) == identity)
+}
+
+/// The aerosol identity of template 4.48's assembled values: type at index
+/// 2, the size interval at 3–7, the wavelength interval at 8–12. An
+/// interval of the missing type carries no limits, as the header index
+/// reads it (`gribindex.rs`). Mirrors `_assembled_aerosol` in
+/// `xuebuild/gdal.py`.
+fn assembled_aerosol(values: &[i64]) -> AerosolIdentity {
+    let missing = i64::from(AerosolIdentity::MISSING_TYPE);
+    let limit = |index: usize| -> Option<(i8, u32)> {
+        let (scale, scaled_value) = (values[index], values[index + 1]);
+        (scaled_value != i64::from(u32::MAX)).then_some((scale as i8, scaled_value as u32))
+    };
+    let (size_type, wavelength_type) = (values[3], values[8]);
+    AerosolIdentity {
+        aerosol_type: values[2] as u16,
+        size_type: size_type as u8,
+        size_first: (size_type != missing).then(|| limit(4)).flatten(),
+        size_second: (size_type != missing).then(|| limit(6)).flatten(),
+        wavelength_type: wavelength_type as u8,
+        wavelength_first: (wavelength_type != missing).then(|| limit(9)).flatten(),
+        wavelength_second: (wavelength_type != missing).then(|| limit(11)).flatten(),
+    }
+}
+
 fn band_matches(variable_id: &str, band: &BandInfo) -> Result<bool> {
     let element = band.item("GRIB_ELEMENT").to_uppercase();
     let short_name = band.item("GRIB_SHORT_NAME").to_uppercase();
     Ok(match variable_id {
+        // An aerosol product: the parameter and the aerosol identity, read
+        // off the assembled template values rather than the element.
+        aerosol if AEROSOL_VARIABLE_IDS.contains(&aerosol) => is_aerosol_record(band, aerosol)?,
         // One element on the 2 m surface: the temperature, the dew point,
         // the apparent temperature.
         "tmp2m" | "dpt2m" | "aptmp2m" => {

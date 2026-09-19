@@ -2,7 +2,8 @@ PYTHON ?= $(shell test -x .venv/bin/python && echo .venv/bin/python || echo pyth
 # RUN ?= 2026081506
 RUN ?= latest
 # Last forecast hour to build; empty takes the whole axis the model publishes
-# (240 for the global models, 360 for AIFS and IFS HRES, 18 for HRRR).
+# (240 for the global models, 360 for AIFS and IFS HRES, 18 for HRRR, 120
+# for GEFS-Aerosols).
 HOURS ?=
 FORCE ?=
 PROFILE ?= balanced
@@ -10,8 +11,10 @@ PROFILE ?= balanced
 # aifs (ECMWF AIFS Single open data, 6-hourly to F360),
 # ifshres (ECMWF IFS HRES at 0.1° through Open-Meteo, hourly to F090 and on
 # to F360, 00Z and 12Z only, fetched with the om2nc binary),
-# sflux (GFS surface flux, native ~13 km, hourly, adds the dswrf layer), or
-# hrrr (NOAA HRRR, 3 km over the contiguous US, a cycle every hour, to F18);
+# sflux (GFS surface flux, native ~13 km, hourly, adds the dswrf layer),
+# hrrr (NOAA HRRR, 3 km over the contiguous US, a cycle every hour, to F18),
+# or gefsaero (NOAA GEFS-Aerosols, 0.25°, 3-hourly to F120: aerosol optical
+# depth by species and the surface PM2.5 / PM10);
 # mrms (the NOAA radar mosaic, an observation every two minutes), jma
 # (the JMA precipitation nowcast over Japan, every five minutes, through the
 # jma-radar tool), cma (the CMA radar mosaic over China, every six
@@ -150,7 +153,8 @@ spike-webcodecs:
 # MODEL=ifshres builds the ECMWF IFS HRES 0.1° feed through Open-Meteo
 # (needs the om2nc binary on PATH; see README's Requirements);
 # MODEL=sflux builds the native-resolution GFS surface flux feed;
-# MODEL=hrrr builds the hourly 3 km HRRR feed over the contiguous US.
+# MODEL=hrrr builds the hourly 3 km HRRR feed over the contiguous US;
+# MODEL=gefsaero builds the GEFS-Aerosols feed.
 mvp: check install wasm
 	$(PYTHON) -m xuebuild build-bin --model $(MODEL) --run $(RUN) $(if $(HOURS),--hours $(HOURS)) --profile $(PROFILE) --zarr $(FORCE)
 	npm run build

@@ -1,12 +1,13 @@
 # Xue
 
 > Xue (雪, "snow") is an open-source, static-site viewer of weather
-> forecasts. It plays whole NOAA GFS, ECMWF IFS, ECMWF AIFS, ECMWF IFS HRES
-> and NOAA HRRR
+> forecasts. It plays whole NOAA GFS, ECMWF IFS, ECMWF AIFS, ECMWF IFS HRES,
+> NOAA HRRR and NOAA GEFS-Aerosols
 > runs — 2 m temperature, precipitation rate, 10 m and upper-air wind, sea
 > level pressure, isobaric geopotential height, temperature, humidity and
-> water vapour flux, out to 240 hours (360 for AIFS and IFS HRES, 18 for
-> HRRR) — as
+> water vapour flux, aerosol optical depth and particulate matter, out to
+> 240 hours (360 for AIFS and IFS HRES, 18 for HRRR, 120 for
+> GEFS-Aerosols) — as
 > smooth animations over a
 > MapLibre basemap, decoding per-variable Zarr v3 stores laid out for
 > playback (quantized uint8, small tiles × six-frame chunks; the custom
@@ -16,7 +17,7 @@
 
 Facts worth getting right:
 
-- Thirteen live sources, one shell. `gfs`: NOAA GFS 0.25°, hourly to F120 then
+- Fourteen live sources, one shell. `gfs`: NOAA GFS 0.25°, hourly to F120 then
   3-hourly to F240 (161 frames). `sflux`: GFS surface flux on its native
   ~13 km Gaussian grid, same cadence, the only source with solar radiation
   (`dswrf`). `ecmwf`: ECMWF IFS open data 0.25°, 3-hourly to F144 then
@@ -35,7 +36,13 @@ Facts worth getting right:
   one regional source, resampled from its Lambert conformal grid onto a
   0.03° latitude/longitude grid (2441 × 1051) over the domain's footprint;
   the rectangle's corners the conic domain never covered repeat the nearest
-  cell and are not a forecast (the viewer clips them). Three more sources are
+  cell and are not a forecast (the viewer clips them). `gefsaero`: NOAA
+  GEFS-Aerosols, the aerosol member of the Global Ensemble Forecast System
+  (the GOCART aerosol model coupled to the GFS) at 0.25°, 3-hourly to F120
+  (41 frames) from every cycle, complete about six hours after it — the
+  fourteenth live source and the only one with no temperature or rain: it
+  publishes the aerosol optical depth at 550 nm, in total and by species,
+  and the surface PM2.5 / PM10 (below). Three more sources are
   observations rather than forecasts: `radar` (the CMA level-3 radar mosaic
   composite reflectivity over China, six-minute frames on the data portal's
   0.0439° plate carrée tile grid, 1792 × 1024 cells, 67.5°E–146.25°E and
@@ -136,7 +143,14 @@ Facts worth getting right:
   `hgt700`, `hgt500`, `tmp925`, `tmp850`, `tmp500`, `gust`, `tcdc`,
   `lcdc`, `mcdc`, `hcdc`, `cape`, `vis`, `dpt2m`, the forecast composite
   radar reflectivity `cref` (the same name and unit as the radar mosaics'),
-  and the vector pairs `wind10m`, `wind925`, `wind850`, `wind250`. CMA:
+  and the vector pairs `wind10m`, `wind925`, `wind850`, `wind250`.
+  GEFS-AEROSOLS: `aod` (aerosol optical depth at 550 nm, total,
+  dimensionless), `aoddust`, `aodsalt`, `aodsulf`, `aodorg`, `aodbc` (the
+  same for dust, sea salt, sulphate, organic carbon and black carbon),
+  `pm25`, `pm10` (surface PM2.5 and PM10, µg/m³) and `pm10dust` (the PM10
+  of dust alone); every one a GRIB2 aerosol product whose species and
+  size / wavelength intervals are the `aerosol` block beside the
+  variable's `parameter` in the bundle metadata. CMA:
   `cref`. MRMS: `cref` (observed composite reflectivity, dBZ) and `prate`
   (the MRMS precipitation rate, mm/h; a case may ship the reflectivity
   alone). JMA: `prate` (precipitation intensity class representative rate,
@@ -151,7 +165,7 @@ Facts worth getting right:
 - The site is entirely static: Cloudflare Pages for the shell, a public R2
   bucket for data, HTTP Range requests for streaming. There is no API server
   and no account.
-- Data licensing: NOAA GFS and HRRR are public domain; ECMWF open data is CC BY 4.0 and
+- Data licensing: NOAA GFS, GEFS-Aerosols and HRRR are public domain; ECMWF open data is CC BY 4.0 and
   what is served is a converted derivative ("Contains modified ECMWF open
   data"); `cma` is a CMA product (中国气象局国家气象中心, www.nmc.cn) and `mrms` a
   NOAA product (public domain); `jma` is derived from the Japan Meteorological Agency
@@ -195,7 +209,7 @@ fall back to defaults rather than fail, so a constructed link always opens.
   local hours and a row per field, the nearest airport's METAR reports
   (within 40 km) as a block of the same shape; values are the model's
   nearest grid cell, not interpolated. The viewer's point probe links here.
-- `?model=gfs|sflux|ecmwf|aifs|ifshres|hrrr|mrms|jma|cma|himawari|goeseast|goeswest|meteosat|geo`
+- `?model=gfs|sflux|ecmwf|aifs|ifshres|hrrr|gefsaero|mrms|jma|cma|himawari|goeseast|goeswest|meteosat|geo`
   — which live source (`ifs` is an alias of `ecmwf`, `aifs-single` of
   `aifs`, `hres` / `ifs9km` of `ifshres`, `hrpns` of `jma`, `radar` of `cma`, `himawari-9` / `ahi` of
   `himawari`, `goes-19` / `goes-18` of `goeseast` / `goeswest`, `mtg` /
@@ -212,7 +226,9 @@ fall back to defaults rather than fail, so a constructed link always opens.
   particles; `waveheight` for the scalar `htsgw`, `waveperiod` for
   `perpw`), the Himawari `infrared` (`ir104`; `ir`, `satellite` and `sat`
   are accepted spellings), `dustrgb` (`dust`) and `debra` (`dustcf`,
-  `dustconfidence`), or a bundle name such as `tmp850`,
+  `dustconfidence`), the GEFS-Aerosols `aod` (`aod550`; `aoddust`,
+  `aodsalt`, `aodsulf`, `aodorg`, `aodbc` by species), `pm25` (`pm2p5`),
+  `pm10` and `pm10dust`, or a bundle name such as `tmp850`,
   `rh700`, `wind850`, `qflux850`, `hgt500`, `vvel700`, `thetae850`; `t850`,
   `z500`, `humidity700`, `vapour850`, `omega700`, `subtropicalhigh`
   (= `hgt500`) are accepted spellings.
@@ -285,7 +301,7 @@ https://dataset.ringsaturn.me/xue/. The contract is two layers:
 
 - One mutable live pointer per source (JSON, schema 1): `latest.json` (GFS),
   `latest-sflux.json`, `latest-ecmwf.json`, `latest-aifs.json`,
-  `latest-ifshres.json`, `latest-hrrr.json`, `latest-mrms.json`, `latest-jma.json`, `latest-cma.json`,
+  `latest-ifshres.json`, `latest-hrrr.json`, `latest-gefsaero.json`, `latest-mrms.json`, `latest-jma.json`, `latest-cma.json`,
   `latest-himawari.json`, `latest-goeseast.json`, `latest-goeswest.json`,
   `latest-meteosat.json`. Fields: `schemaVersion`, `model`, `product`, `run`
   (YYYYMMDDHH, UTC), `runTime` (ISO 8601), `manifestPath` (relative),

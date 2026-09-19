@@ -17,6 +17,7 @@
 
 use crate::encode::errors::{EncodeError, Result};
 use crate::encode::reproject::Regrid;
+use crate::encode::variables::AEROSOL_VARIABLE_IDS;
 
 /// A second file family of the same cycle some of a source's inputs are read
 /// from — GFS-Wave beside the pgrb2 atmosphere, ECMWF's `wave` stream beside
@@ -597,6 +598,49 @@ pub const SOURCES: &[SourceSpec] = &[
     // may still be built from a local file; the id changed from `radar`
     // with the shape, so a wheel that knows one is never taken for the
     // other. Mirrors `xuebuild/sources.py`.
+    // GEFS-Aerosols: the GEFS cycle's `chem` member, the GOCART aerosol
+    // model coupled to the GFS, whose two-dimensional output sits beside the
+    // ensemble on NOAA's GEFS bucket at 0.25° (`chem/pgrb2ap25/`,
+    // `a2d_0p25`: the only product of the member at that resolution),
+    // three-hourly to 120 hours from every cycle, complete some six hours
+    // after it. Every record is GRIB2 template 4.48, an aerosol product
+    // whose identity is the parameter block plus the aerosol block beside
+    // it (`variables::AerosolIdentity`). The aerosol optical depth at 550
+    // nm, total and by species, and the surface concentrations of fine and
+    // coarse particulate matter — the forecast that pairs with the
+    // satellite sources' Dust RGB and DEBRA confidence. No temperature and
+    // no rain, so the core set is the total optical depth alone. Mirrors
+    // `gefsaero` in `xuebuild/sources.py`.
+    SourceSpec {
+        id: "gefsaero",
+        manifest_model: "GEFS-AEROSOLS",
+        product: "chem-a2d-0p25",
+        latest_filename: Some("latest-gefsaero.json"),
+        steps: &[(120, 3)],
+        input_variable_ids: AEROSOL_VARIABLE_IDS,
+        companion_files: &[],
+        accumulated_precipitation: false,
+        averaged_precipitation: false,
+        interval_precipitation: false,
+        average_window_hours: 6,
+        optional_at_analysis: &[],
+        statistical_processes: &[],
+        bands: &[],
+        bundle_scalar_ids: AEROSOL_VARIABLE_IDS,
+        core_bundle_ids: &["aod"],
+        bundle_vector_ids: &[],
+        bundle_composite_ids: &[],
+        production_grid: (1440, 721),
+        tile: (48, 52),
+        variant_factors: &[2],
+        regrid: None,
+        observation: false,
+        window_hours: None,
+        cadence_seconds: None,
+        series_file: false,
+        open_meteo: None,
+        downsample: None,
+    },
     SourceSpec {
         id: "cma",
         manifest_model: "CMA-RADAR",
@@ -1054,9 +1098,18 @@ mod tests {
         assert_eq!(ifshres.production_grid, (3600, 1801));
         assert_eq!(ifshres.core_bundle_ids, &["tmp2m", "prate"]);
         // Every other forecast source is read record by record.
-        for model in ["gfs", "ecmwf", "aifs", "sflux", "hrrr", "mrms"] {
+        for model in ["gfs", "ecmwf", "aifs", "sflux", "hrrr", "gefsaero", "mrms"] {
             assert!(!source_spec(model).expect(model).series_file, "{model}");
         }
+        // The aerosol source: nine scalar bundles, no vectors, no rain and
+        // no temperature, so its core set is the total optical depth.
+        let gefsaero = source_spec("gefsaero").expect("gefsaero");
+        assert_eq!(gefsaero.input_variable_ids, gefsaero.bundle_scalar_ids);
+        assert_eq!(gefsaero.input_variable_ids.len(), 9);
+        assert_eq!(gefsaero.core_bundle_ids, &["aod"]);
+        assert!(gefsaero.bundle_vector_ids.is_empty() && gefsaero.companion_files.is_empty());
+        assert_eq!(gefsaero.forecast_hours(120).expect("axis").len(), 41);
+        assert!(gefsaero.forecast_hours(121).is_err());
         // One arrival shape for precipitation per source.
         for source in SOURCES {
             let shapes = u8::from(source.accumulated_precipitation)
@@ -1126,7 +1179,7 @@ mod tests {
         // A 6.5 M cell global plane takes two rungs, the way a 9 M cell
         // satellite disk takes three.
         assert_eq!(source_spec("ifshres").expect("ifshres").variant_factors, &[2, 4]);
-        for model in ["gfs", "ecmwf", "aifs", "sflux", "hrrr", "cma", "mrms", "jma"] {
+        for model in ["gfs", "ecmwf", "aifs", "sflux", "hrrr", "gefsaero", "cma", "mrms", "jma"] {
             assert_eq!(source_spec(model).expect(model).variant_factors, &[2], "{model}");
         }
     }
