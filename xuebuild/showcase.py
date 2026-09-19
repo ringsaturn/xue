@@ -511,15 +511,20 @@ def refresh_sidecar(spec: CaseSpec, output_root: Path) -> dict[str, Any]:
         raise ShowcaseError(f"case {spec.id} is not built at {sidecar.parent}; build it instead")
     entry = json.loads(sidecar.read_text(encoding="utf-8"))
     validate_catalog_entry(entry)
+    # The bytes are identified by the manifest's model string, not the
+    # source's shorthand: the shell derives ``modelId`` from that string and
+    # refuses a row whose shorthand disagrees, so a source id renamed since
+    # the case was built (``radar`` → ``cma``) is carried onto the row here
+    # rather than treated as another dataset.
     built = (
-        entry["modelId"],
+        entry["model"],
         entry["run"],
         entry["forecastHours"],
         [round(value, 6) for value in entry["bbox"]],
         entry["variables"],
     )
     wanted = (
-        spec.model,
+        source_spec(spec.model).manifest_model,
         spec.run or entry["run"],
         spec.hours,
         [round(value, 6) for value in spec.bbox],
@@ -529,6 +534,7 @@ def refresh_sidecar(spec: CaseSpec, output_root: Path) -> dict[str, Any]:
         raise ShowcaseError(f"case {spec.id}: the definition no longer describes the built case; rebuild it")
     if spec.default_variable not in entry["variables"]:
         raise ShowcaseError(f"case {spec.id}: defaultVariable {spec.default_variable} is not among the built bundles")
+    entry["modelId"] = spec.model
     entry["title"] = spec.title
     entry["summary"] = spec.summary
     entry["defaultVariable"] = spec.default_variable

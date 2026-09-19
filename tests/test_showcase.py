@@ -450,8 +450,17 @@ class RefreshSidecarTest(unittest.TestCase):
         )
         self.assertIn("showcase/collection.json", [link["href"] for link in catalog["links"]])
 
+    def test_a_renamed_source_id_is_carried_onto_the_row(self) -> None:
+        # The bytes are identified by the manifest's model string; the
+        # shorthand the shell derives from it follows the definition, so a
+        # case built under a source's old id refreshes onto the new one.
+        stale = {**self.entry, "modelId": "gfs-old"}
+        (self.root / "showcase" / "demo-case" / "case.json").write_text(json.dumps(stale), encoding="utf-8")
+        refreshed = refresh_sidecar(parse_case(case_payload()), self.root)
+        self.assertEqual((refreshed["modelId"], refreshed["model"]), ("gfs", "GFS"))
+
     def test_a_definition_that_moved_on_needs_a_rebuild(self) -> None:
-        for overrides in ({"hours": 48}, {"bbox": [100.0, 20.0, 120.0, 40.0]}, {"variables": ["prate"]}, {"run": "2021071900"}):
+        for overrides in ({"hours": 48}, {"bbox": [100.0, 20.0, 120.0, 40.0]}, {"variables": ["prate"]}, {"run": "2021071900"}, {"model": "ecmwf"}):
             with self.assertRaisesRegex(ShowcaseError, "rebuild"):
                 refresh_sidecar(parse_case(case_payload(**overrides)), self.root)
         with self.assertRaisesRegex(ShowcaseError, "not built"):
