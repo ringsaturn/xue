@@ -186,6 +186,13 @@ fall back to defaults rather than fail, so a constructed link always opens.
 
 - https://xue.ringsaturn.me/ — the live viewer. Defaults to GFS precipitation.
 - https://xue.ringsaturn.me/showcase.html — the list of historical cases.
+- https://xue.ringsaturn.me/compare.html — every live forecast model at
+  one point on one clock (`?lat=<deg>&lon=<deg>`, `?span=120|360` hours,
+  `?fields=tmp2m,prate,wind10m,...` among `tmp2m dpt2m prate wind10m gust
+  tcdc prmsl`), one block per model with the run in its header, a row of
+  local hours and a row per field, the nearest airport's METAR reports
+  (within 40 km) as a block of the same shape; values are the model's
+  nearest grid cell, not interpolated. The viewer's point probe links here.
 - `?model=gfs|sflux|ecmwf|aifs|ifshres|hrrr|mrms|jma|cma|himawari|goeseast|goeswest|meteosat|geo`
   — which live source (`ifs` is an alias of `ecmwf`, `aifs-single` of
   `aifs`, `hres` / `ifs9km` of `ifshres`, `hrpns` of `jma`, `radar` of `cma`, `himawari-9` / `ahi` of

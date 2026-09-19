@@ -454,6 +454,21 @@ Session settings, read once at load:
   publishes one beside the store. The store is what the viewer opens by
   default wherever the manifest names one; the data card reads `Zarr`.
 
+## Comparing models at a point
+
+`/compare.html?lat=<deg>&lon=<deg>` lays every live forecast model at one
+point on one clock: a block per model with its run in the header, a row of
+local hours and a row per field (`?fields=tmp2m,prate,wind10m`, among
+temperature, dew point, precipitation rate, wind, gust, cloud cover and
+sea level pressure), five days hourly or fifteen days three-hourly
+(`?span=360`), with the nearest airport's METAR reports of the last day as
+a block of the same shape above them. Each value is the model's own grid
+cell nearest the point, read out of the bundle's Zarr store with one range
+request per temporal group and never interpolated; no map and no playback
+session is opened. The viewer's point probe links to the page at the
+pinned point, and a regional model appears only where its domain covers
+the point.
+
 ## Historical showcase
 
 Besides the live feed, the site publishes cases: one past weather event

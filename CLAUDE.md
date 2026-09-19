@@ -1070,6 +1070,26 @@ the headline gains the ICAO and its category chip and each row's readout
 gains the nearest report within ninety minutes. None of it moves the
 playhead; the playhead only decides which readouts are shown.
 
+The comparison page (`web/compare.html`, `web/src/compare.ts`) is the
+third rollup input beside the viewer and the showcase list: every live
+forecast model at one point on one clock, Windy's "compare" shape — one
+block per model (its run in the header, a row of local hours, a row per
+field), the nearest airport's METAR reports (`stations/`, 40 km) as a
+block of the same shape above them. It opens no map and no playback
+session: `compare/series.ts` fetches each model's pointer and manifest,
+opens each compared bundle's store in a Zarr worker, reads the point's
+cell with one `series` message per variable and terminates the worker, so
+the page holds codes alone; `compare/axis.ts` is the clock, pure
+arithmetic on epoch milliseconds and pixels (a column is one hour, three
+on the 15-day horizon, a frame spans until the model's next, reports are
+thinned to the column, `tests/web/compare.test.ts`). The cell is
+`probeCell` against the bundle's own grid, the full tier, so the viewer's
+probe and this page read the same value; a regional model is offered only
+inside its domain (`modelCoversPoint`). State is the query (`lat`, `lon`,
+`span`, `fields`); hidden and pinned models are `localStorage`. The
+viewer's probe panel links here (`compareUrl`), and `discovery.ts` lists
+the page in the sitemap.
+
 Shell layout: a display-serif title top-left names the layer and opens the
 run picker (`#model-sheet`); three round buttons top-right (language, cases,
 appearance) share `web/src/sheet.ts` with the model and sources sheets; the

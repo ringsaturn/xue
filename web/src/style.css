@@ -3757,3 +3757,394 @@ html:has(.showcase-page) {
 .showcase-page .source-note a:focus-visible {
   text-decoration: underline;
 }
+
+/* ---------------------------------------------------------------------------
+   The comparison page (compare.html): one block per model on one clock.
+
+   The blocks live in one horizontal scroll container, so a pan moves every
+   model together and 15:00 stays under 15:00; the label column and each
+   block's header are sticky against the left edge. Cells are positioned
+   in pixels along the track by compare/axis.ts, tinted by the viewer's own
+   palette for the field. */
+
+.compare-shell {
+  max-width: none;
+}
+
+.compare-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  align-items: flex-end;
+  margin: 28px 0 20px;
+}
+
+.compare-point {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: flex-end;
+}
+
+.compare-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.compare-field input {
+  width: 110px;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.compare-field input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.compare-locate,
+.compare-spans button,
+.cmp-action {
+  display: inline-flex;
+  height: 32px;
+  align-items: center;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+}
+
+.compare-locate:hover,
+.compare-spans button:hover,
+.cmp-action:hover {
+  color: var(--text);
+  border-color: var(--muted);
+}
+
+.compare-locate:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.compare-spans {
+  display: flex;
+  gap: 4px;
+}
+
+.compare-spans button[aria-pressed="true"],
+.cmp-action[aria-pressed="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg);
+}
+
+.compare-page .field-chips {
+  padding: 0;
+  align-self: flex-end;
+}
+
+.compare-page .field-chips button {
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 16px;
+}
+
+.compare-scroll {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  margin: 0 calc(-1 * clamp(16px, 4vw, 40px));
+  padding: 0 clamp(16px, 4vw, 40px);
+  scrollbar-width: thin;
+}
+
+.compare-blocks {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: max-content;
+  min-width: 100%;
+}
+
+.cmp-block {
+  --cmp-label: 132px;
+  --cmp-row: 30px;
+  position: relative;
+  width: max-content;
+}
+
+/* The header keeps to the viewport while the block scrolls under it. */
+.cmp-head {
+  position: sticky;
+  left: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  align-items: baseline;
+  width: fit-content;
+  max-width: calc(100vw - 2 * clamp(16px, 4vw, 40px));
+  padding: 0 0 8px;
+}
+
+.cmp-name {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+  line-height: 1.1;
+}
+
+.cmp-meta {
+  display: inline-flex;
+  gap: 12px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+}
+
+.cmp-actions {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.cmp-actions .cmp-action {
+  height: 24px;
+  padding: 0 9px;
+  border-radius: 12px;
+}
+
+.cmp-note {
+  position: sticky;
+  left: 0;
+  width: fit-content;
+  margin: 0;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+.cmp-note.is-error {
+  color: var(--warning);
+}
+
+/* `overflow: clip`, not `hidden`: hidden would make the grid a scroll
+   container of its own and the sticky label column would stick to it, which
+   never scrolls, instead of to the page's scroller. */
+.cmp-grid {
+  position: relative;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--card);
+  overflow: clip;
+}
+
+.cmp-block.is-observed .cmp-grid {
+  border-style: dashed;
+}
+
+.cmp-row {
+  position: relative;
+  display: flex;
+  height: var(--cmp-row);
+  border-top: 1px solid var(--grid-line);
+}
+
+.cmp-row:first-of-type {
+  border-top: 0;
+}
+
+.cmp-label {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  display: flex;
+  flex: 0 0 var(--cmp-label);
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 0 10px;
+  background: var(--sheet);
+  border-right: 1px solid var(--line);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.cmp-label-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cmp-label-unit {
+  flex: none;
+  color: var(--tick-off);
+}
+
+.cmp-track {
+  position: relative;
+  flex: none;
+  height: 100%;
+}
+
+.cmp-cell {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  box-sizing: border-box;
+  border-right: 1px solid var(--grid-line);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+/* A cell wider than a column (a six-hourly frame on an hourly axis) reads
+   from its own frame's time, at the left, not the middle of its span. */
+.cmp-cell {
+  justify-content: flex-start;
+  padding-left: 6px;
+}
+
+.cmp-days .cmp-cell,
+.cmp-day {
+  justify-content: flex-start;
+}
+
+.cmp-day {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
+  padding-left: 8px;
+  border-right: 1px solid var(--line);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 600;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.cmp-hours .cmp-cell {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.cmp-arrow {
+  flex: none;
+  color: var(--text);
+}
+
+.cmp-shade {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--cmp-label);
+  pointer-events: none;
+}
+
+.cmp-night {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(var(--accent-rgb), 0.045);
+}
+
+.cmp-now {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  border-left: 2px solid var(--warning);
+  z-index: 1;
+}
+
+.cmp-field.is-reading .cmp-track {
+  background: repeating-linear-gradient(90deg, transparent 0 8px, var(--grid-line) 8px 16px);
+  opacity: 0.6;
+}
+
+.compare-hidden {
+  margin-top: 24px;
+}
+
+.compare-hidden ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.compare-note {
+  margin: 24px 0 32px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+@media (max-width: 640px) {
+  .cmp-block {
+    --cmp-label: 96px;
+  }
+
+  .cmp-name {
+    font-size: 20px;
+  }
+
+  .cmp-actions {
+    margin-left: 0;
+  }
+}
+
+/* The probe panel's way into the comparison page, on the meta line beside
+   the pinned point's zone: a link styled as the line's other instrument
+   text, underlined on hover only. */
+.probe-compare {
+  color: var(--text);
+  letter-spacing: 0.06em;
+  text-decoration: none;
+}
+
+.probe-compare:hover,
+.probe-compare:focus-visible {
+  text-decoration: underline;
+}

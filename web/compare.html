@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#F3EFE6" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#000000" />
+    <meta name="description" data-i18n-content="compareMetaDescription" content="Compare GFS, ECMWF, AIFS, IFS HRES and HRRR forecasts at one point, hour by hour, against the nearest airport's METAR reports." />
+    <title>Compare forecasts · Xue</title>
+
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <!-- Search metadata; pagemeta.ts completes the hreflang set and pins a
+         `?lang=` rendering's canonical to itself, as on the viewer. The
+         point in the query is state, not content: every point is one page. -->
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <link rel="canonical" href="https://xue.ringsaturn.me/compare.html" />
+    <link rel="alternate" hreflang="x-default" href="https://xue.ringsaturn.me/compare.html" />
+    <link rel="alternate" hreflang="en" href="https://xue.ringsaturn.me/compare.html?lang=en" />
+    <link rel="alternate" hreflang="zh-CN" href="https://xue.ringsaturn.me/compare.html?lang=zh" />
+    <link rel="alternate" hreflang="zh-TW" href="https://xue.ringsaturn.me/compare.html?lang=zh-Hant" />
+    <link rel="preconnect" href="https://dataset.ringsaturn.me" crossorigin />
+
+    <!-- Settled before the first paint; see the note in index.html. -->
+    <script>
+      (function () {
+        try {
+          var url = new URLSearchParams(location.search).get("theme");
+          var stored = localStorage.getItem("xue-theme");
+          var choice = url === "dark" || url === "light" ? url : stored === "dark" || stored === "light" ? stored : null;
+          if (choice) document.documentElement.dataset.theme = choice;
+        } catch (error) {
+          // Storage can be unavailable (privacy modes); prefers-color-scheme decides.
+        }
+      })();
+    </script>
+
+    <!-- Social cards are scraped from the static markup, before the i18n
+         pass runs, so they stay in English like the pre-JS fallback copy. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Xue" />
+    <meta property="og:url" content="https://xue.ringsaturn.me/compare.html" />
+    <meta property="og:title" content="Compare forecasts · Xue" />
+    <meta property="og:description" content="Compare GFS, ECMWF, AIFS, IFS HRES and HRRR forecasts at one point, hour by hour, against the nearest airport's METAR reports." />
+    <meta property="og:image" content="https://xue.ringsaturn.me/og-image.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Compare forecasts · Xue" />
+    <meta name="twitter:description" content="Compare GFS, ECMWF, AIFS, IFS HRES and HRRR forecasts at one point, hour by hour, against the nearest airport's METAR reports." />
+    <meta name="twitter:image" content="https://xue.ringsaturn.me/og-image.jpg" />
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebPage",
+        "@id": "https://xue.ringsaturn.me/compare.html",
+        "url": "https://xue.ringsaturn.me/compare.html",
+        "name": "Compare forecasts · Xue",
+        "description": "Compare GFS, ECMWF, AIFS, IFS HRES and HRRR forecasts at one point, hour by hour, against the nearest airport's METAR reports.",
+        "isPartOf": { "@type": "WebSite", "@id": "https://xue.ringsaturn.me/#website", "url": "https://xue.ringsaturn.me/", "name": "Xue" }
+      }
+    </script>
+  </head>
+  <body class="showcase-page compare-page">
+    <main class="showcase-shell compare-shell">
+      <div class="showcase-topbar">
+        <a class="showcase-back-link" id="compare-map-link" href="./">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M10 3L5 8l5 5" />
+          </svg>
+          <span data-i18n="showcaseHome">Live forecast</span>
+        </a>
+        <div class="showcase-actions">
+          <button id="lang-toggle" class="icon-button" type="button" aria-haspopup="dialog" aria-expanded="false" data-i18n-aria="langPickerAria" aria-label="Language">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M3 5h8M7 5V3.5M9.2 5c0 3.4-2.4 6.2-6.2 7.6M5 8.4c1 1.9 2.8 3.4 5.2 4.1" />
+              <path d="M12.4 20l4-9.5 4 9.5M13.9 16.6h5" />
+            </svg>
+          </button>
+          <button id="theme-toggle" class="icon-button" type="button" data-i18n-aria="themeToggleAria" aria-label="Toggle light and dark">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+              <path d="M10 2a8 8 0 1 0 0 16z" />
+              <circle cx="10" cy="10" r="7.5" fill="none" stroke="currentColor" stroke-width="1.6" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <header class="showcase-header">
+        <h1>
+          <span data-i18n="compareHeading">Model comparison</span>
+          <span class="showcase-eyebrow" data-i18n="compareEyebrow">point</span>
+        </h1>
+        <p class="showcase-intro" data-i18n="compareIntro">
+          Every live forecast model at one point, on one clock: what each run says for the hours ahead, beside the
+          nearest airport's own reports.
+        </p>
+      </header>
+
+      <!-- The point, the horizon and the fields: the whole state of the
+           page, mirrored in the query string by compare.ts. -->
+      <form class="compare-controls" id="compare-controls">
+        <div class="compare-point">
+          <label class="compare-field">
+            <span data-i18n="compareLatitude">Latitude</span>
+            <input id="compare-lat" name="lat" type="number" inputmode="decimal" step="0.01" min="-90" max="90" required />
+          </label>
+          <label class="compare-field">
+            <span data-i18n="compareLongitude">Longitude</span>
+            <input id="compare-lon" name="lon" type="number" inputmode="decimal" step="0.01" min="-180" max="180" required />
+          </label>
+          <button class="compare-locate" id="compare-locate" type="button" data-i18n="compareLocate">Use my location</button>
+        </div>
+        <div class="compare-spans" role="group" id="compare-spans">
+          <button type="button" data-span="120" aria-pressed="true" data-i18n="compareSpan5">5 days</button>
+          <button type="button" data-span="360" aria-pressed="false" data-i18n="compareSpan15">15 days</button>
+        </div>
+        <div class="field-chips compare-fields" role="group" id="compare-fields" data-i18n-aria="compareFieldsAria" aria-label="Fields to compare"></div>
+      </form>
+
+      <p id="compare-status" class="showcase-status" role="status" aria-live="polite" hidden></p>
+
+      <div class="compare-scroll" id="compare-scroll">
+        <div class="compare-blocks" id="compare-blocks" data-i18n-aria="compareModelsAria" aria-label="Model comparison blocks"></div>
+      </div>
+
+      <section class="compare-hidden" id="compare-hidden" hidden>
+        <p class="sheet-heading" data-i18n="compareHidden">Hidden models</p>
+        <ul id="compare-hidden-list"></ul>
+      </section>
+
+      <p class="compare-note" data-i18n="compareCells">
+        Each value is the model's own grid cell nearest the point, never an interpolation; times read in your zone.
+      </p>
+
+      <footer class="source-note">
+        <a href="https://github.com/ringsaturn/xue" target="_blank" rel="noreferrer">GITHUB</a>
+        <span>·</span>
+        DATA <a href="https://registry.opendata.aws/noaa-gfs-bdp-pds/" target="_blank" rel="noreferrer">NOAA GFS</a>
+        · <a href="https://registry.opendata.aws/noaa-hrrr-pds/" target="_blank" rel="noreferrer">NOAA HRRR</a>
+        · CONTAINS MODIFIED <a href="https://www.ecmwf.int/en/forecasts/datasets/open-data" target="_blank" rel="noreferrer">ECMWF OPEN DATA</a>
+        (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">CC BY 4.0</a>)
+        · IFS HRES VIA <a href="https://open-meteo.com" target="_blank" rel="noreferrer">OPEN-METEO</a>
+        · METAR <a href="https://aviationweather.gov" target="_blank" rel="noreferrer">NOAA AWC</a>
+      </footer>
+
+      <div id="lang-sheet" class="model-sheet lang-sheet" hidden>
+        <div class="model-sheet-scrim" data-sheet-dismiss></div>
+        <div class="model-sheet-panel lang-panel" role="dialog" aria-modal="true" data-i18n-aria="langPickerAria" aria-label="Language">
+          <span class="sheet-grip" aria-hidden="true"></span>
+          <p class="sheet-heading" data-i18n="langPickerHeading">LANGUAGE</p>
+          <div id="lang-list" class="lang-list" role="group"></div>
+        </div>
+      </div>
+    </main>
+    <script type="module" src="/src/compare.ts"></script>
+  </body>
+</html>

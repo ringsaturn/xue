@@ -506,6 +506,55 @@ export const en = {
   soundingClose: "Close",
   soundingSheetHeading: "SOUNDING",
   soundingSheetAria: "Sounding chart",
+
+  /* The comparison page (compare.html): every live forecast model at one
+   * point on one clock, Windy's "compare" shape — one block per model,
+   * hourly columns, a row per field — with the nearest airport's reports
+   * as a block of their own. The heading is display type and short; the
+   * eyebrow is one lowercase word beside it, as `showcaseArchive` is.
+   * `compareLink` is the probe panel's button into the page and reads as
+   * instrument text: keep it to one short uppercase word.
+   *
+   * `compareSpan5` / `compareSpan15` are the two horizons, a pair of
+   * chips, and `compareLatitude` / `compareLongitude` label two numeric
+   * inputs. `compareHide` / `compareShow` / `comparePin` are per-model
+   * buttons; `compareHidden` heads the list of blocks taken off the page.
+   * `compareLoading` names the model still being read, and
+   * `compareModelFailed` carries the decoder's own English message after
+   * the model's name. `compareObservationsFrom` heads the airport block
+   * with the ICAO id (`RJTT`), which stays as it is. `compareCells` is the
+   * one-line note under the blocks on what a value is. */
+  compareLink: "COMPARE",
+  compareTitle: "Compare forecasts",
+  compareHeading: "Model comparison",
+  compareEyebrow: "point",
+  compareIntro:
+    "Every live forecast model at one point, on one clock: what each run says for the hours ahead, beside the nearest airport's own reports.",
+  compareMetaDescription:
+    "Compare GFS, ECMWF, AIFS, IFS HRES and HRRR forecasts at one point, hour by hour, against the nearest airport's METAR reports.",
+  compareLatitude: "Latitude",
+  compareLongitude: "Longitude",
+  compareLocate: "Use my location",
+  compareLocateFailed: "Location unavailable",
+  compareOnMap: "On the map",
+  compareSpan5: "5 days",
+  compareSpan15: "15 days",
+  compareFieldsAria: "Fields to compare",
+  compareModelsAria: "Model comparison blocks",
+  compareLoading: "Reading {model}…",
+  compareModelFailed: "{model}: {message}",
+  compareOffGrid: "outside this model's grid",
+  compareNoModels: "No model covers this point",
+  compareHide: "Hide",
+  compareShow: "Show",
+  comparePin: "Pin to top",
+  compareHidden: "Hidden models",
+  compareRun: "Run",
+  compareObservationsFrom: "Reports from {icao}",
+  compareNoAirport: "No airport within 40 km",
+  compareHours: "Hours",
+  compareNow: "now",
+  compareCells: "Each value is the model's own grid cell nearest the point, never an interpolation; times read in your zone.",
 } as const;
 
 /** Every key the UI can ask for. Each locale module is typed against this,

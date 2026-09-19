@@ -187,8 +187,7 @@ import {
   probeWindDirection,
   wrap,
   type ProbeValue,
-  type ProbeVariable,
-} from "./probe";
+  type ProbeVariable, normalizeLongitude } from "./probe";
 import {
   alignSeries,
   drawMeteogram,
@@ -2206,6 +2205,15 @@ function buildProbePanel() {
   const zone = document.createElement("span");
   zone.className = "probe-zone";
   zone.id = "probe-zone";
+  // The way into the comparison page at this very point: every live model
+  // at the pinned cell on one clock (compare.html), a link so it opens in
+  // a tab of its own beside the map. The href follows the pin.
+  const compare = document.createElement("a");
+  compare.className = "probe-compare";
+  compare.id = "probe-compare";
+  compare.target = "_blank";
+  compare.rel = "noreferrer";
+  compare.textContent = t("compareLink");
   const footer = document.createElement("span");
   footer.className = "probe-footer";
   const count = document.createElement("span");
@@ -2228,7 +2236,7 @@ function buildProbePanel() {
   codeLine.className = "probe-code-line";
   codeLine.append(code, airport);
   headline.append(codeLine, value);
-  metaLine.append(meta, coords, zone, footer, close);
+  metaLine.append(meta, coords, zone, compare, footer, close);
   axis.append(metaLine, canvas);
   head.append(headline, axis);
   // The meteogram: the row labels and readouts are DOM text in the left
@@ -2256,6 +2264,7 @@ function buildProbePanel() {
     airportCategory,
     coords,
     zone,
+    compare,
     value,
     meta,
     canvas,
@@ -2324,6 +2333,25 @@ function buildProbePin(): HTMLElement {
   pin.setAttribute("aria-hidden", "true");
   return pin;
 }
+
+/** The comparison page at a point: its own page, keyed by the query the
+ * way the viewer is, so the link carries the language and theme along. */
+function compareUrl(latitude: number, longitude: number): string {
+  const url = new URL("compare.html", window.location.href);
+  url.searchParams.set("lat", latitude.toFixed(2));
+  url.searchParams.set("lon", longitude.toFixed(2));
+  return url.href;
+}
+
+/** The top-right link into the comparison page follows the camera: the
+ * map's centre, so the page opens on what is being looked at. */
+const compareLink = document.getElementById("compare-link") as HTMLAnchorElement | null;
+function syncCompareLink(): void {
+  if (!compareLink) return;
+  const center = map.getCenter();
+  compareLink.href = compareUrl(center.lat, normalizeLongitude(center.lng));
+}
+syncCompareLink();
 
 /** A probed coordinate, at the precision a grid cell center needs. */
 function formatProbeDegrees(value: number, axis: "NS" | "EW"): string {
@@ -2612,6 +2640,8 @@ function renderProbe(): void {
   probePanel.coords.textContent =
     `${formatProbeDegrees(point.latitude, "NS")} ${formatProbeDegrees(point.longitude, "EW")}`;
   probePanel.zone.textContent = probeZone ? zoneDisplayName(probeZone, frameValidTime(activeFrameIndex ?? Number(slider.value))) : "";
+  probePanel.compare.href = compareUrl(point.latitude, point.longitude);
+  probePanel.compare.textContent = t("compareLink");
 
   const index = activeFrameIndex ?? Number(slider.value);
   const offsets = member ? memberProbeOffsets(session) : frameAxis();
@@ -7296,6 +7326,7 @@ map.on("moveend", () => {
   updateStatsReadout();
   refreshLabels();
   scheduleRetier();
+  syncCompareLink();
 });
 // A resize changes the share of the grid in view without moving the camera.
 map.on("resize", scheduleRetier);

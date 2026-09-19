@@ -40,10 +40,11 @@ const CATALOG = JSON.stringify({
 });
 
 describe("sitemap", () => {
-  it("lists the two pages and one URL per case", () => {
+  it("lists the three pages and one URL per case", () => {
     expect(sitemapUrls(["zhengzhou-2021", "shadel-2026"])).toEqual([
       `${SITE_ORIGIN}/`,
       `${SITE_ORIGIN}/showcase.html`,
+      `${SITE_ORIGIN}/compare.html`,
       `${SITE_ORIGIN}/?case=zhengzhou-2021`,
       `${SITE_ORIGIN}/?case=shadel-2026`,
     ]);
