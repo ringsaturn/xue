@@ -12,13 +12,14 @@ schemas are not fetched here).
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import tempfile
 import unittest
 from datetime import UTC, datetime
 from pathlib import Path
 
-from xuebuild import stac
+from xuebuild import stac, stacindex
 from xuebuild.airport import schema as airport_schema
 from xuebuild.manifest import build_bin_manifest
 from xuebuild.pointproduct import crc32_hex, encode_json
@@ -494,14 +495,16 @@ class WritingTests(unittest.TestCase):
         self.assertEqual(Path(written["liveItem"]), self.root / "gfs" / "item.json")
         self.assertEqual(Path(written["collection"]), self.root / "gfs" / "collection.json")
         self.assertEqual(Path(written["catalog"]), self.root / "catalog.json")
+        self.assertEqual(Path(written["index"]), self.root / "index.html")
+        self.assertEqual(Path(written["index"]).read_text(encoding="utf-8"), stacindex.render_index())
         item = json.loads(Path(written["item"]).read_text(encoding="utf-8"))
         collection = json.loads(Path(written["collection"]).read_text(encoding="utf-8"))
         self.assertEqual(item["assets"]["manifest"]["href"].split("=")[1], item["assets"]["manifest"]["xue:crc32"])
         self.assertEqual(collection["xue:live"], "gfs.2026081406")
         # Writing again from the same manifest changes nothing.
-        before = Path(written["item"]).stat().st_mtime_ns
+        before = [Path(written[key]).stat().st_mtime_ns for key in ("item", "catalog", "index")]
         stac.write_run_documents(self.root, source=source_spec("gfs"), manifest_path=manifest_path)
-        self.assertEqual(Path(written["item"]).stat().st_mtime_ns, before)
+        self.assertEqual([Path(written[key]).stat().st_mtime_ns for key in ("item", "catalog", "index")], before)
 
     def test_a_partial_manifest_is_not_a_run(self) -> None:
         part = self.root / "gfs.2026081406" / "manifest.part.tmp2m.json"
@@ -509,6 +512,54 @@ class WritingTests(unittest.TestCase):
         part.write_text(json.dumps(_gfs_manifest()), encoding="utf-8")
         with self.assertRaises(stac.StacError):
             stac.write_run_documents(self.root, source=source_spec("gfs"), manifest_path=part)
+
+
+class LandingPageTests(unittest.TestCase):
+    """The root's `index.html` (`xuebuild/stacindex.py`): not a STAC
+    object, but derived on the catalog's terms — from the registry and the
+    prose alone — and written beside it."""
+
+    def test_the_page_is_a_pure_function_of_the_registry(self) -> None:
+        self.assertEqual(stacindex.render_index(), stacindex.render_index())
+
+    def test_the_page_lists_every_collection_of_the_catalog(self) -> None:
+        page = stacindex.render_index()
+        children = [link for link in stac.root_catalog()["links"] if link["rel"] == "child"]
+        directories = [link["href"].removesuffix("/collection.json") for link in children]
+        self.assertEqual(re.findall(r'<tr data-dir="([^"]+)">', page), directories)
+        for link in children:
+            with self.subTest(collection=link["href"]):
+                self.assertIn(f'<a href="{link["href"]}">{link["title"]}</a>', page)
+        # Every source and product states its terms; the showcase has none of its own.
+        self.assertEqual(page.count("<dt>", page.index('<dl class="licences">')), len(children) - 1)
+        self.assertIn(f'href="{stac.CATALOG_FILENAME}"', page)
+        self.assertIn(f"{stacindex.DOCS_URL}/stac.md", page)
+
+    def test_the_licences_come_from_the_prose(self) -> None:
+        page = stacindex.render_index()
+        for source in SOURCES.values():
+            if not source.live:
+                continue
+            prose = stac._source_prose(source)
+            with self.subTest(source=source.id):
+                if prose["license"] != "other":
+                    self.assertIn(f">{prose['license']}</a>", page)
+                for link in prose["links"]:
+                    if link["rel"] == "license":
+                        self.assertIn(f'<a href="{link["href"]}">', page)
+
+    def test_the_hostnames_are_the_frontends(self) -> None:
+        site = (Path(__file__).resolve().parent.parent / "web" / "src" / "site.ts").read_text(encoding="utf-8")
+        constants = dict(re.findall(r'export const (\w+) = "([^"]+)";', site))
+        self.assertEqual(stacindex.SITE_ORIGIN, constants["SITE_ORIGIN"])
+        self.assertEqual(stacindex.REPO_URL, constants["REPO_URL"])
+        self.assertEqual(stacindex.DATA_ORIGIN, constants["DATA_ORIGIN"])
+
+    def test_the_template_leaves_no_placeholder_behind(self) -> None:
+        page = stacindex.render_index()
+        self.assertNotRegex(page, r"\$[a-z_]+")
+        self.assertNotIn("$$", page)
+        self.assertIn("${dir}/collection.json", page, "the script's template literals survive")
 
 
 class PointProductTests(unittest.TestCase):

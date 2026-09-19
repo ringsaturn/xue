@@ -49,6 +49,10 @@ LATEST_FILE = $(if $(filter gfs,$(MODEL)),latest.json,latest-$(MODEL).json)
 STAC_CATALOG = catalog.json
 STAC_COLLECTION = collection.json
 STAC_ITEM = item.json
+# Beside the catalog, the data root's landing page (xuebuild/stacindex.py):
+# not a STAC object, derived from the same registry and written with the
+# catalog, so it travels with it.
+STAC_INDEX = index.html
 # Which catalog directory `upload-r2-stac-collection` pushes: a model's by
 # default, `showcase`, or one of the point products (docs/stac.md
 # "Point products"), each of which holds a collection.json and the live
@@ -71,7 +75,7 @@ AWS_REQUEST_CHECKSUM_CALCULATION ?= when_required
 AWS_RESPONSE_CHECKSUM_VALIDATION ?= when_required
 export AWS_DEFAULT_REGION AWS_REQUEST_CHECKSUM_CALCULATION AWS_RESPONSE_CHECKSUM_VALIDATION
 
-.PHONY: check install wasm test test-rust test-e2e encoder-rust encoder-rust-test encoder-wheel bench bench-video bench-lossy mvp serve format-pdf deploy-build upload-r2 upload-r2-bundles upload-r2-manifest upload-r2-stac-item check-pointer upload-r2-pointer upload-r2-stac-collection upload-r2-index warm-r2 prune-r2 prune-r2-rounds live-run live-manifest live-window pull-r2-frames push-r2-frames prune-r2-frames pull-r2-ancillary deploy-pages deploy showcase showcase-check showcase-refresh live-showcase-catalog upload-r2-showcase tc-build live-tc-index upload-r2-tc prune-r2-tc airport-build live-airport-index upload-r2-airport prune-r2-airport sounding-build live-sounding-index upload-r2-sounding prune-r2-sounding clean
+.PHONY: check install wasm test test-rust test-e2e encoder-rust encoder-rust-test encoder-wheel bench bench-video bench-lossy mvp serve format-pdf deploy-build upload-r2 upload-r2-bundles upload-r2-manifest upload-r2-stac-item check-pointer upload-r2-pointer upload-r2-stac-collection warm-r2 prune-r2 prune-r2-rounds live-run live-manifest live-window pull-r2-frames push-r2-frames prune-r2-frames pull-r2-ancillary deploy-pages deploy showcase showcase-check showcase-refresh live-showcase-catalog upload-r2-showcase tc-build live-tc-index upload-r2-tc prune-r2-tc airport-build live-airport-index upload-r2-airport prune-r2-airport sounding-build live-sounding-index upload-r2-sounding prune-r2-sounding clean
 
 check:
 	$(PYTHON) scripts/check_dependencies.py
@@ -302,22 +306,15 @@ upload-r2-pointer:
 upload-r2-stac-collection:
 	@set -e; \
 	[ -f web/public/data/$(STAC_DIR)/$(STAC_COLLECTION) ] || { echo "no $(STAC_DIR)/$(STAC_COLLECTION); nothing built the catalog"; exit 0; }; \
-	echo "Uploading $(STAC_DIR)/$(STAC_ITEM), $(STAC_DIR)/$(STAC_COLLECTION) and $(STAC_CATALOG)..."; \
+	echo "Uploading $(STAC_DIR)/$(STAC_ITEM), $(STAC_DIR)/$(STAC_COLLECTION), $(STAC_CATALOG) and $(STAC_INDEX)..."; \
 	[ ! -f web/public/data/$(STAC_DIR)/$(STAC_ITEM) ] || \
 	$(S3) cp web/public/data/$(STAC_DIR)/$(STAC_ITEM) s3://$(R2_BUCKET)/$(R2_PREFIX)/$(STAC_DIR)/$(STAC_ITEM) --no-progress $(DRY_RUN) \
 		--content-type application/geo+json --cache-control "no-cache"; \
 	$(S3) cp web/public/data/$(STAC_DIR)/$(STAC_COLLECTION) s3://$(R2_BUCKET)/$(R2_PREFIX)/$(STAC_DIR)/$(STAC_COLLECTION) --no-progress $(DRY_RUN) \
 		--content-type application/json --cache-control "no-cache"; \
 	$(S3) cp web/public/data/$(STAC_CATALOG) s3://$(R2_BUCKET)/$(R2_PREFIX)/$(STAC_CATALOG) --no-progress $(DRY_RUN) \
-		--content-type application/json --cache-control "no-cache"
-
-# The data root's landing page (web/dataroot/index.html): a human's entry
-# to the STAC catalog, naming catalog.json and the repository's docs. Not
-# read by the shell or any catalog document, uploaded by hand when it
-# changes; no-cache like the catalog beside it.
-upload-r2-index:
-	@echo "Uploading index.html..."; \
-	$(S3) cp web/dataroot/index.html s3://$(R2_BUCKET)/$(R2_PREFIX)/index.html --no-progress $(DRY_RUN) \
+		--content-type application/json --cache-control "no-cache"; \
+	$(S3) cp web/public/data/$(STAC_INDEX) s3://$(R2_BUCKET)/$(R2_PREFIX)/$(STAC_INDEX) --no-progress $(DRY_RUN) \
 		--content-type "text/html; charset=utf-8" --cache-control "no-cache"
 
 # GET every artifact of one uploaded run through the public hostname, with

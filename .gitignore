@@ -36,6 +36,7 @@ web/public/data/showcase/
 # The STAC catalog a build derives beside the manifests (docs/stac.md): the
 # root catalog and one collection directory per source.
 web/public/data/catalog.json
+web/public/data/index.html
 web/public/data/gfs/
 web/public/data/ecmwf/
 web/public/data/sflux/

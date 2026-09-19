@@ -591,11 +591,12 @@ class GoldenTests(unittest.TestCase):
             built = {
                 str(path.relative_to(output)): path
                 for path in sorted(output.rglob("*"))
-                # The root catalog the build also rewrites is a function of
-                # the source registry, not of this product; tests/test_stac.py
-                # pins it, and pinning it here would make a new weather
-                # source a failure of the airport golden.
-                if path.is_file() and path.name != "catalog.json"
+                # The root catalog the build also rewrites, and the landing
+                # page beside it, are functions of the source registry, not
+                # of this product; tests/test_stac.py pins them, and pinning
+                # them here would make a new weather source a failure of the
+                # airport golden.
+                if path.is_file() and path.name not in ("catalog.json", "index.html")
             }
             expected = {str(path.relative_to(EXPECTED)): path for path in sorted(EXPECTED.rglob("*")) if path.is_file()}
             self.assertEqual(sorted(built), sorted(expected))

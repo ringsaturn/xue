@@ -38,7 +38,7 @@ pointers:
 | `<product>.<issue>/item.json` | one Item per issue, beside its `index.json` | no | same |
 | `showcase/collection.json` | the Collection of the historical cases | yes | `showcase build` / `refresh` / `catalog` |
 | `showcase/<case>/item.json` | one Item per case, beside its manifest | rewritten by `showcase refresh` | same |
-| `index.html` | not a STAC object: the root's landing page for a reader arriving in a browser, naming `catalog.json` and these documents, with a table of the live Collections filled from the catalog (`web/dataroot/index.html`) | yes | `make upload-r2-index`, by hand |
+| `index.html` | not a STAC object: the root's landing page for a reader arriving in a browser, naming `catalog.json` and these documents, listing every Collection with its licence (`xuebuild/stacindex.py`, from the registry and the prose, so a pure function like the catalog); the live run and extent are read from each Collection in the browser | yes (with the catalog) | wherever the catalog is, uploaded with it |
 
 Mutable documents are served `no-cache`, like the pointer; an Item is too,
 since a STAC client fetches it by its plain name rather than under a `?v=`

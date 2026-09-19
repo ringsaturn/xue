@@ -35,6 +35,9 @@ The layout, at the data root:
   ships.
 - ``showcase/collection.json`` and ``showcase/<case>/item.json`` — the
   cases, from ``showcase.json``'s rows and their manifests.
+- ``index.html`` — not a STAC object: the landing page a browser gets at
+  the root, derived from the same registry by ``stacindex.py`` and written
+  whenever the catalog is.
 
 Everything here is a pure function of the manifest, the catalog row and the
 source registry — no timestamps, no host names — so a run built whole and a
@@ -1727,6 +1730,18 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
     temporary.replace(path)
 
 
+def _write_root(output_dir: Path) -> dict[str, str]:
+    """The two documents every publish rewrites at the data root: the root
+    catalog and, beside it, the landing page ``stacindex.py`` derives from
+    the same registry (not a STAC object; a person's entry to the catalog).
+    Returns both paths by name."""
+    from .stacindex import write_index  # a reader of this module
+
+    catalog_path = output_dir / CATALOG_FILENAME
+    _write_json(catalog_path, root_catalog())
+    return {"catalog": str(catalog_path), "index": str(write_index(output_dir))}
+
+
 def _rebase_href(href: str, from_dir: str, to_dir: str) -> str:
     """``href``, written relative to ``from_dir``, rewritten relative to
     ``to_dir`` (both directories relative to the data root, ``""`` for the
@@ -1774,16 +1789,14 @@ def write_run_documents(output_dir: Path, *, source: SourceSpec, manifest_path: 
     live_item_path = output_dir / source.id / ITEM_FILENAME
     collection = source_collection(source, item, item_relative)
     collection_path = output_dir / source.id / COLLECTION_FILENAME
-    catalog_path = output_dir / CATALOG_FILENAME
     _write_json(item_path, item)
     _write_json(live_item_path, live_item)
     _write_json(collection_path, collection)
-    _write_json(catalog_path, root_catalog())
     return {
         "item": str(item_path),
         "liveItem": str(live_item_path),
         "collection": str(collection_path),
-        "catalog": str(catalog_path),
+        **_write_root(output_dir),
     }
 
 
@@ -1822,14 +1835,12 @@ def write_point_product_documents(
     item_relative = item_path.relative_to(output_dir).as_posix()
     live_item_path = output_dir / product / ITEM_FILENAME
     collection_path = output_dir / product / COLLECTION_FILENAME
-    catalog_path = output_dir / CATALOG_FILENAME
     _write_json(live_item_path, relocate_item(item, from_dir=posixpath.dirname(item_relative), to_dir=product))
     _write_json(collection_path, point_product_collection(product, item, item_relative))
-    _write_json(catalog_path, root_catalog())
     return written | {
         "liveItem": str(live_item_path),
         "collection": str(collection_path),
-        "catalog": str(catalog_path),
+        **_write_root(output_dir),
     }
 
 
@@ -1849,6 +1860,4 @@ def write_showcase_documents(output_dir: Path, catalog: dict[str, Any]) -> dict[
         items.append((f"{item_path.parent.name}/{ITEM_FILENAME}", item))
     collection_path = output_dir / SHOWCASE_COLLECTION_ID / COLLECTION_FILENAME
     _write_json(collection_path, showcase_collection(items))
-    catalog_path = output_dir / CATALOG_FILENAME
-    _write_json(catalog_path, root_catalog())
-    return {"items": item_paths, "collection": str(collection_path), "catalog": str(catalog_path)}
+    return {"items": item_paths, "collection": str(collection_path), **_write_root(output_dir)}

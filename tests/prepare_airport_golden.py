@@ -12,8 +12,9 @@ of it, offline and with fixed generation times, and writes both under
 the build to: the index and the STAC documents pretty-printed, and
 ``history.jsonl`` exactly as published, which is already one line per
 station and diffs that way. The root ``catalog.json`` the build also
-writes is a function of the source registry rather than of this product
-and is pinned by ``tests/test_stac.py`` instead.
+writes, and the ``index.html`` beside it, are functions of the source
+registry rather than of this product and are pinned by
+``tests/test_stac.py`` instead.
 
 The second round is what makes the golden worth having: it carries the
 merge (a station's new observation joins its history, newest first), the

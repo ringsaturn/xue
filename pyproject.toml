@@ -40,7 +40,7 @@ xue = "xuebuild.cli:main"
 include = ["xuebuild*"]
 
 [tool.setuptools.package-data]
-xuebuild = ["palette.txt", "precipitation_palette.txt"]
+xuebuild = ["palette.txt", "precipitation_palette.txt", "stacindex.html"]
 
 [dependency-groups]
 # Optional, for tests and for reading a delta-coded store through

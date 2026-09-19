@@ -709,6 +709,13 @@ split-build and top-up identity tests cover them. The writer runs in the
 CLI, not the converter: `build-bin` for a whole run, `assemble-run`, and
 `xue stac`; a `--bundles` piece writes none. Licenses and provider prose
 live in `_source_prose`, held to the registry by `tests/test_stac.py`.
+Beside the catalog, `xuebuild/stacindex.py` renders the root's `index.html`
+(template `stacindex.html`, a `string.Template`) from the same registry and
+prose — the landing page a browser gets, naming `catalog.json`, the docs
+and every Collection's licence; the live run is read from each Collection
+in the browser — written by `stac._write_root` wherever the catalog is and
+uploaded with it by `upload-r2-stac-collection`. Its hostnames mirror
+`web/src/site.ts`.
 
 The three point products (`sounding`, `airport`, `tc`, `POINT_PRODUCTS`)
 are in it on the same terms, derived from an issue's `index.json` alone by
