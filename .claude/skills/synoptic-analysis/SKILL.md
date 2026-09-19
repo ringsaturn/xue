@@ -118,12 +118,14 @@ directory layout and the importable functions (`level`, `ascent_at`,
 writes `fig_tracks`, `fig_upper`, `fig_verify`, `fig_surface`,
 `fig_moisture_gust`, `fig_meteogram`, `fig_skewt`, `fig_nowcast` and
 `fig_ensemble` (PNG) into `<dir>/figures/`, each only when the directory
-holds what it needs; labels are Chinese (`--lang zh`, default) or English,
-times in the `--tz` zone. A Markdown report that references those files
+holds what it needs; labels follow the xue viewer's eleven UI locales (`--lang zh|zh-Hant|en|ja|ko|de|fr|es|pt|tr|ru`,
+`zh` by default), times in the `--tz` zone. A Markdown report that references those files
 compiles with `pandoc report.md -o report.pdf --pdf-engine=xelatex`; for
 Chinese text put `documentclass: ctexart` in the YAML header (ctex's default
-fonts) and map the few glyphs Latin Modern lacks with `newunicodechar`
-(`→ ≥ ≤ θ µ ½`).
+fonts), for Japanese `documentclass: bxjsarticle` with `classoption: [pandoc,
+ja=standard, jafont=hiragino-pron]`, and map the few glyphs Latin Modern lacks with `newunicodechar`
+(`→ ≥ ≤ θ µ ½`; ctex's STSong also lacks the katakana middle dot `・`, map it to
+`·`), and read the build log for `Missing character` before shipping a PDF.
 
 ### 3. Analyse top-down, then attribute every claim
 
