@@ -941,7 +941,7 @@ test("range-capable server streams on demand and never downloads the full body",
   // phone viewport does not, and has its own test below.
   test.skip(testInfo.project.name !== "desktop", "a global view is a desktop-width view");
   // Full residency needs several playback loops. Budget well past the
-  // measured worst case (test.slow()'s 90 s left no room) so only a real
+  // measured worst case (a tripled test.slow() once left no room) so only a real
   // stall fails.
   test.setTimeout(180_000);
   const counters: RangeCounters = { ranged: 0, full: 0, lengths: [] };

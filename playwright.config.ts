@@ -3,7 +3,12 @@ import { defineConfig, devices } from "@playwright/test";
 export default defineConfig({
   testDir: "tests/e2e",
   globalSetup: "./tests/e2e/global-setup.ts",
-  timeout: 30_000,
+  // A test here is a WebGL2 map under software GL plus a decode worker on a
+  // four-core runner, and every step is a few rendered frames: a click
+  // during playback costs 5-12 s and an ordinary test 20-29 s, a slow
+  // runner tips it over. The bound is what a hung test costs, not what a
+  // passing one takes, so give it twice the measured worst case.
+  timeout: 60_000,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   // These tests drive a WebGL2 map and a decode worker, so two of them on a
