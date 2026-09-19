@@ -26,11 +26,10 @@ dependencies = [
     # `gdalinfo` on PATH, which the scheduled publish workflows no longer
     # install. The floor tracks the current release because the wheel's
     # source table must match sources.py (a wheel that publishes a different
-    # bundle set refuses to build), and 0.21 is the first wheel that knows
-    # the DEBRA dust confidence: the six-channel satellite sources, the
-    # `dustcf` composite bundle of one variable with its producer block,
-    # and the 3.9 and 6.2 µm channel variables.
-    "xuepy>=0.21,<0.22",
+    # bundle set refuses to build), and 0.22 is the first wheel whose GFS
+    # and ECMWF tables publish the height, temperature, humidity and wind
+    # on all eight registered isobaric surfaces.
+    "xuepy>=0.22,<0.23",
 ]
 
 [project.scripts]
