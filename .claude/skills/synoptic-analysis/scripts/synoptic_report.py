@@ -235,10 +235,16 @@ def region_report(source: str, box, times, out: dict):
             rec["cape"] = mx
 
         if "prate" in stores:
-            f = _frame(_load(source, "prate", cache), "prate", t, box)
-            mx = _where_max(f)
-            print(f"PRATE max {mx[2]:.1f} mm/h at {_fmt_pos(mx[0], mx[1])}; ≥ 1 mm/h over {_area_share(f, f.values >= 1):.0%}, ≥ 10 mm/h over {_area_share(f, f.values >= 10):.0%}")
-            rec["prate"] = mx
+            # De-accumulated precipitation (ECMWF, AIFS, IFS HRES) has no
+            # analysis frame; the same is true of their gust.
+            try:
+                f = _frame(_load(source, "prate", cache), "prate", t, box)
+            except ValueError:
+                print("PRATE no frame at this time (series starts after the analysis)")
+            else:
+                mx = _where_max(f)
+                print(f"PRATE max {mx[2]:.1f} mm/h at {_fmt_pos(mx[0], mx[1])}; ≥ 1 mm/h over {_area_share(f, f.values >= 1):.0%}, ≥ 10 mm/h over {_area_share(f, f.values >= 10):.0%}")
+                rec["prate"] = mx
 
         if "wind10m" in stores:
             ds = _load(source, "wind10m", cache)
@@ -248,9 +254,13 @@ def region_report(source: str, box, times, out: dict):
             print(f"WIND10 max {m[2]:.0f} m/s at {_fmt_pos(m[0], m[1])}; ≥ 17 m/s (gale) over {_area_share(spd, spd.values >= 17):.1%} of box")
             rec["wind10m"] = m
         if "gust" in stores:
-            f = _frame(_load(source, "gust", cache), "gust", t, box)
-            mx = _where_max(f)
-            print(f"GUST  max {mx[2]:.0f} m/s at {_fmt_pos(mx[0], mx[1])}")
+            try:
+                f = _frame(_load(source, "gust", cache), "gust", t, box)
+            except ValueError:
+                print("GUST  no frame at this time")
+            else:
+                mx = _where_max(f)
+                print(f"GUST  max {mx[2]:.0f} m/s at {_fmt_pos(mx[0], mx[1])}")
         if "tmp2m" in stores:
             f = _frame(_load(source, "tmp2m", cache), "tmp2m", t, box)
             print(f"T2M   range {np.nanmin(f.values):.1f}–{np.nanmax(f.values):.1f} °C")
