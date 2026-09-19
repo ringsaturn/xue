@@ -2,13 +2,6 @@
 
 [![test](https://github.com/ringsaturn/xue/actions/workflows/test.yml/badge.svg)](https://github.com/ringsaturn/xue/actions/workflows/test.yml)
 [![docs](https://github.com/ringsaturn/xue/actions/workflows/docs-rust.yml/badge.svg)](https://ringsaturn.github.io/xue/)
-[![GFS/0p25 run](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest.json&query=%24.run&label=GFS/0p25&color=0b7cbd&cacheSeconds=600)](https://dataset.ringsaturn.me/xue/latest.json)
-[![GFS/SFLUX run](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-sflux.json&query=%24.run&label=GFS/SFLUX&color=2b6cb0&cacheSeconds=600)](https://dataset.ringsaturn.me/xue/latest-sflux.json)
-[![ECMWF/IFS 0p25 run](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-ecmwf.json&query=%24.run&label=ECMWF/IFS%200p25&color=1f6f8b&cacheSeconds=600)](https://dataset.ringsaturn.me/xue/latest-ecmwf.json)
-[![ECMWF/AIFS 0p25 run](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-aifs.json&query=%24.run&label=ECMWF/AIFS%200p25&color=2f8f6b&cacheSeconds=600)](https://dataset.ringsaturn.me/xue/latest-aifs.json)
-[![ECMWF/HRES 0p1 run](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-ifshres.json&query=%24.run&label=ECMWF/HRES%200p1&color=1f8f8b&cacheSeconds=600)](https://dataset.ringsaturn.me/xue/latest-ifshres.json)
-[![HRRR run](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-hrrr.json&query=%24.run&label=HRRR&color=7b4ea3&cacheSeconds=600)](https://dataset.ringsaturn.me/xue/latest-hrrr.json)
-[![MRMS window](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-mrms.json&query=%24.run&label=MRMS&color=b7472a&cacheSeconds=300)](https://dataset.ringsaturn.me/xue/latest-mrms.json)
 
 > Xue (雪, pronounced /ɕɥɛ/, roughly "shweh"), Chinese for snow.
 
@@ -32,21 +25,25 @@ pipeline.
 
 ## Sources
 
-| Source | `--model` | Grid | Axis | Pointer |
-|---|---|---|---|---|
-| NOAA GFS 0.25° | `gfs` | 1440 × 721, 0.25° | hourly to F120, 3-hourly to F240 (161 frames) | `latest.json` |
-| GFS surface flux | `sflux` | 3072 × 1536 Gaussian, ~13 km | as GFS | `latest-sflux.json` |
-| ECMWF IFS open data 0.25° | `ecmwf` | 1440 × 721, 0.25° | 3-hourly to 144 h, 6-hourly to F240 (65 frames) | `latest-ecmwf.json` |
-| ECMWF AIFS Single open data 0.25° | `aifs` | 1440 × 721, 0.25° | 6-hourly to F360 from every cycle (61 frames) | `latest-aifs.json` |
-| ECMWF IFS HRES via Open-Meteo | `ifshres` | 3600 × 1801, 0.1° | hourly to F090, 3-hourly to F144, 6-hourly to F360 (145 frames), 00Z and 12Z only | `latest-ifshres.json` |
-| NOAA HRRR | `hrrr` | 2441 × 1051, 0.03°, contiguous US | hourly to F18, a cycle every hour | `latest-hrrr.json` |
-| NOAA MRMS | `mrms` | 3500 × 1750, 0.02°, contiguous US | one frame every two minutes, a rolling four-hour window | `latest-mrms.json` |
-| JMA precipitation nowcast | `jma` | 5600 × 5000, 0.005°, Japan | one frame every five minutes, a rolling three-hour window | `latest-jma.json` |
-| CMA radar mosaic | `cma` | 1792 × 1024, 0.0439°, China | one frame every six minutes, a rolling three-hour window | `latest-cma.json` |
-| Himawari-9 infrared, Dust RGB and DEBRA dust confidence | `himawari` | 3000 × 3000, 0.04°, the disk 80.7–200.7°E, ±60° | one scan every ten minutes, a rolling six-hour window | `latest-himawari.json` |
-| GOES-19 (East) infrared, Dust RGB and DEBRA dust confidence | `goeseast` | 3000 × 3000, 0.04°, the disk 135.2–15.2°W, ±60° | one scan every ten minutes, a rolling six-hour window | `latest-goeseast.json` |
-| GOES-18 (West) infrared, Dust RGB and DEBRA dust confidence | `goeswest` | 3000 × 3000, 0.04°, the disk 163°E–77°W, ±60° | one scan every ten minutes, a rolling six-hour window | `latest-goeswest.json` |
-| Meteosat-12 infrared and Dust RGB | `meteosat` | 3000 × 3000, 0.04°, the disk 60°W–60°E, ±60° | the scan on each hour (the cycle EUMETSAT releases openly), a rolling 24-hour window | `latest-meteosat.json` |
+| Source | `--model` | Grid | Axis | Pointer | Latest |
+|---|---|---|---|---|---|
+| NOAA GFS 0.25° | `gfs` | 1440 × 721, 0.25° | hourly to F120, 3-hourly to F240 (161 frames) | `latest.json` | [![gfs run](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest.json&query=%24.run&label=run&color=0b7cbd&cacheSeconds=600)](https://dataset.ringsaturn.me/xue/latest.json) |
+| GFS surface flux | `sflux` | 3072 × 1536 Gaussian, ~13 km | as GFS | `latest-sflux.json` | [![sflux run](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-sflux.json&query=%24.run&label=run&color=2b6cb0&cacheSeconds=600)](https://dataset.ringsaturn.me/xue/latest-sflux.json) |
+| ECMWF IFS open data 0.25° | `ecmwf` | 1440 × 721, 0.25° | 3-hourly to 144 h, 6-hourly to F240 (65 frames) | `latest-ecmwf.json` | [![ecmwf run](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-ecmwf.json&query=%24.run&label=run&color=1f6f8b&cacheSeconds=600)](https://dataset.ringsaturn.me/xue/latest-ecmwf.json) |
+| ECMWF AIFS Single open data 0.25° | `aifs` | 1440 × 721, 0.25° | 6-hourly to F360 from every cycle (61 frames) | `latest-aifs.json` | [![aifs run](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-aifs.json&query=%24.run&label=run&color=3c7a89&cacheSeconds=600)](https://dataset.ringsaturn.me/xue/latest-aifs.json) |
+| ECMWF IFS HRES via Open-Meteo | `ifshres` | 3600 × 1801, 0.1° | hourly to F090, 3-hourly to F144, 6-hourly to F360 (145 frames), 00Z and 12Z only | `latest-ifshres.json` | [![ifshres run](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-ifshres.json&query=%24.run&label=run&color=2a9d8f&cacheSeconds=600)](https://dataset.ringsaturn.me/xue/latest-ifshres.json) |
+| NOAA HRRR | `hrrr` | 2441 × 1051, 0.03°, contiguous US | hourly to F18, a cycle every hour | `latest-hrrr.json` | [![hrrr run](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-hrrr.json&query=%24.run&label=run&color=7b4ea3&cacheSeconds=600)](https://dataset.ringsaturn.me/xue/latest-hrrr.json) |
+| NOAA MRMS | `mrms` | 3500 × 1750, 0.02°, contiguous US | one frame every two minutes, a rolling four-hour window | `latest-mrms.json` | [![mrms window](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-mrms.json&query=%24.run&label=window&color=b7472a&cacheSeconds=600)](https://dataset.ringsaturn.me/xue/latest-mrms.json) |
+| JMA precipitation nowcast | `jma` | 5600 × 5000, 0.005°, Japan | one frame every five minutes, a rolling three-hour window | `latest-jma.json` | [![jma window](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-jma.json&query=%24.run&label=window&color=c25b2c&cacheSeconds=600)](https://dataset.ringsaturn.me/xue/latest-jma.json) |
+| CMA radar mosaic | `cma` | 1792 × 1024, 0.0439°, China | one frame every six minutes, a rolling three-hour window | `latest-cma.json` | [![cma window](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-cma.json&query=%24.run&label=window&color=b03a5b&cacheSeconds=600)](https://dataset.ringsaturn.me/xue/latest-cma.json) |
+| Himawari-9 infrared, Dust RGB and DEBRA dust confidence | `himawari` | 3000 × 3000, 0.04°, the disk 80.7–200.7°E, ±60° | one scan every ten minutes, a rolling six-hour window | `latest-himawari.json` | [![himawari window](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-himawari.json&query=%24.run&label=window&color=6d597a&cacheSeconds=600)](https://dataset.ringsaturn.me/xue/latest-himawari.json) |
+| GOES-19 (East) infrared, Dust RGB and DEBRA dust confidence | `goeseast` | 3000 × 3000, 0.04°, the disk 135.2–15.2°W, ±60° | one scan every ten minutes, a rolling six-hour window | `latest-goeseast.json` | [![goeseast window](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-goeseast.json&query=%24.run&label=window&color=5c677d&cacheSeconds=600)](https://dataset.ringsaturn.me/xue/latest-goeseast.json) |
+| GOES-18 (West) infrared, Dust RGB and DEBRA dust confidence | `goeswest` | 3000 × 3000, 0.04°, the disk 163°E–77°W, ±60° | one scan every ten minutes, a rolling six-hour window | `latest-goeswest.json` | [![goeswest window](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-goeswest.json&query=%24.run&label=window&color=5c677d&cacheSeconds=600)](https://dataset.ringsaturn.me/xue/latest-goeswest.json) |
+| Meteosat-12 infrared and Dust RGB | `meteosat` | 3000 × 3000, 0.04°, the disk 60°W–60°E, ±60° | the scan on each hour (the cycle EUMETSAT releases openly), a rolling 24-hour window | `latest-meteosat.json` | [![meteosat window](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-meteosat.json&query=%24.run&label=window&color=4a5d8f&cacheSeconds=600)](https://dataset.ringsaturn.me/xue/latest-meteosat.json) |
+
+The last column reads the live pointer through a badge: the newest run's
+cycle (`YYYYMMDDHH`, UTC) for a forecast, and for a rolling window the
+hour it starts at — the frames run several hours past it.
 
 Each model publishes as an independent dataset under `<model>.<run>/`, taken
 live by its pointer at the data root. The geostationary mosaic
