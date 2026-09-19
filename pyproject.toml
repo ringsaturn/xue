@@ -26,12 +26,11 @@ dependencies = [
     # `gdalinfo` on PATH, which the scheduled publish workflows no longer
     # install. The floor tracks the current release because the wheel's
     # source table must match sources.py (a wheel that publishes a different
-    # bundle set refuses to build), and 0.20 is the first wheel that knows
-    # the ifshres source: a forecast read as one NetCDF series per variable
-    # (the run time from the time coordinate's epoch, an analysis-optional
-    # variable short of its lead-zero frame), the interval precipitation
-    # total divided into a rate, and a NaN nodata taken as a fill.
-    "xuepy>=0.20,<0.21",
+    # bundle set refuses to build), and 0.21 is the first wheel that knows
+    # the DEBRA dust confidence: the six-channel satellite sources, the
+    # `dustcf` composite bundle of one variable with its producer block,
+    # and the 3.9 and 6.2 µm channel variables.
+    "xuepy>=0.21,<0.22",
 ]
 
 [project.scripts]
