@@ -1690,9 +1690,18 @@ html[lang="ja"] .rail-glyph {
   letter-spacing: 0.08em;
 }
 
+/* The dataset list scrolls inside the panel once the sources outgrow the
+   viewport: fourteen rows are taller than a phone, a tablet in landscape
+   or a short laptop window. The cap is what the viewport leaves under the
+   panel's top edge (92px), its padding, the heading and a 20px margin
+   below, the way the field and language lists are capped. */
 .model-switch {
   display: flex;
+  max-height: calc(100vh - 170px);
+  max-height: calc(100dvh - 170px);
   flex-direction: column;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .model-switch button {
@@ -3403,6 +3412,14 @@ body[data-credits~="meteosat"] .source-credit[data-credit-model="meteosat"] {
   .skewt-panel {
     max-height: calc(100vh - 24px - env(safe-area-inset-bottom));
     transform: none;
+  }
+
+  /* Docked to the bottom, the dataset list is capped by what the viewport
+     leaves above the panel's padding, grip and heading, plus 24px of map
+     showing over it. */
+  .model-switch {
+    max-height: calc(100vh - 120px - env(safe-area-inset-bottom));
+    max-height: calc(100dvh - 120px - env(safe-area-inset-bottom));
   }
 
   .sheet-grip {
