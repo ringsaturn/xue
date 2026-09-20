@@ -145,8 +145,12 @@ class RegistryAlternateTests(unittest.TestCase):
         self.assertEqual((aifs_tp.triple, aifs_tp.level_type, aifs_tp.statistical, aifs_tp.gdal_unit), ((0, 1, 52), 1, 1, "kg/(m^2*s)"))
         self.assertEqual((tp.grib2_number, tp.gdal_unit), (193, "-"), "the IFS record is still the identity")
         tcdc = variable_spec("tcdc")
-        self.assertEqual([alternate.triple for alternate in tcdc.grib2_alternates], [(0, 6, 192), (0, 6, 1)])
-        self.assertEqual(tcdc.grib2_alternates[1].level_type, 1)
+        # The third alternate is NCEP's CFSv2 spelling of the identity's own
+        # surface, not an AIFS encoding (tests/test_cfs.py).
+        self.assertEqual(
+            [(alternate.triple, alternate.level_type) for alternate in tcdc.grib2_alternates],
+            [((0, 6, 192), 1), ((0, 6, 1), 1), ((0, 6, 1), 200)],
+        )
         self.assertEqual(tcdc.grib2_alternates[1].gdal_unit, "", "percent, the identity's own unit")
         for layer, number, surface, value in (("lcdc", 3, 1, None), ("mcdc", 4, 100, 80000.0), ("hcdc", 5, 100, 45000.0)):
             spec = variable_spec(layer)

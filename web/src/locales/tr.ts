@@ -116,6 +116,7 @@ export const tr: Record<MessageKey, string> = {
   creditsGfs: "TAHMİN VERİSİ · GFS 0.25° VE SFLUX",
   creditsHrrr: "TAHMİN VERİSİ · HRRR 3 KM, ABD ANAKARASI",
   creditsGefsAero: "AEROSOL TAHMİNİ · GEFS-AEROSOLS 0,25°, AOD VE YÜZEY PARTİKÜLLERİ",
+  creditsCfs: "MEVSİMLİK TAHMİN · CFSv2, 9 AY, 6 SAATTE BİR",
   creditsEcmwf: "DEĞİŞTİRİLMİŞ ECMWF VERİSİ İÇERİR · CC BY 4.0",
   creditsIfsHres: "ECMWF IFS'TEN ECMWF TARAFINDAN UYARLANDI, CC BY 4.0 İLE LİSANSLI · OPEN-METEO ÜZERİNDEN · IFS HRES ~9 KM, 0,1°'YE YENİDEN ÖRNEKLENDİ",
   creditsMrms: "RADAR GÖZLEMLERİ · MRMS, ABD ANAKARASI",

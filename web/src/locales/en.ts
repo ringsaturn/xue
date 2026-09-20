@@ -209,6 +209,9 @@ export const en = {
   creditsGfs: "FORECAST DATA · GFS 0.25° AND SFLUX",
   creditsHrrr: "FORECAST DATA · HRRR 3 KM, CONTIGUOUS US",
   creditsGefsAero: "AEROSOL FORECAST · GEFS-AEROSOLS 0.25°, AOD AND SURFACE PM",
+  /** The seasonal run: one forecast nine months deep, so the strip under
+   * the track reads in months rather than in days. */
+  creditsCfs: "SEASONAL FORECAST · CFSv2, 9 MONTHS, 6-HOURLY",
   creditsEcmwf: "CONTAINS MODIFIED ECMWF DATA · CC BY 4.0",
   /** The IFS HRES line carries the attribution ECMWF's licence asks for on
    * an adapted work, and names Open-Meteo, which forwards the centre's

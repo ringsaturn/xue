@@ -227,6 +227,37 @@
         }
       ]
     },
+    "cfs": {
+      "title": "NCEP CFSv2 seasonal",
+      "description": "The NCEP Climate Forecast System version 2, the operational coupled atmosphere-ocean-land forecast, on its native T126 Gaussian grid (0.9375°): the surface fields of ensemble member 01, six-hourly from 6 to 6552 hours — thirty-nine weeks of a nine-month run. Two cycles a day (00Z and 12Z); only the newest is kept. The precipitation rate, downward shortwave radiation and total cloud cover are means over the six hours ending at each frame.",
+      "license": "other",
+      "providers": [
+        {
+          "name": "NOAA / NCEP",
+          "roles": [
+            "producer",
+            "licensor"
+          ],
+          "url": "https://www.ncei.noaa.gov/"
+        },
+        {
+          "name": "Xue",
+          "roles": [
+            "processor",
+            "host"
+          ],
+          "url": "https://github.com/ringsaturn/xue"
+        }
+      ],
+      "links": [
+        {
+          "rel": "license",
+          "href": "https://www.noaa.gov/information-technology/open-data-dissemination",
+          "type": "text/html",
+          "title": "NOAA open data dissemination"
+        }
+      ]
+    },
     "cma": {
       "title": "CMA radar mosaic",
       "description": "The China Meteorological Administration level-3 composite reflectivity mosaic (RADAR_L3_MST_CREF) over China: a national composite every six minutes, decoded from the agency's data portal tiles onto the portal's plate carrée grid at 0.0439° (1792 × 1024 cells, 67.5°E–146.25°E, 11.25°N–56.25°N) and published under cref, as a rolling window rebuilt every few minutes. Source: China Meteorological Administration, National Meteorological Centre (www.nmc.cn).",

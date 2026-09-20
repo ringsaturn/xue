@@ -152,6 +152,17 @@ class SourceSpec:
     declares at most one."""
     average_window_hours: int = 6
     """Length of the averaging-window reset cycle for averaged precipitation."""
+    first_hour: int = 0
+    """The first forecast hour the source publishes.
+
+    Zero for every source whose cycle ships an analysis file: the series
+    starts at the run time. CFSv2 is the exception — its per-variable time
+    series begin at the first six-hour step and the cycle's analysis lives
+    in another file family, encoded as an instantaneous analysis where every
+    published frame is a six-hour mean, so the source declares its axis to
+    start at hour 6 and no f000 is fetched at all. :meth:`forecast_hours`
+    counts from here, which is what every axis check downstream reads.
+    Mirrored in the native encoder's source table."""
     optional_at_analysis: tuple[str, ...] = ()
     """Input variables absent from the analysis (f000) file — sflux carries no
     PRATE record at f000, ECMWF's gust is an interval maximum whose interval
@@ -354,14 +365,15 @@ class SourceSpec:
         return tuple(variable_id for variable_id in self.input_variable_ids if self.companion_of(variable_id) is None)
 
     def forecast_hours(self, last_hour: int) -> list[int]:
-        """The published axis from the analysis through ``last_hour``.
+        """The published axis from :attr:`first_hour` — the analysis for
+        every source but CFSv2 — through ``last_hour``.
 
         ``last_hour`` must itself lie on the axis — a cap that lands between
         steps (or beyond the published range) has no complete final frame to
         fetch and is rejected outright."""
         if self.observation:
             raise DownloadError(f"{self.manifest_model} is an observation source and publishes no forecast axis")
-        hours = [0]
+        hours = [self.first_hour]
         for boundary, step in self.steps:
             while hours[-1] < min(boundary, last_hour):
                 hours.append(hours[-1] + step)
@@ -369,6 +381,8 @@ class SourceSpec:
                 break
         if hours[-1] != last_hour:
             published = ", then ".join(f"{step}-hourly to f{boundary:03d}" for boundary, step in self.steps)
+            if self.first_hour:
+                published = f"from f{self.first_hour:03d}, {published}"
             raise DownloadError(
                 f"forecast hour {last_hour} is not on the {self.manifest_model} axis ({published})"
             )
@@ -981,6 +995,74 @@ SOURCES: dict[str, SourceSpec] = {
         accumulated_precipitation=False,
         bundle_scalar_ids=AEROSOL_VARIABLE_IDS,
         core_bundle_ids=("aod",),
+        video=False,
+    ),
+    # NCEP CFSv2: the operational coupled climate forecast, nine months of
+    # six-hourly output from every cycle. Its surface fields arrive not as
+    # one file per frame but as one file per variable holding that
+    # variable's whole run (``time_grib_01/<name>.01.<run>.daily.grb2``,
+    # with an ``.idx`` beside it) — series-major input, which is the shape
+    # the published bundles have always wanted, so a run is fetched as a
+    # handful of very large range requests and split into frames rather
+    # than assembled a frame at a time (xuebuild/fetch.py,
+    # ``_fetch_cfs_run``). Ensemble member 01 alone: it is the only one of
+    # the four that runs the full nine months. Only the 00Z and 12Z cycles
+    # are published (``cycle_hours`` 12, as on IFS HRES) — twice a day is
+    # as often as a seasonal forecast is worth rebuilding.
+    #
+    # The horizon is a calendar, not a count: a run ends at the first 00Z
+    # of the tenth calendar month after its cycle, which is 6564 to 6888
+    # hours depending on the date. A source carries one axis, so the
+    # published one is the length every 00Z / 12Z cycle reaches: 6552
+    # hours, thirty-nine weeks, 1092 frames of six hours.
+    #
+    # The series begin at the first step and the cycle's analysis sits in
+    # another file family (``6hrly_grib_01/flxf<run>...``), where the flux
+    # fields are instantaneous analysis values rather than the six-hour
+    # means every forecast frame carries and the 10 m wind pair shares one
+    # GRIB message. Rather than publish one frame of a different quantity,
+    # the source declares its axis to start at hour 6 (``first_hour``) and
+    # never fetches the analysis at all.
+    #
+    # The grid is the T126 Gaussian one (384 x 190, a 0.9375° step and
+    # GDAL's uniform latitude spacing), the same shape of grid as the
+    # sflux source's: the converter's global-longitude snap and column roll
+    # already describe it.
+    "cfs": SourceSpec(
+        id="cfs",
+        manifest_model="CFSv2",
+        product="time-grib-01",
+        latest_filename="latest-cfs.json",
+        steps=((6552, 6),),
+        first_hour=6,
+        cycle_hours=12,
+        input_variable_ids=(
+            "tmp2m",
+            "prate",
+            "ugrd10m",
+            "vgrd10m",
+            "tcdc",
+            "dswrf",
+            "tmpsfc",
+            "icec",
+            "icetk",
+        ),
+        # PRATE is already a rate; nothing is de-accumulated or de-averaged.
+        accumulated_precipitation=False,
+        # NCEP encodes every CFSv2 record as product definition template 4.0
+        # (an instantaneous field), but the three flux quantities are means
+        # over the six hours ending at the frame. The metadata says what the
+        # values are, not what the template claims.
+        statistical_processes=(("prate", 0), ("dswrf", 0), ("tcdc", 0)),
+        bundle_scalar_ids=("tmp2m", "prate", "tcdc", "dswrf", "tmpsfc", "icec", "icetk"),
+        bundle_vector_ids=("wind10m",),
+        core_bundle_ids=("tmp2m", "prate"),
+        production_grid=(384, 190),
+        # 96 x 95 cells cuts the grid into 4 x 2 = 8 tiles with no clipped
+        # edge, about 90° x 90° of ground: a whole plane is 73 000 cells, so
+        # a tile is what keeps one cell's nine-month series to a few
+        # hundred kilobytes rather than the whole grid's.
+        tile=(96, 95),
         video=False,
     ),
     # CMA weather radar level-3 mosaic composite reflectivity

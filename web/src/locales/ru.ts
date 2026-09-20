@@ -115,6 +115,7 @@ export const ru: Record<MessageKey, string> = {
   creditsGfs: "ПРОГНОСТИЧЕСКИЕ ДАННЫЕ · GFS 0.25° И SFLUX",
   creditsHrrr: "ПРОГНОСТИЧЕСКИЕ ДАННЫЕ · HRRR 3 КМ, КОНТИНЕНТАЛЬНЫЕ США",
   creditsGefsAero: "ПРОГНОЗ АЭРОЗОЛЕЙ · GEFS-AEROSOLS 0,25°, АОТ И ПРИЗЕМНЫЕ ЧАСТИЦЫ",
+  creditsCfs: "СЕЗОННЫЙ ПРОГНОЗ · CFSv2, 9 МЕСЯЦЕВ, КАЖДЫЕ 6 ЧАСОВ",
   creditsEcmwf: "СОДЕРЖИТ ИЗМЕНЁННЫЕ ДАННЫЕ ECMWF · CC BY 4.0",
   creditsIfsHres: "АДАПТИРОВАНО ИЗ ECMWF IFS ЦЕНТРОМ ECMWF, ЛИЦЕНЗИЯ CC BY 4.0 · ЧЕРЕЗ OPEN-METEO · IFS HRES ~9 КМ, ПЕРЕСЭМПЛИРОВАНО ДО 0,1°",
   creditsMrms: "РАДАРНЫЕ НАБЛЮДЕНИЯ · MRMS, КОНТИНЕНТАЛЬНЫЕ США",

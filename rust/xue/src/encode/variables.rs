@@ -694,7 +694,10 @@ pub const VARIABLES: &[VariableSpec] = &[
     // on the ground surface (GDAL reports its unit as "-"), scaled to
     // percent by the converter; AIFS writes it under the WMO 0/6/1 in
     // percent as a layer from the ground surface to the top of the
-    // atmosphere.
+    // atmosphere. NCEP writes the same "entire atmosphere" layer as its
+    // local surface type 200 rather than the WMO type 10 pgrb2 uses in the
+    // CFSv2 time series — GDAL renders both `0-EATM` — so that is a third
+    // alternate.
     VariableSpec {
         id: "tcdc",
         label: "Total cloud cover",
@@ -724,6 +727,15 @@ pub const VARIABLES: &[VariableSpec] = &[
                 category: 6,
                 number: 1,
                 level_type: 1,
+                level_value: None,
+                statistical: None,
+                gdal_unit: "",
+            },
+            RecordAlternate {
+                discipline: 0,
+                category: 6,
+                number: 1,
+                level_type: 200,
                 level_value: None,
                 statistical: None,
                 gdal_unit: "",

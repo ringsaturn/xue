@@ -110,6 +110,7 @@ export const ja: Record<MessageKey, string> = {
   creditsGfs: "予報データ · GFS 0.25° および SFLUX",
   creditsHrrr: "予報データ · HRRR 3 KM、米国本土",
   creditsGefsAero: "エーロゾル予報 · GEFS-AEROSOLS 0.25°、光学的厚さと地上 PM",
+  creditsCfs: "季節予報 · CFSv2、9 か月、6 時間間隔",
   creditsEcmwf: "改変した ECMWF データを含む · CC BY 4.0",
   creditsIfsHres: "ECMWF IFS を ECMWF が提供、CC BY 4.0 に基づき改変 · Open-Meteo 経由 · IFS HRES 約 9 km、0.1° に再サンプリング",
   creditsMrms: "レーダー観測 · MRMS、米国本土",

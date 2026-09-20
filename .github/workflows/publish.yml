@@ -39,7 +39,7 @@ on:
   workflow_call:
     inputs:
       model:
-        description: "Forecast source: gfs, sflux, ecmwf, aifs, ifshres, hrrr or gefsaero"
+        description: "Forecast source: gfs, sflux, ecmwf, aifs, ifshres, hrrr, gefsaero or cfs"
         required: true
         type: string
       run:

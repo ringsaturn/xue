@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import re
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 
 from .errors import DownloadError
@@ -101,6 +103,86 @@ def field_byte_range(
 
 def target_byte_range(text: str, file_size: int | None = None) -> ByteRange:
     return field_byte_range(text, TARGET_FIELD, file_size=file_size)
+
+
+# ``<n> hour fcst`` in a wgrib2 description, which is how a whole-run time
+# series names the frame a record belongs to. CFSv2 publishes one object per
+# variable rather than one per frame, so the forecast hour is what picks a
+# record out of the sidecar rather than something the object name already
+# said.
+_SERIES_HOUR = re.compile(r":(\d+) hour fcst:")
+
+
+def series_byte_ranges(
+    text: str,
+    target_field: str,
+    *,
+    file_size: int | None = None,
+    alternate_fields: tuple[str, ...] = (),
+) -> dict[int, ByteRange]:
+    """Every record of one field in a whole-run time-series ``.idx``, by the
+    forecast hour its description names.
+
+    A time-series object holds one variable's entire run — one record per
+    frame, and two fields' worth when it carries a vector pair — so the
+    field alone names hundreds of records and the hour is what picks one.
+    The phrases are the registry's, ``alternate_fields`` tried in turn when
+    the first names nothing, exactly as :func:`field_byte_range` does.
+
+    A record's end is the next record's offset; the last record of the
+    sidecar has none, so it is included only when ``file_size`` says where
+    the object ends and is left out otherwise. That omission is what makes
+    an incomplete run answerable: a sidecar written ahead of its data ends
+    on a record whose bytes may not be there, and a caller that has not
+    measured the object must not assume they are.
+    """
+    records = parse_index(text)
+    for field in (target_field, *alternate_fields):
+        matches = [index for index, record in enumerate(records) if field in f":{record.description}"]
+        if matches:
+            break
+    ranges: dict[int, ByteRange] = {}
+    for index in matches:
+        hour_match = _SERIES_HOUR.search(f":{records[index].description}")
+        if hour_match is None:
+            raise DownloadError(
+                f"time-series .idx record {records[index].number} names no forecast hour: "
+                f"{records[index].description!r}"
+            )
+        hour = int(hour_match.group(1))
+        start = records[index].offset
+        if index + 1 < len(records):
+            end = records[index + 1].offset - 1
+        elif file_size is not None and file_size > start:
+            end = file_size - 1
+        else:
+            continue
+        if hour in ranges:
+            raise DownloadError(f"time-series .idx names forecast hour {hour} twice for {target_field}")
+        ranges[hour] = ByteRange(start, end)
+    return ranges
+
+
+def coalesce_ranges(ranges: Sequence[ByteRange] | Iterable[ByteRange]) -> list[ByteRange]:
+    """Byte ranges merged where one begins exactly where the last ended.
+
+    A time-series object stores a field's frames in hour order, so a whole
+    run's records are one contiguous span and a run cut short at some hour
+    is a span plus whatever the file interleaves after it (CFSv2's wind
+    object writes a block of U records, then the same block of V records,
+    and repeats). Merging turns a thousand records into a handful of range
+    requests without ever downloading a byte the caller did not ask for.
+    The input must be sorted by offset.
+    """
+    merged: list[ByteRange] = []
+    for byte_range in ranges:
+        if merged and byte_range.start == merged[-1].end + 1:
+            merged[-1] = ByteRange(merged[-1].start, byte_range.end)
+        elif merged and byte_range.start <= merged[-1].end:
+            raise DownloadError("byte ranges to coalesce must be sorted and disjoint")
+        else:
+            merged.append(byte_range)
+    return merged
 
 
 def ecmwf_field_byte_range(

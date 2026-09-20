@@ -147,6 +147,40 @@ for h in 000 003; do
 done
 ```
 
+`cfs.2026091900.f006.crop.grib2` and `cfs.2026091900.f012.crop.grib2` are a
+48 by 40 cell East Asian window (`-srcwin 96 32 48 40`: about 89.5E to
+134.5E and 59.4N to 21.5N) of the first two frames of the 2026-09-19 00Z
+CFSv2 cycle, the nine records the source fetches in `xuebuild/sources.py`
+order: 2 m temperature, precipitation rate, the 10 m wind pair, total cloud
+cover, downward shortwave radiation, surface temperature and the two sea ice
+fields. There is no f000 fixture because the source publishes none — its
+time series begin at the first six-hour step (`SourceSpec.first_hour`), so
+these two frames are the axis's first two.
+
+The window holds what the source needs exercising on: the T126 Gaussian
+grid, which GDAL reports at a 0.9375° longitude step and a uniform
+0.947368° latitude one and which the regional step snap must leave alone;
+real precipitation structure over the Yangtze and the Sea of Japan; total
+cloud cover from 3 % to overcast; and a sea ice thickness whose `9999`
+nodata covers five sixths of the window (land and open water alike), so the
+fill rule runs against real masked points. NCEP writes the total cloud
+cover on its local "entire atmosphere" surface (type 200) rather than the
+WMO type 10 pgrb2 uses, which is what the registry's alternate is for, and
+every record is the instantaneous template 4.0 although three of the fields
+are six-hour means.
+
+Cut from the records assembled by byte range off each variable's
+time-series `.idx` (one object per variable, the order the source's) with:
+
+```sh
+python -m xuebuild fetch --model cfs --run 2026091900 --hours 12 --raw-dir /tmp/raw
+for h in 006 012; do
+  gdal_translate -srcwin 96 32 48 40 -of GRIB -co DATA_ENCODING=COMPLEX_PACKING \
+    /tmp/raw/cfs.2026091900/cfs.2026091900.f$h.grib2 \
+    tests/fixtures/cfs.2026091900.f$h.crop.grib2
+done
+```
+
 `aerosol-registry.json` is the registry golden for the nine, with each
 variable's `aerosol` block beside its parameter (`tests/test_aerosol.py`;
 the Rust encoder and the frontend read the same file).

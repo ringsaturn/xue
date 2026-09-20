@@ -19,6 +19,7 @@ export type ForecastModelId =
   | "ecmwf"
   | "aifs"
   | "ifshres"
+  | "cfs"
   | "sflux"
   | "hrrr"
   | "gefsaero"
@@ -115,6 +116,19 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
   // surface fields only, hourly to F090 and out to F360, from the 00Z and
   // 12Z cycles alone.
   ifshres: { id: "ifshres", label: "ECMWF-HRES", product: "ifs-hres-0p1", latestFilename: "latest-ifshres.json" },
+  // NOAA CFSv2, the coupled seasonal model: one nine-month forecast from
+  // the 00Z and 12Z cycles, six-hourly on the model's own T126 Gaussian
+  // grid. Its axis is the long one: 1092 frames (F6 to F6552) over 39 weeks, which the
+  // track reads in months rather than in days (`timeline.ts`). Surface
+  // fields only, so the rail opens on the medium-range core with the sea
+  // surface beside it rather than the cloud.
+  cfs: {
+    id: "cfs",
+    label: "CFSv2",
+    product: "time-grib-01",
+    latestFilename: "latest-cfs.json",
+    railCore: ["tmp2m", "prate", "wind10m", "tmpsfc"],
+  },
   // NOAA HRRR, 3 km over the contiguous United States, a new cycle every
   // hour: a regional model, resampled by the encoder from its Lambert
   // conformal grid onto a 0.03° one over the domain's footprint.
@@ -309,7 +323,7 @@ export function isObservationModel(model: ForecastModelId): boolean {
   return FORECAST_MODELS[model].observation === true;
 }
 
-/** The model switch's entries, in order: the seven forecasts, the seven
+/** The model switch's entries, in order: the eight forecasts, the seven
  * rolling observation windows (MRMS, the JMA nowcast, the CMA mosaic and
  * the four geostationary imagers) and the geostationary mosaic, a view
  * over the imagers with no feed of its own. */
@@ -319,6 +333,7 @@ export const FORECAST_MODEL_IDS: readonly ForecastModelId[] = [
   "ecmwf",
   "aifs",
   "ifshres",
+  "cfs",
   "hrrr",
   "gefsaero",
   "mrms",
@@ -833,11 +848,17 @@ export function validateManifest(
   const modelInfo = modelForManifestString(value.model);
   if (!modelInfo || value.product !== modelInfo.product) throw new Error("unsupported manifest product");
   if (expectedModel !== undefined && modelInfo.id !== expectedModel) throw new Error("manifest model does not match the request");
+  // A year of lead time. The bound is a sanity check on a number the shell
+  // sizes readouts from, not a statement about what a run may publish: it
+  // was 384 while the deepest horizon was a 16-day medium-range run, and
+  // the seasonal model reaches 6552 hours (39 weeks) in one run. Widening
+  // it is a two-sided deploy — an old cached shell refuses the new range —
+  // so the shell goes out before a run in it does.
   if (
     typeof value.forecastHours !== "number" ||
     !Number.isInteger(value.forecastHours) ||
     value.forecastHours <= 0 ||
-    value.forecastHours > 384
+    value.forecastHours > 8760
   ) {
     throw new Error("invalid manifest forecast range");
   }

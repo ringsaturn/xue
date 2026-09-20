@@ -114,6 +114,18 @@ pub struct SourceSpec {
     /// `xuebuild/sources.py`.
     pub interval_precipitation: bool,
     pub average_window_hours: i64,
+    /// The first forecast hour the source publishes.
+    ///
+    /// Zero for every source whose cycle ships an analysis file: the series
+    /// starts at the run time. CFSv2 is the exception — its per-variable
+    /// time series begin at the first six-hour step and the cycle's
+    /// analysis lives in another file family, encoded as an instantaneous
+    /// analysis where every published frame is a six-hour mean, so the
+    /// source declares its axis to start at hour 6 and no f000 is fetched
+    /// at all. [`SourceSpec::forecast_hours`] counts from here, which is
+    /// what every axis check reads. Mirrors `first_hour` in
+    /// `xuebuild/sources.py`.
+    pub first_hour: i64,
     /// Input variables absent from the analysis (f000) file.
     pub optional_at_analysis: &'static [&'static str],
     /// Published scalars whose values are a statistic over the step ending
@@ -228,7 +240,8 @@ impl SourceSpec {
             .find(|companion| companion.variable_ids.contains(&variable_id))
     }
 
-    /// The published axis from the analysis through `last_hour`.
+    /// The published axis from [`SourceSpec::first_hour`] — the analysis for
+    /// every source but CFSv2 — through `last_hour`.
     ///
     /// `last_hour` must itself lie on the axis — a cap that lands between
     /// steps (or beyond the published range) has no complete final frame and
@@ -240,7 +253,7 @@ impl SourceSpec {
                 self.manifest_model
             )));
         }
-        let mut hours = vec![0i64];
+        let mut hours = vec![self.first_hour];
         for &(boundary, step) in self.steps {
             while *hours.last().expect("non-empty") < boundary.min(last_hour) {
                 hours.push(hours.last().expect("non-empty") + step);
@@ -250,12 +263,15 @@ impl SourceSpec {
             }
         }
         if *hours.last().expect("non-empty") != last_hour {
-            let published = self
+            let mut published = self
                 .steps
                 .iter()
                 .map(|(boundary, step)| format!("{step}-hourly to f{boundary:03}"))
                 .collect::<Vec<_>>()
                 .join(", then ");
+            if self.first_hour != 0 {
+                published = format!("from f{:03}, {published}", self.first_hour);
+            }
             return Err(EncodeError::conversion(format!(
                 "forecast hour {last_hour} is not on the {} axis ({published})",
                 self.manifest_model
@@ -303,6 +319,7 @@ pub const SOURCES: &[SourceSpec] = &[
         averaged_precipitation: false,
         interval_precipitation: false,
         average_window_hours: 6,
+        first_hour: 0,
         optional_at_analysis: &[],
         statistical_processes: &[],
         bands: &[],
@@ -367,6 +384,7 @@ pub const SOURCES: &[SourceSpec] = &[
         averaged_precipitation: false,
         interval_precipitation: false,
         average_window_hours: 6,
+        first_hour: 0,
         optional_at_analysis: &["gust"],
         statistical_processes: &[("prate", 0), ("gust", 2)],
         bands: &[],
@@ -421,6 +439,7 @@ pub const SOURCES: &[SourceSpec] = &[
         averaged_precipitation: false,
         interval_precipitation: false,
         average_window_hours: 6,
+        first_hour: 0,
         optional_at_analysis: &[],
         statistical_processes: &[("prate", 0)],
         bands: &[],
@@ -479,6 +498,7 @@ pub const SOURCES: &[SourceSpec] = &[
         averaged_precipitation: false,
         interval_precipitation: true,
         average_window_hours: 6,
+        first_hour: 0,
         optional_at_analysis: &["apcp", "dswrf", "gust"],
         statistical_processes: &[("prate", 0), ("dswrf", 0), ("gust", 2)],
         bands: &[],
@@ -523,6 +543,7 @@ pub const SOURCES: &[SourceSpec] = &[
         averaged_precipitation: true,
         interval_precipitation: false,
         average_window_hours: 6,
+        first_hour: 0,
         optional_at_analysis: &["prate_ave"],
         statistical_processes: &[("prate", 0)],
         bands: &[],
@@ -566,6 +587,7 @@ pub const SOURCES: &[SourceSpec] = &[
         averaged_precipitation: false,
         interval_precipitation: false,
         average_window_hours: 6,
+        first_hour: 0,
         optional_at_analysis: &[],
         statistical_processes: &[],
         bands: &[],
@@ -623,6 +645,7 @@ pub const SOURCES: &[SourceSpec] = &[
         averaged_precipitation: false,
         interval_precipitation: false,
         average_window_hours: 6,
+        first_hour: 0,
         optional_at_analysis: &[],
         statistical_processes: &[],
         bands: &[],
@@ -632,6 +655,75 @@ pub const SOURCES: &[SourceSpec] = &[
         bundle_composite_ids: &[],
         production_grid: (1440, 721),
         tile: (48, 52),
+        variant_factors: &[2],
+        regrid: None,
+        observation: false,
+        window_hours: None,
+        cadence_seconds: None,
+        series_file: false,
+        open_meteo: None,
+        downsample: None,
+    },
+    // NCEP CFSv2: the operational coupled climate forecast, nine months of
+    // six-hourly output from every cycle. Its surface fields arrive not as
+    // one file per frame but as one file per variable holding that
+    // variable's whole run (`time_grib_01/<name>.01.<run>.daily.grb2`, with
+    // an `.idx` beside it) — series-major input, which the Python fetch
+    // stage cuts into the frames this encoder reads, so nothing here knows
+    // the difference. Ensemble member 01 alone runs the full nine months,
+    // and only the 00Z and 12Z cycles are published (`cycle_hours` 12, as
+    // on IFS HRES).
+    //
+    // The horizon is a calendar, not a count: a run ends at the first 00Z
+    // of the tenth calendar month after its cycle, 6564 to 6888 hours
+    // depending on the date. A source carries one axis, so the published
+    // one is the length every 00Z / 12Z cycle reaches: 6552 hours,
+    // thirty-nine weeks, 1092 frames of six hours.
+    //
+    // The series begin at the first step and the cycle's analysis sits in
+    // another file family, where the flux fields are instantaneous analysis
+    // values rather than the six-hour means every forecast frame carries.
+    // Rather than publish one frame of a different quantity, the source
+    // declares `first_hour` 6 and never fetches the analysis — so nothing
+    // is analysis-optional either.
+    //
+    // The grid is the T126 Gaussian one (384 x 190, a 0.9375° step and
+    // GDAL's uniform latitude spacing), the same shape of grid as the sflux
+    // source's: the global-longitude snap and the column roll in `grid.rs`
+    // already describe it. Mirrors `cfs` in `xuebuild/sources.py`.
+    SourceSpec {
+        id: "cfs",
+        manifest_model: "CFSv2",
+        product: "time-grib-01",
+        latest_filename: Some("latest-cfs.json"),
+        steps: &[(6552, 6)],
+        input_variable_ids: &[
+            "tmp2m", "prate", "ugrd10m", "vgrd10m", "tcdc", "dswrf", "tmpsfc", "icec", "icetk",
+        ],
+        companion_files: &[],
+        // PRATE is already a rate; nothing is de-accumulated or de-averaged.
+        accumulated_precipitation: false,
+        averaged_precipitation: false,
+        interval_precipitation: false,
+        average_window_hours: 6,
+        first_hour: 6,
+        optional_at_analysis: &[],
+        // NCEP encodes every CFSv2 record as product definition template 4.0
+        // (an instantaneous field), but the three flux quantities are means
+        // over the six hours ending at the frame. The metadata says what the
+        // values are, not what the template claims.
+        statistical_processes: &[("prate", 0), ("dswrf", 0), ("tcdc", 0)],
+        bands: &[],
+        bundle_scalar_ids: &["tmp2m", "prate", "tcdc", "dswrf", "tmpsfc", "icec", "icetk"],
+        core_bundle_ids: &["tmp2m", "prate"],
+        bundle_vector_ids: &["wind10m"],
+        bundle_composite_ids: &[],
+        production_grid: (384, 190),
+        // 96 x 95 cells cuts the grid into 4 x 2 = 8 tiles with no clipped
+        // edge: a whole plane is 73 000 cells, so a tile is what keeps one
+        // cell's nine-month series to a few hundred kilobytes rather than
+        // the whole grid's.
+        tile: (96, 95),
         variant_factors: &[2],
         regrid: None,
         observation: false,
@@ -653,6 +745,7 @@ pub const SOURCES: &[SourceSpec] = &[
         averaged_precipitation: false,
         interval_precipitation: false,
         average_window_hours: 6,
+        first_hour: 0,
         optional_at_analysis: &[],
         statistical_processes: &[],
         bands: &[],
@@ -695,6 +788,7 @@ pub const SOURCES: &[SourceSpec] = &[
         averaged_precipitation: false,
         interval_precipitation: false,
         average_window_hours: 6,
+        first_hour: 0,
         optional_at_analysis: &[],
         statistical_processes: &[],
         bands: &[],
@@ -736,6 +830,7 @@ pub const SOURCES: &[SourceSpec] = &[
         averaged_precipitation: false,
         interval_precipitation: false,
         average_window_hours: 6,
+        first_hour: 0,
         optional_at_analysis: &[],
         statistical_processes: &[],
         bands: &[],
@@ -777,6 +872,7 @@ pub const SOURCES: &[SourceSpec] = &[
         averaged_precipitation: false,
         interval_precipitation: false,
         average_window_hours: 6,
+        first_hour: 0,
         optional_at_analysis: &[],
         statistical_processes: &[],
         // The six infrared windows fetched (AHI bands 7, 8, 11, 13, 14, 15),
@@ -854,6 +950,7 @@ pub const SOURCES: &[SourceSpec] = &[
         averaged_precipitation: false,
         interval_precipitation: false,
         average_window_hours: 6,
+        first_hour: 0,
         optional_at_analysis: &[],
         statistical_processes: &[],
         // ABI channels 7, 8, 11, 13, 14, 15 at 3.90, 6.19, 8.50, 10.35,
@@ -911,6 +1008,7 @@ pub const SOURCES: &[SourceSpec] = &[
         averaged_precipitation: false,
         interval_precipitation: false,
         average_window_hours: 6,
+        first_hour: 0,
         optional_at_analysis: &[],
         statistical_processes: &[],
         // ABI channels 7, 8, 11, 13, 14, 15 at 3.90, 6.19, 8.50, 10.35,
@@ -981,6 +1079,7 @@ pub const SOURCES: &[SourceSpec] = &[
         averaged_precipitation: false,
         interval_precipitation: false,
         average_window_hours: 6,
+        first_hour: 0,
         optional_at_analysis: &[],
         statistical_processes: &[],
         // FCI IR_87, IR_105, IR_123 at 8.70, 10.50, 12.30 µm; WMO C-5 71
@@ -1098,7 +1197,7 @@ mod tests {
         assert_eq!(ifshres.production_grid, (3600, 1801));
         assert_eq!(ifshres.core_bundle_ids, &["tmp2m", "prate"]);
         // Every other forecast source is read record by record.
-        for model in ["gfs", "ecmwf", "aifs", "sflux", "hrrr", "gefsaero", "mrms"] {
+        for model in ["gfs", "ecmwf", "aifs", "sflux", "hrrr", "gefsaero", "cfs", "mrms"] {
             assert!(!source_spec(model).expect(model).series_file, "{model}");
         }
         // The aerosol source: nine scalar bundles, no vectors, no rain and
@@ -1142,9 +1241,62 @@ mod tests {
             // Assembly order: the companion's records come last.
             assert_eq!(&source.input_variable_ids[source.input_variable_ids.len() - 3..], wave.variable_ids);
         }
-        for model in ["sflux", "hrrr", "cma"] {
+        for model in ["sflux", "hrrr", "cfs", "cma"] {
             assert!(source_spec(model).expect(model).companion_files.is_empty(), "{model}");
         }
+    }
+
+    /// CFSv2: nine months of six-hourly output of which the published axis
+    /// is the thirty-nine weeks every 00Z and 12Z cycle reaches, and the
+    /// one source whose axis begins at a step rather than at the analysis.
+    #[test]
+    fn the_cfs_axis_is_six_hourly_from_the_first_step_to_thirty_nine_weeks() {
+        let cfs = source_spec("cfs").expect("cfs");
+        assert_eq!((cfs.manifest_model, cfs.product), ("CFSv2", "time-grib-01"));
+        assert_eq!(cfs.latest_filename, Some("latest-cfs.json"));
+        assert_eq!(cfs.steps, &[(6552, 6)]);
+        assert_eq!(cfs.first_hour, 6);
+        let axis = cfs.forecast_hours(6552).expect("axis");
+        assert_eq!(axis.len(), 1092);
+        assert_eq!((axis[0], axis[1], axis[1091]), (6, 12, 6552));
+        assert_eq!(cfs.forecast_hours(6).expect("axis"), vec![6]);
+        // Neither the analysis nor an hour between the steps is on it.
+        for off_axis in [0, 3, 9, 6551, 6558] {
+            assert!(cfs.forecast_hours(off_axis).is_err(), "f{off_axis}");
+        }
+        // Every other source still counts from the analysis.
+        for source in SOURCES {
+            assert_eq!(source.first_hour, if source.id == "cfs" { 6 } else { 0 }, "{}", source.id);
+        }
+        // What it fetches and what it publishes: the surface set and the
+        // 10 m pair, no companion family, nothing analysis-optional
+        // (there is no analysis frame at all) and no video.
+        assert_eq!(
+            cfs.input_variable_ids,
+            &["tmp2m", "prate", "ugrd10m", "vgrd10m", "tcdc", "dswrf", "tmpsfc", "icec", "icetk"]
+        );
+        assert_eq!(
+            cfs.bundle_scalar_ids,
+            &["tmp2m", "prate", "tcdc", "dswrf", "tmpsfc", "icec", "icetk"]
+        );
+        assert_eq!(cfs.bundle_vector_ids, &["wind10m"]);
+        assert_eq!(cfs.core_bundle_ids, &["tmp2m", "prate"]);
+        assert!(cfs.bundle_composite_ids.is_empty() && cfs.companion_files.is_empty());
+        assert!(cfs.optional_at_analysis.is_empty() && cfs.bands.is_empty());
+        // PRATE is already a rate, and the three flux fields are six-hour
+        // means NCEP encodes as instantaneous.
+        assert!(
+            !cfs.accumulated_precipitation && !cfs.averaged_precipitation && !cfs.interval_precipitation
+        );
+        assert_eq!(cfs.statistical_processes, &[("prate", 0), ("dswrf", 0), ("tcdc", 0)]);
+        // The T126 Gaussian grid, cut into eight whole tiles.
+        assert_eq!(cfs.production_grid, (384, 190));
+        assert_eq!(cfs.tile, (96, 95));
+        assert_eq!((384 / 96) * (190 / 95), 8);
+        assert_eq!(cfs.variant_factors, &[2]);
+        assert!(cfs.fetched() && cfs.live());
+        assert!(!cfs.observation && !cfs.series_file);
+        assert!(cfs.regrid.is_none() && cfs.downsample.is_none() && cfs.open_meteo.is_none());
     }
 
     /// ECMWF's gust record is all zeros at the analysis and not fetched
@@ -1179,7 +1331,7 @@ mod tests {
         // A 6.5 M cell global plane takes two rungs, the way a 9 M cell
         // satellite disk takes three.
         assert_eq!(source_spec("ifshres").expect("ifshres").variant_factors, &[2, 4]);
-        for model in ["gfs", "ecmwf", "aifs", "sflux", "hrrr", "gefsaero", "cma", "mrms", "jma"] {
+        for model in ["gfs", "ecmwf", "aifs", "sflux", "hrrr", "gefsaero", "cfs", "cma", "mrms", "jma"] {
             assert_eq!(source_spec(model).expect(model).variant_factors, &[2], "{model}");
         }
     }

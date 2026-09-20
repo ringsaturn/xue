@@ -533,6 +533,12 @@ VARIABLES: dict[str, VariableSpec] = {
     # scales to percent; AIFS writes the same ``tcc`` under the WMO 0/6/1 in
     # percent, but as a layer from the ground surface to the top of the
     # atmosphere rather than on the entire-atmosphere surface.
+    # NCEP spells the surface out in full in the CFSv2 sidecars
+    # (``TCDC:entire atmosphere (considered as a single layer)``) where
+    # pgrb2 abbreviates it, so the long spelling is an alternate phrase —
+    # and writes the surface as the NCEP-local type 200 rather than the WMO
+    # type 10 pgrb2 uses for the same "entire atmosphere" layer, which GDAL
+    # renders ``0-EATM`` either way, so that is an alternate record too.
     "tcdc": VariableSpec(
         id="tcdc",
         label="Total cloud cover",
@@ -541,12 +547,17 @@ VARIABLES: dict[str, VariableSpec] = {
         grib_element="TCDC",
         index_field=":TCDC:entire atmosphere:",
         excluded_index_phrases=("ave fcst",),
+        alternate_index_fields=(":TCDC:entire atmosphere (considered as a single layer):",),
         ecmwf_param="tcc",
         open_meteo="cloud_cover",
         grib2_category=6,
         grib2_number=1,
         grib2_level_type=10,
-        grib2_alternates=(RecordAlternate(0, 6, 192, 1, gdal_unit="-"), RecordAlternate(0, 6, 1, 1)),
+        grib2_alternates=(
+            RecordAlternate(0, 6, 192, 1, gdal_unit="-"),
+            RecordAlternate(0, 6, 1, 1),
+            RecordAlternate(0, 6, 1, 200),
+        ),
         gdal_unit="%",
     ),
     # Surface-based convective available potential energy, 0/7/6 on the

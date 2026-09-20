@@ -458,6 +458,20 @@ def _source_prose(source: SourceSpec) -> dict[str, Any]:
             "providers": [_NOAA_PROVIDER, _XUE_PROVIDER],
             "links": [_NOAA_LICENSE_LINK],
         },
+        "cfs": {
+            "title": "NCEP CFSv2 seasonal",
+            "description": (
+                "The NCEP Climate Forecast System version 2, the operational coupled "
+                "atmosphere-ocean-land forecast, on its native T126 Gaussian grid (0.9375°): the "
+                "surface fields of ensemble member 01, six-hourly from 6 to 6552 hours — "
+                "thirty-nine weeks of a nine-month run. Two cycles a day (00Z and 12Z); only the "
+                "newest is kept. The precipitation rate, downward shortwave radiation and total "
+                "cloud cover are means over the six hours ending at each frame."
+            ),
+            "license": "other",
+            "providers": [_NOAA_PROVIDER, _XUE_PROVIDER],
+            "links": [_NOAA_LICENSE_LINK],
+        },
         "mrms": {
             "title": "NOAA MRMS radar mosaic",
             "description": (

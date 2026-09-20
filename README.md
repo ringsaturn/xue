@@ -34,6 +34,7 @@ pipeline.
 | ECMWF IFS HRES (Open-Meteo) | 0.1° global · hourly to F090, 3-hourly to F144, 6-hourly to F360; 00Z and 12Z | <a href="https://dataset.ringsaturn.me/xue/latest-ifshres.json"><img alt="the newest ifshres run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-ifshres.json&query=%24.runTime&label=&color=2a9d8f&style=flat-square&cacheSeconds=600" width="170"></a> |
 | NOAA HRRR | 0.03° contiguous US · hourly to F18, a cycle every hour | <a href="https://dataset.ringsaturn.me/xue/latest-hrrr.json"><img alt="the newest hrrr run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-hrrr.json&query=%24.runTime&label=&color=7b4ea3&style=flat-square&cacheSeconds=600" width="170"></a> |
 | NOAA GEFS-Aerosols | 0.25° global · 3-hourly to F120 | <a href="https://dataset.ringsaturn.me/xue/latest-gefsaero.json"><img alt="the newest gefsaero run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-gefsaero.json&query=%24.runTime&label=&color=8a6d3b&style=flat-square&cacheSeconds=600" width="170"></a> |
+| NCEP CFSv2 | 0.9375° global (T126 Gaussian) · 6-hourly from F6 to F6552 (39 weeks); 00Z and 12Z | <a href="https://dataset.ringsaturn.me/xue/latest-cfs.json"><img alt="the newest cfs run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-cfs.json&query=%24.runTime&label=&color=4f7942&style=flat-square&cacheSeconds=600" width="170"></a> |
 | NOAA MRMS radar | 0.02° contiguous US · every 2 min, a rolling 4 h window | <a href="https://dataset.ringsaturn.me/xue/latest-mrms.json"><img alt="the newest mrms run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-mrms.json&query=%24.runTime&label=&color=b7472a&style=flat-square&cacheSeconds=600" width="170"></a> |
 | JMA precipitation nowcast | 0.005° Japan · every 5 min, a rolling 3 h window | <a href="https://dataset.ringsaturn.me/xue/latest-jma.json"><img alt="the newest jma run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-jma.json&query=%24.runTime&label=&color=c25b2c&style=flat-square&cacheSeconds=600" width="170"></a> |
 | CMA radar mosaic | 0.0439° China · every 6 min, a rolling 3 h window | <a href="https://dataset.ringsaturn.me/xue/latest-cma.json"><img alt="the newest cma run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-cma.json&query=%24.runTime&label=&color=b03a5b&style=flat-square&cacheSeconds=600" width="170"></a> |
@@ -123,6 +124,33 @@ Bundle sets:
   precipitation codebook's logarithmic shape. No temperature and no rain,
   so the run's core set is the total optical depth alone; a cycle is
   complete about six hours after it.
+- CFSv2 (`cfs`): NCEP's operational coupled climate forecast — the one
+  seasonal-range source here. Seven scalar bundles (the core pair, total
+  cloud cover, downward shortwave radiation, surface temperature and the
+  two sea ice fields) and the 10 m wind, on the model's own T126 Gaussian
+  grid (384 × 190, a 0.9375° step, the same shape of grid as the surface
+  flux source's). Ensemble member 01 of the 00Z and 12Z cycles, which are
+  the ones that run the full nine months. The run itself ends at the first
+  00Z of the tenth calendar month after the cycle — 6564 to 6888 hours
+  depending on the date — so the published axis is the thirty-nine weeks
+  every cycle reaches: six-hourly from F6 to F6552, 1092 frames, about
+  73 000 cells each.
+  Unlike every other fetched source, a CFSv2 run is published series-major:
+  one object per variable holding that variable's whole run, with an `.idx`
+  beside it. The fetch reads each variable in one or two very large range
+  requests and cuts the frames out of what it read, so a run costs a
+  handful of requests rather than a thousand. The series start at the first
+  six-hour step and the cycle's analysis, which lives in another file
+  family, encodes its flux fields as instantaneous analysis values where
+  every forecast frame carries a six-hour mean; rather than publish one
+  frame of a different quantity the source's axis simply starts at F6.
+  NCEP writes every record as the instantaneous template 4.0, but the
+  precipitation rate, the downward shortwave radiation and the total cloud
+  cover are means over the six hours ending at the frame, which the bundle
+  metadata says outright (`typeOfStatisticalProcessing` 0). The time series
+  are written as the model runs, so a cycle counts as complete only when
+  every object's sidecar names its F6552 record *and* the object measures
+  that far; the 00Z cycle lands about 11:30Z and the 12Z one about 23:25Z.
 - MRMS: composite reflectivity under `cref` and the radar-derived
   precipitation rate under `prate`. A run is a window (`--run` names its
   first hour, `--hours` its length) whose frames are listed off the
@@ -355,13 +383,15 @@ make mvp MODEL=ifshres    # ECMWF IFS HRES 0.1° via Open-Meteo (needs om2nc)
 make mvp MODEL=sflux      # GFS surface flux
 make mvp MODEL=hrrr       # NOAA HRRR
 make mvp MODEL=gefsaero   # NOAA GEFS-Aerosols
+make mvp MODEL=cfs        # NCEP CFSv2 seasonal (a nine-month run; slow)
 make serve
 ```
 
-Or step by step (`--model gfs|sflux|ecmwf|aifs|ifshres|hrrr|gefsaero|mrms|jma|cma|himawari|goeseast|goeswest|meteosat`,
+Or step by step (`--model gfs|sflux|ecmwf|aifs|ifshres|hrrr|gefsaero|cfs|mrms|jma|cma|himawari|goeseast|goeswest|meteosat`,
 default `gfs`; `--hours` defaults to the whole axis the model publishes: 240
 for the global models, 360 for AIFS and IFS HRES, 18 for HRRR, 120 for
-GEFS-Aerosols, and on the rolling windows their length):
+GEFS-Aerosols, 6552 for CFSv2 (whose axis starts at F6, not the analysis),
+and on the rolling windows their length):
 
 ```sh
 python -m xuebuild fetch --run latest --hours 240
@@ -376,6 +406,7 @@ python -m xuebuild build-bin --model ifshres --run latest --hours 360
 python -m xuebuild build-bin --model sflux --run latest --hours 240
 python -m xuebuild build-bin --model hrrr --run latest
 python -m xuebuild build-bin --model gefsaero --run latest --hours 120
+python -m xuebuild build-bin --model cfs --run latest --hours 6552
 python -m xuebuild build-bin --model mrms --run 2026091300 --hours 3   # a past window
 python -m xuebuild build-bin --model mrms --run latest --hours 4 --round now   # one round of the live window
 python -m xuebuild build-bin --model jma --run latest --hours 3 --round now    # the JMA nowcast, through jma-radar
@@ -421,7 +452,7 @@ manifest requires `--force` (`make mvp FORCE=--force`).
 
 `/?model=gfs&type=wind`, `/?model=ecmwf&type=temp`. `model` accepts `gfs` /
 `ecmwf` (alias `ifs`) / `aifs` (alias `aifs-single`) / `ifshres` (aliases
-`hres`, `ifs9km`) / `sflux` / `hrrr` / `gefsaero` / `mrms`; `type` accepts aliases
+`hres`, `ifs9km`) / `sflux` / `hrrr` / `gefsaero` / `cfs` / `mrms`; `type` accepts aliases
 such as `tmp2m` / `prate` / `wind10m` / `solar` / `radar`, and each isobaric
 field names itself (`pressure`, `hgt500`, `tmp850` / `t850`, `rh700`,
 `wind850`, `qflux850` / `vapor850`; there is no separate `level`
@@ -572,7 +603,9 @@ GitHub Actions runs the loop on a schedule, one workflow per source
 [`publish-ifshres.yml`](.github/workflows/publish-ifshres.yml),
 [`publish-hrrr.yml`](.github/workflows/publish-hrrr.yml), the last every
 hour,
-[`publish-gefsaero.yml`](.github/workflows/publish-gefsaero.yml)), all
+[`publish-gefsaero.yml`](.github/workflows/publish-gefsaero.yml),
+[`publish-cfs.yml`](.github/workflows/publish-cfs.yml), twice a day when
+the seasonal run's time series have landed), all
 calling the reusable
 [`publish.yml`](.github/workflows/publish.yml) with the `R2_ACCESS_KEY_ID`
 / `R2_SECRET_ACCESS_KEY` / `CLOUDFLARE_ACCOUNT_ID` repository secrets. The
@@ -850,9 +883,12 @@ Fixture provenance and regeneration are documented in
 ## Data and Licensing
 
 Weather data comes from
-[NOAA GFS](https://registry.opendata.aws/noaa-gfs-bdp-pds/) and
+[NOAA GFS](https://registry.opendata.aws/noaa-gfs-bdp-pds/),
 [NOAA GEFS](https://registry.opendata.aws/noaa-gefs-bdp-pds/) (the
-GEFS-Aerosols member; both public domain)
+GEFS-Aerosols member) and
+[NCEP CFSv2](https://registry.opendata.aws/noaa-cfs/) (all three works of
+the United States government and so in the public domain; NOAA requests
+attribution and does not endorse this use)
 and [ECMWF open data](https://www.ecmwf.int/en/forecasts/datasets/open-data),
 the IFS and the AIFS (CC BY 4.0, © European Centre for Medium-Range Weather Forecasts; this
 project distributes converted derivatives: "Contains modified ECMWF open

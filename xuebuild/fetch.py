@@ -28,9 +28,11 @@ from .satellite import producers as satellite_producers
 from .errors import DownloadError
 from .idx import (
     ByteRange,
+    coalesce_ranges,
     ecmwf_field_byte_range,
     ecmwf_level_selector,
     field_byte_range,
+    series_byte_ranges,
 )
 from .model import GfsRun
 from .sources import SourceSpec, source_spec
@@ -96,6 +98,10 @@ ECMWF_UNPACED_BASE_URLS = tuple(
     if url.strip()
 )
 ECMWF_FRAME_ATTEMPTS = 3
+# NCEP CFSv2 has one AWS Open Data bucket and no mirror
+# (registry.opendata.aws/noaa-cfs-pds), anonymous, with an ``.idx`` beside
+# every object. Override with XUE_CFS_BASE_URL.
+CFS_BASE_URL = os.environ.get("XUE_CFS_BASE_URL", "https://noaa-cfs-pds.s3.amazonaws.com").rstrip("/")
 # MRMS is on its own AWS Open Data bucket (registry.opendata.aws/noaa-mrms-pds),
 # anonymous, listable, and about a minute behind real time. There is no
 # mirror and no ``.idx``: a frame is one whole gzipped GRIB per product,
@@ -276,6 +282,309 @@ def ecmwf_companion_object_url(
     except KeyError:
         raise DownloadError(f"unknown ECMWF companion file family: {family}") from None
     return ecmwf_object_url(run, forecast_hour, base_url=base_url, stream=stream, model=model)
+
+
+# -- CFSv2 ---------------------------------------------------------------------
+#
+# ``cfs.<YYYYMMDD>/<HH>/time_grib_01/<name>.01.<run>.daily.grb2``, one object
+# per variable holding that variable's whole nine-month run, with an ``.idx``
+# beside it. The cycle's analysis sits in another family
+# (``6hrly_grib_01/flxf<run>.01.<run>.grb2``) and is not read: the source's
+# axis starts at the first six-hour step (``SourceSpec.first_hour``).
+
+# Ensemble member: 01 is the only one of the four that runs the full nine
+# months, and it is in every cycle.
+CFS_MEMBER = "01"
+# The object each input's records live in. These stems are NCEP's own
+# spelling of the quantity and belong to this source alone — like an
+# Open-Meteo variable name, but for one source only, so the registry does
+# not carry them. The wind pair shares one object.
+CFS_SERIES_FILES: dict[str, str] = {
+    "tmp2m": "tmp2m",
+    "prate": "prate",
+    "ugrd10m": "wnd10m",
+    "vgrd10m": "wnd10m",
+    "tcdc": "tcdcclm",
+    "dswrf": "dswsfc",
+    "tmpsfc": "tmpsfc",
+    "icec": "icecon",
+    "icetk": "icethk",
+}
+# How many frames at each end of what a fetch wrote are read back with the
+# GRIB2 header index. Every record came out of a range the server confirmed
+# by Content-Range and length, so re-reading all eleven hundred frames would
+# only cost time; the ends catch a mis-cut.
+CFS_VERIFY_FRAMES = 2
+
+
+def cfs_series_url(run: GfsRun, name: str) -> str:
+    """The object holding one CFSv2 variable's whole run."""
+    return f"{CFS_BASE_URL}/cfs.{run.date}/{run.cycle}/time_grib_{CFS_MEMBER}/{name}.{CFS_MEMBER}.{run.id}.daily.grb2"
+
+
+def cfs_variable_url(run: GfsRun, variable_id: str) -> str:
+    """The object one input variable is read from."""
+    try:
+        name = CFS_SERIES_FILES[variable_id]
+    except KeyError:
+        raise DownloadError(f"CFSv2 publishes no time series for {variable_id}") from None
+    return cfs_series_url(run, name)
+
+
+def cfs_frame_name(spec: SourceSpec, run: GfsRun, forecast_hour: int) -> str:
+    """The GRIB one frame of a CFSv2 run is split into — the name every
+    other source's fetch writes, the hour running to four digits of its own
+    accord past f999."""
+    return f"{spec.id}.{run.id}.f{forecast_hour:03d}.grib2"
+
+
+def _cfs_series_ranges(
+    index_text: str, variable_id: str, *, file_size: int | None = None
+) -> dict[int, ByteRange]:
+    """Where each frame of one input lives in its time-series object."""
+    variable = VARIABLES[variable_id]
+    return series_byte_ranges(
+        index_text,
+        variable.index_field,
+        file_size=file_size,
+        alternate_fields=variable.alternate_index_fields,
+    )
+
+
+def _cfs_run_is_complete(
+    spec: SourceSpec,
+    run: GfsRun,
+    hours: int,
+    *,
+    fetch: Callable[[str], str] | None = None,
+    measure: Callable[[str], int | None] | None = None,
+) -> bool:
+    """Whether every object a CFSv2 run needs carries its records through
+    ``hours``.
+
+    A time-series object is written as the model runs, and its sidecar can
+    describe records whose bytes have not landed, so two things are asked of
+    each: the ``.idx`` names a record at ``hours`` *with a successor*, which
+    is what fixes its end, and the object measures at least that far
+    (:func:`remote_length`). The wind pair is asked twice, once per field,
+    because the two are written in separate blocks.
+    """
+    read = fetch or fetch_text
+    length = measure or remote_length
+    for variable_id in spec.input_variable_ids:
+        url = cfs_variable_url(run, variable_id)
+        try:
+            index_text = read(url + ".idx")
+        except DownloadError as exc:
+            if _http_error_code(exc) == 404:
+                LOG.info("CFSv2 run %s has no %s time series yet", run.id, variable_id)
+                return False
+            raise
+        # No file size: the sidecar's last record is left out, so a record
+        # answered here is one whose end the sidecar itself fixes.
+        byte_range = _cfs_series_ranges(index_text, variable_id).get(hours)
+        if byte_range is None:
+            LOG.info("CFSv2 run %s has no %s record at f%03d yet", run.id, variable_id, hours)
+            return False
+        measured = length(url)
+        if measured is None or measured <= byte_range.end:
+            LOG.info(
+                "CFSv2 run %s has the %s f%03d record in its .idx but only %s bytes of data",
+                run.id,
+                variable_id,
+                hours,
+                measured,
+            )
+            return False
+    return True
+
+
+def _cfs_frames_to_fetch(
+    paths: dict[int, Path], variable_ids: tuple[str, ...], *, force: bool
+) -> list[int]:
+    """The hours whose frame is missing or does not hold what this build
+    asked for. A readable frame is reused as every other source's is, and a
+    narrowed run downloads only the hours it is short of."""
+    from .grib2 import inspect_grib_fast
+
+    if force:
+        return list(paths)
+    missing: list[int] = []
+    for hour, path in paths.items():
+        if not path.is_file():
+            missing.append(hour)
+            continue
+        try:
+            frames = inspect_grib_fast(path, variable_ids)
+        except Exception:
+            missing.append(hour)
+            continue
+        if any(frame.lead_seconds != hour * 3600 for frame in frames.values()):
+            missing.append(hour)
+    return missing
+
+
+def _cfs_object_index(url: str) -> tuple[str, int | None]:
+    """One time-series object's sidecar and measured length. Read once per
+    object rather than once per input, since the wind pair shares one."""
+    return fetch_text(url + ".idx"), remote_length(url)
+
+
+def _download_cfs_series(
+    url: str,
+    variable_id: str,
+    hours: list[int],
+    destination: Path,
+    *,
+    index_text: str,
+    file_size: int | None,
+) -> dict[int, tuple[int, int]]:
+    """One input's records for ``hours``, in as few range requests as the
+    object's layout allows, written to ``destination`` in hour order.
+
+    Returns where each hour's record landed in that file. The records of one
+    field are stored in hour order, so a whole run is one request and a run
+    cut short is one per block the object interleaves (CFSv2's wind object
+    alternates a block of U records with the same block of V records, so the
+    pair costs one request each)."""
+    ranges = _cfs_series_ranges(index_text, variable_id, file_size=file_size)
+    absent = [hour for hour in hours if hour not in ranges]
+    if absent:
+        raise DownloadError(
+            f"{url} carries no {variable_id} record at forecast hour {absent[0]} "
+            f"({len(absent)} of {len(hours)} missing)"
+        )
+    wanted = [ranges[hour] for hour in hours]
+    blobs = coalesce_ranges(wanted)
+    LOG.info("downloading %s of %s in %d range request(s)", variable_id, url.rsplit("/", 1)[-1], len(blobs))
+    placement: dict[int, tuple[int, int]] = {}
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with destination.open("wb") as handle:
+        bases: list[int] = []
+        base = 0
+        for blob in blobs:
+            bases.append(base)
+            handle.write(fetch_range(url, blob))
+            base += blob.length
+    index = 0
+    for hour in hours:
+        byte_range = ranges[hour]
+        while not (blobs[index].start <= byte_range.start and byte_range.end <= blobs[index].end):
+            index += 1
+        placement[hour] = (bases[index] + byte_range.start - blobs[index].start, byte_range.length)
+    return placement
+
+
+def _fetch_cfs_run(
+    spec: SourceSpec,
+    run: GfsRun,
+    hours: int,
+    raw_root: Path,
+    *,
+    force: bool = False,
+    input_ids: tuple[str, ...] | None = None,
+) -> list[Path]:
+    """A CFSv2 run, fetched series-major and written frame-major.
+
+    Every other fetched forecast reads one object per frame and takes the
+    records it wants out of each; CFSv2 publishes the transpose, one object
+    per variable holding the whole run, so a build reads each variable once
+    as a handful of very large ranges and then cuts the frames out of what
+    it read. The frames it writes are exactly what the frame-by-frame
+    sources write — one GRIB per hour, the records in the order the build
+    asked for them — so nothing downstream of the fetch knows the
+    difference.
+
+    A ``--bundles`` group narrows ``input_ids`` and so touches only that
+    group's objects, which is what lets the fanned-out publish work
+    unchanged.
+    """
+    from .grib2 import inspect_grib_fast
+
+    destination = raw_root / f"{spec.id}.{run.id}"
+    forecast_hours = spec.forecast_hours(hours)
+    variable_ids = _frame_variable_ids(spec, forecast_hours[0], input_ids)
+    if not variable_ids:
+        raise DownloadError("a CFSv2 fetch needs at least one input variable")
+    paths = {hour: destination / cfs_frame_name(spec, run, hour) for hour in forecast_hours}
+    needed = _cfs_frames_to_fetch(paths, variable_ids, force=force)
+    if not needed:
+        LOG.info("reusing %d readable CFSv2 frames in %s", len(paths), destination)
+        return [paths[hour] for hour in forecast_hours]
+    LOG.info(
+        "fetching %d of %d CFSv2 frames of run %s (%d variables)",
+        len(needed),
+        len(paths),
+        run.id,
+        len(variable_ids),
+    )
+    # The series are cut up as soon as they are all down, so they live in a
+    # directory of their own under the run: `discover_inputs` lists files,
+    # not directories, so a crash between the two leaves nothing a build
+    # would mistake for a frame.
+    series_root = destination / "series"
+    series_root.mkdir(parents=True, exist_ok=True)
+    series_paths = {
+        variable_id: series_root / f"{spec.id}.{run.id}.series.{variable_id}.grb2"
+        for variable_id in variable_ids
+    }
+    try:
+        # One sidecar read and one measurement per object, before anything is
+        # downloaded: the wind pair shares an object, and a run that turns out
+        # to be short of an hour says so before a hundred megabytes move.
+        objects = {
+            url: _cfs_object_index(url)
+            for url in dict.fromkeys(cfs_variable_url(run, variable_id) for variable_id in variable_ids)
+        }
+
+        def download(variable_id: str) -> tuple[str, dict[int, tuple[int, int]]]:
+            url = cfs_variable_url(run, variable_id)
+            index_text, file_size = objects[url]
+            return variable_id, _download_cfs_series(
+                url,
+                variable_id,
+                needed,
+                series_paths[variable_id],
+                index_text=index_text,
+                file_size=file_size,
+            )
+
+        workers = max(1, min(spec.fetch_concurrency, len(variable_ids)))
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            placements = dict(executor.map(download, variable_ids))
+        handles = {variable_id: series_paths[variable_id].open("rb") for variable_id in variable_ids}
+        try:
+            for hour in needed:
+                payload = bytearray()
+                for variable_id in variable_ids:
+                    offset, length = placements[variable_id][hour]
+                    handle = handles[variable_id]
+                    handle.seek(offset)
+                    record = handle.read(length)
+                    if len(record) != length:
+                        raise DownloadError(f"{series_paths[variable_id]} is short of the f{hour:03d} record")
+                    payload += record
+                _atomic_write(paths[hour], bytes(payload))
+        finally:
+            for handle in handles.values():
+                handle.close()
+    finally:
+        shutil.rmtree(series_root, ignore_errors=True)
+    # Every frame is cut from ranges the server confirmed by Content-Range
+    # and length, so the records are read back out of the ends of what was
+    # written rather than out of all thousand-odd frames.
+    for hour in needed[:CFS_VERIFY_FRAMES] + needed[-CFS_VERIFY_FRAMES:]:
+        try:
+            frames = inspect_grib_fast(paths[hour], variable_ids)
+        except Exception as exc:
+            raise DownloadError(f"the CFSv2 frame written for f{hour:03d} cannot be read: {exc}") from exc
+        for variable_id, frame in frames.items():
+            if frame.lead_seconds != hour * 3600:
+                raise DownloadError(
+                    f"the CFSv2 frame written for f{hour:03d} carries {variable_id} at "
+                    f"f{frame.lead_seconds // 3600:03d}"
+                )
+    return [paths[hour] for hour in forecast_hours]
 
 
 # -- MRMS ---------------------------------------------------------------------
@@ -1230,6 +1539,11 @@ def _fetch_satellite_run(
 def model_object_url(run: GfsRun, forecast_hour: int, model: str) -> str:
     if model in ECMWF_OPEN_DATA_MODELS:
         return ecmwf_object_url(run, forecast_hour, model=model)
+    if model == "cfs":
+        # CFSv2 has no object per forecast hour: a run is one object per
+        # variable holding the whole series. The hour is ignored and the
+        # run's reference object named — the one a probe would ask for.
+        return cfs_variable_url(run, source_spec(model).input_variable_ids[0])
     if model == "sflux":
         return sflux_object_url(run, forecast_hour)
     if model == "hrrr":
@@ -1350,6 +1664,26 @@ def remote_exists(url: str) -> bool:
         raise
 
 
+def remote_length(url: str) -> int | None:
+    """How many bytes of an object the bucket is serving, or None when it
+    does not exist or will not say. What tells an object still being
+    written from one whose sidecar simply runs ahead of it."""
+    try:
+        response = _request(url, method="HEAD", timeout=15)
+    except DownloadError as exc:
+        if _http_error_code(exc) == 404:
+            return None
+        raise
+    with response:
+        if getattr(response, "status", None) != 200:
+            return None
+        value = getattr(response, "headers", {}).get("Content-Length")
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _run_is_complete(
     run: GfsRun,
     hours: int,
@@ -1364,6 +1698,8 @@ def _run_is_complete(
         return _jma_run_is_complete(source_spec(model), run, hours)
     if model == "cma":
         return _cma_run_is_complete(source_spec(model), run, hours)
+    if model == "cfs":
+        return _cfs_run_is_complete(source_spec(model), run, hours)
     if source_spec(model).open_meteo is not None:
         return _open_meteo_run_is_complete(source_spec(model), run)
     if source_spec(model).platform is not None:
@@ -1758,6 +2094,8 @@ def fetch_run(
         return _fetch_jma_run(spec, run, hours, raw_root, force=force, input_ids=input_ids)
     if spec.id == "cma":
         return _fetch_cma_run(spec, run, hours, raw_root, force=force, input_ids=input_ids)
+    if spec.id == "cfs":
+        return _fetch_cfs_run(spec, run, hours, raw_root, force=force, input_ids=input_ids)
     if spec.platform is not None:
         return _fetch_satellite_run(spec, run, hours, raw_root, force=force, input_ids=input_ids)
     if spec.open_meteo is not None:

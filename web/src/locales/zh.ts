@@ -110,6 +110,7 @@ export const zh: Record<MessageKey, string> = {
   creditsGfs: "预报数据 · GFS 0.25° 与 SFLUX",
   creditsHrrr: "预报数据 · HRRR 3 公里，美国本土",
   creditsGefsAero: "气溶胶预报 · GEFS-AEROSOLS 0.25°，光学厚度与地面颗粒物",
+  creditsCfs: "季节预报 · CFSv2，9 个月，6 小时间隔",
   creditsEcmwf: "含经修改的 ECMWF 数据 · CC BY 4.0",
   creditsIfsHres: "改编自 ECMWF IFS，由 ECMWF 提供，依 CC BY 4.0 授权 · 经 Open-Meteo 转发 · IFS HRES 约 9 公里，重采样到 0.1°",
   creditsMrms: "雷达观测 · MRMS，美国本土",

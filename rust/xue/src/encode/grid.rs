@@ -475,7 +475,10 @@ pub fn crop_grid(grid: GridInfo, bbox: (f64, f64, f64, f64)) -> Result<GridInfo>
 
 #[cfg(test)]
 mod tests {
-    use super::{crop_grid, snap_global_longitudes, snap_regional_steps, BlockReduction, GridInfo};
+    use super::{
+        crop_grid, normalize_longitudes, snap_global_longitudes, snap_regional_steps,
+        BlockReduction, GridInfo,
+    };
     use std::path::Path;
 
     const WAVE_STEP: f64 = 0.2500000111188325;
@@ -567,6 +570,69 @@ mod tests {
         // 0.03 comes out as the double nearest 0.03, not 30 * 0.001.
         let thirty = snap_regional_steps(GridInfo::new(100, 100, -100.0, 40.0, 0.03 + 1e-10, -0.03));
         assert_eq!(thirty.longitude_step, 0.03);
+    }
+
+    /// The CFSv2 T126 Gaussian grid, as GDAL reports the surface flux
+    /// records: 384 x 190 from a corner at (-0.46875, 89.7507), so the
+    /// first cell center is exactly on Greenwich — the sflux grid's shape.
+    /// It closes the circle at 360 / 384, and the columns at or past 180
+    /// move to the front, which is what puts it in the -180-first layout
+    /// every other source arrives in.
+    #[test]
+    fn the_cfs_gaussian_grid_snaps_to_the_circle_and_rolls_to_minus_180() {
+        let longitude_step = 0.9375;
+        let latitude_step = -0.9473684210526316;
+        let raw = GridInfo::new(
+            384,
+            190,
+            -0.46875 + longitude_step / 2.0,
+            89.7507 + latitude_step / 2.0,
+            longitude_step,
+            latitude_step,
+        );
+        assert_eq!(raw.first_longitude, 0.0, "the first center is on Greenwich");
+        assert!(raw.wraps());
+        let snapped = snap_global_longitudes(raw);
+        assert_eq!(snapped.longitude_step, 360.0 / 384.0);
+        assert_eq!(snapped.first_longitude, 0.0);
+        // A wrapping grid is never re-stepped as a regional one.
+        let snapped = snap_regional_steps(snapped);
+        assert_eq!(snapped.longitude_step, 0.9375);
+        let rolled = normalize_longitudes(snapped);
+        assert_eq!(rolled.column_roll, 192);
+        assert_eq!(rolled.first_longitude, -180.0);
+        assert_eq!((rolled.width, rolled.height), (384, 190));
+        // 192 columns of 0.9375° is exactly half the world, so the roll is
+        // the grid's own half: column 0 of the rolled plane is 180° E.
+        assert_eq!(rolled.column_roll as f64 * rolled.longitude_step, 180.0);
+    }
+
+    /// A 48 x 40 cell window cut out of that grid with `gdal_translate
+    /// -srcwin` — the CFSv2 test fixture. GDAL re-derives the step from the
+    /// window's first and last coordinates and lands a hair off 0.9375, and
+    /// the regional snap must leave it there: a 0.9375° step is nowhere
+    /// near a whole thousandth of a degree, and rounding it to 0.938 would
+    /// move the last column a fortieth of a cell.
+    #[test]
+    fn a_crop_of_the_cfs_grid_keeps_its_gaussian_steps() {
+        let longitude_step = 0.9374986808510636;
+        let latitude_step = -0.9473684358974358;
+        let raw = GridInfo::new(
+            48,
+            40,
+            89.53112565957447 + longitude_step / 2.0,
+            59.434895217948714 + latitude_step / 2.0,
+            longitude_step,
+            latitude_step,
+        );
+        assert!(!raw.wraps());
+        let snapped = snap_regional_steps(snap_global_longitudes(raw.clone()));
+        assert_eq!(snapped.longitude_step, longitude_step);
+        assert_eq!(snapped.latitude_step, latitude_step);
+        assert_eq!(snapped.first_longitude, raw.first_longitude);
+        assert_eq!(snapped.first_latitude, raw.first_latitude);
+        // And a window of a global grid is not rolled either.
+        assert_eq!(normalize_longitudes(snapped).column_roll, 0);
     }
 
     #[test]

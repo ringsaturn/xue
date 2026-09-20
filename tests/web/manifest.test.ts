@@ -250,7 +250,11 @@ describe("validateManifest", () => {
     // 120-hour and 240-hour runs coexist (the horizon is a pipeline choice).
     expect(validateManifest({ ...manifestFixture(), forecastHours: 240 }).forecastHours).toBe(240);
     expect(validateManifest({ ...manifestFixture(), forecastHours: 24 }).forecastHours).toBe(24);
-    for (const broken of [0, -24, 1.5, 385, "120", undefined]) {
+    // The seasonal model is one run 39 weeks deep, so the ceiling is a year
+    // rather than the 384 hours the medium-range horizons needed.
+    expect(validateManifest({ ...manifestFixture(), forecastHours: 6552 }).forecastHours).toBe(6552);
+    expect(validateManifest({ ...manifestFixture(), forecastHours: 8760 }).forecastHours).toBe(8760);
+    for (const broken of [0, -24, 1.5, 8761, "120", undefined]) {
       expect(() => validateManifest({ ...manifestFixture(), forecastHours: broken })).toThrow("range");
     }
   });
@@ -617,7 +621,8 @@ describe("dataset kinds", () => {
     expect(isObservationModel("cma")).toBe(true);
     expect(isObservationModel("mrms")).toBe(true);
     expect(isObservationModel("jma")).toBe(true);
-    for (const model of ["gfs", "sflux", "ecmwf", "aifs", "ifshres", "hrrr", "gefsaero"] as const) expect(isObservationModel(model)).toBe(false);
+    for (const model of ["gfs", "sflux", "ecmwf", "aifs", "ifshres", "cfs", "hrrr", "gefsaero"] as const)
+      expect(isObservationModel(model)).toBe(false);
   });
 
   it("lists the live feeds, the seven observation windows among them", () => {
@@ -625,13 +630,24 @@ describe("dataset kinds", () => {
     // SourceSpec.latest_filename); the seven observation windows are the
     // last of the switch order, and the mosaic — a view over the imagers
     // with no feed of its own — closes it.
-    expect(FORECAST_MODEL_IDS).toEqual(["gfs", "sflux", "ecmwf", "aifs", "ifshres", "hrrr", "gefsaero", "mrms", "jma", "cma", "himawari", "goeseast", "goeswest", "meteosat", "geo"]);
+    expect(FORECAST_MODEL_IDS).toEqual(["gfs", "sflux", "ecmwf", "aifs", "ifshres", "cfs", "hrrr", "gefsaero", "mrms", "jma", "cma", "himawari", "goeseast", "goeswest", "meteosat", "geo"]);
     for (const model of FORECAST_MODEL_IDS) {
       if (FORECAST_MODELS[model].mosaic) expect(FORECAST_MODELS[model].latestFilename).toBeUndefined();
       else expect(FORECAST_MODELS[model].latestFilename).toBeDefined();
     }
     expect(FORECAST_MODELS.aifs).toMatchObject({ label: "AIFS", product: "aifs-single-0p25", latestFilename: "latest-aifs.json" });
     expect(FORECAST_MODELS.ifshres).toMatchObject({ label: "ECMWF-HRES", product: "ifs-hres-0p1", latestFilename: "latest-ifshres.json" });
+    // The seasonal run ships the forecast core pair, so it takes the
+    // default `coreBundles` and the default opening layer; only its rail
+    // differs, the sea surface standing where the cloud does elsewhere.
+    expect(FORECAST_MODELS.cfs).toMatchObject({
+      label: "CFSv2",
+      product: "time-grib-01",
+      latestFilename: "latest-cfs.json",
+      railCore: ["tmp2m", "prate", "wind10m", "tmpsfc"],
+    });
+    expect(FORECAST_MODELS.cfs.coreBundles).toBeUndefined();
+    expect(FORECAST_MODELS.cfs.defaultVariable).toBeUndefined();
     // The aerosol run ships no temperature and no precipitation: its core
     // is the total optical depth, which it opens on.
     expect(FORECAST_MODELS.gefsaero).toMatchObject({

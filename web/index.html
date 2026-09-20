@@ -112,6 +112,7 @@
               "ECMWF AIFS Single 0.25° open data runs, the centre's data-driven model, 6-hourly to 360 h",
               "ECMWF IFS HRES 0.1° surface runs from the centre's ~9 km operational forecast as Open-Meteo forwards it, hourly to 90 h and out to 360 h",
               "NOAA HRRR 3 km runs over the contiguous United States, a new cycle every hour, hourly to 18 h, with the model's forecast radar reflectivity",
+              "NOAA CFSv2 seasonal runs on the coupled model's 0.9375° grid, 6-hourly out to 39 weeks from the 00Z and 12Z cycles",
               "2 m temperature, precipitation rate, 10 m wind with particle animation, downward shortwave radiation",
               "Sea level pressure isobars and 850/700/500/250 hPa geopotential height contours with labelled highs and lows",
               "Upper-air temperature, relative humidity, wind and water vapour flux on isobaric surfaces",
@@ -145,6 +146,7 @@
             "isBasedOn": [
               { "@type": "Dataset", "name": "NOAA Global Forecast System (GFS)", "url": "https://registry.opendata.aws/noaa-gfs-bdp-pds/" },
               { "@type": "Dataset", "name": "NOAA High-Resolution Rapid Refresh (HRRR)", "url": "https://registry.opendata.aws/noaa-hrrr-pds/" },
+              { "@type": "Dataset", "name": "NOAA Climate Forecast System version 2 (CFSv2)", "url": "https://registry.opendata.aws/noaa-cfs/" },
               { "@type": "Dataset", "name": "NOAA Multi-Radar/Multi-Sensor System (MRMS)", "url": "https://registry.opendata.aws/noaa-mrms-pds/" },
               { "@type": "Dataset", "name": "JMA High-resolution Precipitation Nowcast (気象庁 高解像度降水ナウキャスト)", "url": "https://www.jma.go.jp/bosai/en_nowc/", "license": "https://www.jma.go.jp/jma/kishou/info/coment.html" },
               { "@type": "Dataset", "name": "CMA weather radar level-3 mosaic composite reflectivity (中国气象局雷达组合反射率拼图, RADAR_L3_MST_CREF)", "url": "https://www.nmc.cn" },
@@ -179,6 +181,7 @@
               { "@type": "DataDownload", "name": "ECMWF AIFS live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-aifs.json" },
               { "@type": "DataDownload", "name": "ECMWF IFS HRES 0.1° live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-ifshres.json" },
               { "@type": "DataDownload", "name": "HRRR live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-hrrr.json" },
+              { "@type": "DataDownload", "name": "CFSv2 seasonal live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-cfs.json" },
               { "@type": "DataDownload", "name": "GEFS-Aerosols live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-gefsaero.json" },
               { "@type": "DataDownload", "name": "MRMS radar live pointer (rolling window of the last three to four hours)", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-mrms.json" },
               { "@type": "DataDownload", "name": "JMA precipitation nowcast live pointer (rolling window of the last two to three hours)", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-jma.json" },
@@ -689,6 +692,11 @@
               <small>IFS 9KM &rarr; 0.1°</small>
               <span class="model-check" aria-hidden="true"></span>
             </button>
+            <button type="button" data-model="cfs" aria-pressed="false">
+              <span class="model-name">CFSv2</span>
+              <small>NOAA SEASONAL 9M</small>
+              <span class="model-check" aria-hidden="true"></span>
+            </button>
             <button type="button" data-model="hrrr" aria-pressed="false">
               <span class="model-name">HRRR</span>
               <small>CONUS 3KM</small>
@@ -854,6 +862,13 @@
                 <span class="credits-name">NOAA HRRR</span>
                 <small data-i18n="creditsHrrr">FORECAST DATA · HRRR 3 KM, CONTIGUOUS US</small>
                 <span class="credits-arrow" aria-hidden="true"></span>
+              </a>
+            </li>
+            <li>
+              <a href="https://registry.opendata.aws/noaa-cfs/" target="_blank" rel="noreferrer">
+                <span class="credits-name">NOAA CFSv2</span>
+                <small data-i18n="creditsCfs">SEASONAL FORECAST · CFSv2, 9 MONTHS, 6-HOURLY</small>
+                <span class="credits-arrow" aria-hidden="true">↗</span>
               </a>
             </li>
             <li>

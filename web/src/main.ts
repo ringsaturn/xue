@@ -205,12 +205,15 @@ import { displayUnit, displayValue } from "./units";
 import { fetchPoster, isPosterSupported } from "./poster";
 import { frameCacheKey, parseFrameCacheKey, variableKey } from "./sessionkeys";
 import { applyTheme, isDark, onThemeChange, toggleTheme } from "./theme";
+import { timelinePlan, type TimelinePlan, type TimelineSegment } from "./timeline";
 import {
   displayZone,
   formatClockStamp,
   formatCompactStamp,
   formatDayMark as formatDayMarkIn,
+  formatMonthMark,
   formatStamp,
+  monthKey,
   onDisplayZoneChange,
   setDisplayZone,
   zoneAt,
@@ -943,6 +946,7 @@ const MODEL_EYEBROW: Record<ForecastModelId, string> = {
   ecmwf: "ECMWF / IFS (0.25°)",
   aifs: "ECMWF / AIFS SINGLE (0.25°)",
   ifshres: "ECMWF / IFS HRES (0.1°)",
+  cfs: "NOAA / CFSv2 SEASONAL (0.94°)",
   sflux: "NOAA / GFS SFLUX (13 KM)",
   hrrr: "NOAA / HRRR CONUS (3 KM)",
   gefsaero: "NOAA / GEFS-AEROSOLS (0.25°)",
@@ -1781,13 +1785,22 @@ function hideError(): void {
   errorPanel.hidden = true;
 }
 
+/** The data card's progress bar is a row of cells, one per frame — but the
+ * bar is a couple of hundred pixels wide and the cells are a grid with a
+ * pixel between them, so past this many the gaps alone are wider than the
+ * card and nothing is drawn at all. A long axis (a seasonal run is 1092
+ * frames) fills a fixed number of cells proportionally instead; the frame
+ * count itself is read beside the bar. */
+const PRELOAD_SEGMENT_LIMIT = 120;
+
 function buildPreloadSegments(total: number): void {
+  const cells = Math.max(1, Math.min(total, PRELOAD_SEGMENT_LIMIT));
   preloadSegments.replaceChildren();
-  preloadSegments.style.setProperty("--frame-count", String(total));
-  for (let index = 0; index < total; index += 1) {
+  preloadSegments.style.setProperty("--frame-count", String(cells));
+  for (let index = 0; index < cells; index += 1) {
     preloadSegments.append(document.createElement("i"));
   }
-  preloadSegments.setAttribute("aria-valuemax", String(total));
+  preloadSegments.setAttribute("aria-valuemax", String(cells));
 }
 
 function resetPreloadCard(total: number): void {
@@ -2815,19 +2828,13 @@ function formatRowReadout(row: MeteogramRowData, index: number): { values: strin
   return { values: parts.join(" · "), unit };
 }
 
-/** The day marks, placed exactly as the capsule's day strip places them —
- * whole forecast days from the run, every other one on a long axis — so
- * the two read the same instants. */
+/** The day marks, read off the same plan the capsule's strip is built from
+ * — whole forecast days from the run, every other one past six days, month
+ * boundaries on a seasonal axis — so the two read the same instants. Every
+ * segment is drawn here, including the ones the capsule drops for want of
+ * room: the header has the whole width to itself. */
 function meteogramDayMarks(): DayMark[] {
-  const marks: DayMark[] = [];
-  const days = forecastDayCount();
-  const stride = days > 6 ? 2 : 1;
-  for (let day = stride; day <= days; day += stride) {
-    const index = dayFrameIndex(day);
-    if (index === null) continue;
-    marks.push({ index, label: formatDayMark(frameValidTime(index)) });
-  }
-  return marks;
+  return timeline.segments.map((segment) => ({ index: segment.index, label: segmentLabel(segment) }));
 }
 
 /** The meteogram rows: read every series onto the primary axis, write the
@@ -3876,74 +3883,110 @@ function handleDecodedFrame(
   if (composite?.wantedKeys.has(key) && activeFrameIndex !== null) trySelectComposite(activeFrameIndex);
 }
 
+/** The track's geometry for the axis on screen: which frames carry a tick
+ * and how the strip under them is divided (`timeline.ts`). Recomputed
+ * whenever the axis, the track's width, the locale or the display zone
+ * changes — the last two because the strip's segments are months, and which
+ * month an instant falls in is a question about a zone. */
+let timeline: TimelinePlan = { long: false, ticks: [], segments: [] };
+
+/** The playhead has passed every tick standing on a frame at or before it. */
 function updateTicks(selected: number): void {
-  [...tickMarks.children].forEach((element, index) => element.classList.toggle("is-active", index <= selected));
+  const ticks = timeline.ticks;
+  [...tickMarks.children].forEach((element, position) =>
+    element.classList.toggle("is-active", (ticks[position]?.index ?? position) <= selected),
+  );
 }
 
-function buildTicks(total: number): void {
+/** Rebuild the ticks, the strip and the marks' active state from the axis.
+ * One entry point for all of it: the two strips are laid out from a single
+ * plan, so they cannot disagree about where a boundary is. */
+function buildTimeline(): void {
+  const axis = frameAxis();
+  timeline = timelinePlan({
+    leadSeconds: axis.map((_, index) => frameLeadSeconds(index)),
+    runTime: metadata ? Date.parse(metadata.runTime) : 0,
+    trackWidth: forecastDays.clientWidth || 680,
+    monthKey: (validTime) => monthKey(validTime, displayZone),
+  });
+  buildTicks();
+  buildForecastDays();
+  updateTicks(activeFrameIndex ?? Number(slider.value));
+}
+
+/** One `<i>` per tick. On an axis of days that is one per frame, with the
+ * full height on a day boundary; on a seasonal one it is one per day, full
+ * height on the first of each month — a thousand hairlines in seven hundred
+ * pixels is a smear, and it would also cost a class toggle apiece on every
+ * step of the playhead. */
+function buildTicks(): void {
   tickMarks.replaceChildren();
-  for (let index = 0; index < total; index += 1) {
-    const tick = document.createElement("i");
-    // Major tick on every day boundary, whatever the model's frame step.
-    tick.className = frameLeadSeconds(index) % DAY_SECONDS === 0 ? "major" : "";
-    tickMarks.append(tick);
+  for (const tick of timeline.ticks) {
+    const element = document.createElement("i");
+    element.className = tick.major ? "major" : "";
+    tickMarks.append(element);
   }
 }
 
-/** Frame index of one forecast day boundary (24, 48, ... hours out), or null
- * when the model's step does not land a frame exactly on it. */
-function dayFrameIndex(day: number): number | null {
-  if (!metadata) return day * 24 < FRAME_COUNT ? day * 24 : null;
-  const index = frameIndexForOffset((day * DAY_SECONDS) / frameUnitSeconds);
-  return index >= 0 ? index : null;
+/** The track before a run has loaded: an hourly axis of the default length,
+ * so the capsule is a track rather than an empty box while the manifest is
+ * in flight. Ticks only — there is no run time yet to name a day by. */
+function buildPlaceholderTicks(): void {
+  const plan = timelinePlan({
+    leadSeconds: [...Array(FRAME_COUNT).keys()].map((index) => index * HOUR_SECONDS),
+    runTime: 0,
+    trackWidth: forecastDays.clientWidth || 680,
+  });
+  timeline = { ...plan, segments: [] };
+  buildTicks();
 }
 
-/** Whole forecast days the active axis reaches (5 on a 120-hour run, 10 on
- * a 240-hour one). */
-function forecastDayCount(): number {
-  return Math.floor(frameLeadSeconds(frameCount() - 1) / DAY_SECONDS);
+/** The label a strip segment carries: a weekday and day of month on a day
+ * boundary, the month's own name on a month — with the year where the strip
+ * has just crossed into one. */
+function segmentLabel(segment: TimelineSegment): string {
+  const valid = frameValidTime(segment.index);
+  return segment.kind === "day"
+    ? formatDayMark(valid)
+    : formatMonthMark(valid, displayZone, htmlLang, segment.yearChanged);
 }
 
-/** The room at each end of the day-label strip that the start and the horizon
- * take, in pixels of the track: a mark centred inside it would run into
- * them. */
-const TRACK_END_LABEL_PX = 48;
-
-/** Day boundaries as marks along the track, each sitting at the fraction of
- * the axis its frame falls on. Ten of them on a 240-hour run would collide,
- * so a long axis labels every other day; a mark that would run into the start or
- * the horizon at the ends of the same strip is dropped, since those already
- * name both — measured against the track, which is a third as wide on a
- * phone. Leaves the active mark where the playhead is. */
+/** The strip under the ticks: day boundaries on an axis of days, each at
+ * the fraction of the axis its frame falls on, and month names centred in
+ * their own segment on a seasonal one. A mark that would run into the start
+ * or the horizon at the ends of the same strip is dropped, since those
+ * already name both. Leaves the active mark where the playhead is. */
 function buildForecastDays(): void {
   forecastDays.replaceChildren();
-  const days = forecastDayCount();
-  const stride = days > 6 ? 2 : 1;
-  const lastIndex = Math.max(1, frameCount() - 1);
-  const edge = Math.max(4, (TRACK_END_LABEL_PX / Math.max(1, forecastDays.clientWidth || 680)) * 100);
-  for (let day = stride; day <= days; day += stride) {
-    const index = dayFrameIndex(day);
-    if (index === null) continue;
-    const percent = (index / lastIndex) * 100;
-    if (percent < edge || percent > 100 - edge) continue;
+  for (const segment of timeline.segments) {
+    if (!segment.labelled) continue;
     const mark = document.createElement("time");
     mark.className = "forecast-day";
-    mark.dataset.day = String(day);
-    mark.style.left = `${percent.toFixed(2)}%`;
-    const valid = frameValidTime(index);
-    mark.dateTime = new Date(valid).toISOString();
-    mark.textContent = formatDayMark(valid);
+    mark.dataset.index = String(segment.index);
+    if (segment.kind === "day") mark.dataset.day = String(segment.day);
+    mark.style.left = `${segment.percent.toFixed(2)}%`;
+    mark.dateTime = new Date(frameValidTime(segment.index)).toISOString();
+    mark.textContent = segmentLabel(segment);
     forecastDays.append(mark);
   }
   updateForecastDay(activeFrameIndex ?? Number(slider.value));
 }
 
 function updateForecastDay(frameIndex: number): void {
-  const day = Math.ceil(frameLeadSeconds(frameIndex) / DAY_SECONDS);
-  // The playhead belongs to the first mark it has not passed yet — the day
-  // it is running into — and to the last mark once it is past all of them.
   const marks = [...forecastDays.children] as HTMLElement[];
-  const active = marks.find((mark) => Number(mark.dataset.day) >= day) ?? marks.at(-1) ?? null;
+  let active: HTMLElement | null;
+  if (timeline.long) {
+    // A month is a span, so the playhead belongs to the segment it is
+    // inside — the last one it has reached, and the first while it is still
+    // in the partial month a run starts in, which is too narrow to name.
+    active = marks.filter((mark) => Number(mark.dataset.index) <= frameIndex).at(-1) ?? marks[0] ?? null;
+  } else {
+    // A day mark is a boundary: the playhead belongs to the first one it
+    // has not passed yet — the day it is running into — and to the last
+    // once it is past all of them.
+    const day = Math.ceil(frameLeadSeconds(frameIndex) / DAY_SECONDS);
+    active = marks.find((mark) => Number(mark.dataset.day) >= day) ?? marks.at(-1) ?? null;
+  }
   for (const mark of marks) {
     const on = mark === active;
     mark.classList.toggle("is-active", on);
@@ -4507,14 +4550,15 @@ new ResizeObserver(() => {
   document.documentElement.style.setProperty("--capsule-height", `${Math.ceil(timelinePanel.offsetHeight)}px`);
   syncRailFade();
 }).observe(timelinePanel);
-// Which day marks fit beside the start and the horizon depends on the track's
-// width, so a resize lays them out again.
+// Which marks fit beside the start and the horizon — and, on a seasonal
+// axis, which months are wide enough to name at all — depends on the
+// track's width, so a resize lays the strip out again.
 let forecastDaysWidth = 0;
 new ResizeObserver(() => {
   const width = forecastDays.clientWidth;
   if (width === forecastDaysWidth) return;
   forecastDaysWidth = width;
-  if (metadata) buildForecastDays();
+  if (metadata) buildTimeline();
 }).observe(forecastDays);
 if (variableRail) new ResizeObserver(syncRailDensity).observe(variableRail);
 
@@ -6241,8 +6285,7 @@ function syncTimeline(session: VariableSession): void {
   const offsets = frameOffsets(time);
   trackStart.textContent = formatTrackEnd(offsets[0]! * axisUnitSeconds(time));
   trackHorizon.textContent = formatTrackEnd(offsets.at(-1)! * axisUnitSeconds(time));
-  buildTicks(time.frameCount);
-  buildForecastDays();
+  buildTimeline();
   dataCardIndex.textContent = `${time.frameCount}F`;
   buildPreloadSegments(time.frameCount);
 }
@@ -7237,7 +7280,7 @@ function applyLocale(): void {
   }
   const index = activeFrameIndex ?? Number(slider.value);
   if (metadata) {
-    buildForecastDays();
+    buildTimeline();
     updateForecastDay(index);
   }
   if (activeCase) updateCasePresentation(activeCase);
@@ -7256,7 +7299,7 @@ function applyLocale(): void {
 function applyDisplayZone(): void {
   if (!metadata) return;
   updateFrameReadout(activeFrameIndex ?? Number(slider.value));
-  buildForecastDays();
+  buildTimeline();
 }
 
 // Neither the locale nor the theme reloads: the picker and the toggle each
@@ -7437,7 +7480,7 @@ try {
 
 updateTransport();
 syncRail();
-buildTicks(FRAME_COUNT);
+buildPlaceholderTicks();
 resetPreloadCard(FRAME_COUNT);
 map.once("load", () => {
   mapStyleReady = true;

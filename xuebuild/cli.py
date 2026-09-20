@@ -49,13 +49,21 @@ from .tc.fetch import fetch_sources as fetch_tc_sources
 from .tc.schema import parse_issue as parse_tc_issue
 
 
+# The longest axis any source publishes — CFSv2's thirty-nine weeks, against
+# the 240 to 384 hours every other forecast reaches. Derived rather than
+# written down so a source that reaches further only has to say so once; the
+# bound is a typo catcher, and each source rejects an hour off its own axis
+# with the axis in the message (`SourceSpec.forecast_hours`).
+MAX_FORECAST_HOURS = max(spec.horizon_hours for spec in SOURCES.values())
+
+
 def forecast_hours(value: str) -> int:
     try:
         parsed = int(value)
     except ValueError as exc:
         raise argparse.ArgumentTypeError("hours must be an integer") from exc
-    if not 0 <= parsed <= 384:
-        raise argparse.ArgumentTypeError("hours must be between 0 and 384")
+    if not 0 <= parsed <= MAX_FORECAST_HOURS:
+        raise argparse.ArgumentTypeError(f"hours must be between 0 and {MAX_FORECAST_HOURS}")
     return parsed
 
 
@@ -82,7 +90,8 @@ def _common_run_arguments(parser: argparse.ArgumentParser, *, force_help: str) -
         default=None,
         help="last forecast hour, inclusive; must lie on the model's published axis "
         "(e.g. GFS: hourly to 120, then 3-hourly to 240); defaults to the whole axis "
-        "the model publishes (240 for the global models, 18 for HRRR, 120 for GEFS-Aerosols); on an observation "
+        "the model publishes (240 for the global models, 18 for HRRR, 120 for GEFS-Aerosols, "
+        "6552 for CFSv2, whose axis starts at 6); on an observation "
         "source, the window length in hours (3 for MRMS, JMA and the CMA mosaic)",
     )
     parser.add_argument("--force", action="store_true", help=force_help)
@@ -107,6 +116,8 @@ def _model_argument(parser: argparse.ArgumentParser, *, fetched_only: bool = Tru
             "NOAA HRRR over the contiguous US (3 km, a cycle every hour, hourly to 18), "
             "gefsaero, NOAA GEFS-Aerosols at 0.25 degree (3-hourly to 120: aerosol optical "
             "depth by species and the surface PM2.5 / PM10), "
+            "cfs, NCEP CFSv2 seasonal on its T126 Gaussian grid (6-hourly from 6 to 6552 hours, "
+            "thirty-nine weeks; 00Z and 12Z), "
             "NOAA MRMS, the radar mosaic over the contiguous US (an observation every "
             "two minutes; --run names the window's first hour and --hours its length, 3 by default), "
             "JMA, the precipitation nowcast over Japan (an observation every five minutes, "

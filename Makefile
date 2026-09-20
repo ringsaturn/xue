@@ -154,7 +154,9 @@ spike-webcodecs:
 # (needs the om2nc binary on PATH; see README's Requirements);
 # MODEL=sflux builds the native-resolution GFS surface flux feed;
 # MODEL=hrrr builds the hourly 3 km HRRR feed over the contiguous US;
-# MODEL=gefsaero builds the GEFS-Aerosols feed.
+# MODEL=gefsaero builds the GEFS-Aerosols feed;
+# MODEL=cfs builds the CFSv2 seasonal feed (a nine-month run: 1092 frames,
+# so HOURS=<hour on the 6-hourly axis> is worth setting for a quick look).
 mvp: check install wasm
 	$(PYTHON) -m xuebuild build-bin --model $(MODEL) --run $(RUN) $(if $(HOURS),--hours $(HOURS)) --profile $(PROFILE) --zarr $(FORCE)
 	npm run build
