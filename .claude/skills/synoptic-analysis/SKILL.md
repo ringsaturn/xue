@@ -90,20 +90,31 @@ numbers.
 For anything beyond a quick look (a written report, figures, a second pass
 later) fetch once into a directory and work from it; every diagnostic and
 figure below then costs no network and the numbers stay consistent across
-the report:
+the report.
+
+A case lives in one directory named by its date and a short slug,
+`tmp/<yyyy-mm-dd>-<case>/` in this repository (`tmp/` is gitignored;
+`2026-09-19-tokyo-typhoon`, `2026-09-19-dust-case`): the fetched data under
+`case/`, the figures under `figures/` (`figures-<lang>/` when the report is
+written in more than one language, since the labels are localized), and beside them the report itself as
+`<yyyy-mm-dd>-<case>.<lang>.md` with its PDF `<yyyy-mm-dd>-<case>.<lang>.pdf`
+— the same stem as the directory, the language tag being the viewer's locale
+code (`zh`, `en`, `ja`, …), so `tmp/2026-09-19-tokyo-typhoon/2026-09-19-tokyo-typhoon.ja.md`.
+Never name the report `report.md`. The examples below abbreviate the
+directory to `<dir>`:
 
 ```sh
-python scripts/case_data.py fetch /tmp/case --box 22 48 125 155 \
+python scripts/case_data.py fetch <dir>/case --box 22 48 125 155 \
     --times 2026-09-19T00Z,2026-09-21T06Z,2026-09-21T12Z --sources gfs,ecmwf \
     --point 35.553 139.781 --point-sources gfs,ecmwf,ifshres \
     --storm WP242026 --soundings-near 35.55,139.78,10 --soundings 47971,54857 \
     --airport RJTT --satellite himawari --radar jma --nowcast-box 30 40 132 146
-python scripts/case_data.py soundings /tmp/case --tendency      # mandatory levels per station + 12 h changes
-python scripts/case_data.py verify /tmp/case                    # model analysis at the stations vs the ascents
-python scripts/case_data.py ensemble /tmp/case 35.553 139.781 --times 2026-09-21T06Z,2026-09-21T12Z \
+python scripts/case_data.py soundings <dir>/case --tendency      # mandatory levels per station + 12 h changes
+python scripts/case_data.py verify <dir>/case                    # model analysis at the stations vs the ascents
+python scripts/case_data.py ensemble <dir>/case 35.553 139.781 --times 2026-09-21T06Z,2026-09-21T12Z \
     --from 2026-09-20T12Z --to 2026-09-22T12Z                   # member spread and closest approach
-python scripts/case_data.py point /tmp/case --tz 9 --day 2026-09-21   # daily summary + one day hourly, local zone
-python scripts/case_plots.py /tmp/case --tz 9 --lang zh --point-name 羽田 \
+python scripts/case_data.py point <dir>/case --tz 9 --day 2026-09-21   # daily summary + one day hourly, local zone
+python scripts/case_plots.py <dir>/case --out <dir>/figures --tz 9 --lang zh --point-name 羽田 \
     --map-times 2026-09-21T06Z,2026-09-21T12Z --map-box 26 44 130 150 \
     --mark 2026-09-21T08Z --window 2026-09-21T03Z,2026-09-21T08Z --span 2026-09-19T00Z,2026-09-22T12Z \
     --skewt 47646,47678,47971 --ens-from 2026-09-20T12Z --ens-to 2026-09-22T12Z
@@ -117,10 +128,11 @@ directory layout and the importable functions (`level`, `ascent_at`,
 `accumulate`) are documented in `case_data.py`'s docstring. `case_plots.py`
 writes `fig_tracks`, `fig_upper`, `fig_verify`, `fig_surface`,
 `fig_moisture_gust`, `fig_meteogram`, `fig_skewt`, `fig_nowcast` and
-`fig_ensemble` (PNG) into `<dir>/figures/`, each only when the directory
+`fig_ensemble` (PNG) into `--out` (default `<case dir>/figures/`), each only when the directory
 holds what it needs; labels follow the xue viewer's eleven UI locales (`--lang zh|zh-Hant|en|ja|ko|de|fr|es|pt|tr|ru`,
-`zh` by default), times in the `--tz` zone. A Markdown report that references those files
-compiles with `pandoc report.md -o report.pdf --pdf-engine=xelatex`; for
+`zh` by default), times in the `--tz` zone. The report that references those files
+compiles with `pandoc <yyyy-mm-dd>-<case>.<lang>.md -o <yyyy-mm-dd>-<case>.<lang>.pdf --pdf-engine=xelatex`
+from the case directory; for
 Chinese text put `documentclass: ctexart` in the YAML header (ctex's default
 fonts), for Japanese `documentclass: bxjsarticle` with `classoption: [pandoc,
 ja=standard, jafont=hiragino-pron]`, and map the few glyphs Latin Modern lacks with `newunicodechar`
@@ -163,7 +175,9 @@ product and use the grid for the environment (steering flow from the
 
 ### 4. Write the report
 
-Use this shape; drop a section only when nothing applies.
+Write it to `tmp/<yyyy-mm-dd>-<case>/<yyyy-mm-dd>-<case>.<lang>.md` (§2b),
+one file per language asked for. Use this shape; drop a section only when
+nothing applies.
 
 ```
 # Synoptic situation: <region>, <period> (issued <now UTC / local>)
