@@ -15,6 +15,8 @@
 //! off the Open-Meteo bucket by the `om2nc` tool, and is an ordinary
 //! forecast cycle in every other respect.
 
+use std::path::{Path, PathBuf};
+
 use crate::encode::errors::{EncodeError, Result};
 use crate::encode::reproject::Regrid;
 use crate::encode::variables::AEROSOL_VARIABLE_IDS;
@@ -25,14 +27,71 @@ use crate::encode::variables::AEROSOL_VARIABLE_IDS;
 /// frame's GRIB after the primary file's, so the converter still sees one
 /// file per frame; the native encoder carries the table so the two
 /// registries stay one. Mirrors `CompanionFile` in `xuebuild/sources.py`.
+///
+/// A family that declares a [`CompanionFile::production_grid`] is a *grid
+/// family* instead: its records are on another grid than the primary
+/// file's, and GDAL cannot read a GRIB whose messages disagree on the grid
+/// — it exposes every band at the first message's size and warns that the
+/// data access may be incomplete, which is a wrong plane rather than an
+/// error. So such a family's records are never appended to the frame; they
+/// are written to a sibling frame file of the same name under a directory
+/// named by the family id (`<run dir>/<id>/<frame file name>`,
+/// [`family_frame_path`]), and the converter reads them from there with a
+/// `GridInfo` of the family's own.
 #[derive(Debug, Clone, Copy)]
 pub struct CompanionFile {
     /// The family: `wave` for GFS-Wave and for the `wave` stream of ECMWF
-    /// open data.
+    /// open data, `pgb` for the CFSv2 pressure-level series.
     pub id: &'static str,
     /// Which of the source's `input_variable_ids` come from this family, in
     /// assembly order.
     pub variable_ids: &'static [&'static str],
+    /// Set when the family is on a grid of its own (CFSv2's 1° pressure-level
+    /// series beside its T126 Gaussian surface series): the grid a complete
+    /// build must find its records on, the way `SourceSpec::production_grid`
+    /// is for the primary file. Setting it makes the family a grid family —
+    /// its records live in their own frame file (above) and every bundle
+    /// built from them carries this grid. `None` for a family on the
+    /// source's own grid, which is the shape the wave families have and
+    /// which is unchanged in every respect.
+    pub production_grid: Option<(usize, usize)>,
+    /// The container v2 tile size the family's bundles are cut with, as
+    /// `(width, height)` in cells of *its* grid. Set together with
+    /// [`CompanionFile::production_grid`]; `None` on a family that shares the
+    /// source's grid and therefore its `SourceSpec::tile`.
+    pub tile: Option<(usize, usize)>,
+}
+
+impl CompanionFile {
+    /// Whether the family is a grid family: its records are on their own
+    /// grid, in their own frame file.
+    pub fn own_grid(&self) -> bool {
+        self.production_grid.is_some()
+    }
+}
+
+/// Where one family's records of a frame live: the frame file itself for the
+/// primary family (and for a companion that shares the source's grid, whose
+/// records are appended to it), a sibling of the same name under a directory
+/// named by the family id for a grid family —
+/// `cfs.2026091912/pgb/cfs.2026091912.f006.grib2` beside
+/// `cfs.2026091912/cfs.2026091912.f006.grib2`.
+///
+/// The one place the layout is written down on this side: the Python fetch
+/// writes it and both converters read it. Mirrors `family_frame_path` in
+/// `xuebuild/sources.py`.
+pub fn family_frame_path(frame: &Path, family: Option<&str>) -> PathBuf {
+    match family {
+        None => frame.to_path_buf(),
+        Some(family) => {
+            let name = frame.file_name().unwrap_or(frame.as_os_str());
+            frame
+                .parent()
+                .unwrap_or(Path::new(""))
+                .join(family)
+                .join(name)
+        }
+    }
 }
 
 /// The spectral band a satellite image variable was measured in, in the
@@ -240,6 +299,45 @@ impl SourceSpec {
             .find(|companion| companion.variable_ids.contains(&variable_id))
     }
 
+    /// The companion families on a grid of their own
+    /// ([`CompanionFile::production_grid`]), in declaration order. Empty for
+    /// every source but CFSv2. Mirrors `SourceSpec.grid_families`.
+    pub fn grid_families(&self) -> impl Iterator<Item = &'static CompanionFile> {
+        self.companion_files
+            .iter()
+            .filter(|companion| companion.own_grid())
+    }
+
+    /// The grid family `variable_id` is read from, or `None` for an input on
+    /// the source's own grid — which is every input of every source whose
+    /// families share its grid, the wave families included. Mirrors
+    /// `SourceSpec.grid_family_of`.
+    pub fn grid_family_of(&self, variable_id: &str) -> Option<&'static CompanionFile> {
+        self.companion_of(variable_id)
+            .filter(|companion| companion.own_grid())
+    }
+
+    /// The `(production_grid, tile)` one family's bundles are built on: the
+    /// source's own for the primary family (`None`), the family's for a grid
+    /// family. Mirrors `SourceSpec.family_grid`.
+    pub fn family_grid(&self, family: Option<&str>) -> Result<((usize, usize), (usize, usize))> {
+        let Some(family) = family else {
+            return Ok((self.production_grid, self.tile));
+        };
+        for companion in self.grid_families() {
+            if companion.id == family {
+                return Ok((
+                    companion.production_grid.expect("a grid family has a grid"),
+                    companion.tile.expect("a grid family has a tile"),
+                ));
+            }
+        }
+        Err(EncodeError::conversion(format!(
+            "{} has no {family} grid family",
+            self.manifest_model
+        )))
+    }
+
     /// The published axis from [`SourceSpec::first_hour`] — the analysis for
     /// every source but CFSv2 — through `last_hour`.
     ///
@@ -281,6 +379,48 @@ impl SourceSpec {
     }
 }
 
+/// The CFSv2 inputs that arrive on the 1° pressure-level grid rather than the
+/// T126 Gaussian surface grid — the `pgb` grid family of the `cfs` source
+/// below, in the order its sibling frame file carries them. NCEP writes a
+/// time-series object per quantity and surface (`z500`, `t850`, `wnd850`,
+/// `q850`, `vvel500`, `prmsl`), and not every quantity is on every surface:
+/// there is no 925 hPa or 300 hPa height, no 300 hPa temperature, and the
+/// humidity stops at 500 hPa. The specific humidities feed the vapour flux
+/// alone. Mirrors `CFS_PGB_IDS` in `xuebuild/sources.py`.
+pub const CFS_PGB_IDS: &[&str] = &[
+    "prmsl",
+    "hgt1000",
+    "hgt850",
+    "hgt700",
+    "hgt500",
+    "hgt200",
+    "tmp1000",
+    "tmp850",
+    "tmp700",
+    "tmp500",
+    "tmp250",
+    "tmp200",
+    "ugrd1000",
+    "vgrd1000",
+    "ugrd925",
+    "vgrd925",
+    "ugrd850",
+    "vgrd850",
+    "ugrd700",
+    "vgrd700",
+    "ugrd500",
+    "vgrd500",
+    "ugrd250",
+    "vgrd250",
+    "ugrd200",
+    "vgrd200",
+    "spfh925",
+    "spfh850",
+    "spfh700",
+    "spfh500",
+    "vvel500",
+];
+
 pub const SOURCES: &[SourceSpec] = &[
     SourceSpec {
         id: "gfs",
@@ -314,6 +454,8 @@ pub const SOURCES: &[SourceSpec] = &[
         companion_files: &[CompanionFile {
             id: "wave",
             variable_ids: &["htsgw", "perpw", "dirpw"],
+            production_grid: None,
+            tile: None,
         }],
         accumulated_precipitation: false,
         averaged_precipitation: false,
@@ -379,6 +521,8 @@ pub const SOURCES: &[SourceSpec] = &[
         companion_files: &[CompanionFile {
             id: "wave",
             variable_ids: &["htsgw", "perpw", "dirpw"],
+            production_grid: None,
+            tile: None,
         }],
         accumulated_precipitation: true,
         averaged_precipitation: false,
@@ -434,6 +578,8 @@ pub const SOURCES: &[SourceSpec] = &[
         companion_files: &[CompanionFile {
             id: "wave",
             variable_ids: &["htsgw", "dirpw"],
+            production_grid: None,
+            tile: None,
         }],
         accumulated_precipitation: true,
         averaged_precipitation: false,
@@ -697,10 +843,28 @@ pub const SOURCES: &[SourceSpec] = &[
         product: "time-grib-01",
         latest_filename: Some("latest-cfs.json"),
         steps: &[(6552, 6)],
+        // The nine surface inputs of the primary (flx) file, then the
+        // pressure-level family's on its own 1° grid (`CFS_PGB_IDS`).
         input_variable_ids: &[
             "tmp2m", "prate", "ugrd10m", "vgrd10m", "tcdc", "dswrf", "tmpsfc", "icec", "icetk",
+            "prmsl", "hgt1000", "hgt850", "hgt700", "hgt500", "hgt200", "tmp1000", "tmp850",
+            "tmp700", "tmp500", "tmp250", "tmp200", "ugrd1000", "vgrd1000", "ugrd925", "vgrd925",
+            "ugrd850", "vgrd850", "ugrd700", "vgrd700", "ugrd500", "vgrd500", "ugrd250", "vgrd250",
+            "ugrd200", "vgrd200", "spfh925", "spfh850", "spfh700", "spfh500", "vvel500",
         ],
-        companion_files: &[],
+        // The pressure-level and sea level pressure series are published on
+        // a regular 1° grid rather than the T126 Gaussian grid the surface
+        // series use, so they are a grid family: their records are fetched
+        // into a sibling frame file of their own and every bundle built from
+        // them carries the 1° grid. 90 x 91 cells cuts it into 4 x 2 = 8
+        // tiles, the same shape as the surface grid's, with the last tile
+        // row one cell short of the pole row (181 = 91 + 90).
+        companion_files: &[CompanionFile {
+            id: "pgb",
+            variable_ids: CFS_PGB_IDS,
+            production_grid: Some((360, 181)),
+            tile: Some((90, 91)),
+        }],
         // PRATE is already a rate; nothing is de-accumulated or de-averaged.
         accumulated_precipitation: false,
         averaged_precipitation: false,
@@ -714,9 +878,22 @@ pub const SOURCES: &[SourceSpec] = &[
         // values are, not what the template claims.
         statistical_processes: &[("prate", 0), ("dswrf", 0), ("tcdc", 0)],
         bands: &[],
-        bundle_scalar_ids: &["tmp2m", "prate", "tcdc", "dswrf", "tmpsfc", "icec", "icetk"],
+        // The seven surface scalars on the Gaussian grid, then the thirteen
+        // the 1° family publishes: sea level pressure, the geopotential
+        // height and temperature on the surfaces CFSv2 writes a series for,
+        // and the 500 hPa vertical velocity. The specific humidities are
+        // read and never published — they ship inside the vapour flux the
+        // converter derives from them and the wind on their surface.
+        bundle_scalar_ids: &[
+            "tmp2m", "prate", "tcdc", "dswrf", "tmpsfc", "icec", "icetk", "prmsl", "hgt1000",
+            "hgt850", "hgt700", "hgt500", "hgt200", "tmp1000", "tmp850", "tmp700", "tmp500",
+            "tmp250", "tmp200", "vvel500",
+        ],
         core_bundle_ids: &["tmp2m", "prate"],
-        bundle_vector_ids: &["wind10m"],
+        bundle_vector_ids: &[
+            "wind10m", "wind1000", "wind925", "wind850", "wind700", "wind500", "wind250",
+            "wind200", "qflux925", "qflux850", "qflux700", "qflux500",
+        ],
         bundle_composite_ids: &[],
         production_grid: (384, 190),
         // 96 x 95 cells cuts the grid into 4 x 2 = 8 tiles with no clipped
@@ -1124,7 +1301,7 @@ pub fn source_spec(model: &str) -> Result<&'static SourceSpec> {
 
 #[cfg(test)]
 mod tests {
-    use super::{source_spec, SOURCES};
+    use super::{family_frame_path, source_spec, Path, CFS_PGB_IDS, SOURCES};
 
     #[test]
     fn a_cap_must_land_on_the_published_axis() {
@@ -1241,9 +1418,71 @@ mod tests {
             // Assembly order: the companion's records come last.
             assert_eq!(&source.input_variable_ids[source.input_variable_ids.len() - 3..], wave.variable_ids);
         }
-        for model in ["sflux", "hrrr", "cfs", "cma"] {
+        for model in ["sflux", "hrrr", "cma"] {
             assert!(source_spec(model).expect(model).companion_files.is_empty(), "{model}");
         }
+        // The wave families share the source's grid: their records are
+        // appended to the frame and nothing about them is a grid family.
+        for model in ["gfs", "ecmwf", "aifs"] {
+            let source = source_spec(model).expect(model);
+            assert_eq!(source.grid_families().count(), 0, "{model}");
+            for variable_id in source.input_variable_ids {
+                assert!(source.grid_family_of(variable_id).is_none(), "{model} {variable_id}");
+            }
+            assert_eq!(
+                source.family_grid(None).expect("the primary family"),
+                (source.production_grid, source.tile),
+                "{model}"
+            );
+        }
+    }
+
+    /// CFSv2's pressure-level series are on the 1° grid the surface series
+    /// are not, so they are a grid family: their records live in a sibling
+    /// frame file of their own and every bundle built from them carries
+    /// that grid and its tile. Mirrors the `GridFamilyTests` of the Python
+    /// suite.
+    #[test]
+    fn the_cfs_pressure_levels_are_a_grid_family_of_their_own() {
+        let cfs = source_spec("cfs").expect("cfs");
+        let [pgb] = cfs.companion_files else { panic!("one companion family") };
+        assert_eq!(pgb.id, "pgb");
+        assert!(pgb.own_grid());
+        assert_eq!(pgb.variable_ids, CFS_PGB_IDS);
+        assert_eq!(pgb.variable_ids.len(), 31);
+        assert_eq!(cfs.grid_families().count(), 1);
+        // Every family input is fetched, in the order the family file
+        // carries it, after the nine of the primary file.
+        assert_eq!(&cfs.input_variable_ids[9..], CFS_PGB_IDS);
+        for variable_id in CFS_PGB_IDS {
+            assert_eq!(cfs.grid_family_of(variable_id).map(|f| f.id), Some("pgb"), "{variable_id}");
+        }
+        for variable_id in &cfs.input_variable_ids[..9] {
+            assert!(cfs.grid_family_of(variable_id).is_none(), "{variable_id}");
+        }
+        assert_eq!(cfs.family_grid(None).expect("primary"), ((384, 190), (96, 95)));
+        assert_eq!(cfs.family_grid(Some("pgb")).expect("pgb"), ((360, 181), (90, 91)));
+        assert!(cfs.family_grid(Some("wave")).is_err());
+        // 4 x 2 tiles, the last row one cell short of the pole row.
+        assert_eq!((360_usize).div_ceil(90) * (181_usize).div_ceil(91), 8);
+        // The specific humidities are read and never published.
+        for level in [925, 850, 700, 500] {
+            let id = format!("spfh{level}");
+            assert!(cfs.input_variable_ids.contains(&id.as_str()), "{id}");
+            assert!(!cfs.bundle_scalar_ids.contains(&id.as_str()), "{id}");
+        }
+    }
+
+    /// A grid family's records are a sibling frame file of the same name;
+    /// the primary family is the frame itself.
+    #[test]
+    fn a_family_s_records_live_in_a_sibling_frame_file() {
+        let frame = Path::new("data/raw/cfs.2026091912/cfs.2026091912.f006.grib2");
+        assert_eq!(family_frame_path(frame, None), frame);
+        assert_eq!(
+            family_frame_path(frame, Some("pgb")),
+            Path::new("data/raw/cfs.2026091912/pgb/cfs.2026091912.f006.grib2")
+        );
     }
 
     /// CFSv2: nine months of six-hourly output of which the published axis
@@ -1272,16 +1511,28 @@ mod tests {
         // 10 m pair, no companion family, nothing analysis-optional
         // (there is no analysis frame at all) and no video.
         assert_eq!(
-            cfs.input_variable_ids,
+            &cfs.input_variable_ids[..9],
             &["tmp2m", "prate", "ugrd10m", "vgrd10m", "tcdc", "dswrf", "tmpsfc", "icec", "icetk"]
         );
+        assert_eq!(cfs.input_variable_ids.len(), 9 + 31);
         assert_eq!(
             cfs.bundle_scalar_ids,
-            &["tmp2m", "prate", "tcdc", "dswrf", "tmpsfc", "icec", "icetk"]
+            &[
+                "tmp2m", "prate", "tcdc", "dswrf", "tmpsfc", "icec", "icetk", "prmsl", "hgt1000",
+                "hgt850", "hgt700", "hgt500", "hgt200", "tmp1000", "tmp850", "tmp700", "tmp500",
+                "tmp250", "tmp200", "vvel500",
+            ]
         );
-        assert_eq!(cfs.bundle_vector_ids, &["wind10m"]);
+        assert_eq!(
+            cfs.bundle_vector_ids,
+            &[
+                "wind10m", "wind1000", "wind925", "wind850", "wind700", "wind500", "wind250",
+                "wind200", "qflux925", "qflux850", "qflux700", "qflux500",
+            ]
+        );
         assert_eq!(cfs.core_bundle_ids, &["tmp2m", "prate"]);
-        assert!(cfs.bundle_composite_ids.is_empty() && cfs.companion_files.is_empty());
+        assert_eq!(cfs.bundle_scalar_ids.len() + cfs.bundle_vector_ids.len(), 32);
+        assert!(cfs.bundle_composite_ids.is_empty());
         assert!(cfs.optional_at_analysis.is_empty() && cfs.bands.is_empty());
         // PRATE is already a rate, and the three flux fields are six-hour
         // means NCEP encodes as instantaneous.

@@ -1048,7 +1048,7 @@ codebook's offset puts every standard contour exactly half a code off, so a
 line never coincides with a flat plateau. Before contouring,
 `layer.ts::prerender` smooths each uploaded plane in grid space (a separable
 Gaussian, coverage-renormalised, into a 16-bit RG8 texture;
-`CONTOUR_SMOOTHING_CELLS` in `main.ts` sets its width); filled fields never
+`pressure.ts::contourSmoothingCells` sets its width from the session grid's step: one cell at 1°, two below); filled fields never
 go through it. Labels (a value on each line, an H/L with its value on each
 closed center) are the one CPU step: `web/src/isolines.ts` reduces the
 displayed plane to the cells in view, smooths it the same way, runs marching

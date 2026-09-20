@@ -35,7 +35,7 @@ from .idx import (
     series_byte_ranges,
 )
 from .model import GfsRun
-from .sources import SourceSpec, source_spec
+from .sources import SourceSpec, family_frame_path, source_spec
 from .variables import VARIABLES
 
 LOG = logging.getLogger(__name__)
@@ -309,6 +309,22 @@ CFS_SERIES_FILES: dict[str, str] = {
     "tmpsfc": "tmpsfc",
     "icec": "icecon",
     "icetk": "icethk",
+    # The pressure-level family (``sources.CFS_PGB_IDS``), one object per
+    # quantity and surface: the height is ``z``, the temperature ``t``, the
+    # wind pair one ``wnd`` object per surface as at 10 m, the specific
+    # humidity ``q``, and the vertical velocity and sea level pressure their
+    # own names. These objects are on the 1° grid, so what is fetched from
+    # them goes into the family's own frame file (``sources.family_frame_path``).
+    "prmsl": "prmsl",
+    "vvel500": "vvel500",
+    **{f"hgt{level}": f"z{level}" for level in (1000, 850, 700, 500, 200)},
+    **{f"tmp{level}": f"t{level}" for level in (1000, 850, 700, 500, 250, 200)},
+    **{
+        f"{component}{level}": f"wnd{level}"
+        for level in (1000, 925, 850, 700, 500, 250, 200)
+        for component in ("ugrd", "vgrd")
+    },
+    **{f"spfh{level}": f"q{level}" for level in (925, 850, 700, 500)},
 }
 # How many frames at each end of what a fetch wrote are read back with the
 # GRIB2 header index. Every record came out of a range the server confirmed
@@ -404,7 +420,9 @@ def _cfs_frames_to_fetch(
 ) -> list[int]:
     """The hours whose frame is missing or does not hold what this build
     asked for. A readable frame is reused as every other source's is, and a
-    narrowed run downloads only the hours it is short of."""
+    narrowed run downloads only the hours it is short of. Asked once per
+    family: the primary frame and a grid family's sibling are written
+    separately and can be short of different hours."""
     from .grib2 import inspect_grib_fast
 
     if force:
@@ -498,6 +516,14 @@ def _fetch_cfs_run(
     A ``--bundles`` group narrows ``input_ids`` and so touches only that
     group's objects, which is what lets the fanned-out publish work
     unchanged.
+
+    The pressure-level inputs are on another grid than the surface ones, so
+    they are a grid family: their records go into a sibling frame file of
+    their own (``sources.family_frame_path``) rather than into the frame,
+    because a GRIB whose messages disagree on the grid is not a file GDAL
+    can read. Each family is short of its own hours and is filled
+    separately; a group that asks for one family alone writes that family's
+    files and nothing else.
     """
     from .grib2 import inspect_grib_fast
 
@@ -506,17 +532,34 @@ def _fetch_cfs_run(
     variable_ids = _frame_variable_ids(spec, forecast_hours[0], input_ids)
     if not variable_ids:
         raise DownloadError("a CFSv2 fetch needs at least one input variable")
-    paths = {hour: destination / cfs_frame_name(spec, run, hour) for hour in forecast_hours}
-    needed = _cfs_frames_to_fetch(paths, variable_ids, force=force)
-    if not needed:
-        LOG.info("reusing %d readable CFSv2 frames in %s", len(paths), destination)
-        return [paths[hour] for hour in forecast_hours]
+    # The variables of each family, in source order, and where that family's
+    # frames live. The frame *names* are the primary family's either way, so
+    # the run's frame list is the same list whichever families a build reads.
+    frame_names = {hour: destination / cfs_frame_name(spec, run, hour) for hour in forecast_hours}
+    families: dict[str | None, tuple[str, ...]] = {}
+    for variable_id in variable_ids:
+        companion = spec.grid_family_of(variable_id)
+        family = companion.id if companion is not None else None
+        families[family] = families.get(family, ()) + (variable_id,)
+    paths = {
+        family: {hour: family_frame_path(path, family) for hour, path in frame_names.items()}
+        for family in families
+    }
+    needed = {
+        family: _cfs_frames_to_fetch(paths[family], family_ids, force=force)
+        for family, family_ids in families.items()
+    }
+    if not any(needed.values()):
+        LOG.info("reusing %d readable CFSv2 frames in %s", len(frame_names), destination)
+        return [frame_names[hour] for hour in forecast_hours]
     LOG.info(
-        "fetching %d of %d CFSv2 frames of run %s (%d variables)",
-        len(needed),
-        len(paths),
+        "fetching %d of %d CFSv2 frames of run %s (%d variables in %d file famil%s)",
+        max(len(hours_needed) for hours_needed in needed.values()),
+        len(frame_names),
         run.id,
         len(variable_ids),
+        len(families),
+        "y" if len(families) == 1 else "ies",
     )
     # The series are cut up as soon as they are all down, so they live in a
     # directory of their own under the run: `discover_inputs` lists files,
@@ -524,9 +567,19 @@ def _fetch_cfs_run(
     # would mistake for a frame.
     series_root = destination / "series"
     series_root.mkdir(parents=True, exist_ok=True)
+    # Only the variables of a family that is short of something are read.
+    wanted_ids = tuple(
+        variable_id
+        for family, family_ids in families.items()
+        if needed[family]
+        for variable_id in family_ids
+    )
     series_paths = {
         variable_id: series_root / f"{spec.id}.{run.id}.series.{variable_id}.grb2"
-        for variable_id in variable_ids
+        for variable_id in wanted_ids
+    }
+    family_of = {
+        variable_id: family for family, family_ids in families.items() for variable_id in family_ids
     }
     try:
         # One sidecar read and one measurement per object, before anything is
@@ -534,7 +587,7 @@ def _fetch_cfs_run(
         # to be short of an hour says so before a hundred megabytes move.
         objects = {
             url: _cfs_object_index(url)
-            for url in dict.fromkeys(cfs_variable_url(run, variable_id) for variable_id in variable_ids)
+            for url in dict.fromkeys(cfs_variable_url(run, variable_id) for variable_id in wanted_ids)
         }
 
         def download(variable_id: str) -> tuple[str, dict[int, tuple[int, int]]]:
@@ -543,28 +596,29 @@ def _fetch_cfs_run(
             return variable_id, _download_cfs_series(
                 url,
                 variable_id,
-                needed,
+                needed[family_of[variable_id]],
                 series_paths[variable_id],
                 index_text=index_text,
                 file_size=file_size,
             )
 
-        workers = max(1, min(spec.fetch_concurrency, len(variable_ids)))
+        workers = max(1, min(spec.fetch_concurrency, len(wanted_ids)))
         with ThreadPoolExecutor(max_workers=workers) as executor:
-            placements = dict(executor.map(download, variable_ids))
-        handles = {variable_id: series_paths[variable_id].open("rb") for variable_id in variable_ids}
+            placements = dict(executor.map(download, wanted_ids))
+        handles = {variable_id: series_paths[variable_id].open("rb") for variable_id in wanted_ids}
         try:
-            for hour in needed:
-                payload = bytearray()
-                for variable_id in variable_ids:
-                    offset, length = placements[variable_id][hour]
-                    handle = handles[variable_id]
-                    handle.seek(offset)
-                    record = handle.read(length)
-                    if len(record) != length:
-                        raise DownloadError(f"{series_paths[variable_id]} is short of the f{hour:03d} record")
-                    payload += record
-                _atomic_write(paths[hour], bytes(payload))
+            for family, family_ids in families.items():
+                for hour in needed[family]:
+                    payload = bytearray()
+                    for variable_id in family_ids:
+                        offset, length = placements[variable_id][hour]
+                        handle = handles[variable_id]
+                        handle.seek(offset)
+                        record = handle.read(length)
+                        if len(record) != length:
+                            raise DownloadError(f"{series_paths[variable_id]} is short of the f{hour:03d} record")
+                        payload += record
+                    _atomic_write(paths[family][hour], bytes(payload))
         finally:
             for handle in handles.values():
                 handle.close()
@@ -573,18 +627,21 @@ def _fetch_cfs_run(
     # Every frame is cut from ranges the server confirmed by Content-Range
     # and length, so the records are read back out of the ends of what was
     # written rather than out of all thousand-odd frames.
-    for hour in needed[:CFS_VERIFY_FRAMES] + needed[-CFS_VERIFY_FRAMES:]:
-        try:
-            frames = inspect_grib_fast(paths[hour], variable_ids)
-        except Exception as exc:
-            raise DownloadError(f"the CFSv2 frame written for f{hour:03d} cannot be read: {exc}") from exc
-        for variable_id, frame in frames.items():
-            if frame.lead_seconds != hour * 3600:
-                raise DownloadError(
-                    f"the CFSv2 frame written for f{hour:03d} carries {variable_id} at "
-                    f"f{frame.lead_seconds // 3600:03d}"
-                )
-    return [paths[hour] for hour in forecast_hours]
+    for family, family_ids in families.items():
+        hours_needed = needed[family]
+        for hour in hours_needed[:CFS_VERIFY_FRAMES] + hours_needed[-CFS_VERIFY_FRAMES:]:
+            path = paths[family][hour]
+            try:
+                frames = inspect_grib_fast(path, family_ids)
+            except Exception as exc:
+                raise DownloadError(f"the CFSv2 frame written for f{hour:03d} cannot be read: {exc}") from exc
+            for variable_id, frame in frames.items():
+                if frame.lead_seconds != hour * 3600:
+                    raise DownloadError(
+                        f"the CFSv2 frame written for f{hour:03d} carries {variable_id} at "
+                        f"f{frame.lead_seconds // 3600:03d}"
+                    )
+    return [frame_names[hour] for hour in forecast_hours]
 
 
 # -- MRMS ---------------------------------------------------------------------

@@ -11,6 +11,7 @@ use xue::encode::convert::{
     average_window_start, convert_bin, deaccumulate_precipitation, deaverage_precipitation,
     ConvertOptions,
 };
+use xue::Bundle;
 use xue::encode::grid::{crop_grid, GridInfo};
 use xue::encode::poster::{decode_poster, encode_poster};
 use xue::encode::quantize::codebook;
@@ -270,4 +271,150 @@ fn golden_encode_matches_the_python_reference() {
             "{name} differs from the Python encoder's output"
         );
     }
+}
+
+// -- grid families -----------------------------------------------------------
+
+/// The CFSv2 fixture laid out the way a fetched run is: the primary frame
+/// file per frame, and the pressure-level family's records in a sibling of
+/// the same name under `pgb/` (`sources::family_frame_path`), which is what
+/// `stage_run` in `tests/test_cfs.py` does on the reference side.
+fn stage_cfs_run(root: &std::path::Path) -> Vec<PathBuf> {
+    let fixtures = repository_root().join("tests/fixtures");
+    let run = root.join("cfs.2026091900");
+    std::fs::create_dir_all(run.join("pgb")).expect("run directory");
+    let mut frames = Vec::new();
+    for hour in ["f006", "f012"] {
+        let primary = fixtures.join(format!("cfs.2026091900.{hour}.crop.grib2"));
+        let family = fixtures.join(format!("cfs.2026091900.pgb.{hour}.crop.grib2"));
+        if !primary.is_file() || !family.is_file() {
+            return Vec::new();
+        }
+        let frame = run.join(format!("cfs.2026091900.{hour}.grib2"));
+        std::fs::copy(&primary, &frame).expect("primary frame");
+        std::fs::copy(&family, run.join("pgb").join(frame.file_name().expect("name")))
+            .expect("family frame");
+        frames.push(frame);
+    }
+    frames
+}
+
+/// One bundle's `(width, height)` as its metadata declares it.
+fn bundle_grid(path: &std::path::Path) -> (u64, u64) {
+    let bytes = std::fs::read(path).unwrap_or_else(|_| panic!("{} was written", path.display()));
+    let bundle = Bundle::open(&bytes).expect("a readable bundle");
+    let metadata: serde_json::Value =
+        serde_json::from_str(bundle.metadata_json()).expect("metadata json");
+    let grid = &metadata["grid"];
+    (
+        grid["width"].as_u64().expect("width"),
+        grid["height"].as_u64().expect("height"),
+    )
+}
+
+/// A fanned-out publish job of both CFSv2 families at once: each bundle comes
+/// out on the grid of the family it was read from — the 48 x 40 window of the
+/// T126 Gaussian grid for the surface field, the 45 x 38 window of the 1°
+/// grid for the pressure-level ones — with its own half tier and its own
+/// poster. Skipped (rather than failed) when the fixtures are absent.
+#[test]
+fn a_group_of_both_cfs_families_builds_each_on_its_own_grid() {
+    let root = std::env::temp_dir().join("xue-encode-cfs-families");
+    let _ = std::fs::remove_dir_all(&root);
+    let frames = stage_cfs_run(&root);
+    if frames.is_empty() {
+        eprintln!("skipping: the CFSv2 fixtures are absent");
+        return;
+    }
+    let output = root.join("out");
+    let options = ConvertOptions {
+        model: "cfs".into(),
+        bundle_ids: Some(
+            ["tmp2m", "hgt500", "qflux850"]
+                .iter()
+                .map(|id| (*id).to_string())
+                .collect(),
+        ),
+        manifest_path: Some(output.join("manifest.part.json")),
+        ..ConvertOptions::default()
+    };
+    convert_bin(&frames, &output, &options).expect("conversion");
+    assert_eq!(bundle_grid(&output.join("tmp2m.xue")), (48, 40));
+    assert_eq!(bundle_grid(&output.join("tmp2m.half.xue")), (24, 20));
+    for bundle_id in ["hgt500", "qflux850"] {
+        assert_eq!(bundle_grid(&output.join(format!("{bundle_id}.xue"))), (45, 38), "{bundle_id}");
+        assert_eq!(
+            bundle_grid(&output.join(format!("{bundle_id}.half.xue"))),
+            (23, 19),
+            "{bundle_id}"
+        );
+    }
+    // The contour-drawn pressure family ships no poster; the others do, each
+    // on its own family's grid.
+    assert!(output.join("tmp2m.poster.bin").is_file());
+    assert!(!output.join("hgt500.poster.bin").exists());
+    let manifest: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(output.join("manifest.part.json")).expect("manifest"))
+            .expect("manifest json");
+    let variables: Vec<&str> = manifest["bundles"]
+        .as_array()
+        .expect("bundles")
+        .iter()
+        .map(|bundle| bundle["variable"].as_str().expect("variable"))
+        .collect();
+    assert_eq!(variables, ["tmp2m", "hgt500", "qflux850"]);
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// The other shape a fanned-out publish takes: a run directory holding the
+/// family's frames and no primary frame at all, because the job's bundles
+/// fetch none. The frames are listed from the family's own directory.
+#[test]
+fn a_group_of_the_cfs_family_alone_builds_from_the_family_directory() {
+    let root = std::env::temp_dir().join("xue-encode-cfs-family-only");
+    let _ = std::fs::remove_dir_all(&root);
+    let frames = stage_cfs_run(&root);
+    if frames.is_empty() {
+        eprintln!("skipping: the CFSv2 fixtures are absent");
+        return;
+    }
+    for frame in &frames {
+        std::fs::remove_file(frame).expect("the primary frame goes");
+    }
+    let output = root.join("out");
+    let options = ConvertOptions {
+        model: "cfs".into(),
+        bundle_ids: Some(vec!["hgt500".to_string(), "qflux850".to_string()]),
+        ..ConvertOptions::default()
+    };
+    convert_bin(&[root.join("cfs.2026091900")], &output, &options).expect("conversion");
+    for bundle_id in ["hgt500", "qflux850"] {
+        assert_eq!(bundle_grid(&output.join(format!("{bundle_id}.xue"))), (45, 38), "{bundle_id}");
+    }
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// A frame whose family file the fetch did not write is a conversion error
+/// naming the family, not a build on half a run.
+#[test]
+fn a_frame_whose_family_file_is_missing_is_refused() {
+    let root = std::env::temp_dir().join("xue-encode-cfs-short");
+    let _ = std::fs::remove_dir_all(&root);
+    let frames = stage_cfs_run(&root);
+    if frames.is_empty() {
+        eprintln!("skipping: the CFSv2 fixtures are absent");
+        return;
+    }
+    let missing = root
+        .join("cfs.2026091900/pgb")
+        .join(frames[1].file_name().expect("name"));
+    std::fs::remove_file(&missing).expect("the family frame goes");
+    let options = ConvertOptions {
+        model: "cfs".into(),
+        bundle_ids: Some(vec!["tmp2m".to_string(), "hgt500".to_string()]),
+        ..ConvertOptions::default()
+    };
+    let error = convert_bin(&frames, &root.join("out"), &options).expect_err("refused");
+    assert!(error.to_string().contains("pgb"), "{error}");
+    let _ = std::fs::remove_dir_all(&root);
 }

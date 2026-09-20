@@ -45,6 +45,7 @@ which becomes a rate by one division.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 from .errors import DownloadError
 from .satellite.platforms import GOES_EAST, GOES_WEST, HIMAWARI, METEOSAT, SatelliteBand
@@ -62,7 +63,19 @@ class CompanionFile:
     own; the fetcher appends the records it needs from the family to the
     frame's GRIB after the primary file's, so downstream of the download a
     frame is still one file. :mod:`xuebuild.fetch` knows each family's
-    object name by ``id`` and source."""
+    object name by ``id`` and source.
+
+    A family that declares a :attr:`production_grid` is a *grid family*
+    instead: its records are on another grid than the primary file's, and
+    GDAL cannot read a GRIB whose messages disagree on the grid — it
+    exposes every band at the first message's size and warns that the data
+    access may be incomplete, which is a wrong plane rather than an error.
+    So such a family's records are never appended to the frame; they are
+    written to a sibling frame file of the same name under a directory
+    named by the family id (``<run dir>/<id>/<frame file name>``), and the
+    converter reads them from there with a :class:`GridInfo` of the
+    family's own. ``discover_inputs`` lists files and not directories, so
+    the primary frame list is unchanged."""
 
     id: str
     """The family: ``wave`` for GFS-Wave and for the ``wave`` stream of
@@ -81,6 +94,39 @@ class CompanionFile:
     OpenJPEG on board (``scripts/build-gdal-minimal.sh``); before that the
     wave family was repacked here, and the switch stays for the next
     packing a wheel cannot read."""
+    production_grid: tuple[int, int] | None = None
+    """Set when the family is on a grid of its own (CFSv2's 1° pressure-level
+    series beside its T126 Gaussian surface series): the grid a complete
+    build must find its records on, the way
+    :attr:`SourceSpec.production_grid` is for the primary file. Setting it
+    makes the family a grid family — its records live in their own frame
+    file (above) and every bundle built from them carries this grid.
+    None for a family on the source's own grid, which is the shape the wave
+    families have and which is unchanged in every respect."""
+    tile: tuple[int, int] | None = None
+    """The container v2 tile size the family's bundles are cut with, as
+    ``(width, height)`` in cells of *its* grid. Set together with
+    :attr:`production_grid`; None on a family that shares the source's grid
+    and therefore its :attr:`SourceSpec.tile`."""
+
+    @property
+    def own_grid(self) -> bool:
+        """Whether the family is a grid family: its records are on their own
+        grid, in their own frame file."""
+        return self.production_grid is not None
+
+
+def family_frame_path(frame: Path, family: str | None) -> Path:
+    """Where one family's records of a frame live: the frame file itself for
+    the primary family (and for a companion that shares the source's grid,
+    whose records are appended to it), a sibling of the same name under a
+    directory named by the family id for a grid family —
+    ``cfs.2026091912/pgb/cfs.2026091912.f006.grib2`` beside
+    ``cfs.2026091912/cfs.2026091912.f006.grib2``.
+
+    The one place the layout is written down: the fetch writes it and the
+    converter reads it. Mirrored in the native encoder."""
+    return frame if family is None else frame.parent / family / frame.name
 
 
 @dataclass(frozen=True)
@@ -364,6 +410,32 @@ class SourceSpec:
         """The inputs read from the primary file, in assembly order."""
         return tuple(variable_id for variable_id in self.input_variable_ids if self.companion_of(variable_id) is None)
 
+    @property
+    def grid_families(self) -> tuple[CompanionFile, ...]:
+        """The companion families on a grid of their own
+        (:attr:`CompanionFile.production_grid`), in declaration order. Empty
+        for every source but CFSv2."""
+        return tuple(companion for companion in self.companion_files if companion.own_grid)
+
+    def grid_family_of(self, variable_id: str) -> CompanionFile | None:
+        """The grid family ``variable_id`` is read from, or None for an input
+        on the source's own grid — which is every input of every source
+        whose families share its grid, the wave families included."""
+        companion = self.companion_of(variable_id)
+        return companion if companion is not None and companion.own_grid else None
+
+    def family_grid(self, family: str | None) -> tuple[tuple[int, int], tuple[int, int]]:
+        """The ``(production_grid, tile)`` one family's bundles are built on:
+        the source's own for the primary family (``None``), the family's for
+        a grid family."""
+        if family is None:
+            return self.production_grid, self.tile
+        for companion in self.grid_families:
+            if companion.id == family:
+                assert companion.production_grid is not None and companion.tile is not None
+                return companion.production_grid, companion.tile
+        raise DownloadError(f"{self.manifest_model} has no {family} grid family")
+
     def forecast_hours(self, last_hour: int) -> list[int]:
         """The published axis from :attr:`first_hour` — the analysis for
         every source but CFSv2 — through ``last_hour``.
@@ -387,6 +459,49 @@ class SourceSpec:
                 f"forecast hour {last_hour} is not on the {self.manifest_model} axis ({published})"
             )
         return hours
+
+
+# The CFSv2 inputs that arrive on the 1° pressure-level grid rather than the
+# T126 Gaussian surface grid — the ``pgb`` grid family of the ``cfs`` source
+# below, in the order its sibling frame file carries them. NCEP writes a
+# time-series object per quantity and surface (``z500``, ``t850``,
+# ``wnd850``, ``q850``, ``vvel500``, ``prmsl``), and not every quantity is on
+# every surface: there is no 925 hPa or 300 hPa height, no 300 hPa
+# temperature, and the humidity stops at 500 hPa. The specific humidities
+# feed the vapour flux alone.
+CFS_PGB_IDS: tuple[str, ...] = (
+    "prmsl",
+    "hgt1000",
+    "hgt850",
+    "hgt700",
+    "hgt500",
+    "hgt200",
+    "tmp1000",
+    "tmp850",
+    "tmp700",
+    "tmp500",
+    "tmp250",
+    "tmp200",
+    "ugrd1000",
+    "vgrd1000",
+    "ugrd925",
+    "vgrd925",
+    "ugrd850",
+    "vgrd850",
+    "ugrd700",
+    "vgrd700",
+    "ugrd500",
+    "vgrd500",
+    "ugrd250",
+    "vgrd250",
+    "ugrd200",
+    "vgrd200",
+    "spfh925",
+    "spfh850",
+    "spfh700",
+    "spfh500",
+    "vvel500",
+)
 
 
 SOURCES: dict[str, SourceSpec] = {
@@ -1046,6 +1161,18 @@ SOURCES: dict[str, SourceSpec] = {
             "tmpsfc",
             "icec",
             "icetk",
+            # The pressure-level family, on its own 1° grid (below).
+            *CFS_PGB_IDS,
+        ),
+        # The pressure-level and sea level pressure series are published on a
+        # regular 1° grid rather than the T126 Gaussian grid the surface
+        # series use, so they are a grid family: their records are fetched
+        # into a sibling frame file of their own and every bundle built from
+        # them carries the 1° grid. 90 x 91 cells cuts it into 4 x 2 = 8
+        # tiles, the same shape as the surface grid's, with the last tile row
+        # one cell short of the pole row (181 = 91 + 90).
+        companion_files=(
+            CompanionFile(id="pgb", variable_ids=CFS_PGB_IDS, production_grid=(360, 181), tile=(90, 91)),
         ),
         # PRATE is already a rate; nothing is de-accumulated or de-averaged.
         accumulated_precipitation=False,
@@ -1054,8 +1181,48 @@ SOURCES: dict[str, SourceSpec] = {
         # over the six hours ending at the frame. The metadata says what the
         # values are, not what the template claims.
         statistical_processes=(("prate", 0), ("dswrf", 0), ("tcdc", 0)),
-        bundle_scalar_ids=("tmp2m", "prate", "tcdc", "dswrf", "tmpsfc", "icec", "icetk"),
-        bundle_vector_ids=("wind10m",),
+        # The seven surface scalars on the Gaussian grid, then the thirteen
+        # the 1° family publishes: sea level pressure, the geopotential
+        # height and temperature on the surfaces CFSv2 writes a series for,
+        # and the 500 hPa vertical velocity. The specific humidities are
+        # read and never published — they ship inside the vapour flux the
+        # converter derives from them and the wind on their surface.
+        bundle_scalar_ids=(
+            "tmp2m",
+            "prate",
+            "tcdc",
+            "dswrf",
+            "tmpsfc",
+            "icec",
+            "icetk",
+            "prmsl",
+            "hgt1000",
+            "hgt850",
+            "hgt700",
+            "hgt500",
+            "hgt200",
+            "tmp1000",
+            "tmp850",
+            "tmp700",
+            "tmp500",
+            "tmp250",
+            "tmp200",
+            "vvel500",
+        ),
+        bundle_vector_ids=(
+            "wind10m",
+            "wind1000",
+            "wind925",
+            "wind850",
+            "wind700",
+            "wind500",
+            "wind250",
+            "wind200",
+            "qflux925",
+            "qflux850",
+            "qflux700",
+            "qflux500",
+        ),
         core_bundle_ids=("tmp2m", "prate"),
         production_grid=(384, 190),
         # 96 x 95 cells cuts the grid into 4 x 2 = 8 tiles with no clipped

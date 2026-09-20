@@ -38,7 +38,7 @@ use crate::encode::parallel::for_each_ordered;
 use crate::encode::poster::encode_poster;
 use crate::encode::quantize::{codebook, Codebook};
 use crate::encode::reproject::{build_resampler, lambert_conformal_from_wkt, ProjectedGrid};
-use crate::encode::sources::{source_spec, SourceSpec};
+use crate::encode::sources::{family_frame_path, source_spec, SourceSpec};
 use crate::encode::temporal::build_chunks;
 
 /// Scalar variables ship one single-variable bundle each; the two wind
@@ -366,6 +366,81 @@ pub fn bundle_input_ids(source: &SourceSpec, bundle_id: &str) -> Vec<String> {
             .collect();
     }
     vec![bundle_id.to_string()]
+}
+
+/// The id of the grid family one input is read from, or `None` for an input
+/// on the source's own grid (`SourceSpec::grid_family_of`). Mirrors
+/// `grid_family_of` in `xuebuild/binconvert.py`.
+pub fn grid_family_of(source: &SourceSpec, variable_id: &str) -> Option<&'static str> {
+    source.grid_family_of(variable_id).map(|companion| companion.id)
+}
+
+/// The grid family one bundle is built on: the family every one of its inputs
+/// is read from, so the bundle's grid, tile, variants and poster are that
+/// family's.
+///
+/// A bundle whose inputs span two grids could not be written at all — its
+/// planes would not be the same shape — so a source that declares one is a
+/// registry bug, and it is refused here rather than half-built. (The vapour
+/// flux at 850 hPa reads the specific humidity and the wind pair there, all
+/// three from the CFSv2 pressure-level family, which is what makes it one
+/// bundle's worth of one grid.) Mirrors `bundle_grid_family` in
+/// `xuebuild/binconvert.py`.
+pub fn bundle_grid_family(source: &SourceSpec, bundle_id: &str) -> Result<Option<&'static str>> {
+    let mut families: Vec<Option<&'static str>> = Vec::new();
+    for variable_id in bundle_input_ids(source, bundle_id) {
+        let family = grid_family_of(source, &variable_id);
+        if !families.contains(&family) {
+            families.push(family);
+        }
+    }
+    if families.len() > 1 {
+        let mut named: Vec<&str> = families
+            .iter()
+            .map(|family| family.unwrap_or("the primary file"))
+            .collect();
+        named.sort_unstable();
+        return Err(EncodeError::conversion(format!(
+            "the {bundle_id} bundle of {} reads {}: every variable of a bundle must be on one grid",
+            source.manifest_model,
+            named.join(", ")
+        )));
+    }
+    Ok(families.first().copied().flatten())
+}
+
+/// The frames a conversion reads, named by the primary file of each.
+///
+/// A frame of a source with a grid family is more than one file under one run
+/// directory: the primary file, and a sibling of the same name under each
+/// family's own directory (`sources::family_frame_path`). Listing the run
+/// directory lists the primary files, as it always did. A build narrowed to
+/// one family's bundles fetches no primary file at all, so its frames are
+/// listed from that family's directory instead and named by the primary path
+/// they would have had; nothing reads that path unless a variable of the
+/// primary file is read. Mirrors `_discover_frames` in
+/// `xuebuild/binconvert.py`.
+fn discover_frames(inputs: &[PathBuf], source: &SourceSpec) -> Result<Vec<PathBuf>> {
+    match discover_inputs(inputs) {
+        Ok(paths) => Ok(paths),
+        Err(error) => {
+            if inputs.len() != 1 || !inputs[0].is_dir() {
+                return Err(error);
+            }
+            for companion in source.grid_families() {
+                let directory = inputs[0].join(companion.id);
+                if directory.is_dir() {
+                    return Ok(discover_inputs(&[directory])?
+                        .into_iter()
+                        .map(|path| {
+                            inputs[0].join(path.file_name().unwrap_or(path.as_os_str()))
+                        })
+                        .collect());
+                }
+            }
+            Err(error)
+        }
+    }
 }
 
 /// Every bundle a source can publish, in manifest order: its scalars, then
@@ -772,17 +847,38 @@ impl PlaneSources {
     }
 }
 
+/// One grid per variable of a frame: the run's single grid for every source
+/// with one, and — on a source with a grid family — the grid of the family
+/// each variable is read from. Mirrors `_grid_for` in
+/// `xuebuild/binconvert.py`, where the same thing is a `GridInfo` or a
+/// mapping.
+pub struct PlaneGrids(Vec<(String, GridInfo)>);
+
+impl PlaneGrids {
+    fn for_variable(&self, variable_id: &str) -> Result<&GridInfo> {
+        self.0
+            .iter()
+            .find(|(id, _)| id == variable_id)
+            .map(|(_, grid)| grid)
+            .ok_or_else(|| EncodeError::conversion(format!("no grid for {variable_id}")))
+    }
+}
+
 /// Extract every requested band of one frame, as float64 planes in physical
 /// units, cropped and rolled into the published layout: one dataset open
 /// per file the frame's variables live in — one for a GRIB record set, one
-/// per variable for a satellite window whose series are one file each
-/// (mirrors `_extract_planes` in `xuebuild/binconvert.py`).
+/// per variable for a satellite window whose series are one file each, one
+/// per grid family for a source with more than one grid (mirrors
+/// `_extract_planes` in `xuebuild/binconvert.py`).
+///
+/// `grids` is the published grid per variable; a file holds one family's
+/// records, so the plane size is read off the grid of whatever the file
+/// carries.
 fn extract_planes(
     frames: &FileFrames,
-    grid: &GridInfo,
+    grids: &PlaneGrids,
     plane_sources: &PlaneSources,
 ) -> Result<Vec<(String, Vec<f64>)>> {
-    let (source_height, source_width) = grid.source_shape();
     // The files in first-seen order, each with the variables it holds.
     let mut by_file: Vec<(&PathBuf, Vec<&(String, SourceFrame)>)> = Vec::new();
     for entry in frames {
@@ -793,6 +889,8 @@ fn extract_planes(
     }
     let mut raw_planes: Vec<(String, Vec<f64>)> = Vec::with_capacity(frames.len());
     for (source, file_frames) in by_file {
+        let (source_height, source_width) =
+            grids.for_variable(&file_frames[0].0)?.source_shape();
         // The netCDF driver is not thread-safe; the guard is held for the
         // whole extraction, open included, and is a no-op for every GRIB
         // source.
@@ -826,6 +924,8 @@ fn extract_planes(
             .position(|(id, _)| id == variable_id)
             .expect("read just above");
         let (_, mut plane) = raw_planes.swap_remove(position);
+        let grid = grids.for_variable(variable_id)?;
+        let (source_height, source_width) = grid.source_shape();
         if grid.column_roll > 0 {
             let roll = grid.column_roll;
             let mut rolled = vec![0f64; plane.len()];
@@ -927,7 +1027,7 @@ type QuantizedFile = (i64, Vec<(String, Vec<u8>)>, Vec<PlaneStats>);
 
 fn quantize_file(
     frames: &FileFrames,
-    grid: &GridInfo,
+    grids: &PlaneGrids,
     profile: &str,
     plane_source: &PlaneSources,
     average_window_hours: i64,
@@ -942,7 +1042,7 @@ fn quantize_file(
     // is a whole hour out, so they can work in hours.
     let hour = lead / HOUR_SECONDS;
 
-    let extracted = match extract_planes(frames, grid, plane_source) {
+    let extracted = match extract_planes(frames, grids, plane_source) {
         Ok(planes) => planes,
         Err(error) => {
             // Unblock the successor waiting on this worker's plane.
@@ -1426,6 +1526,10 @@ pub fn convert_bin(
     let grid_path: PathBuf;
     let plane_source: PlaneSources;
     let producer_versions: Vec<(String, (String, String))>;
+    // Which grid family each variable is read on: empty for every source but
+    // CFSv2, whose pressure-level inputs sit in a frame file of their own on
+    // a grid of their own (`sources::CompanionFile`).
+    let mut variable_families: Vec<(String, Option<&'static str>)>;
 
     if source.series_file {
         // A series-file source is one NetCDF file holding a whole variable's
@@ -1531,8 +1635,10 @@ pub fn convert_bin(
         drop_ids = Vec::new();
         plane_source = PlaneSources::PerVariable(series.plane_sources);
         producer_versions = series.producers;
+        // No series-file source has a grid family: one run, one grid.
+        variable_families = Vec::new();
     } else {
-        let paths = discover_inputs(inputs)?;
+        let paths = discover_frames(inputs, source)?;
         // One real GDAL inspection pass over the first file: it probes which
         // vector bundles can be built (their inputs are optional, so runs
         // fetched before the wind components joined the download set still
@@ -1580,7 +1686,43 @@ pub fn convert_bin(
         }
         let mut optional: Vec<&str> = source.optional_at_analysis.to_vec();
         optional.extend(vector_only_ids.iter().map(String::as_str));
-        let reference_frames = inspect_grib_multi(&paths[0], &inspect_ids, &optional)?;
+        // Which grid family each input is read from — `None` for every input
+        // of every source but CFSv2. The reference pass runs once per family
+        // in play, each over that family's own file.
+        let input_families: Vec<(String, Option<&'static str>)> = source
+            .input_variable_ids
+            .iter()
+            .map(|variable_id| ((*variable_id).to_string(), grid_family_of(source, variable_id)))
+            .collect();
+        let family_of = |variable_id: &str| -> Option<&'static str> {
+            input_families
+                .iter()
+                .find(|(id, _)| id == variable_id)
+                .and_then(|(_, family)| *family)
+        };
+        let mut inspect_families: Vec<Option<&'static str>> = Vec::new();
+        for variable_id in &inspect_ids {
+            let family = family_of(variable_id);
+            if !inspect_families.contains(&family) {
+                inspect_families.push(family);
+            }
+        }
+        let mut reference_frames: FileFrames = Vec::new();
+        for family in inspect_families {
+            let family_ids: Vec<&str> = inspect_ids
+                .iter()
+                .copied()
+                .filter(|id| family_of(id) == family)
+                .collect();
+            for entry in inspect_grib_multi(
+                &family_frame_path(&paths[0], family),
+                &family_ids,
+                &optional,
+            )? {
+                reference_frames.retain(|(id, _)| *id != entry.0);
+                reference_frames.push(entry);
+            }
+        }
 
         available_vector_ids = requested_vector_ids
             .iter()
@@ -1660,12 +1802,14 @@ pub fn convert_bin(
             source.optional_at_analysis,
             &reference_frames,
             source.cadence_seconds,
+            &input_families,
             options,
         )?;
         available_composite_ids = Vec::new();
         grid_path = paths[0].clone();
         plane_source = PlaneSources::Uniform(PlaneSource::grib());
         producer_versions = Vec::new();
+        variable_families = input_families;
     }
 
     // -- the time axis ------------------------------------------------------
@@ -1720,24 +1864,82 @@ pub fn convert_bin(
         .to_offset(time::UtcOffset::UTC);
 
     // -- the grid -----------------------------------------------------------
-    let mut grid = grid_info(&grid_path, source)?;
-    if options.require_complete && (grid.width, grid.height) != source.production_grid {
-        return Err(EncodeError::conversion(format!(
-            "production build requires a {}x{} grid",
-            source.production_grid.0, source.production_grid.1
-        )));
+    // Every published variable's grid family: for a variable the converter
+    // derives (the vapour flux pair, the rate) the family its bundle's inputs
+    // are read from, for one it reads its own. `None` throughout on every
+    // source but CFSv2, so there is one family and one grid as there always
+    // was.
+    for bundle_id in published_bundle_ids(source) {
+        let family = bundle_grid_family(source, bundle_id)?;
+        for variable_id in bundle_variable_ids(bundle_id) {
+            variable_families.retain(|(id, _)| *id != variable_id);
+            variable_families.push((variable_id, family));
+        }
     }
-    if let Some(bbox) = options.bbox {
-        grid = crop_grid(grid, bbox)?;
-        log!(
-            options,
-            "cropped to {}x{} from {:.4},{:.4}",
-            grid.width,
-            grid.height,
-            grid.first_longitude,
-            grid.first_latitude
-        );
+    let family_of = |variable_id: &str| -> Option<&'static str> {
+        variable_families
+            .iter()
+            .find(|(id, _)| id == variable_id)
+            .and_then(|(_, family)| *family)
+    };
+    // One grid per family in play, each read from that family's own file and
+    // checked against that family's production grid. The families are in
+    // input order, so the primary file's — the run's grid in the build report
+    // — comes first wherever this build reads it at all.
+    let mut family_order: Vec<Option<&'static str>> = Vec::new();
+    for variable_id in &variable_ids {
+        let family = family_of(variable_id);
+        if !family_order.contains(&family) {
+            family_order.push(family);
+        }
     }
+    let mut grids: Vec<(Option<&'static str>, GridInfo)> = Vec::new();
+    for family in &family_order {
+        let mut family_grid = grid_info(&family_frame_path(&grid_path, *family), source)?;
+        if options.require_complete {
+            let (production_grid, _) = source.family_grid(*family)?;
+            if (family_grid.width, family_grid.height) != production_grid {
+                let where_ = match family {
+                    Some(family) => format!(" for the {family} family"),
+                    None => String::new(),
+                };
+                return Err(EncodeError::conversion(format!(
+                    "production build requires a {}x{} grid{where_}",
+                    production_grid.0, production_grid.1
+                )));
+            }
+        }
+        if let Some(bbox) = options.bbox {
+            family_grid = crop_grid(family_grid, bbox)?;
+            log!(
+                options,
+                "cropped {} to {}x{} from {:.4},{:.4}",
+                family.unwrap_or("the run"),
+                family_grid.width,
+                family_grid.height,
+                family_grid.first_longitude,
+                family_grid.first_latitude
+            );
+        }
+        grids.push((*family, family_grid));
+    }
+    let grid_for = |family: Option<&'static str>| -> &GridInfo {
+        &grids
+            .iter()
+            .find(|(held, _)| *held == family)
+            .expect("every family in play has a grid")
+            .1
+    };
+    // The run-level grid — the build report's, and the one every source with
+    // a single grid uses throughout.
+    let grid = grid_for(family_order[0]).clone();
+    // The grid each variable's planes are read and cropped on.
+    let read_grids = PlaneGrids(
+        variable_ids
+            .iter()
+            .map(|variable_id| (variable_id.clone(), grid_for(family_of(variable_id)).clone()))
+            .collect(),
+    );
 
     // -- extract and quantize ------------------------------------------------
     log!(
@@ -1761,7 +1963,7 @@ pub fn convert_bin(
         let (previous, own) = plan[index].clone();
         quantize_file(
             &per_file[index],
-            &grid,
+            &read_grids,
             &options.profile,
             &plane_source,
             source.average_window_hours,
@@ -1846,7 +2048,7 @@ pub fn convert_bin(
             .ok_or_else(|| {
                 EncodeError::conversion(format!("missing {variable_id} plane at the first frame"))
             })?;
-        let (payload, poster_grid) = encode_poster(plane, &grid)?;
+        let (payload, poster_grid) = encode_poster(plane, grid_for(family_of(variable_id)))?;
         let poster_path = output_dir.join(format!("{variable_id}.poster.bin"));
         binformat::write_atomic(&poster_path, &payload)?;
         let metadata = build_metadata(
@@ -1883,10 +2085,14 @@ pub fn convert_bin(
     // (half, quarter, eighth): its file suffix, factor, grid and the codes of
     // every plane sampled from the full ones. `skip_variants` skips every
     // rung.
+    //
+    // A source with more than one grid gets one rung per factor per family:
+    // a family's rung is its own grid decimated, so a bundle's tier keeps the
+    // tile geometry of its own grid.
     struct Rung {
         suffix: String,
         factor: usize,
-        grid: GridInfo,
+        grids: Vec<(Option<&'static str>, GridInfo)>,
         codes_by_offset: BTreeMap<i64, Vec<(String, Vec<u8>)>>,
     }
     let ladder: Vec<Rung> = if options.skip_variants {
@@ -1899,7 +2105,10 @@ pub fn convert_bin(
                 Ok(Rung {
                     suffix: format!(".{}", tier_name(factor)?),
                     factor,
-                    grid: variant_grid(&grid, factor),
+                    grids: grids
+                        .iter()
+                        .map(|(family, family_grid)| (*family, variant_grid(family_grid, factor)))
+                        .collect(),
                     codes_by_offset: codes_by_offset
                         .iter()
                         .map(|(offset, planes)| {
@@ -1908,7 +2117,14 @@ pub fn convert_bin(
                                 planes
                                     .iter()
                                     .map(|(name, codes)| {
-                                        (name.clone(), decimate_codes(codes, &grid, factor))
+                                        (
+                                            name.clone(),
+                                            decimate_codes(
+                                                codes,
+                                                grid_for(family_of(name)),
+                                                factor,
+                                            ),
+                                        )
                                     })
                                     .collect(),
                             )
@@ -1935,13 +2151,28 @@ pub fn convert_bin(
         let bundle_variables: Vec<String> = bundle_variable_ids(bundle_id);
         let variables: Vec<&str> = bundle_variables.iter().map(String::as_str).collect();
         let bundle_offsets: Vec<i64> = variable_offsets[variables[0]].clone();
+        // The bundle is written on its own family's grid, with that family's
+        // tile: one grid for every source but CFSv2, whose pressure-level
+        // bundles are 1° where its surface ones are the T126 Gaussian grid.
+        let family = family_of(variables[0]);
+        let (_, family_tile) = source.family_grid(family)?;
         // The full tier first, then each rung of the ladder the way the
         // half tier was submitted alone; a bundle's variant reports come
         // out in the ladder's ascending factor order.
-        let tiers = std::iter::once(("", 1usize, &grid, &codes_by_offset)).chain(
-            ladder
-                .iter()
-                .map(|rung| (rung.suffix.as_str(), rung.factor, &rung.grid, &rung.codes_by_offset)),
+        let tiers = std::iter::once(("", 1usize, grid_for(family), &codes_by_offset)).chain(
+            ladder.iter().map(|rung| {
+                (
+                    rung.suffix.as_str(),
+                    rung.factor,
+                    &rung
+                        .grids
+                        .iter()
+                        .find(|(held, _)| *held == family)
+                        .expect("every family in play has a rung")
+                        .1,
+                    &rung.codes_by_offset,
+                )
+            }),
         );
         for (suffix, factor, bundle_grid, codes) in tiers {
             let metadata = build_metadata(
@@ -1954,7 +2185,7 @@ pub fn convert_bin(
                 unit_seconds,
                 &producer_versions,
             )?;
-            let tile = bundle_tile(source.tile, bundle_grid, factor);
+            let tile = bundle_tile(family_tile, bundle_grid, factor);
             let geometry = TileGeometry::new(
                 bundle_grid.width as u32,
                 bundle_grid.height as u32,
@@ -2276,34 +2507,83 @@ fn sharing_plan(
 /// Inspection uses the GRIB2 header index; the first file is cross-checked
 /// against `reference_frames` (a real GDAL pass) and a run whose files the
 /// header index cannot parse falls back to GDAL inspection.
+///
+/// `families` names, per variable, the grid family it is read from where a
+/// source has one: those variables are inspected in the frame's sibling file
+/// (`sources::family_frame_path`) instead of in the frame itself, and one
+/// frame's answers are merged into the one record set the rest of the
+/// converter reads. A frame whose family file is missing is refused before
+/// anything is inspected, since it is a fetch that did not finish rather
+/// than a file to fall back over. Mirrors `_prepare_frames_all` in
+/// `xuebuild/binconvert.py`.
 fn prepare_frames_all(
     paths: &[PathBuf],
     variable_ids: &[&str],
     optional_at_analysis: &[&str],
     reference_frames: &FileFrames,
     cadence_seconds: Option<i64>,
+    families: &[(String, Option<&'static str>)],
     options: &ConvertOptions,
 ) -> Result<Vec<FileFrames>> {
     use rayon::prelude::*;
 
-    let fast: Result<Vec<FileFrames>> = paths
-        .par_iter()
-        .map(|path| inspect_grib_fast(path, variable_ids, optional_at_analysis))
-        .collect::<Result<Vec<_>>>()
-        .and_then(|per_file| {
-            check_reference_frames(&per_file[0], reference_frames, variable_ids)?;
-            Ok(per_file)
-        });
+    // The variables of each family, in first-seen order.
+    let mut by_family: Vec<(Option<&'static str>, Vec<&str>)> = Vec::new();
+    for variable_id in variable_ids {
+        let family = families
+            .iter()
+            .find(|(id, _)| id == variable_id)
+            .and_then(|(_, family)| *family);
+        match by_family.iter_mut().find(|(held, _)| *held == family) {
+            Some((_, ids)) => ids.push(variable_id),
+            None => by_family.push((family, vec![variable_id])),
+        }
+    }
+    for (family, _) in &by_family {
+        // The primary file's absence is the inspector's own error.
+        let Some(family) = family else { continue };
+        for path in paths {
+            let family_path = family_frame_path(path, Some(family));
+            if !family_path.is_file() {
+                return Err(EncodeError::conversion(format!(
+                    "the {family} records of {} are missing: {} does not exist",
+                    path.file_name().unwrap_or(path.as_os_str()).to_string_lossy(),
+                    family_path.display()
+                )));
+            }
+        }
+    }
+    let inspect_all = |inspect: &(dyn Fn(&Path, &[&str]) -> Result<FileFrames> + Sync)| -> Result<Vec<FileFrames>> {
+        paths
+            .par_iter()
+            .map(|path| {
+                let mut frames: FileFrames = Vec::new();
+                for (family, family_ids) in &by_family {
+                    let family_path = family_frame_path(path, *family);
+                    for entry in inspect(&family_path, family_ids)? {
+                        frames.retain(|(id, _)| *id != entry.0);
+                        frames.push(entry);
+                    }
+                }
+                Ok(frames)
+            })
+            .collect::<Result<Vec<_>>>()
+    };
+
+    let fast: Result<Vec<FileFrames>> = inspect_all(&|path, ids| {
+        inspect_grib_fast(path, ids, optional_at_analysis)
+    })
+    .and_then(|per_file| {
+        check_reference_frames(&per_file[0], reference_frames, variable_ids)?;
+        Ok(per_file)
+    });
     let mut per_file = match fast {
         Ok(per_file) => per_file,
         Err(error) => {
             eprintln!(
                 "WARNING GRIB2 header index unavailable ({error}); falling back to GDAL inspection"
             );
-            paths
-                .par_iter()
-                .map(|path| inspect_grib_multi(path, variable_ids, optional_at_analysis))
-                .collect::<Result<Vec<_>>>()?
+            inspect_all(&|path, ids| inspect_grib_multi(path, ids, optional_at_analysis))?
         }
     };
     log!(options, "indexed {} files", per_file.len());
@@ -2457,6 +2737,53 @@ fn check_reference_frames(
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod grid_family_tests {
+    use super::{bundle_grid_family, grid_family_of};
+    use crate::encode::sources::{source_spec, CFS_PGB_IDS};
+
+    /// Which grid each of a source's bundles is built on, from the registry
+    /// alone: every CFSv2 pressure-level bundle reads the `pgb` family, every
+    /// surface one the primary file, and no bundle of any other source reads
+    /// a family at all — the wave companions share their source's grid, so
+    /// nothing about them changed.
+    #[test]
+    fn every_bundle_is_built_on_one_grid() {
+        let cfs = source_spec("cfs").expect("cfs");
+        for bundle_id in ["tmp2m", "prate", "tcdc", "dswrf", "tmpsfc", "icec", "icetk", "wind10m"] {
+            assert_eq!(bundle_grid_family(cfs, bundle_id).expect("one grid"), None, "{bundle_id}");
+        }
+        for bundle_id in [
+            "prmsl", "hgt1000", "hgt850", "hgt700", "hgt500", "hgt200", "tmp1000", "tmp850",
+            "tmp700", "tmp500", "tmp250", "tmp200", "vvel500", "wind1000", "wind925", "wind850",
+            "wind700", "wind500", "wind250", "wind200", "qflux925", "qflux850", "qflux700",
+            "qflux500",
+        ] {
+            assert_eq!(
+                bundle_grid_family(cfs, bundle_id).expect("one grid"),
+                Some("pgb"),
+                "{bundle_id}"
+            );
+        }
+        // The vapour flux reads the humidity and the wind pair on its
+        // surface, all three from the family, which is what makes it one
+        // bundle's worth of one grid.
+        for variable_id in CFS_PGB_IDS {
+            assert_eq!(grid_family_of(cfs, variable_id), Some("pgb"), "{variable_id}");
+        }
+        for model in ["gfs", "ecmwf", "aifs", "sflux", "hrrr", "gefsaero", "ifshres", "mrms"] {
+            let source = source_spec(model).expect(model);
+            for bundle_id in source.bundle_scalar_ids.iter().chain(source.bundle_vector_ids) {
+                assert_eq!(
+                    bundle_grid_family(source, bundle_id).expect("one grid"),
+                    None,
+                    "{model} {bundle_id}"
+                );
+            }
+        }
+    }
 }
 
 #[cfg(test)]

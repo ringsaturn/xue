@@ -6,8 +6,10 @@ import { KNOWN_BUNDLE_IDS } from "../../web/src/manifest";
 import type { LinearQuantization } from "../../web/src/manifest";
 import { buildPalette } from "../../web/src/palettes";
 import {
+  COARSE_CONTOUR_STEP_DEGREES,
   PRESSURE_BUNDLE_IDS,
   PRESSURE_LEVELS,
+  contourSmoothingCells,
   isPressureBundle,
   pressureCode,
   pressureLegend,
@@ -118,5 +120,44 @@ describe("pressure presentation", () => {
     expect(colorAt(60)).not.toEqual(colorAt(200));
     // Reserved codes stay fully transparent, as for every other variable.
     expect(colorAt(255)).toEqual([0, 0, 0, 0]);
+  });
+});
+
+describe("contourSmoothingCells", () => {
+  it("keeps two cells on every sub-degree grid", () => {
+    // The smoothing is meant as about half a degree of sky. Two cells is
+    // that on the 0.25° production grid and less on the finer ones, so a
+    // narrower kernel there would buy nothing and a staircase back.
+    expect(contourSmoothingCells(0.25)).toBe(2); // GFS, ECMWF, AIFS
+    expect(contourSmoothingCells(0.1)).toBe(2); // IFS HRES
+    expect(contourSmoothingCells(0.03)).toBe(2); // HRRR
+    expect(contourSmoothingCells(0.5)).toBe(2); // a 0.25° grid's half tier
+    // A grid's step is negative when it runs the other way; only the
+    // spacing matters.
+    expect(contourSmoothingCells(-0.25)).toBe(2);
+  });
+
+  it("narrows to one cell on a degree-scale grid", () => {
+    // Two cells of a 1° grid is two whole degrees of Gaussian, four times
+    // what the chart wants: a low would be smoothed out of the field
+    // before the lines were traced through it.
+    expect(contourSmoothingCells(1)).toBe(1); // CFSv2's pressure grid
+    expect(contourSmoothingCells(-1)).toBe(1);
+    expect(contourSmoothingCells(2)).toBe(1); // and its half tier
+    expect(contourSmoothingCells(COARSE_CONTOUR_STEP_DEGREES)).toBe(1);
+  });
+
+  it("puts the boundary below a degree and above the fine grids", () => {
+    expect(COARSE_CONTOUR_STEP_DEGREES).toBeLessThan(1);
+    expect(COARSE_CONTOUR_STEP_DEGREES).toBeGreaterThan(0.5);
+    const below = COARSE_CONTOUR_STEP_DEGREES - 1e-9;
+    expect(contourSmoothingCells(below)).toBe(2);
+  });
+
+  it("takes the fine width for a step it cannot read", () => {
+    // A metadata block with no usable step is the old behaviour, which
+    // every grid before the degree-scale ones was drawn with.
+    expect(contourSmoothingCells(Number.NaN)).toBe(2);
+    expect(contourSmoothingCells(0)).toBe(2);
   });
 });

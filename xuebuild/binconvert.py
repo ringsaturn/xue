@@ -55,7 +55,7 @@ from .satellite.platforms import platform as satellite_platform
 from .satellite.producers import PRODUCERS
 from .quantize import PRESSURE_VARIABLE_IDS, PROFILES, PrecipitationCodebook, TemperatureCodebook
 from .reproject import ProjectedGrid, Resampler, build_resampler, lambert_conformal_from_wkt
-from .sources import Downsample, SourceSpec, source_spec
+from .sources import Downsample, SourceSpec, family_frame_path, source_spec
 from .variables import (
     DUST_CF_BUNDLE_ID,
     DUST_CF_COMPONENT_IDS,
@@ -362,6 +362,59 @@ def bundle_input_ids(source: SourceSpec, bundle_id: str) -> tuple[str, ...]:
     if bundle_id == "prate":
         return (next(vid for vid in source.input_variable_ids if vid in PRECIPITATION_INPUT_IDS),)
     return (bundle_id,)
+
+
+def grid_family_of(source: SourceSpec, variable_id: str) -> str | None:
+    """The id of the grid family one input is read from, or None for an input
+    on the source's own grid (:meth:`SourceSpec.grid_family_of`)."""
+    companion = source.grid_family_of(variable_id)
+    return companion.id if companion is not None else None
+
+
+def bundle_grid_family(source: SourceSpec, bundle_id: str) -> str | None:
+    """The grid family one bundle is built on: the family every one of its
+    inputs is read from, so the bundle's grid, tile, variants and poster are
+    that family's.
+
+    A bundle whose inputs span two grids could not be written at all — its
+    planes would not be the same shape — so a source that declares one is a
+    registry bug, and it is refused here rather than half-built. (The
+    vapour flux at 850 hPa reads the specific humidity and the wind pair
+    there, all three from the CFSv2 pressure-level family, which is what
+    makes it one bundle's worth of one grid.)"""
+    families = {
+        grid_family_of(source, variable_id) for variable_id in bundle_input_ids(source, bundle_id)
+    }
+    if len(families) > 1:
+        named = sorted(family or "the primary file" for family in families)
+        raise ConversionError(
+            f"the {bundle_id} bundle of {source.manifest_model} reads {', '.join(named)}: "
+            "every variable of a bundle must be on one grid"
+        )
+    return families.pop() if families else None
+
+
+def _discover_frames(input_path: Path | Sequence[Path], source: SourceSpec) -> list[Path]:
+    """The frames a conversion reads, named by the primary file of each.
+
+    A frame of a source with a grid family is more than one file under one
+    run directory: the primary file, and a sibling of the same name under
+    each family's own directory (:func:`~xuebuild.sources.family_frame_path`).
+    Listing the run directory lists the primary files, as it always did.
+    A build narrowed to one family's bundles fetches no primary file at
+    all, so its frames are listed from that family's directory instead and
+    named by the primary path they would have had; nothing reads that path
+    unless a variable of the primary file is read."""
+    try:
+        return discover_inputs(input_path)
+    except ConversionError:
+        if not isinstance(input_path, Path) or not input_path.is_dir():
+            raise
+        for companion in source.grid_families:
+            directory = input_path / companion.id
+            if directory.is_dir():
+                return [input_path / path.name for path in discover_inputs(directory)]
+        raise
 
 
 def analysis_optional_ids(source: SourceSpec, scalar_ids: tuple[str, ...]) -> tuple[str, ...]:
@@ -893,26 +946,39 @@ def _plane_source_for(plane_source: PlaneSource | Mapping[str, PlaneSource], var
     return plane_source[variable_id]
 
 
+def _grid_for(grid: GridInfo | Mapping[str, GridInfo], variable_id: str) -> GridInfo:
+    """One variable's grid: the run's single grid, or — on a source with a
+    grid family — the grid of the family the variable is read from."""
+    if isinstance(grid, GridInfo):
+        return grid
+    return grid[variable_id]
+
+
 def _extract_planes(
     frames: dict[str, SourceFrame],
-    grid: GridInfo,
+    grid: GridInfo | Mapping[str, GridInfo],
     work: Path,
     plane_source: PlaneSource | Mapping[str, PlaneSource] = GRIB_PLANE_SOURCE,
 ) -> dict[str, np.ndarray]:
     """Extract every requested band of one frame: a single gdal_translate
     per file the frame's variables live in — one for a GRIB record set,
     one per variable for a satellite window whose series are one file
-    each (mirrored in encode/convert.rs)."""
+    each, one per grid family for a source with more than one grid
+    (mirrored in encode/convert.rs).
+
+    ``grid`` is the published grid, or one per variable where the frame's
+    families are on grids of their own; a file holds one family's records,
+    so the plane size is read off the grid of whatever the file carries."""
     order = list(frames)
     hour = frames[order[0]].lead_seconds
     values_by_id: dict[str, np.ndarray] = {}
-    source_height, source_width = grid.source_shape
-    plane_size = source_width * source_height
     # The files in first-seen order, each with the variables it holds.
     by_file: dict[Path, list[str]] = {}
     for variable_id in order:
         by_file.setdefault(frames[variable_id].path, []).append(variable_id)
     for source, file_order in by_file.items():
+        source_height, source_width = _grid_for(grid, file_order[0]).source_shape
+        plane_size = source_width * source_height
         # Named by the band set's hash rather than the ids joined: a GFS frame
         # now carries over thirty of them, past a filesystem's 255-byte name.
         band_set = zlib.crc32("-".join(file_order).encode("ascii")) & 0xFFFFFFFF
@@ -931,20 +997,21 @@ def _extract_planes(
             values_by_id[variable_id] = values[index * plane_size : (index + 1) * plane_size].copy()
     planes: dict[str, np.ndarray] = {}
     for variable_id in order:
-        plane = values_by_id[variable_id].reshape(source_height, source_width)
-        if grid.column_roll:
-            plane = np.roll(plane, grid.column_roll, axis=1)
+        variable_grid = _grid_for(grid, variable_id)
+        plane = values_by_id[variable_id].reshape(*variable_grid.source_shape)
+        if variable_grid.column_roll:
+            plane = np.roll(plane, variable_grid.column_roll, axis=1)
         # Missing data becomes a value before the plane is resampled, so a
         # fill never blends into its neighbours; then the projected plane
         # lands on the regular grid, and only then is a regional window cut.
         plane = _plane_source_for(plane_source, variable_id).apply_fill(plane)
         plane = _fill_missing(variable_id, plane)
-        if grid.resample is not None:
-            plane = grid.resample.take(plane)
-        if grid.downsample is not None:
-            plane = grid.downsample.take(plane)
-        if grid.crop is not None:
-            plane = np.ascontiguousarray(grid.crop.take(plane))
+        if variable_grid.resample is not None:
+            plane = variable_grid.resample.take(plane)
+        if variable_grid.downsample is not None:
+            plane = variable_grid.downsample.take(plane)
+        if variable_grid.crop is not None:
+            plane = np.ascontiguousarray(variable_grid.crop.take(plane))
         plane = plane.ravel()
         if not np.isfinite(plane).all():
             raise ConversionError(f"Xue v1 requires complete planes, found non-finite values in {source}")
@@ -1057,6 +1124,7 @@ def _prepare_frames_all(
     optional_at_analysis: tuple[str, ...] = (),
     reference_frames: dict[str, SourceFrame] | None = None,
     cadence_seconds: int | None = None,
+    families: Mapping[str, str | None] | None = None,
 ) -> list[dict[str, SourceFrame]]:
     """Inspect every file once for all variables, in parallel across files.
 
@@ -1067,23 +1135,50 @@ def _prepare_frames_all(
     header index cannot parse falls back to gdalinfo inspection. With a
     ``cadence_seconds`` the files are a fetched observation, each stamped
     with its own time, and are re-keyed onto the window's axis
-    (:func:`_snap_observation_frames`)."""
+    (:func:`_snap_observation_frames`).
+
+    ``families`` maps a variable to the grid family it is read from, where a
+    source has one: those variables are inspected in the frame's sibling
+    file (:func:`~xuebuild.sources.family_frame_path`) instead of in the
+    frame itself, and one frame's answers are merged into the one dictionary
+    the rest of the converter reads. A frame whose family file is missing is
+    refused before anything is inspected, since it is a fetch that did not
+    finish rather than a file to fall back over."""
+    by_family: dict[str | None, tuple[str, ...]] = {}
+    for variable_id in variable_ids:
+        family = families.get(variable_id) if families is not None else None
+        by_family[family] = by_family.get(family, ()) + (variable_id,)
+    for family in by_family:
+        if family is None:
+            # The primary file's absence is the inspector's own error.
+            continue
+        for path in paths:
+            family_path = family_frame_path(path, family)
+            if not family_path.is_file():
+                raise ConversionError(
+                    f"the {family} records of {path.name} are missing: {family_path} does not exist"
+                )
+
+    def inspect_all(inspect) -> list[dict[str, SourceFrame]]:
+        def one(path: Path) -> dict[str, SourceFrame]:
+            frames: dict[str, SourceFrame] = {}
+            for family, family_ids in by_family.items():
+                frames.update(inspect(family_frame_path(path, family), family_ids))
+            return frames
+
+        return list(executor.map(one, paths))
+
     with ThreadPoolExecutor(max_workers=_INSPECT_WORKERS) as executor:
         try:
-            per_file = list(
-                executor.map(
-                    lambda path: grib2.inspect_grib_fast(path, variable_ids, optional_ids=optional_at_analysis),
-                    paths,
-                )
+            per_file = inspect_all(
+                lambda path, ids: grib2.inspect_grib_fast(path, ids, optional_ids=optional_at_analysis)
             )
             if reference_frames is not None:
                 _check_reference_frames(per_file[0], reference_frames, variable_ids)
         except ConversionError as exc:
             LOG.warning("GRIB2 header index unavailable (%s); falling back to gdalinfo inspection", exc)
-            per_file = list(
-                executor.map(
-                    lambda path: inspect_grib_multi(path, variable_ids, optional_ids=optional_at_analysis), paths
-                )
+            per_file = inspect_all(
+                lambda path, ids: inspect_grib_multi(path, ids, optional_ids=optional_at_analysis)
             )
     if cadence_seconds is not None:
         per_file = _snap_observation_frames(per_file, cadence_seconds)
@@ -1258,7 +1353,7 @@ def decode_poster(payload: bytes, width: int, height: int) -> np.ndarray:
 
 def _quantize_file(
     frames: dict[str, SourceFrame],
-    grid: GridInfo,
+    grid: GridInfo | Mapping[str, GridInfo],
     work: Path,
     codebooks: dict[str, TemperatureCodebook | PrecipitationCodebook],
     previous_precipitation: tuple[int, Future | None] | None = None,
@@ -1730,8 +1825,10 @@ def convert_bin(
         grid_path = series.dataset
         plane_source: PlaneSource | dict[str, PlaneSource] = series.plane_sources
         producer_versions = series.producers
+        # No series-file source has a grid family: one run, one grid.
+        variable_families: dict[str, str | None] = {}
     else:
-        paths = discover_inputs(input_path)
+        paths = _discover_frames(input_path, source)
         # One real gdalinfo pass over the first file: it probes which vector
         # bundles can be built (their inputs are optional, so runs fetched
         # before the wind components joined the download set, and the cropped
@@ -1764,11 +1861,23 @@ def convert_bin(
                 if variable_id not in source.bundle_scalar_ids
             )
         )
-        reference_frames = inspect_grib_multi(
-            paths[0],
-            inspect_ids,
-            optional_ids=source.optional_at_analysis + derivation_only_ids,
-        )
+        # Which grid family each input is read from — None for every input of
+        # every source but CFSv2, whose pressure-level inputs sit in a frame
+        # file of their own on a grid of their own (sources.CompanionFile).
+        input_families = {
+            variable_id: grid_family_of(source, variable_id) for variable_id in source.input_variable_ids
+        }
+        reference_frames: dict[str, SourceFrame] = {}
+        for family in dict.fromkeys(input_families[variable_id] for variable_id in inspect_ids):
+            reference_frames.update(
+                inspect_grib_multi(
+                    family_frame_path(paths[0], family),
+                    tuple(
+                        variable_id for variable_id in inspect_ids if input_families[variable_id] == family
+                    ),
+                    optional_ids=source.optional_at_analysis + derivation_only_ids,
+                )
+            )
         available_vector_ids = tuple(
             bundle_id
             for bundle_id in requested_vector_ids
@@ -1826,12 +1935,18 @@ def convert_bin(
                 f"including the analysis; {list(variable_ids)} is not enough"
             )
         per_file = _prepare_frames_all(
-            paths, variable_ids, source.optional_at_analysis, reference_frames, source.cadence_seconds
+            paths,
+            variable_ids,
+            source.optional_at_analysis,
+            reference_frames,
+            source.cadence_seconds,
+            families=input_families,
         )
         available_composite_ids = ()
         grid_path = paths[0]
         plane_source = GRIB_PLANE_SOURCE
         producer_versions = {}
+        variable_families = dict(input_families)
 
     # The bundle's time axis: the coarsest unit that expresses every frame
     # exactly, and each frame's offset in it. An hour for every forecast
@@ -1866,21 +1981,53 @@ def convert_bin(
                 )
     run_time = per_file[0][variable_ids[0]].run_time.astimezone(UTC)
 
-    grid = _grid_info(grid_path, source)
-    if require_complete and (grid.width, grid.height) != source.production_grid:
-        raise ConversionError(
-            f"production build requires a {source.production_grid[0]}x{source.production_grid[1]} grid"
-        )
-    if bbox is not None:
-        grid = crop_grid(grid, bbox)
-        LOG.info(
-            "cropped to %dx%d from %.4f,%.4f (%s)",
-            grid.width,
-            grid.height,
-            grid.first_longitude,
-            grid.first_latitude,
-            ",".join(f"{value:g}" for value in bbox),
-        )
+    # Every published variable's grid family: for a variable the converter
+    # derives (the vapour flux pair, the rate) the family its bundle's
+    # inputs are read from, for one it reads its own. None throughout on
+    # every source but CFSv2, so there is one family and one grid as there
+    # always was.
+    for bundle_id in published_bundle_ids(source):
+        family = bundle_grid_family(source, bundle_id)
+        for variable_id in bundle_variable_ids(bundle_id):
+            variable_families[variable_id] = family
+    # One GridInfo per family in play, each read from that family's own file
+    # and checked against that family's production grid. The families are in
+    # input order, so the primary file's — the run's grid in the build report
+    # — comes first wherever this build reads it at all.
+    family_order = list(
+        dict.fromkeys(variable_families.get(variable_id) for variable_id in variable_ids)
+    )
+    grids: dict[str | None, GridInfo] = {}
+    for family in family_order:
+        family_grid = _grid_info(family_frame_path(grid_path, family), source)
+        if require_complete:
+            production_grid, _ = source.family_grid(family)
+            if (family_grid.width, family_grid.height) != production_grid:
+                where = f" for the {family} family" if family is not None else ""
+                raise ConversionError(
+                    f"production build requires a {production_grid[0]}x{production_grid[1]} grid{where}"
+                )
+        if bbox is not None:
+            family_grid = crop_grid(family_grid, bbox)
+            LOG.info(
+                "cropped %s to %dx%d from %.4f,%.4f (%s)",
+                family or "the run",
+                family_grid.width,
+                family_grid.height,
+                family_grid.first_longitude,
+                family_grid.first_latitude,
+                ",".join(f"{value:g}" for value in bbox),
+            )
+        grids[family] = family_grid
+    # The run-level grid — the build report's, and the one every source with
+    # a single grid uses throughout.
+    grid = grids[family_order[0]]
+
+    def grid_for(variable_id: str) -> GridInfo:
+        """The grid one published variable's planes are on."""
+        return grids[variable_families.get(variable_id)]
+
+    read_grids = {variable_id: grid_for(variable_id) for variable_id in variable_ids}
 
     stats: list[PlaneStats] = []
     codes_by_offset: dict[int, dict[str, np.ndarray]] = {}
@@ -1952,7 +2099,7 @@ def convert_bin(
             results = executor.map(
                 lambda item: _quantize_file(
                     item[0],
-                    grid,
+                    read_grids,
                     work,
                     codebooks,
                     item[1],
@@ -2020,9 +2167,14 @@ def convert_bin(
     video_reports: dict[str, dict[str, Any]] = {}
     if not skip_video:
         for variable_id in video_bundle_ids:
+            video_grid = grid_for(variable_id)
             try:
                 video_artifact = encode_variable_video(
-                    codes_by_offset, variable_offsets[variable_id], variable_id, width=grid.width, height=grid.height
+                    codes_by_offset,
+                    variable_offsets[variable_id],
+                    variable_id,
+                    width=video_grid.width,
+                    height=video_grid.height,
                 )
             except ConversionError as exc:
                 LOG.warning("skipping %s video artifact: %s", variable_id, exc)
@@ -2040,7 +2192,7 @@ def convert_bin(
             # Same shape as the metadata embedded in the .xue, scoped to this
             # variable: the frontend needs grid/time/quantization to configure
             # the WebGL layer and palette regardless of which decode path it uses.
-            video_metadata = build_metadata(run_time, variable_offsets[variable_id], grid, profile, (variable_id,), source=source, unit_seconds=unit_seconds)
+            video_metadata = build_metadata(run_time, variable_offsets[variable_id], video_grid, profile, (variable_id,), source=source, unit_seconds=unit_seconds)
             video_reports[variable_id] = {
                 "variable": variable_id,
                 "streamPath": str(stream_path),
@@ -2048,8 +2200,8 @@ def convert_bin(
                 "byteLength": len(video_artifact.stream_bytes),
                 "crc32": f"{zlib.crc32(video_artifact.stream_bytes) & 0xFFFFFFFF:08x}",
                 "codec": video_artifact.codec_string,
-                "width": grid.width,
-                "height": grid.height,
+                "width": video_grid.width,
+                "height": video_grid.height,
                 "gop": video_artifact.index["gop"],
                 "frameCount": video_artifact.index["frameCount"],
                 "metadataJson": json.dumps(video_metadata),
@@ -2062,7 +2214,9 @@ def convert_bin(
     output_dir.mkdir(parents=True, exist_ok=True)
     poster_reports: dict[str, dict[str, Any]] = {}
     for variable_id in companion_variable_ids:
-        payload, poster_grid = encode_poster(codes_by_offset[variable_offsets[variable_id][0]][variable_id], grid)
+        payload, poster_grid = encode_poster(
+            codes_by_offset[variable_offsets[variable_id][0]][variable_id], grid_for(variable_id)
+        )
         poster_path = output_dir / f"{variable_id}.poster.bin"
         poster_path.write_bytes(payload)
         poster_reports[variable_id] = {
@@ -2090,13 +2244,18 @@ def convert_bin(
     # compression. Each job materializes its raw payloads itself, so at most
     # _BUNDLE_WRITERS bundles' payloads are alive at once.
     variant_factors = source.variant_factors if not skip_variants else ()
-    variant_grids = {factor: _variant_grid(grid, factor) for factor in variant_factors}
+    # One rung per factor per family: a family's rung is its own grid
+    # decimated, so a bundle's tier keeps the tile geometry of its own grid.
+    variant_grids = {
+        factor: {family: _variant_grid(family_grid, factor) for family, family_grid in grids.items()}
+        for factor in variant_factors
+    }
     # Iterate the codes actually present per hour: derived prate has no
     # analysis-frame plane on ECMWF/sflux.
     variant_codes_by_offset = {
         factor: {
             offset: {
-                variable_id: _decimate_codes(codes, grid, factor)
+                variable_id: _decimate_codes(codes, grid_for(variable_id), factor)
                 for variable_id, codes in codes_by_offset[offset].items()
             }
             for offset in offsets
@@ -2111,7 +2270,6 @@ def convert_bin(
         def submit_bundle(
             bundle_id: str,
             factor: int,
-            bundle_grid: GridInfo,
             codes: dict[int, dict[str, np.ndarray]],
         ) -> Future:
             # ``factor`` 1 is the full tier, bare-named; a rung takes its
@@ -2119,6 +2277,13 @@ def convert_bin(
             suffix = f".{variant_tier(factor)}" if factor > 1 else ""
             bundle_variables = bundle_variable_ids(bundle_id)
             bundle_offsets = variable_offsets[bundle_variables[0]]
+            # The bundle is written on its own family's grid, with that
+            # family's tile: one grid for every source but CFSv2, whose
+            # pressure-level bundles are 1° where its surface ones are the
+            # T126 Gaussian grid.
+            family = variable_families.get(bundle_variables[0])
+            bundle_grid = grids[family] if factor == 1 else variant_grids[factor][family]
+            family_tile = source.family_grid(family)[1]
             metadata = build_metadata(
                 run_time,
                 bundle_offsets,
@@ -2130,7 +2295,7 @@ def convert_bin(
                 producers=producer_versions,
             )
 
-            tile = _bundle_tile(source.tile, bundle_grid, factor=factor)
+            tile = _bundle_tile(family_tile, bundle_grid, factor=factor)
             tiles = binformat.TileGeometry(bundle_grid.width, bundle_grid.height, *tile)
 
             def job() -> dict[str, Any]:
@@ -2174,10 +2339,10 @@ def convert_bin(
         # bundle, the ladder's ascending factor order regardless.
         submit_order = available_composite_ids + available_vector_ids + scalar_variable_ids
         report_order = scalar_variable_ids + available_vector_ids + available_composite_ids
-        full_futures = {bundle_id: submit_bundle(bundle_id, 1, grid, codes_by_offset) for bundle_id in submit_order}
+        full_futures = {bundle_id: submit_bundle(bundle_id, 1, codes_by_offset) for bundle_id in submit_order}
         variant_futures = {
             factor: {
-                bundle_id: submit_bundle(bundle_id, factor, variant_grids[factor], variant_codes_by_offset[factor])
+                bundle_id: submit_bundle(bundle_id, factor, variant_codes_by_offset[factor])
                 for bundle_id in submit_order
             }
             for factor in variant_factors

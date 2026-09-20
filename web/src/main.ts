@@ -61,6 +61,7 @@ import {
   isBundleVariableId,
   modelDefaultVariable,
   modelRailCore,
+  overlayResolutionPreference,
   parseBundleMetadata,
   pickBundleVariant,
   settleBundleVariant,
@@ -108,6 +109,7 @@ import {
 import { buildPalette, buildVapourFluxPalette, buildWaveFieldPalette, buildWindFieldPalette, decodeValue, encodeLog, legendGradient } from "./palettes";
 import {
   PRESSURE_BUNDLE_IDS,
+  contourSmoothingCells,
   isPressureBundle,
   pressureLevelForIdentity,
   type PressureBundleId,
@@ -3423,8 +3425,12 @@ function refreshViewportTiles(): void {
 // rung is opened beside the old one, takes its place under the bundle id,
 // and the old one is disposed: its frame stays on screen until the first
 // frame of the new one is decoded, so the swap shows as a change of detail,
-// never as a blank. Overlays are pinned to the smallest rung and members
-// of the mosaic open as overlays, so only the primary moves.
+// never as a blank. Overlays take their rung once at open
+// (`overlayResolutionPreference`: the smallest, or the full grid when the
+// grid is coarse enough that the smallest has nothing left to draw) and
+// members of the mosaic open as overlays, so only the primary moves — an
+// overlay opened on a coarse grid's full tier is never weighed again and
+// so never drops off it while the view is what it is.
 
 const RETIER_SETTLE_MS = 400;
 let retierTimer: ReturnType<typeof setTimeout> | null = null;
@@ -5036,7 +5042,9 @@ function warnOnIdentityMismatch(variableId: ForecastBundleId, identity: Variable
  * describe the primary — and takes the half-resolution tier where one is
  * offered: contour lines are smoothed again in the shader, and nothing the
  * lines slot draws needs the full grid, so the bytes go to the field the
- * viewer is actually reading. `?res=full` still pins every session.
+ * viewer is actually reading. The exception is a coarse grid, where the
+ * half tier has too few samples left to trace a line through
+ * (`overlayResolutionPreference`). `?res=` still pins every session.
  *
  * A probe session (the meteogram's rows) is the primary's tier opened
  * quietly on the streaming path alone: it exists to read one cell's series
@@ -5092,17 +5100,21 @@ function loadVariable(
     // the cell budget says which tier a frame of it can afford to hold.
     const overlay = role === "overlay";
     const quiet = role !== "primary";
-    const variant =
-      options.tier !== undefined
-        ? options.tier
-        : pickBundleVariant(
-            descriptor.variants,
-            neededGridWidth(),
-            slowConnection(),
-            overlay && resolutionPreference !== "full" ? "half" : resolutionPreference,
-            bundleLongitudeSpan(descriptor),
-            bundleVariantBudget(descriptor, run.bundles),
-          );
+    const pickTier = (): VariantDescriptor | null => {
+      // The caller may have weighed the rung already (`retierPrimary`),
+      // and then nothing here is read at all.
+      if (options.tier !== undefined) return options.tier;
+      const budget = bundleVariantBudget(descriptor, run.bundles);
+      return pickBundleVariant(
+        descriptor.variants,
+        neededGridWidth(),
+        slowConnection(),
+        overlay ? overlayResolutionPreference(resolutionPreference, budget?.fullGrid) : resolutionPreference,
+        bundleLongitudeSpan(descriptor),
+        budget,
+      );
+    };
+    const variant = pickTier();
     const video = h264Enabled && role !== "probe" ? descriptor.video : undefined;
     // Opted in, the video path must still earn its bytes — prefer it only
     // when the stream is not larger than the bundle it replaces (lossless
@@ -5296,16 +5308,6 @@ function loadVariable(
 const CONTOUR_WIDTH = 0.6;
 const CONTOUR_EMPHASIS_WIDTH = 1.2;
 
-/** Standard deviation, in grid cells, of the smoothing a plane gets before
- * it is contoured. Sea level pressure is stored in 1 hPa codes and drawn
- * every 4 hPa, so in a weak gradient one code spans several cells and the
- * raw contour is a staircase along their edges; two cells of Gaussian
- * (half a degree on the production grids) is enough to recover the smooth
- * field underneath without blunting a low. The heights are quantized finer
- * relative to their interval and need less, but one figure keeps every
- * level of the family reading the same way. */
-const CONTOUR_SMOOTHING_CELLS = 2;
-
 /** The contour settings for a variable, or null when it is a filled field.
  *
  * Which interval to draw follows the field's `(family, level)` identity;
@@ -5314,14 +5316,22 @@ const CONTOUR_SMOOTHING_CELLS = 2;
  * session. The dequantization comes off the bundle's own codebook rather than
  * the level registry: the registry says what to draw, the file says what its
  * codes mean, and a run encoded at a different profile stays correct.
- * A logarithmic codebook has no contour reading at all. */
+ * A logarithmic codebook has no contour reading at all.
+ *
+ * The smoothing is measured in cells but meant in degrees, so it follows
+ * the grid the plane is on (`contourSmoothingCells`); `longitudeStep` is
+ * that grid's, the session's own or the poster's, and the quarter-degree
+ * default stands for the callers that only ask whether there is a chart
+ * here at all. */
 function contourStyleFor(
   variable: BundleVariable,
   identity: VariableIdentity | null = identityForBundleId(variable.id),
   overlay = false,
+  longitudeStep = 0.25,
 ): ContourStyle | null {
   const level = pressureLevelForIdentity(identity);
   if (!level || variable.quantization.type !== "linear") return null;
+  const smoothing = contourSmoothingCells(longitudeStep);
   if (overlay) {
     // Lines over another field: no fill of their own, and one ink that reads
     // on every ground the fills use — near-white on the dark theme's slates,
@@ -5337,7 +5347,7 @@ function contourStyleFor(
       emphasisWidth: CONTOUR_EMPHASIS_WIDTH,
       lineColor: isDark ? [1, 1, 1, 0.85] : [0.11, 0.1, 0.09, 0.85],
       fillAlpha: 0,
-      smoothing: CONTOUR_SMOOTHING_CELLS,
+      smoothing,
     };
   }
   return {
@@ -5354,7 +5364,7 @@ function contourStyleFor(
     // A low-saturation fill under the lines: enough to read a ridge from a
     // trough at a glance, faint enough that the lines stay the subject.
     fillAlpha: 0.45,
-    smoothing: CONTOUR_SMOOTHING_CELLS,
+    smoothing,
   };
 }
 
@@ -5566,10 +5576,12 @@ function viewportCellWindow(grid: ReturnType<typeof geoGrid>): CellWindow | null
 function sendLabels(frame: DecodedFrame): void {
   const session = slots.lines.session;
   if (!session) return;
-  const style = contourStyleFor(session.variable, session.identity);
+  const grid = geoGrid(session.metadata);
+  // The labels are traced from the same smoothed field the shader draws,
+  // so they read the width off the session's own grid too.
+  const style = contourStyleFor(session.variable, session.identity, false, grid.longitudeStep);
   const level = pressureLevelForIdentity(session.identity);
   if (!style || !level || !ensureLabelLayers()) return;
-  const grid = geoGrid(session.metadata);
   const window = viewportCellWindow(grid);
   if (!window) return;
   const request: LabelRequest = {
@@ -6084,7 +6096,7 @@ function configureSlotLayer(slot: RasterSlot, session: VariableSession, overlay:
         ? steppedPrecipitationPalette(session.variable)
         : buildPalette(session.variable, session.identity),
     );
-    layer.setContours(contourStyleFor(session.variable, session.identity, overlay));
+    layer.setContours(contourStyleFor(session.variable, session.identity, overlay, geoGrid(session.metadata).longitudeStep));
     layer.setFloorNoData(floorIsNoData(session.chartId));
     // An overlay shows nothing until its first plane lands: the slot may
     // still hold another surface's plane, and lines of the wrong level over
@@ -6238,7 +6250,7 @@ async function showPoster(variableId: ForecastBundleId, sequence: number): Promi
     // away from wind has to leave magnitude mode before this uploads.
     target.setVectorField(null);
     target.setPalette(buildPalette(variable));
-    target.setContours(contourStyleFor(variable));
+    target.setContours(contourStyleFor(variable, undefined, false, geoGrid(posterMetadata).longitudeStep));
     target.setFloorNoData(floorIsNoData(registeredBundleId(identityForBundleId(variable.id))));
     target.setFrame(plane);
     target.setVisible(true);
@@ -7258,7 +7270,9 @@ function applyAppearance(): void {
   for (const slot of [slots.fill, slots.lines]) {
     const session = slot.session;
     if (!session || session.vector) continue;
-    slot.layer.setContours(contourStyleFor(session.variable, session.identity, session !== activeSession));
+    slot.layer.setContours(
+      contourStyleFor(session.variable, session.identity, session !== activeSession, geoGrid(session.metadata).longitudeStep),
+    );
   }
   scheduleProbeRender();
 }

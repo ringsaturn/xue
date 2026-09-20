@@ -11,7 +11,9 @@ import {
   frameOffsets,
   hasBundle,
   hasWindBundle,
+  isCoarseGrid,
   isObservationModel,
+  overlayResolutionPreference,
   parseBundleMetadata,
   pickBundleVariant,
   settleBundleVariant,
@@ -471,6 +473,61 @@ describe("pickBundleVariant", () => {
       expect(pickBundleVariant(ladder, zoomedOut, false, "auto", 120, budget(2_500_000, 4))).toEqual(diskHalf);
       expect(pickBundleVariant(ladder, zoomedOut, false, "auto", 120, budget(100_000, 0))).toBeNull();
     });
+  });
+});
+
+describe("overlayResolutionPreference", () => {
+  // The grids the shell meets, as `bundleVariantBudget` reports them:
+  // twice the poster's size, so the numbers are the canonical plane's.
+  const quarterDegree = { width: 1440, height: 722 }; // GFS, ECMWF, AIFS
+  const tenth = { width: 3600, height: 1802 }; // IFS HRES
+  const disk = { width: 3000, height: 3000 }; // a satellite full disk
+  const degree = { width: 360, height: 182 }; // a 1° pressure grid
+  const regional = { width: 3500, height: 1750 }; // the MRMS mosaic
+
+  it("leaves an overlay on the smallest rung on every fine grid", () => {
+    for (const grid of [quarterDegree, tenth, disk, regional]) {
+      expect(isCoarseGrid(grid)).toBe(false);
+      expect(overlayResolutionPreference("auto", grid)).toBe("half");
+    }
+  });
+
+  it("opens an overlay at full resolution on a degree-scale grid", () => {
+    // 360 × 182 is 65 520 cells — a quarter of the fine grids' smallest
+    // rung — while its own half tier is 180 × 91, too few samples to trace
+    // a contour through. The whole plane costs less than the ladder saves.
+    expect(isCoarseGrid(degree)).toBe(true);
+    expect(overlayResolutionPreference("auto", degree)).toBe("full");
+  });
+
+  it("puts the boundary at 512 squared", () => {
+    expect(isCoarseGrid({ width: 512, height: 512 })).toBe(true);
+    expect(isCoarseGrid({ width: 512, height: 513 })).toBe(false);
+    // A degenerate grid says nothing, so it is not coarse.
+    expect(isCoarseGrid({ width: 0, height: 512 })).toBe(false);
+    expect(isCoarseGrid(undefined)).toBe(false);
+    expect(isCoarseGrid(null)).toBe(false);
+  });
+
+  it("lets ?res= pin either end, coarse grid or not", () => {
+    expect(overlayResolutionPreference("full", degree)).toBe("full");
+    expect(overlayResolutionPreference("half", degree)).toBe("half");
+    expect(overlayResolutionPreference("full", quarterDegree)).toBe("full");
+    expect(overlayResolutionPreference("half", quarterDegree)).toBe("half");
+  });
+
+  it("keeps the overlay on the smallest rung when the run says nothing", () => {
+    expect(overlayResolutionPreference("auto", undefined)).toBe("half");
+  });
+
+  it("is the preference the tier pick then reads", () => {
+    // What `loadVariable` does with the answer: a coarse grid's overlay
+    // takes the canonical bundle, a fine grid's the smallest rung, and
+    // neither is touched by how wide the view happens to be.
+    const coarseHalf = { ...variantFixture(), width: 180, height: 91 };
+    const fineHalf = variantFixture();
+    expect(pickBundleVariant([coarseHalf], 512, false, overlayResolutionPreference("auto", degree))).toBeNull();
+    expect(pickBundleVariant([fineHalf], 4000, false, overlayResolutionPreference("auto", quarterDegree))).toEqual(fineHalf);
   });
 });
 

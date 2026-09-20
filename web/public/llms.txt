@@ -44,11 +44,19 @@ Facts worth getting right:
   publishes the aerosol optical depth at 550 nm, in total and by species,
   and the surface PM2.5 / PM10 (below). `cfs`: NCEP CFSv2, the operational
   coupled climate forecast and the only seasonal-range source here — the
-  fifteenth live source. Ensemble member 01 of the 00Z and 12Z cycles on
-  the model's own T126 Gaussian grid (384 × 190, a 0.9375° step),
+  fifteenth live source. Ensemble member 01 of the 00Z and 12Z cycles,
   6-hourly from F6 to F6552 (1092 frames, thirty-nine weeks), complete
-  about eleven and a half hours after the cycle. It publishes `tmp2m`,
-  `prate`, `tcdc`, `dswrf`, `tmpsfc`, `icec`, `icetk` and `wind10m`. Two
+  about eleven and a half hours after the cycle. It is the one source
+  published on **two grids**: its surface fields are on the model's own
+  T126 Gaussian grid (384 × 190, a 0.9375° step) and its upper-air fields
+  on a regular 1° one (360 × 181). Each bundle states its own grid, as
+  every bundle always has, so a reader needs no special case — but a
+  CFSv2 `tmp2m` plane and a CFSv2 `hgt500` plane are different shapes.
+  It publishes `tmp2m`, `prate`, `tcdc`, `dswrf`, `tmpsfc`, `icec`,
+  `icetk` and `wind10m` on the
+  Gaussian grid, and `prmsl`, the geopotential height and temperature on
+  the standard surfaces, the 500 hPa vertical velocity, the isobaric wind
+  pairs and the vapour flux on the 1° grid — thirty-two bundles. Two
   things to know when reading it: its series start at the first six-hour
   step rather than at the analysis, so every bundle's first frame is F6;
   and its precipitation rate, solar radiation and total cloud cover are
@@ -163,11 +171,16 @@ Facts worth getting right:
   `pm25`, `pm10` (surface PM2.5 and PM10, µg/m³) and `pm10dust` (the PM10
   of dust alone); every one a GRIB2 aerosol product whose species and
   size / wavelength intervals are the `aerosol` block beside the
-  variable's `parameter` in the bundle metadata. CFSv2 (`cfs`): `tmp2m`,
-  `prate`, `tcdc`, `dswrf`, `tmpsfc`, `icec`, `icetk` and the vector pair
-  `wind10m`, eight in all, every series starting at F6 rather than at the
-  analysis; its `prate`, `dswrf` and `tcdc` are means over the six hours
-  ending at the frame. CMA:
+  variable's `parameter` in the bundle metadata. CFSv2 (`cfs`): on the T126
+  Gaussian grid `tmp2m`, `prate`, `tcdc`, `dswrf`, `tmpsfc`, `icec`,
+  `icetk` and the vector pair `wind10m`; on the 1° grid `prmsl`,
+  `hgt1000` / `hgt850` / `hgt700` / `hgt500` / `hgt200`, `tmp1000` /
+  `tmp850` / `tmp700` / `tmp500` / `tmp250` / `tmp200`, `vvel500`, the
+  vector pairs `wind1000` / `wind925` / `wind850` / `wind700` / `wind500` /
+  `wind250` / `wind200` and `qflux925` / `qflux850` / `qflux700` /
+  `qflux500` — thirty-two in all, every series starting at F6 rather than
+  at the analysis; its `prate`, `dswrf` and `tcdc` are means over the six
+  hours ending at the frame. CMA:
   `cref`. MRMS: `cref` (observed composite reflectivity, dBZ) and `prate`
   (the MRMS precipitation rate, mm/h; a case may ship the reflectivity
   alone). JMA: `prate` (precipitation intensity class representative rate,

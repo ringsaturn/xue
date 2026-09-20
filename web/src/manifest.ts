@@ -984,6 +984,38 @@ export function pickBundleVariant(
   return sorted[0] ?? null;
 }
 
+/** Cells in a whole plane below which a grid counts as coarse: 512 × 512.
+ * A global 0.25° grid (1440 × 721) is four times this and every finer grid
+ * further still, so only the degree-scale grids fall under it. */
+export const COARSE_GRID_CELLS = 512 * 512;
+
+/** True when a bundle's canonical grid is coarse enough that stepping down
+ * the ladder throws away detail the renderer needs rather than pixels the
+ * view cannot show. `fullGrid` is `VariantBudget.fullGrid`, undefined when
+ * the run says nothing about the grid — then the grid is treated as fine,
+ * which is what every source before the degree-scale ones was. */
+export function isCoarseGrid(fullGrid?: { width: number; height: number } | null): boolean {
+  if (!fullGrid) return false;
+  const cells = fullGrid.width * fullGrid.height;
+  return cells > 0 && cells <= COARSE_GRID_CELLS;
+}
+
+/** The tier preference an overlay session opens on. An overlay draws over
+ * a field the viewer is reading, so it normally takes the smallest rung and
+ * leaves the bytes to the primary — contour lines are smoothed in the
+ * shader anyway. On a coarse grid that reasoning inverts: a 1° field's half
+ * tier is 0.5 samples per 2° of sky, and contours traced from it are a
+ * staircase no amount of smoothing recovers, while the whole plane is a
+ * rounding error against the budget. So a coarse grid's overlay opens full.
+ * `?res=` is a pin and wins either way. */
+export function overlayResolutionPreference(
+  preference: ResolutionPreference,
+  fullGrid?: { width: number; height: number } | null,
+): ResolutionPreference {
+  if (preference !== "auto") return preference;
+  return isCoarseGrid(fullGrid) ? "full" : "half";
+}
+
 /** The tier a session already open on `current` should be on now that the
  * view has moved: `pickBundleVariant` again, with a dead band so a camera
  * resting near a boundary does not reopen the session on every nudge.

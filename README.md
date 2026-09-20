@@ -34,7 +34,7 @@ pipeline.
 | ECMWF IFS HRES (Open-Meteo) | 0.1° global · hourly to F090, 3-hourly to F144, 6-hourly to F360; 00Z and 12Z | <a href="https://dataset.ringsaturn.me/xue/latest-ifshres.json"><img alt="the newest ifshres run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-ifshres.json&query=%24.runTime&label=&color=2a9d8f&style=flat-square&cacheSeconds=600" width="170"></a> |
 | NOAA HRRR | 0.03° contiguous US · hourly to F18, a cycle every hour | <a href="https://dataset.ringsaturn.me/xue/latest-hrrr.json"><img alt="the newest hrrr run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-hrrr.json&query=%24.runTime&label=&color=7b4ea3&style=flat-square&cacheSeconds=600" width="170"></a> |
 | NOAA GEFS-Aerosols | 0.25° global · 3-hourly to F120 | <a href="https://dataset.ringsaturn.me/xue/latest-gefsaero.json"><img alt="the newest gefsaero run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-gefsaero.json&query=%24.runTime&label=&color=8a6d3b&style=flat-square&cacheSeconds=600" width="170"></a> |
-| NCEP CFSv2 | 0.9375° global (T126 Gaussian) · 6-hourly from F6 to F6552 (39 weeks); 00Z and 12Z | <a href="https://dataset.ringsaturn.me/xue/latest-cfs.json"><img alt="the newest cfs run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-cfs.json&query=%24.runTime&label=&color=4f7942&style=flat-square&cacheSeconds=600" width="170"></a> |
+| NCEP CFSv2 | 0.9375° global (T126 Gaussian) surface, 1° global upper air · 6-hourly from F6 to F6552 (39 weeks); 00Z and 12Z | <a href="https://dataset.ringsaturn.me/xue/latest-cfs.json"><img alt="the newest cfs run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-cfs.json&query=%24.runTime&label=&color=4f7942&style=flat-square&cacheSeconds=600" width="170"></a> |
 | NOAA MRMS radar | 0.02° contiguous US · every 2 min, a rolling 4 h window | <a href="https://dataset.ringsaturn.me/xue/latest-mrms.json"><img alt="the newest mrms run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-mrms.json&query=%24.runTime&label=&color=b7472a&style=flat-square&cacheSeconds=600" width="170"></a> |
 | JMA precipitation nowcast | 0.005° Japan · every 5 min, a rolling 3 h window | <a href="https://dataset.ringsaturn.me/xue/latest-jma.json"><img alt="the newest jma run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-jma.json&query=%24.runTime&label=&color=c25b2c&style=flat-square&cacheSeconds=600" width="170"></a> |
 | CMA radar mosaic | 0.0439° China · every 6 min, a rolling 3 h window | <a href="https://dataset.ringsaturn.me/xue/latest-cma.json"><img alt="the newest cma run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-cma.json&query=%24.runTime&label=&color=b03a5b&style=flat-square&cacheSeconds=600" width="170"></a> |
@@ -125,25 +125,39 @@ Bundle sets:
   so the run's core set is the total optical depth alone; a cycle is
   complete about six hours after it.
 - CFSv2 (`cfs`): NCEP's operational coupled climate forecast — the one
-  seasonal-range source here. Seven scalar bundles (the core pair, total
-  cloud cover, downward shortwave radiation, surface temperature and the
-  two sea ice fields) and the 10 m wind, on the model's own T126 Gaussian
-  grid (384 × 190, a 0.9375° step, the same shape of grid as the surface
-  flux source's). Ensemble member 01 of the 00Z and 12Z cycles, which are
-  the ones that run the full nine months. The run itself ends at the first
-  00Z of the tenth calendar month after the cycle — 6564 to 6888 hours
-  depending on the date — so the published axis is the thirty-nine weeks
-  every cycle reaches: six-hourly from F6 to F6552, 1092 frames, about
-  73 000 cells each.
+  seasonal-range source here. Thirty-two bundles on two grids. Seven scalar
+  bundles (the core pair, total cloud cover, downward shortwave radiation,
+  surface temperature and the two sea ice fields) and the 10 m wind come
+  from the model's own T126 Gaussian grid (384 × 190, a 0.9375° step, the
+  same shape of grid as the surface flux source's). The upper air comes on
+  a regular 1° grid (360 × 181), which the source reads as a *grid family*:
+  sea level pressure, the geopotential height at 1000/850/700/500/200 hPa,
+  the temperature at 1000/850/700/500/250/200, the 500 hPa vertical
+  velocity, the wind pair at 1000/925/850/700/500/250/200 and the water
+  vapour flux the converter derives at 925/850/700/500 from the specific
+  humidity there (which is read and never published). A GRIB whose messages
+  disagree on the grid is not a file GDAL can read, so a family's records
+  are fetched into a sibling frame file of their own under the run
+  directory and every bundle built from them carries that family's grid,
+  tile and resolution ladder; nothing else in the format changes, since a
+  bundle has always described its own grid. Ensemble member 01 of the 00Z
+  and 12Z cycles, which are the ones that run the full nine months. The
+  run itself ends at the first 00Z of the tenth calendar month after the
+  cycle — 6564 to 6888 hours depending on the date — so the published axis
+  is the thirty-nine weeks every cycle reaches: six-hourly from F6 to
+  F6552, 1092 frames, about 73 000 cells a surface plane and 65 000 an
+  upper-air one.
   Unlike every other fetched source, a CFSv2 run is published series-major:
   one object per variable holding that variable's whole run, with an `.idx`
   beside it. The fetch reads each variable in one or two very large range
   requests and cuts the frames out of what it read, so a run costs a
-  handful of requests rather than a thousand. The series start at the first
-  six-hour step and the cycle's analysis, which lives in another file
-  family, encodes its flux fields as instantaneous analysis values where
-  every forecast frame carries a six-hour mean; rather than publish one
-  frame of a different quantity the source's axis simply starts at F6.
+  handful of requests rather than a thousand — forty inputs over
+  thirty-two objects, the wind objects read twice each for their U and V
+  blocks. The series start at the first six-hour step and the cycle's
+  analysis, which lives in another file family, encodes its flux fields as
+  instantaneous analysis values where every forecast frame carries a
+  six-hour mean; rather than publish one frame of a different quantity the
+  source's axis simply starts at F6.
   NCEP writes every record as the instantaneous template 4.0, but the
   precipitation rate, the downward shortwave radiation and the total cloud
   cover are means over the six hours ending at the frame, which the bundle

@@ -169,8 +169,29 @@ WMO type 10 pgrb2 uses, which is what the registry's alternate is for, and
 every record is the instantaneous template 4.0 although three of the fields
 are six-hour means.
 
-Cut from the records assembled by byte range off each variable's
-time-series `.idx` (one object per variable, the order the source's) with:
+`cfs.2026091900.pgb.f006.crop.grib2` and `cfs.2026091900.pgb.f012.crop.grib2`
+are the same two frames of the source's **pressure-level grid family**: the
+thirty-one records CFSv2 publishes on a regular 1° grid rather than on the
+Gaussian one (`sources.CFS_PGB_IDS` order — sea level pressure, the
+geopotential height on five surfaces, the temperature on six, the wind pair
+on seven, the specific humidity on four and the 500 hPa vertical velocity),
+over the same East Asian ground at that step: 45 by 38 cells,
+`-srcwin 270 30 45 38`, 90E to 134E and 60N to 23N. A GRIB whose messages
+disagree on the grid is not a file GDAL can read, so the family's records
+live in a sibling frame file of the same name under `pgb/`
+(`sources.family_frame_path`) rather than in the frame; the tests stage the
+two fixtures into that layout. The window spans the mid-latitude westerlies
+from the subtropics to 60N, so it holds real structure for every field it
+carries: 500 hPa heights from 5483 to 5942 gpm, sea level pressure from
+1004 to 1031 hPa, 850 hPa winds to 17 m/s in both components and specific
+humidity from near nothing in the north to 21 g/kg in the south, which is
+what the contour family, the wind pairs and the derived vapour flux run
+against. GDAL reports the grid at exactly 1° from a first cell centre
+already on a whole degree — nothing to snap and nothing to roll.
+
+Both sets are cut from the records assembled by byte range off each
+variable's time-series `.idx` (one object per variable, the order the
+source's) with:
 
 ```sh
 python -m xuebuild fetch --model cfs --run 2026091900 --hours 12 --raw-dir /tmp/raw
@@ -178,6 +199,9 @@ for h in 006 012; do
   gdal_translate -srcwin 96 32 48 40 -of GRIB -co DATA_ENCODING=COMPLEX_PACKING \
     /tmp/raw/cfs.2026091900/cfs.2026091900.f$h.grib2 \
     tests/fixtures/cfs.2026091900.f$h.crop.grib2
+  gdal_translate -srcwin 270 30 45 38 -of GRIB -co DATA_ENCODING=COMPLEX_PACKING \
+    /tmp/raw/cfs.2026091900/pgb/cfs.2026091900.f$h.grib2 \
+    tests/fixtures/cfs.2026091900.pgb.f$h.crop.grib2
 done
 ```
 

@@ -635,6 +635,48 @@ mod tests {
         assert_eq!(normalize_longitudes(snapped).column_roll, 0);
     }
 
+    /// The other CFSv2 grid: the 1° pressure-level series of the `pgb`
+    /// family, which GDAL reports as 360 x 181 from a corner at
+    /// (-180.5, 90.5). Its step is already exactly 1° and its first cell
+    /// center already at -180, so the global snap changes nothing and there
+    /// is no roll — the family arrives in the -180-first layout the surface
+    /// grid has to be rolled into.
+    #[test]
+    fn the_cfs_one_degree_grid_needs_neither_snapping_nor_a_roll() {
+        let raw = GridInfo::new(360, 181, -180.5 + 0.5, 90.5 - 0.5, 1.0, -1.0);
+        assert_eq!((raw.first_longitude, raw.first_latitude), (-180.0, 90.0));
+        assert!(raw.wraps());
+        let snapped = snap_global_longitudes(raw);
+        assert_eq!(snapped.longitude_step, 360.0 / 360.0);
+        assert_eq!(snapped.longitude_step, 1.0);
+        assert_eq!(snapped.first_longitude, -180.0);
+        // A wrapping grid is never re-stepped as a regional one.
+        let snapped = snap_regional_steps(snapped);
+        assert_eq!((snapped.longitude_step, snapped.latitude_step), (1.0, -1.0));
+        let rolled = normalize_longitudes(snapped);
+        assert_eq!(rolled.column_roll, 0);
+        assert_eq!((rolled.first_longitude, rolled.first_latitude), (-180.0, 90.0));
+        assert_eq!((rolled.width, rolled.height), (360, 181));
+        // 181 rows of 1° is pole to pole, the row count the 90 x 91 tile
+        // cuts into two rows of tiles, the last one cell short.
+        assert_eq!(181_usize.div_ceil(91), 2);
+    }
+
+    /// The 45 x 38 cell window of that grid the CFSv2 pressure-level fixture
+    /// was cut to with `gdal_translate -srcwin 270 30 45 38`: GDAL reports
+    /// the geotransform (89.5, 1, 0, 60.5, 0, -1), so the window keeps whole
+    /// degrees, the regional snap leaves both axes where they are, and
+    /// nothing rolls.
+    #[test]
+    fn a_crop_of_the_cfs_one_degree_grid_keeps_its_whole_degrees() {
+        let raw = GridInfo::new(45, 38, 89.5 + 0.5, 60.5 - 0.5, 1.0, -1.0);
+        assert!(!raw.wraps());
+        let snapped = snap_regional_steps(snap_global_longitudes(raw));
+        assert_eq!((snapped.longitude_step, snapped.latitude_step), (1.0, -1.0));
+        assert_eq!((snapped.first_longitude, snapped.first_latitude), (90.0, 60.0));
+        assert_eq!(normalize_longitudes(snapped).column_roll, 0);
+    }
+
     #[test]
     fn the_block_maximum_keeps_the_strongest_cell_and_propagates_nan() {
         let grid = snap_regional_steps(GridInfo::new(4, 2, -129.995, 54.995, 0.01, -0.01))

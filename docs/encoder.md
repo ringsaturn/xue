@@ -257,6 +257,51 @@ are a few per cent larger, so a build on 3.12 is valid but not the same
 bytes, and `tests/test_native.py` skips its byte comparisons there. The
 published runs are built on 3.14.
 
+## Grid families
+
+One source publishes its inputs on two grids: CFSv2 writes the surface
+series on the model's T126 Gaussian grid and the pressure-level and sea
+level pressure series on a regular 1° one. GDAL cannot read a GRIB whose
+messages disagree on the grid — it exposes the later bands at the first
+message's size, warns that the data access may be incomplete and returns a
+different checksum than reading that record alone — so the second grid
+cannot simply be appended to the frame. It is a **grid family**:
+`sources.CompanionFile` with a `production_grid` and a `tile` of its own.
+
+What both encoders do with one:
+
+- **Layout.** A family's records of a frame live in a sibling file of the
+  same name under a directory named by the family id —
+  `cfs.2026091912/pgb/cfs.2026091912.f006.grib2` beside
+  `cfs.2026091912/cfs.2026091912.f006.grib2`
+  (`sources.family_frame_path`, the one place the rule is written down).
+  Listing a run directory lists files, not directories, so the frame list
+  is unchanged; a build narrowed to one family's bundles writes no primary
+  file at all, and then the frames are listed from that family's directory
+  and named by the primary path they would have had.
+- **Inspection and extraction.** A family's variables are inspected and
+  extracted from its own file, and a frame's answers are merged into the
+  one frame dictionary the rest of the converter reads. A missing family
+  file is an error, not a fall-back.
+- **Grid.** Each family gets its own `GridInfo`, read from its own file by
+  the same rules (the global longitude snap, the regional step snap, the
+  column roll). A complete build checks each family's grid against that
+  family's `production_grid`, and `--bbox` crops each family separately.
+- **Bundles.** A bundle is built on the family every one of its inputs is
+  read from — the vapour flux at 850 hPa reads the specific humidity and
+  the wind pair there, all from the same family — and a bundle whose inputs
+  would span two grids is refused outright. Its grid, its tile, its
+  resolution ladder, its poster and its metadata are that family's.
+- **What stays the primary family's.** The build report's run-level `grid`,
+  and therefore the STAC Item's bbox and spatial dimensions, which are read
+  off the core scalars' poster metadata. The manifest has no run-level
+  grid and the frontend opens one grid per session, so nothing in the
+  delivery contract changes.
+
+A companion family without a `production_grid` is unchanged in every
+respect: GFS-Wave and the ECMWF `wave` stream are still appended to the
+frame's GRIB after the primary file's records, on the source's own grid.
+
 ## Not covered
 
 Fetching (`xue fetch`), the showcase driver, `build-bin` and `verify-bin`
@@ -275,7 +320,7 @@ Every source, on real runs, with every artifact compared byte for byte:
 | GFS-SFLUX | de-averaging `prate_ave`, the Gaussian grid, the -180 column roll, `dswrf` |
 | HRRR | a projected source: the Lambert conformal grid read out of GDAL's WKT, the footprint, the resampling onto the regular 0.03° grid (`sin` / `cos` / `tan` / `pow` per row and column, exact IEEE arithmetic per cell; `tests/test_hrrr.py`), and the `MSLMA` / `REFC` aliases |
 | GEFS-AEROSOLS | GRIB2 product definition template 4.48: the aerosol type and the size and wavelength intervals parsed out of the template by the header index and out of GDAL's `GRIB_PDS_TEMPLATE_ASSEMBLED_VALUES` by the band matcher, compared whole with the registered `AerosolIdentity` (a dozen `AOTK` records per frame share the parameter and surface), written as the metadata's `aerosol` block; the `log1p` codebooks on fields other than precipitation, NCEP's local PMTF / PMTC numbers in µg/m³ as GDAL reports them (`tests/test_aerosol.py`, on the Saharan fixture) |
-| CFSv2 | a seasonal run: the T126 Gaussian grid and its column roll, NCEP's local "entire atmosphere" surface (type 200) accepted under the pgrb2 total cloud cover's identity, the `9999` ice-thickness fill, and an axis that begins at a step rather than at the analysis (`first_hour` 6, so every bundle carries `firstFrameOffset: 6`) with the three flux fields' `typeOfStatisticalProcessing` written into metadata although the records are the instantaneous template (`tests/test_cfs.py`, on the East Asian fixture) |
+| CFSv2 | a seasonal run on two grids: the T126 Gaussian surface grid and its column roll, the 1° pressure-level **grid family** beside it (its own frame file, its own `GridInfo`, its own tile and ladder, and the vapour flux derived on it), NCEP's local "entire atmosphere" surface (type 200) accepted under the pgrb2 total cloud cover's identity, the `9999` ice-thickness fill, and an axis that begins at a step rather than at the analysis (`first_hour` 6, so every bundle carries `firstFrameOffset: 6`) with the three flux fields' `typeOfStatisticalProcessing` written into metadata although the records are the instantaneous template (`tests/test_cfs.py`, on the East Asian fixture) |
 | GFS, cropped | `--bbox` with `--bundles`, and `manifest.json` |
 | CMA-RADAR | the NetCDF observation path: unscaling, the fill value, a `unitSeconds: 360` axis listing its offsets around archive gaps, `--hours`; since 0.17 a fetched window like JMA's, read out of its archive with the window's first hour as the run (`tests/test_cma.py`); the id is `cma` since then, `radar` being the local-file shape the wheels before 0.17 know |
 | JMA-HRPNS | a fetched observation that arrives as a NetCDF series (`series_file`), the way the CMA file does, with a cadence: the five-minute times snapped to their slots and the window's first hour taken as the run (`unitSeconds: 300`, `firstFrameOffset: 1`, offsets listed around a gap), a byte-packed rate unscaled through `scale_factor` 0.5 with the 255 fill folded to the codebook bottom, and a run directory holding exactly one series (`tests/test_jma.py`) |

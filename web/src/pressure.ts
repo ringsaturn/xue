@@ -126,3 +126,26 @@ export function pressureLegend(id: PressureBundleId): string[] {
   }
   return ticks;
 }
+
+/** Longitude step, in degrees, at or above which a grid is drawn with the
+ * narrow contour smoothing: 0.9°, so a degree-scale grid is narrow and
+ * 0.25°, 0.1° and 0.03° are not. */
+export const COARSE_CONTOUR_STEP_DEGREES = 0.9;
+
+/** Standard deviation, in grid cells, of the smoothing a plane gets before
+ * it is contoured. The figure is in cells but the reason is in degrees: sea
+ * level pressure is stored in 1 hPa codes and drawn every 4 hPa, so in a
+ * weak gradient one code spans several cells and the raw contour is a
+ * staircase along their edges, and about half a degree of Gaussian is what
+ * recovers the smooth field underneath without blunting a low. Two cells is
+ * that half degree on a 0.25° grid and less than it on the finer ones, so
+ * they all take two; a degree-scale grid would read it as two whole degrees
+ * and flatten the very systems the chart is drawn for, so it takes one —
+ * still a degree of smoothing, which is as little as a cell-wide kernel can
+ * ask for. The heights are quantized finer relative to their interval and
+ * need less, but one figure per grid keeps every level of the family
+ * reading the same way. */
+export function contourSmoothingCells(longitudeStep: number): number {
+  const step = Math.abs(longitudeStep);
+  return Number.isFinite(step) && step >= COARSE_CONTOUR_STEP_DEGREES ? 1 : 2;
+}
