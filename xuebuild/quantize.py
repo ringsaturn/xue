@@ -175,6 +175,31 @@ COMPACT_CLOUD = TemperatureCodebook(minimum=0.0, maximum=100.0, step=1.0, name="
 # the format (legend, probe, poster) already spreads a ramp over.
 QUALITY_CAPE = TemperatureCodebook(minimum=0.0, maximum=6350.0, step=25.0, name="cape")
 COMPACT_CAPE = TemperatureCodebook(minimum=0.0, maximum=6350.0, step=50.0, name="cape")
+# Convective inhibition: cape's twin one-sided the other way, from the zero
+# the whole column shares down to the -1016 J/kg a strong cap reaches at
+# 4 J/kg — finer than cape's 25 J/kg because the interesting range (0 to
+# -200, the cap a forecaster reads) is a fraction of cape's, and coarse
+# enough to spend the full 0..254 code space on the field.
+QUALITY_CIN = TemperatureCodebook(minimum=-1016.0, maximum=0.0, step=4.0, name="cin")
+COMPACT_CIN = TemperatureCodebook(minimum=-1016.0, maximum=0.0, step=8.0, name="cin")
+# Precipitable water: 0–127 kg/m² at half a kilogram (a millimetre of water
+# per square metre) spends the full code space over the ~80 mm a saturated
+# tropical column holds. The field is smooth, so the compact profile keeps
+# the range at a whole kg/m².
+QUALITY_PWAT = TemperatureCodebook(minimum=0.0, maximum=127.0, step=0.5, name="pwat")
+COMPACT_PWAT = TemperatureCodebook(minimum=0.0, maximum=127.0, step=1.0, name="pwat")
+# Planetary boundary layer height: 0–5080 m at 20 m spends the full code
+# space over the ~5 km a deep desert or marine boundary layer reaches.
+# Doubled in the compact profile.
+QUALITY_PBL = TemperatureCodebook(minimum=0.0, maximum=5080.0, step=20.0, name="hpbl")
+COMPACT_PBL = TemperatureCodebook(minimum=0.0, maximum=5080.0, step=40.0, name="hpbl")
+# Precipitation type: a categorical codebook of WMO code table 4.201's own
+# values (1 rain, 3 freezing rain, 5 snow, 8 ice pellets) with 0 for none —
+# integer codes with no error budget, the same book in every profile since
+# there is nothing to trade resolution for. The codes between are other
+# types GFS does not report and are never written; a chart keys on the ones
+# that are.
+PTYPE = TemperatureCodebook(minimum=0.0, maximum=8.0, step=1.0, name="ptype")
 # Visibility in kilometres: 0–25.4 km at 100 m spends the full code space
 # over GFS's ~24 km ceiling; fog (under 1 km) keeps ten codes, enough for
 # the 200 / 500 / 1000 m classes a visibility chart draws.
@@ -565,7 +590,21 @@ ISOBARIC_VARIABLE_IDS: tuple[str, ...] = tuple(QUALITY_ISOBARIC)
 # The surface diagnostics held to the Rust encoder and the frontend by
 # tests/fixtures/surface-registry.json, the way the pressure family and the
 # isobaric families have registries of their own.
-SURFACE_VARIABLE_IDS: tuple[str, ...] = ("gust", "tcdc", "cape", "vis", "dpt2m", "aptmp2m", "lcdc", "mcdc", "hcdc")
+SURFACE_VARIABLE_IDS: tuple[str, ...] = (
+    "gust",
+    "tcdc",
+    "cape",
+    "cin",
+    "vis",
+    "dpt2m",
+    "aptmp2m",
+    "lcdc",
+    "mcdc",
+    "hcdc",
+    "pwat",
+    "hpbl",
+    "ptype",
+)
 
 PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
     "quality": {
@@ -573,14 +612,20 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
         "prate": QUALITY_PRECIPITATION,
         "ugrd10m": QUALITY_WIND,
         "vgrd10m": QUALITY_WIND,
+        "ugrd100m": QUALITY_WIND,
+        "vgrd100m": QUALITY_WIND,
         "dswrf": QUALITY_FLUX,
         "cref": QUALITY_REFLECTIVITY,
         "gust": QUALITY_GUST,
         "tcdc": QUALITY_CLOUD,
         "cape": QUALITY_CAPE,
+        "cin": QUALITY_CIN,
         "vis": QUALITY_VISIBILITY,
         "dpt2m": QUALITY_DEW_POINT,
         "aptmp2m": QUALITY_APPARENT,
+        "pwat": QUALITY_PWAT,
+        "hpbl": QUALITY_PBL,
+        "ptype": PTYPE,
         **QUALITY_CLOUD_LAYER,
         **QUALITY_OCEAN,
         **QUALITY_SATELLITE,
@@ -593,14 +638,20 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
         "prate": COMPACT_PRECIPITATION,
         "ugrd10m": COMPACT_WIND,
         "vgrd10m": COMPACT_WIND,
+        "ugrd100m": COMPACT_WIND,
+        "vgrd100m": COMPACT_WIND,
         "dswrf": COMPACT_FLUX,
         "cref": COMPACT_REFLECTIVITY,
         "gust": COMPACT_GUST,
         "tcdc": COMPACT_CLOUD,
         "cape": COMPACT_CAPE,
+        "cin": COMPACT_CIN,
         "vis": COMPACT_VISIBILITY,
         "dpt2m": COMPACT_DEW_POINT,
         "aptmp2m": COMPACT_APPARENT,
+        "pwat": COMPACT_PWAT,
+        "hpbl": COMPACT_PBL,
+        "ptype": PTYPE,
         **COMPACT_CLOUD_LAYER,
         **COMPACT_OCEAN,
         **COMPACT_SATELLITE,
@@ -624,14 +675,20 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
         "prate": COMPACT_PRECIPITATION,
         "ugrd10m": QUALITY_WIND,
         "vgrd10m": QUALITY_WIND,
+        "ugrd100m": QUALITY_WIND,
+        "vgrd100m": QUALITY_WIND,
         "dswrf": QUALITY_FLUX,
         "cref": QUALITY_REFLECTIVITY,
         "gust": QUALITY_GUST,
         "tcdc": COMPACT_CLOUD,
         "cape": QUALITY_CAPE,
+        "cin": QUALITY_CIN,
         "vis": QUALITY_VISIBILITY,
         "dpt2m": QUALITY_DEW_POINT,
         "aptmp2m": QUALITY_APPARENT,
+        "pwat": QUALITY_PWAT,
+        "hpbl": QUALITY_PBL,
+        "ptype": PTYPE,
         **COMPACT_CLOUD_LAYER,
         **QUALITY_OCEAN,
         "icec": COMPACT_ICE_COVER,

@@ -46,10 +46,11 @@ const registry = registryJson as unknown as Record<string, RegistryEntry>;
 
 describe("the isobaric family registry", () => {
   it("knows every variable the encoders register, and nothing else", () => {
-    // The isobaric pairs: not the 10 m wind, and not the wave vector, which
-    // the ocean registry carries.
+    // The isobaric pairs: not the 10 m or 100 m wind (surface pairs, no
+    // fixture of their own), and not the wave vector, which the ocean
+    // registry carries.
     const componentIds = Object.values(VECTOR_BUNDLES)
-      .filter(([u]) => u !== "ugrd10m" && u !== "uwave")
+      .filter(([u]) => u !== "ugrd10m" && u !== "ugrd100m" && u !== "uwave")
       .flatMap(([u, v]) => [u, v]);
     const scalarIds = ISOBARIC_FILL_IDS.filter((id) => !isVectorBundle(id));
     expect([...scalarIds, ...componentIds].sort()).toEqual(Object.keys(registry).sort());
@@ -159,11 +160,29 @@ describe("the isobaric family registry", () => {
     expect(vectorComponents("wind850")).toEqual(["ugrd850", "vgrd850"]);
     expect(vectorComponents("qflux850")).toEqual(["uqflx850", "vqflx850"]);
     expect(vectorComponents("wind10m")).toEqual(["ugrd10m", "vgrd10m"]);
+    expect(vectorComponents("wind100m")).toEqual(["ugrd100m", "vgrd100m"]);
     expect(vectorComponents("tmp850")).toBeNull();
     expect(vectorMaxMagnitude("wind", null)).toBe(40);
     expect(vectorMaxMagnitude("wind", 850)).toBeGreaterThan(40);
     expect(vectorMaxMagnitude("wind", 250)).toBeGreaterThan(vectorMaxMagnitude("wind", 850));
     expect(vectorMaxMagnitude("qflux", 850)).toBe(50);
+    // The 100 m pair is a wind at hub height: the 10 m ramp's own ceiling.
+    expect(vectorMaxMagnitude("wind100m", null)).toBe(40);
+  });
+
+  it("keeps the 100 m wind its own family, so the wind level row survives", () => {
+    // A second near-surface member would take the wind family's level row;
+    // the 100 m pair is a family of its own instead.
+    expect(familyOf("wind100m")).toBe("wind100m");
+    expect(familyOf("wind10m")).toBe("wind");
+    expect(familyLevels("wind100m")).toEqual(["wind100m"]);
+    expect(familyVariants("wind100m")).toEqual(["wind100m"]);
+    expect(familyMembers("wind100m")).toEqual(["wind100m"]);
+    expect(levelCode("wind100m")).toBe("100M");
+    expect(familyLevels("wind")).toContain("wind1000");
+    // The 100 m id is not an isobaric surface, and the code reads its own
+    // family, not a level.
+    expect(bundleLevel("wind100m")).toBeNull();
   });
 
   it("builds six legend ticks, high to low, for every member", () => {

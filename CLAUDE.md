@@ -549,8 +549,10 @@ never written: `grib2_aliases` (another triple on the same surface) and
 process, GDAL unit). One entry per variable feeds both record matching and
 the schema v3 metadata block; it assigns no container id. Some entries are
 input-only (ECMWF `tp` de-accumulates into `prate`, sflux `prate_ave`
-de-averages into `prate`; `dirpw` and `spfh<level>` feed derivations). The
-isobaric families (`hgt`, `tmp`, `rh`, `spfh`, `ugrd`/`vgrd`,
+de-averages into `prate`; `dirpw` and `spfh<level>` feed derivations; GFS's
+four categorical precipitation-type flags `crain` / `cfrzr` / `cicep` /
+`csnow` combine into the categorical `ptype`, `binconvert.derive_ptype`).
+The isobaric families (`hgt`, `tmp`, `rh`, `spfh`, `ugrd`/`vgrd`,
 `uqflx`/`vqflx`, `vvel`, `thetae`) are generated from one table of eight
 levels; `isobaric_variable(id)` answers `(family, level)`.
 

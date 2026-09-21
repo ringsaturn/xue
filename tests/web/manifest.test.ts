@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import surfaceRegistryJson from "../fixtures/surface-registry.json";
+
 import { CRC32_INITIAL, crc32Hex, crc32Of, crc32Update } from "../../web/src/crc32";
 import {
   axisUnitSeconds,
@@ -21,6 +23,11 @@ import {
   validateLatestPointer,
   validateManifest,
   visibleGridShare,
+  KNOWN_BUNDLE_IDS,
+  SURFACE_DIAGNOSTIC_IDS,
+  VECTOR_BUNDLES,
+  isVectorBundle,
+  vectorComponents,
 } from "../../web/src/manifest";
 import { buildPalette, buildWindSpeedPalette, decodeLinear, decodeLog } from "../../web/src/palettes";
 import type { BundleVariable, LogQuantization, VariantDescriptor, ZarrStoreDescriptor } from "../../web/src/manifest";
@@ -113,6 +120,27 @@ function manifestFixture() {
     ],
   };
 }
+
+describe("the bundle id registry", () => {
+  it("carries the new GFS surface fields in the registry's own order", () => {
+    // The 13 entries of tests/fixtures/surface-registry.json, which the
+    // encoder writes from SURFACE_VARIABLE_IDS (xuebuild/quantize.py); the
+    // frontend list is held to that order.
+    expect(SURFACE_DIAGNOSTIC_IDS).toHaveLength(13);
+    expect(Object.keys(surfaceRegistryJson)).toEqual([...SURFACE_DIAGNOSTIC_IDS]);
+    for (const id of ["cin", "pwat", "hpbl", "ptype", "wind100m"]) {
+      expect(KNOWN_BUNDLE_IDS).toContain(id);
+    }
+  });
+
+  it("keeps the 100 m wind a vector pair of its own, distinct from the 10 m one", () => {
+    expect(isVectorBundle("wind10m")).toBe(true);
+    expect(isVectorBundle("wind100m")).toBe(true);
+    expect(vectorComponents("wind10m")).toEqual(["ugrd10m", "vgrd10m"]);
+    expect(vectorComponents("wind100m")).toEqual(["ugrd100m", "vgrd100m"]);
+    expect(VECTOR_BUNDLES.wind100m).toEqual(["ugrd100m", "vgrd100m"]);
+  });
+});
 
 describe("validateManifest", () => {
   it("accepts a valid schema v5 manifest with a video descriptor", () => {

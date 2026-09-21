@@ -269,7 +269,7 @@ class RegistryTests(unittest.TestCase):
         # stated input order is the order the records sit in the frame.
         primary = gfs.primary_input_ids()
         self.assertEqual(gfs.input_variable_ids, primary + WAVE_IDS)
-        self.assertEqual(len(primary), 61)
+        self.assertEqual(len(primary), 70)
         # ECMWF reads the same three from its `wave` stream, under the same
         # family id, appended the same way.
         ecmwf = source_spec("ecmwf")

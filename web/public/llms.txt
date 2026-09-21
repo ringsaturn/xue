@@ -148,8 +148,11 @@ Facts worth getting right:
   analysis frame; its CAPE is the most-unstable parcel's (`mucape`), its
   wave period the peak period (`pp1d`). GFS additionally: `lcdc`, `mcdc`,
   `hcdc` (low / middle / high cloud cover), `vis`, `aptmp2m` (apparent
-  temperature) and `icec` (sea ice cover), which the ECMWF open data does
-  not carry. AIFS: the ECMWF set less what its open data lacks — no
+  temperature), `cin` (convective inhibition), `pwat` (precipitable water),
+  `hpbl` (planetary boundary layer height), `ptype` (the categorical
+  precipitation type derived from the model's four rain / freezing-rain /
+  ice-pellet / snow flags), the 100 m wind pair `wind100m`, and `icec` (sea
+  ice cover), which the ECMWF open data does not carry. AIFS: the ECMWF set less what its open data lacks — no
   `rh850` / `rh700` / `rh500` (it carries specific humidity only), no
   `gust`, `cape`, `icetk` or `perpw` — plus `lcdc`, `mcdc`, `hcdc`; its
   `prate` is de-accumulated from a run total in millimetres and is a mean

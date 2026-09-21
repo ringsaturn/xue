@@ -30,7 +30,21 @@ import { PRESSURE_BUNDLE_IDS, pressureLabel } from "./pressure";
  * `tests/fixtures/aerosol-registry.json` (`tests/web/aerosol.test.ts`), the
  * way pressure.ts is held by its own registry.
  */
-export type IsobaricFamily = "hgt" | "tmp" | "rh" | "spfh" | "wind" | "qflux" | "vvel" | "thetae" | "cloud" | "ice" | "wave" | "aod" | "pm";
+export type IsobaricFamily =
+  | "hgt"
+  | "tmp"
+  | "rh"
+  | "spfh"
+  | "wind"
+  | "wind100m"
+  | "qflux"
+  | "vvel"
+  | "thetae"
+  | "cloud"
+  | "ice"
+  | "wave"
+  | "aod"
+  | "pm";
 
 export const ISOBARIC_FAMILIES: readonly IsobaricFamily[] = [
   "hgt",
@@ -38,6 +52,7 @@ export const ISOBARIC_FAMILIES: readonly IsobaricFamily[] = [
   "rh",
   "spfh",
   "wind",
+  "wind100m",
   "qflux",
   "vvel",
   "thetae",
@@ -99,6 +114,20 @@ export const FAMILIES: Record<IsobaricFamily, FamilyInfo> = {
   // input, but no source publishes it, so the shell writes no tile.
   spfh: { id: "spfh", kind: "scalar", surface: null, code: "SPFH", surfaceCode: "", glossKey: null },
   wind: { id: "wind", kind: "vector", surface: "wind10m", code: "WIND", surfaceCode: "10M", glossKey: "varWind" },
+  // The 100 m wind is its own family, not a member of the wind family: a
+  // family has one surface member and the eight isobaric surfaces, and a
+  // second near-surface member would take the level row the wind family
+  // already has. One member, no level row (a family of variants), so the
+  // bundle is reached through the field sheet and the generic tile.
+  wind100m: {
+    id: "wind100m",
+    kind: "vector",
+    surface: "wind100m",
+    code: "WIND100M",
+    surfaceCode: "100M",
+    glossKey: "varWind",
+    variants: [{ id: "wind100m", code: "100M" }],
+  },
   qflux: { id: "qflux", kind: "vector", surface: null, code: "QFLUX", surfaceCode: "", glossKey: "varVapourFlux" },
   vvel: { id: "vvel", kind: "scalar", surface: null, code: "OMEGA", surfaceCode: "", glossKey: "varOmega" },
   thetae: { id: "thetae", kind: "scalar", surface: null, code: "THETAE", surfaceCode: "", glossKey: "varThetaE" },
@@ -407,6 +436,31 @@ export const WAVE_PERIOD_CHART_MAX = 20;
 export const GUST_SPEED_MAX = 50;
 export const CAPE_CHART_MAX = 5000;
 
+/** Precipitable water reads to 80 kg/m² (numerically a millimetre of water):
+ * a saturated tropical column, past which the codebook's 127 kg/m² holds the
+ * extreme for a probe without stretching the ramp. */
+export const PWAT_CHART_MAX = 80;
+/** Convective inhibition reads over the cap a forecaster acts on, 0 down to
+ * -200 J/kg; the codebook runs on to -1016 so a strong cap stays distinct in
+ * a probe. The ramp is one-sided and negative: 0 is transparent. */
+export const CIN_CHART_RANGE: readonly [number, number] = [-200, 0];
+/** The planetary boundary layer height reads to 4 km — a deep desert or
+ * marine boundary layer; the codebook runs to 5080 m. */
+export const PBL_CHART_MAX = 4000;
+
+/** The precipitation-type legend: WMO code table 4.201's values GFS
+ * reports, each with the colour a chart paints it in and the message key
+ * its legend swatch reads under. A categorical field, so its legend is a
+ * key of swatches, not a bar (`variables.ts::SurfaceEntry.legendKey`), and
+ * code 0 (no precipitation) is transparent and not in the key. The colours
+ * are the palette's own (`palettes.ts`). */
+export const PTYPE_CLASSES: readonly { code: number; rgb: readonly [number, number, number]; labelKey: MessageKey }[] = [
+  { code: 1, rgb: [58, 123, 214], labelKey: "legendPtypeRain" },
+  { code: 3, rgb: [226, 111, 168], labelKey: "legendPtypeFreezingRain" },
+  { code: 5, rgb: [205, 224, 242], labelKey: "legendPtypeSnow" },
+  { code: 8, rgb: [138, 92, 196], labelKey: "legendPtypeIcePellets" },
+];
+
 /** The value span a filled scalar's legend reads over, or null where the
  * span is the codebook's own: a registered temperature surface takes its
  * windowed domain, a surface diagnostic its chart ceiling. */
@@ -419,9 +473,14 @@ export function scalarLegendRange(identity: VariableIdentity): readonly [number,
   if (family === "gust") return [0, GUST_SPEED_MAX];
   if (family === "tcdc" || family === "lcdc" || family === "mcdc" || family === "hcdc") return [0, 100];
   if (family === "cape") return [0, CAPE_CHART_MAX];
+  if (family === "cin") return CIN_CHART_RANGE;
   if (family === "vis") return [0, VISIBILITY_CHART_MAX];
   if (family === "dpt2m") return DEW_POINT_CHART_RANGE;
   if (family === "aptmp2m") return APPARENT_CHART_RANGE;
+  if (family === "pwat") return [0, PWAT_CHART_MAX];
+  if (family === "hpbl") return [0, PBL_CHART_MAX];
+  // Precipitation type is categorical: its legend is a swatch key, not a
+  // ramp, so it has no scalar span (`isobaricLegend` returns null too).
   // The skin temperature reads over the 2 m temperature's ramp; the
   // codebook's 67 °C desert top holds the ramp's last colour.
   if (family === "tmpsfc") return temperaturePaletteDomain(null);
@@ -526,6 +585,9 @@ export const APPARENT_CHART_RANGE: readonly [number, number] = [-50, 50];
 export function vectorMaxMagnitude(family: ChartFamily, level: number | null): number {
   if (family === "qflux") return 50;
   if (family === "wave") return WAVE_HEIGHT_CHART_MAX;
+  // The 100 m pair is a wind at hub height: the 10 m ramp's own ceiling, so
+  // a speed is the same colour on both.
+  if (family === "wind100m") return 40;
   if (!isRegisteredLevel(level)) return 40;
   if (level >= 700) return 60;
   if (level === 500) return 80;
@@ -540,6 +602,7 @@ export function familyLabel(id: ForecastBundleId): string {
   if (level === null) {
     if (id === "tmp2m") return t("varLabelTmp2m");
     if (id === "wind10m") return t("varLabelWind10m");
+    if (id === "wind100m") return t("varLabelWind100m");
     if (id === "wave") return t("varLabelWave");
     const listed = MEMBER_LABEL_KEYS[id];
     if (listed) return t(listed);
@@ -550,6 +613,7 @@ export function familyLabel(id: ForecastBundleId): string {
     rh: "varLabelRhAtLevel",
     spfh: "varLabelSpfhAtLevel",
     wind: "varLabelWindAtLevel",
+    wind100m: "varLabelWind100m",
     qflux: "varLabelQfluxAtLevel",
     hgt: "varLabelHeightAtLevel",
     vvel: "varLabelVvelAtLevel",
@@ -597,6 +661,7 @@ export function isobaricCode(id: ForecastBundleId): string {
     rh: "RH",
     spfh: "SPFH",
     wind: "WIND",
+    wind100m: "WIND100M",
     qflux: "QFLUX",
     vvel: "OMEGA",
     thetae: "THETAE",
@@ -640,9 +705,12 @@ export function isobaricLegend(identity: VariableIdentity): string[] | null {
   if (family === "gust") return rangeLegend([0, GUST_SPEED_MAX], 10);
   if (family === "tcdc" || family === "lcdc" || family === "mcdc" || family === "hcdc") return rangeLegend([0, 100], 20);
   if (family === "cape") return rangeLegend([0, CAPE_CHART_MAX], 1000);
+  if (family === "cin") return rangeLegend(CIN_CHART_RANGE, 40);
   if (family === "vis") return rangeLegend([0, VISIBILITY_CHART_MAX], 5);
   if (family === "dpt2m") return rangeLegend(DEW_POINT_CHART_RANGE, 6);
   if (family === "aptmp2m") return rangeLegend(APPARENT_CHART_RANGE, 10);
+  if (family === "pwat") return rangeLegend([0, PWAT_CHART_MAX], 10);
+  if (family === "hpbl") return rangeLegend([0, PBL_CHART_MAX], 500);
   if (family === "tmpsfc") return rangeLegend(temperaturePaletteDomain(null), 10);
   if (family === "icec") return rangeLegend([0, 100], 20);
   if (family === "icetk") return rangeLegend([0, ICE_THICKNESS_CHART_MAX], 1);

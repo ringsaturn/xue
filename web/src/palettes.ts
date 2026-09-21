@@ -1,10 +1,14 @@
 import { identityForBundleId, type VariableIdentity } from "./identity";
 import {
   CAPE_CHART_MAX,
+  CIN_CHART_RANGE,
   DEW_POINT_CHART_RANGE,
   GUST_SPEED_MAX,
   ICE_THICKNESS_CHART_MAX,
   OMEGA_PALETTE_MAX,
+  PBL_CHART_MAX,
+  PTYPE_CLASSES,
+  PWAT_CHART_MAX,
   VISIBILITY_CHART_MAX,
   WAVE_HEIGHT_CHART_MAX,
   WAVE_PERIOD_CHART_MAX,
@@ -299,6 +303,63 @@ export const CAPE_STOPS: Stop[] = [
   [CAPE_CHART_MAX, 90, 30, 130, 255],
 ];
 
+// Precipitable water in kg/m² — numerically a millimetre of water — as a
+// rising moisture ramp: a dry column is nearly the map, the middle thickens
+// through teal and blue, and a saturated tropical column deepens to violet
+// at the 80 mm chart ceiling. The same reading as the humidity and dew point
+// ramps, on the column's own scale. Values are kg/m².
+const PWAT_STOPS: Stop[] = [
+  [0, 200, 220, 200, 0],
+  [5, 190, 222, 180, 70],
+  [10, 170, 216, 165, 130],
+  [20, 130, 205, 150, 185],
+  [30, 90, 190, 160, 215],
+  [45, 60, 160, 185, 240],
+  [60, 50, 115, 195, 250],
+  [PWAT_CHART_MAX, 60, 60, 150, 255],
+];
+
+// Convective inhibition in J/kg, one-sided the other way to CAPE: no cap at
+// 0 J/kg is the map, and the ramp deepens down to a lifted parcel twice held
+// back, through a cool blue that is the opposite side of the CAPE ramp's
+// warm core — a violet at the -200 J/kg chart ceiling, past which the
+// codebook runs on to -1016 for a probe. Values are J/kg, always <= 0.
+const CIN_STOPS: Stop[] = [
+  [CIN_CHART_RANGE[0], 90, 30, 130, 255],
+  [-150, 70, 55, 165, 250],
+  [-100, 55, 95, 190, 235],
+  [-60, 70, 140, 205, 210],
+  [-30, 120, 185, 215, 160],
+  [-10, 180, 220, 225, 60],
+  [0, 220, 225, 220, 0],
+];
+
+// Planetary boundary layer height in metres, drawn as a terrain ramp: a
+// shallow night or winter layer is nearly the map, the mixing layer climbs
+// through lowland green and tan, and a deep desert or marine layer runs to
+// the brown of high ground at the 4 km chart ceiling. Values are metres.
+const PBL_STOPS: Stop[] = [
+  [0, 60, 120, 80, 0],
+  [200, 90, 150, 90, 90],
+  [500, 130, 175, 95, 150],
+  [1000, 185, 195, 110, 195],
+  [1500, 215, 195, 120, 220],
+  [2000, 225, 170, 100, 240],
+  [2500, 205, 130, 80, 248],
+  [3000, 170, 95, 70, 252],
+  [PBL_CHART_MAX, 150, 70, 60, 255],
+];
+
+// Precipitation type as a categorical palette over WMO code table 4.201's
+// values: rain blue, freezing rain pink, snow a pale white-blue, ice pellets
+// purple, with code 0 (no precipitation) transparent. A discrete field, so
+// the stops sit exactly on the class codes; an interpolated code the encoder
+// never writes (2, 4, 6, 7) blends between neighbours, which is harmless.
+const PTYPE_STOPS: Stop[] = [
+  [0, 0, 0, 0, 0],
+  ...PTYPE_CLASSES.map(({ code, rgb }) => [code, rgb[0], rgb[1], rgb[2], 255] as Stop),
+];
+
 // Vertical velocity ω, a diverging ramp about zero: nothing within
 // ±0.1 Pa/s, where most of a field sits and the small values are noise,
 // ascent (negative ω, the side a rainfall chart shades) in blues deepening
@@ -585,7 +646,9 @@ export function windFieldStops(maxSpeed = WIND_SPEED_MAX): Stop[] {
  * palette, with the field's transparency folded in. `maxSpeed` is the
  * speed the last entry stands for; the ramp and its transparency stretch
  * with it, so an isobaric wind with a higher ceiling keeps the same colours
- * at the same fraction of its own scale. */
+ * at the same fraction of its own scale. The 100 m pair is a wind at hub
+ * height and takes the 10 m wind's own 40 m/s ceiling (`levels.ts::
+ * vectorMaxMagnitude`), so a speed is the same colour on both. */
 export function buildWindFieldPalette(maxSpeed = WIND_SPEED_MAX): Uint8Array {
   const palette = buildWindSpeedPalette(maxSpeed);
   const stretch = maxSpeed / WIND_SPEED_MAX;
@@ -676,6 +739,12 @@ function stopsFor(variable: BundleVariable, identity: VariableIdentity | null): 
   if (family === "gust") return windFieldStops(GUST_SPEED_MAX);
   if (family === "tcdc" || family === "lcdc" || family === "mcdc" || family === "hcdc") return CLOUD_STOPS;
   if (family === "cape") return CAPE_STOPS;
+  if (family === "cin") return CIN_STOPS;
+  if (family === "pwat") return PWAT_STOPS;
+  if (family === "hpbl") return PBL_STOPS;
+  // Precipitation type is categorical: the palette steps on its class codes
+  // and its legend is a swatch key (`levels.ts::PTYPE_CLASSES`).
+  if (family === "ptype") return PTYPE_STOPS;
   if (family === "vis") return VISIBILITY_STOPS;
   if (family === "dpt2m") return DEW_POINT_STOPS;
   // The apparent temperature is a temperature: the same ramp, so 30 °C

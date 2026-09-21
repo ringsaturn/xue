@@ -25,6 +25,9 @@ static HEIGHT_RE: LazyLock<Regex> = LazyLock::new(|| {
 static TEN_METRE_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i)(?:^|[^0-9])10(?:\.0+)?\s*m(?:eter)?s?\s+above\s+ground").expect("valid regex")
 });
+static HUNDRED_METRE_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)(?:^|[^0-9])100(?:\.0+)?\s*m(?:eter)?s?\s+above\s+ground").expect("valid regex")
+});
 
 pub const SUPPORTED_EXTENSIONS: &[&str] = &["grb", "grb2", "grib2"];
 
@@ -134,7 +137,7 @@ pub fn raster_expression(variable_id: &str, unit: &str) -> Result<String> {
             }
             Ok("maximum(0,minimum(1270,A))".into())
         }
-        "ugrd10m" | "vgrd10m" => wind_expression(unit),
+        "ugrd10m" | "vgrd10m" | "ugrd100m" | "vgrd100m" => wind_expression(unit),
         // The 2 m dew point, the apparent temperature and the surface (skin)
         // temperature take the temperature's rule over their own codebook
         // ranges.
@@ -266,6 +269,71 @@ pub fn raster_expression(variable_id: &str, unit: &str) -> Result<String> {
                 )));
             }
             Ok("maximum(0,minimum(6350,A))".into())
+        }
+        // Convective inhibition in J/kg, one-sided the other way from cape:
+        // 0 at the top, -1016 J/kg at the bottom.
+        "cin" => {
+            if !["j/kg", "jkg-1", "jkg^-1"].contains(&compact_unit(unit).as_str()) {
+                return Err(EncodeError::conversion(format!(
+                    "unsupported convective inhibition unit: {}",
+                    if unit.is_empty() { "<missing>" } else { unit }
+                )));
+            }
+            Ok("maximum(-1016,minimum(0,A))".into())
+        }
+        // Precipitable water, a column mass in kg/m² — one kilogram per
+        // square metre is a millimetre of liquid water, so no conversion
+        // applies. Mirrors `precipitable_water_expression`.
+        "pwat" => {
+            if !["kg/m^2", "kg/m2", "kgm^-2", "kgm-2", "kgm**-2", "mm", "kgs-1m-1"]
+                .contains(&compact_unit(unit).as_str())
+            {
+                return Err(EncodeError::conversion(format!(
+                    "unsupported precipitable water unit: {}",
+                    if unit.is_empty() { "<missing>" } else { unit }
+                )));
+            }
+            Ok("maximum(0,minimum(127,A))".into())
+        }
+        // Planetary boundary layer height in metres.
+        "hpbl" => {
+            if !["m", "metre", "meter", "metres", "meters"].contains(&compact_unit(unit).as_str()) {
+                return Err(EncodeError::conversion(format!(
+                    "unsupported boundary layer height unit: {}",
+                    if unit.is_empty() { "<missing>" } else { unit }
+                )));
+            }
+            Ok("maximum(0,minimum(5080,A))".into())
+        }
+        // The four 0/1 categorical precipitation-type flags (GRIB2 code
+        // table 4.222), which GDAL reports under a unit that is the code
+        // table's own name rather than a physical unit — `0=no; 1=yes`, or
+        // `(Code table 4.222)` from another driver.
+        "crain" | "cfrzr" | "cicep" | "csnow" => {
+            let compact = compact_unit(unit).replace("codetable", "");
+            if !matches!(compact.as_str(), "1" | "-" | "" | "4.222" | "0=no;1=yes")
+                && !compact.contains("4.222")
+                && !compact.contains("0=no")
+            {
+                return Err(EncodeError::conversion(format!(
+                    "unsupported categorical unit: {}",
+                    if unit.is_empty() { "<missing>" } else { unit }
+                )));
+            }
+            Ok("maximum(0,minimum(1,A))".into())
+        }
+        // The derived categorical precipitation type, which is never read
+        // from a record; the expression exists so a registry walk over every
+        // surface diagnostic can ask for one (WMO code table 4.201, 0 to 8).
+        "ptype" => {
+            let compact = compact_unit(unit).replace("codetable", "");
+            if !matches!(compact.as_str(), "1" | "-" | "" | "4.201") && !compact.contains("4.201") {
+                return Err(EncodeError::conversion(format!(
+                    "unsupported precipitation type unit: {}",
+                    if unit.is_empty() { "<missing>" } else { unit }
+                )));
+            }
+            Ok("maximum(0,minimum(8,A))".into())
         }
         // Mean sea level pressure: GRIB2 carries pascals, the codebook
         // quantizes hectopascals. Only Pa is accepted — a file already in
@@ -586,8 +654,8 @@ fn band_matches(variable_id: &str, band: &BandInfo) -> Result<bool> {
         // gust on the 10 m surface (the interval maximum, `10fg`) and the
         // most-unstable CAPE departing from surface type 17, which GDAL
         // describes as such and gives no short name of its own.
-        "dswrf" | "gust" | "cape" | "vis" | "tmpsfc" | "icec" | "icetk" | "htsgw" | "perpw"
-        | "dirpw" => {
+        "dswrf" | "gust" | "cape" | "cin" | "hpbl" | "crain" | "cfrzr" | "cicep" | "csnow"
+        | "vis" | "tmpsfc" | "icec" | "icetk" | "htsgw" | "perpw" | "dirpw" => {
             let text = searchable(band).to_lowercase();
             let registered = variable_spec(variable_id)?.grib_element;
             let aliases: &[&str] = match registered {
@@ -649,10 +717,32 @@ fn band_matches(variable_id: &str, band: &BandInfo) -> Result<bool> {
                         || text.contains("ground or water surface")))
                 || (variable_id == "cref" && is_mrms_record(band, "MERGEDREFLECTIVITYQCCOMPOSITE"))
         }
+        // Precipitable water: NCEP writes the column total on its local
+        // "entire atmosphere (considered as a single layer)" surface (type
+        // 200), which GDAL renders like the WMO type 10 and describes in
+        // full. Mirrors `_is_entire_atmosphere_record(…, "PWAT")`.
+        "pwat" => {
+            let text = searchable(band).to_lowercase();
+            element == variable_spec(variable_id)?.grib_element
+                && (short_name == "0-EATM" || text.contains("entire atmosphere"))
+        }
         "ugrd10m" | "vgrd10m" => {
             element == variable_spec(variable_id)?.grib_element
                 && (matches!(short_name.as_str(), "10-HTGL" | "10-M-HTGL")
                     || TEN_METRE_RE.is_match(&searchable(band)))
+        }
+        // One wind component on the 100 m surface (type 103, value 100),
+        // which pgrb2 writes for wind power; GDAL spells it `100-HTGL`.
+        // Mirrors `_is_hundred_metre_wind`.
+        "ugrd100m" | "vgrd100m" => {
+            element == variable_spec(variable_id)?.grib_element
+                && (matches!(short_name.as_str(), "100-HTGL" | "100-M-HTGL")
+                    || HUNDRED_METRE_RE.is_match(&searchable(band)))
+        }
+        // The derived precipitation type is never a GRIB record.
+        // Mirrors `ptype` in `_band_matches`.
+        "ptype" => {
+            return Err(EncodeError::conversion("ptype is derived, not a GRIB record"))
         }
         // PRMSL on GRIB2 surface 101 (mean sea level); GDAL spells that
         // short name `0-MSL`, and the phrase fallback catches drivers that

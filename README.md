@@ -60,9 +60,12 @@ for it.
 
 Bundle sets:
 
-- GFS: 2 m temperature, precipitation rate, 10 m wind, the surface
-  diagnostics (gust, total / low / middle / high cloud cover, CAPE,
-  visibility, 2 m dew point and apparent temperature), 850 / 700 / 500 hPa
+- GFS: 2 m temperature, precipitation rate, the categorical precipitation
+  type (derived from the model's four 0/1 rain / freezing-rain / ice-pellet /
+  snow flags), 10 m wind and 100 m wind, the surface diagnostics (gust,
+  total / low / middle / high cloud cover, CAPE and convective inhibition,
+  visibility, 2 m dew point and apparent temperature, precipitable water and
+  planetary boundary layer height), 850 / 700 / 500 hPa
   vertical velocity, 850 hPa equivalent potential temperature (derived from
   temperature and specific humidity), the ocean fields (skin temperature,
   sea ice cover and thickness, significant wave height and primary period

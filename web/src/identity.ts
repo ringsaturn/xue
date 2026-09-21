@@ -44,6 +44,7 @@ export type ChartFamily =
   | "rh"
   | "spfh"
   | "wind"
+  | "wind100m"
   | "qflux"
   | "vvel"
   | "thetae"
@@ -56,9 +57,13 @@ export type ChartFamily =
   | "mcdc"
   | "hcdc"
   | "cape"
+  | "cin"
   | "vis"
   | "dpt2m"
   | "aptmp2m"
+  | "pwat"
+  | "hpbl"
+  | "ptype"
   | "tmpsfc"
   | "icec"
   | "icetk"
@@ -152,7 +157,11 @@ function isTriple(parameter: BundleParameter, discipline: number, category: numb
  * (0,4,192) @1 downward shortwave radiation, (0,16,5) @10 composite
  * reflectivity, (0,2,22) @1 wind gust, (0,6,1) @10 total cloud cover,
  * (0,6,3) @214 / (0,6,4) @224 / (0,6,5) @234 low / middle / high cloud
- * cover, (0,7,6) @1 surface-based CAPE, (0,19,0) @1 visibility, (0,0,6)
+ * cover, (0,7,6) @1 surface-based CAPE and (0,7,7) @1 convective
+ * inhibition, (0,1,3) @200 precipitable water (NCEP's local "entire
+ * atmosphere (considered as a single layer)" surface, which carries no
+ * value), (0,3,196) @1 planetary boundary layer height, (0,1,19) @1
+ * precipitation type, (0,19,0) @1 visibility, (0,0,6)
  * @103 value 2 dew point, (0,0,21) @103 value 2 apparent temperature,
  * (0,2,8) @100 vertical velocity, (0,0,3) @100 equivalent potential
  * temperature, (0,0,0) @1 surface (skin) temperature, (10,2,0) @1 sea ice
@@ -210,7 +219,11 @@ export function identityForParameter(parameter: BundleParameter, band?: BundleBa
   if (isTriple(parameter, 0, 6, 4) && surface === 224) return scalar("mcdc", null);
   if (isTriple(parameter, 0, 6, 5) && surface === 234) return scalar("hcdc", null);
   if (isTriple(parameter, 0, 7, 6) && surface === 1) return scalar("cape", null);
+  if (isTriple(parameter, 0, 7, 7) && surface === 1) return scalar("cin", null);
   if (isTriple(parameter, 0, 19, 0) && surface === 1) return scalar("vis", null);
+  if (isTriple(parameter, 0, 1, 3) && surface === 200) return scalar("pwat", null);
+  if (isTriple(parameter, 0, 3, 196) && surface === 1) return scalar("hpbl", null);
+  if (isTriple(parameter, 0, 1, 19) && surface === 1) return scalar("ptype", null);
   return null;
 }
 
@@ -336,11 +349,12 @@ function aerosolField(fields: readonly AerosolField[], aerosol: BundleAerosol | 
 }
 
 /** The u and v halves of each vector family, as parameter triples. The
- * wind and the vapour flux are on isobaric surfaces (the wind also at 10 m);
- * the wave vector — Xue-local numbers in the oceanographic discipline's
- * waves category, the height along the direction of travel — sits on the
- * water surface like the wave fields it is derived from, its surface value
- * no more part of the identity than theirs. */
+ * wind and the vapour flux are on isobaric surfaces (the wind also at 10 m
+ * and, as its own family, at 100 m); the wave vector — Xue-local numbers in
+ * the oceanographic discipline's waves category, the height along the
+ * direction of travel — sits on the water surface like the wave fields it
+ * is derived from, its surface value no more part of the identity than
+ * theirs. */
 const VECTOR_PAIRS: readonly { family: ChartFamily; u: readonly [number, number, number]; v: readonly [number, number, number] }[] = [
   { family: "wind", u: [0, 2, 2], v: [0, 2, 3] },
   { family: "qflux", u: [0, 1, 250], v: [0, 1, 251] },
@@ -357,8 +371,14 @@ export function identityForParameterPair(u: BundleParameter, v: BundleParameter)
   if (surfaceValue(u) !== surfaceValue(v)) return null;
   for (const pair of VECTOR_PAIRS) {
     if (!isTriple(u, ...pair.u) || !isTriple(v, ...pair.v)) continue;
-    if (pair.family === "wind" && u.typeOfFirstFixedSurface === 103 && surfaceValue(u) === 10) {
-      return vector("wind", null);
+    if (pair.family === "wind" && u.typeOfFirstFixedSurface === 103) {
+      // The same parameters on a height-above-ground surface: 10 m is the
+      // surface wind, 100 m the turbine hub height, its own family so it
+      // does not take over the wind family's isobaric level row.
+      const value = surfaceValue(u);
+      if (value === 10) return vector("wind", null);
+      if (value === 100) return vector("wind100m", null);
+      return null;
     }
     if (pair.family === "wave") return u.typeOfFirstFixedSurface === 1 ? vector("wave", null) : null;
     const level = isobaricLevel(u);

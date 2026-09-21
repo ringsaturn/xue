@@ -29,7 +29,7 @@
 
 import { t, type MessageKey } from "./i18n";
 import type { ChartFamily, VariableIdentity } from "./identity";
-import { familyLabel, isobaricCode, isobaricLegend, type IsobaricFamily } from "./levels";
+import { PTYPE_CLASSES, familyLabel, isobaricCode, isobaricLegend, type IsobaricFamily } from "./levels";
 import { ISOBARIC_LEVELS, type IsobaricLevel, type KnownBundleId } from "./manifest";
 import { PRESSURE_BUNDLE_IDS, PRESSURE_LEVELS, pressureCode, pressureLabel, pressureLegend, type PressureBundleId } from "./pressure";
 
@@ -101,6 +101,20 @@ export interface LegendSwatch {
  * the composite makes each thing look like, since the guns are band
  * differences with no unit to tick. The order is the one a forecaster
  * reads it in — the signal first, then what it is told apart from. */
+/** The precipitation type's key: one swatch per class, the colours its
+ * categorical palette paints (`levels.ts::PTYPE_CLASSES`, `palettes.ts`).
+ * Code 0 (no precipitation) is transparent and is no swatch. Built on
+ * demand rather than at load: this module sits on a cycle (identity.ts
+ * reads it and the level registry it reads comes back through here), so
+ * reading `PTYPE_CLASSES` at module evaluation would see an uninitialised
+ * binding when `levels.ts` is the entry point. */
+function ptypeKey(): readonly { color: string; labelKey: MessageKey }[] {
+  return PTYPE_CLASSES.map(({ rgb, labelKey }) => ({
+    color: `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`,
+    labelKey,
+  }));
+}
+
 const DUST_RGB_KEY: readonly { color: string; labelKey: MessageKey }[] = [
   { color: "#e34fb8", labelKey: "legendDustDust" },
   { color: "#7a1a1a", labelKey: "legendDustThickHigh" },
@@ -398,6 +412,37 @@ function buildSpecs(): readonly VariableSpec[] {
     meteogramCode: "HIGH",
     showcaseCode: "CLOUD HIGH",
   }),
+  // Precipitable water: the column's vapour as a depth, a rising moisture
+  // ramp over a dry map.
+  surface({
+    id: "pwat",
+    chart: "pwat",
+    group: "moisture",
+    code: "PWAT EATM",
+    title: ["Precipitable", "Water"],
+    bufferTitle: "Precipitable water buffer",
+    labelKey: "varLabelPwat",
+    ground: "slate",
+    urlName: "pwat",
+    urlAliases: ["precipitablewater", "pw"],
+    showcaseCode: "PWAT",
+  }),
+  // Precipitation type: a categorical field, so its legend is a key of
+  // swatches (one per WMO code table 4.201 class) rather than a bar.
+  surface({
+    id: "ptype",
+    chart: "ptype",
+    group: "moisture",
+    code: "PTYPE SFC",
+    title: ["Precipitation", "Type"],
+    bufferTitle: "Precipitation buffer",
+    labelKey: "varLabelPtype",
+    legendKey: ptypeKey(),
+    ground: "slate",
+    urlName: "ptype",
+    urlAliases: ["preciptype", "precipitationtype"],
+    showcaseCode: "PTYPE",
+  }),
   // Wind. The speed fields and the gust, translucent at the low end, on
   // the wind's own ground.
   surface({
@@ -416,6 +461,25 @@ function buildSpecs(): readonly VariableSpec[] {
     urlName: "wind",
     meteogramCode: "WIND",
     showcaseCode: "WIND",
+  }),
+  // The 100 m wind, the turbine hub height: the same parameters as the 10 m
+  // pair on the 100 m surface, its own family (`levels.ts`) rather than a
+  // second member of the wind family.
+  surface({
+    id: "wind100m",
+    chart: "wind100m",
+    vector: true,
+    family: "wind100m",
+    group: "wind",
+    code: "WIND 100M",
+    title: ["100 m", "Wind"],
+    bufferTitle: "Wind buffer",
+    labelKey: "varLabelWind100m",
+    legend: ["40", "30", "20", "10", "5", "0"],
+    ground: "wind",
+    urlName: "wind100m",
+    urlAliases: ["wind100"],
+    showcaseCode: "WIND 100M",
   }),
   ...isobaric({ family: "wind", vector: true, group: "wind", word: "Wind", showcaseWord: "WIND", ground: "wind" }),
   surface({
@@ -446,6 +510,36 @@ function buildSpecs(): readonly VariableSpec[] {
     urlName: "cape",
     urlAliases: ["instability"],
     showcaseCode: "CAPE",
+  }),
+  // The inhibition is CAPE's twin: the negative area under the parcel path,
+  // so its ramp is one-sided downward and 0 is the map.
+  surface({
+    id: "cin",
+    chart: "cin",
+    group: "dynamics",
+    code: "CIN SFC",
+    title: ["Convective", "Inhibition"],
+    bufferTitle: "CIN buffer",
+    labelKey: "varLabelCin",
+    ground: "slate",
+    urlName: "cin",
+    urlAliases: ["inhibition"],
+    showcaseCode: "CIN",
+  }),
+  // The boundary layer height is a depth, read as terrain: a shallow layer
+  // is nearly the map, a deep one the high ground of the ramp.
+  surface({
+    id: "hpbl",
+    chart: "hpbl",
+    group: "dynamics",
+    code: "HPBL SFC",
+    title: ["Boundary Layer", "Height"],
+    bufferTitle: "Boundary layer buffer",
+    labelKey: "varLabelHpbl",
+    ground: "slate",
+    urlName: "hpbl",
+    urlAliases: ["pbl", "boundarylayer"],
+    showcaseCode: "PBL",
   }),
   ...isobaric({ family: "vvel", group: "dynamics", word: "Vertical Velocity", showcaseWord: "OMEGA", ground: "slate" }),
   ...isobaric({ family: "thetae", group: "dynamics", word: "Theta-e", showcaseWord: "THETAE", ground: "coat" }),
