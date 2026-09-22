@@ -3089,7 +3089,10 @@ body[data-credits~="meteosat"] .source-credit[data-credit-model="meteosat"] {
 }
 
 /* The sources sheet docks to the bottom edge at every width: it is opened
-   from the bottom corner, and lists rows the way the model sheet does. */
+   from the bottom corner, and lists rows the way the model sheet does.
+   The list has outgrown a short laptop window and a phone: the panel is
+   capped to what the viewport leaves above the safe area, and the list
+   scrolls inside it while the grip and heading stay put. */
 .credits-panel {
   top: auto;
   right: 0;
@@ -3097,6 +3100,8 @@ body[data-credits~="meteosat"] .source-credit[data-credit-model="meteosat"] {
   left: 0;
   width: auto;
   max-width: 480px;
+  max-height: calc(100vh - 24px);
+  max-height: calc(100dvh - 24px);
   margin: 0 auto;
   padding-bottom: calc(24px + env(safe-area-inset-bottom));
   border-radius: 28px 28px 0 0;
@@ -3112,6 +3117,9 @@ body[data-credits~="meteosat"] .source-credit[data-credit-model="meteosat"] {
   margin: 0;
   padding: 0;
   list-style: none;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .credits-list a {
