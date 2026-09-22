@@ -2,22 +2,25 @@
 
 `gfs.2026081406.f000.crop.grib2` is an 80 by 80 cell crop of every record
 the GFS source fetches from the 2026-08-14 06:00 UTC analysis: 2 m
-temperature, surface precipitation rate, the 10 m wind pair, mean sea level
-pressure, the geopotential height, temperature and relative humidity on
-the eight registered isobaric surfaces (1000 / 925 / 850 / 700 / 500 /
-300 / 250 / 200 hPa), 850 hPa specific humidity, the wind pair on the same
-eight surfaces, then the surface diagnostics (gust, total / low / middle /
-high cloud cover, CAPE, visibility, 2 m dew point and apparent
-temperature), the 850 / 700 / 500 hPa vertical velocity, the surface
+temperature, surface precipitation rate, the 10 m and 100 m wind pairs, mean
+sea level pressure, the geopotential height, temperature and relative
+humidity on the eight registered isobaric surfaces (1000 / 925 / 850 / 700 /
+500 / 300 / 250 / 200 hPa), 850 hPa specific humidity, the wind pair on the
+same eight surfaces, then the surface diagnostics (gust, total / low /
+middle / high cloud cover, CAPE, convective inhibition, visibility, 2 m dew
+point, apparent temperature, precipitable water, planetary boundary layer
+height and the four categorical precipitation-type flags the `ptype` bundle
+is derived from), the 850 / 700 / 500 hPa vertical velocity, the surface
 temperature and the two sea ice fields, and — appended by the fetcher from
 the cycle's GFS-Wave file — the significant wave height, primary wave
-period and direction: sixty-four records, in the order
-`xuebuild/sources.py` lists them. It covers
+period and direction: seventy-three records (seventy from pgrb2, three from
+GFS-Wave), in the order `xuebuild/sources.py` lists them. It covers
 approximately 118E to 138E and 18N to 38N, including the browser test's
-initial viewport, so the record matchers, the GRIB2 header index, the vapour
-flux derivation and the byte-identity parity test all run against real
-records. About a sixth of the window is land, which the wave records leave
-to their bitmap, so the nodata fill runs against real masked points too.
+initial viewport, so the record matchers, the GRIB2 header index, the
+`ptype` derivation, the vapour flux derivation and the byte-identity parity
+test all run against real records. About a sixth of the window is land,
+which the wave records leave to their bitmap, so the nodata fill runs
+against real masked points too.
 
 The fixture was recut from the downloaded analysis with:
 

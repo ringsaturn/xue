@@ -22,15 +22,18 @@ class IndexMessagesTests(unittest.TestCase):
         # them: the surface fields, the pressure family, the upper-air inputs
         # (the 850 hPa specific humidity among them, fetched only to derive
         # the vapour flux and the equivalent potential temperature), then the
-        # surface diagnostics and the vertical velocity, then the ocean —
+        # 100 m wind pair, the surface diagnostics (the four categorical
+        # precipitation-type flags among them, fetched only to derive the
+        # precipitation type) and the vertical velocity, then the ocean —
         # three pgrb2 records and, appended from the cycle's GFS-Wave file,
         # three wave records.
-        self.assertEqual(len(messages), 64)
+        self.assertEqual(len(messages), 73)
         temperature, precipitation, u_wind, v_wind, pressure = messages[:5]
         heights = messages[5:13]
         upper_air = messages[13:46]
-        diagnostics = messages[46:58]
-        ocean = messages[58:]
+        wind_100m = messages[46:48]
+        diagnostics = messages[48:67]
+        ocean = messages[67:]
         levels = [100000.0, 92500.0, 85000.0, 70000.0, 50000.0, 30000.0, 25000.0, 20000.0]
         self.assertEqual(temperature.band, 1)
         self.assertEqual(
@@ -82,25 +85,40 @@ class IndexMessagesTests(unittest.TestCase):
             ],
         )
         self.assertTrue(all(message.level_type == 100 for message in upper_air))
+        # The 100 m wind pair, the turbine hub height: the 10 m pair's own
+        # parameters on the 100 m surface.
+        self.assertEqual(
+            [(m.band, m.parameter_category, m.parameter_number, m.level_type, m.level_value) for m in wind_100m],
+            [(47, 2, 2, 103, 100.0), (48, 2, 3, 103, 100.0)],
+        )
         # The surface diagnostics, each on the surface its registry entry
         # declares: the ground, the entire atmosphere, the three cloud
-        # layers, the 2 m surface — and every one the instantaneous record,
-        # not the interval average that sits beside the cloud covers.
+        # layers, the 2 m surface, NCEP's single-layer entire-atmosphere
+        # type 200 the precipitable water sits on — and every one the
+        # instantaneous record, not the interval average that sits beside
+        # the cloud covers.
         self.assertEqual(
             [(m.band, m.parameter_category, m.parameter_number, m.level_type, m.level_value) for m in diagnostics],
             [
-                (47, 2, 22, 1, 0.0),
-                (48, 6, 1, 10, 0.0),
-                (49, 6, 3, 214, 0.0),
-                (50, 6, 4, 224, 0.0),
-                (51, 6, 5, 234, 0.0),
-                (52, 7, 6, 1, 0.0),
-                (53, 19, 0, 1, 0.0),
-                (54, 0, 6, 103, 2.0),
-                (55, 0, 21, 103, 2.0),
-                (56, 2, 8, 100, 85000.0),
-                (57, 2, 8, 100, 70000.0),
-                (58, 2, 8, 100, 50000.0),
+                (49, 2, 22, 1, 0.0),
+                (50, 6, 1, 10, 0.0),
+                (51, 6, 3, 214, 0.0),
+                (52, 6, 4, 224, 0.0),
+                (53, 6, 5, 234, 0.0),
+                (54, 7, 6, 1, 0.0),
+                (55, 7, 7, 1, 0.0),
+                (56, 19, 0, 1, 0.0),
+                (57, 0, 6, 103, 2.0),
+                (58, 0, 21, 103, 2.0),
+                (59, 1, 3, 200, 0.0),
+                (60, 3, 196, 1, 0.0),
+                (61, 1, 192, 1, 0.0),
+                (62, 1, 193, 1, 0.0),
+                (63, 1, 194, 1, 0.0),
+                (64, 1, 195, 1, 0.0),
+                (65, 2, 8, 100, 85000.0),
+                (66, 2, 8, 100, 70000.0),
+                (67, 2, 8, 100, 50000.0),
             ],
         )
         self.assertTrue(all(message.statistical_process is None for message in diagnostics))
@@ -112,12 +130,12 @@ class IndexMessagesTests(unittest.TestCase):
         self.assertEqual(
             [(m.band, m.discipline, m.parameter_category, m.parameter_number, m.level_type, m.level_value) for m in ocean],
             [
-                (59, 0, 0, 0, 1, 0.0),
-                (60, 10, 2, 0, 1, 0.0),
-                (61, 10, 2, 1, 1, 0.0),
-                (62, 10, 0, 3, 1, 1.0),
-                (63, 10, 0, 11, 1, 1.0),
-                (64, 10, 0, 10, 1, 1.0),
+                (68, 0, 0, 0, 1, 0.0),
+                (69, 10, 2, 0, 1, 0.0),
+                (70, 10, 2, 1, 1, 0.0),
+                (71, 10, 0, 3, 1, 1.0),
+                (72, 10, 0, 11, 1, 1.0),
+                (73, 10, 0, 10, 1, 1.0),
             ],
         )
         self.assertTrue(all(message.statistical_process is None for message in ocean))

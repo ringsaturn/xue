@@ -337,10 +337,18 @@ export const en = {
   legendDustLow: "Low warm cloud",
   legendDustDesert: "Hot desert surface",
   legendDustSurface: "Sea and vegetated land",
+  /** The precipitation type's key: one row per WMO code table 4.201 class
+   * GFS reports, in place of the bar (the field is categorical). Short noun
+   * phrases, one line at 10px mono; "no precipitation" has no swatch. */
+  legendPtypeRain: "Rain",
+  legendPtypeFreezingRain: "Freezing rain",
+  legendPtypeSnow: "Snow",
+  legendPtypeIcePellets: "Ice pellets",
   varLabelTmp2m: "2 m temperature",
   varLabelPrate: "Precipitation rate",
   varLabelDswrf: "Solar radiation",
   varLabelWind10m: "10 m wind",
+  varLabelWind100m: "100 m wind",
   varLabelCref: "Composite radar reflectivity",
   varLabelIr104: "Infrared imagery (10.4 µm brightness temperature)",
   varLabelDustrgb: "Dust RGB (infrared composite)",
@@ -348,12 +356,19 @@ export const en = {
   varLabelGust: "Wind gust",
   varLabelTcdc: "Total cloud cover",
   varLabelCape: "Convective available potential energy",
+  varLabelCin: "Convective inhibition",
   varLabelVis: "Visibility",
   varLabelDpt2m: "2 m dew point",
   varLabelAptmp2m: "2 m apparent temperature",
   varLabelLcdc: "Low cloud cover",
   varLabelMcdc: "Middle cloud cover",
   varLabelHcdc: "High cloud cover",
+  // Precipitable water is the vapour column's depth; the boundary layer
+  // height is a depth too; the precipitation type is the categorical field
+  // the four flags are combined into.
+  varLabelPwat: "Precipitable water",
+  varLabelHpbl: "Planetary boundary layer height",
+  varLabelPtype: "Precipitation type",
   // The ocean set. The skin temperature is one field that is the SST over
   // water and the ground's skin over land; the label says both, since the
   // tile reads "SST".

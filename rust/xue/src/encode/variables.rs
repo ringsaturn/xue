@@ -611,6 +611,50 @@ pub const VARIABLES: &[VariableSpec] = &[
         producer_id: None,
         grib2_aerosol: None,
     },
+    // 100 m wind components, the hub height of a modern turbine, delivered
+    // together as the `wind100m` bundle: the same parameters on the 100 m
+    // surface (type 103, value 100), which pgrb2 writes for wind power.
+    // Mirrors `ugrd100m` / `vgrd100m` in `xuebuild/variables.py`.
+    VariableSpec {
+        id: "ugrd100m",
+        label: "100 meter U wind component",
+        output_unit: "m/s",
+        value_range: (-64.0, 64.0),
+        grib_element: "UGRD",
+        open_meteo: "",
+        grib2_discipline: 0,
+        grib2_category: 2,
+        grib2_number: 2,
+        grib2_level_type: 103,
+        grib2_level_value: Some(100.0),
+        grib2_statistical: None,
+        grib2_aliases: &[],
+        grib2_alternates: &[],
+        gdal_unit: "m/s",
+        fill_values: &[],
+        producer_id: None,
+        grib2_aerosol: None,
+    },
+    VariableSpec {
+        id: "vgrd100m",
+        label: "100 meter V wind component",
+        output_unit: "m/s",
+        value_range: (-64.0, 64.0),
+        grib_element: "VGRD",
+        open_meteo: "",
+        grib2_discipline: 0,
+        grib2_category: 2,
+        grib2_number: 3,
+        grib2_level_type: 103,
+        grib2_level_value: Some(100.0),
+        grib2_statistical: None,
+        grib2_aliases: &[],
+        grib2_alternates: &[],
+        gdal_unit: "m/s",
+        fill_values: &[],
+        producer_id: None,
+        grib2_aerosol: None,
+    },
     // Composite reflectivity: the column maximum, so its fixed surface is
     // the entire atmosphere (type 10, which carries no value). It arrives
     // two ways under one identity: as the radar mosaic's NetCDF observation
@@ -778,6 +822,165 @@ pub const VARIABLES: &[VariableSpec] = &[
         producer_id: None,
         grib2_aerosol: None,
     },
+    // Convective inhibition, 0/7/7 on the ground surface: the negative area
+    // under the parcel path, so never positive. GFS caps the field near
+    // -1000 J/kg in the strongest cap; the codebook runs to -1016 at 4 J/kg.
+    // Mirrors `cin` in `xuebuild/variables.py`.
+    VariableSpec {
+        id: "cin",
+        label: "Convective inhibition",
+        output_unit: "J/kg",
+        value_range: (-1016.0, 0.0),
+        grib_element: "CIN",
+        open_meteo: "",
+        grib2_discipline: 0,
+        grib2_category: 7,
+        grib2_number: 7,
+        grib2_level_type: 1,
+        grib2_level_value: Some(0.0),
+        grib2_statistical: None,
+        grib2_aliases: &[],
+        grib2_alternates: &[],
+        gdal_unit: "J/kg",
+        fill_values: &[],
+        producer_id: None,
+        grib2_aerosol: None,
+    },
+    // Planetary boundary layer height, published by NCEP under its local
+    // 0/3/196 on the ground surface (not the WMO 0/3/18), which is the
+    // number pgrb2's `:HPBL:surface:` record carries. Metres.
+    VariableSpec {
+        id: "hpbl",
+        label: "Planetary boundary layer height",
+        output_unit: "m",
+        value_range: (0.0, 5080.0),
+        grib_element: "HPBL",
+        open_meteo: "",
+        grib2_discipline: 0,
+        grib2_category: 3,
+        grib2_number: 196,
+        grib2_level_type: 1,
+        grib2_level_value: Some(0.0),
+        grib2_statistical: None,
+        grib2_aliases: &[],
+        grib2_alternates: &[],
+        gdal_unit: "m",
+        fill_values: &[],
+        producer_id: None,
+        grib2_aerosol: None,
+    },
+    // The four categorical precipitation-type flags pgrb2 carries, each a 0/1
+    // field on the ground surface (NCEP-local 0/1/192–195): rain, freezing
+    // rain, ice pellets and snow. Input-only — the converter combines them
+    // into the one categorical `ptype` a run publishes
+    // (`convert::derive_ptype`) — so none ever reaches a bundle.
+    VariableSpec {
+        id: "crain",
+        label: "Categorical rain",
+        output_unit: "1",
+        value_range: (0.0, 1.0),
+        grib_element: "CRAIN",
+        open_meteo: "",
+        grib2_discipline: 0,
+        grib2_category: 1,
+        grib2_number: 192,
+        grib2_level_type: 1,
+        grib2_level_value: Some(0.0),
+        grib2_statistical: None,
+        grib2_aliases: &[],
+        grib2_alternates: &[],
+        gdal_unit: "0=no; 1=yes",
+        fill_values: &[],
+        producer_id: None,
+        grib2_aerosol: None,
+    },
+    VariableSpec {
+        id: "cfrzr",
+        label: "Categorical freezing rain",
+        output_unit: "1",
+        value_range: (0.0, 1.0),
+        grib_element: "CFRZR",
+        open_meteo: "",
+        grib2_discipline: 0,
+        grib2_category: 1,
+        grib2_number: 193,
+        grib2_level_type: 1,
+        grib2_level_value: Some(0.0),
+        grib2_statistical: None,
+        grib2_aliases: &[],
+        grib2_alternates: &[],
+        gdal_unit: "0=no; 1=yes",
+        fill_values: &[],
+        producer_id: None,
+        grib2_aerosol: None,
+    },
+    VariableSpec {
+        id: "cicep",
+        label: "Categorical ice pellets",
+        output_unit: "1",
+        value_range: (0.0, 1.0),
+        grib_element: "CICEP",
+        open_meteo: "",
+        grib2_discipline: 0,
+        grib2_category: 1,
+        grib2_number: 194,
+        grib2_level_type: 1,
+        grib2_level_value: Some(0.0),
+        grib2_statistical: None,
+        grib2_aliases: &[],
+        grib2_alternates: &[],
+        gdal_unit: "0=no; 1=yes",
+        fill_values: &[],
+        producer_id: None,
+        grib2_aerosol: None,
+    },
+    VariableSpec {
+        id: "csnow",
+        label: "Categorical snow",
+        output_unit: "1",
+        value_range: (0.0, 1.0),
+        grib_element: "CSNOW",
+        open_meteo: "",
+        grib2_discipline: 0,
+        grib2_category: 1,
+        grib2_number: 195,
+        grib2_level_type: 1,
+        grib2_level_value: Some(0.0),
+        grib2_statistical: None,
+        grib2_aliases: &[],
+        grib2_alternates: &[],
+        gdal_unit: "0=no; 1=yes",
+        fill_values: &[],
+        producer_id: None,
+        grib2_aerosol: None,
+    },
+    // Precipitation type: the four flags above combined into one categorical
+    // field, derived by the converter and never fetched, so the
+    // record-matching fields stay empty. The values are WMO code table
+    // 4.201's own: 1 rain, 3 freezing rain, 5 snow, 8 ice pellets. When two
+    // flags disagree the order rain, freezing rain, ice pellets, snow
+    // decides, each later flag overriding; both encoders share that order to
+    // stay byte-identical.
+    VariableSpec {
+        id: "ptype",
+        label: "Precipitation type",
+        output_unit: "1",
+        value_range: (0.0, 8.0),
+        grib_element: "",
+        open_meteo: "",
+        grib2_discipline: 0,
+        grib2_category: 1,
+        grib2_number: 19,
+        grib2_level_type: 1,
+        grib2_level_value: Some(0.0),
+        grib2_statistical: None,
+        grib2_aliases: &[],
+        grib2_alternates: &[],
+        gdal_unit: "",
+        fill_values: &[],
+        producer_id: None,
+        grib2_aerosol: None,
+    },
     // Surface visibility, 0/19/0 on the ground surface: GRIB2 carries metres,
     // the codebook quantizes kilometres.
     VariableSpec {
@@ -839,6 +1042,32 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_aliases: &[],
         grib2_alternates: &[],
         gdal_unit: "C",
+        fill_values: &[],
+        producer_id: None,
+        grib2_aerosol: None,
+    },
+    // Precipitable water: the vertically integrated water vapour of the whole
+    // column, 0/1/3 on NCEP's local "entire atmosphere (considered as a single
+    // layer)" surface (type 200, which carries no value, like the WMO type 10
+    // pgrb2 writes the total cloud cover on). GRIB2 carries it in kg/m², which
+    // is a millimetre of liquid water, so no unit conversion applies. Mirrors
+    // `pwat` in `xuebuild/variables.py`.
+    VariableSpec {
+        id: "pwat",
+        label: "Precipitable water",
+        output_unit: "kg/m²",
+        value_range: (0.0, 127.0),
+        grib_element: "PWAT",
+        open_meteo: "",
+        grib2_discipline: 0,
+        grib2_category: 1,
+        grib2_number: 3,
+        grib2_level_type: 200,
+        grib2_level_value: None,
+        grib2_statistical: None,
+        grib2_aliases: &[],
+        grib2_alternates: &[],
+        gdal_unit: "kg/(m^2)",
         fill_values: &[],
         producer_id: None,
         grib2_aerosol: None,
@@ -1768,15 +1997,20 @@ mod tests {
     }
 
     /// `tests/fixtures/surface-registry.json`: the surface diagnostics
-    /// (wind gust, total cloud cover, CAPE), held to the Python encoder and
-    /// the frontend the same way.
+    /// (wind gust, the cloud covers, CAPE, CIN, visibility, the dew point,
+    /// the apparent temperature, precipitable water, the boundary layer
+    /// height and the derived precipitation type), held to the Python
+    /// encoder and the frontend the same way.
     #[test]
     fn the_surface_registry_matches_the_shared_fixture() {
         let entries = registry("surface-registry.json");
         assert_eq!(
             entries.keys().collect::<Vec<_>>(),
-            ["gust", "tcdc", "cape", "vis", "dpt2m", "aptmp2m", "lcdc", "mcdc", "hcdc"],
-            "nine variables, in the fixture's order"
+            [
+                "gust", "tcdc", "cape", "cin", "vis", "dpt2m", "aptmp2m", "lcdc", "mcdc", "hcdc",
+                "pwat", "hpbl", "ptype"
+            ],
+            "thirteen variables, in the fixture's order"
         );
         for (variable_id, entry) in entries {
             let spec = variable_spec(&variable_id).unwrap_or_else(|_| panic!("{variable_id}"));

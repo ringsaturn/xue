@@ -18,6 +18,7 @@ from .variables import AEROSOL_VARIABLE_IDS, SURFACE_TEMPERATURE_IDS, AerosolIde
 SUPPORTED_EXTENSIONS = {".grb", ".grb2", ".grib2"}
 HEIGHT_RE = re.compile(r"(?:^|[^0-9])2(?:\.0+)?\s*m(?:eter)?s?\s+above\s+ground", re.IGNORECASE)
 TEN_METRE_RE = re.compile(r"(?:^|[^0-9])10(?:\.0+)?\s*m(?:eter)?s?\s+above\s+ground", re.IGNORECASE)
+HUNDRED_METRE_RE = re.compile(r"(?:^|[^0-9])100(?:\.0+)?\s*m(?:eter)?s?\s+above\s+ground", re.IGNORECASE)
 
 
 def require_command(command: str) -> str:
@@ -266,6 +267,58 @@ def cape_expression(unit: str) -> str:
     return "maximum(0,minimum(6350,A))"
 
 
+def cin_expression(unit: str) -> str:
+    """Convective inhibition in J/kg, clamped to the cin codebook's range:
+    0 at the top, -1016 J/kg at the bottom, one-sided the other way from
+    cape."""
+    compact = re.sub(r"[\s*()\[\]]", "", unit.strip().lower())
+    aliases = {"j/kg", "jkg-1", "jkg^-1"}
+    if compact not in aliases:
+        raise ConversionError(f"unsupported convective inhibition unit: {unit or '<missing>'}")
+    return "maximum(-1016,minimum(0,A))"
+
+
+def precipitable_water_expression(unit: str) -> str:
+    """Precipitable water, a column mass in kg/m² — one kilogram per square
+    metre is a millimetre of liquid water, and the codebook quantizes the
+    number either spelling gives, so no conversion applies."""
+    compact = re.sub(r"[\s*()\[\]]", "", unit.strip().lower()).replace("²", "^2")
+    aliases = {"kg/m^2", "kg/m2", "kgm^-2", "kgm-2", "kgm**-2", "mm", "kgs-1m-1"}
+    if compact not in aliases:
+        raise ConversionError(f"unsupported precipitable water unit: {unit or '<missing>'}")
+    return "maximum(0,minimum(127,A))"
+
+
+def boundary_layer_height_expression(unit: str) -> str:
+    """Planetary boundary layer height in metres, clamped to the hpbl
+    codebook range."""
+    compact = re.sub(r"[\s*()\[\]]", "", unit.strip().lower())
+    if compact not in {"m", "metre", "meter", "metres", "meters"}:
+        raise ConversionError(f"unsupported boundary layer height unit: {unit or '<missing>'}")
+    return "maximum(0,minimum(5080,A))"
+
+
+def categorical_expression(unit: str) -> str:
+    """One of the four 0/1 categorical precipitation-type flags (GRIB2 code
+    table 4.222), which GDAL reports under a unit that is the code table's
+    own name rather than a physical unit — ``0=no; 1=yes``, or
+    ``(Code table 4.222)`` from another driver. Clamped to 0–1."""
+    compact = re.sub(r"[\s*()\[\]]", "", unit.strip().lower()).replace("codetable", "")
+    if compact not in {"1", "-", "", "4.222", "0=no;1=yes"} and "4.222" not in compact and "0=no" not in compact:
+        raise ConversionError(f"unsupported categorical unit: {unit or '<missing>'}")
+    return "maximum(0,minimum(1,A))"
+
+
+def precipitation_type_expression(unit: str) -> str:
+    """The derived categorical precipitation type, which is never read from a
+    record; the expression exists so a registry walk over every surface
+    diagnostic can ask for one. WMO code table 4.201's values, 0 to 8."""
+    compact = re.sub(r"[\s*()\[\]]", "", unit.strip().lower()).replace("codetable", "")
+    if compact not in {"1", "-", "", "4.201"} and "4.201" not in compact:
+        raise ConversionError(f"unsupported precipitation type unit: {unit or '<missing>'}")
+    return "maximum(0,minimum(8,A))"
+
+
 def ice_cover_expression(unit: str) -> str:
     """Sea ice cover: GRIB2 carries a 0–1 proportion (GDAL spells the unit
     "Proportion"), the codebook quantizes percent."""
@@ -423,7 +476,7 @@ def raster_expression(variable_id: str, unit: str) -> str:
         return accumulation_expression(unit)
     if variable_id == "dswrf":
         return flux_expression(unit)
-    if variable_id in ("ugrd10m", "vgrd10m"):
+    if variable_id in ("ugrd10m", "vgrd10m", "ugrd100m", "vgrd100m"):
         return wind_expression(unit)
     if variable_id == "prmsl":
         return pressure_expression(unit)
@@ -433,6 +486,16 @@ def raster_expression(variable_id: str, unit: str) -> str:
         return cloud_cover_expression(unit)
     if variable_id == "cape":
         return cape_expression(unit)
+    if variable_id == "cin":
+        return cin_expression(unit)
+    if variable_id == "pwat":
+        return precipitable_water_expression(unit)
+    if variable_id == "hpbl":
+        return boundary_layer_height_expression(unit)
+    if variable_id in ("crain", "cfrzr", "cicep", "csnow"):
+        return categorical_expression(unit)
+    if variable_id == "ptype":
+        return precipitation_type_expression(unit)
     if variable_id == "vis":
         return visibility_expression(unit)
     if variable_id == "cref":
@@ -645,6 +708,23 @@ def _is_ten_metre_wind(metadata: dict[str, str], description: str, element: str)
     return short_name in {"10-HTGL", "10-M-HTGL"} or bool(TEN_METRE_RE.search(searchable))
 
 
+def _is_hundred_metre_wind(metadata: dict[str, str], description: str, element: str) -> bool:
+    """One wind component on the 100 m surface (type 103, value 100), which
+    pgrb2 writes for wind power. GDAL spells it ``100-HTGL``."""
+    if metadata.get("GRIB_ELEMENT", "").upper() != element:
+        return False
+    short_name = metadata.get("GRIB_SHORT_NAME", "").upper()
+    searchable = " ".join(
+        [
+            short_name,
+            metadata.get("GRIB_COMMENT", ""),
+            metadata.get("GRIB_LEVEL", ""),
+            description,
+        ]
+    )
+    return short_name in {"100-HTGL", "100-M-HTGL"} or bool(HUNDRED_METRE_RE.search(searchable))
+
+
 def _is_mean_sea_level_pressure(metadata: dict[str, str], description: str) -> bool:
     """PRMSL on GRIB2 surface 101 (mean sea level). GDAL spells that short
     name ``0-MSL``; the phrase fallback catches drivers that do not. ECMWF
@@ -786,8 +866,17 @@ def _band_matches(variable_id: str, metadata: dict[str, str], description: str) 
         return _is_surface_record(metadata, description, "GUST") or _is_interval_maximum_gust(metadata, description)
     if variable_id == "cape":
         return _is_surface_record(metadata, description, "CAPE") or _is_most_unstable_cape(metadata, description)
+    if variable_id == "pwat":
+        # NCEP writes the column total on its local "entire atmosphere
+        # (considered as a single layer)" surface (type 200), which GDAL
+        # renders like the WMO type 10 and describes in full.
+        return _is_entire_atmosphere_record(metadata, description, "PWAT")
     if variable_id in ("dswrf", "vis", "tmpsfc", "icec", "icetk", "htsgw", "perpw", "dirpw"):
         return _is_surface_record(metadata, description, variable_spec(variable_id).grib_element)
+    if variable_id in ("cin", "hpbl", "crain", "cfrzr", "cicep", "csnow"):
+        return _is_surface_record(metadata, description, variable_spec(variable_id).grib_element)
+    if variable_id == "ptype":
+        raise ConversionError("ptype is derived, not a GRIB record")
     if variable_id == "tcdc":
         # pgrb2's entire-atmosphere record, IFS open data's local fraction,
         # or AIFS's WMO record as a layer from the ground surface up.
@@ -804,6 +893,8 @@ def _band_matches(variable_id: str, metadata: dict[str, str], description: str) 
         return _is_cloud_layer_record(metadata, description, variable_spec(variable_id).grib_element)
     if variable_id in ("ugrd10m", "vgrd10m"):
         return _is_ten_metre_wind(metadata, description, variable_spec(variable_id).grib_element)
+    if variable_id in ("ugrd100m", "vgrd100m"):
+        return _is_hundred_metre_wind(metadata, description, variable_spec(variable_id).grib_element)
     if variable_id == "prmsl":
         return _is_mean_sea_level_pressure(metadata, description)
     isobaric = isobaric_variable(variable_id)

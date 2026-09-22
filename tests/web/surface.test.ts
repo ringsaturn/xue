@@ -3,7 +3,16 @@ import { describe, expect, it } from "vitest";
 import registryJson from "../fixtures/surface-registry.json";
 
 import { identifyBundle, identityForBundleId, identityForParameter, registeredBundleId } from "../../web/src/identity";
-import { CAPE_CHART_MAX, GUST_SPEED_MAX, familyOf, isobaricLegend, scalarLegendRange } from "../../web/src/levels";
+import {
+  CAPE_CHART_MAX,
+  CIN_CHART_RANGE,
+  GUST_SPEED_MAX,
+  PBL_CHART_MAX,
+  PWAT_CHART_MAX,
+  familyOf,
+  isobaricLegend,
+  scalarLegendRange,
+} from "../../web/src/levels";
 import {
   KNOWN_BUNDLE_IDS,
   SURFACE_DIAGNOSTIC_IDS,
@@ -14,6 +23,7 @@ import {
 } from "../../web/src/manifest";
 import { CAPE_STOPS, buildPalette, buildWindFieldPalette, decodeValue, legendGradient, windFieldStops } from "../../web/src/palettes";
 import { parseVariableFromSearch, searchForVariable } from "../../web/src/urlstate";
+import { variableSpec } from "../../web/src/variables";
 
 /** The committed registry both encoders are held to
  * (`tests/test_surface.py`, and the Rust encoder's unit tests). */
@@ -58,6 +68,9 @@ describe("the surface diagnostic registry", () => {
 
   it("reads the legend over a span the codebook can hold", () => {
     for (const id of SURFACE_DIAGNOSTIC_IDS) {
+      // Precipitation type is categorical: its legend is a swatch key, not a
+      // ramp, so it has no numeric span (`isobaricLegend` is null too).
+      if (id === "ptype") continue;
       const { offset, scale, maximumCode } = registry[id]!.quality;
       const identity = identityForBundleId(id)!;
       const [low, high] = scalarLegendRange(identity)!;
@@ -75,9 +88,13 @@ describe("the surface diagnostic registry", () => {
     expect(scalarLegendRange(identityForBundleId("gust")!)).toEqual([0, GUST_SPEED_MAX]);
     expect(scalarLegendRange(identityForBundleId("tcdc")!)).toEqual([0, 100]);
     expect(scalarLegendRange(identityForBundleId("cape")!)).toEqual([0, CAPE_CHART_MAX]);
+    expect(scalarLegendRange(identityForBundleId("cin")!)).toEqual(CIN_CHART_RANGE);
     expect(scalarLegendRange(identityForBundleId("vis")!)).toEqual([0, 25]);
     expect(scalarLegendRange(identityForBundleId("dpt2m")!)).toEqual([-30, 30]);
     expect(scalarLegendRange(identityForBundleId("aptmp2m")!)).toEqual([-50, 50]);
+    expect(scalarLegendRange(identityForBundleId("pwat")!)).toEqual([0, PWAT_CHART_MAX]);
+    expect(scalarLegendRange(identityForBundleId("hpbl")!)).toEqual([0, PBL_CHART_MAX]);
+    expect(scalarLegendRange(identityForBundleId("ptype")!)).toBeNull();
     for (const layer of ["lcdc", "mcdc", "hcdc"]) expect(scalarLegendRange(identityForBundleId(layer)!)).toEqual([0, 100]);
     // The cloud legend is the codebook's whole span; the other two saturate
     // short of theirs, so a probe still tells the extreme apart.
@@ -154,6 +171,37 @@ describe("the surface diagnostic registry", () => {
     expect(gradient.endsWith("rgba(250, 240, 180, 0.000))")).toBe(true);
   });
 
+  it("keys the precipitation type on its classes and paints each one", () => {
+    // Categorical: the legend is a key of swatches, not a bar, and the field
+    // is painted by class code with 0 (no precipitation) left transparent.
+    const spec = variableSpec("ptype")!;
+    expect(spec.legendKey).not.toBeNull();
+    expect(spec.legend()).toEqual([]);
+    const key = spec.legendKey!();
+    expect(key.map((swatch) => swatch.label)).toEqual(["Rain", "Freezing rain", "Snow", "Ice pellets"]);
+    const ptype = buildPalette(bundleVariable("ptype"));
+    expect(ptype[3]).toBe(0); // code 0: no precipitation, the map
+    const at = (code: number) => [...ptype.subarray(code * 4, code * 4 + 4)] as [number, number, number, number];
+    // Every class the encoder writes is opaque, and the four are distinct.
+    const classes = [1, 3, 5, 8];
+    for (const code of classes) expect(at(code)[3]).toBe(255);
+    expect(new Set(classes.map((code) => at(code).join(","))).size).toBe(4);
+    // Rain reads blue, freezing rain pink, snow pale, ice pellets purple.
+    const [rainR, , rainB] = at(1);
+    expect(rainB).toBeGreaterThan(rainR);
+    const [frzR, frzG, frzB] = at(3);
+    expect(frzR).toBeGreaterThan(frzB);
+    expect(frzR).toBeGreaterThan(frzG);
+    const snow = at(5);
+    expect(Math.min(snow[0], snow[1], snow[2])).toBeGreaterThan(180);
+    const [iceR, , iceB] = at(8);
+    expect(iceB).toBeGreaterThan(iceR);
+    // Codes past the last class and the no-data code are unpainted.
+    expect(at(200)[3]).toBe(0);
+    expect(at(255)[3]).toBe(0);
+    expect(decodeValue(bundleVariable("ptype"), 255)).toBeNull();
+  });
+
   it("paints reduced visibility and leaves clear air to the map", () => {
     const vis = buildPalette(bundleVariable("vis"));
     const at = (km: number) => [...vis.subarray(km * 10 * 4, km * 10 * 4 + 4)];
@@ -199,10 +247,25 @@ describe("the surface diagnostic registry", () => {
     expect(parseVariableFromSearch("?type=CloudCover")).toBe("tcdc");
     expect(parseVariableFromSearch("?type=tcdc")).toBe("tcdc");
     expect(parseVariableFromSearch("?type=cape")).toBe("cape");
+    expect(parseVariableFromSearch("?type=cin")).toBe("cin");
+    expect(parseVariableFromSearch("?type=inhibition")).toBe("cin");
+    expect(parseVariableFromSearch("?type=pwat")).toBe("pwat");
+    expect(parseVariableFromSearch("?type=precipitablewater")).toBe("pwat");
+    expect(parseVariableFromSearch("?type=hpbl")).toBe("hpbl");
+    expect(parseVariableFromSearch("?type=pbl")).toBe("hpbl");
+    expect(parseVariableFromSearch("?type=ptype")).toBe("ptype");
+    expect(parseVariableFromSearch("?type=preciptype")).toBe("ptype");
+    expect(parseVariableFromSearch("?type=wind100m")).toBe("wind100m");
+    expect(parseVariableFromSearch("?type=wind100")).toBe("wind100m");
     for (const [id, spelling] of [
       ["gust", "gust"],
       ["tcdc", "cloud"],
       ["cape", "cape"],
+      ["cin", "cin"],
+      ["pwat", "pwat"],
+      ["hpbl", "hpbl"],
+      ["ptype", "ptype"],
+      ["wind100m", "wind100m"],
     ] as const) {
       expect(searchForVariable(id, "")).toBe(`?model=gfs&type=${spelling}`);
       expect(parseVariableFromSearch(searchForVariable(id, ""))).toBe(id);

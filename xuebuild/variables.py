@@ -430,6 +430,35 @@ VARIABLES: dict[str, VariableSpec] = {
         grib2_level_value=10.0,
         gdal_unit="m/s",
     ),
+    # 100 m wind components, the hub height of a modern turbine, delivered
+    # together as the ``wind100m`` bundle: the same parameters on the 100 m
+    # surface (type 103, value 100), which pgrb2 writes for wind power.
+    "ugrd100m": VariableSpec(
+        id="ugrd100m",
+        label="100 meter U wind component",
+        output_unit="m/s",
+        value_range=(-64, 64),
+        grib_element="UGRD",
+        index_field=":UGRD:100 m above ground:",
+        grib2_category=2,
+        grib2_number=2,
+        grib2_level_type=103,
+        grib2_level_value=100.0,
+        gdal_unit="m/s",
+    ),
+    "vgrd100m": VariableSpec(
+        id="vgrd100m",
+        label="100 meter V wind component",
+        output_unit="m/s",
+        value_range=(-64, 64),
+        grib_element="VGRD",
+        index_field=":VGRD:100 m above ground:",
+        grib2_category=2,
+        grib2_number=3,
+        grib2_level_type=103,
+        grib2_level_value=100.0,
+        gdal_unit="m/s",
+    ),
     # Mean sea level pressure. NCEP publishes several reductions; PRMSL
     # (0/3/1) is the same quantity ECMWF calls ``msl`` — encoded there as
     # plain pressure (0/3/0) on the mean sea level surface, hence the alias —
@@ -583,6 +612,119 @@ VARIABLES: dict[str, VariableSpec] = {
         grib2_alternates=(RecordAlternate(0, 7, 6, 17),),
         gdal_unit="J/kg",
     ),
+    # Convective inhibition, 0/7/7 on the ground surface: the negative area
+    # under the parcel path, so never positive. GFS caps the field near
+    # -1000 J/kg in the strongest cap; the codebook runs to -1016 at 4 J/kg
+    # — far below the tens a CIN chart classes, and fine enough to keep the
+    # weak 0 to -50 capping that decides whether a storm fires.
+    "cin": VariableSpec(
+        id="cin",
+        label="Convective inhibition",
+        output_unit="J/kg",
+        value_range=(-1016.0, 0.0),
+        grib_element="CIN",
+        index_field=":CIN:surface:",
+        grib2_category=7,
+        grib2_number=7,
+        grib2_level_type=1,
+        grib2_level_value=0.0,
+        gdal_unit="J/kg",
+    ),
+    # Planetary boundary layer height, 0/3/18 in the WMO table but published
+    # by NCEP under its local 0/3/196 on the ground surface, which is the
+    # number pgrb2's ``:HPBL:surface:`` record carries. Metres, up to the
+    # ~5 km a deep desert or marine boundary layer reaches.
+    "hpbl": VariableSpec(
+        id="hpbl",
+        label="Planetary boundary layer height",
+        output_unit="m",
+        value_range=(0.0, 5080.0),
+        grib_element="HPBL",
+        index_field=":HPBL:surface:",
+        grib2_category=3,
+        grib2_number=196,
+        grib2_level_type=1,
+        grib2_level_value=0.0,
+        gdal_unit="m",
+    ),
+    # The four categorical precipitation-type flags pgrb2 carries, each a 0/1
+    # field on the ground surface (NCEP-local 0/1/192–195, GRIB2 code table
+    # 4.222's "yes/no"): rain, freezing rain, ice pellets and snow. They are
+    # input-only — the converter combines them into the one categorical
+    # ``ptype`` a run publishes (:func:`xuebuild.binconvert.derive_ptype`) —
+    # so none of the four ever reaches a bundle and none needs a codebook.
+    "crain": VariableSpec(
+        id="crain",
+        label="Categorical rain",
+        output_unit="1",
+        value_range=(0.0, 1.0),
+        grib_element="CRAIN",
+        index_field=":CRAIN:surface:",
+        grib2_category=1,
+        grib2_number=192,
+        grib2_level_type=1,
+        grib2_level_value=0.0,
+        gdal_unit="0=no; 1=yes",
+    ),
+    "cfrzr": VariableSpec(
+        id="cfrzr",
+        label="Categorical freezing rain",
+        output_unit="1",
+        value_range=(0.0, 1.0),
+        grib_element="CFRZR",
+        index_field=":CFRZR:surface:",
+        grib2_category=1,
+        grib2_number=193,
+        grib2_level_type=1,
+        grib2_level_value=0.0,
+        gdal_unit="0=no; 1=yes",
+    ),
+    "cicep": VariableSpec(
+        id="cicep",
+        label="Categorical ice pellets",
+        output_unit="1",
+        value_range=(0.0, 1.0),
+        grib_element="CICEP",
+        index_field=":CICEP:surface:",
+        grib2_category=1,
+        grib2_number=194,
+        grib2_level_type=1,
+        grib2_level_value=0.0,
+        gdal_unit="0=no; 1=yes",
+    ),
+    "csnow": VariableSpec(
+        id="csnow",
+        label="Categorical snow",
+        output_unit="1",
+        value_range=(0.0, 1.0),
+        grib_element="CSNOW",
+        index_field=":CSNOW:surface:",
+        grib2_category=1,
+        grib2_number=195,
+        grib2_level_type=1,
+        grib2_level_value=0.0,
+        gdal_unit="0=no; 1=yes",
+    ),
+    # Precipitation type: the four flags above combined into one categorical
+    # field, derived by the converter and never fetched, so the record
+    # matching fields stay empty. The values are WMO code table 4.201's own,
+    # the codes a chart keys on: 0 no precipitation, 1 rain, 3 freezing rain,
+    # 5 snow, 8 ice pellets (the codes between are other types GFS does not
+    # report and are never written). When two flags disagree at a point —
+    # NCEP's categorical fields are mutually exclusive by construction, and a
+    # 2026-09-21 analysis has no multi-flag cell — the order rain, freezing
+    # rain, ice pellets, snow decides, each later flag overriding; both
+    # encoders must share that order to stay byte-identical.
+    "ptype": VariableSpec(
+        id="ptype",
+        label="Precipitation type",
+        output_unit="1",
+        value_range=(0.0, 8.0),
+        grib2_category=1,
+        grib2_number=19,
+        grib2_level_type=1,
+        grib2_level_value=0.0,
+    ),
     # Surface visibility, 0/19/0 on the ground surface. GRIB2 carries metres
     # (GFS caps it at ~24 km); the codebook quantizes kilometres.
     "vis": VariableSpec(
@@ -632,6 +774,25 @@ VARIABLES: dict[str, VariableSpec] = {
         grib2_level_type=103,
         grib2_level_value=2.0,
         gdal_unit="C",
+    ),
+    # Precipitable water: the vertically integrated water vapour of the whole
+    # column, 0/1/3 on NCEP's local "entire atmosphere (considered as a single
+    # layer)" surface (type 200, which carries no value, like the WMO type 10
+    # pgrb2 writes the total cloud cover on). GRIB2 carries it in kg/m², which
+    # is a millimetre of liquid water — the number a chart of it is read in —
+    # so no unit conversion applies and the codebook quantizes it as it
+    # arrives. ECMWF open data carries the same field as ``tcwv``.
+    "pwat": VariableSpec(
+        id="pwat",
+        label="Precipitable water",
+        output_unit="kg/m²",
+        value_range=(0.0, 127.0),
+        grib_element="PWAT",
+        index_field=":PWAT:entire atmosphere (considered as a single layer):",
+        grib2_category=1,
+        grib2_number=3,
+        grib2_level_type=200,
+        gdal_unit="kg/(m^2)",
     ),
     # The cloud layers: three parameters of their own (0/6/3, 0/6/4, 0/6/5),
     # each on its own layer surface (214 low, 224 middle, 234 high — code

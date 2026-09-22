@@ -58,6 +58,13 @@ describe("identityForParameter", () => {
     expect(identityForParameter(parameter(0, 1, 7, 1, 0))).toEqual({ family: "prate", level: null, vector: false });
     expect(identityForParameter(parameter(0, 4, 192, 1, 0))).toEqual({ family: "dswrf", level: null, vector: false });
     expect(identityForParameter(parameter(0, 16, 5, 10, null))).toEqual({ family: "cref", level: null, vector: false });
+    // The surface diagnostics added with the GFS fields: inhibition, the
+    // boundary layer height, the derived precipitation type, and the
+    // precipitable water on NCEP's local "entire atmosphere" surface 200.
+    expect(identityForParameter(parameter(0, 7, 7, 1, 0))).toEqual({ family: "cin", level: null, vector: false });
+    expect(identityForParameter(parameter(0, 3, 196, 1, 0))).toEqual({ family: "hpbl", level: null, vector: false });
+    expect(identityForParameter(parameter(0, 1, 19, 1, 0))).toEqual({ family: "ptype", level: null, vector: false });
+    expect(identityForParameter(parameter(0, 1, 3, 200, null))).toEqual({ family: "pwat", level: null, vector: false });
   });
 
   it("reads a local parameter number, which is where dswrf lives", () => {
@@ -76,6 +83,11 @@ describe("identityForParameter", () => {
     // A null surface on an isobaric type has no level, so it is not a field
     // this build can place.
     expect(identityForParameter(parameter(0, 0, 0, 100, null))).toBeNull();
+    // Precipitable water is the same record: 0/1/3 on the entire-atmosphere
+    // surface 200, both surface halves null.
+    const pwat = parameter(0, 1, 3, 200, null);
+    expect(pwat.scaleFactorOfFirstFixedSurface).toBeNull();
+    expect(identityForParameter(pwat)).toEqual({ family: "pwat", level: null, vector: false });
   });
 
   it("takes the level from the scaled value, not from a table of levels", () => {
@@ -97,6 +109,12 @@ describe("identityForParameter", () => {
     // The right triple on the wrong surface is not the same field.
     expect(identityForParameter(parameter(0, 0, 0, 103, 100))).toBeNull();
     expect(identityForParameter(parameter(0, 1, 7, 100, 85_000))).toBeNull();
+    // The new surface diagnostics on the wrong surface are not them: the
+    // precipitable water needs surface 200, the other three surface 1.
+    expect(identityForParameter(parameter(0, 1, 3, 1, 0))).toBeNull();
+    expect(identityForParameter(parameter(0, 7, 7, 100, 85_000))).toBeNull();
+    expect(identityForParameter(parameter(0, 3, 196, 100, 85_000))).toBeNull();
+    expect(identityForParameter(parameter(0, 1, 19, 100, 85_000))).toBeNull();
   });
 });
 
@@ -104,6 +122,13 @@ describe("identityForParameterPair", () => {
   it("recognizes the u/v pairs on their own surfaces", () => {
     expect(identityForParameterPair(parameter(0, 2, 2, 103, 10), parameter(0, 2, 3, 103, 10))).toEqual({
       family: "wind",
+      level: null,
+      vector: true,
+    });
+    // The same parameters on the 100 m surface: the turbine hub height, a
+    // family of its own while the 10 m pair keeps the wind family.
+    expect(identityForParameterPair(parameter(0, 2, 2, 103, 100), parameter(0, 2, 3, 103, 100))).toEqual({
+      family: "wind100m",
       level: null,
       vector: true,
     });
@@ -125,6 +150,9 @@ describe("identityForParameterPair", () => {
     // v then u is not the pair; the caller tries both orders.
     expect(identityForParameterPair(parameter(0, 2, 3, 103, 10), parameter(0, 2, 2, 103, 10))).toBeNull();
     expect(identityForParameterPair(parameter(0, 2, 2, 103, 10), parameter(0, 0, 0, 103, 10))).toBeNull();
+    // A height-above-ground pair that is neither the 10 m nor the 100 m
+    // surface is no field this build charts.
+    expect(identityForParameterPair(parameter(0, 2, 2, 103, 50), parameter(0, 2, 3, 103, 50))).toBeNull();
   });
 });
 
@@ -181,6 +209,11 @@ describe("identityForBundleId", () => {
   it("reads the naming convention, which is all the manifest carries", () => {
     expect(identityForBundleId("tmp2m")).toEqual({ family: "tmp", level: null, vector: false });
     expect(identityForBundleId("wind10m")).toEqual({ family: "wind", level: null, vector: true });
+    expect(identityForBundleId("wind100m")).toEqual({ family: "wind100m", level: null, vector: true });
+    expect(identityForBundleId("cin")).toEqual({ family: "cin", level: null, vector: false });
+    expect(identityForBundleId("pwat")).toEqual({ family: "pwat", level: null, vector: false });
+    expect(identityForBundleId("hpbl")).toEqual({ family: "hpbl", level: null, vector: false });
+    expect(identityForBundleId("ptype")).toEqual({ family: "ptype", level: null, vector: false });
     expect(identityForBundleId("prmsl")).toEqual({ family: "hgt", level: null, vector: false });
     expect(identityForBundleId("hgt500")).toEqual({ family: "hgt", level: 500, vector: false });
     expect(identityForBundleId("qflux850")).toEqual({ family: "qflux", level: 850, vector: true });
@@ -212,6 +245,17 @@ describe("identityForBundleId", () => {
           variable(2, "vqflx850", parameter(0, 1, 251, 100, 85_000)),
         ],
       ],
+      ["cin", [variable(1, "cin", parameter(0, 7, 7, 1, 0))]],
+      ["hpbl", [variable(1, "hpbl", parameter(0, 3, 196, 1, 0))]],
+      ["ptype", [variable(1, "ptype", parameter(0, 1, 19, 1, 0))]],
+      ["pwat", [variable(1, "pwat", parameter(0, 1, 3, 200, null))]],
+      [
+        "wind100m",
+        [
+          variable(1, "ugrd100m", parameter(0, 2, 2, 103, 100)),
+          variable(2, "vgrd100m", parameter(0, 2, 3, 103, 100)),
+        ],
+      ],
     ];
     for (const [id, variables] of cases) {
       expect(sameIdentity(identityForBundleId(id), identifyBundle(variables)!.identity)).toBe(true);
@@ -226,6 +270,11 @@ describe("registeredBundleId", () => {
     expect(registeredBundleId({ family: "tmp", level: 850, vector: false })).toBe("tmp850");
     expect(registeredBundleId({ family: "hgt", level: null, vector: false })).toBe("prmsl");
     expect(registeredBundleId({ family: "wind", level: null, vector: true })).toBe("wind10m");
+    expect(registeredBundleId({ family: "wind100m", level: null, vector: true })).toBe("wind100m");
+    expect(registeredBundleId({ family: "cin", level: null, vector: false })).toBe("cin");
+    expect(registeredBundleId({ family: "pwat", level: null, vector: false })).toBe("pwat");
+    expect(registeredBundleId({ family: "hpbl", level: null, vector: false })).toBe("hpbl");
+    expect(registeredBundleId({ family: "ptype", level: null, vector: false })).toBe("ptype");
     // Families with no surface member: a level is the only way to name them.
     expect(registeredBundleId({ family: "rh", level: null, vector: false })).toBeNull();
     expect(registeredBundleId({ family: "qflux", level: null, vector: true })).toBeNull();

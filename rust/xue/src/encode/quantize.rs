@@ -337,6 +337,61 @@ const COMPACT_CAPE: LinearCodebook = LinearCodebook {
     step: 50.0,
     ..QUALITY_CAPE
 };
+// Convective inhibition: cape's twin one-sided the other way, from the zero
+// the whole column shares down to the -1016 J/kg a strong cap reaches at
+// 4 J/kg — finer than cape's 25 J/kg because the interesting range (0 to
+// -200) is a fraction of cape's, and coarse enough to spend the full 0..254
+// code space. Mirrors `QUALITY_CIN` in `xuebuild/quantize.py`.
+const QUALITY_CIN: LinearCodebook = LinearCodebook {
+    minimum: -1016.0,
+    maximum: 0.0,
+    step: 4.0,
+    nodata_code: 255,
+    name: "cin",
+};
+const COMPACT_CIN: LinearCodebook = LinearCodebook {
+    step: 8.0,
+    ..QUALITY_CIN
+};
+// Precipitable water: 0–127 kg/m² at half a kilogram spends the full code
+// space over the ~80 mm a saturated tropical column holds; the compact
+// profile keeps the range at a whole kg/m². Mirrors `QUALITY_PWAT`.
+const QUALITY_PWAT: LinearCodebook = LinearCodebook {
+    minimum: 0.0,
+    maximum: 127.0,
+    step: 0.5,
+    nodata_code: 255,
+    name: "pwat",
+};
+const COMPACT_PWAT: LinearCodebook = LinearCodebook {
+    step: 1.0,
+    ..QUALITY_PWAT
+};
+// Planetary boundary layer height: 0–5080 m at 20 m spends the full code
+// space over the ~5 km a deep boundary layer reaches; doubled in compact.
+// Mirrors `QUALITY_PBL`.
+const QUALITY_PBL: LinearCodebook = LinearCodebook {
+    minimum: 0.0,
+    maximum: 5080.0,
+    step: 20.0,
+    nodata_code: 255,
+    name: "hpbl",
+};
+const COMPACT_PBL: LinearCodebook = LinearCodebook {
+    step: 40.0,
+    ..QUALITY_PBL
+};
+// Precipitation type: a categorical codebook of WMO code table 4.201's own
+// values (1 rain, 3 freezing rain, 5 snow, 8 ice pellets) with 0 for none —
+// integer codes with no error budget, the same book in every profile. Mirrors
+// `PTYPE` in `xuebuild/quantize.py`.
+const PTYPE: LinearCodebook = LinearCodebook {
+    minimum: 0.0,
+    maximum: 8.0,
+    step: 1.0,
+    nodata_code: 255,
+    name: "ptype",
+};
 // Visibility in kilometres: 0–25.4 km at 100 m spends the full code space
 // over GFS's ~24 km ceiling.
 const QUALITY_VISIBILITY: LinearCodebook = LinearCodebook {
@@ -700,8 +755,8 @@ pub fn codebook(profile: &str, variable_id: &str) -> Result<Codebook> {
         (_, "tmp2m") => Codebook::Linear(COMPACT_TEMPERATURE),
         ("quality", "prate") => Codebook::Precipitation(QUALITY_PRECIPITATION),
         (_, "prate") => Codebook::Precipitation(COMPACT_PRECIPITATION),
-        (_, "ugrd10m" | "vgrd10m") if quality => Codebook::Linear(QUALITY_WIND),
-        (_, "ugrd10m" | "vgrd10m") => Codebook::Linear(COMPACT_WIND),
+        (_, "ugrd10m" | "vgrd10m" | "ugrd100m" | "vgrd100m") if quality => Codebook::Linear(QUALITY_WIND),
+        (_, "ugrd10m" | "vgrd10m" | "ugrd100m" | "vgrd100m") => Codebook::Linear(COMPACT_WIND),
         (_, "dswrf") if quality => Codebook::Linear(QUALITY_FLUX),
         (_, "dswrf") => Codebook::Linear(COMPACT_FLUX),
         (_, "cref") if quality => Codebook::Linear(QUALITY_REFLECTIVITY),
@@ -712,12 +767,21 @@ pub fn codebook(profile: &str, variable_id: &str) -> Result<Codebook> {
         (_, "tcdc") => Codebook::Linear(COMPACT_CLOUD),
         (_, "cape") if quality => Codebook::Linear(QUALITY_CAPE),
         (_, "cape") => Codebook::Linear(COMPACT_CAPE),
+        (_, "cin") if quality => Codebook::Linear(QUALITY_CIN),
+        (_, "cin") => Codebook::Linear(COMPACT_CIN),
         (_, "vis") if quality => Codebook::Linear(QUALITY_VISIBILITY),
         (_, "vis") => Codebook::Linear(COMPACT_VISIBILITY),
         (_, "dpt2m") if quality => Codebook::Linear(QUALITY_DEW_POINT),
         (_, "dpt2m") => Codebook::Linear(COMPACT_DEW_POINT),
         (_, "aptmp2m") if quality => Codebook::Linear(QUALITY_APPARENT),
         (_, "aptmp2m") => Codebook::Linear(COMPACT_APPARENT),
+        (_, "pwat") if quality => Codebook::Linear(QUALITY_PWAT),
+        (_, "pwat") => Codebook::Linear(COMPACT_PWAT),
+        (_, "hpbl") if quality => Codebook::Linear(QUALITY_PBL),
+        (_, "hpbl") => Codebook::Linear(COMPACT_PBL),
+        // The categorical precipitation type is the same book in every
+        // profile: there is no resolution to trade.
+        (_, "ptype") => Codebook::Linear(PTYPE),
         ("quality", "lcdc") => Codebook::Linear(cloud_layer_codebook("lcdc", false)),
         (_, "lcdc") => Codebook::Linear(cloud_layer_codebook("lcdc", true)),
         ("quality", "mcdc") => Codebook::Linear(cloud_layer_codebook("mcdc", false)),

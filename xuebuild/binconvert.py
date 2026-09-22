@@ -89,8 +89,13 @@ remain readable; nothing new is written at them."""
 WIND_COMPONENT_IDS = ("ugrd10m", "vgrd10m")
 WIND_BUNDLE_ID = "wind10m"
 WAVE_BUNDLE_ID = "wave"
+# The 100 m wind pair, the hub height of a modern turbine: the same parameters
+# on the 100 m surface, a vector bundle of its own.
+WIND_100M_COMPONENT_IDS = ("ugrd100m", "vgrd100m")
+WIND_100M_BUNDLE_ID = "wind100m"
 VECTOR_BUNDLES: dict[str, tuple[str, str]] = {
     WIND_BUNDLE_ID: WIND_COMPONENT_IDS,
+    WIND_100M_BUNDLE_ID: WIND_100M_COMPONENT_IDS,
     **{f"wind{level}": (f"ugrd{level}", f"vgrd{level}") for level in ISOBARIC_LEVELS_HPA},
     **{f"qflux{level}": (f"uqflx{level}", f"vqflx{level}") for level in ISOBARIC_LEVELS_HPA},
     WAVE_BUNDLE_ID: WAVE_VECTOR_COMPONENT_IDS,
@@ -130,17 +135,20 @@ def bundle_variable_ids(bundle_id: str) -> tuple[str, ...]:
 
 # Scalar bundles the converter derives rather than reads: the equivalent
 # potential temperature on each isobaric surface, from the temperature and
-# the specific humidity there. Like a vapour flux bundle, listing one in a
-# source's scalars publishes it only when every input is fetched, and an
-# input that serves only the derivation is released once it is done.
+# the specific humidity there, and the categorical precipitation type from
+# the four NCEP flags. Like a vapour flux bundle, listing one in a source's
+# scalars publishes it only when every input is fetched, and an input that
+# serves only the derivation is released once it is done.
 DERIVED_SCALARS: dict[str, tuple[str, ...]] = {
-    f"thetae{level}": (f"tmp{level}", f"spfh{level}") for level in ISOBARIC_LEVELS_HPA
+    **{f"thetae{level}": (f"tmp{level}", f"spfh{level}") for level in ISOBARIC_LEVELS_HPA},
+    # The four categorical flags, in the order derive_ptype combines them.
+    "ptype": ("crain", "cfrzr", "cicep", "csnow"),
 }
 
 
 def theta_e_level(bundle_id: str) -> int | None:
     """The isobaric surface of a ``thetae<level>`` bundle, or None."""
-    if bundle_id in DERIVED_SCALARS:
+    if bundle_id.startswith("thetae") and bundle_id in DERIVED_SCALARS:
         return int(bundle_id[len("thetae") :])
     return None
 
@@ -179,8 +187,10 @@ def video_variable_ids(source: SourceSpec) -> frozenset[str]:
 # Precipitation and radar reflectivity move with weather systems, so temporal
 # differencing makes them larger, not smaller: their chunks stack the codes
 # RAW. Every linear-codebook field is smooth enough to chain against the
-# previous frame inside its chunk.
-RAW_VARIABLE_IDS = {"prate", "cref"}
+# previous frame inside its chunk. The categorical precipitation type is RAW
+# for the same reason a codebook of classes never differences: every class
+# boundary moves with the weather, and a category's code is not a number.
+RAW_VARIABLE_IDS = {"prate", "cref", "ptype"}
 # The pressure family (sea level pressure, pressure-level geopotential
 # heights) ships bundles only: the frontend draws it as contour lines, which
 # needs the exact codes and never the H.264 companion's chroma-subsampled
@@ -861,6 +871,44 @@ def derive_theta_e(values: dict[str, np.ndarray], bundle_id: str) -> np.ndarray:
     return theta * np.exp((3.376 / t_lcl - 0.00254) * r_g * (1.0 + 0.00081 * r_g))
 
 
+# GRIB2 code table 4.201's codes for the four types pgrb2's categorical flags
+# report, and the order they are combined in: rain, then freezing rain, then
+# ice pellets, then snow, each later flag overriding an earlier one. The four
+# are mutually exclusive in the model's own output — a 2026-09-21 analysis
+# has no cell with two flags set — so the order only decides a point the
+# model should never produce; both encoders share it so even such a point
+# encodes byte-identically.
+PTYPE_CODES: tuple[tuple[str, float], ...] = (
+    ("crain", 1.0),
+    ("cfrzr", 3.0),
+    ("cicep", 8.0),
+    ("csnow", 5.0),
+)
+
+
+def derive_ptype(values: dict[str, np.ndarray], bundle_id: str) -> np.ndarray:
+    """The categorical precipitation type on the ground, from the four 0/1
+    flags pgrb2 carries: WMO code table 4.201's value for each (1 rain,
+    3 freezing rain, 5 snow, 8 ice pellets), 0 where none is set. The flags
+    are combined in :data:`PTYPE_CODES` order, each setting the code where
+    it is non-zero. Comparisons and selects only, in float64, which the
+    native encoder reproduces one by one."""
+    inputs = DERIVED_SCALARS[bundle_id]
+    codes = np.zeros_like(values[inputs[0]])
+    for variable_id, code in PTYPE_CODES:
+        codes = np.where(values[variable_id] > 0.0, code, codes)
+    return codes
+
+
+def derive_scalar(values: dict[str, np.ndarray], bundle_id: str) -> np.ndarray:
+    """The one plane of a derived scalar bundle: the equivalent potential
+    temperature from the temperature and specific humidity on its surface,
+    the categorical precipitation type from the four flags."""
+    if bundle_id == "ptype":
+        return derive_ptype(values, bundle_id)
+    return derive_theta_e(values, bundle_id)
+
+
 def deaccumulate_precipitation(
     current_mm: np.ndarray,
     previous_mm: np.ndarray | None,
@@ -1431,7 +1479,7 @@ def _quantize_file(
         u_id, v_id = VECTOR_BUNDLES[bundle_id]
         values[u_id], values[v_id] = derive_vector(values, bundle_id)
     for bundle_id in derived_scalar_ids:
-        values[bundle_id] = derive_theta_e(values, bundle_id)
+        values[bundle_id] = derive_scalar(values, bundle_id)
     for variable_id in drop_ids:
         values.pop(variable_id, None)
     codes: dict[str, np.ndarray] = {}

@@ -19,6 +19,12 @@ function railTileIds(): string[] {
   return [...section![0].matchAll(/data-variable="([a-z0-9]+)"/g)].map((match) => match[1]!);
 }
 
+/** Registered fields with no written rail tile: reached through the field
+ * sheet's OTHER group, which lists every bundle the run publishes that no
+ * tile stands for (pwat, cin, hpbl, ptype and the wind100m pair are new
+ * enough that no tile is written for them yet). */
+const SHEET_ONLY_IDS: readonly string[] = ["cin", "pwat", "hpbl", "ptype", "wind100m"];
+
 describe("the variable table", () => {
   it("has one row per registered id, in a fixed order", () => {
     const ids = variableIds();
@@ -83,6 +89,7 @@ describe("the variable table", () => {
         tiles.includes(id) ||
         (spec.family !== null && tileFamilies.has(spec.family)) ||
         UNTILED_BUNDLE_IDS.includes(id) ||
+        SHEET_ONLY_IDS.includes(id) ||
         // Specific humidity is registered, shipped by no source, and has
         // no tile (levels.ts).
         spec.family === "spfh";
@@ -110,5 +117,24 @@ describe("the variable table", () => {
     expect(pressure.meteogramCode).toBe("PRMSL");
     expect(pressure.ground).toBe("chart");
     expect(variableSpec("hgt500")!.urlAliases).toContain("subtropicalhigh");
+    // The new GFS fields: the 100 m wind is a vector of its own family, and
+    // the precipitation type's legend is a swatch key rather than a bar.
+    const wind100 = variableSpec("wind100m")!;
+    expect(wind100.vector).toBe(true);
+    expect(wind100.family).toBe("wind100m");
+    expect(wind100.code).toBe("WIND 100M");
+    expect(wind100.label()).toBe("100 m wind");
+    expect(wind100.legend()).toEqual(["40", "30", "20", "10", "5", "0"]);
+    const ptype = variableSpec("ptype")!;
+    expect(ptype.legend()).toEqual([]);
+    expect(ptype.legendKey?.().map((swatch) => swatch.label)).toEqual([
+      "Rain",
+      "Freezing rain",
+      "Snow",
+      "Ice pellets",
+    ]);
+    expect(variableSpec("cin")!.label()).toBe("Convective inhibition");
+    expect(variableSpec("pwat")!.label()).toBe("Precipitable water");
+    expect(variableSpec("hpbl")!.label()).toBe("Planetary boundary layer height");
   });
 });

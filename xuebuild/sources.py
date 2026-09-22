@@ -522,9 +522,13 @@ SOURCES: dict[str, SourceSpec] = {
         # there (so spfh850 is fetched as an input only — it also feeds the
         # 850 hPa equivalent potential temperature the converter derives).
         # Then the surface diagnostics — gust, the total and
-        # the three cloud layers, CAPE, visibility, dew point and apparent
-        # temperature — and the vertical velocity on the three surfaces a
-        # rainfall chart reads ascent on. Then the ocean: the surface (skin)
+        # the three cloud layers, CAPE, visibility, dew point, apparent
+        # temperature, the precipitable water and boundary layer height,
+        # and the four categorical precipitation-type flags the ptype
+        # bundle is derived from (input-only, like spfh850) — and the
+        # vertical velocity on the three surfaces a rainfall chart reads
+        # ascent on. The 100 m wind pair joins the 10 m pair as a wind
+        # bundle of its own. Then the ocean: the surface (skin)
         # temperature, which is the SST over water, and the two sea ice
         # fields from pgrb2, and the significant wave height, primary wave
         # period and direction from the cycle's GFS-Wave file — the
@@ -532,7 +536,7 @@ SOURCES: dict[str, SourceSpec] = {
         # wave vector the converter derives from it and the height, not as
         # a scalar of its own. The specific humidity above 850 hPa, the
         # other vapour fluxes and the other vertical velocities stay
-        # unpublished: sixty-one pgrb2 records and three wave records per
+        # unpublished: seventy pgrb2 records and three wave records per
         # frame.
         input_variable_ids=(
             "tmp2m",
@@ -581,15 +585,24 @@ SOURCES: dict[str, SourceSpec] = {
             "vgrd250",
             "ugrd200",
             "vgrd200",
+            "ugrd100m",
+            "vgrd100m",
             "gust",
             "tcdc",
             "lcdc",
             "mcdc",
             "hcdc",
             "cape",
+            "cin",
             "vis",
             "dpt2m",
             "aptmp2m",
+            "pwat",
+            "hpbl",
+            "crain",
+            "cfrzr",
+            "cicep",
+            "csnow",
             "vvel850",
             "vvel700",
             "vvel500",
@@ -605,6 +618,7 @@ SOURCES: dict[str, SourceSpec] = {
         bundle_scalar_ids=(
             "tmp2m",
             "prate",
+            "ptype",
             "prmsl",
             "hgt1000",
             "hgt925",
@@ -636,9 +650,12 @@ SOURCES: dict[str, SourceSpec] = {
             "mcdc",
             "hcdc",
             "cape",
+            "cin",
             "vis",
             "dpt2m",
             "aptmp2m",
+            "pwat",
+            "hpbl",
             "vvel850",
             "vvel700",
             "vvel500",
@@ -651,6 +668,7 @@ SOURCES: dict[str, SourceSpec] = {
         ),
         bundle_vector_ids=(
             "wind10m",
+            "wind100m",
             "wind1000",
             "wind925",
             "wind850",

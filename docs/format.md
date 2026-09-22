@@ -321,15 +321,21 @@ recognize; anything else it can still decode.
 | `prate` | 0 / 1 / 7 | 1, 0 | `typeOfStatisticalProcessing: 0` when derived (ECMWF, sflux) |
 | `ugrd10m` | 0 / 2 / 2 | 103, 10 m | |
 | `vgrd10m` | 0 / 2 / 3 | 103, 10 m | |
+| `ugrd100m` / `vgrd100m` | 0 / 2 / 2, 0 / 2 / 3 | 103, 100 m | 100 m wind components, the turbine hub height; the `wind100m` bundle |
 | `dswrf` | 0 / 4 / 192 | 1, 0 | NCEP local parameter |
 | `cref` | 0 / 16 / 5 | 10, no value | Composite reflectivity, entire atmosphere; observed (the radar mosaic) or forecast (HRRR's `REFC`, NCEP-local 0 / 16 / 196, accepted on input and never written) |
 | `gust` | 0 / 2 / 22 | 1, 0 | Instantaneous surface wind gust (GFS). ECMWF's `10fg` / `10fg3`, the same parameter on the 10 m surface (103, 10 m) as the maximum over the interval ending at the frame, product template 4.8, is accepted on input under this identity and never written; on ECMWF the series starts at the first step |
 | `tcdc` | 0 / 6 / 1 | 10, no value | Total cloud cover, entire atmosphere; the instantaneous record, not the interval average. ECMWF's `tcc`, the ECMWF-local 0 / 6 / 192 on the ground surface as a 0–1 fraction, is accepted on input, scaled to percent, and never written |
 | `cape` | 0 / 7 / 6 | 1, 0 | Surface-based CAPE (not the mixed-layer variants on surface type 108). ECMWF's `mucape`, the same parameter departing from surface type 17, the most unstable parcel's level, is accepted on input and never written |
+| `cin` | 0 / 7 / 7 | 1, 0 | Surface-based convective inhibition in J/kg, never positive (not the mixed-layer variants on surface type 108) |
 | `lcdc` / `mcdc` / `hcdc` | 0 / 6 / 3, 0 / 6 / 4, 0 / 6 / 5 | 214 / 224 / 234, no value | Low / middle / high cloud cover, each its own parameter on its own layer surface; the instantaneous records |
 | `vis` | 0 / 19 / 0 | 1, 0 | Surface visibility, quantized in km |
 | `dpt2m` | 0 / 0 / 6 | 103, 2 m | 2 m dew point |
 | `aptmp2m` | 0 / 0 / 21 | 103, 2 m | NCEP's 2 m apparent temperature |
+| `pwat` | 0 / 1 / 3 | 200, no value | Precipitable water, the column mass in kg/m² (a millimetre of water); NCEP writes it on its local "entire atmosphere (considered as a single layer)" surface, type 200, which carries no value like the WMO type 10 |
+| `hpbl` | 0 / 3 / 196 | 1, 0 | Planetary boundary layer height in metres, NCEP's local number (the WMO table's 0 / 3 / 18 is not what pgrb2 carries) |
+| `ptype` | 0 / 1 / 19 | 1, 0 | Precipitation type: one categorical field the encoder derives from the four flags below, in WMO code table 4.201's own values (1 rain, 3 freezing rain, 5 snow, 8 ice pellets, 0 none). Never fetched; the flags are inputs only and reach no bundle |
+| `crain` / `cfrzr` / `cicep` / `csnow` | 0 / 1 / 192–195 | 1, 0 | The four 0/1 categorical precipitation-type flags pgrb2 carries (rain, freezing rain, ice pellets, snow; NCEP-local numbers), input-only, combined into `ptype` |
 | `tmpsfc` | 0 / 0 / 0 | 1, 0 | Surface (skin) temperature, the SST over water. ECMWF's `skt`, its own parameter 0 / 0 / 17 with no surface value, is accepted on input and never written |
 | `icec` | 10 / 2 / 0 | 1, 0 | Sea ice cover, a 0–1 proportion quantized in percent (GFS only) |
 | `icetk` | 10 / 2 / 1 | 1, 0 | Sea ice thickness; ECMWF's `sithick` carries no surface value and a bitmap over land (GDAL's 9999, the bottom of the codebook), and is accepted on input |
@@ -363,6 +369,17 @@ standard gravity (9.80665 m/s²), in g·cm⁻¹·hPa⁻¹·s⁻¹. GRIB2 has no 
 parameter for a per-level horizontal vapour flux, so the two components take
 local-use numbers 250 and 251 in the moisture category, which no centre this
 pipeline reads from uses.
+
+The precipitation type is derived the same way: the encoder reads pgrb2's
+four 0/1 categorical flags — `crain`, `cfrzr`, `cicep` and `csnow`, its
+local numbers 0 / 1 / 192–195 on the ground surface — and writes one
+categorical field under WMO code table 4.201's own values (0 none, 1 rain,
+3 freezing rain, 5 snow, 8 ice pellets). The four are mutually exclusive in
+the model's own output, so a chart of `ptype` never has to resolve a real
+disagreement; where two were set anyway, the order rain, freezing rain,
+ice pellets, snow decides, each later flag overriding, and both encoders
+share that order so the plane stays byte-identical. The four flags are
+input-only and reach no bundle.
 
 #### Band, Producer and Aerosol
 
@@ -779,13 +796,17 @@ values unless noted):
 | Variable | offset | scale | maximumCode | nodataCode | Error budget |
 |---|---:|---:|---:|---:|---|
 | `tmp2m` | −60 °C | 0.5 | 220 | 255 | 0.25 °C |
-| `ugrd10m` / `vgrd10m` | −63.5 m/s | 0.5 | 254 | 255 | 0.25 m/s |
+| `ugrd10m` / `vgrd10m` / `ugrd100m` / `vgrd100m` | −63.5 m/s | 0.5 | 254 | 255 | 0.25 m/s |
 | `dswrf` | 0 W/m² | 5 | 254 | 255 | 2.5 W/m² |
 | `cref` | 0 dBZ | 0.5 | 160 | 255 | 0.25 dB |
 | `gust` | 0 m/s | 0.5 | 254 | 255 | 0.25 m/s |
 | `tcdc` | 0 % | 0.5 | 200 | 255 | 0.25 % |
 | `cape` | 0 J/kg | 25 | 254 | 255 | 12.5 J/kg |
+| `cin` | −1016 J/kg | 4 | 254 | 255 | 2 J/kg |
 | `lcdc` / `mcdc` / `hcdc` | 0 % | 0.5 | 200 | 255 | 0.25 % |
+| `pwat` | 0 kg/m² | 0.5 | 254 | 255 | 0.25 kg/m² |
+| `hpbl` | 0 m | 20 | 254 | 255 | 10 m |
+| `ptype` | 0 | 1 | 8 | 255 | — |
 | `vis` | 0 km | 0.1 | 254 | 255 | 0.05 km |
 | `dpt2m` | −70 °C | 0.5 | 220 | 255 | 0.25 °C |
 | `aptmp2m` | −90 °C | 1 | 150 | 255 | 0.5 °C |
@@ -833,15 +854,21 @@ values unless noted):
 
 The `compact` profile doubles each `scale` (temperature 1.0 → maximumCode
 110, wind 1.0 → 127, dswrf 10 → 127, cref 1.0 → 80, gust 1.0 → 127, every
-cloud cover 1.0 → 100, cape 50 → 127, vis 0.2 → 127, dpt2m 1.0 → 110,
-aptmp2m 2 → 75, tmpsfc 1.0 → 127, icec 1.0 → 100, icetk 0.04 → 127, htsgw
-and perpw 0.2 → 127, and every pressure-family and isobaric codebook → half
-its maximumCode over the same range). Two codebooks do not keep the same
-range: `dirpw`'s compact codebook stops at 357° (3 → 119), because 360 / 3
+cloud cover 1.0 → 100, cape 50 → 127, cin 8 → 127, vis 0.2 → 127, dpt2m 1.0
+→ 110, aptmp2m 2 → 75, pwat 1.0 → 127, hpbl 40 → 127, tmpsfc 1.0 → 127, icec
+1.0 → 100, icetk 0.04 → 127, htsgw and perpw 0.2 → 127, and every
+pressure-family and isobaric codebook → half its maximumCode over the same
+range). Two codebooks do not keep the same range: `dirpw`'s compact codebook
+stops at 357° (3 → 119), because 360 / 3
 codes would put 360°, which is 0°, back on the grid; and the wave vector's
 stops at ±25.2 m (0.4 → 126) so that 0 stays on the grid, since land is
-(0, 0) in the pair and the middle code of both. `balanced` takes the compact
-`icec` beside the compact humidity and cloud cover.
+(0, 0) in the pair and the middle code of both. The categorical `ptype`
+takes one book in every profile: its integer class codes have no resolution
+to trade, and the codes between the four types GFS reports are never
+written. `balanced` takes the compact
+`icec` beside the compact humidity and cloud cover, and the quality book for
+every other one-sided field (the inhibition, the precipitable water, the
+boundary layer height), as it does for the aerosol fields.
 
 The wave fields are the first whose records do not cover the grid: GFS-Wave
 carries a bitmap, and land comes out of GDAL as its nodata value (9999).
@@ -1335,8 +1362,8 @@ Normative for byte identity between the two encoders:
 - Every variable's grouping is `GROUP_LENGTH = 6` frames, formed inside
   segments of constant step exactly as v1's temporal grouping, applied once
   per file to the shared axis. A trailing short group is its own group.
-- Predictor: RAW for `prate` and `cref`; PREVIOUS for every linear-codebook
-  field.
+- Predictor: RAW for `prate`, `cref` and the categorical `ptype`; PREVIOUS
+  for every linear-codebook field.
 - Tile size is a per-source registry value; a reduced-resolution variant
   decimated by `f` (2, 4 or 8: every `f`-th row and column of the canonical
   plane, from row and column 0) uses `(ceil(tileWidth / f), ceil(tileHeight

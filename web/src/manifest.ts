@@ -390,9 +390,11 @@ export type IsobaricScalarBundleId =
   | `thetae${IsobaricLevel}`;
 
 /** The two-variable bundles: a u/v pair the viewer draws as a magnitude field
- * with optional particles — the 10 m wind, the wind on each isobaric surface,
- * and the water vapour flux the encoder derives there. */
-export type VectorBundleId = "wind10m" | `wind${IsobaricLevel}` | `qflux${IsobaricLevel}` | "wave";
+ * with optional particles — the 10 m wind, the 100 m wind (the turbine hub
+ * height, the same parameters on surface type 103 value 100), the wind on
+ * each isobaric surface, and the water vapour flux the encoder derives
+ * there. */
+export type VectorBundleId = "wind10m" | "wind100m" | `wind${IsobaricLevel}` | `qflux${IsobaricLevel}` | "wave";
 
 /** The three-variable bundles: a colour composite a producer derived from
  * several satellite channels, whose variables are the three guns the viewer
@@ -428,20 +430,41 @@ export type KnownBundleId =
   | VectorBundleId;
 
 /** The surface diagnostics — wind gust, cloud cover (the total and the
- * three layers), surface-based CAPE, visibility, 2 m dew point and 2 m
- * apparent temperature — single layers like `dswrf`, held to the encoders
- * by `tests/fixtures/surface-registry.json`. */
-export type SurfaceDiagnosticId = "gust" | "tcdc" | "cape" | "vis" | "dpt2m" | "aptmp2m" | "lcdc" | "mcdc" | "hcdc";
+ * three layers), surface-based CAPE and its twin convective inhibition,
+ * visibility, 2 m dew point and 2 m apparent temperature, precipitable
+ * water, planetary boundary layer height and the categorical precipitation
+ * type — single layers like `dswrf`, held to the encoders by
+ * `tests/fixtures/surface-registry.json`. The order is the registry's own
+ * (`xuebuild/quantize.py::SURFACE_VARIABLE_IDS`), which `tests/web/surface.test.ts`
+ * holds the list to. */
+export type SurfaceDiagnosticId =
+  | "gust"
+  | "tcdc"
+  | "cape"
+  | "cin"
+  | "vis"
+  | "dpt2m"
+  | "aptmp2m"
+  | "lcdc"
+  | "mcdc"
+  | "hcdc"
+  | "pwat"
+  | "hpbl"
+  | "ptype";
 export const SURFACE_DIAGNOSTIC_IDS: readonly SurfaceDiagnosticId[] = [
   "gust",
   "tcdc",
   "cape",
+  "cin",
   "vis",
   "dpt2m",
   "aptmp2m",
   "lcdc",
   "mcdc",
   "hcdc",
+  "pwat",
+  "hpbl",
+  "ptype",
 ];
 
 /** The ocean set — the surface (skin) temperature, which is the SST over
@@ -488,6 +511,8 @@ export function isBundleVariableId(value: unknown): value is ForecastBundleId {
 export type VectorComponentId =
   | "ugrd10m"
   | "vgrd10m"
+  | "ugrd100m"
+  | "vgrd100m"
   | `ugrd${IsobaricLevel}`
   | `vgrd${IsobaricLevel}`
   | `uqflx${IsobaricLevel}`
@@ -545,6 +570,7 @@ export const KNOWN_BUNDLE_IDS: readonly KnownBundleId[] = [
   ...perLevel("vvel"),
   ...perLevel("thetae"),
   "wind10m",
+  "wind100m",
   ...perLevel("wind"),
   ...perLevel("qflux"),
   "wave",
@@ -557,6 +583,9 @@ export const WAVE_COMPONENT_IDS: readonly ["uwave", "vwave"] = ["uwave", "vwave"
 /** The u/v component pair of every vector bundle. */
 export const VECTOR_BUNDLES: Record<VectorBundleId, readonly [VectorComponentId, VectorComponentId]> = {
   wind10m: ["ugrd10m", "vgrd10m"],
+  // The 100 m pair: the same parameters on the turbine hub height, the
+  // `wind100m` bundle (xuebuild/binconvert.py::WIND_100M_COMPONENT_IDS).
+  wind100m: ["ugrd100m", "vgrd100m"],
   ...Object.fromEntries(ISOBARIC_LEVELS.map((level) => [`wind${level}`, [`ugrd${level}`, `vgrd${level}`]])),
   ...Object.fromEntries(ISOBARIC_LEVELS.map((level) => [`qflux${level}`, [`uqflx${level}`, `vqflx${level}`]])),
   wave: WAVE_COMPONENT_IDS,

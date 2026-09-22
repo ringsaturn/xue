@@ -49,6 +49,12 @@ use crate::encode::temporal::build_chunks;
 /// `xuebuild/binconvert.py`.
 pub const WIND_COMPONENT_IDS: [&str; 2] = ["ugrd10m", "vgrd10m"];
 pub const WIND_BUNDLE_ID: &str = "wind10m";
+/// The 100 m wind pair, the hub height of a modern turbine: the same
+/// parameters on the 100 m surface, a vector bundle of its own. Mirrors
+/// `WIND_100M_COMPONENT_IDS` / `WIND_100M_BUNDLE_ID` in
+/// `xuebuild/binconvert.py`.
+pub const WIND_100M_COMPONENT_IDS: [&str; 2] = ["ugrd100m", "vgrd100m"];
+pub const WIND_100M_BUNDLE_ID: &str = "wind100m";
 pub const WAVE_BUNDLE_ID: &str = "wave";
 /// The inputs the wave vector is derived from: the significant wave height
 /// and the primary wave direction. Mirrors `DERIVED_VECTORS["wave"]` in
@@ -59,6 +65,9 @@ const WAVE_INPUT_IDS: [&str; 2] = ["htsgw", "dirpw"];
 pub fn vector_components(bundle_id: &str) -> Option<(String, String)> {
     if bundle_id == WIND_BUNDLE_ID {
         return Some((WIND_COMPONENT_IDS[0].into(), WIND_COMPONENT_IDS[1].into()));
+    }
+    if bundle_id == WIND_100M_BUNDLE_ID {
+        return Some((WIND_100M_COMPONENT_IDS[0].into(), WIND_100M_COMPONENT_IDS[1].into()));
     }
     if bundle_id == WAVE_BUNDLE_ID {
         return Some((WAVE_VECTOR_COMPONENT_IDS[0].into(), WAVE_VECTOR_COMPONENT_IDS[1].into()));
@@ -163,8 +172,14 @@ pub fn analysis_optional_ids<'a>(source: &SourceSpec, scalar_ids: &[&'a str]) ->
 }
 
 /// The source inputs a derived scalar is built from, or `None` for a scalar
-/// read from a record.
+/// read from a record. The equivalent potential temperature reads the
+/// temperature and specific humidity on its surface; the precipitation type
+/// reads the four categorical flags. Mirrors `DERIVED_SCALARS` in
+/// `xuebuild/binconvert.py`.
 pub fn derived_scalar_inputs(bundle_id: &str) -> Option<Vec<String>> {
+    if bundle_id == "ptype" {
+        return Some(PTYPE_INPUT_IDS.iter().map(|id| (*id).to_string()).collect());
+    }
     let level = theta_e_level(bundle_id)?;
     Some(vec![format!("tmp{level}"), format!("spfh{level}")])
 }
@@ -203,9 +218,11 @@ pub fn vector_input_ids(bundle_id: &str) -> Vec<String> {
 /// Precipitation and radar reflectivity move with weather systems, so
 /// temporal differencing makes them larger, not smaller: their chunks stack
 /// the codes RAW. Every linear-codebook field chains against the previous
-/// frame inside its chunk. Mirrors `RAW_VARIABLE_IDS` in
-/// `xuebuild/binconvert.py`.
-const RAW_VARIABLE_IDS: [&str; 2] = ["prate", "cref"];
+/// frame inside its chunk. The categorical precipitation type is RAW for the
+/// same reason a codebook of classes never differences: every class boundary
+/// moves with the weather, and a category's code is not a number. Mirrors
+/// `RAW_VARIABLE_IDS` in `xuebuild/binconvert.py`.
+const RAW_VARIABLE_IDS: [&str; 3] = ["prate", "cref", "ptype"];
 /// The pressure family: mean sea level pressure and the isobaric geopotential
 /// heights. The frontend draws them as contour lines, so they ship bundles
 /// only — no poster (it would paint a filled field the view never shows) and
@@ -756,6 +773,24 @@ fn convert_units(variable_id: &str, unit: &str, values: &mut [f64]) -> Result<()
 /// stratospheric cell can carry zero, whose vapour pressure has no logarithm.
 const THETA_E_MINIMUM_Q: f64 = 1e-7;
 
+/// The four categorical precipitation-type flags, in the order
+/// [`derive_ptype`] combines them. Mirrors `DERIVED_SCALARS["ptype"]` in
+/// `xuebuild/binconvert.py`.
+const PTYPE_INPUT_IDS: [&str; 4] = ["crain", "cfrzr", "cicep", "csnow"];
+
+/// GRIB2 code table 4.201's codes for the four types pgrb2's categorical
+/// flags report, and the order they are combined in: rain, then freezing
+/// rain, then ice pellets, then snow, each later flag overriding an earlier
+/// one. Both encoders share this order so even a point the model should
+/// never produce encodes byte-identically. Mirrors `PTYPE_CODES` in
+/// `xuebuild/binconvert.py`.
+const PTYPE_CODES: [(&str, f64); 4] = [
+    ("crain", 1.0),
+    ("cfrzr", 3.0),
+    ("cicep", 8.0),
+    ("csnow", 5.0),
+];
+
 /// The equivalent potential temperature on one isobaric surface, in K, from
 /// the temperature already in °C and the specific humidity already in g/kg
 /// there: Bolton (1980) eq. 43 with its own lifting-condensation-level
@@ -781,6 +816,33 @@ pub fn derive_theta_e(temperature: &[f64], specific_humidity: &[f64], level_hpa:
             theta * ((3.376 / t_lcl - 0.00254) * r_g * (1.0 + 0.00081 * r_g)).exp()
         })
         .collect()
+}
+
+/// The categorical precipitation type on the ground, from the four 0/1 flags
+/// pgrb2 carries: WMO code table 4.201's value for each (1 rain, 3 freezing
+/// rain, 5 snow, 8 ice pellets), 0 where none is set. The flags are combined
+/// in `PTYPE_CODES` order, each setting the code where it is non-zero.
+/// Comparisons and selects only, in f64 — exactly what `derive_ptype` in
+/// `xuebuild/binconvert.py` does, so the two encoders stay byte-identical on
+/// a field neither reads from a record.
+pub fn derive_ptype(values: &[(String, Vec<f64>)]) -> Result<Vec<f64>> {
+    let plane = |name: &str| -> Result<&[f64]> {
+        values
+            .iter()
+            .find(|(id, _)| id == name)
+            .map(|(_, plane)| plane.as_slice())
+            .ok_or_else(|| EncodeError::conversion(format!("missing {name} plane for ptype")))
+    };
+    let mut codes = vec![0.0f64; plane(PTYPE_INPUT_IDS[0])?.len()];
+    for (variable_id, code) in PTYPE_CODES {
+        let plane = plane(variable_id)?;
+        for (slot, value) in codes.iter_mut().zip(plane) {
+            if *value > 0.0 {
+                *slot = code;
+            }
+        }
+    }
+    Ok(codes)
 }
 
 /// The water vapour flux components on one isobaric surface, q·V/g in
@@ -1138,19 +1200,25 @@ fn quantize_file(
         values.push((u_id, component_u));
         values.push((v_id, component_v));
     }
-    // The equivalent potential temperatures, after the vapour flux and
-    // before the derivation-only inputs go: both read the specific humidity.
+    // The derived scalars, after the vapour flux and before the
+    // derivation-only inputs go: the equivalent potential temperatures read
+    // the specific humidity on their surface, the precipitation type the four
+    // categorical flags.
     for bundle_id in derived_scalar_ids {
-        let inputs = derived_scalar_inputs(bundle_id).expect("a derived scalar");
-        let level = theta_e_level(bundle_id).expect("a derived scalar has a level");
-        let plane = |name: &str| -> Result<&Vec<f64>> {
-            values
-                .iter()
-                .find(|(id, _)| id == name)
-                .map(|(_, plane)| plane)
-                .ok_or_else(|| EncodeError::conversion(format!("missing {name} plane for {bundle_id}")))
+        let derived = if *bundle_id == "ptype" {
+            derive_ptype(&values)?
+        } else {
+            let inputs = derived_scalar_inputs(bundle_id).expect("a derived scalar");
+            let level = theta_e_level(bundle_id).expect("a derived scalar has a level");
+            let plane = |name: &str| -> Result<&Vec<f64>> {
+                values
+                    .iter()
+                    .find(|(id, _)| id == name)
+                    .map(|(_, plane)| plane)
+                    .ok_or_else(|| EncodeError::conversion(format!("missing {name} plane for {bundle_id}")))
+            };
+            derive_theta_e(plane(&inputs[0])?, plane(&inputs[1])?, level)
         };
-        let derived = derive_theta_e(plane(&inputs[0])?, plane(&inputs[1])?, level);
         values.push(((*bundle_id).to_string(), derived));
     }
     values.retain(|(name, _)| !drop_ids.contains(name));
