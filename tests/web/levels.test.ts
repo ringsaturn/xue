@@ -7,6 +7,7 @@ import {
   ISOBARIC_FAMILIES,
   ISOBARIC_FILL_IDS,
   bundleLevel,
+  familyLabel,
   familyLevels,
   familyMembers,
   familyVariants,
@@ -170,19 +171,33 @@ describe("the isobaric family registry", () => {
     expect(vectorMaxMagnitude("wind100m", null)).toBe(40);
   });
 
-  it("keeps the 100 m wind its own family, so the wind level row survives", () => {
-    // A second near-surface member would take the wind family's level row;
-    // the 100 m pair is a family of its own instead.
-    expect(familyOf("wind100m")).toBe("wind100m");
+  it("puts the 100 m wind on the wind family's level row", () => {
+    // The wind family lists its surfaces outright so two near-surface
+    // members can sit on one level row; the 100 m pair is not a family of
+    // its own.
+    expect(familyOf("wind100m")).toBe("wind");
     expect(familyOf("wind10m")).toBe("wind");
-    expect(familyLevels("wind100m")).toEqual(["wind100m"]);
-    expect(familyVariants("wind100m")).toEqual(["wind100m"]);
-    expect(familyMembers("wind100m")).toEqual(["wind100m"]);
+    expect((ISOBARIC_FAMILIES as readonly string[])).not.toContain("wind100m");
+    expect(familyLevels("wind")).toEqual([
+      "wind10m",
+      "wind100m",
+      "wind1000",
+      "wind925",
+      "wind850",
+      "wind700",
+      "wind500",
+      "wind300",
+      "wind250",
+      "wind200",
+    ]);
+    expect(familyVariants("wind")).toEqual([]);
+    expect(familyMembers("wind")).toContain("wind100m");
     expect(levelCode("wind100m")).toBe("100M");
-    expect(familyLevels("wind")).toContain("wind1000");
-    // The 100 m id is not an isobaric surface, and the code reads its own
-    // family, not a level.
+    expect(levelCode("wind10m")).toBe("10M");
+    // The trailing "m" keeps the id off the isobaric convention: it has no
+    // level, and its label comes from the family member table.
     expect(bundleLevel("wind100m")).toBeNull();
+    expect(familyLabel("wind100m")).toBe("100 m wind");
   });
 
   it("builds six legend ticks, high to low, for every member", () => {

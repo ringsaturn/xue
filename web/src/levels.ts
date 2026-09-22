@@ -36,7 +36,6 @@ export type IsobaricFamily =
   | "rh"
   | "spfh"
   | "wind"
-  | "wind100m"
   | "qflux"
   | "vvel"
   | "thetae"
@@ -52,7 +51,6 @@ export const ISOBARIC_FAMILIES: readonly IsobaricFamily[] = [
   "rh",
   "spfh",
   "wind",
-  "wind100m",
   "qflux",
   "vvel",
   "thetae",
@@ -113,20 +111,31 @@ export const FAMILIES: Record<IsobaricFamily, FamilyInfo> = {
   // Registered on both encoders and fetched by GFS as the vapour flux's
   // input, but no source publishes it, so the shell writes no tile.
   spfh: { id: "spfh", kind: "scalar", surface: null, code: "SPFH", surfaceCode: "", glossKey: null },
-  wind: { id: "wind", kind: "vector", surface: "wind10m", code: "WIND", surfaceCode: "10M", glossKey: "varWind" },
-  // The 100 m wind is its own family, not a member of the wind family: a
-  // family has one surface member and the eight isobaric surfaces, and a
-  // second near-surface member would take the level row the wind family
-  // already has. One member, no level row (a family of variants), so the
-  // bundle is reached through the field sheet and the generic tile.
-  wind100m: {
-    id: "wind100m",
+  // The wind family lists its surfaces outright: the 10 m wind heads it,
+  // the 100 m pair (the turbine hub height, the same parameters on surface
+  // 103 value 100) is the second near-surface member, then the eight
+  // isobaric surfaces from the ground up. Listing them is what lets a
+  // family carry two near-surface members; the generated form (surface plus
+  // the eight isobaric levels) cannot.
+  wind: {
+    id: "wind",
     kind: "vector",
-    surface: "wind100m",
-    code: "WIND100M",
-    surfaceCode: "100M",
+    surface: "wind10m",
+    code: "WIND",
+    surfaceCode: "10M",
     glossKey: "varWind",
-    variants: [{ id: "wind100m", code: "100M" }],
+    levels: [
+      { id: "wind10m", code: "10M" },
+      { id: "wind100m", code: "100M" },
+      { id: "wind1000", code: "1000" },
+      { id: "wind925", code: "925" },
+      { id: "wind850", code: "850" },
+      { id: "wind700", code: "700" },
+      { id: "wind500", code: "500" },
+      { id: "wind300", code: "300" },
+      { id: "wind250", code: "250" },
+      { id: "wind200", code: "200" },
+    ],
   },
   qflux: { id: "qflux", kind: "vector", surface: null, code: "QFLUX", surfaceCode: "", glossKey: "varVapourFlux" },
   vvel: { id: "vvel", kind: "scalar", surface: null, code: "OMEGA", surfaceCode: "", glossKey: "varOmega" },
@@ -613,7 +622,6 @@ export function familyLabel(id: ForecastBundleId): string {
     rh: "varLabelRhAtLevel",
     spfh: "varLabelSpfhAtLevel",
     wind: "varLabelWindAtLevel",
-    wind100m: "varLabelWind100m",
     qflux: "varLabelQfluxAtLevel",
     hgt: "varLabelHeightAtLevel",
     vvel: "varLabelVvelAtLevel",
@@ -661,7 +669,6 @@ export function isobaricCode(id: ForecastBundleId): string {
     rh: "RH",
     spfh: "SPFH",
     wind: "WIND",
-    wind100m: "WIND100M",
     qflux: "QFLUX",
     vvel: "OMEGA",
     thetae: "THETAE",

@@ -19,12 +19,6 @@ function railTileIds(): string[] {
   return [...section![0].matchAll(/data-variable="([a-z0-9]+)"/g)].map((match) => match[1]!);
 }
 
-/** Registered fields with no written rail tile: reached through the field
- * sheet's OTHER group, which lists every bundle the run publishes that no
- * tile stands for (pwat, cin, hpbl, ptype and the wind100m pair are new
- * enough that no tile is written for them yet). */
-const SHEET_ONLY_IDS: readonly string[] = ["cin", "pwat", "hpbl", "ptype", "wind100m"];
-
 describe("the variable table", () => {
   it("has one row per registered id, in a fixed order", () => {
     const ids = variableIds();
@@ -89,13 +83,31 @@ describe("the variable table", () => {
         tiles.includes(id) ||
         (spec.family !== null && tileFamilies.has(spec.family)) ||
         UNTILED_BUNDLE_IDS.includes(id) ||
-        SHEET_ONLY_IDS.includes(id) ||
         // Specific humidity is registered, shipped by no source, and has
         // no tile (levels.ts).
         spec.family === "spfh";
       expect(reachable, `${id} is reachable from no tile`).toBe(true);
     }
     expect(FAMILIES.spfh.glossKey).toBeNull();
+  });
+
+  it("tiles the new GFS fields under their own sheet groups", () => {
+    // Each has a written rail tile, so the field sheet files it under its
+    // group rather than the catch-all OTHER.
+    for (const id of ["pwat", "ptype", "cin", "hpbl"] as const) {
+      expect(railTileIds()).toContain(id);
+      expect(variableSpec(id)!.family).toBeNull();
+    }
+    expect(variableSpec("pwat")!.group).toBe("moisture");
+    expect(variableSpec("ptype")!.group).toBe("moisture");
+    expect(variableSpec("cin")!.group).toBe("dynamics");
+    expect(variableSpec("hpbl")!.group).toBe("dynamics");
+    // The 100 m wind has no tile of its own: it is a member of the wind
+    // family, behind the wind tile.
+    expect(railTileIds()).not.toContain("wind100m");
+    expect(variableSpec("wind100m")!.group).toBe("wind");
+    expect(variableSpec("wind100m")!.family).toBe("wind");
+    expect(familyMembers("wind")).toContain("wind100m");
   });
 
   it("carries the instrument copy the panels read", () => {
@@ -121,7 +133,7 @@ describe("the variable table", () => {
     // the precipitation type's legend is a swatch key rather than a bar.
     const wind100 = variableSpec("wind100m")!;
     expect(wind100.vector).toBe(true);
-    expect(wind100.family).toBe("wind100m");
+    expect(wind100.family).toBe("wind");
     expect(wind100.code).toBe("WIND 100M");
     expect(wind100.label()).toBe("100 m wind");
     expect(wind100.legend()).toEqual(["40", "30", "20", "10", "5", "0"]);

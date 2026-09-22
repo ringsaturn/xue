@@ -404,6 +404,20 @@
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphPrate">R</b>
           <span class="rail-name"><span>PRECIP</span> <small data-i18n="varPrecip">RATE</small></span>
         </button>
+        <!-- Precipitable water and the precipitation type, beside the
+             precipitation they describe: the column's vapour as a droplet
+             over stacked depth lines, and the type as a cloud with rain and
+             snow under it. -->
+        <button type="button" data-variable="pwat" data-i18n-tip="varLabelPwat" aria-pressed="false" hidden>
+          <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5c2.4 3 4 5.2 4 7.3a4 4 0 0 1-8 0c0-2.1 1.6-4.3 4-7.3z" /><path d="M6 15.5h12M6 18.5h12M6 21h12" /></svg>
+          <b class="rail-glyph" aria-hidden="true" data-i18n="glyphPwat">P</b>
+          <span class="rail-name"><span>PWAT</span> <small data-i18n="varPwat">COLUMN</small></span>
+        </button>
+        <button type="button" data-variable="ptype" data-i18n-tip="varLabelPtype" aria-pressed="false" hidden>
+          <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.5 13a3.5 3.5 0 0 0-.4-7A5.5 5.5 0 0 0 6.6 7.1 3 3 0 0 0 7 13h10.5z" /><circle cx="9.5" cy="16.5" r="1.1" fill="currentColor" stroke="none" /><circle cx="13.5" cy="16.5" r="1.1" fill="currentColor" stroke="none" /><path d="M17 15.5v3M15.7 16.2l2.6 1.6M18.3 16.2l-2.6 1.6" /></svg>
+          <b class="rail-glyph" aria-hidden="true" data-i18n="glyphPtype">Y</b>
+          <span class="rail-name"><span>PTYPE</span> <small data-i18n="varPtype">SFC</small></span>
+        </button>
         <button type="button" data-variable="wind10m" data-i18n-tip="tipWind" data-family="wind" aria-pressed="false" hidden>
           <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8h9.5a2.5 2.5 0 1 0-2.5-2.5" /><path d="M3 12.5h14a2.5 2.5 0 1 1-2.5 2.5" /><path d="M3 17h7a2 2 0 1 1-2 2" /></svg>
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphWind10m">W</b>
@@ -479,6 +493,19 @@
           <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 3L6 13.5h5l-1 7.5 8-11.5h-5z" /></svg>
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphCape">C</b>
           <span class="rail-name"><span>CAPE</span> <small data-i18n="varCape">SFC</small></span>
+        </button>
+        <!-- Convective inhibition and the boundary layer height, beside the
+             convection they shape: the cap as a parcel held under a lid, the
+             mixing depth as a measure between the ground and the layer top. -->
+        <button type="button" data-variable="cin" data-i18n-tip="varLabelCin" aria-pressed="false" hidden>
+          <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20V9" /><path d="M8.5 12.5L12 9l3.5 3.5" /><path d="M5.5 5.5h13" /></svg>
+          <b class="rail-glyph" aria-hidden="true" data-i18n="glyphCin">I</b>
+          <span class="rail-name"><span>CIN</span> <small data-i18n="varCin">SFC</small></span>
+        </button>
+        <button type="button" data-variable="hpbl" data-i18n-tip="varLabelHpbl" aria-pressed="false" hidden>
+          <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.5 20.5h13" /><path d="M5.5 5.5h13" stroke-dasharray="2 2" /><path d="M12 8v10" /><path d="M9.8 10.2L12 8l2.2 2.2" /><path d="M9.8 15.8L12 18l2.2-2.2" /></svg>
+          <b class="rail-glyph" aria-hidden="true" data-i18n="glyphHpbl">B</b>
+          <span class="rail-name"><span>PBL</span> <small data-i18n="varHpbl">HEIGHT</small></span>
         </button>
         <button type="button" data-variable="vvel700" data-family="vvel" data-i18n-tip="tipOmega" aria-pressed="false" hidden>
           <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 20V6" /><path d="M4 9l3-3 3 3" /><path d="M17 4v14" /><path d="M14 15l3 3 3-3" /></svg>

@@ -46,6 +46,13 @@ export const en = {
   varGust: "SFC",
   varCloud: "TOTAL",
   varCape: "SFC",
+  /** The new GFS fields' rail glosses: precipitable water is the whole
+   * column, the precipitation type and the inhibition are surface fields,
+   * the boundary layer height is a depth. */
+  varPwat: "COLUMN",
+  varPtype: "SFC",
+  varCin: "SFC",
+  varHpbl: "HEIGHT",
   /** Visibility is a surface field; the dew point and apparent temperature
    * are 2 m fields; the two upper-air families name their quantity. */
   varVis: "SFC",
@@ -109,6 +116,12 @@ export const en = {
   // ω and θ are the symbols the two upper-air quantities are written with
   // in every script; the surface fields take their initials.
   glyphVis: "V",
+  // The new GFS fields take their initials: precipitable water, inhibition,
+  // the boundary layer and the precipitation type.
+  glyphPwat: "P",
+  glyphCin: "I",
+  glyphHpbl: "B",
+  glyphPtype: "Y",
   glyphDpt2m: "D",
   glyphAptmp2m: "A",
   glyphVvel: "ω",

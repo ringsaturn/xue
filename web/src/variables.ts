@@ -463,13 +463,14 @@ function buildSpecs(): readonly VariableSpec[] {
     showcaseCode: "WIND",
   }),
   // The 100 m wind, the turbine hub height: the same parameters as the 10 m
-  // pair on the 100 m surface, its own family (`levels.ts`) rather than a
-  // second member of the wind family.
+  // pair on the 100 m surface. Its chart family is its own (a 100 m wind is
+  // not a 10 m wind for palette or legend purposes), but its rail family is
+  // `wind`, so it rides the wind tile's level row.
   surface({
     id: "wind100m",
     chart: "wind100m",
     vector: true,
-    family: "wind100m",
+    family: "wind",
     group: "wind",
     code: "WIND 100M",
     title: ["100 m", "Wind"],
