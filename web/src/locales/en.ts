@@ -448,7 +448,11 @@ export const en = {
   probeOutside: "Outside this dataset's grid",
   probeNoData: "No data at this frame",
   probeAwaiting: "Waiting for this frame",
-  probeElevationLabel: "Elev",
+  /** The model's own terrain height, read beside the DEM's (`probeDemLabel`):
+   * the two elevations the pin stands together, and the pair a terrain
+   * correction is the difference of. Each names its source so neither is
+   * mistaken for the other. */
+  probeModelElevationLabel: "MODEL",
   /** The relief the map draws, read beside the model's own terrain. An
    * acronym the field reads as itself in every language, so the dictionary
    * carries the same three letters throughout. */

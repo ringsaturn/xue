@@ -275,7 +275,7 @@ export const zhHant: Record<MessageKey, string> = {
   probeOutside: "該點在本資料集網格之外",
   probeNoData: "此影格無資料",
   probeAwaiting: "等待該影格解碼",
-  probeElevationLabel: "海拔",
+  probeModelElevationLabel: "模式",
   probeDemLabel: "DEM",
   probeCloseAria: "關閉點位資料",
 

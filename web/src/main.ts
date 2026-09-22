@@ -2759,7 +2759,7 @@ function modelElevationText(): string {
   const value = probeSeriesValues(probe, probeVariables(session), frameOffsets(session.metadata.time))[0];
   if (typeof value !== "number") return "";
   const unit = displayUnit(session.variable.unit);
-  return `${t("probeElevationLabel")} ${formatProbeValue(session.variable, displayValue(session.variable.unit, value))} ${unit}`.trimEnd();
+  return `${t("probeModelElevationLabel")} ${formatProbeValue(session.variable, displayValue(session.variable.unit, value))} ${unit}`.trimEnd();
 }
 
 /** The DEM's own elevation under the pin, to whole metres: the samples carry a

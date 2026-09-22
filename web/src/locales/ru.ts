@@ -280,7 +280,7 @@ export const ru: Record<MessageKey, string> = {
   probeOutside: "Точка вне сетки этого набора данных",
   probeNoData: "В этом кадре нет данных",
   probeAwaiting: "Ожидание этого кадра",
-  probeElevationLabel: "Выс.",
+  probeModelElevationLabel: "МОДЕЛЬ",
   probeDemLabel: "DEM",
   probeCloseAria: "Закрыть данные точки",
 

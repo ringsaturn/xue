@@ -280,7 +280,7 @@ export const ko: Record<MessageKey, string> = {
   probeOutside: "이 지점은 데이터셋 격자 밖입니다",
   probeNoData: "이 프레임에는 자료가 없습니다",
   probeAwaiting: "이 프레임의 디코딩을 기다리는 중",
-  probeElevationLabel: "고도",
+  probeModelElevationLabel: "모델",
   probeDemLabel: "DEM",
   probeCloseAria: "지점 데이터 닫기",
 

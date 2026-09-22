@@ -281,7 +281,7 @@ export const tr: Record<MessageKey, string> = {
   probeOutside: "Bu veri setinin gridi dışında",
   probeNoData: "Bu karede veri yok",
   probeAwaiting: "Bu kare bekleniyor",
-  probeElevationLabel: "Rakım",
+  probeModelElevationLabel: "MODEL",
   probeDemLabel: "DEM",
   probeCloseAria: "Nokta verisini kapat",
 

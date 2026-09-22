@@ -278,7 +278,7 @@ export const fr: Record<MessageKey, string> = {
   probeOutside: "Hors de la grille de ce jeu de données",
   probeNoData: "Aucune donnée à cette image",
   probeAwaiting: "En attente de cette image",
-  probeElevationLabel: "Alt.",
+  probeModelElevationLabel: "MODÈLE",
   probeDemLabel: "DEM",
   probeCloseAria: "Fermer les données du point",
 
