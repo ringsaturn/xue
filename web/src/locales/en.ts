@@ -449,6 +449,10 @@ export const en = {
   probeNoData: "No data at this frame",
   probeAwaiting: "Waiting for this frame",
   probeElevationLabel: "Elev",
+  /** The relief the map draws, read beside the model's own terrain. An
+   * acronym the field reads as itself in every language, so the dictionary
+   * carries the same three letters throughout. */
+  probeDemLabel: "DEM",
   probeCloseAria: "Close point data",
 
   // The letter on a pressure center, following each country's own chart

@@ -279,6 +279,7 @@ export const es: Record<MessageKey, string> = {
   probeNoData: "Sin datos en este fotograma",
   probeAwaiting: "Esperando este fotograma",
   probeElevationLabel: "Elev.",
+  probeDemLabel: "DEM",
   probeCloseAria: "Cerrar los datos del punto",
 
   centerHigh: "A",

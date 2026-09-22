@@ -276,6 +276,7 @@ export const zh: Record<MessageKey, string> = {
   probeNoData: "此帧无数据",
   probeAwaiting: "等待该帧解码",
   probeElevationLabel: "海拔",
+  probeDemLabel: "DEM",
   probeCloseAria: "关闭点位数据",
 
   centerHigh: "高",

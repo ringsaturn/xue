@@ -282,6 +282,7 @@ export const tr: Record<MessageKey, string> = {
   probeNoData: "Bu karede veri yok",
   probeAwaiting: "Bu kare bekleniyor",
   probeElevationLabel: "Rakım",
+  probeDemLabel: "DEM",
   probeCloseAria: "Nokta verisini kapat",
 
   centerHigh: "Y",

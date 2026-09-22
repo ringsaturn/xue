@@ -281,6 +281,7 @@ export const ko: Record<MessageKey, string> = {
   probeNoData: "이 프레임에는 자료가 없습니다",
   probeAwaiting: "이 프레임의 디코딩을 기다리는 중",
   probeElevationLabel: "고도",
+  probeDemLabel: "DEM",
   probeCloseAria: "지점 데이터 닫기",
 
   centerHigh: "고",

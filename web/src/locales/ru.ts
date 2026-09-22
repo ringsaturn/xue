@@ -281,6 +281,7 @@ export const ru: Record<MessageKey, string> = {
   probeNoData: "В этом кадре нет данных",
   probeAwaiting: "Ожидание этого кадра",
   probeElevationLabel: "Выс.",
+  probeDemLabel: "DEM",
   probeCloseAria: "Закрыть данные точки",
 
   centerHigh: "В",

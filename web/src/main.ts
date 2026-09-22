@@ -233,6 +233,7 @@ import {
   type TileGeometry,
   type TileRect,
 } from "./tiles";
+import { demElevationAt, TERRAIN_ATTRIBUTION, TERRAIN_MAX_ZOOM, TERRAIN_SOURCE, TERRAIN_TILES } from "./terrain";
 import { applyPageMeta } from "./pagemeta";
 import {
   caseCameraLimits,
@@ -661,23 +662,16 @@ type LineLayer = Extract<BasemapStyle["layers"][number], { type: "line" }>;
 type HillshadeLayer = Extract<BasemapStyle["layers"][number], { type: "hillshade" }>;
 type HillshadePaint = NonNullable<HillshadeLayer["paint"]>;
 
-/** Mapterhorn's relief, drawn as a hillshade under the fields.
- *
- * The tiles are Terrarium-encoded 512 px WebP, 30 m global to z12 with finer
- * archives over part of the world. They are served with
- * `Access-Control-Allow-Origin: *` off Cloudflare, so the page reads them
- * directly and no proxy sits in front.
+/** The relief, drawn as a hillshade under the fields. The source, its tiles
+ * and the readout's own sampler live in `terrain.ts`; this is the style's half
+ * of the pair.
  *
  * `maxzoom` is pinned to the global archive's own ceiling rather than left to
  * the TileJSON, which names none: without it the map asks for z13 and deeper
  * at every viewport, and while the Alps and Japan answer, most of the world —
  * China included — returns 404. Past the ceiling MapLibre overzooms the z12
  * tile, which costs sharpness and no requests. */
-const TERRAIN_SOURCE = "mapterhorn";
 const TERRAIN_LAYER = "hillshade";
-const TERRAIN_MAX_ZOOM = 12;
-const TERRAIN_TILES = ["https://tiles.mapterhorn.com/{z}/{x}/{y}.webp"];
-const TERRAIN_ATTRIBUTION = "<a href='https://mapterhorn.com/attribution/'>© Mapterhorn</a>";
 
 /** The relief's ink, per ground. On paper the shadow is the chart's own warm
  * brown and the highlight is paper white; on the dark grounds both steps hug
@@ -2163,6 +2157,9 @@ let probeRenderFrame: number | null = null;
  * index download. */
 let probeZone: string | null = null;
 let probePinSequence = 0;
+/** The DEM elevation under the pin, and the point it was read for: the sample
+ * is a network read, and a moved pin must not wear the old point's number. */
+let probeDem: { key: string; value: number | null } | null = null;
 /** Series requests in flight, so a re-render or a session swap does not ask
  * twice for the same cell. Keyed by `variableId:column:row`. */
 const probeSeriesRequests = new Set<string>();
@@ -2557,6 +2554,7 @@ function closeProbe(): void {
   // Unpinned, the clock is the viewer's own again.
   probePinSequence += 1;
   probeZone = null;
+  probeDem = null;
   setDisplayZone(null);
 }
 
@@ -2730,30 +2728,46 @@ function scheduleProbeRender(): void {
   });
 }
 
-/** The pinned cell's terrain height, from the run's static `orog` bundle
- * when it publishes one, else empty. Read at the orog bundle's own grid cell
- * — the primary's on every source that carries terrain — beside the
- * coordinates it belongs to. */
-function renderProbeElevation(): void {
-  const element = probePanel.elevation;
+/** The pinned cell's terrain, from two sources: the run's static `orog`
+ * bundle where it publishes one, read at that bundle's own grid cell, and the
+ * DEM under the point the panel names, sampled from the very relief the map
+ * draws. Either can be absent — a run with no orography, a tile that does not
+ * answer — and the line carries whichever arrived. */
+function renderProbeElevation(point: { latitude: number; longitude: number }): void {
+  probePanel.elevation.textContent = [modelElevationText(), demElevationText()].filter(Boolean).join(" · ");
+  // The DEM is a fetch, so it lands a frame or two after the model's own
+  // number; ask for the point on screen, and drop the answer if the pin has
+  // moved on by the time it arrives.
+  const key = `${point.latitude.toFixed(4)},${point.longitude.toFixed(4)}`;
+  if (probeDem?.key === key) return;
+  probeDem = { key, value: null };
+  void demElevationAt(point.latitude, point.longitude).then((value) => {
+    if (probeDem?.key !== key) return;
+    probeDem = { key, value };
+    renderProbeElevation(point);
+  });
+}
+
+/** The model's own terrain height, from the `orog` bundle, else empty. Read at
+ * the orog bundle's own grid cell — the primary's on every source that carries
+ * terrain. */
+function modelElevationText(): string {
   const session = sessions.get("orog");
-  if (!probe || !session) {
-    element.textContent = "";
-    return;
-  }
+  if (!probe || !session) return "";
   const cell = probe.cellFor(session.metadata);
-  if (!cell) {
-    element.textContent = "";
-    return;
-  }
+  if (!cell) return "";
   const value = probeSeriesValues(probe, probeVariables(session), frameOffsets(session.metadata.time))[0];
-  if (typeof value !== "number") {
-    element.textContent = "";
-    return;
-  }
+  if (typeof value !== "number") return "";
   const unit = displayUnit(session.variable.unit);
-  element.textContent =
-    `${t("probeElevationLabel")} ${formatProbeValue(session.variable, displayValue(session.variable.unit, value))} ${unit}`.trimEnd();
+  return `${t("probeElevationLabel")} ${formatProbeValue(session.variable, displayValue(session.variable.unit, value))} ${unit}`.trimEnd();
+}
+
+/** The DEM's own elevation under the pin, to whole metres: the samples carry a
+ * 1/256 m fraction the terrain does not resolve. Empty until it arrives. */
+function demElevationText(): string {
+  const value = probeDem?.value;
+  if (value === null || value === undefined) return "";
+  return `${t("probeDemLabel")} ${Math.round(value)} m`;
 }
 
 function renderProbe(): void {
@@ -2769,6 +2783,7 @@ function renderProbe(): void {
     probePanel.value.value = "--";
     probePanel.meta.textContent = t("probeAwaiting");
     probePanel.elevation.textContent = "";
+    probeDem = null;
     probePanel.count.textContent = "";
     probePanel.hint.textContent = "";
     probePanel.canvas.getContext("2d")?.clearRect(0, 0, probePanel.canvas.width, probePanel.canvas.height);
@@ -2784,7 +2799,7 @@ function renderProbe(): void {
   const point = cell ?? { longitude: series.longitude, latitude: series.latitude };
   probePanel.coords.textContent =
     `${formatProbeDegrees(point.latitude, "NS")} ${formatProbeDegrees(point.longitude, "EW")}`;
-  renderProbeElevation();
+  renderProbeElevation(point);
   probePanel.zone.textContent = probeZone ? zoneDisplayName(probeZone, frameValidTime(activeFrameIndex ?? Number(slider.value))) : "";
   probePanel.compare.href = compareUrl(point.latitude, point.longitude);
   probePanel.compare.textContent = t("compareLink");

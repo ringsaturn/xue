@@ -276,6 +276,7 @@ export const ja: Record<MessageKey, string> = {
   probeNoData: "このフレームにデータはありません",
   probeAwaiting: "このフレームの復号を待っています",
   probeElevationLabel: "標高",
+  probeDemLabel: "DEM",
   probeCloseAria: "地点データを閉じる",
 
   centerHigh: "高",
