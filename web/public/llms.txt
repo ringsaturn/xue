@@ -143,10 +143,13 @@ Facts worth getting right:
   `qflux850` and `wave` (the height laid along the direction the waves travel, u/v in
   metres — the viewer's wave layer; the primary direction is read from it
   as `atan2(-u, -v)`, degrees true the waves come from, and is not
-  published as a scalar). On ECMWF the gust is the maximum over the
+  published as a scalar). Both also carry the model's own terrain height
+  `orog` (metres) — a static bundle, one frame at the analysis and nothing
+  to play. On ECMWF the gust is the maximum over the
   interval ending at the frame (ECMWF `10fg`) and, like `prate`, has no
   analysis frame; its CAPE is the most-unstable parcel's (`mucape`), its
-  wave period the peak period (`pp1d`). GFS additionally: `lcdc`, `mcdc`,
+  wave period the peak period (`pp1d`); its `orog` is the surface
+  geopotential divided by g. GFS additionally: `lcdc`, `mcdc`,
   `hcdc` (low / middle / high cloud cover), `vis`, `aptmp2m` (apparent
   temperature), `cin` (convective inhibition), `pwat` (precipitable water),
   `hpbl` (planetary boundary layer height), `ptype` (the categorical
@@ -157,7 +160,7 @@ Facts worth getting right:
   `gust`, `cape`, `icetk` or `perpw` — plus `lcdc`, `mcdc`, `hcdc`; its
   `prate` is de-accumulated from a run total in millimetres and is a mean
   over the six-hour step. SFLUX: `tmp2m`,
-  `prate`, `dswrf`, `wind10m`. IFS HRES (`ifshres`): the GFS surface set its
+  `prate`, `dswrf`, `orog`, `wind10m`. IFS HRES (`ifshres`): the GFS surface set its
   9 km product carries — `tmp2m`, `prate`, `dswrf`, `prmsl`, `gust`,
   `tcdc`, `lcdc`, `mcdc`, `hcdc`, `cape`, `vis`, `dpt2m`, `tmpsfc`,
   `icetk` and the vector pair `wind10m`, fifteen in all; no isobaric
@@ -167,7 +170,8 @@ Facts worth getting right:
   `hgt700`, `hgt500`, `tmp925`, `tmp850`, `tmp500`, `gust`, `tcdc`,
   `lcdc`, `mcdc`, `hcdc`, `cape`, `vis`, `dpt2m`, the forecast composite
   radar reflectivity `cref` (the same name and unit as the radar mosaics'),
-  and the vector pairs `wind10m`, `wind925`, `wind850`, `wind250`.
+  the static terrain `orog`, and the vector pairs `wind10m`, `wind925`,
+  `wind850`, `wind250`.
   GEFS-AEROSOLS: `aod` (aerosol optical depth at 550 nm, total,
   dimensionless), `aoddust`, `aodsalt`, `aodsulf`, `aodorg`, `aodbc` (the
   same for dust, sea salt, sulphate, organic carbon and black carbon),

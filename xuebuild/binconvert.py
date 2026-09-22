@@ -36,6 +36,7 @@ from .gdal import (
     inspect_grib,
     inspect_grib_multi,
     normalize_unit,
+    orography_is_metres,
     precipitation_accumulation_is_mm,
     precipitation_rate_is_mm_per_hour,
     raster_expression,
@@ -64,6 +65,7 @@ from .variables import (
     ISOBARIC_LEVELS_HPA,
     STANDARD_GRAVITY,
     SURFACE_TEMPERATURE_IDS,
+    VARIABLES,
     WAVE_VECTOR_COMPONENT_IDS,
     isobaric_variable,
     variable_spec,
@@ -800,6 +802,11 @@ def _convert_units(frame: SourceFrame, values: np.ndarray) -> np.ndarray:
         # A direction in degrees true: a record can carry 360, which is the
         # codebook's 0 — reduce it there so the wrap never clamps.
         values = np.mod(values, 360.0)
+    elif frame.variable_id == "orog" and not orography_is_metres(frame.unit):
+        # ECMWF open data writes the surface geopotential (m² s⁻²) where
+        # NCEP writes the geopotential height (gpm); the codebook quantizes
+        # metres, so the geopotential divides by the standard gravity.
+        values /= STANDARD_GRAVITY
     # Wind components, geopotential heights, relative humidity, cloud cover,
     # CAPE, vertical velocity, ice thickness and the wave height and period
     # are already in their output units.
@@ -1173,11 +1180,16 @@ def _prepare_frames_all(
     reference_frames: dict[str, SourceFrame] | None = None,
     cadence_seconds: int | None = None,
     families: Mapping[str, str | None] | None = None,
+    static_ids: tuple[str, ...] = (),
 ) -> list[dict[str, SourceFrame]]:
     """Inspect every file once for all variables, in parallel across files.
 
     Variables in ``optional_at_analysis`` may be absent from the f000 file
-    only (sflux carries no PRATE record at analysis time). Inspection uses
+    only (sflux carries no PRATE record at analysis time). Variables in
+    ``static_ids`` may be absent from every file but the first: a static
+    field is fetched and read at the analysis alone (ECMWF open data
+    carries its orography at f000 and nowhere else), and the frame it is
+    read from is the first. Inspection uses
     the GRIB2 header index; the first file is cross-checked against
     ``reference_frames`` (a real gdalinfo pass) and a run whose files the
     header index cannot parse falls back to gdalinfo inspection. With a
@@ -1207,6 +1219,11 @@ def _prepare_frames_all(
                     f"the {family} records of {path.name} are missing: {family_path} does not exist"
                 )
 
+    # A static record is expected only at the first frame, so it is optional
+    # everywhere the inspector looks; its presence at the first frame is
+    # required below.
+    inspection_optional = optional_at_analysis + static_ids
+
     def inspect_all(inspect) -> list[dict[str, SourceFrame]]:
         def one(path: Path) -> dict[str, SourceFrame]:
             frames: dict[str, SourceFrame] = {}
@@ -1219,32 +1236,41 @@ def _prepare_frames_all(
     with ThreadPoolExecutor(max_workers=_INSPECT_WORKERS) as executor:
         try:
             per_file = inspect_all(
-                lambda path, ids: grib2.inspect_grib_fast(path, ids, optional_ids=optional_at_analysis)
+                lambda path, ids: grib2.inspect_grib_fast(path, ids, optional_ids=inspection_optional)
             )
             if reference_frames is not None:
                 _check_reference_frames(per_file[0], reference_frames, variable_ids)
         except ConversionError as exc:
             LOG.warning("GRIB2 header index unavailable (%s); falling back to gdalinfo inspection", exc)
             per_file = inspect_all(
-                lambda path, ids: inspect_grib_multi(path, ids, optional_ids=optional_at_analysis)
+                lambda path, ids: inspect_grib_multi(path, ids, optional_ids=inspection_optional)
             )
     if cadence_seconds is not None:
         per_file = _snap_observation_frames(per_file, cadence_seconds)
     for frames in per_file:
         leads = {frame.lead_seconds for frame in frames.values()}
-        if len(leads) != 1:
-            raise ConversionError(f"variables disagree on the lead time in {frames[variable_ids[0]].path}")
-    per_file.sort(key=lambda frames: frames[variable_ids[0]].lead_seconds)
+        if len(leads) > 1:
+            raise ConversionError(f"variables disagree on the lead time in {next(iter(frames.values())).path}")
+    per_file.sort(key=lambda frames: next(iter(frames.values())).lead_seconds)
+    first_lead = next(iter(per_file[0].values())).lead_seconds
     for variable_id in variable_ids:
+        present = [frames[variable_id] for frames in per_file if variable_id in frames]
+        if variable_id in static_ids:
+            if not present or present[0].lead_seconds != first_lead:
+                raise ConversionError(
+                    f"missing static {variable_id} record at the first frame"
+                )
+            _check_frames(present, variable_id)
+            continue
         for frames in per_file:
             if variable_id in frames:
                 continue
-            lead = frames[variable_ids[0]].lead_seconds
+            lead = next(iter(frames.values())).lead_seconds
             if variable_id not in optional_at_analysis or lead != 0:
                 raise ConversionError(
                     f"missing {variable_id} record at forecast hour {lead // binformat.HOUR_SECONDS}"
                 )
-        _check_frames([frames[variable_id] for frames in per_file if variable_id in frames], variable_id)
+        _check_frames(present, variable_id)
     return per_file
 
 
@@ -1974,10 +2000,13 @@ def convert_bin(
         variable_ids = tuple(
             sorted(
                 input_scalar_ids + vector_read_ids,
-                key=lambda variable_id: variable_id in source.optional_at_analysis,
+                key=lambda variable_id: (
+                    VARIABLES[variable_id].static,
+                    variable_id in source.optional_at_analysis,
+                ),
             )
         )
-        if not variable_ids or variable_ids[0] in source.optional_at_analysis:
+        if not variable_ids or variable_ids[0] in source.optional_at_analysis or VARIABLES[variable_ids[0]].static:
             raise ConversionError(
                 f"a {source.manifest_model} build needs at least one variable present in every file, "
                 f"including the analysis; {list(variable_ids)} is not enough"
@@ -1989,6 +2018,7 @@ def convert_bin(
             reference_frames,
             source.cadence_seconds,
             families=input_families,
+            static_ids=tuple(variable_id for variable_id in variable_ids if VARIABLES[variable_id].static),
         )
         available_composite_ids = ()
         grid_path = paths[0]
@@ -2208,6 +2238,13 @@ def convert_bin(
         # no analysis file) carries every frame it read.
         for variable_id in analysis_optional_ids(source, scalar_variable_ids):
             variable_offsets[variable_id] = offsets[1:]
+    # A static field does not vary in time: its one frame is the first, and
+    # its bundle carries just that offset (docs/format.md — a one-frame axis
+    # is a uniform axis with frameStep 1). The fetch reads it only from the
+    # analysis and the inspector accepts it nowhere else.
+    for variable_id in encoded_variable_ids:
+        if VARIABLES[variable_id].static:
+            variable_offsets[variable_id] = [offsets[0]]
 
     # Optional per-variable WebCodecs video artifacts.
     # Best-effort: a missing ffmpeg or an encode failure just skips that

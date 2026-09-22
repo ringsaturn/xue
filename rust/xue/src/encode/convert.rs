@@ -18,8 +18,9 @@ use crate::encode::binformat::{self, ChunkPayload, ChunkTables, HOUR_SECONDS};
 use crate::format::{ChunkEntry, Predictor, TileGeometry, VariableEntry, NO_DEPENDENCY};
 use crate::encode::errors::{EncodeError, Result};
 use crate::encode::variables::{
-    isobaric_variable, variable_spec, DUST_CF_BUNDLE_ID, DUST_CF_COMPONENT_IDS, DUST_RGB_BUNDLE_ID,
-    DUST_RGB_COMPONENT_IDS, ISOBARIC_LEVELS_HPA, STANDARD_GRAVITY, WAVE_VECTOR_COMPONENT_IDS,
+    is_static, isobaric_variable, variable_spec, DUST_CF_BUNDLE_ID, DUST_CF_COMPONENT_IDS,
+    DUST_RGB_BUNDLE_ID, DUST_RGB_COMPONENT_IDS, ISOBARIC_LEVELS_HPA, STANDARD_GRAVITY,
+    WAVE_VECTOR_COMPONENT_IDS,
 };
 use crate::encode::gdalio::{needs_serial_access, netcdf_guard, Dataset};
 use crate::encode::grid::{
@@ -748,6 +749,20 @@ fn convert_units(variable_id: &str, unit: &str, values: &mut [f64]) -> Result<()
         "dirpw" => values
             .iter_mut()
             .for_each(|value| *value = value.rem_euclid(360.0)),
+        // Orography: NCEP writes the geopotential height (gpm, numerically
+        // metres); ECMWF open data the surface geopotential (m² s⁻²), which
+        // divides by the standard gravity. Mirrors `_convert_units`.
+        "orog" => {
+            let compact: String = unit
+                .trim()
+                .to_lowercase()
+                .chars()
+                .filter(|character| !" *()[]".contains(*character))
+                .collect();
+            if !matches!(compact.as_str(), "gpm" | "m") {
+                values.iter_mut().for_each(|value| *value /= STANDARD_GRAVITY);
+            }
+        }
         other => match isobaric_variable(other) {
             // Isobaric temperature follows the 2 m rule.
             Some(("tmp", _)) => match normalize_unit(unit)? {
@@ -1854,8 +1869,16 @@ pub fn convert_bin(
         // its forecast hour, so it must be one no file can lack. Stable-sorting
         // the analysis-optional inputs to the back is enough unless nothing
         // else was asked for.
-        ordered.sort_by_key(|id| source.optional_at_analysis.contains(&id.as_str()));
-        if ordered.is_empty() || source.optional_at_analysis.contains(&ordered[0].as_str()) {
+        ordered.sort_by_key(|id| {
+            (
+                is_static(id),
+                source.optional_at_analysis.contains(&id.as_str()),
+            )
+        });
+        if ordered.is_empty()
+            || source.optional_at_analysis.contains(&ordered[0].as_str())
+            || is_static(&ordered[0])
+        {
             return Err(EncodeError::conversion(format!(
                 "a {} build needs at least one variable present in every file, including the \
                  analysis; {ordered:?} is not enough",
@@ -1864,6 +1887,11 @@ pub fn convert_bin(
         }
         variable_ids = ordered;
         let ordered_refs: Vec<&str> = variable_ids.iter().map(String::as_str).collect();
+        let static_refs: Vec<&str> = ordered_refs
+            .iter()
+            .copied()
+            .filter(|id| is_static(id))
+            .collect();
         per_file = prepare_frames_all(
             &paths,
             &ordered_refs,
@@ -1871,6 +1899,7 @@ pub fn convert_bin(
             &reference_frames,
             source.cadence_seconds,
             &input_families,
+            &static_refs,
             options,
         )?;
         available_composite_ids = Vec::new();
@@ -2099,6 +2128,13 @@ pub fn convert_bin(
     if offsets.len() > 1 && offsets[0] == 0 {
         for variable_id in analysis_optional_ids(source, &scalar_variable_ids) {
             variable_offsets.insert(variable_id.to_string(), offsets[1..].to_vec());
+        }
+    }
+    // A static field does not vary in time: its one frame is the first, and
+    // its bundle carries just that offset. Mirrors `xuebuild/binconvert.py`.
+    for variable_id in &encoded_variable_ids {
+        if is_static(variable_id) {
+            variable_offsets.insert(variable_id.clone(), vec![offsets[0]]);
         }
     }
 
@@ -2591,6 +2627,7 @@ fn prepare_frames_all(
     reference_frames: &FileFrames,
     cadence_seconds: Option<i64>,
     families: &[(String, Option<&'static str>)],
+    static_ids: &[&str],
     options: &ConvertOptions,
 ) -> Result<Vec<FileFrames>> {
     use rayon::prelude::*;
@@ -2621,6 +2658,11 @@ fn prepare_frames_all(
             }
         }
     }
+    // A static record is expected only at the first frame, so it is optional
+    // everywhere the inspector looks; its presence at the first frame is
+    // required below.
+    let mut inspection_optional: Vec<&str> = optional_at_analysis.to_vec();
+    inspection_optional.extend_from_slice(static_ids);
     let inspect_all = |inspect: &(dyn Fn(&Path, &[&str]) -> Result<FileFrames> + Sync)| -> Result<Vec<FileFrames>> {
         paths
             .par_iter()
@@ -2639,7 +2681,7 @@ fn prepare_frames_all(
     };
 
     let fast: Result<Vec<FileFrames>> = inspect_all(&|path, ids| {
-        inspect_grib_fast(path, ids, optional_at_analysis)
+        inspect_grib_fast(path, ids, &inspection_optional)
     })
     .and_then(|per_file| {
         check_reference_frames(&per_file[0], reference_frames, variable_ids)?;
@@ -2651,7 +2693,7 @@ fn prepare_frames_all(
             eprintln!(
                 "WARNING GRIB2 header index unavailable ({error}); falling back to GDAL inspection"
             );
-            inspect_all(&|path, ids| inspect_grib_multi(path, ids, optional_at_analysis))?
+            inspect_all(&|path, ids| inspect_grib_multi(path, ids, &inspection_optional))?
         }
     };
     log!(options, "indexed {} files", per_file.len());
@@ -2674,17 +2716,39 @@ fn prepare_frames_all(
             .map(|frame| frame.lead_seconds)
             .unwrap_or(i64::MAX)
     });
+    let first_lead = per_file
+        .iter()
+        .filter_map(|frames| frames.first())
+        .map(|(_, frame)| frame.lead_seconds)
+        .min()
+        .unwrap_or(0);
     for variable_id in variable_ids {
-        for frames in &per_file {
-            if frame_of(frames, variable_id).is_some() {
-                continue;
-            }
-            let lead = frames[0].1.lead_seconds;
-            if !optional_at_analysis.contains(variable_id) || lead != 0 {
+        if static_ids.contains(variable_id) {
+            // A static record is fetched at the first frame alone; its
+            // absence anywhere is expected, its absence there is a fetch
+            // that did not finish.
+            let present: Vec<i64> = per_file
+                .iter()
+                .filter_map(|frames| frame_of(frames, variable_id))
+                .map(|frame| frame.lead_seconds)
+                .collect();
+            if present.is_empty() || present.iter().min() != Some(&first_lead) {
                 return Err(EncodeError::conversion(format!(
-                    "missing {variable_id} record at forecast hour {}",
-                    lead / HOUR_SECONDS
+                    "missing static {variable_id} record at the first frame"
                 )));
+            }
+        } else {
+            for frames in &per_file {
+                if frame_of(frames, variable_id).is_some() {
+                    continue;
+                }
+                let lead = frames[0].1.lead_seconds;
+                if !optional_at_analysis.contains(variable_id) || lead != 0 {
+                    return Err(EncodeError::conversion(format!(
+                        "missing {variable_id} record at forecast hour {}",
+                        lead / HOUR_SECONDS
+                    )));
+                }
             }
         }
         let mut leads: Vec<i64> = per_file

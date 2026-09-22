@@ -193,6 +193,14 @@ COMPACT_PWAT = TemperatureCodebook(minimum=0.0, maximum=127.0, step=1.0, name="p
 # Doubled in the compact profile.
 QUALITY_PBL = TemperatureCodebook(minimum=0.0, maximum=5080.0, step=20.0, name="hpbl")
 COMPACT_PBL = TemperatureCodebook(minimum=0.0, maximum=5080.0, step=40.0, name="hpbl")
+# Orography: the model's terrain height, −430 m (the Dead Sea shore) to
+# 8968 m at a 37 m step, spending the full 0..254 code space. The field is
+# static, so the step is a display precision rather than a forecast
+# resolution — 37 m is what one byte buys across a global DEM's range, and
+# a relief basemap reads it the way it reads contour lines a hundred metres
+# apart. The compact profile doubles the step and halves the code space.
+QUALITY_OROGRAPHY = TemperatureCodebook(minimum=-430.0, maximum=8968.0, step=37.0, name="orog")
+COMPACT_OROGRAPHY = TemperatureCodebook(minimum=-430.0, maximum=8968.0, step=74.0, name="orog")
 # Precipitation type: a categorical codebook of WMO code table 4.201's own
 # values (1 rain, 3 freezing rain, 5 snow, 8 ice pellets) with 0 for none —
 # integer codes with no error budget, the same book in every profile since
@@ -625,6 +633,7 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
         "aptmp2m": QUALITY_APPARENT,
         "pwat": QUALITY_PWAT,
         "hpbl": QUALITY_PBL,
+        "orog": QUALITY_OROGRAPHY,
         "ptype": PTYPE,
         **QUALITY_CLOUD_LAYER,
         **QUALITY_OCEAN,
@@ -651,6 +660,7 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
         "aptmp2m": COMPACT_APPARENT,
         "pwat": COMPACT_PWAT,
         "hpbl": COMPACT_PBL,
+        "orog": COMPACT_OROGRAPHY,
         "ptype": PTYPE,
         **COMPACT_CLOUD_LAYER,
         **COMPACT_OCEAN,
@@ -688,6 +698,7 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
         "aptmp2m": QUALITY_APPARENT,
         "pwat": QUALITY_PWAT,
         "hpbl": QUALITY_PBL,
+        "orog": QUALITY_OROGRAPHY,
         "ptype": PTYPE,
         **COMPACT_CLOUD_LAYER,
         **QUALITY_OCEAN,

@@ -65,7 +65,8 @@ Bundle sets:
   snow flags), 10 m wind and 100 m wind, the surface diagnostics (gust,
   total / low / middle / high cloud cover, CAPE and convective inhibition,
   visibility, 2 m dew point and apparent temperature, precipitable water and
-  planetary boundary layer height), 850 / 700 / 500 hPa
+  planetary boundary layer height), the surface orography (the model's own
+  terrain, a static one-frame bundle), 850 / 700 / 500 hPa
   vertical velocity, 850 hPa equivalent potential temperature (derived from
   temperature and specific humidity), the ocean fields (skin temperature,
   sea ice cover and thickness, significant wave height and primary period
@@ -78,6 +79,7 @@ Bundle sets:
   flux (`q·V/g`, derived).
 - ECMWF: the subset of that set its open data carries, under the same
   identities (`msl` as `prmsl`, `mucape` as `cape`, `skt` as `tmpsfc`,
+  the surface orography as the surface geopotential, divided by g,
   wave fields from the `wave` stream). Open data has no precipitation-rate
   field, so `tp` is differenced between frames into an interval-mean rate;
   the series starts at F003 (64 frames). The gust is an interval maximum

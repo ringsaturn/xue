@@ -334,6 +334,7 @@ recognize; anything else it can still decode.
 | `aptmp2m` | 0 / 0 / 21 | 103, 2 m | NCEP's 2 m apparent temperature |
 | `pwat` | 0 / 1 / 3 | 200, no value | Precipitable water, the column mass in kg/m² (a millimetre of water); NCEP writes it on its local "entire atmosphere (considered as a single layer)" surface, type 200, which carries no value like the WMO type 10 |
 | `hpbl` | 0 / 3 / 196 | 1, 0 | Planetary boundary layer height in metres, NCEP's local number (the WMO table's 0 / 3 / 18 is not what pgrb2 carries) |
+| `orog` | 0 / 3 / 5 | 1, 0 | Orography in metres, a static one-frame bundle. ECMWF open data's surface geopotential, 0 / 3 / 4 on the same surface, is accepted on input and divided by g |
 | `ptype` | 0 / 1 / 19 | 1, 0 | Precipitation type: one categorical field the encoder derives from the four flags below, in WMO code table 4.201's own values (1 rain, 3 freezing rain, 5 snow, 8 ice pellets, 0 none). Never fetched; the flags are inputs only and reach no bundle |
 | `crain` / `cfrzr` / `cicep` / `csnow` | 0 / 1 / 192–195 | 1, 0 | The four 0/1 categorical precipitation-type flags pgrb2 carries (rain, freezing rain, ice pellets, snow; NCEP-local numbers), input-only, combined into `ptype` |
 | `tmpsfc` | 0 / 0 / 0 | 1, 0 | Surface (skin) temperature, the SST over water. ECMWF's `skt`, its own parameter 0 / 0 / 17 with no surface value, is accepted on input and never written |
@@ -590,6 +591,15 @@ window, so the field is smoother and its peaks lower on the far side of the
 boundary. That is a property of the source data; a renderer that labels
 units should not present the two segments as the same measurement.
 
+A field that does not vary in time — a model's own terrain height — is an
+ordinary bundle whose axis holds a single frame: `frameCount` 1 with
+`frameStep` 1 on the declared unit. Nothing in the container marks it as
+static; a producer that knows one (Xue's registry does, the variable
+descriptor's `static` flag is the fetcher's and the converter's, not the
+file's) simply fetches and encodes the plane once rather than at every lead
+time. A reader draws it like any one-frame field, and a viewer that offers
+playback has nothing to scrub.
+
 The encoder rotates longitude columns so the first column is `-180`,
 preserving north-to-south row order. Grids that natively start at Greenwich
 (the GFS surface-flux Gaussian grid) are rolled by the encoder into the same
@@ -806,6 +816,7 @@ values unless noted):
 | `lcdc` / `mcdc` / `hcdc` | 0 % | 0.5 | 200 | 255 | 0.25 % |
 | `pwat` | 0 kg/m² | 0.5 | 254 | 255 | 0.25 kg/m² |
 | `hpbl` | 0 m | 20 | 254 | 255 | 10 m |
+| `orog` | −430 m | 37 | 254 | 255 | 18.5 m |
 | `ptype` | 0 | 1 | 8 | 255 | — |
 | `vis` | 0 km | 0.1 | 254 | 255 | 0.05 km |
 | `dpt2m` | −70 °C | 0.5 | 220 | 255 | 0.25 °C |
@@ -855,7 +866,7 @@ values unless noted):
 The `compact` profile doubles each `scale` (temperature 1.0 → maximumCode
 110, wind 1.0 → 127, dswrf 10 → 127, cref 1.0 → 80, gust 1.0 → 127, every
 cloud cover 1.0 → 100, cape 50 → 127, cin 8 → 127, vis 0.2 → 127, dpt2m 1.0
-→ 110, aptmp2m 2 → 75, pwat 1.0 → 127, hpbl 40 → 127, tmpsfc 1.0 → 127, icec
+→ 110, aptmp2m 2 → 75, pwat 1.0 → 127, hpbl 40 → 127, orog 74 → 127, tmpsfc 1.0 → 127, icec
 1.0 → 100, icetk 0.04 → 127, htsgw and perpw 0.2 → 127, and every
 pressure-family and isobaric codebook → half its maximumCode over the same
 range). Two codebooks do not keep the same range: `dirpw`'s compact codebook

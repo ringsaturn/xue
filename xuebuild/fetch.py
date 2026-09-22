@@ -1921,14 +1921,16 @@ def _frame_variable_ids(
     spec: SourceSpec, forecast_hour: int, input_ids: tuple[str, ...] | None = None
 ) -> tuple[str, ...]:
     """Input variables one frame of this source actually carries — the
-    analysis file can lack some (sflux has no PRATE record at f000).
+    analysis file can lack some (sflux has no PRATE record at f000), and a
+    static field (the model terrain) is fetched from the analysis alone,
+    since it does not vary in time and its bundle carries one frame.
 
     ``input_ids`` narrows the download to the variables a build needs, which
     is what lets a showcase case fetch only its own fields."""
     wanted = spec.input_variable_ids if input_ids is None else input_ids
     if forecast_hour == 0:
         return tuple(variable_id for variable_id in wanted if variable_id not in spec.optional_at_analysis)
-    return tuple(wanted)
+    return tuple(variable_id for variable_id in wanted if not VARIABLES[variable_id].static)
 
 
 def _download_noaa_records(url: str, variable_ids: tuple[str, ...]) -> bytes:

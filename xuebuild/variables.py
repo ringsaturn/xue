@@ -228,6 +228,19 @@ class VariableSpec:
     the plane — a value, not a gap, the way the radar mosaic's fill is
     handled (docs/format.md). Empty for a field that covers its whole
     grid."""
+    static: bool = False
+    """True for a field that does not vary in time — the model's own
+    terrain height. Its record exists at the analysis and, on a source that
+    recomputes it, repeats there; only the analysis frame is fetched and
+    read, and its bundle carries the one frame (``time.frameCount`` 1)
+    rather than the run's axis. A static variable is neither a scalar the
+    source may lack at the analysis nor one the converter treats as part of
+    the time series (:attr:`~xuebuild.sources.SourceSpec`).
+
+    It is still an ordinary bundle: same grid, codebook, manifest entry,
+    poster and resolution ladder. What marks it is this flag, mirrored in
+    the native encoder's source table, and the one-frame axis the reader
+    already knows how to draw."""
 
     def parameter_metadata(self) -> dict[str, object]:
         """The variable's GRIB2 identity, as a schema v3 metadata block.
@@ -646,6 +659,36 @@ VARIABLES: dict[str, VariableSpec] = {
         grib2_level_type=1,
         grib2_level_value=0.0,
         gdal_unit="m",
+    ),
+    # Orography: the model's own terrain height, on the ground surface and
+    # invariant in time, so its bundle carries one frame (``static``). GFS,
+    # HRRR and sflux write it as the geopotential height 0/3/5 on the ground
+    # surface (``:HGT:surface:``, gpm); ECMWF open data (IFS and AIFS) writes
+    # the geopotential itself, 0/3/4 on the same surface, which the alternate
+    # accepts and the converter divides by g to metres. The codebook's floor
+    # is the Dead Sea shore and its 37 m step lifts the top past Everest, so
+    # one global scale covers every model in the set. A reader draws it as a
+    # static relief layer and, later, a finer DEM beside it.
+    "orog": VariableSpec(
+        id="orog",
+        label="Orography",
+        output_unit="m",
+        value_range=(-430.0, 8968.0),
+        grib_element="HGT",
+        index_field=":HGT:surface:",
+        ecmwf_param="z",
+        grib2_category=3,
+        grib2_number=5,
+        grib2_level_type=1,
+        grib2_level_value=0.0,
+        grib2_alternates=(
+            # ECMWF's surface geopotential, in m² s⁻²: the same surface, the
+            # parameter one number down the table. The alternate's unit is
+            # the geopotential spelling so the converter scales it.
+            RecordAlternate(0, 3, 4, level_type=1, gdal_unit="(m^2)/(s^2)"),
+        ),
+        gdal_unit="gpm",
+        static=True,
     ),
     # The four categorical precipitation-type flags pgrb2 carries, each a 0/1
     # field on the ground surface (NCEP-local 0/1/192–195, GRIB2 code table
@@ -1326,6 +1369,13 @@ VARIABLES: dict[str, VariableSpec] = {
 # also carries the two derived wave vector components.
 OCEAN_VARIABLE_IDS: tuple[str, ...] = ("tmpsfc", "icec", "icetk", "htsgw", "perpw", "dirpw")
 WAVE_VECTOR_COMPONENT_IDS: tuple[str, str] = ("uwave", "vwave")
+# The fields that do not vary in time (:attr:`VariableSpec.static`), in
+# registry order — the model terrain today. Derived rather than listed, so a
+# source's fetch and a build find them without a second table to keep in
+# step; the native encoder carries the same flag per variable.
+STATIC_VARIABLE_IDS: tuple[str, ...] = tuple(
+    variable_id for variable_id, spec in VARIABLES.items() if spec.static
+)
 # The satellite channels, the composite guns and the confidence, held to the Rust encoder
 # and the frontend by tests/fixtures/satellite-registry.json the same way.
 # The channels are what a platform's imager measures (a ``band`` block

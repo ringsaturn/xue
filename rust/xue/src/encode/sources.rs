@@ -454,7 +454,7 @@ pub const SOURCES: &[SourceSpec] = &[
             "vgrd300", "ugrd250", "vgrd250", "ugrd200", "vgrd200", "ugrd100m", "vgrd100m", "gust",
             "tcdc", "lcdc", "mcdc", "hcdc", "cape", "cin", "vis", "dpt2m", "aptmp2m", "pwat",
             "hpbl", "crain", "cfrzr", "cicep", "csnow", "vvel850", "vvel700", "vvel500", "tmpsfc",
-            "icec", "icetk", "htsgw", "perpw", "dirpw",
+            "icec", "icetk", "orog", "htsgw", "perpw", "dirpw",
         ],
         companion_files: &[CompanionFile {
             id: "wave",
@@ -476,7 +476,7 @@ pub const SOURCES: &[SourceSpec] = &[
             "tmp300", "tmp250", "tmp200", "rh1000", "rh925", "rh850", "rh700", "rh500", "rh300",
             "rh250", "rh200", "gust", "tcdc", "lcdc", "mcdc", "hcdc", "cape", "cin", "vis",
             "dpt2m", "aptmp2m", "pwat", "hpbl", "vvel850", "vvel700", "vvel500", "thetae850",
-            "tmpsfc", "icec", "icetk", "htsgw", "perpw",
+            "tmpsfc", "icec", "icetk", "htsgw", "perpw", "orog",
         ],
         core_bundle_ids: &["tmp2m", "prate"],
         bundle_vector_ids: &[
@@ -521,7 +521,7 @@ pub const SOURCES: &[SourceSpec] = &[
             "rh300", "rh250", "rh200", "spfh850", "ugrd1000", "vgrd1000", "ugrd925", "vgrd925",
             "ugrd850", "vgrd850", "ugrd700", "vgrd700", "ugrd500", "vgrd500", "ugrd300", "vgrd300",
             "ugrd250", "vgrd250", "ugrd200", "vgrd200", "gust", "tcdc", "cape", "dpt2m", "vvel850",
-            "vvel700", "vvel500", "tmpsfc", "icetk", "htsgw", "perpw", "dirpw",
+            "vvel700", "vvel500", "tmpsfc", "icetk", "orog", "htsgw", "perpw", "dirpw",
         ],
         companion_files: &[CompanionFile {
             id: "wave",
@@ -542,7 +542,7 @@ pub const SOURCES: &[SourceSpec] = &[
             "hgt250", "hgt200", "tmp1000", "tmp925", "tmp850", "tmp700", "tmp500", "tmp300",
             "tmp250", "tmp200", "rh1000", "rh925", "rh850", "rh700", "rh500", "rh300", "rh250",
             "rh200", "gust", "tcdc", "cape", "dpt2m", "vvel850", "vvel700", "vvel500", "thetae850",
-            "tmpsfc", "icetk", "htsgw", "perpw",
+            "tmpsfc", "icetk", "htsgw", "perpw", "orog",
         ],
         core_bundle_ids: &["tmp2m", "prate"],
         bundle_vector_ids: &[
@@ -578,7 +578,7 @@ pub const SOURCES: &[SourceSpec] = &[
             "tmp2m", "tp", "ugrd10m", "vgrd10m", "prmsl", "hgt850", "hgt700", "hgt500", "hgt250",
             "tmp925", "tmp850", "tmp500", "spfh850", "ugrd925", "vgrd925", "ugrd850", "vgrd850",
             "ugrd250", "vgrd250", "tcdc", "lcdc", "mcdc", "hcdc", "dpt2m", "vvel850", "vvel700",
-            "vvel500", "tmpsfc", "htsgw", "dirpw",
+            "vvel500", "tmpsfc", "orog", "htsgw", "dirpw",
         ],
         companion_files: &[CompanionFile {
             id: "wave",
@@ -597,7 +597,7 @@ pub const SOURCES: &[SourceSpec] = &[
         bundle_scalar_ids: &[
             "tmp2m", "prate", "prmsl", "hgt850", "hgt700", "hgt500", "hgt250", "tmp925", "tmp850",
             "tmp500", "tcdc", "lcdc", "mcdc", "hcdc", "dpt2m", "vvel850", "vvel700", "vvel500",
-            "thetae850", "tmpsfc", "htsgw",
+            "thetae850", "tmpsfc", "htsgw", "orog",
         ],
         core_bundle_ids: &["tmp2m", "prate"],
         bundle_vector_ids: &["wind10m", "wind925", "wind850", "wind250", "qflux850", "wave"],
@@ -688,7 +688,7 @@ pub const SOURCES: &[SourceSpec] = &[
         product: "sfluxgrb",
         latest_filename: Some("latest-sflux.json"),
         steps: &[(120, 1), (240, 3)],
-        input_variable_ids: &["tmp2m", "prate_ave", "ugrd10m", "vgrd10m", "dswrf"],
+        input_variable_ids: &["tmp2m", "prate_ave", "ugrd10m", "vgrd10m", "dswrf", "orog"],
         companion_files: &[],
         accumulated_precipitation: false,
         averaged_precipitation: true,
@@ -698,7 +698,7 @@ pub const SOURCES: &[SourceSpec] = &[
         optional_at_analysis: &["prate_ave"],
         statistical_processes: &[("prate", 0)],
         bands: &[],
-        bundle_scalar_ids: &["tmp2m", "prate", "dswrf"],
+        bundle_scalar_ids: &["tmp2m", "prate", "dswrf", "orog"],
         core_bundle_ids: &["tmp2m", "prate"],
         bundle_vector_ids: &["wind10m"],
         bundle_composite_ids: &[],
@@ -731,7 +731,7 @@ pub const SOURCES: &[SourceSpec] = &[
         input_variable_ids: &[
             "tmp2m", "prate", "ugrd10m", "vgrd10m", "prmsl", "hgt850", "hgt700", "hgt500",
             "tmp925", "tmp850", "tmp500", "ugrd925", "vgrd925", "ugrd850", "vgrd850", "ugrd250",
-            "vgrd250", "gust", "tcdc", "lcdc", "mcdc", "hcdc", "cape", "vis", "dpt2m", "cref",
+            "vgrd250", "gust", "tcdc", "lcdc", "mcdc", "hcdc", "cape", "vis", "dpt2m", "cref", "orog",
         ],
         companion_files: &[],
         accumulated_precipitation: false,
@@ -744,7 +744,7 @@ pub const SOURCES: &[SourceSpec] = &[
         bands: &[],
         bundle_scalar_ids: &[
             "tmp2m", "prate", "prmsl", "hgt850", "hgt700", "hgt500", "tmp925", "tmp850", "tmp500",
-            "gust", "tcdc", "lcdc", "mcdc", "hcdc", "cape", "vis", "dpt2m", "cref",
+            "gust", "tcdc", "lcdc", "mcdc", "hcdc", "cape", "vis", "dpt2m", "cref", "orog",
         ],
         core_bundle_ids: &["tmp2m", "prate"],
         bundle_vector_ids: &["wind10m", "wind925", "wind850", "wind250"],

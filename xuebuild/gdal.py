@@ -426,6 +426,37 @@ def height_expression(unit: str) -> str:
     return "A"
 
 
+# How GDAL and eccodes spell the surface geopotential ECMWF open data
+# carries as its orography: m² s⁻², in whichever punctuation the driver
+# reports it ("(m^2)/(s^2)" from the GRIB driver, "m**2 s**-2" from the
+# header index). Compacted to one spelling for the test.
+_GEOPOTENTIAL_UNITS = {"m2/s2", "m2s-2"}
+
+
+def _compact_unit(unit: str) -> str:
+    return re.sub(r"[\s*\[\]()^]", "", unit.strip().lower()).replace("²", "2")
+
+
+def orography_is_metres(unit: str) -> bool:
+    """Whether an orography record is already in metres — NCEP's
+    geopotential height (``gpm``) — rather than the geopotential
+    (m² s⁻²) ECMWF open data writes, which must be divided by g."""
+    return _compact_unit(unit) in {"gpm", "m"}
+
+
+def orography_expression(unit: str) -> str:
+    """Orography, in metres. NCEP writes the geopotential height (``gpm``,
+    numerically metres); ECMWF open data the geopotential itself
+    (m² s⁻²), which the converter divides by the standard gravity
+    (:func:`xuebuild.binconvert._convert_units`). This expression is the
+    unit's acceptance rule alone, shared by both encoders' cross-check; the
+    arithmetic is the converter's."""
+    compact = _compact_unit(unit)
+    if compact in {"gpm", "m"} or compact in _GEOPOTENTIAL_UNITS:
+        return "A"
+    raise ConversionError(f"unsupported orography unit: {unit or '<missing>'}")
+
+
 def humidity_expression(unit: str) -> str:
     """Relative humidity, already in percent."""
     compact = unit.strip().strip("[]()")
@@ -518,6 +549,8 @@ def raster_expression(variable_id: str, unit: str) -> str:
         return wave_period_expression(unit)
     if variable_id == "dirpw":
         return wave_direction_expression(unit)
+    if variable_id == "orog":
+        return orography_expression(unit)
     if variable_id in AEROSOL_VARIABLE_IDS:
         if variable_id.startswith("aod"):
             return aerosol_optical_depth_expression(unit)
@@ -848,6 +881,31 @@ def _assembled_aerosol(values: list[int]) -> AerosolIdentity:
     )
 
 
+def _is_orography_record(metadata: dict[str, str], description: str) -> bool:
+    """The model's terrain height on the ground surface. NCEP publishes it
+    as the geopotential height 0/3/5 (GFS, HRRR and sflux, GDAL element
+    ``HGT``, ``:HGT:surface:``); ECMWF open data as the geopotential itself
+    0/3/4, which GDAL names ``GP`` and describes only in the comment, so
+    the geopotential spelling is accepted beside the element. Both sit on
+    surface type 1, and a fetched file carries no other record of either
+    element."""
+    element = metadata.get("GRIB_ELEMENT", "").upper()
+    if element == "HGT":
+        return _is_surface_record(metadata, description, "HGT")
+    if element not in {"GP", "Z"}:
+        return False
+    short_name = metadata.get("GRIB_SHORT_NAME", "").upper()
+    searchable = " ".join(
+        [
+            short_name,
+            metadata.get("GRIB_COMMENT", ""),
+            metadata.get("GRIB_LEVEL", ""),
+            description,
+        ]
+    ).lower()
+    return (short_name.endswith("-SFC") or "ground or water surface" in searchable) and "geopotential" in searchable
+
+
 def _band_matches(variable_id: str, metadata: dict[str, str], description: str) -> bool:
     if variable_id in AEROSOL_VARIABLE_IDS:
         return _is_aerosol_record(metadata, variable_id)
@@ -897,6 +955,8 @@ def _band_matches(variable_id: str, metadata: dict[str, str], description: str) 
         return _is_hundred_metre_wind(metadata, description, variable_spec(variable_id).grib_element)
     if variable_id == "prmsl":
         return _is_mean_sea_level_pressure(metadata, description)
+    if variable_id == "orog":
+        return _is_orography_record(metadata, description)
     isobaric = isobaric_variable(variable_id)
     if isobaric is not None:
         spec = variable_spec(variable_id)

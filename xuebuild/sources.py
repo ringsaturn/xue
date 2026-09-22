@@ -536,7 +536,8 @@ SOURCES: dict[str, SourceSpec] = {
         # wave vector the converter derives from it and the height, not as
         # a scalar of its own. The specific humidity above 850 hPa, the
         # other vapour fluxes and the other vertical velocities stay
-        # unpublished: seventy pgrb2 records and three wave records per
+        # unpublished: seventy-one pgrb2 records and three wave records per
+        # frame, one of the pgrb2 records the static orography.
         # frame.
         input_variable_ids=(
             "tmp2m",
@@ -609,6 +610,7 @@ SOURCES: dict[str, SourceSpec] = {
             "tmpsfc",
             "icec",
             "icetk",
+            "orog",
             "htsgw",
             "perpw",
             "dirpw",
@@ -665,6 +667,7 @@ SOURCES: dict[str, SourceSpec] = {
             "icetk",
             "htsgw",
             "perpw",
+            "orog",
         ),
         bundle_vector_ids=(
             "wind10m",
@@ -760,6 +763,7 @@ SOURCES: dict[str, SourceSpec] = {
             "vvel500",
             "tmpsfc",
             "icetk",
+            "orog",
             "htsgw",
             "perpw",
             "dirpw",
@@ -808,6 +812,7 @@ SOURCES: dict[str, SourceSpec] = {
             "icetk",
             "htsgw",
             "perpw",
+            "orog",
         ),
         bundle_vector_ids=(
             "wind10m",
@@ -875,6 +880,7 @@ SOURCES: dict[str, SourceSpec] = {
             "vvel700",
             "vvel500",
             "tmpsfc",
+            "orog",
             "htsgw",
             "dirpw",
         ),
@@ -903,6 +909,7 @@ SOURCES: dict[str, SourceSpec] = {
             "thetae850",
             "tmpsfc",
             "htsgw",
+            "orog",
         ),
         bundle_vector_ids=("wind10m", "wind925", "wind850", "wind250", "qflux850", "wave"),
         video=False,
@@ -1007,12 +1014,12 @@ SOURCES: dict[str, SourceSpec] = {
         latest_filename="latest-sflux.json",
         # Same cadence as pgrb2: hourly through f120, three-hourly to f240.
         steps=((120, 1), (240, 3)),
-        input_variable_ids=("tmp2m", "prate_ave", "ugrd10m", "vgrd10m", "dswrf"),
+        input_variable_ids=("tmp2m", "prate_ave", "ugrd10m", "vgrd10m", "dswrf", "orog"),
         accumulated_precipitation=False,
         averaged_precipitation=True,
         optional_at_analysis=("prate_ave",),
         statistical_processes=(("prate", 0),),
-        bundle_scalar_ids=("tmp2m", "prate", "dswrf"),
+        bundle_scalar_ids=("tmp2m", "prate", "dswrf", "orog"),
         bundle_vector_ids=("wind10m",),
         video=False,
         production_grid=(3072, 1536),
@@ -1070,6 +1077,7 @@ SOURCES: dict[str, SourceSpec] = {
             "vis",
             "dpt2m",
             "cref",
+            "orog",
         ),
         accumulated_precipitation=False,
         bundle_scalar_ids=(
@@ -1091,6 +1099,7 @@ SOURCES: dict[str, SourceSpec] = {
             "vis",
             "dpt2m",
             "cref",
+            "orog",
         ),
         bundle_vector_ids=("wind10m", "wind925", "wind850", "wind250"),
         # The 0.03° grid over the footprint of the 1799 x 1059 domain: the

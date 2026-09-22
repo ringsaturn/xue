@@ -381,6 +381,21 @@ const COMPACT_PBL: LinearCodebook = LinearCodebook {
     step: 40.0,
     ..QUALITY_PBL
 };
+// Orography: the model terrain, −430 m (the Dead Sea shore) to 8968 m at a
+// 37 m step, spending the full 0..254 code space. Static, so the step is a
+// display precision rather than a forecast resolution. Mirrors
+// `QUALITY_OROGRAPHY` in `xuebuild/quantize.py`.
+const QUALITY_OROGRAPHY: LinearCodebook = LinearCodebook {
+    minimum: -430.0,
+    maximum: 8968.0,
+    step: 37.0,
+    nodata_code: 255,
+    name: "orog",
+};
+const COMPACT_OROGRAPHY: LinearCodebook = LinearCodebook {
+    step: 74.0,
+    ..QUALITY_OROGRAPHY
+};
 // Precipitation type: a categorical codebook of WMO code table 4.201's own
 // values (1 rain, 3 freezing rain, 5 snow, 8 ice pellets) with 0 for none —
 // integer codes with no error budget, the same book in every profile. Mirrors
@@ -779,6 +794,8 @@ pub fn codebook(profile: &str, variable_id: &str) -> Result<Codebook> {
         (_, "pwat") => Codebook::Linear(COMPACT_PWAT),
         (_, "hpbl") if quality => Codebook::Linear(QUALITY_PBL),
         (_, "hpbl") => Codebook::Linear(COMPACT_PBL),
+        (_, "orog") if quality => Codebook::Linear(QUALITY_OROGRAPHY),
+        (_, "orog") => Codebook::Linear(COMPACT_OROGRAPHY),
         // The categorical precipitation type is the same book in every
         // profile: there is no resolution to trade.
         (_, "ptype") => Codebook::Linear(PTYPE),

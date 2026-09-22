@@ -309,6 +309,16 @@ pub const AEROSOL_VARIABLE_IDS: &[&str] = &[
 /// Mirrors `SURFACE_TEMPERATURE_IDS` in `xuebuild/variables.py`.
 pub const SURFACE_TEMPERATURE_IDS: &[&str] = &["tmp2m", "dpt2m", "aptmp2m", "tmpsfc"];
 
+/// The fields that do not vary in time — the model terrain. Only the
+/// analysis frame is fetched and read, and the bundle carries a one-frame
+/// axis. Mirrors `STATIC_VARIABLE_IDS` in `xuebuild/variables.py`.
+pub const STATIC_VARIABLE_IDS: &[&str] = &["orog"];
+
+/// Whether a published variable is time-invariant (`STATIC_VARIABLE_IDS`).
+pub fn is_static(variable_id: &str) -> bool {
+    STATIC_VARIABLE_IDS.contains(&variable_id)
+}
+
 /// `(family, level in hPa)` of an isobaric variable, or `None` for anything
 /// else — including a level that is not registered (`hgt550`). This is what
 /// record matching needs beyond the family's element: every level of a family
@@ -865,6 +875,41 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_aliases: &[],
         grib2_alternates: &[],
         gdal_unit: "m",
+        fill_values: &[],
+        producer_id: None,
+        grib2_aerosol: None,
+    },
+    // Orography: the model's own terrain height, on the ground surface and
+    // invariant in time, so its bundle carries one frame
+    // (`STATIC_VARIABLE_IDS`). GFS, HRRR and sflux write the geopotential
+    // height 0/3/5 (`:HGT:surface:`, gpm); ECMWF open data writes the
+    // geopotential itself 0/3/4, which the alternate accepts and the
+    // converter divides by g to metres. Mirrors `orog` in
+    // `xuebuild/variables.py`.
+    VariableSpec {
+        id: "orog",
+        label: "Orography",
+        output_unit: "m",
+        value_range: (-430.0, 8968.0),
+        grib_element: "HGT",
+        open_meteo: "",
+        grib2_discipline: 0,
+        grib2_category: 3,
+        grib2_number: 5,
+        grib2_level_type: 1,
+        grib2_level_value: Some(0.0),
+        grib2_statistical: None,
+        grib2_aliases: &[],
+        grib2_alternates: &[RecordAlternate {
+            discipline: 0,
+            category: 3,
+            number: 4,
+            level_type: 1,
+            level_value: None,
+            statistical: None,
+            gdal_unit: "(m^2)/(s^2)",
+        }],
+        gdal_unit: "gpm",
         fill_values: &[],
         producer_id: None,
         grib2_aerosol: None,

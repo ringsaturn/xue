@@ -387,6 +387,19 @@ pub fn raster_expression(variable_id: &str, unit: &str) -> Result<String> {
                 Ok(format!("maximum(0,minimum({maximum},A))"))
             }
         }
+        "orog" => {
+            // NCEP's geopotential height (gpm) or ECMWF open data's surface
+            // geopotential (m² s⁻²); the converter divides the latter by g.
+            let compact = compact_unit(unit);
+            if matches!(compact.as_str(), "gpm" | "m" | "m^2/s^2" | "m^2s^-2") {
+                Ok("A".into())
+            } else {
+                Err(EncodeError::conversion(format!(
+                    "unsupported orography unit: {}",
+                    if unit.is_empty() { "<missing>" } else { unit }
+                )))
+            }
+        }
         other if isobaric_variable(other).is_some() => {
             let (family, _) = isobaric_variable(other).expect("checked");
             let compact = unit.trim().trim_matches(|character| "[]()".contains(character));
@@ -725,6 +738,19 @@ fn band_matches(variable_id: &str, band: &BandInfo) -> Result<bool> {
             let text = searchable(band).to_lowercase();
             element == variable_spec(variable_id)?.grib_element
                 && (short_name == "0-EATM" || text.contains("entire atmosphere"))
+        }
+        // The model terrain on the ground surface: NCEP's geopotential
+        // height (element HGT) or ECMWF open data's surface geopotential
+        // (element GP, described only in the comment). Mirrors
+        // `_is_orography_record`.
+        "orog" => {
+            let text = searchable(band).to_lowercase();
+            let on_surface = short_name.ends_with("-SFC")
+                || text.contains("sfc=\"")
+                || text.contains("ground or water surface");
+            on_surface
+                && (element == "HGT"
+                    || (matches!(element.as_str(), "GP" | "Z") && text.contains("geopotential")))
         }
         "ugrd10m" | "vgrd10m" => {
             element == variable_spec(variable_id)?.grib_element
