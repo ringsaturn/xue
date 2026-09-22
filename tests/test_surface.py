@@ -151,6 +151,10 @@ class RegistryTests(unittest.TestCase):
             spec = variable_spec(flag)
             self.assertEqual((spec.grib2_category, spec.grib2_number, spec.grib2_level_type), (1, number, 1))
             self.assertEqual(spec.index_field, f":{spec.grib_element}:surface:")
+            # pgrb2 carries an interval average of each flag beside the
+            # instantaneous record from f001 on; the fetch must take the
+            # instantaneous one, as prate and the cloud covers do.
+            self.assertEqual(spec.excluded_index_phrases, ("ave fcst",))
         ptype = variable_spec("ptype")
         self.assertEqual((ptype.grib2_category, ptype.grib2_number, ptype.grib2_level_type), (1, 19, 1))
         self.assertEqual(ptype.grib_element, "", "the type is derived, not a record")

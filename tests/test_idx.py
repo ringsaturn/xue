@@ -41,6 +41,17 @@ class IndexTests(unittest.TestCase):
         )
         self.assertEqual((selected.start, selected.end), (0, 99))
 
+    def test_selects_the_instantaneous_categorical_flag(self) -> None:
+        # From f001 on pgrb2 carries the interval average of each
+        # precipitation-type flag beside the instantaneous record, as it
+        # does for the rate; the fetch must take the instantaneous one.
+        index = """1:0:d=x:CRAIN:surface:1 hour fcst:
+2:100:d=x:CRAIN:surface:0-1 hour ave fcst:
+3:200:d=x:CSNOW:surface:1 hour fcst:
+"""
+        selected = field_byte_range(index, ":CRAIN:surface:", excluded_phrases=("ave fcst",))
+        self.assertEqual((selected.start, selected.end), (0, 99))
+
     def test_rejects_missing_duplicate_and_unordered_target(self) -> None:
         with self.assertRaises(DownloadError):
             target_byte_range("1:0:TMP:surface:\n2:10:WIND:surface:\n")

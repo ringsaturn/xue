@@ -660,6 +660,10 @@ VARIABLES: dict[str, VariableSpec] = {
         value_range=(0.0, 1.0),
         grib_element="CRAIN",
         index_field=":CRAIN:surface:",
+        # From f001 on pgrb2 carries an interval average of each flag beside
+        # the instantaneous record (``0-1 hour ave fcst``); the type at the
+        # frame is the instantaneous one, as for prate and the cloud covers.
+        excluded_index_phrases=("ave fcst",),
         grib2_category=1,
         grib2_number=192,
         grib2_level_type=1,
@@ -673,6 +677,7 @@ VARIABLES: dict[str, VariableSpec] = {
         value_range=(0.0, 1.0),
         grib_element="CFRZR",
         index_field=":CFRZR:surface:",
+        excluded_index_phrases=("ave fcst",),
         grib2_category=1,
         grib2_number=193,
         grib2_level_type=1,
@@ -686,6 +691,7 @@ VARIABLES: dict[str, VariableSpec] = {
         value_range=(0.0, 1.0),
         grib_element="CICEP",
         index_field=":CICEP:surface:",
+        excluded_index_phrases=("ave fcst",),
         grib2_category=1,
         grib2_number=194,
         grib2_level_type=1,
@@ -699,6 +705,7 @@ VARIABLES: dict[str, VariableSpec] = {
         value_range=(0.0, 1.0),
         grib_element="CSNOW",
         index_field=":CSNOW:surface:",
+        excluded_index_phrases=("ave fcst",),
         grib2_category=1,
         grib2_number=195,
         grib2_level_type=1,
