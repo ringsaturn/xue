@@ -18,6 +18,7 @@ export const fr: Record<MessageKey, string> = {
   varWind: "10M",
   varSolar: "FLUX",
   varRadar: "CREF",
+  varOrog: "OROG",
   varInfrared: "IR 10,4",
   varDustRgb: "RGB",
   varDustCf: "DEBRA",
@@ -214,6 +215,7 @@ export const fr: Record<MessageKey, string> = {
   varLabelWind10m: "Vent à 10 m",
   varLabelWind100m: "Vent à 100 m",
   varLabelCref: "Réflectivité radar composite",
+  varLabelOrog: "Orographie",
   varLabelIr104: "Image infrarouge (température de brillance à 10,4 µm)",
   varLabelDustrgb: "RGB poussière (composite infrarouge)",
   varLabelDustcf: "Confiance poussière DEBRA",
@@ -275,6 +277,7 @@ export const fr: Record<MessageKey, string> = {
   probeOutside: "Hors de la grille de ce jeu de données",
   probeNoData: "Aucune donnée à cette image",
   probeAwaiting: "En attente de cette image",
+  probeElevationLabel: "Alt.",
   probeCloseAria: "Fermer les données du point",
 
   centerHigh: "A",

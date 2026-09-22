@@ -18,6 +18,7 @@ export const de: Record<MessageKey, string> = {
   varWind: "10M",
   varSolar: "FLUSS",
   varRadar: "CREF",
+  varOrog: "OROG",
   varInfrared: "IR 10,4",
   varDustRgb: "RGB",
   varDustCf: "DEBRA",
@@ -214,6 +215,7 @@ export const de: Record<MessageKey, string> = {
   varLabelWind10m: "Wind in 10 m",
   varLabelWind100m: "Wind in 100 m",
   varLabelCref: "Radar-Komposit-Reflektivität",
+  varLabelOrog: "Orographie",
   varLabelIr104: "Infrarotbild (Helligkeitstemperatur bei 10,4 µm)",
   varLabelDustrgb: "Staub-RGB (Infrarot-Komposit)",
   varLabelDustcf: "DEBRA-Staubkonfidenz",
@@ -275,6 +277,7 @@ export const de: Record<MessageKey, string> = {
   probeOutside: "Außerhalb des Gitters dieses Datensatzes",
   probeNoData: "Keine Daten in diesem Bild",
   probeAwaiting: "Warte auf dieses Bild",
+  probeElevationLabel: "Höhe",
   probeCloseAria: "Punktdaten schließen",
 
   centerHigh: "H",

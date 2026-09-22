@@ -18,6 +18,7 @@ export const pt: Record<MessageKey, string> = {
   varWind: "10M",
   varSolar: "FLUXO",
   varRadar: "CREF",
+  varOrog: "OROG",
   varInfrared: "IV 10,4",
   varDustRgb: "RGB",
   varDustCf: "DEBRA",
@@ -214,6 +215,7 @@ export const pt: Record<MessageKey, string> = {
   varLabelWind10m: "Vento a 10 m",
   varLabelWind100m: "Vento a 100 m",
   varLabelCref: "Refletividade radar composta",
+  varLabelOrog: "Orografia",
   varLabelIr104: "Imagem infravermelha (temperatura de brilho a 10,4 µm)",
   varLabelDustrgb: "RGB de poeira (composição infravermelha)",
   varLabelDustcf: "Confiança de poeira DEBRA",
@@ -275,6 +277,7 @@ export const pt: Record<MessageKey, string> = {
   probeOutside: "Fora da grelha deste conjunto de dados",
   probeNoData: "Sem dados neste fotograma",
   probeAwaiting: "A aguardar este fotograma",
+  probeElevationLabel: "Elev.",
   probeCloseAria: "Fechar os dados do ponto",
 
   centerHigh: "A",

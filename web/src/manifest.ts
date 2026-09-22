@@ -421,6 +421,7 @@ export type KnownBundleId =
   | ForecastVariableId
   | "dswrf"
   | "cref"
+  | "orog"
   | SurfaceDiagnosticId
   | OceanId
   | SatelliteId
@@ -558,6 +559,7 @@ export const KNOWN_BUNDLE_IDS: readonly KnownBundleId[] = [
   "prate",
   "dswrf",
   "cref",
+  "orog",
   ...SURFACE_DIAGNOSTIC_IDS,
   ...OCEAN_IDS,
   ...SATELLITE_IDS,

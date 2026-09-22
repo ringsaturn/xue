@@ -21,6 +21,7 @@ export const tr: Record<MessageKey, string> = {
   varWind: "10M",
   varSolar: "AKI",
   varRadar: "CREF",
+  varOrog: "OROG",
   varInfrared: "IR 10,4",
   varDustRgb: "RGB",
   varDustCf: "DEBRA",
@@ -217,6 +218,7 @@ export const tr: Record<MessageKey, string> = {
   varLabelWind10m: "10 m rüzgarı",
   varLabelWind100m: "100 m rüzgarı",
   varLabelCref: "Bileşik radar reflektivitesi",
+  varLabelOrog: "Orografi",
   varLabelIr104: "Kızılötesi görüntü (10,4 µm parlaklık sıcaklığı)",
   varLabelDustrgb: "Toz RGB (kızılötesi bileşik)",
   varLabelDustcf: "DEBRA toz güveni",
@@ -278,6 +280,7 @@ export const tr: Record<MessageKey, string> = {
   probeOutside: "Bu veri setinin gridi dışında",
   probeNoData: "Bu karede veri yok",
   probeAwaiting: "Bu kare bekleniyor",
+  probeElevationLabel: "Rakım",
   probeCloseAria: "Nokta verisini kapat",
 
   centerHigh: "Y",

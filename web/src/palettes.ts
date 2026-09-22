@@ -350,6 +350,22 @@ const PBL_STOPS: Stop[] = [
   [PBL_CHART_MAX, 150, 70, 60, 255],
 ];
 
+// Orography: a hypsometric ramp, sea level to the high Himalaya, one
+// opaque coat. Static, so the same colours read every frame — the ground a
+// weather layer sits on rather than a field that changes.
+const OROGRAPHY_STOPS: Stop[] = [
+  [-430, 30, 60, 130, 255],
+  [0, 45, 105, 145, 255],
+  [200, 70, 145, 95, 255],
+  [600, 130, 180, 90, 255],
+  [1200, 200, 200, 120, 255],
+  [2000, 205, 175, 105, 255],
+  [3000, 165, 125, 85, 255],
+  [4500, 135, 100, 80, 255],
+  [6000, 205, 205, 205, 255],
+  [8968, 255, 255, 255, 255],
+];
+
 // Precipitation type as a categorical palette over WMO code table 4.201's
 // values: rain blue, freezing rain pink, snow a pale white-blue, ice pellets
 // purple, with code 0 (no precipitation) transparent. A discrete field, so
@@ -736,6 +752,7 @@ function stopsFor(variable: BundleVariable, identity: VariableIdentity | null): 
   }
   if (family === "dswrf") return SOLAR_STOPS;
   if (family === "cref") return REFLECTIVITY_STOPS;
+  if (family === "orog") return OROGRAPHY_STOPS;
   if (family === "gust") return windFieldStops(GUST_SPEED_MAX);
   if (family === "tcdc" || family === "lcdc" || family === "mcdc" || family === "hcdc") return CLOUD_STOPS;
   if (family === "cape") return CAPE_STOPS;

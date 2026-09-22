@@ -15,6 +15,7 @@ export const zhHant: Record<MessageKey, string> = {
   varWind: "風場",
   varSolar: "輻射",
   varRadar: "雷達",
+  varOrog: "地形",
   varInfrared: "紅外 10.4",
   varDustRgb: "RGB",
   varDustCf: "DEBRA",
@@ -211,6 +212,7 @@ export const zhHant: Record<MessageKey, string> = {
   varLabelWind10m: "10 公尺風",
   varLabelWind100m: "100 公尺風",
   varLabelCref: "雷達組合反射率",
+  varLabelOrog: "地形高度",
   varLabelIr104: "紅外影像（10.4 µm 亮溫）",
   varLabelDustrgb: "沙塵 RGB（紅外合成）",
   varLabelDustcf: "DEBRA 沙塵信心度",
@@ -272,6 +274,7 @@ export const zhHant: Record<MessageKey, string> = {
   probeOutside: "該點在本資料集網格之外",
   probeNoData: "此影格無資料",
   probeAwaiting: "等待該影格解碼",
+  probeElevationLabel: "海拔",
   probeCloseAria: "關閉點位資料",
 
   centerHigh: "高",

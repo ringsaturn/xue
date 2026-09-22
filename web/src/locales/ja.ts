@@ -15,6 +15,7 @@ export const ja: Record<MessageKey, string> = {
   varWind: "風",
   varSolar: "日射",
   varRadar: "レーダー",
+  varOrog: "地形",
   varInfrared: "赤外 10.4",
   varDustRgb: "RGB",
   varDustCf: "DEBRA",
@@ -211,6 +212,7 @@ export const ja: Record<MessageKey, string> = {
   varLabelWind10m: "地上 10 m 風",
   varLabelWind100m: "100 m 風",
   varLabelCref: "レーダー合成反射強度",
+  varLabelOrog: "地形高度",
   varLabelIr104: "赤外画像（10.4 µm 輝度温度）",
   varLabelDustrgb: "ダスト RGB（赤外合成）",
   varLabelDustcf: "DEBRA ダスト信頼度",
@@ -272,6 +274,7 @@ export const ja: Record<MessageKey, string> = {
   probeOutside: "この地点はデータセットの格子の外です",
   probeNoData: "このフレームにデータはありません",
   probeAwaiting: "このフレームの復号を待っています",
+  probeElevationLabel: "標高",
   probeCloseAria: "地点データを閉じる",
 
   centerHigh: "高",

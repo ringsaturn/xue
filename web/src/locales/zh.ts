@@ -15,6 +15,7 @@ export const zh: Record<MessageKey, string> = {
   varWind: "风场",
   varSolar: "辐射",
   varRadar: "雷达",
+  varOrog: "地形",
   varInfrared: "红外 10.4",
   varDustRgb: "RGB",
   varDustCf: "DEBRA",
@@ -211,6 +212,7 @@ export const zh: Record<MessageKey, string> = {
   varLabelWind10m: "10 米风",
   varLabelWind100m: "100 米风",
   varLabelCref: "雷达组合反射率",
+  varLabelOrog: "地形高度",
   varLabelIr104: "红外影像（10.4 µm 亮温）",
   varLabelDustrgb: "沙尘 RGB（红外合成）",
   varLabelDustcf: "DEBRA 沙尘置信度",
@@ -272,6 +274,7 @@ export const zh: Record<MessageKey, string> = {
   probeOutside: "该点在本数据集网格之外",
   probeNoData: "此帧无数据",
   probeAwaiting: "等待该帧解码",
+  probeElevationLabel: "海拔",
   probeCloseAria: "关闭点位数据",
 
   centerHigh: "高",

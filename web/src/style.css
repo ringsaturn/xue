@@ -2512,6 +2512,16 @@ html[lang="ja"] .rail-glyph {
   margin-left: auto;
 }
 
+/* The pinned cell's terrain height, beside its coordinates: a number and a
+   unit, so the mono face and the same tracking as the rest of the line. */
+.probe-elevation {
+  letter-spacing: 0.02em;
+}
+
+.probe-elevation:empty {
+  display: none;
+}
+
 /* The pinned point's zone — the one the capsule under this panel now reads
    in — beside its coordinates; a zone id is an identifier, so it is not
    tracked out like the rest of the line. */

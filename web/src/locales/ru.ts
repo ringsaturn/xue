@@ -20,6 +20,7 @@ export const ru: Record<MessageKey, string> = {
   varWind: "10 М",
   varSolar: "ПОТОК",
   varRadar: "CREF",
+  varOrog: "OROG",
   varInfrared: "ИК 10,4",
   varDustRgb: "RGB",
   varDustCf: "DEBRA",
@@ -216,6 +217,7 @@ export const ru: Record<MessageKey, string> = {
   varLabelWind10m: "Ветер на 10 м",
   varLabelWind100m: "Ветер на 100 м",
   varLabelCref: "Составная радиолокационная отражаемость",
+  varLabelOrog: "Орография",
   varLabelIr104: "Инфракрасный снимок (яркостная температура 10,4 мкм)",
   varLabelDustrgb: "Пылевой RGB (инфракрасный композит)",
   varLabelDustcf: "Уверенность DEBRA в пыли",
@@ -277,6 +279,7 @@ export const ru: Record<MessageKey, string> = {
   probeOutside: "Точка вне сетки этого набора данных",
   probeNoData: "В этом кадре нет данных",
   probeAwaiting: "Ожидание этого кадра",
+  probeElevationLabel: "Выс.",
   probeCloseAria: "Закрыть данные точки",
 
   centerHigh: "В",

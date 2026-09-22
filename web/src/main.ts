@@ -1614,6 +1614,14 @@ function frameCount(): number {
   return metadata?.time.frameCount ?? FRAME_COUNT;
 }
 
+/** Whether the open session's axis holds a single frame — a static field
+ * (the model terrain), which has nothing to scrub or play. The transport is
+ * disabled rather than left as a dead slider and a PLAY button that cannot
+ * advance. */
+function isStaticAxis(): boolean {
+  return frameCount() <= 1;
+}
+
 // The active session's materialized frame-offset axis. Non-uniform axes
 // (240-hour runs go 3-hourly past f120; the radar mosaic has gaps) make
 // index<->offset conversions table lookups, so both are memoized on the
@@ -2216,6 +2224,11 @@ function buildProbePanel() {
   const coords = document.createElement("span");
   coords.className = "probe-coords";
   coords.id = "probe-coords";
+  // The pinned cell's terrain height, from the run's static orography when
+  // it ships one; empty — and out of the layout — otherwise.
+  const elevation = document.createElement("span");
+  elevation.className = "probe-elevation";
+  elevation.id = "probe-elevation";
   // The zone the pinned point lies in, which every valid time on screen now
   // reads in; empty until the lookup answers.
   const zone = document.createElement("span");
@@ -2252,7 +2265,7 @@ function buildProbePanel() {
   codeLine.className = "probe-code-line";
   codeLine.append(code, airport);
   headline.append(codeLine, value);
-  metaLine.append(meta, coords, zone, compare, footer, close);
+  metaLine.append(meta, coords, elevation, zone, compare, footer, close);
   axis.append(metaLine, canvas);
   head.append(headline, axis);
   // The meteogram: the row labels and readouts are DOM text in the left
@@ -2279,6 +2292,7 @@ function buildProbePanel() {
     airportId,
     airportCategory,
     coords,
+    elevation,
     zone,
     compare,
     value,
@@ -2499,6 +2513,10 @@ function probeSessions(): VariableSession[] {
 function probeBundleIds(): string[] {
   const ids: string[] = [];
   for (const spec of currentMeteogramRows()) ids.push(...spec.bundles);
+  // The run's terrain, so the pin can read its elevation. Published as an
+  // ordinary bundle, opened like a row: one extra session for the whole
+  // point read, and skipped on a run that ships none.
+  if (manifest && hasBundle(manifest, "orog")) ids.push("orog");
   if (manifest && soundingSection.isOpen()) {
     for (const bundle of modelProfileBundles(manifest.bundles.map((entry) => entry.variable))) {
       ids.push(bundle.id);
@@ -2628,6 +2646,32 @@ function scheduleProbeRender(): void {
   });
 }
 
+/** The pinned cell's terrain height, from the run's static `orog` bundle
+ * when it publishes one, else empty. Read at the orog bundle's own grid cell
+ * — the primary's on every source that carries terrain — beside the
+ * coordinates it belongs to. */
+function renderProbeElevation(): void {
+  const element = probePanel.elevation;
+  const session = sessions.get("orog");
+  if (!probe || !session) {
+    element.textContent = "";
+    return;
+  }
+  const cell = probe.cellFor(session.metadata);
+  if (!cell) {
+    element.textContent = "";
+    return;
+  }
+  const value = probeSeriesValues(probe, probeVariables(session), frameOffsets(session.metadata.time))[0];
+  if (typeof value !== "number") {
+    element.textContent = "";
+    return;
+  }
+  const unit = displayUnit(session.variable.unit);
+  element.textContent =
+    `${t("probeElevationLabel")} ${formatProbeValue(session.variable, displayValue(session.variable.unit, value))} ${unit}`.trimEnd();
+}
+
 function renderProbe(): void {
   const series = probe;
   if (!series) return;
@@ -2640,6 +2684,7 @@ function renderProbe(): void {
     // blank the panel rather than leave the previous dataset's numbers up.
     probePanel.value.value = "--";
     probePanel.meta.textContent = t("probeAwaiting");
+    probePanel.elevation.textContent = "";
     probePanel.count.textContent = "";
     probePanel.hint.textContent = "";
     probePanel.canvas.getContext("2d")?.clearRect(0, 0, probePanel.canvas.width, probePanel.canvas.height);
@@ -2655,6 +2700,7 @@ function renderProbe(): void {
   const point = cell ?? { longitude: series.longitude, latitude: series.latitude };
   probePanel.coords.textContent =
     `${formatProbeDegrees(point.latitude, "NS")} ${formatProbeDegrees(point.longitude, "EW")}`;
+  renderProbeElevation();
   probePanel.zone.textContent = probeZone ? zoneDisplayName(probeZone, frameValidTime(activeFrameIndex ?? Number(slider.value))) : "";
   probePanel.compare.href = compareUrl(point.latitude, point.longitude);
   probePanel.compare.textContent = t("compareLink");
@@ -6300,6 +6346,10 @@ function syncTimeline(session: VariableSession): void {
   buildTimeline();
   dataCardIndex.textContent = `${time.frameCount}F`;
   buildPreloadSegments(time.frameCount);
+  // A static field's one frame has no transport; a time series restores it.
+  slider.disabled = isStaticAxis();
+  playButton.disabled = isStaticAxis();
+  speedButton.disabled = isStaticAxis();
 }
 
 /** An end label of the track: a lead time in whole hours, `+0H` to `+240H`. */
@@ -7147,11 +7197,11 @@ async function initialize({ frame = false }: { frame?: boolean } = {}): Promise<
 
     say(loadStatus, "framesReady", { count: frameCount() });
     loadStatus.className = "load-status";
-    slider.disabled = false;
-    playButton.disabled = false;
-    speedButton.disabled = false;
+    slider.disabled = isStaticAxis();
+    playButton.disabled = isStaticAxis();
+    speedButton.disabled = isStaticAxis();
     setVariableButtonsDisabled(false);
-    if (!reducedMotion.matches && (resume === null || resume.playing)) startPlayback();
+    if (!isStaticAxis() && !reducedMotion.matches && (resume === null || resume.playing)) startPlayback();
   } catch (error) {
     if (sequence !== initializeSequence) return;
     if (error instanceof DOMException && error.name === "AbortError") return;

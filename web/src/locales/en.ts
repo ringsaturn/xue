@@ -33,6 +33,7 @@ export const en = {
   varWind: "10M",
   varSolar: "FLUX",
   varRadar: "CREF",
+  varOrog: "OROG",
   /** The satellite tile: the channel's nominal wavelength in µm after the
    * code (SAT IR 10.4). */
   varInfrared: "IR 10.4",
@@ -363,6 +364,7 @@ export const en = {
   varLabelWind10m: "10 m wind",
   varLabelWind100m: "100 m wind",
   varLabelCref: "Composite radar reflectivity",
+  varLabelOrog: "Orography",
   varLabelIr104: "Infrared imagery (10.4 µm brightness temperature)",
   varLabelDustrgb: "Dust RGB (infrared composite)",
   varLabelDustcf: "DEBRA dust confidence",
@@ -442,6 +444,7 @@ export const en = {
   probeOutside: "Outside this dataset's grid",
   probeNoData: "No data at this frame",
   probeAwaiting: "Waiting for this frame",
+  probeElevationLabel: "Elev",
   probeCloseAria: "Close point data",
 
   // The letter on a pressure center, following each country's own chart

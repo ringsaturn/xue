@@ -354,6 +354,24 @@ function buildSpecs(): readonly VariableSpec[] {
     urlAliases: ["reflectivity"],
     showcaseCode: "RADAR",
   }),
+  // The model's own terrain height, a static field: its bundle carries one
+  // frame (the analysis), so the transport has nothing to scrub. Drawn as
+  // relief under whatever else is on, and the ground the later, finer DEM
+  // will join it on.
+  surface({
+    id: "orog",
+    chart: "orog",
+    group: "dynamics",
+    code: "OROG SFC",
+    title: ["Orography"],
+    bufferTitle: "Terrain buffer",
+    labelKey: "varLabelOrog",
+    legend: ["8000", "6000", "4000", "2000", "500", "0"],
+    ground: "coat",
+    urlName: "terrain",
+    urlAliases: ["orography", "elevation"],
+    showcaseCode: "TERRAIN",
+  }),
   surface({
     id: "tcdc",
     chart: "tcdc",

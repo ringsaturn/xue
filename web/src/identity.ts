@@ -51,6 +51,7 @@ export type ChartFamily =
   | "prate"
   | "dswrf"
   | "cref"
+  | "orog"
   | "gust"
   | "tcdc"
   | "lcdc"
@@ -193,6 +194,10 @@ export function identityForParameter(parameter: BundleParameter, band?: BundleBa
     return field === null ? null : scalar(field, null);
   }
   if (isTriple(parameter, 0, 3, 5) && level !== null) return scalar("hgt", level);
+  // Orography: the geopotential height on the ground surface (NCEP), or the
+  // geopotential itself (ECMWF open data), no level of its own.
+  if (isTriple(parameter, 0, 3, 5) && surface === 1) return scalar("orog", null);
+  if (isTriple(parameter, 0, 3, 4) && surface === 1) return scalar("orog", null);
   if (isTriple(parameter, 0, 3, 1) && surface === 101) return scalar("hgt", null);
   if (isTriple(parameter, 0, 0, 0)) {
     if (level !== null) return scalar("tmp", level);
