@@ -11,10 +11,12 @@ middle / high cloud cover, CAPE, convective inhibition, visibility, 2 m dew
 point, apparent temperature, precipitable water, planetary boundary layer
 height and the four categorical precipitation-type flags the `ptype` bundle
 is derived from), the 850 / 700 / 500 hPa vertical velocity, the surface
-temperature and the two sea ice fields, and — appended by the fetcher from
-the cycle's GFS-Wave file — the significant wave height, primary wave
-period and direction: seventy-three records (seventy from pgrb2, three from
-GFS-Wave), in the order `xuebuild/sources.py` lists them. It covers
+temperature and the two sea ice fields, the surface orography (the
+geopotential height 0/3/5 on the ground surface, `:HGT:surface:`), and —
+appended by the fetcher from the cycle's GFS-Wave file — the significant
+wave height, primary wave period and direction: seventy-four records
+(seventy-one from pgrb2, three from GFS-Wave), in the order
+`xuebuild/sources.py` lists them. It covers
 approximately 118E to 138E and 18N to 38N, including the browser test's
 initial viewport, so the record matchers, the GRIB2 header index, the
 `ptype` derivation, the vapour flux derivation and the byte-identity parity
@@ -55,7 +57,8 @@ grib_set -r -s packingType=grid_jpeg /tmp/wave.crop.grib2 \
 
 `hrrr.2026091100.f000.crop.grib2` is a 120 by 120 cell window of every
 record the HRRR source fetches from the 2026-09-11 00:00 UTC analysis,
-twenty-six records in `xuebuild/sources.py` order, over the Gulf coast
+twenty-seven records in `xuebuild/sources.py` order — the surface
+orography (`:HGT:surface:`) at the end — over the Gulf coast
 (roughly 88W to 84W, 27N to 31N) and still on the model's own 3 km Lambert
 conformal grid — a crop keeps the projection, and GDAL's GRIB writer
 carries it — so the WKT parsing, the footprint, the resampling onto the
@@ -73,9 +76,11 @@ gdal_translate -srcwin 1220 800 120 120 -of GRIB -co DATA_ENCODING=COMPLEX_PACKI
 are an 80 by 80 cell window of the analysis and the first step of the
 2026-09-12 12:00 UTC ECMWF open data cycle, every record the ECMWF source
 fetches in `xuebuild/sources.py` order — the `oper` stream's, then the
-three `wave` stream records the fetcher appends: fifty-seven records at
-the analysis, which carries no gust (the interval maximum is empty there
-and the source lists it as optional), fifty-eight at F003. The window is
+three `wave` stream records the fetcher appends: fifty-eight records at
+each frame, the analysis carrying the surface geopotential (`z` at `sfc`,
+the orography the source fetches at the analysis alone) and the first step
+the gust (the interval maximum, empty at the analysis and therefore
+optional there). The window is
 the Kara Sea, 60E to 80E and 65N to 85N: sea ice (the ice thickness
 carries a bitmap over land), open water (the wave records' bitmap covers
 the ice and the land) and Novaya Zemlya and Yamal, so every fill rule meets
@@ -102,11 +107,12 @@ done
 are the same 80 by 80 cell Kara Sea window (`-srcwin 960 20 80 80`) of the
 analysis and the first step of the 2026-09-17 00:00 UTC ECMWF AIFS Single
 open data cycle, every record the AIFS source fetches in
-`xuebuild/sources.py` order — the `oper` stream's twenty-eight, then the
+`xuebuild/sources.py` order — the `oper` stream's twenty-nine, then the
 two `wave` records (the significant height and the mean direction; the
 AIFS wave stream carries a mean, not a peak, period, which the source
-leaves out): thirty at each frame, the run total being an all-zero
-record at the analysis. They hold the four encodings the AIFS open data
+leaves out): thirty-one at the analysis — the surface geopotential, the
+source's static orography, among them — and thirty at the step, the run
+total being an all-zero record at the analysis. They hold the four encodings the AIFS open data
 writes differently from the IFS — the run-total precipitation as the WMO
 0/1/52 (GDAL's TPRATE) accumulated in kg/m², the total cloud cover as the
 WMO 0/6/1 in percent from the ground surface up, and the low / middle /

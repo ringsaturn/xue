@@ -27,13 +27,17 @@ class IndexMessagesTests(unittest.TestCase):
         # precipitation type) and the vertical velocity, then the ocean —
         # three pgrb2 records and, appended from the cycle's GFS-Wave file,
         # three wave records.
-        self.assertEqual(len(messages), 73)
+        self.assertEqual(len(messages), 74)
         temperature, precipitation, u_wind, v_wind, pressure = messages[:5]
         heights = messages[5:13]
         upper_air = messages[13:46]
         wind_100m = messages[46:48]
         diagnostics = messages[48:67]
-        ocean = messages[67:]
+        # The orography sits between the sea ice and the companion wave
+        # records: a primary-file record appended after the ocean trio, its
+        # record last of the pgrb2 set and before the wave file's.
+        orography = messages[70]
+        ocean = messages[67:70] + messages[71:]
         levels = [100000.0, 92500.0, 85000.0, 70000.0, 50000.0, 30000.0, 25000.0, 20000.0]
         self.assertEqual(temperature.band, 1)
         self.assertEqual(
@@ -122,6 +126,19 @@ class IndexMessagesTests(unittest.TestCase):
             ],
         )
         self.assertTrue(all(message.statistical_process is None for message in diagnostics))
+        # Orography: the geopotential height 0/3/5 on the ground surface,
+        # before the wave file's records.
+        self.assertEqual(
+            (
+                orography.band,
+                orography.discipline,
+                orography.parameter_category,
+                orography.parameter_number,
+                orography.level_type,
+                orography.level_value,
+            ),
+            (71, 0, 3, 5, 1, 0.0),
+        )
         # The ocean fields: the skin temperature and the two sea ice fields
         # on the ground surface (value 0), then the wave fields on the water
         # surface as WAVEWATCH III writes it — value 1, which the registry
@@ -133,9 +150,9 @@ class IndexMessagesTests(unittest.TestCase):
                 (68, 0, 0, 0, 1, 0.0),
                 (69, 10, 2, 0, 1, 0.0),
                 (70, 10, 2, 1, 1, 0.0),
-                (71, 10, 0, 3, 1, 1.0),
-                (72, 10, 0, 11, 1, 1.0),
-                (73, 10, 0, 10, 1, 1.0),
+                (72, 10, 0, 3, 1, 1.0),
+                (73, 10, 0, 11, 1, 1.0),
+                (74, 10, 0, 10, 1, 1.0),
             ],
         )
         self.assertTrue(all(message.statistical_process is None for message in ocean))

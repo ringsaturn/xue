@@ -97,7 +97,7 @@ class SourceRegistryTests(unittest.TestCase):
             self.assertIn(bundle_id, aifs)
         self.assertEqual(set(aifs) - set(ecmwf), set(ADDED))
         self.assertEqual(set(ecmwf) - set(aifs), set(DROPPED) | set(NOT_TAKEN_UP))
-        self.assertEqual(len(aifs), 27)
+        self.assertEqual(len(aifs), 28)
         # The 850 hPa specific humidity still feeds the two derivations.
         self.assertIn("qflux850", aifs)
         self.assertIn("thetae850", aifs)
@@ -220,11 +220,13 @@ class FetchTests(unittest.TestCase):
 
 class MatcherTests(unittest.TestCase):
     def test_the_header_index_finds_every_input_in_source_order(self) -> None:
-        for path in FIXTURE_FRAMES:
-            frames = grib2.inspect_grib_fast(path, AIFS.input_variable_ids)
-            self.assertEqual(len(frames), 30, path.name)
-            self.assertEqual([frames[variable_id].band for variable_id in AIFS.input_variable_ids], list(range(1, 31)))
-        step = grib2.inspect_grib_fast(FIXTURE_FRAMES[1], AIFS.input_variable_ids)
+        for path, expected in zip(FIXTURE_FRAMES, (31, 30)):
+            frames = grib2.inspect_grib_fast(path, AIFS.input_variable_ids, optional_ids=("orog",))
+            self.assertEqual(len(frames), expected, path.name)
+            present = [variable_id for variable_id in AIFS.input_variable_ids if variable_id in frames]
+            self.assertEqual([frames[variable_id].band for variable_id in present], list(range(1, expected + 1)))
+        step = grib2.inspect_grib_fast(FIXTURE_FRAMES[1], AIFS.input_variable_ids, optional_ids=("orog",))
+        self.assertNotIn("orog", step)
         self.assertEqual(step["tp"].lead_seconds, 6 * 3600)
         # The alternates' own units where they have one, the identity's
         # otherwise.
@@ -237,7 +239,7 @@ class MatcherTests(unittest.TestCase):
 
     def test_the_records_are_what_the_alternates_say(self) -> None:
         by_band = {message.band: message for message in grib2.index_messages(FIXTURE_FRAMES[1])}
-        frames = grib2.inspect_grib_fast(FIXTURE_FRAMES[1], AIFS.input_variable_ids)
+        frames = grib2.inspect_grib_fast(FIXTURE_FRAMES[1], AIFS.input_variable_ids, optional_ids=("orog",))
         tp = by_band[frames["tp"].band]
         self.assertEqual((tp.discipline, tp.parameter_category, tp.parameter_number), (0, 1, 52))
         self.assertEqual((tp.level_type, tp.statistical_process), (1, 1))
@@ -258,8 +260,8 @@ class MatcherTests(unittest.TestCase):
     def test_gdalinfo_agrees_with_the_header_index(self) -> None:
         with mock.patch.dict(os.environ, {"XUE_ENCODER": "python"}):
             for path in FIXTURE_FRAMES:
-                fast = grib2.inspect_grib_fast(path, AIFS.input_variable_ids)
-                slow = inspect_grib_multi(path, AIFS.input_variable_ids)
+                fast = grib2.inspect_grib_fast(path, AIFS.input_variable_ids, optional_ids=("orog",))
+                slow = inspect_grib_multi(path, AIFS.input_variable_ids, optional_ids=("orog",))
                 self.assertEqual(set(fast), set(slow), path.name)
                 for variable_id, frame in fast.items():
                     self.assertEqual(frame, slow[variable_id], f"{path.name} {variable_id}")

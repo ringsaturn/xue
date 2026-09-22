@@ -95,7 +95,14 @@ class SfluxFetchTests(unittest.TestCase):
             analysis_ids,
             [variable_id for variable_id in spec.input_variable_ids if variable_id != "prate_ave"],
         )
-        self.assertEqual(forecast_ids, list(spec.input_variable_ids))
+        self.assertEqual(
+            forecast_ids,
+            [
+                variable_id
+                for variable_id in spec.input_variable_ids
+                if not variable_spec(variable_id).static
+            ],
+        )
 
 
 class DeaverageTests(unittest.TestCase):
@@ -200,7 +207,7 @@ class DswrfRegistryTests(unittest.TestCase):
         self.assertEqual(spec.product, "sfluxgrb")
         self.assertEqual(spec.latest_filename, "latest-sflux.json")
         self.assertEqual(spec.production_grid, (3072, 1536))
-        self.assertEqual(spec.bundle_scalar_ids, ("tmp2m", "prate", "dswrf"))
+        self.assertEqual(spec.bundle_scalar_ids, ("tmp2m", "prate", "dswrf", "orog"))
         self.assertTrue(spec.averaged_precipitation)
         self.assertEqual(spec.optional_at_analysis, ("prate_ave",))
         with self.assertRaises(DownloadError):

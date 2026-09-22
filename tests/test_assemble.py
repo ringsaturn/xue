@@ -75,7 +75,7 @@ class BundleGroupTests(unittest.TestCase):
                 matrix = assemble.bundle_group_matrix(source, 100)
                 self.assertFalse(any(entry["video"] for entry in matrix))
         matrix = assemble.bundle_group_matrix(source_spec("sflux"), 100)
-        self.assertEqual([entry["slug"] for entry in matrix], ["tmp2m-prate", "dswrf", "wind10m"])
+        self.assertEqual([entry["slug"] for entry in matrix], ["tmp2m-prate", "dswrf", "orog", "wind10m"])
         self.assertFalse(any(entry["eccodes"] for entry in matrix), "sflux repacks nothing")
 
     def test_a_bundle_absent_from_the_analysis_never_builds_alone(self) -> None:
@@ -152,7 +152,7 @@ class MergePartialManifestTests(unittest.TestCase):
 
     def test_parts_merge_in_publication_order(self) -> None:
         merged = assemble.merge_partial_manifests(
-            [_part(self.source, ["wind10m", "prate"]), _part(self.source, ["dswrf"]), _part(self.source, ["tmp2m"])],
+            [_part(self.source, ["wind10m", "prate"]), _part(self.source, ["dswrf", "orog"]), _part(self.source, ["tmp2m"])],
             source=self.source,
             expected_hours=240,
         )
@@ -181,7 +181,7 @@ class MergePartialManifestTests(unittest.TestCase):
             }
         ]
         merged = assemble.merge_partial_manifests(
-            [_part(self.source, ["wind10m", "prate", "dswrf"]), with_store],
+            [_part(self.source, ["wind10m", "prate", "dswrf", "orog"]), with_store],
             source=self.source,
             expected_hours=240,
         )
@@ -215,7 +215,7 @@ class MergePartialManifestTests(unittest.TestCase):
             require_core_variables=False,
         )
         merged = assemble.merge_partial_manifests(
-            [_part(self.source, ["wind10m", "prate", "dswrf"]), part],
+            [_part(self.source, ["wind10m", "prate", "dswrf", "orog"]), part],
             source=self.source,
             expected_hours=240,
         )
@@ -227,7 +227,7 @@ class MergePartialManifestTests(unittest.TestCase):
         self.assertEqual(assemble._delivery_bytes(_entry("prate")), 10)
 
     def test_a_missing_bundle_is_an_error_not_a_shorter_run(self) -> None:
-        with self.assertRaisesRegex(ManifestError, "missing \\['dswrf'\\]"):
+        with self.assertRaisesRegex(ManifestError, "missing \\['dswrf', 'orog'\\]"):
             assemble.merge_partial_manifests(
                 [_part(self.source, ["tmp2m", "prate"]), _part(self.source, ["wind10m"])],
                 source=self.source,
@@ -270,7 +270,7 @@ class MergePartialManifestTests(unittest.TestCase):
         # one part brings dswrf and rebuilds prate. The result is the
         # manifest a whole build writes today: the live entries kept, the
         # part's entry winning for prate, the retired one dropped.
-        live = _part(self.source, ["tmp2m", "prate", "wind10m"])
+        live = _part(self.source, ["tmp2m", "prate", "wind10m", "orog"])
         live["bundles"].append(_entry("retired"))
         live["bundles"][1]["crc32"] = "11111111"
         part = _part(self.source, ["dswrf", "prate"])
@@ -278,13 +278,13 @@ class MergePartialManifestTests(unittest.TestCase):
         self.assertEqual([bundle["variable"] for bundle in merged["bundles"]], list(published_bundle_ids(self.source)))
         self.assertEqual(merged["bundles"][1]["crc32"], "0badf00d", "the part replaces the live entry")
         whole = assemble.merge_partial_manifests(
-            [_part(self.source, ["tmp2m", "prate", "dswrf", "wind10m"])], source=self.source, expected_hours=240
+            [_part(self.source, ["tmp2m", "prate", "dswrf", "wind10m", "orog"])], source=self.source, expected_hours=240
         )
         self.assertEqual(merged, whole)
 
     def test_a_top_up_still_needs_every_bundle(self) -> None:
         live = _part(self.source, ["tmp2m", "prate"])
-        with self.assertRaisesRegex(ManifestError, "missing \\['wind10m'\\]"):
+        with self.assertRaisesRegex(ManifestError, "missing \\['orog', 'wind10m'\\]"):
             assemble.merge_partial_manifests([_part(self.source, ["dswrf"])], source=self.source, expected_hours=240, base=live)
 
     def test_a_top_up_onto_another_run_is_refused(self) -> None:

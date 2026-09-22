@@ -59,7 +59,7 @@ FIXTURE_FRAMES = [FIXTURES / "ecmwf.2026091212.f000.crop.grib2", FIXTURES / "ecm
 ECMWF = source_spec("ecmwf")
 GFS = source_spec("gfs")
 # The bundles this widening added to the ECMWF set, in publication order.
-ADDED = ("gust", "tcdc", "cape", "dpt2m", "vvel850", "vvel700", "vvel500", "thetae850", "tmpsfc", "icetk", "htsgw", "perpw", "wave")
+ADDED = ("gust", "tcdc", "cape", "dpt2m", "vvel850", "vvel700", "vvel500", "thetae850", "tmpsfc", "icetk", "htsgw", "perpw", "wave", "orog")
 
 requires_gdalinfo = unittest.skipUnless(shutil.which("gdalinfo") is not None, "gdalinfo is not on PATH")
 
@@ -76,7 +76,7 @@ class SourceRegistryTests(unittest.TestCase):
         for bundle_id in ("lcdc", "mcdc", "hcdc", "vis", "icec", "aptmp2m"):
             self.assertIn(bundle_id, gfs)
             self.assertNotIn(bundle_id, ecmwf)
-        self.assertEqual(len(ecmwf), 50)
+        self.assertEqual(len(ecmwf), 51)
 
     def test_every_added_input_names_its_ecmwf_record(self) -> None:
         for variable_id in ECMWF.input_variable_ids:
@@ -157,14 +157,19 @@ class FetchTests(unittest.TestCase):
 
 class MatcherTests(unittest.TestCase):
     def test_the_header_index_finds_every_input_in_source_order(self) -> None:
-        for path, expected in zip(FIXTURE_FRAMES, (57, 58)):
-            frames = grib2.inspect_grib_fast(path, ECMWF.input_variable_ids, optional_ids=ECMWF.optional_at_analysis)
+        optional = ECMWF.optional_at_analysis + ("orog",)
+        for path, expected in zip(FIXTURE_FRAMES, (58, 58)):
+            frames = grib2.inspect_grib_fast(path, ECMWF.input_variable_ids, optional_ids=optional)
             self.assertEqual(len(frames), expected, path.name)
             present = [variable_id for variable_id in ECMWF.input_variable_ids if variable_id in frames]
             self.assertEqual([frames[variable_id].band for variable_id in present], list(range(1, expected + 1)))
-        analysis, step = (grib2.inspect_grib_fast(path, ECMWF.input_variable_ids, optional_ids=("gust",)) for path in FIXTURE_FRAMES)
+        analysis, step = (grib2.inspect_grib_fast(path, ECMWF.input_variable_ids, optional_ids=optional) for path in FIXTURE_FRAMES)
         self.assertNotIn("gust", analysis)
         self.assertEqual(step["gust"].lead_seconds, 3 * 3600)
+        # The orography is the analysis's alone on this source; ECMWF writes
+        # no surface geopotential at a lead time.
+        self.assertIn("orog", analysis)
+        self.assertNotIn("orog", step)
         # The alternates' own units, the aliases' the registry's.
         self.assertEqual(step["tcdc"].unit, "-")
         self.assertEqual(step["gust"].unit, "m/s")
@@ -177,7 +182,7 @@ class MatcherTests(unittest.TestCase):
 
     def test_the_records_are_what_the_alternates_say(self) -> None:
         by_band = {message.band: message for message in grib2.index_messages(FIXTURE_FRAMES[1])}
-        frames = grib2.inspect_grib_fast(FIXTURE_FRAMES[1], ECMWF.input_variable_ids)
+        frames = grib2.inspect_grib_fast(FIXTURE_FRAMES[1], ECMWF.input_variable_ids, optional_ids=("orog",))
         gust = by_band[frames["gust"].band]
         self.assertEqual((gust.discipline, gust.parameter_category, gust.parameter_number), (0, 2, 22))
         self.assertEqual((gust.level_type, gust.level_value, gust.statistical_process), (103, 10.0, 2))
@@ -194,9 +199,10 @@ class MatcherTests(unittest.TestCase):
     @requires_gdalinfo
     def test_gdalinfo_agrees_with_the_header_index(self) -> None:
         with mock.patch.dict(os.environ, {"XUE_ENCODER": "python"}):
+            optional = ECMWF.optional_at_analysis + ("orog",)
             for path in FIXTURE_FRAMES:
-                fast = grib2.inspect_grib_fast(path, ECMWF.input_variable_ids, optional_ids=ECMWF.optional_at_analysis)
-                slow = inspect_grib_multi(path, ECMWF.input_variable_ids, optional_ids=ECMWF.optional_at_analysis)
+                fast = grib2.inspect_grib_fast(path, ECMWF.input_variable_ids, optional_ids=optional)
+                slow = inspect_grib_multi(path, ECMWF.input_variable_ids, optional_ids=optional)
                 self.assertEqual(set(fast), set(slow), path.name)
                 for variable_id, frame in fast.items():
                     self.assertEqual(frame, slow[variable_id], f"{path.name} {variable_id}")

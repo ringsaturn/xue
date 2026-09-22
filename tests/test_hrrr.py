@@ -137,12 +137,13 @@ class SourceRegistryTests(unittest.TestCase):
         self.assertEqual(published[:2], ("tmp2m", "prate"))
         self.assertIn("prmsl", published)
         self.assertIn("cref", published)
+        self.assertIn("orog", published)
         self.assertEqual(published[-4:], ("wind10m", "wind925", "wind850", "wind250"))
         # What the surface file does not carry is not listed.
         for absent in ("hgt250", "rh850", "spfh850", "aptmp2m", "thetae850", "qflux850", "tmpsfc"):
             self.assertNotIn(absent, published, absent)
         # The fixture carries every input, in source order.
-        self.assertEqual(len(HRRR.input_variable_ids), 26)
+        self.assertEqual(len(HRRR.input_variable_ids), 27)
 
 
 class CycleTests(unittest.TestCase):
@@ -260,7 +261,7 @@ class RecordMatchingTests(unittest.TestCase):
     def test_every_input_is_found_in_the_fixture_both_ways(self) -> None:
         fast = grib2.inspect_grib_fast(FIXTURE, HRRR.input_variable_ids)
         self.assertEqual(tuple(fast), HRRR.input_variable_ids)
-        self.assertEqual([frame.band for frame in fast.values()], list(range(1, 27)))
+        self.assertEqual([frame.band for frame in fast.values()], list(range(1, 28)))
         self.assertEqual({frame.lead_seconds for frame in fast.values()}, {0})
         with mock.patch.dict(os.environ, {"XUE_ENCODER": "python"}):
             if shutil.which("gdalinfo") is None:

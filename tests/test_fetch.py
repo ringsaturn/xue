@@ -28,6 +28,7 @@ from xuebuild.fetch import (
 from xuebuild.idx import ByteRange
 from xuebuild.model import GfsRun
 from xuebuild.sources import source_spec
+from xuebuild.variables import variable_spec
 
 
 class _RangeHandler(BaseHTTPRequestHandler):
@@ -158,10 +159,16 @@ class FetchTests(unittest.TestCase):
         ):
             payload = _download_ecmwf_payload(run, 3, source_spec("ecmwf"))
 
-        # Every input, the wave family's from its own stream, all from the
-        # mirror the frame settled on: the `oper` index of the throttled
-        # mirror, then that mirror's `oper` and `wave` indexes.
-        self.assertEqual(payload, b"x" * len(source_spec("ecmwf").input_variable_ids))
+        # Every input but the analysis-only orography, the wave family's from
+        # its own stream, all from the mirror the frame settled on: the
+        # `oper` index of the throttled mirror, then that mirror's `oper`
+        # and `wave` indexes.
+        fetched = [
+            variable_id
+            for variable_id in source_spec("ecmwf").input_variable_ids
+            if not variable_spec(variable_id).static
+        ]
+        self.assertEqual(payload, b"x" * len(fetched))
         self.assertEqual(len(requested_indexes), 3)
         self.assertTrue(requested_indexes[1].endswith("/oper/20260815000000-3h-oper-fc.index"))
         self.assertTrue(requested_indexes[2].endswith("/wave/20260815000000-3h-wave-fc.index"))
