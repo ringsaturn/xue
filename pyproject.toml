@@ -28,8 +28,10 @@ dependencies = [
     # source table must match sources.py (a wheel that publishes a different
     # bundle set refuses to build), and 0.22 is the first wheel whose GFS
     # and ECMWF tables publish the height, temperature, humidity and wind
-    # on all eight registered isobaric surfaces.
-    "xuepy>=0.25,<0.26",
+    # on all eight registered isobaric surfaces. 0.26 adds the precipitable
+    # water, the convective inhibition, the planetary boundary layer height,
+    # the derived categorical precipitation type and the 100 m wind.
+    "xuepy>=0.26,<0.27",
 ]
 
 [project.scripts]
