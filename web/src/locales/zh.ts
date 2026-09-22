@@ -131,6 +131,7 @@ export const zh: Record<MessageKey, string> = {
   creditsAirport: "机场 METAR 与 TAF · 各国气象部门经 NOAA/NWS 航空气象中心转发",
   creditsRadar: "雷达拼图",
   creditsBasemap: "底图 · © OPENSTREETMAP 贡献者",
+  creditsTerrain: "地形晕渲 · © MAPTERHORN · 高程数据来源一览",
   creditsCode: "源代码 · RINGSATURN/XUE",
   caseTag: "个例",
   runCycle: "模式周期",

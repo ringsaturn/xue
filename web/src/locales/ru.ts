@@ -136,6 +136,7 @@ export const ru: Record<MessageKey, string> = {
   creditsAirport: "METAR И TAF АЭРОПОРТОВ · МЕТЕОСЛУЖБЫ МИРА ЧЕРЕЗ NOAA/NWS AWC",
   creditsRadar: "РАДАРНАЯ МОЗАИКА",
   creditsBasemap: "ПОДЛОЖКА · © УЧАСТНИКИ OPENSTREETMAP",
+  creditsTerrain: "РЕЛЬЕФ · © MAPTERHORN · ИСТОЧНИКИ ДАННЫХ О ВЫСОТАХ",
   creditsCode: "ИСХОДНЫЙ КОД · RINGSATURN/XUE",
   caseTag: "СЛУЧАЙ",
   runCycle: "Исходный срок",

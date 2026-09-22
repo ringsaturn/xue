@@ -136,6 +136,7 @@ export const ko: Record<MessageKey, string> = {
   creditsAirport: "공항 METAR·TAF · 각국 기상기관 (NOAA/NWS AWC 경유)",
   creditsRadar: "레이더 합성도",
   creditsBasemap: "배경지도 · © OPENSTREETMAP 기여자",
+  creditsTerrain: "지형 음영 · © MAPTERHORN · 고도 데이터 출처 목록",
   creditsCode: "소스 코드 · RINGSATURN/XUE",
   caseTag: "사례",
   runCycle: "모델 초기시각",

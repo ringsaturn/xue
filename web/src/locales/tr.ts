@@ -137,6 +137,7 @@ export const tr: Record<MessageKey, string> = {
   creditsAirport: "HAVALİMANI METAR VE TAF · DÜNYA METEOROLOJİ SERVİSLERİ, NOAA/NWS AWC ÜZERİNDEN",
   creditsRadar: "RADAR MOZAİĞİ",
   creditsBasemap: "ALTLIK HARİTA · © OPENSTREETMAP KATKIDA BULUNANLAR",
+  creditsTerrain: "KABARTMA · © MAPTERHORN · YÜKSEKLİK VERİSİ KAYNAKLARI",
   creditsCode: "KAYNAK KODU · RINGSATURN/XUE",
   caseTag: "VAKA",
   runCycle: "Model koşusu",

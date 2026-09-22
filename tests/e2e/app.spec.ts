@@ -8,8 +8,12 @@ import { withoutStores } from "./artifacts";
 // 127.0.0.1 every tile request dies on CORS — and a map whose tiles never
 // settle occasionally never fires "load", which is what gates initialize().
 // Empty tiles keep the basemap (and the network) out of the tests entirely.
+// The relief comes off a third-party host too, and answers publicly, so it
+// is stubbed the same way: no test should depend on its bytes, and a missing
+// DEM only means the hillshade paints nothing.
 test.beforeEach(async ({ page }) => {
   await page.route("**/api.protomaps.com/**", (route) => route.fulfill({ status: 204, body: "" }));
+  await page.route("**/tiles.mapterhorn.com/**", (route) => route.fulfill({ status: 204, body: "" }));
 });
 
 const TMP2M_FIXTURE = readFileSync(

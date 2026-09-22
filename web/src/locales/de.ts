@@ -134,6 +134,7 @@ export const de: Record<MessageKey, string> = {
   creditsAirport: "FLUGHAFEN-METAR & TAF · WETTERDIENSTE WELTWEIT ÜBER NOAA/NWS AWC",
   creditsRadar: "RADARKOMPOSIT",
   creditsBasemap: "BASISKARTE · © OPENSTREETMAP-MITWIRKENDE",
+  creditsTerrain: "GELÄNDERELIEF · © MAPTERHORN · HÖHENDATEN-QUELLEN",
   creditsCode: "QUELLCODE · RINGSATURN/XUE",
   caseTag: "FALL",
   runCycle: "Modelllauf",

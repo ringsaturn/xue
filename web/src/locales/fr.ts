@@ -134,6 +134,7 @@ export const fr: Record<MessageKey, string> = {
   creditsAirport: "METAR & TAF D'AÉROPORTS · SERVICES MÉTÉO DU MONDE VIA NOAA/NWS AWC",
   creditsRadar: "MOSAÏQUE RADAR",
   creditsBasemap: "FOND DE CARTE · © CONTRIBUTEURS OPENSTREETMAP",
+  creditsTerrain: "RELIEF · © MAPTERHORN · SOURCES DES DONNÉES D'ÉLÉVATION",
   creditsCode: "CODE SOURCE · RINGSATURN/XUE",
   caseTag: "CAS",
   runCycle: "Réseau du modèle",

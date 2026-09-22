@@ -253,6 +253,10 @@ export const en = {
   creditsAirport: "AIRPORT METAR & TAF · WORLD MET SERVICES VIA NOAA/NWS AWC",
   creditsRadar: "RADAR MOSAIC",
   creditsBasemap: "BASEMAP · © OPENSTREETMAP CONTRIBUTORS",
+  /** The relief under the fields. Mapterhorn asks for the project to be
+   * named; the elevation models behind each region are far too many to list
+   * here, so the row links to Mapterhorn's own attribution page, which does. */
+  creditsTerrain: "TERRAIN RELIEF · © MAPTERHORN · ELEVATION MODEL SOURCES",
   creditsCode: "SOURCE CODE · RINGSATURN/XUE",
   caseTag: "CASE",
   runCycle: "Model run",

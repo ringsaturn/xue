@@ -131,6 +131,7 @@ export const ja: Record<MessageKey, string> = {
   creditsAirport: "空港 METAR・TAF · 各国気象機関（NOAA/NWS AWC 経由）",
   creditsRadar: "レーダー合成図",
   creditsBasemap: "ベースマップ · © OPENSTREETMAP 貢献者",
+  creditsTerrain: "地形陰影 · © MAPTERHORN · 標高データ出典一覧",
   creditsCode: "ソースコード · RINGSATURN/XUE",
   caseTag: "事例",
   runCycle: "初期時刻",

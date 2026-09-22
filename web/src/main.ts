@@ -584,6 +584,11 @@ function applyBasemapTheme(): void {
     map.setPaintProperty("background", "background-color", theme.background ?? theme.ocean);
   if (map.getLayer("water")) map.setPaintProperty("water", "fill-color", theme.ocean);
   if (map.getLayer("earth")) map.setPaintProperty("earth", "fill-color", theme.land);
+  if (map.getLayer(TERRAIN_LAYER)) {
+    for (const [name, value] of Object.entries(hillshadePaint(darkGround))) {
+      map.setPaintProperty(TERRAIN_LAYER, name as PaintName, value as PaintValue);
+    }
+  }
   applyBasemapInk(darkGround);
   tcLayers?.setInk(darkGround);
   stationLayers?.setInk(darkGround);
@@ -653,9 +658,55 @@ const PROTOMAPS_KEY = "249bb192fefe0a77";
 // object's type from the map options that consume it.
 type BasemapStyle = Exclude<MapOptions["style"], string | undefined>;
 type LineLayer = Extract<BasemapStyle["layers"][number], { type: "line" }>;
+type HillshadeLayer = Extract<BasemapStyle["layers"][number], { type: "hillshade" }>;
+type HillshadePaint = NonNullable<HillshadeLayer["paint"]>;
+
+/** Mapterhorn's relief, drawn as a hillshade under the fields.
+ *
+ * The tiles are Terrarium-encoded 512 px WebP, 30 m global to z12 with finer
+ * archives over part of the world. They are served with
+ * `Access-Control-Allow-Origin: *` off Cloudflare, so the page reads them
+ * directly and no proxy sits in front.
+ *
+ * `maxzoom` is pinned to the global archive's own ceiling rather than left to
+ * the TileJSON, which names none: without it the map asks for z13 and deeper
+ * at every viewport, and while the Alps and Japan answer, most of the world —
+ * China included — returns 404. Past the ceiling MapLibre overzooms the z12
+ * tile, which costs sharpness and no requests. */
+const TERRAIN_SOURCE = "mapterhorn";
+const TERRAIN_LAYER = "hillshade";
+const TERRAIN_MAX_ZOOM = 12;
+const TERRAIN_TILES = ["https://tiles.mapterhorn.com/{z}/{x}/{y}.webp"];
+const TERRAIN_ATTRIBUTION = "<a href='https://mapterhorn.com/attribution/'>© Mapterhorn</a>";
+
+/** The relief's ink, per ground. On paper the shadow is the chart's own warm
+ * brown and the highlight is paper white; on the dark grounds both steps hug
+ * the land tone, so the relief reads as texture rather than as a light
+ * source. The alpha lives in the colors — MapLibre mixes the pair by aspect
+ * and the shade's alpha scales the result — which keeps the field and the
+ * place labels legible where they cross a slope. */
+const HILLSHADE_INK: Record<"light" | "dark", HillshadePaint> = {
+  light: {
+    "hillshade-shadow-color": "rgba(107, 92, 66, 0.5)",
+    "hillshade-highlight-color": "rgba(255, 255, 255, 0.45)",
+    "hillshade-accent-color": "rgba(138, 122, 92, 0.3)",
+    "hillshade-exaggeration": 0.35,
+  },
+  dark: {
+    "hillshade-shadow-color": "rgba(0, 0, 0, 0.55)",
+    "hillshade-highlight-color": "rgba(143, 168, 191, 0.38)",
+    "hillshade-accent-color": "rgba(0, 0, 0, 0.3)",
+    "hillshade-exaggeration": 0.25,
+  },
+};
+
+function hillshadePaint(darkGround: boolean): HillshadePaint {
+  return HILLSHADE_INK[darkGround ? "dark" : "light"];
+}
 
 function buildBasemapStyle(): BasemapStyle {
   const theme = currentBasemapTheme();
+  const darkGround = luminance(theme.ocean) < 0.5;
   const flavorName = isDark ? "dark" : LIGHT_FLAVOR;
   const flavor = {
     ...namedFlavor(flavorName),
@@ -676,17 +727,50 @@ function buildBasemapStyle(): BasemapStyle {
         maxzoom: 15,
         attribution: "Protomaps © OpenStreetMap contributors",
       },
+      // The relief is inline too, and for the same reason: a TileJSON round
+      // trip in front of the first paint buys nothing the constants above
+      // do not already say.
+      [TERRAIN_SOURCE]: {
+        type: "raster-dem",
+        tiles: TERRAIN_TILES,
+        encoding: "terrarium",
+        maxzoom: TERRAIN_MAX_ZOOM,
+        attribution: TERRAIN_ATTRIBUTION,
+      },
     },
     // The flavor's landcover layer repaints the whole landmass in its own
     // near-black tones, defeating the per-variable earth color — drop it so
     // land stays a flat themed slate under the data.
     // Basemap labels follow the UI locale.
     layers: withCoastline(
-      quietedUnderData(
-        basemapLayers("protomaps", flavor, { lang: basemapLang }).filter((layer) => layer.id !== "landcover"),
+      withHillshade(
+        quietedUnderData(
+          basemapLayers("protomaps", flavor, { lang: basemapLang }).filter((layer) => layer.id !== "landcover"),
+        ),
+        hillshadePaint(darkGround),
       ),
     ),
   };
+}
+
+/** The relief, inserted just above the land fill. Everything the flavor puts
+ * over the ground — landuse, waterways, roads and their casings, boundaries,
+ * labels — then draws on top of it, and the forecast layers insert above all
+ * of those (before the coastline). Putting it lower would bury it under the
+ * opaque `earth` fill; putting it higher would run it over the roads. */
+function withHillshade(
+  layers: BasemapStyle["layers"],
+  paint: HillshadePaint,
+): BasemapStyle["layers"] {
+  const hillshade: BasemapStyle["layers"][number] = {
+    id: TERRAIN_LAYER,
+    type: "hillshade",
+    source: TERRAIN_SOURCE,
+    paint,
+  };
+  const at = layers.findIndex((layer) => layer.id === "earth");
+  if (at < 0) throw new Error("basemap style has no earth layer");
+  return [...layers.slice(0, at + 1), hillshade, ...layers.slice(at + 1)];
 }
 
 /** The flavor's street-level detail, toned down so a field stays the
