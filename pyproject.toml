@@ -30,8 +30,9 @@ dependencies = [
     # and ECMWF tables publish the height, temperature, humidity and wind
     # on all eight registered isobaric surfaces. 0.26 adds the precipitable
     # water, the convective inhibition, the planetary boundary layer height,
-    # the derived categorical precipitation type and the 100 m wind.
-    "xuepy>=0.26,<0.27",
+    # the derived categorical precipitation type and the 100 m wind. 0.27
+    # adds the model orography, a static one-frame bundle.
+    "xuepy>=0.27,<0.28",
 ]
 
 [project.scripts]
