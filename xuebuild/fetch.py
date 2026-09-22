@@ -2085,6 +2085,18 @@ def fetch_frame(
 
     spec = source_spec(model)
     frame_variable_ids = _frame_variable_ids(spec, forecast_hour, input_ids)
+    if not frame_variable_ids:
+        # Every requested input is static (read at the analysis alone) or
+        # optional there, so this frame carries nothing to fetch. A group
+        # that could only ever fetch one frame is not a group the converter
+        # can key an axis by; `assemble.bundle_groups` never emits one, and
+        # asking for it directly is an error rather than a file of no
+        # records a repack or an inspection would then fail on.
+        requested = ", ".join(input_ids) if input_ids is not None else "the source's inputs"
+        raise DownloadError(
+            f"{spec.manifest_model} f{forecast_hour:03d} carries none of the requested records "
+            f"({requested}): they are static or optional at the analysis"
+        )
     output = destination / f"{spec.id}.{run.id}.f{forecast_hour:03d}.grib2"
     if output.exists() and not force:
         try:

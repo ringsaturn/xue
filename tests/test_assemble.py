@@ -55,7 +55,12 @@ class BundleGroupTests(unittest.TestCase):
     def test_enough_groups_means_one_bundle_each(self) -> None:
         source = source_spec("gfs")
         groups = assemble.bundle_groups(source, len(published_bundle_ids(source)) + 5)
-        self.assertEqual(groups, [(bundle_id,) for bundle_id in published_bundle_ids(source)])
+        # Every bundle is its own group, save orog: the fetch reads it at the
+        # analysis alone, so it cannot key a run axis and shares a group with
+        # the lightest bundle present in every frame.
+        mine = list(published_bundle_ids(source))
+        anchor = mine.index("prmsl")
+        self.assertEqual(groups, [(b,) for b in mine[:anchor]] + [("prmsl", "orog")] + [(b,) for b in mine[anchor + 1 :] if b != "orog"])
 
     def test_the_matrix_flags_the_video_jobs(self) -> None:
         matrix = assemble.bundle_group_matrix(source_spec("gfs"), 100)
@@ -75,7 +80,7 @@ class BundleGroupTests(unittest.TestCase):
                 matrix = assemble.bundle_group_matrix(source, 100)
                 self.assertFalse(any(entry["video"] for entry in matrix))
         matrix = assemble.bundle_group_matrix(source_spec("sflux"), 100)
-        self.assertEqual([entry["slug"] for entry in matrix], ["tmp2m-prate", "dswrf", "orog", "wind10m"])
+        self.assertEqual([entry["slug"] for entry in matrix], ["tmp2m-prate", "dswrf-orog", "wind10m"])
         self.assertFalse(any(entry["eccodes"] for entry in matrix), "sflux repacks nothing")
 
     def test_a_bundle_absent_from_the_analysis_never_builds_alone(self) -> None:
@@ -96,6 +101,32 @@ class BundleGroupTests(unittest.TestCase):
         # GFS has no analysis-optional input, so nothing changes there.
         gfs = source_spec("gfs")
         self.assertEqual(assemble.bundle_groups(gfs, 100, ("prate",)), [("prate",)])
+
+    def test_the_static_terrain_never_builds_alone(self) -> None:
+        # orog is fetched at the analysis alone (`VariableSpec.static`), so a
+        # job that builds it alone would fetch one frame and leave the
+        # converter with no variable present in every file to key the axis by
+        # (the 2026-09-22 06Z aifs publish failed exactly so: it fetched the
+        # analysis and then repacked empty frames). It shares a job with the
+        # lightest bundle present in every frame, rebuilt byte-identical
+        # beside it on a top-up.
+        for model in ("gfs", "sflux", "ecmwf", "aifs", "hrrr"):
+            with self.subTest(model=model):
+                source = source_spec(model)
+                for max_groups in (1, 2, 3, 4, 100):
+                    for group in assemble.bundle_groups(source, max_groups):
+                        if "orog" in group:
+                            self.assertTrue(any(bundle_id != "orog" for bundle_id in group), group)
+                groups = assemble.bundle_groups(source, 100, ("orog",))
+                self.assertEqual(len(groups), 1)
+                self.assertEqual(len(groups[0]), 2)
+                self.assertIn("orog", groups[0])
+        # The companion is the lightest anchored bundle of that source, not
+        # always the same one: the pressure family's sea level pressure is
+        # lightest on GFS and HRRR, the 2 m temperature on the rest.
+        self.assertEqual(assemble.bundle_groups(source_spec("gfs"), 100, ("orog",)), [("prmsl", "orog")])
+        self.assertEqual(assemble.bundle_groups(source_spec("hrrr"), 100, ("orog",)), [("prmsl", "orog")])
+        self.assertEqual(assemble.bundle_groups(source_spec("sflux"), 100, ("orog",)), [("tmp2m", "orog")])
 
     def test_no_groups_is_refused(self) -> None:
         with self.assertRaises(ManifestError):

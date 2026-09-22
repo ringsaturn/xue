@@ -180,6 +180,15 @@ class FetchTests(unittest.TestCase):
         )
         self.assertEqual(sum("-wave-fc.grib2" in url for url in requested_ranges), 3)
 
+    def test_a_frame_that_carries_none_of_the_requested_records_is_refused(self) -> None:
+        # A static field is fetched at the analysis alone, so a later frame
+        # asked for it by itself carries nothing. That is an error rather
+        # than a file of no records a repack or an inspection would fail on.
+        run = GfsRun(datetime(2026, 8, 15, 0, tzinfo=UTC))
+        with tempfile.TemporaryDirectory() as temporary:
+            with self.assertRaisesRegex(DownloadError, "static or optional"):
+                fetch_frame(run, 3, Path(temporary), model="gfs", input_ids=("orog",))
+
     def test_ecmwf_run_retries_only_the_failed_frame(self) -> None:
         run = GfsRun(datetime(2026, 8, 15, 0, tzinfo=UTC))
         attempts: list[int] = []

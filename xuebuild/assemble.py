@@ -31,6 +31,7 @@ from typing import Any
 
 from .binconvert import bundle_input_ids, published_bundle_ids, video_variable_ids
 from .errors import ManifestError
+from .variables import variable_spec
 from .manifest import (
     _parse_time,
     build_bin_manifest,
@@ -128,12 +129,14 @@ def bundle_groups(
     does. With ``max_groups`` at or above the bundle count every bundle is
     its own group — except one that could not build on its own: a bundle
     whose every input is absent from the analysis file (sflux ``prate``,
-    whose ``prate_ave`` has no f000 record) leaves a job fetching nothing
-    for f000 and a converter with no variable to key the frames by, so such
-    a bundle always shares a group with one that is present at f000 — the
-    lightest such group, or, when nothing requested qualifies (a top-up of
-    that bundle alone), the lightest such bundle the source publishes,
-    rebuilt byte-identical beside it.
+    whose ``prate_ave`` has no f000 record) or present there alone (the
+    static ``orog``, which the fetch reads at the analysis and nowhere else)
+    leaves a job fetching nothing for a later frame and a converter with no
+    variable to key the frames by, so such a bundle always shares a group
+    with one that is present in every frame — the lightest such group, or,
+    when nothing requested qualifies (a top-up of that bundle alone), the
+    lightest such bundle the source publishes, rebuilt byte-identical beside
+    it.
     """
     if max_groups < 1:
         raise ManifestError("a run needs at least one bundle group")
@@ -150,8 +153,15 @@ def bundle_groups(
         return _bundle_weight(source, bundle_id)
 
     def anchored(bundle_id: str) -> bool:
+        # A group needs a variable present in every fetched frame to key the
+        # run's axis: an input that is neither optional at the analysis nor
+        # static. A static field (the terrain) is fetched at the analysis
+        # alone, so it cannot anchor a group — a top-up of `orog` by itself
+        # would fetch nothing past f000 and leave the converter with no
+        # frames to read.
         return any(
-            input_id not in source.optional_at_analysis for input_id in bundle_input_ids(source, bundle_id)
+            input_id not in source.optional_at_analysis and not variable_spec(input_id).static
+            for input_id in bundle_input_ids(source, bundle_id)
         )
 
     if bundle_ids and not any(anchored(bundle_id) for bundle_id in bundle_ids):
