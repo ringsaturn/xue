@@ -821,7 +821,7 @@ pub fn derive_theta_e(temperature: &[f64], specific_humidity: &[f64], level_hpa:
 /// The categorical precipitation type on the ground, from the four 0/1 flags
 /// pgrb2 carries: WMO code table 4.201's value for each (1 rain, 3 freezing
 /// rain, 5 snow, 8 ice pellets), 0 where none is set. The flags are combined
-/// in [`PTYPE_CODES`] order, each setting the code where it is non-zero.
+/// in `PTYPE_CODES` order, each setting the code where it is non-zero.
 /// Comparisons and selects only, in f64 — exactly what `derive_ptype` in
 /// `xuebuild/binconvert.py` does, so the two encoders stay byte-identical on
 /// a field neither reads from a record.
