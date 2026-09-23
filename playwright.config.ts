@@ -9,6 +9,13 @@ export default defineConfig({
   // runner tips it over. The bound is what a hung test costs, not what a
   // passing one takes, so give it twice the measured worst case.
   timeout: 60_000,
+  // Playwright's five-second default expectation is a green local run's
+  // budget, not a loaded CI runner's: the store- and bundle-readiness probes
+  // here wait on a WASM decode under software GL, and a busy four-core runner
+  // blew past five seconds for a session that was merely slow, not stuck. A
+  // failed expectation is still a failure; it just no longer costs a retry
+  // when the only problem was the runner.
+  expect: { timeout: 15_000 },
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   // These tests drive a WebGL2 map and a decode worker, so two of them on a

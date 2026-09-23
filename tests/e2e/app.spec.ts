@@ -999,7 +999,11 @@ test("the credit mark opens the sources sheet, and the line folds into it on a p
 
 test("a phone-sized view buffers its own tiles and says so", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "mobile", "the phone viewport is the narrow one");
-  test.setTimeout(180_000);
+  // The viewport residency is a WASM decode of the phone's tiles under
+  // software GL: ~90 s on a quiet runner, and the 120 s it used to allow was
+  // inside the spread, so a loaded runner failed a session that was only
+  // slow. Give it the room the desktop residency test has.
+  test.setTimeout(240_000);
   const counters: RangeCounters = { ranged: 0, full: 0, lengths: [] };
   await routeManifest(page);
   await routeBundleWithRanges(page, counters);
@@ -1008,7 +1012,7 @@ test("a phone-sized view buffers its own tiles and says so", async ({ page }, te
   // The phone shows a fraction of the world, so the session never fetches
   // the rest of the grid — and the card reports what it did buffer rather
   // than stalling short of "fully buffered".
-  await expect(page.locator("#preload-state")).toHaveText("Viewport fully buffered", { timeout: 120_000 });
+  await expect(page.locator("#preload-state")).toHaveText("Viewport fully buffered", { timeout: 180_000 });
   await expect(page.locator("#preload-percent")).not.toHaveText("100%");
   await expect(page.locator("#preload-format")).toContainText("Xue");
   expect(counters.ranged).toBeGreaterThan(1);
