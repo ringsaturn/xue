@@ -478,14 +478,17 @@ live-airport-index:
 	$(S3) cp "s3://$(R2_BUCKET)/$(R2_PREFIX)/$$path" "web/public/data/$$path" --only-show-errors; \
 	printf '%s' "$$pointer" > web/public/data/latest-airport.json; \
 	history=$$(jq -r .history.path "web/public/data/$$path"); \
-	$(S3) cp "s3://$(R2_BUCKET)/$(R2_PREFIX)/$$directory/$$history" "web/public/data/$$directory/$$history" \
-		--no-progress --only-show-errors; \
-	crc=$$($(PYTHON) -c "import sys, zlib; print(f'{zlib.crc32(open(sys.argv[1], \"rb\").read()) & 0xFFFFFFFF:08x}')" "web/public/data/$$directory/$$history"); \
 	named=$$(jq -r .history.crc32 "web/public/data/$$path"); \
-	[ "$$crc" = "$$named" ] || { echo "the live $$history is CRC32 $$crc but its index says $$named"; exit 1; }; \
-	stations=$$(jq -r '.stations | length' "web/public/data/$$path"); \
-	bytes=$$(jq -r .history.byteLength "web/public/data/$$path"); \
-	echo "live airport round: $$path ($$stations stations, $$bytes bytes of history)"
+	if $(S3) cp "s3://$(R2_BUCKET)/$(R2_PREFIX)/$$directory/$$history" "web/public/data/$$directory/$$history" --no-progress --only-show-errors; then \
+		crc=$$($(PYTHON) -c "import sys, zlib; print(f'{zlib.crc32(open(sys.argv[1], \"rb\").read()) & 0xFFFFFFFF:08x}')" "web/public/data/$$directory/$$history"); \
+		[ "$$crc" = "$$named" ] || { echo "the live $$history is CRC32 $$crc but its index says $$named"; exit 1; }; \
+		stations=$$(jq -r '.stations | length' "web/public/data/$$path"); \
+		bytes=$$(jq -r .history.byteLength "web/public/data/$$path"); \
+		echo "live airport round: $$path ($$stations stations, $$bytes bytes of history)"; \
+	else \
+		rm -f "web/public/data/$$directory/$$history"; \
+		echo "warning: the live round $$path names $$history but R2 has no such object; carrying on, so the next round starts a fresh window rather than wedging the pipeline"; \
+	fi
 
 # Push the round's history file, then the index that spans it, then the
 # pointer that takes the round live — each object before the one that names
@@ -510,6 +513,15 @@ upload-r2-airport:
 		--content-type application/json --cache-control "public, max-age=31536000, immutable"; \
 	[ ! -f "$$dir/$(STAC_ITEM)" ] || $(S3) cp $$dir/$(STAC_ITEM) s3://$(R2_BUCKET)/$(R2_PREFIX)/airport.$(AIRPORT_ROUND)/$(STAC_ITEM) \
 		--no-progress $(DRY_RUN) --content-type application/geo+json --cache-control "no-cache"; \
+	[ -n "$(DRY_RUN)" ] || { \
+		history_bytes=$$(wc -c < "$$dir/$$history" | tr -d ' '); \
+		index_bytes=$$(wc -c < "$$dir/index.json" | tr -d ' '); \
+		remote_history=$$($(AWS) s3api --endpoint-url $(R2_ENDPOINT) head-object --bucket $(R2_BUCKET) --key "$(R2_PREFIX)/airport.$(AIRPORT_ROUND)/$$history" --query ContentLength --output text 2>/dev/null || true); \
+		remote_index=$$($(AWS) s3api --endpoint-url $(R2_ENDPOINT) head-object --bucket $(R2_BUCKET) --key "$(R2_PREFIX)/airport.$(AIRPORT_ROUND)/index.json" --query ContentLength --output text 2>/dev/null || true); \
+		[ "$$remote_history" = "$$history_bytes" ] || { echo "airport.$(AIRPORT_ROUND)/$$history is '$$remote_history' bytes on R2, not $$history_bytes; the pointer stays put"; exit 1; }; \
+		[ "$$remote_index" = "$$index_bytes" ] || { echo "airport.$(AIRPORT_ROUND)/index.json is '$$remote_index' bytes on R2, not $$index_bytes; the pointer stays put"; exit 1; }; \
+		echo "verified $$history ($$history_bytes bytes) and index.json ($$index_bytes bytes) on R2"; \
+	}; \
 	echo "Uploading latest-airport.json (takes airport round $(AIRPORT_ROUND) live)..."; \
 	$(S3) cp web/public/data/latest-airport.json s3://$(R2_BUCKET)/$(R2_PREFIX)/latest-airport.json --no-progress $(DRY_RUN) \
 		--content-type application/json --cache-control "no-cache"; \
