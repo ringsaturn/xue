@@ -8,6 +8,8 @@
     "build": "tsc --noEmit && vite build --config vite.config.ts",
     "preview": "vite preview --config vite.config.ts",
     "test:web": "vitest run",
+    "api:build": "esbuild api/server.ts --bundle --platform=node --format=esm --outfile=api/dist/server.mjs --log-level=warning",
+    "api": "npm run api:build && node api/dist/server.mjs",
     "measure:backends": "vitest run --config web/tooling/vitest.measure.config.ts",
     "test:e2e": "playwright test"
   },
