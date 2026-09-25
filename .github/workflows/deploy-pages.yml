@@ -17,6 +17,7 @@ on:
     branches: [main]
     paths:
       - web/**
+      - functions/**
       - rust/**
       # The build derives llms-full.txt from these documents
       # (web/tooling/discovery.ts). sitemap.xml comes from the published
@@ -81,6 +82,10 @@ jobs:
       # typecheck or build without it.
       - name: Build WASM decoder
         run: make wasm
+
+      # The API's Pages Function imports the `--target bundler` build.
+      - name: Build WASM decoder for the API
+        run: make wasm-worker
 
       # `vite build --mode deploy` points VITE_DATA_BASE_URL at the public R2
       # bucket (web/.env.deploy) and dist-deploy/ carries only the shell.

@@ -3,6 +3,7 @@
 import { createServer } from "node:http";
 
 import { handle } from "./lib/api";
+import { loadDecoder } from "./lib/wasm";
 
 const port = Number(process.env.PORT ?? 8788);
 const host = process.env.HOST ?? "127.0.0.1";
@@ -14,7 +15,7 @@ const server = createServer(async (incoming, outgoing) => {
       method: incoming.method ?? "GET",
       headers: incoming.headers as Record<string, string>,
     });
-    const response = await handle(request);
+    const response = await handle(request, { decodeChunk: await loadDecoder() });
     outgoing.statusCode = response.status;
     response.headers.forEach((value, key) => outgoing.setHeader(key, value));
     if (incoming.method === "HEAD") {

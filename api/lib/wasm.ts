@@ -1,18 +1,16 @@
-/** Loads the existing `rust/xue-wasm` decoder (`--target web`, the same
- * artifact the browser uses) into Node. The default export is wasm-bindgen's
- * init; we hand it the wasm bytes explicitly, so no `fetch`/`import.meta.url`
- * path games. */
+/** The `decodeChunk` a Node host provides, from the `--target web` wasm the
+ * browser also uses. A Worker host uses `wasm.worker.ts` instead (the
+ * `--target bundler` build), so the read path never imports a Node built-in. */
 
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import init, { decodeChunk } from "../../web/src/wasm/xue";
+import type { DecodeChunk } from "./read";
 
-export type DecodeChunkFn = typeof decodeChunk;
+let ready: Promise<DecodeChunk> | null = null;
 
-let ready: Promise<DecodeChunkFn> | null = null;
-
-export function loadDecoder(): Promise<DecodeChunkFn> {
+export function loadDecoder(): Promise<DecodeChunk> {
   ready ??= (async () => {
     const dir = resolve(process.env.XUE_WASM_DIR ?? resolve(process.cwd(), "web/src/wasm"));
     await init({ module_or_path: readFileSync(resolve(dir, "xue_bg.wasm")) });

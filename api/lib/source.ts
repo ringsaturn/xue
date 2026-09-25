@@ -7,7 +7,7 @@
  * document does not list variables; the manifest only names bundle ids. */
 
 import { fetchJson } from "./bucket";
-import { resolveRun } from "./point";
+import { resolveRun } from "./read";
 
 interface CubeVariable {
   description?: string;

@@ -4,9 +4,15 @@
 
 import { HttpError } from "./http";
 
-export const DATA_ORIGIN = normalize(
-  process.env.XUE_DATA_ORIGIN ?? "https://dataset.ringsaturn.me/xue/",
-);
+const DEFAULT_ORIGIN = "https://dataset.ringsaturn.me/xue/";
+
+/** A Node host can point this at a local build; a Worker has no `process`, so
+ * the default stands (guarded because `process` does not exist in workerd). */
+function originOverride(): string | undefined {
+  return typeof process !== "undefined" ? process.env?.XUE_DATA_ORIGIN : undefined;
+}
+
+export const DATA_ORIGIN = normalize(originOverride() ?? DEFAULT_ORIGIN);
 
 function normalize(value: string): string {
   return value.endsWith("/") ? value : `${value}/`;

@@ -78,7 +78,7 @@ AWS_REQUEST_CHECKSUM_CALCULATION ?= when_required
 AWS_RESPONSE_CHECKSUM_VALIDATION ?= when_required
 export AWS_DEFAULT_REGION AWS_REQUEST_CHECKSUM_CALCULATION AWS_RESPONSE_CHECKSUM_VALIDATION
 
-.PHONY: check install wasm test test-rust test-e2e encoder-rust encoder-rust-test encoder-wheel bench bench-video bench-lossy mvp serve format-pdf deploy-build upload-r2 upload-r2-bundles upload-r2-manifest upload-r2-stac-item check-pointer upload-r2-pointer upload-r2-stac-collection warm-r2 prune-r2 prune-r2-rounds live-run live-manifest live-window pull-r2-frames push-r2-frames prune-r2-frames pull-r2-ancillary deploy-pages deploy showcase showcase-check showcase-refresh live-showcase-catalog upload-r2-showcase tc-build live-tc-index upload-r2-tc prune-r2-tc airport-build live-airport-index upload-r2-airport prune-r2-airport sounding-build live-sounding-index upload-r2-sounding prune-r2-sounding clean
+.PHONY: check install wasm wasm-worker test test-rust test-e2e encoder-rust encoder-rust-test encoder-wheel bench bench-video bench-lossy mvp serve format-pdf deploy-build upload-r2 upload-r2-bundles upload-r2-manifest upload-r2-stac-item check-pointer upload-r2-pointer upload-r2-stac-collection warm-r2 prune-r2 prune-r2-rounds live-run live-manifest live-window pull-r2-frames push-r2-frames prune-r2-frames pull-r2-ancillary deploy-pages deploy showcase showcase-check showcase-refresh live-showcase-catalog upload-r2-showcase tc-build live-tc-index upload-r2-tc prune-r2-tc airport-build live-airport-index upload-r2-airport prune-r2-airport sounding-build live-sounding-index upload-r2-sounding prune-r2-sounding clean
 
 check:
 	$(PYTHON) scripts/check_dependencies.py
@@ -88,6 +88,13 @@ install:
 
 wasm:
 	cd rust && wasm-pack build xue-wasm --target web --out-dir ../../web/src/wasm --out-name xue
+
+# The Workers/wasm-bindgen build of the same decoder, for the API's Pages
+# Function: `--target bundler` emits a module import that wrangler turns into
+# a `WebAssembly.Module`, where `--target web`'s init would call the
+# `WebAssembly.instantiate(buffer)` Workers forbids.
+wasm-worker:
+	cd rust && wasm-pack build xue-wasm --target bundler --out-dir ../../api/wasm-bundler --out-name xue
 
 test: test-rust
 	$(PYTHON) -m unittest discover -s tests -p 'test_*.py' -v
@@ -182,6 +189,7 @@ deploy-build:
 	rm -rf dist-deploy
 	mkdir -p dist-deploy
 	rsync -a --exclude 'data/' dist/ dist-deploy/
+	printf '%s\n' '{ "version": 1, "include": ["/api/*"], "exclude": [] }' > dist-deploy/_routes.json
 
 # Upload one run to the public R2 dataset bucket that deploy builds read from
 # (web/.env.deploy -> VITE_DATA_BASE_URL): the per-variable .xue bundles

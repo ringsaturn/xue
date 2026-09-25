@@ -4,8 +4,15 @@
 
 import { DATA_ORIGIN, fetchJson } from "./bucket";
 import { HttpError, errorResponse, json } from "./http";
-import { readPoint } from "./point";
+import { readPoint, type DecodeChunk } from "./read";
 import { readSource } from "./source";
+
+/** What a host must supply to serve the API: the wasm decoder. Node and a
+ * Worker each provide it from their own wasm build (`wasm.ts` /
+ * `wasm.worker.ts`), so nothing below imports a host-specific module. */
+export interface ApiDeps {
+  decodeChunk: DecodeChunk;
+}
 
 const OPTIONS_HEADERS = {
   "access-control-allow-origin": "*",
@@ -14,7 +21,7 @@ const OPTIONS_HEADERS = {
   "access-control-max-age": "86400",
 } as const;
 
-export async function handle(request: Request): Promise<Response> {
+export async function handle(request: Request, deps: ApiDeps): Promise<Response> {
   const url = new URL(request.url);
   const path = url.pathname.replace(/\/+$/, "") || "/";
   try {
@@ -28,7 +35,7 @@ export async function handle(request: Request): Promise<Response> {
     if (path === "/v1/catalog") return await catalog();
     const source = /^\/v1\/sources\/([^/]+)$/.exec(path);
     if (source) return await sourceDetail(source[1]!);
-    if (path === "/v1/point") return await point(url.searchParams);
+    if (path === "/v1/point") return await point(url.searchParams, deps.decodeChunk);
     throw new HttpError(404, "not_found", `no route for ${path}`);
   } catch (error) {
     return errorResponse(error);
@@ -52,7 +59,7 @@ async function sourceDetail(id: string): Promise<Response> {
   return json(summary, { cacheControl: "public, max-age=60" });
 }
 
-async function point(params: URLSearchParams): Promise<Response> {
+async function point(params: URLSearchParams, decodeChunk: DecodeChunk): Promise<Response> {
   const source = params.get("source");
   const latRaw = params.get("lat");
   const lonRaw = params.get("lon");
@@ -64,14 +71,17 @@ async function point(params: URLSearchParams): Promise<Response> {
     ?.split(",")
     .map((value) => value.trim())
     .filter(Boolean);
-  const result = await readPoint({
-    source,
-    lat: Number(latRaw),
-    lon: Number(lonRaw),
-    variables,
-    time: params.get("time") ?? undefined,
-    run: params.get("run") ?? undefined,
-  });
+  const result = await readPoint(
+    {
+      source,
+      lat: Number(latRaw),
+      lon: Number(lonRaw),
+      variables,
+      time: params.get("time") ?? undefined,
+      run: params.get("run") ?? undefined,
+    },
+    decodeChunk,
+  );
   // A `run`-addressed response is stable for that run, so it caches long; the
   // live path can change with the next cycle, so it caches briefly.
   const run = (result as { run?: string }).run;

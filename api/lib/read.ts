@@ -1,8 +1,10 @@
 /** One point's series, read straight from the published Zarr stores.
  *
  * Resolution is the published chain — Collection (`xue:pointer`) → pointer →
- * manifest — and decoding reuses `web/src/zarr/shard.ts` plus `decodeChunk`
- * from the existing wasm. No new format, no new artifact. */
+ * manifest — and decoding reuses `web/src/zarr/shard.ts` plus a `decodeChunk`
+ * supplied by the host. The decoder is a parameter, not an import, so this
+ * module is host-neutral: Node supplies the `--target web` wasm, a Worker the
+ * `--target bundler` one. No new format, no new artifact. */
 
 import {
   PREDICTOR_PREVIOUS,
@@ -20,7 +22,15 @@ import { fetchJson, fetchRange, fetchText } from "./bucket";
 import { probeCell, type ProbeCell } from "./grid";
 import { HttpError } from "./http";
 import { decodeValue, type Quantization } from "./quantize";
-import { loadDecoder } from "./wasm";
+
+/** The decoder a host provides: `decodeChunk` from `rust/xue-wasm`. */
+export type DecodeChunk = (
+  bytes: Uint8Array,
+  frames: number,
+  height: number,
+  width: number,
+  predictor: number,
+) => Uint8Array;
 
 interface Pointer {
   run: string;
@@ -186,7 +196,7 @@ async function readBundleSeries(
   variable: BundleVariable,
   cell: ProbeCell,
   indices: number[],
-  decodeChunk: Awaited<ReturnType<typeof loadDecoder>>,
+  decodeChunk: DecodeChunk,
 ): Promise<(number | null)[]> {
   const layout = parseArrayMetadata(await fetchText(`${storeBase}/${variable.id}/zarr.json?v=${crc}`));
   const tile = tileOf(layout, cell.row, cell.column);
@@ -229,7 +239,7 @@ async function readBundleSeries(
   });
 }
 
-export async function readPoint(options: ReadPointOptions): Promise<unknown> {
+export async function readPoint(options: ReadPointOptions, decodeChunk: DecodeChunk): Promise<unknown> {
   const { source, lat, lon } = options;
   if (typeof source !== "string" || source.length === 0) {
     throw new HttpError(400, "invalid_parameter", "source is required");
@@ -251,7 +261,6 @@ export async function readPoint(options: ReadPointOptions): Promise<unknown> {
     throw new HttpError(404, "no_live_run", `source ${source} publishes no bundles`);
   }
 
-  const decodeChunk = await loadDecoder();
   const variables: Record<string, unknown> = {};
   let cell: ProbeCell | null = null;
   let times: string[] | null = null;
