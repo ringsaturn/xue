@@ -18,6 +18,7 @@ on:
     paths:
       - web/**
       - functions/**
+      - api/**
       - rust/**
       # The build derives llms-full.txt from these documents
       # (web/tooling/discovery.ts). sitemap.xml comes from the published
