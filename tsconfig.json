@@ -15,6 +15,6 @@
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "types": ["vite/client", "node"]
   },
-  "include": ["web/**/*.ts", "tests/web/**/*.ts", "vite.config.ts", "playwright.config.ts"]
+  "include": ["web/**/*.ts", "tests/web/**/*.ts", "api/**/*.ts", "vite.config.ts", "playwright.config.ts"]
 }
 
