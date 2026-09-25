@@ -201,12 +201,25 @@ async function readBundleSeries(
   const layout = parseArrayMetadata(await fetchText(`${storeBase}/${variable.id}/zarr.json?v=${crc}`));
   const tile = tileOf(layout, cell.row, cell.column);
   const origin = tileOrigin(layout, tile);
+  const stride = layout.tileHeight * layout.tileWidth;
+  const cellOffset = (cell.row - origin.row) * layout.tileWidth + (cell.column - origin.column);
+
+  // One chunk holds a time chunk's frames, so group the frames by the chunk
+  // they fall in and read each chunk once — a whole-axis read is one request
+  // per time chunk, not one per frame.
+  const byTimeChunk = new Map<number, number[]>();
+  indices.forEach((frameIndex, position) => {
+    const timeChunk = Math.floor(frameIndex / layout.timeChunk);
+    const list = byTimeChunk.get(timeChunk);
+    if (list) list.push(position);
+    else byTimeChunk.set(timeChunk, [position]);
+  });
 
   // Index per shard the requested frames touch (the exporter writes one shard,
   // so this is one read; kept general for the earlier shape).
   const shards = new Map<number, (ShardIndexEntry | null)[]>();
   const needed = new Set<number>();
-  for (const index of indices) needed.add(shardOf(layout, Math.floor(index / layout.timeChunk)).shard);
+  for (const timeChunk of byTimeChunk.keys()) needed.add(shardOf(layout, timeChunk).shard);
   for (const shard of needed) {
     const bytes = await fetchRange(`${storeBase}/${variable.id}/c/${shard}/0/0?v=${crc}`, {
       suffix: shardIndexLength(layout.chunksPerShard),
@@ -214,11 +227,11 @@ async function readBundleSeries(
     shards.set(shard, parseShardIndex(bytes, layout.chunksPerShard));
   }
 
-  return await mapLimit(indices, 6, async (index) => {
-    const timeChunk = Math.floor(index / layout.timeChunk);
+  const values: (number | null)[] = new Array(indices.length).fill(null);
+  await mapLimit([...byTimeChunk.entries()], 6, async ([timeChunk, positions]) => {
     const { shard, position } = shardOf(layout, timeChunk);
     const entry = shards.get(shard)![position + tile];
-    if (!entry) return null;
+    if (!entry) return;
     const payload = await fetchRange(`${storeBase}/${variable.id}/c/${shard}/0/0?v=${crc}`, {
       offset: entry.offset,
       length: entry.length,
@@ -230,13 +243,12 @@ async function readBundleSeries(
       layout.tileWidth,
       layout.delta ? PREDICTOR_PREVIOUS : PREDICTOR_RAW,
     );
-    const frameInChunk = index - timeChunk * layout.timeChunk;
-    const offset =
-      frameInChunk * layout.tileHeight * layout.tileWidth +
-      (cell.row - origin.row) * layout.tileWidth +
-      (cell.column - origin.column);
-    return decodeValue(variable.quantization, codes[offset]!);
+    for (const slot of positions) {
+      const frameInChunk = indices[slot]! - timeChunk * layout.timeChunk;
+      values[slot] = decodeValue(variable.quantization, codes[frameInChunk * stride + cellOffset]!);
+    }
   });
+  return values;
 }
 
 export async function readPoint(options: ReadPointOptions, decodeChunk: DecodeChunk): Promise<unknown> {
