@@ -144,7 +144,7 @@ jobs:
 
       # The AWS CLI is preinstalled on the runner; R2 is its S3 endpoint.
       # The credentials are step-scoped rather than job env, so third-party
-      # actions never see them; the listing proves they work before the
+      # actions never see them; the read proves they work before the
       # first round rather than at its upload.
       - name: Check R2 credentials
         env:
@@ -158,9 +158,9 @@ jobs:
             [ -n "${!name}" ] || { echo "::error::$name is empty; set the R2 repository secrets"; exit 1; }
           done
           aws --version
-          aws s3 ls "s3://dataset/xue/" --region auto \
+          aws s3api head-object --bucket dataset --key xue/catalog.json --region auto \
             --endpoint-url "https://${CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com" > /dev/null \
-            || { echo "::error::R2 credentials failed a test listing of the dataset bucket"; exit 1; }
+            || { echo "::error::R2 credentials failed a test read of the dataset bucket"; exit 1; }
 
       - uses: astral-sh/setup-uv@v5
         with:

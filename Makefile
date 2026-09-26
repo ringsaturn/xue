@@ -76,7 +76,12 @@ S3 = $(AWS) s3 --endpoint-url $(R2_ENDPOINT)
 AWS_DEFAULT_REGION ?= auto
 AWS_REQUEST_CHECKSUM_CALCULATION ?= when_required
 AWS_RESPONSE_CHECKSUM_VALIDATION ?= when_required
-export AWS_DEFAULT_REGION AWS_REQUEST_CHECKSUM_CALCULATION AWS_RESPONSE_CHECKSUM_VALIDATION
+# The CLI's multipart threshold lives in its config file, not an environment
+# variable. Point it at the one that raises the threshold above every artifact
+# we publish, so a store shard is one PutObject instead of seven Class A
+# operations (scripts/aws-config has the measurement).
+AWS_CONFIG_FILE ?= $(CURDIR)/scripts/aws-config
+export AWS_DEFAULT_REGION AWS_REQUEST_CHECKSUM_CALCULATION AWS_RESPONSE_CHECKSUM_VALIDATION AWS_CONFIG_FILE
 
 .PHONY: check install wasm wasm-worker test test-rust test-e2e encoder-rust encoder-rust-test encoder-wheel bench bench-video bench-lossy mvp serve format-pdf deploy-build upload-r2 upload-r2-bundles upload-r2-manifest upload-r2-stac-item check-pointer upload-r2-pointer upload-r2-stac-collection warm-r2 prune-r2 prune-r2-rounds live-run live-manifest live-window pull-r2-frames push-r2-frames prune-r2-frames pull-r2-ancillary deploy-pages deploy showcase showcase-check showcase-refresh live-showcase-catalog upload-r2-showcase tc-build live-tc-index upload-r2-tc prune-r2-tc airport-build live-airport-index upload-r2-airport prune-r2-airport sounding-build live-sounding-index upload-r2-sounding prune-r2-sounding clean
 
@@ -211,12 +216,15 @@ deploy-build:
 #
 # A rolling window's round (ROUND=HHMM) is the same path one directory
 # deeper: the round's artifacts and manifest are synced into
-# <model>.<run>/<ROUND>/ and the pointer names the round.
+# <model>.<run>/<ROUND>/ and the pointer names the round. It copies rather
+# than syncs, for the reason `upload-r2-bundles` below records: a fresh run
+# or round directory has nothing to skip, so a sync only spends a
+# destination listing on deciding to upload everything anyway.
 upload-r2:
 	@set -e; dir=web/public/data/$(RUN_DIR); \
 	[ -d "$$dir" ] || { echo "no built run at $$dir, pass RUN=YYYYMMDDHH"; exit 1; }; \
 	$(MAKE) --no-print-directory check-pointer MODEL=$(MODEL) RUN=$(RUN) ROUND=$(ROUND); \
-	$(S3) sync $$dir s3://$(R2_BUCKET)/$(R2_PREFIX)/$(RUN_DIR)/ --no-progress $(DRY_RUN) \
+	$(S3) cp $$dir s3://$(R2_BUCKET)/$(R2_PREFIX)/$(RUN_DIR)/ --recursive --no-progress $(DRY_RUN) \
 		--exclude "manifest.part.*.json" --exclude "$(STAC_ITEM)" \
 		--cache-control "public, max-age=31536000, immutable"; \
 	$(MAKE) --no-print-directory upload-r2-stac-item MODEL=$(MODEL) RUN=$(RUN) ROUND=$(ROUND) DRY_RUN=$(DRY_RUN); \
@@ -430,7 +438,7 @@ upload-r2-tc:
 	pointer_crc=$$(jq -r .crc32 web/public/data/latest-tc.json); \
 	index_crc=$$($(PYTHON) -c "import sys, zlib; print(f'{zlib.crc32(open(sys.argv[1], \"rb\").read()) & 0xFFFFFFFF:08x}')" $$dir/index.json); \
 	[ "$$pointer_crc" = "$$index_crc" ] || { echo "latest-tc.json carries CRC32 $$pointer_crc but $$dir/index.json is $$index_crc"; exit 1; }; \
-	$(S3) sync $$dir s3://$(R2_BUCKET)/$(R2_PREFIX)/tc.$(ISSUE)/ --no-progress $(DRY_RUN) --exclude "$(STAC_ITEM)" \
+	$(S3) cp $$dir s3://$(R2_BUCKET)/$(R2_PREFIX)/tc.$(ISSUE)/ --recursive --no-progress $(DRY_RUN) --exclude "$(STAC_ITEM)" \
 		--content-type application/json --cache-control "public, max-age=31536000, immutable"; \
 	[ ! -f "$$dir/$(STAC_ITEM)" ] || $(S3) cp $$dir/$(STAC_ITEM) s3://$(R2_BUCKET)/$(R2_PREFIX)/tc.$(ISSUE)/$(STAC_ITEM) \
 		--no-progress $(DRY_RUN) --content-type application/geo+json --cache-control "no-cache"; \
@@ -684,9 +692,10 @@ prune-r2:
 # before the newest ROUNDS_KEEP are deleted — never the one the pointer
 # names, whatever its name sorts as. A viewer on a replaced round has the
 # next round plus a poll interval to be brought forward before its objects
-# go. The runs the top-level prune (`prune-r2`, KEEP=2 for these sources)
-# still keeps beside the live one are trimmed to their newest round: their
-# viewers have long moved on, and a satellite round is most of a gigabyte.
+# go. The live run directory is the pointer's own `manifestPath` two levels
+# up, so only that one directory is listed; the runs `prune-r2` keeps beside
+# the live one are left whole until it deletes them, which trades a little
+# storage for two fewer listings a round on every source.
 # Rounds are named by the clock minute they were built at (HHMM), so a run
 # whose rounds straddle midnight sorts wrong lexically; `round_order`
 # folds a round more than twelve hours before the newest into the next day.
@@ -704,21 +713,17 @@ prune-r2-rounds:
 	pointer=$$($(S3) cp s3://$(R2_BUCKET)/$(R2_PREFIX)/$(LATEST_FILE) - --only-show-errors 2>/dev/null || true); \
 	[ -n "$$pointer" ] || { echo "no live pointer for $(MODEL), refusing to prune"; exit 1; }; \
 	live=$$(printf '%s' "$$pointer" | jq -r .manifestPath | xargs dirname); \
-	run=$$(printf '%s' "$$pointer" | jq -r .run); \
+	dir=$$(printf '%s' "$$live" | xargs dirname); \
 	echo "live $(MODEL) round: $$live"; \
-	runs=$$($(S3) ls s3://$(R2_BUCKET)/$(R2_PREFIX)/ | awk '/ PRE /{print $$2}' | sed 's:/$$::' | grep "^$(MODEL)\." || true); \
-	for dir in $$runs; do \
-		listing=$$($(S3) ls s3://$(R2_BUCKET)/$(R2_PREFIX)/$$dir/) \
-			|| { echo "listing $$dir failed, refusing to prune"; exit 1; }; \
-		rounds=$$(printf '%s\n' "$$listing" | awk '/ PRE /{print $$2}' | sed 's:/$$::' | grep -E '^[0-9]{4}$$' || true); \
-		[ -n "$$rounds" ] || continue; \
-		if [ "$$dir" = "$(MODEL).$$run" ]; then keep=$(ROUNDS_KEEP); else keep=1; fi; \
-		for round in $$($(PYTHON) -c "$$round_order" "$$rounds" | tr ' ' '\n' | tail -n +$$((keep + 1))); do \
-			if [ "$$dir/$$round" != "$$live" ]; then \
-				echo "Deleting $$dir/$$round..."; \
-				$(S3) rm s3://$(R2_BUCKET)/$(R2_PREFIX)/$$dir/$$round/ --recursive --only-show-errors $(DRY_RUN); \
-			fi; \
-		done; \
+	listing=$$($(S3) ls s3://$(R2_BUCKET)/$(R2_PREFIX)/$$dir/) \
+		|| { echo "listing $$dir failed, refusing to prune"; exit 1; }; \
+	rounds=$$(printf '%s\n' "$$listing" | awk '/ PRE /{print $$2}' | sed 's:/$$::' | grep -E '^[0-9]{4}$$' || true); \
+	[ -n "$$rounds" ] || exit 0; \
+	for round in $$($(PYTHON) -c "$$round_order" "$$rounds" | tr ' ' '\n' | tail -n +$$(( $(ROUNDS_KEEP) + 1 ))); do \
+		if [ "$$dir/$$round" != "$$live" ]; then \
+			echo "Deleting $$dir/$$round..."; \
+			$(S3) rm s3://$(R2_BUCKET)/$(R2_PREFIX)/$$dir/$$round/ --recursive --only-show-errors $(DRY_RUN); \
+		fi; \
 	done
 
 # Print the run the live pointer names, or nothing when there is no pointer.

@@ -136,7 +136,7 @@ jobs:
 
       # The AWS CLI is preinstalled on the runner; R2 is its S3 endpoint.
       # The credentials are step-scoped rather than job env, so third-party
-      # actions never see them; the listings prove they work before the
+      # actions never see them; the read and the archive listing prove they work before the
       # first round rather than at its fetch or its upload. Two buckets:
       # the dataset bucket the rounds publish into, and the archive bucket
       # the archive reader takes the window from.
@@ -156,8 +156,8 @@ jobs:
           done
           aws --version
           endpoint="https://${CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com"
-          aws s3 ls "s3://dataset/xue/" --region auto --endpoint-url "$endpoint" > /dev/null \
-            || { echo "::error::R2 credentials failed a test listing of the dataset bucket"; exit 1; }
+          aws s3api head-object --bucket dataset --key xue/catalog.json --region auto --endpoint-url "$endpoint" > /dev/null \
+            || { echo "::error::R2 credentials failed a test read of the dataset bucket"; exit 1; }
           AWS_ACCESS_KEY_ID="$ARCHIVE_ACCESS_KEY_ID" AWS_SECRET_ACCESS_KEY="$ARCHIVE_SECRET_ACCESS_KEY" \
             aws s3 ls "${XUE_CMA_ARCHIVE}/" --region auto --endpoint-url "$endpoint" > /dev/null \
             || { echo "::error::the archive credentials failed a test listing of the CMA archive; set CMA_ARCHIVE_ACCESS_KEY_ID / CMA_ARCHIVE_SECRET_ACCESS_KEY to a token that reads it"; exit 1; }

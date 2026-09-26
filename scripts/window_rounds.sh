@@ -117,6 +117,10 @@ while :; do
     echo "round $round: the live window already ends at $newest, nothing to publish"
   elif [ "$ok" = true ]; then
     echo "round $round: bucket at $newest, live at ${live:-nothing}, building"
+    # The run the pointer names before this round, so the bucket-wide prune
+    # below runs only when the round actually supersedes a run (a new run
+    # directory, once an hour) rather than listing the bucket every round.
+    prev_run=$(make -s live-run MODEL=$model 2>/dev/null || true)
     build_seconds=0; upload_seconds=0; prune_seconds=0
     t0=$(date -u +%s)
     if $python -m xuebuild -v build-bin --model $model --run latest --hours "$hours" \
@@ -147,8 +151,12 @@ while :; do
         if [ -z "$dry_run" ]; then
           make prune-r2-rounds MODEL=$model || echo "pruning the run's rounds failed; the next round tries again"
         fi
-        make prune-r2 MODEL=$model KEEP="$keep" DRY_RUN="$dry_run" \
-          || echo "pruning the superseded runs failed; the next round tries again"
+        # A run is superseded only when the hour changes; pruning every round
+        # would list the bucket for nothing. A dry run still previews it.
+        if [ "$run" != "$prev_run" ] || [ -n "$dry_run" ]; then
+          make prune-r2 MODEL=$model KEEP="$keep" DRY_RUN="$dry_run" \
+            || echo "pruning the superseded runs failed; the next round tries again"
+        fi
         prune_seconds=$(( $(date -u +%s) - t0 ))
         built_epoch=$($python -c "from datetime import datetime, UTC; print(int(datetime.strptime('$built', '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=UTC).timestamp()))")
         age=$(( pointer_at - built_epoch ))

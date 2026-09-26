@@ -138,7 +138,7 @@ jobs:
       # The AWS CLI is preinstalled on the runner; R2 is its S3 endpoint.
       # The credentials are deliberately step-scoped (here and on the make
       # steps that talk to R2) rather than job env, so third-party actions
-      # never see them. The listing proves they actually work before the
+      # never see them. The read proves they actually work before the
       # build starts, instead of failing at the upload step.
       - name: Check R2 credentials
         env:
@@ -152,9 +152,9 @@ jobs:
             [ -n "${!name}" ] || { echo "::error::$name is empty; set the R2 repository secrets"; exit 1; }
           done
           aws --version
-          aws s3 ls "s3://dataset/xue/" --region auto \
+          aws s3api head-object --bucket dataset --key xue/catalog.json --region auto \
             --endpoint-url "https://${CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com" > /dev/null \
-            || { echo "::error::R2 credentials failed a test listing of the dataset bucket"; exit 1; }
+            || { echo "::error::R2 credentials failed a test read of the dataset bucket"; exit 1; }
 
       - name: Validate inputs
         run: |

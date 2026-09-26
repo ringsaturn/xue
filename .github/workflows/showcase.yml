@@ -87,9 +87,9 @@ jobs:
             [ -n "${!name}" ] || { echo "::error::$name is empty; set the R2 repository secrets"; exit 1; }
           done
           aws --version
-          aws s3 ls "s3://dataset/xue/" --region auto \
+          aws s3api head-object --bucket dataset --key xue/catalog.json --region auto \
             --endpoint-url "https://${CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com" > /dev/null \
-            || { echo "::error::R2 credentials failed a test listing of the dataset bucket"; exit 1; }
+            || { echo "::error::R2 credentials failed a test read of the dataset bucket"; exit 1; }
 
       - uses: astral-sh/setup-uv@v5
         with:

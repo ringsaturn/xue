@@ -612,7 +612,11 @@ rounds (MRMS, JMA) do, since a round is a handful of small objects replaced
 minutes later.
 
 Credentials are an R2 API token's key pair in `AWS_ACCESS_KEY_ID` /
-`AWS_SECRET_ACCESS_KEY`, plus `CLOUDFLARE_ACCOUNT_ID` for the endpoint.
+`AWS_SECRET_ACCESS_KEY`, plus `CLOUDFLARE_ACCOUNT_ID` for the endpoint. The
+Makefile points the CLI at [`scripts/aws-config`](scripts/aws-config), which
+raises its multipart threshold above every artifact published, so each
+object costs one Class A operation instead of one per part (R2 bills every
+`UploadPart`).
 
 GitHub Actions runs the loop on a schedule, one workflow per source
 ([`publish-gfs.yml`](.github/workflows/publish-gfs.yml),
@@ -695,10 +699,11 @@ there is something new, builds the whole window again (`build-bin --run
 latest --hours 4 --round HHMM`; frames already on disk are reused, and the
 previous run's are linked across when the window crosses an hour), uploads
 the round with `make upload-r2 … ROUND=HHMM` into `mrms.<run>/<HHMM>/`
-(warmed, then the pointer), and prunes: rounds before the run's newest two
-(`make prune-r2-rounds`, never the one the pointer names), then runs before
-the newest two (`make prune-r2 KEEP=2`, so a viewer still on the previous
-window keeps its artifacts). Each round goes into its own subdirectory
+(warmed, then the pointer), and prunes: the live run's rounds before its
+newest two (`make prune-r2-rounds`, which lists only the run directory the
+pointer names, never the round it names), and, when the round supersedes a
+run, the runs before the newest two (`make prune-r2 KEEP=2`, so a viewer
+still on the previous window keeps its artifacts until the next hour). Each round goes into its own subdirectory
 because the same run is rebuilt every five minutes and an object rewritten
 under an unchanged `?v=` would serve a viewer's range requests the wrong
 bytes. One log line per round records the newest frame's age when the

@@ -1,0 +1,14 @@
+# AWS CLI settings for the dataset bucket, pointed at by the Makefile's
+# AWS_CONFIG_FILE. R2 bills CreateMultipartUpload, UploadPart and
+# CompleteMultipartUpload as Class A operations, and the CLI's default 8 MiB
+# multipart threshold turns every store shard larger than that into about
+# seven Class A operations where one would do. Measured on this bucket in
+# 2026-09: multipart was 42% of Class A and ListObjects 6%.
+#
+# R2 accepts a single PutObject up to 5 GiB and every artifact the pipeline
+# publishes is smaller, so the threshold is raised to upload each as one
+# operation. Credentials stay in the environment; no profile is named here.
+[default]
+region = auto
+s3 =
+    multipart_threshold = 5GB

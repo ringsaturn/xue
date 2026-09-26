@@ -368,8 +368,10 @@ model starts here; the frontend mirror is `FORECAST_MODELS` in
   the live `window.json` → build → `make upload-r2 … ROUND=` →
   `prune-r2-rounds` keeps the live run's newest two rounds (in clock
   order: a round is named by its build minute and a run's rounds may
-  straddle midnight) and trims every other run to its newest one,
-  `prune-r2 KEEP=2` the previous run. The shell polls the MRMS pointer every two
+  straddle midnight), listing only the run directory the pointer names; the
+  previous run is left whole until it is superseded, when `prune-r2 KEEP=2`
+  deletes it, and that prune runs only on a run change rather than every
+  round. The shell polls the MRMS pointer every two
   minutes, treats a changed `manifestCrc32` as a new run, and on a rolling
   window keeps the playhead by observation time or follows the end when it
   was at the end (`checkForNewRun` / `resumeOnNewRun` in `main.ts`).
@@ -746,6 +748,20 @@ and every Collection's licence; the live run is read from each Collection
 in the browser — written by `stac._write_root` wherever the catalog is and
 uploaded with it by `upload-r2-stac-collection`. Its hostnames mirror
 `web/src/site.ts`.
+
+### Uploads to R2 (`scripts/aws-config`)
+
+Every publish talks to R2 through the AWS CLI (`$(S3)` in the Makefile). R2
+bills `CreateMultipartUpload`, `UploadPart` and `CompleteMultipartUpload` as
+Class A operations, and the CLI's default 8 MiB multipart threshold turned
+each store shard larger than that into about seven where one `PutObject`
+would do (measured on the bucket in 2026-09: multipart was 42% of Class A,
+`ListObjects` 6%). The Makefile exports `AWS_CONFIG_FILE` pointing at
+`scripts/aws-config`, which raises `s3.multipart_threshold` to 5 GB — above
+every artifact we publish — so each object is one operation. Credentials
+stay in the environment; the file names no profile. The workflows' "Check R2
+credentials" probe reads that config too, and is a `head-object` (Class B)
+rather than a bucket listing.
 
 The three point products (`sounding`, `airport`, `tc`, `POINT_PRODUCTS`)
 are in it on the same terms, derived from an issue's `index.json` alone by
