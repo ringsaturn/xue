@@ -1707,6 +1707,8 @@ def _bundle_manifest_entry(
         }
     if "zarr" in bundle:
         entry["zarr"] = _zarr_descriptor(bundle["zarr"], manifest_dir)
+    if "series" in bundle:
+        entry["series"] = _zarr_descriptor(bundle["series"], manifest_dir)
     return entry
 
 
@@ -1782,6 +1784,7 @@ def convert_bin(
     last_hour: int | None = None,
     zarr: bool = False,
     container: bool = True,
+    series: bool = True,
 ) -> dict[str, Any]:
     """Convert a GRIB run into per-variable Xue bundles.
 
@@ -2409,6 +2412,15 @@ def convert_bin(
                     )
                     LOG.info("wrote %s (%.2f MB)", export.path, export.byte_length / 1e6)
                     report["zarr"] = export.to_dict()
+                    if series and factor == 1 and bundle_id in source.series_bundle_ids:
+                        # The series companion is a full-resolution artifact:
+                        # a pinned point reads the canonical bundle, never a
+                        # tier, so no variant ships one.
+                        companion = zarrstore.export_series(
+                            bundle_path, zarrstore.series_store_path_for(bundle_path), executor=compressor
+                        )
+                        LOG.info("wrote %s (%.2f MB)", companion.path, companion.byte_length / 1e6)
+                        report["series"] = companion.to_dict()
                     if not container:
                         # The video companions were encoded from the codes
                         # in memory, so nothing else reads the file.

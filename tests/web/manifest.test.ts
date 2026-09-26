@@ -377,6 +377,19 @@ describe("validateManifest", () => {
     storeBearing(notAnObject).zarr = "gfs.2026081506/tmp2m.zarr";
     expect(() => validateManifest(notAnObject)).toThrow("object");
   });
+
+  it("accepts an optional series store, and holds it to its own suffix", () => {
+    const withSeries = manifestFixture();
+    (storeBearing(withSeries) as { series?: unknown }).series = zarrFixture("gfs.2026081506/tmp2m.series.zarr");
+    const manifest = validateManifest(withSeries);
+    expect(manifest.bundles[0]!.series?.path).toBe("gfs.2026081506/tmp2m.series.zarr");
+    expect(manifest.bundles[1]!.series).toBeUndefined();
+
+    // A map-store path is not a series store: the suffix is the field's meaning.
+    const wrongSuffix = manifestFixture();
+    (storeBearing(wrongSuffix) as { series?: unknown }).series = zarrFixture();
+    expect(() => validateManifest(wrongSuffix)).toThrow("path");
+  });
 });
 
 describe("pickBundleVariant", () => {

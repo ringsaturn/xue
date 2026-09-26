@@ -5314,7 +5314,15 @@ function loadVariable(
       // one shard (one temporal group) per GET: what a whole bundle
       // download costs, group by group. A probe session is streamed or
       // nothing either way.
-      const store = zarrStoreFor(dataBackend, descriptor, variant);
+      //
+      // A probe session reads one cell's series and nothing else, so where
+      // the bundle ships a series companion it opens that instead: one inner
+      // chunk is the whole axis of the cell's block, where the map store
+      // costs one chunk per time chunk. The companion is full resolution, so
+      // a chosen tier's series is the same read; the `.xue` container has no
+      // series form, so `?backend=xue` keeps the map path.
+      const seriesStore = role === "probe" && dataBackend !== "xue" ? descriptor.series : undefined;
+      const store = seriesStore ?? zarrStoreFor(dataBackend, descriptor, variant);
       const storeRoot = store && runUrl ? zarrRootUrl(store.path, runUrl) : null;
       const storeStreams =
         store !== undefined &&

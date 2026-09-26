@@ -290,6 +290,57 @@ A series costs opening plus `timeChunks` requests, the container's own
 shape (its prefix plus one chunk per group), independent of the frame
 count.
 
+## Series store
+
+A **series store** is the same bundle's quantized codes cut for the other
+access pattern: one cell's whole series. It is an ordinary store under this
+profile except for the geometry of its arrays, so every rule above applies
+unchanged.
+
+- The store's root is `<bundle>.series.zarr`, and its group document carries
+  the bundle's metadata verbatim in `attributes.xue`, exactly as the
+  full-resolution store does. Both stores name the same run of the same
+  bundle; a manifest entry carries the map store as `zarr` and the series
+  store as `series`, each a `{path, byteLength, crc32}` descriptor. The
+  series descriptor is full-resolution only and absent wherever the pipeline
+  does not derive one.
+- Every variable array is `uint8` of shape `[frameCount, height, width]` and
+  carries exactly one `sharding_indexed` codec, with `chunk_shape =
+  [frameCount, blockHeight, blockWidth]` — the whole axis of one spatial
+  block — and the outer chunk (shard) the whole array rounded up to whole
+  blocks: `[frameCount, ceil(height/blockHeight) * blockHeight,
+  ceil(width/blockWidth) * blockWidth]`. The array's own `chunk_shape` is the
+  authority for the block, as it is the authority for the time chunk above.
+- The inner codec chain is the variable's, exactly as the map store:
+  `[xue.delta{axis: 0}, bytes, zstd]` on a PREVIOUS variable and
+  `[bytes, zstd]` on a RAW one. The delta runs over the whole axis, so an
+  inner chunk is the variable's whole temporal residual cube for one block.
+  Unlike the map store, which leaves `xue.delta` off so a generic Zarr client
+  needs nothing registered, the series store defaults to it: it is the
+  layout's own predictor, and its only readers already decode it.
+- `fill_value` is the variable's `nodataCode`; the rows and columns past the
+  grid are written as it. There is no frame padding: the axis *is* the time
+  chunk.
+- The three coordinate arrays are unchanged.
+
+The block is a per-source registry value; 8 x 8 is what the reference
+pipeline writes. Which bundles ship a series store at all is the source
+registry's `series_bundle_ids` — opt-in per source, so a rollout can watch
+one dataset's storage and read counts before the next; the GFS
+0.25-degree run is the first, for `tmp2m`, `prate` and `wind10m`. Measured
+on `gfs.2026090918` (161 frames, 0.25° global), an
+8 x 8 series store is 37.2 MB against the bundle's 37.0 MB for `tmp2m` (101.4
+MB against 100.8 for the two-variable `wind10m`), its shard index is 262 KB
+per array (16 bytes per inner chunk), and one cell's whole series is a 1.9 KB
+median chunk.
+
+Reading one cell's series: one inner chunk of the block containing the cell,
+which holds every frame, plus the shard index once per store. A bilinear read
+of four neighbouring cells is one chunk where they share a block and two to
+four where they do not. A series store is read for series only: a frame read
+through it would fetch one tiny chunk per block, which is not what it is cut
+for.
+
 ## Equivalence with the container
 
 The codes are identical by construction: the exporter re-encodes every

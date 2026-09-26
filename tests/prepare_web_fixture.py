@@ -54,6 +54,10 @@ FIXTURE_BUNDLE_ORDER = ("tmp2m", "prate", "gust", "hgt500", "tmp850", "wind10m")
 # take and leaves the rest on the container path — both are exercised. The
 # upper-air and pressure bundles stay container-only.
 FIXTURE_ZARR_BUNDLES = ("tmp2m", "prate", "wind10m")
+# The bundles that also ship a series companion (`<bundle>.series.zarr`, the
+# point-read layout) — the full-resolution ones only, matching the GFS source's
+# `series_bundle_ids` (`xuebuild/sources.py`), which is the rollout switch.
+FIXTURE_SERIES_BUNDLES = ("tmp2m", "prate", "wind10m")
 HOURS = list(range(121))
 # The ECMWF fixture models the full IFS open data series: 3-hourly to 144
 # hours, 6-hourly to 240 — a mixed-step axis, so its bundles list their hours
@@ -113,6 +117,13 @@ def _export_store(bundle_path: Path) -> dict:
     """The bundle's Zarr store beside it, and the manifest descriptor that
     names it — derived from the finished file the way a build derives it."""
     report = zarrstore.export_bundle(bundle_path, zarrstore.store_path_for(bundle_path))
+    return report.descriptor(WEB_FIXTURE_ROOT)
+
+
+def _export_series(bundle_path: Path) -> dict:
+    """The bundle's series companion beside it, and the manifest descriptor
+    that names it — derived from the finished file, as the map store is."""
+    report = zarrstore.export_series(bundle_path, zarrstore.series_store_path_for(bundle_path))
     return report.descriptor(WEB_FIXTURE_ROOT)
 
 
@@ -290,6 +301,8 @@ def prepare_web_fixture() -> Path:
         if variable_id in FIXTURE_ZARR_BUNDLES:
             entry["zarr"] = _export_store(bundle_path)
             variant["zarr"] = _export_store(half_path)
+        if variable_id in FIXTURE_SERIES_BUNDLES:
+            entry["series"] = _export_series(bundle_path)
         bundles.append(
             {
                 **entry,
@@ -402,6 +415,7 @@ def prepare_web_fixture() -> Path:
                 }
             ],
             "zarr": _export_store(wind_path),
+            "series": _export_series(wind_path),
         }
     )
     # A delta-chain store with its index at the start of each shard, for the

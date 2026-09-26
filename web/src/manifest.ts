@@ -725,6 +725,11 @@ export interface VariableBundleDescriptor {
   poster?: PosterDescriptor;
   /** The bundle as a Zarr store, when the build derived one. */
   zarr?: ZarrStoreDescriptor;
+  /** The bundle as a series store (`docs/zarr-profile.md`, "Series store"):
+   * one inner chunk is a cell's whole series, so a point read is one chunk.
+   * Full-resolution only, and derived only for the bundles a pinned point
+   * reads; absent everywhere else, where the map store's series path stands. */
+  series?: ZarrStoreDescriptor;
 }
 
 export interface ForecastManifest {
@@ -801,9 +806,9 @@ function validateContainerFields(entry: Record<string, unknown>, paths: Set<stri
   }
 }
 
-function validateZarrDescriptor(input: unknown, paths: Set<string>): ZarrStoreDescriptor {
+function validateZarrDescriptor(input: unknown, paths: Set<string>, suffix = ".zarr"): ZarrStoreDescriptor {
   const store = object(input);
-  relativePath(store.path, ".zarr", paths, "zarr store");
+  relativePath(store.path, suffix, paths, suffix === ".zarr" ? "zarr store" : "series store");
   if (typeof store.byteLength !== "number" || !Number.isInteger(store.byteLength) || store.byteLength <= 0) {
     throw new Error("invalid zarr store byteLength");
   }
@@ -920,6 +925,9 @@ export function validateManifest(
     }
     if (bundle.zarr !== undefined) {
       validateZarrDescriptor(bundle.zarr, paths);
+    }
+    if (bundle.series !== undefined) {
+      validateZarrDescriptor(bundle.series, paths, ".series.zarr");
     }
     variables.push(bundle.variable);
   }

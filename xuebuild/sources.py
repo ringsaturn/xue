@@ -308,6 +308,21 @@ class SourceSpec:
 
     Every existing rendition is unchanged by a longer ladder; a source
     only ever gains files. Mirrored in the native encoder's source table."""
+    series_bundle_ids: tuple[str, ...] = ()
+    """Bundles that also ship a series companion store
+    (``<bundle>.series.zarr``, docs/zarr-profile.md "Series store"): one inner
+    chunk is a cell's whole series, so the point API's ``/point`` and the
+    shell's pinned point read one chunk per variable instead of one per time
+    chunk. Empty — the default, and every source but GFS today — ships none,
+    and a pinned point falls back to the map store's series path, which is
+    correct and only slower.
+
+    This is the rollout switch: a source opts in one at a time, so the extra
+    storage per run (a companion is about the size of the bundle it mirrors,
+    and it is retired with the run) and the API's read count can be watched
+    on a single dataset before the next. Only full-resolution bundles are
+    mirrored. The encoder derives the store from the bundle on the Python
+    side, so the wheel's own source table carries nothing for it."""
     fetch_concurrency: int = 4
     """Frames fetched in parallel. Each frame costs several fresh HTTPS
     round-trips, so sequential fetching is latency-bound. NOAA's bucket and
@@ -683,6 +698,12 @@ SOURCES: dict[str, SourceSpec] = {
             "qflux850",
             "wave",
         ),
+        # The series companion rollout starts here, on the 0.25-degree global
+        # run: the point API's core rows, so `/point?variables=tmp2m,wind10m`
+        # and the pinned temperature/wind rows read one chunk each. The other
+        # sources opt in the same way once this one's read counts and storage
+        # are known.
+        series_bundle_ids=("tmp2m", "prate", "wind10m"),
     ),
     "ecmwf": SourceSpec(
         id="ecmwf",

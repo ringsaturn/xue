@@ -217,17 +217,37 @@ def _canonical_metadata_json(text: str) -> str:
     return json.dumps(json.loads(text))
 
 
-def _zarr_reports(bundles: list[dict[str, Any]], variants: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
-    """One Zarr store per bundle and per variant the native encoder wrote,
-    keyed by the bundle file's absolute path."""
-    reports: dict[str, dict[str, Any]] = {}
+def _zarr_reports(
+    bundles: list[dict[str, Any]],
+    variants: list[dict[str, Any]],
+    *,
+    series: bool = True,
+    series_bundle_ids: tuple[str, ...] = (),
+) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
+    """One map store per bundle and per variant, and one series store per full
+    bundle whose variable is in ``series_bundle_ids``
+    (:attr:`xuebuild.sources.SourceSpec.series_bundle_ids`); each keyed by the
+    bundle file's absolute path. Two dicts are returned because a series store
+    is only ever a full-resolution artifact (a pinned point never reads a
+    tier), so it has no variant counterpart to sit beside."""
+    stores: dict[str, dict[str, Any]] = {}
+    series_stores: dict[str, dict[str, Any]] = {}
     with ThreadPoolExecutor(max_workers=os.cpu_count() or 4) as executor:
         for artifact in [*bundles, *variants]:
             bundle_path = Path(artifact["output"])
             export = zarrstore.export_bundle(bundle_path, zarrstore.store_path_for(bundle_path), executor=executor)
             LOG.info("wrote %s (%.2f MB)", export.path, export.byte_length / 1e6)
-            reports[str(bundle_path)] = export.to_dict()
-    return reports
+            stores[str(bundle_path)] = export.to_dict()
+        for artifact in bundles:
+            if not series or artifact["variable"] not in series_bundle_ids:
+                continue
+            bundle_path = Path(artifact["output"])
+            export = zarrstore.export_series(
+                bundle_path, zarrstore.series_store_path_for(bundle_path), executor=executor
+            )
+            LOG.info("wrote %s (%.2f MB)", export.path, export.byte_length / 1e6)
+            series_stores[str(bundle_path)] = export.to_dict()
+    return stores, series_stores
 
 
 def _manifest_entry(
@@ -235,14 +255,15 @@ def _manifest_entry(
     video: dict[str, Any] | None,
     manifest_dir: Path,
     zarr: dict[str, dict[str, Any]] | None = None,
+    series: dict[str, dict[str, Any]] | None = None,
     retired: set[str] = frozenset(),
 ) -> dict[str, Any]:
-    """One manifest bundle entry, with its video and Zarr descriptors folded
-    in. ``zarr`` is keyed by bundle path, absolute, as `_zarr_reports` keys
-    it; the entry's own paths are relative to the manifest. ``retired`` is
-    the set of those paths whose container was removed behind its store:
-    the entry then drops the container's ``path`` / ``byteLength`` /
-    ``crc32`` unit, on the bundle and on its tiers alike."""
+    """One manifest bundle entry, with its video, Zarr and series descriptors
+    folded in. ``zarr`` and ``series`` are keyed by bundle path, absolute, as
+    `_zarr_reports` keys them; the entry's own paths are relative to the
+    manifest. ``retired`` is the set of those paths whose container was
+    removed behind its store: the entry then drops the container's ``path`` /
+    ``byteLength`` / ``crc32`` unit, on the bundle and on its tiers alike."""
     entry = dict(entry)
 
     def without_container(node: dict[str, Any]) -> dict[str, Any]:
@@ -256,8 +277,8 @@ def _manifest_entry(
             "metadataJson": _canonical_metadata_json(poster["metadataJson"]),
         }
 
-    def store(path: str) -> dict[str, Any] | None:
-        report = (zarr or {}).get(str(manifest_dir / path))
+    def descriptor(reports: dict[str, dict[str, Any]] | None, path: str) -> dict[str, Any] | None:
+        report = (reports or {}).get(str(manifest_dir / path))
         if report is None:
             return None
         return {
@@ -268,7 +289,9 @@ def _manifest_entry(
 
     if "variants" in entry:
         entry["variants"] = [
-            without_container({**variant, **({"zarr": descriptor} if (descriptor := store(variant["path"])) else {})})
+            without_container(
+                {**variant, **({"zarr": store} if (store := descriptor(zarr, variant["path"])) else {})}
+            )
             for variant in entry["variants"]
         ]
     if video is not None:
@@ -284,9 +307,12 @@ def _manifest_entry(
             "frameCount": video["frameCount"],
             "metadataJson": video["metadataJson"],
         }
-    descriptor = store(entry["path"])
-    if descriptor is not None:
-        entry["zarr"] = descriptor
+    store = descriptor(zarr, entry["path"])
+    if store is not None:
+        entry["zarr"] = store
+    series_store = descriptor(series, entry["path"])
+    if series_store is not None:
+        entry["series"] = series_store
     return without_container(entry)
 
 
@@ -296,10 +322,11 @@ def _rewrite_manifest(
     *,
     require_core: bool,
     zarr: dict[str, dict[str, Any]] | None = None,
+    series: dict[str, dict[str, Any]] | None = None,
     retired: set[str] = frozenset(),
 ) -> dict[str, Any]:
-    """Fold the video and Zarr descriptors into the manifest the native
-    encoder wrote.
+    """Fold the video, Zarr and series descriptors into the manifest the
+    native encoder wrote.
 
     Rebuilt through `build_bin_manifest` rather than edited in place, so the
     result is validated and its keys land in the order the reference writes
@@ -311,7 +338,7 @@ def _rewrite_manifest(
     payload = build_bin_manifest(
         _run_time(existing),
         bundles=[
-            _manifest_entry(entry, videos.get(entry["variable"]), manifest_path.parent, zarr, retired)
+            _manifest_entry(entry, videos.get(entry["variable"]), manifest_path.parent, zarr, series, retired)
             for entry in existing["bundles"]
         ],
         expected_hours=expected_hours,
@@ -350,6 +377,7 @@ def convert_bin(
     last_hour: int | None = None,
     zarr: bool = False,
     container: bool = True,
+    series: bool = True,
 ) -> dict[str, Any]:
     """`binconvert.convert_bin`, run through the native encoder.
 
@@ -415,12 +443,20 @@ def convert_bin(
     report["videos"] = list(videos.values())
 
     stores: dict[str, dict[str, Any]] = {}
+    series_stores: dict[str, dict[str, Any]] = {}
     retired: set[str] = set()
     if zarr:
-        stores = _zarr_reports(report["bundles"], report.get("variants", []))
+        stores, series_stores = _zarr_reports(
+            report["bundles"],
+            report.get("variants", []),
+            series=series,
+            series_bundle_ids=tuple(source.series_bundle_ids),
+        )
         # The Python path reports a store on the bundle it belongs to.
         for artifact in [*report["bundles"], *report.get("variants", [])]:
             artifact["zarr"] = stores[str(Path(artifact["output"]))]
+            if str(Path(artifact["output"])) in series_stores:
+                artifact["series"] = series_stores[str(Path(artifact["output"]))]
             if not container:
                 # The videos above and the store were both read out of the
                 # file; nothing else will be.
@@ -430,7 +466,12 @@ def convert_bin(
     if manifest_path is not None:
         require_core = bundle_ids is None
         payload = _rewrite_manifest(
-            Path(manifest_path), videos, require_core=require_core, zarr=stores, retired=retired
+            Path(manifest_path),
+            videos,
+            require_core=require_core,
+            zarr=stores,
+            series=series_stores,
+            retired=retired,
         )
         LOG.info("wrote manifest %s", manifest_path)
         if latest_path is not None and run_id is not None:

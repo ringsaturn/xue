@@ -183,6 +183,13 @@ def parser() -> argparse.ArgumentParser:
         help="publish the Zarr store alone: remove each .xue once its store and video companions are read "
         "out of it and name no container in the manifest (needs --zarr); XUE_CONTAINER=0 does the same",
     )
+    convert_bin_parser.add_argument(
+        "--no-series",
+        dest="series",
+        action="store_false",
+        help="do not derive the series companion stores (<bundle>.series.zarr) the point-read bundles "
+        "would otherwise ship (needs --zarr; docs/zarr-profile.md)",
+    )
 
     verify_bin_parser = commands.add_parser("verify-bin", help="validate and fully decode a Xue bundle")
     verify_bin_parser.add_argument("bundle", type=Path)
@@ -244,6 +251,13 @@ def parser() -> argparse.ArgumentParser:
         action="store_false",
         help="publish the Zarr store alone: remove each .xue once its store and video companions are read "
         "out of it and name no container in the manifest (needs --zarr); XUE_CONTAINER=0 does the same",
+    )
+    build_bin_parser.add_argument(
+        "--no-series",
+        dest="series",
+        action="store_false",
+        help="do not derive the series companion stores (<bundle>.series.zarr) the point-read bundles "
+        "would otherwise ship (needs --zarr; docs/zarr-profile.md)",
     )
     build_bin_parser.add_argument(
         "--bundles",
@@ -494,6 +508,7 @@ def main(argv: list[str] | None = None) -> int:
                 last_hour=arguments.hours,
                 zarr=arguments.zarr or enabled_by_environment(),
                 container=arguments.container and container_enabled_by_environment(),
+                series=arguments.series,
             )
             print(json.dumps(report, indent=2))
         elif arguments.command == "verify-bin":
@@ -620,6 +635,7 @@ def main(argv: list[str] | None = None) -> int:
                 bundle_ids=bundle_ids,
                 zarr=arguments.zarr or enabled_by_environment(),
                 container=arguments.container and container_enabled_by_environment(),
+                series=arguments.series,
             )
             report["run"] = run.id
             if arguments.round is not None:

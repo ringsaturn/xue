@@ -107,6 +107,7 @@ def build_bin_manifest(
                 **({"video": bundle["video"]} if "video" in bundle else {}),
                 **({"poster": bundle["poster"]} if "poster" in bundle else {}),
                 **({"zarr": bundle["zarr"]} if "zarr" in bundle else {}),
+                **({"series": bundle["series"]} if "series" in bundle else {}),
             }
             for bundle in bundles
         ],
@@ -146,23 +147,25 @@ def _validate_container_fields(node: dict[str, Any], variable: str, paths: set[s
         raise ManifestError(f"manifest bundle{label} crc32 must be 8 lowercase hex characters for {variable}")
 
 
-def _validate_zarr_descriptor(store: object, variable: str, paths: set[str]) -> None:
+def _validate_zarr_descriptor(store: object, variable: str, paths: set[str], suffix: str = ".zarr") -> None:
     """The optional Zarr store beside a bundle or a variant: the store's root
-    directory (a relative ``.zarr`` path, under the same rules as the bundle
-    path), the sum of every object in it, and the CRC-32 of its root
-    ``zarr.json``. Optional everywhere: a run that ships no store is
+    directory (a relative path ending in ``suffix``, under the same rules as
+    the bundle path), the sum of every object in it, and the CRC-32 of its
+    root ``zarr.json``. Optional everywhere: a run that ships no store is
     complete without it, and a reader that does not know the field skips it
-    — every validator here checks named fields and rejects no extra key."""
+    — every validator here checks named fields and rejects no extra key.
+    ``suffix`` is ``.zarr`` for the map store and ``.series.zarr`` for the
+    series companion, so a descriptor's path names its kind."""
     if not isinstance(store, dict):
         raise ManifestError(f"manifest bundle zarr descriptor must be an object for {variable}")
     path = store.get("path")
     if (
         not isinstance(path, str)
-        or not path.endswith(".zarr")
+        or not path.endswith(suffix)
         or path.startswith(("/", "http:", "https:"))
         or ".." in Path(path).parts
     ):
-        raise ManifestError(f"manifest bundle zarr path must be a relative .zarr path for {variable}")
+        raise ManifestError(f"manifest bundle zarr path must be a relative {suffix} path for {variable}")
     if path in paths:
         raise ManifestError("manifest contains duplicate bundle paths")
     paths.add(path)
@@ -305,6 +308,8 @@ def validate_bin_manifest(
             _validate_poster_descriptor(bundle["poster"], variable, paths)
         if "zarr" in bundle:
             _validate_zarr_descriptor(bundle["zarr"], variable, paths)
+        if "series" in bundle:
+            _validate_zarr_descriptor(bundle["series"], variable, paths, ".series.zarr")
         variables.append(variable)
     if require_core_variables:
         for required in MODEL_CORE_BUNDLES[model]:

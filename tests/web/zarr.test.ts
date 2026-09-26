@@ -452,6 +452,37 @@ describe("ZarrSession", () => {
     });
   }
 
+  for (const [storeName, bundleName, variables] of [
+    ["tmp2m.series.zarr", "tmp2m.xue", [1]],
+    ["prate.series.zarr", "prate.xue", [1]],
+    ["wind10m.series.zarr", "wind10m.xue", [1, 2]],
+  ] as const) {
+    it(`reads ${storeName} series as the container does, from one chunk`, async () => {
+      const { session, bundle } = await open(storeName, bundleName);
+      const metadata = parseBundleMetadata(session.metadataJson);
+      const { width, height } = metadata.grid;
+      const layout = parseArrayMetadata(
+        readFileSync(`${FIXTURE_ROOT}/${storeName}/${metadata.variables[0]!.id}/zarr.json`, "utf8"),
+      );
+      // The whole axis is one time chunk, so a cell's series is one inner
+      // chunk, where the map store costs one per time chunk.
+      expect(layout.timeChunk).toBe(layout.frameCount);
+      expect(layout.timeChunks).toBe(1);
+      const cells: [number, number][] = [
+        [0, 0],
+        [width - 1, height - 1],
+        [Math.floor(width / 4) + 1, Math.floor(height / 4) + 2],
+        [Math.floor(width / 8) + 1, height - 2],
+      ];
+      for (const [column, row] of cells) {
+        for (const variable of variables) {
+          const series = await session.decodeSeries(variable, column, row);
+          expect(Buffer.from(series)).toEqual(Buffer.from(bundle.decodeSeries(variable, column, row)));
+        }
+      }
+    });
+  }
+
   it("drops the least recently used chunks under a payload budget and fetches them again on demand", async () => {
     const { session, bundle, log } = await open("tmp2m.zarr", "tmp2m.xue");
     expect(session.payloadBudgetBytes).toBe(Number.POSITIVE_INFINITY);

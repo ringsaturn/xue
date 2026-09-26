@@ -20,12 +20,14 @@
 # The H.264 companions are skipped: they are opt-in (`?use_h264=true`) and
 # would double the bytes warmed for viewers that never request them.
 #
-# A Zarr store (`zarr` descriptor on a bundle or a variant) is a handful
-# of objects: the group and array documents, each array's one shard — the
-# whole array, read by range the way a bundle is, and warmed whole the way
-# a bundle is — and the coordinate arrays, which a viewer never reads. The
-# objects are named off the local group document (`xue.variables[].id`),
-# since a chunk key is deterministic.
+# A Zarr store (`zarr` descriptor on a bundle or a variant, `series` on a
+# full bundle) is a handful of objects: the group and array documents, each
+# array's one shard — the whole array, read by range the way a bundle is,
+# and warmed whole the way a bundle is — and the coordinate arrays, which a
+# viewer never reads. The objects are named off the local group document
+# (`xue.variables[].id`), since a chunk key is deterministic. The series
+# store is warmed too: a pinned point reads it, and its shard is warmed whole
+# so the first pin does not pay the fill from R2.
 #
 # Usage: scripts/warm_edge_cache.sh <model> <run> [--artifacts-of <manifest>]
 #                                                [--manifest-only]
@@ -79,7 +81,7 @@ jobs=${WARM_JOBS:-6}
 # checked to be on disk before anything is listed off it.
 stores=
 if [ "$scope" != manifest ]; then
-  stores=$(jq -r '.bundles[] | ., .variants[] | .zarr // empty | "\(.path) \(.crc32)"' "$source")
+  stores=$(jq -r '.bundles[] | ., .variants[] | (.zarr // empty), (.series // empty) | "\(.path) \(.crc32)"' "$source")
   while read -r store crc; do
     [ -z "$store" ] || [ -f "$dir/$store/zarr.json" ] || { echo "no store at $dir/$store/zarr.json" >&2; exit 1; }
   done <<STORES

@@ -28,6 +28,7 @@ from xuebuild import binconvert, binformat, temporal, zarrcodec, zarrstore, zstd
 from xuebuild.binconvert import GridInfo, build_metadata
 from xuebuild.errors import BundleError, ManifestError
 from xuebuild.manifest import validate_bin_manifest
+from xuebuild.sources import source_spec
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 FIXTURE_GRIB = REPOSITORY_ROOT / "tests" / "fixtures" / "gfs.2026081406.f000.crop.grib2"
@@ -356,6 +357,84 @@ class ExportTests(unittest.TestCase):
         self.assertTrue((store / "tmp2m" / "zarr.json").is_file())
 
 
+class SeriesExportTests(unittest.TestCase):
+    """The series store: the same codes cut one inner chunk per 8 x 8 block
+    over the whole axis, so a cell's series is one chunk where the map store
+    costs one per time chunk."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.root = Path(tempfile.mkdtemp(prefix="xue-zarr-series-"))
+        cls.bundle = write_v2(cls.root / "pair.xue", ("tmp2m", "prate"))
+        cls.delta = zarrstore.export_series(cls.root / "pair.xue", cls.root / "pair.series.zarr")
+        cls.plain = zarrstore.export_series(
+            cls.root / "pair.xue", cls.root / "plain.series.zarr", delta=False
+        )
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        shutil.rmtree(cls.root, ignore_errors=True)
+
+    def test_read_back_equals_decode_plane(self) -> None:
+        for report in (self.delta, self.plain):
+            for numeric_id, name in self.bundle.variable_ids.items():
+                with self.subTest(store=report.path.name, variable=name):
+                    np.testing.assert_array_equal(
+                        read_back(report.path, name, self.bundle.frame_count),
+                        expected_codes(self.bundle, numeric_id),
+                    )
+
+    def test_one_chunk_per_block_over_the_whole_axis(self) -> None:
+        geometry = zarrstore.ArrayGeometry.from_metadata(
+            zarrstore.read_json(self.delta.path / "tmp2m" / "zarr.json")
+        )
+        self.assertEqual(geometry.inner_shape, (self.bundle.frame_count, 8, 8))
+        self.assertEqual((geometry.time_chunks, geometry.shard_frames), (1, self.bundle.frame_count))
+        # 17 x 9 cells in 8 x 8 blocks: three columns, two rows, each last clipped.
+        self.assertEqual((geometry.tile_columns, geometry.tile_rows, geometry.tile_count), (3, 2, 6))
+        self.assertEqual(geometry.shard_index_bytes, 16 * 6 + 4)
+        # A cell's whole series is one inner chunk, at the block's full shape.
+        tile = (4 // 8) * geometry.tile_columns + 4 // 8
+        row, column = geometry.tile_origin(tile)
+        block = zarrstore.read_array_chunk(self.delta.path, "tmp2m", 0, tile)
+        self.assertEqual(block.shape, (self.bundle.frame_count, 8, 8))
+        np.testing.assert_array_equal(block[:, 4 - row, 4 - column], self.bundle.decode_series(1, 4, 4))
+
+    def test_the_chains_are_the_bundles_predictors(self) -> None:
+        for report, delta in ((self.delta, True), (self.plain, False)):
+            for name, predictor in (("tmp2m", "previous"), ("prate", "raw")):
+                chain = [
+                    codec["name"]
+                    for codec in zarrstore.read_json(report.path / name / "zarr.json")["codecs"][0][
+                        "configuration"
+                    ]["codecs"]
+                ]
+                self.assertEqual(
+                    chain,
+                    (["xue.delta"] if delta and predictor == "previous" else []) + ["bytes", "zstd"],
+                )
+        # The group carries the bundle's metadata verbatim, as the map store's does.
+        self.assertEqual(
+            zarrstore.read_json(self.delta.path / "zarr.json")["attributes"]["xue"], self.bundle.metadata
+        )
+
+    def test_the_series_store_path(self) -> None:
+        self.assertEqual(zarrstore.series_store_path_for(Path("x/tmp2m.xue")), Path("x/tmp2m.series.zarr"))
+
+    def test_the_rollout_switch_is_per_source(self) -> None:
+        """The companion ships only where a source opts in, so it can be
+        observed on one dataset first. GFS is that dataset; every other source
+        is off until its own registry entry says otherwise."""
+        gfs = source_spec("gfs")
+        self.assertTrue(gfs.series_bundle_ids)
+        for bundle_id in gfs.series_bundle_ids:
+            self.assertIn(bundle_id, binconvert.published_bundle_ids(gfs))
+            self.assertNotIn(".half", bundle_id)
+        for model in ("ecmwf", "sflux", "hrrr", "cfs", "mrms", "jma"):
+            with self.subTest(model=model):
+                self.assertEqual(source_spec(model).series_bundle_ids, ())
+
+
 @unittest.skipUnless(zarrcodec.available(), "zarr-python is not installed (uv sync --group zarr)")
 class ZarrClientTests(unittest.TestCase):
     """What a generic client sees. The standard chain needs nothing
@@ -486,12 +565,38 @@ class BuildIntegrationTests(unittest.TestCase):
         def strip(manifest: dict) -> dict:
             for bundle in manifest["bundles"]:
                 bundle.pop("zarr", None)
+                bundle.pop("series", None)
                 for variant in bundle.get("variants", []):
                     variant.pop("zarr", None)
             return manifest
 
         self.assertEqual(without, strip(with_zarr))
         self.assertEqual(list(self.without.rglob("*.zarr")), [])
+
+    def test_the_series_companion_is_named_and_reads_the_same_codes(self) -> None:
+        manifest = json.loads((self.with_zarr / "manifest.json").read_text(encoding="utf-8"))
+        for bundle in manifest["bundles"]:
+            with self.subTest(variable=bundle["variable"]):
+                if bundle["variable"] not in source_spec("gfs").series_bundle_ids:
+                    self.assertNotIn("series", bundle)
+                    continue
+                series = bundle["series"]
+                self.assertEqual(series["path"], bundle["path"].removesuffix(".xue") + ".series.zarr")
+                self.assertEqual(series["byteLength"], zarrstore.store_byte_length(self.with_zarr / series["path"]))
+                root = (self.with_zarr / series["path"] / "zarr.json").read_bytes()
+                self.assertEqual(series["crc32"], f"{binformat.crc32_plane(root):08x}")
+                bundle_file = binformat.read_bundle(self.with_zarr / bundle["path"])
+                for numeric_id, name in bundle_file.variable_ids.items():
+                    store = self.with_zarr / series["path"]
+                    geometry = zarrstore.ArrayGeometry.from_metadata(zarrstore.read_json(store / name / "zarr.json"))
+                    self.assertEqual(geometry.time_chunks, 1)
+                    tile = 0
+                    row, column = geometry.tile_origin(tile)
+                    height, width = geometry.tile_shape(tile)
+                    block = zarrstore.read_array_chunk(store, name, 0, tile)
+                    np.testing.assert_array_equal(
+                        block, expected_codes(bundle_file, numeric_id)[:, row : row + height, column : column + width]
+                    )
 
     def test_a_stale_descriptor_is_rejected_when_the_store_moves(self) -> None:
         manifest = json.loads((self.with_zarr / "manifest.json").read_text(encoding="utf-8"))

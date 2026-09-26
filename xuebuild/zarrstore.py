@@ -68,6 +68,14 @@ TIME_CHUNK = 6
 """Frames per Zarr time chunk. The bundle's own group length, on a regular
 grid rather than restarted at every change of step."""
 
+SERIES_BLOCK = (8, 8)
+"""The spatial block a series store is cut into, ``(width, height)``
+(docs/zarr-profile.md, "Series store"). Measured as the sweet spot: the store
+is the same size as the bundle and one cell's whole series is one inner chunk
+of a few KB, where a 4 x 4 block costs four times the index for a third of
+the payload and a 16 x 16 one quadruples the payload for a quarter of the
+index."""
+
 ZSTD_LEVEL = zstdcli.DEFAULT_LEVEL
 DELTA_CODEC = "xue.delta"
 INDEX_LOCATIONS = ("start", "end")
@@ -418,6 +426,34 @@ def _tile_blocks(
     return blocks
 
 
+def _series_blocks(bundle: binformat.Bundle, numeric_id: int, geometry: ArrayGeometry) -> list[np.ndarray]:
+    """Every frame of every block, for a series geometry.
+
+    A series geometry has thousands of tiny blocks and one time chunk, so the
+    v2 chunk path (`_tile_blocks`) would decode one group chunk per (tile,
+    group) — tens of thousands of decodes for a global run. Decode one whole
+    frame at a time instead, the pass the v1 branch already makes, and cut
+    every block out of it. The blocks together hold the variable's whole cube
+    (``frame_count`` x height x width; 167 MB for a 161-frame global uint8
+    temperature bundle), which is what the one pass costs in memory.
+    """
+    if geometry.time_chunks != 1:
+        raise AssertionError("a series geometry has one time chunk")
+    height, width = geometry.height, geometry.width
+    blocks = [
+        np.empty((geometry.frame_count, *geometry.tile_shape(tile)), dtype=np.uint8)
+        for tile in range(geometry.tile_count)
+    ]
+    for frame in range(geometry.frame_count):
+        plane = bundle.decode_plane(numeric_id, bundle.frame_offsets[frame]).reshape(height, width)
+        for tile, block in enumerate(blocks):
+            row, column = geometry.tile_origin(tile)
+            block_height, block_width = block.shape[1], block.shape[2]
+            block[frame] = plane[row : row + block_height, column : column + block_width]
+    bundle.clear_cache()
+    return blocks
+
+
 def _pad_block(block: np.ndarray, geometry: ArrayGeometry, nodata: int) -> np.ndarray:
     """A clipped block at the full inner-chunk shape, nodata beyond the grid
     and beyond the axis: a Zarr chunk is always stored whole."""
@@ -559,6 +595,13 @@ def _comparable_chunk(
     grid does not clip. Only a v2 file has chunks to compare against."""
     if bundle.container_version != binformat.VERSION_V2:
         return None
+    # The bundle chunk a store chunk equals must be cut the same way: same tile
+    # size, same frames. A series geometry's blocks are far smaller than the
+    # bundle's tiles, so nothing is comparable — without this the two tile
+    # grids would be conflated (a one-group bundle, a single-frame file
+    # included, would look comparable block for block).
+    if (geometry.tile_width, geometry.tile_height) != (bundle.tiles.tile_width, bundle.tiles.tile_height):
+        return None
     if geometry.tile_shape(tile) != (geometry.tile_height, geometry.tile_width):
         return None
     first = time_chunk * geometry.time_chunk
@@ -582,10 +625,12 @@ def _write_array(
     delta: bool,
     index_location: str,
     executor: ThreadPoolExecutor,
+    series: bool = False,
 ) -> tuple[int, int, int, int]:
     """One variable's array: its metadata and its one shard. Returns bytes
     written, inner chunks written, comparable and identical chunks (see
-    :class:`ExportReport`)."""
+    :class:`ExportReport`). ``series`` reads the bundle a plane at a time,
+    the way a series geometry's thousands of tiny blocks want."""
     predictor = _predictor_name(bundle, numeric_id)
     use_delta = delta and predictor == "previous"
     nodata = variable["quantization"]["nodataCode"]
@@ -598,7 +643,11 @@ def _write_array(
     chunks = comparable = identical = 0
     shard_payloads: list[bytes] = []
     for time_chunk in range(geometry.time_chunks):
-        blocks = _tile_blocks(bundle, numeric_id, geometry, geometry.frames(time_chunk))
+        blocks = (
+            _series_blocks(bundle, numeric_id, geometry)
+            if series
+            else _tile_blocks(bundle, numeric_id, geometry, geometry.frames(time_chunk))
+        )
         stored = [_pad_block(block, geometry, nodata) for block in blocks]
         if use_delta:
             stored = [_delta_encode(block) for block in stored]
@@ -638,6 +687,8 @@ def export_bundle(
     index_location: str = DEFAULT_INDEX_LOCATION,
     tile: tuple[int, int] | None = None,
     executor: ThreadPoolExecutor | None = None,
+    series: bool = False,
+    block: tuple[int, int] | None = None,
 ) -> ExportReport:
     """Derive the Zarr v3 store of one bundle.
 
@@ -647,18 +698,36 @@ def export_bundle(
     stays the default any Zarr client reads without registering anything.
     ``tile`` is only for a v1 bundle, which carries no tiling of its own.
     ``executor`` bounds the compression a build shares between bundles.
+
+    ``series`` cuts the other access pattern instead (docs/zarr-profile.md,
+    "Series store"): one inner chunk is the whole time axis of one ``block``
+    spatial block, so a cell's series is one chunk. ``export_series`` is the
+    named wrapper; the parameters are here so both stores share one writer.
     """
     if index_location not in INDEX_LOCATIONS:
         raise ConversionError(f"index location must be one of {', '.join(INDEX_LOCATIONS)}, not {index_location!r}")
     bundle = binformat.read_bundle(xue_path)
-    tile_width, tile_height = _bundle_tile(bundle, tile)
-    geometry = ArrayGeometry(
-        frame_count=bundle.frame_count,
-        height=bundle.height,
-        width=bundle.width,
-        tile_height=tile_height,
-        tile_width=tile_width,
-    )
+    if series:
+        block = block or SERIES_BLOCK
+        if len(block) != 2 or block[0] < 1 or block[1] < 1:
+            raise ConversionError("a series block must be two positive cell counts")
+        geometry = ArrayGeometry(
+            frame_count=bundle.frame_count,
+            height=bundle.height,
+            width=bundle.width,
+            tile_height=block[1],
+            tile_width=block[0],
+            time_chunk=bundle.frame_count,
+        )
+    else:
+        tile_width, tile_height = _bundle_tile(bundle, tile)
+        geometry = ArrayGeometry(
+            frame_count=bundle.frame_count,
+            height=bundle.height,
+            width=bundle.width,
+            tile_height=tile_height,
+            tile_width=tile_width,
+        )
     variables = {variable["numericId"]: variable for variable in bundle.metadata["variables"]}
     # The arrays in the order the group's `variables` lists them.
     array_names = [variable["id"] for variable in bundle.metadata["variables"]]
@@ -687,6 +756,7 @@ def export_bundle(
                 delta=delta,
                 index_location=index_location,
                 executor=pool,
+                series=series,
             )
             report.arrays[name] = written
             report.byte_length += written
@@ -723,9 +793,47 @@ def export_bundle(
     return report
 
 
+def export_series(
+    xue_path: Path,
+    zarr_dir: Path,
+    *,
+    block: tuple[int, int] = SERIES_BLOCK,
+    delta: bool = True,
+    index_location: str = DEFAULT_INDEX_LOCATION,
+    executor: ThreadPoolExecutor | None = None,
+) -> ExportReport:
+    """Derive the bundle's series store (docs/zarr-profile.md, "Series store").
+
+    The same codes cut one way for the map and the other way for a point:
+    one inner chunk is the whole time axis of one ``block`` spatial block, so
+    a cell's series costs one chunk instead of one per time chunk. ``delta``
+    defaults on — the ``xue.delta`` chain is the bundle's own PREVIOUS
+    predictor, and it is what the series layout was measured with; the
+    published map store leaves it off for standard-Zarr readability, which a
+    series store does not need to imitate. ``executor`` bounds the
+    compression a build shares between stores.
+    """
+    return export_bundle(
+        xue_path,
+        zarr_dir,
+        delta=delta,
+        index_location=index_location,
+        executor=executor,
+        series=True,
+        block=block,
+    )
+
+
 def store_path_for(xue_path: Path) -> Path:
     """``tmp2m.xue`` → ``tmp2m.zarr``, ``tmp2m.half.xue`` → ``tmp2m.half.zarr``."""
     return xue_path.with_suffix(".zarr")
+
+
+def series_store_path_for(xue_path: Path) -> Path:
+    """``tmp2m.xue`` → ``tmp2m.series.zarr``, ``tmp2m.half.xue`` →
+    ``tmp2m.half.series.zarr``. Only the full-resolution bundle ships one in
+    production, but the mapping is total so a variant can be exported too."""
+    return xue_path.with_suffix(".series.zarr")
 
 
 # -- reading (NumPy only, for tests and inspection) -----------------------------

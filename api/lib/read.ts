@@ -39,9 +39,20 @@ interface Pointer {
   manifestCrc32: string;
 }
 
+interface Store {
+  path: string;
+  crc32: string;
+  byteLength?: number;
+}
+
 interface ManifestBundle {
   variable: string;
-  zarr?: { path: string; crc32: string };
+  zarr?: Store;
+  /** The series companion (`docs/zarr-profile.md`, "Series store"): one
+   * inner chunk is a cell's whole series. Preferred over `zarr` when present,
+   * because a point read then costs one chunk instead of one per time chunk;
+   * absent on older runs and on bundles the pipeline does not mirror. */
+  series?: Store;
 }
 
 interface Manifest {
@@ -285,11 +296,15 @@ export async function readPoint(options: ReadPointOptions, decodeChunk: DecodeCh
         available: manifest.bundles.map((candidate) => candidate.variable),
       });
     }
-    if (!bundle.zarr) {
-      throw new HttpError(404, "unknown_variable", `bundle ${bundleId} ships no zarr store`);
+    // Prefer the series companion: its whole-axis inner chunk turns the
+    // per-time-chunk chunk reads into one, which is the difference between a
+    // free-tier variable or two and the documented eight.
+    const store = bundle.series ?? bundle.zarr;
+    if (!store) {
+      throw new HttpError(404, "unknown_variable", `bundle ${bundleId} ships no store`);
     }
-    const storeBase = `${runDir}/${bundle.zarr.path}`;
-    const crc = bundle.zarr.crc32;
+    const storeBase = `${runDir}/${store.path}`;
+    const crc = store.crc32;
     const group = parseGroupMetadata(await fetchText(`${storeBase}/zarr.json?v=${crc}`));
     const metadata = group.metadata as unknown as BundleMetadata;
     const bundleCell = probeCell(metadata, lon, lat);
