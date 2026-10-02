@@ -81,8 +81,12 @@ jobs:
           sudo apt-get install -y --no-install-recommends libgdal-dev libclang-dev
           make encoder-py
 
+      # `--no-sync`: `uv run` otherwise re-syncs and replaces the xuepy the
+      # step above built from this tree with PyPI's, which is exactly the
+      # stale wheel a release branch must not test against. The preceding
+      # `uv sync` already made the environment current.
       - name: Run Python tests
-        run: uv run python -m unittest discover -s tests -p 'test_*.py' -v
+        run: uv run --no-sync python -m unittest discover -s tests -p 'test_*.py' -v
 
   rust:
     name: rust
