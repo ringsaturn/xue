@@ -22,6 +22,7 @@
 
 mod bucket;
 mod cache;
+mod docs;
 mod error;
 mod point;
 mod source;
@@ -61,6 +62,9 @@ async fn route(request: Request, env: &Env) -> Result<Response, HttpError> {
     let url = request.url().map_err(HttpError::from)?;
     let path = url.path().trim_end_matches('/');
     let path = if path.is_empty() { "/" } else { path };
+    // The contract is generated and held per isolate; the Swagger UI under
+    // `public/` is served by the static-assets server, so it never reaches
+    // this route.
     let cacheable = method == Method::Get
         && (path == "/v1/catalog"
             || path == "/v1/point"
@@ -90,6 +94,7 @@ async fn dispatch(path: &str, url: &worker::Url, env: &Env) -> Result<Response, 
             });
             error::json(&body, 200, Some("no-store"), &[])
         }
+        "/openapi.json" | "/v1/openapi.json" => docs::openapi(&data).await,
         "/v1/catalog" => source::catalog(&data).await,
         "/v1/point" => {
             let query = point::parse_query(url);

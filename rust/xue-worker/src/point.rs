@@ -3,9 +3,11 @@
 //! Resolution is the published chain — Collection (`xue:pointer`) → pointer →
 //! manifest — and decoding reuses the container's `decode_chunk` plus the Zarr
 //! read geometry in `xue::zarr`. No new format, no new artifact. The response
-//! carries the source and run, the request, the probed cell, the ISO 8601 axis,
-//! and per requested bundle either one variable's `{label, unit, values}` or a
-//! `{components: {…}}` map, with `null` for a missing code.
+//! carries the source and run, the request, the probed cell and the ISO 8601
+//! axis. `variables` is a flat map keyed by variable id — a vector bundle's
+//! components are separate entries carrying their `bundle` — so a client types
+//! it as one `map<string, Variable>` whatever it asked for; `null` marks a
+//! missing code.
 
 use futures_util::future::join_all;
 use serde::Deserialize;
@@ -152,19 +154,24 @@ fn param(url: &Url, key: &str) -> Option<String> {
 }
 
 pub fn parse_query(url: &Url) -> PointQuery {
-    let variables = param(url, "variables").map(|value| {
-        value
-            .split(',')
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .map(str::to_owned)
-            .collect::<Vec<_>>()
-    });
+    // Both spellings: `?variables=a,b` (the OpenAPI `explode: false` form) and
+    // `?variables=a&variables=b` (a repeated array).
+    let mut variables: Vec<String> = Vec::new();
+    for (name, value) in url.query_pairs() {
+        if name == "variables" {
+            for part in value.split(',') {
+                let part = part.trim();
+                if !part.is_empty() {
+                    variables.push(part.to_owned());
+                }
+            }
+        }
+    }
     PointQuery {
         source: param(url, "source"),
         lat: param(url, "lat").and_then(|value| value.parse().ok()),
         lon: param(url, "lon").and_then(|value| value.parse().ok()),
-        variables: variables.filter(|list| !list.is_empty()),
+        variables: (!variables.is_empty()).then_some(variables),
         time: param(url, "time"),
         run: param(url, "run"),
     }
@@ -174,16 +181,18 @@ fn storage_error(error: DecodeError) -> HttpError {
     HttpError::new(502, "upstream_failed", error.to_string())
 }
 
-fn variable_json(variable: &VariableMetadata, values: &[Option<f64>]) -> Value {
-    let mut entry = Map::new();
-    if let Some(label) = &variable.label {
-        entry.insert("label".into(), json!(label));
-    }
-    if let Some(unit) = &variable.unit {
-        entry.insert("unit".into(), json!(unit));
-    }
-    entry.insert("values".into(), json!(values));
-    Value::Object(entry)
+/// One entry of the flat `variables` map: the variable's own id keys it, and
+/// `bundle` says which requested bundle it belongs to, so a vector bundle's
+/// components are separate entries rather than a nested `components` object.
+/// Every field is always present — `label`/`unit` are `null` when the metadata
+/// has none — so a client types one struct whatever it asked for.
+fn variable_json(variable: &VariableMetadata, bundle: &str, values: &[Option<f64>]) -> Value {
+    json!({
+        "bundle": bundle,
+        "label": variable.label,
+        "unit": variable.unit,
+        "values": values,
+    })
 }
 
 /// The values of one variable at one cell across the requested frames.
@@ -405,7 +414,6 @@ pub async fn read_point(data: &Data, query: &PointQuery) -> Result<(Value, Strin
         }
         unit_seconds.get_or_insert(metadata.unit_seconds);
 
-        let mut decoded = Map::new();
         for variable in &metadata.variables {
             let values = read_bundle_series(
                 data,
@@ -416,19 +424,11 @@ pub async fn read_point(data: &Data, query: &PointQuery) -> Result<(Value, Strin
                 &indices,
             )
             .await?;
-            decoded.insert(variable.id.clone(), variable_json(variable, &values));
+            variables.insert(
+                variable.id.clone(),
+                variable_json(variable, bundle_id, &values),
+            );
         }
-        let entry = if metadata.variables.len() == 1 && metadata.variables[0].id == *bundle_id {
-            decoded.get(bundle_id).cloned().unwrap_or(Value::Null)
-        } else if metadata.variables.len() == 1 {
-            decoded
-                .get(&metadata.variables[0].id)
-                .cloned()
-                .unwrap_or(Value::Null)
-        } else {
-            json!({ "components": decoded })
-        };
-        variables.insert(bundle_id.clone(), entry);
     }
 
     let body = json!({

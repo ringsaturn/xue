@@ -1,0 +1,346 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Xue data API",
+    "version": "0.1.0",
+    "summary": "Read-only JSON over the published Xue weather stores.",
+    "description": "A stateless facade over the public Xue dataset on Cloudflare R2. It resolves a run the way the STAC catalog does (Collection -> live pointer -> manifest), reads the bundle's Zarr v3 store and decodes the quantized codes. It never writes data, and the viewer does not depend on it.\n\nTimes are UTC ISO 8601. `variables` is a flat map keyed by variable id, whatever bundle was requested: a vector bundle's components are separate entries carrying the `bundle` they belong to. Every field is present; `null` marks a missing code or an absent label/unit.",
+    "license": { "name": "MIT OR Apache-2.0" }
+  },
+  "servers": [
+    { "url": "https://xue-api.ringsaturn.me" },
+    { "url": "/" }
+  ],
+  "tags": [
+    { "name": "meta", "description": "Liveness and the machine-readable contract." },
+    { "name": "catalog", "description": "What the dataset publishes." },
+    { "name": "data", "description": "One cell's series." }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": ["meta"],
+        "operationId": "health",
+        "summary": "Liveness; never touches the bucket.",
+        "responses": {
+          "200": {
+            "description": "The service is up.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Health" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/openapi.json": {
+      "get": {
+        "tags": ["meta"],
+        "operationId": "openapi",
+        "summary": "This document.",
+        "responses": {
+          "200": {
+            "description": "The OpenAPI contract.",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        }
+      }
+    },
+    "/v1/catalog": {
+      "get": {
+        "tags": ["catalog"],
+        "operationId": "catalog",
+        "summary": "The sources the dataset publishes.",
+        "responses": {
+          "200": {
+            "description": "One entry per STAC Collection.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Catalog" }
+              }
+            }
+          },
+          "502": { "$ref": "#/components/responses/ErrorResponse" }
+        }
+      }
+    },
+    "/v1/sources/{source}": {
+      "get": {
+        "tags": ["catalog"],
+        "operationId": "source",
+        "summary": "One source's live run and variable table.",
+        "parameters": [
+          { "$ref": "#/components/parameters/sourcePath" }
+        ],
+        "responses": {
+          "200": {
+            "description": "The live run's summary.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Source" }
+              }
+            }
+          },
+          "404": { "$ref": "#/components/responses/ErrorResponse" },
+          "502": { "$ref": "#/components/responses/ErrorResponse" }
+        }
+      }
+    },
+    "/v1/point": {
+      "get": {
+        "tags": ["data"],
+        "operationId": "point",
+        "summary": "One cell's series, one or more bundles.",
+        "parameters": [
+          { "$ref": "#/components/parameters/sourceQuery" },
+          { "$ref": "#/components/parameters/lat" },
+          { "$ref": "#/components/parameters/lon" },
+          { "$ref": "#/components/parameters/variables" },
+          { "$ref": "#/components/parameters/time" },
+          { "$ref": "#/components/parameters/run" }
+        ],
+        "responses": {
+          "200": {
+            "description": "The probed cell and one entry per returned variable.",
+            "headers": {
+              "x-xue-run": {
+                "description": "The run directory the response resolved to.",
+                "schema": { "type": "string" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/PointResponse" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/ErrorResponse" },
+          "404": { "$ref": "#/components/responses/ErrorResponse" },
+          "422": { "$ref": "#/components/responses/ErrorResponse" },
+          "502": { "$ref": "#/components/responses/ErrorResponse" }
+        }
+      }
+    }
+  },
+  "components": {
+    "parameters": {
+      "sourcePath": {
+        "name": "source",
+        "in": "path",
+        "required": true,
+        "description": "Collection id, e.g. `gfs`, `mrms`, `himawari`.",
+        "schema": { "type": "string" }
+      },
+      "sourceQuery": {
+        "name": "source",
+        "in": "query",
+        "required": true,
+        "description": "Collection id, e.g. `gfs`, `mrms`, `himawari`.",
+        "schema": { "type": "string" }
+      },
+      "lat": {
+        "name": "lat",
+        "in": "query",
+        "required": true,
+        "description": "Latitude in degrees, -90 to 90.",
+        "schema": { "type": "number", "minimum": -90, "maximum": 90 }
+      },
+      "lon": {
+        "name": "lon",
+        "in": "query",
+        "required": true,
+        "description": "Longitude in degrees, -180 to 360 (a satellite disk may use 180 to 360).",
+        "schema": { "type": "number", "minimum": -180, "maximum": 360 }
+      },
+      "variables": {
+        "name": "variables",
+        "in": "query",
+        "required": false,
+        "description": "Comma-separated bundle ids, e.g. `tmp2m,wind10m`. Defaults to the run's first bundle.",
+        "schema": { "type": "string" },
+        "example": "tmp2m,wind10m"
+      },
+      "time": {
+        "name": "time",
+        "in": "query",
+        "required": false,
+        "description": "A valid time; the nearest frame is returned. Without it the whole axis is returned.",
+        "schema": { "type": "string", "format": "date-time" }
+      },
+      "run": {
+        "name": "run",
+        "in": "query",
+        "required": false,
+        "description": "Pin the run instead of following the live pointer: a STAC Item id (`gfs.2026092506`, `mrms.2026092509.1455`), a run directory (`mrms.2026092509/1455`) or a plain run id. The answer is then stable and caches for a day.",
+        "schema": { "type": "string" }
+      }
+    },
+    "responses": {
+      "ErrorResponse": {
+        "description": "An error document.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "Health": {
+        "type": "object",
+        "required": ["status", "build", "now"],
+        "properties": {
+          "status": { "type": "string", "const": "ok" },
+          "build": { "type": "string" },
+          "now": { "type": "string", "format": "date-time" }
+        }
+      },
+      "Catalog": {
+        "type": "object",
+        "required": ["dataOrigin", "collections"],
+        "properties": {
+          "dataOrigin": {
+            "type": "string",
+            "description": "The public origin a client can read the same objects from directly."
+          },
+          "collections": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/Collection" }
+          }
+        }
+      },
+      "Collection": {
+        "type": "object",
+        "required": ["id", "title", "href"],
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": ["string", "null"] },
+          "href": { "type": "string", "description": "Relative href to the STAC Collection." }
+        }
+      },
+      "Source": {
+        "type": "object",
+        "required": ["source", "bundles", "variables"],
+        "properties": {
+          "source": { "type": "string" },
+          "title": { "type": ["string", "null"] },
+          "description": { "type": ["string", "null"] },
+          "license": { "type": ["string", "null"] },
+          "run": {
+            "type": ["string", "null"],
+            "description": "The live run directory, e.g. `gfs.2026100206`."
+          },
+          "runTime": { "type": ["string", "null"], "format": "date-time" },
+          "bbox": {
+            "type": ["array", "null"],
+            "items": { "type": "number" }
+          },
+          "time": {
+            "type": ["object", "null"],
+            "description": "The Item's `cube:dimensions.time`.",
+            "additionalProperties": true
+          },
+          "bundles": {
+            "type": "array",
+            "description": "The request vocabulary: the ids `/v1/point?variables=` accepts.",
+            "items": { "type": "string" }
+          },
+          "variables": {
+            "type": "object",
+            "description": "The flat variable table, keyed by variable id.",
+            "additionalProperties": { "$ref": "#/components/schemas/VariableMeta" }
+          }
+        }
+      },
+      "VariableMeta": {
+        "type": "object",
+        "required": ["bundle", "label", "unit"],
+        "properties": {
+          "bundle": { "type": "string" },
+          "label": { "type": ["string", "null"] },
+          "unit": { "type": ["string", "null"] }
+        }
+      },
+      "Variable": {
+        "type": "object",
+        "required": ["bundle", "label", "unit", "values"],
+        "properties": {
+          "bundle": { "type": "string" },
+          "label": { "type": ["string", "null"] },
+          "unit": { "type": ["string", "null"] },
+          "values": {
+            "type": "array",
+            "description": "One value per entry of `time.times`; `null` is a missing code.",
+            "items": { "type": ["number", "null"] }
+          }
+        }
+      },
+      "Cell": {
+        "type": "object",
+        "required": ["column", "row", "longitude", "latitude"],
+        "properties": {
+          "column": { "type": "integer" },
+          "row": { "type": "integer" },
+          "longitude": { "type": "number" },
+          "latitude": { "type": "number" }
+        }
+      },
+      "TimeAxis": {
+        "type": "object",
+        "required": ["unitSeconds", "times"],
+        "properties": {
+          "unitSeconds": { "type": "integer" },
+          "times": { "type": "array", "items": { "type": "string", "format": "date-time" } }
+        }
+      },
+      "PointResponse": {
+        "type": "object",
+        "required": ["source", "run", "runTime", "request", "cell", "time", "variables"],
+        "properties": {
+          "source": { "type": "string" },
+          "run": { "type": "string" },
+          "runTime": { "type": ["string", "null"], "format": "date-time" },
+          "request": {
+            "type": "object",
+            "required": ["lat", "lon", "variables"],
+            "properties": {
+              "lat": { "type": "number" },
+              "lon": { "type": "number" },
+              "variables": {
+                "type": "array",
+                "description": "The bundle ids requested (or the default).",
+                "items": { "type": "string" }
+              }
+            }
+          },
+          "cell": { "$ref": "#/components/schemas/Cell" },
+          "time": { "$ref": "#/components/schemas/TimeAxis" },
+          "variables": {
+            "type": "object",
+            "description": "The flat variable table, keyed by variable id.",
+            "additionalProperties": { "$ref": "#/components/schemas/Variable" }
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": ["code", "message"],
+            "properties": {
+              "code": {
+                "type": "string",
+                "description": "One of `invalid_parameter`, `unknown_source`, `unknown_run`, `unknown_variable`, `no_live_run`, `method_not_allowed`, `point_off_grid`, `upstream_failed`, `not_found`."
+              },
+              "message": { "type": "string" },
+              "detail": { "description": "Extra context, e.g. the available bundle ids on `unknown_variable`." }
+            }
+          }
+        }
+      }
+    }
+  }
+}

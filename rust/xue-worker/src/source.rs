@@ -74,7 +74,10 @@ pub async fn read_source(data: &Data, source: &str) -> Result<Value, HttpError> 
         "run".into(),
         collection.get("xue:live").cloned().unwrap_or(Value::Null),
     );
-    summary.insert("bundles".into(), Value::Null);
+    // `bundles` is the request vocabulary (`/v1/point?variables=` ids) and
+    // `variables` the flat per-variable metadata; both are filled below.
+    summary.insert("bundles".into(), json!([]));
+    summary.insert("variables".into(), json!({}));
 
     match data.value(&format!("{source}/item.json")).await {
         Ok(item) => {
@@ -95,84 +98,59 @@ pub async fn read_source(data: &Data, source: &str) -> Result<Value, HttpError> 
             if let Some(value) = item.pointer("/properties/cube:dimensions/time") {
                 summary.insert("time".into(), value.clone());
             }
-            summary.insert("bundles".into(), bundles_from_item(&item));
+            let (bundles, variables) = variables_from_item(&item);
+            summary.insert("bundles".into(), json!(bundles));
+            summary.insert("variables".into(), Value::Object(variables));
         }
         Err(_) => {
-            // No live STAC Item (an older bucket or a local build): fall back to
-            // the manifest's bundle ids, which the point path already reads.
+            // No live STAC Item (an older bucket or a local build): the
+            // manifest names the bundle ids but not their variables, so only
+            // the request vocabulary can be filled.
             if let Ok(Run { manifest, .. }) = resolve_run(data, source, None).await {
-                let bundles: Map<String, Value> = manifest
+                let bundles: Vec<&str> = manifest
                     .bundles
                     .iter()
-                    .map(|bundle| {
-                        (
-                            bundle.variable.clone(),
-                            json!({ "label": Value::Null, "unit": Value::Null }),
-                        )
-                    })
+                    .map(|bundle| bundle.variable.as_str())
                     .collect();
-                summary.insert("bundles".into(), Value::Object(bundles));
+                summary.insert("bundles".into(), json!(bundles));
             }
         }
     }
     Ok(Value::Object(summary))
 }
 
-/// Group an Item's `cube:variables` by the bundle each array belongs to.
-fn bundles_from_item(item: &Value) -> Value {
-    let mut groups: Vec<(String, Vec<(&str, Value)>)> = Vec::new();
-    if let Some(variables) = item
+/// The request vocabulary and the flat variable table an Item carries:
+/// `bundles` is the list of bundle ids a caller may request, and `variables` is
+/// keyed by array id with the bundle each belongs to, so a vector bundle's
+/// components are separate entries rather than a nested `components` object.
+fn variables_from_item(item: &Value) -> (Vec<String>, Map<String, Value>) {
+    let mut bundles: Vec<String> = Vec::new();
+    let mut variables = Map::new();
+    if let Some(cube) = item
         .pointer("/properties/cube:variables")
         .and_then(Value::as_object)
     {
-        for (array_id, variable) in variables {
-            let bundle_id = variable
+        for (array_id, variable) in cube {
+            let bundle = variable
                 .get("xue:bundle")
                 .and_then(Value::as_str)
                 .unwrap_or(array_id);
-            let record = json!({
-                "id": array_id,
-                "label": variable
-                    .get("description")
-                    .or_else(|| variable.get("title"))
-                    .cloned()
-                    .unwrap_or(Value::Null),
-                "unit": variable.get("unit").cloned().unwrap_or(Value::Null),
-            });
-            match groups.iter_mut().find(|(id, _)| id == bundle_id) {
-                Some((_, arrays)) => arrays.push((array_id, record)),
-                None => groups.push((bundle_id.to_owned(), vec![(array_id, record)])),
+            if !bundles.iter().any(|held| held == bundle) {
+                bundles.push(bundle.to_owned());
             }
+            variables.insert(
+                array_id.clone(),
+                json!({
+                    "bundle": bundle,
+                    "label": variable
+                        .get("description")
+                        .or_else(|| variable.get("title"))
+                        .cloned()
+                        .unwrap_or(Value::Null),
+                    "unit": variable.get("unit").cloned().unwrap_or(Value::Null),
+                }),
+            );
         }
     }
-    let bundles: Map<String, Value> = groups
-        .into_iter()
-        .map(|(bundle_id, arrays)| {
-            let only = &arrays[0].1;
-            let entry = if arrays.len() == 1
-                && only.get("id").and_then(Value::as_str) == Some(bundle_id.as_str())
-            {
-                json!({
-                    "label": only.get("label").cloned().unwrap_or(Value::Null),
-                    "unit": only.get("unit").cloned().unwrap_or(Value::Null),
-                })
-            } else {
-                let components: Map<String, Value> = arrays
-                    .iter()
-                    .map(|(id, record)| {
-                        (
-                            (*id).to_owned(),
-                            json!({
-                                "label": record.get("label").cloned().unwrap_or(Value::Null),
-                                "unit": record.get("unit").cloned().unwrap_or(Value::Null),
-                            }),
-                        )
-                    })
-                    .collect();
-                json!({ "components": components })
-            };
-            (bundle_id, entry)
-        })
-        .collect();
-    Value::Object(bundles)
+    (bundles, variables)
 }

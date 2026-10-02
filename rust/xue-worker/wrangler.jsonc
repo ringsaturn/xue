@@ -8,6 +8,12 @@
   "build": {
     "command": "cargo install -q worker-build && worker-build --release"
   },
+  // The Swagger UI (`public/docs/`, a pinned swagger-ui-dist) is served by the
+  // static-assets server, not compiled into the wasm; only `/v1/*` reaches the
+  // Worker. `public/index.html` is a redirect to the docs.
+  "assets": {
+    "directory": "public"
+  },
   // The dataset bucket: the Worker reads the objects the publish-* jobs write
   // by exact key and range. The binding adds no exposure the public origin
   // does not already have; the Worker only builds keys the manifest/pointer
