@@ -60,6 +60,10 @@ publishing; `showcase/README.md` covers authoring historical cases.
 ```sh
 make check                       # verify GDAL / zstd / node / wasm-pack versions
 make wasm                        # build the WASM decoder into web/src/wasm/ (generated, gitignored)
+make api-worker                  # build the data-API Worker (rust/xue-worker, worker-build)
+make api-dev                     # wrangler dev, local Worker + real R2 (remote binding)
+make api-dev-cdn                 # the fallback: local Worker reading the public origin
+make deploy-api                  # deploy the API Worker (needs Workers Scripts: Edit)
 make mvp [MODEL=gfs|ecmwf|aifs|ifshres|sflux] # check + install + wasm + build a run + vite build
 make serve                       # vite preview on 127.0.0.1
 npm run dev                      # vite dev server
@@ -748,6 +752,30 @@ and every Collection's licence; the live run is read from each Collection
 in the browser — written by `stac._write_root` wherever the catalog is and
 uploaded with it by `upload-r2-stac-collection`. Its hostnames mirror
 `web/src/site.ts`.
+
+### Data API (`rust/xue-worker`)
+
+A read-only JSON API over the published stores, as its own Worker on
+`xue-api.ringsaturn.me` (contract `plans/025-cf-worker-api.md`). It is an
+additional layer, not part of the pipeline: it adds no format and writes
+nothing, and the shell does not depend on it. Endpoints: `/health`,
+`/v1/catalog`, `/v1/sources/{source}` (the live run's summary and full
+variable list, from the live STAC Item) and `/v1/point` (one cell's series,
+optionally at one ISO 8601 `time` or a pinned `run`). Resolution is the
+published chain Collection → pointer → manifest; the store is read over R2
+ranges through the `DATA` binding and decoded by the `xue` crate's own
+`decode_chunk`, the same path the browser's wasm uses. The Zarr read geometry
+lives in `rust/xue/src/zarr.rs` (group/array metadata, shard index, tile
+arithmetic, grid probe, codebook decode), IO-free and unit-tested;
+`xue-worker` adds only the HTTP/serde shell and the bucket reads.
+`web/src/zarr/shard.ts` stays the browser's own implementation — both are
+held to `docs/zarr-profile.md`, and `tests/web/zarr.test.ts` still covers the
+browser's — so folding the browser onto the Rust reader is the remaining
+`plans/025` §9.3 step. The R2 binding is marked `remote: true` (a `wrangler
+dev`-only field `wrangler deploy` ignores), so `make api-dev` runs the Worker
+locally while reading the real bucket; `DATA_SOURCE=cdn` switches it to the
+public origin instead (`make api-dev-cdn`), the fallback when the network
+blocks the remote-binding session.
 
 ### Uploads to R2 (`scripts/aws-config`)
 

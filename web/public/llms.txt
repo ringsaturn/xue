@@ -200,8 +200,13 @@ Facts worth getting right:
 - Only the newest run per source is kept online. Runs are pruned when
   superseded; historical events survive only as cases (below).
 - The site is entirely static: Cloudflare Pages for the shell, a public R2
-  bucket for data, HTTP Range requests for streaming. There is no API server
-  and no account.
+  bucket for data, HTTP Range requests for streaming. No account, no cookies.
+- A read-only JSON API over the same public bucket is at
+  https://xue-api.ringsaturn.me: `GET /v1/catalog`, `GET
+  /v1/sources/{source}` (the live run and its variable list), and `GET
+  /v1/point?source=&lat=&lon=&variables=` for one cell's series (ISO 8601
+  `time`, or the whole axis). It never writes data, and the site does not
+  depend on it.
 - Data licensing: NOAA GFS, GEFS-Aerosols, HRRR and NCEP CFSv2 are public domain; ECMWF open data is CC BY 4.0 and
   what is served is a converted derivative ("Contains modified ECMWF open
   data"); `cma` is a CMA product (中国气象局国家气象中心, www.nmc.cn) and `mrms` a

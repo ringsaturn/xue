@@ -34,6 +34,7 @@
 
 pub mod format;
 pub mod decode;
+pub mod zarr;
 
 pub use decode::{decode_chunk, Bundle, StreamingBundle};
 pub use format::{

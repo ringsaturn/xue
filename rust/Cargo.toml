@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["xue", "xue-wasm", "xue-py"]
+members = ["xue", "xue-wasm", "xue-py", "xue-worker"]
 
 # xue-py hard-enables `xue/encoder`, so leaving it in the default set made a
 # bare `cargo build` or `cargo test` in this directory demand a system GDAL

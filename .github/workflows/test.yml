@@ -91,6 +91,8 @@ jobs:
         run: uv sync
 
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -108,6 +110,13 @@ jobs:
 
       - name: Run Rust tests
         run: make test-rust
+
+      # The API Worker links `worker`, which builds only for wasm32, so it is
+      # not in `cargo test`'s default members. Compile it for that target here
+      # so a broken worker fails CI rather than the deploy workflow.
+      - name: Check the API Worker compiles for wasm
+        working-directory: rust
+        run: cargo check -p xue-worker --target wasm32-unknown-unknown
 
       # A broken or private intra-doc link is how a module silently drops out
       # of the rendered page — docs.rs publishes the gap without failing.

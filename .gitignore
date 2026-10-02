@@ -60,6 +60,8 @@ web/src/wasm/
 *.egg-info/
 docs/format.pdf
 build/
+# Wrangler's local dev state (the miniflare R2/KV caches `make api-dev` writes).
+.wrangler/
 
 # `maturin develop` drops the extension module into the source package;
 # released wheels build it in CI (scripts/build-encoder-wheel.sh).

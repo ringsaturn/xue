@@ -16,6 +16,8 @@ const V3_TIME_FIELDS: [&str; 4] =
 
 pub(crate) struct Metadata {
     pub(crate) json: String,
+    /// The lowest schema version able to express this axis and variable set.
+    pub(crate) schema_version: u8,
     pub(crate) width: u32,
     pub(crate) height: u32,
     pub(crate) plane_length: u32,
@@ -454,6 +456,7 @@ pub(crate) fn parse_metadata(raw: &[u8]) -> Result<Metadata, DecodeError> {
     }
     Ok(Metadata {
         json: text.to_owned(),
+        schema_version: schema_version as u8,
         width: width as u32,
         height: height as u32,
         plane_length: plane_length as u32,

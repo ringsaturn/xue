@@ -1,0 +1,55 @@
+name: deploy api
+
+# The data API is its own Worker on xue-api.ringsaturn.me, decoupled from the
+# Pages shell: it deploys only when the worker crate (or the `xue` crate it
+# reads Zarr through) changes. Data publishing stays an R2-only operation.
+#
+# Credentials: a token with "Workers Scripts: Edit" on the account. The Pages
+# token deploy-pages.yml uses differs; give the shared repository token both
+# scopes, or add a dedicated secret and point this workflow at it.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - rust/xue-worker/**
+      - rust/xue/**
+      - rust/Cargo.toml
+      - rust/Cargo.lock
+      - .github/workflows/deploy-api.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: deploy
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # The wrangler build command installs worker-build if it is missing and
+      # otherwise reuses it.
+      - name: Deploy the API worker
+        working-directory: rust/xue-worker
+        run: npx --yes wrangler@4 deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

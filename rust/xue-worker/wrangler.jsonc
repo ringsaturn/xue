@@ -1,0 +1,40 @@
+{
+  // The Xue data API as its own Worker, decoupled from the Pages shell.
+  // Deploy from this directory (`npx wrangler deploy`); the build runs
+  // worker-build over the crate and pulls `xue` from the workspace.
+  "name": "xue-api",
+  "main": "build/worker/shim.mjs",
+  "compatibility_date": "2026-07-08",
+  "build": {
+    "command": "cargo install -q worker-build && worker-build --release"
+  },
+  // The dataset bucket: the Worker reads the objects the publish-* jobs write
+  // by exact key and range. The binding adds no exposure the public origin
+  // does not already have; the Worker only builds keys the manifest/pointer
+  // name, never a client-supplied path.
+  //
+  // `remote: true` is dev-only: `wrangler dev` runs the Worker locally but
+  // routes `env.DATA` to the real bucket through a remote binding session, so
+  // the empty local simulation is bypassed. `wrangler deploy` ignores it. If
+  // that session is blocked (the same network that breaks `wrangler dev
+  // --remote`), use `--local` for an empty bucket or `DATA_SOURCE=cdn` to read
+  // the public origin instead (`make api-dev-cdn`).
+  "r2_buckets": [
+    { "binding": "DATA", "bucket_name": "dataset", "remote": true }
+  ],
+  "vars": {
+    "DATA_PREFIX": "xue",
+    "DATA_ORIGIN": "https://dataset.ringsaturn.me/xue/"
+  },
+  "routes": [
+    { "pattern": "xue-api.ringsaturn.me", "custom_domain": true }
+  ],
+  // The dataset bucket is `location: APAC` (see the Cloudflare R2 API), so the
+  // Worker runs next to it rather than next to the request's ingress data
+  // center: a cold query is a chain of R2 reads, and keeping those local beats
+  // the one forwarding hop the client leg pays. `mode: smart` cannot make this
+  // choice when all traffic lands in one place (it only considers data centers
+  // the Worker has already run in), so the region is explicit.
+  "placement": { "region": "aws:ap-southeast-1" },
+  "observability": { "enabled": true }
+}
