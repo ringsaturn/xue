@@ -2416,11 +2416,15 @@ pub fn convert_bin(
             .iter()
             .map(|bundle| {
                 let variable = bundle["variable"].as_str().unwrap_or_default();
+                // The bundle's grid is its family's; `family_of` is keyed by
+                // variable id, and a vector bundle's id is not one.
+                let family = bundle_grid_family(source, variable)?;
                 bundle_manifest_entry(
                     bundle,
                     manifest_dir,
                     poster_reports.get(variable),
                     variant_reports.get(variable),
+                    grid_for(family),
                 )
             })
             .collect::<Result<_>>()?;
@@ -2479,6 +2483,7 @@ fn bundle_manifest_entry(
     manifest_dir: &Path,
     poster: Option<&Value>,
     variants: Option<&Vec<Value>>,
+    grid: &GridInfo,
 ) -> Result<Value> {
     let relative = |path: &str| -> Result<String> {
         let path = Path::new(path);
@@ -2496,6 +2501,9 @@ fn bundle_manifest_entry(
     };
     let mut entry = Map::new();
     entry.insert("variable".into(), bundle["variable"].clone());
+    // The bundle's full grid, the block a store's `attributes.xue.grid`
+    // carries too, so the STAC Item states the authoritative grid.
+    entry.insert("grid".into(), Value::Object(grid.metadata()));
     entry.insert(
         "path".into(),
         json!(relative(bundle["output"].as_str().unwrap_or_default())?),

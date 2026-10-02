@@ -6,7 +6,10 @@ name: test
 # the Actions parser does not support YAML anchors.)
 on:
   push:
-    branches: [main]
+    # `release/**` so a release branch (`release/0.28`) is tested before it is
+    # merged: its encoders run ahead of the published xuepy wheel, and the job
+    # below builds the wheel from the tree on those branches.
+    branches: [main, "release/**"]
     paths-ignore:
       - "**.md"
       - docs/**
@@ -73,7 +76,7 @@ jobs:
       # reference pipeline); main installs the published wheel and this step
       # never runs there.
       - name: Build the native encoder from this tree
-        if: startsWith(github.ref_name, 'release')
+        if: startsWith(github.ref_name, 'release/')
         run: |
           sudo apt-get install -y --no-install-recommends libgdal-dev libclang-dev
           make encoder-py

@@ -821,11 +821,30 @@ def _bundle_metadata(bundle: dict[str, Any]) -> dict[str, Any] | None:
 def _grid_of(manifest: dict[str, Any]) -> dict[str, Any] | None:
     """The published grid, as ``{first_longitude, first_latitude,
     longitude_step, latitude_step, width, height, wraps}`` at full
-    resolution, or None when the manifest carries no metadata to read one
-    from. Off a poster the dimensions are the decimated ones and the steps
-    are halved back; the extent is then computed from the decimated cell
-    centers, which is the origin exactly and the far edge to within one
-    full cell."""
+    resolution, or None when the manifest carries no grid to read one from.
+
+    A bundle's own ``grid`` — the block a store's ``attributes.xue.grid``
+    carries, and every bundle of a run shares it — is authoritative. An older
+    manifest predates the field, so the metadata blocks are the fallback: a
+    video describes the full grid, a poster the decimated one, whose steps are
+    halved back and whose dimensions stay decimated — the origin is then exact
+    and the far edge is right to within one full cell."""
+    for bundle in manifest["bundles"]:
+        grid = bundle.get("grid")
+        if grid is not None:
+            longitude_step = float(grid["longitudeStep"])
+            latitude_step = float(grid["latitudeStep"])
+            return {
+                "first_longitude": float(grid["firstLongitude"]),
+                "first_latitude": float(grid["firstLatitude"]),
+                "longitude_step": longitude_step,
+                "latitude_step": latitude_step,
+                "width": int(grid["width"]),
+                "height": int(grid["height"]),
+                "center_longitude_step": longitude_step,
+                "center_latitude_step": latitude_step,
+                "wraps": bool(grid.get("wrapLongitude", False)),
+            }
     for kind, metadata in _metadata_blocks(manifest):
         grid = metadata["grid"]
         divisor = 2 if kind == "poster" else 1
@@ -1150,6 +1169,21 @@ def _item_properties(
         "cube:dimensions": dimensions,
         "cube:variables": _variables_of(manifest, ["time", "y", "x"] if grid is not None else ["time"]),
     }
+    if grid is not None and "width" in grid:
+        # The full grid a client places a point on, the same block the store's
+        # ``attributes.xue.grid`` carries, so no reader has to open the store
+        # (or un-decimate a poster) to probe a cell. A showcase case builds a
+        # steps-only fallback grid when the manifest carries no metadata, and
+        # sets its own ``xue:grid`` from the case row.
+        properties["xue:grid"] = {
+            "width": grid["width"],
+            "height": grid["height"],
+            "firstLongitude": grid["first_longitude"],
+            "firstLatitude": grid["first_latitude"],
+            "longitudeStep": grid["longitude_step"],
+            "latitudeStep": grid["latitude_step"],
+            "wrapLongitude": grid["wraps"],
+        }
     if not source.observation:
         extensions.insert(0, FORECAST_EXTENSION)
         properties["forecast:reference_datetime"] = manifest["runTime"]

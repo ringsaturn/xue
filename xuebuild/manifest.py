@@ -100,6 +100,7 @@ def build_bin_manifest(
         "bundles": [
             {
                 "variable": bundle["variable"],
+                **({"grid": bundle["grid"]} if "grid" in bundle else {}),
                 **({"path": bundle["path"]} if "path" in bundle else {}),
                 **({"byteLength": bundle["byteLength"]} if "path" in bundle else {}),
                 **({"crc32": bundle["crc32"]} if "path" in bundle else {}),
@@ -175,6 +176,26 @@ def _validate_zarr_descriptor(store: object, variable: str, paths: set[str], suf
     crc32 = store.get("crc32")
     if not isinstance(crc32, str) or len(crc32) != 8 or any(ch not in "0123456789abcdef" for ch in crc32):
         raise ManifestError(f"manifest bundle zarr crc32 must be 8 lowercase hex characters for {variable}")
+
+
+def _validate_grid(grid: object, variable: str) -> None:
+    """The optional full grid a bundle entry carries — the same block a store's
+    ``attributes.xue.grid`` holds: where the run's cells start, how they step,
+    and whether longitude wraps. Optional, so an entry written before the field
+    reads absent, and a validator that does not know it skips the key rather
+    than rejecting it."""
+    if not isinstance(grid, dict):
+        raise ManifestError(f"manifest bundle grid must be an object for {variable}")
+    for key in ("width", "height"):
+        value = grid.get(key)
+        if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+            raise ManifestError(f"manifest bundle grid {key} must be a positive integer for {variable}")
+    for key in ("firstLongitude", "firstLatitude", "longitudeStep", "latitudeStep"):
+        value = grid.get(key)
+        if not isinstance(value, (int, float)) or isinstance(value, bool):
+            raise ManifestError(f"manifest bundle grid {key} must be a number for {variable}")
+    if not isinstance(grid.get("wrapLongitude"), bool):
+        raise ManifestError(f"manifest bundle grid wrapLongitude must be a boolean for {variable}")
 
 
 def _validate_variant_descriptor(variant: object, variable: str, paths: set[str]) -> None:
@@ -310,6 +331,8 @@ def validate_bin_manifest(
             _validate_zarr_descriptor(bundle["zarr"], variable, paths)
         if "series" in bundle:
             _validate_zarr_descriptor(bundle["series"], variable, paths, ".series.zarr")
+        if "grid" in bundle:
+            _validate_grid(bundle["grid"], variable)
         variables.append(variable)
     if require_core_variables:
         for required in MODEL_CORE_BUNDLES[model]:

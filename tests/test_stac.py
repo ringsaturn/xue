@@ -196,6 +196,42 @@ class RunItemTests(unittest.TestCase):
         self.assertEqual(dimensions["time"]["step"], "PT1H")
         self.assertEqual(item["properties"]["forecast:horizon"], "PT18H")
 
+    def test_the_bundle_grid_is_authoritative(self) -> None:
+        # A poster's metadata grid is decimated; the entry's own `grid` is the
+        # full one and wins, and the Item states it verbatim as `xue:grid`.
+        poster = _poster("tmp2m", _metadata(grid=GLOBAL_POSTER_GRID, count=7))
+        entry = _store_entry("tmp2m", poster=poster)
+        entry["grid"] = {
+            "width": 1440,
+            "height": 721,
+            "firstLongitude": -180.0,
+            "firstLatitude": 90.0,
+            "longitudeStep": 0.25,
+            "latitudeStep": -0.25,
+            "wrapLongitude": True,
+        }
+        item = stac.run_item(
+            _manifest([entry], model="gfs", hours=6),
+            "0badf00d",
+            source=self.source,
+            manifest_relative_path="gfs.2026081406/manifest.json",
+        )
+        properties = item["properties"]
+        self.assertEqual(
+            properties["xue:grid"],
+            {
+                "width": 1440,
+                "height": 721,
+                "firstLongitude": -180.0,
+                "firstLatitude": 90.0,
+                "longitudeStep": 0.25,
+                "latitudeStep": -0.25,
+                "wrapLongitude": True,
+            },
+        )
+        self.assertEqual(item["bbox"], [-180.0, -90.0, 180.0, 90.0])
+        self.assertEqual(properties["cube:dimensions"]["x"]["step"], 0.25)
+
     def test_assets_are_one_per_artifact(self) -> None:
         assets = self.item["assets"]
         self.assertEqual(assets["manifest"]["href"], "manifest.json?v=dbf3a790")

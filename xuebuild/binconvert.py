@@ -1674,9 +1674,15 @@ def _bundle_manifest_entry(
     video_report: dict[str, Any] | None,
     poster_report: dict[str, Any] | None,
     variant_reports: list[dict[str, Any]] | None = None,
+    *,
+    grid: GridInfo,
 ) -> dict[str, Any]:
     entry = {
         "variable": bundle["variable"],
+        # The bundle's full grid, the same block the store's
+        # ``attributes.xue.grid`` carries, so the STAC Item states the
+        # authoritative grid instead of un-decimating a poster.
+        "grid": grid.metadata(),
         **_container_fields(bundle, manifest_dir),
     }
     if variant_reports:
@@ -2499,6 +2505,7 @@ def convert_bin(
                     video_reports.get(bundle["variable"]),
                     poster_reports.get(bundle["variable"]),
                     variant_reports.get(bundle["variable"]),
+                    grid=grids[bundle_grid_family(source, bundle["variable"])],
                 )
                 for bundle in bundle_reports
             ],

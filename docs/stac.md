@@ -88,16 +88,20 @@ the longest lead as an ISO 8601 duration (`PT240H`), `forecast:perturbed`
 observation (MRMS) declares no forecast fields; its `xue:observation` is
 `true`.
 
-Space. The manifest names no grid; the Item reads one off the bundle
-metadata a run's core scalars always carry: the H.264 companion's when
-there is one (the full grid), else a poster's, which is the grid decimated
-two to one (`GridInfo.decimated`: same origin, doubled step). So the
-`cube:dimensions` `x` / `y` steps are exact, the origin is exact, and a
-regional grid's far edge is right to within one full cell. A wrapping grid
-is `[-180, -90, 180, 90]`. `bbox` and `geometry` follow (two polygons when a
-window crosses the antimeridian). The authoritative grid is the store's own
-`attributes.xue`; a manifest with no metadata at all (only the synthetic
-ones in tests) gets a null geometry and a time dimension alone.
+Space. Every bundle entry carries the bundle's own full grid as `grid` — the
+same block a store's `attributes.xue.grid` holds — so the Item reads an
+exact grid and states it again, verbatim, as `xue:grid`, for a client that
+wants the origin and steps without parsing `cube:dimensions`. A manifest
+written before the field falls back to the bundle metadata a run's core
+scalars always carry: the H.264 companion's when there is one (the full
+grid), else a poster's, which is the grid decimated two to one
+(`GridInfo.decimated`: same origin, doubled step), whose steps are halved
+back — the origin is then exact and a regional far edge is right to within
+one full cell. A wrapping grid is `[-180, -90, 180, 90]`. `bbox` and
+`geometry` follow (two polygons when a window crosses the antimeridian).
+The store's own `attributes.xue` stays the decode-time authority; a manifest
+with no metadata at all (only the synthetic ones in tests) gets a null
+geometry and a time dimension alone.
 
 Variables. `cube:variables` has one entry per array the run publishes: a
 scalar bundle is one, a vector bundle its two components (`ugrd10m` /
