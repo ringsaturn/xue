@@ -83,7 +83,7 @@ AWS_RESPONSE_CHECKSUM_VALIDATION ?= when_required
 AWS_CONFIG_FILE ?= $(CURDIR)/scripts/aws-config
 export AWS_DEFAULT_REGION AWS_REQUEST_CHECKSUM_CALCULATION AWS_RESPONSE_CHECKSUM_VALIDATION AWS_CONFIG_FILE
 
-.PHONY: check install wasm api-worker deploy-api api-dev api-dev-cdn test test-rust test-e2e encoder-rust encoder-rust-test encoder-wheel bench bench-video bench-lossy mvp serve format-pdf deploy-build upload-r2 upload-r2-bundles upload-r2-manifest upload-r2-stac-item check-pointer upload-r2-pointer upload-r2-stac-collection warm-r2 prune-r2 prune-r2-rounds live-run live-manifest live-window pull-r2-frames push-r2-frames prune-r2-frames pull-r2-ancillary deploy-pages deploy showcase showcase-check showcase-refresh live-showcase-catalog upload-r2-showcase tc-build live-tc-index upload-r2-tc prune-r2-tc airport-build live-airport-index upload-r2-airport prune-r2-airport sounding-build live-sounding-index upload-r2-sounding prune-r2-sounding clean
+.PHONY: check install wasm api-worker deploy-api api-dev api-dev-cdn test test-rust test-e2e encoder-rust encoder-rust-test encoder-wheel encoder-py bench bench-video bench-lossy mvp serve format-pdf deploy-build upload-r2 upload-r2-bundles upload-r2-manifest upload-r2-stac-item check-pointer upload-r2-pointer upload-r2-stac-collection warm-r2 prune-r2 prune-r2-rounds live-run live-manifest live-window pull-r2-frames push-r2-frames prune-r2-frames pull-r2-ancillary deploy-pages deploy showcase showcase-check showcase-refresh live-showcase-catalog upload-r2-showcase tc-build live-tc-index upload-r2-tc prune-r2-tc airport-build live-airport-index upload-r2-airport prune-r2-airport sounding-build live-sounding-index upload-r2-sounding prune-r2-sounding clean
 
 check:
 	$(PYTHON) scripts/check_dependencies.py
@@ -157,6 +157,14 @@ encoder-rust-test:
 # directories, and every licence text alongside the extension module.
 encoder-wheel:
 	./scripts/build-encoder-wheel.sh
+
+# Build the native encoder from this tree into the active environment, so the
+# Python tests compare this tree's Python encoder against this tree's Rust
+# encoder instead of the last published xuepy. Needs a system GDAL
+# (gdal-config and headers) and libclang; the release branch runs this before
+# its Python tests, while main installs the published wheel.
+encoder-py:
+	uv pip install --reinstall ./rust/xue-py
 
 bench:
 	$(PYTHON) scripts/bench_bin.py data/raw/gfs.$(RUN) --output data/work/bench_bin.json

@@ -66,6 +66,18 @@ jobs:
       - name: Sync Python environment
         run: uv sync --group satellite
 
+      # On the release branch this tree's encoders are ahead of the last
+      # published wheel, so the native parity test would compare against a
+      # stale xuepy and fail by design. Build the wheel from this tree instead
+      # (against the system GDAL, which the job already installs for the
+      # reference pipeline); main installs the published wheel and this step
+      # never runs there.
+      - name: Build the native encoder from this tree
+        if: startsWith(github.ref_name, 'release')
+        run: |
+          sudo apt-get install -y --no-install-recommends libgdal-dev libclang-dev
+          make encoder-py
+
       - name: Run Python tests
         run: uv run python -m unittest discover -s tests -p 'test_*.py' -v
 

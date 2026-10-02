@@ -78,6 +78,10 @@ Time. The Item covers the run's whole axis: `start_datetime` /
 `end_datetime` are the union of every axis the manifest's bundle metadata
 carries (a rate that starts at the first step widens nothing; f240 is the
 end), and `datetime` repeats the start so a client that sorts on it can.
+The `time` dimension carries `step` when the axis is uniform and `values`
+(the exact instants, the datacube extension's spelling) when it is not —
+GFS is hourly to F120 and 3-hourly after, which one step cannot state — so
+a client reads the whole axis off the Item.
 `forecast:reference_datetime` is the cycle (`runTime`), `forecast:horizon`
 the longest lead as an ISO 8601 duration (`PT240H`), `forecast:perturbed`
 `false`, since every published run is a deterministic control. An
@@ -98,7 +102,10 @@ ones in tests) gets a null geometry and a time dimension alone.
 Variables. `cube:variables` has one entry per array the run publishes: a
 scalar bundle is one, a vector bundle its two components (`ugrd10m` /
 `vgrd10m` under `wind10m`, marked `xue:bundle`), each with the registry's
-label and unit. A bundle the registry does not know (a manifest admits any
+label and unit, and with the variable's codebook as `xue:quantization`
+(the same block a store's `attributes.xue.variables[].quantization`
+carries), so a client turns a stored code into a value without opening the
+store. A bundle the registry does not know (a manifest admits any
 well-formed name) is listed by name alone.
 
 Assets. One per artifact, keyed by bundle:
@@ -107,6 +114,7 @@ Assets. One per artifact, keyed by bundle:
 |---|---|---|---|
 | `manifest` | `manifest.json?v=<crc32>`, the manifest under the `?v=` a viewer fetches it with | `application/json` | `metadata` |
 | `<bundle>` | the Zarr store (`<bundle>.zarr`), or the `.xue` container when the entry ships no store | `application/vnd.zarr` / `application/octet-stream` | `data` |
+| `<bundle>-series` | the series companion (`<bundle>.series.zarr`) when the run publishes one, marked `xue:series: true` (`docs/zarr-profile.md`, "Series store") | `application/vnd.zarr` | `data` |
 | `<bundle>-xue` | the container, when it ships beside a store | `application/octet-stream` | `data` |
 | `<bundle>-<tier>`, `-<tier>-xue` | each reduced-resolution tier, likewise: `-half` on every source, `-quarter` and `-eighth` too on the satellite disks (`SourceSpec.variant_factors`) | | `data`, `overview` |
 | `<bundle>-poster` | the first-frame poster (`.poster.bin`) | `application/octet-stream` | `overview` |

@@ -807,6 +807,17 @@ def _metadata_blocks(manifest: dict[str, Any]) -> list[tuple[str, dict[str, Any]
     return blocks
 
 
+def _bundle_metadata(bundle: dict[str, Any]) -> dict[str, Any] | None:
+    """A bundle's own metadata JSON, off whichever descriptor carries one
+    (a video describes the full grid, a poster the decimated one; the
+    variables' codebooks and the axis are the same either way)."""
+    for kind in ("video", "poster"):
+        descriptor = bundle.get(kind)
+        if descriptor is not None:
+            return json.loads(descriptor["metadataJson"])
+    return None
+
+
 def _grid_of(manifest: dict[str, Any]) -> dict[str, Any] | None:
     """The published grid, as ``{first_longitude, first_latitude,
     longitude_step, latitude_step, width, height, wraps}`` at full
@@ -887,11 +898,18 @@ def _time_axis_of(manifest: dict[str, Any]) -> tuple[list[int], bool]:
 
 def _temporal_dimension(run_time: datetime, leads: list[int]) -> dict[str, Any]:
     steps = {b - a for a, b in pairwise(leads)}
-    return {
+    step = _iso_duration(next(iter(steps))) if len(steps) == 1 else None
+    dimension: dict[str, Any] = {
         "type": "temporal",
         "extent": [iso_z(run_time + timedelta(seconds=leads[0])), iso_z(run_time + timedelta(seconds=leads[-1]))],
-        "step": _iso_duration(next(iter(steps))) if len(steps) == 1 else None,
+        "step": step,
     }
+    if step is None:
+        # A piecewise axis (GFS is hourly to F120 then 3-hourly) has no single
+        # step, so the exact instants are the only faithful spelling; the
+        # datacube extension's `values` is that spelling.
+        dimension["values"] = [iso_z(run_time + timedelta(seconds=lead)) for lead in leads]
+    return dimension
 
 
 def _spatial_dimensions(grid: dict[str, Any], bbox: list[float]) -> dict[str, Any]:
@@ -922,6 +940,12 @@ def _variables_of(manifest: dict[str, Any], dimensions: list[str]) -> dict[str, 
     variables: dict[str, Any] = {}
     for bundle in manifest["bundles"]:
         bundle_id = bundle["variable"]
+        metadata = _bundle_metadata(bundle)
+        quantization = {
+            variable["id"]: variable["quantization"]
+            for variable in (metadata or {}).get("variables", [])
+            if variable.get("quantization") is not None
+        }
         for variable_id in bundle_variable_ids(bundle_id):
             entry: dict[str, Any] = {"dimensions": dimensions, "type": "data"}
             spec = VARIABLES.get(variable_id)
@@ -930,6 +954,10 @@ def _variables_of(manifest: dict[str, Any], dimensions: list[str]) -> dict[str, 
                 entry["unit"] = spec.output_unit
             if variable_id != bundle_id:
                 entry["xue:bundle"] = bundle_id
+            if variable_id in quantization:
+                # The codebook, so a client turns a stored code into a value
+                # without opening the store's ``attributes.xue``.
+                entry["xue:quantization"] = quantization[variable_id]
             variables[variable_id] = entry
     return variables
 
@@ -1028,6 +1056,21 @@ def manifest_assets(manifest: dict[str, Any], manifest_crc32: str) -> dict[str, 
         bundle_id = bundle["variable"]
         title = _bundle_title(bundle_id)
         assets.update(_data_assets(bundle, bundle_id, tier="full", title=title, roles=["data"]))
+        series = bundle.get("series")
+        if series is not None:
+            # The series companion (`docs/zarr-profile.md`, "Series store"):
+            # the same codes cut for a cell's whole series, marked so a point
+            # reader finds it without reading the manifest.
+            assets[f"{bundle_id}-series"] = {
+                "href": series["path"],
+                "type": ZARR_MEDIA_TYPE,
+                "title": f"{title} (series store)",
+                "roles": ["data"],
+                "xue:kind": "store",
+                "xue:tier": "full",
+                "xue:series": True,
+                **_file_fields(series["byteLength"], series["crc32"], single_file=False),
+            }
         for variant in bundle.get("variants", []):
             tier = _variant_tier(variant, bundle_id)
             reduced = _data_assets(variant, f"{bundle_id}-{tier}", tier=tier, title=f"{title} ({tier} resolution)", roles=["data", "overview"])
