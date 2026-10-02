@@ -11,7 +11,6 @@ use worker::Response;
 
 use crate::bucket::Data;
 use crate::error::{json as json_response, HttpError};
-use crate::point::{resolve_run, Run};
 
 pub async fn catalog(data: &Data) -> Result<Response, HttpError> {
     let root = data.value("catalog.json").await?;
@@ -74,9 +73,9 @@ pub async fn read_source(data: &Data, source: &str) -> Result<Value, HttpError> 
         "run".into(),
         collection.get("xue:live").cloned().unwrap_or(Value::Null),
     );
-    // `bundles` is the request vocabulary (`/v1/point?variables=` ids) and
-    // `variables` the flat per-variable metadata; both are filled below.
-    summary.insert("bundles".into(), json!([]));
+    // The flat variable table. The request vocabulary that `/v1/point?variables=`
+    // accepts is the distinct `bundle` values in it, so there is no second list
+    // to keep in step.
     summary.insert("variables".into(), json!({}));
 
     match data.value(&format!("{source}/item.json")).await {
@@ -98,33 +97,25 @@ pub async fn read_source(data: &Data, source: &str) -> Result<Value, HttpError> 
             if let Some(value) = item.pointer("/properties/cube:dimensions/time") {
                 summary.insert("time".into(), value.clone());
             }
-            let (bundles, variables) = variables_from_item(&item);
-            summary.insert("bundles".into(), json!(bundles));
-            summary.insert("variables".into(), Value::Object(variables));
+            summary.insert(
+                "variables".into(),
+                Value::Object(variables_from_item(&item)),
+            );
         }
         Err(_) => {
-            // No live STAC Item (an older bucket or a local build): the
-            // manifest names the bundle ids but not their variables, so only
-            // the request vocabulary can be filled.
-            if let Ok(Run { manifest, .. }) = resolve_run(data, source, None).await {
-                let bundles: Vec<&str> = manifest
-                    .bundles
-                    .iter()
-                    .map(|bundle| bundle.variable.as_str())
-                    .collect();
-                summary.insert("bundles".into(), json!(bundles));
-            }
+            // No live STAC Item (an older bucket or a local build): the Item is
+            // where a run's variables live, and the manifest names only bundle
+            // ids, so the table stays empty rather than mislabelling a bundle
+            // id as a variable id.
         }
     }
     Ok(Value::Object(summary))
 }
 
-/// The request vocabulary and the flat variable table an Item carries:
-/// `bundles` is the list of bundle ids a caller may request, and `variables` is
-/// keyed by array id with the bundle each belongs to, so a vector bundle's
-/// components are separate entries rather than a nested `components` object.
-fn variables_from_item(item: &Value) -> (Vec<String>, Map<String, Value>) {
-    let mut bundles: Vec<String> = Vec::new();
+/// The flat variable table an Item carries, keyed by array id, each entry
+/// carrying the `bundle` it belongs to — so a vector bundle's components are
+/// separate entries rather than a nested `components` object.
+fn variables_from_item(item: &Value) -> Map<String, Value> {
     let mut variables = Map::new();
     if let Some(cube) = item
         .pointer("/properties/cube:variables")
@@ -135,9 +126,6 @@ fn variables_from_item(item: &Value) -> (Vec<String>, Map<String, Value>) {
                 .get("xue:bundle")
                 .and_then(Value::as_str)
                 .unwrap_or(array_id);
-            if !bundles.iter().any(|held| held == bundle) {
-                bundles.push(bundle.to_owned());
-            }
             variables.insert(
                 array_id.clone(),
                 json!({
@@ -152,5 +140,5 @@ fn variables_from_item(item: &Value) -> (Vec<String>, Map<String, Value>) {
             );
         }
     }
-    (bundles, variables)
+    variables
 }

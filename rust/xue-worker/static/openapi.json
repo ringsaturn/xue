@@ -221,7 +221,7 @@
       },
       "Source": {
         "type": "object",
-        "required": ["source", "bundles", "variables"],
+        "required": ["source", "variables"],
         "properties": {
           "source": { "type": "string" },
           "title": { "type": ["string", "null"] },
@@ -241,14 +241,9 @@
             "description": "The Item's `cube:dimensions.time`.",
             "additionalProperties": true
           },
-          "bundles": {
-            "type": "array",
-            "description": "The request vocabulary: the ids `/v1/point?variables=` accepts.",
-            "items": { "type": "string" }
-          },
           "variables": {
             "type": "object",
-            "description": "The flat variable table, keyed by variable id.",
+            "description": "The flat variable table, keyed by variable id, each entry carrying the `bundle` it belongs to. The ids `/v1/point?variables=` accepts are the distinct `bundle` values.",
             "additionalProperties": { "$ref": "#/components/schemas/VariableMeta" }
           }
         }
