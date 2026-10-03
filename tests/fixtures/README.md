@@ -280,6 +280,21 @@ the 09Z window read with `cmaarchive.read_window` and written with
 `write_series`, then `xarray.open_dataset("window.nc").isel(time=[0, 1,
 3], lat=slice(512, 640), lon=slice(1024, 1152))` written back the same way.
 
+`aurora.2026100304.crop.nc` is a NetCDF series of three frames of the SWPC
+OVATION aurora probability (04:40, 04:45 and 04:55 UTC on 2026-10-03; 04:50
+left out so the axis lists its offsets) cropped to 60 by 40 cells of the
+published 1° grid over the Arctic (0E to 59E, 50N to 89N): the real 04:40
+grid and two scaled copies, so a plane is distinguishable from its
+neighbour. The shape is what `xuebuild/aurora.py` writes — `aurora(time,
+lat, lon)` as uint8 with `scale_factor` 0.5 and `_FillValue` 255, unit `%`,
+`time` in seconds since the epoch — so the five-minute snapping, the
+run-hour rule, the unscaling and the byte-identity parity test all run
+against a real grid. Cut with a few lines of xarray: the
+`json/ovation_aurora_latest.json` `coordinates` mapped onto a 181 x 360
+array and sliced to latitudes 50–89 and longitudes 0–59, the second and
+third frames scaled 0.8 and 0.6, written with the same encoding
+`xuebuild/aurora.py` uses.
+
 `himawari/` holds four ISatSS tiles of the Himawari-9 AHI 10.4 µm channel
 (band 13) exactly as NOAA's `noaa-himawari9` bucket serves them: tiles
 T020 and T021 of the 03:00 and 03:10 UTC full-disk scans of 2026-09-17

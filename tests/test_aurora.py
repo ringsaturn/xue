@@ -9,18 +9,30 @@ snap, the cache listing — runs with NumPy alone.
 
 from __future__ import annotations
 
+import filecmp
 import json
+import os
+import shutil
 import tempfile
 import unittest
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from unittest import mock
 
-from xuebuild import aurora
-from xuebuild.errors import DownloadError
+from xuebuild import aurora, binconvert, native, zstdcli
+from xuebuild.binformat import read_bundle
+from xuebuild.errors import ConversionError, DownloadError
 from xuebuild.fetch import _fetch_aurora_run, latest_aurora_slot
 from xuebuild.model import GfsRun
 from xuebuild.sources import MODEL_CORE_BUNDLES, SOURCES, source_spec
 from xuebuild.stac import _source_prose
+
+FIXTURES = Path(__file__).parent / "fixtures"
+SERIES = FIXTURES / "aurora.2026100304.crop.nc"
+
+requires_gdal = unittest.skipUnless(
+    shutil.which("gdalinfo") is not None and shutil.which("gdal_translate") is not None, "GDAL is not on PATH"
+)
 
 AURORA = source_spec("aurora")
 
@@ -197,6 +209,90 @@ class FetchTests(unittest.TestCase):
     def test_an_input_the_source_does_not_publish_is_refused(self) -> None:
         with self.assertRaisesRegex(DownloadError, "publishes"):
             _fetch_aurora_run(AURORA, self.run, 3, self.root, force=False, input_ids=("cref",), fetch=lambda url: ovation_payload())
+
+
+@requires_gdal
+class ConversionTests(unittest.TestCase):
+    """The window series through both encoders.
+
+    ``tests/fixtures/aurora.2026100304.crop.nc`` is three grids of the
+    2026-10-03 04Z hour (04:40, 04:45 and 04:55; 04:50 left out, so the axis
+    lists its offsets) cropped to 60 x 40 cells over the Arctic (0-59E,
+    50-89N): the 1° OVATION probability of the real 04:40 grid and two
+    scaled copies, so a plane is distinguishable from its neighbour.
+    """
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.root = Path(tempfile.mkdtemp(prefix="xue-aurora-"))
+        inputs = cls.root / "aurora.2026100304"
+        inputs.mkdir()
+        shutil.copy(SERIES, inputs / "aurora.2026100304.nc")
+        cls.inputs = inputs
+        with mock.patch.dict(os.environ, {"XUE_ENCODER": "python"}):
+            cls.report = binconvert.convert_bin(
+                inputs,
+                cls.root / "out",
+                model="aurora",
+                skip_video=True,
+                work_root=cls.root / "work",
+                manifest_path=cls.root / "out" / "manifest.json",
+            )
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        shutil.rmtree(cls.root, ignore_errors=True)
+
+    def test_the_window_is_a_five_minute_axis_from_the_hour(self) -> None:
+        self.assertEqual([bundle["variable"] for bundle in self.report["bundles"]], ["aurora"])
+        self.assertEqual(self.report["videos"], [])
+        manifest = json.loads((self.root / "out" / "manifest.json").read_text())
+        self.assertEqual((manifest["model"], manifest["product"]), ("SWPC-AURORA", "ovation-aurora-1p00"))
+        self.assertEqual(manifest["runTime"], "2026-10-03T04:00:00Z")
+        self.assertEqual(manifest["forecastHours"], 1)
+        bundle = read_bundle(self.root / "out" / "aurora.xue")
+        # 04:40, 04:45 and 04:55 from the 04:00 run: offsets listed in
+        # five-minute units, since 04:50 is not there.
+        self.assertEqual(
+            bundle.metadata["time"],
+            {"unitSeconds": 300, "firstFrameOffset": 8, "frameCount": 3, "frameOffsets": [8, 9, 11]},
+        )
+        grid = bundle.metadata["grid"]
+        self.assertEqual((grid["width"], grid["height"]), (60, 40))
+        self.assertEqual((grid["longitudeStep"], grid["latitudeStep"]), (1.0, -1.0))
+        variable = bundle.metadata["variables"][0]
+        self.assertEqual(variable["unit"], "%")
+        self.assertEqual(variable["parameter"]["discipline"], 3)
+        self.assertEqual(variable["parameter"]["parameterCategory"], 192)
+        self.assertEqual(variable["quantization"]["type"], "linear")
+        # The gap at 04:50 ends a temporal group: two groups for three frames.
+        self.assertEqual((bundle.frame_count, len(bundle.groups)), (3, 2))
+        # Decoding a plane gives the codebook's own half-percent grid.
+        values = bundle.decode_plane(1, 8)
+        self.assertGreater(float(max(values)), 0.0)
+        self.assertLessEqual(float(max(values)), 100.0)
+
+    def test_a_complete_build_wants_the_production_grid(self) -> None:
+        with mock.patch.dict(os.environ, {"XUE_ENCODER": "python"}):
+            with self.assertRaisesRegex(ConversionError, "360x181 grid"):
+                binconvert.convert_bin(
+                    self.inputs, self.root / "complete", model="aurora", skip_video=True, require_complete=True, expected_hours=3
+                )
+
+    @unittest.skipUnless(native.knows_source("aurora"), f"the installed {native.DISTRIBUTION} wheel predates the aurora source")
+    def test_the_native_encoder_writes_the_same_bytes(self) -> None:
+        if not zstdcli.compresses_in_process():
+            self.skipTest("the reference encoder compresses through the zstd CLI")
+        subject = self.root / "native"
+        with mock.patch.dict(os.environ, {"XUE_ENCODER": "native"}):
+            report = native.convert_bin(self.inputs, subject, model="aurora", skip_video=True, manifest_path=subject / "manifest.json")
+        if report["zstdVersion"] != self.report["zstdVersion"]:
+            self.skipTest("libzstd differs between the reference and the wheel")
+        names = sorted(path.name for path in (self.root / "out").iterdir())
+        self.assertEqual(sorted(path.name for path in subject.iterdir()), names)
+        for name in names:
+            with self.subTest(artifact=name):
+                self.assertTrue(filecmp.cmp(self.root / "out" / name, subject / name, shallow=False), name)
 
 
 if __name__ == "__main__":  # pragma: no cover
