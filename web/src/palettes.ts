@@ -167,6 +167,23 @@ const DUST_CONFIDENCE_STOPS: Stop[] = [
   [1, 255, 106, 0, 255],
 ];
 
+/** Aurora visibility probability, 0–100 %: the auroral green through the
+ * cyan of a bright substorm to the violet of a strong one, and fully
+ * transparent at zero — a probability field is mostly zero, and painting
+ * the quiet sky would hide the map under it. The first stop above zero
+ * lifts slowly so a ten-percent night reads as a trace rather than a
+ * wash. */
+const AURORA_STOPS: Stop[] = [
+  [0, 0, 0, 0, 0],
+  [5, 30, 120, 70, 60],
+  [15, 30, 190, 120, 130],
+  [30, 40, 220, 200, 175],
+  [50, 90, 230, 180, 205],
+  [70, 160, 130, 235, 225],
+  [85, 210, 90, 235, 245],
+  [100, 255, 255, 255, 255],
+];
+
 // The pressure family shares one ramp, given in fractions of the level's own
 // codebook range rather than absolute values: a fill under contour lines is
 // read as "low here, high there", and every level would otherwise need its
@@ -779,6 +796,7 @@ function stopsFor(variable: BundleVariable, identity: VariableIdentity | null): 
   if (family === "dirpw") return WAVE_DIRECTION_STOPS;
   if (family === "ir104") return BRIGHTNESS_TEMPERATURE_STOPS;
   if (family === "dustcf") return DUST_CONFIDENCE_STOPS;
+  if (family === "aurora") return AURORA_STOPS;
   if (family === "hgt" && linear) return pressureStops(linear);
   if (family === "tmp") return remapStops(TEMPERATURE_STOPS, [-60, 50], temperaturePaletteDomain(level));
   if (family === "rh") return HUMIDITY_STOPS;

@@ -1580,6 +1580,46 @@ SOURCES: dict[str, SourceSpec] = {
         cadence_seconds=3600,
         video=False,
     ),
+    # NOAA SWPC's OVATION model aurora probability: the chance, in percent,
+    # that aurora is visible overhead, on a regular 1° global grid
+    # (360 × 181, 0–359°E, 90°S–90°N). A space weather product on the same
+    # shape as the weather observations above: a live feed, a rolling
+    # window, ``series_file``. The live JSON service keeps only the newest
+    # grid (there is no gridded history — see plans/027-aurora.md), so the
+    # window is grown from a frame cache: xuebuild/aurora.py writes each
+    # round's grid as one frame under ``data/raw/aurora-frames/``, the
+    # fetch assembles the window's frames into the NetCDF series the
+    # observation ingest reads, and the cache is mirrored on the bucket by
+    # the same ``make pull-r2-frames`` / ``push-r2-frames`` the JMA and
+    # satellite feeds use (FRAME_CACHE in scripts/window_rounds.sh). A cold
+    # window holds the one frame fetched that round; it fills as the
+    # rolling publish runs, five minutes a frame, up to three hours. The
+    # probability is read off the ``Forecast Time`` the model stamps it
+    # with, snapped to the five-minute mark.
+    "aurora": SourceSpec(
+        id="aurora",
+        manifest_model="SWPC-AURORA",
+        product="ovation-aurora-1p00",
+        latest_filename="latest-aurora.json",
+        steps=(),
+        input_variable_ids=("aurora",),
+        accumulated_precipitation=False,
+        bundle_scalar_ids=("aurora",),
+        core_bundle_ids=("aurora",),
+        # The OVATION grid: 360 longitudes by 181 latitudes at 1°.
+        production_grid=(360, 181),
+        # 12 x 13 cells is 12° x 13° at this step — the same ground a GFS
+        # tile covers — so 30 x 14 = 420 tiles, the last row clipped to 12
+        # latitudes as the format allows. One tile's whole series is tens
+        # of KB.
+        tile=(12, 13),
+        observation=True,
+        series_file=True,
+        cycle_hours=1,
+        window_hours=3,
+        cadence_seconds=300,
+        video=False,
+    ),
 }
 
 MODEL_PRODUCTS: dict[str, str] = {spec.manifest_model: spec.product for spec in SOURCES.values()}

@@ -125,6 +125,16 @@ Facts worth getting right:
   the cycle on each hour is published, a 24-hour window, because the
   EUMETSAT data policy releases that cycle as Core data under CC-BY-4.0
   and the ten-minute cycles between under other terms.
+  `aurora` is the only space-weather source: the NOAA Space Weather
+  Prediction Center's OVATION model, the probability in percent that aurora
+  is visible overhead, on a regular 1° global grid (360 longitudes and 181
+  latitudes, 0–359°E and 90°S–90°N), one grid every five minutes, valid at
+  the model's own forecast time (about an hour after the L1 solar-wind
+  observation that drives it). The live feed carries only the newest grid
+  and no gridded history, so the rolling window is grown from a frame
+  cache: a cold window holds the frame of the round that built it and fills
+  as the publish runs. A value is a visibility probability, not an
+  intensity.
   An observation dataset has no
   run cycle and no lead time: its `run` is the hour its series starts and
   a frame's offset is time elapsed since.
@@ -194,7 +204,9 @@ Facts worth getting right:
   mm/h). HIMAWARI: `ir104` (10.4 µm brightness temperature, K) and
   `dustrgb` (the Dust RGB's red, green and blue guns, 0–1, a composite
   with no physical unit) and `dustcf` (the DEBRA dust confidence, 0–1;
-  GOES-EAST and GOES-WEST the same three, METEOSAT the first two). Names
+  GOES-EAST and GOES-WEST the same three, METEOSAT the first two). AURORA:
+  `aurora` (aurora visibility probability, percent, on a 1° global grid).
+  Names
   are `<family><level>`; the level is in hPa, `2m`/`10m` are heights above
   ground, `prmsl` is mean sea level pressure.
 - Only the newest run per source is kept online. Runs are pruned when
@@ -220,7 +232,9 @@ Facts worth getting right:
   requested, no endorsement implied); `meteosat` is EUMETSAT Meteosat
   data, the hourly Level 1 cycle, CC-BY-4.0 ("Contains modified EUMETSAT
   Meteosat data <year>", the year of distribution stamped where the
-  attribution is shown; no endorsement implied); `ifshres` is ECMWF IFS HRES
+  attribution is shown; no endorsement implied); `aurora` is NOAA SWPC's
+  OVATION model output (a US Government work, public domain, attribution
+  requested, no endorsement implied); `ifshres` is ECMWF IFS HRES
   forwarded by Open-Meteo, CC BY 4.0 ("Adapted from ECMWF IFS by ECMWF,
   licensed under CC BY 4.0", via Open-Meteo, open-meteo.com — neither
   ECMWF nor Open-Meteo endorses this use); the basemap
@@ -251,7 +265,7 @@ fall back to defaults rather than fail, so a constructed link always opens.
   local hours and a row per field, the nearest airport's METAR reports
   (within 40 km) as a block of the same shape; values are the model's
   nearest grid cell, not interpolated. The viewer's point probe links here.
-- `?model=gfs|sflux|ecmwf|aifs|ifshres|hrrr|gefsaero|cfs|mrms|jma|cma|himawari|goeseast|goeswest|meteosat|geo`
+- `?model=gfs|sflux|ecmwf|aifs|ifshres|hrrr|gefsaero|cfs|mrms|jma|cma|himawari|goeseast|goeswest|meteosat|aurora|geo`
   — which live source (`ifs` is an alias of `ecmwf`, `aifs-single` of
   `aifs`, `hres` / `ifs9km` of `ifshres`, `cfsv2` of `cfs`, `hrpns` of `jma`, `radar` of `cma`, `himawari-9` / `ahi` of
   `himawari`, `goes-19` / `goes-18` of `goeseast` / `goeswest`, `mtg` /

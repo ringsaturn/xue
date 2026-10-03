@@ -607,6 +607,37 @@
           "title": "EUMETSAT MTG FCI Level 1 data guide (the product, its channels and the radiance-to-temperature conversion)"
         }
       ]
+    },
+    "aurora": {
+      "title": "NOAA SWPC OVATION aurora probability",
+      "description": "The NOAA Space Weather Prediction Center's OVATION model: the probability, in percent, that aurora is visible overhead, on a regular 1° global grid (360 × 181 cells, 0–359°E, 90°S–90°N), one grid every five minutes, published as a rolling window grown from a frame cache. The value is a visibility probability, not an intensity, and carries no lead time: each grid is valid at the model's own forecast time, roughly an hour ahead of the L1 solar-wind observation that drives it. Source: NOAA Space Weather Prediction Center; the data are unaltered but quantized, and NOAA does not endorse this site.",
+      "license": "other",
+      "providers": [
+        {
+          "name": "NOAA Space Weather Prediction Center",
+          "roles": [
+            "producer",
+            "licensor"
+          ],
+          "url": "https://www.swpc.noaa.gov/products/aurora-30-minute-forecast"
+        },
+        {
+          "name": "Xue",
+          "roles": [
+            "processor",
+            "host"
+          ],
+          "url": "https://github.com/ringsaturn/xue"
+        }
+      ],
+      "links": [
+        {
+          "rel": "license",
+          "href": "https://www.weather.gov/disclaimer",
+          "type": "text/html",
+          "title": "NOAA/NWS: US Government work, public domain (attribution requested, no endorsement)"
+        }
+      ]
     }
   },
   "pointProducts": {

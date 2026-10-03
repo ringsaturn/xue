@@ -42,6 +42,7 @@ pipeline.
 | GOES-19 (East) | 0.04° disk at 75.2°W · every 10 min, a rolling 6 h window | <a href="https://dataset.ringsaturn.me/xue/latest-goeseast.json"><img alt="the newest goeseast run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-goeseast.json&query=%24.runTime&label=&color=5c677d&style=flat-square&cacheSeconds=600" width="170"></a> |
 | GOES-18 (West) | 0.04° disk at 137°W · every 10 min, a rolling 6 h window | <a href="https://dataset.ringsaturn.me/xue/latest-goeswest.json"><img alt="the newest goeswest run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-goeswest.json&query=%24.runTime&label=&color=5c677d&style=flat-square&cacheSeconds=600" width="170"></a> |
 | Meteosat-12 | 0.04° disk at 0° · hourly (the openly released cycle), a rolling 24 h window | <a href="https://dataset.ringsaturn.me/xue/latest-meteosat.json"><img alt="the newest meteosat run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-meteosat.json&query=%24.runTime&label=&color=4a5d8f&style=flat-square&cacheSeconds=600" width="170"></a> |
+| NOAA SWPC aurora | 1° global · every 5 min, a rolling 3 h window | <a href="https://dataset.ringsaturn.me/xue/latest-aurora.json"><img alt="the newest aurora run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-aurora.json&query=%24.runTime&label=&color=2e7d6f&style=flat-square&cacheSeconds=600" width="170"></a> |
 
 The last column reads the newest run off the source's live pointer
 (`latest.json` for GFS, `latest-<model>.json` for the rest with the
@@ -285,6 +286,20 @@ Bundle sets:
   under CC-BY-4.0 and the cycles between under terms that do not allow
   this use. Contains modified EUMETSAT Meteosat data 2026 (the year of
   distribution is stamped wherever the attribution is shown).
+- NOAA SWPC aurora: the Space Weather Prediction Center's OVATION model, the
+  probability in percent that aurora is visible overhead, on a regular 1°
+  global grid (360 × 181 cells, 0–359°E and 90°S–90°N), one grid every five
+  minutes. A space-weather observation, live like MRMS: a rolling three-hour
+  window rebuilt every five minutes. The live feed carries only the newest
+  grid — there is no listing and no gridded archive — so the window is grown
+  from a frame cache (`data/raw/aurora-frames/`, one small NetCDF per valid
+  time written by `xuebuild/aurora.py`), mirrored on the bucket by `make
+  pull-r2-frames` / `push-r2-frames`; a cold window holds the frame of the
+  round that built it and fills as the publish runs. The value is a
+  visibility probability, not an intensity, and a frame's valid time is the
+  model's own forecast time (about an hour after the L1 solar-wind
+  observation that drives it): the window is a sequence of successive
+  forecasts, not one run's lead times.
 
 Every level of the isobaric families is registered; turning one on is a line
 in `xuebuild/sources.py` and its mirror in the native encoder, not a format

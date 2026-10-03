@@ -83,7 +83,8 @@ export type ChartFamily =
   | "aodbc"
   | "pm25"
   | "pm10"
-  | "pm10dust";
+  | "pm10dust"
+  | "aurora";
 
 export interface VariableIdentity {
   family: ChartFamily;
@@ -445,6 +446,29 @@ export function identityForProducedScalar(variable: { parameter?: BundleParamete
   return null;
 }
 
+/** Local-use scalars carrying no `producer` block: the source's own
+ * documentation names them, and no producer algorithm derived them. The
+ * SWPC OVATION aurora probability is the first — a space-weather field the
+ * encoder writes under a local-use number in the space-products discipline,
+ * with neither a WMO parameter nor a producer to say what it is. */
+const LOCAL_SCALARS: readonly {
+  family: ChartFamily;
+  discipline: number;
+  category: number;
+  number: number;
+}[] = [{ family: "aurora", discipline: 3, category: 192, number: 5 }];
+
+/** The identity of a local-use scalar this shell knows without a producer
+ * block, or null. A local-use parameter under a number this build has no
+ * chart for is unknown. */
+function identityForLocalScalar(parameter: BundleParameter): VariableIdentity | null {
+  if (!isLocalUse(parameter)) return null;
+  for (const entry of LOCAL_SCALARS) {
+    if (isTriple(parameter, entry.discipline, entry.category, entry.number)) return scalar(entry.family, null);
+  }
+  return null;
+}
+
 /**
  * The identity of a three-variable bundle whose variables are the guns of
  * a composite this shell knows, in red, green, blue order, or null. Each
@@ -542,7 +566,7 @@ export function identifyBundle(variables: readonly BundleVariable[]): BundleIden
   const first = variables[0]!;
   const identity = first.parameter
     ? isLocalUse(first.parameter)
-      ? identityForProducedScalar(first)
+      ? (identityForProducedScalar(first) ?? identityForLocalScalar(first.parameter))
       : identityForParameter(first.parameter, first.band, first.aerosol)
     : (LEGACY_IDENTITIES[first.id] ?? null);
   return identity === null ? null : { identity, variables: [first] };

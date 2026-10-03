@@ -342,6 +342,20 @@ model starts here; the frontend mirror is `FORECAST_MODELS` in
   `latest-cma.json`), so a wheel that knows `radar` is never taken by
   `native.knows_source` for one that knows `cma`; the manifest identity
   `CMA-RADAR` and the cases built under it are unchanged.
+- Frame-cache observation (`aurora`): an observation whose feed carries only
+  the newest frame, with no listing and no archive, so a window cannot be
+  fetched whole. `xuebuild/aurora.py` parses the SWPC OVATION JSON grid,
+  snaps its valid time to the five-minute mark and writes one small NetCDF
+  per slot under `data/raw/aurora-frames/<variable>/`;
+  `fetch.py::_fetch_aurora_run` refreshes the newest grid and assembles the
+  window's cached frames into the series `observation.py` reads, and
+  `_aurora_run_is_complete` admits a named window (only the cache knows which
+  past frames exist). The cache is mirrored on the bucket by `make
+  pull-r2-frames` / `push-r2-frames` (`FRAME_CACHE=true` in
+  `window_rounds.sh`) like the JMA and satellite frames — the Makefile globs
+  key on `<variable>/<name>_<YYYYMMDDHHMMSS>.<ext>`. `force` never clears the
+  cache (the past grids cannot be re-fetched); `publish-aurora.yml` runs `uv
+  sync --group aurora` (xarray + netCDF4) and one round per five-minute cron.
 - Fetched observation (`mrms`): a run is a window named by its first hour
   (`window_hours`, also its `--hours` default), its frames listed off the
   bucket (`fetch.py::mrms_window_frames`: one gzipped GRIB per product per

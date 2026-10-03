@@ -388,4 +388,9 @@ export const ja: Record<MessageKey, string> = {
   compareHours: "時刻",
   compareNow: "現在",
   compareCells: "各値はそのモデル自身の格子で地点に最も近いセルの値で、内挿はしていません。時刻はお使いのタイムゾーンで表示します。",
+  glyphAurora: "A",
+  varAurora: "確率",
+  fieldGroupSpace: "宇宙天気",
+  varLabelAurora: "オーロラ可視確率",
+  creditsAurora: "宇宙天気 · オーロラ可視確率 · NOAA SWPC OVATION モデル",
 };

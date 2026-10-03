@@ -394,4 +394,9 @@ export const tr: Record<MessageKey, string> = {
   compareHours: "Saatler",
   compareNow: "şimdi",
   compareCells: "Her değer, o modelin kendi gridinde noktaya en yakın hücredir; enterpolasyon yapılmaz. Saatler sizin saat diliminizde okunur.",
+  glyphAurora: "A",
+  varAurora: "OLASILIK",
+  fieldGroupSpace: "UZAY HAVASI",
+  varLabelAurora: "Aurora görünürlük olasılığı",
+  creditsAurora: "UZAY HAVASI · AURORA OLASILIĞI · NOAA SWPC OVATION MODELİ",
 };

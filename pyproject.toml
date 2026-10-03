@@ -61,6 +61,11 @@ zarr = ["zarr>=3.1", "numcodecs>=0.16", "xarray>=2025.1", "pystac>=1.14"]
 # over s3fs and handed to the converter as the NetCDF series xarray writes.
 # Only the `publish cma` workflow syncs it; every other build stays NumPy.
 cma = ["zarr>=3.1", "numcodecs>=0.16", "s3fs>=2024.10", "xarray>=2025.1", "netcdf4>=1.7"]
+# What the SWPC OVATION aurora feed's fetch writes its frame cache and window
+# series with (xuebuild/aurora.py): the model publishes a JSON grid, and the
+# observation ingest reads NetCDF, so the fetch writes it with xarray — the
+# `aurora` workflow syncs this group, every other build stays NumPy.
+aurora = ["xarray>=2025.1", "netcdf4>=1.7"]
 # What a satellite source's composite producer runs
 # (xuebuild/satellite/producers.py): the classic Dust RGB is
 # `shachen.dustrgb.dust_rgb` on an xarray scene, called per slot in the

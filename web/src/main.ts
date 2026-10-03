@@ -1037,6 +1037,7 @@ const MODEL_EYEBROW: Record<ForecastModelId, string> = {
   goeseast: "NOAA / GOES-19 ABI EAST (0.04°)",
   goeswest: "NOAA / GOES-18 ABI WEST (0.04°)",
   meteosat: "EUMETSAT / METEOSAT-12 FCI (0.04°, HOURLY)",
+  aurora: "NOAA SWPC / OVATION (1°)",
   geo: "GEO MOSAIC",
 };
 
@@ -4485,6 +4486,7 @@ const FIELD_GROUP_LABEL: Record<SheetGroup, MessageKey> = {
   aerosol: "fieldGroupAerosol",
   ocean: "fieldGroupOcean",
   satellite: "fieldGroupSatellite",
+  space: "fieldGroupSpace",
   other: "fieldGroupOther",
 };
 

@@ -735,6 +735,35 @@ def _source_prose(source: SourceSpec) -> dict[str, Any]:
             },
         ],
     }
+    prose["aurora"] = {
+        "title": "NOAA SWPC OVATION aurora probability",
+        "description": (
+            "The NOAA Space Weather Prediction Center's OVATION model: the probability, in percent, that "
+            "aurora is visible overhead, on a regular 1° global grid (360 × 181 cells, 0–359°E, 90°S–90°N), "
+            "one grid every five minutes, published as a rolling window grown from a frame cache. The value "
+            "is a visibility probability, not an intensity, and carries no lead time: each grid is valid at "
+            "the model's own forecast time, roughly an hour ahead of the L1 solar-wind observation that "
+            "drives it. Source: NOAA Space Weather Prediction Center; the data are unaltered but quantized, "
+            "and NOAA does not endorse this site."
+        ),
+        "license": "other",
+        "providers": [
+            {
+                "name": "NOAA Space Weather Prediction Center",
+                "roles": ["producer", "licensor"],
+                "url": "https://www.swpc.noaa.gov/products/aurora-30-minute-forecast",
+            },
+            _XUE_PROVIDER,
+        ],
+        "links": [
+            {
+                "rel": "license",
+                "href": "https://www.weather.gov/disclaimer",
+                "type": "text/html",
+                "title": "NOAA/NWS: US Government work, public domain (attribution requested, no endorsement)",
+            }
+        ],
+    }
     try:
         return prose[source.id]
     except KeyError as exc:  # pragma: no cover - the table is held to the registry by a test

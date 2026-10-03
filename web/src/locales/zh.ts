@@ -386,4 +386,9 @@ export const zh: Record<MessageKey, string> = {
   compareHours: "时刻",
   compareNow: "现在",
   compareCells: "每个数值取自该模式自身网格中距该点最近的格点，不做插值；时间按你所在时区显示。",
+  glyphAurora: "A",
+  varAurora: "概率",
+  fieldGroupSpace: "空间天气",
+  varLabelAurora: "极光可见概率",
+  creditsAurora: "空间天气 · 极光可见概率 · NOAA SWPC OVATION 模式",
 };

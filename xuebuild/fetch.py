@@ -21,7 +21,7 @@ from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
 from pathlib import Path
 
-from . import cmaarchive, jmacli, om2nccli
+from . import aurora, cmaarchive, jmacli, om2nccli
 from . import satellite
 from .satellite import fetch as satellite_fetch
 from .satellite import producers as satellite_producers
@@ -1180,6 +1180,93 @@ def _fetch_jma_run(
     return [output]
 
 
+# -- NOAA SWPC OVATION aurora ------------------------------------------------
+#
+# A live observation whose feed keeps only the newest grid (no listing, no
+# archive — plans/027-aurora.md §2), so a window is grown from a frame
+# cache rather than fetched whole: each round refreshes the newest grid,
+# xuebuild/aurora.py writes it as one frame under ``data/raw/aurora-frames/``
+# and assembles the window's cached frames into the NetCDF series the
+# observation ingest reads. The cache is mirrored on the bucket by the same
+# ``make pull-r2-frames`` / ``push-r2-frames`` the JMA and satellite feeds
+# use (FRAME_CACHE in scripts/window_rounds.sh). ``force`` overwrites the
+# newest frame and rebuilds the series, but never discards the cache: the
+# past frames cannot be re-fetched, so clearing them would destroy the
+# window.
+
+
+def fetch_ovation_grid(*, fetch: Callable[[str], str] | None = None) -> aurora.OvationFrame:
+    """The model's newest grid, parsed and its valid time snapped."""
+    return aurora.parse_ovation((fetch or fetch_text)(aurora.OVATION_URL))
+
+
+def latest_aurora_slot(
+    spec: SourceSpec, *, now: datetime | None = None, fetch: Callable[[str], str] | None = None
+) -> datetime:
+    """The valid time of the newest grid — the end of the live window. The
+    ``now`` argument is accepted for the shared ``latest_observation_slot``
+    signature and unused: the feed, not the clock, carries the slot."""
+    return fetch_ovation_grid(fetch=fetch).valid_time
+
+
+def _aurora_run_is_complete(
+    spec: SourceSpec, run: GfsRun, hours: int, *, fetch: Callable[[str], str] | None = None
+) -> bool:
+    """Whether a named window can be assembled. Only the frame cache knows
+    which past frames exist — the live feed carries none — so completeness
+    is decided when the fetch reads the cache, and a named window is
+    admitted here. A window with no cached frame fails there with the cache
+    path in the message."""
+    return True
+
+
+def _fetch_aurora_run(
+    spec: SourceSpec,
+    run: GfsRun,
+    hours: int,
+    raw_root: Path,
+    *,
+    force: bool,
+    input_ids: tuple[str, ...] | None,
+    fetch: Callable[[str], str] | None = None,
+) -> list[Path]:
+    """Fetch one window: refresh the newest OVATION grid into the frame
+    cache, then assemble the window's cached frames into the run's NetCDF
+    series, with a ``fetch.json`` beside it in the shape the other
+    observations leave (one entry per frame with its slot). The window fills
+    over the rolling publish's rounds; a cold window holds the one frame
+    fetched here."""
+    if input_ids is not None and any(variable_id not in spec.input_variable_ids for variable_id in input_ids):
+        raise DownloadError(f"{spec.manifest_model} publishes {list(spec.input_variable_ids)}, not {list(input_ids)}")
+    frames_dir = raw_root / aurora.FRAMES_DIRNAME
+    destination = raw_root / f"{spec.id}.{run.id}"
+    output = destination / f"{spec.id}.{run.id}.nc"
+
+    frame = fetch_ovation_grid(fetch=fetch)
+    path = aurora.write_frame(frames_dir, frame)
+    LOG.info(
+        "%s newest grid valid %s written to %s",
+        spec.manifest_model,
+        frame.valid_time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        path,
+    )
+    slots = aurora.write_window(frames_dir, run.time, hours, output)
+    record = {
+        "model": spec.id,
+        "run": run.id,
+        "hours": hours,
+        "cadenceSeconds": spec.cadence_seconds,
+        "grid": {"width": aurora.GRID_SHAPE[1], "height": aurora.GRID_SHAPE[0]},
+        "series": output.name,
+        "frames": [
+            {"path": output.name, "slot": slot.strftime("%Y-%m-%dT%H:%M:%SZ")} for slot in slots
+        ],
+    }
+    (destination / MRMS_FETCH_FILENAME).write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
+    LOG.info("%s run %s: %d frames in %s", spec.manifest_model, run.id, len(slots), output)
+    return [output]
+
+
 def latest_observation_slot(spec: SourceSpec, *, now: datetime | None = None) -> datetime:
     """The newest frame a live observation source's feed holds — what the
     rolling publish compares the live window against, and what
@@ -1190,6 +1277,8 @@ def latest_observation_slot(spec: SourceSpec, *, now: datetime | None = None) ->
         return latest_jma_slot(spec, now=now)
     if spec.id == "cma":
         return latest_cma_slot(spec, now=now)
+    if spec.id == "aurora":
+        return latest_aurora_slot(spec, now=now)
     if spec.platform is not None:
         return latest_satellite_slot(spec, now=now)
     raise DownloadError(f"{spec.manifest_model} is not a live observation source")
@@ -1755,6 +1844,8 @@ def _run_is_complete(
         return _jma_run_is_complete(source_spec(model), run, hours)
     if model == "cma":
         return _cma_run_is_complete(source_spec(model), run, hours)
+    if model == "aurora":
+        return _aurora_run_is_complete(source_spec(model), run, hours)
     if model == "cfs":
         return _cfs_run_is_complete(source_spec(model), run, hours)
     if source_spec(model).open_meteo is not None:
@@ -2165,6 +2256,8 @@ def fetch_run(
         return _fetch_jma_run(spec, run, hours, raw_root, force=force, input_ids=input_ids)
     if spec.id == "cma":
         return _fetch_cma_run(spec, run, hours, raw_root, force=force, input_ids=input_ids)
+    if spec.id == "aurora":
+        return _fetch_aurora_run(spec, run, hours, raw_root, force=force, input_ids=input_ids)
     if spec.id == "cfs":
         return _fetch_cfs_run(spec, run, hours, raw_root, force=force, input_ids=input_ids)
     if spec.platform is not None:

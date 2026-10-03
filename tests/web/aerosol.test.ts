@@ -89,7 +89,7 @@ describe("the aerosol registry", () => {
       expect(variableSpec(id)!.group).toBe("aerosol");
       expect(variableSpec(id)!.ground).toBe("slate");
     }
-    expect(FIELD_GROUPS).toEqual(["temperature", "moisture", "wind", "dynamics", "radiation", "aerosol", "ocean", "satellite"]);
+    expect(FIELD_GROUPS).toEqual(["temperature", "moisture", "wind", "dynamics", "radiation", "aerosol", "ocean", "satellite", "space"]);
   });
 
   it("resolves every entry's parameter and aerosol blocks to its own id, and back", () => {

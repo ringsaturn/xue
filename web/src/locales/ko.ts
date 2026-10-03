@@ -393,4 +393,9 @@ export const ko: Record<MessageKey, string> = {
   compareHours: "시각",
   compareNow: "지금",
   compareCells: "각 값은 그 모델 자체 격자에서 지점에 가장 가까운 격자점의 값이며 보간하지 않습니다. 시각은 사용자의 시간대로 표시됩니다.",
+  glyphAurora: "A",
+  varAurora: "확률",
+  fieldGroupSpace: "우주기상",
+  varLabelAurora: "오로라 관측 확률",
+  creditsAurora: "우주기상 · 오로라 확률 · NOAA SWPC OVATION 모델",
 };

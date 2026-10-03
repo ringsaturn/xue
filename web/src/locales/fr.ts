@@ -391,4 +391,9 @@ export const fr: Record<MessageKey, string> = {
   compareHours: "Heures",
   compareNow: "maintenant",
   compareCells: "Chaque valeur est la maille du modèle la plus proche du point, jamais une interpolation ; les heures sont dans votre fuseau.",
+  glyphAurora: "A",
+  varAurora: "PROBA",
+  fieldGroupSpace: "MÉTÉO SPATIALE",
+  varLabelAurora: "Probabilité d'aurores visibles",
+  creditsAurora: "MÉTÉO SPATIALE · PROBABILITÉ D'AURORES · MODÈLE OVATION DU NOAA SWPC",
 };

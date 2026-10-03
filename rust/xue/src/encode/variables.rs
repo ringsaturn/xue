@@ -1965,6 +1965,34 @@ pub const VARIABLES: &[VariableSpec] = &[
     theta_e_spec!("thetae300", "300 hPa equivalent potential temperature", 30000.0, (285.0, 412.0)),
     theta_e_spec!("thetae250", "250 hPa equivalent potential temperature", 25000.0, (295.0, 422.0)),
     theta_e_spec!("thetae200", "200 hPa equivalent potential temperature", 20000.0, (305.0, 432.0)),
+    // NOAA SWPC OVATION aurora probability: the chance, in percent, that
+    // aurora is visible overhead, on a 1-degree global grid. A space
+    // weather product with no GRIB record to match — the fetch reads the
+    // model's JSON grid and writes the NetCDF series `observation.rs`
+    // reads — so its identity is a local-use number under GRIB2's
+    // space-products discipline (3) that means nothing without the
+    // source's own documentation. Mirrors `aurora` in
+    // `xuebuild/variables.py`.
+    VariableSpec {
+        id: "aurora",
+        label: "Aurora probability",
+        output_unit: "%",
+        value_range: (0.0, 100.0),
+        grib_element: "",
+        open_meteo: "",
+        grib2_discipline: 3,
+        grib2_category: 192,
+        grib2_number: 5,
+        grib2_level_type: 8,
+        grib2_level_value: None,
+        grib2_statistical: None,
+        grib2_aliases: &[],
+        grib2_alternates: &[],
+        gdal_unit: "",
+        fill_values: &[],
+        producer_id: None,
+        grib2_aerosol: None,
+    },
 ];
 
 pub fn variable_spec(variable_id: &str) -> Result<&'static VariableSpec> {

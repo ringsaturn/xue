@@ -139,7 +139,7 @@
             "@type": "Dataset",
             "@id": "https://xue.ringsaturn.me/#data",
             "name": "Xue live forecast bundles",
-            "description": "The current NOAA GFS, GFS surface-flux, ECMWF IFS, ECMWF AIFS, ECMWF IFS HRES 0.1° and NOAA HRRR runs, the last three to four hours of the NOAA MRMS radar mosaic, the last two to three hours of the JMA precipitation nowcast over Japan and of the CMA radar mosaic over China, the last five to six hours of Himawari-9, GOES-19 and GOES-18 infrared imagery and Dust RGB composites over the three geostationary disks, and the last day of hourly Meteosat-12 imagery and Dust RGB over the 0° disk (which the viewer also shows as one geostationary mosaic, each disk clipped to the longitudes it sees least obliquely, at /?model=geo), each a rolling window rebuilt every few minutes, converted into the .xue container: 8-bit quantized planes on the native grid with temporal residual prediction and Zstandard compression, one file per variable, streamable by HTTP range request. Only the newest run per source is kept.",
+            "description": "The current NOAA GFS, GFS surface-flux, ECMWF IFS, ECMWF AIFS, ECMWF IFS HRES 0.1° and NOAA HRRR runs, the last three to four hours of the NOAA MRMS radar mosaic, the last two to three hours of the JMA precipitation nowcast over Japan and of the CMA radar mosaic over China, the last five to six hours of Himawari-9, GOES-19 and GOES-18 infrared imagery and Dust RGB composites over the three geostationary disks, and the last day of hourly Meteosat-12 imagery and Dust RGB over the 0° disk (which the viewer also shows as one geostationary mosaic, each disk clipped to the longitudes it sees least obliquely, at /?model=geo), the last three hours of the NOAA SWPC OVATION aurora visibility probability on a 1° global grid, each a rolling window rebuilt every few minutes, converted into the .xue container: 8-bit quantized planes on the native grid with temporal residual prediction and Zstandard compression, one file per variable, streamable by HTTP range request. Only the newest run per source is kept.",
             "url": "https://dataset.ringsaturn.me/xue/",
             "isAccessibleForFree": true,
             "creator": { "@id": "https://github.com/ringsaturn#person" },
@@ -153,6 +153,7 @@
               { "@type": "Dataset", "name": "NOAA Himawari-9 AHI full-disk imagery (JMA ひまわり9号, ISatSS)", "url": "https://registry.opendata.aws/noaa-himawari/" },
               { "@type": "Dataset", "name": "NOAA GOES-R series ABI full-disk imagery (GOES-19 East, GOES-18 West, ABI-L2-CMIPF)", "url": "https://registry.opendata.aws/noaa-goes/" },
               { "@type": "Dataset", "name": "EUMETSAT Meteosat-12 (MTG-I1) FCI Level 1c full-disk imagery, hourly repeat cycle (EO:EUM:DAT:0662; contains modified EUMETSAT Meteosat data)", "url": "https://data.eumetsat.int/product/EO:EUM:DAT:0662", "license": "https://creativecommons.org/licenses/by/4.0/" },
+              { "@type": "Dataset", "name": "NOAA SWPC OVATION aurora visibility probability (1° global, five-minute model runs)", "url": "https://www.swpc.noaa.gov/products/aurora-30-minute-forecast" },
               { "@type": "Dataset", "name": "NOAA GEFS-Aerosols (Global Ensemble Forecast System aerosol member, 0.25°)", "url": "https://registry.opendata.aws/noaa-gefs/" },
               { "@type": "Dataset", "name": "ECMWF Open Data (real-time)", "url": "https://www.ecmwf.int/en/forecasts/datasets/open-data", "license": "https://creativecommons.org/licenses/by/4.0/" },
               { "@type": "Dataset", "name": "ECMWF IFS HRES surface fields forwarded by Open-Meteo (adapted from ECMWF IFS by ECMWF, licensed under CC BY 4.0, via Open-Meteo)", "url": "https://open-meteo.com", "license": "https://creativecommons.org/licenses/by/4.0/" }
@@ -172,7 +173,8 @@
               "composite radar reflectivity (observed by the CMA and NOAA MRMS mosaics, forecast by HRRR)",
               "radar precipitation intensity classes (the JMA nowcast over Japan, as representative rates)",
               "10.4 µm infrared brightness temperature (Himawari-9 AHI band 13 over the western Pacific, GOES-19 and GOES-18 ABI channel 13 over the Americas and the Pacific, Meteosat-12 FCI IR 10.5 over Europe, Africa and the Atlantic; cloud-top temperature)",
-              "Dust RGB composite (the 12.3−10.4 µm, 11.2−8.6 µm and 10.4 µm stretches of the classic EUMETSAT / GOES-R recipe, computed by shachen; lofted mineral dust in magenta)"
+              "Dust RGB composite (the 12.3−10.4 µm, 11.2−8.6 µm and 10.4 µm stretches of the classic EUMETSAT / GOES-R recipe, computed by shachen; lofted mineral dust in magenta)",
+              "aurora visibility probability (percent, on a 1° global grid, from the NOAA SWPC OVATION model)"
             ],
             "distribution": [
               { "@type": "DataDownload", "name": "GFS live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest.json" },
@@ -190,6 +192,7 @@
               { "@type": "DataDownload", "name": "GOES-East imagery live pointer (rolling window of the last five to six hours)", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-goeseast.json" },
               { "@type": "DataDownload", "name": "GOES-West imagery live pointer (rolling window of the last five to six hours)", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-goeswest.json" },
               { "@type": "DataDownload", "name": "Meteosat imagery live pointer (rolling window of the last day, hourly)", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-meteosat.json" },
+              { "@type": "DataDownload", "name": "NOAA SWPC OVATION aurora probability live pointer (rolling window of the last three hours)", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-aurora.json" },
               { "@type": "DataDownload", "name": "Historical case catalog", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/showcase.json" }
             ]
           },
@@ -462,6 +465,12 @@
           <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5" /><path d="M6.5 16.2c1.6-1.4 3.4-1.4 5.5 0s3.9 1.4 5.5 0" /><path d="M8 12.4c1.3-1.1 2.7-1.1 4 0s2.7 1.1 4 0" /><path d="M9.5 8.8c1-.8 2-.8 3 0s2 .8 2.5 0" /></svg>
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphDustcf">C</b>
           <span class="rail-name"><span>DUST</span> <small data-i18n="varDustCf">DEBRA</small></span>
+        </button>
+        <!-- The SWPC aurora probability: an auroral arc over the pole. -->
+        <button type="button" data-variable="aurora" data-i18n-tip="varLabelAurora" aria-pressed="false" hidden>
+          <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 14.5c3-6 6-9 9.5-9s6.5 3 9.5 9" /><path d="M4.5 18.5c2.2-1 4.6-1.5 7.5-1.5s5.3.5 7.5 1.5" /></svg>
+          <b class="rail-glyph" aria-hidden="true" data-i18n="glyphAurora">A</b>
+          <span class="rail-name"><span>AURORA</span> <small data-i18n="varAurora">PROB</small></span>
         </button>
         <!-- The rest of the fields, in the sheet's own groups: shown on
              the rail only while on screen, reached through MORE otherwise.
@@ -772,6 +781,11 @@
             <button type="button" data-model="meteosat" aria-pressed="false">
               <span class="model-name">METEOSAT</span>
               <small>SATELLITE IR</small>
+              <span class="model-check" aria-hidden="true"></span>
+            </button>
+            <button type="button" data-model="aurora" aria-pressed="false">
+              <span class="model-name">AURORA</span>
+              <small>SWPC OVATION 1°</small>
               <span class="model-check" aria-hidden="true"></span>
             </button>
             <button type="button" data-model="geo" aria-pressed="false">

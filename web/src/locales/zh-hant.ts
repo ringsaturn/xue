@@ -386,4 +386,9 @@ export const zhHant: Record<MessageKey, string> = {
   compareHours: "時刻",
   compareNow: "現在",
   compareCells: "每個數值取自該模式自身網格中距該點最近的格點，不做內插；時間依你所在時區顯示。",
+  glyphAurora: "A",
+  varAurora: "機率",
+  fieldGroupSpace: "太空天氣",
+  varLabelAurora: "極光可見機率",
+  creditsAurora: "太空天氣 · 極光可見機率 · NOAA SWPC OVATION 模式",
 };

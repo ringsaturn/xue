@@ -393,4 +393,9 @@ export const ru: Record<MessageKey, string> = {
   compareHours: "Часы",
   compareNow: "сейчас",
   compareCells: "Каждое значение — ближайшая к точке ячейка собственной сетки модели, без интерполяции; время в вашем часовом поясе.",
+  glyphAurora: "A",
+  varAurora: "ВЕРОЯТН",
+  fieldGroupSpace: "КОСМИЧЕСКАЯ ПОГОДА",
+  varLabelAurora: "Вероятность видимости полярного сияния",
+  creditsAurora: "КОСМИЧЕСКАЯ ПОГОДА · ВЕРОЯТНОСТЬ ПОЛЯРНОГО СИЯНИЯ · МОДЕЛЬ OVATION NOAA SWPC",
 };

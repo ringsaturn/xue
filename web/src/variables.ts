@@ -37,8 +37,8 @@ import { PRESSURE_BUNDLE_IDS, PRESSURE_LEVELS, pressureCode, pressureLabel, pres
  * group is chart knowledge — what a forecaster would file it under — and
  * the sheet's last group, for bundles no entry stands for, is the sheet's
  * own. */
-export type FieldGroup = "temperature" | "moisture" | "wind" | "dynamics" | "radiation" | "aerosol" | "ocean" | "satellite";
-export const FIELD_GROUPS: readonly FieldGroup[] = ["temperature", "moisture", "wind", "dynamics", "radiation", "aerosol", "ocean", "satellite"];
+export type FieldGroup = "temperature" | "moisture" | "wind" | "dynamics" | "radiation" | "aerosol" | "ocean" | "satellite" | "space";
+export const FIELD_GROUPS: readonly FieldGroup[] = ["temperature", "moisture", "wind", "dynamics", "radiation", "aerosol", "ocean", "satellite", "space"];
 
 /** The ground a field is drawn on, by what its palette needs (main.ts
  * maps each to its tones per theme): an opaque coat's near-void, a
@@ -882,11 +882,29 @@ function buildSpecs(): readonly VariableSpec[] {
     urlAliases: ["dustcf", "dustconfidence"],
     showcaseCode: "DEBRA",
   }),
+  // NOAA SWPC's OVATION aurora probability: the chance, in percent, that
+  // aurora is visible overhead, on a 1° global grid. A space-weather field,
+  // so it is the only member of its sheet group. Its ramp is the auroral
+  // green-to-violet of the model's own quicklooks; 0 % is transparent,
+  // since a probability field is mostly zero.
+  surface({
+    id: "aurora",
+    chart: "aurora",
+    group: "space",
+    code: "AUR %",
+    title: ["Aurora", "Probability"],
+    bufferTitle: "Aurora buffer",
+    labelKey: "varLabelAurora",
+    legend: ["100", "80", "60", "40", "20", "0"],
+    ground: "coat",
+    urlName: "aurora",
+    urlAliases: ["ovation"],
+    showcaseCode: "AUR",
+  }),
   // The lines.
   ...pressure(),
   ];
 }
-
 interface VariableTable {
   specs: readonly VariableSpec[];
   /** By id. Complete over `KnownBundleId`: a bundle id added to the type

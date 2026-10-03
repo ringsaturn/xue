@@ -723,12 +723,12 @@ describe("dataset kinds", () => {
       expect(isObservationModel(model)).toBe(false);
   });
 
-  it("lists the live feeds, the seven observation windows among them", () => {
+  it("lists the live feeds, the eight observation windows among them", () => {
     // Every live feed has a pointer to poll (mirrors
-    // SourceSpec.latest_filename); the seven observation windows are the
+    // SourceSpec.latest_filename); the eight observation windows are the
     // last of the switch order, and the mosaic — a view over the imagers
     // with no feed of its own — closes it.
-    expect(FORECAST_MODEL_IDS).toEqual(["gfs", "sflux", "ecmwf", "aifs", "ifshres", "cfs", "hrrr", "gefsaero", "mrms", "jma", "cma", "himawari", "goeseast", "goeswest", "meteosat", "geo"]);
+    expect(FORECAST_MODEL_IDS).toEqual(["gfs", "sflux", "ecmwf", "aifs", "ifshres", "cfs", "hrrr", "gefsaero", "mrms", "jma", "cma", "himawari", "goeseast", "goeswest", "meteosat", "aurora", "geo"]);
     for (const model of FORECAST_MODEL_IDS) {
       if (FORECAST_MODELS[model].mosaic) expect(FORECAST_MODELS[model].latestFilename).toBeUndefined();
       else expect(FORECAST_MODELS[model].latestFilename).toBeDefined();
@@ -782,6 +782,22 @@ describe("dataset kinds", () => {
       region: [-60, -60, 60, 60],
     });
     expect(isObservationModel("meteosat")).toBe(true);
+  });
+
+  it("opens the SWPC aurora probability on its own 1° grid", () => {
+    // Mirrors the `aurora` entry of SOURCES: a space-weather observation
+    // whose window is grown from a frame cache, five minutes a frame.
+    expect(FORECAST_MODELS.aurora).toMatchObject({
+      id: "aurora",
+      label: "SWPC-AURORA",
+      product: "ovation-aurora-1p00",
+      latestFilename: "latest-aurora.json",
+      observation: true,
+      coreBundles: ["aurora"],
+      defaultVariable: "aurora",
+      railCore: ["aurora"],
+    });
+    expect(isObservationModel("aurora")).toBe(true);
   });
 
   it("opens the two GOES disks on the infrared channel, the West one past the antimeridian", () => {

@@ -241,6 +241,14 @@ COMPACT_ICE_COVER = TemperatureCodebook(minimum=0.0, maximum=100.0, step=1.0, na
 # 5 m GFS caps the field at.
 QUALITY_ICE_THICKNESS = TemperatureCodebook(minimum=0.0, maximum=5.08, step=0.02, name="icetk")
 COMPACT_ICE_THICKNESS = TemperatureCodebook(minimum=0.0, maximum=5.08, step=0.04, name="icetk")
+# Aurora probability: 0–100 % at half a percent, the cloud cover's own
+# numbers. The field is a smooth global probability with no fine structure
+# to resolve, so the balanced profile takes its compact 1 % step the way
+# every other percent field does, and 0 stays an ordinary code — the
+# format carries no bitmap and the shader interpolates across the polar
+# edge, where the data really does fall to zero.
+QUALITY_AURORA = TemperatureCodebook(minimum=0.0, maximum=100.0, step=0.5, name="aurora")
+COMPACT_AURORA = TemperatureCodebook(minimum=0.0, maximum=100.0, step=1.0, name="aurora")
 # Significant wave height and primary wave period: 0–25.4 at a tenth spends
 # the full code space over both — the highest significant wave height a
 # global wave model analyses is about 20 m, the longest primary period about
@@ -635,6 +643,7 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
         "hpbl": QUALITY_PBL,
         "orog": QUALITY_OROGRAPHY,
         "ptype": PTYPE,
+        "aurora": QUALITY_AURORA,
         **QUALITY_CLOUD_LAYER,
         **QUALITY_OCEAN,
         **QUALITY_SATELLITE,
@@ -662,6 +671,7 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
         "hpbl": COMPACT_PBL,
         "orog": COMPACT_OROGRAPHY,
         "ptype": PTYPE,
+        "aurora": COMPACT_AURORA,
         **COMPACT_CLOUD_LAYER,
         **COMPACT_OCEAN,
         **COMPACT_SATELLITE,
@@ -700,6 +710,7 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
         "hpbl": QUALITY_PBL,
         "orog": QUALITY_OROGRAPHY,
         "ptype": PTYPE,
+        "aurora": COMPACT_AURORA,
         **COMPACT_CLOUD_LAYER,
         **QUALITY_OCEAN,
         "icec": COMPACT_ICE_COVER,

@@ -34,6 +34,9 @@ export const en = {
   varSolar: "FLUX",
   varRadar: "CREF",
   varOrog: "OROG",
+  /** The aurora tile: the field is a probability, so the gloss is the
+   * unit. */
+  varAurora: "PROB",
   /** The satellite tile: the channel's nominal wavelength in µm after the
    * code (SAT IR 10.4). */
   varInfrared: "IR 10.4",
@@ -109,6 +112,8 @@ export const en = {
   glyphDustrgb: "D",
   // C for the dust confidence.
   glyphDustcf: "C",
+  // The aurora probability: its initial.
+  glyphAurora: "A",
   // N is the synoptic-code letter for total cloud amount; the gust and CAPE
   // take their initials.
   glyphGust: "G",
@@ -200,6 +205,7 @@ export const en = {
   fieldGroupAerosol: "AEROSOLS & AIR QUALITY",
   fieldGroupOcean: "OCEAN",
   fieldGroupSatellite: "SATELLITE",
+  fieldGroupSpace: "SPACE WEATHER",
   fieldGroupOther: "OTHER",
   /** The particle switch as a rail tile in the overlay section: the gloss
    * after the code PARTICLES, and its glyph (the tooltip and accessible
@@ -249,6 +255,9 @@ export const en = {
    * `applyStaticMessages` stamps at render time so the copy never goes
    * stale. */
   creditsMeteosat: "SATELLITE IMAGERY · CONTAINS MODIFIED EUMETSAT METEOSAT DATA {year} · METEOSAT-12 FCI, HOURLY CYCLE, CC-BY-4.0 (REPROJECTED)",
+  /** The aurora line names the model and the agency; NOAA's US
+   * government work needs no licence but asks for the source. */
+  creditsAurora: "SPACE WEATHER · AURORA PROBABILITY · NOAA SWPC OVATION MODEL",
   creditsSounding: "RADIOSONDE SOUNDINGS · GTS TEMP VIA WIS2, NATIONAL MET SERVICES",
   creditsAirport: "AIRPORT METAR & TAF · WORLD MET SERVICES VIA NOAA/NWS AWC",
   creditsRadar: "RADAR MOSAIC",
@@ -369,6 +378,7 @@ export const en = {
   varLabelWind100m: "100 m wind",
   varLabelCref: "Composite radar reflectivity",
   varLabelOrog: "Orography",
+  varLabelAurora: "Aurora visibility probability",
   varLabelIr104: "Infrared imagery (10.4 µm brightness temperature)",
   varLabelDustrgb: "Dust RGB (infrared composite)",
   varLabelDustcf: "DEBRA dust confidence",

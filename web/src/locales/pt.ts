@@ -391,4 +391,9 @@ export const pt: Record<MessageKey, string> = {
   compareHours: "Horas",
   compareNow: "agora",
   compareCells: "Cada valor é a célula da grelha do próprio modelo mais próxima do ponto, nunca uma interpolação; as horas são mostradas no seu fuso horário.",
+  glyphAurora: "A",
+  varAurora: "PROB",
+  fieldGroupSpace: "CLIMA ESPACIAL",
+  varLabelAurora: "Probabilidade de auroras visíveis",
+  creditsAurora: "CLIMA ESPACIAL · PROBABILIDADE DE AURORAS · MODELO OVATION DA NOAA SWPC",
 };

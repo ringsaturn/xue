@@ -1361,6 +1361,25 @@ VARIABLES: dict[str, VariableSpec] = {
         grib2_aerosol=AerosolIdentity(62001, size_type=0, size_first=(6, 10), size_second=(0, 0)),
         gdal_unit="10^-6g/m^3",
     ),
+    # The NOAA SWPC OVATION model's aurora probability: the chance, in
+    # percent, that aurora is visible overhead, on a regular 1° global grid
+    # (360 × 181 cells, 0–359°E, 90°S–90°N). A space weather product rather
+    # than a tropospheric one: it has no GRIB identity to match — the fetch
+    # stage reads it from the model's JSON grid and writes the NetCDF series
+    # the observation ingest already reads (xuebuild/aurora.py) — so it
+    # takes a local-use number under GRIB2's space-products discipline (3)
+    # that means nothing without the source's own documentation. The value
+    # is a probability, not an intensity: 0 is no chance, 100 is certain.
+    "aurora": VariableSpec(
+        id="aurora",
+        label="Aurora probability",
+        output_unit="%",
+        value_range=(0, 100),
+        grib2_discipline=3,
+        grib2_category=192,
+        grib2_number=5,
+        grib2_level_type=8,
+    ),
 }
 
 # The ocean set: the three pgrb2 fields and the three GFS-Wave fields above,

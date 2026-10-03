@@ -1295,6 +1295,39 @@ pub const SOURCES: &[SourceSpec] = &[
         open_meteo: None,
         downsample: None,
     },
+    SourceSpec {
+        id: "aurora",
+        manifest_model: "SWPC-AURORA",
+        product: "ovation-aurora-1p00",
+        latest_filename: Some("latest-aurora.json"),
+        steps: &[],
+        input_variable_ids: &["aurora"],
+        companion_files: &[],
+        accumulated_precipitation: false,
+        averaged_precipitation: false,
+        interval_precipitation: false,
+        average_window_hours: 6,
+        first_hour: 0,
+        optional_at_analysis: &[],
+        statistical_processes: &[],
+        bands: &[],
+        bundle_scalar_ids: &["aurora"],
+        core_bundle_ids: &["aurora"],
+        bundle_vector_ids: &[],
+        bundle_composite_ids: &[],
+        // The OVATION grid: 360 longitudes by 181 latitudes at 1 degree, cut
+        // into 12 x 13 degree tiles. Mirrors `xuebuild/sources.py`.
+        production_grid: (360, 181),
+        tile: (12, 13),
+        variant_factors: &[2],
+        regrid: None,
+        observation: true,
+        window_hours: Some(3),
+        cadence_seconds: Some(300),
+        series_file: true,
+        open_meteo: None,
+        downsample: None,
+    },
 ];
 
 pub fn source_spec(model: &str) -> Result<&'static SourceSpec> {
@@ -1366,6 +1399,18 @@ mod tests {
         for (_, band) in meteosat.bands {
             assert_eq!((band.satellite_number, band.instrument_type), (71, 210));
         }
+        // The SWPC OVATION aurora probability is the same shape on its own
+        // 1-degree grid: a fetched NetCDF window, five minutes a frame. It
+        // has no bands, no companions and no GRIB record at all — the fetch
+        // writes the series from the model's JSON grid. Mirrors the aurora
+        // assertions in `tests/test_aurora.py`.
+        let aurora = source_spec("aurora").expect("aurora");
+        assert!(aurora.observation && aurora.series_file && aurora.fetched() && aurora.live());
+        assert_eq!(aurora.cadence_seconds, Some(300));
+        assert_eq!(aurora.window_hours, Some(3));
+        assert_eq!(aurora.production_grid, (360, 181));
+        assert_eq!(aurora.core_bundle_ids, &["aurora"]);
+        assert!(aurora.bands.is_empty() && aurora.companion_files.is_empty());
         // The IFS HRES run om2nc resamples off the Open-Meteo bucket is the
         // one series-file source that is not an observation: a cycle with a
         // run time and lead times, whose frames happen to arrive as one

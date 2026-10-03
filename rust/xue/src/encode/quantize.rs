@@ -483,6 +483,20 @@ const COMPACT_ICE_THICKNESS: LinearCodebook = LinearCodebook {
     step: 0.04,
     ..QUALITY_ICE_THICKNESS
 };
+// Aurora probability: 0–100 % at half a percent, the cloud cover's numbers.
+// Balanced takes the 1 % step like every other percent field. Mirrors
+// `QUALITY_AURORA` / `COMPACT_AURORA` in `xuebuild/quantize.py`.
+const QUALITY_AURORA: LinearCodebook = LinearCodebook {
+    minimum: 0.0,
+    maximum: 100.0,
+    step: 0.5,
+    nodata_code: 255,
+    name: "aurora",
+};
+const COMPACT_AURORA: LinearCodebook = LinearCodebook {
+    step: 1.0,
+    ..QUALITY_AURORA
+};
 // Significant wave height and primary wave period: 0–25.4 at a tenth.
 const QUALITY_WAVE_HEIGHT: LinearCodebook = LinearCodebook {
     minimum: 0.0,
@@ -811,6 +825,8 @@ pub fn codebook(profile: &str, variable_id: &str) -> Result<Codebook> {
         // as for cloud cover.
         ("quality", "icec") => Codebook::Linear(QUALITY_ICE_COVER),
         (_, "icec") => Codebook::Linear(COMPACT_ICE_COVER),
+        ("quality", "aurora") => Codebook::Linear(QUALITY_AURORA),
+        (_, "aurora") => Codebook::Linear(COMPACT_AURORA),
         (_, "icetk") if quality => Codebook::Linear(QUALITY_ICE_THICKNESS),
         (_, "icetk") => Codebook::Linear(COMPACT_ICE_THICKNESS),
         (_, "htsgw") if quality => Codebook::Linear(QUALITY_WAVE_HEIGHT),

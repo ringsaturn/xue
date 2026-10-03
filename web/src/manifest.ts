@@ -30,6 +30,7 @@ export type ForecastModelId =
   | "goeseast"
   | "goeswest"
   | "meteosat"
+  | "aurora"
   | "geo";
 
 export interface ForecastModelInfo {
@@ -306,6 +307,22 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
     subLongitude: 0,
     cadenceSeconds: 3600,
   },
+  // NOAA SWPC's OVATION aurora probability: the chance, in percent, that
+  // aurora is visible overhead, on a 1° global grid, one grid every five
+  // minutes. A space-weather observation, live like MRMS: a rolling window
+  // grown from a frame cache — the live feed carries only the newest grid —
+  // some ten minutes behind real time. Global, so no region: the camera
+  // stays where the reader left it.
+  aurora: {
+    id: "aurora",
+    label: "SWPC-AURORA",
+    product: "ovation-aurora-1p00",
+    latestFilename: "latest-aurora.json",
+    observation: true,
+    coreBundles: ["aurora"],
+    defaultVariable: "aurora",
+    railCore: ["aurora"],
+  },
 };
 
 /** The layer a dataset opens on when nothing asked for one. */
@@ -323,10 +340,10 @@ export function isObservationModel(model: ForecastModelId): boolean {
   return FORECAST_MODELS[model].observation === true;
 }
 
-/** The model switch's entries, in order: the eight forecasts, the seven
- * rolling observation windows (MRMS, the JMA nowcast, the CMA mosaic and
- * the four geostationary imagers) and the geostationary mosaic, a view
- * over the imagers with no feed of its own. */
+/** The model switch's entries, in order: the eight forecasts, the eight
+ * rolling observation windows (MRMS, the JMA nowcast, the CMA mosaic, the
+ * four geostationary imagers and the SWPC aurora probability) and the
+ * geostationary mosaic, a view over the imagers with no feed of its own. */
 export const FORECAST_MODEL_IDS: readonly ForecastModelId[] = [
   "gfs",
   "sflux",
@@ -343,6 +360,7 @@ export const FORECAST_MODEL_IDS: readonly ForecastModelId[] = [
   "goeseast",
   "goeswest",
   "meteosat",
+  "aurora",
   "geo",
 ];
 
@@ -422,6 +440,7 @@ export type KnownBundleId =
   | "dswrf"
   | "cref"
   | "orog"
+  | "aurora"
   | SurfaceDiagnosticId
   | OceanId
   | SatelliteId
@@ -560,6 +579,7 @@ export const KNOWN_BUNDLE_IDS: readonly KnownBundleId[] = [
   "dswrf",
   "cref",
   "orog",
+  "aurora",
   ...SURFACE_DIAGNOSTIC_IDS,
   ...OCEAN_IDS,
   ...SATELLITE_IDS,

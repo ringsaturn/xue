@@ -1,0 +1,233 @@
+name: publish aurora
+
+# The NOAA SWPC OVATION aurora probability: the chance, in percent, that
+# aurora is visible overhead, on a regular 1° global grid, one model grid
+# every five minutes. A space-weather observation with a live feed, like
+# MRMS and the JMA nowcast: a rolling window (the last three hours on a
+# 1° grid, the native five-minute step) rebuilt every five minutes into a
+# round subdirectory of its run (<model>.<run>/<HHMM>/) and pointed at by
+# latest-aurora.json.
+#
+# The live service keeps only the newest grid — there is no listing and no
+# gridded archive (plans/027-aurora.md §2) — so the window cannot be fetched
+# whole the way the JMA listing lets a round. Instead each round refreshes
+# the newest grid into a frame cache under data/raw/aurora-frames/
+# (xuebuild/aurora.py writes one small NetCDF per valid time) and assembles
+# the window's cached frames into the series the ingest reads; the cache is
+# mirrored on the bucket (`make pull-r2-frames` / `push-r2-frames`) so a
+# fresh runner inherits the history and a cold window fills over hours.
+# `force` never clears it: the past grids cannot be re-fetched.
+#
+# Machine time: twelve jobs an hour of one to two minutes each, free on a
+# public repository's standard runners.
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+    inputs:
+      loop:
+        description: "Keep running rounds until twenty past the next hour instead of one round"
+        type: boolean
+        default: false
+      round_minutes:
+        description: "Minutes between rounds when looping"
+        type: string
+        default: "2"
+      hours:
+        description: "Window length in hours (the whole hours on screen plus the one in progress)"
+        type: string
+        default: "3"
+      encoder:
+        description: "auto (the xuepy wheel when its release knows the aurora source, else the reference pipeline with GDAL), native (insist on the wheel) or python (insist on the reference pipeline)"
+        type: choice
+        options: [auto, native, python]
+        default: auto
+      profile:
+        description: "Quantization/compression profile"
+        type: choice
+        options: [balanced, quality, compact]
+        default: balanced
+      keep:
+        description: "Published runs to keep on R2 (2 = the live run and the one before it)"
+        type: string
+        default: "2"
+      force:
+        description: "Build a round even when the live one already ends at the newest grid"
+        type: boolean
+        default: false
+      dry_run:
+        description: "Build and report what the uploads and prunes would do, but write nothing to R2"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  # scripts/successor_queued.sh lists this workflow's waiting runs, for a
+  # looping dispatch to yield to the next scheduled job.
+  actions: read
+
+concurrency:
+  group: publish-aurora
+  # A late cron queues behind the job still running and then finds nothing
+  # new; a looping dispatch yields to it on its own.
+  cancel-in-progress: false
+
+env:
+  # Which encoder the rounds convert through. The wheel on PyPI cannot know
+  # the aurora source before a release carries it (a scheduled run cannot
+  # pass an input, and a wheel is released on the crate's tags), so `auto`
+  # resolves the choice in the job below — native when the installed wheel
+  # knows the model, else the reference pipeline with a ::warning:: — and
+  # the dispatch can still insist on either.
+  ENCODER: ${{ inputs.encoder || 'auto' }}
+  # Every round is published as Zarr stores alone (plan 017 phase 7): the
+  # store is derived from the `.xue` the round wrote and the file retired
+  # before upload.
+  XUE_ZARR: "1"
+  XUE_CONTAINER: "0"
+
+jobs:
+  publish:
+    # Scheduled runs on forks would publish into a bucket they cannot reach.
+    if: github.event_name != 'schedule' || github.repository == 'ringsaturn/xue'
+    runs-on: ubuntu-24.04
+    # One round is a minute or two; the first round of a cold cache is a
+    # single grid, so this is only the backstop for a round that hangs.
+    timeout-minutes: 90
+    env:
+      MODEL: aurora
+      FRAME_CACHE: "true"
+      ONCE: ${{ !inputs.loop }}
+      ROUND_MINUTES: ${{ inputs.round_minutes || '2' }}
+      # For a looping dispatch: run past the hour, and hand over to the next
+      # scheduled job as soon as it is waiting.
+      UNTIL_MINUTE: "80"
+      HANDOVER_CHECK: scripts/successor_queued.sh
+      # No edge-cache warm-up: a round is a few small objects replaced a few
+      # minutes later, and the shell's next poll fills the edge itself.
+      WARM: "false"
+      HOURS: ${{ inputs.hours || '3' }}
+      PROFILE: ${{ inputs.profile || 'balanced' }}
+      KEEP: ${{ inputs.keep || '2' }}
+      FORCE: ${{ inputs.force || false }}
+      DRY_RUN: ${{ inputs.dry_run && '--dryrun' || '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate inputs
+        run: |
+          set -euo pipefail
+          printf '%s' "$ROUND_MINUTES" | grep -Eq '^[1-9][0-9]?$' \
+            || { echo "::error::round_minutes must be a positive integer of minutes"; exit 1; }
+          printf '%s' "$HOURS" | grep -Eq '^[1-9][0-9]?$' \
+            || { echo "::error::hours must be a positive integer"; exit 1; }
+          printf '%s' "$KEEP" | grep -Eq '^[1-9][0-9]*$' \
+            || { echo "::error::keep must be a positive integer"; exit 1; }
+
+      # The AWS CLI is preinstalled on the runner; R2 is its S3 endpoint.
+      # The credentials are step-scoped rather than job env, so third-party
+      # actions never see them; the read proves they work before the first
+      # round rather than at its upload.
+      - name: Check R2 credentials
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+          AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+        run: |
+          for name in CLOUDFLARE_ACCOUNT_ID AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY; do
+            [ -n "${!name}" ] || { echo "::error::$name is empty; set the R2 repository secrets"; exit 1; }
+          done
+          aws --version
+          aws s3api head-object --bucket dataset --key xue/catalog.json --region auto \
+            --endpoint-url "https://${CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com" > /dev/null \
+            || { echo "::error::R2 credentials failed a test read of the dataset bucket"; exit 1; }
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          python-version: "3.14"
+
+      # The aurora group is what writes the frame cache and the window series
+      # (xuebuild/aurora.py: xarray + netCDF4). No ffmpeg: the source ships no
+      # video. The xuepy wheel carries the GDAL the native encoder extracts
+      # and inspects with; the reference pipeline needs the system one.
+      - name: Sync Python environment
+        run: uv sync --group aurora
+
+      # XUE_ENCODER is what xuebuild reads (auto | native | python); it is
+      # set here rather than at the workflow level so a wheel that predates
+      # the source resolves to the reference pipeline explicitly, once, and
+      # every later step (the GDAL install, the rounds) sees one answer.
+      - name: Resolve the encoder
+        run: |
+          set -euo pipefail
+          case "$ENCODER" in
+            native|python) encoder="$ENCODER" ;;
+            auto)
+              if .venv/bin/python -c "import sys; from xuebuild import native; sys.exit(0 if native.knows_source('$MODEL') else 1)"; then
+                encoder=native
+              else
+                wheel=$(.venv/bin/python -c "from xuebuild import native; print(native.version() or 'unknown')")
+                echo "::warning::xuepy ${wheel} does not know the ${MODEL} source; converting through the reference pipeline (slower). Release a wheel that carries it and bump the pin in pyproject.toml."
+                encoder=python
+              fi ;;
+            *) echo "::error::encoder must be auto, native or python, not '$ENCODER'"; exit 1 ;;
+          esac
+          echo "XUE_ENCODER=$encoder" >> "$GITHUB_ENV"
+          echo "encoder: $encoder" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Install GDAL for the reference pipeline
+        if: ${{ env.XUE_ENCODER == 'python' }}
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq gdal-bin
+          gdalinfo --version
+
+      - name: Run the rounds
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: |
+          set -o pipefail
+          scripts/window_rounds.sh 2>&1 | tee rounds.log
+          status=$?
+          {
+            echo "### aurora rounds"
+            echo
+            echo '```'
+            grep -E '^round [0-9]{4}:|rounds this hour' rounds.log || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit $status
+
+      # The pointer is served with no-cache, so the edge revalidates it; a
+      # stale read here means the last flip has not propagated rather than
+      # failed, so it warns instead of failing an otherwise complete hour.
+      - name: Verify the live pointer
+        if: ${{ !inputs.dry_run }}
+        run: |
+          set -uo pipefail
+          [ -f web/public/data/latest-aurora.json ] || { echo "No round built this hour." >> "$GITHUB_STEP_SUMMARY"; exit 0; }
+          url="https://dataset.ringsaturn.me/xue/latest-aurora.json"
+          published=$(curl -fsSL "$url" | jq -r '.manifestPath' || true)
+          if [ -n "$published" ] && [ -f "web/public/data/$published" ]; then
+            echo "$url serves $published." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::$url serves '${published:-nothing}', not the round this job last built"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: publish-report-aurora
+          path: |
+            rounds.log
+            build-report.json
+            web/public/data/latest-aurora.json
+          retention-days: 14
+          if-no-files-found: ignore

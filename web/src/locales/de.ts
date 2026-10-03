@@ -391,4 +391,9 @@ export const de: Record<MessageKey, string> = {
   compareHours: "Stunden",
   compareNow: "jetzt",
   compareCells: "Jeder Wert ist die dem Punkt nächste Gitterzelle des jeweiligen Modells, nie eine Interpolation; Zeiten in Ihrer Zeitzone.",
+  glyphAurora: "A",
+  varAurora: "WAHR",
+  fieldGroupSpace: "WELTRAUMWETTER",
+  varLabelAurora: "Wahrscheinlichkeit sichtbarer Polarlichter",
+  creditsAurora: "WELTRAUMWETTER · POLARLICHTWAHRSCHEINLICHKEIT · NOAA SWPC OVATION-MODELL",
 };
