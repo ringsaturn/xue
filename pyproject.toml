@@ -31,8 +31,10 @@ dependencies = [
     # on all eight registered isobaric surfaces. 0.26 adds the precipitable
     # water, the convective inhibition, the planetary boundary layer height,
     # the derived categorical precipitation type and the 100 m wind. 0.27
-    # adds the model orography, a static one-frame bundle.
-    "xuepy>=0.27,<0.28",
+    # adds the model orography, a static one-frame bundle. 0.28 adds each
+    # bundle's own full grid to the manifest, which is what the STAC Item
+    # reads its authoritative `xue:grid` from.
+    "xuepy>=0.28,<0.29",
 ]
 
 [project.scripts]
