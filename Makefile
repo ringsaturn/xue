@@ -780,7 +780,9 @@ live-window:
 # frame once. Frames are immutable and named by their time
 # (`hrpns_<YYYYMMDDHHMMSS>.nc`, `ir104_<YYYYMMDDHHMMSS>.tif`), so a pull
 # takes the hours of the window about to be built (the last HOURS + 1
-# hours), a push sends what is new, and a prune drops the hours older than
+# hours), and the same span ahead, since a feed's valid times may lead the
+# clock — the OVATION aurora grids are forecast valid some ninety minutes
+# ahead. A push sends what is new, and a prune drops the hours older than
 # FRAMES_KEEP_HOURS. The default keeps a week, for a feed whose tiles expire
 # at the agency (JMA: a case can only be cut from what is kept); a satellite
 # source keeps its window and a little slack, since NOAA's buckets hold the
@@ -792,7 +794,7 @@ FRAMES_KEEP_HOURS ?= 168
 pull-r2-frames:
 	@set -e; mkdir -p $(FRAMES_DIR); \
 	includes=$$($(PYTHON) -c "from datetime import datetime, timedelta, UTC; now = datetime.now(UTC); \
-	print(' '.join('--include */*_' + (now - timedelta(hours=h)).strftime('%Y%m%d%H') + '*' for h in range(int('$(if $(HOURS),$(HOURS),3)') + 1, -1, -1)))"); \
+	print(' '.join('--include */*_' + (now - timedelta(hours=h)).strftime('%Y%m%d%H') + '*' for h in range(int('$(if $(HOURS),$(HOURS),3)') + 1, -int('$(if $(HOURS),$(HOURS),3)') - 2, -1)))"); \
 	$(S3) sync $(FRAMES_PREFIX)/ $(FRAMES_DIR)/ --exclude "*" --include "*/grid.json" $$includes --only-show-errors; \
 	echo "frame cache: $$(find $(FRAMES_DIR) \( -name '*.nc' -o -name '*.tif' \) | wc -l | tr -d ' ') frames on disk"
 
