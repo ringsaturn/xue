@@ -1284,6 +1284,27 @@ def latest_observation_slot(spec: SourceSpec, *, now: datetime | None = None) ->
     raise DownloadError(f"{spec.manifest_model} is not a live observation source")
 
 
+def observation_window_start(
+    spec: SourceSpec, newest: datetime, hours: int, raw_root: Path | None
+) -> datetime:
+    """Where a live observation window starts: the hour ``hours - 1`` before
+    the newest frame, every feed whose own listing or archive reaches that
+    far back. The aurora cache is the exception — the live service keeps
+    only the newest grid, so the window is grown from a frame cache and may
+    not yet reach back a whole window — and there the start is the hour of
+    its **earliest cached frame**, so the run id and the manifest's run
+    time (the first frame's hour, the observation rule) agree from the
+    first round and the window lengthens as the cache fills. An empty
+    cache starts at the newest frame's own hour."""
+    start = newest.replace(minute=0, second=0, microsecond=0) - timedelta(hours=hours - 1)
+    if spec.id != "aurora" or raw_root is None:
+        return start
+    frames = aurora.cached_frames(raw_root / aurora.FRAMES_DIRNAME)
+    if not frames:
+        return newest.replace(minute=0, second=0, microsecond=0)
+    return max(start, frames[0][0].replace(minute=0, second=0, microsecond=0))
+
+
 # -- CMA radar mosaic ---------------------------------------------------------
 #
 # The archive is one Zarr store per UTC day, each with a complete 240-slot
@@ -1907,6 +1928,7 @@ def resolve_run(
     max_cycles: int = 20,
     exists: Callable[[str], bool] = remote_exists,
     model: str = "gfs",
+    raw_root: Path | None = None,
 ) -> GfsRun:
     spec = source_spec(model)
     label = spec.manifest_model
@@ -1928,7 +1950,7 @@ def resolve_run(
             if not spec.live:
                 raise DownloadError(f"{label} has no live feed: name the window's first hour with --run YYYYMMDDHH")
             newest = latest_observation_slot(spec, now=now)
-            start = newest.replace(minute=0, second=0, microsecond=0) - timedelta(hours=hours - 1)
+            start = observation_window_start(spec, newest, hours, raw_root)
             LOG.info("%s newest frame %s, live window from %s", label, newest.isoformat(), start.isoformat())
             return GfsRun(start)
         run = parse_run(value, model)

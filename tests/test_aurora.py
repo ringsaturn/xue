@@ -22,7 +22,7 @@ from unittest import mock
 from xuebuild import aurora, binconvert, native, zstdcli
 from xuebuild.binformat import read_bundle
 from xuebuild.errors import ConversionError, DownloadError
-from xuebuild.fetch import _fetch_aurora_run, latest_aurora_slot
+from xuebuild.fetch import _fetch_aurora_run, latest_aurora_slot, observation_window_start
 from xuebuild.model import GfsRun
 from xuebuild.sources import MODEL_CORE_BUNDLES, SOURCES, source_spec
 from xuebuild.stac import _source_prose
@@ -209,6 +209,44 @@ class FetchTests(unittest.TestCase):
     def test_an_input_the_source_does_not_publish_is_refused(self) -> None:
         with self.assertRaisesRegex(DownloadError, "publishes"):
             _fetch_aurora_run(AURORA, self.run, 3, self.root, force=False, input_ids=("cref",), fetch=lambda url: ovation_payload())
+
+
+class WindowStartTests(unittest.TestCase):
+    """Where an aurora window starts when the cache has not filled it yet.
+
+    The manifest's run time is the first frame's hour (the observation
+    rule), and the pointer requires it to equal the run id, so the run must
+    anchor to the earliest cached frame until the cache reaches a whole
+    window back."""
+
+    def setUp(self) -> None:
+        self.root = Path(tempfile.mkdtemp(prefix="xue-aurora-"))
+        self.addCleanup(shutil.rmtree, self.root, True)
+        self.frames_dir = self.root / aurora.FRAMES_DIRNAME
+
+    def _touch(self, moment: datetime) -> None:
+        variable_dir = self.frames_dir / aurora.VARIABLE_DIR
+        variable_dir.mkdir(parents=True, exist_ok=True)
+        (variable_dir / aurora.frame_name(moment)).write_bytes(b"")
+
+    def test_a_cold_cache_starts_at_the_newest_frames_hour(self) -> None:
+        newest = datetime(2026, 10, 3, 12, 35, tzinfo=UTC)
+        self.assertEqual(observation_window_start(AURORA, newest, 3, self.root), datetime(2026, 10, 3, 12, 0, tzinfo=UTC))
+
+    def test_a_partial_cache_starts_at_its_earliest_frame(self) -> None:
+        self._touch(datetime(2026, 10, 3, 11, 5, tzinfo=UTC))
+        newest = datetime(2026, 10, 3, 12, 35, tzinfo=UTC)
+        self.assertEqual(observation_window_start(AURORA, newest, 3, self.root), datetime(2026, 10, 3, 11, 0, tzinfo=UTC))
+
+    def test_a_full_cache_starts_a_whole_window_back(self) -> None:
+        self._touch(datetime(2026, 10, 3, 10, 5, tzinfo=UTC))
+        newest = datetime(2026, 10, 3, 12, 35, tzinfo=UTC)
+        self.assertEqual(observation_window_start(AURORA, newest, 3, self.root), datetime(2026, 10, 3, 10, 0, tzinfo=UTC))
+
+    def test_other_observations_keep_the_plain_rule(self) -> None:
+        newest = datetime(2026, 10, 3, 12, 35, tzinfo=UTC)
+        self.assertEqual(observation_window_start(source_spec("mrms"), newest, 3, self.root), datetime(2026, 10, 3, 10, 0, tzinfo=UTC))
+        self.assertEqual(observation_window_start(AURORA, newest, 3, None), datetime(2026, 10, 3, 10, 0, tzinfo=UTC))
 
 
 @requires_gdal

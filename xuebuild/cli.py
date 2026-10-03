@@ -491,7 +491,7 @@ def main(argv: list[str] | None = None) -> int:
         if arguments.command in ("fetch", "build-bin", "assemble-run"):
             arguments.hours = _run_hours(arguments)
         if arguments.command == "fetch":
-            run = resolve_run(arguments.run, hours=arguments.hours, model=arguments.model)
+            run = resolve_run(arguments.run, hours=arguments.hours, model=arguments.model, raw_root=arguments.raw_dir)
             paths = fetch_run(run, arguments.hours, arguments.raw_dir, force=arguments.force, model=arguments.model)
             print("\n".join(str(path) for path in paths))
         elif arguments.command == "convert-bin":
@@ -567,7 +567,7 @@ def main(argv: list[str] | None = None) -> int:
                     )
             if arguments.round is not None and bundle_ids is not None:
                 raise ConversionError("--round builds a whole run; it cannot be combined with --bundles")
-            run = resolve_run(arguments.run, hours=arguments.hours, model=arguments.model)
+            run = resolve_run(arguments.run, hours=arguments.hours, model=arguments.model, raw_root=arguments.raw_dir)
             run_directory = f"{source.id}.{run.id}"
             output_directory = arguments.output_dir / run_directory
             if arguments.round is not None:
