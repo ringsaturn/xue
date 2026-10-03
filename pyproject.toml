@@ -33,8 +33,9 @@ dependencies = [
     # the derived categorical precipitation type and the 100 m wind. 0.27
     # adds the model orography, a static one-frame bundle. 0.28 adds each
     # bundle's own full grid to the manifest, which is what the STAC Item
-    # reads its authoritative `xue:grid` from.
-    "xuepy>=0.28,<0.29",
+    # reads its authoritative `xue:grid` from. 0.29 adds the SWPC OVATION
+    # aurora probability source.
+    "xuepy>=0.29,<0.30",
 ]
 
 [project.scripts]
