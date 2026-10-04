@@ -685,9 +685,13 @@ export class ForecastLayer implements CustomLayerInterface {
   /** The map pass compiled per projection variant and terrain mode, since
    * MapLibre's prelude differs between them (projection.ts). */
   private surfacePrograms = new Map<string, { program: WebGLProgram; uniforms: Record<string, WebGLUniformLocation | null> }>();
-  /** Pole-to-pole mesh of one world copy, and the mesh one terrain tile is
-   * drawn with: both are positions in the unit square plus indices. */
+  /** Pole-to-pole mesh of one world copy for the globe, the one quad the
+   * plane needs (its projection is linear, so two triangles are exact and
+   * a software rasteriser is spared a hundred thousand more), and the mesh
+   * one terrain tile is drawn with: positions in the unit square plus
+   * indices, all three. */
   private worldMesh: { vertexArray: WebGLVertexArrayObject; count: number } | null = null;
+  private planeMesh: { vertexArray: WebGLVertexArrayObject; count: number } | null = null;
   private tileMesh: { vertexArray: WebGLVertexArrayObject; count: number; size: number } | null = null;
   private demSampler: WebGLSampler | null = null;
   /** Altitude correction over the relief: its inputs, and the orography
@@ -814,6 +818,7 @@ export class ForecastLayer implements CustomLayerInterface {
     this.gl = gl;
     this.surfacePrograms.clear();
     this.worldMesh = { ...uploadMesh(gl, gridMesh(WORLD_MESH_COLUMNS, WORLD_MESH_ROWS, worldRowAt(WORLD_MESH_ROWS))) };
+    this.planeMesh = uploadMesh(gl, gridMesh(1, 1));
     this.tileMesh = null;
     this.demSampler = createLinearSampler(gl);
     this.orographyTexture = null;
@@ -903,6 +908,7 @@ export class ForecastLayer implements CustomLayerInterface {
     this.program = null;
     this.surfacePrograms.clear();
     this.worldMesh = null;
+    this.planeMesh = null;
     this.tileMesh = null;
     this.demSampler = null;
     this.orographyTexture = null;
@@ -1210,7 +1216,7 @@ export class ForecastLayer implements CustomLayerInterface {
 
   render(gl: WebGLRenderingContext | WebGL2RenderingContext, args: unknown): void {
     if (!(gl instanceof WebGL2RenderingContext)) return;
-    if (!this.visible || !this.map || !this.worldMesh || !this.slots || !this.hasFrame || !this.pendingPalette) return;
+    if (!this.visible || !this.map || !this.worldMesh || !this.planeMesh || !this.slots || !this.hasFrame || !this.pendingPalette) return;
     const input = args as CustomRenderMethodInput;
     if (!input?.shaderData || !input.defaultProjectionData) return;
     const tiles = surfaceTiles(this.map, input);
@@ -1324,10 +1330,12 @@ export class ForecastLayer implements CustomLayerInterface {
       // on the globe, one, or the copies would overlap and double the blend.
       gl.disable(gl.DEPTH_TEST);
       setProjectionUniforms(gl, this.uniforms, input.defaultProjectionData);
-      gl.bindVertexArray(this.worldMesh.vertexArray);
-      for (const offset of isGlobe(input) ? [0] : [-1, 0, 1]) {
+      const globe = isGlobe(input);
+      const mesh = globe ? this.worldMesh : this.planeMesh;
+      gl.bindVertexArray(mesh.vertexArray);
+      for (const offset of globe ? [0] : [-1, 0, 1]) {
         gl.uniform4f(this.uniforms.u_tile!, offset, 0, 1, 0);
-        gl.drawElements(gl.TRIANGLES, this.worldMesh.count, gl.UNSIGNED_INT, 0);
+        gl.drawElements(gl.TRIANGLES, mesh.count, gl.UNSIGNED_INT, 0);
       }
     }
     gl.bindVertexArray(null);
