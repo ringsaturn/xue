@@ -703,15 +703,11 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         super().setUpClass()
-        cls.frames = stage_run(cls.root / "raw")
-        cls.output = cls.root / "cfs.2026091900"
-        cls.report = binconvert.convert_bin(
-            cls.frames,
-            cls.output,
-            work_root=cls.root / "work",
-            manifest_path=cls.output / "manifest.json",
-            model="cfs",
-        )
+        # The module's reference build, which the parity case compares the
+        # wheel's against; the root is for the builds the tests make.
+        cls.output = REFERENCE.run_directory
+        _, cls.report = REFERENCE.get()
+        cls.frames = REFERENCE.frames
 
     def _bundle(self, bundle_id: str):
         return read_bundle(self.output / f"{bundle_id}.xue")

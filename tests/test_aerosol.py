@@ -413,24 +413,14 @@ class MatcherTests(unittest.TestCase):
         self.assertFalse(_band_matches("aod", uv, ""))
 
 
-class ConversionTests(ClassTempRoot, unittest.TestCase):
-    """The two-frame fixture through the reference pipeline."""
-
-    root: Path
-
-    root_prefix = "xue-gefsaero-"
+class ConversionTests(unittest.TestCase):
+    """The two-frame fixture through the reference pipeline: the module's
+    reference build, which the parity case compares the wheel's against."""
 
     @classmethod
     def setUpClass(cls) -> None:
-        super().setUpClass()
-        cls.output = cls.root / "gefsaero.2026091900"
-        cls.report = binconvert.convert_bin(
-            FIXTURE_FRAMES,
-            cls.output,
-            work_root=cls.root / "work",
-            manifest_path=cls.output / "manifest.json",
-            model="gefsaero",
-        )
+        cls.output = REFERENCE.run_directory
+        _, cls.report = REFERENCE.get()
 
     def _plane(self, variable_id: str, offset: int) -> tuple[np.ndarray, dict]:
         bundle = read_bundle(self.output / f"{variable_id}.xue")

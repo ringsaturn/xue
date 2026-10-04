@@ -29,11 +29,10 @@ from __future__ import annotations
 import json
 import unittest
 from datetime import UTC, datetime
-from pathlib import Path
 
 import numpy as np
 
-from tests._support import ClassTempRoot, FIXTURES, ParityCase, ReferenceBuild, assert_gdalinfo_agrees, requires_gdalinfo
+from tests._support import FIXTURES, ParityCase, ReferenceBuild, assert_gdalinfo_agrees, requires_gdalinfo
 from xuebuild import binconvert, grib2
 from xuebuild.binconvert import analysis_optional_ids, published_bundle_ids, video_variable_ids
 from xuebuild.binformat import read_bundle
@@ -201,24 +200,14 @@ class MatcherTests(unittest.TestCase):
         assert_gdalinfo_agrees(self, ((path, ECMWF.input_variable_ids, optional) for path in FIXTURE_FRAMES))
 
 
-class ConversionTests(ClassTempRoot, unittest.TestCase):
-    """The two-frame fixture through the reference pipeline."""
-
-    root: Path
-
-    root_prefix = "xue-ecmwf-"
+class ConversionTests(unittest.TestCase):
+    """The two-frame fixture through the reference pipeline: the module's
+    reference build, which the parity case compares the wheel's against."""
 
     @classmethod
     def setUpClass(cls) -> None:
-        super().setUpClass()
-        cls.output = cls.root / "ecmwf.2026091212"
-        cls.report = binconvert.convert_bin(
-            FIXTURE_FRAMES,
-            cls.output,
-            work_root=cls.root / "work",
-            manifest_path=cls.output / "manifest.json",
-            model="ecmwf",
-        )
+        cls.output = REFERENCE.run_directory
+        _, cls.report = REFERENCE.get()
 
     def _plane(self, variable_id: str, offset: int, member: int = 1) -> tuple[np.ndarray, dict]:
         bundle = read_bundle(self.output / f"{variable_id}.xue")
