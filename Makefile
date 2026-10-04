@@ -84,4 +84,4 @@ mvp: check install wasm ## Build one run (MODEL, RUN, HOURS) and the frontend
 serve: ## vite preview on 127.0.0.1
 	npm run preview -- --host 127.0.0.1
 
-include mk/r2.mk mk/cache.mk mk/products.mk mk/showcase.mk mk/deploy.mk mk/extras.mk
+include mk/r2.mk mk/cache.mk mk/products.mk mk/showcase.mk mk/deploy.mk

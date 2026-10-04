@@ -61,7 +61,6 @@ rust/xue-py/pysrc/xue/proj-data/
 rust/xue-py/pysrc/xue/licenses/
 web/src/wasm/
 *.egg-info/
-docs/format.pdf
 build/
 # Wrangler's local dev state (the miniflare R2/KV caches `make api-dev` writes).
 .wrangler/
