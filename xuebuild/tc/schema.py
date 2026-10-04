@@ -13,8 +13,6 @@ non-negative radii, the fixed-point arrays' lengths.
 
 from __future__ import annotations
 
-import json
-import math
 import re
 from datetime import UTC, datetime
 from itertools import pairwise
@@ -28,6 +26,12 @@ from ..pointproduct import (  # noqa: F401 — re-exported: the tc modules impor
     encode_json,
     pointer_payload,
     pointer_shape_error,
+    check_number,
+    check_pointer,
+    check_sources,
+    check_time,
+    parse_issue_hour,
+    read_index_file,
     write_bytes_atomic,
 )
 from .track import MISSING, QUADRANTS, RADII_THRESHOLDS
@@ -51,32 +55,15 @@ def issue_directory(issue: datetime) -> str:
 
 
 def parse_issue(value: str) -> datetime:
-    if not ISSUE.match(value):
-        raise TcProductError("issue must be a UTC hour, YYYYMMDDHH")
-    try:
-        return datetime.strptime(value, "%Y%m%d%H").replace(tzinfo=UTC)
-    except ValueError as exc:
-        raise TcProductError(f"issue is not a valid hour: {value}") from exc
+    return parse_issue_hour(TcProductError, value)
 
 
 def _time(value: object, label: str) -> datetime:
-    if not isinstance(value, str) or not value.endswith("Z"):
-        raise TcProductError(f"{label} must be an ISO 8601 UTC timestamp ending in Z")
-    try:
-        return datetime.fromisoformat(value)
-    except ValueError as exc:
-        raise TcProductError(f"{label} is not a valid timestamp") from exc
+    return check_time(TcProductError, value, label)
 
 
 def _number(value: object, label: str, *, minimum: float | None = None, maximum: float | None = None) -> None:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise TcProductError(f"{label} must be a number")
-    if math.isnan(value):
-        raise TcProductError(f"{label} must not be NaN")
-    if minimum is not None and value < minimum:
-        raise TcProductError(f"{label} must be at least {minimum}")
-    if maximum is not None and value > maximum:
-        raise TcProductError(f"{label} must be at most {maximum}")
+    check_number(TcProductError, value, label, minimum=minimum, maximum=maximum)
 
 
 def _optional_number(value: object, label: str, **bounds: float | None) -> None:
@@ -211,24 +198,11 @@ def validate_aliases(aliases: object, label: str) -> None:
 
 
 def validate_sources(sources: object, label: str) -> None:
-    if not isinstance(sources, list):
-        raise TcProductError(f"{label} must be a list")
-    seen: set[str] = set()
-    for index, status in enumerate(sources):
-        if not isinstance(status, dict):
-            raise TcProductError(f"{label}[{index}] must be an object")
-        source_id = status.get("id")
-        if not isinstance(source_id, str) or not SOURCE_KEY.match(source_id):
-            raise TcProductError(f"{label}[{index}].id must be a source id")
-        if source_id in seen:
-            raise TcProductError(f"{label} lists {source_id} twice")
-        seen.add(source_id)
-        if not isinstance(status.get("ok"), bool):
-            raise TcProductError(f"{label}[{index}].ok must be a boolean")
-        if not status["ok"] and not isinstance(status.get("error"), str):
-            raise TcProductError(f"{label}[{index}] failed without an error message")
+    def extra(status: dict[str, Any], where: str) -> None:
         if "fetched" in status:
-            _time(status["fetched"], f"{label}[{index}].fetched")
+            _time(status["fetched"], f"{where}.fetched")
+
+    check_sources(TcProductError, sources, label, SOURCE_KEY, extra)
 
 
 def _validate_keyed(section: object, label: str, validator: Any) -> None:
@@ -359,19 +333,8 @@ def build_pointer(issue: datetime, index_path: str, index_bytes: bytes) -> dict[
 
 
 def validate_pointer(payload: object) -> None:
-    error = pointer_shape_error(payload, PRODUCT)
-    if error is not None:
-        raise TcProductError(error)
-    assert isinstance(payload, dict)
-    issued = _time(payload.get("issued"), "pointer.issued")
-    if Path(payload["path"]).parts[0] != issue_directory(issued):
-        raise TcProductError("tc pointer path does not name the issued hour's directory")
+    check_pointer(TcProductError, payload, PRODUCT, issue_directory, "tc pointer path does not name the issued hour's directory")
 
 
 def read_index(path: Path) -> dict[str, Any]:
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise TcProductError(f"cannot read tc index {path}: {exc}") from exc
-    validate_index(payload)
-    return payload
+    return read_index_file(TcProductError, path, PRODUCT, validate_index)

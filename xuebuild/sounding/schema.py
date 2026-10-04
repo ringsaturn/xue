@@ -17,8 +17,6 @@ byte spans are in order, do not overlap, and tile the file exactly.
 
 from __future__ import annotations
 
-import json
-import math
 import re
 from datetime import UTC, datetime
 from pathlib import Path
@@ -32,6 +30,12 @@ from ..pointproduct import (  # noqa: F401 — re-exported: the sounding modules
     iso_z,
     pointer_payload,
     pointer_shape_error,
+    check_number,
+    check_pointer,
+    check_sources,
+    check_time,
+    parse_issue_hour,
+    read_index_file,
     write_bytes_atomic,
 )
 from .bufr import MISSING, VALUE_BOUNDS
@@ -69,32 +73,15 @@ def issue_directory(issue: datetime) -> str:
 
 
 def parse_issue(value: str) -> datetime:
-    if not ISSUE.match(value):
-        raise SoundingProductError("issue must be a UTC hour, YYYYMMDDHH")
-    try:
-        return datetime.strptime(value, "%Y%m%d%H").replace(tzinfo=UTC)
-    except ValueError as exc:
-        raise SoundingProductError(f"issue is not a valid hour: {value}") from exc
+    return parse_issue_hour(SoundingProductError, value)
 
 
 def _time(value: object, label: str) -> datetime:
-    if not isinstance(value, str) or not value.endswith("Z"):
-        raise SoundingProductError(f"{label} must be an ISO 8601 UTC timestamp ending in Z")
-    try:
-        return datetime.fromisoformat(value)
-    except ValueError as exc:
-        raise SoundingProductError(f"{label} is not a valid timestamp") from exc
+    return check_time(SoundingProductError, value, label)
 
 
 def _number(value: object, label: str, *, minimum: float | None = None, maximum: float | None = None) -> None:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise SoundingProductError(f"{label} must be a number")
-    if math.isnan(value):
-        raise SoundingProductError(f"{label} must not be NaN")
-    if minimum is not None and value < minimum:
-        raise SoundingProductError(f"{label} must be at least {minimum}")
-    if maximum is not None and value > maximum:
-        raise SoundingProductError(f"{label} must be at most {maximum}")
+    check_number(SoundingProductError, value, label, minimum=minimum, maximum=maximum)
 
 
 def _optional_number(value: object, label: str, **bounds: float | None) -> None:
@@ -197,26 +184,13 @@ def validate_headline(payload: object, label: str) -> None:
 
 
 def validate_sources(sources: object, label: str) -> None:
-    if not isinstance(sources, list):
-        raise SoundingProductError(f"{label} must be a list")
-    seen: set[str] = set()
-    for index, status in enumerate(sources):
-        if not isinstance(status, dict):
-            raise SoundingProductError(f"{label}[{index}] must be an object")
-        source_id = status.get("id")
-        if not isinstance(source_id, str) or not SOURCE_KEY.match(source_id):
-            raise SoundingProductError(f"{label}[{index}].id must be a source id")
-        if source_id in seen:
-            raise SoundingProductError(f"{label} lists {source_id} twice")
-        seen.add(source_id)
-        if not isinstance(status.get("ok"), bool):
-            raise SoundingProductError(f"{label}[{index}].ok must be a boolean")
-        if not status["ok"] and not isinstance(status.get("error"), str):
-            raise SoundingProductError(f"{label}[{index}] failed without an error message")
+    def extra(status: dict[str, Any], where: str) -> None:
         if status.get("fetched") is not None:
-            _time(status["fetched"], f"{label}[{index}].fetched")
+            _time(status["fetched"], f"{where}.fetched")
         if status.get("watermark") is not None:
-            _time(status["watermark"], f"{label}[{index}].watermark")
+            _time(status["watermark"], f"{where}.watermark")
+
+    check_sources(SoundingProductError, sources, label, SOURCE_KEY, extra)
 
 
 def validate_station_line(payload: object, label: str = "station") -> None:
@@ -331,19 +305,8 @@ def build_pointer(issue: datetime, index_path: str, index_bytes: bytes) -> dict[
 
 
 def validate_pointer(payload: object) -> None:
-    error = pointer_shape_error(payload, PRODUCT)
-    if error is not None:
-        raise SoundingProductError(error)
-    assert isinstance(payload, dict)
-    issued = _time(payload.get("issued"), "pointer.issued")
-    if Path(payload["path"]).parts[0] != issue_directory(issued):
-        raise SoundingProductError("sounding pointer path does not name the issued hour's directory")
+    check_pointer(SoundingProductError, payload, PRODUCT, issue_directory, "sounding pointer path does not name the issued hour's directory")
 
 
 def read_index(path: Path) -> dict[str, Any]:
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise SoundingProductError(f"cannot read sounding index {path}: {exc}") from exc
-    validate_index(payload)
-    return payload
+    return read_index_file(SoundingProductError, path, PRODUCT, validate_index)

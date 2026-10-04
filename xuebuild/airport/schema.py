@@ -15,8 +15,6 @@ of it by range and parse the slice on its own.
 
 from __future__ import annotations
 
-import json
-import math
 import re
 from datetime import UTC, datetime
 from pathlib import Path
@@ -29,6 +27,11 @@ from ..pointproduct import (  # noqa: F401 — re-exported: the airport modules 
     encode_json,
     pointer_payload,
     pointer_shape_error,
+    check_number,
+    check_pointer,
+    check_sources,
+    check_time,
+    read_index_file,
     write_bytes_atomic,
 )
 
@@ -130,27 +133,15 @@ def round_directory(moment: datetime) -> str:
 
 
 def _time(value: object, label: str) -> datetime:
-    if not isinstance(value, str) or not value.endswith("Z"):
-        raise AirportProductError(f"{label} must be an ISO 8601 UTC timestamp ending in Z")
-    try:
-        return datetime.fromisoformat(value)
-    except ValueError as exc:
-        raise AirportProductError(f"{label} is not a valid timestamp") from exc
+    return check_time(AirportProductError, value, label)
 
 
 Bounds = tuple[float | None, float | None]
 
 
 def _number(value: object, label: str, bounds: Bounds | None = None) -> None:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise AirportProductError(f"{label} must be a number")
-    if math.isnan(value):
-        raise AirportProductError(f"{label} must not be NaN")
     minimum, maximum = bounds or (None, None)
-    if minimum is not None and value < minimum:
-        raise AirportProductError(f"{label} must be at least {minimum}")
-    if maximum is not None and value > maximum:
-        raise AirportProductError(f"{label} must be at most {maximum}")
+    check_number(AirportProductError, value, label, minimum=minimum, maximum=maximum)
 
 
 def _optional_number(value: object, label: str, bounds: Bounds | None = None) -> None:
@@ -197,27 +188,13 @@ def _cloud(value: object, label: str) -> None:
 
 
 def validate_sources(sources: object, label: str) -> None:
-    if not isinstance(sources, list):
-        raise AirportProductError(f"{label} must be a list")
-    seen: set[str] = set()
-    for index, status in enumerate(sources):
-        where = f"{label}[{index}]"
-        if not isinstance(status, dict):
-            raise AirportProductError(f"{where} must be an object")
-        source_id = status.get("id")
-        if not isinstance(source_id, str) or not SOURCE_KEY.match(source_id):
-            raise AirportProductError(f"{where}.id must be a source id")
-        if source_id in seen:
-            raise AirportProductError(f"{label} lists {source_id} twice")
-        seen.add(source_id)
-        if not isinstance(status.get("ok"), bool):
-            raise AirportProductError(f"{where}.ok must be a boolean")
-        if not status["ok"] and not isinstance(status.get("error"), str):
-            raise AirportProductError(f"{where} failed without an error message")
+    def extra(status: dict[str, Any], where: str) -> None:
         if "fetched" in status:
             _time(status["fetched"], f"{where}.fetched")
         if "reports" in status:
             _integer(status["reports"], f"{where}.reports", (0, None))
+
+    check_sources(AirportProductError, sources, label, SOURCE_KEY, extra)
 
 
 # --- the files ---------------------------------------------------------
@@ -377,19 +354,8 @@ def build_pointer(issued: datetime, index_path: str, index_bytes: bytes) -> dict
 
 
 def validate_pointer(payload: object) -> None:
-    error = pointer_shape_error(payload, PRODUCT)
-    if error is not None:
-        raise AirportProductError(error)
-    assert isinstance(payload, dict)
-    issued = _time(payload.get("issued"), "pointer.issued")
-    if Path(payload["path"]).parts[0] != round_directory(issued):
-        raise AirportProductError("airport pointer path does not name the issued round's directory")
+    check_pointer(AirportProductError, payload, PRODUCT, round_directory, "airport pointer path does not name the issued round's directory")
 
 
 def read_index(path: Path) -> dict[str, Any]:
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise AirportProductError(f"cannot read airport index {path}: {exc}") from exc
-    validate_index(payload)
-    return payload
+    return read_index_file(AirportProductError, path, PRODUCT, validate_index)
