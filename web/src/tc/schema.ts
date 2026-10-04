@@ -4,20 +4,15 @@
  * model key the registry does not know passes, a shape that is wrong or
  * a `schemaVersion` above the one implemented does not. */
 
+import { CRC32, object, pointer, timestamp, type ProductPointer } from "../schema/validate";
+
 const TC_SCHEMA_VERSION = 1;
 export const TC_POINTER_FILENAME = "latest-tc.json";
 const TC_MISSING = -32768;
 
 type TcLevel = "A" | "B" | "C";
 
-export interface TcPointer {
-  schemaVersion: 1;
-  product: "tc";
-  issued: string;
-  path: string;
-  byteLength: number;
-  crc32: string;
-}
+export type TcPointer = ProductPointer<"tc">;
 
 interface TcPosition {
   time: string;
@@ -135,7 +130,7 @@ export interface TcStorm {
 const ATCF_ID = /^[A-Z]{2}\d{6}$/;
 const SYNTHETIC_ID = /^x-[a-z]{2}-\d{10}-\d+$/;
 const KEY = /^[a-z][a-z0-9]*$/;
-const CRC32 = /^[0-9a-f]{8}$/;
+const TC_PATH = /^tc\.\d{10}\/index\.json$/;
 
 function isTcStormId(value: unknown): value is string {
   return (
@@ -144,19 +139,9 @@ function isTcStormId(value: unknown): value is string {
   );
 }
 
-function object(input: unknown, label: string): Record<string, unknown> {
-  if (typeof input !== "object" || input === null || Array.isArray(input))
-    throw new Error(`${label} must be an object`);
-  return input as Record<string, unknown>;
-}
-
-function timestamp(value: unknown, label: string): number {
-  if (typeof value !== "string" || !value.endsWith("Z"))
-    throw new Error(`${label} must be a UTC timestamp`);
-  const parsed = Date.parse(value);
-  if (!Number.isFinite(parsed))
-    throw new Error(`${label} is not a valid timestamp`);
-  return parsed;
+/** A `timestamp`, as epoch milliseconds. */
+function instant(value: unknown, label: string): number {
+  return Date.parse(timestamp(value, label));
 }
 
 function number(
@@ -217,8 +202,8 @@ function aliases(
     const from = item.from;
     const to = item.to;
     if (
-      timestamp(from, `${label}.${alias}.from`) >
-      timestamp(to, `${label}.${alias}.to`)
+      instant(from, `${label}.${alias}.from`) >
+      instant(to, `${label}.${alias}.to`)
     ) {
       throw new Error(`${label}.${alias} ends before it starts`);
     }
@@ -273,7 +258,7 @@ function validateTcForecast(
 ): TcForecast {
   const value = object(input, label);
   timestamp(value.issued, `${label}.issued`);
-  const base = timestamp(value.base, `${label}.base`);
+  const base = instant(value.base, `${label}.base`);
   if (
     value.run !== undefined &&
     (typeof value.run !== "string" || !/^\d{10}$/.test(value.run))
@@ -584,24 +569,7 @@ export function validateTcIndex(input: unknown): TcIndex {
 }
 
 export function validateTcPointer(input: unknown): TcPointer {
-  const value = object(input, "tc pointer");
-  if (value.schemaVersion !== TC_SCHEMA_VERSION)
-    throw new Error("unsupported tc pointer schema version");
-  if (value.product !== "tc") throw new Error("tc pointer product must be tc");
-  timestamp(value.issued, "tc pointer issued");
-  if (
-    typeof value.path !== "string" ||
-    !/^tc\.\d{10}\/index\.json$/.test(value.path)
-  )
-    throw new Error("tc pointer path is malformed");
-  return {
-    schemaVersion: 1,
-    product: "tc",
-    issued: value.issued as string,
-    path: value.path,
-    byteLength: byteLength(value.byteLength, "tc pointer byteLength"),
-    crc32: crc(value.crc32, "tc pointer crc32"),
-  };
+  return pointer(input, "tc", TC_PATH, TC_SCHEMA_VERSION);
 }
 
 /** One ensemble member's track, unpacked from the fixed-point arrays: the
