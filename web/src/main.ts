@@ -34,7 +34,7 @@ import {
   type MessageKey,
 } from "./i18n";
 import { createSheet, mountLanguagePicker } from "./sheet";
-import { formatPointDegrees, formatRegion } from "./format";
+import { formatBytes, formatPointDegrees, formatRegion } from "./format";
 import { dataBaseUrl } from "./site";
 import { ForecastLayer, MAX_NAMED_CONTOURS, type CompositeField, type ContourStyle, type VectorField, type FramePlanes } from "./layer";
 import {
@@ -1656,12 +1656,6 @@ function resayAll(): void {
  * point's (`timezone.ts`). */
 function formatDate(value: string | number): string {
   return formatStamp(value, displayZone);
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(bytes < 10 * 1024 ? 1 : 0)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function formatCompactDate(value: number): string {
