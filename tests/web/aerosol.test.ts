@@ -33,47 +33,32 @@ import { buildPalette, decodeValue, encodeLog } from "../../web/src/palettes";
 import { displayUnit } from "../../web/src/units";
 import { parseModelFromSearch, parseVariableFromSearch, searchForVariable } from "../../web/src/urlstate";
 import { FIELD_GROUPS, variableIds, variableSpec } from "../../web/src/variables";
+import { metadataJson, registryVariable, rgba, type RegistryEntry } from "./helpers";
 
 /** The committed registry both encoders are held to (`tests/test_aerosol.py`,
  * and the Rust encoder's unit tests): the nine aerosol fields with their
  * parameter and aerosol blocks and their logarithmic codebooks. */
-interface RegistryEntry {
-  label: string;
-  unit: string;
-  parameter: BundleParameter;
+interface AerosolEntry extends RegistryEntry<LogQuantization> {
   aerosol: BundleAerosol;
-  quality: LogQuantization;
-  compact: LogQuantization;
 }
 
-const registry = registryJson as unknown as Record<string, RegistryEntry>;
+const registry = registryJson as unknown as Record<string, AerosolEntry>;
 
 function bundleVariable(id: string, profile: "quality" | "compact" = "quality"): BundleVariable {
   const entry = registry[id]!;
-  return {
-    numericId: 1,
-    id,
-    label: entry.label,
-    unit: entry.unit,
-    parameter: entry.parameter,
-    aerosol: entry.aerosol,
-    quantization: entry[profile],
-  };
-}
-
-function rgba(palette: Uint8Array, code: number): [number, number, number, number] {
-  return [...palette.subarray(code * 4, code * 4 + 4)] as [number, number, number, number];
+  return registryVariable(id, entry, entry[profile], { aerosol: entry.aerosol });
 }
 
 function metadata(variable: BundleVariable): string {
-  return JSON.stringify({
-    schemaVersion: 3,
-    model: "GEFS-AEROSOLS",
-    runTime: "2026-09-19T00:00:00Z",
-    time: { unitSeconds: 3600, firstFrameOffset: 0, frameCount: 2, frameStep: 3 },
-    grid: { width: 1440, height: 721, firstLongitude: -180, firstLatitude: 90, longitudeStep: 0.25, latitudeStep: -0.25, wrapLongitude: true },
-    variables: [variable],
-  });
+  return metadataJson(
+    {
+      model: "GEFS-AEROSOLS",
+      runTime: "2026-09-19T00:00:00Z",
+      time: { unitSeconds: 3600, firstFrameOffset: 0, frameCount: 2, frameStep: 3 },
+      grid: { width: 1440, height: 721, firstLongitude: -180, firstLatitude: 90, longitudeStep: 0.25, latitudeStep: -0.25, wrapLongitude: true },
+    },
+    [variable],
+  );
 }
 
 const ODD_IDS = ["aod", "aoddust", "aodsalt", "aodsulf", "aodorg", "aodbc"] as const;

@@ -32,6 +32,7 @@ import { meteogramRowCode, meteogramRows } from "../../web/src/meteogram";
 import { buildPalette, decodeValue } from "../../web/src/palettes";
 import { parseVariableFromSearch, searchForVariable } from "../../web/src/urlstate";
 import { variableSpec } from "../../web/src/variables";
+import { HIMAWARI_ENVELOPE, metadataJson, registryVariable, rgba, type RegistryEntry } from "./helpers";
 
 /** The committed registry both encoders are held to
  * (`tests/test_satellite.py`, and the Rust encoder's unit tests): one entry
@@ -39,30 +40,17 @@ import { variableSpec } from "../../web/src/variables";
  * platform, the composite's guns and the produced scalar with their
  * `producer` id — and the produced bundles' component lists under
  * `bundles` (the composite's three guns, the confidence's one variable). */
-interface RegistryEntry {
-  label: string;
-  unit: string;
-  parameter: BundleParameter;
+interface SatelliteEntry extends RegistryEntry {
   band?: Record<string, BundleBand>;
   producer?: { id: string };
-  quality: LinearQuantization;
-  compact: LinearQuantization;
 }
 
-const registryFile = registryJson as unknown as { variables: Record<string, RegistryEntry>; bundles: Record<string, string[]> };
+const registryFile = registryJson as unknown as { variables: Record<string, SatelliteEntry>; bundles: Record<string, string[]> };
 const registry = registryFile.variables;
 
 function bundleVariable(id: string, band: BundleBand | undefined = registry[id]!.band?.himawari): BundleVariable {
   const entry = registry[id]!;
-  return {
-    numericId: 1,
-    id,
-    label: entry.label,
-    unit: entry.unit,
-    parameter: entry.parameter,
-    band,
-    quantization: entry.quality,
-  };
+  return registryVariable(id, entry, entry.quality, { band });
 }
 
 /** The guns' contract, written out so the composite is held to it whether
@@ -114,10 +102,6 @@ function confidenceVariable(producer: BundleProducer | null = PRODUCER): BundleV
     ...(producer === null ? {} : { producer }),
     quantization: GUN_QUANTIZATION,
   };
-}
-
-function rgba(palette: Uint8Array, code: number): [number, number, number, number] {
-  return [...palette.subarray(code * 4, code * 4 + 4)] as [number, number, number, number];
 }
 
 describe("the satellite registry", () => {
@@ -204,15 +188,7 @@ describe("the satellite registry", () => {
   });
 
   it("is parsed with its band by the metadata validator", () => {
-    const metadata = {
-      schemaVersion: 3,
-      model: "HIMAWARI",
-      runTime: "2026-09-17T03:00:00Z",
-      time: { unitSeconds: 600, firstFrameOffset: 0, frameCount: 2, frameStep: 1 },
-      grid: { width: 3000, height: 3000, firstLongitude: 80.72, firstLatitude: 59.98, longitudeStep: 0.04, latitudeStep: -0.04, wrapLongitude: false },
-      variables: [bundleVariable("ir104")],
-    };
-    const parsed = parseBundleMetadata(JSON.stringify(metadata));
+    const parsed = parseBundleMetadata(metadataJson(HIMAWARI_ENVELOPE, [bundleVariable("ir104")]));
     expect(parsed.variables[0]!.band?.satelliteNumber).toBe(174);
     expect(identifyBundle(parsed.variables)?.identity.family).toBe("ir104");
   });
@@ -313,15 +289,7 @@ describe("the Dust RGB composite", () => {
   });
 
   it("is parsed with its producer by the metadata validator", () => {
-    const metadata = {
-      schemaVersion: 3,
-      model: "HIMAWARI",
-      runTime: "2026-09-17T03:00:00Z",
-      time: { unitSeconds: 600, firstFrameOffset: 0, frameCount: 2, frameStep: 1 },
-      grid: { width: 3000, height: 3000, firstLongitude: 80.72, firstLatitude: 59.98, longitudeStep: 0.04, latitudeStep: -0.04, wrapLongitude: false },
-      variables: gunVariables(),
-    };
-    const parsed = parseBundleMetadata(JSON.stringify(metadata));
+    const parsed = parseBundleMetadata(metadataJson(HIMAWARI_ENVELOPE, gunVariables()));
     expect(parsed.variables.length).toBe(3);
     expect(parsed.variables[0]!.producer).toEqual(PRODUCER);
     expect(identifyBundle(parsed.variables)?.identity).toEqual(DUST_IDENTITY);
@@ -394,15 +362,7 @@ describe("the DEBRA dust confidence", () => {
   });
 
   it("is parsed with its producer by the metadata validator", () => {
-    const metadata = {
-      schemaVersion: 3,
-      model: "HIMAWARI",
-      runTime: "2026-09-17T03:00:00Z",
-      time: { unitSeconds: 600, firstFrameOffset: 0, frameCount: 2, frameStep: 1 },
-      grid: { width: 3000, height: 3000, firstLongitude: 80.72, firstLatitude: 59.98, longitudeStep: 0.04, latitudeStep: -0.04, wrapLongitude: false },
-      variables: [confidenceVariable()],
-    };
-    const parsed = parseBundleMetadata(JSON.stringify(metadata));
+    const parsed = parseBundleMetadata(metadataJson(HIMAWARI_ENVELOPE, [confidenceVariable()]));
     expect(parsed.variables.length).toBe(1);
     expect(parsed.variables[0]!.producer).toEqual(PRODUCER);
     expect(parsed.variables[0]!.band).toBeUndefined();

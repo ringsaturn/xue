@@ -17,29 +17,19 @@ import {
   KNOWN_BUNDLE_IDS,
   SURFACE_DIAGNOSTIC_IDS,
   isVectorBundle,
-  type BundleParameter,
   type BundleVariable,
-  type LinearQuantization,
 } from "../../web/src/manifest";
 import { CAPE_STOPS, buildPalette, buildWindFieldPalette, decodeValue, legendGradient, windFieldStops } from "../../web/src/palettes";
 import { parseVariableFromSearch, searchForVariable } from "../../web/src/urlstate";
 import { variableSpec } from "../../web/src/variables";
+import { registryVariable, type RegistryEntry } from "./helpers";
 
 /** The committed registry both encoders are held to
  * (`tests/test_surface.py`, and the Rust encoder's unit tests). */
-interface RegistryEntry {
-  label: string;
-  unit: string;
-  parameter: BundleParameter;
-  quality: LinearQuantization;
-  compact: LinearQuantization;
-}
-
 const registry = registryJson as unknown as Record<string, RegistryEntry>;
 
 function bundleVariable(id: string, profile: "quality" | "compact" = "quality"): BundleVariable {
-  const entry = registry[id]!;
-  return { numericId: 1, id, label: entry.label, unit: entry.unit, parameter: entry.parameter, quantization: entry[profile] };
+  return registryVariable(id, registry[id]!, registry[id]![profile]);
 }
 
 describe("the surface diagnostic registry", () => {

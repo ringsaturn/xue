@@ -28,9 +28,7 @@ import {
   VECTOR_BUNDLES,
   WAVE_COMPONENT_IDS,
   isVectorBundle,
-  type BundleParameter,
   type BundleVariable,
-  type LinearQuantization,
 } from "../../web/src/manifest";
 import { buildPalette, buildWaveFieldPalette, decodeValue } from "../../web/src/palettes";
 import {
@@ -41,44 +39,17 @@ import {
   parseVariableFromSearch,
   searchForVariable,
 } from "../../web/src/urlstate";
+import { registryVariable, rgba, type RegistryEntry } from "./helpers";
 
 /** The committed registry both encoders are held to (`tests/test_ocean.py`,
  * and the Rust encoder's unit tests). */
-interface RegistryEntry {
-  label: string;
-  unit: string;
-  parameter: BundleParameter;
-  quality: LinearQuantization;
-  compact: LinearQuantization;
-}
-
 const registry = registryJson as unknown as Record<string, RegistryEntry>;
 
 function bundleVariable(
   id: string,
   profile: "quality" | "compact" = "quality",
 ): BundleVariable {
-  const entry = registry[id]!;
-  return {
-    numericId: 1,
-    id,
-    label: entry.label,
-    unit: entry.unit,
-    parameter: entry.parameter,
-    quantization: entry[profile],
-  };
-}
-
-function rgba(
-  palette: Uint8Array,
-  code: number,
-): [number, number, number, number] {
-  return [...palette.subarray(code * 4, code * 4 + 4)] as [
-    number,
-    number,
-    number,
-    number,
-  ];
+  return registryVariable(id, registry[id]!, registry[id]![profile]);
 }
 
 describe("the ocean registry", () => {
