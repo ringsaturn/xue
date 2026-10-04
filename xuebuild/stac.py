@@ -1,64 +1,13 @@
-"""A SpatioTemporal Asset Catalog face over what the encoder publishes.
+"""A static STAC catalog derived beside what the encoder publishes, so the
+Zarr stores can be found the way the STAC ecosystem finds data.
+``docs/stac.md`` is the contract: the layout, the Items, the Collections and
+the extensions used.
 
-Every JSON the pipeline writes today — a run's ``manifest.json``, the
-per-model live pointer, ``showcase.json`` — keeps its shape and its readers;
-this module *derives* a static STAC catalog beside them (``docs/stac.md``)
-so the Zarr stores can be found the way the rest of that ecosystem finds
-data: ``pystac`` / ``xpystac`` / ``odc-stac`` open an Item's
-``application/vnd.zarr`` asset straight into xarray.
-
-The layout, at the data root:
-
-- ``catalog.json`` — the root **Catalog**, one child link per live source
-  and one for the showcase.
-- ``<source>/collection.json`` — one **Collection** per source, mutable
-  like the pointer it mirrors: its ``item`` / ``latest-version`` links name
-  the run the pointer names. Rewritten by every publish, uploaded with the
-  pointer.
-- ``<source>/item.json`` — the **live Item**: the run Item below, relocated
-  to a path that never changes. Only the newest run is kept on the bucket
-  (an hour for HRRR, minutes for an MRMS round), so a link into
-  ``<source>.<run>/`` dies with the run; this is the URL a Collection
-  links and a client bookmarks, and it always resolves.
-- ``<source>.<run>/item.json`` (a rolling window's
-  ``<source>.<run>/<HHMM>/item.json``) — one **Item** per published run,
-  beside its manifest and derived from it alone: one asset per artifact
-  (store, container, each reduced tier, poster, video), the manifest itself as a
-  ``metadata`` asset under its ``?v=``, the grid as ``bbox`` /
-  ``cube:dimensions``, the variables as ``cube:variables``, the cycle as
-  ``forecast:reference_datetime``.
-- ``<product>/collection.json``, ``<product>/item.json`` and
-  ``<product>.<issue>/item.json`` — the same three documents for each of
-  the point products published beside the runs (``sounding``, ``airport``,
-  ``tc``), derived from the issue's ``index.json`` alone: where the
-  stations are, what period the issue covers, and one asset per file it
-  ships.
-- ``showcase/collection.json`` and ``showcase/<case>/item.json`` — the
-  cases, from ``showcase.json``'s rows and their manifests.
-- ``index.html`` — not a STAC object: the landing page a browser gets at
-  the root, derived from the same registry by ``stacindex.py`` and written
-  whenever the catalog is.
-
-Everything here is a pure function of the manifest, the catalog row and the
-source registry — no timestamps, no host names — so a run built whole and a
-run built in pieces derive the same documents (``tests/test_assemble.py``)
-and a document can be regenerated at any time from what is on disk. Links
-are relative, which is what a static catalog on a bucket wants: a client
-resolves them against the URL it read the document from, whichever origin
-serves the data.
-
-What a manifest does not carry the Item does not claim. The manifest names
-no grid; it is read off the poster (or video) metadata a run's core scalars
-always carry, and a poster is the grid decimated two to one
-(``GridInfo.decimated``: same origin, doubled step), so the full step is
-exact and a regional grid's far edge is right to within one cell — the
-authoritative grid is the store's own ``attributes.xue``. A manifest with no
-such metadata (the synthetic ones in tests) gets a null geometry and no
-spatial dimensions, which STAC allows.
-
-Field names outside the core spec come from published extensions — forecast
-v0.2.0, datacube v2.3.0, file v2.1.0 — and everything Xue-specific sits
-under the ``xue:`` prefix, undeclared, as STAC custom fields are.
+Every document is a pure function of the manifest, the catalog row and the
+source registry (no timestamps, no host names, relative links), so a run
+built whole and one built in pieces derive the same documents
+(``tests/test_assemble.py``). What a manifest does not carry the Item does
+not claim: without a grid to read, an Item has a null geometry.
 """
 
 from __future__ import annotations
