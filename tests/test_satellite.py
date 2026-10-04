@@ -48,8 +48,8 @@ from unittest import mock
 
 import numpy as np
 
-from tests._support import ClassTempRoot, FIXTURES, TempRoot, requires_gdal_warp, requires_native_source
-from xuebuild import binconvert, native, observation, zstdcli
+from tests._support import ClassTempRoot, FIXTURES, TempRoot, assert_native_matches, requires_gdal_warp, requires_native_source
+from xuebuild import binconvert, observation
 from xuebuild.binformat import read_bundle
 from xuebuild.errors import ConversionError, DownloadError
 from xuebuild.fetch import (
@@ -103,7 +103,6 @@ SLOT_0310 = datetime(2026, 9, 17, 3, 10, tzinfo=UTC)
 TILE_GRID = TargetGrid(west=140.0, south=20.0, east=164.0, north=33.0, step=0.04)
 #: The platform as the fixture sees it: a slot is two tiles.
 TWO_TILES = dataclasses.replace(HIMAWARI, tile_count=2)
-
 
 
 def stage_ancillary(raw_root: Path, slots: tuple[datetime, ...], *, skin: str = "gfs.tmpsfc.pacific.grib2") -> Path:
@@ -965,20 +964,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
 
     @requires_native_source("himawari", "the himawari source's bundle set")
     def test_the_native_encoder_writes_the_same_bytes(self) -> None:
-        if not zstdcli.compresses_in_process():
-            self.skipTest("the reference encoder compresses through the zstd CLI")
-        subject = self.root / "native"
-        with mock.patch.dict(os.environ, {"XUE_ENCODER": "native"}):
-            report = native.convert_bin(
-                self.inputs, subject, model="himawari", skip_video=True, manifest_path=subject / "manifest.json", require_complete=True, expected_hours=3
-            )
-        if report["zstdVersion"] != self.report["zstdVersion"]:
-            self.skipTest("libzstd differs between the reference and the wheel")
-        names = sorted(path.name for path in (self.root / "out").iterdir())
-        self.assertEqual(sorted(path.name for path in subject.iterdir()), names)
-        for name in names:
-            with self.subTest(artifact=name):
-                self.assertTrue(filecmp.cmp(self.root / "out" / name, subject / name, shallow=False), name)
+        assert_native_matches(self, self.inputs, self.root / "out", self.report, self.root / "native", model="himawari", require_complete=True, expected_hours=3)
 
 
 if __name__ == "__main__":

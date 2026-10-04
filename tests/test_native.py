@@ -42,6 +42,7 @@ FIXTURE_GRIB = REPOSITORY_ROOT / "tests" / "fixtures" / "gfs.2026081406.f000.cro
 # fixture above never carried that packing.
 FIXTURE_JP2_GRIB = REPOSITORY_ROOT / "tests" / "fixtures" / "gfswave.2026091100.f000.jp2.crop.grib2"
 
+
 def _selection(value: str):
     """Run with `XUE_ENCODER` set to one value."""
     return mock.patch.dict(os.environ, {encoder.SELECTION_VARIABLE: value})

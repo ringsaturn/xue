@@ -28,18 +28,15 @@ of the 2026-09-19 00Z cycle over the Sahara and the Gulf of Guinea (10W–10E,
 from __future__ import annotations
 
 import copy
-import filecmp
 import json
-import shutil
-import tempfile
 import unittest
 from datetime import UTC, datetime
 from pathlib import Path
 
 import numpy as np
 
-from tests._support import ClassTempRoot, FIXTURES, assert_gdalinfo_agrees, requires_gdalinfo
-from xuebuild import binconvert, grib2, native, quantize, zstdcli
+from tests._support import ClassTempRoot, FIXTURES, ParityCase, ReferenceBuild, assert_gdalinfo_agrees, requires_gdalinfo
+from xuebuild import binconvert, grib2, quantize
 from xuebuild.binconvert import analysis_optional_ids, published_bundle_ids, video_variable_ids
 from xuebuild.binformat import Bundle, BundleError, read_bundle
 from xuebuild.errors import ConversionError, DownloadError
@@ -135,6 +132,7 @@ IDX_RECORDS = {
     "pm10dust": 22,
 }
 
+
 def registry_entry(variable_id: str) -> dict:
     """The registry as the implementations must agree it is."""
     spec = variable_spec(variable_id)
@@ -147,6 +145,14 @@ def registry_entry(variable_id: str) -> dict:
         "quality": PROFILES["quality"][variable_id].metadata(),
         "compact": PROFILES["compact"][variable_id].metadata(),
     }
+
+
+#: The reference build every class here reads (tests/_support.py).
+REFERENCE = ReferenceBuild("gefsaero", "2026091900", FIXTURE_FRAMES)
+
+
+def tearDownModule() -> None:
+    REFERENCE.cleanup()
 
 
 class RegistryTests(unittest.TestCase):
@@ -625,61 +631,13 @@ class MetadataValidationTests(ClassTempRoot, unittest.TestCase):
             self._parse(metadata)
 
 
-@unittest.skipUnless(native.available(), f"{native.DISTRIBUTION} is not installed")
-class NativeParityTests(unittest.TestCase):
+class NativeParityTests(ParityCase, unittest.TestCase):
     """The same two frames through both encoders, byte for byte: the
     template 4.48 identity through both matchers, the logarithmic codebooks
     and the aerosol block, on real GEFS-Aerosols records."""
 
-    root: Path
-
-    @classmethod
-    def setUpClass(cls) -> None:
-        if not native.knows_source("gefsaero"):
-            raise unittest.SkipTest(f"the installed {native.DISTRIBUTION} wheel predates the GEFS-Aerosols source")
-        cls.root = Path(tempfile.mkdtemp(prefix="xue-gefsaero-parity-"))
-        cls.reference, cls.reference_report = cls._build(binconvert, "reference")
-        try:
-            cls.subject, cls.subject_report = cls._build(native, "subject")
-        except ConversionError as exc:
-            if "out of step" in str(exc):
-                shutil.rmtree(cls.root, ignore_errors=True)
-                raise unittest.SkipTest(f"the installed {native.DISTRIBUTION} wheel predates the GEFS-Aerosols source: {exc}")
-            raise
-
-    @classmethod
-    def tearDownClass(cls) -> None:
-        shutil.rmtree(cls.root, ignore_errors=True)
-
-    @classmethod
-    def _build(cls, implementation, name: str) -> tuple[Path, dict]:
-        run_directory = cls.root / name / "gefsaero.2026091900"
-        report = implementation.convert_bin(
-            FIXTURE_FRAMES,
-            run_directory,
-            work_root=cls.root / f"{name}-work",
-            manifest_path=run_directory / "manifest.json",
-            latest_path=cls.root / name / "latest-gefsaero.json",
-            run_id="2026091900",
-            model="gefsaero",
-        )
-        return cls.root / name, report
-
-    def test_every_artifact_is_byte_identical(self) -> None:
-        if not zstdcli.compresses_in_process():
-            self.skipTest("the reference encoder compresses through the zstd CLI below Python 3.14")
-        if self.reference_report["zstdVersion"] != self.subject_report["zstdVersion"]:
-            self.skipTest("libzstd differs between the reference and the wheel")
-        reference = sorted(path.relative_to(self.reference).as_posix() for path in self.reference.rglob("*"))
-        subject = sorted(path.relative_to(self.subject).as_posix() for path in self.subject.rglob("*"))
-        self.assertEqual(reference, subject)
-        self.assertTrue(any(name.endswith("pm10dust.xue") for name in reference))
-        for relative in reference:
-            path = self.reference / relative
-            if path.is_dir():
-                continue
-            with self.subTest(artifact=relative):
-                self.assertTrue(filecmp.cmp(path, self.subject / relative, shallow=False), f"{relative} differs")
+    reference = REFERENCE
+    expect = ("gefsaero.2026091900/pm10dust.xue",)
 
 
 if __name__ == "__main__":

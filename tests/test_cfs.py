@@ -53,19 +53,17 @@ in source order, over the same ground at 1° (45 x 38 cells).
 
 from __future__ import annotations
 
-import filecmp
 import json
 import shutil
 import struct
-import tempfile
 import unittest
 from datetime import UTC, datetime
 from pathlib import Path
 from unittest import mock
 
 
-from tests._support import ClassTempRoot, FIXTURES, TempRoot, assert_gdalinfo_agrees, requires_gdalinfo
-from xuebuild import binconvert, fetch as fetchmod, grib2, native, quantize, zstdcli
+from tests._support import ClassTempRoot, FIXTURES, ParityCase, ReferenceBuild, TempRoot, assert_gdalinfo_agrees, requires_gdalinfo
+from xuebuild import binconvert, fetch as fetchmod, grib2, quantize
 from xuebuild.binconvert import (
     analysis_optional_ids,
     bundle_grid_family,
@@ -172,6 +170,14 @@ def grib_messages(path: Path) -> list[bytes]:
         messages.append(payload[offset : offset + length])
         offset += length
     return messages
+
+
+#: The reference build every class here reads (tests/_support.py).
+REFERENCE = ReferenceBuild("cfs", "2026091900", stage_run)
+
+
+def tearDownModule() -> None:
+    REFERENCE.cleanup()
 
 
 class SourceRegistryTests(unittest.TestCase):
@@ -481,7 +487,6 @@ class BucketStub:
 
 class FetchTests(TempRoot, unittest.TestCase):
     root_prefix = "xue-cfs-fetch-"
-
 
     def test_a_run_is_split_into_frames_in_source_order(self) -> None:
         stub = BucketStub()
@@ -903,68 +908,15 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
             )
 
 
-@unittest.skipUnless(native.available(), f"{native.DISTRIBUTION} is not installed")
-class NativeParityTests(unittest.TestCase):
+class NativeParityTests(ParityCase, unittest.TestCase):
     """The same two frames through both encoders, byte for byte — the
     Gaussian grid and the 1° grid family beside it, the NCEP
     entire-atmosphere surface, the nodata fill, the derived vapour flux and
     an axis that starts at a step, on real CFSv2 records. All thirty-two
     bundles, so a family bundle's grid, tile and ladder are compared too."""
 
-    root: Path
-
-    @classmethod
-    def setUpClass(cls) -> None:
-        if not native.knows_source("cfs"):
-            raise unittest.SkipTest(
-                f"the installed {native.DISTRIBUTION} wheel predates the CFSv2 pressure-level family"
-            )
-        cls.root = Path(tempfile.mkdtemp(prefix="xue-cfs-parity-"))
-        cls.frames = stage_run(cls.root / "raw")
-        cls.reference, cls.reference_report = cls._build(binconvert, "reference")
-        try:
-            cls.subject, cls.subject_report = cls._build(native, "subject")
-        except ConversionError as exc:
-            if "out of step" in str(exc):
-                shutil.rmtree(cls.root, ignore_errors=True)
-                raise unittest.SkipTest(f"the installed {native.DISTRIBUTION} wheel predates the CFSv2 source: {exc}")
-            raise
-
-    @classmethod
-    def tearDownClass(cls) -> None:
-        shutil.rmtree(cls.root, ignore_errors=True)
-
-    @classmethod
-    def _build(cls, implementation, name: str) -> tuple[Path, dict]:
-        run_directory = cls.root / name / "cfs.2026091900"
-        report = implementation.convert_bin(
-            cls.frames,
-            run_directory,
-            work_root=cls.root / f"{name}-work",
-            manifest_path=run_directory / "manifest.json",
-            latest_path=cls.root / name / "latest-cfs.json",
-            run_id="2026091900",
-            model="cfs",
-        )
-        return cls.root / name, report
-
-    def test_every_artifact_is_byte_identical(self) -> None:
-        if not zstdcli.compresses_in_process():
-            self.skipTest("the reference encoder compresses through the zstd CLI below Python 3.14")
-        if self.reference_report["zstdVersion"] != self.subject_report["zstdVersion"]:
-            self.skipTest("libzstd differs between the reference and the wheel")
-        reference = sorted(path.relative_to(self.reference).as_posix() for path in self.reference.rglob("*"))
-        subject = sorted(path.relative_to(self.subject).as_posix() for path in self.subject.rglob("*"))
-        self.assertEqual(reference, subject)
-        for bundle_id in PUBLISHED:
-            self.assertIn(f"cfs.2026091900/{bundle_id}.xue", reference)
-            self.assertIn(f"cfs.2026091900/{bundle_id}.half.xue", reference)
-        for relative in reference:
-            path = self.reference / relative
-            if path.is_dir():
-                continue
-            with self.subTest(artifact=relative):
-                self.assertTrue(filecmp.cmp(path, self.subject / relative, shallow=False), f"{relative} differs")
+    reference = REFERENCE
+    expect = tuple(f"cfs.2026091900/{bundle_id}{suffix}.xue" for bundle_id in PUBLISHED for suffix in ("", ".half"))
 
 
 if __name__ == "__main__":

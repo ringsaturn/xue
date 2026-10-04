@@ -20,7 +20,6 @@ source fetches in source order, still on the model's own projection.
 
 from __future__ import annotations
 
-import filecmp
 import json
 import math
 import os
@@ -34,8 +33,8 @@ from unittest import mock
 
 import numpy as np
 
-from tests._support import ClassTempRoot, FIXTURES, requires_gdalinfo
-from xuebuild import binconvert, grib2, native, zstdcli
+from tests._support import ClassTempRoot, FIXTURES, assert_native_matches, requires_gdalinfo
+from xuebuild import binconvert, grib2, native
 from xuebuild.binconvert import (
     GridInfo,
     _extract_planes,
@@ -97,6 +96,7 @@ HRRR_F01_IDX = "\n".join(
         "80:33910487:d=2026091100:HGT:cloud ceiling:1 hour fcst:",
     ]
 )
+
 
 def wheel_reads_projections() -> bool:
     """Whether the installed wheel is new enough for a projected source: it
@@ -478,18 +478,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
 
     @requires_projected_native
     def test_the_native_encoder_writes_the_same_bytes(self) -> None:
-        if not zstdcli.compresses_in_process():
-            self.skipTest("the reference encoder compresses through the zstd CLI")
-        subject = self.root / "native"
-        with mock.patch.dict(os.environ, {"XUE_ENCODER": "native"}):
-            report = native.convert_bin(FIXTURE, subject, model="hrrr", skip_video=True, manifest_path=subject / "manifest.json")
-        if report["zstdVersion"] != self.report["zstdVersion"]:
-            self.skipTest("libzstd differs between the reference and the wheel")
-        names = sorted(path.name for path in (self.root / "out").iterdir())
-        self.assertEqual(sorted(path.name for path in subject.iterdir()), names)
-        for name in names:
-            with self.subTest(artifact=name):
-                self.assertTrue(filecmp.cmp(self.root / "out" / name, subject / name, shallow=False), name)
+        assert_native_matches(self, FIXTURE, self.root / "out", self.report, self.root / "native", model="hrrr")
 
 
 class DecimationTests(unittest.TestCase):

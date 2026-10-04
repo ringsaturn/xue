@@ -26,7 +26,6 @@ to 118.1E, 33.75N to 28.1N) on a convective afternoon, returns to 62.5 dBZ.
 from __future__ import annotations
 
 import dataclasses
-import filecmp
 import importlib.util
 import json
 import os
@@ -39,8 +38,8 @@ from unittest import mock
 
 import numpy as np
 
-from tests._support import ClassTempRoot, FIXTURES, TempRoot, requires_gdal, requires_native_source
-from xuebuild import binconvert, cmaarchive, fetch, native, observation, zstdcli
+from tests._support import ClassTempRoot, FIXTURES, TempRoot, assert_native_matches, requires_gdal, requires_native_source
+from xuebuild import binconvert, cmaarchive, fetch, observation
 from xuebuild.binformat import read_bundle
 from xuebuild.errors import ConversionError, DownloadError
 from xuebuild.fetch import (
@@ -67,7 +66,6 @@ from xuebuild.stac import _source_prose
 
 SERIES = FIXTURES / "cma.2026091609.crop.nc"
 CMA = source_spec("cma")
-
 
 
 def stamp(text: str) -> datetime:
@@ -413,6 +411,7 @@ class FetchTests(TempRoot, unittest.TestCase):
         with self.assertRaisesRegex(DownloadError, "publishes"):
             _fetch_cma_run(CMA, self.run, 3, self.root, force=False, input_ids=("prate",))
 
+
 class ShowcaseTests(unittest.TestCase):
     def _payload(self, **overrides: object) -> dict[str, object]:
         payload: dict[str, object] = {
@@ -505,18 +504,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
 
     @requires_native_source("cma")
     def test_the_native_encoder_writes_the_same_bytes(self) -> None:
-        if not zstdcli.compresses_in_process():
-            self.skipTest("the reference encoder compresses through the zstd CLI")
-        subject = self.root / "native"
-        with mock.patch.dict(os.environ, {"XUE_ENCODER": "native"}):
-            report = native.convert_bin(self.inputs, subject, model="cma", skip_video=True, manifest_path=subject / "manifest.json")
-        if report["zstdVersion"] != self.report["zstdVersion"]:
-            self.skipTest("libzstd differs between the reference and the wheel")
-        names = sorted(path.name for path in (self.root / "out").iterdir())
-        self.assertEqual(sorted(path.name for path in subject.iterdir()), names)
-        for name in names:
-            with self.subTest(artifact=name):
-                self.assertTrue(filecmp.cmp(self.root / "out" / name, subject / name, shallow=False), name)
+        assert_native_matches(self, self.inputs, self.root / "out", self.report, self.root / "native", model="cma")
 
 
 class StacTests(unittest.TestCase):
