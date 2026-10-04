@@ -24,7 +24,8 @@ import { buildPalette } from "./palettes";
 import { fetchPoster, isPosterSupported } from "./poster";
 import { applyPageMeta, pageUrl } from "./pagemeta";
 import { fetchCaseManifest, fetchCatalog, localizedText, type ShowcaseCase } from "./showcase-catalog";
-import { SITE_NAME } from "./site";
+import { dataBaseUrl, SITE_NAME } from "./site";
+import { formatRegion, formatUtcHour } from "./format";
 import { variableSpec } from "./variables";
 
 /**
@@ -73,10 +74,6 @@ if (langTrigger && langSheet && langList) {
   onLocaleChange(renderLanguageList);
 }
 
-function dataBaseUrl(): string {
-  return import.meta.env.VITE_DATA_BASE_URL || "data/";
-}
-
 /** The contact-sheet code of one bundle (`VariableSpec.showcaseCode`,
  * matching the viewer's own switch labels): the surface fields have a
  * word, every isobaric field is its family and level ("HGT 500MB",
@@ -85,28 +82,9 @@ function variableCode(id: ForecastBundleId): string {
   return variableSpec(id)?.showcaseCode ?? id.toUpperCase();
 }
 
-/** Compact UTC stamp. Cards line several of these up in narrow columns, so
- * they stay in the fixed ISO-like shape rather than a locale long form. */
-function formatDate(value: string): string {
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return "--";
-  const pad = (item: number) => String(item).padStart(2, "0");
-  return `${parsed.getUTCFullYear()}-${pad(parsed.getUTCMonth() + 1)}-${pad(parsed.getUTCDate())} ${pad(parsed.getUTCHours())}Z`;
-}
-
 function formatBytes(bytes: number): string {
   if (bytes >= 1e6) return `${(bytes / 1e6).toFixed(1)} MB`;
   return `${Math.round(bytes / 1e3)} KB`;
-}
-
-function formatDegrees(value: number, axis: "NS" | "EW"): string {
-  const hemisphere = axis === "NS" ? (value >= 0 ? "N" : "S") : value >= 0 ? "E" : "W";
-  return `${Math.abs(value).toFixed(Math.abs(value) % 1 === 0 ? 0 : 1)}°${hemisphere}`;
-}
-
-function regionLabel(showcaseCase: ShowcaseCase): string {
-  const [west, south, east, north] = showcaseCase.bbox;
-  return `${formatDegrees(north, "NS")} ${formatDegrees(west, "EW")} → ${formatDegrees(south, "NS")} ${formatDegrees(east, "EW")}`;
 }
 
 function definition(label: string, value: string, wide = false): HTMLElement {
@@ -157,14 +135,14 @@ function buildCard(
   // Observations have no run cycle and no lead time: the run line is where
   // the series starts, and the range is how long it runs.
   const observations = isObservationModel(showcaseCase.modelId);
-  if (showcaseCase.eventTime) facts.append(definition(t("showcaseEventLabel"), formatDate(showcaseCase.eventTime)));
+  if (showcaseCase.eventTime) facts.append(definition(t("showcaseEventLabel"), formatUtcHour(showcaseCase.eventTime)));
   facts.append(
-    definition(t(observations ? "showcaseSeriesLabel" : "showcaseRunLabel"), formatDate(showcaseCase.runTime)),
+    definition(t(observations ? "showcaseSeriesLabel" : "showcaseRunLabel"), formatUtcHour(showcaseCase.runTime)),
     definition(
       t(observations ? "showcaseSpanLabel" : "showcaseRangeLabel"),
       t("showcaseHours", { count: showcaseCase.forecastHours }),
     ),
-    definition(t("showcaseRegionLabel"), regionLabel(showcaseCase), true),
+    definition(t("showcaseRegionLabel"), formatRegion(showcaseCase.bbox), true),
     definition(t("showcaseGridLabel"), `${showcaseCase.grid.width}×${showcaseCase.grid.height}`),
     definition(t("showcaseSizeLabel"), formatBytes(showcaseCase.byteLength)),
   );

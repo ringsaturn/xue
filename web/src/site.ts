@@ -11,3 +11,10 @@ export const REPO_URL = "https://github.com/ringsaturn/xue";
 /** The public R2 bucket the deploy build reads runs from (web/.env.deploy);
  * cited by the discovery files so an agent can fetch the same bytes. */
 export const DATA_ORIGIN = "https://dataset.ringsaturn.me/xue/";
+
+/** The data root the shell reads pointers, manifests and stores from:
+ * `VITE_DATA_BASE_URL` (the bucket, on a deploy build) else the site's own
+ * `data/`. */
+export function dataBaseUrl(): string {
+  return import.meta.env.VITE_DATA_BASE_URL || "data/";
+}
