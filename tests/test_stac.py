@@ -19,6 +19,7 @@ import unittest
 from datetime import UTC, datetime
 from pathlib import Path
 
+from tests._support import FIXTURES, TempRoot
 from xuebuild import stac, stacindex
 from xuebuild.airport import schema as airport_schema
 from xuebuild.manifest import build_bin_manifest
@@ -27,7 +28,6 @@ from xuebuild.sounding import schema as sounding_schema
 from xuebuild.sources import SOURCES, source_spec
 from xuebuild.tc import schema as tc_schema
 
-FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
 try:
     import pystac
@@ -517,10 +517,8 @@ class CaseItemTests(unittest.TestCase):
         self.assertEqual(item["properties"]["cube:dimensions"]["x"]["step"], 1.0)
 
 
-class WritingTests(unittest.TestCase):
-    def setUp(self) -> None:
-        self.root = Path(tempfile.mkdtemp(prefix="xue-stac-"))
-        self.addCleanup(shutil.rmtree, self.root, True)
+class WritingTests(TempRoot, unittest.TestCase):
+    root_prefix = "xue-stac-"
 
     def test_run_documents_land_beside_the_manifest_and_at_the_root(self) -> None:
         manifest_path = self.root / "gfs.2026081406" / "manifest.json"
@@ -821,10 +819,11 @@ class PointProductTests(unittest.TestCase):
                 self.assertTrue(any(link["rel"] == "license" for link in prose["links"]))
 
 
-class PointProductWritingTests(unittest.TestCase):
+class PointProductWritingTests(TempRoot, unittest.TestCase):
+    root_prefix = "xue-stac-point-"
+
     def setUp(self) -> None:
-        self.root = Path(tempfile.mkdtemp(prefix="xue-stac-point-"))
-        self.addCleanup(shutil.rmtree, self.root, True)
+        super().setUp()
         self.index_path = self.root / "sounding.2026091402" / "index.json"
         self.index_path.parent.mkdir()
         payload = json.loads((FIXTURES / "sounding/expected/index.json").read_text(encoding="utf-8"))

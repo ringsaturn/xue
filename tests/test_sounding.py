@@ -17,6 +17,7 @@ from pathlib import Path
 
 import numpy as np
 
+from tests._support import FIXTURES
 from xuebuild.errors import DownloadError, SoundingProductError
 from xuebuild.sounding import bufr, derive
 from xuebuild.sounding.build import KEEP_TIMES, build_product, merge_soundings
@@ -41,7 +42,6 @@ from xuebuild.sounding.schema import (
     validate_station_line,
 )
 
-FIXTURES = Path(__file__).resolve().parent / "fixtures"
 SOUNDING_FIXTURES = FIXTURES / "sounding"
 RAW = SOUNDING_FIXTURES / "sounding.2026091402"
 EXPECTED = SOUNDING_FIXTURES / "expected"

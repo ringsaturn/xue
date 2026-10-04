@@ -13,6 +13,7 @@ import unittest
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from tests._support import FIXTURES
 from xuebuild.errors import TcProductError
 from xuebuild.tc import atcf, bufrtracks, ibtracs, tcw
 from xuebuild.tc.build import build_product, previous_systems
@@ -30,7 +31,6 @@ from xuebuild.tc.schema import (
 )
 from xuebuild.tc.track import MISSING, wrap_longitude
 
-FIXTURES = Path(__file__).resolve().parent / "fixtures"
 TC_FIXTURES = FIXTURES / "tc"
 RAW = TC_FIXTURES / "tc.2026091206"
 EXPECTED = TC_FIXTURES / "expected"

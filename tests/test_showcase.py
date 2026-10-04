@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -10,6 +9,7 @@ from unittest import mock
 
 import numpy as np
 
+from tests._support import TempRoot
 from xuebuild.binconvert import GridInfo, bundle_input_ids, crop_grid, published_bundle_ids
 from xuebuild.errors import ConversionError, ManifestError, XueError
 from xuebuild.manifest import build_bin_manifest, validate_bin_manifest
@@ -391,12 +391,13 @@ class CatalogEntryTest(unittest.TestCase):
         self.assertGreaterEqual(north, 10.0)
 
 
-class RefreshSidecarTest(unittest.TestCase):
+class RefreshSidecarTest(TempRoot, unittest.TestCase):
     """A built case's row rewritten from its definition, bundles untouched."""
 
+    root_prefix = "xue-showcase-refresh-"
+
     def setUp(self) -> None:
-        self.root = Path(tempfile.mkdtemp(prefix="xue-showcase-refresh-"))
-        self.addCleanup(shutil.rmtree, self.root, ignore_errors=True)
+        super().setUp()
         entry, manifest = build_entry()
         case_dir = self.root / "showcase" / "demo-case"
         case_dir.mkdir(parents=True)
