@@ -1515,9 +1515,10 @@ SOURCES: dict[str, SourceSpec] = {
     # the same ``make pull-r2-frames`` / ``push-r2-frames`` the JMA and
     # satellite feeds use (FRAME_CACHE in scripts/window_rounds.sh). A cold
     # window holds the one frame fetched that round; it fills as the
-    # rolling publish runs, five minutes a frame, up to three hours. The
-    # probability is read off the ``Forecast Time`` the model stamps it
-    # with, snapped to the five-minute mark.
+    # rolling publish runs, five minutes a frame, up to twelve hours (a
+    # whole night at aurora latitudes). The probability is read off the
+    # ``Forecast Time`` the model stamps it with, snapped to the
+    # five-minute mark.
     "aurora": SourceSpec(
         id="aurora",
         manifest_model="SWPC-AURORA",
@@ -1538,7 +1539,7 @@ SOURCES: dict[str, SourceSpec] = {
         observation=True,
         series_file=True,
         cycle_hours=1,
-        window_hours=3,
+        window_hours=12,
         cadence_seconds=300,
         video=False,
     ),

@@ -3,7 +3,7 @@ name: publish aurora
 # The NOAA SWPC OVATION aurora probability: the chance, in percent, that
 # aurora is visible overhead, on a regular 1° global grid, one model grid
 # every five minutes. A space-weather observation with a live feed, like
-# MRMS and the JMA nowcast: a rolling window (the last three hours on a
+# MRMS and the JMA nowcast: a rolling window (the last twelve hours on a
 # 1° grid, the native five-minute step) rebuilt every five minutes into a
 # round subdirectory of its run (<model>.<run>/<HHMM>/) and pointed at by
 # latest-aurora.json.
@@ -37,7 +37,7 @@ on:
       hours:
         description: "Window length in hours (the whole hours on screen plus the one in progress)"
         type: string
-        default: "3"
+        default: "12"
       encoder:
         description: "auto (the xuepy wheel when its release knows the aurora source, else the reference pipeline with GDAL), native (insist on the wheel) or python (insist on the reference pipeline)"
         type: choice
@@ -107,7 +107,7 @@ jobs:
       # No edge-cache warm-up: a round is a few small objects replaced a few
       # minutes later, and the shell's next poll fills the edge itself.
       WARM: "false"
-      HOURS: ${{ inputs.hours || '3' }}
+      HOURS: ${{ inputs.hours || '12' }}
       PROFILE: ${{ inputs.profile || 'balanced' }}
       KEEP: ${{ inputs.keep || '2' }}
       FORCE: ${{ inputs.force || false }}

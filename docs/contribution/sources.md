@@ -24,7 +24,7 @@ differs, and what the rest of the system relies on. `xuebuild/sources.py`
 | `mrms` | fetched observation | gzipped GRIB listed off the bucket | 120 s slots, 3 h window (4 in the workflow) | `cref` |
 | `jma` | series-file observation | `jma-radar` tool, frame cache | 300 s, 3 h window | `prate` |
 | `cma` | series-file observation (archived) | `cmaarchive.py` over a Zarr archive | 360 s, 3 h window | `cref` |
-| `aurora` | frame-cache observation | SWPC OVATION JSON, frame cache | 300 s, 3 h window | `aurora` |
+| `aurora` | frame-cache observation | SWPC OVATION JSON, frame cache | 300 s, 12 h window | `aurora` |
 | `himawari`, `goeseast`, `goeswest` | satellite | `xuebuild/satellite/`, frame cache | 600 s, 6 h window | `ir104` |
 | `meteosat` | satellite | `xuebuild/satellite/` (EUMETSAT Data Store) | 3600 s, 24 h window | `ir104` |
 

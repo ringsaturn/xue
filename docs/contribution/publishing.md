@@ -107,7 +107,7 @@ Per-source switches:
 | `cma` | 3 | `XUE_CMA_ARCHIVE` secret, `uv sync --group cma`; `CMA_ARCHIVE_ACCESS_KEY_ID` / `CMA_ARCHIVE_SECRET_ACCESS_KEY` when the dataset token cannot read the archive |
 | `himawari`, `goeseast`, `goeswest` | 6 | `FRAME_CACHE=true` (warped GeoTIFFs, kept `FRAMES_KEEP_HOURS`=8), `ANCILLARY=true` (CAMEL months for DEBRA), `--group satellite`, system `gdal-bin` |
 | `meteosat` | 24 | as above plus the `EUMETSAT_*` secrets and `hdf5plugin` |
-| `aurora` | 3 | `FRAME_CACHE=true` (the feed has only its newest grid; `force` never clears the cache), `--group aurora` |
+| `aurora` | 12 | `FRAME_CACHE=true` (the feed has only its newest grid; `force` never clears the cache), `--group aurora` |
 
 ```sh
 ONCE=true scripts/window_rounds.sh                         # one MRMS round

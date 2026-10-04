@@ -56,7 +56,7 @@ def ovation_payload(stamp: str = "2026-10-03T04:41:00Z", offset: float = 0.0) ->
 
 class RegistryTests(unittest.TestCase):
     def test_the_source_is_the_fetched_observation_it_claims_to_be(self) -> None:
-        self.assertEqual((AURORA.window_hours, AURORA.horizon_hours, AURORA.cadence_seconds), (3, 3, 300))
+        self.assertEqual((AURORA.window_hours, AURORA.horizon_hours, AURORA.cadence_seconds), (12, 12, 300))
         self.assertEqual((AURORA.input_variable_ids, AURORA.bundle_scalar_ids, AURORA.core_bundle_ids), (("aurora",),) * 3)
         self.assertTrue(AURORA.observation and AURORA.series_file and AURORA.fetched and AURORA.live)
         self.assertFalse(AURORA.video)

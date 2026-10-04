@@ -1322,7 +1322,7 @@ pub const SOURCES: &[SourceSpec] = &[
         variant_factors: &[2],
         regrid: None,
         observation: true,
-        window_hours: Some(3),
+        window_hours: Some(12),
         cadence_seconds: Some(300),
         series_file: true,
         open_meteo: None,
@@ -1407,7 +1407,7 @@ mod tests {
         let aurora = source_spec("aurora").expect("aurora");
         assert!(aurora.observation && aurora.series_file && aurora.fetched() && aurora.live());
         assert_eq!(aurora.cadence_seconds, Some(300));
-        assert_eq!(aurora.window_hours, Some(3));
+        assert_eq!(aurora.window_hours, Some(12));
         assert_eq!(aurora.production_grid, (360, 181));
         assert_eq!(aurora.core_bundle_ids, &["aurora"]);
         assert!(aurora.bands.is_empty() && aurora.companion_files.is_empty());

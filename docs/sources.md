@@ -158,7 +158,7 @@ needs `EUMETSAT_CONSUMER_KEY` / `EUMETSAT_CONSUMER_SECRET` (free at
 
 ### NOAA SWPC aurora (`aurora`)
 
-1° global (360 × 181), every 5 min, a 3 h window. The OVATION model's
+1° global (360 × 181), every 5 min, a 12 h window. The OVATION model's
 probability (percent) that aurora is visible overhead. A frame's valid
 time is the model's forecast time, about an hour after the solar-wind
 observation driving it, so the window is a sequence of successive
