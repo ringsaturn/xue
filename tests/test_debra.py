@@ -34,7 +34,7 @@ from pathlib import Path
 
 import numpy as np
 
-from tests._support import TempRoot, requires_gdal_warp
+from tests._support import TempRoot, requires_gdal_warp, requires_shachen
 from tests.test_satellite import CHANNELS, DEBRA_FIXTURES, SLOT_0300, SLOT_0310, TILE_GRID, TWO_TILES, bucket, fixture_keys, stage_ancillary
 from xuebuild.errors import ConversionError, DownloadError
 from xuebuild.idx import ByteRange
@@ -254,6 +254,7 @@ class ProducerTests(TempRoot, unittest.TestCase):
         resolved = DEBRA.ancillary_for(HIMAWARI, GOBI_SLOT, self.ancillary)
         self.assertEqual(resolved, {"camel": self.ancillary / "camel", "skin": self.ancillary / "gfs" / "gfs_tmpsfc_2026091412_f001.grib2"})
 
+    @requires_shachen
     def test_the_chain_is_shachen_s_run_debra_cell_for_cell(self) -> None:
         """Composed here from the per-equation modules with this module's
         regrid, zenith and land mask, the confidence equals what
@@ -302,6 +303,7 @@ class ProducerTests(TempRoot, unittest.TestCase):
         quiet = actual[covered]
         self.assertGreater(float((quiet == 0.0).mean()), 0.7)
 
+    @requires_shachen
     def test_the_confidence_is_defined_over_water_and_staged_land_and_gated(self) -> None:
         """Water needs no climatology (DEBRA reads its emissivity as
         unity); land is defined inside a staged file and nothing outside;
@@ -379,6 +381,7 @@ class WindowTests(TempRoot, unittest.TestCase):
         arguments.update(overrides)
         return satellite_fetch.fetch_window(TWO_TILES, CHANNELS, SLOT_0300, 1, **arguments)
 
+    @requires_shachen
     def test_a_slot_s_confidence_is_composed_once_against_the_staged_ancillary(self) -> None:
         window = self.fetch_window()
         self.assertEqual(list(window.series)[-1], "dustcf")

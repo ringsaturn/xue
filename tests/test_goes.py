@@ -24,7 +24,7 @@ from unittest import mock
 
 import numpy as np
 
-from tests._support import ClassTempRoot, TempRoot, assert_native_matches, counting, requires_gdal_warp, requires_native_source
+from tests._support import ClassTempRoot, TempRoot, assert_native_matches, counting, requires_gdal_warp, requires_native_source, requires_shachen
 from tests.test_satellite import bucket, stage_ancillary
 from xuebuild import binconvert, observation
 from xuebuild.binformat import read_bundle
@@ -303,6 +303,7 @@ class FetchTests(TempRoot, unittest.TestCase):
         self.assertFalse(np.isfinite(plane[:, :20]).any())
         self.assertFalse(np.isfinite(plane[:15, :]).any())
 
+    @requires_shachen
     def test_the_dust_rgb_takes_the_abi_stretches(self) -> None:
         from shachen.constants import DUST_RGB, DUST_RGB_ABI  # noqa: PLC0415
         from shachen.dustrgb import dust_rgb  # noqa: PLC0415
@@ -327,6 +328,7 @@ class FetchTests(TempRoot, unittest.TestCase):
         gun = window.slots[0].frames["dustr"]
         self.assertEqual(json.loads(assemble.packing_path(gun).read_text(encoding="utf-8"))["producer"], {"id": "shachen", "version": DUST.version})
 
+    @requires_shachen
     def test_the_source_fetch_writes_the_series_and_a_fetch_record(self) -> None:
         stage_ancillary(self.root, (SLOT_1510, SLOT_1520), skin="gfs.tmpsfc.caribbean.grib2")
         written = _fetch_satellite_run(EAST, GfsRun(HOUR), 3, self.root, force=False, input_ids=None, fetch=self.listing, download=self.download)
@@ -346,6 +348,7 @@ class FetchTests(TempRoot, unittest.TestCase):
 
 
 @requires_gdal_warp
+@requires_shachen
 class ConversionTests(ClassTempRoot, unittest.TestCase):
     root_prefix = "xue-goes-convert-"
 
