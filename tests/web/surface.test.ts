@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import registryJson from "../fixtures/surface-registry.json";
 
-import { identifyBundle, identityForBundleId, identityForParameter, registeredBundleId } from "../../web/src/identity";
+import { identityForBundleId } from "../../web/src/identity";
 import {
   CAPE_CHART_MAX,
   CIN_CHART_RANGE,
@@ -10,7 +10,6 @@ import {
   PBL_CHART_MAX,
   PWAT_CHART_MAX,
   familyOf,
-  isobaricLegend,
   scalarLegendRange,
 } from "../../web/src/levels";
 import {
@@ -44,37 +43,9 @@ describe("the surface diagnostic registry", () => {
     }
   });
 
-  it("identifies each field from its parameter block, and from its name before the file is open", () => {
-    for (const id of SURFACE_DIAGNOSTIC_IDS) {
-      const identity = identityForParameter(registry[id]!.parameter);
-      expect(identity).toEqual({ family: id, level: null, vector: false });
-      expect(identityForBundleId(id)).toEqual(identity);
-      expect(registeredBundleId(identity)).toBe(id);
-      // A file named anything at all still reads as the field it carries.
-      const placed = identifyBundle([{ ...bundleVariable(id), id: "x" }]);
-      expect(placed?.identity).toEqual(identity);
-    }
-  });
-
-  it("reads the legend over a span the codebook can hold", () => {
-    for (const id of SURFACE_DIAGNOSTIC_IDS) {
-      // Precipitation type is categorical: its legend is a swatch key, not a
-      // ramp, so it has no numeric span (`isobaricLegend` is null too).
-      if (id === "ptype") continue;
-      const { offset, scale, maximumCode } = registry[id]!.quality;
-      const identity = identityForBundleId(id)!;
-      const [low, high] = scalarLegendRange(identity)!;
-      expect(low).toBeGreaterThanOrEqual(offset);
-      expect(high).toBeLessThanOrEqual(offset + scale * maximumCode);
-      // Six ticks, high to low, the top one at the chart ceiling.
-      const legend = isobaricLegend(identity)!;
-      expect(legend).toHaveLength(6);
-      expect(Number(legend[0])).toBe(high);
-      expect(Number(legend[5])).toBe(low);
-      for (let index = 1; index < legend.length; index += 1) {
-        expect(Number(legend[index])).toBeLessThan(Number(legend[index - 1]));
-      }
-    }
+  // The registry contract every field is held to (identity, legend span,
+  // decoding) is in registries.test.ts.
+  it("reads each legend over its chart span", () => {
     expect(scalarLegendRange(identityForBundleId("gust")!)).toEqual([0, GUST_SPEED_MAX]);
     expect(scalarLegendRange(identityForBundleId("tcdc")!)).toEqual([0, 100]);
     expect(scalarLegendRange(identityForBundleId("cape")!)).toEqual([0, CAPE_CHART_MAX]);
@@ -218,16 +189,6 @@ describe("the surface diagnostic registry", () => {
     const apparent = buildPalette(bundleVariable("aptmp2m"));
     const temperature = buildPalette({ ...bundleVariable("aptmp2m"), id: "tmp2m", parameter: undefined, quantization: { type: "linear", offset: -60, scale: 0.5, minimumCode: 0, maximumCode: 220, nodataCode: 255 } });
     expect([...apparent.subarray(120 * 4, 120 * 4 + 4)]).toEqual([...temperature.subarray(180 * 4, 180 * 4 + 4)]);
-  });
-
-  it("decodes every valid code and no reserved one", () => {
-    for (const id of SURFACE_DIAGNOSTIC_IDS) {
-      const variable = bundleVariable(id);
-      const { offset, scale, maximumCode, nodataCode } = registry[id]!.quality;
-      expect(decodeValue(variable, 0)).toBe(offset);
-      expect(decodeValue(variable, maximumCode)).toBeCloseTo(offset + scale * maximumCode, 9);
-      expect(decodeValue(variable, nodataCode)).toBeNull();
-    }
   });
 
   it("spells each layer in the URL under a short name", () => {
