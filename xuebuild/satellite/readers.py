@@ -34,13 +34,11 @@ from xml.sax.saxutils import escape
 
 import numpy as np
 
+from ..common import S3_NAMESPACE, s3_list_pages, s3_list_query
 from ..errors import ConversionError, DownloadError
 from ..gdal import require_command, run_command
 from . import eumetsat
 from .platforms import Channel, Platform
-
-_S3_NAMESPACE = "{http://s3.amazonaws.com/doc/2006-03-01/}"
-
 
 @dataclass(frozen=True)
 class SlotObject:
@@ -88,39 +86,25 @@ def list_prefix(
     """One S3 ``list-type=2`` listing under ``prefix``, every page: the
     objects as ``(key, size)`` and, with a delimiter, the common prefixes
     (the "directories") one level down."""
-    import urllib.parse  # noqa: PLC0415
-
     fetch = fetch or _fetch_text
     objects: list[tuple[str, int]] = []
     prefixes: list[str] = []
-    token: str | None = None
-    while True:
-        query = {"list-type": "2", "prefix": prefix, "max-keys": "1000"}
-        if delimiter:
-            query["delimiter"] = delimiter
-        if token is not None:
-            query["continuation-token"] = token
-        payload = fetch(f"{bucket_url(bucket)}/?{urllib.parse.urlencode(query)}")
-        try:
-            root = ET.fromstring(payload)
-        except ET.ParseError as exc:
-            raise DownloadError(f"{bucket} listing is not XML: {exc}") from exc
-        for contents in root.iter(f"{_S3_NAMESPACE}Contents"):
-            key = contents.findtext(f"{_S3_NAMESPACE}Key") or ""
+
+    def page(token: str | None) -> str:
+        query = s3_list_query(prefix, token, max_keys=1000, delimiter=delimiter)
+        return fetch(f"{bucket_url(bucket)}/?{query}")
+
+    for root in s3_list_pages(page, f"{bucket} listing"):
+        for contents in root.iter(f"{S3_NAMESPACE}Contents"):
+            key = contents.findtext(f"{S3_NAMESPACE}Key") or ""
             try:
-                size = int(contents.findtext(f"{_S3_NAMESPACE}Size") or "0")
+                size = int(contents.findtext(f"{S3_NAMESPACE}Size") or "0")
             except ValueError:
                 size = 0
             objects.append((key, size))
-        for common in root.iter(f"{_S3_NAMESPACE}CommonPrefixes"):
-            prefixes.append(common.findtext(f"{_S3_NAMESPACE}Prefix") or "")
-        token = None
-        if (root.findtext(f"{_S3_NAMESPACE}IsTruncated") or "").lower() == "true":
-            token = root.findtext(f"{_S3_NAMESPACE}NextContinuationToken") or None
-            if token is None:
-                raise DownloadError(f"{bucket} listing is truncated but carries no continuation token")
-        if token is None:
-            return objects, prefixes
+        for common in root.iter(f"{S3_NAMESPACE}CommonPrefixes"):
+            prefixes.append(common.findtext(f"{S3_NAMESPACE}Prefix") or "")
+    return objects, prefixes
 
 
 class Reader(Protocol):

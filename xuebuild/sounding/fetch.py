@@ -37,7 +37,6 @@ import logging
 import shutil
 import urllib.error
 import urllib.parse
-import xml.etree.ElementTree as ElementTree
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -45,7 +44,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .. import __version__
-from ..common import iso_z, write_bytes_atomic
+from ..common import S3_NAMESPACE, iso_z, s3_list_pages, s3_list_query, write_bytes_atomic
 from ..errors import DownloadError, SoundingProductError, XueError
 from ..fetch import get_ok
 from .bufr import parse_file_name
@@ -62,8 +61,6 @@ GATEWAY_PREFIX = "data/{gateway}/data/core/I/U/S/"
 """``I/U/S/`` is the WMO heading tree's upper-air sounding subtree: the
 whole ``I/U/`` tree is a hundred thousand objects (aircraft and satellite
 winds), and this branch is two thousand."""
-
-S3_NS = "{http://s3.amazonaws.com/doc/2006-03-01/}"
 
 USER_AGENT = f"xue/{__version__} (+https://github.com/ringsaturn/xue)"
 
@@ -151,30 +148,20 @@ def list_objects(
     The bucket answers ``list-type=2`` without a signature; the response is
     the S3 XML schema and is parsed with the stdlib."""
     objects: list[RemoteObject] = []
-    token: str | None = None
-    for _ in range(100):  # a thousand pages would be a bucket layout change
-        query = {"list-type": "2", "prefix": prefix}
-        if token is not None:
-            query["continuation-token"] = token
-        body = get(f"{base_url}?{urllib.parse.urlencode(query)}")
-        try:
-            root = ElementTree.fromstring(body)
-        except ElementTree.ParseError as exc:
-            raise DownloadError(f"the bucket listing for {prefix} is not XML: {exc}") from exc
-        for contents in root.findall(f"{S3_NS}Contents"):
-            key = contents.findtext(f"{S3_NS}Key")
-            modified = _parse_time(contents.findtext(f"{S3_NS}LastModified"))
-            size = contents.findtext(f"{S3_NS}Size")
+    pages = s3_list_pages(
+        lambda token: get(f"{base_url}?{s3_list_query(prefix, token)}"),
+        f"the bucket listing for {prefix}",
+        strict=False,
+        max_pages=100,  # a thousand pages would be a bucket layout change
+    )
+    for root in pages:
+        for contents in root.findall(f"{S3_NAMESPACE}Contents"):
+            key = contents.findtext(f"{S3_NAMESPACE}Key")
+            modified = _parse_time(contents.findtext(f"{S3_NAMESPACE}LastModified"))
+            size = contents.findtext(f"{S3_NAMESPACE}Size")
             if not key or modified is None or size is None:
                 continue
             objects.append(RemoteObject(key=key, last_modified=modified, size=int(size)))
-        if root.findtext(f"{S3_NS}IsTruncated") != "true":
-            break
-        token = root.findtext(f"{S3_NS}NextContinuationToken")
-        if not token:
-            break
-    else:
-        raise DownloadError(f"the bucket listing for {prefix} did not terminate")
     return objects
 
 
