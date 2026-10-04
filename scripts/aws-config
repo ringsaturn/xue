@@ -1,4 +1,4 @@
-# AWS CLI settings for the dataset bucket, pointed at by the Makefile's
+# AWS CLI settings for the dataset bucket, pointed at by mk/r2.mk's
 # AWS_CONFIG_FILE. R2 bills CreateMultipartUpload, UploadPart and
 # CompleteMultipartUpload as Class A operations, and the CLI's default 8 MiB
 # multipart threshold turns every store shard larger than that into about

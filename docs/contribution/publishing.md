@@ -8,7 +8,7 @@ the AWS CLI.
 Credentials: an R2 API token's key pair in `AWS_ACCESS_KEY_ID` /
 `AWS_SECRET_ACCESS_KEY` plus `CLOUDFLARE_ACCOUNT_ID`; on Actions the
 `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `CLOUDFLARE_ACCOUNT_ID`
-secrets. The Makefile points the CLI at `scripts/aws-config`, which raises
+secrets. `mk/r2.mk` points the CLI at `scripts/aws-config`, which raises
 the multipart threshold above every artifact, so each object costs one
 Class A operation instead of one per part.
 

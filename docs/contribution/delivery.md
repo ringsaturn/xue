@@ -95,7 +95,7 @@ nothing, and the shell does not depend on it. Endpoints `/health`,
 
 ## Uploads to R2 (`scripts/aws-config`)
 
-All uploads go through the AWS CLI (`$(S3)` in the Makefile).
+All uploads go through the AWS CLI (`$(S3)` in `mk/r2.mk`).
 
 - **One operation per object.** R2 bills each multipart step as Class A, and
   the CLI's 8 MiB default split large shards into ~7. `AWS_CONFIG_FILE`
