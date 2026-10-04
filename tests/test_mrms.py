@@ -41,6 +41,7 @@ from unittest import mock
 
 import numpy as np
 
+from tests._support import ClassTempRoot, FIXTURES, TempRoot, requires_gdalinfo, requires_native_source
 from xuebuild import binconvert, cli, fetch, grib2, native, zstdcli
 from xuebuild.binconvert import (
     BlockReduction,
@@ -84,12 +85,10 @@ from xuebuild.showcase import LOCALES, ShowcaseError, build_case, parse_case
 from xuebuild.sources import SOURCES, Downsample, source_spec
 from xuebuild.variables import variable_spec
 
-FIXTURES = Path(__file__).resolve().parent / "fixtures"
 FRAMES = (FIXTURES / "mrms.2026091300.t0000.crop.grib2", FIXTURES / "mrms.2026091300.t0002.crop.grib2")
 MRMS = source_spec("mrms")
 RUN = GfsRun(datetime(2026, 9, 13, 0, tzinfo=UTC))
 
-requires_gdalinfo = unittest.skipUnless(shutil.which("gdalinfo") is not None, "gdalinfo is not on PATH")
 
 
 def listing(*keys: str, truncated: bool = False) -> str:
@@ -350,12 +349,13 @@ class ListingTests(unittest.TestCase):
         self.assertEqual([("20260912" in url) for url in listed], [False, False, True, True])
 
 
-class DownloadTests(unittest.TestCase):
+class DownloadTests(TempRoot, unittest.TestCase):
     """The fixture's messages served back as the bucket's gzipped objects."""
 
+    root_prefix = "xue-mrms-fetch-"
+
     def setUp(self) -> None:
-        self.root = Path(tempfile.mkdtemp(prefix="xue-mrms-fetch-"))
-        self.addCleanup(shutil.rmtree, self.root, ignore_errors=True)
+        super().setUp()
         cref0, prate0 = split_messages(FRAMES[0])
         cref2, prate2 = split_messages(FRAMES[1])
         self.objects = {
@@ -849,10 +849,12 @@ class ShowcaseCaseTests(DownloadTests):
 
 
 @requires_gdalinfo
-class ConversionTests(unittest.TestCase):
+class ConversionTests(ClassTempRoot, unittest.TestCase):
+    root_prefix = "xue-mrms-"
+
     @classmethod
     def setUpClass(cls) -> None:
-        cls.root = Path(tempfile.mkdtemp(prefix="xue-mrms-"))
+        super().setUpClass()
         inputs = cls.root / "mrms.2026091300"
         inputs.mkdir()
         for path in FRAMES:
@@ -867,10 +869,6 @@ class ConversionTests(unittest.TestCase):
                 work_root=cls.root / "work",
                 manifest_path=cls.root / "out" / "manifest.json",
             )
-
-    @classmethod
-    def tearDownClass(cls) -> None:
-        shutil.rmtree(cls.root, ignore_errors=True)
 
     def test_the_window_is_a_two_minute_axis_on_the_thinned_grid(self) -> None:
         self.assertEqual([bundle["variable"] for bundle in self.report["bundles"]], ["cref", "prate"])
@@ -908,7 +906,7 @@ class ConversionTests(unittest.TestCase):
                     self.inputs, self.root / "complete", model="mrms", skip_video=True, require_complete=True, expected_hours=3
                 )
 
-    @unittest.skipUnless(native.knows_source("mrms"), f"the installed {native.DISTRIBUTION} wheel predates the MRMS source")
+    @requires_native_source("mrms", "the MRMS source")
     def test_the_native_encoder_writes_the_same_bytes(self) -> None:
         if not zstdcli.compresses_in_process():
             self.skipTest("the reference encoder compresses through the zstd CLI")

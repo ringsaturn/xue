@@ -13,12 +13,12 @@ import filecmp
 import json
 import os
 import shutil
-import tempfile
 import unittest
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest import mock
 
+from tests._support import ClassTempRoot, FIXTURES, TempRoot, requires_gdal, requires_native_source
 from xuebuild import aurora, binconvert, native, zstdcli
 from xuebuild.binformat import read_bundle
 from xuebuild.errors import ConversionError, DownloadError
@@ -27,12 +27,8 @@ from xuebuild.model import GfsRun
 from xuebuild.sources import MODEL_CORE_BUNDLES, source_spec
 from xuebuild.stac import _source_prose
 
-FIXTURES = Path(__file__).parent / "fixtures"
 SERIES = FIXTURES / "aurora.2026100304.crop.nc"
 
-requires_gdal = unittest.skipUnless(
-    shutil.which("gdalinfo") is not None and shutil.which("gdal_translate") is not None, "GDAL is not on PATH"
-)
 
 AURORA = source_spec("aurora")
 
@@ -116,10 +112,11 @@ class ParseTests(unittest.TestCase):
         self.assertEqual(aurora.frame_time(Path(name)), moment)
 
 
-class CacheTests(unittest.TestCase):
+class CacheTests(TempRoot, unittest.TestCase):
+    root_prefix = "xue-aurora-"
+
     def setUp(self) -> None:
-        self.root = Path(tempfile.mkdtemp(prefix="xue-aurora-"))
-        self.addCleanup(__import__("shutil").rmtree, self.root, True)
+        super().setUp()
         self.frames_dir = self.root / aurora.FRAMES_DIRNAME
 
     def _touch(self, moment: datetime) -> Path:
@@ -150,10 +147,11 @@ class CacheTests(unittest.TestCase):
 
 
 @unittest.skipUnless(NETCDF, "the aurora group (xarray + netCDF4) is not installed")
-class SeriesTests(unittest.TestCase):
+class SeriesTests(TempRoot, unittest.TestCase):
+    root_prefix = "xue-aurora-"
+
     def setUp(self) -> None:
-        self.root = Path(tempfile.mkdtemp(prefix="xue-aurora-"))
-        self.addCleanup(__import__("shutil").rmtree, self.root, True)
+        super().setUp()
         self.frames_dir = self.root / aurora.FRAMES_DIRNAME
 
     def test_a_frame_and_a_window_are_written_and_read_back(self) -> None:
@@ -180,10 +178,11 @@ class SeriesTests(unittest.TestCase):
             aurora.write_window(self.frames_dir, datetime(2026, 10, 3, 4, 0, tzinfo=UTC), 3, self.root / "x.nc")
 
 
-class FetchTests(unittest.TestCase):
+class FetchTests(TempRoot, unittest.TestCase):
+    root_prefix = "xue-aurora-"
+
     def setUp(self) -> None:
-        self.root = Path(tempfile.mkdtemp(prefix="xue-aurora-"))
-        self.addCleanup(__import__("shutil").rmtree, self.root, True)
+        super().setUp()
         self.run = GfsRun(datetime(2026, 10, 3, 4, 0, tzinfo=UTC))
 
     def test_latest_slot_reads_the_grid_s_forecast_time(self) -> None:
@@ -211,7 +210,7 @@ class FetchTests(unittest.TestCase):
             _fetch_aurora_run(AURORA, self.run, 3, self.root, force=False, input_ids=("cref",), fetch=lambda url: ovation_payload())
 
 
-class WindowStartTests(unittest.TestCase):
+class WindowStartTests(TempRoot, unittest.TestCase):
     """Where an aurora window starts when the cache has not filled it yet.
 
     The manifest's run time is the first frame's hour (the observation
@@ -219,9 +218,10 @@ class WindowStartTests(unittest.TestCase):
     anchor to the earliest cached frame until the cache reaches a whole
     window back."""
 
+    root_prefix = "xue-aurora-"
+
     def setUp(self) -> None:
-        self.root = Path(tempfile.mkdtemp(prefix="xue-aurora-"))
-        self.addCleanup(shutil.rmtree, self.root, True)
+        super().setUp()
         self.frames_dir = self.root / aurora.FRAMES_DIRNAME
 
     def _touch(self, moment: datetime) -> None:
@@ -250,7 +250,7 @@ class WindowStartTests(unittest.TestCase):
 
 
 @requires_gdal
-class ConversionTests(unittest.TestCase):
+class ConversionTests(ClassTempRoot, unittest.TestCase):
     """The window series through both encoders.
 
     ``tests/fixtures/aurora.2026100304.crop.nc`` is three grids of the
@@ -260,9 +260,11 @@ class ConversionTests(unittest.TestCase):
     scaled copies, so a plane is distinguishable from its neighbour.
     """
 
+    root_prefix = "xue-aurora-"
+
     @classmethod
     def setUpClass(cls) -> None:
-        cls.root = Path(tempfile.mkdtemp(prefix="xue-aurora-"))
+        super().setUpClass()
         inputs = cls.root / "aurora.2026100304"
         inputs.mkdir()
         shutil.copy(SERIES, inputs / "aurora.2026100304.nc")
@@ -276,10 +278,6 @@ class ConversionTests(unittest.TestCase):
                 work_root=cls.root / "work",
                 manifest_path=cls.root / "out" / "manifest.json",
             )
-
-    @classmethod
-    def tearDownClass(cls) -> None:
-        shutil.rmtree(cls.root, ignore_errors=True)
 
     def test_the_window_is_a_five_minute_axis_from_the_hour(self) -> None:
         self.assertEqual([bundle["variable"] for bundle in self.report["bundles"]], ["aurora"])
@@ -317,7 +315,7 @@ class ConversionTests(unittest.TestCase):
                     self.inputs, self.root / "complete", model="aurora", skip_video=True, require_complete=True, expected_hours=3
                 )
 
-    @unittest.skipUnless(native.knows_source("aurora"), f"the installed {native.DISTRIBUTION} wheel predates the aurora source")
+    @requires_native_source("aurora")
     def test_the_native_encoder_writes_the_same_bytes(self) -> None:
         if not zstdcli.compresses_in_process():
             self.skipTest("the reference encoder compresses through the zstd CLI")
