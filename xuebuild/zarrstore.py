@@ -1,47 +1,10 @@
-"""A Xue bundle as a Zarr v3 store.
+"""A Xue bundle as a Zarr v3 store, derived from the finished ``.xue``.
 
-A container v2 bundle is, up to its index format, a sharded Zarr v3 ``uint8``
-array: a chunk is one spatial tile of one temporal group, a group is one
-contiguous run of chunks in row-major tile order, each chunk is one
-Zstandard frame, and the temporal residual is a wrapping difference against
-the previous frame inside the chunk. Zarr spells the same things as a
-``sharding_indexed`` codec (one shard per array — the whole time axis of the
-whole grid — its inner chunks concatenated time chunk by time chunk in
-row-major tile order with one offset table), a ``zstd`` codec, and —
-optionally — an array-to-array ``xue.delta`` codec that is the
-residual arithmetic moved into the codec chain. This module writes that
-store from a bundle that has already been written, so the two carry the same
-codes by construction: nothing is re-quantized, and every chunk is re-encoded
-from the codes the bundle decodes to. ``docs/zarr-profile.md`` is normative
-for the layout.
-
-The store is written with NumPy alone — the metadata documents, the shard
-bytes, the 16-byte-per-chunk index and its CRC-32C are all assembled here —
-so the build pipeline gains no dependency. zarr-python and xarray are what
-the tests open the result with, and what `xuebuild.zarrcodec` registers the
-delta codec for; neither is needed to produce a store.
-
-Two choices differ from the bundle and are deliberate. The time axis is cut
-on a *regular* grid of six frames, where the bundle cuts its groups inside
-segments of constant step (a mixed-step axis restarts its groups at the
-change of cadence), so a Zarr chunk may straddle two of the bundle's groups
-and the two layouts coincide only up to the first change of step; and an
-edge tile is stored at the full inner-chunk shape padded with the variable's
-nodata code, where the bundle clips it to the grid. A chunk that covers the
-same frames and the same unclipped tile as one of the bundle's carries
-byte-identical compressed bytes under the delta chain (or the standard chain
-for a RAW variable), and the export report measures how many do rather than
-assuming it.
-
-One shard per array, rather than one per time chunk, is what keeps a store
-at a handful of objects: a bucket bills every object written, and a store
-cut every six frames costs a GFS run some five thousand objects where the
-container cost sixty. A shard the size of the array is what the container
-already was — one object, read by range — and its index, one pair per inner
-chunk over the whole axis, is the container's whole index too: a reader
-fetches it once at open (a suffix range, no object length needed) and holds
-every offset, so a point series costs one request per time chunk and a
-frame one per tile row, as they did in the container.
+Every chunk is re-encoded from the codes the bundle decodes to, so the store
+carries the bundle's codes by construction, and the metadata, shard bytes,
+index and CRC-32C are assembled with NumPy alone, so the build gains no
+dependency. ``docs/zarr-profile.md`` is normative for the layout and gives the
+reasons for its regular time chunks, padded edge tiles and one shard per array.
 """
 
 from __future__ import annotations

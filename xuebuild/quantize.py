@@ -678,7 +678,7 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
         **COMPACT_PRESSURE,
         **COMPACT_ISOBARIC,
     },
-    # Production default since 2026-08-17: temperature keeps the 0.5°C step
+    # The production default: temperature keeps the 0.5°C step
     # (0.25°C error budget, shared with the H.264 video artifact), while
     # precipitation drops to the 128-level codebook — halving its symbol
     # count cuts the prate bundle by roughly 13% for a codebook step that

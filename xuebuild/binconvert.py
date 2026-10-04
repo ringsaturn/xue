@@ -880,8 +880,8 @@ def derive_theta_e(values: dict[str, np.ndarray], bundle_id: str) -> np.ndarray:
 # GRIB2 code table 4.201's codes for the four types pgrb2's categorical flags
 # report, and the order they are combined in: rain, then freezing rain, then
 # ice pellets, then snow, each later flag overriding an earlier one. The four
-# are mutually exclusive in the model's own output — a 2026-09-21 analysis
-# has no cell with two flags set — so the order only decides a point the
+# are mutually exclusive in the model's own output — an analysis has no
+# cell with two flags set — so the order only decides a point the
 # model should never produce; both encoders share it so even such a point
 # encodes byte-identically.
 PTYPE_CODES: tuple[tuple[str, float], ...] = (
@@ -1027,7 +1027,7 @@ def _extract_planes(
         source_height, source_width = _grid_for(grid, file_order[0]).source_shape
         plane_size = source_width * source_height
         # Named by the band set's hash rather than the ids joined: a GFS frame
-        # now carries over thirty of them, past a filesystem's 255-byte name.
+        # carries over thirty of them, past a filesystem's 255-byte name.
         band_set = zlib.crc32("-".join(file_order).encode("ascii")) & 0xFFFFFFFF
         raw = work / f"planes.f{hour:03d}.{os.getpid()}.{band_set:08x}.bin"
         command = [require_command("gdal_translate"), "-q"]
