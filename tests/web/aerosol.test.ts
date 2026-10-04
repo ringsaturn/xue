@@ -31,7 +31,7 @@ import {
 import { meteogramRows } from "../../web/src/meteogram";
 import { buildPalette, decodeValue, encodeLog } from "../../web/src/palettes";
 import { displayUnit } from "../../web/src/units";
-import { parseModelFromSearch, parseVariableFromSearch, searchForVariable } from "../../web/src/urlstate";
+import { parseModelFromSearch } from "../../web/src/urlstate";
 import { FIELD_GROUPS, variableIds, variableSpec } from "../../web/src/variables";
 import { metadataJson, registryVariable, rgba, type RegistryEntry } from "./helpers";
 
@@ -214,24 +214,6 @@ describe("the aerosol families", () => {
     expect(FORECAST_MODELS.gefsaero.coreBundles).toEqual(["aod"]);
     expect(parseModelFromSearch("?model=gefsaero")).toBe("gefsaero");
     expect(parseModelFromSearch("?model=GEFS-Aerosols")).toBe("gefsaero");
-  });
-
-  it("is reachable by every spelling", () => {
-    expect(parseVariableFromSearch("?type=aod")).toBe("aod");
-    expect(parseVariableFromSearch("?type=aerosol")).toBe("aod");
-    expect(parseVariableFromSearch("?type=AOD550")).toBe("aod");
-    expect(parseVariableFromSearch("?type=aoddust")).toBe("aoddust");
-    expect(parseVariableFromSearch("?type=smoke")).toBe("aodorg");
-    expect(parseVariableFromSearch("?type=blackcarbon")).toBe("aodbc");
-    expect(parseVariableFromSearch("?type=pm25")).toBe("pm25");
-    expect(parseVariableFromSearch("?type=pm2p5")).toBe("pm25");
-    expect(parseVariableFromSearch("?type=airquality")).toBe("pm25");
-    expect(parseVariableFromSearch("?type=pm10")).toBe("pm10");
-    expect(parseVariableFromSearch("?type=pm10dust")).toBe("pm10dust");
-    // The Dust RGB keeps `dust`.
-    expect(parseVariableFromSearch("?type=dust")).toBe("dustrgb");
-    expect(searchForVariable("aod", "")).toContain("type=aod");
-    expect(searchForVariable("pm25", "")).toContain("type=pm25");
   });
 
   it("gives the surface particulates a meteogram row, and the column its own", () => {

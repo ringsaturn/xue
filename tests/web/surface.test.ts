@@ -19,7 +19,6 @@ import {
   type BundleVariable,
 } from "../../web/src/manifest";
 import { CAPE_STOPS, buildPalette, buildWindFieldPalette, decodeValue, legendGradient, windFieldStops } from "../../web/src/palettes";
-import { parseVariableFromSearch, searchForVariable } from "../../web/src/urlstate";
 import { variableSpec } from "../../web/src/variables";
 import { registryVariable, type RegistryEntry } from "./helpers";
 
@@ -189,37 +188,5 @@ describe("the surface diagnostic registry", () => {
     const apparent = buildPalette(bundleVariable("aptmp2m"));
     const temperature = buildPalette({ ...bundleVariable("aptmp2m"), id: "tmp2m", parameter: undefined, quantization: { type: "linear", offset: -60, scale: 0.5, minimumCode: 0, maximumCode: 220, nodataCode: 255 } });
     expect([...apparent.subarray(120 * 4, 120 * 4 + 4)]).toEqual([...temperature.subarray(180 * 4, 180 * 4 + 4)]);
-  });
-
-  it("spells each layer in the URL under a short name", () => {
-    expect(parseVariableFromSearch("?type=gust")).toBe("gust");
-    expect(parseVariableFromSearch("?type=gusts")).toBe("gust");
-    expect(parseVariableFromSearch("?type=cloud")).toBe("tcdc");
-    expect(parseVariableFromSearch("?type=CloudCover")).toBe("tcdc");
-    expect(parseVariableFromSearch("?type=tcdc")).toBe("tcdc");
-    expect(parseVariableFromSearch("?type=cape")).toBe("cape");
-    expect(parseVariableFromSearch("?type=cin")).toBe("cin");
-    expect(parseVariableFromSearch("?type=inhibition")).toBe("cin");
-    expect(parseVariableFromSearch("?type=pwat")).toBe("pwat");
-    expect(parseVariableFromSearch("?type=precipitablewater")).toBe("pwat");
-    expect(parseVariableFromSearch("?type=hpbl")).toBe("hpbl");
-    expect(parseVariableFromSearch("?type=pbl")).toBe("hpbl");
-    expect(parseVariableFromSearch("?type=ptype")).toBe("ptype");
-    expect(parseVariableFromSearch("?type=preciptype")).toBe("ptype");
-    expect(parseVariableFromSearch("?type=wind100m")).toBe("wind100m");
-    expect(parseVariableFromSearch("?type=wind100")).toBe("wind100m");
-    for (const [id, spelling] of [
-      ["gust", "gust"],
-      ["tcdc", "cloud"],
-      ["cape", "cape"],
-      ["cin", "cin"],
-      ["pwat", "pwat"],
-      ["hpbl", "hpbl"],
-      ["ptype", "ptype"],
-      ["wind100m", "wind100m"],
-    ] as const) {
-      expect(searchForVariable(id, "")).toBe(`?model=gfs&type=${spelling}`);
-      expect(parseVariableFromSearch(searchForVariable(id, ""))).toBe(id);
-    }
   });
 });

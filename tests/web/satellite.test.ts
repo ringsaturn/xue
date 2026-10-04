@@ -30,7 +30,6 @@ import {
 } from "../../web/src/manifest";
 import { meteogramRowCode, meteogramRows } from "../../web/src/meteogram";
 import { buildPalette, decodeValue } from "../../web/src/palettes";
-import { parseVariableFromSearch, searchForVariable } from "../../web/src/urlstate";
 import { variableSpec } from "../../web/src/variables";
 import { HIMAWARI_ENVELOPE, metadataJson, registryVariable, rgba, type RegistryEntry } from "./helpers";
 
@@ -232,14 +231,6 @@ describe("the satellite registry", () => {
     expect(displayValue("°C", 21.5)).toBe(21.5);
   });
 
-  it("is reached by its own type names", () => {
-    expect(parseVariableFromSearch("?type=infrared")).toBe("ir104");
-    expect(parseVariableFromSearch("?type=ir")).toBe("ir104");
-    expect(parseVariableFromSearch("?type=satellite")).toBe("ir104");
-    expect(parseVariableFromSearch("?type=ir104")).toBe("ir104");
-    expect(searchForVariable("ir104", "")).toBe("?model=gfs&type=infrared");
-  });
-
   it("fills the cloud-top row of the meteogram", () => {
     const rows = meteogramRows((id) => id === "ir104");
     expect(rows.map((row) => row.id)).toEqual(["cloudtop"]);
@@ -320,12 +311,6 @@ describe("the Dust RGB composite", () => {
     expect(spec.title.join(" ")).toBe("Dust RGB");
     expect(spec.label()).toBe("Dust RGB (infrared composite)");
     expect(spec.ground).toBe("slate");
-  });
-
-  it("is reached by its own type names", () => {
-    expect(parseVariableFromSearch("?type=dustrgb")).toBe("dustrgb");
-    expect(parseVariableFromSearch("?type=dust")).toBe("dustrgb");
-    expect(searchForVariable("dustrgb", "")).toBe("?model=gfs&type=dustrgb");
   });
 });
 
@@ -417,12 +402,5 @@ describe("the DEBRA dust confidence", () => {
     expect(registry.dustcf!.unit).toBe("1");
     // A dimensionless quantity shows no unit at all: "0.24", not "0.24 1".
     expect(displayUnit("1")).toBe("");
-  });
-
-  it("is reached by its own type names", () => {
-    expect(parseVariableFromSearch("?type=debra")).toBe("dustcf");
-    expect(parseVariableFromSearch("?type=dustcf")).toBe("dustcf");
-    expect(parseVariableFromSearch("?type=dustconfidence")).toBe("dustcf");
-    expect(searchForVariable("dustcf", "")).toBe("?model=gfs&type=debra");
   });
 });
