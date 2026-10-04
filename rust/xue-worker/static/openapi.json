@@ -4,7 +4,7 @@
     "title": "Xue data API",
     "version": "0.1.0",
     "summary": "Read-only JSON over the published Xue weather stores.",
-    "description": "A stateless facade over the public Xue dataset on Cloudflare R2. It resolves a run the way the STAC catalog does (Collection -> live pointer -> manifest), reads the bundle's Zarr v3 store and decodes the quantized codes. It never writes data, and the viewer does not depend on it.\n\nTimes are UTC ISO 8601. `variables` is a flat map keyed by variable id, whatever bundle was requested: a vector bundle's components are separate entries carrying the `bundle` they belong to. Every field is present; `null` marks a missing code or an absent label/unit.",
+    "description": "**Experimental.** Routes, parameters and response shapes may change without notice, and there is no guarantee of availability or freshness. For anything that must keep working, read the static STAC catalog and Zarr stores directly.\n\nA stateless facade over the public Xue dataset on Cloudflare R2. It resolves a run the way the STAC catalog does (Collection -> live pointer -> manifest), reads the bundle's Zarr v3 store and decodes the quantized codes. It never writes data, and the viewer does not depend on it.\n\nTimes are UTC ISO 8601. `variables` is a flat map keyed by variable id, whatever bundle was requested: a vector bundle's components are separate entries carrying the `bundle` they belong to. Every field is present; `null` marks a missing code or an absent label/unit.",
     "license": { "name": "MIT OR Apache-2.0" }
   },
   "servers": [

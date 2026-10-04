@@ -1,5 +1,13 @@
 # The data API
 
+> **Experimental.** The API may change or break without notice, including
+> routes, parameters and response shapes, and it has no versioning promise
+> beyond the `/v1` prefix. It runs on a best-effort basis with no
+> guarantee of availability or of freshness: a run can reach the API late,
+> or not at all. For anything that must keep working, read the static
+> catalog and the Zarr stores directly (`docs/stac.md`,
+> `docs/zarr-profile.md`), which are the published data contract.
+
 `https://xue-api.ringsaturn.me` is a read-only JSON service over the
 published dataset. It resolves a run the way the STAC catalog does
 (Collection → live pointer → manifest), reads the bundle's Zarr store with
@@ -134,7 +142,7 @@ Errors are not cached.
 
 - Requests are rate-limited per IP at the zone. The rule lives in the
   Cloudflare dashboard, not in this repository.
-- There is no key, quota or SLA.
+- There is no key, quota or SLA (see the experimental notice above).
 - The data keep their sources' licences. NOAA products are public domain
   (attribution requested); ECMWF, EUMETSAT and JMA require attribution. The
   Collection's `license` and its `providers` (`/v1/sources/{source}`, or

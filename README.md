@@ -80,7 +80,8 @@ with HTTP Range requests.
   ds = xr.open_zarr(run.assets["tmp2m"].get_absolute_href())
   ```
 
-- **Data API**: a read-only JSON API at <https://xue-api.ringsaturn.me>
+- **Data API** (experimental: no compatibility, reliability or freshness
+  guarantee): a read-only JSON API at <https://xue-api.ringsaturn.me>
   (`/v1/catalog`, `/v1/sources/{source}`,
   `/v1/point?source=&lat=&lon=&variables=` with an optional ISO 8601
   `time` or a pinned `run`; OpenAPI at `/openapi.json`; contract in
