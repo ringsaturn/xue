@@ -24,7 +24,14 @@ from typing import Any
 
 from . import aurora, cmaarchive, jmacli, om2nccli
 from . import satellite
-from .common import write_bytes_atomic
+from .common import (
+    S3_NAMESPACE,
+    s3_continuation,
+    s3_list_pages,
+    s3_list_query,
+    s3_parse_page,
+    write_bytes_atomic,
+)
 from .satellite import fetch as satellite_fetch
 from .satellite import producers as satellite_producers
 from .errors import DownloadError
@@ -656,7 +663,7 @@ def _fetch_cfs_run(
 # down to its slot (``SourceSpec.cadence_seconds``).
 
 _MRMS_KEY_TIME = re.compile(r"_(\d{8})-(\d{6})\.grib2\.gz$")
-_S3_NAMESPACE = "{http://s3.amazonaws.com/doc/2006-03-01/}"
+_MRMS_LISTING = "MRMS listing"
 
 
 @dataclass(frozen=True)
@@ -687,13 +694,15 @@ def parse_mrms_listing(xml_text: str) -> tuple[list[MrmsObject], str | None]:
     if the page was truncated. Keys that are not a product frame — the
     bucket carries nothing else under a product day, but a listing is
     somebody else's file — are skipped."""
-    try:
-        root = ElementTree.fromstring(xml_text)
-    except ElementTree.ParseError as exc:
-        raise DownloadError(f"MRMS listing is not XML: {exc}") from exc
+    root = s3_parse_page(xml_text, _MRMS_LISTING)
+    objects = _mrms_page_objects(root)
+    return objects, s3_continuation(root, _MRMS_LISTING)
+
+
+def _mrms_page_objects(root: ElementTree.Element) -> list[MrmsObject]:
     objects: list[MrmsObject] = []
-    for contents in root.iter(f"{_S3_NAMESPACE}Contents"):
-        key = contents.findtext(f"{_S3_NAMESPACE}Key") or ""
+    for contents in root.iter(f"{S3_NAMESPACE}Contents"):
+        key = contents.findtext(f"{S3_NAMESPACE}Key") or ""
         match = _MRMS_KEY_TIME.search(key)
         if not match:
             continue
@@ -702,12 +711,7 @@ def parse_mrms_listing(xml_text: str) -> tuple[list[MrmsObject], str | None]:
         except ValueError:
             continue
         objects.append(MrmsObject(key=key, observed=observed))
-    token = None
-    if (root.findtext(f"{_S3_NAMESPACE}IsTruncated") or "").lower() == "true":
-        token = root.findtext(f"{_S3_NAMESPACE}NextContinuationToken") or None
-        if token is None:
-            raise DownloadError("MRMS listing is truncated but carries no continuation token")
-    return objects, token
+    return objects
 
 
 def list_mrms_objects(product: str, day: datetime, *, fetch: Callable[[str], str] | None = None) -> list[MrmsObject]:
@@ -717,15 +721,11 @@ def list_mrms_objects(product: str, day: datetime, *, fetch: Callable[[str], str
     fetch = fetch or fetch_text
     prefix = mrms_product_prefix(product, day)
     objects: list[MrmsObject] = []
-    token: str | None = None
-    while True:
-        query = {"list-type": "2", "prefix": prefix, "max-keys": "1000"}
-        if token is not None:
-            query["continuation-token"] = token
-        page, token = parse_mrms_listing(fetch(f"{MRMS_BASE_URL}/?{urllib.parse.urlencode(query)}"))
-        objects.extend(page)
-        if token is None:
-            return objects
+    for root in s3_list_pages(
+        lambda token: fetch(f"{MRMS_BASE_URL}/?{s3_list_query(prefix, token, max_keys=1000)}"), _MRMS_LISTING
+    ):
+        objects.extend(_mrms_page_objects(root))
+    return objects
 
 
 def mrms_window_frames(
