@@ -1,45 +1,11 @@
 """Per-model source registry: where a model's data comes from and how its
 run directory, manifest identity, and time axis are named.
 
-The models share one output contract: whatever the source, the bundles carry
-the same data variable ids (tmp2m, prate, ugrd10m/vgrd10m, on sflux also
-dswrf, on GFS and ECMWF the pressure family, the upper-air fills, the
-vertical velocity, the 850 hPa equivalent potential temperature and as much
-of the surface diagnostics and the ocean fields as each publishes; on HRRR
-the forecast composite reflectivity under the radar mosaic's ``cref``) so
-the decoder and frontend never care which model produced them. A source may
-read more than one file family of a cycle (GFS pgrb2 plus GFS-Wave, ECMWF
-``oper`` plus ``wave``, :class:`CompanionFile`); the frame the converter
-sees is still one GRIB. A
-source may be computed on a map projection (HRRR, Lambert conformal): its
-``regrid`` says so, and the converter resamples every plane onto the regular
-grid the format describes (:mod:`xuebuild.reproject`).
-Not every source is a forecast: an ``observation`` source holds a series
-of observed analyses with no cycle and an axis that is whatever times the
-observations carry. The NOAA MRMS mosaic is fetched from
-its bucket a window at a time (``window_hours``), one whole GRIB per
-two-minute frame, thinned onto a coarser grid (``downsample``) before
-anything else reads it, and — the first source that is an observation *and*
-live — published as a rolling window its pointer follows. The JMA
-precipitation nowcast is the second shape: fetched like MRMS, a rolling
-window with a pointer, but its frames arrive as one NetCDF series per
-window (``series_file``), assembled from the agency's map tiles by the
-``jma-radar`` tool (:mod:`xuebuild.jmacli`) rather than read record by
-record. The CMA radar mosaic is that shape too: a private archive keeps
-the agency's six-minute mosaics as one Zarr store per UTC day, and a
-window is read back out of those stores as one NetCDF series
-(:mod:`xuebuild.cmaarchive`); a showcase case may still be built from a
-local file cut from the same mosaics.
-A ``series_file`` source need not be an observation: ECMWF's IFS HRES on its
-native 9 km grid arrives as one NetCDF series per variable too, resampled off
-the Open-Meteo bucket by the ``om2nc`` tool (:mod:`xuebuild.om2nccli`), and is
-an ordinary forecast cycle in every other respect.
-ECMWF has no native rate field; its accumulated ``tp`` input is de-accumulated
-into prate by the converter. GFS sflux has only interval-averaged PRATE (the
-averaging window resets every 6 hours); the converter de-averages consecutive
-frames into hourly rates. Open-Meteo's ``precipitation`` is a third shape, the
-total over the interval since the previous step (``interval_precipitation``),
-which becomes a rate by one division.
+Every source publishes the same variable ids for the same quantities, so
+the decoder and the frontend never care which model produced a bundle.
+The source kinds (forecast, observation window, series file, satellite) and
+the mechanisms a :class:`SourceSpec` field switches on are described in
+``docs/contribution/sources.md``.
 """
 
 from __future__ import annotations
@@ -88,12 +54,11 @@ class CompanionFile:
     with eccodes at fetch time, the way the CCSDS-packed ECMWF files are,
     because some GDAL this pipeline converts through cannot decode their
     packing. A build job of a bundle from such a family installs
-    ``grib_set`` (``assemble.group_needs_eccodes``). No family needs it
-    now: WAVEWATCH III writes JPEG 2000 packing (DRS template 5.40), and
-    the GDAL the ``xuepy`` wheel carries decodes it since the wheel took
-    OpenJPEG on board (``scripts/build-gdal-minimal.sh``); before that the
-    wave family was repacked here, and the switch stays for the next
-    packing a wheel cannot read."""
+    ``grib_set`` (``assemble.group_needs_eccodes``). No family needs it:
+    the GDAL the ``xuepy`` wheel carries links OpenJPEG
+    (``scripts/build-gdal-minimal.sh``) and so decodes WAVEWATCH III's
+    JPEG 2000 packing (DRS template 5.40); the switch is for a packing a
+    wheel cannot read."""
     production_grid: tuple[int, int] | None = None
     """Set when the family is on a grid of its own (CFSv2's 1° pressure-level
     series beside its T126 Gaussian surface series): the grid a complete
@@ -698,11 +663,9 @@ SOURCES: dict[str, SourceSpec] = {
             "qflux850",
             "wave",
         ),
-        # The series companion rollout starts here, on the 0.25-degree global
-        # run: the point API's core rows, so `/point?variables=tmp2m,wind10m`
-        # and the pinned temperature/wind rows read one chunk each. The other
-        # sources opt in the same way once this one's read counts and storage
-        # are known.
+        # Series companions for the point API's core rows, so
+        # `/point?variables=tmp2m,wind10m` and the pinned temperature/wind
+        # rows read one chunk each. Other sources opt in the same way.
         series_bundle_ids=("tmp2m", "prate", "wind10m"),
     ),
     "ecmwf": SourceSpec(
@@ -1160,37 +1123,12 @@ SOURCES: dict[str, SourceSpec] = {
         core_bundle_ids=("aod",),
         video=False,
     ),
-    # NCEP CFSv2: the operational coupled climate forecast, nine months of
-    # six-hourly output from every cycle. Its surface fields arrive not as
-    # one file per frame but as one file per variable holding that
-    # variable's whole run (``time_grib_01/<name>.01.<run>.daily.grb2``,
-    # with an ``.idx`` beside it) — series-major input, which is the shape
-    # the published bundles have always wanted, so a run is fetched as a
-    # handful of very large range requests and split into frames rather
-    # than assembled a frame at a time (xuebuild/fetch.py,
-    # ``_fetch_cfs_run``). Ensemble member 01 alone: it is the only one of
-    # the four that runs the full nine months. Only the 00Z and 12Z cycles
-    # are published (``cycle_hours`` 12, as on IFS HRES) — twice a day is
-    # as often as a seasonal forecast is worth rebuilding.
-    #
-    # The horizon is a calendar, not a count: a run ends at the first 00Z
-    # of the tenth calendar month after its cycle, which is 6564 to 6888
-    # hours depending on the date. A source carries one axis, so the
-    # published one is the length every 00Z / 12Z cycle reaches: 6552
-    # hours, thirty-nine weeks, 1092 frames of six hours.
-    #
-    # The series begin at the first step and the cycle's analysis sits in
-    # another file family (``6hrly_grib_01/flxf<run>...``), where the flux
-    # fields are instantaneous analysis values rather than the six-hour
-    # means every forecast frame carries and the 10 m wind pair shares one
-    # GRIB message. Rather than publish one frame of a different quantity,
-    # the source declares its axis to start at hour 6 (``first_hour``) and
-    # never fetches the analysis at all.
-    #
-    # The grid is the T126 Gaussian one (384 x 190, a 0.9375° step and
-    # GDAL's uniform latitude spacing), the same shape of grid as the
-    # sflux source's: the converter's global-longitude snap and column roll
-    # already describe it.
+    # NCEP CFSv2 member 01, nine months of six-hourly output from the 00Z
+    # and 12Z cycles, fetched as one series-major object per variable
+    # (docs/contribution/sources.md, "cfs"). The horizon is a calendar, not
+    # a count: a run ends at the first 00Z of the tenth calendar month after
+    # its cycle (6564 to 6888 hours), and a source carries one axis, so the
+    # published one is what every cycle reaches: 6552 hours, 1092 frames.
     "cfs": SourceSpec(
         id="cfs",
         manifest_model="CFSv2",
@@ -1321,28 +1259,12 @@ SOURCES: dict[str, SourceSpec] = {
         cadence_seconds=360,
         video=False,
     ),
-    # NOAA MRMS (Multi-Radar Multi-Sensor): the national radar mosaic over
-    # the contiguous United States, already merged and quality-controlled,
-    # a composite every two minutes on a regular 0.01° grid, public domain,
-    # on its own bucket about a minute behind real time. An observation
-    # source like the CMA mosaic, but fetched: one whole gzipped GRIB per
-    # product per frame, no ``.idx`` and no byte ranges (``xuebuild/fetch.py``
-    # lists the day's directory and takes the frames of the window). The
-    # composite reflectivity is published under the mosaic's ``cref`` and the
-    # precipitation rate under ``prate``, each through the registry's
-    # alternate for the MRMS-local identity (discipline 209), with the
-    # product's out-of-coverage and no-echo sentinels folded to the codebook
-    # bottom. The 7000 x 3500 grid is thinned two to one by block maximum
-    # (``Downsample``) onto 0.02°, which is 6.1 M cells a frame — measured
-    # 2026-09-13 on a convective evening at about 420 KB a frame raw and
-    # half that against the previous frame, so a three-hour window is tens
-    # of megabytes. Its frames are stamped a jittered forty seconds past each
-    # two-minute mark and snapped to the mark (``cadence_seconds``). A build
-    # names the window's first hour as its run; the live feed is a rolling
-    # window — ``--run latest`` is the window whose last hour holds the
-    # bucket's newest frame — rebuilt every few minutes into a round
-    # subdirectory of the run (``build-bin --round``), and the pointer names
-    # the round (.github/workflows/publish-mrms.yml).
+    # NOAA MRMS: the radar mosaic over the contiguous United States, a
+    # composite every two minutes at 0.01°, fetched as a rolling window of
+    # whole gzipped GRIBs (docs/contribution/sources.md, "mrms"). The
+    # 7000 x 3500 grid is thinned two to one by block maximum onto 0.02°:
+    # about 420 KB a frame raw on a convective evening, half that against
+    # the previous frame, so a three-hour window is tens of megabytes.
     "mrms": SourceSpec(
         id="mrms",
         manifest_model="NOAA-MRMS",
@@ -1454,8 +1376,8 @@ SOURCES: dict[str, SourceSpec] = {
         bundle_composite_ids=("dustrgb", "dustcf"),
         core_bundle_ids=("ir104",),
         # The platform's region at 0.04°: 120° x 120° is 3000 x 3000 cells,
-        # 9 M a frame, 4.6 MB quantized and compressed (measured 2026-09-17
-        # on six slots: an infrared image has texture everywhere, and cloud
+        # 9 M a frame, 4.6 MB quantized and compressed (an infrared image
+        # has texture everywhere, and cloud
         # motion between ten-minute frames leaves the temporal residual
         # little to save).
         production_grid=(3000, 3000),
