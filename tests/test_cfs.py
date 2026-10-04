@@ -64,7 +64,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from unittest import mock
 
-import numpy as np
 
 from xuebuild import binconvert, fetch as fetchmod, grib2, native, quantize, zstdcli
 from xuebuild.binconvert import (

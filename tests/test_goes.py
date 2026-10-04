@@ -13,7 +13,6 @@ byte-identical when the installed wheel knows the source.
 
 from __future__ import annotations
 
-import dataclasses
 import filecmp
 import json
 import os
@@ -44,7 +43,7 @@ from xuebuild.fetch import (
 from xuebuild.manifest import validate_bin_manifest
 from xuebuild.model import GfsRun
 from xuebuild.quantize import PROFILES
-from xuebuild.satellite import GOES_EAST, GOES_WEST, HIMAWARI, PLATFORMS, assemble
+from xuebuild.satellite import GOES_EAST, GOES_WEST, HIMAWARI, assemble
 from xuebuild.satellite import fetch as satellite_fetch
 from xuebuild.satellite.producers import PRODUCERS
 from xuebuild.satellite.projector import TargetGrid
