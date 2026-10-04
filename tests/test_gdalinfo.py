@@ -11,12 +11,11 @@ wrong.
 So these tests diff the two sources field by field over a real GRIB fixture,
 and check that the selection follows `XUE_ENCODER` so a run never mixes them.
 
-The comparison cases skip unless both sources are actually present — which
-means a wheel new enough to carry `gdal_info`, not merely one installed: the
-published wheel can lag this working tree, and CI sits in exactly that state
-between a version bump and its release. The selection cases run either way,
-because that logic is what decides whether a build quietly needs a system
-GDAL it was not given.
+The comparison cases skip unless both sources are present: the wheel
+(every one the `xuepy` pin admits carries `gdal_info` and reports the
+coordinate system) and `gdalinfo` on PATH. The selection cases run either
+way, because that logic is what decides whether a build quietly needs a
+system GDAL it was not given.
 """
 
 from __future__ import annotations
@@ -28,7 +27,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from tests._support import requires_gdalinfo
+from tests._support import requires_gdalinfo, requires_native
 from xuebuild import gdal, native
 from xuebuild.errors import ConversionError
 
@@ -43,22 +42,6 @@ FIXTURE_PROJECTED_GRIB = REPOSITORY_ROOT / "tests" / "fixtures" / "hrrr.20260911
 BAND_KEYS = ("band", "description", "unit", "scale", "offset", "noDataValue")
 
 
-def wheel_can_inspect() -> bool:
-    """Whether the resolved wheel is new enough to inspect.
-
-    Not the same question as `native.available()`. A wheel predating
-    `gdal_info` still converts, so it is "available", but inspection falls
-    back to the CLI — which is the state CI sits in whenever the pin admits a
-    published wheel older than the working tree.
-    """
-    return native.available() and hasattr(native.require(), "gdal_info")
-
-
-requires_native_info = unittest.skipUnless(
-    wheel_can_inspect(), "the installed xuepy wheel has no gdal_info"
-)
-
-
 def cli_info(path: Path) -> dict:
     result = subprocess.run(
         ["gdalinfo", "-json", str(path)], capture_output=True, text=True, check=True
@@ -66,7 +49,7 @@ def cli_info(path: Path) -> dict:
     return json.loads(result.stdout)
 
 
-@requires_native_info
+@requires_native
 @requires_gdalinfo
 class NativeMatchesTheCommandLine(unittest.TestCase):
     """Both GDALs, one fixture, the same answers."""
@@ -112,13 +95,7 @@ class NativeMatchesTheCommandLine(unittest.TestCase):
                 )
 
 
-def wheel_reports_coordinate_systems() -> bool:
-    """Whether the resolved wheel reports `coordinateSystem` — newer again
-    than `gdal_info` itself, and what a projected source (HRRR) needs."""
-    return wheel_can_inspect() and "coordinateSystem" in native.require().gdal_info(str(FIXTURE_GRIB))
-
-
-@unittest.skipUnless(wheel_reports_coordinate_systems(), "the installed xuepy wheel reports no coordinate system")
+@requires_native
 @requires_gdalinfo
 class CoordinateSystemMatchesTheCommandLine(unittest.TestCase):
     """The WKT is what tells a projected grid from a regular one, so the two
@@ -143,7 +120,7 @@ class CoordinateSystemMatchesTheCommandLine(unittest.TestCase):
         self.assertEqual(through_wheel.resample.source, through_cli.resample.source)
 
 
-@requires_native_info
+@requires_native
 @requires_gdalinfo
 class InspectionAgreesThroughEitherSource(unittest.TestCase):
     """The frames xuebuild derives, not just the JSON underneath them."""
@@ -178,29 +155,15 @@ class TheSourceFollowsTheEncoderSelection(unittest.TestCase):
         with mock.patch.dict(os.environ, {"XUE_ENCODER": "python"}):
             self.assertIsNone(gdal._native_gdal_info())
 
-    @requires_native_info
+    @requires_native
     def test_native_uses_the_wheel(self) -> None:
         with mock.patch.dict(os.environ, {"XUE_ENCODER": "native"}):
             self.assertIsNotNone(gdal._native_gdal_info())
 
     def test_auto_follows_what_the_wheel_can_do(self) -> None:
-        # Whether the wheel can *inspect*, not merely whether it is
-        # installed: a wheel older than gdal_info converts natively and still
-        # inspects through the CLI.
         with mock.patch.dict(os.environ, {"XUE_ENCODER": "auto"}):
             selected = gdal._native_gdal_info()
-        self.assertEqual(selected is not None, wheel_can_inspect())
-
-    @unittest.skipUnless(
-        native.available() and not wheel_can_inspect(),
-        "needs an installed wheel that predates gdal_info",
-    )
-    def test_an_older_wheel_falls_back_rather_than_failing(self) -> None:
-        # The published wheel can lag the working tree, and the build must
-        # still run — through the CLI, with publish.yml installing gdal-bin
-        # because it asks the same question this does.
-        with mock.patch.dict(os.environ, {"XUE_ENCODER": "native"}):
-            self.assertIsNone(gdal._native_gdal_info())
+        self.assertEqual(selected is not None, native.available())
 
     def test_native_without_the_wheel_fails_at_the_first_inspection(self) -> None:
         # Rather than after fetching a whole run: the fetch path inspects
