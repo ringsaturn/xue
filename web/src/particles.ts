@@ -44,9 +44,8 @@ interface WindParticleOptions {
 }
 
 const WIND_PARTICLE_DEFAULTS: WindParticleOptions = {
-  // A quarter of what the overlay ran at when it was the whole wind layer:
-  // over the colored speed field the particles are a trace of direction, and
-  // at the old density their trails hazed the field over.
+  // Sparse: over the colored speed field the particles are a trace of
+  // direction, and any denser their trails haze the field over.
   count: 16384,
   speedFactor: 55000,
   fadeOpacity: 0.955,
@@ -102,7 +101,7 @@ float latitudeOf(vec2 pos) {
 }
 
 // Grid coordinates of a world position. The longitude offset wraps into
-// [0, 360) so a global grid indexes from -180 as before and a regional
+// [0, 360) so a global grid indexes from -180 and a regional
 // window that crosses the antimeridian stays contiguous.
 vec2 gridUv(vec2 pos) {
   float longitude = fract(pos.x) * 360.0 - 180.0;

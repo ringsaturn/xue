@@ -234,9 +234,8 @@ export const FAMILIES: Record<IsobaricFamily, FamilyInfo> = {
 
 /** Bundles the shell has chart knowledge for but deliberately writes no rail
  * tile for: the scalar primary wave direction, which is not a fill (see the
- * wave family above) and is no longer published — the wave vector is how
- * it is drawn. Reachable by URL on a run that still carries it, which gets
- * no generic tile for it either. */
+ * wave family above) — the wave vector is how it is drawn. Reachable by URL
+ * on a run that carries it, which gets no generic tile for it either. */
 export const UNTILED_BUNDLE_IDS: readonly ForecastBundleId[] = ["dirpw"];
 
 /** The family a bundle id *names*, or null for a single layer (precipitation,

@@ -466,8 +466,8 @@ function planeCacheBudgetBytes(): number {
  * recently used. The window ahead of the playhead is what has to fit: a
  * full satellite disk's Dust RGB is some 12 MB of chunks a frame, so
  * 192 MB holds the desktop window (twelve frames) with room for the pair
- * on screen, and the whole 400 MB axis no longer accumulates in the
- * worker over one pass of playback. A four-gigabyte device keeps half of
+ * on screen, rather than the whole 400 MB axis accumulating in the worker
+ * over one pass of playback. A four-gigabyte device keeps half of
  * that; a constrained connection, already on the smallest tier, needs
  * far less. */
 function zarrPayloadBudgetBytes(): number {
@@ -654,7 +654,7 @@ const COASTLINE_WIDTH: NonNullable<NonNullable<LineLayer["paint"]>["line-width"]
 const FORECAST_ANCHOR_LAYER = COASTLINE_LAYER;
 const PROTOMAPS_KEY = "249bb192fefe0a77";
 
-// maplibre-gl 6 no longer re-exports the style-spec types; take the style
+// maplibre-gl 6 does not re-export the style-spec types; take the style
 // object's type from the map options that consume it.
 type BasemapStyle = Exclude<MapOptions["style"], string | undefined>;
 type LineLayer = Extract<BasemapStyle["layers"][number], { type: "line" }>;
@@ -3405,8 +3405,7 @@ function advancePlayback(timestamp: number): void {
  *
  * Wind blends like every other field: its codes mix linearly, and taking the
  * magnitude after the mix is a blend of the two wind vectors rather than of
- * two speeds. (It used to be skipped, back when the particles were the whole
- * visual and supplied the motion between field updates themselves.) */
+ * two speeds. */
 function blendTowardNext(timestamp: number): void {
   const session = activeSession;
   const slot = primarySlot();
@@ -6253,7 +6252,7 @@ function configureSlotLayer(slot: RasterSlot, session: VariableSession, overlay:
     layer.setVectorField(field);
     layer.setPalette(vectorPalette(session));
     // Without linear codebooks on both components there is no speed to
-    // color; the overlay is then the whole layer, as it used to be.
+    // color; the particle overlay is then the whole layer.
     layer.setVisible(field !== null);
   } else {
     layer.setCompositeField(null);

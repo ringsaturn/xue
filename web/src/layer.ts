@@ -26,15 +26,15 @@ import { WHOLE_PLANE_COVERAGE, type CoverageBox } from "./tiles";
  * RG8 (u codes in red, v in green, the interleaving the particle layer
  * already builds), each channel is reconstructed on its own, and the palette
  * is looked up by speed / `maxMagnitude` instead of by code. Every scalar
- * field takes the single-channel path exactly as before.
+ * field takes the single-channel path.
  *
  * A third mode draws a colour composite: the Dust RGB arrives as three
  * planes, one per gun, already stretched by the producer, and the picture
  * is those guns as red, green and blue with no palette at all. The guns
  * are three R8 textures (the red in the data texture, the green and blue
- * in samplers of their own; never interleaved on the CPU, which cost a
- * pass over 27 MB per frame of a full satellite disk),
- * each gun reconstructed on its own through the same filter and clamp, and
+ * in samplers of their own; never interleaved on the CPU, which would cost
+ * a pass over 27 MB per frame of a full satellite disk), each gun
+ * reconstructed on its own through the same filter and clamp, and
  * a cell whose guns sit at the codebook's bottom code — outside the disk,
  * or where a channel was missing — is painted as nothing.
  *
@@ -323,7 +323,7 @@ void main() {
   float longitude = fract(v_mercator.x) * 360.0 - 180.0;
   float latitude = 90.0 - (360.0 / PI) * atan(exp((v_mercator.y * 2.0 - 1.0) * PI));
   // Degrees east of the grid origin, wrapped into [0, 360): a global grid
-  // indexes from -180 as before, and a regional window that crosses the
+  // indexes from -180, and a regional window that crosses the
   // antimeridian stays contiguous instead of splitting in two.
   float delta = mod(longitude - u_first.x, 360.0);
   float u = (delta / u_step.x + 0.5) / u_size.x;
@@ -606,8 +606,7 @@ export class ForecastLayer implements CustomLayerInterface {
   private mixWeight = 0;
   /** The part of the texture the displayed plane actually filled. */
   private coverage: CoverageBox = WHOLE_PLANE_COVERAGE;
-  /** Contour drawing, off by default: every filled field renders exactly as
-   * it did before this existed. */
+  /** Contour drawing, off by default: a filled field draws no contours. */
   private contours: ContourStyle | null = null;
   private floorNoData = false;
   /** Magnitude mode, off by default: a plane is one code per cell unless a

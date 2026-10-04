@@ -8,10 +8,8 @@
  * instrument code, the headline, the localized label, the legend's ticks,
  * the ground under it, the `?type=` spellings, the meteogram and showcase
  * codes, which rail family and which group of the field sheet it belongs
- * to — used to sit in ten tables across as many files, each keyed by the
- * bundle id, none of them the authority. This is that authority: one
- * `VariableSpec` per registered bundle id, and every one of those tables
- * derives from it. `identity.ts` reads the id ↔ identity maps off it;
+ * to — is here and nowhere else: one `VariableSpec` per registered bundle
+ * id, and every id-keyed table derives from it. `identity.ts` reads the id ↔ identity maps off it;
  * `urlstate.ts` its aliases; `meteogram.ts` and `showcase.ts` their codes;
  * `main.ts` the copy, the legend, the ground and the sheet's groups.
  *
