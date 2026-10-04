@@ -259,19 +259,6 @@ pub struct BundleMetadata {
     pub variables: Vec<VariableMetadata>,
 }
 
-impl BundleMetadata {
-    /// Seconds since the run time for each frame offset.
-    pub fn axis_seconds(&self, run_time: &str) -> Result<Vec<f64>, DecodeError> {
-        let run_ms = parse_iso(run_time)
-            .ok_or_else(|| err("metadata runTime is not an ISO 8601 instant"))?;
-        Ok(self
-            .offsets
-            .iter()
-            .map(|&offset| run_ms + f64::from(offset) * f64::from(self.unit_seconds) * 1000.0)
-            .collect())
-    }
-}
-
 /// Parse and validate a bundle metadata JSON document. Validation is the
 /// container decoder's own (`crate::decode::metadata`), so the two readers
 /// agree on what is a valid document; the geo and codebook fields the API
@@ -720,53 +707,6 @@ pub fn tile_of(layout: &ArrayLayout, row: u32, column: u32) -> Result<u32, Decod
         return Err(err("cell is outside the grid"));
     }
     Ok((row / layout.tile_height) * layout.tile_columns + column / layout.tile_width)
-}
-
-/// How many of a time chunk's frames lie on the axis; fewer than the chunk
-/// shape on the last one.
-pub fn frames_in_time_chunk(layout: &ArrayLayout, time_chunk: u32) -> u32 {
-    layout.time_chunk.min(
-        layout
-            .frame_count
-            .saturating_sub(time_chunk * layout.time_chunk),
-    )
-}
-
-/// Copy frame `frame_in_chunk` of one decoded inner chunk — stored whole at
-/// the inner shape — into a plane, trimming the padding past the grid's edge.
-/// `chunk` is `None` for a chunk the shard never held, which is the fill value
-/// throughout.
-pub fn place_tile(
-    plane: &mut [u8],
-    layout: &ArrayLayout,
-    tile: u32,
-    chunk: Option<&[u8]>,
-    frame_in_chunk: u32,
-) -> Result<(), DecodeError> {
-    let (origin_row, origin_column) = tile_origin(layout, tile);
-    let (shape_height, shape_width) = tile_shape(layout, tile);
-    let stride = (layout.tile_height as usize) * (layout.tile_width as usize);
-    for row in 0..shape_height {
-        let target =
-            ((origin_row + row) as usize) * (layout.width as usize) + origin_column as usize;
-        let width = shape_width as usize;
-        if target + width > plane.len() {
-            return Err(err("plane buffer is smaller than the grid"));
-        }
-        match chunk {
-            None => plane[target..target + width].fill(layout.fill_value),
-            Some(chunk) => {
-                let source = (frame_in_chunk as usize) * stride
-                    + (row as usize) * (layout.tile_width as usize);
-                let end = source + width;
-                if end > chunk.len() {
-                    return Err(err("inner chunk is smaller than its declared shape"));
-                }
-                plane[target..target + width].copy_from_slice(&chunk[source..end]);
-            }
-        }
-    }
-    Ok(())
 }
 
 // -- time ----------------------------------------------------------------------
