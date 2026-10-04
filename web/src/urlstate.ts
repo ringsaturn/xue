@@ -246,6 +246,52 @@ export function searchWithParticles(search: string, particles: boolean): string 
   return `?${params.toString()}`;
 }
 
+/** How the map is drawn: on the flat Web Mercator plane or on the globe,
+ * and whether the ground is lifted into 3D relief (with how much vertical
+ * exaggeration). Camera-like rather than a choice of layer, so it lives
+ * beside the view, not in it — the map itself holds it. */
+export interface SceneState {
+  globe: boolean;
+  /** Vertical exaggeration of the 3D terrain, or null for a flat ground. */
+  terrain: number | null;
+}
+
+/** The exaggeration `?terrain=on` means: enough that a mountain range reads
+ * as one from a pitched camera, not so much that a ridge spikes. */
+export const DEFAULT_TERRAIN_EXAGGERATION = 1.5;
+const MAX_TERRAIN_EXAGGERATION = 10;
+
+/** `?projection=globe` draws the globe (anything else, the plane);
+ * `?terrain=on` lifts the ground at the default exaggeration and
+ * `?terrain=<number>` at that one, up to ten. */
+export function parseSceneFromSearch(search: string): SceneState {
+  const params = new URLSearchParams(search);
+  const globe = params.get("projection")?.trim().toLowerCase() === "globe";
+  const value = params.get("terrain")?.trim().toLowerCase();
+  let terrain: number | null = null;
+  if (value !== undefined) {
+    const number = Number(value);
+    if (value !== "" && Number.isFinite(number) && number > 0) {
+      terrain = Math.min(number, MAX_TERRAIN_EXAGGERATION);
+    } else if (SWITCH_ALIASES[value] === true) {
+      terrain = DEFAULT_TERRAIN_EXAGGERATION;
+    }
+  }
+  return { globe, terrain };
+}
+
+/** The given query string carrying the scene; the plane and a flat ground
+ * write nothing. */
+export function searchWithScene(search: string, scene: SceneState): string {
+  const params = new URLSearchParams(search);
+  if (scene.globe) params.set("projection", "globe");
+  else params.delete("projection");
+  if (scene.terrain === null) params.delete("terrain");
+  else if (Math.abs(scene.terrain - DEFAULT_TERRAIN_EXAGGERATION) < 1e-6) params.set("terrain", "on");
+  else params.set("terrain", String(Math.round(scene.terrain * 10) / 10));
+  return `?${params.toString()}`;
+}
+
 /** Accepted spellings for a pinned resolution tier. Matching is
  * case-insensitive. */
 const RESOLUTION_ALIASES: Record<string, ResolutionPreference> = {

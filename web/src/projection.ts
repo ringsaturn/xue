@@ -1,0 +1,375 @@
+import type { CustomRenderMethodInput, Map as MaplibreMap } from "maplibre-gl";
+
+/**
+ * Where the custom layers put a point of the world on screen: on a flat
+ * Web Mercator plane, on the globe, or on either draped over the map's 3D
+ * terrain.
+ *
+ * MapLibre hands a custom layer the projection as GLSL (`projectTile`,
+ * `projectTileFor3D`) plus the uniforms that drive it, and both change with
+ * the projection, so a layer's vertex stage is compiled per projection
+ * variant and cached by `variantName`. Every layer here addresses the world
+ * in Mercator units, [0, 1] across and down, and the default projection data
+ * is built for exactly that: `projectTile(mercator)` works unchanged on the
+ * plane and on the sphere.
+ *
+ * Terrain is the map's own: the raster-dem source the hillshade already
+ * draws, turned on with `map.setTerrain`. A custom layer is never draped by
+ * MapLibre (only the raster-like layers render to the terrain's textures),
+ * so a layer that should lie on the ground draws itself once per terrain
+ * tile, with that tile's DEM texture and the same bilinear elevation lookup
+ * MapLibre's own terrain mesh uses — so the field sits on the very surface
+ * the basemap is drawn on, and the depth the terrain left behind hides what
+ * a ridge hides. `Map.terrain` and its tile manager are typed but internal,
+ * so they are read through the narrow structural types below and every
+ * missing piece falls back to the flat path rather than throwing.
+ */
+
+/** Tile-local units a projection matrix for one tile expects. */
+export const TILE_EXTENT = 8192;
+
+const EARTH_CIRCUMFERENCE_M = 40075016.7;
+
+/** The projection uniforms MapLibre's prelude declares. */
+export const PROJECTION_UNIFORM_NAMES = [
+  "u_projection_matrix",
+  "u_projection_fallback_matrix",
+  "u_projection_tile_mercator_coords",
+  "u_projection_clipping_plane",
+  "u_projection_transition",
+] as const;
+
+/** The terrain uniforms the surface vertex and fragment stages declare. */
+export const TERRAIN_UNIFORM_NAMES = [
+  "u_tile",
+  "u_terrain",
+  "u_terrain_dim",
+  "u_terrain_matrix",
+  "u_terrain_unpack",
+  "u_terrain_exaggeration",
+  "u_dem_texel_meters",
+  "u_depth",
+] as const;
+
+/** Elevation in metres (times the exaggeration) at a tile-local position,
+ * MapLibre's `get_elevation` under names of our own: the DEM is a RGBA8
+ * texture with a one-texel border, and the unpack vector turns its bytes back
+ * into metres whatever the encoding (Terrarium or Mapbox). */
+export const TERRAIN_VERTEX_GLSL = `
+uniform highp sampler2D u_terrain;
+uniform float u_terrain_dim;
+uniform mat4 u_terrain_matrix;
+uniform vec4 u_terrain_unpack;
+uniform float u_terrain_exaggeration;
+float surfaceTexel(ivec2 at) {
+  vec4 rgb = (texelFetch(u_terrain, at, 0) * 255.0) * u_terrain_unpack;
+  return rgb.r + rgb.g + rgb.b - u_terrain_unpack.a;
+}
+// DEM texel coordinates of a tile-local position (0..8192).
+vec2 surfaceDemCoord(vec2 tilePosition) {
+  return (u_terrain_matrix * vec4(tilePosition, 0.0, 1.0)).xy * u_terrain_dim + 1.0;
+}
+float surfaceElevation(vec2 coord) {
+  vec2 f = fract(coord);
+  ivec2 c = ivec2(floor(coord));
+  ivec2 hi = textureSize(u_terrain, 0) - 1;
+  float tl = surfaceTexel(clamp(c, ivec2(0), hi));
+  float tr = surfaceTexel(clamp(c + ivec2(1, 0), ivec2(0), hi));
+  float bl = surfaceTexel(clamp(c + ivec2(0, 1), ivec2(0), hi));
+  float br = surfaceTexel(clamp(c + ivec2(1, 1), ivec2(0), hi));
+  return mix(mix(tl, tr, f.x), mix(bl, br, f.x), f.y) * u_terrain_exaggeration;
+}
+`;
+
+/** The terrain's depth, packed into RGBA by MapLibre's depth pass: whether a
+ * clip-space position is behind the terrain surface already drawn. The
+ * same test MapLibre's symbols fade behind hills with. */
+export const TERRAIN_DEPTH_GLSL = `
+uniform highp sampler2D u_depth;
+bool surfaceOccluded(vec4 clip) {
+  vec3 frag = clip.xyz / clip.w;
+  highp float stored = dot(texture(u_depth, frag.xy * 0.5 + 0.5), vec4(1.0) / vec4(256.0 * 256.0 * 256.0, 256.0 * 256.0, 256.0, 1.0));
+  return stored + 0.0001 - frag.z < -0.002;
+}
+`;
+
+/** Relief shading for a fragment on the terrain: the slope under it, read
+ * from the same DEM with linear filtering (the encodings are linear in their
+ * bytes, so filtering each byte filters the elevation), lit from the
+ * north-west the way a printed relief map is. 1.0 is a flat surface. */
+export const TERRAIN_SHADE_GLSL = `
+uniform highp sampler2D u_terrain;
+uniform vec4 u_terrain_unpack;
+uniform float u_terrain_exaggeration;
+uniform float u_dem_texel_meters;
+float surfaceSample(vec2 coord) {
+  vec4 rgb = (texture(u_terrain, coord / vec2(textureSize(u_terrain, 0))) * 255.0) * u_terrain_unpack;
+  return rgb.r + rgb.g + rgb.b - u_terrain_unpack.a;
+}
+float surfaceShade(vec2 coord) {
+  float east = surfaceSample(coord + vec2(1.0, 0.0)) - surfaceSample(coord - vec2(1.0, 0.0));
+  float south = surfaceSample(coord + vec2(0.0, 1.0)) - surfaceSample(coord - vec2(0.0, 1.0));
+  float run = 2.0 * u_dem_texel_meters / max(u_terrain_exaggeration, 1.0);
+  // (east, north, up): a texel row runs south.
+  vec3 normal = normalize(vec3(-east / run, south / run, 1.0));
+  vec3 light = normalize(vec3(-1.0, 1.0, 1.4));
+  float lambert = max(dot(normal, light), 0.0);
+  return clamp(0.42 + 0.78 * lambert / dot(vec3(0.0, 0.0, 1.0), light), 0.35, 1.25);
+}
+`;
+
+/** Insert `#define`s after the `#version` line a shader opens with. */
+export function withDefines(source: string, defines: readonly string[]): string {
+  if (!defines.length) return source;
+  const newline = source.indexOf("\n");
+  return `${source.slice(0, newline + 1)}${defines.map((name) => `#define ${name}\n`).join("")}${source.slice(newline + 1)}`;
+}
+
+/** The vertex prelude for this frame's projection, with its defines. */
+export function projectionPrelude(args: CustomRenderMethodInput): string {
+  return `${args.shaderData.vertexShaderPrelude}\n${args.shaderData.define}\n`;
+}
+
+export function isGlobe(args: CustomRenderMethodInput): boolean {
+  return args.shaderData.define.includes("GLOBE");
+}
+
+type ProjectionDataLike = {
+  mainMatrix: ArrayLike<number>;
+  fallbackMatrix: ArrayLike<number>;
+  tileMercatorCoords: ArrayLike<number>;
+  clippingPlane: ArrayLike<number>;
+  projectionTransition: number;
+};
+
+function f32(values: ArrayLike<number>): Float32Array {
+  return values instanceof Float32Array ? values : new Float32Array(Array.from(values));
+}
+
+export function setProjectionUniforms(
+  gl: WebGL2RenderingContext,
+  uniforms: Record<string, WebGLUniformLocation | null>,
+  data: ProjectionDataLike,
+): void {
+  if (uniforms.u_projection_matrix) gl.uniformMatrix4fv(uniforms.u_projection_matrix, false, f32(data.mainMatrix));
+  if (uniforms.u_projection_fallback_matrix) {
+    gl.uniformMatrix4fv(uniforms.u_projection_fallback_matrix, false, f32(data.fallbackMatrix));
+  }
+  const tile = data.tileMercatorCoords;
+  if (uniforms.u_projection_tile_mercator_coords) {
+    gl.uniform4f(uniforms.u_projection_tile_mercator_coords, tile[0] ?? 0, tile[1] ?? 0, tile[2] ?? 1, tile[3] ?? 1);
+  }
+  const plane = data.clippingPlane;
+  if (uniforms.u_projection_clipping_plane) {
+    gl.uniform4f(uniforms.u_projection_clipping_plane, plane[0] ?? 0, plane[1] ?? 0, plane[2] ?? 0, plane[3] ?? 0);
+  }
+  if (uniforms.u_projection_transition) gl.uniform1f(uniforms.u_projection_transition, data.projectionTransition);
+}
+
+/** One terrain tile a layer draws itself over. */
+export interface SurfaceTile {
+  /** The tile's Mercator origin (wrap included) and its side. */
+  x: number;
+  y: number;
+  size: number;
+  projection: ProjectionDataLike;
+  dem: WebGLTexture;
+  depth: WebGLTexture;
+  demDim: number;
+  demMatrix: ArrayLike<number>;
+  demUnpack: ArrayLike<number>;
+  exaggeration: number;
+  /** Ground metres one DEM texel spans, at the tile's middle latitude. */
+  demTexelMeters: number;
+}
+
+interface TileIdLike {
+  wrap: number;
+  canonical: { x: number; y: number; z: number };
+}
+interface TerrainLike {
+  tileManager?: { getRenderableTiles?: () => Array<{ tileID: TileIdLike }> };
+  getTerrainData?: (tileID: TileIdLike) => {
+    u_terrain_dim: number;
+    u_terrain_matrix: ArrayLike<number>;
+    u_terrain_unpack: ArrayLike<number>;
+    u_terrain_exaggeration: number;
+    texture: WebGLTexture;
+    depthTexture: WebGLTexture;
+    tile?: { tileID?: TileIdLike; dem?: { dim?: number } } | null;
+  };
+}
+
+/** The terrain tiles on screen, each with what drawing over it takes, or
+ * null when the map has no terrain (or MapLibre no longer exposes it the way
+ * this reads it — the layer then stays flat). */
+export function surfaceTiles(map: MaplibreMap, args: CustomRenderMethodInput): SurfaceTile[] | null {
+  const terrain = (map as unknown as { terrain?: TerrainLike | null }).terrain;
+  const renderable = terrain?.tileManager?.getRenderableTiles?.();
+  if (!terrain?.getTerrainData || !renderable) return null;
+  const globe = isGlobe(args);
+  const tiles: SurfaceTile[] = [];
+  for (const { tileID } of renderable) {
+    const { x, y, z } = tileID.canonical;
+    const count = 2 ** z;
+    const data = terrain.getTerrainData(tileID);
+    const projection = args.getProjectionData({
+      tileID: { wrap: tileID.wrap, canonical: { x, y, z } },
+      applyGlobeMatrix: globe,
+    }) as unknown as ProjectionDataLike;
+    const sourceZ = data.tile?.tileID?.canonical.z ?? z;
+    const middle = (y + 0.5) / count;
+    const latitude = Math.atan(Math.sinh(Math.PI * (1 - 2 * middle)));
+    tiles.push({
+      x: x / count + tileID.wrap,
+      y: y / count,
+      size: 1 / count,
+      projection,
+      dem: data.texture,
+      depth: data.depthTexture,
+      demDim: data.u_terrain_dim,
+      demMatrix: data.u_terrain_matrix,
+      demUnpack: data.u_terrain_unpack,
+      exaggeration: data.u_terrain_exaggeration,
+      demTexelMeters: (EARTH_CIRCUMFERENCE_M * Math.cos(latitude)) / 2 ** sourceZ / Math.max(1, data.u_terrain_dim),
+    });
+  }
+  return tiles;
+}
+
+/** Bind one terrain tile's projection and DEM. The DEM goes on `demUnit`
+ * (read through `linearSampler` when given, so the texture's own NEAREST —
+ * which MapLibre relies on — is left alone), the terrain depth on
+ * `depthUnit` when the program reads it. */
+export function bindSurfaceTile(
+  gl: WebGL2RenderingContext,
+  uniforms: Record<string, WebGLUniformLocation | null>,
+  tile: SurfaceTile,
+  demUnit: number,
+  linearSampler: WebGLSampler | null,
+  depthUnit: number | null,
+): void {
+  setProjectionUniforms(gl, uniforms, tile.projection);
+  if (uniforms.u_tile) gl.uniform4f(uniforms.u_tile, tile.x, tile.y, tile.size, 0);
+  gl.activeTexture(gl.TEXTURE0 + demUnit);
+  gl.bindTexture(gl.TEXTURE_2D, tile.dem);
+  gl.bindSampler(demUnit, linearSampler);
+  if (uniforms.u_terrain) gl.uniform1i(uniforms.u_terrain, demUnit);
+  if (uniforms.u_terrain_dim) gl.uniform1f(uniforms.u_terrain_dim, tile.demDim);
+  if (uniforms.u_terrain_matrix) gl.uniformMatrix4fv(uniforms.u_terrain_matrix, false, f32(tile.demMatrix));
+  const unpack = tile.demUnpack;
+  if (uniforms.u_terrain_unpack) {
+    gl.uniform4f(uniforms.u_terrain_unpack, unpack[0] ?? 0, unpack[1] ?? 0, unpack[2] ?? 0, unpack[3] ?? 0);
+  }
+  if (uniforms.u_terrain_exaggeration) gl.uniform1f(uniforms.u_terrain_exaggeration, tile.exaggeration);
+  if (uniforms.u_dem_texel_meters) gl.uniform1f(uniforms.u_dem_texel_meters, tile.demTexelMeters);
+  if (depthUnit !== null && uniforms.u_depth) {
+    gl.activeTexture(gl.TEXTURE0 + depthUnit);
+    gl.bindTexture(gl.TEXTURE_2D, tile.depth);
+    gl.uniform1i(uniforms.u_depth, depthUnit);
+  }
+}
+
+/** A linear sampler for reading a DEM smoothly without touching the
+ * texture's own filter state. */
+export function createLinearSampler(gl: WebGL2RenderingContext): WebGLSampler | null {
+  const sampler = gl.createSampler();
+  gl.samplerParameteri(sampler, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.samplerParameteri(sampler, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.samplerParameteri(sampler, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.samplerParameteri(sampler, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  return sampler;
+}
+
+/** A grid of `columns` x `rows` cells over the unit square, as two
+ * triangles per cell. `rowAt` places row `j` (0..rows) on the vertical
+ * axis, which lets the world mesh space its rows by latitude. */
+export function gridMesh(
+  columns: number,
+  rows: number,
+  rowAt: (row: number) => number = (row) => row / rows,
+): { positions: Float32Array; indices: Uint32Array } {
+  const positions = new Float32Array((columns + 1) * (rows + 1) * 2);
+  for (let row = 0; row <= rows; row += 1) {
+    const y = rowAt(row);
+    for (let column = 0; column <= columns; column += 1) {
+      const at = (row * (columns + 1) + column) * 2;
+      positions[at] = column / columns;
+      positions[at + 1] = y;
+    }
+  }
+  const indices = new Uint32Array(columns * rows * 6);
+  let at = 0;
+  for (let row = 0; row < rows; row += 1) {
+    for (let column = 0; column < columns; column += 1) {
+      const a = row * (columns + 1) + column;
+      const b = a + 1;
+      const c = a + columns + 1;
+      const d = c + 1;
+      // The diagonal MapLibre's terrain mesh splits a cell along, so a
+      // tile mesh and the terrain's are the same triangles.
+      indices.set([a, c, d, a, d, b], at);
+      at += 6;
+    }
+  }
+  return { positions, indices };
+}
+
+/** Positions at or past this mark a skirt vertex: the edge vertex it hangs
+ * from, plus `SKIRT_OFFSET` on both axes. */
+export const SKIRT_OFFSET = 10;
+
+/** A tile mesh with skirts: `gridMesh` plus a wall hanging down from each
+ * edge, so where a tile meets a neighbour of another level of detail the
+ * gap between their edges shows the field's own colour rather than the
+ * basemap under it — what MapLibre's terrain mesh does for the same seam. */
+export function skirtedTileMesh(size: number): { positions: Float32Array; indices: Uint32Array } {
+  const grid = gridMesh(size, size);
+  const edge: number[] = [];
+  for (let column = 0; column < size; column += 1) edge.push(column);
+  for (let row = 0; row < size; row += 1) edge.push(row * (size + 1) + size);
+  for (let column = size; column > 0; column -= 1) edge.push(size * (size + 1) + column);
+  for (let row = size; row > 0; row -= 1) edge.push(row * (size + 1));
+  const base = grid.positions.length / 2;
+  const positions = new Float32Array(grid.positions.length + edge.length * 2);
+  positions.set(grid.positions);
+  edge.forEach((vertex, at) => {
+    positions[(base + at) * 2] = grid.positions[vertex * 2]! + SKIRT_OFFSET;
+    positions[(base + at) * 2 + 1] = grid.positions[vertex * 2 + 1]! + SKIRT_OFFSET;
+  });
+  const indices = new Uint32Array(grid.indices.length + edge.length * 6);
+  indices.set(grid.indices);
+  let at = grid.indices.length;
+  for (let index = 0; index < edge.length; index += 1) {
+    const next = (index + 1) % edge.length;
+    const a = edge[index]!;
+    const b = edge[next]!;
+    const c = base + index;
+    const d = base + next;
+    indices.set([a, c, b, b, c, d], at);
+    at += 6;
+  }
+  return { positions, indices };
+}
+
+/** Mercator y of a latitude, unclamped: the globe's polar caps lie past
+ * [0, 1], where the plane never shows and the sphere still does. */
+export function mercatorYUnclamped(latitude: number): number {
+  const phi = (latitude * Math.PI) / 180;
+  return 0.5 - Math.log(Math.tan(Math.PI / 4 + phi / 2)) / (2 * Math.PI);
+}
+
+/** Rows of the world mesh, spaced evenly in latitude from pole to pole (a
+ * hair short of each, where Mercator y is infinite), so the sphere stays
+ * round at the poles and the plane is not over-tessellated at its edges. */
+export function worldRowAt(rows: number): (row: number) => number {
+  const limit = 89.9;
+  return (row) => mercatorYUnclamped(limit - (2 * limit * row) / rows);
+}
+
+/** Cells per side of the terrain's own tile mesh, which a layer draping
+ * itself over a tile matches. */
+export function terrainMeshSize(map: MaplibreMap): number {
+  const size = (map as unknown as { terrain?: { meshSize?: number } | null }).terrain?.meshSize;
+  return typeof size === "number" && size > 0 ? size : 128;
+}

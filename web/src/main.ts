@@ -9,8 +9,10 @@ import "./style.css";
 import { layers as basemapLayers, namedFlavor } from "@protomaps/basemaps";
 import {
   GeoJSONSource,
+  GlobeControl,
   Map as MaplibreMap,
   NavigationControl,
+  TerrainControl,
   Marker,
   Popup,
   setWorkerUrl,
@@ -36,7 +38,14 @@ import {
 import { createSheet, mountLanguagePicker } from "./sheet";
 import { formatBytes, formatPointDegrees, formatRegion } from "./format";
 import { dataBaseUrl } from "./site";
-import { ForecastLayer, MAX_NAMED_CONTOURS, type CompositeField, type ContourStyle, type VectorField, type FramePlanes } from "./layer";
+import {
+  ForecastLayer,
+  MAX_NAMED_CONTOURS,
+  type CompositeField,
+  type ContourStyle,
+  type FramePlanes,
+  type VectorField,
+} from "./layer";
 import {
   DERIVED_MAX_CODE,
   frontPalette,
@@ -130,7 +139,11 @@ import {
   parseExperimentFromSearch,
   parseModelFromSearch,
   parseResolutionFromSearch,
+  parseSceneFromSearch,
   parseUseH264FromSearch,
+  searchWithScene,
+  DEFAULT_TERRAIN_EXAGGERATION,
+  type SceneState,
   type StationsUrlState,
 } from "./urlstate";
 import {
@@ -232,7 +245,14 @@ import {
   type TileGeometry,
   type TileRect,
 } from "./tiles";
-import { demElevationAt, TERRAIN_ATTRIBUTION, TERRAIN_MAX_ZOOM, TERRAIN_SOURCE, TERRAIN_TILES } from "./terrain";
+import {
+  demElevationAt,
+  TERRAIN_ATTRIBUTION,
+  TERRAIN_MAX_ZOOM,
+  TERRAIN_MESH_SOURCE,
+  TERRAIN_SOURCE,
+  TERRAIN_TILES,
+} from "./terrain";
 import { applyPageMeta } from "./pagemeta";
 import {
   caseCameraLimits,
@@ -730,6 +750,12 @@ function buildBasemapStyle(): BasemapStyle {
         maxzoom: TERRAIN_MAX_ZOOM,
         attribution: TERRAIN_ATTRIBUTION,
       },
+      [TERRAIN_MESH_SOURCE]: {
+        type: "raster-dem",
+        tiles: TERRAIN_TILES,
+        encoding: "terrarium",
+        maxzoom: TERRAIN_MAX_ZOOM,
+      },
     },
     // The flavor's landcover layer repaints the whole landmass in its own
     // near-black tones, defeating the per-variable earth color — drop it so
@@ -858,8 +884,44 @@ const map = new MaplibreMap({
   hash: "map",
   attributionControl: false,
   style: appliedBasemapStyle,
+  // Steep enough to look along a valley once the ground is in 3D relief.
+  maxPitch: 85,
 });
 map.addControl(new NavigationControl({ showCompass: false }), "top-right");
+
+/** The scene a link opened with: plane or globe, flat ground or relief.
+ * The map holds it from here on (its own controls toggle both), and the
+ * address bar reads it back off the map (`currentScene`). */
+const urlScene = parseSceneFromSearch(window.location.search);
+/** Whether the map holds the scene yet; until then the link's is the one. */
+let sceneApplied = false;
+map.addControl(new GlobeControl(), "top-right");
+map.addControl(
+  new TerrainControl({ source: TERRAIN_MESH_SOURCE, exaggeration: urlScene.terrain ?? DEFAULT_TERRAIN_EXAGGERATION }),
+  "top-right",
+);
+
+function currentScene(): SceneState {
+  if (!sceneApplied) return urlScene;
+  return {
+    globe: map.getProjection()?.type === "globe",
+    terrain: map.getTerrain()?.exaggeration ?? null,
+  };
+}
+
+/** Put the link's scene on the map once the style (and the relief source in
+ * it) exists, then keep the address bar following the map's controls. */
+function applySceneFromUrl(): void {
+  if (urlScene.globe) map.setProjection({ type: "globe" });
+  if (urlScene.terrain !== null) map.setTerrain({ source: TERRAIN_MESH_SOURCE, exaggeration: urlScene.terrain });
+  sceneApplied = true;
+  map.on("projectiontransition", syncUrl);
+  map.on("terrain", () => {
+    syncUrl();
+    syncZoomCeiling();
+  });
+  syncZoomCeiling();
+}
 
 type StyleProperties = Record<string, unknown> | undefined;
 type PaintName = Parameters<typeof map.setPaintProperty>[1];
@@ -4984,8 +5046,9 @@ function syncUrl(): void {
     { model: selectedModelId, caseId: activeCase?.id ?? null, experimentEnabled, particlesChosen },
     DEFAULT_VARIABLE,
   );
-  if (search === window.location.search) return;
-  window.history.replaceState(null, "", `${window.location.pathname}${search}${window.location.hash}`);
+  const withScene = searchWithScene(search, currentScene());
+  if (withScene === window.location.search) return;
+  window.history.replaceState(null, "", `${window.location.pathname}${withScene}${window.location.hash}`);
 }
 
 /** Absolute artifact URL, resolved against the run manifest's own URL
@@ -6489,7 +6552,10 @@ function applyZoomCeiling(session: VariableSession): void {
  * costs nothing. */
 function syncZoomCeiling(): void {
   const marks = view.marks.stations.soundings || view.marks.stations.airports;
-  const ceiling = Math.max(dataZoomCeiling, marks && activeCase === null ? STATION_MAX_ZOOM : 0);
+  // In 3D relief the ground carries detail the grid does not, so the camera
+  // may go as deep as the DEM does.
+  const relief = sceneApplied && map.getTerrain() ? TERRAIN_MAX_ZOOM : 0;
+  const ceiling = Math.max(dataZoomCeiling, marks && activeCase === null ? STATION_MAX_ZOOM : 0, relief);
   if (map.getMaxZoom() === ceiling) return;
   map.setMaxZoom(ceiling);
   // The navigation control greys its + only on zoom events, so a ceiling
@@ -7667,6 +7733,7 @@ map.once("load", () => {
   // A theme or language picked while the style was still loading was built
   // into nothing; the sync is a no-op otherwise, and applies the ground.
   syncBasemapStyle();
+  applySceneFromUrl();
   // A link that fixed the view is opened on that view; every other opens
   // on the dataset's own region.
   void initialize({ frame: urlCamera === null });

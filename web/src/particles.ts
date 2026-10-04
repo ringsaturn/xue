@@ -1,8 +1,19 @@
-import type { CustomLayerInterface, Map as MaplibreMap } from "maplibre-gl";
+import type { CustomLayerInterface, CustomRenderMethodInput, Map as MaplibreMap } from "maplibre-gl";
 
 import { DOMAIN_GLSL, DOMAIN_UNIFORM_NAMES, setDomainUniforms, type LambertDomain } from "./domain";
 import { t } from "./i18n";
-import { extractMatrix } from "./layer";
+import {
+  bindSurfaceTile,
+  isGlobe,
+  projectionPrelude,
+  PROJECTION_UNIFORM_NAMES,
+  setProjectionUniforms,
+  surfaceTiles,
+  TERRAIN_DEPTH_GLSL,
+  TERRAIN_UNIFORM_NAMES,
+  TERRAIN_VERTEX_GLSL,
+  withDefines,
+} from "./projection";
 import type { BundleMetadata, LinearQuantization } from "./manifest";
 import { WIND_COMPONENT_IDS, type BundleVariable, type DataVariableId } from "./manifest";
 import { mercatorY } from "./mercator";
@@ -55,6 +66,12 @@ const WIND_PARTICLE_DEFAULTS: WindParticleOptions = {
 };
 
 const EARTH_CIRCUMFERENCE_M = 40075016.7;
+
+/** Where the point pass reads its particle index from, in every variant. */
+const INDEX_ATTRIBUTE = 0;
+/** Units 0..2 carry the state, wind and palette; the terrain rides above. */
+const DEM_TEXTURE_UNIT = 3;
+const DEPTH_TEXTURE_UNIT = 4;
 
 const QUAD_VERTEX_SHADER = `#version 300 es
 in vec2 a_pos;
@@ -187,8 +204,19 @@ void main() {
   out_color = vec4(fract(pos * 255.0), floor(pos * 255.0) / 255.0);
 }`;
 
-const DRAW_VERTEX_SHADER = `#version 300 es
+// Through MapLibre's projection prelude, so particles fly over the plane or
+// the globe alike. With XUE_TERRAIN the pass is drawn once per terrain tile
+// (projection.ts): a particle outside the tile is sent off clip space, one
+// inside is lifted onto the tile's DEM, and one the terrain's depth says is
+// behind a ridge reads as calm, which the fragment stage leaves undrawn.
+// u_tile is a world copy's offset in the flat pass and the tile's Mercator
+// origin and side on the terrain.
+// MapLibre's prelude declares PI already.
+const PI_DECLARATION = /const float PI\s*=[^;]*;/;
+function drawVertexShader(prelude: string): string {
+  return `#version 300 es
 precision highp float;
+${prelude}
 in float a_index;
 uniform sampler2D u_particles;
 uniform sampler2D u_wind;
@@ -200,11 +228,14 @@ uniform vec2 u_size;
 uniform float u_wrap;
 uniform float u_particles_res;
 uniform float u_point_size;
-uniform float u_world_offset;
-uniform mat4 u_matrix;
+uniform vec4 u_tile;
 uniform float u_max_speed;
 out float v_speed_t;
-${WIND_SAMPLING}
+${WIND_SAMPLING.replace(PI_DECLARATION, "")}
+#ifdef XUE_TERRAIN
+${TERRAIN_VERTEX_GLSL}
+${TERRAIN_DEPTH_GLSL}
+#endif
 
 void main() {
   vec2 lookup = vec2(
@@ -216,8 +247,21 @@ void main() {
   // calm, which the fragment stage leaves undrawn.
   v_speed_t = inGrid(pos) ? clamp(length(windAt(pos)) / u_max_speed, 0.0, 1.0) : 0.0;
   gl_PointSize = u_point_size;
-  gl_Position = u_matrix * vec4(pos.x + u_world_offset, pos.y, 0.0, 1.0);
+#ifdef XUE_TERRAIN
+  vec2 local = vec2(fract(pos.x - u_tile.x), pos.y - u_tile.y) / u_tile.z;
+  if (local.x >= 1.0 || local.y < 0.0 || local.y >= 1.0) {
+    gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+    v_speed_t = 0.0;
+    return;
+  }
+  vec2 tilePosition = local * 8192.0;
+  gl_Position = projectTileFor3D(tilePosition, surfaceElevation(surfaceDemCoord(tilePosition)));
+  if (surfaceOccluded(gl_Position)) v_speed_t = 0.0;
+#else
+  gl_Position = projectTile(vec2(pos.x + u_tile.x, pos.y));
+#endif
 }`;
+}
 
 const DRAW_FRAGMENT_SHADER = `#version 300 es
 precision mediump float;
@@ -288,6 +332,8 @@ export class WindParticleLayer implements CustomLayerInterface {
 
   private updateProgram: ProgramInfo | null = null;
   private drawProgram: ProgramInfo | null = null;
+  /** The point pass per projection variant and terrain mode. */
+  private drawPrograms = new Map<string, ProgramInfo>();
   private fadeProgram: ProgramInfo | null = null;
   private screenProgram: ProgramInfo | null = null;
 
@@ -448,11 +494,7 @@ export class WindParticleLayer implements CustomLayerInterface {
       "u_rand_seed", "u_speed_factor", "u_elapsed", "u_drop_rate", "u_drop_rate_bump", "u_max_speed",
       ...DOMAIN_UNIFORM_NAMES,
     ]);
-    this.drawProgram = this.createProgram(gl, DRAW_VERTEX_SHADER, DRAW_FRAGMENT_SHADER, [
-      "u_particles", "u_wind", "u_wind_offset", "u_wind_scale", "u_first", "u_step", "u_size", "u_wrap",
-      "u_particles_res", "u_point_size", "u_world_offset", "u_matrix", "u_max_speed", "u_palette",
-      "u_ink", "u_monochrome", ...DOMAIN_UNIFORM_NAMES,
-    ]);
+    this.drawPrograms.clear();
     this.fadeProgram = this.createProgram(gl, QUAD_VERTEX_SHADER, FADE_FRAGMENT_SHADER, ["u_screen", "u_fade"]);
     this.screenProgram = this.createProgram(gl, QUAD_VERTEX_SHADER, SCREEN_FRAGMENT_SHADER, ["u_screen", "u_opacity"]);
 
@@ -474,9 +516,9 @@ export class WindParticleLayer implements CustomLayerInterface {
     const indexBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, indexBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, indices, gl.STATIC_DRAW);
-    const indexPosition = gl.getAttribLocation(this.drawProgram.program, "a_index");
-    gl.enableVertexAttribArray(indexPosition);
-    gl.vertexAttribPointer(indexPosition, 1, gl.FLOAT, false, 0, 0);
+    // Every variant of the point pass binds a_index here (drawProgramFor).
+    gl.enableVertexAttribArray(INDEX_ATTRIBUTE);
+    gl.vertexAttribPointer(INDEX_ATTRIBUTE, 1, gl.FLOAT, false, 0, 0);
     gl.bindVertexArray(null);
 
     this.framebuffer = gl.createFramebuffer();
@@ -509,6 +551,7 @@ export class WindParticleLayer implements CustomLayerInterface {
     this.gl = null;
     this.updateProgram = null;
     this.drawProgram = null;
+    this.drawPrograms.clear();
     this.fadeProgram = null;
     this.screenProgram = null;
     this.quadVertexArray = null;
@@ -521,7 +564,35 @@ export class WindParticleLayer implements CustomLayerInterface {
     this.windUploaded = false;
   }
 
-  private createProgram(gl: WebGL2RenderingContext, vertex: string, fragment: string, uniformNames: string[]): ProgramInfo {
+  /** The point pass for this frame's projection, compiled on first use. */
+  private drawProgramFor(gl: WebGL2RenderingContext, args: CustomRenderMethodInput, terrain: boolean): ProgramInfo {
+    const key = `${args.shaderData.variantName}:${terrain ? "terrain" : "flat"}`;
+    const cached = this.drawPrograms.get(key);
+    if (cached) return cached;
+    const defines = terrain ? ["XUE_TERRAIN"] : [];
+    const info = this.createProgram(
+      gl,
+      withDefines(drawVertexShader(projectionPrelude(args)), defines),
+      DRAW_FRAGMENT_SHADER,
+      [
+        "u_particles", "u_wind", "u_wind_offset", "u_wind_scale", "u_first", "u_step", "u_size", "u_wrap",
+        "u_particles_res", "u_point_size", "u_max_speed", "u_palette",
+        "u_ink", "u_monochrome", ...DOMAIN_UNIFORM_NAMES,
+        ...PROJECTION_UNIFORM_NAMES, ...TERRAIN_UNIFORM_NAMES,
+      ],
+      { a_index: INDEX_ATTRIBUTE },
+    );
+    this.drawPrograms.set(key, info);
+    return info;
+  }
+
+  private createProgram(
+    gl: WebGL2RenderingContext,
+    vertex: string,
+    fragment: string,
+    uniformNames: string[],
+    attributes: Record<string, number> = {},
+  ): ProgramInfo {
     const program = gl.createProgram();
     for (const [kind, source] of [
       [gl.VERTEX_SHADER, vertex],
@@ -536,6 +607,7 @@ export class WindParticleLayer implements CustomLayerInterface {
       }
       gl.attachShader(program, shader);
     }
+    for (const [name, location] of Object.entries(attributes)) gl.bindAttribLocation(program, location, name);
     gl.linkProgram(program);
     if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
       throw new Error(`wind program link failed: ${gl.getProgramInfoLog(program) ?? "unknown"}`);
@@ -650,14 +722,16 @@ export class WindParticleLayer implements CustomLayerInterface {
       !this.windTexture ||
       !this.stateTextures ||
       !this.updateProgram ||
-      !this.drawProgram ||
+      !this.map ||
       !this.fadeProgram ||
       !this.screenProgram
     ) {
       return;
     }
-    const matrix = extractMatrix(args);
-    if (!matrix) return;
+    const input = args as CustomRenderMethodInput;
+    if (!input?.shaderData || !input.defaultProjectionData) return;
+    const tiles = surfaceTiles(this.map, input);
+    this.drawProgram = this.drawProgramFor(gl, input, tiles !== null);
 
     const now = performance.now();
     const elapsed = this.lastFrameTime === 0 ? 0 : Math.min((now - this.lastFrameTime) / 1000, 0.1);
@@ -704,11 +778,18 @@ export class WindParticleLayer implements CustomLayerInterface {
     gl.uniform4f(draw.uniforms.u_ink!, ink?.[0] ?? 1, ink?.[1] ?? 1, ink?.[2] ?? 1, ink?.[3] ?? 1);
     gl.uniform1f(draw.uniforms.u_particles_res!, this.particleRes);
     gl.uniform1f(draw.uniforms.u_point_size!, Math.min(3, Math.max(1, 1.3 * (window.devicePixelRatio || 1))));
-    gl.uniformMatrix4fv(draw.uniforms.u_matrix!, false, matrix);
     gl.bindVertexArray(this.indexVertexArray);
-    for (const worldOffset of [-1, 0, 1]) {
-      gl.uniform1f(draw.uniforms.u_world_offset!, worldOffset);
-      gl.drawArrays(gl.POINTS, 0, this.particleCount);
+    if (tiles) {
+      for (const tile of tiles) {
+        bindSurfaceTile(gl, draw.uniforms, tile, DEM_TEXTURE_UNIT, null, DEPTH_TEXTURE_UNIT);
+        gl.drawArrays(gl.POINTS, 0, this.particleCount);
+      }
+    } else {
+      setProjectionUniforms(gl, draw.uniforms, input.defaultProjectionData);
+      for (const worldOffset of isGlobe(input) ? [0] : [-1, 0, 1]) {
+        gl.uniform4f(draw.uniforms.u_tile!, worldOffset, 0, 1, 0);
+        gl.drawArrays(gl.POINTS, 0, this.particleCount);
+      }
     }
     gl.bindVertexArray(null);
 

@@ -18,6 +18,7 @@ Storms, soundings and airports: [point-products.md](point-products.md).
 | `worker.ts`, `zarr/`, `webcodecs.ts` | The three decode channels (`.xue`, store, H.264). |
 | `tiles.ts` | Viewport to tile rectangles. |
 | `layer.ts`, `particles.ts`, `isolines.ts` + `labels.worker.ts` | Raster layer, wind particles, contour labels. |
+| `projection.ts`, `terrain.ts` | Plane / globe projection and terrain draping for the custom layers; DEM readout. |
 | `palettes.ts`, `units.ts`, `domain.ts` | Ramps, display units, regional footprints. |
 | `playback.ts`, `timeline.ts` | Frame-rate ladder and dwell; transport geometry. |
 | `probe.ts`, `meteogram.ts` | Point probe and its rows. |
@@ -118,6 +119,21 @@ and the window shrinks to fit it.
 - Particles: on by default, `?particles=off` / `localStorage`, off under
   `prefers-reduced-motion`. With them off, wind narrows to the viewport; on,
   the session takes the whole plane because particles respawn anywhere.
+- Projection and relief (`projection.ts`): the custom layers draw through
+  MapLibre's projection prelude (`projectTile`), compiled per
+  `shaderData.variantName`, so the same Mercator-addressed field lies on
+  the plane (a pole-to-pole mesh, three world copies) or the globe (one
+  copy). With `map.setTerrain` on, MapLibre does not drape custom layers,
+  so the field and the particles draw once per terrain tile
+  (`Map.terrain`, internal but typed; read structurally, flat fallback)
+  with that tile's DEM and the terrain's own mesh size and diagonal, so
+  the depth test against the terrain is an equality (polygon offset breaks
+  the ties, nothing is written). The field shades its own relief (the
+  hillshade under it is hidden); particles hide behind ridges through the
+  terrain's packed depth texture. Tile meshes carry skirts for LOD seams.
+  The terrain uses its own copy of the Mapterhorn source (MapLibre renders
+  hillshade and terrain worse from one). With relief on, the zoom ceiling
+  rises to the DEM's z12.
 - `playback.ts` dwells per frame so a mixed-step axis plays at one speed.
 - Regional models clip raster, particles, probe and labels to
   `FORECAST_MODELS[].domain` (`domain.ts`).
@@ -218,7 +234,7 @@ hidden and pinned models are `localStorage`.
   and showcase cards stay UTC.
 - Query state lives in `urlstate.ts` (`?model=`, `?type=`, `?lines=`,
   `?case=`, `?res=`, `?use_h264=`, `?particles=`, `?backend=`, `?x=`,
-  `?tc*=`, `?stations=`); `?lang=` in `i18n.ts`, `?theme=` in `theme.ts`.
+  `?tc*=`, `?stations=`, `?projection=`, `?terrain=`); `?lang=` in `i18n.ts`, `?theme=` in `theme.ts`.
   Unknown values fall back to defaults.
 - The camera is the fragment `#map=<zoom>/<lat>/<lon>`, so a pan never
   touches the query. `parseCameraFromHash` only says whether a link fixed

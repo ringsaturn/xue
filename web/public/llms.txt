@@ -296,6 +296,11 @@ fall back to defaults rather than fail, so a constructed link always opens.
   viewport and connection.
 - `?particles=off` — hide the wind particle animation (default on, off under
   prefers-reduced-motion).
+- `?projection=globe` — draw the map as a globe (default: the flat Web
+  Mercator plane).
+- `?terrain=on|<exaggeration>` — lift the ground into 3D relief with the
+  forecast draped over it (`on` = 1.5×, a number up to 10). Bearing and
+  pitch go in the camera fragment: `#map=<zoom>/<lat>/<lon>/<bearing>/<pitch>`.
 - `?lang=zh|zh-Hant|en|ja|ko|de|fr|es|pt|tr|ru` and `?theme=light|dark` —
   otherwise the browser's language and colour scheme decide.
 - `?tc=<storm id>` — focus one tropical cyclone (an ATCF id such as

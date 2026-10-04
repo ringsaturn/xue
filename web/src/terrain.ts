@@ -20,6 +20,11 @@
  * z12; the finer archives Mapterhorn publishes are regional, so the readout
  * samples the ceiling that covers everywhere. */
 export const TERRAIN_SOURCE = "mapterhorn";
+/** The same tiles again, as the source the 3D terrain is built from:
+ * MapLibre renders a hillshade and a terrain mesh better from two sources
+ * than from one (it warns when they share), and the browser's HTTP cache
+ * fetches each tile once either way. */
+export const TERRAIN_MESH_SOURCE = "mapterhorn-mesh";
 const TERRAIN_TILE_URL = "https://tiles.mapterhorn.com/{z}/{x}/{y}.webp";
 export const TERRAIN_TILES = [TERRAIN_TILE_URL];
 export const TERRAIN_MAX_ZOOM = 12;

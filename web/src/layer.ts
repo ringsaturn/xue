@@ -1,9 +1,27 @@
-import type { CustomLayerInterface, Map as MaplibreMap } from "maplibre-gl";
+import type { CustomLayerInterface, CustomRenderMethodInput, Map as MaplibreMap } from "maplibre-gl";
 
 import { DOMAIN_GLSL, DOMAIN_UNIFORM_NAMES, setDomainUniforms, type LambertDomain } from "./domain";
 import type { LongitudeBand } from "./mosaic";
 import { t } from "./i18n";
 import type { BundleMetadata } from "./manifest";
+import {
+  bindSurfaceTile,
+  createLinearSampler,
+  gridMesh,
+  isGlobe,
+  projectionPrelude,
+  PROJECTION_UNIFORM_NAMES,
+  setProjectionUniforms,
+  SKIRT_OFFSET,
+  skirtedTileMesh,
+  surfaceTiles,
+  terrainMeshSize,
+  TERRAIN_SHADE_GLSL,
+  TERRAIN_UNIFORM_NAMES,
+  TERRAIN_VERTEX_GLSL,
+  withDefines,
+  worldRowAt,
+} from "./projection";
 import { WHOLE_PLANE_COVERAGE, type CoverageBox } from "./tiles";
 
 /**
@@ -62,9 +80,10 @@ import { WHOLE_PLANE_COVERAGE, type CoverageBox } from "./tiles";
  * original codes.
  */
 
-// Exported so a headless WebGL2 test can compile and sample the real shader:
-// the antimeridian seam this clips at is a pixel-level property no
-// application-level test sees.
+// Exported so a headless WebGL2 test can compile and sample the real
+// fragment shader through a plain matrix: the antimeridian seam it clips at
+// is a pixel-level property no application-level test sees. The map draws
+// through `surfaceVertexShader` instead.
 export const VERTEX_SHADER = `#version 300 es
 in vec2 a_position;
 uniform mat4 u_matrix;
@@ -74,9 +93,47 @@ void main() {
   gl_Position = u_matrix * vec4(a_position, 0.0, 1.0);
 }`;
 
+/** The map pass as the map draws it: through MapLibre's projection prelude,
+ * so the same field lies on the plane or on the globe, and — with
+ * XUE_TERRAIN — once per terrain tile, lifted onto that tile's DEM
+ * (projection.ts). `u_tile` places the mesh in Mercator units: a world copy's
+ * offset with side 1 for the world mesh, a tile's origin and side
+ * otherwise. */
+export function surfaceVertexShader(prelude: string): string {
+  return `#version 300 es
+${prelude}
+in vec2 a_position;
+uniform vec4 u_tile;
+out vec2 v_mercator;
+#ifdef XUE_TERRAIN
+${TERRAIN_VERTEX_GLSL}
+uniform float u_dem_texel_meters;
+out vec2 v_dem;
+#endif
+void main() {
+#ifdef XUE_TERRAIN
+  // A skirt vertex (projection.ts) hangs below the edge vertex it copies.
+  bool skirt = a_position.x >= ${SKIRT_OFFSET - 1}.0;
+  vec2 position = skirt ? a_position - ${SKIRT_OFFSET}.0 : a_position;
+  v_mercator = u_tile.xy + position * u_tile.z;
+  vec2 tilePosition = position * 8192.0;
+  v_dem = surfaceDemCoord(tilePosition);
+  float drop = skirt ? u_terrain_dim * u_dem_texel_meters * 0.02 * u_terrain_exaggeration : 0.0;
+  gl_Position = projectTileFor3D(tilePosition, surfaceElevation(v_dem) - drop);
+#else
+  v_mercator = u_tile.xy + a_position * u_tile.z;
+  gl_Position = projectTile(v_mercator);
+#endif
+}`;
+}
+
 export const FRAGMENT_SHADER = `#version 300 es
 precision highp float;
 in vec2 v_mercator;
+#ifdef XUE_TERRAIN
+in vec2 v_dem;
+${TERRAIN_SHADE_GLSL}
+#endif
 uniform sampler2D u_data;
 uniform sampler2D u_data_b;
 // The green and blue guns of a composite, one R8 texture each beside the
@@ -410,6 +467,11 @@ void main() {
     color.a *= u_fill_alpha;
     color = mix(color, u_line_color, lines);
   }
+#ifdef XUE_TERRAIN
+  // Over 3D terrain the field hides the hillshade beneath it, so it carries
+  // the relief itself.
+  color.rgb = min(color.rgb * surfaceShade(v_dem), vec3(1.0));
+#endif
   out_color = vec4(color.rgb * color.a, color.a);
 }`;
 
@@ -595,6 +657,14 @@ export class ForecastLayer implements CustomLayerInterface {
   private slots: [FrameSlot, FrameSlot] | null = null;
   private paletteTexture: WebGLTexture | null = null;
   private uniforms: Record<string, WebGLUniformLocation | null> = {};
+  /** The map pass compiled per projection variant and terrain mode, since
+   * MapLibre's prelude differs between them (projection.ts). */
+  private surfacePrograms = new Map<string, { program: WebGLProgram; uniforms: Record<string, WebGLUniformLocation | null> }>();
+  /** Pole-to-pole mesh of one world copy, and the mesh one terrain tile is
+   * drawn with: both are positions in the unit square plus indices. */
+  private worldMesh: { vertexArray: WebGLVertexArrayObject; count: number } | null = null;
+  private tileMesh: { vertexArray: WebGLVertexArrayObject; count: number; size: number } | null = null;
+  private demSampler: WebGLSampler | null = null;
   // The smoothing pass: its program, the texture the horizontal pass writes
   // and the vertical one reads, and the framebuffer both draw through.
   private smoothProgram: WebGLProgram | null = null;
@@ -687,28 +757,19 @@ export class ForecastLayer implements CustomLayerInterface {
     }
     this.map = map;
     this.gl = gl;
-    const program = buildProgram(gl, VERTEX_SHADER, FRAGMENT_SHADER);
-    this.program = program;
-    for (const name of [
-      "u_matrix", "u_data", "u_data_b", "u_green", "u_blue", "u_green_b", "u_blue_b", "u_palette", "u_first", "u_step", "u_size",
-      "u_mix", "u_wrap", "u_cover", "u_decode", "u_floor_nodata", "u_contour", "u_contour_values",
-      "u_contour_value_count", "u_line_color", "u_fill_alpha",
-      "u_vector", "u_vector_offset", "u_vector_scale", "u_vector_max", "u_vector_nodata",
-      "u_composite", "u_composite_offset", "u_composite_scale",
-      ...DOMAIN_UNIFORM_NAMES,
-      "u_band",
-    ]) {
-      this.uniforms[name] = gl.getUniformLocation(program, name);
-    }
+    this.surfacePrograms.clear();
+    this.worldMesh = { ...uploadMesh(gl, gridMesh(WORLD_MESH_COLUMNS, WORLD_MESH_ROWS, worldRowAt(WORLD_MESH_ROWS))) };
+    this.tileMesh = null;
+    this.demSampler = createLinearSampler(gl);
+    this.program = null;
     const smoothProgram = buildProgram(gl, SMOOTH_VERTEX_SHADER, SMOOTH_FRAGMENT_SHADER);
     this.smoothProgram = smoothProgram;
     for (const name of ["u_source", "u_size", "u_axis", "u_wrap", "u_cover", "u_radius", "u_weights"]) {
       this.smoothUniforms[name] = gl.getUniformLocation(smoothProgram, name);
     }
 
-    // One quad spanning three world copies so wrapped views stay covered.
-    // Both programs bind a_position to attribute 0, so the smoothing pass
-    // draws the same array; its clip space keeps the middle copy.
+    // The smoothing pass draws one quad; its clip space keeps the [0, 1]
+    // part. (The map pass draws the meshes above.)
     this.vertexArray = gl.createVertexArray();
     gl.bindVertexArray(this.vertexArray);
     const buffer = gl.createBuffer();
@@ -782,6 +843,10 @@ export class ForecastLayer implements CustomLayerInterface {
     this.gl = null;
     this.map = null;
     this.program = null;
+    this.surfacePrograms.clear();
+    this.worldMesh = null;
+    this.tileMesh = null;
+    this.demSampler = null;
     this.smoothProgram = null;
     this.slots = null;
     this.scratchTexture = null;
@@ -1021,11 +1086,48 @@ export class ForecastLayer implements CustomLayerInterface {
     gl.viewport(previousViewport[0]!, previousViewport[1]!, previousViewport[2]!, previousViewport[3]!);
   }
 
+  /** The map pass for this frame's projection, compiled on first use. */
+  private surfaceProgram(
+    gl: WebGL2RenderingContext,
+    args: CustomRenderMethodInput,
+    terrain: boolean,
+  ): { program: WebGLProgram; uniforms: Record<string, WebGLUniformLocation | null> } {
+    const key = `${args.shaderData.variantName}:${terrain ? "terrain" : "flat"}`;
+    const cached = this.surfacePrograms.get(key);
+    if (cached) return cached;
+    const defines = terrain ? ["XUE_TERRAIN"] : [];
+    const program = buildProgram(
+      gl,
+      withDefines(surfaceVertexShader(projectionPrelude(args)), defines),
+      withDefines(FRAGMENT_SHADER, defines),
+    );
+    const uniforms: Record<string, WebGLUniformLocation | null> = {};
+    for (const name of [...MAP_UNIFORM_NAMES, ...PROJECTION_UNIFORM_NAMES, ...TERRAIN_UNIFORM_NAMES]) {
+      uniforms[name] = gl.getUniformLocation(program, name);
+    }
+    const built = { program, uniforms };
+    this.surfacePrograms.set(key, built);
+    return built;
+  }
+
+  /** The mesh one terrain tile is drawn with, at the terrain's own mesh
+   * resolution so the field's triangles are the terrain's triangles and the
+   * depth test against it is an equality, not a race. */
+  private ensureTileMesh(gl: WebGL2RenderingContext, size: number): { vertexArray: WebGLVertexArrayObject; count: number } {
+    if (this.tileMesh?.size === size) return this.tileMesh;
+    this.tileMesh = { ...uploadMesh(gl, skirtedTileMesh(size)), size };
+    return this.tileMesh;
+  }
+
   render(gl: WebGLRenderingContext | WebGL2RenderingContext, args: unknown): void {
     if (!(gl instanceof WebGL2RenderingContext)) return;
-    if (!this.visible || !this.program || !this.slots || !this.hasFrame || !this.pendingPalette) return;
-    const matrix = extractMatrix(args);
-    if (!matrix) return;
+    if (!this.visible || !this.map || !this.worldMesh || !this.slots || !this.hasFrame || !this.pendingPalette) return;
+    const input = args as CustomRenderMethodInput;
+    if (!input?.shaderData || !input.defaultProjectionData) return;
+    const tiles = surfaceTiles(this.map, input);
+    const surface = this.surfaceProgram(gl, input, tiles !== null);
+    this.program = surface.program;
+    this.uniforms = surface.uniforms;
 
     // A slot reads through its smoothed texture only when that is current;
     // prerender runs first in the same frame, so it is, but a raw plane is
@@ -1035,7 +1137,6 @@ export class ForecastLayer implements CustomLayerInterface {
       key !== null && slot.smoothedPlane === slot.plane && slot.smoothedKey === key ? slot.smooth : slot.raw;
 
     gl.useProgram(this.program);
-    gl.uniformMatrix4fv(this.uniforms.u_matrix!, false, matrix);
     gl.uniform2f(this.uniforms.u_first!, this.firstLongitude, this.firstLatitude);
     gl.uniform2f(this.uniforms.u_step!, this.longitudeStep, this.latitudeStep);
     gl.uniform2f(this.uniforms.u_size!, this.width, this.height);
@@ -1109,10 +1210,75 @@ export class ForecastLayer implements CustomLayerInterface {
 
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-    gl.bindVertexArray(this.vertexArray);
-    gl.drawArrays(gl.TRIANGLES, 0, 6);
+    gl.disable(gl.CULL_FACE);
+    if (tiles) {
+      // On the terrain: the field's triangles coincide with the terrain's,
+      // so the depth it left decides what a ridge hides, and a nudge toward
+      // the camera settles the ties in the field's favour. Nothing is
+      // written, so the layers above still see the terrain's depth.
+      const mesh = this.ensureTileMesh(gl, terrainMeshSize(this.map));
+      gl.enable(gl.DEPTH_TEST);
+      gl.depthFunc(gl.LEQUAL);
+      gl.depthMask(false);
+      gl.enable(gl.POLYGON_OFFSET_FILL);
+      gl.polygonOffset(-1, -2);
+      gl.bindVertexArray(mesh.vertexArray);
+      for (const tile of tiles) {
+        bindSurfaceTile(gl, this.uniforms, tile, DEM_TEXTURE_UNIT, this.demSampler, null);
+        gl.drawElements(gl.TRIANGLES, mesh.count, gl.UNSIGNED_INT, 0);
+      }
+      gl.bindSampler(DEM_TEXTURE_UNIT, null);
+      gl.disable(gl.POLYGON_OFFSET_FILL);
+    } else {
+      // On the plane, three world copies so a wrapped view stays covered;
+      // on the globe, one, or the copies would overlap and double the blend.
+      gl.disable(gl.DEPTH_TEST);
+      setProjectionUniforms(gl, this.uniforms, input.defaultProjectionData);
+      gl.bindVertexArray(this.worldMesh.vertexArray);
+      for (const offset of isGlobe(input) ? [0] : [-1, 0, 1]) {
+        gl.uniform4f(this.uniforms.u_tile!, offset, 0, 1, 0);
+        gl.drawElements(gl.TRIANGLES, this.worldMesh.count, gl.UNSIGNED_INT, 0);
+      }
+    }
     gl.bindVertexArray(null);
   }
+}
+
+/** Columns and rows of the world mesh: fine enough that the sphere reads
+ * round and a cell of it is under a degree and a half. */
+const WORLD_MESH_COLUMNS = 256;
+const WORLD_MESH_ROWS = 128;
+
+/** Units 0..6 carry the data, palette and guns; the DEM rides above them. */
+const DEM_TEXTURE_UNIT = 7;
+
+const MAP_UNIFORM_NAMES = [
+  "u_data", "u_data_b", "u_green", "u_blue", "u_green_b", "u_blue_b", "u_palette", "u_first", "u_step", "u_size",
+  "u_mix", "u_wrap", "u_cover", "u_decode", "u_floor_nodata", "u_contour", "u_contour_values",
+  "u_contour_value_count", "u_line_color", "u_fill_alpha",
+  "u_vector", "u_vector_offset", "u_vector_scale", "u_vector_max", "u_vector_nodata",
+  "u_composite", "u_composite_offset", "u_composite_scale",
+  ...DOMAIN_UNIFORM_NAMES,
+  "u_band",
+];
+
+/** A mesh from `gridMesh` on the GPU, positions at attribute 0. */
+export function uploadMesh(
+  gl: WebGL2RenderingContext,
+  mesh: { positions: Float32Array; indices: Uint32Array },
+): { vertexArray: WebGLVertexArrayObject; count: number } {
+  const vertexArray = gl.createVertexArray();
+  gl.bindVertexArray(vertexArray);
+  const positions = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, positions);
+  gl.bufferData(gl.ARRAY_BUFFER, mesh.positions, gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(POSITION_ATTRIBUTE);
+  gl.vertexAttribPointer(POSITION_ATTRIBUTE, 2, gl.FLOAT, false, 0, 0);
+  const indices = gl.createBuffer();
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indices);
+  gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, mesh.indices, gl.STATIC_DRAW);
+  gl.bindVertexArray(null);
+  return { vertexArray, count: mesh.indices.length };
 }
 
 /** Attribute index both programs bind `a_position` to, so one vertex array
