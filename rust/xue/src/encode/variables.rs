@@ -311,7 +311,7 @@ pub const SURFACE_TEMPERATURE_IDS: &[&str] = &["tmp2m", "dpt2m", "aptmp2m", "tmp
 
 /// The fields that do not vary in time — the model terrain. Only the
 /// analysis frame is fetched and read, and the bundle carries a one-frame
-/// axis. Mirrors `STATIC_VARIABLE_IDS` in `xuebuild/variables.py`.
+/// axis. Mirrors `VariableSpec.static` in `xuebuild/variables.py`.
 pub const STATIC_VARIABLE_IDS: &[&str] = &["orog"];
 
 /// Whether a published variable is time-invariant (`STATIC_VARIABLE_IDS`).

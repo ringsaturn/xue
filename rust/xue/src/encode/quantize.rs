@@ -252,7 +252,7 @@ const COMPACT_REFLECTIVITY: LinearCodebook = LinearCodebook {
 // The satellite infrared window: brightness temperature from 180 K (also
 // what the cells outside the disk become) to 331.8 K at 0.6 K, the full
 // code space; the compact profile doubles the step and stops a code short.
-// Mirrors `QUALITY_BRIGHTNESS_TEMPERATURE` in `xuebuild/quantize.py`.
+// Mirrors `_brightness_temperature("ir104")` in `xuebuild/quantize.py`.
 const QUALITY_BRIGHTNESS_TEMPERATURE: LinearCodebook = LinearCodebook {
     minimum: 180.0,
     maximum: 331.8,
