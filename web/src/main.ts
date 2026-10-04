@@ -29,15 +29,11 @@ import {
   basemapLang,
   htmlLang,
   locale,
-  localeHtmlLang,
-  LOCALES,
   onLocaleChange,
-  setLocale,
   t,
-  type Locale,
   type MessageKey,
 } from "./i18n";
-import { createSheet, fillLanguageList } from "./sheet";
+import { createSheet, mountLanguagePicker } from "./sheet";
 import { formatPointDegrees, formatRegion } from "./format";
 import { dataBaseUrl } from "./site";
 import { ForecastLayer, MAX_NAMED_CONTOURS, type CompositeField, type ContourStyle, type VectorField, type FramePlanes } from "./layer";
@@ -1090,11 +1086,9 @@ const tcSheetControl = createSheet({
   canOpen: () => tcLoaded !== null && activeCase === null,
 });
 
-const langSheetControl = createSheet({
-  trigger: langTrigger,
-  sheet: langSheet,
-  initialFocus: (sheet) => sheet.querySelector<HTMLButtonElement>("button[aria-current]"),
-});
+/** The language picker; `renderLanguageList` rebuilds its rows after a
+ * switch so the check moves. */
+const renderLanguageList = mountLanguagePicker(langTrigger, langSheet, required<HTMLElement>("lang-list"));
 
 /** The field sheet: every field the run publishes, hung from the rail's
  * MORE tile; its rows are written by `renderFieldSheet` whenever the run
@@ -1105,19 +1099,6 @@ const fieldSheetControl = createSheet({
   canOpen: () => manifest !== null && !switchingVariable,
   initialFocus: (sheet) => sheet.querySelector<HTMLButtonElement>('button[aria-pressed="true"]'),
 });
-/** The picker's rows, with the language in force checked; rebuilt after a
- * switch so the check moves. */
-function renderLanguageList(): void {
-  fillLanguageList(required<HTMLElement>("lang-list"), LOCALES, {
-    current: locale,
-    htmlLang: localeHtmlLang,
-    onPick: (next: Locale) => {
-      langSheetControl.close();
-      setLocale(next);
-    },
-  });
-}
-renderLanguageList();
 
 interface DecodedFrame {
   plane: Uint8Array;
