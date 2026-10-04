@@ -50,8 +50,8 @@ from .variables import VARIABLES
 LOG = logging.getLogger(__name__)
 # GFS objects (pgrb2 and sflux, including .idx files) are mirrored bit-for-bit
 # on several clouds. Google's mirror serves through its global edge and is
-# dramatically faster than the us-east-1 AWS bucket from East Asia (measured
-# 2026-08-18: ~2.7 MB/s vs ~0.6 MB/s), so it is the default; override with
+# dramatically faster than the us-east-1 AWS bucket from East Asia (about
+# 2.7 MB/s against 0.6 MB/s), so it is the default; override with
 # XUE_GFS_BASE_URL (e.g. https://noaa-gfs-bdp-pds.s3.amazonaws.com).
 BASE_URL = os.environ.get(
     "XUE_GFS_BASE_URL", "https://storage.googleapis.com/global-forecast-system"
@@ -66,8 +66,8 @@ GEFS_BASE_URL = os.environ.get(
 # HRRR is mirrored the same way (registry.opendata.aws/noaa-hrrr-pds), and
 # neither copy of a cycle fills in a whole run at once: the hours land one
 # by one, not always in order, and one mirror can hold an hour the other
-# does not yet (seen 2026-09-12: f002 on Google, not on S3, then the other
-# way round). So a frame is fetched from the first mirror that has it, and a
+# does not yet (an hour on Google and not on S3, or the other way round).
+# So a frame is fetched from the first mirror that has it, and a
 # cycle is complete only when one mirror has every hour of it.
 HRRR_BASE_URLS = tuple(
     url.strip().rstrip("/")
@@ -99,7 +99,7 @@ ECMWF_REQUEST_INTERVAL = float(os.environ.get("XUE_ECMWF_REQUEST_INTERVAL", "0.7
 # Mirrors that answer bursts without throttling, so the pacing below does not
 # apply to them. Google's copy took the whole 22-record set of eight frames
 # four frames at a time — 184 range requests in one burst — with every
-# response a 206 (measured 2026-09-11); the S3 bucket and data.ecmwf.int are
+# response a 206; the S3 bucket and data.ecmwf.int are
 # the ones that answer 503 Slow Down, and stay paced.
 ECMWF_UNPACED_BASE_URLS = tuple(
     url.strip().rstrip("/")

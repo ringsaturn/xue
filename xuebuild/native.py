@@ -11,8 +11,7 @@ Two things the native encoder does not do, and this module supplies:
 
 * the optional H.264 companions. It writes bundles, so the codes it wrote can
   be read straight back out of them with the decoder the same wheel carries,
-  and handed to the existing ffmpeg encoder. That keeps the video artifacts on
-  the Python side, where they started, without re-extracting anything.
+  and handed to the existing ffmpeg encoder, without re-extracting anything.
 * the optional Zarr stores (`build-bin --zarr`). Like the video, they are
   derived from the bundles just written, by the same `zarrstore.export_bundle`
   the Python path calls on its own bundles, so both paths' stores are the
@@ -93,11 +92,9 @@ def knows_source(model: str) -> bool:
     is enough to ask, and nothing is read or written. What a test that
     needs a wheel at least as new as some source skips on, and what the
     scheduled builds ask before taking the native path. A source whose
-    shape changes takes a new id for the same reason (the CMA mosaic went
-    from ``radar``, a local file, to ``cma``, a fetched window): a wheel
-    that knows the old id must not be taken for one that knows the new
-    shape; a source that gains a bundle (the Dust RGB on Himawari) is
-    caught by the bundle list."""
+    shape changes takes a new id for the same reason: a wheel that knows
+    the old id must not be taken for one that knows the new shape; a source
+    that gains a bundle is caught by the bundle list."""
     if not available():
         return False
     try:

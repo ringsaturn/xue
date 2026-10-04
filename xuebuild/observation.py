@@ -1,53 +1,14 @@
-"""Gridded observation series: a NetCDF file as a run of Xue frames.
+"""Gridded series files: a NetCDF window or forecast series as a run of Xue
+frames, mirrored by ``rust/xue/src/encode/observation.rs``.
 
-A forecast source is a cycle on a bucket, fetched one record per forecast
-hour. An observation source is the opposite shape: one local file that
-already holds the whole series, one band per time, produced after the fact by
-whatever decoded the original product (for the CMA radar mosaic, the
-archive of decoded portal tiles, read back as NetCDF).
-
-This module is the ingest half of that shape. It reads each variable's band
-and dimension metadata with one ``gdalinfo`` pass and returns the same
-:class:`~xue.model.SourceFrame` list the GRIB inspectors return, so the
-converter downstream (crop, quantize, temporal grouping, container write) is
-the ordinary one. A window may carry several variables — a satellite
-window is one series file per channel and per produced component
-(:func:`series_files`) — each read with its own packing. Two things differ
-from GRIB and are carried in the returned per-variable
-:class:`~xue.model.PlaneSource`:
-
-* the values are packed, so extraction runs ``gdal_translate -unscale``;
-* points outside the instrument's coverage carry a fill value, and Xue has
-  no bitmap — the fill becomes the bottom of the variable's codebook, which
-  is the value a renderer paints as nothing.
-
-The time axis is whatever the file carries. Observation series have gaps
-(a publication missed, an outage), so the axis is *not* validated against a
-published cadence the way a forecast run's is; it only has to be strictly
-increasing on whole seconds. For a local archive file (the CMA mosaic) the
-first frame is the series' ``runTime``. For a fetched window
-(:attr:`~xuebuild.sources.SourceSpec.cadence_seconds` set: the JMA nowcast)
-the window is the axis, the same rule the MRMS frames follow
-(``binconvert._snap_observation_frames``): each time is snapped down to its
-cadence slot, the run time is the whole hour the first slot falls in — the
-hour the run id names — and a frame's offset is its slot's distance from it.
-
-**A forecast series** (``series_file`` on a source that is not an
-observation: the ECMWF IFS HRES run ``om2nc`` resamples off the Open-Meteo
-bucket, :mod:`xuebuild.om2nccli`) is read here too, and differs in three
-ways. Its run time is not its first frame but the epoch of the ``time``
-coordinate — ``hours since <cycle>`` — which is the cycle itself, so a
-variable whose series starts at the first step still carries the lead times
-of that cycle; the file's own ``forecast_reference_time`` must agree with
-it. Its variables need not all cover the axis: one the source lists under
-:attr:`~xuebuild.sources.SourceSpec.optional_at_analysis` (an interval
-total, a mean, a maximum — none of which exists at the analysis) may lack
-exactly the lead-zero frame, and each returned frame mapping then holds
-only the variables that time has. And the file may spell a unit another way
-than the registry does (:func:`accepted_series_units`). Everything
-downstream — the crop, the quantization, the temporal grouping — is the
-ordinary path, and the forecast axis itself is validated against the
-source's published steps by the converter, as any cycle's is.
+Returns the same :class:`~xue.model.SourceFrame` list the GRIB inspectors
+return, plus a per-variable :class:`~xue.model.PlaneSource` (the packing to
+unscale, the fill that becomes the codebook bottom), so the converter
+downstream is the ordinary one. An observation axis may have gaps (a missed
+publication, an outage), so it only has to be strictly increasing on whole
+seconds; the cadence snap of a fetched window and a forecast series' run time
+(the ``time`` epoch) are in ``docs/contribution/sources.md``, "The
+series-file path", and under ``ifshres``.
 """
 
 from __future__ import annotations

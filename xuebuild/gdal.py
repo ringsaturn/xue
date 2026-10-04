@@ -49,9 +49,8 @@ def _native_gdal_info() -> Any:
     """The `xuepy` wheel's `gdal_info`, or None when this build must shell out.
 
     The wheel carries its own GDAL, so a build converting through the native
-    encoder can inspect its inputs without a system `gdalinfo` on PATH — the
-    inspection pass was the last thing in the fetch-and-convert path that
-    needed one. Which source a build uses follows `XUE_ENCODER`, so a run
+    encoder can inspect its inputs without a system `gdalinfo` on PATH.
+    Which source a build uses follows `XUE_ENCODER`, so a run
     never mixes two GDAL builds: `python` shells out (it needs a system GDAL
     for `gdal_translate` regardless), `native` insists on the wheel, and
     `auto` takes the wheel when it is installed.

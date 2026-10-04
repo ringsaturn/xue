@@ -35,7 +35,7 @@ from .errors import BundleError
 
 MAGIC = b"XUE\0\0\0\0\0"
 VERSION = 1
-"""The plane-major container. Still read; no longer written."""
+"""The plane-major container. Read, never written."""
 VERSION_V2 = 2
 """The tiled container: a payload is a chunk, not a plane."""
 CONTAINER_VERSIONS = (VERSION, VERSION_V2)

@@ -1,25 +1,11 @@
-"""A run built in pieces: grouping its bundles into jobs, and putting the
-pieces back together into one manifest and the live pointer.
+"""A run built in pieces: grouping its bundles into jobs, and merging the
+jobs' partial manifests (``manifest.part.<group>.json``) into the run's
+manifest, whole or as a top-up onto the live one, before the live pointer.
 
-The scheduled publish fans a run out over one GitHub Actions job per bundle
-group (`.github/workflows/publish.yml`). Each job fetches only its own
-inputs, converts with ``bundle_ids`` restricted, uploads its artifacts to the
-run directory on R2 and leaves behind a *partial manifest* — the manifest a
-restricted build writes, holding just that group's bundles — under
-``manifest.part.<group>.json``. One finishing job collects the parts, merges
-them here into the run's real ``manifest.json`` in publication order, and
-only then writes the pointer whose CRC32 covers it. Nothing in the container
-or manifest format knows any of this happened: a bundle's bytes do not depend
-on which other bundles were built beside it (``tests/test_assemble.py`` holds
-that), and the merged manifest is exactly the one a monolithic build writes.
-
-The same independence is what makes a **top-up** sound: when the run R2
-already serves lacks bundles the source has since started publishing (a new
-variable landed between two cycles), the publish builds only the missing
-groups and merges their parts *onto* the live manifest
-(``merge_partial_manifests(..., base=...)``) instead of rebuilding the run.
-The result is again the manifest a whole build would have written, and the
-pointer flips to its new CRC32 under the same run id.
+The merged manifest is exactly the one a whole build writes, because a
+bundle's bytes do not depend on which other bundles were built beside it
+(``tests/test_assemble.py``). The fan-out is in
+``docs/contribution/pipeline.md`` under ``assemble.py``.
 """
 
 from __future__ import annotations
