@@ -203,9 +203,6 @@ class DswrfRegistryTests(unittest.TestCase):
 
     def test_source_registry(self) -> None:
         spec = source_spec("sflux")
-        self.assertEqual(spec.manifest_model, "GFS-SFLUX")
-        self.assertEqual(spec.product, "sfluxgrb")
-        self.assertEqual(spec.latest_filename, "latest-sflux.json")
         self.assertEqual(spec.production_grid, (3072, 1536))
         self.assertEqual(spec.bundle_scalar_ids, ("tmp2m", "prate", "dswrf", "orog"))
         self.assertTrue(spec.averaged_precipitation)

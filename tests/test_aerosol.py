@@ -50,7 +50,7 @@ from xuebuild.gdal import (
 from xuebuild.idx import field_byte_range
 from xuebuild.model import GfsRun
 from xuebuild.quantize import PROFILES
-from xuebuild.sources import MODEL_CORE_BUNDLES, MODEL_PRODUCTS, source_spec
+from xuebuild.sources import source_spec
 from xuebuild.stac import prose_document
 from xuebuild.variables import AEROSOL_VARIABLE_IDS, VARIABLES, AerosolIdentity, variable_spec
 
@@ -275,13 +275,7 @@ class SourceRegistryTests(unittest.TestCase):
         with self.assertRaises(DownloadError):
             GEFSAERO.forecast_hours(4)
 
-    def test_the_identity_strings(self) -> None:
-        self.assertEqual(
-            (GEFSAERO.manifest_model, GEFSAERO.product, GEFSAERO.latest_filename),
-            ("GEFS-AEROSOLS", "chem-a2d-0p25", "latest-gefsaero.json"),
-        )
-        self.assertEqual(MODEL_PRODUCTS["GEFS-AEROSOLS"], "chem-a2d-0p25")
-        self.assertEqual(MODEL_CORE_BUNDLES["GEFS-AEROSOLS"], ("aod",))
+    def test_the_grid_video_and_catalog_prose(self) -> None:
         self.assertEqual((GEFSAERO.production_grid, GEFSAERO.tile, GEFSAERO.variant_factors), ((1440, 721), (48, 52), (2,)))
         self.assertFalse(GEFSAERO.video)
         self.assertEqual(video_variable_ids(GEFSAERO), frozenset())

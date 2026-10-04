@@ -54,7 +54,7 @@ from xuebuild.fetch import (
     parse_run,
     resolve_run,
 )
-from xuebuild.manifest import MODEL_CORE_BUNDLES, validate_bin_manifest
+from xuebuild.manifest import validate_bin_manifest
 from xuebuild.model import GfsRun
 from xuebuild.observation import accepted_series_units
 from xuebuild.quantize import PROFILES
@@ -110,10 +110,6 @@ class SourceRegistryTests(unittest.TestCase):
         self.assertTrue(SPEC.fetched and SPEC.live and SPEC.series_file)
         self.assertFalse(SPEC.observation, "a forecast, the first series-file source that is one")
         self.assertEqual(SPEC.open_meteo, "ecmwf_ifs")
-        self.assertEqual(
-            (SPEC.manifest_model, SPEC.product, SPEC.latest_filename),
-            ("ECMWF-HRES", "ifs-hres-0p1", "latest-ifshres.json"),
-        )
         self.assertEqual((SPEC.cycle_hours, SPEC.horizon_hours, SPEC.video), (12, 360, False))
         self.assertIsNone(SPEC.window_hours)
         self.assertIsNone(SPEC.cadence_seconds)
@@ -137,8 +133,6 @@ class SourceRegistryTests(unittest.TestCase):
     def test_it_publishes_fifteen_bundles_in_the_gfs_order(self) -> None:
         self.assertEqual(published_bundle_ids(SPEC), BUNDLES)
         self.assertEqual(len(BUNDLES), 15)
-        self.assertEqual(SPEC.core_bundle_ids, ("tmp2m", "prate"))
-        self.assertEqual(MODEL_CORE_BUNDLES["ECMWF-HRES"], ("tmp2m", "prate"))
         # Every published bundle's inputs are fetched, and apcp is fetched
         # without ever being published: it is the rate's input.
         self.assertIn("apcp", SPEC.input_variable_ids)

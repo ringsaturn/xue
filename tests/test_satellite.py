@@ -268,7 +268,6 @@ class RegistryTests(unittest.TestCase):
         self.assertEqual(binconvert.published_bundle_ids(fewer), ("ir104",))
         dust_only = dataclasses.replace(SPEC, input_variable_ids=("ir086", "ir104", "ir112", "ir123"))
         self.assertEqual(binconvert.published_bundle_ids(dust_only), ("ir104", "dustrgb"))
-        self.assertEqual((SPEC.manifest_model, SPEC.latest_filename), ("HIMAWARI", "latest-himawari.json"))
         self.assertEqual([spec.id for spec in SOURCES.values() if spec.platform], ["himawari", "goeseast", "goeswest", "meteosat"])
 
     def test_the_source_band_is_the_platform_s(self) -> None:

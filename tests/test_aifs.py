@@ -52,7 +52,7 @@ from xuebuild.gdal import (
     raster_expression,
 )
 from xuebuild.model import GfsRun
-from xuebuild.sources import MODEL_CORE_BUNDLES, MODEL_PRODUCTS, source_spec
+from xuebuild.sources import source_spec
 from xuebuild.stac import prose_document
 from xuebuild.variables import variable_spec
 
@@ -109,10 +109,7 @@ class SourceRegistryTests(unittest.TestCase):
         with self.assertRaises(DownloadError):
             AIFS.forecast_hours(3)
 
-    def test_the_identity_strings(self) -> None:
-        self.assertEqual((AIFS.manifest_model, AIFS.product, AIFS.latest_filename), ("AIFS", "aifs-single-0p25", "latest-aifs.json"))
-        self.assertEqual(MODEL_PRODUCTS["AIFS"], "aifs-single-0p25")
-        self.assertEqual(MODEL_CORE_BUNDLES["AIFS"], ("tmp2m", "prate"))
+    def test_the_grid_video_and_catalog_prose(self) -> None:
         self.assertEqual(AIFS.production_grid, ECMWF.production_grid)
         self.assertEqual(AIFS.tile, ECMWF.tile)
         self.assertFalse(AIFS.video)

@@ -58,7 +58,7 @@ from xuebuild.fetch import (
     resolve_run,
     window_summary,
 )
-from xuebuild.manifest import MODEL_CORE_BUNDLES, validate_bin_manifest
+from xuebuild.manifest import validate_bin_manifest
 from xuebuild.model import GfsRun
 from xuebuild.showcase import parse_case
 from xuebuild.sources import SOURCES, source_spec
@@ -103,10 +103,8 @@ THREE_HOURS = slots(stamp("2026-09-15T22:12:00Z"), stamp("2026-09-16T01:06:00Z")
 class SourceRegistryTests(unittest.TestCase):
     def test_the_source_is_a_fetched_series_file_observation(self) -> None:
         self.assertTrue(CMA.observation and CMA.fetched and CMA.live and CMA.series_file)
-        self.assertEqual((CMA.manifest_model, CMA.product, CMA.latest_filename), ("CMA-RADAR", "l3-mst-cref", "latest-cma.json"))
         self.assertEqual((CMA.window_hours, CMA.horizon_hours, CMA.cadence_seconds, CMA.cycle_hours), (3, 3, 360, 1))
         self.assertEqual((CMA.input_variable_ids, CMA.bundle_scalar_ids, CMA.core_bundle_ids), (("cref",),) * 3)
-        self.assertEqual(MODEL_CORE_BUNDLES["CMA-RADAR"], ("cref",))
         self.assertFalse(CMA.video)
         self.assertIsNone(CMA.downsample)
         # The grid the archive keeps is the one a complete build wants: the

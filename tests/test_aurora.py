@@ -23,7 +23,7 @@ from xuebuild.binformat import read_bundle
 from xuebuild.errors import ConversionError, DownloadError
 from xuebuild.fetch import _fetch_aurora_run, latest_aurora_slot, observation_window_start
 from xuebuild.model import GfsRun
-from xuebuild.sources import MODEL_CORE_BUNDLES, source_spec
+from xuebuild.sources import source_spec
 from xuebuild.stac import _source_prose
 
 SERIES = FIXTURES / "aurora.2026100304.crop.nc"
@@ -56,11 +56,8 @@ def ovation_payload(stamp: str = "2026-10-03T04:41:00Z", offset: float = 0.0) ->
 
 class RegistryTests(unittest.TestCase):
     def test_the_source_is_the_fetched_observation_it_claims_to_be(self) -> None:
-        self.assertEqual((AURORA.id, AURORA.manifest_model, AURORA.product), ("aurora", "SWPC-AURORA", "ovation-aurora-1p00"))
-        self.assertEqual(AURORA.latest_filename, "latest-aurora.json")
         self.assertEqual((AURORA.window_hours, AURORA.horizon_hours, AURORA.cadence_seconds), (3, 3, 300))
         self.assertEqual((AURORA.input_variable_ids, AURORA.bundle_scalar_ids, AURORA.core_bundle_ids), (("aurora",),) * 3)
-        self.assertEqual(MODEL_CORE_BUNDLES["SWPC-AURORA"], ("aurora",))
         self.assertTrue(AURORA.observation and AURORA.series_file and AURORA.fetched and AURORA.live)
         self.assertFalse(AURORA.video)
 

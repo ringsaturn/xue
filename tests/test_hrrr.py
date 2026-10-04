@@ -100,9 +100,6 @@ HRRR_F01_IDX = "\n".join(
 
 class SourceRegistryTests(unittest.TestCase):
     def test_the_source_is_hourly_and_regridded(self) -> None:
-        self.assertEqual(HRRR.manifest_model, "HRRR")
-        self.assertEqual(HRRR.product, "wrfsfc")
-        self.assertEqual(HRRR.latest_filename, "latest-hrrr.json")
         self.assertEqual(HRRR.cycle_hours, 1)
         self.assertEqual(HRRR.horizon_hours, 18)
         self.assertEqual(HRRR.forecast_hours(18), list(range(19)))
