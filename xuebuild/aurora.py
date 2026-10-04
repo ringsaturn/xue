@@ -45,8 +45,6 @@ UTC = timezone.utc
 OVATION_URL = "https://services.swpc.noaa.gov/json/ovation_aurora_latest.json"
 #: The published grid: 181 latitudes (90°S…90°N) by 360 longitudes (0…359°E).
 GRID_SHAPE: tuple[int, int] = (181, 360)
-#: The frames are on the five-minute mark; the service refreshes that often.
-CADENCE_SECONDS = 300
 #: The frame cache under ``data/raw/``; the paired bucket prefix is
 #: ``<prefix>/aurora-frames/`` (the Makefile's ``$(MODEL)-frames``).
 FRAMES_DIRNAME = "aurora-frames"

@@ -1388,13 +1388,6 @@ VARIABLES: dict[str, VariableSpec] = {
 # also carries the two derived wave vector components.
 OCEAN_VARIABLE_IDS: tuple[str, ...] = ("tmpsfc", "icec", "icetk", "htsgw", "perpw", "dirpw")
 WAVE_VECTOR_COMPONENT_IDS: tuple[str, str] = ("uwave", "vwave")
-# The fields that do not vary in time (:attr:`VariableSpec.static`), in
-# registry order — the model terrain today. Derived rather than listed, so a
-# source's fetch and a build find them without a second table to keep in
-# step; the native encoder carries the same flag per variable.
-STATIC_VARIABLE_IDS: tuple[str, ...] = tuple(
-    variable_id for variable_id, spec in VARIABLES.items() if spec.static
-)
 # The satellite channels, the composite guns and the confidence, held to the Rust encoder
 # and the frontend by tests/fixtures/satellite-registry.json the same way.
 # The channels are what a platform's imager measures (a ``band`` block

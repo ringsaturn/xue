@@ -8,9 +8,7 @@ path rather than fail the whole build.
 
 from __future__ import annotations
 
-import re
 import shutil
-import subprocess
 
 from .errors import ConversionError
 
@@ -20,11 +18,3 @@ def require_ffmpeg() -> str:
     if not resolved:
         raise ConversionError("required command is missing: ffmpeg")
     return resolved
-
-
-def ffmpeg_version() -> str:
-    result = subprocess.run([require_ffmpeg(), "-version"], text=True, capture_output=True, check=False)
-    match = re.search(r"ffmpeg version (\S+)", result.stdout + result.stderr)
-    if result.returncode or not match:
-        raise ConversionError("could not determine ffmpeg version")
-    return match.group(1)

@@ -93,11 +93,6 @@ class System:
         if self.name is None and sighting.name:
             self.name = sighting.name
 
-    def nearest_position(self, time: datetime) -> tuple[datetime, float, float] | None:
-        if not self.positions:
-            return None
-        return min(self.positions, key=lambda item: abs((item[0] - time).total_seconds()))
-
 
 @dataclass(frozen=True)
 class PreviousSystem:
