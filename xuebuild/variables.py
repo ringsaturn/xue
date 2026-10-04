@@ -761,8 +761,8 @@ VARIABLES: dict[str, VariableSpec] = {
     # the codes a chart keys on: 0 no precipitation, 1 rain, 3 freezing rain,
     # 5 snow, 8 ice pellets (the codes between are other types GFS does not
     # report and are never written). When two flags disagree at a point —
-    # NCEP's categorical fields are mutually exclusive by construction, and a
-    # 2026-09-21 analysis has no multi-flag cell — the order rain, freezing
+    # NCEP's categorical fields are mutually exclusive by construction, and an
+    # analysis has no multi-flag cell — the order rain, freezing
     # rain, ice pellets, snow decides, each later flag overriding; both
     # encoders must share that order to stay byte-identical.
     "ptype": VariableSpec(
@@ -1086,7 +1086,7 @@ VARIABLES: dict[str, VariableSpec] = {
     # and 15; ABI channels 11, 14 and 15), the same parameter and codebook
     # as ``ir104``: registered so a source can fetch them for a composite
     # (``SourceSpec.input_variable_ids``) or publish them by a source-table
-    # line, and unpublished by every source today.
+    # line; no source publishes them.
     "ir086": VariableSpec(
         id="ir086",
         label="Brightness temperature, 8.6 µm",
