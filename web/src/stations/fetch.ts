@@ -1,15 +1,10 @@
 /** Reading the two station products off the data root: the pointer → index
- * fetch both share with the runs and the storm tracks (pointer with caching
- * disabled, index `?v=<crc32>` addressed and pointer-relative), and the one
- * range request that reads a single station out of the `.jsonl` beside the
- * index. Nothing here touches the map.
- *
- * A data root that publishes neither product is not a failure: the pointer
- * 404s and the loader resolves to null, the way `tc/tracks.ts` does, so a
- * shell deployed before the product exists asks once per poll and draws
- * nothing. */
+ * fetch (`pointerindex.ts`, null when the root publishes no such product),
+ * and the one range request that reads a single station out of the `.jsonl`
+ * beside the index. Nothing here touches the map. */
 
 import { fetchImmutable } from "../fetchimmutable";
+import { loadPointerIndex, type LoadedIndex } from "../pointerindex";
 import {
   AIRPORT_POINTER_FILENAME,
   SOUNDING_POINTER_FILENAME,
@@ -30,46 +25,11 @@ import {
   type StationFile,
 } from "./schema";
 
-interface LoadedIndex<P, I> {
-  pointer: P;
-  index: I;
-  /** Absolute index URL (with its `?v=`); the file beside it resolves
-   * against this. */
-  indexUrl: string;
-}
-
 export type LoadedSoundingIndex = LoadedIndex<SoundingPointer, SoundingIndex>;
 export type LoadedAirportIndex = LoadedIndex<AirportPointer, AirportIndex>;
 
-/** The pointer, then the index it names. Null when the root publishes no
- * such product (404, or a bucket that answers 403 for a missing key). */
-async function loadIndex<P extends { path: string; crc32: string }, I>(
-  baseUrl: string,
-  filename: string,
-  parsePointer: (input: unknown) => P,
-  parseIndex: (input: unknown) => I,
-  what: string,
-): Promise<LoadedIndex<P, I> | null> {
-  const pointerUrl = new URL(`${baseUrl}${filename}`, document.baseURI);
-  const response = await fetch(pointerUrl, { cache: "no-cache" });
-  if (response.status === 404 || response.status === 403) return null;
-  if (!response.ok)
-    throw new Error(`${what} pointer request failed: ${response.status}`);
-  const pointer = parsePointer(await response.json());
-  const indexUrl = new URL(pointer.path, new URL(baseUrl, document.baseURI));
-  indexUrl.searchParams.set("v", pointer.crc32);
-  const indexResponse = await fetchImmutable(indexUrl);
-  if (!indexResponse.ok)
-    throw new Error(`${what} index request failed: ${indexResponse.status}`);
-  return {
-    pointer,
-    index: parseIndex(await indexResponse.json()),
-    indexUrl: indexUrl.href,
-  };
-}
-
 export function fetchSoundingIndex(baseUrl: string): Promise<LoadedSoundingIndex | null> {
-  return loadIndex(
+  return loadPointerIndex(
     baseUrl,
     SOUNDING_POINTER_FILENAME,
     parseSoundingPointer,
@@ -79,7 +39,7 @@ export function fetchSoundingIndex(baseUrl: string): Promise<LoadedSoundingIndex
 }
 
 export function fetchAirportIndex(baseUrl: string): Promise<LoadedAirportIndex | null> {
-  return loadIndex(
+  return loadPointerIndex(
     baseUrl,
     AIRPORT_POINTER_FILENAME,
     parseAirportPointer,
