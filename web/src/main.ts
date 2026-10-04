@@ -38,6 +38,8 @@ import {
   type MessageKey,
 } from "./i18n";
 import { createSheet, fillLanguageList } from "./sheet";
+import { formatPointDegrees, formatRegion } from "./format";
+import { dataBaseUrl } from "./site";
 import { ForecastLayer, MAX_NAMED_CONTOURS, type CompositeField, type ContourStyle, type VectorField, type FramePlanes } from "./layer";
 import {
   DERIVED_MAX_CODE,
@@ -2487,12 +2489,6 @@ function syncCompareLink(): void {
 }
 syncCompareLink();
 
-/** A probed coordinate, at the precision a grid cell center needs. */
-function formatProbeDegrees(value: number, axis: "NS" | "EW"): string {
-  const hemisphere = axis === "NS" ? (value >= 0 ? "N" : "S") : (value >= 0 ? "E" : "W");
-  return `${Math.abs(value).toFixed(2)}°${hemisphere}`;
-}
-
 /** Decimals worth showing for a value: a linear codebook resolves exactly as
  * far as its step, and the logarithmic one resolves light rain much more
  * finely than heavy. */
@@ -2821,7 +2817,7 @@ function renderProbe(): void {
   renderProbeAirportChip();
   const point = cell ?? { longitude: series.longitude, latitude: series.latitude };
   probePanel.coords.textContent =
-    `${formatProbeDegrees(point.latitude, "NS")} ${formatProbeDegrees(point.longitude, "EW")}`;
+    `${formatPointDegrees(point.latitude, "NS")} ${formatPointDegrees(point.longitude, "EW")}`;
   renderProbeElevation(point);
   probePanel.zone.textContent = probeZone ? zoneDisplayName(probeZone, frameValidTime(activeFrameIndex ?? Number(slider.value))) : "";
   probePanel.compare.href = compareUrl(point.latitude, point.longitude);
@@ -4999,15 +4995,8 @@ function frameModelRegion(): void {
 function updateCasePresentation(showcaseCase: ShowcaseCase): void {
   caseTitle.textContent = localizedText(showcaseCase.title, locale);
   caseSummary.textContent = localizedText(showcaseCase.summary, locale);
-  const [west, south, east, north] = showcaseCase.bbox;
-  caseRegion.textContent = `${formatDegrees(north, "NS")} ${formatDegrees(west, "EW")} → ${formatDegrees(south, "NS")} ${formatDegrees(east, "EW")}`;
+  caseRegion.textContent = formatRegion(showcaseCase.bbox);
   caseBanner.hidden = false;
-}
-
-/** A bbox corner, in the compact form the instrument panel uses. */
-function formatDegrees(value: number, axis: "NS" | "EW"): string {
-  const hemisphere = axis === "NS" ? (value >= 0 ? "N" : "S") : (value >= 0 ? "E" : "W");
-  return `${Math.abs(value).toFixed(Math.abs(value) % 1 === 0 ? 0 : 1)}°${hemisphere}`;
 }
 
 /** Keep the address bar shareable: reflect the on-screen model and
@@ -5023,10 +5012,6 @@ function syncUrl(): void {
   );
   if (search === window.location.search) return;
   window.history.replaceState(null, "", `${window.location.pathname}${search}${window.location.hash}`);
-}
-
-function dataBaseUrl(): string {
-  return import.meta.env.VITE_DATA_BASE_URL || "data/";
 }
 
 /** Absolute artifact URL, resolved against the run manifest's own URL

@@ -11,6 +11,7 @@
  * and the flight categories (`VFR`) are instrument text and stay English;
  * the row labels and the valid time are the shell's. */
 
+import { formatPointDegrees } from "../format";
 import { t } from "../i18n";
 import { categoryColor } from "./layers";
 import type { AirportStation, SoundingStationEntry } from "./schema";
@@ -67,7 +68,7 @@ function position(lat: number, lon: number): HTMLElement {
   return element(
     "div",
     "station-card-position",
-    `${Math.abs(lat).toFixed(2)}°${lat >= 0 ? "N" : "S"} ${Math.abs(lon).toFixed(2)}°${lon >= 0 ? "E" : "W"}`,
+    `${formatPointDegrees(lat, "NS")} ${formatPointDegrees(lon, "EW")}`,
   );
 }
 

@@ -48,6 +48,8 @@ import { applyPageMeta } from "./pagemeta";
 import { buildPalette, precipitationColor } from "./palettes";
 import { geoGrid } from "./probe";
 import { createSheet, fillLanguageList } from "./sheet";
+import { dataBaseUrl } from "./site";
+import { formatPointDegrees, formatUtcHour } from "./format";
 import { fetchAirportIndex, fetchAirportStation } from "./stations/fetch";
 import { nearestAirport } from "./stations/nearest";
 import { cloudCoverPercent } from "./stations/observations";
@@ -237,10 +239,6 @@ if (langTrigger && langSheet && langList) {
   onLocaleChange(renderLanguageList);
 }
 
-function dataBaseUrl(): string {
-  return import.meta.env.VITE_DATA_BASE_URL || "data/";
-}
-
 function say(text: string | null, error = false): void {
   status.hidden = text === null;
   status.textContent = text ?? "";
@@ -249,18 +247,6 @@ function say(text: string | null, error = false): void {
 
 // ---------------------------------------------------------------------------
 // Formatting.
-
-function formatRun(runTime: string): string {
-  const parsed = new Date(runTime);
-  if (Number.isNaN(parsed.getTime())) return "--";
-  const pad = (item: number) => String(item).padStart(2, "0");
-  return `${parsed.getUTCFullYear()}-${pad(parsed.getUTCMonth() + 1)}-${pad(parsed.getUTCDate())} ${pad(parsed.getUTCHours())}Z`;
-}
-
-function formatDegrees(value: number, axisName: "NS" | "EW"): string {
-  const hemisphere = axisName === "NS" ? (value >= 0 ? "N" : "S") : value >= 0 ? "E" : "W";
-  return `${Math.abs(value).toFixed(2)}°${hemisphere}`;
-}
 
 function formatGridStep(step: number): string {
   const text = Math.abs(step).toFixed(3).replace(/0+$/, "").replace(/\.$/, "");
@@ -442,7 +428,7 @@ function modelBlock(result: ModelResult, ax: Axis, zone: string): HTMLElement {
   const meta: (HTMLElement | string)[] = [];
   const first = [...result.series.values()].find((series): series is PointSeries => series !== null);
   if (first) meta.push(element("span", "cmp-grid-step", formatGridStep(geoGrid(first.metadata).longitudeStep)));
-  if (result.run) meta.push(element("span", "cmp-run", `${t("compareRun")} ${formatRun(result.run.manifest.runTime)}`));
+  if (result.run) meta.push(element("span", "cmp-run", `${t("compareRun")} ${formatUtcHour(result.run.manifest.runTime)}`));
   const { section, head, grid } = blockShell(result.model, info.label, meta);
 
   const actions = element("div", "cmp-actions");
@@ -626,7 +612,7 @@ function syncUrl(): void {
 function documentTitle(): void {
   applyPageMeta({
     path: "/compare.html",
-    title: `${t("compareTitle")} · ${formatDegrees(state.latitude, "NS")} ${formatDegrees(state.longitude, "EW")}`,
+    title: `${t("compareTitle")} · ${formatPointDegrees(state.latitude, "NS")} ${formatPointDegrees(state.longitude, "EW")}`,
   });
 }
 
