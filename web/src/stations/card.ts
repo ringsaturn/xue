@@ -11,6 +11,7 @@
  * and the flight categories (`VFR`) are instrument text and stay English;
  * the row labels and the valid time are the shell's. */
 
+import { element } from "../dom";
 import { formatPointDegrees } from "../format";
 import { t } from "../i18n";
 import { categoryColor } from "./layers";
@@ -25,17 +26,6 @@ interface StationCardOptions {
    * viewer gets from a mark to the full ascent under the panel, or to the
    * airport's observations laid over the rows. Absent, no button. */
   onPin?: () => void;
-}
-
-function element<K extends keyof HTMLElementTagNameMap>(
-  tag: K,
-  className: string,
-  text?: string,
-): HTMLElementTagNameMap[K] {
-  const node = document.createElement(tag);
-  node.className = className;
-  if (text !== undefined) node.textContent = text;
-  return node;
 }
 
 /** One labelled value under the headline. A row whose value is missing is

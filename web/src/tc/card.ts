@@ -6,6 +6,7 @@
  * are instrument text and stay English; the valid time is the shell's,
  * read in its display zone. */
 
+import { element } from "../dom";
 import { t } from "../i18n";
 import { agencyColor, TC_AGENCIES } from "./agencies";
 import type { TcPointData } from "./layers";
@@ -16,17 +17,6 @@ const KNOT = 0.514444;
 interface CardOptions {
   /** The valid time, formatted the way the capsule formats one. */
   formatTime(time: string): string;
-}
-
-function element<K extends keyof HTMLElementTagNameMap>(
-  tag: K,
-  className: string,
-  text?: string,
-): HTMLElementTagNameMap[K] {
-  const node = document.createElement(tag);
-  node.className = className;
-  if (text !== undefined) node.textContent = text;
-  return node;
 }
 
 function formatLead(seconds: number): string {
