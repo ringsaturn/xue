@@ -223,7 +223,7 @@ test("bundle download failure keeps animation controls disabled", async ({ page 
 test("corrupted bundle fails checksum verification and shows an error", async ({ page }) => {
   await routeManifest(page);
   const corrupted = Buffer.from(PRATE_FIXTURE);
-  corrupted[corrupted.length - 100] ^= 0xff;
+  corrupted[corrupted.length - 100]! ^= 0xff;
   await routeBundle(page, undefined, corrupted);
   await page.goto("/");
   await expect(page.getByRole("alert")).toContainText("checksum", { timeout: 20_000 });
