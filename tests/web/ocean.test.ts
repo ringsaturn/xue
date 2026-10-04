@@ -35,10 +35,6 @@ import {
   identityForParameterPair,
 } from "../../web/src/identity";
 import { vectorMaxMagnitude } from "../../web/src/levels";
-import {
-  parseVariableFromSearch,
-  searchForVariable,
-} from "../../web/src/urlstate";
 import { registryVariable, rgba, type RegistryEntry } from "./helpers";
 
 /** The committed registry both encoders are held to (`tests/test_ocean.py`,
@@ -359,31 +355,5 @@ describe("the ocean registry", () => {
         registry.dirpw!.compact.maximumCode,
       ),
     ).toBeLessThan(360);
-  });
-
-  it("spells each layer in the URL under a short name", () => {
-    expect(parseVariableFromSearch("?type=sst")).toBe("tmpsfc");
-    expect(parseVariableFromSearch("?type=SkinTemp")).toBe("tmpsfc");
-    expect(parseVariableFromSearch("?type=seaice")).toBe("icec");
-    expect(parseVariableFromSearch("?type=ice")).toBe("icec");
-    expect(parseVariableFromSearch("?type=icethickness")).toBe("icetk");
-    expect(parseVariableFromSearch("?type=waves")).toBe("wave");
-    expect(parseVariableFromSearch("?type=wave")).toBe("wave");
-    expect(parseVariableFromSearch("?type=waveheight")).toBe("htsgw");
-    expect(parseVariableFromSearch("?type=swh")).toBe("htsgw");
-    expect(parseVariableFromSearch("?type=waveperiod")).toBe("perpw");
-    expect(parseVariableFromSearch("?type=wavedirection")).toBe("dirpw");
-    for (const [id, spelling] of [
-      ["tmpsfc", "sst"],
-      ["icec", "seaice"],
-      ["icetk", "icethickness"],
-      ["wave", "waves"],
-      ["htsgw", "waveheight"],
-      ["perpw", "waveperiod"],
-      ["dirpw", "wavedirection"],
-    ] as const) {
-      expect(searchForVariable(id, "")).toBe(`?model=gfs&type=${spelling}`);
-      expect(parseVariableFromSearch(searchForVariable(id, ""))).toBe(id);
-    }
   });
 });

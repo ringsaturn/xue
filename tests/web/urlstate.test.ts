@@ -17,6 +17,7 @@ import {
   searchWithLines,
   searchWithParticles,
 } from "../../web/src/urlstate";
+import type { KnownBundleId } from "../../web/src/manifest";
 
 describe("parseVariableFromSearch", () => {
   it("resolves the canonical type names", () => {
@@ -99,6 +100,90 @@ describe("parseVariableFromSearch", () => {
     expect(parseVariableFromSearch("?type=")).toBeNull();
     expect(parseVariableFromSearch("?model=gfs")).toBeNull();
     expect(parseVariableFromSearch("")).toBeNull();
+  });
+});
+
+describe("the fields' own ?type= spellings", () => {
+  it.each([
+    // Surface diagnostics.
+    ["?type=gust", "gust"],
+    ["?type=gusts", "gust"],
+    ["?type=cloud", "tcdc"],
+    ["?type=CloudCover", "tcdc"],
+    ["?type=tcdc", "tcdc"],
+    ["?type=cape", "cape"],
+    ["?type=cin", "cin"],
+    ["?type=inhibition", "cin"],
+    ["?type=pwat", "pwat"],
+    ["?type=precipitablewater", "pwat"],
+    ["?type=hpbl", "hpbl"],
+    ["?type=pbl", "hpbl"],
+    ["?type=ptype", "ptype"],
+    ["?type=preciptype", "ptype"],
+    ["?type=wind100m", "wind100m"],
+    ["?type=wind100", "wind100m"],
+    // Ocean.
+    ["?type=sst", "tmpsfc"],
+    ["?type=SkinTemp", "tmpsfc"],
+    ["?type=seaice", "icec"],
+    ["?type=ice", "icec"],
+    ["?type=icethickness", "icetk"],
+    ["?type=waves", "wave"],
+    ["?type=wave", "wave"],
+    ["?type=waveheight", "htsgw"],
+    ["?type=swh", "htsgw"],
+    ["?type=waveperiod", "perpw"],
+    ["?type=wavedirection", "dirpw"],
+    // Aerosol.
+    ["?type=aod", "aod"],
+    ["?type=aerosol", "aod"],
+    ["?type=AOD550", "aod"],
+    ["?type=aoddust", "aoddust"],
+    ["?type=smoke", "aodorg"],
+    ["?type=blackcarbon", "aodbc"],
+    ["?type=pm25", "pm25"],
+    ["?type=pm2p5", "pm25"],
+    ["?type=airquality", "pm25"],
+    ["?type=pm10", "pm10"],
+    ["?type=pm10dust", "pm10dust"],
+    // Satellite. The Dust RGB keeps `dust`.
+    ["?type=infrared", "ir104"],
+    ["?type=ir", "ir104"],
+    ["?type=satellite", "ir104"],
+    ["?type=ir104", "ir104"],
+    ["?type=dustrgb", "dustrgb"],
+    ["?type=dust", "dustrgb"],
+    ["?type=debra", "dustcf"],
+    ["?type=dustcf", "dustcf"],
+    ["?type=dustconfidence", "dustcf"],
+  ])("reads %s as %s", (search, id) => {
+    expect(parseVariableFromSearch(search)).toBe(id);
+  });
+
+  it.each<[KnownBundleId, string]>([
+    ["gust", "gust"],
+    ["tcdc", "cloud"],
+    ["cape", "cape"],
+    ["cin", "cin"],
+    ["pwat", "pwat"],
+    ["hpbl", "hpbl"],
+    ["ptype", "ptype"],
+    ["wind100m", "wind100m"],
+    ["tmpsfc", "sst"],
+    ["icec", "seaice"],
+    ["icetk", "icethickness"],
+    ["wave", "waves"],
+    ["htsgw", "waveheight"],
+    ["perpw", "waveperiod"],
+    ["dirpw", "wavedirection"],
+    ["aod", "aod"],
+    ["pm25", "pm25"],
+    ["ir104", "infrared"],
+    ["dustrgb", "dustrgb"],
+    ["dustcf", "debra"],
+  ])("writes %s as type=%s and reads it back", (id, spelling) => {
+    expect(searchForVariable(id, "")).toBe(`?model=gfs&type=${spelling}`);
+    expect(parseVariableFromSearch(searchForVariable(id, ""))).toBe(id);
   });
 });
 
