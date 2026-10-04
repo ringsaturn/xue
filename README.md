@@ -83,8 +83,8 @@ with HTTP Range requests.
 - **Data API**: a read-only JSON API at <https://xue-api.ringsaturn.me>
   (`/v1/catalog`, `/v1/sources/{source}`,
   `/v1/point?source=&lat=&lon=&variables=` with an optional ISO 8601
-  `time` or a pinned `run`; OpenAPI at `/openapi.json`). The site does not
-  depend on it.
+  `time` or a pinned `run`; OpenAPI at `/openapi.json`; contract in
+  [`docs/api.md`](docs/api.md)). The site does not depend on it.
 - **Decoders**: `pip install xuepy` (`import xue`) and the
   [`xue` crate](https://crates.io/crates/xue)
   ([API docs](https://ringsaturn.github.io/xue/)) read both containers.
@@ -135,7 +135,8 @@ published permanently. See [`showcase/README.md`](showcase/README.md).
 
 - Specifications: [`docs/format.md`](docs/format.md) (container and
   bundle metadata), [`docs/zarr-profile.md`](docs/zarr-profile.md),
-  [`docs/stac.md`](docs/stac.md), [`docs/encoder.md`](docs/encoder.md)
+  [`docs/stac.md`](docs/stac.md), [`docs/api.md`](docs/api.md) (data API),
+  [`docs/encoder.md`](docs/encoder.md)
   (native encoder), [`docs/satellite.md`](docs/satellite.md),
   [`docs/tc.md`](docs/tc.md), [`docs/airport.md`](docs/airport.md),
   [`docs/sounding.md`](docs/sounding.md).

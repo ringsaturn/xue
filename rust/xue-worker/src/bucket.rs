@@ -1,6 +1,7 @@
 //! Reading the published data.
 //!
-//! Two interchangeable backends, chosen by `DATA_SOURCE`:
+//! Two interchangeable backends on the Workers runtime, chosen by
+//! `DATA_SOURCE`:
 //!
 //! * `r2` (default): the `DATA` R2 binding, `get(key).range(…)` — an exact
 //!   range, no whole-object fill, deterministic on a cold object.
@@ -9,18 +10,33 @@
 //!   is empty) and as a fallback when an object is served faster from the
 //!   edge cache than from the bucket's own region.
 //!
+//! Natively there is a third, in memory, which is how the tests feed the
+//! handlers a fixture bucket and count the reads a query costs.
+//!
 //! The object layout and the resolution chain above this (`collection →
 //! pointer → manifest`) are the data contract, not the API's.
 
 use serde::de::DeserializeOwned;
+#[cfg(not(target_arch = "wasm32"))]
+use std::{cell::RefCell, collections::HashMap};
+#[cfg(target_arch = "wasm32")]
 use worker::{Bucket, Env, Fetch, Headers, Method, Range, Request, RequestInit, Url};
 
 use crate::cache;
 use crate::error::HttpError;
 
 enum Backend {
+    #[cfg(target_arch = "wasm32")]
     R2(Bucket),
+    #[cfg(target_arch = "wasm32")]
     Cdn,
+    /// Objects by key (no prefix), and the log of every read as
+    /// `(path, kind)`, kind one of `whole`, `range`, `suffix`.
+    #[cfg(not(target_arch = "wasm32"))]
+    Memory {
+        objects: HashMap<String, Vec<u8>>,
+        reads: RefCell<Vec<(String, &'static str)>>,
+    },
 }
 
 /// An explicit byte range: a known length, or a suffix with no object length.
@@ -32,6 +48,7 @@ enum ReadRange {
 /// A handle on the public dataset, with the prefix every key shares.
 pub struct Data {
     backend: Backend,
+    #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
     prefix: String,
     /// The public origin a client can read the same objects from directly;
     /// reported by `/v1/catalog` so a consumer can pin a run itself.
@@ -39,7 +56,8 @@ pub struct Data {
 }
 
 impl Data {
-    pub fn new(env: &Env) -> Result<Data, HttpError> {
+    #[cfg(target_arch = "wasm32")]
+    pub fn from_env(env: &Env) -> Result<Data, HttpError> {
         let prefix = env
             .var("DATA_PREFIX")
             .map(|value| value.to_string())
@@ -68,6 +86,28 @@ impl Data {
         })
     }
 
+    /// A bucket held in memory, keyed by path under the data root.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn in_memory(objects: HashMap<String, Vec<u8>>) -> Data {
+        Data {
+            backend: Backend::Memory {
+                objects,
+                reads: RefCell::new(Vec::new()),
+            },
+            prefix: String::new(),
+            origin: "https://dataset.example/xue/".to_owned(),
+        }
+    }
+
+    /// Every read so far, `(path, kind)`, oldest first.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn reads(&self) -> Vec<(String, &'static str)> {
+        match &self.backend {
+            Backend::Memory { reads, .. } => reads.borrow().clone(),
+        }
+    }
+
+    #[cfg(target_arch = "wasm32")]
     fn key(&self, path: &str) -> String {
         format!(
             "{}/{}",
@@ -76,6 +116,7 @@ impl Data {
         )
     }
 
+    #[cfg(target_arch = "wasm32")]
     fn url(&self, path: &str) -> Result<Url, HttpError> {
         let url = format!(
             "{}/{}",
@@ -96,6 +137,7 @@ impl Data {
     /// it.
     async fn read(&self, path: &str, range: Option<ReadRange>) -> Result<Vec<u8>, HttpError> {
         match &self.backend {
+            #[cfg(target_arch = "wasm32")]
             Backend::R2(bucket) => {
                 let request = bucket.get(self.key(path));
                 let request = match range {
@@ -115,6 +157,7 @@ impl Data {
                 })?;
                 body.bytes().await.map_err(HttpError::from)
             }
+            #[cfg(target_arch = "wasm32")]
             Backend::Cdn => {
                 let url = self.url(path)?;
                 let mut init = RequestInit::new();
@@ -169,6 +212,29 @@ impl Data {
                     }
                     None => Ok(bytes),
                 }
+            }
+            #[cfg(not(target_arch = "wasm32"))]
+            Backend::Memory { objects, reads } => {
+                let kind = match range {
+                    None => "whole",
+                    Some(ReadRange::Offset { .. }) => "range",
+                    Some(ReadRange::Suffix { .. }) => "suffix",
+                };
+                reads.borrow_mut().push((path.to_owned(), kind));
+                let bytes = objects
+                    .get(path.trim_start_matches('/'))
+                    .ok_or_else(|| HttpError::new(404, "not_found", format!("no object {path}")))?;
+                Ok(match range {
+                    Some(ReadRange::Offset { offset, length }) => {
+                        let start = offset.min(bytes.len() as u64) as usize;
+                        let end = (offset + length).min(bytes.len() as u64) as usize;
+                        bytes[start..end].to_vec()
+                    }
+                    Some(ReadRange::Suffix { suffix }) => {
+                        bytes[bytes.len().saturating_sub(suffix as usize)..].to_vec()
+                    }
+                    None => bytes.clone(),
+                })
             }
         }
     }

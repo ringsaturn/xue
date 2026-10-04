@@ -12,7 +12,7 @@
 use futures_util::future::join_all;
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
-use worker::Url;
+use url::Url;
 
 use xue::zarr::{self, ArrayLayout, ProbeCell, VariableMetadata};
 use xue::{decode_chunk, DecodeError, Predictor};

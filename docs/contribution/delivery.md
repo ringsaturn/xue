@@ -81,8 +81,8 @@ products'.
 ## Data API (`rust/xue-worker`)
 
 A read-only JSON Worker (`xue-api.ringsaturn.me`): adds no format, writes
-nothing, and the shell does not depend on it. Endpoints `/health`,
-`/v1/catalog`, `/v1/sources/{source}`, `/v1/point` (`time`, `run`).
+nothing, and the shell does not depend on it. The endpoint contract
+(parameters, responses, errors, caching) is [api.md](../api.md).
 
 - Resolves Collection → pointer → manifest, reads stores by R2 range
   (`DATA` binding) and decodes with the crate's `decode_chunk`.
@@ -92,6 +92,9 @@ nothing, and the shell does not depend on it. Endpoints `/health`,
 - The binding is `remote: true` (honoured by `wrangler dev` only), so
   `make api-dev` runs locally against the real bucket; `make api-dev-cdn`
   (`DATA_SOURCE=cdn`) reads the public origin when the network blocks that.
+- Only `runtime.rs` and `docs.rs` touch the Workers runtime; the handlers
+  return plain values, so `cargo test -p xue-worker` runs them natively over
+  the web fixtures through an in-memory `Data` that logs every read.
 
 ## Uploads to R2 (`scripts/aws-config`)
 

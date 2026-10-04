@@ -8,6 +8,7 @@
 //! an upstream failure unless a caller says otherwise.
 
 use serde_json::Value;
+#[cfg(target_arch = "wasm32")]
 use worker::{Headers, Response};
 
 #[derive(Debug)]
@@ -34,12 +35,14 @@ impl HttpError {
     }
 }
 
+#[cfg(target_arch = "wasm32")]
 impl From<worker::Error> for HttpError {
     fn from(error: worker::Error) -> HttpError {
         HttpError::new(502, "upstream_failed", error.to_string())
     }
 }
 
+#[cfg(target_arch = "wasm32")]
 /// The CORS headers every response carries; the API is credential-free and
 /// cross-origin is the norm.
 pub fn cors_headers() -> Result<Headers, HttpError> {
@@ -50,6 +53,7 @@ pub fn cors_headers() -> Result<Headers, HttpError> {
     Ok(headers)
 }
 
+#[cfg(target_arch = "wasm32")]
 fn base_headers(extra: &[(&str, &str)]) -> Result<Headers, HttpError> {
     let headers = cors_headers()?;
     headers
@@ -64,6 +68,7 @@ fn base_headers(extra: &[(&str, &str)]) -> Result<Headers, HttpError> {
     Ok(headers)
 }
 
+#[cfg(target_arch = "wasm32")]
 /// A JSON response, `Content-Type` and CORS included.
 pub fn json(
     value: &Value,
@@ -83,6 +88,7 @@ pub fn json(
         .with_headers(headers))
 }
 
+#[cfg(target_arch = "wasm32")]
 /// The `204` an `OPTIONS` preflight gets.
 pub fn preflight() -> Result<Response, HttpError> {
     let headers = cors_headers()?;
@@ -101,6 +107,7 @@ pub fn preflight() -> Result<Response, HttpError> {
         .with_headers(headers))
 }
 
+#[cfg(target_arch = "wasm32")]
 /// Render any handler failure as the contract's error document. Built with
 /// `worker::Result` directly so it cannot itself need an error handler.
 pub fn error_response(error: HttpError) -> worker::Result<Response> {
