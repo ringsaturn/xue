@@ -136,6 +136,7 @@ describe("llms-full", () => {
       "docs/airport.md",
       "docs/sounding.md",
       "docs/stac.md",
+      "docs/api.md",
       "showcase/README.md",
     ]);
     for (const path of LLMS_FULL_SOURCES) expect(existsSync(join(REPO_ROOT, path)), path).toBe(true);

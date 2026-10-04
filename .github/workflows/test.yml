@@ -137,6 +137,13 @@ jobs:
         working-directory: rust
         run: cargo check -p xue-worker --target wasm32-unknown-unknown
 
+      # Its handlers compile natively too (only the Workers entry point is
+      # wasm-only), so they run here over the web fixtures, which the test
+      # builds with the synced Python when they are missing.
+      - name: Test the API Worker's handlers
+        working-directory: rust
+        run: cargo test -p xue-worker
+
       # A broken or private intra-doc link is how a module silently drops out
       # of the rendered page — docs.rs publishes the gap without failing.
       # --all-features is what [package.metadata.docs.rs] asks docs.rs for, and

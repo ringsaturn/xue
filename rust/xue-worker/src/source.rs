@@ -7,12 +7,11 @@
 //! does not list variables; the manifest only names bundle ids.
 
 use serde_json::{json, Map, Value};
-use worker::Response;
 
 use crate::bucket::Data;
-use crate::error::{json as json_response, HttpError};
+use crate::error::HttpError;
 
-pub async fn catalog(data: &Data) -> Result<Response, HttpError> {
+pub async fn catalog(data: &Data) -> Result<Value, HttpError> {
     let root = data.value("catalog.json").await?;
     let collections: Vec<Value> = root
         .get("links")
@@ -32,13 +31,7 @@ pub async fn catalog(data: &Data) -> Result<Response, HttpError> {
                 .collect()
         })
         .unwrap_or_default();
-    let body = json!({ "dataOrigin": data.origin, "collections": collections });
-    json_response(&body, 200, Some("public, max-age=60"), &[])
-}
-
-pub async fn detail(data: &Data, source: &str) -> Result<Response, HttpError> {
-    let summary = read_source(data, source).await?;
-    json_response(&summary, 200, Some("public, max-age=60"), &[])
+    Ok(json!({ "dataOrigin": data.origin, "collections": collections }))
 }
 
 pub async fn read_source(data: &Data, source: &str) -> Result<Value, HttpError> {
