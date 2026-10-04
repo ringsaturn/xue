@@ -1,8 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
 import { existsSync, readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 
 import { fulfillWithRanges, routeStores, storeOnly, withoutStores } from "./artifacts";
+import { fixtureJson, fixturePath, stubBasemap } from "./fixtures";
 
 /**
  * The Zarr channel end to end — the default path. The synthetic GFS
@@ -23,16 +23,11 @@ import { fulfillWithRanges, routeStores, storeOnly, withoutStores } from "./arti
  * a run published before the store existed.
  */
 
-// The Protomaps API key is origin-locked to the production domains, so from
-// 127.0.0.1 every tile request dies on CORS — and a map whose tiles never
-// settle occasionally never fires "load", which is what gates initialize().
-test.beforeEach(async ({ page }) => {
-  await page.route("**/api.protomaps.com/**", (route) => route.fulfill({ status: 204, body: "" }));
-});
+test.beforeEach(({ page }) => stubBasemap(page));
 
-const FIXTURE_ROOT = fileURLToPath(new URL("../fixtures/generated/web/", import.meta.url));
-const MANIFEST_FIXTURE = JSON.parse(readFileSync(`${FIXTURE_ROOT}manifest.json`, "utf8"));
-const LATEST_FIXTURE = JSON.parse(readFileSync(`${FIXTURE_ROOT}latest.json`, "utf8"));
+const FIXTURE_ROOT = fixturePath("");
+const MANIFEST_FIXTURE = fixtureJson("manifest.json");
+const LATEST_FIXTURE = fixtureJson("latest.json");
 
 interface StoreCounters {
   /** Range requests against store objects, and every 206's length in order. */

@@ -1,31 +1,18 @@
 import { expect, test, type Page } from "@playwright/test";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 
 import { routeStores } from "./artifacts";
+import { fixtureBytes, fixtureJson, fixturePath, stubBasemap } from "./fixtures";
 
-// The Protomaps API key is origin-locked to the production domains, so from
-// 127.0.0.1 every tile request dies on CORS — and a map whose tiles never
-// settle occasionally never fires "load", which is what gates initialize().
-test.beforeEach(async ({ page }) => {
-  await page.route("**/api.protomaps.com/**", (route) => route.fulfill({ status: 204, body: "" }));
-});
+test.beforeEach(({ page }) => stubBasemap(page));
 
-const CATALOG_FIXTURE = JSON.parse(
-  readFileSync(fileURLToPath(new URL("../fixtures/generated/web/showcase.json", import.meta.url)), "utf8"),
-);
-const CASE_MANIFEST_FIXTURE = JSON.parse(
-  readFileSync(
-    fileURLToPath(new URL("../fixtures/generated/web/showcase/demo-typhoon/manifest.json", import.meta.url)),
-    "utf8",
-  ),
-);
+const CATALOG_FIXTURE = fixtureJson("showcase.json");
+const CASE_MANIFEST_FIXTURE = fixtureJson("showcase/demo-typhoon/manifest.json");
 /** The case ships two of the four bundles, so the viewer has something to
  * hide and the case's own default layer differs from the app's. */
 const CASE_ARTIFACTS: Record<string, Buffer> = Object.fromEntries(
   ["tmp2m.xue", "prate.xue", "tmp2m.poster.bin", "prate.poster.bin"].map((name) => [
     name,
-    readFileSync(fileURLToPath(new URL(`../fixtures/generated/web/showcase/demo-typhoon/${name}`, import.meta.url))),
+    fixtureBytes(`showcase/demo-typhoon/${name}`),
   ]),
 );
 
@@ -40,7 +27,7 @@ async function routeShowcase(page: Page, catalog: unknown = CATALOG_FIXTURE): Pr
   await page.route("**/data/showcase/*/manifest.json*", (route) =>
     route.fulfill({ json: CASE_MANIFEST_FIXTURE }),
   );
-  await routeStores(page, "**/data/showcase/*/*.zarr/**", fileURLToPath(new URL("../fixtures/generated/web/showcase/demo-typhoon/", import.meta.url)));
+  await routeStores(page, "**/data/showcase/*/*.zarr/**", fixturePath("showcase/demo-typhoon/"));
   for (const pattern of ["**/data/showcase/*/*.poster.bin*", "**/data/showcase/*/*.xue*"]) {
     await page.route(pattern, (route) => {
       const body = artifact(route.request().url());

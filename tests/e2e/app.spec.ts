@@ -1,54 +1,29 @@
 import { expect, test, type Page } from "@playwright/test";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 
-import { withoutStores } from "./artifacts";
+import { fulfillWithRanges, withoutStores } from "./artifacts";
+import { fixtureBytes, fixtureJson, stubBasemap } from "./fixtures";
 
-// The Protomaps API key is origin-locked to the production domains, so from
-// 127.0.0.1 every tile request dies on CORS — and a map whose tiles never
-// settle occasionally never fires "load", which is what gates initialize().
-// Empty tiles keep the basemap (and the network) out of the tests entirely.
-// The relief comes off a third-party host too, and answers publicly, so it
-// is stubbed the same way: no test should depend on its bytes, and a missing
-// DEM only means the hillshade paints nothing.
-test.beforeEach(async ({ page }) => {
-  await page.route("**/api.protomaps.com/**", (route) => route.fulfill({ status: 204, body: "" }));
-  await page.route("**/tiles.mapterhorn.com/**", (route) => route.fulfill({ status: 204, body: "" }));
-});
+// Empty tiles keep the basemap and the relief (and the network) out of the
+// tests entirely.
+test.beforeEach(({ page }) => stubBasemap(page, { relief: true }));
 
-const TMP2M_FIXTURE = readFileSync(
-  fileURLToPath(new URL("../fixtures/generated/web/tmp2m.xue", import.meta.url)),
-);
-const PRATE_FIXTURE = readFileSync(
-  fileURLToPath(new URL("../fixtures/generated/web/prate.xue", import.meta.url)),
-);
-const WIND_FIXTURE = readFileSync(
-  fileURLToPath(new URL("../fixtures/generated/web/wind10m.xue", import.meta.url)),
-);
+const TMP2M_FIXTURE = fixtureBytes("tmp2m.xue");
+const PRATE_FIXTURE = fixtureBytes("prate.xue");
+const WIND_FIXTURE = fixtureBytes("wind10m.xue");
 // One upper-air fill: the temperature family's 850 hPa member, which is what
 // gives the temperature tile a level row of its own.
-const TMP850_FIXTURE = readFileSync(
-  fileURLToPath(new URL("../fixtures/generated/web/tmp850.xue", import.meta.url)),
-);
+const TMP850_FIXTURE = fixtureBytes("tmp850.xue");
 // A field outside the rail's core tiles: reached through the MORE sheet,
 // and on the rail only while on screen.
-const GUST_FIXTURE = readFileSync(
-  fileURLToPath(new URL("../fixtures/generated/web/gust.xue", import.meta.url)),
-);
-const GUST_HALF_FIXTURE = readFileSync(
-  fileURLToPath(new URL("../fixtures/generated/web/gust.half.xue", import.meta.url)),
-);
+const GUST_FIXTURE = fixtureBytes("gust.xue");
+const GUST_HALF_FIXTURE = fixtureBytes("gust.half.xue");
 // One level of the pressure family: the viewer draws it as contour lines,
 // and it ships no poster, so switching to it exercises the path where nothing
 // paints until the first real plane decodes.
-const HGT500_FIXTURE = readFileSync(
-  fileURLToPath(new URL("../fixtures/generated/web/hgt500.xue", import.meta.url)),
-);
+const HGT500_FIXTURE = fixtureBytes("hgt500.xue");
 // Its half-resolution tier, which is what the level takes as lines over a
 // filled field: the lines slot never needs the full grid.
-const HGT500_HALF_FIXTURE = readFileSync(
-  fileURLToPath(new URL("../fixtures/generated/web/hgt500.half.xue", import.meta.url)),
-);
+const HGT500_HALF_FIXTURE = fixtureBytes("hgt500.half.xue");
 // The manifest of a run published before the Zarr store existed: the
 // fixture's `zarr` descriptors dropped, so every session here opens its
 // `.xue` container. That is the shape of every run the bucket holds from
@@ -56,67 +31,28 @@ const HGT500_HALF_FIXTURE = readFileSync(
 // rebuilt — the container path is a permanent one and this suite is its
 // coverage. The default path, the store, is zarr.spec.ts's.
 const MANIFEST_FIXTURE = withoutStores(
-  JSON.parse(readFileSync(fileURLToPath(new URL("../fixtures/generated/web/manifest.json", import.meta.url)), "utf8")),
+  fixtureJson("manifest.json"),
 );
-const LATEST_FIXTURE = JSON.parse(
-  readFileSync(
-    fileURLToPath(new URL("../fixtures/generated/web/latest.json", import.meta.url)),
-    "utf8",
-  ),
-);
+const LATEST_FIXTURE = fixtureJson("latest.json");
 const POSTER_FIXTURES: Record<string, Buffer> = {
-  "tmp2m.poster.bin": readFileSync(
-    fileURLToPath(new URL("../fixtures/generated/web/tmp2m.poster.bin", import.meta.url)),
-  ),
-  "prate.poster.bin": readFileSync(
-    fileURLToPath(new URL("../fixtures/generated/web/prate.poster.bin", import.meta.url)),
-  ),
+  "tmp2m.poster.bin": fixtureBytes("tmp2m.poster.bin"),
+  "prate.poster.bin": fixtureBytes("prate.poster.bin"),
 };
 // The ECMWF model is its own dataset: own live pointer, own run directory,
 // own 3-hourly time axis.
-const ECMWF_TMP2M_FIXTURE = readFileSync(
-  fileURLToPath(new URL("../fixtures/generated/web/ecmwf/tmp2m.xue", import.meta.url)),
-);
-const ECMWF_PRATE_FIXTURE = readFileSync(
-  fileURLToPath(new URL("../fixtures/generated/web/ecmwf/prate.xue", import.meta.url)),
-);
-const ECMWF_MANIFEST_FIXTURE = JSON.parse(
-  readFileSync(
-    fileURLToPath(new URL("../fixtures/generated/web/ecmwf/manifest.json", import.meta.url)),
-    "utf8",
-  ),
-);
-const ECMWF_LATEST_FIXTURE = JSON.parse(
-  readFileSync(
-    fileURLToPath(new URL("../fixtures/generated/web/latest-ecmwf.json", import.meta.url)),
-    "utf8",
-  ),
-);
+const ECMWF_TMP2M_FIXTURE = fixtureBytes("ecmwf/tmp2m.xue");
+const ECMWF_PRATE_FIXTURE = fixtureBytes("ecmwf/prate.xue");
+const ECMWF_MANIFEST_FIXTURE = fixtureJson("ecmwf/manifest.json");
+const ECMWF_LATEST_FIXTURE = fixtureJson("latest-ecmwf.json");
 // The GFS-SFLUX model: hourly axis, prate without an
 // analysis frame, and the optional dswrf solar-radiation bundle.
 const SFLUX_FIXTURES: Record<string, Buffer> = {
-  "tmp2m.xue": readFileSync(
-    fileURLToPath(new URL("../fixtures/generated/web/sflux/tmp2m.xue", import.meta.url)),
-  ),
-  "prate.xue": readFileSync(
-    fileURLToPath(new URL("../fixtures/generated/web/sflux/prate.xue", import.meta.url)),
-  ),
-  "dswrf.xue": readFileSync(
-    fileURLToPath(new URL("../fixtures/generated/web/sflux/dswrf.xue", import.meta.url)),
-  ),
+  "tmp2m.xue": fixtureBytes("sflux/tmp2m.xue"),
+  "prate.xue": fixtureBytes("sflux/prate.xue"),
+  "dswrf.xue": fixtureBytes("sflux/dswrf.xue"),
 };
-const SFLUX_MANIFEST_FIXTURE = JSON.parse(
-  readFileSync(
-    fileURLToPath(new URL("../fixtures/generated/web/sflux/manifest.json", import.meta.url)),
-    "utf8",
-  ),
-);
-const SFLUX_LATEST_FIXTURE = JSON.parse(
-  readFileSync(
-    fileURLToPath(new URL("../fixtures/generated/web/latest-sflux.json", import.meta.url)),
-    "utf8",
-  ),
-);
+const SFLUX_MANIFEST_FIXTURE = fixtureJson("sflux/manifest.json");
+const SFLUX_LATEST_FIXTURE = fixtureJson("latest-sflux.json");
 
 interface BundleCounters {
   tmp2m: number;
@@ -219,26 +155,19 @@ async function routeBundleWithRanges(
         : pathname.endsWith("gust.xue")
           ? GUST_FIXTURE
           : PRATE_FIXTURE;
-    const match = /^bytes=(\d+)-(\d+)$/.exec(route.request().headers()["range"] ?? "");
-    if (match) {
-      const start = Number(match[1]);
-      const end = Math.min(Number(match[2]), body.length - 1);
-      if (counters) {
-        counters.ranged += 1;
-        counters.lengths.push(end - start + 1);
-      }
-      return route.fulfill({
-        status: 206,
-        contentType: "application/octet-stream",
-        headers: {
-          "accept-ranges": "bytes",
-          "content-range": `bytes ${start}-${end}/${body.length}`,
-        },
-        body: body.subarray(start, end + 1),
-      });
-    }
-    if (counters) counters.full += 1;
-    return route.fulfill({ status: 200, contentType: "application/octet-stream", body });
+    return fulfillWithRanges(
+      body,
+      route.request().headers()["range"],
+      (length) => {
+        if (counters) {
+          counters.ranged += 1;
+          counters.lengths.push(length);
+        }
+      },
+      () => {
+        if (counters) counters.full += 1;
+      },
+    )(route);
   });
 }
 
