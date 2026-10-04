@@ -138,8 +138,11 @@ and the window shrinks to fit it.
   temperature is moved from the model's ground (the run's `orog` plane,
   decoded whole once and uploaded on its own grid) to the DEM's at
   6.5 K/km, in the fragment shader, faded in as a model cell grows past
-  ~24–64 px on screen (`lapseWeight`). The DEM readout samples the pinned
-  point, never the cell centre.
+  ~24–64 px on screen (`lapseWeight`). The pin carries the same
+  correction as a meteogram row of its own (`TERRAIN_ROW_SPEC`, "TMP 2M ·
+  DEM", under the model's temperature) whenever it has both heights,
+  relief on or off. The DEM readout samples the pinned point, never the
+  cell centre.
 - Particles: speed halves per zoom level past z4 (`zoomPace`) so the pace
   on screen holds; positions are RGBA32F where `EXT_color_buffer_float`
   allows (16-bit positions are 600 m steps). From z5 on the plane they are

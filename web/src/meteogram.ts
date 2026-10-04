@@ -26,7 +26,17 @@
 import type { ProbeValue } from "./probe";
 import { variableSpec } from "./variables";
 
-export type MeteogramRowId = "temperature" | "precipitation" | "wind" | "cloud" | "pressure" | "cloudtop" | "particulate" | "aod" | "taf";
+export type MeteogramRowId =
+  | "temperature"
+  | "terrain"
+  | "precipitation"
+  | "wind"
+  | "cloud"
+  | "pressure"
+  | "cloudtop"
+  | "particulate"
+  | "aod"
+  | "taf";
 
 /** How a row draws its series: traces, bars from a baseline, or one shaded
  * band per series (the cloud layers, high over middle over low; and the
@@ -110,11 +120,30 @@ export const TAF_ROW_SPEC: MeteogramRowSpec = {
   baseline: null,
 };
 
+/** The 2 m temperature carried from the model's ground to the DEM's under
+ * the pin, at a standard lapse rate: a row of its own under the model's,
+ * derived rather than read, so it is inserted by the caller — and only
+ * where the pin has both heights — rather than listed in the templates. */
+export const TERRAIN_ROW_SPEC: MeteogramRowSpec = {
+  id: "terrain",
+  kind: "line",
+  bundles: ["tmp2m"],
+  range: null,
+  baseline: null,
+};
+
+/** A series moved by a fixed amount: the terrain row's, which is the
+ * model's temperature shifted by one height difference for every frame. */
+export function shiftSeries(values: readonly ProbeValue[], delta: number): ProbeValue[] {
+  return values.map((value) => (typeof value === "number" ? value + delta : value));
+}
+
 /** The row's label: its bundles' codes joined, the surface once at the end
  * where every bundle shares it ("TMP · DPT 2M", "WIND · GUST 10M"). A row
  * with no bundle is named for itself. */
 export function meteogramRowCode(spec: MeteogramRowSpec): string {
   if (spec.bundles.length === 0) return spec.id.toUpperCase();
+  if (spec.id === "terrain") return `${variableSpec("tmp2m")?.meteogramCode ?? "TMP"} 2M · DEM`;
   // The instrument code each bundle is labelled by (`VariableSpec.meteogramCode`).
   const codes = spec.bundles.map((id) => variableSpec(id)?.meteogramCode ?? id.toUpperCase());
   const surface = spec.id === "temperature" ? "2M" : spec.id === "wind" ? "10M" : null;

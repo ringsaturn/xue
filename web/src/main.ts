@@ -44,6 +44,7 @@ import {
   type CompositeField,
   type ContourStyle,
   type FramePlanes,
+  LAPSE_RATE,
   type LapseCorrection,
   type VectorField,
 } from "./layer";
@@ -211,6 +212,8 @@ import {
   meteogramRows,
   seriesState,
   TAF_ROW_SPEC,
+  TERRAIN_ROW_SPEC,
+  shiftSeries,
   type DayMark,
   type MeteogramRowData,
   type MeteogramRowSpec,
@@ -2475,7 +2478,9 @@ function currentMeteogramRows(): MeteogramRowSpec[] {
 function syncProbeRowElements(specs: MeteogramRowSpec[]): void {
   const same =
     probeRowElements.length === specs.length &&
-    probeRowElements.every((row, index) => row.spec.bundles.join() === specs[index]!.bundles.join());
+    probeRowElements.every(
+      (row, index) => row.spec.id === specs[index]!.id && row.spec.bundles.join() === specs[index]!.bundles.join(),
+    );
   if (same) return;
   probeRowElements = specs.map((spec) => {
     const root = document.createElement("div");
@@ -2804,19 +2809,37 @@ function renderProbeElevation(point: { latitude: number; longitude: number }): v
     if (probeDem?.key !== key) return;
     probeDem = { key, value };
     renderProbeElevation(point);
+    // The terrain row waits on this height.
+    scheduleProbeRender();
   });
 }
 
-/** The model's own terrain height, from the `orog` bundle, else empty. Read at
- * the orog bundle's own grid cell — the primary's on every source that carries
+/** The model's own terrain height in metres at the pin, or null. Read at the
+ * orog bundle's own grid cell — the primary's on every source that carries
  * terrain. */
+function modelElevationValue(): number | null {
+  const session = sessions.get("orog");
+  if (!probe || !session) return null;
+  if (!probe.cellFor(session.metadata)) return null;
+  const value = probeSeriesValues(probe, probeVariables(session), frameOffsets(session.metadata.time))[0];
+  return typeof value === "number" ? value : null;
+}
+
+/** What the terrain row adds to the model's 2 m temperature at the pin: a
+ * standard lapse rate over the model's ground height less the DEM's under
+ * the pinned point, or null until both heights are in. */
+function probeTerrainDelta(): number | null {
+  const model = modelElevationValue();
+  const dem = probeDem?.value;
+  if (model === null || dem === null || dem === undefined) return null;
+  return LAPSE_RATE * (model - dem);
+}
+
+/** The model's own terrain height, from the `orog` bundle, else empty. */
 function modelElevationText(): string {
   const session = sessions.get("orog");
-  if (!probe || !session) return "";
-  const cell = probe.cellFor(session.metadata);
-  if (!cell) return "";
-  const value = probeSeriesValues(probe, probeVariables(session), frameOffsets(session.metadata.time))[0];
-  if (typeof value !== "number") return "";
+  const value = modelElevationValue();
+  if (!session || value === null) return "";
   const unit = displayUnit(session.variable.unit);
   return `${t("probeModelElevationLabel")} ${formatProbeValue(session.variable, displayValue(session.variable.unit, value))} ${unit}`.trimEnd();
 }
@@ -3052,6 +3075,13 @@ function renderProbeRows(series: ProbeSeries, index: number): void {
   // while the pinned point has an airport with a current TAF.
   const taf = probeAirport?.history?.taf ?? null;
   if (specs.length > 0 && taf) specs.push(TAF_ROW_SPEC);
+  // The terrain row, under the model's temperature, once the pin has both
+  // heights it is the difference of.
+  const terrainDelta = probeTerrainDelta();
+  const temperatureRow = specs.findIndex((spec) => spec.id === "temperature");
+  if (terrainDelta !== null && temperatureRow >= 0 && specs[temperatureRow]!.bundles[0] === "tmp2m") {
+    specs.splice(temperatureRow + 1, 0, TERRAIN_ROW_SPEC);
+  }
   syncProbeRowElements(specs);
   // The sparkline repeats a row when the field on screen is one of the
   // rows' bundles; then the row stands for it, marked, and the sparkline
@@ -3089,8 +3119,13 @@ function renderProbeRows(series: ProbeSeries, index: number): void {
       continue;
     }
     const read = spec.bundles.map((id) => probeSessionSeries(series, sessions.get(id), leads));
-    const row: MeteogramRowData = { spec, series: read.map((item) => item.values) };
-    if (history && axis) {
+    const row: MeteogramRowData = {
+      spec,
+      series: read.map((item) =>
+        spec.id === "terrain" && terrainDelta !== null ? shiftSeries(item.values, terrainDelta) : item.values,
+      ),
+    };
+    if (history && axis && spec.id !== "terrain") {
       const marks = rowObservations(spec.id, history.metars, axis);
       if (marks.length) row.observations = marks;
     }
