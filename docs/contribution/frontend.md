@@ -1,0 +1,240 @@
+# Frontend
+
+The shell is a static Vite build of `web/` (`index.html`, `showcase.html`,
+`compare.html`) over MapLibre and WebGL2. Data layout:
+[delivery.md](delivery.md), [../zarr-profile.md](../zarr-profile.md).
+Storms, soundings and airports: [point-products.md](point-products.md).
+`web/src/wasm/` comes from `make wasm`; nothing typechecks without it.
+
+## Module map (`web/src/`)
+
+| Module | Role |
+| --- | --- |
+| `main.ts` | Composition root: sessions, slots, playback, rail, probe, polling. |
+| `manifest.ts` | Pointer/manifest validation, `FORECAST_MODELS`, bundle metadata, tier picks. |
+| `identity.ts`, `sessionkeys.ts` | Variable identity from the GRIB2 `parameter` block; session-scoped keys. |
+| `variables.ts`, `levels.ts`, `pressure.ts` | Variable table; family registry; contour intervals. |
+| `viewstate.ts`, `urlstate.ts` | `ViewState`; query and camera-hash parsing. |
+| `worker.ts`, `zarr/`, `webcodecs.ts` | The three decode channels (`.xue`, store, H.264). |
+| `tiles.ts` | Viewport to tile rectangles. |
+| `layer.ts`, `particles.ts`, `isolines.ts` + `labels.worker.ts` | Raster layer, wind particles, contour labels. |
+| `palettes.ts`, `units.ts`, `domain.ts` | Ramps, display units, regional footprints. |
+| `playback.ts`, `timeline.ts` | Frame-rate ladder and dwell; transport geometry. |
+| `probe.ts`, `meteogram.ts` | Point probe and its rows. |
+| `mosaic.ts`, `composite.ts` | Geostationary mosaic by longitude bands; the `?x=` experiment. |
+| `i18n.ts` + `locales/`, `theme.ts`, `timezone.ts` | Locale, appearance, display zone. |
+| `pagemeta.ts`, `site.ts` | Per-view metadata; the only place production hostnames appear. |
+| `compare.ts` + `compare/`, `showcase.ts` | Comparison page; case list page. |
+| `tc/`, `stations/`, `sounding/` | Point-product marks, cards, skew-T. |
+
+## Sessions and delivery
+
+A session is one bundle in its own worker with its own grid, tiles and
+tier. Every channel speaks one protocol (`booted` → `init` / `init-stream`
+→ `ready`, then `decode` → `frame`, `series`, `prefetch-window`), so
+`main.ts` holds any of them in the same field.
+
+`main.ts::loadVariable` picks, in order: the Zarr store over ranges
+(whenever the bundle or tier has a `zarr` descriptor, unless
+`?backend=xue`), `.xue` over ranges, `.xue` downloaded whole, the store by
+whole objects (only when no container ships). H.264 only with
+`?use_h264=true`, a video artifact and browser support. Probe sessions are
+streamed or nothing.
+
+Store channel: `zarr/shard.ts` parses the CRC-32C-checked shard index once
+and maps frame and tile to a span (`shardOf`; a time chunk is six frames
+and may straddle container groups); `zarr/store.ts` appends `?v=` and
+merges one shard's ranges issued in one microtask (gap ≤ 64 KB). Chunks
+decode via `decodeChunk` from `rust/xue-wasm`. Compressed chunks are an LRU
+under `payloadBudgetBytes` (`zarrPayloadBudgetBytes`: 192 MB, 96 MB on a
+≤ 4 GB device, 64 MB on a constrained connection), so memory follows the
+window ahead of the playhead, not the axis; a decode re-fetches what was
+evicted between fetch and assembly.
+
+A streaming session fetches only its viewport's tiles (`u_cover` in
+`layer.ts` clips to what a partial plane holds); the data card then reads
+"Viewport fully buffered".
+
+`numericId` is file-local (1..n per bundle): never key across sessions by
+it alone. `sessionkeys.ts` scopes cache and probe keys, and each worker is
+bound to its session by closure.
+
+A tab whose validator refuses a live manifest (`ManifestRejectedError`) or
+cannot open a live store (`StoreRejectedError`) reloads once per manifest
+(`reloadForNewerShell`, crc32 in `sessionStorage`). It is insurance, not a
+substitute for deploying the shell before the data
+([publishing.md](publishing.md)).
+
+New runs: a changed `manifestCrc32` on a polled pointer is a new run; a
+rolling observation window keeps the playhead by observation time, or
+follows the end if it was there (`checkForNewRun`, `resumeOnNewRun`).
+
+### Composition and tiers
+
+`ViewComposition {fill, lines}`: two slots, each a `ForecastLayer` with its
+own session. The primary (fill, else lines) drives timeline, legend, data
+card and ground, and alone gates the playhead. The lines overlay follows by
+lead seconds on its own axis: an undecoded frame keeps the last one up, a
+missing lead time hides it. Prefetch runs on the primary at the
+connection's concurrency, on overlays at one. A `?type=` is a composition
+with one slot.
+
+`manifest.ts::pickBundleVariant` chooses the rung from viewport, connection
+and the bundle's longitude span, then a cell budget
+(`main.ts::planeCellBudget`: 2.5 M cells, halved on ≤ 4 GB, quartered on a
+constrained connection) against rung cells × `visibleGridShare`. A full
+satellite disk thus plays at lower rungs zoomed out but full on a storm.
+`?res=half|full` pins. Overlays take the half tier unless `?res=full`;
+overlays and mosaic members never re-tier.
+
+When the camera rests (400 ms), `retierPrimary` asks `settleBundleVariant`
+(a 20 % dead band so a boundary does not flap), opens the new rung beside
+the old with `loadVariable(…, { replace, tier })`, keeps the old frame up
+until the new lands, then disposes the old session. The plane cache grows
+with frame size to hold the prefetch window (cap 256 MB, 128 MB on ≤ 4 GB)
+and the window shrinks to fit it.
+
+## Rendering
+
+- `layer.ts`: one quantized R8 plane, inverse Web Mercator, palette lookup
+  in the fragment shader, two frames blended by `u_mix`. **Never animate
+  raster opacity.**
+- Vectors: `setVectorField` uses RG8 (u red, v green, the packing
+  `particles.ts` needs, interleaved once per frame) and colours by
+  `magnitude / levels.ts::vectorMaxMagnitude`. Only the wind pair is
+  packed; a composite's guns stay three R8 textures (`FramePlanes`).
+- Contours: `setContours` finds lines per pixel from the dequantized value
+  and its screen gradient. It depends on an encoder rule: every pressure
+  codebook puts each standard contour half a code off, so a line never sits
+  on a plateau. `prerender` first smooths the plane in grid space (Gaussian,
+  coverage-renormalised, 16-bit RG8; width
+  `pressure.ts::contourSmoothingCells`). Filled fields are never smoothed.
+  `tests/fixtures/pressure-registry.json` holds codebooks and intervals
+  equal across the three implementations.
+- Labels are the one CPU step: `isolines.ts` crops the plane to the view
+  and smooths it the same way, `labels.worker.ts` runs marching squares and
+  an extremum search, two symbol layers place values and H/L. Throttled to
+  1 Hz during playback; stop, step or pan refreshes at once.
+- Particles: on by default, `?particles=off` / `localStorage`, off under
+  `prefers-reduced-motion`. With them off, wind narrows to the viewport; on,
+  the session takes the whole plane because particles respawn anywhere.
+- `playback.ts` dwells per frame so a mixed-step axis plays at one speed.
+- Regional models clip raster, particles, probe and labels to
+  `FORECAST_MODELS[].domain` (`domain.ts`).
+
+## Rail and view state
+
+What is on screen is one object, `view: ViewState`. The rail
+(`syncRail`), the level row and the URL (`syncUrl` over `searchForView`,
+the inverse of `parseView`) are projections of it; nothing else keeps a
+copy.
+
+Three rail sections, one kind of press each: **fields** (a radio: core
+tiles from `FORECAST_MODELS[].railCore`, the on-screen tile, and MORE →
+`#field-sheet`), **overlays** (switches: pressure lines, particles, derived
+layers), **marks** (storms, soundings, airports). Switches carry
+`data-toggle` and a ring, sheet triggers `data-dialog` and a chevron.
+`syncFieldTiles` hides unshipped tiles and writes a generic one for an
+on-screen field without a tile; `syncRailDensity` shrinks tiles to 36px
+when they do not fit.
+
+`levels.ts`: one tile per family. `levels` are one quantity on other
+surfaces (the level row); `variants` are different quantities behind one
+tile (chips in the sheet, cycled by re-pressing the tile, never on the
+level row). Re-pressing the pressed lines member removes the lines; ALONE
+drops the field, and `lastField` returns on the next press.
+
+`variables.ts` is complete over `KnownBundleId` and every id-keyed table
+derives from it. `chart` (what the field is) and `family` (which tile) are
+different questions; keep both. Labels and legends are closures so they
+follow the locale. **The table is built on first use, never at load**: it
+sits on the import cycle identity → variables → levels → pressure →
+identity. `tests/web/variables.test.ts` holds the markup to it. A new field
+is a row there plus an optional tile; a bundle the shell does not know
+renders generically. Satellite files stay in kelvin; `units.ts` shows °C in
+legends and readouts only.
+
+Default field: with no `?type=` and nothing pressed this session
+(`variableChosen`), `FORECAST_MODELS[].defaultVariable`, else
+`DEFAULT_VARIABLE`. A chosen layer survives a model switch.
+
+## Probe panel
+
+A click pins a cell (`probe.ts`); store and v2 sessions answer one `series`
+message for the whole axis, v1 and video fill in from decoded planes. Rows
+(`meteogram.ts`) are whatever the manifest publishes, each a probe session
+at the primary's tier, aligned to the primary axis by lead seconds
+(`alignSeries`) so a missing frame is a gap, not a shifted column. Panel and
+capsule share `--probe-column`, so all playheads coincide. Skew-T and
+airport overlays: [point-products.md](point-products.md#in-the-probe-panel).
+
+## Compare page
+
+`compare.html`: every live forecast model at one point on one clock, plus
+the nearest airport's METARs. No map, no playback: `compare/series.ts`
+opens each store in a Zarr worker, sends one `series` per variable and
+terminates it. `compare/axis.ts` is pure arithmetic
+(`tests/web/compare.test.ts`). The cell is `probeCell` on the full tier, so
+it matches the viewer's probe; regional models appear only inside their
+domain (`modelCoversPoint`). State is `lat`, `lon`, `span`, `fields`;
+hidden and pinned models are `localStorage`.
+
+## Layout and theming
+
+- Title top left (opens `#model-sheet`); three round buttons top right;
+  colour scale on the left edge; one 48px tile per layer on the right; one
+  capsule at the bottom, ≤ 960px. The range input is transparent and only
+  carries hit area, keyboard and accessible name.
+- Round controls, zoom tile, rail and credit mark share **one 44px column
+  at one right offset** (20px, 16px on phones); keep new controls on it.
+  The credit line shows only above 1400px.
+- Each layer keeps the ground its palette needs, so chrome and map tokens
+  are separate. Things floating on the map use `--map-ink` /
+  `--map-ink-muted`, following `body[data-ground]` from
+  `applyBasemapTheme`. The coastline is the shell's own layer; forecast
+  layers insert below it.
+- Theme and locale switch in place, never by reload (`onThemeChange`,
+  `onLocaleChange`). **`map.setStyle` drops the custom WebGL layers**, so
+  `syncBasemapStyle` diffs layer properties instead. `index.html` repeats
+  theme detection inline so the first paint is on the right ground.
+- **`isDark`, `locale`, `htmlLang`, `basemapLang`, `displayZone` are live
+  bindings: read them at use, never capture them in a module constant.**
+- The Protomaps key allows the production domains and `localhost`, not
+  `127.0.0.1` (Playwright's origin, hence stubbed tiles). See the real
+  basemap at `http://localhost:4173`.
+
+## i18n, time and URL state
+
+- Eleven locales under `locales/`, each `Record<MessageKey, string>`
+  against `en.ts`, the source of truth and the only one with design notes.
+  Translate only human-facing copy: errors, worker messages, instrument
+  codes (`F058`, `PLAY`), diagnostics, `UTC+9` and zone ids stay English.
+  Long-lived status copy goes through `say()` so a switch restates it.
+- Observation datasets (`isObservationModel`) read "OBSERVED" and the
+  frame's clock time instead of "FORECAST HOUR" / `F058`: an observation
+  has no run to count from.
+- Valid times use one display zone (`timezone.ts`): the browser's, or the
+  pinned point's (`tzf-wasm`, a 4 MB index loaded on first pin). Run cycles
+  and showcase cards stay UTC.
+- Query state lives in `urlstate.ts` (`?model=`, `?type=`, `?lines=`,
+  `?case=`, `?res=`, `?use_h264=`, `?particles=`, `?backend=`, `?x=`,
+  `?tc*=`, `?stations=`); `?lang=` in `i18n.ts`, `?theme=` in `theme.ts`.
+  Unknown values fall back to defaults.
+- The camera is the fragment `#map=<zoom>/<lat>/<lon>`, so a pan never
+  touches the query. `parseCameraFromHash` only says whether a link fixed
+  the view; the region is framed on a model switch or a first open without
+  a camera, never on a retry or a new run.
+
+## Discovery
+
+What the shell says about itself must match what the encoder publishes.
+`web/index.html` and `web/showcase.html` carry static metadata, hreflang and
+JSON-LD; `pagemeta.ts` rewrites title, canonical and `og:url` per view (a
+case is its own page, every live view is `/`, a `?lang=` page is canonical
+to itself). Update `web/public/llms.txt` when `xuebuild/sources.py` changes
+what a model publishes or `urlstate.ts` gains a parameter.
+`web/tooling/discovery.ts` generates `sitemap.xml` and `llms-full.txt`
+(README + `docs/*.md` + `showcase/README.md`) at build time, so
+`deploy-pages.yml` triggers on those documents too. Sitemap cases come from
+the published `showcase.json` at `VITE_DATA_BASE_URL`, never from
+`showcase/cases/`: a deploy build fails if the bucket does not answer.
