@@ -136,6 +136,7 @@ export const ja: Record<MessageKey, string> = {
   caseTag: "事例",
   runCycle: "初期時刻",
   latestObservation: "最新の観測",
+  latestNowcast: "最新のナウキャスト",
   awaitingData: "データ待機中",
   validTimeLabel: "対象時刻",
   observationTimeLabel: "観測時刻",

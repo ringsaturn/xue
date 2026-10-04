@@ -68,6 +68,7 @@ import {
   axisUnitSeconds,
   frameOffsets,
   HOUR_SECONDS,
+  isNowcastModel,
   isObservationModel,
   sameTimeAxis,
   visibleGridShare,
@@ -930,6 +931,7 @@ const runTimeLabel = required<HTMLElement>("run-time-label");
 const validTimeLabel = required<HTMLElement>("valid-time-label");
 const loadStatus = required<HTMLElement>("load-status");
 const tickMarks = required<HTMLElement>("tick-marks");
+const trackNow = required<HTMLElement>("track-now");
 const errorPanel = required<HTMLElement>("error-panel");
 const errorMessage = required<HTMLElement>("error-message");
 const retryButton = required<HTMLButtonElement>("retry-button");
@@ -1748,15 +1750,27 @@ function showingObservations(): boolean {
   return isObservationModel(activeCase ? activeCase.modelId : selectedModelId);
 }
 
+/** Whether the observation window on screen runs ahead of the clock — a
+ * nowcast whose newest frames are the near future (`leadsClock`). */
+function showingNowcast(): boolean {
+  return isNowcastModel(activeCase ? activeCase.modelId : selectedModelId);
+}
+
 /** Retitle the timeline and station panel for the kind of dataset on screen.
  * The instrument-panel control label stays English in both locales, like
- * every other one. */
+ * every other one. A nowcast is still read by its clock, but its frames are
+ * valid times, not observation times. */
 function applyDatasetWording(): void {
   const observations = showingObservations();
-  leadLabel.textContent = observations ? "OBSERVED" : "FORECAST HOUR";
-  runTimeLabel.textContent = t(observations ? "latestObservation" : "runCycle");
-  validTimeLabel.textContent = t(observations ? "observationTimeLabel" : "validTimeLabel");
-  slider.setAttribute("aria-label", t(observations ? "observationTimeLabel" : "forecastHourAria"));
+  const nowcast = showingNowcast();
+  leadLabel.textContent = nowcast ? "NOWCAST" : observations ? "OBSERVED" : "FORECAST HOUR";
+  runTimeLabel.textContent = t(nowcast ? "latestNowcast" : observations ? "latestObservation" : "runCycle");
+  validTimeLabel.textContent = t(observations && !nowcast ? "observationTimeLabel" : "validTimeLabel");
+  slider.setAttribute(
+    "aria-label",
+    t(nowcast ? "validTimeLabel" : observations ? "observationTimeLabel" : "forecastHourAria"),
+  );
+  placeNowMark();
   forecastDays.setAttribute("aria-label", t(observations ? "observationDaysAria" : "forecastDaysAria"));
 }
 
@@ -1823,7 +1837,15 @@ function formatLead(index: number): string {
  * (its readout is already that stamp's clock). */
 function frameStampLine(index: number): string {
   const stamp = formatCompactDate(frameValidTime(index));
+  if (showingNowcast()) return `${stamp}${formatAheadOfClock(frameValidTime(index))}`;
   return showingObservations() ? stamp : `${formatLead(index)} · ${stamp}`;
+}
+
+/** How far a nowcast frame lies ahead of the clock, as an instrument code
+ * (" · +42M"); empty for a frame already past. */
+function formatAheadOfClock(validTime: number): string {
+  const minutes = Math.round((validTime - Date.now()) / 60_000);
+  return minutes > 0 ? ` · +${minutes}M` : "";
 }
 
 /** The pin's time line: the playhead's stamp, and on a mosaic the
@@ -4064,6 +4086,30 @@ function buildTimeline(): void {
   buildTicks();
   buildForecastDays();
   updateTicks(activeFrameIndex ?? Number(slider.value));
+  placeNowMark();
+}
+
+/** On a nowcast, a hairline where the clock falls on the track: frames to
+ * its right are the near future. The ticks are spaced by index, so the
+ * mark sits between the two frames that straddle now, in proportion to
+ * their valid times. Hidden on every other dataset and whenever now is
+ * outside the window. */
+function placeNowMark(): void {
+  const count = metadata ? frameCount() : 0;
+  const now = Date.now();
+  let position: number | null = null;
+  if (showingNowcast() && count > 1) {
+    for (let index = 0; index < count - 1; index += 1) {
+      const from = frameValidTime(index);
+      const to = frameValidTime(index + 1);
+      if (now >= from && now <= to) {
+        position = index + (to > from ? (now - from) / (to - from) : 0);
+        break;
+      }
+    }
+  }
+  trackNow.hidden = position === null;
+  if (position !== null) trackNow.style.left = `${((position / (count - 1)) * 100).toFixed(2)}%`;
 }
 
 /** One `<i>` per tick. On an axis of days that is one per frame, with the
@@ -7617,6 +7663,8 @@ function schedulePointerPoll(): void {
 schedulePointerPoll();
 window.setInterval(() => void loadTc(), LATEST_POLL_MS);
 window.setInterval(() => void loadStations(), LATEST_POLL_MS);
+// The clock moves under a nowcast's frames between window rebuilds.
+window.setInterval(placeNowMark, 30_000);
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) stopPlayback();
   else {

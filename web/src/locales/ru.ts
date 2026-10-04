@@ -141,6 +141,7 @@ export const ru: Record<MessageKey, string> = {
   caseTag: "СЛУЧАЙ",
   runCycle: "Исходный срок",
   latestObservation: "Последнее наблюдение",
+  latestNowcast: "Последний наукаст",
   awaitingData: "Ожидание данных",
   validTimeLabel: "Время прогноза",
   observationTimeLabel: "Время наблюдения",

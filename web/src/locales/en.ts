@@ -273,6 +273,10 @@ export const en = {
   // names a forecast's cycle names the window's newest observation instead,
   // and a frame is an observation, not a forecast.
   latestObservation: "Latest observation",
+  // A nowcast's frames are valid ahead of the clock (the aurora grid is valid
+  // when the solar wind it was computed from reaches the Earth), so its newest
+  // frame is a forecast a little way off, not an observation.
+  latestNowcast: "Latest nowcast",
   awaitingData: "Awaiting data",
   validTimeLabel: "Valid time",
   observationTimeLabel: "Observation time",

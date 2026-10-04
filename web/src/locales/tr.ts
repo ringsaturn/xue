@@ -142,6 +142,7 @@ export const tr: Record<MessageKey, string> = {
   caseTag: "VAKA",
   runCycle: "Model koşusu",
   latestObservation: "Son gözlem",
+  latestNowcast: "Son anlık tahmin",
   awaitingData: "Veri bekleniyor",
   validTimeLabel: "Geçerlilik zamanı",
   observationTimeLabel: "Gözlem zamanı",
