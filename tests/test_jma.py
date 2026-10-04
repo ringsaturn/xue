@@ -36,6 +36,7 @@ from unittest import mock
 
 import numpy as np
 
+from tests._support import ClassTempRoot, FIXTURES, TempRoot, requires_gdal, requires_native_source
 from xuebuild import binconvert, fetch, jmacli, native, observation, zstdcli
 from xuebuild.binformat import read_bundle
 from xuebuild.errors import ConversionError, DownloadError
@@ -60,13 +61,9 @@ from xuebuild.quantize import PROFILES
 from xuebuild.sources import SOURCES, source_spec
 from xuebuild.stac import _source_prose
 
-FIXTURES = Path(__file__).parent / "fixtures"
 SERIES = FIXTURES / "jma.2026091601.crop.nc"
 JMA = source_spec("jma")
 
-requires_gdal = unittest.skipUnless(
-    shutil.which("gdalinfo") is not None and shutil.which("gdal_translate") is not None, "GDAL is not on PATH"
-)
 
 
 def stamp(text: str) -> datetime:
@@ -318,10 +315,11 @@ class ToolTests(unittest.TestCase):
                         jmacli.fetch_window(**arguments, **paths)
 
 
-class FetchTests(unittest.TestCase):
+class FetchTests(TempRoot, unittest.TestCase):
+    root_prefix = "xue-jma-"
+
     def setUp(self) -> None:
-        self.root = Path(tempfile.mkdtemp(prefix="xue-jma-"))
-        self.addCleanup(shutil.rmtree, self.root, ignore_errors=True)
+        super().setUp()
         self.run = GfsRun(stamp("20260916010000"))
 
     def _summary(self, *validtimes: str, write_output: Path | None = None) -> dict:
@@ -442,10 +440,12 @@ class FetchTests(unittest.TestCase):
 
 
 @requires_gdal
-class ConversionTests(unittest.TestCase):
+class ConversionTests(ClassTempRoot, unittest.TestCase):
+    root_prefix = "xue-jma-"
+
     @classmethod
     def setUpClass(cls) -> None:
-        cls.root = Path(tempfile.mkdtemp(prefix="xue-jma-"))
+        super().setUpClass()
         inputs = cls.root / "jma.2026091601"
         inputs.mkdir()
         shutil.copy(SERIES, inputs / "jma.2026091601.nc")
@@ -459,10 +459,6 @@ class ConversionTests(unittest.TestCase):
                 work_root=cls.root / "work",
                 manifest_path=cls.root / "out" / "manifest.json",
             )
-
-    @classmethod
-    def tearDownClass(cls) -> None:
-        shutil.rmtree(cls.root, ignore_errors=True)
 
     def test_the_window_is_a_five_minute_axis_from_the_hour(self) -> None:
         self.assertEqual([bundle["variable"] for bundle in self.report["bundles"]], ["prate"])
@@ -516,7 +512,7 @@ class ConversionTests(unittest.TestCase):
             with self.assertRaisesRegex(ConversionError, "exactly one NetCDF series"):
                 binconvert.convert_bin(two, self.root / "two-out", model="jma", skip_video=True)
 
-    @unittest.skipUnless(native.knows_source("jma"), f"the installed {native.DISTRIBUTION} wheel predates the JMA source")
+    @requires_native_source("jma", "the JMA source")
     def test_the_native_encoder_writes_the_same_bytes(self) -> None:
         if not zstdcli.compresses_in_process():
             self.skipTest("the reference encoder compresses through the zstd CLI")

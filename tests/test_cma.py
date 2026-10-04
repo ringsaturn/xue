@@ -39,6 +39,7 @@ from unittest import mock
 
 import numpy as np
 
+from tests._support import ClassTempRoot, FIXTURES, TempRoot, requires_gdal, requires_native_source
 from xuebuild import binconvert, cmaarchive, fetch, native, observation, zstdcli
 from xuebuild.binformat import read_bundle
 from xuebuild.errors import ConversionError, DownloadError
@@ -64,13 +65,9 @@ from xuebuild.showcase import parse_case
 from xuebuild.sources import SOURCES, source_spec
 from xuebuild.stac import _source_prose
 
-FIXTURES = Path(__file__).parent / "fixtures"
 SERIES = FIXTURES / "cma.2026091609.crop.nc"
 CMA = source_spec("cma")
 
-requires_gdal = unittest.skipUnless(
-    shutil.which("gdalinfo") is not None and shutil.which("gdal_translate") is not None, "GDAL is not on PATH"
-)
 
 
 def stamp(text: str) -> datetime:
@@ -374,10 +371,11 @@ class StoreTests(unittest.TestCase):
 
 
 @requires_zarr
-class FetchTests(unittest.TestCase):
+class FetchTests(TempRoot, unittest.TestCase):
+    root_prefix = "xue-cma-"
+
     def setUp(self) -> None:
-        self.root = Path(tempfile.mkdtemp(prefix="xue-cma-"))
-        self.addCleanup(shutil.rmtree, self.root, ignore_errors=True)
+        super().setUp()
         self.base = self.root / "archive"
         make_day_store(self.base, stamp("2026-09-16T00:00:00Z"), written={90: 10.0, 91: 11.0, 93: 13.0})
         self.run = GfsRun(stamp("2026-09-16T09:00:00Z"))
@@ -451,10 +449,12 @@ _LOCALES = ("zh", "zh-Hant", "en", "ja", "ko", "de", "fr", "es", "pt", "tr", "ru
 
 
 @requires_gdal
-class ConversionTests(unittest.TestCase):
+class ConversionTests(ClassTempRoot, unittest.TestCase):
+    root_prefix = "xue-cma-"
+
     @classmethod
     def setUpClass(cls) -> None:
-        cls.root = Path(tempfile.mkdtemp(prefix="xue-cma-"))
+        super().setUpClass()
         inputs = cls.root / "cma.2026091609"
         inputs.mkdir()
         shutil.copy(SERIES, inputs / "cma.2026091609.nc")
@@ -468,10 +468,6 @@ class ConversionTests(unittest.TestCase):
                 work_root=cls.root / "work",
                 manifest_path=cls.root / "out" / "manifest.json",
             )
-
-    @classmethod
-    def tearDownClass(cls) -> None:
-        shutil.rmtree(cls.root, ignore_errors=True)
 
     def test_the_window_is_a_six_minute_axis_from_the_hour(self) -> None:
         self.assertEqual([bundle["variable"] for bundle in self.report["bundles"]], ["cref"])
@@ -507,7 +503,7 @@ class ConversionTests(unittest.TestCase):
                     self.inputs, self.root / "complete", model="cma", skip_video=True, require_complete=True, expected_hours=3
                 )
 
-    @unittest.skipUnless(native.knows_source("cma"), f"the installed {native.DISTRIBUTION} wheel predates the cma source")
+    @requires_native_source("cma")
     def test_the_native_encoder_writes_the_same_bytes(self) -> None:
         if not zstdcli.compresses_in_process():
             self.skipTest("the reference encoder compresses through the zstd CLI")
