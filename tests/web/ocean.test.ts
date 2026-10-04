@@ -171,15 +171,9 @@ describe("the ocean registry", () => {
     expect(isobaricLegend(identity as never)).toEqual(["10", "8", "6", "4", "2", "0"]);
   });
 
-  it("identifies each field from its parameter block, and from its name before the file is open", () => {
-    for (const id of OCEAN_IDS) {
-      const identity = identityForParameter(registry[id]!.parameter);
-      expect(identity).toEqual({ family: id, level: null, vector: false });
-      expect(identityForBundleId(id)).toEqual(identity);
-      expect(registeredBundleId(identity)).toBe(id);
-      const placed = identifyBundle([{ ...bundleVariable(id), id: "x" }]);
-      expect(placed?.identity).toEqual(identity);
-    }
+  // The registry contract every field is held to (identity, legend span,
+  // decoding) is in registries.test.ts.
+  it("identifies the fields by the parameter alone, not the surface value", () => {
     // The wave records' surface value is not part of the identity: the
     // registry declares none, WAVEWATCH III writes 1, pgrb2 would write 0.
     const base = registry.htsgw!.parameter;
@@ -213,24 +207,7 @@ describe("the ocean registry", () => {
     ).toBeNull();
   });
 
-  it("reads the legend over a span the codebook can hold", () => {
-    for (const id of OCEAN_IDS) {
-      const { offset, scale, maximumCode } = registry[id]!.quality;
-      const identity = identityForBundleId(id)!;
-      const [low, high] = scalarLegendRange(identity)!;
-      expect(low).toBeGreaterThanOrEqual(offset);
-      // The direction's legend closes the circle at 360, which the codebook
-      // stops one code short of; every other span sits inside its codebook.
-      if (id !== "dirpw")
-        expect(high).toBeLessThanOrEqual(offset + scale * maximumCode);
-      const legend = isobaricLegend(identity)!;
-      expect(legend).toHaveLength(6);
-      expect(Number(legend[0])).toBe(high);
-      expect(Number(legend[5])).toBe(low);
-      for (let index = 1; index < legend.length; index += 1) {
-        expect(Number(legend[index])).toBeLessThan(Number(legend[index - 1]));
-      }
-    }
+  it("reads each legend over its chart span", () => {
     expect(scalarLegendRange(identityForBundleId("tmpsfc")!)).toEqual(
       temperaturePaletteDomain(null),
     );
@@ -374,17 +351,7 @@ describe("the ocean registry", () => {
     expect(at(270)[2]).toBeGreaterThan(at(270)[1]);
   });
 
-  it("decodes every valid code and no reserved one", () => {
-    for (const id of OCEAN_IDS) {
-      const variable = bundleVariable(id);
-      const { offset, scale, maximumCode, nodataCode } = registry[id]!.quality;
-      expect(decodeValue(variable, 0)).toBe(offset);
-      expect(decodeValue(variable, maximumCode)).toBeCloseTo(
-        offset + scale * maximumCode,
-        9,
-      );
-      expect(decodeValue(variable, nodataCode)).toBeNull();
-    }
+  it("decodes no direction as 360", () => {
     // The direction's compact codebook stops at 357°: no code reads as 360.
     expect(
       decodeValue(
