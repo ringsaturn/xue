@@ -9,7 +9,7 @@
  * scrim, a close button — shuts it, Escape shuts it, and focus moves into the
  * panel on open and comes back to the trigger on close. */
 
-export interface SheetOptions {
+interface SheetOptions {
   /** The control that opens it; carries `aria-expanded`. */
   trigger: HTMLElement;
   /** The `.model-sheet` wrapper: scrim plus panel, `hidden` while closed. */
@@ -21,7 +21,7 @@ export interface SheetOptions {
   initialFocus?: (sheet: HTMLElement) => HTMLElement | null | undefined;
 }
 
-export interface SheetController {
+interface SheetController {
   open(): void;
   close(): void;
   toggle(): void;

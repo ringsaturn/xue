@@ -10,7 +10,7 @@ import { variableIds, variableSpec } from "./variables";
 
 /** Default model when the URL names none (or names one this app does not
  * serve — a bad link falls back rather than erroring). */
-export const DEFAULT_MODEL: ForecastModelId = "gfs";
+const DEFAULT_MODEL: ForecastModelId = "gfs";
 
 /** Layer shown when the URL names none, and the one the app falls back to
  * when a dataset does not ship the requested layer. Every live run carries
@@ -171,7 +171,7 @@ export function parseUseH264FromSearch(search: string): boolean {
  * lines, the particles run by the 850 hPa vapour flux — and which of the
  * two fields the frontend computes from several bundles (composite.ts)
  * are drawn. Nothing is remembered between sessions. */
-export interface ExperimentState {
+interface ExperimentState {
   enabled: boolean;
   inflow: boolean;
   front: boolean;
@@ -277,7 +277,7 @@ export type DataBackend = "xue" | "zarr";
 /** The store is the everyday path; the container is what a run published
  * before the store existed, and what `?backend=xue` asks for on one that
  * ships both. */
-export const DEFAULT_BACKEND: DataBackend = "zarr";
+const DEFAULT_BACKEND: DataBackend = "zarr";
 
 /** `?backend=xue` asks for the container — taken for a bundle whose
  * manifest entry carries one, the store otherwise — and anything else, an
@@ -352,7 +352,7 @@ export function searchForCaseVariable(variableId: ForecastBundleId, search: stri
 }
 
 /** Where the map is looking, as a shared link carries it. */
-export interface MapCamera {
+interface MapCamera {
   /** [longitude, latitude] of the view's center, in degrees. */
   center: [number, number];
   zoom: number;
@@ -444,7 +444,7 @@ export interface StationsUrlState {
   airports: boolean;
 }
 
-export const STATIONS_OFF: StationsUrlState = { soundings: false, airports: false };
+const STATIONS_OFF: StationsUrlState = { soundings: false, airports: false };
 
 const STATION_ALIASES: Record<string, keyof StationsUrlState> = {
   snd: "soundings",

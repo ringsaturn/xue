@@ -110,7 +110,7 @@ export type VideoStreamSource =
   | { kind: "buffer"; buffer: ArrayBuffer }
   | { kind: "url"; url: string; byteLength: number; variableKey: string };
 
-export interface VideoAssetOptions {
+interface VideoAssetOptions {
   source: VideoStreamSource;
   frames: VideoFrameIndexEntry[];
   codec: string;

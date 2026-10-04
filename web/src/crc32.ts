@@ -27,7 +27,7 @@ export function crc32Update(state: number, chunk: Uint8Array): number {
   return crc >>> 0;
 }
 
-export function crc32Final(state: number): number {
+function crc32Final(state: number): number {
   return (state ^ 0xffffffff) >>> 0;
 }
 

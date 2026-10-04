@@ -30,14 +30,14 @@ import { decodeValue, precipitationColor } from "./palettes";
 import type { GeoGrid } from "./probe";
 
 /** One decoded scalar plane on its own grid. */
-export interface ScalarPlane {
+interface ScalarPlane {
   grid: GeoGrid;
   variable: BundleVariable;
   plane: Uint8Array;
 }
 
 /** One decoded vector pair on its own grid. */
-export interface VectorPlane {
+interface VectorPlane {
   grid: GeoGrid;
   u: BundleVariable;
   v: BundleVariable;
@@ -53,7 +53,7 @@ export const DERIVED_MAX_CODE = 254;
  * over East Asia in September the 90th percentile of the smoothed
  * magnitude is near 13 and a marked stream 18–25), and the θe ramp in
  * kelvin — 332 K is ordinary maritime air, 344 K a tropical air mass. */
-export interface InflowThresholds {
+interface InflowThresholds {
   flux: readonly [number, number];
   thetaE: readonly [number, number];
 }
@@ -76,12 +76,12 @@ export const FRONT_ZONE_GRADIENT: readonly [number, number] = [4.5, 11];
  * ten — and a raw gradient is speckle everywhere; a degree of smoothing
  * leaves the synoptic frontal band and little else. Stated in degrees so
  * the half-resolution tier and the full grid smooth the same distance. */
-export const FRONT_SMOOTHING_DEGREES = 1;
+const FRONT_SMOOTHING_DEGREES = 1;
 
 /** The same for both inputs of the inflow — the flux magnitude and the θe
  * read under it — so the tint is one broad stream rather than a field of
  * patches. */
-export const INFLOW_SMOOTHING_DEGREES = 1;
+const INFLOW_SMOOTHING_DEGREES = 1;
 
 /** Kilometres per degree of latitude. */
 const KM_PER_DEGREE = 111.32;
@@ -95,7 +95,7 @@ export function ramp(value: number, from: number, to: number): number {
 }
 
 /** Every code of a variable decoded once: NaN for the reserved codes. */
-export function decodeTable(variable: BundleVariable): Float32Array {
+function decodeTable(variable: BundleVariable): Float32Array {
   const table = new Float32Array(256);
   for (let code = 0; code < 256; code += 1) {
     const value = decodeValue(variable, code);
@@ -221,7 +221,7 @@ export function thermalFrontZone(
 
 /** A scalar plane decoded to physical values and smoothed by a Gaussian of
  * the given width in degrees (none at 0). */
-export function smoothedField(scalar: ScalarPlane, smoothingDegrees: number): Float32Array {
+function smoothedField(scalar: ScalarPlane, smoothingDegrees: number): Float32Array {
   const { grid } = scalar;
   const cells = grid.width * grid.height;
   const table = decodeTable(scalar.variable);
@@ -320,7 +320,7 @@ export const PRECIPITATION_STEP_BOUNDS: readonly number[] = [0.1, 1, 2, 5, 10, 2
 
 /** One band's colour: the ramp at the geometric middle of the band, the
  * top band sampled a step above its floor. */
-export function precipitationStepColor(step: number): readonly [number, number, number] {
+function precipitationStepColor(step: number): readonly [number, number, number] {
   const from = PRECIPITATION_STEP_BOUNDS[step]!;
   const to = PRECIPITATION_STEP_BOUNDS[step + 1] ?? from * 2;
   const [r, g, b] = precipitationColor(Math.sqrt(from * to));

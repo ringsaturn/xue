@@ -25,7 +25,7 @@ import { latitudeOf, longitudeOf, mercatorX, mercatorY, worldPixels, zoomForSpan
 
 /** Bounding box as [west, south, east, north] in degrees. `east < west`
  * crosses the antimeridian. */
-export type CaseBounds = [number, number, number, number];
+type CaseBounds = [number, number, number, number];
 
 export interface ShowcaseCase {
   id: string;
@@ -56,7 +56,7 @@ export interface ShowcaseCase {
   credit?: string;
 }
 
-export interface ShowcaseCatalog {
+interface ShowcaseCatalog {
   schemaVersion: 1;
   generatedAt: string;
   cases: ShowcaseCase[];
@@ -212,7 +212,7 @@ export function fitBoundsCorners(box: CaseBounds): [[number, number], [number, n
   ];
 }
 
-export interface LoadedCase {
+interface LoadedCase {
   case: ShowcaseCase;
   manifest: ForecastManifest;
   /** Absolute manifest URL (with its ?v=); artifact paths resolve against it. */
@@ -236,9 +236,9 @@ export async function fetchCaseManifest(baseUrl: string, showcaseCase: ShowcaseC
 }
 
 /** How much breathing room a case's region keeps around the viewport edge. */
-export const CASE_VIEW_PADDING = 28;
+const CASE_VIEW_PADDING = 28;
 
-export interface CaseCameraLimits {
+interface CaseCameraLimits {
   /** Where the case sits, as [lng, lat]. */
   center: [number, number];
   /** Zoom at which the region just fills the padded viewport — the point

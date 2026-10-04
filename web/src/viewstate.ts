@@ -46,7 +46,7 @@ export interface ViewComposition {
   lines: PressureBundleId | null;
 }
 
-export interface DerivedShown {
+interface DerivedShown {
   inflow: boolean;
   front: boolean;
 }
@@ -71,7 +71,7 @@ export interface ViewState {
  * experiment's switch (a page-load choice) and whether the particles were
  * ever chosen (only a chosen off is written, so a reduced-motion visitor
  * who never touched the switch hands out ordinary links). */
-export interface ViewContext {
+interface ViewContext {
   model: ForecastModelId;
   caseId: string | null;
   experimentEnabled: boolean;
@@ -90,7 +90,7 @@ export interface ViewDefaults {
   particles: boolean;
 }
 
-export interface ParsedView {
+interface ParsedView {
   view: ViewState;
   /** Whether `?type=` named a layer — what lets a dataset's own default win
    * over the app-wide one, and keeps a chosen layer across a model switch. */

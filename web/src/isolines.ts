@@ -52,7 +52,7 @@ export interface Field {
 }
 
 /** One traced contour, in field coordinates (fractional block indices). */
-export interface Polyline {
+interface Polyline {
   level: number;
   /** [x0, y0, x1, y1, ...] */
   points: number[];
@@ -459,13 +459,13 @@ export interface LabelRequest {
   prominence: number;
 }
 
-export interface LabelLine {
+interface LabelLine {
   value: number;
   /** [longitude, latitude] pairs. */
   coordinates: [number, number][];
 }
 
-export interface LabelCenter {
+interface LabelCenter {
   kind: "high" | "low";
   longitude: number;
   latitude: number;

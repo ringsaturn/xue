@@ -17,7 +17,7 @@ import { LOCALES, localeHtmlLang, normalizeLocale } from "./i18n";
 import type { Locale } from "./i18n";
 import { SITE_NAME, SITE_ORIGIN } from "./site";
 
-export interface PageMeta {
+interface PageMeta {
   /** Root-relative path with the query that defines the *content* — `/`
    * for the live viewer, `/?case=<id>` for a case, `/showcase.html`. */
   path: string;

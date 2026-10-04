@@ -15,7 +15,7 @@
  * decoded frames and its playhead across the switch.
  */
 
-export type Theme = "light" | "dark";
+type Theme = "light" | "dark";
 
 const STORAGE_KEY = "xue-theme";
 

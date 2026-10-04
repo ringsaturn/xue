@@ -32,7 +32,7 @@ export type MeteogramRowId = "temperature" | "precipitation" | "wind" | "cloud" 
  * band per series (the cloud layers, high over middle over low; and the
  * aerodrome forecast's periods, which are bands laid along the axis by
  * their own clock rather than per frame). */
-export type MeteogramRowKind = "line" | "bars" | "bands";
+type MeteogramRowKind = "line" | "bars" | "bands";
 
 export interface MeteogramRowSpec {
   id: MeteogramRowId;
@@ -140,7 +140,7 @@ export function alignSeries(
 /** Whether every frame a bundle's axis has at the point is in hand: a series
  * with a column its axis lacks is still complete, one awaiting a frame is
  * not, and one with nothing at all is empty. */
-export type SeriesState = "empty" | "partial" | "complete";
+type SeriesState = "empty" | "partial" | "complete";
 
 export function seriesState(
   axisLeadSeconds: readonly number[],
@@ -242,7 +242,7 @@ export function axisPosition(leadSeconds: readonly number[], seconds: number): n
  * hollow one for the companion the row draws dashed (the dew point), a
  * short tick for a gust, a stepped line for a cover that holds until the
  * next report. */
-export type ObservationKind = "dot" | "hollow" | "tick" | "step";
+type ObservationKind = "dot" | "hollow" | "tick" | "step";
 
 /** One observed value on a row: `x` is lead seconds from the run time — the
  * observation's own clock, not a frame index — and `y` the value in the
@@ -291,7 +291,7 @@ export interface MeteogramRowData {
   bands?: readonly MeteogramBand[];
 }
 
-export interface MeteogramGeometry {
+interface MeteogramGeometry {
   /** CSS pixels the canvas is drawn at (scaled by devicePixelRatio outside). */
   width: number;
   /** The day-mark strip above the first row. */
@@ -299,7 +299,7 @@ export interface MeteogramGeometry {
   rowHeight: number;
 }
 
-export interface MeteogramInk {
+interface MeteogramInk {
   /** The traces, bars and bands. */
   ink: string;
   /** Labels, and the second series of a row. */
