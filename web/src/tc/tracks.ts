@@ -5,6 +5,7 @@
  * touches the map. */
 
 import { fetchImmutable } from "../fetchimmutable";
+import { loadPointerIndex, type LoadedIndex } from "../pointerindex";
 import {
   ensembleMembers,
   isTcEnsemble,
@@ -22,37 +23,13 @@ import {
   validateTcStorm,
 } from "./schema";
 
-export interface LoadedTcIndex {
-  pointer: TcPointer;
-  index: TcIndex;
-  /** Absolute index URL (with its `?v=`); storm paths resolve against it. */
-  indexUrl: string;
-}
+/** The live product; storm paths resolve against its `indexUrl`. */
+export type LoadedTcIndex = LoadedIndex<TcPointer, TcIndex>;
 
 /** The live product, or null when the data root publishes none (a 404 on
  * the pointer is the product not existing, not a failure). */
-export async function fetchTcIndex(
-  baseUrl: string,
-): Promise<LoadedTcIndex | null> {
-  const pointerUrl = new URL(
-    `${baseUrl}${TC_POINTER_FILENAME}`,
-    document.baseURI,
-  );
-  const response = await fetch(pointerUrl, { cache: "no-cache" });
-  if (response.status === 404 || response.status === 403) return null;
-  if (!response.ok)
-    throw new Error(`tc pointer request failed: ${response.status}`);
-  const pointer = validateTcPointer(await response.json());
-  const indexUrl = new URL(pointer.path, new URL(baseUrl, document.baseURI));
-  indexUrl.searchParams.set("v", pointer.crc32);
-  const indexResponse = await fetchImmutable(indexUrl);
-  if (!indexResponse.ok)
-    throw new Error(`tc index request failed: ${indexResponse.status}`);
-  return {
-    pointer,
-    index: validateTcIndex(await indexResponse.json()),
-    indexUrl: indexUrl.href,
-  };
+export function fetchTcIndex(baseUrl: string): Promise<LoadedTcIndex | null> {
+  return loadPointerIndex(baseUrl, TC_POINTER_FILENAME, validateTcPointer, validateTcIndex, "tc");
 }
 
 export async function fetchTcStorm(
