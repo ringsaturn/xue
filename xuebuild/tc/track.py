@@ -26,10 +26,6 @@ def iso_z(value: datetime) -> str:
     return value.astimezone(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
-def parse_ymdh(value: str) -> datetime:
-    return datetime.strptime(value, "%Y%m%d%H").replace(tzinfo=UTC)
-
-
 def wrap_longitude(value: float) -> float:
     """Into (-180, 180], the product's one convention. A value already
     inside is returned untouched, so a source's tenths stay tenths."""

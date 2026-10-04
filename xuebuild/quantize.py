@@ -295,7 +295,6 @@ def _brightness_temperature(channel_id: str) -> tuple[TemperatureCodebook, Tempe
     )
 
 
-QUALITY_BRIGHTNESS_TEMPERATURE, COMPACT_BRIGHTNESS_TEMPERATURE = _brightness_temperature("ir104")
 # A Dust RGB gun is a stretched, gamma-corrected number in 0–1 (the
 # ``shachen`` producer, xuebuild/satellite/producers.py): 250 steps of
 # 0.004 across the range, more than a display resolves. The codebook

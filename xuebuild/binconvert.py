@@ -33,7 +33,6 @@ from .errors import ConversionError, DownloadError
 from .gdal import (
     discover_inputs,
     dataset_info,
-    inspect_grib,
     inspect_grib_multi,
     normalize_unit,
     orography_is_metres,
@@ -986,13 +985,6 @@ def deaverage_precipitation(
     return deaccumulate_precipitation(accumulated_mm, previous_mm, hour - interval_start)
 
 
-def _extract_plane(frame: SourceFrame, grid: GridInfo, work: Path) -> np.ndarray:
-    """Extract one GRIB band as a float64 plane in physical units. The
-    converter itself extracts whole files via :func:`_extract_planes`; this
-    single-band form is kept for the bench scripts."""
-    return _extract_planes({frame.variable_id: frame}, grid, work)[frame.variable_id]
-
-
 def _plane_source_for(plane_source: PlaneSource | Mapping[str, PlaneSource], variable_id: str) -> PlaneSource:
     """One file's plane source (GRIB: the same for every record) or an
     observation window's per-variable ones."""
@@ -1085,12 +1077,6 @@ def _fill_missing(variable_id: str, plane: np.ndarray) -> np.ndarray:
     if not spec.fill_values:
         return plane
     return PlaneSource(fill_values=spec.fill_values, fill_replacement=float(spec.value_range[0])).apply_fill(plane)
-
-
-def _prepare_frames(paths: list[Path], variable_id: str) -> list[SourceFrame]:
-    frames = sorted((inspect_grib(path, variable_id) for path in paths), key=lambda frame: frame.lead_seconds)
-    _check_frames(frames, variable_id)
-    return frames
 
 
 def _check_frames(frames: list[SourceFrame], variable_id: str) -> None:
