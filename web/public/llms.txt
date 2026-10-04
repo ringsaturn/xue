@@ -490,7 +490,12 @@ format is specified in `docs/format.md` (link below). Decoders you can call:
 ## Documentation
 
 - [README](https://github.com/ringsaturn/xue/blob/main/README.md): what the
-  project is, the size argument for the format, commands, publishing.
+  project is, the sources, quick start, using the data, URL parameters,
+  licensing.
+- [Sources](https://github.com/ringsaturn/xue/blob/main/docs/sources.md):
+  what each source publishes, its grid, axis and caveats.
+- [Zarr store profile](https://github.com/ringsaturn/xue/blob/main/docs/zarr-profile.md):
+  the normative layout of the published stores.
 - [Format specification](https://github.com/ringsaturn/xue/blob/main/docs/format.md):
   the normative `.xue` container spec (both container versions, the bundle
   metadata schema, quantization and the residual arithmetic).
@@ -516,7 +521,7 @@ format is specified in `docs/format.md` (link below). Decoders you can call:
 
 ## Optional
 
-- [llms-full.txt](https://xue.ringsaturn.me/llms-full.txt): all six
+- [llms-full.txt](https://xue.ringsaturn.me/llms-full.txt): the user-facing
   documents above in one file, generated at each deploy.
 - [Sitemap](https://xue.ringsaturn.me/sitemap.xml): the two pages and every
   published case.

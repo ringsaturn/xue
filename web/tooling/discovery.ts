@@ -4,8 +4,8 @@
  * Both are derived, not written: the sitemap's case pages come from the
  * *published* showcase catalog (`showcase.json` at the data root — the same
  * mutable index the showcase page lists), and `llms-full.txt` is the
- * project's own documentation — README, the format and encoder specs, the
- * case authoring guide — concatenated with its relative links rewritten to
+ * project's user-facing documentation — README, the source notes, the specs,
+ * the case authoring guide — concatenated with its relative links rewritten to
  * the repository, so a model reading one file follows none into the void.
  * `llms.txt` (the short index) and `robots.txt` are prose and live as static
  * files in `web/public/`.
@@ -120,9 +120,10 @@ export function renderLlmsFull(docs: readonly DocSource[]): string {
     "# Xue — full documentation",
     "",
     `> Concatenated from the repository (${REPO_URL}) at build time: the README, the`,
-    "> normative format specification, the native encoder notes, the tropical",
-    "> cyclone product specification, the STAC catalog contract and the case",
-    `> authoring guide. The short index is ${SITE_ORIGIN}/llms.txt.`,
+    "> per-source notes, the normative format and Zarr store specifications, the",
+    "> native encoder notes, the tropical cyclone, airport and sounding product",
+    "> specifications, the STAC catalog contract and the case authoring guide.",
+    `> The short index is ${SITE_ORIGIN}/llms.txt.`,
     "",
   ].join("\n");
   const sections = docs.map(
@@ -135,9 +136,12 @@ export function renderLlmsFull(docs: readonly DocSource[]): string {
 /** The documents `llms-full.txt` carries, in reading order. */
 export const LLMS_FULL_SOURCES: readonly string[] = [
   "README.md",
+  "docs/sources.md",
   "docs/format.md",
+  "docs/zarr-profile.md",
   "docs/encoder.md",
   "docs/tc.md",
+  "docs/airport.md",
   "docs/sounding.md",
   "docs/stac.md",
   "showcase/README.md",
