@@ -74,11 +74,13 @@ npx vitest run tests/web
 
 ## Ship, in this order
 
-1. Merge the code.
-2. **Deploy the Pages shell** (an older `FORECAST_MODELS` rejects the model
-   id).
-3. Release the `xuepy` wheel that carries the source (`release` skill), then
-   relock. `publish.yml` pins the native encoder, so a forecast source
-   publishes on schedule only after that.
-4. Dispatch the workflow once by hand and check the live pointer, then let
+1. Merge the frontend half (the `FORECAST_MODELS` row and any charts) to
+   `main` and **let the Pages shell deploy**: an older shell rejects the
+   model id.
+2. Release on a `release/0.N` branch with the encoder half (`release`
+   skill): the change, the release commit, the tag on the branch, PyPI,
+   the relock, then a fast-forward into `main`. `publish.yml` pins the
+   native encoder, so a forecast source publishes on schedule only once
+   the relocked wheel is on `main`.
+3. Dispatch the workflow once by hand and check the live pointer, then let
    the cron take over.

@@ -55,13 +55,14 @@ before publishing data** that:
   `native.knows_source`. The installed wheel may predate a source, so they
   fall back to the reference pipeline with a `::warning::`.
 - `pyproject.toml`'s `xuepy` floor tracks the current release, because the
-  wheel's source table must match `sources.py`. After an encoder or
-  source-table change merges, `main` still has the old wheel locked, so
-  native parity tests and the affected scheduled publishes stay red until
-  the relock. This is expected. The sequence is release commit → `v*` tag →
-  wait for PyPI → relock commit, which raises the floor and runs
-  `uv lock --refresh-package xuepy`. Never raise the floor before the wheel
-  is on PyPI. Use the `release` skill.
+  wheel's source table must match `sources.py`. So a release is prepared
+  on a `release/0.N` branch: the change, then the release commit, then the
+  `v*` tag on the branch, then a wait for PyPI, then the relock commit
+  (raise the floor, `uv lock --refresh-package xuepy`), and only then a
+  fast-forward merge into `main`. `main` never holds an encoder change
+  without its wheel, so scheduled publishes do not fail in the window.
+  Never raise the floor before the wheel is on PyPI. Use the `release`
+  skill.
 - Never chain a commit or push behind a pipe that hides an exit code
   (`make test | tail`, `uv lock | grep`). Gate on the command's own status.
 

@@ -53,6 +53,8 @@ npx vitest run tests/web
 ```
 
 The `xuepy` floor must cover a wheel whose source table publishes the new
-bundle, otherwise native builds refuse. So: commit → `release` skill →
-relock → the next scheduled run publishes it. For a new chart, deploy the
-shell before the data.
+bundle, otherwise native builds refuse it. So do the encoder change on a
+`release/0.N` branch and follow the `release` skill: the change, the
+release commit, the tag, PyPI, the relock, then a fast-forward into
+`main`. The next scheduled run publishes the bundle. For a new chart,
+deploy the shell from `main` before the release lands.

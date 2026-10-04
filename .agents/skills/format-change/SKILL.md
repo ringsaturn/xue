@@ -51,6 +51,8 @@ field is rejected by every validator.
 
 Commit the spec, the code in all implementations and the fixtures together.
 If the change is shell-first, deploy Pages (`deploy-pages.yml`) before any
-publish workflow writes the new shape. If the native encoder changed, a
-`xuepy` release follows (the `release` skill) before scheduled workflows,
-which pin `XUE_ENCODER=native`, can write it.
+publish workflow writes the new shape: merge the reader side to `main`
+first. If the native encoder changed, the encoder side goes through a
+`release/0.N` branch (the `release` skill) and reaches `main` together with
+its relocked wheel. Scheduled workflows pin `XUE_ENCODER=native`, so they
+write the new shape only after that.
