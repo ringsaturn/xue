@@ -34,20 +34,15 @@ import {
 import {
   applyStaticMessages,
   htmlLang,
-  locale,
-  localeHtmlLang,
-  LOCALES,
   onLocaleChange,
-  setLocale,
   t,
-  type Locale,
 } from "./i18n";
 import { vectorMaxMagnitude } from "./levels";
 import { FORECAST_MODELS, type ForecastBundleId, type ForecastModelId, type LoadedManifest } from "./manifest";
 import { applyPageMeta } from "./pagemeta";
 import { buildPalette, precipitationColor } from "./palettes";
 import { geoGrid } from "./probe";
-import { createSheet, fillLanguageList } from "./sheet";
+import { mountLanguagePicker } from "./sheet";
 import { dataBaseUrl } from "./site";
 import { formatPointDegrees, formatUtcHour } from "./format";
 import { fetchAirportIndex, fetchAirportStation } from "./stations/fetch";
@@ -221,22 +216,7 @@ const langTrigger = document.getElementById("lang-toggle");
 const langSheet = document.getElementById("lang-sheet");
 const langList = document.getElementById("lang-list");
 if (langTrigger && langSheet && langList) {
-  const langSheetControl = createSheet({
-    trigger: langTrigger,
-    sheet: langSheet,
-    initialFocus: (sheet) => sheet.querySelector<HTMLButtonElement>("button[aria-current]"),
-  });
-  const renderLanguageList = () =>
-    fillLanguageList(langList, LOCALES, {
-      current: locale,
-      htmlLang: localeHtmlLang,
-      onPick: (next: Locale) => {
-        langSheetControl.close();
-        setLocale(next);
-      },
-    });
-  renderLanguageList();
-  onLocaleChange(renderLanguageList);
+  onLocaleChange(mountLanguagePicker(langTrigger, langSheet, langList));
 }
 
 function say(text: string | null, error = false): void {

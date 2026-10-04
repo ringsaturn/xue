@@ -9,6 +9,8 @@
  * scrim, a close button — shuts it, Escape shuts it, and focus moves into the
  * panel on open and comes back to the trigger on close. */
 
+import { locale, localeHtmlLang, LOCALES, setLocale, type Locale } from "./i18n";
+
 interface SheetOptions {
   /** The control that opens it; carries `aria-expanded`. */
   trigger: HTMLElement;
@@ -70,7 +72,7 @@ export function createSheet({ trigger, sheet, canOpen, initialFocus }: SheetOpti
  * holds an empty `.lang-list` — so both build it the same way. The endonyms
  * are never translated: each row names its own language, in its own script,
  * and carries `lang` so a screen reader reads it in that language. */
-export function fillLanguageList<Code extends string>(
+function fillLanguageList<Code extends string>(
   list: HTMLElement,
   locales: readonly { code: Code; endonym: string }[],
   options: { current: Code; htmlLang: (code: Code) => string; onPick: (code: Code) => void },
@@ -95,4 +97,26 @@ export function fillLanguageList<Code extends string>(
       return button;
     }),
   );
+}
+
+/** Wire the language picker: its sheet, and its rows with the language in
+ * force checked. Hands back the row builder, to run again after a switch so
+ * the check moves. */
+export function mountLanguagePicker(trigger: HTMLElement, sheet: HTMLElement, list: HTMLElement): () => void {
+  const control = createSheet({
+    trigger,
+    sheet,
+    initialFocus: (panel) => panel.querySelector<HTMLButtonElement>("button[aria-current]"),
+  });
+  const render = () =>
+    fillLanguageList(list, LOCALES, {
+      current: locale,
+      htmlLang: localeHtmlLang,
+      onPick: (next: Locale) => {
+        control.close();
+        setLocale(next);
+      },
+    });
+  render();
+  return render;
 }

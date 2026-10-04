@@ -9,15 +9,11 @@ import "./style.css";
 import {
   applyStaticMessages,
   locale,
-  localeHtmlLang,
-  LOCALES,
   onLocaleChange,
-  setLocale,
   t,
-  type Locale,
   type MessageKey,
 } from "./i18n";
-import { createSheet, fillLanguageList } from "./sheet";
+import { mountLanguagePicker } from "./sheet";
 import { applyTheme, toggleTheme } from "./theme";
 import { isObservationModel, parseBundleMetadata, type ForecastBundleId, type PosterDescriptor } from "./manifest";
 import { buildPalette } from "./palettes";
@@ -56,22 +52,7 @@ const langTrigger = document.getElementById("lang-toggle");
 const langSheet = document.getElementById("lang-sheet");
 const langList = document.getElementById("lang-list");
 if (langTrigger && langSheet && langList) {
-  const langSheetControl = createSheet({
-    trigger: langTrigger,
-    sheet: langSheet,
-    initialFocus: (sheet) => sheet.querySelector<HTMLButtonElement>("button[aria-current]"),
-  });
-  const renderLanguageList = () =>
-    fillLanguageList(langList, LOCALES, {
-      current: locale,
-      htmlLang: localeHtmlLang,
-      onPick: (next: Locale) => {
-        langSheetControl.close();
-        setLocale(next);
-      },
-    });
-  renderLanguageList();
-  onLocaleChange(renderLanguageList);
+  onLocaleChange(mountLanguagePicker(langTrigger, langSheet, langList));
 }
 
 /** The contact-sheet code of one bundle (`VariableSpec.showcaseCode`,
