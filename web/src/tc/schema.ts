@@ -4,11 +4,11 @@
  * model key the registry does not know passes, a shape that is wrong or
  * a `schemaVersion` above the one implemented does not. */
 
-export const TC_SCHEMA_VERSION = 1;
+const TC_SCHEMA_VERSION = 1;
 export const TC_POINTER_FILENAME = "latest-tc.json";
-export const TC_MISSING = -32768;
+const TC_MISSING = -32768;
 
-export type TcLevel = "A" | "B" | "C";
+type TcLevel = "A" | "B" | "C";
 
 export interface TcPointer {
   schemaVersion: 1;
@@ -19,7 +19,7 @@ export interface TcPointer {
   crc32: string;
 }
 
-export interface TcPosition {
+interface TcPosition {
   time: string;
   lat: number;
   lon: number;
@@ -44,7 +44,7 @@ export interface TcIndexEntry {
   best: string[];
 }
 
-export interface TcSourceStatus {
+interface TcSourceStatus {
   id: string;
   ok: boolean;
   fetched?: string;
@@ -89,7 +89,7 @@ export interface TcForecast {
   points: TcPoint[];
 }
 
-export interface TcTrack {
+interface TcTrack {
   source: string | null;
   provisional: boolean;
   points: TcPoint[];
@@ -108,7 +108,7 @@ export interface TcEnsemble {
   mean: TcForecast | null;
 }
 
-export interface TcAlert {
+interface TcAlert {
   time: string;
   line: [[number, number], [number, number]] | null;
   halfWidth: number | null;
@@ -137,7 +137,7 @@ const SYNTHETIC_ID = /^x-[a-z]{2}-\d{10}-\d+$/;
 const KEY = /^[a-z][a-z0-9]*$/;
 const CRC32 = /^[0-9a-f]{8}$/;
 
-export function isTcStormId(value: unknown): value is string {
+function isTcStormId(value: unknown): value is string {
   return (
     typeof value === "string" &&
     (ATCF_ID.test(value) || SYNTHETIC_ID.test(value))
@@ -267,7 +267,7 @@ function point(input: unknown, label: string, forecast: boolean): TcPoint {
   return result;
 }
 
-export function validateTcForecast(
+function validateTcForecast(
   input: unknown,
   label = "forecast",
 ): TcForecast {
@@ -304,7 +304,7 @@ export function validateTcForecast(
   return result;
 }
 
-export function validateTcTrack(input: unknown, label = "track"): TcTrack {
+function validateTcTrack(input: unknown, label = "track"): TcTrack {
   const value = object(input, label);
   const source = optionalString(value.source, `${label}.source`);
   if (source !== null && !KEY.test(source))
@@ -325,7 +325,7 @@ export function validateTcTrack(input: unknown, label = "track"): TcTrack {
   return { source, provisional: value.provisional, points };
 }
 
-export function validateTcEnsemble(
+function validateTcEnsemble(
   input: unknown,
   label = "ensemble",
 ): TcEnsemble {
@@ -607,7 +607,7 @@ export function validateTcPointer(input: unknown): TcPointer {
 /** One ensemble member's track, unpacked from the fixed-point arrays: the
  * leads it has a position at, in seconds, and the positions. A member
  * that never found the system comes back empty. */
-export interface TcMemberTrack {
+interface TcMemberTrack {
   member: number;
   leads: number[];
   lat: number[];

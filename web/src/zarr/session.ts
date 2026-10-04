@@ -46,7 +46,7 @@ import {
 } from "./shard";
 import type { ZarrStore } from "./store";
 
-export type DecodeChunkFn = (bytes: Uint8Array, frames: number, height: number, width: number, predictor: number) => Uint8Array;
+type DecodeChunkFn = (bytes: Uint8Array, frames: number, height: number, width: number, predictor: number) => Uint8Array;
 
 /** One inner chunk's address: a variable, a time chunk, a tile. */
 export interface ChunkKey {

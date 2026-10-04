@@ -23,11 +23,11 @@ import { identityForBundleId } from "../identity";
 
 /** The three quantities a column needs. Height comes along when the run
  * publishes it, but a skew-T is drawn on pressure and does not need it. */
-export type ModelField = "tmp" | "rh" | "wind";
+type ModelField = "tmp" | "rh" | "wind";
 
 /** One bundle of a model column: which pressure level it is on and which
  * of the three quantities it carries. */
-export interface ModelLevelBundle {
+interface ModelLevelBundle {
   id: string;
   /** Isobaric surface, hPa. */
   level: number;

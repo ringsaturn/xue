@@ -24,7 +24,7 @@ import type { ProfileDerived, SoundingLevels } from "./profile";
 
 /** One station's line of `soundings.jsonl` (`docs/sounding.md` §5), narrowed
  * to what the chart reads. */
-export interface SampleSounding extends SoundingLevels {
+interface SampleSounding extends SoundingLevels {
   time: string;
   launched: string | null;
   bulletin: string;

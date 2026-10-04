@@ -8,7 +8,7 @@
  * id. The names here are the instrument codes (`NHC`, `JTWC`), English in
  * every locale like the rest of the panel's codes. */
 
-export interface AgencyInfo {
+interface AgencyInfo {
   id: string;
   /** The code the map and the panel print. */
   code: string;
@@ -22,7 +22,7 @@ export interface AgencyInfo {
   scale: string;
 }
 
-export interface ModelInfo {
+interface ModelInfo {
   id: string;
   code: string;
   name: string;

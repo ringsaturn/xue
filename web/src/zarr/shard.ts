@@ -37,11 +37,11 @@ import { parseBundleMetadata, type BundleMetadata } from "../manifest";
 export const PREDICTOR_RAW = 0;
 export const PREDICTOR_PREVIOUS = 2;
 
-export const DELTA_CODEC = "xue.delta";
+const DELTA_CODEC = "xue.delta";
 export const INDEX_ENTRY_BYTES = 16;
-export const INDEX_CHECKSUM_BYTES = 4;
+const INDEX_CHECKSUM_BYTES = 4;
 
-export type IndexLocation = "start" | "end";
+type IndexLocation = "start" | "end";
 
 export interface ZarrGroup {
   /** The bundle metadata, as the group's `attributes.xue` carries it. */

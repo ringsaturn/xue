@@ -59,26 +59,26 @@ export interface ZarrSeriesMessage {
   row: number;
 }
 
-export interface ZarrPrefetchWindowMessage {
+interface ZarrPrefetchWindowMessage {
   type: "prefetch-window";
   hours: number[];
   concurrency: number;
   tiles?: TileRect[];
 }
 
-export interface ZarrRecycleMessage {
+interface ZarrRecycleMessage {
   type: "recycle";
   buffer: ArrayBuffer;
 }
 
-export interface ZarrClearCacheMessage {
+interface ZarrClearCacheMessage {
   type: "clear-cache";
 }
 
 /** The `.xue` worker's whole-buffer init, which this channel refuses: a
  * store is many objects and is only ever streamed. Named so the worker can
  * answer it with a clear error instead of an unknown-message silence. */
-export interface ZarrRefusedInitMessage {
+interface ZarrRefusedInitMessage {
   type: "init";
 }
 

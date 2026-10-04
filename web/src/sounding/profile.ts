@@ -161,13 +161,13 @@ export interface ModelLevel {
  * Bolton (1980) eq. 10, the same form `docs/sounding.md` §7 gives for `pw`
  * and the encoder's θe derivation uses, so every part of this project agrees
  * on what saturation means. */
-export function saturationVapourPressure(tCelsius: number): number {
+function saturationVapourPressure(tCelsius: number): number {
   return 6.112 * Math.exp((17.67 * tCelsius) / (tCelsius + 243.5));
 }
 
 /** The inverse: the dew point, °C, at which a vapour pressure `e` (hPa)
  * saturates. */
-export function dewPointFromVapourPressure(e: number): number {
+function dewPointFromVapourPressure(e: number): number {
   const logged = Math.log(e / 6.112);
   return (243.5 * logged) / (17.67 - logged);
 }
@@ -256,7 +256,7 @@ const EPSILON = 0.622;
 /** Latent heat of vaporisation at 0 °C, J/kg. */
 const LV = 2.501e6;
 /** The reference pressure potential temperature is defined at, hPa. */
-export const REFERENCE_PRESSURE = 1000;
+const REFERENCE_PRESSURE = 1000;
 
 /**
  * The dry adiabat of potential temperature `theta` (K) at pressure `p` (hPa),
@@ -268,7 +268,7 @@ export function dryAdiabat(theta: number, p: number): number {
 }
 
 /** Saturation mixing ratio, kg/kg, at a temperature (°C) and pressure (hPa). */
-export function saturationMixingRatio(tCelsius: number, p: number): number {
+function saturationMixingRatio(tCelsius: number, p: number): number {
   const e = saturationVapourPressure(tCelsius);
   return (EPSILON * e) / Math.max(p - e, 1e-6);
 }
@@ -351,7 +351,7 @@ export function mixingRatioLine(w: number, p: number): number {
 
 /** A lifting condensation level: where a parcel lifted dry-adiabatically
  * first saturates. */
-export interface Lcl {
+interface Lcl {
   /** Pressure, hPa. */
   p: number;
   /** Temperature, °C. */

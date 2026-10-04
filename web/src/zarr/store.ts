@@ -32,7 +32,7 @@ export interface ByteRange {
 }
 
 /** The last `suffixLength` bytes of an object, wherever it ends. */
-export interface SuffixRange {
+interface SuffixRange {
   suffixLength: number;
 }
 
@@ -41,9 +41,9 @@ export type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
 /** Bytes between two ranges up to which they are fetched as one request.
  * 64 KB is a few inner chunks on a production grid: the gap a missing tile
  * leaves in an otherwise contiguous tile row. */
-export const COALESCE_GAP = 64 * 1024;
+const COALESCE_GAP = 64 * 1024;
 
-export interface StoreStats {
+interface StoreStats {
   /** HTTP requests actually issued. */
   requests: number;
   /** Ranges callers asked for, before coalescing. */
@@ -54,7 +54,7 @@ export interface StoreStats {
 
 /** One merged request: the run it covers and which of the caller's ranges
  * (by index into the input) it answers. */
-export interface CoalescedRange extends ByteRange {
+interface CoalescedRange extends ByteRange {
   members: number[];
 }
 
@@ -84,7 +84,7 @@ interface PendingRange {
   reject: (error: unknown) => void;
 }
 
-export interface ZarrStoreOptions {
+interface ZarrStoreOptions {
   /** `fetch` to use; the tests and the measurement harness serve a
    * directory through one of their own. */
   fetch?: FetchLike;

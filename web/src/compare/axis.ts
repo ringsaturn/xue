@@ -43,7 +43,7 @@ export interface Axis {
   widthPx: number;
 }
 
-export function columnHoursFor(span: SpanHours): 1 | 3 {
+function columnHoursFor(span: SpanHours): 1 | 3 {
   return span === 120 ? 1 : 3;
 }
 
@@ -144,7 +144,7 @@ export function layoutReports(axis: Axis, timesMs: readonly number[]): FrameCell
 }
 
 /** A column of the axis with its clock reading in the display zone. */
-export interface HourColumn {
+interface HourColumn {
   timeMs: number;
   x: number;
   /** Local hour, 0–23. */
@@ -154,7 +154,7 @@ export interface HourColumn {
 }
 
 /** A run of columns falling on one local date. */
-export interface DayBand {
+interface DayBand {
   label: string;
   x: number;
   width: number;

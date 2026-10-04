@@ -43,7 +43,7 @@ const PHONE_WIDTH = 720;
  * of the screen, so the section starts closed there too. */
 const SHORT_HEIGHT = 760;
 
-export interface SoundingSectionOptions {
+interface SoundingSectionOptions {
   /** The model column at the selected ascent's time, with the run it came
    * from, or null when the run publishes no isobaric levels or has no
    * frame near enough. Called at draw time, never cached. */
@@ -117,7 +117,7 @@ function element<K extends keyof HTMLElementTagNameMap>(
  * no state of its own. The fallbacks are the light theme's, for a context
  * where computed styles are not available.
  */
-export function skewTInkFrom(node: Element): SkewTInk {
+function skewTInkFrom(node: Element): SkewTInk {
   const styles = getComputedStyle(node);
   const read = (name: string, fallback: string): string =>
     styles.getPropertyValue(name).trim() || fallback;

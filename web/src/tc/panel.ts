@@ -9,7 +9,7 @@ import { t } from "../i18n";
 import { agencyCode, TC_AGENCIES, TC_MODELS } from "./agencies";
 import type { TcIndex, TcIndexEntry } from "./schema";
 
-export interface TcPanelState {
+interface TcPanelState {
   index: TcIndex | null;
   /** The focused storm, or null for every named system. */
   selected: string | null;
@@ -21,13 +21,13 @@ export interface TcPanelState {
   best: boolean;
 }
 
-export interface TcPanelChoices {
+interface TcPanelChoices {
   /** The agency and model keys present on the storms drawn, in order. */
   agencies: readonly string[];
   models: readonly string[];
 }
 
-export interface TcPanelHandlers {
+interface TcPanelHandlers {
   onSelect(id: string | null): void;
   onAgency(id: string, on: boolean): void;
   onModel(id: string, on: boolean): void;
