@@ -21,7 +21,6 @@ import filecmp
 import io
 import json
 import os
-import shutil
 import subprocess
 import tempfile
 import unittest
@@ -34,7 +33,7 @@ from unittest import mock
 
 import numpy as np
 
-from tests.test_satellite import requires_gdal
+from tests._support import ClassTempRoot, TempRoot, counting, requires_gdal_warp, requires_hdf5plugin, requires_native_source
 from xuebuild import binconvert, native, observation, zstdcli
 from xuebuild.binformat import read_bundle
 from xuebuild.errors import ConversionError, DownloadError
@@ -83,9 +82,6 @@ SLOT_1300 = CYCLES[3]
 #: that warp: 0–3°S across 10°W–10°E.
 TILE_GRID = TargetGrid(west=-10.0, south=-4.0, east=10.0, north=1.0, step=0.04)
 
-requires_hdf5plugin = unittest.skipUnless(
-    __import__("importlib").util.find_spec("hdf5plugin") is not None, "hdf5plugin is not installed (uv sync --group satellite)"
-)
 
 
 def product_id(start: datetime) -> str:
@@ -155,16 +151,6 @@ def store(features: list[dict[str, object]]) -> Callable[[str], str]:
         return json.dumps({"type": "FeatureCollection", "totalResults": len(hits), "itemsPerPage": 100, "startIndex": 0, "features": hits})
 
     return fetch
-
-
-def counting(listing: Callable[[str], str]) -> tuple[Callable[[str], str], list[str]]:
-    asked: list[str] = []
-
-    def fetch(url: str) -> str:
-        asked.append(url)
-        return listing(url)
-
-    return fetch, asked
 
 
 def chunk_download(downloads: list[str] | None = None) -> Callable[[str], bytes]:
@@ -433,12 +419,13 @@ class ListingTests(unittest.TestCase):
             self.reader.download(METEOSAT, [], Path(tempfile.mkdtemp(prefix="xue-fci-")), download=lambda url: b"x")
 
 
-@requires_gdal
+@requires_gdal_warp
 @requires_hdf5plugin
-class FetchTests(unittest.TestCase):
+class FetchTests(TempRoot, unittest.TestCase):
+    root_prefix = "xue-meteosat-"
+
     def setUp(self) -> None:
-        self.root = Path(tempfile.mkdtemp(prefix="xue-meteosat-"))
-        self.addCleanup(shutil.rmtree, self.root, True)
+        super().setUp()
         self.listing = store([product_feature(start) for start in CYCLES])
         self.downloads: list[str] = []
         self.download = chunk_download(self.downloads)
@@ -553,14 +540,19 @@ class FetchTests(unittest.TestCase):
                 )
 
 
-@requires_gdal
+@requires_gdal_warp
 @requires_hdf5plugin
-class ConversionTests(unittest.TestCase):
+class ConversionTests(ClassTempRoot, unittest.TestCase):
+    root_prefix = "xue-meteosat-convert-"
+
     @classmethod
     def setUpClass(cls) -> None:
-        cls.root = Path(tempfile.mkdtemp(prefix="xue-meteosat-convert-"))
-        cls.patcher = mock.patch.object(FCIReader, "needed_chunks", lambda self, platform: {20})
-        cls.patcher.start()
+        super().setUpClass()
+        # Stopped by a class cleanup, which also runs when the build below
+        # fails: a patch left running narrows every later test's reader.
+        patcher = mock.patch.object(FCIReader, "needed_chunks", lambda self, platform: {20})
+        patcher.start()
+        cls.addClassCleanup(patcher.stop)
         _fetch_satellite_run(SPEC, GfsRun(SLOT_1200), 1, cls.root, force=False, input_ids=None, fetch=store([product_feature(start) for start in CYCLES]), download=chunk_download())
         cls.inputs = cls.root / "meteosat.2026091712"
         with mock.patch.dict(os.environ, {"XUE_ENCODER": "python"}):
@@ -574,11 +566,6 @@ class ConversionTests(unittest.TestCase):
                 require_complete=True,
                 expected_hours=1,
             )
-
-    @classmethod
-    def tearDownClass(cls) -> None:
-        cls.patcher.stop()
-        shutil.rmtree(cls.root, ignore_errors=True)
 
     def test_the_bundles_are_hourly_with_the_fci_band(self) -> None:
         self.assertEqual([bundle["variable"] for bundle in self.report["bundles"]], ["ir104", "dustrgb"])
@@ -639,7 +626,7 @@ class ConversionTests(unittest.TestCase):
                     np.testing.assert_array_equal(np.asarray(rung.decode_plane(1, offset)).reshape(side, side), expected)
         self.assertEqual([Path(variant["output"]).name for variant in self.report["variants"]], [f"{b}.{t}.xue" for b in ("ir104", "dustrgb") for t, _, _, _ in rungs])
 
-    @unittest.skipUnless(native.knows_source("meteosat"), f"the installed {native.DISTRIBUTION} wheel predates the meteosat source")
+    @requires_native_source("meteosat")
     def test_the_native_encoder_writes_the_same_bytes(self) -> None:
         if not zstdcli.compresses_in_process():
             self.skipTest("the reference encoder compresses through the zstd CLI")
