@@ -29,6 +29,7 @@ from datetime import UTC, datetime
 from typing import Any
 from xml.etree import ElementTree
 
+from ..common import iso_z
 from .schema import CHANGES, WIND_DIRECTION_RANGE, WIND_SPEED_RANGE
 from .units import bounded, cloud_layers, visibility, wind_speed
 
@@ -53,8 +54,8 @@ class TafPeriod:
 
     def to_json(self) -> dict[str, Any]:
         return {
-            "from": _iso(self.start),
-            "to": _iso(self.end),
+            "from": iso_z(self.start),
+            "to": iso_z(self.end),
             "change": self.change,
             "prob": self.prob,
             "wd": self.wd,
@@ -78,17 +79,13 @@ class TafReport:
 
     def to_json(self) -> dict[str, Any]:
         return {
-            "issued": _iso(self.issued),
-            "from": _iso(self.start),
-            "to": _iso(self.end),
+            "issued": iso_z(self.issued),
+            "from": iso_z(self.start),
+            "to": iso_z(self.end),
             "raw": self.raw,
             "amended": self.amended,
             "periods": [period.to_json() for period in self.periods],
         }
-
-
-def _iso(moment: datetime) -> str:
-    return moment.astimezone(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
 def _text(element: ElementTree.Element | None, name: str) -> str | None:

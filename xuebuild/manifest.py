@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from .common import iso_z
 from .errors import ManifestError
 from .sources import MODEL_CORE_BUNDLES, MODEL_PRODUCTS
 
@@ -34,10 +35,6 @@ from .sources import MODEL_CORE_BUNDLES, MODEL_PRODUCTS
 # unknown bundle name is skipped rather than rejected (docs/format.md).
 
 _BUNDLE_VARIABLE_PATTERN = re.compile(r"^[a-z][a-z0-9]*$")
-
-
-def iso_z(value: datetime) -> str:
-    return value.astimezone(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
 def _parse_time(value: object, label: str) -> datetime:

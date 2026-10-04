@@ -7,8 +7,10 @@ seconds — converted at the parser, so nothing downstream knows a knot.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from typing import Any
+
+from ..common import iso_z  # noqa: F401 — re-exported: the tc modules import it from here
 
 # The three wind-radii thresholds every source reports on, keyed by the
 # knot value the agencies name them by (ECMWF's are 18 / 26 / 33 m/s —
@@ -20,10 +22,6 @@ QUADRANTS = ("ne", "se", "sw", "nw")
 
 MISSING = -32768
 """The missing value of an ensemble's fixed-point arrays."""
-
-
-def iso_z(value: datetime) -> str:
-    return value.astimezone(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
 def wrap_longitude(value: float) -> float:

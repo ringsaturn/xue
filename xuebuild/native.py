@@ -32,7 +32,6 @@ from __future__ import annotations
 import json
 import logging
 import os
-import zlib
 from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
@@ -40,6 +39,7 @@ from pathlib import Path
 from typing import Any
 
 from . import zarrstore
+from .common import crc32_hex
 from .binconvert import published_bundle_ids, retire_container, video_variable_ids
 from .errors import ConversionError
 from .manifest import (
@@ -185,7 +185,7 @@ def _video_reports(
             "streamPath": str(stream_path),
             "indexPath": str(index_path),
             "byteLength": len(artifact.stream_bytes),
-            "crc32": f"{zlib.crc32(artifact.stream_bytes) & 0xFFFFFFFF:08x}",
+            "crc32": crc32_hex(artifact.stream_bytes),
             "codec": artifact.codec_string,
             "width": grid["width"],
             "height": grid["height"],
@@ -480,7 +480,7 @@ def convert_bin(
                 run_id,
                 _run_time(payload),
                 manifest_path=Path(manifest_path).relative_to(Path(latest_path).parent).as_posix(),
-                manifest_crc32=f"{zlib.crc32(manifest_bytes) & 0xFFFFFFFF:08x}",
+                manifest_crc32=crc32_hex(manifest_bytes),
                 model=source.manifest_model,
                 product=source.product,
             )
