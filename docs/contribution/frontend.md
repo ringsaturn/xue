@@ -139,6 +139,16 @@ and the window shrinks to fit it.
   decoded whole once and uploaded on its own grid) to the DEM's at
   6.5 K/km, in the fragment shader, faded in as a model cell grows past
   ~24–64 px on screen (`lapseWeight`).
+- Particles: speed halves per zoom level past z4 (`zoomPace`) so the pace
+  on screen holds; positions are RGBA32F where `EXT_color_buffer_float`
+  allows (16-bit positions are 600 m steps). From z5 on the plane they are
+  seeded on the ground under a 9x9 screen lattice (`map.unproject`, so on
+  the terrain too; refreshed on `moveend`, never inside a render: unproject
+  rebinds the default framebuffer), interpolated in homogeneous
+  coordinates so density is even per pixel, all reseeded when the camera
+  settles, and respawned when they leave the screen. On terrain their
+  height follows the terrain mesh's own triangles, so the depth test against
+  the terrain's packed depth is about ridges, not facets.
 - `playback.ts` dwells per frame so a mixed-step axis plays at one speed.
 - Regional models clip raster, particles, probe and labels to
   `FORECAST_MODELS[].domain` (`domain.ts`).

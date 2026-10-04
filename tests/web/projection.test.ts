@@ -79,3 +79,13 @@ describe("scene URL state", () => {
     expect(searchWithScene("", { globe: false, terrain: 2.6 })).toBe("?terrain=2.6");
   });
 });
+
+describe("particle pacing and seeding", () => {
+  it("keeps the speed below the reference zoom and halves it per level above", async () => {
+    const { zoomPace } = await import("../../web/src/particles");
+    expect(zoomPace(1.65)).toBe(1);
+    expect(zoomPace(4)).toBe(1);
+    expect(zoomPace(5)).toBe(0.5);
+    expect(zoomPace(10)).toBe(1 / 64);
+  });
+});

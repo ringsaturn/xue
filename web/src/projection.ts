@@ -49,6 +49,7 @@ export const TERRAIN_UNIFORM_NAMES = [
   "u_terrain_exaggeration",
   "u_dem_texel_meters",
   "u_depth",
+  "u_mesh_size",
 ] as const;
 
 /** Elevation in metres (times the exaggeration) at a tile-local position,
@@ -68,6 +69,26 @@ float surfaceTexel(ivec2 at) {
 // DEM texel coordinates of a tile-local position (0..8192).
 vec2 surfaceDemCoord(vec2 tilePosition) {
   return (u_terrain_matrix * vec4(tilePosition, 0.0, 1.0)).xy * u_terrain_dim + 1.0;
+}
+float surfaceElevation(vec2 coord);
+// The height the terrain's own mesh has at a tile-local position: the DEM at
+// the mesh's vertices, interpolated across the triangle the point falls in
+// (split along the same diagonal as the mesh). A point lifted this way lies
+// on the very surface the terrain's depth was drawn from, so a depth test
+// against it is about ridges, not about the mesh's facets.
+uniform float u_mesh_size;
+float surfaceMeshElevation(vec2 tilePosition) {
+  vec2 cell = tilePosition / 8192.0 * u_mesh_size;
+  vec2 corner = floor(cell);
+  vec2 f = cell - corner;
+  float spacing = 8192.0 / u_mesh_size;
+  float ea = surfaceElevation(surfaceDemCoord(corner * spacing));
+  float eb = surfaceElevation(surfaceDemCoord((corner + vec2(1.0, 0.0)) * spacing));
+  float ec = surfaceElevation(surfaceDemCoord((corner + vec2(0.0, 1.0)) * spacing));
+  float ed = surfaceElevation(surfaceDemCoord((corner + vec2(1.0, 1.0)) * spacing));
+  return f.x >= f.y
+    ? ea + (eb - ea) * f.x + (ed - eb) * f.y
+    : ea + (ec - ea) * f.y + (ed - ec) * f.x;
 }
 float surfaceElevation(vec2 coord) {
   vec2 f = fract(coord);
@@ -181,6 +202,8 @@ export interface SurfaceTile {
   exaggeration: number;
   /** Ground metres one DEM texel spans, at the tile's middle latitude. */
   demTexelMeters: number;
+  /** Cells per side of the terrain's mesh over this tile. */
+  meshSize: number;
 }
 
 interface TileIdLike {
@@ -208,6 +231,7 @@ export function surfaceTiles(map: MaplibreMap, args: CustomRenderMethodInput): S
   const renderable = terrain?.tileManager?.getRenderableTiles?.();
   if (!terrain?.getTerrainData || !renderable) return null;
   const globe = isGlobe(args);
+  const meshSize = terrainMeshSize(map);
   const tiles: SurfaceTile[] = [];
   for (const { tileID } of renderable) {
     const { x, y, z } = tileID.canonical;
@@ -231,6 +255,7 @@ export function surfaceTiles(map: MaplibreMap, args: CustomRenderMethodInput): S
       demMatrix: data.u_terrain_matrix,
       demUnpack: data.u_terrain_unpack,
       exaggeration: data.u_terrain_exaggeration,
+      meshSize,
       demTexelMeters: (EARTH_CIRCUMFERENCE_M * Math.cos(latitude)) / 2 ** sourceZ / Math.max(1, data.u_terrain_dim),
     });
   }
@@ -263,6 +288,7 @@ export function bindSurfaceTile(
   }
   if (uniforms.u_terrain_exaggeration) gl.uniform1f(uniforms.u_terrain_exaggeration, tile.exaggeration);
   if (uniforms.u_dem_texel_meters) gl.uniform1f(uniforms.u_dem_texel_meters, tile.demTexelMeters);
+  if (uniforms.u_mesh_size) gl.uniform1f(uniforms.u_mesh_size, tile.meshSize);
   if (depthUnit !== null && uniforms.u_depth) {
     gl.activeTexture(gl.TEXTURE0 + depthUnit);
     gl.bindTexture(gl.TEXTURE_2D, tile.depth);
