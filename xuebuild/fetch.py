@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
 from pathlib import Path
+from typing import Any
 
 from . import aurora, cmaarchive, jmacli, om2nccli
 from . import satellite
@@ -820,12 +821,7 @@ def _download_mrms_frame(
     payload = b""
     for variable_id, item in objects.items():
         url = mrms_object_url(item.key)
-        response = _request(url)
-        with response:
-            status = getattr(response, "status", None)
-            if status != 200:
-                raise DownloadError(f"expected HTTP 200 for {url}, received {status}")
-            body = _read_response(response)
+        body = get_ok(url)
         try:
             payload += gzip.decompress(body)
         except (OSError, EOFError) as exc:
@@ -1985,13 +1981,20 @@ def _read_response(response: object) -> bytes:
     return response.read()  # type: ignore[attr-defined]
 
 
-def fetch_text(url: str) -> str:
-    response = _request(url)
+def get_ok(url: str, **request: Any) -> bytes:
+    """GET through :func:`_request` (``request`` is its retry budget,
+    headers and timeout) and return the body of an HTTP 200; any other
+    status is a :class:`DownloadError`."""
+    response = _request(url, **request)
     with response:
         status = getattr(response, "status", None)
         if status != 200:
             raise DownloadError(f"expected HTTP 200 for {url}, received {status}")
-        body = _read_response(response)
+        return _read_response(response)
+
+
+def fetch_text(url: str) -> str:
+    body = get_ok(url)
     try:
         return body.decode("utf-8")
     except UnicodeDecodeError as exc:

@@ -77,14 +77,9 @@ def _fetch_text(url: str) -> str:
 
 
 def _download_bytes(url: str) -> bytes:
-    from ..fetch import _read_response, _request  # noqa: PLC0415 - fetch.py dispatches here
+    from ..fetch import get_ok  # noqa: PLC0415 - fetch.py dispatches here
 
-    response = _request(url)
-    with response:
-        status = getattr(response, "status", None)
-        if status != 200:
-            raise DownloadError(f"expected HTTP 200 for {url}, received {status}")
-        return _read_response(response)
+    return get_ok(url)
 
 
 def list_prefix(

@@ -47,7 +47,7 @@ from typing import Any, Callable
 from .. import __version__
 from ..common import iso_z, write_bytes_atomic
 from ..errors import DownloadError, SoundingProductError, XueError
-from ..fetch import _request
+from ..fetch import get_ok
 from .bufr import parse_file_name
 
 LOG = logging.getLogger(__name__)
@@ -132,14 +132,7 @@ def issue_raw_directory(raw_root: Path, issue: datetime) -> Path:
 
 
 def _get(url: str, *, timeout: float = 60) -> bytes:
-    response = _request(
-        url, headers={"User-Agent": USER_AGENT}, timeout=timeout, attempts=4, max_elapsed=120
-    )
-    with response:
-        status = getattr(response, "status", None)
-        if status != 200:
-            raise DownloadError(f"expected HTTP 200 for {url}, received {status}")
-        return response.read()  # type: ignore[no-any-return]
+    return get_ok(url, headers={"User-Agent": USER_AGENT}, timeout=timeout, attempts=4, max_elapsed=120)
 
 
 def _parse_time(value: str | None) -> datetime | None:
