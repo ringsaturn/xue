@@ -141,6 +141,7 @@ export const ko: Record<MessageKey, string> = {
   caseTag: "사례",
   runCycle: "모델 초기시각",
   latestObservation: "최신 관측",
+  latestNowcast: "최신 초단기 예측",
   awaitingData: "자료 대기 중",
   validTimeLabel: "유효시각",
   observationTimeLabel: "관측시각",

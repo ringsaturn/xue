@@ -14,6 +14,7 @@ import {
   hasBundle,
   hasWindBundle,
   isCoarseGrid,
+  isNowcastModel,
   isObservationModel,
   overlayResolutionPreference,
   parseBundleMetadata,
@@ -721,6 +722,15 @@ describe("dataset kinds", () => {
     expect(isObservationModel("jma")).toBe(true);
     for (const model of ["gfs", "sflux", "ecmwf", "aifs", "ifshres", "cfs", "hrrr", "gefsaero"] as const)
       expect(isObservationModel(model)).toBe(false);
+  });
+
+  it("marks only the aurora window as running ahead of the clock", () => {
+    // OVATION's grids are valid when the solar wind reaches the Earth, about
+    // an hour after L1 measured it; the radar and imager windows are past.
+    expect(isNowcastModel("aurora")).toBe(true);
+    expect(isObservationModel("aurora")).toBe(true);
+    for (const model of ["mrms", "jma", "cma", "himawari", "goeseast", "gfs"] as const)
+      expect(isNowcastModel(model)).toBe(false);
   });
 
   it("lists the live feeds, the eight observation windows among them", () => {

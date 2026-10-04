@@ -139,6 +139,7 @@ export const de: Record<MessageKey, string> = {
   caseTag: "FALL",
   runCycle: "Modelllauf",
   latestObservation: "Letzte Beobachtung",
+  latestNowcast: "Letzter Nowcast",
   awaitingData: "Warte auf Daten",
   validTimeLabel: "Gültigkeitszeit",
   observationTimeLabel: "Beobachtungszeit",

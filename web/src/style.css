@@ -1532,6 +1532,22 @@ html[lang="ja"] .rail-glyph {
   background: var(--accent);
 }
 
+/* Where the clock falls on a nowcast's track (main.ts::placeNowMark): a
+   dashed hairline through the ticks, so the frames past it read as ahead. */
+.track-now {
+  position: absolute;
+  top: 0;
+  width: 0;
+  height: 18px;
+  border-left: 1px dashed var(--text);
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.track-now[hidden] {
+  display: none;
+}
+
 .track-playhead {
   position: absolute;
   top: 0;

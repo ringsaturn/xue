@@ -51,6 +51,13 @@ export interface ForecastModelInfo {
    * a frame's offset is time elapsed since — so the viewer labels it as
    * such (mirrors `SourceSpec.observation` in xue/sources.py). */
   observation?: boolean;
+  /** True on an observation dataset whose frames are stamped at a valid time
+   * ahead of the clock: a model driven by an observation and valid when that
+   * observation arrives — OVATION's grid is valid when the solar wind seen at
+   * L1 reaches the Earth, about an hour after it was measured. The newest
+   * frames are the near future, so the viewer calls them a nowcast and marks
+   * where now falls on the track. */
+  leadsClock?: boolean;
   /** The bundles a complete run of the dataset must ship — what a live
    * manifest is refused without: the tmp2m/prate pair on a forecast, the
    * reflectivity on a radar mosaic (mirrors `SourceSpec.core_bundle_ids`).
@@ -309,16 +316,18 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
   },
   // NOAA SWPC's OVATION aurora probability: the chance, in percent, that
   // aurora is visible overhead, on a 1° global grid, one grid every five
-  // minutes. A space-weather observation, live like MRMS: a rolling window
-  // grown from a frame cache — the live feed carries only the newest grid —
-  // some ten minutes behind real time. Global, so no region: the camera
-  // stays where the reader left it.
+  // minutes. Live like MRMS: a rolling window grown from a frame cache — the
+  // live feed carries only the newest grid. Each grid is valid at its
+  // ``Forecast Time``, the solar wind's arrival about an hour after L1 saw
+  // it, so the window's newest frames lie ahead of the clock. Global, so no
+  // region: the camera stays where the reader left it.
   aurora: {
     id: "aurora",
     label: "SWPC-AURORA",
     product: "ovation-aurora-1p00",
     latestFilename: "latest-aurora.json",
     observation: true,
+    leadsClock: true,
     coreBundles: ["aurora"],
     defaultVariable: "aurora",
     railCore: ["aurora"],
@@ -338,6 +347,11 @@ export function modelRailCore(model: ForecastModelId): readonly ForecastBundleId
 /** True when a dataset is observations, not a forecast. */
 export function isObservationModel(model: ForecastModelId): boolean {
   return FORECAST_MODELS[model].observation === true;
+}
+
+/** True when a dataset's frames run ahead of the clock (`leadsClock`). */
+export function isNowcastModel(model: ForecastModelId): boolean {
+  return FORECAST_MODELS[model].leadsClock === true;
 }
 
 /** The model switch's entries, in order: the eight forecasts, the eight

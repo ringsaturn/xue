@@ -139,6 +139,7 @@ export const pt: Record<MessageKey, string> = {
   caseTag: "CASO",
   runCycle: "Ciclo do modelo",
   latestObservation: "Última observação",
+  latestNowcast: "Última previsão imediata",
   awaitingData: "A aguardar dados",
   validTimeLabel: "Hora de validade",
   observationTimeLabel: "Hora de observação",
