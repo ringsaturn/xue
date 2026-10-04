@@ -39,7 +39,7 @@ import {
   type TrackPosition,
 } from "./tracks";
 
-export const TC_SOURCE = "tc-tracks";
+const TC_SOURCE = "tc-tracks";
 const LAYERS = {
   radii: "tc-radii",
   radiiLine: "tc-radii-line",

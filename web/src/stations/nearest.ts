@@ -20,7 +20,7 @@
 import type { AirportIndex, AirportStation, SoundingIndex, SoundingStationEntry } from "./schema";
 
 /** A station and how far the pinned point is from it. */
-export interface NearestStation<S> {
+interface NearestStation<S> {
   station: S;
   /** Great-circle distance, kilometres. */
   distanceKm: number;

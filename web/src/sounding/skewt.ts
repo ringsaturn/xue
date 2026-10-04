@@ -38,7 +38,7 @@ import {
 } from "./profile";
 
 /** A rectangle in canvas pixels. */
-export interface SkewTRect {
+interface SkewTRect {
   x: number;
   y: number;
   width: number;
@@ -67,7 +67,7 @@ export interface SkewTLayout extends SkewTRect {
   barbWidth: number;
 }
 
-export interface SkewTLayoutOptions {
+interface SkewTLayoutOptions {
   /** 100 hPa by default; 50 for an ascent worth following into the
    * stratosphere. */
   pressureTop?: number;
@@ -130,17 +130,17 @@ export function insideChart(layout: SkewTLayout, x: number, y: number): boolean 
 
 /** The isobars that carry a label — the mandatory levels a reader looks for,
  * and nothing between them. */
-export const LABELLED_ISOBARS: readonly number[] = [1000, 925, 850, 700, 500, 400, 300, 250, 200, 150, 100, 70, 50];
+const LABELLED_ISOBARS: readonly number[] = [1000, 925, 850, 700, 500, 400, 300, 250, 200, 150, 100, 70, 50];
 
 /** Isotherms every 10 °C, the 0 °C line emphasised. */
-export const ISOTHERM_STEP = 10;
+const ISOTHERM_STEP = 10;
 /** Dry adiabats every 10 K of potential temperature. */
-export const DRY_ADIABAT_STEP = 10;
+const DRY_ADIABAT_STEP = 10;
 /** The pseudoadiabats drawn, by wet-bulb potential temperature at 1000 hPa
  * (°C). A few, wide apart: they are orientation, not a reading. */
-export const MOIST_ADIABATS: readonly number[] = [-20, -10, 0, 8, 16, 24, 32, 40];
+const MOIST_ADIABATS: readonly number[] = [-20, -10, 0, 8, 16, 24, 32, 40];
 /** The saturation mixing-ratio lines drawn, g/kg. */
-export const MIXING_RATIO_LINES: readonly number[] = [1, 2, 4, 8, 16];
+const MIXING_RATIO_LINES: readonly number[] = [1, 2, 4, 8, 16];
 /** Isohumes are only drawn in the lower troposphere; above it they crowd into
  * the left margin and mean nothing. */
 const MIXING_RATIO_TOP_HPA = 600;
@@ -180,7 +180,7 @@ export interface SkewTInk {
   modelDew?: string;
 }
 
-export interface SkewTOptions {
+interface SkewTOptions {
   /** The observed ascent: `t` solid, `td` dashed. */
   profile?: Profile | null;
   /** A second profile — a model column at the same point — dotted, in the
@@ -624,7 +624,7 @@ export function drawSkewT(
 }
 
 /** One profile's reading under the pointer. */
-export interface SkewTProfileReadout {
+interface SkewTProfileReadout {
   t: number | null;
   td: number | null;
   wd: number | null;
@@ -634,7 +634,7 @@ export interface SkewTProfileReadout {
 
 /** What the chart says at a point: the pressure and temperature the point
  * itself projects from, and each profile's values there. */
-export interface SkewTReadout {
+interface SkewTReadout {
   /** hPa. */
   p: number;
   /** °C at the pointer, not on any profile. */

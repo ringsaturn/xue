@@ -13,7 +13,7 @@ import { QUADRANT_CODES } from "./schema";
 
 const KNOT = 0.514444;
 
-export interface CardOptions {
+interface CardOptions {
   /** The valid time, formatted the way the capsule formats one. */
   formatTime(time: string): string;
 }

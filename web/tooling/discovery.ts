@@ -97,7 +97,7 @@ export async function loadCatalogCaseIds(dataBaseUrl: string | undefined, public
 }
 
 /** One document folded into `llms-full.txt`. */
-export interface DocSource {
+interface DocSource {
   /** Repository-relative path, for the section heading and link rewriting. */
   repoPath: string;
   markdown: string;
@@ -147,7 +147,7 @@ export const LLMS_FULL_SOURCES: readonly string[] = [
   "showcase/README.md",
 ];
 
-export interface DiscoveryOptions {
+interface DiscoveryOptions {
   /** Repository root: where the documents live. */
   repoRoot: string;
   /** The page's `VITE_DATA_BASE_URL` for this build mode, if set. */

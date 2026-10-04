@@ -15,7 +15,7 @@ import { t } from "../i18n";
 import { categoryColor } from "./layers";
 import type { AirportStation, SoundingStationEntry } from "./schema";
 
-export interface StationCardOptions {
+interface StationCardOptions {
   /** The valid time, formatted the way the capsule formats one. */
   formatTime(time: string): string;
   /** Which ground the map is on, for the category's own color. */

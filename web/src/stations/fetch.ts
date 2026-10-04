@@ -30,7 +30,7 @@ import {
   type StationFile,
 } from "./schema";
 
-export interface LoadedIndex<P, I> {
+interface LoadedIndex<P, I> {
   pointer: P;
   index: I;
   /** Absolute index URL (with its `?v=`); the file beside it resolves

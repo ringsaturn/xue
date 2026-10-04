@@ -14,13 +14,13 @@
  * not. Unknown fields are ignored rather than refused, so a v1 reader
  * survives an added optional field. */
 
-export const STATION_SCHEMA_VERSION = 1;
+const STATION_SCHEMA_VERSION = 1;
 export const SOUNDING_POINTER_FILENAME = "latest-sounding.json";
 export const AIRPORT_POINTER_FILENAME = "latest-airport.json";
 
 /** The missing value in every one of a sounding's level arrays, `sig`
  * included. A JSON number, not a 16-bit field. */
-export const SOUNDING_MISSING = -32768;
+const SOUNDING_MISSING = -32768;
 
 /** The seven parallel level arrays, in the order the contract lists them,
  * with the fixed-point range each stays inside (`MISSING` aside). The
@@ -35,8 +35,8 @@ const LEVEL_BOUNDS: Record<string, [number, number]> = {
   ws: [0, 3000],
   sig: [0, 262143],
 };
-export const LEVEL_ARRAYS = ["p", "z", "t", "td", "wd", "ws", "sig"] as const;
-export type LevelArray = (typeof LEVEL_ARRAYS)[number];
+const LEVEL_ARRAYS = ["p", "z", "t", "td", "wd", "ws", "sig"] as const;
+type LevelArray = (typeof LEVEL_ARRAYS)[number];
 
 /** A WIGOS identifier written out: series, issuer, issue number and the
  * local identifier — digits, hyphens and (rarely) letters. */
@@ -50,7 +50,7 @@ const CRC32 = /^[0-9a-f]{8}$/;
 const SOUNDING_PATH = /^sounding\.\d{10}\/index\.json$/;
 const AIRPORT_PATH = /^airport\.\d{12}\/index\.json$/;
 
-export const FLIGHT_CATEGORIES = ["VFR", "MVFR", "IFR", "LIFR"] as const;
+const FLIGHT_CATEGORIES = ["VFR", "MVFR", "IFR", "LIFR"] as const;
 export type FlightCategory = (typeof FLIGHT_CATEGORIES)[number];
 
 /** The ranges the contract admits, shared by both products' readers. A
@@ -67,7 +67,7 @@ const HEIGHT: [number, number] = LEVEL_BOUNDS.z!;
 
 /** The pointer both products publish, which is the run pointer's shape
  * with another product name. */
-export interface StationPointer<P extends string> {
+interface StationPointer<P extends string> {
   schemaVersion: 1;
   product: P;
   issued: string;
@@ -90,7 +90,7 @@ export interface StationFile {
 /** A product's account of one of its sources. Kept as the index carries
  * it: the ids are admitted on shape, so a gateway added after this build
  * still reads. */
-export interface StationSource {
+interface StationSource {
   id: string;
   ok: boolean;
   url?: string;
@@ -99,7 +99,7 @@ export interface StationSource {
 }
 
 /** What a sounding marker draws without fetching the soundings file. */
-export interface SoundingHeadline {
+interface SoundingHeadline {
   /** 500 hPa temperature and dew point, °C to a tenth. */
   t500: number | null;
   td500: number | null;
@@ -163,7 +163,7 @@ export interface Sounding {
   derived: SoundingDerived;
 }
 
-export interface SoundingDerived {
+interface SoundingDerived {
   freezingLevel: number | null;
   pw: number | null;
   lapse850_500: number | null;

@@ -31,8 +31,8 @@ import type {
   SoundingStationEntry,
 } from "./schema";
 
-export const SOUNDING_SOURCE = "station-soundings";
-export const AIRPORT_SOURCE = "station-airports";
+const SOUNDING_SOURCE = "station-soundings";
+const AIRPORT_SOURCE = "station-airports";
 
 const LAYERS = {
   sounding: "station-sounding",
@@ -42,7 +42,7 @@ const LAYERS = {
   airportMinor: "station-airport-minor",
 } as const;
 
-export const STATION_LAYER_IDS: readonly string[] = Object.values(LAYERS);
+const STATION_LAYER_IDS: readonly string[] = Object.values(LAYERS);
 /** The layers a click on the map may hit a station through, the sparser
  * set first so a sounding over an airport opens the sounding. */
 export const STATION_CLICKABLE_LAYERS: readonly string[] = [
