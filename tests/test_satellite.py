@@ -39,6 +39,7 @@ import os
 import re
 import shutil
 import subprocess
+import tempfile
 import unittest
 import urllib.parse
 from collections.abc import Callable
@@ -435,8 +436,61 @@ class ListingTests(unittest.TestCase):
 
 
 @requires_gdal_warp
+def warp_window(
+    root: Path,
+    ancillary: Path,
+    listing: Callable[[str], str],
+    download: Callable[[str], bytes],
+    *,
+    force: bool = False,
+    grid: TargetGrid = TILE_GRID,
+    channels: tuple = (IR104,),
+    producers: tuple = (),
+):
+    """The fixture's one-hour window fetched into ``root`` on two tiles."""
+    return satellite_fetch.fetch_window(
+        TWO_TILES,
+        channels,
+        SLOT_0300,
+        1,
+        grid=grid,
+        raw_root=root,
+        destination=root / "himawari.2026091703",
+        series_stem="himawari.2026091703",
+        units={channel.id: "K" for channel in channels},
+        producers=producers,
+        ancillary_root=ancillary,
+        force=force,
+        fetch=listing,
+        download=download,
+    )
+
+
 class FetchTests(TempRoot, unittest.TestCase):
     root_prefix = "xue-himawari-"
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        # The six channels warped once for the class: the first round most
+        # of these tests start from, and the slow part of each. A test that
+        # starts from it takes a copy (from_seed), since the tests change
+        # what they read.
+        cls.seed = Path(tempfile.mkdtemp(prefix="xue-himawari-seed-"))
+        cls.addClassCleanup(shutil.rmtree, cls.seed, True)
+        listing, download = bucket(fixture_keys())
+        cls.seed_downloads: list[str] = []
+
+        def download_counting(url: str) -> bytes:
+            cls.seed_downloads.append(url)
+            return download(url)
+
+        ancillary = stage_ancillary(cls.seed, (SLOT_0300, SLOT_0310))
+        cls.seed_window = warp_window(cls.seed, ancillary, listing, download_counting, channels=CHANNELS)
+
+    def from_seed(self) -> None:
+        """The class's warped six-channel window, as this test's raw root."""
+        shutil.copytree(self.seed, self.root, dirs_exist_ok=True)
 
     def setUp(self) -> None:
         super().setUp()
@@ -458,21 +512,15 @@ class FetchTests(TempRoot, unittest.TestCase):
         channels: tuple = (IR104,),
         producers: tuple = (),
     ):
-        return satellite_fetch.fetch_window(
-            TWO_TILES,
-            channels,
-            SLOT_0300,
-            1,
-            grid=grid,
-            raw_root=self.root,
-            destination=self.root / "himawari.2026091703",
-            series_stem="himawari.2026091703",
-            units={channel.id: "K" for channel in channels},
-            producers=producers,
-            ancillary_root=self.ancillary,
+        return warp_window(
+            self.root,
+            self.ancillary,
+            listing or self.listing,
+            self.download_counting,
             force=force,
-            fetch=listing or self.listing,
-            download=self.download_counting,
+            grid=grid,
+            channels=channels,
+            producers=producers,
         )
 
     def test_a_slot_is_warped_once_and_read_from_the_cache_after(self) -> None:
@@ -515,9 +563,13 @@ class FetchTests(TempRoot, unittest.TestCase):
         are cached as frames beside them, so the next round reads
         everything back and composes nothing. A slot one channel lacks is
         left out whole, and every series carries the same axis."""
+        # The class's window is the first round: every tile of both slots
+        # fetched once and warped. The producer then runs on what it cached.
+        self.assertEqual([(item.slot, item.tiles) for item in self.seed_window.slots], [(SLOT_0300, 12), (SLOT_0310, 12)])
+        self.assertEqual(len(self.seed_downloads), 24)
+        self.from_seed()
         window = self.fetch_window(channels=CHANNELS, producers=(DUST,))
-        self.assertEqual([(item.slot, item.tiles) for item in window.slots], [(SLOT_0300, 12), (SLOT_0310, 12)])
-        self.assertEqual(len(self.downloads), 24)
+        self.assertEqual(self.downloads, [])
         self.assertEqual(list(window.series), ["ir039", "wv062", "ir086", "ir104", "ir112", "ir123", "dustr", "dustg", "dustb"])
         self.assertEqual(list(window.slots[0].frames), list(window.series))
         self.assertEqual(sorted(path.name for path in (self.root / "himawari-frames").iterdir()), sorted(window.series))
@@ -562,6 +614,7 @@ class FetchTests(TempRoot, unittest.TestCase):
             self.fetch_window(channels=(IR104,), producers=(DUST,))
 
     def test_a_frame_is_the_tiles_on_the_target_grid(self) -> None:
+        self.from_seed()
         window = self.fetch_window()
         info = json.loads(subprocess.run(["gdalinfo", "-json", "-stats", str(window.slots[0].frames["ir104"])], check=True, capture_output=True, text=True).stdout)
         self.assertEqual(info["size"], [600, 325])
@@ -586,6 +639,7 @@ class FetchTests(TempRoot, unittest.TestCase):
             self.fetch_window(listing=bucket({})[0], force=True)
 
     def test_a_frame_cached_before_sidecars_is_read_off_its_band(self) -> None:
+        self.from_seed()
         window = self.fetch_window()
         frame = window.slots[0].frames["ir104"]
         sidecar = assemble.packing_path(frame)
@@ -600,6 +654,7 @@ class FetchTests(TempRoot, unittest.TestCase):
             assemble.frame_packing(frame)
 
     def test_the_series_is_what_the_observation_ingest_reads(self) -> None:
+        self.from_seed()
         window = self.fetch_window(channels=CHANNELS, producers=(DUST,))
         wanted = ("ir104", *DUST_RGB_COMPONENT_IDS)
         # The run directory, one file per variable, resolved by id; or the
