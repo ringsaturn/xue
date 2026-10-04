@@ -1,12 +1,9 @@
 """Geostationary satellite imagery as a ``series_file`` observation source.
 
-A satellite source is the JMA nowcast's and the CMA mosaic's shape: the
-fetch stage produces one NetCDF series per window on a regular grid and
-the converter downstream is untouched. What the fetch stage does here is
-list a scan's tiles on the agency's public bucket, warp them from the
-geostationary projection onto plate carrée, cache the result per frame,
-and stack the window's frames into the series. Four seams are fixed for
-what comes after the first satellite and channel:
+The fetch stage lists a scan's files, warps them from the geostationary
+projection onto plate carrée, caches each frame and stacks the window into
+one NetCDF series per variable, so the converter downstream is untouched
+(``docs/satellite.md``). Four seams:
 
 - :mod:`platforms` — the registry: one row per spacecraft at an orbital
   slot, its instrument's channels, its files' bucket and reader;

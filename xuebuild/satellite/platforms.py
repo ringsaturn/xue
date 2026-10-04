@@ -216,9 +216,9 @@ ABI_CHANNELS: tuple[Channel, ...] = (
 )
 
 # Himawari-9 at 140.7°E, the JMA imager NOAA redistributes on its own bucket
-# (2026-09-17 measurements: the ISatSS tiles of a slot are generated about
-# eight minutes after the scan starts and listed some fifteen minutes after
-# it). WMO C-5 174, C-8 297 (wmo-im/CCT).
+# (the ISatSS tiles of a slot are generated about eight minutes after the
+# scan starts and listed some fifteen minutes after it). WMO C-5 174, C-8
+# 297 (wmo-im/CCT).
 HIMAWARI = Platform(
     role="himawari",
     spacecraft="Himawari-9",
