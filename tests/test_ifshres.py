@@ -39,8 +39,8 @@ from unittest import mock
 
 import numpy as np
 
-from tests._support import ClassTempRoot, FIXTURES, TempRoot, assert_native_matches, requires_gdal
-from xuebuild import binconvert, fetch, native, observation, om2nccli
+from tests._support import ClassTempRoot, FIXTURES, TempRoot, assert_native_matches, requires_gdal, requires_native_source
+from xuebuild import binconvert, fetch, observation, om2nccli
 from xuebuild.binconvert import interval_rate, published_bundle_ids
 from xuebuild.binformat import read_bundle
 from xuebuild.errors import ConversionError, DownloadError
@@ -695,9 +695,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                     expected_hours=3,
                 )
 
-    @unittest.skipUnless(
-        native.knows_source("ifshres"), f"the installed {native.DISTRIBUTION} wheel predates the ifshres source"
-    )
+    @requires_native_source("ifshres")
     def test_the_native_encoder_writes_the_same_bytes(self) -> None:
         assert_native_matches(self, SERIES_DIR, self.root / "out", self.report, self.root / "native", model="ifshres")
 

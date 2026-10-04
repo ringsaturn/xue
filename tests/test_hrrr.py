@@ -33,8 +33,8 @@ from unittest import mock
 
 import numpy as np
 
-from tests._support import ClassTempRoot, FIXTURES, assert_native_matches, requires_gdalinfo
-from xuebuild import binconvert, grib2, native
+from tests._support import ClassTempRoot, FIXTURES, assert_native_matches, requires_gdalinfo, requires_native
+from xuebuild import binconvert, grib2
 from xuebuild.binconvert import (
     GridInfo,
     _extract_planes,
@@ -95,22 +95,6 @@ HRRR_F01_IDX = "\n".join(
         "79:33000000:d=2026091100:TCDC:entire atmosphere:1 hour fcst:",
         "80:33910487:d=2026091100:HGT:cloud ceiling:1 hour fcst:",
     ]
-)
-
-
-def wheel_reads_projections() -> bool:
-    """Whether the installed wheel is new enough for a projected source: it
-    reports the coordinate system `gdalinfo` does, which is what the
-    converter recognises a projection from. An older wheel converts the
-    regular grids as before and is skipped here, the way CI sits between a
-    version bump and its release."""
-    if not native.available() or not hasattr(native.require(), "gdal_info"):
-        return False
-    return "coordinateSystem" in native.require().gdal_info(str(FIXTURE))
-
-
-requires_projected_native = unittest.skipUnless(
-    wheel_reads_projections(), "the installed xuepy wheel predates projected sources"
 )
 
 
@@ -476,7 +460,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         wind = read_bundle(self.root / "out" / "wind10m.xue")
         self.assertEqual([variable["id"] for variable in wind.metadata["variables"]], ["ugrd10m", "vgrd10m"])
 
-    @requires_projected_native
+    @requires_native
     def test_the_native_encoder_writes_the_same_bytes(self) -> None:
         assert_native_matches(self, FIXTURE, self.root / "out", self.report, self.root / "native", model="hrrr")
 

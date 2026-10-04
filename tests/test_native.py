@@ -29,7 +29,6 @@ from tests._support import (
     assert_trees_identical,
     require_comparable_compression,
     requires_native,
-    requires_native_source,
 )
 from xuebuild import binconvert, binformat, encoder, native
 from xuebuild.errors import ConversionError
@@ -323,11 +322,6 @@ class NativeRestrictedBuildTests(ClassTempRoot, unittest.TestCase):
 
 
 @requires_native
-# The crop is a regional grid a hair off 0.25° as GDAL reads it, which an
-# encoder describes on its round step since the MRMS source arrived
-# (`_snap_regional_steps`); a wheel from before then writes the old grid
-# block and cannot match.
-@requires_native_source("mrms", "the regional grid snap")
 class NativeJpeg2000Tests(ClassTempRoot, unittest.TestCase):
     """The GDAL the wheel carries decodes JPEG 2000-packed records — the
     GFS-Wave family as published, which the first wheel refused ("Is the
