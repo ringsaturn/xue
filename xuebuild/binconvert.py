@@ -29,6 +29,7 @@ from typing import Any
 import numpy as np
 
 from . import binformat, grib2, temporal, zarrstore, zstdcli
+from .common import crc32_hex
 from .errors import ConversionError, DownloadError
 from .gdal import (
     discover_inputs,
@@ -1650,7 +1651,7 @@ def _write_variable_bundle(
         "variable": variable_id,
         "output": str(output),
         "byteLength": len(bundle_bytes),
-        "crc32": f"{zlib.crc32(bundle_bytes) & 0xFFFFFFFF:08x}",
+        "crc32": crc32_hex(bundle_bytes),
     }
 
 
@@ -2278,7 +2279,7 @@ def convert_bin(
                 "streamPath": str(stream_path),
                 "indexPath": str(index_path),
                 "byteLength": len(video_artifact.stream_bytes),
-                "crc32": f"{zlib.crc32(video_artifact.stream_bytes) & 0xFFFFFFFF:08x}",
+                "crc32": crc32_hex(video_artifact.stream_bytes),
                 "codec": video_artifact.codec_string,
                 "width": video_grid.width,
                 "height": video_grid.height,
@@ -2304,7 +2305,7 @@ def convert_bin(
             "width": poster_grid.width,
             "height": poster_grid.height,
             "byteLength": len(payload),
-            "crc32": f"{zlib.crc32(payload) & 0xFFFFFFFF:08x}",
+            "crc32": crc32_hex(payload),
             "metadataJson": json.dumps(build_metadata(run_time, variable_offsets[variable_id], poster_grid, profile, (variable_id,), source=source, unit_seconds=unit_seconds)),
         }
         LOG.info("wrote %s (%.1f KB)", poster_path, len(payload) / 1e3)
@@ -2514,7 +2515,7 @@ def convert_bin(
                 run_id,
                 run_time,
                 manifest_path=manifest_path.relative_to(latest_path.parent).as_posix(),
-                manifest_crc32=f"{zlib.crc32(manifest_bytes) & 0xFFFFFFFF:08x}",
+                manifest_crc32=crc32_hex(manifest_bytes),
                 model=source.manifest_model,
                 product=source.product,
             )

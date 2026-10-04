@@ -25,10 +25,10 @@ pointer flips to its new CRC32 under the same run id.
 from __future__ import annotations
 
 import json
-import zlib
 from pathlib import Path
 from typing import Any
 
+from .common import crc32_hex
 from .binconvert import bundle_input_ids, published_bundle_ids, video_variable_ids
 from .errors import ManifestError
 from .variables import variable_spec
@@ -318,7 +318,7 @@ def assemble_run(
         run_id,
         _parse_time(payload["runTime"], "runTime"),
         manifest_path=manifest_path.relative_to(output_dir).as_posix(),
-        manifest_crc32=f"{zlib.crc32(manifest_bytes) & 0xFFFFFFFF:08x}",
+        manifest_crc32=crc32_hex(manifest_bytes),
         model=source.manifest_model,
         product=source.product,
     )

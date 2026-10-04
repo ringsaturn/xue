@@ -40,12 +40,12 @@ import json
 import logging
 import os
 import re
-import zlib
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from .common import crc32_hex
 from .binconvert import bundle_input_ids, published_bundle_ids
 from .encoder import convert_bin
 from .errors import DownloadError, ManifestError, XueError
@@ -454,7 +454,7 @@ def build_catalog_entry(
         "variables": [bundle["variable"] for bundle in manifest["bundles"]],
         "defaultVariable": spec.default_variable,
         "manifestPath": f"{spec.output_subdirectory}/manifest.json",
-        "manifestCrc32": f"{zlib.crc32(manifest_bytes) & 0xFFFFFFFF:08x}",
+        "manifestCrc32": crc32_hex(manifest_bytes),
         # What the case weighs on the bucket: each bundle's container, or
         # its store on a bundle that ships only the store.
         "byteLength": sum(
@@ -563,7 +563,7 @@ def collect_catalog(output_root: Path) -> dict[str, Any]:
         manifest_path = output_root / entry["manifestPath"]
         if not manifest_path.exists():
             raise ShowcaseError(f"case {entry['id']} has a sidecar but no manifest at {manifest_path}")
-        crc32 = f"{zlib.crc32(manifest_path.read_bytes()) & 0xFFFFFFFF:08x}"
+        crc32 = crc32_hex(manifest_path.read_bytes())
         if crc32 != entry["manifestCrc32"]:
             raise ShowcaseError(
                 f"case {entry['id']} sidecar names manifest crc32 {entry['manifestCrc32']}, "

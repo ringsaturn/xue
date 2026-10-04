@@ -45,6 +45,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .. import __version__
+from ..common import iso_z
 from ..errors import DownloadError, SoundingProductError, XueError
 from ..fetch import _request
 from .bufr import parse_file_name
@@ -94,12 +95,12 @@ class SourceStatus:
     def to_json(self) -> dict[str, Any]:
         payload: dict[str, Any] = {"id": self.id, "ok": self.ok}
         if self.fetched is not None:
-            payload["fetched"] = _iso(self.fetched)
+            payload["fetched"] = iso_z(self.fetched)
         if self.url is not None:
             payload["url"] = self.url
         if self.error is not None:
             payload["error"] = self.error
-        payload["watermark"] = None if self.watermark is None else _iso(self.watermark)
+        payload["watermark"] = None if self.watermark is None else iso_z(self.watermark)
         payload.update(self.detail)
         return payload
 
@@ -124,10 +125,6 @@ class RemoteObject:
     @property
     def name(self) -> str:
         return self.key.rsplit("/", 1)[-1]
-
-
-def _iso(moment: datetime) -> str:
-    return moment.astimezone(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
 def issue_raw_directory(raw_root: Path, issue: datetime) -> Path:

@@ -22,6 +22,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
+from ..common import iso_z
 from .schema import (
     CATEGORIES,
     ELEVATION_RANGE,
@@ -78,7 +79,7 @@ class MetarReport:
         """The report as a shard writes it. The station's identity and
         position are on the station, not repeated on every report."""
         return {
-            "time": self.time.astimezone(UTC).isoformat(timespec="seconds").replace("+00:00", "Z"),
+            "time": iso_z(self.time),
             "raw": self.raw,
             "t": self.t,
             "td": self.td,

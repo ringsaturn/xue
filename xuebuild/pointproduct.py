@@ -12,17 +12,14 @@ from __future__ import annotations
 import json
 import os
 import re
-import zlib
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from .common import crc32_hex, iso_z  # noqa: F401 — re-exported for the products
+
 POINTER_SCHEMA_VERSION = 1
 CRC32 = re.compile(r"^[0-9a-f]{8}$")
-
-
-def crc32_hex(payload: bytes) -> str:
-    return f"{zlib.crc32(payload) & 0xFFFFFFFF:08x}"
 
 
 def encode_json(payload: dict[str, Any]) -> bytes:
@@ -41,10 +38,6 @@ def write_bytes_atomic(path: Path, payload: bytes) -> None:
         handle.flush()
         os.fsync(handle.fileno())
     temporary.replace(path)
-
-
-def iso_z(moment: datetime) -> str:
-    return moment.astimezone(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
 def pointer_payload(
