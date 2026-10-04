@@ -22,8 +22,10 @@ on:
       # (web/tooling/discovery.ts). sitemap.xml comes from the published
       # showcase catalog in the bucket, not from showcase/cases/, so a case
       # enters the sitemap at the first shell deploy after its upload.
+      # docs/contribution/ is developer documentation and is not in it.
       - showcase/README.md
       - docs/**
+      - "!docs/contribution/**"
       - README.md
       - package.json
       - package-lock.json
@@ -31,6 +33,7 @@ on:
       - vite.config.ts
       - wrangler.jsonc
       - Makefile
+      - mk/**
       - .github/workflows/deploy-pages.yml
   workflow_dispatch:
 

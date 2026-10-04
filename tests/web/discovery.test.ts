@@ -1,6 +1,6 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -14,6 +14,8 @@ import {
   sitemapUrls,
 } from "../../web/tooling/discovery";
 import { REPO_URL, SITE_ORIGIN } from "../../web/src/site";
+
+const REPO_ROOT = resolve(__dirname, "../..");
 
 const scratch: string[] = [];
 
@@ -126,12 +128,16 @@ describe("llms-full", () => {
   it("names documents that exist in the repository", () => {
     expect(LLMS_FULL_SOURCES).toEqual([
       "README.md",
+      "docs/sources.md",
       "docs/format.md",
+      "docs/zarr-profile.md",
       "docs/encoder.md",
       "docs/tc.md",
+      "docs/airport.md",
       "docs/sounding.md",
       "docs/stac.md",
       "showcase/README.md",
     ]);
+    for (const path of LLMS_FULL_SOURCES) expect(existsSync(join(REPO_ROOT, path)), path).toBe(true);
   });
 });

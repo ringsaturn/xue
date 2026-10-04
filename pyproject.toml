@@ -16,25 +16,10 @@ license = "MIT OR Apache-2.0"
 license-files = ["LICENSE-MIT", "LICENSE-APACHE"]
 dependencies = [
     "numpy>=2.0",
-    # The native encoder, built from rust/xue-py in this repository. A build
-    # runs through it by default; XUE_ENCODER=python falls back to the
-    # subprocess pipeline, which is the reference implementation.
-    #
-    # 0.4 is the floor because `xue.gdal_info` arrived there, and
-    # `xuebuild.gdal.dataset_info` uses it to inspect inputs through the
-    # wheel's own GDAL. Below it a build still works but needs a system
-    # `gdalinfo` on PATH, which the scheduled publish workflows no longer
-    # install. The floor tracks the current release because the wheel's
-    # source table must match sources.py (a wheel that publishes a different
-    # bundle set refuses to build), and 0.22 is the first wheel whose GFS
-    # and ECMWF tables publish the height, temperature, humidity and wind
-    # on all eight registered isobaric surfaces. 0.26 adds the precipitable
-    # water, the convective inhibition, the planetary boundary layer height,
-    # the derived categorical precipitation type and the 100 m wind. 0.27
-    # adds the model orography, a static one-frame bundle. 0.28 adds each
-    # bundle's own full grid to the manifest, which is what the STAC Item
-    # reads its authoritative `xue:grid` from. 0.29 adds the SWPC OVATION
-    # aurora probability source.
+    # The native encoder (rust/xue-py); XUE_ENCODER=python falls back to the
+    # reference pipeline. The floor tracks the current release because the
+    # wheel's source table must match xuebuild/sources.py, and a wheel that
+    # publishes a different bundle set refuses to build (docs/contribution/releasing.md).
     "xuepy>=0.29,<0.30",
 ]
 
@@ -49,27 +34,11 @@ include = ["xuebuild*"]
 xuebuild = ["palette.txt", "precipitation_palette.txt", "stacindex.html"]
 
 [dependency-groups]
-# Optional, for tests and for reading a delta-coded store through
-# zarr-python / xarray. The exporter itself (xuebuild/zarrstore.py) writes a
-# Zarr v3 store with NumPy alone, so the runtime dependencies above stay
-# NumPy + xuepy; this group only registers the `xue.delta` codec
-# (xuebuild/zarrcodec.py) and opens the result the way any Zarr client
-# would — pystac likewise reads the STAC catalog (xuebuild/stac.py, also
-# hand-written) the way a catalog client would, in tests/test_stac.py.
+# Tests, and reading a delta-coded store or the STAC catalog the way a client would.
 zarr = ["zarr>=3.1", "numcodecs>=0.16", "xarray>=2025.1", "pystac>=1.14"]
-# What the CMA radar feed's fetch reads its archive with (xuebuild/cmaarchive.py):
-# one plain Zarr v3 store per day on a private bucket, opened with zarr-python
-# over s3fs and handed to the converter as the NetCDF series xarray writes.
-# Only the `publish cma` workflow syncs it; every other build stays NumPy.
+# The CMA radar fetch: reads its daily Zarr archive over s3fs (xuebuild/cmaarchive.py).
 cma = ["zarr>=3.1", "numcodecs>=0.16", "s3fs>=2024.10", "xarray>=2025.1", "netcdf4>=1.7"]
-# What the SWPC OVATION aurora feed's fetch writes its frame cache and window
-# series with (xuebuild/aurora.py): the model publishes a JSON grid, and the
-# observation ingest reads NetCDF, so the fetch writes it with xarray — the
-# `aurora` workflow syncs this group, every other build stays NumPy.
+# The SWPC aurora fetch: writes its frame cache and window series as NetCDF (xuebuild/aurora.py).
 aurora = ["xarray>=2025.1", "netcdf4>=1.7"]
-# What a satellite source's composite producer runs
-# (xuebuild/satellite/producers.py): the classic Dust RGB is
-# `shachen.dustrgb.dust_rgb` on an xarray scene, called per slot in the
-# fetch stage. Only the satellite publish workflows and the satellite tests
-# need it; the converter reads the produced frames like any channel.
+# The satellite fetch: Dust RGB / DEBRA producers (shachen) and the FCI JPEG-LS filter.
 satellite = ["shachen>=0.3.0", "xarray>=2025.1", "hdf5plugin>=5.0"]

@@ -1,9 +1,7 @@
 /**
  * Browser-native WebCodecs decode path for the temperature video artifact.
  *
- * Ports the logic proven out in scripts/webcodecs_spike/spike.js into a
- * `DecodeChannel`
- * that mimics the Worker message protocol `worker.ts` speaks
+ * A `DecodeChannel` that mimics the Worker message protocol `worker.ts` speaks
  * (`booted` -> `init` -> `ready`, then `decode` -> `frame`/`error`), so
  * `main.ts` can hold either a real Worker (Xue/WASM path) or this
  * channel (video path) in the same `VariableSession.worker` field without

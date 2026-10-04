@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Measure the per-frame raster-tile baseline from the README size table.
+"""Measure the per-frame raster-tile baseline behind the size table in
+docs/contribution/architecture-rationale.md.
 
 Converts 2 m temperature and precipitation rate from one GFS run into
 per-frame precolored PNG8 PMTiles (EPSG:3857, zoom 0-4) and reports the

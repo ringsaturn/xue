@@ -1,10 +1,8 @@
 """Optional lossless-video artifacts, decoded in-browser via WebCodecs.
 
 Encodes the same quantized R8 codes Xue stores as a GOP-6
-lossless H.264 Annex-B elementary stream. This is the production port of the
-encode/demux logic proven out in ``scripts/prep_webcodecs_spike.py`` and
-``scripts/webcodecs_spike/spike.js``: browsers whose ``VideoDecoder`` supports the emitted
-profile (Chrome, as of the spike; not Safari) can decode this stream
+lossless H.264 Annex-B elementary stream. Browsers whose ``VideoDecoder``
+supports the emitted profile (Chrome; not Safari) can decode this stream
 byte-exact with no WASM and no MP4 demuxer, using
 ``avc: {format: "annexb"}`` and feeding these access units directly as
 ``EncodedVideoChunk``s.

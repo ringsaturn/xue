@@ -6,7 +6,7 @@ edition = "2021"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/ringsaturn/xue"
 description = "Python bindings for the Xue decoder and the experimental native encoder"
-# Distributed as a wheel through the project's own index, never to crates.io.
+# Distributed as the xuepy wheel on PyPI, never to crates.io.
 publish = false
 build = "build.rs"
 

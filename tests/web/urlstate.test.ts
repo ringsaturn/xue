@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { FORECAST_MODELS } from "../../web/src/manifest";
 
 import {
   EXPERIMENT_OFF,
@@ -102,6 +103,13 @@ describe("parseVariableFromSearch", () => {
 });
 
 describe("parseModelFromSearch", () => {
+  it("resolves every model the shell serves by its own id", () => {
+    for (const id of Object.keys(FORECAST_MODELS)) {
+      expect(parseModelFromSearch(`?model=${id}`)).toBe(id);
+    }
+    expect(parseModelFromSearch("?model=OVATION")).toBe("aurora");
+  });
+
   it("resolves served models and their aliases, case-insensitively", () => {
     expect(parseModelFromSearch("?model=gfs")).toBe("gfs");
     expect(parseModelFromSearch("?model=ECMWF")).toBe("ecmwf");
