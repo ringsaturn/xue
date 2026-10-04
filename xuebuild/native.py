@@ -44,9 +44,8 @@ from .binconvert import published_bundle_ids, retire_container, video_variable_i
 from .errors import ConversionError
 from .manifest import (
     build_bin_manifest,
-    build_latest_pointer,
     write_bin_manifest,
-    write_latest_pointer,
+    write_pointer_to_manifest,
 )
 from .sources import SourceSpec, source_spec
 from .videoconvert import build_debug_playlist, encode_variable_video
@@ -475,15 +474,13 @@ def convert_bin(
         )
         LOG.info("wrote manifest %s", manifest_path)
         if latest_path is not None and run_id is not None:
-            manifest_bytes = Path(manifest_path).read_bytes()
-            pointer = build_latest_pointer(
-                run_id,
-                _run_time(payload),
-                manifest_path=Path(manifest_path).relative_to(Path(latest_path).parent).as_posix(),
-                manifest_crc32=crc32_hex(manifest_bytes),
+            write_pointer_to_manifest(
+                Path(latest_path),
+                Path(manifest_path),
+                run_id=run_id,
+                run_time=_run_time(payload),
                 model=source.manifest_model,
                 product=source.product,
             )
-            write_latest_pointer(Path(latest_path), pointer)
             LOG.info("wrote live pointer %s -> run %s", latest_path, run_id)
     return report

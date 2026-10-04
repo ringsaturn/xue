@@ -28,16 +28,14 @@ import json
 from pathlib import Path
 from typing import Any
 
-from .common import crc32_hex
 from .binconvert import bundle_input_ids, published_bundle_ids, video_variable_ids
 from .errors import ManifestError
 from .variables import variable_spec
 from .manifest import (
     _parse_time,
     build_bin_manifest,
-    build_latest_pointer,
     write_bin_manifest,
-    write_latest_pointer,
+    write_pointer_to_manifest,
 )
 from .sources import SourceSpec, source_spec
 
@@ -312,17 +310,15 @@ def assemble_run(
     payload = merge_partial_manifests(parts, source=source, expected_hours=expected_hours, base=base)
     manifest_path = run_directory / "manifest.json"
     write_bin_manifest(manifest_path, payload, force=force, expected_hours=expected_hours)
-    manifest_bytes = manifest_path.read_bytes()
     latest_path = output_dir / source.latest_filename
-    pointer = build_latest_pointer(
-        run_id,
-        _parse_time(payload["runTime"], "runTime"),
-        manifest_path=manifest_path.relative_to(output_dir).as_posix(),
-        manifest_crc32=crc32_hex(manifest_bytes),
+    write_pointer_to_manifest(
+        latest_path,
+        manifest_path,
+        run_id=run_id,
+        run_time=_parse_time(payload["runTime"], "runTime"),
         model=source.manifest_model,
         product=source.product,
     )
-    write_latest_pointer(latest_path, pointer)
     fresh = [variable for part in parts for variable in manifest_bundle_ids(part)]
     return {
         "model": source.manifest_model,
