@@ -36,6 +36,7 @@ from pathlib import Path
 
 import numpy as np
 
+from tests._support import FIXTURES, registry_entry
 from xuebuild import grib2
 from xuebuild.assemble import bundle_group_matrix, group_needs_eccodes
 from xuebuild.binconvert import (
@@ -70,22 +71,10 @@ from xuebuild.sources import source_spec
 from xuebuild.variables import OCEAN_VARIABLE_IDS, WAVE_VECTOR_COMPONENT_IDS, variable_spec
 
 FIXTURE = Path(__file__).resolve().parent / "fixtures" / "gfs.2026081406.f000.crop.grib2"
-REGISTRY = Path(__file__).resolve().parent / "fixtures" / "ocean-registry.json"
+REGISTRY = FIXTURES / "ocean-registry.json"
 EPOCH = datetime(2026, 1, 1, tzinfo=UTC)
 WAVE_IDS = ("htsgw", "perpw", "dirpw")
 GDAL_GRIB_NODATA = 9999.0
-
-
-def registry_entry(variable_id: str) -> dict:
-    """The registry as the implementations must agree it is."""
-    spec = variable_spec(variable_id)
-    return {
-        "label": spec.label,
-        "unit": spec.output_unit,
-        "parameter": spec.parameter_metadata(),
-        "quality": PROFILES["quality"][variable_id].metadata(),
-        "compact": PROFILES["compact"][variable_id].metadata(),
-    }
 
 
 class RegistryTests(unittest.TestCase):

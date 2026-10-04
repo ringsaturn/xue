@@ -19,10 +19,10 @@ from __future__ import annotations
 
 import json
 import unittest
-from pathlib import Path
 
 import numpy as np
 
+from tests._support import FIXTURES, registry_entry
 from xuebuild.binconvert import (
     VECTOR_BUNDLES,
     VIDEO_VARIABLE_IDS,
@@ -45,19 +45,7 @@ from xuebuild.variables import (
     variable_spec,
 )
 
-REGISTRY = Path(__file__).resolve().parent / "fixtures" / "isobaric-registry.json"
-
-
-def registry_entry(variable_id: str) -> dict:
-    """The registry as the three implementations must agree it is."""
-    spec = variable_spec(variable_id)
-    return {
-        "label": spec.label,
-        "unit": spec.output_unit,
-        "parameter": spec.parameter_metadata(),
-        "quality": PROFILES["quality"][variable_id].metadata(),
-        "compact": PROFILES["compact"][variable_id].metadata(),
-    }
+REGISTRY = FIXTURES / "isobaric-registry.json"
 
 
 class RegistryTests(unittest.TestCase):

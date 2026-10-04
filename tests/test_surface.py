@@ -21,10 +21,10 @@ from __future__ import annotations
 import json
 import unittest
 from datetime import UTC, datetime
-from pathlib import Path
 
 import numpy as np
 
+from tests._support import FIXTURES, registry_entry
 from xuebuild.binconvert import (
     PTYPE_CODES,
     VECTOR_BUNDLES,
@@ -39,7 +39,7 @@ from xuebuild.quantize import PROFILES, SURFACE_VARIABLE_IDS
 from xuebuild.sources import source_spec
 from xuebuild.variables import variable_spec
 
-REGISTRY = Path(__file__).resolve().parent / "fixtures" / "surface-registry.json"
+REGISTRY = FIXTURES / "surface-registry.json"
 EPOCH = datetime(2026, 1, 1, tzinfo=UTC)
 CLOUD_COVER_IDS = ("tcdc", "lcdc", "mcdc", "hcdc")
 # Fields whose codebook is not one-sided: a temperature runs below zero (the
@@ -49,18 +49,6 @@ NEGATIVE_OFFSET_IDS = ("dpt2m", "aptmp2m", "cin")
 # The one categorical codebook: integer class codes with no error budget, the
 # same book in every profile.
 CATEGORICAL_IDS = ("ptype",)
-
-
-def registry_entry(variable_id: str) -> dict:
-    """The registry as the three implementations must agree it is."""
-    spec = variable_spec(variable_id)
-    return {
-        "label": spec.label,
-        "unit": spec.output_unit,
-        "parameter": spec.parameter_metadata(),
-        "quality": PROFILES["quality"][variable_id].metadata(),
-        "compact": PROFILES["compact"][variable_id].metadata(),
-    }
 
 
 class RegistryTests(unittest.TestCase):

@@ -19,10 +19,10 @@ from __future__ import annotations
 
 import json
 import unittest
-from pathlib import Path
 
 import numpy as np
 
+from tests._support import FIXTURES, registry_entry
 from xuebuild.errors import ConversionError
 from xuebuild.gdal import _band_matches, height_expression, pressure_expression, raster_expression
 from xuebuild.quantize import (
@@ -34,31 +34,23 @@ from xuebuild.quantize import (
 )
 from xuebuild.variables import HEIGHT_LEVELS_HPA, height_variable_id, variable_spec
 
-REGISTRY = Path(__file__).resolve().parent / "fixtures" / "pressure-registry.json"
+REGISTRY = FIXTURES / "pressure-registry.json"
 
 
-def registry_entry(variable_id: str) -> dict:
-    """The registry as the three implementations must agree it is."""
-    spec = variable_spec(variable_id)
-    entry: dict = {
-        "label": spec.label,
-        "unit": spec.output_unit,
-        "parameter": spec.parameter_metadata(),
-        "contourInterval": CONTOUR_INTERVALS[variable_id],
-        "quality": PROFILES["quality"][variable_id].metadata(),
-        "compact": PROFILES["compact"][variable_id].metadata(),
-    }
+def pressure_entry(variable_id: str) -> dict:
+    """The shared registry entry plus what the contours need."""
+    extra: dict = {"contourInterval": CONTOUR_INTERVALS[variable_id]}
     if variable_id in EMPHASIS_INTERVALS:
-        entry["emphasisInterval"] = EMPHASIS_INTERVALS[variable_id]
+        extra["emphasisInterval"] = EMPHASIS_INTERVALS[variable_id]
     if variable_id in EMPHASIS_CONTOURS:
-        entry["emphasisContours"] = list(EMPHASIS_CONTOURS[variable_id])
-    return entry
+        extra["emphasisContours"] = list(EMPHASIS_CONTOURS[variable_id])
+    return registry_entry(variable_id, **extra)
 
 
 class RegistryTests(unittest.TestCase):
     def test_the_committed_registry_still_describes_this_encoder(self) -> None:
         expected = json.loads(REGISTRY.read_text(encoding="utf-8"))
-        actual = {variable_id: registry_entry(variable_id) for variable_id in PRESSURE_VARIABLE_IDS}
+        actual = {variable_id: pressure_entry(variable_id) for variable_id in PRESSURE_VARIABLE_IDS}
         self.assertEqual(
             actual,
             expected,
