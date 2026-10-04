@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import json
 import shutil
-import tempfile
 import unittest
 import warnings
 from dataclasses import replace
@@ -24,6 +23,7 @@ from pathlib import Path
 
 import numpy as np
 
+from tests._support import ClassTempRoot
 from xuebuild import binconvert, binformat, temporal, zarrcodec, zarrstore, zstdcli
 from xuebuild.binconvert import GridInfo, build_metadata
 from xuebuild.errors import BundleError, ManifestError
@@ -133,13 +133,15 @@ class Crc32cTests(unittest.TestCase):
         self.assertEqual(zarrstore.crc32c(b""), 0)
 
 
-class ExportTests(unittest.TestCase):
+class ExportTests(ClassTempRoot, unittest.TestCase):
     """One two-variable bundle (a PREVIOUS and a RAW variable, the wind
     layout) exported four ways, plus a single-variable one."""
 
+    root_prefix = "xue-zarr-"
+
     @classmethod
     def setUpClass(cls) -> None:
-        cls.root = Path(tempfile.mkdtemp(prefix="xue-zarr-"))
+        super().setUpClass()
         cls.bundle = write_v2(cls.root / "pair.xue", ("tmp2m", "prate"))
         cls.single = write_v2(cls.root / "single.xue", ("tmp2m",))
         cls.stores: dict[tuple[bool, str], zarrstore.ExportReport] = {}
@@ -152,10 +154,6 @@ class ExportTests(unittest.TestCase):
                     index_location=location,
                 )
         cls.single_store = zarrstore.export_bundle(cls.root / "single.xue", cls.root / "single.zarr")
-
-    @classmethod
-    def tearDownClass(cls) -> None:
-        shutil.rmtree(cls.root, ignore_errors=True)
 
     def test_default_index_location_is_the_suffix_range_one(self) -> None:
         self.assertEqual(zarrstore.DEFAULT_INDEX_LOCATION, "end")
@@ -357,23 +355,21 @@ class ExportTests(unittest.TestCase):
         self.assertTrue((store / "tmp2m" / "zarr.json").is_file())
 
 
-class SeriesExportTests(unittest.TestCase):
+class SeriesExportTests(ClassTempRoot, unittest.TestCase):
     """The series store: the same codes cut one inner chunk per 8 x 8 block
     over the whole axis, so a cell's series is one chunk where the map store
     costs one per time chunk."""
 
+    root_prefix = "xue-zarr-series-"
+
     @classmethod
     def setUpClass(cls) -> None:
-        cls.root = Path(tempfile.mkdtemp(prefix="xue-zarr-series-"))
+        super().setUpClass()
         cls.bundle = write_v2(cls.root / "pair.xue", ("tmp2m", "prate"))
         cls.delta = zarrstore.export_series(cls.root / "pair.xue", cls.root / "pair.series.zarr")
         cls.plain = zarrstore.export_series(
             cls.root / "pair.xue", cls.root / "plain.series.zarr", delta=False
         )
-
-    @classmethod
-    def tearDownClass(cls) -> None:
-        shutil.rmtree(cls.root, ignore_errors=True)
 
     def test_read_back_equals_decode_plane(self) -> None:
         for report in (self.delta, self.plain):
@@ -436,23 +432,21 @@ class SeriesExportTests(unittest.TestCase):
 
 
 @unittest.skipUnless(zarrcodec.available(), "zarr-python is not installed (uv sync --group zarr)")
-class ZarrClientTests(unittest.TestCase):
+class ZarrClientTests(ClassTempRoot, unittest.TestCase):
     """What a generic client sees. The standard chain needs nothing
     registered; the delta chain needs `xuebuild.zarrcodec.register`."""
 
+    root_prefix = "xue-zarr-client-"
+
     @classmethod
     def setUpClass(cls) -> None:
-        cls.root = Path(tempfile.mkdtemp(prefix="xue-zarr-client-"))
+        super().setUpClass()
         cls.bundle = write_v2(cls.root / "pair.xue", ("tmp2m", "prate"))
         cls.standard = zarrstore.export_bundle(cls.root / "pair.xue", cls.root / "standard.zarr")
         cls.delta = zarrstore.export_bundle(cls.root / "pair.xue", cls.root / "delta.zarr", delta=True)
         cls.start = zarrstore.export_bundle(
             cls.root / "pair.xue", cls.root / "start.zarr", delta=True, index_location="start"
         )
-
-    @classmethod
-    def tearDownClass(cls) -> None:
-        shutil.rmtree(cls.root, ignore_errors=True)
 
     def test_zarr_python_reads_the_codes(self) -> None:
         import zarr
@@ -509,13 +503,15 @@ class ZarrClientTests(unittest.TestCase):
 
 
 @unittest.skipUnless(shutil.which("gdal_translate"), "the reference encoder needs a system GDAL")
-class BuildIntegrationTests(unittest.TestCase):
+class BuildIntegrationTests(ClassTempRoot, unittest.TestCase):
     """`convert_bin(..., zarr=True)`: one store beside every bundle and
     variant, named in the manifest, and the bundles unchanged by it."""
 
+    root_prefix = "xue-zarr-build-"
+
     @classmethod
     def setUpClass(cls) -> None:
-        cls.root = Path(tempfile.mkdtemp(prefix="xue-zarr-build-"))
+        super().setUpClass()
         cls.without = cls.root / "without"
         cls.with_zarr = cls.root / "with"
         cls.reports = {}
@@ -528,10 +524,6 @@ class BuildIntegrationTests(unittest.TestCase):
                 skip_video=True,
                 zarr=zarr,
             )
-
-    @classmethod
-    def tearDownClass(cls) -> None:
-        shutil.rmtree(cls.root, ignore_errors=True)
 
     def test_every_bundle_and_variant_has_a_store_named_in_the_manifest(self) -> None:
         manifest = json.loads((self.with_zarr / "manifest.json").read_text(encoding="utf-8"))
