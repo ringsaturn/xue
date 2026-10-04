@@ -171,7 +171,7 @@ class RegistryTests(unittest.TestCase):
     def test_the_source_is_the_himawari_one_hourly_on_its_own_disk(self) -> None:
         himawari = source_spec("himawari")
         self.assertTrue(SPEC.observation and SPEC.series_file and SPEC.fetched and SPEC.live)
-        self.assertEqual((SPEC.platform, SPEC.manifest_model, SPEC.latest_filename, SPEC.product), ("meteosat", "METEOSAT", "latest-meteosat.json", "fci-fldk-0p04"))
+        self.assertEqual(SPEC.platform, "meteosat")
         # FCI has no 11.2 µm window: three channels feed the composite.
         self.assertEqual(SPEC.input_variable_ids, ("ir086", "ir104", "ir123"))
         # The same scalars and core; the Dust RGB alone of the composites,

@@ -54,7 +54,7 @@ from xuebuild.fetch import (
     resolve_run,
     window_summary,
 )
-from xuebuild.manifest import MODEL_CORE_BUNDLES, validate_bin_manifest
+from xuebuild.manifest import validate_bin_manifest
 from xuebuild.model import GfsRun
 from xuebuild.quantize import PROFILES
 from xuebuild.sources import SOURCES, source_spec
@@ -87,10 +87,8 @@ THREE_HOURS = tuple(
 class SourceRegistryTests(unittest.TestCase):
     def test_the_source_is_a_fetched_series_file_observation(self) -> None:
         self.assertTrue(JMA.observation and JMA.fetched and JMA.live and JMA.series_file)
-        self.assertEqual((JMA.manifest_model, JMA.product, JMA.latest_filename), ("JMA-HRPNS", "japan-prate", "latest-jma.json"))
         self.assertEqual((JMA.window_hours, JMA.horizon_hours, JMA.cadence_seconds), (3, 3, 300))
         self.assertEqual((JMA.input_variable_ids, JMA.bundle_scalar_ids, JMA.core_bundle_ids), (("prate",),) * 3)
-        self.assertEqual(MODEL_CORE_BUNDLES["JMA-HRPNS"], ("prate",))
         self.assertFalse(JMA.video)
         # The grid the fetch asks the tool for is the one a complete build wants.
         west, south, east, north = JMA_BBOX

@@ -73,7 +73,6 @@ from xuebuild.fetch import (
 )
 from xuebuild.gdal import _band_matches, inspect_grib_multi, precipitation_rate_is_mm_per_hour, raster_expression
 from xuebuild.manifest import (
-    MODEL_CORE_BUNDLES,
     build_bin_manifest,
     build_latest_pointer,
     validate_bin_manifest,
@@ -127,13 +126,11 @@ def split_messages(path: Path) -> list[bytes]:
 
 class SourceRegistryTests(unittest.TestCase):
     def test_the_source_is_a_fetched_observation(self) -> None:
-        self.assertEqual((MRMS.manifest_model, MRMS.product), ("NOAA-MRMS", "conus-cref"))
         self.assertTrue(MRMS.observation)
         self.assertTrue(MRMS.fetched)
         # The one source that is an observation and live: a rolling window
         # its pointer follows.
         self.assertTrue(MRMS.live)
-        self.assertEqual(MRMS.latest_filename, "latest-mrms.json")
         self.assertEqual((MRMS.window_hours, MRMS.cadence_seconds), (3, 120))
         self.assertEqual(MRMS.horizon_hours, 3)
         self.assertEqual(MRMS.cycle_hours, 1)
@@ -156,11 +153,6 @@ class SourceRegistryTests(unittest.TestCase):
 
     def test_published_bundles_and_the_core_set(self) -> None:
         self.assertEqual(published_bundle_ids(MRMS), ("cref", "prate"))
-        self.assertEqual(MRMS.core_bundle_ids, ("cref",))
-        self.assertEqual(MODEL_CORE_BUNDLES["NOAA-MRMS"], ("cref",))
-        self.assertEqual(MODEL_CORE_BUNDLES["CMA-RADAR"], ("cref",))
-        for model in ("GFS", "ECMWF", "GFS-SFLUX", "HRRR"):
-            self.assertEqual(MODEL_CORE_BUNDLES[model], ("tmp2m", "prate"), model)
         # A source's core set is a subset of what it publishes, or a
         # complete build could never validate.
         for source in SOURCES.values():

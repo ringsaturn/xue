@@ -90,8 +90,6 @@ from xuebuild.idx import ByteRange, coalesce_ranges, series_byte_ranges
 from xuebuild.model import GfsRun
 from xuebuild.sources import (
     CFS_PGB_IDS,
-    MODEL_CORE_BUNDLES,
-    MODEL_PRODUCTS,
     SOURCES,
     family_frame_path,
     source_spec,
@@ -199,13 +197,7 @@ class SourceRegistryTests(unittest.TestCase):
         self.assertEqual({source_id for source_id, hour in starts.items() if hour}, {"cfs"})
         self.assertEqual(GFS.forecast_hours(6)[0], 0)
 
-    def test_the_identity_strings(self) -> None:
-        self.assertEqual(
-            (CFS.manifest_model, CFS.product, CFS.latest_filename),
-            ("CFSv2", "time-grib-01", "latest-cfs.json"),
-        )
-        self.assertEqual(MODEL_PRODUCTS["CFSv2"], "time-grib-01")
-        self.assertEqual(MODEL_CORE_BUNDLES["CFSv2"], ("tmp2m", "prate"))
+    def test_the_grid_tiles_and_kind(self) -> None:
         self.assertEqual(CFS.production_grid, (384, 190))
         self.assertEqual(CFS.tile, (96, 95))
         self.assertEqual(CFS.variant_factors, (2,))

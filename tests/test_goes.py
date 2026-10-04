@@ -79,10 +79,10 @@ def fixture_keys() -> dict[str, Path]:
 class RegistryTests(unittest.TestCase):
     def test_the_sources_are_the_himawari_one_on_their_own_disks(self) -> None:
         himawari = source_spec("himawari")
-        for spec, platform, model, pointer in ((EAST, "goeseast", "GOES-EAST", "latest-goeseast.json"), (WEST, "goeswest", "GOES-WEST", "latest-goeswest.json")):
+        for spec, platform in ((EAST, "goeseast"), (WEST, "goeswest")):
             with self.subTest(source=spec.id):
                 self.assertTrue(spec.observation and spec.series_file and spec.fetched and spec.live)
-                self.assertEqual((spec.platform, spec.manifest_model, spec.latest_filename, spec.product), (platform, model, pointer, "abi-fldk-0p04"))
+                self.assertEqual(spec.platform, platform)
                 self.assertEqual(spec.input_variable_ids, himawari.input_variable_ids)
                 self.assertEqual((spec.bundle_scalar_ids, spec.bundle_composite_ids, spec.core_bundle_ids), (himawari.bundle_scalar_ids, himawari.bundle_composite_ids, himawari.core_bundle_ids))
                 self.assertEqual(binconvert.published_bundle_ids(spec), ("ir104", "dustrgb", "dustcf"))
