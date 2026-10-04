@@ -172,6 +172,10 @@ export const ja: Record<MessageKey, string> = {
   langPickerAria: "言語",
   langPickerHeading: "言語",
   themeToggleAria: "ライト / ダークを切り替え",
+  viewGlobeAria: "地球儀表示",
+  viewTerrainAria: "3D 地形",
+  viewResetNorthAria: "北を上に戻す",
+  viewResetPitchAria: "傾きをリセット",
   particlesToggle: "粒子アニメーション",
   particlesToggleAria: "風の粒子アニメーションを切り替え",
 

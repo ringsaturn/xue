@@ -172,6 +172,10 @@ export const zhHant: Record<MessageKey, string> = {
   langPickerAria: "語言",
   langPickerHeading: "語言",
   themeToggleAria: "切換淺色 / 深色",
+  viewGlobeAria: "地球視圖",
+  viewTerrainAria: "三維地形",
+  viewResetNorthAria: "重設為正北",
+  viewResetPitchAria: "重設俯仰",
   particlesToggle: "粒子動畫",
   particlesToggleAria: "切換風場粒子動畫",
 

@@ -19,6 +19,7 @@ Storms, soundings and airports: [point-products.md](point-products.md).
 | `tiles.ts` | Viewport to tile rectangles. |
 | `layer.ts`, `particles.ts`, `isolines.ts` + `labels.worker.ts` | Raster layer, wind particles, contour labels. |
 | `projection.ts`, `terrain.ts` | Plane / globe projection and terrain draping for the custom layers; DEM readout. |
+| `viewcontrol.ts` | The view tile under the zoom tile: globe and relief switches, reset north / tilt. |
 | `palettes.ts`, `units.ts`, `domain.ts` | Ramps, display units, regional footprints. |
 | `playback.ts`, `timeline.ts` | Frame-rate ladder and dwell; transport geometry. |
 | `probe.ts`, `meteogram.ts` | Point probe and its rows. |
@@ -133,7 +134,10 @@ and the window shrinks to fit it.
   terrain's packed depth texture. Tile meshes carry skirts for LOD seams.
   The terrain uses its own copy of the Mapterhorn source (MapLibre renders
   hillshade and terrain worse from one). With relief on, the zoom ceiling
-  rises to the DEM's z12.
+  rises to the DEM's z12. The switches and the way back to north and to a flat camera share
+  one tile under the zoom tile (`viewcontrol.ts`); the two resets show only
+  while the camera is turned or tilted, and the rail's box starts under
+  the column wherever it ends (`--controls-bottom`).
 - Altitude correction (`layer.ts::lapseCodes`): with relief on, a 2 m
   temperature is moved from the model's ground (the run's `orog` plane,
   decoded whole once and uploaded on its own grid) to the DEM's at

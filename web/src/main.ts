@@ -9,10 +9,8 @@ import "./style.css";
 import { layers as basemapLayers, namedFlavor } from "@protomaps/basemaps";
 import {
   GeoJSONSource,
-  GlobeControl,
   Map as MaplibreMap,
   NavigationControl,
-  TerrainControl,
   Marker,
   Popup,
   setWorkerUrl,
@@ -38,6 +36,7 @@ import {
 import { createSheet, mountLanguagePicker } from "./sheet";
 import { formatBytes, formatPointDegrees, formatRegion } from "./format";
 import { dataBaseUrl } from "./site";
+import { ViewControl } from "./viewcontrol";
 import {
   ForecastLayer,
   MAX_NAMED_CONTOURS,
@@ -899,11 +898,25 @@ map.addControl(new NavigationControl({ showCompass: false }), "top-right");
 const urlScene = parseSceneFromSearch(window.location.search);
 /** Whether the map holds the scene yet; until then the link's is the one. */
 let sceneApplied = false;
-map.addControl(new GlobeControl(), "top-right");
 map.addControl(
-  new TerrainControl({ source: TERRAIN_MESH_SOURCE, exaggeration: urlScene.terrain ?? DEFAULT_TERRAIN_EXAGGERATION }),
+  new ViewControl({
+    terrainSource: TERRAIN_MESH_SOURCE,
+    exaggeration: () => urlScene.terrain ?? DEFAULT_TERRAIN_EXAGGERATION,
+    onResize: syncControlColumn,
+  }),
   "top-right",
 );
+
+/** The rail's box starts under the map's controls, whose column grows and
+ * shrinks with the view tile's reset buttons: the stylesheet reads where it
+ * ends from `--controls-bottom`. */
+function syncControlColumn(): void {
+  const column = document.querySelector<HTMLElement>(".maplibregl-ctrl-top-right");
+  if (!column) return;
+  document.documentElement.style.setProperty("--controls-bottom", `${Math.round(column.getBoundingClientRect().bottom)}px`);
+}
+syncControlColumn();
+window.addEventListener("resize", syncControlColumn);
 
 function currentScene(): SceneState {
   if (!sceneApplied) return urlScene;

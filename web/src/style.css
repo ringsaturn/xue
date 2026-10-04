@@ -916,7 +916,7 @@ body.is-pressure .legend {
      down the slack — where the centred rail of old landed — and a rail
      taller than the box scrolls (below) instead of running into the
      controls above or the mark beneath. */
-  top: 172px;
+  top: calc(var(--controls-bottom, 162px) + 10px);
   right: 16px;
   bottom: 56px;
   display: flex;
@@ -3189,9 +3189,50 @@ body[data-credits~="meteosat"] .source-credit[data-credit-model="meteosat"] {
 }
 
 /* MapLibre's own 10px control margin would push the tile off the column
-   the round controls and the rail sit on. */
+   the round controls and the rail sit on; between two tiles the gap is the
+   rail's own. */
 .maplibregl-ctrl-top-right .maplibregl-ctrl {
   margin: 0;
+}
+
+.maplibregl-ctrl-top-right .maplibregl-ctrl + .maplibregl-ctrl {
+  margin-top: 6px;
+}
+
+/* The view tile's middle buttons come and go (viewcontrol.ts), so the
+   tile clips its own corners rather than trusting first/last child. */
+.view-control {
+  overflow: hidden;
+}
+
+.view-control button[hidden] {
+  display: none;
+}
+
+.view-control .maplibregl-ctrl-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* A switch that is on is inked, as an active rail tile is; its icon turns
+   over with the ground (the dark theme's icons are already inverted). */
+.view-control button[aria-pressed="true"] {
+  background: var(--text) !important;
+}
+
+.view-control button[aria-pressed="true"] .maplibregl-ctrl-icon {
+  filter: invert(1);
+}
+
+:root[data-theme="dark"] .view-control button[aria-pressed="true"] .maplibregl-ctrl-icon {
+  filter: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .view-control button[aria-pressed="true"] .maplibregl-ctrl-icon {
+    filter: none;
+  }
 }
 
 /* Restyled into the rail's language: one blurred tile, two halves. With

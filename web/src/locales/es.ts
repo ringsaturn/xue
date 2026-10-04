@@ -175,6 +175,10 @@ export const es: Record<MessageKey, string> = {
   langPickerAria: "Idioma",
   langPickerHeading: "IDIOMA",
   themeToggleAria: "Alternar claro / oscuro",
+  viewGlobeAria: "Globo",
+  viewTerrainAria: "Relieve 3D",
+  viewResetNorthAria: "Orientar al norte",
+  viewResetPitchAria: "Restablecer inclinación",
   particlesToggle: "Partículas",
   particlesToggleAria: "Alternar la animación de partículas de viento",
 

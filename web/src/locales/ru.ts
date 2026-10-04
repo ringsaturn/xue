@@ -177,6 +177,10 @@ export const ru: Record<MessageKey, string> = {
   langPickerAria: "Язык",
   langPickerHeading: "ЯЗЫК",
   themeToggleAria: "Переключить светлое / тёмное",
+  viewGlobeAria: "Глобус",
+  viewTerrainAria: "3D-рельеф",
+  viewResetNorthAria: "Сбросить на север",
+  viewResetPitchAria: "Сбросить наклон",
   particlesToggle: "Частицы",
   particlesToggleAria: "Включить или выключить анимацию частиц ветра",
 

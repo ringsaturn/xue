@@ -178,6 +178,10 @@ export const tr: Record<MessageKey, string> = {
   langPickerAria: "Dil",
   langPickerHeading: "DİL",
   themeToggleAria: "Açık / koyu görünümü değiştir",
+  viewGlobeAria: "Küre",
+  viewTerrainAria: "3B arazi",
+  viewResetNorthAria: "Kuzeye sıfırla",
+  viewResetPitchAria: "Eğimi sıfırla",
   particlesToggle: "Parçacıklar",
   particlesToggleAria: "Rüzgar parçacık animasyonunu aç/kapat",
 

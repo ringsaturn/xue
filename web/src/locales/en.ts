@@ -324,6 +324,14 @@ export const en = {
   langPickerAria: "Language",
   langPickerHeading: "LANGUAGE",
   themeToggleAria: "Toggle light / dark",
+  /** The view tile under the zoom buttons (viewcontrol.ts): the globe and the
+   * 3D relief as switches, then back to north and back to a flat camera —
+   * the last two shown only while the map is turned or tilted. Tooltips
+   * and accessible names. */
+  viewGlobeAria: "Globe",
+  viewTerrainAria: "3D terrain",
+  viewResetNorthAria: "Reset to north",
+  viewResetPitchAria: "Reset tilt",
   /** The wind layer's own control, in the transport capsule: the colored
    * speed field is always drawn, and this turns the particle animation over
    * it on and off. Icon-only, like the three circles above, so the name is

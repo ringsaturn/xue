@@ -177,6 +177,10 @@ export const ko: Record<MessageKey, string> = {
   langPickerAria: "언어",
   langPickerHeading: "언어",
   themeToggleAria: "밝게 / 어둡게 전환",
+  viewGlobeAria: "지구본 보기",
+  viewTerrainAria: "3D 지형",
+  viewResetNorthAria: "북쪽으로 재설정",
+  viewResetPitchAria: "기울기 재설정",
   particlesToggle: "입자 애니메이션",
   particlesToggleAria: "바람 입자 애니메이션 전환",
 
