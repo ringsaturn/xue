@@ -29,7 +29,7 @@ from typing import Any
 
 from ..common import write_bytes_atomic
 from ..errors import DownloadError, XueError
-from ..fetch import ECMWF_BASE_URLS, _http_error_code, _request
+from ..fetch import ECMWF_BASE_URLS, _http_error_code, get_ok
 from .track import SourceStatus
 
 LOG = logging.getLogger(__name__)
@@ -69,12 +69,7 @@ def issue_raw_directory(raw_root: Path, issue: datetime) -> Path:
 
 
 def _get(url: str, *, headers: dict[str, str] | None = None, timeout: float = 60) -> bytes:
-    response = _request(url, headers=headers, timeout=timeout, attempts=3, max_elapsed=90)
-    with response:
-        status = getattr(response, "status", None)
-        if status != 200:
-            raise DownloadError(f"expected HTTP 200 for {url}, received {status}")
-        return response.read()  # type: ignore[no-any-return]
+    return get_ok(url, headers=headers, timeout=timeout, attempts=3, max_elapsed=90)
 
 
 def _get_optional(url: str, **kwargs: Any) -> bytes | None:
