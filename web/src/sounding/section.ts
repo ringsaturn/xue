@@ -22,6 +22,7 @@
  * would be the whole screen — fetches nothing and opens no session.
  */
 
+import { element } from "../dom";
 import { t } from "../i18n";
 import { fetchSoundingStation, type LoadedSoundingIndex } from "../stations/fetch";
 import type { SoundingStation, SoundingStationEntry } from "../stations/schema";
@@ -94,17 +95,6 @@ export interface SoundingSection {
   drawInto(canvas: HTMLCanvasElement, width: number, height: number): void;
   /** What the sheet's heading names. */
   headline(): string;
-}
-
-function element<K extends keyof HTMLElementTagNameMap>(
-  tag: K,
-  className: string,
-  text?: string,
-): HTMLElementTagNameMap[K] {
-  const node = document.createElement(tag);
-  node.className = className;
-  if (text !== undefined) node.textContent = text;
-  return node;
 }
 
 /**
