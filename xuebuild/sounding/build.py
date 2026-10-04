@@ -57,7 +57,7 @@ from .schema import (
 LOG = logging.getLogger(__name__)
 
 KEEP_TIMES = 4
-"""Nominal times a station file carries: four is two days of the 00Z /
+"""Nominal times a station's line carries: four is two days of the 00Z /
 12Z pair, which is the window the panel offers."""
 
 STALE_HOURS = 48

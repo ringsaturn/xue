@@ -76,7 +76,7 @@ class MetarReport:
     raw: str
 
     def to_json(self) -> dict[str, Any]:
-        """The report as a shard writes it. The station's identity and
+        """The report as the history file writes it. The station's identity and
         position are on the station, not repeated on every report."""
         return {
             "time": iso_z(self.time),
