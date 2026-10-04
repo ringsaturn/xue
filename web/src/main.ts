@@ -2788,8 +2788,9 @@ function scheduleProbeRender(): void {
 
 /** The pinned cell's terrain, from two sources: the run's static `orog`
  * bundle where it publishes one, read at that bundle's own grid cell, and the
- * DEM under the point the panel names, sampled from the very relief the map
- * draws. Either can be absent — a run with no orography, a tile that does not
+ * DEM under the point that was pinned — not the cell's centre, which on a
+ * quarter-degree grid can sit 15 km away down a mountain's flank — sampled
+ * from the very relief the map draws. Either can be absent — a run with no orography, a tile that does not
  * answer — and the line carries whichever arrived. */
 function renderProbeElevation(point: { latitude: number; longitude: number }): void {
   probePanel.elevation.textContent = [modelElevationText(), demElevationText()].filter(Boolean).join(" · ");
@@ -2857,7 +2858,7 @@ function renderProbe(): void {
   const point = cell ?? { longitude: series.longitude, latitude: series.latitude };
   probePanel.coords.textContent =
     `${formatPointDegrees(point.latitude, "NS")} ${formatPointDegrees(point.longitude, "EW")}`;
-  renderProbeElevation(point);
+  renderProbeElevation({ latitude: series.latitude, longitude: series.longitude });
   probePanel.zone.textContent = probeZone ? zoneDisplayName(probeZone, frameValidTime(activeFrameIndex ?? Number(slider.value))) : "";
   probePanel.compare.href = compareUrl(point.latitude, point.longitude);
   probePanel.compare.textContent = t("compareLink");
