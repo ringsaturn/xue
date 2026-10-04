@@ -35,7 +35,7 @@ from pathlib import Path
 
 import numpy as np
 
-from tests._support import ClassTempRoot, FIXTURES, ParityCase, ReferenceBuild, assert_gdalinfo_agrees, requires_gdalinfo
+from tests._support import ClassTempRoot, FIXTURES, ParityCase, ReferenceBuild, assert_gdalinfo_agrees, registry_entry, requires_gdalinfo
 from xuebuild import binconvert, grib2, quantize
 from xuebuild.binconvert import analysis_optional_ids, published_bundle_ids, video_variable_ids
 from xuebuild.binformat import Bundle, BundleError, read_bundle
@@ -133,18 +133,11 @@ IDX_RECORDS = {
 }
 
 
-def registry_entry(variable_id: str) -> dict:
-    """The registry as the implementations must agree it is."""
+def aerosol_entry(variable_id: str) -> dict:
+    """The shared registry entry plus the aerosol block."""
     spec = variable_spec(variable_id)
     assert spec.grib2_aerosol is not None
-    return {
-        "label": spec.label,
-        "unit": spec.output_unit,
-        "parameter": spec.parameter_metadata(),
-        "aerosol": spec.grib2_aerosol.metadata(),
-        "quality": PROFILES["quality"][variable_id].metadata(),
-        "compact": PROFILES["compact"][variable_id].metadata(),
-    }
+    return registry_entry(variable_id, aerosol=spec.grib2_aerosol.metadata())
 
 
 #: The reference build every class here reads (tests/_support.py).
@@ -158,7 +151,7 @@ def tearDownModule() -> None:
 class RegistryTests(unittest.TestCase):
     def test_the_committed_registry_still_describes_this_encoder(self) -> None:
         expected = json.loads(REGISTRY.read_text(encoding="utf-8"))
-        actual = {variable_id: registry_entry(variable_id) for variable_id in AEROSOL_VARIABLE_IDS}
+        actual = {variable_id: aerosol_entry(variable_id) for variable_id in AEROSOL_VARIABLE_IDS}
         self.assertEqual(list(actual), list(expected), "the registry's order is the source's")
         self.assertEqual(
             actual,
