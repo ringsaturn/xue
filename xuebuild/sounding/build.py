@@ -31,6 +31,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from .. import pointproduct
 from ..errors import SoundingProductError, XueError
 from ..stac import write_point_product_documents
 from . import bufr, derive
@@ -437,25 +438,15 @@ def _read_previous_soundings(
 def load_previous_index(path: Path | None, output_root: Path) -> dict[str, Any] | None:
     """The previous hour's index: the one given, else the one the local
     pointer names, else nothing (a first build, or a fresh checkout)."""
-    if path is not None:
-        return read_index(path)
-    pointer = output_root / POINTER_FILENAME
-    if not pointer.exists():
-        return None
-    try:
-        named = json.loads(pointer.read_text(encoding="utf-8")).get("path")
-    except (OSError, json.JSONDecodeError, AttributeError):
-        return None
-    if not isinstance(named, str):
-        return None
-    index_path = output_root / named
-    if not index_path.exists():
-        return None
-    try:
-        return read_index(index_path)
-    except SoundingProductError as exc:
-        LOG.warning("sounding: ignoring the previous index at %s: %s", index_path, exc)
-        return None
+    return pointproduct.load_previous_index(
+        path,
+        output_root,
+        product="sounding",
+        pointer_filename=POINTER_FILENAME,
+        read_index=read_index,
+        error=SoundingProductError,
+        log=LOG,
+    )
 
 
 def previous_watermarks(previous_index: dict[str, Any] | None) -> dict[str, datetime | None]:

@@ -32,6 +32,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from .. import pointproduct
 from ..errors import AirportProductError, XueError
 from ..pointproduct import iso_z
 from ..stac import write_point_product_documents
@@ -303,22 +304,12 @@ def load_previous_index(path: Path | None, output_root: Path) -> dict[str, Any] 
     the one given, else the one the local pointer names, else nothing (a
     first build, or a fresh checkout — the history then starts from the
     ninety minutes the AWC cache holds)."""
-    if path is not None:
-        return read_index(path)
-    pointer = output_root / POINTER_FILENAME
-    if not pointer.exists():
-        return None
-    try:
-        named = json.loads(pointer.read_text(encoding="utf-8")).get("path")
-    except (OSError, json.JSONDecodeError, AttributeError):
-        return None
-    if not isinstance(named, str):
-        return None
-    index_path = output_root / named
-    if not index_path.exists():
-        return None
-    try:
-        return read_index(index_path)
-    except AirportProductError as exc:
-        LOG.warning("airport: ignoring the previous index at %s: %s", index_path, exc)
-        return None
+    return pointproduct.load_previous_index(
+        path,
+        output_root,
+        product="airport",
+        pointer_filename=POINTER_FILENAME,
+        read_index=read_index,
+        error=AirportProductError,
+        log=LOG,
+    )
