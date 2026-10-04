@@ -423,7 +423,7 @@ def parser() -> argparse.ArgumentParser:
 
     airport_build = commands.add_parser(
         "airport-build",
-        help="fetch the airport METAR and TAF caches and write one airport.<round>/ index, the shards that changed and the pointer",
+        help="fetch the airport METAR and TAF caches and write one airport.<round>/ index, its history.jsonl and the pointer",
     )
     airport_build.add_argument(
         "--round",
@@ -435,8 +435,8 @@ def parser() -> argparse.ArgumentParser:
     airport_build.add_argument(
         "--previous-index",
         type=Path,
-        help="the previous round's index.json, whose shards are this round's history (default: the one the "
-        "local latest-airport.json names, if any; `make live-airport-index` fetches the live one and its shards)",
+        help="the previous round's index.json, whose history.jsonl this round merges onto (default: the one the "
+        "local latest-airport.json names, if any; `make live-airport-index` fetches the live one and its history)",
     )
     airport_build.add_argument("--offline", action="store_true", help="build from what is already fetched; touch no network")
     airport_build.add_argument("--force", action="store_true", help="rebuild a round whose index exists")
@@ -460,9 +460,9 @@ def parser() -> argparse.ArgumentParser:
     sounding_build.add_argument(
         "--previous-index",
         type=Path,
-        help="the previous hour's index.json, whose watermark bounds the fetch and whose station files are copied "
-        "forward (default: the one the local latest-sounding.json names, if any; `make live-sounding-index` "
-        "fetches the live one and its station files)",
+        help="the previous hour's index.json, whose watermark bounds the fetch and whose soundings.jsonl carries "
+        "forward the stations with no new ascent (default: the one the local latest-sounding.json names, if any; "
+        "`make live-sounding-index` fetches the live one and its soundings.jsonl)",
     )
     sounding_build.add_argument(
         "--offline", action="store_true", help="build from what is already fetched; touch no network"
