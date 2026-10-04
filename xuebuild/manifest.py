@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from .common import iso_z
+from .common import crc32_hex, iso_z
 from .errors import ManifestError
 from .sources import MODEL_CORE_BUNDLES, MODEL_PRODUCTS
 
@@ -411,3 +411,21 @@ def write_latest_pointer(path: Path, payload: dict[str, Any]) -> None:
     is no ``--force`` guard."""
     validate_latest_pointer(payload)
     _write_json_atomic(path, payload, force=True)
+
+
+def write_pointer_to_manifest(
+    latest_path: Path, manifest_path: Path, *, run_id: str, run_time: datetime, model: str, product: str
+) -> dict[str, Any]:
+    """Take a written manifest live: the pointer at ``latest_path`` names it
+    relative to itself and carries the CRC32 of its bytes as they are on
+    disk, so it is written last."""
+    pointer = build_latest_pointer(
+        run_id,
+        run_time,
+        manifest_path=manifest_path.relative_to(latest_path.parent).as_posix(),
+        manifest_crc32=crc32_hex(manifest_path.read_bytes()),
+        model=model,
+        product=product,
+    )
+    write_latest_pointer(latest_path, pointer)
+    return pointer

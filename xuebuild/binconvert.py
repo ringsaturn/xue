@@ -45,10 +45,9 @@ from .gdal import (
 )
 from .manifest import (
     build_bin_manifest,
-    build_latest_pointer,
     iso_z,
     write_bin_manifest,
-    write_latest_pointer,
+    write_pointer_to_manifest,
 )
 from .model import GRIB_PLANE_SOURCE, PlaneSource, SourceFrame
 from .observation import inspect_observation
@@ -2510,16 +2509,14 @@ def convert_bin(
         )
         LOG.info("wrote manifest %s", manifest_path)
         if latest_path is not None and run_id is not None:
-            manifest_bytes = manifest_path.read_bytes()
-            pointer = build_latest_pointer(
-                run_id,
-                run_time,
-                manifest_path=manifest_path.relative_to(latest_path.parent).as_posix(),
-                manifest_crc32=crc32_hex(manifest_bytes),
+            write_pointer_to_manifest(
+                latest_path,
+                manifest_path,
+                run_id=run_id,
+                run_time=run_time,
                 model=source.manifest_model,
                 product=source.product,
             )
-            write_latest_pointer(latest_path, pointer)
             LOG.info("wrote live pointer %s -> run %s", latest_path, run_id)
     return report
 
