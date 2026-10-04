@@ -55,7 +55,6 @@ from __future__ import annotations
 
 import filecmp
 import json
-import os
 import shutil
 import struct
 import tempfile
@@ -65,6 +64,7 @@ from pathlib import Path
 from unittest import mock
 
 
+from tests._support import ClassTempRoot, FIXTURES, TempRoot, assert_gdalinfo_agrees, requires_gdalinfo
 from xuebuild import binconvert, fetch as fetchmod, grib2, native, quantize, zstdcli
 from xuebuild.binconvert import (
     analysis_optional_ids,
@@ -88,7 +88,6 @@ from xuebuild.fetch import (
     model_object_url,
     resolve_run,
 )
-from xuebuild.gdal import inspect_grib_multi
 from xuebuild.idx import ByteRange, coalesce_ranges, series_byte_ranges
 from xuebuild.model import GfsRun
 from xuebuild.sources import (
@@ -102,7 +101,6 @@ from xuebuild.sources import (
 from xuebuild.stac import prose_document
 from xuebuild.variables import variable_spec
 
-FIXTURES = Path(__file__).resolve().parent / "fixtures"
 FIXTURE_FRAMES = [FIXTURES / "cfs.2026091900.f006.crop.grib2", FIXTURES / "cfs.2026091900.f012.crop.grib2"]
 FIXTURE_PGB_FRAMES = [
     FIXTURES / "cfs.2026091900.pgb.f006.crop.grib2",
@@ -159,9 +157,6 @@ def stage_run(root: Path) -> list[Path]:
         shutil.copy(family, family_frame_path(frame, "pgb"))
         frames.append(frame)
     return frames
-
-
-requires_gdalinfo = unittest.skipUnless(shutil.which("gdalinfo") is not None, "gdalinfo is not on PATH")
 
 
 def grib_messages(path: Path) -> list[bytes]:
@@ -484,10 +479,9 @@ class BucketStub:
             case.addCleanup(patcher.stop)
 
 
-class FetchTests(unittest.TestCase):
-    def setUp(self) -> None:
-        self.root = Path(tempfile.mkdtemp(prefix="xue-cfs-fetch-"))
-        self.addCleanup(shutil.rmtree, self.root, True)
+class FetchTests(TempRoot, unittest.TestCase):
+    root_prefix = "xue-cfs-fetch-"
+
 
     def test_a_run_is_split_into_frames_in_source_order(self) -> None:
         stub = BucketStub()
@@ -686,26 +680,24 @@ class MatcherTests(unittest.TestCase):
 
     @requires_gdalinfo
     def test_gdalinfo_agrees_with_the_header_index(self) -> None:
-        with mock.patch.dict(os.environ, {"XUE_ENCODER": "python"}):
-            for path, ids in list(zip(FIXTURE_FRAMES, [CFS.primary_input_ids()] * 2)) + list(
-                zip(FIXTURE_PGB_FRAMES, [CFS_PGB_IDS] * 2)
-            ):
-                fast = grib2.inspect_grib_fast(path, ids)
-                slow = inspect_grib_multi(path, ids)
-                self.assertEqual(set(fast), set(slow), path.name)
-                for variable_id, frame in fast.items():
-                    self.assertEqual(frame, slow[variable_id], f"{path.name} {variable_id}")
+        assert_gdalinfo_agrees(
+            self,
+            [(path, CFS.primary_input_ids(), ()) for path in FIXTURE_FRAMES]
+            + [(path, CFS_PGB_IDS, ()) for path in FIXTURE_PGB_FRAMES],
+        )
 
 
-class ConversionTests(unittest.TestCase):
+class ConversionTests(ClassTempRoot, unittest.TestCase):
     """The two-frame fixture of both families through the reference
     pipeline."""
 
     root: Path
 
+    root_prefix = "xue-cfs-"
+
     @classmethod
     def setUpClass(cls) -> None:
-        cls.root = Path(tempfile.mkdtemp(prefix="xue-cfs-"))
+        super().setUpClass()
         cls.frames = stage_run(cls.root / "raw")
         cls.output = cls.root / "cfs.2026091900"
         cls.report = binconvert.convert_bin(
@@ -715,10 +707,6 @@ class ConversionTests(unittest.TestCase):
             manifest_path=cls.output / "manifest.json",
             model="cfs",
         )
-
-    @classmethod
-    def tearDownClass(cls) -> None:
-        shutil.rmtree(cls.root, ignore_errors=True)
 
     def _bundle(self, bundle_id: str):
         return read_bundle(self.output / f"{bundle_id}.xue")

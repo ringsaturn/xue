@@ -28,16 +28,14 @@ from __future__ import annotations
 
 import filecmp
 import json
-import os
 import shutil
-import tempfile
 import unittest
 from datetime import UTC, datetime
 from pathlib import Path
-from unittest import mock
 
 import numpy as np
 
+from tests._support import ClassTempRoot, FIXTURES, assert_gdalinfo_agrees, requires_gdalinfo
 from xuebuild import binconvert, grib2, native, zstdcli
 from xuebuild.binconvert import analysis_optional_ids, published_bundle_ids, video_variable_ids
 from xuebuild.binformat import read_bundle
@@ -48,21 +46,16 @@ from xuebuild.fetch import (
     ecmwf_companion_object_url,
     ecmwf_object_url,
 )
-from xuebuild.gdal import inspect_grib_multi
 from xuebuild.idx import ecmwf_field_byte_range
 from xuebuild.model import GfsRun
 from xuebuild.sources import source_spec
 from xuebuild.variables import variable_spec
 
-FIXTURES = Path(__file__).resolve().parent / "fixtures"
 FIXTURE_FRAMES = [FIXTURES / "ecmwf.2026091212.f000.crop.grib2", FIXTURES / "ecmwf.2026091212.f003.crop.grib2"]
 ECMWF = source_spec("ecmwf")
 GFS = source_spec("gfs")
 # The bundles this widening added to the ECMWF set, in publication order.
 ADDED = ("gust", "tcdc", "cape", "dpt2m", "vvel850", "vvel700", "vvel500", "thetae850", "tmpsfc", "icetk", "htsgw", "perpw", "wave", "orog")
-
-requires_gdalinfo = unittest.skipUnless(shutil.which("gdalinfo") is not None, "gdalinfo is not on PATH")
-
 
 class SourceRegistryTests(unittest.TestCase):
     def test_ecmwf_publishes_what_the_open_data_carries_in_gfs_order(self) -> None:
@@ -198,24 +191,20 @@ class MatcherTests(unittest.TestCase):
 
     @requires_gdalinfo
     def test_gdalinfo_agrees_with_the_header_index(self) -> None:
-        with mock.patch.dict(os.environ, {"XUE_ENCODER": "python"}):
-            optional = ECMWF.optional_at_analysis + ("orog",)
-            for path in FIXTURE_FRAMES:
-                fast = grib2.inspect_grib_fast(path, ECMWF.input_variable_ids, optional_ids=optional)
-                slow = inspect_grib_multi(path, ECMWF.input_variable_ids, optional_ids=optional)
-                self.assertEqual(set(fast), set(slow), path.name)
-                for variable_id, frame in fast.items():
-                    self.assertEqual(frame, slow[variable_id], f"{path.name} {variable_id}")
+        optional = ECMWF.optional_at_analysis + ("orog",)
+        assert_gdalinfo_agrees(self, ((path, ECMWF.input_variable_ids, optional) for path in FIXTURE_FRAMES))
 
 
-class ConversionTests(unittest.TestCase):
+class ConversionTests(ClassTempRoot, unittest.TestCase):
     """The two-frame fixture through the reference pipeline."""
 
     root: Path
 
+    root_prefix = "xue-ecmwf-"
+
     @classmethod
     def setUpClass(cls) -> None:
-        cls.root = Path(tempfile.mkdtemp(prefix="xue-ecmwf-"))
+        super().setUpClass()
         cls.output = cls.root / "ecmwf.2026091212"
         cls.report = binconvert.convert_bin(
             FIXTURE_FRAMES,
@@ -224,10 +213,6 @@ class ConversionTests(unittest.TestCase):
             manifest_path=cls.output / "manifest.json",
             model="ecmwf",
         )
-
-    @classmethod
-    def tearDownClass(cls) -> None:
-        shutil.rmtree(cls.root, ignore_errors=True)
 
     def _plane(self, variable_id: str, offset: int, member: int = 1) -> tuple[np.ndarray, dict]:
         bundle = read_bundle(self.output / f"{variable_id}.xue")
@@ -289,16 +274,18 @@ class ConversionTests(unittest.TestCase):
 
 
 @unittest.skipUnless(native.available(), f"{native.DISTRIBUTION} is not installed")
-class NativeParityTests(unittest.TestCase):
+class NativeParityTests(ClassTempRoot, unittest.TestCase):
     """The same two frames through both encoders, byte for byte — every
     alternate identity, the fraction unit, the analysis-less gust axis, the
     bitmap fills and the wave vector, on real ECMWF records."""
 
     root: Path
 
+    root_prefix = "xue-ecmwf-parity-"
+
     @classmethod
     def setUpClass(cls) -> None:
-        cls.root = Path(tempfile.mkdtemp(prefix="xue-ecmwf-parity-"))
+        super().setUpClass()
         cls.reference, cls.reference_report = cls._build(binconvert, "reference")
         try:
             cls.subject, cls.subject_report = cls._build(native, "subject")
@@ -307,10 +294,6 @@ class NativeParityTests(unittest.TestCase):
                 shutil.rmtree(cls.root, ignore_errors=True)
                 raise unittest.SkipTest(f"the installed {native.DISTRIBUTION} wheel predates the ECMWF set: {exc}")
             raise
-
-    @classmethod
-    def tearDownClass(cls) -> None:
-        shutil.rmtree(cls.root, ignore_errors=True)
 
     @classmethod
     def _build(cls, implementation, name: str) -> tuple[Path, dict]:

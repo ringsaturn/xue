@@ -13,12 +13,11 @@ from __future__ import annotations
 
 import filecmp
 import json
-import shutil
-import tempfile
 import unittest
 from datetime import UTC, datetime
 from pathlib import Path
 
+from tests._support import ClassTempRoot
 from xuebuild import assemble, binconvert, stac
 from xuebuild.binconvert import published_bundle_ids
 from xuebuild.errors import ManifestError
@@ -324,16 +323,18 @@ class MergePartialManifestTests(unittest.TestCase):
             assemble.merge_partial_manifests([_part(self.source, ["dswrf"])], source=self.source, expected_hours=240, base=live)
 
 
-class SplitBuildIdentityTests(unittest.TestCase):
+class SplitBuildIdentityTests(ClassTempRoot, unittest.TestCase):
     """The GRIB fixture built whole and built in groups, then assembled."""
 
     root: Path
     whole: Path
     split: Path
 
+    root_prefix = "xue-assemble-"
+
     @classmethod
     def setUpClass(cls) -> None:
-        cls.root = Path(tempfile.mkdtemp(prefix="xue-assemble-"))
+        super().setUpClass()
         cls.source = source_spec("gfs")
         cls.whole = cls.root / "whole"
         cls.split = cls.root / "split"
@@ -368,10 +369,6 @@ class SplitBuildIdentityTests(unittest.TestCase):
         # pieces): the Item, the source's Collection and the root catalog.
         for root in (cls.whole, cls.split):
             stac.write_run_documents(root, source=cls.source, manifest_path=root / run_directory / "manifest.json")
-
-    @classmethod
-    def tearDownClass(cls) -> None:
-        shutil.rmtree(cls.root, ignore_errors=True)
 
     def _artifacts(self, root: Path) -> list[Path]:
         return sorted(
@@ -426,15 +423,17 @@ if __name__ == "__main__":
     unittest.main()
 
 
-class TopUpIdentityTests(unittest.TestCase):
+class TopUpIdentityTests(ClassTempRoot, unittest.TestCase):
     """A run published short of some bundles, topped up with only those,
     is the run built whole today — manifest, pointer and artifacts."""
 
     root: Path
 
+    root_prefix = "xue-topup-"
+
     @classmethod
     def setUpClass(cls) -> None:
-        cls.root = Path(tempfile.mkdtemp(prefix="xue-topup-"))
+        super().setUpClass()
         cls.source = source_spec("gfs")
         run_id = "2026081406"
         cls.run_directory = f"gfs.{run_id}"
@@ -480,10 +479,6 @@ class TopUpIdentityTests(unittest.TestCase):
         )
         for root in (cls.whole, cls.topped):
             stac.write_run_documents(root, source=cls.source, manifest_path=root / cls.run_directory / "manifest.json")
-
-    @classmethod
-    def tearDownClass(cls) -> None:
-        shutil.rmtree(cls.root, ignore_errors=True)
 
     def test_only_the_missing_bundles_were_built(self) -> None:
         self.assertEqual(self.missing, self.ocean)
