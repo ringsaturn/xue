@@ -24,24 +24,36 @@ it); it depends on the `xuepy` wheel.
 
 ## The flow
 
-1. **Land the change.** Encoder and source-table changes merge to `main`
-   (or are tested first on a `release/**` branch; see below).
-2. **Release commit**, `chore: release 0.N.0`: bump `version` in
-   `rust/xue/Cargo.toml` and `rust/xue-py/Cargo.toml`, and refresh
-   `rust/Cargo.lock`. Nothing else.
-3. **Tag** that commit `v0.N.0` and push the tag. Both workflows first check
-   that the tag equals the manifest version and refuse otherwise.
-   `release-crate.yml` publishes the crate and creates the GitHub release;
-   `release-xuepy.yml` builds wheels on macOS arm64 and Linux x86_64 /
-   aarch64 (manylinux_2_39), smoke-tests each one (encode the GRIB fixture
-   and the JPEG 2000 wave fixture, decode them back), publishes to PyPI and
-   attaches them to the release. Both authenticate with Trusted Publishing
-   (OIDC); no token is stored. No sdist is published: a source build needs
-   GDAL, libclang and cmake.
-4. **Relock commit**, `chore: relock on the published xuepy 0.N.0`, once
-   the wheels are on PyPI: raise the floor in `pyproject.toml` to
-   `"xuepy>=0.N,<0.N+1"` and run `uv lock --refresh-package xuepy`. Commit
-   `pyproject.toml` and `uv.lock` together.
+Everything happens on a `release/0.N` branch, and `main` receives the
+release only once it is complete. So `main` never carries an encoder or
+source-table change without the wheel that matches it, and the scheduled
+publishes keep working throughout the release window.
+
+1. **Branch**: `git checkout -b release/0.N main`. Commit the encoder or
+   source-table change there, or merge it in. `test.yml` runs on
+   `release/**`, and its Python job builds the wheel from the tree
+   (`make encoder-py`) instead of installing PyPI's, so native parity is
+   checked against the code being released.
+2. **Release commit** on the branch, `chore: release 0.N.0`: bump `version`
+   in `rust/xue/Cargo.toml` and `rust/xue-py/Cargo.toml`, and refresh
+   `rust/Cargo.lock`. Nothing else goes in this commit.
+3. **Tag** the release commit `v0.N.0` on the branch, then push the branch
+   and the tag. Both workflows first check that the tag equals the manifest
+   version and refuse otherwise. `release-crate.yml` publishes the crate and
+   creates the GitHub release. `release-xuepy.yml` builds wheels on macOS
+   arm64 and Linux x86_64 / aarch64 (manylinux_2_39), smoke-tests each one
+   (it encodes the GRIB fixture and the JPEG 2000 wave fixture and decodes
+   them back), publishes to PyPI and attaches the wheels to the release.
+   Both authenticate with Trusted Publishing (OIDC), so no token is stored.
+   No sdist is published, because a source build needs GDAL, libclang and
+   cmake.
+4. **Relock commit** on the branch, `chore: relock on the published xuepy
+   0.N.0`, once the wheels are on PyPI: raise the floor in `pyproject.toml`
+   to `"xuepy>=0.N,<0.N+1"` and run `uv lock --refresh-package xuepy`.
+   Commit `pyproject.toml` and `uv.lock` together.
+5. **Merge into `main`** with a fast-forward (`git merge --ff-only
+   release/0.N`), so the change, the release commit and the relock land on
+   `main` together and keep their history. Then delete the branch.
 
 A manual dispatch of either workflow is a rehearsal: `cargo publish
 --dry-run`, or wheels uploaded as workflow artifacts only.
@@ -59,28 +71,21 @@ build instead of quietly publishing less. The floor is therefore the first
 release whose table matches this tree's `sources.py`, and the upper bound
 keeps an unrelocked tree from picking up a newer table.
 
-## CI is red between the change and the relock
+## Why the release lives on a branch
 
-This is expected and is cleared by the relock:
-
-- After an encoder or source-table change merges, `main` still installs the
-  old locked wheel, so `tests/test_native.py` (byte parity between the two
-  encoders) and the scheduled publishes of the affected sources fail until
-  the relock lands.
-- Raising the floor before the wheel is on PyPI makes `uv sync` fail
-  everywhere, because the version cannot be resolved. That is why the floor
-  is raised in the relock commit, not the release commit.
-
-To test an encoder change before it reaches `main`, push it to a
-`release/**` branch (`release/0.N`): `test.yml` runs there and its Python
-job builds the wheel from the tree (`make encoder-py`) instead of
-installing PyPI's.
+If an encoder or source-table change merged to `main` before its wheel
+shipped, `main` would still install the old locked wheel. Then
+`tests/test_native.py` (byte parity between the two encoders) and the
+scheduled publishes of the affected sources, which pin
+`XUE_ENCODER=native`, would fail until the relock. Raising the floor before
+the wheel is on PyPI is worse: `uv sync` fails everywhere, because the
+version cannot be resolved. Keeping steps 1–4 on `release/0.N` confines
+both failure windows to the branch.
 
 Workflows that publish a source a released wheel may not know yet
 (`publish-jma.yml` and the other rolling windows except MRMS) resolve the
-encoder at job time with `native.knows_source` and fall back to the
-reference pipeline with a warning, so a new source can go live before its
-wheel ships.
+encoder at job time with `native.knows_source`, and fall back to the
+reference pipeline with a warning.
 
 ## Deploy order
 
