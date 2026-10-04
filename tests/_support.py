@@ -51,30 +51,28 @@ def _fci_unreadable() -> str | None:
 
     The chunks are compressed with a JPEG-LS HDF5 filter that `hdf5plugin`
     ships, and a GDAL built against another HDF5 fails on it with
-    "undefined filter" even with the plugin path set; this is the probe
-    `publish-meteosat.yml` runs before a round, on the fixture chunk.
+    "undefined filter" even with the plugin path set. This is the probe
+    `publish-meteosat.yml` runs before a round (`gdalinfo -stats`), on the
+    fixture chunk.
     """
     if not _importable("hdf5plugin"):
         return "hdf5plugin is not installed (uv sync --group satellite)"
-    if not _have("gdal_translate"):
-        return "gdal_translate is not on PATH"
+    if not _have("gdalinfo"):
+        return "gdalinfo is not on PATH"
     import hdf5plugin  # noqa: PLC0415
 
     chunk = next((FIXTURES / "meteosat").glob("*.nc"))
     with tempfile.TemporaryDirectory(prefix="xue-fci-probe-") as scratch:
-        # A copy, so GDAL's sidecars never land beside the fixture.
+        # A copy, so GDAL's .aux.xml sidecar never lands beside the fixture.
         copy = Path(scratch) / "chunk.nc"
         shutil.copy(chunk, copy)
         result = subprocess.run(
-            [
-                "gdal_translate", "-q", "-of", "ENVI",
-                f'NETCDF:"{copy}":/data/ir_105/measured/effective_radiance', str(Path(scratch) / "probe.bin"),
-            ],
+            ["gdalinfo", "-stats", f'NETCDF:"{copy}":/data/ir_105/measured/effective_radiance'],
             env=dict(os.environ, HDF5_PLUGIN_PATH=str(hdf5plugin.PLUGIN_PATH)),
             capture_output=True,
             text=True,
         )
-    if result.returncode != 0:
+    if result.returncode != 0 or "STATISTICS_MAXIMUM" not in result.stdout:
         return "the GDAL on PATH cannot decode an FCI chunk through hdf5plugin's filter"
     return None
 
@@ -83,6 +81,10 @@ def requires_hdf5plugin(item):
     """Skip unless an FCI chunk can be read: `hdf5plugin` installed and the
     GDAL on PATH able to use its filter. Probed once, when first applied."""
     reason = _fci_unreadable()
+    if os.environ.get("GITHUB_ACTIONS") == "true" and _importable("hdf5plugin"):
+        # CI's GDAL is expected to read the chunk: let the tests fail rather
+        # than skip quietly if it cannot.
+        reason = None
     return unittest.skipIf(reason is not None, reason or "")(item)
 
 
