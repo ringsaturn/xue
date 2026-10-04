@@ -9,7 +9,6 @@ snap, the cache listing — runs with NumPy alone.
 
 from __future__ import annotations
 
-import filecmp
 import json
 import os
 import shutil
@@ -18,8 +17,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest import mock
 
-from tests._support import ClassTempRoot, FIXTURES, TempRoot, requires_gdal, requires_native_source
-from xuebuild import aurora, binconvert, native, zstdcli
+from tests._support import ClassTempRoot, FIXTURES, TempRoot, assert_native_matches, requires_gdal, requires_native_source
+from xuebuild import aurora, binconvert
 from xuebuild.binformat import read_bundle
 from xuebuild.errors import ConversionError, DownloadError
 from xuebuild.fetch import _fetch_aurora_run, latest_aurora_slot, observation_window_start
@@ -42,6 +41,7 @@ def _native(name: str) -> bool:
 
 
 NETCDF = _native("netCDF4") and _native("xarray")
+
 
 #: A synthetic OVATION document: the real shape, values a ramp so a plane is
 #: distinguishable from its neighbour.
@@ -317,18 +317,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
 
     @requires_native_source("aurora")
     def test_the_native_encoder_writes_the_same_bytes(self) -> None:
-        if not zstdcli.compresses_in_process():
-            self.skipTest("the reference encoder compresses through the zstd CLI")
-        subject = self.root / "native"
-        with mock.patch.dict(os.environ, {"XUE_ENCODER": "native"}):
-            report = native.convert_bin(self.inputs, subject, model="aurora", skip_video=True, manifest_path=subject / "manifest.json")
-        if report["zstdVersion"] != self.report["zstdVersion"]:
-            self.skipTest("libzstd differs between the reference and the wheel")
-        names = sorted(path.name for path in (self.root / "out").iterdir())
-        self.assertEqual(sorted(path.name for path in subject.iterdir()), names)
-        for name in names:
-            with self.subTest(artifact=name):
-                self.assertTrue(filecmp.cmp(self.root / "out" / name, subject / name, shallow=False), name)
+        assert_native_matches(self, self.inputs, self.root / "out", self.report, self.root / "native", model="aurora")
 
 
 if __name__ == "__main__":  # pragma: no cover

@@ -17,7 +17,6 @@ window's slots are hourly while the store lists one every ten minutes.
 
 from __future__ import annotations
 
-import filecmp
 import io
 import json
 import os
@@ -33,8 +32,8 @@ from unittest import mock
 
 import numpy as np
 
-from tests._support import ClassTempRoot, TempRoot, counting, requires_gdal_warp, requires_hdf5plugin, requires_native_source
-from xuebuild import binconvert, native, observation, zstdcli
+from tests._support import ClassTempRoot, TempRoot, assert_native_matches, counting, requires_gdal_warp, requires_hdf5plugin, requires_native_source
+from xuebuild import binconvert, observation
 from xuebuild.binformat import read_bundle
 from xuebuild.errors import ConversionError, DownloadError
 from xuebuild.fetch import (
@@ -81,7 +80,6 @@ SLOT_1300 = CYCLES[3]
 #: The fixture strip's footprint at the published step, for the tests
 #: that warp: 0–3°S across 10°W–10°E.
 TILE_GRID = TargetGrid(west=-10.0, south=-4.0, east=10.0, north=1.0, step=0.04)
-
 
 
 def product_id(start: datetime) -> str:
@@ -628,20 +626,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
 
     @requires_native_source("meteosat")
     def test_the_native_encoder_writes_the_same_bytes(self) -> None:
-        if not zstdcli.compresses_in_process():
-            self.skipTest("the reference encoder compresses through the zstd CLI")
-        subject = self.root / "native"
-        with mock.patch.dict(os.environ, {"XUE_ENCODER": "native"}):
-            report = native.convert_bin(
-                self.inputs, subject, model="meteosat", skip_video=True, manifest_path=subject / "manifest.json", require_complete=True, expected_hours=1
-            )
-        if report["zstdVersion"] != self.report["zstdVersion"]:
-            self.skipTest("libzstd differs between the reference and the wheel")
-        names = sorted(path.name for path in (self.root / "out").iterdir())
-        self.assertEqual(sorted(path.name for path in subject.iterdir()), names)
-        for name in names:
-            with self.subTest(artifact=name):
-                self.assertTrue(filecmp.cmp(self.root / "out" / name, subject / name, shallow=False), name)
+        assert_native_matches(self, self.inputs, self.root / "out", self.report, self.root / "native", model="meteosat", require_complete=True, expected_hours=1)
 
 
 if __name__ == "__main__":

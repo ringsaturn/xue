@@ -26,18 +26,15 @@ thirty at each, the ``oper`` stream's then the two ``wave`` records.
 
 from __future__ import annotations
 
-import filecmp
 import json
-import shutil
-import tempfile
 import unittest
 from datetime import UTC, datetime
 from pathlib import Path
 
 import numpy as np
 
-from tests._support import ClassTempRoot, FIXTURES, assert_gdalinfo_agrees, requires_gdalinfo
-from xuebuild import binconvert, grib2, native, quantize, zstdcli
+from tests._support import ClassTempRoot, FIXTURES, ParityCase, ReferenceBuild, assert_gdalinfo_agrees, requires_gdalinfo
+from xuebuild import binconvert, grib2, quantize
 from xuebuild.binconvert import analysis_optional_ids, published_bundle_ids, video_variable_ids
 from xuebuild.binformat import read_bundle
 from xuebuild.errors import ConversionError, DownloadError
@@ -76,6 +73,14 @@ NOT_TAKEN_UP = (
     "wind1000", "wind700", "wind500", "wind300", "wind200",
 )
 ADDED = ("lcdc", "mcdc", "hcdc")
+
+#: The reference build every class here reads (tests/_support.py).
+REFERENCE = ReferenceBuild("aifs", "2026091700", FIXTURE_FRAMES)
+
+
+def tearDownModule() -> None:
+    REFERENCE.cleanup()
+
 
 class SourceRegistryTests(unittest.TestCase):
     def test_aifs_publishes_the_ifs_set_less_what_it_lacks_plus_the_cloud_layers(self) -> None:
@@ -324,62 +329,13 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         self.assertLess(float(np.mean(skin == 0)), 0.01)
 
 
-@unittest.skipUnless(native.available(), f"{native.DISTRIBUTION} is not installed")
-class NativeParityTests(unittest.TestCase):
+class NativeParityTests(ParityCase, unittest.TestCase):
     """The same two frames through both encoders, byte for byte — the five
     AIFS encodings under their alternates, the millimetre accumulation, the
     bitmap fill and the wave vector, on real AIFS records."""
 
-    root: Path
-
-    @classmethod
-    def setUpClass(cls) -> None:
-        if not native.knows_source("aifs"):
-            raise unittest.SkipTest(f"the installed {native.DISTRIBUTION} wheel predates the AIFS source")
-        cls.root = Path(tempfile.mkdtemp(prefix="xue-aifs-parity-"))
-        cls.reference, cls.reference_report = cls._build(binconvert, "reference")
-        try:
-            cls.subject, cls.subject_report = cls._build(native, "subject")
-        except ConversionError as exc:
-            if "out of step" in str(exc):
-                shutil.rmtree(cls.root, ignore_errors=True)
-                raise unittest.SkipTest(f"the installed {native.DISTRIBUTION} wheel predates the AIFS source: {exc}")
-            raise
-
-    @classmethod
-    def tearDownClass(cls) -> None:
-        shutil.rmtree(cls.root, ignore_errors=True)
-
-    @classmethod
-    def _build(cls, implementation, name: str) -> tuple[Path, dict]:
-        run_directory = cls.root / name / "aifs.2026091700"
-        report = implementation.convert_bin(
-            FIXTURE_FRAMES,
-            run_directory,
-            work_root=cls.root / f"{name}-work",
-            manifest_path=run_directory / "manifest.json",
-            latest_path=cls.root / name / "latest-aifs.json",
-            run_id="2026091700",
-            model="aifs",
-        )
-        return cls.root / name, report
-
-    def test_every_artifact_is_byte_identical(self) -> None:
-        if not zstdcli.compresses_in_process():
-            self.skipTest("the reference encoder compresses through the zstd CLI below Python 3.14")
-        if self.reference_report["zstdVersion"] != self.subject_report["zstdVersion"]:
-            self.skipTest("libzstd differs between the reference and the wheel")
-        reference = sorted(path.relative_to(self.reference).as_posix() for path in self.reference.rglob("*"))
-        subject = sorted(path.relative_to(self.subject).as_posix() for path in self.subject.rglob("*"))
-        self.assertEqual(reference, subject)
-        self.assertTrue(any(name.endswith("lcdc.xue") for name in reference))
-        self.assertTrue(any(name.endswith("wave.xue") for name in reference))
-        for relative in reference:
-            path = self.reference / relative
-            if path.is_dir():
-                continue
-            with self.subTest(artifact=relative):
-                self.assertTrue(filecmp.cmp(path, self.subject / relative, shallow=False), f"{relative} differs")
+    reference = REFERENCE
+    expect = ("aifs.2026091700/lcdc.xue", "aifs.2026091700/wave.xue")
 
 
 if __name__ == "__main__":

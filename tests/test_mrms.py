@@ -26,7 +26,6 @@ echo, and a quarter a rain band.
 
 from __future__ import annotations
 
-import filecmp
 import gzip
 import io
 import json
@@ -41,8 +40,8 @@ from unittest import mock
 
 import numpy as np
 
-from tests._support import ClassTempRoot, FIXTURES, TempRoot, requires_gdalinfo, requires_native_source
-from xuebuild import binconvert, cli, fetch, grib2, native, zstdcli
+from tests._support import ClassTempRoot, FIXTURES, TempRoot, assert_native_matches, requires_gdalinfo, requires_native_source
+from xuebuild import binconvert, cli, fetch, grib2
 from xuebuild.binconvert import (
     BlockReduction,
     GridInfo,
@@ -88,7 +87,6 @@ from xuebuild.variables import variable_spec
 FRAMES = (FIXTURES / "mrms.2026091300.t0000.crop.grib2", FIXTURES / "mrms.2026091300.t0002.crop.grib2")
 MRMS = source_spec("mrms")
 RUN = GfsRun(datetime(2026, 9, 13, 0, tzinfo=UTC))
-
 
 
 def listing(*keys: str, truncated: bool = False) -> str:
@@ -908,18 +906,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
 
     @requires_native_source("mrms", "the MRMS source")
     def test_the_native_encoder_writes_the_same_bytes(self) -> None:
-        if not zstdcli.compresses_in_process():
-            self.skipTest("the reference encoder compresses through the zstd CLI")
-        subject = self.root / "native"
-        with mock.patch.dict(os.environ, {"XUE_ENCODER": "native"}):
-            report = native.convert_bin(self.inputs, subject, model="mrms", skip_video=True, manifest_path=subject / "manifest.json")
-        if report["zstdVersion"] != self.report["zstdVersion"]:
-            self.skipTest("libzstd differs between the reference and the wheel")
-        names = sorted(path.name for path in (self.root / "out").iterdir())
-        self.assertEqual(sorted(path.name for path in subject.iterdir()), names)
-        for name in names:
-            with self.subTest(artifact=name):
-                self.assertTrue(filecmp.cmp(self.root / "out" / name, subject / name, shallow=False), name)
+        assert_native_matches(self, self.inputs, self.root / "out", self.report, self.root / "native", model="mrms")
 
 
 if __name__ == "__main__":

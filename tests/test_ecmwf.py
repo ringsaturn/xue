@@ -26,17 +26,15 @@ step — from the ``oper`` and ``wave`` streams as the fetcher assembles them.
 
 from __future__ import annotations
 
-import filecmp
 import json
-import shutil
 import unittest
 from datetime import UTC, datetime
 from pathlib import Path
 
 import numpy as np
 
-from tests._support import ClassTempRoot, FIXTURES, assert_gdalinfo_agrees, requires_gdalinfo
-from xuebuild import binconvert, grib2, native, zstdcli
+from tests._support import ClassTempRoot, FIXTURES, ParityCase, ReferenceBuild, assert_gdalinfo_agrees, requires_gdalinfo
+from xuebuild import binconvert, grib2
 from xuebuild.binconvert import analysis_optional_ids, published_bundle_ids, video_variable_ids
 from xuebuild.binformat import read_bundle
 from xuebuild.errors import ConversionError, DownloadError
@@ -56,6 +54,14 @@ ECMWF = source_spec("ecmwf")
 GFS = source_spec("gfs")
 # The bundles this widening added to the ECMWF set, in publication order.
 ADDED = ("gust", "tcdc", "cape", "dpt2m", "vvel850", "vvel700", "vvel500", "thetae850", "tmpsfc", "icetk", "htsgw", "perpw", "wave", "orog")
+
+#: The reference build every class here reads (tests/_support.py).
+REFERENCE = ReferenceBuild("ecmwf", "2026091212", FIXTURE_FRAMES)
+
+
+def tearDownModule() -> None:
+    REFERENCE.cleanup()
+
 
 class SourceRegistryTests(unittest.TestCase):
     def test_ecmwf_publishes_what_the_open_data_carries_in_gfs_order(self) -> None:
@@ -273,58 +279,13 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         self.assertGreater(int(u.max()), 127)
 
 
-@unittest.skipUnless(native.available(), f"{native.DISTRIBUTION} is not installed")
-class NativeParityTests(ClassTempRoot, unittest.TestCase):
+class NativeParityTests(ParityCase, unittest.TestCase):
     """The same two frames through both encoders, byte for byte — every
     alternate identity, the fraction unit, the analysis-less gust axis, the
     bitmap fills and the wave vector, on real ECMWF records."""
 
-    root: Path
-
-    root_prefix = "xue-ecmwf-parity-"
-
-    @classmethod
-    def setUpClass(cls) -> None:
-        super().setUpClass()
-        cls.reference, cls.reference_report = cls._build(binconvert, "reference")
-        try:
-            cls.subject, cls.subject_report = cls._build(native, "subject")
-        except ConversionError as exc:
-            if "out of step" in str(exc):
-                shutil.rmtree(cls.root, ignore_errors=True)
-                raise unittest.SkipTest(f"the installed {native.DISTRIBUTION} wheel predates the ECMWF set: {exc}")
-            raise
-
-    @classmethod
-    def _build(cls, implementation, name: str) -> tuple[Path, dict]:
-        run_directory = cls.root / name / "ecmwf.2026091212"
-        report = implementation.convert_bin(
-            FIXTURE_FRAMES,
-            run_directory,
-            work_root=cls.root / f"{name}-work",
-            manifest_path=run_directory / "manifest.json",
-            latest_path=cls.root / name / "latest-ecmwf.json",
-            run_id="2026091212",
-            model="ecmwf",
-        )
-        return cls.root / name, report
-
-    def test_every_artifact_is_byte_identical(self) -> None:
-        if not zstdcli.compresses_in_process():
-            self.skipTest("the reference encoder compresses through the zstd CLI below Python 3.14")
-        if self.reference_report["zstdVersion"] != self.subject_report["zstdVersion"]:
-            self.skipTest("libzstd differs between the reference and the wheel")
-        reference = sorted(path.relative_to(self.reference).as_posix() for path in self.reference.rglob("*"))
-        subject = sorted(path.relative_to(self.subject).as_posix() for path in self.subject.rglob("*"))
-        self.assertEqual(reference, subject)
-        self.assertTrue(any(name.endswith("gust.xue") for name in reference))
-        self.assertTrue(any(name.endswith("wave.xue") for name in reference))
-        for relative in reference:
-            path = self.reference / relative
-            if path.is_dir():
-                continue
-            with self.subTest(artifact=relative):
-                self.assertTrue(filecmp.cmp(path, self.subject / relative, shallow=False), f"{relative} differs")
+    reference = REFERENCE
+    expect = ("ecmwf.2026091212/gust.xue", "ecmwf.2026091212/wave.xue")
 
 
 if __name__ == "__main__":

@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any
 from unittest import mock
 
-from xuebuild import grib2, native, zstdcli
+from xuebuild import binconvert, grib2, native, zstdcli
 from xuebuild.gdal import inspect_grib_multi
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
@@ -43,6 +43,8 @@ requires_gdal = unittest.skipUnless(_have("gdalinfo", "gdal_translate"), "GDAL i
 requires_gdal_warp = unittest.skipUnless(
     _have("gdalinfo", "gdal_translate", "gdalwarp", "gdalbuildvrt"), "GDAL is not on PATH"
 )
+
+
 @functools.cache
 def _fci_unreadable() -> str | None:
     """Why the GDAL on PATH cannot read an FCI chunk, or None when it can.
@@ -82,6 +84,8 @@ def requires_hdf5plugin(item):
     GDAL on PATH able to use its filter. Probed once, when first applied."""
     reason = _fci_unreadable()
     return unittest.skipIf(reason is not None, reason or "")(item)
+
+
 requires_shachen = unittest.skipUnless(
     _importable("shachen"), "shachen is not installed (uv sync --group satellite)"
 )
@@ -249,3 +253,107 @@ class ClassTempRoot:
         super().setUpClass()  # type: ignore[misc]
         cls.root = Path(tempfile.mkdtemp(prefix=cls.root_prefix))
         cls.addClassCleanup(shutil.rmtree, cls.root, True)  # type: ignore[attr-defined]
+
+
+def convert_run(
+    implementation,
+    frames: Path | Sequence[Path],
+    root: Path,
+    *,
+    model: str,
+    run_id: str,
+    latest: str | None = None,
+    **options: Any,
+) -> tuple[Path, dict]:
+    """A whole run as a scheduled build writes it: the run directory under
+    ``root``, its manifest inside, the live pointer beside it. Returns
+    ``root`` and the report."""
+    from xuebuild.sources import source_spec  # noqa: PLC0415
+
+    run_directory = root / f"{model}.{run_id}"
+    report = implementation.convert_bin(
+        frames,
+        run_directory,
+        work_root=root.with_name(f"{root.name}-work"),
+        manifest_path=run_directory / "manifest.json",
+        latest_path=root / (latest or source_spec(model).latest_filename),
+        run_id=run_id,
+        model=model,
+        **options,
+    )
+    return root, report
+
+
+class ReferenceBuild:
+    """One reference build of a run per test module, made on first use and
+    shared by every class that reads it — they only read it. The module's
+    ``tearDownModule`` calls :meth:`cleanup`."""
+
+    def __init__(
+        self,
+        model: str,
+        run_id: str,
+        frames: Path | Sequence[Path] | Callable[[Path], Path | Sequence[Path]],
+    ) -> None:
+        self.model = model
+        self.run_id = run_id
+        self._frames = frames
+        self._scratch: Path | None = None
+        self._built: tuple[Path, dict] | None = None
+        self.frames: Path | Sequence[Path] | None = None
+
+    def get(self) -> tuple[Path, dict]:
+        """The root holding the run directory and the pointer, and the report."""
+        if self._built is None:
+            self._scratch = Path(tempfile.mkdtemp(prefix=f"xue-{self.model}-reference-"))
+            frames = self._frames
+            self.frames = frames(self._scratch / "raw") if callable(frames) else frames
+            self._built = convert_run(
+                binconvert, self.frames, self._scratch / "reference", model=self.model, run_id=self.run_id
+            )
+        return self._built
+
+    @property
+    def run_directory(self) -> Path:
+        root, _ = self.get()
+        return root / f"{self.model}.{self.run_id}"
+
+    def cleanup(self) -> None:
+        if self._scratch is not None:
+            shutil.rmtree(self._scratch, ignore_errors=True)
+        self._scratch = None
+        self._built = None
+
+
+class ParityCase:
+    """A forecast run through both encoders, byte for byte.
+
+    Mix in before ``unittest.TestCase`` (as a mixin it is not collected
+    itself wherever it is imported). A subclass names ``reference`` (the module's :class:`ReferenceBuild`)
+    and ``expect`` (relative paths the comparison must find, so it cannot
+    pass by both sides skipping a bundle). The subject is built through the
+    wheel into a scratch root of its own, laid out like the reference, so
+    even the live pointer — which names the manifest relative to itself
+    and carries its CRC32 — has to come out the same.
+    """
+
+    reference: ReferenceBuild
+    expect: tuple[str, ...] = ()
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()  # type: ignore[misc]
+        build = cls.reference
+        if not native_knows(build.model):
+            raise unittest.SkipTest(f"the installed {native.DISTRIBUTION} wheel predates the {build.model} source")
+        cls.reference_root, cls.reference_report = build.get()
+        scratch = Path(tempfile.mkdtemp(prefix=f"xue-{build.model}-parity-"))
+        cls.addClassCleanup(shutil.rmtree, scratch, True)  # type: ignore[attr-defined]
+        cls.subject_root, cls.subject_report = convert_run(
+            native, build.frames, scratch / "subject", model=build.model, run_id=build.run_id
+        )
+
+    def test_every_artifact_is_byte_identical(self) -> None:
+        case: Any = self
+        require_comparable_compression(case, self.reference_report, self.subject_report)
+        assert_trees_identical(case, self.reference_root, self.subject_root, expect=self.expect)
