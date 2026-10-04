@@ -31,7 +31,6 @@ import importlib.util
 import json
 import os
 import shutil
-import subprocess
 import tempfile
 import unittest
 from datetime import UTC, datetime, timedelta
@@ -528,7 +527,6 @@ class StacTests(unittest.TestCase):
     def test_a_source_stripped_of_its_feed_has_no_collection(self) -> None:
         """No registered source is without a feed any more; the rule is
         checked on a copy of the CMA source with its pointer taken off."""
-        from xuebuild import stac
 
         archive_only = dataclasses.replace(CMA, latest_filename=None)
         self.assertFalse(archive_only.live)

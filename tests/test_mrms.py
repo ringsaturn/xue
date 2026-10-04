@@ -30,13 +30,12 @@ import filecmp
 import gzip
 import io
 import json
-import math
 import os
 import shutil
 import struct
 import tempfile
 import unittest
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest import mock
 

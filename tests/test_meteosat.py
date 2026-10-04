@@ -58,8 +58,6 @@ from xuebuild.satellite.readers import (
     FCI_BT_SCALE,
     FCI_GROUPS,
     FCIReader,
-    SlotFiles,
-    SlotObject,
     brightness_temperature,
     elevation_angle,
     parse_fci_chunk,

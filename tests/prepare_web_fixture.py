@@ -14,7 +14,7 @@ from pathlib import Path
 
 import numpy as np
 
-from xuebuild import binformat, temporal, zarrstore, zstdcli
+from xuebuild import binformat, zarrstore, zstdcli
 from xuebuild.binconvert import (
     GridInfo,
     WIND_COMPONENT_IDS,

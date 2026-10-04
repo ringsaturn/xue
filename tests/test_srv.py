@@ -7,7 +7,6 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
-import zlib
 from datetime import UTC, datetime
 from pathlib import Path
 

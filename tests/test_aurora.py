@@ -24,7 +24,7 @@ from xuebuild.binformat import read_bundle
 from xuebuild.errors import ConversionError, DownloadError
 from xuebuild.fetch import _fetch_aurora_run, latest_aurora_slot, observation_window_start
 from xuebuild.model import GfsRun
-from xuebuild.sources import MODEL_CORE_BUNDLES, SOURCES, source_spec
+from xuebuild.sources import MODEL_CORE_BUNDLES, source_spec
 from xuebuild.stac import _source_prose
 
 FIXTURES = Path(__file__).parent / "fixtures"
