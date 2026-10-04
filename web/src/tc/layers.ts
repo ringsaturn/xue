@@ -57,7 +57,6 @@ const LAYERS = {
   nameLabel: "tc-name-label",
 } as const;
 
-export const TC_LAYER_IDS: readonly string[] = Object.values(LAYERS);
 /** The layers a click on the map may hit a storm point through, nearest
  * on top first. */
 export const TC_CLICKABLE_LAYERS: readonly string[] = [
