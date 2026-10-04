@@ -27,6 +27,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from ..common import write_bytes_atomic
 from ..errors import DownloadError, XueError
 from ..fetch import ECMWF_BASE_URLS, _http_error_code, _request
 from .track import SourceStatus
@@ -86,13 +87,6 @@ def _get_optional(url: str, **kwargs: Any) -> bytes | None:
         raise
 
 
-def _write(path: Path, payload: bytes) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(path.suffix + ".part")
-    temporary.write_bytes(payload)
-    temporary.replace(path)
-
-
 def _cycles(issue: datetime) -> list[datetime]:
     floored = issue.astimezone(UTC).replace(minute=0, second=0, microsecond=0)
     floored = floored.replace(hour=(floored.hour // 6) * 6)
@@ -102,7 +96,7 @@ def _cycles(issue: datetime) -> list[datetime]:
 def fetch_jtwc(directory: Path) -> FetchResult:
     now = datetime.now(UTC)
     rss = _get(JTWC_RSS_URL, headers={"User-Agent": JTWC_USER_AGENT})
-    _write(directory / "jtwc.rss", rss)
+    write_bytes_atomic(directory / "jtwc.rss", rss)
     files = ["jtwc.rss"]
     names = list(dict.fromkeys(_TCW_LINK.findall(rss.decode("utf-8", errors="replace"))))
     for name in names:
@@ -111,7 +105,7 @@ def fetch_jtwc(directory: Path) -> FetchResult:
         if body is None:
             LOG.warning("jtwc: %s listed but not served", url)
             continue
-        _write(directory / f"{name}.tcw", body)
+        write_bytes_atomic(directory / f"{name}.tcw", body)
         files.append(f"{name}.tcw")
     return FetchResult(
         SourceStatus("jtwc", True, fetched=now, url=JTWC_RSS_URL, detail={"products": len(files) - 1}), files
@@ -121,7 +115,7 @@ def fetch_jtwc(directory: Path) -> FetchResult:
 def fetch_nhc(directory: Path) -> FetchResult:
     now = datetime.now(UTC)
     current = _get(NHC_CURRENT_STORMS_URL)
-    _write(directory / "CurrentStorms.json", current)
+    write_bytes_atomic(directory / "CurrentStorms.json", current)
     files = ["CurrentStorms.json"]
     try:
         storms = json.loads(current).get("activeStorms", [])
@@ -138,11 +132,11 @@ def fetch_nhc(directory: Path) -> FetchResult:
                 a_deck = gzip.decompress(a_deck)
             except (OSError, EOFError) as exc:
                 raise DownloadError(f"a-deck for {storm_id} is not gzip: {exc}") from exc
-            _write(directory / f"a{storm_id}.dat", a_deck)
+            write_bytes_atomic(directory / f"a{storm_id}.dat", a_deck)
             files.append(f"a{storm_id}.dat")
         b_deck = _get_optional(f"{NHC_ATCF_URL}/btk/b{storm_id}.dat")
         if b_deck is not None:
-            _write(directory / f"b{storm_id}.dat", b_deck)
+            write_bytes_atomic(directory / f"b{storm_id}.dat", b_deck)
             files.append(f"b{storm_id}.dat")
     return FetchResult(
         SourceStatus("nhc", True, fetched=now, url=NHC_CURRENT_STORMS_URL, detail={"storms": len(storms)}), files
@@ -161,7 +155,7 @@ def fetch_gfs(directory: Path, issue: datetime) -> FetchResult:
         if body is None:
             continue
         name = f"{cycle:%Y%m%d%H}/avno.t{cycle:%H}z.cyclone.trackatcfunix"
-        _write(directory / name, body)
+        write_bytes_atomic(directory / name, body)
         return FetchResult(SourceStatus("gfs", True, fetched=now, url=url, cycle=f"{cycle:%Y%m%d%H}"), [name])
     raise DownloadError(f"no GFS tracker output in the last {CYCLE_LOOKBACK} cycles")
 
@@ -180,7 +174,7 @@ def fetch_gefs(directory: Path, issue: datetime) -> FetchResult:
                 LOG.warning("gefs: member %s of %s missing", member, f"{cycle:%Y%m%d%H}")
                 continue
             name = f"{cycle:%Y%m%d%H}/{member}.t{cycle:%H}z.cyclone.trackatcfunix"
-            _write(directory / name, body)
+            write_bytes_atomic(directory / name, body)
             files.append(name)
         return FetchResult(
             SourceStatus(
@@ -212,7 +206,7 @@ def _fetch_ecmwf(directory: Path, issue: datetime, source_id: str, stream: str) 
             if body is None:
                 break  # not on this mirror means not published yet; mirrors agree
             name = f"{cycle:%Y%m%d%H}-{stream}-tf.bufr"
-            _write(directory / name, body)
+            write_bytes_atomic(directory / name, body)
             return FetchResult(SourceStatus(source_id, True, fetched=now, url=url, cycle=f"{cycle:%Y%m%d%H}"), [name])
     raise DownloadError(f"no ECMWF {stream} track file in the last {CYCLE_LOOKBACK} cycles")
 
@@ -229,7 +223,7 @@ def fetch_ibtracs(directory: Path) -> FetchResult:
     now = datetime.now(UTC)
     body = _get(IBTRACS_URL, timeout=120)
     name = "ibtracs.ACTIVE.list.v04r01.csv"
-    _write(directory / name, body)
+    write_bytes_atomic(directory / name, body)
     return FetchResult(SourceStatus("ibtracs", True, fetched=now, url=IBTRACS_URL), [name])
 
 
@@ -282,7 +276,7 @@ def fetch_sources(
             result = FetchResult(
                 SourceStatus(source_id, False, fetched=datetime.now(UTC), error=f"{type(exc).__name__}: {exc}"), []
             )
-        _write(record, json.dumps(result.to_json(), indent=2).encode("utf-8"))
+        write_bytes_atomic(record, json.dumps(result.to_json(), indent=2).encode("utf-8"))
         results[source_id] = result
     return results
 
