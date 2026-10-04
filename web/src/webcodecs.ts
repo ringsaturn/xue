@@ -18,8 +18,8 @@
  * `progress`/`resident` messages mirror the streaming Worker protocol.
  *
  * Not WASM, not a Worker: `VideoDecoder` already runs off the main thread
- * internally, and decoding a GOP-6 stream is cheap enough (measured p95
- * 33.9ms for a full 6-frame decode) that a dedicated Worker isn't needed.
+ * internally, and decoding a GOP-6 stream is cheap enough that a dedicated
+ * Worker isn't needed.
  */
 
 import { frameOffsets, parseBundleMetadata } from "./manifest";
@@ -386,7 +386,7 @@ class VideoDecodeChannel implements DecodeChannel {
 
   terminate(): void {
     // No persistent VideoDecoder to release: each decodeGop() call opens
-    // and closes its own, since a GOP-6 decode is cheap (p95 33.9ms measured).
+    // and closes its own, since a GOP-6 decode is cheap.
     // The flag stops the background prefetch loop and mutes late messages.
     this.terminated = true;
   }
