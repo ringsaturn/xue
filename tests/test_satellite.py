@@ -39,7 +39,6 @@ import os
 import re
 import shutil
 import subprocess
-import tempfile
 import unittest
 import urllib.parse
 from collections.abc import Callable
@@ -49,6 +48,7 @@ from unittest import mock
 
 import numpy as np
 
+from tests._support import ClassTempRoot, FIXTURES, TempRoot, requires_gdal_warp, requires_native_source
 from xuebuild import binconvert, native, observation, zstdcli
 from xuebuild.binformat import read_bundle
 from xuebuild.errors import ConversionError, DownloadError
@@ -83,7 +83,6 @@ from xuebuild.variables import (
     variable_spec,
 )
 
-FIXTURES = Path(__file__).parent / "fixtures"
 TILES = FIXTURES / "himawari"
 DEBRA_FIXTURES = FIXTURES / "debra"
 REGISTRY = FIXTURES / "satellite-registry.json"
@@ -105,10 +104,6 @@ TILE_GRID = TargetGrid(west=140.0, south=20.0, east=164.0, north=33.0, step=0.04
 #: The platform as the fixture sees it: a slot is two tiles.
 TWO_TILES = dataclasses.replace(HIMAWARI, tile_count=2)
 
-requires_gdal = unittest.skipUnless(
-    all(shutil.which(command) for command in ("gdalinfo", "gdal_translate", "gdalwarp", "gdalbuildvrt")),
-    "GDAL is not on PATH",
-)
 
 
 def stage_ancillary(raw_root: Path, slots: tuple[datetime, ...], *, skin: str = "gfs.tmpsfc.pacific.grib2") -> Path:
@@ -440,11 +435,12 @@ class ListingTests(unittest.TestCase):
         self.assertEqual((slots[0], slots[-1]), (SLOT_0300, SLOT_0300 + timedelta(hours=3)))
 
 
-@requires_gdal
-class FetchTests(unittest.TestCase):
+@requires_gdal_warp
+class FetchTests(TempRoot, unittest.TestCase):
+    root_prefix = "xue-himawari-"
+
     def setUp(self) -> None:
-        self.root = Path(tempfile.mkdtemp(prefix="xue-himawari-"))
-        self.addCleanup(shutil.rmtree, self.root, True)
+        super().setUp()
         self.keys = fixture_keys()
         self.listing, self.download = bucket(self.keys)
         self.downloads: list[str] = []
@@ -740,11 +736,13 @@ class FetchTests(unittest.TestCase):
         self.assertEqual(assemble.frame_path(self.root, IR104, SLOT_0310), self.root / "ir104" / "ir104_20260917031000.tif")
 
 
-@requires_gdal
-class ConversionTests(unittest.TestCase):
+@requires_gdal_warp
+class ConversionTests(ClassTempRoot, unittest.TestCase):
+    root_prefix = "xue-himawari-convert-"
+
     @classmethod
     def setUpClass(cls) -> None:
-        cls.root = Path(tempfile.mkdtemp(prefix="xue-himawari-convert-"))
+        super().setUpClass()
         listing, download = bucket(fixture_keys())
         stage_ancillary(cls.root, (SLOT_0300, SLOT_0310))
         with mock.patch.dict(PLATFORMS, {"himawari": TWO_TILES}):
@@ -761,10 +759,6 @@ class ConversionTests(unittest.TestCase):
                 require_complete=True,
                 expected_hours=3,
             )
-
-    @classmethod
-    def tearDownClass(cls) -> None:
-        shutil.rmtree(cls.root, ignore_errors=True)
 
     def test_the_bundle_is_the_disk_grid_with_the_band_beside_the_parameter(self) -> None:
         self.assertEqual([bundle["variable"] for bundle in self.report["bundles"]], ["ir104", "dustrgb", "dustcf"])
@@ -969,7 +963,7 @@ class ConversionTests(unittest.TestCase):
         self.assertEqual([bundle["variable"] for bundle in report["bundles"]], ["dustrgb"])
         self.assertTrue(filecmp.cmp(self.root / "only-dust" / "dustrgb.xue", self.root / "out" / "dustrgb.xue", shallow=False))
 
-    @unittest.skipUnless(native.knows_source("himawari"), f"the installed {native.DISTRIBUTION} wheel predates the himawari source's bundle set")
+    @requires_native_source("himawari", "the himawari source's bundle set")
     def test_the_native_encoder_writes_the_same_bytes(self) -> None:
         if not zstdcli.compresses_in_process():
             self.skipTest("the reference encoder compresses through the zstd CLI")

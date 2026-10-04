@@ -34,7 +34,8 @@ from pathlib import Path
 
 import numpy as np
 
-from tests.test_satellite import CHANNELS, DEBRA_FIXTURES, SLOT_0300, SLOT_0310, TILE_GRID, TWO_TILES, bucket, fixture_keys, requires_gdal, stage_ancillary
+from tests._support import TempRoot, requires_gdal_warp
+from tests.test_satellite import CHANNELS, DEBRA_FIXTURES, SLOT_0300, SLOT_0310, TILE_GRID, TWO_TILES, bucket, fixture_keys, stage_ancillary
 from xuebuild.errors import ConversionError, DownloadError
 from xuebuild.idx import ByteRange
 from xuebuild.satellite import GOES_EAST, HIMAWARI, METEOSAT, ancillary, assemble
@@ -125,7 +126,7 @@ class RegridTests(unittest.TestCase):
         np.testing.assert_allclose(out[100], expected, atol=1e-9)
 
 
-@requires_gdal
+@requires_gdal_warp
 class AncillaryReaderTests(unittest.TestCase):
     def test_the_skin_temperature_is_kelvin_on_its_own_grid(self) -> None:
         field = ancillary.read_skin_temperature(DEBRA_FIXTURES / "gfs.tmpsfc.gobi.grib2")
@@ -233,11 +234,12 @@ class AncillaryReaderTests(unittest.TestCase):
         self.assertEqual(source.metadata()["validTime"], "2026-09-17T03:00:00Z")
 
 
-@requires_gdal
-class ProducerTests(unittest.TestCase):
+@requires_gdal_warp
+class ProducerTests(TempRoot, unittest.TestCase):
+    root_prefix = "xue-debra-"
+
     def setUp(self) -> None:
-        self.root = Path(tempfile.mkdtemp(prefix="xue-debra-"))
-        self.addCleanup(shutil.rmtree, self.root, True)
+        super().setUp()
         self.ancillary = gobi_ancillary(self.root)
 
     def test_the_producer_reads_five_windows_on_every_imager_here(self) -> None:
@@ -351,13 +353,14 @@ class ProducerTests(unittest.TestCase):
             DEBRA.run(HIMAWARI, scene, {"camel": resolved["camel"]}, slot=GOBI_SLOT, grid=grid)
 
 
-@requires_gdal
-class WindowTests(unittest.TestCase):
+@requires_gdal_warp
+class WindowTests(TempRoot, unittest.TestCase):
     """The producer in the fetch stage, on the Himawari fixture tiles."""
 
+    root_prefix = "xue-debra-window-"
+
     def setUp(self) -> None:
-        self.root = Path(tempfile.mkdtemp(prefix="xue-debra-window-"))
-        self.addCleanup(shutil.rmtree, self.root, True)
+        super().setUp()
         self.listing, self.download = bucket(fixture_keys())
         self.ancillary = stage_ancillary(self.root, (SLOT_0300, SLOT_0310))
 

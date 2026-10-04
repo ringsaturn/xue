@@ -16,18 +16,16 @@ from __future__ import annotations
 import filecmp
 import json
 import os
-import shutil
 import subprocess
-import tempfile
 import unittest
-from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest import mock
 
 import numpy as np
 
-from tests.test_satellite import bucket, requires_gdal, stage_ancillary
+from tests._support import ClassTempRoot, TempRoot, counting, requires_gdal_warp, requires_native_source
+from tests.test_satellite import bucket, stage_ancillary
 from xuebuild import binconvert, native, observation, zstdcli
 from xuebuild.binformat import read_bundle
 from xuebuild.errors import DownloadError
@@ -76,17 +74,6 @@ def fixture_keys() -> dict[str, Path]:
         assert parsed is not None, path.name
         keys[f"{GOES_EAST.prefix}/{parsed.start:%Y/%j/%H}/{path.name}"] = path
     return keys
-
-
-def counting(listing: Callable[[str], str]) -> tuple[Callable[[str], str], list[str]]:
-    """A listing that records the URLs it was asked for."""
-    asked: list[str] = []
-
-    def fetch(url: str) -> str:
-        asked.append(url)
-        return listing(url)
-
-    return fetch, asked
 
 
 class RegistryTests(unittest.TestCase):
@@ -244,11 +231,12 @@ class ListingTests(unittest.TestCase):
             satellite_fetch.latest_slot(GOES_WEST, GOES_WEST.channel("ir104"), now=now, fetch=listing)
 
 
-@requires_gdal
-class FetchTests(unittest.TestCase):
+@requires_gdal_warp
+class FetchTests(TempRoot, unittest.TestCase):
+    root_prefix = "xue-goes-"
+
     def setUp(self) -> None:
-        self.root = Path(tempfile.mkdtemp(prefix="xue-goes-"))
-        self.addCleanup(shutil.rmtree, self.root, True)
+        super().setUp()
         self.keys = fixture_keys()
         self.listing, self.download = bucket(self.keys)
         self.downloads: list[str] = []
@@ -357,11 +345,13 @@ class FetchTests(unittest.TestCase):
         self.assertEqual(series.producers["dustr"], ("shachen", DUST.version))
 
 
-@requires_gdal
-class ConversionTests(unittest.TestCase):
+@requires_gdal_warp
+class ConversionTests(ClassTempRoot, unittest.TestCase):
+    root_prefix = "xue-goes-convert-"
+
     @classmethod
     def setUpClass(cls) -> None:
-        cls.root = Path(tempfile.mkdtemp(prefix="xue-goes-convert-"))
+        super().setUpClass()
         listing, download = bucket(fixture_keys())
         stage_ancillary(cls.root, (SLOT_1510, SLOT_1520), skin="gfs.tmpsfc.caribbean.grib2")
         _fetch_satellite_run(EAST, GfsRun(HOUR), 3, cls.root, force=False, input_ids=None, fetch=listing, download=download)
@@ -377,10 +367,6 @@ class ConversionTests(unittest.TestCase):
                 require_complete=True,
                 expected_hours=3,
             )
-
-    @classmethod
-    def tearDownClass(cls) -> None:
-        shutil.rmtree(cls.root, ignore_errors=True)
 
     def test_the_bundles_are_the_east_disk_with_the_abi_band(self) -> None:
         self.assertEqual([bundle["variable"] for bundle in self.report["bundles"]], ["ir104", "dustrgb", "dustcf"])
@@ -441,7 +427,7 @@ class ConversionTests(unittest.TestCase):
                     np.testing.assert_array_equal(np.asarray(rung.decode_plane(1, offset)).reshape(side, side), expected)
         self.assertEqual([Path(variant["output"]).name for variant in self.report["variants"]], [f"{b}.{t}.xue" for b in ("ir104", "dustrgb", "dustcf") for t, _, _, _ in rungs])
 
-    @unittest.skipUnless(native.knows_source("goeseast"), f"the installed {native.DISTRIBUTION} wheel predates the goeseast source")
+    @requires_native_source("goeseast")
     def test_the_native_encoder_writes_the_same_bytes(self) -> None:
         if not zstdcli.compresses_in_process():
             self.skipTest("the reference encoder compresses through the zstd CLI")
