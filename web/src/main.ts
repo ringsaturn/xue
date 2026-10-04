@@ -44,6 +44,7 @@ import {
   type CompositeField,
   type ContourStyle,
   type FramePlanes,
+  type LapseCorrection,
   type VectorField,
 } from "./layer";
 import {
@@ -919,6 +920,7 @@ function applySceneFromUrl(): void {
   map.on("terrain", () => {
     syncUrl();
     syncZoomCeiling();
+    syncLapse();
   });
   syncZoomCeiling();
 }
@@ -4023,6 +4025,7 @@ function handleDecodedFrame(
   if (previous) planeCacheBytes -= previous.plane.byteLength;
   const plane = new Uint8Array(message.buffer);
   planeCache.set(key, { plane, decodeMs: message.decodeMs, tiles: message.tiles ?? null, session });
+  if (relief?.session === session && !message.tiles) acceptReliefPlane(session, plane);
   planeCacheBytes += plane.byteLength;
   lastDecodeMs = message.decodeMs;
   recordDecodeEvent(plane.byteLength, message.decodeMs);
@@ -6592,6 +6595,7 @@ function applyVariable(session: VariableSession): void {
   applyOverlays();
   applyMosaicMembers();
   applyComposite();
+  syncLapse();
   updateVariablePresentation(session);
   syncUrl();
   updateCacheReadout();
@@ -6614,6 +6618,97 @@ function applyVariable(session: VariableSession): void {
     ensureProbeSessions();
     scheduleProbeRender();
   }
+}
+
+// ---------------------------------------------------------------------------
+// Altitude correction over the 3D relief (layer.ts::lapseCodes): the 2 m
+// temperature moved from the model's smoothed ground to the DEM's at a
+// standard lapse rate. Only with the terrain on and a run that publishes its
+// orography; the run's `orog` plane is decoded whole once (a megabyte on
+// GFS) and kept as its own copy, since cached planes are recycled.
+
+/** The orography session the correction reads, and its plane once decoded. */
+let relief: { session: VariableSession; plane: Uint8Array | null } | null = null;
+
+/** The fields the correction applies to: a temperature 2 m above the ground. */
+const LAPSE_FIELDS: ReadonlySet<KnownBundleId> = new Set(["tmp2m"]);
+
+function lapseWanted(session: VariableSession | null): session is VariableSession {
+  return (
+    session !== null &&
+    sceneApplied &&
+    map.getTerrain() !== null &&
+    session.chartId !== null &&
+    LAPSE_FIELDS.has(session.chartId) &&
+    session.variable.quantization.type === "linear" &&
+    manifest !== null &&
+    hasBundle(manifest, "orog")
+  );
+}
+
+function syncLapse(): void {
+  const session = activeSession;
+  const layer = session ? slotFor(session.id).layer : null;
+  if (!lapseWanted(session) || !layer) {
+    layer?.setLapseCorrection(null);
+    return;
+  }
+  const orography = sessions.get("orog");
+  if (relief && relief.session === orography && relief.plane) {
+    layer.setLapseCorrection(lapseCorrection(session, relief.session, relief.plane));
+    return;
+  }
+  if (relief && relief.session === orography) return;
+  const sequence = initializeSequence;
+  void loadVariable("orog", sequence, "probe")
+    .then((opened) => {
+      if (sequence !== initializeSequence) return;
+      relief = { session: opened, plane: null };
+      const offset = frameOffsets(opened.metadata.time)[0] ?? 0;
+      requestDecode(opened, opened.variable, offset);
+    })
+    .catch((error: unknown) => {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      console.warn("relief: orog not opened:", error instanceof Error ? error.message : error);
+    });
+}
+
+/** A whole orography plane arrived for the correction. */
+function acceptReliefPlane(session: VariableSession, plane: Uint8Array): void {
+  if (!relief || relief.session !== session) return;
+  relief.plane = plane.slice();
+  syncLapse();
+}
+
+let lapseCorrectionCache: { key: string; value: LapseCorrection } | null = null;
+
+function lapseCorrection(temperature: VariableSession, orography: VariableSession, plane: Uint8Array): LapseCorrection | null {
+  const tq = temperature.variable.quantization;
+  const oq = orography.variable.quantization;
+  if (tq.type !== "linear" || oq.type !== "linear") return null;
+  const key = `${temperature.key}:${orography.key}`;
+  if (lapseCorrectionCache?.key === key && lapseCorrectionCache.value.orography === plane) return lapseCorrectionCache.value;
+  const grid = orography.metadata.grid as Record<string, number | boolean>;
+  const width = (grid.width as number) ?? 0;
+  const longitudeStep = (grid.longitudeStep as number) ?? 0.25;
+  const value: LapseCorrection = {
+    orography: plane,
+    grid: {
+      width,
+      height: (grid.height as number) ?? 0,
+      firstLongitude: (grid.firstLongitude as number) ?? -180,
+      firstLatitude: (grid.firstLatitude as number) ?? 90,
+      longitudeStep,
+      latitudeStep: (grid.latitudeStep as number) ?? -0.25,
+      wraps: (grid.wrapLongitude as boolean) ?? Math.abs(width * longitudeStep - 360) < 1e-6,
+    },
+    orographyOffset: oq.offset,
+    orographyScale: oq.scale,
+    temperatureScale: tq.scale,
+    maximumCode: tq.maximumCode,
+  };
+  lapseCorrectionCache = { key, value };
+  return value;
 }
 
 // ---------------------------------------------------------------------------

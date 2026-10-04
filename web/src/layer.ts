@@ -133,6 +133,28 @@ in vec2 v_mercator;
 #ifdef XUE_TERRAIN
 in vec2 v_dem;
 ${TERRAIN_SHADE_GLSL}
+// Altitude correction of a near-surface temperature over the relief, off
+// (weight 0) for every other field. The model's ground is its own smoothed
+// orography, a quarter-degree grid's mountain a broad hill, so its 2 m
+// temperature belongs to a height the real slope under the fragment is not
+// at; a standard lapse rate moves it there: T + gamma * (model height - DEM
+// height). u_orog is the run's orography on its own grid (u_orog_grid: first
+// longitude, first latitude, steps; u_orog_decode: offset, metres per code),
+// and u_lapse is (weight, codes per metre of height difference, highest
+// value code) — the weight fades the correction in as the camera closes in.
+uniform sampler2D u_orog;
+uniform vec4 u_orog_grid;
+uniform vec2 u_orog_size;
+uniform vec2 u_orog_decode;
+uniform vec3 u_lapse;
+float lapseCodes(float longitude, float latitude) {
+  vec2 uv = vec2(
+    (mod(longitude - u_orog_grid.x, 360.0) / u_orog_grid.z + 0.5) / u_orog_size.x,
+    ((latitude - u_orog_grid.y) / u_orog_grid.w + 0.5) / u_orog_size.y
+  );
+  float model = u_orog_decode.x + texture(u_orog, uv).r * 255.0 * u_orog_decode.y;
+  return (model - surfaceSample(v_dem)) * u_lapse.y;
+}
 #endif
 uniform sampler2D u_data;
 uniform sampler2D u_data_b;
@@ -446,6 +468,9 @@ void main() {
       if (missingB) discard;
       code = mix(code, codeB, u_mix);
     }
+#ifdef XUE_TERRAIN
+    if (u_lapse.x > 0.0) code = clamp(code + u_lapse.x * lapseCodes(longitude, latitude), 0.0, u_lapse.z);
+#endif
     color = texture(u_palette, vec2((code * 255.0 + 0.5) / 256.0, 0.5));
   }
   if (u_contour.x > 0.0) {
@@ -665,6 +690,11 @@ export class ForecastLayer implements CustomLayerInterface {
   private worldMesh: { vertexArray: WebGLVertexArrayObject; count: number } | null = null;
   private tileMesh: { vertexArray: WebGLVertexArrayObject; count: number; size: number } | null = null;
   private demSampler: WebGLSampler | null = null;
+  /** Altitude correction over the relief: its inputs, and the orography
+   * texture they are uploaded to. */
+  private lapse: LapseCorrection | null = null;
+  private orographyTexture: WebGLTexture | null = null;
+  private uploadedOrography: Uint8Array | null = null;
   // The smoothing pass: its program, the texture the horizontal pass writes
   // and the vertical one reads, and the framebuffer both draw through.
   private smoothProgram: WebGLProgram | null = null;
@@ -734,6 +764,31 @@ export class ForecastLayer implements CustomLayerInterface {
     this.mixWeight = 0;
   }
 
+  /** Correct a near-surface temperature for altitude over the 3D relief, or
+   * stop (null). Applies only on the terrain path, faded in by zoom. */
+  setLapseCorrection(lapse: LapseCorrection | null): void {
+    if (this.lapse === lapse) return;
+    this.lapse = lapse;
+    this.uploadOrography();
+    this.map?.triggerRepaint();
+  }
+
+  private uploadOrography(): void {
+    const gl = this.gl;
+    const lapse = this.lapse;
+    if (!gl || !lapse || this.uploadedOrography === lapse.orography) return;
+    if (lapse.orography.length !== lapse.grid.width * lapse.grid.height) return;
+    if (!this.orographyTexture) this.orographyTexture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, this.orographyTexture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, lapse.grid.wraps ? gl.REPEAT : gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, lapse.grid.width, lapse.grid.height, 0, gl.RED, gl.UNSIGNED_BYTE, lapse.orography);
+    this.uploadedOrography = lapse.orography;
+  }
+
   /** Clip to a regional model's own footprint, or to nothing but the grid. */
   setDomain(domain: LambertDomain | null): void {
     if (this.domain === domain) return;
@@ -761,6 +816,9 @@ export class ForecastLayer implements CustomLayerInterface {
     this.worldMesh = { ...uploadMesh(gl, gridMesh(WORLD_MESH_COLUMNS, WORLD_MESH_ROWS, worldRowAt(WORLD_MESH_ROWS))) };
     this.tileMesh = null;
     this.demSampler = createLinearSampler(gl);
+    this.orographyTexture = null;
+    this.uploadedOrography = null;
+    this.uploadOrography();
     this.program = null;
     const smoothProgram = buildProgram(gl, SMOOTH_VERTEX_SHADER, SMOOTH_FRAGMENT_SHADER);
     this.smoothProgram = smoothProgram;
@@ -847,6 +905,8 @@ export class ForecastLayer implements CustomLayerInterface {
     this.worldMesh = null;
     this.tileMesh = null;
     this.demSampler = null;
+    this.orographyTexture = null;
+    this.uploadedOrography = null;
     this.smoothProgram = null;
     this.slots = null;
     this.scratchTexture = null;
@@ -1119,6 +1179,35 @@ export class ForecastLayer implements CustomLayerInterface {
     return this.tileMesh;
   }
 
+  /** The altitude correction's uniforms for this frame: off unless a scalar
+   * field has one and the camera is close enough for it to matter. */
+  private bindLapse(gl: WebGL2RenderingContext): void {
+    const lapse = this.lapse;
+    const ready = lapse !== null && this.uploadedOrography === lapse.orography && !this.vector && !this.composite;
+    const weight = ready && this.map ? lapseWeight(this.longitudeStep, this.map.getZoom()) : 0;
+    gl.activeTexture(gl.TEXTURE0 + OROGRAPHY_TEXTURE_UNIT);
+    // A sampler is bound whatever the mode: an unbound one is a draw-time
+    // error on some drivers.
+    gl.bindTexture(gl.TEXTURE_2D, ready ? this.orographyTexture : this.paletteTexture);
+    gl.uniform1i(this.uniforms.u_orog!, OROGRAPHY_TEXTURE_UNIT);
+    gl.uniform3f(
+      this.uniforms.u_lapse!,
+      weight,
+      lapse ? LAPSE_RATE / (255 * lapse.temperatureScale) : 0,
+      lapse ? lapse.maximumCode / 255 : 1,
+    );
+    if (!lapse) return;
+    gl.uniform4f(
+      this.uniforms.u_orog_grid!,
+      lapse.grid.firstLongitude,
+      lapse.grid.firstLatitude,
+      lapse.grid.longitudeStep,
+      lapse.grid.latitudeStep,
+    );
+    gl.uniform2f(this.uniforms.u_orog_size!, lapse.grid.width, lapse.grid.height);
+    gl.uniform2f(this.uniforms.u_orog_decode!, lapse.orographyOffset, lapse.orographyScale);
+  }
+
   render(gl: WebGLRenderingContext | WebGL2RenderingContext, args: unknown): void {
     if (!(gl instanceof WebGL2RenderingContext)) return;
     if (!this.visible || !this.map || !this.worldMesh || !this.slots || !this.hasFrame || !this.pendingPalette) return;
@@ -1222,6 +1311,7 @@ export class ForecastLayer implements CustomLayerInterface {
       gl.depthMask(false);
       gl.enable(gl.POLYGON_OFFSET_FILL);
       gl.polygonOffset(-1, -2);
+      this.bindLapse(gl);
       gl.bindVertexArray(mesh.vertexArray);
       for (const tile of tiles) {
         bindSurfaceTile(gl, this.uniforms, tile, DEM_TEXTURE_UNIT, this.demSampler, null);
@@ -1249,8 +1339,10 @@ export class ForecastLayer implements CustomLayerInterface {
 const WORLD_MESH_COLUMNS = 256;
 const WORLD_MESH_ROWS = 128;
 
-/** Units 0..6 carry the data, palette and guns; the DEM rides above them. */
+/** Units 0..6 carry the data, palette and guns; the DEM rides above them,
+ * and the model's orography above that. */
 const DEM_TEXTURE_UNIT = 7;
+const OROGRAPHY_TEXTURE_UNIT = 8;
 
 const MAP_UNIFORM_NAMES = [
   "u_data", "u_data_b", "u_green", "u_blue", "u_green_b", "u_blue_b", "u_palette", "u_first", "u_step", "u_size",
@@ -1260,7 +1352,43 @@ const MAP_UNIFORM_NAMES = [
   "u_composite", "u_composite_offset", "u_composite_scale",
   ...DOMAIN_UNIFORM_NAMES,
   "u_band",
+  "u_orog", "u_orog_grid", "u_orog_size", "u_orog_decode", "u_lapse",
 ];
+
+/** Standard atmosphere lapse rate, kelvin per metre. */
+export const LAPSE_RATE = 0.0065;
+
+/** The model's terrain and the temperature codebook an altitude correction
+ * needs (see `lapseCodes` in the fragment shader). */
+export interface LapseCorrection {
+  orography: Uint8Array;
+  grid: {
+    width: number;
+    height: number;
+    firstLongitude: number;
+    firstLatitude: number;
+    longitudeStep: number;
+    latitudeStep: number;
+    wraps: boolean;
+  };
+  /** Orography codebook: metres = offset + code * scale. */
+  orographyOffset: number;
+  orographyScale: number;
+  /** Temperature codebook: degrees per code, and the highest value code. */
+  temperatureScale: number;
+  maximumCode: number;
+}
+
+/** How much of the altitude correction applies at a zoom, from the size of a
+ * model cell on screen: none while a cell is a few pixels (the relief and
+ * the grid are then about as coarse as each other), all of it once a cell
+ * spans most of a finger — GFS from about zoom 6 to 7.5, HRRR's 3 km grid
+ * from about 9 to 10.5. */
+export function lapseWeight(longitudeStep: number, zoom: number): number {
+  const cellPixels = (Math.abs(longitudeStep) / 360) * 512 * 2 ** zoom;
+  const t = Math.min(1, Math.max(0, (cellPixels - 24) / (64 - 24)));
+  return t * t * (3 - 2 * t);
+}
 
 /** A mesh from `gridMesh` on the GPU, positions at attribute 0. */
 export function uploadMesh(

@@ -134,6 +134,11 @@ and the window shrinks to fit it.
   The terrain uses its own copy of the Mapterhorn source (MapLibre renders
   hillshade and terrain worse from one). With relief on, the zoom ceiling
   rises to the DEM's z12.
+- Altitude correction (`layer.ts::lapseCodes`): with relief on, a 2 m
+  temperature is moved from the model's ground (the run's `orog` plane,
+  decoded whole once and uploaded on its own grid) to the DEM's at
+  6.5 K/km, in the fragment shader, faded in as a model cell grows past
+  ~24–64 px on screen (`lapseWeight`).
 - `playback.ts` dwells per frame so a mixed-step axis plays at one speed.
 - Regional models clip raster, particles, probe and labels to
   `FORECAST_MODELS[].domain` (`domain.ts`).
