@@ -14,27 +14,7 @@ import {
   type TileRect,
 } from "../../web/src/tiles";
 import type { BundleMetadata } from "../../web/src/manifest";
-
-/** The global quarter-degree production grid, as a bundle declares it. */
-function globalGrid(overrides: Record<string, unknown> = {}): BundleMetadata {
-  return {
-    schemaVersion: 3,
-    model: "GFS",
-    runTime: "2026-08-15T06:00:00Z",
-    time: { frameCount: 3, unitSeconds: 3600, firstFrameOffset: 0, frameStep: 1 },
-    grid: {
-      width: 1440,
-      height: 721,
-      firstLongitude: -180,
-      firstLatitude: 90,
-      longitudeStep: 0.25,
-      latitudeStep: -0.25,
-      wrapLongitude: true,
-      ...overrides,
-    },
-    variables: [],
-  } as unknown as BundleMetadata;
-}
+import { globalGrid } from "./helpers";
 
 /** A showcase crop over the western Pacific: 10 degrees square, no wrap. */
 function croppedGrid(): BundleMetadata {
