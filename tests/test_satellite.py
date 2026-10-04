@@ -49,7 +49,7 @@ from unittest import mock
 
 import numpy as np
 
-from tests._support import ClassTempRoot, FIXTURES, TempRoot, assert_native_matches, requires_gdal_warp, requires_native_source
+from tests._support import ClassTempRoot, FIXTURES, TempRoot, assert_native_matches, requires_gdal_warp, requires_native_source, requires_shachen
 from xuebuild import binconvert, observation
 from xuebuild.binformat import read_bundle
 from xuebuild.errors import ConversionError, DownloadError
@@ -557,6 +557,7 @@ class FetchTests(TempRoot, unittest.TestCase):
         self.assertEqual(len(self.downloads), 8)
         self.assertTrue(filecmp.cmp(window.series["ir104"], forced.series["ir104"], shallow=False), "a frame is a pure function of its tiles")
 
+    @requires_shachen
     def test_a_window_of_six_channels_composes_the_dust_rgb_per_slot(self) -> None:
         """Every channel of a slot is warped and cached on its own; the
         producer then runs once on the slot's planes and its three guns
@@ -653,6 +654,7 @@ class FetchTests(TempRoot, unittest.TestCase):
         with self.assertRaisesRegex(ConversionError, "not a packing sidecar"):
             assemble.frame_packing(frame)
 
+    @requires_shachen
     def test_the_series_is_what_the_observation_ingest_reads(self) -> None:
         self.from_seed()
         window = self.fetch_window(channels=CHANNELS, producers=(DUST,))
@@ -701,6 +703,7 @@ class FetchTests(TempRoot, unittest.TestCase):
         with self.assertRaisesRegex(ConversionError, "holds 0"):
             observation.series_files(self.root, ("ir086",))
 
+    @requires_shachen
     def test_the_source_fetch_writes_the_series_and_a_fetch_record(self) -> None:
         with mock.patch.dict(PLATFORMS, {"himawari": TWO_TILES}):
             written = _fetch_satellite_run(
@@ -791,6 +794,7 @@ class FetchTests(TempRoot, unittest.TestCase):
 
 
 @requires_gdal_warp
+@requires_shachen
 class ConversionTests(ClassTempRoot, unittest.TestCase):
     root_prefix = "xue-himawari-convert-"
 

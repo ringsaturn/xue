@@ -32,7 +32,7 @@ from unittest import mock
 
 import numpy as np
 
-from tests._support import ClassTempRoot, TempRoot, assert_native_matches, counting, requires_gdal_warp, requires_hdf5plugin, requires_native_source
+from tests._support import ClassTempRoot, TempRoot, assert_native_matches, counting, requires_gdal_warp, requires_hdf5plugin, requires_native_source, requires_shachen
 from xuebuild import binconvert, observation
 from xuebuild.binformat import read_bundle
 from xuebuild.errors import ConversionError, DownloadError
@@ -492,6 +492,7 @@ class FetchTests(TempRoot, unittest.TestCase):
         values = np.fromfile(self.root / "unscaled.bin", dtype="<f8").reshape(125, 500)
         np.testing.assert_allclose(values[covered], plane[covered], atol=1e-9)
 
+    @requires_shachen
     def test_the_dust_rgb_reads_the_ten_micron_window_for_green(self) -> None:
         from shachen.constants import DUST_RGB  # noqa: PLC0415
         from shachen.dustrgb import dust_rgb  # noqa: PLC0415
@@ -513,6 +514,7 @@ class FetchTests(TempRoot, unittest.TestCase):
         gun = window.slots[0].frames["dustr"]
         self.assertEqual(json.loads(assemble.packing_path(gun).read_text(encoding="utf-8"))["producer"], {"id": "shachen", "version": DUST.version})
 
+    @requires_shachen
     def test_the_source_fetch_writes_hourly_series_and_a_fetch_record(self) -> None:
         written = _fetch_satellite_run(SPEC, GfsRun(SLOT_1200), 1, self.root, force=False, input_ids=None, fetch=self.listing, download=self.download)
         run_dir = self.root / "meteosat.2026091712"
@@ -540,6 +542,7 @@ class FetchTests(TempRoot, unittest.TestCase):
 
 @requires_gdal_warp
 @requires_hdf5plugin
+@requires_shachen
 class ConversionTests(ClassTempRoot, unittest.TestCase):
     root_prefix = "xue-meteosat-convert-"
 
