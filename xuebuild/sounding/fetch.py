@@ -45,7 +45,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .. import __version__
-from ..common import iso_z
+from ..common import iso_z, write_bytes_atomic
 from ..errors import DownloadError, SoundingProductError, XueError
 from ..fetch import _request
 from .bufr import parse_file_name
@@ -142,13 +142,6 @@ def _get(url: str, *, timeout: float = 60) -> bytes:
         return response.read()  # type: ignore[no-any-return]
 
 
-def _write(path: Path, payload: bytes) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(path.suffix + ".part")
-    temporary.write_bytes(payload)
-    temporary.replace(path)
-
-
 def _parse_time(value: str | None) -> datetime | None:
     if not value:
         return None
@@ -238,7 +231,7 @@ def fetch_gateway(
         if _reuse(reuse_root, gateway, item, destination):
             return "reused"
         try:
-            _write(destination, get(base_url + urllib.parse.quote(item.key)))
+            write_bytes_atomic(destination, get(base_url + urllib.parse.quote(item.key)))
         except (XueError, urllib.error.URLError, OSError, ValueError) as exc:
             LOG.warning("sounding %s: %s did not download: %s", gateway, item.name, exc)
             failures.append(exc)
@@ -352,7 +345,7 @@ def fetch_sources(
             result = FetchResult(
                 SourceStatus(gateway, False, fetched=now, error=f"{type(exc).__name__}: {exc}"), []
             )
-        _write(record, json.dumps(result.to_json(), indent=2).encode("utf-8"))
+        write_bytes_atomic(record, json.dumps(result.to_json(), indent=2).encode("utf-8"))
         results[gateway] = result
     return results
 

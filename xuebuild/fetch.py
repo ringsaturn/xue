@@ -23,6 +23,7 @@ from pathlib import Path
 
 from . import aurora, cmaarchive, jmacli, om2nccli
 from . import satellite
+from .common import write_bytes_atomic
 from .satellite import fetch as satellite_fetch
 from .satellite import producers as satellite_producers
 from .errors import DownloadError
@@ -618,7 +619,7 @@ def _fetch_cfs_run(
                         if len(record) != length:
                             raise DownloadError(f"{series_paths[variable_id]} is short of the f{hour:03d} record")
                         payload += record
-                    _atomic_write(paths[family][hour], bytes(payload))
+                    write_bytes_atomic(paths[family][hour], bytes(payload))
         finally:
             for handle in handles.values():
                 handle.close()
@@ -829,7 +830,7 @@ def _download_mrms_frame(
             payload += gzip.decompress(body)
         except (OSError, EOFError) as exc:
             raise DownloadError(f"MRMS object is not a gzip file: {url}: {exc}") from exc
-    _atomic_write(output, payload)
+    write_bytes_atomic(output, payload)
     try:
         for variable_id in objects:
             inspect_grib(output, variable_id)
@@ -2020,16 +2021,6 @@ def fetch_range(url: str, byte_range: ByteRange) -> bytes:
     return body
 
 
-def _atomic_write(path: Path, payload: bytes) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(path.suffix + ".part")
-    with temporary.open("wb") as handle:
-        handle.write(payload)
-        handle.flush()
-        os.fsync(handle.fileno())
-    temporary.replace(path)
-
-
 def _frame_variable_ids(
     spec: SourceSpec, forecast_hour: int, input_ids: tuple[str, ...] | None = None
 ) -> tuple[str, ...]:
@@ -2237,7 +2228,7 @@ def fetch_frame(
         # the stored file.
         raw = output.with_suffix(".ccsds.grib2")
         repacked = output.with_suffix(".repack.grib2")
-        _atomic_write(raw, payload)
+        write_bytes_atomic(raw, payload)
         try:
             repack_grid_simple(raw, repacked)
             repacked.replace(output)
@@ -2247,7 +2238,7 @@ def fetch_frame(
             raw.unlink(missing_ok=True)
             repacked.unlink(missing_ok=True)
     else:
-        _atomic_write(output, payload)
+        write_bytes_atomic(output, payload)
     try:
         for variable_id in frame_variable_ids:
             inspect_grib(output, variable_id)

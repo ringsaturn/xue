@@ -10,13 +10,12 @@ here so the three cannot drift; each product keeps its own validators.
 from __future__ import annotations
 
 import json
-import os
 import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from .common import crc32_hex, iso_z  # noqa: F401 — re-exported for the products
+from .common import crc32_hex, iso_z, write_bytes_atomic  # noqa: F401 — re-exported for the products
 
 POINTER_SCHEMA_VERSION = 1
 CRC32 = re.compile(r"^[0-9a-f]{8}$")
@@ -28,16 +27,6 @@ def encode_json(payload: dict[str, Any]) -> bytes:
     return json.dumps(
         payload, separators=(",", ":"), ensure_ascii=True, allow_nan=False
     ).encode("ascii")
-
-
-def write_bytes_atomic(path: Path, payload: bytes) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(path.suffix + ".part")
-    with temporary.open("wb") as handle:
-        handle.write(payload)
-        handle.flush()
-        os.fsync(handle.fileno())
-    temporary.replace(path)
 
 
 def pointer_payload(
