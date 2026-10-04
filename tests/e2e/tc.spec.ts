@@ -1,50 +1,24 @@
 import { expect, test, type Page } from "@playwright/test";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 
 import { withoutStores } from "./artifacts";
+import { fixtureBytes, fixtureJson, stubBasemap } from "./fixtures";
 
-// The Protomaps API key is origin-locked to the production domains, so from
-// 127.0.0.1 every tile request dies on CORS — and a map whose tiles never
-// settle occasionally never fires "load", which is what gates initialize().
-test.beforeEach(async ({ page }) => {
-  await page.route("**/api.protomaps.com/**", (route) =>
-    route.fulfill({ status: 204, body: "" }),
-  );
-});
+test.beforeEach(({ page }) => stubBasemap(page));
 
 // The live run under the marks: the synthetic GFS fixture.
-const LATEST_FIXTURE = JSON.parse(
-  readFileSync(
-    fileURLToPath(
-      new URL("../fixtures/generated/web/latest.json", import.meta.url),
-    ),
-    "utf8",
-  ),
-);
+const LATEST_FIXTURE = fixtureJson("latest.json");
 // The run as one published before the Zarr store existed (app.spec.ts
 // runs on the same shape): the bundles are served whole, and the wait
 // below is for the whole-download state. The marks take no session, so
 // which path the field came by is not this suite's concern.
 const MANIFEST_FIXTURE = withoutStores(
-  JSON.parse(
-    readFileSync(
-      fileURLToPath(
-        new URL("../fixtures/generated/web/manifest.json", import.meta.url),
-      ),
-      "utf8",
-    ),
-  ),
+  fixtureJson("manifest.json"),
 );
 const BUNDLES: Record<string, Buffer> = Object.fromEntries(
   ["tmp2m.xue", "prate.xue", "tmp2m.poster.bin", "prate.poster.bin"].map(
     (name) => [
       name,
-      readFileSync(
-        fileURLToPath(
-          new URL(`../fixtures/generated/web/${name}`, import.meta.url),
-        ),
-      ),
+      fixtureBytes(name),
     ],
   ),
 );
@@ -54,18 +28,12 @@ const BUNDLES: Record<string, Buffer> = Object.fromEntries(
 // forecasts and four model tracks, plus two invests — as the bucket would
 // serve it.
 const TC_ROOT = new URL("../fixtures/tc/expected/", import.meta.url);
-const TC_POINTER = JSON.parse(
-  readFileSync(fileURLToPath(new URL("latest-tc.json", TC_ROOT)), "utf8"),
-);
-const TC_INDEX = JSON.parse(
-  readFileSync(fileURLToPath(new URL("index.json", TC_ROOT)), "utf8"),
-);
+const TC_POINTER = fixtureJson("latest-tc.json", TC_ROOT);
+const TC_INDEX = fixtureJson("index.json", TC_ROOT);
 const TC_STORMS: Record<string, unknown> = Object.fromEntries(
   (TC_INDEX.storms as { path: string }[]).map((storm) => [
     storm.path,
-    JSON.parse(
-      readFileSync(fileURLToPath(new URL(storm.path, TC_ROOT)), "utf8"),
-    ),
+    fixtureJson(storm.path, TC_ROOT),
   ]),
 );
 
