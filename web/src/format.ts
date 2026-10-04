@@ -31,3 +31,11 @@ export function formatUtcHour(value: string): string {
   const pad = (item: number) => String(item).padStart(2, "0");
   return `${parsed.getUTCFullYear()}-${pad(parsed.getUTCMonth() + 1)}-${pad(parsed.getUTCDate())} ${pad(parsed.getUTCHours())}Z`;
 }
+
+/** A byte count in decimal units, as the labels say: 1 KB = 1000 B. Below
+ * 10 KB one decimal, so small sizes stay distinguishable. */
+export function formatBytes(bytes: number): string {
+  if (bytes < 1e3) return `${Math.round(bytes)} B`;
+  if (bytes < 1e6) return `${(bytes / 1e3).toFixed(bytes < 1e4 ? 1 : 0)} KB`;
+  return `${(bytes / 1e6).toFixed(1)} MB`;
+}

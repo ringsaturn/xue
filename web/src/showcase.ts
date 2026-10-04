@@ -21,7 +21,7 @@ import { fetchPoster, isPosterSupported } from "./poster";
 import { applyPageMeta, pageUrl } from "./pagemeta";
 import { fetchCaseManifest, fetchCatalog, localizedText, type ShowcaseCase } from "./showcase-catalog";
 import { dataBaseUrl, SITE_NAME } from "./site";
-import { formatRegion, formatUtcHour } from "./format";
+import { formatBytes, formatRegion, formatUtcHour } from "./format";
 import { variableSpec } from "./variables";
 
 /**
@@ -61,11 +61,6 @@ if (langTrigger && langSheet && langList) {
  * "T 850MB"); a bundle the table lacks is written under its own id. */
 function variableCode(id: ForecastBundleId): string {
   return variableSpec(id)?.showcaseCode ?? id.toUpperCase();
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes >= 1e6) return `${(bytes / 1e6).toFixed(1)} MB`;
-  return `${Math.round(bytes / 1e3)} KB`;
 }
 
 function definition(label: string, value: string, wide = false): HTMLElement {
