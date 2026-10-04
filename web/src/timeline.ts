@@ -42,13 +42,13 @@ export const LONG_AXIS_DAYS = 45;
 /** The room the start and horizon labels take at either end of the strip,
  * in pixels of the track: they share the band with the segment labels, so a
  * mark centred inside that room would run into one of them. */
-export const TRACK_END_LABEL_PX = 48;
+const TRACK_END_LABEL_PX = 48;
 
 /** The room a month name needs. Mono at 10px: three or four letters, or a
  * month and a year where the year turns over. */
 const MONTH_LABEL_PX = 42;
 
-export interface TimelineTick {
+interface TimelineTick {
   /** The frame the tick stands on. */
   index: number;
   /** Drawn full height: a day boundary on a short axis, the first day of a
@@ -68,7 +68,7 @@ interface SegmentBase {
 }
 
 /** One whole forecast day from the run time. */
-export interface TimelineDaySegment extends SegmentBase {
+interface TimelineDaySegment extends SegmentBase {
   kind: "day";
   day: number;
 }
@@ -94,7 +94,7 @@ export interface TimelinePlan {
   segments: TimelineSegment[];
 }
 
-export interface TimelineInput {
+interface TimelineInput {
   /** Seconds from the run time to each frame, in frame order. */
   leadSeconds: readonly number[];
   /** The run time as a millisecond epoch: a frame's valid time is this plus

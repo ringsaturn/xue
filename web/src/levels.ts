@@ -61,7 +61,7 @@ export const ISOBARIC_FAMILIES: readonly IsobaricFamily[] = [
   "pm",
 ];
 
-export interface FamilyInfo {
+interface FamilyInfo {
   id: IsobaricFamily;
   /** Filled field, magnitude field of a u/v pair, or contour lines. */
   kind: "scalar" | "vector" | "lines";
@@ -90,7 +90,7 @@ export interface FamilyInfo {
   variants?: readonly FamilyMember[];
 }
 
-export interface FamilyMember {
+interface FamilyMember {
   id: ForecastBundleId;
   /** The level row's or the chip's label. */
   code: string;
@@ -352,7 +352,7 @@ const SPECIFIC_HUMIDITY_MAX: Record<IsobaricLevel, number> = {
 /** True when a level is one of the eight the encoders register a family on.
  * Chart knowledge exists only there; a field on any other surface is drawn
  * generically from its own codebook. */
-export function isRegisteredLevel(level: number | null): level is IsobaricLevel {
+function isRegisteredLevel(level: number | null): level is IsobaricLevel {
   return level !== null && (ISOBARIC_LEVELS as readonly number[]).includes(level);
 }
 
@@ -518,7 +518,7 @@ export function scalarLegendRange(identity: VariableIdentity): readonly [number,
  * fields at 1000, past which the codebook keeps a plume distinct in a
  * probe. Because the codebook is logarithmic, the legend's evenly spaced
  * ticks fall on values that are not round (`logLegend`). */
-export interface AerosolChart {
+interface AerosolChart {
   trace: number;
   scale: number;
   maximum: number;
@@ -538,7 +538,7 @@ export const AEROSOL_CHARTS: Readonly<Record<AerosolChartFamily, AerosolChart>> 
   pm10: COARSE_PARTICULATE_CHART,
   pm10dust: COARSE_PARTICULATE_CHART,
 };
-export type AerosolChartFamily = "aod" | "aoddust" | "aodsalt" | "aodsulf" | "aodorg" | "aodbc" | "pm25" | "pm10" | "pm10dust";
+type AerosolChartFamily = "aod" | "aoddust" | "aodsalt" | "aodsulf" | "aodorg" | "aodbc" | "pm25" | "pm10" | "pm10dust";
 
 /** The aerosol chart of a family, or null for any other. */
 export function aerosolChart(family: ChartFamily): AerosolChart | null {
@@ -572,7 +572,7 @@ export function logLegend(chart: AerosolChart): string[] {
  * sees. */
 export const BRIGHTNESS_TEMPERATURE_CHART_RANGE: readonly [number, number] = [183.15, 333.15];
 /** The same domain in Celsius, for the legend's ticks. */
-export const BRIGHTNESS_TEMPERATURE_LEGEND_RANGE: readonly [number, number] = [-90, 60];
+const BRIGHTNESS_TEMPERATURE_LEGEND_RANGE: readonly [number, number] = [-90, 60];
 
 /** Visibility reads to 25 km — the codebook's 25.4 without the odd tenth;
  * the ramp is transparent long before that. */
@@ -583,7 +583,7 @@ export const DEW_POINT_CHART_RANGE: readonly [number, number] = [-30, 30];
 /** The apparent temperature reads over the temperature ramp's own domain,
  * trimmed to ±50 so the legend ticks in twenties; the codebook's extremes
  * beyond it hold the ramp's end colours. */
-export const APPARENT_CHART_RANGE: readonly [number, number] = [-50, 50];
+const APPARENT_CHART_RANGE: readonly [number, number] = [-50, 50];
 
 /** Ceiling of a vector field's magnitude palette: the 10 m wind's 40 m/s,
  * more for the isobaric winds (a jet core passes 80), the vapour flux's

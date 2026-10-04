@@ -5,7 +5,7 @@ import { t } from "./i18n";
 import type { GeoGrid } from "./probe";
 import type { ViewportBounds } from "./tiles";
 
-export type ForecastVariableId = "tmp2m" | "prate";
+type ForecastVariableId = "tmp2m" | "prate";
 
 /** Datasets this app can tune to. Each is its own dataset: its own
  * immutable run directories and its own manifest identity, and — when it has
@@ -33,7 +33,7 @@ export type ForecastModelId =
   | "aurora"
   | "geo";
 
-export interface ForecastModelInfo {
+interface ForecastModelInfo {
   id: ForecastModelId;
   /** Display label and the manifest/pointer ``model`` string. */
   label: string;
@@ -101,7 +101,7 @@ export interface ForecastModelInfo {
 }
 
 /** The rail's core tiles on a forecast model (`ForecastModelInfo.railCore`). */
-export const FORECAST_RAIL_CORE: readonly ForecastBundleId[] = ["tmp2m", "prate", "wind10m", "tcdc"];
+const FORECAST_RAIL_CORE: readonly ForecastBundleId[] = ["tmp2m", "prate", "wind10m", "tcdc"];
 
 export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
   gfs: { id: "gfs", label: "GFS", product: "pgrb2.0p25", latestFilename: "latest.json" },
@@ -426,12 +426,12 @@ export type IsobaricScalarBundleId =
  * height, the same parameters on surface type 103 value 100), the wind on
  * each isobaric surface, and the water vapour flux the encoder derives
  * there. */
-export type VectorBundleId = "wind10m" | "wind100m" | `wind${IsobaricLevel}` | `qflux${IsobaricLevel}` | "wave";
+type VectorBundleId = "wind10m" | "wind100m" | `wind${IsobaricLevel}` | `qflux${IsobaricLevel}` | "wave";
 
 /** The three-variable bundles: a colour composite a producer derived from
  * several satellite channels, whose variables are the three guns the viewer
  * draws straight as red, green and blue (the classic Dust RGB). */
-export type CompositeBundleId = "dustrgb";
+type CompositeBundleId = "dustrgb";
 
 /** A bundle-level id in a manifest.
  *
@@ -471,7 +471,7 @@ export type KnownBundleId =
  * `tests/fixtures/surface-registry.json`. The order is the registry's own
  * (`xuebuild/quantize.py::SURFACE_VARIABLE_IDS`), which `tests/web/surface.test.ts`
  * holds the list to. */
-export type SurfaceDiagnosticId =
+type SurfaceDiagnosticId =
   | "gust"
   | "tcdc"
   | "cape"
@@ -507,7 +507,7 @@ export const SURFACE_DIAGNOSTIC_IDS: readonly SurfaceDiagnosticId[] = [
  * encoders by `tests/fixtures/ocean-registry.json`. The same registry
  * carries the components of the `wave` vector bundle the encoders derive
  * from the height and direction (`WAVE_COMPONENT_IDS`). */
-export type OceanId = "tmpsfc" | "icec" | "icetk" | "htsgw" | "perpw" | "dirpw";
+type OceanId = "tmpsfc" | "icec" | "icetk" | "htsgw" | "perpw" | "dirpw";
 export const OCEAN_IDS: readonly OceanId[] = ["tmpsfc", "icec", "icetk", "htsgw", "perpw", "dirpw"];
 
 /** The satellite bundles — brightness temperature in the 10.4 µm infrared
@@ -519,7 +519,7 @@ export const OCEAN_IDS: readonly OceanId[] = ["tmpsfc", "icec", "icetk", "htsgw"
  * (`dustcf`: one scalar in 0–1, painted with a ramp like a channel, not a
  * composite) — held to the encoders by
  * `tests/fixtures/satellite-registry.json`. */
-export type SatelliteId = "ir104" | CompositeBundleId | "dustcf";
+type SatelliteId = "ir104" | CompositeBundleId | "dustcf";
 export const SATELLITE_IDS: readonly SatelliteId[] = ["ir104", "dustrgb", "dustcf"];
 
 /** The aerosol set — the aerosol optical depth at 550 nm, for the whole
@@ -531,7 +531,7 @@ export const SATELLITE_IDS: readonly SatelliteId[] = ["ir104", "dustrgb", "dustc
  * `aerosol` block beside its parameter (`BundleAerosol`), the species and
  * the size cut. Held to the encoders by
  * `tests/fixtures/aerosol-registry.json`. */
-export type AerosolId = "aod" | "aoddust" | "aodsalt" | "aodsulf" | "aodorg" | "aodbc" | "pm25" | "pm10" | "pm10dust";
+type AerosolId = "aod" | "aoddust" | "aodsalt" | "aodsulf" | "aodorg" | "aodbc" | "pm25" | "pm10" | "pm10dust";
 export const AEROSOL_IDS: readonly AerosolId[] = ["aod", "aoddust", "aodsalt", "aodsulf", "aodorg", "aodbc", "pm25", "pm10", "pm10dust"];
 
 /** A well-formed bundle/variable name: lowercase alphanumeric, starting with
@@ -542,7 +542,7 @@ export function isBundleVariableId(value: unknown): value is ForecastBundleId {
 }
 
 /** The component variables a vector bundle carries, both on one time axis. */
-export type VectorComponentId =
+type VectorComponentId =
   | "ugrd10m"
   | "vgrd10m"
   | "ugrd100m"
@@ -556,7 +556,7 @@ export type VectorComponentId =
 
 /** The component variables a composite bundle carries: the three guns of
  * the Dust RGB, in the order the renderer draws them. */
-export type CompositeComponentId = "dustr" | "dustg" | "dustb";
+type CompositeComponentId = "dustr" | "dustg" | "dustb";
 
 /** Data-level variable ids that can appear inside bundle metadata. A plain
  * string for the same reason `ForecastBundleId` is: a file names its own
@@ -565,7 +565,7 @@ export type DataVariableId = string;
 
 /** The data-level ids this shell knows by name (the v1/v2 fallback in
  * identity.ts, and the component pairs below). */
-export type KnownDataVariableId =
+type KnownDataVariableId =
   | ForecastVariableId
   | "dswrf"
   | "cref"
@@ -577,7 +577,7 @@ export type KnownDataVariableId =
   | VectorComponentId
   | CompositeComponentId;
 
-export const FORECAST_VARIABLE_IDS: readonly ForecastVariableId[] = ["tmp2m", "prate"];
+const FORECAST_VARIABLE_IDS: readonly ForecastVariableId[] = ["tmp2m", "prate"];
 
 function perLevel<Prefix extends string>(prefix: Prefix): `${Prefix}${IsobaricLevel}`[] {
   return ISOBARIC_LEVELS.map((level) => `${prefix}${level}` as `${Prefix}${IsobaricLevel}`);
@@ -713,7 +713,7 @@ export interface VariantDescriptor {
 
 /** The `.xue` container of a bundle or a tier, once the validator has
  * established the entry carries one. */
-export interface ContainerDescriptor {
+interface ContainerDescriptor {
   path: string;
   byteLength: number;
   crc32: string;
@@ -899,7 +899,7 @@ function validateVideoDescriptor(input: unknown, paths: Set<string>): VideoBundl
   return video as unknown as VideoBundleDescriptor;
 }
 
-export interface ManifestValidationOptions {
+interface ManifestValidationOptions {
   /** Whether the manifest must ship its dataset's core bundles
    * (`ForecastModelInfo.coreBundles`: the tmp2m and prate pair on a
    * forecast). True for a live run, which always covers every core
@@ -1060,7 +1060,7 @@ export function pickBundleVariant(
 /** Cells in a whole plane below which a grid counts as coarse: 512 × 512.
  * A global 0.25° grid (1440 × 721) is four times this and every finer grid
  * further still, so only the degree-scale grids fall under it. */
-export const COARSE_GRID_CELLS = 512 * 512;
+const COARSE_GRID_CELLS = 512 * 512;
 
 /** True when a bundle's canonical grid is coarse enough that stepping down
  * the ladder throws away detail the renderer needs rather than pixels the
@@ -1183,7 +1183,7 @@ export function visibleGridShare(
 // only mutable object is this tiny pointer; the run manifest and every heavy
 // artifact it names are immutable and cache-busted via ?v=<crc32>.
 
-export interface LatestPointer {
+interface LatestPointer {
   schemaVersion: 1;
   model: string;
   run: string;

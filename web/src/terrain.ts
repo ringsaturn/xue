@@ -36,7 +36,7 @@ export function terrariumElevation(red: number, green: number, blue: number): nu
 }
 
 /** One tile and the pixel inside it that holds a point. */
-export interface DemSample {
+interface DemSample {
   zoom: number;
   x: number;
   y: number;

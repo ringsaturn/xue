@@ -21,7 +21,7 @@ import type { DataVariableId, ForecastBundleId, PressureBundleId } from "./manif
  * that file, as do `tests/test_pressure.py` and the Rust encoder's unit
  * tests, so an interval cannot move on one side alone.
  */
-export interface PressureLevelInfo {
+interface PressureLevelInfo {
   id: PressureBundleId;
   /** Isobaric surface in hPa; null for mean sea level pressure. */
   levelHpa: number | null;

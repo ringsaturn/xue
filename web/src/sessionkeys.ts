@@ -19,12 +19,12 @@
  */
 
 /** Anything carrying a session's cache identity (a `VariableSession`). */
-export interface SessionKeyed {
+interface SessionKeyed {
   key: number;
 }
 
 /** Anything carrying a file-local variable number (a `BundleVariable`). */
-export interface NumberedVariable {
+interface NumberedVariable {
   numericId: number;
 }
 

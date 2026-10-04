@@ -258,7 +258,7 @@ const SPECIFIC_HUMIDITY_UNIT_STOPS: Stop[] = [
 // transparency climbs slowly through the background flux (5–10 is most of
 // an ocean) and only firms up past 15, so the belts stand out of the map
 // instead of out of a green veil.
-export const VAPOUR_FLUX_STOPS: Stop[] = [
+const VAPOUR_FLUX_STOPS: Stop[] = [
   [0, 160, 210, 170, 0],
   [2, 160, 210, 170, 0],
   [5, 130, 200, 140, 50],
@@ -399,7 +399,7 @@ const PTYPE_STOPS: Stop[] = [
 // to violet, descent in a fainter amber to brown — subsidence is the quieter
 // half of the story, so it gets the quieter colours. Values are Pa/s; the
 // ramp saturates at ±2.5 and the codebook runs on to ±6.35.
-export const OMEGA_STOPS: Stop[] = [
+const OMEGA_STOPS: Stop[] = [
   [-OMEGA_PALETTE_MAX, 70, 30, 130, 255],
   [-1.5, 60, 70, 180, 250],
   [-1.0, 50, 120, 200, 240],

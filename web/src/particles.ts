@@ -25,7 +25,7 @@ import { buildWindSpeedPalette, WIND_SPEED_MAX } from "./palettes";
  * webgl-wind, Windy and earth.nullschool.
  */
 
-export interface WindParticleOptions {
+interface WindParticleOptions {
   /** Number of particles simulated (rounded up to a square texture). */
   count: number;
   /** Time-lapse multiplier applied to real wind speed: a particle in 10 m/s
@@ -43,7 +43,7 @@ export interface WindParticleOptions {
   opacity: number;
 }
 
-export const WIND_PARTICLE_DEFAULTS: WindParticleOptions = {
+const WIND_PARTICLE_DEFAULTS: WindParticleOptions = {
   // A quarter of what the overlay ran at when it was the whole wind layer:
   // over the colored speed field the particles are a trace of direction, and
   // at the old density their trails hazed the field over.

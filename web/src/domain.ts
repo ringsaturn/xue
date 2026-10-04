@@ -35,7 +35,7 @@ export interface LambertDomain {
 
 /** The derived constants of the cone: `n` (the cone constant), `R·F` (the
  * scale) and the radius of the origin's parallel. */
-export interface LambertCone {
+interface LambertCone {
   n: number;
   scale: number;
   originRadius: number;
@@ -143,7 +143,7 @@ export const HRRR_DOMAIN: LambertDomain = {
 /** A rectangle of the globe as [west, south, east, north] in degrees — a
  * model's `region`, or the map's own bounds, whose longitudes run past ±180
  * when the view is wider than the world. */
-export type GeoBox = readonly [number, number, number, number];
+type GeoBox = readonly [number, number, number, number];
 
 /** How much of the view a region fills: the area of their overlap as a
  * fraction of the view's, in degrees squared. Zero when they miss each
