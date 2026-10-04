@@ -30,16 +30,15 @@ from __future__ import annotations
 import copy
 import filecmp
 import json
-import os
 import shutil
 import tempfile
 import unittest
 from datetime import UTC, datetime
 from pathlib import Path
-from unittest import mock
 
 import numpy as np
 
+from tests._support import ClassTempRoot, FIXTURES, assert_gdalinfo_agrees, requires_gdalinfo
 from xuebuild import binconvert, grib2, native, quantize, zstdcli
 from xuebuild.binconvert import analysis_optional_ids, published_bundle_ids, video_variable_ids
 from xuebuild.binformat import Bundle, BundleError, read_bundle
@@ -48,7 +47,6 @@ from xuebuild.fetch import GEFS_BASE_URL, _run_is_complete, gefsaero_object_url,
 from xuebuild.gdal import (
     _band_matches,
     aerosol_optical_depth_expression,
-    inspect_grib_multi,
     particulate_matter_expression,
     raster_expression,
 )
@@ -59,7 +57,6 @@ from xuebuild.sources import MODEL_CORE_BUNDLES, MODEL_PRODUCTS, source_spec
 from xuebuild.stac import prose_document
 from xuebuild.variables import AEROSOL_VARIABLE_IDS, VARIABLES, AerosolIdentity, variable_spec
 
-FIXTURES = Path(__file__).resolve().parent / "fixtures"
 FIXTURE_FRAMES = [FIXTURES / "gefsaero.2026091900.f000.crop.grib2", FIXTURES / "gefsaero.2026091900.f003.crop.grib2"]
 REGISTRY = FIXTURES / "aerosol-registry.json"
 GEFSAERO = source_spec("gefsaero")
@@ -137,9 +134,6 @@ IDX_RECORDS = {
     "pm10": 24,
     "pm10dust": 22,
 }
-
-requires_gdalinfo = unittest.skipUnless(shutil.which("gdalinfo") is not None, "gdalinfo is not on PATH")
-
 
 def registry_entry(variable_id: str) -> dict:
     """The registry as the implementations must agree it is."""
@@ -388,13 +382,7 @@ class MatcherTests(unittest.TestCase):
 
     @requires_gdalinfo
     def test_gdalinfo_agrees_with_the_header_index(self) -> None:
-        with mock.patch.dict(os.environ, {"XUE_ENCODER": "python"}):
-            for path in FIXTURE_FRAMES:
-                fast = grib2.inspect_grib_fast(path, GEFSAERO.input_variable_ids)
-                slow = inspect_grib_multi(path, GEFSAERO.input_variable_ids)
-                self.assertEqual(set(fast), set(slow), path.name)
-                for variable_id, frame in fast.items():
-                    self.assertEqual(frame, slow[variable_id], f"{path.name} {variable_id}")
+        assert_gdalinfo_agrees(self, ((path, GEFSAERO.input_variable_ids, ()) for path in FIXTURE_FRAMES))
 
     def test_the_band_matcher_reads_the_assembled_template(self) -> None:
         dust = {
@@ -426,14 +414,16 @@ class MatcherTests(unittest.TestCase):
         self.assertFalse(_band_matches("aod", uv, ""))
 
 
-class ConversionTests(unittest.TestCase):
+class ConversionTests(ClassTempRoot, unittest.TestCase):
     """The two-frame fixture through the reference pipeline."""
 
     root: Path
 
+    root_prefix = "xue-gefsaero-"
+
     @classmethod
     def setUpClass(cls) -> None:
-        cls.root = Path(tempfile.mkdtemp(prefix="xue-gefsaero-"))
+        super().setUpClass()
         cls.output = cls.root / "gefsaero.2026091900"
         cls.report = binconvert.convert_bin(
             FIXTURE_FRAMES,
@@ -442,10 +432,6 @@ class ConversionTests(unittest.TestCase):
             manifest_path=cls.output / "manifest.json",
             model="gefsaero",
         )
-
-    @classmethod
-    def tearDownClass(cls) -> None:
-        shutil.rmtree(cls.root, ignore_errors=True)
 
     def _plane(self, variable_id: str, offset: int) -> tuple[np.ndarray, dict]:
         bundle = read_bundle(self.output / f"{variable_id}.xue")
@@ -507,15 +493,17 @@ class ConversionTests(unittest.TestCase):
         self.assertEqual(half.metadata["variables"][0]["aerosol"], variable_spec("pm25").grib2_aerosol.metadata())
 
 
-class MetadataValidationTests(unittest.TestCase):
+class MetadataValidationTests(ClassTempRoot, unittest.TestCase):
     """The reader's rules for the block, on a written bundle's metadata with
     each malformation in turn."""
 
     root: Path
 
+    root_prefix = "xue-gefsaero-meta-"
+
     @classmethod
     def setUpClass(cls) -> None:
-        cls.root = Path(tempfile.mkdtemp(prefix="xue-gefsaero-meta-"))
+        super().setUpClass()
         output = cls.root / "gefsaero.2026091900"
         binconvert.convert_bin(
             FIXTURE_FRAMES[:1],
@@ -526,10 +514,6 @@ class MetadataValidationTests(unittest.TestCase):
         )
         cls.pm25 = read_bundle(output / "pm25.xue").metadata
         cls.aod = read_bundle(output / "aod.xue").metadata
-
-    @classmethod
-    def tearDownClass(cls) -> None:
-        shutil.rmtree(cls.root, ignore_errors=True)
 
     @staticmethod
     def _parse(metadata: dict) -> None:

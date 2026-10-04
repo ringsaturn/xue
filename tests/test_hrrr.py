@@ -34,6 +34,7 @@ from unittest import mock
 
 import numpy as np
 
+from tests._support import ClassTempRoot, FIXTURES, requires_gdalinfo
 from xuebuild import binconvert, grib2, native, zstdcli
 from xuebuild.binconvert import (
     GridInfo,
@@ -67,7 +68,7 @@ from xuebuild.reproject import (
 from xuebuild.sources import source_spec
 from xuebuild.variables import variable_spec
 
-FIXTURE = Path(__file__).resolve().parent / "fixtures" / "hrrr.2026091100.f000.crop.grib2"
+FIXTURE = FIXTURES / "hrrr.2026091100.f000.crop.grib2"
 HRRR = source_spec("hrrr")
 
 # The HRRR CONUS grid as GDAL reports it: 1799 x 1059 cells of 3 km, the
@@ -96,9 +97,6 @@ HRRR_F01_IDX = "\n".join(
         "80:33910487:d=2026091100:HGT:cloud ceiling:1 hour fcst:",
     ]
 )
-
-requires_gdalinfo = unittest.skipUnless(shutil.which("gdalinfo") is not None, "gdalinfo is not on PATH")
-
 
 def wheel_reads_projections() -> bool:
     """Whether the installed wheel is new enough for a projected source: it
@@ -443,10 +441,12 @@ class FixtureGridTests(unittest.TestCase):
 
 
 @requires_gdalinfo
-class ConversionTests(unittest.TestCase):
+class ConversionTests(ClassTempRoot, unittest.TestCase):
+    root_prefix = "xue-hrrr-"
+
     @classmethod
     def setUpClass(cls) -> None:
-        cls.root = Path(tempfile.mkdtemp(prefix="xue-hrrr-"))
+        super().setUpClass()
         with mock.patch.dict(os.environ, {"XUE_ENCODER": "python"}):
             cls.report = binconvert.convert_bin(
                 FIXTURE,
@@ -456,10 +456,6 @@ class ConversionTests(unittest.TestCase):
                 work_root=cls.root / "work",
                 manifest_path=cls.root / "out" / "manifest.json",
             )
-
-    @classmethod
-    def tearDownClass(cls) -> None:
-        shutil.rmtree(cls.root, ignore_errors=True)
 
     def test_every_published_bundle_is_written_on_the_regular_grid(self) -> None:
         variables = [bundle["variable"] for bundle in self.report["bundles"]]

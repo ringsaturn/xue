@@ -30,7 +30,6 @@ import dataclasses
 import filecmp
 import json
 import os
-import shutil
 import subprocess
 import tempfile
 import unittest
@@ -41,6 +40,7 @@ from unittest import mock
 
 import numpy as np
 
+from tests._support import ClassTempRoot, FIXTURES, TempRoot, requires_gdal
 from xuebuild import binconvert, fetch, native, observation, om2nccli, zstdcli
 from xuebuild.binconvert import interval_rate, published_bundle_ids
 from xuebuild.binformat import read_bundle
@@ -63,14 +63,10 @@ from xuebuild.sources import source_spec
 from xuebuild.stac import _source_prose
 from xuebuild.variables import variable_spec
 
-FIXTURES = Path(__file__).parent / "fixtures"
 SERIES_DIR = FIXTURES / "ifshres.2026091800"
 SPEC = source_spec("ifshres")
 RUN = GfsRun(datetime(2026, 9, 18, tzinfo=UTC))
 
-requires_gdal = unittest.skipUnless(
-    shutil.which("gdalinfo") is not None and shutil.which("gdal_translate") is not None, "GDAL is not on PATH"
-)
 
 #: The published bundles, in manifest order: the GFS surface set Open-Meteo
 #: carries, the sflux radiation, and the 10 m wind pair.
@@ -407,10 +403,9 @@ class CompletenessTests(unittest.TestCase):
                 resolve_run("2026091800", hours=360, model="ifshres")
 
 
-class FetchTests(unittest.TestCase):
-    def setUp(self) -> None:
-        self.root = Path(tempfile.mkdtemp(prefix="xue-ifshres-"))
-        self.addCleanup(shutil.rmtree, self.root, ignore_errors=True)
+class FetchTests(TempRoot, unittest.TestCase):
+    root_prefix = "xue-ifshres-"
+
 
     def _fetcher(self, written: list[dict]):
         def fetch_variable(**kwargs) -> None:
@@ -577,10 +572,12 @@ class SeriesIngestTests(unittest.TestCase):
 
 
 @requires_gdal
-class ConversionTests(unittest.TestCase):
+class ConversionTests(ClassTempRoot, unittest.TestCase):
+    root_prefix = "xue-ifshres-"
+
     @classmethod
     def setUpClass(cls) -> None:
-        cls.root = Path(tempfile.mkdtemp(prefix="xue-ifshres-"))
+        super().setUpClass()
         with mock.patch.dict(os.environ, {"XUE_ENCODER": "python"}):
             cls.report = binconvert.convert_bin(
                 SERIES_DIR,
@@ -591,10 +588,6 @@ class ConversionTests(unittest.TestCase):
                 run_id="2026091800",
                 manifest_path=cls.root / "out" / "manifest.json",
             )
-
-    @classmethod
-    def tearDownClass(cls) -> None:
-        shutil.rmtree(cls.root, ignore_errors=True)
 
     def manifest(self) -> dict:
         return json.loads((self.root / "out" / "manifest.json").read_text())

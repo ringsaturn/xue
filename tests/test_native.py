@@ -17,16 +17,21 @@ build silently falls back.
 
 from __future__ import annotations
 
-import filecmp
 import json
 import os
 import shutil
-import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
 
-from xuebuild import binconvert, binformat, encoder, native, zstdcli
+from tests._support import (
+    ClassTempRoot,
+    assert_trees_identical,
+    require_comparable_compression,
+    requires_native,
+    requires_native_source,
+)
+from xuebuild import binconvert, binformat, encoder, native
 from xuebuild.errors import ConversionError
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -36,33 +41,6 @@ FIXTURE_GRIB = REPOSITORY_ROOT / "tests" / "fixtures" / "gfs.2026081406.f000.cro
 # a bitmap over land. gdal_translate re-encodes what it crops, so the crop
 # fixture above never carried that packing.
 FIXTURE_JP2_GRIB = REPOSITORY_ROOT / "tests" / "fixtures" / "gfswave.2026091100.f000.jp2.crop.grib2"
-
-requires_native = unittest.skipUnless(
-    native.available(), f"{native.DISTRIBUTION} is not installed"
-)
-
-
-def require_comparable_compression(
-    case: unittest.TestCase, reference: dict, subject: dict
-) -> None:
-    """Skip unless both encoders compressed the same way.
-
-    Everything downstream of a compressed payload — the bundles, their CRC32s,
-    the manifest that records them, the pointer that CRCs the manifest — is
-    only comparable when the two ran the same libzstd the same way.
-    """
-    if not zstdcli.compresses_in_process():
-        case.skipTest(
-            "the reference encoder is compressing through the zstd CLI "
-            "(Python < 3.14), which streams rather than one-shot: the frames "
-            "decode the same but the bytes cannot match"
-        )
-    if reference["zstdVersion"] != subject["zstdVersion"]:
-        case.skipTest(
-            f"libzstd differs: the reference has {reference['zstdVersion']}, "
-            f"{native.DISTRIBUTION} carries {subject['zstdVersion']}"
-        )
-
 
 def _selection(value: str):
     """Run with `XUE_ENCODER` set to one value."""
@@ -111,7 +89,7 @@ class EncoderSelectionTests(unittest.TestCase):
 
 
 @requires_native
-class NativeParityTests(unittest.TestCase):
+class NativeParityTests(ClassTempRoot, unittest.TestCase):
     """One build each, compared file by file.
 
     Both encoders write into identically shaped directories under one root, so
@@ -123,15 +101,13 @@ class NativeParityTests(unittest.TestCase):
     reference: Path
     subject: Path
 
-    @classmethod
-    def setUpClass(cls) -> None:
-        cls.root = Path(tempfile.mkdtemp(prefix="xue-native-parity-"))
-        cls.reference, cls.reference_report = cls._build(binconvert, "reference")
-        cls.subject, cls.subject_report = cls._build(native, "subject")
+    root_prefix = "xue-native-parity-"
 
     @classmethod
-    def tearDownClass(cls) -> None:
-        shutil.rmtree(cls.root, ignore_errors=True)
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        cls.reference, cls.reference_report = cls._build(binconvert, "reference")
+        cls.subject, cls.subject_report = cls._build(native, "subject")
 
     @classmethod
     def _build(cls, implementation, name: str) -> tuple[Path, dict]:
@@ -155,15 +131,7 @@ class NativeParityTests(unittest.TestCase):
 
     def test_every_artifact_is_byte_identical(self) -> None:
         require_comparable_compression(self, self.reference_report, self.subject_report)
-        for path in sorted(self.reference.rglob("*")):
-            if path.is_dir():
-                continue
-            relative = path.relative_to(self.reference)
-            with self.subTest(artifact=relative.as_posix()):
-                self.assertTrue(
-                    filecmp.cmp(path, self.subject / relative, shallow=False),
-                    f"{relative} differs between the two encoders",
-                )
+        assert_trees_identical(self, self.reference, self.subject)
 
     def test_the_video_companions_were_actually_built(self) -> None:
         """Parity is worth nothing if both sides skipped the same work."""
@@ -177,20 +145,18 @@ class NativeParityTests(unittest.TestCase):
 
 
 @requires_native
-class NativeZarrParityTests(unittest.TestCase):
+class NativeZarrParityTests(ClassTempRoot, unittest.TestCase):
     """`--zarr` on both paths: the stores are derived from the bundles by one
     exporter, so they agree exactly when the bundles do — and the manifest
     names every one of them the same way."""
 
-    @classmethod
-    def setUpClass(cls) -> None:
-        cls.root = Path(tempfile.mkdtemp(prefix="xue-native-zarr-"))
-        cls.reference, cls.reference_report = cls._build(binconvert, "reference")
-        cls.subject, cls.subject_report = cls._build(native, "subject")
+    root_prefix = "xue-native-zarr-"
 
     @classmethod
-    def tearDownClass(cls) -> None:
-        shutil.rmtree(cls.root, ignore_errors=True)
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        cls.reference, cls.reference_report = cls._build(binconvert, "reference")
+        cls.subject, cls.subject_report = cls._build(native, "subject")
 
     @classmethod
     def _build(cls, implementation, name: str) -> tuple[Path, dict]:
@@ -220,36 +186,22 @@ class NativeZarrParityTests(unittest.TestCase):
 
     def test_every_object_of_every_store_is_byte_identical(self) -> None:
         require_comparable_compression(self, self.reference_report, self.subject_report)
-        self.assertEqual(
-            sorted(path.relative_to(self.reference).as_posix() for path in self.reference.rglob("*")),
-            sorted(path.relative_to(self.subject).as_posix() for path in self.subject.rglob("*")),
-        )
-        for path in sorted(self.reference.rglob("*")):
-            if path.is_dir():
-                continue
-            relative = path.relative_to(self.reference)
-            with self.subTest(artifact=relative.as_posix()):
-                self.assertTrue(
-                    filecmp.cmp(path, self.subject / relative, shallow=False),
-                    f"{relative} differs between the two encoders",
-                )
+        assert_trees_identical(self, self.reference, self.subject)
 
 
 @requires_native
-class NativeStoreOnlyParityTests(unittest.TestCase):
+class NativeStoreOnlyParityTests(ClassTempRoot, unittest.TestCase):
     """`--zarr --no-xue` on both paths: the container is retired behind its
     store, so a run publishes the store alone — no `.xue` on disk, none in
     the manifest — and the two encoders still agree object for object."""
 
-    @classmethod
-    def setUpClass(cls) -> None:
-        cls.root = Path(tempfile.mkdtemp(prefix="xue-native-store-only-"))
-        cls.reference, cls.reference_report = cls._build(binconvert, "reference")
-        cls.subject, cls.subject_report = cls._build(native, "subject")
+    root_prefix = "xue-native-store-only-"
 
     @classmethod
-    def tearDownClass(cls) -> None:
-        shutil.rmtree(cls.root, ignore_errors=True)
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        cls.reference, cls.reference_report = cls._build(binconvert, "reference")
+        cls.subject, cls.subject_report = cls._build(native, "subject")
 
     @classmethod
     def _build(cls, implementation, name: str) -> tuple[Path, dict]:
@@ -292,34 +244,23 @@ class NativeStoreOnlyParityTests(unittest.TestCase):
 
     def test_every_object_is_byte_identical(self) -> None:
         require_comparable_compression(self, self.reference_report, self.subject_report)
-        self.assertEqual(
-            sorted(path.relative_to(self.reference).as_posix() for path in self.reference.rglob("*")),
-            sorted(path.relative_to(self.subject).as_posix() for path in self.subject.rglob("*")),
-        )
-        for path in sorted(self.reference.rglob("*")):
-            if path.is_dir():
-                continue
-            relative = path.relative_to(self.reference)
-            with self.subTest(artifact=relative.as_posix()):
-                self.assertTrue(filecmp.cmp(path, self.subject / relative, shallow=False), f"{relative} differs")
+        assert_trees_identical(self, self.reference, self.subject)
 
 
 @requires_native
-class NativeReportTests(unittest.TestCase):
+class NativeReportTests(ClassTempRoot, unittest.TestCase):
     """The report is the CLI's output and the publish workflow's summary
     input, so it has to carry the same keys the reference does."""
 
+    root_prefix = "xue-native-report-"
+
     @classmethod
     def setUpClass(cls) -> None:
-        cls.root = Path(tempfile.mkdtemp(prefix="xue-native-report-"))
+        super().setUpClass()
         cls.reference = binconvert.convert_bin(
             FIXTURE_GRIB, cls.root / "reference", work_root=cls.root / "work", skip_video=True
         )
         cls.subject = native.convert_bin(FIXTURE_GRIB, cls.root / "subject", skip_video=True)
-
-    @classmethod
-    def tearDownClass(cls) -> None:
-        shutil.rmtree(cls.root, ignore_errors=True)
 
     def test_the_reports_have_the_same_shape(self) -> None:
         self.assertEqual(sorted(self.reference), sorted(self.subject))
@@ -343,19 +284,17 @@ class NativeReportTests(unittest.TestCase):
 
 
 @requires_native
-class NativeRestrictedBuildTests(unittest.TestCase):
+class NativeRestrictedBuildTests(ClassTempRoot, unittest.TestCase):
     """A showcase case: one variable, cropped, and no core-pair requirement."""
+
+    root_prefix = "xue-native-case-"
 
     @classmethod
     def setUpClass(cls) -> None:
-        cls.root = Path(tempfile.mkdtemp(prefix="xue-native-case-"))
+        super().setUpClass()
         cls.bbox = (119.0, 30.0, 125.0, 36.0)
         cls.reference, cls.reference_report = cls._build(binconvert, "reference")
         cls.subject, cls.subject_report = cls._build(native, "subject")
-
-    @classmethod
-    def tearDownClass(cls) -> None:
-        shutil.rmtree(cls.root, ignore_errors=True)
 
     @classmethod
     def _build(cls, implementation, name: str) -> tuple[Path, dict]:
@@ -379,19 +318,16 @@ class NativeRestrictedBuildTests(unittest.TestCase):
 
     def test_the_cropped_build_is_byte_identical(self) -> None:
         require_comparable_compression(self, self.reference_report, self.subject_report)
-        for path in sorted(self.reference.rglob("*")):
-            if path.is_dir():
-                continue
-            relative = path.relative_to(self.reference)
-            with self.subTest(artifact=relative.as_posix()):
-                self.assertTrue(
-                    filecmp.cmp(path, self.subject / relative, shallow=False),
-                    f"{relative} differs between the two encoders",
-                )
+        assert_trees_identical(self, self.reference, self.subject)
 
 
 @requires_native
-class NativeJpeg2000Tests(unittest.TestCase):
+# The crop is a regional grid a hair off 0.25° as GDAL reads it, which an
+# encoder describes on its round step since the MRMS source arrived
+# (`_snap_regional_steps`); a wheel from before then writes the old grid
+# block and cannot match.
+@requires_native_source("mrms", "the regional grid snap")
+class NativeJpeg2000Tests(ClassTempRoot, unittest.TestCase):
     """The GDAL the wheel carries decodes JPEG 2000-packed records — the
     GFS-Wave family as published, which the first wheel refused ("Is the
     JPEG2000 driver available?") and the fetcher repacked for — and reads
@@ -400,22 +336,13 @@ class NativeJpeg2000Tests(unittest.TestCase):
     byte-identical from the raw records."""
 
     WAVE_BUNDLES = ("htsgw", "perpw", "wave")
+    root_prefix = "xue-native-jp2-"
 
     @classmethod
     def setUpClass(cls) -> None:
-        # The crop is a regional grid a hair off 0.25° as GDAL reads it,
-        # which an encoder describes on its round step since the MRMS
-        # source arrived (`_snap_regional_steps`); a wheel from before then
-        # writes the old grid block and cannot match.
-        if not native.knows_source("mrms"):
-            raise unittest.SkipTest(f"the installed {native.DISTRIBUTION} wheel predates the regional grid snap")
-        cls.root = Path(tempfile.mkdtemp(prefix="xue-native-jp2-"))
+        super().setUpClass()
         cls.reference, cls.reference_report = cls._build(binconvert, "reference")
         cls.subject, cls.subject_report = cls._build(native, "subject")
-
-    @classmethod
-    def tearDownClass(cls) -> None:
-        shutil.rmtree(cls.root, ignore_errors=True)
 
     @classmethod
     def _build(cls, implementation, name: str) -> tuple[Path, dict]:
@@ -440,15 +367,7 @@ class NativeJpeg2000Tests(unittest.TestCase):
 
     def test_the_jpeg_2000_build_is_byte_identical(self) -> None:
         require_comparable_compression(self, self.reference_report, self.subject_report)
-        for path in sorted(self.reference.rglob("*")):
-            if path.is_dir():
-                continue
-            relative = path.relative_to(self.reference)
-            with self.subTest(artifact=relative.as_posix()):
-                self.assertTrue(
-                    filecmp.cmp(path, self.subject / relative, shallow=False),
-                    f"{relative} differs between the two encoders",
-                )
+        assert_trees_identical(self, self.reference, self.subject)
 
 
 if __name__ == "__main__":

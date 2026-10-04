@@ -23,12 +23,12 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
 import subprocess
 import unittest
 from pathlib import Path
 from unittest import mock
 
+from tests._support import requires_gdalinfo
 from xuebuild import gdal, native
 from xuebuild.errors import ConversionError
 
@@ -57,9 +57,6 @@ def wheel_can_inspect() -> bool:
 requires_native_info = unittest.skipUnless(
     wheel_can_inspect(), "the installed xuepy wheel has no gdal_info"
 )
-requires_cli = unittest.skipUnless(
-    shutil.which("gdalinfo") is not None, "gdalinfo is not on PATH"
-)
 
 
 def cli_info(path: Path) -> dict:
@@ -70,7 +67,7 @@ def cli_info(path: Path) -> dict:
 
 
 @requires_native_info
-@requires_cli
+@requires_gdalinfo
 class NativeMatchesTheCommandLine(unittest.TestCase):
     """Both GDALs, one fixture, the same answers."""
 
@@ -122,7 +119,7 @@ def wheel_reports_coordinate_systems() -> bool:
 
 
 @unittest.skipUnless(wheel_reports_coordinate_systems(), "the installed xuepy wheel reports no coordinate system")
-@requires_cli
+@requires_gdalinfo
 class CoordinateSystemMatchesTheCommandLine(unittest.TestCase):
     """The WKT is what tells a projected grid from a regular one, so the two
     sources must print the same text — a geographic system for the global
@@ -147,7 +144,7 @@ class CoordinateSystemMatchesTheCommandLine(unittest.TestCase):
 
 
 @requires_native_info
-@requires_cli
+@requires_gdalinfo
 class InspectionAgreesThroughEitherSource(unittest.TestCase):
     """The frames xuebuild derives, not just the JSON underneath them."""
 

@@ -28,16 +28,15 @@ from __future__ import annotations
 
 import filecmp
 import json
-import os
 import shutil
 import tempfile
 import unittest
 from datetime import UTC, datetime
 from pathlib import Path
-from unittest import mock
 
 import numpy as np
 
+from tests._support import ClassTempRoot, FIXTURES, assert_gdalinfo_agrees, requires_gdalinfo
 from xuebuild import binconvert, grib2, native, quantize, zstdcli
 from xuebuild.binconvert import analysis_optional_ids, published_bundle_ids, video_variable_ids
 from xuebuild.binformat import read_bundle
@@ -53,7 +52,6 @@ from xuebuild.fetch import (
 )
 from xuebuild.gdal import (
     accumulation_expression,
-    inspect_grib_multi,
     precipitation_accumulation_is_mm,
     raster_expression,
 )
@@ -62,7 +60,6 @@ from xuebuild.sources import MODEL_CORE_BUNDLES, MODEL_PRODUCTS, source_spec
 from xuebuild.stac import prose_document
 from xuebuild.variables import variable_spec
 
-FIXTURES = Path(__file__).resolve().parent / "fixtures"
 FIXTURE_FRAMES = [FIXTURES / "aifs.2026091700.f000.crop.grib2", FIXTURES / "aifs.2026091700.f006.crop.grib2"]
 AIFS = source_spec("aifs")
 ECMWF = source_spec("ecmwf")
@@ -79,9 +76,6 @@ NOT_TAKEN_UP = (
     "wind1000", "wind700", "wind500", "wind300", "wind200",
 )
 ADDED = ("lcdc", "mcdc", "hcdc")
-
-requires_gdalinfo = unittest.skipUnless(shutil.which("gdalinfo") is not None, "gdalinfo is not on PATH")
-
 
 class SourceRegistryTests(unittest.TestCase):
     def test_aifs_publishes_the_ifs_set_less_what_it_lacks_plus_the_cloud_layers(self) -> None:
@@ -258,23 +252,19 @@ class MatcherTests(unittest.TestCase):
 
     @requires_gdalinfo
     def test_gdalinfo_agrees_with_the_header_index(self) -> None:
-        with mock.patch.dict(os.environ, {"XUE_ENCODER": "python"}):
-            for path in FIXTURE_FRAMES:
-                fast = grib2.inspect_grib_fast(path, AIFS.input_variable_ids, optional_ids=("orog",))
-                slow = inspect_grib_multi(path, AIFS.input_variable_ids, optional_ids=("orog",))
-                self.assertEqual(set(fast), set(slow), path.name)
-                for variable_id, frame in fast.items():
-                    self.assertEqual(frame, slow[variable_id], f"{path.name} {variable_id}")
+        assert_gdalinfo_agrees(self, ((path, AIFS.input_variable_ids, ("orog",)) for path in FIXTURE_FRAMES))
 
 
-class ConversionTests(unittest.TestCase):
+class ConversionTests(ClassTempRoot, unittest.TestCase):
     """The two-frame fixture through the reference pipeline."""
 
     root: Path
 
+    root_prefix = "xue-aifs-"
+
     @classmethod
     def setUpClass(cls) -> None:
-        cls.root = Path(tempfile.mkdtemp(prefix="xue-aifs-"))
+        super().setUpClass()
         cls.output = cls.root / "aifs.2026091700"
         cls.report = binconvert.convert_bin(
             FIXTURE_FRAMES,
@@ -283,10 +273,6 @@ class ConversionTests(unittest.TestCase):
             manifest_path=cls.output / "manifest.json",
             model="aifs",
         )
-
-    @classmethod
-    def tearDownClass(cls) -> None:
-        shutil.rmtree(cls.root, ignore_errors=True)
 
     def _plane(self, variable_id: str, offset: int, member: int = 1) -> tuple[np.ndarray, dict]:
         bundle = read_bundle(self.output / f"{variable_id}.xue")
