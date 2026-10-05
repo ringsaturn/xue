@@ -71,15 +71,16 @@ interface TcRequests {
 }
 
 /** The product's two layers: the mutable pointer and the immutable issue
- * directory it names, every file `?v=`-addressed. */
+ * directory it names (`tc/YYYY/MM/DD/tc.<hour>/`, or flat under the
+ * root), every file `?v=`-addressed. */
 async function routeTc(page: Page, requests?: TcRequests): Promise<void> {
   await page.route("**/data/latest-tc.json*", (route) =>
     route.fulfill({ json: TC_POINTER }),
   );
-  await page.route("**/data/tc.*/index.json*", (route) =>
+  await page.route("**/data/**/tc.*/index.json*", (route) =>
     route.fulfill({ json: TC_INDEX }),
   );
-  await page.route("**/data/tc.*/*.json?*", (route) => {
+  await page.route("**/data/**/tc.*/*.json?*", (route) => {
     const url = new URL(route.request().url());
     const name = url.pathname.split("/").pop() ?? "";
     if (name === "index.json") return route.fallback();
