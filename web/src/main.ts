@@ -6701,34 +6701,31 @@ const RADAR_SCALES = {
   },
 } as const;
 
-/** The radar's group on the level row: the site and the sweep on screen as
- * its caption, then REF and VEL. Built once per site and updated in place,
- * since the caption follows every frame. */
-let radarLevelGroup: { root: HTMLElement; caption: HTMLElement; ref: HTMLButtonElement; vel: HTMLButtonElement } | null = null;
+/** The radar's group on the level row: the sweep on screen as its caption,
+ * then the site as a pressed chip whose ✕ is the way back to the mosaic.
+ * Built once per site and updated in place, since the caption follows
+ * every frame. The products are on the rail. */
+let radarLevelGroup: { root: HTMLElement; caption: HTMLElement; site: HTMLButtonElement } | null = null;
 
-function radarLevelButton(product: "n0b" | "n0g", code: string, gloss: string): HTMLButtonElement {
-  const button = document.createElement("button");
-  button.type = "button";
-  button.dataset.level = "";
-  button.dataset.slot = "radar";
-  const glyph = document.createElement("b");
-  glyph.setAttribute("aria-hidden", "true");
-  glyph.textContent = code;
-  const name = document.createElement("span");
-  name.className = "rail-name";
-  const codeSpan = document.createElement("span");
-  codeSpan.textContent = code;
-  const glossSmall = document.createElement("small");
-  glossSmall.textContent = gloss;
-  name.append(codeSpan, " ", glossSmall);
-  button.append(glyph, name);
-  // The pressed product is also the way back: pressing it again closes the
-  // site and the field returns, as a pressed lines member removes the lines.
-  button.addEventListener("click", () => {
-    if (view.marks.radar.product === product) closeRadarSite();
-    else setRadarProduct(product);
+/** REF and VEL on the rail, under the radar tile: shown while a site is. */
+const radarProductTiles = [...document.querySelectorAll<HTMLButtonElement>("[data-radar-product]")];
+for (const tile of radarProductTiles) {
+  const product = tile.dataset.radarProduct as "n0b" | "n0g";
+  tile.addEventListener("click", () => {
+    if (view.marks.radar.product !== product) setRadarProduct(product);
   });
-  return button;
+}
+
+function syncRadarProductTiles(product: "n0b" | "n0g" | null): void {
+  let changed = false;
+  for (const tile of radarProductTiles) {
+    if (tile.hidden !== (product === null)) {
+      tile.hidden = product === null;
+      changed = true;
+    }
+    tile.setAttribute("aria-pressed", String(tile.dataset.radarProduct === product));
+  }
+  if (changed) syncRailDensity();
 }
 
 function ensureRadarLevelGroup(): NonNullable<typeof radarLevelGroup> {
@@ -6738,11 +6735,16 @@ function ensureRadarLevelGroup(): NonNullable<typeof radarLevelGroup> {
   root.dataset.slot = "radar";
   const caption = document.createElement("span");
   caption.className = "level-caption";
-  const ref = radarLevelButton("n0b", "REF", t("radarReflectivity"));
-  const vel = radarLevelButton("n0g", "VEL", t("radarVelocity"));
-  root.append(caption, ref, vel);
+  const site = document.createElement("button");
+  site.type = "button";
+  site.dataset.level = "";
+  site.dataset.slot = "radar";
+  site.className = "is-removable";
+  site.setAttribute("aria-pressed", "true");
+  site.addEventListener("click", () => closeRadarSite());
+  root.append(caption, site);
   levelRow.append(root);
-  radarLevelGroup = { root, caption, ref, vel };
+  radarLevelGroup = { root, caption, site };
   return radarLevelGroup;
 }
 
@@ -6792,9 +6794,11 @@ function renderRadarChip(readout: RadarReadout | null): void {
     radarLevelGroup?.root.remove();
     radarLevelGroup = null;
     levelRow.hidden = levelRow.childElementCount === 0;
+    syncRadarProductTiles(null);
     restoreFieldLegend();
     return;
   }
+  syncRadarProductTiles(readout.product);
   const group = ensureRadarLevelGroup();
   levelRow.hidden = false;
   // The sweep's clock time alone: the capsule beside it already carries the
@@ -6810,28 +6814,17 @@ function renderRadarChip(readout: RadarReadout | null): void {
   // by design. Past the window the sweep is the site's newest, however old.
   const minutes = readout.age === null || readout.stale ? null : Math.round(readout.age / 60_000);
   const age = minutes === null ? "" : minutes === 0 ? " ±0m" : ` −${minutes}m`;
-  // Three parts, so a phone's row can keep just the time beside the products
-  // (the site is labelled on the map).
-  const site = document.createElement("span");
-  site.className = "level-caption-site";
-  site.textContent = `${readout.site.icao} · `;
+  // The age goes first on a phone: the time and the site chip are what the
+  // row has room for.
   const when = document.createElement("span");
   when.textContent = `${readout.stale ? `${t("radarLatest")} ` : ""}${time}${readout.loading ? " …" : ""}`;
   const trailing = document.createElement("span");
   trailing.className = "level-caption-age";
   trailing.textContent = readout.loading ? "" : age;
-  group.caption.replaceChildren(site, when, trailing);
-  for (const [button, product] of [[group.ref, "n0b"], [group.vel, "n0g"]] as const) {
-    const pressed = readout.product === product;
-    // A row wider than the capsule scrolls: the product just chosen comes
-    // into view, as a pressed level does.
-    if (pressed && button.getAttribute("aria-pressed") !== "true") {
-      button.scrollIntoView({ block: "nearest", inline: "nearest" });
-    }
-    button.setAttribute("aria-pressed", String(pressed));
-    button.classList.toggle("is-removable", pressed);
-    button.title = pressed ? t("radarCloseAria") : "";
-  }
+  group.caption.replaceChildren(when, trailing);
+  group.site.textContent = readout.site.icao;
+  group.site.title = t("radarCloseAria");
+  group.site.setAttribute("aria-label", `${readout.site.icao}: ${t("radarCloseAria")}`);
   renderRadarLegend(readout.product);
   applyRadarTitle(readout);
 }

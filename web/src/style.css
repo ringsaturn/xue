@@ -2349,7 +2349,6 @@ html[lang="ja"] .rail-glyph {
 }
 
 @media (max-width: 720px) {
-  .level-group[data-slot="radar"] .level-caption-site,
   .level-group[data-slot="radar"] .level-caption-age {
     display: none;
   }

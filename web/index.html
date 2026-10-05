@@ -655,6 +655,20 @@
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphRadarSite">D</b>
           <span class="rail-name"><span>RADAR</span> <small data-i18n="varRadarSite">SITE</small></span>
         </button>
+        <!-- With a site open, its two products: a radio pair like the field
+             tiles (pressed is the product on screen), shown only while a
+             site is. The way back to the mosaic is the site chip on the
+             level row. -->
+        <button type="button" data-radar-product="n0b" data-i18n-tip="radarReflectivity" aria-pressed="false" hidden>
+          <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 15.5c0-4.6 3.4-9 7.5-9s7.5 4.4 7.5 9c0 2.6-3.4 3.5-7.5 3.5s-7.5-.9-7.5-3.5z" /><path d="M9 14.6c0-2.2 1.4-4 3-4s3 1.8 3 4c0 1.2-1.4 1.6-3 1.6s-3-.4-3-1.6z" fill="currentColor" stroke="none" /></svg>
+          <b class="rail-glyph" aria-hidden="true">REF</b>
+          <span class="rail-name"><span>REF</span> <small data-i18n="radarReflectivity">Reflectivity</small></span>
+        </button>
+        <button type="button" data-radar-product="n0g" data-i18n-tip="radarVelocity" aria-pressed="false" hidden>
+          <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none" /><path d="M15 12h6M18.5 9.5L21 12l-2.5 2.5" /><path d="M3 12h6M6.5 9.5L9 12l-2.5 2.5" /></svg>
+          <b class="rail-glyph" aria-hidden="true">VEL</b>
+          <span class="rail-name"><span>VEL</span> <small data-i18n="radarVelocity">Velocity</small></span>
+        </button>
         </div>
       </div>
 
