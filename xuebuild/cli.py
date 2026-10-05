@@ -481,8 +481,8 @@ def parser() -> argparse.ArgumentParser:
 
     nexrad_case = commands.add_parser(
         "nexrad-case",
-        help="replay five-minute nexrad rounds over a past interval into a directory (a showcase case; nothing is "
-        "registered in showcase.json)",
+        help="replay five-minute nexrad rounds over a past interval into <output-dir>/<case id>/radar/, the "
+        "radar overlay of the showcase case of that id",
     )
     nexrad_case.add_argument("case", type=Path, help="the case definition: {id, start, end, sites}")
     nexrad_case.add_argument("--raw-dir", type=Path, default=Path("data/raw"))
@@ -874,7 +874,7 @@ def main(argv: list[str] | None = None) -> int:
                 end=datetime.fromisoformat(case["end"]),
                 sites=list(case["sites"]),
                 raw_root=arguments.raw_dir,
-                output_root=arguments.output_dir / case["id"],
+                output_root=arguments.output_dir / case["id"] / "radar",
                 fetch=not arguments.offline,
             )
             print(json.dumps({"case": case["id"], "round": report["round"], "rounds": len(report["window"]["rounds"]), "sites": report["window"]["sites"]}, indent=2))

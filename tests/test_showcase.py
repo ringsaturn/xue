@@ -490,3 +490,47 @@ class RestrictedManifestTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RadarOverlayTest(unittest.TestCase):
+    """A case's single-site radar block: checked in the definition, carried
+    onto the row, and measured from the built window at catalog time."""
+
+    RADAR = {"window": "radar/nexrad.202303250145/index.json", "defaultSite": "GWX", "defaultProduct": "n0g"}
+
+    def test_the_definition_carries_it(self) -> None:
+        spec = parse_case(case_payload(radar=dict(self.RADAR)))
+        self.assertEqual(spec.radar, self.RADAR)
+        entry, _ = build_entry(radar=dict(self.RADAR))
+        self.assertEqual(entry["radar"], self.RADAR)
+
+    def test_a_malformed_block_is_refused(self) -> None:
+        for radar in (
+            {**self.RADAR, "window": "../other/index.json"},
+            {**self.RADAR, "window": "/radar/index.json"},
+            {**self.RADAR, "window": "radar/manifest.json"},
+            {**self.RADAR, "defaultSite": "KGWX"},
+            {**self.RADAR, "defaultProduct": "n0q"},
+            {**self.RADAR, "extra": 1},
+            "radar/index.json",
+        ):
+            with self.subTest(radar=radar), self.assertRaises(ShowcaseError):
+                parse_case(case_payload(radar=radar))
+
+    def test_the_catalog_measures_the_built_window(self) -> None:
+        from tests.prepare_nexrad_golden import build
+        from xuebuild.common import crc32_hex
+        from xuebuild.showcase import _catalog_radar
+
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch)
+            entry = {"id": "demo-case", "radar": dict(self.RADAR)}
+            with self.assertRaises(ShowcaseError):
+                _catalog_radar(root, entry)  # not built yet
+            build(root / "showcase" / "demo-case" / "radar")
+            block = _catalog_radar(root, entry)
+            data = (root / "showcase" / "demo-case" / self.RADAR["window"]).read_bytes()
+            self.assertEqual(block["byteLength"], len(data))
+            self.assertEqual(block["crc32"], crc32_hex(data))
+            with self.assertRaises(ShowcaseError):
+                _catalog_radar(root, {"id": "demo-case", "radar": {**self.RADAR, "defaultSite": "NQA"}})

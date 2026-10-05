@@ -126,6 +126,11 @@ class CaseSpec:
     tags: tuple[str, ...]
     credit: str | None
     profile: str
+    radar: dict[str, str] | None = None
+    """The single-site radar overlay the case plays over its own axis
+    (``docs/nexrad.md``): ``window``, the window manifest of a
+    ``xue nexrad-case`` build, relative to the case's directory, and the
+    ``defaultSite`` and ``defaultProduct`` the viewer opens on."""
 
     @property
     def output_subdirectory(self) -> str:
@@ -269,6 +274,10 @@ def parse_case(payload: dict[str, Any], *, source_name: str = "<case>") -> CaseS
     if profile not in ("quality", "balanced", "compact"):
         raise ShowcaseError(f"case {case_id}: profile must be quality, balanced or compact")
 
+    radar = payload.get("radar")
+    if radar is not None:
+        radar = _radar_block(radar, case_id)
+
     return CaseSpec(
         id=case_id,
         title=_localized(payload.get("title"), "title", case_id),
@@ -284,7 +293,33 @@ def parse_case(payload: dict[str, Any], *, source_name: str = "<case>") -> CaseS
         tags=tuple(tags),
         credit=credit,
         profile=profile,
+        radar=radar,
     )
+
+
+RADAR_PRODUCTS = ("n0b", "n0g")
+
+
+def _radar_block(value: object, case_id: str) -> dict[str, str]:
+    """A case's ``radar`` block: a window manifest inside the case's own
+    directory, a three-letter site and one of the two products."""
+    if not isinstance(value, dict) or set(value) - {"window", "defaultSite", "defaultProduct", "byteLength", "crc32"}:
+        raise ShowcaseError(f"case {case_id}: radar must be {{window, defaultSite, defaultProduct}}")
+    window = value.get("window")
+    if (
+        not isinstance(window, str)
+        or not window.endswith("/index.json")
+        or window.startswith("/")
+        or ".." in window.split("/")
+    ):
+        raise ShowcaseError(f"case {case_id}: radar.window must be an index.json inside the case directory")
+    site = value.get("defaultSite")
+    if not isinstance(site, str) or not re.fullmatch(r"[A-Z0-9]{3}", site):
+        raise ShowcaseError(f"case {case_id}: radar.defaultSite must be a three-character site id")
+    product = value.get("defaultProduct")
+    if product not in RADAR_PRODUCTS:
+        raise ShowcaseError(f"case {case_id}: radar.defaultProduct must be one of {RADAR_PRODUCTS}")
+    return {"window": window, "defaultSite": site, "defaultProduct": product}
 
 
 def load_case(path: Path) -> CaseSpec:
@@ -468,6 +503,8 @@ def build_catalog_entry(
         entry["tags"] = list(spec.tags)
     if spec.credit:
         entry["credit"] = spec.credit
+    if spec.radar:
+        entry["radar"] = dict(spec.radar)
     validate_catalog_entry(entry)
     return entry
 
@@ -496,6 +533,8 @@ def validate_catalog_entry(entry: dict[str, Any]) -> None:
         raise ShowcaseError(f"catalog entry {entry['id']} defaults to a variable it does not ship")
     if not isinstance(entry.get("forecastHours"), int) or entry["forecastHours"] <= 0:
         raise ShowcaseError(f"catalog entry {entry['id']} has an invalid forecastHours")
+    if "radar" in entry:
+        _radar_block(entry["radar"], entry["id"])
 
 
 def refresh_sidecar(spec: CaseSpec, output_root: Path) -> dict[str, Any]:
@@ -538,7 +577,12 @@ def refresh_sidecar(spec: CaseSpec, output_root: Path) -> dict[str, Any]:
     entry["title"] = spec.title
     entry["summary"] = spec.summary
     entry["defaultVariable"] = spec.default_variable
-    for key, value in (("eventTime", spec.event_time), ("tags", list(spec.tags)), ("credit", spec.credit)):
+    for key, value in (
+        ("eventTime", spec.event_time),
+        ("tags", list(spec.tags)),
+        ("credit", spec.credit),
+        ("radar", dict(spec.radar) if spec.radar else None),
+    ):
         if value:
             entry[key] = value
         else:
@@ -577,6 +621,8 @@ def collect_catalog(output_root: Path) -> dict[str, Any]:
             )
         except ManifestError as exc:
             raise ShowcaseError(f"case {entry['id']} has an invalid manifest: {exc}") from exc
+        if "radar" in entry:
+            entry["radar"] = _catalog_radar(output_root, entry)
         entries.append(entry)
     entries.sort(key=_catalog_sort_key, reverse=True)
     return {
@@ -584,6 +630,26 @@ def collect_catalog(output_root: Path) -> dict[str, Any]:
         "generatedAt": iso_z(datetime.now(UTC)),
         "cases": entries,
     }
+
+
+def _catalog_radar(output_root: Path, entry: dict[str, Any]) -> dict[str, Any]:
+    """The radar block as the catalog publishes it: the window manifest's
+    length and CRC32 (its ``?v=``), measured from the built file, which
+    must be a valid window holding the default site."""
+    from .nexrad.schema import read_window  # the nexrad package imports nothing of the showcase's
+
+    block = _radar_block(entry["radar"], entry["id"])
+    path = output_root / SHOWCASE_DIRECTORY / entry["id"] / block["window"]
+    if not path.is_file():
+        raise ShowcaseError(f"case {entry['id']} names a radar window that is not built: {path}")
+    data = path.read_bytes()
+    try:
+        window = read_window(path)
+    except XueError as exc:
+        raise ShowcaseError(f"case {entry['id']} has an invalid radar window: {exc}") from exc
+    if block["defaultSite"] not in {row[0] for row in window["sites"]}:
+        raise ShowcaseError(f"case {entry['id']}: radar.defaultSite {block['defaultSite']} is not in its window")
+    return {**block, "byteLength": len(data), "crc32": crc32_hex(data)}
 
 
 def write_catalog(output_root: Path) -> Path:
