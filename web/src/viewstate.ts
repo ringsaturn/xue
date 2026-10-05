@@ -22,6 +22,7 @@ import {
   parseLinesFromSearch,
   parseParticlesFromSearch,
   parseStationsFromSearch,
+  parseRadarFromSearch,
   parseTcFromSearch,
   parseVariableFromSearch,
   searchForCaseVariable,
@@ -29,8 +30,10 @@ import {
   searchWithExperiment,
   searchWithLines,
   searchWithParticles,
+  searchWithRadar,
   searchWithStations,
   searchWithTc,
+  type RadarUrlState,
   type StationsUrlState,
   type TcUrlState,
 } from "./urlstate";
@@ -63,6 +66,7 @@ export interface ViewState {
   marks: {
     tc: TcUrlState;
     stations: StationsUrlState;
+    radar: RadarUrlState;
   };
 }
 
@@ -127,7 +131,11 @@ export function parseView(search: string, defaults: ViewDefaults): ParsedView {
       lines: composition.lines,
       particles: requestedParticles ?? defaults.particles,
       derived: { inflow: experiment.inflow, front: experiment.front },
-      marks: { tc: parseTcFromSearch(search), stations: parseStationsFromSearch(search) },
+      marks: {
+        tc: parseTcFromSearch(search),
+        stations: parseStationsFromSearch(search),
+        radar: parseRadarFromSearch(search),
+      },
     },
     fieldRequested: requestedField !== null,
     particlesRequested: requestedParticles !== null,
@@ -148,5 +156,6 @@ export function searchForView(view: ViewState, search: string, context: ViewCont
   const withParticles = searchWithParticles(withLines, view.particles || !context.particlesChosen);
   const withExperiment = searchWithExperiment(withParticles, { enabled: context.experimentEnabled, ...view.derived });
   const withStations = searchWithStations(withExperiment, view.marks.stations);
-  return searchWithTc(withStations, view.marks.tc);
+  const withRadar = searchWithRadar(withStations, view.marks.radar);
+  return searchWithTc(withRadar, view.marks.tc);
 }

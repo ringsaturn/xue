@@ -54,6 +54,49 @@ export interface ShowcaseCase {
   eventTime?: string;
   tags?: string[];
   credit?: string;
+  /** The single-site radar overlay the case plays over its axis
+   * (`docs/nexrad.md`), when it carries one. */
+  radar?: ShowcaseRadar;
+}
+
+export interface ShowcaseRadar {
+  /** The window manifest, from the data root, and its `?v=`. */
+  windowPath: string;
+  crc32: string;
+  byteLength: number;
+  defaultSite: string;
+  defaultProduct: "n0b" | "n0g";
+}
+
+/** A case's radar block, or undefined when it has none or carries one this
+ * shell cannot read: the case then plays without the overlay rather than
+ * not at all. */
+function radarBlock(input: unknown, id: string): ShowcaseRadar | undefined {
+  if (input === undefined) return undefined;
+  const value = input as Record<string, unknown> | null;
+  const window = value?.window;
+  const ok =
+    typeof window === "string" &&
+    window.endsWith("/index.json") &&
+    !window.startsWith("/") &&
+    !window.split("/").includes("..") &&
+    typeof value?.crc32 === "string" &&
+    /^[0-9a-f]{8}$/.test(value.crc32) &&
+    typeof value?.byteLength === "number" &&
+    typeof value?.defaultSite === "string" &&
+    /^[A-Z0-9]{3}$/.test(value.defaultSite) &&
+    (value?.defaultProduct === "n0b" || value?.defaultProduct === "n0g");
+  if (!ok) {
+    console.warn(`showcase: case ${id} carries a radar block this shell cannot read; playing it without`);
+    return undefined;
+  }
+  return {
+    windowPath: `showcase/${id}/${window}`,
+    crc32: value!.crc32 as string,
+    byteLength: value!.byteLength as number,
+    defaultSite: value!.defaultSite as string,
+    defaultProduct: value!.defaultProduct as "n0b" | "n0g",
+  };
 }
 
 interface ShowcaseCatalog {
@@ -154,13 +197,17 @@ function validateCase(input: unknown): ShowcaseCase {
       throw new Error(`showcase case ${id} has an invalid grid`);
     }
   }
-  return {
+  const radar = radarBlock(value.radar, id);
+  const entry: ShowcaseCase = {
     ...(value as unknown as ShowcaseCase),
     title: localized(value.title, "title"),
     summary: localized(value.summary, "summary"),
     bbox: bounds(value.bbox, "bbox"),
     dataBbox: bounds(value.dataBbox, "dataBbox"),
   };
+  if (radar) entry.radar = radar;
+  else delete entry.radar;
+  return entry;
 }
 
 /** The catalog, keeping every case this shell can play. A case it cannot

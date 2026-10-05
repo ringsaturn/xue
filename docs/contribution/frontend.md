@@ -30,6 +30,7 @@ Storms, soundings and airports: [point-products.md](point-products.md).
 | `pagemeta.ts`, `site.ts` | Per-view metadata; the only place production hostnames appear. |
 | `compare.ts` + `compare/`, `showcase.ts` | Comparison page; case list page. |
 | `tc/`, `stations/`, `sounding/` | Point-product marks, cards, skew-T. |
+| `radar/` | Single-site radar overlay (`docs/nexrad.md`): window manifest reader, a worker that range-reads one site's round and decodes it with the WASM `decodeChunk` (RAW), a session that streams rounds outward from the playhead (≤ 4 in flight, byte budget 384 MB desktop / 96 MB narrow, farthest rounds evicted first), the polar `R8UI` shader on the projection prelude, site marks and the chip. Follows the playhead, never holds it; not draped on terrain. |
 
 ## Sessions and delivery
 

@@ -341,6 +341,15 @@ fall back to defaults rather than fail, so a constructed link always opens.
   height (within 300 m) takes the airport's place on the temperature, wind
   and pressure rows; its temperature goes on the terrain-corrected row
   where the panel has one.
+- `?radar=<site>` — draw one WSR-88D radar's lowest sweep over whatever is
+  on screen (`docs/nexrad.md`): `?radar=GWX` picks Columbus AFB, `?radar=on`
+  lets the page pick (a case's default, else the site nearest the view).
+  `?radarproduct=n0g` shows radial velocity (green toward the radar, red away,
+  purple range-folded) instead of reflectivity. The sweep shown is the
+  newest at or before the playhead, within 15 minutes; past the window the
+  newest is shown faded. It follows the playhead and never holds it. The
+  Rolling Fork showcase case (`?case=rolling-fork-2023`) carries DGX, GWX and
+  NQA beside the MRMS mosaic.
 - `?use_h264=true` — opt into the H.264 companion artifacts via WebCodecs
   instead of the Xue decoder (a comparison path, not the default; GFS and
   HRRR publish the companions for their surface fields, ECMWF and SFLUX

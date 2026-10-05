@@ -24,6 +24,7 @@ import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&ur
 
 import { CRC32_INITIAL, crc32Hex, crc32Update } from "./crc32";
 import { fetchImmutable } from "./fetchimmutable";
+import { loadPointerIndex } from "./pointerindex";
 import {
   applyStaticMessages,
   basemapLang,
@@ -181,6 +182,7 @@ import {
   type StationPointData,
 } from "./stations/layers";
 import {
+  haversineKm,
   nearestAirport,
   nearestSounding,
   nearestSynopStations,
@@ -188,6 +190,8 @@ import {
   type NearestStation,
 } from "./stations/nearest";
 import { synopObservedValue, synopRowObservations, synopTakesRow } from "./stations/synopobs";
+import { RADAR_SITE_LAYER, RadarOverlay, type RadarReadout } from "./radar/overlay";
+import { NEXRAD_POINTER_FILENAME, parseNexradPointer, parseRadarWindow, type RadarWindow } from "./radar/schema";
 import {
   nearestObservation,
   rowObservations,
@@ -1117,6 +1121,12 @@ const tcTile = required<HTMLButtonElement>("tc-tile");
 const soundingTile = required<HTMLButtonElement>("sounding-tile");
 const airportTile = required<HTMLButtonElement>("airport-tile");
 const synopTile = required<HTMLButtonElement>("synop-tile");
+const radarTile = required<HTMLButtonElement>("radar-tile");
+const radarChip = required<HTMLElement>("radar-chip");
+const radarChipSite = required<HTMLElement>("radar-chip-site");
+const radarChipRef = required<HTMLButtonElement>("radar-chip-ref");
+const radarChipVel = required<HTMLButtonElement>("radar-chip-vel");
+const radarChipTime = required<HTMLElement>("radar-chip-time");
 const tcSheet = required<HTMLElement>("tc-sheet");
 const tcList = required<HTMLElement>("tc-list");
 const fieldMore = required<HTMLButtonElement>("field-more");
@@ -5032,6 +5042,7 @@ function syncRail(): void {
   soundingTile.setAttribute("aria-pressed", String(!soundingTile.hidden && view.marks.stations.soundings));
   airportTile.setAttribute("aria-pressed", String(!airportTile.hidden && view.marks.stations.airports));
   synopTile.setAttribute("aria-pressed", String(!synopTile.hidden && view.marks.stations.synop));
+  radarTile.setAttribute("aria-pressed", String(!radarTile.hidden && view.marks.radar.on));
 }
 
 /** How far the rail is clipped at each end, as the two lengths the
@@ -6426,6 +6437,7 @@ async function loadStations(): Promise<void> {
   if (soundings.status === "fulfilled") soundingLoaded = soundings.value;
   if (airports.status === "fulfilled") airportLoaded = airports.value;
   if (synop.status === "fulfilled") synopLoaded = synop.value;
+  if (activeCase === null && requestedCaseId === null) await loadLiveRadar(base);
   applyStationView();
 }
 
@@ -6481,6 +6493,7 @@ function applyStationView(): void {
 /** The valid time the marks are dimmed against: the playhead's, or now
  * before a run has loaded. */
 function syncStationTime(): void {
+  syncRadarTime();
   if (!stationLayers) return;
   const index = activeFrameIndex ?? requestedFrameIndex;
   stationLayers.setTime(metadata && index !== null ? frameValidTime(index) : Date.now());
@@ -6539,6 +6552,153 @@ function toggleStationProduct(product: keyof StationsUrlState): void {
   syncUrl();
   applyStationView();
 }
+
+// ---------------------------------------------------------------------------
+// Single-site radar (docs/nexrad.md): an overlay that follows the playhead,
+// like the station marks, drawn from a window of polar stores — the live one
+// under `latest-nexrad.json`, or a showcase case's own. One site at a time:
+// the rail tile turns it on, a click on a site's mark picks the site, and
+// the chip under the title switches reflectivity and velocity. The link
+// carries `?radar=<site>` and `?radarproduct=n0g`.
+
+/** Whether the link named a radar state: a case's default then does not
+ * override it. */
+const requestedRadarFromUrl = new URLSearchParams(window.location.search).has("radar");
+
+/** The window the overlay reads from, and the URL its rounds resolve
+ * against. */
+let radarWindow: { window: RadarWindow; url: string } | null = null;
+let radarOverlay: RadarOverlay | null = null;
+/** The case's window, read once per case. */
+let radarCaseLoadedFor: string | null = null;
+
+async function loadLiveRadar(base: string): Promise<void> {
+  try {
+    const loaded = await loadPointerIndex(base, NEXRAD_POINTER_FILENAME, parseNexradPointer, parseRadarWindow, "nexrad");
+    radarWindow = loaded ? { window: loaded.index, url: loaded.indexUrl } : null;
+  } catch (error) {
+    console.warn("radar: live window not read:", error instanceof Error ? error.message : error);
+  }
+  applyRadarView();
+}
+
+async function loadCaseRadar(showcaseCase: ShowcaseCase): Promise<void> {
+  const radar = showcaseCase.radar;
+  if (!radar || radarCaseLoadedFor === showcaseCase.id) return;
+  radarCaseLoadedFor = showcaseCase.id;
+  const url = new URL(radar.windowPath, new URL(dataBaseUrl(), document.baseURI));
+  url.searchParams.set("v", radar.crc32);
+  try {
+    const response = await fetchImmutable(url);
+    if (!response.ok) throw new Error(`radar window request failed: ${response.status}`);
+    radarWindow = { window: parseRadarWindow(await response.json()), url: url.href };
+    // A case opens with its radar on, on the site and product it names,
+    // unless the link says otherwise.
+    if (!requestedRadarFromUrl) {
+      view.marks.radar = { on: true, site: radar.defaultSite, product: radar.defaultProduct };
+    }
+  } catch (error) {
+    console.warn(`radar: case ${showcaseCase.id} window not read:`, error instanceof Error ? error.message : error);
+    radarWindow = null;
+  }
+  applyRadarView();
+}
+
+function ensureRadarOverlay(): RadarOverlay | null {
+  if (!mapStyleReady) return null;
+  if (!radarOverlay) radarOverlay = new RadarOverlay(map, renderRadarChip);
+  const before = (map.getStyle().layers ?? []).find((entry) => entry.type === "symbol")?.id;
+  radarOverlay.ensure(before);
+  radarOverlay.setInk(getComputedStyle(document.body).getPropertyValue("--text").trim() || "#1b1a17");
+  return radarOverlay;
+}
+
+/** The nearest site of the window to the map's centre: what the tile
+ * opens on when nothing names a site. */
+function nearestRadarSite(window: RadarWindow): string | null {
+  const center = map.getCenter();
+  let best: { id: string; distance: number } | null = null;
+  for (const site of window.sites) {
+    const distance = haversineKm(center.lng, center.lat, site.lon, site.lat);
+    if (!best || distance < best.distance) best = { id: site.id, distance };
+  }
+  return best?.id ?? null;
+}
+
+function applyRadarView(): void {
+  const available = radarWindow !== null && (activeCase === null || activeCase.radar !== undefined);
+  if (radarTile.hidden === available) {
+    radarTile.hidden = !available;
+    syncRailDensity();
+  }
+  syncRail();
+  const state = view.marks.radar;
+  if (!available || !state.on) {
+    radarOverlay?.remove();
+    radarOverlay = null;
+    renderRadarChip(null);
+    return;
+  }
+  const overlay = ensureRadarOverlay();
+  if (!overlay) return;
+  overlay.setWindow(radarWindow!.window, radarWindow!.url);
+  const site =
+    state.site && radarWindow!.window.sites.some((entry) => entry.id === state.site)
+      ? state.site
+      : (activeCase?.radar?.defaultSite ?? nearestRadarSite(radarWindow!.window));
+  if (site !== state.site) view.marks.radar = { ...state, site };
+  overlay.setProduct(view.marks.radar.product);
+  overlay.setSite(site);
+  syncRadarTime();
+}
+
+function syncRadarTime(): void {
+  if (!radarOverlay) return;
+  const index = activeFrameIndex ?? requestedFrameIndex;
+  radarOverlay.setTime(metadata && index !== null ? frameValidTime(index) : null);
+}
+
+function renderRadarChip(readout: RadarReadout | null): void {
+  radarChip.hidden = readout === null;
+  if (!readout) return;
+  radarChipSite.textContent = readout.site.icao;
+  radarChipRef.setAttribute("aria-pressed", String(readout.product === "n0b"));
+  radarChipVel.setAttribute("aria-pressed", String(readout.product === "n0g"));
+  radarChip.dataset.state = readout.loading ? "loading" : readout.stale ? "stale" : "current";
+  const time = readout.sweepTime === null ? "--" : formatDate(readout.sweepTime);
+  radarChipTime.textContent = readout.stale ? `${t("radarLatest")} ${time}` : time;
+}
+
+function radarSiteAt(point: { x: number; y: number }): string | null {
+  if (!radarOverlay || !map.getLayer(RADAR_SITE_LAYER)) return null;
+  const box: [[number, number], [number, number]] = [
+    [point.x - 7, point.y - 7],
+    [point.x + 7, point.y + 7],
+  ];
+  const feature = map.queryRenderedFeatures(box, { layers: [RADAR_SITE_LAYER] })[0];
+  const id = feature?.properties?.id;
+  return typeof id === "string" ? id : null;
+}
+
+function selectRadarSite(id: string): void {
+  view.marks.radar = { ...view.marks.radar, on: true, site: id };
+  syncUrl();
+  applyRadarView();
+}
+
+function setRadarProduct(product: "n0b" | "n0g"): void {
+  view.marks.radar = { ...view.marks.radar, product };
+  syncUrl();
+  applyRadarView();
+}
+
+radarTile.addEventListener("click", () => {
+  view.marks.radar = { ...view.marks.radar, on: !view.marks.radar.on };
+  syncUrl();
+  applyRadarView();
+});
+radarChipRef.addEventListener("click", () => setRadarProduct("n0b"));
+radarChipVel.addEventListener("click", () => setRadarProduct("n0g"));
 
 soundingTile.addEventListener("click", () => toggleStationProduct("soundings"));
 airportTile.addEventListener("click", () => toggleStationProduct("airports"));
@@ -7778,6 +7938,7 @@ async function initialize({ frame = false }: { frame?: boolean } = {}): Promise<
       caseDefaultApplied = true;
       document.body.classList.add("is-showcase");
       updateCasePresentation(found);
+      void loadCaseRadar(found);
       // Frame the event before any byte lands, so the first painted plane
       // arrives on the region it belongs to rather than on the world view.
       applyCaseCamera(found, frame);
@@ -8080,6 +8241,13 @@ map.on("click", (event) => {
     return;
   }
   closeTcCard();
+  // A radar site's mark picks that site; the sweep under the pointer is
+  // not a mark, so the field's probe still takes a click on it.
+  const radarSite = radarSiteAt(event.point);
+  if (radarSite) {
+    selectRadarSite(radarSite);
+    return;
+  }
   // A station mark under the pointer opens its card instead of pinning the
   // field: the storm marks take precedence, the stations come next, and the
   // probe is what a click on the field itself does.
@@ -8092,12 +8260,12 @@ map.on("click", (event) => {
   setProbe(event.lngLat.lng, event.lngLat.lat);
 });
 map.on("mousemove", (event) => {
-  if (!tcLayers && !stationLayers) return;
+  if (!tcLayers && !stationLayers && !radarOverlay) return;
   const station = stationPointAt(event.point);
   // The mark under the pointer grows by a pixel, which is the only feature
   // state either product keeps.
   stationLayers?.setHover(station?.data ?? null);
-  map.getCanvas().style.cursor = tcPointAt(event.point) || station ? "pointer" : "";
+  map.getCanvas().style.cursor = tcPointAt(event.point) || station || radarSiteAt(event.point) ? "pointer" : "";
 });
 window.addEventListener("pointerdown", (event) => {
   if (!contextMenu.hidden && !contextMenu.contains(event.target as Node)) hideContextMenu();

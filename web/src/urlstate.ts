@@ -543,6 +543,52 @@ export function searchWithStations(search: string, state: StationsUrlState): str
   return `?${params.toString()}`;
 }
 
+/** The single-site radar a link carries (`docs/nexrad.md`): `?radar=GWX`
+ * draws that site, `?radarproduct=n0g` shows its velocity rather than its
+ * reflectivity. No `?radar=` (or `?radar=off`) draws none; `?radar=on`
+ * turns the overlay on and lets the page pick the site (a case's default,
+ * else the one nearest the view). A site id is three letters or digits; a
+ * malformed one falls back to `on`. */
+export interface RadarUrlState {
+  on: boolean;
+  site: string | null;
+  product: "n0b" | "n0g";
+}
+
+const RADAR_OFF: RadarUrlState = { on: false, site: null, product: "n0b" };
+const RADAR_PRODUCT_ALIASES: Record<string, "n0b" | "n0g"> = {
+  n0b: "n0b",
+  ref: "n0b",
+  reflectivity: "n0b",
+  n0g: "n0g",
+  vel: "n0g",
+  velocity: "n0g",
+};
+
+export function parseRadarFromSearch(search: string): RadarUrlState {
+  const params = new URLSearchParams(search);
+  const value = (params.get("radar") ?? "").trim();
+  const product = RADAR_PRODUCT_ALIASES[(params.get("radarproduct") ?? "").trim().toLowerCase()] ?? "n0b";
+  if (!value || value.toLowerCase() === "off") return { ...RADAR_OFF, product };
+  const site = value.toUpperCase();
+  return { on: true, site: /^[A-Z0-9]{3}$/.test(site) ? site : null, product };
+}
+
+/** The given query string carrying the radar: nothing when it is off, the
+ * product only when it is velocity. */
+export function searchWithRadar(search: string, state: RadarUrlState): string {
+  const params = new URLSearchParams(search);
+  if (!state.on) {
+    params.delete("radar");
+    params.delete("radarproduct");
+  } else {
+    params.set("radar", state.site ?? "on");
+    if (state.product === "n0g") params.set("radarproduct", "n0g");
+    else params.delete("radarproduct");
+  }
+  return `?${params.toString()}`;
+}
+
 export function searchWithTc(search: string, state: TcUrlState): string {
   const params = new URLSearchParams(search);
   if (state.off) params.set("tc", "off");

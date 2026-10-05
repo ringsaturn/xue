@@ -2322,6 +2322,67 @@ html[lang="ja"] .rail-glyph {
   letter-spacing: 0.04em;
 }
 
+/* The single-site radar's chip: the site, the product switch and the time
+   of the sweep on screen, under the title where the eye already is. */
+.radar-chip {
+  position: absolute;
+  z-index: 3;
+  top: 104px;
+  left: 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  backdrop-filter: blur(10px);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+.radar-chip[hidden] {
+  display: none;
+}
+
+.radar-chip-products {
+  display: inline-flex;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+}
+
+.radar-chip-products button {
+  padding: 2px 8px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.radar-chip-products button[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--bg);
+}
+
+.radar-chip-time {
+  color: var(--muted);
+}
+
+.radar-chip[data-state="loading"] .radar-chip-time::after {
+  content: " …";
+}
+
+@media (max-width: 720px) {
+  .radar-chip {
+    top: calc(84px + env(safe-area-inset-top));
+    left: 16px;
+  }
+}
+
 /* A network's credit line, which its terms ask to be shown with the data. */
 .station-card-credit {
   color: var(--muted);
