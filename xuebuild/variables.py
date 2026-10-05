@@ -1448,7 +1448,21 @@ ISOBARIC_FAMILIES: tuple[str, ...] = (
     "vqflx",
     "vvel",
     "thetae",
+    "cat",
 )
+
+# The surfaces a family is registered on where that is not all eight. The
+# clear-air turbulence index reads the wind on the surfaces above and below
+# its own, and only the jet levels have both among the eight: 300, 250 and
+# 200 hPa, where an aircraft at cruise meets it.
+CAT_LEVELS_HPA: tuple[int, ...] = (300, 250, 200)
+_FAMILY_LEVELS_HPA: dict[str, tuple[int, ...]] = {"cat": CAT_LEVELS_HPA}
+
+
+def isobaric_family_levels(family: str) -> tuple[int, ...]:
+    """The surfaces one isobaric family is registered on, top-down order of
+    :data:`ISOBARIC_LEVELS_HPA`."""
+    return _FAMILY_LEVELS_HPA.get(family, ISOBARIC_LEVELS_HPA)
 
 
 def isobaric_variable_id(family: str, level_hpa: int) -> str:
@@ -1465,7 +1479,7 @@ def isobaric_variable(variable_id: str) -> tuple[str, int] | None:
     for family in ISOBARIC_FAMILIES:
         if variable_id.startswith(family) and variable_id[len(family) :].isdigit():
             level = int(variable_id[len(family) :])
-            if level in ISOBARIC_LEVELS_HPA:
+            if level in isobaric_family_levels(family):
                 return family, level
     return None
 
@@ -1631,6 +1645,22 @@ def _isobaric_spec(family: str, level_hpa: int) -> VariableSpec:
             grib2_number=3,
             **common,
         )
+    if family == "cat":
+        # Clear-air turbulence as an eddy dissipation rate: the Ellrod TI1
+        # index (vertical shear times deformation) projected onto the
+        # climatological EDR distribution, derived by the converter from the
+        # wind and the height on its surface and the ones around it
+        # (binconvert.derive_cat), never fetched. GRIB2's 0/19/29 is the
+        # clear-air turbulence EDR, which is what this is; 0/19/30 (EDPARM)
+        # is the all-sources eddy dissipation parameter, which this is not.
+        return VariableSpec(
+            label=f"{level_hpa} hPa clear-air turbulence (EDR)",
+            output_unit="m^(2/3)/s",
+            value_range=(0.0, 0.635),
+            grib2_category=19,
+            grib2_number=29,
+            **common,
+        )
     # Water vapour flux, q·V/g in g·cm⁻¹·hPa⁻¹·s⁻¹ — the unit a Chinese
     # synoptic chart contours it in. Derived by the converter from the
     # specific humidity and the wind on the same surface, never fetched, so
@@ -1650,7 +1680,7 @@ def _isobaric_spec(family: str, level_hpa: int) -> VariableSpec:
 
 
 for _family in ISOBARIC_FAMILIES:
-    for _level in ISOBARIC_LEVELS_HPA:
+    for _level in isobaric_family_levels(_family):
         VARIABLES[isobaric_variable_id(_family, _level)] = _isobaric_spec(_family, _level)
 del _family, _level
 

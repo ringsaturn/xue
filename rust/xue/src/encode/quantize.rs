@@ -690,6 +690,23 @@ const COMPACT_VERTICAL_VELOCITY: LinearCodebook = LinearCodebook {
     step: 0.1,
     ..QUALITY_VERTICAL_VELOCITY
 };
+// Clear-air turbulence as an EDR in m^(2/3)/s: 0–0.635 at 0.005 keeps every
+// intensity threshold on a code; the floor is also what the rows the index is
+// not computed on are written as. Compact doubles the step over 0.64, the
+// nearest top its step divides. Mirrors `QUALITY_CAT` / `COMPACT_CAT` in
+// `xuebuild/quantize.py`.
+const QUALITY_CAT: LinearCodebook = LinearCodebook {
+    minimum: 0.0,
+    maximum: 0.635,
+    step: 0.005,
+    nodata_code: 255,
+    name: "cat",
+};
+const COMPACT_CAT: LinearCodebook = LinearCodebook {
+    maximum: 0.64,
+    step: 0.01,
+    ..QUALITY_CAT
+};
 // Equivalent potential temperature: the temperature's 0.5 K step over a
 // 127 K window placed per level. Must stay identical to `_THETA_E_OFFSETS`
 // in `xuebuild/quantize.py`.
@@ -767,6 +784,13 @@ fn isobaric_codebook(variable_id: &str, compact: bool) -> Option<LinearCodebook>
                 step: if compact { 1.0 } else { 0.5 },
                 nodata_code: 255,
                 name: "equivalent potential temperature",
+            }
+        }
+        "cat" => {
+            if compact {
+                COMPACT_CAT
+            } else {
+                QUALITY_CAT
             }
         }
         _ => return None,

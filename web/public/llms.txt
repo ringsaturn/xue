@@ -154,7 +154,10 @@ Facts worth getting right:
   mandatory radiosonde levels), the surface diagnostics `gust`, `tcdc` (total
   cloud cover), `cape`, `dpt2m`, the vertical velocity `vvel850`,
   `vvel700`, `vvel500`, the 850 hPa equivalent potential temperature
-  `thetae850`, the ocean fields `tmpsfc` (surface / skin temperature, the
+  `thetae850`, the clear-air turbulence `cat300`, `cat250`, `cat200` (an
+  eddy dissipation rate in m^(2/3)/s: the Ellrod TI1 index of the resolved
+  wind projected onto the climatological EDR distribution, no convective or
+  mountain-wave turbulence), the ocean fields `tmpsfc` (surface / skin temperature, the
   SST over water), `icetk` (sea ice thickness), `htsgw` and `perpw`
   (significant wave height and primary wave period, from the wave model of
   the same cycle — GFS-Wave, ECMWF's `wave` stream; land is 0 in both), and

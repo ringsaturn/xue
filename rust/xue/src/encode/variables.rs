@@ -260,8 +260,23 @@ pub const ISOBARIC_LEVELS_HPA: &[u32] = &[1000, 925, 850, 700, 500, 300, 250, 20
 /// The id prefixes of the isobaric families. Mirrors `ISOBARIC_FAMILIES` in
 /// `xuebuild/variables.py`.
 pub const ISOBARIC_FAMILIES: &[&str] = &[
-    "hgt", "tmp", "rh", "spfh", "ugrd", "vgrd", "uqflx", "vqflx", "vvel", "thetae",
+    "hgt", "tmp", "rh", "spfh", "ugrd", "vgrd", "uqflx", "vqflx", "vvel", "thetae", "cat",
 ];
+
+/// The surfaces the clear-air turbulence family is registered on: the index
+/// reads the wind on the surfaces above and below its own, and only the jet
+/// levels have both among the eight. Mirrors `CAT_LEVELS_HPA` in
+/// `xuebuild/variables.py`.
+pub const CAT_LEVELS_HPA: &[u32] = &[300, 250, 200];
+
+/// The surfaces one isobaric family is registered on, in level order.
+/// Mirrors `isobaric_family_levels` in `xuebuild/variables.py`.
+pub fn isobaric_family_levels(family: &str) -> &'static [u32] {
+    match family {
+        "cat" => CAT_LEVELS_HPA,
+        _ => ISOBARIC_LEVELS_HPA,
+    }
+}
 
 /// Standard gravity, the `g` in the water vapour flux `q·V/g`.
 pub const STANDARD_GRAVITY: f64 = 9.80665;
@@ -386,7 +401,7 @@ pub fn isobaric_variable(variable_id: &str) -> Option<(&'static str, u32)> {
         if let Some(rest) = variable_id.strip_prefix(family) {
             if !rest.is_empty() && rest.bytes().all(|byte| byte.is_ascii_digit()) {
                 let level: u32 = rest.parse().ok()?;
-                return ISOBARIC_LEVELS_HPA.contains(&level).then_some((*family, level));
+                return isobaric_family_levels(family).contains(&level).then_some((*family, level));
             }
         }
     }
@@ -476,6 +491,16 @@ macro_rules! vertical_velocity_spec {
 macro_rules! theta_e_spec {
     ($id:literal, $label:literal, $level_pa:literal, $range:expr) => {
         isobaric_spec!($id, $label, $level_pa, $range, "K", "", 0, 3, "")
+    };
+}
+// Clear-air turbulence as an eddy dissipation rate: the Ellrod TI1 index
+// projected onto the climatological EDR distribution, derived by the
+// converter from the wind and the height on its surface and the ones around
+// it, never fetched. GRIB2's 0/19/29 is the clear-air turbulence EDR; 0/19/30
+// (EDPARM) is the all-sources parameter, which this is not.
+macro_rules! cat_spec {
+    ($id:literal, $label:literal, $level_pa:literal) => {
+        isobaric_spec!($id, $label, $level_pa, (0.0, 0.635), "m^(2/3)/s", "", 19, 29, "")
     };
 }
 
@@ -2054,6 +2079,9 @@ pub const VARIABLES: &[VariableSpec] = &[
     theta_e_spec!("thetae300", "300 hPa equivalent potential temperature", 30000.0, (285.0, 412.0)),
     theta_e_spec!("thetae250", "250 hPa equivalent potential temperature", 25000.0, (295.0, 422.0)),
     theta_e_spec!("thetae200", "200 hPa equivalent potential temperature", 20000.0, (305.0, 432.0)),
+    cat_spec!("cat300", "300 hPa clear-air turbulence (EDR)", 30000.0),
+    cat_spec!("cat250", "250 hPa clear-air turbulence (EDR)", 25000.0),
+    cat_spec!("cat200", "200 hPa clear-air turbulence (EDR)", 20000.0),
     // NOAA SWPC OVATION aurora probability: the chance, in percent, that
     // aurora is visible overhead, on a 1-degree global grid. A space
     // weather product with no GRIB record to match — the fetch reads the
@@ -2129,7 +2157,8 @@ pub fn variable_spec(variable_id: &str) -> Result<&'static VariableSpec> {
 #[cfg(test)]
 mod tests {
     use super::{
-        isobaric_variable, reflectivity_level, variable_spec, AerosolIdentity, AEROSOL_VARIABLE_IDS,
+        isobaric_family_levels, isobaric_variable, reflectivity_level, variable_spec, AerosolIdentity,
+        AEROSOL_VARIABLE_IDS, CAT_LEVELS_HPA,
         DUST_CF_BUNDLE_ID, DUST_CF_COMPONENT_IDS, DUST_RGB_BUNDLE_ID, DUST_RGB_COMPONENT_IDS,
         ISOBARIC_FAMILIES, ISOBARIC_LEVELS_HPA, OCEAN_VARIABLE_IDS, REFLECTIVITY_LEVELS_M,
         REFLECTIVITY_VARIABLE_IDS, SATELLITE_CHANNEL_IDS, SATELLITE_VARIABLE_IDS,
@@ -2156,7 +2185,7 @@ mod tests {
     #[test]
     fn the_isobaric_registry_matches_the_shared_fixture() {
         let entries = registry("isobaric-registry.json");
-        assert_eq!(entries.len(), 9 * ISOBARIC_LEVELS_HPA.len());
+        assert_eq!(entries.len(), 9 * ISOBARIC_LEVELS_HPA.len() + CAT_LEVELS_HPA.len());
         for (variable_id, entry) in entries {
             let spec = variable_spec(&variable_id).unwrap_or_else(|_| panic!("{variable_id}"));
             assert_eq!(json!(spec.label), entry["label"], "{variable_id}");
@@ -2218,9 +2247,9 @@ mod tests {
     }
 
     #[test]
-    fn every_family_is_registered_at_every_level() {
+    fn every_family_is_registered_at_each_of_its_levels() {
         for family in ISOBARIC_FAMILIES {
-            for level in ISOBARIC_LEVELS_HPA {
+            for level in isobaric_family_levels(family) {
                 let id = format!("{family}{level}");
                 let spec = variable_spec(&id).unwrap_or_else(|_| panic!("{id}"));
                 assert_eq!(spec.grib2_level_type, 100, "{id}");
@@ -2229,6 +2258,8 @@ mod tests {
             }
         }
         assert_eq!(isobaric_variable("tmp550"), None, "not a registered level");
+        assert_eq!(isobaric_variable("cat850"), None, "not a level the family is registered on");
+        assert!(variable_spec("cat850").is_err());
         assert_eq!(isobaric_variable("tmp2m"), None);
         assert_eq!(isobaric_variable("prmsl"), None);
         assert_eq!(isobaric_variable("rh"), None);

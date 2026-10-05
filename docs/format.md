@@ -353,13 +353,31 @@ recognize; anything else it can still decode.
 | `uqflx<level>` / `vqflx<level>` | 0 / 1 / 250, 0 / 1 / 251 | 100, `<level>` hPa in Pa | Water vapour flux components, `q·V/g` in g·cm⁻¹·hPa⁻¹·s⁻¹; Xue-local parameter numbers |
 | `vvel<level>` | 0 / 2 / 8 | 100, `<level>` hPa in Pa | Vertical velocity ω in Pa/s on the isobaric surface |
 | `thetae<level>` | 0 / 0 / 3 | 100, `<level>` hPa in Pa | Equivalent potential temperature in K, derived by the encoder (Bolton 1980) from the temperature and specific humidity on the surface; GRIB2's EPOT number |
+| `cat<level>` | 0 / 19 / 29 | 100, `<level>` hPa in Pa | Clear-air turbulence as an eddy dissipation rate in m^(2/3)/s: the Ellrod TI1 index (vertical wind shear times total deformation) derived by the encoder from the wind and height on the surface and the ones bracketing it, projected per source onto the climatological EDR distribution (below); GRIB2's CAT EDR number. Registered on 300, 250 and 200 hPa only |
 | `aod` | 0 / 20 / 102 | 10, no value | Aerosol optical thickness at 550 nm, total aerosol (GEFS-Aerosols), dimensionless. An aerosol product (template 4.48): the `aerosol` block beside the parameter (below) is part of the identity — type 62000, particles smaller than 20 µm, 545–565 nm — and tells it from the other six wavelengths and five species the same parameter carries in one file |
 | `aoddust` / `aodsalt` / `aodsulf` / `aodorg` / `aodbc` | 0 / 20 / 102 | 10, no value | The same optical thickness for dust, sea salt, sulphate, particulate organic matter and black carbon: the same parameter and intervals, `aerosolType` 62001 / 62008 / 62006 / 62010 / 62009 |
 | `pm25` | 0 / 13 / 193 | 1, 0 | PM2.5 surface concentration in µg/m³, NCEP's local PMTF number; `aerosol` type 62000, particles smaller than 2.5 µm, no wavelength interval |
 | `pm10` / `pm10dust` | 0 / 13 / 192 | 1, 0 | PM10 surface concentration in µg/m³ (NCEP's local PMTC), total aerosol and dust alone: one parameter, `aerosolType` 62000 / 62001, particles smaller than 10 µm, no wavelength interval |
 
 The eight registered isobaric surfaces are 1000, 925, 850, 700, 500, 300,
-250 and 200 hPa, and every isobaric family is registered on all eight.
+250 and 200 hPa, and every isobaric family but `cat` is registered on all
+eight. `cat` is registered on 300, 250 and 200 hPa: its vertical shear is
+taken across 250–300 hPa for `cat300`, 200–300 for `cat250` and 200–250 for
+`cat200`, the deformation on the surface itself.
+
+The `cat<level>` derivation, in float64, in this order (both encoders):
+centred differences on the uncropped global plane, before any crop window
+is cut, with `R = 6371000 m`, `dx = R·cos φ·Δλ` per row and `dy = R·Δφ`,
+the columns wrapping on a global grid; `DST = ∂u/∂x − ∂v/∂y`,
+`DSH = ∂v/∂x + ∂u/∂y`, `DEF = √(DST² + DSH²)`; `VWS = |V_above − V_below| /
+max(z_above − z_below, 1 m)`; `TI1 = VWS·DEF`; then
+`EDR = exp(a + b·ln max(TI1, 10⁻¹²))` with `b = 0.5067 / σ_L`,
+`a = −2.572 − b·μ_L`, the climatological ln EDR mean and standard deviation
+of Sharman & Pearson (2017) and the source's own ln TI1 fit
+(`SourceSpec.cat_calibration`); then every `EDR < 0.10` (ICAO's nil
+turbulence) becomes 0, 0.10 itself keeping its code. The first and last
+rows and every row past 85° latitude are written as 0, the codebook floor.
+
 Within a family the variables differ only in the surface value, written in
 the surface's own unit, pascals: `hgt500` carries
 `scaleFactorOfFirstFixedSurface: 0`, `scaledValueOfFirstFixedSurface: 50000`.
@@ -862,6 +880,7 @@ values unless noted):
 | `thetae300` | 285 K | 0.5 | 254 | 255 | 0.25 K |
 | `thetae250` | 295 K | 0.5 | 254 | 255 | 0.25 K |
 | `thetae200` | 305 K | 0.5 | 254 | 255 | 0.25 K |
+| `cat<level>` | 0 m^(2/3)/s | 0.005 | 127 | 255 | 0.0025 m^(2/3)/s |
 
 The `compact` profile doubles each `scale` (temperature 1.0 → maximumCode
 110, wind 1.0 → 127, dswrf 10 → 127, cref 1.0 → 80, gust 1.0 → 127, every
@@ -869,7 +888,7 @@ cloud cover 1.0 → 100, cape 50 → 127, cin 8 → 127, vis 0.2 → 127, dpt2m 
 → 110, aptmp2m 2 → 75, pwat 1.0 → 127, hpbl 40 → 127, orog 74 → 127, tmpsfc 1.0 → 127, icec
 1.0 → 100, icetk 0.04 → 127, htsgw and perpw 0.2 → 127, and every
 pressure-family and isobaric codebook → half its maximumCode over the same
-range). Two codebooks do not keep the same range: `dirpw`'s compact codebook
+range; `cat<level>` 0.01 over 0–0.64 → 64). Two codebooks do not keep the same range: `dirpw`'s compact codebook
 stops at 357° (3 → 119), because 360 / 3
 codes would put 360°, which is 0°, back on the grid; and the wave vector's
 stops at ±25.2 m (0.4 → 126) so that 0 stays on the grid, since land is

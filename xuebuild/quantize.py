@@ -16,6 +16,7 @@ import numpy as np
 from .errors import ConversionError
 from .variables import (
     AEROSOL_VARIABLE_IDS,
+    CAT_LEVELS_HPA,
     DUST_CF_COMPONENT_IDS,
     DUST_RGB_COMPONENT_IDS,
     ISOBARIC_LEVELS_HPA,
@@ -586,6 +587,15 @@ def _theta_e_codebook(level_hpa: int, *, compact: bool) -> TemperatureCodebook:
     )
 
 
+# Clear-air turbulence as an EDR in m^(2/3)/s: severe starts near 0.45, so
+# 0–0.635 at 0.005 (127 codes) keeps every intensity threshold on a code and
+# clamps only past anything an aircraft reports; the floor is also what the
+# polar rows the index is not computed on are written as. Compact doubles the
+# step over 0.64, the nearest top its step divides.
+QUALITY_CAT = TemperatureCodebook(minimum=0.0, maximum=0.635, step=0.005, name="cat")
+COMPACT_CAT = TemperatureCodebook(minimum=0.0, maximum=0.64, step=0.01, name="cat")
+
+
 def _isobaric_codebooks(*, compact: bool) -> dict[str, TemperatureCodebook]:
     books: dict[str, TemperatureCodebook] = {}
     for level in ISOBARIC_LEVELS_HPA:
@@ -600,6 +610,8 @@ def _isobaric_codebooks(*, compact: bool) -> dict[str, TemperatureCodebook]:
             COMPACT_VERTICAL_VELOCITY if compact else QUALITY_VERTICAL_VELOCITY
         )
         books[isobaric_variable_id("thetae", level)] = _theta_e_codebook(level, compact=compact)
+    for level in CAT_LEVELS_HPA:
+        books[isobaric_variable_id("cat", level)] = COMPACT_CAT if compact else QUALITY_CAT
     return books
 
 

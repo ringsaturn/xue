@@ -109,8 +109,9 @@ takes a new id so an old wheel is not mistaken for a new one (`radar` →
 
 ## Forecasts
 
-**gfs.** The reference source and the full bundle set (62 bundles, isobaric
-families on all eight levels, the GFS-Wave companion `gfswave.*` beside
+**gfs.** The reference source and the full bundle set (65 bundles, isobaric
+families on all eight levels, the clear-air turbulence `cat300`/`cat250`/`cat200`
+with its own `cat_calibration`, the GFS-Wave companion `gfswave.*` beside
 `atmos/`). Only source with `series_bundle_ids` (`tmp2m`, `prate`,
 `wind10m` ship a `<bundle>.series.zarr` companion; see
 [../zarr-profile.md](../zarr-profile.md)) and, with HRRR, H.264 video
@@ -124,7 +125,9 @@ grid (3072 × 1536); `prate_ave` is a window mean de-averaged into `prate`.
 `data.ecmwf.int` ones answer bursts with 503 and are paced; Google's is not. The `wave` stream is a
 companion beside `oper`. Publishes what the open data carries, in GFS order,
 so a model switch keeps the layer; the gust is analysis-optional and spelled
-`10fg` to 90 h, `10fg3` beyond (`ecmwf_alternate_params`).
+`10fg` to 90 h, `10fg3` beyond (`ecmwf_alternate_params`). The `cat` bundles carry a fit of
+their own (`cat_calibration`): on the same runs IFS's ln TI1 mean sits about
+0.25 below GFS's at every level.
 
 **aifs.** ECMWF's AIFS Single, fetched by the IFS path under another model
 directory (`fetch.py::ECMWF_OPEN_DATA_MODELS`, `ifs` | `aifs-single`),

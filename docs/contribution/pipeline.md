@@ -27,8 +27,9 @@ container id.
 - Input-only entries are read, never published: ECMWF `tp` and sflux
   `prate_ave` (into `prate`), `dirpw`, `spfh<level>`, and GFS's
   `crain`/`cfrzr`/`cicep`/`csnow` (into `ptype`, `binconvert.derive_ptype`).
-- Isobaric families come from one eight-level table;
-  `isobaric_variable(id)` returns `(family, level)`.
+- Isobaric families come from one eight-level table (`cat` uses only
+  300/250/200, `isobaric_family_levels`); `isobaric_variable(id)` returns
+  `(family, level)`.
 
 ## Registration is not publication
 
@@ -38,7 +39,10 @@ ships, and a listed bundle ships only when its inputs were fetched:
 - vectors (`wind10m`, `wind<level>`, …): every input in
   `binconvert.vector_input_ids`;
 - derived scalars (`binconvert.DERIVED_SCALARS`: `thetae`, Bolton 1980 in a
-  fixed operation order the native side must repeat) and derived vectors
+  fixed operation order the native side must repeat; `cat`, Ellrod TI1
+  projected onto EDR with the source's `cat_calibration`, the one derivation
+  that reads neighbours, so `_extract_planes` hands it the uncropped planes
+  and the crop is cut afterwards) and derived vectors
   (`binconvert.DERIVED_VECTORS`: `qflux` = q·V/g; `wave` = height along the
   direction of travel in wind convention, `(-h sin θ, -h cos θ)`).
 

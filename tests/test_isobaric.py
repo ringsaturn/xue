@@ -40,6 +40,7 @@ from xuebuild.variables import (
     ISOBARIC_FAMILIES,
     ISOBARIC_LEVELS_HPA,
     STANDARD_GRAVITY,
+    isobaric_family_levels,
     isobaric_variable,
     isobaric_variable_id,
     variable_spec,
@@ -70,13 +71,16 @@ class RegistryTests(unittest.TestCase):
 
     def test_every_family_is_registered_at_every_level(self) -> None:
         for family in ISOBARIC_FAMILIES:
-            for level in ISOBARIC_LEVELS_HPA:
+            for level in isobaric_family_levels(family):
                 variable_id = isobaric_variable_id(family, level)
                 spec = variable_spec(variable_id)
                 self.assertEqual(spec.grib2_level_type, 100, variable_id)
                 self.assertEqual(spec.grib2_level_value, level * 100.0, variable_id)
                 self.assertEqual(isobaric_variable(variable_id), (family, level))
         self.assertIsNone(isobaric_variable("tmp550"), "not a registered level")
+        # The turbulence index is registered on the jet levels only.
+        self.assertEqual(isobaric_family_levels("cat"), (300, 250, 200))
+        self.assertIsNone(isobaric_variable("cat850"))
         self.assertIsNone(isobaric_variable("tmp2m"))
         self.assertIsNone(isobaric_variable("prmsl"))
 

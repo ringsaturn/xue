@@ -375,6 +375,15 @@ class SourceSpec:
     Gaussian grid is a third of the run — 334 MB on top of 1.07 GB of
     bundles — and the slowest step of its build. Read on the Python side
     only, where ffmpeg runs; the native encoder writes no video."""
+    cat_calibration: tuple[tuple[int, float, float], ...] = ()
+    """``(level_hpa, mean, standard deviation)`` of ln TI1 (s^-2) on each
+    surface the source publishes a ``cat<level>`` bundle for: the
+    lognormal fit the clear-air turbulence index is projected onto the
+    climatological EDR distribution through (``binconvert.derive_cat``).
+    Per source because the deformation a model resolves depends on its
+    effective resolution, so one fit would make two models' EDR
+    incomparable. Fitted once, offline, by ``scripts/cat_calibration.py``;
+    a refit changes output bytes and goes through a release."""
 
     @property
     def live(self) -> bool:
@@ -680,6 +689,9 @@ SOURCES: dict[str, SourceSpec] = {
             "vvel700",
             "vvel500",
             "thetae850",
+            "cat300",
+            "cat250",
+            "cat200",
             "tmpsfc",
             "icec",
             "icetk",
@@ -705,6 +717,9 @@ SOURCES: dict[str, SourceSpec] = {
         # `/point?variables=tmp2m,wind10m` and the pinned temperature/wind
         # rows read one chunk each. Other sources opt in the same way.
         series_bundle_ids=("tmp2m", "prate", "wind10m"),
+        # ln TI1 over |lat| <= 85°, cos(lat)-weighted: ten 00Z/12Z runs
+        # 2024-03 to 2026-06, F000/F024/F048, 29.4 million cells per level.
+        cat_calibration=((300, -15.5314, 1.1545), (250, -15.8164, 1.1271), (200, -15.6885, 1.1422)),
     ),
     "ecmwf": SourceSpec(
         id="ecmwf",
@@ -830,6 +845,9 @@ SOURCES: dict[str, SourceSpec] = {
             "vvel700",
             "vvel500",
             "thetae850",
+            "cat300",
+            "cat250",
+            "cat200",
             "tmpsfc",
             "icetk",
             "htsgw",
@@ -850,6 +868,8 @@ SOURCES: dict[str, SourceSpec] = {
             "wave",
         ),
         video=False,
+        # The GFS fit's runs, leads and cells, from the open data records.
+        cat_calibration=((300, -15.8093, 1.1601), (250, -16.0237, 1.1220), (200, -15.9364, 1.1154)),
     ),
     # ECMWF's data-driven model, AIFS Single, from the same open data
     # service under ``aifs-single/0p25/`` — an ``oper`` and a ``wave``

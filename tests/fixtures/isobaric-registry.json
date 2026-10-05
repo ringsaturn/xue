@@ -2014,5 +2014,89 @@
       "maximumCode": 127,
       "nodataCode": 255
     }
+  },
+  "cat300": {
+    "label": "300 hPa clear-air turbulence (EDR)",
+    "unit": "m^(2/3)/s",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 19,
+      "parameterNumber": 29,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 30000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.005,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.01,
+      "minimumCode": 0,
+      "maximumCode": 64,
+      "nodataCode": 255
+    }
+  },
+  "cat250": {
+    "label": "250 hPa clear-air turbulence (EDR)",
+    "unit": "m^(2/3)/s",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 19,
+      "parameterNumber": 29,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 25000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.005,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.01,
+      "minimumCode": 0,
+      "maximumCode": 64,
+      "nodataCode": 255
+    }
+  },
+  "cat200": {
+    "label": "200 hPa clear-air turbulence (EDR)",
+    "unit": "m^(2/3)/s",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 19,
+      "parameterNumber": 29,
+      "typeOfFirstFixedSurface": 100,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 20000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.005,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.01,
+      "minimumCode": 0,
+      "maximumCode": 64,
+      "nodataCode": 255
+    }
   }
 }

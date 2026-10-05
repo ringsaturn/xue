@@ -64,12 +64,14 @@ GFS = source_spec("gfs")
 # any pressure level, no gust, CAPE, ice thickness or peak period), what the
 # IFS source publishes on the isobaric surfaces the AIFS source has not
 # taken up yet (the heights, temperatures and winds beyond the synoptic
-# levels; the records exist in the AIFS open data), and what AIFS adds.
+# levels, and the turbulence index they would feed; the records exist in
+# the AIFS open data), and what AIFS adds.
 DROPPED = tuple(f"rh{level}" for level in (1000, 925, 850, 700, 500, 300, 250, 200)) + ("gust", "cape", "icetk", "perpw")
 NOT_TAKEN_UP = (
     "hgt1000", "hgt925", "hgt300", "hgt200",
     "tmp1000", "tmp700", "tmp300", "tmp250", "tmp200",
     "wind1000", "wind700", "wind500", "wind300", "wind200",
+    "cat300", "cat250", "cat200",
 )
 ADDED = ("lcdc", "mcdc", "hcdc")
 

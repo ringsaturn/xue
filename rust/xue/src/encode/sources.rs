@@ -283,6 +283,14 @@ pub struct SourceSpec {
     /// `tile` describe it. Mirrors `SourceSpec.regrid` in
     /// `xuebuild/sources.py`.
     pub regrid: Option<Regrid>,
+    /// `(level_hpa, mean, standard deviation)` of ln TI1 (s^-2) on each
+    /// surface the source publishes a `cat<level>` bundle for: the lognormal
+    /// fit the clear-air turbulence index is projected onto the
+    /// climatological EDR distribution through (`convert::derive_cat`). Per
+    /// source because the deformation a model resolves depends on its
+    /// effective resolution. Mirrors `SourceSpec.cat_calibration` in
+    /// `xuebuild/sources.py`, literal for literal.
+    pub cat_calibration: &'static [(u32, f64, f64)],
 }
 
 impl SourceSpec {
@@ -483,7 +491,7 @@ pub const SOURCES: &[SourceSpec] = &[
             "tmp300", "tmp250", "tmp200", "rh1000", "rh925", "rh850", "rh700", "rh500", "rh300",
             "rh250", "rh200", "gust", "tcdc", "lcdc", "mcdc", "hcdc", "cape", "cin", "vis",
             "dpt2m", "aptmp2m", "pwat", "hpbl", "vvel850", "vvel700", "vvel500", "thetae850",
-            "tmpsfc", "icec", "icetk", "htsgw", "perpw", "orog",
+            "cat300", "cat250", "cat200", "tmpsfc", "icec", "icetk", "htsgw", "perpw", "orog",
         ],
         core_bundle_ids: &["tmp2m", "prate"],
         bundle_vector_ids: &[
@@ -502,6 +510,9 @@ pub const SOURCES: &[SourceSpec] = &[
         series_file: false,
         open_meteo: None,
         downsample: None,
+        // ln TI1 over |lat| <= 85°, cos(lat)-weighted: ten 00Z/12Z runs
+        // 2024-03 to 2026-06, F000/F024/F048, 29.4 million cells per level.
+        cat_calibration: &[(300, -15.5314, 1.1545), (250, -15.8164, 1.1271), (200, -15.6885, 1.1422)],
     },
     SourceSpec {
         id: "ecmwf",
@@ -550,7 +561,7 @@ pub const SOURCES: &[SourceSpec] = &[
             "hgt250", "hgt200", "tmp1000", "tmp925", "tmp850", "tmp700", "tmp500", "tmp300",
             "tmp250", "tmp200", "rh1000", "rh925", "rh850", "rh700", "rh500", "rh300", "rh250",
             "rh200", "gust", "tcdc", "cape", "dpt2m", "vvel850", "vvel700", "vvel500", "thetae850",
-            "tmpsfc", "icetk", "htsgw", "perpw", "orog",
+            "cat300", "cat250", "cat200", "tmpsfc", "icetk", "htsgw", "perpw", "orog",
         ],
         core_bundle_ids: &["tmp2m", "prate"],
         bundle_vector_ids: &[
@@ -569,6 +580,8 @@ pub const SOURCES: &[SourceSpec] = &[
         series_file: false,
         open_meteo: None,
         downsample: None,
+        // The GFS fit's runs, leads and cells, from the open data records.
+        cat_calibration: &[(300, -15.8093, 1.1601), (250, -16.0237, 1.1220), (200, -15.9364, 1.1154)],
     },
     // ECMWF's data-driven model, AIFS Single, from the same open data
     // service: an `oper` and a `wave` stream on the same 0.25° grid, every
@@ -622,6 +635,7 @@ pub const SOURCES: &[SourceSpec] = &[
         series_file: false,
         open_meteo: None,
         downsample: None,
+        cat_calibration: &[],
     },
     // ECMWF IFS HRES, the deterministic high-resolution forecast on its
     // native O1280 grid (~9 km), as Open-Meteo redistributes it: one `.om`
@@ -690,6 +704,7 @@ pub const SOURCES: &[SourceSpec] = &[
         series_file: true,
         open_meteo: Some("ecmwf_ifs"),
         downsample: None,
+        cat_calibration: &[],
     },
     // GFS surface flux files on the native ~13 km T1534 Gaussian grid. Adds
     // the dswrf layer; prate is de-averaged from window-cumulative averages.
@@ -724,6 +739,7 @@ pub const SOURCES: &[SourceSpec] = &[
         series_file: false,
         open_meteo: None,
         downsample: None,
+        cat_calibration: &[],
     },
     // NOAA HRRR: the 3 km convection-allowing model over the contiguous
     // United States, a cycle every hour, hourly to F18. Computed on a
@@ -774,6 +790,7 @@ pub const SOURCES: &[SourceSpec] = &[
         series_file: false,
         open_meteo: None,
         downsample: None,
+        cat_calibration: &[],
     },
     // CMA weather radar level-3 mosaic composite reflectivity: the national
     // composite every six minutes, kept as one Zarr store per UTC day in a
@@ -828,6 +845,7 @@ pub const SOURCES: &[SourceSpec] = &[
         series_file: false,
         open_meteo: None,
         downsample: None,
+        cat_calibration: &[],
     },
     // NCEP CFSv2: the operational coupled climate forecast, nine months of
     // six-hourly output from every cycle. Its surface fields arrive not as
@@ -929,6 +947,7 @@ pub const SOURCES: &[SourceSpec] = &[
         series_file: false,
         open_meteo: None,
         downsample: None,
+        cat_calibration: &[],
     },
     SourceSpec {
         id: "cma",
@@ -963,6 +982,7 @@ pub const SOURCES: &[SourceSpec] = &[
         series_file: true,
         open_meteo: None,
         downsample: None,
+        cat_calibration: &[],
     },
     // NOAA MRMS: the national radar mosaic over the contiguous United
     // States, a composite every two minutes on a regular 0.01° grid, fetched
@@ -1006,6 +1026,7 @@ pub const SOURCES: &[SourceSpec] = &[
         series_file: false,
         open_meteo: None,
         downsample: Some(Downsample { factor: 2 }),
+        cat_calibration: &[],
     },
     // NOAA MRMS 3D: the national mosaic's merged reflectivity on its 33
     // constant-altitude levels, 0.5 to 19 km above mean sea level, one whole
@@ -1051,6 +1072,7 @@ pub const SOURCES: &[SourceSpec] = &[
         series_file: false,
         open_meteo: None,
         downsample: Some(Downsample { factor: 5 }),
+        cat_calibration: &[],
     },
     // JMA 高解像度降水ナウキャスト: the agency's precipitation intensity
     // analysis over Japan, a frame every five minutes, published as map
@@ -1095,6 +1117,7 @@ pub const SOURCES: &[SourceSpec] = &[
         series_file: true,
         open_meteo: None,
         downsample: None,
+        cat_calibration: &[],
     },
     // Himawari-9 AHI at 140.7°E as NOAA redistributes it (the ISatSS
     // tiles), warped by the Python fetch stage onto a 0.04° plate carrée
@@ -1172,6 +1195,7 @@ pub const SOURCES: &[SourceSpec] = &[
         series_file: true,
         open_meteo: None,
         downsample: None,
+        cat_calibration: &[],
     },
     // The two GOES-R imagers, GOES-19 at 75.2°W (East) and GOES-18 at
     // 137.0°W (West), from NOAA's own buckets: the CMIPF product, each
@@ -1242,6 +1266,7 @@ pub const SOURCES: &[SourceSpec] = &[
         series_file: true,
         open_meteo: None,
         downsample: None,
+        cat_calibration: &[],
     },
     SourceSpec {
         id: "goeswest",
@@ -1301,6 +1326,7 @@ pub const SOURCES: &[SourceSpec] = &[
         series_file: true,
         open_meteo: None,
         downsample: None,
+        cat_calibration: &[],
     },
     // Meteosat-12 (MTG-I1) FCI at 0°, EUMETSAT's prime full-disk service,
     // from the EUMETSAT Data Store rather than a public bucket (the Python
@@ -1361,6 +1387,7 @@ pub const SOURCES: &[SourceSpec] = &[
         series_file: true,
         open_meteo: None,
         downsample: None,
+        cat_calibration: &[],
     },
     SourceSpec {
         id: "aurora",
@@ -1395,6 +1422,7 @@ pub const SOURCES: &[SourceSpec] = &[
         series_file: true,
         open_meteo: None,
         downsample: None,
+        cat_calibration: &[],
     },
 ];
 

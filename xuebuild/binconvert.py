@@ -61,6 +61,7 @@ from .variables import (
     DUST_CF_COMPONENT_IDS,
     DUST_RGB_BUNDLE_ID,
     DUST_RGB_COMPONENT_IDS,
+    CAT_LEVELS_HPA,
     ISOBARIC_LEVELS_HPA,
     REFLECTIVITY_VARIABLE_IDS,
     STANDARD_GRAVITY,
@@ -153,10 +154,39 @@ def bundle_variable_ids(bundle_id: str) -> tuple[str, ...]:
 # the four NCEP flags. Like a vapour flux bundle, listing one in a source's
 # scalars publishes it only when every input is fetched, and an input that
 # serves only the derivation is released once it is done.
+# The clear-air turbulence index on each of its surfaces: the deformation is
+# taken on the surface itself, the vertical shear across the pair of
+# surfaces ``(above, below)`` that brackets it among the eight registered —
+# centred at 250 hPa, one-sided at the two ends.
+CAT_SHEAR_LAYERS: dict[int, tuple[int, int]] = {300: (250, 300), 250: (200, 300), 200: (200, 250)}
+
+
+def _cat_input_ids(level: int) -> tuple[str, ...]:
+    """The inputs of ``cat<level>``, each once: the wind and height above,
+    then below, then the wind on the surface (already listed for 300 and
+    200, whose surface is one end of the layer)."""
+    above, below = CAT_SHEAR_LAYERS[level]
+    return tuple(
+        dict.fromkeys(
+            (
+                f"ugrd{above}",
+                f"vgrd{above}",
+                f"hgt{above}",
+                f"ugrd{below}",
+                f"vgrd{below}",
+                f"hgt{below}",
+                f"ugrd{level}",
+                f"vgrd{level}",
+            )
+        )
+    )
+
+
 DERIVED_SCALARS: dict[str, tuple[str, ...]] = {
     **{f"thetae{level}": (f"tmp{level}", f"spfh{level}") for level in ISOBARIC_LEVELS_HPA},
     # The four categorical flags, in the order derive_ptype combines them.
     "ptype": ("crain", "cfrzr", "cicep", "csnow"),
+    **{f"cat{level}": _cat_input_ids(level) for level in CAT_LEVELS_HPA},
 }
 
 
@@ -164,6 +194,13 @@ def theta_e_level(bundle_id: str) -> int | None:
     """The isobaric surface of a ``thetae<level>`` bundle, or None."""
     if bundle_id.startswith("thetae") and bundle_id in DERIVED_SCALARS:
         return int(bundle_id[len("thetae") :])
+    return None
+
+
+def cat_level(bundle_id: str) -> int | None:
+    """The isobaric surface of a ``cat<level>`` bundle, or None."""
+    if bundle_id.startswith("cat") and bundle_id in DERIVED_SCALARS:
+        return int(bundle_id[len("cat") :])
     return None
 
 
@@ -204,7 +241,11 @@ def video_variable_ids(source: SourceSpec) -> frozenset[str]:
 # previous frame inside its chunk. The categorical precipitation type is RAW
 # for the same reason a codebook of classes never differences: every class
 # boundary moves with the weather, and a category's code is not a number.
-RAW_VARIABLE_IDS = {"prate", "cref", "ptype", *REFLECTIVITY_VARIABLE_IDS}
+# The clear-air turbulence index is a product of horizontal and vertical
+# gradients, cell-scale structure that does not persist three hours: on a
+# real GFS and ECMWF run, nil clamp included, chaining makes its chunks
+# half as large again as RAW.
+RAW_VARIABLE_IDS = {"prate", "cref", "ptype", *REFLECTIVITY_VARIABLE_IDS, *(f"cat{level}" for level in CAT_LEVELS_HPA)}
 # The pressure family (sea level pressure, pressure-level geopotential
 # heights) ships bundles only: the frontend draws it as contour lines, which
 # needs the exact codes and never the H.264 companion's chroma-subsampled
@@ -926,6 +967,191 @@ def derive_ptype(values: dict[str, np.ndarray], bundle_id: str) -> np.ndarray:
     return codes
 
 
+# The clear-air turbulence derivation's constants, each one literal shared
+# with the native encoder. The sphere is the mean Earth radius; past 85° the
+# zonal spacing shrinks towards nothing and no airway is drawn there; the
+# floor keeps a calm cell's logarithm finite. The climatological ln EDR
+# mean and standard deviation are Sharman & Pearson's (2017), as ECMWF's
+# CAT index (Bechtold et al. 2021, Tech. Memo. 874, c1 = -2.57,
+# c2 = 0.51) projects onto them.
+EARTH_RADIUS_M = 6371000.0
+CAT_POLAR_LATITUDE = 85.0
+CAT_TI1_FLOOR = 1e-12
+CAT_EDR_LOG_MEAN = -2.572
+CAT_EDR_LOG_STD = 0.5067
+# ICAO Annex 3 classes an EDR of 0.10 or less as nil turbulence, and the
+# shell draws nothing below it; the half of the map that sits in that range
+# would otherwise carry most of a bundle's entropy (57 % of its bytes).
+CAT_EDR_NIL = 0.10
+
+
+def ellrod_ti1(
+    planes: Mapping[str, np.ndarray],
+    level: int,
+    latitudes: np.ndarray,
+    longitude_step: float,
+    latitude_step: float,
+    wraps: bool,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Ellrod & Knapp's (1992) TI1 on one isobaric surface, in s^-2, and the
+    mask of the cells it is defined on, from ``(rows, columns)`` planes of
+    the wind (m/s) and the geopotential height (gpm) keyed by input id.
+
+    The planes must be the whole grid the source arrives on, north row
+    first: a crop's edge or a decimated grid would put the differences on
+    the wrong neighbours. ``latitudes`` are the rows' centres in degrees.
+    Defined on every row but the first and the last whose latitude is within
+    :data:`CAT_POLAR_LATITUDE`, and on every column when the grid wraps (the
+    first and last columns being neighbours), every column but the end ones
+    when it does not; elsewhere the index is 0.
+
+    In float64, in exactly this order, which the native encoder repeats
+    step by step:
+
+    1. ``rad = pi / 180``; per row ``c = cos(latitude * rad)`` (the scalar
+       libm cosine, one per row);
+    2. per row ``dx = R * c * (longitude_step * rad)``, left to right, and
+       ``dy = R * (-latitude_step * rad)``; ``two_dx = 2 * dx``,
+       ``two_dy = 2 * dy``;
+    3. for f in u, v on the surface: ``df/dx = (f[r, j+1] - f[r, j-1]) / two_dx[r]``
+       (columns modulo the width), ``df/dy = (f[r-1, j] - f[r+1, j]) / two_dy``
+       (row r-1 is the northern neighbour);
+    4. ``DST = du/dx - dv/dy``; ``DSH = dv/dx + du/dy``;
+       ``DEF = sqrt(DST * DST + DSH * DSH)``;
+    5. ``du = u_above - u_below``; ``dv = v_above - v_below``;
+       ``dz = max(z_above - z_below, 1.0)``;
+       ``VWS = sqrt(du * du + dv * dv) / dz``;
+    6. ``TI1 = VWS * DEF``, then 0 wherever the mask is false.
+    """
+    above, below = CAT_SHEAR_LAYERS[level]
+    u = planes[f"ugrd{level}"]
+    v = planes[f"vgrd{level}"]
+    rows, columns = u.shape
+    if latitude_step >= 0.0:
+        raise ConversionError("the clear-air turbulence index needs a north-to-south grid")
+    if rows < 3 or latitudes.shape != (rows,):
+        raise ConversionError(f"cannot difference a {rows}-row plane against {latitudes.shape[0]} latitudes")
+    rad = math.pi / 180.0
+    cosine = np.array([math.cos(float(latitude) * rad) for latitude in latitudes], dtype=np.float64)
+    dx = EARTH_RADIUS_M * cosine * (longitude_step * rad)
+    dy = EARTH_RADIUS_M * (-latitude_step * rad)
+    two_dx = (2.0 * dx)[:, None]
+    two_dy = 2.0 * dy
+
+    def d_dx(f: np.ndarray) -> np.ndarray:
+        return (np.roll(f, -1, axis=1) - np.roll(f, 1, axis=1)) / two_dx
+
+    def d_dy(f: np.ndarray) -> np.ndarray:
+        return (np.roll(f, 1, axis=0) - np.roll(f, -1, axis=0)) / two_dy
+
+    dst = d_dx(u) - d_dy(v)
+    dsh = d_dx(v) + d_dy(u)
+    deformation = np.sqrt(dst * dst + dsh * dsh)
+    du = planes[f"ugrd{above}"] - planes[f"ugrd{below}"]
+    dv = planes[f"vgrd{above}"] - planes[f"vgrd{below}"]
+    dz = np.maximum(planes[f"hgt{above}"] - planes[f"hgt{below}"], 1.0)
+    shear = np.sqrt(du * du + dv * dv) / dz
+    ti1 = shear * deformation
+    valid = np.zeros((rows, columns), dtype=bool)
+    valid[1:-1] = True
+    valid &= (np.abs(latitudes) <= CAT_POLAR_LATITUDE)[:, None]
+    if not wraps:
+        valid[:, 0] = False
+        valid[:, -1] = False
+    return np.where(valid, ti1, 0.0), valid
+
+
+def derive_cat(
+    planes: Mapping[str, np.ndarray],
+    bundle_id: str,
+    latitudes: np.ndarray,
+    longitude_step: float,
+    latitude_step: float,
+    wraps: bool,
+    calibration: tuple[float, float],
+) -> np.ndarray:
+    """The clear-air turbulence on one isobaric surface as an eddy
+    dissipation rate in m^(2/3)/s: :func:`ellrod_ti1` projected from its
+    own lognormal fit ``calibration = (mean, standard deviation)`` of ln TI1
+    onto the climatological ln EDR distribution (Sharman & Pearson 2017).
+    After TI1, in float64 and this order:
+
+    1. ``b = CAT_EDR_LOG_STD / std``; ``a = CAT_EDR_LOG_MEAN - b * mean``
+       (scalars);
+    2. ``ln_ti1 = ln(max(TI1, CAT_TI1_FLOOR))``;
+    3. ``EDR = exp(a + b * ln_ti1)``;
+    4. ``EDR = 0`` where ``EDR < CAT_EDR_NIL`` (strictly: 0.10 itself
+       keeps its code);
+    5. 0 wherever TI1 is undefined — the codebook floor, drawn as no
+       turbulence, since a plane carries no nodata.
+    """
+    level = cat_level(bundle_id)
+    if level is None:
+        raise ConversionError(f"{bundle_id} is not a clear-air turbulence bundle")
+    mean, std = calibration
+    ti1, valid = ellrod_ti1(planes, level, latitudes, longitude_step, latitude_step, wraps)
+    b = CAT_EDR_LOG_STD / std
+    a = CAT_EDR_LOG_MEAN - b * mean
+    ln_ti1 = np.log(np.maximum(ti1, CAT_TI1_FLOOR))
+    edr = np.exp(a + b * ln_ti1)
+    edr = np.where(edr < CAT_EDR_NIL, 0.0, edr)
+    return np.where(valid, edr, 0.0)
+
+
+def uncropped_shape(grid: GridInfo) -> tuple[int, int]:
+    """``(rows, columns)`` of a variable's plane before its crop window is
+    cut: the published grid's, or the crop's source grid's."""
+    if grid.crop is None:
+        return grid.height, grid.width
+    return grid.crop.source_height, grid.crop.source_width
+
+
+def uncropped_latitudes(grid: GridInfo) -> np.ndarray:
+    """The centre latitude of every row of the uncropped plane, in degrees:
+    ``first_latitude + (row - crop_row_start) * latitude_step`` in float64,
+    the published grid's own origin and step counted from the crop's first
+    row (0 without a crop)."""
+    rows, _columns = uncropped_shape(grid)
+    row_start = grid.crop.row_start if grid.crop is not None else 0
+    return np.array(
+        [grid.first_latitude + float(row - row_start) * grid.latitude_step for row in range(rows)],
+        dtype=np.float64,
+    )
+
+
+def uncropped_wraps(grid: GridInfo) -> bool:
+    """Whether the uncropped plane's columns run all the way round."""
+    _rows, columns = uncropped_shape(grid)
+    return abs(columns * grid.longitude_step - 360.0) < 1e-6
+
+
+def _derive_cat_plane(
+    planes: Mapping[str, np.ndarray],
+    bundle_id: str,
+    grid: GridInfo,
+    calibration: Mapping[int, tuple[float, float]],
+) -> np.ndarray:
+    """One ``cat<level>`` frame on the published (cropped) grid, derived on
+    the uncropped planes and only then cut to the window."""
+    level = cat_level(bundle_id)
+    assert level is not None
+    if level not in calibration:
+        raise ConversionError(f"the source publishes {bundle_id} without a ln TI1 calibration for {level} hPa")
+    shape = uncropped_shape(grid)
+    edr = derive_cat(
+        {variable_id: planes[variable_id].reshape(shape) for variable_id in DERIVED_SCALARS[bundle_id]},
+        bundle_id,
+        uncropped_latitudes(grid),
+        grid.longitude_step,
+        grid.latitude_step,
+        uncropped_wraps(grid),
+        calibration[level],
+    )
+    if grid.crop is not None:
+        edr = grid.crop.take(edr)
+    return np.ascontiguousarray(edr).ravel()
+
+
 def derive_scalar(values: dict[str, np.ndarray], bundle_id: str) -> np.ndarray:
     """The one plane of a derived scalar bundle: the equivalent potential
     temperature from the temperature and specific humidity on its surface,
@@ -1026,6 +1252,8 @@ def _extract_planes(
     grid: GridInfo | Mapping[str, GridInfo],
     work: Path,
     plane_source: PlaneSource | Mapping[str, PlaneSource] = GRIB_PLANE_SOURCE,
+    uncropped_ids: frozenset[str] = frozenset(),
+    uncropped: dict[str, np.ndarray] | None = None,
 ) -> dict[str, np.ndarray]:
     """Extract every requested band of one frame: a single gdal_translate
     per file the frame's variables live in — one for a GRIB record set,
@@ -1035,7 +1263,11 @@ def _extract_planes(
 
     ``grid`` is the published grid, or one per variable where the frame's
     families are on grids of their own; a file holds one family's records,
-    so the plane size is read off the grid of whatever the file carries."""
+    so the plane size is read off the grid of whatever the file carries.
+
+    Each of ``uncropped_ids`` is also put in ``uncropped`` as it was before
+    the crop window was cut, unit-converted the same way — the whole plane a
+    derivation reading neighbours needs (:func:`_derive_cat_plane`)."""
     order = list(frames)
     hour = frames[order[0]].lead_seconds
     values_by_id: dict[str, np.ndarray] = {}
@@ -1077,12 +1309,18 @@ def _extract_planes(
             plane = variable_grid.resample.take(plane)
         if variable_grid.downsample is not None:
             plane = variable_grid.downsample.take(plane)
+        whole = plane
         if variable_grid.crop is not None:
             plane = np.ascontiguousarray(variable_grid.crop.take(plane))
         plane = plane.ravel()
         if not np.isfinite(plane).all():
             raise ConversionError(f"Xue v1 requires complete planes, found non-finite values in {source}")
         planes[variable_id] = _convert_units(frames[variable_id], plane)
+        if uncropped is not None and variable_id in uncropped_ids:
+            if variable_grid.crop is None:
+                uncropped[variable_id] = planes[variable_id]
+            else:
+                uncropped[variable_id] = _convert_units(frames[variable_id], whole.ravel().copy())
     return planes
 
 
@@ -1443,6 +1681,7 @@ def _quantize_file(
     derived_vector_ids: tuple[str, ...] = (),
     drop_ids: frozenset[str] = frozenset(),
     derived_scalar_ids: tuple[str, ...] = (),
+    cat_calibration: Mapping[int, tuple[float, float]] | None = None,
 ) -> tuple[int, dict[str, np.ndarray], list[PlaneStats]]:
     """Extract and quantize every variable of one file; runs on a worker thread.
 
@@ -1451,6 +1690,9 @@ def _quantize_file(
     from the planes just extracted, and ``drop_ids`` the inputs that served
     only such a derivation and are not themselves published — they are
     released here rather than quantized and carried through the whole run.
+    A clear-air turbulence bundle is derived on its inputs' uncropped planes
+    with the source's ``cat_calibration`` (level → ln TI1 mean and standard
+    deviation).
 
     Derived-precipitation sources (ECMWF run-total tp, sflux window-averaged
     prate_ave) difference against the previous file's raw plane. Instead of
@@ -1466,8 +1708,17 @@ def _quantize_file(
     # The precipitation derivations below are GRIB-only, and every GRIB record
     # is a whole hour out, so they can work in hours.
     hour = lead // binformat.HOUR_SECONDS
+    cat_ids = tuple(bundle_id for bundle_id in derived_scalar_ids if cat_level(bundle_id) is not None)
+    uncropped: dict[str, np.ndarray] = {}
     try:
-        values = _extract_planes(frames, grid, work, plane_source)
+        values = _extract_planes(
+            frames,
+            grid,
+            work,
+            plane_source,
+            frozenset(variable_id for bundle_id in cat_ids for variable_id in DERIVED_SCALARS[bundle_id]),
+            uncropped,
+        )
     except BaseException as exc:
         # Unblock the successor waiting on this worker's plane.
         if own_precipitation is not None:
@@ -1511,7 +1762,13 @@ def _quantize_file(
         u_id, v_id = VECTOR_BUNDLES[bundle_id]
         values[u_id], values[v_id] = derive_vector(values, bundle_id)
     for bundle_id in derived_scalar_ids:
-        values[bundle_id] = derive_scalar(values, bundle_id)
+        if bundle_id in cat_ids:
+            values[bundle_id] = _derive_cat_plane(
+                uncropped, bundle_id, _grid_for(grid, DERIVED_SCALARS[bundle_id][0]), cat_calibration or {}
+            )
+        else:
+            values[bundle_id] = derive_scalar(values, bundle_id)
+    uncropped.clear()
     for variable_id in drop_ids:
         values.pop(variable_id, None)
     codes: dict[str, np.ndarray] = {}
@@ -2199,6 +2456,7 @@ def convert_bin(
         # Derived after the vapour flux and before the derivation-only inputs
         # are dropped: both read spfh850.
         derived_scalar_ids = available_derived_ids
+        cat_calibration = {level: (mean, std) for level, mean, std in source.cat_calibration}
         with ThreadPoolExecutor(max_workers=_EXTRACT_WORKERS) as executor:
             results = executor.map(
                 lambda item: _quantize_file(
@@ -2213,6 +2471,7 @@ def convert_bin(
                     derived_vector_ids,
                     drop_ids,
                     derived_scalar_ids,
+                    cat_calibration,
                 ),
                 sharing_plan(),
             )
