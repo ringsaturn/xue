@@ -23,6 +23,7 @@ use crate::encode::variables::{
     WAVE_VECTOR_COMPONENT_IDS,
 };
 use crate::encode::gdalio::{needs_serial_access, netcdf_guard, Dataset};
+use crate::encode::gribpng::GribPngFile;
 use crate::encode::grid::{
     crop_grid, normalize_longitudes, snap_global_longitudes, snap_regional_steps, GridInfo,
 };
@@ -973,6 +974,7 @@ fn extract_planes(
         // source.
         let _serial = needs_serial_access(source).then(netcdf_guard);
         let dataset = Dataset::open(source)?;
+        let png = GribPngFile::open(source);
         if dataset.size() != (source_width, source_height) {
             return Err(EncodeError::conversion(format!(
                 "extracted plane size mismatch for {}",
@@ -981,7 +983,10 @@ fn extract_planes(
         }
         let unscale = plane_sources.for_variable(&file_frames[0].0)?.unscale;
         for (variable_id, frame) in file_frames {
-            let mut plane = dataset.read_band_f64(frame.band)?;
+            let mut plane = match &png {
+                Some(png) => png.read_band_f64(&dataset, frame.band)?,
+                None => dataset.read_band_f64(frame.band)?,
+            };
             if unscale {
                 let band = dataset.band_info(frame.band)?;
                 if band.scale != 1.0 || band.offset != 0.0 {

@@ -36,6 +36,7 @@ pub mod errors;
 pub mod gdalio;
 pub mod grid;
 pub(crate) mod gribindex;
+pub(crate) mod gribpng;
 pub(crate) mod inspect;
 pub(crate) mod manifest;
 pub(crate) mod metadata;

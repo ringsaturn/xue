@@ -23,7 +23,7 @@ of it.
 | Stage | Python | Native |
 |---|---|---|
 | grid + band metadata | `gdalinfo -json` subprocess | `gdal-sys` (georust) in process, exported back to Python as `xue.gdal_info` so `xuebuild` can inspect without a system GDAL |
-| plane extraction | `gdal_translate` → ENVI → `np.fromfile` | `GDALRasterIO` into a `Vec<f64>` |
+| plane extraction | `gdal_translate` → ENVI → `np.fromfile` | `GDALRasterIO` into a `Vec<f64>`; PNG-packed GRIB2 (template 5.41, every MRMS product) inflated directly (`gribpng.rs`), with the single-precision unpack calibrated against one GDAL read per process |
 | GRIB2 record index | hand-rolled section walker (`xuebuild/grib2.py`) | [grib-rs](https://github.com/noritada/grib-rs) |
 | compression | `compression.zstd` / `zstd` CLI | `zstd` crate (`ZSTD_compress2`) |
 | poster deflate | `zlib.compress(level=9)` | `flate2` on libz |
@@ -34,6 +34,14 @@ of it.
 `gdal` 0.19, the safe wrapper does not compile against GDAL 3.13 (its
 `GDALDataType` and `GDALRasterIOExtraArg` changed shape). The surface needed
 here is a dozen stable C functions (`src/gdalio.rs`).
+
+GDAL's GRIB driver takes about 0.3 s to unpack one 7000 × 3500 MRMS plane
+whose PNG inflates in under 10 ms; `gribpng.rs` reads it in about 80 ms. Its
+values must be GDAL's to the bit. g2clib computes `refD + bdscale × X` in
+single precision, and whether that multiply-add is fused depends on how the
+linked GDAL was compiled. So the first eligible plane is read both ways, and
+the arithmetic that reproduces GDAL is used from then on. If neither does,
+every read stays on GDAL.
 
 ## Building
 
