@@ -77,7 +77,16 @@ Facts worth getting right:
   minutes, so a frame with no new scan behind it repeats the last one over
   that radar's coverage), which is also the sixth live source: a rolling
   window of the last three to four hours, rebuilt every five minutes and
-  reaching to within about three minutes of real time. `jma` is the seventh
+  reaching to within about three minutes of real time. `mrms3d` is the
+  same mosaic's 3D reflectivity: 33 constant-altitude levels from 0.5 to
+  19 km above mean sea level (every 0.25 km to 3 km, every 0.5 km to 9 km,
+  every 1 km above), one frame every ten minutes from the scan at each
+  mark, thinned by block maximum to 0.05°, all levels in one `refl3d`
+  bundle (variables `refl500` … `refl19000`, dBZ, GRIB2 209/9/0 on surface
+  102 at the altitude in metres); a rolling window of the last three to
+  four hours, rebuilt every ten minutes. The viewer draws it as a
+  raymarched volume on the flat map only (`?vexag=` sets the vertical
+  exaggeration, 10 by default); on the globe it draws nothing. `jma` is the seventh
   live source and the third observation: the Japan Meteorological Agency's
   high-resolution precipitation nowcast analysis (高解像度降水ナウキャスト)
   over Japan, five-minute frames decoded from the agency's map tiles onto a
@@ -200,7 +209,7 @@ Facts worth getting right:
   hours ending at the frame. CMA:
   `cref`. MRMS: `cref` (observed composite reflectivity, dBZ) and `prate`
   (the MRMS precipitation rate, mm/h; a case may ship the reflectivity
-  alone). JMA: `prate` (precipitation intensity class representative rate,
+  alone). MRMS3D: `refl3d` (the 33-level volume above). JMA: `prate` (precipitation intensity class representative rate,
   mm/h). HIMAWARI: `ir104` (10.4 µm brightness temperature, K) and
   `dustrgb` (the Dust RGB's red, green and blue guns, 0–1, a composite
   with no physical unit) and `dustcf` (the DEBRA dust confidence, 0–1;
@@ -266,7 +275,7 @@ fall back to defaults rather than fail, so a constructed link always opens.
   local hours and a row per field, the nearest airport's METAR reports
   (within 40 km) as a block of the same shape; values are the model's
   nearest grid cell, not interpolated. The viewer's point probe links here.
-- `?model=gfs|sflux|ecmwf|aifs|ifshres|hrrr|gefsaero|cfs|mrms|jma|cma|himawari|goeseast|goeswest|meteosat|aurora|geo`
+- `?model=gfs|sflux|ecmwf|aifs|ifshres|hrrr|gefsaero|cfs|mrms|mrms3d|jma|cma|himawari|goeseast|goeswest|meteosat|aurora|geo`
   — which live source (`ifs` is an alias of `ecmwf`, `aifs-single` of
   `aifs`, `hres` / `ifs9km` of `ifshres`, `cfsv2` of `cfs`, `hrpns` of `jma`, `radar` of `cma`, `himawari-9` / `ahi` of
   `himawari`, `goes-19` / `goes-18` of `goeseast` / `goeswest`, `mtg` /
@@ -370,7 +379,7 @@ https://dataset.ringsaturn.me/xue/. The contract is two layers:
 
 - One mutable live pointer per source (JSON, schema 1): `latest.json` (GFS),
   `latest-sflux.json`, `latest-ecmwf.json`, `latest-aifs.json`,
-  `latest-ifshres.json`, `latest-hrrr.json`, `latest-gefsaero.json`, `latest-cfs.json`, `latest-mrms.json`, `latest-jma.json`, `latest-cma.json`,
+  `latest-ifshres.json`, `latest-hrrr.json`, `latest-gefsaero.json`, `latest-cfs.json`, `latest-mrms.json`, `latest-mrms3d.json`, `latest-jma.json`, `latest-cma.json`,
   `latest-himawari.json`, `latest-goeseast.json`, `latest-goeswest.json`,
   `latest-meteosat.json`. Fields: `schemaVersion`, `model`, `product`, `run`
   (YYYYMMDDHH, UTC), `runTime` (ISO 8601), `manifestPath` (relative),
