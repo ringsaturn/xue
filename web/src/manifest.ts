@@ -204,9 +204,9 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
   },
   // The same NOAA mosaic's 3D reflectivity: 33 constant-altitude levels
   // (0.5 to 19 km above mean sea level) of one ten-minute scan each, in
-  // one `refl3d` bundle thinned to 0.05°. A dataset of its own, with its
-  // own rolling window and pointer, drawn by the volume layer (volume.ts)
-  // on the plane and on the globe.
+  // one `refl3d` bundle thinned to 0.05°, drawn by the volume layer
+  // (volume.ts) on the plane and on the globe. Not in the model sheet: it
+  // is reached through showcase cases (and `?model=mrms3d`).
   mrms3d: {
     id: "mrms3d",
     label: "NOAA-MRMS3D",

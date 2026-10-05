@@ -83,8 +83,8 @@ Facts worth getting right:
   every 1 km above), one frame every ten minutes from the scan at each
   mark, thinned by block maximum to 0.05°, all levels in one `refl3d`
   bundle (variables `refl500` … `refl19000`, dBZ, GRIB2 209/9/0 on surface
-  102 at the altitude in metres); a rolling window of the last three to
-  four hours, rebuilt every ten minutes. The viewer draws it as a
+  102 at the altitude in metres). It is not published live: it appears in
+  showcase cases only (`/showcase.html`). The viewer draws it as a
   raymarched volume, on the plane and on the globe (`?vexag=` sets the
   vertical exaggeration, 10 by default). `jma` is the seventh
   live source and the third observation: the Japan Meteorological Agency's
@@ -275,7 +275,7 @@ fall back to defaults rather than fail, so a constructed link always opens.
   local hours and a row per field, the nearest airport's METAR reports
   (within 40 km) as a block of the same shape; values are the model's
   nearest grid cell, not interpolated. The viewer's point probe links here.
-- `?model=gfs|sflux|ecmwf|aifs|ifshres|hrrr|gefsaero|cfs|mrms|mrms3d|jma|cma|himawari|goeseast|goeswest|meteosat|aurora|geo`
+- `?model=gfs|sflux|ecmwf|aifs|ifshres|hrrr|gefsaero|cfs|mrms|jma|cma|himawari|goeseast|goeswest|meteosat|aurora|geo`
   — which live source (`ifs` is an alias of `ecmwf`, `aifs-single` of
   `aifs`, `hres` / `ifs9km` of `ifshres`, `cfsv2` of `cfs`, `hrpns` of `jma`, `radar` of `cma`, `himawari-9` / `ahi` of
   `himawari`, `goes-19` / `goes-18` of `goeseast` / `goeswest`, `mtg` /
@@ -379,7 +379,7 @@ https://dataset.ringsaturn.me/xue/. The contract is two layers:
 
 - One mutable live pointer per source (JSON, schema 1): `latest.json` (GFS),
   `latest-sflux.json`, `latest-ecmwf.json`, `latest-aifs.json`,
-  `latest-ifshres.json`, `latest-hrrr.json`, `latest-gefsaero.json`, `latest-cfs.json`, `latest-mrms.json`, `latest-mrms3d.json`, `latest-jma.json`, `latest-cma.json`,
+  `latest-ifshres.json`, `latest-hrrr.json`, `latest-gefsaero.json`, `latest-cfs.json`, `latest-mrms.json`, `latest-jma.json`, `latest-cma.json`,
   `latest-himawari.json`, `latest-goeseast.json`, `latest-goeswest.json`,
   `latest-meteosat.json`. Fields: `schemaVersion`, `model`, `product`, `run`
   (YYYYMMDDHH, UTC), `runTime` (ISO 8601), `manifestPath` (relative),
