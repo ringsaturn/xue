@@ -5244,7 +5244,10 @@ function updateVariablePresentation(session: VariableSession): void {
   syncDerivedLegend();
   // A radar drawn alone keeps the legend for its own scale.
   const radarProduct = legend.dataset.radar;
-  if (radarProduct === "n0b" || radarProduct === "n0g") renderRadarLegend(radarProduct, true);
+  if (radarProduct === "n0b" || radarProduct === "n0g") {
+    renderRadarLegend(radarProduct, true);
+    if (lastRadarReadout) applyRadarTitle(lastRadarReadout);
+  }
   if (experimentEnabled && session.chartId === "prate") {
     const key = steppedPrecipitationLegend();
     legendBar.style.background = key.gradient;
@@ -6729,7 +6732,48 @@ function ensureRadarLevelGroup(): NonNullable<typeof radarLevelGroup> {
   return radarLevelGroup;
 }
 
+/** The readout last drawn, so a field change under an open site can put
+ * the radar's title back over the field's. */
+let lastRadarReadout: RadarReadout | null = null;
+/** The field's own stamp, kept while a site's sweep time stands in it. */
+let fieldStampText = "";
+
+function stampField(text: string): void {
+  fieldStampText = text;
+  if (!legend.dataset.radar) sayText(runTime, text);
+}
+
+const RADAR_TITLES = { n0b: "Base Reflectivity", n0g: "Base Velocity" } as const;
+const RADAR_CODES = { n0b: "N0B", n0g: "N0G" } as const;
+
+/** The headline names what is on screen: with a site open, its product and
+ * the radar, in the instrument English every headline is in; the page's
+ * own title, which is localized, follows on a live view. */
+function applyRadarTitle(readout: RadarReadout): void {
+  variableTitle.textContent = RADAR_TITLES[readout.product];
+  variableCode.textContent = `NEXRAD / ${readout.site.icao} ${RADAR_CODES[readout.product]}`;
+  modelEyebrow.textContent = "NOAA / NWS NEXRAD";
+  runTimeLabel.textContent = t("latestObservation");
+  if (readout.sweepTime !== null) sayText(runTime, formatStamp(readout.sweepTime, "UTC"));
+  if (!activeCase) {
+    applyPageMeta({
+      path: "/",
+      title: t("pageTitleLiveObservation", {
+        variable: t(readout.product === "n0b" ? "radarReflectivity" : "radarVelocity"),
+        model: `NEXRAD ${readout.site.icao}`,
+        hours: String(Math.round(radarWindowHours())),
+      }),
+      description: t("metaDescription"),
+    });
+  }
+}
+
+function radarWindowHours(): number {
+  return radarWindow ? radarWindow.window.windowSeconds / 3600 : 3;
+}
+
 function renderRadarChip(readout: RadarReadout | null): void {
+  lastRadarReadout = readout;
   if (!readout) {
     radarLevelGroup?.root.remove();
     radarLevelGroup = null;
@@ -6775,6 +6819,7 @@ function renderRadarChip(readout: RadarReadout | null): void {
     button.title = pressed ? t("radarCloseAria") : "";
   }
   renderRadarLegend(readout.product);
+  applyRadarTitle(readout);
 }
 
 /** The field legend, showing the radar's scale while a site is alone. */
@@ -6798,6 +6843,9 @@ function restoreFieldLegend(): void {
   if (legend.dataset.radar === undefined) return;
   delete legend.dataset.radar;
   legendFolded.hidden = true;
+  if (fieldStampText) sayText(runTime, fieldStampText);
+  applyDatasetWording();
+  // The field's own headline, legend and page title.
   if (activeSession) updateVariablePresentation(activeSession);
 }
 
@@ -7203,7 +7251,7 @@ function syncTimeline(session: VariableSession): void {
   // An observation window is named by its newest frame, not by where it
   // starts: that is what a viewer of a live feed wants to know. Stamped in
   // UTC like a run cycle.
-  if (showingObservations()) sayText(runTime, formatStamp(frameValidTime(frameCount() - 1), "UTC"));
+  if (showingObservations()) stampField(formatStamp(frameValidTime(frameCount() - 1), "UTC"));
   if (previous && sameTimeAxis(previous, time)) {
     return;
   }
@@ -8130,7 +8178,7 @@ async function initialize({ frame = false }: { frame?: boolean } = {}): Promise<
     // whatever zone the valid times below read in. An observation window's
     // runTime is only where it starts; its line is stamped with the newest
     // frame once the session's axis is known (syncTimeline).
-    if (!showingObservations()) sayText(runTime, formatStamp(loadedManifest.runTime, "UTC"));
+    if (!showingObservations()) stampField(formatStamp(loadedManifest.runTime, "UTC"));
 
     // A slot this run does not ship empties; a case names its own default
     // for when that leaves nothing, and a live run always carries its core
