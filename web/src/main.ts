@@ -282,6 +282,7 @@ import {
   type VideoStreamSource,
 } from "./webcodecs";
 import { spawnZarrWorker, zarrInitMessage, zarrObjectUrl, zarrRootUrl, zarrStoreFor } from "./zarr/channel";
+import { DEFAULT_VERTICAL_EXAGGERATION, VOLUME_BUNDLE_LEVELS, VolumeLayer, volumeLevels, type VolumeLevels } from "./volume";
 
 // Rewrite the static shell into the detected locale and appearance before
 // anything renders.
@@ -409,6 +410,18 @@ function planeCellBudget(): number {
   if (lowMemoryDevice()) cells /= 2;
   if (constrainedConnection()) cells /= 4;
   return cells;
+}
+
+/** A volume's tiers weighed for the whole stack: four planes' worth of the
+ * cell budget spread over its levels, so CONUS at 0.05° (33 levels of
+ * 0.98 M cells) takes the half tier until the view narrows to a share of
+ * it. */
+const VOLUME_PLANE_EQUIVALENT = 4;
+
+function volumeBudget(bundleId: string, budget: VariantBudget | undefined): VariantBudget | undefined {
+  const levels = VOLUME_BUNDLE_LEVELS.get(bundleId);
+  if (!budget || levels === undefined) return budget;
+  return { ...budget, cells: (budget.cells * VOLUME_PLANE_EQUIVALENT) / levels };
 }
 
 /** What `pickBundleVariant` needs to weigh a bundle's tiers against
@@ -1288,6 +1301,10 @@ interface VariableSession {
    * differ (ECMWF prate has no analysis frame), so a frame is found by lead
    * time rather than by index. */
   leadOffsets: Map<number, number> | null;
+  /** The altitude levels of a volume bundle (the MRMS reflectivity cube),
+   * drawn by the volume layer from all of them at once; null for every
+   * other bundle. */
+  volume: VolumeLevels | null;
 }
 
 /** Where a session's frame offset for a lead time comes from: exact match
@@ -1482,6 +1499,8 @@ function slotSessions(): VariableSession[] {
 let windLayer: WindParticleLayer | null = null;
 let windLayerAdded = false;
 let windLayerGridSource: BundleMetadata | null = null;
+let volumeLayer: VolumeLayer | null = null;
+let volumeLayerAdded = false;
 
 /** One field the experiment computes: its layer, the grid it was last
  * configured for, and the input planes the plane on screen was built from
@@ -3595,7 +3614,13 @@ function blendTowardNext(timestamp: number): void {
   // One coverage box serves both slots, so a pair decoded for different views
   // (a pan mid-playback) holds the current image instead of blending a plane
   // against another frame's stale bytes.
-  if (current && upcoming && sameTileRects(current[0]!.tiles, upcoming[0]!.tiles)) {
+  if (current && upcoming && session.volume) {
+    volumeLayer?.setBlend(
+      current.map((frame) => frame.plane),
+      upcoming.map((frame) => frame.plane),
+      weight,
+    );
+  } else if (current && upcoming && sameTileRects(current[0]!.tiles, upcoming[0]!.tiles)) {
     ensureSlotGrid(slot, session);
     slot.layer.setBlend(
       displayPlane(session, activeFrameIndex, current),
@@ -3701,6 +3726,8 @@ function sessionViewportTiles(session: VariableSession): TileRect[] | null {
   if (session.resident && session.residentScope === "bundle") return null;
   if (session.vector && view.particles) return null;
   if (isCompositeInput(session)) return null;
+  // A ray may cross any part of the volume, so it is held whole.
+  if (session.volume) return null;
   const bounds = map.getBounds();
   return viewportTileRects(session.metadata, session.tiles, {
     west: bounds.getWest(),
@@ -3966,7 +3993,9 @@ function trySelectFrame(index: number): boolean {
       planeCache.set(key, planes[position]!);
     }
     ensureSlotGrid(slot, session);
-    if (session.composite) {
+    if (session.volume) {
+      volumeLayer?.setFrame(planes.map((plane) => plane!.plane));
+    } else if (session.composite) {
       // One coverage box serves the three guns, so it has to be a box all
       // three planes hold: their own tiles when they agree, the view's
       // otherwise — cachedFrame has already proved every plane covers that.
@@ -5441,7 +5470,7 @@ function loadVariable(
       // The caller may have weighed the rung already (`retierPrimary`),
       // and then nothing here is read at all.
       if (options.tier !== undefined) return options.tier;
-      const budget = bundleVariantBudget(descriptor, run.bundles);
+      const budget = volumeBudget(variableId, bundleVariantBudget(descriptor, run.bundles));
       return pickBundleVariant(
         descriptor.variants,
         neededGridWidth(),
@@ -5594,9 +5623,14 @@ function loadVariable(
     // is one whose two variables are a component pair in the table, and the
     // u/v order is the table's. A file this build cannot place renders its
     // first variable as a plain scalar.
-    const derived = identifyBundle(bundleMetadata.variables);
-    const sessionVariables = derived?.variables ?? fallbackVariables(variableId, bundleMetadata);
-    const identity = derived?.identity ?? null;
+    // A volume bundle is one quantity on many altitudes; a frame of it is
+    // every level, and its colours are the composite reflectivity's.
+    const volume = VOLUME_BUNDLE_LEVELS.has(variableId) ? volumeLevels(bundleMetadata.variables) : null;
+    const derived = volume ? null : identifyBundle(bundleMetadata.variables);
+    const sessionVariables = volume?.variables ?? derived?.variables ?? fallbackVariables(variableId, bundleMetadata);
+    const identity: VariableIdentity | null = volume
+      ? { family: "cref", level: null, vector: false }
+      : (derived?.identity ?? null);
     warnOnIdentityMismatch(variableId, identity);
     const session: VariableSession = {
       id: variableId,
@@ -5622,6 +5656,7 @@ function loadVariable(
       residentScope: "bundle",
       viewTiles: null,
       leadOffsets: null,
+      volume,
     };
     // Streaming progress may have raced ahead of session registration.
     const early = pendingStream.get(variableKey);
@@ -6425,7 +6460,17 @@ function floorIsNoData(chartId: KnownBundleId | null): boolean {
 function configureSlotLayer(slot: RasterSlot, session: VariableSession, overlay: boolean): void {
   slot.session = session;
   const { layer } = slot;
-  if (session.composite) {
+  if (session.volume) {
+    // The volume layer draws it; the plane layer would show one level flat.
+    layer.setCompositeField(null);
+    layer.setVectorField(null);
+    layer.setContours(null);
+    layer.setPalette(buildPalette(session.variable, session.identity));
+    layer.setVisible(false);
+    const volumeView = ensureVolumeLayer();
+    volumeView.configure(geoGrid(session.metadata), session.volume);
+    volumeView.setPalette(buildPalette(session.variable, session.identity));
+  } else if (session.composite) {
     // A composite is a picture: its three guns drawn straight as colour
     // through the same projection, blend and coverage clip, no palette.
     const field = compositeField(session);
@@ -6567,6 +6612,21 @@ function setParticlesEnabled(next: boolean): void {
   // still has to be handed the planes it was not being given.
   const target = requestedFrameIndex ?? activeFrameIndex;
   if (target !== null) trySelectFrame(target);
+}
+
+/** Create the radar volume layer on first use, above the plane layers and
+ * below the boundary lines. `?vexag=` sets its vertical exaggeration. */
+function ensureVolumeLayer(): VolumeLayer {
+  if (!volumeLayer) {
+    const asked = Number(new URLSearchParams(window.location.search).get("vexag"));
+    const exaggeration = Number.isFinite(asked) && asked > 0 && asked <= 200 ? asked : DEFAULT_VERTICAL_EXAGGERATION;
+    volumeLayer = new VolumeLayer((message) => showError(message), exaggeration);
+  }
+  if (!volumeLayerAdded) {
+    map.addLayer(volumeLayer, FORECAST_ANCHOR_LAYER);
+    volumeLayerAdded = true;
+  }
+  return volumeLayer;
 }
 
 /** Create the wind particle layer on first use, above the scalar plane and
@@ -6729,6 +6789,7 @@ function applyVariable(session: VariableSession): void {
     windLayer?.setInk(particleInk());
   }
   windLayer?.setVisible(wind && view.particles);
+  volumeLayer?.setVisible(session.volume !== null);
   applyOverlays();
   applyMosaicMembers();
   applyComposite();

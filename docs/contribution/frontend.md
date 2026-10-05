@@ -20,6 +20,7 @@ Storms, soundings and airports: [point-products.md](point-products.md).
 | `layer.ts`, `particles.ts`, `isolines.ts` + `labels.worker.ts` | Raster layer, wind particles, contour labels. |
 | `projection.ts`, `terrain.ts` | Plane / globe projection and terrain draping for the custom layers; DEM readout. |
 | `viewcontrol.ts` | The view tile under the zoom tile: globe and relief switches, reset north / tilt. |
+| `volume.ts` | The radar volume (`refl3d`): a 3D texture per frame, raymarched in a Mercator box. |
 | `palettes.ts`, `units.ts`, `domain.ts` | Ramps, display units, regional footprints. |
 | `playback.ts`, `timeline.ts` | Frame-rate ladder and dwell; transport geometry. |
 | `probe.ts`, `meteogram.ts` | Point probe and its rows. |
@@ -139,6 +140,22 @@ and the window shrinks to fit it.
   while the camera is turned or tilted, and the rail's box starts under
   the column wherever it ends (`--controls-bottom`). Phones drop only the
   zoom tile (pinch zooms; nothing switches the globe or the relief).
+- Radar volume (`volume.ts`, `?model=mrms3d`): a volume bundle's levels
+  (one quantity on GRIB2 surface 102, ascending) are the session's
+  variables, every one decoded per frame, the session whole (a ray can
+  cross any of it) and its tier weighed for the stack (four planes' worth
+  of the cell budget). The levels go into an R8 3D texture per frame (two,
+  blended by `u_mix`; halved by block maximum past `MAX_3D_TEXTURE_SIZE`)
+  and are raymarched front to back in a Mercator box from sea level to
+  half a step over the top level, `?vexag=` times its height (10 by
+  default). The camera comes from the projection matrix's x, y and w rows
+  (its depth row is not invertible); each pixel's ray runs from the camera
+  to the box face it lies on, and only the exit face draws. A 1D lookup
+  takes altitude to the uneven level spacing. Colour is the cref palette,
+  brightened with height; opacity rises from 18 to 60 dBZ and is per
+  voxel, so the step count does not change the picture. Flat Mercator
+  only (nothing on the globe), no terrain occlusion, and the tier is
+  picked at session open.
 - Altitude correction (`layer.ts::lapseCodes`): with relief on, a 2 m
   temperature is moved from the model's ground (the run's `orog` plane,
   decoded whole once and uploaded on its own grid) to the DEM's at
