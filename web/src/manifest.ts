@@ -206,7 +206,7 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
   // (0.5 to 19 km above mean sea level) of one ten-minute scan each, in
   // one `refl3d` bundle thinned to 0.05°. A dataset of its own, with its
   // own rolling window and pointer, drawn by the volume layer (volume.ts)
-  // on the flat map only.
+  // on the plane and on the globe.
   mrms3d: {
     id: "mrms3d",
     label: "NOAA-MRMS3D",

@@ -3,11 +3,11 @@
 // frame, the ray from the camera through each pixel of the box the volume
 // fills, front to back with a reflectivity transfer function.
 //
-// Flat Web Mercator only: the box is a Mercator box whose height is the
-// altitude scaled by one exaggerated metres-to-Mercator factor, so on the
-// globe the layer draws nothing (the field's own 2D layer is what a globe
-// shows of it). No terrain occlusion: the volume floats over the relief
-// from sea level up.
+// On the plane the box is a Mercator box whose height is the altitude
+// scaled by one exaggerated metres-to-Mercator factor; on the globe it is
+// a shell over the box in MapLibre's unit-sphere space, its own program,
+// the ray stopped by the planet. No terrain occlusion: the volume floats
+// over the relief from sea level up.
 
 import type { CustomLayerInterface, CustomRenderMethodInput, Map as MapLibreMap } from "maplibre-gl";
 import { MercatorCoordinate } from "maplibre-gl";
@@ -267,6 +267,115 @@ export function regionGrid(grid: VolumeGrid, region: GridRegion): VolumeGrid {
   };
 }
 
+/** MapLibre's globe radius, in metres: the unit sphere its globe matrix
+ * maps from is this many metres across a radius. */
+export const GLOBE_RADIUS = 6371008.8;
+
+/** A point in the unit-sphere space MapLibre's globe matrix maps from (the
+ * projection prelude's `projectToSphere`, y toward the north pole), lifted
+ * `metres` (already exaggerated) above the sphere. */
+export function spherePoint(longitude: number, latitude: number, metres = 0): [number, number, number] {
+  const lon = (longitude * Math.PI) / 180;
+  const lat = (latitude * Math.PI) / 180;
+  const radius = 1 + metres / GLOBE_RADIUS;
+  return [Math.sin(lon) * Math.cos(lat) * radius, Math.sin(lat) * radius, Math.cos(lon) * Math.cos(lat) * radius];
+}
+
+/** A closed mesh around a latitude/longitude box between the sphere and
+ * `top` metres (exaggerated) above it, in unit-sphere space, each vertex
+ * with its face's outward normal: the top and the floor subdivided so
+ * they follow the curve, and the four walls. Triangles, indexed. */
+export function globeShellMesh(
+  box: { west: number; east: number; south: number; north: number },
+  top: number,
+  columns = 48,
+  rows = 24,
+): { positions: Float32Array; normals: Float32Array; indices: Uint16Array } {
+  const positions: number[] = [];
+  const normals: number[] = [];
+  const indices: number[] = [];
+  const lonAt = (i: number) => box.west + ((box.east - box.west) * i) / columns;
+  const latAt = (j: number) => box.north + ((box.south - box.north) * j) / rows;
+  const push = (point: [number, number, number], normal: [number, number, number]) => {
+    positions.push(...point);
+    normals.push(...normal);
+    return positions.length / 3 - 1;
+  };
+  const radial = (lon: number, lat: number, sign: number): [number, number, number] =>
+    spherePoint(lon, lat).map((value) => value * sign) as [number, number, number];
+  // A grid of (u + 1) x (v + 1) vertices from `vertex(i, j)`, two triangles
+  // a cell.
+  const sheet = (u: number, v: number, vertex: (i: number, j: number) => number) => {
+    const at: number[][] = [];
+    for (let j = 0; j <= v; j += 1) {
+      at.push([]);
+      for (let i = 0; i <= u; i += 1) at[j]!.push(vertex(i, j));
+    }
+    for (let j = 0; j < v; j += 1) {
+      for (let i = 0; i < u; i += 1) {
+        const a = at[j]![i]!;
+        const b = at[j]![i + 1]!;
+        const c = at[j + 1]![i]!;
+        const d = at[j + 1]![i + 1]!;
+        indices.push(a, c, d, a, d, b);
+      }
+    }
+  };
+  // Top and floor: radial normals, out and in.
+  sheet(columns, rows, (i, j) => push(spherePoint(lonAt(i), latAt(j), top), radial(lonAt(i), latAt(j), 1)));
+  sheet(columns, rows, (i, j) => push(spherePoint(lonAt(i), latAt(j), 0), radial(lonAt(i), latAt(j), -1)));
+  // East and west walls: the meridian planes, whose normal is the
+  // direction of increasing longitude.
+  for (const [lon, sign] of [
+    [box.east, 1],
+    [box.west, -1],
+  ] as const) {
+    const radians = (lon * Math.PI) / 180;
+    const normal: [number, number, number] = [Math.cos(radians) * sign, 0, -Math.sin(radians) * sign];
+    sheet(rows, 1, (j, k) => push(spherePoint(lon, latAt(j), k * top), normal));
+  }
+  // North and south walls: cones of constant latitude, whose normal is the
+  // direction of increasing latitude at each longitude.
+  for (const [lat, sign] of [
+    [box.north, 1],
+    [box.south, -1],
+  ] as const) {
+    const phi = (lat * Math.PI) / 180;
+    sheet(columns, 1, (i, k) => {
+      const lambda = (lonAt(i) * Math.PI) / 180;
+      const normal: [number, number, number] = [
+        -Math.sin(lambda) * Math.sin(phi) * sign,
+        Math.cos(phi) * sign,
+        -Math.cos(lambda) * Math.sin(phi) * sign,
+      ];
+      return push(spherePoint(lonAt(i), lat, k * top), normal);
+    });
+  }
+  return { positions: Float32Array.from(positions), normals: Float32Array.from(normals), indices: Uint16Array.from(indices) };
+}
+
+/** A section's wall on the globe: a strip along the great circle from `a`
+ * to `b`, from the sphere to `top` metres (exaggerated) above it, as
+ * triangle-strip vertex pairs (ground, top). */
+export function globeSectionStrip(a: [number, number], b: [number, number], top: number, segments = 48): Float32Array {
+  const p = spherePoint(a[0], a[1]);
+  const q = spherePoint(b[0], b[1]);
+  const angle = Math.acos(Math.min(1, Math.max(-1, p[0] * q[0] + p[1] * q[1] + p[2] * q[2])));
+  const out: number[] = [];
+  for (let i = 0; i <= segments; i += 1) {
+    const t = i / segments;
+    // Spherical interpolation; a straight blend where the ends coincide.
+    const [wa, wb] =
+      angle < 1e-9 ? [1 - t, t] : [Math.sin((1 - t) * angle) / Math.sin(angle), Math.sin(t * angle) / Math.sin(angle)];
+    const point = [0, 1, 2].map((axis) => wa * p[axis]! + wb * q[axis]!);
+    const length = Math.hypot(...point);
+    const unit = point.map((value) => value / length);
+    const lifted = 1 + top / GLOBE_RADIUS;
+    out.push(...unit, ...unit.map((value) => value * lifted));
+  }
+  return Float32Array.from(out);
+}
+
 export const VOLUME_VERTEX_SHADER = `#version 300 es
 in vec3 a_position;
 uniform mat4 u_matrix;
@@ -391,6 +500,148 @@ void main() {
 }
 `;
 
+/** The globe's volume: the same march in unit-sphere space, through the
+ * shell between the sphere and the top over the box. Only the faces a ray
+ * leaves through draw (by their outward normal, not by winding), and a ray
+ * stops where it meets the planet. */
+export const VOLUME_GLOBE_VERTEX_SHADER = `#version 300 es
+in vec3 a_position;
+in vec3 a_normal;
+uniform mat4 u_matrix;
+out vec3 v_world;
+out vec3 v_normal;
+void main() {
+  v_world = a_position;
+  v_normal = a_normal;
+  gl_Position = u_matrix * vec4(a_position, 1.0);
+}
+`;
+
+export const VOLUME_GLOBE_FRAGMENT_SHADER = `#version 300 es
+precision highp float;
+precision highp sampler3D;
+in vec3 v_world;
+in vec3 v_normal;
+uniform vec3 u_camera;
+uniform float u_r_top;
+// metres of (unexaggerated) altitude per unit of radius above the sphere
+uniform float u_altitude_scale;
+uniform vec4 u_grid;
+uniform float u_top;
+uniform sampler3D u_volume_a;
+uniform sampler3D u_volume_b;
+uniform float u_mix;
+uniform sampler2D u_palette;
+uniform sampler2D u_levels;
+uniform vec3 u_codebook;
+uniform vec3 u_dbz;
+uniform float u_voxel;
+uniform float u_veil;
+out vec4 out_color;
+
+const int MAX_STEPS = ${MAX_STEPS};
+
+void main() {
+  vec3 ray = v_world - u_camera;
+  float hit = length(ray);
+  vec3 dir = ray / hit;
+  if (dot(v_normal, dir) <= 0.0) discard;
+  float b = dot(u_camera, dir);
+  float c = dot(u_camera, u_camera);
+  // The planet: a face behind it is drawn by the floor the ray meets first.
+  // The floor is the ground itself, but its triangles are chords that sag
+  // up to half a kilometre under the sphere, so a ray meets the sphere a
+  // little before its floor fragment: the floor is taken on the near half
+  // of the ray's way through the planet, every other face only short of
+  // the ground by more than a few kilometres.
+  float ground = b * b - (c - 1.0);
+  if (c > 1.0 && ground > 0.0) {
+    float root = sqrt(ground);
+    float near = -b - root;
+    float far = -b + root;
+    bool floor = dot(v_normal, v_world) < -0.99 * length(v_world);
+    if (floor ? hit > 0.5 * (near + far) : (near > 0.0 && near < hit - 1e-3)) discard;
+  }
+  float shell = b * b - (c - u_r_top * u_r_top);
+  float enter = c > u_r_top * u_r_top && shell > 0.0 ? -b - sqrt(shell) : 0.0;
+  enter = max(enter, 0.0);
+  float span = hit - enter;
+  if (span <= 0.0) discard;
+  int steps = int(clamp(ceil(span / u_voxel), 1.0, float(MAX_STEPS)));
+  float dt = span / float(steps);
+  float stride = dt / u_voxel;
+  vec4 sum = vec4(0.0);
+  for (int i = 0; i < MAX_STEPS; i += 1) {
+    if (i >= steps) break;
+    vec3 p = u_camera + dir * (enter + (float(i) + 0.5) * dt);
+    float r = length(p);
+    float lat = degrees(asin(clamp(p.y / r, -1.0, 1.0)));
+    float lon = degrees(atan(p.x, p.z));
+    vec2 uv = vec2((lon - u_grid.x) / u_grid.z, (u_grid.y - lat) / u_grid.w);
+    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) continue;
+    float altitude = (r - 1.0) * u_altitude_scale;
+    if (altitude < 0.0) continue;
+    float w = texture(u_levels, vec2(altitude / u_top, 0.5)).r;
+    vec3 coordinate = vec3(uv, w);
+    float code = mix(texture(u_volume_a, coordinate).r, texture(u_volume_b, coordinate).r, u_mix) * 255.0;
+    if (code > u_codebook.z + 0.5) continue;
+    float dbz = u_codebook.x + code * u_codebook.y;
+    float density = smoothstep(u_dbz.x, u_dbz.y, dbz) * u_dbz.z;
+    if (density <= 0.0) continue;
+    float alpha = 1.0 - pow(1.0 - min(density, 0.999), stride);
+    vec3 color = texture(u_palette, vec2((code + 0.5) / 256.0, 0.5)).rgb * (0.7 + 0.3 * w);
+    sum += (1.0 - sum.a) * vec4(color * alpha, alpha);
+    if (sum.a > 0.97) break;
+  }
+  if (sum.a <= 0.0) discard;
+  out_color = sum * u_veil;
+}
+`;
+
+/** The globe's section wall: positions straight in unit-sphere space. */
+export const SECTION_GLOBE_VERTEX_SHADER = `#version 300 es
+in vec3 a_position;
+uniform mat4 u_matrix;
+out vec3 v_world;
+void main() {
+  v_world = a_position;
+  gl_Position = u_matrix * vec4(a_position, 1.0);
+}
+`;
+
+export const SECTION_GLOBE_FRAGMENT_SHADER = `#version 300 es
+precision highp float;
+precision highp sampler3D;
+in vec3 v_world;
+uniform vec4 u_grid;
+uniform float u_altitude_scale;
+uniform float u_top;
+uniform sampler3D u_volume_a;
+uniform sampler3D u_volume_b;
+uniform float u_mix;
+uniform sampler2D u_palette;
+uniform sampler2D u_levels;
+uniform vec3 u_codebook;
+uniform vec2 u_dbz;
+out vec4 out_color;
+
+void main() {
+  float r = length(v_world);
+  float lat = degrees(asin(clamp(v_world.y / r, -1.0, 1.0)));
+  float lon = degrees(atan(v_world.x, v_world.z));
+  vec2 uv = vec2((lon - u_grid.x) / u_grid.z, (u_grid.y - lat) / u_grid.w);
+  if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) discard;
+  float w = texture(u_levels, vec2((r - 1.0) * u_altitude_scale / u_top, 0.5)).r;
+  vec3 coordinate = vec3(uv, w);
+  float code = mix(texture(u_volume_a, coordinate).r, texture(u_volume_b, coordinate).r, u_mix) * 255.0;
+  float dbz = u_codebook.x + code * u_codebook.y;
+  bool echo = code <= u_codebook.z + 0.5 && dbz >= u_dbz.x;
+  vec3 color = echo ? texture(u_palette, vec2((code + 0.5) / 256.0, 0.5)).rgb : vec3(0.93);
+  float alpha = echo ? 0.95 : 0.5;
+  out_color = vec4(color * alpha, alpha);
+}
+`;
+
 /** The veil over the march while a section stands in it. */
 const SECTION_VEIL = 0.35;
 
@@ -442,6 +693,17 @@ export class VolumeLayer implements CustomLayerInterface {
   private sectionUniforms = new Map<string, WebGLUniformLocation | null>();
   private sectionBuffer: WebGLBuffer | null = null;
   private sectionVao: WebGLVertexArrayObject | null = null;
+  /** The globe's programs and its shell mesh, built from the box. */
+  private globeProgram: WebGLProgram | null = null;
+  private globeUniforms = new Map<string, WebGLUniformLocation | null>();
+  private globeVao: WebGLVertexArrayObject | null = null;
+  private globeBuffers: WebGLBuffer[] = [];
+  private globeIndexCount = 0;
+  private globeDirty = true;
+  private sectionGlobeProgram: WebGLProgram | null = null;
+  private sectionGlobeUniforms = new Map<string, WebGLUniformLocation | null>();
+  private sectionGlobeVao: WebGLVertexArrayObject | null = null;
+  private sectionGlobeBuffer: WebGLBuffer | null = null;
 
   constructor(
     private readonly onUnsupported: (message: string) => void,
@@ -587,6 +849,44 @@ export class VolumeLayer implements CustomLayerInterface {
       gl.vertexAttribPointer(sectionLocation, 3, gl.FLOAT, false, 0, 0);
       gl.bindVertexArray(null);
     }
+    this.globeProgram = linkProgram(gl, VOLUME_GLOBE_VERTEX_SHADER, VOLUME_GLOBE_FRAGMENT_SHADER);
+    if (this.globeProgram) {
+      for (const name of [
+        "u_matrix", "u_camera", "u_r_top", "u_altitude_scale", "u_grid", "u_top", "u_volume_a", "u_volume_b",
+        "u_mix", "u_palette", "u_levels", "u_codebook", "u_dbz", "u_voxel", "u_veil",
+      ]) {
+        this.globeUniforms.set(name, gl.getUniformLocation(this.globeProgram, name));
+      }
+      this.globeVao = gl.createVertexArray();
+      this.globeBuffers = [gl.createBuffer()!, gl.createBuffer()!, gl.createBuffer()!];
+      gl.bindVertexArray(this.globeVao);
+      for (const [index, name] of ["a_position", "a_normal"].entries()) {
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.globeBuffers[index]!);
+        const at = gl.getAttribLocation(this.globeProgram, name);
+        gl.enableVertexAttribArray(at);
+        gl.vertexAttribPointer(at, 3, gl.FLOAT, false, 0, 0);
+      }
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.globeBuffers[2]!);
+      gl.bindVertexArray(null);
+    }
+    this.sectionGlobeProgram = linkProgram(gl, SECTION_GLOBE_VERTEX_SHADER, SECTION_GLOBE_FRAGMENT_SHADER);
+    if (this.sectionGlobeProgram) {
+      for (const name of [
+        "u_matrix", "u_grid", "u_altitude_scale", "u_top", "u_volume_a", "u_volume_b", "u_mix",
+        "u_palette", "u_levels", "u_codebook", "u_dbz",
+      ]) {
+        this.sectionGlobeUniforms.set(name, gl.getUniformLocation(this.sectionGlobeProgram, name));
+      }
+      this.sectionGlobeVao = gl.createVertexArray();
+      this.sectionGlobeBuffer = gl.createBuffer();
+      gl.bindVertexArray(this.sectionGlobeVao);
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.sectionGlobeBuffer);
+      const at = gl.getAttribLocation(this.sectionGlobeProgram, "a_position");
+      gl.enableVertexAttribArray(at);
+      gl.vertexAttribPointer(at, 3, gl.FLOAT, false, 0, 0);
+      gl.bindVertexArray(null);
+    }
+    this.globeDirty = true;
     this.slots = [0, 1].map(() => ({ texture: gl.createTexture()!, planes: null }));
     this.paletteTexture = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, this.paletteTexture);
@@ -610,6 +910,12 @@ export class VolumeLayer implements CustomLayerInterface {
       gl.deleteVertexArray(this.vao);
       gl.deleteProgram(this.program);
       gl.deleteProgram(this.sectionProgram);
+      gl.deleteProgram(this.globeProgram);
+      gl.deleteProgram(this.sectionGlobeProgram);
+      for (const buffer of this.globeBuffers) gl.deleteBuffer(buffer);
+      gl.deleteBuffer(this.sectionGlobeBuffer);
+      gl.deleteVertexArray(this.globeVao);
+      gl.deleteVertexArray(this.sectionGlobeVao);
       gl.deleteBuffer(this.sectionBuffer);
       gl.deleteVertexArray(this.sectionVao);
     }
@@ -621,7 +927,10 @@ export class VolumeLayer implements CustomLayerInterface {
   render(context: WebGLRenderingContext | WebGL2RenderingContext, input: CustomRenderMethodInput): void {
     const gl = context as WebGL2RenderingContext;
     if (!this.visible || !this.program || !this.grid || !this.slots[0]?.planes || !this.palette) return;
-    if (isGlobe(input)) return;
+    if (isGlobe(input)) {
+      this.renderGlobe(gl, input);
+      return;
+    }
     const matrix = input.defaultProjectionData.mainMatrix as ArrayLike<number>;
     const camera = cameraFromMatrix(matrix);
     if (!camera) return;
@@ -695,10 +1004,101 @@ export class VolumeLayer implements CustomLayerInterface {
     gl.bindVertexArray(null);
   }
 
+  /** The globe: the march through the shell over the box in unit-sphere
+   * space, then the section, if any, as a wall along its great circle.
+   * Nothing while the projection is between globe and plane. */
+  private renderGlobe(gl: WebGL2RenderingContext, input: CustomRenderMethodInput): void {
+    const data = input.defaultProjectionData;
+    if (!this.globeProgram || !this.globeVao || data.projectionTransition < 0.999) return;
+    const matrix = data.mainMatrix as ArrayLike<number>;
+    const camera = cameraFromMatrix(matrix);
+    if (!camera) return;
+    if (this.boxDirty) this.rebuildBox(gl);
+    if (this.levelsDirty) this.uploadLevels(gl);
+    const box = this.box!;
+    // Metres of the box's height above the sphere, exaggerated.
+    const lift = box.top * this.exaggeration;
+    if (this.globeDirty) {
+      const mesh = globeShellMesh(box, lift);
+      gl.bindVertexArray(this.globeVao);
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.globeBuffers[0]!);
+      gl.bufferData(gl.ARRAY_BUFFER, mesh.positions, gl.STATIC_DRAW);
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.globeBuffers[1]!);
+      gl.bufferData(gl.ARRAY_BUFFER, mesh.normals, gl.STATIC_DRAW);
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.globeBuffers[2]!);
+      gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, mesh.indices, gl.STATIC_DRAW);
+      gl.bindVertexArray(null);
+      this.globeIndexCount = mesh.indices.length;
+      this.globeDirty = false;
+    }
+    const uniform = (name: string) => this.globeUniforms.get(name)!;
+    const grid = [box.west, box.north, box.east - box.west, box.north - box.south] as const;
+    gl.useProgram(this.globeProgram);
+    gl.uniformMatrix4fv(uniform("u_matrix"), false, Float32Array.from(matrix));
+    gl.uniform3f(uniform("u_camera"), camera[0], camera[1], camera[2]);
+    gl.uniform1f(uniform("u_r_top"), 1 + lift / GLOBE_RADIUS);
+    gl.uniform1f(uniform("u_altitude_scale"), GLOBE_RADIUS / this.exaggeration);
+    gl.uniform4f(uniform("u_grid"), ...grid);
+    gl.uniform1f(uniform("u_top"), box.top);
+    gl.uniform1f(uniform("u_mix"), this.slots[1]!.planes ? this.mixWeight : 0);
+    gl.uniform3f(uniform("u_codebook"), ...this.codebook);
+    gl.uniform3f(uniform("u_dbz"), CLEAR_DBZ, DENSE_DBZ, VOXEL_OPACITY);
+    // One texel across, in radians of arc: the sphere's own unit.
+    gl.uniform1f(uniform("u_voxel"), (((box.east - box.west) / this.textureSize[0]) * Math.PI) / 180);
+    gl.uniform1f(uniform("u_veil"), this.section ? SECTION_VEIL : 1);
+    this.bindVolumeTextures(gl, uniform);
+    gl.disable(gl.DEPTH_TEST);
+    gl.disable(gl.CULL_FACE);
+    gl.depthMask(false);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    gl.bindVertexArray(this.globeVao);
+    gl.drawElements(gl.TRIANGLES, this.globeIndexCount, gl.UNSIGNED_SHORT, 0);
+    gl.bindVertexArray(null);
+
+    if (this.section && this.sectionGlobeProgram && this.sectionGlobeVao) {
+      const wall = globeSectionStrip(this.section[0], this.section[1], lift);
+      const sectionUniform = (name: string) => this.sectionGlobeUniforms.get(name)!;
+      gl.useProgram(this.sectionGlobeProgram);
+      gl.uniformMatrix4fv(sectionUniform("u_matrix"), false, Float32Array.from(matrix));
+      gl.uniform4f(sectionUniform("u_grid"), ...grid);
+      gl.uniform1f(sectionUniform("u_altitude_scale"), GLOBE_RADIUS / this.exaggeration);
+      gl.uniform1f(sectionUniform("u_top"), box.top);
+      gl.uniform1f(sectionUniform("u_mix"), this.slots[1]!.planes ? this.mixWeight : 0);
+      gl.uniform3f(sectionUniform("u_codebook"), ...this.codebook);
+      gl.uniform2f(sectionUniform("u_dbz"), SECTION_ECHO_DBZ, DENSE_DBZ);
+      this.bindVolumeTextures(gl, sectionUniform);
+      gl.bindVertexArray(this.sectionGlobeVao);
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.sectionGlobeBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER, wall, gl.DYNAMIC_DRAW);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, wall.length / 3);
+      gl.bindVertexArray(null);
+    }
+    gl.activeTexture(gl.TEXTURE0);
+  }
+
+  /** The two frames' volumes, the palette and the level lookup on units
+   * 0–3, for whichever program `uniform` belongs to. */
+  private bindVolumeTextures(gl: WebGL2RenderingContext, uniform: (name: string) => WebGLUniformLocation | null): void {
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_3D, this.slots[0]!.texture);
+    gl.uniform1i(uniform("u_volume_a"), 0);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_3D, (this.slots[1]!.planes ? this.slots[1]! : this.slots[0]!).texture);
+    gl.uniform1i(uniform("u_volume_b"), 1);
+    gl.activeTexture(gl.TEXTURE2);
+    gl.bindTexture(gl.TEXTURE_2D, this.paletteTexture);
+    gl.uniform1i(uniform("u_palette"), 2);
+    gl.activeTexture(gl.TEXTURE3);
+    gl.bindTexture(gl.TEXTURE_2D, this.levelTexture);
+    gl.uniform1i(uniform("u_levels"), 3);
+  }
+
   private rebuildBox(gl: WebGL2RenderingContext): void {
     if (!this.grid || this.altitudes.length === 0) return;
     const grid = this.region ? regionGrid(this.grid, this.region) : this.grid;
     this.box = volumeBox(grid, volumeTop(this.altitudes), this.exaggeration);
+    this.globeDirty = true;
     const [x0, y0, z0] = this.box.min;
     const [x1, y1, z1] = this.box.max;
     const corners = new Float32Array([

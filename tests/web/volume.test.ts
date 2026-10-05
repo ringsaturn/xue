@@ -2,9 +2,13 @@ import { describe, expect, it } from "vitest";
 import type { BundleVariable } from "../../web/src/manifest";
 import {
   cameraFromMatrix,
+  GLOBE_RADIUS,
+  globeSectionStrip,
+  globeShellMesh,
   levelLookup,
   maxPool2,
   regionGrid,
+  spherePoint,
   tileRegion,
   VOLUME_BUNDLE_LEVELS,
   volumeBox,
@@ -203,5 +207,56 @@ describe("volume drag tools", () => {
     expect(dragSelects("box", 0, 0, 40, 30)).toBe(true);
     expect(dragSelects("section", 0, 0, 9, 9)).toBe(true);
     expect(dragSelects("section", 0, 0, 5, 5)).toBe(false);
+  });
+});
+
+describe("globe shell", () => {
+  it("puts a point where MapLibre's projectToSphere does, lifted by its height", () => {
+    // lon 0 lat 0 → +z; lon 90 → +x; the north pole → +y.
+    expect(spherePoint(0, 0).map((v) => +v.toFixed(12))).toEqual([0, 0, 1]);
+    expect(spherePoint(90, 0).map((v) => +v.toFixed(12))).toEqual([1, 0, 0]);
+    expect(spherePoint(0, 90).map((v) => +v.toFixed(12))).toEqual([0, 1, 0]);
+    const lifted = spherePoint(-83, 32, GLOBE_RADIUS);
+    expect(Math.hypot(...lifted)).toBeCloseTo(2, 12);
+  });
+
+  it("is closed around the box with outward normals", () => {
+    const box = { west: -130, east: -60, south: 20, north: 55 };
+    const lift = 19500 * 10;
+    const mesh = globeShellMesh(box, lift, 8, 4);
+    const count = mesh.positions.length / 3;
+    expect(mesh.normals.length).toBe(mesh.positions.length);
+    expect(Math.max(...mesh.indices)).toBeLessThan(count);
+    // Two triangles a cell: top and floor 8 x 4, east/west walls 4 x 1,
+    // north/south walls 8 x 1.
+    expect(mesh.indices.length).toBe(3 * 2 * (2 * 8 * 4 + 2 * 4 + 2 * 8));
+    // Each triangle's normal leads out of the box: a step along it from the
+    // centroid leaves, a step against it stays in. The step (0.01 of the
+    // radius, 0.57°) is larger than a chord's sag, smaller than the box.
+    const inside = ([x, y, z]: number[]) => {
+      const r = Math.hypot(x!, y!, z!);
+      const lat = (Math.asin(y! / r) * 180) / Math.PI;
+      const lon = (Math.atan2(x!, z!) * 180) / Math.PI;
+      return r > 1 && r < 1 + lift / GLOBE_RADIUS && lat > box.south && lat < box.north && lon > box.west && lon < box.east;
+    };
+    for (let t = 0; t < mesh.indices.length; t += 3) {
+      const corners = [0, 1, 2].map((k) => mesh.indices[t + k]!);
+      const centroid = [0, 1, 2].map((axis) => corners.reduce((sum, v) => sum + mesh.positions[v * 3 + axis]!, 0) / 3);
+      const n = [0, 1, 2].map((axis) => mesh.normals[corners[0]! * 3 + axis]!);
+      expect(inside(centroid.map((value, axis) => value + 0.01 * n[axis]!))).toBe(false);
+      expect(inside(centroid.map((value, axis) => value - 0.01 * n[axis]!))).toBe(true);
+    }
+  });
+
+  it("stands a section on the great circle between its ends", () => {
+    const strip = globeSectionStrip([-84, 31], [-81, 33], 195000, 4);
+    expect(strip.length).toBe((4 + 1) * 2 * 3);
+    // Ground vertices on the sphere, top ones lifted.
+    expect(Math.hypot(strip[0]!, strip[1]!, strip[2]!)).toBeCloseTo(1, 6);
+    expect(Math.hypot(strip[3]!, strip[4]!, strip[5]!)).toBeCloseTo(1 + 195000 / GLOBE_RADIUS, 6);
+    const start = spherePoint(-84, 31);
+    const end = spherePoint(-81, 33);
+    [0, 1, 2].forEach((axis) => expect(strip[axis]!).toBeCloseTo(start[axis]!, 6));
+    [0, 1, 2].forEach((axis) => expect(strip[24 + axis]!).toBeCloseTo(end[axis]!, 6));
   });
 });

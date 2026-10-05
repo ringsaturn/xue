@@ -85,8 +85,8 @@ Facts worth getting right:
   bundle (variables `refl500` … `refl19000`, dBZ, GRIB2 209/9/0 on surface
   102 at the altitude in metres); a rolling window of the last three to
   four hours, rebuilt every ten minutes. The viewer draws it as a
-  raymarched volume on the flat map only (`?vexag=` sets the vertical
-  exaggeration, 10 by default); on the globe it draws nothing. `jma` is the seventh
+  raymarched volume, on the plane and on the globe (`?vexag=` sets the
+  vertical exaggeration, 10 by default). `jma` is the seventh
   live source and the third observation: the Japan Meteorological Agency's
   high-resolution precipitation nowcast analysis (高解像度降水ナウキャスト)
   over Japan, five-minute frames decoded from the agency's map tiles onto a

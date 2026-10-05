@@ -156,8 +156,15 @@ and the window shrinks to fit it.
   to the box face it lies on, and only the exit face draws. A 1D lookup
   takes altitude to the uneven level spacing. Colour is the cref palette,
   brightened with height; opacity rises from 18 to 60 dBZ and is per
-  voxel, so the step count does not change the picture. Flat Mercator
-  only (nothing on the globe), no terrain occlusion. Two drag tools in the
+  voxel, so the step count does not change the picture. On the globe the
+  same march runs in MapLibre's unit-sphere space (the prelude's
+  `projectToSphere`: y to the north pole, a height scales the radius by
+  `1 + h / 6371008.8`) through a shell over the box: a closed mesh with
+  outward normals, only the faces a ray leaves through drawn, the ray
+  stopped by the planet (the floor taken on the near half of a ray's way
+  through it, since its chords sag under the sphere), its own program so
+  the plane's is untouched, nothing mid-transition. No terrain occlusion.
+  Two drag tools in the
   view tile (`volumetool.ts`; shown over a volume only, armed by a press,
   then the next drag — mouse or finger — through a clear sheet over the
   canvas): a box is a close-up, the camera flies to it, the session's
