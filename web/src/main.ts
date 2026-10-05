@@ -162,13 +162,16 @@ import { pointDataOf, StormLayers, TC_CLICKABLE_LAYERS, type StormView, type TcP
 import { renderTcPanel } from "./tc/panel";
 import type { TcIndexEntry, TcStorm } from "./tc/schema";
 import { fetchTcIndex, fetchTcStorm, resolveTcStormId, stormBounds, type LoadedTcIndex } from "./tc/tracks";
-import { buildAirportCard, buildSoundingCard } from "./stations/card";
+import { buildAirportCard, buildSoundingCard, buildSynopCard } from "./stations/card";
 import {
   fetchAirportIndex,
   fetchAirportStation,
   fetchSoundingIndex,
+  fetchSynopIndex,
+  fetchSynopStation,
   type LoadedAirportIndex,
   type LoadedSoundingIndex,
+  type LoadedSynopIndex,
 } from "./stations/fetch";
 import {
   StationLayers,
@@ -177,7 +180,14 @@ import {
   stationDataOf,
   type StationPointData,
 } from "./stations/layers";
-import { nearestAirport, nearestSounding } from "./stations/nearest";
+import {
+  nearestAirport,
+  nearestSounding,
+  nearestSynopStations,
+  synopForElevation,
+  type NearestStation,
+} from "./stations/nearest";
+import { synopObservedValue, synopRowObservations, synopTakesRow } from "./stations/synopobs";
 import {
   nearestObservation,
   rowObservations,
@@ -185,7 +195,7 @@ import {
   tafBands,
   type ObservationAxis,
 } from "./stations/observations";
-import type { AirportStation, AirportStationHistory } from "./stations/schema";
+import type { AirportStation, AirportStationHistory, SynopStation, SynopStationSeries } from "./stations/schema";
 import { createSoundingSection, type SoundingSection } from "./sounding/section";
 import { modelProfileBundles, nearestFrameForTime } from "./sounding/model";
 import { profileFromModel, type ModelLevel, type Profile } from "./sounding/profile";
@@ -1065,6 +1075,7 @@ const langSheet = required<HTMLElement>("lang-sheet");
 const tcTile = required<HTMLButtonElement>("tc-tile");
 const soundingTile = required<HTMLButtonElement>("sounding-tile");
 const airportTile = required<HTMLButtonElement>("airport-tile");
+const synopTile = required<HTMLButtonElement>("synop-tile");
 const tcSheet = required<HTMLElement>("tc-sheet");
 const tcList = required<HTMLElement>("tc-list");
 const fieldMore = required<HTMLButtonElement>("field-more");
@@ -2267,6 +2278,13 @@ let probeAirport: {
 /** The pin the airport history in flight belongs to; an answer for a pin
  * since replaced must not land on the new one. */
 let probeAirportSequence = 0;
+/** The surface stations near the pin, nearest first, and the windows read
+ * so far by station id. Which of them speaks for the pin waits on the
+ * ground height under it (`probeSynop`), so the candidates are kept rather
+ * than one chosen at pin time. */
+let probeSynopCandidates: NearestStation<SynopStation>[] = [];
+const probeSynopSeries = new Map<string, SynopStationSeries | "pending" | "failed">();
+let probeSynopSequence = 0;
 
 /** The day strip and the row pitch of the meteogram, shared by the canvas
  * and the DOM rows beside it so the two stay aligned. A row is two lines of
@@ -2597,6 +2615,10 @@ function resolveProbeStations(longitude: number, latitude: number): void {
   const sounding = soundingLoaded ? nearestSounding(soundingLoaded.index, longitude, latitude) : null;
   soundingSection.setStation(soundingLoaded, sounding?.station ?? null, sounding?.distanceKm ?? 0);
 
+  probeSynopCandidates = synopLoaded ? nearestSynopStations(synopLoaded.index, longitude, latitude) : [];
+  probeSynopSeries.clear();
+  probeSynopSequence += 1;
+
   const airport = airportLoaded ? nearestAirport(airportLoaded.index, longitude, latitude) : null;
   probeAirport = airport
     ? { station: airport.station, distanceKm: airport.distanceKm, history: null }
@@ -2619,12 +2641,46 @@ function resolveProbeStations(longitude: number, latitude: number): void {
     });
 }
 
+/** The surface station that speaks for the pin and its window, once read:
+ * the nearest candidate at about the pin's ground height, or the nearest
+ * outright until that height is known. The window is one range request,
+ * asked for the first time a render wants it. */
+function probeSynop(): { station: SynopStation; distanceKm: number; series: SynopStationSeries } | null {
+  if (!synopLoaded || probeSynopCandidates.length === 0) return null;
+  const ground = probeDem?.value ?? null;
+  const chosen = synopForElevation(probeSynopCandidates, ground);
+  if (!chosen) return null;
+  const known = probeSynopSeries.get(chosen.station.id);
+  if (known === undefined) {
+    probeSynopSeries.set(chosen.station.id, "pending");
+    const sequence = probeSynopSequence;
+    void fetchSynopStation(synopLoaded, chosen.station)
+      .then((series) => {
+        if (sequence !== probeSynopSequence) return;
+        probeSynopSeries.set(chosen.station.id, series);
+        scheduleProbeRender();
+      })
+      .catch((error: unknown) => {
+        if (sequence === probeSynopSequence) probeSynopSeries.set(chosen.station.id, "failed");
+        console.warn(
+          `synop: ${chosen.station.id} window not read:`,
+          error instanceof Error ? error.message : error,
+        );
+      });
+    return null;
+  }
+  return typeof known === "string" ? null : { ...chosen, series: known };
+}
+
 function closeProbe(): void {
   if (!probe) return;
   probe = null;
   probeSeriesRequests.clear();
   probeAirport = null;
   probeAirportSequence += 1;
+  probeSynopCandidates = [];
+  probeSynopSeries.clear();
+  probeSynopSequence += 1;
   soundingSection.setStation(null, null, 0);
   probeMarker?.remove();
   probePanel.root.hidden = true;
@@ -3115,6 +3171,10 @@ function renderProbeRows(series: ProbeSeries, index: number): void {
   // lookup for every row rather than one per row.
   const observedNow =
     history && axis ? nearestObservation(history.metars, frameValidTime(index)) : null;
+  // A surface station at the pin's own height takes the airport's place on
+  // the rows both fill; the airport keeps the cloud and its forecast.
+  const station = axis ? probeSynop() : null;
+  const hasTerrainRow = specs.some((spec) => spec.id === "terrain");
   const rows: MeteogramRowData[] = [];
   for (const [position, spec] of specs.entries()) {
     const element = probeRowElements[position]!;
@@ -3139,7 +3199,11 @@ function renderProbeRows(series: ProbeSeries, index: number): void {
         spec.id === "terrain" && terrainDelta !== null ? shiftSeries(item.values, terrainDelta) : item.values,
       ),
     };
-    if (history && axis && spec.id !== "terrain") {
+    const fromStation = station !== null && synopTakesRow(spec.id, hasTerrainRow);
+    if (fromStation && axis) {
+      const marks = synopRowObservations(spec.id, station.series, axis);
+      if (marks.length) row.observations = marks;
+    } else if (history && axis && spec.id !== "terrain") {
       const marks = rowObservations(spec.id, history.metars, axis);
       if (marks.length) row.observations = marks;
     }
@@ -3163,7 +3227,11 @@ function renderProbeRows(series: ProbeSeries, index: number): void {
     // the way it rides the lead line above: degrees the wind comes from.
     // Last comes what the airport measured within ninety minutes of this
     // frame, so the forecast and the observation read on one line.
-    const observed = observedNow === null ? null : rowObservedValue(spec.id, observedNow);
+    const observed = fromStation
+      ? synopObservedValue(spec.id, station.series, frameValidTime(index))
+      : observedNow === null || spec.id === "terrain"
+        ? null
+        : rowObservedValue(spec.id, observedNow);
     const session = sessions.get(spec.bundles[0]!);
     const reported =
       observed === null || !session
@@ -4808,6 +4876,7 @@ function syncRail(): void {
   }
   soundingTile.setAttribute("aria-pressed", String(!soundingTile.hidden && view.marks.stations.soundings));
   airportTile.setAttribute("aria-pressed", String(!airportTile.hidden && view.marks.stations.airports));
+  synopTile.setAttribute("aria-pressed", String(!synopTile.hidden && view.marks.stations.synop));
 }
 
 /** How far the rail is clipped at each end, as the two lengths the
@@ -6155,8 +6224,8 @@ function renderTcSheet(): void {
 }
 
 // ---------------------------------------------------------------------------
-// Station marks: the two point products beside the runs and the storms
-// (docs/sounding.md, docs/airport.md), drawn as MapLibre circle layers
+// Station marks: the point products beside the runs and the storms
+// (docs/sounding.md, docs/airport.md, docs/synop.md), drawn as MapLibre circle layers
 // over whatever fill and lines are on screen. Like the storm tracks they
 // take no session and no worker and never gate the playhead — the
 // playhead's valid time only decides which marks are drawn faint — and
@@ -6170,6 +6239,7 @@ function renderTcSheet(): void {
 
 let soundingLoaded: LoadedSoundingIndex | null = null;
 let airportLoaded: LoadedAirportIndex | null = null;
+let synopLoaded: LoadedSynopIndex | null = null;
 /** Whether a poll has run at all, so a tab that opened hidden still loads
  * the products once while a later poll on a hidden one does not. */
 let stationsPolled = false;
@@ -6184,12 +6254,17 @@ let stationCard: Popup | null = null;
 async function loadStations(): Promise<void> {
   if (document.hidden && stationsPolled) return;
   const base = dataBaseUrl();
-  const [soundings, airports] = await Promise.allSettled([fetchSoundingIndex(base), fetchAirportIndex(base)]);
+  const [soundings, airports, synop] = await Promise.allSettled([
+    fetchSoundingIndex(base),
+    fetchAirportIndex(base),
+    fetchSynopIndex(base),
+  ]);
   stationsPolled = true;
   // A poll that fails leaves the previous issue drawn; only an answer
   // replaces it.
   if (soundings.status === "fulfilled") soundingLoaded = soundings.value;
   if (airports.status === "fulfilled") airportLoaded = airports.value;
+  if (synop.status === "fulfilled") synopLoaded = synop.value;
   applyStationView();
 }
 
@@ -6209,6 +6284,7 @@ function applyStationView(): void {
   const hidden = activeCase !== null;
   const soundingAvailable = soundingLoaded !== null && !hidden;
   const airportAvailable = airportLoaded !== null && !hidden;
+  const synopAvailable = synopLoaded !== null && !hidden;
   let railChanged = false;
   if (soundingTile.hidden === soundingAvailable) {
     soundingTile.hidden = !soundingAvailable;
@@ -6218,19 +6294,25 @@ function applyStationView(): void {
     airportTile.hidden = !airportAvailable;
     railChanged = true;
   }
+  if (synopTile.hidden === synopAvailable) {
+    synopTile.hidden = !synopAvailable;
+    railChanged = true;
+  }
   if (railChanged) syncRailDensity();
   const drawSoundings = soundingAvailable && view.marks.stations.soundings;
   const drawAirports = airportAvailable && view.marks.stations.airports;
+  const drawSynop = synopAvailable && view.marks.stations.synop;
   syncRail();
   syncZoomCeiling();
   // Nothing on screen and nothing on the map: the layers are never added,
   // so a viewer who asks for no station pays nothing for the products
   // existing.
-  if (!drawSoundings && !drawAirports && stationLayers === null) return;
+  if (!drawSoundings && !drawAirports && !drawSynop && stationLayers === null) return;
   const layers = ensureStationLayers();
   if (!layers) return;
   layers.setSoundings(drawSoundings ? soundingLoaded!.index : null);
   layers.setAirports(drawAirports ? airportLoaded!.index : null);
+  layers.setSynop(drawSynop ? synopLoaded!.index : null);
   syncStationTime();
   closeStationCard();
 }
@@ -6273,7 +6355,11 @@ function showStationCard(data: StationPointData, lngLat: [number, number]): void
     },
   };
   const content =
-    data.kind === "sounding" ? buildSoundingCard(data.station, options) : buildAirportCard(data.station, options);
+    data.kind === "sounding"
+      ? buildSoundingCard(data.station, options)
+      : data.kind === "synop"
+        ? buildSynopCard(data.station, data.network, options)
+        : buildAirportCard(data.station, options);
   stationCard = new Popup({ closeButton: false, closeOnClick: false, className: "station-popup", maxWidth: "280px", offset: 10 })
     .setLngLat(lngLat)
     .setDOMContent(content)
@@ -6295,6 +6381,7 @@ function toggleStationProduct(product: keyof StationsUrlState): void {
 
 soundingTile.addEventListener("click", () => toggleStationProduct("soundings"));
 airportTile.addEventListener("click", () => toggleStationProduct("airports"));
+synopTile.addEventListener("click", () => toggleStationProduct("synop"));
 
 function ensureLayers(): void {
   if (layersAdded) return;
@@ -6597,14 +6684,14 @@ function applyZoomCeiling(session: VariableSession): void {
   syncZoomCeiling();
 }
 
-/** The data's ceiling, or the station marks' when either product is asked
+/** The data's ceiling, or the station marks' when any product is asked
  * for — whichever lets the camera deeper. Asked for, not loaded: the run
  * usually lands before the indexes do, and a ceiling that followed the
  * indexes would first pull a deep link at zoom 9 back to 7 and only then
  * let go. A product that never loads leaves a ceiling nothing needs, which
  * costs nothing. */
 function syncZoomCeiling(): void {
-  const marks = view.marks.stations.soundings || view.marks.stations.airports;
+  const marks = view.marks.stations.soundings || view.marks.stations.airports || view.marks.stations.synop;
   // In 3D relief the ground carries detail the grid does not, so the camera
   // may go as deep as the DEM does.
   const relief = sceneApplied && map.getTerrain() ? TERRAIN_MAX_ZOOM : 0;

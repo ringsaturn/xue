@@ -309,22 +309,29 @@ fall back to defaults rather than fail, so a constructed link always opens.
   named system is drawn over whatever layer is on screen. `?tcagency=nhc,jtwc`
   and `?tcmodel=gfs,ecmwf` narrow the official and model tracks drawn
   (absent means all); `?tcmembers=on` adds the ensemble members.
-- `?stations=snd|apt|snd,apt` — draw the station marks over whatever layer
-  is on screen: `snd` the radiosonde soundings (one circle per station,
-  filled by its 500 hPa temperature; the card reads the headline the index
-  carries), `apt` the airports (one circle per station, coloured by its
-  flight category; below zoom 6 only the stations with a current TAF).
-  Absent, or `?stations=off`, draws neither — the default, since five
-  thousand airport marks on a world view read as texture rather than data.
-  `sounding`, `soundings`, `airport`, `airports`, `on` and `all` are
-  accepted spellings. The marks follow the playhead's valid time only in
+- `?stations=snd|apt|syn` (comma-joined for more than one) — draw the
+  station marks over whatever layer is on screen: `snd` the radiosonde
+  soundings (one circle per station, filled by its 500 hPa temperature;
+  the card reads the headline the index carries), `apt` the airports (one
+  circle per station, coloured by its flight category; below zoom 6 only
+  the stations with a current TAF), `syn` the surface weather stations
+  (one small circle per station, filled by its current temperature, grey
+  where it has no thermometer; principal stations at every zoom, automatic
+  ones from zoom 5, precipitation gauges from zoom 7). Absent, or
+  `?stations=off`, draws none — the default, since thousands of marks on a
+  world view read as texture rather than data. `sounding`, `airport`,
+  `synop`, `surface`, their plurals, `on` and `all` are accepted
+  spellings. The marks follow the playhead's valid time only in
   that a station observed far from it is drawn faint; they load nothing
   per frame and never hold up playback. Both products also answer a pinned
   point whatever this parameter says: clicking the map draws the nearest
   ascent within 150 km as a skew-T under the meteogram rows, with the run's
   own isobaric levels dotted over it, and lays the nearest airport's last
   day of METARs — and its TAF, as a row of forecast periods — over the rows
-  themselves.
+  themselves. A surface station within 20 km at about the pin's ground
+  height (within 300 m) takes the airport's place on the temperature, wind
+  and pressure rows; its temperature goes on the terrain-corrected row
+  where the panel has one.
 - `?use_h264=true` — opt into the H.264 companion artifacts via WebCodecs
   instead of the Xue decoder (a comparison path, not the default; GFS and
   HRRR publish the companions for their surface fields, ECMWF and SFLUX
@@ -408,8 +415,8 @@ https://dataset.ringsaturn.me/xue/. The contract is two layers:
   manifest itself under its `?v=`), the grid and axis as `cube:dimensions`,
   every array as `cube:variables`, the cycle as
   `forecast:reference_datetime` — and `showcase/collection.json` with an
-  Item per case. The three point products below are in it on the same
-  terms: `sounding/`, `airport/` and `tc/` each carry a `collection.json`
+  Item per case. The point products below are in it on the same
+  terms: `sounding/`, `airport/`, `synop/` and `tc/` each carry a `collection.json`
   and the live `item.json`, with one `<product>.<issue>/item.json` beside
   each index naming its files as assets (the `?v=`-addressed index, the
   NDJSON file or one JSON file per storm) and the stations' bounding box as
@@ -479,6 +486,26 @@ https://dataset.ringsaturn.me/xue/. The contract is two layers:
   originating national meteorological and hydrological services. The
   viewer does not read it yet.
 
+- Surface weather stations are a JSON product under the same root, every
+  ten minutes (schema 1, `docs/synop.md`): national observation networks,
+  each read by an adapter into one set of elements, JMA AMeDAS (about
+  1 300 stations over Japan, ten-minute) the first. The mutable pointer
+  `latest-synop.json` names `synop.<YYYYMMDDHHMM>/index.json`, which lists
+  `networks[]` (id, name, `cadence`, `prPeriod`, the `attribution` to show,
+  `license`, `latest`, and its `<network>.jsonl` file with length and
+  CRC32), the `elements` order (`t`, `rh`, `p`, `slp`, `wd`, `ws`, `gust`,
+  `pr`, `pr1h`, `sun`, `snow`, `vis`) and one compact row per station:
+  `id` (`<network>:<number>`, e.g. `amedas:50066` for Mt. Fuji), network
+  index, `lat`, `lon`, `elev`, `rank` (0 principal, 1 automatic, 2
+  precipitation gauge), `name`, `obsTime`, the current value of each
+  element, then the `offset` / `length` of the station's line in its
+  network's file. That line holds the last 24 hours as columns: `time`
+  (epoch seconds, oldest first) and `obs.<element>` arrays as long, null
+  where not reported. Units are SI (°C, %, hPa, m/s, mm, minutes of
+  sunshine, cm of snow, metres of visibility); doubtful or missing values
+  are null; nothing is derived. AMeDAS is reused under JMA's website terms
+  (Public Data License v1.0): credit 「出典：気象庁ホームページ」.
+
 A `.xue` bundle is one gridded variable (or a u/v pair) for a whole run:
 8-bit quantized planes on the native grid, temporal residual prediction in
 anchor groups, one Zstandard frame per spatial tile per group, all indexed so
@@ -515,6 +542,10 @@ format is specified in `docs/format.md` (link below). Decoders you can call:
   the normative description of the ten-minute METAR / TAF product —
   delivery, units, identity, and the index, history and pointer files.
 
+- [Surface station product](https://github.com/ringsaturn/xue/blob/main/docs/synop.md):
+  the normative description of the ten-minute surface station product —
+  delivery, the elements and units, identity, the index, the network files
+  and each network's source and terms.
 - [Radiosonde sounding product](https://github.com/ringsaturn/xue/blob/main/docs/sounding.md):
   the normative description of the hourly sounding product — delivery, the
   fixed-point level arrays, station identity, the index, the station file,

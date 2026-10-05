@@ -545,21 +545,29 @@ export const en = {
   tcHide: "Hide tracks",
   tcShow: "Show tracks",
 
-  /** The two point products drawn as station marks over whatever is on
-   * screen (`docs/sounding.md`, `docs/airport.md`): the two rail tiles —
+  /** The point products drawn as station marks over whatever is on
+   * screen (`docs/sounding.md`, `docs/airport.md`, `docs/synop.md`): the
+   * rail tiles —
    * their gloss and glyph, the CJK locales using their own character the
    * way the storm tile does — and the card a clicked mark opens. A
    * station's identifiers (an ICAO id, a WMO number), the flight
    * categories (`VFR`, `LIFR`), `METAR` and every unit (`hPa`, `gpm`,
    * `m/s`) are instrument text and stay as they are; these are the words
    * around them. "Precipitable water" is the depth of the vapour column,
-   * "Levels" the number of levels the published ascent carries. */
+   * "Levels" the number of levels the published ascent carries. The
+   * surface stations' tile is national weather-station networks (AMeDAS
+   * first); "Station pressure" is the pressure at the station's own
+   * height, as opposed to the sea-level reduction, and a network's credit
+   * line on the card stays as the network words it. */
   soundingTileTip: "Radiosonde soundings",
   varSounding: "UPPER AIR",
   glyphSounding: "S",
   airportTileTip: "Airport observations",
   varAirport: "METAR",
   glyphAirport: "A",
+  synopTileTip: "Surface weather stations",
+  varSynop: "SURFACE",
+  glyphSynop: "W",
   stationSounding: "Sounding",
   stationAirport: "Airport",
   stationObserved: "Observed",
@@ -569,6 +577,14 @@ export const en = {
   stationVisibility: "Visibility",
   stationQnh: "QNH",
   stationLevels: "Levels",
+  stationSynop: "Weather station",
+  stationHumidity: "Humidity",
+  stationPrecipitation: "Precipitation",
+  stationPressure: "Station pressure",
+  stationSeaLevelPressure: "Sea-level pressure",
+  stationSunshine: "Sunshine",
+  stationSnowDepth: "Snow depth",
+  stationElevation: "Elevation",
   /** The card's button: pins the probe on the station, and for a sounding
    * also opens the chart under the panel. */
   stationOpenSounding: "Open sounding",

@@ -15,7 +15,7 @@ import { element } from "../dom";
 import { formatPointDegrees } from "../format";
 import { t } from "../i18n";
 import { categoryColor } from "./layers";
-import type { AirportStation, SoundingStationEntry } from "./schema";
+import type { AirportStation, SoundingStationEntry, SynopNetwork, SynopStation } from "./schema";
 
 interface StationCardOptions {
   /** The valid time, formatted the way the capsule formats one. */
@@ -171,6 +171,65 @@ export function buildAirportCard(
   if (table) root.append(table);
 
   root.append(position(station.lat, station.lon));
+  if (options.onPin) root.append(action(t("stationPinHere"), options.onPin));
+  return root;
+}
+
+/** A period in seconds as the card's precipitation and sunshine rows label
+ * it: `10 min`, `1 h`. Instrument text, like the units. */
+function period(seconds: number | null): string {
+  if (seconds === null) return "";
+  return seconds % 3600 === 0 ? ` · ${seconds / 3600} h` : ` · ${Math.round(seconds / 60)} min`;
+}
+
+function fixed(value: number | null | undefined, digits: number, unit: string): string | null {
+  return value === null || value === undefined ? null : `${value.toFixed(digits)} ${unit}`;
+}
+
+/** A surface station's card: its current values from the index — each
+ * element's newest within the hour, so a summit station's hourly humidity
+ * shows between the hours — and the network it belongs to, whose credit
+ * line the terms ask to be shown with the data. */
+export function buildSynopCard(
+  station: SynopStation,
+  network: SynopNetwork,
+  options: StationCardOptions,
+): HTMLElement {
+  const root = element("div", "station-card");
+  const values = station.values;
+
+  const head = element("div", "station-card-head");
+  head.append(element("span", "station-card-name", station.name ?? station.id));
+  head.append(element("span", "station-card-kind", t("stationSynop")));
+  root.append(head);
+
+  const when = element("div", "station-card-time");
+  when.append(element("span", "", options.formatTime(station.obsTime)));
+  when.append(element("span", "station-card-code", t("stationObserved")));
+  root.append(when);
+
+  const headline = element("div", "station-card-headline");
+  const temperature = celsius(values.t ?? null);
+  if (temperature) headline.append(element("span", "", temperature));
+  const air = wind(values.wd ?? null, values.ws ?? null, values.gust ?? null);
+  if (air) headline.append(element("span", "station-card-wind", air));
+  if (headline.childElementCount) root.append(headline);
+
+  const table = rows([
+    [t("stationHumidity"), values.rh === null || values.rh === undefined ? null : `${values.rh} %`],
+    [t("stationPrecipitation") + period(network.prPeriod), fixed(values.pr, 1, "mm")],
+    [t("stationPrecipitation") + period(3600), fixed(values.pr1h, 1, "mm")],
+    [t("stationPressure"), fixed(values.p, 1, "hPa")],
+    [t("stationSeaLevelPressure"), fixed(values.slp, 1, "hPa")],
+    [t("stationSunshine") + period(network.prPeriod), values.sun === null || values.sun === undefined ? null : `${Math.round(values.sun)} min`],
+    [t("stationSnowDepth"), values.snow === null || values.snow === undefined ? null : `${values.snow} cm`],
+    [t("stationVisibility"), visibility(values.vis ?? null)],
+    [t("stationElevation"), station.elev === null ? null : `${Math.round(station.elev)} m`],
+  ]);
+  if (table) root.append(table);
+
+  root.append(position(station.lat, station.lon));
+  root.append(element("div", "station-card-credit", `${network.name} · ${network.attribution}`));
   if (options.onPin) root.append(action(t("stationPinHere"), options.onPin));
   return root;
 }

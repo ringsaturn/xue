@@ -47,7 +47,7 @@ describe("parseView", () => {
     expect(view.particles).toBe(false);
     expect(particlesRequested).toBe(true);
     expect(view.derived).toEqual({ inflow: true, front: false });
-    expect(view.marks.stations).toEqual({ soundings: true, airports: true });
+    expect(view.marks.stations).toEqual({ soundings: true, airports: true, synop: false });
     expect(view.marks.tc).toMatchObject({ storm: "EP142026", off: false, members: true });
   });
 });

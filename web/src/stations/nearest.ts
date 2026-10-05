@@ -17,10 +17,17 @@
  * Arithmetic only — no DOM, no fetching. The index is read, never mutated.
  */
 
-import type { AirportIndex, AirportStation, SoundingIndex, SoundingStationEntry } from "./schema";
+import type {
+  AirportIndex,
+  AirportStation,
+  SoundingIndex,
+  SoundingStationEntry,
+  SynopIndex,
+  SynopStation,
+} from "./schema";
 
 /** A station and how far the pinned point is from it. */
-interface NearestStation<S> {
+export interface NearestStation<S> {
   station: S;
   /** Great-circle distance, kilometres. */
   distanceKm: number;
@@ -30,6 +37,18 @@ interface NearestStation<S> {
 export const SOUNDING_RADIUS_KM = 150;
 /** The radius an airport's observation still describes the pinned point. */
 export const AIRPORT_RADIUS_KM = 40;
+/** The radius a surface station still describes the pinned point within.
+ * Tighter than an airport's: a national network has a station every 15–20
+ * km, so there is nearly always one closer, and a valley and the ridge
+ * above it are 10 km apart. */
+export const SYNOP_RADIUS_KM = 20;
+/** How far a station's height may be from the ground under the pin before
+ * its temperature stops being the pin's: 300 m is about 2 °C at the
+ * standard lapse rate. A summit station is not the town below it. */
+export const SYNOP_ELEVATION_TOLERANCE_M = 300;
+/** How many of the nearest stations are kept as candidates while the
+ * ground height under the pin is still on its way. */
+const SYNOP_CANDIDATES = 6;
 
 /** Mean Earth radius, km — the sphere every distance here is measured on.
  * A spherical distance is a few tenths of a percent off the ellipsoid's,
@@ -99,4 +118,37 @@ export function nearestAirport(
   maxKm: number = AIRPORT_RADIUS_KM,
 ): NearestStation<AirportStation> | null {
   return nearest(index.stations, longitude, latitude, maxKm);
+}
+
+/** The surface stations inside `maxKm` of the pinned point, nearest first,
+ * at most a handful: which of them speaks for the point depends on the
+ * ground height under it (`synopForElevation`), which arrives later. */
+export function nearestSynopStations(
+  index: SynopIndex,
+  longitude: number,
+  latitude: number,
+  maxKm: number = SYNOP_RADIUS_KM,
+): NearestStation<SynopStation>[] {
+  const found: NearestStation<SynopStation>[] = [];
+  for (const station of index.stations) {
+    const distanceKm = haversineKm(longitude, latitude, station.lon, station.lat);
+    if (distanceKm <= maxKm) found.push({ station, distanceKm });
+  }
+  return found.sort((a, b) => a.distanceKm - b.distanceKm).slice(0, SYNOP_CANDIDATES);
+}
+
+/** The nearest candidate standing at about the pin's height, or the
+ * nearest outright while that height is unknown. A station whose own height
+ * is unknown is taken at its word. */
+export function synopForElevation(
+  candidates: readonly NearestStation<SynopStation>[],
+  groundMetres: number | null,
+  tolerance: number = SYNOP_ELEVATION_TOLERANCE_M,
+): NearestStation<SynopStation> | null {
+  if (groundMetres === null) return candidates[0] ?? null;
+  return (
+    candidates.find(
+      ({ station }) => station.elev === null || Math.abs(station.elev - groundMetres) <= tolerance,
+    ) ?? null
+  );
 }

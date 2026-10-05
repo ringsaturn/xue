@@ -7,6 +7,7 @@ import airportIndexJson from "../fixtures/airport/expected/airport.202609161440/
 import airportPointerJson from "../fixtures/airport/expected/latest-airport.json";
 import soundingIndexJson from "../fixtures/sounding/expected/index.json";
 import soundingPointerJson from "../fixtures/sounding/expected/latest-sounding.json";
+import synopIndexJson from "../fixtures/synop/expected/synop.202610050010/index.json";
 
 import {
   fetchAirportStation,
@@ -23,6 +24,8 @@ import {
   AIRPORT_ALL_ZOOM,
   AIRPORT_STALE_MS,
   SOUNDING_STALE_MS,
+  SYNOP_AUTOMATIC_ZOOM,
+  SYNOP_GAUGE_ZOOM,
   airportDrawnAtZoom,
   airportFeatures,
   categoryColor,
@@ -42,6 +45,7 @@ import {
   parseSoundingIndex,
   parseSoundingPointer,
   parseSoundingStation,
+  parseSynopIndex,
   type AirportStation,
 } from "../../web/src/stations/schema";
 import { parseStationsFromSearch, searchWithStations } from "../../web/src/urlstate";
@@ -68,6 +72,7 @@ const HISTORY_JSONL = fixture("airport/expected/airport.202609161440/history.jso
 
 const soundingIndex = parseSoundingIndex(soundingIndexJson);
 const airportIndex = parseAirportIndex(airportIndexJson);
+const synopIndex = parseSynopIndex(synopIndexJson);
 
 /** A deep copy of a golden, for the tests that damage one. */
 function copy<T>(value: T): T {
@@ -265,7 +270,7 @@ describe("the style the layers add", () => {
     for (const darkGround of [false, true]) {
       for (const time of [null, Date.parse("2026-09-16T14:30:00Z")]) {
         const sources = Object.fromEntries(
-          stationSourceSpecs({ soundings: soundingIndex, airports: airportIndex }).map(
+          stationSourceSpecs({ soundings: soundingIndex, airports: airportIndex, synop: synopIndex }).map(
             ({ id, source }) => [id, source],
           ),
         );
@@ -279,17 +284,25 @@ describe("the style the layers add", () => {
     }
   });
 
-  it("draws the soundings over the airports, all three under one anchor", () => {
+  it("draws the soundings over the airports over the surface stations, all under one anchor", () => {
     const layers = stationLayerSpecs({ darkGround: false, time: null, ink: "#333333" });
     expect(layers.map((layer) => layer.id)).toEqual([
+      "station-synop-gauge",
+      "station-synop-automatic",
+      "station-synop-principal",
       "station-airport-minor",
       "station-airport-major",
       "station-sounding",
     ]);
+    // The surface stations fill in by rank; the principal ones are drawn
+    // at every zoom.
+    expect(layers[0]!.minzoom).toBe(SYNOP_GAUGE_ZOOM);
+    expect(layers[1]!.minzoom).toBe(SYNOP_AUTOMATIC_ZOOM);
+    expect(layers[2]!.minzoom).toBeUndefined();
     // Only the thinned-out half is held back by zoom; a station with a
     // current TAF is drawn at every zoom.
-    expect(layers[0]!.minzoom).toBe(AIRPORT_ALL_ZOOM);
-    expect(layers[1]!.minzoom).toBeUndefined();
+    expect(layers[3]!.minzoom).toBe(AIRPORT_ALL_ZOOM);
+    expect(layers[4]!.minzoom).toBeUndefined();
   });
 });
 
@@ -383,41 +396,49 @@ describe("reading one station by range", () => {
 
 describe("the ?stations= parameter", () => {
   it("is off when the link says nothing", () => {
-    expect(parseStationsFromSearch("")).toEqual({ soundings: false, airports: false });
-    expect(parseStationsFromSearch("?stations=off")).toEqual({ soundings: false, airports: false });
-    expect(parseStationsFromSearch("?stations=nonsense")).toEqual({ soundings: false, airports: false });
+    expect(parseStationsFromSearch("")).toEqual({ soundings: false, airports: false, synop: false });
+    expect(parseStationsFromSearch("?stations=off")).toEqual({ soundings: false, airports: false, synop: false });
+    expect(parseStationsFromSearch("?stations=nonsense")).toEqual({ soundings: false, airports: false, synop: false });
   });
 
   it("reads each product, together and apart", () => {
-    expect(parseStationsFromSearch("?stations=snd")).toEqual({ soundings: true, airports: false });
-    expect(parseStationsFromSearch("?stations=apt")).toEqual({ soundings: false, airports: true });
-    expect(parseStationsFromSearch("?stations=snd,apt")).toEqual({ soundings: true, airports: true });
+    expect(parseStationsFromSearch("?stations=snd")).toEqual({ soundings: true, airports: false, synop: false });
+    expect(parseStationsFromSearch("?stations=apt")).toEqual({ soundings: false, airports: true, synop: false });
+    expect(parseStationsFromSearch("?stations=snd,apt")).toEqual({ soundings: true, airports: true, synop: false });
     expect(parseStationsFromSearch("?stations=SOUNDINGS, Airport")).toEqual({
       soundings: true,
       airports: true,
+      synop: false,
     });
-    expect(parseStationsFromSearch("?stations=on")).toEqual({ soundings: true, airports: true });
-    expect(parseStationsFromSearch("?stations=all")).toEqual({ soundings: true, airports: true });
+    expect(parseStationsFromSearch("?stations=syn")).toEqual({ soundings: false, airports: false, synop: true });
+    expect(parseStationsFromSearch("?stations=Surface,apt")).toEqual({ soundings: false, airports: true, synop: true });
+    expect(parseStationsFromSearch("?stations=on")).toEqual({ soundings: true, airports: true, synop: true });
+    expect(parseStationsFromSearch("?stations=all")).toEqual({ soundings: true, airports: true, synop: true });
   });
 
   it("writes only what differs from the default", () => {
-    expect(searchWithStations("?type=temp", { soundings: false, airports: false })).toBe("?type=temp");
-    expect(searchWithStations("?type=temp", { soundings: true, airports: false })).toBe(
+    expect(searchWithStations("?type=temp", { soundings: false, airports: false, synop: false })).toBe("?type=temp");
+    expect(searchWithStations("?type=temp", { soundings: true, airports: false, synop: false })).toBe(
       "?type=temp&stations=snd",
     );
-    expect(searchWithStations("?type=temp", { soundings: true, airports: true })).toBe(
+    expect(searchWithStations("?type=temp", { soundings: true, airports: true, synop: false })).toBe(
       "?type=temp&stations=snd%2Capt",
     );
+    expect(searchWithStations("?type=temp", { soundings: false, airports: true, synop: true })).toBe(
+      "?type=temp&stations=apt%2Csyn",
+    );
     // A link that already named the products is rewritten, not doubled.
-    expect(searchWithStations("?stations=apt", { soundings: false, airports: false })).toBe("?");
+    expect(searchWithStations("?stations=apt", { soundings: false, airports: false, synop: false })).toBe("?");
   });
 
   it("round-trips what it writes", () => {
     for (const state of [
-      { soundings: false, airports: false },
-      { soundings: true, airports: false },
-      { soundings: false, airports: true },
-      { soundings: true, airports: true },
+      { soundings: false, airports: false, synop: false },
+      { soundings: true, airports: false, synop: false },
+      { soundings: false, airports: true, synop: false },
+      { soundings: true, airports: true, synop: false },
+      { soundings: false, airports: false, synop: true },
+      { soundings: true, airports: true, synop: true },
     ]) {
       expect(parseStationsFromSearch(searchWithStations("", state))).toEqual(state);
     }

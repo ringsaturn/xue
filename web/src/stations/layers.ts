@@ -1,6 +1,6 @@
-/** The station marks on the map: two MapLibre GeoJSON sources — the
- * radiosondes and the airports — over whatever fill and lines are on
- * screen, drawn the way the storm tracks are and with no shader of ours.
+/** The station marks on the map: three MapLibre GeoJSON sources — the
+ * radiosondes, the airports and the surface stations — over whatever fill
+ * and lines are on screen, drawn the way the storm tracks are and with no shader of ours.
  *
  * Both products are point sets an index already holds whole: seven
  * hundred soundings, five thousand airports, each with the one
@@ -29,10 +29,14 @@ import type {
   FlightCategory,
   SoundingIndex,
   SoundingStationEntry,
+  SynopIndex,
+  SynopNetwork,
+  SynopStation,
 } from "./schema";
 
 const SOUNDING_SOURCE = "station-soundings";
 const AIRPORT_SOURCE = "station-airports";
+const SYNOP_SOURCE = "station-synop";
 
 const LAYERS = {
   sounding: "station-sounding",
@@ -40,7 +44,15 @@ const LAYERS = {
   airportMajor: "station-airport-major",
   /** Every other airport, from `AIRPORT_ALL_ZOOM` up. */
   airportMinor: "station-airport-minor",
+  /** Surface stations by rank: the principal ones at every zoom, the
+   * automatic ones from `SYNOP_AUTOMATIC_ZOOM`, the precipitation gauges
+   * from `SYNOP_GAUGE_ZOOM`. */
+  synopPrincipal: "station-synop-principal",
+  synopAutomatic: "station-synop-automatic",
+  synopGauge: "station-synop-gauge",
 } as const;
+
+const SYNOP_LAYERS = [LAYERS.synopGauge, LAYERS.synopAutomatic, LAYERS.synopPrincipal] as const;
 
 const STATION_LAYER_IDS: readonly string[] = Object.values(LAYERS);
 /** The layers a click on the map may hit a station through, the sparser
@@ -49,6 +61,9 @@ export const STATION_CLICKABLE_LAYERS: readonly string[] = [
   LAYERS.sounding,
   LAYERS.airportMajor,
   LAYERS.airportMinor,
+  LAYERS.synopPrincipal,
+  LAYERS.synopAutomatic,
+  LAYERS.synopGauge,
 ];
 
 /** Below this zoom the airports thin to the ones with a current TAF. The
@@ -58,6 +73,12 @@ export const STATION_CLICKABLE_LAYERS: readonly string[] = [
  * read as a network. */
 export const AIRPORT_ALL_ZOOM = 6;
 
+/** Where the surface stations fill in. A national network is a station
+ * every 15–20 km — AMeDAS is 1 300 over Japan — so a regional view shows
+ * the principal stations alone, a prefecture the automatic stations, and a
+ * city the gauges that measure nothing but rain. */
+export const SYNOP_AUTOMATIC_ZOOM = 5;
+export const SYNOP_GAUGE_ZOOM = 7;
 /** How far from the playhead an observation may be before its mark is
  * drawn faint. An airport reports every half hour and a sonde flies twice
  * a day, so the two windows are hours apart; both are wide enough that a
@@ -66,13 +87,31 @@ export const AIRPORT_ALL_ZOOM = 6;
  * rather than wrong. */
 export const AIRPORT_STALE_MS = 3 * 3600 * 1000;
 export const SOUNDING_STALE_MS = 15 * 3600 * 1000;
+/** A surface station reports every ten minutes to every hour. */
+export const SYNOP_STALE_MS = 2 * 3600 * 1000;
 
 const FULL_OPACITY = 0.92;
 const STALE_OPACITY = 0.28;
 
 const RADIUS = 4.5;
 const HOVER_RADIUS = 5.5;
+/** The surface stations are dense; their dots are a size down. */
+const SYNOP_RADIUS = 3.5;
+const SYNOP_HOVER_RADIUS = 4.5;
 
+/** The surface stations' temperature ramp, °C, cold to hot. It is a ramp
+ * for telling a cold valley from a warm coast at a glance, not one to read
+ * a value off — the card does that — and a station with no thermometer
+ * (a precipitation gauge) is drawn in the neutral grey. */
+const SURFACE_T_RAMP: readonly (readonly [number, string])[] = [
+  [-20, "#2c4fa8"],
+  [-5, "#5b8fd6"],
+  [5, "#8fc3c9"],
+  [15, "#e8c36a"],
+  [25, "#e07b39"],
+  [35, "#b2182b"],
+];
+const NO_TEMPERATURE = "#98a2b0";
 /** A sounding with no 500 hPa temperature is drawn hollow: the ring in
  * the map's ink and nothing inside it. */
 const HOLLOW = "rgba(0, 0, 0, 0)";
@@ -170,7 +209,8 @@ export function isStale(observed: number, time: number, limit: number): boolean 
  * string: MapLibre flattens nested properties). */
 export type StationPointData =
   | { kind: "sounding"; station: SoundingStationEntry }
-  | { kind: "airport"; station: AirportStation };
+  | { kind: "airport"; station: AirportStation }
+  | { kind: "synop"; station: SynopStation; network: SynopNetwork };
 
 export function stationDataOf(feature: { properties?: unknown }): StationPointData | null {
   const properties = feature.properties as Record<string, unknown> | null | undefined;
@@ -232,6 +272,41 @@ export function airportFeatures(index: AirportIndex | null): FeatureCollection {
   );
 }
 
+/** One circle per surface station, carrying its rank (which layer draws
+ * it), its current temperature where it has one, and its newest time. */
+export function synopFeatures(index: SynopIndex | null): FeatureCollection {
+  if (index === null) return collection([]);
+  return collection(
+    index.stations.map((station) => {
+      const t = station.values.t ?? null;
+      return point(station.lon, station.lat, {
+        id: station.id,
+        kind: "synop",
+        rank: station.rank,
+        ...(t === null ? {} : { t }),
+        time: Date.parse(station.obsTime),
+        data: JSON.stringify({
+          kind: "synop",
+          station,
+          network: index.networks[station.network]!,
+        } satisfies StationPointData),
+      });
+    }),
+  );
+}
+
+/** A surface station's fill: its current temperature on the ramp, or the
+ * neutral grey where it has none. */
+export function synopColorExpression(): ExpressionSpecification {
+  const stops = SURFACE_T_RAMP.flatMap(([value, color]) => [value, color]);
+  return [
+    "case",
+    ["has", "t"],
+    ["interpolate", ["linear"], ["number", ["get", "t"]], ...stops] as ExpressionSpecification,
+    NO_TEMPERATURE,
+  ];
+}
+
 /** The opacity a mark is drawn at for a playhead at `time`: full inside
  * the product's window, faint outside it. An expression over the feature's
  * own `time`, so a playhead move is two paint properties rather than a
@@ -283,6 +358,16 @@ const RADIUS_EXPRESSION: ExpressionSpecification = [
   ["case", ["boolean", ["feature-state", "hover"], false], HOVER_RADIUS + GROWTH, RADIUS + GROWTH],
 ];
 
+const SYNOP_RADIUS_EXPRESSION: ExpressionSpecification = [
+  "interpolate",
+  ["linear"],
+  ["zoom"],
+  GROW_FROM_ZOOM,
+  ["case", ["boolean", ["feature-state", "hover"], false], SYNOP_HOVER_RADIUS, SYNOP_RADIUS],
+  GROW_TO_ZOOM,
+  ["case", ["boolean", ["feature-state", "hover"], false], SYNOP_HOVER_RADIUS + GROWTH, SYNOP_RADIUS + GROWTH],
+];
+
 /** How far the playhead must move before the dimming is recomputed. The
  * readout calls `setTime` on every frame, and a paint property set is a
  * repaint; half a minute is far below either product's cadence. */
@@ -293,8 +378,13 @@ const TIME_EPSILON_MS = 30_000;
 export function stationSourceSpecs(data: {
   soundings: SoundingIndex | null;
   airports: AirportIndex | null;
+  synop: SynopIndex | null;
 }): { id: string; source: GeoJSONSourceSpecification }[] {
   return [
+    {
+      id: SYNOP_SOURCE,
+      source: { type: "geojson", data: synopFeatures(data.synop), promoteId: "id" },
+    },
     {
       id: SOUNDING_SOURCE,
       source: { type: "geojson", data: soundingFeatures(data.soundings), promoteId: "id" },
@@ -306,9 +396,10 @@ export function stationSourceSpecs(data: {
   ];
 }
 
-/** The three circle layers, in the order they are added: each goes under
- * the same symbol layer, so the last one added draws on top and the
- * soundings — the sparser set — stay over the airports.
+/** The circle layers, in the order they are added: each goes under the
+ * same symbol layer, so the last one added draws on top — the surface
+ * stations, the densest set, at the bottom, then the airports, and the
+ * soundings, the sparsest, over both.
  *
  * The airports are two layers rather than one because `zoom` is not an
  * expression a filter may use: the ones with a current TAF are drawn at
@@ -328,7 +419,39 @@ export function stationLayerSpecs(state: {
     "circle-stroke-opacity": airportOpacity,
   } as const;
   const soundingOpacity = freshnessOpacity(state.time, SOUNDING_STALE_MS);
+  const synopOpacity = freshnessOpacity(state.time, SYNOP_STALE_MS);
+  const synopPaint = {
+    "circle-radius": SYNOP_RADIUS_EXPRESSION,
+    "circle-color": synopColorExpression(),
+    "circle-stroke-color": state.ink,
+    "circle-stroke-width": 0.6,
+    "circle-opacity": synopOpacity,
+    "circle-stroke-opacity": synopOpacity,
+  } as const;
   return [
+    {
+      id: LAYERS.synopGauge,
+      type: "circle",
+      source: SYNOP_SOURCE,
+      minzoom: SYNOP_GAUGE_ZOOM,
+      filter: ["==", ["get", "rank"], 2],
+      paint: { ...synopPaint },
+    },
+    {
+      id: LAYERS.synopAutomatic,
+      type: "circle",
+      source: SYNOP_SOURCE,
+      minzoom: SYNOP_AUTOMATIC_ZOOM,
+      filter: ["==", ["get", "rank"], 1],
+      paint: { ...synopPaint },
+    },
+    {
+      id: LAYERS.synopPrincipal,
+      type: "circle",
+      source: SYNOP_SOURCE,
+      filter: ["==", ["get", "rank"], 0],
+      paint: { ...synopPaint },
+    },
     {
       id: LAYERS.airportMinor,
       type: "circle",
@@ -368,6 +491,7 @@ export class StationLayers {
   private appliedTime: number | null = null;
   private soundings: SoundingIndex | null = null;
   private airports: AirportIndex | null = null;
+  private synop: SynopIndex | null = null;
   private hovered: { source: string; id: string } | null = null;
 
   constructor(private readonly map: MaplibreMap) {}
@@ -381,6 +505,7 @@ export class StationLayers {
     for (const { id, source } of stationSourceSpecs({
       soundings: this.soundings,
       airports: this.airports,
+      synop: this.synop,
     })) {
       if (!map.getSource(id)) map.addSource(id, source);
     }
@@ -419,6 +544,11 @@ export class StationLayers {
     this.publish(AIRPORT_SOURCE, airportFeatures(index));
   }
 
+  setSynop(index: SynopIndex | null): void {
+    this.synop = index;
+    this.publish(SYNOP_SOURCE, synopFeatures(index));
+  }
+
   /** The playhead's valid time, which is only ever what a mark's opacity
    * is measured against: the marks take no session and never gate it. */
   setTime(time: number | null): void {
@@ -435,6 +565,11 @@ export class StationLayers {
     const opacity = freshnessOpacity(time, SOUNDING_STALE_MS);
     this.map.setPaintProperty(LAYERS.sounding, "circle-opacity", opacity);
     this.map.setPaintProperty(LAYERS.sounding, "circle-stroke-opacity", opacity);
+    const synopOpacity = freshnessOpacity(time, SYNOP_STALE_MS);
+    for (const id of SYNOP_LAYERS) {
+      this.map.setPaintProperty(id, "circle-opacity", synopOpacity);
+      this.map.setPaintProperty(id, "circle-stroke-opacity", synopOpacity);
+    }
   }
 
   /** The mark under the pointer, which grows by a pixel; null clears it. */
@@ -445,7 +580,9 @@ export class StationLayers {
         ? null
         : data.kind === "sounding"
           ? { source: SOUNDING_SOURCE, id: data.station.id }
-          : { source: AIRPORT_SOURCE, id: data.station.icao };
+          : data.kind === "synop"
+            ? { source: SYNOP_SOURCE, id: data.station.id }
+            : { source: AIRPORT_SOURCE, id: data.station.icao };
     const previous = this.hovered;
     if (previous?.source === next?.source && previous?.id === next?.id) return;
     if (previous) this.map.setFeatureState(previous, { hover: false });
@@ -453,12 +590,12 @@ export class StationLayers {
     this.hovered = next;
   }
 
-  /** Take both products off the map — a case, or a root that publishes
-   * neither — leaving the style as it was found. */
+  /** Take every product off the map — a case, or a root that publishes
+   * none — leaving the style as it was found. */
   remove(): void {
     if (!this.added) return;
     for (const id of STATION_LAYER_IDS) if (this.map.getLayer(id)) this.map.removeLayer(id);
-    for (const source of [SOUNDING_SOURCE, AIRPORT_SOURCE])
+    for (const source of [SOUNDING_SOURCE, AIRPORT_SOURCE, SYNOP_SOURCE])
       if (this.map.getSource(source)) this.map.removeSource(source);
     this.added = false;
     this.hovered = null;

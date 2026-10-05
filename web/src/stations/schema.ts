@@ -1,7 +1,8 @@
-/** The two point products the shell draws as station marks, schema v1 —
+/** The three point products the shell draws as station marks, schema v1 —
  * the radiosonde soundings (`docs/sounding.md`, written by
- * `xuebuild/sounding/schema.py`) and the airports (`docs/airport.md`,
- * `xuebuild/airport/schema.py`). Both take the same shape as the storm
+ * `xuebuild/sounding/schema.py`), the airports (`docs/airport.md`,
+ * `xuebuild/airport/schema.py`) and the surface stations (`docs/synop.md`,
+ * `xuebuild/synop/schema.py`). All take the same shape as the storm
  * tracks: a mutable pointer names an immutable directory, the directory's
  * `index.json` is what a marker layer reads, and one line of the `.jsonl`
  * beside it — addressed by the index's own byte span — is one station's
@@ -28,6 +29,7 @@ import {
 const STATION_SCHEMA_VERSION = 1;
 export const SOUNDING_POINTER_FILENAME = "latest-sounding.json";
 export const AIRPORT_POINTER_FILENAME = "latest-airport.json";
+export const SYNOP_POINTER_FILENAME = "latest-synop.json";
 
 /** The missing value in every one of a sounding's level arrays, `sig`
  * included. A JSON number, not a 16-bit field. */
@@ -62,6 +64,12 @@ const SOURCE_ID = /^[a-z][a-z0-9]*(?:[.:-][a-z0-9]+)*$/;
 const SOUNDING_PATH =
   /^(?:sounding\/(\d{4})\/(\d{2})\/(\d{2})\/sounding\.\1\2\3\d{2}|sounding\.\d{10})\/index\.json$/;
 const AIRPORT_PATH = /^airport\.\d{12}\/index\.json$/;
+const SYNOP_PATH = /^synop\.\d{12}\/index\.json$/;
+/** `<network>:<the network's own station number>`; the first group is the
+ * network. */
+const SYNOP_STATION_ID = /^([a-z][a-z0-9]*(?:-[a-z0-9]+)*):[0-9A-Za-z_.-]+$/;
+const NETWORK_ID = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
+const ELEMENT_KEY = /^[a-z][a-z0-9]*$/;
 
 const FLIGHT_CATEGORIES = ["VFR", "MVFR", "IFR", "LIFR"] as const;
 export type FlightCategory = (typeof FLIGHT_CATEGORIES)[number];
@@ -82,6 +90,7 @@ const HEIGHT: [number, number] = LEVEL_BOUNDS.z!;
  * with another product name. */
 export type SoundingPointer = ProductPointer<"sounding">;
 export type AirportPointer = ProductPointer<"airport">;
+export type SynopPointer = ProductPointer<"synop">;
 
 /** The file beside the index — `soundings.jsonl`, `history.jsonl` — with
  * the `?v=` a reader requests it under. */
@@ -641,5 +650,221 @@ export function parseAirportStation(input: unknown): AirportStationHistory {
     wmo: optionalString(value.wmo, "station.wmo", WMO_NUMBER),
     metars: observations,
     taf: value.taf === null || value.taf === undefined ? null : taf(value.taf, "station.taf"),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// The surface stations (`docs/synop.md`): one index over many networks, a
+// `<network>.jsonl` per network beside it, and every station's window as
+// columns on its line.
+
+/** The ranges v1 holds its elements to (`docs/synop.md` §2). An element
+ * this build does not know is admitted as any number: a network added
+ * after this build still reads. */
+const SYNOP_BOUNDS: Record<string, [number, number]> = {
+  t: TEMPERATURE,
+  rh: [0, 100],
+  p: [300, 1100],
+  slp: PRESSURE,
+  wd: WIND_DIRECTION,
+  ws: WIND_SPEED,
+  gust: WIND_SPEED,
+  pr: [0, 1000],
+  pr1h: [0, 1000],
+  sun: [0, 60],
+  snow: [0, 2000],
+  vis: [0, Infinity],
+};
+
+/** How prominent a station is, which the map thins by: 0 a principal
+ * station, 1 a multi-element automatic one, 2 a precipitation gauge. */
+export type SynopRank = 0 | 1 | 2;
+
+export interface SynopNetwork {
+  id: string;
+  name: string;
+  /** Seconds between a station's reports. */
+  cadence: number;
+  /** Seconds `pr` and `sun` accumulate over. */
+  prPeriod: number | null;
+  /** What a display must show beside the network's data. */
+  attribution: string;
+  license: string;
+  url: string;
+  latest: string | null;
+  file: StationFile;
+}
+
+/** One index row, expanded. `values` are the station's current values by
+ * element key — each element's newest within the hour before `obsTime`. */
+export interface SynopStation {
+  id: string;
+  /** Position in the index's `networks`. */
+  network: number;
+  lat: number;
+  lon: number;
+  elev: number | null;
+  rank: SynopRank;
+  name: string | null;
+  obsTime: string;
+  values: Record<string, number | null>;
+  offset: number;
+  length: number;
+}
+
+export interface SynopIndex {
+  schemaVersion: number;
+  issued: string;
+  generated: string;
+  networks: SynopNetwork[];
+  elements: string[];
+  stations: SynopStation[];
+  sources: StationSource[];
+}
+
+/** One line of a network file: a station's window, column by column.
+ * `time` is epoch seconds, oldest first; each array of `obs` is as long. */
+export interface SynopStationSeries {
+  id: string;
+  name: string | null;
+  /** The network's own spellings by language tag. */
+  names: Record<string, string> | null;
+  lat: number;
+  lon: number;
+  elev: number | null;
+  wmo: string | null;
+  rank: SynopRank;
+  time: number[];
+  obs: Record<string, (number | null)[]>;
+}
+
+function rank(value: unknown, label: string): SynopRank {
+  if (value !== 0 && value !== 1 && value !== 2) throw new Error(`${label} must be 0, 1 or 2`);
+  return value;
+}
+
+function elementValue(key: string, value: unknown, label: string): number | null {
+  return optionalNumber(value, label, SYNOP_BOUNDS[key]);
+}
+
+export function parseSynopPointer(input: unknown): SynopPointer {
+  return pointer(input, "synop", SYNOP_PATH, STATION_SCHEMA_VERSION);
+}
+
+/** `synop.<round>/index.json`: the compact rows expanded, each checked
+ * against its network's file the way the airport rows are against theirs. */
+export function parseSynopIndex(input: unknown): SynopIndex {
+  const value = object(input, "synop index");
+  const version = schemaVersion(value.schemaVersion, "synop index", STATION_SCHEMA_VERSION);
+  const networks = list(value.networks, "index.networks").map((item, index) => {
+    const label = `index.networks[${index}]`;
+    const entry = object(item, label);
+    const id = string(entry.id, `${label}.id`, NETWORK_ID);
+    return {
+      id,
+      name: string(entry.name, `${label}.name`),
+      cadence: integer(entry.cadence, `${label}.cadence`, 60),
+      prPeriod: entry.prPeriod === null || entry.prPeriod === undefined
+        ? null
+        : integer(entry.prPeriod, `${label}.prPeriod`, 60),
+      attribution: string(entry.attribution, `${label}.attribution`),
+      license: string(entry.license, `${label}.license`),
+      url: string(entry.url, `${label}.url`),
+      latest: optionalTimestamp(entry.latest, `${label}.latest`),
+      file: stationFile(entry.file, `${label}.file`, `${id}.jsonl`),
+    } satisfies SynopNetwork;
+  });
+  if (new Set(networks.map((network) => network.id)).size !== networks.length)
+    throw new Error("index.networks lists a network twice");
+  const elements = list(value.elements, "index.elements").map((item, index) =>
+    string(item, `index.elements[${index}]`, ELEMENT_KEY),
+  );
+  if (new Set(elements).size !== elements.length)
+    throw new Error("index.elements lists an element twice");
+  const width = 8 + elements.length + 2;
+  const ends = networks.map(() => 0);
+  let previous = "";
+  const stations = list(value.stations, "index.stations").map((item, index) => {
+    const label = `index.stations[${index}]`;
+    const row = list(item, label);
+    if (row.length !== width) throw new Error(`${label} must be a row of ${width} values`);
+    const id = string(row[0], `${label}.id`, SYNOP_STATION_ID);
+    if (id <= previous) throw new Error("index.stations must be sorted by id and unique");
+    previous = id;
+    const network = integer(row[1], `${label}.network`);
+    if (network >= networks.length) throw new Error(`${label}.network names no network`);
+    if (SYNOP_STATION_ID.exec(id)![1] !== networks[network]!.id)
+      throw new Error(`${label}.id does not belong to its network`);
+    const { offset, length } = span(
+      { offset: row[width - 2], length: row[width - 1] },
+      label,
+      ends[network]!,
+      networks[network]!.file.byteLength,
+    );
+    ends[network] = offset + length;
+    const values: Record<string, number | null> = {};
+    elements.forEach((key, position) => {
+      values[key] = elementValue(key, row[8 + position], `${label}.${key}`);
+    });
+    return {
+      id,
+      network,
+      lat: number(row[2], `${label}.lat`, LATITUDE),
+      lon: number(row[3], `${label}.lon`, LONGITUDE),
+      elev: optionalNumber(row[4], `${label}.elev`, ELEVATION),
+      rank: rank(row[5], `${label}.rank`),
+      name: optionalString(row[6], `${label}.name`),
+      obsTime: timestamp(row[7], `${label}.obsTime`),
+      values,
+      offset,
+      length,
+    } satisfies SynopStation;
+  });
+  return {
+    schemaVersion: version,
+    issued: timestamp(value.issued, "index.issued"),
+    generated: timestamp(value.generated, "index.generated"),
+    networks,
+    elements,
+    stations,
+    sources: sources(value.sources, "index.sources"),
+  };
+}
+
+/** One line of a network file, the slice an index row's span reads out. */
+export function parseSynopStation(input: unknown): SynopStationSeries {
+  const value = object(input, "station");
+  const time = list(value.time, "station.time").map((item, index) =>
+    integer(item, `station.time[${index}]`),
+  );
+  if (time.length === 0) throw new Error("station.time must not be empty");
+  for (let index = 1; index < time.length; index += 1)
+    if (time[index]! <= time[index - 1]!) throw new Error("station.time must be strictly increasing");
+  const columns = object(value.obs, "station.obs");
+  const obs: Record<string, (number | null)[]> = {};
+  for (const [key, column] of Object.entries(columns)) {
+    if (!ELEMENT_KEY.test(key)) throw new Error(`station.obs has a malformed key ${key}`);
+    const values = list(column, `station.obs.${key}`);
+    if (values.length !== time.length) throw new Error(`station.obs.${key} must be as long as time`);
+    obs[key] = values.map((item, index) => elementValue(key, item, `station.obs.${key}[${index}]`));
+  }
+  let names: Record<string, string> | null = null;
+  if (value.names !== null && value.names !== undefined) {
+    const entries = Object.entries(object(value.names, "station.names"));
+    names = Object.fromEntries(
+      entries.map(([tag, name]) => [tag, string(name, `station.names.${tag}`)]),
+    );
+  }
+  return {
+    id: string(value.id, "station.id", SYNOP_STATION_ID),
+    name: optionalString(value.name, "station.name"),
+    names,
+    lat: number(value.lat, "station.lat", LATITUDE),
+    lon: number(value.lon, "station.lon", LONGITUDE),
+    elev: optionalNumber(value.elev, "station.elev", ELEVATION),
+    wmo: optionalString(value.wmo, "station.wmo"),
+    rank: rank(value.rank, "station.rank"),
+    time,
+    obs,
   };
 }

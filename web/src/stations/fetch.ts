@@ -1,4 +1,4 @@
-/** Reading the two station products off the data root: the pointer → index
+/** Reading the station products off the data root: the pointer → index
  * fetch (`pointerindex.ts`, null when the root publishes no such product),
  * and the one range request that reads a single station out of the `.jsonl`
  * beside the index. Nothing here touches the map. */
@@ -8,12 +8,16 @@ import { loadPointerIndex, type LoadedIndex } from "../pointerindex";
 import {
   AIRPORT_POINTER_FILENAME,
   SOUNDING_POINTER_FILENAME,
+  SYNOP_POINTER_FILENAME,
   parseAirportIndex,
   parseAirportPointer,
   parseAirportStation,
   parseSoundingIndex,
   parseSoundingPointer,
   parseSoundingStation,
+  parseSynopIndex,
+  parseSynopPointer,
+  parseSynopStation,
   type AirportIndex,
   type AirportPointer,
   type AirportStation,
@@ -23,10 +27,15 @@ import {
   type SoundingStation,
   type SoundingStationEntry,
   type StationFile,
+  type SynopIndex,
+  type SynopPointer,
+  type SynopStation,
+  type SynopStationSeries,
 } from "./schema";
 
 export type LoadedSoundingIndex = LoadedIndex<SoundingPointer, SoundingIndex>;
 export type LoadedAirportIndex = LoadedIndex<AirportPointer, AirportIndex>;
+export type LoadedSynopIndex = LoadedIndex<SynopPointer, SynopIndex>;
 
 export function fetchSoundingIndex(baseUrl: string): Promise<LoadedSoundingIndex | null> {
   return loadPointerIndex(
@@ -46,6 +55,10 @@ export function fetchAirportIndex(baseUrl: string): Promise<LoadedAirportIndex |
     parseAirportIndex,
     "airport",
   );
+}
+
+export function fetchSynopIndex(baseUrl: string): Promise<LoadedSynopIndex | null> {
+  return loadPointerIndex(baseUrl, SYNOP_POINTER_FILENAME, parseSynopPointer, parseSynopIndex, "synop");
 }
 
 /** The URL of the file beside an index, under the `?v=` the index gives
@@ -136,5 +149,18 @@ export async function fetchAirportStation(
   const parsed = parseAirportStation(await fetchSpan(url, station.offset, station.length));
   if (parsed.icao !== station.icao)
     throw new Error(`history.jsonl span names ${parsed.icao}, not ${station.icao}`);
+  return parsed;
+}
+
+/** One surface station's window, read by range out of its network's file. */
+export async function fetchSynopStation(
+  loaded: LoadedSynopIndex,
+  station: SynopStation,
+): Promise<SynopStationSeries> {
+  const network = loaded.index.networks[station.network]!;
+  const url = stationFileUrl(loaded.indexUrl, network.file);
+  const parsed = parseSynopStation(await fetchSpan(url, station.offset, station.length));
+  if (parsed.id !== station.id)
+    throw new Error(`${network.file.path} span names ${parsed.id}, not ${station.id}`);
   return parsed;
 }
