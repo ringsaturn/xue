@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { validateManifest } from "../../web/src/manifest";
 import { spawnRectangle } from "../../web/src/particles";
@@ -80,31 +80,48 @@ describe("showcase catalog", () => {
     expect(catalog.cases[0]!.defaultVariable).toBe("gust10m");
   });
 
-  it("rejects malformed or repeated variable names", () => {
+  // A case the shell cannot read is dropped, never the catalog: a new kind
+  // of case published before every open tab has the shell that reads it
+  // must not empty the page.
+  const dropped = (overrides: Record<string, unknown>) =>
+    validateCatalog(catalogFixture([caseFixture(overrides)])).cases.length === 0;
+
+  it("drops a case with malformed or repeated variable names", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     for (const variables of [["Prate"], ["tmp-2m"], [""], ["prate", "prate"], [], ["prate", 7]]) {
-      expect(() =>
-        validateCatalog(catalogFixture([caseFixture({ variables, defaultVariable: variables[0] })])),
-      ).toThrow();
+      expect(dropped({ variables, defaultVariable: variables[0] })).toBe(true);
     }
+    warn.mockRestore();
   });
 
-  it("rejects a manifest path outside the case's own directory", () => {
-    expect(() =>
-      validateCatalog(catalogFixture([caseFixture({ manifestPath: "showcase/other/manifest.json" })])),
-    ).toThrow();
-    expect(() =>
-      validateCatalog(catalogFixture([caseFixture({ manifestPath: "../latest.json" })])),
-    ).toThrow();
+  it("drops a case whose manifest is outside its own directory", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(dropped({ manifestPath: "showcase/other/manifest.json" })).toBe(true);
+    expect(dropped({ manifestPath: "../latest.json" })).toBe(true);
+    warn.mockRestore();
   });
 
-  it("rejects a dataset it cannot serve", () => {
-    expect(() => validateCatalog(catalogFixture([caseFixture({ model: "ICON" })]))).toThrow();
-    expect(() => validateCatalog(catalogFixture([caseFixture({ modelId: "ecmwf" })]))).toThrow();
-    expect(() => validateCatalog(catalogFixture([caseFixture({ product: "pgrb2.0p50" })]))).toThrow();
+  it("drops a case on a dataset it cannot serve", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(dropped({ model: "ICON" })).toBe(true);
+    expect(dropped({ modelId: "ecmwf" })).toBe(true);
+    expect(dropped({ product: "pgrb2.0p50" })).toBe(true);
+    warn.mockRestore();
   });
 
-  it("rejects a default variable the case does not ship", () => {
-    expect(() => validateCatalog(catalogFixture([caseFixture({ defaultVariable: "tmp2m" })]))).toThrow();
+  it("drops a case defaulting to a variable it does not ship", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(dropped({ defaultVariable: "tmp2m" })).toBe(true);
+    warn.mockRestore();
+  });
+
+  it("keeps the rest of the catalog around a case of an unknown kind", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const unknown = { id: "rolling-fork-2023", kind: "nexrad", window: "showcase/rolling-fork-2023/index.json" };
+    const catalog = validateCatalog({ ...catalogFixture(), cases: [unknown, caseFixture()] });
+    expect(catalog.cases.map((item) => item.id)).toEqual([caseFixture().id]);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("rolling-fork-2023"));
+    warn.mockRestore();
   });
 
   it("rejects duplicate case ids", () => {

@@ -163,11 +163,24 @@ function validateCase(input: unknown): ShowcaseCase {
   };
 }
 
+/** The catalog, keeping every case this shell can play. A case it cannot
+ * read — a dataset or a case kind added after it was deployed, or a
+ * malformed row — is dropped with a warning rather than failing the
+ * catalog, so publishing a new kind of case never empties the page of
+ * every shell that predates it. Only the catalog's own shape throws. */
 export function validateCatalog(input: unknown): ShowcaseCatalog {
   const value = object(input);
   if (value.schemaVersion !== 1) throw new Error("unsupported showcase catalog schema version");
   if (!Array.isArray(value.cases)) throw new Error("showcase catalog has no case list");
-  const cases = value.cases.map(validateCase);
+  const cases: ShowcaseCase[] = [];
+  for (const entry of value.cases) {
+    try {
+      cases.push(validateCase(entry));
+    } catch (error) {
+      const id = typeof (entry as { id?: unknown } | null)?.id === "string" ? (entry as { id: string }).id : "?";
+      console.warn(`showcase: skipping case ${id}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
   if (new Set(cases.map((item) => item.id)).size !== cases.length) {
     throw new Error("showcase catalog contains duplicate case ids");
   }
