@@ -435,10 +435,15 @@ void main() {
   // Opacity per sample follows the step's length in voxels, so the picture
   // does not change with how many samples a ray takes.
   float stride = dt / u_voxel;
+  // Each pixel starts its march at its own phase within the first step.
+  // At one fixed phase every ray samples the same shells, and a sampled
+  // volume shows them as wood-grain bands; a per-pixel offset (interleaved
+  // gradient noise) turns the bands into a grain too fine to see.
+  float phase = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
   vec4 sum = vec4(0.0);
   for (int i = 0; i < MAX_STEPS; i += 1) {
     if (i >= steps) break;
-    vec3 p = u_camera + dir * (enter + (float(i) + 0.5) * dt);
+    vec3 p = u_camera + dir * (enter + (float(i) + phase) * dt);
     float lon = p.x * 360.0 - 180.0;
     float lat = degrees(atan(sinh(PI * (1.0 - 2.0 * p.y))));
     vec2 uv = vec2((lon - u_grid.x) / u_grid.z, (u_grid.y - lat) / u_grid.w);
@@ -570,10 +575,15 @@ void main() {
   int steps = int(clamp(ceil(span / u_voxel), 1.0, float(MAX_STEPS)));
   float dt = span / float(steps);
   float stride = dt / u_voxel;
+  // Each pixel starts its march at its own phase within the first step.
+  // At one fixed phase every ray samples the same shells, and a sampled
+  // volume shows them as wood-grain bands; a per-pixel offset (interleaved
+  // gradient noise) turns the bands into a grain too fine to see.
+  float phase = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
   vec4 sum = vec4(0.0);
   for (int i = 0; i < MAX_STEPS; i += 1) {
     if (i >= steps) break;
-    vec3 p = u_camera + dir * (enter + (float(i) + 0.5) * dt);
+    vec3 p = u_camera + dir * (enter + (float(i) + phase) * dt);
     float r = length(p);
     float lat = degrees(asin(clamp(p.y / r, -1.0, 1.0)));
     float lon = degrees(atan(p.x, p.z));
