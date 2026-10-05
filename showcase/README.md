@@ -108,6 +108,22 @@ retires a case.
    whole national mosaic for every frame (about 1.5 MB gzipped per
    product), so a twelve-hour case fetches half a gigabyte per product.
 
+   An `mrms` case may carry the **single-site radars** of the same night
+   beside the mosaic: an optional `radar` block names the NEXRAD window
+   built for it, which the viewer draws one site at a time in place of the
+   mosaic ([`docs/nexrad.md`](../docs/nexrad.md)).
+
+   ```json
+   "radar": {"window": "radar/index.json", "defaultSite": "GWX", "defaultProduct": "n0g"}
+   ```
+
+   `window` is relative to `showcase/<id>/`. The window is built
+   separately, as one polar store per product for the whole case (`xue
+   nexrad-case showcase/nexrad-cases/<id>.json`, writing
+   `web/public/data/showcase/<id>/radar/`), and the catalog row gains its
+   `byteLength` and `crc32` when the case is refreshed or rebuilt. A shell
+   that does not know the block plays the mosaic alone.
+
    Prose is the definition's to change after the fact: a translation added
    or a summary corrected reaches the catalog with
 
@@ -168,6 +184,7 @@ The public archives do not go back forever:
 | `ecmwf` | about 2024-02 | Only the 00z and 12z oper cycles reach far enough for a long case |
 | `hrrr` | about 2014-08 | Every hour's cycle, hourly to f18 |
 | `mrms` | 2020-10-14 | Every two minutes; a case is a window from any hour |
+| `mrms3d` | 2020-10-14 | The 33 `MergedReflectivityQC` altitudes every ten minutes; a case is a window from any hour, like `mrms`. Build it with the native encoder (`XUE_ENCODER=native`, xuepy 0.30 or later): the reference path needs about 14 GB a frame |
 | `jma` | — | No archive: the agency lists three hours and its tiles expire after days. A window can only be built from the decoded-frame cache the live feed keeps on the bucket (`make pull-r2-frames`), and cases are not wired up yet |
 | `himawari` | 2022-12-13 | Every ten minutes from NOAA's `noaa-himawari9` bucket (the ISatSS tiles); a case is a window from any hour, like `mrms`, each scan 26 MB of tiles fetched and warped on the spot, so build it on a runner (`showcase.yml`). Crop with `bbox`: the whole disk is 4.6 MB a frame. Himawari-8's bucket (2019–2022) needs a platform row not written yet |
 | `cma` | 2026-09-06 | Every six minutes from a private daily Zarr archive (`XUE_CMA_ARCHIVE`, read with the `R2_*` credentials, `uv sync --group cma`); a case is a window from any hour, like `mrms`. A case may instead name a local NetCDF series (`dataset`), which is how the cases before the archive were cut |
