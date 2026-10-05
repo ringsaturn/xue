@@ -226,6 +226,7 @@ export const de: Record<MessageKey, string> = {
   varLabelWind10m: "Wind in 10 m",
   varLabelWind100m: "Wind in 100 m",
   varLabelCref: "Radar-Komposit-Reflektivität",
+  varLabelRefl3d: "3D-Radarreflektivität",
   varLabelOrog: "Orographie",
   varLabelIr104: "Infrarotbild (Helligkeitstemperatur bei 10,4 µm)",
   varLabelDustrgb: "Staub-RGB (Infrarot-Komposit)",

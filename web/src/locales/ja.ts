@@ -223,6 +223,7 @@ export const ja: Record<MessageKey, string> = {
   varLabelWind10m: "地上 10 m 風",
   varLabelWind100m: "100 m 風",
   varLabelCref: "レーダー合成反射強度",
+  varLabelRefl3d: "3次元レーダー反射強度",
   varLabelOrog: "地形高度",
   varLabelIr104: "赤外画像（10.4 µm 輝度温度）",
   varLabelDustrgb: "ダスト RGB（赤外合成）",

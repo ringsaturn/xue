@@ -228,6 +228,7 @@ export const ru: Record<MessageKey, string> = {
   varLabelWind10m: "Ветер на 10 м",
   varLabelWind100m: "Ветер на 100 м",
   varLabelCref: "Составная радиолокационная отражаемость",
+  varLabelRefl3d: "Трёхмерная радиолокационная отражаемость",
   varLabelOrog: "Орография",
   varLabelIr104: "Инфракрасный снимок (яркостная температура 10,4 мкм)",
   varLabelDustrgb: "Пылевой RGB (инфракрасный композит)",

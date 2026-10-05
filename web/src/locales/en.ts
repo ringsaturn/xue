@@ -397,6 +397,7 @@ export const en = {
   varLabelWind10m: "10 m wind",
   varLabelWind100m: "100 m wind",
   varLabelCref: "Composite radar reflectivity",
+  varLabelRefl3d: "3D radar reflectivity",
   varLabelOrog: "Orography",
   varLabelAurora: "Aurora visibility probability",
   varLabelIr104: "Infrared imagery (10.4 µm brightness temperature)",

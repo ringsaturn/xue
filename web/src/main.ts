@@ -5153,6 +5153,20 @@ function legendGradientFor(session: VariableSession): string {
  * label and unit, and the legend spans the codebook. */
 function variableUi(session: VariableSession): VariableUi {
   const spec = session.chartId === null ? null : variableSpec(session.chartId);
+  // A volume borrows the composite's colours, not its name: what is drawn is
+  // the reflectivity on every altitude, and its code says which.
+  const volume = spec && VOLUME_BUNDLE_LEVELS.has(session.id) ? volumeLevels(session.metadata.variables) : null;
+  if (spec && volume) {
+    const km = (metres: number) => String(Number((metres / 1000).toFixed(1)));
+    return {
+      code: `${session.id.toUpperCase()} ${km(volume.altitudes[0]!)}–${km(volume.altitudes[volume.altitudes.length - 1]!)} KM`,
+      title: ["3D", "Reflectivity"],
+      bufferTitle: spec.bufferTitle,
+      label: t("varLabelRefl3d"),
+      legend: spec.legend(),
+      legendKey: spec.legendKey?.() ?? null,
+    };
+  }
   if (spec) {
     return {
       code: spec.code,

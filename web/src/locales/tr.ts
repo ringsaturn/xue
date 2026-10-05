@@ -229,6 +229,7 @@ export const tr: Record<MessageKey, string> = {
   varLabelWind10m: "10 m rüzgarı",
   varLabelWind100m: "100 m rüzgarı",
   varLabelCref: "Bileşik radar reflektivitesi",
+  varLabelRefl3d: "3B radar yansıtıcılığı",
   varLabelOrog: "Orografi",
   varLabelIr104: "Kızılötesi görüntü (10,4 µm parlaklık sıcaklığı)",
   varLabelDustrgb: "Toz RGB (kızılötesi bileşik)",

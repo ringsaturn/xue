@@ -228,6 +228,7 @@ export const ko: Record<MessageKey, string> = {
   varLabelWind10m: "지상 10 m 바람",
   varLabelWind100m: "100 m 바람",
   varLabelCref: "레이더 합성 반사도",
+  varLabelRefl3d: "3차원 레이더 반사도",
   varLabelOrog: "지형 고도",
   varLabelIr104: "적외 영상 (10.4 µm 휘도 온도)",
   varLabelDustrgb: "먼지 RGB (적외 합성)",
