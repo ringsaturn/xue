@@ -1,0 +1,54 @@
+{
+  "id": "rolling-fork-2023",
+  "title": {
+    "zh": "2023 年 3 月罗灵福克龙卷",
+    "en": "The Rolling Fork tornado, March 2023",
+    "zh-Hant": "2023 年 3 月羅靈福克龍捲",
+    "ja": "2023年3月 ローリングフォークの竜巻",
+    "ko": "2023년 3월 롤링포크 토네이도",
+    "de": "Der Tornado von Rolling Fork, März 2023",
+    "fr": "La tornade de Rolling Fork, mars 2023",
+    "es": "El tornado de Rolling Fork, marzo de 2023",
+    "pt": "O tornado de Rolling Fork, março de 2023",
+    "tr": "Rolling Fork hortumu, Mart 2023",
+    "ru": "Торнадо в Роллинг-Форке, март 2023"
+  },
+  "summary": {
+    "zh": "2023 年 3 月 24 日傍晚，一个长寿命超级单体横穿密西西比三角洲。美国中部夏令时晚 8 点前后（25 日 01:00 UTC），它生成了 EF4 级的罗灵福克—锡尔弗城龙卷，造成 17 人死亡；当晚稍后，同一风暴又袭击了密西西比州东北部的阿莫里。此处是 NOAA MRMS 雷达拼图自 23Z 起四小时、原生两分钟一帧，并可同时查看杰克逊（DGX）、哥伦布空军基地（GWX）和孟菲斯（NQA）三部单站雷达的反射率与径向速度，逐个体扫追踪旋转。雷达观测，非预报产品。",
+    "en": "On the evening of 24 March 2023 a long-lived supercell crossed the Mississippi Delta. Around 8 pm CDT (01:00 UTC on the 25th) it produced the EF4 Rolling Fork–Silver City tornado, which killed 17 people, and later that night the same storm struck Amory in northeast Mississippi. This is four hours of the NOAA MRMS radar mosaic from 23Z at its two-minute cadence, with the single-site radars at Jackson (DGX), Columbus AFB (GWX) and Memphis (NQA) available beside it, reflectivity and radial velocity, so the rotation can be followed scan by scan. Radar observations, not a forecast.",
+    "zh-Hant": "2023 年 3 月 24 日傍晚，一個長壽命超級單體橫越密西西比三角洲。美國中部夏令時間晚上 8 點前後（25 日 01:00 UTC），它生成了 EF4 級的羅靈福克—錫爾弗城龍捲，造成 17 人死亡；當晚稍後，同一風暴又襲擊了密西西比州東北部的阿莫里。此處是 NOAA MRMS 雷達拼圖自 23Z 起四小時、原生兩分鐘一幀，並可同時查看傑克遜（DGX）、哥倫布空軍基地（GWX）和孟菲斯（NQA）三部單站雷達的反射率與徑向速度，逐個體掃追蹤旋轉。雷達觀測，非預報產品。",
+    "ja": "2023年3月24日の夕方、長寿命のスーパーセルがミシシッピ・デルタを横断した。米国中部夏時間の午後8時ごろ（25日 01:00 UTC）に EF4 のローリングフォーク—シルバーシティ竜巻を発生させて17人が亡くなり、その夜遅くには同じ嵐がミシシッピ州北東部のエイモリーを襲った。これは NOAA MRMS レーダー合成の 23Z からの4時間を元データどおり2分間隔で示したもので、ジャクソン（DGX）、コロンバス空軍基地（GWX）、メンフィス（NQA）の単一サイト・レーダーの反射強度とドップラー速度も並べて見られ、回転をスキャンごとに追える。予報ではなくレーダー観測。",
+    "ko": "2023년 3월 24일 저녁, 수명이 긴 슈퍼셀이 미시시피 삼각주를 가로질렀다. 미국 중부 서머타임 오후 8시경(25일 01:00 UTC) 이 폭풍은 EF4 등급의 롤링포크–실버시티 토네이도를 일으켜 17명이 숨졌고, 그날 밤 늦게 같은 폭풍이 미시시피주 북동부의 에이머리를 강타했다. 이 사례는 NOAA MRMS 레이더 합성의 23Z부터 4시간을 원본 그대로 2분 간격으로 보여 주며, 잭슨(DGX)·콜럼버스 공군기지(GWX)·멤피스(NQA) 단일 레이더의 반사도와 시선 속도를 함께 볼 수 있어 회전을 스캔마다 따라갈 수 있다. 예보가 아닌 레이더 관측.",
+    "de": "Am Abend des 24. März 2023 zog eine langlebige Superzelle über das Mississippi-Delta. Gegen 20 Uhr CDT (01:00 UTC am 25.) brachte sie den EF4-Tornado von Rolling Fork und Silver City hervor, der 17 Menschen tötete; später in der Nacht traf derselbe Sturm Amory im Nordosten von Mississippi. Dies sind vier Stunden des NOAA-MRMS-Radarkomposits ab 23Z im Zwei-Minuten-Takt der Quelle, daneben die Einzelradare Jackson (DGX), Columbus AFB (GWX) und Memphis (NQA) mit Reflektivität und Radialgeschwindigkeit, sodass sich die Rotation Scan für Scan verfolgen lässt. Radarbeobachtungen, keine Vorhersage.",
+    "fr": "Le soir du 24 mars 2023, une supercellule de longue durée traverse le delta du Mississippi. Vers 20 h CDT (01:00 UTC le 25), elle engendre la tornade EF4 de Rolling Fork et Silver City, qui fait 17 morts ; plus tard dans la nuit, la même tempête frappe Amory, dans le nord-est du Mississippi. Voici quatre heures de la mosaïque radar NOAA MRMS à partir de 23Z, à la cadence source de deux minutes, avec à côté les radars de Jackson (DGX), de la base de Columbus (GWX) et de Memphis (NQA), en réflectivité et en vitesse radiale, pour suivre la rotation balayage après balayage. Observations radar, pas une prévision.",
+    "es": "La tarde del 24 de marzo de 2023, una supercélula de larga vida cruzó el delta del Misisipi. Hacia las 20:00 CDT (01:00 UTC del 25) produjo el tornado EF4 de Rolling Fork y Silver City, que causó 17 muertos; más tarde esa noche, la misma tormenta golpeó Amory, en el noreste de Misisipi. Estas son cuatro horas del mosaico radar NOAA MRMS desde las 23Z a la cadencia original de dos minutos, junto a los radares de Jackson (DGX), la base aérea de Columbus (GWX) y Memphis (NQA), con reflectividad y velocidad radial, para seguir la rotación barrido a barrido. Observaciones de radar, no un pronóstico.",
+    "pt": "No fim da tarde de 24 de março de 2023, uma supercélula de longa duração atravessou o delta do Mississippi. Por volta das 20h CDT (01:00 UTC do dia 25), produziu o tornado EF4 de Rolling Fork e Silver City, que matou 17 pessoas; mais tarde naquela noite, a mesma tempestade atingiu Amory, no nordeste do Mississippi. Estas são quatro horas do mosaico de radar NOAA MRMS a partir das 23Z, na cadência original de dois minutos, ao lado dos radares de Jackson (DGX), da base aérea de Columbus (GWX) e de Memphis (NQA), com refletividade e velocidade radial, para acompanhar a rotação varredura a varredura. Observações de radar, não uma previsão.",
+    "tr": "24 Mart 2023 akşamı uzun ömürlü bir süper hücre Mississippi Deltası’nı geçti. CDT ile saat 20.00 sularında (25 Mart 01:00 UTC) EF4 şiddetindeki Rolling Fork–Silver City hortumunu oluşturdu ve 17 kişi hayatını kaybetti; aynı gece daha sonra aynı fırtına Mississippi’nin kuzeydoğusundaki Amory’yi vurdu. Bu, NOAA MRMS radar mozaiğinin 23Z’den itibaren dört saati, kaynağın iki dakikalık adımıyla; yanında Jackson (DGX), Columbus Hava Üssü (GWX) ve Memphis (NQA) tekil radarlarının yansıtırlık ve radyal hız verisi var, böylece dönme tarama tarama izlenebiliyor. Radar gözlemi, tahmin değil.",
+    "ru": "Вечером 24 марта 2023 года долгоживущая суперъячейка пересекла дельту Миссисипи. Около 20:00 CDT (01:00 UTC 25-го) она породила торнадо EF4 Роллинг-Форк — Силвер-Сити, унёсшее 17 жизней, а позже той же ночью тот же шторм ударил по Эймори на северо-востоке Миссисипи. Это четыре часа радарной мозаики NOAA MRMS с 23Z с исходным шагом в две минуты, а рядом — одиночные радары Джексона (DGX), авиабазы Коламбус (GWX) и Мемфиса (NQA) с отражаемостью и радиальной скоростью, чтобы следить за вращением от обзора к обзору. Радарные наблюдения, не прогноз."
+  },
+  "model": "mrms",
+  "run": "2023032423",
+  "hours": 4,
+  "bbox": [
+    -93.5,
+    30.5,
+    -86.0,
+    36.5
+  ],
+  "variables": [
+    "cref"
+  ],
+  "defaultVariable": "cref",
+  "eventTime": "2023-03-25T01:00:00Z",
+  "tags": [
+    "tornado",
+    "radar",
+    "north-america"
+  ],
+  "credit": "NOAA MRMS",
+  "radar": {
+    "window": "radar/index.json",
+    "defaultSite": "GWX",
+    "defaultProduct": "n0g"
+  }
+}

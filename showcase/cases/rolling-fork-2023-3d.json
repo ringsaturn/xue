@@ -1,0 +1,50 @@
+{
+  "id": "rolling-fork-2023-3d",
+  "title": {
+    "zh": "罗灵福克龙卷的三维雷达体",
+    "en": "The Rolling Fork supercell in 3D",
+    "zh-Hant": "羅靈福克龍捲的三維雷達體",
+    "ja": "ローリングフォークのスーパーセルを3Dで",
+    "ko": "롤링포크 슈퍼셀 3D 레이더",
+    "de": "Die Superzelle von Rolling Fork in 3D",
+    "fr": "La supercellule de Rolling Fork en 3D",
+    "es": "La supercélula de Rolling Fork en 3D",
+    "pt": "A supercélula de Rolling Fork em 3D",
+    "tr": "Rolling Fork süper hücresi 3B",
+    "ru": "Суперъячейка Роллинг-Форка в 3D"
+  },
+  "summary": {
+    "zh": "与罗灵福克个例同一个晚上，换成三维来看：NOAA MRMS 三维反射率，0.5 至 19 km 共 33 个高度层，自 23Z 起四小时、每十分钟一次体扫。倾斜地图，框选风暴以 0.05° 全分辨率近看，或拖一条线切出穿过对流核与回波顶的垂直剖面。雷达观测，非预报产品。",
+    "en": "The same evening as the Rolling Fork case, seen as a volume: the NOAA MRMS 3D reflectivity on 33 altitudes from 0.5 to 19 km, one scan every ten minutes for four hours from 23Z. Tilt the map, box the storm for a close-up at the full 0.05° grid, or drag a line to cut a vertical section through its core and echo top. Radar observations, not a forecast.",
+    "zh-Hant": "與羅靈福克個例同一個晚上，換成三維來看：NOAA MRMS 三維反射率，0.5 至 19 km 共 33 個高度層，自 23Z 起四小時、每十分鐘一次體掃。傾斜地圖，框選風暴以 0.05° 全解析度近看，或拖一條線切出穿過對流核與回波頂的垂直剖面。雷達觀測，非預報產品。",
+    "ja": "ローリングフォークの事例と同じ夜を、立体で見る。NOAA MRMS の3次元反射強度を高度 0.5〜19 km の33層で、23Z から4時間、10分ごとのスキャンで示す。地図を傾け、嵐を囲んで 0.05° の全解像度で近くから見るか、線を引いてコアとエコー頂を通る鉛直断面を切り出せる。予報ではなくレーダー観測。",
+    "ko": "롤링포크 사례와 같은 날 저녁을 입체로 본다. NOAA MRMS 3차원 반사도를 고도 0.5~19 km의 33개 층으로, 23Z부터 4시간 동안 10분마다 한 번의 스캔으로 보여 준다. 지도를 기울이거나, 폭풍을 상자로 잡아 0.05° 전체 해상도로 가까이 보거나, 선을 그어 핵과 에코 정점을 지나는 연직 단면을 자를 수 있다. 예보가 아닌 레이더 관측.",
+    "de": "Derselbe Abend wie im Fall Rolling Fork, als Volumen: die 3D-Reflektivität von NOAA MRMS auf 33 Höhen von 0,5 bis 19 km, ein Scan alle zehn Minuten über vier Stunden ab 23Z. Die Karte neigen, den Sturm für eine Nahansicht im vollen 0,05°-Gitter einrahmen oder eine Linie ziehen, um einen Vertikalschnitt durch Kern und Echotop zu legen. Radarbeobachtungen, keine Vorhersage.",
+    "fr": "Le même soir que le cas de Rolling Fork, vu en volume : la réflectivité 3D de NOAA MRMS sur 33 altitudes de 0,5 à 19 km, un balayage toutes les dix minutes pendant quatre heures à partir de 23Z. Inclinez la carte, encadrez l’orage pour le voir de près sur la grille complète de 0,05°, ou tracez une ligne pour couper une coupe verticale à travers son cœur et son sommet d’écho. Observations radar, pas une prévision.",
+    "es": "La misma tarde que el caso de Rolling Fork, vista como volumen: la reflectividad 3D de NOAA MRMS en 33 altitudes de 0,5 a 19 km, un barrido cada diez minutos durante cuatro horas desde las 23Z. Inclina el mapa, encuadra la tormenta para verla de cerca en la malla completa de 0,05° o traza una línea para cortar una sección vertical por su núcleo y su tope de eco. Observaciones de radar, no un pronóstico.",
+    "pt": "A mesma noite do caso de Rolling Fork, vista como volume: a refletividade 3D do NOAA MRMS em 33 altitudes de 0,5 a 19 km, uma varredura a cada dez minutos durante quatro horas a partir das 23Z. Incline o mapa, enquadre a tempestade para vê-la de perto na grade completa de 0,05° ou trace uma linha para cortar uma seção vertical pelo núcleo e pelo topo de eco. Observações de radar, não uma previsão.",
+    "tr": "Rolling Fork vakasıyla aynı akşam, hacim olarak: NOAA MRMS 3B yansıtırlığı, 0,5 ile 19 km arasında 33 yükseklikte, 23Z’den itibaren dört saat boyunca on dakikada bir tarama. Haritayı eğin, fırtınayı bir kutuyla seçip 0,05°’lik tam ızgarada yakından görün ya da bir çizgi çekerek çekirdeğinden ve yankı tepesinden geçen dikey bir kesit alın. Radar gözlemi, tahmin değil.",
+    "ru": "Тот же вечер, что и в случае Роллинг-Форка, в объёме: 3D-отражаемость NOAA MRMS на 33 высотах от 0,5 до 19 км, один обзор каждые десять минут в течение четырёх часов с 23Z. Наклоните карту, обведите шторм рамкой, чтобы рассмотреть его на полной сетке 0,05°, или проведите линию, чтобы получить вертикальный разрез через ядро и верхнюю границу эха. Радарные наблюдения, не прогноз."
+  },
+  "model": "mrms3d",
+  "run": "2023032423",
+  "hours": 4,
+  "bbox": [
+    -93.5,
+    30.5,
+    -86.0,
+    36.5
+  ],
+  "variables": [
+    "refl3d"
+  ],
+  "defaultVariable": "refl3d",
+  "eventTime": "2023-03-25T01:00:00Z",
+  "tags": [
+    "tornado",
+    "radar",
+    "3d",
+    "north-america"
+  ],
+  "credit": "NOAA MRMS"
+}
