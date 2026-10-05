@@ -243,7 +243,8 @@ pub fn analysis_optional_ids<'a>(source: &SourceSpec, scalar_ids: &[&'a str]) ->
 /// read from a record. The equivalent potential temperature reads the
 /// temperature and specific humidity on its surface; the precipitation type
 /// reads the four categorical flags; the clear-air turbulence index the wind
-/// and height around its surface ([`cat_input_ids`]). Mirrors
+/// and height on the surfaces bounding its shear layer and the wind on its
+/// own. Mirrors
 /// `DERIVED_SCALARS` in `xuebuild/binconvert.py`.
 pub fn derived_scalar_inputs(bundle_id: &str) -> Option<Vec<String>> {
     if bundle_id == "ptype" {
