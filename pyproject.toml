@@ -20,7 +20,7 @@ dependencies = [
     # reference pipeline. The floor tracks the current release because the
     # wheel's source table must match xuebuild/sources.py, and a wheel that
     # publishes a different bundle set refuses to build (docs/contribution/releasing.md).
-    "xuepy>=0.29,<0.30",
+    "xuepy>=0.30,<0.31",
 ]
 
 [project.scripts]
