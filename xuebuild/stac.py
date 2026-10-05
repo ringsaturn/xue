@@ -93,25 +93,28 @@ _XUE_PROVIDER = {
 
 
 # The point products published beside the runs (`docs/sounding.md`,
-# `docs/airport.md`, `docs/tc.md`): a fixed list rather than a registry,
+# `docs/airport.md`, `docs/synop.md`, `docs/tc.md`): a fixed list rather than a registry,
 # since each is its own pipeline under one delivery contract
 # (`xuebuild/pointproduct.py`). They are the root catalog's other children.
-POINT_PRODUCTS = ("sounding", "airport", "tc")
+POINT_PRODUCTS = ("sounding", "airport", "synop", "tc")
 
 NDJSON_MEDIA_TYPE = "application/x-ndjson"
 
 
 def _point_product_prose(product: str) -> dict[str, Any]:
-    """`_source_prose` for the three point products.
+    """`_source_prose` for the point products.
 
-    None of the three has an SPDX identifier to name. The soundings are
+    None of them has an SPDX identifier to name. The soundings are
     WMO core data under the Unified Data Policy (Resolution 1,
     Cg-Ext(2021)) — free and unrestricted with attribution of the original
     source requested, which no SPDX id spells — so the license is `other`
     with the resolution linked. The airport reports are decoded by a work
     of the United States government, which is in the public domain rather
     than under CC0 (`CC0-1.0` would claim a waiver nobody granted), so
-    that too is `other`, with the service's own terms linked. The tracks
+    that too is `other`, with the service's own terms linked. The surface
+    stations are each network's own terms — JMA's site content is under
+    the Public Data License v1.0, which no SPDX id spells — so the
+    Collection is `other` and links each network's terms. The tracks
     come from several centres at once — US government works, ECMWF open
     data under CC BY 4.0, IBTrACS — so the Collection is `other` and the
     links name each.
@@ -200,6 +203,39 @@ def _point_product_prose(product: str) -> dict[str, Any]:
                     "href": "https://aviationweather.gov/data/api/",
                     "type": "text/html",
                     "title": "Aviation Weather Center data services",
+                },
+            ],
+        },
+        "synop": {
+            "title": "Surface weather stations",
+            "description": (
+                "National surface observation networks, aggregated every ten minutes: each station's "
+                "newest values in the index, and its last 24 hours as columns on one line of its "
+                "network's NDJSON file beside it, in one set of elements and SI units whatever the "
+                "network. The first network is the Japan Meteorological Agency's AMeDAS, about 1 300 "
+                "stations every ten minutes. A rolling window with no fixed start — only the newest "
+                "round is published, and each round carries the whole window."
+            ),
+            "license": "other",
+            "keywords": ["weather", "observation", "surface", "station", "synop", "amedas"],
+            "providers": [
+                {
+                    "name": "Japan Meteorological Agency",
+                    "description": (
+                        "AMeDAS observations as the agency's website publishes them; 出典：気象庁ホームページ. "
+                        "Reused under the Public Data License v1.0."
+                    ),
+                    "roles": ["producer", "licensor"],
+                    "url": "https://www.jma.go.jp/bosai/amedas/",
+                },
+                _XUE_PROVIDER,
+            ],
+            "links": [
+                {
+                    "rel": "license",
+                    "href": "https://www.jma.go.jp/jma/kishou/info/coment.html",
+                    "type": "text/html",
+                    "title": "JMA website terms of use: Public Data License v1.0, source credit required",
                 },
             ],
         },
@@ -1314,6 +1350,8 @@ def _point_product_positions(index: dict[str, Any], product: str) -> list[tuple[
         return [(float(station["lon"]), float(station["lat"])) for station in index["stations"]]
     if product == "airport":
         return [(float(row[2]), float(row[1])) for row in index["stations"]]
+    if product == "synop":
+        return [(float(row[3]), float(row[2])) for row in index["stations"]]
     return [
         (float(storm["position"]["lon"]), float(storm["position"]["lat"]))
         for storm in index["storms"]
@@ -1339,6 +1377,11 @@ def _point_product_period(index: dict[str, Any], product: str, issued: datetime)
             iso_z(issued - timedelta(hours=24)),
             max((row[4] for row in index["stations"]), default=default),
         )
+    elif product == "synop":
+        bounds = (
+            iso_z(issued - timedelta(hours=24)),
+            max((row[7] for row in index["stations"]), default=default),
+        )
     else:
         times = [storm["position"]["time"] for storm in index["storms"] if storm.get("position")]
         bounds = (min(times, default=default), max(times, default=default))
@@ -1350,8 +1393,8 @@ def _point_product_assets(
     index: dict[str, Any], product: str, index_byte_length: int, index_crc32: str
 ) -> dict[str, Any]:
     """The issue's files as assets: the index itself, then what it names —
-    the one NDJSON file the soundings and the airports publish, or one JSON
-    file per storm. Every href carries the ``?v=`` the reader fetches it
+    the one NDJSON file the soundings and the airports publish, one per
+    network for the surface stations, or one JSON file per storm. Every href carries the ``?v=`` the reader fetches it
     under, which for the index is the pointer's own CRC32 (the index does
     not state its own length, so the caller, which has the bytes, does)."""
     assets: dict[str, Any] = {
@@ -1380,6 +1423,25 @@ def _point_product_assets(
             **_file_fields(descriptor["byteLength"], descriptor["crc32"], single_file=True),
         }
         return assets
+    if product == "synop":
+        for network in index["networks"]:
+            descriptor = network["file"]
+            assets[network["id"]] = {
+                "href": f"{descriptor['path']}?v={descriptor['crc32']}",
+                "type": NDJSON_MEDIA_TYPE,
+                "title": f"{network['name']}: observations by station",
+                "description": (
+                    "One station per line, sorted by id, its window as columns. A station's `offset` and "
+                    "`length` in the index are the byte span of its line's JSON object, excluding the "
+                    "newline, so one station is one `Range: bytes=<offset>-<offset+length-1>` request and "
+                    "the whole file streams line by line."
+                ),
+                "roles": ["data"],
+                "xue:kind": "series",
+                "xue:network": network["id"],
+                **_file_fields(descriptor["byteLength"], descriptor["crc32"], single_file=True),
+            }
+        return assets
     for storm in index["storms"]:
         name = storm.get("name")
         assets[storm["id"]] = {
@@ -1396,7 +1458,7 @@ def _point_product_assets(
 
 
 def _point_product_label(product: str, issued: datetime) -> str:
-    if product == "airport":
+    if product in ("airport", "synop"):
         return f"{issued.strftime('%Y-%m-%d %H:%MZ')} round"
     return f"{issued.strftime('%Y-%m-%d %HZ')} issue"
 
@@ -1660,8 +1722,8 @@ def root_catalog() -> dict[str, Any]:
         "description": (
             "Global and regional weather forecast runs and radar observations, packed by Xue into "
             "Zarr v3 stores (docs/zarr-profile.md) for playback in a browser and reading with xarray, "
-            "beside three point products in plain JSON: radiosonde soundings, airport reports and "
-            "tropical cyclone tracks. One Collection per source or product, whose Item is the newest "
+            "beside four point products in plain JSON: radiosonde soundings, airport reports, surface "
+            "station observations and tropical cyclone tracks. One Collection per source or product, whose Item is the newest "
             "run or issue; the showcase Collection keeps historical cases."
         ),
         "links": [

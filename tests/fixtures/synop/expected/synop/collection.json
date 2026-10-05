@@ -1,0 +1,85 @@
+{
+ "type": "Collection",
+ "stac_version": "1.1.0",
+ "stac_extensions": [],
+ "id": "synop",
+ "title": "Surface weather stations",
+ "description": "National surface observation networks, aggregated every ten minutes: each station's newest values in the index, and its last 24 hours as columns on one line of its network's NDJSON file beside it, in one set of elements and SI units whatever the network. The first network is the Japan Meteorological Agency's AMeDAS, about 1 300 stations every ten minutes. A rolling window with no fixed start — only the newest round is published, and each round carries the whole window.",
+ "license": "other",
+ "keywords": ["weather", "observation", "surface", "station", "synop", "amedas"],
+ "providers": [
+  {
+   "name": "Japan Meteorological Agency",
+   "description": "AMeDAS observations as the agency's website publishes them; 出典：気象庁ホームページ. Reused under the Public Data License v1.0.",
+   "roles": ["producer", "licensor"],
+   "url": "https://www.jma.go.jp/bosai/amedas/"
+  },
+  {
+   "name": "Xue",
+   "roles": ["processor", "host"],
+   "url": "https://github.com/ringsaturn/xue"
+  }
+ ],
+ "extent": {
+  "spatial": {
+   "bbox": [
+    [-180.0, -90.0, 180.0, 90.0]
+   ]
+  },
+  "temporal": {
+   "interval": [
+    [null, null]
+   ]
+  }
+ },
+ "xue:pointer": "latest-synop.json",
+ "xue:live": "synop.202610050010",
+ "links": [
+  {
+   "rel": "root",
+   "href": "../catalog.json",
+   "type": "application/json"
+  },
+  {
+   "rel": "parent",
+   "href": "../catalog.json",
+   "type": "application/json"
+  },
+  {
+   "rel": "item",
+   "href": "item.json",
+   "type": "application/geo+json",
+   "title": "Surface weather stations · 2026-10-05 00:10Z round"
+  },
+  {
+   "rel": "latest-version",
+   "href": "item.json",
+   "type": "application/geo+json",
+   "title": "Surface weather stations · 2026-10-05 00:10Z round"
+  },
+  {
+   "rel": "alternate",
+   "href": "../synop.202610050010/item.json",
+   "type": "application/geo+json",
+   "title": "Surface weather stations · 2026-10-05 00:10Z round (beside its index; gone when the issue is)"
+  },
+  {
+   "rel": "xue:pointer",
+   "href": "../latest-synop.json",
+   "type": "application/json",
+   "title": "live pointer (schema v1)"
+  },
+  {
+   "rel": "describedby",
+   "href": "https://github.com/ringsaturn/xue/blob/main/docs/synop.md",
+   "type": "text/markdown",
+   "title": "The synop product, schema v1"
+  },
+  {
+   "rel": "license",
+   "href": "https://www.jma.go.jp/jma/kishou/info/coment.html",
+   "type": "text/html",
+   "title": "JMA website terms of use: Public Data License v1.0, source credit required"
+  }
+ ]
+}

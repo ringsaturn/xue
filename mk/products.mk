@@ -1,16 +1,18 @@
-# The point products (docs/tc.md, docs/airport.md, docs/sounding.md): one
-# directory per issue or round, immutable and ?v=<crc32>-addressed, taken live
+# The point products (docs/tc.md, docs/airport.md, docs/sounding.md,
+# docs/synop.md): one directory per issue or round, immutable and ?v=<crc32>-addressed, taken live
 # by latest-<product>.json. Each build reads the previous live one, so a
 # publish pulls it first (live-*-index); a missing pointer is the first publish.
 
-# ISSUE=YYYYMMDDHH for tc and sounding; airport takes ROUND=YYYYMMDDHHMM.
+# ISSUE=YYYYMMDDHH for tc and sounding; airport and synop take ROUND=YYYYMMDDHHMM.
 ISSUE ?= now
 AIRPORT_ROUND = $(if $(ROUND),$(ROUND),now)
+SYNOP_ROUND = $(if $(ROUND),$(ROUND),now)
 TC_KEEP ?= 168
 AIRPORT_KEEP ?= 18
 SOUNDING_KEEP ?= 168
+SYNOP_KEEP ?= 18
 
-.PHONY: tc-build live-tc-index upload-r2-tc prune-r2-tc airport-build live-airport-index upload-r2-airport prune-r2-airport sounding-build live-sounding-index upload-r2-sounding prune-r2-sounding
+.PHONY: tc-build live-tc-index upload-r2-tc prune-r2-tc airport-build live-airport-index upload-r2-airport prune-r2-airport sounding-build live-sounding-index upload-r2-sounding prune-r2-sounding synop-build live-synop-index upload-r2-synop prune-r2-synop
 
 # $(call point_dir,product,id): an issue's directory under the data root.
 # The hourly products file it under its day, <product>/YYYY/MM/DD/<product>.<id>,
@@ -183,3 +185,61 @@ upload-r2-sounding: ## Upload a sounding issue, then take it live
 
 prune-r2-sounding: ## Delete sounding issues beyond the newest SOUNDING_KEEP
 	$(call point_prune,sounding,$(SOUNDING_KEEP),issue)
+
+synop-build: ## Build the surface station product for ROUND
+	$(PYTHON) -m xuebuild synop-build --round $(SYNOP_ROUND) $(FORCE)
+
+# The live pointer, index and every network file it spans: the files are the
+# next build's history, so each CRC32 is checked rather than trusted, and a
+# missing one only restarts that network's window.
+live-synop-index: ## Pull the live synop pointer, index and network files
+	@set -e; mkdir -p web/public/data; \
+	pointer=$$($(S3) cp $(R2_ROOT)/latest-synop.json - --only-show-errors 2>/dev/null || true); \
+	[ -n "$$pointer" ] || { echo "no live synop pointer"; exit 0; }; \
+	path=$$(printf '%s' "$$pointer" | jq -r .path); \
+	directory=$$(dirname "$$path"); \
+	mkdir -p "web/public/data/$$directory"; \
+	$(S3) cp "$(R2_ROOT)/$$path" "web/public/data/$$path" --only-show-errors; \
+	printf '%s' "$$pointer" > web/public/data/latest-synop.json; \
+	for file in $$(jq -r '.networks[].file.path' "web/public/data/$$path"); do \
+		named=$$(jq -r --arg file "$$file" '.networks[] | select(.file.path == $$file) | .file.crc32' "web/public/data/$$path"); \
+		if $(S3) cp "$(R2_ROOT)/$$directory/$$file" "web/public/data/$$directory/$$file" --only-show-errors; then \
+			crc=$$($(CRC32) "web/public/data/$$directory/$$file"); \
+			[ "$$crc" = "$$named" ] || { echo "the live $$file is CRC32 $$crc but its index says $$named"; exit 1; }; \
+			echo "live synop round: $$directory/$$file ($$(wc -c < "web/public/data/$$directory/$$file" | tr -d ' ') bytes)"; \
+		else \
+			rm -f "web/public/data/$$directory/$$file"; \
+			echo "warning: $$path names $$file but R2 has no such object; that network's window starts again"; \
+		fi; \
+	done
+
+# Every network file, then the index, then the pointer: each object before
+# the one that names it, and the pointer moves only once R2 reports every
+# size.
+upload-r2-synop: ## Upload a synop round, then take it live
+	@set -e; \
+	$(call point_pointer_check,synop,$(SYNOP_ROUND),round,pass ROUND=YYYYMMDDHHMM,no network's observations arrived); \
+	files=$$(jq -r '.networks[].file.path' $$dir/index.json); \
+	for file in $$files; do \
+		$(S3) cp $$dir/$$file $(R2_ROOT)/$$rel/$$file --no-progress $(DRY_RUN) \
+			--content-type application/x-ndjson --cache-control "public, max-age=31536000, immutable"; \
+	done; \
+	$(S3) cp $$dir/index.json $(R2_ROOT)/$$rel/index.json --no-progress $(DRY_RUN) \
+		--content-type application/json --cache-control "public, max-age=31536000, immutable"; \
+	[ ! -f "$$dir/$(STAC_ITEM)" ] || $(S3) cp $$dir/$(STAC_ITEM) $(R2_ROOT)/$$rel/$(STAC_ITEM) \
+		--no-progress $(DRY_RUN) --content-type application/geo+json --cache-control "no-cache"; \
+	[ -n "$(DRY_RUN)" ] || { \
+		for file in $$files index.json; do \
+			local_bytes=$$(wc -c < "$$dir/$$file" | tr -d ' '); \
+			remote_bytes=$$($(call r2_size,$$rel/$$file)); \
+			[ "$$remote_bytes" = "$$local_bytes" ] || { echo "$$rel/$$file is '$$remote_bytes' bytes on R2, not $$local_bytes; the pointer stays put"; exit 1; }; \
+			echo "verified $$file ($$local_bytes bytes) on R2"; \
+		done; \
+	}; \
+	echo "Uploading latest-synop.json (takes synop round $(SYNOP_ROUND) live)..."; \
+	$(S3) cp web/public/data/latest-synop.json $(R2_ROOT)/latest-synop.json --no-progress $(DRY_RUN) \
+		--content-type application/json --cache-control "no-cache"; \
+	$(MAKE) --no-print-directory upload-r2-stac-collection STAC_DIR=synop DRY_RUN=$(DRY_RUN)
+
+prune-r2-synop: ## Delete synop rounds beyond the newest SYNOP_KEEP
+	$(call point_prune,synop,$(SYNOP_KEEP),round)

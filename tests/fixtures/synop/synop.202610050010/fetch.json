@@ -1,0 +1,22 @@
+{
+  "round": "202610050010",
+  "sources": [
+    {
+      "id": "jma-amedas-map",
+      "ok": true,
+      "fetched": "2026-10-05T00:14:00Z",
+      "url": "https://www.jma.go.jp/bosai/amedas/data/map",
+      "file": "synop.202610050010/amedas",
+      "snapshots": 1,
+      "missing": 0
+    },
+    {
+      "id": "jma-amedas-table",
+      "ok": true,
+      "fetched": "2026-10-05T00:04:00Z",
+      "url": "https://www.jma.go.jp/bosai/amedas/const/amedastable.json",
+      "file": "amedas-stations.json",
+      "cached": true
+    }
+  ]
+}

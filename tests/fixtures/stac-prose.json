@@ -743,6 +743,46 @@
         }
       ]
     },
+    "synop": {
+      "title": "Surface weather stations",
+      "description": "National surface observation networks, aggregated every ten minutes: each station's newest values in the index, and its last 24 hours as columns on one line of its network's NDJSON file beside it, in one set of elements and SI units whatever the network. The first network is the Japan Meteorological Agency's AMeDAS, about 1 300 stations every ten minutes. A rolling window with no fixed start — only the newest round is published, and each round carries the whole window.",
+      "license": "other",
+      "keywords": [
+        "weather",
+        "observation",
+        "surface",
+        "station",
+        "synop",
+        "amedas"
+      ],
+      "providers": [
+        {
+          "name": "Japan Meteorological Agency",
+          "description": "AMeDAS observations as the agency's website publishes them; 出典：気象庁ホームページ. Reused under the Public Data License v1.0.",
+          "roles": [
+            "producer",
+            "licensor"
+          ],
+          "url": "https://www.jma.go.jp/bosai/amedas/"
+        },
+        {
+          "name": "Xue",
+          "roles": [
+            "processor",
+            "host"
+          ],
+          "url": "https://github.com/ringsaturn/xue"
+        }
+      ],
+      "links": [
+        {
+          "rel": "license",
+          "href": "https://www.jma.go.jp/jma/kishou/info/coment.html",
+          "type": "text/html",
+          "title": "JMA website terms of use: Public Data License v1.0, source credit required"
+        }
+      ]
+    },
     "tc": {
       "title": "Tropical cyclone tracks",
       "description": "Every tropical cyclone the warning centres and the models are tracking, aggregated every hour: the official forecasts of the National Hurricane Center and the Joint Typhoon Warning Center, the multi-agency best tracks, the NCEP tracker's GFS and GEFS tracks and ECMWF's deterministic and ensemble tracks — one JSON file per system beside an index that names the systems and their headline positions. A rolling window with no fixed start: only the newest issue is published.",

@@ -1,10 +1,11 @@
 # Point products
 
-Three products sit beside the gridded runs: tropical cyclone tracks
-(`xuebuild/tc/`), airport METAR/TAF (`xuebuild/airport/`) and radiosonde
-soundings (`xuebuild/sounding/`). Schemas are normative in
-[../tc.md](../tc.md), [../airport.md](../airport.md) and
-[../sounding.md](../sounding.md); STAC in [../stac.md](../stac.md).
+Four products sit beside the gridded runs: tropical cyclone tracks
+(`xuebuild/tc/`), airport METAR/TAF (`xuebuild/airport/`), radiosonde
+soundings (`xuebuild/sounding/`) and surface stations
+(`xuebuild/synop/`). Schemas are normative in [../tc.md](../tc.md),
+[../airport.md](../airport.md), [../sounding.md](../sounding.md) and
+[../synop.md](../synop.md); STAC in [../stac.md](../stac.md).
 
 ## Shared contract
 
@@ -14,11 +15,12 @@ soundings (`xuebuild/sounding/`). Schemas are normative in
   objects: the index and one JSONL (one line per station, sorted by id)
   whose `offset` / `length` the index rows carry, so a browser reads one
   station with one Range request and an analyst streams one file. The tc
-  index names one `<storm id>.json` per system.
+  index names one `<storm id>.json` per system. A synop round has one
+  JSONL per network, so a network's file stays the size of a network.
 - **One object per issue, never per station**: many small files hurt bucket
   traversal and analysis.
 - **The previous issue is input.** `make live-<product>-index` runs before
-  each build: tc carries identities forward, airport merges history,
+  each build: tc carries identities forward, airport and synop merge history,
   sounding carries forward stations without a new ascent (after checking
   the JSONL's CRC32).
 - **Sources fail alone** into `sources[]`; the pointer is withheld only when
@@ -33,7 +35,7 @@ soundings (`xuebuild/sounding/`). Schemas are normative in
 - **Layout.** tc and sounding file an issue under its UTC day,
   `<product>/YYYY/MM/DD/<product>.<hour>/` (`pointproduct.archive_directory`,
   `point_dir` in `mk/products.mk`), so retention can grow to years without
-  a flat root of thousands of prefixes; the airport rounds stay flat. Every
+  a flat root of thousands of prefixes; the airport and synop rounds stay flat. Every
   validator, the STAC Item and the prune still accept the flat
   `<product>.<hour>/` the issues were published under before.
 
@@ -56,6 +58,22 @@ of METARs and current TAF; each round merges new reports by (station, time),
 newest winning, drops what is older than 24 h, and removes stations whose
 window empties. The pointer is withheld only when both METARs and TAFs
 failed. `AIRPORT_KEEP` rounds are kept.
+
+## Surface stations
+
+- One product, many networks. `networks.py` is a fixed tuple; each network
+  is an adapter module with `fetch(raw_root, round, since, …)` and
+  `read(raw_root, statuses)` that converts its own format into the
+  elements of `docs/synop.md` §2. Adding a network touches that tuple, a
+  new module, a `docs/synop.md` §8 subsection, a fixture and the STAC prose
+  — not the schema and not the shell.
+- `since` is the network's `latest` in the previous index, so a round asks
+  only for what is new and a gap refills as far as the network keeps data.
+- The index's element values are each element's newest non-null value
+  within the hour (accumulations only at the newest time): some elements
+  arrive less often than the station reports.
+- AMeDAS reads the agency's map-page JSON (no API, no SLA); the quality
+  rule and the 16-point wind code come from that page's own script.
 
 ## Soundings
 
@@ -80,18 +98,20 @@ per frame and never gate the playhead; a showcase case hides them, and
   `Range: bytes=<offset>-<offset+length-1>`; a 206 must answer exactly that
   span, a 200 is sliced at the same offsets.
 - The playhead only sets a paint expression fading stations observed more
-  than 3 h (airports) or 15 h (soundings) away: two paint properties, no
-  feature rebuild.
+  than 3 h (airports), 2 h (surface stations) or 15 h (soundings) away:
+  paint properties, no feature rebuild.
 - Below zoom 6 only airports with a TAF are drawn; soundings are hollow when
   the ascent never reached 500 hPa.
+- Surface stations thin by `rank` (principal always, automatic from zoom
+  5, gauges from 7) and are filled by their current temperature.
 - URL state: `?tc=<id>|off`, `?tcagency=`, `?tcmodel=`, `?tcmembers=`,
-  `?stations=snd|apt|snd,apt|off` (link only, never stored).
+  `?stations=snd,apt,syn|off` (link only, never stored).
 
 ### In the probe panel
 
-A pin reads both station products whether or not their tiles are pressed:
-`stations/nearest.ts` takes the nearest ascent within 150 km and airport
-within 40 km.
+A pin reads the station products whether or not their tiles are pressed:
+`stations/nearest.ts` takes the nearest ascent within 150 km, airport
+within 40 km, and up to six surface stations within 20 km.
 
 - **Skew-T** (`sounding/`): behind a disclosure, open above phone width.
   Opening it fetches the station's line and opens probe sessions for the
@@ -104,3 +124,8 @@ within 40 km.
   lead seconds (`axisPosition`), the TAF a `taf` row of bands hatched for
   `TEMPO` / `PROB`, and readouts gain the nearest report within 90 minutes.
   None of it moves the playhead.
+- **Surface station** (`stations/synopobs.ts`): the nearest candidate within
+  300 m of the DEM height under the pin (the nearest outright until the DEM
+  answers) replaces the airport on the temperature, wind and pressure rows;
+  its temperature goes on the terrain row when there is one. Its window is
+  one range request, made the first time a render picks the station.

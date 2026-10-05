@@ -26,6 +26,7 @@ from xuebuild.manifest import build_bin_manifest
 from xuebuild.pointproduct import crc32_hex, encode_json
 from xuebuild.sounding import schema as sounding_schema
 from xuebuild.sources import SOURCES, source_spec
+from xuebuild.synop import schema as synop_schema
 from xuebuild.tc import schema as tc_schema
 
 
@@ -597,7 +598,7 @@ class LandingPageTests(unittest.TestCase):
 
 
 class PointProductTests(unittest.TestCase):
-    """The three point products (`docs/stac.md` §"Point products"), built
+    """The point products (`docs/stac.md` §"Point products"), built
     from the goldens the products' own tests hold their builds to. The
     goldens are pretty-printed; re-encoded the way the product writes them
     they are the published bytes exactly, so the Item's `?v=` here is the
@@ -622,6 +623,9 @@ class PointProductTests(unittest.TestCase):
 
     def airport_item(self) -> dict:
         return self.item("airport", "airport.202609161440", "airport/expected/airport.202609161440/index.json")
+
+    def synop_item(self) -> dict:
+        return self.item("synop", "synop.202610050010", "synop/expected/synop.202610050010/index.json")
 
     def tc_item(self) -> dict:
         return self.item("tc", "tc/2026/09/12/tc.2026091206", "tc/expected/index.json")
@@ -747,6 +751,25 @@ class PointProductTests(unittest.TestCase):
         self.assertEqual(assets[first["id"]]["file:size"], first["byteLength"])
         self.assertEqual(len(encoded), pointer["byteLength"])
 
+    def test_a_synop_round_is_an_asset_per_network(self) -> None:
+        index, _ = self.index("synop/expected/synop.202610050010/index.json")
+        item = self.synop_item()
+        self.assertEqual(item["id"], "synop.202610050010")
+        self.assertEqual(sorted(item["assets"]), ["amedas", "index"])
+        network = index["networks"][0]
+        asset = item["assets"]["amedas"]
+        self.assertEqual(asset["href"], f"amedas.jsonl?v={network['file']['crc32']}")
+        self.assertEqual(asset["type"], stac.NDJSON_MEDIA_TYPE)
+        self.assertEqual(asset["xue:network"], "amedas")
+        self.assertEqual(asset["file:size"], network["file"]["byteLength"])
+        properties = item["properties"]
+        self.assertEqual(properties["start_datetime"], "2026-10-04T00:10:00Z")
+        self.assertEqual(properties["end_datetime"], "2026-10-05T00:10:00Z")
+        self.assertEqual(properties["xue:stations"], len(index["stations"]))
+        self.assertTrue(properties["title"].endswith("2026-10-05 00:10Z round"))
+        self.assertEqual(item["bbox"][1], min(row[2] for row in index["stations"]))
+        self.assertEqual(item["bbox"][2], max(row[3] for row in index["stations"]))
+
     def test_an_index_elsewhere_is_not_an_issue(self) -> None:
         index, encoded = self.index("tc/expected/index.json")
         for path in (
@@ -811,17 +834,28 @@ class PointProductTests(unittest.TestCase):
     def test_the_catalog_lists_every_product(self) -> None:
         children = [link["href"] for link in stac.root_catalog()["links"] if link["rel"] == "child"]
         self.assertEqual(
-            children[-4:],
-            ["sounding/collection.json", "airport/collection.json", "tc/collection.json", "showcase/collection.json"],
+            children[-5:],
+            [
+                "sounding/collection.json",
+                "airport/collection.json",
+                "synop/collection.json",
+                "tc/collection.json",
+                "showcase/collection.json",
+            ],
         )
 
     def test_the_products_are_the_ones_that_publish_a_pointer(self) -> None:
         # The fixed list in stac.py against each product's own schema: an
         # id it does not spell the same way would leave a Collection
         # pointing at a pointer nobody writes.
-        schemas = (sounding_schema, airport_schema, tc_schema)
+        schemas = (sounding_schema, airport_schema, synop_schema, tc_schema)
         self.assertEqual(sorted(stac.POINT_PRODUCTS), sorted(schema.PRODUCT for schema in schemas))
-        items = {"sounding": self.sounding_item, "airport": self.airport_item, "tc": self.tc_item}
+        items = {
+            "sounding": self.sounding_item,
+            "airport": self.airport_item,
+            "synop": self.synop_item,
+            "tc": self.tc_item,
+        }
         for schema in schemas:
             with self.subTest(product=schema.PRODUCT):
                 item = items[schema.PRODUCT]()
@@ -837,7 +871,7 @@ class PointProductTests(unittest.TestCase):
             with self.subTest(product=product):
                 prose = pinned["pointProducts"][product]
                 self.assertTrue(prose["title"] and prose["description"] and prose["providers"])
-                # None of the three has an SPDX id, so each names its terms.
+                # None of them has an SPDX id, so each names its terms.
                 self.assertEqual(prose["license"], "other")
                 self.assertTrue(any(link["rel"] == "license" for link in prose["links"]))
 

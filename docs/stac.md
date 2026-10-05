@@ -33,7 +33,7 @@ pointers:
 | `<source>/item.json` | the live Item: the run's Item relocated to a path that never changes | yes, replaced by every publish | same |
 | `<source>.<run>/item.json` | one Item per published run, beside its manifest | rewritten in place by a top-up, like the manifest | `build-bin` (whole run), `assemble-run` |
 | `<source>.<run>/<HHMM>/item.json` | the Item of one round of a rolling window (MRMS, JMA, CMA radar) | no | `build-bin --round` |
-| `<product>/collection.json` | one Collection per point product (`sounding`, `airport`, `tc`), the STAC face of its live pointer | yes | the product's build, `xue stac --product` |
+| `<product>/collection.json` | one Collection per point product (`sounding`, `airport`, `synop`, `tc`), the STAC face of its live pointer | yes | the product's build, `xue stac --product` |
 | `<product>/item.json` | the live Item: the newest issue's Item relocated to a path that never changes | yes, replaced by every issue | same |
 | `<product>.<issue>/item.json` | one Item per issue, beside its `index.json` | no | same |
 | `showcase/collection.json` | the Collection of the historical cases | yes | `showcase build` / `refresh` / `catalog` |
@@ -159,9 +159,10 @@ repeats the Item id and `xue:pointer` the pointer's file name.
 
 ## Point products
 
-Three products beside the runs are not rasters and have no manifest: the
+Four products beside the runs are not rasters and have no manifest: the
 radiosonde soundings (`docs/sounding.md`), the airport reports
-(`docs/airport.md`) and the tropical cyclone tracks (`docs/tc.md`). Each
+(`docs/airport.md`), the surface station observations (`docs/synop.md`)
+and the tropical cyclone tracks (`docs/tc.md`). Each
 publishes a mutable `latest-<product>.json` naming an immutable
 `<product>.<issue>/index.json`, and each gets the same three documents a
 source does — a Collection, a live Item, an Item per issue — derived from
@@ -169,11 +170,12 @@ that `index.json` alone and from nothing else.
 
 `<product>/collection.json`. Id: the product id. `title`, `description`,
 `license`, `keywords` and `providers` come from `_point_product_prose` in
-`xuebuild/stac.py`; none of the three has an SPDX identifier to name, so
-all three are `other` with the terms linked: the WMO Unified Data Policy
+`xuebuild/stac.py`; none of them has an SPDX identifier to name, so
+all are `other` with the terms linked: the WMO Unified Data Policy
 (Resolution 1, Cg-Ext(2021)) for the soundings, the NWS disclaimer for the
 airport caches (a work of the US government is in the public domain, which
-is not CC0), and both of those plus CC BY 4.0 for the tracks, whose
+is not CC0), each network's terms for the surface stations (JMA's website
+terms, the Public Data License v1.0, for AMeDAS), and both of those plus CC BY 4.0 for the tracks, whose
 sources are several agencies at once. `extent` is the whole world and
 `[[null, null]]`: every issue is a rolling window whose start moves, so a
 Collection stating the live issue's bounds would be wrong as soon as the
@@ -184,16 +186,18 @@ the catalog, `item` and `latest-version` to the live Item beside it,
 `xue:live` repeats the Item id and `xue:pointer` the pointer's file name.
 
 the issue directory's `item.json`: `sounding/2026/09/14/sounding.2026091402/`,
-`tc/2026/09/13/tc.2026091301/`, `airport.202609161430/` (the airport
-rounds stay flat; an hourly issue published before the archive tree sits
+`tc/2026/09/13/tc.2026091301/`, `airport.202609161430/`,
+`synop.202610050010/` (the ten-minute rounds stay flat; an hourly issue published before the archive tree sits
 flat too). Id: the directory's own name
-(`sounding.2026091402`, `airport.202609161430`, `tc.2026091301`).
+(`sounding.2026091402`, `airport.202609161430`, `synop.202610050010`,
+`tc.2026091301`).
 Extensions: [file v2.1.0](https://github.com/stac-extensions/file) alone —
 a point product is a set of stations, not a cube, and declares no
 `cube:dimensions` and no forecast fields.
 
 Space. `geometry` and `bbox` are the box around the stations the index
-lists: the soundings' and the airports' own positions, a storm's headline
+lists: the soundings', the airports' and the surface stations' own
+positions, a storm's headline
 position. It is the plain minimum and maximum over those points, so two
 storms either side of the Pacific make a box the long way round rather
 than one across the antimeridian. An index whose storms have nothing
@@ -203,8 +207,8 @@ observed has no positions at all, and then `geometry` is `null` with no
 Time. `datetime` is the issue (`issued`), what a client sorts on, and the
 period it covers is in the two bounds: for a sounding issue the oldest
 nominal time any station still carries to the newest ascent in it, for an
-airport round the 24 hours of history it holds (`issued − 24 h` to the
-newest observation), for a tc issue the earliest and latest headline
+airport or synop round the 24 hours of history it holds (`issued − 24 h`
+to the newest observation), for a tc issue the earliest and latest headline
 position. An empty index is the instant it was issued.
 
 Properties. `xue:product`, `xue:schemaVersion`, `xue:issued`,
@@ -222,6 +226,7 @@ a multihash, as a run's artifacts carry):
 |---|---|---|---|
 | `index` | `index.json?v=<crc32>`, under the CRC the pointer carries | `application/json` | `metadata` |
 | `soundings` / `history` | the product's one NDJSON file | `application/x-ndjson` | `data` |
+| `<network id>` | a synop round's NDJSON file per network, with `xue:network` | `application/x-ndjson` | `data` |
 | `<storm id>` | one JSON file per system a tc issue lists | `application/json` | `data` |
 
 The NDJSON asset's `description` states the addressing rule, which is the
@@ -235,7 +240,7 @@ The live Item at `<product>/item.json` is that Item relocated
 (`relocate_item`), every href reaching into the issue directory, so
 the URL a client bookmarks still resolves after the issue it named is
 pruned — seven days for the soundings and the tracks, three hours for the
-airport rounds.
+airport and synop rounds.
 An issue whose build withheld the pointer (no gateway contributed, both
 observation sources failed) gets its own Item and nothing else: the
 Collection and the live Item follow the pointer, as a source's do.

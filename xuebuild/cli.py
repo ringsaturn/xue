@@ -36,6 +36,12 @@ from .airport.build import load_previous_index as load_previous_airport_index
 from .airport.fetch import fetch_round as fetch_airport_round
 from .airport.schema import floor_round as floor_airport_round
 from .airport.schema import parse_round as parse_airport_round
+from .synop.build import build_product as build_synop_product
+from .synop.build import load_previous_index as load_previous_synop_index
+from .synop.fetch import fetch_round as fetch_synop_round
+from .synop.networks import NETWORKS as SYNOP_NETWORKS
+from .synop.schema import floor_round as floor_synop_round
+from .synop.schema import parse_round as parse_synop_round
 from .sounding.build import build_product as build_sounding_product
 from .sounding.build import load_previous_index as load_previous_sounding_index
 from .sounding.build import previous_watermarks as sounding_watermarks
@@ -311,12 +317,13 @@ def parser() -> argparse.ArgumentParser:
     stac_parser.add_argument(
         "--product",
         choices=POINT_PRODUCTS,
-        help="a point product instead of a run (docs/sounding.md, docs/airport.md, docs/tc.md); needs --issue",
+        help="a point product instead of a run (docs/sounding.md, docs/airport.md, docs/synop.md, docs/tc.md); "
+        "needs --issue",
     )
     stac_parser.add_argument(
         "--issue",
         help="the point product issue whose index.json is on disk: YYYYMMDDHH for sounding and tc, "
-        "YYYYMMDDHHMM for an airport round",
+        "YYYYMMDDHHMM for an airport or synop round",
     )
     stac_parser.add_argument("--output-dir", type=Path, default=Path("web/public/data"))
 
@@ -441,6 +448,33 @@ def parser() -> argparse.ArgumentParser:
     airport_build.add_argument("--offline", action="store_true", help="build from what is already fetched; touch no network")
     airport_build.add_argument("--force", action="store_true", help="rebuild a round whose index exists")
     airport_build.add_argument("--force-download", action="store_true", help="fetch every source again, station table included")
+
+    synop_build = commands.add_parser(
+        "synop-build",
+        help="fetch the surface station networks and write one synop.<round>/ index, a <network>.jsonl per network "
+        "and the pointer",
+    )
+    synop_build.add_argument(
+        "--round",
+        default="now",
+        help="the round, YYYYMMDDHHMM in UTC with the minute a multiple of ten, or now (this minute floored to ten)",
+    )
+    synop_build.add_argument(
+        "--networks",
+        help=f"comma-separated networks to fetch (default: all of {', '.join(network.id for network in SYNOP_NETWORKS)}); "
+        "the others carry their history over",
+    )
+    synop_build.add_argument("--raw-dir", type=Path, default=Path("data/raw"))
+    synop_build.add_argument("--output-dir", type=Path, default=Path("web/public/data"))
+    synop_build.add_argument(
+        "--previous-index",
+        type=Path,
+        help="the previous round's index.json, whose network files this round merges onto (default: the one the "
+        "local latest-synop.json names, if any; `make live-synop-index` fetches the live one and its files)",
+    )
+    synop_build.add_argument("--offline", action="store_true", help="build from what is already fetched; touch no network")
+    synop_build.add_argument("--force", action="store_true", help="rebuild a round whose index exists")
+    synop_build.add_argument("--force-download", action="store_true", help="fetch every source again, station tables included")
 
     sounding_build = commands.add_parser(
         "sounding-build",
@@ -746,6 +780,28 @@ def main(argv: list[str] | None = None) -> int:
                 force=arguments.force,
             )
             print(json.dumps(report, indent=2))
+        elif arguments.command == "synop-build":
+            moment = floor_synop_round(datetime.now(UTC)) if arguments.round == "now" else parse_synop_round(arguments.round)
+            networks = None
+            if arguments.networks:
+                known = tuple(network.id for network in SYNOP_NETWORKS)
+                networks = tuple(dict.fromkeys(item.strip() for item in arguments.networks.split(",") if item.strip()))
+                unknown = [item for item in networks if item not in known]
+                if unknown:
+                    raise XueError(f"unknown synop networks {unknown}; choose from {', '.join(known)}")
+            previous = load_previous_synop_index(arguments.previous_index, arguments.output_dir)
+            if not arguments.offline:
+                fetch_synop_round(
+                    arguments.raw_dir, moment, previous_index=previous, networks=networks, force=arguments.force_download
+                )
+            report = build_synop_product(
+                moment,
+                arguments.raw_dir,
+                arguments.output_dir,
+                previous_index=previous,
+                force=arguments.force,
+            )
+            print(json.dumps(report, indent=2, ensure_ascii=False))
         elif arguments.command == "sounding-build":
             if arguments.issue == "now":
                 issue = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)

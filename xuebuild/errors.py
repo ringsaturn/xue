@@ -29,3 +29,7 @@ class SoundingProductError(XueError):
 
 class AirportProductError(XueError):
     """The airport METAR / TAF product violates its versioned contract."""
+
+
+class SynopProductError(XueError):
+    """The surface station observation product violates its versioned contract."""

@@ -129,6 +129,7 @@ withholds its pointer only when nothing contributed.
 | Tropical cyclones | `publish-tc.yml` | twenty past every hour | [`docs/tc.md`](../tc.md) |
 | Airports | `publish-airport.yml` | every ten minutes | [`docs/airport.md`](../airport.md) |
 | Soundings | `publish-sounding.yml` | a quarter past every hour | [`docs/sounding.md`](../sounding.md) |
+| Surface stations | `publish-synop.yml` | three past every ten minutes | [`docs/synop.md`](../synop.md) |
 
 ```sh
 make live-tc-index && make tc-build                  # previous index first, so ids carry over
@@ -137,10 +138,12 @@ make live-airport-index && make airport-build        # merges onto the live 24 h
 make upload-r2-airport ROUND=202609161440 && make prune-r2-airport  # history → index → pointer; keeps three hours
 make live-sounding-index && make sounding-build      # watermark + carry-forward from the live issue
 make upload-r2-sounding ISSUE=2026091402 && make prune-r2-sounding  # keeps seven days
+make live-synop-index && make synop-build            # each network resumes after its live `latest`
+make upload-r2-synop ROUND=202610050010 && make prune-r2-synop  # network files → index → pointer; keeps three hours
 .venv/bin/python -m xuebuild tc-build --issue 2026091206 --offline --raw-dir tests/fixtures/tc
 ```
 
-The airport and sounding builds also take `--offline --raw-dir
+The airport, sounding and synop builds also take `--offline --raw-dir
 tests/fixtures/<product>`.
 
 ## STAC catalog
