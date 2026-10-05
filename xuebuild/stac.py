@@ -93,10 +93,10 @@ _XUE_PROVIDER = {
 
 
 # The point products published beside the runs (`docs/sounding.md`,
-# `docs/airport.md`, `docs/synop.md`, `docs/tc.md`): a fixed list rather than a registry,
+# `docs/airport.md`, `docs/synop.md`, `docs/tc.md`, `docs/nexrad.md`): a fixed list rather than a registry,
 # since each is its own pipeline under one delivery contract
 # (`xuebuild/pointproduct.py`). They are the root catalog's other children.
-POINT_PRODUCTS = ("sounding", "airport", "synop", "tc")
+POINT_PRODUCTS = ("sounding", "airport", "synop", "tc", "nexrad")
 
 NDJSON_MEDIA_TYPE = "application/x-ndjson"
 
@@ -114,7 +114,9 @@ def _point_product_prose(product: str) -> dict[str, Any]:
     that too is `other`, with the service's own terms linked. The surface
     stations are each network's own terms — JMA's site content is under
     the Public Data License v1.0, which no SPDX id spells — so the
-    Collection is `other` and links each network's terms. The tracks
+    Collection is `other` and links each network's terms. The single-site
+    radar is NOAA open data with attribution requested, which no SPDX id
+    spells either. The tracks
     come from several centres at once — US government works, ECMWF open
     data under CC BY 4.0, IBTrACS — so the Collection is `other` and the
     links name each.
@@ -236,6 +238,43 @@ def _point_product_prose(product: str) -> dict[str, Any]:
                     "href": "https://www.jma.go.jp/jma/kishou/info/coment.html",
                     "type": "text/html",
                     "title": "JMA website terms of use: Public Data License v1.0, source credit required",
+                },
+            ],
+        },
+        "nexrad": {
+            "title": "Single-site weather radar (NEXRAD Level III)",
+            "description": (
+                "The US WSR-88D network's lowest sweep, radar by radar: base reflectivity (N0B, 0.25 km gates "
+                "to 460 km) and dealiased radial velocity (N0G, to 300 km, positive away from the radar), "
+                "every sweep as the radar made it, supplemental SAILS sweeps included. Each five-minute round "
+                "is one immutable Zarr store per product in the polar profile (site, sweep, azimuth, range), "
+                "holding the sweeps that arrived since the round before; the round's index is the window "
+                "manifest over the last three hours, with every site's byte span per round. A rolling window "
+                "with no fixed start."
+            ),
+            "license": "other",
+            "keywords": ["weather", "observation", "radar", "nexrad", "wsr-88d", "reflectivity", "doppler velocity"],
+            "providers": [
+                {
+                    "name": "NOAA / NWS Radar Operations Center",
+                    "description": "The WSR-88D network and its Level III products; attribution requested.",
+                    "roles": ["producer", "licensor"],
+                    "url": "https://www.roc.noaa.gov/",
+                },
+                {
+                    "name": "Unidata",
+                    "description": "The real-time Level III archive on AWS Open Data (unidata-nexrad-level3).",
+                    "roles": ["host"],
+                    "url": "https://registry.opendata.aws/noaa-nexrad/",
+                },
+                _XUE_PROVIDER,
+            ],
+            "links": [
+                {
+                    "rel": "license",
+                    "href": "https://registry.opendata.aws/noaa-nexrad/",
+                    "type": "text/html",
+                    "title": "NOAA Open Data Dissemination: open to the public, attribution requested, no endorsement implied",
                 },
             ],
         },
@@ -1366,6 +1405,8 @@ def _point_product_positions(index: dict[str, Any], product: str) -> list[tuple[
         return [(float(row[2]), float(row[1])) for row in index["stations"]]
     if product == "synop":
         return [(float(row[3]), float(row[2])) for row in index["stations"]]
+    if product == "nexrad":
+        return [(float(row[3]), float(row[2])) for row in index["sites"]]
     return [
         (float(storm["position"]["lon"]), float(storm["position"]["lat"]))
         for storm in index["storms"]
@@ -1395,6 +1436,20 @@ def _point_product_period(index: dict[str, Any], product: str, issued: datetime)
         bounds = (
             iso_z(issued - timedelta(hours=24)),
             max((row[7] for row in index["stations"]), default=default),
+        )
+    elif product == "nexrad":
+        # The sweeps the window holds, from the first to the newest.
+        times = [
+            time
+            for entry in index["rounds"]
+            for block in (entry.get("n0b"), entry.get("n0g"))
+            if block
+            for _site, sweeps in block["scans"]
+            for time in sweeps
+        ]
+        bounds = (
+            iso_z(datetime.fromtimestamp(min(times), UTC)) if times else default,
+            iso_z(datetime.fromtimestamp(max(times), UTC)) if times else default,
         )
     else:
         times = [storm["position"]["time"] for storm in index["storms"] if storm.get("position")]
@@ -1456,6 +1511,33 @@ def _point_product_assets(
                 **_file_fields(descriptor["byteLength"], descriptor["crc32"], single_file=True),
             }
         return assets
+    if product == "nexrad":
+        # This round's own stores: the window's older rounds are their own
+        # Items, and the manifest (the index asset) spans them all.
+        own = index["rounds"][-1] if index["rounds"] and index["rounds"][-1]["round"] == index["issued"] else {}
+        titles = {"n0b": "Base reflectivity (N0B)", "n0g": "Base radial velocity (N0G)"}
+        for key in ("n0b", "n0g"):
+            block = own.get(key)
+            if block is None:
+                continue
+            assets[key] = {
+                "href": f"{key}.zarr",
+                "type": ZARR_MEDIA_TYPE,
+                "title": f"{titles[key]}: the round's sweeps, polar store",
+                "description": (
+                    "A Zarr v3 group in the polar branch of the Xue profile: one uint8 array "
+                    "[site, scan, azimuth, range] in one shard, one inner chunk per site. The window "
+                    "manifest gives each site's byte span in the shard, so one site is one Range request."
+                ),
+                "roles": ["data"],
+                "xue:kind": "store",
+                **_file_fields(
+                    block["group"]["byteLength"] + block["shard"]["byteLength"],
+                    block["group"]["crc32"],
+                    single_file=False,
+                ),
+            }
+        return assets
     for storm in index["storms"]:
         name = storm.get("name")
         assets[storm["id"]] = {
@@ -1472,7 +1554,7 @@ def _point_product_assets(
 
 
 def _point_product_label(product: str, issued: datetime) -> str:
-    if product in ("airport", "synop"):
+    if product in ("airport", "synop", "nexrad"):
         return f"{issued.strftime('%Y-%m-%d %H:%MZ')} round"
     return f"{issued.strftime('%Y-%m-%d %HZ')} issue"
 
@@ -1522,7 +1604,7 @@ def point_product_item(
         "xue:product": product,
         "xue:schemaVersion": index["schemaVersion"],
         "xue:issued": iso_z(issued),
-        count_key: len(index["storms"] if product == "tc" else index["stations"]),
+        count_key: len(index["storms"] if product == "tc" else index["sites"] if product == "nexrad" else index["stations"]),
         "xue:sources": [{"id": source["id"], "ok": bool(source["ok"])} for source in index["sources"]],
     }
     if product == "sounding":
@@ -1736,8 +1818,9 @@ def root_catalog() -> dict[str, Any]:
         "description": (
             "Global and regional weather forecast runs and radar observations, packed by Xue into "
             "Zarr v3 stores (docs/zarr-profile.md) for playback in a browser and reading with xarray, "
-            "beside four point products in plain JSON: radiosonde soundings, airport reports, surface "
-            "station observations and tropical cyclone tracks. One Collection per source or product, whose Item is the newest "
+            "beside four point products in plain JSON — radiosonde soundings, airport reports, surface "
+            "station observations and tropical cyclone tracks — and single-site radar sweeps as polar Zarr "
+            "stores. One Collection per source or product, whose Item is the newest "
             "run or issue; the showcase Collection keeps historical cases."
         ),
         "links": [

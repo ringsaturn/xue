@@ -36,6 +36,15 @@ from .airport.build import load_previous_index as load_previous_airport_index
 from .airport.fetch import fetch_round as fetch_airport_round
 from .airport.schema import floor_round as floor_airport_round
 from .airport.schema import parse_round as parse_airport_round
+from .nexrad.build import build_case as build_nexrad_case
+from .nexrad.build import catch_up as catch_up_nexrad
+from .nexrad.build import load_previous_window as load_previous_nexrad_window
+from .nexrad.build import load_stations as load_nexrad_stations
+from .nexrad.build import write_pointer as write_nexrad_pointer
+from .nexrad.schema import WINDOW_FILENAME as NEXRAD_WINDOW_FILENAME
+from .nexrad.schema import floor_round as floor_nexrad_round
+from .nexrad.schema import parse_round as parse_nexrad_round
+from .nexrad.schema import round_directory as nexrad_round_directory
 from .synop.build import build_product as build_synop_product
 from .synop.build import load_previous_index as load_previous_synop_index
 from .synop.fetch import fetch_round as fetch_synop_round
@@ -451,6 +460,35 @@ def parser() -> argparse.ArgumentParser:
     airport_build.add_argument("--force", action="store_true", help="rebuild a round whose index exists")
     airport_build.add_argument("--force-download", action="store_true", help="fetch every source again, station table included")
 
+    nexrad_build = commands.add_parser(
+        "nexrad-build",
+        help="fetch the WSR-88D sweeps newer than the live window and write one nexrad.<round>/ (a polar store per "
+        "product and the window manifest), the pointer and the round's STAC item",
+    )
+    nexrad_build.add_argument(
+        "--round",
+        default="now",
+        help="the round, YYYYMMDDHHMM in UTC with the minute a multiple of five, or now (this minute floored to five)",
+    )
+    nexrad_build.add_argument(
+        "--sites",
+        required=True,
+        help="comma-separated three-letter site ids (TLX,GWX,…), or `all` for every NEXRAD site in the station table",
+    )
+    nexrad_build.add_argument("--raw-dir", type=Path, default=Path("data/raw"))
+    nexrad_build.add_argument("--output-dir", type=Path, default=Path("web/public/data"))
+    nexrad_build.add_argument("--offline", action="store_true", help="build from the sweeps already on disk; touch no network")
+
+    nexrad_case = commands.add_parser(
+        "nexrad-case",
+        help="replay five-minute nexrad rounds over a past interval into a directory (a showcase case; nothing is "
+        "registered in showcase.json)",
+    )
+    nexrad_case.add_argument("case", type=Path, help="the case definition: {id, start, end, sites}")
+    nexrad_case.add_argument("--raw-dir", type=Path, default=Path("data/raw"))
+    nexrad_case.add_argument("--output-dir", type=Path, default=Path("web/public/data/showcase"))
+    nexrad_case.add_argument("--offline", action="store_true", help="build from the sweeps already on disk")
+
     synop_build = commands.add_parser(
         "synop-build",
         help="fetch the surface station networks and write one synop.<round>/ index, a <network>.jsonl per network "
@@ -782,6 +820,64 @@ def main(argv: list[str] | None = None) -> int:
                 force=arguments.force,
             )
             print(json.dumps(report, indent=2))
+        elif arguments.command == "nexrad-build":
+            moment = floor_nexrad_round(datetime.now(UTC)) if arguments.round == "now" else parse_nexrad_round(arguments.round)
+            stations = load_nexrad_stations(arguments.raw_dir, fetch=not arguments.offline)
+            sites = (
+                sorted(stations)
+                if arguments.sites.strip().lower() == "all"
+                else [site.strip().upper() for site in arguments.sites.split(",") if site.strip()]
+            )
+            unknown = [site for site in sites if site not in stations]
+            if unknown:
+                raise XueError(f"unknown nexrad sites {unknown}")
+            built = catch_up_nexrad(
+                moment,
+                raw_root=arguments.raw_dir,
+                output_root=arguments.output_dir,
+                stations=stations,
+                sites=sites,
+                previous=load_previous_nexrad_window(arguments.output_dir),
+                fetch=not arguments.offline,
+            )
+            if not built:
+                raise XueError(f"nexrad round {moment:%Y%m%d%H%M} is not newer than the live window")
+            report = built[-1]
+            moment = datetime.strptime(report["round"], "%Y%m%d%H%M").replace(tzinfo=UTC)
+            ok = any(source["ok"] for source in report["sources"])
+            pointer = write_nexrad_pointer(arguments.output_dir, moment, report["windowBytes"]) if ok else None
+            stac_paths = write_point_product_documents(
+                arguments.output_dir,
+                product="nexrad",
+                index_path=arguments.output_dir / nexrad_round_directory(moment) / NEXRAD_WINDOW_FILENAME,
+                live=pointer is not None,
+            )
+            print(
+                json.dumps(
+                    {
+                        "round": report["round"],
+                        "built": [entry["round"] for entry in built],
+                        "stores": report["stores"],
+                        "rounds": len(report["window"]["rounds"]),
+                        "sites": len(report["window"]["sites"]),
+                        "sources": report["sources"],
+                        "pointer": None if pointer is None else str(pointer),
+                        "stac": stac_paths,
+                    },
+                    indent=2,
+                )
+            )
+        elif arguments.command == "nexrad-case":
+            case = json.loads(arguments.case.read_text(encoding="utf-8"))
+            report = build_nexrad_case(
+                start=datetime.fromisoformat(case["start"]),
+                end=datetime.fromisoformat(case["end"]),
+                sites=list(case["sites"]),
+                raw_root=arguments.raw_dir,
+                output_root=arguments.output_dir / case["id"],
+                fetch=not arguments.offline,
+            )
+            print(json.dumps({"case": case["id"], "round": report["round"], "rounds": len(report["window"]["rounds"]), "sites": report["window"]["sites"]}, indent=2))
         elif arguments.command == "synop-build":
             moment = floor_synop_round(datetime.now(UTC)) if arguments.round == "now" else parse_synop_round(arguments.round)
             networks = None

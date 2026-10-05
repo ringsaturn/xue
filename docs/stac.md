@@ -33,7 +33,7 @@ pointers:
 | `<source>/item.json` | the live Item: the run's Item relocated to a path that never changes | yes, replaced by every publish | same |
 | `<source>.<run>/item.json` | one Item per published run, beside its manifest | rewritten in place by a top-up, like the manifest | `build-bin` (whole run), `assemble-run` |
 | `<source>.<run>/<HHMM>/item.json` | the Item of one round of a rolling window (MRMS, JMA, CMA radar) | no | `build-bin --round` |
-| `<product>/collection.json` | one Collection per point product (`sounding`, `airport`, `synop`, `tc`), the STAC face of its live pointer | yes | the product's build, `xue stac --product` |
+| `<product>/collection.json` | one Collection per point product (`sounding`, `airport`, `synop`, `tc`, `nexrad`), the STAC face of its live pointer | yes | the product's build, `xue stac --product` |
 | `<product>/item.json` | the live Item: the newest issue's Item relocated to a path that never changes | yes, replaced by every issue | same |
 | `<product>.<issue>/item.json` | one Item per issue, beside its `index.json` | no | same |
 | `showcase/collection.json` | the Collection of the historical cases | yes | `showcase build` / `refresh` / `catalog` |
@@ -159,10 +159,11 @@ repeats the Item id and `xue:pointer` the pointer's file name.
 
 ## Point products
 
-Four products beside the runs are not rasters and have no manifest: the
-radiosonde soundings (`docs/sounding.md`), the airport reports
-(`docs/airport.md`), the surface station observations (`docs/synop.md`)
-and the tropical cyclone tracks (`docs/tc.md`). Each
+Five products beside the runs have no run manifest: the radiosonde
+soundings (`docs/sounding.md`), the airport reports (`docs/airport.md`),
+the surface station observations (`docs/synop.md`), the tropical cyclone
+tracks (`docs/tc.md`) and the single-site radar (`docs/nexrad.md`), whose
+data are polar Zarr stores but whose index is a window manifest. Each
 publishes a mutable `latest-<product>.json` naming an immutable
 `<product>.<issue>/index.json`, and each gets the same three documents a
 source does — a Collection, a live Item, an Item per issue — derived from
@@ -175,8 +176,10 @@ all are `other` with the terms linked: the WMO Unified Data Policy
 (Resolution 1, Cg-Ext(2021)) for the soundings, the NWS disclaimer for the
 airport caches (a work of the US government is in the public domain, which
 is not CC0), each network's terms for the surface stations (JMA's website
-terms, the Public Data License v1.0, for AMeDAS), and both of those plus CC BY 4.0 for the tracks, whose
-sources are several agencies at once. `extent` is the whole world and
+terms, the Public Data License v1.0, for AMeDAS), NOAA Open Data
+Dissemination (attribution requested, no endorsement) for the radar, and
+both of the first two plus CC BY 4.0 for the tracks, whose sources are
+several agencies at once. `extent` is the whole world and
 `[[null, null]]`: every issue is a rolling window whose start moves, so a
 Collection stating the live issue's bounds would be wrong as soon as the
 next one lands, and the description says so. Links: `root` and `parent` to
@@ -187,17 +190,18 @@ the catalog, `item` and `latest-version` to the live Item beside it,
 
 the issue directory's `item.json`: `sounding/2026/09/14/sounding.2026091402/`,
 `tc/2026/09/13/tc.2026091301/`, `airport.202609161430/`,
-`synop.202610050010/` (the ten-minute rounds stay flat; an hourly issue published before the archive tree sits
+`synop.202610050010/`, `nexrad.202610050805/` (the ten- and five-minute
+rounds stay flat; an hourly issue published before the archive tree sits
 flat too). Id: the directory's own name
 (`sounding.2026091402`, `airport.202609161430`, `synop.202610050010`,
-`tc.2026091301`).
+`nexrad.202610050805`, `tc.2026091301`).
 Extensions: [file v2.1.0](https://github.com/stac-extensions/file) alone —
 a point product is a set of stations, not a cube, and declares no
 `cube:dimensions` and no forecast fields.
 
 Space. `geometry` and `bbox` are the box around the stations the index
 lists: the soundings', the airports' and the surface stations' own
-positions, a storm's headline
+positions, the radars' antennas in the window's site table, a storm's headline
 position. It is the plain minimum and maximum over those points, so two
 storms either side of the Pacific make a box the long way round rather
 than one across the antimeridian. An index whose storms have nothing
@@ -208,11 +212,13 @@ Time. `datetime` is the issue (`issued`), what a client sorts on, and the
 period it covers is in the two bounds: for a sounding issue the oldest
 nominal time any station still carries to the newest ascent in it, for an
 airport or synop round the 24 hours of history it holds (`issued − 24 h`
-to the newest observation), for a tc issue the earliest and latest headline
+to the newest observation), for a nexrad round the first to the newest
+sweep the window holds, for a tc issue the earliest and latest headline
 position. An empty index is the instant it was issued.
 
 Properties. `xue:product`, `xue:schemaVersion`, `xue:issued`,
-`xue:stations` (`xue:storms` for the tracks) and `xue:sources`, the
+`xue:stations` (`xue:storms` for the tracks; the window's sites for the
+radar) and `xue:sources`, the
 index's own `sources[]` reduced to `{id, ok}` so a client sees which
 gateway or centre was down without reading the index. A sounding issue
 also carries `xue:watermark`, the product's account per gateway of how
@@ -228,19 +234,23 @@ a multihash, as a run's artifacts carry):
 | `soundings` / `history` | the product's one NDJSON file | `application/x-ndjson` | `data` |
 | `<network id>` | a synop round's NDJSON file per network, with `xue:network` | `application/x-ndjson` | `data` |
 | `<storm id>` | one JSON file per system a tc issue lists | `application/json` | `data` |
+| `n0b` / `n0g` | a nexrad round's own polar store per product (`n0b.zarr`), `xue:kind` `store`; `file:size` is the root document and the shard, and the store carries `xue:crc32` (its root document's, the `?v=`) rather than `file:checksum`, as a run's stores do | `application/vnd.zarr` | `data` |
 
 The NDJSON asset's `description` states the addressing rule, which is the
 point of the layout: one station per line, sorted by id, and a station's
 `offset` and `length` in the index are the byte span of its line's object
 (the newline excluded), so one station is one `Range` request and the
-whole file still streams. Assets carry `xue:kind` (`index`, `series`,
-`storm`), and a storm's also `xue:level` and `xue:basin`.
+whole file still streams. A nexrad round's Item names only that round's
+stores: the older rounds of the window are their own Items, and the index
+asset — the window manifest — spans them all. Assets carry `xue:kind`
+(`index`, `series`, `store`, `storm`), and a storm's also `xue:level` and
+`xue:basin`.
 
 The live Item at `<product>/item.json` is that Item relocated
 (`relocate_item`), every href reaching into the issue directory, so
 the URL a client bookmarks still resolves after the issue it named is
 pruned — seven days for the soundings and the tracks, three hours for the
-airport and synop rounds.
+airport, synop and nexrad rounds.
 An issue whose build withheld the pointer (no gateway contributed, both
 observation sources failed) gets its own Item and nothing else: the
 Collection and the live Item follow the pointer, as a source's do.

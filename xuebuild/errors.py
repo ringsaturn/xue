@@ -33,3 +33,7 @@ class AirportProductError(XueError):
 
 class SynopProductError(XueError):
     """The surface station observation product violates its versioned contract."""
+
+
+class NexradProductError(XueError):
+    """The single-site radar product violates its versioned contract."""

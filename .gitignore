@@ -32,6 +32,8 @@ web/public/data/sounding.*/
 web/public/data/latest-sounding.json
 web/public/data/synop.*/
 web/public/data/latest-synop.json
+web/public/data/nexrad.*/
+web/public/data/latest-nexrad.json
 web/public/data/himawari.*/
 web/public/data/latest-himawari.json
 web/public/data/aurora.*/
@@ -50,6 +52,7 @@ web/public/data/jma/
 web/public/data/cma/
 web/public/data/aurora/
 web/public/data/synop/
+web/public/data/nexrad/
 # Scratch case definitions for local development; the curated set is
 # showcase/cases/ and is checked in.
 showcase/cases-local/

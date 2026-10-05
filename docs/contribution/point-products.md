@@ -75,6 +75,22 @@ failed. `AIRPORT_KEEP` rounds are kept.
 - AMeDAS reads the agency's map-page JSON (no API, no SLA); the quality
   rule and the 16-point wind code come from that page's own script.
 
+## Single-site radar
+
+- `xuebuild/nexrad/`: `level3.py` reads N0B / N0G (bzip2 packet 16) itself —
+  no MetPy — and refuses any codebook but the spec's; `store.py` writes the
+  polar store (`docs/zarr-profile.md`, "Polar store"); `build.py` builds a
+  round from the sweeps newer than the window's newest per site and product,
+  and `catch_up` fills a late or missed schedule with ordinary five-minute
+  rounds, so a site's inner chunk never holds more than one round's sweeps.
+- The index is the window manifest. It is rewritten every round from the
+  previous one; the stores never are.
+- Cases (`showcase/nexrad-cases/*.json`, `xue nexrad-case`) replay the same
+  rounds over a past interval. They are not in `showcase.json` until the
+  shell knows the case kind: a catalog row the deployed shell cannot parse
+  fails the whole catalog.
+- Level 3 N0B / N0G exist from 2022-02 on; earlier events have N0Q / N0U only.
+
 ## Soundings
 
 The fetch lists the two GTS→WIS2 gateway directories of the public

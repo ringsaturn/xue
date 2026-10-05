@@ -1,0 +1,115 @@
+{
+ "type": "Collection",
+ "stac_version": "1.1.0",
+ "stac_extensions": [],
+ "id": "nexrad",
+ "title": "Single-site weather radar (NEXRAD Level III)",
+ "description": "The US WSR-88D network's lowest sweep, radar by radar: base reflectivity (N0B, 0.25 km gates to 460 km) and dealiased radial velocity (N0G, to 300 km, positive away from the radar), every sweep as the radar made it, supplemental SAILS sweeps included. Each five-minute round is one immutable Zarr store per product in the polar profile (site, sweep, azimuth, range), holding the sweeps that arrived since the round before; the round's index is the window manifest over the last three hours, with every site's byte span per round. A rolling window with no fixed start.",
+ "license": "other",
+ "keywords": [
+  "weather",
+  "observation",
+  "radar",
+  "nexrad",
+  "wsr-88d",
+  "reflectivity",
+  "doppler velocity"
+ ],
+ "providers": [
+  {
+   "name": "NOAA / NWS Radar Operations Center",
+   "description": "The WSR-88D network and its Level III products; attribution requested.",
+   "roles": [
+    "producer",
+    "licensor"
+   ],
+   "url": "https://www.roc.noaa.gov/"
+  },
+  {
+   "name": "Unidata",
+   "description": "The real-time Level III archive on AWS Open Data (unidata-nexrad-level3).",
+   "roles": [
+    "host"
+   ],
+   "url": "https://registry.opendata.aws/noaa-nexrad/"
+  },
+  {
+   "name": "Xue",
+   "roles": [
+    "processor",
+    "host"
+   ],
+   "url": "https://github.com/ringsaturn/xue"
+  }
+ ],
+ "extent": {
+  "spatial": {
+   "bbox": [
+    [
+     -180.0,
+     -90.0,
+     180.0,
+     90.0
+    ]
+   ]
+  },
+  "temporal": {
+   "interval": [
+    [
+     null,
+     null
+    ]
+   ]
+  }
+ },
+ "xue:pointer": "latest-nexrad.json",
+ "xue:live": "nexrad.202303250145",
+ "links": [
+  {
+   "rel": "root",
+   "href": "../catalog.json",
+   "type": "application/json"
+  },
+  {
+   "rel": "parent",
+   "href": "../catalog.json",
+   "type": "application/json"
+  },
+  {
+   "rel": "item",
+   "href": "item.json",
+   "type": "application/geo+json",
+   "title": "Single-site weather radar (NEXRAD Level III) · 2023-03-25 01:45Z round"
+  },
+  {
+   "rel": "latest-version",
+   "href": "item.json",
+   "type": "application/geo+json",
+   "title": "Single-site weather radar (NEXRAD Level III) · 2023-03-25 01:45Z round"
+  },
+  {
+   "rel": "alternate",
+   "href": "../nexrad.202303250145/item.json",
+   "type": "application/geo+json",
+   "title": "Single-site weather radar (NEXRAD Level III) · 2023-03-25 01:45Z round (beside its index; gone when the issue is)"
+  },
+  {
+   "rel": "xue:pointer",
+   "href": "../latest-nexrad.json",
+   "type": "application/json",
+   "title": "live pointer (schema v1)"
+  },
+  {
+   "rel": "describedby",
+   "href": "https://github.com/ringsaturn/xue/blob/main/docs/nexrad.md",
+   "type": "text/markdown",
+   "title": "The nexrad product, schema v1"
+  },
+  {
+   "rel": "license",
+   "href": "https://registry.opendata.aws/noaa-nexrad/",
+   "type": "text/html",
+   "title": "NOAA Open Data Dissemination: open to the public, attribution requested, no endorsement implied"
+  }
+ ]
+}

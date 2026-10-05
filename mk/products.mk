@@ -11,8 +11,11 @@ TC_KEEP ?= 168
 AIRPORT_KEEP ?= 18
 SOUNDING_KEEP ?= 168
 SYNOP_KEEP ?= 18
+NEXRAD_KEEP ?= 40
+NEXRAD_ROUND = $(if $(ROUND),$(ROUND),now)
+NEXRAD_SITES ?= all
 
-.PHONY: tc-build live-tc-index upload-r2-tc prune-r2-tc airport-build live-airport-index upload-r2-airport prune-r2-airport sounding-build live-sounding-index upload-r2-sounding prune-r2-sounding synop-build live-synop-index upload-r2-synop prune-r2-synop
+.PHONY: tc-build live-tc-index upload-r2-tc prune-r2-tc airport-build live-airport-index upload-r2-airport prune-r2-airport sounding-build live-sounding-index upload-r2-sounding prune-r2-sounding synop-build live-synop-index upload-r2-synop prune-r2-synop nexrad-build nexrad-case prune-r2-nexrad
 
 # $(call point_dir,product,id): an issue's directory under the data root.
 # The hourly products file it under its day, <product>/YYYY/MM/DD/<product>.<id>,
@@ -243,3 +246,13 @@ upload-r2-synop: ## Upload a synop round, then take it live
 
 prune-r2-synop: ## Delete synop rounds beyond the newest SYNOP_KEEP
 	$(call point_prune,synop,$(SYNOP_KEEP),round)
+
+nexrad-build: ## Build the nexrad rounds up to ROUND for NEXRAD_SITES (docs/nexrad.md)
+	$(PYTHON) -m xuebuild nexrad-build --round $(NEXRAD_ROUND) --sites $(NEXRAD_SITES)
+
+nexrad-case: ## Replay a nexrad showcase case, CASE=showcase/nexrad-cases/<id>.json
+	@[ -n "$(CASE)" ] || { echo "pass CASE=showcase/nexrad-cases/<id>.json"; exit 1; }
+	$(PYTHON) -m xuebuild nexrad-case $(CASE)
+
+prune-r2-nexrad: ## Delete nexrad rounds beyond the newest NEXRAD_KEEP
+	$(call point_prune,nexrad,$(NEXRAD_KEEP),round)

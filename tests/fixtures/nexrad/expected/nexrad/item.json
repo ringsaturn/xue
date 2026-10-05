@@ -1,0 +1,117 @@
+{
+ "type": "Feature",
+ "stac_version": "1.1.0",
+ "stac_extensions": [
+  "https://stac-extensions.github.io/file/v2.1.0/schema.json"
+ ],
+ "id": "nexrad.202303250145",
+ "collection": "nexrad",
+ "geometry": {
+  "type": "Polygon",
+  "coordinates": [
+   [
+    [
+     -89.984444,
+     32.279944
+    ],
+    [
+     -88.329194,
+     32.279944
+    ],
+    [
+     -88.329194,
+     33.896917
+    ],
+    [
+     -89.984444,
+     33.896917
+    ],
+    [
+     -89.984444,
+     32.279944
+    ]
+   ]
+  ]
+ },
+ "bbox": [
+  -89.984444,
+  32.279944,
+  -88.329194,
+  33.896917
+ ],
+ "properties": {
+  "title": "Single-site weather radar (NEXRAD Level III) · 2023-03-25 01:45Z round",
+  "datetime": "2023-03-25T01:45:00Z",
+  "start_datetime": "2023-03-25T01:36:23Z",
+  "end_datetime": "2023-03-25T01:43:17Z",
+  "xue:product": "nexrad",
+  "xue:schemaVersion": 1,
+  "xue:issued": "2023-03-25T01:45:00Z",
+  "xue:stations": 2,
+  "xue:sources": [
+   {
+    "id": "unidata-n0b",
+    "ok": true
+   },
+   {
+    "id": "unidata-n0g",
+    "ok": true
+   }
+  ]
+ },
+ "links": [
+  {
+   "rel": "root",
+   "href": "../catalog.json",
+   "type": "application/json"
+  },
+  {
+   "rel": "parent",
+   "href": "collection.json",
+   "type": "application/json"
+  },
+  {
+   "rel": "collection",
+   "href": "collection.json",
+   "type": "application/json"
+  }
+ ],
+ "assets": {
+  "index": {
+   "href": "../nexrad.202303250145/index.json?v=19b86fd2",
+   "type": "application/json",
+   "title": "nexrad index (schema v1)",
+   "roles": [
+    "metadata"
+   ],
+   "xue:kind": "index",
+   "file:size": 1154,
+   "xue:crc32": "19b86fd2",
+   "file:checksum": "b2020419b86fd2"
+  },
+  "n0b": {
+   "href": "../nexrad.202303250145/n0b.zarr",
+   "type": "application/vnd.zarr",
+   "title": "Base reflectivity (N0B): the round's sweeps, polar store",
+   "description": "A Zarr v3 group in the polar branch of the Xue profile: one uint8 array [site, scan, azimuth, range] in one shard, one inner chunk per site. The window manifest gives each site's byte span in the shard, so one site is one Range request.",
+   "roles": [
+    "data"
+   ],
+   "xue:kind": "store",
+   "file:size": 323306,
+   "xue:crc32": "45e322ac"
+  },
+  "n0g": {
+   "href": "../nexrad.202303250145/n0g.zarr",
+   "type": "application/vnd.zarr",
+   "title": "Base radial velocity (N0G): the round's sweeps, polar store",
+   "description": "A Zarr v3 group in the polar branch of the Xue profile: one uint8 array [site, scan, azimuth, range] in one shard, one inner chunk per site. The window manifest gives each site's byte span in the shard, so one site is one Range request.",
+   "roles": [
+    "data"
+   ],
+   "xue:kind": "store",
+   "file:size": 516140,
+   "xue:crc32": "a0631eff"
+  }
+ }
+}

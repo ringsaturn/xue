@@ -26,6 +26,7 @@ from xuebuild.manifest import build_bin_manifest
 from xuebuild.pointproduct import crc32_hex, encode_json
 from xuebuild.sounding import schema as sounding_schema
 from xuebuild.sources import SOURCES, source_spec
+from xuebuild.nexrad import schema as nexrad_schema
 from xuebuild.synop import schema as synop_schema
 from xuebuild.tc import schema as tc_schema
 
@@ -627,6 +628,9 @@ class PointProductTests(unittest.TestCase):
     def synop_item(self) -> dict:
         return self.item("synop", "synop.202610050010", "synop/expected/synop.202610050010/index.json")
 
+    def nexrad_item(self) -> dict:
+        return self.item("nexrad", "nexrad.202303250145", "nexrad/expected/nexrad.202303250145/index.json")
+
     def tc_item(self) -> dict:
         return self.item("tc", "tc/2026/09/12/tc.2026091206", "tc/expected/index.json")
 
@@ -770,6 +774,24 @@ class PointProductTests(unittest.TestCase):
         self.assertEqual(item["bbox"][1], min(row[2] for row in index["stations"]))
         self.assertEqual(item["bbox"][2], max(row[3] for row in index["stations"]))
 
+    def test_a_nexrad_round_is_its_own_stores_over_the_window(self) -> None:
+        index, _ = self.index("nexrad/expected/nexrad.202303250145/index.json")
+        item = self.nexrad_item()
+        self.assertEqual(item["id"], "nexrad.202303250145")
+        self.assertEqual(sorted(item["assets"]), ["index", "n0b", "n0g"])
+        own = index["rounds"][-1]
+        store = item["assets"]["n0g"]
+        self.assertEqual(store["href"], "n0g.zarr")
+        self.assertEqual(store["type"], stac.ZARR_MEDIA_TYPE)
+        self.assertEqual(store["xue:kind"], "store")
+        self.assertEqual(store["xue:crc32"], own["n0g"]["group"]["crc32"])
+        self.assertNotIn("file:checksum", store)
+        properties = item["properties"]
+        # The window's sweeps, oldest to newest, not the rounds' minutes.
+        self.assertEqual(properties["start_datetime"], "2023-03-25T01:36:23Z")
+        self.assertEqual(properties["end_datetime"], "2023-03-25T01:43:17Z")
+        self.assertEqual(properties["xue:stations"], 2)
+
     def test_an_index_elsewhere_is_not_an_issue(self) -> None:
         index, encoded = self.index("tc/expected/index.json")
         for path in (
@@ -834,12 +856,13 @@ class PointProductTests(unittest.TestCase):
     def test_the_catalog_lists_every_product(self) -> None:
         children = [link["href"] for link in stac.root_catalog()["links"] if link["rel"] == "child"]
         self.assertEqual(
-            children[-5:],
+            children[-6:],
             [
                 "sounding/collection.json",
                 "airport/collection.json",
                 "synop/collection.json",
                 "tc/collection.json",
+                "nexrad/collection.json",
                 "showcase/collection.json",
             ],
         )
@@ -848,13 +871,14 @@ class PointProductTests(unittest.TestCase):
         # The fixed list in stac.py against each product's own schema: an
         # id it does not spell the same way would leave a Collection
         # pointing at a pointer nobody writes.
-        schemas = (sounding_schema, airport_schema, synop_schema, tc_schema)
+        schemas = (sounding_schema, airport_schema, synop_schema, tc_schema, nexrad_schema)
         self.assertEqual(sorted(stac.POINT_PRODUCTS), sorted(schema.PRODUCT for schema in schemas))
         items = {
             "sounding": self.sounding_item,
             "airport": self.airport_item,
             "synop": self.synop_item,
             "tc": self.tc_item,
+            "nexrad": self.nexrad_item,
         }
         for schema in schemas:
             with self.subTest(product=schema.PRODUCT):

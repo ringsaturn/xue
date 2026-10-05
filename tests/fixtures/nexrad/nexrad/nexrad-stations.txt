@@ -1,0 +1,4 @@
+NCDCID   ICAO WBAN  NAME                           COUNTRY              ST COUNTY                         LAT       LON        ELEV   UTC   STNTYPE                                            
+-------- ---- ----- ------------------------------ -------------------- -- ------------------------------ --------- ---------- ------ ----- -------------------------------------------------- 
+30001827 KDGX       JACKSON BRANDON                UNITED STATES        MS RANKIN                         32.279944 -89.984444 609    -6    NEXRAD                                             
+30001858 KGWX 53837 COLUMBUS AFB                   UNITED STATES        MS MONROE                         33.896917 -88.329194 590    -6    NEXRAD                                             
