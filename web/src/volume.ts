@@ -26,15 +26,15 @@ export const VOLUME_BUNDLE_LEVELS: ReadonlyMap<string, number> = new Map([["refl
 export const DEFAULT_VERTICAL_EXAGGERATION = 10;
 
 /** Reflectivity below which the transfer function is clear and at which it
- * is fully dense, in dBZ: light stratiform echo reads as a haze, a
- * convective core as a solid. */
-const CLEAR_DBZ = 18;
-const DENSE_DBZ = 60;
+ * is fully dense, in dBZ: light stratiform echo stays a thin veil, so it
+ * cannot bury the convective cores that read as solids inside it. */
+const CLEAR_DBZ = 25;
+const DENSE_DBZ = 55;
 
 /** How much one voxel of the densest echo occludes: well under one, so a
  * stratiform shield hundreds of voxels deep reads as a veil and the cores
  * inside it still show. */
-const VOXEL_OPACITY = 0.2;
+const VOXEL_OPACITY = 0.6;
 
 /** Bins in the altitude-to-level lookup, over `[0, top]`. */
 const LEVEL_LOOKUP_SIZE = 1024;
@@ -457,8 +457,9 @@ void main() {
     float density = smoothstep(u_dbz.x, u_dbz.y, dbz) * u_dbz.z;
     if (density <= 0.0) continue;
     float alpha = 1.0 - pow(1.0 - min(density, 0.999), stride);
-    // Brighter with height: the one depth cue a volume without lighting has.
-    vec3 color = texture(u_palette, vec2((code + 0.5) / 256.0, 0.5)).rgb * (0.7 + 0.3 * w);
+    // Unshaded: the palette alone carries the reflectivity, and depth reads
+    // from the tilted camera and from nearer echo occluding farther.
+    vec3 color = texture(u_palette, vec2((code + 0.5) / 256.0, 0.5)).rgb;
     sum += (1.0 - sum.a) * vec4(color * alpha, alpha);
     if (sum.a > 0.97) break;
   }
@@ -599,7 +600,7 @@ void main() {
     float density = smoothstep(u_dbz.x, u_dbz.y, dbz) * u_dbz.z;
     if (density <= 0.0) continue;
     float alpha = 1.0 - pow(1.0 - min(density, 0.999), stride);
-    vec3 color = texture(u_palette, vec2((code + 0.5) / 256.0, 0.5)).rgb * (0.7 + 0.3 * w);
+    vec3 color = texture(u_palette, vec2((code + 0.5) / 256.0, 0.5)).rgb;
     sum += (1.0 - sum.a) * vec4(color * alpha, alpha);
     if (sum.a > 0.97) break;
   }
