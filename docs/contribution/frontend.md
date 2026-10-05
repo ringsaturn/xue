@@ -137,7 +137,8 @@ and the window shrinks to fit it.
   rises to the DEM's z12. The switches and the way back to north and to a flat camera share
   one tile under the zoom tile (`viewcontrol.ts`); the two resets show only
   while the camera is turned or tilted, and the rail's box starts under
-  the column wherever it ends (`--controls-bottom`).
+  the column wherever it ends (`--controls-bottom`). Phones drop only the
+  zoom tile (pinch zooms; nothing switches the globe or the relief).
 - Altitude correction (`layer.ts::lapseCodes`): with relief on, a 2 m
   temperature is moved from the model's ground (the run's `orog` plane,
   decoded whole once and uploaded on its own grid) to the DEM's at

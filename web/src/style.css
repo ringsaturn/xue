@@ -3309,9 +3309,20 @@ body[data-credits~="meteosat"] .source-credit[data-credit-model="meteosat"] {
 }
 
 @media (max-width: 720px) {
-  /* Pinch gestures replace the +/- control; every saved pixel goes to the map. */
+  /* Pinch gestures replace the +/- control, but no gesture switches the
+     globe or the relief, so the view tile stays: on the column, just under
+     the round controls. */
   .maplibregl-ctrl-top-right {
+    top: calc(72px + env(safe-area-inset-top));
+    right: 16px;
+  }
+
+  .maplibregl-ctrl-top-right .maplibregl-ctrl-group:not(.view-control) {
     display: none;
+  }
+
+  .maplibregl-ctrl-top-right .view-control {
+    margin-top: 0;
   }
 
   .title-block {
@@ -3386,10 +3397,10 @@ body[data-credits~="meteosat"] .source-credit[data-credit-model="meteosat"] {
   }
 
   /* The same column as the round controls above: 44px at 16px, and the box
-     runs from just under them to just over the capsule — there is no zoom
-     tile here, and a phone's rail is the one most likely to scroll. */
+     runs from just under the view tile to just over the capsule — a phone's
+     rail is the one most likely to scroll. */
   .variable-rail {
-    top: calc(72px + env(safe-area-inset-top));
+    top: calc(var(--controls-bottom, 160px) + 10px);
     right: 12px;
     bottom: calc(62px + env(safe-area-inset-bottom) + var(--capsule-height, 90px));
   }
