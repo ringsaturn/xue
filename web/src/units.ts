@@ -10,14 +10,19 @@
  * nothing here changes a value that is stored or compared. The other rule
  * is that a dimensionless quantity — an optical depth, whose unit the
  * encoder writes as `1` the way a CF file does — shows no unit at all.
+ * The EDR's m^(2/3) s^-1, however an encoder spells the exponent in ASCII,
+ * reads with the fraction glyph, short enough for the legend's unit line.
  */
 
 const KELVIN_OFFSET = 273.15;
+/** m^(2/3)/s, m^(2/3) s^-1, m2/3 s-1, m**(2/3) s**-1 and the like. */
+const EDR_UNIT = /^m\s*(?:\^|\*\*)?\s*\(?2\/3\)?\s*(?:\/\s*s|s\s*(?:\^|\*\*)?\s*-1|s⁻¹)$/;
 
 /** The unit a readout shows a file unit as. */
 export function displayUnit(unit: string): string {
   if (unit === "K") return "°C";
   if (unit === "1") return "";
+  if (EDR_UNIT.test(unit)) return "m⅔/s";
   return unit;
 }
 

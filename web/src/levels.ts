@@ -1,6 +1,6 @@
 import { t, type MessageKey } from "./i18n";
 import type { ChartFamily, VariableIdentity } from "./identity";
-import { ISOBARIC_LEVELS, type ForecastBundleId, type IsobaricLevel } from "./manifest";
+import { CAT_LEVELS, ISOBARIC_LEVELS, type ForecastBundleId, type IsobaricLevel } from "./manifest";
 import { PRESSURE_BUNDLE_IDS, pressureLabel } from "./pressure";
 
 /**
@@ -39,6 +39,7 @@ export type IsobaricFamily =
   | "qflux"
   | "vvel"
   | "thetae"
+  | "cat"
   | "cloud"
   | "ice"
   | "wave"
@@ -54,6 +55,7 @@ export const ISOBARIC_FAMILIES: readonly IsobaricFamily[] = [
   "qflux",
   "vvel",
   "thetae",
+  "cat",
   "cloud",
   "ice",
   "wave",
@@ -140,6 +142,18 @@ export const FAMILIES: Record<IsobaricFamily, FamilyInfo> = {
   qflux: { id: "qflux", kind: "vector", surface: null, code: "QFLUX", surfaceCode: "", glossKey: "varVapourFlux" },
   vvel: { id: "vvel", kind: "scalar", surface: null, code: "OMEGA", surfaceCode: "", glossKey: "varOmega" },
   thetae: { id: "thetae", kind: "scalar", surface: null, code: "THETAE", surfaceCode: "", glossKey: "varThetaE" },
+  // Clear-air turbulence lists its surfaces: the encoders derive it only on
+  // the three jet levels (manifest.ts `CAT_LEVELS`), so the level row must
+  // not offer the five below, which no run can ship.
+  cat: {
+    id: "cat",
+    kind: "scalar",
+    surface: null,
+    code: "CAT",
+    surfaceCode: "",
+    glossKey: "varCat",
+    levels: CAT_LEVELS.map((level) => ({ id: `cat${level}` as ForecastBundleId, code: String(level) })),
+  },
   // Cloud cover: the total heads the family and the three layers are its
   // levels, so one rail tile and the level row serve all four.
   cloud: {
@@ -254,17 +268,23 @@ export function familyOf(id: ForecastBundleId): IsobaricFamily | null {
   const match = /^([a-z]+)(\d+)$/.exec(id);
   if (!match) return null;
   const prefix = match[1] as IsobaricFamily;
-  return ISOBARIC_FAMILIES.includes(prefix) && (ISOBARIC_LEVELS as readonly number[]).includes(Number(match[2])) ? prefix : null;
+  if (!ISOBARIC_FAMILIES.includes(prefix)) return null;
+  // A family that lists its members has no others: `cat850` is no member
+  // of the turbulence family, which exists on the jet levels only.
+  const info = FAMILIES[prefix];
+  if (info.levels || info.variants) return null;
+  return (ISOBARIC_LEVELS as readonly number[]).includes(Number(match[2])) ? prefix : null;
 }
 
 /** The isobaric surface a bundle id names, in hPa, or null for a surface
  * member and for anything outside the families. The same naming convention
  * `familyOf` reads, with the same standing. */
 export function bundleLevel(id: ForecastBundleId): IsobaricLevel | null {
-  const match = /^(?:hgt|tmp|rh|spfh|wind|qflux|vvel|thetae)(\d+)$/.exec(id);
+  const match = /^(hgt|tmp|rh|spfh|wind|qflux|vvel|thetae|cat)(\d+)$/.exec(id);
   if (!match) return null;
-  const level = Number(match[1]);
-  return (ISOBARIC_LEVELS as readonly number[]).includes(level) ? (level as IsobaricLevel) : null;
+  const level = Number(match[2]);
+  const levels: readonly number[] = match[1] === "cat" ? CAT_LEVELS : ISOBARIC_LEVELS;
+  return levels.includes(level) ? (level as IsobaricLevel) : null;
 }
 
 /** The members a family lists outright: its levels and its variants. */
@@ -365,7 +385,54 @@ export function isobaricRange(family: ChartFamily, level: number | null): readon
   if (family === "spfh") return [0, SPECIFIC_HUMIDITY_MAX[level]];
   if (family === "vvel") return [-6.35, 6.35];
   if (family === "thetae") return [THETA_E_OFFSETS[level], THETA_E_OFFSETS[level] + 127];
+  if (family === "cat" && isCatLevel(level)) return [0, CAT_CODEBOOK_MAX];
   return null;
+}
+
+/** The clear-air turbulence codebook's top, in m^(2/3) s⁻¹: 0.005 a code
+ * over 127 codes, copied from xuebuild/quantize.py. EDR in the free
+ * atmosphere rarely passes 0.6, so the top code is the extreme. */
+export const CAT_CODEBOOK_MAX = 0.635;
+
+function isCatLevel(level: number | null): boolean {
+  return level !== null && (CAT_LEVELS as readonly number[]).includes(level);
+}
+
+/** The turbulence intensity classes, by the EDR (the cube root of the eddy
+ * dissipation rate, m^(2/3) s⁻¹) that opens each, weakest first. ICAO
+ * Annex 3 reports nil at or under 0.10, light above 0.10, moderate from
+ * 0.20 and severe from 0.45 (peak EDR); the WAFS gridded forecast's SIGWX
+ * marks severe already from 0.35, and that forecast threshold splits the
+ * Annex 3 moderate class in two so a reader sees where a forecaster would
+ * draw severe. The classes are stepped, not a ramp: an intensity class is
+ * what a pilot report and a SIGWX chart speak in. Nil is transparent, so
+ * the map stays legible where nothing is forecast. Each `from` is
+ * inclusive except light's, which Annex 3 opens strictly above 0.10. */
+export const CAT_CLASSES: readonly {
+  from: number;
+  /** True when `from` itself still belongs to the class below. */
+  exclusive: boolean;
+  rgb: readonly [number, number, number];
+  alpha: number;
+  labelKey: MessageKey;
+}[] = [
+  { from: 0.1, exclusive: true, rgb: [126, 196, 206], alpha: 120, labelKey: "legendCatLight" },
+  { from: 0.2, exclusive: false, rgb: [238, 200, 66], alpha: 215, labelKey: "legendCatModerate" },
+  { from: 0.35, exclusive: false, rgb: [236, 122, 44], alpha: 235, labelKey: "legendCatModerateSevere" },
+  { from: 0.45, exclusive: false, rgb: [196, 30, 70], alpha: 250, labelKey: "legendCatSevere" },
+];
+
+/** The class index an EDR falls in (0 the weakest listed class), or -1 for
+ * nil. Comparisons carry a tolerance well under the codebook's 0.005 step,
+ * so a decoded code that sits on a threshold (0.20 is code 40, read back
+ * as 0.2000000000000000111) lands where the threshold says. */
+export function catClass(edr: number): number {
+  const epsilon = 1e-9;
+  let index = -1;
+  for (const [at, entry] of CAT_CLASSES.entries()) {
+    if (entry.exclusive ? edr > entry.from + epsilon : edr >= entry.from - epsilon) index = at;
+  }
+  return index;
 }
 
 /** Codebook offsets of the equivalent potential temperature per level, in
@@ -478,6 +545,7 @@ export function scalarLegendRange(identity: VariableIdentity): readonly [number,
   if (family === "tmp" && isRegisteredLevel(level)) return temperatureLegendRange(level);
   if (family === "thetae" && isRegisteredLevel(level)) return thetaEPaletteDomain(level);
   if (family === "vvel" && isRegisteredLevel(level)) return [-OMEGA_PALETTE_MAX, OMEGA_PALETTE_MAX];
+  if (family === "cat") return [0, CAT_CODEBOOK_MAX];
   if (family === "gust") return [0, GUST_SPEED_MAX];
   if (family === "tcdc" || family === "lcdc" || family === "mcdc" || family === "hcdc") return [0, 100];
   if (family === "cape") return [0, CAPE_CHART_MAX];
@@ -625,6 +693,7 @@ export function familyLabel(id: ForecastBundleId): string {
     hgt: "varLabelHeightAtLevel",
     vvel: "varLabelVvelAtLevel",
     thetae: "varLabelThetaeAtLevel",
+    cat: "varLabelCatAtLevel",
     cloud: "varLabelTcdc",
     ice: "varLabelIcec",
     wave: "varLabelHtsgw",
@@ -671,6 +740,7 @@ export function isobaricCode(id: ForecastBundleId): string {
     qflux: "QFLUX",
     vvel: "OMEGA",
     thetae: "THETAE",
+    cat: "CAT",
     cloud: "CLOUD",
     ice: "ICE",
     wave: "WAVE",
@@ -730,6 +800,9 @@ export function isobaricLegend(identity: VariableIdentity): string[] | null {
   if (aerosol) return logLegend(aerosol);
   if (family === "vvel" && isRegisteredLevel(level)) return rangeLegend([-OMEGA_PALETTE_MAX, OMEGA_PALETTE_MAX], 0.5);
   if (family === "thetae" && isRegisteredLevel(level)) return rangeLegend(thetaEPaletteDomain(level), 5);
+  // The turbulence's legend is a key of intensity classes, not ticks
+  // (`variables.ts`); these back the probe and any caller that wants a bar.
+  if (family === "cat") return rangeLegend([0, 0.5], 0.1);
   if (family === "tmp" && isRegisteredLevel(level)) return rangeLegend(temperatureLegendRange(level), 5);
   if (family === "rh" && isRegisteredLevel(level)) return rangeLegend([0, 100], 20);
   if (family === "spfh" && isRegisteredLevel(level)) {
@@ -742,6 +815,9 @@ export function isobaricLegend(identity: VariableIdentity): string[] | null {
 /** The isobaric members that are filled fields or vector fields — everything
  * the level row can put in the fill slot. The pressure family is the lines
  * slot's and lives in pressure.ts. */
-export const ISOBARIC_FILL_IDS: readonly ForecastBundleId[] = (["tmp", "rh", "spfh", "wind", "qflux", "vvel", "thetae"] as const).flatMap(
-  (family) => ISOBARIC_LEVELS.map((level) => `${family}${level}` as ForecastBundleId),
-);
+export const ISOBARIC_FILL_IDS: readonly ForecastBundleId[] = [
+  ...(["tmp", "rh", "spfh", "wind", "qflux", "vvel", "thetae"] as const).flatMap((family) =>
+    ISOBARIC_LEVELS.map((level) => `${family}${level}` as ForecastBundleId),
+  ),
+  ...CAT_LEVELS.map((level) => `cat${level}` as ForecastBundleId),
+];

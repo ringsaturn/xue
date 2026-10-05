@@ -92,10 +92,10 @@ describe("the isobaric family registry", () => {
     for (const family of ISOBARIC_FAMILIES) {
       const members = familyMembers(family);
       const listed = FAMILIES[family].levels ?? FAMILIES[family].variants;
-      expect(members[0]).toBe(FAMILIES[family].surface ?? `${family}1000`);
-      // A family that lists its members (cloud cover, sea ice) has exactly
-      // those; an isobaric one has the eight surfaces plus its surface
-      // member.
+      expect(members[0]).toBe(FAMILIES[family].surface ?? listed?.[0]?.id ?? `${family}1000`);
+      // A family that lists its members (cloud cover, sea ice, the
+      // turbulence's jet levels) has exactly those; an isobaric one has the
+      // eight surfaces plus its surface member.
       expect(members.length).toBe(listed ? listed.length : ISOBARIC_LEVELS.length + (FAMILIES[family].surface ? 1 : 0));
       for (const member of members) expect(familyOf(member)).toBe(family);
     }

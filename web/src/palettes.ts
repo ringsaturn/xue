@@ -1,5 +1,6 @@
 import { identityForBundleId, type VariableIdentity } from "./identity";
 import {
+  CAT_CLASSES,
   CAPE_CHART_MAX,
   CIN_CHART_RANGE,
   DEW_POINT_CHART_RANGE,
@@ -393,6 +394,23 @@ const PTYPE_STOPS: Stop[] = [
   ...PTYPE_CLASSES.map(({ code, rgb }) => [code, rgb[0], rgb[1], rgb[2], 255] as Stop),
 ];
 
+// Clear-air turbulence as stepped intensity classes (`levels.ts::CAT_CLASSES`):
+// each class edge is two stops at the same value, so every code inside a
+// class takes the class's one colour and nil is transparent. The edge sits
+// a hair to the side of the threshold its class says is inclusive or not,
+// so a code exactly on a threshold falls where ICAO puts it.
+function catStops(): Stop[] {
+  const first = CAT_CLASSES[0]!;
+  const stops: Stop[] = [[0, first.rgb[0], first.rgb[1], first.rgb[2], 0]];
+  for (const entry of CAT_CLASSES) {
+    const previous = stops[stops.length - 1]!;
+    const edge = entry.exclusive ? entry.from + 1e-6 : entry.from - 1e-6;
+    stops.push([edge, previous[1], previous[2], previous[3], previous[4]]);
+    stops.push([edge, entry.rgb[0], entry.rgb[1], entry.rgb[2], entry.alpha]);
+  }
+  return stops;
+}
+
 // Vertical velocity ω, a diverging ramp about zero: nothing within
 // ±0.1 Pa/s, where most of a field sits and the small values are noise,
 // ascent (negative ω, the side a rainfall chart shades) in blues deepening
@@ -785,6 +803,7 @@ function stopsFor(variable: BundleVariable, identity: VariableIdentity | null): 
   // "feels like" is the same orange as 30 °C is.
   if (family === "aptmp2m") return TEMPERATURE_STOPS;
   if (family === "vvel") return OMEGA_STOPS;
+  if (family === "cat") return catStops();
   if (family === "thetae") return remapStops(THETA_E_UNIT_STOPS, [0, 1], thetaEPaletteDomain(level));
   // The skin temperature is a temperature: the 2 m ramp, so the sea
   // surface reads in the same colours as the air over it.

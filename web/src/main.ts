@@ -5113,9 +5113,10 @@ new ResizeObserver(() => {
 }).observe(forecastDays);
 if (variableRail) new ResizeObserver(syncRailDensity).observe(variableRail);
 
-/** The swatch key a picture shows in place of the bar and its ticks (the
- * Dust RGB: what each colour is a sign of), or the bar again when the
- * field has none. A gun is a unitless stretch, so the unit line goes too. */
+/** The swatch key a picture or a set of classes shows in place of the bar
+ * and its ticks (the Dust RGB: what each colour is a sign of; the
+ * turbulence: its intensity classes), or the bar again when the field has
+ * none. The unit line stays only when it has a unit to say. */
 function renderLegendKey(key: readonly LegendSwatch[] | null): void {
   legend.classList.toggle("has-key", key !== null);
   legendKey.hidden = key === null;

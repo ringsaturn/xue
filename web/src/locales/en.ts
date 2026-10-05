@@ -64,6 +64,9 @@ export const en = {
   varFeelsLike: "2M",
   varOmega: "VERT",
   varThetaE: "EQUIV",
+  /** Clear-air turbulence names its quantity, EDR, in every Latin-script
+   * locale (the instrument word, like CAT beside it); CJK glosses the code. */
+  varCat: "EDR",
   // The experiment's derived layers' captions: one word under the code.
   varInflow: "INFLOW",
   varFront: "FRONT",
@@ -132,6 +135,8 @@ export const en = {
   glyphAptmp2m: "A",
   glyphVvel: "ω",
   glyphThetae: "θ",
+  // ε is the eddy dissipation rate's own symbol in every script.
+  glyphCat: "ε",
   // The experiment's two derived layers (`?x=`): M for moist, F for front.
   glyphInflow: "M",
   glyphFront: "F",
@@ -161,6 +166,7 @@ export const en = {
   tipCloud: "Cloud cover",
   tipOmega: "Vertical velocity",
   tipThetaE: "Equivalent potential temperature",
+  tipCat: "Clear-air turbulence",
   /** Sea ice and the waves are family tiles; the skin temperature reuses
    * its data-card label. */
   tipIce: "Sea ice",
@@ -392,6 +398,14 @@ export const en = {
   legendPtypeFreezingRain: "Freezing rain",
   legendPtypeSnow: "Snow",
   legendPtypeIcePellets: "Ice pellets",
+  /** The turbulence key's intensity words (ICAO's light / moderate /
+   * severe, with the WAFS severe-forecast threshold splitting moderate);
+   * the EDR span after each word is appended untranslated. Keep them as
+   * short as an aviation report says them. */
+  legendCatLight: "Light",
+  legendCatModerate: "Moderate",
+  legendCatModerateSevere: "Moderate–severe",
+  legendCatSevere: "Severe",
   varLabelTmp2m: "2 m temperature",
   varLabelPrate: "Precipitation rate",
   varLabelDswrf: "Solar radiation",
@@ -453,6 +467,7 @@ export const en = {
   varLabelQfluxAtLevel: "{level} hPa water vapour flux",
   varLabelVvelAtLevel: "{level} hPa vertical velocity",
   varLabelThetaeAtLevel: "{level} hPa equivalent potential temperature",
+  varLabelCatAtLevel: "{level} hPa clear-air turbulence (EDR)",
   // The 5880 gpm contour, "588" on a Chinese chart — the line the western
   // Pacific subtropical high is defined by.
   legendSubtropicalHigh: "588 line",

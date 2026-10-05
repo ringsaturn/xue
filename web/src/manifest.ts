@@ -427,19 +427,28 @@ function modelForManifestString(model: unknown): ForecastModelInfo | null {
 export const ISOBARIC_LEVELS = [1000, 925, 850, 700, 500, 300, 250, 200] as const;
 export type IsobaricLevel = (typeof ISOBARIC_LEVELS)[number];
 
+/** The surfaces the clear-air turbulence is published on, from the ground
+ * up: the jet levels, where cruising aircraft meet it. The encoders derive
+ * it from the wind and height on neighbouring published levels, so it
+ * exists nowhere else (xuebuild/variables.py registers it on these three). */
+export const CAT_LEVELS = [300, 250, 200] as const satisfies readonly IsobaricLevel[];
+export type CatLevel = (typeof CAT_LEVELS)[number];
+
 /** The pressure family: mean sea level pressure and geopotential height on
  * the isobaric surfaces. What the viewer draws from them is contours; see
  * pressure.ts. */
 export type PressureBundleId = "prmsl" | `hgt${IsobaricLevel}`;
 
-/** The filled isobaric scalars: temperature, relative humidity and specific
- * humidity on the same surfaces (levels.ts). */
+/** The filled isobaric scalars: temperature, relative humidity, specific
+ * humidity, vertical velocity and θe on the same surfaces, and the
+ * clear-air turbulence on the jet levels (levels.ts). */
 export type IsobaricScalarBundleId =
   | `tmp${IsobaricLevel}`
   | `rh${IsobaricLevel}`
   | `spfh${IsobaricLevel}`
   | `vvel${IsobaricLevel}`
-  | `thetae${IsobaricLevel}`;
+  | `thetae${IsobaricLevel}`
+  | `cat${CatLevel}`;
 
 /** The two-variable bundles: a u/v pair the viewer draws as a magnitude field
  * with optional particles — the 10 m wind, the 100 m wind (the turbine hub
@@ -625,6 +634,7 @@ export const KNOWN_BUNDLE_IDS: readonly KnownBundleId[] = [
   ...perLevel("spfh"),
   ...perLevel("vvel"),
   ...perLevel("thetae"),
+  ...CAT_LEVELS.map((level) => `cat${level}` as const),
   "wind10m",
   "wind100m",
   ...perLevel("wind"),

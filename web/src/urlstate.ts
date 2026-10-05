@@ -44,7 +44,7 @@ function typeAliases(): Record<string, ForecastBundleId> {
 
 /** The family an isobaric spelling names: the id's own prefix, plus the
  * spellings a chart reader types — `t850`, `z500`, `humidity700`, `q850`,
- * `vapor850` / `vapour850` / `moisture850`. */
+ * `vapor850` / `vapour850` / `moisture850`, `turbulence250` / `edr250`. */
 const FAMILY_ALIASES: Record<string, string> = {
   hgt: "hgt",
   z: "hgt",
@@ -66,6 +66,9 @@ const FAMILY_ALIASES: Record<string, string> = {
   thetae: "thetae",
   thetase: "thetae",
   epot: "thetae",
+  cat: "cat",
+  turbulence: "cat",
+  edr: "cat",
 };
 
 /** `<family alias><level>` resolved by rule rather than by an enumerated

@@ -27,8 +27,8 @@
 
 import { t, type MessageKey } from "./i18n";
 import type { ChartFamily, VariableIdentity } from "./identity";
-import { PTYPE_CLASSES, familyLabel, isobaricCode, isobaricLegend, type IsobaricFamily } from "./levels";
-import { ISOBARIC_LEVELS, type IsobaricLevel, type KnownBundleId } from "./manifest";
+import { CAT_CLASSES, PTYPE_CLASSES, familyLabel, isobaricCode, isobaricLegend, type IsobaricFamily } from "./levels";
+import { CAT_LEVELS, ISOBARIC_LEVELS, type IsobaricLevel, type KnownBundleId } from "./manifest";
 import { PRESSURE_BUNDLE_IDS, PRESSURE_LEVELS, pressureCode, pressureLabel, pressureLegend, type PressureBundleId } from "./pressure";
 
 /** The field sheet's groups, in the order it lists them. A quantity's
@@ -113,6 +113,25 @@ function ptypeKey(): readonly { color: string; labelKey: MessageKey }[] {
   }));
 }
 
+/** The clear-air turbulence's key: one swatch per intensity class, the
+ * strongest first like a ramp's top tick, each named by its intensity word
+ * and the EDR span that opens and closes it (`levels.ts::CAT_CLASSES`).
+ * The numbers are instrument values and stay as written in every locale;
+ * the unit line above the key says what they are in. Nil is transparent
+ * and is no swatch. Built on demand for the same cycle reason as
+ * `ptypeKey`. */
+function catKey(): readonly LegendSwatch[] {
+  const number = (value: number) => value.toFixed(2);
+  return CAT_CLASSES.map((entry, index) => {
+    const next = CAT_CLASSES[index + 1];
+    const span = next ? `${number(entry.from)}–${number(next.from)}` : `≥ ${number(entry.from)}`;
+    return {
+      color: `rgba(${entry.rgb[0]}, ${entry.rgb[1]}, ${entry.rgb[2]}, ${(entry.alpha / 255).toFixed(3)})`,
+      label: `${t(entry.labelKey)} ${span}`,
+    };
+  }).reverse();
+}
+
 const DUST_RGB_KEY: readonly { color: string; labelKey: MessageKey }[] = [
   { color: "#e34fb8", labelKey: "legendDustDust" },
   { color: "#7a1a1a", labelKey: "legendDustThickHigh" },
@@ -185,10 +204,14 @@ interface IsobaricEntry {
   /** Spellings for particular levels, on top of the family rule
    * `urlstate.ts` resolves (`t850`, `z500`). */
   urlAliases?: Partial<Record<IsobaricLevel, readonly string[]>>;
+  /** The surfaces the family is registered on; all eight when absent. */
+  levels?: readonly IsobaricLevel[];
+  /** A swatch key in place of the bar (`VariableSpec.legendKey`). */
+  legendKey?: () => readonly LegendSwatch[];
 }
 
 function isobaric(entry: IsobaricEntry): VariableSpec[] {
-  return ISOBARIC_LEVELS.map((level) => {
+  return (entry.levels ?? ISOBARIC_LEVELS).map((level) => {
     const id = `${entry.family}${level}` as KnownBundleId;
     const identity: VariableIdentity = { family: entry.family, level, vector: entry.vector ?? false };
     return {
@@ -203,9 +226,9 @@ function isobaric(entry: IsobaricEntry): VariableSpec[] {
       title: [`${level} hPa`, entry.word],
       bufferTitle: `${entry.word} buffer`,
       label: () => familyLabel(id),
-      legend: () => isobaricLegend(identity) ?? [],
+      legend: entry.legendKey ? () => [] : () => isobaricLegend(identity) ?? [],
       legendGradient: "palette",
-      legendKey: null,
+      legendKey: entry.legendKey ?? null,
       ground: entry.ground,
       urlName: id,
       urlAliases: entry.urlAliases?.[level] ?? [],
@@ -561,6 +584,19 @@ function buildSpecs(): readonly VariableSpec[] {
   ...isobaric({ family: "vvel", group: "dynamics", word: "Vertical Velocity", showcaseWord: "OMEGA", ground: "slate" }),
   ...isobaric({ family: "thetae", group: "dynamics", word: "Theta-e", showcaseWord: "THETAE", ground: "coat" }),
   ...isobaric({ family: "qflux", vector: true, group: "dynamics", word: "Vapour Flux", showcaseWord: "QFLUX", ground: "slate" }),
+  // Clear-air turbulence on the jet levels: nil is transparent, so the map
+  // shows through between the bands and the slate keeps it legible. 250 hPa
+  // takes the plain words, the level a jet core sits nearest.
+  ...isobaric({
+    family: "cat",
+    group: "dynamics",
+    word: "Turbulence",
+    showcaseWord: "CAT",
+    ground: "slate",
+    levels: CAT_LEVELS,
+    legendKey: catKey,
+    urlAliases: { 250: ["turbulence", "cat", "edr"] },
+  }),
   // Radiation and visibility. Clear air is the map, and the reduced-
   // visibility ramp comes in translucent, on the slate; the radiation has
   // a ground of its own.

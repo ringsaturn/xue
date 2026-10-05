@@ -20,8 +20,9 @@ import { isobaricChartFamily, specForIdentity, variableSpec } from "./variables"
  * exactly the ids those files can carry and nothing more.
  */
 
-/** The chart families. The first eight are registered on isobaric surfaces
- * and some of them also have a near-surface member; the rest are single
+/** The chart families. Those up to `cat` are registered on isobaric
+ * surfaces (the clear-air turbulence on the three jet levels only) and some
+ * of them also have a near-surface member; the rest are single
  * layers (precipitation, radiation, reflectivity, the surface diagnostics:
  * gust, the four cloud covers, CAPE, visibility, dew point, apparent
  * temperature — and the ocean set: skin temperature, sea ice cover and
@@ -48,6 +49,7 @@ export type ChartFamily =
   | "qflux"
   | "vvel"
   | "thetae"
+  | "cat"
   | "prate"
   | "dswrf"
   | "cref"
@@ -166,7 +168,9 @@ function isTriple(parameter: BundleParameter, discipline: number, category: numb
  * precipitation type, (0,19,0) @1 visibility, (0,0,6)
  * @103 value 2 dew point, (0,0,21) @103 value 2 apparent temperature,
  * (0,2,8) @100 vertical velocity, (0,0,3) @100 equivalent potential
- * temperature, (0,0,0) @1 surface (skin) temperature, (10,2,0) @1 sea ice
+ * temperature, (0,19,29) @100 clear-air turbulence in EDR units (what
+ * the encoders derive from the resolved flow), (0,0,0) @1 surface (skin)
+ * temperature, (10,2,0) @1 sea ice
  * cover, (10,2,1) @1 sea ice thickness, (10,0,3) / (10,0,11) / (10,0,10)
  * @1 significant wave height, primary wave period and direction — the
  * oceanographic discipline's surface, whose value (0 from pgrb2, 1 from
@@ -211,6 +215,7 @@ export function identityForParameter(parameter: BundleParameter, band?: BundleBa
   if (isTriple(parameter, 10, 0, 11) && surface === 1) return scalar("perpw", null);
   if (isTriple(parameter, 10, 0, 10) && surface === 1) return scalar("dirpw", null);
   if (isTriple(parameter, 0, 0, 3) && level !== null) return scalar("thetae", level);
+  if (isTriple(parameter, 0, 19, 29) && level !== null) return scalar("cat", level);
   if (isTriple(parameter, 0, 0, 6) && surface === 103 && value === 2) return scalar("dpt2m", null);
   if (isTriple(parameter, 0, 0, 21) && surface === 103 && value === 2) return scalar("aptmp2m", null);
   if (isTriple(parameter, 0, 2, 8) && level !== null) return scalar("vvel", level);
