@@ -128,6 +128,7 @@ export const ko: Record<MessageKey, string> = {
   creditsEcmwf: "수정된 ECMWF 자료 포함 · CC BY 4.0",
   creditsIfsHres: "ECMWF IFS를 각색, 제공 ECMWF, CC BY 4.0 라이선스 · OPEN-METEO 경유 · IFS HRES 약 9 KM, 0.1°로 재샘플링",
   creditsMrms: "레이더 관측 · MRMS, 미국 본토",
+  creditsNexrad: "단일 레이더 · 반사도와 시선 속도, 미국",
   creditsJma: "레이더 강수 · 기상청 실황예보, 일본 (재격자화)",
   creditsHimawari: "위성 영상 · 히마와리 9호 AHI, 일본 기상청, NOAA 오픈 데이터 경유 (재투영)",
   creditsGoes: "위성 영상 · GOES-19 동부·GOES-18 서부 ABI, NOAA NESDIS, NOAA 오픈 데이터 경유 (재투영)",

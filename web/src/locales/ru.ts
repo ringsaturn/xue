@@ -128,6 +128,7 @@ export const ru: Record<MessageKey, string> = {
   creditsEcmwf: "СОДЕРЖИТ ИЗМЕНЁННЫЕ ДАННЫЕ ECMWF · CC BY 4.0",
   creditsIfsHres: "АДАПТИРОВАНО ИЗ ECMWF IFS ЦЕНТРОМ ECMWF, ЛИЦЕНЗИЯ CC BY 4.0 · ЧЕРЕЗ OPEN-METEO · IFS HRES ~9 КМ, ПЕРЕСЭМПЛИРОВАНО ДО 0,1°",
   creditsMrms: "РАДАРНЫЕ НАБЛЮДЕНИЯ · MRMS, КОНТИНЕНТАЛЬНЫЕ США",
+  creditsNexrad: "ОТДЕЛЬНЫЕ РАДАРЫ · ОТРАЖАЕМОСТЬ И РАДИАЛЬНАЯ СКОРОСТЬ, США",
   creditsJma: "РАДАРНЫЕ ОСАДКИ · НАУКАСТ JMA, ЯПОНИЯ (ПЕРЕСЕТКА)",
   creditsHimawari: "СПУТНИКОВЫЕ СНИМКИ · HIMAWARI-9 AHI, JMA, ЧЕРЕЗ NOAA OPEN DATA (ПЕРЕПРОЕЦИРОВАНО)",
   creditsGoes: "СПУТНИКОВЫЕ СНИМКИ · GOES-19 ВОСТОК И GOES-18 ЗАПАД ABI, NOAA NESDIS, ЧЕРЕЗ NOAA OPEN DATA (ПЕРЕПРОЕЦИРОВАНО)",

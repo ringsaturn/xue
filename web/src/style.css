@@ -3124,6 +3124,15 @@ body[data-credits~="meteosat"] .source-credit[data-credit-model="meteosat"] {
   display: inline;
 }
 
+/* One radar alone suppresses the field, so only the radar's notice stands. */
+body.radar-alone .source-credit[data-credit-model] {
+  display: none;
+}
+
+body.radar-alone .source-credit[data-credit-model="nexrad"] {
+  display: inline;
+}
+
 .credits-trigger {
   display: flex;
   flex: none;

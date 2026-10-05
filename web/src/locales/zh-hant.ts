@@ -123,6 +123,7 @@ export const zhHant: Record<MessageKey, string> = {
   creditsEcmwf: "含經修改的 ECMWF 資料 · CC BY 4.0",
   creditsIfsHres: "改編自 ECMWF IFS，由 ECMWF 提供，依 CC BY 4.0 授權 · 經 Open-Meteo 轉發 · IFS HRES 約 9 公里，重新取樣至 0.1°",
   creditsMrms: "雷達觀測 · MRMS，美國本土",
+  creditsNexrad: "單站雷達 · 基本反射率與徑向速度，美國",
   creditsJma: "雷達降水 · 氣象廳臨近預報，日本（重採樣）",
   creditsHimawari: "衛星影像 · 向日葵 9 號 AHI，日本氣象廳，經 NOAA 開放資料（重投影）",
   creditsGoes: "衛星影像 · GOES-19 東、GOES-18 西 ABI，NOAA NESDIS，經 NOAA 開放資料（重投影）",
