@@ -1,6 +1,7 @@
 """The nexrad product (``xuebuild/nexrad``, ``docs/nexrad.md``): the Level 3
 reader on real sweeps, the polar store round trip, two rounds built from the
-fixture into a window, the late-sweep rule, and the validators.
+fixture into a window, the late-sweep rule, the same interval written as a
+case's window stores, and the validators.
 
 The fixture is seven real Level 3 files from the Rolling Fork tornado night
 (2023-03-25 01:36–01:44Z): DGX's two N0B and two N0G sweeps, and three of
@@ -22,11 +23,11 @@ import numpy as np
 
 from xuebuild import zstdcli
 from xuebuild.errors import NexradProductError
-from xuebuild.nexrad.build import build_case, build_round, catch_up, load_stations, write_pointer
+from xuebuild.nexrad.build import build_case, build_round, catch_up, load_stations, replay, write_pointer
 from xuebuild.nexrad.fetch import key_time, parse_stations
 from xuebuild.nexrad.level3 import BEAMS, read_sweep
 from xuebuild.nexrad.schema import WINDOW_FILENAME, parse_round, read_window, validate_pointer, validate_window
-from xuebuild.nexrad.store import SiteSweeps, read_site, write_store
+from xuebuild.nexrad.store import SiteSweeps, read_site, write_store, write_window_store
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "nexrad"
 SWEEPS = sorted((FIXTURES / "nexrad").glob("*/*_*"))
@@ -131,6 +132,108 @@ class StoreTest(unittest.TestCase):
         np.testing.assert_array_equal(group["site_latitude"][:], [s.latitude for s in self.sites])
 
 
+class WindowStoreTest(unittest.TestCase):
+    """The fixture interval as a case: one store per product holding both
+    rounds, each site's round one span of its one shard."""
+
+    def setUp(self) -> None:
+        self.scratch = tempfile.TemporaryDirectory()
+        scratch = Path(self.scratch.name)
+        raw = scratch / "raw"
+        shutil.copytree(FIXTURES, raw)
+        self.case = scratch / "case"
+        self.report = build_case(start=START, end=END, sites=["GWX", "DGX"], raw_root=raw, output_root=self.case, fetch=False, now=END)
+        self.rounds = replay(start=START, end=END, sites=["DGX", "GWX"], raw_root=raw, output_root=scratch / "live", fetch=False, now=END)
+        self.live = scratch / "live"
+
+    def tearDown(self) -> None:
+        self.scratch.cleanup()
+
+    def test_a_case_is_two_stores_and_a_manifest(self) -> None:
+        tops = sorted(path.name for path in self.case.iterdir())
+        self.assertEqual(tops, ["index.json", "n0b.zarr", "n0g.zarr"])
+        objects = [path for path in self.case.rglob("*") if path.is_file()]
+        self.assertEqual(len(objects), 2 * (1 + 2 + 7 * 2) + 1)
+
+    def test_its_rounds_are_the_replays_rounds(self) -> None:
+        window = self.report["window"]
+        live = self.rounds["window"]
+        self.assertEqual(window["sites"], live["sites"])
+        self.assertEqual([entry["round"] for entry in window["rounds"]], [entry["round"] for entry in live["rounds"]])
+        for mine, theirs in zip(window["rounds"], live["rounds"]):
+            self.assertEqual(mine["path"], "./")
+            for product in ("n0b", "n0g"):
+                self.assertEqual(product in mine, product in theirs)
+                if product in mine:
+                    self.assertEqual(mine[product]["scans"], theirs[product]["scans"])
+                    self.assertEqual([row[0::3] for row in mine[product]["chunks"]], [row[0::3] for row in theirs[product]["chunks"]])
+
+    def test_every_span_decodes_to_the_replays_sweeps(self) -> None:
+        window = self.report["window"]
+        sites = [row[0] for row in window["sites"]]
+        for position, entry in enumerate(window["rounds"]):
+            for product in ("n0b", "n0g"):
+                block = entry.get(product)
+                if block is None:
+                    continue
+                gates = {"n0b": 1840, "n0g": 1200}[product]
+                shard = (self.case / f"{product}.zarr" / product / "c" / "0" / "0" / "0" / "0").read_bytes()
+                self.assertEqual(len(shard), block["shard"]["byteLength"])
+                live_root = self.live / f"nexrad.{entry['round'][:16].replace('-', '').replace('T', '').replace(':', '')}" / f"{product}.zarr"
+                for site, offset, length, sweeps in block["chunks"]:
+                    raw = zstdcli.decompress(shard[offset : offset + length], expected_length=block["depth"] * BEAMS * gates)
+                    codes = np.frombuffer(raw, np.uint8).reshape(block["depth"], BEAMS, gates)[:sweeps]
+                    live_group = json.loads((live_root / "zarr.json").read_text())
+                    want, _times = read_site(live_root, product, live_group["attributes"]["xue_polar"]["sites"].index(sites[site]))
+                    np.testing.assert_array_equal(codes, want)
+                    store_group = json.loads((self.case / f"{product}.zarr" / "zarr.json").read_text())
+                    through_index, _ = read_site(self.case / f"{product}.zarr", product, store_group["attributes"]["xue_polar"]["sites"].index(sites[site]), position)
+                    np.testing.assert_array_equal(through_index, want)
+
+    def test_the_group_names_its_rounds(self) -> None:
+        group = json.loads((self.case / "n0g.zarr" / "zarr.json").read_text())
+        block = group["attributes"]["xue_polar"]
+        self.assertEqual(block["rounds"], ["2023-03-25T01:40:00Z", "2023-03-25T01:45:00Z"])
+        self.assertNotIn("round", block)
+        array = json.loads((self.case / "n0g.zarr" / "n0g" / "zarr.json").read_text())
+        depth = array["codecs"][0]["configuration"]["chunk_shape"][1]
+        self.assertEqual(array["shape"][1], 2 * depth)
+        self.assertEqual(depth, self.report["stores"]["n0g"]["depth"])
+
+    def test_a_site_without_a_sweep_in_a_round_reads_empty(self) -> None:
+        group = json.loads((self.case / "n0b.zarr" / "zarr.json").read_text())
+        sites = group["attributes"]["xue_polar"]["sites"]
+        empty = [
+            (row, column)
+            for row in range(len(sites))
+            for column in range(2)
+            if len(read_site(self.case / "n0b.zarr", "n0b", row, column)[0]) == 0
+        ]
+        listed = {(row[0], position) for position, entry in enumerate(self.report["window"]["rounds"]) for row in entry.get("n0b", {}).get("chunks", [])}
+        self.assertEqual(len(empty) + len(listed), len(sites) * 2)
+
+    def test_a_sweep_past_the_last_round_is_refused(self) -> None:
+        late = sweep("GWX_N0G_2023_03_25_01_38_00")
+        with self.assertRaises(NexradProductError):
+            write_window_store(
+                Path(self.scratch.name) / "late.zarr",
+                product="n0g",
+                rounds=[datetime(2023, 3, 25, 1, 35, tzinfo=UTC)],
+                sites=[SiteSweeps("GWX", 0.0, 0.0, 0.0, [late])],
+            )
+
+    def test_a_stock_zarr_client_reads_it(self) -> None:
+        try:
+            import zarr
+        except ImportError:
+            self.skipTest("zarr-python is not installed (the `zarr` dependency group)")
+        group = zarr.open_group(str(self.case / "n0g.zarr"), mode="r")
+        times = group["scan_time"][:]
+        row, column = np.argwhere(times != -1)[-1]
+        codes, _ = read_site(self.case / "n0g.zarr", "n0g", int(row), int(column) // group["n0g"].chunks[1])
+        np.testing.assert_array_equal(group["n0g"][int(row), int(column)], codes[int(column) % group["n0g"].chunks[1]])
+
+
 class WindowTest(unittest.TestCase):
     def setUp(self) -> None:
         self.scratch = tempfile.TemporaryDirectory()
@@ -142,7 +245,7 @@ class WindowTest(unittest.TestCase):
         self.scratch.cleanup()
 
     def build(self) -> dict:
-        return build_case(start=START, end=END, sites=["DGX", "GWX"], raw_root=self.raw, output_root=self.output, fetch=False, now=END)
+        return replay(start=START, end=END, sites=["DGX", "GWX"], raw_root=self.raw, output_root=self.output, fetch=False, now=END)
 
     def test_two_rounds_make_a_valid_window(self) -> None:
         report = self.build()
@@ -225,6 +328,19 @@ class GoldenTest(unittest.TestCase):
             golden = json.loads((FIXTURES / "expected" / ROUND / WINDOW_FILENAME).read_bytes())
             self.assertEqual(_without_compressed_bytes(built), _without_compressed_bytes(golden))
 
+    def test_the_case_matches_the_golden_whatever_the_compressor(self) -> None:
+        from tests.prepare_nexrad_golden import CASE, build_case_window
+
+        with tempfile.TemporaryDirectory() as scratch:
+            built = build_case_window(Path(scratch))["window"]
+            golden = json.loads((FIXTURES / "expected" / CASE / WINDOW_FILENAME).read_bytes())
+            for window in (built, golden):
+                for entry in window["rounds"]:
+                    for product in ("n0b", "n0g"):
+                        if product in entry:
+                            entry[product].pop("group")
+            self.assertEqual(_without_compressed_bytes(built), _without_compressed_bytes(golden))
+
     def test_the_build_matches_the_golden(self) -> None:
         from tests.prepare_nexrad_golden import ROUND, build
 
@@ -240,6 +356,10 @@ class GoldenTest(unittest.TestCase):
             for relative in (f"{ROUND}/{WINDOW_FILENAME}", f"{ROUND}/item.json", "nexrad/collection.json", "nexrad/item.json", "latest-nexrad.json"):
                 with self.subTest(relative):
                     self.assertEqual(json.loads((output / relative).read_bytes()), json.loads((expected / relative).read_bytes()))
+            from tests.prepare_nexrad_golden import CASE, build_case_window
+
+            build_case_window(output / CASE)
+            self.assertEqual(json.loads((output / CASE / WINDOW_FILENAME).read_bytes()), json.loads((expected / CASE / WINDOW_FILENAME).read_bytes()))
 
 
 class ValidatorTest(unittest.TestCase):
@@ -248,7 +368,7 @@ class ValidatorTest(unittest.TestCase):
         scratch = tempfile.TemporaryDirectory()
         raw = Path(scratch.name) / "raw"
         shutil.copytree(FIXTURES, raw)
-        cls.window = build_case(start=START, end=END, sites=["DGX", "GWX"], raw_root=raw, output_root=Path(scratch.name) / "out", fetch=False, now=END)["window"]
+        cls.window = replay(start=START, end=END, sites=["DGX", "GWX"], raw_root=raw, output_root=Path(scratch.name) / "out", fetch=False, now=END)["window"]
         scratch.cleanup()
 
     def broken(self, change) -> dict:
@@ -275,6 +395,29 @@ class ValidatorTest(unittest.TestCase):
         for name, change in cases.items():
             with self.subTest(name), self.assertRaises(NexradProductError):
                 validate_window(self.broken(change))
+
+    def test_malformed_case_windows_are_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as scratch:
+            raw = Path(scratch) / "raw"
+            shutil.copytree(FIXTURES, raw)
+            case = build_case(start=START, end=END, sites=["DGX", "GWX"], raw_root=raw, output_root=Path(scratch) / "case", fetch=False, now=END)["window"]
+        validate_window(case)
+        cases = {
+            "depth missing": lambda w: w["rounds"][0]["n0g"].pop("depth"),
+            "depth differs": lambda w: w["rounds"][1]["n0g"].__setitem__("depth", 9),
+            "sweeps past the depth": lambda w: w["rounds"][0]["n0g"].__setitem__("depth", 1) or w["rounds"][1]["n0g"].__setitem__("depth", 1),
+            "another shard": lambda w: w["rounds"][1]["n0g"]["shard"].__setitem__("crc32", "00000000"),
+            "mixed paths": lambda w: w["rounds"][1].__setitem__("path", "../nexrad.202303250145/"),
+        }
+        for name, change in cases.items():
+            window = copy.deepcopy(case)
+            change(window)
+            with self.subTest(name), self.assertRaises(NexradProductError):
+                validate_window(window)
+        live = copy.deepcopy(self.window)
+        live["rounds"][0]["n0g"]["depth"] = 2
+        with self.assertRaises(NexradProductError):
+            validate_window(live)
 
     def test_stations(self) -> None:
         stations = parse_stations((FIXTURES / "nexrad" / "nexrad-stations.txt").read_text())

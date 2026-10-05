@@ -40,6 +40,15 @@ and the point products.
 Deployment is one-sided: a new pointer and new directories, which a shell
 that does not know the product never requests.
 
+A **showcase case** is a closed window, rebuilt never: it is written as
+one [window store](zarr-profile.md#polar-store) per product for the whole
+case instead of one round store per round, beside one window manifest:
+`showcase/<id>/radar/n0b.zarr/`, `n0g.zarr/` and `index.json`. The rounds
+are the same rounds (§3), replayed over the case's interval with a window
+as long as the case; only where their sweeps are stored differs (§4). A
+case has no pointer and no per-round directories or STAC items: the
+showcase catalog names its `index.json`.
+
 ## 2. Products, codes and geometry
 
 | product | source | quantity | unit | beams × gates | `quantization` | reserved codes |
@@ -111,15 +120,22 @@ product's index takes, so the pointer is the point products' exactly.
   antenna's WGS84 position and its height above mean sea level in metres.
   Every index below is a position in it.
 - `rounds` is oldest first, every round inside `windowSeconds` before
-  `issued`. `path` is the round's directory relative to this manifest.
+  `issued`. `path` is the directory holding the round's stores, relative
+  to this manifest: `../nexrad.<round>/` for a round store, `./` for a
+  window store beside the manifest (a case, §1).
 - Per product: `group` measures the store's root `zarr.json` (its `?v=`),
   `shard` the data array's one shard object (`<product>/c/0/0/0/0`), and
   `chunks` gives one `[site, offset, length, sweeps]` per site the store
   holds, in store order: the byte span of that site's inner chunk in the
   shard and how many of its `scan` slots are real sweeps. A reader fetches
   `[offset, offset + length)` of the shard directly, without the shard
-  index, decompresses it to `scans × 720 × gates` bytes and keeps the
-  first `sweeps` slots.
+  index, decompresses it to `depth × 720 × gates` bytes and keeps the
+  first `sweeps` slots. `depth` is the store's inner chunk depth: in a
+  round store the largest `sweeps` of the round's rows; in a window store
+  the product block says it as `"depth": 3`, the same in every round,
+  since the store's chunk is padded to its busiest site's busiest round.
+  In a window store every round's `group` and `shard` measure the same
+  two objects, and a round's `chunks` are spans in that one shard.
 - `scans` gives, per site in the store, the sweeps' start times (Unix
   seconds UTC, ascending) — the store's `scan_time` row without its
   padding, so a player builds a site's timeline from the manifest alone.

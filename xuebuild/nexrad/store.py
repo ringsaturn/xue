@@ -1,6 +1,9 @@
 """Writing and reading one polar store (``docs/zarr-profile.md``, "Polar
-store"): one product of one round, a Zarr v3 group holding the
-``[site, scan, azimuth, range]`` array as one shard and its coordinates.
+store"): one product over one round (a round store) or every round of a
+closed window (a window store), a Zarr v3 group holding the ``[site, scan,
+azimuth, range]`` array as one shard and its coordinates. The inner chunk
+is one site's sweeps of one round, so a window store's site is read round
+by round exactly as a round store's is.
 
 The shard, its index and the codec chain are the grid stores' own
 (``zarrstore``): one ``(offset, nbytes)`` pair per inner chunk and the
@@ -35,6 +38,8 @@ FILL_VALUE = 0
 SCAN_PADDING = -1
 
 _INDEX_ENTRY = struct.Struct("<QQ")
+_EMPTY_ENTRY = 0xFFFFFFFFFFFFFFFF
+"""Both halves of a never-written chunk's index pair."""
 _INDEX_CHECKSUM = struct.Struct("<I")
 _CODEC_BYTES = {"name": "bytes"}
 _CODEC_BYTES_LITTLE = {"name": "bytes", "configuration": {"endian": "little"}}
@@ -79,7 +84,7 @@ class SiteSweeps:
 
 @dataclass(frozen=True)
 class StoreReport:
-    """What the window manifest records of a store just written."""
+    """What the window manifest records of a round store just written."""
 
     group_bytes: int
     group_crc32: str
@@ -87,6 +92,21 @@ class StoreReport:
     shard_crc32: str
     chunks: list[tuple[str, int, int, int]]
     """``(site, offset, length, sweeps)`` per site, in store order."""
+
+
+@dataclass(frozen=True)
+class WindowStoreReport:
+    """What the window manifest records of a window store just written."""
+
+    group_bytes: int
+    group_crc32: str
+    shard_bytes: int
+    shard_crc32: str
+    depth: int
+    """The inner chunk's sweep slots: the busiest site's busiest round."""
+    rounds: list[list[tuple[str, int, int, int]]]
+    """Per round, ``(site, offset, length, sweeps)`` for every site with a
+    sweep in it, in store order."""
 
 
 def _dump_json(payload: dict[str, Any]) -> bytes:
@@ -125,30 +145,79 @@ def _coordinate(values: np.ndarray, data_type: str, fill_value: Any, dimensions:
 def write_store(zarr_dir: Path, *, product: str, round_time: datetime, sites: list[SiteSweeps]) -> StoreReport:
     """Write ``<product>.zarr`` for one round from each site's sweeps, the
     sites in the order given (the window's site table order)."""
-    if product not in VARIABLES:
-        raise NexradProductError(f"unknown nexrad product {product!r}")
     if not sites or any(not entry.sweeps for entry in sites):
         raise NexradProductError("a polar store holds only sites with at least one sweep")
-    gates = gates_for(product)
-    scans = max(len(entry.sweeps) for entry in sites)
+    report = _write_polar(zarr_dir, product=product, rounds=[round_time], sites=sites, cells={(row, 0): entry.sweeps for row, entry in enumerate(sites)})
+    return StoreReport(
+        group_bytes=report.group_bytes,
+        group_crc32=report.group_crc32,
+        shard_bytes=report.shard_bytes,
+        shard_crc32=report.shard_crc32,
+        chunks=report.rounds[0],
+    )
 
-    payloads: list[bytes] = []
-    for entry in sites:
-        block = np.zeros((1, scans, BEAMS, gates), dtype=np.uint8)
-        for position, sweep in enumerate(entry.sweeps):
-            if sweep.product != product or sweep.codes.shape != (BEAMS, gates):
-                raise NexradProductError(f"{entry.site}: a {sweep.product} sweep in the {product} store")
-            block[0, position] = sweep.codes
-        payloads.append(zstdcli.compress(block.tobytes(), level=ZSTD_LEVEL, checksum=True))
+
+def write_window_store(zarr_dir: Path, *, product: str, rounds: list[datetime], sites: list[SiteSweeps]) -> WindowStoreReport:
+    """Write ``<product>.zarr`` for a closed window: every site's sweeps,
+    oldest first, each filed under the first of ``rounds`` at or after its
+    start. A sweep after the last round, or one no round reaches, is
+    refused rather than dropped."""
+    if not rounds or any(later <= earlier for earlier, later in zip(rounds, rounds[1:])):
+        raise NexradProductError("a window store's rounds must be oldest first and unique")
+    if not sites or any(not entry.sweeps for entry in sites):
+        raise NexradProductError("a polar store holds only sites with at least one sweep")
+    cells: dict[tuple[int, int], list[Sweep]] = {}
+    for row, entry in enumerate(sites):
+        for sweep in entry.sweeps:
+            column = next((position for position, moment in enumerate(rounds) if sweep.scan_time <= moment), None)
+            if column is None:
+                raise NexradProductError(f"{entry.site}: a sweep at {_iso(sweep.scan_time)} is after the window's last round")
+            cells.setdefault((row, column), []).append(sweep)
+    return _write_polar(zarr_dir, product=product, rounds=rounds, sites=sites, cells=cells)
+
+
+def _write_polar(
+    zarr_dir: Path,
+    *,
+    product: str,
+    rounds: list[datetime],
+    sites: list[SiteSweeps],
+    cells: dict[tuple[int, int], list[Sweep]],
+) -> WindowStoreReport:
+    """The store itself: inner chunk ``[s, r]`` is ``cells[(s, r)]``, the
+    sweeps of site ``s`` in round ``r``, padded to the busiest cell. One
+    round makes a round store, its block naming ``round``; more make a
+    window store, naming ``rounds``."""
+    if product not in VARIABLES:
+        raise NexradProductError(f"unknown nexrad product {product!r}")
+    gates = gates_for(product)
+    depth = max(len(sweeps) for sweeps in cells.values())
+    window = len(rounds) > 1
 
     entries = bytearray()
+    payloads: list[bytes] = []
+    chunks: list[list[tuple[str, int, int, int]]] = [[] for _ in rounds]
     cursor = 0
-    chunks: list[tuple[str, int, int, int]] = []
-    for entry, payload in zip(sites, payloads):
-        entries += _INDEX_ENTRY.pack(cursor, len(payload))
-        chunks.append((entry.site, cursor, len(payload), len(entry.sweeps)))
-        cursor += len(payload)
+    for row, entry in enumerate(sites):
+        for column in range(len(rounds)):
+            sweeps = cells.get((row, column))
+            if not sweeps:
+                entries += _INDEX_ENTRY.pack(_EMPTY_ENTRY, _EMPTY_ENTRY)
+                continue
+            block = np.zeros((1, depth, BEAMS, gates), dtype=np.uint8)
+            for position, sweep in enumerate(sweeps):
+                if sweep.product != product or sweep.codes.shape != (BEAMS, gates):
+                    raise NexradProductError(f"{entry.site}: a {sweep.product} sweep in the {product} store")
+                block[0, position] = sweep.codes
+            payload = zstdcli.compress(block.tobytes(), level=ZSTD_LEVEL, checksum=True)
+            entries += _INDEX_ENTRY.pack(cursor, len(payload))
+            chunks[column].append((entry.site, cursor, len(payload), len(sweeps)))
+            payloads.append(payload)
+            cursor += len(payload)
     shard = b"".join(payloads) + bytes(entries) + _INDEX_CHECKSUM.pack(crc32c(bytes(entries)))
+    # Within a round the spans follow the site order, which the manifest
+    # relies on: the shard is laid out site-major, so they do.
+    scans = len(rounds) * depth
 
     variable = VARIABLES[product]
     quantization = variable["quantization"]
@@ -164,7 +233,7 @@ def write_store(zarr_dir: Path, *, product: str, round_time: datetime, sites: li
             {
                 "name": "sharding_indexed",
                 "configuration": {
-                    "chunk_shape": [1, scans, BEAMS, gates],
+                    "chunk_shape": [1, depth, BEAMS, gates],
                     "codecs": [_CODEC_BYTES, _CODEC_ZSTD],
                     "index_codecs": [_CODEC_BYTES_LITTLE, _CODEC_CRC32C],
                     "index_location": "end",
@@ -186,11 +255,13 @@ def write_store(zarr_dir: Path, *, product: str, round_time: datetime, sites: li
 
     scan_time = np.full((len(sites), scans), SCAN_PADDING, dtype=np.int64)
     elevation = np.full((len(sites), scans), np.nan, dtype=np.float32)
+    for (row, column), sweeps in cells.items():
+        for position, sweep in enumerate(sweeps):
+            scan_time[row, column * depth + position] = int(sweep.scan_time.timestamp())
+            elevation[row, column * depth + position] = sweep.elevation
     for row, entry in enumerate(sites):
-        for position, sweep in enumerate(entry.sweeps):
-            scan_time[row, position] = int(sweep.scan_time.timestamp())
-            elevation[row, position] = sweep.elevation
-        if np.any(np.diff(scan_time[row, : len(entry.sweeps)]) <= 0):
+        real = scan_time[row][scan_time[row] != SCAN_PADDING]
+        if np.any(np.diff(real) <= 0):
             raise NexradProductError(f"{entry.site}: sweeps must be in strictly increasing time")
     coordinates = {
         "azimuth": _coordinate(((np.arange(BEAMS) + 0.5) * BEAM_WIDTH).astype(np.float32), "float32", "NaN", ("azimuth",), {"units": "degrees", "long_name": "beam centre azimuth, clockwise from true north"}),
@@ -208,17 +279,16 @@ def write_store(zarr_dir: Path, *, product: str, round_time: datetime, sites: li
         key = ("c", *(["0"] * len(metadata["shape"])))
         _write(zarr_dir / name / Path(*key), data)
         _write(zarr_dir / name / "zarr.json", _dump_json(metadata))
+    block: dict[str, Any] = {"version": POLAR_VERSION, "product": product}
+    if window:
+        block["rounds"] = [_iso(moment) for moment in rounds]
+    else:
+        block["round"] = _iso(rounds[0])
+    block["sites"] = [entry.site for entry in sites]
     group = {
         "zarr_format": 3,
         "node_type": "group",
-        "attributes": {
-            "xue_polar": {
-                "version": POLAR_VERSION,
-                "product": product,
-                "round": _iso(round_time),
-                "sites": [entry.site for entry in sites],
-            }
-        },
+        "attributes": {"xue_polar": block},
         "consolidated_metadata": {
             "kind": "inline",
             "must_understand": False,
@@ -227,33 +297,46 @@ def write_store(zarr_dir: Path, *, product: str, round_time: datetime, sites: li
     }
     group_bytes = _dump_json(group)
     _write(zarr_dir / "zarr.json", group_bytes)
-    return StoreReport(
+    return WindowStoreReport(
         group_bytes=len(group_bytes),
         group_crc32=_crc32_hex(group_bytes),
         shard_bytes=len(shard),
         shard_crc32=_crc32_hex(shard),
-        chunks=chunks,
+        depth=depth,
+        rounds=chunks,
     )
 
 
-def read_site(zarr_dir: Path, product: str, site_index: int) -> tuple[np.ndarray, np.ndarray]:
-    """One site's real sweeps and their start times, through the shard
-    index: ``(codes [sweeps, 720, gates], scan_time [sweeps])``."""
+def read_site(zarr_dir: Path, product: str, site_index: int, round_index: int = 0) -> tuple[np.ndarray, np.ndarray]:
+    """One site's real sweeps of one of the store's rounds and their start
+    times, through the shard index: ``(codes [sweeps, 720, gates],
+    scan_time [sweeps])``. A round the site has no sweep in reads empty."""
     group = json.loads((zarr_dir / "zarr.json").read_text(encoding="utf-8"))
     block = group.get("attributes", {}).get("xue_polar")
     if not isinstance(block, dict) or block.get("version") != POLAR_VERSION or "xue" in group.get("attributes", {}):
         raise NexradProductError(f"{zarr_dir} is not a version {POLAR_VERSION} polar store")
+    if ("round" in block) == ("rounds" in block):
+        raise NexradProductError(f"{zarr_dir}: a polar store names its round or its rounds, not both or neither")
+    rounds = len(block["rounds"]) if "rounds" in block else 1
+    if not 0 <= round_index < rounds:
+        raise NexradProductError(f"{zarr_dir} has no round {round_index}")
     array = json.loads((zarr_dir / product / "zarr.json").read_text(encoding="utf-8"))
     sites, scans, beams, gates = array["shape"]
+    depth = array["codecs"][0]["configuration"]["chunk_shape"][1]
+    if depth * rounds != scans:
+        raise NexradProductError(f"{zarr_dir}: scan is not its rounds times the chunk depth")
     shard = (zarr_dir / product / "c" / "0" / "0" / "0" / "0").read_bytes()
-    index_length = _INDEX_ENTRY.size * sites + _INDEX_CHECKSUM.size
+    index_length = _INDEX_ENTRY.size * sites * rounds + _INDEX_CHECKSUM.size
     index = shard[-index_length:]
     pairs = index[:-_INDEX_CHECKSUM.size]
     if _INDEX_CHECKSUM.unpack(index[-_INDEX_CHECKSUM.size :])[0] != crc32c(pairs):
         raise NexradProductError(f"{zarr_dir}: shard index checksum mismatch")
-    offset, nbytes = _INDEX_ENTRY.unpack_from(pairs, site_index * _INDEX_ENTRY.size)
-    raw = zstdcli.decompress(shard[offset : offset + nbytes], expected_length=scans * beams * gates)
-    codes = np.frombuffer(raw, dtype=np.uint8).reshape(scans, beams, gates)
     times = np.frombuffer((zarr_dir / "scan_time" / "c" / "0" / "0").read_bytes(), dtype="<i8").reshape(sites, scans)[site_index]
+    times = times[round_index * depth : (round_index + 1) * depth]
     real = int(np.count_nonzero(times != SCAN_PADDING))
+    offset, nbytes = _INDEX_ENTRY.unpack_from(pairs, (site_index * rounds + round_index) * _INDEX_ENTRY.size)
+    if offset == _EMPTY_ENTRY and nbytes == _EMPTY_ENTRY:
+        return np.zeros((0, beams, gates), dtype=np.uint8), times[:0]
+    raw = zstdcli.decompress(shard[offset : offset + nbytes], expected_length=depth * beams * gates)
+    codes = np.frombuffer(raw, dtype=np.uint8).reshape(depth, beams, gates)
     return codes[:real], times[:real]

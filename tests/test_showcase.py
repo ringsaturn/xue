@@ -496,7 +496,7 @@ class RadarOverlayTest(unittest.TestCase):
     """A case's single-site radar block: checked in the definition, carried
     onto the row, and measured from the built window at catalog time."""
 
-    RADAR = {"window": "radar/nexrad.202303250145/index.json", "defaultSite": "GWX", "defaultProduct": "n0g"}
+    RADAR = {"window": "radar/index.json", "defaultSite": "GWX", "defaultProduct": "n0g"}
 
     def test_the_definition_carries_it(self) -> None:
         spec = parse_case(case_payload(radar=dict(self.RADAR)))
@@ -518,7 +518,7 @@ class RadarOverlayTest(unittest.TestCase):
                 parse_case(case_payload(radar=radar))
 
     def test_the_catalog_measures_the_built_window(self) -> None:
-        from tests.prepare_nexrad_golden import build
+        from tests.prepare_nexrad_golden import build_case_window
         from xuebuild.common import crc32_hex
         from xuebuild.showcase import _catalog_radar
 
@@ -527,7 +527,7 @@ class RadarOverlayTest(unittest.TestCase):
             entry = {"id": "demo-case", "radar": dict(self.RADAR)}
             with self.assertRaises(ShowcaseError):
                 _catalog_radar(root, entry)  # not built yet
-            build(root / "showcase" / "demo-case" / "radar")
+            build_case_window(root / "showcase" / "demo-case" / "radar")
             block = _catalog_radar(root, entry)
             data = (root / "showcase" / "demo-case" / self.RADAR["window"]).read_bytes()
             self.assertEqual(block["byteLength"], len(data))

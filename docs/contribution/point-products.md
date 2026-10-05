@@ -85,10 +85,11 @@ failed. `AIRPORT_KEEP` rounds are kept.
   rounds, so a site's inner chunk never holds more than one round's sweeps.
 - The index is the window manifest. It is rewritten every round from the
   previous one; the stores never are.
-- Cases (`showcase/nexrad-cases/*.json`, `xue nexrad-case`) replay the same
-  rounds over a past interval. They are not in `showcase.json` until the
-  shell knows the case kind: a catalog row the deployed shell cannot parse
-  fails the whole catalog.
+- Cases (`showcase/nexrad-cases/*.json`, `xue nexrad-case`) take the same
+  rounds over a past interval but write one window store per product
+  (`build_case`): a closed interval needs no per-round directories, and a
+  store per round per product was ~35 objects a round. `replay` still
+  builds the live layout over a past interval, for the golden.
 - Level 3 N0B / N0G exist from 2022-02 on; earlier events have N0Q / N0U only.
 
 ## Soundings

@@ -44,6 +44,9 @@ ROUND = re.compile(r"^\d{12}$")
 SITE = re.compile(r"^[A-Z0-9]{3}$")
 ICAO = re.compile(r"^[A-Z0-9]{4}$")
 ROUND_PATH = re.compile(r"^\.\./nexrad\.\d{12}/$")
+WINDOW_STORE_PATH = "./"
+"""A round's ``path`` when its stores are the window stores beside the
+manifest (a case, ``docs/nexrad.md`` §1)."""
 SOURCE_KEY = re.compile(r"^[a-z][a-z0-9-]*$")
 
 
@@ -121,6 +124,10 @@ def validate_window(payload: object) -> None:
         raise NexradProductError("window.rounds must be a list")
     previous: datetime | None = None
     latest: dict[tuple[str, int], int] = {}
+    # A window store is one object per product, so every round names the
+    # same group, shard and depth.
+    stores: dict[str, tuple[object, object, int]] = {}
+    in_window_store: bool | None = None
     floor = issued.timestamp() - window
     for position, entry in enumerate(rounds):
         label = f"window.rounds[{position}]"
@@ -135,8 +142,12 @@ def validate_window(payload: object) -> None:
             raise NexradProductError(f"{label}.round is outside the window")
         previous = moment
         path = entry.get("path")
-        if not isinstance(path, str) or not ROUND_PATH.match(path) or not path.rstrip("/").endswith(round_name(moment)):
-            raise NexradProductError(f"{label}.path must name the round's directory")
+        window_store = path == WINDOW_STORE_PATH
+        if not window_store and (not isinstance(path, str) or not ROUND_PATH.match(path) or not path.rstrip("/").endswith(round_name(moment))):
+            raise NexradProductError(f"{label}.path must name the round's directory, or be {WINDOW_STORE_PATH!r}")
+        if in_window_store is not None and window_store != in_window_store:
+            raise NexradProductError("window.rounds are all in round stores or all in window stores")
+        in_window_store = window_store
         products = [key for key in entry if key in PRODUCTS]
         if not products:
             raise NexradProductError(f"{label} holds no product")
@@ -147,6 +158,14 @@ def validate_window(payload: object) -> None:
                 raise NexradProductError(f"{where} must be an object")
             _file(block.get("group"), f"{where}.group")
             shard_length = _file(block.get("shard"), f"{where}.shard")
+            depth: int | None = None
+            if window_store:
+                depth = _integer(block.get("depth"), f"{where}.depth", 1)
+                store = (block["group"], block["shard"], depth)
+                if stores.setdefault(product, store) != store:
+                    raise NexradProductError(f"{where} must name the same window store as every other round")
+            elif "depth" in block:
+                raise NexradProductError(f"{where}.depth belongs to a window store")
             chunks = block.get("chunks")
             scans = block.get("scans")
             if not isinstance(chunks, list) or not chunks or not isinstance(scans, list) or len(scans) != len(chunks):
@@ -161,6 +180,8 @@ def validate_window(payload: object) -> None:
                 offset = _integer(chunk[1], f"{where} offset", 0)
                 length = _integer(chunk[2], f"{where} length", 1)
                 sweeps = _integer(chunk[3], f"{where} sweeps", 1)
+                if depth is not None and sweeps > depth:
+                    raise NexradProductError(f"{where} site {site} has more sweeps than the store's depth")
                 if offset < end or offset + length > shard_length:
                     raise NexradProductError(f"{where} chunk spans must be in order inside the shard")
                 end = offset + length

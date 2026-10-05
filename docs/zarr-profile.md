@@ -354,22 +354,31 @@ is never derived from a bundle. Everything in "Array metadata" and
 index, the codecs and the reading of an inner chunk are the same; the
 dimensions, the chunking and the attributes are its own.
 
-- One store is one product of one round, `<round directory>/<product>.zarr`
-  (`nexrad.202610050805/n0b.zarr`). The group's attributes carry a
-  `xue_polar` block in place of `xue` and `xue_profile`; its `version` is
-  this branch's version, `1`. A reader tells the branches apart by which
-  one is present and refuses a group carrying both or neither, or a
-  `version` it does not implement.
+- A store is one product over one or more **rounds**, the intervals a
+  product delivers its sweeps in. A **round store** holds one round,
+  `<round directory>/<product>.zarr` (`nexrad.202610050805/n0b.zarr`); a
+  **window store** holds every round of a closed window, one store per
+  product for the whole of it (a showcase case's, `nexrad.md` §1). The
+  group's attributes carry a `xue_polar` block in place of `xue` and
+  `xue_profile`; its `version` is this branch's version, `1`. A reader
+  tells the branches apart by which one is present and refuses a group
+  carrying both or neither, or a `version` it does not implement.
 - One data array, named by the product (`n0b`), `uint8` of shape `[site,
   scan, azimuth, range]` with `dimension_names` exactly those four. `site`
-  indexes the radars that scanned in the round, `scan` the sweeps of one
-  site in time order, `azimuth` the beam and `range` the gate.
-- Chunking. The inner chunk is one site's whole round: `[1, scans, azimuth,
-  range]`, where `scans` is the largest number of sweeps any site of the
-  round has. The outer chunk (shard) is the whole array, so `c/0/0/0/0` is
-  the only data object and its index holds one pair per site. Sites with
-  fewer sweeps are padded to `scans` with `fill_value`; whether a sweep
-  exists is said by `scan_time`, never by the codes.
+  indexes the radars that scanned in the store's rounds, `scan` the sweeps
+  of one site in time order, `azimuth` the beam and `range` the gate.
+- Chunking. The inner chunk is one site's sweeps of one round: `[1, depth,
+  azimuth, range]`, where `depth` is the largest number of sweeps any site
+  has in any one of the store's rounds. Inner chunk `[s, r, 0, 0]` is site
+  `s` in the store's round `r`, so `scan` runs over the whole store, round
+  after round, `rounds × depth` long, and scan slot `r × depth + k` is the
+  site's `k`-th sweep of round `r`. The outer chunk (shard) is the whole
+  array, so `c/0/0/0/0` is the only data object and its index holds one
+  pair per site and round, in that order; a site with no sweep in a round
+  has the never-written pair there. A site's round with fewer sweeps is
+  padded to `depth` with `fill_value`; whether a sweep exists is said by
+  `scan_time`, never by the codes. A round store is the one-round case:
+  its index holds one pair per site.
 - Inner codec chain `[bytes, zstd]` (level 15, content checksum). There is
   no `xue.delta`: consecutive sweeps are minutes apart and a difference
   against the previous one is larger than the sweep itself. Index codecs,
@@ -423,15 +432,18 @@ dimensions, the chunking and the attributes are its own.
   The group's block is `{"version": 1, "product": "n0b", "round":
   "2026-10-05T08:05:00Z", "sites": ["TLX", "TBW", …]}`: the product, the
   round's UTC minute, and the sites in index order by the source's own
-  identifiers.
+  identifiers. A window store carries `"rounds": ["2023-03-24T23:05:00Z",
+  …]` in place of `round`: its rounds' UTC minutes in chunk order, oldest
+  first. A block carrying both or neither is refused.
 - Mapping a gate to the ground is the reader's: the profile fixes the
   coordinates, not the projection. The reference reader uses the
   standard-refraction (4/3 effective earth radius) beam model from the
   site's WGS84 position.
-- Reading one site: the group, the array's `zarr.json`, then the shard
-  index (suffix range) and the site's one inner chunk; a product that
-  publishes the chunk spans (`nexrad.md`, "Window") lets a reader skip the
-  index and read the chunk directly.
+- Reading one site's round: the group, the array's `zarr.json`, then the
+  shard index (suffix range) and the site's inner chunk of that round; a
+  product that publishes the chunk spans (`nexrad.md` §4) lets a reader
+  skip the index and read the chunk directly, one range per site per
+  round in either kind of store.
 
 ## Equivalence with the container
 

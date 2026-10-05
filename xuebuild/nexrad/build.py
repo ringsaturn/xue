@@ -6,8 +6,9 @@ newest for that site and no later than the round itself, so a sweep that
 reaches the bucket late lands in the next round instead of being lost, and
 none is in two. The stores are written once; the manifest is rewritten
 every round from the previous one, dropping rounds that fell out of the
-window. A showcase case is the same thing replayed: consecutive rounds over
-a past interval with a window as long as the case.
+window. A showcase case is the same rounds over a closed past interval,
+written as one window store per product instead of a store per round
+(``build_case``).
 """
 
 from __future__ import annotations
@@ -29,6 +30,7 @@ from .schema import (
     SCHEMA_VERSION,
     WINDOW_FILENAME,
     WINDOW_SECONDS,
+    WINDOW_STORE_PATH,
     build_pointer,
     encode_json,
     iso_z,
@@ -38,7 +40,7 @@ from .schema import (
     validate_window,
     write_bytes_atomic,
 )
-from .store import SiteSweeps, write_store
+from .store import SiteSweeps, write_store, write_window_store
 
 LOG = logging.getLogger(__name__)
 
@@ -229,12 +231,12 @@ def _window_payload(
         table.append([site, station.icao, round(station.latitude, 6), round(station.longitude, 6), round(station.height_m, 1)])
     entries = []
     for held in rounds:
-        name = round_directory(held.round)
         entry: dict[str, Any] = {
             "round": iso_z(held.round),
             # Relative to the manifest, which lives in the newest round's
-            # directory: one level up and back down, for its own too.
-            "path": f"../{name}/",
+            # directory: one level up and back down, for its own too. A
+            # case's window stores sit beside it.
+            "path": held.path if held.path == WINDOW_STORE_PATH else f"../{round_directory(held.round)}/",
         }
         for product in PRODUCTS:
             block = held.products.get(product)
@@ -243,6 +245,7 @@ def _window_payload(
             entry[product] = {
                 "group": block["group"],
                 "shard": block["shard"],
+                **({"depth": block["depth"]} if "depth" in block else {}),
                 "chunks": [[index[site], offset, length, sweeps] for site, offset, length, sweeps in block["chunks"]],
                 "scans": [[index[site], block["scans"][site]] for site, *_ in block["chunks"]],
             }
@@ -321,7 +324,7 @@ def catch_up(
     return reports
 
 
-def build_case(
+def replay(
     *,
     start: datetime,
     end: datetime,
@@ -331,11 +334,11 @@ def build_case(
     fetch: bool = True,
     now: datetime | None = None,
 ) -> dict[str, Any]:
-    """Replay rounds over ``(start, end]`` into ``output_root`` with a window
-    as long as the case, returning the last round's report: its manifest is
-    the case's."""
+    """Replay live rounds over ``(start, end]`` into ``output_root`` with a
+    window as long as the interval, a round store per round, returning the
+    last round's report: the live layout over a past interval."""
     if start.minute % ROUND_MINUTES or end.minute % ROUND_MINUTES or end <= start:
-        raise NexradProductError("a case runs between two round minutes")
+        raise NexradProductError("a replay runs between two round minutes")
     stations = load_stations(raw_root, fetch=fetch)
     window_seconds = int((end - start).total_seconds())
     previous: dict[str, Any] | None = None
@@ -357,3 +360,98 @@ def build_case(
         previous = report["window"]
         moment += timedelta(minutes=ROUND_MINUTES)
     return report
+
+
+def build_case(
+    *,
+    start: datetime,
+    end: datetime,
+    sites: list[str],
+    raw_root: Path,
+    output_root: Path,
+    fetch: bool = True,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Write a case over ``(start, end]`` into ``output_root``: one window
+    store per product and the window manifest beside them. Its rounds are
+    the ones a replay would build — every sweep in the first round at or
+    after its start — with nothing late to wait for, since the interval is
+    past."""
+    if start.minute % ROUND_MINUTES or end.minute % ROUND_MINUTES or end <= start:
+        raise NexradProductError("a case runs between two round minutes")
+    now = now or datetime.now(UTC)
+    stations = load_stations(raw_root, fetch=fetch)
+    rounds: list[datetime] = []
+    moment = start + timedelta(minutes=ROUND_MINUTES)
+    while moment <= end:
+        rounds.append(moment)
+        moment += timedelta(minutes=ROUND_MINUTES)
+
+    held = [_Round(moment, WINDOW_STORE_PATH) for moment in rounds]
+    sources: list[dict[str, Any]] = []
+    stores: dict[str, dict[str, Any]] = {}
+    for product in PRODUCTS:
+        per_site: list[SiteSweeps] = []
+        reports = 0
+        failed_total: list[str] = []
+        error: str | None = None
+        for site in sorted(sites):
+            try:
+                keys = list_keys(site, product, start, end) if fetch else _keys_on_disk(raw_root, site, product, start, end)
+                if fetch:
+                    _fetched, failed = download(raw_root, keys)
+                    failed_total += failed
+            except XueError as exc:
+                error = f"{site}: {exc}"
+                LOG.warning("nexrad %s: %s", product, error)
+                continue
+            sweeps, failed = _read_sweeps(raw_root, keys)
+            failed_total += [key for key in failed if key not in failed_total]
+            sweeps = [sweep for sweep in sweeps if start < sweep.scan_time <= end]
+            if not sweeps:
+                continue
+            station = stations.get(site)
+            per_site.append(
+                SiteSweeps(
+                    site=site,
+                    latitude=sweeps[0].site_latitude,
+                    longitude=sweeps[0].site_longitude,
+                    height_m=sweeps[0].site_height_m if station is None else station.height_m,
+                    sweeps=sweeps,
+                )
+            )
+            reports += len(sweeps)
+        status: dict[str, Any] = {"id": f"unidata-{product}", "ok": error is None or reports > 0, "reports": reports}
+        if failed_total:
+            status["missing"] = len(failed_total)
+        if error is not None:
+            status["error"] = error
+        if not status["ok"] and "error" not in status:
+            status["error"] = "no sweep read"
+        sources.append(status)
+        if not per_site:
+            continue
+        report = write_window_store(output_root / f"{product}.zarr", product=product, rounds=rounds, sites=per_site)
+        stores[product] = {"sites": len(per_site), "shardBytes": report.shard_bytes, "depth": report.depth}
+        times = {entry.site: [int(sweep.scan_time.timestamp()) for sweep in entry.sweeps] for entry in per_site}
+        for entry, chunks in zip(held, report.rounds):
+            if not chunks:
+                continue
+            floor = entry.round - timedelta(minutes=ROUND_MINUTES)
+            entry.products[product] = {
+                "group": {"byteLength": report.group_bytes, "crc32": report.group_crc32},
+                "shard": {"byteLength": report.shard_bytes, "crc32": report.shard_crc32},
+                "depth": report.depth,
+                "chunks": chunks,
+                "scans": {
+                    site: [time for time in times[site] if floor.timestamp() < time <= entry.round.timestamp()]
+                    for site, *_ in chunks
+                },
+            }
+
+    window_seconds = int((end - start).total_seconds())
+    window = _window_payload(end, [entry for entry in held if entry.products], stations, window_seconds, sources, now)
+    validate_window(window)
+    window_bytes = encode_json(window)
+    write_bytes_atomic(output_root / WINDOW_FILENAME, window_bytes)
+    return {"window": window, "windowBytes": window_bytes, "stores": stores, "sources": sources}

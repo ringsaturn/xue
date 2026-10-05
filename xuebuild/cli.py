@@ -481,7 +481,7 @@ def parser() -> argparse.ArgumentParser:
 
     nexrad_case = commands.add_parser(
         "nexrad-case",
-        help="replay five-minute nexrad rounds over a past interval into <output-dir>/<case id>/radar/, the "
+        help="write a past interval's five-minute nexrad rounds into <output-dir>/<case id>/radar/ as one window store per product, the "
         "radar overlay of the showcase case of that id",
     )
     nexrad_case.add_argument("case", type=Path, help="the case definition: {id, start, end, sites}")
@@ -877,7 +877,7 @@ def main(argv: list[str] | None = None) -> int:
                 output_root=arguments.output_dir / case["id"] / "radar",
                 fetch=not arguments.offline,
             )
-            print(json.dumps({"case": case["id"], "round": report["round"], "rounds": len(report["window"]["rounds"]), "sites": report["window"]["sites"]}, indent=2))
+            print(json.dumps({"case": case["id"], "rounds": len(report["window"]["rounds"]), "stores": report["stores"], "sources": report["sources"]}, indent=2))
         elif arguments.command == "synop-build":
             moment = floor_synop_round(datetime.now(UTC)) if arguments.round == "now" else parse_synop_round(arguments.round)
             networks = None
