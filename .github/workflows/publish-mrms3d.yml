@@ -1,0 +1,194 @@
+name: publish mrms3d
+
+# NOAA MRMS 3D reflectivity (MergedReflectivityQC): the radar mosaic over
+# the contiguous United States on 33 constant altitudes from 0.5 to 19 km
+# above mean sea level, a scan every two minutes, one object per level.
+# The live feed is a rolling window — the last three whole hours plus the
+# hour in progress, one frame every ten minutes (the scan stamped in the
+# first two minutes of each ten), the 0.01° grid thinned to 0.05° by block
+# maximum, all 33 levels in one `refl3d` bundle — rebuilt into a round
+# subdirectory of its run (<model>.<run>/<HHMM>/) and pointed at by
+# latest-mrms3d.json.
+#
+# The shape of publish-mrms.yml: one round per job (scripts/window_rounds.sh,
+# ONCE=true) on a cron, here every ten minutes since a round has nothing new
+# to publish more often. The cron fires three minutes past each ten-minute
+# mark, by which time the mark's scan is usually on the bucket. A dispatch
+# with `loop` on runs the rounds until twenty past the next hour and yields
+# to the next scheduled job once it is waiting (scripts/successor_queued.sh).
+#
+# Machine time: six jobs an hour of a few minutes each, free on a public
+# repository's standard runners.
+
+on:
+  schedule:
+    - cron: "3-59/10 * * * *"
+  workflow_dispatch:
+    inputs:
+      loop:
+        description: "Keep running rounds until twenty past the next hour instead of one round"
+        type: boolean
+        default: false
+      round_minutes:
+        description: "Minutes between rounds when looping"
+        type: string
+        default: "10"
+      hours:
+        description: "Window length in hours (the whole hours on screen plus the one in progress)"
+        type: string
+        default: "4"
+      profile:
+        description: "Quantization/compression profile"
+        type: choice
+        options: [balanced, quality, compact]
+        default: balanced
+      keep:
+        description: "Published runs to keep on R2 (2 = the live run and the one before it)"
+        type: string
+        default: "2"
+      force:
+        description: "Build a round even when the live one already ends at the bucket's newest frame"
+        type: boolean
+        default: false
+      dry_run:
+        description: "Build and report what the uploads and prunes would do, but write nothing to R2"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  # scripts/successor_queued.sh lists this workflow's waiting runs, for a
+  # looping dispatch to yield to the next scheduled job.
+  actions: read
+
+concurrency:
+  group: publish-mrms3d
+  # A late cron queues behind the job still running and then finds
+  # nothing new; a looping dispatch yields to it on its own.
+  cancel-in-progress: false
+
+env:
+  # Convert through the native encoder and insist on it: the reference
+  # pipeline holds every full-resolution level of a frame at once (about
+  # 14 GB a frame), more than a runner has, so a wheel that predates the
+  # source must fail the round rather than fall back.
+  XUE_ENCODER: native
+  # Every round is published as Zarr stores alone: the store is derived
+  # from the `.xue` the round wrote and the file retired before upload.
+  XUE_ZARR: "1"
+  XUE_CONTAINER: "0"
+
+jobs:
+  publish:
+    # Scheduled runs on forks would publish into a bucket they cannot reach.
+    if: github.event_name != 'schedule' || github.repository == 'ringsaturn/xue'
+    runs-on: ubuntu-24.04
+    # One round is a few minutes; a round that has to fetch a window's
+    # worth of frames (33 objects each) after an outage takes longer. A
+    # looping dispatch stops at twenty past the next hour on its own
+    # (UNTIL_MINUTE below); this is the backstop for a round that hangs.
+    timeout-minutes: 90
+    env:
+      MODEL: mrms3d
+      ONCE: ${{ !inputs.loop }}
+      ROUND_MINUTES: ${{ inputs.round_minutes || '10' }}
+      # For a looping dispatch: run past the hour, and hand over to the next
+      # scheduled job as soon as it is waiting.
+      UNTIL_MINUTE: "80"
+      HANDOVER_CHECK: scripts/successor_queued.sh
+      # No edge-cache warm-up: a round is a handful of objects replaced ten
+      # minutes later, and the shell's next poll fills the edge itself.
+      WARM: "false"
+      HOURS: ${{ inputs.hours || '4' }}
+      PROFILE: ${{ inputs.profile || 'balanced' }}
+      KEEP: ${{ inputs.keep || '2' }}
+      FORCE: ${{ inputs.force || false }}
+      DRY_RUN: ${{ inputs.dry_run && '--dryrun' || '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate inputs
+        run: |
+          set -euo pipefail
+          printf '%s' "$ROUND_MINUTES" | grep -Eq '^[1-9][0-9]?$' \
+            || { echo "::error::round_minutes must be a positive integer of minutes"; exit 1; }
+          printf '%s' "$HOURS" | grep -Eq '^[1-9][0-9]?$' \
+            || { echo "::error::hours must be a positive integer"; exit 1; }
+          printf '%s' "$KEEP" | grep -Eq '^[1-9][0-9]*$' \
+            || { echo "::error::keep must be a positive integer"; exit 1; }
+
+      # The AWS CLI is preinstalled on the runner; R2 is its S3 endpoint.
+      # The credentials are step-scoped rather than job env, so third-party
+      # actions never see them; the read proves they work before the
+      # first round rather than at its upload.
+      - name: Check R2 credentials
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+          AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+        run: |
+          for name in CLOUDFLARE_ACCOUNT_ID AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY; do
+            [ -n "${!name}" ] || { echo "::error::$name is empty; set the R2 repository secrets"; exit 1; }
+          done
+          aws --version
+          aws s3api head-object --bucket dataset --key xue/catalog.json --region auto \
+            --endpoint-url "https://${CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com" > /dev/null \
+            || { echo "::error::R2 credentials failed a test read of the dataset bucket"; exit 1; }
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          python-version: "3.14"
+
+      # No ffmpeg: the source ships no video, and the xuepy wheel carries
+      # the GDAL the native encoder extracts and inspects with.
+      - name: Sync Python environment
+        run: uv sync
+
+      - name: Run the rounds
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: |
+          set -o pipefail
+          scripts/window_rounds.sh 2>&1 | tee rounds.log
+          status=$?
+          {
+            echo "### mrms3d rounds"
+            echo
+            echo '```'
+            grep -E '^round [0-9]{4}:|rounds this hour' rounds.log || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit $status
+
+      # The pointer is served with no-cache, so the edge revalidates it; a
+      # stale read here means the last flip has not propagated rather than
+      # failed, so it warns instead of failing an otherwise complete hour.
+      - name: Verify the live pointer
+        if: ${{ !inputs.dry_run }}
+        run: |
+          set -uo pipefail
+          [ -f web/public/data/latest-mrms3d.json ] || { echo "No round built this hour." >> "$GITHUB_STEP_SUMMARY"; exit 0; }
+          url="https://dataset.ringsaturn.me/xue/latest-mrms3d.json"
+          published=$(curl -fsSL "$url" | jq -r '.manifestPath' || true)
+          if [ -n "$published" ] && [ -f "web/public/data/$published" ]; then
+            echo "$url serves $published." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::$url serves '${published:-nothing}', not the round this job last built"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: publish-report-mrms3d
+          path: |
+            rounds.log
+            build-report.json
+            web/public/data/latest-mrms3d.json
+          retention-days: 14
+          if-no-files-found: ignore
