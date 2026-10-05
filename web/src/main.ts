@@ -1112,6 +1112,7 @@ const MODEL_EYEBROW: Record<ForecastModelId, string> = {
   gefsaero: "NOAA / GEFS-AEROSOLS (0.25°)",
   cma: "CMA / RADAR MOSAIC (0.044°)",
   mrms: "NOAA / MRMS CONUS (0.02°)",
+  mrms3d: "NOAA / MRMS 3D REFLECTIVITY CONUS (0.05°)",
   jma: "JMA / NOWCAST JAPAN (0.005°)",
   himawari: "JMA / HIMAWARI-9 AHI (0.04°)",
   goeseast: "NOAA / GOES-19 ABI EAST (0.04°)",

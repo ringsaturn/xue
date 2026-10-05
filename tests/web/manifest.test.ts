@@ -30,6 +30,7 @@ import {
   isVectorBundle,
   vectorComponents,
 } from "../../web/src/manifest";
+import { identifyBundle, identityForBundleId } from "../../web/src/identity";
 import { buildPalette, buildWindSpeedPalette, decodeLinear, decodeLog } from "../../web/src/palettes";
 import type { BundleVariable, LogQuantization, VariantDescriptor, ZarrStoreDescriptor } from "../../web/src/manifest";
 
@@ -733,12 +734,12 @@ describe("dataset kinds", () => {
       expect(isNowcastModel(model)).toBe(false);
   });
 
-  it("lists the live feeds, the eight observation windows among them", () => {
+  it("lists the live feeds, the nine observation windows among them", () => {
     // Every live feed has a pointer to poll (mirrors
-    // SourceSpec.latest_filename); the eight observation windows are the
+    // SourceSpec.latest_filename); the nine observation windows are the
     // last of the switch order, and the mosaic — a view over the imagers
     // with no feed of its own — closes it.
-    expect(FORECAST_MODEL_IDS).toEqual(["gfs", "sflux", "ecmwf", "aifs", "ifshres", "cfs", "hrrr", "gefsaero", "mrms", "jma", "cma", "himawari", "goeseast", "goeswest", "meteosat", "aurora", "geo"]);
+    expect(FORECAST_MODEL_IDS).toEqual(["gfs", "sflux", "ecmwf", "aifs", "ifshres", "cfs", "hrrr", "gefsaero", "mrms", "mrms3d", "jma", "cma", "himawari", "goeseast", "goeswest", "meteosat", "aurora", "geo"]);
     for (const model of FORECAST_MODEL_IDS) {
       if (FORECAST_MODELS[model].mosaic) expect(FORECAST_MODELS[model].latestFilename).toBeUndefined();
       else expect(FORECAST_MODELS[model].latestFilename).toBeDefined();
@@ -767,6 +768,7 @@ describe("dataset kinds", () => {
       railCore: ["aod", "pm25"],
     });
     expect(FORECAST_MODELS.mrms.latestFilename).toBe("latest-mrms.json");
+    expect(FORECAST_MODELS.mrms3d.latestFilename).toBe("latest-mrms3d.json");
     expect(FORECAST_MODELS.jma.latestFilename).toBe("latest-jma.json");
     expect(FORECAST_MODELS.cma.latestFilename).toBe("latest-cma.json");
     expect(FORECAST_MODELS.himawari.latestFilename).toBe("latest-himawari.json");
@@ -893,6 +895,53 @@ describe("dataset kinds", () => {
     // The two mosaics are not interchangeable.
     expect(() => validateManifest(mrms, "cma")).toThrow();
     expect(FORECAST_MODELS.mrms.region).toEqual([-130, 20, -60, 55]);
+  });
+
+  it("admits an mrms3d manifest with its 33-level reflectivity volume as the core", () => {
+    // Mirrors the `mrms3d` entry of SOURCES: the MRMS 3D reflectivity is a
+    // dataset of its own beside the composite, one `refl3d` bundle that
+    // must ship, opened on itself over the CONUS region.
+    expect(FORECAST_MODELS.mrms3d).toMatchObject({
+      id: "mrms3d",
+      label: "NOAA-MRMS3D",
+      product: "conus-refl3d",
+      latestFilename: "latest-mrms3d.json",
+      observation: true,
+      coreBundles: ["refl3d"],
+      defaultVariable: "refl3d",
+      railCore: ["refl3d"],
+      region: [-130, 20, -60, 55],
+    });
+    expect(isObservationModel("mrms3d")).toBe(true);
+    expect(isNowcastModel("mrms3d")).toBe(false);
+    const volume = {
+      schemaVersion: 5,
+      model: "NOAA-MRMS3D",
+      product: "conus-refl3d",
+      runTime: "2026-10-05T00:00:00Z",
+      forecastHours: 3,
+      bundles: [{ variable: "refl3d", path: "refl3d.xue", byteLength: 1, crc32: "00000000" }],
+    };
+    expect(validateManifest(volume, "mrms3d").bundles.map((bundle) => bundle.variable)).toEqual(["refl3d"]);
+    expect(() => validateManifest({ ...volume, bundles: [{ ...volume.bundles[0]!, variable: "cref" }] }, "mrms3d")).toThrow(
+      /no bundle for variable refl3d/,
+    );
+    // The composite mosaic and the volume are not interchangeable.
+    expect(() => validateManifest(volume, "mrms")).toThrow();
+    expect(() =>
+      validateManifest({ ...volume, model: "NOAA-MRMS", product: "conus-cref" }, "mrms3d"),
+    ).toThrow();
+    const pointer = {
+      schemaVersion: 1,
+      model: "NOAA-MRMS3D",
+      product: "conus-refl3d",
+      run: "2026100500",
+      runTime: "2026-10-05T00:00:00Z",
+      manifestPath: "mrms3d.2026100500/0030/manifest.json",
+      manifestCrc32: "0badf00d",
+    };
+    expect(validateLatestPointer(pointer, "mrms3d").manifestPath).toBe("mrms3d.2026100500/0030/manifest.json");
+    expect(() => validateLatestPointer(pointer, "mrms")).toThrow();
   });
 
   it("admits a jma manifest by its own identity, with the rate as its core", () => {
@@ -1082,6 +1131,50 @@ describe("parseBundleMetadata", () => {
       ],
     };
     expect(parseBundleMetadata(JSON.stringify(entireAtmosphere)).schemaVersion).toBe(3);
+  });
+
+  it("reads the 33-level MRMS reflectivity volume as one bundle", () => {
+    // MergedReflectivityQC on constant altitudes (local discipline 209,
+    // category 9, number 0, surface 102 in metres above mean sea level),
+    // 0.5 to 19 km, numbered 1..33 in level order.
+    const levels = [
+      500, 750, 1000, 1250, 1500, 1750, 2000, 2250, 2500, 2750, 3000, 3500, 4000, 4500, 5000, 5500, 6000, 6500, 7000,
+      7500, 8000, 8500, 9000, 10000, 11000, 12000, 13000, 14000, 15000, 16000, 17000, 18000, 19000,
+    ];
+    const volume = {
+      ...v3Metadata,
+      model: "NOAA-MRMS3D",
+      product: "conus-refl3d",
+      grid: { width: 1400, height: 700 },
+      time: { unitSeconds: 600, firstFrameOffset: 0, frameCount: 4, frameOffsets: [0, 1, 2, 4] },
+      variables: levels.map((metres, index) => ({
+        numericId: index + 1,
+        id: `refl${metres}`,
+        label: `Radar reflectivity at ${metres / 1000} km MSL`,
+        unit: "dBZ",
+        quantization: { type: "linear", offset: 0, scale: 0.5, minimumCode: 0, maximumCode: 160, nodataCode: 255 },
+        parameter: {
+          discipline: 209,
+          parameterCategory: 9,
+          parameterNumber: 0,
+          typeOfFirstFixedSurface: 102,
+          scaleFactorOfFirstFixedSurface: 0,
+          scaledValueOfFirstFixedSurface: metres,
+        },
+      })),
+    };
+    const parsed = parseBundleMetadata(JSON.stringify(volume));
+    expect(parsed.variables).toHaveLength(33);
+    expect(parsed.variables.map((variable) => variable.parameter?.scaledValueOfFirstFixedSurface)).toEqual(levels);
+    expect(parsed.variables.map((variable) => variable.numericId)).toEqual(levels.map((_, index) => index + 1));
+    // No renderer knows the volume yet: neither the first two levels as a
+    // component pair nor any three as a composite, so the shell draws the
+    // first level as an unlabelled scalar (and the bundle id names no
+    // family the convention describes).
+    expect(identifyBundle(parsed.variables)).toBeNull();
+    expect(identifyBundle(parsed.variables.slice(0, 2))).toBeNull();
+    expect(identifyBundle(parsed.variables.slice(0, 3))).toBeNull();
+    expect(identityForBundleId("refl3d")).toBeNull();
   });
 
   it("ties the parameter block to schema version 3", () => {

@@ -109,6 +109,8 @@ const MODEL_ALIASES: Record<string, ForecastModelId> = {
   gefsaerosols: "gefsaero",
   "gefs-chem": "gefsaero",
   mrms: "mrms",
+  mrms3d: "mrms3d",
+  "mrms-3d": "mrms3d",
   jma: "jma",
   hrpns: "jma",
   cma: "cma",

@@ -25,6 +25,7 @@ export type ForecastModelId =
   | "gefsaero"
   | "cma"
   | "mrms"
+  | "mrms3d"
   | "jma"
   | "himawari"
   | "goeseast"
@@ -201,6 +202,23 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
     railCore: ["cref", "prate"],
     region: [-130, 20, -60, 55],
   },
+  // The same NOAA mosaic's 3D reflectivity: 33 constant-altitude levels
+  // (0.5 to 19 km above mean sea level) of one ten-minute scan each, in
+  // one `refl3d` bundle thinned to 0.05°. A dataset of its own, with its
+  // own rolling window and pointer. Not in the model sheet (index.html has
+  // no button for it) until a volume renderer exists: only `?model=mrms3d`
+  // opens it, and the shell draws the bundle's lowest level meanwhile.
+  mrms3d: {
+    id: "mrms3d",
+    label: "NOAA-MRMS3D",
+    product: "conus-refl3d",
+    latestFilename: "latest-mrms3d.json",
+    observation: true,
+    coreBundles: ["refl3d"],
+    defaultVariable: "refl3d",
+    railCore: ["refl3d"],
+    region: [-130, 20, -60, 55],
+  },
   // JMA 高解像度降水ナウキャスト, the Japan Meteorological Agency's
   // precipitation nowcast analysis: precipitation intensity classes every
   // five minutes, decoded by the encoder from the agency's map tiles onto
@@ -354,10 +372,12 @@ export function isNowcastModel(model: ForecastModelId): boolean {
   return FORECAST_MODELS[model].leadsClock === true;
 }
 
-/** The model switch's entries, in order: the eight forecasts, the eight
- * rolling observation windows (MRMS, the JMA nowcast, the CMA mosaic, the
- * four geostationary imagers and the SWPC aurora probability) and the
- * geostationary mosaic, a view over the imagers with no feed of its own. */
+/** The datasets in the model switch's order: the eight forecasts, the nine
+ * rolling observation windows (MRMS and its 3D volume, the JMA nowcast, the
+ * CMA mosaic, the four geostationary imagers and the SWPC aurora
+ * probability) and the geostationary mosaic, a view over the imagers with
+ * no feed of its own. The switch offers the ones index.html has a button
+ * for, which leaves out the MRMS volume until it has a renderer. */
 export const FORECAST_MODEL_IDS: readonly ForecastModelId[] = [
   "gfs",
   "sflux",
@@ -368,6 +388,7 @@ export const FORECAST_MODEL_IDS: readonly ForecastModelId[] = [
   "hrrr",
   "gefsaero",
   "mrms",
+  "mrms3d",
   "jma",
   "cma",
   "himawari",
