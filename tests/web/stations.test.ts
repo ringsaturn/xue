@@ -77,7 +77,12 @@ function copy<T>(value: T): T {
 describe("the station product schemas", () => {
   it("accepts the committed sounding golden", () => {
     const pointer = parseSoundingPointer(soundingPointerJson);
-    expect(pointer.path).toBe("sounding.2026091402/index.json");
+    expect(pointer.path).toBe("sounding/2026/09/14/sounding.2026091402/index.json");
+    // Issues published before the archive tree sat directly under the root.
+    const flat = { ...soundingPointerJson, path: "sounding.2026091402/index.json" };
+    expect(parseSoundingPointer(flat).path).toBe(flat.path);
+    const misfiled = { ...soundingPointerJson, path: "sounding/2026/10/14/sounding.2026091402/index.json" };
+    expect(() => parseSoundingPointer(misfiled)).toThrow();
     expect(soundingIndex.soundings.path).toBe("soundings.jsonl");
     expect(soundingIndex.stations.length).toBeGreaterThan(0);
     const first = soundingIndex.stations[0]!;

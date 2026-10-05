@@ -669,9 +669,18 @@ def main(argv: list[str] | None = None) -> int:
         elif arguments.command == "stac" and arguments.product is not None:
             if arguments.issue is None:
                 raise XueError(f"stac --product {arguments.product} needs the issue it describes: --issue YYYYMMDDHH")
-            index_path = arguments.output_dir / f"{arguments.product}.{arguments.issue}" / "index.json"
-            if not index_path.is_file():
-                raise XueError(f"no index at {index_path}")
+            # The hourly products file an issue under its year, month and day;
+            # an issue built before that layout sits flat under the root.
+            flat = arguments.output_dir / f"{arguments.product}.{arguments.issue}" / "index.json"
+            candidates = [flat]
+            if arguments.product in ("tc", "sounding"):
+                issue = arguments.issue
+                candidates.insert(
+                    0, arguments.output_dir / arguments.product / issue[:4] / issue[4:6] / issue[6:8] / flat.parent.name / "index.json"
+                )
+            index_path = next((path for path in candidates if path.is_file()), None)
+            if index_path is None:
+                raise XueError(f"no index at {candidates[0]}")
             print(
                 json.dumps(
                     write_point_product_documents(

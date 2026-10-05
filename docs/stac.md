@@ -183,7 +183,10 @@ the catalog, `item` and `latest-version` to the live Item beside it,
 `describedby` to the product's document, and the `license` links.
 `xue:live` repeats the Item id and `xue:pointer` the pointer's file name.
 
-`<product>.<issue>/item.json`. Id: the directory
+the issue directory's `item.json`: `sounding/2026/09/14/sounding.2026091402/`,
+`tc/2026/09/13/tc.2026091301/`, `airport.202609161430/` (the airport
+rounds stay flat; an hourly issue published before the archive tree sits
+flat too). Id: the directory's own name
 (`sounding.2026091402`, `airport.202609161430`, `tc.2026091301`).
 Extensions: [file v2.1.0](https://github.com/stac-extensions/file) alone —
 a point product is a set of stations, not a cube, and declares no
@@ -229,9 +232,9 @@ whole file still streams. Assets carry `xue:kind` (`index`, `series`,
 `storm`), and a storm's also `xue:level` and `xue:basin`.
 
 The live Item at `<product>/item.json` is that Item relocated
-(`relocate_item`), every href reaching into `../<product>.<issue>/`, so
+(`relocate_item`), every href reaching into the issue directory, so
 the URL a client bookmarks still resolves after the issue it named is
-pruned — two days for the soundings and the tracks, three hours for the
+pruned — seven days for the soundings and the tracks, three hours for the
 airport rounds.
 An issue whose build withheld the pointer (no gateway contributed, both
 observation sources failed) gets its own Item and nothing else: the

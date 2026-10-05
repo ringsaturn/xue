@@ -57,7 +57,10 @@ const ICAO = /^[A-Z0-9]{2,4}$/;
 /** A gateway id (`jp-jma-gts-to-wis2`) or a native WIS2 topic source
  * (`wis2:jp-jma`), and the airport product's own (`awc-metars`). */
 const SOURCE_ID = /^[a-z][a-z0-9]*(?:[.:-][a-z0-9]+)*$/;
-const SOUNDING_PATH = /^sounding\.\d{10}\/index\.json$/;
+/** `sounding/YYYY/MM/DD/sounding.<hour>/index.json`, or the flat
+ * `sounding.<hour>/index.json` issues were published under before. */
+const SOUNDING_PATH =
+  /^(?:sounding\/(\d{4})\/(\d{2})\/(\d{2})\/sounding\.\1\2\3\d{2}|sounding\.\d{10})\/index\.json$/;
 const AIRPORT_PATH = /^airport\.\d{12}\/index\.json$/;
 
 const FLIGHT_CATEGORIES = ["VFR", "MVFR", "IFR", "LIFR"] as const;

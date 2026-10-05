@@ -30,6 +30,12 @@ soundings (`xuebuild/sounding/`). Schemas are normative in
   `tests/prepare_<product>_golden.py`. tc and sounding need `bufr_dump`.
 - **Upload** payload → index → pointer (`make upload-r2-<product>`);
   `prune-r2-<product>` trims old issues.
+- **Layout.** tc and sounding file an issue under its UTC day,
+  `<product>/YYYY/MM/DD/<product>.<hour>/` (`pointproduct.archive_directory`,
+  `point_dir` in `mk/products.mk`), so retention can grow to years without
+  a flat root of thousands of prefixes; the airport rounds stay flat. Every
+  validator, the STAC Item and the prune still accept the flat
+  `<product>.<hour>/` the issues were published under before.
 
 ## Tropical cyclones
 

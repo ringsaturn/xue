@@ -22,15 +22,20 @@ pointers (`latest.json`, `latest-<model>.json`), `latest-tc.json` and
 
   ```json
   {"schemaVersion": 1, "product": "sounding", "issued": "2026-09-14T02:00:00Z",
-   "path": "sounding.2026091402/index.json", "byteLength": 6569, "crc32": "c07d6fe2"}
+   "path": "sounding/2026/09/14/sounding.2026091402/index.json", "byteLength": 6569, "crc32": "c07d6fe2"}
   ```
 
   `path` is relative to the pointer and always
-  `sounding.<issued hour>/index.json`; `byteLength` and `crc32` (zlib
+  `sounding/<YYYY>/<MM>/<DD>/sounding.<issued hour>/index.json`, the date
+  being the issued hour's. A pointer written before that layout names the
+  flat `sounding.<issued hour>/index.json`, and a reader accepts both.
+  `byteLength` and `crc32` (zlib
   CRC32 of the file's bytes, eight lowercase hex digits) are the index's,
   so it can be requested as `<path>?v=<crc32>` through an immutable cache.
-- `sounding.<YYYYMMDDHH>/` is one immutable directory per issue: the UTC
-  hour the product was aggregated at, not any sounding's nominal time. It
+- `sounding/<YYYY>/<MM>/<DD>/sounding.<YYYYMMDDHH>/` is one immutable
+  directory per issue, filed under its UTC day so the archive can be kept
+  for years without any listing level growing past a few dozen prefixes.
+  The hour is the UTC hour the product was aggregated at, not any sounding's nominal time. It
   holds the product's two files, `index.json` and `soundings.jsonl`, and
   beside them `item.json`, the issue's STAC Item — a pure function of the
   index, read by a catalog client and by nothing in the product
@@ -38,7 +43,7 @@ pointers (`latest.json`, `latest-<model>.json`), `latest-tc.json` and
   pointer names it nothing in it changes; a manual rebuild of an hour
   (`sounding-build --issue … --force`) writes the directory again, and
   both files are addressed by their CRC, so a cache never serves one
-  hour's bytes under another's key. Directories are pruned after two days
+  hour's bytes under another's key. Directories are pruned after seven days
   (`make prune-r2-sounding`).
 - `soundings.jsonl` is every station's soundings, one JSON object per
   line, sorted by station id. `index.json` spans it: the `soundings`

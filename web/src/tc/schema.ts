@@ -130,7 +130,10 @@ export interface TcStorm {
 const ATCF_ID = /^[A-Z]{2}\d{6}$/;
 const SYNTHETIC_ID = /^x-[a-z]{2}-\d{10}-\d+$/;
 const KEY = /^[a-z][a-z0-9]*$/;
-const TC_PATH = /^tc\.\d{10}\/index\.json$/;
+/** `tc/YYYY/MM/DD/tc.<hour>/index.json`, or the flat `tc.<hour>/index.json`
+ * issues were published under before. */
+const TC_PATH =
+  /^(?:tc\/(\d{4})\/(\d{2})\/(\d{2})\/tc\.\1\2\3\d{2}|tc\.\d{10})\/index\.json$/;
 
 function isTcStormId(value: unknown): value is string {
   return (

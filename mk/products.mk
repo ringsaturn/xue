@@ -6,21 +6,27 @@
 # ISSUE=YYYYMMDDHH for tc and sounding; airport takes ROUND=YYYYMMDDHHMM.
 ISSUE ?= now
 AIRPORT_ROUND = $(if $(ROUND),$(ROUND),now)
-TC_KEEP ?= 48
+TC_KEEP ?= 168
 AIRPORT_KEEP ?= 18
-SOUNDING_KEEP ?= 48
+SOUNDING_KEEP ?= 168
 
 .PHONY: tc-build live-tc-index upload-r2-tc prune-r2-tc airport-build live-airport-index upload-r2-airport prune-r2-airport sounding-build live-sounding-index upload-r2-sounding prune-r2-sounding
+
+# $(call point_dir,product,id): an issue's directory under the data root.
+# The hourly products file it under its day, <product>/YYYY/MM/DD/<product>.<id>,
+# so the archive can grow for years; the airport's rounds stay flat.
+point_dir = $(if $(filter tc sounding,$(1)),$(1)/$(shell printf '%s' '$(2)' | cut -c1-4)/$(shell printf '%s' '$(2)' | cut -c5-6)/$(shell printf '%s' '$(2)' | cut -c7-8)/$(1).$(2),$(1).$(2))
 
 # $(call point_pointer_check,product,id,noun,pass hint,why no pointer): the
 # pointer on disk must name this issue and carry its index's CRC32.
 define point_pointer_check
 [ "$(2)" != "now" ] || { echo "$(4)"; exit 1; }; \
-	dir=web/public/data/$(1).$(2); \
+	rel=$(call point_dir,$(1),$(2)); \
+	dir=web/public/data/$$rel; \
 	[ -f "$$dir/index.json" ] || { echo "no built $(1) $(3) at $$dir"; exit 1; }; \
 	[ -f web/public/data/latest-$(1).json ] || { echo "no latest-$(1).json: the build withheld the pointer ($(5))"; exit 1; }; \
 	pointer_path=$$(jq -r .path web/public/data/latest-$(1).json); \
-	[ "$$pointer_path" = "$(1).$(2)/index.json" ] || { echo "latest-$(1).json names $$pointer_path, not $(1).$(2)"; exit 1; }; \
+	[ "$$pointer_path" = "$$rel/index.json" ] || { echo "latest-$(1).json names $$pointer_path, not $$rel"; exit 1; }; \
 	pointer_crc=$$(jq -r .crc32 web/public/data/latest-$(1).json); \
 	index_crc=$$($(CRC32) $$dir/index.json); \
 	[ "$$pointer_crc" = "$$index_crc" ] || { echo "latest-$(1).json carries CRC32 $$pointer_crc but $$dir/index.json is $$index_crc"; exit 1; }
@@ -37,19 +43,19 @@ define point_upload_ndjson
 @set -e; \
 	$(call point_pointer_check,$(1),$(2),$(4),$(5),$(6)); \
 	$(3)=$$(jq -r .$(3).path $$dir/index.json); \
-	$(S3) cp $$dir/$$$(3) $(R2_ROOT)/$(1).$(2)/$$$(3) --no-progress $(DRY_RUN) \
+	$(S3) cp $$dir/$$$(3) $(R2_ROOT)/$$rel/$$$(3) --no-progress $(DRY_RUN) \
 		--content-type application/x-ndjson --cache-control "public, max-age=31536000, immutable"; \
-	$(S3) cp $$dir/index.json $(R2_ROOT)/$(1).$(2)/index.json --no-progress $(DRY_RUN) \
+	$(S3) cp $$dir/index.json $(R2_ROOT)/$$rel/index.json --no-progress $(DRY_RUN) \
 		--content-type application/json --cache-control "public, max-age=31536000, immutable"; \
-	[ ! -f "$$dir/$(STAC_ITEM)" ] || $(S3) cp $$dir/$(STAC_ITEM) $(R2_ROOT)/$(1).$(2)/$(STAC_ITEM) \
+	[ ! -f "$$dir/$(STAC_ITEM)" ] || $(S3) cp $$dir/$(STAC_ITEM) $(R2_ROOT)/$$rel/$(STAC_ITEM) \
 		--no-progress $(DRY_RUN) --content-type application/geo+json --cache-control "no-cache"; \
 	[ -n "$(DRY_RUN)" ] || { \
 		$(3)_bytes=$$(wc -c < "$$dir/$$$(3)" | tr -d ' '); \
 		index_bytes=$$(wc -c < "$$dir/index.json" | tr -d ' '); \
-		remote_$(3)=$$($(call r2_size,$(1).$(2)/$$$(3))); \
-		remote_index=$$($(call r2_size,$(1).$(2)/index.json)); \
-		[ "$$remote_$(3)" = "$$$(3)_bytes" ] || { echo "$(1).$(2)/$$$(3) is '$$remote_$(3)' bytes on R2, not $$$(3)_bytes; the pointer stays put"; exit 1; }; \
-		[ "$$remote_index" = "$$index_bytes" ] || { echo "$(1).$(2)/index.json is '$$remote_index' bytes on R2, not $$index_bytes; the pointer stays put"; exit 1; }; \
+		remote_$(3)=$$($(call r2_size,$$rel/$$$(3))); \
+		remote_index=$$($(call r2_size,$$rel/index.json)); \
+		[ "$$remote_$(3)" = "$$$(3)_bytes" ] || { echo "$$rel/$$$(3) is '$$remote_$(3)' bytes on R2, not $$$(3)_bytes; the pointer stays put"; exit 1; }; \
+		[ "$$remote_index" = "$$index_bytes" ] || { echo "$$rel/index.json is '$$remote_index' bytes on R2, not $$index_bytes; the pointer stays put"; exit 1; }; \
 		echo "verified $$$(3) ($$$(3)_bytes bytes) and index.json ($$index_bytes bytes) on R2"; \
 	}; \
 	echo "Uploading latest-$(1).json (takes $(1) $(4) $(2) live)..."; \
@@ -87,18 +93,32 @@ endef
 
 # $(call point_prune,product,keep,noun): delete directories beyond the newest
 # <keep>, never the one the live pointer names; no pointer, nothing to prune.
+# The candidates are the flat <product>.<id> directories under the root and
+# those under <product>/YYYY/MM/DD/, ranked by their own name. A nested listing
+# that fails only hides candidates, and a hidden one is neither deleted nor
+# pushes a listed one past <keep>.
 define point_prune
 @set -e; \
-	live=$$($(S3) cp $(R2_ROOT)/latest-$(1).json - --only-show-errors 2>/dev/null | jq -r .path | cut -d/ -f1 || true); \
+	live=$$($(S3) cp $(R2_ROOT)/latest-$(1).json - --only-show-errors 2>/dev/null | jq -r .path || true); \
+	live=$${live%/index.json}; \
 	[ -n "$$live" ] || { echo "no live $(1) pointer, nothing to prune"; exit 0; }; \
 	echo "live $(1) $(3): $$live"; \
 	listing=$$($(S3) ls $(R2_ROOT)/) \
 		|| { echo "listing the bucket failed, refusing to prune"; exit 1; }; \
-	for $(3) in $$(printf '%s\n' "$$listing" | awk '/ PRE /{print $$2}' \
-		| sed 's:/$$::' | grep "^$(1)\." | sort -r | tail -n +$$(($(2) + 1))); do \
-		if [ "$$$(3)" != "$$live" ]; then \
-			echo "Deleting $$$(3)..."; \
-			$(S3) rm $(R2_ROOT)/$$$(3)/ --recursive --only-show-errors $(DRY_RUN); \
+	directories=$$(printf '%s\n' "$$listing" | awk '/ PRE /{print $$2}' | sed 's:/$$::' | grep "^$(1)\." || true); \
+	for year in $$($(S3) ls $(R2_ROOT)/$(1)/ 2>/dev/null | awk '/ PRE [0-9][0-9][0-9][0-9]\/$$/{print $$2}' | sed 's:/$$::'); do \
+		for month in $$($(S3) ls $(R2_ROOT)/$(1)/$$year/ 2>/dev/null | awk '/ PRE [0-9][0-9]\/$$/{print $$2}' | sed 's:/$$::'); do \
+			for day in $$($(S3) ls $(R2_ROOT)/$(1)/$$year/$$month/ 2>/dev/null | awk '/ PRE [0-9][0-9]\/$$/{print $$2}' | sed 's:/$$::'); do \
+				directories="$$directories $$($(S3) ls $(R2_ROOT)/$(1)/$$year/$$month/$$day/ 2>/dev/null | awk '/ PRE /{print $$2}' \
+					| sed 's:/$$::' | grep "^$(1)\." | sed "s:^:$(1)/$$year/$$month/$$day/:" || true)"; \
+			done; \
+		done; \
+	done; \
+	for directory in $$(for candidate in $$directories; do printf '%s %s\n' "$${candidate##*/}" "$$candidate"; done \
+		| sort -r | tail -n +$$(($(2) + 1)) | cut -d' ' -f2); do \
+		if [ "$$directory" != "$$live" ]; then \
+			echo "Deleting $$directory..."; \
+			$(S3) rm $(R2_ROOT)/$$directory/ --recursive --only-show-errors $(DRY_RUN); \
 		fi; \
 	done
 endef
@@ -122,14 +142,14 @@ live-tc-index: ## Pull the live tc pointer and index
 upload-r2-tc: ## Upload a tc issue, then take it live
 	@set -e; \
 	$(call point_pointer_check,tc,$(ISSUE),issue,pass ISSUE=YYYYMMDDHH,no source contributed); \
-	$(S3) cp $$dir $(R2_ROOT)/tc.$(ISSUE)/ --recursive --no-progress $(DRY_RUN) --exclude "$(STAC_ITEM)" \
+	$(S3) cp $$dir $(R2_ROOT)/$$rel/ --recursive --no-progress $(DRY_RUN) --exclude "$(STAC_ITEM)" \
 		--content-type application/json --cache-control "public, max-age=31536000, immutable"; \
-	[ ! -f "$$dir/$(STAC_ITEM)" ] || $(S3) cp $$dir/$(STAC_ITEM) $(R2_ROOT)/tc.$(ISSUE)/$(STAC_ITEM) \
+	[ ! -f "$$dir/$(STAC_ITEM)" ] || $(S3) cp $$dir/$(STAC_ITEM) $(R2_ROOT)/$$rel/$(STAC_ITEM) \
 		--no-progress $(DRY_RUN) --content-type application/geo+json --cache-control "no-cache"; \
 	[ -n "$(DRY_RUN)" ] || { \
 		index_bytes=$$(wc -c < "$$dir/index.json" | tr -d ' '); \
-		remote_index=$$($(call r2_size,tc.$(ISSUE)/index.json)); \
-		[ "$$remote_index" = "$$index_bytes" ] || { echo "tc.$(ISSUE)/index.json is '$$remote_index' bytes on R2, not $$index_bytes; the pointer stays put"; exit 1; }; \
+		remote_index=$$($(call r2_size,$$rel/index.json)); \
+		[ "$$remote_index" = "$$index_bytes" ] || { echo "$$rel/index.json is '$$remote_index' bytes on R2, not $$index_bytes; the pointer stays put"; exit 1; }; \
 		echo "verified index.json ($$index_bytes bytes) on R2"; \
 	}; \
 	echo "Uploading latest-tc.json (takes tc issue $(ISSUE) live)..."; \

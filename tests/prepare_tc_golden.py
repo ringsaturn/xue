@@ -25,7 +25,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from xuebuild.tc.build import build_product
-from xuebuild.tc.schema import parse_issue
+from xuebuild.tc.schema import issue_directory, parse_issue
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "tc"
 ISSUE = "2026091206"
@@ -59,7 +59,7 @@ def build_expected(destination: Path) -> dict[str, object]:
         if destination.exists():
             shutil.rmtree(destination)
         destination.mkdir(parents=True)
-        for path in sorted((output / f"tc.{ISSUE}").iterdir()):
+        for path in sorted((output / issue_directory(parse_issue(ISSUE))).iterdir()):
             payload = json.loads(path.read_bytes())
             (destination / path.name).write_text(pretty(payload) + "\n")
         pointer = json.loads((output / "latest-tc.json").read_bytes())

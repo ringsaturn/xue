@@ -787,13 +787,20 @@ class ValidationTests(unittest.TestCase):
 
     def test_the_pointer_names_the_issued_hour(self) -> None:
         index = encode_json({"schemaVersion": 1})
-        pointer = build_pointer(ISSUE, "sounding.2026091402/index.json", index)
+        pointer = build_pointer(ISSUE, "sounding/2026/09/14/sounding.2026091402/index.json", index)
         self.assertEqual(pointer["crc32"], crc32_hex(index))
         self.assertEqual(pointer["product"], "sounding")
-        with self.assertRaises(SoundingProductError):
-            validate_pointer({**pointer, "path": "sounding.2026091403/index.json"})
-        with self.assertRaises(SoundingProductError):
-            validate_pointer({**pointer, "path": "/sounding.2026091402/index.json"})
+        # An issue published before the archive tree sat flat under the root.
+        validate_pointer({**pointer, "path": "sounding.2026091402/index.json"})
+        for path in (
+            "sounding.2026091403/index.json",
+            "sounding/2026/09/14/sounding.2026091403/index.json",
+            "sounding/2026/10/14/sounding.2026091402/index.json",
+            "sounding/2026/09/14/sounding.2026091402/x/index.json",
+            "/sounding.2026091402/index.json",
+        ):
+            with self.assertRaises(SoundingProductError):
+                validate_pointer({**pointer, "path": path})
         with self.assertRaises(SoundingProductError):
             parse_issue("2026091402Z")
 
@@ -882,7 +889,7 @@ class GoldenBuildTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as scratch:
             output = Path(scratch)
             report = self.build(output)
-            directory = output / "sounding.2026091402"
+            directory = output / "sounding" / "2026" / "09" / "14" / "sounding.2026091402"
             self.assertEqual(
                 sorted(path.name for path in directory.iterdir()),
                 ["index.json", "item.json", SOUNDINGS_FILENAME],
@@ -918,7 +925,7 @@ class GoldenBuildTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as scratch:
             output = Path(scratch)
             self.build(output)
-            directory = output / "sounding.2026091402"
+            directory = output / "sounding" / "2026" / "09" / "14" / "sounding.2026091402"
             index = json.loads((directory / "index.json").read_bytes())
             blob = (directory / SOUNDINGS_FILENAME).read_bytes()
             descriptor = index["soundings"]
@@ -940,7 +947,7 @@ class GoldenBuildTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as scratch:
             output = Path(scratch)
             self.build(output)
-            directory = output / "sounding.2026091402"
+            directory = output / "sounding" / "2026" / "09" / "14" / "sounding.2026091402"
             index = json.loads((directory / "index.json").read_bytes())
             blob = (directory / SOUNDINGS_FILENAME).read_bytes()
             offset = 0
@@ -962,11 +969,35 @@ class GoldenBuildTests(unittest.TestCase):
         self.assertEqual(index["watermark"]["jp-jma-gts-to-wis2"], "2026-09-14T02:34:41Z")
         self.assertIsNone(index["watermark"]["de-dwd-gts-to-wis2"])
 
+    def test_a_previous_issue_in_the_flat_layout_is_carried_forward(self) -> None:
+        # The first build after the archive tree finds the live issue where
+        # it was published before it, directly under the root.
+        with tempfile.TemporaryDirectory() as scratch:
+            output = Path(scratch)
+            build_product(ISSUE, SOUNDING_FIXTURES, output, force=True, now=utc(2026, 9, 14, 2, 5))
+            archived = output / "sounding" / "2026" / "09" / "14" / "sounding.2026091402"
+            flat = output / "sounding.2026091402"
+            shutil.move(archived, flat)
+            previous = json.loads((flat / "index.json").read_bytes())
+            report = build_product(
+                parse_issue("2026091403"),
+                Path(scratch) / "empty-raw",
+                output,
+                previous_index=previous,
+                force=True,
+                now=utc(2026, 9, 14, 3, 5),
+            )
+            self.assertEqual((report["fresh"], report["copied"]), (0, 19))
+            self.assertEqual(
+                (flat / SOUNDINGS_FILENAME).read_bytes(),
+                (output / "sounding" / "2026" / "09" / "14" / "sounding.2026091403" / SOUNDINGS_FILENAME).read_bytes(),
+            )
+
     def test_an_unchanged_station_is_copied_forward_byte_for_byte(self) -> None:
         with tempfile.TemporaryDirectory() as scratch:
             output = Path(scratch)
             build_product(ISSUE, SOUNDING_FIXTURES, output, force=True, now=utc(2026, 9, 14, 2, 5))
-            previous = json.loads((output / "sounding.2026091402" / "index.json").read_bytes())
+            previous = json.loads((output / "sounding" / "2026" / "09" / "14" / "sounding.2026091402" / "index.json").read_bytes())
             later = parse_issue("2026091403")
             report = build_product(
                 later,
@@ -981,10 +1012,10 @@ class GoldenBuildTests(unittest.TestCase):
             # Nothing new arrived, so the file is rewritten identically —
             # every station's line and its span included.
             self.assertEqual(
-                (output / "sounding.2026091402" / SOUNDINGS_FILENAME).read_bytes(),
-                (output / "sounding.2026091403" / SOUNDINGS_FILENAME).read_bytes(),
+                (output / "sounding" / "2026" / "09" / "14" / "sounding.2026091402" / SOUNDINGS_FILENAME).read_bytes(),
+                (output / "sounding" / "2026" / "09" / "14" / "sounding.2026091403" / SOUNDINGS_FILENAME).read_bytes(),
             )
-            index = json.loads((output / "sounding.2026091403" / "index.json").read_bytes())
+            index = json.loads((output / "sounding" / "2026" / "09" / "14" / "sounding.2026091403" / "index.json").read_bytes())
             self.assertEqual(
                 [(e["id"], e["offset"], e["length"]) for e in index["stations"]],
                 [(e["id"], e["offset"], e["length"]) for e in previous["stations"]],
@@ -1000,7 +1031,7 @@ class GoldenBuildTests(unittest.TestCase):
             raw = Path(scratch) / "raw"
             shutil.copytree(RAW, raw / "sounding.2026091403")
             build_product(ISSUE, SOUNDING_FIXTURES, output, force=True, now=utc(2026, 9, 14, 2, 5))
-            previous = json.loads((output / "sounding.2026091402" / "index.json").read_bytes())
+            previous = json.loads((output / "sounding" / "2026" / "09" / "14" / "sounding.2026091402" / "index.json").read_bytes())
             report = build_product(
                 parse_issue("2026091403"),
                 raw,
@@ -1011,15 +1042,15 @@ class GoldenBuildTests(unittest.TestCase):
             )
             self.assertEqual((report["fresh"], report["copied"]), (19, 0))
             self.assertEqual(
-                (output / "sounding.2026091402" / SOUNDINGS_FILENAME).read_bytes(),
-                (output / "sounding.2026091403" / SOUNDINGS_FILENAME).read_bytes(),
+                (output / "sounding" / "2026" / "09" / "14" / "sounding.2026091402" / SOUNDINGS_FILENAME).read_bytes(),
+                (output / "sounding" / "2026" / "09" / "14" / "sounding.2026091403" / SOUNDINGS_FILENAME).read_bytes(),
             )
 
     def test_a_station_that_stops_reporting_drops_out_after_two_days(self) -> None:
         with tempfile.TemporaryDirectory() as scratch:
             output = Path(scratch)
             build_product(ISSUE, SOUNDING_FIXTURES, output, force=True, now=utc(2026, 9, 14, 2, 5))
-            previous = json.loads((output / "sounding.2026091402" / "index.json").read_bytes())
+            previous = json.loads((output / "sounding" / "2026" / "09" / "14" / "sounding.2026091402" / "index.json").read_bytes())
             stale = parse_issue("2026091702")
             report = build_product(
                 stale,

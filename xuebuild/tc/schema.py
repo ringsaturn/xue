@@ -22,6 +22,8 @@ from typing import Any
 from ..errors import TcProductError
 from ..pointproduct import (  # noqa: F401 — re-exported: the tc modules import them from here
     CRC32,
+    archive_directory,
+    flat_directory,
     crc32_hex,
     encode_json,
     pointer_payload,
@@ -50,8 +52,15 @@ ISSUE = re.compile(r"^\d{10}$")
 
 
 def issue_directory(issue: datetime) -> str:
-    """``tc.2026091206``: one directory per aggregation hour."""
-    return f"tc.{issue.astimezone(UTC).strftime('%Y%m%d%H')}"
+    """``tc/2026/09/12/tc.2026091206``: one directory per aggregation
+    hour, filed under its year, month and day."""
+    return archive_directory(PRODUCT, issue)
+
+
+def pointer_directories(issue: datetime) -> tuple[str, ...]:
+    """Where a pointer may name the issue: the archive tree, or the flat
+    ``tc.<hour>`` directory issues were published in before it."""
+    return (issue_directory(issue), flat_directory(PRODUCT, issue))
 
 
 def parse_issue(value: str) -> datetime:
@@ -333,7 +342,7 @@ def build_pointer(issue: datetime, index_path: str, index_bytes: bytes) -> dict[
 
 
 def validate_pointer(payload: object) -> None:
-    check_pointer(TcProductError, payload, PRODUCT, issue_directory, "tc pointer path does not name the issued hour's directory")
+    check_pointer(TcProductError, payload, PRODUCT, pointer_directories, "tc pointer path does not name the issued hour's directory")
 
 
 def read_index(path: Path) -> dict[str, Any]:

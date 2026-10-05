@@ -25,6 +25,8 @@ from typing import Any
 from ..errors import SoundingProductError
 from ..pointproduct import (  # noqa: F401 — re-exported: the sounding modules import them from here
     CRC32,
+    archive_directory,
+    flat_directory,
     crc32_hex,
     encode_json,
     iso_z,
@@ -68,8 +70,15 @@ something this validator admits."""
 
 
 def issue_directory(issue: datetime) -> str:
-    """``sounding.2026091402``: one directory per aggregation hour."""
-    return f"sounding.{issue.astimezone(UTC).strftime('%Y%m%d%H')}"
+    """``sounding/2026/09/14/sounding.2026091402``: one directory per
+    aggregation hour, filed under its year, month and day."""
+    return archive_directory(PRODUCT, issue)
+
+
+def pointer_directories(issue: datetime) -> tuple[str, ...]:
+    """Where a pointer may name the issue: the archive tree, or the flat
+    ``sounding.<hour>`` directory issues were published in before it."""
+    return (issue_directory(issue), flat_directory(PRODUCT, issue))
 
 
 def parse_issue(value: str) -> datetime:
@@ -305,7 +314,7 @@ def build_pointer(issue: datetime, index_path: str, index_bytes: bytes) -> dict[
 
 
 def validate_pointer(payload: object) -> None:
-    check_pointer(SoundingProductError, payload, PRODUCT, issue_directory, "sounding pointer path does not name the issued hour's directory")
+    check_pointer(SoundingProductError, payload, PRODUCT, pointer_directories, "sounding pointer path does not name the issued hour's directory")
 
 
 def read_index(path: Path) -> dict[str, Any]:

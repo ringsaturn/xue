@@ -354,7 +354,7 @@ def build_pointer(issued: datetime, index_path: str, index_bytes: bytes) -> dict
 
 
 def validate_pointer(payload: object) -> None:
-    check_pointer(AirportProductError, payload, PRODUCT, round_directory, "airport pointer path does not name the issued round's directory")
+    check_pointer(AirportProductError, payload, PRODUCT, lambda moment: (round_directory(moment),), "airport pointer path does not name the issued round's directory")
 
 
 def read_index(path: Path) -> dict[str, Any]:

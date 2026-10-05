@@ -132,11 +132,11 @@ withholds its pointer only when nothing contributed.
 
 ```sh
 make live-tc-index && make tc-build                  # previous index first, so ids carry over
-make upload-r2-tc ISSUE=2026091301 && make prune-r2-tc            # keeps two days
+make upload-r2-tc ISSUE=2026091301 && make prune-r2-tc            # keeps seven days
 make live-airport-index && make airport-build        # merges onto the live 24 h history
 make upload-r2-airport ROUND=202609161440 && make prune-r2-airport  # history → index → pointer; keeps three hours
 make live-sounding-index && make sounding-build      # watermark + carry-forward from the live issue
-make upload-r2-sounding ISSUE=2026091402 && make prune-r2-sounding  # keeps two days
+make upload-r2-sounding ISSUE=2026091402 && make prune-r2-sounding  # keeps seven days
 .venv/bin/python -m xuebuild tc-build --issue 2026091206 --offline --raw-dir tests/fixtures/tc
 ```
 

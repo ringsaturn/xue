@@ -2,9 +2,9 @@ name: publish tc
 
 # The tropical cyclone product (docs/tc.md): the agencies' forecasts and
 # best tracks and the models' objective tracks, aggregated once an hour
-# into an immutable tc.<issue>/ directory on R2 and taken live by the
-# mutable latest-tc.json beside the run pointers. Independent of the
-# raster publishes — nothing here reads a run, and a red run does not
+# into an immutable tc/YYYY/MM/DD/tc.<issue>/ directory on R2 and taken
+# live by the mutable latest-tc.json beside the run pointers. Independent
+# of the raster publishes — nothing here reads a run, and a red run does not
 # hold this back — and cheap: a few hundred kilobytes of text and BUFR
 # in, one job, well under two minutes.
 #
@@ -26,7 +26,7 @@ on:
       keep:
         description: "Issue directories to keep on R2 (hours)"
         type: string
-        default: "48"
+        default: "168"
       dry_run:
         description: "Build and report what would be uploaded and pruned, but write nothing to R2"
         type: boolean
@@ -53,7 +53,7 @@ jobs:
     timeout-minutes: 20
     env:
       ISSUE: ${{ inputs.issue || 'now' }}
-      TC_KEEP: ${{ inputs.keep || '48' }}
+      TC_KEEP: ${{ inputs.keep || '168' }}
       DRY_RUN: ${{ inputs.dry_run && '--dryrun' || '' }}
       FORCE: ${{ inputs.force && '--force' || '' }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -96,7 +96,7 @@ jobs:
           [ "$issue" != "now" ] || issue=$(date -u +%Y%m%d%H)
           live=""
           if [ -f web/public/data/latest-tc.json ]; then
-            live=$(jq -r .path web/public/data/latest-tc.json | sed -n 's:^tc\.\([0-9]\{10\}\)/index\.json$:\1:p')
+            live=$(jq -r .path web/public/data/latest-tc.json | sed -n 's:^\(tc/[0-9/]\{11\}\)\{0,1\}tc\.\([0-9]\{10\}\)/index\.json$:\2:p')
           fi
           if [ "$live" = "$issue" ] && [ -z "$FORCE" ]; then
             echo "tc $issue is already live; nothing to build" | tee -a "$GITHUB_STEP_SUMMARY"

@@ -28,7 +28,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from xuebuild.sounding.build import build_product
-from xuebuild.sounding.schema import parse_issue
+from xuebuild.sounding.schema import issue_directory, parse_issue
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "sounding"
 ISSUE = "2026091402"
@@ -62,7 +62,7 @@ def build_expected(destination: Path) -> dict[str, object]:
         if destination.exists():
             shutil.rmtree(destination)
         destination.mkdir(parents=True)
-        directory = output / f"sounding.{ISSUE}"
+        directory = output / issue_directory(parse_issue(ISSUE))
         # The index is pretty-printed so the golden diffs by field; the
         # soundings file is committed exactly as published, one line per
         # station, which is diff-friendly already and is the thing a

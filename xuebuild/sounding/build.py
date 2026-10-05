@@ -48,6 +48,7 @@ from .schema import (
     encode_json,
     iso_z,
     issue_directory,
+    pointer_directories,
     read_index,
     validate_index,
     validate_station_line,
@@ -214,8 +215,11 @@ def previous_directory(previous_index: dict[str, Any] | None, output_root: Path)
         issued = datetime.fromisoformat(previous_index["issued"])
     except (KeyError, TypeError, ValueError):
         return None
-    directory = output_root / issue_directory(issued)
-    return directory if directory.is_dir() else None
+    for name in pointer_directories(issued):
+        directory = output_root / name
+        if directory.is_dir():
+            return directory
+    return None
 
 
 def build_product(
@@ -228,7 +232,7 @@ def build_product(
     force: bool = False,
     now: datetime | None = None,
 ) -> dict[str, Any]:
-    """Read the issue's fetched directories, write ``sounding.<issue>/``
+    """Read the issue's fetched directories, write ``sounding/YYYY/MM/DD/sounding.<issue>/``
     under ``output_root`` and, when anything contributed, the pointer."""
     now = now or datetime.now(UTC)
     raw_directory = issue_raw_directory(raw_root, issue)

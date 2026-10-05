@@ -1288,15 +1288,20 @@ def case_item(entry: dict[str, Any], manifest: dict[str, Any], manifest_crc32: s
 
 
 def _point_product_directory(product: str, index_relative_path: str) -> str:
-    """The issue directory an index lives in (``sounding.2026091402``),
-    checked against the product it is claimed to belong to. The directory
-    name is the Item's id, the way a run's is."""
+    """The issue directory an index lives in, from the data root
+    (``sounding/2026/09/14/sounding.2026091402``, or the flat
+    ``airport.202609161430``), checked against the product it is claimed to
+    belong to. Its last component is the Item's id, the way a run's
+    directory name is."""
     path = Path(index_relative_path)
-    if path.name != INDEX_FILENAME or len(path.parts) != 2:
-        raise StacError(f"a {product} item derives from <issue>/index.json, not {index_relative_path}")
-    directory = path.parts[0]
-    if not re.fullmatch(rf"{re.escape(product)}\.\d+", directory):
-        raise StacError(f"{directory} is not a {product} issue directory")
+    product_name = re.escape(product)
+    leaf = rf"{product_name}\.(\d+)"
+    directory = path.parent.as_posix()
+    match = re.fullmatch(rf"{product_name}/(\d{{4}})/(\d{{2}})/(\d{{2}})/{leaf}", directory) or re.fullmatch(leaf, directory)
+    if path.name != INDEX_FILENAME or match is None:
+        raise StacError(f"a {product} item derives from <issue directory>/index.json, not {index_relative_path}")
+    if match.re.groups == 4 and not match.group(4).startswith(match.group(1) + match.group(2) + match.group(3)):
+        raise StacError(f"{directory} is filed under another day than its issue")
     return directory
 
 
@@ -1408,12 +1413,14 @@ def point_product_item(
     alone (``docs/stac.md`` §"Point products").
 
     ``index_relative_path`` is the index's path from the data root
-    (``tc.2026091301/index.json``) — what the product's pointer carries —
-    and its directory is the Item's id. There is no grid and no forecast
+    (``tc/2026/09/13/tc.2026091301/index.json``) — what the product's pointer
+    carries — and its directory's name is the Item's id. There is no grid and no forecast
     axis here: a point product is a set of stations, so the Item states
     where they are, what period the issue covers and which files carry
     it."""
     directory = _point_product_directory(product, index_relative_path)
+    catalog_href = posixpath.relpath(CATALOG_FILENAME, directory)
+    collection_href = posixpath.relpath(f"{product}/{COLLECTION_FILENAME}", directory)
     issued = _parse_time(index["issued"])
     positions = _point_product_positions(index, product)
     bbox = (
@@ -1449,15 +1456,15 @@ def point_product_item(
         "type": "Feature",
         "stac_version": STAC_VERSION,
         "stac_extensions": [FILE_EXTENSION],
-        "id": directory,
+        "id": posixpath.basename(directory),
         "collection": product,
         "geometry": _bbox_geometry(bbox) if bbox is not None else None,
         **({"bbox": bbox} if bbox is not None else {}),
         "properties": properties,
         "links": [
-            {"rel": "root", "href": f"../{CATALOG_FILENAME}", "type": STAC_JSON_MEDIA_TYPE},
-            {"rel": "parent", "href": f"../{product}/{COLLECTION_FILENAME}", "type": STAC_JSON_MEDIA_TYPE},
-            {"rel": "collection", "href": f"../{product}/{COLLECTION_FILENAME}", "type": STAC_JSON_MEDIA_TYPE},
+            {"rel": "root", "href": catalog_href, "type": STAC_JSON_MEDIA_TYPE},
+            {"rel": "parent", "href": collection_href, "type": STAC_JSON_MEDIA_TYPE},
+            {"rel": "collection", "href": collection_href, "type": STAC_JSON_MEDIA_TYPE},
         ],
         "assets": _point_product_assets(index, product, index_byte_length, index_crc32),
     }

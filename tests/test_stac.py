@@ -618,13 +618,13 @@ class PointProductTests(unittest.TestCase):
         )
 
     def sounding_item(self) -> dict:
-        return self.item("sounding", "sounding.2026091402", "sounding/expected/index.json")
+        return self.item("sounding", "sounding/2026/09/14/sounding.2026091402", "sounding/expected/index.json")
 
     def airport_item(self) -> dict:
         return self.item("airport", "airport.202609161440", "airport/expected/airport.202609161440/index.json")
 
     def tc_item(self) -> dict:
-        return self.item("tc", "tc.2026091206", "tc/expected/index.json")
+        return self.item("tc", "tc/2026/09/12/tc.2026091206", "tc/expected/index.json")
 
     def test_an_issue_is_an_item_of_its_product(self) -> None:
         item = self.sounding_item()
@@ -647,9 +647,9 @@ class PointProductTests(unittest.TestCase):
         self.assertNotIn("cube:dimensions", properties)
         self.assertNotIn("forecast:reference_datetime", properties)
         rels = {link["rel"]: link["href"] for link in item["links"]}
-        self.assertEqual(rels["root"], "../catalog.json")
-        self.assertEqual(rels["parent"], "../sounding/collection.json")
-        self.assertEqual(rels["collection"], "../sounding/collection.json")
+        self.assertEqual(rels["root"], "../../../../../catalog.json")
+        self.assertEqual(rels["parent"], "../../../../collection.json")
+        self.assertEqual(rels["collection"], "../../../../collection.json")
 
     def test_the_box_is_the_stations(self) -> None:
         index, _ = self.index("sounding/expected/index.json")
@@ -691,7 +691,7 @@ class PointProductTests(unittest.TestCase):
             len(encoded),
             crc32_hex(encoded),
             product="tc",
-            index_relative_path="tc.2026091206/index.json",
+            index_relative_path="tc/2026/09/12/tc.2026091206/index.json",
         )
         self.assertIsNone(item["geometry"])
         self.assertNotIn("bbox", item)
@@ -749,15 +749,38 @@ class PointProductTests(unittest.TestCase):
 
     def test_an_index_elsewhere_is_not_an_issue(self) -> None:
         index, encoded = self.index("tc/expected/index.json")
-        for path in ("index.json", "tc.2026091206/1455/index.json", "sounding.2026091402/index.json"):
+        for path in (
+            "index.json",
+            "tc.2026091206/1455/index.json",
+            "sounding.2026091402/index.json",
+            "tc/2026/10/12/tc.2026091206/index.json",
+            "tc/2026/09/tc.2026091206/index.json",
+            "sounding/2026/09/12/tc.2026091206/index.json",
+        ):
             with self.subTest(path=path), self.assertRaises(stac.StacError):
                 stac.point_product_item(
                     index, len(encoded), crc32_hex(encoded), product="tc", index_relative_path=path
                 )
 
+    def test_an_issue_in_the_archive_tree_links_up_to_the_root(self) -> None:
+        links = {link["rel"]: link["href"] for link in self.tc_item()["links"]}
+        self.assertEqual(links, {
+            "root": "../../../../../catalog.json",
+            "parent": "../../../../collection.json",
+            "collection": "../../../../collection.json",
+        })
+
+    def test_a_flat_issue_still_makes_an_item(self) -> None:
+        # Issues published before the archive tree sat directly under the root.
+        item = self.item("tc", "tc.2026091206", "tc/expected/index.json")
+        self.assertEqual(item["id"], "tc.2026091206")
+        links = {link["rel"]: link["href"] for link in item["links"]}
+        self.assertEqual(links["root"], "../catalog.json")
+        self.assertEqual(links["collection"], "../tc/collection.json")
+
     def test_the_collection_mirrors_the_pointer(self) -> None:
         item = self.tc_item()
-        collection = stac.point_product_collection("tc", item, "tc.2026091206/item.json")
+        collection = stac.point_product_collection("tc", item, "tc/2026/09/12/tc.2026091206/item.json")
         self.assertEqual(collection["id"], "tc")
         self.assertEqual(collection["license"], "other")
         self.assertEqual(collection["xue:live"], "tc.2026091206")
@@ -768,7 +791,7 @@ class PointProductTests(unittest.TestCase):
         links = {link["rel"]: link["href"] for link in collection["links"]}
         self.assertEqual(links["item"], "item.json")
         self.assertEqual(links["latest-version"], "item.json")
-        self.assertEqual(links["alternate"], "../tc.2026091206/item.json")
+        self.assertEqual(links["alternate"], "../tc/2026/09/12/tc.2026091206/item.json")
         self.assertEqual(links["xue:pointer"], "../latest-tc.json")
         self.assertEqual(links["root"], "../catalog.json")
         self.assertEqual(links["describedby"], "https://github.com/ringsaturn/xue/blob/main/docs/tc.md")
@@ -776,14 +799,14 @@ class PointProductTests(unittest.TestCase):
 
     def test_the_live_item_is_the_issue_item_relocated(self) -> None:
         item = self.sounding_item()
-        live = stac.relocate_item(item, from_dir="sounding.2026091402", to_dir="sounding")
+        live = stac.relocate_item(item, from_dir="sounding/2026/09/14/sounding.2026091402", to_dir="sounding")
         self.assertEqual(live["id"], item["id"])
         self.assertEqual(live["properties"], item["properties"])
-        self.assertTrue(live["assets"]["index"]["href"].startswith("../sounding.2026091402/index.json?v="))
-        self.assertEqual(live["assets"]["soundings"]["href"].split("?")[0], "../sounding.2026091402/soundings.jsonl")
+        self.assertTrue(live["assets"]["index"]["href"].startswith("2026/09/14/sounding.2026091402/index.json?v="))
+        self.assertEqual(live["assets"]["soundings"]["href"].split("?")[0], "2026/09/14/sounding.2026091402/soundings.jsonl")
         links = {link["rel"]: link["href"] for link in live["links"]}
         self.assertEqual(links, {"root": "../catalog.json", "parent": "collection.json", "collection": "collection.json"})
-        self.assertEqual(stac.relocate_item(live, from_dir="sounding", to_dir="sounding.2026091402"), item)
+        self.assertEqual(stac.relocate_item(live, from_dir="sounding", to_dir="sounding/2026/09/14/sounding.2026091402"), item)
 
     def test_the_catalog_lists_every_product(self) -> None:
         children = [link["href"] for link in stac.root_catalog()["links"] if link["rel"] == "child"]
@@ -824,8 +847,8 @@ class PointProductWritingTests(TempRoot, unittest.TestCase):
 
     def setUp(self) -> None:
         super().setUp()
-        self.index_path = self.root / "sounding.2026091402" / "index.json"
-        self.index_path.parent.mkdir()
+        self.index_path = self.root / "sounding/2026/09/14/sounding.2026091402" / "index.json"
+        self.index_path.parent.mkdir(parents=True)
         payload = json.loads((FIXTURES / "sounding/expected/index.json").read_text(encoding="utf-8"))
         self.index_path.write_bytes(encode_json(payload))
 
@@ -850,7 +873,7 @@ class PointProductWritingTests(TempRoot, unittest.TestCase):
         )
         self.assertEqual(list(written), ["item"])
         self.assertTrue(Path(written["item"]).is_file())
-        self.assertFalse((self.root / "sounding").exists())
+        self.assertFalse((self.root / "sounding" / "item.json").exists())
         self.assertFalse((self.root / "catalog.json").exists())
 
     def test_an_unknown_product_is_refused(self) -> None:
@@ -882,8 +905,8 @@ class PystacRoundTripTests(unittest.TestCase):
     def test_pystac_reads_a_point_product(self) -> None:
         root = Path(tempfile.mkdtemp(prefix="xue-stac-pystac-point-"))
         self.addCleanup(shutil.rmtree, root, True)
-        index_path = root / "tc.2026091206" / "index.json"
-        index_path.parent.mkdir()
+        index_path = root / "tc/2026/09/12/tc.2026091206" / "index.json"
+        index_path.parent.mkdir(parents=True)
         index_path.write_bytes(encode_json(json.loads((FIXTURES / "tc/expected/index.json").read_text(encoding="utf-8"))))
         stac.write_point_product_documents(root, product="tc", index_path=index_path)
         catalog = pystac.Catalog.from_file(str(root / "catalog.json"))
@@ -895,7 +918,7 @@ class PystacRoundTripTests(unittest.TestCase):
         self.assertEqual(items[0].assets["index"].media_type, stac.JSON_MEDIA_TYPE)
         self.assertEqual(
             items[0].assets["index"].get_absolute_href().split("?")[0],
-            str(root / "tc.2026091206" / "index.json"),
+            str(root / "tc/2026/09/12/tc.2026091206" / "index.json"),
         )
 
 

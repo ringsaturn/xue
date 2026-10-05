@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import logging
 import math
+import posixpath
 import re
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -81,6 +82,22 @@ def pointer_shape_error(payload: object, product: str) -> str | None:
     return None
 
 
+def archive_directory(product: str, issue: datetime) -> str:
+    """``sounding/2026/09/14/sounding.2026091402``: an hourly issue's
+    directory under its product's year, month and day, so the archive can
+    grow for years with every listing level a few dozen prefixes wide. The leaf keeps the
+    product and the hour, so a directory copied anywhere still says what
+    it is."""
+    hour = issue.astimezone(UTC)
+    return f"{product}/{hour:%Y}/{hour:%m}/{hour:%d}/{product}.{hour:%Y%m%d%H}"
+
+
+def flat_directory(product: str, issue: datetime) -> str:
+    """``sounding.2026091402``: the layout an hourly issue was published in
+    before the archive tree. Pointers and Items naming it stay readable."""
+    return f"{product}.{issue.astimezone(UTC):%Y%m%d%H}"
+
+
 def parse_issue_hour(error: ProductError, value: str) -> datetime:
     """``2026091206`` → that UTC hour: the issue id of the hourly products."""
     if not ISSUE_HOUR.match(value):
@@ -145,16 +162,21 @@ def check_sources(
 
 
 def check_pointer(
-    error: ProductError, payload: object, product: str, directory: Callable[[datetime], str], mismatch: str
+    error: ProductError,
+    payload: object,
+    product: str,
+    directories: Callable[[datetime], tuple[str, ...]],
+    mismatch: str,
 ) -> None:
     """The shared pointer checks, then the product's path rule: the path
-    names the directory of the issue it says it is (``mismatch`` if not)."""
+    names one of the directories the issue it says it is may live in
+    (``mismatch`` if not)."""
     message = pointer_shape_error(payload, product)
     if message is not None:
         raise error(message)
     assert isinstance(payload, dict)
     issued = check_time(error, payload.get("issued"), "pointer.issued")
-    if Path(payload["path"]).parts[0] != directory(issued):
+    if posixpath.dirname(payload["path"]) not in directories(issued):
         raise error(mismatch)
 
 

@@ -69,7 +69,7 @@ describe("the tropical cyclone registry", () => {
 describe("the product schema", () => {
   it("accepts the committed golden", () => {
     const pointer = validateTcPointer(expectedPointer);
-    expect(pointer.path).toBe("tc.2026091206/index.json");
+    expect(pointer.path).toBe("tc/2026/09/12/tc.2026091206/index.json");
     const index = validateTcIndex(expectedIndex);
     expect(index.storms.map((storm) => storm.id)).toEqual([
       "EP142026",
@@ -87,6 +87,22 @@ describe("the product schema", () => {
     ]);
     expect(isTcEnsemble(storm.models.gefs!)).toBe(true);
     expect(isTcEnsemble(storm.models.gfs!)).toBe(false);
+  });
+
+  it("admits a flat issue path and refuses a misfiled one", () => {
+    // Issues published before the archive tree sat directly under the root.
+    expect(
+      validateTcPointer({
+        ...expectedPointer,
+        path: "tc.2026091206/index.json",
+      }).path,
+    ).toBe("tc.2026091206/index.json");
+    for (const path of [
+      "tc/2026/10/12/tc.2026091206/index.json",
+      "tc/2026/09/tc.2026091206/index.json",
+      "sounding/2026/09/12/sounding.2026091206/index.json",
+    ])
+      expect(() => validateTcPointer({ ...expectedPointer, path })).toThrow();
   });
 
   it("rejects a newer schema and malformed shapes, and admits unknown keys", () => {

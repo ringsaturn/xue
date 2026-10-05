@@ -491,7 +491,7 @@ def build_product(
     force: bool = False,
     now: datetime | None = None,
 ) -> dict[str, Any]:
-    """Read the issue's fetched directories, write ``tc.<issue>/`` under
+    """Read the issue's fetched directories, write ``tc/YYYY/MM/DD/tc.<issue>/`` under
     ``output_root`` and, when anything contributed, the pointer."""
     now = now or datetime.now(UTC)
     raw_directory = issue_raw_directory(raw_root, issue)

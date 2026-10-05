@@ -2,8 +2,8 @@ name: publish sounding
 
 # The radiosonde sounding product (docs/sounding.md): the TEMP bulletins
 # the two GTS→WIS2 gateways republish, aggregated once an hour into an
-# immutable sounding.<issue>/ directory on R2 and taken live by the
-# mutable latest-sounding.json beside the run pointers. Independent of
+# immutable sounding/YYYY/MM/DD/sounding.<issue>/ directory on R2 and
+# taken live by the mutable latest-sounding.json beside the run pointers. Independent of
 # the raster publishes — nothing here reads a run, and a red run does not
 # hold this back — and cheap: two bucket listings, a few dozen small BUFR
 # files and a few hundred bufr_dump calls, one job, one to three minutes.
@@ -28,7 +28,7 @@ on:
       keep:
         description: "Issue directories to keep on R2 (hours)"
         type: string
-        default: "48"
+        default: "168"
       dry_run:
         description: "Build and report what would be uploaded and pruned, but write nothing to R2"
         type: boolean
@@ -56,7 +56,7 @@ jobs:
     timeout-minutes: 45
     env:
       ISSUE: ${{ inputs.issue || 'now' }}
-      SOUNDING_KEEP: ${{ inputs.keep || '48' }}
+      SOUNDING_KEEP: ${{ inputs.keep || '168' }}
       DRY_RUN: ${{ inputs.dry_run && '--dryrun' || '' }}
       FORCE: ${{ inputs.force && '--force' || '' }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -100,7 +100,7 @@ jobs:
           [ "$issue" != "now" ] || issue=$(date -u +%Y%m%d%H)
           live=""
           if [ -f web/public/data/latest-sounding.json ]; then
-            live=$(jq -r .path web/public/data/latest-sounding.json | sed -n 's:^sounding\.\([0-9]\{10\}\)/index\.json$:\1:p')
+            live=$(jq -r .path web/public/data/latest-sounding.json | sed -n 's:^\(sounding/[0-9/]\{11\}\)\{0,1\}sounding\.\([0-9]\{10\}\)/index\.json$:\2:p')
           fi
           if [ "$live" = "$issue" ] && [ -z "$FORCE" ]; then
             echo "sounding $issue is already live; nothing to build" | tee -a "$GITHUB_STEP_SUMMARY"

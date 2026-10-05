@@ -21,14 +21,18 @@ pointers (`latest.json`, `latest-<model>.json`) and `showcase.json`.
 
   ```json
   {"schemaVersion": 1, "product": "tc", "issued": "2026-09-13T01:00:00Z",
-   "path": "tc.2026091301/index.json", "byteLength": 15930, "crc32": "5ca38836"}
+   "path": "tc/2026/09/13/tc.2026091301/index.json", "byteLength": 15930, "crc32": "5ca38836"}
   ```
 
-  `path` is relative to the pointer and always `tc.<issued hour>/index.json`;
-  `byteLength` and `crc32` (zlib CRC32 of the file's bytes, eight lowercase
+  `path` is relative to the pointer and always
+  `tc/<YYYY>/<MM>/<DD>/tc.<issued hour>/index.json`, the date being the
+  issued hour's. A pointer written before that layout names the flat
+  `tc.<issued hour>/index.json`, and a reader accepts both. `byteLength` and `crc32` (zlib CRC32 of the file's bytes, eight lowercase
   hex digits) are the index's, so it can be requested as `<path>?v=<crc32>`
   through an immutable cache.
-- `tc.<YYYYMMDDHH>/` is one immutable directory per issue: the UTC hour the
+- `tc/<YYYY>/<MM>/<DD>/tc.<YYYYMMDDHH>/` is one immutable directory per
+  issue, filed under its UTC day so the archive can be kept for years
+  without any listing level growing past a few dozen prefixes. The hour is the UTC hour the
   product was aggregated at, not any centre's issue time. It holds
   `index.json` and one `<storm id>.json` per system, and beside them
   `item.json`, the issue's STAC Item — a pure function of the index, read
@@ -37,7 +41,7 @@ pointers (`latest.json`, `latest-<model>.json`) and `showcase.json`.
   it nothing in it changes; a manual rebuild of an hour (`tc-build --issue
   … --force`) writes the directory again, and every file is addressed by
   its CRC, so a cache never serves one hour's bytes under another's key.
-  Directories are pruned after two days (`make prune-r2-tc`).
+  Directories are pruned after seven days (`make prune-r2-tc`).
 - Paths inside `index.json` are file names beside it; request each as
   `<name>?v=<crc32>` with the CRC the index carries.
 

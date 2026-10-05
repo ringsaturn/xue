@@ -513,12 +513,19 @@ class SchemaTests(unittest.TestCase):
 
     def test_pointer(self) -> None:
         index = encode_json({"schemaVersion": 1})
-        pointer = build_pointer(ISSUE, "tc.2026091206/index.json", index)
+        pointer = build_pointer(ISSUE, "tc/2026/09/12/tc.2026091206/index.json", index)
         self.assertEqual(pointer["crc32"], crc32_hex(index))
-        with self.assertRaises(TcProductError):
-            validate_pointer({**pointer, "path": "tc.2026091207/index.json"})
-        with self.assertRaises(TcProductError):
-            validate_pointer({**pointer, "path": "/tc.2026091206/index.json"})
+        # An issue published before the archive tree sat flat under the root.
+        validate_pointer({**pointer, "path": "tc.2026091206/index.json"})
+        for path in (
+            "tc.2026091207/index.json",
+            "tc/2026/09/12/tc.2026091207/index.json",
+            "tc/2026/10/12/tc.2026091206/index.json",
+            "tc/2026/09/12/tc.2026091206/x/index.json",
+            "/tc.2026091206/index.json",
+        ):
+            with self.assertRaises(TcProductError):
+                validate_pointer({**pointer, "path": path})
         with self.assertRaises(TcProductError):
             parse_issue("2026091206Z")
 
@@ -534,7 +541,7 @@ class GoldenBuildTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as scratch:
             output = Path(scratch)
             report = build_product(ISSUE, TC_FIXTURES, output, force=True, now=utc(2026, 9, 12, 7, 5))
-            directory = output / "tc.2026091206"
+            directory = output / "tc" / "2026" / "09" / "12" / "tc.2026091206"
             built = {path.name: json.loads(path.read_bytes()) for path in directory.iterdir()}
             expected = {
                 path.name: json.loads(path.read_text(encoding="utf-8"))
@@ -579,7 +586,7 @@ class GoldenBuildTests(unittest.TestCase):
             self.assertEqual(statuses["nhc"]["error"], "HTTP 503")
             self.assertEqual(statuses["ecmwfens"]["error"], "not fetched")
             self.assertTrue(statuses["jtwc"]["ok"])
-            storm = json.loads((output / "tc.2026091207" / "EP142026.json").read_bytes())
+            storm = json.loads((output / "tc" / "2026" / "09" / "12" / "tc.2026091207" / "EP142026.json").read_bytes())
             # Without NHC's b-deck the US best track comes from JTWC's warning history.
             self.assertEqual(storm["best"]["usa"]["source"], "jtwc")
             self.assertEqual(sorted(storm["agencies"]), ["jtwc"])
@@ -596,7 +603,7 @@ class GoldenBuildTests(unittest.TestCase):
             report = build_product(ISSUE, raw, output, force=True)
             self.assertIsNone(report["pointer"])
             self.assertFalse((output / "latest-tc.json").exists())
-            self.assertTrue((output / "tc.2026091206" / "index.json").exists())
+            self.assertTrue((output / "tc" / "2026" / "09" / "12" / "tc.2026091206" / "index.json").exists())
             with self.assertRaises(TcProductError):
                 build_product(ISSUE, raw, output)
 
