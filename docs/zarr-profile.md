@@ -6,7 +6,9 @@ reads. It is normative for what the exporter (`xuebuild/zarrstore.py`, `xue
 export-zarr`, `build-bin --zarr`) writes and for what a store must look like
 to be one of these. The container itself is specified in
 [`format.md`](format.md); this profile adds nothing to it and changes
-nothing in it.
+nothing in it. A second branch, the [polar store](#polar-store), carries
+radar sweeps in beam-and-gate coordinates for products that have no grid
+and no container.
 
 The store is derived from a bundle, never the other way round. A build
 writes the `.xue` first, reads its codes back and writes the store from
@@ -340,6 +342,96 @@ of four neighbouring cells is one chunk where they share a block and two to
 four where they do not. A series store is read for series only: a frame read
 through it would fetch one tiny chunk per block, which is not what it is cut
 for.
+
+## Polar store
+
+A **polar store** carries radar sweeps in the radar's own coordinates — one
+row per beam, one column per range gate — instead of a latitude-longitude
+grid. It is the profile's second branch and the one a single-site radar
+product writes ([`nexrad.md`](nexrad.md)); it has no `.xue` counterpart and
+is never derived from a bundle. Everything in "Array metadata" and
+"Reading" applies except where this section says otherwise: the shard, the
+index, the codecs and the reading of an inner chunk are the same; the
+dimensions, the chunking and the attributes are its own.
+
+- One store is one product of one round, `<round directory>/<product>.zarr`
+  (`nexrad.202610050805/n0b.zarr`). The group's attributes carry a
+  `xue_polar` block in place of `xue` and `xue_profile`; its `version` is
+  this branch's version, `1`. A reader tells the branches apart by which
+  one is present and refuses a group carrying both or neither, or a
+  `version` it does not implement.
+- One data array, named by the product (`n0b`), `uint8` of shape `[site,
+  scan, azimuth, range]` with `dimension_names` exactly those four. `site`
+  indexes the radars that scanned in the round, `scan` the sweeps of one
+  site in time order, `azimuth` the beam and `range` the gate.
+- Chunking. The inner chunk is one site's whole round: `[1, scans, azimuth,
+  range]`, where `scans` is the largest number of sweeps any site of the
+  round has. The outer chunk (shard) is the whole array, so `c/0/0/0/0` is
+  the only data object and its index holds one pair per site. Sites with
+  fewer sweeps are padded to `scans` with `fill_value`; whether a sweep
+  exists is said by `scan_time`, never by the codes.
+- Inner codec chain `[bytes, zstd]` (level 15, content checksum). There is
+  no `xue.delta`: consecutive sweeps are minutes apart and a difference
+  against the previous one is larger than the sweep itself. Index codecs,
+  `index_location` and the never-written pair are as above.
+- `fill_value` is `0`.
+- Codes. A sweep's codes are its source's own, unchanged: a linear codebook
+  over a contiguous run of codes plus **reserved codes** that carry a state
+  rather than a value. The data array's attributes declare both, in their
+  own `xue_polar` block:
+
+  ```json
+  "attributes": {
+    "xue_polar": {
+      "variable": { "id": "n0g", "label": "Base velocity", "unit": "m/s",
+                    "quantization": { "type": "linear", "offset": -64.5, "scale": 0.5,
+                                      "minimumCode": 2, "maximumCode": 255 },
+                    "reservedCodes": { "0": "below_threshold", "1": "range_folded" },
+                    "signConvention": "positive_away" },
+      "geometry": { "azimuthStart": 0.0, "azimuthStep": 0.5,
+                    "rangeStart": 0.0, "rangeStep": 0.25 }
+    },
+    "scale_factor": 0.5, "add_offset": -64.5,
+    "flag_values": [0, 1], "flag_meanings": "below_threshold range_folded"
+  }
+  ```
+
+  value = `code × scale + offset` for `minimumCode ≤ code ≤ maximumCode`; a
+  reserved code has no value and a reader must not dequantize, filter or
+  interpolate across it as one. `signConvention` is present on a radial
+  velocity and is `positive_away` (motion away from the radar is positive).
+  `scale_factor` / `add_offset` let a CF client dequantize; `flag_values`
+  tells it which codes are not values. There is no `_FillValue`: code 0 is
+  data (no echo), not missing.
+- Geometry. Beam `j` covers azimuths `[azimuthStart + j × azimuthStep,
+  azimuthStart + (j + 1) × azimuthStep)` in degrees clockwise from true
+  north; gate `i` covers slant ranges `[rangeStart + i × rangeStep,
+  rangeStart + (i + 1) × rangeStep)` in kilometres from the antenna. A
+  source whose beams do not start on this grid is binned by beam centre.
+- Coordinates, beside the data array, each one chunk under `[bytes]`
+  (little-endian), as a grid store's coordinates are:
+
+  | array | dtype | shape | meaning |
+  |---|---|---|---|
+  | `azimuth` | `float32` | `[azimuth]` | beam centre, degrees true |
+  | `range` | `float32` | `[range]` | gate centre, km slant range |
+  | `site_latitude`, `site_longitude` | `float64` | `[site]` | antenna, WGS84 degrees |
+  | `site_height` | `float32` | `[site]` | antenna, metres above mean sea level |
+  | `scan_time` | `int64` | `[site, scan]` | sweep start, Unix seconds UTC; `-1` for a padding sweep |
+  | `elevation` | `float32` | `[site, scan]` | sweep elevation angle, degrees; `NaN` for padding |
+
+  The group's block is `{"version": 1, "product": "n0b", "round":
+  "2026-10-05T08:05:00Z", "sites": ["TLX", "TBW", …]}`: the product, the
+  round's UTC minute, and the sites in index order by the source's own
+  identifiers.
+- Mapping a gate to the ground is the reader's: the profile fixes the
+  coordinates, not the projection. The reference reader uses the
+  standard-refraction (4/3 effective earth radius) beam model from the
+  site's WGS84 position.
+- Reading one site: the group, the array's `zarr.json`, then the shard
+  index (suffix range) and the site's one inner chunk; a product that
+  publishes the chunk spans (`nexrad.md`, "Window") lets a reader skip the
+  index and read the chunk directly.
 
 ## Equivalence with the container
 
