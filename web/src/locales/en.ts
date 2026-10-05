@@ -306,6 +306,11 @@ export const en = {
   /** The speed button reads "12 FPS" in every locale (an instrument value,
    * like the forecast hour); only its accessible name is translated. */
   playbackSpeed: "Playback speed",
+  /** The GIF button beside the speed button reads "GIF" (and its progress,
+   * "12/48", while it captures) in every locale; its accessible name is
+   * translated, and turns into the way to cancel while it runs. */
+  gifExportAria: "Save the loop as a GIF",
+  gifCancelAria: "Cancel the GIF",
   readingManifest: "Loading manifest",
   forecastHourAria: "Forecast hour",
   forecastDaysAria: "Daily forecast segments",

@@ -160,6 +160,8 @@ export const ja: Record<MessageKey, string> = {
   playAnimation: "アニメーションを再生",
   pauseAnimation: "アニメーションを一時停止",
   playbackSpeed: "再生速度",
+  gifExportAria: "ループを GIF で保存",
+  gifCancelAria: "GIF の保存を中止",
   readingManifest: "マニフェストを読み込み中",
   forecastHourAria: "予報時間",
   forecastDaysAria: "日別の予報区間",

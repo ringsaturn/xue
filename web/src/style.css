@@ -1454,6 +1454,17 @@ html[lang="ja"] .rail-glyph {
   opacity: 0.5;
 }
 
+/* Wide enough for "48/48" so the capsule does not shift while it counts;
+   while it runs the pill is inked and a second press cancels. */
+.gif-button {
+  min-width: 54px;
+}
+
+.gif-button.is-busy {
+  border-color: var(--text);
+  color: var(--text);
+}
+
 /* The one filled control on the page. 36px, not the 44 of the round
    controls in the corner: the capsule's height is map the viewer loses, and
    the button has nothing within a finger's width of it. */

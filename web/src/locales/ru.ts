@@ -165,6 +165,8 @@ export const ru: Record<MessageKey, string> = {
   playAnimation: "Запустить анимацию",
   pauseAnimation: "Приостановить анимацию",
   playbackSpeed: "Скорость воспроизведения",
+  gifExportAria: "Сохранить анимацию как GIF",
+  gifCancelAria: "Отменить GIF",
   readingManifest: "Загрузка манифеста",
   forecastHourAria: "Час прогноза",
   forecastDaysAria: "Суточные отрезки прогноза",

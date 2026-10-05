@@ -160,6 +160,8 @@ export const zh: Record<MessageKey, string> = {
   playAnimation: "播放动画",
   pauseAnimation: "暂停动画",
   playbackSpeed: "播放速度",
+  gifExportAria: "将动画保存为 GIF",
+  gifCancelAria: "取消 GIF",
   readingManifest: "正在读取清单",
   forecastHourAria: "预报时次",
   forecastDaysAria: "逐日预报分段",

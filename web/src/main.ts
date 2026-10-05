@@ -282,6 +282,7 @@ import {
   type VideoStreamSource,
 } from "./webcodecs";
 import { spawnZarrWorker, zarrInitMessage, zarrObjectUrl, zarrRootUrl, zarrStoreFor } from "./zarr/channel";
+import { deliverGif, exportGif, gifFileName, gifFrameWindow, type GifHost } from "./gifexport";
 import { DEFAULT_VERTICAL_EXAGGERATION, VOLUME_BUNDLE_LEVELS, VolumeLayer, volumeLevels, type VolumeLevels } from "./volume";
 
 // Rewrite the static shell into the detected locale and appearance before
@@ -1039,6 +1040,8 @@ const retryButton = required<HTMLButtonElement>("retry-button");
 const playButton = required<HTMLButtonElement>("play-button");
 const playLabel = required<HTMLElement>("play-label");
 const speedButton = required<HTMLButtonElement>("speed-button");
+const gifButton = required<HTMLButtonElement>("gif-button");
+const gifLabel = required<HTMLElement>("gif-label");
 const particlesToggle = required<HTMLButtonElement>("particles-toggle");
 const speedLabel = required<HTMLElement>("speed-label");
 const validTime = required<HTMLTimeElement>("valid-time");
@@ -3517,6 +3520,94 @@ function handleStreamMessage(message: {
   if (activeSession === session) refreshDataCard(session);
 }
 
+/** The GIF export under way, aborted by a second press or by a new dataset. */
+let gifExport: AbortController | null = null;
+
+const gifHost: GifHost = {
+  map,
+  show: (index) => trySelectFrame(index),
+  caption: (index) => ({
+    title: variableTitle.textContent ?? "",
+    code: variableCode.textContent ?? "",
+    // The file travels without the capsule that names the zone, so the
+    // stamp carries the offset itself.
+    stamp: showingObservations()
+      ? formatDate(frameValidTime(index))
+      : `${formatLead(index)} · ${formatDate(frameValidTime(index))}`,
+  }),
+  credit: gifCredit,
+  holdMs: frameHoldMs,
+};
+
+/** The notices the credit line shows for the data on screen, then the
+ * basemap's, after the site's address. Which notices are on is the
+ * stylesheet's call (`body[data-model]`, `body[data-credits]`), and a
+ * notice's own display reads it even where the line itself is hidden. */
+function gifCredit(): string {
+  const notices = [...document.querySelectorAll<HTMLElement>(".source-credit")]
+    .filter((credit) => getComputedStyle(credit).display !== "none")
+    .map((credit) => (credit.textContent ?? "").replace(/\s+/g, " ").replace(/\s*·\s*$/, "").trim());
+  return [window.location.host, ...notices, "© OPENSTREETMAP · PROTOMAPS"].join(" · ");
+}
+
+function setGifState(running: boolean): void {
+  gifButton.classList.toggle("is-busy", running);
+  const label = t(running ? "gifCancelAria" : "gifExportAria");
+  gifButton.setAttribute("aria-label", label);
+  gifButton.title = label;
+  if (!running) gifLabel.textContent = "GIF";
+}
+
+/** Capture the loop from the frame on screen and hand the file over, then
+ * put the frame and the playback back as they were. */
+async function saveGif(): Promise<void> {
+  if (gifExport) {
+    gifExport.abort();
+    return;
+  }
+  if (!activeVariable || isStaticAxis()) return;
+  const controller = new AbortController();
+  gifExport = controller;
+  const resumeVariable = activeVariable;
+  const resumeIndex = activeFrameIndex ?? Number(slider.value);
+  const resumePlaying = playing;
+  stopPlayback();
+  setGifState(true);
+  const frames = gifFrameWindow(frameCount(), resumeIndex);
+  const name = gifFileName(variableCode.textContent ?? "", frameValidTime(frames[0]!));
+  let failed = false;
+  try {
+    const blob = await exportGif(
+      gifHost,
+      frames,
+      ({ phase, done, total }) => {
+        gifLabel.textContent = phase === "capture" ? `${done}/${total}` : `${Math.round((done / total) * 100)}%`;
+      },
+      controller.signal,
+    );
+    await deliverGif(blob, name);
+  } catch (error) {
+    if (!(error instanceof DOMException && error.name === "AbortError")) {
+      console.error("GIF export failed", error);
+      failed = true;
+    }
+  } finally {
+    gifExport = null;
+    setGifState(false);
+    if (failed) {
+      gifLabel.textContent = "ERR";
+      setTimeout(() => {
+        if (!gifExport) gifLabel.textContent = "GIF";
+      }, 3000);
+    }
+    // A new dataset aborts the export and owns the frame from then on.
+    if (activeVariable === resumeVariable) {
+      trySelectFrame(resumeIndex);
+      if (resumePlaying) startPlayback();
+    }
+  }
+}
+
 function updateTransport(): void {
   playButton.classList.toggle("is-playing", playing);
   const transportLabel = playing ? t("pauseAnimation") : t("playAnimation");
@@ -3654,7 +3745,7 @@ function blendOverlay(slot: RasterSlot, index: number, next: number, weight: num
 }
 
 function startPlayback(): void {
-  if (!activeVariable || slider.disabled || playing || !ready) return;
+  if (!activeVariable || slider.disabled || playing || !ready || gifExport) return;
   hideError();
   playing = true;
   restartCadence(activeFrameIndex ?? Number(slider.value));
@@ -6727,6 +6818,7 @@ function syncTimeline(session: VariableSession): void {
   slider.disabled = isStaticAxis();
   playButton.disabled = isStaticAxis();
   speedButton.disabled = isStaticAxis();
+  gifButton.disabled = isStaticAxis();
 }
 
 /** An end label of the track: a lead time in whole hours, `+0H` to `+240H`. */
@@ -7536,6 +7628,8 @@ async function initialize({ frame = false }: { frame?: boolean } = {}): Promise<
   slider.disabled = true;
   playButton.disabled = true;
   speedButton.disabled = true;
+  gifButton.disabled = true;
+  gifExport?.abort();
   setVariableButtonsDisabled(true);
   document.body.classList.add("is-data-loading");
   dataCard.setAttribute("aria-busy", "true");
@@ -7673,6 +7767,7 @@ async function initialize({ frame = false }: { frame?: boolean } = {}): Promise<
     slider.disabled = isStaticAxis();
     playButton.disabled = isStaticAxis();
     speedButton.disabled = isStaticAxis();
+    gifButton.disabled = isStaticAxis();
     setVariableButtonsDisabled(false);
     if (!isStaticAxis() && !reducedMotion.matches && (resume === null || resume.playing)) startPlayback();
   } catch (error) {
@@ -7929,6 +8024,7 @@ playButton.addEventListener("click", () => {
 // One button cycling the ladder: at four rungs a menu would cost more taps
 // than it saves, and the label always reads the rate in force.
 speedButton.addEventListener("click", () => setPlaybackFps(nextFps(playbackFps), true));
+gifButton.addEventListener("click", () => void saveGif());
 particlesToggle.addEventListener("click", () => setParticlesEnabled(!view.particles));
 /** Poll the live pointer; a changed manifest re-initializes onto the new
  * run ("排播型电视直播" — the client tunes itself to the newest broadcast).

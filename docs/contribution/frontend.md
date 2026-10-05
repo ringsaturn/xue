@@ -20,6 +20,7 @@ Storms, soundings and airports: [point-products.md](point-products.md).
 | `layer.ts`, `particles.ts`, `isolines.ts` + `labels.worker.ts` | Raster layer, wind particles, contour labels. |
 | `projection.ts`, `terrain.ts` | Plane / globe projection and terrain draping for the custom layers; DEM readout. |
 | `viewcontrol.ts` | The view tile under the zoom tile: globe and relief switches, reset north / tilt. |
+| `gifexport.ts` + `gif.worker.ts` | The capsule's GIF button: up to 48 frames from the one on screen, captured off the map canvas in its `render` event, caption and credits burnt in, one palette for the loop (`gifenc`, in a worker); a share sheet on touch screens, a download elsewhere. |
 | `volume.ts` | The radar volume (`refl3d`): a 3D texture per frame, raymarched in a Mercator box. |
 | `palettes.ts`, `units.ts`, `domain.ts` | Ramps, display units, regional footprints. |
 | `playback.ts`, `timeline.ts` | Frame-rate ladder and dwell; transport geometry. |

@@ -166,6 +166,8 @@ export const tr: Record<MessageKey, string> = {
   playAnimation: "Animasyonu oynat",
   pauseAnimation: "Animasyonu duraklat",
   playbackSpeed: "Oynatma hızı",
+  gifExportAria: "Döngüyü GIF olarak kaydet",
+  gifCancelAria: "GIF’i iptal et",
   readingManifest: "Manifest yükleniyor",
   forecastHourAria: "Tahmin saati",
   forecastDaysAria: "Günlük tahmin dilimleri",

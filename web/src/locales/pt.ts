@@ -163,6 +163,8 @@ export const pt: Record<MessageKey, string> = {
   playAnimation: "Reproduzir animação",
   pauseAnimation: "Pausar animação",
   playbackSpeed: "Velocidade de reprodução",
+  gifExportAria: "Salvar a animação como GIF",
+  gifCancelAria: "Cancelar o GIF",
   readingManifest: "A carregar o manifesto",
   forecastHourAria: "Hora de previsão",
   forecastDaysAria: "Segmentos diários da previsão",
