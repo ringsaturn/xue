@@ -198,10 +198,41 @@ class WindowTest(unittest.TestCase):
             validate_pointer(pointer | {"path": "nexrad.202303250140/index.json"})
 
 
+def _without_compressed_bytes(window: dict) -> dict:
+    """A window manifest with what depends on the compressor's bytes taken
+    out: each shard's length and CRC and each chunk's span. What is left —
+    sites, rounds, sweep counts and times, the store roots — is the same
+    whichever zstd engine wrote the stores."""
+    window = copy.deepcopy(window)
+    for entry in window["rounds"]:
+        for product in ("n0b", "n0g"):
+            block = entry.get(product)
+            if block:
+                block.pop("shard")
+                block["chunks"] = [[site, sweeps] for site, _offset, _length, sweeps in block["chunks"]]
+    window.pop("generated", None)
+    return window
+
+
 class GoldenTest(unittest.TestCase):
+    def test_the_rounds_match_the_golden_whatever_the_compressor(self) -> None:
+        from tests.prepare_nexrad_golden import ROUND, build
+
+        with tempfile.TemporaryDirectory() as scratch:
+            output = Path(scratch)
+            build(output)
+            built = json.loads((output / ROUND / WINDOW_FILENAME).read_bytes())
+            golden = json.loads((FIXTURES / "expected" / ROUND / WINDOW_FILENAME).read_bytes())
+            self.assertEqual(_without_compressed_bytes(built), _without_compressed_bytes(golden))
+
     def test_the_build_matches_the_golden(self) -> None:
         from tests.prepare_nexrad_golden import ROUND, build
 
+        # The golden pins the stores' compressed bytes (through every CRC
+        # that covers them), which only the in-process engine reproduces:
+        # the zstd CLI (Python < 3.14) streams and writes other bytes.
+        if not zstdcli.compresses_in_process():
+            self.skipTest("the stores are compressed through the zstd CLI, which cannot match the golden's bytes")
         expected = FIXTURES / "expected"
         with tempfile.TemporaryDirectory() as scratch:
             output = Path(scratch)
