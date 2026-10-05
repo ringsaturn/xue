@@ -144,8 +144,10 @@ and the window shrinks to fit it.
 - Radar volume (`volume.ts`, `?model=mrms3d`): a volume bundle's levels
   (one quantity on GRIB2 surface 102, ascending) are the session's
   variables, every one decoded per frame, the session whole (a ray can
-  cross any of it) and its tier weighed for the stack (four planes' worth
-  of the cell budget). The levels go into an R8 3D texture per frame (two,
+  cross any of it) and its tier weighed for the stack (five planes' worth
+  of the cell budget, the view's share measured on the session's own grid
+  since the bundle has no poster, floored at a quarter): CONUS opens on the
+  half tier and a close view re-tiers to the full one. The levels go into an R8 3D texture per frame (two,
   blended by `u_mix`; halved by block maximum past `MAX_3D_TEXTURE_SIZE`)
   and are raymarched front to back in a Mercator box from sea level to
   half a step over the top level, `?vexag=` times its height (10 by
@@ -155,8 +157,7 @@ and the window shrinks to fit it.
   takes altitude to the uneven level spacing. Colour is the cref palette,
   brightened with height; opacity rises from 18 to 60 dBZ and is per
   voxel, so the step count does not change the picture. Flat Mercator
-  only (nothing on the globe), no terrain occlusion, and the tier is
-  picked at session open.
+  only (nothing on the globe), no terrain occlusion.
 - Altitude correction (`layer.ts::lapseCodes`): with relief on, a 2 m
   temperature is moved from the model's ground (the run's `orog` plane,
   decoded whole once and uploaded on its own grid) to the DEM's at

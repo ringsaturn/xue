@@ -413,16 +413,41 @@ function planeCellBudget(): number {
   return cells;
 }
 
-/** A volume's tiers weighed for the whole stack: four planes' worth of the
+/** A volume's tiers weighed for the whole stack: five planes' worth of the
  * cell budget spread over its levels, so CONUS at 0.05° (33 levels of
- * 0.98 M cells) takes the half tier until the view narrows to a share of
- * it. */
-const VOLUME_PLANE_EQUIVALENT = 4;
+ * 0.98 M cells) takes the half tier until the view narrows to a quarter of
+ * it, with room for `settleBundleVariant`'s dead band there. A volume is
+ * held whole whatever the view shows, so the view's share stands only for
+ * how much detail it can use, and is floored: below a quarter the stack
+ * would cost more than the share says, and a phone's halved budget never
+ * reaches the full tier. */
+const VOLUME_PLANE_EQUIVALENT = 5;
+const VOLUME_SHARE_FLOOR = 0.25;
 
-function volumeBudget(bundleId: string, budget: VariantBudget | undefined): VariantBudget | undefined {
+function volumeBudget(
+  bundleId: string,
+  budget: VariantBudget | undefined,
+  grid?: ReturnType<typeof geoGrid>,
+): VariantBudget | undefined {
   const levels = VOLUME_BUNDLE_LEVELS.get(bundleId);
   if (!budget || levels === undefined) return budget;
-  return { ...budget, cells: (budget.cells * VOLUME_PLANE_EQUIVALENT) / levels };
+  // A volume ships no poster to weigh the view against; once it is open,
+  // its own grid is the extent.
+  let share = budget.visibleShare;
+  if (grid) {
+    const bounds = map.getBounds();
+    share = visibleGridShare(grid, {
+      west: bounds.getWest(),
+      east: bounds.getEast(),
+      south: bounds.getSouth(),
+      north: bounds.getNorth(),
+    });
+  }
+  return {
+    ...budget,
+    cells: (budget.cells * VOLUME_PLANE_EQUIVALENT) / levels,
+    visibleShare: Math.max(share, VOLUME_SHARE_FLOOR),
+  };
 }
 
 /** What `pickBundleVariant` needs to weigh a bundle's tiers against
@@ -3925,7 +3950,7 @@ async function retierPrimary(): Promise<void> {
     slowConnection(),
     resolutionPreference,
     bundleLongitudeSpan(descriptor),
-    bundleVariantBudget(descriptor, manifest.bundles),
+    volumeBudget(session.id, bundleVariantBudget(descriptor, manifest.bundles), geoGrid(session.metadata)),
   );
   if (sameTier(wanted, session.variant)) return;
   retiering = true;
