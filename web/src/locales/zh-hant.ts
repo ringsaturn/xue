@@ -135,6 +135,7 @@ export const zhHant: Record<MessageKey, string> = {
   creditsTerrain: "地形暈渲 · © MAPTERHORN · 高程資料來源一覽",
   creditsCode: "原始碼 · RINGSATURN/XUE",
   caseTag: "個案",
+  caseSummaryAria: "個案摘要",
   runCycle: "模式週期",
   latestObservation: "最新觀測",
   latestNowcast: "最新臨近預報",

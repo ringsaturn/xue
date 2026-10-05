@@ -141,6 +141,7 @@ export const tr: Record<MessageKey, string> = {
   creditsTerrain: "KABARTMA · © MAPTERHORN · YÜKSEKLİK VERİSİ KAYNAKLARI",
   creditsCode: "KAYNAK KODU · RINGSATURN/XUE",
   caseTag: "VAKA",
+  caseSummaryAria: "Vaka özeti",
   runCycle: "Model koşusu",
   latestObservation: "Son gözlem",
   latestNowcast: "Son anlık tahmin",

@@ -7,6 +7,7 @@ import {
   caseCameraLimits,
   fitBoundsCorners,
   localizedText,
+  radarReachBox,
   validateCatalog,
 } from "../../web/src/showcase-catalog";
 import { parseCaseFromSearch, searchForCaseVariable } from "../../web/src/urlstate";
@@ -246,6 +247,24 @@ describe("case camera limits", () => {
     const [[west, south], [east, north]] = limits.bounds;
     return west <= box[0] && east >= box[2] && south <= box[1] && north >= box[3];
   }
+
+  it("widens a radar case's region to every site's whole disc", () => {
+    // Rolling Fork: KNQA (Memphis) sits near the region's north edge, and
+    // its 460 km reflectivity disc runs well past it.
+    const region: [number, number, number, number] = [-93.5, 30.5, -86, 36.5];
+    const knqa = { lat: 35.3447, lon: -89.8733 };
+    const box = radarReachBox(region, [knqa, { lat: 33.4769, lon: -88.3289 }], 460);
+    const dLat = 460 / 111.195;
+    expect(box[3]).toBeCloseTo(knqa.lat + dLat, 6);
+    expect(box[1]).toBeLessThanOrEqual(region[1]);
+    // The disc's widest east-west reach, at its poleward edge, is inside.
+    const dLonEdge = dLat / Math.cos(((knqa.lat + dLat) * Math.PI) / 180);
+    expect(box[0]).toBeLessThanOrEqual(knqa.lon - dLonEdge + 1e-9);
+    expect(box[2]).toBeGreaterThanOrEqual(knqa.lon + dLonEdge - 1e-9);
+    expect(coversBox(box, DESKTOP)).toBe(true);
+    // No sites, no change.
+    expect(radarReachBox(region, [], 460)).toEqual(region);
+  });
 
   it("frames the region and holds panning to what that shows", () => {
     const limits = caseCameraLimits(HEAT_DOME, DESKTOP);

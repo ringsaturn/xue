@@ -190,7 +190,7 @@ import {
 } from "./stations/nearest";
 import { synopObservedValue, synopRowObservations, synopTakesRow } from "./stations/synopobs";
 import { RADAR_SITE_LAYER, RadarOverlay, type RadarReadout } from "./radar/overlay";
-import { NEXRAD_POINTER_FILENAME, parseNexradPointer, parseRadarWindow, type RadarWindow } from "./radar/schema";
+import { GATE_KM, GATES, NEXRAD_POINTER_FILENAME, parseNexradPointer, parseRadarWindow, type RadarWindow } from "./radar/schema";
 import {
   nearestObservation,
   rowObservations,
@@ -272,6 +272,7 @@ import {
 import { applyPageMeta } from "./pagemeta";
 import {
   caseCameraLimits,
+  radarReachBox,
   fetchCaseManifest,
   fetchCatalog,
   localizedText,
@@ -1158,6 +1159,32 @@ function derivedButtons(): HTMLButtonElement[] {
 const modelButtons = [...document.querySelectorAll<HTMLButtonElement>("button[data-model]")];
 const modelEyebrow = required<HTMLElement>("model-eyebrow");
 const caseBanner = required<HTMLElement>("case-banner");
+const caseToggle = required<HTMLButtonElement>("case-toggle");
+const CASE_SUMMARY_KEY = "xue-case-summary";
+
+/** The case's summary card, open or folded to the banner line. The last
+ * choice holds for every case after it: one who folded it wanted the map. */
+function setCaseSummaryOpen(open: boolean, remember: boolean): void {
+  caseToggle.setAttribute("aria-expanded", String(open));
+  caseBanner.toggleAttribute("data-collapsed", !open);
+  if (!remember) return;
+  try {
+    localStorage.setItem(CASE_SUMMARY_KEY, open ? "open" : "folded");
+  } catch {
+    // Preference just won't persist.
+  }
+}
+
+function storedCaseSummaryOpen(): boolean {
+  try {
+    return localStorage.getItem(CASE_SUMMARY_KEY) !== "folded";
+  } catch {
+    return true;
+  }
+}
+
+caseToggle.addEventListener("click", () => setCaseSummaryOpen(caseToggle.getAttribute("aria-expanded") !== "true", true));
+setCaseSummaryOpen(storedCaseSummaryOpen(), false);
 const caseTitle = required<HTMLElement>("case-title");
 const caseSummary = required<HTMLElement>("case-summary");
 const caseRegion = required<HTMLElement>("case-region");
@@ -5304,7 +5331,13 @@ function applyCaseCamera(showcaseCase: ShowcaseCase, recenter: boolean): void {
   // camera the new ones are measured from.
   map.setMaxBounds(null);
   map.setMinZoom(0);
-  const limits = caseCameraLimits(showcaseCase.bbox, {
+  // A case with single-site radar holds the camera to its region and every
+  // site's reach, so a sweep running off the region can still be panned to.
+  const box =
+    showcaseCase.radar && radarWindow
+      ? radarReachBox(showcaseCase.bbox, radarWindow.window.sites, RADAR_REACH_KM)
+      : showcaseCase.bbox;
+  const limits = caseCameraLimits(box, {
     width: canvas.clientWidth,
     height: canvas.clientHeight,
   });
@@ -6593,6 +6626,8 @@ const requestedRadarFromUrl = new URLSearchParams(window.location.search).has("r
 /** The window the overlay reads from, and the URL its rounds resolve
  * against. */
 let radarWindow: { window: RadarWindow; url: string } | null = null;
+/** How far a site's longest-reaching product sees, km: N0B's 460. */
+const RADAR_REACH_KM = Math.max(...Object.values(GATES)) * GATE_KM;
 let radarOverlay: RadarOverlay | null = null;
 /** The case's window, read once per case. */
 let radarCaseLoadedFor: string | null = null;
@@ -6626,6 +6661,7 @@ async function loadCaseRadar(showcaseCase: ShowcaseCase): Promise<void> {
     console.warn(`radar: case ${showcaseCase.id} window not read:`, error instanceof Error ? error.message : error);
     radarWindow = null;
   }
+  if (activeCase?.id === showcaseCase.id) applyCaseCamera(showcaseCase, false);
   applyRadarView();
 }
 

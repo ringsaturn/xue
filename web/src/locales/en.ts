@@ -269,6 +269,7 @@ export const en = {
   creditsTerrain: "TERRAIN RELIEF · © MAPTERHORN · ELEVATION MODEL SOURCES",
   creditsCode: "SOURCE CODE · RINGSATURN/XUE",
   caseTag: "CASE",
+  caseSummaryAria: "Case summary",
   runCycle: "Model run",
   // An observation dataset has no run cycle and no lead time: the line that
   // names a forecast's cycle names the window's newest observation instead,

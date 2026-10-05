@@ -140,6 +140,7 @@ export const ru: Record<MessageKey, string> = {
   creditsTerrain: "РЕЛЬЕФ · © MAPTERHORN · ИСТОЧНИКИ ДАННЫХ О ВЫСОТАХ",
   creditsCode: "ИСХОДНЫЙ КОД · RINGSATURN/XUE",
   caseTag: "СЛУЧАЙ",
+  caseSummaryAria: "Описание случая",
   runCycle: "Исходный срок",
   latestObservation: "Последнее наблюдение",
   latestNowcast: "Последний наукаст",

@@ -140,6 +140,7 @@ export const ko: Record<MessageKey, string> = {
   creditsTerrain: "지형 음영 · © MAPTERHORN · 고도 데이터 출처 목록",
   creditsCode: "소스 코드 · RINGSATURN/XUE",
   caseTag: "사례",
+  caseSummaryAria: "사례 요약",
   runCycle: "모델 초기시각",
   latestObservation: "최신 관측",
   latestNowcast: "최신 초단기 예측",

@@ -135,6 +135,7 @@ export const ja: Record<MessageKey, string> = {
   creditsTerrain: "地形陰影 · © MAPTERHORN · 標高データ出典一覧",
   creditsCode: "ソースコード · RINGSATURN/XUE",
   caseTag: "事例",
+  caseSummaryAria: "事例の概要",
   runCycle: "初期時刻",
   latestObservation: "最新の観測",
   latestNowcast: "最新のナウキャスト",

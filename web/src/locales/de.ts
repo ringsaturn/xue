@@ -138,6 +138,7 @@ export const de: Record<MessageKey, string> = {
   creditsTerrain: "GELÄNDERELIEF · © MAPTERHORN · HÖHENDATEN-QUELLEN",
   creditsCode: "QUELLCODE · RINGSATURN/XUE",
   caseTag: "FALL",
+  caseSummaryAria: "Fallbeschreibung",
   runCycle: "Modelllauf",
   latestObservation: "Letzte Beobachtung",
   latestNowcast: "Letzter Nowcast",

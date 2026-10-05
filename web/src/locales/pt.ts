@@ -138,6 +138,7 @@ export const pt: Record<MessageKey, string> = {
   creditsTerrain: "RELEVO DO TERRENO · © MAPTERHORN · FONTES DE DADOS DE ELEVAÇÃO",
   creditsCode: "CÓDIGO-FONTE · RINGSATURN/XUE",
   caseTag: "CASO",
+  caseSummaryAria: "Resumo do caso",
   runCycle: "Ciclo do modelo",
   latestObservation: "Última observação",
   latestNowcast: "Última previsão imediata",

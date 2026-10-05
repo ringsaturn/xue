@@ -317,6 +317,33 @@ interface CaseCameraLimits {
  * Pure geometry, in Mercator world units — no map instance, so it is
  * unit-testable and the caller decides when to apply it.
  */
+/** Kilometres per degree of latitude, on the mean sphere. */
+const KM_PER_DEGREE = 111.195;
+
+/** A case's region widened to reach every radar's coverage: the union of
+ * the case box and, per site, the box around its disc of `rangeKm`. A
+ * single-site sweep runs past the mosaic's region (a site near its edge
+ * sees hundreds of kilometres out), and the camera held to the region
+ * would leave part of the disc out of reach. The longitude half-width is
+ * taken at the disc's poleward edge, where a degree is shortest. */
+export function radarReachBox(
+  box: CaseBounds,
+  sites: readonly { lat: number; lon: number }[],
+  rangeKm: number,
+): CaseBounds {
+  let [west, south, east, north] = box;
+  const dLat = rangeKm / KM_PER_DEGREE;
+  for (const site of sites) {
+    const poleward = Math.min(85, Math.abs(site.lat) + dLat);
+    const dLon = Math.min(180, dLat / Math.cos((poleward * Math.PI) / 180));
+    west = Math.min(west, Math.max(-180, site.lon - dLon));
+    east = Math.max(east, Math.min(180, site.lon + dLon));
+    south = Math.min(south, Math.max(-85, site.lat - dLat));
+    north = Math.max(north, Math.min(85, site.lat + dLat));
+  }
+  return [west, south, east, north];
+}
+
 export function caseCameraLimits(
   box: CaseBounds,
   viewport: { width: number; height: number },

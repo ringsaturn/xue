@@ -290,12 +290,18 @@
         <div class="case-pill">
           <span class="case-tag" data-i18n="caseTag">CASE</span>
           <h2 id="case-title"></h2>
+          <!-- Folds the summary card away to leave the map; the viewer's
+               last choice is kept (main.ts::setCaseSummaryOpen). Phones
+               never show the card, so never the switch. -->
+          <button class="case-toggle" id="case-toggle" type="button" aria-expanded="true" aria-controls="case-detail" data-i18n-aria="caseSummaryAria" aria-label="Case summary">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 15l6-6 6 6" /></svg>
+          </button>
           <a class="case-back" href="./showcase.html">
             <span aria-hidden="true">←</span>
             <span class="sr-only" data-i18n="showcaseBack">All cases</span>
           </a>
         </div>
-        <div class="case-detail">
+        <div class="case-detail" id="case-detail">
           <p id="case-summary"></p>
           <p class="case-region" id="case-region"></p>
         </div>

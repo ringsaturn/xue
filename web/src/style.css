@@ -466,7 +466,8 @@ body.is-showcase .model-caret {
   white-space: nowrap;
 }
 
-.case-back {
+.case-back,
+.case-toggle {
   display: flex;
   width: 32px;
   height: 32px;
@@ -474,14 +475,37 @@ body.is-showcase .model-caret {
   align-items: center;
   justify-content: center;
   margin-left: auto;
+  padding: 0;
+  border: 0;
   border-radius: 50%;
+  background: transparent;
   color: var(--muted);
+  cursor: pointer;
   text-decoration: none;
 }
 
+.case-toggle + .case-back {
+  margin-left: 0;
+}
+
 .case-back:hover,
-.case-back:focus-visible {
+.case-back:focus-visible,
+.case-toggle:hover,
+.case-toggle:focus-visible {
   color: var(--text);
+}
+
+.case-toggle svg {
+  transition: transform 160ms ease;
+}
+
+/* Folded: the banner line alone, the chevron turned to say there is more. */
+.case-toggle[aria-expanded="false"] svg {
+  transform: rotate(180deg);
+}
+
+.case-banner[data-collapsed] .case-detail {
+  display: none;
 }
 
 /* The summary is a card like the pill above it, not text on the map: a
@@ -3443,8 +3467,13 @@ body.radar-alone .source-credit[data-credit-model="nexrad"] {
     max-width: calc(100% - 16px - 16px - 44px - 10px);
   }
 
-  .case-detail {
+  .case-detail,
+  .case-toggle {
     display: none;
+  }
+
+  .case-toggle + .case-back {
+    margin-left: auto;
   }
 
   .data-card {
