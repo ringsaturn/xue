@@ -20,6 +20,8 @@ export interface RadarChunkRequest {
   offset: number;
   length: number;
   scans: number;
+  /** Real sweeps at the head of the chunk: only these are handed back. */
+  sweeps: number;
   gates: number;
 }
 
@@ -43,7 +45,11 @@ async function decode(request: RadarChunkRequest): Promise<RadarChunkReply> {
   }
   if (body.length !== request.length) throw new Error("radar chunk length mismatch");
   await ready;
-  const codes = decodeChunk(body, request.scans, BEAMS, request.gates, PREDICTOR_RAW);
+  const decoded = decodeChunk(body, request.scans, BEAMS, request.gates, PREDICTOR_RAW);
+  // A window store pads every chunk to its busiest round; the padding is
+  // never drawn, so it is dropped here rather than held resident.
+  const real = request.sweeps * BEAMS * request.gates;
+  const codes = real < decoded.length ? decoded.slice(0, real) : decoded;
   return { id: request.id, ok: true, codes: codes.buffer as ArrayBuffer, bytes: body.length };
 }
 

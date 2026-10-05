@@ -1,7 +1,8 @@
 /** The single-site radar's window manifest (`docs/nexrad.md` §4), schema v1,
  * as the shell reads it: the site table, and per round and product the
  * polar store's `?v=`, each site's byte span in the shard and its sweep
- * times.
+ * times. A round's store is its own (live) or the window store a case keeps
+ * beside the manifest; either way a site's round is one span.
  *
  * Admission is structural, the posture the other point products take: an
  * unknown site or source id is data. What is checked is what a reader
@@ -18,6 +19,8 @@ const POINTER_PATH = /^nexrad\.\d{12}\/index\.json$/;
 const SITE = /^[A-Z0-9]{3}$/;
 const ICAO = /^[A-Z0-9]{4}$/;
 const ROUND_PATH = /^\.\.\/nexrad\.\d{12}\/$/;
+/** A round whose stores are the window stores beside the manifest. */
+const WINDOW_STORE_PATH = "./";
 
 export const RADAR_PRODUCTS = ["n0b", "n0g"] as const;
 export type RadarProduct = (typeof RADAR_PRODUCTS)[number];
@@ -56,7 +59,7 @@ export interface RadarRoundProduct {
   groupCrc32: string;
   shardBytes: number;
   shardCrc32: string;
-  /** Sweep slots per chunk: the store's padded scan count, which a chunk
+  /** Sweep slots per chunk: the store's inner chunk depth, which a chunk
    * decompresses to `scans × 720 × gates` bytes of. */
   scans: number;
   chunks: RadarChunk[];
@@ -65,7 +68,7 @@ export interface RadarRoundProduct {
 export interface RadarRound {
   /** The round's minute, epoch milliseconds. */
   time: number;
-  /** The round's directory, relative to the manifest. */
+  /** The directory holding the round's stores, relative to the manifest. */
   path: string;
   products: Partial<Record<RadarProduct, RadarRoundProduct>>;
 }
@@ -124,6 +127,10 @@ export function parseRadarWindow(input: unknown): RadarWindow {
   });
   const latest = new Map<string, number>();
   let previousRound = -Infinity;
+  // A window store is one object per product: every round names the same
+  // root, shard and depth.
+  const stores = new Map<RadarProduct, string>();
+  let inWindowStore: boolean | null = null;
   const rounds = list(value.rounds, "window.rounds").map((item, index) => {
     const label = `window.rounds[${index}]`;
     const entry = object(item, label);
@@ -131,7 +138,11 @@ export function parseRadarWindow(input: unknown): RadarWindow {
     if (time <= previousRound) throw new Error("window.rounds must be oldest first and unique");
     if (time > issued || time <= issued - windowSeconds * 1000) throw new Error(`${label} is outside the window`);
     previousRound = time;
-    const path = string(entry.path, `${label}.path`, ROUND_PATH);
+    const windowStore = entry.path === WINDOW_STORE_PATH;
+    const path = windowStore ? WINDOW_STORE_PATH : string(entry.path, `${label}.path`, ROUND_PATH);
+    if (inWindowStore !== null && windowStore !== inWindowStore)
+      throw new Error("window.rounds are all in round stores or all in window stores");
+    inWindowStore = windowStore;
     const products: Partial<Record<RadarProduct, RadarRoundProduct>> = {};
     for (const product of RADAR_PRODUCTS) {
       if (entry[product] === undefined) continue;
@@ -140,6 +151,15 @@ export function parseRadarWindow(input: unknown): RadarWindow {
       const group = file(block.group, `${where}.group`);
       const shard = file(block.shard, `${where}.shard`);
       const scans = list(block.scans, `${where}.scans`);
+      let depth: number | null = null;
+      if (windowStore) {
+        depth = integer(block.depth, `${where}.depth`, 1);
+        const store = `${group.crc32}:${shard.crc32}:${shard.byteLength}:${depth}`;
+        if ((stores.get(product) ?? store) !== store) throw new Error(`${where} names another window store`);
+        stores.set(product, store);
+      } else if (block.depth !== undefined) {
+        throw new Error(`${where}.depth belongs to a window store`);
+      }
       const rows = list(block.chunks, `${where}.chunks`);
       if (rows.length === 0 || rows.length !== scans.length)
         throw new Error(`${where} needs a chunk and a scan row per site`);
@@ -160,6 +180,7 @@ export function parseRadarWindow(input: unknown): RadarWindow {
         if (scan.length !== 2 || scan[0] !== site) throw new Error(`${where}.scans rows follow the chunks`);
         const times = list(scan[1], `${where}.scans[${position}][1]`).map((seconds) => integer(seconds, `${where} scan time`) * 1000);
         if (times.length !== sweeps) throw new Error(`${where} site ${site}: sweeps and times disagree`);
+        if (depth !== null && sweeps > depth) throw new Error(`${where} site ${site}: more sweeps than the store's depth`);
         const key = `${product}:${site}`;
         for (const time of times) {
           if (time > (latest.get(key) ?? -Infinity) && time <= previousRound) latest.set(key, time);
@@ -172,10 +193,12 @@ export function parseRadarWindow(input: unknown): RadarWindow {
         groupCrc32: group.crc32,
         shardBytes: shard.byteLength,
         shardCrc32: shard.crc32,
-        // A store pads every site to its busiest one (the polar profile's
-        // inner chunk), and the manifest lists every site of the store, so
-        // the largest sweep count here is the chunk's padded length exactly.
-        scans: padded,
+        // A round store pads every site to its busiest one (the polar
+        // profile's inner chunk), and the manifest lists every site of the
+        // store, so the largest sweep count here is the chunk's padded
+        // length exactly. A window store pads to its busiest round too, and
+        // says so.
+        scans: depth ?? padded,
         chunks,
       };
     }

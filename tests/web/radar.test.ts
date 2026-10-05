@@ -1,10 +1,12 @@
 /** The single-site radar in the shell (`docs/nexrad.md`): the window
- * manifest and pointer readers on the committed golden, the URL state, the
- * case block, the disc mesh and the site marks. */
+ * manifest and pointer readers on the committed goldens (a live round's and
+ * a case's window stores), the URL state, the case block, the disc mesh and
+ * the site marks. */
 
 import { describe, expect, it, vi } from "vitest";
 
 import pointerJson from "../fixtures/nexrad/expected/latest-nexrad.json";
+import caseJson from "../fixtures/nexrad/expected/case/index.json";
 import windowJson from "../fixtures/nexrad/expected/nexrad.202303250145/index.json";
 
 import { discMesh } from "../../web/src/radar/layer";
@@ -44,6 +46,38 @@ describe("the window manifest", () => {
     const repeat = clone(windowJson) as unknown as { rounds: { n0g: { scans: [number, number[]][] } }[] };
     repeat.rounds[1]!.n0g.scans[1]![1] = [1679708280];
     expect(() => parseRadarWindow(repeat)).toThrow(/strictly follow/);
+  });
+});
+
+describe("a case's window stores", () => {
+  const window = parseRadarWindow(caseJson);
+
+  it("reads every round out of the one store beside the manifest", () => {
+    expect(window.rounds.map((round) => round.path)).toEqual(["./", "./"]);
+    const [first, second] = window.rounds.map((round) => round.products.n0g!);
+    // The store pads every chunk to its busiest round, so a round with one
+    // GWX sweep still decompresses to two slots.
+    expect(first!.scans).toBe(2);
+    expect(second!.scans).toBe(2);
+    expect(second!.chunks.find((chunk) => chunk.site === 1)!.sweeps).toBe(1);
+    expect(first!.shardCrc32).toBe(second!.shardCrc32);
+    expect(second!.chunks[0]!.offset).toBeGreaterThan(first!.chunks[0]!.offset);
+  });
+
+  it("refuses a round that would read another store or another depth", () => {
+    type Case = { rounds: { path: string; n0g: { depth?: number; shard: { crc32: string } } }[] };
+    const missing = clone(caseJson) as unknown as Case;
+    delete missing.rounds[0]!.n0g.depth;
+    expect(() => parseRadarWindow(missing)).toThrow(/depth/);
+    const other = clone(caseJson) as unknown as Case;
+    other.rounds[1]!.n0g.shard.crc32 = "00000000";
+    expect(() => parseRadarWindow(other)).toThrow(/another window store/);
+    const mixed = clone(caseJson) as unknown as Case;
+    mixed.rounds[1]!.path = "../nexrad.202303250145/";
+    expect(() => parseRadarWindow(mixed)).toThrow(/all in round stores or all in window stores/);
+    const live = clone(windowJson) as unknown as Case;
+    live.rounds[0]!.n0g.depth = 2;
+    expect(() => parseRadarWindow(live)).toThrow(/belongs to a window store/);
   });
 });
 
@@ -93,7 +127,7 @@ describe("a case's radar block", () => {
     byteLength: 1,
   };
   const radar = {
-    window: "radar/nexrad.202303250230/index.json",
+    window: "radar/index.json",
     defaultSite: "GWX",
     defaultProduct: "n0g",
     byteLength: 21501,
@@ -104,7 +138,7 @@ describe("a case's radar block", () => {
     const catalog = validateCatalog({ schemaVersion: 1, generatedAt: "", cases: [{ ...base, radar }] });
     expect(catalog.cases).toHaveLength(1);
     expect(catalog.cases[0]!.radar).toEqual({
-      windowPath: "showcase/rolling-fork-2023/radar/nexrad.202303250230/index.json",
+      windowPath: "showcase/rolling-fork-2023/radar/index.json",
       crc32: "36144726",
       byteLength: 21501,
       defaultSite: "GWX",

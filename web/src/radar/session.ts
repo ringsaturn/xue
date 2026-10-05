@@ -233,7 +233,8 @@ export class RadarSession {
   private fits(round: number): boolean {
     const product = this.product;
     const block = this.window.rounds[round]!.products[product]!;
-    const need = block.scans * BEAMS * GATES[product];
+    const chunk = block.chunks.find((item) => item.site === this.siteIndex)!;
+    const need = chunk.sweeps * BEAMS * GATES[product];
     const distance = (index: number) => Math.abs(this.window.rounds[index]!.time - (this.time ?? 0));
     while (this.stats.residentBytes + need > this.budgetBytes) {
       let victim: string | null = null;
@@ -268,6 +269,7 @@ export class RadarSession {
       offset: chunk.offset,
       length: chunk.length,
       scans: block.scans,
+      sweeps: chunk.sweeps,
       gates: GATES[product],
     }).then((reply) => {
       this.pending.delete(key);
@@ -277,7 +279,7 @@ export class RadarSession {
         console.warn(`radar: ${this.site.id} ${product} round ${round} not read: ${reply.error}`);
       } else {
         const codes = new Uint8Array(reply.codes);
-        this.resident.set(key, { codes, gates: GATES[product], scans: block.scans, touched: ++this.touch });
+        this.resident.set(key, { codes, gates: GATES[product], scans: chunk.sweeps, touched: ++this.touch });
         this.stats.residentBytes += codes.byteLength;
         this.stats.peakResidentBytes = Math.max(this.stats.peakResidentBytes, this.stats.residentBytes);
         this.stats.fetchedBytes += reply.bytes;
