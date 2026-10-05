@@ -16,7 +16,8 @@ use crate::encode::errors::{EncodeError, Result};
 use crate::encode::gdalio::{BandInfo, Dataset};
 use crate::encode::model::SourceFrame;
 use crate::encode::variables::{
-    isobaric_variable, variable_spec, AerosolIdentity, AEROSOL_VARIABLE_IDS, SURFACE_TEMPERATURE_IDS,
+    isobaric_variable, reflectivity_level, variable_spec, AerosolIdentity, AEROSOL_VARIABLE_IDS,
+    SURFACE_TEMPERATURE_IDS,
 };
 
 static HEIGHT_RE: LazyLock<Regex> = LazyLock::new(|| {
@@ -204,8 +205,9 @@ pub fn raster_expression(variable_id: &str, unit: &str) -> Result<String> {
         }
         // Composite reflectivity in dBZ, which GDAL's GRIB tables spell
         // "dB" and the radar mosaic's NetCDF spells in full; sub-zero
-        // returns are below the codebook, no echo either way.
-        "cref" => {
+        // returns are below the codebook, no echo either way. Every level of
+        // the 3D mosaic takes the same rule.
+        id if id == "cref" || reflectivity_level(id).is_some() => {
             if !["db", "dbz"].contains(&compact_unit(unit).as_str()) {
                 return Err(EncodeError::conversion(format!(
                     "unsupported reflectivity unit: {}",
@@ -524,14 +526,55 @@ fn searchable(band: &BandInfo) -> String {
     .join(" ")
 }
 
-/// One MRMS product under the registry's MRMS alternate: GDAL names the
-/// record by the product (its local table for centre 161 —
-/// `MergedReflectivityQCComposite`, `PrecipRate`), on the MRMS-local
-/// discipline 209. The level is part of the product name, so the element
-/// alone is unambiguous. Mirrors `_is_mrms_record` in `xuebuild/gdal.py`;
-/// `element` is the product's name in upper case, as `band_matches` compares.
-fn is_mrms_record(band: &BandInfo, element: &str) -> bool {
-    band.item("GRIB_ELEMENT").to_uppercase() == element && band.item("GRIB_DISCIPLINE") == "209"
+/// One MRMS product under the registry's MRMS identity for `variable_id` —
+/// its own (the 3D mosaic's reflectivity levels) or its discipline-209
+/// alternate (the composite, the rate): GDAL names the record by the product
+/// (its local table for centre 161 — `MergedReflectivityQCComposite`,
+/// `PrecipRate`, `MergedReflectivityQC`), on the MRMS-local discipline 209,
+/// at a height above mean sea level. The element is not enough: the 3D
+/// mosaic's 33 levels share one, so the level must be this identity's too —
+/// read off the assembled template (the parameter at indices 0–1, the type
+/// of first fixed surface, its scale factor and scaled value at 9–11 of
+/// template 4.0), or, where the driver did not assemble it, off the short
+/// name GDAL spells it with (`3000-GPML`). Mirrors `_is_mrms_record` in
+/// `xuebuild/gdal.py`; `element` is the product's name in upper case, as
+/// `band_matches` compares.
+fn is_mrms_record(band: &BandInfo, variable_id: &str, element: &str) -> Result<bool> {
+    if band.item("GRIB_ELEMENT").to_uppercase() != element || band.item("GRIB_DISCIPLINE") != "209" {
+        return Ok(false);
+    }
+    let spec = variable_spec(variable_id)?;
+    let (category, number, level_type, level_value) = spec
+        .grib2_alternates
+        .iter()
+        .find(|alternate| alternate.discipline == 209)
+        .map_or(
+            (spec.grib2_category, spec.grib2_number, spec.grib2_level_type, spec.grib2_level_value),
+            |alternate| (alternate.category, alternate.number, alternate.level_type, alternate.level_value),
+        );
+    let values: Vec<i64> = band
+        .item("GRIB_PDS_TEMPLATE_ASSEMBLED_VALUES")
+        .split_whitespace()
+        .map(str::parse::<i64>)
+        .collect::<std::result::Result<_, _>>()
+        .unwrap_or_default();
+    if band.item("GRIB_PDS_PDTN") == "0" && values.len() >= 12 {
+        if (values[0], values[1], values[9])
+            != (i64::from(category), i64::from(number), i64::from(level_type))
+        {
+            return Ok(false);
+        }
+        let Some(expected) = level_value else {
+            return Ok(true);
+        };
+        let (scale, scaled_value) = (values[10], values[11]);
+        return Ok(scaled_value != i64::from(u32::MAX)
+            && scaled_value as f64 / 10f64.powi(scale as i32) == expected);
+    }
+    let Some(expected) = level_value.filter(|_| level_type == 102) else {
+        return Ok(true);
+    };
+    Ok(band.item("GRIB_SHORT_NAME").to_uppercase() == format!("{expected}-GPML"))
 }
 
 /// One GRIB2 aerosol product (template 4.48) under the registry's parameter
@@ -635,7 +678,7 @@ fn band_matches(variable_id: &str, band: &BandInfo) -> Result<bool> {
         "prate" | "prate_ave" => {
             (element == "PRATE"
                 && (short_name == "0-SFC" || searchable(band).to_lowercase().contains("surface")))
-                || (variable_id == "prate" && is_mrms_record(band, "PRECIPRATE"))
+                || (variable_id == "prate" && is_mrms_record(band, variable_id, "PRECIPRATE")?)
         }
         // ECMWF open data tp: GDAL's tables do not know the local parameter
         // 0/1/193, so GRIB_ELEMENT is "unknown" and the comment carries the
@@ -728,7 +771,8 @@ fn band_matches(variable_id: &str, band: &BandInfo) -> Result<bool> {
                     && (short_name.ends_with("-SFC")
                         || text.contains("sfc=\"")
                         || text.contains("ground or water surface")))
-                || (variable_id == "cref" && is_mrms_record(band, "MERGEDREFLECTIVITYQCCOMPOSITE"))
+                || (variable_id == "cref"
+                    && is_mrms_record(band, variable_id, "MERGEDREFLECTIVITYQCCOMPOSITE")?)
         }
         // Precipitable water: NCEP writes the column total on its local
         // "entire atmosphere (considered as a single layer)" surface (type
@@ -780,6 +824,10 @@ fn band_matches(variable_id: &str, band: &BandInfo) -> Result<bool> {
             matches!(element.as_str(), "PRMSL" | "PRES" | "MSLMA")
                 && (short_name == "0-MSL"
                     || searchable(band).to_lowercase().contains("mean sea level"))
+        }
+        // One level of the MRMS 3D reflectivity mosaic.
+        other if reflectivity_level(other).is_some() => {
+            is_mrms_record(band, other, "MERGEDREFLECTIVITYQC")?
         }
         other if isobaric_variable(other).is_some() => {
             let (_, level) = isobaric_variable(other).expect("checked");
@@ -892,4 +940,76 @@ pub fn inspect_grib_multi(
         ));
     }
     Ok(frames)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{band_matches, raster_expression, BandInfo};
+    use std::collections::HashMap;
+
+    /// One level of the MRMS 3D mosaic as GDAL's GRIB driver describes it.
+    fn mrms_level(metres: u32) -> BandInfo {
+        let metadata: HashMap<String, String> = [
+            ("GRIB_ELEMENT", "MergedReflectivityQC".to_string()),
+            ("GRIB_SHORT_NAME", format!("{metres}-GPML")),
+            ("GRIB_DISCIPLINE", "209".to_string()),
+            ("GRIB_UNIT", "[dBZ]".to_string()),
+            ("GRIB_PDS_PDTN", "0".to_string()),
+            (
+                "GRIB_PDS_TEMPLATE_ASSEMBLED_VALUES",
+                format!("9 0 8 0 97 0 0 0 0 102 0 {metres} 255 1 0"),
+            ),
+        ]
+        .into_iter()
+        .map(|(key, value)| (key.to_string(), value))
+        .collect();
+        BandInfo {
+            number: 1,
+            description: String::new(),
+            metadata,
+            unit: String::new(),
+            scale: 1.0,
+            offset: 0.0,
+            nodata: None,
+        }
+    }
+
+    /// Every level is the same element on discipline 209: the level read
+    /// off the assembled template is what tells them apart, and a level is
+    /// never taken for its neighbour (the composite's matcher is
+    /// level-blind and must stay out of the family).
+    #[test]
+    fn an_mrms_level_matches_its_own_variable_only() {
+        let band = mrms_level(3000);
+        assert!(band_matches("refl3000", &band).expect("registered"));
+        for other in ["refl500", "refl300", "refl30000", "refl3500"] {
+            assert!(!band_matches(other, &band).unwrap_or(false), "{other}");
+        }
+        assert!(!band_matches("cref", &band).expect("registered"));
+        // Without the assembled values, the short name says the same.
+        let mut bare = mrms_level(500);
+        bare.metadata.remove("GRIB_PDS_TEMPLATE_ASSEMBLED_VALUES");
+        assert!(band_matches("refl500", &bare).expect("registered"));
+        assert!(!band_matches("refl750", &bare).expect("registered"));
+        // Another surface type at the same value is not the level.
+        let mut wrong_surface = mrms_level(3000);
+        wrong_surface.metadata.insert(
+            "GRIB_PDS_TEMPLATE_ASSEMBLED_VALUES".into(),
+            "9 0 8 0 97 0 0 0 0 103 0 3000 255 1 0".into(),
+        );
+        assert!(!band_matches("refl3000", &wrong_surface).expect("registered"));
+        // Nor is another discipline.
+        let mut wrong_discipline = mrms_level(3000);
+        wrong_discipline.metadata.insert("GRIB_DISCIPLINE".into(), "0".into());
+        assert!(!band_matches("refl3000", &wrong_discipline).expect("registered"));
+    }
+
+    #[test]
+    fn a_reflectivity_level_takes_the_composite_s_rule() {
+        assert_eq!(
+            raster_expression("refl19000", "dBZ").expect("dBZ"),
+            raster_expression("cref", "dBZ").expect("dBZ")
+        );
+        assert!(raster_expression("refl500", "mm/h").is_err());
+    }
 }

@@ -20,6 +20,7 @@ from .variables import (
     DUST_RGB_COMPONENT_IDS,
     ISOBARIC_LEVELS_HPA,
     OCEAN_VARIABLE_IDS,
+    REFLECTIVITY_VARIABLE_IDS,
     SATELLITE_CHANNEL_IDS,
     WAVE_VECTOR_COMPONENT_IDS,
     isobaric_variable_id,
@@ -155,6 +156,10 @@ COMPACT_FLUX = TemperatureCodebook(minimum=0.0, maximum=1270.0, step=10.0, name=
 # with a class the data never reached.
 QUALITY_REFLECTIVITY = TemperatureCodebook(minimum=0.0, maximum=80.0, step=0.5, name="cref")
 COMPACT_REFLECTIVITY = TemperatureCodebook(minimum=0.0, maximum=80.0, step=1.0, name="cref")
+# The reflectivity volume's 33 levels quantize exactly as the composite does:
+# the same quantity in the same unit, drawn with the same palette.
+QUALITY_REFLECTIVITY_VOLUME = {variable_id: QUALITY_REFLECTIVITY for variable_id in REFLECTIVITY_VARIABLE_IDS}
+COMPACT_REFLECTIVITY_VOLUME = {variable_id: COMPACT_REFLECTIVITY for variable_id in REFLECTIVITY_VARIABLE_IDS}
 # Wind gust: a speed, so one-sided, at the 10 m components' 0.5 m/s step but
 # over 0–127 m/s — the isobaric wind's ceiling, which no surface gust in a
 # 0.25° model reaches (a category-5 core gusts in the 80s). Spends the full
@@ -631,6 +636,7 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
         "vgrd100m": QUALITY_WIND,
         "dswrf": QUALITY_FLUX,
         "cref": QUALITY_REFLECTIVITY,
+        **QUALITY_REFLECTIVITY_VOLUME,
         "gust": QUALITY_GUST,
         "tcdc": QUALITY_CLOUD,
         "cape": QUALITY_CAPE,
@@ -659,6 +665,7 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
         "vgrd100m": COMPACT_WIND,
         "dswrf": COMPACT_FLUX,
         "cref": COMPACT_REFLECTIVITY,
+        **COMPACT_REFLECTIVITY_VOLUME,
         "gust": COMPACT_GUST,
         "tcdc": COMPACT_CLOUD,
         "cape": COMPACT_CAPE,
@@ -698,6 +705,7 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
         "vgrd100m": QUALITY_WIND,
         "dswrf": QUALITY_FLUX,
         "cref": QUALITY_REFLECTIVITY,
+        **QUALITY_REFLECTIVITY_VOLUME,
         "gust": QUALITY_GUST,
         "tcdc": COMPACT_CLOUD,
         "cape": QUALITY_CAPE,

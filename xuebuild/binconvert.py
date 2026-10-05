@@ -62,6 +62,7 @@ from .variables import (
     DUST_RGB_BUNDLE_ID,
     DUST_RGB_COMPONENT_IDS,
     ISOBARIC_LEVELS_HPA,
+    REFLECTIVITY_VARIABLE_IDS,
     STANDARD_GRAVITY,
     SURFACE_TEMPERATURE_IDS,
     VARIABLES,
@@ -124,13 +125,25 @@ COMPOSITE_BUNDLES: dict[str, tuple[str, ...]] = {
 }
 
 
+# Volume bundles: many variables each read directly off the source's
+# records and written as one bundle in this order — the MRMS reflectivity
+# mosaic's 33 constant-altitude levels, lowest first, so a cell's column is
+# one tile's adjacent chunks. Nothing is derived; the bundle is a packaging
+# of its members. Mirrored in encode/convert.rs.
+VOLUME_BUNDLES: dict[str, tuple[str, ...]] = {
+    "refl3d": REFLECTIVITY_VARIABLE_IDS,
+}
+
+
 def bundle_variable_ids(bundle_id: str) -> tuple[str, ...]:
     """The variables one bundle carries, in bundle order: a scalar's own,
-    a vector's pair, a composite's components."""
+    a vector's pair, a composite's components, a volume's levels."""
     if bundle_id in VECTOR_BUNDLES:
         return VECTOR_BUNDLES[bundle_id]
     if bundle_id in COMPOSITE_BUNDLES:
         return COMPOSITE_BUNDLES[bundle_id]
+    if bundle_id in VOLUME_BUNDLES:
+        return VOLUME_BUNDLES[bundle_id]
     return (bundle_id,)
 
 
@@ -191,7 +204,7 @@ def video_variable_ids(source: SourceSpec) -> frozenset[str]:
 # previous frame inside its chunk. The categorical precipitation type is RAW
 # for the same reason a codebook of classes never differences: every class
 # boundary moves with the weather, and a category's code is not a number.
-RAW_VARIABLE_IDS = {"prate", "cref", "ptype"}
+RAW_VARIABLE_IDS = {"prate", "cref", "ptype", *REFLECTIVITY_VARIABLE_IDS}
 # The pressure family (sea level pressure, pressure-level geopotential
 # heights) ships bundles only: the frontend draws it as contour lines, which
 # needs the exact codes and never the H.264 companion's chroma-subsampled
@@ -368,6 +381,8 @@ def bundle_input_ids(source: SourceSpec, bundle_id: str) -> tuple[str, ...]:
         if source.platform is None:
             return producer.inputs
         return producer.inputs_for(satellite_platform(source.platform))
+    if bundle_id in VOLUME_BUNDLES:
+        return VOLUME_BUNDLES[bundle_id]
     if bundle_id in DERIVED_SCALARS:
         return DERIVED_SCALARS[bundle_id]
     if bundle_id == "prate":
@@ -451,9 +466,9 @@ def series_lead_seconds(frames: dict[str, SourceFrame]) -> int:
 def published_bundle_ids(source: SourceSpec) -> tuple[str, ...]:
     """Every bundle a source can publish, in manifest order: its scalars,
     then each listed vector bundle whose inputs the source fetches, then
-    each listed composite whose producer's channels it fetches. A derived
-    scalar counts the same way — listed, it ships only when its inputs
-    are."""
+    each listed composite whose producer's channels it fetches, then each
+    listed volume whose levels it fetches. A derived scalar counts the same
+    way — listed, it ships only when its inputs are."""
     scalars = tuple(
         bundle_id
         for bundle_id in source.bundle_scalar_ids
@@ -469,7 +484,12 @@ def published_bundle_ids(source: SourceSpec) -> tuple[str, ...]:
         for bundle_id in source.bundle_composite_ids
         if all(variable_id in source.input_variable_ids for variable_id in bundle_input_ids(source, bundle_id))
     )
-    return scalars + vectors + composites
+    volumes = tuple(
+        bundle_id
+        for bundle_id in source.bundle_volume_ids
+        if all(variable_id in source.input_variable_ids for variable_id in bundle_input_ids(source, bundle_id))
+    )
+    return scalars + vectors + composites + volumes
 
 
 def _grid_info(path: Path, source: SourceSpec | None = None) -> GridInfo:
@@ -1890,6 +1910,7 @@ def convert_bin(
         )
         available_derived_ids: tuple[str, ...] = ()
         available_composite_ids = tuple(bundle_id for bundle_id in requested_bundle_ids if bundle_id in COMPOSITE_BUNDLES)
+        available_volume_ids = tuple(bundle_id for bundle_id in requested_bundle_ids if bundle_id in VOLUME_BUNDLES)
         drop_ids: frozenset[str] = frozenset()
         grid_path = series.dataset
         plane_source: PlaneSource | dict[str, PlaneSource] = series.plane_sources
@@ -1956,6 +1977,16 @@ def convert_bin(
             bundle_id
             for bundle_id in requested_derived_ids
             if all(variable_id in reference_frames for variable_id in DERIVED_SCALARS[bundle_id])
+        )
+        # A volume's levels are every one of them an input the run must
+        # carry (none is optional), so a listed volume is built from what
+        # the first file was found to hold.
+        available_volume_ids = tuple(
+            bundle_id
+            for bundle_id in published_bundle_ids(source)
+            if bundle_id in VOLUME_BUNDLES
+            and (bundle_ids is None or bundle_id in bundle_ids)
+            and all(variable_id in reference_frames for variable_id in VOLUME_BUNDLES[bundle_id])
         )
         for bundle_id in requested_vector_ids + requested_derived_ids:
             if bundle_id not in available_vector_ids + available_derived_ids:
@@ -2204,7 +2235,7 @@ def convert_bin(
         )
     encoded_variable_ids = scalar_variable_ids + tuple(
         variable_id
-        for bundle_id in available_vector_ids + available_composite_ids
+        for bundle_id in available_vector_ids + available_composite_ids + available_volume_ids
         for variable_id in bundle_variable_ids(bundle_id)
     )
     # Scalars that also ship a poster — every published scalar but the
@@ -2422,12 +2453,12 @@ def convert_bin(
             return writers.submit(job)
 
         # Submit largest first — the full tier, then each rung of the
-        # ladder in turn — so the vector and composite bundles' long
+        # ladder in turn — so the volume, composite and vector bundles' long
         # compression starts at once; reports keep the
-        # scalars-then-vectors-then-composites manifest order and, within a
+        # scalars-vectors-composites-volumes manifest order and, within a
         # bundle, the ladder's ascending factor order regardless.
-        submit_order = available_composite_ids + available_vector_ids + scalar_variable_ids
-        report_order = scalar_variable_ids + available_vector_ids + available_composite_ids
+        submit_order = available_volume_ids + available_composite_ids + available_vector_ids + scalar_variable_ids
+        report_order = scalar_variable_ids + available_vector_ids + available_composite_ids + available_volume_ids
         full_futures = {bundle_id: submit_bundle(bundle_id, 1, codes_by_offset) for bundle_id in submit_order}
         variant_futures = {
             factor: {

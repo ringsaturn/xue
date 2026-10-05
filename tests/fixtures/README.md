@@ -248,6 +248,36 @@ cat crop.MRMS_MergedReflectivityQCComposite_00.50_20260913-000242.grib2 \
     crop.MRMS_PrecipRate_00.00_20260913-000200.grib2 > tests/fixtures/mrms.2026091300.t0002.crop.grib2
 ```
 
+`mrms3d.2026100423.t0030.crop.grib2` and `mrms3d.2026100423.t0040.crop.grib2`
+are a 300 by 140 cell window of two ten-minute frames of the MRMS
+reflectivity volume: each the 33 levels of one scan
+(`MergedReflectivityQC_00.50` to `MergedReflectivityQC_19.00`, stamped
+2026-10-04 23:30:40 and 23:40:38, the scans the slot rule takes at the 23:30
+and 23:40 marks) concatenated in level order, the way the fetcher assembles
+a frame; the names are the fetcher's. The window is the Georgia and South
+Carolina coast (81.75W to 78.75W, 32N to 30.6N) under a line of storms:
+echo to 55 dBZ near the ground, above 30 dBZ to about 9 km and tops near
+17 km, outside coverage (`-999`) over most of the sea at 500 m where the
+beams overshoot, and clear air (`-99`) above the tops, so the per-level
+record matching, both sentinels, the five-to-one block maximum (300 by 140
+cells become 60 by 28, two tiles of 50), the ten-minute axis and the
+byte-identity parity test all run against real records. Cut, from the 66
+objects gunzipped, with:
+
+```sh
+levels="00.50 00.75 01.00 01.25 01.50 01.75 02.00 02.25 02.50 02.75 03.00 03.50 04.00 04.50 05.00
+        05.50 06.00 06.50 07.00 07.50 08.00 08.50 09.00 10.00 11.00 12.00 13.00 14.00 15.00 16.00
+        17.00 18.00 19.00"
+for f in MRMS_MergedReflectivityQC_*_20261004-233040 MRMS_MergedReflectivityQC_*_20261004-234038; do
+  gdal_translate -srcwin 4825 2300 300 140 -of GRIB -co DATA_ENCODING=PNG $f.grib2 crop.$f.grib2
+done
+for pair in "233040 t0030" "234038 t0040"; do
+  set -- $pair
+  for m in $levels; do cat crop.MRMS_MergedReflectivityQC_${m}_20261004-$1.grib2; done \
+    > tests/fixtures/mrms3d.2026100423.$2.crop.grib2
+done
+```
+
 `jma.2026091601.crop.nc` is a NetCDF series of three frames of the JMA
 precipitation nowcast (01:05, 01:10 and 01:20 UTC on 2026-09-16; 01:15 left
 out so the axis lists its offsets) cropped to 400 by 300 cells of the

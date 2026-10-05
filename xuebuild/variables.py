@@ -1654,6 +1654,70 @@ for _family in ISOBARIC_FAMILIES:
         VARIABLES[isobaric_variable_id(_family, _level)] = _isobaric_spec(_family, _level)
 del _family, _level
 
+
+# The MRMS reflectivity volume: the radar mosaic's 33 constant-altitude
+# planes (CAPPIs), 500 m to 19 km above mean sea level, densest near the
+# ground. Every level is the same MRMS-local parameter (209/9/0,
+# ``MergedReflectivityQC``) on the "specific altitude above mean sea level"
+# surface (102) at the level's height in metres, so the family is generated
+# from one table like the isobaric ones. MRMS publishes each level as a
+# product of its own, ``MergedReflectivityQC_<km>`` with the height in
+# kilometres to two decimals. Unlike the composite, which this pipeline
+# publishes under the WMO identity a forecast reflectivity shares, there is
+# no WMO parameter for a reflectivity on an altitude surface, so the
+# MRMS-local identity is the primary one and is what a bundle declares.
+# The order is the bundle's variable order (``refl3d``).
+REFLECTIVITY_LEVELS_M: tuple[int, ...] = (
+    500, 750, 1000, 1250, 1500, 1750, 2000, 2250, 2500, 2750,
+    3000, 3500, 4000, 4500, 5000, 5500, 6000, 6500, 7000, 7500,
+    8000, 8500, 9000, 10000, 11000, 12000, 13000, 14000, 15000,
+    16000, 17000, 18000, 19000,
+)  # fmt: skip
+
+
+def reflectivity_variable_id(level_m: int) -> str:
+    return f"refl{level_m}"
+
+
+def reflectivity_level(variable_id: str) -> int | None:
+    """The altitude in metres of a ``refl<metres>`` variable, or None for
+    anything else — including a height that is not one of the volume's."""
+    if variable_id.startswith("refl") and variable_id[len("refl") :].isdigit():
+        level = int(variable_id[len("refl") :])
+        if level in REFLECTIVITY_LEVELS_M:
+            return level
+    return None
+
+
+REFLECTIVITY_VARIABLE_IDS: tuple[str, ...] = tuple(reflectivity_variable_id(level) for level in REFLECTIVITY_LEVELS_M)
+
+
+def _reflectivity_spec(level_m: int) -> VariableSpec:
+    # The same sentinels as the composite: -999 outside radar coverage
+    # (which is most of a low level away from a radar, the beam being above
+    # it), -99 inside coverage with no echo; both become the codebook bottom
+    # and the sub-zero returns left are clamped there by the codebook.
+    return VariableSpec(
+        id=reflectivity_variable_id(level_m),
+        label=f"Radar reflectivity at {level_m / 1000:g} km MSL",
+        output_unit="dBZ",
+        value_range=(0, 80),
+        grib_element="MergedReflectivityQC",
+        mrms_product=f"MergedReflectivityQC_{level_m / 1000:05.2f}",
+        grib2_discipline=209,
+        grib2_category=9,
+        grib2_number=0,
+        grib2_level_type=102,
+        grib2_level_value=float(level_m),
+        gdal_unit="dBZ",
+        fill_values=(-999.0, -99.0),
+    )
+
+
+for _level in REFLECTIVITY_LEVELS_M:
+    VARIABLES[reflectivity_variable_id(_level)] = _reflectivity_spec(_level)
+del _level
+
 # Standard gravity, the g in q·V/g.
 STANDARD_GRAVITY = 9.80665
 

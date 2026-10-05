@@ -19,7 +19,7 @@ use std::path::{Path, PathBuf};
 
 use crate::encode::errors::{EncodeError, Result};
 use crate::encode::reproject::Regrid;
-use crate::encode::variables::AEROSOL_VARIABLE_IDS;
+use crate::encode::variables::{AEROSOL_VARIABLE_IDS, REFLECTIVITY_VARIABLE_IDS};
 
 /// A second file family of the same cycle some of a source's inputs are read
 /// from — GFS-Wave beside the pgrb2 atmosphere, ECMWF's `wave` stream beside
@@ -220,6 +220,13 @@ pub struct SourceSpec {
     /// off the series the fetch stage wrote and never derives them itself.
     /// Mirrors `bundle_composite_ids` in `xuebuild/sources.py`.
     pub bundle_composite_ids: &'static [&'static str],
+    /// Volume bundles published after the composites, in manifest order: a
+    /// bundle of many variables each read directly from its own record — the
+    /// MRMS 3D mosaic's `refl3d`, one reflectivity per constant-altitude
+    /// level (`convert::volume_components`). Listing one publishes it only
+    /// when every member is in `input_variable_ids`. Mirrors
+    /// `bundle_volume_ids` in `xuebuild/sources.py`.
+    pub bundle_volume_ids: &'static [&'static str],
     /// Grid a complete (`require_complete`) build must arrive on.
     pub production_grid: (usize, usize),
     /// Container v2 tile size as `(width, height)` in grid cells. Mirrors
@@ -484,6 +491,7 @@ pub const SOURCES: &[SourceSpec] = &[
             "wind300", "wind250", "wind200", "qflux850", "wave",
         ],
         bundle_composite_ids: &[],
+        bundle_volume_ids: &[],
         production_grid: (1440, 721),
         tile: (48, 52),
         variant_factors: &[2],
@@ -550,6 +558,7 @@ pub const SOURCES: &[SourceSpec] = &[
             "wind200", "qflux850", "wave",
         ],
         bundle_composite_ids: &[],
+        bundle_volume_ids: &[],
         production_grid: (1440, 721),
         tile: (48, 52),
         variant_factors: &[2],
@@ -602,6 +611,7 @@ pub const SOURCES: &[SourceSpec] = &[
         core_bundle_ids: &["tmp2m", "prate"],
         bundle_vector_ids: &["wind10m", "wind925", "wind850", "wind250", "qflux850", "wave"],
         bundle_composite_ids: &[],
+        bundle_volume_ids: &[],
         production_grid: (1440, 721),
         tile: (48, 52),
         variant_factors: &[2],
@@ -660,6 +670,7 @@ pub const SOURCES: &[SourceSpec] = &[
         core_bundle_ids: &["tmp2m", "prate"],
         bundle_vector_ids: &["wind10m"],
         bundle_composite_ids: &[],
+        bundle_volume_ids: &[],
         // The 0.1° global grid om2nc resamples onto: −180 to 179.9 and both
         // poles, the 0.25° grid's shape at two and a half times its step.
         production_grid: (3600, 1801),
@@ -702,6 +713,7 @@ pub const SOURCES: &[SourceSpec] = &[
         core_bundle_ids: &["tmp2m", "prate"],
         bundle_vector_ids: &["wind10m"],
         bundle_composite_ids: &[],
+        bundle_volume_ids: &[],
         production_grid: (3072, 1536),
         tile: (96, 96),
         variant_factors: &[2],
@@ -749,6 +761,7 @@ pub const SOURCES: &[SourceSpec] = &[
         core_bundle_ids: &["tmp2m", "prate"],
         bundle_vector_ids: &["wind10m", "wind925", "wind850", "wind250"],
         bundle_composite_ids: &[],
+        bundle_volume_ids: &[],
         // The 0.03° grid over the footprint of the 1799 x 1059 domain, from
         // 134.10 W, 52.62 N to 60.90 W, 21.12 N.
         production_grid: (2441, 1051),
@@ -804,6 +817,7 @@ pub const SOURCES: &[SourceSpec] = &[
         core_bundle_ids: &["aod"],
         bundle_vector_ids: &[],
         bundle_composite_ids: &[],
+        bundle_volume_ids: &[],
         production_grid: (1440, 721),
         tile: (48, 52),
         variant_factors: &[2],
@@ -900,6 +914,7 @@ pub const SOURCES: &[SourceSpec] = &[
             "wind200", "qflux925", "qflux850", "qflux700", "qflux500",
         ],
         bundle_composite_ids: &[],
+        bundle_volume_ids: &[],
         production_grid: (384, 190),
         // 96 x 95 cells cuts the grid into 4 x 2 = 8 tiles with no clipped
         // edge: a whole plane is 73 000 cells, so a tile is what keeps one
@@ -935,6 +950,7 @@ pub const SOURCES: &[SourceSpec] = &[
         core_bundle_ids: &["cref"],
         bundle_vector_ids: &[],
         bundle_composite_ids: &[],
+        bundle_volume_ids: &[],
         // The zoom-5 tile grid over the archive's bbox: 0.0439° cells from
         // 67.5E to 146.25E and 56.25N to 11.25N.
         production_grid: (1792, 1024),
@@ -978,6 +994,7 @@ pub const SOURCES: &[SourceSpec] = &[
         core_bundle_ids: &["cref"],
         bundle_vector_ids: &[],
         bundle_composite_ids: &[],
+        bundle_volume_ids: &[],
         // The thinned 0.02° grid: 130W to 60W, 55N to 20N.
         production_grid: (3500, 1750),
         tile: (64, 64),
@@ -989,6 +1006,51 @@ pub const SOURCES: &[SourceSpec] = &[
         series_file: false,
         open_meteo: None,
         downsample: Some(Downsample { factor: 2 }),
+    },
+    // NOAA MRMS 3D: the national mosaic's merged reflectivity on its 33
+    // constant-altitude levels, 0.5 to 19 km above mean sea level, one whole
+    // GRIB per level per two-minute scan in the same bucket as `mrms`. A
+    // published frame is every ten minutes, on the :x0 marks: the fetch keeps
+    // the scan stamped in the two minutes after each mark, all 33 levels from
+    // that one scan, and concatenates them in level order into one GRIB, so
+    // the observation times snap down to the ten-minute mark here
+    // (`cadence_seconds`). Each level is a variable of its own under the
+    // MRMS-local 209/9/0 on its altitude, published together as the `refl3d`
+    // volume bundle; the 7000 x 3500 grid is thinned five to one by block
+    // maximum onto 0.05°. Mirrors `xuebuild/sources.py`.
+    SourceSpec {
+        id: "mrms3d",
+        manifest_model: "NOAA-MRMS3D",
+        product: "conus-refl3d",
+        latest_filename: Some("latest-mrms3d.json"),
+        steps: &[],
+        input_variable_ids: &REFLECTIVITY_VARIABLE_IDS,
+        companion_files: &[],
+        accumulated_precipitation: false,
+        averaged_precipitation: false,
+        interval_precipitation: false,
+        average_window_hours: 6,
+        first_hour: 0,
+        optional_at_analysis: &[],
+        statistical_processes: &[],
+        bands: &[],
+        bundle_scalar_ids: &[],
+        core_bundle_ids: &["refl3d"],
+        bundle_vector_ids: &[],
+        bundle_composite_ids: &[],
+        bundle_volume_ids: &["refl3d"],
+        // The thinned 0.05° grid: 130W to 60W, 55N to 20N, cut into
+        // 2.5° tiles (28 x 14).
+        production_grid: (1400, 700),
+        tile: (50, 50),
+        variant_factors: &[2],
+        regrid: None,
+        observation: true,
+        window_hours: Some(3),
+        cadence_seconds: Some(600),
+        series_file: false,
+        open_meteo: None,
+        downsample: Some(Downsample { factor: 5 }),
     },
     // JMA 高解像度降水ナウキャスト: the agency's precipitation intensity
     // analysis over Japan, a frame every five minutes, published as map
@@ -1020,6 +1082,7 @@ pub const SOURCES: &[SourceSpec] = &[
         core_bundle_ids: &["prate"],
         bundle_vector_ids: &[],
         bundle_composite_ids: &[],
+        bundle_volume_ids: &[],
         // The 0.005° grid over the coverage envelope: 121E to 149E, 45.5N to
         // 20.5N.
         production_grid: (5600, 5000),
@@ -1095,6 +1158,7 @@ pub const SOURCES: &[SourceSpec] = &[
         // the channels, and the DEBRA confidence from five, each read off
         // the series like any channel.
         bundle_composite_ids: &["dustrgb", "dustcf"],
+        bundle_volume_ids: &[],
         // The platform's region at 0.04°: 120° x 120°.
         production_grid: (3000, 3000),
         tile: (64, 64),
@@ -1167,6 +1231,7 @@ pub const SOURCES: &[SourceSpec] = &[
         core_bundle_ids: &["ir104"],
         bundle_vector_ids: &[],
         bundle_composite_ids: &["dustrgb", "dustcf"],
+        bundle_volume_ids: &[],
         production_grid: (3000, 3000),
         tile: (64, 64),
         variant_factors: &[2, 4, 8],
@@ -1225,6 +1290,7 @@ pub const SOURCES: &[SourceSpec] = &[
         core_bundle_ids: &["ir104"],
         bundle_vector_ids: &[],
         bundle_composite_ids: &["dustrgb", "dustcf"],
+        bundle_volume_ids: &[],
         production_grid: (3000, 3000),
         tile: (64, 64),
         variant_factors: &[2, 4, 8],
@@ -1284,6 +1350,7 @@ pub const SOURCES: &[SourceSpec] = &[
         core_bundle_ids: &["ir104"],
         bundle_vector_ids: &[],
         bundle_composite_ids: &["dustrgb"],
+        bundle_volume_ids: &[],
         production_grid: (3000, 3000),
         tile: (64, 64),
         variant_factors: &[2, 4, 8],
@@ -1315,6 +1382,7 @@ pub const SOURCES: &[SourceSpec] = &[
         core_bundle_ids: &["aurora"],
         bundle_vector_ids: &[],
         bundle_composite_ids: &[],
+        bundle_volume_ids: &[],
         // The OVATION grid: 360 longitudes by 181 latitudes at 1 degree, cut
         // into 12 x 13 degree tiles. Mirrors `xuebuild/sources.py`.
         production_grid: (360, 181),
@@ -1424,7 +1492,7 @@ mod tests {
         assert_eq!(ifshres.production_grid, (3600, 1801));
         assert_eq!(ifshres.core_bundle_ids, &["tmp2m", "prate"]);
         // Every other forecast source is read record by record.
-        for model in ["gfs", "ecmwf", "aifs", "sflux", "hrrr", "gefsaero", "cfs", "mrms"] {
+        for model in ["gfs", "ecmwf", "aifs", "sflux", "hrrr", "gefsaero", "cfs", "mrms", "mrms3d"] {
             assert!(!source_spec(model).expect(model).series_file, "{model}");
         }
         // The aerosol source: nine scalar bundles, no vectors, no rain and
@@ -1600,6 +1668,35 @@ mod tests {
         assert!(cfs.regrid.is_none() && cfs.downsample.is_none() && cfs.open_meteo.is_none());
     }
 
+    /// The MRMS 3D mosaic: the 33 reflectivity levels read from one GRIB per
+    /// ten-minute frame and published as one volume bundle, thinned five to
+    /// one onto 0.05°. Mirrors the source assertions in
+    /// `tests/test_mrms3d.py`.
+    #[test]
+    fn the_mrms3d_volume_is_every_level_on_the_ten_minute_marks() {
+        let source = source_spec("mrms3d").expect("mrms3d");
+        assert_eq!((source.manifest_model, source.product), ("NOAA-MRMS3D", "conus-refl3d"));
+        assert_eq!(source.latest_filename, Some("latest-mrms3d.json"));
+        assert!(source.observation && source.fetched() && source.live() && !source.series_file);
+        assert_eq!((source.window_hours, source.cadence_seconds), (Some(3), Some(600)));
+        assert_eq!(source.input_variable_ids.len(), 33);
+        assert_eq!(source.input_variable_ids[0], "refl500");
+        assert_eq!(source.input_variable_ids[32], "refl19000");
+        assert!(source.bundle_scalar_ids.is_empty());
+        assert!(source.bundle_vector_ids.is_empty() && source.bundle_composite_ids.is_empty());
+        assert_eq!(source.bundle_volume_ids, &["refl3d"]);
+        assert_eq!(source.core_bundle_ids, &["refl3d"]);
+        assert_eq!(source.downsample.map(|downsample| downsample.factor), Some(5));
+        assert_eq!(source.production_grid, (1400, 700));
+        assert_eq!(source.tile, (50, 50));
+        assert_eq!((1400 / 50) * (700 / 50), 28 * 14);
+        assert_eq!(source.variant_factors, &[2]);
+        // Only the 3D mosaic ships a volume.
+        for other in SOURCES.iter().filter(|other| other.id != "mrms3d") {
+            assert!(other.bundle_volume_ids.is_empty(), "{}", other.id);
+        }
+    }
+
     /// ECMWF's gust record is all zeros at the analysis and not fetched
     /// there, so the series starts at the first step, the way its
     /// de-accumulated rate does.
@@ -1632,7 +1729,7 @@ mod tests {
         // A 6.5 M cell global plane takes two rungs, the way a 9 M cell
         // satellite disk takes three.
         assert_eq!(source_spec("ifshres").expect("ifshres").variant_factors, &[2, 4]);
-        for model in ["gfs", "ecmwf", "aifs", "sflux", "hrrr", "gefsaero", "cfs", "cma", "mrms", "jma"] {
+        for model in ["gfs", "ecmwf", "aifs", "sflux", "hrrr", "gefsaero", "cfs", "cma", "mrms", "mrms3d", "jma"] {
             assert_eq!(source_spec(model).expect(model).variant_factors, &[2], "{model}");
         }
     }

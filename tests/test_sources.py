@@ -28,6 +28,7 @@ IDENTITIES = {
     # The manifest identity outlived the source id's change from `radar`.
     "cma": ("CMA-RADAR", "l3-mst-cref", "latest-cma.json", ("cref",)),
     "mrms": ("NOAA-MRMS", "conus-cref", "latest-mrms.json", ("cref",)),
+    "mrms3d": ("NOAA-MRMS3D", "conus-refl3d", "latest-mrms3d.json", ("refl3d",)),
     "jma": ("JMA-HRPNS", "japan-prate", "latest-jma.json", ("prate",)),
     "himawari": ("HIMAWARI", "ahi-fldk-0p04", "latest-himawari.json", ("ir104",)),
     "goeseast": ("GOES-EAST", "abi-fldk-0p04", "latest-goeseast.json", ("ir104",)),

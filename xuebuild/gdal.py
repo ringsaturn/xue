@@ -12,7 +12,14 @@ from typing import Any
 
 from .errors import ConversionError
 from .model import SourceFrame
-from .variables import AEROSOL_VARIABLE_IDS, SURFACE_TEMPERATURE_IDS, AerosolIdentity, isobaric_variable, variable_spec
+from .variables import (
+    AEROSOL_VARIABLE_IDS,
+    SURFACE_TEMPERATURE_IDS,
+    AerosolIdentity,
+    isobaric_variable,
+    reflectivity_level,
+    variable_spec,
+)
 
 
 SUPPORTED_EXTENSIONS = {".grb", ".grb2", ".grib2"}
@@ -528,7 +535,7 @@ def raster_expression(variable_id: str, unit: str) -> str:
         return precipitation_type_expression(unit)
     if variable_id == "vis":
         return visibility_expression(unit)
-    if variable_id == "cref":
+    if variable_id == "cref" or reflectivity_level(variable_id) is not None:
         return reflectivity_expression(unit)
     if variable_id == "dpt2m":
         return celsius_expression(unit, low=-70, high=40)
@@ -813,17 +820,47 @@ def _isobaric_level_re(level_hpa: int) -> re.Pattern[str]:
 
 
 def _is_mrms_record(metadata: dict[str, str], variable_id: str) -> bool:
-    """One MRMS product under the registry's MRMS alternate for
-    ``variable_id``: GDAL names the record by the product (its local table
-    for centre 161 — ``MergedReflectivityQCComposite``, ``PrecipRate``), on
-    the MRMS-local discipline 209. The level is part of the product name
-    (``_00.50`` is the 500 m surface the composite is stamped on), so the
-    element alone is unambiguous."""
-    product = variable_spec(variable_id).mrms_product
-    if not product:
+    """One MRMS product under the registry's MRMS identity for
+    ``variable_id`` — its own (the reflectivity volume's levels) or its
+    discipline-209 alternate (the composite, the rate): GDAL names the
+    record by the product (its local table for centre 161 —
+    ``MergedReflectivityQCComposite``, ``PrecipRate``,
+    ``MergedReflectivityQC``), on the MRMS-local discipline 209, at a
+    height above mean sea level. The element is not enough: the volume's
+    33 levels share one, so the level must be this identity's too — read
+    off the assembled template (type of first fixed surface, scale factor
+    and scaled value at indices 9–11 of template 4.0), or, where the driver
+    did not assemble it, off the short name GDAL spells it with
+    (``3000-GPML``)."""
+    spec = variable_spec(variable_id)
+    if not spec.mrms_product:
         return False
-    element = product.split("_", 1)[0]
-    return metadata.get("GRIB_ELEMENT", "") == element and metadata.get("GRIB_DISCIPLINE", "") == "209"
+    element = spec.mrms_product.split("_", 1)[0]
+    if metadata.get("GRIB_ELEMENT", "") != element or metadata.get("GRIB_DISCIPLINE", "") != "209":
+        return False
+    identity = next(
+        (
+            (alternate.category, alternate.number, alternate.level_type, alternate.level_value)
+            for alternate in spec.grib2_alternates
+            if alternate.discipline == 209
+        ),
+        (spec.grib2_category, spec.grib2_number, spec.grib2_level_type, spec.grib2_level_value),
+    )
+    category, number, level_type, level_value = identity
+    try:
+        values = [int(field) for field in metadata.get("GRIB_PDS_TEMPLATE_ASSEMBLED_VALUES", "").split()]
+    except ValueError:
+        values = []
+    if metadata.get("GRIB_PDS_PDTN") == "0" and len(values) >= 12:
+        if (values[0], values[1], values[9]) != (category, number, level_type):
+            return False
+        if level_value is None:
+            return True
+        scale, scaled_value = values[10], values[11]
+        return scaled_value != 0xFFFFFFFF and scaled_value / (10.0**scale) == level_value
+    if level_type != 102 or level_value is None:
+        return True
+    return metadata.get("GRIB_SHORT_NAME", "").upper() == f"{level_value:g}-GPML"
 
 
 def _is_aerosol_record(metadata: dict[str, str], variable_id: str) -> bool:
@@ -946,6 +983,10 @@ def _band_matches(variable_id: str, metadata: dict[str, str], description: str) 
         return _is_entire_atmosphere_record(
             metadata, description, variable_spec(variable_id).grib_element
         ) or _is_mrms_record(metadata, variable_id)
+    if reflectivity_level(variable_id) is not None:
+        # One level of the MRMS reflectivity volume: the product's own
+        # identity, level included.
+        return _is_mrms_record(metadata, variable_id)
     if variable_id in ("lcdc", "mcdc", "hcdc"):
         return _is_cloud_layer_record(metadata, description, variable_spec(variable_id).grib_element)
     if variable_id in ("ugrd10m", "vgrd10m"):
