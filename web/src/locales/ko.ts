@@ -183,6 +183,8 @@ export const ko: Record<MessageKey, string> = {
   viewTerrainAria: "3D 지형",
   viewResetNorthAria: "북쪽으로 재설정",
   viewResetPitchAria: "기울기 재설정",
+  viewBoxAria: "폭풍 확대: 영역을 드래그",
+  viewSectionAria: "연직 단면: 선을 드래그",
   particlesToggle: "입자 애니메이션",
   particlesToggleAria: "바람 입자 애니메이션 전환",
 

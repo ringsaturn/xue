@@ -181,6 +181,8 @@ export const pt: Record<MessageKey, string> = {
   viewTerrainAria: "Relevo 3D",
   viewResetNorthAria: "Orientar para o norte",
   viewResetPitchAria: "Redefinir inclinação",
+  viewBoxAria: "Close da tempestade: arraste uma caixa",
+  viewSectionAria: "Corte vertical: arraste uma linha",
   particlesToggle: "Partículas",
   particlesToggleAria: "Alternar a animação de partículas de vento",
 

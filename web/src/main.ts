@@ -283,7 +283,8 @@ import {
 } from "./webcodecs";
 import { spawnZarrWorker, zarrInitMessage, zarrObjectUrl, zarrRootUrl, zarrStoreFor } from "./zarr/channel";
 import { deliverGif, exportGif, gifFileName, gifFrameWindow, type GifHost } from "./gifexport";
-import { DEFAULT_VERTICAL_EXAGGERATION, VOLUME_BUNDLE_LEVELS, VolumeLayer, volumeLevels, type VolumeLevels } from "./volume";
+import { DEFAULT_VERTICAL_EXAGGERATION, VOLUME_BUNDLE_LEVELS, VolumeLayer, tileRegion, volumeLevels, type VolumeLevels } from "./volume";
+import { boxBounds, VolumeTool, type LonLat, type VolumeDrag, type VolumeToolKind } from "./volumetool";
 
 // Rewrite the static shell into the detected locale and appearance before
 // anything renders.
@@ -431,6 +432,10 @@ function volumeBudget(
 ): VariantBudget | undefined {
   const levels = VOLUME_BUNDLE_LEVELS.get(bundleId);
   if (!budget || levels === undefined) return budget;
+  const cells = (budget.cells * VOLUME_PLANE_EQUIVALENT) / levels;
+  // A close-up decodes the box's tiles alone, so the box is the share, with
+  // no floor: that is what lets it take the full grid.
+  if (grid && volumeFocus) return { ...budget, cells, visibleShare: visibleGridShare(grid, volumeFocus) };
   // A volume ships no poster to weigh the view against; once it is open,
   // its own grid is the extent.
   let share = budget.visibleShare;
@@ -443,11 +448,7 @@ function volumeBudget(
       north: bounds.getNorth(),
     });
   }
-  return {
-    ...budget,
-    cells: (budget.cells * VOLUME_PLANE_EQUIVALENT) / levels,
-    visibleShare: Math.max(share, VOLUME_SHARE_FLOOR),
-  };
+  return { ...budget, cells, visibleShare: Math.max(share, VOLUME_SHARE_FLOOR) };
 }
 
 /** What `pickBundleVariant` needs to weigh a bundle's tiers against
@@ -947,14 +948,13 @@ map.addControl(new NavigationControl({ showCompass: false }), "top-right");
 const urlScene = parseSceneFromSearch(window.location.search);
 /** Whether the map holds the scene yet; until then the link's is the one. */
 let sceneApplied = false;
-map.addControl(
-  new ViewControl({
-    terrainSource: TERRAIN_MESH_SOURCE,
-    exaggeration: () => urlScene.terrain ?? DEFAULT_TERRAIN_EXAGGERATION,
-    onResize: syncControlColumn,
-  }),
-  "top-right",
-);
+const viewControl = new ViewControl({
+  terrainSource: TERRAIN_MESH_SOURCE,
+  exaggeration: () => urlScene.terrain ?? DEFAULT_TERRAIN_EXAGGERATION,
+  onResize: syncControlColumn,
+  onVolumeTool: (kind) => pressVolumeTool(kind),
+});
+map.addControl(viewControl, "top-right");
 
 /** The rail's box starts under the map's controls, whose column grows and
  * shrinks with the view tile's reset buttons: the stylesheet reads where it
@@ -1529,6 +1529,13 @@ let windLayerAdded = false;
 let windLayerGridSource: BundleMetadata | null = null;
 let volumeLayer: VolumeLayer | null = null;
 let volumeLayerAdded = false;
+/** The radar volume's close-up: the box dragged over a storm, whose tiles
+ * alone the session decodes (and so reads by range) at the full grid, the
+ * volume clipped to them. Null for the whole volume. */
+let volumeFocus: { west: number; east: number; south: number; north: number } | null = null;
+/** The vertical section's two ends, or null. */
+let volumeSection: [LonLat, LonLat] | null = null;
+let volumeTool: VolumeTool | null = null;
 
 /** One field the experiment computes: its layer, the grid it was last
  * configured for, and the input planes the plane on screen was built from
@@ -3730,7 +3737,8 @@ function blendTowardNext(timestamp: number): void {
   // One coverage box serves both slots, so a pair decoded for different views
   // (a pan mid-playback) holds the current image instead of blending a plane
   // against another frame's stale bytes.
-  if (current && upcoming && session.volume) {
+  if (current && upcoming && session.volume && sameTileRects(current[0]!.tiles, upcoming[0]!.tiles)) {
+    volumeLayer?.setRegion(volumeRegion(session));
     volumeLayer?.setBlend(
       current.map((frame) => frame.plane),
       upcoming.map((frame) => frame.plane),
@@ -3842,8 +3850,9 @@ function sessionViewportTiles(session: VariableSession): TileRect[] | null {
   if (session.resident && session.residentScope === "bundle") return null;
   if (session.vector && view.particles) return null;
   if (isCompositeInput(session)) return null;
-  // A ray may cross any part of the volume, so it is held whole.
-  if (session.volume) return null;
+  // A ray may cross any part of the volume, so it is held whole — or, in a
+  // close-up, exactly the box's tiles, which the volume is clipped to.
+  if (session.volume) return volumeFocus ? viewportTileRects(session.metadata, session.tiles, volumeFocus, 0) : null;
   const bounds = map.getBounds();
   return viewportTileRects(session.metadata, session.tiles, {
     west: bounds.getWest(),
@@ -4110,6 +4119,7 @@ function trySelectFrame(index: number): boolean {
     }
     ensureSlotGrid(slot, session);
     if (session.volume) {
+      volumeLayer?.setRegion(volumeRegion(session));
       volumeLayer?.setFrame(planes.map((plane) => plane!.plane));
     } else if (session.composite) {
       // One coverage box serves the three guns, so it has to be a box all
@@ -6730,6 +6740,85 @@ function setParticlesEnabled(next: boolean): void {
   if (target !== null) trySelectFrame(target);
 }
 
+/** The cells the volume layer holds: the close-up's tiles, or null for the
+ * whole grid. Taken from the box, not from what a frame's planes were
+ * decoded for: a session already resident decodes whole planes, which hold
+ * the box as well as tiles decoded for it do. */
+function volumeRegion(session: VariableSession) {
+  if (!volumeFocus || !session.tiles) return null;
+  const grid = session.metadata.grid;
+  const rects = viewportTileRects(session.metadata, session.tiles, volumeFocus, 0);
+  return tileRegion(rects, session.tiles, grid.width, grid.height);
+}
+
+/** A press on one of the volume tools in the view tile: clear what it holds,
+ * or arm it for the next drag, or disarm it. */
+function pressVolumeTool(kind: VolumeToolKind): void {
+  volumeTool ??= new VolumeTool(map, finishVolumeDrag, () => syncVolumeTools());
+  if (kind === "box" && volumeFocus) {
+    volumeTool.arm(null);
+    setVolumeFocus(null);
+    return;
+  }
+  if (kind === "section" && volumeSection) {
+    volumeTool.arm(null);
+    volumeSection = null;
+    volumeLayer?.setSection(null);
+    syncVolumeTools();
+    return;
+  }
+  volumeTool.arm(volumeTool.armed === kind ? null : kind);
+}
+
+function finishVolumeDrag(drag: VolumeDrag): void {
+  if (drag.kind === "box") {
+    setVolumeFocus(boxBounds(drag.start, drag.end));
+  } else {
+    volumeSection = [drag.start, drag.end];
+    volumeLayer?.setSection(volumeSection);
+    syncVolumeTools();
+  }
+}
+
+/** Close in on a box (the camera flies to it; its tiles are decoded at the
+ * finest tier the budget allows) or open back out to the whole volume. */
+function setVolumeFocus(focus: typeof volumeFocus): void {
+  volumeFocus = focus;
+  if (focus) {
+    map.fitBounds(
+      [
+        [focus.west, focus.south],
+        [focus.east, focus.north],
+      ],
+      { padding: 96, pitch: 55, duration: 1200 },
+    );
+  } else {
+    volumeLayer?.setRegion(null);
+  }
+  // The move's own moveend re-tiers and refreshes the tiles; a cleared box
+  // with the camera at rest needs both now.
+  refreshViewportTiles();
+  scheduleRetier();
+  if (requestedFrameIndex !== null) trySelectFrame(requestedFrameIndex);
+  syncVolumeTools();
+}
+
+function clearVolumeSelection(): void {
+  volumeTool?.arm(null);
+  volumeFocus = null;
+  volumeSection = null;
+  volumeLayer?.setRegion(null);
+  volumeLayer?.setSection(null);
+}
+
+function syncVolumeTools(): void {
+  viewControl.setVolumeTools({
+    available: activeSession?.volume != null,
+    box: volumeFocus !== null || volumeTool?.armed === "box",
+    section: volumeSection !== null || volumeTool?.armed === "section",
+  });
+}
+
 /** Create the radar volume layer on first use, above the plane layers and
  * below the boundary lines. `?vexag=` sets its vertical exaggeration. */
 function ensureVolumeLayer(): VolumeLayer {
@@ -6907,6 +6996,8 @@ function applyVariable(session: VariableSession): void {
   }
   windLayer?.setVisible(wind && view.particles);
   volumeLayer?.setVisible(session.volume !== null);
+  if (!session.volume) clearVolumeSelection();
+  syncVolumeTools();
   applyOverlays();
   applyMosaicMembers();
   applyComposite();

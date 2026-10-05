@@ -181,6 +181,8 @@ export const es: Record<MessageKey, string> = {
   viewTerrainAria: "Relieve 3D",
   viewResetNorthAria: "Orientar al norte",
   viewResetPitchAria: "Restablecer inclinación",
+  viewBoxAria: "Primer plano de la tormenta: arrastra un recuadro",
+  viewSectionAria: "Corte vertical: arrastra una línea",
   particlesToggle: "Partículas",
   particlesToggleAria: "Alternar la animación de partículas de viento",
 

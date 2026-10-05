@@ -216,6 +216,57 @@ export function maxPool2(plane: Uint8Array, width: number, height: number): Uint
   return out;
 }
 
+/** A regular latitude/longitude grid: its size and its first cell centre. */
+export interface VolumeGrid {
+  width: number;
+  height: number;
+  firstLongitude: number;
+  firstLatitude: number;
+  longitudeStep: number;
+  latitudeStep: number;
+}
+
+/** A rectangle of grid cells: the part of the grid a close-up holds. */
+export interface GridRegion {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/** The cells a set of tile rectangles covers (inclusive tile indices, the
+ * decoder's shape), as one rectangle clipped to the grid, or null for none
+ * — the whole plane. */
+export function tileRegion(
+  rects: readonly { firstColumn: number; firstRow: number; lastColumn: number; lastRow: number }[] | null,
+  tile: { tileWidth: number; tileHeight: number },
+  width: number,
+  height: number,
+): GridRegion | null {
+  if (!rects || rects.length === 0) return null;
+  const firstColumn = Math.min(...rects.map((rect) => rect.firstColumn));
+  const firstRow = Math.min(...rects.map((rect) => rect.firstRow));
+  const lastColumn = Math.max(...rects.map((rect) => rect.lastColumn));
+  const lastRow = Math.max(...rects.map((rect) => rect.lastRow));
+  const x = firstColumn * tile.tileWidth;
+  const y = firstRow * tile.tileHeight;
+  const right = Math.min(width, (lastColumn + 1) * tile.tileWidth);
+  const bottom = Math.min(height, (lastRow + 1) * tile.tileHeight);
+  if (right <= x || bottom <= y) return null;
+  return { x, y, width: right - x, height: bottom - y };
+}
+
+/** The grid a region of `grid` is: the same steps from its own first cell. */
+export function regionGrid(grid: VolumeGrid, region: GridRegion): VolumeGrid {
+  return {
+    ...grid,
+    width: region.width,
+    height: region.height,
+    firstLongitude: grid.firstLongitude + region.x * grid.longitudeStep,
+    firstLatitude: grid.firstLatitude + region.y * grid.latitudeStep,
+  };
+}
+
 export const VOLUME_VERTEX_SHADER = `#version 300 es
 in vec3 a_position;
 uniform mat4 u_matrix;
@@ -246,6 +297,8 @@ uniform sampler2D u_levels;
 uniform vec3 u_codebook;
 uniform vec3 u_dbz;
 uniform float u_voxel;
+// The whole march dimmed while a section stands in it.
+uniform float u_veil;
 out vec4 out_color;
 
 const float PI = 3.141592653589793;
@@ -296,22 +349,57 @@ void main() {
     if (sum.a > 0.97) break;
   }
   if (sum.a <= 0.0) discard;
-  out_color = sum;
+  out_color = sum * u_veil;
 }
 `;
+
+/** A vertical section: a wall from sea level to the top along a line,
+ * painted with the volume's codes where it stands. Echo is opaque in the
+ * palette's colours, the rest a pale panel, so the wall reads as a chart
+ * standing in the volume. */
+export const SECTION_FRAGMENT_SHADER = `#version 300 es
+precision highp float;
+precision highp sampler3D;
+in vec3 v_world;
+uniform vec4 u_grid;
+uniform float u_z_scale;
+uniform float u_top;
+uniform sampler3D u_volume_a;
+uniform sampler3D u_volume_b;
+uniform float u_mix;
+uniform sampler2D u_palette;
+uniform sampler2D u_levels;
+uniform vec3 u_codebook;
+uniform vec2 u_dbz;
+out vec4 out_color;
+
+const float PI = 3.141592653589793;
+
+void main() {
+  float lon = v_world.x * 360.0 - 180.0;
+  float lat = degrees(atan(sinh(PI * (1.0 - 2.0 * v_world.y))));
+  vec2 uv = vec2((lon - u_grid.x) / u_grid.z, (u_grid.y - lat) / u_grid.w);
+  if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) discard;
+  float w = texture(u_levels, vec2(v_world.z / u_z_scale / u_top, 0.5)).r;
+  vec3 coordinate = vec3(uv, w);
+  float code = mix(texture(u_volume_a, coordinate).r, texture(u_volume_b, coordinate).r, u_mix) * 255.0;
+  float dbz = u_codebook.x + code * u_codebook.y;
+  bool echo = code <= u_codebook.z + 0.5 && dbz >= u_dbz.x;
+  vec3 color = echo ? texture(u_palette, vec2((code + 0.5) / 256.0, 0.5)).rgb : vec3(0.93);
+  float alpha = echo ? 0.95 : 0.5;
+  out_color = vec4(color * alpha, alpha);
+}
+`;
+
+/** The veil over the march while a section stands in it. */
+const SECTION_VEIL = 0.35;
+
+/** Reflectivity below which a section shows the panel, not the palette. */
+const SECTION_ECHO_DBZ = 10;
 
 interface VolumeSlot {
   texture: WebGLTexture;
   planes: readonly Uint8Array[] | null;
-}
-
-interface VolumeGrid {
-  width: number;
-  height: number;
-  firstLongitude: number;
-  firstLatitude: number;
-  longitudeStep: number;
-  latitudeStep: number;
 }
 
 /** The radar volume as a MapLibre custom layer. Fed the level planes of
@@ -346,6 +434,14 @@ export class VolumeLayer implements CustomLayerInterface {
   private boxDirty = true;
   private levelsDirty = true;
   private storageDirty = true;
+  /** The cells a close-up holds, or null for the whole grid. */
+  private region: GridRegion | null = null;
+  /** A section's two ends, longitude and latitude, or null. */
+  private section: [[number, number], [number, number]] | null = null;
+  private sectionProgram: WebGLProgram | null = null;
+  private sectionUniforms = new Map<string, WebGLUniformLocation | null>();
+  private sectionBuffer: WebGLBuffer | null = null;
+  private sectionVao: WebGLVertexArrayObject | null = null;
 
   constructor(
     private readonly onUnsupported: (message: string) => void,
@@ -398,6 +494,32 @@ export class VolumeLayer implements CustomLayerInterface {
     this.map?.triggerRepaint();
   }
 
+  /** Hold only `region`'s cells (the tiles a close-up decodes), or the
+   * whole grid. The textures, the box and the march all shrink to it. */
+  setRegion(region: GridRegion | null): void {
+    const same =
+      region === this.region ||
+      (region !== null &&
+        this.region !== null &&
+        region.x === this.region.x &&
+        region.y === this.region.y &&
+        region.width === this.region.width &&
+        region.height === this.region.height);
+    if (same) return;
+    this.region = region ? { ...region } : null;
+    this.storageDirty = true;
+    this.boxDirty = true;
+    for (const slot of this.slots) slot.planes = null;
+    this.map?.triggerRepaint();
+  }
+
+  /** A vertical section between two points, longitude and latitude, or
+   * none. */
+  setSection(section: [[number, number], [number, number]] | null): void {
+    this.section = section;
+    this.map?.triggerRepaint();
+  }
+
   setFrame(planes: readonly Uint8Array[]): void {
     this.setBlend(planes, null, 0);
   }
@@ -433,7 +555,7 @@ export class VolumeLayer implements CustomLayerInterface {
     }
     for (const name of [
       "u_matrix", "u_camera", "u_box_min", "u_box_max", "u_grid", "u_z_scale", "u_top",
-      "u_volume_a", "u_volume_b", "u_mix", "u_palette", "u_levels", "u_codebook", "u_dbz", "u_voxel",
+      "u_volume_a", "u_volume_b", "u_mix", "u_palette", "u_levels", "u_codebook", "u_dbz", "u_voxel", "u_veil",
     ]) {
       this.uniforms.set(name, gl.getUniformLocation(this.program, name));
     }
@@ -448,6 +570,23 @@ export class VolumeLayer implements CustomLayerInterface {
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.indexBuffer);
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, BOX_INDICES, gl.STATIC_DRAW);
     gl.bindVertexArray(null);
+    this.sectionProgram = linkProgram(gl, VOLUME_VERTEX_SHADER, SECTION_FRAGMENT_SHADER);
+    if (this.sectionProgram) {
+      for (const name of [
+        "u_matrix", "u_grid", "u_z_scale", "u_top", "u_volume_a", "u_volume_b", "u_mix",
+        "u_palette", "u_levels", "u_codebook", "u_dbz",
+      ]) {
+        this.sectionUniforms.set(name, gl.getUniformLocation(this.sectionProgram, name));
+      }
+      this.sectionVao = gl.createVertexArray();
+      this.sectionBuffer = gl.createBuffer();
+      gl.bindVertexArray(this.sectionVao);
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.sectionBuffer);
+      const sectionLocation = gl.getAttribLocation(this.sectionProgram, "a_position");
+      gl.enableVertexAttribArray(sectionLocation);
+      gl.vertexAttribPointer(sectionLocation, 3, gl.FLOAT, false, 0, 0);
+      gl.bindVertexArray(null);
+    }
     this.slots = [0, 1].map(() => ({ texture: gl.createTexture()!, planes: null }));
     this.paletteTexture = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, this.paletteTexture);
@@ -470,6 +609,9 @@ export class VolumeLayer implements CustomLayerInterface {
       gl.deleteBuffer(this.indexBuffer);
       gl.deleteVertexArray(this.vao);
       gl.deleteProgram(this.program);
+      gl.deleteProgram(this.sectionProgram);
+      gl.deleteBuffer(this.sectionBuffer);
+      gl.deleteVertexArray(this.sectionVao);
     }
     this.slots = [];
     this.gl = null;
@@ -500,6 +642,7 @@ export class VolumeLayer implements CustomLayerInterface {
     gl.uniform3f(this.uniforms.get("u_dbz")!, CLEAR_DBZ, DENSE_DBZ, VOXEL_OPACITY);
     // One texel of the texture as it is held, in Mercator units across.
     gl.uniform1f(this.uniforms.get("u_voxel")!, (box.max[0] - box.min[0]) / this.textureSize[0]);
+    gl.uniform1f(this.uniforms.get("u_veil")!, this.section ? SECTION_VEIL : 1);
 
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_3D, this.slots[0]!.texture);
@@ -522,12 +665,40 @@ export class VolumeLayer implements CustomLayerInterface {
     gl.bindVertexArray(this.vao);
     gl.drawElements(gl.TRIANGLES, BOX_INDICES.length, gl.UNSIGNED_SHORT, 0);
     gl.bindVertexArray(null);
+    if (this.section) this.renderSection(gl, matrix, box);
     gl.activeTexture(gl.TEXTURE0);
+  }
+
+  /** The section wall, over the march with the textures still bound. */
+  private renderSection(gl: WebGL2RenderingContext, matrix: ArrayLike<number>, box: VolumeBox): void {
+    if (!this.section || !this.sectionProgram || !this.sectionVao) return;
+    const [a, b] = this.section.map((point) => MercatorCoordinate.fromLngLat(point));
+    const top = box.max[2];
+    const wall = new Float32Array([a!.x, a!.y, 0, b!.x, b!.y, 0, a!.x, a!.y, top, b!.x, b!.y, top]);
+    gl.useProgram(this.sectionProgram);
+    const uniform = (name: string) => this.sectionUniforms.get(name)!;
+    gl.uniformMatrix4fv(uniform("u_matrix"), false, Float32Array.from(matrix));
+    gl.uniform4f(uniform("u_grid"), box.west, box.north, box.east - box.west, box.north - box.south);
+    gl.uniform1f(uniform("u_z_scale"), box.zScale);
+    gl.uniform1f(uniform("u_top"), box.top);
+    gl.uniform1f(uniform("u_mix"), this.slots[1]!.planes ? this.mixWeight : 0);
+    gl.uniform3f(uniform("u_codebook"), ...this.codebook);
+    gl.uniform2f(uniform("u_dbz"), SECTION_ECHO_DBZ, DENSE_DBZ);
+    gl.uniform1i(uniform("u_volume_a"), 0);
+    gl.uniform1i(uniform("u_volume_b"), 1);
+    gl.uniform1i(uniform("u_palette"), 2);
+    gl.uniform1i(uniform("u_levels"), 3);
+    gl.bindVertexArray(this.sectionVao);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.sectionBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, wall, gl.DYNAMIC_DRAW);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    gl.bindVertexArray(null);
   }
 
   private rebuildBox(gl: WebGL2RenderingContext): void {
     if (!this.grid || this.altitudes.length === 0) return;
-    this.box = volumeBox(this.grid, volumeTop(this.altitudes), this.exaggeration);
+    const grid = this.region ? regionGrid(this.grid, this.region) : this.grid;
+    this.box = volumeBox(grid, volumeTop(this.altitudes), this.exaggeration);
     const [x0, y0, z0] = this.box.min;
     const [x1, y1, z1] = this.box.max;
     const corners = new Float32Array([
@@ -560,8 +731,14 @@ export class VolumeLayer implements CustomLayerInterface {
   private ensureStorage(gl: WebGL2RenderingContext): void {
     if (!this.storageDirty || !this.grid) return;
     const limit = gl.getParameter(gl.MAX_3D_TEXTURE_SIZE) as number;
-    let [width, height] = [this.grid.width, this.grid.height];
-    this.planeSize = [width, height];
+    this.planeSize = [this.grid.width, this.grid.height];
+    // A close-up holds its own cells at full detail; one past the device's
+    // limit falls back to the whole grid, halved as that is.
+    if (this.region && (this.region.width > limit || this.region.height > limit)) {
+      this.region = null;
+      this.boxDirty = true;
+    }
+    let [width, height] = this.region ? [this.region.width, this.region.height] : this.planeSize;
     while ((width > limit || height > limit) && width > 1) {
       width = Math.ceil(width / 2);
       height = Math.ceil(height / 2);
@@ -583,6 +760,26 @@ export class VolumeLayer implements CustomLayerInterface {
     gl.bindTexture(gl.TEXTURE_3D, slot.texture);
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
     const [width, height] = this.textureSize;
+    const region = this.region;
+    if (region) {
+      // Only the region's cells: the rest of a close-up's planes are stale.
+      // A 3D upload takes its rows inside an image UNPACK_IMAGE_HEIGHT tall
+      // (by default the upload's own height), so skipping rows needs the
+      // plane's whole height there, or WebGL refuses the upload.
+      gl.pixelStorei(gl.UNPACK_ROW_LENGTH, this.planeSize[0]);
+      gl.pixelStorei(gl.UNPACK_IMAGE_HEIGHT, this.planeSize[1]);
+      gl.pixelStorei(gl.UNPACK_SKIP_PIXELS, region.x);
+      gl.pixelStorei(gl.UNPACK_SKIP_ROWS, region.y);
+      for (let level = 0; level < Math.min(planes.length, this.levelCount); level += 1) {
+        gl.texSubImage3D(gl.TEXTURE_3D, 0, 0, 0, level, width, height, 1, gl.RED, gl.UNSIGNED_BYTE, planes[level]!);
+      }
+      gl.pixelStorei(gl.UNPACK_ROW_LENGTH, 0);
+      gl.pixelStorei(gl.UNPACK_IMAGE_HEIGHT, 0);
+      gl.pixelStorei(gl.UNPACK_SKIP_PIXELS, 0);
+      gl.pixelStorei(gl.UNPACK_SKIP_ROWS, 0);
+      slot.planes = planes;
+      return;
+    }
     for (let level = 0; level < Math.min(planes.length, this.levelCount); level += 1) {
       let plane = planes[level]!;
       let [w, h] = this.planeSize;

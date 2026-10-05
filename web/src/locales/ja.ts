@@ -178,6 +178,8 @@ export const ja: Record<MessageKey, string> = {
   viewTerrainAria: "3D 地形",
   viewResetNorthAria: "北を上に戻す",
   viewResetPitchAria: "傾きをリセット",
+  viewBoxAria: "嵐のクローズアップ：範囲をドラッグ",
+  viewSectionAria: "鉛直断面：線をドラッグ",
   particlesToggle: "粒子アニメーション",
   particlesToggleAria: "風の粒子アニメーションを切り替え",
 

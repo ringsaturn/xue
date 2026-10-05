@@ -184,6 +184,8 @@ export const tr: Record<MessageKey, string> = {
   viewTerrainAria: "3B arazi",
   viewResetNorthAria: "Kuzeye sıfırla",
   viewResetPitchAria: "Eğimi sıfırla",
+  viewBoxAria: "Fırtına yakın planı: bir kutu sürükleyin",
+  viewSectionAria: "Düşey kesit: bir çizgi sürükleyin",
   particlesToggle: "Parçacıklar",
   particlesToggleAria: "Rüzgar parçacık animasyonunu aç/kapat",
 

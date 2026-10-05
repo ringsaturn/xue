@@ -157,7 +157,18 @@ and the window shrinks to fit it.
   takes altitude to the uneven level spacing. Colour is the cref palette,
   brightened with height; opacity rises from 18 to 60 dBZ and is per
   voxel, so the step count does not change the picture. Flat Mercator
-  only (nothing on the globe), no terrain occlusion.
+  only (nothing on the globe), no terrain occlusion. Two drag tools in the
+  view tile (`volumetool.ts`; shown over a volume only, armed by a press,
+  then the next drag — mouse or finger — through a clear sheet over the
+  canvas): a box is a close-up, the camera flies to it, the session's
+  viewport tiles become the box's (so only their chunks are read by
+  range) and the tier is weighed on the box's share with no floor, and
+  the layer holds just those cells (`setRegion`: textures sized to the
+  region, uploaded with `UNPACK_ROW_LENGTH`/`SKIP_*` and
+  `UNPACK_IMAGE_HEIGHT` set to the plane's height — a 3D upload refuses
+  skipped rows otherwise); a line stands a vertical section, a wall from
+  sea level to the top painted from the same 3D textures, over the march
+  veiled to a third. Pressing a tool again clears what it holds.
 - Altitude correction (`layer.ts::lapseCodes`): with relief on, a 2 m
   temperature is moved from the model's ground (the run's `orog` plane,
   decoded whole once and uploaded on its own grid) to the DEM's at

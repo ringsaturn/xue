@@ -25,7 +25,28 @@ export interface ViewControlOptions {
   exaggeration: () => number;
   /** The column's height changed (a reset button came or went). */
   onResize?: () => void;
+  /** One of the radar volume's tools was pressed (`main.ts` arms it, or
+   * clears what it selected). */
+  onVolumeTool?: (kind: "box" | "section") => void;
 }
+
+/** What the volume tools show: whether they are offered at all (only over
+ * a volume), and whether each is armed or holds a selection. */
+export interface VolumeToolState {
+  available: boolean;
+  box: boolean;
+  section: boolean;
+}
+
+const BOX_ICON = `<svg viewBox="0 0 29 29" width="29" height="29" aria-hidden="true">
+  <rect x="7.5" y="8.5" width="14" height="12" fill="none" stroke="#333" stroke-width="1.6" stroke-dasharray="2.6 2"/>
+  <path d="M12 17.5v-5M14.5 17.5v-7M17 17.5v-4" fill="none" stroke="#333" stroke-width="1.4" stroke-linecap="round"/>
+</svg>`;
+
+const SECTION_ICON = `<svg viewBox="0 0 29 29" width="29" height="29" aria-hidden="true">
+  <path d="M7 20.5 22 9.5" fill="none" stroke="#333" stroke-width="1.6" stroke-linecap="round"/>
+  <path d="M10.5 18v-6.5M14.5 15v-7M18.5 12V6.5" fill="none" stroke="#333" stroke-width="1.3" stroke-linecap="round"/>
+</svg>`;
 
 const PITCH_ICON = `<svg viewBox="0 0 29 29" width="29" height="29" aria-hidden="true">
   <path d="M7 19.5h15" fill="none" stroke="#333" stroke-width="1.6" stroke-linecap="round"/>
@@ -41,6 +62,8 @@ export class ViewControl implements IControl {
   private north: HTMLButtonElement | null = null;
   private needle: HTMLElement | null = null;
   private flat: HTMLButtonElement | null = null;
+  private box: HTMLButtonElement | null = null;
+  private section: HTMLButtonElement | null = null;
   /** Locale listeners cannot be removed; one is enough for the page. */
   private listening = false;
 
@@ -66,6 +89,14 @@ export class ViewControl implements IControl {
       map.easeTo({ pitch: 0 });
     });
     this.flat.querySelector(".maplibregl-ctrl-icon")!.innerHTML = PITCH_ICON;
+    this.box = this.button(container, "view-control-box", "viewBoxAria", () => this.options.onVolumeTool?.("box"));
+    this.box.querySelector(".maplibregl-ctrl-icon")!.innerHTML = BOX_ICON;
+    this.section = this.button(container, "view-control-section", "viewSectionAria", () =>
+      this.options.onVolumeTool?.("section"),
+    );
+    this.section.querySelector(".maplibregl-ctrl-icon")!.innerHTML = SECTION_ICON;
+    this.box.hidden = true;
+    this.section.hidden = true;
     this.container = container;
     map.on("projectiontransition", this.sync);
     map.on("terrain", this.sync);
@@ -109,13 +140,25 @@ export class ViewControl implements IControl {
   }
 
   private readonly label = (): void => {
-    for (const button of [this.globe, this.terrain, this.north, this.flat]) {
+    for (const button of [this.globe, this.terrain, this.north, this.flat, this.box, this.section]) {
       if (!button) continue;
       const text = t(button.dataset.label as MessageKey);
       button.title = text;
       button.setAttribute("aria-label", text);
     }
   };
+
+  /** Offer the volume tools, or not, and show which is armed or active. */
+  setVolumeTools(state: VolumeToolState): void {
+    if (!this.box || !this.section) return;
+    this.box.setAttribute("aria-pressed", String(state.box));
+    this.section.setAttribute("aria-pressed", String(state.section));
+    if (this.box.hidden === state.available) {
+      this.box.hidden = !state.available;
+      this.section.hidden = !state.available;
+      this.options.onResize?.();
+    }
+  }
 
   private readonly sync = (): void => {
     const map = this.map;

@@ -4,11 +4,14 @@ import {
   cameraFromMatrix,
   levelLookup,
   maxPool2,
+  regionGrid,
+  tileRegion,
   VOLUME_BUNDLE_LEVELS,
   volumeBox,
   volumeLevels,
   volumeTop,
 } from "../../web/src/volume";
+import { boxBounds, dragSelects } from "../../web/src/volumetool";
 
 const LEVELS_M = [
   500, 750, 1000, 1250, 1500, 1750, 2000, 2250, 2500, 2750, 3000, 3500, 4000, 4500, 5000, 5500, 6000, 6500, 7000,
@@ -155,5 +158,50 @@ describe("max pool", () => {
     const plane = Uint8Array.from([1, 9, 2, 3, 4, 5, 7, 0, 6, 8, 1, 1, 2, 3, 4]);
     // 5 x 3 → 3 x 2
     expect(Array.from(maxPool2(plane, 5, 3))).toEqual([9, 6, 8, 1, 3, 4]);
+  });
+});
+
+describe("close-up region", () => {
+  const tile = { tileWidth: 50, tileHeight: 50 };
+
+  it("is the union of the decoded tiles in cells, clipped to the grid", () => {
+    expect(tileRegion([{ firstColumn: 3, firstRow: 2, lastColumn: 5, lastRow: 4 }], tile, 1400, 700)).toEqual({
+      x: 150,
+      y: 100,
+      width: 150,
+      height: 150,
+    });
+    // The last tile row of a 700-row grid at 50 is whole; a 690-row grid clips it.
+    expect(tileRegion([{ firstColumn: 27, firstRow: 13, lastColumn: 27, lastRow: 13 }], tile, 1400, 690)).toEqual({
+      x: 1350,
+      y: 650,
+      width: 50,
+      height: 40,
+    });
+    expect(tileRegion(null, tile, 1400, 700)).toBeNull();
+  });
+
+  it("moves the grid's origin to the region's first cell", () => {
+    const grid = { width: 1400, height: 700, firstLongitude: -129.975, firstLatitude: 54.975, longitudeStep: 0.05, latitudeStep: -0.05 };
+    const sub = regionGrid(grid, { x: 150, y: 100, width: 150, height: 150 });
+    expect(sub.firstLongitude).toBeCloseTo(-122.475, 9);
+    expect(sub.firstLatitude).toBeCloseTo(49.975, 9);
+    expect([sub.width, sub.height]).toEqual([150, 150]);
+    const box = volumeBox(sub, 19500, 10);
+    expect(box.west).toBeCloseTo(-122.5, 9);
+    expect(box.north).toBeCloseTo(50, 9);
+  });
+});
+
+describe("volume drag tools", () => {
+  it("orders a box's corners whichever way it was dragged", () => {
+    expect(boxBounds([-80, 30], [-84, 33])).toEqual({ west: -84, east: -80, south: 30, north: 33 });
+  });
+
+  it("takes a tap for nothing and a drag for a selection", () => {
+    expect(dragSelects("box", 0, 0, 40, 5)).toBe(false);
+    expect(dragSelects("box", 0, 0, 40, 30)).toBe(true);
+    expect(dragSelects("section", 0, 0, 9, 9)).toBe(true);
+    expect(dragSelects("section", 0, 0, 5, 5)).toBe(false);
   });
 });

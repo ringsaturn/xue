@@ -181,6 +181,8 @@ export const fr: Record<MessageKey, string> = {
   viewTerrainAria: "Relief 3D",
   viewResetNorthAria: "Réorienter au nord",
   viewResetPitchAria: "Réinitialiser l’inclinaison",
+  viewBoxAria: "Gros plan d’un orage : tracer un cadre",
+  viewSectionAria: "Coupe verticale : tracer une ligne",
   particlesToggle: "Particules",
   particlesToggleAria: "Activer ou désactiver l'animation des particules de vent",
 

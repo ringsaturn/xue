@@ -181,6 +181,8 @@ export const de: Record<MessageKey, string> = {
   viewTerrainAria: "3D-Gelände",
   viewResetNorthAria: "Nach Norden ausrichten",
   viewResetPitchAria: "Neigung zurücksetzen",
+  viewBoxAria: "Sturm-Nahansicht: Rechteck aufziehen",
+  viewSectionAria: "Vertikalschnitt: Linie ziehen",
   particlesToggle: "Partikel",
   particlesToggleAria: "Windpartikel-Animation umschalten",
 

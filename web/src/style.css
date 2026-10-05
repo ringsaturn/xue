@@ -3254,6 +3254,31 @@ body[data-credits~="meteosat"] .source-credit[data-credit-model="meteosat"] {
   }
 }
 
+/* The radar volume's drag tools (volumetool.ts): while one is armed, a
+   clear sheet over the canvas takes the drag instead of the map, finger
+   or mouse alike, and draws the box or the line in the ink. */
+.volume-tool-sheet {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.volume-tool-shape {
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.volume-tool-shape rect,
+.volume-tool-shape line {
+  fill: color-mix(in srgb, var(--text) 8%, transparent);
+  stroke: var(--text);
+  stroke-width: 1.5;
+  stroke-dasharray: 5 4;
+}
+
 /* Restyled into the rail's language: one blurred tile, two halves. With
    the 1px border the tile is 44px wide — the rail tile's and the round
    controls' width, on the same right offset. */

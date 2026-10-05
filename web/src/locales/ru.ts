@@ -183,6 +183,8 @@ export const ru: Record<MessageKey, string> = {
   viewTerrainAria: "3D-рельеф",
   viewResetNorthAria: "Сбросить на север",
   viewResetPitchAria: "Сбросить наклон",
+  viewBoxAria: "Шторм крупным планом: выделите рамкой",
+  viewSectionAria: "Вертикальный разрез: проведите линию",
   particlesToggle: "Частицы",
   particlesToggleAria: "Включить или выключить анимацию частиц ветра",
 

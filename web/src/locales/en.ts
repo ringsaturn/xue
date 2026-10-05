@@ -337,6 +337,8 @@ export const en = {
   viewTerrainAria: "3D terrain",
   viewResetNorthAria: "Reset to north",
   viewResetPitchAria: "Reset tilt",
+  viewBoxAria: "Storm close-up: drag a box over it",
+  viewSectionAria: "Vertical section: drag a line",
   /** The wind layer's own control, in the transport capsule: the colored
    * speed field is always drawn, and this turns the particle animation over
    * it on and off. Icon-only, like the three circles above, so the name is

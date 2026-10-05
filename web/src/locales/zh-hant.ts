@@ -178,6 +178,8 @@ export const zhHant: Record<MessageKey, string> = {
   viewTerrainAria: "三維地形",
   viewResetNorthAria: "重設為正北",
   viewResetPitchAria: "重設俯仰",
+  viewBoxAria: "風暴特寫：框選一塊區域",
+  viewSectionAria: "垂直剖面：拖一條線",
   particlesToggle: "粒子動畫",
   particlesToggleAria: "切換風場粒子動畫",
 
