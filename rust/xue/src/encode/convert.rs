@@ -18,9 +18,9 @@ use crate::encode::binformat::{self, ChunkPayload, ChunkTables, HOUR_SECONDS};
 use crate::format::{ChunkEntry, Predictor, TileGeometry, VariableEntry, NO_DEPENDENCY};
 use crate::encode::errors::{EncodeError, Result};
 use crate::encode::variables::{
-    is_static, isobaric_variable, variable_spec, DUST_CF_BUNDLE_ID, DUST_CF_COMPONENT_IDS,
-    DUST_RGB_BUNDLE_ID, DUST_RGB_COMPONENT_IDS, ISOBARIC_LEVELS_HPA, STANDARD_GRAVITY,
-    WAVE_VECTOR_COMPONENT_IDS,
+    is_static, isobaric_variable, reflectivity_level, variable_spec, DUST_CF_BUNDLE_ID,
+    DUST_CF_COMPONENT_IDS, DUST_RGB_BUNDLE_ID, DUST_RGB_COMPONENT_IDS, ISOBARIC_LEVELS_HPA,
+    REFLECTIVITY_VARIABLE_IDS, STANDARD_GRAVITY, WAVE_VECTOR_COMPONENT_IDS,
 };
 use crate::encode::gdalio::{needs_serial_access, netcdf_guard, Dataset};
 use crate::encode::gribpng::GribPngFile;
@@ -101,6 +101,22 @@ pub fn composite_components(bundle_id: &str) -> Option<Vec<String>> {
     Some(components.iter().map(|id| (*id).to_string()).collect())
 }
 
+/// The MRMS 3D reflectivity volume: one variable per constant-altitude level.
+pub const REFLECTIVITY_VOLUME_BUNDLE_ID: &str = "refl3d";
+
+/// Volume bundles: many variables, each read directly from its own record,
+/// written as one bundle in this order — the MRMS 3D mosaic's reflectivity
+/// on its 33 levels, bottom to top. Unlike a composite's, the members are
+/// the source's own inputs. Mirrors `VOLUME_BUNDLES` in
+/// `xuebuild/binconvert.py`.
+pub fn volume_components(bundle_id: &str) -> Option<Vec<String>> {
+    let members: &[&str] = match bundle_id {
+        REFLECTIVITY_VOLUME_BUNDLE_ID => &REFLECTIVITY_VARIABLE_IDS,
+        _ => return None,
+    };
+    Some(members.iter().map(|id| (*id).to_string()).collect())
+}
+
 /// The Dust RGB's inputs: the 8.6, 10.4, 11.2 and 12.3 µm windows.
 const DUST_RGB_INPUT_IDS: [&str; 4] = ["ir086", "ir104", "ir112", "ir123"];
 /// The DEBRA confidence's inputs: the 3.9 µm window, the 6.2 µm water
@@ -133,14 +149,17 @@ fn composite_input_ids(source: &SourceSpec, bundle_id: &str) -> Option<Vec<Strin
 }
 
 /// The variables one bundle carries, in bundle order: a scalar's own, a
-/// vector's pair, a composite's components. Mirrors `bundle_variable_ids`
-/// in `xuebuild/binconvert.py`.
+/// vector's pair, a composite's components, a volume's levels. Mirrors
+/// `bundle_variable_ids` in `xuebuild/binconvert.py`.
 pub fn bundle_variable_ids(bundle_id: &str) -> Vec<String> {
     if let Some((u, v)) = vector_components(bundle_id) {
         return vec![u, v];
     }
     if let Some(components) = composite_components(bundle_id) {
         return components;
+    }
+    if let Some(members) = volume_components(bundle_id) {
+        return members;
     }
     vec![bundle_id.to_string()]
 }
@@ -222,9 +241,12 @@ pub fn vector_input_ids(bundle_id: &str) -> Vec<String> {
 /// the codes RAW. Every linear-codebook field chains against the previous
 /// frame inside its chunk. The categorical precipitation type is RAW for the
 /// same reason a codebook of classes never differences: every class boundary
-/// moves with the weather, and a category's code is not a number. Mirrors
+/// moves with the weather, and a category's code is not a number. Every
+/// level of the 3D reflectivity mosaic is RAW like the composite. Mirrors
 /// `RAW_VARIABLE_IDS` in `xuebuild/binconvert.py`.
-const RAW_VARIABLE_IDS: [&str; 3] = ["prate", "cref", "ptype"];
+fn is_raw_variable(variable_id: &str) -> bool {
+    matches!(variable_id, "prate" | "cref" | "ptype") || reflectivity_level(variable_id).is_some()
+}
 /// The pressure family: mean sea level pressure and the isobaric geopotential
 /// heights. The frontend draws them as contour lines, so they ship bundles
 /// only — no poster (it would paint a filled field the view never shows) and
@@ -371,6 +393,9 @@ pub fn bundle_input_ids(source: &SourceSpec, bundle_id: &str) -> Vec<String> {
     if let Some(inputs) = composite_input_ids(source, bundle_id) {
         return inputs;
     }
+    if let Some(members) = volume_components(bundle_id) {
+        return members;
+    }
     if let Some(inputs) = derived_scalar_inputs(bundle_id) {
         return inputs;
     }
@@ -464,8 +489,9 @@ fn discover_frames(inputs: &[PathBuf], source: &SourceSpec) -> Result<Vec<PathBu
 
 /// Every bundle a source can publish, in manifest order: its scalars, then
 /// each listed vector bundle whose inputs the source fetches, then each
-/// listed composite whose producer's channels it fetches. A derived scalar
-/// counts the same way — listed, it ships only when its inputs are.
+/// listed composite whose producer's channels it fetches, then each listed
+/// volume whose members it fetches. A derived scalar counts the same way —
+/// listed, it ships only when its inputs are.
 pub fn published_bundle_ids(source: &SourceSpec) -> Vec<&'static str> {
     let mut ids: Vec<&'static str> = source
         .bundle_scalar_ids
@@ -486,7 +512,11 @@ pub fn published_bundle_ids(source: &SourceSpec) -> Vec<&'static str> {
             ids.push(bundle_id);
         }
     }
-    for bundle_id in source.bundle_composite_ids {
+    for bundle_id in source
+        .bundle_composite_ids
+        .iter()
+        .chain(source.bundle_volume_ids)
+    {
         if bundle_input_ids(source, bundle_id)
             .iter()
             .all(|id| source.input_variable_ids.contains(&id.as_str()))
@@ -952,98 +982,131 @@ impl PlaneGrids {
 /// `grids` is the published grid per variable; a file holds one family's
 /// records, so the plane size is read off the grid of whatever the file
 /// carries.
+///
+/// Each band is taken through the whole per-plane chain ([`finish_plane`])
+/// as soon as it is read, so a frame never holds more than one
+/// full-resolution plane beside the thinned ones already finished: an MRMS
+/// 3D frame is 33 levels of 7000 x 3500 doubles, 6.5 GB read whole, and
+/// 196 MB a plane. The chain is per plane and the planes come back in
+/// `frames` order, so the output is the same either way. A file the netCDF
+/// driver reads is the exception: its reads are serialized
+/// (`netcdf_guard`), so its planes are read under the guard, the guard
+/// released, and only then finished, rather than holding every other
+/// worker's reads behind this one's arithmetic.
 fn extract_planes(
     frames: &FileFrames,
     grids: &PlaneGrids,
     plane_sources: &PlaneSources,
 ) -> Result<Vec<(String, Vec<f64>)>> {
-    // The files in first-seen order, each with the variables it holds.
-    let mut by_file: Vec<(&PathBuf, Vec<&(String, SourceFrame)>)> = Vec::new();
-    for entry in frames {
+    // The files in first-seen order, each with the positions in `frames` of
+    // the variables it holds.
+    let mut by_file: Vec<(&PathBuf, Vec<usize>)> = Vec::new();
+    for (index, entry) in frames.iter().enumerate() {
         match by_file.iter_mut().find(|(path, _)| **path == entry.1.path) {
-            Some((_, held)) => held.push(entry),
-            None => by_file.push((&entry.1.path, vec![entry])),
+            Some((_, held)) => held.push(index),
+            None => by_file.push((&entry.1.path, vec![index])),
         }
     }
-    let mut raw_planes: Vec<(String, Vec<f64>)> = Vec::with_capacity(frames.len());
-    for (source, file_frames) in by_file {
-        let (source_height, source_width) =
-            grids.for_variable(&file_frames[0].0)?.source_shape();
-        // The netCDF driver is not thread-safe; the guard is held for the
-        // whole extraction, open included, and is a no-op for every GRIB
-        // source.
-        let _serial = needs_serial_access(source).then(netcdf_guard);
-        let dataset = Dataset::open(source)?;
-        let png = GribPngFile::open(source);
-        if dataset.size() != (source_width, source_height) {
-            return Err(EncodeError::conversion(format!(
-                "extracted plane size mismatch for {}",
-                source.display()
-            )));
-        }
-        let unscale = plane_sources.for_variable(&file_frames[0].0)?.unscale;
-        for (variable_id, frame) in file_frames {
-            let mut plane = match &png {
-                Some(png) => png.read_band_f64(&dataset, frame.band)?,
-                None => dataset.read_band_f64(frame.band)?,
-            };
-            if unscale {
-                let band = dataset.band_info(frame.band)?;
-                if band.scale != 1.0 || band.offset != 0.0 {
-                    for value in &mut plane {
-                        *value = *value * band.scale + band.offset;
+    let mut planes: Vec<Option<Vec<f64>>> = vec![None; frames.len()];
+    for (source, positions) in by_file {
+        let first_id = &frames[positions[0]].0;
+        let (source_height, source_width) = grids.for_variable(first_id)?.source_shape();
+        let unscale = plane_sources.for_variable(first_id)?.unscale;
+        let serial = needs_serial_access(source);
+        let mut unfinished: Vec<(usize, Vec<f64>)> = Vec::new();
+        {
+            // The netCDF driver is not thread-safe; the guard is held for
+            // the file's open and every read, and is a no-op for every GRIB
+            // source.
+            let _serial = serial.then(netcdf_guard);
+            let dataset = Dataset::open(source)?;
+            let png = GribPngFile::open(source);
+            if dataset.size() != (source_width, source_height) {
+                return Err(EncodeError::conversion(format!(
+                    "extracted plane size mismatch for {}",
+                    source.display()
+                )));
+            }
+            for &position in &positions {
+                let frame = &frames[position].1;
+                let mut plane = match &png {
+                    Some(png) => png.read_band_f64(&dataset, frame.band)?,
+                    None => dataset.read_band_f64(frame.band)?,
+                };
+                if unscale {
+                    let band = dataset.band_info(frame.band)?;
+                    if band.scale != 1.0 || band.offset != 0.0 {
+                        for value in &mut plane {
+                            *value = *value * band.scale + band.offset;
+                        }
                     }
                 }
-            }
-            raw_planes.push((variable_id.clone(), plane));
-        }
-    }
-    let mut planes = Vec::with_capacity(frames.len());
-    for (variable_id, frame) in frames {
-        let source = &frame.path;
-        let position = raw_planes
-            .iter()
-            .position(|(id, _)| id == variable_id)
-            .expect("read just above");
-        let (_, mut plane) = raw_planes.swap_remove(position);
-        let grid = grids.for_variable(variable_id)?;
-        let (source_height, source_width) = grid.source_shape();
-        if grid.column_roll > 0 {
-            let roll = grid.column_roll;
-            let mut rolled = vec![0f64; plane.len()];
-            for row in 0..source_height {
-                let base = row * source_width;
-                for column in 0..source_width {
-                    rolled[base + column] =
-                        plane[base + (column + source_width - roll) % source_width];
+                if serial {
+                    unfinished.push((position, plane));
+                } else {
+                    planes[position] = Some(finish_plane(&frames[position], plane, grids, plane_sources)?);
                 }
             }
-            plane = rolled;
         }
-        // Missing data becomes a value before the plane is resampled, so a
-        // fill never blends into its neighbours; then the projected plane
-        // lands on the regular grid, and only then is a regional window cut.
-        plane_sources.for_variable(variable_id)?.apply_fill(&mut plane);
-        fill_missing(variable_id, &mut plane)?;
-        if let Some(resample) = &grid.resample {
-            plane = resample.take(&plane)?;
+        for (position, plane) in unfinished {
+            planes[position] = Some(finish_plane(&frames[position], plane, grids, plane_sources)?);
         }
-        if let Some(downsample) = &grid.downsample {
-            plane = downsample.take(&plane)?;
-        }
-        if let Some(crop) = grid.crop {
-            plane = crop.take(&plane);
-        }
-        if plane.iter().any(|value| !value.is_finite()) {
-            return Err(EncodeError::conversion(format!(
-                "Xue v1 requires complete planes, found non-finite values in {}",
-                source.display()
-            )));
-        }
-        convert_units(variable_id, &frame.unit, &mut plane)?;
-        planes.push((variable_id.clone(), plane));
     }
-    Ok(planes)
+    Ok(frames
+        .iter()
+        .zip(planes)
+        .map(|((variable_id, _), plane)| (variable_id.clone(), plane.expect("every frame read")))
+        .collect())
+}
+
+/// One extracted plane through the per-plane chain, into the published
+/// layout and physical units: the column roll, the fill values, the missing
+/// points, the resampling of a projected grid, the block thinning, the
+/// regional crop, the completeness check and the unit conversion, in that
+/// order.
+fn finish_plane(
+    (variable_id, frame): &(String, SourceFrame),
+    mut plane: Vec<f64>,
+    grids: &PlaneGrids,
+    plane_sources: &PlaneSources,
+) -> Result<Vec<f64>> {
+    let source = &frame.path;
+    let grid = grids.for_variable(variable_id)?;
+    let (source_height, source_width) = grid.source_shape();
+    if grid.column_roll > 0 {
+        let roll = grid.column_roll;
+        let mut rolled = vec![0f64; plane.len()];
+        for row in 0..source_height {
+            let base = row * source_width;
+            for column in 0..source_width {
+                rolled[base + column] =
+                    plane[base + (column + source_width - roll) % source_width];
+            }
+        }
+        plane = rolled;
+    }
+    // Missing data becomes a value before the plane is resampled, so a
+    // fill never blends into its neighbours; then the projected plane
+    // lands on the regular grid, and only then is a regional window cut.
+    plane_sources.for_variable(variable_id)?.apply_fill(&mut plane);
+    fill_missing(variable_id, &mut plane)?;
+    if let Some(resample) = &grid.resample {
+        plane = resample.take(&plane)?;
+    }
+    if let Some(downsample) = &grid.downsample {
+        plane = downsample.take(&plane)?;
+    }
+    if let Some(crop) = grid.crop {
+        plane = crop.take(&plane);
+    }
+    if plane.iter().any(|value| !value.is_finite()) {
+        return Err(EncodeError::conversion(format!(
+            "Xue v1 requires complete planes, found non-finite values in {}",
+            source.display()
+        )));
+    }
+    convert_units(variable_id, &frame.unit, &mut plane)?;
+    Ok(plane)
 }
 
 /// Map the points a record does not cover to the bottom of the variable's
@@ -1364,7 +1427,7 @@ fn bundle_chunks(
         .enumerate()
         .map(|(index, variable_id)| VariableEntry {
             variable_id: index as u8 + 1,
-            predictor: if RAW_VARIABLE_IDS.contains(variable_id) {
+            predictor: if is_raw_variable(variable_id) {
                 Predictor::Raw
             } else {
                 Predictor::Previous
@@ -1610,6 +1673,7 @@ pub fn convert_bin(
     let available_vector_ids: Vec<&'static str>;
     let available_derived_ids: Vec<&'static str>;
     let available_composite_ids: Vec<&'static str>;
+    let available_volume_ids: Vec<&'static str>;
     let drop_ids: Vec<String>;
     let grid_path: PathBuf;
     let plane_source: PlaneSources;
@@ -1719,6 +1783,11 @@ pub fn convert_bin(
             .iter()
             .copied()
             .filter(|bundle_id| composite_components(bundle_id).is_some())
+            .collect();
+        available_volume_ids = requested_bundle_ids
+            .iter()
+            .copied()
+            .filter(|bundle_id| volume_components(bundle_id).is_some())
             .collect();
         drop_ids = Vec::new();
         plane_source = PlaneSources::PerVariable(series.plane_sources);
@@ -1908,6 +1977,26 @@ pub fn convert_bin(
             options,
         )?;
         available_composite_ids = Vec::new();
+        // A volume's levels are every one of them an input the run must
+        // carry (none is optional), so a listed volume is built from what the
+        // first file was found to hold.
+        available_volume_ids = published
+            .iter()
+            .copied()
+            .filter(|bundle_id| {
+                options
+                    .bundle_ids
+                    .as_ref()
+                    .is_none_or(|ids| ids.iter().any(|wanted| wanted == bundle_id))
+            })
+            .filter(|bundle_id| {
+                volume_components(bundle_id).is_some_and(|members| {
+                    members
+                        .iter()
+                        .all(|id| reference_frames.iter().any(|(name, _)| name == id))
+                })
+            })
+            .collect();
         grid_path = paths[0].clone();
         plane_source = PlaneSources::Uniform(PlaneSource::grib());
         producer_versions = Vec::new();
@@ -2103,7 +2192,11 @@ pub fn convert_bin(
     }
     let mut encoded_variable_ids: Vec<String> =
         scalar_variable_ids.iter().map(|id| (*id).to_string()).collect();
-    for bundle_id in available_vector_ids.iter().chain(&available_composite_ids) {
+    for bundle_id in available_vector_ids
+        .iter()
+        .chain(&available_composite_ids)
+        .chain(&available_volume_ids)
+    {
         encoded_variable_ids.extend(bundle_variable_ids(bundle_id));
     }
     // Scalars that also ship a poster — every published scalar but the
@@ -2244,15 +2337,17 @@ pub fn convert_bin(
             .collect::<Result<_>>()?
     };
 
-    // Composite and vector bundles first (the largest), scalars after;
-    // reports keep the scalars-then-vectors-then-composites manifest order
-    // regardless.
-    let mut submit_order: Vec<&str> = available_composite_ids.clone();
+    // Volume, composite and vector bundles first (the largest), scalars
+    // after; reports keep the scalars-vectors-composites-volumes manifest
+    // order regardless.
+    let mut submit_order: Vec<&str> = available_volume_ids.clone();
+    submit_order.extend_from_slice(&available_composite_ids);
     submit_order.extend_from_slice(&available_vector_ids);
     submit_order.extend_from_slice(&scalar_variable_ids);
     let mut report_order: Vec<&str> = scalar_variable_ids.clone();
     report_order.extend_from_slice(&available_vector_ids);
     report_order.extend_from_slice(&available_composite_ids);
+    report_order.extend_from_slice(&available_volume_ids);
 
     let mut full_reports: BTreeMap<&str, Value> = BTreeMap::new();
     let mut variant_reports: BTreeMap<&str, Vec<Value>> = BTreeMap::new();
@@ -2918,9 +3013,14 @@ mod grid_family_tests {
         for variable_id in CFS_PGB_IDS {
             assert_eq!(grid_family_of(cfs, variable_id), Some("pgb"), "{variable_id}");
         }
-        for model in ["gfs", "ecmwf", "aifs", "sflux", "hrrr", "gefsaero", "ifshres", "mrms"] {
+        for model in ["gfs", "ecmwf", "aifs", "sflux", "hrrr", "gefsaero", "ifshres", "mrms", "mrms3d"] {
             let source = source_spec(model).expect(model);
-            for bundle_id in source.bundle_scalar_ids.iter().chain(source.bundle_vector_ids) {
+            for bundle_id in source
+                .bundle_scalar_ids
+                .iter()
+                .chain(source.bundle_vector_ids)
+                .chain(source.bundle_volume_ids)
+            {
                 assert_eq!(
                     bundle_grid_family(source, bundle_id).expect("one grid"),
                     None,
@@ -3037,6 +3137,41 @@ mod composite_tests {
         let meteosat = source_spec("meteosat").expect("meteosat");
         assert_eq!(bundle_input_ids(meteosat, "dustcf"), ["ir039", "wv062", "ir086", "ir104", "ir123"]);
         assert_eq!(published_bundle_ids(meteosat), ["ir104", "dustrgb"]);
+    }
+}
+
+#[cfg(test)]
+mod volume_tests {
+    use super::{bundle_input_ids, bundle_variable_ids, is_raw_variable, published_bundle_ids};
+    use crate::encode::sources::source_spec;
+    use crate::encode::variables::REFLECTIVITY_VARIABLE_IDS;
+
+    /// The `refl3d` volume carries the 33 levels bottom to top, reads each
+    /// from its own record, publishes after every other kind of bundle and
+    /// stacks every level RAW, as the composite does. Mirrors
+    /// `VOLUME_BUNDLES` in `xuebuild/binconvert.py` and `tests/test_mrms3d.py`.
+    #[test]
+    fn the_reflectivity_volume_is_its_33_levels_in_order() {
+        let source = source_spec("mrms3d").expect("mrms3d");
+        assert_eq!(bundle_variable_ids("refl3d"), REFLECTIVITY_VARIABLE_IDS);
+        assert_eq!(bundle_input_ids(source, "refl3d"), REFLECTIVITY_VARIABLE_IDS);
+        assert_eq!(published_bundle_ids(source), ["refl3d"]);
+        for variable_id in REFLECTIVITY_VARIABLE_IDS {
+            assert!(is_raw_variable(variable_id), "{variable_id}");
+        }
+        for variable_id in ["prate", "cref", "ptype"] {
+            assert!(is_raw_variable(variable_id), "{variable_id}");
+        }
+        for variable_id in ["tmp2m", "refl", "refl600", "ir104"] {
+            assert!(!is_raw_variable(variable_id), "{variable_id}");
+        }
+        // No other source publishes one.
+        for model in ["gfs", "ecmwf", "mrms", "himawari", "cma"] {
+            assert!(
+                !published_bundle_ids(source_spec(model).expect(model)).contains(&"refl3d"),
+                "{model}"
+            );
+        }
     }
 }
 

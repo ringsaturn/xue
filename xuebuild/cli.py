@@ -98,7 +98,7 @@ def _common_run_arguments(parser: argparse.ArgumentParser, *, force_help: str) -
         "(e.g. GFS: hourly to 120, then 3-hourly to 240); defaults to the whole axis "
         "the model publishes (240 for the global models, 18 for HRRR, 120 for GEFS-Aerosols, "
         "6552 for CFSv2, whose axis starts at 6); on an observation "
-        "source, the window length in hours (3 for MRMS, JMA and the CMA mosaic)",
+        "source, the window length in hours (3 for MRMS, its volume, JMA and the CMA mosaic)",
     )
     parser.add_argument("--force", action="store_true", help=force_help)
 
@@ -126,6 +126,8 @@ def _model_argument(parser: argparse.ArgumentParser, *, fetched_only: bool = Tru
             "thirty-nine weeks; 00Z and 12Z), "
             "NOAA MRMS, the radar mosaic over the contiguous US (an observation every "
             "two minutes; --run names the window's first hour and --hours its length, 3 by default), "
+            "mrms3d, its reflectivity volume on 33 levels from 0.5 to 19 km (a frame every ten "
+            "minutes at 0.05 degree; a window the same way), "
             "JMA, the precipitation nowcast over Japan (an observation every five minutes, "
             "fetched through the jma-radar tool; a window the same way), "
             "cma, the CMA composite reflectivity mosaic over China (an observation every "

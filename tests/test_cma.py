@@ -122,7 +122,7 @@ class SourceRegistryTests(unittest.TestCase):
             [spec.id for spec in SOURCES.values() if spec.series_file],
             ["ifshres", "cma", "jma", "himawari", "goeseast", "goeswest", "meteosat", "aurora"],
         )
-        self.assertEqual([spec.id for spec in SOURCES.values() if spec.observation], ["cma", "mrms", "jma", "himawari", "goeseast", "goeswest", "meteosat", "aurora"])
+        self.assertEqual([spec.id for spec in SOURCES.values() if spec.observation], ["cma", "mrms", "mrms3d", "jma", "himawari", "goeseast", "goeswest", "meteosat", "aurora"])
         self.assertTrue(all(spec.fetched and spec.live for spec in SOURCES.values()))
 
     def test_the_catalog_prose_names_the_agency_and_the_archive(self) -> None:

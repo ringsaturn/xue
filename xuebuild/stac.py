@@ -471,6 +471,18 @@ def _source_prose(source: SourceSpec) -> dict[str, Any]:
             "providers": [_NOAA_PROVIDER, _XUE_PROVIDER],
             "links": [_NOAA_LICENSE_LINK],
         },
+        "mrms3d": {
+            "title": "NOAA MRMS 3D reflectivity",
+            "description": (
+                "The NOAA Multi-Radar/Multi-Sensor merged reflectivity over the contiguous United "
+                "States on its 33 constant-altitude levels (CAPPIs, 0.5 to 19 km above mean sea "
+                "level), one bundle holding every level, a frame every ten minutes from the scan at "
+                "each mark, published as a rolling window and thinned to 0.05° by block maximum."
+            ),
+            "license": "other",
+            "providers": [_NOAA_PROVIDER, _XUE_PROVIDER],
+            "links": [_NOAA_LICENSE_LINK],
+        },
         "jma": {
             "title": "JMA precipitation nowcast (hrpns)",
             "description": (
@@ -1063,6 +1075,8 @@ def _bundle_title(bundle_id: str) -> str:
         return " / ".join(labels) if labels else bundle_id
     if bundle_id == "dustrgb":
         return "Dust RGB (red, green and blue guns)"
+    if bundle_id == "refl3d":
+        return "Radar reflectivity volume (33 CAPPI levels, 0.5–19 km MSL)"
     spec = VARIABLES.get(bundle_id)
     return spec.label if spec is not None else bundle_id
 

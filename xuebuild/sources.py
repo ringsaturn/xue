@@ -16,7 +16,7 @@ from pathlib import Path
 from .errors import DownloadError
 from .satellite.platforms import GOES_EAST, GOES_WEST, HIMAWARI, METEOSAT, SatelliteBand
 from .reproject import Regrid
-from .variables import AEROSOL_VARIABLE_IDS
+from .variables import AEROSOL_VARIABLE_IDS, REFLECTIVITY_VARIABLE_IDS, VARIABLES
 
 
 @dataclass(frozen=True)
@@ -121,7 +121,7 @@ class Downsample:
 class SourceSpec:
     id: str
     """CLI / URL / directory id: "gfs", "ecmwf", "aifs", "ifshres", "sflux", "hrrr", "gefsaero", "cma",
-    "mrms", "jma", "himawari", "goeseast", "goeswest" or "meteosat"."""
+    "mrms", "mrms3d", "jma", "himawari", "goeseast", "goeswest" or "meteosat"."""
     manifest_model: str
     """The manifest and bundle-metadata ``model`` string."""
     product: str
@@ -241,6 +241,14 @@ class SourceSpec:
     when every channel its producer reads is in :attr:`input_variable_ids`;
     the converter reads the produced components off the series the fetch
     stage wrote and never derives them itself."""
+    bundle_volume_ids: tuple[str, ...] = ()
+    """Volume bundles published after the composites, in manifest order: a
+    bundle of many variables each read directly off the source's records —
+    ``refl3d``, the MRMS reflectivity mosaic's 33 constant-altitude levels
+    (:data:`xuebuild.binconvert.VOLUME_BUNDLES`), one bundle so a reader
+    takes a column or a slab in one range. Listing one publishes it only
+    when every member is in :attr:`input_variable_ids`; a member is not
+    published as a scalar of its own."""
     production_grid: tuple[int, int] = (1440, 721)
     """Grid a complete (``require_complete``) build must arrive on."""
     tile: tuple[int, int] = (48, 52)
@@ -319,6 +327,20 @@ class SourceSpec:
     has no room for the seconds: the frame at ``00:02:41`` is the frame at
     ``00:02``. It is also the ``unitSeconds`` such a bundle declares, since
     no coarser unit fits its axis."""
+    object_cadence_seconds: int | None = None
+    """For a fetched observation whose published :attr:`cadence_seconds` is
+    a coarser multiple of the interval the bucket's objects come at: that
+    interval. An object's slot is its observation time snapped down to it,
+    and the slot is kept only when it is also a multiple of
+    :attr:`cadence_seconds` — so the MRMS reflectivity volume, scanned every
+    two minutes and published every ten, takes the scan stamped in
+    ``[mark, mark + 120 s)`` at each ten-minute mark and drops the four
+    scans between, and every level of a frame comes from the one scan (a
+    mark one level lacks is a gap, not a frame stitched from two scans).
+    None — every other source — snaps to :attr:`cadence_seconds` itself
+    and keeps every slot. Read by the fetch alone (:mod:`xuebuild.fetch`);
+    the converter snaps a frame's time to :attr:`cadence_seconds`, which a
+    kept object's already is."""
     series_file: bool = False
     """True when a run of the source is one NetCDF file per variable holding
     that variable's whole series, one band per time, read through
@@ -358,6 +380,22 @@ class SourceSpec:
     def live(self) -> bool:
         """Whether the source has a live feed to fetch and point at."""
         return self.latest_filename is not None
+
+    @property
+    def mrms(self) -> bool:
+        """Whether the source is fetched off the MRMS bucket: an observation
+        every input of which is an MRMS product
+        (:attr:`~xuebuild.variables.VariableSpec.mrms_product`), one GRIB
+        per frame rather than a series file — the composite mosaic and the
+        reflectivity volume, but not the JMA nowcast, whose ``prate`` is
+        also an MRMS product's quantity. What the fetch dispatches on."""
+        return (
+            self.observation
+            and self.window_hours is not None
+            and not self.series_file
+            and bool(self.input_variable_ids)
+            and all(VARIABLES[variable_id].mrms_product for variable_id in self.input_variable_ids)
+        )
 
     @property
     def fetched(self) -> bool:
@@ -1287,6 +1325,40 @@ SOURCES: dict[str, SourceSpec] = {
         window_hours=3,
         cadence_seconds=120,
         downsample=Downsample(factor=2),
+        video=False,
+    ),
+    # NOAA MRMS, the reflectivity volume: the same mosaic as ``mrms`` as 33
+    # constant-altitude planes, 500 m to 19 km above mean sea level, each a
+    # product of its own on the bucket (``MergedReflectivityQC_<km>``),
+    # scanned every two minutes at 0.01° (docs/contribution/sources.md,
+    # "mrms3d"). A frame is about 26 MB of GRIB, so the volume is published
+    # every ten minutes (``cadence_seconds``) from the scan stamped in the
+    # first two minutes after each mark (``object_cadence_seconds``), and
+    # thinned five to one by block maximum onto 0.05°. The 33 levels ship as
+    # one ``refl3d`` bundle, so a column or a slab is one range.
+    "mrms3d": SourceSpec(
+        id="mrms3d",
+        manifest_model="NOAA-MRMS3D",
+        product="conus-refl3d",
+        latest_filename="latest-mrms3d.json",
+        steps=(),
+        input_variable_ids=REFLECTIVITY_VARIABLE_IDS,
+        accumulated_precipitation=False,
+        bundle_scalar_ids=(),
+        bundle_volume_ids=("refl3d",),
+        core_bundle_ids=("refl3d",),
+        # The thinned 0.05° grid: 130W to 60W, 55N to 20N.
+        production_grid=(1400, 700),
+        # 50 x 50 cells is 2.5° at this step — 28 x 14 tiles.
+        tile=(50, 50),
+        # S3 answers bursts without throttling; a frame is 33 objects.
+        fetch_concurrency=8,
+        observation=True,
+        cycle_hours=1,
+        window_hours=3,
+        cadence_seconds=600,
+        object_cadence_seconds=120,
+        downsample=Downsample(factor=5),
         video=False,
     ),
     # JMA 高解像度降水ナウキャスト (high-resolution precipitation nowcast,

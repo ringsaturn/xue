@@ -313,6 +313,37 @@
         }
       ]
     },
+    "mrms3d": {
+      "title": "NOAA MRMS 3D reflectivity",
+      "description": "The NOAA Multi-Radar/Multi-Sensor merged reflectivity over the contiguous United States on its 33 constant-altitude levels (CAPPIs, 0.5 to 19 km above mean sea level), one bundle holding every level, a frame every ten minutes from the scan at each mark, published as a rolling window and thinned to 0.05° by block maximum.",
+      "license": "other",
+      "providers": [
+        {
+          "name": "NOAA / NCEP",
+          "roles": [
+            "producer",
+            "licensor"
+          ],
+          "url": "https://www.ncei.noaa.gov/"
+        },
+        {
+          "name": "Xue",
+          "roles": [
+            "processor",
+            "host"
+          ],
+          "url": "https://github.com/ringsaturn/xue"
+        }
+      ],
+      "links": [
+        {
+          "rel": "license",
+          "href": "https://www.noaa.gov/information-technology/open-data-dissemination",
+          "type": "text/html",
+          "title": "NOAA open data dissemination"
+        }
+      ]
+    },
     "jma": {
       "title": "JMA precipitation nowcast (hrpns)",
       "description": "The Japan Meteorological Agency's high-resolution precipitation nowcast analysis (高解像度降水ナウキャスト) over Japan: precipitation intensity classes every five minutes, decoded from the agency's map tiles onto a regular 0.005° grid by the strongest class in each cell and published under prate at each class's representative rate (0.5, 3, 7.5, 15, 25, 40, 65 and 100 mm/h), as a rolling window rebuilt every five minutes. Source: Japan Meteorological Agency website (出典：気象庁ホームページ), regridded and reclassified by jma-radar.",

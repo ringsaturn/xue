@@ -22,6 +22,7 @@ differs, and what the rest of the system relies on. `xuebuild/sources.py`
 | `cfs` | forecast (seasonal) | one object per variable per run | 6 h from F6 to F6552; 00Z/12Z | `tmp2m`, `prate` |
 | `ifshres` | series-file forecast | om2nc (Open-Meteo `.om`) | 1 h to F90, 3 h to F144, 6 h to F360; 00Z/12Z | `tmp2m`, `prate` |
 | `mrms` | fetched observation | gzipped GRIB listed off the bucket | 120 s slots, 3 h window (4 in the workflow) | `cref` |
+| `mrms3d` | fetched observation (volume) | 33 gzipped GRIBs a frame, listed off the bucket | 600 s marks of 120 s scans, 3 h window | `refl3d` |
 | `jma` | series-file observation | `jma-radar` tool, frame cache | 300 s, 3 h window | `prate` |
 | `cma` | series-file observation (archived) | `cmaarchive.py` over a Zarr archive | 360 s, 3 h window | `cref` |
 | `aurora` | frame-cache observation | SWPC OVATION JSON, frame cache | 300 s, 12 h window | `aurora` |
@@ -203,6 +204,28 @@ the `-999` / `-99` / `-3` sentinels are `fill_values`. `downsample` factor
 2; MRMS writes its last coordinate short, hence the step snap. The
 workflow's `--hours 4` covers three whole hours plus the hour in progress. `pickBundleVariant` scales the needed width by the bundle's
 longitude span, so a regional grid can take its half tier zoomed out.
+
+**mrms3d.** The same mosaic's reflectivity on its 33 constant-altitude
+levels (`REFLECTIVITY_LEVELS_M`, 500 m to 19 km MSL), each a product of its
+own on the bucket and an id of its own (`refl<metres>`), published as one
+`refl3d` bundle (`binconvert.py::VOLUME_BUNDLES`, after the composites in
+manifest order; no poster, no video). The levels are scanned every two
+minutes and published every ten: `SourceSpec.object_cadence_seconds` (120)
+is the bucket's interval, `cadence_seconds` (600) the axis's, and
+`fetch.py::mrms_object_slot` snaps an object down to the former and keeps it
+only on a multiple of the latter. A frame is therefore the scan stamped in
+`[mark, mark + 120 s)`, every level from that one scan, and a mark any level
+lacks is a gap; the window listing, the live slot and the completeness check
+all go through it (`SourceSpec.mrms` is the dispatch key for both sources).
+The levels share one GRIB element, so `_is_mrms_record` compares the level
+too (template 4.0's assembled surface, or the `<metres>-GPML` short name);
+the identity written is the MRMS-local 209/9/0 on surface 102, since no WMO
+parameter names a reflectivity on an altitude surface. Codebooks and the
+RAW predictor are `cref`'s. Thinned five to one by block maximum onto 0.05°
+(1400 x 700, tile 50). A full-resolution frame is about 26 MB of GRIB and
+33 planes of 7000 x 3500: the native encoder reads and thins one band at a
+time, while the Python reference holds them all (fine on crop fixtures,
+gigabytes on a real frame), which is why its workflow pins native.
 
 **jma.** The JMA precipitation nowcast over Japan. The fetch is the
 `jma-radar` tool (`xuebuild/jmacli.py`: `python -m jma_radar window --json`,

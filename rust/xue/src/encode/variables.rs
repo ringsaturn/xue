@@ -304,6 +304,64 @@ pub const AEROSOL_VARIABLE_IDS: &[&str] = &[
     "aod", "aoddust", "aodsalt", "aodsulf", "aodorg", "aodbc", "pm25", "pm10", "pm10dust",
 ];
 
+/// The constant-altitude levels the MRMS 3D reflectivity mosaic is published
+/// on, in metres above mean sea level, in level order — the order of the
+/// `refl3d` volume bundle's variables. Mirrors `REFLECTIVITY_LEVELS_M` in
+/// `xuebuild/variables.py`.
+pub const REFLECTIVITY_LEVELS_M: [u32; 33] = [
+    500, 750, 1000, 1250, 1500, 1750, 2000, 2250, 2500, 2750, 3000, 3500, 4000, 4500, 5000, 5500,
+    6000, 6500, 7000, 7500, 8000, 8500, 9000, 10000, 11000, 12000, 13000, 14000, 15000, 16000,
+    17000, 18000, 19000,
+];
+/// The family's ids, `refl<metres>`, in the same order.
+pub const REFLECTIVITY_VARIABLE_IDS: [&str; 33] = [
+    "refl500",
+    "refl750",
+    "refl1000",
+    "refl1250",
+    "refl1500",
+    "refl1750",
+    "refl2000",
+    "refl2250",
+    "refl2500",
+    "refl2750",
+    "refl3000",
+    "refl3500",
+    "refl4000",
+    "refl4500",
+    "refl5000",
+    "refl5500",
+    "refl6000",
+    "refl6500",
+    "refl7000",
+    "refl7500",
+    "refl8000",
+    "refl8500",
+    "refl9000",
+    "refl10000",
+    "refl11000",
+    "refl12000",
+    "refl13000",
+    "refl14000",
+    "refl15000",
+    "refl16000",
+    "refl17000",
+    "refl18000",
+    "refl19000",
+];
+
+/// The level in metres of one reflectivity family variable (`refl3000` →
+/// 3000), or `None` for anything else — a level that is not registered
+/// included. Mirrors `reflectivity_level` in `xuebuild/variables.py`.
+pub fn reflectivity_level(variable_id: &str) -> Option<u32> {
+    let rest = variable_id.strip_prefix("refl")?;
+    if rest.is_empty() || !rest.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    let level: u32 = rest.parse().ok()?;
+    REFLECTIVITY_LEVELS_M.contains(&level).then_some(level)
+}
+
 /// The ids the Celsius rule applies to at the surface: GDAL normalizes every
 /// GRIB temperature to Celsius, and the converter accepts K and F as well.
 /// Mirrors `SURFACE_TEMPERATURE_IDS` in `xuebuild/variables.py`.
@@ -418,6 +476,37 @@ macro_rules! vertical_velocity_spec {
 macro_rules! theta_e_spec {
     ($id:literal, $label:literal, $level_pa:literal, $range:expr) => {
         isobaric_spec!($id, $label, $level_pa, $range, "K", "", 0, 3, "")
+    };
+}
+
+// One level of the MRMS merged reflectivity mosaic (`MergedReflectivityQC`):
+// the MRMS-local 209/9/0 on a "specific altitude above mean sea level"
+// surface (type 102) at the level in metres, in dBZ. Every level is the same
+// product at another altitude, so the entries are a table of numbers. Points
+// outside radar coverage carry -999 and points inside it with no echo -99;
+// both are the codebook bottom, as for the composite.
+macro_rules! reflectivity_spec {
+    ($id:literal, $label:literal, $metres:literal) => {
+        VariableSpec {
+            id: $id,
+            label: $label,
+            output_unit: "dBZ",
+            value_range: (0.0, 80.0),
+            grib_element: "MergedReflectivityQC",
+            open_meteo: "",
+            grib2_discipline: 209,
+            grib2_category: 9,
+            grib2_number: 0,
+            grib2_level_type: 102,
+            grib2_level_value: Some($metres),
+            grib2_statistical: None,
+            grib2_aliases: &[],
+            grib2_alternates: &[],
+            gdal_unit: "dBZ",
+            fill_values: &[-999.0, -99.0],
+            producer_id: None,
+            grib2_aerosol: None,
+        }
     };
 }
 
@@ -1993,6 +2082,41 @@ pub const VARIABLES: &[VariableSpec] = &[
         producer_id: None,
         grib2_aerosol: None,
     },
+    // The MRMS 3D reflectivity mosaic, one variable per constant-altitude
+    // level (`REFLECTIVITY_LEVELS_M`).
+    reflectivity_spec!("refl500", "Radar reflectivity at 0.5 km MSL", 500.0),
+    reflectivity_spec!("refl750", "Radar reflectivity at 0.75 km MSL", 750.0),
+    reflectivity_spec!("refl1000", "Radar reflectivity at 1 km MSL", 1000.0),
+    reflectivity_spec!("refl1250", "Radar reflectivity at 1.25 km MSL", 1250.0),
+    reflectivity_spec!("refl1500", "Radar reflectivity at 1.5 km MSL", 1500.0),
+    reflectivity_spec!("refl1750", "Radar reflectivity at 1.75 km MSL", 1750.0),
+    reflectivity_spec!("refl2000", "Radar reflectivity at 2 km MSL", 2000.0),
+    reflectivity_spec!("refl2250", "Radar reflectivity at 2.25 km MSL", 2250.0),
+    reflectivity_spec!("refl2500", "Radar reflectivity at 2.5 km MSL", 2500.0),
+    reflectivity_spec!("refl2750", "Radar reflectivity at 2.75 km MSL", 2750.0),
+    reflectivity_spec!("refl3000", "Radar reflectivity at 3 km MSL", 3000.0),
+    reflectivity_spec!("refl3500", "Radar reflectivity at 3.5 km MSL", 3500.0),
+    reflectivity_spec!("refl4000", "Radar reflectivity at 4 km MSL", 4000.0),
+    reflectivity_spec!("refl4500", "Radar reflectivity at 4.5 km MSL", 4500.0),
+    reflectivity_spec!("refl5000", "Radar reflectivity at 5 km MSL", 5000.0),
+    reflectivity_spec!("refl5500", "Radar reflectivity at 5.5 km MSL", 5500.0),
+    reflectivity_spec!("refl6000", "Radar reflectivity at 6 km MSL", 6000.0),
+    reflectivity_spec!("refl6500", "Radar reflectivity at 6.5 km MSL", 6500.0),
+    reflectivity_spec!("refl7000", "Radar reflectivity at 7 km MSL", 7000.0),
+    reflectivity_spec!("refl7500", "Radar reflectivity at 7.5 km MSL", 7500.0),
+    reflectivity_spec!("refl8000", "Radar reflectivity at 8 km MSL", 8000.0),
+    reflectivity_spec!("refl8500", "Radar reflectivity at 8.5 km MSL", 8500.0),
+    reflectivity_spec!("refl9000", "Radar reflectivity at 9 km MSL", 9000.0),
+    reflectivity_spec!("refl10000", "Radar reflectivity at 10 km MSL", 10000.0),
+    reflectivity_spec!("refl11000", "Radar reflectivity at 11 km MSL", 11000.0),
+    reflectivity_spec!("refl12000", "Radar reflectivity at 12 km MSL", 12000.0),
+    reflectivity_spec!("refl13000", "Radar reflectivity at 13 km MSL", 13000.0),
+    reflectivity_spec!("refl14000", "Radar reflectivity at 14 km MSL", 14000.0),
+    reflectivity_spec!("refl15000", "Radar reflectivity at 15 km MSL", 15000.0),
+    reflectivity_spec!("refl16000", "Radar reflectivity at 16 km MSL", 16000.0),
+    reflectivity_spec!("refl17000", "Radar reflectivity at 17 km MSL", 17000.0),
+    reflectivity_spec!("refl18000", "Radar reflectivity at 18 km MSL", 18000.0),
+    reflectivity_spec!("refl19000", "Radar reflectivity at 19 km MSL", 19000.0),
 ];
 
 pub fn variable_spec(variable_id: &str) -> Result<&'static VariableSpec> {
@@ -2005,9 +2129,10 @@ pub fn variable_spec(variable_id: &str) -> Result<&'static VariableSpec> {
 #[cfg(test)]
 mod tests {
     use super::{
-        isobaric_variable, variable_spec, AerosolIdentity, AEROSOL_VARIABLE_IDS, DUST_CF_BUNDLE_ID,
-        DUST_CF_COMPONENT_IDS, DUST_RGB_BUNDLE_ID, DUST_RGB_COMPONENT_IDS, ISOBARIC_FAMILIES,
-        ISOBARIC_LEVELS_HPA, OCEAN_VARIABLE_IDS, SATELLITE_CHANNEL_IDS, SATELLITE_VARIABLE_IDS,
+        isobaric_variable, reflectivity_level, variable_spec, AerosolIdentity, AEROSOL_VARIABLE_IDS,
+        DUST_CF_BUNDLE_ID, DUST_CF_COMPONENT_IDS, DUST_RGB_BUNDLE_ID, DUST_RGB_COMPONENT_IDS,
+        ISOBARIC_FAMILIES, ISOBARIC_LEVELS_HPA, OCEAN_VARIABLE_IDS, REFLECTIVITY_LEVELS_M,
+        REFLECTIVITY_VARIABLE_IDS, SATELLITE_CHANNEL_IDS, SATELLITE_VARIABLE_IDS,
         WAVE_VECTOR_COMPONENT_IDS,
     };
     use crate::encode::quantize::codebook;
@@ -2049,6 +2174,46 @@ mod tests {
                     .unwrap_or_else(|error| panic!("{variable_id} {profile}: {error}"));
                 assert_eq!(Value::Object(book.metadata()), entry[key], "{variable_id} {profile} codebook");
             }
+        }
+    }
+
+    /// The MRMS 3D reflectivity family: one variable per level, in level
+    /// order, each the MRMS-local 209/9/0 on its altitude in metres, with
+    /// the composite's sentinels and codebooks.
+    #[test]
+    fn every_reflectivity_level_is_registered_in_metres() {
+        assert_eq!(REFLECTIVITY_LEVELS_M.len(), 33);
+        assert!(REFLECTIVITY_LEVELS_M.windows(2).all(|pair| pair[0] < pair[1]));
+        let cref = variable_spec("cref").expect("cref");
+        for (level, id) in REFLECTIVITY_LEVELS_M.iter().zip(REFLECTIVITY_VARIABLE_IDS) {
+            assert_eq!(id, format!("refl{level}"));
+            assert_eq!(reflectivity_level(id), Some(*level));
+            let spec = variable_spec(id).unwrap_or_else(|_| panic!("{id}"));
+            assert_eq!(
+                (spec.grib2_discipline, spec.grib2_category, spec.grib2_number, spec.grib2_level_type),
+                (209, 9, 0, 102),
+                "{id}"
+            );
+            assert_eq!(spec.grib2_level_value, Some(f64::from(*level)), "{id}");
+            assert_eq!(spec.parameter_metadata()["scaledValueOfFirstFixedSurface"], json!(level), "{id}");
+            assert_eq!(spec.parameter_metadata()["scaleFactorOfFirstFixedSurface"], json!(0), "{id}");
+            assert_eq!((spec.output_unit, spec.gdal_unit, spec.value_range), ("dBZ", "dBZ", (0.0, 80.0)));
+            assert_eq!(spec.grib_element, "MergedReflectivityQC");
+            assert_eq!(spec.fill_values, cref.fill_values, "{id}");
+            for profile in ["quality", "compact", "balanced"] {
+                assert_eq!(
+                    codebook(profile, id).expect("book").as_linear().map(|book| book.metadata()),
+                    codebook(profile, "cref").expect("book").as_linear().map(|book| book.metadata()),
+                    "{id} {profile}"
+                );
+            }
+        }
+        assert_eq!(variable_spec("refl500").expect("refl500").label, "Radar reflectivity at 0.5 km MSL");
+        assert_eq!(variable_spec("refl750").expect("refl750").label, "Radar reflectivity at 0.75 km MSL");
+        assert_eq!(variable_spec("refl3000").expect("refl3000").label, "Radar reflectivity at 3 km MSL");
+        assert_eq!(variable_spec("refl19000").expect("refl19000").label, "Radar reflectivity at 19 km MSL");
+        for other in ["refl", "refl600", "refl3000x", "cref", "reflx500"] {
+            assert_eq!(reflectivity_level(other), None, "{other}");
         }
     }
 

@@ -9,7 +9,9 @@
 use serde_json::{json, Map, Value};
 
 use crate::encode::errors::{EncodeError, Result};
-use crate::encode::variables::{isobaric_variable, AEROSOL_VARIABLE_IDS, SATELLITE_CHANNEL_IDS};
+use crate::encode::variables::{
+    isobaric_variable, reflectivity_level, AEROSOL_VARIABLE_IDS, SATELLITE_CHANNEL_IDS,
+};
 
 /// Linear uint8 codebook. Not temperature-specific: it quantizes any linear
 /// field; the wind components reuse it with a symmetric m/s range.
@@ -790,6 +792,12 @@ pub fn codebook(profile: &str, variable_id: &str) -> Result<Codebook> {
         (_, "dswrf") => Codebook::Linear(COMPACT_FLUX),
         (_, "cref") if quality => Codebook::Linear(QUALITY_REFLECTIVITY),
         (_, "cref") => Codebook::Linear(COMPACT_REFLECTIVITY),
+        // Every level of the 3D mosaic takes the composite's book, profile
+        // for profile.
+        _ if reflectivity_level(variable_id).is_some() && quality => {
+            Codebook::Linear(QUALITY_REFLECTIVITY)
+        }
+        _ if reflectivity_level(variable_id).is_some() => Codebook::Linear(COMPACT_REFLECTIVITY),
         (_, "gust") if quality => Codebook::Linear(QUALITY_GUST),
         (_, "gust") => Codebook::Linear(COMPACT_GUST),
         ("quality", "tcdc") => Codebook::Linear(QUALITY_CLOUD),

@@ -680,6 +680,25 @@ class MrmsObject:
         return datetime.fromtimestamp(seconds, tz=UTC)
 
 
+def mrms_object_slot(spec: SourceSpec, item: MrmsObject) -> datetime | None:
+    """The published slot one object serves, or None when it serves none.
+
+    The object's time is snapped down to the interval the bucket's objects
+    come at (``SourceSpec.object_cadence_seconds``, or the published
+    cadence where they are the same), and the slot is kept only when it
+    falls on the published cadence: the reflectivity volume, scanned every
+    two minutes and published every ten, takes the scan stamped in
+    ``[mark, mark + 120 s)`` and no other, so every level of a frame is the
+    one scan. With no object cadence every slot is kept, as the composite
+    mosaic's always were."""
+    if spec.cadence_seconds is None:
+        raise DownloadError(f"{spec.manifest_model} declares no observation cadence")
+    slot = item.slot(spec.object_cadence_seconds or spec.cadence_seconds)
+    if int(slot.timestamp()) % spec.cadence_seconds:
+        return None
+    return slot
+
+
 def mrms_product_prefix(product: str, day: datetime) -> str:
     """The bucket prefix of one product's directory for one UTC day."""
     return f"{MRMS_DOMAIN}/{product}/{day.astimezone(UTC):%Y%m%d}/"
@@ -739,7 +758,9 @@ def mrms_window_frames(
     """The frames of one window, keyed by slot: for every slot from the run's
     hour through ``hours`` past it (inclusive) that every requested product
     has an object in, the object of each product, in the source's input
-    order. A slot any product lacks is left out — the axis allows the gap,
+    order. A slot is :func:`mrms_object_slot`'s: on a source published
+    coarser than its objects come, only the objects at a published mark
+    count. A slot any product lacks is left out — the axis allows the gap,
     and the next build takes the slot if the object lands later. Two objects
     of one product in one slot (a reissue) resolve to the later one.
     ``input_ids`` narrows the products, the way a bundle group's fetch
@@ -764,8 +785,8 @@ def mrms_window_frames(
         slots: dict[datetime, MrmsObject] = {}
         for listed_day in days:
             for item in list_mrms_objects(product, listed_day, fetch=fetch):
-                slot = item.slot(spec.cadence_seconds)
-                if start <= slot <= end and (slot not in slots or item.observed > slots[slot].observed):
+                slot = mrms_object_slot(spec, item)
+                if slot is not None and start <= slot <= end and (slot not in slots or item.observed > slots[slot].observed):
                     slots[slot] = item
         per_product.append(slots)
     common = sorted(set.intersection(*(set(slots) for slots in per_product)))
@@ -788,13 +809,13 @@ def _download_mrms_frame(
     """One frame: each product's object, decompressed, in input order, one
     GRIB with one message per product — the shape every other source's
     frame has downstream of the download."""
-    from .gdal import inspect_grib
+    from .gdal import inspect_grib_multi
 
     output = destination / mrms_frame_name(spec, run, slot)
     if output.exists() and not force:
         try:
-            for variable_id in objects:
-                inspect_grib(output, variable_id)
+            # One gdalinfo pass for every product: a volume frame is 33.
+            inspect_grib_multi(output, tuple(objects))
             LOG.info("reusing readable GRIB %s", output)
             return output
         except Exception:
@@ -828,8 +849,7 @@ def _download_mrms_frame(
             raise DownloadError(f"MRMS object is not a gzip file: {url}: {exc}") from exc
     write_bytes_atomic(output, payload)
     try:
-        for variable_id in objects:
-            inspect_grib(output, variable_id)
+        inspect_grib_multi(output, tuple(objects))
     except Exception as exc:
         if output.exists():
             output.unlink()
@@ -935,18 +955,23 @@ def _fetch_mrms_run(
 
 
 def _mrms_run_is_complete(spec: SourceSpec, run: GfsRun, hours: int, *, fetch: Callable[[str], str] | None = None) -> bool:
-    """Whether the window has fully landed: the bucket carries a frame of
+    """Whether the window has fully landed: the bucket carries an object of
     every product at or past the window's end. The end slot itself may be a
     gap — an observation axis allows one — so what proves the window is
-    that the products have moved past it."""
+    that the products have moved past it. Any object counts, not only one
+    at a published mark: the scans between the volume's ten-minute marks
+    prove the feed has moved on just as well (the window's end is a mark,
+    so an object snapped to the objects' own interval reaches it exactly
+    when its time does)."""
     end = run.time + timedelta(hours=hours)
+    object_cadence = spec.object_cadence_seconds or spec.cadence_seconds or 1
     for variable_id in spec.input_variable_ids:
         product = VARIABLES[variable_id].mrms_product
         latest = None
         for day in (end, end + timedelta(days=1)):
             objects = list_mrms_objects(product, day, fetch=fetch)
             if objects:
-                latest = max(item.observed for item in objects)
+                latest = max(item.slot(object_cadence) for item in objects)
                 break
         if latest is None or latest < end:
             return False
@@ -971,13 +996,14 @@ def latest_mrms_slot(
         if not product:
             raise DownloadError(f"{variable_id} is not an MRMS product")
         products.append(product)
-    per_product = [
-        {item.slot(spec.cadence_seconds) for item in list_mrms_objects(product, today, fetch=fetch)}
-        for product in products
-    ]
+    def slots_of(day: datetime, product: str) -> set[datetime]:
+        slots = (mrms_object_slot(spec, item) for item in list_mrms_objects(product, day, fetch=fetch))
+        return {slot for slot in slots if slot is not None}
+
+    per_product = [slots_of(today, product) for product in products]
     if current - today < timedelta(hours=1) or not all(per_product):
         for slots, product in zip(per_product, products):
-            slots.update(item.slot(spec.cadence_seconds) for item in list_mrms_objects(product, today - timedelta(days=1), fetch=fetch))
+            slots.update(slots_of(today - timedelta(days=1), product))
     common = set.intersection(*per_product) if per_product else set()
     if not common:
         raise DownloadError(f"{spec.manifest_model} has no frame of every product on the bucket today or yesterday")
@@ -1268,7 +1294,7 @@ def latest_observation_slot(spec: SourceSpec, *, now: datetime | None = None) ->
     """The newest frame a live observation source's feed holds — what the
     rolling publish compares the live window against, and what
     ``resolve_run("latest")`` ends the window at."""
-    if spec.id == "mrms":
+    if spec.mrms:
         return latest_mrms_slot(spec, now=now)
     if spec.id == "jma":
         return latest_jma_slot(spec, now=now)
@@ -1856,7 +1882,7 @@ def _run_is_complete(
     *,
     now: datetime | None = None,
 ) -> bool:
-    if model == "mrms":
+    if source_spec(model).mrms:
         return _mrms_run_is_complete(source_spec(model), run, hours)
     if model == "jma":
         return _jma_run_is_complete(source_spec(model), run, hours)
@@ -2266,7 +2292,7 @@ def fetch_run(
     fetch is latency-bound, not bandwidth-bound). Results keep frame order.
     ECMWF retries a failed frame in place so completed frames remain reusable."""
     spec = source_spec(model)
-    if spec.id == "mrms":
+    if spec.mrms:
         return _fetch_mrms_run(spec, run, hours, raw_root, force=force, input_ids=input_ids)
     if spec.id == "jma":
         return _fetch_jma_run(spec, run, hours, raw_root, force=force, input_ids=input_ids)

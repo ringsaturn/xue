@@ -43,6 +43,15 @@ linked GDAL was compiled. So the first eligible plane is read both ways, and
 the arithmetic that reproduces GDAL is used from then on. If neither does,
 every read stays on GDAL.
 
+Each band is taken through the whole per-plane chain (column roll, fill
+values, resampling, block thinning, crop, the completeness check, unit
+conversion) as soon as it is read, before the next band is read, so a
+worker holds one full-resolution plane at a time rather than every record
+of its file. That matters for the MRMS 3D mosaic, whose frame is 33
+records of 7000 × 3500 doubles: 6.5 GB read whole, 196 MB a plane. A file
+the netCDF driver reads is the exception: its reads stay serialized under
+`netcdf_guard`, and its planes are finished after the guard is released.
+
 ## Building
 
 GDAL must be discoverable through `pkg-config`, and `gdal-sys` generates its
@@ -333,6 +342,7 @@ Every source, on real runs, with every artifact compared byte for byte:
 | CMA-RADAR | the NetCDF observation path: unscaling, the fill value, a `unitSeconds: 360` axis listing its offsets around archive gaps, `--hours`; since 0.17 a fetched window like JMA's, read out of its archive with the window's first hour as the run (`tests/test_cma.py`); the id is `cma` since then, `radar` being the local-file shape the wheels before 0.17 know |
 | JMA-HRPNS | a fetched observation that arrives as a NetCDF series (`series_file`), the way the CMA file does, with a cadence: the five-minute times snapped to their slots and the window's first hour taken as the run (`unitSeconds: 300`, `firstFrameOffset: 1`, offsets listed around a gap), a byte-packed rate unscaled through `scale_factor` 0.5 with the 255 fill folded to the codebook bottom, and a run directory holding exactly one series (`tests/test_jma.py`) |
 | NOAA-MRMS | a fetched observation: one GRIB per two-minute frame, each its own reference time, re-keyed onto the window's axis (`unitSeconds: 120`, the observation times snapped to the mark, the first hour as the run); the MRMS-local identities (discipline 209) under `cref` and `prate` through the registry's alternates, a rate already in mm/h, the `-999` / `-99` / `-3` sentinels folded to the codebook bottom; a regional grid described on its round step; and the 2 x 2 block-maximum thinning onto 0.02° (`tests/test_mrms.py`) |
+| NOAA-MRMS3D | the same bucket's 3D mosaic: the 33 constant-altitude levels of `MergedReflectivityQC` (209/9/0 on surface type 102, 0.5–19 km) read from one GRIB per ten-minute frame, every level matched on its altitude rather than on the element the levels share (by the assembled template 4.0, or GDAL's `<metres>-GPML` short name), published as the one `refl3d` volume bundle in level order (`unitSeconds: 600`), each level RAW with the composite's codebook, and thinned 5 x 5 by block maximum onto 0.05° (`tests/test_mrms3d.py`) |
 | SWPC-AURORA | a fetched observation that arrives as a NetCDF series (`series_file`) like JMA's but grown from a frame cache, since the live feed carries only the newest grid: `xuebuild/aurora.py` parses the OVATION JSON, snaps its valid time to the five-minute mark and writes one small NetCDF per slot; the fetch assembles the window's cached frames, the window's first hour being the run (`unitSeconds: 300`); a linear 0–100 % codebook on a 1° global grid, and a window that is a sequence of successive forecasts, not one run's lead times (`tests/test_aurora.py`) |
 
 One condition the reference never met: GDAL's netCDF driver is not
