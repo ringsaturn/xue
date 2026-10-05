@@ -355,6 +355,8 @@ export const es: Record<MessageKey, string> = {
   radarProductAria: "Producto de radar",
   radarLatest: "último",
   radarCloseAria: "Volver al mosaico",
+  radarReflectivity: "Reflectividad",
+  radarVelocity: "Velocidad radial",
   stationSounding: "Radiosondeo",
   stationAirport: "Aeropuerto",
   stationObserved: "Observado",

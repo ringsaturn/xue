@@ -352,6 +352,8 @@ export const ja: Record<MessageKey, string> = {
   radarProductAria: "レーダープロダクト",
   radarLatest: "最新",
   radarCloseAria: "合成図に戻る",
+  radarReflectivity: "反射強度",
+  radarVelocity: "ドップラー速度",
   stationSounding: "高層観測",
   stationAirport: "空港",
   stationObserved: "観測",

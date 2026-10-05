@@ -422,7 +422,8 @@ body.is-showcase .model-caret {
   top: 92px;
   left: 20px;
   display: flex;
-  max-width: min(520px, calc(100% - 40px));
+  /* Never under the right-hand control column: 44px at 20px, plus a gap. */
+  max-width: min(520px, calc(100% - 20px - 20px - 44px - 12px));
   flex-direction: column;
   gap: 8px;
 }
@@ -2322,149 +2323,35 @@ html[lang="ja"] .rail-glyph {
   letter-spacing: 0.04em;
 }
 
-/* The single-site radar's card: the site and the way back to the mosaic,
-   the product switch, the sweep on screen and how far it trails the
-   playhead, and the product's own scale. Bottom left on a wide screen,
-   clear of a case's banner above and the transport to its right; on a
-   phone it takes the field legend's place, which the single-site view
-   hides. */
-.radar-chip {
-  position: absolute;
-  z-index: 3;
-  bottom: 24px;
-  left: 20px;
-  display: flex;
-  width: 112px;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 6px;
-  padding: 8px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--surface);
-  color: var(--text);
-  backdrop-filter: blur(10px);
+/* Range-folded under the single-site radar's scale: a gate with no value,
+   in the quiet tint the sweep draws it in. */
+.legend-folded {
+  color: var(--map-ink-muted);
   font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.04em;
-}
-
-.radar-chip[hidden],
-body.radar-alone #legend {
-  display: none;
-}
-
-.radar-chip-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.radar-chip-close {
-  width: 28px;
-  height: 28px;
-  border: 0;
-  border-radius: 50%;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  font-size: 16px;
-  cursor: pointer;
-}
-
-.radar-chip-products {
-  display: flex;
-  overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-}
-
-.radar-chip-products button {
-  flex: 1;
-  min-height: 32px;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  cursor: pointer;
-}
-
-.radar-chip-products button[aria-pressed="true"] {
-  background: var(--accent);
-  color: var(--bg);
-}
-
-.radar-chip-time {
-  font-size: 12px;
-}
-
-.radar-chip-age {
-  color: var(--muted);
-}
-
-.radar-chip[data-state="loading"] .radar-chip-time::after {
-  content: " …";
-}
-
-.radar-chip-legend {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
-}
-
-.radar-chip-unit,
-.radar-chip-folded {
-  color: var(--muted);
   font-size: 10px;
 }
 
-.radar-chip-scale {
-  display: flex;
-  height: 140px;
-  gap: 6px;
-}
-
-.radar-chip-bar {
-  width: 10px;
-  border-radius: 5px;
-}
-
-.radar-chip-bar[data-product="n0b"] {
-  background: linear-gradient(to top, rgb(99 235 235), rgb(0 153 242), rgb(0 217 0), rgb(0 140 0), rgb(255 230 0), rgb(255 140 0), rgb(230 0 0), rgb(204 0 204));
-}
-
-.radar-chip-bar[data-product="n0g"] {
-  background: linear-gradient(to top, rgb(0 115 0), rgb(184 217 184) 50%, rgb(224 189 189) 50%, rgb(158 0 0));
-}
-
-.radar-chip-labels {
-  display: flex;
-  flex-direction: column-reverse;
-  justify-content: space-between;
-  font-size: 10px;
-}
-
-.radar-chip-folded::before {
+.legend-folded::before {
   display: inline-block;
   width: 10px;
   height: 10px;
-  margin-right: 6px;
+  margin-right: 5px;
   border-radius: 2px;
   background: rgb(158 148 179 / 0.45);
   content: "";
   vertical-align: -1px;
 }
 
-@media (max-width: 720px) {
-  .radar-chip {
-    top: calc(118px + env(safe-area-inset-top));
-    bottom: auto;
-    left: 16px;
-  }
+/* The radar's group on the level row: the site and its sweep, then the
+   products. The caption carries the sweep time, so it does not shrink. */
+.level-group[data-slot="radar"] .level-caption {
+  white-space: nowrap;
+}
 
-  .radar-chip-scale {
-    height: 110px;
+@media (max-width: 720px) {
+  .level-group[data-slot="radar"] .level-caption-site,
+  .level-group[data-slot="radar"] .level-caption-age {
+    display: none;
   }
 }
 
@@ -3544,7 +3431,8 @@ body[data-credits~="meteosat"] .source-credit[data-credit-model="meteosat"] {
   .case-banner {
     top: calc(80px + env(safe-area-inset-top));
     left: 16px;
-    max-width: calc(100% - 32px);
+    /* Clear of the view tile's globe button in the right-hand column. */
+    max-width: calc(100% - 16px - 16px - 44px - 10px);
   }
 
   .case-detail {

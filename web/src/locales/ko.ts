@@ -357,6 +357,8 @@ export const ko: Record<MessageKey, string> = {
   radarProductAria: "레이더 산출물",
   radarLatest: "최신",
   radarCloseAria: "합성도로 돌아가기",
+  radarReflectivity: "반사도",
+  radarVelocity: "시선속도",
   stationSounding: "고층관측",
   stationAirport: "공항",
   stationObserved: "관측",

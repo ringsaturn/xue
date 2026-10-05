@@ -358,6 +358,8 @@ export const tr: Record<MessageKey, string> = {
   radarProductAria: "Radar ürünü",
   radarLatest: "en yeni",
   radarCloseAria: "Mozaiğe dön",
+  radarReflectivity: "Yansıtırlık",
+  radarVelocity: "Radyal hız",
   stationSounding: "Radyosonda",
   stationAirport: "Havalimanı",
   stationObserved: "Gözlem",

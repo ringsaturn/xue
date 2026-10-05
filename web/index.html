@@ -233,26 +233,6 @@
       <!-- The title is the model control: it names what is on screen and
            opens the model sheet, the way the whole top-left corner reads as
            one label rather than a panel. -->
-      <div id="radar-chip" class="radar-chip" hidden>
-        <div class="radar-chip-head">
-          <b id="radar-chip-site" class="radar-chip-site"></b>
-          <button id="radar-chip-close" type="button" class="radar-chip-close" data-i18n-aria="radarCloseAria" aria-label="Back to the mosaic">×</button>
-        </div>
-        <span class="radar-chip-products" role="group" data-i18n-aria="radarProductAria" aria-label="Radar product">
-          <button id="radar-chip-ref" type="button" aria-pressed="true">REF</button>
-          <button id="radar-chip-vel" type="button" aria-pressed="false">VEL</button>
-        </span>
-        <span id="radar-chip-time" class="radar-chip-time"></span>
-        <span id="radar-chip-age" class="radar-chip-age"></span>
-        <div id="radar-chip-legend" class="radar-chip-legend" aria-hidden="true">
-          <span id="radar-chip-unit" class="radar-chip-unit">dBZ</span>
-          <div class="radar-chip-scale">
-            <div id="radar-chip-bar" class="radar-chip-bar"></div>
-            <div id="radar-chip-labels" class="radar-chip-labels"></div>
-          </div>
-          <span class="radar-chip-folded">RF</span>
-        </div>
-      </div>
       <h1 class="title-block">
         <button id="model-trigger" type="button" aria-haspopup="dialog" aria-expanded="false" data-i18n-aria="modelSwitchAria" aria-label="Dataset">
           <span class="title-line">
@@ -384,6 +364,7 @@
           <li id="legend-inflow" hidden><span class="legend-swatch legend-swatch-inflow" aria-hidden="true"></span><span data-i18n="legendInflow">Warm moist inflow</span></li>
           <li id="legend-front" hidden><span class="legend-swatch legend-swatch-front" aria-hidden="true"></span><span data-i18n="legendFront">Frontal zone (θe gradient)</span></li>
         </ul>
+        <span id="legend-folded" class="legend-folded" hidden>RF</span>
       </aside>
 
       <!-- The layer rail: three sections, one kind of press each. The

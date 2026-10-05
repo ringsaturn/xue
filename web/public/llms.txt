@@ -344,11 +344,12 @@ fall back to defaults rather than fail, so a constructed link always opens.
 - `?radar=<site>` — draw one WSR-88D radar's lowest sweep alone over the
   basemap (`docs/nexrad.md`), the field under it held off screen:
   `?radar=GWX` is Columbus AFB. `?radar=on` only marks the sites over the
-  field; a click on one opens it, and the card's × goes back to the field.
+  field; a click on one opens it, and re-pressing the pressed product on the
+  level row (REF / VEL beside the site and sweep time) goes back to the field.
   `?radarproduct=n0g` shows radial velocity (green toward the radar, red away,
   grey-violet range-folded) instead of reflectivity. The sweep shown is the
-  newest at or before the playhead, within 15 minutes, and the card says how
-  far it trails the playhead; past the window the newest is shown faded. It
+  newest at or before the playhead, within 15 minutes, and the level row says
+  how far it trails the playhead; past the window the newest is shown faded. It
   follows the playhead and never holds it. The Rolling Fork showcase case
   (`?case=rolling-fork-2023`) carries DGX, GWX and NQA.
 - `?use_h264=true` — opt into the H.264 companion artifacts via WebCodecs

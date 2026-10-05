@@ -581,6 +581,8 @@ export const en = {
   radarProductAria: "Radar product",
   radarLatest: "newest",
   radarCloseAria: "Back to the mosaic",
+  radarReflectivity: "Reflectivity",
+  radarVelocity: "Velocity",
   stationSounding: "Sounding",
   stationAirport: "Airport",
   stationObserved: "Observed",

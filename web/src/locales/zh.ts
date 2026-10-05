@@ -350,6 +350,8 @@ export const zh: Record<MessageKey, string> = {
   radarProductAria: "雷达产品",
   radarLatest: "最新",
   radarCloseAria: "返回拼图",
+  radarReflectivity: "反射率",
+  radarVelocity: "径向速度",
   stationSounding: "探空",
   stationAirport: "机场",
   stationObserved: "观测",

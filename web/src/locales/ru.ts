@@ -357,6 +357,8 @@ export const ru: Record<MessageKey, string> = {
   radarProductAria: "Продукт радара",
   radarLatest: "последний",
   radarCloseAria: "Назад к мозаике",
+  radarReflectivity: "Отражаемость",
+  radarVelocity: "Радиальная скорость",
   stationSounding: "Зондирование",
   stationAirport: "Аэропорт",
   stationObserved: "Наблюдение",

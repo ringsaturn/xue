@@ -1125,16 +1125,7 @@ const soundingTile = required<HTMLButtonElement>("sounding-tile");
 const airportTile = required<HTMLButtonElement>("airport-tile");
 const synopTile = required<HTMLButtonElement>("synop-tile");
 const radarTile = required<HTMLButtonElement>("radar-tile");
-const radarChip = required<HTMLElement>("radar-chip");
-const radarChipSite = required<HTMLElement>("radar-chip-site");
-const radarChipRef = required<HTMLButtonElement>("radar-chip-ref");
-const radarChipVel = required<HTMLButtonElement>("radar-chip-vel");
-const radarChipTime = required<HTMLElement>("radar-chip-time");
-const radarChipAge = required<HTMLElement>("radar-chip-age");
-const radarChipClose = required<HTMLButtonElement>("radar-chip-close");
-const radarChipBar = required<HTMLElement>("radar-chip-bar");
-const radarChipLabels = required<HTMLElement>("radar-chip-labels");
-const radarChipUnit = required<HTMLElement>("radar-chip-unit");
+const legendFolded = required<HTMLElement>("legend-folded");
 const tcSheet = required<HTMLElement>("tc-sheet");
 const tcList = required<HTMLElement>("tc-list");
 const fieldMore = required<HTMLButtonElement>("field-more");
@@ -4693,6 +4684,12 @@ function renderLevelRow(): void {
     }
     levelRow.append(container);
   }
+  // The radar's group is the overlay's, not the run's: kept across a
+  // rebuild, after the run's own groups.
+  if (radarLevelGroup) {
+    levelRow.append(radarLevelGroup.root);
+    levelRow.hidden = false;
+  }
   // A row wider than the capsule scrolls: bring each pressed member into
   // view (the lines' last, so the group that changed most recently wins)
   // and fade whichever end is clipped.
@@ -5245,6 +5242,9 @@ function updateVariablePresentation(session: VariableSession): void {
   legendBar.style.background = legendGradientFor(session);
   renderLegendKey(ui.legendKey);
   syncDerivedLegend();
+  // A radar drawn alone keeps the legend for its own scale.
+  const radarProduct = legend.dataset.radar;
+  if (radarProduct === "n0b" || radarProduct === "n0g") renderRadarLegend(radarProduct, true);
   if (experimentEnabled && session.chartId === "prate") {
     const key = steppedPrecipitationLegend();
     legendBar.style.background = key.gradient;
@@ -6666,40 +6666,146 @@ function syncRadarTime(): void {
   radarOverlay.setTime(metadata && index !== null ? frameValidTime(index) : null);
 }
 
-/** The scale beside the sweep, product by product: the reflectivity ramp
- * the shader draws from 5 dBZ, and velocity ±30 m/s from green (toward the
- * radar) through pale to red (away). */
+/** The scale of the sweep on screen, written into the field legend while a
+ * site is drawn alone: the reflectivity ramp the shader draws from 5 dBZ,
+ * or velocity ±30 m/s from green (toward the radar) through pale to red
+ * (away), with the range-folded tint under it. Top first, as the legend's
+ * ticks read. */
 const RADAR_SCALES = {
-  n0b: { unit: "dBZ", labels: ["5", "25", "45", "65"] },
-  n0g: { unit: "m/s", labels: ["−30", "0", "+30"] },
+  n0b: {
+    unit: "dBZ",
+    labels: ["65", "45", "25", "5"],
+    gradient: "linear-gradient(to bottom, rgb(204 0 204), rgb(230 0 0), rgb(255 140 0), rgb(255 230 0), rgb(0 140 0), rgb(0 217 0), rgb(0 153 242), rgb(99 235 235))",
+  },
+  n0g: {
+    unit: "m/s",
+    labels: ["+30", "0", "−30"],
+    gradient: "linear-gradient(to bottom, rgb(158 0 0), rgb(224 189 189) 50%, rgb(184 217 184) 50%, rgb(0 115 0))",
+  },
 } as const;
 
+/** The radar's group on the level row: the site and the sweep on screen as
+ * its caption, then REF and VEL. Built once per site and updated in place,
+ * since the caption follows every frame. */
+let radarLevelGroup: { root: HTMLElement; caption: HTMLElement; ref: HTMLButtonElement; vel: HTMLButtonElement } | null = null;
+
+function radarLevelButton(product: "n0b" | "n0g", code: string, gloss: string): HTMLButtonElement {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.dataset.level = "";
+  button.dataset.slot = "radar";
+  const glyph = document.createElement("b");
+  glyph.setAttribute("aria-hidden", "true");
+  glyph.textContent = code;
+  const name = document.createElement("span");
+  name.className = "rail-name";
+  const codeSpan = document.createElement("span");
+  codeSpan.textContent = code;
+  const glossSmall = document.createElement("small");
+  glossSmall.textContent = gloss;
+  name.append(codeSpan, " ", glossSmall);
+  button.append(glyph, name);
+  // The pressed product is also the way back: pressing it again closes the
+  // site and the field returns, as a pressed lines member removes the lines.
+  button.addEventListener("click", () => {
+    if (view.marks.radar.product === product) closeRadarSite();
+    else setRadarProduct(product);
+  });
+  return button;
+}
+
+function ensureRadarLevelGroup(): NonNullable<typeof radarLevelGroup> {
+  if (radarLevelGroup && radarLevelGroup.root.isConnected) return radarLevelGroup;
+  const root = document.createElement("div");
+  root.className = "level-group";
+  root.dataset.slot = "radar";
+  const caption = document.createElement("span");
+  caption.className = "level-caption";
+  const ref = radarLevelButton("n0b", "REF", t("radarReflectivity"));
+  const vel = radarLevelButton("n0g", "VEL", t("radarVelocity"));
+  root.append(caption, ref, vel);
+  levelRow.append(root);
+  radarLevelGroup = { root, caption, ref, vel };
+  return radarLevelGroup;
+}
+
 function renderRadarChip(readout: RadarReadout | null): void {
-  radarChip.hidden = readout === null;
-  if (!readout) return;
-  radarChipSite.textContent = readout.site.icao;
-  radarChipRef.setAttribute("aria-pressed", String(readout.product === "n0b"));
-  radarChipVel.setAttribute("aria-pressed", String(readout.product === "n0g"));
-  radarChip.dataset.state = readout.loading ? "loading" : readout.stale ? "stale" : "current";
-  const time = readout.sweepTime === null ? "--" : formatCompactDate(readout.sweepTime);
-  radarChipTime.textContent = readout.stale ? `${t("radarLatest")} ${time}` : time;
-  // How far the sweep trails the playhead: a radar scans every few
-  // minutes and the playhead moves in the mosaic's steps, so the two
-  // clocks differ by design and the card says by how much.
-  // Past the window the sweep is the site's newest, however old: the card
-  // says "newest" and no age.
-  const minutes = readout.age === null || readout.stale ? null : Math.round(readout.age / 60_000);
-  radarChipAge.textContent = minutes === null ? "" : minutes === 0 ? "±0 min" : `−${minutes} min`;
-  const scale = RADAR_SCALES[readout.product];
-  if (radarChipBar.dataset.product !== readout.product) {
-    radarChipBar.dataset.product = readout.product;
-    radarChipUnit.textContent = scale.unit;
-    radarChipLabels.replaceChildren(...scale.labels.map((label) => {
-      const span = document.createElement("span");
-      span.textContent = label;
-      return span;
-    }));
+  if (!readout) {
+    radarLevelGroup?.root.remove();
+    radarLevelGroup = null;
+    levelRow.hidden = levelRow.childElementCount === 0;
+    restoreFieldLegend();
+    return;
   }
+  const group = ensureRadarLevelGroup();
+  levelRow.hidden = false;
+  // The sweep's clock time alone: the capsule beside it already carries the
+  // date, and a phone's row has room for little more than the products.
+  const time =
+    readout.sweepTime === null
+      ? "--"
+      : new Intl.DateTimeFormat(htmlLang, { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: displayZone }).format(
+          readout.sweepTime,
+        );
+  // How far the sweep trails the playhead: a radar scans every few minutes
+  // and the playhead moves in the mosaic's steps, so the two clocks differ
+  // by design. Past the window the sweep is the site's newest, however old.
+  const minutes = readout.age === null || readout.stale ? null : Math.round(readout.age / 60_000);
+  const age = minutes === null ? "" : minutes === 0 ? " ±0m" : ` −${minutes}m`;
+  // Three parts, so a phone's row can keep just the time beside the products
+  // (the site is labelled on the map).
+  const site = document.createElement("span");
+  site.className = "level-caption-site";
+  site.textContent = `${readout.site.icao} · `;
+  const when = document.createElement("span");
+  when.textContent = `${readout.stale ? `${t("radarLatest")} ` : ""}${time}${readout.loading ? " …" : ""}`;
+  const trailing = document.createElement("span");
+  trailing.className = "level-caption-age";
+  trailing.textContent = readout.loading ? "" : age;
+  group.caption.replaceChildren(site, when, trailing);
+  for (const [button, product] of [[group.ref, "n0b"], [group.vel, "n0g"]] as const) {
+    const pressed = readout.product === product;
+    // A row wider than the capsule scrolls: the product just chosen comes
+    // into view, as a pressed level does.
+    if (pressed && button.getAttribute("aria-pressed") !== "true") {
+      button.scrollIntoView({ block: "nearest", inline: "nearest" });
+    }
+    button.setAttribute("aria-pressed", String(pressed));
+    button.classList.toggle("is-removable", pressed);
+    button.title = pressed ? t("radarCloseAria") : "";
+  }
+  renderRadarLegend(readout.product);
+}
+
+/** The field legend, showing the radar's scale while a site is alone. */
+function renderRadarLegend(product: "n0b" | "n0g", force = false): void {
+  const scale = RADAR_SCALES[product];
+  if (legend.dataset.radar === product && !force) return;
+  legend.dataset.radar = product;
+  renderLegendKey(null);
+  legendUnit.textContent = scale.unit;
+  legendLabels.replaceChildren(...scale.labels.map((label) => {
+    const span = document.createElement("span");
+    span.textContent = label;
+    return span;
+  }));
+  legendBar.style.background = scale.gradient;
+  legendFolded.hidden = false;
+}
+
+/** Give the legend back to the field on screen. */
+function restoreFieldLegend(): void {
+  if (legend.dataset.radar === undefined) return;
+  delete legend.dataset.radar;
+  legendFolded.hidden = true;
+  if (activeSession) updateVariablePresentation(activeSession);
+}
+
+/** Back to the field: the site closes, the sites stay marked. */
+function closeRadarSite(): void {
+  view.marks.radar = { ...view.marks.radar, site: null };
+  syncUrl();
+  applyRadarView();
 }
 
 function radarSiteAt(point: { x: number; y: number }): string | null {
@@ -6734,14 +6840,7 @@ radarTile.addEventListener("click", () => {
   syncUrl();
   applyRadarView();
 });
-radarChipRef.addEventListener("click", () => setRadarProduct("n0b"));
-// Back to the mosaic: the sites stay marked, one click away.
-radarChipClose.addEventListener("click", () => {
-  view.marks.radar = { ...view.marks.radar, site: null };
-  syncUrl();
-  applyRadarView();
-});
-radarChipVel.addEventListener("click", () => setRadarProduct("n0g"));
+
 
 soundingTile.addEventListener("click", () => toggleStationProduct("soundings"));
 airportTile.addEventListener("click", () => toggleStationProduct("airports"));
