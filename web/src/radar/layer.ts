@@ -73,7 +73,10 @@ float value(float code) {
   return u_product < 0.5 ? -33.0 + 0.5 * code : -64.5 + 0.5 * code;
 }
 
-const vec4 FOLDED = vec4(0.55, 0.2, 0.75, 1.0);
+// Range-folded gates carry no value: a quiet grey-violet at half strength,
+// so a wide folded band reads as "unknown" rather than as the strongest
+// colour on the map.
+const vec4 FOLDED = vec4(0.62, 0.58, 0.70, 1.0) * 0.45;
 
 void main() {
   float longitude = (v_mercator.x * 2.0 - 1.0) * PI;

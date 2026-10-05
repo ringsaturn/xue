@@ -349,6 +349,7 @@ export const zhHant: Record<MessageKey, string> = {
   glyphRadarSite: "雷",
   radarProductAria: "雷達產品",
   radarLatest: "最新",
+  radarCloseAria: "返回拼圖",
   stationSounding: "探空",
   stationAirport: "機場",
   stationObserved: "觀測",

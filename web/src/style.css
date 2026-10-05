@@ -2322,19 +2322,25 @@ html[lang="ja"] .rail-glyph {
   letter-spacing: 0.04em;
 }
 
-/* The single-site radar's chip: the site, the product switch and the time
-   of the sweep on screen, under the title where the eye already is. */
+/* The single-site radar's card: the site and the way back to the mosaic,
+   the product switch, the sweep on screen and how far it trails the
+   playhead, and the product's own scale. Bottom left on a wide screen,
+   clear of a case's banner above and the transport to its right; on a
+   phone it takes the field legend's place, which the single-site view
+   hides. */
 .radar-chip {
   position: absolute;
   z-index: 3;
-  top: 104px;
+  bottom: 24px;
   left: 20px;
   display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 5px 8px;
+  width: 112px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  padding: 8px;
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: 12px;
   background: var(--surface);
   color: var(--text);
   backdrop-filter: blur(10px);
@@ -2343,19 +2349,39 @@ html[lang="ja"] .rail-glyph {
   letter-spacing: 0.04em;
 }
 
-.radar-chip[hidden] {
+.radar-chip[hidden],
+body.radar-alone #legend {
   display: none;
 }
 
+.radar-chip-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.radar-chip-close {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 16px;
+  cursor: pointer;
+}
+
 .radar-chip-products {
-  display: inline-flex;
+  display: flex;
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 999px;
 }
 
 .radar-chip-products button {
-  padding: 2px 8px;
+  flex: 1;
+  min-height: 32px;
   border: 0;
   background: transparent;
   color: inherit;
@@ -2369,6 +2395,10 @@ html[lang="ja"] .rail-glyph {
 }
 
 .radar-chip-time {
+  font-size: 12px;
+}
+
+.radar-chip-age {
   color: var(--muted);
 }
 
@@ -2376,10 +2406,65 @@ html[lang="ja"] .rail-glyph {
   content: " …";
 }
 
+.radar-chip-legend {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.radar-chip-unit,
+.radar-chip-folded {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.radar-chip-scale {
+  display: flex;
+  height: 140px;
+  gap: 6px;
+}
+
+.radar-chip-bar {
+  width: 10px;
+  border-radius: 5px;
+}
+
+.radar-chip-bar[data-product="n0b"] {
+  background: linear-gradient(to top, rgb(99 235 235), rgb(0 153 242), rgb(0 217 0), rgb(0 140 0), rgb(255 230 0), rgb(255 140 0), rgb(230 0 0), rgb(204 0 204));
+}
+
+.radar-chip-bar[data-product="n0g"] {
+  background: linear-gradient(to top, rgb(0 115 0), rgb(184 217 184) 50%, rgb(224 189 189) 50%, rgb(158 0 0));
+}
+
+.radar-chip-labels {
+  display: flex;
+  flex-direction: column-reverse;
+  justify-content: space-between;
+  font-size: 10px;
+}
+
+.radar-chip-folded::before {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 6px;
+  border-radius: 2px;
+  background: rgb(158 148 179 / 0.45);
+  content: "";
+  vertical-align: -1px;
+}
+
 @media (max-width: 720px) {
   .radar-chip {
-    top: calc(84px + env(safe-area-inset-top));
+    top: calc(118px + env(safe-area-inset-top));
+    bottom: auto;
     left: 16px;
+  }
+
+  .radar-chip-scale {
+    height: 110px;
   }
 }
 

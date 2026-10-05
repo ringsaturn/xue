@@ -354,6 +354,7 @@ export const fr: Record<MessageKey, string> = {
   glyphRadarSite: "D",
   radarProductAria: "Produit radar",
   radarLatest: "dernier",
+  radarCloseAria: "Retour à la mosaïque",
   stationSounding: "Radiosondage",
   stationAirport: "Aéroport",
   stationObserved: "Observé",

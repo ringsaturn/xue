@@ -351,6 +351,7 @@ export const ja: Record<MessageKey, string> = {
   glyphRadarSite: "雷",
   radarProductAria: "レーダープロダクト",
   radarLatest: "最新",
+  radarCloseAria: "合成図に戻る",
   stationSounding: "高層観測",
   stationAirport: "空港",
   stationObserved: "観測",

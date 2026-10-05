@@ -580,6 +580,7 @@ export const en = {
   glyphRadarSite: "D",
   radarProductAria: "Radar product",
   radarLatest: "newest",
+  radarCloseAria: "Back to the mosaic",
   stationSounding: "Sounding",
   stationAirport: "Airport",
   stationObserved: "Observed",

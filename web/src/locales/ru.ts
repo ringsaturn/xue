@@ -356,6 +356,7 @@ export const ru: Record<MessageKey, string> = {
   glyphRadarSite: "D",
   radarProductAria: "Продукт радара",
   radarLatest: "последний",
+  radarCloseAria: "Назад к мозаике",
   stationSounding: "Зондирование",
   stationAirport: "Аэропорт",
   stationObserved: "Наблюдение",

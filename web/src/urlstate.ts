@@ -545,10 +545,10 @@ export function searchWithStations(search: string, state: StationsUrlState): str
 
 /** The single-site radar a link carries (`docs/nexrad.md`): `?radar=GWX`
  * draws that site, `?radarproduct=n0g` shows its velocity rather than its
- * reflectivity. No `?radar=` (or `?radar=off`) draws none; `?radar=on`
- * turns the overlay on and lets the page pick the site (a case's default,
- * else the one nearest the view). A site id is three letters or digits; a
- * malformed one falls back to `on`. */
+ * reflectivity. A named site is drawn alone, the field under it held off
+ * screen. No `?radar=` (or `?radar=off`) draws none; `?radar=on` marks the
+ * sites over the field without choosing one. A site id is three letters or
+ * digits; a malformed one falls back to `on`. */
 export interface RadarUrlState {
   on: boolean;
   site: string | null;

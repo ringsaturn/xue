@@ -356,6 +356,7 @@ export const ko: Record<MessageKey, string> = {
   glyphRadarSite: "레",
   radarProductAria: "레이더 산출물",
   radarLatest: "최신",
+  radarCloseAria: "합성도로 돌아가기",
   stationSounding: "고층관측",
   stationAirport: "공항",
   stationObserved: "관측",

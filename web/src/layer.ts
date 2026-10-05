@@ -736,6 +736,7 @@ export class ForecastLayer implements CustomLayerInterface {
   private hasFrame = false;
   /** Hidden while no weather layer is on screen. */
   private visible = true;
+  private suppressed = false;
 
   // Pending state survives context loss and is re-applied in onAdd.
   private pendingPlaneA: FramePlanes | null = null;
@@ -923,6 +924,15 @@ export class ForecastLayer implements CustomLayerInterface {
   setVisible(visible: boolean): void {
     if (this.visible === visible) return;
     this.visible = visible;
+    this.map?.triggerRepaint();
+  }
+
+  /** Hold the field off screen whatever its slot says: the single-site
+   * radar draws one radar alone over the basemap, and the slot's own
+   * show/hide keeps running underneath so letting go is instant. */
+  setSuppressed(suppressed: boolean): void {
+    if (this.suppressed === suppressed) return;
+    this.suppressed = suppressed;
     this.map?.triggerRepaint();
   }
 
@@ -1216,7 +1226,7 @@ export class ForecastLayer implements CustomLayerInterface {
 
   render(gl: WebGLRenderingContext | WebGL2RenderingContext, args: unknown): void {
     if (!(gl instanceof WebGL2RenderingContext)) return;
-    if (!this.visible || !this.map || !this.worldMesh || !this.planeMesh || !this.slots || !this.hasFrame || !this.pendingPalette) return;
+    if (!this.visible || this.suppressed || !this.map || !this.worldMesh || !this.planeMesh || !this.slots || !this.hasFrame || !this.pendingPalette) return;
     const input = args as CustomRenderMethodInput;
     if (!input?.shaderData || !input.defaultProjectionData) return;
     const tiles = surfaceTiles(this.map, input);

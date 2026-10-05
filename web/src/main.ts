@@ -182,7 +182,6 @@ import {
   type StationPointData,
 } from "./stations/layers";
 import {
-  haversineKm,
   nearestAirport,
   nearestSounding,
   nearestSynopStations,
@@ -669,6 +668,10 @@ function applyBasemapTheme(): void {
   applyBasemapInk(darkGround);
   tcLayers?.setInk(darkGround);
   stationLayers?.setInk(darkGround);
+  if (radarOverlay) {
+    const style = getComputedStyle(document.body);
+    radarOverlay.setInk(style.getPropertyValue("--text").trim(), style.getPropertyValue("--bg").trim());
+  }
 }
 
 /** Repaint the basemap's labels and boundaries for the current ground.
@@ -1127,6 +1130,11 @@ const radarChipSite = required<HTMLElement>("radar-chip-site");
 const radarChipRef = required<HTMLButtonElement>("radar-chip-ref");
 const radarChipVel = required<HTMLButtonElement>("radar-chip-vel");
 const radarChipTime = required<HTMLElement>("radar-chip-time");
+const radarChipAge = required<HTMLElement>("radar-chip-age");
+const radarChipClose = required<HTMLButtonElement>("radar-chip-close");
+const radarChipBar = required<HTMLElement>("radar-chip-bar");
+const radarChipLabels = required<HTMLElement>("radar-chip-labels");
+const radarChipUnit = required<HTMLElement>("radar-chip-unit");
 const tcSheet = required<HTMLElement>("tc-sheet");
 const tcList = required<HTMLElement>("tc-list");
 const fieldMore = required<HTMLButtonElement>("field-more");
@@ -6609,20 +6617,12 @@ function ensureRadarOverlay(): RadarOverlay | null {
   if (!radarOverlay) radarOverlay = new RadarOverlay(map, renderRadarChip);
   const before = (map.getStyle().layers ?? []).find((entry) => entry.type === "symbol")?.id;
   radarOverlay.ensure(before);
-  radarOverlay.setInk(getComputedStyle(document.body).getPropertyValue("--text").trim() || "#1b1a17");
+  const style = getComputedStyle(document.body);
+  radarOverlay.setInk(
+    style.getPropertyValue("--text").trim() || "#1b1a17",
+    style.getPropertyValue("--bg").trim() || "#f3efe6",
+  );
   return radarOverlay;
-}
-
-/** The nearest site of the window to the map's centre: what the tile
- * opens on when nothing names a site. */
-function nearestRadarSite(window: RadarWindow): string | null {
-  const center = map.getCenter();
-  let best: { id: string; distance: number } | null = null;
-  for (const site of window.sites) {
-    const distance = haversineKm(center.lng, center.lat, site.lon, site.lat);
-    if (!best || distance < best.distance) best = { id: site.id, distance };
-  }
-  return best?.id ?? null;
 }
 
 function applyRadarView(): void {
@@ -6637,19 +6637,27 @@ function applyRadarView(): void {
     radarOverlay?.remove();
     radarOverlay = null;
     renderRadarChip(null);
+    setRadarAlone(false);
     return;
   }
   const overlay = ensureRadarOverlay();
   if (!overlay) return;
   overlay.setWindow(radarWindow!.window, radarWindow!.url);
-  const site =
-    state.site && radarWindow!.window.sites.some((entry) => entry.id === state.site)
-      ? state.site
-      : (activeCase?.radar?.defaultSite ?? nearestRadarSite(radarWindow!.window));
+  // A site the window does not have is no site: the marks show, the
+  // mosaic stays.
+  const site = state.site && radarWindow!.window.sites.some((entry) => entry.id === state.site) ? state.site : null;
   if (site !== state.site) view.marks.radar = { ...state, site };
   overlay.setProduct(view.marks.radar.product);
   overlay.setSite(site);
+  // One radar, alone: a chosen site's sweep is read against the basemap,
+  // not blended over a mosaic of every other radar.
+  setRadarAlone(site !== null);
   syncRadarTime();
+}
+
+function setRadarAlone(alone: boolean): void {
+  document.body.classList.toggle("radar-alone", alone);
+  slots.fill.layer.setSuppressed(alone);
 }
 
 function syncRadarTime(): void {
@@ -6658,6 +6666,14 @@ function syncRadarTime(): void {
   radarOverlay.setTime(metadata && index !== null ? frameValidTime(index) : null);
 }
 
+/** The scale beside the sweep, product by product: the reflectivity ramp
+ * the shader draws from 5 dBZ, and velocity ±30 m/s from green (toward the
+ * radar) through pale to red (away). */
+const RADAR_SCALES = {
+  n0b: { unit: "dBZ", labels: ["5", "25", "45", "65"] },
+  n0g: { unit: "m/s", labels: ["−30", "0", "+30"] },
+} as const;
+
 function renderRadarChip(readout: RadarReadout | null): void {
   radarChip.hidden = readout === null;
   if (!readout) return;
@@ -6665,8 +6681,25 @@ function renderRadarChip(readout: RadarReadout | null): void {
   radarChipRef.setAttribute("aria-pressed", String(readout.product === "n0b"));
   radarChipVel.setAttribute("aria-pressed", String(readout.product === "n0g"));
   radarChip.dataset.state = readout.loading ? "loading" : readout.stale ? "stale" : "current";
-  const time = readout.sweepTime === null ? "--" : formatDate(readout.sweepTime);
+  const time = readout.sweepTime === null ? "--" : formatCompactDate(readout.sweepTime);
   radarChipTime.textContent = readout.stale ? `${t("radarLatest")} ${time}` : time;
+  // How far the sweep trails the playhead: a radar scans every few
+  // minutes and the playhead moves in the mosaic's steps, so the two
+  // clocks differ by design and the card says by how much.
+  // Past the window the sweep is the site's newest, however old: the card
+  // says "newest" and no age.
+  const minutes = readout.age === null || readout.stale ? null : Math.round(readout.age / 60_000);
+  radarChipAge.textContent = minutes === null ? "" : minutes === 0 ? "±0 min" : `−${minutes} min`;
+  const scale = RADAR_SCALES[readout.product];
+  if (radarChipBar.dataset.product !== readout.product) {
+    radarChipBar.dataset.product = readout.product;
+    radarChipUnit.textContent = scale.unit;
+    radarChipLabels.replaceChildren(...scale.labels.map((label) => {
+      const span = document.createElement("span");
+      span.textContent = label;
+      return span;
+    }));
+  }
 }
 
 function radarSiteAt(point: { x: number; y: number }): string | null {
@@ -6693,11 +6726,21 @@ function setRadarProduct(product: "n0b" | "n0g"): void {
 }
 
 radarTile.addEventListener("click", () => {
-  view.marks.radar = { ...view.marks.radar, on: !view.marks.radar.on };
+  const on = !view.marks.radar.on;
+  // Turned on in a case, the tile opens the case's own site; elsewhere it
+  // shows the sites, and a click on one opens it.
+  const site = on ? (view.marks.radar.site ?? activeCase?.radar?.defaultSite ?? null) : view.marks.radar.site;
+  view.marks.radar = { ...view.marks.radar, on, site };
   syncUrl();
   applyRadarView();
 });
 radarChipRef.addEventListener("click", () => setRadarProduct("n0b"));
+// Back to the mosaic: the sites stay marked, one click away.
+radarChipClose.addEventListener("click", () => {
+  view.marks.radar = { ...view.marks.radar, site: null };
+  syncUrl();
+  applyRadarView();
+});
 radarChipVel.addEventListener("click", () => setRadarProduct("n0g"));
 
 soundingTile.addEventListener("click", () => toggleStationProduct("soundings"));

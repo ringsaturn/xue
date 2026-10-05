@@ -357,6 +357,7 @@ export const tr: Record<MessageKey, string> = {
   glyphRadarSite: "D",
   radarProductAria: "Radar ürünü",
   radarLatest: "en yeni",
+  radarCloseAria: "Mozaiğe dön",
   stationSounding: "Radyosonda",
   stationAirport: "Havalimanı",
   stationObserved: "Gözlem",
