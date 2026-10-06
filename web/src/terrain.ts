@@ -27,12 +27,13 @@ export const TERRAIN_SOURCE = "mapterhorn";
 export const TERRAIN_MESH_SOURCE = "mapterhorn-mesh";
 const TERRAIN_TILE_URL = "https://tiles.mapterhorn.com/{z}/{x}/{y}.webp";
 export const TERRAIN_MAX_ZOOM = 12;
-/** How deep the camera may go over the 3D relief: the basemap's own z15.
- * Where a regional archive reaches that deep (`terrainprotocol.ts`) the
- * relief gains detail all the way down; elsewhere MapLibre overzooms the
- * z12 tile — no new detail and no new requests, but a small hill fills the
- * view instead of a few pixels. */
-export const TERRAIN_CAMERA_MAX_ZOOM = 15;
+/** How deep the camera may go over the 3D relief: z16, as deep as Japan's
+ * regional archive (`terrainprotocol.ts`), and one past the basemap's z15,
+ * whose vector tiles overzoom cleanly. Where an archive reaches that deep
+ * the relief gains detail all the way down; elsewhere MapLibre overzooms
+ * the z12 tile — no new detail and no new requests, but a small hill fills
+ * the view instead of a few pixels. */
+export const TERRAIN_CAMERA_MAX_ZOOM = 16;
 export const TERRAIN_ATTRIBUTION = "<a href='https://mapterhorn.com/attribution/'>© Mapterhorn</a>";
 
 /** Terrarium tiles are 512 px square and carry no `tileSize` of their own for
