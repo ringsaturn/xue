@@ -149,8 +149,12 @@ float surfaceSample(vec2 coord) {
   return mix(mix(tl, tr, f.x), mix(bl, br, f.x), f.y);
 }
 float surfaceShade(vec2 coord) {
-  float east = surfaceSample(coord + vec2(1.0, 0.0)) - surfaceSample(coord - vec2(1.0, 0.0));
-  float south = surfaceSample(coord + vec2(0.0, 1.0)) - surfaceSample(coord - vec2(0.0, 1.0));
+  // The stencil stays inside the texture: within a texel of its edge a
+  // central difference would read one clamped sample, halve the slope and
+  // draw the DEM tile's edge as a pale seam across the relief.
+  vec2 at = clamp(coord, vec2(1.0), vec2(textureSize(u_terrain, 0)) - 2.0);
+  float east = surfaceSample(at + vec2(1.0, 0.0)) - surfaceSample(at - vec2(1.0, 0.0));
+  float south = surfaceSample(at + vec2(0.0, 1.0)) - surfaceSample(at - vec2(0.0, 1.0));
   float run = 2.0 * u_dem_texel_meters / max(u_terrain_exaggeration, 1.0);
   // (east, north, up): a texel row runs south.
   vec3 normal = normalize(vec3(-east / run, south / run, 1.0));
