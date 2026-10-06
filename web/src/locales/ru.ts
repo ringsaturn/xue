@@ -187,6 +187,7 @@ export const ru: Record<MessageKey, string> = {
   themeToggleAria: "Переключить светлое / тёмное",
   viewGlobeAria: "Глобус",
   viewTerrainAria: "3D-рельеф",
+  viewShadowAria: "Тени рельефа",
   viewResetNorthAria: "Сбросить на север",
   viewResetPitchAria: "Сбросить наклон",
   viewBoxAria: "Шторм крупным планом: выделите рамкой",

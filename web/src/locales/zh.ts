@@ -182,6 +182,7 @@ export const zh: Record<MessageKey, string> = {
   themeToggleAria: "切换浅色 / 深色",
   viewGlobeAria: "地球视图",
   viewTerrainAria: "三维地形",
+  viewShadowAria: "地形阴影",
   viewResetNorthAria: "重置为正北",
   viewResetPitchAria: "重置俯仰",
   viewBoxAria: "风暴特写：框选一块区域",

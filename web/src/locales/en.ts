@@ -338,12 +338,13 @@ export const en = {
   langPickerAria: "Language",
   langPickerHeading: "LANGUAGE",
   themeToggleAria: "Toggle light / dark",
-  /** The view tile under the zoom buttons (viewcontrol.ts): the globe and the
-   * 3D relief as switches, then back to north and back to a flat camera —
+  /** The view tile under the zoom buttons (viewcontrol.ts): the globe, the
+   * 3D relief and its cast shadows as switches, then back to north and back to a flat camera —
    * the last two shown only while the map is turned or tilted. Tooltips
    * and accessible names. */
   viewGlobeAria: "Globe",
   viewTerrainAria: "3D terrain",
+  viewShadowAria: "Terrain shadows",
   viewResetNorthAria: "Reset to north",
   viewResetPitchAria: "Reset tilt",
   viewBoxAria: "Storm close-up: drag a box over it",

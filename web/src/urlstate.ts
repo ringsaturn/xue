@@ -259,6 +259,8 @@ export interface SceneState {
   globe: boolean;
   /** Vertical exaggeration of the 3D terrain, or null for a flat ground. */
   terrain: number | null;
+  /** Whether the relief casts the sun's shadows (shadowlayer.ts). */
+  shadow: boolean;
 }
 
 /** The exaggeration `?terrain=on` means: enough that a mountain range reads
@@ -268,7 +270,8 @@ const MAX_TERRAIN_EXAGGERATION = 10;
 
 /** `?projection=globe` draws the globe (anything else, the plane);
  * `?terrain=on` lifts the ground at the default exaggeration and
- * `?terrain=<number>` at that one, up to ten. */
+ * `?terrain=<number>` at that one, up to ten; `?shadow=on` casts the
+ * terrain's shadows. */
 export function parseSceneFromSearch(search: string): SceneState {
   const params = new URLSearchParams(search);
   const globe = params.get("projection")?.trim().toLowerCase() === "globe";
@@ -282,11 +285,12 @@ export function parseSceneFromSearch(search: string): SceneState {
       terrain = DEFAULT_TERRAIN_EXAGGERATION;
     }
   }
-  return { globe, terrain };
+  const shadow = SWITCH_ALIASES[params.get("shadow")?.trim().toLowerCase() ?? ""] === true;
+  return { globe, terrain, shadow };
 }
 
-/** The given query string carrying the scene; the plane and a flat ground
- * write nothing. */
+/** The given query string carrying the scene; the plane, a flat ground and
+ * no shadows write nothing. */
 export function searchWithScene(search: string, scene: SceneState): string {
   const params = new URLSearchParams(search);
   if (scene.globe) params.set("projection", "globe");
@@ -294,6 +298,8 @@ export function searchWithScene(search: string, scene: SceneState): string {
   if (scene.terrain === null) params.delete("terrain");
   else if (Math.abs(scene.terrain - DEFAULT_TERRAIN_EXAGGERATION) < 1e-6) params.set("terrain", "on");
   else params.set("terrain", String(Math.round(scene.terrain * 10) / 10));
+  if (scene.shadow) params.set("shadow", "on");
+  else params.delete("shadow");
   return `?${params.toString()}`;
 }
 

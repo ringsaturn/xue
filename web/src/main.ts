@@ -274,6 +274,7 @@ import {
 } from "./terrain";
 import { registerTerrainProtocol, TERRAIN_DETAIL_MAX_ZOOM, TERRAIN_DETAIL_TILES } from "./terrainprotocol";
 import { PeakLabels } from "./peaks";
+import { TerrainShadows } from "./shadowlayer";
 import { applyPageMeta } from "./pagemeta";
 import {
   caseCameraLimits,
@@ -671,6 +672,7 @@ function applyBasemapTheme(): void {
       map.setPaintProperty(TERRAIN_LAYER, name as PaintName, value as PaintValue);
     }
   }
+  terrainShadows?.setDarkGround(darkGround);
   applyBasemapInk(darkGround);
   tcLayers?.setInk(darkGround);
   stationLayers?.setInk(darkGround);
@@ -780,6 +782,33 @@ const HILLSHADE_INK: Record<"light" | "dark", HillshadePaint> = {
 
 function hillshadePaint(darkGround: boolean): HillshadePaint {
   return HILLSHADE_INK[darkGround ? "dark" : "light"];
+}
+
+/** The relief's cast shadows (`shadowlayer.ts`), built once the style has
+ * loaded, since their layer goes in directly above the hillshade. */
+let terrainShadows: TerrainShadows | null = null;
+
+function startTerrainShadows(): void {
+  const shadows = new TerrainShadows({
+    map,
+    hillshadeLayer: TERRAIN_LAYER,
+    darkGround: () => document.body.dataset.ground === "dark",
+    onChange: () => {
+      viewControl.syncShadow();
+      syncUrl();
+    },
+  });
+  terrainShadows = shadows;
+  syncShadowTime();
+  shadows.setEnabled(urlScene.shadow);
+  viewControl.setShadow({ enabled: () => shadows.enabled, toggle: () => shadows.setEnabled(!shadows.enabled) });
+}
+
+/** The instant the sun is placed at: the playhead's valid time, or now
+ * before a run has loaded. */
+function syncShadowTime(index: number | null = activeFrameIndex ?? requestedFrameIndex): void {
+  if (!terrainShadows) return;
+  terrainShadows.setTime(metadata && index !== null ? frameValidTime(index) : Date.now(), playing);
 }
 
 function buildBasemapStyle(): BasemapStyle {
@@ -986,6 +1015,7 @@ function currentScene(): SceneState {
   return {
     globe: map.getProjection()?.type === "globe",
     terrain: map.getTerrain()?.exaggeration ?? null,
+    shadow: terrainShadows?.enabled ?? urlScene.shadow,
   };
 }
 
@@ -4005,6 +4035,7 @@ function updateFrameReadout(index: number): void {
   scheduleProbeRender();
   syncTcTime();
   syncStationTime();
+  syncShadowTime(index);
 }
 
 /** Reconfigure a slot's layer for its session's own bundle grid (poster
@@ -9091,6 +9122,7 @@ map.once("load", () => {
   // into nothing; the sync is a no-op otherwise, and applies the ground.
   syncBasemapStyle();
   applySceneFromUrl();
+  startTerrainShadows();
   // A link that fixed the view is opened on that view; every other opens
   // on the dataset's own region.
   void initialize({ frame: urlCamera === null });

@@ -10,12 +10,14 @@ import {
   parseModelFromSearch,
   parseParticlesFromSearch,
   parseResolutionFromSearch,
+  parseSceneFromSearch,
   parseUseH264FromSearch,
   parseVariableFromSearch,
   searchForVariable,
   searchWithExperiment,
   searchWithLines,
   searchWithParticles,
+  searchWithScene,
 } from "../../web/src/urlstate";
 import type { KnownBundleId } from "../../web/src/manifest";
 
@@ -473,5 +475,27 @@ describe("parseCameraFromHash", () => {
     expect(parseCameraFromHash("#map=zoom/lat/lon")).toBeNull();
     expect(parseCameraFromHash("#map=4.5/91/0")).toBeNull();
     expect(parseCameraFromHash("#map=-1/38.5/-97.5")).toBeNull();
+  });
+});
+
+describe("terrain shadows in the scene", () => {
+  it("are off unless the URL switches them on, in any switch spelling", () => {
+    expect(parseSceneFromSearch("").shadow).toBe(false);
+    expect(parseSceneFromSearch("?shadow=off").shadow).toBe(false);
+    expect(parseSceneFromSearch("?shadow=banana").shadow).toBe(false);
+    for (const on of ["on", "ON", "1", "true", "yes", " On "]) {
+      expect(parseSceneFromSearch(`?shadow=${encodeURIComponent(on)}`).shadow).toBe(true);
+    }
+  });
+
+  it("are read beside the globe and the relief", () => {
+    expect(parseSceneFromSearch("?projection=globe&terrain=2&shadow=on")).toEqual({ globe: true, terrain: 2, shadow: true });
+  });
+
+  it("write shadow=on when on, nothing when off, and round-trip", () => {
+    const on = searchWithScene("?model=gfs", { globe: false, terrain: null, shadow: true });
+    expect(on).toBe("?model=gfs&shadow=on");
+    expect(parseSceneFromSearch(on).shadow).toBe(true);
+    expect(searchWithScene("?model=gfs&shadow=on", { globe: false, terrain: null, shadow: false })).toBe("?model=gfs");
   });
 });

@@ -55,15 +55,16 @@ describe("withDefines", () => {
 
 describe("scene URL state", () => {
   it("defaults to a flat plane", () => {
-    expect(parseSceneFromSearch("")).toEqual({ globe: false, terrain: null });
-    expect(parseSceneFromSearch("?projection=mercator&terrain=off")).toEqual({ globe: false, terrain: null });
-    expect(parseSceneFromSearch("?terrain=banana")).toEqual({ globe: false, terrain: null });
+    expect(parseSceneFromSearch("")).toEqual({ globe: false, terrain: null, shadow: false });
+    expect(parseSceneFromSearch("?projection=mercator&terrain=off")).toEqual({ globe: false, terrain: null, shadow: false });
+    expect(parseSceneFromSearch("?terrain=banana")).toEqual({ globe: false, terrain: null, shadow: false });
   });
 
   it("reads the globe and the relief", () => {
     expect(parseSceneFromSearch("?projection=Globe&terrain=on")).toEqual({
       globe: true,
       terrain: DEFAULT_TERRAIN_EXAGGERATION,
+      shadow: false,
     });
     expect(parseSceneFromSearch("?terrain=2.6").terrain).toBe(2.6);
     expect(parseSceneFromSearch("?terrain=50").terrain).toBe(10);
@@ -71,12 +72,12 @@ describe("scene URL state", () => {
   });
 
   it("writes only what differs from the default and round-trips", () => {
-    expect(searchWithScene("?model=gfs", { globe: false, terrain: null })).toBe("?model=gfs");
-    expect(searchWithScene("?model=gfs&projection=globe&terrain=on", { globe: false, terrain: null })).toBe("?model=gfs");
-    const on = searchWithScene("?model=gfs", { globe: true, terrain: DEFAULT_TERRAIN_EXAGGERATION });
+    expect(searchWithScene("?model=gfs", { globe: false, terrain: null, shadow: false })).toBe("?model=gfs");
+    expect(searchWithScene("?model=gfs&projection=globe&terrain=on", { globe: false, terrain: null, shadow: false })).toBe("?model=gfs");
+    const on = searchWithScene("?model=gfs", { globe: true, terrain: DEFAULT_TERRAIN_EXAGGERATION, shadow: false });
     expect(on).toBe("?model=gfs&projection=globe&terrain=on");
-    expect(parseSceneFromSearch(on)).toEqual({ globe: true, terrain: DEFAULT_TERRAIN_EXAGGERATION });
-    expect(searchWithScene("", { globe: false, terrain: 2.6 })).toBe("?terrain=2.6");
+    expect(parseSceneFromSearch(on)).toEqual({ globe: true, terrain: DEFAULT_TERRAIN_EXAGGERATION, shadow: false });
+    expect(searchWithScene("", { globe: false, terrain: 2.6, shadow: false })).toBe("?terrain=2.6");
   });
 });
 

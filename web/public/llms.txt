@@ -313,6 +313,9 @@ fall back to defaults rather than fail, so a constructed link always opens.
 - `?terrain=on|<exaggeration>` — lift the ground into 3D relief with the
   forecast draped over it (`on` = 1.5×, a number up to 10). Bearing and
   pitch go in the camera fragment: `#map=<zoom>/<lat>/<lon>/<bearing>/<pitch>`.
+- `?shadow=on` — cast the terrain's shadows for the sun at the frame's valid
+  time (or now, before data loads), over the basemap and the forecast, flat
+  or in 3D relief, from zoom 9 in (default off).
 - `?lang=zh|zh-Hant|en|ja|ko|de|fr|es|pt|tr|ru` and `?theme=light|dark` —
   otherwise the browser's language and colour scheme decide.
 - `?tc=<storm id>` — focus one tropical cyclone (an ATCF id such as

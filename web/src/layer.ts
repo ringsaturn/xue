@@ -217,6 +217,12 @@ uniform sampler2D u_blue;
 uniform sampler2D u_green_b;
 uniform sampler2D u_blue_b;
 uniform sampler2D u_palette;
+// Terrain cast shadows (shadowlayer.ts), off (strength 0) unless switched
+// on: a sunlit mask over a Mercator rectangle (x0, y0, x1, y1), 0 in shadow
+// or night and 1 in full sun, and how far a shadowed fragment darkens.
+uniform sampler2D u_shadow;
+uniform vec4 u_shadow_rect;
+uniform float u_shadow_strength;
 uniform vec2 u_first;
 uniform vec2 u_step;
 uniform vec2 u_size;
@@ -449,6 +455,19 @@ float contourCoverage(float value, float gradient, float interval, float halfWid
   return lineCoverage(distance, gradient, halfWidth) * smoothstep(2.0, 6.0, spacingPixels);
 }
 
+// How sunlit the ground under a Mercator position is. The mask's x may run
+// past [0, 1] (a view across the antimeridian) and the mesh's x does on a
+// world copy, so the position is taken eastward of the rectangle's western
+// edge, wrapped; outside the rectangle nothing was computed and nothing is
+// shaded.
+float sunlit(vec2 mercator) {
+  if (u_shadow_strength <= 0.0) return 1.0;
+  float sx = mod(mercator.x - u_shadow_rect.x, 1.0) / max(u_shadow_rect.z - u_shadow_rect.x, 1e-9);
+  float sy = (mercator.y - u_shadow_rect.y) / max(u_shadow_rect.w - u_shadow_rect.y, 1e-9);
+  if (sx > 1.0 || sy < 0.0 || sy > 1.0) return 1.0;
+  return texture(u_shadow, vec2(sx, sy)).r;
+}
+
 void main() {
   float longitude = fract(v_mercator.x) * 360.0 - 180.0;
   float latitude = 90.0 - (360.0 / PI) * atan(exp((v_mercator.y * 2.0 - 1.0) * PI));
@@ -543,6 +562,9 @@ void main() {
     color.a *= u_fill_alpha;
     color = mix(color, u_line_color, lines);
   }
+  // The field covers the basemap's shadow layer, so it carries the shadows
+  // itself.
+  color.rgb *= mix(1.0, 1.0 - u_shadow_strength, 1.0 - sunlit(v_mercator));
 #ifdef XUE_TERRAIN
   // Over 3D terrain the field hides the hillshade beneath it, so it carries
   // the relief itself.
@@ -745,6 +767,10 @@ export class ForecastLayer implements CustomLayerInterface {
   private planeMesh: { vertexArray: WebGLVertexArrayObject; count: number } | null = null;
   private tileMesh: { vertexArray: WebGLVertexArrayObject; count: number; size: number } | null = null;
   private demSampler: WebGLSampler | null = null;
+  /** The shadow mask as this layer last uploaded it (its version), or a
+   * white texel while there is none. */
+  private shadowTexture: WebGLTexture | null = null;
+  private shadowVersion = -1;
   /** Altitude correction over the relief: its inputs, and the orography
    * texture they are uploaded to. */
   private lapse: LapseCorrection | null = null;
@@ -912,6 +938,8 @@ export class ForecastLayer implements CustomLayerInterface {
     this.planeMesh = uploadMesh(gl, gridMesh(1, 1));
     this.tileMesh = null;
     this.demSampler = createLinearSampler(gl);
+    this.shadowTexture = null;
+    this.shadowVersion = -1;
     this.orographyTexture = null;
     this.columnTextures = [];
     this.emptyColumn = null;
@@ -1006,6 +1034,7 @@ export class ForecastLayer implements CustomLayerInterface {
     this.planeMesh = null;
     this.tileMesh = null;
     this.demSampler = null;
+    this.shadowTexture = null;
     this.orographyTexture = null;
     this.columnTextures = [];
     this.emptyColumn = null;
@@ -1343,6 +1372,39 @@ export class ForecastLayer implements CustomLayerInterface {
     gl.uniform2f(this.uniforms.u_orog_decode!, lapse.orographyOffset, lapse.orographyScale);
   }
 
+  /** The terrain shadows' uniforms for this frame, uploading the mask when
+   * it changed since this layer last drew. */
+  private bindShadow(gl: WebGL2RenderingContext): void {
+    const shadow = fieldShadow;
+    gl.activeTexture(gl.TEXTURE0 + SHADOW_TEXTURE_UNIT);
+    if (!this.shadowTexture) {
+      this.shadowTexture = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, this.shadowTexture);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      this.shadowVersion = -1;
+    }
+    gl.bindTexture(gl.TEXTURE_2D, this.shadowTexture);
+    if (this.shadowVersion !== fieldShadowVersion) {
+      gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+      if (shadow && shadow.lit.length >= shadow.width * shadow.height) {
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, shadow.width, shadow.height, 0, gl.RED, gl.UNSIGNED_BYTE, shadow.lit);
+      } else {
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, 1, 1, 0, gl.RED, gl.UNSIGNED_BYTE, new Uint8Array([255]));
+      }
+      this.shadowVersion = fieldShadowVersion;
+    }
+    gl.uniform1i(this.uniforms.u_shadow!, SHADOW_TEXTURE_UNIT);
+    const rect = shadow?.rect ?? { x0: 0, y0: 0, x1: 1, y1: 1 };
+    gl.uniform4f(this.uniforms.u_shadow_rect!, rect.x0, rect.y0, rect.x1, rect.y1);
+    gl.uniform1f(this.uniforms.u_shadow_strength!, shadow?.strength ?? 0);
+    // Zero is the shader's "unset": the printed map's north-west light.
+    const light = shadow?.light ?? [0, 0, 0];
+    if (this.uniforms.u_light) gl.uniform3f(this.uniforms.u_light, light[0], light[1], light[2]);
+  }
+
   render(gl: WebGLRenderingContext | WebGL2RenderingContext, args: unknown): void {
     if (!(gl instanceof WebGL2RenderingContext)) return;
     if (!this.visible || this.suppressed || !this.map || !this.worldMesh || !this.planeMesh || !this.slots || !this.hasFrame || !this.pendingPalette) return;
@@ -1431,6 +1493,7 @@ export class ForecastLayer implements CustomLayerInterface {
       gl.bindTexture(gl.TEXTURE_2D, texture);
       gl.uniform1i(this.uniforms[name]!, 3 + at);
     }
+    this.bindShadow(gl);
 
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
@@ -1482,6 +1545,33 @@ const DEM_TEXTURE_UNIT = 7;
 const OROGRAPHY_TEXTURE_UNIT = 8;
 /** The column's three textures. */
 const COLUMN_TEXTURE_UNITS = [9, 10, 11] as const;
+/** The terrain shadows' sunlit mask; WebGL2 guarantees 16 units. */
+const SHADOW_TEXTURE_UNIT = 12;
+
+/** The terrain shadows every field layer darkens by (shadowlayer.ts): the
+ * latest sunlit mask over its Mercator rectangle, how strongly a shadow
+ * darkens, and the sun as the relief's light (east, north, up). One for the
+ * page, since every field lies on the same ground. */
+export interface FieldShadow {
+  rect: { x0: number; y0: number; x1: number; y1: number };
+  width: number;
+  height: number;
+  /** Row-major, north row first, 0 shadow .. 255 sunlit. */
+  lit: Uint8Array;
+  strength: number;
+  light: readonly [number, number, number];
+}
+
+let fieldShadow: FieldShadow | null = null;
+/** Bumped on every change, so each layer re-uploads the mask once. */
+let fieldShadowVersion = 0;
+
+/** Hand the field layers a new mask, or switch the shadows off (null). The
+ * caller repaints the map. */
+export function setFieldShadow(shadow: FieldShadow | null): void {
+  fieldShadow = shadow;
+  fieldShadowVersion += 1;
+}
 
 const MAP_UNIFORM_NAMES = [
   "u_data", "u_data_b", "u_green", "u_blue", "u_green_b", "u_blue_b", "u_palette", "u_first", "u_step", "u_size",
@@ -1493,6 +1583,7 @@ const MAP_UNIFORM_NAMES = [
   "u_band",
   "u_orog", "u_orog_grid", "u_orog_size", "u_orog_decode", "u_lapse",
   "u_lapse_t", "u_column_a", "u_column_b", "u_column_c", "u_column_grid", "u_column_size", "u_column_on",
+  "u_shadow", "u_shadow_rect", "u_shadow_strength", "u_light",
 ];
 
 /** A grid a correction input is laid on. */

@@ -185,6 +185,7 @@ export const fr: Record<MessageKey, string> = {
   themeToggleAria: "Basculer clair / sombre",
   viewGlobeAria: "Globe",
   viewTerrainAria: "Relief 3D",
+  viewShadowAria: "Ombres du relief",
   viewResetNorthAria: "Réorienter au nord",
   viewResetPitchAria: "Réinitialiser l’inclinaison",
   viewBoxAria: "Gros plan d’un orage : tracer un cadre",

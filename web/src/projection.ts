@@ -116,7 +116,9 @@ bool surfaceOccluded(vec4 clip) {
 
 /** Relief shading for a fragment on the terrain: the slope under it, read
  * from the same DEM, lit from the north-west the way a printed relief map
- * is. 1.0 is a flat surface.
+ * is — or, while terrain shadows are on, from the sun (`u_light`, east,
+ * north, up; left unset it is the north-west light). 1.0 is a flat
+ * surface.
  *
  * The DEM is unpacked texel by texel and interpolated in metres, never
  * through the sampler's own filtering: the encodings are linear in their
@@ -131,6 +133,7 @@ uniform highp sampler2D u_terrain;
 uniform vec4 u_terrain_unpack;
 uniform float u_terrain_exaggeration;
 uniform float u_dem_texel_meters;
+uniform vec3 u_light;
 float surfaceShadeTexel(ivec2 at) {
   ivec2 hi = textureSize(u_terrain, 0) - 1;
   vec4 rgb = (texelFetch(u_terrain, clamp(at, ivec2(0), hi), 0) * 255.0) * u_terrain_unpack;
@@ -151,7 +154,7 @@ float surfaceShade(vec2 coord) {
   float run = 2.0 * u_dem_texel_meters / max(u_terrain_exaggeration, 1.0);
   // (east, north, up): a texel row runs south.
   vec3 normal = normalize(vec3(-east / run, south / run, 1.0));
-  vec3 light = normalize(vec3(-1.0, 1.0, 1.4));
+  vec3 light = normalize(dot(u_light, u_light) > 0.0 ? u_light : vec3(-1.0, 1.0, 1.4));
   float lambert = max(dot(normal, light), 0.0);
   return clamp(0.42 + 0.78 * lambert / dot(vec3(0.0, 0.0, 1.0), light), 0.35, 1.25);
 }
