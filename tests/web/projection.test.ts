@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { Map as MaplibreMap } from "maplibre-gl";
 
-import { gridMesh, keepTerrainCameraStill, mercatorYUnclamped, SKIRT_OFFSET, skirtedTileMesh, withDefines, worldRowAt } from "../../web/src/projection";
+import { gridMesh, keepTerrainCameraStill, mercatorYUnclamped, moveCenterOnRay, SKIRT_OFFSET, skirtedTileMesh, withDefines, worldRowAt } from "../../web/src/projection";
 import { parseSceneFromSearch, searchWithScene, DEFAULT_TERRAIN_EXAGGERATION } from "../../web/src/urlstate";
 
 describe("gridMesh", () => {
@@ -93,30 +93,123 @@ describe("particle pacing and seeding", () => {
   });
 });
 
+describe("moveCenterOnRay", () => {
+  /** A camera over Fuji's flank: z13, pitch 60, looking north, 1,000 px to the center. */
+  function readout(over: Partial<Parameters<typeof moveCenterOnRay>[0]> = {}) {
+    return {
+      center: { lng: 138.74, lat: 35.34 },
+      elevation: 2000,
+      zoom: 13,
+      pitch: 60,
+      bearing: 0,
+      fovInRadians: 0.6435,
+      height: 800,
+      cameraToCenterDistance: 800 / 2 / Math.tan(0.6435 / 2),
+      worldSize: 512 * 2 ** 13,
+      tileSize: 512,
+      minZoom: 0,
+      maxZoom: 16,
+      tileZoom: 13,
+      centerPoint: null,
+      ...over,
+    };
+  }
+  /** The camera's altitude and ground position, from the transform's own quantities. */
+  function camera(t: ReturnType<typeof readout>) {
+    const metersPerPixel = (40075016.7 * Math.cos((t.center.lat * Math.PI) / 180)) / t.worldSize;
+    const distance = t.cameraToCenterDistance * metersPerPixel;
+    const pitch = (t.pitch * Math.PI) / 180;
+    const back = distance * Math.sin(pitch);
+    return {
+      altitude: t.elevation + distance * Math.cos(pitch),
+      lat: t.center.lat - (back * Math.cos((t.bearing * Math.PI) / 180)) / 111320,
+    };
+  }
+  function slide(t: ReturnType<typeof readout>, elevation: number) {
+    moveCenterOnRay(
+      t,
+      elevation,
+      (e) => (t.elevation = e),
+      (c) => (t.center = c),
+      (z) => {
+        t.zoom = z;
+        t.worldSize = 512 * 2 ** z;
+      },
+    );
+    return t;
+  }
+
+  it("lands the center on the plane with the camera where it was", () => {
+    const before = readout();
+    const was = camera(before);
+    const after = slide(readout(), 1400);
+    expect(after.elevation).toBeCloseTo(1400, 6);
+    expect(after.center.lat).toBeGreaterThan(before.center.lat);
+    expect(after.zoom).toBeLessThan(before.zoom);
+    const is = camera(after);
+    expect(is.altitude).toBeCloseTo(was.altitude, 0);
+    expect(is.lat).toBeCloseTo(was.lat, 4);
+  });
+
+  it("leaves the transform alone when the plane is nearer than the zoom ceiling allows", () => {
+    // The camera is at about 6,700 m; ground 200 m under it wants zoom 17.6.
+    const t = readout();
+    const moved = moveCenterOnRay(t, 6500, () => { throw new Error("elevation"); }, () => { throw new Error("center"); }, () => { throw new Error("zoom"); });
+    expect(moved).toBe(false);
+    expect(t.zoom).toBe(13);
+  });
+
+  it("keeps the camera still when it looks almost level", () => {
+    const before = readout({ pitch: 85 });
+    const after = slide(readout({ pitch: 85 }), 1900);
+    expect(camera(after).altitude).toBeCloseTo(camera(before).altitude, 0);
+    expect(after.zoom).toBeLessThanOrEqual(16);
+  });
+});
+
 describe("keepTerrainCameraStill", () => {
   /** A map whose transform is one instance of a one-off prototype. */
   function fakeMap() {
     const calls: string[] = [];
     const prototype = {
+      center: { lng: 138.74, lat: 35.34 },
       elevation: 100,
-      _helper: {
-        recalculateZoomAndCenter(elevation: number) {
-          calls.push(`walk ${elevation}`);
-        },
-        _calcMatrices() {
-          calls.push("matrices");
-        },
-      },
+      zoom: 13,
+      pitch: 60,
+      bearing: 0,
+      fovInRadians: 0.6435,
+      height: 800,
+      cameraToCenterDistance: 800 / 2 / Math.tan(0.6435 / 2),
+      worldSize: 512 * 2 ** 13,
+      tileSize: 512,
+      minZoom: 0,
+      maxZoom: 16,
+      tileZoom: 13,
+      centerPoint: null,
       setElevation(elevation: number) {
-        calls.push(`camera ${elevation}`);
+        calls.push(`elevation ${elevation.toFixed(0)}`);
         this.elevation = elevation;
+      },
+      setCenter(center: { lng: number; lat: number }) {
+        calls.push("center");
+        this.center = center;
+      },
+      setZoom(zoom: number) {
+        calls.push("zoom");
+        this.zoom = zoom;
+      },
+      screenPointToLocation(_point: unknown, _terrain?: unknown) {
+        return this.center;
+      },
+      recalculateZoomAndCenter(_terrain?: unknown) {
+        calls.push("maplibre landing");
       },
     };
     const transform = Object.create(prototype) as typeof prototype;
     const camera = { transform, elevationFreeze: false, easing: false, isEasing: () => camera.easing };
     const map = {
       _camera: camera,
-      terrain: {} as unknown,
+      terrain: { getElevationForLngLatZoom: () => 130 } as unknown,
       on() {},
       setTerrain(options: unknown) {
         transform.setElevation(options ? 300 : 0);
@@ -130,13 +223,16 @@ describe("keepTerrainCameraStill", () => {
   it("slides the center along the ray when the ground re-samples at rest", () => {
     const { transform, calls } = fakeMap();
     transform.setElevation(130);
-    expect(calls).toEqual(["walk 130", "matrices"]);
+    expect(calls).toEqual(["elevation 130", "center", "zoom"]);
   });
 
-  it("leaves a settled center alone", () => {
+  it("leaves a settled center alone, and one the ray cannot reach", () => {
     const { transform, calls } = fakeMap();
     transform.setElevation(100.5);
     expect(calls).toEqual([]);
+    transform.setElevation(130);
+    transform.setElevation(130);
+    expect(calls).toEqual(["elevation 130", "center", "zoom"]);
   });
 
   it("moves the camera during a gesture, an ease, a toggle, and without terrain", () => {
@@ -150,15 +246,17 @@ describe("keepTerrainCameraStill", () => {
     map.setTerrain({});
     map.terrain = null;
     transform.setElevation(0);
-    expect(calls).toEqual(["camera 130", "camera 160", "camera 300", "camera 0"]);
+    expect(calls).toEqual(["elevation 130", "elevation 160", "elevation 300", "elevation 0"]);
   });
 
-  it("gives up the walk when its steps stop shrinking", () => {
-    const { transform, calls } = fakeMap();
-    // The fake helper never moves the center, so every step stays 30 m.
+  it("lands a gesture on the sampled ground along the ray", () => {
+    const { map, transform, calls } = fakeMap();
+    transform.recalculateZoomAndCenter(map.terrain);
+    expect(calls).toEqual(["elevation 130", "center", "zoom"]);
     transform.setElevation(130);
-    transform.setElevation(130);
-    transform.setElevation(130);
-    expect(calls).toEqual(["walk 130", "matrices", "walk 130", "matrices", "camera 130"]);
+    expect(calls.length).toBe(3);
+    map.terrain = null;
+    transform.recalculateZoomAndCenter(undefined);
+    expect(calls.at(-1)).toBe("maplibre landing");
   });
 });

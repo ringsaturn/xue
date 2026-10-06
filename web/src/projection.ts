@@ -425,17 +425,40 @@ export function terrainMeshSize(map: MaplibreMap): number {
   return typeof size === "number" && size > 0 ? size : 128;
 }
 
-/** The transform internals the terrain camera fix below reaches. */
-interface TransformInternals {
+/** What the terrain camera fix below reads from a transform. */
+interface TransformReadout {
+  center: { lng: number; lat: number };
   elevation: number;
+  zoom: number;
+  pitch: number;
+  bearing: number;
+  fovInRadians: number;
+  height: number;
+  cameraToCenterDistance: number;
+  worldSize: number;
+  tileSize: number;
+  minZoom: number;
+  maxZoom: number;
+  tileZoom: number;
+  centerPoint: unknown;
+}
+
+/** The transform internals the terrain camera fix below reaches. */
+interface TransformInternals extends TransformReadout {
   /** Globe transform only: true while the globe, not its Mercator half, renders. */
   isGlobeRendering?: boolean;
   /** Globe transform only. */
   _mercatorTransform?: unknown;
-  _helper: { recalculateZoomAndCenter(elevation: number): void; _calcMatrices(): void };
   apply(source: unknown, forceOverrideZ: boolean): void;
-  recalculateZoomAndCenter(terrain?: unknown): void;
+  recalculateZoomAndCenter(terrain?: TerrainReadout): void;
+  screenPointToLocation(point: unknown, terrain?: TerrainReadout): { lng: number; lat: number };
+  setCenter(center: { lng: number; lat: number }): void;
+  setZoom(zoom: number): void;
   setElevation(elevation: number): void;
+}
+
+interface TerrainReadout {
+  getElevationForLngLatZoom(lnglat: { lng: number; lat: number }, zoom: number): number;
 }
 
 interface CameraInternals {
@@ -446,35 +469,93 @@ interface CameraInternals {
 
 const CAMERA_FIX = Symbol("xue.terrainCameraFix");
 
-/** A center this close to the ground is on it; stopping here ends the walk below. */
+/** A center this close to the ground is on it. */
 const SETTLED_ELEVATION_M = 1;
+/** Idle steps after which the center is left where it is (ground steeper than the ray). */
+const MAX_IDLE_STEPS = 8;
+/** Kept clear of the zoom limits so the constrained `setZoom` never moves the camera. */
+const ZOOM_MARGIN = 0.01;
+
+const mercatorUnitsPerMeter = (lat: number): number => 1 / (EARTH_CIRCUMFERENCE_M * Math.cos((lat * Math.PI) / 180));
+const mercatorX = (lng: number): number => (180 + lng) / 360;
+const mercatorY = (lat: number): number => (180 - (180 / Math.PI) * Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360))) / 360;
+const lngFromMercatorX = (x: number): number => x * 360 - 180;
+const latFromMercatorY = (y: number): number => (360 / Math.PI) * Math.atan(Math.exp(((180 - y * 360) * Math.PI) / 180)) - 90;
+
+/**
+ * Move the center along the view ray onto the plane at `elevation`, the
+ * camera where it is: MapLibre's `recalculateZoomAndCenter`, which does
+ * the same in pixel space, without its two ways of moving the camera after
+ * all. The zoom is the distance to the center, so a plane nearer than the
+ * zoom ceiling allows (ground rising toward a camera that looks almost
+ * level, or above it) leaves the transform as it is, the center floating
+ * off the ground, and a plane farther than the floor allows stops there;
+ * MapLibre parks the center 10 km out past 84° of pitch and lets the zoom
+ * clamp pull the camera the rest of the way. Returns whether it moved.
+ */
+export function moveCenterOnRay(transform: TransformReadout, elevation: number, setElevation: (elevation: number) => void, setCenter: (center: { lng: number; lat: number }) => void, setZoom: (zoom: number) => void): boolean {
+  const { center, worldSize } = transform;
+  const unitsPerPixel = 1 / worldSize;
+  const unitsPerMeter = mercatorUnitsPerMeter(center.lat);
+  const pixelsPerMeter = unitsPerMeter * worldSize;
+  // The camera, in pixels: behind the center along the bearing, above it by the pitch.
+  const pitch = (transform.pitch * Math.PI) / 180;
+  const bearing = (transform.bearing * Math.PI) / 180;
+  const dirX = Math.sin(pitch) * Math.sin(bearing);
+  const dirY = -Math.sin(pitch) * Math.cos(bearing);
+  const cosPitch = Math.cos(pitch);
+  const distancePixels = transform.cameraToCenterDistance;
+  const cameraX = mercatorX(center.lng) / unitsPerPixel - distancePixels * dirX;
+  const cameraY = mercatorY(center.lat) / unitsPerPixel - distancePixels * dirY;
+  const cameraAltitude = transform.elevation + (distancePixels * cosPitch) / pixelsPerMeter;
+  // Distance to the new center, in metres along the ray, held inside the zoom limits.
+  const zoomScale = transform.height / 2 / Math.tan(transform.fovInRadians / 2) / transform.tileSize;
+  const nearest = zoomScale / (2 ** (transform.maxZoom - ZOOM_MARGIN) * unitsPerMeter);
+  const farthest = zoomScale / (2 ** (transform.minZoom + ZOOM_MARGIN) * unitsPerMeter);
+  const wanted = (cameraAltitude - elevation) / cosPitch;
+  if (wanted < nearest) return false;
+  const distance = Math.min(farthest, wanted);
+  const x = cameraX + dirX * distance * pixelsPerMeter;
+  const y = cameraY + dirY * distance * pixelsPerMeter;
+  const next = { lng: lngFromMercatorX(x * unitsPerPixel), lat: latFromMercatorY(y * unitsPerPixel) };
+  const zoom = Math.log2(zoomScale / (distance * mercatorUnitsPerMeter(next.lat)));
+  setElevation(cameraAltitude - distance * cosPitch);
+  setCenter(next);
+  setZoom(Math.min(transform.maxZoom, Math.max(transform.minZoom, zoom)));
+  return true;
+}
 
 /**
  * Keep the camera still over the 3D relief. MapLibre clamps the center to
- * the ground and, whenever the ground under it turns out elsewhere, moves
- * the camera with the center (`setElevation`: same center, same zoom, new
- * height), which the viewer sees as the whole scene shifting. That happens
- * right after every gesture, since a gesture ends by moving the center onto
- * the terrain *mesh* under the screen center and the next frame re-samples
- * the DEM there (metres to tens of metres apart on rough ground), after an
- * inertia glide for the same reason, and whenever a sharper DEM tile lands
- * under the center. Here an idle re-sample slides the center along the view
- * ray onto the new elevation instead, the camera where it is: a fixed-point
- * walk that converges on ground gentler than the ray and is invisible at
- * every step; where it would not converge, the camera moves as before. The
- * gesture and ease paths, terrain toggles and the globe's own rendering
- * keep MapLibre's behaviour: the first two already keep the camera still,
- * a toggle wants the camera lifted, and the globe ignores terrain.
+ * the ground: a gesture ends by moving the center onto the terrain under
+ * the screen center with the camera where it is, and whenever the ground
+ * under the center then turns out elsewhere, the camera moves with the
+ * center (`setElevation`: same center, same zoom, new height), which the
+ * viewer sees as the whole scene shifting. That happens right after every
+ * gesture, since the gesture lands on the terrain *mesh* and the next frame
+ * re-samples the DEM there (metres to tens of metres apart on rough
+ * ground), after an inertia glide for the same reason, and whenever a
+ * sharper DEM tile lands under the center. Landing itself moves the camera
+ * too whenever the ground point is closer than the zoom ceiling allows,
+ * which a camera looking almost level reaches on any rise of the ground
+ * ahead, and past 84° of pitch MapLibre gives up on the ray altogether.
  *
- * The globe transform past its Mercator zoom also hands the gesture's end
- * to its Mercator half and never copies the result back, as its own
- * `setLocationAtPoint` does, so without the copy the next frame dropped the
- * center straight onto the ground below it, and the camera with it:
- * hundreds of metres on a mountain side. Applied to the prototype of
- * whichever transform the map has, once each.
+ * Here both go through `moveCenterOnRay`: the center slides along the view
+ * ray onto the new elevation when the zoom limits leave room, the camera
+ * never moving. An idle re-sample is a fixed-point walk that converges on
+ * ground gentler than the ray and is invisible at every step; a repeated
+ * request is one the ray cannot meet, and a walk that keeps finding new
+ * ground stops after a few steps with the center floating. Eases, terrain
+ * toggles and the globe's own rendering keep MapLibre's behaviour: an ease
+ * animates the camera anyway, a toggle wants the camera lifted, and the
+ * globe ignores terrain. The globe transform past its Mercator zoom also
+ * hands a terrain-less landing to its Mercator half and never copies the
+ * result back, as its own `setLocationAtPoint` does; that copy is here
+ * too. Applied to the prototype of whichever transform the map has, once
+ * each.
  */
 export function keepTerrainCameraStill(map: MaplibreMap): void {
-  const internals = map as unknown as { _camera?: CameraInternals; terrain?: unknown };
+  const internals = map as unknown as { _camera?: CameraInternals; terrain?: TerrainReadout | null };
   let toggling = false;
   const setTerrain = map.setTerrain.bind(map);
   map.setTerrain = (options) => {
@@ -485,15 +566,23 @@ export function keepTerrainCameraStill(map: MaplibreMap): void {
       toggling = false;
     }
   };
-  // The walk's state: how many idle steps in a row, and the last one's size.
+  // The idle walk's state: steps in a row, and the ground last asked for.
   let steps = 0;
-  let lastStep = Infinity;
+  let lastRequest = NaN;
   const patch = (): void => {
     const transform = internals._camera?.transform;
     if (!transform) return;
     const prototype = Object.getPrototypeOf(transform) as TransformInternals & { [CAMERA_FIX]?: true };
     if (prototype[CAMERA_FIX] || typeof prototype.setElevation !== "function") return;
     const setElevation = prototype.setElevation;
+    const slide = (target: TransformInternals, elevation: number): boolean =>
+      moveCenterOnRay(
+        target,
+        elevation,
+        (value) => setElevation.call(target, value),
+        (center) => target.setCenter(center),
+        (zoom) => target.setZoom(zoom),
+      );
     prototype.setElevation = function (this: TransformInternals, elevation: number): void {
       const camera = internals._camera;
       const idle =
@@ -503,35 +592,32 @@ export function keepTerrainCameraStill(map: MaplibreMap): void {
         !camera.elevationFreeze &&
         !camera.isEasing() &&
         !this.isGlobeRendering;
-      const step = Math.abs(elevation - this.elevation);
       if (!idle) {
         steps = 0;
-        lastStep = Infinity;
+        lastRequest = NaN;
         setElevation.call(this, elevation);
         return;
       }
-      if (step < SETTLED_ELEVATION_M) {
-        steps = 0;
-        lastStep = Infinity;
-        return;
-      }
-      if (steps >= 2 && step >= lastStep) {
-        // Not converging: the ground under the ray is steeper than the ray.
-        setElevation.call(this, elevation);
-        return;
-      }
-      steps += 1;
-      lastStep = step;
-      this._helper.recalculateZoomAndCenter(elevation);
-      this._helper._calcMatrices();
+      if (Math.abs(elevation - lastRequest) < SETTLED_ELEVATION_M) return;
+      lastRequest = elevation;
+      if (Math.abs(elevation - this.elevation) < SETTLED_ELEVATION_M) return;
+      if (++steps > MAX_IDLE_STEPS) return;
+      slide(this, elevation);
     };
-    if ("_mercatorTransform" in transform && typeof prototype.apply === "function") {
-      const recalculate = prototype.recalculateZoomAndCenter;
-      prototype.recalculateZoomAndCenter = function (this: TransformInternals, terrain?: unknown): void {
+    const recalculate = prototype.recalculateZoomAndCenter;
+    const globe = "_mercatorTransform" in transform && typeof prototype.apply === "function";
+    prototype.recalculateZoomAndCenter = function (this: TransformInternals, terrain?: TerrainReadout): void {
+      if (!terrain || this.isGlobeRendering) {
         recalculate.call(this, terrain);
-        if (!this.isGlobeRendering) this.apply(this._mercatorTransform, false);
-      };
-    }
+        if (globe && !this.isGlobeRendering) this.apply(this._mercatorTransform, false);
+        return;
+      }
+      // The ground under the screen center, as MapLibre samples it.
+      const ground = terrain.getElevationForLngLatZoom(this.screenPointToLocation(this.centerPoint, terrain), this.tileZoom);
+      slide(this, ground);
+      steps = 0;
+      lastRequest = ground;
+    };
     prototype[CAMERA_FIX] = true;
   };
   patch();
