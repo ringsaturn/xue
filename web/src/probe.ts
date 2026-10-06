@@ -113,6 +113,53 @@ export function probeCell(
   };
 }
 
+/** The four cells around a point and their bilinear weights, each cell as
+ * the coordinates of its centre (a `ProbeSeries` pinned there reads exactly
+ * that cell): what a probe needs to read a field the way the map's shader
+ * filters it rather than at the nearest cell. Columns wrap on a global
+ * grid; past a cropped grid's edge, or its last row, the edge cell takes
+ * the weight. Null off the grid. */
+export function bilinearCells(
+  metadata: BundleMetadata,
+  longitude: number,
+  latitude: number,
+): { cells: { longitude: number; latitude: number }[]; weights: number[] } | null {
+  if (!probeCell(metadata, longitude, latitude)) return null;
+  const grid = geoGrid(metadata);
+  const x = wrap(longitude - grid.firstLongitude, 360) / grid.longitudeStep;
+  const y = (latitude - grid.firstLatitude) / grid.latitudeStep;
+  const column0 = Math.floor(x);
+  const row0 = Math.floor(y);
+  const fx = x - column0;
+  const fy = y - row0;
+  const columnAt = (column: number) => (grid.wraps ? wrap(column, grid.width) : Math.min(grid.width - 1, Math.max(0, column)));
+  const rowAt = (row: number) => Math.min(grid.height - 1, Math.max(0, row));
+  const cells: { longitude: number; latitude: number }[] = [];
+  const weights: number[] = [];
+  for (const [dr, wy] of [[0, 1 - fy], [1, fy]] as const) {
+    for (const [dc, wx] of [[0, 1 - fx], [1, fx]] as const) {
+      cells.push({
+        longitude: normalizeLongitude(grid.firstLongitude + columnAt(column0 + dc) * grid.longitudeStep),
+        latitude: grid.firstLatitude + rowAt(row0 + dr) * grid.latitudeStep,
+      });
+      weights.push(wx * wy);
+    }
+  }
+  return { cells, weights };
+}
+
+/** Values of the same frame at the four cells, weighted: no data where any
+ * cell has none, not yet where any is still to come. */
+export function blendValues(values: readonly ProbeValue[], weights: readonly number[]): ProbeValue {
+  let sum = 0;
+  for (const [index, value] of values.entries()) {
+    if (value === undefined) return undefined;
+    if (value === null) return null;
+    sum += value * weights[index]!;
+  }
+  return sum;
+}
+
 function seriesKey(variableKey: string, frameOffset: number): string {
   return `${variableKey}|${frameOffset}`;
 }

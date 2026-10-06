@@ -213,6 +213,8 @@ import { strideFor, type CellWindow, type LabelRequest } from "./isolines";
 import type { LabelsWorkerRequest, LabelsWorkerResponse } from "./labels.worker";
 import {
   ProbeSeries,
+  bilinearCells,
+  blendValues,
   geoGrid,
   probeSeriesValues,
   probeWindDirection,
@@ -2347,6 +2349,14 @@ let probeDem: { key: string; value: number | null } | null = null;
 /** Series requests in flight, so a re-render or a session swap does not ask
  * twice for the same cell. Keyed by `variableId:column:row`. */
 const probeSeriesRequests = new Set<string>();
+/** The four cells around the pin on each grid a bilinear read is taken on,
+ * each a series of its own, and their weights — the map's shader filters
+ * the 2 m temperature and the orography between cells, so the terrain row
+ * reads them the same way (`PROBE_BILINEAR_IDS`). Keyed by the bundle's
+ * metadata, dropped with the pin. */
+const probeCorners = new Map<BundleMetadata, { series: ProbeSeries[]; weights: number[] } | null>();
+/** The bundles read bilinearly at the pin, for the terrain row. */
+const PROBE_BILINEAR_IDS: ReadonlySet<string> = new Set(["tmp2m", "orog"]);
 
 // The two point products answer a pinned point too, and not as marks: the
 // nearest radiosonde ascent becomes a skew-T under the rows, and the
@@ -2684,6 +2694,7 @@ function setProbe(longitude: number, latitude: number): void {
   // and keeping them would suppress the series read when a point is pinned
   // again later.
   probeSeriesRequests.clear();
+  probeCorners.clear();
   resolveProbeStations(longitude, latitude);
   void resolveProbeZone(longitude, latitude);
   seedProbeFromCache();
@@ -2768,6 +2779,7 @@ function closeProbe(): void {
   if (!probe) return;
   probe = null;
   probeSeriesRequests.clear();
+  probeCorners.clear();
   probeAirport = null;
   probeAirportSequence += 1;
   probeSynopCandidates = [];
@@ -2877,8 +2889,18 @@ function requestProbeSeries(session: VariableSession): void {
   if (!probe || !session.tiles || !ready) return;
   const cell = probe.cellFor(session.metadata);
   if (!cell) return;
+  postProbeSeries(session, cell.column, cell.row);
+  if (!PROBE_BILINEAR_IDS.has(session.id)) return;
+  for (const corner of cornersFor(session)?.series ?? []) {
+    const at = corner.cellFor(session.metadata);
+    if (at) postProbeSeries(session, at.column, at.row);
+  }
+}
+
+/** Ask a session's worker for one cell's series of every variable, once. */
+function postProbeSeries(session: VariableSession, column: number, row: number): void {
   for (const variable of session.variables) {
-    const key = `${probeKey(session, variable)}:${cell.column}:${cell.row}`;
+    const key = `${probeKey(session, variable)}:${column}:${row}`;
     if (probeSeriesRequests.has(key)) continue;
     probeSeriesRequests.add(key);
     session.worker.postMessage({
@@ -2886,10 +2908,32 @@ function requestProbeSeries(session: VariableSession): void {
       requestId: nextRequestId++,
       generation,
       variableId: variable.numericId,
-      column: cell.column,
-      row: cell.row,
+      column,
+      row,
     });
   }
+}
+
+/** The pin's four cells on a session's grid (`probeCorners`), or null off
+ * the grid. */
+function cornersFor(session: VariableSession): { series: ProbeSeries[]; weights: number[] } | null {
+  if (!probe) return null;
+  if (probeCorners.has(session.metadata)) return probeCorners.get(session.metadata)!;
+  const around = bilinearCells(session.metadata, probe.longitude, probe.latitude);
+  const corners = around
+    ? { series: around.cells.map((cell) => new ProbeSeries(cell.longitude, cell.latitude)), weights: around.weights }
+    : null;
+  probeCorners.set(session.metadata, corners);
+  return corners;
+}
+
+/** One bundle's series at the pin on the primary axis, bilinear between the
+ * four cells around it; undefined frames until all four have arrived. */
+function probeBilinearSeries(session: VariableSession | undefined, leads: readonly number[]): ProbeValue[] | null {
+  const corners = session ? cornersFor(session) : null;
+  if (!session || !corners) return null;
+  const read = corners.series.map((corner) => probeSessionSeries(corner, session, leads).values);
+  return leads.map((_, index) => blendValues(read.map((values) => values[index]), corners.weights));
 }
 
 /** A whole series arrived. It is dropped unless the pin is still on the very
@@ -2907,12 +2951,18 @@ function handleProbeSeries(
 ): void {
   const variable = session.variables.find((item) => item.numericId === message.variableId);
   if (!probe || !variable || message.generation !== generation) return;
-  const cell = probe.cellFor(session.metadata);
-  if (!cell || cell.column !== message.column || cell.row !== message.row) return;
   const offsets = frameOffsets(session.metadata.time);
-  if (probe.adopt(session.metadata, probeKey(session, variable), offsets, new Uint8Array(message.buffer))) {
-    scheduleProbeRender();
+  const codes = new Uint8Array(message.buffer);
+  const key = probeKey(session, variable);
+  let adopted = false;
+  // The cell is the pin's own, or one of the four a bilinear read takes —
+  // the nearest is usually one of them too.
+  for (const series of [probe, ...(probeCorners.get(session.metadata)?.series ?? [])]) {
+    const cell = series.cellFor(session.metadata);
+    if (!cell || cell.column !== message.column || cell.row !== message.row) continue;
+    if (series.adopt(session.metadata, key, offsets, codes)) adopted = true;
   }
+  if (adopted) scheduleProbeRender();
 }
 
 /** Take the samples the frame cache already holds — a point pinned mid-run
@@ -2990,10 +3040,24 @@ function modelElevationValue(): number | null {
   return typeof value === "number" ? value : null;
 }
 
+/** The model's ground height under the pin as the map's shader reads it,
+ * bilinear between the four cells around it; null until all four are in.
+ * The readout keeps the nearest cell's (`modelElevationValue`): the
+ * model's own number. */
+function modelElevationBilinear(): number | null {
+  const session = sessions.get("orog");
+  if (!session) return null;
+  // A static bundle: its one frame, at its own first offset.
+  const time = session.metadata.time;
+  const lead = (frameOffsets(time)[0] ?? 0) * axisUnitSeconds(time);
+  const value = probeBilinearSeries(session, [lead])?.[0];
+  return typeof value === "number" ? value : null;
+}
+
 /** The pin's two heights, the model ground's and the DEM's, once both are
  * in: what the terrain row carries the 2 m temperature between. */
 function probeTerrainHeights(): { model: number; site: number } | null {
-  const model = modelElevationValue();
+  const model = modelElevationBilinear();
   const site = probeDem?.value;
   if (model === null || site === null || site === undefined) return null;
   return { model, site };
@@ -3043,8 +3107,13 @@ function probeTerrainSeries(
         height: probeSessionSeries(series, sessions.get(level.height), leads),
       }))
     : [];
+  // The map's shader filters the 2 m temperature between cells; the row
+  // takes the same blend once the four cells are in, the nearest until then.
+  const blended = probeBilinearSeries(sessions.get("tmp2m"), leads);
   let fallbacks = 0;
-  const values = temperature.map((t2m, index) => {
+  const values = temperature.map((nearest, index) => {
+    const between = blended?.[index];
+    const t2m = typeof between === "number" ? between : nearest;
     if (typeof t2m !== "number") return t2m;
     const column: ColumnLevel[] = [];
     for (const level of levels) {
@@ -8473,6 +8542,7 @@ async function initialize({ frame = false }: { frame?: boolean } = {}): Promise<
   vectorPlanes.clear();
   probe?.clear();
   probeSeriesRequests.clear();
+  probeCorners.clear();
   scheduleProbeRender();
   lastDecodeMs = null;
   decodeEvents.length = 0;

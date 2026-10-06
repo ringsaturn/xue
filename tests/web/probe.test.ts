@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  bilinearCells,
+  blendValues,
   normalizeLongitude,
   probeCell,
   ProbeSeries,
@@ -101,6 +103,37 @@ describe("probeCell", () => {
   it("rejects a grid with no extent", () => {
     expect(probeCell(globalGrid({ width: 0 }), 0, 0)).toBeNull();
     expect(probeCell(globalGrid({ longitudeStep: 0 }), 0, 0)).toBeNull();
+  });
+});
+
+describe("bilinearCells", () => {
+  it("weights the four cells around a point the way the shader filters", () => {
+    const around = bilinearCells(globalGrid(), 138.75 + 0.0625, 35.25 - 0.125)!;
+    expect(around.cells).toEqual([
+      { longitude: 138.75, latitude: 35.25 },
+      { longitude: 139, latitude: 35.25 },
+      { longitude: 138.75, latitude: 35 },
+      { longitude: 139, latitude: 35 },
+    ]);
+    expect(around.weights).toEqual([0.75 * 0.5, 0.25 * 0.5, 0.75 * 0.5, 0.25 * 0.5]);
+  });
+
+  it("wraps across the antimeridian on a global grid", () => {
+    const around = bilinearCells(globalGrid(), 179.9, 0)!;
+    expect(around.cells.map((cell) => cell.longitude)).toEqual([179.75, -180, 179.75, -180]);
+  });
+
+  it("holds the edge cell of a cropped grid and is null off it", () => {
+    const around = bilinearCells(croppedGrid(), 129.6, 20.6)!;
+    expect(around.cells.map((cell) => cell.longitude)).toEqual([129.5, 129.5, 129.5, 129.5]);
+    expect(around.weights.reduce((sum, weight) => sum + weight, 0)).toBeCloseTo(1, 12);
+    expect(bilinearCells(croppedGrid(), 100, 20)).toBeNull();
+  });
+
+  it("blends a frame only when all four cells have it", () => {
+    expect(blendValues([1, 2, 3, 4], [0.25, 0.25, 0.25, 0.25])).toBe(2.5);
+    expect(blendValues([1, undefined, 3, 4], [0.25, 0.25, 0.25, 0.25])).toBeUndefined();
+    expect(blendValues([1, null, 3, 4], [0.25, 0.25, 0.25, 0.25])).toBeNull();
   });
 });
 
