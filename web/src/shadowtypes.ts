@@ -23,6 +23,9 @@ export interface ShadowRequest {
   zoom: number;
   /** The widest mosaic side in pixels the worker may build (default 2048). */
   maxPixels?: number;
+  /** When given, the worker also inks the mask for the basemap: `rgb` in
+   * full shadow at `alpha`, transparent in sun. */
+  ink?: { rgb: readonly [number, number, number]; alpha: number };
 }
 
 export interface ShadowResult {
@@ -37,6 +40,9 @@ export interface ShadowResult {
   height: number;
   /** Row-major, north row first, `width * height` bytes; transferred. */
   lit: Uint8Array;
+  /** The mask inked as the request asked, ready for an image source;
+   * transferred. */
+  image?: ImageBitmap;
   /** The sun at the rectangle's centre, degrees: azimuth clockwise from
    * north, elevation above the horizon (refraction included). */
   sun: { azimuth: number; elevation: number };

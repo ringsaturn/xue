@@ -3913,6 +3913,7 @@ function stopPlayback(): void {
   updateTransport();
   // Playback throttles the labels; the frame it stopped on gets them now.
   refreshLabels();
+  syncShadowTime();
 }
 
 function advancePlayback(timestamp: number): void {
@@ -4015,6 +4016,7 @@ function startPlayback(): void {
   playing = true;
   restartCadence(activeFrameIndex ?? Number(slider.value));
   updateTransport();
+  syncShadowTime();
   playbackFrame = window.requestAnimationFrame(advancePlayback);
 }
 

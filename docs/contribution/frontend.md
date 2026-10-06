@@ -245,20 +245,22 @@ and the window shrinks to fit it.
   (`shadow.worker.ts`) fetches the Terrarium tiles the hillshade uses and
   ray-marches toward the sun at the playhead's valid time (now, before a
   run) into a sunlit mask over a Mercator rectangle, the view plus a margin
-  sunward. `shadowlayer.ts` gives the mask three consumers: an `image`
-  source and `raster` layer directly above the hillshade, inked for the
-  ground (MapLibre drapes it onto the terrain and the globe, which it never
-  does for a custom layer); the field layers, which darken by it
-  (`setFieldShadow`, `u_shadow_strength` 0 when off, no extra variant) and
-  shade their 3D relief from the sun (`u_light`); and the hillshade's
-  illumination direction and altitude. None of it is in the built style,
-  so `syncBasemapStyle`'s diff leaves it alone; a ground change only
-  re-inks. Recomputed on frame change, `moveend` and the switch, one
-  request in flight, at most four a second while playing; the last mask
-  stays up until the next arrives. Nothing is cast below
-  `MIN_SHADOW_ZOOM` (9): there a mountain's shadow is a few DEM pixels and
-  the march would cost a full view for nothing, so the switch stays on and
-  the shadows return when the camera comes close.
+  sunward, at most 1280 px a side; it also inks the mask for the ground
+  into an `ImageBitmap`, so the main thread does no per-pixel work.
+  `shadowlayer.ts` gives the mask three consumers: an `image` source and
+  `raster` layer directly above the hillshade (MapLibre drapes it onto the
+  terrain and the globe, which it never does for a custom layer); the field
+  layers, which darken by it (`setFieldShadow`, `u_shadow_strength` 0 when
+  off, no extra variant) and shade their 3D relief from the sun
+  (`u_light`); and the hillshade's illumination, changed only in 2° steps
+  since a paint change redraws every draped terrain tile. None of it is in
+  the built style, so `syncBasemapStyle`'s diff leaves it alone. Recomputed
+  on frame step, `moveend`, a ground change and the switch, one request in
+  flight. Nothing is cast while the timeline plays (a march per frame
+  competes with the frame decoders, and a late mask is on the wrong side of
+  the hills) or below `MIN_SHADOW_ZOOM` (9), where a mountain's shadow is a
+  few DEM pixels; the switch stays on and the shadows return on the frame
+  playback stops at, or when the camera comes close.
 - `playback.ts` dwells per frame so a mixed-step axis plays at one speed.
 - Regional models clip raster, particles, probe and labels to
   `FORECAST_MODELS[].domain` (`domain.ts`).

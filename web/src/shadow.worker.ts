@@ -89,6 +89,20 @@ function blit(mosaic: Float32Array, width: number, height: number, tile: MosaicT
   }
 }
 
+/** The mask as the basemap draws it: the ink in full shadow, transparent
+ * in sun. Built here so the main thread receives a finished picture. */
+function inked(lit: Uint8Array, width: number, height: number, ink: NonNullable<ShadowRequest["ink"]>): Promise<ImageBitmap> {
+  const rgba = new Uint8ClampedArray(width * height * 4);
+  const [r, g, b] = ink.rgb;
+  for (let i = 0, j = 0; i < lit.length; i++, j += 4) {
+    rgba[j] = r;
+    rgba[j + 1] = g;
+    rgba[j + 2] = b;
+    rgba[j + 3] = (255 - (lit[i] as number)) * ink.alpha;
+  }
+  return createImageBitmap(new ImageData(rgba, width, height));
+}
+
 async function handle(request: ShadowRequest): Promise<void> {
   const plan = planMosaic(request.bounds, request.zoom, request.time, { maxPixels: request.maxPixels });
   const decoded = await Promise.all(plan.tiles.map(loadTile));
@@ -103,6 +117,8 @@ async function handle(request: ShadowRequest): Promise<void> {
   const centreLat = latitudeAt((innerRect.y0 + innerRect.y1) / 2);
   const centreLon = ((innerRect.x0 + innerRect.x1) / 2) * 360 - 180;
   const sun = apparentSun(request.time, centreLat, centreLon);
+  const image = request.ink ? await inked(lit, plan.inner.width, plan.inner.height, request.ink) : undefined;
+  if (request.id < newestId) return;
   const result: ShadowResult = {
     type: "shadow",
     id: request.id,
@@ -112,9 +128,10 @@ async function handle(request: ShadowRequest): Promise<void> {
     width: plan.inner.width,
     height: plan.inner.height,
     lit,
+    image,
     sun,
   };
-  scope.postMessage(result, [lit.buffer]);
+  scope.postMessage(result, image ? [lit.buffer, image] : [lit.buffer]);
 }
 
 scope.onmessage = (event: MessageEvent<ShadowRequest>) => {
