@@ -28,6 +28,11 @@ export const TERRAIN_MESH_SOURCE = "mapterhorn-mesh";
 const TERRAIN_TILE_URL = "https://tiles.mapterhorn.com/{z}/{x}/{y}.webp";
 export const TERRAIN_TILES = [TERRAIN_TILE_URL];
 export const TERRAIN_MAX_ZOOM = 12;
+/** How deep the camera may go over the 3D relief: past the DEM's z12,
+ * MapLibre overzooms its tiles — no new detail and no new requests, but a
+ * small hill fills the view instead of a few pixels — down to the
+ * basemap's own z15. */
+export const TERRAIN_CAMERA_MAX_ZOOM = 15;
 export const TERRAIN_ATTRIBUTION = "<a href='https://mapterhorn.com/attribution/'>© Mapterhorn</a>";
 
 /** Terrarium tiles are 512 px square and carry no `tileSize` of their own for

@@ -264,6 +264,7 @@ import {
 import {
   demElevationAt,
   TERRAIN_ATTRIBUTION,
+  TERRAIN_CAMERA_MAX_ZOOM,
   TERRAIN_MAX_ZOOM,
   TERRAIN_MESH_SOURCE,
   TERRAIN_SOURCE,
@@ -7353,8 +7354,8 @@ function applyZoomCeiling(session: VariableSession): void {
 function syncZoomCeiling(): void {
   const marks = view.marks.stations.soundings || view.marks.stations.airports || view.marks.stations.synop;
   // In 3D relief the ground carries detail the grid does not, so the camera
-  // may go as deep as the DEM does.
-  const relief = sceneApplied && map.getTerrain() ? TERRAIN_MAX_ZOOM : 0;
+  // may go past the grid's ceiling, and past the DEM's own (overzoomed).
+  const relief = sceneApplied && map.getTerrain() ? TERRAIN_CAMERA_MAX_ZOOM : 0;
   const ceiling = Math.max(dataZoomCeiling, marks && activeCase === null ? STATION_MAX_ZOOM : 0, relief);
   if (map.getMaxZoom() === ceiling) return;
   map.setMaxZoom(ceiling);

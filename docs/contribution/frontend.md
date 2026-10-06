@@ -137,7 +137,7 @@ and the window shrinks to fit it.
   terrain's packed depth texture. Tile meshes carry skirts for LOD seams.
   The terrain uses its own copy of the Mapterhorn source (MapLibre renders
   hillshade and terrain worse from one). With relief on, the zoom ceiling
-  rises to the DEM's z12. The switches and the way back to north and to a flat camera share
+  rises to z15, the basemap's, past the DEM's z12 (its tiles overzoomed). The switches and the way back to north and to a flat camera share
   one tile under the zoom tile (`viewcontrol.ts`); the two resets show only
   while the camera is turned or tilted, and the rail's box starts under
   the column wherever it ends (`--controls-bottom`). Phones drop only the
