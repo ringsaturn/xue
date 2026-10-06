@@ -12,7 +12,7 @@
 //! the byte spans either still needs. `tileGeometry` returning `undefined` is
 //! how the Worker tells the two versions apart without an error path.
 
-use xue::{Bundle, FrameRequest, Predictor, StreamingBundle, TileGeometry, TileRect};
+use xue::{Bundle, FrameRequest, Level3Sweep, Predictor, StreamingBundle, TileGeometry, TileRect};
 use wasm_bindgen::prelude::*;
 
 /// Decode one chunk payload that came from outside a container: an inner
@@ -34,6 +34,73 @@ pub fn decode_chunk(
 ) -> Result<Vec<u8>, JsError> {
     let predictor = Predictor::parse(predictor).map_err(|error| JsError::new(&error.0))?;
     xue::decode_chunk(bytes, frames, height, width, predictor).map_err(|error| JsError::new(&error.0))
+}
+
+/// One NEXRAD Level 3 N0B / N0G sweep read straight from the public bucket,
+/// accepted and binned exactly as the polar store's builder does
+/// (`xue::read_level3`).
+#[wasm_bindgen(js_name = decodeLevel3)]
+pub fn decode_level3(bytes: &[u8]) -> Result<WasmLevel3Sweep, JsError> {
+    xue::read_level3(bytes)
+        .map(|inner| WasmLevel3Sweep { inner })
+        .map_err(|error| JsError::new(&error.0))
+}
+
+/// A decoded sweep. The codes stay in linear memory until `takeCodes` moves
+/// them out, so reading the header facts first costs no copy of the grid.
+#[wasm_bindgen]
+pub struct WasmLevel3Sweep {
+    inner: Level3Sweep,
+}
+
+#[wasm_bindgen]
+impl WasmLevel3Sweep {
+    /// 153 (N0B) or 154 (N0G).
+    #[wasm_bindgen(getter, js_name = productCode)]
+    pub fn product_code(&self) -> u16 {
+        self.inner.product_code
+    }
+
+    /// Gates per beam; the codes are `720 × gates`, beam-major.
+    #[wasm_bindgen(getter)]
+    pub fn gates(&self) -> u32 {
+        self.inner.gates
+    }
+
+    /// The sweep's own start, Unix seconds.
+    #[wasm_bindgen(getter, js_name = scanTime)]
+    pub fn scan_time(&self) -> f64 {
+        self.inner.scan_time as f64
+    }
+
+    /// Degrees.
+    #[wasm_bindgen(getter)]
+    pub fn elevation(&self) -> f32 {
+        self.inner.elevation
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn latitude(&self) -> f64 {
+        self.inner.latitude
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn longitude(&self) -> f64 {
+        self.inner.longitude
+    }
+
+    /// Site height, metres.
+    #[wasm_bindgen(getter)]
+    pub fn height(&self) -> f64 {
+        self.inner.height_m
+    }
+
+    /// Move the `720 × gates` codes out; a second call returns an empty
+    /// array.
+    #[wasm_bindgen(js_name = takeCodes)]
+    pub fn take_codes(&mut self) -> Vec<u8> {
+        std::mem::take(&mut self.inner.codes)
+    }
 }
 
 /// A viewport's tile rectangles, flattened as

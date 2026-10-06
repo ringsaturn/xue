@@ -76,7 +76,8 @@ byte-identically to the Python reference pipeline — see
 [`docs/encoder.md`](https://github.com/ringsaturn/xue/blob/main/docs/encoder.md).
 Enabling it requires a system GDAL and libclang at build time. A decode-only
 build resolves none of its dependencies and needs neither: `cargo add xue`
-pulls in `crc32fast`, `ruzstd` and `serde_json` and nothing else, with no C
+pulls in `crc32fast`, `ruzstd`, `serde_json` and `bzip2` (its pure-Rust
+backend, for the NEXRAD Level 3 reader) and nothing else, with no C
 toolchain involved. That is also why the crate builds for
 `wasm32-unknown-unknown`.
 

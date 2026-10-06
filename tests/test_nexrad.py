@@ -76,6 +76,13 @@ class Level3Test(unittest.TestCase):
         with self.assertRaises(NexradProductError):
             read_sweep(bytes(data))
 
+    def test_the_level3_digest_is_the_readers(self) -> None:
+        # rust/xue/tests/level3.rs holds the wasm reader to this digest, so
+        # the two readers cannot drift without one of the tests going red.
+        from tests.prepare_nexrad_golden import LEVEL3_DIGEST, level3_digest
+
+        self.assertEqual(level3_digest(), json.loads((FIXTURES / "expected" / LEVEL3_DIGEST).read_bytes()))
+
 
 class StoreTest(unittest.TestCase):
     def setUp(self) -> None:

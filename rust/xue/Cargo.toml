@@ -50,6 +50,9 @@ path = "src/bin/xue-encode.rs"
 required-features = ["encoder"]
 
 [dependencies]
+# Level 3 radar symbology is bzip2. The default backend is libbz2-rs-sys, a
+# pure-Rust port, so the decoder still needs no C toolchain and builds for wasm.
+bzip2 = "0.6"
 crc32fast = "1"
 ruzstd = "0.8"
 serde_json = "1"

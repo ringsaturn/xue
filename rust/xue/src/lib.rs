@@ -28,15 +28,20 @@
 //!   constants, the enums, and the pack/unpack pair for each structure. Both
 //!   directions go through it, so a field cannot drift between them.
 //! * [`decode`] — reading, re-exported here. Links nothing, compiles to wasm.
+//! * [`mod@level3`] — NEXRAD Level 3 N0B / N0G sweeps, a port of the
+//!   Python reader the polar store is built from, so the browser can read a
+//!   live site's sweeps straight from the public bucket.
 //! * `encode` — the native encoder, behind the off-by-default `encoder`
 //!   feature because it links GDAL. Not a link: on a decode-only build
 //!   the module does not exist, so linking it would dangle there.
 
 pub mod format;
 pub mod decode;
+pub mod level3;
 pub mod zarr;
 
 pub use decode::{decode_chunk, Bundle, StreamingBundle};
+pub use level3::{read_level3, Level3Sweep, LEVEL3_BEAMS};
 pub use format::{
     align8, ChunkEntry, Compression, DecodeError, FixedHeader, FrameRequest, GroupEntry,
     IndexHeader, IndexHeaderV2, PlaneEntry, Predictor, TileGeometry, TileRect, VariableEntry,
