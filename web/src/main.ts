@@ -38,14 +38,17 @@ import { createSheet, mountLanguagePicker } from "./sheet";
 import { formatBytes, formatPointDegrees, formatRegion } from "./format";
 import { dataBaseUrl } from "./site";
 import { ViewControl } from "./viewcontrol";
+import { COLUMN_CAPACITY, COLUMN_LEVELS_HPA, siteTemperature, sortedColumn, type ColumnLevel } from "./lapse";
 import {
   ForecastLayer,
   MAX_NAMED_CONTOURS,
   type CompositeField,
   type ContourStyle,
+  type ColumnWindow,
+  type CorrectionGrid,
   type FramePlanes,
-  LAPSE_RATE,
   type LapseCorrection,
+  lapseWeight,
   type VectorField,
 } from "./layer";
 import {
@@ -225,7 +228,6 @@ import {
   seriesState,
   TAF_ROW_SPEC,
   TERRAIN_ROW_SPEC,
-  shiftSeries,
   type DayMark,
   type MeteogramRowData,
   type MeteogramRowSpec,
@@ -2822,6 +2824,9 @@ function probeBundleIds(): string[] {
   // ordinary bundle, opened like a row: one extra session for the whole
   // point read, and skipped on a run that ships none.
   if (manifest && hasBundle(manifest, "orog")) ids.push("orog");
+  // The terrain-correction pair, once the pin is known to stand above the
+  // model ground: below it the terrain row needs nothing but the heights.
+  if (probeWantsColumn()) ids.push(...terrainColumnIds());
   if (manifest && soundingSection.isOpen()) {
     for (const bundle of modelProfileBundles(manifest.bundles.map((entry) => entry.variable))) {
       ids.push(bundle.id);
@@ -2985,14 +2990,82 @@ function modelElevationValue(): number | null {
   return typeof value === "number" ? value : null;
 }
 
-/** What the terrain row adds to the model's 2 m temperature at the pin: a
- * standard lapse rate over the model's ground height less the DEM's under
- * the pinned point, or null until both heights are in. */
-function probeTerrainDelta(): number | null {
+/** The pin's two heights, the model ground's and the DEM's, once both are
+ * in: what the terrain row carries the 2 m temperature between. */
+function probeTerrainHeights(): { model: number; site: number } | null {
   const model = modelElevationValue();
-  const dem = probeDem?.value;
-  if (model === null || dem === null || dem === undefined) return null;
-  return LAPSE_RATE * (model - dem);
+  const site = probeDem?.value;
+  if (model === null || site === null || site === undefined) return null;
+  return { model, site };
+}
+
+/** The isobaric surfaces the run publishes both the temperature and the
+ * height of, among those the column is read on (lapse.ts), bottom first —
+ * none on a run that has fewer than two. */
+function terrainColumnLevels(): { level: number; temperature: string; height: string }[] {
+  if (!manifest) return [];
+  const levels = COLUMN_LEVELS_HPA.filter((level) => hasBundle(manifest!, `tmp${level}`) && hasBundle(manifest!, `hgt${level}`)).map(
+    (level) => ({ level, temperature: `tmp${level}`, height: `hgt${level}` }),
+  );
+  return levels.length >= 2 ? levels : [];
+}
+
+/** The bundles of the column, temperature and height level by level. */
+function terrainColumnIds(): string[] {
+  return terrainColumnLevels().flatMap((level) => [level.temperature, level.height]);
+}
+
+/** Whether the pin stands above the model ground of a run with a column,
+ * so the terrain row reads it. */
+function probeWantsColumn(): boolean {
+  const heights = probeTerrainHeights();
+  return heights !== null && heights.site > heights.model && terrainColumnLevels().length > 0;
+}
+
+/** The pin and run a terrain-row fallback was last reported for. */
+let terrainFallbackNoted: string | null = null;
+
+/** The terrain row's series: the model's 2 m temperature carried to the
+ * DEM's height under the pin frame by frame, through the run's isobaric
+ * column above the model ground and at the standard lapse rate below it. A
+ * frame whose column is incomplete takes the standard rate too, said once
+ * on the console rather than on the row. */
+function probeTerrainSeries(
+  temperature: readonly ProbeValue[],
+  heights: { model: number; site: number },
+  series: ProbeSeries,
+  leads: readonly number[],
+): ProbeValue[] {
+  const wanted = probeWantsColumn();
+  const levels = wanted
+    ? terrainColumnLevels().map((level) => ({
+        temperature: probeSessionSeries(series, sessions.get(level.temperature), leads),
+        height: probeSessionSeries(series, sessions.get(level.height), leads),
+      }))
+    : [];
+  let fallbacks = 0;
+  const values = temperature.map((t2m, index) => {
+    if (typeof t2m !== "number") return t2m;
+    const column: ColumnLevel[] = [];
+    for (const level of levels) {
+      const t = level.temperature.values[index];
+      const z = level.height.values[index];
+      if (typeof t === "number" && typeof z === "number") column.push({ height: z, temperature: t });
+    }
+    const carried = siteTemperature(t2m, heights.model, heights.site, wanted ? sortedColumn(column) : null);
+    if (wanted && carried.fallback) fallbacks += 1;
+    return carried.value;
+  });
+  // Reported only once the column is read through: while it loads, every
+  // frame is a fallback for a moment and none of it is worth a line.
+  const read = levels.length > 0 && levels.every((level) => level.temperature.state === "complete" && level.height.state === "complete");
+  const key = `${probeDem?.key ?? ""}:${currentRun ?? ""}`;
+  if (fallbacks > 0 && read && terrainFallbackNoted !== key) {
+    terrainFallbackNoted = key;
+    // Diagnostics stay English.
+    console.info(`terrain row: ${fallbacks} of ${temperature.length} frames used the fixed lapse rate (column incomplete)`);
+  }
+  return values;
 }
 
 /** The model's own terrain height, from the `orog` bundle, else empty. */
@@ -3236,10 +3309,21 @@ function renderProbeRows(series: ProbeSeries, index: number): void {
   const taf = probeAirport?.history?.taf ?? null;
   if (specs.length > 0 && taf) specs.push(TAF_ROW_SPEC);
   // The terrain row, under the model's temperature, once the pin has both
-  // heights it is the difference of.
-  const terrainDelta = probeTerrainDelta();
+  // heights it carries the temperature between.
+  const terrainHeights = probeTerrainHeights();
+  // The column is read only once both heights put the pin above the model
+  // ground, which is known here first. Its sessions may already be open for
+  // the map's correction, which reads planes, not the pin's series.
+  if (probeWantsColumn()) {
+    const ids = terrainColumnIds();
+    if (ids.some((id) => !sessions.has(id))) ensureProbeSessions();
+    for (const id of ids) {
+      const session = sessions.get(id);
+      if (session) requestProbeSeries(session);
+    }
+  }
   const temperatureRow = specs.findIndex((spec) => spec.id === "temperature");
-  if (terrainDelta !== null && temperatureRow >= 0 && specs[temperatureRow]!.bundles[0] === "tmp2m") {
+  if (terrainHeights !== null && temperatureRow >= 0 && specs[temperatureRow]!.bundles[0] === "tmp2m") {
     specs.splice(temperatureRow + 1, 0, TERRAIN_ROW_SPEC);
   }
   syncProbeRowElements(specs);
@@ -3286,7 +3370,9 @@ function renderProbeRows(series: ProbeSeries, index: number): void {
     const row: MeteogramRowData = {
       spec,
       series: read.map((item) =>
-        spec.id === "terrain" && terrainDelta !== null ? shiftSeries(item.values, terrainDelta) : item.values,
+        spec.id === "terrain" && terrainHeights !== null
+          ? probeTerrainSeries(item.values, terrainHeights, series, leads)
+          : item.values,
       ),
     };
     const fromStation = station !== null && synopTakesRow(spec.id, hasTerrainRow);
@@ -3902,6 +3988,7 @@ function sessionViewportTiles(session: VariableSession): TileRect[] | null {
  * every session on screen. A plane already decoded for a wider set stays
  * valid; anything narrower is re-requested by the frame retry below. */
 function refreshViewportTiles(): void {
+  requestColumnFrame();
   let changed = false;
   for (const session of slotSessions()) {
     const next = sessionViewportTiles(session);
@@ -4190,6 +4277,7 @@ function trySelectFrame(index: number): boolean {
     // the wrong picture, whichever of the two were ahead.
     for (const overlay of overlaySlots()) trySelectOverlayFrame(overlay, index);
     trySelectComposite(index);
+    requestColumnFrame();
     prefetchNext(index);
     return true;
   }
@@ -4278,7 +4366,14 @@ function prefetchNext(index: number): void {
 /** Ask one session's decoder for one of its variables at one frame offset.
  * The session is passed in rather than looked up: a numericId names a
  * variable only inside the file it came from. */
-function requestDecode(session: VariableSession, variable: BundleVariable, hour: number): void {
+function requestDecode(
+  session: VariableSession,
+  variable: BundleVariable,
+  hour: number,
+  /** The tiles to decode for a session that is not on screen, which is
+   * otherwise asked for whole planes. */
+  tiles?: TileRect[] | null,
+): void {
   if (!ready) return;
   const key = cacheKey(session, variable, hour);
   if ([...inflight.values()].includes(key)) return;
@@ -4299,7 +4394,7 @@ function requestDecode(session: VariableSession, variable: BundleVariable, hour:
     frameOffset: hour,
     // Only a session on screen narrows the decode to its view; a background
     // session (the other variable, preloading) is asked for whole planes.
-    tiles: (slotSessions().includes(session) ? session.viewTiles : null) ?? undefined,
+    tiles: (tiles !== undefined ? tiles : slotSessions().includes(session) ? session.viewTiles : null) ?? undefined,
   });
 }
 
@@ -4335,6 +4430,7 @@ function handleDecodedFrame(
   const plane = new Uint8Array(message.buffer);
   planeCache.set(key, { plane, decodeMs: message.decodeMs, tiles: message.tiles ?? null, session });
   if (relief?.session === session && !message.tiles) acceptReliefPlane(session, plane);
+  acceptColumnPlane(session, message.frameOffset, plane);
   planeCacheBytes += plane.byteLength;
   lastDecodeMs = message.decodeMs;
   recordDecodeEvent(plane.byteLength, message.decodeMs);
@@ -7422,10 +7518,16 @@ function applyVariable(session: VariableSession): void {
 
 // ---------------------------------------------------------------------------
 // Altitude correction over the 3D relief (layer.ts::lapseCodes): the 2 m
-// temperature moved from the model's smoothed ground to the DEM's at a
-// standard lapse rate. Only with the terrain on and a run that publishes its
-// orography; the run's `orog` plane is decoded whole once (a megabyte on
-// GFS) and kept as its own copy, since cached planes are recycled.
+// temperature moved from the model's smoothed ground to the DEM's by the
+// formula the meteogram's terrain row reads (lapse.ts). Only with the
+// terrain on and a run that publishes its orography; the run's `orog` plane
+// is decoded whole once (a megabyte on GFS) and kept as its own copy, since
+// cached planes are recycled. Above the model ground the formula reads the
+// run's terrain-correction pair for the frame on screen, decoded for the
+// view's tiles alone; until a frame's pair lands, the last one shown stands
+// in (the pair changes slowly from one frame to the next, far less than the
+// standard lapse rate differs from it), and a run without one keeps the
+// standard rate throughout.
 
 /** The orography session the correction reads, and its plane once decoded. */
 let relief: { session: VariableSession; plane: Uint8Array | null } | null = null;
@@ -7453,9 +7555,10 @@ function syncLapse(): void {
     layer?.setLapseCorrection(null);
     return;
   }
+  syncReliefColumn();
   const orography = sessions.get("orog");
   if (relief && relief.session === orography && relief.plane) {
-    layer.setLapseCorrection(lapseCorrection(session, relief.session, relief.plane));
+    layer.setLapseCorrection(lapseCorrection(session, relief.session, relief.plane, reliefColumn?.shown ?? null));
     return;
   }
   if (relief && relief.session === orography) return;
@@ -7482,33 +7585,298 @@ function acceptReliefPlane(session: VariableSession, plane: Uint8Array): void {
 
 let lapseCorrectionCache: { key: string; value: LapseCorrection } | null = null;
 
-function lapseCorrection(temperature: VariableSession, orography: VariableSession, plane: Uint8Array): LapseCorrection | null {
+/** A session's grid as the correction's shader reads it. */
+function correctionGrid(session: VariableSession): CorrectionGrid {
+  const grid = session.metadata.grid as Record<string, number | boolean>;
+  const width = (grid.width as number) ?? 0;
+  const longitudeStep = (grid.longitudeStep as number) ?? 0.25;
+  return {
+    width,
+    height: (grid.height as number) ?? 0,
+    firstLongitude: (grid.firstLongitude as number) ?? -180,
+    firstLatitude: (grid.firstLatitude as number) ?? 90,
+    longitudeStep,
+    latitudeStep: (grid.latitudeStep as number) ?? -0.25,
+    wraps: (grid.wrapLongitude as boolean) ?? Math.abs(width * longitudeStep - 360) < 1e-6,
+  };
+}
+
+function lapseCorrection(
+  temperature: VariableSession,
+  orography: VariableSession,
+  plane: Uint8Array,
+  column: ColumnWindow | null,
+): LapseCorrection | null {
   const tq = temperature.variable.quantization;
   const oq = orography.variable.quantization;
   if (tq.type !== "linear" || oq.type !== "linear") return null;
   const key = `${temperature.key}:${orography.key}`;
-  if (lapseCorrectionCache?.key === key && lapseCorrectionCache.value.orography === plane) return lapseCorrectionCache.value;
-  const grid = orography.metadata.grid as Record<string, number | boolean>;
-  const width = (grid.width as number) ?? 0;
-  const longitudeStep = (grid.longitudeStep as number) ?? 0.25;
+  const cached = lapseCorrectionCache;
+  if (cached?.key === key && cached.value.orography === plane && cached.value.column === column) return cached.value;
   const value: LapseCorrection = {
     orography: plane,
-    grid: {
-      width,
-      height: (grid.height as number) ?? 0,
-      firstLongitude: (grid.firstLongitude as number) ?? -180,
-      firstLatitude: (grid.firstLatitude as number) ?? 90,
-      longitudeStep,
-      latitudeStep: (grid.latitudeStep as number) ?? -0.25,
-      wraps: (grid.wrapLongitude as boolean) ?? Math.abs(width * longitudeStep - 360) < 1e-6,
-    },
+    grid: correctionGrid(orography),
     orographyOffset: oq.offset,
     orographyScale: oq.scale,
+    temperatureOffset: tq.offset,
     temperatureScale: tq.scale,
     maximumCode: tq.maximumCode,
+    column,
   };
   lapseCorrectionCache = { key, value };
   return value;
+}
+
+/** A window of the grid, in the grid's own cells: its first column (which
+ * may lie past either edge of a wrapping grid), its first row and its size. */
+interface ColumnCells {
+  column: number;
+  row: number;
+  width: number;
+  height: number;
+}
+
+/** The column the map's correction reads: its sessions once open, level by
+ * level, the frame, window and tiles last asked for, what has landed for
+ * it (each plane cut to the window as it arrives), and the window on
+ * screen. */
+let reliefColumn: {
+  levels: { temperature: VariableSession | null; height: VariableSession | null }[];
+  /** `<offset>:<window>:<tiles>` of the request in flight, or of the last. */
+  asked: string | null;
+  /** When the request in flight was sent, or null: a request the decode
+   * queue dropped for a newer one is given up after a while. */
+  inflightSince: number | null;
+  landed: {
+    asked: string;
+    /** The frame offset asked of each session. */
+    expected: Map<VariableSession, number>;
+    window: ColumnCells;
+    tiles: TileRect[] | null;
+    values: Map<VariableSession, Float32Array>;
+  } | null;
+  shown: ColumnWindow | null;
+} | null = null;
+
+/** Open the column's sessions for a run that has one, and ask for the frame
+ * on screen. */
+function syncReliefColumn(): void {
+  const levels = terrainColumnLevels();
+  if (levels.length === 0) {
+    reliefColumn = null;
+    return;
+  }
+  const opened = levels.map((level) => ({
+    temperature: sessions.get(level.temperature) ?? null,
+    height: sessions.get(level.height) ?? null,
+  }));
+  const same =
+    reliefColumn !== null &&
+    reliefColumn.levels.length === opened.length &&
+    reliefColumn.levels.every((level, index) => level.temperature === opened[index]!.temperature && level.height === opened[index]!.height);
+  if (!same) {
+    reliefColumn = { levels: opened, asked: null, inflightSince: null, landed: null, shown: null };
+  }
+  const missing = levels.flatMap((level) => [level.temperature, level.height]).filter((id) => !sessions.has(id));
+  if (missing.length > 0) {
+    const sequence = initializeSequence;
+    for (const id of missing) {
+      void loadVariable(id, sequence, "probe")
+        .then(() => {
+          if (sequence === initializeSequence) syncLapse();
+        })
+        .catch((error: unknown) => {
+          if (error instanceof DOMException && error.name === "AbortError") return;
+          console.warn(`relief: ${id} not opened:`, error instanceof Error ? error.message : error);
+        });
+    }
+    return;
+  }
+  requestColumnFrame();
+}
+
+/** Every session of the column, once all are open. */
+function reliefColumnSessions(): VariableSession[] | null {
+  const column = reliefColumn;
+  if (!column) return null;
+  const all = column.levels.flatMap((level) => [level.temperature, level.height]);
+  return all.every((session): session is VariableSession => session !== null) ? all : null;
+}
+
+/** Ask for the column at the frame on screen, over the view's tiles — one
+ * request at a time, so a playing loop never queues frames it has moved
+ * past. */
+function requestColumnFrame(): void {
+  const column = reliefColumn;
+  const all = reliefColumnSessions();
+  if (!column || !all || activeFrameIndex === null) return;
+  const reference = all[0]!;
+  // Nothing is decoded while the correction is off or faded out.
+  if (!lapseWanted(activeSession) || lapseWeight(correctionGrid(reference).longitudeStep, map.getZoom()) <= 0) return;
+  const now = performance.now();
+  if (column.inflightSince !== null && now - column.inflightSince < COLUMN_REQUEST_PATIENCE_MS) return;
+  const offset = sessionOffsetForLead(reference, frameLeadSeconds(activeFrameIndex));
+  if (offset === null) return;
+  const window = viewColumnCells(reference);
+  if (window === null) return;
+  const tiles = columnViewTiles(reference);
+  const asked = `${offset}:${JSON.stringify(window)}:${tiles === null ? "all" : JSON.stringify(tiles)}`;
+  if (asked === column.asked && column.inflightSince === null) return;
+  column.asked = asked;
+  column.inflightSince = now;
+  const expected = new Map<VariableSession, number>();
+  for (const session of all) {
+    const sessionOffset = sessionOffsetForLead(session, frameLeadSeconds(activeFrameIndex));
+    // A surface without this frame leaves the column incomplete; the
+    // correction keeps the last one shown.
+    if (sessionOffset === null) return;
+    expected.set(session, sessionOffset);
+  }
+  column.landed = { asked, expected, window, tiles, values: new Map() };
+  for (const [session, sessionOffset] of expected) requestDecode(session, session.variable, sessionOffset, tiles);
+}
+
+/** How long a request for the column may stay unanswered before the next
+ * frame asks again. */
+const COLUMN_REQUEST_PATIENCE_MS = 3000;
+
+/** The largest window, in cells either way, the column is built over: past
+ * it the view is far too wide for the correction to show (it fades in at
+ * a few dozen pixels a cell). */
+const COLUMN_WINDOW_LIMIT = 512;
+
+/** The cells under the view on a session's grid, one cell wider all round,
+ * or null when that is past `COLUMN_WINDOW_LIMIT`. */
+function viewColumnCells(session: VariableSession): ColumnCells | null {
+  const grid = correctionGrid(session);
+  const bounds = map.getBounds();
+  const firstColumn = Math.floor((bounds.getWest() - grid.firstLongitude) / grid.longitudeStep) - 1;
+  const lastColumn = Math.ceil((bounds.getEast() - grid.firstLongitude) / grid.longitudeStep) + 1;
+  const rowA = (bounds.getNorth() - grid.firstLatitude) / grid.latitudeStep;
+  const rowB = (bounds.getSouth() - grid.firstLatitude) / grid.latitudeStep;
+  const firstRow = Math.max(0, Math.floor(Math.min(rowA, rowB)) - 1);
+  const lastRow = Math.min(grid.height - 1, Math.ceil(Math.max(rowA, rowB)) + 1);
+  const width = grid.wraps ? lastColumn - firstColumn + 1 : Math.min(grid.width - 1, lastColumn) - Math.max(0, firstColumn) + 1;
+  const height = lastRow - firstRow + 1;
+  if (width <= 1 || height <= 1 || width > COLUMN_WINDOW_LIMIT || height > COLUMN_WINDOW_LIMIT) return null;
+  return { column: grid.wraps ? firstColumn : Math.max(0, firstColumn), row: firstRow, width, height };
+}
+
+/** The column's tiles under the view, or null for the whole plane. */
+function columnViewTiles(session: VariableSession): TileRect[] | null {
+  if (!session.tiles || !session.streaming) return null;
+  const bounds = map.getBounds();
+  return viewportTileRects(session.metadata, session.tiles, {
+    west: bounds.getWest(),
+    east: bounds.getEast(),
+    south: bounds.getSouth(),
+    north: bounds.getNorth(),
+  });
+}
+
+/** One of the column's planes arrived: cut the window out of it (the
+ * cache recycles the plane), and once every one of the frame asked for is
+ * in, build the column and show it. */
+function acceptColumnPlane(session: VariableSession, offset: number, plane: Uint8Array): void {
+  const column = reliefColumn;
+  const landed = column?.landed;
+  const all = reliefColumnSessions();
+  if (!column || !landed || !all || landed.expected.get(session) !== offset || landed.values.has(session)) return;
+  landed.values.set(session, windowValues(session, plane, landed.window, landed.tiles));
+  if (landed.values.size < all.length) return;
+  column.inflightSince = null;
+  column.shown = columnWindow(column, landed);
+  // syncLapse shows it, then asks for the frame on screen if that has
+  // moved on meanwhile.
+  syncLapse();
+}
+
+/** A plane's values over a window, NaN where the cell was not decoded (a
+ * tile outside `tiles`) or is the codebook's nodata. */
+function windowValues(session: VariableSession, plane: Uint8Array, window: ColumnCells, tiles: TileRect[] | null): Float32Array {
+  const out = new Float32Array(window.width * window.height).fill(Number.NaN);
+  const quantization = session.variable.quantization;
+  if (quantization.type !== "linear") return out;
+  const grid = correctionGrid(session);
+  const geometry = session.tiles;
+  const decoded = (column: number, row: number) => {
+    if (tiles === null || !geometry) return true;
+    const tileColumn = Math.floor(column / geometry.tileWidth);
+    const tileRow = Math.floor(row / geometry.tileHeight);
+    return tiles.some(
+      (rect) => tileColumn >= rect.firstColumn && tileColumn <= rect.lastColumn && tileRow >= rect.firstRow && tileRow <= rect.lastRow,
+    );
+  };
+  for (let j = 0; j < window.height; j += 1) {
+    const row = window.row + j;
+    for (let i = 0; i < window.width; i += 1) {
+      const column = (((window.column + i) % grid.width) + grid.width) % grid.width;
+      if (!decoded(column, row)) continue;
+      const code = plane[row * grid.width + column]!;
+      if (code === quantization.nodataCode || code > quantization.maximumCode) continue;
+      out[j * window.width + i] = quantization.offset + code * quantization.scale;
+    }
+  }
+  return out;
+}
+
+/** The column over the window for the shader: per cell its surfaces sorted
+ * by height (lapse.ts::sortedColumn), packed three RGBA texels a cell. */
+function columnWindow(
+  column: NonNullable<typeof reliefColumn>,
+  landed: NonNullable<NonNullable<typeof reliefColumn>["landed"]>,
+): ColumnWindow {
+  const { window } = landed;
+  const cells = window.width * window.height;
+  const a = new Float32Array(cells * 4);
+  const b = new Float32Array(cells * 4);
+  const c = new Float32Array(cells * 4);
+  const planes = column.levels.map((level) => ({
+    temperature: landed.values.get(level.temperature!)!,
+    height: landed.values.get(level.height!)!,
+  }));
+  const heights = new Array<number>(COLUMN_CAPACITY);
+  const temperatures = new Array<number>(COLUMN_CAPACITY);
+  for (let cell = 0; cell < cells; cell += 1) {
+    let count = 0;
+    for (const plane of planes) {
+      const z = plane.height[cell]!;
+      const t = plane.temperature[cell]!;
+      if (!Number.isFinite(z) || !Number.isFinite(t)) continue;
+      // Insertion by height: five surfaces at most.
+      let at = count;
+      while (at > 0 && heights[at - 1]! > z) {
+        heights[at] = heights[at - 1]!;
+        temperatures[at] = temperatures[at - 1]!;
+        at -= 1;
+      }
+      heights[at] = z;
+      temperatures[at] = t;
+      count += 1;
+    }
+    for (let k = count; k < COLUMN_CAPACITY; k += 1) {
+      heights[k] = heights[Math.max(0, count - 1)] ?? 0;
+      temperatures[k] = temperatures[Math.max(0, count - 1)] ?? 0;
+    }
+    const o = cell * 4;
+    a[o] = heights[0]!; a[o + 1] = heights[1]!; a[o + 2] = heights[2]!; a[o + 3] = heights[3]!;
+    b[o] = heights[4]!; b[o + 1] = temperatures[0]!; b[o + 2] = temperatures[1]!; b[o + 3] = temperatures[2]!;
+    c[o] = temperatures[3]!; c[o + 1] = temperatures[4]!; c[o + 2] = count < 2 ? 0 : count;
+  }
+  const grid = correctionGrid(column.levels[0]!.temperature!);
+  return {
+    a,
+    b,
+    c,
+    grid: {
+      width: window.width,
+      height: window.height,
+      firstLongitude: grid.firstLongitude + window.column * grid.longitudeStep,
+      firstLatitude: grid.firstLatitude + window.row * grid.latitudeStep,
+      longitudeStep: grid.longitudeStep,
+      latitudeStep: grid.latitudeStep,
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------

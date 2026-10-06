@@ -177,15 +177,27 @@ and the window shrinks to fit it.
   skipped rows otherwise); a line stands a vertical section, a wall from
   sea level to the top painted from the same 3D textures, over the march
   veiled to a third. Pressing a tool again clears what it holds.
-- Altitude correction (`layer.ts::lapseCodes`): with relief on, a 2 m
-  temperature is moved from the model's ground (the run's `orog` plane,
-  decoded whole once and uploaded on its own grid) to the DEM's at
-  6.5 K/km, in the fragment shader, faded in as a model cell grows past
-  ~24–64 px on screen (`lapseWeight`). The pin carries the same
+- Altitude correction (`layer.ts::lapseCodes`, formula in `lapse.ts`):
+  with relief on, a 2 m temperature is moved from the model's ground (the
+  run's `orog` plane, decoded whole once and uploaded on its own grid) to
+  the DEM's, in the fragment shader, faded in as a model cell grows past
+  ~24–64 px on screen (`lapseWeight`). Below the model ground it is
+  6.5 K/km; above it, the free atmosphere at the DEM's height plus the
+  model's departure from it at its own ground, faded with the height
+  climbed (`exp(−dz / 800 m)`). The free atmosphere is the run's own
+  `tmp<level>` / `hgt<level>` on 1000–500 hPa, whichever pairs it
+  publishes: for the frame on screen they are decoded over the view's
+  tiles one request at a time, cut to a cell window around the view, and
+  each cell's column sorted by height into three RGBA32F textures the
+  shader reads with `texelFetch` (bilinear by hand; an undecoded cell
+  means no column). The last column shown stands in until the next lands;
+  a run with fewer than two pairs keeps 6.5 K/km. The pin carries the same
   correction as a meteogram row of its own (`TERRAIN_ROW_SPEC`, "TMP 2M ·
   DEM", under the model's temperature) whenever it has both heights,
-  relief on or off. The DEM readout samples the pinned point, never the
-  cell centre.
+  relief on or off, opening the column's sessions only once the pin stands
+  above the model ground; frames without a column fall back to 6.5 K/km
+  with one console line, never a mark on the row. The DEM readout samples
+  the pinned point, never the cell centre.
 - Particles: speed halves per zoom level past z4 (`zoomPace`) so the pace
   on screen holds; positions are RGBA32F where `EXT_color_buffer_float`
   allows (16-bit positions are 600 m steps). From z5 on the plane they are

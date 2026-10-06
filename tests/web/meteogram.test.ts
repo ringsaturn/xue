@@ -10,7 +10,6 @@ import {
   meteogramRows,
   seriesState,
   TAF_ROW_SPEC,
-  shiftSeries,
   TERRAIN_ROW_SPEC,
 } from "../../web/src/meteogram";
 
@@ -178,10 +177,6 @@ describe("the aerodrome forecast row", () => {
 });
 
 describe("terrain row", () => {
-  it("shifts every value and keeps the gaps", () => {
-    expect(shiftSeries([17, null, undefined, -1.5], -20.2)).toEqual([17 - 20.2, null, undefined, -1.5 - 20.2]);
-  });
-
   it("is labelled as the 2 m temperature at the DEM", () => {
     expect(meteogramRowCode(TERRAIN_ROW_SPEC)).toBe("TMP 2M · DEM");
   });
