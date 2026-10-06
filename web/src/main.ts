@@ -236,6 +236,7 @@ import {
 } from "./meteogram";
 import { displayUnit, displayValue } from "./units";
 import { fetchPoster, isPosterSupported } from "./poster";
+import { keepGlobeTerrainGesturesStill } from "./projection";
 import { frameCacheKey, parseFrameCacheKey, variableKey } from "./sessionkeys";
 import { applyTheme, isDark, onThemeChange, toggleTheme } from "./theme";
 import { timelinePlan, type TimelinePlan, type TimelineSegment } from "./timeline";
@@ -969,6 +970,7 @@ const map = new MaplibreMap({
   maxPitch: 85,
 });
 map.addControl(new NavigationControl({ showCompass: false }), "top-right");
+keepGlobeTerrainGesturesStill(map);
 
 /** Whether the map holds the scene yet; until then the link's is the one. */
 let sceneApplied = false;

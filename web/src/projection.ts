@@ -424,3 +424,41 @@ export function terrainMeshSize(map: MaplibreMap): number {
   const size = (map as unknown as { terrain?: { meshSize?: number } | null }).terrain?.meshSize;
   return typeof size === "number" && size > 0 ? size : 128;
 }
+
+/** The globe transform's internals the gesture fix below reaches. */
+interface GlobeTransformInternals {
+  isGlobeRendering: boolean;
+  _mercatorTransform: unknown;
+  apply(source: unknown, forceOverrideZ: boolean): void;
+  recalculateZoomAndCenter(terrain?: unknown): void;
+}
+
+const GESTURE_FIX = Symbol("xue.globeTerrainGestureFix");
+
+/**
+ * Keep the camera still when a pan or zoom over the 3D relief ends on the
+ * globe. A terrain gesture holds the center's elevation frozen and, as it
+ * ends, moves the center onto the ground under it while keeping the camera
+ * where it is (`recalculateZoomAndCenter`). The globe transform past its
+ * Mercator zoom hands that to its Mercator half and never copies the result
+ * back, as its own `setLocationAtPoint` does, so the next frame drops the
+ * center straight onto the ground below it instead, and the camera with it:
+ * hundreds of metres on a mountain side, a visible jump. This copies the
+ * result back. Applied to the globe transform's prototype, once.
+ */
+export function keepGlobeTerrainGesturesStill(map: MaplibreMap): void {
+  const patch = (): void => {
+    const transform = (map as unknown as { _camera?: { transform?: object } })._camera?.transform;
+    if (!transform || !("_mercatorTransform" in transform)) return;
+    const prototype = Object.getPrototypeOf(transform) as GlobeTransformInternals & { [GESTURE_FIX]?: true };
+    if (prototype[GESTURE_FIX] || typeof prototype.apply !== "function") return;
+    const recalculate = prototype.recalculateZoomAndCenter;
+    prototype.recalculateZoomAndCenter = function (this: GlobeTransformInternals, terrain?: unknown): void {
+      recalculate.call(this, terrain);
+      if (!this.isGlobeRendering) this.apply(this._mercatorTransform, false);
+    };
+    prototype[GESTURE_FIX] = true;
+  };
+  patch();
+  map.on("projectiontransition", patch);
+}
