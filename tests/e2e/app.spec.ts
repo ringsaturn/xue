@@ -564,9 +564,11 @@ test("the rail is three sections, and MORE lists the fields the core tiles do no
   await expect(more).toBeVisible();
   await expect(more).toHaveAttribute("aria-expanded", "false");
   // The overlay section carries the pressure switch; the marks section has
-  // nothing to show on this fixture and is hidden with its rule.
+  // only the radar sites, whose live table ships with the shell — the
+  // fixture publishes no station product.
   await expect(rail.locator('.rail-section[data-section="overlay"] button:visible')).toHaveCount(1);
-  await expect(rail.locator('.rail-section[data-section="mark"]')).toBeHidden();
+  await expect(rail.locator('.rail-section[data-section="mark"] button:visible')).toHaveCount(1);
+  await expect(page.locator("#radar-tile")).toBeVisible();
   // MORE opens the sheet: every field the run publishes, in its group, the
   // one on screen checked.
   await more.click();
