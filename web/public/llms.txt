@@ -343,7 +343,15 @@ fall back to defaults rather than fail, so a constructed link always opens.
   themselves. A surface station within 20 km at about the pin's ground
   height (within 300 m) takes the airport's place on the temperature, wind
   and pressure rows; its temperature goes on the terrain-corrected row
-  where the panel has one.
+  where the panel has one. That row ("TMP 2M · DEM") carries the model's
+  2 m temperature to the terrain's height: below the model ground at
+  6.5 K/km, above it as the free atmosphere at that height (the run's
+  1000–500 hPa temperatures interpolated in their heights) plus the
+  model's surface departure faded by `exp(−dz / 800 m)` — the REDCAPP
+  decomposition (Cao et al. 2017, doi:10.5194/gmd-10-2905-2017) over a
+  TopoSCALE free atmosphere (Fiddes & Gruber 2014,
+  doi:10.5194/gmd-7-387-2014). With relief on, the map is corrected the
+  same way.
 - `?radar=<site>` — draw one WSR-88D radar's lowest sweep alone over the
   basemap (`docs/nexrad.md`), the field under it held off screen:
   `?radar=GWX` is Columbus AFB. `?radar=on` only marks the sites over the
