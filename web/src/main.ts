@@ -237,7 +237,7 @@ import {
 } from "./meteogram";
 import { displayUnit, displayValue } from "./units";
 import { fetchPoster, isPosterSupported } from "./poster";
-import { keepTerrainCameraStill } from "./projection";
+import { globeProjection, isGlobeProjection, keepTerrainCameraStill } from "./projection";
 import { frameCacheKey, parseFrameCacheKey, variableKey } from "./sessionkeys";
 import { applyTheme, isDark, onThemeChange, toggleTheme } from "./theme";
 import { timelinePlan, type TimelinePlan, type TimelineSegment } from "./timeline";
@@ -997,7 +997,7 @@ window.addEventListener("resize", syncControlColumn);
 function currentScene(): SceneState {
   if (!sceneApplied) return urlScene;
   return {
-    globe: map.getProjection()?.type === "globe",
+    globe: isGlobeProjection(map),
     terrain: map.getTerrain()?.exaggeration ?? null,
     shadow: terrainShadows?.enabled ?? urlScene.shadow,
   };
@@ -1013,11 +1013,13 @@ function syncPeakLabels(): void {
 /** Put the link's scene on the map once the style (and the relief source in
  * it) exists, then keep the address bar following the map's controls. */
 function applySceneFromUrl(): void {
-  if (urlScene.globe) map.setProjection({ type: "globe" });
+  if (urlScene.globe) map.setProjection(globeProjection(urlScene.terrain !== null));
   if (urlScene.terrain !== null) map.setTerrain({ source: TERRAIN_MESH_SOURCE, exaggeration: urlScene.terrain });
   sceneApplied = true;
   map.on("projectiontransition", syncUrl);
   map.on("terrain", () => {
+    // The relief moves the globe's handover; the switch reads the terrain.
+    if (isGlobeProjection(map)) map.setProjection(globeProjection(map.getTerrain() !== null));
     syncUrl();
     syncLapse();
     syncPeakLabels();

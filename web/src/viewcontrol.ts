@@ -1,6 +1,7 @@
 import type { IControl, Map as MaplibreMap } from "maplibre-gl";
 
 import { onLocaleChange, t, type MessageKey } from "./i18n";
+import { globeProjection, isGlobeProjection } from "./projection";
 
 /**
  * The view tile under the zoom tile: the globe, the 3D relief and the
@@ -91,8 +92,7 @@ export class ViewControl implements IControl {
     const container = document.createElement("div");
     container.className = "maplibregl-ctrl maplibregl-ctrl-group view-control";
     this.globe = this.button(container, "maplibregl-ctrl-globe", "viewGlobeAria", () => {
-      const globe = map.getProjection()?.type === "globe";
-      map.setProjection({ type: globe ? "mercator" : "globe" });
+      map.setProjection(isGlobeProjection(map) ? { type: "mercator" } : globeProjection(map.getTerrain() !== null));
     });
     this.terrain = this.button(container, "maplibregl-ctrl-terrain", "viewTerrainAria", () => {
       if (map.getTerrain()) map.setTerrain(null);
@@ -200,7 +200,7 @@ export class ViewControl implements IControl {
     if (!map || !this.globe || !this.terrain || !this.north || !this.flat) return;
     // On reads in the rail's language (an inked tile, the stylesheet's), not
     // in MapLibre's blue "enabled" icons.
-    this.globe.setAttribute("aria-pressed", String(map.getProjection()?.type === "globe"));
+    this.globe.setAttribute("aria-pressed", String(isGlobeProjection(map)));
     this.terrain.setAttribute("aria-pressed", String(map.getTerrain() !== null));
     const bearing = map.getBearing();
     if (this.needle) this.needle.style.transform = `rotate(${-bearing}deg)`;

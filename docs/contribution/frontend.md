@@ -144,7 +144,10 @@ and the window shrinks to fit it.
   re-samples differently (after every gesture and glide, when a sharper DEM
   tile lands), so idle re-samples slide the center along the view ray
   instead, and the globe transform copies a gesture's end back from its
-  Mercator half. The zoom ceiling is z16 for every
+  Mercator half. With relief on, the globe hands over to the plane between
+  z9 and z10 instead of MapLibre's z11–12 (`globeProjection`): the globe's
+  controls ignore terrain, so the ground grabbed did not follow the cursor
+  and the center never landed. The zoom ceiling is z16 for every
   view: in relief, real detail where a regional archive reaches it (Japan's
   does), the z12 tile overzoomed elsewhere. The switches and the way back to north and to a flat camera share
   one tile under the zoom tile (`viewcontrol.ts`); the two resets show only

@@ -1,4 +1,4 @@
-import type { CustomRenderMethodInput, Map as MaplibreMap } from "maplibre-gl";
+import type { CustomRenderMethodInput, Map as MaplibreMap, ProjectionSpecification } from "maplibre-gl";
 
 /**
  * Where the custom layers put a point of the world on screen: on a flat
@@ -423,6 +423,26 @@ export function worldRowAt(rows: number): (row: number) => number {
 export function terrainMeshSize(map: MaplibreMap): number {
   const size = (map as unknown as { terrain?: { meshSize?: number } | null }).terrain?.meshSize;
   return typeof size === "number" && size > 0 ? size : 128;
+}
+
+/** The zoom at which the globe has handed over to the plane when the relief is on. */
+const GLOBE_HANDOVER_WITH_RELIEF = 10;
+
+/**
+ * The globe projection to set: MapLibre's own, which hands over to the
+ * plane between z11 and z12, or with the 3D relief on one that hands over
+ * between z9 and z10. The globe's controls ignore terrain (the ground
+ * grabbed does not follow the cursor, the center never lands), and relief
+ * matters only where the plane takes over anyway.
+ */
+export function globeProjection(terrain: boolean): ProjectionSpecification {
+  if (!terrain) return { type: "globe" };
+  return { type: ["interpolate", ["linear"], ["zoom"], GLOBE_HANDOVER_WITH_RELIEF - 1, "vertical-perspective", GLOBE_HANDOVER_WITH_RELIEF, "mercator"] };
+}
+
+/** Whether the map shows the globe at low zoom, under either handover. */
+export function isGlobeProjection(map: MaplibreMap): boolean {
+  return (map.getProjection()?.type ?? "mercator") !== "mercator";
 }
 
 /** A MapLibre `LngLat`, reached through the transform's own center so no runtime import is needed. */
