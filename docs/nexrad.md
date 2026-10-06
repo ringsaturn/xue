@@ -188,8 +188,10 @@ pointer, round or store is published for it.
   every station in NCEI's table that published N0B on the day before
   `xue nexrad-sites` wrote it. Rerun it when the network changes.
 - **Timeline.** An open site lists `<SITE>_<PRODUCT>_<YYYY_MM_DD_HH>` for
-  every UTC hour of the newest three hours, then once a minute from its
-  newest key on (`start-after`); a hidden page skips the minute and
+  every UTC hour of the newest three hours — the current hour first, the
+  rest together — then once a minute from its newest key on
+  (`start-after`); its newest sweep is read before any other, then the
+  rest outward from the playhead; a hidden page skips the minute and
   catches up when shown. A sweep's time is its key's (§2); a sweep older
   than three hours leaves the timeline. Only the product shown is listed.
 - **Sweeps.** Each sweep is one object read whole and decoded by the

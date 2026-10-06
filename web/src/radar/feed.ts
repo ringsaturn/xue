@@ -27,6 +27,10 @@ export interface RadarUnit {
 /** One site's units of one product. A live site's units change as sweeps
  * arrive and age out; `onChange` says so. */
 export interface RadarSiteFeed {
+  /** A live site's newest sweep is fetched before anything else: it is
+   * what the view shows past the window, and the first thing anyone
+   * opening a live site looks at. */
+  readonly live: boolean;
   units(product: RadarProduct): readonly RadarUnit[];
   /** The product is shown: a live feed starts listing it. */
   watch(product: RadarProduct): void;
@@ -52,6 +56,7 @@ export function windowFeed(window: RadarWindow, windowUrl: string): RadarFeed {
     site(index: number): RadarSiteFeed {
       const cache = new Map<RadarProduct, RadarUnit[]>();
       return {
+        live: false,
         units(product) {
           let units = cache.get(product);
           if (units) return units;

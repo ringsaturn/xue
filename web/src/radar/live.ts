@@ -87,6 +87,7 @@ interface Track {
 }
 
 class LiveSite implements RadarSiteFeed {
+  readonly live = true;
   private readonly tracks = new Map<RadarProduct, Track>();
   private readonly abort = new AbortController();
   private closed = false;
@@ -151,24 +152,35 @@ class LiveSite implements RadarSiteFeed {
     }
   }
 
+  /** The current hour is listed first and published alone, so the newest
+   * sweep is on its way after one listing; the older hours follow
+   * together. Across the Pacific a listing is ~0.6 s, and the window's
+   * four in a row were ~2.4 s before the first sweep was asked for. */
   private async catchUp(product: RadarProduct, track: Track): Promise<void> {
     const now = Date.now();
     const start = now - LIVE_WINDOW_SECONDS * 1000;
     const newest = track.keys.at(-1) ?? null;
     const HOUR = 3600_000;
-    const added: { key: string; time: number }[] = [];
-    for (let hour = Math.floor(Math.max(start, newest?.time ?? start) / HOUR) * HOUR; hour <= now; hour += HOUR) {
-      for (const key of await listPrefix(hourPrefix(this.site.id, product, hour), newest?.key ?? null, this.abort.signal)) {
+    const hours: number[] = [];
+    for (let hour = Math.floor(now / HOUR) * HOUR; hour >= Math.floor(Math.max(start, newest?.time ?? start) / HOUR) * HOUR; hour -= HOUR)
+      hours.push(hour);
+    const list = async (hour: number) =>
+      (await listPrefix(hourPrefix(this.site.id, product, hour), newest?.key ?? null, this.abort.signal)).flatMap((key) => {
         const time = keyTime(key);
-        if (time !== null && time > start && (newest === null || time > newest.time)) added.push({ key, time });
-      }
-    }
+        return time !== null && time > start && (newest === null || time > newest.time) ? [{ key, time }] : [];
+      });
+    this.merge(track, start, await list(hours[0]!));
+    if (hours.length > 1) this.merge(track, start, (await Promise.all(hours.slice(1).map(list))).flat());
+  }
+
+  private merge(track: Track, start: number, added: { key: string; time: number }[]): void {
     const kept = track.keys.filter((item) => item.time > start);
     if (added.length === 0 && kept.length === track.keys.length) return;
     track.keys = [...kept, ...added].sort((a, b) => a.time - b.time);
     track.units = null;
     this.onChange();
   }
+
 }
 
 /** The live source as a feed over the static site table. */

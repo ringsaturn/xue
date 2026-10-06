@@ -15,8 +15,9 @@ import type { RadarSiteFeed, RadarUnit } from "./feed";
 import type { RadarChunkReply, RadarChunkRequest, RadarDecodeRequest } from "./worker";
 import { BEAMS, type RadarProduct, type RadarSite } from "./schema";
 
-/** Units being fetched or decoded at once. */
-const MAX_IN_FLIGHT = 4;
+/** Units being fetched or decoded at once: a browser's six connections to
+ * one HTTP/1.1 host, which the live bucket is. */
+const MAX_IN_FLIGHT = 6;
 /** How far behind the playhead a sweep still stands for it: one missed
  * volume scan at the slowest clear-air cadence. Past this the site shows
  * nothing rather than an old picture. */
@@ -230,7 +231,10 @@ export class RadarSession {
     const ahead = units.slice(position, position + 1 + AHEAD_ROUNDS);
     const behind = units.slice(0, position).reverse();
     const beyond = units.slice(position + 1 + AHEAD_ROUNDS);
-    return [...ahead, ...behind, ...beyond];
+    const order = [...ahead, ...behind, ...beyond];
+    if (!this.feed.live) return order;
+    const newest = units[units.length - 1]!;
+    return [newest, ...order.filter((unit) => unit !== newest)];
   }
 
   private pump(): void {
