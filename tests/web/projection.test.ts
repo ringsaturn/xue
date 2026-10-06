@@ -93,11 +93,19 @@ describe("particle pacing and seeding", () => {
   });
 });
 
+/** Stands in for MapLibre's LngLat: the fix builds centers through the center's own class. */
+class FakeLngLat {
+  constructor(
+    public lng: number,
+    public lat: number,
+  ) {}
+}
+
 describe("moveCenterOnRay", () => {
   /** A camera over Fuji's flank: z13, pitch 60, looking north, 1,000 px to the center. */
   function readout(over: Partial<Parameters<typeof moveCenterOnRay>[0]> = {}) {
     return {
-      center: { lng: 138.74, lat: 35.34 },
+      center: new FakeLngLat(138.74, 35.34) as { lng: number; lat: number },
       elevation: 2000,
       zoom: 13,
       pitch: 60,
@@ -144,6 +152,7 @@ describe("moveCenterOnRay", () => {
     const was = camera(before);
     const after = slide(readout(), 1400);
     expect(after.elevation).toBeCloseTo(1400, 6);
+    expect(after.center).toBeInstanceOf(FakeLngLat);
     expect(after.center.lat).toBeGreaterThan(before.center.lat);
     expect(after.zoom).toBeLessThan(before.zoom);
     const is = camera(after);
@@ -159,6 +168,14 @@ describe("moveCenterOnRay", () => {
     expect(t.zoom).toBe(13);
   });
 
+  it("lifts the camera with the center when the plane is above it", () => {
+    const t = readout();
+    const calls: string[] = [];
+    const moved = moveCenterOnRay(t, 9000, (e) => calls.push(`elevation ${e}`), () => calls.push("center"), () => calls.push("zoom"));
+    expect(moved).toBe(false);
+    expect(calls).toEqual(["elevation 9000"]);
+  });
+
   it("keeps the camera still when it looks almost level", () => {
     const before = readout({ pitch: 85 });
     const after = slide(readout({ pitch: 85 }), 1900);
@@ -172,7 +189,7 @@ describe("keepTerrainCameraStill", () => {
   function fakeMap() {
     const calls: string[] = [];
     const prototype = {
-      center: { lng: 138.74, lat: 35.34 },
+      center: new FakeLngLat(138.74, 35.34) as { lng: number; lat: number },
       elevation: 100,
       zoom: 13,
       pitch: 60,
@@ -204,9 +221,13 @@ describe("keepTerrainCameraStill", () => {
       recalculateZoomAndCenter(_terrain?: unknown) {
         calls.push("maplibre landing");
       },
+      apply(_source: unknown, _constrain: boolean) {
+        calls.push("copy synced");
+      },
     };
     const transform = Object.create(prototype) as typeof prototype;
-    const camera = { transform, elevationFreeze: false, easing: false, isEasing: () => camera.easing };
+    const requested = Object.create(prototype) as typeof prototype;
+    const camera = { transform, _requestedCameraState: requested, elevationFreeze: false, easing: false, isEasing: () => camera.easing };
     const map = {
       _camera: camera,
       terrain: { getElevationForLngLatZoom: () => 130 } as unknown,
@@ -220,10 +241,10 @@ describe("keepTerrainCameraStill", () => {
     return { map, camera, transform, calls };
   }
 
-  it("slides the center along the ray when the ground re-samples at rest", () => {
+  it("slides the center along the ray when the ground re-samples at rest, and syncs the gesture copy", () => {
     const { transform, calls } = fakeMap();
     transform.setElevation(130);
-    expect(calls).toEqual(["elevation 130", "center", "zoom"]);
+    expect(calls).toEqual(["elevation 130", "center", "zoom", "copy synced"]);
   });
 
   it("leaves a settled center alone, and one the ray cannot reach", () => {
@@ -232,7 +253,7 @@ describe("keepTerrainCameraStill", () => {
     expect(calls).toEqual([]);
     transform.setElevation(130);
     transform.setElevation(130);
-    expect(calls).toEqual(["elevation 130", "center", "zoom"]);
+    expect(calls).toEqual(["elevation 130", "center", "zoom", "copy synced"]);
   });
 
   it("moves the camera during a gesture, an ease, a toggle, and without terrain", () => {

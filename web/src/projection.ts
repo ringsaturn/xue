@@ -425,9 +425,16 @@ export function terrainMeshSize(map: MaplibreMap): number {
   return typeof size === "number" && size > 0 ? size : 128;
 }
 
+/** A MapLibre `LngLat`, reached through the transform's own center so no runtime import is needed. */
+interface LngLatLike {
+  lng: number;
+  lat: number;
+}
+type LngLatClass = new (lng: number, lat: number) => LngLatLike;
+
 /** What the terrain camera fix below reads from a transform. */
 interface TransformReadout {
-  center: { lng: number; lat: number };
+  center: LngLatLike;
   elevation: number;
   zoom: number;
   pitch: number;
@@ -451,18 +458,20 @@ interface TransformInternals extends TransformReadout {
   _mercatorTransform?: unknown;
   apply(source: unknown, forceOverrideZ: boolean): void;
   recalculateZoomAndCenter(terrain?: TerrainReadout): void;
-  screenPointToLocation(point: unknown, terrain?: TerrainReadout): { lng: number; lat: number };
-  setCenter(center: { lng: number; lat: number }): void;
+  screenPointToLocation(point: unknown, terrain?: TerrainReadout): LngLatLike;
+  setCenter(center: LngLatLike): void;
   setZoom(zoom: number): void;
   setElevation(elevation: number): void;
 }
 
 interface TerrainReadout {
-  getElevationForLngLatZoom(lnglat: { lng: number; lat: number }, zoom: number): number;
+  getElevationForLngLatZoom(lnglat: LngLatLike, zoom: number): number;
 }
 
 interface CameraInternals {
   transform?: TransformInternals;
+  /** The copy a gesture accumulates into; stale once the rendered transform moves on its own. */
+  _requestedCameraState?: TransformInternals;
   elevationFreeze?: boolean;
   isEasing(): boolean;
 }
@@ -488,12 +497,14 @@ const latFromMercatorY = (y: number): number => (360 / Math.PI) * Math.atan(Math
  * the same in pixel space, without its two ways of moving the camera after
  * all. The zoom is the distance to the center, so a plane nearer than the
  * zoom ceiling allows (ground rising toward a camera that looks almost
- * level, or above it) leaves the transform as it is, the center floating
- * off the ground, and a plane farther than the floor allows stops there;
- * MapLibre parks the center 10 km out past 84° of pitch and lets the zoom
- * clamp pull the camera the rest of the way. Returns whether it moved.
+ * level) leaves the transform as it is, the center floating off the
+ * ground, and a plane farther than the floor allows stops there; MapLibre
+ * parks the center 10 km out past 84° of pitch and lets the zoom clamp
+ * pull the camera the rest of the way. A plane above the camera has no
+ * still solution: the view is into the mountain, so the camera is lifted
+ * with the center, as MapLibre does. Returns whether the center moved.
  */
-export function moveCenterOnRay(transform: TransformReadout, elevation: number, setElevation: (elevation: number) => void, setCenter: (center: { lng: number; lat: number }) => void, setZoom: (zoom: number) => void): boolean {
+export function moveCenterOnRay(transform: TransformReadout, elevation: number, setElevation: (elevation: number) => void, setCenter: (center: LngLatLike) => void, setZoom: (zoom: number) => void): boolean {
   const { center, worldSize } = transform;
   const unitsPerPixel = 1 / worldSize;
   const unitsPerMeter = mercatorUnitsPerMeter(center.lat);
@@ -513,11 +524,16 @@ export function moveCenterOnRay(transform: TransformReadout, elevation: number, 
   const nearest = zoomScale / (2 ** (transform.maxZoom - ZOOM_MARGIN) * unitsPerMeter);
   const farthest = zoomScale / (2 ** (transform.minZoom + ZOOM_MARGIN) * unitsPerMeter);
   const wanted = (cameraAltitude - elevation) / cosPitch;
+  if (wanted <= 0) {
+    setElevation(elevation);
+    return false;
+  }
   if (wanted < nearest) return false;
   const distance = Math.min(farthest, wanted);
   const x = cameraX + dirX * distance * pixelsPerMeter;
   const y = cameraY + dirY * distance * pixelsPerMeter;
-  const next = { lng: lngFromMercatorX(x * unitsPerPixel), lat: latFromMercatorY(y * unitsPerPixel) };
+  const LngLat = center.constructor as LngLatClass;
+  const next = new LngLat(lngFromMercatorX(x * unitsPerPixel), latFromMercatorY(y * unitsPerPixel));
   const zoom = Math.log2(zoomScale / (distance * mercatorUnitsPerMeter(next.lat)));
   setElevation(cameraAltitude - distance * cosPitch);
   setCenter(next);
@@ -603,6 +619,9 @@ export function keepTerrainCameraStill(map: MaplibreMap): void {
       if (Math.abs(elevation - this.elevation) < SETTLED_ELEVATION_M) return;
       if (++steps > MAX_IDLE_STEPS) return;
       slide(this, elevation);
+      // A gesture's copy outlives the gesture; left behind, its camera would
+      // snap back on the next gesture's first frame.
+      camera._requestedCameraState?.apply(this, false);
     };
     const recalculate = prototype.recalculateZoomAndCenter;
     const globe = "_mercatorTransform" in transform && typeof prototype.apply === "function";
