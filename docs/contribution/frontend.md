@@ -138,8 +138,8 @@ and the window shrinks to fit it.
   hillshade under it is hidden); particles hide behind ridges through the
   terrain's packed depth texture. Tile meshes carry skirts for LOD seams.
   The terrain uses its own copy of the Mapterhorn source (MapLibre renders
-  hillshade and terrain worse from one). With relief on, the zoom ceiling
-  rises to z16: real detail where a regional archive reaches it (Japan's
+  hillshade and terrain worse from one). The zoom ceiling is z16 for every
+  view: in relief, real detail where a regional archive reaches it (Japan's
   does), the z12 tile overzoomed elsewhere. The switches and the way back to north and to a flat camera share
   one tile under the zoom tile (`viewcontrol.ts`); the two resets show only
   while the camera is turned or tilted, and the rail's box starts under

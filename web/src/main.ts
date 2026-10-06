@@ -234,7 +234,6 @@ import {
   type MeteogramRowData,
   type MeteogramRowSpec,
 } from "./meteogram";
-import { zoomCeilingForStep } from "./mercator";
 import { displayUnit, displayValue } from "./units";
 import { fetchPoster, isPosterSupported } from "./poster";
 import { frameCacheKey, parseFrameCacheKey, variableKey } from "./sessionkeys";
@@ -940,57 +939,26 @@ let appliedBasemapStyle: BasemapStyle = buildBasemapStyle();
  * own framing yields to the sharer's view. */
 const urlCamera = parseCameraFromHash(window.location.hash);
 
-/** The zoom ceiling with nothing finer than the global models on screen.
- * A finer grid raises it (`applyZoomCeiling`): the ceiling follows the
- * data, since past the point where a cell is `ZOOM_CEILING_CELL_PIXELS`
- * wide the map only magnifies the interpolation. */
-const BASE_MAX_ZOOM = 7;
-/** The ceiling while station marks are drawn. Airports sit a few
- * kilometres apart — a city's civil and military fields, a pair of
- * regional strips — and at the models' ceiling those are one dot; the
- * marks are worth three more levels even where the field under them is
- * only being magnified. */
-const STATION_MAX_ZOOM = 10;
-/** What the data on screen is worth, kept so the station switch can be
- * folded in without reading the grid again. */
-let dataZoomCeiling = BASE_MAX_ZOOM;
-/** How wide a grid cell may get on screen before the zoom stops — 32 CSS
- * px puts the 0.005° JMA nowcast at zoom 12, a 0.02° radar mosaic at 10
- * and the 0.03° HRRR grid at 9.5, while the 0.25° models stay at the base
- * ceiling. */
-const ZOOM_CEILING_CELL_PIXELS = 32;
-/** How far a link's camera is honoured before any dataset has said what
- * its grid earns: the ceiling of the finest grid published. A link into a
- * regional dataset at a city zoom opens where it points instead of at the
- * base ceiling; the dataset's own ceiling (`applyZoomCeiling`) settles it
- * once the manifest is in. */
-const DEEP_LINK_MAX_ZOOM = 12.5;
+/** One zoom ceiling for every view: as deep as the relief draws, one past
+ * the basemap's z15. Past a grid's own resolution a field is only
+ * magnified, as any raster is; how far to look is the viewer's call. */
+const MAX_ZOOM = TERRAIN_CAMERA_MAX_ZOOM;
 
 /** The scene a link opened with: plane or globe, flat ground or relief.
  * The map holds it from here on (its own controls toggle both), and the
  * address bar reads it back off the map (`currentScene`). */
 const urlScene = parseSceneFromSearch(window.location.search);
 
-/** The ceiling the map opens with. MapLibre ignores a fragment whose zoom
- * is past the map's ceiling and opens on the default view instead, so a
- * link into the relief may go as deep as the relief will allow once it is
- * lifted, and a link deeper than any ceiling opens on its own place at the
- * ceiling (`center`/`zoom` below) rather than on the world. */
-const initialMaxZoom = urlCamera
-  ? Math.max(
-      BASE_MAX_ZOOM,
-      Math.min(urlCamera.zoom, urlScene.terrain !== null ? TERRAIN_CAMERA_MAX_ZOOM : DEEP_LINK_MAX_ZOOM),
-    )
-  : BASE_MAX_ZOOM;
-
 registerTerrainProtocol();
 
 const map = new MaplibreMap({
   container: "map",
+  // MapLibre drops a fragment deeper than the ceiling and opens on the
+  // default view; this opens such a link on its own place instead.
   center: urlCamera?.center ?? [128, 28],
-  zoom: urlCamera ? Math.min(urlCamera.zoom, initialMaxZoom) : 1.65,
+  zoom: urlCamera ? Math.min(urlCamera.zoom, MAX_ZOOM) : 1.65,
   minZoom: 0,
-  maxZoom: initialMaxZoom,
+  maxZoom: MAX_ZOOM,
   // The view lives in the fragment, `#map=<zoom>/<lat>/<lon>`, kept
   // current on every move — so a copied address reproduces the view, and
   // the query string, which is what names the page, never changes on a pan.
@@ -1048,11 +1016,9 @@ function applySceneFromUrl(): void {
   map.on("projectiontransition", syncUrl);
   map.on("terrain", () => {
     syncUrl();
-    syncZoomCeiling();
     syncLapse();
     syncPeakLabels();
   });
-  syncZoomCeiling();
   syncPeakLabels();
 }
 
@@ -6757,7 +6723,6 @@ function applyStationView(): void {
   const drawAirports = airportAvailable && view.marks.stations.airports;
   const drawSynop = synopAvailable && view.marks.stations.synop;
   syncRail();
-  syncZoomCeiling();
   // Nothing on screen and nothing on the map: the layers are never added,
   // so a viewer who asks for no station pays nothing for the products
   // existing.
@@ -7556,39 +7521,6 @@ function formatTrackEnd(leadSeconds: number): string {
   return `+${Math.round(leadSeconds / HOUR_SECONDS)}H`;
 }
 
-/** Let the camera go as deep as the primary's grid is worth — the ceiling
- * is the data's, so a 0.02° mosaic opens two zoom levels the 0.25° models
- * never had. MapLibre clamps the camera at once when the ceiling drops
- * below it, which is what a switch back to a coarser dataset wants. */
-function applyZoomCeiling(session: VariableSession): void {
-  const grid = geoGrid(session.metadata);
-  dataZoomCeiling = zoomCeilingForStep(grid.longitudeStep, ZOOM_CEILING_CELL_PIXELS, BASE_MAX_ZOOM);
-  syncZoomCeiling();
-}
-
-/** The data's ceiling, or the station marks' when any product is asked
- * for — whichever lets the camera deeper. Asked for, not loaded: the run
- * usually lands before the indexes do, and a ceiling that followed the
- * indexes would first pull a deep link at zoom 9 back to 7 and only then
- * let go. A product that never loads leaves a ceiling nothing needs, which
- * costs nothing. */
-function syncZoomCeiling(): void {
-  const marks = view.marks.stations.soundings || view.marks.stations.airports || view.marks.stations.synop;
-  // In 3D relief the ground carries detail the grid does not, so the camera
-  // may go past the grid's ceiling, and past the DEM's own (overzoomed).
-  // Until the map holds the scene, the link's relief counts, so a deep link
-  // into it is not pulled back before the terrain is lifted.
-  const lifted = sceneApplied ? map.getTerrain() !== null : urlScene.terrain !== null;
-  const relief = lifted ? TERRAIN_CAMERA_MAX_ZOOM : 0;
-  const ceiling = Math.max(dataZoomCeiling, marks && activeCase === null ? STATION_MAX_ZOOM : 0, relief);
-  if (map.getMaxZoom() === ceiling) return;
-  map.setMaxZoom(ceiling);
-  // The navigation control greys its + only on zoom events, so a ceiling
-  // lifted while the camera sits at the old one would leave the button
-  // dead until the next pinch; a zoom event with nothing moved refreshes it.
-  map.fire("zoom");
-}
-
 function applyVariable(session: VariableSession): void {
   if (!layersAdded) return;
   // Another level's labels, or a filled field's none, replace the last.
@@ -7599,7 +7531,6 @@ function applyVariable(session: VariableSession): void {
   // The composition follows the session that actually landed: a slot the
   // run could not fill has already emptied by now.
   setComposition(compositionForPrimary(session.id, view.lines));
-  applyZoomCeiling(session);
   syncTimeline(session);
   const slot = slotFor(session.id);
   configureSlotLayer(slot, session, false);
