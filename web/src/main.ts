@@ -966,14 +966,31 @@ const ZOOM_CEILING_CELL_PIXELS = 32;
  * once the manifest is in. */
 const DEEP_LINK_MAX_ZOOM = 12.5;
 
+/** The scene a link opened with: plane or globe, flat ground or relief.
+ * The map holds it from here on (its own controls toggle both), and the
+ * address bar reads it back off the map (`currentScene`). */
+const urlScene = parseSceneFromSearch(window.location.search);
+
+/** The ceiling the map opens with. MapLibre ignores a fragment whose zoom
+ * is past the map's ceiling and opens on the default view instead, so a
+ * link into the relief may go as deep as the relief will allow once it is
+ * lifted, and a link deeper than any ceiling opens on its own place at the
+ * ceiling (`center`/`zoom` below) rather than on the world. */
+const initialMaxZoom = urlCamera
+  ? Math.max(
+      BASE_MAX_ZOOM,
+      Math.min(urlCamera.zoom, urlScene.terrain !== null ? TERRAIN_CAMERA_MAX_ZOOM : DEEP_LINK_MAX_ZOOM),
+    )
+  : BASE_MAX_ZOOM;
+
 registerTerrainProtocol();
 
 const map = new MaplibreMap({
   container: "map",
-  center: [128, 28],
-  zoom: 1.65,
+  center: urlCamera?.center ?? [128, 28],
+  zoom: urlCamera ? Math.min(urlCamera.zoom, initialMaxZoom) : 1.65,
   minZoom: 0,
-  maxZoom: urlCamera ? Math.max(BASE_MAX_ZOOM, Math.min(urlCamera.zoom, DEEP_LINK_MAX_ZOOM)) : BASE_MAX_ZOOM,
+  maxZoom: initialMaxZoom,
   // The view lives in the fragment, `#map=<zoom>/<lat>/<lon>`, kept
   // current on every move — so a copied address reproduces the view, and
   // the query string, which is what names the page, never changes on a pan.
@@ -985,10 +1002,6 @@ const map = new MaplibreMap({
 });
 map.addControl(new NavigationControl({ showCompass: false }), "top-right");
 
-/** The scene a link opened with: plane or globe, flat ground or relief.
- * The map holds it from here on (its own controls toggle both), and the
- * address bar reads it back off the map (`currentScene`). */
-const urlScene = parseSceneFromSearch(window.location.search);
 /** Whether the map holds the scene yet; until then the link's is the one. */
 let sceneApplied = false;
 const viewControl = new ViewControl({
@@ -7563,7 +7576,10 @@ function syncZoomCeiling(): void {
   const marks = view.marks.stations.soundings || view.marks.stations.airports || view.marks.stations.synop;
   // In 3D relief the ground carries detail the grid does not, so the camera
   // may go past the grid's ceiling, and past the DEM's own (overzoomed).
-  const relief = sceneApplied && map.getTerrain() ? TERRAIN_CAMERA_MAX_ZOOM : 0;
+  // Until the map holds the scene, the link's relief counts, so a deep link
+  // into it is not pulled back before the terrain is lifted.
+  const lifted = sceneApplied ? map.getTerrain() !== null : urlScene.terrain !== null;
+  const relief = lifted ? TERRAIN_CAMERA_MAX_ZOOM : 0;
   const ceiling = Math.max(dataZoomCeiling, marks && activeCase === null ? STATION_MAX_ZOOM : 0, relief);
   if (map.getMaxZoom() === ceiling) return;
   map.setMaxZoom(ceiling);
