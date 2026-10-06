@@ -794,15 +794,11 @@ function startTerrainShadows(): void {
     map,
     hillshadeLayer: TERRAIN_LAYER,
     darkGround: () => document.body.dataset.ground === "dark",
-    onChange: () => {
-      viewControl.syncShadow();
-      syncUrl();
-    },
+    onChange: syncUrl,
   });
   terrainShadows = shadows;
   syncShadowTime();
   shadows.setEnabled(urlScene.shadow);
-  viewControl.setShadow({ enabled: () => shadows.enabled, toggle: () => shadows.setEnabled(!shadows.enabled) });
 }
 
 /** The instant the sun is placed at: the playhead's valid time, or now

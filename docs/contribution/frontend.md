@@ -246,7 +246,8 @@ and the window shrinks to fit it.
   settles, and respawned when they leave the screen. On terrain their
   height follows the terrain mesh's own triangles, so the depth test against
   the terrain's packed depth is about ridges, not facets.
-- Terrain shadows (`?shadow=on`, the view tile's sun button): a worker
+- Terrain shadows (`?shadow=on`; no switch on the view tile until the
+  feature is finished): a worker
   (`shadow.worker.ts`) fetches the Terrarium tiles the hillshade uses and
   ray-marches toward the sun at the playhead's valid time (now, before a
   run) into a sunlit mask over a Mercator rectangle, the view plus a margin
