@@ -5,18 +5,29 @@
 
 > Xue (雪, pronounced /ɕɥɛ/, roughly "shweh"), Chinese for snow.
 
-Xue packs weather forecast runs and observation windows into per-variable
-Zarr v3 stores laid out for playback (quantized single-byte planes, small
-spatial tiles × six consecutive steps per chunk, one shard per variable;
-[`docs/zarr-profile.md`](docs/zarr-profile.md)) and plays them in a static
-MapLibre page. A Rust WebAssembly worker decodes chunks on demand, a WebGL2
-layer projects and colours them on the GPU, and wind renders as GPU
-particles. The layout was developed as a single-file container, `.xue`
-([`docs/format.md`](docs/format.md)); nothing has been published in it
-since 2026-09-15, and every decoder still reads it.
+**Live weather models, radar and satellite, played back in the browser:
+<https://xue.ringsaturn.me>**
 
-Live demo: <https://xue.ringsaturn.me>. The title in the top-left corner
-switches between sources.
+- Forecasts from GFS, ECMWF IFS and AIFS, HRRR and CFSv2: temperature,
+  precipitation, wind particles, isobars, upper-air charts, clear-air
+  turbulence; skew-T soundings and point meteograms anywhere.
+- Observations: MRMS, NEXRAD, JMA and CMA radar; Himawari, GOES and
+  Meteosat imagery with dust products; METAR, soundings, typhoon tracks.
+- A globe with terrain, 3D radar volumes, and replays of past events
+  ([showcase](https://xue.ringsaturn.me/showcase.html)).
+
+The title in the top-left corner switches between sources.
+
+There is no server behind it. Every run is a set of per-variable Zarr v3
+stores laid out for playback (quantized single-byte planes, small spatial
+tiles × six consecutive steps per chunk, one shard per variable;
+[`docs/zarr-profile.md`](docs/zarr-profile.md)) with a STAC catalog,
+published as static files on a CDN. The page reads them with HTTP Range
+requests: a Rust WebAssembly worker decodes chunks on demand, and a WebGL2
+layer projects and colours them on the GPU. The same stores open in
+Python with `xarray` or the `xuepy` wheel. Code is MIT or Apache-2.0.
+The earlier single-file container, `.xue` ([`docs/format.md`](docs/format.md)),
+is no longer published and every decoder still reads it.
 
 ## Sources
 
