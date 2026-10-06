@@ -4,9 +4,8 @@ import { onLocaleChange, t, type MessageKey } from "./i18n";
 import { globeProjection, isGlobeProjection } from "./projection";
 
 /**
- * The view tile under the zoom tile: the globe, the 3D relief and the
- * terrain's cast shadows as switches, then a way back to north and a way
- * back to a flat camera. The last two are there only while the camera has
+ * The view tile under the zoom tile: the globe and the 3D relief as
+ * switches, then a way back to north and a way back to a flat camera. The last two are there only while the camera has
  * turned or tilted, so the column is as short as the view lets it be; the
  * north button's needle turns with the map so it says which way north is
  * before it is pressed.
@@ -32,13 +31,6 @@ export interface ViewControlOptions {
   onVolumeTool?: (kind: "box" | "section") => void;
 }
 
-/** The terrain shadows' switch, handed over once `main.ts` has built them
- * (the button stays hidden until then). */
-export interface ShadowSwitch {
-  enabled: () => boolean;
-  toggle: () => void;
-}
-
 /** What the volume tools show: whether they are offered at all (only over
  * a volume), and whether each is armed or holds a selection. */
 export interface VolumeToolState {
@@ -57,13 +49,6 @@ const SECTION_ICON = `<svg viewBox="0 0 29 29" width="29" height="29" aria-hidde
   <path d="M10.5 18v-6.5M14.5 15v-7M18.5 12V6.5" fill="none" stroke="#333" stroke-width="1.3" stroke-linecap="round"/>
 </svg>`;
 
-const SHADOW_ICON = `<svg viewBox="0 0 29 29" width="29" height="29" aria-hidden="true">
-  <circle cx="9" cy="9" r="2.6" fill="none" stroke="#333" stroke-width="1.5"/>
-  <path d="M9 3.8v1.2M9 13v1.2M3.8 9h1.2M13 9h1.2M5.3 5.3l.9.9M11.8 11.8l.9.9M12.7 5.3l-.9.9M6.2 11.8l-.9.9" fill="none" stroke="#333" stroke-width="1.2" stroke-linecap="round"/>
-  <path d="M18 13.5 22.5 21.5H26z" fill="#333" fill-opacity="0.55"/>
-  <path d="M13.5 21.5 18 13.5l4.5 8z" fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round"/>
-</svg>`;
-
 const PITCH_ICON = `<svg viewBox="0 0 29 29" width="29" height="29" aria-hidden="true">
   <path d="M7 19.5h15" fill="none" stroke="#333" stroke-width="1.6" stroke-linecap="round"/>
   <path d="M8.5 15.5 20.5 9.5" fill="none" stroke="#333" stroke-width="1.6" stroke-linecap="round" stroke-dasharray="2 2.2"/>
@@ -75,8 +60,6 @@ export class ViewControl implements IControl {
   private container: HTMLElement | null = null;
   private globe: HTMLButtonElement | null = null;
   private terrain: HTMLButtonElement | null = null;
-  private shadow: HTMLButtonElement | null = null;
-  private shadowSwitch: ShadowSwitch | null = null;
   private north: HTMLButtonElement | null = null;
   private needle: HTMLElement | null = null;
   private flat: HTMLButtonElement | null = null;
@@ -98,9 +81,6 @@ export class ViewControl implements IControl {
       if (map.getTerrain()) map.setTerrain(null);
       else map.setTerrain({ source: this.options.terrainSource, exaggeration: this.options.exaggeration() });
     });
-    this.shadow = this.button(container, "view-control-shadow", "viewShadowAria", () => this.shadowSwitch?.toggle());
-    this.shadow.querySelector(".maplibregl-ctrl-icon")!.innerHTML = SHADOW_ICON;
-    this.shadow.hidden = this.shadowSwitch === null;
     this.north = this.button(container, "maplibregl-ctrl-compass", "viewResetNorthAria", () => {
       map.easeTo({ bearing: 0 });
     });
@@ -160,28 +140,13 @@ export class ViewControl implements IControl {
   }
 
   private readonly label = (): void => {
-    for (const button of [this.globe, this.terrain, this.shadow, this.north, this.flat, this.box, this.section]) {
+    for (const button of [this.globe, this.terrain, this.north, this.flat, this.box, this.section]) {
       if (!button) continue;
       const text = t(button.dataset.label as MessageKey);
       button.title = text;
       button.setAttribute("aria-label", text);
     }
   };
-
-  /** Offer the shadow switch, and show whether it is on. */
-  setShadow(shadowSwitch: ShadowSwitch): void {
-    this.shadowSwitch = shadowSwitch;
-    if (this.shadow?.hidden) {
-      this.shadow.hidden = false;
-      this.options.onResize?.();
-    }
-    this.syncShadow();
-  }
-
-  /** Show whether the shadows are on, after they were switched. */
-  syncShadow(): void {
-    this.shadow?.setAttribute("aria-pressed", String(this.shadowSwitch?.enabled() ?? false));
-  }
 
   /** Offer the volume tools, or not, and show which is armed or active. */
   setVolumeTools(state: VolumeToolState): void {

@@ -182,7 +182,6 @@ export const ja: Record<MessageKey, string> = {
   themeToggleAria: "ライト / ダークを切り替え",
   viewGlobeAria: "地球儀表示",
   viewTerrainAria: "3D 地形",
-  viewShadowAria: "地形の影",
   viewResetNorthAria: "北を上に戻す",
   viewResetPitchAria: "傾きをリセット",
   viewBoxAria: "嵐のクローズアップ：範囲をドラッグ",

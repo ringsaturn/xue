@@ -187,7 +187,6 @@ export const ko: Record<MessageKey, string> = {
   themeToggleAria: "밝게 / 어둡게 전환",
   viewGlobeAria: "지구본 보기",
   viewTerrainAria: "3D 지형",
-  viewShadowAria: "지형 그림자",
   viewResetNorthAria: "북쪽으로 재설정",
   viewResetPitchAria: "기울기 재설정",
   viewBoxAria: "폭풍 확대: 영역을 드래그",
