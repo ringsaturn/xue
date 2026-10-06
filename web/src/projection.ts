@@ -66,9 +66,11 @@ float surfaceTexel(ivec2 at) {
   vec4 rgb = (texelFetch(u_terrain, at, 0) * 255.0) * u_terrain_unpack;
   return rgb.r + rgb.g + rgb.b - u_terrain_unpack.a;
 }
-// DEM texel coordinates of a tile-local position (0..8192).
+// DEM texel coordinates of a tile-local position (0..8192): MapLibre's
+// \`get_elevation\` places DEM pixel i at the centre of cell i, behind a
+// two-texel border, so the texel coordinate is uv * dim + 1.5.
 vec2 surfaceDemCoord(vec2 tilePosition) {
-  return (u_terrain_matrix * vec4(tilePosition, 0.0, 1.0)).xy * u_terrain_dim + 1.0;
+  return (u_terrain_matrix * vec4(tilePosition, 0.0, 1.0)).xy * u_terrain_dim + 1.5;
 }
 float surfaceElevation(vec2 coord);
 // The height the terrain's own mesh has at a tile-local position: the DEM at
