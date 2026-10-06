@@ -963,10 +963,8 @@ const map = new MaplibreMap({
   hash: "map",
   attributionControl: false,
   style: appliedBasemapStyle,
-  // Steep enough to look along a valley once the ground is in 3D relief,
-  // and short of the near-level views where the terrain camera's ground
-  // point runs kilometres out for a few pixels of mouse travel.
-  maxPitch: 80,
+  // Steep enough to look along a valley once the ground is in 3D relief.
+  maxPitch: 85,
 });
 map.addControl(new NavigationControl({ showCompass: false }), "top-right");
 
