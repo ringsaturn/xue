@@ -8,13 +8,19 @@
  * decoded elevations are kept here too, since decoding a WebP and unpacking
  * it costs more than the march over the same pixels.
  *
+ * The march runs on the GPU (`shadowgl.ts`, the worker's own WebGL2
+ * context) and falls back to `marchLit` on the CPU for good the first time
+ * the GPU fails: no WebGL2 in workers, a shader that does not build, a lost
+ * context. A mosaic too large for the GPU path goes to the CPU alone.
+ *
  * Requests carry increasing ids and only the newest one matters: a request
  * that has been superseded by the time its tiles arrive is dropped before
  * the march, the step that costs.
  */
 
-import { apparentSun, latitudeAt, marchLit, planMosaic, type MosaicTile } from "./shadow";
-import type { ShadowError, ShadowRequest, ShadowResult } from "./shadowtypes";
+import { apparentSun, latitudeAt, marchLit, planMosaic, type MosaicGeometry, type MosaicTile } from "./shadow";
+import { ShadowGL } from "./shadowgl";
+import type { ShadowBackend, ShadowError, ShadowRequest, ShadowResult } from "./shadowtypes";
 import { TERRAIN_TILE_SIZE, terrainTileUrl, terrariumElevation } from "./terrain";
 
 const MAX_CACHED_TILES = 96;
@@ -25,6 +31,8 @@ const scope = self as unknown as DedicatedWorkerGlobalScope;
 const tileCache = new Map<string, Promise<Float32Array | null>>();
 let newestId = -Infinity;
 let canvas: OffscreenCanvas | null = null;
+/** Undefined until first wanted; null once it has failed. */
+let gpu: ShadowGL | null | undefined;
 
 async function fetchBitmap(tile: MosaicTile): Promise<ImageBitmap | null> {
   try {
@@ -103,8 +111,62 @@ function inked(lit: Uint8Array, width: number, height: number, ink: NonNullable<
   return createImageBitmap(new ImageData(rgba, width, height));
 }
 
+function gpuMarcher(): ShadowGL | null {
+  if (gpu === undefined) {
+    try {
+      gpu = new ShadowGL();
+    } catch (error) {
+      disableGpu(error);
+    }
+  }
+  return gpu ?? null;
+}
+
+function disableGpu(error: unknown): void {
+  try {
+    gpu?.dispose();
+  } catch {
+    // A lost context may refuse even its own cleanup.
+  }
+  gpu = null;
+  const reason = error instanceof Error ? error.message : String(error);
+  console.warn(`terrain shadows: marching on the CPU, the GPU path failed (${reason})`);
+}
+
+interface Marched {
+  lit: Uint8Array;
+  image?: ImageBitmap;
+  backend: ShadowBackend;
+}
+
+async function marchOn(mosaic: Float32Array, plan: MosaicGeometry, request: ShadowRequest): Promise<Marched> {
+  const wanted = request.backend ?? "auto";
+  if (wanted !== "cpu") {
+    const marcher = gpuMarcher();
+    if (marcher) {
+      try {
+        const marched = marcher.march(mosaic, plan, request.time, request.ink);
+        if (marched) return { ...marched, backend: "gpu" };
+      } catch (error) {
+        disableGpu(error);
+      }
+    }
+    if (wanted === "gpu") throw new Error("the GPU shadow march is unavailable for this request");
+  }
+  const lit = marchLit(mosaic, plan, request.time);
+  const image = request.ink ? await inked(lit, plan.inner.width, plan.inner.height, request.ink) : undefined;
+  return { lit, image, backend: "cpu" };
+}
+
+/** The widest mosaic the CPU march gets, whatever was asked: it costs
+ * hundreds of milliseconds at this size and grows with the pixel count,
+ * where the GPU's tens barely notice. */
+const CPU_MAX_PIXELS = 1280;
+
 async function handle(request: ShadowRequest): Promise<void> {
-  const plan = planMosaic(request.bounds, request.zoom, request.time, { maxPixels: request.maxPixels });
+  const onCpu = request.backend === "cpu" || (request.backend !== "gpu" && gpuMarcher() === null);
+  const maxPixels = onCpu ? Math.min(request.maxPixels ?? CPU_MAX_PIXELS, CPU_MAX_PIXELS) : request.maxPixels;
+  const plan = planMosaic(request.bounds, request.zoom, request.time, { maxPixels });
   const decoded = await Promise.all(plan.tiles.map(loadTile));
   if (request.id < newestId) return;
   const mosaic = new Float32Array(plan.width * plan.height);
@@ -112,13 +174,17 @@ async function handle(request: ShadowRequest): Promise<void> {
     const metres = decoded[i];
     if (metres) blit(mosaic, plan.width, plan.height, tile, metres);
   });
-  const lit = marchLit(mosaic, plan, request.time);
+  const started = performance.now();
+  const { lit, image, backend } = await marchOn(mosaic, plan, request);
+  const marchMs = performance.now() - started;
   const { innerRect } = plan;
   const centreLat = latitudeAt((innerRect.y0 + innerRect.y1) / 2);
   const centreLon = ((innerRect.x0 + innerRect.x1) / 2) * 360 - 180;
   const sun = apparentSun(request.time, centreLat, centreLon);
-  const image = request.ink ? await inked(lit, plan.inner.width, plan.inner.height, request.ink) : undefined;
-  if (request.id < newestId) return;
+  if (request.id < newestId) {
+    image?.close();
+    return;
+  }
   const result: ShadowResult = {
     type: "shadow",
     id: request.id,
@@ -130,6 +196,8 @@ async function handle(request: ShadowRequest): Promise<void> {
     lit,
     image,
     sun,
+    backend,
+    marchMs,
   };
   scope.postMessage(result, image ? [lit.buffer, image] : [lit.buffer]);
 }

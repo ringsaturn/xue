@@ -26,7 +26,13 @@ export interface ShadowRequest {
   /** When given, the worker also inks the mask for the basemap: `rgb` in
    * full shadow at `alpha`, transparent in sun. */
   ink?: { rgb: readonly [number, number, number]; alpha: number };
+  /** Where to march: "auto" (the default) tries the GPU and falls back to
+   * the CPU; "cpu" and "gpu" force one, to compare them. A forced "gpu"
+   * that cannot run answers with a `ShadowError`. */
+  backend?: "auto" | ShadowBackend;
 }
+
+export type ShadowBackend = "cpu" | "gpu";
 
 export interface ShadowResult {
   type: "shadow";
@@ -46,6 +52,10 @@ export interface ShadowResult {
   /** The sun at the rectangle's centre, degrees: azimuth clockwise from
    * north, elevation above the horizon (refraction included). */
   sun: { azimuth: number; elevation: number };
+  /** Which marcher produced the mask, and how long the march (and the
+   * inking) took in milliseconds: diagnostics. */
+  backend: ShadowBackend;
+  marchMs: number;
 }
 
 export interface ShadowError {

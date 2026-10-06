@@ -47,10 +47,10 @@ const MIN_LIGHT_ELEVATION = 5;
  * while the march still costs a full view's worth of pixels; the switch
  * stays on and the shadows come back once the camera is close again. */
 export const MIN_SHADOW_ZOOM = 9;
-/** The widest mask side the worker builds, margin included: the march
- * grows with the pixel count, and the mask is drawn with linear filtering,
- * so a coarser one than the screen costs only the shadows' sharpest edges. */
-const SHADOW_MAX_PIXELS = 1280;
+/** The widest mask side asked for, margin included. The worker marches it
+ * on the GPU in tens of milliseconds; when it falls back to the CPU it
+ * caps the size itself. */
+const SHADOW_MAX_PIXELS = 2048;
 /** The hillshade is relit only when the sun has moved this far, in
  * degrees: a paint change makes MapLibre redraw every draped terrain tile. */
 const LIGHT_STEP = 2;

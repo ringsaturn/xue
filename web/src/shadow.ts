@@ -13,26 +13,26 @@
 
 import { TERRAIN_MAX_ZOOM, TERRAIN_TILE_SIZE } from "./terrain";
 
-const DEG = Math.PI / 180;
+export const DEG = Math.PI / 180;
 /** Web Mercator's latitude limit, where the square world ends. */
 export const MERCATOR_MAX_LAT = 85.05112878;
-const EQUATOR_METRES = 40075016.7;
+export const EQUATOR_METRES = 40075016.7;
 const EARTH_RADIUS = 6371000;
 /** Terrestrial refraction bends sight lines over the curve; surveyors fold it
  * into an effective radius R / (1 - k), k = 0.13. */
-const EFFECTIVE_RADIUS = EARTH_RADIUS / (1 - 0.13);
+export const EFFECTIVE_RADIUS = EARTH_RADIUS / (1 - 0.13);
 /** The sun's apparent radius: the penumbra's half-width. */
-const SUN_RADIUS = 0.267;
+export const SUN_RADIUS = 0.267;
 /** Civil twilight: below this the ground gets no light worth drawing. */
-const NIGHT = -6;
-const MIN_ELEVATION = 0.5;
+export const NIGHT = -6;
+export const MIN_ELEVATION = 0.5;
 export const MAX_SHADOW_METRES = 120000;
 /** The relief assumed before any tile is read, sizing the margin casters can
  * stand in. */
 export const DEFAULT_RELIEF = 4000;
 export const DEFAULT_MAX_PIXELS = 2048;
 const MARGIN_PIXELS = 64;
-const STEP_GROWTH = 1.06;
+export const STEP_GROWTH = 1.06;
 
 export interface SunPosition {
   /** Degrees clockwise from north. */
@@ -83,7 +83,7 @@ export function solarEphemeris(timeMs: number): SolarEphemeris {
 }
 
 /** The hour angle at a longitude, radians, west of the meridian positive. */
-function hourAngle(ephemeris: SolarEphemeris, lonDeg: number): number {
+export function hourAngle(ephemeris: SolarEphemeris, lonDeg: number): number {
   return ((ephemeris.solarMinutes + 4 * lonDeg) / 4 - 180) * DEG;
 }
 

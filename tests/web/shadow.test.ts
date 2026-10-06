@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  latitudeAt,
   marchLit,
   mercatorX,
   metresPerPixel,
@@ -11,6 +12,7 @@ import {
   worldPixels,
   type MosaicGeometry,
 } from "../../web/src/shadow";
+import { MAX_MARCH_STEPS, marchStepBound, marchUniforms } from "../../web/src/shadowgl";
 
 describe("solarPosition", () => {
   it("matches NREL's solar position reference case", () => {
@@ -209,5 +211,57 @@ describe("planMosaic", () => {
     expect(plan.rect.y0).toBeGreaterThanOrEqual(0);
     expect(plan.originY).toBeGreaterThanOrEqual(0);
     expect(plan.tiles.every((tile) => tile.y >= 0)).toBe(true);
+  });
+});
+
+describe("GPU march inputs", () => {
+  const geometry: MosaicGeometry = {
+    demZoom: 10,
+    originX: 232000,
+    originY: 103000,
+    width: 1280,
+    height: 900,
+    inner: { x: 170, y: 64, width: 948, height: 573 },
+  };
+  const time = Date.UTC(2026, 9, 6, 8, 0);
+
+  it("reproduces each pixel's sun from the packed uniforms", () => {
+    const u = marchUniforms(geometry, time);
+    expect(Math.abs(u.hourAngle0)).toBeLessThanOrEqual(Math.PI);
+    const world = worldPixels(geometry.demZoom);
+    for (const [col, row] of [
+      [0, 0],
+      [947, 0],
+      [400, 300],
+      [947, 572],
+    ] as const) {
+      // The shader's arithmetic, in double precision.
+      const lat = Math.atan(Math.sinh(u.mercatorArg0 - row * u.mercatorArgStep));
+      const h = u.hourAngle0 + col * u.hourAngleStep;
+      const sinE =
+        Math.sin(lat) * u.sinDeclination + Math.cos(lat) * u.cosDeclination * Math.cos(h);
+      const elevation = (Math.asin(sinE) * 180) / Math.PI;
+      const latDeg = latitudeAt((geometry.originY + geometry.inner.y + row + 0.5) / world);
+      const lonDeg = ((geometry.originX + geometry.inner.x + col + 0.5) / world) * 360 - 180;
+      expect((lat * 180) / Math.PI).toBeCloseTo(latDeg, 9);
+      expect(elevation).toBeCloseTo(solarPosition(time, latDeg, lonDeg).elevation, 6);
+      expect(u.metresPerPixel * Math.cos(lat)).toBeCloseTo(metresPerPixel(geometry.demZoom, latDeg), 6);
+    }
+  });
+
+  it("bounds the march loop beyond any mosaic's diagonal", () => {
+    for (const side of [64, 1280, 2048, 4096]) {
+      const bound = marchStepBound(side, side);
+      expect(bound).toBeLessThanOrEqual(MAX_MARCH_STEPS);
+      // The march has left the mosaic by then.
+      let travelled = 0;
+      let step = 1;
+      for (let i = 0; i < bound - 2; i++) {
+        travelled += step;
+        step *= 1.06;
+      }
+      expect(travelled).toBeGreaterThan(Math.hypot(side, side));
+    }
+    expect(marchStepBound(40000, 40000)).toBeGreaterThan(MAX_MARCH_STEPS);
   });
 });
