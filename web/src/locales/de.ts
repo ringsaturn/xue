@@ -139,6 +139,7 @@ export const de: Record<MessageKey, string> = {
   creditsRadar: "RADARKOMPOSIT",
   creditsBasemap: "BASISKARTE · © OPENSTREETMAP-MITWIRKENDE",
   creditsTerrain: "GELÄNDERELIEF · © MAPTERHORN · HÖHENDATEN-QUELLEN",
+  creditsPeaks: "GIPFELNAMEN & HÖHEN · CC0",
   creditsCode: "QUELLCODE · RINGSATURN/XUE",
   caseTag: "FALL",
   caseSummaryAria: "Fallbeschreibung",

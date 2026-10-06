@@ -136,6 +136,7 @@ export const zhHant: Record<MessageKey, string> = {
   creditsRadar: "雷達拼圖",
   creditsBasemap: "底圖 · © OPENSTREETMAP 貢獻者",
   creditsTerrain: "地形暈渲 · © MAPTERHORN · 高程資料來源一覽",
+  creditsPeaks: "山峰名稱與海拔 · CC0",
   creditsCode: "原始碼 · RINGSATURN/XUE",
   caseTag: "個案",
   caseSummaryAria: "個案摘要",

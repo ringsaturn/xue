@@ -139,6 +139,7 @@ export const es: Record<MessageKey, string> = {
   creditsRadar: "MOSAICO RADAR",
   creditsBasemap: "MAPA BASE · © COLABORADORES DE OPENSTREETMAP",
   creditsTerrain: "RELIEVE DEL TERRENO · © MAPTERHORN · FUENTES DE DATOS DE ELEVACIÓN",
+  creditsPeaks: "NOMBRES Y ALTITUDES DE CUMBRES · CC0",
   creditsCode: "CÓDIGO FUENTE · RINGSATURN/XUE",
   caseTag: "CASO",
   caseSummaryAria: "Resumen del caso",

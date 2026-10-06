@@ -142,6 +142,7 @@ export const tr: Record<MessageKey, string> = {
   creditsRadar: "RADAR MOZAİĞİ",
   creditsBasemap: "ALTLIK HARİTA · © OPENSTREETMAP KATKIDA BULUNANLAR",
   creditsTerrain: "KABARTMA · © MAPTERHORN · YÜKSEKLİK VERİSİ KAYNAKLARI",
+  creditsPeaks: "ZİRVE ADLARI VE YÜKSEKLİKLERİ · CC0",
   creditsCode: "KAYNAK KODU · RINGSATURN/XUE",
   caseTag: "VAKA",
   caseSummaryAria: "Vaka özeti",

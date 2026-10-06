@@ -139,6 +139,7 @@ export const fr: Record<MessageKey, string> = {
   creditsRadar: "MOSAÏQUE RADAR",
   creditsBasemap: "FOND DE CARTE · © CONTRIBUTEURS OPENSTREETMAP",
   creditsTerrain: "RELIEF · © MAPTERHORN · SOURCES DES DONNÉES D'ÉLÉVATION",
+  creditsPeaks: "NOMS ET ALTITUDES DES SOMMETS · CC0",
   creditsCode: "CODE SOURCE · RINGSATURN/XUE",
   caseTag: "CAS",
   caseSummaryAria: "Résumé du cas",

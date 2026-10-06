@@ -274,6 +274,7 @@ import {
   TERRAIN_SOURCE,
   TERRAIN_TILES,
 } from "./terrain";
+import { PeakLabels } from "./peaks";
 import { applyPageMeta } from "./pagemeta";
 import {
   caseCameraLimits,
@@ -988,6 +989,13 @@ function currentScene(): SceneState {
   };
 }
 
+/** Named peaks, drawn while the ground is in 3D relief. */
+const peakLabels = new PeakLabels(map, () => ({ basemapLang, htmlLang }));
+
+function syncPeakLabels(): void {
+  if (peakLabels.setVisible(map.getTerrain() !== null)) applyBasemapInk(document.body.dataset.ground === "dark");
+}
+
 /** Put the link's scene on the map once the style (and the relief source in
  * it) exists, then keep the address bar following the map's controls. */
 function applySceneFromUrl(): void {
@@ -999,8 +1007,10 @@ function applySceneFromUrl(): void {
     syncUrl();
     syncZoomCeiling();
     syncLapse();
+    syncPeakLabels();
   });
   syncZoomCeiling();
+  syncPeakLabels();
 }
 
 type StyleProperties = Record<string, unknown> | undefined;
@@ -8870,6 +8880,7 @@ function applyLocale(): void {
   else applyPageMeta({ path: activeCase ? `/?case=${encodeURIComponent(activeCase.id)}` : "/" });
   renderProbe();
   syncBasemapStyle();
+  peakLabels.syncLanguage();
   // The H/L letters on the pressure centers are the dictionary's.
   refreshLabels();
   renderTcSheet();

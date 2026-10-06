@@ -136,6 +136,7 @@ export const ja: Record<MessageKey, string> = {
   creditsRadar: "レーダー合成図",
   creditsBasemap: "ベースマップ · © OPENSTREETMAP 貢献者",
   creditsTerrain: "地形陰影 · © MAPTERHORN · 標高データ出典一覧",
+  creditsPeaks: "山名と標高 · CC0",
   creditsCode: "ソースコード · RINGSATURN/XUE",
   caseTag: "事例",
   caseSummaryAria: "事例の概要",

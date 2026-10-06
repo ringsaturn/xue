@@ -273,6 +273,7 @@ export const en = {
    * named; the elevation models behind each region are far too many to list
    * here, so the row links to Mapterhorn's own attribution page, which does. */
   creditsTerrain: "TERRAIN RELIEF · © MAPTERHORN · ELEVATION MODEL SOURCES",
+  creditsPeaks: "MOUNTAIN PEAK NAMES & HEIGHTS · CC0",
   creditsCode: "SOURCE CODE · RINGSATURN/XUE",
   caseTag: "CASE",
   caseSummaryAria: "Case summary",

@@ -141,6 +141,7 @@ export const ru: Record<MessageKey, string> = {
   creditsRadar: "РАДАРНАЯ МОЗАИКА",
   creditsBasemap: "ПОДЛОЖКА · © УЧАСТНИКИ OPENSTREETMAP",
   creditsTerrain: "РЕЛЬЕФ · © MAPTERHORN · ИСТОЧНИКИ ДАННЫХ О ВЫСОТАХ",
+  creditsPeaks: "НАЗВАНИЯ И ВЫСОТЫ ВЕРШИН · CC0",
   creditsCode: "ИСХОДНЫЙ КОД · RINGSATURN/XUE",
   caseTag: "СЛУЧАЙ",
   caseSummaryAria: "Описание случая",
