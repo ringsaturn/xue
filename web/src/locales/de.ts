@@ -7,7 +7,7 @@ import type { MessageKey } from "./en";
 
 export const de: Record<MessageKey, string> = {
   metaDescription:
-    "Kostenlose GFS- und ECMWF-Modellkarten bis 240 Stunden: Temperatur, Niederschlag, Wind, Isobaren des Luftdrucks auf Meereshöhe, 500/850-hPa-Höhenkarten, Feuchte und Wasserdampftransport in der Höhe.",
+    "Kostenlose Live-Wetterkarten im Browser: GFS-, ECMWF- und AIFS-Vorhersagen, Radar- und Satellitenloops, Taifunzugbahnen, 3D-Radar und Skew-T-Diagramme.",
   pageTitleLive: "{variable} – Vorhersagekarte · {model} {hours}H",
   pageTitleLiveObservation: "{variable} – Beobachtungskarte · {model} · letzte {hours} h",
   mapAria: "Globale Vorhersagekarte für Temperatur und Niederschlag",

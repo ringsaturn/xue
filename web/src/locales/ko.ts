@@ -9,7 +9,7 @@ import type { MessageKey } from "./en";
 
 export const ko: Record<MessageKey, string> = {
   metaDescription:
-    "무료 GFS·ECMWF 수치예보 지도: 240시간 전 지구 기온·강수·바람, 해면기압 등압선, 500/850 hPa 상층 일기도, 상층 습도와 수증기 수송을 브라우저에서 애니메이션으로.",
+    "무료 실시간 날씨 지도를 브라우저에서: GFS·ECMWF·AIFS 수치예보, 레이더와 위성 영상 애니메이션, 태풍 경로, 3D 레이더, 스큐-T 단열선도.",
   pageTitleLive: "{variable} 예보 지도 · {model} {hours}H",
   pageTitleLiveObservation: "{variable} 관측 지도 · {model} · 최근 {hours}시간",
   mapAria: "전 지구 기온·강수 예보 지도",

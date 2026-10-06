@@ -10,7 +10,7 @@ import type { MessageKey } from "./en";
 
 export const tr: Record<MessageKey, string> = {
   metaDescription:
-    "240 saate kadar ücretsiz GFS ve ECMWF hava modeli haritaları: sıcaklık, yağış, rüzgar, deniz seviyesi basıncı izobarları, 500/850 hPa haritaları, üst atmosfer nemi ve nem akısı.",
+    "Tarayıcıda ücretsiz canlı hava durumu haritaları: GFS, ECMWF ve AIFS tahminleri, radar ve uydu animasyonları, tayfun rotaları, 3B radar ve skew-T diyagramları.",
   pageTitleLive: "{variable} tahmin haritası · {model} {hours}H",
   pageTitleLiveObservation: "{variable} gözlem haritası · {model} · son {hours} saat",
   mapAria: "Küresel sıcaklık ve yağış tahmin haritası",

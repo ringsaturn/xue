@@ -10,7 +10,7 @@
 
 export const en = {
   metaDescription:
-    "Free GFS and ECMWF weather model maps to 240 hours: temperature, precipitation, wind, MSLP isobars, 500/850 hPa charts, upper-air humidity and moisture flux.",
+    "Free live weather maps in your browser: GFS, ECMWF and AIFS forecasts, radar and satellite loops, typhoon tracks, 3D radar and skew-T soundings.",
   /** The live viewer's document title, what a search result for `/` shows:
    * the field by its localized label, the kind of thing this is, and the
    * model with its horizon (`{hours}H` stays as the instrument reads it).

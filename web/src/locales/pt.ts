@@ -7,7 +7,7 @@ import type { MessageKey } from "./en";
 
 export const pt: Record<MessageKey, string> = {
   metaDescription:
-    "Mapas gratuitos dos modelos GFS e ECMWF até 240 horas: temperatura, precipitação, vento, isóbaras de pressão ao nível do mar, cartas de 500/850 hPa, humidade e fluxo de vapor de água em altitude.",
+    "Mapas meteorológicos ao vivo e gratuitos no navegador: previsões GFS, ECMWF e AIFS, animações de radar e satélite, trajetórias de tufões, radar 3D e diagramas skew-T.",
   pageTitleLive: "Mapa de previsão: {variable} · {model} {hours}H",
   pageTitleLiveObservation: "Mapa de observação: {variable} · {model} · últimas {hours} h",
   mapAria: "Mapa global de previsão de temperatura e precipitação",

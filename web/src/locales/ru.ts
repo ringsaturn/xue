@@ -9,7 +9,7 @@ import type { MessageKey } from "./en";
 
 export const ru: Record<MessageKey, string> = {
   metaDescription:
-    "Бесплатные карты моделей GFS и ECMWF на 240 часов: температура, осадки, ветер, изобары приземного давления, карты 500/850 гПа, влажность и перенос водяного пара на высотах.",
+    "Бесплатные карты погоды в реальном времени в браузере: прогнозы GFS, ECMWF и AIFS, анимации радаров и спутников, траектории тайфунов, 3D-радар и диаграммы skew-T.",
   pageTitleLive: "Прогностическая карта: {variable} · {model} {hours}H",
   pageTitleLiveObservation: "Карта наблюдений: {variable} · {model} · последние {hours} ч",
   mapAria: "Глобальная карта прогноза температуры и осадков",
