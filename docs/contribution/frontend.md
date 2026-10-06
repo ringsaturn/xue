@@ -138,7 +138,13 @@ and the window shrinks to fit it.
   hillshade under it is hidden); particles hide behind ridges through the
   terrain's packed depth texture. Tile meshes carry skirts for LOD seams.
   The terrain uses its own copy of the Mapterhorn source (MapLibre renders
-  hillshade and terrain worse from one). The zoom ceiling is z16 for every
+  hillshade and terrain worse from one). `keepTerrainCameraStill` patches
+  the transform so the camera never jumps over relief: MapLibre clamps the
+  center to the ground and moves the camera whenever the ground under it
+  re-samples differently (after every gesture and glide, when a sharper DEM
+  tile lands), so idle re-samples slide the center along the view ray
+  instead, and the globe transform copies a gesture's end back from its
+  Mercator half. The zoom ceiling is z16 for every
   view: in relief, real detail where a regional archive reaches it (Japan's
   does), the z12 tile overzoomed elsewhere. The switches and the way back to north and to a flat camera share
   one tile under the zoom tile (`viewcontrol.ts`); the two resets show only

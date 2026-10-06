@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { gridMesh, mercatorYUnclamped, SKIRT_OFFSET, skirtedTileMesh, withDefines, worldRowAt } from "../../web/src/projection";
+import type { Map as MaplibreMap } from "maplibre-gl";
+
+import { gridMesh, keepTerrainCameraStill, mercatorYUnclamped, SKIRT_OFFSET, skirtedTileMesh, withDefines, worldRowAt } from "../../web/src/projection";
 import { parseSceneFromSearch, searchWithScene, DEFAULT_TERRAIN_EXAGGERATION } from "../../web/src/urlstate";
 
 describe("gridMesh", () => {
@@ -88,5 +90,75 @@ describe("particle pacing and seeding", () => {
     expect(zoomPace(4)).toBe(1);
     expect(zoomPace(5)).toBe(0.5);
     expect(zoomPace(10)).toBe(1 / 64);
+  });
+});
+
+describe("keepTerrainCameraStill", () => {
+  /** A map whose transform is one instance of a one-off prototype. */
+  function fakeMap() {
+    const calls: string[] = [];
+    const prototype = {
+      elevation: 100,
+      _helper: {
+        recalculateZoomAndCenter(elevation: number) {
+          calls.push(`walk ${elevation}`);
+        },
+        _calcMatrices() {
+          calls.push("matrices");
+        },
+      },
+      setElevation(elevation: number) {
+        calls.push(`camera ${elevation}`);
+        this.elevation = elevation;
+      },
+    };
+    const transform = Object.create(prototype) as typeof prototype;
+    const camera = { transform, elevationFreeze: false, easing: false, isEasing: () => camera.easing };
+    const map = {
+      _camera: camera,
+      terrain: {} as unknown,
+      on() {},
+      setTerrain(options: unknown) {
+        transform.setElevation(options ? 300 : 0);
+        return map;
+      },
+    };
+    keepTerrainCameraStill(map as unknown as MaplibreMap);
+    return { map, camera, transform, calls };
+  }
+
+  it("slides the center along the ray when the ground re-samples at rest", () => {
+    const { transform, calls } = fakeMap();
+    transform.setElevation(130);
+    expect(calls).toEqual(["walk 130", "matrices"]);
+  });
+
+  it("leaves a settled center alone", () => {
+    const { transform, calls } = fakeMap();
+    transform.setElevation(100.5);
+    expect(calls).toEqual([]);
+  });
+
+  it("moves the camera during a gesture, an ease, a toggle, and without terrain", () => {
+    const { map, camera, transform, calls } = fakeMap();
+    camera.elevationFreeze = true;
+    transform.setElevation(130);
+    camera.elevationFreeze = false;
+    camera.easing = true;
+    transform.setElevation(160);
+    camera.easing = false;
+    map.setTerrain({});
+    map.terrain = null;
+    transform.setElevation(0);
+    expect(calls).toEqual(["camera 130", "camera 160", "camera 300", "camera 0"]);
+  });
+
+  it("gives up the walk when its steps stop shrinking", () => {
+    const { transform, calls } = fakeMap();
+    // The fake helper never moves the center, so every step stays 30 m.
+    transform.setElevation(130);
+    transform.setElevation(130);
+    transform.setElevation(130);
+    expect(calls).toEqual(["walk 130", "matrices", "walk 130", "matrices", "camera 130"]);
   });
 });

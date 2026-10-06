@@ -425,39 +425,114 @@ export function terrainMeshSize(map: MaplibreMap): number {
   return typeof size === "number" && size > 0 ? size : 128;
 }
 
-/** The globe transform's internals the gesture fix below reaches. */
-interface GlobeTransformInternals {
-  isGlobeRendering: boolean;
-  _mercatorTransform: unknown;
+/** The transform internals the terrain camera fix below reaches. */
+interface TransformInternals {
+  elevation: number;
+  /** Globe transform only: true while the globe, not its Mercator half, renders. */
+  isGlobeRendering?: boolean;
+  /** Globe transform only. */
+  _mercatorTransform?: unknown;
+  _helper: { recalculateZoomAndCenter(elevation: number): void; _calcMatrices(): void };
   apply(source: unknown, forceOverrideZ: boolean): void;
   recalculateZoomAndCenter(terrain?: unknown): void;
+  setElevation(elevation: number): void;
 }
 
-const GESTURE_FIX = Symbol("xue.globeTerrainGestureFix");
+interface CameraInternals {
+  transform?: TransformInternals;
+  elevationFreeze?: boolean;
+  isEasing(): boolean;
+}
+
+const CAMERA_FIX = Symbol("xue.terrainCameraFix");
+
+/** A center this close to the ground is on it; stopping here ends the walk below. */
+const SETTLED_ELEVATION_M = 1;
 
 /**
- * Keep the camera still when a pan or zoom over the 3D relief ends on the
- * globe. A terrain gesture holds the center's elevation frozen and, as it
- * ends, moves the center onto the ground under it while keeping the camera
- * where it is (`recalculateZoomAndCenter`). The globe transform past its
- * Mercator zoom hands that to its Mercator half and never copies the result
- * back, as its own `setLocationAtPoint` does, so the next frame drops the
- * center straight onto the ground below it instead, and the camera with it:
- * hundreds of metres on a mountain side, a visible jump. This copies the
- * result back. Applied to the globe transform's prototype, once.
+ * Keep the camera still over the 3D relief. MapLibre clamps the center to
+ * the ground and, whenever the ground under it turns out elsewhere, moves
+ * the camera with the center (`setElevation`: same center, same zoom, new
+ * height), which the viewer sees as the whole scene shifting. That happens
+ * right after every gesture, since a gesture ends by moving the center onto
+ * the terrain *mesh* under the screen center and the next frame re-samples
+ * the DEM there (metres to tens of metres apart on rough ground), after an
+ * inertia glide for the same reason, and whenever a sharper DEM tile lands
+ * under the center. Here an idle re-sample slides the center along the view
+ * ray onto the new elevation instead, the camera where it is: a fixed-point
+ * walk that converges on ground gentler than the ray and is invisible at
+ * every step; where it would not converge, the camera moves as before. The
+ * gesture and ease paths, terrain toggles and the globe's own rendering
+ * keep MapLibre's behaviour: the first two already keep the camera still,
+ * a toggle wants the camera lifted, and the globe ignores terrain.
+ *
+ * The globe transform past its Mercator zoom also hands the gesture's end
+ * to its Mercator half and never copies the result back, as its own
+ * `setLocationAtPoint` does, so without the copy the next frame dropped the
+ * center straight onto the ground below it, and the camera with it:
+ * hundreds of metres on a mountain side. Applied to the prototype of
+ * whichever transform the map has, once each.
  */
-export function keepGlobeTerrainGesturesStill(map: MaplibreMap): void {
+export function keepTerrainCameraStill(map: MaplibreMap): void {
+  const internals = map as unknown as { _camera?: CameraInternals; terrain?: unknown };
+  let toggling = false;
+  const setTerrain = map.setTerrain.bind(map);
+  map.setTerrain = (options) => {
+    toggling = true;
+    try {
+      return setTerrain(options);
+    } finally {
+      toggling = false;
+    }
+  };
+  // The walk's state: how many idle steps in a row, and the last one's size.
+  let steps = 0;
+  let lastStep = Infinity;
   const patch = (): void => {
-    const transform = (map as unknown as { _camera?: { transform?: object } })._camera?.transform;
-    if (!transform || !("_mercatorTransform" in transform)) return;
-    const prototype = Object.getPrototypeOf(transform) as GlobeTransformInternals & { [GESTURE_FIX]?: true };
-    if (prototype[GESTURE_FIX] || typeof prototype.apply !== "function") return;
-    const recalculate = prototype.recalculateZoomAndCenter;
-    prototype.recalculateZoomAndCenter = function (this: GlobeTransformInternals, terrain?: unknown): void {
-      recalculate.call(this, terrain);
-      if (!this.isGlobeRendering) this.apply(this._mercatorTransform, false);
+    const transform = internals._camera?.transform;
+    if (!transform) return;
+    const prototype = Object.getPrototypeOf(transform) as TransformInternals & { [CAMERA_FIX]?: true };
+    if (prototype[CAMERA_FIX] || typeof prototype.setElevation !== "function") return;
+    const setElevation = prototype.setElevation;
+    prototype.setElevation = function (this: TransformInternals, elevation: number): void {
+      const camera = internals._camera;
+      const idle =
+        camera?.transform === this &&
+        !!internals.terrain &&
+        !toggling &&
+        !camera.elevationFreeze &&
+        !camera.isEasing() &&
+        !this.isGlobeRendering;
+      const step = Math.abs(elevation - this.elevation);
+      if (!idle) {
+        steps = 0;
+        lastStep = Infinity;
+        setElevation.call(this, elevation);
+        return;
+      }
+      if (step < SETTLED_ELEVATION_M) {
+        steps = 0;
+        lastStep = Infinity;
+        return;
+      }
+      if (steps >= 2 && step >= lastStep) {
+        // Not converging: the ground under the ray is steeper than the ray.
+        setElevation.call(this, elevation);
+        return;
+      }
+      steps += 1;
+      lastStep = step;
+      this._helper.recalculateZoomAndCenter(elevation);
+      this._helper._calcMatrices();
     };
-    prototype[GESTURE_FIX] = true;
+    if ("_mercatorTransform" in transform && typeof prototype.apply === "function") {
+      const recalculate = prototype.recalculateZoomAndCenter;
+      prototype.recalculateZoomAndCenter = function (this: TransformInternals, terrain?: unknown): void {
+        recalculate.call(this, terrain);
+        if (!this.isGlobeRendering) this.apply(this._mercatorTransform, false);
+      };
+    }
+    prototype[CAMERA_FIX] = true;
   };
   patch();
   map.on("projectiontransition", patch);
