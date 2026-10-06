@@ -138,13 +138,9 @@ and the window shrinks to fit it.
   hillshade under it is hidden); particles hide behind ridges through the
   terrain's packed depth texture. Tile meshes carry skirts for LOD seams.
   The terrain uses its own copy of the Mapterhorn source (MapLibre renders
-  hillshade and terrain worse from one). `keepTerrainCameraStill` patches
-  the transform so the camera never jumps over relief: MapLibre clamps the
-  center to the ground and moves the camera whenever the ground under it
-  re-samples differently (after every gesture and glide, when a sharper DEM
-  tile lands), so idle re-samples slide the center along the view ray
-  instead, and the globe transform copies a gesture's end back from its
-  Mercator half. With relief on, the globe hands over to the plane between
+  hillshade and terrain worse from one). The terrain camera is MapLibre's
+  own (6.12 or later: a gesture holds the center elevation and lands it
+  with the camera still). With relief on, the globe hands over to the plane between
   z9 and z10 instead of MapLibre's z11–12 (`globeProjection`): the globe's
   controls ignore terrain, so the ground grabbed did not follow the cursor
   and the center never landed. The zoom ceiling is z16 for every
