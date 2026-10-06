@@ -1,6 +1,7 @@
 import type { CustomLayerInterface, CustomRenderMethodInput, Map as MaplibreMap } from "maplibre-gl";
 
 import { DOMAIN_GLSL, DOMAIN_UNIFORM_NAMES, setDomainUniforms, type LambertDomain } from "./domain";
+import { SITE_TEMPERATURE_GLSL } from "./lapse";
 import type { LongitudeBand } from "./mosaic";
 import { t } from "./i18n";
 import type { BundleMetadata } from "./manifest";
@@ -137,23 +138,73 @@ ${TERRAIN_SHADE_GLSL}
 // (weight 0) for every other field. The model's ground is its own smoothed
 // orography, a quarter-degree grid's mountain a broad hill, so its 2 m
 // temperature belongs to a height the real slope under the fragment is not
-// at; a standard lapse rate moves it there: T + gamma * (model height - DEM
-// height). u_orog is the run's orography on its own grid (u_orog_grid: first
+// at; lapse.ts moves it there, the same formula the meteogram's terrain row
+// reads. u_orog is the run's orography on its own grid (u_orog_grid: first
 // longitude, first latitude, steps; u_orog_decode: offset, metres per code),
-// and u_lapse is (weight, codes per metre of height difference, highest
-// value code) — the weight fades the correction in as the camera closes in.
+// and u_lapse is (weight, codes per kelvin, highest value code), u_lapse_t
+// the temperature codebook (offset, degrees per code) — the weight fades the
+// correction in as the camera closes in. The column is the frame's isobaric
+// surfaces over a window of the grid around the view, built on the CPU
+// (main.ts::columnWindow): per cell its heights sorted (u_column_a: the
+// first four; u_column_b.x the fifth) with their temperatures (u_column_b.yzw,
+// u_column_c.xy) and how many there are (u_column_c.z, 0 where the cell was
+// not decoded); u_column_grid is the window's first longitude, first
+// latitude and steps, u_column_size its width and height, u_column_on 0
+// where the run has no column.
 uniform sampler2D u_orog;
 uniform vec4 u_orog_grid;
 uniform vec2 u_orog_size;
 uniform vec2 u_orog_decode;
 uniform vec3 u_lapse;
-float lapseCodes(float longitude, float latitude) {
+uniform vec2 u_lapse_t;
+uniform highp sampler2D u_column_a;
+uniform highp sampler2D u_column_b;
+uniform highp sampler2D u_column_c;
+uniform vec4 u_column_grid;
+uniform vec2 u_column_size;
+uniform float u_column_on;
+${SITE_TEMPERATURE_GLSL}
+// The column at a point, bilinear between the four cells around it; no
+// column (count 0) where any of the four is outside the window, undecoded,
+// or holds another number of surfaces.
+int columnSample(float longitude, float latitude, out float heights[COLUMN_CAPACITY], out float temperatures[COLUMN_CAPACITY]) {
+  for (int k = 0; k < COLUMN_CAPACITY; k += 1) { heights[k] = 0.0; temperatures[k] = 0.0; }
+  vec2 cell = vec2(
+    mod(longitude - u_column_grid.x, 360.0) / u_column_grid.z,
+    (latitude - u_column_grid.y) / u_column_grid.w
+  );
+  vec2 base = floor(cell);
+  vec2 f = cell - base;
+  ivec2 size = ivec2(u_column_size);
+  int count = -1;
+  for (int corner = 0; corner < 4; corner += 1) {
+    ivec2 p = ivec2(base) + ivec2(corner % 2, corner / 2);
+    if (p.x < 0 || p.y < 0 || p.x >= size.x || p.y >= size.y) return 0;
+    vec4 a = texelFetch(u_column_a, p, 0);
+    vec4 b = texelFetch(u_column_b, p, 0);
+    vec4 c = texelFetch(u_column_c, p, 0);
+    int n = int(c.z + 0.5);
+    if (n < 2 || (count >= 0 && n != count)) return 0;
+    count = n;
+    float w = (corner % 2 == 0 ? 1.0 - f.x : f.x) * (corner / 2 == 0 ? 1.0 - f.y : f.y);
+    heights[0] += w * a.x; heights[1] += w * a.y; heights[2] += w * a.z; heights[3] += w * a.w; heights[4] += w * b.x;
+    temperatures[0] += w * b.y; temperatures[1] += w * b.z; temperatures[2] += w * b.w;
+    temperatures[3] += w * c.x; temperatures[4] += w * c.y;
+  }
+  return count;
+}
+float lapseCodes(float longitude, float latitude, float code) {
   vec2 uv = vec2(
     (mod(longitude - u_orog_grid.x, 360.0) / u_orog_grid.z + 0.5) / u_orog_size.x,
     ((latitude - u_orog_grid.y) / u_orog_grid.w + 0.5) / u_orog_size.y
   );
   float model = u_orog_decode.x + texture(u_orog, uv).r * 255.0 * u_orog_decode.y;
-  return (model - surfaceSample(v_dem)) * u_lapse.y;
+  float site = surfaceSample(v_dem);
+  float t2m = u_lapse_t.x + code * 255.0 * u_lapse_t.y;
+  float heights[COLUMN_CAPACITY];
+  float temperatures[COLUMN_CAPACITY];
+  int count = u_column_on > 0.5 && site > model ? columnSample(longitude, latitude, heights, temperatures) : 0;
+  return siteTemperatureDelta(t2m, model, site, heights, temperatures, count) * u_lapse.y;
 }
 #endif
 uniform sampler2D u_data;
@@ -469,7 +520,7 @@ void main() {
       code = mix(code, codeB, u_mix);
     }
 #ifdef XUE_TERRAIN
-    if (u_lapse.x > 0.0) code = clamp(code + u_lapse.x * lapseCodes(longitude, latitude), 0.0, u_lapse.z);
+    if (u_lapse.x > 0.0) code = clamp(code + u_lapse.x * lapseCodes(longitude, latitude, code), 0.0, u_lapse.z);
 #endif
     color = texture(u_palette, vec2((code * 255.0 + 0.5) / 256.0, 0.5));
   }
@@ -698,6 +749,8 @@ export class ForecastLayer implements CustomLayerInterface {
    * texture they are uploaded to. */
   private lapse: LapseCorrection | null = null;
   private orographyTexture: WebGLTexture | null = null;
+  private columnTextures: WebGLTexture[] = [];
+  private uploadedColumn: ColumnWindow | null = null;
   private uploadedOrography: Uint8Array | null = null;
   // The smoothing pass: its program, the texture the horizontal pass writes
   // and the vertical one reads, and the framebuffer both draw through.
@@ -775,8 +828,45 @@ export class ForecastLayer implements CustomLayerInterface {
     if (this.lapse === lapse) return;
     this.lapse = lapse;
     this.uploadOrography();
+    this.uploadColumn();
     this.map?.triggerRepaint();
   }
+
+  private uploadColumn(): void {
+    const gl = this.gl;
+    const column = this.lapse?.column ?? null;
+    if (!gl || !column || this.uploadedColumn === column) return;
+    const { width, height } = column.grid;
+    if ([column.a, column.b, column.c].some((plane) => plane.length !== width * height * 4)) return;
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
+    for (const [index, plane] of [column.a, column.b, column.c].entries()) {
+      if (!this.columnTextures[index]) this.columnTextures[index] = gl.createTexture()!;
+      gl.bindTexture(gl.TEXTURE_2D, this.columnTextures[index]!);
+      // Read with texelFetch, so no filter applies (a float texture is not
+      // filterable without an extension anyway); nearest keeps it complete.
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, width, height, 0, gl.RGBA, gl.FLOAT, plane);
+    }
+    this.uploadedColumn = column;
+  }
+
+  private emptyColumn: WebGLTexture | null = null;
+
+  /** One float texel, what the column samplers hold while unused. */
+  private emptyColumnTexture(gl: WebGL2RenderingContext): WebGLTexture {
+    if (this.emptyColumn) return this.emptyColumn;
+    const texture = gl.createTexture()!;
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, 1, 1, 0, gl.RGBA, gl.FLOAT, new Float32Array(4));
+    this.emptyColumn = texture;
+    return texture;
+  }
+
 
   private uploadOrography(): void {
     const gl = this.gl;
@@ -823,8 +913,12 @@ export class ForecastLayer implements CustomLayerInterface {
     this.tileMesh = null;
     this.demSampler = createLinearSampler(gl);
     this.orographyTexture = null;
+    this.columnTextures = [];
+    this.emptyColumn = null;
+    this.uploadedColumn = null;
     this.uploadedOrography = null;
     this.uploadOrography();
+    this.uploadColumn();
     this.program = null;
     const smoothProgram = buildProgram(gl, SMOOTH_VERTEX_SHADER, SMOOTH_FRAGMENT_SHADER);
     this.smoothProgram = smoothProgram;
@@ -913,6 +1007,9 @@ export class ForecastLayer implements CustomLayerInterface {
     this.tileMesh = null;
     this.demSampler = null;
     this.orographyTexture = null;
+    this.columnTextures = [];
+    this.emptyColumn = null;
+    this.uploadedColumn = null;
     this.uploadedOrography = null;
     this.smoothProgram = null;
     this.slots = null;
@@ -1209,9 +1306,31 @@ export class ForecastLayer implements CustomLayerInterface {
     gl.uniform3f(
       this.uniforms.u_lapse!,
       weight,
-      lapse ? LAPSE_RATE / (255 * lapse.temperatureScale) : 0,
+      lapse ? 1 / (255 * lapse.temperatureScale) : 0,
       lapse ? lapse.maximumCode / 255 : 1,
     );
+    gl.uniform2f(this.uniforms.u_lapse_t!, lapse?.temperatureOffset ?? 0, lapse?.temperatureScale ?? 0);
+    const column = ready ? (lapse.column ?? null) : null;
+    const columnReady = column !== null && this.uploadedColumn === column;
+    for (const [index, unit] of COLUMN_TEXTURE_UNITS.entries()) {
+      gl.activeTexture(gl.TEXTURE0 + unit);
+      // A float sampler needs a float texture bound even while unused.
+      gl.bindTexture(gl.TEXTURE_2D, columnReady ? this.columnTextures[index]! : this.emptyColumnTexture(gl));
+    }
+    gl.uniform1i(this.uniforms.u_column_a!, COLUMN_TEXTURE_UNITS[0]);
+    gl.uniform1i(this.uniforms.u_column_b!, COLUMN_TEXTURE_UNITS[1]);
+    gl.uniform1i(this.uniforms.u_column_c!, COLUMN_TEXTURE_UNITS[2]);
+    gl.uniform1f(this.uniforms.u_column_on!, columnReady ? 1 : 0);
+    if (columnReady) {
+      gl.uniform4f(
+        this.uniforms.u_column_grid!,
+        column.grid.firstLongitude,
+        column.grid.firstLatitude,
+        column.grid.longitudeStep,
+        column.grid.latitudeStep,
+      );
+      gl.uniform2f(this.uniforms.u_column_size!, column.grid.width, column.grid.height);
+    }
     if (!lapse) return;
     gl.uniform4f(
       this.uniforms.u_orog_grid!,
@@ -1361,6 +1480,8 @@ const WORLD_MESH_ROWS = 128;
  * and the model's orography above that. */
 const DEM_TEXTURE_UNIT = 7;
 const OROGRAPHY_TEXTURE_UNIT = 8;
+/** The column's three textures. */
+const COLUMN_TEXTURE_UNITS = [9, 10, 11] as const;
 
 const MAP_UNIFORM_NAMES = [
   "u_data", "u_data_b", "u_green", "u_blue", "u_green_b", "u_blue_b", "u_palette", "u_first", "u_step", "u_size",
@@ -1371,30 +1492,48 @@ const MAP_UNIFORM_NAMES = [
   ...DOMAIN_UNIFORM_NAMES,
   "u_band",
   "u_orog", "u_orog_grid", "u_orog_size", "u_orog_decode", "u_lapse",
+  "u_lapse_t", "u_column_a", "u_column_b", "u_column_c", "u_column_grid", "u_column_size", "u_column_on",
 ];
 
-/** Standard atmosphere lapse rate, kelvin per metre. */
-export const LAPSE_RATE = 0.0065;
+/** A grid a correction input is laid on. */
+export interface CorrectionGrid {
+  width: number;
+  height: number;
+  firstLongitude: number;
+  firstLatitude: number;
+  longitudeStep: number;
+  latitudeStep: number;
+  wraps: boolean;
+}
 
-/** The model's terrain and the temperature codebook an altitude correction
- * needs (see `lapseCodes` in the fragment shader). */
+/** The frame's isobaric column over a window of the grid around the view
+ * (lapse.ts), three RGBA texels per cell: heights sorted with their
+ * temperatures and the count of surfaces (see the fragment shader). The
+ * window's grid does not wrap: a view across the antimeridian takes a
+ * window that runs past the grid's last column. */
+export interface ColumnWindow {
+  a: Float32Array;
+  b: Float32Array;
+  c: Float32Array;
+  grid: { width: number; height: number; firstLongitude: number; firstLatitude: number; longitudeStep: number; latitudeStep: number };
+}
+
+/** The model's terrain, the frame's column and the temperature codebook an
+ * altitude correction needs (see `lapseCodes` in the fragment shader). */
 export interface LapseCorrection {
   orography: Uint8Array;
-  grid: {
-    width: number;
-    height: number;
-    firstLongitude: number;
-    firstLatitude: number;
-    longitudeStep: number;
-    latitudeStep: number;
-    wraps: boolean;
-  };
+  grid: CorrectionGrid;
   /** Orography codebook: metres = offset + code * scale. */
   orographyOffset: number;
   orographyScale: number;
-  /** Temperature codebook: degrees per code, and the highest value code. */
+  /** Temperature codebook: degrees = offset + code * scale, and the
+   * highest value code. */
+  temperatureOffset: number;
   temperatureScale: number;
   maximumCode: number;
+  /** The isobaric column for the frame on screen, or null: a run without
+   * one, or before its first planes land. */
+  column: ColumnWindow | null;
 }
 
 /** How much of the altitude correction applies at a zoom, from the size of a

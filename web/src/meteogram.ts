@@ -121,7 +121,8 @@ export const TAF_ROW_SPEC: MeteogramRowSpec = {
 };
 
 /** The 2 m temperature carried from the model's ground to the DEM's under
- * the pin, at a standard lapse rate: a row of its own under the model's,
+ * the pin (lapse.ts: through the run's column above the model ground, at
+ * the standard lapse rate below it): a row of its own under the model's,
  * derived rather than read, so it is inserted by the caller — and only
  * where the pin has both heights — rather than listed in the templates. */
 export const TERRAIN_ROW_SPEC: MeteogramRowSpec = {
@@ -131,12 +132,6 @@ export const TERRAIN_ROW_SPEC: MeteogramRowSpec = {
   range: null,
   baseline: null,
 };
-
-/** A series moved by a fixed amount: the terrain row's, which is the
- * model's temperature shifted by one height difference for every frame. */
-export function shiftSeries(values: readonly ProbeValue[], delta: number): ProbeValue[] {
-  return values.map((value) => (typeof value === "number" ? value + delta : value));
-}
 
 /** The row's label: its bundles' codes joined, the surface once at the end
  * where every bundle shares it ("TMP · DPT 2M", "WIND · GUST 10M"). A row

@@ -1,0 +1,554 @@
+[
+  {
+    "name": "fuji gfs",
+    "t2m": 16.891,
+    "model": 647.74,
+    "site": 3684.0,
+    "levels": [
+      {
+        "height": 66.63,
+        "temperature": 21.716
+      },
+      {
+        "height": 734.01,
+        "temperature": 18.832
+      },
+      {
+        "height": 1457.14,
+        "temperature": 15.916
+      },
+      {
+        "height": 3090.22,
+        "temperature": 9.014
+      },
+      {
+        "height": 5807.0,
+        "temperature": -5.39
+      }
+    ],
+    "siteTemperature": 5.813854615530024
+  },
+  {
+    "name": "summit, moist column",
+    "t2m": 17.0,
+    "model": 643.0,
+    "site": 3748.0,
+    "levels": [
+      {
+        "height": 110.0,
+        "temperature": 24.0
+      },
+      {
+        "height": 760.0,
+        "temperature": 21.01
+      },
+      {
+        "height": 1460.0,
+        "temperature": 17.79
+      },
+      {
+        "height": 3010.0,
+        "temperature": 10.66
+      },
+      {
+        "height": 5570.0,
+        "temperature": -1.1159999999999997
+      }
+    ],
+    "siteTemperature": 7.171393248664774
+  },
+  {
+    "name": "summit at night",
+    "t2m": 9.0,
+    "model": 643.0,
+    "site": 3748.0,
+    "levels": [
+      {
+        "height": 110.0,
+        "temperature": 2.0
+      },
+      {
+        "height": 760.0,
+        "temperature": 8.0
+      },
+      {
+        "height": 1460.0,
+        "temperature": 3.8
+      },
+      {
+        "height": 3010.0,
+        "temperature": -5.5
+      },
+      {
+        "height": 5570.0,
+        "temperature": -21.0
+      }
+    ],
+    "siteTemperature": -9.925459317223897
+  },
+  {
+    "name": "slope just above",
+    "t2m": 12.0,
+    "model": 900.0,
+    "site": 1000.0,
+    "levels": [
+      {
+        "height": 110.0,
+        "temperature": 2.0
+      },
+      {
+        "height": 760.0,
+        "temperature": 8.0
+      },
+      {
+        "height": 1460.0,
+        "temperature": 3.8
+      },
+      {
+        "height": 3010.0,
+        "temperature": -5.5
+      },
+      {
+        "height": 5570.0,
+        "temperature": -21.0
+      }
+    ],
+    "siteTemperature": 10.831285008509441
+  },
+  {
+    "name": "valley",
+    "t2m": 15.0,
+    "model": 1400.0,
+    "site": 600.0,
+    "levels": [
+      {
+        "height": 110.0,
+        "temperature": 20.0
+      },
+      {
+        "height": 760.0,
+        "temperature": 15.775
+      },
+      {
+        "height": 1460.0,
+        "temperature": 11.225
+      },
+      {
+        "height": 3010.0,
+        "temperature": 1.1500000000000021
+      },
+      {
+        "height": 5570.0,
+        "temperature": -15.489999999999995
+      }
+    ],
+    "siteTemperature": 20.2
+  },
+  {
+    "name": "valley at night",
+    "t2m": -3.0,
+    "model": 900.0,
+    "site": 400.0,
+    "levels": [
+      {
+        "height": 110.0,
+        "temperature": 2.0
+      },
+      {
+        "height": 760.0,
+        "temperature": 8.0
+      },
+      {
+        "height": 1460.0,
+        "temperature": 3.8
+      },
+      {
+        "height": 3010.0,
+        "temperature": -5.5
+      },
+      {
+        "height": 5570.0,
+        "temperature": -21.0
+      }
+    ],
+    "siteTemperature": 0.25
+  },
+  {
+    "name": "on the model ground",
+    "t2m": 5.0,
+    "model": 800.0,
+    "site": 800.0,
+    "levels": [
+      {
+        "height": 110.0,
+        "temperature": 2.0
+      },
+      {
+        "height": 760.0,
+        "temperature": 8.0
+      },
+      {
+        "height": 1460.0,
+        "temperature": 3.8
+      },
+      {
+        "height": 3010.0,
+        "temperature": -5.5
+      },
+      {
+        "height": 5570.0,
+        "temperature": -21.0
+      }
+    ],
+    "siteTemperature": 5.0
+  },
+  {
+    "name": "above 500 hPa",
+    "t2m": -8.0,
+    "model": 4500.0,
+    "site": 8000.0,
+    "levels": [
+      {
+        "height": 110.0,
+        "temperature": 28.0
+      },
+      {
+        "height": 760.0,
+        "temperature": 24.1
+      },
+      {
+        "height": 1460.0,
+        "temperature": 19.9
+      },
+      {
+        "height": 3010.0,
+        "temperature": 10.599999999999998
+      },
+      {
+        "height": 5570.0,
+        "temperature": -4.759999999999998
+      }
+    ],
+    "siteTemperature": -20.676601454061913
+  },
+  {
+    "name": "below 1000 hPa",
+    "t2m": 30.0,
+    "model": -20.0,
+    "site": 300.0,
+    "levels": [
+      {
+        "height": 110.0,
+        "temperature": 30.0
+      },
+      {
+        "height": 760.0,
+        "temperature": 23.63
+      },
+      {
+        "height": 1460.0,
+        "temperature": 16.77
+      },
+      {
+        "height": 3010.0,
+        "temperature": 1.5800000000000018
+      },
+      {
+        "height": 5570.0,
+        "temperature": -23.507999999999996
+      }
+    ],
+    "siteTemperature": 27.571579561099885
+  },
+  {
+    "name": "two surfaces",
+    "t2m": 11.0,
+    "model": 700.0,
+    "site": 2600.0,
+    "levels": [
+      {
+        "height": 1460.0,
+        "temperature": 3.8
+      },
+      {
+        "height": 5570.0,
+        "temperature": -21.0
+      }
+    ],
+    "siteTemperature": -2.8686193711722217
+  },
+  {
+    "name": "out of height order",
+    "t2m": 4.0,
+    "model": 1200.0,
+    "site": 2900.0,
+    "levels": [
+      {
+        "height": 5570.0,
+        "temperature": -21.0
+      },
+      {
+        "height": 3010.0,
+        "temperature": -5.5
+      },
+      {
+        "height": 1460.0,
+        "temperature": 3.8
+      },
+      {
+        "height": 760.0,
+        "temperature": 8.0
+      },
+      {
+        "height": 110.0,
+        "temperature": 2.0
+      }
+    ],
+    "siteTemperature": -5.002428836842739
+  },
+  {
+    "name": "no column",
+    "t2m": 4.0,
+    "model": 1200.0,
+    "site": 2900.0,
+    "levels": [
+      {
+        "height": 1460.0,
+        "temperature": 3.8
+      }
+    ],
+    "siteTemperature": -7.049999999999999
+  },
+  {
+    "name": "random 0",
+    "t2m": 6.951927475096168,
+    "model": 1109.105592406668,
+    "site": 4213.951824738192,
+    "levels": [
+      {
+        "height": 110.0,
+        "temperature": -9.745026790071883
+      },
+      {
+        "height": 760.0,
+        "temperature": -12.578874613330026
+      },
+      {
+        "height": 1460.0,
+        "temperature": -15.63071073068495
+      },
+      {
+        "height": 3010.0,
+        "temperature": -22.38834784768514
+      },
+      {
+        "height": 5570.0,
+        "temperature": -33.549348505440285
+      }
+    ],
+    "siteTemperature": -27.202997455830143
+  },
+  {
+    "name": "random 1",
+    "t2m": 19.164285110372685,
+    "model": 897.8083015257831,
+    "site": 2432.961407886845,
+    "levels": [
+      {
+        "height": 110.0,
+        "temperature": -12.87493253064528
+      },
+      {
+        "height": 760.0,
+        "temperature": -15.118287973739363
+      },
+      {
+        "height": 1460.0,
+        "temperature": -17.534209220148377
+      },
+      {
+        "height": 3010.0,
+        "temperature": -22.88374912291119
+      },
+      {
+        "height": 5570.0,
+        "temperature": -31.719118252635575
+      }
+    ],
+    "siteTemperature": -15.791016111314319
+  },
+  {
+    "name": "random 2",
+    "t2m": -26.777847623926757,
+    "model": 605.1397291102306,
+    "site": 290.6889391556843,
+    "levels": [
+      {
+        "height": 110.0,
+        "temperature": -4.432713149222803
+      },
+      {
+        "height": 760.0,
+        "temperature": -2.6081333713358363
+      },
+      {
+        "height": 1460.0,
+        "temperature": -0.6432013028421797
+      },
+      {
+        "height": 3010.0,
+        "temperature": 3.707719705965202
+      },
+      {
+        "height": 5570.0,
+        "temperature": 10.893756985027718
+      }
+    ],
+    "siteTemperature": -24.733917489222208
+  },
+  {
+    "name": "random 3",
+    "t2m": 22.236727161808542,
+    "model": 1931.5557967316252,
+    "site": 1220.1275934082792,
+    "levels": [
+      {
+        "height": 110.0,
+        "temperature": 6.570490181331365
+      },
+      {
+        "height": 760.0,
+        "temperature": 5.010685746877725
+      },
+      {
+        "height": 1460.0,
+        "temperature": 3.3308963559276497
+      },
+      {
+        "height": 3010.0,
+        "temperature": -0.3886372954618018
+      },
+      {
+        "height": 5570.0,
+        "temperature": -6.531867068079219
+      }
+    ],
+    "siteTemperature": 26.86101048341029
+  },
+  {
+    "name": "random 4",
+    "t2m": -25.3249802252628,
+    "model": 1002.8485203799042,
+    "site": 4245.329976274886,
+    "levels": [
+      {
+        "height": 110.0,
+        "temperature": -7.193345544539731
+      },
+      {
+        "height": 760.0,
+        "temperature": -12.817717218961862
+      },
+      {
+        "height": 1460.0,
+        "temperature": -18.874732868339542
+      },
+      {
+        "height": 3010.0,
+        "temperature": -32.286696091961545
+      },
+      {
+        "height": 5570.0,
+        "temperature": -54.438067609685625
+      }
+    ],
+    "siteTemperature": -43.15659194910815
+  },
+  {
+    "name": "random 5",
+    "t2m": -16.378478859119962,
+    "model": 1008.8298595872225,
+    "site": 1288.6323718841445,
+    "levels": [
+      {
+        "height": 110.0,
+        "temperature": -10.14742919351801
+      },
+      {
+        "height": 760.0,
+        "temperature": -14.736721548890337
+      },
+      {
+        "height": 1460.0,
+        "temperature": -19.67903639313746
+      },
+      {
+        "height": 3010.0,
+        "temperature": -30.62273354825608
+      },
+      {
+        "height": 5570.0,
+        "temperature": -48.69748497864555
+      }
+    ],
+    "siteTemperature": -18.387978877493296
+  },
+  {
+    "name": "random 6",
+    "t2m": 22.544564201546915,
+    "model": 2073.144618471907,
+    "site": 2418.310527055117,
+    "levels": [
+      {
+        "height": 110.0,
+        "temperature": -7.25316833778624
+      },
+      {
+        "height": 760.0,
+        "temperature": -9.671949206143628
+      },
+      {
+        "height": 1460.0,
+        "temperature": -12.276790141297738
+      },
+      {
+        "height": 3010.0,
+        "temperature": -18.044652211996127
+      },
+      {
+        "height": 5570.0,
+        "temperature": -27.570927631988305
+      }
+    ],
+    "siteTemperature": 8.257825579365294
+  },
+  {
+    "name": "random 7",
+    "t2m": 15.932904667376071,
+    "model": 1779.6105408059886,
+    "site": 4602.052436681257,
+    "levels": [
+      {
+        "height": 110.0,
+        "temperature": 20.894377905915622
+      },
+      {
+        "height": 760.0,
+        "temperature": 18.664400271498582
+      },
+      {
+        "height": 1460.0,
+        "temperature": 16.262885895972538
+      },
+      {
+        "height": 3010.0,
+        "temperature": 10.94524692159344
+      },
+      {
+        "height": 5570.0,
+        "temperature": 2.1625657768124817
+      }
+    ],
+    "siteTemperature": 5.505843719223482
+  }
+]
