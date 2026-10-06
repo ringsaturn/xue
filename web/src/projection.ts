@@ -115,17 +115,35 @@ bool surfaceOccluded(vec4 clip) {
 `;
 
 /** Relief shading for a fragment on the terrain: the slope under it, read
- * from the same DEM with linear filtering (the encodings are linear in their
- * bytes, so filtering each byte filters the elevation), lit from the
- * north-west the way a printed relief map is. 1.0 is a flat surface. */
+ * from the same DEM, lit from the north-west the way a printed relief map
+ * is. 1.0 is a flat surface.
+ *
+ * The DEM is unpacked texel by texel and interpolated in metres, never
+ * through the sampler's own filtering: the encodings are linear in their
+ * bytes, but a filtered UNORM8 comes back at fp16-like precision on common
+ * GPUs, and an ulp of Terrarium's red byte is about 32 m. Wherever the
+ * ground crosses a multiple of 256 m — where neighbouring texels differ in
+ * red — the slope then picks up that noise, and the shade draws it as
+ * rippled bands along the contour. The texel convention is the vertex
+ * stage's: an integer coordinate is a texel's center. */
 export const TERRAIN_SHADE_GLSL = `
 uniform highp sampler2D u_terrain;
 uniform vec4 u_terrain_unpack;
 uniform float u_terrain_exaggeration;
 uniform float u_dem_texel_meters;
-float surfaceSample(vec2 coord) {
-  vec4 rgb = (texture(u_terrain, coord / vec2(textureSize(u_terrain, 0))) * 255.0) * u_terrain_unpack;
+float surfaceShadeTexel(ivec2 at) {
+  ivec2 hi = textureSize(u_terrain, 0) - 1;
+  vec4 rgb = (texelFetch(u_terrain, clamp(at, ivec2(0), hi), 0) * 255.0) * u_terrain_unpack;
   return rgb.r + rgb.g + rgb.b - u_terrain_unpack.a;
+}
+float surfaceSample(vec2 coord) {
+  vec2 f = fract(coord);
+  ivec2 c = ivec2(floor(coord));
+  float tl = surfaceShadeTexel(c);
+  float tr = surfaceShadeTexel(c + ivec2(1, 0));
+  float bl = surfaceShadeTexel(c + ivec2(0, 1));
+  float br = surfaceShadeTexel(c + ivec2(1, 1));
+  return mix(mix(tl, tr, f.x), mix(bl, br, f.x), f.y);
 }
 float surfaceShade(vec2 coord) {
   float east = surfaceSample(coord + vec2(1.0, 0.0)) - surfaceSample(coord - vec2(1.0, 0.0));
