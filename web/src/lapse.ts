@@ -16,7 +16,9 @@
  *
  * The map's fragment shader (`SITE_TEMPERATURE_GLSL`) and the meteogram's
  * terrain row (`siteTemperature`) are this one formula, so the two agree at
- * the pin up to how each samples the grid.
+ * the pin up to how each samples the grid. Where the method comes from and
+ * what it was fitted on: docs/contribution/frontend.md (altitude
+ * correction, sources).
  */
 
 /** Standard atmosphere lapse rate, kelvin per metre: below the model ground,
@@ -24,9 +26,8 @@
 export const LAPSE_RATE = 0.0065;
 
 /** How fast the model's boundary-layer departure fades with the height
- * climbed above its ground, metres. Fitted on four seasonal weeks of
- * mountain stations against GFS and ECMWF; each model's own best is within
- * 0.01 K of this one. */
+ * climbed above its ground, metres; each of GFS's and ECMWF's own best is
+ * within 0.01 K of it (docs/contribution/frontend.md). */
 export const SURFACE_ANOMALY_DECAY_M = 800;
 
 /** The surfaces the column is read on, bottom first: a summit the

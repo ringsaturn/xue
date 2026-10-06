@@ -198,6 +198,27 @@ and the window shrinks to fit it.
   above the model ground; frames without a column fall back to 6.5 K/km
   with one console line, never a mark on the row. The DEM readout samples
   the pinned point, never the cell centre.
+  - Sources. Splitting the 2 m temperature into the free atmosphere at the
+    site plus a surface departure carried from the coarse ground is
+    REDCAPP's (Cao, Gruber & Zhang 2017, *GMD* 10:2905,
+    doi:10.5194/gmd-10-2905-2017). Its free atmosphere — pressure-level
+    temperatures interpolated in their geopotential heights — is
+    TopoSCALE's (Fiddes & Gruber 2014, *GMD* 7:387,
+    doi:10.5194/gmd-7-387-2014), and taking the column instead of the 2 m
+    temperature above the model ground follows Gao, Bernhardt & Schulz
+    (2012, *HESS* 16:4661, doi:10.5194/hess-16-4661-2012). The weight
+    `exp(−dz / 800 m)` is this project's: it depends on `dz` alone and
+    needs no terrain indices or per-site fit. H was chosen by
+    leave-one-week-out validation against mountain and lowland stations
+    from NOAA's Integrated Surface Database (gaps filled from GHCNh and the
+    Iowa Environmental Mesonet), with GFS and ECMWF IFS open
+    data (CC BY 4.0) 0.25° forecasts over four seasonal weeks, 2024-10 to
+    2025-07. The 6.5 K/km below the model ground is the ICAO standard
+    atmosphere's lapse rate. Exposed
+    summits stay colder than the free atmosphere at their height in winter
+    (Sheridan, Vosper & Smith 2018, *JAMC* 57:1907,
+    doi:10.1175/JAMC-D-17-0140.1), which the method does not remove; the
+    terrain row reads 1–4 K warm there.
 - Particles: speed halves per zoom level past z4 (`zoomPace`) so the pace
   on screen holds; positions are RGBA32F where `EXT_color_buffer_float`
   allows (16-bit positions are 600 m steps). From z5 on the plane they are
