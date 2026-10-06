@@ -269,11 +269,10 @@ import {
   demElevationAt,
   TERRAIN_ATTRIBUTION,
   TERRAIN_CAMERA_MAX_ZOOM,
-  TERRAIN_MAX_ZOOM,
   TERRAIN_MESH_SOURCE,
   TERRAIN_SOURCE,
-  TERRAIN_TILES,
 } from "./terrain";
+import { registerTerrainProtocol, TERRAIN_DETAIL_MAX_ZOOM, TERRAIN_DETAIL_TILES } from "./terrainprotocol";
 import { PeakLabels } from "./peaks";
 import { applyPageMeta } from "./pagemeta";
 import {
@@ -748,15 +747,14 @@ type LineLayer = Extract<BasemapStyle["layers"][number], { type: "line" }>;
 type HillshadeLayer = Extract<BasemapStyle["layers"][number], { type: "hillshade" }>;
 type HillshadePaint = NonNullable<HillshadeLayer["paint"]>;
 
-/** The relief, drawn as a hillshade under the fields. The source, its tiles
- * and the readout's own sampler live in `terrain.ts`; this is the style's half
- * of the pair.
+/** The relief, drawn as a hillshade under the fields. The source and the
+ * readout's own sampler live in `terrain.ts`, the tiles' coverage past z12 in
+ * `terrainprotocol.ts`; this is the style's half of the set.
  *
- * `maxzoom` is pinned to the global archive's own ceiling rather than left to
- * the TileJSON, which names none: without it the map asks for z13 and deeper
- * at every viewport, and while the Alps and Japan answer, most of the world —
- * China included — returns 404. Past the ceiling MapLibre overzooms the z12
- * tile, which costs sharpness and no requests. */
+ * `maxzoom` is the deepest regional archive's, not left to the TileJSON,
+ * which names none. The protocol answers 404 locally wherever no archive
+ * reaches a tile's zoom — most of the world, China included — and MapLibre
+ * then overzooms the z12 tile, which costs sharpness and no requests. */
 const TERRAIN_LAYER = "hillshade";
 
 /** The relief's ink, per ground. On paper the shadow is the chart's own warm
@@ -812,16 +810,16 @@ function buildBasemapStyle(): BasemapStyle {
       // do not already say.
       [TERRAIN_SOURCE]: {
         type: "raster-dem",
-        tiles: TERRAIN_TILES,
+        tiles: TERRAIN_DETAIL_TILES,
         encoding: "terrarium",
-        maxzoom: TERRAIN_MAX_ZOOM,
+        maxzoom: TERRAIN_DETAIL_MAX_ZOOM,
         attribution: TERRAIN_ATTRIBUTION,
       },
       [TERRAIN_MESH_SOURCE]: {
         type: "raster-dem",
-        tiles: TERRAIN_TILES,
+        tiles: TERRAIN_DETAIL_TILES,
         encoding: "terrarium",
-        maxzoom: TERRAIN_MAX_ZOOM,
+        maxzoom: TERRAIN_DETAIL_MAX_ZOOM,
       },
     },
     // The flavor's landcover layer repaints the whole landmass in its own
@@ -938,6 +936,8 @@ const ZOOM_CEILING_CELL_PIXELS = 32;
  * base ceiling; the dataset's own ceiling (`applyZoomCeiling`) settles it
  * once the manifest is in. */
 const DEEP_LINK_MAX_ZOOM = 12.5;
+
+registerTerrainProtocol();
 
 const map = new MaplibreMap({
   container: "map",
