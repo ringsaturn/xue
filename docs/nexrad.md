@@ -11,6 +11,11 @@ stay the `mrms` source's; velocity cannot be mosaicked at all, since each
 radar measures it along its own beams. This document is the normative
 description of the product, schema v1.
 
+The shell's live view does not read those stores: it reads the source's
+own Level 3 objects straight out of the source bucket (§7), so nothing is
+built for a site nobody opens. The stores are what `xue nexrad-build`
+writes and what a showcase case keeps.
+
 ## 1. Delivery
 
 Everything is a static file under the data root, beside the run pointers
@@ -172,3 +177,27 @@ rules and every manifest against §4 as it writes them; a reader validates
 the same shapes on read, refuses a `schemaVersion` or `xue_polar` version
 above the one it implements, and treats an unknown site id or source id as
 data, not an error.
+
+## 7. The live view
+
+The shell's live single-site view reads the source (§5) directly; no
+pointer, round or store is published for it.
+
+- **Sites.** The marks are a static table in the shell,
+  `web/src/radar/sites.json`: the window manifest's site rows (§4) for
+  every station in NCEI's table that published N0B on the day before
+  `xue nexrad-sites` wrote it. Rerun it when the network changes.
+- **Timeline.** An open site lists `<SITE>_<PRODUCT>_<YYYY_MM_DD_HH>` for
+  every UTC hour of the newest three hours, then once a minute from its
+  newest key on (`start-after`); a hidden page skips the minute and
+  catches up when shown. A sweep's time is its key's (§2); a sweep older
+  than three hours leaves the timeline. Only the product shown is listed.
+- **Sweeps.** Each sweep is one object read whole and decoded by the
+  WASM `decodeLevel3`, a port of the builder's reader (`level3.py`) held
+  to it by a pinned digest of the fixture's sweeps
+  (`tests/fixtures/nexrad/expected/level3.json`). It yields the same codes
+  on the same beam grid a polar store holds, so §2 applies unchanged.
+- **Cross-origin.** The bucket answers objects, listings and `Range`
+  preflights with `Access-Control-Allow-Origin: *`. Should it stop, the
+  bucket URL in `web/src/radar/live.ts` is the one place a pass-through
+  proxy would go.

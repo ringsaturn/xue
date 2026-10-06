@@ -1,25 +1,27 @@
-/** One radar site's window, read for playback: which sweep stands at a
- * time, and the rounds that hold them, fetched near the playhead first.
+/** One radar site's sweeps, read for playback: which sweep stands at a
+ * time, and the units that hold them, fetched near the playhead first.
  *
- * A round is the unit read: one range out of one store's shard gives the
- * site's every sweep of those five minutes (`docs/nexrad.md` §4), decoded in
- * a worker. Rounds are asked for in time order outward from the playhead —
- * the one it stands on, then the ones it is about to play, then behind it —
- * never more than `MAX_IN_FLIGHT` at once, and held under a byte budget that
- * evicts whole rounds farthest from the playhead first, the way the frame
- * cache evicts planes. A product is only read once it is shown: velocity
- * costs nothing until someone switches to it. */
+ * A unit is what one decode reads (`feed.ts`): a case's round, every sweep
+ * of five minutes out of one range of a store's shard (`docs/nexrad.md`
+ * §4), or a live sweep's own Level 3 object (§7). Units are asked for in
+ * time order outward from the playhead — the one it stands on, then the
+ * ones it is about to play, then behind it — never more than
+ * `MAX_IN_FLIGHT` at once, and held under a byte budget that evicts whole
+ * units farthest from the playhead first, the way the frame cache evicts
+ * planes. A product is only read once it is shown: velocity costs nothing
+ * until someone switches to it. */
 
-import type { RadarChunkReply, RadarChunkRequest } from "./worker";
-import { BEAMS, GATES, type RadarProduct, type RadarWindow } from "./schema";
+import type { RadarSiteFeed, RadarUnit } from "./feed";
+import type { RadarChunkReply, RadarChunkRequest, RadarDecodeRequest } from "./worker";
+import { BEAMS, type RadarProduct, type RadarSite } from "./schema";
 
-/** Rounds being fetched or decoded at once. */
+/** Units being fetched or decoded at once. */
 const MAX_IN_FLIGHT = 4;
 /** How far behind the playhead a sweep still stands for it: one missed
  * volume scan at the slowest clear-air cadence. Past this the site shows
  * nothing rather than an old picture. */
 export const SWEEP_MAX_AGE_MS = 15 * 60 * 1000;
-/** Rounds fetched ahead of the playhead before any behind it. */
+/** Units fetched ahead of the playhead before any behind it. */
 const AHEAD_ROUNDS = 8;
 
 export interface RadarSweep {
@@ -29,8 +31,7 @@ export interface RadarSweep {
 }
 
 interface Slot {
-  round: number;
-  chunk: number;
+  unit: RadarUnit;
   sweep: number;
   time: number;
 }
@@ -38,7 +39,8 @@ interface Slot {
 interface Resident {
   codes: Uint8Array;
   gates: number;
-  scans: number;
+  /** Its unit's place on the clock, for eviction by distance. */
+  time: number;
   touched: number;
 }
 
@@ -71,12 +73,12 @@ function pool(): Worker[] {
   return workers;
 }
 
-function decodeRemote(request: Omit<RadarChunkRequest, "id">): Promise<RadarChunkReply> {
+function decodeRemote(request: RadarDecodeRequest): Promise<RadarChunkReply> {
   const id = nextRequest++;
   const worker = pool()[id % pool().length]!;
   return new Promise((resolve) => {
     waiting.set(id, resolve);
-    worker.postMessage({ ...request, id } satisfies RadarChunkRequest);
+    worker.postMessage({ ...request, id } as RadarChunkRequest);
   });
 }
 
@@ -86,6 +88,7 @@ export class RadarSession {
   private readonly pending = new Set<string>();
   private readonly failed = new Set<string>();
   private readonly started = performance.now();
+  private readonly feed: RadarSiteFeed;
   private time: number | null = null;
   private product: RadarProduct;
   private touch = 0;
@@ -100,23 +103,21 @@ export class RadarSession {
   private closed = false;
 
   constructor(
-    private readonly window: RadarWindow,
-    private readonly windowUrl: string,
-    readonly siteIndex: number,
+    readonly site: RadarSite,
+    feed: (onChange: () => void) => RadarSiteFeed,
     product: RadarProduct,
     private readonly budgetBytes: number,
     private readonly onChange: () => void,
   ) {
     this.product = product;
-  }
-
-  get site() {
-    return this.window.sites[this.siteIndex]!;
+    this.feed = feed(() => this.unitsChanged());
+    this.feed.watch(product);
   }
 
   setProduct(product: RadarProduct): void {
     if (product === this.product) return;
     this.product = product;
+    this.feed.watch(product);
     this.pump();
   }
 
@@ -126,13 +127,13 @@ export class RadarSession {
     this.pump();
   }
 
-  /** The sweep standing at `time` for the shown product, when its round is
+  /** The sweep standing at `time` for the shown product, when its unit is
    * in hand; null when the site has none that recent, or it is still on
    * its way (then it is asked for). */
   sweepAt(time: number): RadarSweep | null {
     const slot = this.slotAt(this.product, time);
     if (!slot) return null;
-    const resident = this.resident.get(this.key(this.product, slot.round));
+    const resident = this.resident.get(this.key(this.product, slot.unit));
     if (!resident) return null;
     resident.touched = ++this.touch;
     const plane = BEAMS * resident.gates;
@@ -144,7 +145,7 @@ export class RadarSession {
   }
 
   /** The newest sweep time of the shown product at or before `time`, read
-   * from the manifest alone: what the readout names even before the bytes
+   * from the feed alone: what the readout names even before the bytes
    * arrive. */
   sweepTimeAt(time: number): number | null {
     return this.slotAt(this.product, time)?.time ?? null;
@@ -161,25 +162,41 @@ export class RadarSession {
 
   close(): void {
     this.closed = true;
+    this.feed.close();
     this.resident.clear();
     this.pending.clear();
   }
 
-  private key(product: RadarProduct, round: number): string {
-    return `${product}:${round}`;
+  /** A live feed's units changed: sweeps arrived or aged out. Residents of
+   * units gone from the feed are dropped. */
+  private unitsChanged(): void {
+    if (this.closed) return;
+    this.slots.clear();
+    const live = new Set<string>();
+    const products = new Set([...this.resident.keys()].map((key) => key.split(":")[0] as RadarProduct));
+    for (const product of products) {
+      for (const unit of this.feed.units(product)) live.add(this.key(product, unit));
+    }
+    for (const [key, resident] of this.resident) {
+      if (live.has(key)) continue;
+      this.stats.residentBytes -= resident.codes.byteLength;
+      this.resident.delete(key);
+    }
+    this.pump();
+    this.onChange();
+  }
+
+  private key(product: RadarProduct, unit: RadarUnit): string {
+    return `${product}:${unit.key}`;
   }
 
   private timeline(product: RadarProduct): Slot[] {
     let slots = this.slots.get(product);
     if (slots) return slots;
     slots = [];
-    this.window.rounds.forEach((round, roundIndex) => {
-      const block = round.products[product];
-      block?.chunks.forEach((chunk, chunkIndex) => {
-        if (chunk.site !== this.siteIndex) return;
-        chunk.times.forEach((time, sweep) => slots!.push({ round: roundIndex, chunk: chunkIndex, sweep, time }));
-      });
-    });
+    for (const unit of this.feed.units(product)) {
+      unit.times.forEach((time, sweep) => slots!.push({ unit, sweep, time }));
+    }
     slots.sort((a, b) => a.time - b.time);
     this.slots.set(product, slots);
     return slots;
@@ -202,46 +219,41 @@ export class RadarSession {
     return found && time - found.time <= SWEEP_MAX_AGE_MS ? found : null;
   }
 
-  /** The rounds to hold, in the order to fetch them: the one the playhead
+  /** The units to hold, in the order to fetch them: the one the playhead
    * stands on, the ones ahead of it, then the ones behind. */
-  private wanted(): number[] {
-    const slots = this.timeline(this.product);
-    if (slots.length === 0) return [];
-    const rounds = [...new Set(slots.map((slot) => slot.round))].sort((a, b) => a - b);
-    const time = this.time ?? slots[slots.length - 1]!.time;
-    const here = this.slotAt(this.product, time)?.round ?? rounds.find((round) => this.window.rounds[round]!.time >= time) ?? rounds[0]!;
-    const position = Math.max(0, rounds.indexOf(here));
-    const ahead = rounds.slice(position, position + 1 + AHEAD_ROUNDS);
-    const behind = rounds.slice(0, position).reverse();
-    const beyond = rounds.slice(position + 1 + AHEAD_ROUNDS);
+  private wanted(): RadarUnit[] {
+    const units = [...this.feed.units(this.product)].sort((a, b) => a.time - b.time);
+    if (units.length === 0) return [];
+    const time = this.time ?? units[units.length - 1]!.times.at(-1)!;
+    const here = this.slotAt(this.product, time)?.unit ?? units.find((unit) => unit.time >= time) ?? units[0]!;
+    const position = Math.max(0, units.indexOf(here));
+    const ahead = units.slice(position, position + 1 + AHEAD_ROUNDS);
+    const behind = units.slice(0, position).reverse();
+    const beyond = units.slice(position + 1 + AHEAD_ROUNDS);
     return [...ahead, ...behind, ...beyond];
   }
 
   private pump(): void {
     if (this.closed) return;
-    for (const round of this.wanted()) {
+    for (const unit of this.wanted()) {
       if (this.pending.size >= MAX_IN_FLIGHT) break;
-      const key = this.key(this.product, round);
+      const key = this.key(this.product, unit);
       if (this.resident.has(key) || this.pending.has(key) || this.failed.has(key)) continue;
-      if (!this.fits(round)) break;
-      this.fetch(round);
+      if (!this.fits(unit)) break;
+      this.fetch(unit);
     }
   }
 
-  /** Whether a round can be held: room under the budget, made by evicting
-   * rounds farther from the playhead than it is. */
-  private fits(round: number): boolean {
+  /** Whether a unit can be held: room under the budget, made by evicting
+   * units farther from the playhead than it is. */
+  private fits(unit: RadarUnit): boolean {
     const product = this.product;
-    const block = this.window.rounds[round]!.products[product]!;
-    const chunk = block.chunks.find((item) => item.site === this.siteIndex)!;
-    const need = chunk.sweeps * BEAMS * GATES[product];
-    const distance = (index: number) => Math.abs(this.window.rounds[index]!.time - (this.time ?? 0));
-    while (this.stats.residentBytes + need > this.budgetBytes) {
+    const distance = (time: number) => Math.abs(time - (this.time ?? 0));
+    while (this.stats.residentBytes + unit.bytes > this.budgetBytes) {
       let victim: string | null = null;
-      let farthest = distance(round);
-      for (const key of this.resident.keys()) {
-        const index = Number(key.split(":")[1]);
-        const away = distance(index) + (key.startsWith(`${product}:`) ? 0 : Number.MAX_SAFE_INTEGER / 2);
+      let farthest = distance(unit.time);
+      for (const [key, resident] of this.resident) {
+        const away = distance(resident.time) + (key.startsWith(`${product}:`) ? 0 : Number.MAX_SAFE_INTEGER / 2);
         if (away > farthest) {
           farthest = away;
           victim = key;
@@ -254,32 +266,19 @@ export class RadarSession {
     return true;
   }
 
-  private fetch(round: number): void {
+  private fetch(unit: RadarUnit): void {
     const product = this.product;
-    const key = this.key(product, round);
-    const entry = this.window.rounds[round]!;
-    const block = entry.products[product]!;
-    const chunk = block.chunks.find((item) => item.site === this.siteIndex)!;
-    const roundUrl = new URL(entry.path, this.windowUrl);
-    const shard = new URL(`${product}.zarr/${product}/c/0/0/0/0`, roundUrl);
-    shard.searchParams.set("v", block.shardCrc32);
+    const key = this.key(product, unit);
     this.pending.add(key);
-    void decodeRemote({
-      url: shard.href,
-      offset: chunk.offset,
-      length: chunk.length,
-      scans: block.scans,
-      sweeps: chunk.sweeps,
-      gates: GATES[product],
-    }).then((reply) => {
+    void decodeRemote(unit.request).then((reply) => {
       this.pending.delete(key);
       if (this.closed) return;
       if (!reply.ok) {
         this.failed.add(key);
-        console.warn(`radar: ${this.site.id} ${product} round ${round} not read: ${reply.error}`);
+        console.warn(`radar: ${this.site.id} ${product} ${unit.key} not read: ${reply.error}`);
       } else {
         const codes = new Uint8Array(reply.codes);
-        this.resident.set(key, { codes, gates: GATES[product], scans: chunk.sweeps, touched: ++this.touch });
+        this.resident.set(key, { codes, gates: unit.request.gates, time: unit.time, touched: ++this.touch });
         this.stats.residentBytes += codes.byteLength;
         this.stats.peakResidentBytes = Math.max(this.stats.peakResidentBytes, this.stats.residentBytes);
         this.stats.fetchedBytes += reply.bytes;

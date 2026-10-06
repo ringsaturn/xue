@@ -1,7 +1,7 @@
 /** The single-site radar in the shell (`docs/nexrad.md`): the window
  * manifest and pointer readers on the committed goldens (a live round's and
- * a case's window stores), the URL state, the case block, the disc mesh and
- * the site marks. */
+ * a case's window stores), the feeds over them and over the live bucket,
+ * the URL state, the case block, the disc mesh and the site marks. */
 
 import { describe, expect, it, vi } from "vitest";
 
@@ -10,6 +10,8 @@ import caseJson from "../fixtures/nexrad/expected/case/index.json";
 import windowJson from "../fixtures/nexrad/expected/nexrad.202303250145/index.json";
 
 import { discMesh } from "../../web/src/radar/layer";
+import { windowFeed } from "../../web/src/radar/feed";
+import { hourPrefix, keyTime, LIVE_SITES, parseListing } from "../../web/src/radar/live";
 import { siteFeatures } from "../../web/src/radar/overlay";
 import { parseNexradPointer, parseRadarWindow } from "../../web/src/radar/schema";
 import { validateCatalog } from "../../web/src/showcase-catalog";
@@ -177,8 +179,41 @@ describe("the map pieces", () => {
 
   it("marks every site, the chosen one filled", () => {
     const window = parseRadarWindow(windowJson);
-    const features = siteFeatures(window, "GWX").features;
+    const features = siteFeatures(window.sites, "GWX").features;
     expect(features.map((feature) => feature.properties!.id)).toEqual(["DGX", "GWX"]);
     expect(features.map((feature) => feature.properties!.selected)).toEqual([false, true]);
+  });
+});
+
+describe("the feeds", () => {
+  it("reads a case's site as one unit per round", () => {
+    const window = parseRadarWindow(caseJson);
+    const gwx = window.sites.findIndex((site) => site.id === "GWX");
+    const units = windowFeed(window, "https://data.example/showcase/c/radar/index.json?v=1").site(gwx, () => {}).units("n0g");
+    expect(units.map((unit) => unit.times.length)).toEqual(
+      window.rounds.map((round) => round.products.n0g!.chunks.find((chunk) => chunk.site === gwx)!.sweeps),
+    );
+    const first = units[0]!.request;
+    expect(first.kind).toBe("chunk");
+    expect(first.url).toMatch(/^https:\/\/data\.example\/showcase\/c\/radar\/n0g\.zarr\/n0g\/c\/0\/0\/0\/0\?v=[0-9a-f]{8}$/);
+  });
+
+  it("reads the bucket's keys and listings", () => {
+    expect(keyTime("GWX_N0G_2023_03_25_01_36_23")).toBe(Date.UTC(2023, 2, 25, 1, 36, 23));
+    expect(keyTime("GWX_N0G_2023_03_25_01_36")).toBeNull();
+    expect(hourPrefix("GWX", "n0g", Date.UTC(2023, 2, 5, 7, 59))).toBe("GWX_N0G_2023_03_05_07");
+    const page = parseListing(
+      "<ListBucketResult><IsTruncated>true</IsTruncated><Contents><Key>GWX_N0B_2026_10_05_00_00_28</Key></Contents>" +
+        "<Contents><Key>GWX_N0B_2026_10_05_00_03_07</Key></Contents><NextContinuationToken>abc=</NextContinuationToken></ListBucketResult>",
+    );
+    expect(page).toEqual({ keys: ["GWX_N0B_2026_10_05_00_00_28", "GWX_N0B_2026_10_05_00_03_07"], next: "abc=" });
+    expect(parseListing("<ListBucketResult><IsTruncated>false</IsTruncated></ListBucketResult>")).toEqual({ keys: [], next: null });
+  });
+
+  it("knows the live sites as the case's manifest does", () => {
+    const window = parseRadarWindow(caseJson);
+    expect(LIVE_SITES.length).toBeGreaterThan(140);
+    expect(new Set(LIVE_SITES.map((site) => site.id)).size).toBe(LIVE_SITES.length);
+    for (const site of window.sites) expect(LIVE_SITES.find((entry) => entry.id === site.id)).toEqual(site);
   });
 });

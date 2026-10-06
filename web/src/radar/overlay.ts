@@ -1,4 +1,4 @@
-/** The single-site radar as an overlay: the sites of a window as marks, the
+/** The single-site radar as an overlay: the sites of a feed as marks, the
  * chosen site's sweep under the playhead as a polar layer, and the chip that
  * names what is shown.
  *
@@ -13,7 +13,8 @@ import type { FeatureCollection } from "geojson";
 import type { GeoJSONSource, Map as MaplibreMap, SymbolLayerSpecification } from "maplibre-gl";
 
 import { RadarLayer } from "./layer";
-import { GATES, type RadarProduct, type RadarSite, type RadarWindow } from "./schema";
+import type { RadarFeed } from "./feed";
+import { GATES, type RadarProduct, type RadarSite } from "./schema";
 import { RadarSession, SWEEP_MAX_AGE_MS, type RadarSessionStats } from "./session";
 
 const SITES_SOURCE = "radar-sites";
@@ -46,10 +47,10 @@ export function radarBudgetBytes(): number {
   return (narrow ? 96 : 384) * 1024 * 1024;
 }
 
-export function siteFeatures(window: RadarWindow | null, selected: string | null): FeatureCollection {
+export function siteFeatures(sites: readonly RadarSite[], selected: string | null): FeatureCollection {
   return {
     type: "FeatureCollection",
-    features: (window?.sites ?? []).map((site) => ({
+    features: sites.map((site) => ({
       type: "Feature",
       id: site.id,
       geometry: { type: "Point", coordinates: [site.lon, site.lat] },
@@ -164,8 +165,7 @@ export function siteLabelSpec(ink: string, halo: string, font: string[]): Symbol
 
 export class RadarOverlay {
   private readonly layer = new RadarLayer();
-  private window: RadarWindow | null = null;
-  private windowUrl = "";
+  private feed: RadarFeed | null = null;
   private session: RadarSession | null = null;
   private product: RadarProduct = "n0b";
   private time: number | null = null;
@@ -188,32 +188,38 @@ export class RadarOverlay {
   }
 
   get sites(): readonly RadarSite[] {
-    return this.window?.sites ?? [];
+    return this.feed?.sites ?? [];
   }
 
-  /** The window to draw from (a case's or the live one), or none. */
-  setWindow(window: RadarWindow | null, windowUrl: string): void {
-    if (window === this.window && windowUrl === this.windowUrl) return;
+  /** The feed to draw from (a case's window or the live source), or none. */
+  setFeed(feed: RadarFeed | null): void {
+    if (feed === this.feed) return;
     const site = this.siteId;
-    this.window = window;
-    this.windowUrl = windowUrl;
+    this.feed = feed;
     this.session?.close();
     this.session = null;
     this.shown = null;
-    if (window && site) this.setSite(site);
+    if (feed && site) this.setSite(site);
     this.publishSites();
     this.refresh();
   }
 
-  /** Draw this site, or none. A site the window does not have draws none. */
+  /** Draw this site, or none. A site the feed does not have draws none. */
   setSite(id: string | null): void {
     if (id === this.siteId && this.session) return;
     this.session?.close();
     this.session = null;
     this.shown = null;
-    const index = id === null || !this.window ? -1 : this.window.sites.findIndex((site) => site.id === id);
-    if (index >= 0) {
-      this.session = new RadarSession(this.window!, this.windowUrl, index, this.product, radarBudgetBytes(), () => this.refresh());
+    const feed = this.feed;
+    const index = id === null || !feed ? -1 : feed.sites.findIndex((site) => site.id === id);
+    if (feed && index >= 0) {
+      this.session = new RadarSession(
+        feed.sites[index]!,
+        (onChange) => feed.site(index, onChange),
+        this.product,
+        radarBudgetBytes(),
+        () => this.refresh(),
+      );
       if (this.time !== null) this.session.setTime(this.time);
     }
     this.publishSites();
@@ -260,7 +266,7 @@ export class RadarOverlay {
     if (this.added) return;
     if (!this.map.getLayer(this.layer.id)) this.map.addLayer(this.layer, before);
     if (!this.map.getSource(SITES_SOURCE)) {
-      this.map.addSource(SITES_SOURCE, { type: "geojson", data: siteFeatures(this.window, this.siteId), promoteId: "id" });
+      this.map.addSource(SITES_SOURCE, { type: "geojson", data: siteFeatures(this.sites, this.siteId), promoteId: "id" });
     }
     this.putGlyphs();
     if (!this.map.getLayer(RADAR_SITE_LAYER)) this.map.addLayer(siteLayerSpec(), before);
@@ -311,7 +317,7 @@ export class RadarOverlay {
 
   private publishSites(): void {
     const source = this.map.getSource(SITES_SOURCE) as GeoJSONSource | undefined;
-    source?.setData(siteFeatures(this.window, this.siteId));
+    source?.setData(siteFeatures(this.sites, this.siteId));
   }
 
   private refresh(): void {

@@ -1,21 +1,25 @@
-/** The radar's decoder: one site's inner chunk of one round, read by range
- * out of the store's shard and decoded off the main thread.
+/** The radar's decoder: one unit of a site's sweeps, fetched and decoded
+ * off the main thread.
  *
- * A polar store's inner chunk is a Zstandard frame of `scans × 720 × gates`
+ * Two kinds of unit (`feed.ts`). A polar store's inner chunk, read by range
+ * out of the store's shard, is a Zstandard frame of `scans × 720 × gates`
  * codes with no predictor (`docs/zarr-profile.md`, "Polar store"), which is
- * exactly what the container's chunk path decodes: `decodeChunk` from the
- * WASM decoder, with the RAW predictor. The fetch is here too, so the bytes
- * never visit the main thread compressed. */
+ * exactly what the container's chunk path decodes: `decodeChunk` with the
+ * RAW predictor. A live sweep is one Level 3 object from the source bucket,
+ * read whole and decoded by `decodeLevel3`, the port of the encoder's own
+ * reader, into the same codes on the same beam grid. The fetch is here too,
+ * so the bytes never visit the main thread compressed. */
 
-import wasmInit, { decodeChunk } from "../wasm/xue";
+import wasmInit, { decodeChunk, decodeLevel3 } from "../wasm/xue";
 import wasmUrl from "../wasm/xue_bg.wasm?url";
 import { fetchImmutable } from "../fetchimmutable";
+import type { RadarProduct } from "./schema";
 
 const PREDICTOR_RAW = 0;
 const BEAMS = 720;
 
-export interface RadarChunkRequest {
-  id: number;
+export interface RadarChunkDecode {
+  kind: "chunk";
   url: string;
   offset: number;
   length: number;
@@ -25,13 +29,43 @@ export interface RadarChunkRequest {
   gates: number;
 }
 
+export interface RadarLevel3Decode {
+  kind: "level3";
+  url: string;
+  product: RadarProduct;
+  gates: number;
+}
+
+export type RadarDecodeRequest = RadarChunkDecode | RadarLevel3Decode;
+export type RadarChunkRequest = RadarDecodeRequest & { id: number };
+
 export type RadarChunkReply =
   | { id: number; ok: true; codes: ArrayBuffer; bytes: number }
   | { id: number; ok: false; error: string };
 
 const ready = wasmInit(wasmUrl);
+const PRODUCT_CODES: Record<RadarProduct, number> = { n0b: 153, n0g: 154 };
+
+async function decodeSweep(request: RadarLevel3Decode & { id: number }): Promise<RadarChunkReply> {
+  // A sweep is immutable once in the bucket: whatever cache holds it is
+  // right.
+  const response = await fetch(request.url, { cache: "force-cache" });
+  if (!response.ok) throw new Error(`radar sweep request failed: ${response.status}`);
+  const body = new Uint8Array(await response.arrayBuffer());
+  await ready;
+  const sweep = decodeLevel3(body);
+  try {
+    if (sweep.productCode !== PRODUCT_CODES[request.product] || sweep.gates !== request.gates)
+      throw new Error(`radar sweep is product ${sweep.productCode} with ${sweep.gates} gates, not ${request.product}`);
+    const codes = sweep.takeCodes();
+    return { id: request.id, ok: true, codes: codes.buffer as ArrayBuffer, bytes: body.length };
+  } finally {
+    sweep.free();
+  }
+}
 
 async function decode(request: RadarChunkRequest): Promise<RadarChunkReply> {
+  if (request.kind === "level3") return decodeSweep(request);
   const response = await fetchImmutable(request.url, {
     headers: { Range: `bytes=${request.offset}-${request.offset + request.length - 1}` },
   });

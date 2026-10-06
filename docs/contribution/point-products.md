@@ -91,6 +91,11 @@ failed. `AIRPORT_KEEP` rounds are kept.
   store per round per product was ~35 objects a round. `replay` still
   builds the live layout over a past interval, for the golden.
 - Level 3 N0B / N0G exist from 2022-02 on; earlier events have N0Q / N0U only.
+- The live view publishes nothing (`docs/nexrad.md` §7): the shell lists
+  and reads the source bucket itself, and `rust/xue/src/level3.rs` ports
+  `level3.py` for it. A change to the reader changes both, and
+  `tests/prepare_nexrad_golden.py` re-pins `expected/level3.json`.
+  `xue nexrad-sites` rewrites the shell's site table.
 
 ## Soundings
 

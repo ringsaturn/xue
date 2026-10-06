@@ -24,7 +24,6 @@ import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&ur
 
 import { CRC32_INITIAL, crc32Hex, crc32Update } from "./crc32";
 import { fetchImmutable } from "./fetchimmutable";
-import { loadPointerIndex } from "./pointerindex";
 import {
   applyStaticMessages,
   basemapLang,
@@ -193,7 +192,9 @@ import {
 } from "./stations/nearest";
 import { synopObservedValue, synopRowObservations, synopTakesRow } from "./stations/synopobs";
 import { RADAR_SITE_LAYER, RadarOverlay, type RadarReadout } from "./radar/overlay";
-import { GATE_KM, GATES, NEXRAD_POINTER_FILENAME, parseNexradPointer, parseRadarWindow, type RadarWindow } from "./radar/schema";
+import { windowFeed, type RadarFeed } from "./radar/feed";
+import { liveFeed } from "./radar/live";
+import { GATE_KM, GATES, parseRadarWindow } from "./radar/schema";
 import {
   nearestObservation,
   rowObservations,
@@ -5525,8 +5526,8 @@ function applyCaseCamera(showcaseCase: ShowcaseCase, recenter: boolean): void {
   // A case with single-site radar holds the camera to its region and every
   // site's reach, so a sweep running off the region can still be panned to.
   const box =
-    showcaseCase.radar && radarWindow
-      ? radarReachBox(showcaseCase.bbox, radarWindow.window.sites, RADAR_REACH_KM)
+    showcaseCase.radar && radarFeed && !radarFeed.live
+      ? radarReachBox(showcaseCase.bbox, radarFeed.sites, RADAR_REACH_KM)
       : showcaseCase.bbox;
   const limits = caseCameraLimits(box, {
     width: canvas.clientWidth,
@@ -6686,7 +6687,7 @@ async function loadStations(): Promise<void> {
   if (soundings.status === "fulfilled") soundingLoaded = soundings.value;
   if (airports.status === "fulfilled") airportLoaded = airports.value;
   if (synop.status === "fulfilled") synopLoaded = synop.value;
-  if (activeCase === null && requestedCaseId === null) await loadLiveRadar(base);
+  if (activeCase === null && requestedCaseId === null) loadLiveRadar();
   applyStationView();
 }
 
@@ -6803,8 +6804,8 @@ function toggleStationProduct(product: keyof StationsUrlState): void {
 
 // ---------------------------------------------------------------------------
 // Single-site radar (docs/nexrad.md): an overlay that follows the playhead,
-// like the station marks, drawn from a window of polar stores — the live one
-// under `latest-nexrad.json`, or a showcase case's own. One site at a time:
+// like the station marks, drawn from the live source bucket's Level 3 sweeps
+// or a showcase case's window of polar stores. One site at a time:
 // the rail tile turns it on, a click on a site's mark picks the site, and
 // the chip under the title switches reflectivity and velocity. The link
 // carries `?radar=<site>` and `?radarproduct=n0g`.
@@ -6813,22 +6814,20 @@ function toggleStationProduct(product: keyof StationsUrlState): void {
  * override it. */
 const requestedRadarFromUrl = new URLSearchParams(window.location.search).has("radar");
 
-/** The window the overlay reads from, and the URL its rounds resolve
- * against. */
-let radarWindow: { window: RadarWindow; url: string } | null = null;
+/** Where the overlay reads its sites and sweeps: the live source, or the
+ * case's window. */
+let radarFeed: RadarFeed | null = null;
 /** How far a site's longest-reaching product sees, km: N0B's 460. */
 const RADAR_REACH_KM = Math.max(...Object.values(GATES)) * GATE_KM;
 let radarOverlay: RadarOverlay | null = null;
 /** The case's window, read once per case. */
 let radarCaseLoadedFor: string | null = null;
 
-async function loadLiveRadar(base: string): Promise<void> {
-  try {
-    const loaded = await loadPointerIndex(base, NEXRAD_POINTER_FILENAME, parseNexradPointer, parseRadarWindow, "nexrad");
-    radarWindow = loaded ? { window: loaded.index, url: loaded.indexUrl } : null;
-  } catch (error) {
-    console.warn("radar: live window not read:", error instanceof Error ? error.message : error);
-  }
+/** The live feed costs nothing until a site is opened: its sites are a
+ * static table, and only an open site lists and reads the bucket. */
+function loadLiveRadar(): void {
+  if (radarFeed?.live) return;
+  radarFeed = liveFeed();
   applyRadarView();
 }
 
@@ -6841,7 +6840,7 @@ async function loadCaseRadar(showcaseCase: ShowcaseCase): Promise<void> {
   try {
     const response = await fetchImmutable(url);
     if (!response.ok) throw new Error(`radar window request failed: ${response.status}`);
-    radarWindow = { window: parseRadarWindow(await response.json()), url: url.href };
+    radarFeed = windowFeed(parseRadarWindow(await response.json()), url.href);
     // A case opens with its radar on, on the site and product it names,
     // unless the link says otherwise.
     if (!requestedRadarFromUrl) {
@@ -6849,7 +6848,7 @@ async function loadCaseRadar(showcaseCase: ShowcaseCase): Promise<void> {
     }
   } catch (error) {
     console.warn(`radar: case ${showcaseCase.id} window not read:`, error instanceof Error ? error.message : error);
-    radarWindow = null;
+    radarFeed = null;
   }
   if (activeCase?.id === showcaseCase.id) applyCaseCamera(showcaseCase, false);
   applyRadarView();
@@ -6869,7 +6868,8 @@ function ensureRadarOverlay(): RadarOverlay | null {
 }
 
 function applyRadarView(): void {
-  const available = radarWindow !== null && (activeCase === null || activeCase.radar !== undefined);
+  const available =
+    radarFeed !== null && (activeCase === null ? radarFeed.live : activeCase.radar !== undefined && !radarFeed.live);
   if (radarTile.hidden === available) {
     radarTile.hidden = !available;
     syncRailDensity();
@@ -6885,10 +6885,10 @@ function applyRadarView(): void {
   }
   const overlay = ensureRadarOverlay();
   if (!overlay) return;
-  overlay.setWindow(radarWindow!.window, radarWindow!.url);
-  // A site the window does not have is no site: the marks show, the
-  // mosaic stays.
-  const site = state.site && radarWindow!.window.sites.some((entry) => entry.id === state.site) ? state.site : null;
+  overlay.setFeed(radarFeed);
+  // A site the feed does not have is no site: the marks show, the mosaic
+  // stays.
+  const site = state.site && radarFeed!.sites.some((entry) => entry.id === state.site) ? state.site : null;
   if (site !== state.site) view.marks.radar = { ...state, site };
   overlay.setProduct(view.marks.radar.product);
   overlay.setSite(site);
@@ -7011,7 +7011,7 @@ function applyRadarTitle(readout: RadarReadout): void {
 }
 
 function radarWindowHours(): number {
-  return radarWindow ? radarWindow.window.windowSeconds / 3600 : 3;
+  return radarFeed ? radarFeed.windowSeconds / 3600 : 3;
 }
 
 function renderRadarChip(readout: RadarReadout | null): void {

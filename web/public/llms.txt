@@ -364,8 +364,10 @@ fall back to defaults rather than fail, so a constructed link always opens.
   grey-violet range-folded) instead of reflectivity. The sweep shown is the
   newest at or before the playhead, within 15 minutes, and the level row says
   how far it trails the playhead; past the window the newest is shown faded. It
-  follows the playhead and never holds it. The Rolling Fork showcase case
-  (`?case=rolling-fork-2023`) carries DGX, GWX and NQA.
+  follows the playhead and never holds it. Outside a case every WSR-88D site
+  is marked and an open site reads its last three hours live from NOAA's
+  Level 3 bucket, a new sweep within a minute of its arrival. The Rolling
+  Fork showcase case (`?case=rolling-fork-2023`) carries DGX, GWX and NQA.
 - `?use_h264=true` — opt into the H.264 companion artifacts via WebCodecs
   instead of the Xue decoder (a comparison path, not the default; GFS and
   HRRR publish the companions for their surface fields, ECMWF and SFLUX
