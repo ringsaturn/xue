@@ -83,6 +83,31 @@ def list_keys(site: str, product: str, start: datetime, end: datetime) -> list[s
     return sorted(set(keys))
 
 
+def published_sites(product: str, day: datetime) -> set[str]:
+    """The sites with at least one ``product`` sweep on ``day`` (UTC): the
+    bucket's site prefixes, each asked for one key of that day. The terminal
+    Doppler radars share the bucket and never publish N0B or N0G, so they
+    fall out here."""
+    code = SOURCE_CODES[product]
+    url = f"{BUCKET_URL}/?list-type=2&delimiter=_&max-keys=1000"
+    response = get(url)
+    if response.body is None:
+        raise DownloadError(f"listing the bucket's sites failed: HTTP {response.status}")
+    root = ElementTree.fromstring(response.body)
+    prefixes = [item.text or "" for item in root.iter(f"{_S3}Prefix")]
+    sites = [prefix[:-1] for prefix in prefixes if re.fullmatch(r"[A-Z0-9]{3}_", prefix)]
+
+    def publishes(site: str) -> str | None:
+        prefix = f"{site}_{code}_{day:%Y_%m_%d}"
+        listing = get(f"{BUCKET_URL}/?list-type=2&prefix={quote(prefix)}&max-keys=1")
+        if listing.body is None:
+            raise DownloadError(f"listing {prefix} failed: HTTP {listing.status}")
+        return site if ElementTree.fromstring(listing.body).find(f"{_S3}Contents") is not None else None
+
+    with ThreadPoolExecutor(max_workers=DOWNLOAD_WORKERS) as pool:
+        return {site for site in pool.map(publishes, sites) if site is not None}
+
+
 def raw_path(raw_root: Path, key: str) -> Path:
     return raw_root / "nexrad" / key[:3] / key
 

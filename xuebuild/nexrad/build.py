@@ -277,6 +277,18 @@ def load_previous_window(output_root: Path) -> dict[str, Any] | None:
     return read_window(path) if path.exists() else None
 
 
+def shell_sites(stations: dict[str, Station], published: set[str]) -> list[list[Any]]:
+    """The shell's static site table (``docs/nexrad.md`` §7): every station
+    that publishes, as the window manifest's rows, by id. A site that
+    publishes but is missing from the station table is left out, as a
+    window would refuse it."""
+    return [
+        [site, station.icao, round(station.latitude, 6), round(station.longitude, 6), round(station.height_m, 1)]
+        for site, station in sorted(stations.items())
+        if site in published
+    ]
+
+
 def load_stations(raw_root: Path, *, fetch: bool = True) -> dict[str, Station]:
     path = fetch_stations(raw_root) if fetch else raw_root / "nexrad" / "nexrad-stations.txt"
     return parse_stations(path.read_text(encoding="utf-8"))

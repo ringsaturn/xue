@@ -4,7 +4,7 @@ import argparse
 import json
 import logging
 import sys
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from .assemble import (
@@ -40,6 +40,8 @@ from .nexrad.build import build_case as build_nexrad_case
 from .nexrad.build import catch_up as catch_up_nexrad
 from .nexrad.build import load_previous_window as load_previous_nexrad_window
 from .nexrad.build import load_stations as load_nexrad_stations
+from .nexrad.build import shell_sites as nexrad_shell_sites
+from .nexrad.fetch import published_sites as nexrad_published_sites
 from .nexrad.build import write_pointer as write_nexrad_pointer
 from .nexrad.schema import WINDOW_FILENAME as NEXRAD_WINDOW_FILENAME
 from .nexrad.schema import floor_round as floor_nexrad_round
@@ -489,6 +491,13 @@ def parser() -> argparse.ArgumentParser:
     nexrad_case.add_argument("--output-dir", type=Path, default=Path("web/public/data/showcase"))
     nexrad_case.add_argument("--offline", action="store_true", help="build from the sweeps already on disk")
 
+    nexrad_sites = commands.add_parser(
+        "nexrad-sites",
+        help="write the shell's static radar site table: every NEXRAD station that published N0B yesterday (UTC)",
+    )
+    nexrad_sites.add_argument("--raw-dir", type=Path, default=Path("data/raw"))
+    nexrad_sites.add_argument("--output", type=Path, default=Path("web/src/radar/sites.json"))
+
     synop_build = commands.add_parser(
         "synop-build",
         help="fetch the surface station networks and write one synop.<round>/ index, a <network>.jsonl per network "
@@ -878,6 +887,12 @@ def main(argv: list[str] | None = None) -> int:
                 fetch=not arguments.offline,
             )
             print(json.dumps({"case": case["id"], "rounds": len(report["window"]["rounds"]), "stores": report["stores"], "sources": report["sources"]}, indent=2))
+        elif arguments.command == "nexrad-sites":
+            day = datetime.now(UTC) - timedelta(days=1)
+            table = nexrad_shell_sites(load_nexrad_stations(arguments.raw_dir), nexrad_published_sites("n0b", day))
+            rows = ",\n".join(f"  {json.dumps(row)}" for row in table)
+            arguments.output.write_text(f"[\n{rows}\n]\n", encoding="utf-8")
+            print(json.dumps({"sites": len(table), "output": str(arguments.output)}))
         elif arguments.command == "synop-build":
             moment = floor_synop_round(datetime.now(UTC)) if arguments.round == "now" else parse_synop_round(arguments.round)
             networks = None
