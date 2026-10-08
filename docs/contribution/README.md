@@ -18,7 +18,9 @@ at the [README](../../README.md); for contribution rules, at
 | [publishing.md](publishing.md) | Uploading runs, rolling windows, point products, STAC, showcase |
 | [releasing.md](releasing.md) | Crate and wheel releases, the `xuepy` floor, deploy order |
 
-Normative specifications, which win over anything here:
+Normative specifications ([`docs/README.md`](../README.md) lists them all,
+with the versions in use and the compatibility rules), which win over
+anything here:
 
 - [`docs/format.md`](../format.md): the `.xue` container and bundle metadata
 - [`docs/zarr-profile.md`](../zarr-profile.md): the Zarr store profile
