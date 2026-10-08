@@ -49,7 +49,8 @@ from .common import crc32_hex
 from .binconvert import bundle_input_ids, published_bundle_ids
 from .encoder import convert_bin
 from .errors import DownloadError, ManifestError, XueError
-from .fetch import fetch_run, parse_run
+from .fetch import parse_run
+from .localrun import LocalRunError, build_local_run
 from .manifest import iso_z, validate_bin_manifest
 from .sources import SourceSpec, source_spec
 from .stac import write_showcase_documents
@@ -390,69 +391,65 @@ def build_case(
     window frame by frame, the products of the case's variables only.
     """
     source = spec.source
+    output_dir = output_root / spec.output_subdirectory
+    manifest_path = output_dir / "manifest.json"
     if spec.from_dataset:
-        inputs: Path | list[Path] = spec.dataset_path
+        inputs = spec.dataset_path
         if not inputs.is_file():
             raise ShowcaseError(
                 f"case {spec.id}: observation dataset not found at {inputs}; "
                 f"set {OBSERVATION_ROOT_ENV} to where it lives"
             )
         LOG.info("reading %s observation series %s", source.manifest_model, inputs)
+        report = convert_bin(
+            inputs,
+            output_dir,
+            profile=spec.profile,
+            work_root=work_root,
+            expected_hours=spec.hours,
+            manifest_path=manifest_path,
+            force=force,
+            # A cropped case is already a few megabytes: the half-resolution
+            # ladder has nothing left to save, and the H.264 companion cannot
+            # beat it at these sizes either.
+            skip_video=True,
+            skip_variants=True,
+            model=spec.model,
+            bbox=spec.bbox,
+            bundle_ids=spec.variables,
+            # A local file holds more than the case.
+            last_hour=spec.hours,
+            zarr=zarr,
+            container=container,
+        )
     else:
-        run = parse_run(spec.run, source.id)
-        input_ids = tuple(
-            dict.fromkeys(
-                input_id for bundle_id in spec.variables for input_id in bundle_input_ids(source, bundle_id)
+        # A per-case raw directory, so a partial record set never shadows a
+        # full run's cache.
+        try:
+            report = build_local_run(
+                spec.model,
+                spec.run,
+                spec.hours,
+                bbox=spec.bbox,
+                bundle_ids=spec.variables,
+                output_dir=output_dir,
+                raw_root=raw_root / SHOWCASE_DIRECTORY / spec.id,
+                work_root=work_root,
+                profile=spec.profile,
+                force=force,
+                force_download=force_download,
+                zarr=zarr,
+                container=container,
             )
-        )
-        case_raw_root = raw_root / SHOWCASE_DIRECTORY / spec.id
-        if source.observation:
-            LOG.info(
-                "fetching %s window %s +%d h (%s)", source.manifest_model, spec.run, spec.hours, ", ".join(input_ids)
-            )
-        else:
-            LOG.info(
-                "fetching %s run %s f000-f%03d (%s)", source.manifest_model, spec.run, spec.hours, ", ".join(input_ids)
-            )
-        # Exactly the case's own frames: the raw directory can hold more, left
-        # behind by an earlier build of the same case with a longer range.
-        inputs = fetch_run(
-            run, spec.hours, case_raw_root, force=force_download, model=spec.model, input_ids=input_ids
-        )
-
-    output_dir = output_root / spec.output_subdirectory
-    manifest_path = output_dir / "manifest.json"
-    report = convert_bin(
-        inputs,
-        output_dir,
-        profile=spec.profile,
-        work_root=work_root,
-        expected_hours=spec.hours,
-        manifest_path=manifest_path,
-        force=force,
-        # A cropped case is already a few megabytes: the half-resolution
-        # ladder has nothing left to save, and the H.264 companion cannot
-        # beat it at these sizes either.
-        skip_video=True,
-        skip_variants=True,
-        model=spec.model,
-        bbox=spec.bbox,
-        bundle_ids=spec.variables,
-        # A local file holds more than the case; a fetched window is exactly
-        # the frames that were fetched, like a forecast run.
-        last_hour=spec.hours if spec.from_dataset else None,
-        zarr=zarr,
-        container=container,
-    )
+        except LocalRunError as exc:
+            raise ShowcaseError(f"case {spec.id}: {exc}") from exc
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     if manifest["forecastHours"] != spec.hours:
-        # A forecast case is held to its axis by the converter and a
-        # local-file case by ``last_hour``; a fetched window can only come
-        # up short when the archive lacks its last hour, and a case's
+        # A local-file case is held to its axis by ``last_hour``; a case's
         # declared range is never silently shortened.
         raise ShowcaseError(
             f"case {spec.id}: the {source.manifest_model} window reaches +{manifest['forecastHours']} h, "
-            f"not the declared {spec.hours}; the archive lacks the frames past that"
+            f"not the declared {spec.hours}"
         )
     entry = build_catalog_entry(spec, manifest, manifest_path.read_bytes(), report)
     (output_dir / CASE_SIDECAR).write_text(json.dumps(entry, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")

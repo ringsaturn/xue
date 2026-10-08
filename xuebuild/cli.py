@@ -20,6 +20,7 @@ from .binconvert import bundle_input_ids, published_bundle_ids, verify_bin
 from .encoder import convert_bin
 from .errors import ConversionError, XueError
 from .fetch import WINDOW_FILENAME, fetch_run, parse_run, resolve_run, window_summary
+from .localrun import LOCAL_DIRECTORY, build_local_run, parse_bbox
 from .showcase import CASE_SIDECAR, build_case, load_cases, refresh_sidecar, write_catalog
 from .sources import SOURCES, source_spec
 from .stac import POINT_PRODUCTS, write_point_product_documents, write_run_documents
@@ -360,6 +361,47 @@ def parser() -> argparse.ArgumentParser:
         ),
     )
 
+    local_parser = commands.add_parser(
+        "build-local",
+        help="rebuild one archived run into data/local/<model>.<run>/ (Zarr stores and manifest; nothing is uploaded)",
+    )
+    _model_argument(local_parser)
+    local_parser.add_argument("--run", required=True, help="the UTC cycle to rebuild, YYYYMMDDHH (not latest)")
+    local_parser.add_argument(
+        "--hours",
+        type=forecast_hours,
+        default=None,
+        help="last forecast hour, inclusive, on the model's published axis; defaults to the whole axis",
+    )
+    local_parser.add_argument("--bbox", metavar="W,S,E,N", help="crop to this box in degrees; the whole domain when omitted")
+    local_parser.add_argument(
+        "--bundles",
+        nargs="+",
+        metavar="BUNDLE",
+        help="build only these bundles (and fetch only their inputs); every published bundle when omitted",
+    )
+    local_parser.add_argument("--output-dir", type=Path, default=Path("data") / LOCAL_DIRECTORY)
+    local_parser.add_argument(
+        "--raw-dir",
+        type=Path,
+        default=Path("data/raw"),
+        help=f"raw root; the run's GRIB files land in <raw-dir>/{LOCAL_DIRECTORY}/<model>.<run>/",
+    )
+    local_parser.add_argument("--work-dir", type=Path, default=Path("data/work"))
+    local_parser.add_argument("--profile", choices=("quality", "compact", "balanced"), default="quality")
+    local_parser.add_argument(
+        "--no-series",
+        dest="series",
+        action="store_false",
+        help="do not derive the series companion stores (<bundle>.series.zarr) of the source's point-read bundles",
+    )
+    local_parser.add_argument("--force", action="store_true", help="replace an existing local manifest and stores")
+    local_parser.add_argument(
+        "--force-download",
+        action="store_true",
+        help="download GRIB files again even when valid local files exist",
+    )
+
     showcase_parser = commands.add_parser(
         "showcase",
         help="build the historical showcase cases (past runs cropped to one weather event)",
@@ -604,6 +646,23 @@ def main(argv: list[str] | None = None) -> int:
                 index_location=arguments.index_location,
             )
             print(json.dumps(report.to_dict(), indent=2))
+        elif arguments.command == "build-local":
+            source = source_spec(arguments.model)
+            report = build_local_run(
+                arguments.model,
+                arguments.run,
+                _run_hours(arguments),
+                bbox=parse_bbox(arguments.bbox) if arguments.bbox else None,
+                bundle_ids=tuple(dict.fromkeys(arguments.bundles)) if arguments.bundles else None,
+                output_dir=arguments.output_dir / f"{source.id}.{arguments.run}",
+                raw_root=arguments.raw_dir / LOCAL_DIRECTORY,
+                work_root=arguments.work_dir,
+                profile=arguments.profile,
+                force=arguments.force,
+                force_download=arguments.force_download,
+                series=arguments.series,
+            )
+            print(json.dumps(report, indent=2))
         elif arguments.command == "showcase":
             if arguments.showcase_command == "catalog":
                 print(write_catalog(arguments.output_dir))

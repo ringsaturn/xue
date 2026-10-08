@@ -96,7 +96,8 @@ fixture (`gfs.*.crop.grib2` with the same run and `-srcwin`; the two-frame
   `tests/fixtures/locales.json`). A case is a forecast (`run` + `hours`), a
   local-file observation (`dataset`, under `XUE_OBSERVATION_ROOT`) or a
   fetched window (`run` = first hour); a window the archive cannot fill is
-  refused. `showcase refresh` rewrites a sidecar without a rebuild.
+  refused. `showcase refresh` rewrites a sidecar without a rebuild. A
+  fetched case is built by `localrun.build_local_run` plus a catalog row.
 - **`assemble.py`**: `publish.yml` fans a run out: `bundle-groups` packs
   bundles into at most `max_jobs` jobs of similar cost; each job runs
   `build-bin --bundles …` into `data/raw/partial/<group>/` and writes
@@ -107,3 +108,34 @@ fixture (`gfs.*.crop.grib2` with the same run and `-srcwin`; the two-frame
   `tests/test_assemble.py` holds split and top-up builds byte-identical to a
   whole one, so **nothing cross-variable may enter a bundle or its manifest
   entry**.
+
+## Local and archived runs
+
+`build-local` (`localrun.py`, `make run-local`) rebuilds one archived cycle
+for local use, such as a backtest, and uploads nothing:
+
+```sh
+make run-local MODEL=hrrr RUN=2025011512 HOURS=48 BBOX=-107,25.5,-93,37 BUNDLES="tmp2m wind10m"
+.venv/bin/python -m xuebuild build-local --model sflux --run 2025011506 --hours 48 \
+  --bbox=-107,25.5,-93,37 --bundles tmp2m dswrf wind10m
+```
+
+- `--run` is a `YYYYMMDDHH` cycle; `latest` is refused, since the live
+  cycle is `build-bin`'s. `--hours` defaults to the source's whole axis,
+  `--bbox W,S,E,N` (write it `--bbox=…` when west is negative) to the whole
+  domain, and `--bundles` to every bundle the source publishes. Only those
+  bundles' inputs are fetched.
+- The output, `data/local/<model>.<run>/`, is the manifest and one Zarr
+  store per bundle, plus `<bundle>.series.zarr` for the source's
+  `series_bundle_ids` (`--no-series` drops them) and the posters the
+  manifest names. There is no `.xue`, video, reduced-resolution variant,
+  live pointer or STAC.
+- Raw GRIB goes to `data/raw/local/<model>.<run>/`, apart from the live
+  `data/raw/<model>.<run>/`, for the same reason the showcase and the
+  fanned-out jobs keep their own: a narrowed record set must never pass for
+  a full fetch of the run. Delete it once the run is encoded when replaying
+  many cycles.
+- The encoder follows `XUE_ENCODER` as everywhere else. The installed
+  `xuepy` wheel can lag `sources.py` and `variables.py` by a release, so a
+  bundle registered since the last release builds only with
+  `XUE_ENCODER=python`.

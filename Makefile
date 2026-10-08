@@ -81,6 +81,13 @@ mvp: check install wasm ## Build one run (MODEL, RUN, HOURS) and the frontend
 	$(PYTHON) -m xuebuild build-bin --model $(MODEL) --run $(RUN) $(if $(HOURS),--hours $(HOURS)) --profile $(PROFILE) --zarr $(FORCE)
 	npm run build
 
+# An archived run rebuilt for local use (backtesting): BBOX=W,S,E,N crops it,
+# BUNDLES="tmp2m wind10m" narrows it, nothing is uploaded.
+.PHONY: run-local
+run-local: ## Build one archived run into data/local (MODEL, RUN, HOURS, BBOX, BUNDLES)
+	$(PYTHON) -m xuebuild build-local --model $(MODEL) --run $(RUN) $(if $(HOURS),--hours $(HOURS)) \
+		$(if $(BBOX),--bbox=$(BBOX)) $(if $(BUNDLES),--bundles $(BUNDLES)) --profile $(PROFILE) $(FORCE)
+
 serve: ## vite preview on 127.0.0.1
 	npm run preview -- --host 127.0.0.1
 
