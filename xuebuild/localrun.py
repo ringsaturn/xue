@@ -121,6 +121,6 @@ def build_local_run(
         # its last hour, and the requested range is never silently shortened.
         raise LocalRunError(
             f"the {source.manifest_model} {run} build reaches +{manifest['forecastHours']} h, "
-            f"not the requested {hours}; the archive lacks the frames past that"
+            f"not the declared {hours}; the archive lacks the frames past that"
         )
     return report
