@@ -1,16 +1,18 @@
 """Regenerate the terrain-correction golden the frontend is held to.
 
-Twenty synthetic cells — a summit three kilometres above a quarter-degree
-model ground, a night inversion over the model ground, a valley, a slope
-just above the ground, a two-surface column, a summit above 500 hPa, a
-column handed over out of height order — each with the temperature at the
-site that the method evaluated against mountain stations gives: the
-isobaric temperatures interpolated linearly in their heights (sorted, the
-standard 6.5 K/km past either end), and above the model ground
+Twenty-one synthetic cells — a summit three kilometres above a
+quarter-degree model ground by day and by night, a night inversion over
+the model ground, a valley, a slope just above the ground, a two-surface
+column, a summit above 500 hPa, a column handed over out of height order —
+each with the temperature at the site that the method evaluated against
+mountain stations gives: the isobaric temperatures interpolated linearly in
+their heights (sorted, the standard 6.5 K/km past either end), and above
+the model ground
 
-    T = free(site) + exp(-dz / 800 m) * (tmp2m - free(model ground))
+    T = free(site) + exp(-dz / H) * (tmp2m - free(model ground))
 
-and below it ``tmp2m - 0.0065 * dz``. ``tests/web/lapse.test.ts`` holds
+with H = 2500 m where the model ground is warmer than the free atmosphere
+and 800 m where it is colder, and below it ``tmp2m - 0.0065 * dz``. ``tests/web/lapse.test.ts`` holds
 ``web/src/lapse.ts`` to it.
 
 Run it after a deliberate change to the method, and commit the diff with
@@ -29,7 +31,8 @@ import numpy as np
 
 GOLDEN = Path(__file__).resolve().parent / "fixtures" / "lapse-golden.json"
 LAPSE_RATE = 0.0065
-DECAY_M = 800.0
+WARM_DECAY_M = 2500.0
+COLD_DECAY_M = 800.0
 
 
 def free_atmosphere(z: float, levels: list[tuple[float, float]]) -> float:
@@ -50,7 +53,8 @@ def site_temperature(t2m: float, model: float, site: float, levels: list[tuple[f
     dz = site - model
     if dz <= 0 or len(levels) < 2:
         return t2m - LAPSE_RATE * dz
-    return free_atmosphere(site, levels) + math.exp(-dz / DECAY_M) * (t2m - free_atmosphere(model, levels))
+    anomaly = t2m - free_atmosphere(model, levels)
+    return free_atmosphere(site, levels) + math.exp(-dz / (WARM_DECAY_M if anomaly > 0 else COLD_DECAY_M)) * anomaly
 
 
 def standard_column(surface: float, lapse: float) -> list[tuple[float, float]]:
@@ -69,6 +73,7 @@ FUJI = [(66.63, 21.716), (734.01, 18.832), (1457.14, 15.916), (3090.22, 9.014), 
 CASES: list[dict] = [
     {"name": "fuji gfs", "t2m": 16.891, "model": 647.74, "site": 3684.0, "levels": FUJI},
     {"name": "summit, moist column", "t2m": 17.0, "model": 643.0, "site": 3748.0, "levels": standard_column(24.0, 0.0046)},
+    {"name": "summit by day", "t2m": 26.0, "model": 643.0, "site": 3748.0, "levels": standard_column(24.0, 0.0065)},
     {"name": "summit at night", "t2m": 9.0, "model": 643.0, "site": 3748.0, "levels": INVERSION},
     {"name": "slope just above", "t2m": 12.0, "model": 900.0, "site": 1000.0, "levels": INVERSION},
     {"name": "valley", "t2m": 15.0, "model": 1400.0, "site": 600.0, "levels": standard_column(20.0, 0.0065)},

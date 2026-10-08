@@ -201,7 +201,9 @@ and the window shrinks to fit it.
   ~24–64 px on screen (`lapseWeight`). Below the model ground it is
   6.5 K/km; above it, the free atmosphere at the DEM's height plus the
   model's departure from it at its own ground, faded with the height
-  climbed (`exp(−dz / 800 m)`). The free atmosphere is the run's own
+  climbed (`exp(−dz / H)`, H = 2500 m where the ground is warmer than the
+  free atmosphere, 800 m where it is colder). The free atmosphere is the
+  run's own
   `tmp<level>` / `hgt<level>` on 1000–500 hPa, whichever pairs it
   publishes: for the frame on screen they are decoded over the view's
   tiles one request at a time, cut to a cell window around the view, and
@@ -224,13 +226,21 @@ and the window shrinks to fit it.
     doi:10.5194/gmd-7-387-2014), and taking the column instead of the 2 m
     temperature above the model ground follows Gao, Bernhardt & Schulz
     (2012, *HESS* 16:4661, doi:10.5194/hess-16-4661-2012). The weight
-    `exp(−dz / 800 m)` is this project's: it depends on `dz` alone and
-    needs no terrain indices or per-site fit. H was chosen by
-    leave-one-week-out validation against mountain and lowland stations
-    from NOAA's Integrated Surface Database (gaps filled from GHCNh and the
-    Iowa Environmental Mesonet), with GFS and ECMWF IFS open
-    data (CC BY 4.0) 0.25° forecasts over four seasonal weeks, 2024-10 to
-    2025-07. The 6.5 K/km below the model ground is the ICAO standard
+    `exp(−dz / H)` is this project's: it depends on `dz` and the sign of
+    the departure alone and needs no terrain indices or per-site fit. H
+    was chosen by leave-one-week-out and station-grouped validation
+    against mountain and lowland stations from NOAA's Integrated Surface
+    Database (gaps filled from GHCNh and the Iowa Environmental Mesonet),
+    with GFS and ECMWF IFS open data (CC BY 4.0) 0.25° forecasts over four
+    seasonal weeks, 2024-10 to 2025-07: 800 m is within 0.01 K of each
+    model's own best under one H, and the warm departure (daytime, 77–81 %
+    of daytime cells) faded at 2500 m halves the daytime cold bias on
+    stations more than 300 m above the model ground (GFS −0.58 → −0.31 K,
+    ECMWF −0.60 → −0.27 K) at no cost at night. Reading the column above
+    the model ground only was measured and rejected: 0.02 K RMSE on 99 %
+    of the cells, 1–2 K worse on the 1 % over a model ground above 700 hPa,
+    and 0.1–0.4 K colder nights. The 6.5 K/km below the model ground is
+    the ICAO standard
     atmosphere's lapse rate. Exposed
     summits stay colder than the free atmosphere at their height in winter
     (Sheridan, Vosper & Smith 2018, *JAMC* 57:1907,
