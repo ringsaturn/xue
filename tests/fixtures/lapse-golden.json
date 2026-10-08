@@ -58,6 +58,35 @@
     "siteTemperature": 7.171393248664774
   },
   {
+    "name": "summit by day",
+    "t2m": 26.0,
+    "model": 643.0,
+    "site": 3748.0,
+    "levels": [
+      {
+        "height": 110.0,
+        "temperature": 24.0
+      },
+      {
+        "height": 760.0,
+        "temperature": 19.775
+      },
+      {
+        "height": 1460.0,
+        "temperature": 15.225
+      },
+      {
+        "height": 3010.0,
+        "temperature": 5.150000000000002
+      },
+      {
+        "height": 5570.0,
+        "temperature": -11.489999999999995
+      }
+    ],
+    "siteTemperature": 1.931180539382808
+  },
+  {
     "name": "summit at night",
     "t2m": 9.0,
     "model": 643.0,
@@ -84,7 +113,7 @@
         "temperature": -21.0
       }
     ],
-    "siteTemperature": -9.925459317223897
+    "siteTemperature": -9.367642836997213
   },
   {
     "name": "slope just above",
@@ -113,7 +142,7 @@
         "temperature": -21.0
       }
     ],
-    "siteTemperature": 10.831285008509441
+    "siteTemperature": 11.210220885497243
   },
   {
     "name": "valley",
@@ -275,7 +304,7 @@
         "temperature": -21.0
       }
     ],
-    "siteTemperature": -2.8686193711722217
+    "siteTemperature": -2.0219059917459257
   },
   {
     "name": "out of height order",
@@ -346,7 +375,7 @@
         "temperature": -33.549348505440285
       }
     ],
-    "siteTemperature": -27.202997455830143
+    "siteTemperature": -21.556740417496872
   },
   {
     "name": "random 1",
@@ -375,7 +404,7 @@
         "temperature": -31.719118252635575
       }
     ],
-    "siteTemperature": -15.791016111314319
+    "siteTemperature": -2.0828567960760545
   },
   {
     "name": "random 2",
@@ -491,7 +520,7 @@
         "temperature": -48.69748497864555
       }
     ],
-    "siteTemperature": -18.387978877493296
+    "siteTemperature": -18.36619712440956
   },
   {
     "name": "random 6",
@@ -520,7 +549,7 @@
         "temperature": -27.570927631988305
       }
     ],
-    "siteTemperature": 8.257825579365294
+    "siteTemperature": 16.475363730741954
   },
   {
     "name": "random 7",
@@ -549,6 +578,6 @@
         "temperature": 2.1625657768124817
       }
     ],
-    "siteTemperature": 5.505843719223482
+    "siteTemperature": 5.731201419262745
   }
 ]

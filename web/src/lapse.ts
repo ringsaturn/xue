@@ -14,6 +14,10 @@
  *
  *   T = free(site) + exp(−dz / H) · (tmp2m − free(model ground))
  *
+ * H depends on the departure's sign: a ground warmer than the free
+ * atmosphere (the heated daytime boundary layer) reaches further up a
+ * slope than a colder one (the night inversion).
+ *
  * The map's fragment shader (`SITE_TEMPERATURE_GLSL`) and the meteogram's
  * terrain row (`siteTemperature`) are this one formula, so the two agree at
  * the pin up to how each samples the grid. Where the method comes from and
@@ -26,9 +30,12 @@
 export const LAPSE_RATE = 0.0065;
 
 /** How fast the model's boundary-layer departure fades with the height
- * climbed above its ground, metres; each of GFS's and ECMWF's own best is
- * within 0.01 K of it (docs/contribution/frontend.md). */
-export const SURFACE_ANOMALY_DECAY_M = 800;
+ * climbed above its ground, metres, by the departure's sign. The cold
+ * value is where each of GFS's and ECMWF's own best lies within 0.01 K;
+ * the warm one halves the daytime cold bias on summits
+ * (docs/contribution/frontend.md). */
+export const WARM_ANOMALY_DECAY_M = 2500;
+export const COLD_ANOMALY_DECAY_M = 800;
 
 /** The surfaces the column is read on, bottom first: a summit the
  * correction serves stands below 500 hPa, and the levels above it add
@@ -86,11 +93,9 @@ export function siteTemperature(
   const dz = siteHeight - modelHeight;
   if (dz <= 0) return { value: t2m - LAPSE_RATE * dz, fallback: false };
   if (column === null || column.length < 2) return { value: t2m - LAPSE_RATE * dz, fallback: true };
-  const fade = Math.exp(-dz / SURFACE_ANOMALY_DECAY_M);
-  return {
-    value: freeAtmosphere(column, siteHeight) + fade * (t2m - freeAtmosphere(column, modelHeight)),
-    fallback: false,
-  };
+  const anomaly = t2m - freeAtmosphere(column, modelHeight);
+  const fade = Math.exp(-dz / (anomaly > 0 ? WARM_ANOMALY_DECAY_M : COLD_ANOMALY_DECAY_M));
+  return { value: freeAtmosphere(column, siteHeight) + fade * anomaly, fallback: false };
 }
 
 /** The same formula in GLSL, as the kelvin a fragment adds to its 2 m
@@ -116,9 +121,8 @@ float siteTemperatureDelta(float t2m, float modelHeight, float siteHeight,
     float heights[COLUMN_CAPACITY], float temperatures[COLUMN_CAPACITY], int count) {
   float dz = siteHeight - modelHeight;
   if (dz <= 0.0 || count < 2) return -${LAPSE_RATE.toFixed(4)} * dz;
-  float fade = exp(-dz / ${SURFACE_ANOMALY_DECAY_M.toFixed(1)});
-  float site = freeAtmosphere(heights, temperatures, count, siteHeight)
-    + fade * (t2m - freeAtmosphere(heights, temperatures, count, modelHeight));
-  return site - t2m;
+  float anomaly = t2m - freeAtmosphere(heights, temperatures, count, modelHeight);
+  float fade = exp(-dz / (anomaly > 0.0 ? ${WARM_ANOMALY_DECAY_M.toFixed(1)} : ${COLD_ANOMALY_DECAY_M.toFixed(1)}));
+  return freeAtmosphere(heights, temperatures, count, siteHeight) + fade * anomaly - t2m;
 }
 `;

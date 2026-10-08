@@ -1,17 +1,18 @@
 import { describe, expect, it } from "vitest";
 import golden from "../fixtures/lapse-golden.json";
 import {
+  COLD_ANOMALY_DECAY_M,
   freeAtmosphere,
   LAPSE_RATE,
   SITE_TEMPERATURE_GLSL,
   siteTemperature,
   sortedColumn,
-  SURFACE_ANOMALY_DECAY_M,
+  WARM_ANOMALY_DECAY_M,
 } from "../../web/src/lapse";
 
 describe("site temperature", () => {
   it("is the evaluated method on every golden cell", () => {
-    expect(golden.length).toBe(20);
+    expect(golden.length).toBe(21);
     for (const item of golden) {
       const { value } = siteTemperature(item.t2m, item.model, item.site, sortedColumn(item.levels));
       expect(value, item.name).toBeCloseTo(item.siteTemperature, 9);
@@ -38,6 +39,20 @@ describe("site temperature", () => {
     expect(sortedColumn([{ height: 1500, temperature: 4 }, { height: Number.NaN, temperature: 1 }])).toBeNull();
   });
 
+  it("carries a warm ground further up than a cold one", () => {
+    const column = sortedColumn([
+      { height: 0, temperature: 20 },
+      { height: 4000, temperature: -6 },
+    ])!;
+    // The free atmosphere is 20 °C at the ground and 7 °C 2000 m up.
+    const warm = siteTemperature(24, 0, 2000, column).value;
+    const cold = siteTemperature(16, 0, 2000, column).value;
+    expect(warm).toBeCloseTo(7 + 4 * Math.exp(-2000 / WARM_ANOMALY_DECAY_M), 12);
+    expect(cold).toBeCloseTo(7 - 4 * Math.exp(-2000 / COLD_ANOMALY_DECAY_M), 12);
+    expect(warm - 7).toBeGreaterThan(7 - cold);
+    expect(WARM_ANOMALY_DECAY_M).toBeGreaterThan(COLD_ANOMALY_DECAY_M);
+  });
+
   it("is continuous at the model ground", () => {
     const column = sortedColumn([
       { height: 0, temperature: 10 },
@@ -60,6 +75,7 @@ describe("site temperature", () => {
 
   it("gives the shader the same constants", () => {
     expect(SITE_TEMPERATURE_GLSL).toContain(LAPSE_RATE.toFixed(4));
-    expect(SITE_TEMPERATURE_GLSL).toContain(SURFACE_ANOMALY_DECAY_M.toFixed(1));
+    expect(SITE_TEMPERATURE_GLSL).toContain(WARM_ANOMALY_DECAY_M.toFixed(1));
+    expect(SITE_TEMPERATURE_GLSL).toContain(COLD_ANOMALY_DECAY_M.toFixed(1));
   });
 });
