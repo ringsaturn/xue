@@ -1,0 +1,22 @@
+{
+  "attributes": {
+    "version": "fixture-1",
+    "spam": "SPAM 2020 v2r2 SOYB_A",
+    "grid": "mini",
+    "regions": {
+      "us-ia": {
+        "rows": [
+          6,
+          11
+        ],
+        "cols": [
+          13,
+          21
+        ]
+      }
+    },
+    "lon_convention": "cell centres from -110, ascending"
+  },
+  "zarr_format": 3,
+  "node_type": "group"
+}

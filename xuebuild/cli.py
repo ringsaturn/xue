@@ -596,6 +596,51 @@ def parser() -> argparse.ArgumentParser:
     sounding_build.add_argument(
         "--force-download", action="store_true", help="list and fetch each gateway again, ignoring the watermark"
     )
+
+    indicators_build = commands.add_parser(
+        "indicators-build",
+        help="append each source's new run to the agriculture indicators (features/<source>/<yyyy-mm>.jsonl), "
+        "rewrite season/ and then index.json (docs/indicators.md)",
+    )
+    indicators_build.add_argument(
+        "--sources",
+        default="gfs,ecmwf,aifs,ifshres",
+        help="comma-separated sources to read (default: gfs,ecmwf,aifs,ifshres)",
+    )
+    indicators_build.add_argument(
+        "--round",
+        default="now",
+        help="now (the run each live pointer names) or a run, YYYYMMDDHH, read from <source>.<run>/manifest.json",
+    )
+    indicators_build.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path("web/public/data/indicators"),
+        help="the product root, holding the live index.json, the month files and season/ as the bucket has them",
+    )
+    indicators_build.add_argument(
+        "--base-url",
+        default="https://dataset.ringsaturn.me/xue/",
+        help="the data root the pointers, manifests and stores are read from",
+    )
+    indicators_build.add_argument(
+        "--weights-dir", type=Path, help="where the <grid>.zarr weights stores are (default: <output-dir>/weights)"
+    )
+    indicators_build.add_argument(
+        "--force", action="store_true", help="recompute a run already in the index; it must reproduce its line"
+    )
+    indicators_build.add_argument("--dry-run", action="store_true", help="compute and report; write nothing")
+
+    indicators_context = commands.add_parser(
+        "indicators-context",
+        help="fetch the CPC Oceanic Nino Index into the indicators' context/oni.json",
+    )
+    indicators_context.add_argument("--output-dir", type=Path, default=Path("web/public/data/indicators"))
+    indicators_context.add_argument(
+        "--input", type=Path, help="read the oni.ascii.txt table from this file instead of fetching it"
+    )
+    indicators_context.add_argument("--dry-run", action="store_true", help="fetch and report; write nothing")
+
     return root
 
 
@@ -1004,6 +1049,26 @@ def main(argv: list[str] | None = None) -> int:
                 previous_index=previous,
                 force=arguments.force,
             )
+            print(json.dumps(report, indent=2))
+        elif arguments.command == "indicators-build":
+            from .indicators.build import build as build_indicators  # noqa: PLC0415
+            from .indicators.build import parse_round as parse_indicators_round  # noqa: PLC0415
+
+            report = build_indicators(
+                arguments.output_dir,
+                sources=tuple(dict.fromkeys(item.strip() for item in arguments.sources.split(",") if item.strip())),
+                round_run=parse_indicators_round(arguments.round),
+                base_url=arguments.base_url,
+                weights_dir=arguments.weights_dir,
+                force=arguments.force,
+                dry_run=arguments.dry_run,
+            )
+            print(json.dumps(report, indent=2, ensure_ascii=False))
+        elif arguments.command == "indicators-context":
+            from .indicators.context import update_context  # noqa: PLC0415
+
+            text = arguments.input.read_text(encoding="ascii") if arguments.input else None
+            report = update_context(arguments.output_dir, datetime.now(UTC), text=text, dry_run=arguments.dry_run)
             print(json.dumps(report, indent=2))
         return 0
     except XueError as exc:

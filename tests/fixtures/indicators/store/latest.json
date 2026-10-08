@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "model": "GFS",
+  "product": "pgrb2.0p25",
+  "run": "2026081506",
+  "runTime": "2026-08-15T06:00:00Z",
+  "manifestPath": "gfs.2026081506/manifest.json",
+  "manifestCrc32": "49ca438d"
+}

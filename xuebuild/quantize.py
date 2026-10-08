@@ -746,3 +746,58 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
         **{variable_id: COMPACT_HUMIDITY for variable_id in QUALITY_ISOBARIC if variable_id.startswith("rh")},
     },
 }
+
+
+def codebook_from_metadata(
+    quantization: dict[str, object], *, name: str = "codebook"
+) -> TemperatureCodebook | PrecipitationCodebook:
+    """The codebook a variable's ``quantization`` block describes (the
+    inverse of ``metadata()``), for a reader that has a bundle's or a
+    store's metadata and no profile table: the block is self-describing, so
+    a codebook added later decodes without this module knowing its name.
+    Refuses a block whose code range does not follow from its own
+    parameters, since then it does not say one thing."""
+
+    def number(key: str) -> float:
+        value = quantization.get(key)
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+            raise ConversionError(f"{name} quantization {key} must be a finite number")
+        return float(value)
+
+    def code(key: str) -> int:
+        value = quantization.get(key)
+        if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 255:
+            raise ConversionError(f"{name} quantization {key} must be a byte")
+        return value
+
+    kind = quantization.get("type")
+    if kind == "linear":
+        step = number("scale")
+        if step <= 0 or code("minimumCode") != 0:
+            raise ConversionError(f"{name} linear quantization needs a positive scale and minimumCode 0")
+        offset = number("offset")
+        maximum_code = code("maximumCode")
+        codebook = TemperatureCodebook(
+            minimum=offset, maximum=offset + maximum_code * step, step=step, nodata_code=code("nodataCode"), name=name
+        )
+        if codebook.maximum_code != maximum_code or codebook.nodata_code <= maximum_code:
+            raise ConversionError(f"{name} linear quantization code range is inconsistent")
+        return codebook
+    if kind == "log1p":
+        if code("minimumCode") != 1 or code("zeroCode") != 0:
+            raise ConversionError(f"{name} log1p quantization needs zeroCode 0 and minimumCode 1")
+        codebook = PrecipitationCodebook(
+            trace=number("trace"),
+            scale=number("scale"),
+            maximum=number("maximum"),
+            maximum_code=code("maximumCode"),
+            overflow_code=code("overflowCode"),
+            nodata_code=code("nodataCode"),
+            name=name,
+        )
+        if not 0 < codebook.trace < codebook.maximum or codebook.scale <= 0 or not (
+            1 < codebook.maximum_code < codebook.overflow_code < codebook.nodata_code
+        ):
+            raise ConversionError(f"{name} log1p quantization parameters are inconsistent")
+        return codebook
+    raise ConversionError(f"{name} quantization type {kind!r} is not one this reader decodes")

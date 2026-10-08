@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 5,
+  "model": "GFS",
+  "product": "pgrb2.0p25",
+  "runTime": "2026-08-15T06:00:00Z",
+  "forecastHours": 60,
+  "bundles": [
+    {
+      "variable": "tmp2m",
+      "zarr": {
+        "path": "tmp2m.zarr",
+        "byteLength": 27358,
+        "crc32": "8539c564"
+      }
+    },
+    {
+      "variable": "prate",
+      "zarr": {
+        "path": "prate.zarr",
+        "byteLength": 16025,
+        "crc32": "814b0322"
+      }
+    }
+  ]
+}

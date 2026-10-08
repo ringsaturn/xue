@@ -1,0 +1,267 @@
+{
+  "zarr_format": 3,
+  "node_type": "group",
+  "attributes": {
+    "xue": {
+      "schemaVersion": 3,
+      "model": "GFS",
+      "product": "pgrb2.0p25",
+      "runTime": "2026-08-15T06:00:00Z",
+      "profile": "balanced",
+      "time": {
+        "unitSeconds": 3600,
+        "firstFrameOffset": 0,
+        "frameCount": 61,
+        "frameStep": 1
+      },
+      "grid": {
+        "width": 30,
+        "height": 20,
+        "layout": "row-major",
+        "rowOrder": "north-to-south",
+        "columnOrder": "west-to-east",
+        "firstLongitude": -110.0,
+        "firstLatitude": 50.0,
+        "longitudeStep": 1.0,
+        "latitudeStep": -1.0,
+        "wrapLongitude": false
+      },
+      "variables": [
+        {
+          "numericId": 1,
+          "id": "prate",
+          "label": "Precipitation rate",
+          "unit": "mm/h",
+          "parameter": {
+            "discipline": 0,
+            "parameterCategory": 1,
+            "parameterNumber": 7,
+            "typeOfFirstFixedSurface": 1,
+            "scaleFactorOfFirstFixedSurface": 0,
+            "scaledValueOfFirstFixedSurface": 0
+          },
+          "quantization": {
+            "type": "log1p",
+            "trace": 0.01,
+            "scale": 0.05,
+            "maximum": 128.0,
+            "minimumCode": 1,
+            "maximumCode": 125,
+            "zeroCode": 0,
+            "overflowCode": 126,
+            "nodataCode": 127
+          }
+        }
+      ]
+    },
+    "xue_profile": 1
+  },
+  "consolidated_metadata": {
+    "kind": "inline",
+    "must_understand": false,
+    "metadata": {
+      "prate": {
+        "zarr_format": 3,
+        "node_type": "array",
+        "shape": [
+          61,
+          20,
+          30
+        ],
+        "data_type": "uint8",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              66,
+              24,
+              32
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default"
+        },
+        "fill_value": 127,
+        "codecs": [
+          {
+            "name": "sharding_indexed",
+            "configuration": {
+              "chunk_shape": [
+                6,
+                8,
+                8
+              ],
+              "codecs": [
+                {
+                  "name": "bytes"
+                },
+                {
+                  "name": "zstd",
+                  "configuration": {
+                    "level": 15,
+                    "checksum": true
+                  }
+                }
+              ],
+              "index_codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "crc32c"
+                }
+              ],
+              "index_location": "end"
+            }
+          }
+        ],
+        "attributes": {
+          "xue": {
+            "variable": {
+              "numericId": 1,
+              "id": "prate",
+              "label": "Precipitation rate",
+              "unit": "mm/h",
+              "parameter": {
+                "discipline": 0,
+                "parameterCategory": 1,
+                "parameterNumber": 7,
+                "typeOfFirstFixedSurface": 1,
+                "scaleFactorOfFirstFixedSurface": 0,
+                "scaledValueOfFirstFixedSurface": 0
+              },
+              "quantization": {
+                "type": "log1p",
+                "trace": 0.01,
+                "scale": 0.05,
+                "maximum": 128.0,
+                "minimumCode": 1,
+                "maximumCode": 125,
+                "zeroCode": 0,
+                "overflowCode": 126,
+                "nodataCode": 127
+              }
+            },
+            "predictor": "raw"
+          },
+          "_FillValue": 127
+        },
+        "dimension_names": [
+          "time",
+          "latitude",
+          "longitude"
+        ]
+      },
+      "time": {
+        "zarr_format": 3,
+        "node_type": "array",
+        "shape": [
+          61
+        ],
+        "data_type": "int32",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              61
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default"
+        },
+        "fill_value": 0,
+        "codecs": [
+          {
+            "name": "bytes",
+            "configuration": {
+              "endian": "little"
+            }
+          }
+        ],
+        "attributes": {
+          "units": "seconds since 2026-08-15T06:00:00Z",
+          "calendar": "proleptic_gregorian",
+          "standard_name": "time"
+        },
+        "dimension_names": [
+          "time"
+        ]
+      },
+      "latitude": {
+        "zarr_format": 3,
+        "node_type": "array",
+        "shape": [
+          20
+        ],
+        "data_type": "float64",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              20
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default"
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "bytes",
+            "configuration": {
+              "endian": "little"
+            }
+          }
+        ],
+        "attributes": {
+          "units": "degrees_north",
+          "standard_name": "latitude"
+        },
+        "dimension_names": [
+          "latitude"
+        ]
+      },
+      "longitude": {
+        "zarr_format": 3,
+        "node_type": "array",
+        "shape": [
+          30
+        ],
+        "data_type": "float64",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              30
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default"
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "bytes",
+            "configuration": {
+              "endian": "little"
+            }
+          }
+        ],
+        "attributes": {
+          "units": "degrees_east",
+          "standard_name": "longitude"
+        },
+        "dimension_names": [
+          "longitude"
+        ]
+      }
+    }
+  }
+}
