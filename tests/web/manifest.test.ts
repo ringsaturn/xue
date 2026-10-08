@@ -130,7 +130,7 @@ describe("the bundle id registry", () => {
     // frontend list is held to that order.
     expect(SURFACE_DIAGNOSTIC_IDS).toHaveLength(13);
     expect(Object.keys(surfaceRegistryJson)).toEqual([...SURFACE_DIAGNOSTIC_IDS]);
-    for (const id of ["cin", "pwat", "hpbl", "ptype", "wind100m"]) {
+    for (const id of ["cin", "pwat", "hpbl", "ptype", "wind100m", "wind80m"]) {
       expect(KNOWN_BUNDLE_IDS).toContain(id);
     }
   });
@@ -138,9 +138,12 @@ describe("the bundle id registry", () => {
   it("keeps the 100 m wind a vector pair of its own, distinct from the 10 m one", () => {
     expect(isVectorBundle("wind10m")).toBe(true);
     expect(isVectorBundle("wind100m")).toBe(true);
+    expect(isVectorBundle("wind80m")).toBe(true);
     expect(vectorComponents("wind10m")).toEqual(["ugrd10m", "vgrd10m"]);
     expect(vectorComponents("wind100m")).toEqual(["ugrd100m", "vgrd100m"]);
+    expect(vectorComponents("wind80m")).toEqual(["ugrd80m", "vgrd80m"]);
     expect(VECTOR_BUNDLES.wind100m).toEqual(["ugrd100m", "vgrd100m"]);
+    expect(VECTOR_BUNDLES.wind80m).toEqual(["ugrd80m", "vgrd80m"]);
   });
 });
 

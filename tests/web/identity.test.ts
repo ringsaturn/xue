@@ -132,6 +132,11 @@ describe("identityForParameterPair", () => {
       level: null,
       vector: true,
     });
+    expect(identityForParameterPair(parameter(0, 2, 2, 103, 80), parameter(0, 2, 3, 103, 80))).toEqual({
+      family: "wind80m",
+      level: null,
+      vector: true,
+    });
     expect(identityForParameterPair(parameter(0, 2, 2, 100, 85_000), parameter(0, 2, 3, 100, 85_000))).toEqual({
       family: "wind",
       level: 850,
@@ -210,6 +215,7 @@ describe("identityForBundleId", () => {
     expect(identityForBundleId("tmp2m")).toEqual({ family: "tmp", level: null, vector: false });
     expect(identityForBundleId("wind10m")).toEqual({ family: "wind", level: null, vector: true });
     expect(identityForBundleId("wind100m")).toEqual({ family: "wind100m", level: null, vector: true });
+    expect(identityForBundleId("wind80m")).toEqual({ family: "wind80m", level: null, vector: true });
     expect(identityForBundleId("cin")).toEqual({ family: "cin", level: null, vector: false });
     expect(identityForBundleId("pwat")).toEqual({ family: "pwat", level: null, vector: false });
     expect(identityForBundleId("hpbl")).toEqual({ family: "hpbl", level: null, vector: false });
@@ -256,6 +262,13 @@ describe("identityForBundleId", () => {
           variable(2, "vgrd100m", parameter(0, 2, 3, 103, 100)),
         ],
       ],
+      [
+        "wind80m",
+        [
+          variable(1, "ugrd80m", parameter(0, 2, 2, 103, 80)),
+          variable(2, "vgrd80m", parameter(0, 2, 3, 103, 80)),
+        ],
+      ],
     ];
     for (const [id, variables] of cases) {
       expect(sameIdentity(identityForBundleId(id), identifyBundle(variables)!.identity)).toBe(true);
@@ -271,6 +284,7 @@ describe("registeredBundleId", () => {
     expect(registeredBundleId({ family: "hgt", level: null, vector: false })).toBe("prmsl");
     expect(registeredBundleId({ family: "wind", level: null, vector: true })).toBe("wind10m");
     expect(registeredBundleId({ family: "wind100m", level: null, vector: true })).toBe("wind100m");
+    expect(registeredBundleId({ family: "wind80m", level: null, vector: true })).toBe("wind80m");
     expect(registeredBundleId({ family: "cin", level: null, vector: false })).toBe("cin");
     expect(registeredBundleId({ family: "pwat", level: null, vector: false })).toBe("pwat");
     expect(registeredBundleId({ family: "hpbl", level: null, vector: false })).toBe("hpbl");

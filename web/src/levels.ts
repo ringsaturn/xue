@@ -128,6 +128,7 @@ export const FAMILIES: Record<IsobaricFamily, FamilyInfo> = {
     glossKey: "varWind",
     levels: [
       { id: "wind10m", code: "10M" },
+      { id: "wind80m", code: "80M" },
       { id: "wind100m", code: "100M" },
       { id: "wind1000", code: "1000" },
       { id: "wind925", code: "925" },
@@ -663,7 +664,7 @@ export function vectorMaxMagnitude(family: ChartFamily, level: number | null): n
   if (family === "wave") return WAVE_HEIGHT_CHART_MAX;
   // The 100 m pair is a wind at hub height: the 10 m ramp's own ceiling, so
   // a speed is the same colour on both.
-  if (family === "wind100m") return 40;
+  if (family === "wind80m" || family === "wind100m") return 40;
   if (!isRegisteredLevel(level)) return 40;
   if (level >= 700) return 60;
   if (level === 500) return 80;
@@ -678,6 +679,7 @@ export function familyLabel(id: ForecastBundleId): string {
   if (level === null) {
     if (id === "tmp2m") return t("varLabelTmp2m");
     if (id === "wind10m") return t("varLabelWind10m");
+    if (id === "wind80m") return t("varLabelWind80m");
     if (id === "wind100m") return t("varLabelWind100m");
     if (id === "wave") return t("varLabelWave");
     const listed = MEMBER_LABEL_KEYS[id];

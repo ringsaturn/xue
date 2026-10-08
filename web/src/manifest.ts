@@ -455,7 +455,7 @@ export type IsobaricScalarBundleId =
  * height, the same parameters on surface type 103 value 100), the wind on
  * each isobaric surface, and the water vapour flux the encoder derives
  * there. */
-type VectorBundleId = "wind10m" | "wind100m" | `wind${IsobaricLevel}` | `qflux${IsobaricLevel}` | "wave";
+type VectorBundleId = "wind10m" | "wind80m" | "wind100m" | `wind${IsobaricLevel}` | `qflux${IsobaricLevel}` | "wave";
 
 /** The three-variable bundles: a colour composite a producer derived from
  * several satellite channels, whose variables are the three guns the viewer
@@ -574,6 +574,8 @@ export function isBundleVariableId(value: unknown): value is ForecastBundleId {
 type VectorComponentId =
   | "ugrd10m"
   | "vgrd10m"
+  | "ugrd80m"
+  | "vgrd80m"
   | "ugrd100m"
   | "vgrd100m"
   | `ugrd${IsobaricLevel}`
@@ -636,6 +638,7 @@ export const KNOWN_BUNDLE_IDS: readonly KnownBundleId[] = [
   ...perLevel("thetae"),
   ...CAT_LEVELS.map((level) => `cat${level}` as const),
   "wind10m",
+  "wind80m",
   "wind100m",
   ...perLevel("wind"),
   ...perLevel("qflux"),
@@ -651,6 +654,7 @@ export const VECTOR_BUNDLES: Record<VectorBundleId, readonly [VectorComponentId,
   wind10m: ["ugrd10m", "vgrd10m"],
   // The 100 m pair: the same parameters on the turbine hub height, the
   // `wind100m` bundle (xuebuild/binconvert.py::WIND_100M_COMPONENT_IDS).
+  wind80m: ["ugrd80m", "vgrd80m"],
   wind100m: ["ugrd100m", "vgrd100m"],
   ...Object.fromEntries(ISOBARIC_LEVELS.map((level) => [`wind${level}`, [`ugrd${level}`, `vgrd${level}`]])),
   ...Object.fromEntries(ISOBARIC_LEVELS.map((level) => [`qflux${level}`, [`uqflx${level}`, `vqflx${level}`]])),

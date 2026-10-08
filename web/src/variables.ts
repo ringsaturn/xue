@@ -501,6 +501,25 @@ function buildSpecs(): readonly VariableSpec[] {
     meteogramCode: "WIND",
     showcaseCode: "WIND",
   }),
+  // The 80 m wind, the HRRR hub-height pair: the 100 m wind's palette and
+  // legend under a chart id of its own, since a bundle's identity is its
+  // chart family.
+  surface({
+    id: "wind80m",
+    chart: "wind80m",
+    vector: true,
+    family: "wind",
+    group: "wind",
+    code: "WIND 80M",
+    title: ["80 m", "Wind"],
+    bufferTitle: "Wind buffer",
+    labelKey: "varLabelWind80m",
+    legend: ["40", "30", "20", "10", "5", "0"],
+    ground: "wind",
+    urlName: "wind80m",
+    urlAliases: ["wind80"],
+    showcaseCode: "WIND 80M",
+  }),
   // The 100 m wind, the turbine hub height: the same parameters as the 10 m
   // pair on the 100 m surface. Its chart family is its own (a 100 m wind is
   // not a 10 m wind for palette or legend purposes), but its rail family is

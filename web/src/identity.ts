@@ -45,6 +45,7 @@ export type ChartFamily =
   | "rh"
   | "spfh"
   | "wind"
+  | "wind80m"
   | "wind100m"
   | "qflux"
   | "vvel"
@@ -388,6 +389,7 @@ export function identityForParameterPair(u: BundleParameter, v: BundleParameter)
       // does not take over the wind family's isobaric level row.
       const value = surfaceValue(u);
       if (value === 10) return vector("wind", null);
+      if (value === 80) return vector("wind80m", null);
       if (value === 100) return vector("wind100m", null);
       return null;
     }

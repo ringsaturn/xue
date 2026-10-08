@@ -233,6 +233,7 @@ export const es: Record<MessageKey, string> = {
   varLabelPrate: "Intensidad de precipitación",
   varLabelDswrf: "Radiación solar",
   varLabelWind10m: "Viento a 10 m",
+  varLabelWind80m: "Viento a 80 m",
   varLabelWind100m: "Viento a 100 m",
   varLabelCref: "Reflectividad radar compuesta",
   varLabelRefl3d: "Reflectividad radar 3D",

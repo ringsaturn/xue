@@ -236,6 +236,7 @@ export const tr: Record<MessageKey, string> = {
   varLabelPrate: "Yağış şiddeti",
   varLabelDswrf: "Güneş ışınımı",
   varLabelWind10m: "10 m rüzgarı",
+  varLabelWind80m: "80 m rüzgarı",
   varLabelWind100m: "100 m rüzgarı",
   varLabelCref: "Bileşik radar reflektivitesi",
   varLabelRefl3d: "3B radar yansıtıcılığı",

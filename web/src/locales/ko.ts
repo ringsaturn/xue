@@ -235,6 +235,7 @@ export const ko: Record<MessageKey, string> = {
   varLabelPrate: "강수 강도",
   varLabelDswrf: "일사량",
   varLabelWind10m: "지상 10 m 바람",
+  varLabelWind80m: "80 m 바람",
   varLabelWind100m: "100 m 바람",
   varLabelCref: "레이더 합성 반사도",
   varLabelRefl3d: "3차원 레이더 반사도",

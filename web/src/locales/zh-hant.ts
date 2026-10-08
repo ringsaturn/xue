@@ -230,6 +230,7 @@ export const zhHant: Record<MessageKey, string> = {
   varLabelPrate: "降水強度",
   varLabelDswrf: "太陽輻射",
   varLabelWind10m: "10 公尺風",
+  varLabelWind80m: "80 公尺風",
   varLabelWind100m: "100 公尺風",
   varLabelCref: "雷達組合反射率",
   varLabelRefl3d: "三維雷達回波",

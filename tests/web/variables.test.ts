@@ -108,6 +108,10 @@ describe("the variable table", () => {
     expect(variableSpec("wind100m")!.group).toBe("wind");
     expect(variableSpec("wind100m")!.family).toBe("wind");
     expect(familyMembers("wind")).toContain("wind100m");
+    expect(railTileIds()).not.toContain("wind80m");
+    expect(variableSpec("wind80m")!.group).toBe("wind");
+    expect(variableSpec("wind80m")!.family).toBe("wind");
+    expect(familyMembers("wind")).toContain("wind80m");
   });
 
   it("carries the instrument copy the panels read", () => {
@@ -137,6 +141,11 @@ describe("the variable table", () => {
     expect(wind100.code).toBe("WIND 100M");
     expect(wind100.label()).toBe("100 m wind");
     expect(wind100.legend()).toEqual(["40", "30", "20", "10", "5", "0"]);
+    const wind80 = variableSpec("wind80m")!;
+    expect(wind80.vector).toBe(true);
+    expect(wind80.code).toBe("WIND 80M");
+    expect(wind80.label()).toBe("80 m wind");
+    expect(wind80.legend()).toEqual(wind100.legend());
     const ptype = variableSpec("ptype")!;
     expect(ptype.legend()).toEqual([]);
     expect(ptype.legendKey?.().map((swatch) => swatch.label)).toEqual([

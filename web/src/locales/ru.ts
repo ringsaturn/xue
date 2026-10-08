@@ -235,6 +235,7 @@ export const ru: Record<MessageKey, string> = {
   varLabelPrate: "Интенсивность осадков",
   varLabelDswrf: "Солнечная радиация",
   varLabelWind10m: "Ветер на 10 м",
+  varLabelWind80m: "Ветер на 80 м",
   varLabelWind100m: "Ветер на 100 м",
   varLabelCref: "Составная радиолокационная отражаемость",
   varLabelRefl3d: "Трёхмерная радиолокационная отражаемость",

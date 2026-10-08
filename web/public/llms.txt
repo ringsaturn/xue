@@ -192,8 +192,8 @@ Facts worth getting right:
   `hgt700`, `hgt500`, `tmp925`, `tmp850`, `tmp500`, `gust`, `tcdc`,
   `lcdc`, `mcdc`, `hcdc`, `cape`, `vis`, `dpt2m`, the forecast composite
   radar reflectivity `cref` (the same name and unit as the radar mosaics'),
-  the static terrain `orog`, and the vector pairs `wind10m`, `wind925`,
-  `wind850`, `wind250`.
+  the static terrain `orog`, and the vector pairs `wind10m`, `wind80m`,
+  `wind925`, `wind850`, `wind250`.
   GEFS-AEROSOLS: `aod` (aerosol optical depth at 550 nm, total,
   dimensionless), `aoddust`, `aodsalt`, `aodsulf`, `aodorg`, `aodbc` (the
   same for dust, sea salt, sulphate, organic carbon and black carbon),

@@ -411,6 +411,7 @@ export const en = {
   varLabelPrate: "Precipitation rate",
   varLabelDswrf: "Solar radiation",
   varLabelWind10m: "10 m wind",
+  varLabelWind80m: "80 m wind",
   varLabelWind100m: "100 m wind",
   varLabelCref: "Composite radar reflectivity",
   varLabelRefl3d: "3D radar reflectivity",
