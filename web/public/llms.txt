@@ -527,6 +527,14 @@ https://dataset.ringsaturn.me/xue/. The contract is two layers:
   originating national meteorological and hydrological services. The
   viewer does not read it yet.
 
+- `indicators/` under the data root holds area-weighted weather indicators
+  for soybean regions (US Midwest, Brazil, Argentina), computed from the
+  published GFS, ECMWF IFS, AIFS and IFS HRES runs: `index.json` (regions,
+  features, calendar, files with byte offsets), one append-only
+  `features/<source>/<yyyy-mm>.jsonl` per source and month, and
+  `season/<region>.<season>.json` running totals. Physical quantities
+  only, no market data.
+
 - Surface weather stations are a JSON product under the same root, every
   ten minutes (schema 1, `docs/synop.md`): national observation networks,
   each read by an adapter into one set of elements, JMA AMeDAS (about

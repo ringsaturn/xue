@@ -9,6 +9,7 @@ dist/
 dist-deploy/
 data/raw/
 data/work/
+data/indicators/
 web/public/data/gfs.*/
 web/public/data/ecmwf.*/
 web/public/data/sflux.*/
@@ -53,6 +54,7 @@ web/public/data/cma/
 web/public/data/aurora/
 web/public/data/synop/
 web/public/data/nexrad/
+web/public/data/indicators/
 # Scratch case definitions for local development; the curated set is
 # showcase/cases/ and is checked in.
 showcase/cases-local/

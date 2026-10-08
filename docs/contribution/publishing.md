@@ -146,6 +146,43 @@ make upload-r2-synop ROUND=202610050010 && make prune-r2-synop  # network files 
 The airport, sounding and synop builds also take `--offline --raw-dir
 tests/fixtures/<product>`.
 
+## Indicators
+
+`publish-indicators.yml` (seventeen past every hour) reduces the published
+GFS, ECMWF IFS, AIFS and IFS HRES stores over the soybean regions and
+appends the result under `indicators/` at the data root (spec:
+[`docs/indicators.md`](../indicators.md)). It reads the public stores over
+HTTPS and never touches a run's own publish, so it runs on its own schedule
+with base dependencies only (no GDAL, no wheel).
+
+```sh
+make pull-r2-indicators-weights                 # area weights, one Zarr store per grid
+make live-indicators-index                      # live index + this month's files, CRC32-checked
+make indicators-build                           # SOURCES via INDICATORS_SOURCES, ROUND defaults to now
+make upload-r2-indicators                       # month files → season → context → index
+```
+
+Upload order: every month file, then the season totals, the climatology and
+the context table, and only after R2 reports each object's size the
+`index.json` that names them. The month files grow by appending but are
+served under a new `?v=<crc32>` each time, so no URL ever changes under its
+old bytes.
+
+The weights are built by hand, rarely: when the crop mask or the region table
+changes. Download the SPAM 2020 v2r2 soybean physical-area GeoTIFF (it sits
+behind a Harvard Dataverse guestbook form, so it cannot be fetched by a
+script) and the Natural Earth 10 m admin-1 archive, then:
+
+```sh
+uv sync --group indicators
+.venv/bin/python scripts/indicators_weights.py --spam SOYB_A.tif --admin1 ne_10m_admin_1_states_provinces.zip \
+    --weights-version 2          # bump it: rows record the weights version they used
+make upload-r2-indicators-weights                 # manual; only when asked
+```
+
+Existing rows keep the weights version they were computed with; they are not
+recomputed.
+
 ## STAC catalog
 
 The catalog ([`docs/stac.md`](../stac.md)) is derived, never edited: every

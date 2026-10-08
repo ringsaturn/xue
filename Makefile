@@ -91,4 +91,4 @@ run-local: ## Build one archived run into data/local (MODEL, RUN, HOURS, BBOX, B
 serve: ## vite preview on 127.0.0.1
 	npm run preview -- --host 127.0.0.1
 
-include mk/r2.mk mk/cache.mk mk/products.mk mk/showcase.mk mk/deploy.mk
+include mk/r2.mk mk/cache.mk mk/products.mk mk/showcase.mk mk/deploy.mk mk/indicators.mk

@@ -1,0 +1,99 @@
+name: publish indicators
+
+# The area-weighted weather indicators (docs/indicators.md): for each new run
+# of GFS, ECMWF IFS, AIFS and IFS HRES the job reads the published Zarr
+# stores over HTTPS, reduces the fields over the soybean regions with the
+# stored area weights, and appends one row per run to the month's JSONL file
+# beside a refreshed season total and the index that names them. Independent
+# of the raster publishes: it reads what they already put on the bucket, a red
+# run does not hold them back, and it is cheap — a few ranged reads per run,
+# no GDAL, no eccodes, no wheel.
+#
+# The weights are built offline (scripts/indicators_weights.py) and uploaded
+# by hand; this job only pulls them.
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+    inputs:
+      round:
+        description: "Round to build: now or the build's round id"
+        type: string
+        default: now
+      dry_run:
+        description: "Build and report what would be uploaded, but write nothing to R2"
+        type: boolean
+        default: false
+      force:
+        description: "Recompute runs that are already in the index"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# One at a time: the index is the product's only entry point, and the month
+# files are appended onto what the previous job left.
+concurrency:
+  group: publish-indicators
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    # Scheduled runs on forks would publish into a bucket they cannot reach.
+    if: github.event_name != 'schedule' || github.repository == 'ringsaturn/xue'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      ROUND: ${{ inputs.round || 'now' }}
+      DRY_RUN: ${{ inputs.dry_run && '--dryrun' || '' }}
+      FORCE: ${{ inputs.force && '--force' || '' }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          python-version: "3.14"
+
+      # Base dependencies only: NumPy and the standard library read the
+      # stores. No GDAL, no wheel, none of the optional groups.
+      - name: Sync Python environment
+        run: uv sync
+
+      - name: Pull the area weights
+        run: make pull-r2-indicators-weights
+
+      # The live index and this month's files are the history the new rows
+      # are appended to; without them the month would start again.
+      - name: Fetch the live index and this month's files
+        run: make live-indicators-index
+
+      - name: Build the indicators
+        run: |
+          set -euo pipefail
+          uv run python -m xuebuild indicators-build --sources gfs,ecmwf,aifs,ifshres --round "$ROUND" $FORCE > indicators-report.json
+          {
+            echo "### indicators"
+            echo
+            echo '```json'
+            jq . indicators-report.json | head -n 200 || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: indicators-report-${{ github.run_id }}
+          path: indicators-report.json
+          retention-days: 14
+          if-no-files-found: ignore
+
+      # Month files, season totals and context go up first; the index goes up
+      # last, once R2 has reported every size.
+      - name: Upload, the index last
+        run: make upload-r2-indicators DRY_RUN="$DRY_RUN"
