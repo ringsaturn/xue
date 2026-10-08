@@ -74,9 +74,10 @@ jobs:
       # stale xuepy and fail by design. Build the wheel from this tree instead
       # (against the system GDAL, which the job already installs for the
       # reference pipeline); main installs the published wheel and this step
-      # never runs there.
+      # never runs there. A pull request from a release branch runs on the
+      # merge ref, so its head branch is what names the release there.
       - name: Build the native encoder from this tree
-        if: startsWith(github.ref_name, 'release/')
+        if: startsWith(github.ref_name, 'release/') || startsWith(github.head_ref, 'release/')
         run: |
           sudo apt-get install -y --no-install-recommends libgdal-dev libclang-dev
           make encoder-py
