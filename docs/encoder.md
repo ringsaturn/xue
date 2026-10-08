@@ -350,3 +350,7 @@ thread-safe, and reading one file from several threads fails with `netCDF
 chunk fetch failed: NetCDF: HDF error`. Every extraction was its own
 `gdal_translate` process in Python. `encode::gdalio::netcdf_guard`
 serializes those reads; GRIB stays parallel.
+
+---
+
+Part of the Xue specification, licensed under [CC BY 4.0](../LICENSE-CC-BY).

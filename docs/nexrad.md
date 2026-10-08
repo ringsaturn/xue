@@ -203,3 +203,7 @@ pointer, round or store is published for it.
   preflights with `Access-Control-Allow-Origin: *`. Should it stop, the
   bucket URL in `web/src/radar/live.ts` is the one place a pass-through
   proxy would go.
+
+---
+
+Part of the Xue specification, licensed under [CC BY 4.0](../LICENSE-CC-BY).

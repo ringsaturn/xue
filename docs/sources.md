@@ -177,3 +177,7 @@ tropical cyclone tracks ([`tc.md`](tc.md), hourly), airport METAR / TAF
 A showcase case can only be cut where the upstream archive reaches: GFS and
 sflux to about 2021-01, ECMWF open data to about 2024-02, Himawari-9's
 ISatSS tiles to 2022-12. See [`showcase/README.md`](../showcase/README.md).
+
+---
+
+Part of the Xue specification, licensed under [CC BY 4.0](../LICENSE-CC-BY).

@@ -650,3 +650,7 @@ hourly slots against a store that lists ten-minute cycles, the series,
 the ingest, the conversion with the FCI band block and the hourly axis,
 and the native encoder byte for byte when the wheel knows the source.
 The GDAL-backed cases skip without `hdf5plugin`.
+
+---
+
+Part of the Xue specification, licensed under [CC BY 4.0](../LICENSE-CC-BY).

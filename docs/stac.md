@@ -320,3 +320,7 @@ ds = xr.open_zarr(store)                          # the profile in docs/zarr-pro
 `run.properties["cube:variables"]` says what else the run carries and in
 which unit; `run.assets["manifest"].href` is the manifest under its `?v=`,
 for a client that wants the shell's own view of the same run.
+
+---
+
+Part of the Xue specification, licensed under [CC BY 4.0](../LICENSE-CC-BY).

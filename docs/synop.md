@@ -299,3 +299,7 @@ under the Public Data License v1.0 with the source credited —
 was edited; it must not be presented as the agency's own publication
 (<https://www.jma.go.jp/jma/kishou/info/coment.html>). The `attribution`
 string carries the credit, and a display shows it with the data.
+
+---
+
+Part of the Xue specification, licensed under [CC BY 4.0](../LICENSE-CC-BY).

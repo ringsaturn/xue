@@ -159,7 +159,26 @@ published permanently. See [`showcase/README.md`](showcase/README.md).
 
 ## Data and Licensing
 
-Weather data comes from
+Three things are licensed separately.
+
+- **Code** is dual-licensed under MIT and Apache-2.0
+  ([LICENSE-MIT](LICENSE-MIT) / [LICENSE-APACHE](LICENSE-APACHE)); use
+  either at your option.
+- **Specifications**, the documents under [`docs/`](docs/README.md) (the
+  container, the Zarr profile, the STAC catalog, the point products, the
+  data API), are licensed under [CC BY 4.0](LICENSE-CC-BY), as the Zarr
+  specifications are. Implement them in anything; credit "the Xue
+  specification (github.com/ringsaturn/xue)".
+- **Published data** on `https://dataset.ringsaturn.me/xue/` (the stores,
+  the catalog, pointers, indexes and point products) is derived from the
+  sources below and keeps each source's terms, which every STAC Collection
+  names under `license` and `providers`. Xue's own contribution to those
+  objects (the layout, the quantization, the catalog) is licensed under
+  [CC BY 4.0](LICENSE-CC-BY): credit the source as it asks and add "via
+  Xue (xue.ringsaturn.me)", for example *Contains modified ECMWF open data
+  (CC BY 4.0), via Xue*.
+
+The sources. Weather data comes from
 [NOAA GFS](https://registry.opendata.aws/noaa-gfs-bdp-pds/),
 [NOAA GEFS](https://registry.opendata.aws/noaa-gefs-bdp-pds/) (the
 GEFS-Aerosols member) and
@@ -201,10 +220,6 @@ The other sources:
 
 The basemap is [Protomaps](https://protomaps.com)-hosted vector tiles,
 © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors.
-
-The code is dual-licensed under MIT and Apache-2.0
-([LICENSE-MIT](LICENSE-MIT) / [LICENSE-APACHE](LICENSE-APACHE)); use either
-at your option.
 
 ## Acknowledgments
 

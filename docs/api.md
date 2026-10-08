@@ -154,3 +154,7 @@ Errors are not cached.
   the encoder's job, published as products, not computed per request.
 - Point products (soundings, airports, storms) are read straight from the
   catalog for now (`docs/sounding.md`, `docs/airport.md`, `docs/tc.md`).
+
+---
+
+Part of the Xue specification, licensed under [CC BY 4.0](../LICENSE-CC-BY).

@@ -456,3 +456,7 @@ for a predicted variable and under either chain for a RAW one; the export
 report counts those chunks (`comparableChunks`, `identicalChunks`) rather
 than assuming it. On a 49-frame GFS run every comparable chunk was
 identical.
+
+---
+
+Part of the Xue specification, licensed under [CC BY 4.0](../LICENSE-CC-BY).

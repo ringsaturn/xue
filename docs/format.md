@@ -1424,3 +1424,7 @@ length, whole-file CRC-32, resolution variants, optional poster and H.264
 companion artifacts); the manifest and a small mutable `latest.json` pointer
 are delivery concerns defined by the reference implementations
 (`xuebuild/manifest.py`, `web/src/manifest.ts`), not by this container spec.
+
+---
+
+Part of the Xue specification, licensed under [CC BY 4.0](../LICENSE-CC-BY).

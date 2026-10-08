@@ -232,6 +232,11 @@ Facts worth getting right:
   /v1/point?source=&lat=&lon=&variables=` for one cell's series (ISO 8601
   `time`, or the whole axis). It never writes data, and the site does not
   depend on it.
+- Licensing is in three parts: the code MIT OR Apache-2.0; the
+  specifications under `docs/` CC BY 4.0; the published data under each
+  source's terms (every STAC Collection names them under `license` and
+  `providers`), with Xue's own contribution to each object CC BY 4.0
+  (credit the source as it asks and add "via Xue").
 - Data licensing: NOAA GFS, GEFS-Aerosols, HRRR and NCEP CFSv2 are public domain; ECMWF open data is CC BY 4.0 and
   what is served is a converted derivative ("Contains modified ECMWF open
   data"); `cma` is a CMA product (中国气象局国家气象中心, www.nmc.cn) and `mrms` a

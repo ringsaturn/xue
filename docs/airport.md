@@ -260,3 +260,7 @@ against the history file it addresses. Admission is structural: a station
 id, a sky cover or a weather string a reader has never seen is not an
 error. A reader validates the same shapes on read and rejects a
 `schemaVersion` above the one it implements.
+
+---
+
+Part of the Xue specification, licensed under [CC BY 4.0](../LICENSE-CC-BY).

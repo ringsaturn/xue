@@ -411,3 +411,7 @@ length, pressure strictly descending, timestamps in UTC, CRC32s, the
 overlapping, and tiling `soundings.jsonl` exactly. Every line is validated
 as it is written, so a span the index advertises always slices out
 something that parses.
+
+---
+
+Part of the Xue specification, licensed under [CC BY 4.0](../LICENSE-CC-BY).
