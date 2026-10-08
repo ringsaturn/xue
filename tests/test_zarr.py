@@ -426,7 +426,13 @@ class SeriesExportTests(ClassTempRoot, unittest.TestCase):
         for bundle_id in gfs.series_bundle_ids:
             self.assertIn(bundle_id, binconvert.published_bundle_ids(gfs))
             self.assertNotIn(".half", bundle_id)
-        for model in ("ecmwf", "sflux", "hrrr", "cfs", "mrms", "jma"):
+        for model in ("hrrr", "sflux"):
+            with self.subTest(model=model):
+                spec = source_spec(model)
+                self.assertTrue(spec.series_bundle_ids)
+                for bundle_id in spec.series_bundle_ids:
+                    self.assertIn(bundle_id, binconvert.published_bundle_ids(spec))
+        for model in ("ecmwf", "cfs", "mrms", "jma"):
             with self.subTest(model=model):
                 self.assertEqual(source_spec(model).series_bundle_ids, ())
 

@@ -286,7 +286,7 @@ class SourceSpec:
     (``<bundle>.series.zarr``, docs/zarr-profile.md "Series store"): one inner
     chunk is a cell's whole series, so the point API's ``/point`` and the
     shell's pinned point read one chunk per variable instead of one per time
-    chunk. Empty — the default, and every source but GFS today — ships none,
+    chunk. Empty — the default — ships none,
     and a pinned point falls back to the map store's series path, which is
     correct and only slower.
 
@@ -1087,6 +1087,7 @@ SOURCES: dict[str, SourceSpec] = {
         statistical_processes=(("prate", 0),),
         bundle_scalar_ids=("tmp2m", "prate", "dswrf", "orog"),
         bundle_vector_ids=("wind10m",),
+        series_bundle_ids=("tmp2m", "dswrf", "wind10m"),
         video=False,
         production_grid=(3072, 1536),
         # 3072 x 1536 divides exactly into 32 x 16 = 512 tiles with no
@@ -1182,6 +1183,7 @@ SOURCES: dict[str, SourceSpec] = {
         long_cycles=(0, 6, 12, 18),
         long_cycle_steps=((48, 1),),
         regrid=Regrid(step=0.03),
+        series_bundle_ids=("tmp2m", "wind10m", "gust", "tcdc", "wind80m"),
     ),
     # GEFS-Aerosols: the GEFS cycle's ``chem`` member, the GOCART aerosol
     # model coupled to the GFS, whose two-dimensional output sits beside the
