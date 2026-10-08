@@ -72,10 +72,12 @@ downward shortwave radiation.
 
 ### NOAA HRRR (`hrrr`)
 
-0.03° contiguous US, hourly to F18, a cycle every hour. The core pair, sea
-level pressure, 850 / 700 / 500 hPa heights, 925 / 850 / 500 hPa
-temperature, 10 m / 925 / 850 / 250 hPa winds, the surface diagnostics and
-forecast composite reflectivity (`cref`). The Lambert conformal model grid
+0.03° contiguous US, hourly to F18, a cycle every hour; the 00 / 06 / 12 /
+18 UTC cycles run to F48, which a local build may request but the published
+runs do not. The core pair, sea level pressure, 850 / 700 / 500 hPa heights,
+925 / 850 / 500 hPa temperature, 10 m / 80 m (`wind80m`, the hub-height
+pair) / 925 / 850 / 250 hPa winds, the surface diagnostics and forecast
+composite reflectivity (`cref`). The Lambert conformal model grid
 is resampled onto a regular 0.03° grid (bilinear); the viewer clips to the
 model's footprint.
 

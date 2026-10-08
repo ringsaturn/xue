@@ -328,8 +328,10 @@ unchanged.
 The block is a per-source registry value; 8 x 8 is what the reference
 pipeline writes. Which bundles ship a series store at all is the source
 registry's `series_bundle_ids` — opt-in per source, so a rollout can watch
-one dataset's storage and read counts before the next; the GFS
-0.25-degree run is the first, for `tmp2m`, `prate` and `wind10m`. Measured
+one dataset's storage and read counts before the next: the GFS
+0.25-degree run for `tmp2m`, `prate` and `wind10m`, HRRR for `tmp2m`,
+`wind10m`, `gust`, `tcdc` and `wind80m`, sflux for `tmp2m`, `dswrf` and
+`wind10m`. Measured
 on `gfs.2026090918` (161 frames, 0.25° global), an
 8 x 8 series store is 37.2 MB against the bundle's 37.0 MB for `tmp2m` (101.4
 MB against 100.8 for the two-variable `wind10m`), its shard index is 262 KB

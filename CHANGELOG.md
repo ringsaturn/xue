@@ -7,6 +7,10 @@ changes are in `git log`.
 
 ## 2026-10-08
 
+- HRRR publishes `wind80m`, the 80 m wind pair (GRIB2 surface type 103,
+  value 80), beside `wind10m`; a new bundle id, no schema change.
+- Series companion stores on HRRR (`tmp2m`, `wind10m`, `gust`, `tcdc`,
+  `wind80m`) and sflux (`tmp2m`, `dswrf`, `wind10m`), as on GFS.
 - Licensing stated in three parts: the code MIT / Apache-2.0, the
   specifications CC BY 4.0 (`LICENSE-CC-BY`), the published data under each
   source's terms with Xue's own contribution CC BY 4.0.
