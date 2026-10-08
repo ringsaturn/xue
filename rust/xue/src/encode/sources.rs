@@ -152,6 +152,14 @@ pub struct SourceSpec {
     pub latest_filename: Option<&'static str>,
     /// The published time axis as `(last_hour, step_hours)` segments.
     pub steps: &'static [(i64, i64)],
+    /// The UTC cycle hours that run past the end of `steps` (HRRR's
+    /// synoptic cycles run to F48, the others to F18). Only a build that
+    /// names one of these cycles may ask for those hours; the published
+    /// axis is still `steps`. Mirrors `long_cycles` in `xuebuild/sources.py`.
+    pub long_cycles: &'static [u32],
+    /// The axis segments, in `steps`'s form, that continue `steps` on a
+    /// `long_cycles` cycle. Mirrors `long_cycle_steps`.
+    pub long_cycle_steps: &'static [(i64, i64)],
     /// Variables fetched from the source, in GRIB assembly order: the primary
     /// file's records first, then each companion family's.
     pub input_variable_ids: &'static [&'static str],
@@ -358,16 +366,21 @@ impl SourceSpec {
     ///
     /// `last_hour` must itself lie on the axis — a cap that lands between
     /// steps (or beyond the published range) has no complete final frame and
-    /// is rejected outright.
-    pub fn forecast_hours(&self, last_hour: i64) -> Result<Vec<i64>> {
+    /// is rejected outright. Past the end of `steps` the axis continues by
+    /// `long_cycle_steps` only when `cycle` (the run's UTC hour) is one of
+    /// `long_cycles`. Mirrors `forecast_hours` in `xuebuild/sources.py`.
+    pub fn forecast_hours(&self, last_hour: i64, cycle: Option<u32>) -> Result<Vec<i64>> {
         if self.observation {
             return Err(EncodeError::conversion(format!(
                 "{} is an observation source and publishes no forecast axis",
                 self.manifest_model
             )));
         }
+        let long = cycle.is_some_and(|cycle| self.long_cycles.contains(&cycle))
+            && self.steps.last().is_some_and(|&(boundary, _)| last_hour > boundary);
         let mut hours = vec![self.first_hour];
-        for &(boundary, step) in self.steps {
+        let extension: &[(i64, i64)] = if long { self.long_cycle_steps } else { &[] };
+        for &(boundary, step) in self.steps.iter().chain(extension) {
             while *hours.last().expect("non-empty") < boundary.min(last_hour) {
                 hours.push(hours.last().expect("non-empty") + step);
             }
@@ -376,14 +389,28 @@ impl SourceSpec {
             }
         }
         if *hours.last().expect("non-empty") != last_hour {
-            let mut published = self
-                .steps
-                .iter()
-                .map(|(boundary, step)| format!("{step}-hourly to f{boundary:03}"))
-                .collect::<Vec<_>>()
-                .join(", then ");
+            let segments = |steps: &[(i64, i64)]| {
+                steps
+                    .iter()
+                    .map(|(boundary, step)| format!("{step}-hourly to f{boundary:03}"))
+                    .collect::<Vec<_>>()
+                    .join(", then ")
+            };
+            let mut published = segments(self.steps);
             if self.first_hour != 0 {
                 published = format!("from f{:03}, {published}", self.first_hour);
+            }
+            if !self.long_cycles.is_empty() {
+                let cycles = self
+                    .long_cycles
+                    .iter()
+                    .map(|hour| format!("{hour:02}"))
+                    .collect::<Vec<_>>()
+                    .join("/");
+                published = format!(
+                    "{published}; {} from the {cycles} UTC cycles",
+                    segments(self.long_cycle_steps)
+                );
             }
             return Err(EncodeError::conversion(format!(
                 "forecast hour {last_hour} is not on the {} axis ({published})",
@@ -444,6 +471,8 @@ pub const SOURCES: &[SourceSpec] = &[
         latest_filename: Some("latest.json"),
         // Hourly through f120, then three-hourly through f240.
         steps: &[(120, 1), (240, 3)],
+        long_cycles: &[],
+        long_cycle_steps: &[],
         // The pressure family ships mean sea level pressure and the height
         // on all eight registered isobaric surfaces (1000 / 925 / 850 / 700 /
         // 500 / 300 / 250 / 200 hPa); the upper-air fills the temperature,
@@ -521,6 +550,8 @@ pub const SOURCES: &[SourceSpec] = &[
         latest_filename: Some("latest-ecmwf.json"),
         // Three-hourly through 144 hours, then six-hourly through 240.
         steps: &[(144, 3), (240, 6)],
+        long_cycles: &[],
+        long_cycle_steps: &[],
         // The same pressure family and upper-air fills as GFS, from the open
         // data pressure-level records, so the two models offer one set of
         // layers. ECMWF `msl` is matched through the registry's 0/3/0 alias.
@@ -596,6 +627,8 @@ pub const SOURCES: &[SourceSpec] = &[
         product: "aifs-single-0p25",
         latest_filename: Some("latest-aifs.json"),
         steps: &[(360, 6)],
+        long_cycles: &[],
+        long_cycle_steps: &[],
         input_variable_ids: &[
             "tmp2m", "tp", "ugrd10m", "vgrd10m", "prmsl", "hgt850", "hgt700", "hgt500", "hgt250",
             "tmp925", "tmp850", "tmp500", "spfh850", "ugrd925", "vgrd925", "ugrd850", "vgrd850",
@@ -664,6 +697,8 @@ pub const SOURCES: &[SourceSpec] = &[
         // Hourly through 90 hours, three-hourly to 144, six-hourly to 360:
         // 145 frames, the run's own native output cadence.
         steps: &[(90, 1), (144, 3), (360, 6)],
+        long_cycles: &[],
+        long_cycle_steps: &[],
         input_variable_ids: &[
             "tmp2m", "apcp", "ugrd10m", "vgrd10m", "dswrf", "prmsl", "gust", "tcdc", "lcdc",
             "mcdc", "hcdc", "cape", "dpt2m", "vis", "tmpsfc", "icetk",
@@ -714,6 +749,8 @@ pub const SOURCES: &[SourceSpec] = &[
         product: "sfluxgrb",
         latest_filename: Some("latest-sflux.json"),
         steps: &[(120, 1), (240, 3)],
+        long_cycles: &[],
+        long_cycle_steps: &[],
         input_variable_ids: &["tmp2m", "prate_ave", "ugrd10m", "vgrd10m", "dswrf", "orog"],
         companion_files: &[],
         accumulated_precipitation: false,
@@ -756,10 +793,13 @@ pub const SOURCES: &[SourceSpec] = &[
         product: "wrfsfc",
         latest_filename: Some("latest-hrrr.json"),
         steps: &[(18, 1)],
+        long_cycles: &[0, 6, 12, 18],
+        long_cycle_steps: &[(48, 1)],
         input_variable_ids: &[
-            "tmp2m", "prate", "ugrd10m", "vgrd10m", "prmsl", "hgt850", "hgt700", "hgt500",
-            "tmp925", "tmp850", "tmp500", "ugrd925", "vgrd925", "ugrd850", "vgrd850", "ugrd250",
-            "vgrd250", "gust", "tcdc", "lcdc", "mcdc", "hcdc", "cape", "vis", "dpt2m", "cref", "orog",
+            "tmp2m", "prate", "ugrd10m", "vgrd10m", "ugrd80m", "vgrd80m", "prmsl", "hgt850",
+            "hgt700", "hgt500", "tmp925", "tmp850", "tmp500", "ugrd925", "vgrd925", "ugrd850",
+            "vgrd850", "ugrd250", "vgrd250", "gust", "tcdc", "lcdc", "mcdc", "hcdc", "cape", "vis",
+            "dpt2m", "cref", "orog",
         ],
         companion_files: &[],
         accumulated_precipitation: false,
@@ -775,7 +815,7 @@ pub const SOURCES: &[SourceSpec] = &[
             "gust", "tcdc", "lcdc", "mcdc", "hcdc", "cape", "vis", "dpt2m", "cref", "orog",
         ],
         core_bundle_ids: &["tmp2m", "prate"],
-        bundle_vector_ids: &["wind10m", "wind925", "wind850", "wind250"],
+        bundle_vector_ids: &["wind10m", "wind80m", "wind925", "wind850", "wind250"],
         bundle_composite_ids: &[],
         bundle_volume_ids: &[],
         // The 0.03° grid over the footprint of the 1799 x 1059 domain, from
@@ -820,6 +860,8 @@ pub const SOURCES: &[SourceSpec] = &[
         product: "chem-a2d-0p25",
         latest_filename: Some("latest-gefsaero.json"),
         steps: &[(120, 3)],
+        long_cycles: &[],
+        long_cycle_steps: &[],
         input_variable_ids: AEROSOL_VARIABLE_IDS,
         companion_files: &[],
         accumulated_precipitation: false,
@@ -880,6 +922,8 @@ pub const SOURCES: &[SourceSpec] = &[
         product: "time-grib-01",
         latest_filename: Some("latest-cfs.json"),
         steps: &[(6552, 6)],
+        long_cycles: &[],
+        long_cycle_steps: &[],
         // The nine surface inputs of the primary (flx) file, then the
         // pressure-level family's on its own 1° grid (`CFS_PGB_IDS`).
         input_variable_ids: &[
@@ -955,6 +999,8 @@ pub const SOURCES: &[SourceSpec] = &[
         product: "l3-mst-cref",
         latest_filename: Some("latest-cma.json"),
         steps: &[],
+        long_cycles: &[],
+        long_cycle_steps: &[],
         input_variable_ids: &["cref"],
         companion_files: &[],
         accumulated_precipitation: false,
@@ -1000,6 +1046,8 @@ pub const SOURCES: &[SourceSpec] = &[
         product: "conus-cref",
         latest_filename: None,
         steps: &[],
+        long_cycles: &[],
+        long_cycle_steps: &[],
         input_variable_ids: &["cref", "prate"],
         companion_files: &[],
         accumulated_precipitation: false,
@@ -1045,6 +1093,8 @@ pub const SOURCES: &[SourceSpec] = &[
         product: "conus-refl3d",
         latest_filename: Some("latest-mrms3d.json"),
         steps: &[],
+        long_cycles: &[],
+        long_cycle_steps: &[],
         input_variable_ids: &REFLECTIVITY_VARIABLE_IDS,
         companion_files: &[],
         accumulated_precipitation: false,
@@ -1090,6 +1140,8 @@ pub const SOURCES: &[SourceSpec] = &[
         product: "japan-prate",
         latest_filename: Some("latest-jma.json"),
         steps: &[],
+        long_cycles: &[],
+        long_cycle_steps: &[],
         input_variable_ids: &["prate"],
         companion_files: &[],
         accumulated_precipitation: false,
@@ -1134,6 +1186,8 @@ pub const SOURCES: &[SourceSpec] = &[
         product: "ahi-fldk-0p04",
         latest_filename: Some("latest-himawari.json"),
         steps: &[],
+        long_cycles: &[],
+        long_cycle_steps: &[],
         input_variable_ids: &["ir039", "wv062", "ir086", "ir104", "ir112", "ir123"],
         companion_files: &[],
         accumulated_precipitation: false,
@@ -1214,6 +1268,8 @@ pub const SOURCES: &[SourceSpec] = &[
         product: "abi-fldk-0p04",
         latest_filename: Some("latest-goeseast.json"),
         steps: &[],
+        long_cycles: &[],
+        long_cycle_steps: &[],
         input_variable_ids: &["ir039", "wv062", "ir086", "ir104", "ir112", "ir123"],
         companion_files: &[],
         accumulated_precipitation: false,
@@ -1274,6 +1330,8 @@ pub const SOURCES: &[SourceSpec] = &[
         product: "abi-fldk-0p04",
         latest_filename: Some("latest-goeswest.json"),
         steps: &[],
+        long_cycles: &[],
+        long_cycle_steps: &[],
         input_variable_ids: &["ir039", "wv062", "ir086", "ir104", "ir112", "ir123"],
         companion_files: &[],
         accumulated_precipitation: false,
@@ -1347,6 +1405,8 @@ pub const SOURCES: &[SourceSpec] = &[
         product: "fci-fldk-0p04",
         latest_filename: Some("latest-meteosat.json"),
         steps: &[],
+        long_cycles: &[],
+        long_cycle_steps: &[],
         input_variable_ids: &["ir086", "ir104", "ir123"],
         companion_files: &[],
         accumulated_precipitation: false,
@@ -1395,6 +1455,8 @@ pub const SOURCES: &[SourceSpec] = &[
         product: "ovation-aurora-1p00",
         latest_filename: Some("latest-aurora.json"),
         steps: &[],
+        long_cycles: &[],
+        long_cycle_steps: &[],
         input_variable_ids: &["aurora"],
         companion_files: &[],
         accumulated_precipitation: false,
@@ -1440,15 +1502,33 @@ mod tests {
     #[test]
     fn a_cap_must_land_on_the_published_axis() {
         let gfs = source_spec("gfs").expect("gfs");
-        assert_eq!(gfs.forecast_hours(3).expect("axis"), vec![0, 1, 2, 3]);
-        let long = gfs.forecast_hours(240).expect("axis");
+        assert_eq!(gfs.forecast_hours(3, None).expect("axis"), vec![0, 1, 2, 3]);
+        let long = gfs.forecast_hours(240, None).expect("axis");
         assert_eq!(long.len(), 161);
         assert_eq!(long[120], 120);
         assert_eq!(long[121], 123);
         // 121 is past the hourly segment and off the three-hourly one.
-        assert!(gfs.forecast_hours(121).is_err());
+        assert!(gfs.forecast_hours(121, None).is_err());
         // An observation source publishes no forecast axis at all.
-        assert!(source_spec("cma").expect("cma").forecast_hours(1).is_err());
+        assert!(source_spec("cma").expect("cma").forecast_hours(1, None).is_err());
+    }
+
+    #[test]
+    fn hrrr_reaches_f048_only_from_a_synoptic_cycle() {
+        let hrrr = source_spec("hrrr").expect("hrrr");
+        let long = hrrr.forecast_hours(48, Some(12)).expect("axis");
+        assert_eq!(long, (0..=48).collect::<Vec<_>>());
+        for cycle in [0, 6, 18] {
+            assert_eq!(hrrr.forecast_hours(48, Some(cycle)).expect("axis").len(), 49);
+        }
+        assert!(hrrr.forecast_hours(48, Some(3)).is_err());
+        assert!(hrrr.forecast_hours(48, None).is_err());
+        assert!(hrrr.forecast_hours(49, Some(12)).is_err());
+        for cycle in [None, Some(3), Some(12)] {
+            assert_eq!(hrrr.forecast_hours(18, cycle).expect("axis"), (0..=18).collect::<Vec<_>>());
+        }
+        // A source with no long cycles keeps its axis whatever the cycle.
+        assert!(source_spec("gfs").expect("gfs").forecast_hours(243, Some(0)).is_err());
     }
 
     #[test]
@@ -1516,7 +1596,7 @@ mod tests {
         assert!(!ifshres.observation && ifshres.cadence_seconds.is_none());
         assert_eq!(ifshres.open_meteo, Some("ecmwf_ifs"));
         assert!(ifshres.interval_precipitation);
-        assert_eq!(ifshres.forecast_hours(3).expect("axis"), vec![0, 1, 2, 3]);
+        assert_eq!(ifshres.forecast_hours(3, None).expect("axis"), vec![0, 1, 2, 3]);
         assert_eq!(ifshres.production_grid, (3600, 1801));
         assert_eq!(ifshres.core_bundle_ids, &["tmp2m", "prate"]);
         // Every other forecast source is read record by record.
@@ -1530,8 +1610,8 @@ mod tests {
         assert_eq!(gefsaero.input_variable_ids.len(), 9);
         assert_eq!(gefsaero.core_bundle_ids, &["aod"]);
         assert!(gefsaero.bundle_vector_ids.is_empty() && gefsaero.companion_files.is_empty());
-        assert_eq!(gefsaero.forecast_hours(120).expect("axis").len(), 41);
-        assert!(gefsaero.forecast_hours(121).is_err());
+        assert_eq!(gefsaero.forecast_hours(120, None).expect("axis").len(), 41);
+        assert!(gefsaero.forecast_hours(121, None).is_err());
         // One arrival shape for precipitation per source.
         for source in SOURCES {
             let shapes = u8::from(source.accumulated_precipitation)
@@ -1641,13 +1721,13 @@ mod tests {
         assert_eq!(cfs.latest_filename, Some("latest-cfs.json"));
         assert_eq!(cfs.steps, &[(6552, 6)]);
         assert_eq!(cfs.first_hour, 6);
-        let axis = cfs.forecast_hours(6552).expect("axis");
+        let axis = cfs.forecast_hours(6552, None).expect("axis");
         assert_eq!(axis.len(), 1092);
         assert_eq!((axis[0], axis[1], axis[1091]), (6, 12, 6552));
-        assert_eq!(cfs.forecast_hours(6).expect("axis"), vec![6]);
+        assert_eq!(cfs.forecast_hours(6, None).expect("axis"), vec![6]);
         // Neither the analysis nor an hour between the steps is on it.
         for off_axis in [0, 3, 9, 6551, 6558] {
-            assert!(cfs.forecast_hours(off_axis).is_err(), "f{off_axis}");
+            assert!(cfs.forecast_hours(off_axis, None).is_err(), "f{off_axis}");
         }
         // Every other source still counts from the analysis.
         for source in SOURCES {

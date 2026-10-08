@@ -178,6 +178,7 @@ class RegistryTests(unittest.TestCase):
             self.assertNotIn(variable_id, VECTOR_BUNDLES)
             self.assertNotIn(variable_id, VIDEO_VARIABLE_IDS)
         self.assertIn("wind100m", gfs)
+        self.assertIn("wind80m", published_bundle_ids(source_spec("hrrr")))
         ecmwf = published_bundle_ids(source_spec("ecmwf"))
         for variable_id in SURFACE_VARIABLE_IDS:
             self.assertEqual(variable_id in ecmwf, variable_id in ("gust", "tcdc", "cape", "dpt2m"), variable_id)
@@ -250,6 +251,9 @@ class MatcherTests(unittest.TestCase):
             self.assertTrue(_matches(variable_spec(flag), message(1, number, 1, 0.0, None)))
         self.assertTrue(_matches(variable_spec("ugrd100m"), message(2, 2, 103, 100.0, None)))
         self.assertFalse(_matches(variable_spec("ugrd10m"), message(2, 2, 103, 100.0, None)), "the 100 m wind")
+        self.assertTrue(_matches(variable_spec("ugrd80m"), message(2, 2, 103, 80.0, None)))
+        self.assertFalse(_matches(variable_spec("ugrd80m"), message(2, 2, 103, 100.0, None)), "the 100 m wind")
+        self.assertFalse(_matches(variable_spec("ugrd100m"), message(2, 2, 103, 80.0, None)), "the 80 m wind")
 
     def test_gdal_bands_match_on_element_and_surface(self) -> None:
         self.assertTrue(_band_matches("vis", {"GRIB_ELEMENT": "VIS", "GRIB_SHORT_NAME": "0-SFC"}, ""))
@@ -310,6 +314,11 @@ class MatcherTests(unittest.TestCase):
         self.assertTrue(_band_matches("ugrd100m", {"GRIB_ELEMENT": "UGRD"}, "100[Pa] HTGL=100 m above ground"))
         self.assertFalse(_band_matches("ugrd100m", {"GRIB_ELEMENT": "UGRD", "GRIB_SHORT_NAME": "10-HTGL"}, ""))
         self.assertFalse(_band_matches("ugrd10m", {"GRIB_ELEMENT": "UGRD", "GRIB_SHORT_NAME": "100-HTGL"}, ""))
+        self.assertTrue(_band_matches("vgrd80m", {"GRIB_ELEMENT": "VGRD", "GRIB_SHORT_NAME": "80-HTGL"}, ""))
+        self.assertTrue(_band_matches("ugrd80m", {"GRIB_ELEMENT": "UGRD"}, "80[m] HTGL=80 m above ground"))
+        self.assertFalse(_band_matches("ugrd80m", {"GRIB_ELEMENT": "UGRD", "GRIB_SHORT_NAME": "100-HTGL"}, ""))
+        self.assertFalse(_band_matches("ugrd80m", {"GRIB_ELEMENT": "UGRD"}, "100[m] HTGL=100 m above ground"))
+        self.assertFalse(_band_matches("ugrd100m", {"GRIB_ELEMENT": "UGRD", "GRIB_SHORT_NAME": "80-HTGL"}, ""))
         self.assertEqual(raster_expression("tcdc", "-"), "maximum(0,minimum(100,A*100))")
         self.assertEqual(raster_expression("tcdc", "%"), "maximum(0,minimum(100,A))")
 

@@ -149,6 +149,10 @@ it byte-identical, so the operation order is fixed. Mirrors lag each other
 per frame, so a frame comes from the first mirror that has it and a cycle is
 complete only when one mirror has every hour (`XUE_HRRR_BASE_URLS`). The
 shell clips to the footprint (`FORECAST_MODELS[].domain`, `web/src/domain.ts`).
+`wind80m` is the 80 m U/V pair `wrfsfc` writes for wind power (0/2/2–3 on
+surface 103 at 80 m). The 00/06/12/18Z cycles run to F48: `long_cycles`
+lets a build that names one of them ask for `--hours 48`, while the
+published axis, the `--hours` default and the live runs stay at F18.
 
 **gefsaero.** GEFS-Aerosols, the `chem/pgrb2ap25/` `a2d_0p25` files
 (`XUE_GEFS_BASE_URL`). Nine scalars: 550 nm AOD total

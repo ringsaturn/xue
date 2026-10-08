@@ -117,15 +117,76 @@ class SourceRegistryTests(unittest.TestCase):
         self.assertIn("prmsl", published)
         self.assertIn("cref", published)
         self.assertIn("orog", published)
-        self.assertEqual(published[-4:], ("wind10m", "wind925", "wind850", "wind250"))
+        self.assertEqual(published[-5:], ("wind10m", "wind80m", "wind925", "wind850", "wind250"))
         # What the surface file does not carry is not listed.
         for absent in ("hgt250", "rh850", "spfh850", "aptmp2m", "thetae850", "qflux850", "tmpsfc"):
             self.assertNotIn(absent, published, absent)
         # The fixture carries every input, in source order.
-        self.assertEqual(len(HRRR.input_variable_ids), 27)
+        self.assertEqual(len(HRRR.input_variable_ids), 29)
+        self.assertEqual(
+            HRRR.input_variable_ids[2:6], ("ugrd10m", "vgrd10m", "ugrd80m", "vgrd80m")
+        )
+
+    def test_the_80_m_wind_is_a_vector_bundle_with_the_10_m_codebook(self) -> None:
+        from xuebuild.quantize import PROFILES
+
+        self.assertEqual(binconvert.VECTOR_BUNDLES["wind80m"], ("ugrd80m", "vgrd80m"))
+        for component, number in (("ugrd80m", 2), ("vgrd80m", 3)):
+            spec = variable_spec(component)
+            self.assertEqual(spec.index_field, f":{component[0].upper()}GRD:80 m above ground:")
+            self.assertEqual((spec.grib2_category, spec.grib2_number), (2, number))
+            self.assertEqual((spec.grib2_level_type, spec.grib2_level_value), (103, 80.0))
+            self.assertEqual(spec.value_range, (-64, 64))
+            for profile in PROFILES.values():
+                self.assertIs(profile[component], profile["ugrd10m"], component)
+        self.assertEqual(raster_expression("ugrd80m", "m/s"), raster_expression("ugrd10m", "m/s"))
+        eighty = {"GRIB_ELEMENT": "UGRD", "GRIB_SHORT_NAME": "80-HTGL", "GRIB_COMMENT": "u-component of wind [m/s]"}
+        self.assertTrue(_band_matches("ugrd80m", eighty, '80[m] HTGL="Specified height level above ground"'))
+        self.assertFalse(_band_matches("vgrd80m", eighty, '80[m] HTGL="Specified height level above ground"'))
+        self.assertFalse(_band_matches("ugrd10m", eighty, '80[m] HTGL="Specified height level above ground"'))
+        self.assertFalse(_band_matches("ugrd100m", eighty, '80[m] HTGL="Specified height level above ground"'))
+
+    def test_the_series_companions(self) -> None:
+        self.assertEqual(HRRR.series_bundle_ids, ("tmp2m", "wind10m", "gust", "tcdc", "wind80m"))
+        self.assertTrue(set(HRRR.series_bundle_ids) <= set(published_bundle_ids(HRRR)))
 
 
 class CycleTests(unittest.TestCase):
+    def test_the_synoptic_cycles_reach_f048_on_request(self) -> None:
+        # The published axis stays at 18 hours; only a build that names a
+        # synoptic cycle may ask for the 48 it runs to.
+        self.assertEqual(HRRR.horizon_hours, 18)
+        self.assertEqual(HRRR.forecast_hours(48, cycle=12), list(range(49)))
+        for cycle in (0, 6, 18):
+            self.assertEqual(len(HRRR.forecast_hours(48, cycle=cycle)), 49, cycle)
+        with self.assertRaisesRegex(DownloadError, "not on the HRRR axis"):
+            HRRR.forecast_hours(48, cycle=3)
+        with self.assertRaisesRegex(DownloadError, "not on the HRRR axis"):
+            HRRR.forecast_hours(48)
+        with self.assertRaises(DownloadError):
+            HRRR.forecast_hours(49, cycle=12)
+        for cycle in (None, 3, 12):
+            self.assertEqual(HRRR.forecast_hours(18, cycle=cycle), list(range(19)), cycle)
+            self.assertEqual(HRRR.forecast_hours(5, cycle=cycle), list(range(6)), cycle)
+        # A source without long cycles is unchanged whatever the cycle.
+        with self.assertRaises(DownloadError):
+            source_spec("gfs").forecast_hours(243, cycle=0)
+
+    def test_a_named_synoptic_run_resolves_to_f048(self) -> None:
+        probed: list[str] = []
+
+        def exists(url: str) -> bool:
+            probed.append(url)
+            return True
+
+        run = resolve_run("2026091112", hours=48, exists=exists, model="hrrr")
+        self.assertEqual(run.id, "2026091112")
+        self.assertTrue(any("wrfsfcf48" in url for url in probed))
+        with self.assertRaisesRegex(DownloadError, "not on the HRRR axis"):
+            resolve_run("2026091103", hours=48, exists=exists, model="hrrr")
+        with self.assertRaisesRegex(DownloadError, "not on the HRRR axis"):
+            resolve_run("latest", hours=48, exists=exists, model="hrrr")
+
     def test_hourly_cycles_are_parsed_and_floored(self) -> None:
         self.assertEqual(parse_run("2026091107", "hrrr").id, "2026091107")
         with self.assertRaisesRegex(DownloadError, "cycles start at 00, 06, 12, 18 UTC"):
@@ -240,7 +301,7 @@ class RecordMatchingTests(unittest.TestCase):
     def test_every_input_is_found_in_the_fixture_both_ways(self) -> None:
         fast = grib2.inspect_grib_fast(FIXTURE, HRRR.input_variable_ids)
         self.assertEqual(tuple(fast), HRRR.input_variable_ids)
-        self.assertEqual([frame.band for frame in fast.values()], list(range(1, 28)))
+        self.assertEqual([frame.band for frame in fast.values()], list(range(1, 30)))
         self.assertEqual({frame.lead_seconds for frame in fast.values()}, {0})
         with mock.patch.dict(os.environ, {"XUE_ENCODER": "python"}):
             if shutil.which("gdalinfo") is None:
@@ -456,6 +517,13 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         self.assertEqual(bundle.metadata["variables"][0]["unit"], "dBZ")
         wind = read_bundle(self.root / "out" / "wind10m.xue")
         self.assertEqual([variable["id"] for variable in wind.metadata["variables"]], ["ugrd10m", "vgrd10m"])
+        wind80 = read_bundle(self.root / "out" / "wind80m.xue")
+        self.assertEqual([variable["id"] for variable in wind80.metadata["variables"]], ["ugrd80m", "vgrd80m"])
+        surfaces = {
+            (variable["parameter"]["typeOfFirstFixedSurface"], variable["parameter"]["scaledValueOfFirstFixedSurface"])
+            for variable in wind80.metadata["variables"]
+        }
+        self.assertEqual(surfaces, {(103, 80)})
 
     @requires_native
     def test_the_native_encoder_writes_the_same_bytes(self) -> None:

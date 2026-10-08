@@ -443,6 +443,35 @@ VARIABLES: dict[str, VariableSpec] = {
         grib2_level_value=10.0,
         gdal_unit="m/s",
     ),
+    # 80 m wind components, delivered together as the ``wind80m`` bundle:
+    # the same parameters on the 80 m surface (type 103, value 80), which
+    # HRRR's wrfsfc writes for wind power where pgrb2 writes 100 m.
+    "ugrd80m": VariableSpec(
+        id="ugrd80m",
+        label="80 meter U wind component",
+        output_unit="m/s",
+        value_range=(-64, 64),
+        grib_element="UGRD",
+        index_field=":UGRD:80 m above ground:",
+        grib2_category=2,
+        grib2_number=2,
+        grib2_level_type=103,
+        grib2_level_value=80.0,
+        gdal_unit="m/s",
+    ),
+    "vgrd80m": VariableSpec(
+        id="vgrd80m",
+        label="80 meter V wind component",
+        output_unit="m/s",
+        value_range=(-64, 64),
+        grib_element="VGRD",
+        index_field=":VGRD:80 m above ground:",
+        grib2_category=2,
+        grib2_number=3,
+        grib2_level_type=103,
+        grib2_level_value=80.0,
+        gdal_unit="m/s",
+    ),
     # 100 m wind components, the hub height of a modern turbine, delivered
     # together as the ``wind100m`` bundle: the same parameters on the 100 m
     # surface (type 103, value 100), which pgrb2 writes for wind power.

@@ -1904,7 +1904,7 @@ def _run_is_complete(
             try:
                 if all(
                     exists(hrrr_object_url(run, hour, base_url=base_url))
-                    for hour in source_spec(model).forecast_hours(hours)
+                    for hour in source_spec(model).forecast_hours(hours, cycle=run.time.hour)
                 ):
                     return True
             except DownloadError as exc:
@@ -1981,13 +1981,15 @@ def resolve_run(
             raise DownloadError(f"{label} run {run.id} has not fully landed on the bucket through +{hours} h")
         return run
     # Validate the horizon against the model's published axis up front, so an
-    # off-axis --hours fails with the axis description instead of a 404.
-    spec.forecast_hours(hours)
+    # off-axis --hours fails with the axis description instead of a 404. A
+    # named run is checked against its own cycle, which may run longer.
     if value != "latest":
         run = parse_run(value, model)
+        spec.forecast_hours(hours, cycle=run.time.hour)
         if not _run_is_complete(run, hours, model, exists, now=now):
             raise DownloadError(f"{label} run {run.id} is incomplete for f000 through f{hours:03d}")
         return run
+    spec.forecast_hours(hours)
 
     cycle = timedelta(hours=spec.cycle_hours)
     candidate = floor_to_cycle(now or datetime.now(UTC), spec.cycle_hours)
@@ -2307,7 +2309,7 @@ def fetch_run(
     if spec.open_meteo is not None:
         return _fetch_open_meteo_run(spec, run, hours, raw_root, force=force, input_ids=input_ids)
     destination = raw_root / f"{spec.id}.{run.id}"
-    forecast_hours = spec.forecast_hours(hours)
+    forecast_hours = spec.forecast_hours(hours, cycle=run.time.hour)
     frame_attempts = ECMWF_FRAME_ATTEMPTS if model in ECMWF_OPEN_DATA_MODELS else 1
 
     def fetch_with_retries(hour: int) -> Path:

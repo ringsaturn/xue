@@ -26,6 +26,9 @@ static HEIGHT_RE: LazyLock<Regex> = LazyLock::new(|| {
 static TEN_METRE_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i)(?:^|[^0-9])10(?:\.0+)?\s*m(?:eter)?s?\s+above\s+ground").expect("valid regex")
 });
+static EIGHTY_METRE_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)(?:^|[^0-9])80(?:\.0+)?\s*m(?:eter)?s?\s+above\s+ground").expect("valid regex")
+});
 static HUNDRED_METRE_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i)(?:^|[^0-9])100(?:\.0+)?\s*m(?:eter)?s?\s+above\s+ground").expect("valid regex")
 });
@@ -138,7 +141,7 @@ pub fn raster_expression(variable_id: &str, unit: &str) -> Result<String> {
             }
             Ok("maximum(0,minimum(1270,A))".into())
         }
-        "ugrd10m" | "vgrd10m" | "ugrd100m" | "vgrd100m" => wind_expression(unit),
+        "ugrd10m" | "vgrd10m" | "ugrd80m" | "vgrd80m" | "ugrd100m" | "vgrd100m" => wind_expression(unit),
         // The 2 m dew point, the apparent temperature and the surface (skin)
         // temperature take the temperature's rule over their own codebook
         // ranges.
@@ -800,6 +803,14 @@ fn band_matches(variable_id: &str, band: &BandInfo) -> Result<bool> {
             element == variable_spec(variable_id)?.grib_element
                 && (matches!(short_name.as_str(), "10-HTGL" | "10-M-HTGL")
                     || TEN_METRE_RE.is_match(&searchable(band)))
+        }
+        // One wind component on the 80 m surface (type 103, value 80),
+        // which HRRR's wrfsfc writes for wind power; GDAL spells it
+        // `80-HTGL`. Mirrors `_is_eighty_metre_wind`.
+        "ugrd80m" | "vgrd80m" => {
+            element == variable_spec(variable_id)?.grib_element
+                && (matches!(short_name.as_str(), "80-HTGL" | "80-M-HTGL")
+                    || EIGHTY_METRE_RE.is_match(&searchable(band)))
         }
         // One wind component on the 100 m surface (type 103, value 100),
         // which pgrb2 writes for wind power; GDAL spells it `100-HTGL`.

@@ -92,12 +92,16 @@ remain readable; nothing new is written at them."""
 WIND_COMPONENT_IDS = ("ugrd10m", "vgrd10m")
 WIND_BUNDLE_ID = "wind10m"
 WAVE_BUNDLE_ID = "wave"
+# The 80 m wind pair HRRR writes for wind power, a vector bundle of its own.
+WIND_80M_COMPONENT_IDS = ("ugrd80m", "vgrd80m")
+WIND_80M_BUNDLE_ID = "wind80m"
 # The 100 m wind pair, the hub height of a modern turbine: the same parameters
 # on the 100 m surface, a vector bundle of its own.
 WIND_100M_COMPONENT_IDS = ("ugrd100m", "vgrd100m")
 WIND_100M_BUNDLE_ID = "wind100m"
 VECTOR_BUNDLES: dict[str, tuple[str, str]] = {
     WIND_BUNDLE_ID: WIND_COMPONENT_IDS,
+    WIND_80M_BUNDLE_ID: WIND_80M_COMPONENT_IDS,
     WIND_100M_BUNDLE_ID: WIND_100M_COMPONENT_IDS,
     **{f"wind{level}": (f"ugrd{level}", f"vgrd{level}") for level in ISOBARIC_LEVELS_HPA},
     **{f"qflux{level}": (f"uqflx{level}", f"vqflx{level}") for level in ISOBARIC_LEVELS_HPA},
@@ -2319,20 +2323,22 @@ def convert_bin(
         raise ConversionError(
             f"the axis needs {offsets[-1]} steps of {unit_seconds} s, past the u16 frame offset range"
         )
+    run_time = per_file[0][variable_ids[0]].run_time.astimezone(UTC)
     if not source.observation:
         # The input hours must be a contiguous run of the source's published
         # axis (hourly to f120, three-hourly beyond, on GFS), so no frame is
         # missing and every step matches the cadence the source publishes.
+        # The run's own cycle decides whether a longer axis applies.
         hours = offsets
         try:
-            axis = source.forecast_hours(hours[-1])
+            axis = source.forecast_hours(hours[-1], cycle=run_time.hour)
         except DownloadError as exc:
             raise ConversionError(str(exc)) from exc
         if hours != [hour for hour in axis if hour >= hours[0]]:
             raise ConversionError(f"forecast hours must be a contiguous run of the {source.manifest_model} axis")
         if require_complete:
             try:
-                expected_axis = source.forecast_hours(expected_hours)
+                expected_axis = source.forecast_hours(expected_hours, cycle=run_time.hour)
             except DownloadError as exc:
                 raise ConversionError(str(exc)) from exc
             if hours != expected_axis:
@@ -2340,7 +2346,6 @@ def convert_bin(
                     f"complete build requires forecast hours 0 through {expected_hours} on the "
                     f"{source.manifest_model} axis"
                 )
-    run_time = per_file[0][variable_ids[0]].run_time.astimezone(UTC)
 
     # Every published variable's grid family: for a variable the converter
     # derives (the vapour flux pair, the rate) the family its bundle's
@@ -2427,7 +2432,7 @@ def convert_bin(
                     if index:
                         interval_start = series_lead_seconds(per_file[index - 1]) // binformat.HOUR_SECONDS
                     else:
-                        axis = source.forecast_hours(hour)
+                        axis = source.forecast_hours(hour, cycle=run_time.hour)
                         if len(axis) < 2:
                             raise ConversionError(
                                 f"the interval precipitation frame at hour {hour} names no interval"

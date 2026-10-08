@@ -735,6 +735,50 @@ pub const VARIABLES: &[VariableSpec] = &[
         producer_id: None,
         grib2_aerosol: None,
     },
+    // 80 m wind components, delivered together as the `wind80m` bundle:
+    // the same parameters on the 80 m surface (type 103, value 80), which
+    // HRRR's wrfsfc writes for wind power where pgrb2 writes 100 m.
+    // Mirrors `ugrd80m` / `vgrd80m` in `xuebuild/variables.py`.
+    VariableSpec {
+        id: "ugrd80m",
+        label: "80 meter U wind component",
+        output_unit: "m/s",
+        value_range: (-64.0, 64.0),
+        grib_element: "UGRD",
+        open_meteo: "",
+        grib2_discipline: 0,
+        grib2_category: 2,
+        grib2_number: 2,
+        grib2_level_type: 103,
+        grib2_level_value: Some(80.0),
+        grib2_statistical: None,
+        grib2_aliases: &[],
+        grib2_alternates: &[],
+        gdal_unit: "m/s",
+        fill_values: &[],
+        producer_id: None,
+        grib2_aerosol: None,
+    },
+    VariableSpec {
+        id: "vgrd80m",
+        label: "80 meter V wind component",
+        output_unit: "m/s",
+        value_range: (-64.0, 64.0),
+        grib_element: "VGRD",
+        open_meteo: "",
+        grib2_discipline: 0,
+        grib2_category: 2,
+        grib2_number: 3,
+        grib2_level_type: 103,
+        grib2_level_value: Some(80.0),
+        grib2_statistical: None,
+        grib2_aliases: &[],
+        grib2_alternates: &[],
+        gdal_unit: "m/s",
+        fill_values: &[],
+        producer_id: None,
+        grib2_aerosol: None,
+    },
     // 100 m wind components, the hub height of a modern turbine, delivered
     // together as the `wind100m` bundle: the same parameters on the 100 m
     // surface (type 103, value 100), which pgrb2 writes for wind power.

@@ -25,6 +25,7 @@ from .variables import (
 SUPPORTED_EXTENSIONS = {".grb", ".grb2", ".grib2"}
 HEIGHT_RE = re.compile(r"(?:^|[^0-9])2(?:\.0+)?\s*m(?:eter)?s?\s+above\s+ground", re.IGNORECASE)
 TEN_METRE_RE = re.compile(r"(?:^|[^0-9])10(?:\.0+)?\s*m(?:eter)?s?\s+above\s+ground", re.IGNORECASE)
+EIGHTY_METRE_RE = re.compile(r"(?:^|[^0-9])80(?:\.0+)?\s*m(?:eter)?s?\s+above\s+ground", re.IGNORECASE)
 HUNDRED_METRE_RE = re.compile(r"(?:^|[^0-9])100(?:\.0+)?\s*m(?:eter)?s?\s+above\s+ground", re.IGNORECASE)
 
 
@@ -513,7 +514,7 @@ def raster_expression(variable_id: str, unit: str) -> str:
         return accumulation_expression(unit)
     if variable_id == "dswrf":
         return flux_expression(unit)
-    if variable_id in ("ugrd10m", "vgrd10m", "ugrd100m", "vgrd100m"):
+    if variable_id in ("ugrd10m", "vgrd10m", "ugrd80m", "vgrd80m", "ugrd100m", "vgrd100m"):
         return wind_expression(unit)
     if variable_id == "prmsl":
         return pressure_expression(unit)
@@ -745,6 +746,23 @@ def _is_ten_metre_wind(metadata: dict[str, str], description: str, element: str)
         ]
     )
     return short_name in {"10-HTGL", "10-M-HTGL"} or bool(TEN_METRE_RE.search(searchable))
+
+
+def _is_eighty_metre_wind(metadata: dict[str, str], description: str, element: str) -> bool:
+    """One wind component on the 80 m surface (type 103, value 80), which
+    HRRR's wrfsfc writes for wind power. GDAL spells it ``80-HTGL``."""
+    if metadata.get("GRIB_ELEMENT", "").upper() != element:
+        return False
+    short_name = metadata.get("GRIB_SHORT_NAME", "").upper()
+    searchable = " ".join(
+        [
+            short_name,
+            metadata.get("GRIB_COMMENT", ""),
+            metadata.get("GRIB_LEVEL", ""),
+            description,
+        ]
+    )
+    return short_name in {"80-HTGL", "80-M-HTGL"} or bool(EIGHTY_METRE_RE.search(searchable))
 
 
 def _is_hundred_metre_wind(metadata: dict[str, str], description: str, element: str) -> bool:
@@ -991,6 +1009,8 @@ def _band_matches(variable_id: str, metadata: dict[str, str], description: str) 
         return _is_cloud_layer_record(metadata, description, variable_spec(variable_id).grib_element)
     if variable_id in ("ugrd10m", "vgrd10m"):
         return _is_ten_metre_wind(metadata, description, variable_spec(variable_id).grib_element)
+    if variable_id in ("ugrd80m", "vgrd80m"):
+        return _is_eighty_metre_wind(metadata, description, variable_spec(variable_id).grib_element)
     if variable_id in ("ugrd100m", "vgrd100m"):
         return _is_hundred_metre_wind(metadata, description, variable_spec(variable_id).grib_element)
     if variable_id == "prmsl":

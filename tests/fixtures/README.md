@@ -57,15 +57,17 @@ grib_set -r -s packingType=grid_jpeg /tmp/wave.crop.grib2 \
 
 `hrrr.2026091100.f000.crop.grib2` is a 120 by 120 cell window of every
 record the HRRR source fetches from the 2026-09-11 00:00 UTC analysis,
-twenty-seven records in `xuebuild/sources.py` order — the surface
+twenty-nine records in `xuebuild/sources.py` order — the 80 m wind pair
+(`:UGRD:80 m above ground:anl:`, `:VGRD:…`) after the 10 m one, the surface
 orography (`:HGT:surface:`) at the end — over the Gulf coast
 (roughly 88W to 84W, 27N to 31N) and still on the model's own 3 km Lambert
 conformal grid — a crop keeps the projection, and GDAL's GRIB writer
 carries it — so the WKT parsing, the footprint, the resampling onto the
 regular 0.03° grid, the `MSLMA` / `REFC` aliases and the byte-identity
 parity test all run against real projected records. Complex packing keeps
-it a third of a megabyte. Cut from the records assembled by byte range off
-the `.idx` (the order and phrases are the source's) with:
+it about a third of a megabyte. Cut from the records assembled by byte
+range off the `.idx` of `hrrr.20260911/conus/hrrr.t00z.wrfsfcf00.grib2` on
+`noaa-hrrr-bdp-pds` (the order and phrases are the source's) with:
 
 ```sh
 gdal_translate -srcwin 1220 800 120 120 -of GRIB -co DATA_ENCODING=COMPLEX_PACKING \

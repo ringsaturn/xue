@@ -201,6 +201,7 @@ def parse_case(payload: dict[str, Any], *, source_name: str = "<case>") -> CaseS
     run = payload.get("run", "")
     dataset = payload.get("dataset", "")
     from_file = source.observation and (not source.fetched or (source.series_file and bool(dataset)))
+    parsed_run = None
     if from_file:
         if run:
             raise ShowcaseError(f"case {case_id}: an observation case built from a file has no run to name")
@@ -212,7 +213,7 @@ def parse_case(payload: dict[str, Any], *, source_name: str = "<case>") -> CaseS
         if not isinstance(run, str) or not run:
             what = "the window's first hour" if source.observation else "a UTC cycle"
             raise ShowcaseError(f"case {case_id}: run must be {what} in YYYYMMDDHH format")
-        parse_run(run, source.id)
+        parsed_run = parse_run(run, source.id)
 
     hours = payload.get("hours")
     if not isinstance(hours, int) or isinstance(hours, bool) or hours <= 0:
@@ -222,7 +223,7 @@ def parse_case(payload: dict[str, Any], *, source_name: str = "<case>") -> CaseS
     # declaration until the frames are read.
     if not source.observation:
         try:
-            source.forecast_hours(hours)
+            source.forecast_hours(hours, cycle=parsed_run.time.hour if parsed_run else None)
         except DownloadError as exc:
             raise ShowcaseError(f"case {case_id}: {exc}") from exc
 

@@ -360,6 +360,16 @@ class SourceSpec:
     cycle_hours: int = 6
     """Hours between the source's cycles: a run starts on a multiple of this
     (00/06/12/18 UTC for the global models, every hour for HRRR)."""
+    long_cycles: tuple[int, ...] = ()
+    """The UTC cycle hours that run past the end of :attr:`steps`, for a
+    source whose cycles do not all reach the same lead (HRRR's synoptic
+    cycles run to F48, the others to F18). Only a build that names one of
+    these cycles may ask for those hours; the published axis is still
+    :attr:`steps`, so :attr:`horizon_hours`, the ``--hours`` default and the
+    live runs do not change."""
+    long_cycle_steps: tuple[tuple[int, int], ...] = ()
+    """The axis segments, in :attr:`steps`'s ``(last_hour, step_hours)``
+    form, that continue :attr:`steps` on a :attr:`long_cycles` cycle."""
     regrid: Regrid | None = None
     """Set when the source's records are on a map projection rather than a
     regular latitude/longitude grid, and must be resampled onto one of this
@@ -463,17 +473,27 @@ class SourceSpec:
                 return companion.production_grid, companion.tile
         raise DownloadError(f"{self.manifest_model} has no {family} grid family")
 
-    def forecast_hours(self, last_hour: int) -> list[int]:
+    def forecast_hours(self, last_hour: int, *, cycle: int | None = None) -> list[int]:
         """The published axis from :attr:`first_hour` — the analysis for
         every source but CFSv2 — through ``last_hour``.
 
         ``last_hour`` must itself lie on the axis — a cap that lands between
         steps (or beyond the published range) has no complete final frame to
-        fetch and is rejected outright."""
+        fetch and is rejected outright. Past the end of :attr:`steps` the
+        axis continues by :attr:`long_cycle_steps` only when ``cycle`` (the
+        run's UTC hour) is one of :attr:`long_cycles`."""
         if self.observation:
             raise DownloadError(f"{self.manifest_model} is an observation source and publishes no forecast axis")
+        segments = self.steps
+        if (
+            cycle is not None
+            and cycle in self.long_cycles
+            and self.steps
+            and last_hour > self.steps[-1][0]
+        ):
+            segments = self.steps + self.long_cycle_steps
         hours = [self.first_hour]
-        for boundary, step in self.steps:
+        for boundary, step in segments:
             while hours[-1] < min(boundary, last_hour):
                 hours.append(hours[-1] + step)
             if hours[-1] >= last_hour:
@@ -482,6 +502,10 @@ class SourceSpec:
             published = ", then ".join(f"{step}-hourly to f{boundary:03d}" for boundary, step in self.steps)
             if self.first_hour:
                 published = f"from f{self.first_hour:03d}, {published}"
+            if self.long_cycles:
+                cycles = "/".join(f"{hour:02d}" for hour in self.long_cycles)
+                extended = ", then ".join(f"{step}-hourly to f{boundary:03d}" for boundary, step in self.long_cycle_steps)
+                published = f"{published}; {extended} from the {cycles} UTC cycles"
             raise DownloadError(
                 f"forecast hour {last_hour} is not on the {self.manifest_model} axis ({published})"
             )
@@ -1073,7 +1097,7 @@ SOURCES: dict[str, SourceSpec] = {
     # NOAA HRRR: the 3 km convection-allowing model over the contiguous
     # United States, a new cycle every hour, hourly to F18 (the four
     # synoptic cycles run to F48, which is not published here so every
-    # cycle reads the same). Computed on a Lambert conformal conic grid
+    # cycle reads the same; a build that names one of them may ask for it). Computed on a Lambert conformal conic grid
     # (1799 x 1059), so the encoder resamples every plane onto a regular
     # 0.03° grid over the domain's footprint — about 3.3 km north-south and
     # 2.6 km east-west at the domain's middle latitude — and the bundles
@@ -1097,6 +1121,8 @@ SOURCES: dict[str, SourceSpec] = {
             "prate",
             "ugrd10m",
             "vgrd10m",
+            "ugrd80m",
+            "vgrd80m",
             "prmsl",
             "hgt850",
             "hgt700",
@@ -1143,7 +1169,7 @@ SOURCES: dict[str, SourceSpec] = {
             "cref",
             "orog",
         ),
-        bundle_vector_ids=("wind10m", "wind925", "wind850", "wind250"),
+        bundle_vector_ids=("wind10m", "wind80m", "wind925", "wind850", "wind250"),
         # The 0.03° grid over the footprint of the 1799 x 1059 domain: the
         # north-west corner is at 134.10 W, 52.62 N and the grid runs to
         # 60.90 W, 21.12 N (reproject.build_resampler snaps the footprint
@@ -1153,6 +1179,8 @@ SOURCES: dict[str, SourceSpec] = {
         # each a series of nineteen 4 KB planes.
         tile=(64, 64),
         cycle_hours=1,
+        long_cycles=(0, 6, 12, 18),
+        long_cycle_steps=((48, 1),),
         regrid=Regrid(step=0.03),
     ),
     # GEFS-Aerosols: the GEFS cycle's ``chem`` member, the GOCART aerosol

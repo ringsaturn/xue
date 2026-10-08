@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import unittest
 
+from xuebuild.binconvert import published_bundle_ids
 from xuebuild.sources import MODEL_CORE_BUNDLES, MODEL_PRODUCTS, SOURCES, source_spec
 
 FORECAST_CORE = ("tmp2m", "prate")
@@ -57,6 +58,21 @@ class SourceIdentityTests(unittest.TestCase):
                 self.assertEqual(MODEL_CORE_BUNDLES[model], core)
         self.assertEqual(set(MODEL_PRODUCTS), {model for model, *_ in IDENTITIES.values()})
         self.assertEqual(set(MODEL_CORE_BUNDLES), set(MODEL_PRODUCTS))
+
+    def test_series_companions_mirror_published_bundles(self) -> None:
+        for source_id, spec in SOURCES.items():
+            with self.subTest(source=source_id):
+                self.assertLessEqual(set(spec.series_bundle_ids), set(published_bundle_ids(spec)))
+        self.assertEqual(source_spec("sflux").series_bundle_ids, ("tmp2m", "dswrf", "wind10m"))
+
+    def test_long_cycles_extend_past_the_published_axis(self) -> None:
+        for source_id, spec in SOURCES.items():
+            with self.subTest(source=source_id):
+                self.assertEqual(bool(spec.long_cycles), bool(spec.long_cycle_steps))
+                if spec.long_cycle_steps:
+                    self.assertGreater(spec.long_cycle_steps[0][0], spec.steps[-1][0])
+                    self.assertTrue(all(0 <= hour < 24 and hour % spec.cycle_hours == 0 for hour in spec.long_cycles))
+        self.assertEqual([source_id for source_id, spec in SOURCES.items() if spec.long_cycles], ["hrrr"])
 
 
 if __name__ == "__main__":

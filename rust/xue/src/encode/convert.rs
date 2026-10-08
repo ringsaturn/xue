@@ -51,6 +51,11 @@ use crate::encode::temporal::build_chunks;
 /// `xuebuild/binconvert.py`.
 pub const WIND_COMPONENT_IDS: [&str; 2] = ["ugrd10m", "vgrd10m"];
 pub const WIND_BUNDLE_ID: &str = "wind10m";
+/// The 80 m wind pair HRRR writes for wind power, a vector bundle of its
+/// own. Mirrors `WIND_80M_COMPONENT_IDS` / `WIND_80M_BUNDLE_ID` in
+/// `xuebuild/binconvert.py`.
+pub const WIND_80M_COMPONENT_IDS: [&str; 2] = ["ugrd80m", "vgrd80m"];
+pub const WIND_80M_BUNDLE_ID: &str = "wind80m";
 /// The 100 m wind pair, the hub height of a modern turbine: the same
 /// parameters on the 100 m surface, a vector bundle of its own. Mirrors
 /// `WIND_100M_COMPONENT_IDS` / `WIND_100M_BUNDLE_ID` in
@@ -67,6 +72,9 @@ const WAVE_INPUT_IDS: [&str; 2] = ["htsgw", "dirpw"];
 pub fn vector_components(bundle_id: &str) -> Option<(String, String)> {
     if bundle_id == WIND_BUNDLE_ID {
         return Some((WIND_COMPONENT_IDS[0].into(), WIND_COMPONENT_IDS[1].into()));
+    }
+    if bundle_id == WIND_80M_BUNDLE_ID {
+        return Some((WIND_80M_COMPONENT_IDS[0].into(), WIND_80M_COMPONENT_IDS[1].into()));
     }
     if bundle_id == WIND_100M_BUNDLE_ID {
         return Some((WIND_100M_COMPONENT_IDS[0].into(), WIND_100M_COMPONENT_IDS[1].into()));
@@ -2381,10 +2389,16 @@ pub fn convert_bin(
             offsets.last().expect("non-empty axis")
         )));
     }
+    let run_time: OffsetDateTime = frame_of(&per_file[0], reference_id)
+        .expect("reference frame")
+        .run_time
+        .to_offset(time::UtcOffset::UTC);
     if !source.observation {
         // The input hours must be a contiguous run of the source's published
         // axis, so no frame is missing and every step matches the cadence.
-        let axis = source.forecast_hours(*offsets.last().expect("non-empty axis"))?;
+        // The run's own cycle decides whether a longer axis applies.
+        let cycle = Some(u32::from(run_time.hour()));
+        let axis = source.forecast_hours(*offsets.last().expect("non-empty axis"), cycle)?;
         let tail: Vec<i64> = axis
             .iter()
             .copied()
@@ -2397,7 +2411,7 @@ pub fn convert_bin(
             )));
         }
         if options.require_complete {
-            let expected = source.forecast_hours(options.expected_hours)?;
+            let expected = source.forecast_hours(options.expected_hours, cycle)?;
             if offsets != expected {
                 return Err(EncodeError::conversion(format!(
                     "complete build requires forecast hours 0 through {} on the {} axis",
@@ -2406,10 +2420,6 @@ pub fn convert_bin(
             }
         }
     }
-    let run_time: OffsetDateTime = frame_of(&per_file[0], reference_id)
-        .expect("reference frame")
-        .run_time
-        .to_offset(time::UtcOffset::UTC);
 
     // -- the grid -----------------------------------------------------------
     // Every published variable's grid family: for a variable the converter
@@ -3031,7 +3041,12 @@ fn sharing_plan(
                 let interval_start = if index > 0 {
                     per_file[index - 1][0].1.lead_seconds / HOUR_SECONDS
                 } else {
-                    let axis = source.forecast_hours(hour)?;
+                    let cycle = frame
+                        .expect("a frame")
+                        .run_time
+                        .to_offset(time::UtcOffset::UTC)
+                        .hour();
+                    let axis = source.forecast_hours(hour, Some(u32::from(cycle)))?;
                     *axis
                         .get(axis.len().wrapping_sub(2))
                         .ok_or_else(|| EncodeError::conversion(format!(
