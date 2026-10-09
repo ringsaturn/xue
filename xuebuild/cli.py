@@ -1064,6 +1064,10 @@ def main(argv: list[str] | None = None) -> int:
                 dry_run=arguments.dry_run,
             )
             print(json.dumps(report, indent=2, ensure_ascii=False))
+            # A build that could not read a single source has nothing to
+            # publish; a green job over a hollow index would hide an outage.
+            if report["sources"] and all(source["status"] == "failed" for source in report["sources"]):
+                raise XueError("indicators-build: every source failed; see the report")
         elif arguments.command == "indicators-context":
             from .indicators.context import update_context  # noqa: PLC0415
 

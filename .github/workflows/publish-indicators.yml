@@ -73,10 +73,13 @@ jobs:
       - name: Fetch the live index and this month's files
         run: make live-indicators-index
 
+      # Through the Makefile, which is the one place that knows where the
+      # weights were pulled to and where the product builds. A build in which
+      # every source fails exits red here, before anything is uploaded.
       - name: Build the indicators
         run: |
           set -euo pipefail
-          uv run python -m xuebuild indicators-build --sources gfs,ecmwf,aifs,ifshres --round "$ROUND" $FORCE > indicators-report.json
+          make -s indicators-build ROUND="$ROUND" FORCE="$FORCE" > indicators-report.json
           {
             echo "### indicators"
             echo
