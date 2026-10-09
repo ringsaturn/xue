@@ -63,7 +63,7 @@ class SourceIdentityTests(unittest.TestCase):
         for source_id, spec in SOURCES.items():
             with self.subTest(source=source_id):
                 self.assertLessEqual(set(spec.series_bundle_ids), set(published_bundle_ids(spec)))
-        self.assertEqual(source_spec("sflux").series_bundle_ids, ("tmp2m", "dswrf", "wind10m"))
+        self.assertEqual(source_spec("sflux").series_bundle_ids, ("tmp2m", "prate", "dswrf", "wind10m"))
 
     def test_long_cycles_extend_past_the_published_axis(self) -> None:
         for source_id, spec in SOURCES.items():

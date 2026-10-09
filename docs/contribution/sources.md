@@ -112,13 +112,14 @@ takes a new id so an old wheel is not mistaken for a new one (`radar` →
 **gfs.** The reference source and the full bundle set (65 bundles, isobaric
 families on all eight levels, the clear-air turbulence `cat300`/`cat250`/`cat200`
 with its own `cat_calibration`, the GFS-Wave companion `gfswave.*` beside
-`atmos/`). Only source with `series_bundle_ids` (`tmp2m`, `prate`,
-`wind10m` ship a `<bundle>.series.zarr` companion; see
-[../zarr-profile.md](../zarr-profile.md)) and, with HRRR, H.264 video
-(`SourceSpec.video`). `XUE_GFS_BASE_URL` overrides the mirror.
+`atmos/`). `tmp2m`, `prate` and `wind10m` ship a `<bundle>.series.zarr`
+companion (`series_bundle_ids`; see [../zarr-profile.md](../zarr-profile.md)),
+and with HRRR it is the only source with H.264 video (`SourceSpec.video`).
+`XUE_GFS_BASE_URL` overrides the mirror.
 
 **sflux.** GFS's native-resolution surface flux files on the ~13 km Gaussian
 grid (3072 × 1536); `prate_ave` is a window mean de-averaged into `prate`.
+`tmp2m`, `prate`, `dswrf` and `wind10m` ship series companions.
 
 **ecmwf.** ECMWF open data; CCSDS packing is repacked to `grid_simple` with
 `grib_set` at fetch time. Of the three mirrors (`XUE_ECMWF_BASE_URLS`) the S3 and
