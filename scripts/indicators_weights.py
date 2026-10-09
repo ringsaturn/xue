@@ -55,7 +55,8 @@ Gaussian latitude to its mirror.
 Layout of each store (one Zarr v3 group, no consolidated metadata):
 
 * Group attributes: ``version`` (weights revision, SPAM and Natural Earth
-  versions), ``spam`` (``"SPAM 2020 v2r2 SOYB_A"``), ``grid``, ``regions``
+  versions), ``spam`` (``"SPAM 2020 v2r2 SOYB_A"``), ``citation`` and
+  ``notice`` (what IFPRI's terms of use ask for), ``grid``, ``regions``
   (region id -> ``{"rows": [row0, row1], "cols": [col0, col1]}``, the
   half-open bounding box of the non-zero cells) and ``lon_convention``.
 * ``weights`` float32 ``[region, lat, lon]`` on the full published grid, zero
@@ -79,6 +80,8 @@ import zipfile
 from pathlib import Path
 
 import numpy as np
+
+from xuebuild.indicators.weights import SPAM_CITATION, SPAM_NOTICE
 
 SPAM_LABEL = "SPAM 2020 v2r2 SOYB_A"
 
@@ -279,7 +282,15 @@ def write_grid(grid: str, area_by_region: dict[str, tuple[np.ndarray, np.ndarray
     for name, values, dim in (("region", np.array(ids), "region"), ("lat", lat, "lat"), ("lon", lon, "lon")):
         root.create_array(name, data=values, dimension_names=(dim,), chunks=values.shape)
     root.attrs.update(
-        {"version": version, "spam": SPAM_LABEL, "grid": grid, "regions": boxes, "lon_convention": LON_CONVENTION}
+        {
+            "version": version,
+            "spam": SPAM_LABEL,
+            "citation": SPAM_CITATION,
+            "notice": SPAM_NOTICE,
+            "grid": grid,
+            "regions": boxes,
+            "lon_convention": LON_CONVENTION,
+        }
     )
 
 

@@ -202,7 +202,7 @@ is archived, so it is never backfilled.
 | `schemaVersion` | `1` |
 | `product` | `indicators` |
 | `note` | a fixed sentence: what the numbers are and that no agency issued them |
-| `attribution` | `{name, data, license}` per upstream (§9) |
+| `attribution` | `{name, data, license}` per upstream (§10), plus `citation` (the form the upstream asks for) and `notice` (a sentence it requires on adaptations) where the upstream's terms call for them |
 | `regions` | §2 |
 | `features` | `{id, unit, definition}` per day field, the table of §4.1 |
 | `calendar` | `{version, source, regions: {<id>: {season, flowering}}}`, §3 |
@@ -249,6 +249,8 @@ Group attributes:
 |---|---|
 | `version` | the weights version (§8) |
 | `spam` | the SPAM release and layer, `SPAM 2020 v2r2 SOYB_A` |
+| `citation` | the citation IFPRI's terms of use ask for, as in §10 |
+| `notice` | the sentence IFPRI's terms of use require on adaptations, as in §10 |
 | `grid` | the grid id |
 | `regions` | region id → `{"rows": [row0, row1], "cols": [col0, col1]}`, the half-open box of the region's non-zero cells |
 | `lon_convention` | how the grid points are laid out, in words: `Grid points at cell centres: longitudes ascend from -180, latitudes run north to south.` on the global grids |
@@ -310,7 +312,9 @@ and no string value in any file contains, as a word, `signal`, `alert`,
 `ticker`, `trade`, `hedge`, `position` or `yield` (nor their plurals), and
 the files carry no market data, no company and no direction. Thresholds
 are named by their numbers (`hot35_frac`), never by a level of concern.
-The validators enforce the list on every write.
+The validators enforce the list on every write. The one exception is an
+attribution entry's `notice`, an upstream's own sentence quoted as its terms
+require (§10).
 
 ## 10. Attribution
 
@@ -322,6 +326,21 @@ The index carries the credit for each upstream:
 - IFPRI — SPAM 2020 v2r2, doi:10.7910/DVN/SWPENT; CC BY 4.0.
 - Natural Earth — admin-1 boundaries; public domain.
 - NOAA CPC — Oceanic Niño Index; public domain.
+
+IFPRI's terms of use (Harvard Dataverse, the IFPRI Datasets Terms of Use
+Statement of December 2019) release the dataset under CC BY 4.0 and ask two
+things of any adaptation, which the weights are. The index entry and each
+weights store carry both, as `citation` and `notice`:
+
+> International Food Policy Research Institute (IFPRI). 2024. Global
+> Spatially-Disaggregated Crop Production Statistics Data for 2020 Version
+> 1.0.0. https://doi.org/10.7910/DVN/SWPENT. Harvard Dataverse. Version 3.
+>
+> This data was provided by the International Food Policy Research
+> Institute (IFPRI). IFPRI bears no responsibility for the analyses or
+> interpretations of the data presented here.
+
+Nothing here is endorsed by IFPRI, and no IFPRI mark is used.
 
 ---
 

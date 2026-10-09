@@ -83,6 +83,12 @@ def forbidden_in(text: str) -> list[str]:
     return [word for word in _words(text) if _FORBIDDEN.match(word)]
 
 
+QUOTED_KEYS = frozenset({"notice"})
+"""Keys whose value is an upstream's own sentence, quoted as its terms of
+use require (an attribution ``notice``); the vocabulary rule is for the
+product's words, so these values are not checked."""
+
+
 def check_vocabulary(payload: object, where: str = "$") -> None:
     """Raise if a forbidden word is a word of any key or string value."""
     if isinstance(payload, dict):
@@ -90,6 +96,8 @@ def check_vocabulary(payload: object, where: str = "$") -> None:
             found = forbidden_in(str(key))
             if found:
                 raise IndicatorsError(f"{where}: key {key!r} uses {found[0]!r}")
+            if key in QUOTED_KEYS and isinstance(value, str):
+                continue
             check_vocabulary(value, f"{where}.{key}")
     elif isinstance(payload, list):
         for index, value in enumerate(payload):
@@ -355,6 +363,15 @@ INDEX_KEYS = (
 )
 
 
+ATTRIBUTION_KEYS = (
+    ("name", "data", "license"),
+    ("name", "data", "license", "citation"),
+    ("name", "data", "license", "citation", "notice"),
+)
+"""An attribution entry's keys: ``citation`` (the form the upstream asks
+for) and ``notice`` (a sentence it requires on adaptations) are optional."""
+
+
 def validate_index(payload: object) -> None:
     """``indicators/index.json`` (docs/indicators.md §5)."""
     entry = _object(payload, "index", INDEX_KEYS)
@@ -362,7 +379,11 @@ def validate_index(payload: object) -> None:
     _require(entry["product"] == PRODUCT, f"index product must be {PRODUCT!r}")
     _string(entry["note"], "index.note")
     for index, item in enumerate(_list(entry["attribution"], "index.attribution")):
-        attribution = _object(item, f"index.attribution[{index}]", ("name", "data", "license"))
+        attribution = _object(item, f"index.attribution[{index}]")
+        _require(
+            tuple(attribution) in ATTRIBUTION_KEYS,
+            f"index.attribution[{index}] must carry name, data, license, then optionally citation and notice",
+        )
         for key in attribution:
             _string(attribution[key], f"index.attribution[{index}].{key}")
     region_ids = []

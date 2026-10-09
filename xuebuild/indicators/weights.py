@@ -5,9 +5,10 @@ IFS HRES, ``t126`` for CFSv2), written once by the offline weights script
 from SPAM 2020 soybean physical area and Natural Earth admin-1 polygons
 (``docs/indicators.md`` §7 is normative):
 
-- group attributes: ``version``, ``spam``, ``grid``, ``lon_convention``
-  and ``regions`` (region id → ``{"rows": [row0, row1], "cols": [col0,
-  col1]}``, the half-open box of the region's non-zero cells);
+- group attributes: ``version``, ``spam``, ``citation``, ``notice``,
+  ``grid``, ``lon_convention`` and ``regions`` (region id → ``{"rows":
+  [row0, row1], "cols": [col0, col1]}``, the half-open box of the region's
+  non-zero cells);
 - ``weights``: float32 ``[region, lat, lon]`` over the whole published
   grid, zero outside the region, each region summing to 1; one shard per
   region (``sharding_indexed``, index at the end, CRC-32C), inner chunks of
@@ -28,6 +29,21 @@ reader uses (:mod:`.store`).
 """
 
 from __future__ import annotations
+
+SPAM_CITATION = (
+    "International Food Policy Research Institute (IFPRI). 2024. Global Spatially-Disaggregated Crop "
+    "Production Statistics Data for 2020 Version 1.0.0. https://doi.org/10.7910/DVN/SWPENT. "
+    "Harvard Dataverse. Version 3."
+)
+"""The citation IFPRI's terms of use ask for (authorship, year, title,
+publisher, URI), as the dataset's own citation requirement spells it."""
+
+SPAM_NOTICE = (
+    "This data was provided by the International Food Policy Research Institute (IFPRI). "
+    "IFPRI bears no responsibility for the analyses or interpretations of the data presented here."
+)
+"""The sentence IFPRI's terms of use require after the attribution on any
+adaptation of its data; the weights are one."""
 
 import json
 import re

@@ -80,6 +80,8 @@ ATTRIBUTION: tuple[dict[str, str], ...] = (
         "name": "IFPRI",
         "data": "SPAM 2020 v2r2 soybean physical area, doi:10.7910/DVN/SWPENT",
         "license": "CC BY 4.0",
+        "citation": weights_module.SPAM_CITATION,
+        "notice": weights_module.SPAM_NOTICE,
     },
     {"name": "Natural Earth", "data": "admin-1 states and provinces", "license": "Public domain"},
     {"name": "NOAA CPC", "data": "Oceanic Nino Index", "license": "Public domain (U.S. Government work)"},
