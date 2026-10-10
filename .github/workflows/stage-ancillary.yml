@@ -55,7 +55,6 @@ jobs:
     # Scheduled runs on forks would publish into a bucket they cannot reach.
     if: github.event_name != 'schedule' || github.repository == 'ringsaturn/xue'
     runs-on: ubuntu-24.04
-    environment: earthdata
     timeout-minutes: 60
     env:
       REGIONS: ${{ inputs.region || '' }}
@@ -101,7 +100,7 @@ jobs:
         run: |
           set -euo pipefail
           for name in EARTHDATA_USERNAME EARTHDATA_PASSWORD; do
-            [ -n "${!name}" ] || { echo "::error::$name is empty; set the earthdata environment secrets"; exit 1; }
+            [ -n "${!name}" ] || { echo "::error::$name is empty; set the EARTHDATA_USERNAME and EARTHDATA_PASSWORD repository secrets"; exit 1; }
           done
           umask 077
           printf 'machine urs.earthdata.nasa.gov login %s password %s\n' "$EARTHDATA_USERNAME" "$EARTHDATA_PASSWORD" > "$HOME/.netrc"

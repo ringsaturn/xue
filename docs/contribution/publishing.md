@@ -127,7 +127,7 @@ The CAMEL emissivity months the satellite rounds pull (`ANCILLARY=true`,
 03:00 UTC on the 25th it stages the month in progress and the next for
 every region in `xuebuild/satellite/staging.py` (the 1st is the retry) and
 pushes them with `make push-r2-ancillary`. It is the only job that touches
-Earthdata: the `earthdata` environment holds `EARTHDATA_USERNAME` /
+Earthdata: the repository secrets `EARTHDATA_USERNAME` /
 `EARTHDATA_PASSWORD`, written to the runner's `~/.netrc` for the job and
 removed after; R2 is the usual three secrets. A dispatch takes one
 `region`, one `month` (`YYYY-MM`) and `dry_run`; it needs no GDAL.
