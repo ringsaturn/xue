@@ -15,6 +15,10 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 futures-util = "0.3"
 url = "2"
+# The point's IANA zone. `bundled` embeds tzf-dist's lite polygon file
+# (~4 MB raw, 2.6 MB gzipped) in the wasm; `EmbeddedFinder` queries it in
+# place, so a cold isolate pays no decode and the lookup is microseconds.
+tzf-rs = { version = "2.1", default-features = false, features = ["bundled"] }
 
 # The Workers runtime builds only for wasm32. Everything above it — the
 # resolution chain, the point read, the source summary — compiles natively

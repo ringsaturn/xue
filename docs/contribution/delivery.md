@@ -92,6 +92,12 @@ nothing, and the shell does not depend on it. The endpoint contract
 - The binding is `remote: true` (honoured by `wrangler dev` only), so
   `make api-dev` runs locally against the real bucket; `make api-dev-cdn`
   (`DATA_SOURCE=cdn`) reads the public origin when the network blocks that.
+- `timezone.rs` answers the point's IANA zone from `tzf-rs` with its
+  bundled polygon file compiled into the wasm. That file is most of the
+  upload (4.8 MiB uncompressed per `wrangler deploy --dry-run`, against a
+  64 MiB limit on every plan; only the uncompressed size counts). The
+  finder opens on the first point request of an isolate, not at startup,
+  so the 1 s startup limit is untouched.
 - Only `runtime.rs` and `docs.rs` touch the Workers runtime; the handlers
   return plain values, so `cargo test -p xue-worker` runs them natively over
   the web fixtures through an in-memory `Data` that logs every read.

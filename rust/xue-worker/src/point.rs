@@ -19,6 +19,7 @@ use xue::{decode_chunk, DecodeError, Predictor};
 
 use crate::bucket::Data;
 use crate::error::HttpError;
+use crate::timezone;
 
 #[derive(Debug, Deserialize)]
 struct Collection {
@@ -436,6 +437,9 @@ pub async fn read_point(data: &Data, query: &PointQuery) -> Result<(Value, Strin
         "run": dir,
         "runTime": run_time,
         "request": { "lat": lat, "lon": lon, "variables": bundle_ids },
+        // The requested point's zone, not the cell's: on a coarse grid the
+        // cell centre can sit across a border from the point.
+        "timezone": timezone::name(lon, lat),
         "cell": cell.map(|cell| json!({
             "column": cell.column,
             "row": cell.row,

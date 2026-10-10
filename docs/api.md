@@ -60,6 +60,7 @@ The response:
   "run": "gfs.2026100400",
   "runTime": "2026-10-04T00:00:00Z",
   "request": { "lat": 35.7, "lon": 139.7, "variables": ["tmp2m", "wind10m"] },
+  "timezone": "Asia/Tokyo",
   "cell": { "column": 1279, "row": 217, "longitude": 139.75, "latitude": 35.75 },
   "time": { "unitSeconds": 3600, "times": ["2026-10-04T00:00:00.000Z", "…"] },
   "variables": {
@@ -83,6 +84,12 @@ The response:
 - `cell` is the grid cell the point falls in, by the rule the viewer's
   probe and shader use (`xue::zarr::probe_cell`): nearest cell, longitude
   wrapped onto the grid's origin.
+- `timezone` is the IANA zone of the requested point (not of the cell: on
+  a coarse grid the cell centre can sit across a border from it), looked up
+  in the `tzf-rs` polygon index compiled into the Worker. Open sea answers
+  the nautical zone (`Etc/GMT+10`, whose sign is POSIX-inverted); `null`
+  only where no polygon covers the point, which the bundled data does not
+  have. `times` stay UTC; the zone is for the client to convert them with.
 - A bundle whose manifest entry carries a `series` companion
   (`docs/zarr-profile.md`, "Series store") is read through it: one chunk
   for the whole axis. Otherwise its map store is read, one chunk per time

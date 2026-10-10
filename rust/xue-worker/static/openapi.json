@@ -291,7 +291,7 @@
       },
       "PointResponse": {
         "type": "object",
-        "required": ["source", "run", "runTime", "request", "cell", "time", "variables"],
+        "required": ["source", "run", "runTime", "request", "timezone", "cell", "time", "variables"],
         "properties": {
           "source": { "type": "string" },
           "run": { "type": "string" },
@@ -308,6 +308,11 @@
                 "items": { "type": "string" }
               }
             }
+          },
+          "timezone": {
+            "type": ["string", "null"],
+            "description": "The IANA zone of the requested point (tzf-rs); the nautical Etc/GMT±N zone on open sea, null only where no polygon covers the point.",
+            "example": "Asia/Tokyo"
           },
           "cell": { "$ref": "#/components/schemas/Cell" },
           "time": { "$ref": "#/components/schemas/TimeAxis" },

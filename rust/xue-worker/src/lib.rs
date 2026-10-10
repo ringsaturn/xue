@@ -32,6 +32,7 @@ mod point;
 #[cfg(target_arch = "wasm32")]
 mod runtime;
 mod source;
+mod timezone;
 
 #[cfg(test)]
 mod tests;

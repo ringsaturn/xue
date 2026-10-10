@@ -297,6 +297,26 @@ fn without_variables_the_first_bundle_is_read() {
 }
 
 #[test]
+fn the_point_carries_its_iana_zone_and_open_sea_the_nautical_one() {
+    let data = Data::in_memory(bucket());
+    let tokyo = ok(&data, &format!("source=gfs&lat={LAT}&lon={LON}"));
+    assert_eq!(tokyo["timezone"], json!("Asia/Tokyo"));
+    // The zone follows the point, wrapped like the cell is: New York at
+    // -74 and at 286 are the same place.
+    assert_eq!(
+        ok(&data, "source=gfs&lat=40.7&lon=-74")["timezone"],
+        json!("America/New_York")
+    );
+    assert_eq!(
+        ok(&data, "source=gfs&lat=40.7&lon=286")["timezone"],
+        json!("America/New_York")
+    );
+    // tzf-dist's lite file covers the oceans with the nautical zones.
+    let pacific = ok(&data, "source=gfs&lat=0&lon=-150");
+    assert_eq!(pacific["timezone"], json!("Etc/GMT+10"));
+}
+
+#[test]
 fn a_longitude_past_180_wraps_onto_the_same_cell() {
     let data = Data::in_memory(bucket());
     let west = ok(&data, "source=gfs&lat=10&lon=-100&variables=tmp2m");
