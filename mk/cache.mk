@@ -11,7 +11,7 @@ FRAMES_DIR = data/raw/$(MODEL)-frames
 FRAMES_PREFIX = $(R2_ROOT)/$(MODEL)-frames
 FRAMES_KEEP_HOURS ?= 168
 
-.PHONY: pull-r2-frames push-r2-frames prune-r2-frames pull-r2-ancillary
+.PHONY: pull-r2-frames push-r2-frames prune-r2-frames pull-r2-ancillary stage-ancillary push-r2-ancillary
 
 pull-r2-frames: ## Pull the frame cache for the window about to be built
 	@set -e; mkdir -p $(FRAMES_DIR); \
@@ -44,11 +44,26 @@ prune-r2-frames: ## Delete cached frames older than FRAMES_KEEP_HOURS
 		fi; \
 	done
 
-# The CAMEL emissivity months the DEBRA producer reads, staged on the bucket
-# by another pipeline. Read only: nothing here writes to that prefix.
+# The CAMEL emissivity months the DEBRA producer reads: one NetCDF per region
+# and month under <prefix>/<region>/<YYYYMM>.nc, written by `stage-ancillary`
+# (xuebuild/satellite/staging.py, Earthdata credentials in ~/.netrc) and put on
+# the bucket by `push-r2-ancillary`, which stage-ancillary.yml runs before each
+# month's first slot. The rounds only pull. MONTHS (YYYY-MM) and REGIONS are
+# space-separated and optional: the default is this month and the next, every
+# region.
 ANCILLARY_DIR = data/raw/ancillary
 CAMEL_PREFIX ?= s3://$(R2_BUCKET)/shachen-ops/ancillary/camel
+MONTHS ?=
+REGIONS ?=
 pull-r2-ancillary: ## Pull the staged CAMEL months for DEBRA
 	@set -e; mkdir -p $(ANCILLARY_DIR)/camel; \
 	$(S3) sync $(CAMEL_PREFIX)/ $(ANCILLARY_DIR)/camel/ --exclude "*" --include "*/*.nc" --only-show-errors; \
 	echo "ancillary: $$(find $(ANCILLARY_DIR)/camel -name '*.nc' | wc -l | tr -d ' ') staged CAMEL months on disk"
+
+stage-ancillary: ## Stage the CAMEL months for DEBRA (MONTHS=, REGIONS= optional)
+	$(PYTHON) -m xuebuild.satellite.staging --root $(ANCILLARY_DIR) \
+		$(foreach month,$(MONTHS),--month $(month)) $(foreach region,$(REGIONS),--region $(region))
+
+push-r2-ancillary: ## Push the staged CAMEL months to the bucket
+	@set -e; [ -d $(ANCILLARY_DIR)/camel ] || { echo "no staged months at $(ANCILLARY_DIR)/camel"; exit 0; }; \
+	$(S3) sync $(ANCILLARY_DIR)/camel/ $(CAMEL_PREFIX)/ --exclude "*" --include "*/*.nc" --size-only --only-show-errors $(DRY_RUN)

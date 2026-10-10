@@ -1,0 +1,152 @@
+name: stage ancillary
+
+# The CAMEL emissivity months the DEBRA confidence (dustcf) reads beside
+# the satellite channels: one NetCDF per region and month, cut from NASA's
+# CAM5K30EM V003 climatology and put on the bucket under the prefix every
+# satellite round mirrors (`make pull-r2-ancillary`). The rounds never
+# touch Earthdata; the credentials live in this job alone, and a month
+# has to be on the bucket before its first slot, or the rounds serve the
+# region from its newest staged month with a warning. So the 25th stages
+# the month in progress and the next; the 1st is the retry.
+#
+# The record ends in 2023-12, so a month is served by the same calendar
+# month of the newest year that has a granule (never a different month:
+# land emissivity in the thermal window follows land cover and its
+# season, not the year), and the staged file records that year as its
+# `source_month`. Three regions are staged — the Gobi and Taklamakan
+# through the North China Plain to Japan, the Chihuahuan Desert and the
+# US Southwest, and the Saharan transport corridor from Cape Verde to the
+# Caribbean and Gulf — and staging a region is what extends the
+# confidence over its land: cells no staged file reaches are no data.
+# The table is xuebuild/satellite/staging.py.
+#
+# Needs no GDAL: the granule is read and the crops written through
+# xarray and netCDF4 (the `staging` group). A run downloads one granule
+# per month (a few hundred megabytes) and uploads a few megabytes.
+
+on:
+  schedule:
+    - cron: "0 3 25 * *"
+    - cron: "0 3 1 * *"
+  workflow_dispatch:
+    inputs:
+      region:
+        description: "One region key (gobi, swus, atlantic); blank stages every region"
+        type: string
+        default: ""
+      month:
+        description: "One month as YYYY-MM; blank stages this month and the next"
+        type: string
+        default: ""
+      dry_run:
+        description: "Stage into the runner and report what the upload would do, but write nothing to R2"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: stage-ancillary
+  cancel-in-progress: false
+
+jobs:
+  stage:
+    # Scheduled runs on forks would publish into a bucket they cannot reach.
+    if: github.event_name != 'schedule' || github.repository == 'ringsaturn/xue'
+    runs-on: ubuntu-24.04
+    environment: earthdata
+    timeout-minutes: 60
+    env:
+      REGIONS: ${{ inputs.region || '' }}
+      MONTHS: ${{ inputs.month || '' }}
+      DRY_RUN: ${{ inputs.dry_run && '--dryrun' || '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate inputs
+        run: |
+          set -euo pipefail
+          [ -z "$REGIONS" ] || printf '%s' "$REGIONS" | grep -Eq '^(gobi|swus|atlantic)$' \
+            || { echo "::error::region must be gobi, swus or atlantic"; exit 1; }
+          [ -z "$MONTHS" ] || printf '%s' "$MONTHS" | grep -Eq '^[0-9]{4}-(0[1-9]|1[0-2])$' \
+            || { echo "::error::month must be spelled YYYY-MM"; exit 1; }
+
+      # The AWS CLI is preinstalled on the runner; R2 is its S3 endpoint.
+      # The credentials are step-scoped rather than job env, so third-party
+      # actions never see them; the read proves they work before the
+      # download rather than at the upload.
+      - name: Check R2 credentials
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+          AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+        run: |
+          for name in CLOUDFLARE_ACCOUNT_ID AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY; do
+            [ -n "${!name}" ] || { echo "::error::$name is empty; set the R2 repository secrets"; exit 1; }
+          done
+          aws --version
+          aws s3api head-object --bucket dataset --key xue/catalog.json --region auto \
+            --endpoint-url "https://${CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com" > /dev/null \
+            || { echo "::error::R2 credentials failed a test read of the dataset bucket"; exit 1; }
+
+      # earthaccess reads ~/.netrc (`strategy="netrc"`); the file is the
+      # runner's for this job alone and removed below whatever happens.
+      - name: Write the Earthdata credentials
+        env:
+          EARTHDATA_USERNAME: ${{ secrets.EARTHDATA_USERNAME }}
+          EARTHDATA_PASSWORD: ${{ secrets.EARTHDATA_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for name in EARTHDATA_USERNAME EARTHDATA_PASSWORD; do
+            [ -n "${!name}" ] || { echo "::error::$name is empty; set the earthdata environment secrets"; exit 1; }
+          done
+          umask 077
+          printf 'machine urs.earthdata.nasa.gov login %s password %s\n' "$EARTHDATA_USERNAME" "$EARTHDATA_PASSWORD" > "$HOME/.netrc"
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          python-version: "3.14"
+
+      - name: Sync Python environment
+        run: uv sync --group staging
+
+      - name: Stage the months
+        run: |
+          set -o pipefail
+          make stage-ancillary MONTHS="$MONTHS" REGIONS="$REGIONS" 2>&1 | tee staging.log
+          status=$?
+          {
+            echo "### staged CAMEL months"
+            echo
+            echo '```'
+            grep -E '^(INFO|WARNING|error:)' staging.log || true
+            echo '```'
+            echo
+            echo "Files written:"
+            echo
+            find data/raw/ancillary/camel -name '*.nc' | sort | sed 's/^/- /'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit $status
+
+      - name: Push to R2
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: make push-r2-ancillary DRY_RUN="$DRY_RUN"
+
+      - name: Remove the Earthdata credentials
+        if: always()
+        run: rm -f "$HOME/.netrc"
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: stage-ancillary-report
+          path: staging.log
+          retention-days: 14
+          if-no-files-found: ignore

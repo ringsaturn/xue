@@ -105,7 +105,7 @@ Per-source switches:
 | `mrms` | 4 | none |
 | `jma` | 3 | `FRAME_CACHE=true` (jma-radar's decoded frames, pulled before and pushed after, pruned to seven days) |
 | `cma` | 3 | `XUE_CMA_ARCHIVE` secret, `uv sync --group cma`; `CMA_ARCHIVE_ACCESS_KEY_ID` / `CMA_ARCHIVE_SECRET_ACCESS_KEY` when the dataset token cannot read the archive |
-| `himawari`, `goeseast`, `goeswest` | 6 | `FRAME_CACHE=true` (warped GeoTIFFs, kept `FRAMES_KEEP_HOURS`=8), `ANCILLARY=true` (CAMEL months for DEBRA), `--group satellite`, system `gdal-bin` |
+| `himawari`, `goeseast`, `goeswest` | 6 | `FRAME_CACHE=true` (warped GeoTIFFs, kept `FRAMES_KEEP_HOURS`=8), `ANCILLARY=true` (CAMEL months for the dust confidence), `--group satellite`, system `gdal-bin` |
 | `meteosat` | 24 | as above plus the `EUMETSAT_*` secrets and `hdf5plugin` |
 | `aurora` | 12 | `FRAME_CACHE=true` (the feed has only its newest grid; `force` never clears the cache), `--group aurora` |
 
@@ -118,6 +118,19 @@ MODEL=meteosat HOURS=24 FRAME_CACHE=true ONCE=true scripts/window_rounds.sh
 make upload-r2 MODEL=mrms RUN=2026091321 ROUND=1405
 make prune-r2-rounds MODEL=mrms && make prune-r2 MODEL=mrms KEEP=2
 ```
+
+### Ancillary staging
+
+The CAMEL emissivity months the satellite rounds pull (`ANCILLARY=true`,
+`make pull-r2-ancillary`) are staged by
+[`stage-ancillary.yml`](../../.github/workflows/stage-ancillary.yml): at
+03:00 UTC on the 25th it stages the month in progress and the next for
+every region in `xuebuild/satellite/staging.py` (the 1st is the retry) and
+pushes them with `make push-r2-ancillary`. It is the only job that touches
+Earthdata: the `earthdata` environment holds `EARTHDATA_USERNAME` /
+`EARTHDATA_PASSWORD`, written to the runner's `~/.netrc` for the job and
+removed after; R2 is the usual three secrets. A dispatch takes one
+`region`, one `month` (`YYYY-MM`) and `dry_run`; it needs no GDAL.
 
 ## Point products
 

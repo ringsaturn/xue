@@ -40,7 +40,9 @@ zarr = ["zarr>=3.1", "numcodecs>=0.16", "xarray>=2025.1", "pystac>=1.14"]
 cma = ["zarr>=3.1", "numcodecs>=0.16", "s3fs>=2024.10", "xarray>=2025.1", "netcdf4>=1.7"]
 # The SWPC aurora fetch: writes its frame cache and window series as NetCDF (xuebuild/aurora.py).
 aurora = ["xarray>=2025.1", "netcdf4>=1.7"]
-# The satellite fetch: Dust RGB / DEBRA producers (shachen) and the FCI JPEG-LS filter.
-satellite = ["shachen>=0.3.0", "xarray>=2025.1", "hdf5plugin>=5.0"]
+# The satellite fetch: the Dust RGB and dust confidence producers (shachen) and the FCI JPEG-LS filter.
+satellite = ["shachen>=0.4.0", "xarray>=2025.1", "hdf5plugin>=5.0"]
 # The offline soybean area weights (scripts/indicators_weights.py); xuebuild never imports them.
 indicators = ["rasterio>=1.4", "shapely>=2", "pyproj>=3.6", "zarr>=3.1"]
+# Staging the CAMEL emissivity months the dust confidence reads (xuebuild/satellite/staging.py): earthaccess behind shachen[data].
+staging = ["shachen[data]>=0.4.0", "xarray>=2025.1", "netcdf4>=1.7"]
