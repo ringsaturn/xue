@@ -105,6 +105,16 @@ jobs:
           umask 077
           printf 'machine urs.earthdata.nasa.gov login %s password %s\n' "$EARTHDATA_USERNAME" "$EARTHDATA_PASSWORD" > "$HOME/.netrc"
 
+      # The login host has answered the runners with a black hole before
+      # (an IPv4 connect that times out, then an IPv6 route that does not
+      # exist). Fail here with the cause named rather than ten seconds
+      # into earthaccess, after the environment was synced.
+      - name: Check that Earthdata is reachable
+        run: |
+          code=$(curl -4 -sS --max-time 20 -o /dev/null -w '%{http_code}' https://urs.earthdata.nasa.gov/) \
+            || { echo "::error::urs.earthdata.nasa.gov is unreachable over IPv4 from this runner; NASA may be refusing the GitHub address range, stage locally with 'make stage-ancillary' and 'make push-r2-ancillary'"; exit 1; }
+          echo "urs.earthdata.nasa.gov answered $code over IPv4"
+
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
