@@ -719,7 +719,7 @@ class FetchTests(TempRoot, unittest.TestCase):
         self.assertEqual(
             record["producers"],
             [
-                {"bundle": "dustrgb", "id": "shachen", "version": DUST.version, "inputs": ["ir086", "ir104", "ir112", "ir123"]},
+                {"bundle": "dustrgb", "bundles": ["dustrgb"], "id": "shachen", "version": DUST.version, "inputs": ["ir086", "ir104", "ir112", "ir123"]},
                 {"bundle": "dustcf", "bundles": ["dustcf", "zhouye"], "id": "shachen", "version": DEBRA.version, "inputs": ["ir039", "wv062", "ir086", "ir104", "ir123"]},
             ],
         )
