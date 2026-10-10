@@ -567,9 +567,9 @@ export function scalarLegendRange(identity: VariableIdentity): readonly [number,
   if (family === "perpw") return [0, WAVE_PERIOD_CHART_MAX];
   if (family === "dirpw") return [0, 360];
   if (family === "ir104") return BRIGHTNESS_TEMPERATURE_CHART_RANGE;
-  // The dust confidence reads over [0, 1], its codebook less the code
+  // The dust confidences read over [0, 1], their codebook less the code
   // under 0.0 that is no data.
-  if (family === "dustcf") return [0, 1];
+  if (family === "dustcf" || family === "zhouye") return [0, 1];
   const aerosol = aerosolChart(family);
   if (aerosol) return [0, aerosol.chartMax];
   return null;
@@ -797,7 +797,7 @@ export function isobaricLegend(identity: VariableIdentity): string[] | null {
   if (family === "dirpw") return rangeLegend([0, 360], 45);
   // The one legend not in the file's unit: kelvin reads in Celsius.
   if (family === "ir104") return rangeLegend(BRIGHTNESS_TEMPERATURE_LEGEND_RANGE, 30);
-  if (family === "dustcf") return rangeLegend([0, 1], 0.2);
+  if (family === "dustcf" || family === "zhouye") return rangeLegend([0, 1], 0.2);
   const aerosol = aerosolChart(family);
   if (aerosol) return logLegend(aerosol);
   if (family === "vvel" && isRegisteredLevel(level)) return rangeLegend([-OMEGA_PALETTE_MAX, OMEGA_PALETTE_MAX], 0.5);

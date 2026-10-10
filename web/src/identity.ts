@@ -34,7 +34,8 @@ import { isobaricChartFamily, specForIdentity, variableSpec } from "./variables"
  * three-gun colour picture a producer derived from several channels, told
  * apart by the `producer` block and the local-use parameter numbers — and
  * the produced scalars, one field a producer derived from several channels
- * (the DEBRA dust confidence), told apart the same way — and the aerosol
+ * (the DEBRA and ZHOUYE dust confidences), told apart the same way — and
+ * the aerosol
  * set: the optical depth at 550 nm, one family for the whole column and one
  * per species, and the surface particulate matter by size cut, told apart
  * by the `aerosol` block beside a parameter that is the same for every
@@ -78,6 +79,7 @@ export type ChartFamily =
   | "ir104"
   | "dustrgb"
   | "dustcf"
+  | "zhouye"
   | "aod"
   | "aoddust"
   | "aodsalt"
@@ -426,14 +428,19 @@ function isLocalUse(parameter: BundleParameter): boolean {
  * number together like the composites. The DEBRA dust confidence (Miller
  * et al. 2017) is shachen's local number 4 in the space-products
  * discipline, at the top of the atmosphere with the guns it is derived
- * beside. */
+ * beside; the ZHOUYE confidence, the same chain held to the day's level
+ * through the night, is its number 6 (5 is the aurora's, under no
+ * producer). */
 const PRODUCED_SCALARS: readonly {
   family: ChartFamily;
   producer: string;
   discipline: number;
   category: number;
   number: number;
-}[] = [{ family: "dustcf", producer: "shachen", discipline: 3, category: 192, number: 4 }];
+}[] = [
+  { family: "dustcf", producer: "shachen", discipline: 3, category: 192, number: 4 },
+  { family: "zhouye", producer: "shachen", discipline: 3, category: 192, number: 6 },
+];
 
 /**
  * The identity of a one-variable bundle whose variable is a produced

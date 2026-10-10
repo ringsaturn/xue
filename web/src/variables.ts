@@ -935,6 +935,27 @@ function buildSpecs(): readonly VariableSpec[] {
     urlAliases: ["dustcf", "dustconfidence"],
     showcaseCode: "DEBRA",
   }),
+  // The ZHOUYE (昼夜, "day and night") dust confidence: DEBRA's chain made
+  // diurnally consistent, so that by day it is the DEBRA field and at
+  // night dust reads at the day's level instead of fading with the
+  // shortwave tests. A second product beside `dustcf`, not its
+  // replacement — the same ramp, legend and no-data code, told apart by
+  // the code on the tile.
+  surface({
+    id: "zhouye",
+    chart: "zhouye",
+    group: "satellite",
+    code: "ZHOUYE",
+    title: ["Dust", "Confidence"],
+    bufferTitle: "Imagery buffer",
+    labelKey: "varLabelZhouye",
+    legend: ["1", "0.8", "0.6", "0.4", "0.2", "0"],
+    floorIsNoData: true,
+    ground: "slate",
+    urlName: "zhouye",
+    urlAliases: ["zhouyecf"],
+    showcaseCode: "ZHOUYE",
+  }),
   // NOAA SWPC's OVATION aurora probability: the chance, in percent, that
   // aurora is visible overhead, on a 1° global grid. A space-weather field,
   // so it is the only member of its sheet group. Its ramp is the auroral

@@ -45,6 +45,7 @@ export const en = {
   // The confidence field's gloss: the algorithm's name, an instrument code
   // in every language.
   varDustCf: "DEBRA",
+  varZhouye: "ZHOUYE",
   /** The surface diagnostics: gust and CAPE are surface fields (SFC,
    * the same detail the codes carry), cloud cover is the whole column. */
   varGust: "SFC",
@@ -115,6 +116,8 @@ export const en = {
   glyphDustrgb: "D",
   // C for the dust confidence.
   glyphDustcf: "C",
+  // Z for the ZHOUYE confidence, after its name.
+  glyphZhouye: "Z",
   // The aurora probability: its initial.
   glyphAurora: "A",
   // N is the synoptic-code letter for total cloud amount; the gust and CAPE
@@ -420,6 +423,7 @@ export const en = {
   varLabelIr104: "Infrared imagery (10.4 µm brightness temperature)",
   varLabelDustrgb: "Dust RGB (infrared composite)",
   varLabelDustcf: "DEBRA dust confidence",
+  varLabelZhouye: "ZHOUYE dust confidence",
   varLabelGust: "Wind gust",
   varLabelTcdc: "Total cloud cover",
   varLabelCape: "Convective available potential energy",

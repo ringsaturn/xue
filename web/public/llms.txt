@@ -112,8 +112,12 @@ Facts worth getting right:
   package; defined over water and over the land regions an emissivity
   month is staged for — the Gobi through Japan, the US Southwest, the
   Saharan transport corridor — and no data over other land; 0 is no
-  dust evidence, higher is likelier lofted dust), one full-disk
-  scan every ten minutes,
+  dust evidence, higher is likelier lofted dust), and the ZHOUYE dust
+  confidence (`zhouye`: the same chain made diurnally consistent by the
+  same package — by day the DEBRA field, at night dust reads at the
+  day's level instead of fading; a second product beside `dustcf`, not a
+  replacement, on the same 0–1 scale with the same no-data code), one
+  full-disk scan every ten minutes,
   reprojected from the geostationary view onto a 0.04° latitude/longitude
   grid over the useful disk (3000 × 3000, 80.7°E–200.7°E — past the
   antimeridian — and 60°S–60°N; cells outside the disk carry the codebook
@@ -215,8 +219,9 @@ Facts worth getting right:
   alone). MRMS3D: `refl3d` (the 33-level volume above). JMA: `prate` (precipitation intensity class representative rate,
   mm/h). HIMAWARI: `ir104` (10.4 µm brightness temperature, K) and
   `dustrgb` (the Dust RGB's red, green and blue guns, 0–1, a composite
-  with no physical unit) and `dustcf` (the DEBRA dust confidence, 0–1;
-  GOES-EAST and GOES-WEST the same three, METEOSAT the first two). AURORA:
+  with no physical unit), `dustcf` (the DEBRA dust confidence, 0–1) and
+  `zhouye` (the ZHOUYE dust confidence, 0–1, diurnally consistent;
+  GOES-EAST and GOES-WEST the same four, METEOSAT the first two). AURORA:
   `aurora` (aurora visibility probability, percent, on a 1° global grid).
   Names
   are `<family><level>`; the level is in hPa, `2m`/`10m` are heights above
@@ -299,8 +304,8 @@ fall back to defaults rather than fail, so a constructed link always opens.
   `icetk`), `waves` (the `wave` vector — height as the fill, direction as
   particles; `waveheight` for the scalar `htsgw`, `waveperiod` for
   `perpw`), the Himawari `infrared` (`ir104`; `ir`, `satellite` and `sat`
-  are accepted spellings), `dustrgb` (`dust`) and `debra` (`dustcf`,
-  `dustconfidence`), the GEFS-Aerosols `aod` (`aod550`; `aoddust`,
+  are accepted spellings), `dustrgb` (`dust`), `debra` (`dustcf`,
+  `dustconfidence`) and `zhouye` (`zhouyecf`), the GEFS-Aerosols `aod` (`aod550`; `aoddust`,
   `aodsalt`, `aodsulf`, `aodorg`, `aodbc` by species), `pm25` (`pm2p5`),
   `pm10` and `pm10dust`, or a bundle name such as `tmp850`,
   `rh700`, `wind850`, `qflux850`, `hgt500`, `vvel700`, `thetae850`; `t850`,

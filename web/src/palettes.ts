@@ -149,7 +149,8 @@ const BRIGHTNESS_TEMPERATURE_STOPS: Stop[] = [
   [332, 14, 14, 14, 255],
 ];
 
-// The DEBRA dust confidence, in [0, 1]: nothing under 0.1, where the
+// The DEBRA dust confidence, in [0, 1], and the ZHOUYE confidence built
+// on it, which reads on the same ramp: nothing under 0.1, where the
 // combined factor is noise, then the yellow the operational product paints
 // dust in — a translucent pale straw at the first evidence, the saturated
 // golden yellow of a confident plume, orange where the tests all agree —
@@ -814,7 +815,7 @@ function stopsFor(variable: BundleVariable, identity: VariableIdentity | null): 
   if (family === "perpw") return WAVE_PERIOD_STOPS;
   if (family === "dirpw") return WAVE_DIRECTION_STOPS;
   if (family === "ir104") return BRIGHTNESS_TEMPERATURE_STOPS;
-  if (family === "dustcf") return DUST_CONFIDENCE_STOPS;
+  if (family === "dustcf" || family === "zhouye") return DUST_CONFIDENCE_STOPS;
   if (family === "aurora") return AURORA_STOPS;
   if (family === "hgt" && linear) return pressureStops(linear);
   if (family === "tmp") return remapStops(TEMPERATURE_STOPS, [-60, 50], temperaturePaletteDomain(level));

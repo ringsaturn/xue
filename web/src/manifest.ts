@@ -254,7 +254,7 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
     observation: true,
     coreBundles: ["ir104"],
     defaultVariable: "ir104",
-    railCore: ["ir104", "dustrgb", "dustcf"],
+    railCore: ["ir104", "dustrgb", "dustcf", "zhouye"],
     region: [80.7, -60, 200.7, 60],
     subLongitude: 140.7,
     cadenceSeconds: 600,
@@ -275,7 +275,7 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
     observation: true,
     coreBundles: ["ir104"],
     defaultVariable: "ir104",
-    railCore: ["ir104", "dustrgb", "dustcf"],
+    railCore: ["ir104", "dustrgb", "dustcf", "zhouye"],
     region: [-135.2, -60, -15.2, 60],
     subLongitude: 284.8,
     cadenceSeconds: 600,
@@ -288,7 +288,7 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
     observation: true,
     coreBundles: ["ir104"],
     defaultVariable: "ir104",
-    railCore: ["ir104", "dustrgb", "dustcf"],
+    railCore: ["ir104", "dustrgb", "dustcf", "zhouye"],
     region: [163, -60, 283, 60],
     subLongitude: 223,
     cadenceSeconds: 600,
@@ -305,7 +305,7 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
     observation: true,
     coreBundles: ["ir104"],
     defaultVariable: "ir104",
-    railCore: ["ir104", "dustrgb", "dustcf"],
+    railCore: ["ir104", "dustrgb", "dustcf", "zhouye"],
     region: [-180, -60, 180, 60],
     mosaic: true,
     members: ["meteosat", "himawari", "goeswest", "goeseast"],
@@ -544,12 +544,13 @@ export const OCEAN_IDS: readonly OceanId[] = ["tmpsfc", "icec", "icetk", "htsgw"
  * instrument-neutral (AHI band 13 and ABI channel 13 are both `ir104`; the
  * file's `band` block says which), the Dust RGB composite a producer
  * derives from four infrared channels (`dustrgb`, a `CompositeBundleId`),
- * and the DEBRA dust confidence the same producer derives from five
- * (`dustcf`: one scalar in 0–1, painted with a ramp like a channel, not a
- * composite) — held to the encoders by
+ * and the two dust confidences the same producer derives from five
+ * (`dustcf`, the DEBRA factor, and `zhouye`, the same chain held to the
+ * day's level through the night: each one scalar in 0–1, painted with a
+ * ramp like a channel, not a composite) — held to the encoders by
  * `tests/fixtures/satellite-registry.json`. */
-type SatelliteId = "ir104" | CompositeBundleId | "dustcf";
-export const SATELLITE_IDS: readonly SatelliteId[] = ["ir104", "dustrgb", "dustcf"];
+type SatelliteId = "ir104" | CompositeBundleId | "dustcf" | "zhouye";
+export const SATELLITE_IDS: readonly SatelliteId[] = ["ir104", "dustrgb", "dustcf", "zhouye"];
 
 /** The aerosol set — the aerosol optical depth at 550 nm, for the whole
  * column and for each of five species, and the surface particulate matter
