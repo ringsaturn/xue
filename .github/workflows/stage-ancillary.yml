@@ -31,7 +31,7 @@ on:
   workflow_dispatch:
     inputs:
       region:
-        description: "One region key (gobi, swus, atlantic); blank stages every region"
+        description: "One region key (global); blank stages every region"
         type: string
         default: ""
       month:
@@ -66,8 +66,8 @@ jobs:
       - name: Validate inputs
         run: |
           set -euo pipefail
-          [ -z "$REGIONS" ] || printf '%s' "$REGIONS" | grep -Eq '^(gobi|swus|atlantic)$' \
-            || { echo "::error::region must be gobi, swus or atlantic"; exit 1; }
+          [ -z "$REGIONS" ] || printf '%s' "$REGIONS" | grep -Eq '^global$' \
+            || { echo "::error::region must be global"; exit 1; }
           [ -z "$MONTHS" ] || printf '%s' "$MONTHS" | grep -Eq '^[0-9]{4}-(0[1-9]|1[0-2])$' \
             || { echo "::error::month must be spelled YYYY-MM"; exit 1; }
 

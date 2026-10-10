@@ -23,7 +23,7 @@ import numpy as np
 from tests._support import TempRoot, requires_gdal
 from xuebuild.errors import ConversionError, XueError
 from xuebuild.satellite import ancillary, staging
-from xuebuild.satellite.staging import MARGIN_DEG, REGIONS
+from xuebuild.satellite.staging import MARGIN_DEG, REGIONS, Region
 
 
 def _native(name: str) -> bool:
@@ -42,7 +42,8 @@ requires_netcdf = unittest.skipUnless(NETCDF, "the staging group (xarray + netCD
 #: CAM5K30EM's hinge-point wavelengths, as its ``comment`` attribute lists
 #: them; the loader interpolates the DEBRA band centres between them.
 HINGES = (3.6, 4.3, 5.0, 5.8, 7.6, 8.3, 9.3, 10.8, 12.1, 14.3, 15.0, 16.0, 17.0)
-GOBI = REGIONS["gobi"]
+#: A regional box for the crop tests; the table itself holds the globe.
+GOBI = Region("gobi", (80.0, 30.0, 146.0, 55.0), "Gobi and Taklamakan through the North China Plain to Japan")
 
 
 def descending_global(step: float, variables: tuple[str, ...] = ("emis_tir_86",)):
@@ -93,11 +94,9 @@ def write_granule(path: Path, step: float = 1.0) -> Path:
 
 
 class RegionTableTest(unittest.TestCase):
-    def test_three_regions_with_their_boxes(self) -> None:
-        self.assertEqual(sorted(REGIONS), ["atlantic", "gobi", "swus"])
-        self.assertEqual(REGIONS["gobi"].bbox, (80.0, 30.0, 146.0, 55.0))
-        self.assertEqual(REGIONS["swus"].bbox, (-115.0, 25.0, -95.0, 40.0))
-        self.assertEqual(REGIONS["atlantic"].bbox, (-100.0, 0.0, -15.0, 35.0))
+    def test_the_globe_is_the_one_region(self) -> None:
+        self.assertEqual(sorted(REGIONS), ["global"])
+        self.assertEqual(REGIONS["global"].bbox, (-180.0, -90.0, 180.0, 90.0))
         self.assertEqual(MARGIN_DEG, 1.0)
 
     def test_no_region_crosses_the_antimeridian(self) -> None:
@@ -105,14 +104,14 @@ class RegionTableTest(unittest.TestCase):
             lon_min, lat_min, lon_max, lat_max = region.bbox
             self.assertLess(lon_min, lon_max, region.key)
             self.assertLess(lat_min, lat_max, region.key)
-            self.assertGreaterEqual(lon_min - MARGIN_DEG, -180.0, region.key)
-            self.assertLessEqual(lon_max + MARGIN_DEG, 180.0, region.key)
+            self.assertGreaterEqual(lon_min, -180.0, region.key)
+            self.assertLessEqual(lon_max, 180.0, region.key)
             self.assertEqual(region.key, region.key.lower())
             self.assertTrue(region.description)
 
     def test_regions_are_frozen(self) -> None:
         with self.assertRaises(AttributeError):
-            REGIONS["gobi"].bbox = (0.0, 0.0, 1.0, 1.0)  # type: ignore[misc]
+            REGIONS["global"].bbox = (0.0, 0.0, 1.0, 1.0)  # type: ignore[misc]
 
 
 @requires_xarray
@@ -135,6 +134,14 @@ class SubsetTest(unittest.TestCase):
         finite = np.isfinite(values[:, 0])
         np.testing.assert_allclose(values[finite, 0], latitudes[finite])
         self.assertTrue(np.all(np.isnan(values[np.isclose(latitudes, 32.5)])))
+
+    def test_global_box_keeps_the_whole_granule_ascending(self) -> None:
+        granule = descending_global(0.5)
+        cropped = staging.subset(granule, REGIONS["global"])
+        self.assertEqual(dict(cropped.sizes), dict(granule.sizes))
+        self.assertTrue(np.all(np.diff(cropped["latitude"].values) > 0))
+        self.assertTrue(np.all(np.diff(cropped["longitude"].values) > 0))
+        self.assertTrue(ancillary.is_global(cropped["longitude"].values))
 
     def test_empty_box_is_an_error(self) -> None:
         dataset = descending_global(0.5).sel(latitude=slice(10, -10))
@@ -226,12 +233,9 @@ class StageMonthTest(TempRoot, unittest.TestCase):
         written = staging.stage(self.root / "ancillary", months=[date(2026, 9, 1), date(2026, 10, 1)], fetch=self.fetch)
         self.assertEqual(
             [str(path.relative_to(self.root / "ancillary")) for path in written],
-            [f"camel/{key}/{month}.nc" for month in ("202609", "202610") for key in ("gobi", "swus", "atlantic")],
+            [f"camel/global/{month}.nc" for month in ("202609", "202610")],
         )
-        self.assertEqual(
-            ancillary.staged_months(self.root / "ancillary" / "camel"),
-            {"atlantic": ["202609", "202610"], "gobi": ["202609", "202610"], "swus": ["202609", "202610"]},
-        )
+        self.assertEqual(ancillary.staged_months(self.root / "ancillary" / "camel"), {"global": ["202609", "202610"]})
 
     def test_a_granule_month_falls_back_to_the_asked_month(self) -> None:
         import xarray as xr  # noqa: PLC0415
@@ -250,9 +254,9 @@ class StageMonthTest(TempRoot, unittest.TestCase):
             mock.patch.object(staging.logging, "basicConfig"),
             self.assertLogs(staging.LOG, level="INFO") as logs,
         ):
-            code = staging.main(["--root", str(self.root / "ancillary"), "--region", "swus", "--month", "2026-11"])
+            code = staging.main(["--root", str(self.root / "ancillary"), "--region", "global", "--month", "2026-11"])
         self.assertEqual(code, 0)
-        self.assertEqual(ancillary.staged_months(self.root / "ancillary" / "camel"), {"swus": ["202611"]})
+        self.assertEqual(ancillary.staged_months(self.root / "ancillary" / "camel"), {"global": ["202611"]})
         self.assertTrue(any("served by the 2023-09 granule" in line for line in logs.output), logs.output)
         self.assertEqual(staging.main(["--root", str(self.root), "--month", "2026-13"]), 2)
 

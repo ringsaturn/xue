@@ -297,15 +297,14 @@ must keep in mind:
   must answer the same per source. The registry knows a producer's id
   (`VariableSpec.producer_id`), never its version, which comes from the
   series file's stamp. Code 0 is no data in every gun.
-- `dustcf` ships on the three NOAA-redistributed disks only (no staged CAMEL
-  region on Meteosat's); its ancillaries need `ANCILLARY=true` in the rounds
-  script. The CAMEL months are staged by `xuebuild/satellite/staging.py`
+- `dustcf` ships on the three NOAA-redistributed disks only (Meteosat's
+  hourly cycle is not published); its ancillaries need `ANCILLARY=true` in
+  the rounds script. The CAMEL months are staged by `xuebuild/satellite/staging.py`
   (`make stage-ancillary` then `make push-r2-ancillary`; `stage-ancillary.yml`
   on the 25th and the 1st, the `staging` group, Earthdata credentials in
-  `~/.netrc`, no GDAL). Its region table (`gobi`, `swus`, `atlantic`: a bbox
-  plus a 1° margin) decides where the confidence is defined over land, so a
-  new region is a row in that table and a dispatch; a bad subset is fixed by
-  restaging, which overwrites.
+  `~/.netrc`, no GDAL). Its region table (one row, `global`: the whole
+  granule) decides where the confidence is defined over land, which is every
+  disk's land; a bad subset is fixed by restaging, which overwrites.
 - `dustcf` (DEBRA) and `zhouye` (ZHOUYE, shachen ≥ 0.4.0) are two bundles
   from one producer: `Producer.bundle_ids` lists both, `PRODUCERS` keys both
   to the same object, and the fetch runs it once. A source listing only one

@@ -52,7 +52,7 @@ MARGIN_DEG = 1.0
 #: What the staged file says it was cut from.
 SOURCE = "CAMEL CAM5K30EM V003 monthly emissivity"
 #: Where a region's granules are cached under the ancillary root; the
-#: three regions of a month share one.
+#: regions of a month share one.
 GRANULES_DIR = "camel-granules"
 #: The month token in a CAMEL granule's name, canonical
 #: (``CAM5K30EM_202309.nc``) or native (``CAM5K30EM_emis_202309_V003.nc``).
@@ -74,9 +74,10 @@ class Region:
 REGIONS: dict[str, Region] = {
     region.key: region
     for region in (
-        Region("gobi", (80.0, 30.0, 146.0, 55.0), "Gobi and Taklamakan through the North China Plain to Japan (Himawari)"),
-        Region("swus", (-115.0, 25.0, -95.0, 40.0), "Chihuahuan Desert and the US Southwest (GOES-East and GOES-West)"),
-        Region("atlantic", (-100.0, 0.0, -15.0, 35.0), "Saharan transport corridor, Cape Verde to the Caribbean and Gulf (GOES-East)"),
+        # The whole globe: the confidence is defined over every disk's land.
+        # A box's margin past the granule's edge selects nothing extra, and
+        # the reader wraps a global field across the antimeridian itself.
+        Region("global", (-180.0, -90.0, 180.0, 90.0), "Every land cell of every disk (Himawari, GOES-East, GOES-West)"),
     )
 }
 

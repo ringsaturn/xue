@@ -338,11 +338,14 @@ extrapolates at the box's edge), cast back to float32 and written
 zlib-compressed with the attributes the reader keys on (`region`,
 `month`, `source_month`, `source`, `bbox`, `margin_deg`). An empty crop
 is an error; an existing file is overwritten, since restaging is how a
-bad subset is fixed. The regions are a table (`gobi`, `swus`,
-`atlantic`: a key, a box, a description) rather than a derivation from
-the disks, because staging a region is a decision about where the
-product is defined over land; a new region is a row and a dispatch.
-Locally, `make stage-ancillary MONTHS="2026-11" REGIONS="gobi"` does
+bad subset is fixed. The regions are a table (a key, a box, a
+description) rather than a derivation from the disks, because staging a
+region is a decision about where the product is defined over land. The
+table holds one row, `global`, the whole granule: the confidence is
+defined over every disk's land, and the reader wraps a global field
+across the antimeridian itself. A margin past the granule's edge
+selects nothing extra. Locally, `make stage-ancillary MONTHS="2026-11"
+REGIONS="global"` does
 the same against your own `~/.netrc` (the `staging` dependency group;
 no GDAL), and `tests/test_staging.py` holds the crop, the month
 resolution and a staged file's read-back through `ancillary.py` on a
