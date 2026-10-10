@@ -300,6 +300,15 @@ const DUST_CF: LinearCodebook = LinearCodebook {
     nodata_code: 255,
     name: "dustcf",
 };
+// The ZHOUYE confidence is the same number on the same scale. Mirrors
+// `ZHOUYE` in `xuebuild/quantize.py`.
+const ZHOUYE: LinearCodebook = LinearCodebook {
+    minimum: -0.004,
+    maximum: 1.0,
+    step: 0.004,
+    nodata_code: 255,
+    name: "zhouye",
+};
 // Wind gust: one-sided, at the 10 m components' step over the isobaric
 // wind's 127 m/s ceiling, spending the full 0..254 code space.
 const QUALITY_GUST: LinearCodebook = LinearCodebook {
@@ -879,6 +888,7 @@ pub fn codebook(profile: &str, variable_id: &str) -> Result<Codebook> {
         }
         (_, "dustr" | "dustg" | "dustb") => Codebook::Linear(DUST_RGB_GUN),
         (_, "dustcf") => Codebook::Linear(DUST_CF),
+        (_, "zhouye") => Codebook::Linear(ZHOUYE),
         (_, "aod" | "aoddust" | "aodsalt" | "aodsulf" | "aodorg" | "aodbc" | "pm25" | "pm10" | "pm10dust") => {
             let variable_id = AEROSOL_VARIABLE_IDS
                 .iter()

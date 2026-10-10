@@ -221,8 +221,9 @@ pub struct SourceSpec {
     /// Composite bundles published after the vectors, in manifest order: a
     /// bundle of the variables an algorithm derived from the source's
     /// channels in the fetch stage — `dustrgb`, the Dust RGB's three guns,
-    /// and `dustcf`, the DEBRA confidence, a bundle of one variable
-    /// (`convert::composite_components`). Listing one publishes it
+    /// then `dustcf` and `zhouye`, the DEBRA and ZHOUYE confidences, a
+    /// bundle of one variable each (`convert::composite_components`).
+    /// Listing one publishes it
     /// only when every channel its producer reads is in
     /// `input_variable_ids`; the converter reads the produced components
     /// off the series the fetch stage wrote and never derives them itself.
@@ -1234,7 +1235,7 @@ pub const SOURCES: &[SourceSpec] = &[
         // The Dust RGB, composed per slot in the fetch stage from four of
         // the channels, and the DEBRA confidence from five, each read off
         // the series like any channel.
-        bundle_composite_ids: &["dustrgb", "dustcf"],
+        bundle_composite_ids: &["dustrgb", "dustcf", "zhouye"],
         bundle_volume_ids: &[],
         // The platform's region at 0.04°: 120° x 120°.
         production_grid: (3000, 3000),
@@ -1310,7 +1311,7 @@ pub const SOURCES: &[SourceSpec] = &[
         bundle_scalar_ids: &["ir104"],
         core_bundle_ids: &["ir104"],
         bundle_vector_ids: &[],
-        bundle_composite_ids: &["dustrgb", "dustcf"],
+        bundle_composite_ids: &["dustrgb", "dustcf", "zhouye"],
         bundle_volume_ids: &[],
         production_grid: (3000, 3000),
         tile: (64, 64),
@@ -1372,7 +1373,7 @@ pub const SOURCES: &[SourceSpec] = &[
         bundle_scalar_ids: &["ir104"],
         core_bundle_ids: &["ir104"],
         bundle_vector_ids: &[],
-        bundle_composite_ids: &["dustrgb", "dustcf"],
+        bundle_composite_ids: &["dustrgb", "dustcf", "zhouye"],
         bundle_volume_ids: &[],
         production_grid: (3000, 3000),
         tile: (64, 64),

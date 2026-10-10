@@ -151,6 +151,10 @@ reduced tiers. Each publishes:
   0–1, over water and inside staged emissivity regions (the Gobi through
   Japan, the US Southwest, the Saharan corridor). See
   [`satellite.md`](satellite.md).
+- `zhouye` (not Meteosat): the ZHOUYE dust confidence, shachen's
+  day-and-night scheme on the same chain: DEBRA's by day, and after dark a
+  reading at the day's level instead of a fading one. Same grid, coverage
+  and scale as `dustcf`; a second product, not a replacement.
 
 The live windows end 15–20 min behind real time. **Meteosat publishes only
 the cycle on each hour**: EUMETSAT releases that cycle under CC BY 4.0 and

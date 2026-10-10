@@ -22,9 +22,13 @@ operation order, which can be held to a golden, and an external one that
 runs elsewhere and writes to the shared bucket, which the pipeline reads
 back the way it reads the CMA archive. Both producers here are the first
 kind, through the ``shachen`` package: the classic Dust RGB, which reads
-the slot's channels and nothing else, and DEBRA, which also reads two
-ancillary fields (:mod:`ancillary`) the fetch stage puts on disk for the
-slot before the producer runs (:meth:`Producer.ancillary_for`).
+the slot's channels and nothing else, and the dust confidences — DEBRA's
+and ZHOUYE's, two bundles of one variable each from one pass over the
+same chain — which also read two ancillary fields (:mod:`ancillary`) the
+fetch stage puts on disk for the slot before the producer runs
+(:meth:`Producer.ancillary_for`). A producer's outputs are the components
+of one or more composite bundles (:attr:`Producer.bundle_ids`); the fetch
+stage runs it once for all of them and caches every output frame.
 """
 
 from __future__ import annotations
@@ -47,7 +51,12 @@ class Producer(Protocol):
     id: str
     """The ``producer.id`` written into the metadata: ``shachen``."""
     bundle_id: str
-    """The composite bundle the outputs are the components of."""
+    """The first of :attr:`bundle_ids`: what the fetch stage names the
+    producer by in its logs and records."""
+    bundle_ids: tuple[str, ...]
+    """The composite bundles the outputs are the components of, in
+    output order — one for most producers; the dust confidences share a
+    pass, so theirs are two. :data:`PRODUCERS` is keyed by every one."""
     inputs: tuple[str, ...]
     """The channel ids the recipe reads on an imager that has them all,
     in the order :meth:`run` takes them; :meth:`inputs_for` is what one
@@ -117,6 +126,7 @@ class DustRGBProducer:
 
     id: str = "shachen"
     bundle_id: str = "dustrgb"
+    bundle_ids: tuple[str, ...] = ("dustrgb",)
     inputs: tuple[str, ...] = ("ir086", "ir104", "ir112", "ir123")
     outputs: tuple[str, ...] = ("dustr", "dustg", "dustb")
     ancillaries: tuple[str, ...] = ()
@@ -203,18 +213,20 @@ def _naive_utc(slot: datetime) -> datetime:
 def split_window_gate(confidence: np.ndarray, dt1: np.ndarray, dt2: np.ndarray) -> np.ndarray:
     """``confidence`` with 0 where neither split-window test responded.
 
-    The product-layer gate the operational DEBRA pipeline paints by
-    (its ``cf_gated``): a cell whose ``dt1`` and ``dt2`` (Eqs. 13–14 as
-    DEBRA produced them) are both at or below 0 reads 0, since cloud
+    The product-layer gate: a cell whose ``dt1`` and ``dt2`` (Eqs. 13–14
+    as DEBRA produced them) are both at or below 0 reads 0, since cloud
     has no split-window signal and dust nearly always does — the one
     failure it removes is the mid-level cloud too warm for CM1 and too
     thin for CM3, which Eq. 15's thermal-contrast test alone reads as
     dust. It works around the clock and it removes without reordering;
     what it costs, on 42 dust days of East Asian station data, is a
     daytime detection rate at confidence 0.1 of 0.411 → 0.373 for a
-    false-alarm ratio of 0.422 → 0.23. Not part of DEBRA (Eqs. 1–29)
-    and not in ``shachen``. A NaN test counts as "did not respond"; a
-    NaN confidence stays NaN."""
+    false-alarm ratio of 0.422 → 0.23. Not part of DEBRA (Eqs. 1–29) and
+    not in ``shachen``. ``dustcf`` applies it to the blended ``cf_comb``;
+    ``zhouye`` to the normalized day factor alone, since ZHOUYE applies
+    the same corroboration to the terminator and night sums itself with
+    its own DT2 reading. A NaN test counts as "did not respond"; a NaN
+    confidence stays NaN."""
     d1 = np.nan_to_num(np.asarray(dt1, dtype=np.float64), nan=0.0)
     d2 = np.nan_to_num(np.asarray(dt2, dtype=np.float64), nan=0.0)
     cf = np.asarray(confidence, dtype=np.float64)
@@ -223,29 +235,48 @@ def split_window_gate(confidence: np.ndarray, dt1: np.ndarray, dt2: np.ndarray) 
 
 @dataclass(frozen=True)
 class DebraProducer:
-    """DEBRA (Miller et al. 2017, doi:10.1002/2017JD027365), the Dynamic
-    Enhancement Background Reduction Algorithm for dust: Eqs. 1–22 as the
-    ``shachen`` package implements them, run per slot on five infrared
-    windows — the 3.9 µm window and the 6.2 µm water vapour band for the
-    cloud mask, the 8.6, 10.4 and 12.3 µm windows for the mask, the
-    split-window dust tests and the thermal contrast — against a
+    """The two dust confidences on DEBRA's chain, from one pass. DEBRA
+    (Miller et al. 2017, doi:10.1002/2017JD027365, the Dynamic
+    Enhancement Background Reduction Algorithm for dust) is Eqs. 1–22 as
+    the ``shachen`` package implements them, run per slot on five
+    infrared windows — the 3.9 µm window and the 6.2 µm water vapour band
+    for the cloud mask, the 8.6, 10.4 and 12.3 µm windows for the mask,
+    the split-window dust tests and the thermal contrast — against a
     semianalytic clear-sky background (the CAMEL emissivity times a Planck
     curve at the GFS skin temperature, :mod:`ancillary`), with the
     ``shachen`` ABI retune (the Eq. 19 daytime floor at 0.40 rather than
     the printed 0.25, and the night branch on its own interval) on every
-    imager, as the operational pipeline runs it. The one output is the
-    combined confidence factor ``cf_comb`` in 0–1 with the
-    :func:`split_window_gate` applied — the field that pipeline paints —
-    as the ``dustcf`` bundle's one variable.
+    imager. ``dustcf`` is its combined confidence factor ``cf_comb`` in
+    0–1 with the :func:`split_window_gate` applied.
+
+    ``zhouye`` is ZHOUYE (昼夜, "day and night",
+    ``shachen.constants.ZHOUYE``), the diurnally consistent scheme built
+    on the same chain: the same background, cloud mask and tests, with
+    three departures that act on the terminator and night sums
+    (Eqs. 17–18) only — DT2 read on a fixed (−0.5, +1.5) K interval
+    instead of Eq. 14, the thermal-contrast test needing corroboration
+    from a split-window test, and Eq. 19 intervals fitted so that lit
+    dust reads at night as it does by day. The daytime sum and its
+    interval are the ABI retune's, so below a solar zenith of 75° the
+    two confidences agree bit for bit; the gate is applied to ZHOUYE's
+    normalized day factor alone (the same corroboration it applies to
+    the other two sums itself) and the Eq. 22 blend redone through
+    ``shachen``'s own ``blend_confidence``. The two are separate
+    products: ``dustcf`` fades at dusk as DEBRA does, ``zhouye`` does
+    not, and the night false-alarm rate ZHOUYE pays for that is its own.
 
     The chain is composed here from ``shachen``'s per-equation modules
-    rather than through ``shachen.pipeline.run_debra``, because that entry
-    point takes a pyresample area and regrids, finds the sun and masks
-    land itself; on the plate carrée grid the bundles carry, whose
-    longitudes may run past 180°, those three are this module's
-    (:func:`ancillary.regrid`, pyorbital's zenith on the grid's own
-    coordinates, the land mask on wrapped ones). The arithmetic of every
-    equation is ``shachen``'s, in its order.
+    rather than through ``shachen.pipeline.run_debra`` / ``run_zhouye``,
+    because those entry points take a pyresample area and regrid, find
+    the sun and mask land themselves; on the plate carrée grid the
+    bundles carry, whose longitudes may run past 180°, those three are
+    this module's (:func:`ancillary.regrid`, pyorbital's zenith on the
+    grid's own coordinates, the land mask on wrapped ones). The
+    arithmetic of every equation is ``shachen``'s, in its order; only the
+    re-blend after ZHOUYE's day gate is this module's, through
+    ``shachen``'s Eq. 22. The background, mask and tests are computed
+    once and both confidences read them, which is why one producer
+    serves two bundles.
 
     Where the confidence is defined: a cell is computed wherever every
     input channel has data and the ground is either water (DEBRA takes
@@ -257,8 +288,9 @@ class DebraProducer:
 
     id: str = "shachen"
     bundle_id: str = "dustcf"
+    bundle_ids: tuple[str, ...] = ("dustcf", "zhouye")
     inputs: tuple[str, ...] = ("ir039", "wv062", "ir086", "ir104", "ir123")
-    outputs: tuple[str, ...] = ("dustcf",)
+    outputs: tuple[str, ...] = ("dustcf", "zhouye")
     ancillaries: tuple[str, ...] = ("camel", "skin")
     #: How the skin temperature is fetched; None takes the network
     #: through ``xuebuild.fetch``. Injected by the tests.
@@ -315,8 +347,8 @@ class DebraProducer:
             from pyorbital.astronomy import cos_zen  # noqa: PLC0415
             from shachen.background import background_signals  # noqa: PLC0415
             from shachen.cloudmask import cloud_mask  # noqa: PLC0415
-            from shachen.confidence import confidence  # noqa: PLC0415
-            from shachen.constants import ABI_TUNED  # noqa: PLC0415
+            from shachen.confidence import blend_confidence, confidence  # noqa: PLC0415
+            from shachen.constants import ABI_TUNED, ZHOUYE  # noqa: PLC0415
             from shachen.dust_tests import dust_tests  # noqa: PLC0415
         except ImportError as exc:
             raise ConversionError("the DEBRA producer needs the shachen package: uv sync --group satellite") from exc
@@ -359,12 +391,33 @@ class DebraProducer:
         )
         skin_da = xr.DataArray(skin, dims=dims)
         emissivity_ds = xr.Dataset({name: xr.DataArray(plane, dims=dims) for name, plane in emissivity.items()})
-        constants = ABI_TUNED
+        zenith_da = xr.DataArray(zenith, dims=dims)
+        # One pass over what the two schemes share: the ZHOUYE constants
+        # differ from the ABI retune's in the dust tests only by the
+        # second DT2 reading they add, and in the cloud mask not at all.
         background = background_signals(skin_da, emissivity_ds)
-        mask = cloud_mask(scene, skin_da, constants.cloud_mask)
-        tests = dust_tests(scene, background, skin_da, xr.DataArray(is_land, dims=dims), constants.dust_tests)
-        combined = confidence(tests, mask, xr.DataArray(zenith, dims=dims), constants.confidence)
-        gated = split_window_gate(np.asarray(combined["cf_comb"].values), np.asarray(tests["dt1"].values), np.asarray(tests["dt2"].values))
+        mask = cloud_mask(scene, skin_da, ZHOUYE.cloud_mask)
+        tests = dust_tests(scene, background, skin_da, xr.DataArray(is_land, dims=dims), ZHOUYE.dust_tests)
+        dt1 = np.asarray(tests["dt1"].values)
+        dt2 = np.asarray(tests["dt2"].values)
+        # DEBRA reads Eq. 14's DT2 in every sum, so the fixed reading is
+        # kept from it; gated whole.
+        debra = confidence(tests.drop_vars("dt2_fixed"), mask, zenith_da, ABI_TUNED.confidence)
+        dustcf = split_window_gate(np.asarray(debra["cf_comb"].values), dt1, dt2)
+        # ZHOUYE: the day branch gated on Eq. 14's DT2 (the reading Eq. 16
+        # sums), then Eq. 22 again — Eq. 19 maps a zero sum to 0 on the
+        # day interval, so gating the normalized factor is gating the sum.
+        combined = confidence(tests, mask, zenith_da, ZHOUYE.confidence)
+        cf_day = split_window_gate(np.asarray(combined["cf_day"].values), dt1, dt2)
+        zhouye = np.asarray(
+            blend_confidence(
+                xr.DataArray(cf_day, dims=dims),
+                combined["cf_trm"],
+                combined["cf_ngt"],
+                combined["b_ngt_trm"],
+                combined["b_trm_day"],
+            ).values
+        )
 
         # Defined where every input has data and the ground is water or
         # staged; NaN everywhere else, which the frame packs as no data.
@@ -372,14 +425,17 @@ class DebraProducer:
         for channel_id in needed:
             defined &= np.isfinite(inputs[channel_id])
         defined &= np.isfinite(skin)
-        plane = np.where(defined, gated, np.nan)
-        return {"dustcf": np.clip(plane, 0.0, 1.0)}
+        return {
+            "dustcf": np.clip(np.where(defined, dustcf, np.nan), 0.0, 1.0),
+            "zhouye": np.clip(np.where(defined, zhouye, np.nan), 0.0, 1.0),
+        }
 
 
 PRODUCERS: dict[str, Producer] = {
-    producer.bundle_id: producer for producer in (DustRGBProducer(), DebraProducer())
+    bundle_id: producer for producer in (DustRGBProducer(), DebraProducer()) for bundle_id in producer.bundle_ids
 }
-"""By the composite bundle each produces."""
+"""By the composite bundle each produces; a producer of two bundles is
+listed under both, the same object."""
 
 
 def producer_for(bundle_id: str) -> Producer:

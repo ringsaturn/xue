@@ -77,6 +77,7 @@ from xuebuild.sources import SOURCES, SatelliteBand, source_spec
 from xuebuild.stac import _source_prose
 from xuebuild.variables import (
     DUST_CF_BUNDLE_ID,
+    ZHOUYE_BUNDLE_ID,
     DUST_RGB_BUNDLE_ID,
     DUST_RGB_COMPONENT_IDS,
     SATELLITE_CHANNEL_IDS,
@@ -93,7 +94,7 @@ IR104 = HIMAWARI.channel("ir104")
 CHANNELS = tuple(HIMAWARI.channel(channel_id) for channel_id in SPEC.input_variable_ids)
 #: The channels and the variables every satellite source's fetch writes,
 #: in series order: the channels, the Dust RGB's guns, the confidence.
-SERIES_IDS = SPEC.input_variable_ids + DUST_RGB_COMPONENT_IDS + (DUST_CF_BUNDLE_ID,)
+SERIES_IDS = SPEC.input_variable_ids + DUST_RGB_COMPONENT_IDS + (DUST_CF_BUNDLE_ID, ZHOUYE_BUNDLE_ID)
 DUST = PRODUCERS[DUST_RGB_BUNDLE_ID]
 DEBRA = PRODUCERS[DUST_CF_BUNDLE_ID]
 #: The fixture's two slots.
@@ -241,7 +242,7 @@ class RegistryTests(unittest.TestCase):
         codes = PROFILES["quality"]["dustr"].quantize(np.array([-0.004, 0.0, 0.5, 1.0]))
         self.assertEqual(codes.tolist(), [0, 1, 126, 251])
         self.assertEqual(PROFILES["quality"]["dustr"].decode(np.array([1, 251], dtype=np.uint8)).tolist(), [0.0, 1.0])
-        self.assertEqual(binconvert.COMPOSITE_BUNDLES, {"dustrgb": ("dustr", "dustg", "dustb"), "dustcf": ("dustcf",)})
+        self.assertEqual(binconvert.COMPOSITE_BUNDLES, {"dustrgb": ("dustr", "dustg", "dustb"), "dustcf": ("dustcf",), "zhouye": ("zhouye",)})
         self.assertEqual(binconvert.bundle_variable_ids("dustrgb"), DUST_RGB_COMPONENT_IDS)
         self.assertEqual(binconvert.bundle_variable_ids("dustcf"), ("dustcf",))
         self.assertEqual(binconvert.bundle_variable_ids("ir104"), ("ir104",))
@@ -258,8 +259,8 @@ class RegistryTests(unittest.TestCase):
         self.assertTrue(SPEC.observation and SPEC.series_file and SPEC.fetched and SPEC.live)
         self.assertEqual((SPEC.platform, SPEC.grid_step, SPEC.cadence_seconds, SPEC.window_hours), ("himawari", 0.04, 600, 6))
         self.assertEqual(SPEC.input_variable_ids, ("ir039", "wv062", "ir086", "ir104", "ir112", "ir123"))
-        self.assertEqual((SPEC.bundle_scalar_ids, SPEC.bundle_composite_ids, SPEC.core_bundle_ids), (("ir104",), ("dustrgb", "dustcf"), ("ir104",)))
-        self.assertEqual(binconvert.published_bundle_ids(SPEC), ("ir104", "dustrgb", "dustcf"))
+        self.assertEqual((SPEC.bundle_scalar_ids, SPEC.bundle_composite_ids, SPEC.core_bundle_ids), (("ir104",), ("dustrgb", "dustcf", "zhouye"), ("ir104",)))
+        self.assertEqual(binconvert.published_bundle_ids(SPEC), ("ir104", "dustrgb", "dustcf", "zhouye"))
         # A composite's inputs, for the fetch, are the channels its
         # producer reads; a source that fetched fewer would not publish it.
         self.assertEqual(binconvert.bundle_input_ids(SPEC, "dustrgb"), ("ir086", "ir104", "ir112", "ir123"))
@@ -719,7 +720,7 @@ class FetchTests(TempRoot, unittest.TestCase):
             record["producers"],
             [
                 {"bundle": "dustrgb", "id": "shachen", "version": DUST.version, "inputs": ["ir086", "ir104", "ir112", "ir123"]},
-                {"bundle": "dustcf", "id": "shachen", "version": DEBRA.version, "inputs": ["ir039", "wv062", "ir086", "ir104", "ir123"]},
+                {"bundle": "dustcf", "bundles": ["dustcf", "zhouye"], "id": "shachen", "version": DEBRA.version, "inputs": ["ir039", "wv062", "ir086", "ir104", "ir123"]},
             ],
         )
         self.assertEqual([frame["slot"] for frame in record["frames"]], ["2026-09-17T03:00:00Z", "2026-09-17T03:10:00Z"])
@@ -818,7 +819,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
             )
 
     def test_the_bundle_is_the_disk_grid_with_the_band_beside_the_parameter(self) -> None:
-        self.assertEqual([bundle["variable"] for bundle in self.report["bundles"]], ["ir104", "dustrgb", "dustcf"])
+        self.assertEqual([bundle["variable"] for bundle in self.report["bundles"]], ["ir104", "dustrgb", "dustcf", "zhouye"])
         manifest = json.loads((self.root / "out" / "manifest.json").read_text(encoding="utf-8"))
         self.assertEqual((manifest["model"], manifest["product"]), ("HIMAWARI", "ahi-fldk-0p04"))
         self.assertEqual(manifest["runTime"], "2026-09-17T03:00:00Z")
@@ -894,7 +895,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         channel has none and over land no emissivity is staged for, and a
         value in 1..251 elsewhere inside the disk."""
         manifest = json.loads((self.root / "out" / "manifest.json").read_text(encoding="utf-8"))
-        self.assertEqual([bundle["variable"] for bundle in manifest["bundles"]], ["ir104", "dustrgb", "dustcf"])
+        self.assertEqual([bundle["variable"] for bundle in manifest["bundles"]], ["ir104", "dustrgb", "dustcf", "zhouye"])
         entry = next(bundle for bundle in manifest["bundles"] if bundle["variable"] == "dustcf")
         self.assertNotIn("poster", entry)
         self.assertNotIn("video", entry)
@@ -978,9 +979,9 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         # bundles' own order.
         self.assertEqual(
             [Path(variant["output"]).name for variant in self.report["variants"]],
-            [f"{bundle_id}.{tier}.xue" for bundle_id in ("ir104", "dustrgb", "dustcf") for tier, _, _, _ in rungs],
+            [f"{bundle_id}.{tier}.xue" for bundle_id in ("ir104", "dustrgb", "dustcf", "zhouye") for tier, _, _, _ in rungs],
         )
-        self.assertEqual(sorted(path.name for path in (self.root / "out").glob("*.xue")), sorted(f"{b}{s}.xue" for b in ("ir104", "dustrgb", "dustcf") for s in ("", ".half", ".quarter", ".eighth")))
+        self.assertEqual(sorted(path.name for path in (self.root / "out").glob("*.xue")), sorted(f"{b}{s}.xue" for b in ("ir104", "dustrgb", "dustcf", "zhouye") for s in ("", ".half", ".quarter", ".eighth")))
         self.assertEqual(source_spec("gfs").variant_factors, (2,))
 
     def test_a_crop_past_the_antimeridian_reads_the_disk_s_eastern_columns(self) -> None:
@@ -994,7 +995,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                 work_root=self.root / "crop-work",
                 bbox=(-175.0, 0.0, -160.0, 10.0),
             )
-        self.assertEqual([bundle["variable"] for bundle in report["bundles"]], ["ir104", "dustrgb", "dustcf"])
+        self.assertEqual([bundle["variable"] for bundle in report["bundles"]], ["ir104", "dustrgb", "dustcf", "zhouye"])
         grid = read_bundle(self.root / "crop" / "ir104.xue").metadata["grid"]
         self.assertEqual((grid["width"], grid["height"]), (376, 252))
         self.assertEqual(grid["firstLongitude"], -175.0)

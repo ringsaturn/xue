@@ -274,7 +274,7 @@ re-fetched). Needs the `aurora` dependency group.
 
 `himawari`, `goeseast`, `goeswest` and `meteosat` are series-file
 observations whose fetch stage is `xuebuild/satellite/`; registry, readers,
-projector, frame cache, producers, the Dust RGB and the DEBRA confidence are
+projector, frame cache, producers, the Dust RGB and the dust confidence are
 specified in [../satellite.md](../satellite.md). What the rest of the repo
 must keep in mind:
 
@@ -299,7 +299,17 @@ must keep in mind:
   series file's stamp. Code 0 is no data in every gun.
 - `dustcf` ships on the three NOAA-redistributed disks only (no staged CAMEL
   region on Meteosat's); its ancillaries need `ANCILLARY=true` in the rounds
-  script.
+  script. The CAMEL months are staged by `xuebuild/satellite/staging.py`
+  (`make stage-ancillary` then `make push-r2-ancillary`; `stage-ancillary.yml`
+  on the 25th and the 1st, the `staging` group, Earthdata credentials in
+  `~/.netrc`, no GDAL). Its region table (`gobi`, `swus`, `atlantic`: a bbox
+  plus a 1° margin) decides where the confidence is defined over land, so a
+  new region is a row in that table and a dispatch; a bad subset is fixed by
+  restaging, which overwrites.
+- `dustcf` (DEBRA) and `zhouye` (ZHOUYE, shachen ≥ 0.4.0) are two bundles
+  from one producer: `Producer.bundle_ids` lists both, `PRODUCERS` keys both
+  to the same object, and the fetch runs it once. A source listing only one
+  still gets both frames cached; the converter reads what is listed.
 - Frames are kept `FRAMES_KEEP_HOURS` (8; 26 on Meteosat): a day of seven
   variables is ~4.5 GB.
 - They ship three lower rungs (`variant_factors` `(2, 4, 8)`): a

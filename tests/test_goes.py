@@ -48,7 +48,7 @@ from xuebuild.satellite.projector import TargetGrid
 from xuebuild.satellite.readers import CMIPFReader, parse_cmipf_key, reader_for
 from xuebuild.sources import SatelliteBand, source_spec
 from xuebuild.stac import _source_prose
-from xuebuild.variables import DUST_CF_BUNDLE_ID, DUST_RGB_BUNDLE_ID, DUST_RGB_COMPONENT_IDS
+from xuebuild.variables import DUST_CF_BUNDLE_ID, DUST_RGB_BUNDLE_ID, DUST_RGB_COMPONENT_IDS, ZHOUYE_BUNDLE_ID
 
 FIXTURES = Path(__file__).parent / "fixtures" / "goes"
 EAST = source_spec("goeseast")
@@ -85,7 +85,7 @@ class RegistryTests(unittest.TestCase):
                 self.assertEqual(spec.platform, platform)
                 self.assertEqual(spec.input_variable_ids, himawari.input_variable_ids)
                 self.assertEqual((spec.bundle_scalar_ids, spec.bundle_composite_ids, spec.core_bundle_ids), (himawari.bundle_scalar_ids, himawari.bundle_composite_ids, himawari.core_bundle_ids))
-                self.assertEqual(binconvert.published_bundle_ids(spec), ("ir104", "dustrgb", "dustcf"))
+                self.assertEqual(binconvert.published_bundle_ids(spec), ("ir104", "dustrgb", "dustcf", "zhouye"))
                 self.assertEqual((spec.grid_step, spec.cadence_seconds, spec.window_hours, spec.production_grid, spec.tile), (0.04, 600, 6, (3000, 3000), (64, 64)))
                 self.assertFalse(spec.video)
 
@@ -333,7 +333,7 @@ class FetchTests(TempRoot, unittest.TestCase):
         stage_ancillary(self.root, (SLOT_1510, SLOT_1520), skin="gfs.tmpsfc.caribbean.grib2")
         written = _fetch_satellite_run(EAST, GfsRun(HOUR), 3, self.root, force=False, input_ids=None, fetch=self.listing, download=self.download)
         run_dir = self.root / "goeseast.2026091715"
-        self.assertEqual(written, [run_dir / f"goeseast.2026091715.{variable_id}.nc" for variable_id in (*EAST.input_variable_ids, *DUST_RGB_COMPONENT_IDS, DUST_CF_BUNDLE_ID)])
+        self.assertEqual(written, [run_dir / f"goeseast.2026091715.{variable_id}.nc" for variable_id in (*EAST.input_variable_ids, *DUST_RGB_COMPONENT_IDS, DUST_CF_BUNDLE_ID, ZHOUYE_BUNDLE_ID)])
         record = json.loads((run_dir / "fetch.json").read_text(encoding="utf-8"))
         self.assertEqual((record["model"], record["run"], record["hours"], record["cadenceSeconds"]), ("goeseast", "2026091715", 3, 600))
         self.assertEqual(record["platform"], "GOES-19")
@@ -372,7 +372,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
             )
 
     def test_the_bundles_are_the_east_disk_with_the_abi_band(self) -> None:
-        self.assertEqual([bundle["variable"] for bundle in self.report["bundles"]], ["ir104", "dustrgb", "dustcf"])
+        self.assertEqual([bundle["variable"] for bundle in self.report["bundles"]], ["ir104", "dustrgb", "dustcf", "zhouye"])
         manifest = json.loads((self.root / "out" / "manifest.json").read_text(encoding="utf-8"))
         self.assertEqual((manifest["model"], manifest["product"]), ("GOES-EAST", "abi-fldk-0p04"))
         self.assertEqual(manifest["runTime"], "2026-09-17T15:00:00Z")
@@ -428,7 +428,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                     offset = full.frame_offsets[-1]
                     expected = np.asarray(full.decode_plane(1, offset)).reshape(3000, 3000)[::factor, ::factor]
                     np.testing.assert_array_equal(np.asarray(rung.decode_plane(1, offset)).reshape(side, side), expected)
-        self.assertEqual([Path(variant["output"]).name for variant in self.report["variants"]], [f"{b}.{t}.xue" for b in ("ir104", "dustrgb", "dustcf") for t, _, _, _ in rungs])
+        self.assertEqual([Path(variant["output"]).name for variant in self.report["variants"]], [f"{b}.{t}.xue" for b in ("ir104", "dustrgb", "dustcf", "zhouye") for t, _, _, _ in rungs])
 
     @requires_native_source("goeseast")
     def test_the_native_encoder_writes_the_same_bytes(self) -> None:

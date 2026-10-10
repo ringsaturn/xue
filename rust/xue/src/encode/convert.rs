@@ -19,7 +19,8 @@ use crate::format::{ChunkEntry, Predictor, TileGeometry, VariableEntry, NO_DEPEN
 use crate::encode::errors::{EncodeError, Result};
 use crate::encode::variables::{
     is_static, isobaric_variable, reflectivity_level, variable_spec, CAT_LEVELS_HPA, DUST_CF_BUNDLE_ID,
-    DUST_CF_COMPONENT_IDS, DUST_RGB_BUNDLE_ID, DUST_RGB_COMPONENT_IDS, ISOBARIC_LEVELS_HPA,
+    DUST_CF_COMPONENT_IDS, DUST_RGB_BUNDLE_ID, DUST_RGB_COMPONENT_IDS, ISOBARIC_LEVELS_HPA, ZHOUYE_BUNDLE_ID,
+    ZHOUYE_COMPONENT_IDS,
     REFLECTIVITY_VARIABLE_IDS, STANDARD_GRAVITY, WAVE_VECTOR_COMPONENT_IDS,
 };
 use crate::encode::gdalio::{needs_serial_access, netcdf_guard, Dataset};
@@ -98,12 +99,14 @@ pub fn vector_components(bundle_id: &str) -> Option<(String, String)> {
 /// channels in the *fetch stage* (`xuebuild/satellite/producers.py`), read
 /// off the observation series as more variables and written as one bundle
 /// in this order — the converter never derives them. The Dust RGB's three
-/// guns, then the DEBRA confidence, a produced bundle of one variable.
-/// Mirrors `COMPOSITE_BUNDLES` in `xuebuild/binconvert.py`.
+/// guns, then the DEBRA confidence and the ZHOUYE confidence, two produced
+/// bundles of one variable each. Mirrors `COMPOSITE_BUNDLES` in
+/// `xuebuild/binconvert.py`.
 pub fn composite_components(bundle_id: &str) -> Option<Vec<String>> {
     let components: &[&str] = match bundle_id {
         DUST_RGB_BUNDLE_ID => &DUST_RGB_COMPONENT_IDS,
         DUST_CF_BUNDLE_ID => &DUST_CF_COMPONENT_IDS,
+        ZHOUYE_BUNDLE_ID => &ZHOUYE_COMPONENT_IDS,
         _ => return None,
     };
     Some(components.iter().map(|id| (*id).to_string()).collect())
@@ -129,6 +132,7 @@ pub fn volume_components(bundle_id: &str) -> Option<Vec<String>> {
 const DUST_RGB_INPUT_IDS: [&str; 4] = ["ir086", "ir104", "ir112", "ir123"];
 /// The DEBRA confidence's inputs: the 3.9 µm window, the 6.2 µm water
 /// vapour band and the 8.6, 10.4 and 12.3 µm windows, all five required.
+/// The ZHOUYE confidence is composed in the same pass from the same five.
 const DUST_CF_INPUT_IDS: [&str; 5] = ["ir039", "wv062", "ir086", "ir104", "ir123"];
 
 /// The channels a composite's producer reads on the source's platform: what
@@ -137,9 +141,9 @@ const DUST_CF_INPUT_IDS: [&str; 5] = ["ir039", "wv062", "ir086", "ir104", "ir123
 /// `inputs_for` in `xuebuild/satellite/producers.py` through
 /// `binconvert.bundle_input_ids` — the Dust RGB reads the four infrared
 /// windows, or three on an imager without an 11.2 µm one (FCI), where the
-/// 10.4 µm window stands in for the green gun's minuend; the DEBRA
-/// confidence reads its five with no stand-in, so a source that fetches
-/// fewer cannot publish it (`published_bundle_ids`). The platform's channel
+/// 10.4 µm window stands in for the green gun's minuend; the DEBRA and
+/// ZHOUYE confidences read their five with no stand-in, so a source that
+/// fetches fewer cannot publish them (`published_bundle_ids`). The platform's channel
 /// table lives on the Python side; here a source whose inputs lack `ir112`
 /// is one whose imager lacks it.
 fn composite_input_ids(source: &SourceSpec, bundle_id: &str) -> Option<Vec<String>> {
@@ -151,7 +155,9 @@ fn composite_input_ids(source: &SourceSpec, bundle_id: &str) -> Option<Vec<Strin
                 .map(|id| (*id).to_string())
                 .collect(),
         ),
-        DUST_CF_BUNDLE_ID => Some(DUST_CF_INPUT_IDS.iter().map(|id| (*id).to_string()).collect()),
+        DUST_CF_BUNDLE_ID | ZHOUYE_BUNDLE_ID => {
+            Some(DUST_CF_INPUT_IDS.iter().map(|id| (*id).to_string()).collect())
+        }
         _ => None,
     }
 }
@@ -3496,19 +3502,25 @@ mod composite_tests {
     fn the_debra_confidence_reads_five_windows_and_is_one_variable() {
         // The DEBRA confidence has no stand-in: the same five inputs on
         // every platform, and a source that fetches fewer (Meteosat) does
-        // not publish it.
+        // not publish it. The ZHOUYE confidence is composed in the same
+        // pass from the same five, its own bundle of one variable after it.
         assert_eq!(bundle_variable_ids("dustcf"), ["dustcf"]);
+        assert_eq!(bundle_variable_ids("zhouye"), ["zhouye"]);
         for model in ["himawari", "goeseast", "goeswest"] {
             let source = source_spec(model).expect(model);
-            assert_eq!(
-                bundle_input_ids(source, "dustcf"),
-                ["ir039", "wv062", "ir086", "ir104", "ir123"],
-                "{model}"
-            );
-            assert_eq!(published_bundle_ids(source), ["ir104", "dustrgb", "dustcf"], "{model}");
+            for bundle_id in ["dustcf", "zhouye"] {
+                assert_eq!(
+                    bundle_input_ids(source, bundle_id),
+                    ["ir039", "wv062", "ir086", "ir104", "ir123"],
+                    "{model} {bundle_id}"
+                );
+            }
+            assert_eq!(published_bundle_ids(source), ["ir104", "dustrgb", "dustcf", "zhouye"], "{model}");
         }
         let meteosat = source_spec("meteosat").expect("meteosat");
-        assert_eq!(bundle_input_ids(meteosat, "dustcf"), ["ir039", "wv062", "ir086", "ir104", "ir123"]);
+        for bundle_id in ["dustcf", "zhouye"] {
+            assert_eq!(bundle_input_ids(meteosat, bundle_id), ["ir039", "wv062", "ir086", "ir104", "ir123"]);
+        }
         assert_eq!(published_bundle_ids(meteosat), ["ir104", "dustrgb"]);
     }
 }

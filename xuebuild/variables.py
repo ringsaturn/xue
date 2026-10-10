@@ -1243,6 +1243,29 @@ VARIABLES: dict[str, VariableSpec] = {
         grib2_level_type=8,
         producer_id="shachen",
     ),
+    # The ZHOUYE dust confidence (昼夜, "day and night": shachen 0.4.0's
+    # diurnally consistent scheme on DEBRA's chain), the one variable of
+    # the ``zhouye`` bundle and a second product beside ``dustcf``, not a
+    # replacement: the same tests and cloud mask, the terminator and night
+    # sums re-read (DT2 on a fixed interval, DT3 corroborated, Eq. 19
+    # intervals fitted to the day), so by day it is DEBRA's confidence and
+    # at night lit dust keeps the day's reading instead of fading; the
+    # split-window gate applied to the day branch as ``dustcf`` applies it
+    # to the whole. Composed in the same pass as ``dustcf`` from the same
+    # inputs (xuebuild/satellite/producers.py), the next free local-use
+    # number under the same producer (5 is the aurora's, under none), the
+    # same codebook and no-data rule.
+    "zhouye": VariableSpec(
+        id="zhouye",
+        label="ZHOUYE dust confidence",
+        output_unit="1",
+        value_range=(-0.004, 1),
+        grib2_discipline=3,
+        grib2_category=192,
+        grib2_number=6,
+        grib2_level_type=8,
+        producer_id="shachen",
+    ),
     # The GEFS-Aerosols fields (NOAA's GEFS ``chem`` member, the
     # GOCART aerosol model coupled to the GFS), the first aerosol products
     # this pipeline reads: GRIB2 product definition template 4.48, whose
@@ -1431,7 +1454,11 @@ DUST_RGB_COMPONENT_IDS: tuple[str, str, str] = ("dustr", "dustg", "dustb")
 # own, never derived by a converter.
 DUST_CF_BUNDLE_ID = "dustcf"
 DUST_CF_COMPONENT_IDS: tuple[str] = ("dustcf",)
-SATELLITE_VARIABLE_IDS: tuple[str, ...] = SATELLITE_CHANNEL_IDS + DUST_RGB_COMPONENT_IDS + DUST_CF_COMPONENT_IDS
+# The ZHOUYE confidence is the same shape: one produced variable, its own
+# bundle, composed in the same pass as the DEBRA one.
+ZHOUYE_BUNDLE_ID = "zhouye"
+ZHOUYE_COMPONENT_IDS: tuple[str] = ("zhouye",)
+SATELLITE_VARIABLE_IDS: tuple[str, ...] = SATELLITE_CHANNEL_IDS + DUST_RGB_COMPONENT_IDS + DUST_CF_COMPONENT_IDS + ZHOUYE_COMPONENT_IDS
 # The aerosol set, in the order GEFS-Aerosols publishes it: the six optical
 # thicknesses, then the three surface concentrations. Held to the Rust
 # encoder and the frontend by tests/fixtures/aerosol-registry.json, which

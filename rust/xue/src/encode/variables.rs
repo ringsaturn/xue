@@ -295,8 +295,9 @@ pub const WAVE_VECTOR_COMPONENT_IDS: [&str; 2] = ["uwave", "vwave"];
 /// when published); the guns are what the Dust RGB producer derives from
 /// four of them, the three variables of the `dustrgb` bundle in bundle
 /// order. Mirror `SATELLITE_CHANNEL_IDS`, `DUST_RGB_BUNDLE_ID`,
-/// `DUST_RGB_COMPONENT_IDS`, `DUST_CF_BUNDLE_ID`, `DUST_CF_COMPONENT_IDS`
-/// and `SATELLITE_VARIABLE_IDS` in `xuebuild/variables.py`.
+/// `DUST_RGB_COMPONENT_IDS`, `DUST_CF_BUNDLE_ID`, `DUST_CF_COMPONENT_IDS`,
+/// `ZHOUYE_BUNDLE_ID`, `ZHOUYE_COMPONENT_IDS` and `SATELLITE_VARIABLE_IDS`
+/// in `xuebuild/variables.py`.
 pub const SATELLITE_CHANNEL_IDS: &[&str] = &["ir039", "wv062", "ir086", "ir104", "ir112", "ir123"];
 pub const DUST_RGB_BUNDLE_ID: &str = "dustrgb";
 pub const DUST_RGB_COMPONENT_IDS: [&str; 3] = ["dustr", "dustg", "dustb"];
@@ -305,9 +306,13 @@ pub const DUST_RGB_COMPONENT_IDS: [&str; 3] = ["dustr", "dustg", "dustb"];
 /// own, never derived by a converter.
 pub const DUST_CF_BUNDLE_ID: &str = "dustcf";
 pub const DUST_CF_COMPONENT_IDS: [&str; 1] = ["dustcf"];
+/// The ZHOUYE confidence is the same shape: one produced variable, its own
+/// bundle, composed in the same pass as the DEBRA one.
+pub const ZHOUYE_BUNDLE_ID: &str = "zhouye";
+pub const ZHOUYE_COMPONENT_IDS: [&str; 1] = ["zhouye"];
 #[allow(dead_code)] // read by the registry test; the Python side keys its fixture on it
 pub const SATELLITE_VARIABLE_IDS: &[&str] = &[
-    "ir039", "wv062", "ir086", "ir104", "ir112", "ir123", "dustr", "dustg", "dustb", "dustcf",
+    "ir039", "wv062", "ir086", "ir104", "ir112", "ir123", "dustr", "dustg", "dustb", "dustcf", "zhouye",
 ];
 
 /// The aerosol set, in the order GEFS-Aerosols publishes it: the six optical
@@ -1816,6 +1821,38 @@ pub const VARIABLES: &[VariableSpec] = &[
         producer_id: Some("shachen"),
         grib2_aerosol: None,
     },
+    // The ZHOUYE dust confidence (昼夜, "day and night": shachen 0.4.0's
+    // diurnally consistent scheme on DEBRA's chain), the one variable of
+    // the `zhouye` bundle and a second product beside `dustcf`, not a
+    // replacement: the same tests and cloud mask, the terminator and night
+    // sums re-read (DT2 on a fixed interval, DT3 corroborated, Eq. 19
+    // intervals fitted to the day), so by day it is DEBRA's confidence and
+    // at night lit dust keeps the day's reading instead of fading; the
+    // split-window gate applied to the day branch as `dustcf` applies it
+    // to the whole. Composed in the same pass as `dustcf` from the same
+    // inputs (`xuebuild/satellite/producers.py`), the next local-use number
+    // under the same producer, the same codebook and no-data rule.
+    // Mirror `zhouye` in `xuebuild/variables.py`.
+    VariableSpec {
+        id: "zhouye",
+        label: "ZHOUYE dust confidence",
+        output_unit: "1",
+        value_range: (-0.004, 1.0),
+        grib_element: "",
+        open_meteo: "",
+        grib2_discipline: 3,
+        grib2_category: 192,
+        grib2_number: 6,
+        grib2_level_type: 8,
+        grib2_level_value: None,
+        grib2_statistical: None,
+        grib2_aliases: &[],
+        grib2_alternates: &[],
+        gdal_unit: "",
+        fill_values: &[],
+        producer_id: Some("shachen"),
+        grib2_aerosol: None,
+    },
     // The GEFS-Aerosols fields (NOAA's GEFS `chem` member, the GOCART
     // aerosol model coupled to the GFS), the first aerosol products this
     // pipeline reads: GRIB2 product definition template 4.48, whose
@@ -2206,7 +2243,7 @@ mod tests {
         DUST_CF_BUNDLE_ID, DUST_CF_COMPONENT_IDS, DUST_RGB_BUNDLE_ID, DUST_RGB_COMPONENT_IDS,
         ISOBARIC_FAMILIES, ISOBARIC_LEVELS_HPA, OCEAN_VARIABLE_IDS, REFLECTIVITY_LEVELS_M,
         REFLECTIVITY_VARIABLE_IDS, SATELLITE_CHANNEL_IDS, SATELLITE_VARIABLE_IDS,
-        WAVE_VECTOR_COMPONENT_IDS,
+        WAVE_VECTOR_COMPONENT_IDS, ZHOUYE_BUNDLE_ID, ZHOUYE_COMPONENT_IDS,
     };
     use crate::encode::quantize::codebook;
     use serde_json::{json, Value};
@@ -2409,12 +2446,12 @@ mod tests {
     }
 
     /// `tests/fixtures/satellite-registry.json`: the satellite channels,
-    /// the Dust RGB guns and the DEBRA confidence, held to the Python
-    /// encoder the same way — a channel with the `band` block the Himawari
-    /// source writes beside the parameter, read off the source table here;
-    /// a produced variable (a gun, the confidence) with the `producer` id
-    /// registered on it and no band — plus each composite bundle's
-    /// component list.
+    /// the Dust RGB guns and the DEBRA and ZHOUYE confidences, held to the
+    /// Python encoder the same way — a channel with the `band` block the
+    /// Himawari source writes beside the parameter, read off the source
+    /// table here; a produced variable (a gun, a confidence) with the
+    /// `producer` id registered on it and no band — plus each composite
+    /// bundle's component list.
     #[test]
     fn the_satellite_registry_matches_the_shared_fixture() {
         let fixture = registry("satellite-registry.json");
@@ -2422,11 +2459,15 @@ mod tests {
         assert_eq!(
             entries.keys().collect::<Vec<_>>(),
             SATELLITE_VARIABLE_IDS,
-            "the channels, then the guns, then the confidence, in the fixture's order"
+            "the channels, then the guns, then the confidences, in the fixture's order"
         );
         assert_eq!(
             fixture["bundles"],
-            json!({ DUST_RGB_BUNDLE_ID: DUST_RGB_COMPONENT_IDS, DUST_CF_BUNDLE_ID: DUST_CF_COMPONENT_IDS }),
+            json!({
+                DUST_RGB_BUNDLE_ID: DUST_RGB_COMPONENT_IDS,
+                DUST_CF_BUNDLE_ID: DUST_CF_COMPONENT_IDS,
+                ZHOUYE_BUNDLE_ID: ZHOUYE_COMPONENT_IDS,
+            }),
             "each composite bundle's components"
         );
         let himawari = crate::encode::sources::source_spec("himawari").expect("himawari");
@@ -2440,7 +2481,8 @@ mod tests {
                 "{variable_id} GRIB2 identity"
             );
             let produced = DUST_RGB_COMPONENT_IDS.contains(&variable_id.as_str())
-                || DUST_CF_COMPONENT_IDS.contains(&variable_id.as_str());
+                || DUST_CF_COMPONENT_IDS.contains(&variable_id.as_str())
+                || ZHOUYE_COMPONENT_IDS.contains(&variable_id.as_str());
             assert_eq!(SATELLITE_CHANNEL_IDS.contains(&variable_id.as_str()), !produced, "{variable_id}");
             if produced {
                 assert_eq!(json!({ "id": spec.producer_id }), entry["producer"], "{variable_id} producer");
@@ -2470,13 +2512,13 @@ mod tests {
         }
         // The published grid is the platform's region at the step, past
         // the antimeridian; the six channels are fetched, one is published
-        // as a scalar and the two composites beside it.
+        // as a scalar and the three composites beside it.
         assert_eq!(himawari.production_grid, (3000, 3000));
         assert!(himawari.series_file && himawari.observation);
         assert_eq!(himawari.cadence_seconds, Some(600));
         assert_eq!(himawari.input_variable_ids, SATELLITE_CHANNEL_IDS);
         assert_eq!(himawari.bundle_scalar_ids, &["ir104"]);
-        assert_eq!(himawari.bundle_composite_ids, &[DUST_RGB_BUNDLE_ID, DUST_CF_BUNDLE_ID]);
+        assert_eq!(himawari.bundle_composite_ids, &[DUST_RGB_BUNDLE_ID, DUST_CF_BUNDLE_ID, ZHOUYE_BUNDLE_ID]);
     }
 
     /// `tests/fixtures/aerosol-registry.json`: the GEFS-Aerosols fields,

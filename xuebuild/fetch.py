@@ -1669,10 +1669,14 @@ def _fetch_satellite_run(
     # A composite is produced when every channel it reads is fetched: the
     # rule `published_bundle_ids` applies to the source table, applied to
     # what this fetch was asked for.
+    # A producer serving two listed bundles runs once (dict.fromkeys keeps
+    # the first listing's order and drops the repeat).
     producers = tuple(
-        satellite_producers.producer_for(bundle_id)
-        for bundle_id in spec.bundle_composite_ids
-        if all(channel_id in channel_ids for channel_id in satellite_producers.producer_for(bundle_id).inputs_for(platform))
+        dict.fromkeys(
+            satellite_producers.producer_for(bundle_id)
+            for bundle_id in spec.bundle_composite_ids
+            if all(channel_id in channel_ids for channel_id in satellite_producers.producer_for(bundle_id).inputs_for(platform))
+        )
     )
     grid = satellite_grid(spec)
     destination = raw_root / f"{spec.id}.{run.id}"
@@ -1709,7 +1713,13 @@ def _fetch_satellite_run(
         },
         "series": {variable_id: path.name for variable_id, path in window.series.items()},
         "producers": [
-            {"bundle": producer.bundle_id, "id": producer.id, "version": producer.version, "inputs": list(producer.inputs_for(platform))}
+            {
+                "bundle": producer.bundle_id,
+                "bundles": list(producer.bundle_ids),
+                "id": producer.id,
+                "version": producer.version,
+                "inputs": list(producer.inputs_for(platform)),
+            }
             for producer in producers
         ],
         "frames": [

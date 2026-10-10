@@ -1,18 +1,21 @@
-"""The DEBRA producer and the ancillary fields it reads.
+"""The dust confidence producer and the ancillary fields it reads.
 
-``dustcf`` is the second product of the satellite producer seam
-(xuebuild/satellite/producers.py): DEBRA's combined dust confidence,
-computed per slot from five infrared windows against a clear-sky
-background modelled from two fields the imager does not measure — a GFS
-skin temperature fetched by byte range, and the CAMEL emissivity months
-the operational DEBRA pipeline stages on the bucket
-(xuebuild/satellite/ancillary.py). The tests here hold three things:
-that the ancillary readers and the regrid are right on the plate carrée
-grids the bundles carry (including one that runs past 180°); that the
-chain composed here from shachen's per-equation modules equals what
-``shachen.pipeline.run_debra`` computes on the same grid, cell for cell;
-and the two rules the product adds — where the confidence is defined
-(water, or land inside a staged file) and the split-window gate.
+``dustcf`` and ``zhouye`` are the second product of the satellite
+producer seam (xuebuild/satellite/producers.py): DEBRA's combined dust
+confidence and ZHOUYE's diurnally consistent one on the same chain, two
+bundles from one pass, computed per slot from five infrared windows
+against a clear-sky background modelled from two fields the imager does
+not measure — a GFS skin temperature fetched by byte range, and the
+CAMEL emissivity months staged on the bucket
+(xuebuild/satellite/ancillary.py). The tests here hold four things: that
+the ancillary readers and the regrid are right on the plate carrée grids
+the bundles carry (including one that runs past 180°); that the chain
+composed here from shachen's per-equation modules equals what
+``shachen.pipeline.run_debra`` and ``run_zhouye`` compute on the same
+grid, cell for cell (ZHOUYE once its day branch is gated); that by day
+the two agree exactly and by night they do not; and the two rules the
+products add — where the confidence is defined (water, or land inside a
+staged file) and the split-window gate.
 
 ``tests/fixtures/debra/`` holds two crops of the staged gobi month
 (``camel.gobi.202609.crop.nc``, the Gobi itself, land; ``…pacific.nc``,
@@ -48,8 +51,12 @@ DEBRA = PRODUCERS["dustcf"]
 #: box on three sides and past it to the west and north.
 GOBI_GRID = TargetGrid(west=98.0, south=36.0, east=112.0, north=47.0, step=0.1)
 #: The cached record's own valid time, so a golden through shachen's
-#: pipeline sees the same sun.
+#: pipeline sees the same sun: 21:00 at the grid's meridian, night.
 GOBI_SLOT = datetime(2026, 9, 14, 13, 0, tzinfo=UTC)
+#: Ten hours earlier: 11:00 at the meridian, the sun high over the whole
+#: grid. The same record is cached under this slot's first candidate too;
+#: a skin temperature of the wrong hour is fine for an equality.
+GOBI_DAY_SLOT = datetime(2026, 9, 14, 3, 0, tzinfo=UTC)
 
 
 def gobi_ancillary(root: Path) -> Path:
@@ -60,8 +67,9 @@ def gobi_ancillary(root: Path) -> Path:
     shutil.copy(DEBRA_FIXTURES / "camel.gobi.202609.crop.nc", camel / "202609.nc")
     gfs = root / "ancillary" / "gfs"
     gfs.mkdir(parents=True)
-    cycle, forecast_hour = ancillary.skin_temperature_candidates(GOBI_SLOT)[0]
-    shutil.copy(DEBRA_FIXTURES / "gfs.tmpsfc.gobi.grib2", gfs / ancillary.skin_temperature_name(cycle, forecast_hour))
+    for slot in (GOBI_SLOT, GOBI_DAY_SLOT):
+        cycle, forecast_hour = ancillary.skin_temperature_candidates(slot)[0]
+        shutil.copy(DEBRA_FIXTURES / "gfs.tmpsfc.gobi.grib2", gfs / ancillary.skin_temperature_name(cycle, forecast_hour))
     return root / "ancillary"
 
 
@@ -243,7 +251,8 @@ class ProducerTests(TempRoot, unittest.TestCase):
         self.ancillary = gobi_ancillary(self.root)
 
     def test_the_producer_reads_five_windows_on_every_imager_here(self) -> None:
-        self.assertEqual((DEBRA.id, DEBRA.bundle_id, DEBRA.outputs, DEBRA.ancillaries), ("shachen", "dustcf", ("dustcf",), ("camel", "skin")))
+        self.assertEqual((DEBRA.id, DEBRA.bundle_id, DEBRA.bundle_ids, DEBRA.outputs, DEBRA.ancillaries), ("shachen", "dustcf", ("dustcf", "zhouye"), ("dustcf", "zhouye"), ("camel", "skin")))
+        self.assertIs(PRODUCERS["zhouye"], DEBRA)
         for platform in (HIMAWARI, GOES_EAST, METEOSAT):
             self.assertEqual(DEBRA.inputs_for(platform), ("ir039", "wv062", "ir086", "ir104", "ir123"))
         self.assertEqual(DEBRA.version, PRODUCERS["dustrgb"].version)
@@ -254,21 +263,16 @@ class ProducerTests(TempRoot, unittest.TestCase):
         resolved = DEBRA.ancillary_for(HIMAWARI, GOBI_SLOT, self.ancillary)
         self.assertEqual(resolved, {"camel": self.ancillary / "camel", "skin": self.ancillary / "gfs" / "gfs_tmpsfc_2026091412_f001.grib2"})
 
-    @requires_shachen
-    def test_the_chain_is_shachen_s_run_debra_cell_for_cell(self) -> None:
-        """Composed here from the per-equation modules with this module's
-        regrid, zenith and land mask, the confidence equals what
-        ``shachen.pipeline.run_debra`` computes on the same plate carrée
-        area with its own — so nothing in the composition is this
-        module's arithmetic but the three it takes over."""
+    def _references(self, scene: dict[str, np.ndarray], slot: datetime, resolved: dict[str, Path]):
+        """shachen's own pipelines on the same plate carrée area: ZHOUYE
+        with the day branch gated and re-blended through shachen's
+        Eq. 22, and DEBRA (the ABI retune) gated as the product was
+        before ZHOUYE — plus the staged coverage and the solar zenith."""
         import xarray as xr  # noqa: PLC0415
         from pyresample.geometry import AreaDefinition  # noqa: PLC0415
+        from shachen.confidence import blend_confidence  # noqa: PLC0415
         from shachen.constants import ABI_TUNED  # noqa: PLC0415
-        from shachen.pipeline import run_debra  # noqa: PLC0415
-
-        scene = synthetic_scene(GOBI_GRID)
-        resolved = DEBRA.ancillary_for(HIMAWARI, GOBI_SLOT, self.ancillary)
-        actual = DEBRA.run(HIMAWARI, scene, resolved, slot=GOBI_SLOT, grid=GOBI_GRID)["dustcf"]
+        from shachen.pipeline import run_debra, run_zhouye  # noqa: PLC0415
 
         area = AreaDefinition(
             "gobi", "gobi", "gobi", {"proj": "longlat", "datum": "WGS84"}, GOBI_GRID.width, GOBI_GRID.height,
@@ -276,7 +280,7 @@ class ProducerTests(TempRoot, unittest.TestCase):
         )
         names = {"ir039": "bt_swir_39", "wv062": "bt_wv_62", "ir086": "bt_tir_86", "ir104": "bt_tir_104", "ir123": "bt_tir_123"}
         reference_scene = xr.Dataset({names[channel_id]: xr.DataArray(plane, dims=("y", "x")) for channel_id, plane in scene.items()})
-        reference_scene.attrs.update(area=area, start_time=GOBI_SLOT.replace(tzinfo=None))
+        reference_scene.attrs.update(area=area, start_time=slot.replace(tzinfo=None))
         skin = ancillary.read_skin_temperature(resolved["skin"])
         skin_da = xr.DataArray(skin.values, dims=("latitude", "longitude"), coords={"latitude": skin.latitudes, "longitude": skin.longitudes})
         staged = ancillary.read_staged_emissivity(self.ancillary / "camel" / "gobi" / "202609.nc")
@@ -286,15 +290,43 @@ class ProducerTests(TempRoot, unittest.TestCase):
                 for name, field in staged.fields.items()
             }
         )
-        reference = run_debra(reference_scene, skin_da, emissivity, ABI_TUNED)
-        expected = split_window_gate(np.asarray(reference["cf_comb"].values), np.asarray(reference["dt1"].values), np.asarray(reference["dt2"].values))
+        zhouye = run_zhouye(reference_scene, skin_da, emissivity)
+        self.assertEqual(zhouye.attrs["scheme"], "zhouye")
+        cf_day = split_window_gate(np.asarray(zhouye["cf_day"].values), np.asarray(zhouye["dt1"].values), np.asarray(zhouye["dt2"].values))
+        expected = np.asarray(
+            blend_confidence(xr.DataArray(cf_day, dims=("y", "x")), zhouye["cf_trm"], zhouye["cf_ngt"], zhouye["b_ngt_trm"], zhouye["b_trm_day"]).values
+        )
+        debra = run_debra(reference_scene, skin_da, emissivity, ABI_TUNED)
+        self.assertEqual(debra.attrs["scheme"], "debra")
+        debra_gated = split_window_gate(np.asarray(debra["cf_comb"].values), np.asarray(debra["dt1"].values), np.asarray(debra["dt2"].values))
         _, covered = ancillary.emissivity_on_grid([staged], GOBI_GRID)
+        return expected, debra_gated, covered, np.asarray(zhouye["zenith_deg"].values)
+
+    @requires_shachen
+    def test_the_chain_is_shachen_s_run_debra_and_run_zhouye_cell_for_cell(self) -> None:
+        """Composed here from the per-equation modules with this module's
+        regrid, zenith and land mask, the two confidences equal what
+        ``shachen.pipeline.run_debra`` (gated) and ``run_zhouye`` (its day
+        factor gated and the blend redone through shachen's Eq. 22)
+        compute on the same plate carrée area with their own — so nothing
+        in the composition is this module's arithmetic but the three it
+        takes over and the gate. At this slot the grid is in the night,
+        where the two part: ZHOUYE's plume reads higher than DEBRA's."""
+        scene = synthetic_scene(GOBI_GRID)
+        resolved = DEBRA.ancillary_for(HIMAWARI, GOBI_SLOT, self.ancillary)
+        produced = DEBRA.run(HIMAWARI, scene, resolved, slot=GOBI_SLOT, grid=GOBI_GRID)
+        self.assertEqual(tuple(produced), ("dustcf", "zhouye"))
+        actual, dustcf = produced["zhouye"], produced["dustcf"]
+        expected, debra_gated, covered, zenith = self._references(scene, GOBI_SLOT, resolved)
+        self.assertGreater(float(zenith.min()), 90.0)
         # Inside the staged box both are defined and agree; the Gobi is
         # land, so outside it this producer says nothing while shachen,
         # taking a missing emissivity as unity, still answers.
         self.assertTrue(np.isfinite(actual[covered]).all())
         np.testing.assert_allclose(actual[covered], expected[covered], atol=1e-9)
+        np.testing.assert_allclose(dustcf[covered], debra_gated[covered], atol=1e-9)
         self.assertTrue(np.isnan(actual[~covered]).all())
+        self.assertTrue(np.isnan(dustcf[~covered]).all())
         self.assertTrue(np.isfinite(expected[~covered]).any())
         # And the plume reads as dust, the quiet ground as nothing.
         plume = actual[GOBI_GRID.height * 2 // 5 : GOBI_GRID.height * 3 // 5, GOBI_GRID.width * 2 // 5 : GOBI_GRID.width * 3 // 5]
@@ -302,6 +334,31 @@ class ProducerTests(TempRoot, unittest.TestCase):
         self.assertLessEqual(float(np.nanmax(actual)), 1.0)
         quiet = actual[covered]
         self.assertGreater(float((quiet == 0.0).mean()), 0.7)
+        # By night the two schemes part: the same plume reads higher in
+        # ZHOUYE than in DEBRA.
+        debra_plume = dustcf[GOBI_GRID.height * 2 // 5 : GOBI_GRID.height * 3 // 5, GOBI_GRID.width * 2 // 5 : GOBI_GRID.width * 3 // 5]
+        self.assertGreater(float(np.nanmean(plume)), float(np.nanmean(debra_plume)))
+        self.assertFalse(np.allclose(actual[covered], dustcf[covered]))
+
+    @requires_shachen
+    def test_by_day_the_two_confidences_are_one(self) -> None:
+        """Below a solar zenith of 75° the Eq. 20 weight is 1 and ZHOUYE's
+        three hooks touch nothing, so ``zhouye`` is ``dustcf`` bit for
+        bit — DEBRA's ABI retune with the split-window gate — and both
+        equal shachen's pipelines to the regrid's rounding."""
+        scene = synthetic_scene(GOBI_GRID)
+        resolved = DEBRA.ancillary_for(HIMAWARI, GOBI_DAY_SLOT, self.ancillary)
+        produced = DEBRA.run(HIMAWARI, scene, resolved, slot=GOBI_DAY_SLOT, grid=GOBI_GRID)
+        actual, dustcf = produced["zhouye"], produced["dustcf"]
+        expected, debra_gated, covered, zenith = self._references(scene, GOBI_DAY_SLOT, resolved)
+        self.assertLess(float(zenith.max()), 75.0)
+        np.testing.assert_array_equal(actual[covered], dustcf[covered])
+        np.testing.assert_allclose(actual[covered], expected[covered], atol=1e-9)
+        np.testing.assert_allclose(dustcf[covered], debra_gated[covered], atol=1e-9)
+        # The synthetic plume is a faint one on the day interval (its
+        # floor at 0.40 of the sum): above the ramp's noise floor, not high.
+        plume = actual[GOBI_GRID.height * 2 // 5 : GOBI_GRID.height * 3 // 5, GOBI_GRID.width * 2 // 5 : GOBI_GRID.width * 3 // 5]
+        self.assertGreater(float(np.nanmean(plume)), 0.1)
 
     @requires_shachen
     def test_the_confidence_is_defined_over_water_and_staged_land_and_gated(self) -> None:
@@ -384,7 +441,7 @@ class WindowTests(TempRoot, unittest.TestCase):
     @requires_shachen
     def test_a_slot_s_confidence_is_composed_once_against_the_staged_ancillary(self) -> None:
         window = self.fetch_window()
-        self.assertEqual(list(window.series)[-1], "dustcf")
+        self.assertEqual(list(window.series)[-2:], ["dustcf", "zhouye"])
         frame = window.slots[0].frames["dustcf"]
         self.assertEqual(frame, self.root / "himawari-frames" / "dustcf" / "dustcf_20260917030000.tif")
         sidecar = json.loads(assemble.packing_path(frame).read_text(encoding="utf-8"))

@@ -60,6 +60,8 @@ from .variables import (
     DUST_CF_BUNDLE_ID,
     DUST_CF_COMPONENT_IDS,
     DUST_RGB_BUNDLE_ID,
+    ZHOUYE_BUNDLE_ID,
+    ZHOUYE_COMPONENT_IDS,
     DUST_RGB_COMPONENT_IDS,
     CAT_LEVELS_HPA,
     ISOBARIC_LEVELS_HPA,
@@ -122,11 +124,12 @@ DERIVED_VECTORS: dict[str, tuple[str, ...]] = {
 # channels in the *fetch stage* (xuebuild/satellite/producers.py), read off
 # the observation series as more variables and written as one bundle in
 # this order — the converter never derives them. The Dust RGB's three guns,
-# then the DEBRA confidence, a produced bundle of one variable. Mirrored in
-# encode/convert.rs.
+# then the DEBRA confidence and the ZHOUYE confidence, two produced bundles
+# of one variable each. Mirrored in encode/convert.rs.
 COMPOSITE_BUNDLES: dict[str, tuple[str, ...]] = {
     DUST_RGB_BUNDLE_ID: DUST_RGB_COMPONENT_IDS,
     DUST_CF_BUNDLE_ID: DUST_CF_COMPONENT_IDS,
+    ZHOUYE_BUNDLE_ID: ZHOUYE_COMPONENT_IDS,
 }
 
 

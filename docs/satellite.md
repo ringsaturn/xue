@@ -87,14 +87,14 @@ infrared window at 10.4 µm; the exact central wave number is in the
 `sources.py` says which a source publishes (`bundle_scalar_ids`) and
 carries their `band` blocks (`bands`, from `Platform.bands`). The three
 NOAA-hosted sources fetch six channels and publish `ir104`, the Dust RGB
-and the DEBRA confidence; Meteosat fetches three and publishes the first
-two (§"The DEBRA confidence" says why not the third).
+and the dust confidence; Meteosat fetches three and publishes the first
+two (§"The dust confidences" says why not the third).
 
 | id | wavelength | AHI | ABI | FCI | quantity | codebook |
 |---|---|---|---|---|---|---|
 | `ir104` | 10.4 µm (FCI 10.5) | 13 | 13 | 14 (IR 10.5) | brightness temperature, K (the shell reads it in °C) | 180–331.8 at 0.6 |
-| `ir086`, `ir112`, `ir123` | 8.6, 11.2, 12.3 µm (FCI 8.7, —, 12.3) | 11, 14, 15 | 11, 14, 15 | 12, —, 15 | brightness temperature; fetched for the Dust RGB (and, but for 11.2 µm, for DEBRA), registered variables, not published by any source | 180–331.8 at 0.6 |
-| `ir039`, `wv062` | 3.9, 6.2 µm | 7, 8 | 7, 8 | 9, 10 | brightness temperature; fetched for DEBRA's cloud mask, registered variables, not published by any source | 180–331.8 at 0.6 |
+| `ir086`, `ir112`, `ir123` | 8.6, 11.2, 12.3 µm (FCI 8.7, —, 12.3) | 11, 14, 15 | 11, 14, 15 | 12, —, 15 | brightness temperature; fetched for the Dust RGB (and, but for 11.2 µm, for the dust confidence), registered variables, not published by any source | 180–331.8 at 0.6 |
+| `ir039`, `wv062` | 3.9, 6.2 µm | 7, 8 | 7, 8 | 9, 10 | brightness temperature; fetched for the dust confidence's cloud mask, registered variables, not published by any source | 180–331.8 at 0.6 |
 | `ir096`, `ir133` | 9.6, 13.3 µm | 12, 16 | 12, 16 | 13, 16 | brightness temperature | registered on the platform; not yet a variable |
 | `wv069`, `wv073` | 6.9, 7.3 µm | 9, 10 | 9, 10 | —, 11 | brightness temperature | same |
 | `vis064`, `nir086`, `nir161`, … | 0.64, 0.86, 1.61 µm | 3, 4, 5 | 2, 3, 5 | 3, 4, 7 | reflectance | same |
@@ -161,18 +161,21 @@ f-th row and column from the origin, the poster's own sampling — because
 the half of a 3000 × 3000 disk is still twice a full GFS plane and a shell
 with a frame budget needs a rung it can hold.
 
-### The DEBRA confidence
+### The dust confidences
 
 `dustcf` is DEBRA (Miller et al. 2017, doi:10.1002/2017JD027365 — the
 Dynamic Enhancement Background Reduction Algorithm for dust), Eqs. 1–22
 as the `shachen` package implements them: an infrared cloud mask, three
 dust tests against a clear-sky background, and a confidence factor in
 0–1 blended across the terminator, which reads high where lofted mineral
-dust is likely and 0 where nothing suggests it. It is the second product
-of the producer seam (`DebraProducer`), computed per slot in the fetch
-stage like the guns, and it is what the operational DEBRA pipeline
-publishes as its enhanced picture, brought into these stores as one
-scalar field the shell paints with a ramp.
+dust is likely and 0 where nothing suggests it. `zhouye` is ZHOUYE (昼夜,
+"day and night"), the diurnally consistent scheme the same package
+builds on that chain (§"The ZHOUYE scheme" below): the same confidence
+by day, and at night a reading that stays at the day's level instead of
+fading. They are two products — two bundles of one variable each — from
+one pass of the producer seam (`DebraProducer`), computed per slot in
+the fetch stage like the guns and brought into these stores as scalar
+fields the shell paints with one ramp.
 
 | input | what it feeds |
 |---|---|
@@ -181,10 +184,35 @@ scalar field the shell paints with a ramp.
 | a skin temperature | CM1 and DT3 (how cold the window reads against the ground), and the Planck curve of the background |
 | an infrared emissivity | the background: `BT_bg = B⁻¹(ε · B(T_skin))` per window, whose differences are what DT1 and DT2 measure against |
 
+**The ZHOUYE scheme.** DEBRA's three confidence sums (Eqs. 16–18, day,
+terminator and night) are normalized (Eq. 19) and blended by solar
+zenith (Eqs. 20–22). ZHOUYE (`shachen.constants.ZHOUYE`,
+`shachen.pipeline.run_zhouye`) changes three things, all in the
+terminator and night sums and none in the daytime one: DT2 is read on a
+fixed (−0.5, +1.5) K interval of the 8.6 − 10.4 µm difference instead of
+Eq. 14's dynamic one, so the clear-sky side of the signal that Eq. 14
+clips away — where most of the night-time ranking lives — is kept; the
+thermal-contrast test DT3 needs corroboration from a split-window test,
+so a cell lit by DT3 alone (mid-level cloud, or a skin-temperature
+error, far more often than dust) contributes nothing; and the two sums'
+Eq. 19 intervals are fitted so that lit dust reads at night and across
+the terminator as it does by day. The daytime sum and its interval are
+DEBRA's ABI retune, on every imager. Below a solar zenith of 75° the
+Eq. 20 weight is 1 and the two confidences are one, bit for bit; the
+scheme is a night-side extension that blends into DEBRA across 75–90°,
+built so that one dust reads one confidence around the clock — no
+fading at dusk, no brightening after dark. What it costs, on 30 no-dust
+days: the night false-alarm rate at confidence 0.2 doubles (0.0029 →
+0.0054); over quartz sand seas it is on the miss side. The numbers and
+the ground truth are shachen's, and the paper in preparation that
+describes them. The two are kept as separate products because they are
+different claims: `dustcf` is the published algorithm as retuned, with
+a known night; `zhouye` is a new scheme whose night is its own.
+
 The two ancillary fields are not what the algorithm was built against
 (MERRA-2 skin temperature, which lands weeks late, and the CAMEL
-climatology behind Earthdata credentials), so `ancillary.py` takes the
-stand-ins the operational pipeline settled on, in the same shape:
+climatology behind Earthdata credentials), so `ancillary.py` takes two
+stand-ins, in the same shape:
 
 - **Skin temperature** is GFS `TMP:surface`, the one record of NOAA's
   0.25° file nearest the slot's whole hour, located through the file's
@@ -196,22 +224,22 @@ stand-ins the operational pipeline settled on, in the same shape:
   of the same hour asks nothing. Read through GDAL with the unit left in
   kelvin (`GRIB_NORMALIZE_UNITS=NO`; GDAL would hand the field back in
   Celsius) and the raster shifted onto −180 … 180 as GDAL does itself.
-- **Emissivity** is the CAMEL monthly climatology (CAM5K30EM V003) as
-  the operational pipeline stages it on this bucket: one NetCDF per
-  region and operational month, already interpolated to the DEBRA band
-  centres (`emis_tir_86` … `emis_tir_123`), cropped to the region's box
-  with a degree of margin, named for the month it serves (the record
-  ends in 2023; the file's `source_month` says which year's same
-  calendar month it carries). `make pull-r2-ancillary` mirrors that
-  prefix whole into `data/raw/ancillary/camel/<region>/<YYYYMM>.nc`
-  (the rounds script does it before the first build under
-  `ANCILLARY=true`); nothing here touches Earthdata, and nothing writes
-  to the staging prefix. A region with no file for the slot's month is
-  served by its newest staged month with a warning — the product is a
-  climatology, and a region dropping out at a month's turn would be the
-  worse failure; a region with nothing staged is not a region; nothing
-  staged at all is an error, since DEBRA over water alone is not the
-  product.
+- **Emissivity** is the CAMEL monthly climatology (CAM5K30EM V003),
+  staged on this bucket by `xuebuild/satellite/staging.py` (§"Staging
+  the emissivity"): one NetCDF per region and operational month,
+  already interpolated to the DEBRA band centres (`emis_tir_86` …
+  `emis_tir_123`), cropped to the region's box with a degree of margin,
+  named for the month it serves (the record ends in 2023; the file's
+  `source_month` says which year's same calendar month it carries).
+  `make pull-r2-ancillary` mirrors that prefix whole into
+  `data/raw/ancillary/camel/<region>/<YYYYMM>.nc` (the rounds script
+  does it before the first build under `ANCILLARY=true`); a round
+  touches neither Earthdata nor the staging prefix. A region with no
+  file for the slot's month is served by its newest staged month with a
+  warning — the product is a climatology, and a region dropping out at
+  a month's turn would be the worse failure; a region with nothing
+  staged is not a region; nothing staged at all is an error, since the
+  confidence over water alone is not the product.
 
 Both are put on the target grid by one bilinear interpolation
 (`ancillary.regrid`) done in the grid's own copy of the world: a global
@@ -219,17 +247,22 @@ field is re-based column by column onto a grid that runs past 180° and
 wrapped (its first column repeated a turn later), a regional file is
 moved whole by the turn that lays it over the grid, and nothing is
 extrapolated. The chain is composed here from shachen's per-equation
-modules (`background_signals`, `cloud_mask`, `dust_tests`, `confidence`)
-rather than through `shachen.pipeline.run_debra`, because that entry
-point takes a pyresample area and does the regrid, the sun and the land
-mask itself; on these grids those three are this module's (the regrid
-above, pyorbital's zenith on the grid's own coordinates, the land mask on
-wrapped ones), and `tests/test_debra.py` holds the composition equal to
-`run_debra` on a plate carrée area cell for cell. The constants are
-shachen's ABI retune on every imager (the Eq. 19 daytime floor at 0.40
-rather than the printed 0.25, which keeps clear-sky DT3 noise over
-vegetation from colouring, and the night branch on an interval of its
-own), as the operational pipeline runs both AHI and ABI.
+modules (`background_signals`, `cloud_mask`, `dust_tests`, `confidence`,
+`blend_confidence`) rather than through `shachen.pipeline.run_debra` /
+`run_zhouye`, because those entry points take a pyresample area and do
+the regrid, the sun and the land mask themselves; on these grids those
+three are this module's (the regrid above, pyorbital's zenith on the
+grid's own coordinates, the land mask on wrapped ones), and
+`tests/test_debra.py` holds the composition equal to both pipelines on
+a plate carrée area cell for cell. The background, the mask and the
+tests are computed once per slot and both confidences read them (the
+ZHOUYE dust-test constants differ from the ABI retune's only by the
+second DT2 reading they add, which DEBRA's sums are not shown); the
+constants are shachen's ABI retune on every imager (the Eq. 19 daytime
+floor at 0.40 rather than the printed 0.25, which keeps clear-sky DT3
+noise over vegetation from colouring, and the night branch on an
+interval of its own), as the former operational pipeline ran both AHI
+and ABI.
 
 **Where the confidence is defined.** A cell is computed wherever every
 input channel and the skin temperature have data and the ground is
@@ -238,47 +271,82 @@ needs no climatology there — or inside the extent of a staged CAMEL
 file. Land no staged file reaches is no data (code 0), never a
 confidence computed against an emissivity that was never read: staging a
 region is what extends the product over it, and a whole-disk staging
-would fill the disk with no code change. Today the staged regions are the
-operational pipeline's three — the Gobi and Taklamakan through the North
-China Plain to Japan (Himawari), the Chihuahuan Desert and the US
-Southwest (GOES-East and GOES-West both see it), and the Saharan
-transport corridor from the Cape Verde longitudes to the Caribbean and
-the Gulf (GOES-East) — plus every sea the three disks cover. Meteosat
-publishes no confidence: no staged region lies on its disk, the Sahara
-itself is exactly what a climatology is for, and its window is hourly
-besides.
+would fill the disk with no code change. Today the staged regions are
+three — the Gobi and Taklamakan through the North China Plain to Japan
+(Himawari), the Chihuahuan Desert and the US Southwest (GOES-East and
+GOES-West both see it), and the Saharan transport corridor from the
+Cape Verde longitudes to the Caribbean and the Gulf (GOES-East) — plus
+every sea the three disks cover. Meteosat publishes no confidence: no
+staged region lies on its disk, the Sahara itself is exactly what a
+climatology is for, and its window is hourly besides.
 
-**The gate.** What is published is `cf_comb` with the operational
-pipeline's split-window gate applied (`producers.split_window_gate`): a
-cell where neither split-window test responded (`dt1 = dt2 = 0`) reads
-0, since cloud has no split-window signal and dust nearly always does.
-The failure it removes is mid-level cloud too warm for CM1 and too thin
-for CM3, which the thermal-contrast test alone reads as dust; on 42 dust
+**The gate.** What is published as `dustcf` is `cf_comb` with the
+split-window gate applied (`producers.split_window_gate`): a cell where
+neither split-window test responded (`dt1 = dt2 = 0`) reads 0, since
+cloud has no split-window signal and dust nearly always does. The
+failure it removes is mid-level cloud too warm for CM1 and too thin for
+CM3, which the thermal-contrast test alone reads as dust; on 42 dust
 days of East Asian station data it costs a daytime detection rate at
 confidence 0.1 of 0.411 → 0.373 for a false-alarm ratio of 0.422 → 0.23.
-It is not part of DEBRA (Eqs. 1–29) and not in shachen. The pipeline's
-second gate, on the 0.64 µm reflectance, is not applied: it would cost a
+It is not part of DEBRA (Eqs. 1–29) and not in shachen. `zhouye` takes
+the same gate on its normalized day factor alone, then shachen's Eq. 22
+blend again (Eq. 19 maps a zero sum to 0 on the day interval, so gating
+the factor is gating the sum): ZHOUYE's own corroboration rule already
+acts on the terminator and night sums with its DT2 reading, and gating
+the blended ZHOUYE on Eq. 14's DT2 — which is 0 over nearly all clear
+ground at night — would erase the night it was built for. A second gate
+on the 0.64 µm reflectance is not applied to either: it would cost a
 0.5 km visible channel per slot for a false-alarm ratio of 0.23 → 0.21,
-and there is no reflectance at night, where the split-window gate is
-the only gate anyway.
+and there is no reflectance at night.
 
-The result is one bundle of one variable, `dustcf`, on the channel's
-axis and grid: a *composite* bundle in the encoders' terms
-(`binconvert.COMPOSITE_BUNDLES`, `SourceSpec.bundle_composite_ids`) —
-produced in the fetch stage, read off the series with its producer stamp,
-never derived by a converter — whose one component is the bundle itself.
-Its identity is the guns' pattern: a local-use parameter, discipline 3,
-category 192, **number 4**, on surface 8, meaningful only with the
-`producer` block beside it (`{"id": "shachen", "version": …}`, the id
-registered on the variable, the version whatever ran), no band. Its
-codebook is the guns' (linear, offset −0.004, step 0.004, codes 0–251,
-code 0 no data, 0.0 at code 1, 1.0 at code 251), the same ladder, no
-poster and no video. A produced frame's sidecar names, beside the
+The result is two bundles of one variable each, `dustcf` and `zhouye`,
+on the channel's axis and grid: *composite* bundles in the encoders'
+terms (`binconvert.COMPOSITE_BUNDLES`, `SourceSpec.bundle_composite_ids`)
+— produced in the fetch stage, read off the series with their producer
+stamp, never derived by a converter — whose one component is the bundle
+itself.
+Their identity is the guns' pattern: a local-use parameter, discipline
+3, category 192, **number 4** for `dustcf` and **number 6** for
+`zhouye`, on surface 8, meaningful only with the `producer` block beside
+it (`{"id": "shachen", "version": …}`, the id registered on the
+variable, the version whatever ran), no band. Their codebook is the
+guns' (linear, offset −0.004, step 0.004, codes 0–251, code 0 no data,
+0.0 at code 1, 1.0 at code 251), the same ladder, no poster and no
+video. A produced frame's sidecar names, beside the
 producer and the input frames, the ancillary it was computed against
 (the staged directory and the GFS record by name, whose name is the
 cycle and forecast hour). Like every produced frame it is composed once:
 a slot's confidence is the first computation's, and a GFS cycle landing
 later for the same hour does not recompute a cached slot.
+
+### Staging the emissivity
+
+`xuebuild/satellite/staging.py` writes the CAMEL months §"The dust
+confidence" reads, and `stage-ancillary.yml` is the one job that holds
+Earthdata credentials: at 03:00 UTC on the 25th it stages the month in
+progress and the next for every region in the module's table (the 1st
+is the retry), and pushes them with `make push-r2-ancillary` (a
+`--size-only` sync, so an unchanged file costs nothing). A month is cut
+from the granule `shachen.io.emissivity.fetch_emissivity` serves for it
+— the record ends in 2023-12, so the same calendar month of the newest
+year that has one, never a different month — interpolated to the DEBRA
+band centres by `load_band_emissivity`, sorted ascending on both
+coordinates (CAMEL stores latitude north to south, and a slice against
+a descending coordinate selects nothing, silently), cropped to the
+region's box plus `MARGIN_DEG` (1°, so the bilinear regrid never
+extrapolates at the box's edge), cast back to float32 and written
+zlib-compressed with the attributes the reader keys on (`region`,
+`month`, `source_month`, `source`, `bbox`, `margin_deg`). An empty crop
+is an error; an existing file is overwritten, since restaging is how a
+bad subset is fixed. The regions are a table (`gobi`, `swus`,
+`atlantic`: a key, a box, a description) rather than a derivation from
+the disks, because staging a region is a decision about where the
+product is defined over land; a new region is a row and a dispatch.
+Locally, `make stage-ancillary MONTHS="2026-11" REGIONS="gobi"` does
+the same against your own `~/.netrc` (the `staging` dependency group;
+no GDAL), and `tests/test_staging.py` holds the crop, the month
+resolution and a staged file's read-back through `ancillary.py` on a
+synthetic granule, never the network.
 
 ## Metadata
 
@@ -471,7 +539,7 @@ resample the next frame differently, and the cached older frames stay as
 they are, each under its own `?v=` once published. A producer's ancillary
 fields live beside the frames under `data/raw/ancillary/` (the staged
 CAMEL months, mirrored from the bucket by `make pull-r2-ancillary`; the
-GFS records the DEBRA producer fetches per slot, never mirrored), which
+GFS records the dust confidence producer fetches per slot, never mirrored), which
 `_fetch_satellite_run` hands to `fetch_window` as the ancillary root.
 
 ### The series
@@ -579,14 +647,21 @@ takes (`DUST_RGB` for AHI and FCI, `DUST_RGB_ABI` for ABI — the rule
 shachen applies by satpy reader, made here by `Platform.instrument`), then
 marks every cell any input lacked as no data in all three guns.
 
-`DebraProducer` is the second (§"The DEBRA confidence"): `id` `shachen`,
-`bundle_id` `dustcf`, inputs `ir039`, `wv062`, `ir086`, `ir104`, `ir123`
-(all five required; no stand-in), output `dustcf`, ancillaries `camel`
-(the staged months' directory) and `skin` (the slot's GFS record, fetched
-by `ancillary_for` when not cached), `version` shachen's. `run` regrids
-the two fields, finds the sun and the ground, composes shachen's
-per-equation modules with the ABI retune, gates the result and leaves
-NaN wherever the confidence is not defined. `PRODUCERS` is keyed by the
+`DebraProducer` is the second (§"The dust confidences"): `id` `shachen`,
+`bundle_ids` `dustcf` and `zhouye` (`bundle_id` is the first, what the
+logs name it by), inputs `ir039`, `wv062`, `ir086`, `ir104`, `ir123`
+(all five required; no stand-in), outputs `dustcf` and `zhouye` in that
+order, ancillaries `camel` (the staged months' directory) and `skin`
+(the slot's GFS record, fetched by `ancillary_for` when not cached),
+`version` shachen's. `run` regrids the two fields, finds the sun and the
+ground, composes shachen's per-equation modules once, takes the DEBRA
+confidence gated and the ZHOUYE confidence with its day factor gated and
+re-blended, and leaves NaN wherever the confidence is not defined. A
+producer's outputs may be the components of more than one bundle:
+`PRODUCERS` lists it under each, the fetch runs it once for all of them
+(`dict.fromkeys` over the source's listed composites) and caches every
+output frame, so a source listing one of its bundles still composes
+both. `PRODUCERS` is keyed by the
 bundle produced; `SourceSpec.bundle_composite_ids` lists what a source
 publishes, and `_fetch_satellite_run` runs every listed producer whose
 channels the window fetches (asked for the Dust RGB's four alone, it
@@ -601,16 +676,16 @@ two consecutive scans in bands 7, 8, 11, 13, 14 and 15) and
 `tests/test_satellite.py` runs them through the whole stage — listing,
 completeness, download, mosaic, warp, cache, the producers (the Dust RGB
 held cell for cell to `shachen.dustrgb.dust_rgb` called directly),
-series, ingest, conversion on the production grid with both composite
-bundles, a crop past the antimeridian, a `--bundles` build that reads one
+series, ingest, conversion on the production grid with every composite
+bundle, a crop past the antimeridian, a `--bundles` build that reads one
 series alone — against a stand-in for the bucket, then through both
 encoders. `tests/fixtures/debra/` is two crops of a staged CAMEL month
 (the Gobi, land; a box of water south of Japan inside the tiles' grid)
 and four crops of one cached GFS record, and `tests/test_debra.py` holds
 the ancillary readers, the regrid across 180°, the GFS candidate walk and
 byte-range fetch against fakes, the composed chain equal to
-`shachen.pipeline.run_debra` on the same grid, the definition and gate
-rules, and the producer in the fetch stage (composed once, the sidecar
+`shachen.pipeline.run_debra` and `run_zhouye` on the same grid (and the
+two confidences one by day), the definition and gate rules, and the producer in the fetch stage (composed once, the sidecar
 naming its ancillary); the satellite and GOES suites stage the same
 fixtures under the raw root (`stage_ancillary`) so no test reaches the
 GFS bucket.

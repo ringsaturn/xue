@@ -18,6 +18,7 @@ from .variables import (
     AEROSOL_VARIABLE_IDS,
     CAT_LEVELS_HPA,
     DUST_CF_COMPONENT_IDS,
+    ZHOUYE_COMPONENT_IDS,
     DUST_RGB_COMPONENT_IDS,
     ISOBARIC_LEVELS_HPA,
     OCEAN_VARIABLE_IDS,
@@ -313,6 +314,8 @@ DUST_RGB_GUN = TemperatureCodebook(minimum=-0.004, maximum=1.0, step=0.004, name
 # The DEBRA confidence is a number in 0–1 too, and takes the guns' codebook
 # for the same reasons: code 0 is "no data", 0.0 confidence is code 1.
 DUST_CF = TemperatureCodebook(minimum=-0.004, maximum=1.0, step=0.004, name="dustcf")
+# The ZHOUYE confidence is the same number on the same scale.
+ZHOUYE = TemperatureCodebook(minimum=-0.004, maximum=1.0, step=0.004, name="zhouye")
 # The aerosol fields, three log1p codebooks. Their interesting range spans
 # orders of magnitude the way a rain rate's does — a clear sky reads an
 # optical depth of 0.05, a dust plume 2, and a linear step fine enough for
@@ -361,13 +364,15 @@ QUALITY_SATELLITE = {
     **{channel_id: _brightness_temperature(channel_id)[0] for channel_id in SATELLITE_CHANNEL_IDS},
     **{gun_id: DUST_RGB_GUN for gun_id in DUST_RGB_COMPONENT_IDS},
     **{variable_id: DUST_CF for variable_id in DUST_CF_COMPONENT_IDS},
+    **{variable_id: ZHOUYE for variable_id in ZHOUYE_COMPONENT_IDS},
 }
 COMPACT_SATELLITE = {
     **{channel_id: _brightness_temperature(channel_id)[1] for channel_id in SATELLITE_CHANNEL_IDS},
     **{gun_id: DUST_RGB_GUN for gun_id in DUST_RGB_COMPONENT_IDS},
     **{variable_id: DUST_CF for variable_id in DUST_CF_COMPONENT_IDS},
+    **{variable_id: ZHOUYE for variable_id in ZHOUYE_COMPONENT_IDS},
 }
-assert tuple(QUALITY_SATELLITE) == SATELLITE_CHANNEL_IDS + DUST_RGB_COMPONENT_IDS + DUST_CF_COMPONENT_IDS
+assert tuple(QUALITY_SATELLITE) == SATELLITE_CHANNEL_IDS + DUST_RGB_COMPONENT_IDS + DUST_CF_COMPONENT_IDS + ZHOUYE_COMPONENT_IDS
 QUALITY_OCEAN = {
     "tmpsfc": QUALITY_SURFACE_TEMPERATURE,
     "icec": QUALITY_ICE_COVER,
