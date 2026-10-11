@@ -1189,7 +1189,12 @@ pub const SOURCES: &[SourceSpec] = &[
         steps: &[],
         long_cycles: &[],
         long_cycle_steps: &[],
-        input_variable_ids: &["ir039", "wv062", "ir086", "ir104", "ir112", "ir123"],
+        // The six infrared windows first (the first is the one a listing
+        // walks), then the four visible and near-infrared bands the true
+        // colour composite reads (AHI bands 1–4).
+        input_variable_ids: &[
+            "ir039", "wv062", "ir086", "ir104", "ir112", "ir123", "vis047", "vis051", "vis064", "nir086",
+        ],
         companion_files: &[],
         accumulated_precipitation: false,
         averaged_precipitation: false,
@@ -1198,11 +1203,12 @@ pub const SOURCES: &[SourceSpec] = &[
         first_hour: 0,
         optional_at_analysis: &[],
         statistical_processes: &[],
-        // The six infrared windows fetched (AHI bands 7, 8, 11, 13, 14, 15),
-        // each with its band block; the central wave numbers are
-        // round(1e6 / µm) of the AHI's central wavelengths (3.8853, 6.2429,
-        // 8.5926, 10.4073, 11.2395, 12.3806 µm), as `Platform::band`
-        // computes them.
+        // The six infrared windows fetched (AHI bands 7, 8, 11, 13, 14, 15)
+        // and the four visible and near-infrared bands (1, 2, 3, 4), each
+        // with its band block; the central wave numbers are round(1e6 / µm)
+        // of the AHI's central wavelengths (3.8853, 6.2429, 8.5926, 10.4073,
+        // 11.2395, 12.3806; 0.47063, 0.51, 0.63914, 0.8567 µm), as
+        // `Platform::band` computes them.
         bands: &[
             (
                 "ir039",
@@ -1228,14 +1234,31 @@ pub const SOURCES: &[SourceSpec] = &[
                 "ir123",
                 SatelliteBand { satellite_series: 0, satellite_number: 174, instrument_type: 297, central_wavenumber: 80772 },
             ),
+            (
+                "vis047",
+                SatelliteBand { satellite_series: 0, satellite_number: 174, instrument_type: 297, central_wavenumber: 2124811 },
+            ),
+            (
+                "vis051",
+                SatelliteBand { satellite_series: 0, satellite_number: 174, instrument_type: 297, central_wavenumber: 1960784 },
+            ),
+            (
+                "vis064",
+                SatelliteBand { satellite_series: 0, satellite_number: 174, instrument_type: 297, central_wavenumber: 1564602 },
+            ),
+            (
+                "nir086",
+                SatelliteBand { satellite_series: 0, satellite_number: 174, instrument_type: 297, central_wavenumber: 1167270 },
+            ),
         ],
         bundle_scalar_ids: &["ir104"],
         core_bundle_ids: &["ir104"],
         bundle_vector_ids: &[],
         // The Dust RGB, composed per slot in the fetch stage from four of
-        // the channels, and the DEBRA confidence from five, each read off
-        // the series like any channel.
-        bundle_composite_ids: &["dustrgb", "dustcf", "zhouye"],
+        // the windows, the DEBRA and ZHOUYE confidences from five, and the
+        // true colour from the four visible and near-infrared bands, each
+        // read off the series like any channel.
+        bundle_composite_ids: &["dustrgb", "dustcf", "zhouye", "truecolor"],
         bundle_volume_ids: &[],
         // The platform's region at 0.04°: 120° x 120°.
         production_grid: (3000, 3000),
@@ -1257,9 +1280,10 @@ pub const SOURCES: &[SourceSpec] = &[
     // channel of each ten-minute full-disk scan as one calibrated netCDF
     // on the geostationary projection (sweep x), read by the same Python
     // stage through `CMIPFReader`. Each source is the himawari one on its
-    // own disk: the same four windows fetched, ir104 and the Dust RGB
-    // published (the GOES-R Quick Guide's ABI stretches, picked by the
-    // producer by instrument), the same grid step and window. The East
+    // own disk: the same six windows and the three ABI visible bands
+    // fetched; ir104, the Dust RGB (the GOES-R Quick Guide's ABI stretches,
+    // picked by the producer by instrument), the confidences and the true
+    // colour published, the same grid step and window. The East
     // disk sits on negative longitudes (−135.2 … −15.2); the West disk
     // crosses the antimeridian and is spelled 163 … 283, the shape
     // Himawari's grid already takes. Mirrors `xuebuild/sources.py`.
@@ -1271,7 +1295,10 @@ pub const SOURCES: &[SourceSpec] = &[
         steps: &[],
         long_cycles: &[],
         long_cycle_steps: &[],
-        input_variable_ids: &["ir039", "wv062", "ir086", "ir104", "ir112", "ir123"],
+        // The six windows, then the three ABI bands the true colour
+        // composite reads (channels 1–3; the ABI has no green band, so the
+        // producer synthesizes one).
+        input_variable_ids: &["ir039", "wv062", "ir086", "ir104", "ir112", "ir123", "vis047", "vis064", "nir086"],
         companion_files: &[],
         accumulated_precipitation: false,
         averaged_precipitation: false,
@@ -1281,7 +1308,8 @@ pub const SOURCES: &[SourceSpec] = &[
         optional_at_analysis: &[],
         statistical_processes: &[],
         // ABI channels 7, 8, 11, 13, 14, 15 at 3.90, 6.19, 8.50, 10.35,
-        // 11.2, 12.3 µm; WMO C-5 273, C-8 617.
+        // 11.2, 12.3 µm and channels 1, 2, 3 at 0.47, 0.64, 0.865 µm; WMO
+        // C-5 273, C-8 617.
         bands: &[
             (
                 "ir039",
@@ -1307,11 +1335,23 @@ pub const SOURCES: &[SourceSpec] = &[
                 "ir123",
                 SatelliteBand { satellite_series: 0, satellite_number: 273, instrument_type: 617, central_wavenumber: 81301 },
             ),
+            (
+                "vis047",
+                SatelliteBand { satellite_series: 0, satellite_number: 273, instrument_type: 617, central_wavenumber: 2127660 },
+            ),
+            (
+                "vis064",
+                SatelliteBand { satellite_series: 0, satellite_number: 273, instrument_type: 617, central_wavenumber: 1562500 },
+            ),
+            (
+                "nir086",
+                SatelliteBand { satellite_series: 0, satellite_number: 273, instrument_type: 617, central_wavenumber: 1156069 },
+            ),
         ],
         bundle_scalar_ids: &["ir104"],
         core_bundle_ids: &["ir104"],
         bundle_vector_ids: &[],
-        bundle_composite_ids: &["dustrgb", "dustcf", "zhouye"],
+        bundle_composite_ids: &["dustrgb", "dustcf", "zhouye", "truecolor"],
         bundle_volume_ids: &[],
         production_grid: (3000, 3000),
         tile: (64, 64),
@@ -1333,7 +1373,10 @@ pub const SOURCES: &[SourceSpec] = &[
         steps: &[],
         long_cycles: &[],
         long_cycle_steps: &[],
-        input_variable_ids: &["ir039", "wv062", "ir086", "ir104", "ir112", "ir123"],
+        // The six windows, then the three ABI bands the true colour
+        // composite reads (channels 1–3; the ABI has no green band, so the
+        // producer synthesizes one).
+        input_variable_ids: &["ir039", "wv062", "ir086", "ir104", "ir112", "ir123", "vis047", "vis064", "nir086"],
         companion_files: &[],
         accumulated_precipitation: false,
         averaged_precipitation: false,
@@ -1343,7 +1386,8 @@ pub const SOURCES: &[SourceSpec] = &[
         optional_at_analysis: &[],
         statistical_processes: &[],
         // ABI channels 7, 8, 11, 13, 14, 15 at 3.90, 6.19, 8.50, 10.35,
-        // 11.2, 12.3 µm; WMO C-5 272, C-8 617.
+        // 11.2, 12.3 µm and channels 1, 2, 3 at 0.47, 0.64, 0.865 µm; WMO
+        // C-5 272, C-8 617.
         bands: &[
             (
                 "ir039",
@@ -1369,11 +1413,23 @@ pub const SOURCES: &[SourceSpec] = &[
                 "ir123",
                 SatelliteBand { satellite_series: 0, satellite_number: 272, instrument_type: 617, central_wavenumber: 81301 },
             ),
+            (
+                "vis047",
+                SatelliteBand { satellite_series: 0, satellite_number: 272, instrument_type: 617, central_wavenumber: 2127660 },
+            ),
+            (
+                "vis064",
+                SatelliteBand { satellite_series: 0, satellite_number: 272, instrument_type: 617, central_wavenumber: 1562500 },
+            ),
+            (
+                "nir086",
+                SatelliteBand { satellite_series: 0, satellite_number: 272, instrument_type: 617, central_wavenumber: 1156069 },
+            ),
         ],
         bundle_scalar_ids: &["ir104"],
         core_bundle_ids: &["ir104"],
         bundle_vector_ids: &[],
-        bundle_composite_ids: &["dustrgb", "dustcf", "zhouye"],
+        bundle_composite_ids: &["dustrgb", "dustcf", "zhouye", "truecolor"],
         bundle_volume_ids: &[],
         production_grid: (3000, 3000),
         tile: (64, 64),
@@ -1546,17 +1602,22 @@ mod tests {
         assert_eq!(radar.core_bundle_ids, &["cref"]);
         assert_eq!(jma.cadence_seconds, Some(300));
         assert_eq!(jma.core_bundle_ids, &["prate"]);
-        // The three satellite disks are the same shape on their own grids.
+        // The three satellite disks are the same shape on their own grids:
+        // the same six windows, the same bundles; the ABI has no 0.51 µm
+        // band, so the GOES disks fetch three visible bands to the AHI's
+        // four.
         let himawari = source_spec("himawari").expect("himawari");
+        assert_eq!(himawari.bands.len(), 10);
         for (model, number) in [("goeseast", 273), ("goeswest", 272)] {
             let source = source_spec(model).expect(model);
             assert!(source.series_file && source.fetched() && source.live(), "{model}");
-            assert_eq!(source.input_variable_ids, himawari.input_variable_ids, "{model}");
+            assert_eq!(&source.input_variable_ids[..6], &himawari.input_variable_ids[..6], "{model}");
+            assert_eq!(&source.input_variable_ids[6..], &["vis047", "vis064", "nir086"], "{model}");
             assert_eq!(source.bundle_scalar_ids, himawari.bundle_scalar_ids, "{model}");
             assert_eq!(source.bundle_composite_ids, himawari.bundle_composite_ids, "{model}");
             assert_eq!(source.production_grid, himawari.production_grid, "{model}");
             assert_eq!(source.cadence_seconds, Some(600), "{model}");
-            assert_eq!(source.bands.len(), 6, "{model}");
+            assert_eq!(source.bands.len(), 9, "{model}");
             for (_, band) in source.bands {
                 assert_eq!((band.satellite_number, band.instrument_type), (number, 617), "{model}");
             }

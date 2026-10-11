@@ -289,16 +289,25 @@ pub const OCEAN_VARIABLE_IDS: &[&str] = &["tmpsfc", "icec", "icetk", "htsgw", "p
 /// The two components of the derived wave vector bundle, in the same
 /// fixture. Mirrors `WAVE_VECTOR_COMPONENT_IDS` in `xuebuild/variables.py`.
 pub const WAVE_VECTOR_COMPONENT_IDS: [&str; 2] = ["uwave", "vwave"];
-/// The satellite channels, the composite guns and the confidence, held to
+/// The satellite channels, the composite guns and the confidences, held to
 /// the Python encoder by `tests/fixtures/satellite-registry.json`. The
 /// channels are what a platform's imager measures (a `band` block each
-/// when published); the guns are what the Dust RGB producer derives from
-/// four of them, the three variables of the `dustrgb` bundle in bundle
-/// order. Mirror `SATELLITE_CHANNEL_IDS`, `DUST_RGB_BUNDLE_ID`,
-/// `DUST_RGB_COMPONENT_IDS`, `DUST_CF_BUNDLE_ID`, `DUST_CF_COMPONENT_IDS`,
-/// `ZHOUYE_BUNDLE_ID`, `ZHOUYE_COMPONENT_IDS` and `SATELLITE_VARIABLE_IDS`
-/// in `xuebuild/variables.py`.
-pub const SATELLITE_CHANNEL_IDS: &[&str] = &["ir039", "wv062", "ir086", "ir104", "ir112", "ir123"];
+/// when published): six infrared windows, which every source fetches
+/// first, then the four visible and near-infrared bands the true colour
+/// composite reads; the guns are what the Dust RGB producer derives from
+/// four of the windows, the three variables of the `dustrgb` bundle in
+/// bundle order. Mirror `SATELLITE_INFRARED_IDS`,
+/// `SATELLITE_REFLECTANCE_IDS`, `SATELLITE_CHANNEL_IDS`,
+/// `DUST_RGB_BUNDLE_ID`, `DUST_RGB_COMPONENT_IDS`, `DUST_CF_BUNDLE_ID`,
+/// `DUST_CF_COMPONENT_IDS`, `ZHOUYE_BUNDLE_ID`, `ZHOUYE_COMPONENT_IDS`,
+/// `TRUE_COLOR_BUNDLE_ID`, `TRUE_COLOR_COMPONENT_IDS` and
+/// `SATELLITE_VARIABLE_IDS` in `xuebuild/variables.py`.
+pub const SATELLITE_INFRARED_IDS: &[&str] = &["ir039", "wv062", "ir086", "ir104", "ir112", "ir123"];
+pub const SATELLITE_REFLECTANCE_IDS: &[&str] = &["vis047", "vis051", "vis064", "nir086"];
+#[allow(dead_code)] // read by the registry test; the quantizer dispatches on the two halves
+pub const SATELLITE_CHANNEL_IDS: &[&str] = &[
+    "ir039", "wv062", "ir086", "ir104", "ir112", "ir123", "vis047", "vis051", "vis064", "nir086",
+];
 pub const DUST_RGB_BUNDLE_ID: &str = "dustrgb";
 pub const DUST_RGB_COMPONENT_IDS: [&str; 3] = ["dustr", "dustg", "dustb"];
 /// The DEBRA confidence is a composite bundle of one variable: produced in
@@ -310,9 +319,15 @@ pub const DUST_CF_COMPONENT_IDS: [&str; 1] = ["dustcf"];
 /// bundle, composed in the same pass as the DEBRA one.
 pub const ZHOUYE_BUNDLE_ID: &str = "zhouye";
 pub const ZHOUYE_COMPONENT_IDS: [&str; 1] = ["zhouye"];
+/// The true colour composite: three guns produced in the fetch stage from
+/// the reflectance channels by the Python pipeline's own recipe, in bundle
+/// order.
+pub const TRUE_COLOR_BUNDLE_ID: &str = "truecolor";
+pub const TRUE_COLOR_COMPONENT_IDS: [&str; 3] = ["truer", "trueg", "trueb"];
 #[allow(dead_code)] // read by the registry test; the Python side keys its fixture on it
 pub const SATELLITE_VARIABLE_IDS: &[&str] = &[
-    "ir039", "wv062", "ir086", "ir104", "ir112", "ir123", "dustr", "dustg", "dustb", "dustcf", "zhouye",
+    "ir039", "wv062", "ir086", "ir104", "ir112", "ir123", "vis047", "vis051", "vis064", "nir086", "dustr", "dustg",
+    "dustb", "dustcf", "zhouye", "truer", "trueg", "trueb",
 ];
 
 /// The aerosol set, in the order GEFS-Aerosols publishes it: the six optical
@@ -1716,6 +1731,100 @@ pub const VARIABLES: &[VariableSpec] = &[
         producer_id: None,
         grib2_aerosol: None,
     },
+    // The visible and near-infrared channels the true colour composite
+    // reads: top-of-atmosphere bidirectional reflectance as the products
+    // deliver it (a reflectance factor, not yet divided by the cosine of
+    // the solar zenith; the producer does that), a number in 0–1 that a
+    // sunlit cloud takes a little past 1. GRIB2 has no reflectance
+    // parameter for an arbitrary band, so every one takes the
+    // satellite-image "scaled albedo" (discipline 3, category 0, number 1)
+    // on the nominal top of the atmosphere, the `band` block beside it
+    // saying which channel, the way the infrared windows share the
+    // brightness temperature parameter. Fetched for the composite,
+    // registered variables, published by no source; their codebook starts
+    // one step below zero so code 0 is the fill and a night side at 0.0
+    // stays a value. Mirror `vis047`, `vis051`, `vis064` and `nir086` in
+    // `xuebuild/variables.py`.
+    VariableSpec {
+        id: "vis047",
+        label: "Reflectance, 0.47 µm",
+        output_unit: "1",
+        value_range: (-0.01, 1.255),
+        grib_element: "",
+        open_meteo: "",
+        grib2_discipline: 3,
+        grib2_category: 0,
+        grib2_number: 1,
+        grib2_level_type: 8,
+        grib2_level_value: None,
+        grib2_statistical: None,
+        grib2_aliases: &[],
+        grib2_alternates: &[],
+        gdal_unit: "",
+        fill_values: &[],
+        producer_id: None,
+        grib2_aerosol: None,
+    },
+    VariableSpec {
+        id: "vis051",
+        label: "Reflectance, 0.51 µm",
+        output_unit: "1",
+        value_range: (-0.01, 1.255),
+        grib_element: "",
+        open_meteo: "",
+        grib2_discipline: 3,
+        grib2_category: 0,
+        grib2_number: 1,
+        grib2_level_type: 8,
+        grib2_level_value: None,
+        grib2_statistical: None,
+        grib2_aliases: &[],
+        grib2_alternates: &[],
+        gdal_unit: "",
+        fill_values: &[],
+        producer_id: None,
+        grib2_aerosol: None,
+    },
+    VariableSpec {
+        id: "vis064",
+        label: "Reflectance, 0.64 µm",
+        output_unit: "1",
+        value_range: (-0.01, 1.255),
+        grib_element: "",
+        open_meteo: "",
+        grib2_discipline: 3,
+        grib2_category: 0,
+        grib2_number: 1,
+        grib2_level_type: 8,
+        grib2_level_value: None,
+        grib2_statistical: None,
+        grib2_aliases: &[],
+        grib2_alternates: &[],
+        gdal_unit: "",
+        fill_values: &[],
+        producer_id: None,
+        grib2_aerosol: None,
+    },
+    VariableSpec {
+        id: "nir086",
+        label: "Reflectance, 0.86 µm",
+        output_unit: "1",
+        value_range: (-0.01, 1.255),
+        grib_element: "",
+        open_meteo: "",
+        grib2_discipline: 3,
+        grib2_category: 0,
+        grib2_number: 1,
+        grib2_level_type: 8,
+        grib2_level_value: None,
+        grib2_statistical: None,
+        grib2_aliases: &[],
+        grib2_alternates: &[],
+        gdal_unit: "",
+        fill_values: &[],
+        producer_id: None,
+        grib2_aerosol: None,
+    },
     // The classic Dust RGB, the three guns of one composite bundle,
     // `dustrgb`: red is the 12.3 − 10.4 µm split window, green 11.2 − 8.6 µm
     // with a gamma, blue the 10.4 µm window, each stretched to 0–1 by the
@@ -1851,6 +1960,78 @@ pub const VARIABLES: &[VariableSpec] = &[
         gdal_unit: "",
         fill_values: &[],
         producer_id: Some("shachen"),
+        grib2_aerosol: None,
+    },
+    // The true colour composite, the three guns of the `truecolor` bundle:
+    // the 0.64, 0.51 and 0.47 µm reflectances of a slot, each divided by
+    // the cosine of the solar zenith and put through one fixed brightness
+    // curve, the green on the ABI synthesized from the blue, the red and
+    // the 0.86 µm band it has instead — the Python fetch stage's own
+    // recipe (`xuebuild/satellite/producers.py`), so the producer id is
+    // the pipeline's and the version the recipe's. The guns take the next
+    // three local-use numbers (7, 8, 9: 1–3 are the Dust RGB's, 4 and 6
+    // the confidences', 5 the aurora's), the guns' codebook and no-data
+    // rule: code 0 is a cell the disk does not cover, an input lacked, or
+    // the night side. Mirror `truer`, `trueg`, `trueb` in
+    // `xuebuild/variables.py`.
+    VariableSpec {
+        id: "truer",
+        label: "True colour, red gun",
+        output_unit: "1",
+        value_range: (-0.004, 1.0),
+        grib_element: "",
+        open_meteo: "",
+        grib2_discipline: 3,
+        grib2_category: 192,
+        grib2_number: 7,
+        grib2_level_type: 8,
+        grib2_level_value: None,
+        grib2_statistical: None,
+        grib2_aliases: &[],
+        grib2_alternates: &[],
+        gdal_unit: "",
+        fill_values: &[],
+        producer_id: Some("xue"),
+        grib2_aerosol: None,
+    },
+    VariableSpec {
+        id: "trueg",
+        label: "True colour, green gun",
+        output_unit: "1",
+        value_range: (-0.004, 1.0),
+        grib_element: "",
+        open_meteo: "",
+        grib2_discipline: 3,
+        grib2_category: 192,
+        grib2_number: 8,
+        grib2_level_type: 8,
+        grib2_level_value: None,
+        grib2_statistical: None,
+        grib2_aliases: &[],
+        grib2_alternates: &[],
+        gdal_unit: "",
+        fill_values: &[],
+        producer_id: Some("xue"),
+        grib2_aerosol: None,
+    },
+    VariableSpec {
+        id: "trueb",
+        label: "True colour, blue gun",
+        output_unit: "1",
+        value_range: (-0.004, 1.0),
+        grib_element: "",
+        open_meteo: "",
+        grib2_discipline: 3,
+        grib2_category: 192,
+        grib2_number: 9,
+        grib2_level_type: 8,
+        grib2_level_value: None,
+        grib2_statistical: None,
+        grib2_aliases: &[],
+        grib2_alternates: &[],
+        gdal_unit: "",
+        fill_values: &[],
+        producer_id: Some("xue"),
         grib2_aerosol: None,
     },
     // The GEFS-Aerosols fields (NOAA's GEFS `chem` member, the GOCART
@@ -2242,8 +2423,9 @@ mod tests {
         AEROSOL_VARIABLE_IDS, CAT_LEVELS_HPA,
         DUST_CF_BUNDLE_ID, DUST_CF_COMPONENT_IDS, DUST_RGB_BUNDLE_ID, DUST_RGB_COMPONENT_IDS,
         ISOBARIC_FAMILIES, ISOBARIC_LEVELS_HPA, OCEAN_VARIABLE_IDS, REFLECTIVITY_LEVELS_M,
-        REFLECTIVITY_VARIABLE_IDS, SATELLITE_CHANNEL_IDS, SATELLITE_VARIABLE_IDS,
-        WAVE_VECTOR_COMPONENT_IDS, ZHOUYE_BUNDLE_ID, ZHOUYE_COMPONENT_IDS,
+        REFLECTIVITY_VARIABLE_IDS, SATELLITE_CHANNEL_IDS, SATELLITE_INFRARED_IDS, SATELLITE_REFLECTANCE_IDS,
+        SATELLITE_VARIABLE_IDS, TRUE_COLOR_BUNDLE_ID, TRUE_COLOR_COMPONENT_IDS, WAVE_VECTOR_COMPONENT_IDS,
+        ZHOUYE_BUNDLE_ID, ZHOUYE_COMPONENT_IDS,
     };
     use crate::encode::quantize::codebook;
     use serde_json::{json, Value};
@@ -2446,12 +2628,13 @@ mod tests {
     }
 
     /// `tests/fixtures/satellite-registry.json`: the satellite channels,
-    /// the Dust RGB guns and the DEBRA and ZHOUYE confidences, held to the
-    /// Python encoder the same way — a channel with the `band` block the
-    /// Himawari source writes beside the parameter, read off the source
-    /// table here; a produced variable (a gun, a confidence) with the
-    /// `producer` id registered on it and no band — plus each composite
-    /// bundle's component list.
+    /// the Dust RGB guns, the DEBRA and ZHOUYE confidences and the true
+    /// colour guns, held to the Python encoder the same way — a channel
+    /// (a brightness temperature, or a reflectance) with the `band` block
+    /// the Himawari source writes beside the parameter, read off the
+    /// source table here; a produced variable (a gun, a confidence) with
+    /// the `producer` id registered on it and no band — plus each
+    /// composite bundle's component list.
     #[test]
     fn the_satellite_registry_matches_the_shared_fixture() {
         let fixture = registry("satellite-registry.json");
@@ -2459,7 +2642,7 @@ mod tests {
         assert_eq!(
             entries.keys().collect::<Vec<_>>(),
             SATELLITE_VARIABLE_IDS,
-            "the channels, then the guns, then the confidences, in the fixture's order"
+            "the channels, then the dust guns, the confidences and the true colour guns, in the fixture's order"
         );
         assert_eq!(
             fixture["bundles"],
@@ -2467,6 +2650,7 @@ mod tests {
                 DUST_RGB_BUNDLE_ID: DUST_RGB_COMPONENT_IDS,
                 DUST_CF_BUNDLE_ID: DUST_CF_COMPONENT_IDS,
                 ZHOUYE_BUNDLE_ID: ZHOUYE_COMPONENT_IDS,
+                TRUE_COLOR_BUNDLE_ID: TRUE_COLOR_COMPONENT_IDS,
             }),
             "each composite bundle's components"
         );
@@ -2482,7 +2666,8 @@ mod tests {
             );
             let produced = DUST_RGB_COMPONENT_IDS.contains(&variable_id.as_str())
                 || DUST_CF_COMPONENT_IDS.contains(&variable_id.as_str())
-                || ZHOUYE_COMPONENT_IDS.contains(&variable_id.as_str());
+                || ZHOUYE_COMPONENT_IDS.contains(&variable_id.as_str())
+                || TRUE_COLOR_COMPONENT_IDS.contains(&variable_id.as_str());
             assert_eq!(SATELLITE_CHANNEL_IDS.contains(&variable_id.as_str()), !produced, "{variable_id}");
             if produced {
                 assert_eq!(json!({ "id": spec.producer_id }), entry["producer"], "{variable_id} producer");
@@ -2491,6 +2676,18 @@ mod tests {
             } else {
                 assert!(spec.producer_id.is_none(), "{variable_id}: measured, not produced");
                 assert!(entry.get("producer").is_none(), "{variable_id}");
+                // A window is a brightness temperature in kelvin, a visible
+                // band a reflectance factor under the satellite-image albedo
+                // parameter.
+                let reflectance = SATELLITE_REFLECTANCE_IDS.contains(&variable_id.as_str());
+                assert_eq!(SATELLITE_INFRARED_IDS.contains(&variable_id.as_str()), !reflectance, "{variable_id}");
+                let expected = if reflectance { (3, 0, 1, "1") } else { (0, 4, 4, "K") };
+                assert_eq!(
+                    (spec.grib2_discipline, spec.grib2_category, spec.grib2_number, spec.output_unit),
+                    expected,
+                    "{variable_id}"
+                );
+                assert_eq!(spec.grib2_level_type, 8, "{variable_id}");
                 let (_, band) = himawari
                     .bands
                     .iter()
@@ -2511,14 +2708,17 @@ mod tests {
             assert!(spec.grib_element.is_empty() && spec.grib2_aliases.is_empty(), "{variable_id}");
         }
         // The published grid is the platform's region at the step, past
-        // the antimeridian; the six channels are fetched, one is published
-        // as a scalar and the three composites beside it.
+        // the antimeridian; the ten channels are fetched, one is published
+        // as a scalar and the four composites beside it.
         assert_eq!(himawari.production_grid, (3000, 3000));
         assert!(himawari.series_file && himawari.observation);
         assert_eq!(himawari.cadence_seconds, Some(600));
         assert_eq!(himawari.input_variable_ids, SATELLITE_CHANNEL_IDS);
         assert_eq!(himawari.bundle_scalar_ids, &["ir104"]);
-        assert_eq!(himawari.bundle_composite_ids, &[DUST_RGB_BUNDLE_ID, DUST_CF_BUNDLE_ID, ZHOUYE_BUNDLE_ID]);
+        assert_eq!(
+            himawari.bundle_composite_ids,
+            &[DUST_RGB_BUNDLE_ID, DUST_CF_BUNDLE_ID, ZHOUYE_BUNDLE_ID, TRUE_COLOR_BUNDLE_ID]
+        );
     }
 
     /// `tests/fixtures/aerosol-registry.json`: the GEFS-Aerosols fields,
