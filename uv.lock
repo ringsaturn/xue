@@ -2116,6 +2116,9 @@ staging = [
     { name = "shachen", extra = ["data"] },
     { name = "xarray" },
 ]
+wrf = [
+    { name = "netcdf4" },
+]
 zarr = [
     { name = "numcodecs" },
     { name = "pystac" },
@@ -2157,6 +2160,7 @@ staging = [
     { name = "shachen", extras = ["data"], specifier = ">=0.4.0" },
     { name = "xarray", specifier = ">=2025.1" },
 ]
+wrf = [{ name = "netcdf4", specifier = ">=1.7" }]
 zarr = [
     { name = "numcodecs", specifier = ">=0.16" },
     { name = "pystac", specifier = ">=1.14" },

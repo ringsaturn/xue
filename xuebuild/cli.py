@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import shlex
 import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -641,6 +642,17 @@ def parser() -> argparse.ArgumentParser:
     )
     indicators_context.add_argument("--dry-run", action="store_true", help="fetch and report; write nothing")
 
+    wrf_series = commands.add_parser(
+        "wrf-series",
+        help="turn one domain of a Recast WOOF (WRF-ARW) run into the per-variable CF NetCDF series the "
+        "woof source converts: wrfout files in, woof.<cycle>.<variable>.nc on a regular grid out",
+    )
+    wrf_series.add_argument("run_dir", type=Path, help="the run directory holding experiment.toml and run/wrfout/")
+    wrf_series.add_argument("--domain", default="d04", help="the nest to convert, as its files name it (default d04)")
+    wrf_series.add_argument("--out", type=Path, required=True, help="directory the series files are written into")
+    wrf_series.add_argument("--step", type=float, default=0.005, help="cell size of the regular grid in degrees (default 0.005)")
+    wrf_series.add_argument("--force", action="store_true", help="replace series files already in --out")
+
     return root
 
 
@@ -681,6 +693,18 @@ def main(argv: list[str] | None = None) -> int:
                 series=arguments.series,
             )
             print(json.dumps(report, indent=2))
+        elif arguments.command == "wrf-series":
+            from .wrf import convert_run  # noqa: PLC0415 - the one command that reads NetCDF in-process
+
+            for summary in convert_run(
+                arguments.run_dir,
+                arguments.domain,
+                arguments.out,
+                step=arguments.step,
+                force=arguments.force,
+                command=shlex.join(["xue", *(argv if argv is not None else sys.argv[1:])]),
+            ):
+                print(summary.line())
         elif arguments.command == "verify-bin":
             print(json.dumps(verify_bin(arguments.bundle), indent=2))
         elif arguments.command == "export-zarr":

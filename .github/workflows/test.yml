@@ -65,9 +65,10 @@ jobs:
 
       # The satellite group carries shachen (the Dust RGB producer the
       # himawari, GOES and Meteosat fetch tests run) and hdf5plugin (the
-      # JPEG-LS filter the FCI fixture chunk is compressed with).
+      # JPEG-LS filter the FCI fixture chunk is compressed with); the wrf
+      # group carries netCDF4 for the WOOF series tool's tests.
       - name: Sync Python environment
-        run: uv sync --group satellite
+        run: uv sync --group satellite --group wrf
 
       # On the release branch this tree's encoders are ahead of the last
       # published wheel, so the native parity test would compare against a

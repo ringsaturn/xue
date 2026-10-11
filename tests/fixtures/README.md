@@ -380,6 +380,32 @@ together; the pipeline itself writes at `--deflate 1`, which changes
 nothing a decoder sees. Widening the source's input list means cutting the
 new variable the same way, against whichever run is still on the bucket.
 
+`woof.2026101006/` holds forecast hours 1 and 2 of the Recast WOOF
+(WRF-ARW) Fuji run of 2026-10-10 06Z — the 500 m `d04` nest — as `xue
+wrf-series` writes them (`xuebuild/wrf/`): one CF NetCDF per variable,
+`woof.2026101006.<xue id>.nc`, the variable inside carrying the name the
+converter reads a series variable under (`observation.series_variable_name`:
+`temperature_2m` for `tmp2m`, `hpbl` and `orog` as themselves), on a
+regular 0.005° grid inscribed in the nest, latitudes ascending, `time`
+in hours since the cycle and the registry's output unit (`degC`, `m s-1`,
+`mm`, `%`, `m`, `W m-2`). Thirteen files: `tmp2m`, `dpt2m`, `tmpsfc`,
+`ugrd10m`, `vgrd10m`, `apcp`, `tcdc`, `lcdc`, `mcdc`, `hcdc`, `hpbl`,
+`dswrf` and `orog`. The tool's whole output is 79 by 61 cells
+(138.540–138.930°E, 35.220–35.520°N); the fixture keeps a 20 by 16 cell
+window of it (columns 28–47, rows 21–36: 138.680–138.775°E,
+35.325–35.400°N) around the summit cell, whose `orog` reaches 3633 m, so
+the lapse and the terrain under the series are real. The run itself is
+not published; the files are cut from a local copy of the run directory
+(`experiment.toml`, `events.jsonl`, `run/wrfout/wrfout_d04_*`) with:
+
+```sh
+.venv/bin/python tests/prepare_woof_fixture.py ~/Downloads/run_20294738511688ee
+```
+
+which runs the tool into a scratch directory and cuts the window with every
+attribute intact. A change to what the tool writes means regenerating the
+fixture the same way and saying so in the commit.
+
 # Xue fixtures
 
 `tests/prepare_bin_fixture.py` encodes the same cropped GRIB into per-variable
