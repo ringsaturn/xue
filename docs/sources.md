@@ -155,6 +155,14 @@ reduced tiers. Each publishes:
   day-and-night scheme on the same chain: DEBRA's by day, and after dark a
   reading at the day's level instead of a fading one. Same grid, coverage
   and scale as `dustcf`; a second product, not a replacement.
+- `truecolor` (not Meteosat): the visible picture — the 0.64, 0.51 and
+  0.47 µm reflectances as red, green and blue, each divided by the cosine
+  of the solar zenith and put through one brightness curve, the green a
+  hybrid with the 0.86 µm band (synthesized from blue, red and 0.86 µm on
+  the ABI, which has no green band), no Rayleigh correction. Code 0 is no
+  data in every gun, and the night side is code 0: nothing is painted
+  where the sun is down. Xue's own recipe (producer `xue`, version the
+  recipe's). See [`satellite.md`](satellite.md).
 
 The live windows end 15–20 min behind real time. **Meteosat publishes only
 the cycle on each hour**: EUMETSAT releases that cycle under CC BY 4.0 and

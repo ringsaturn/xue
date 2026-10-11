@@ -1,9 +1,9 @@
 # Geostationary satellite imagery
 
 How a geostationary imager's channels become Xue bundles: the `himawari`,
-`goeseast`, `goeswest` and `meteosat` sources, their Dust RGB composite,
-and the seams a further satellite, a second channel and another composite
-product go through. The bundle format is unchanged (`format.md`); what
+`goeseast`, `goeswest` and `meteosat` sources, their Dust RGB and true
+colour composites and dust confidences, and the seams a further satellite,
+a second channel and another composite product go through. The bundle format is unchanged (`format.md`); what
 this document fixes is the fetch stage, `xuebuild/satellite/`, and the
 metadata a satellite variable carries.
 
@@ -73,12 +73,13 @@ west edge inside −180 … 180 and the east edge past 180 — Himawari's 80.7 �
 200.7, GOES-West's 163 … 283 — the one shape the encoders' `crop_grid` and
 the shell's viewport arithmetic take; GOES-East stays on negative
 longitudes like the regional radar grids; Meteosat's −60 … 60 sits on
-the prime meridian. The four sources publish the same variables (`ir104`
-and `dustrgb`; the ABI composite takes the Quick Guide's stretches, FCI
-has no 11.2 µm window and its green gun reads the 10.5 µm one), and every
-seam below is shared: what differs between them is the platform row and
-the reader — and, for Meteosat, the cadence the source publishes at,
-which the data policy sets (§"Rounds").
+the prime meridian. The four sources publish the same core variables
+(`ir104` and `dustrgb`; the ABI composite takes the Quick Guide's
+stretches, FCI has no 11.2 µm window and its green gun reads the 10.5 µm
+one), the three NOAA-hosted ones the dust confidences and the true colour
+composite besides, and every seam below is shared: what differs between
+them is the platform row and the reader — and, for Meteosat, the cadence
+the source publishes at, which the data policy sets (§"Rounds").
 
 A **channel** is a bundle. Its id is the nominal wavelength,
 instrument-neutral: `ir104` is AHI band 13 and ABI channel 13 alike, an
@@ -86,18 +87,21 @@ infrared window at 10.4 µm; the exact central wave number is in the
 `band` block. The registry carries every channel the instrument has;
 `sources.py` says which a source publishes (`bundle_scalar_ids`) and
 carries their `band` blocks (`bands`, from `Platform.bands`). The three
-NOAA-hosted sources fetch six channels and publish `ir104`, the Dust RGB
-and the dust confidence; Meteosat fetches three and publishes the first
-two (§"The dust confidences" says why not the third).
+NOAA-hosted sources fetch six infrared windows and the solar bands (four
+on AHI, three on ABI) and publish `ir104`, the Dust RGB, the dust
+confidences and the true colour; Meteosat fetches three windows and
+publishes the first two (§"The dust confidences" says why not the
+confidences, §"The true colour" why not the picture).
 
 | id | wavelength | AHI | ABI | FCI | quantity | codebook |
 |---|---|---|---|---|---|---|
 | `ir104` | 10.4 µm (FCI 10.5) | 13 | 13 | 14 (IR 10.5) | brightness temperature, K (the shell reads it in °C) | 180–331.8 at 0.6 |
 | `ir086`, `ir112`, `ir123` | 8.6, 11.2, 12.3 µm (FCI 8.7, —, 12.3) | 11, 14, 15 | 11, 14, 15 | 12, —, 15 | brightness temperature; fetched for the Dust RGB (and, but for 11.2 µm, for the dust confidence), registered variables, not published by any source | 180–331.8 at 0.6 |
 | `ir039`, `wv062` | 3.9, 6.2 µm | 7, 8 | 7, 8 | 9, 10 | brightness temperature; fetched for the dust confidence's cloud mask, registered variables, not published by any source | 180–331.8 at 0.6 |
+| `vis047`, `vis051`, `vis064`, `nir086` | 0.47, 0.51, 0.64, 0.86 µm (FCI 0.44, 0.51, 0.64, 0.87) | 1, 2, 3, 4 | 1, —, 2, 3 | 1, 2, 3, 4 | top-of-atmosphere reflectance factor, 0–1 (the product's, not yet divided by the cosine of the solar zenith); fetched for the true colour composite, registered variables (GRIB2 3/0/1, the satellite-image albedo, with the band block), not published by any source | −0.01–1.255 at 0.005 |
 | `ir096`, `ir133` | 9.6, 13.3 µm | 12, 16 | 12, 16 | 13, 16 | brightness temperature | registered on the platform; not yet a variable |
 | `wv069`, `wv073` | 6.9, 7.3 µm | 9, 10 | 9, 10 | —, 11 | brightness temperature | same |
-| `vis064`, `nir086`, `nir161`, … | 0.64, 0.86, 1.61 µm | 3, 4, 5 | 2, 3, 5 | 3, 4, 7 | reflectance | same |
+| `nir161`, `nir226`, … | 1.61, 2.26 µm | 5, 6 | 5, 6 | 7, 8 | reflectance | same |
 
 An FCI channel takes the id of the window it is nearest to (IR 10.5 is
 `ir104`, IR 8.7 `ir086`; the exact wave number is in the band block, and
@@ -110,7 +114,13 @@ source's `input_variable_ids` and `bundle_scalar_ids`, a regenerated
 `satellite-registry.json` (`tests/prepare_satellite_registry.py`), and a
 row of the shell's variable table with a palette. Nothing in the fetch
 stage, the converter or the format changes: the fetch warps every channel
-a source lists, and the ingest reads one series file per variable.
+a source lists, and the ingest reads one series file per variable. A
+channel is warped by its kind (`fetch.resampling_for`): a brightness
+temperature bilinearly, a reflectance — delivered at 0.5 or 1 km, four
+to eight times finer than the grid — as the block mean, so a cloud edge
+is the mean the eye sees from orbit and not a speckle of the four source
+pixels a bilinear sample would pick out of sixty-four. The frame's
+sidecar records which.
 
 ### The Dust RGB
 
@@ -160,6 +170,68 @@ a side, tiles 32, 16 and 8), each decimated from the full plane — every
 f-th row and column from the origin, the poster's own sampling — because
 the half of a 3000 × 3000 disk is still twice a full GFS plane and a shell
 with a frame budget needs a rung it can hold.
+
+### The true colour
+
+`truecolor` is the visible picture: the 0.64, 0.51 and 0.47 µm
+reflectances of a slot as red, green and blue, this pipeline's own recipe
+(`TrueColorProducer`, no package behind it), in a fixed order that the
+tests hold step by step:
+
+1. every input reflectance clipped at 0 from below (the products carry
+   small negative values in the dark);
+2. the cosine of the solar zenith on every cell at the slot's start
+   (pyorbital, on the grid's own coordinates); a cell with the sun below
+   the horizon is no data;
+3. each reflectance divided by `max(cos θ, cos 85°)` — the products are
+   the reflectance *factor*, not yet normalised for the sun, and the floor
+   keeps the last five degrees of a day from amplifying noise;
+4. the green: `0.93 × 0.51 µm + 0.07 × 0.86 µm` on an imager with a green
+   band (AHI, FCI; the hybrid green that lifts vegetation to the colour
+   the eye expects, Miller et al. 2016), or `0.45 × 0.47 µm + 0.45 ×
+   0.64 µm + 0.10 × 0.86 µm` on the ABI, which has no green band (the
+   CIMSS blend);
+5. red, green and blue through one brightness curve — reflectance 0, 25,
+   55, 100, 255 % to 0, 90, 140, 175, 255 of 255, linear between the
+   knots, the CIRA stretch — clamped to 0–1;
+6. no data in all three guns wherever any input had none, or the sun was
+   below the horizon.
+
+| gun | AHI, FCI | ABI |
+|---|---|---|
+| `truer` | 0.64 µm | 0.64 µm |
+| `trueg` | 0.93 × 0.51 µm + 0.07 × 0.86 µm | 0.45 × 0.47 µm + 0.45 × 0.64 µm + 0.10 × 0.86 µm |
+| `trueb` | 0.47 µm | 0.47 µm |
+
+No Rayleigh correction: the limb and the long slant paths keep their blue
+haze. A correction with a lookup table per band would be a new recipe
+version. Which bands a platform feeds the recipe is
+`TrueColorProducer.inputs_for` (four, or three without the 0.51 µm one),
+mirrored by `convert.rs::composite_input_ids` the way the Dust RGB's
+missing 11.2 µm window is.
+
+The guns are the Dust RGB's shape: three variables of one composite
+bundle, local-use parameters 3 / 192 / **7, 8, 9** on surface 8, the
+guns' codebook (code 0 no data, 0.0 at code 1, 1.0 at code 251), no
+poster, no video, the three-rung ladder. The `producer` block beside each
+is `{"id": "xue", "version": "1"}`: the id names this pipeline, and the
+version is the recipe's (`producers.TRUE_COLOR_VERSION`), bumped when a
+constant above changes and never with the package, since a cached slot is
+recomposed when the version it was composed under differs. Code 0 is also
+the night side: there is no sunlit picture to draw, and the shell paints
+nothing there, so the disk's dark half shows the map.
+
+What it costs: the solar bands are the big ones. An AHI slot's 0.5 km red
+band is 390 MB of tiles by day and 230 at night, the three 1 km bands 100
+MB each; an ABI slot's 0.5 km red file is 430 MB by day and 200 at night,
+the two 1 km ones 100 MB. A Himawari round therefore downloads some 700 MB
+of tiles against the windows' 140, a GOES round some 630 against 140,
+warps the 0.5 km band (22 000 × 22 000 cells) once, and caches the frames
+like any channel's. Meteosat publishes no true colour: the FCI reader
+converts radiances to brightness temperature and has no reflectance path
+yet (a reflectance there is `π L / E_sun`, the channel's effective solar
+irradiance being a scalar of its `measured` group), and the hourly window
+would show one sunlit frame in three.
 
 ### The dust confidences
 
@@ -674,15 +746,20 @@ producers and nowhere else.
 
 ## Fixtures and tests
 
-`tests/fixtures/himawari/` is twenty-four real tiles (T020 and T021 of
-two consecutive scans in bands 7, 8, 11, 13, 14 and 15) and
-`tests/test_satellite.py` runs them through the whole stage — listing,
-completeness, download, mosaic, warp, cache, the producers (the Dust RGB
-held cell for cell to `shachen.dustrgb.dust_rgb` called directly),
-series, ingest, conversion on the production grid with every composite
-bundle, a crop past the antimeridian, a `--bundles` build that reads one
-series alone — against a stand-in for the bucket, then through both
-encoders. `tests/fixtures/debra/` is two crops of a staged CAMEL month
+`tests/fixtures/himawari/` is forty real tiles — T020 and T021 of two
+consecutive scans in bands 7, 8, 11, 13, 14 and 15, untouched, and the
+same tiles in bands 1–4 cut to their north-west corner
+(`tests/prepare_himawari_fixture.py`: a sixteenth of each, since a 1 km
+tile is 1.3 MB and the 0.5 km one 4.7) — and `tests/test_satellite.py`
+runs them through the whole stage — listing, completeness, download,
+mosaic, warp (the solar bands as block means, the sidecar saying so),
+cache, the producers (the Dust RGB held cell for cell to
+`shachen.dustrgb.dust_rgb` called directly, the true colour to its recipe
+written out step by step, with the night side empty and dusk darker than
+noon), series, ingest, conversion on the production grid with every
+composite bundle, a crop past the antimeridian, a `--bundles` build that
+reads one series alone — against a stand-in for the bucket, then through
+both encoders. `tests/fixtures/debra/` is two crops of a staged CAMEL month
 (the Gobi, land; a box of water south of Japan inside the tiles' grid)
 and four crops of one cached GFS record, and `tests/test_debra.py` holds
 the ancillary readers, the regrid across 180°, the GFS candidate walk and
@@ -698,17 +775,19 @@ codebooks; `bundles`: each composite's components in order) holds them
 identical across the Python encoder, the Rust encoder and the shell;
 `tests/prepare_satellite_registry.py` regenerates it.
 
-`tests/fixtures/goes/` is eight 220 × 220 windows cut from real GOES-19
-CMIPF files (`tests/prepare_goes_fixture.py`: the four Dust RGB channels
-of two consecutive scans, cut with `gdal_translate -of netCDF -srcwin`,
-which keeps the `geostationary` mapping, the band's packing and fill — the
-Venezuelan coast and Trinidad, 66–62°W, 7–11°N), and `tests/test_goes.py`
-runs them the same way under the `goeseast` source: the hour-directory
-listing and its request count, the slot rule, the reissue rule, the
-single-file download, the warp, the producer with the ABI stretches
-(and that they differ from the SEVIRI set on the scene), the series, the
-ingest, the conversion on the East disk with the ABI band block, and the
-native encoder byte for byte. GOES-West is the same reader on its own
+`tests/fixtures/goes/` is eighteen windows cut from real GOES-19 CMIPF
+files (`tests/prepare_goes_fixture.py`: the six dust channels and the
+three solar bands of two consecutive scans, 220 × 220 cells at 2 km and
+the same ground at each band's own resolution, cut with `gdal_translate
+-of netCDF -srcwin`, which keeps the `geostationary` mapping, the band's
+packing and fill — the Venezuelan coast and Trinidad, 66–62°W, 7–11°N),
+and `tests/test_goes.py` runs them the same way under the `goeseast`
+source: the hour-directory listing and its request count, the slot rule,
+the reissue rule, the single-file download, the warp, the Dust RGB with
+the ABI stretches (and that they differ from the SEVIRI set on the
+scene), the true colour with the synthetic green, the series, the ingest,
+the conversion on the East disk with the ABI band block, and the native
+encoder byte for byte. GOES-West is the same reader on its own
 bucket and grid; its tests are the registry's.
 
 `tests/fixtures/meteosat/` is one real FCI chunk (chunk 20 of a full-disk
