@@ -23,7 +23,7 @@ Storms, soundings and airports: [point-products.md](point-products.md).
 | `peaks.ts` | Named peaks over the 3D relief, from `public/peaks.json`. |
 | `shadowlayer.ts` + `shadow.worker.ts`, `shadowgl.ts`, `shadow.ts`, `shadowtypes.ts` | Terrain cast shadows: the main-thread controller, the worker that ray-marches the DEM, its GPU marcher, its pure functions, the message contract. |
 | `gifexport.ts` + `gif.worker.ts` | The capsule's GIF button: up to 48 frames from the one on screen, captured off the map canvas in its `render` event, caption and credits burnt in, one palette for the loop (`gifenc`, in a worker); a share sheet on touch screens, a download elsewhere. |
-| `volume.ts` | The radar volume (`refl3d`): a 3D texture per frame, raymarched in a Mercator box. |
+| `volume.ts` | The volumes (`refl3d`, `cloud3d`): a 3D texture per frame, raymarched in a Mercator box, the transfer function chosen by the levels' parameter, stopped by the terrain's depth. |
 | `palettes.ts`, `units.ts`, `domain.ts` | Ramps, display units, regional footprints. |
 | `playback.ts`, `timeline.ts` | Frame-rate ladder and dwell; transport geometry. |
 | `probe.ts`, `meteogram.ts` | Point probe and its rows. |
@@ -85,6 +85,17 @@ lead seconds on its own axis: an undecoded frame keeps the last one up, a
 missing lead time hides it. Prefetch runs on the primary at the
 connection's concurrency, on overlays at one. A `?type=` is a composition
 with one slot.
+
+A volume can be an overlay too (`ViewState.volume`, `?volume=cloud3d`):
+over a 2D field, the overlay section's volume switch (`#volume-tile`,
+shown on a run that ships a volume bundle) opens the volume's session at
+the overlay tier (`main.ts::applyVolumeOverlay`) and feeds the volume
+layer the way the lines slot feeds its `ForecastLayer`: by lead seconds,
+every level of a frame or none (`trySelectVolumeOverlay`), blended on the
+primary's clock (`blendVolumeOverlay`), its shown levels kept from
+eviction, whole planes always. It never gates the playhead. It is not a
+`RasterSlot` (those own a `ForecastLayer`); a volume as the field is the
+primary and takes the layer itself, and the overlay empties.
 
 `manifest.ts::pickBundleVariant` chooses the rung from viewport, connection
 and the bundle's longitude span, then a cell budget
@@ -159,7 +170,7 @@ and the window shrinks to fit it.
   basemap POIs, so a tile's OSM copy of the same summit loses the collision.
   The badge is drawn in code because the `white` flavor's sprite has no
   peak icon.
-- Radar volume (`volume.ts`, `?model=mrms3d`): a volume bundle's levels
+- Volumes (`volume.ts`; `?model=mrms3d`, or a `woof` case's `cloud3d`): a volume bundle's levels
   (one quantity on GRIB2 surface 102, ascending) are the session's
   variables, every one decoded per frame, the session whole (a ray can
   cross any of it) and its tier weighed for the stack (five planes' worth
@@ -168,20 +179,34 @@ and the window shrinks to fit it.
   half tier and a close view re-tiers to the full one. The levels go into an R8 3D texture per frame (two,
   blended by `u_mix`; halved by block maximum past `MAX_3D_TEXTURE_SIZE`)
   and are raymarched front to back in a Mercator box from sea level to
-  half a step over the top level, `?vexag=` times its height (10 by
-  default). The camera comes from the projection matrix's x, y and w rows
+  half a step over the top level, its height exaggerated by `?vexag=` or
+  else by the grid's width (1 under two degrees of longitude, 10 over),
+  times the terrain's exaggeration while the relief is on. The camera comes from the projection matrix's x, y and w rows
   (its depth row is not invertible); each pixel's ray runs from the camera
   to the box face it lies on, and only the exit face draws. A 1D lookup
-  takes altitude to the uneven level spacing. Colour is the cref palette,
-  brightened with height; opacity rises from 18 to 60 dBZ and is per
-  voxel, so the step count does not change the picture. On the globe the
+  takes altitude to the uneven level spacing. The transfer function is
+  the levels' parameter's (`volumeTransfer`). Reflectivity: the cref
+  palette, opacity rising from 25 to 55 dBZ, per voxel, so the step count
+  does not change the picture. Cloud water (0/1/22): Beer–Lambert
+  extinction, `1 − exp(−σ·q·stride)` with σ = 1.6 per g/kg per voxel (a
+  0.3 g/kg deck six voxels deep is opaque), coloured from the theme at draw
+  time (grey-blue on paper, warm white on dark), one shadow sample two
+  voxels towards a fixed south-west sun at 45° weighed as four voxels of
+  path, and a silver lining where that sample is clear and the view looks
+  into the sun. With terrain on (plane only), each sample is projected by
+  the layer's matrix and the march stops once MapLibre's packed terrain
+  depth (`projection.ts::terrainDepthTexture`, the same test the particles
+  use) says the relief is in front: the cloud below a ridge is hidden by it.
+  Below the model ground a cloud volume is 0 g/kg, so nothing grows out of
+  the mountain. On the globe the
   same march runs in MapLibre's unit-sphere space (the prelude's
   `projectToSphere`: y to the north pole, a height scales the radius by
   `1 + h / 6371008.8`) through a shell over the box: a closed mesh with
   outward normals, only the faces a ray leaves through drawn, the ray
   stopped by the planet (the floor taken on the near half of a ray's way
   through it, since its chords sag under the sphere), its own program so
-  the plane's is untouched, nothing mid-transition. No terrain occlusion.
+  the plane's is untouched, nothing mid-transition; it draws reflectivity
+  only and has no terrain occlusion.
   Two drag tools in the
   view tile (`volumetool.ts`; shown over a volume only, armed by a press,
   then the next drag — mouse or finger — through a clear sheet over the
@@ -295,8 +320,8 @@ copy.
 
 Three rail sections, one kind of press each: **fields** (a radio: core
 tiles from `FORECAST_MODELS[].railCore`, the on-screen tile, and MORE →
-`#field-sheet`), **overlays** (switches: pressure lines, particles, derived
-layers), **marks** (storms, soundings, airports). Switches carry
+`#field-sheet`), **overlays** (switches: pressure lines, particles, a
+volume, derived layers), **marks** (storms, soundings, airports). Switches carry
 `data-toggle` and a ring, sheet triggers `data-dialog` and a chevron.
 `syncFieldTiles` hides unshipped tiles and writes a generic one for an
 on-screen field without a tile; `syncRailDensity` shrinks tiles to 36px
@@ -380,7 +405,7 @@ hidden and pinned models are `localStorage`.
 - Valid times use one display zone (`timezone.ts`): the browser's, or the
   pinned point's (`tzf-wasm`, a 4 MB index loaded on first pin). Run cycles
   and showcase cards stay UTC.
-- Query state lives in `urlstate.ts` (`?model=`, `?type=`, `?lines=`,
+- Query state lives in `urlstate.ts` (`?model=`, `?type=`, `?lines=`, `?volume=`, `?vexag=`,
   `?case=`, `?res=`, `?use_h264=`, `?particles=`, `?backend=`, `?x=`,
   `?tc*=`, `?stations=`, `?projection=`, `?terrain=`); `?lang=` in `i18n.ts`, `?theme=` in `theme.ts`.
   Unknown values fall back to defaults.

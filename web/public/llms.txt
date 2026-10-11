@@ -86,13 +86,15 @@ Facts worth getting right:
   102 at the altitude in metres). It is not published live: it appears in
   showcase cases only (`/showcase.html`). The viewer draws it as a
   raymarched volume, on the plane and on the globe (`?vexag=` sets the
-  vertical exaggeration, 10 by default). `woof` is cases only too, and
+  vertical exaggeration). `woof` is cases only too, and
   the one *forecast* that is: Recast's WOOF, a WRF-ARW nest at 500 m over
   Mount Fuji (a regular 0.005° grid of 79 × 61 cells, 138.54°E–138.93°E
   and 35.22°N–35.52°N, every cell inside the model domain), hourly frames
   from F1 — no analysis frame, as CFSv2 starts at F6 — with no live
   pointer and no place in the model switch; `/?case=fuji-woof-2026-10-10`
-  opens it, framed by the case's own camera. `jma` is the seventh
+  opens it, framed by the case's own camera, and
+  `/?case=fuji-woof-2026-10-10&volume=cloud3d` draws its cloud water in 3D
+  over the field. `jma` is the seventh
   live source and the third observation: the Japan Meteorological Agency's
   high-resolution precipitation nowcast analysis (高解像度降水ナウキャスト)
   over Japan, five-minute frames decoded from the agency's map tiles onto a
@@ -226,7 +228,10 @@ Facts worth getting right:
   (`woof`): `tmp2m`, `prate`, `tmpsfc`, `dpt2m`, `tcdc`, `lcdc`, `mcdc`,
   `hcdc`, `hpbl`, `dswrf`, the static `orog` and the vector pair
   `wind10m` — the same names and units as the GFS's, so a case ships a
-  subset of them. JMA: `prate` (precipitation intensity class representative rate,
+  subset of them — and `cloud3d`, the cloud water volume: the mixing ratio
+  (g/kg, GRIB2 0/1/22 on surface 102) on 24 altitudes above mean sea level
+  (every 0.25 km from 0.25 to 3 km, every 0.5 km to 6 km, every 1 km to
+  12 km; variables `clw250` … `clw12000`), 0 g/kg below the model ground. JMA: `prate` (precipitation intensity class representative rate,
   mm/h). HIMAWARI: `ir104` (10.4 µm brightness temperature, K) and
   `dustrgb` (the Dust RGB's red, green and blue guns, 0–1, a composite
   with no physical unit), `dustcf` (the DEBRA dust confidence, 0–1) and
@@ -324,6 +329,14 @@ fall back to defaults rather than fail, so a constructed link always opens.
   (= `hgt500`) are accepted spellings.
 - `?lines=` — a contour overlay from the pressure family over any filled
   layer: `pressure` (sea level) or `hgt850|hgt700|hgt500|hgt250`.
+- `?volume=cloud3d` — draw a run's volume bundle as a 3D volume over the
+  2D field on screen (the cloud water of a `woof` case); ignored when the
+  run does not ship it or the field is itself a volume.
+- `?vexag=<number>` — the vertical exaggeration of a 3D volume, up to 200:
+  by default 1 (true scale) for a volume under two degrees of longitude
+  wide and 10 for a wider one. With the terrain on, the terrain's own
+  exaggeration multiplies it, so the volume stays registered to the
+  relief.
 - `?case=<id>` — a historical case; ids come from the catalog below.
 - `?res=half|full` — pin the resolution tier instead of choosing it from the
   viewport and connection.

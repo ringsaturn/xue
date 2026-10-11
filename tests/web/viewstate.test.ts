@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import { parseCaseFromSearch, parseExperimentFromSearch, parseModelFromSearch } from "../../web/src/urlstate";
-import { compositionForPrimary, compositionPrimary, parseView, searchForView, type ViewDefaults } from "../../web/src/viewstate";
+import {
+  compositionForPrimary,
+  compositionPrimary,
+  parseView,
+  searchForView,
+  volumeOverField,
+  type ViewDefaults,
+} from "../../web/src/viewstate";
 
 const DEFAULTS: ViewDefaults = { field: "prate", lines: null, particles: true };
 
@@ -67,6 +74,7 @@ describe("searchForView", () => {
     "?model=gfs&type=precip&tc=EP142026&tcagency=nhc%2Cjtwc&tcmodel=gfs&tcmembers=on",
     "?case=ida-2021&type=radar&lines=pressure",
     "?model=hrrr&type=radar&res=half&backend=xue",
+    "?case=fuji-woof-2026-10-10&type=sst&volume=cloud3d",
   ])("round-trips %s", (search) => {
     expect(roundTrip(search)).toBe(search);
   });
@@ -107,5 +115,23 @@ describe("composition helpers", () => {
     expect(compositionForPrimary("hgt500", "prmsl")).toEqual({ fill: null, lines: "hgt500" });
     expect(compositionPrimary({ fill: null, lines: null }, "prate")).toBe("prate");
     expect(compositionPrimary({ fill: null, lines: "prmsl" }, "prate")).toBe("prmsl");
+  });
+});
+
+describe("the volume overlay", () => {
+  it("is parsed from ?volume=, unknown values reading as none", () => {
+    expect(parseView("?type=sst&volume=cloud3d", DEFAULTS).view.volume).toBe("cloud3d");
+    expect(parseView("?type=sst&volume=CLOUD3D", DEFAULTS).view.volume).toBe("cloud3d");
+    expect(parseView("?type=sst&volume=tmp2m", DEFAULTS).view.volume).toBeNull();
+    expect(parseView("?type=sst&volume=off", DEFAULTS).view.volume).toBeNull();
+    expect(parseView("?type=sst", DEFAULTS).view.volume).toBeNull();
+  });
+
+  it("is drawn and written only over a 2D field", () => {
+    expect(volumeOverField({ field: "tmpsfc", volume: "cloud3d" })).toBe("cloud3d");
+    expect(volumeOverField({ field: null, volume: "cloud3d" })).toBeNull();
+    expect(volumeOverField({ field: "refl3d", volume: "cloud3d" })).toBeNull();
+    // A volume as the field is named by `type`, and `volume` is dropped.
+    expect(roundTrip("?model=mrms3d&type=refl3d&volume=cloud3d")).toBe("?model=mrms3d&type=refl3d");
   });
 });

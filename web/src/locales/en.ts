@@ -221,6 +221,11 @@ export const en = {
    * name are `particlesToggle` / `particlesToggleAria` below). */
   varParticles: "FLOW",
   glyphParticles: "≈",
+  /** The volume switch in the overlay section, which draws a cloud volume
+   * over the field: its gloss after the code CLW3D and its glyph (q, the
+   * mixing ratio; its tooltip is `varLabelCloud3d`). */
+  varVolume: "3D CLOUD",
+  glyphVolume: "Q",
   /** The level row's ALONE member, a switch after the lines' surfaces:
    * its gloss (the visually hidden word after the instrument code ALONE,
    * which stays English) and its tooltip. */
@@ -418,6 +423,7 @@ export const en = {
   varLabelWind100m: "100 m wind",
   varLabelCref: "Composite radar reflectivity",
   varLabelRefl3d: "3D radar reflectivity",
+  varLabelCloud3d: "3D cloud water",
   varLabelOrog: "Orography",
   varLabelAurora: "Aurora visibility probability",
   varLabelIr104: "Infrared imagery (10.4 µm brightness temperature)",

@@ -160,6 +160,8 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
   // The whole 79 × 61 grid lies inside the model domain, so unlike HRRR
   // nothing is clipped, and a case frames its own region, so no `region`.
   // Opens on the skin temperature, where the mountain's own relief shows.
+  // Its cloud water volume (`cloud3d`) is no rail field: it is drawn over
+  // the field from the overlay section's volume switch (`?volume=`).
   woof: {
     id: "woof",
     label: "WOOF-WRF",
@@ -512,6 +514,7 @@ export type KnownBundleId =
   | "cref"
   | "orog"
   | "aurora"
+  | "cloud3d"
   | SurfaceDiagnosticId
   | OceanId
   | SatelliteId
@@ -654,6 +657,7 @@ export const KNOWN_BUNDLE_IDS: readonly KnownBundleId[] = [
   "cref",
   "orog",
   "aurora",
+  "cloud3d",
   ...SURFACE_DIAGNOSTIC_IDS,
   ...OCEAN_IDS,
   ...SATELLITE_IDS,
@@ -689,6 +693,15 @@ export const VECTOR_BUNDLES: Record<VectorBundleId, readonly [VectorComponentId,
   ...Object.fromEntries(ISOBARIC_LEVELS.map((level) => [`qflux${level}`, [`uqflx${level}`, `vqflx${level}`]])),
   wave: WAVE_COMPONENT_IDS,
 } as unknown as Record<VectorBundleId, readonly [VectorComponentId, VectorComponentId]>;
+
+/** Bundles drawn as a volume, by manifest id, with their level count: the
+ * encoders' volume kind (`VOLUME_BUNDLES` in xuebuild/binconvert.py). The
+ * count is what a tier is weighed by before the bundle is opened; the
+ * levels themselves are read off its variables (volume.ts). */
+export const VOLUME_BUNDLE_LEVELS: ReadonlyMap<string, number> = new Map([
+  ["refl3d", 33],
+  ["cloud3d", 24],
+]);
 
 /** True when a bundle *named* by the convention carries a u/v pair rather
  * than one scalar. A guess from the id string, for use before the bundle is

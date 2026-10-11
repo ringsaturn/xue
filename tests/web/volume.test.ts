@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { BundleVariable } from "../../web/src/manifest";
 import {
   cameraFromMatrix,
+  DEFAULT_VERTICAL_EXAGGERATION,
+  defaultVerticalExaggeration,
   GLOBE_RADIUS,
   globeSectionStrip,
   globeShellMesh,
@@ -14,6 +16,7 @@ import {
   volumeBox,
   volumeLevels,
   volumeTop,
+  volumeTransfer,
 } from "../../web/src/volume";
 import { boxBounds, dragSelects } from "../../web/src/volumetool";
 
@@ -258,5 +261,66 @@ describe("globe shell", () => {
     const end = spherePoint(-81, 33);
     [0, 1, 2].forEach((axis) => expect(strip[axis]!).toBeCloseTo(start[axis]!, 6));
     [0, 1, 2].forEach((axis) => expect(strip[24 + axis]!).toBeCloseTo(end[axis]!, 6));
+  });
+});
+
+/** The WRF nest's cloud water volume (`cloud3d`): cloud water mixing ratio
+ * (0/1/22) on 24 altitudes above mean sea level, 250 m apart to 3 km,
+ * 500 m to 6 km and 1 km to 12 km, on the linear g/kg codebook. */
+const CLW_LEVELS_M = [
+  250, 500, 750, 1000, 1250, 1500, 1750, 2000, 2250, 2500, 2750, 3000, 3500, 4000, 4500, 5000, 5500, 6000, 7000, 8000,
+  9000, 10000, 11000, 12000,
+];
+
+function cloudLevel(metres: number, index: number, compact = false): BundleVariable {
+  return {
+    numericId: index + 1,
+    id: `clw${metres}` as BundleVariable["id"],
+    label: `Cloud water at ${metres / 1000} km MSL`,
+    unit: "g/kg",
+    parameter: {
+      discipline: 0,
+      parameterCategory: 1,
+      parameterNumber: 22,
+      typeOfFirstFixedSurface: 102,
+      scaleFactorOfFirstFixedSurface: 0,
+      scaledValueOfFirstFixedSurface: metres,
+    },
+    quantization: compact
+      ? { type: "linear", offset: 0, scale: 0.02, minimumCode: 0, maximumCode: 126, nodataCode: 255 }
+      : { type: "linear", offset: 0, scale: 0.01, minimumCode: 0, maximumCode: 253, nodataCode: 255 },
+  } as BundleVariable;
+}
+
+describe("the cloud water volume", () => {
+  const cloud = CLW_LEVELS_M.map((metres, index) => cloudLevel(metres, index));
+
+  it("reads cloud3d's 24 altitudes in bundle order, on either codebook", () => {
+    const levels = volumeLevels(cloud);
+    expect(levels?.altitudes).toEqual(CLW_LEVELS_M);
+    expect(levels?.variables.map((variable) => variable.id)).toEqual(cloud.map((variable) => variable.id));
+    expect(VOLUME_BUNDLE_LEVELS.get("cloud3d")).toBe(CLW_LEVELS_M.length);
+    expect(volumeLevels(CLW_LEVELS_M.map((metres, index) => cloudLevel(metres, index, true)))?.altitudes).toEqual(CLW_LEVELS_M);
+    expect(volumeTop(CLW_LEVELS_M)).toBe(12500);
+  });
+
+  it("chooses the transfer function by the levels' parameter", () => {
+    expect(volumeTransfer(cloud[0]!.parameter)).toBe("cloud");
+    expect(volumeTransfer(volume[0]!.parameter)).toBe("reflectivity");
+    // Cloud ice (0/1/23) is not cloud water; nor is a missing block.
+    expect(volumeTransfer({ ...cloud[0]!.parameter!, parameterNumber: 23 })).toBe("reflectivity");
+    expect(volumeTransfer(undefined)).toBe("reflectivity");
+  });
+});
+
+describe("default vertical exaggeration", () => {
+  it("is true scale under two degrees of longitude and the wide-area value over it", () => {
+    // The Fuji nest: 79 cells of 0.005°.
+    expect(defaultVerticalExaggeration({ width: 79, longitudeStep: 0.005 })).toBe(1);
+    expect(defaultVerticalExaggeration({ width: 399, longitudeStep: 0.005 })).toBe(1);
+    // CONUS at 0.05°, and a box exactly two degrees wide.
+    expect(defaultVerticalExaggeration({ width: 1400, longitudeStep: 0.05 })).toBe(DEFAULT_VERTICAL_EXAGGERATION);
+    expect(defaultVerticalExaggeration({ width: 400, longitudeStep: 0.005 })).toBe(DEFAULT_VERTICAL_EXAGGERATION);
+    expect(DEFAULT_VERTICAL_EXAGGERATION).toBe(10);
   });
 });

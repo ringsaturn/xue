@@ -96,6 +96,7 @@ import {
 import {
   identifyBundle,
   identityForBundleId,
+  identityForParameter,
   isCompositeIdentity,
   registeredBundleId,
   sameIdentity,
@@ -145,6 +146,7 @@ import {
   parseResolutionFromSearch,
   parseSceneFromSearch,
   parseUseH264FromSearch,
+  parseVerticalExaggerationFromSearch,
   searchNamesTerrain,
   searchWithScene,
   DEFAULT_TERRAIN_EXAGGERATION,
@@ -156,6 +158,7 @@ import {
   compositionPrimary,
   parseView,
   searchForView,
+  volumeOverField,
   type ViewComposition,
   type ViewState,
 } from "./viewstate";
@@ -295,7 +298,7 @@ import {
 } from "./webcodecs";
 import { spawnZarrWorker, zarrInitMessage, zarrObjectUrl, zarrRootUrl, zarrStoreFor } from "./zarr/channel";
 import { deliverGif, exportGif, gifFileName, gifFrameWindow, type GifHost } from "./gifexport";
-import { DEFAULT_VERTICAL_EXAGGERATION, VOLUME_BUNDLE_LEVELS, VolumeLayer, tileRegion, volumeLevels, type VolumeLevels } from "./volume";
+import { VOLUME_BUNDLE_LEVELS, VolumeLayer, tileRegion, volumeLevels, type VolumeLevels } from "./volume";
 import { boxBounds, VolumeTool, type LonLat, type VolumeDrag, type VolumeToolKind } from "./volumetool";
 
 // Rewrite the static shell into the detected locale and appearance before
@@ -1104,6 +1107,7 @@ const speedButton = required<HTMLButtonElement>("speed-button");
 const gifButton = required<HTMLButtonElement>("gif-button");
 const gifLabel = required<HTMLElement>("gif-label");
 const particlesToggle = required<HTMLButtonElement>("particles-toggle");
+const volumeTile = required<HTMLButtonElement>("volume-tile");
 const speedLabel = required<HTMLElement>("speed-label");
 const validTime = required<HTMLTimeElement>("valid-time");
 const dataCard = required<HTMLElement>("data-card");
@@ -1394,9 +1398,9 @@ interface VariableSession {
    * differ (ECMWF prate has no analysis frame), so a frame is found by lead
    * time rather than by index. */
   leadOffsets: Map<number, number> | null;
-  /** The altitude levels of a volume bundle (the MRMS reflectivity cube),
-   * drawn by the volume layer from all of them at once; null for every
-   * other bundle. */
+  /** The altitude levels of a volume bundle (the MRMS reflectivity cube,
+   * the WRF cloud water), drawn by the volume layer from all of them at
+   * once; null for every other bundle. */
   volume: VolumeLevels | null;
 }
 
@@ -1583,6 +1587,8 @@ function slotSessions(): VariableSession[] {
   const list: VariableSession[] = [];
   if (activeSession) list.push(activeSession);
   for (const slot of overlaySlots()) list.push(slot.session!);
+  const volume = volumeOverlaySession();
+  if (volume) list.push(volume);
   for (const session of compositeSessions()) list.push(session);
   return list;
 }
@@ -1601,6 +1607,19 @@ let volumeFocus: { west: number; east: number; south: number; north: number } | 
 /** The vertical section's two ends, or null. */
 let volumeSection: [LonLat, LonLat] | null = null;
 let volumeTool: VolumeTool | null = null;
+
+/** The volume drawn over a 2D field (`view.volume`, `?volume=`): its
+ * session — opened after the primary, at the overlay tier, like the
+ * lines' — and the cache keys of the levels it is waiting on and showing.
+ * It follows the primary's playhead by lead time on its own axis and never
+ * gates it: until every level of the wanted frame is decoded the volume
+ * layer keeps the frame it has. A volume chosen as the field is the
+ * primary's and drawn through `configureSlotLayer`, never through this. */
+const volumeOverlay: { session: VariableSession | null; wantedKeys: Set<string>; shownKeys: string[] } = {
+  session: null,
+  wantedKeys: new Set(),
+  shownKeys: [],
+};
 
 /** One field the experiment computes: its layer, the grid it was last
  * configured for, and the input planes the plane on screen was built from
@@ -3974,6 +3993,7 @@ function blendTowardNext(timestamp: number): void {
   // two slots sit at the same fraction of the step. An overlay still catching
   // up (its plane for this frame not decoded, or not on its axis) holds.
   for (const overlay of overlaySlots()) blendOverlay(overlay, activeFrameIndex, next, weight);
+  blendVolumeOverlay(activeFrameIndex, next, weight);
 }
 
 /** Sweep one overlay between the planes it holds for two primary frames,
@@ -4071,7 +4091,10 @@ function sessionViewportTiles(session: VariableSession): TileRect[] | null {
   if (isCompositeInput(session)) return null;
   // A ray may cross any part of the volume, so it is held whole — or, in a
   // close-up, exactly the box's tiles, which the volume is clipped to.
-  if (session.volume) return volumeFocus ? viewportTileRects(session.metadata, session.tiles, volumeFocus, 0) : null;
+  // The close-up is the primary's alone; an overlaid volume is held whole.
+  if (session.volume) {
+    return volumeFocus && session === activeSession ? viewportTileRects(session.metadata, session.tiles, volumeFocus, 0) : null;
+  }
   const bounds = map.getBounds();
   return viewportTileRects(session.metadata, session.tiles, {
     west: bounds.getWest(),
@@ -4373,6 +4396,7 @@ function trySelectFrame(index: number): boolean {
     // asked for: a line chart of one hour over a field of another would be
     // the wrong picture, whichever of the two were ahead.
     for (const overlay of overlaySlots()) trySelectOverlayFrame(overlay, index);
+    trySelectVolumeOverlay(index);
     trySelectComposite(index);
     requestColumnFrame();
     prefetchNext(index);
@@ -4388,6 +4412,7 @@ function trySelectFrame(index: number): boolean {
   // The overlays' planes for this frame are asked for now too, after the
   // primary's, so they are as likely to be there when it lands.
   for (const overlay of overlaySlots()) requestOverlayDecode(overlay, index);
+  requestVolumeOverlayDecode(index);
   return false;
 }
 
@@ -4439,6 +4464,83 @@ function requestOverlayDecode(slot: RasterSlot, index: number): void {
   if (!cachedFrame(key, session)) requestDecode(session, session.variable, offset);
 }
 
+/** The cache keys of every level of the overlaid volume at the primary's
+ * frame `index`, with the frame offset they are at; null when its axis has
+ * no frame at that lead time. */
+function volumeOverlayFrame(session: VariableSession, index: number): { offset: number; keys: string[] } | null {
+  const offset = sessionOffsetForLead(session, frameLeadSeconds(index));
+  if (offset === null) return null;
+  return { offset, keys: session.variables.map((variable) => cacheKey(session, variable, offset)) };
+}
+
+/** Show the overlaid volume's frame for the primary frame at `index` when
+ * every level of it is decoded; otherwise keep what is on screen and ask
+ * for the missing levels, whose arrival retries this. A lead time the
+ * volume's axis lacks hides it, as it hides the lines. */
+function trySelectVolumeOverlay(index: number): void {
+  const session = volumeOverlaySession();
+  if (!session || !volumeLayer) return;
+  volumeOverlay.wantedKeys.clear();
+  const frame = volumeOverlayFrame(session, index);
+  if (!frame) {
+    volumeLayer.setVisible(false);
+    volumeOverlay.shownKeys = [];
+    return;
+  }
+  // Whole planes only: a ray may cross any column of the box.
+  const planes = frame.keys.map((key) => {
+    const plane = planeCache.get(key);
+    return plane && plane.tiles === null ? plane : undefined;
+  });
+  let complete = true;
+  for (const [position, key] of frame.keys.entries()) {
+    if (planes[position]) continue;
+    complete = false;
+    volumeOverlay.wantedKeys.add(key);
+    requestDecode(session, session.variables[position]!, frame.offset);
+  }
+  if (!complete) return;
+  for (const [position, key] of frame.keys.entries()) {
+    planeCache.delete(key);
+    planeCache.set(key, planes[position]!);
+  }
+  volumeLayer.setFrame(planes.map((plane) => plane!.plane));
+  volumeLayer.setVisible(true);
+  volumeOverlay.shownKeys = frame.keys;
+}
+
+/** Ask for the overlaid volume's levels at a primary frame without showing
+ * anything. */
+function requestVolumeOverlayDecode(index: number): void {
+  const session = volumeOverlaySession();
+  if (!session) return;
+  const frame = volumeOverlayFrame(session, index);
+  if (!frame) return;
+  for (const [position, key] of frame.keys.entries()) {
+    if (planeCache.get(key)?.tiles !== null) requestDecode(session, session.variables[position]!, frame.offset);
+  }
+}
+
+/** Sweep the overlaid volume between its frames for two primary frames,
+ * on the primary's clock, when it is showing exactly the first and holds
+ * every level of the second. */
+function blendVolumeOverlay(index: number, next: number, weight: number): void {
+  const session = volumeOverlaySession();
+  if (!session || !volumeLayer) return;
+  const a = volumeOverlayFrame(session, index);
+  const b = volumeOverlayFrame(session, next);
+  if (!a || !b || volumeOverlay.shownKeys.length !== a.keys.length) return;
+  if (!a.keys.every((key, position) => volumeOverlay.shownKeys[position] === key)) return;
+  const planesA = a.keys.map((key) => planeCache.get(key));
+  const planesB = b.keys.map((key) => planeCache.get(key));
+  if ([...planesA, ...planesB].some((plane) => !plane || plane.tiles !== null)) return;
+  volumeLayer.setBlend(
+    planesA.map((plane) => plane!.plane),
+    planesB.map((plane) => plane!.plane),
+    weight,
+  );
+}
+
 /** Frames decoded ahead of the playhead during playback. One is not enough:
  * a single slow decode (byte-budget eviction forces perpetual re-decodes on
  * long loops) then stalls the very next frame step. A small pipeline absorbs
@@ -4456,6 +4558,7 @@ function prefetchNext(index: number): void {
       if (!cachedFrame(key, session)) requestDecode(session, variable, hour);
     }
     for (const overlay of overlaySlots()) requestOverlayDecode(overlay, frame);
+    requestVolumeOverlayDecode(frame);
     for (const input of compositeSessions()) requestCompositeDecode(input, frame);
   }
 }
@@ -4549,6 +4652,7 @@ function handleDecodedFrame(
     if (overlay.shownKey !== null) displayedKeys.add(overlay.shownKey);
   }
   for (const shown of composite?.shownKeys ?? []) displayedKeys.add(shown);
+  for (const shown of volumeOverlay.shownKeys) displayedKeys.add(shown);
   while (planeCacheBytes > planeCacheBudgetBytes() && planeCache.size > 2) {
     const oldest = planeCache.keys().next().value;
     if (oldest === undefined || oldest === key) break;
@@ -4591,6 +4695,7 @@ function handleDecodedFrame(
   for (const overlay of overlaySlots()) {
     if (overlay.wantedKey === key && activeFrameIndex !== null) trySelectOverlayFrame(overlay, activeFrameIndex);
   }
+  if (volumeOverlay.wantedKeys.has(key) && activeFrameIndex !== null) trySelectVolumeOverlay(activeFrameIndex);
   if (composite?.wantedKeys.has(key) && activeFrameIndex !== null) trySelectComposite(activeFrameIndex);
 }
 
@@ -5261,6 +5366,7 @@ function syncRail(): void {
     if (pressed && !button.hidden) button.scrollIntoView({ block: "nearest", inline: "nearest" });
   }
   particlesToggle.setAttribute("aria-pressed", String(view.particles));
+  syncVolumeTile();
   for (const button of derivedButtons()) {
     button.setAttribute("aria-pressed", String(view.derived[button.dataset.derived as "inflow" | "front"]));
   }
@@ -5374,16 +5480,19 @@ function legendGradientFor(session: VariableSession): string {
  * label and unit, and the legend spans the codebook. */
 function variableUi(session: VariableSession): VariableUi {
   const spec = session.chartId === null ? null : variableSpec(session.chartId);
-  // A volume borrows the composite's colours, not its name: what is drawn is
-  // the reflectivity on every altitude, and its code says which.
-  const volume = spec && VOLUME_BUNDLE_LEVELS.has(session.id) ? volumeLevels(session.metadata.variables) : null;
+  // A volume's code says which altitudes it spans. The reflectivity cube
+  // borrows the composite's colours, not its name: what is drawn is the
+  // reflectivity on every altitude. The cloud water is a chart of its own.
+  const volume = spec ? session.volume : null;
   if (spec && volume) {
-    const km = (metres: number) => String(Number((metres / 1000).toFixed(1)));
+    const km = (metres: number) => String(Number((metres / 1000).toFixed(2)));
+    const cloud = spec.chart === "clw";
+    const span = `${km(volume.altitudes[0]!)}–${km(volume.altitudes[volume.altitudes.length - 1]!)} KM`;
     return {
-      code: `${session.id.toUpperCase()} ${km(volume.altitudes[0]!)}–${km(volume.altitudes[volume.altitudes.length - 1]!)} KM`,
-      title: ["3D", "Reflectivity"],
+      code: `${cloud ? spec.code : session.id.toUpperCase()} ${span}`,
+      title: cloud ? spec.title : ["3D", "Reflectivity"],
       bufferTitle: spec.bufferTitle,
-      label: t("varLabelRefl3d"),
+      label: cloud ? spec.label() : t("varLabelRefl3d"),
       legend: spec.legend(),
       legendKey: spec.legendKey?.() ?? null,
     };
@@ -5507,6 +5616,8 @@ function updateVariablePresentation(session: VariableSession): void {
   // The particle overlay belongs to the vector fields, so its switch appears
   // with them.
   particlesToggle.hidden = !session.vector && !compositeFlowPublished();
+  // The volume switch belongs to a 2D field on a run that ships a volume.
+  syncVolumeTile();
   // The field section follows the field on screen: its tile shows beside
   // the core ones while it is there.
   if (manifest) syncFieldTiles(manifest);
@@ -6046,12 +6157,15 @@ function loadVariable(
     // u/v order is the table's. A file this build cannot place renders its
     // first variable as a plain scalar.
     // A volume bundle is one quantity on many altitudes; a frame of it is
-    // every level, and its colours are the composite reflectivity's.
+    // every level, and it is what its levels' parameter says: cloud water
+    // is a chart of its own, and MRMS's local reflectivity number, which
+    // no chart is keyed by, takes the composite reflectivity's colours.
     const volume = VOLUME_BUNDLE_LEVELS.has(variableId) ? volumeLevels(bundleMetadata.variables) : null;
     const derived = volume ? null : identifyBundle(bundleMetadata.variables);
     const sessionVariables = volume?.variables ?? derived?.variables ?? fallbackVariables(variableId, bundleMetadata);
+    const volumeParameter = volume?.variables[0]?.parameter;
     const identity: VariableIdentity | null = volume
-      ? { family: "cref", level: null, vector: false }
+      ? ((volumeParameter ? identityForParameter(volumeParameter) : null) ?? { family: "cref", level: null, vector: false })
       : (derived?.identity ?? null);
     warnOnIdentityMismatch(variableId, identity);
     const session: VariableSession = {
@@ -7437,13 +7551,12 @@ function syncVolumeTools(): void {
   });
 }
 
-/** Create the radar volume layer on first use, above the plane layers and
- * below the boundary lines. `?vexag=` sets its vertical exaggeration. */
+/** Create the volume layer on first use, above the plane layers and
+ * below the boundary lines. `?vexag=` sets its vertical exaggeration; with
+ * none, the volume's own default applies (volume.ts). */
 function ensureVolumeLayer(): VolumeLayer {
   if (!volumeLayer) {
-    const asked = Number(new URLSearchParams(window.location.search).get("vexag"));
-    const exaggeration = Number.isFinite(asked) && asked > 0 && asked <= 200 ? asked : DEFAULT_VERTICAL_EXAGGERATION;
-    volumeLayer = new VolumeLayer((message) => showError(message), exaggeration);
+    volumeLayer = new VolumeLayer((message) => showError(message), parseVerticalExaggerationFromSearch(window.location.search));
   }
   if (!volumeLayerAdded) {
     map.addLayer(volumeLayer, FORECAST_ANCHOR_LAYER);
@@ -7586,6 +7699,7 @@ function applyVariable(session: VariableSession): void {
   if (!session.volume) clearVolumeSelection();
   syncVolumeTools();
   applyOverlays();
+  applyVolumeOverlay();
   applyMosaicMembers();
   applyComposite();
   syncLapse();
@@ -8263,6 +8377,112 @@ function attachOverlay(slot: RasterSlot, session: VariableSession): void {
   else requestOverlayDecode(slot, index);
 }
 
+/** The volume bundle the run ships for the overlay switch, or null: the
+ * first of the volume bundles it publishes. */
+function shippedVolume(): ForecastBundleId | null {
+  if (!manifest) return null;
+  for (const id of VOLUME_BUNDLE_LEVELS.keys()) if (hasBundle(manifest, id)) return id;
+  return null;
+}
+
+/** Reconcile the overlaid volume with the view: over a 2D field it carries
+ * the volume named in `volume`, loading it after the primary and never
+ * blocking it; it empties when the view names none, when the field is
+ * itself a volume, or when the run does not ship the one named (which then
+ * leaves the view, so the address bar stops naming it). */
+function applyVolumeOverlay(): void {
+  if (view.volume !== null && manifest && !hasBundle(manifest, view.volume)) view.volume = null;
+  const wanted = volumeOverField(view);
+  if (wanted === null) {
+    detachVolumeOverlay();
+    syncVolumeTile();
+    return;
+  }
+  syncVolumeTile();
+  if (volumeOverlay.session?.id === wanted) {
+    // Back over a field after a volume was the field: the layer may hold
+    // that one's grid and levels.
+    configureVolumeOverlay(volumeOverlay.session);
+    if (activeFrameIndex !== null) trySelectVolumeOverlay(activeFrameIndex);
+    return;
+  }
+  detachVolumeOverlay();
+  const sequence = initializeSequence;
+  loadVariable(wanted, sequence, "overlay")
+    .then((session) => {
+      if (sequence !== initializeSequence || !ready) return;
+      if (volumeOverField(view) !== wanted || !session.volume) return;
+      attachVolumeOverlay(session);
+    })
+    .catch((error: unknown) => {
+      if (sequence !== initializeSequence) return;
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      showError(error instanceof Error ? error.message : t("bundleLoadFailed"));
+    });
+}
+
+/** Point the volume layer at the overlaid session: its grid, levels and
+ * palette, the whole volume (the close-up and the section are the primary
+ * volume's tools). */
+function configureVolumeOverlay(session: VariableSession): void {
+  const layer = ensureVolumeLayer();
+  layer.configure(geoGrid(session.metadata), session.volume!);
+  layer.setPalette(buildPalette(session.variable, session.identity));
+  layer.setRegion(null);
+  layer.setSection(null);
+}
+
+/** Put a loaded volume session over the field and hand it the frame on
+ * screen. */
+function attachVolumeOverlay(session: VariableSession): void {
+  volumeOverlay.session = session;
+  volumeOverlay.wantedKeys.clear();
+  volumeOverlay.shownKeys = [];
+  configureVolumeOverlay(session);
+  refreshViewportTiles();
+  const index = activeFrameIndex ?? requestedFrameIndex ?? Number(slider.value);
+  sendPrefetchWindow(index);
+  if (activeFrameIndex !== null) trySelectVolumeOverlay(activeFrameIndex);
+  else requestVolumeOverlayDecode(index);
+}
+
+/** Take the volume off the field. The session stays resident, like every
+ * session that leaves the screen; the layer goes dark unless the primary
+ * is itself a volume, which owns it then. */
+function detachVolumeOverlay(): void {
+  if (volumeOverlay.session === null) return;
+  volumeOverlay.session = null;
+  volumeOverlay.wantedKeys.clear();
+  volumeOverlay.shownKeys = [];
+  if (!activeSession?.volume) volumeLayer?.setVisible(false);
+}
+
+/** The session the volume overlay is drawing, or null when there is none
+ * or the volume is the primary itself. */
+function volumeOverlaySession(): VariableSession | null {
+  const session = volumeOverlay.session;
+  return session !== null && session !== activeSession ? session : null;
+}
+
+/** The overlay section's volume switch: shown over a 2D field on a run
+ * that ships a volume, pressed while one is drawn over it. */
+function syncVolumeTile(): void {
+  const field = view.field;
+  volumeTile.hidden = shippedVolume() === null || field === null || VOLUME_BUNDLE_LEVELS.has(field);
+  volumeTile.setAttribute("aria-pressed", String(!volumeTile.hidden && volumeOverField(view) !== null));
+}
+
+/** Flip the volume over the field. */
+function setVolumeShown(shown: boolean): void {
+  const next = shown ? shippedVolume() : null;
+  if (view.volume === next) return;
+  view.volume = next;
+  syncVolumeTile();
+  syncRailDensity();
+  syncUrl();
+  applyVolumeOverlay();
+}
+
 /** The experiment's key under the colour scale: a row per derived layer
  * the run can feed — the frontal zone needs the θe, the inflow both
  * inputs — and nothing at all outside the experiment. */
@@ -8593,7 +8813,9 @@ async function initialize({ frame = false }: { frame?: boolean } = {}): Promise<
   windLayerGridSource = null;
   windLayer?.setVisible(false);
   resetComposite();
+  detachVolumeOverlay();
   particlesToggle.hidden = true;
+  volumeTile.hidden = true;
   syncRailDensity();
   clearLabels();
   activeSession = null;
@@ -9011,6 +9233,7 @@ playButton.addEventListener("click", () => {
 speedButton.addEventListener("click", () => setPlaybackFps(nextFps(playbackFps), true));
 gifButton.addEventListener("click", () => void saveGif());
 particlesToggle.addEventListener("click", () => setParticlesEnabled(!view.particles));
+volumeTile.addEventListener("click", () => setVolumeShown(volumeOverField(view) === null));
 /** Poll the live pointer; a changed manifest re-initializes onto the new
  * run ("排播型电视直播" — the client tunes itself to the newest broadcast).
  * The manifest's crc is what says "new": a forecast's changes with its run
