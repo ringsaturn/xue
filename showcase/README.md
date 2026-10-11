@@ -150,9 +150,15 @@ retires a case.
    (−180..180) and `terrain`, the vertical exaggeration (a positive number)
    or `false` for an explicitly flat view. Without one the viewer frames the
    `bbox` as before; a shell that does not know the block does the same.
+   The block may also name the **volume** the case opens with drawn over
+   its field — `volume`, one of the volume bundles (`cloud3d`) among the
+   case's own `variables` — the same switch a link's `&volume=` throws, so
+   a visitor sees the cloud without pressing the overlay tile. A link that
+   names `volume=` itself (`off` included) wins, and the tile still turns it
+   off; a shell that does not know the field opens on the field alone.
 
    ```json
-   "view": {"center": [138.73, 35.36], "zoom": 11.6, "pitch": 62, "bearing": -35, "terrain": 1.5}
+   "view": {"center": [138.73, 35.36], "zoom": 11.6, "pitch": 62, "bearing": -35, "terrain": 1.5, "volume": "cloud3d"}
    ```
 
    Prose is the definition's to change after the fact: a translation added

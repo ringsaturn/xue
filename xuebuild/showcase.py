@@ -41,9 +41,10 @@ Its ``hours`` is still a point on the source's published axis, counted from
 the source's first hour.
 
 A case may also carry a ``view``: the camera the shell opens the case on
-(center, zoom, pitch, bearing, terrain exaggeration), carried onto the
-catalog row verbatim. A shell that does not know the block opens the case
-on its bounding box as before.
+(center, zoom, pitch, bearing, terrain exaggeration) and the volume bundle
+it opens drawn over the field, carried onto the catalog row verbatim. A
+shell that does not know the block opens the case on its bounding box as
+before.
 """
 
 from __future__ import annotations
@@ -53,13 +54,14 @@ import logging
 import math
 import os
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from .common import crc32_hex
-from .binconvert import bundle_input_ids, published_bundle_ids
+from .binconvert import VOLUME_BUNDLES, bundle_input_ids, published_bundle_ids
 from .encoder import convert_bin
 from .errors import DownloadError, ManifestError, XueError
 from .fetch import parse_run
@@ -150,9 +152,10 @@ class CaseSpec:
     view: dict[str, Any] | None = None
     """The camera the shell opens the case on (:func:`_view_block`):
     ``center`` as ``[lon, lat]``, ``zoom``, and optionally ``pitch``,
-    ``bearing`` and ``terrain`` (a vertical exaggeration, or ``false`` for an
-    explicitly flat view). Carried onto the catalog row as given; a case
-    without one opens on its bounding box."""
+    ``bearing``, ``terrain`` (a vertical exaggeration, or ``false`` for an
+    explicitly flat view) and ``volume`` (one of the case's volume bundles,
+    drawn over the field from the first frame). Carried onto the catalog
+    row as given; a case without one opens on its bounding box."""
 
     @property
     def output_subdirectory(self) -> str:
@@ -314,7 +317,7 @@ def parse_case(payload: dict[str, Any], *, source_name: str = "<case>") -> CaseS
 
     view = payload.get("view")
     if view is not None:
-        view = _view_block(view, case_id)
+        view = _view_block(view, case_id, ordered)
 
     return CaseSpec(
         id=case_id,
@@ -361,7 +364,7 @@ def _radar_block(value: object, case_id: str) -> dict[str, str]:
     return {"window": window, "defaultSite": site, "defaultProduct": product}
 
 
-_VIEW_KEYS = ("center", "zoom", "pitch", "bearing", "terrain")
+_VIEW_KEYS = ("center", "zoom", "pitch", "bearing", "terrain", "volume")
 
 
 def _view_number(value: object, name: str, case_id: str, low: float, high: float) -> float:
@@ -373,13 +376,16 @@ def _view_number(value: object, name: str, case_id: str, low: float, high: float
     return value
 
 
-def _view_block(value: object, case_id: str) -> dict[str, Any]:
+def _view_block(value: object, case_id: str, variables: Sequence[str]) -> dict[str, Any]:
     """A case's ``view`` block, the camera the shell opens it on: a center
     and a zoom, optionally a pitch, a bearing and the terrain exaggeration
-    (a positive number) or ``false`` for an explicitly flat view. The
-    ranges are MapLibre's; the values pass through as written."""
+    (a positive number) or ``false`` for an explicitly flat view, and
+    optionally the ``volume`` the shell opens drawn over the field — one of
+    the volume bundles (:data:`xuebuild.binconvert.VOLUME_BUNDLES`) among
+    the case's own ``variables``. The ranges are MapLibre's; the values
+    pass through as written."""
     if not isinstance(value, dict) or set(value) - set(_VIEW_KEYS):
-        raise ShowcaseError(f"case {case_id}: view must be {{center, zoom, pitch?, bearing?, terrain?}}")
+        raise ShowcaseError(f"case {case_id}: view must be {{center, zoom, pitch?, bearing?, terrain?, volume?}}")
     center = value.get("center")
     if not isinstance(center, list) or len(center) != 2:
         raise ShowcaseError(f"case {case_id}: view.center must be [longitude, latitude]")
@@ -403,6 +409,13 @@ def _view_block(value: object, case_id: str) -> dict[str, Any]:
             if exaggeration <= 0:
                 raise ShowcaseError(f"case {case_id}: view.terrain must be a positive exaggeration or false")
             view["terrain"] = exaggeration
+    if "volume" in value:
+        volume = value["volume"]
+        if not isinstance(volume, str) or volume not in VOLUME_BUNDLES:
+            raise ShowcaseError(f"case {case_id}: view.volume must be one of the volume bundles {sorted(VOLUME_BUNDLES)}")
+        if volume not in variables:
+            raise ShowcaseError(f"case {case_id}: view.volume names {volume}, which is not among the case's variables")
+        view["volume"] = volume
     return view
 
 
@@ -619,7 +632,7 @@ def validate_catalog_entry(entry: dict[str, Any]) -> None:
     if "radar" in entry:
         _radar_block(entry["radar"], entry["id"])
     if "view" in entry:
-        _view_block(entry["view"], entry["id"])
+        _view_block(entry["view"], entry["id"], variables)
 
 
 def refresh_sidecar(spec: CaseSpec, output_root: Path) -> dict[str, Any]:

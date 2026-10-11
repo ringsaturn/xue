@@ -486,6 +486,32 @@ class ViewBlockTest(unittest.TestCase):
         without, _ = build_entry()
         self.assertNotIn("view", without)
 
+    def test_the_view_may_open_a_volume_the_case_ships(self) -> None:
+        variables = ["tmpsfc", "wind10m", "cloud3d"]
+        view = {**self.VIEW, "volume": "cloud3d"}
+        spec = parse_case(woof_payload(variables=variables, view=view))
+        self.assertEqual(spec.view, view)
+        self.assertEqual(spec.view["volume"], "cloud3d")
+
+    def test_a_view_volume_must_be_a_volume_bundle_among_the_variables(self) -> None:
+        # Shipped as a 2D field, not a volume.
+        with self.assertRaisesRegex(ShowcaseError, "view.volume must be one of the volume bundles"):
+            parse_case(woof_payload(variables=["tmpsfc", "cloud3d"], view={**self.VIEW, "volume": "tmpsfc"}))
+        # A volume bundle the case does not ship.
+        with self.assertRaisesRegex(ShowcaseError, "not among the case's variables"):
+            parse_case(woof_payload(variables=["tmpsfc", "wind10m"], view={**self.VIEW, "volume": "cloud3d"}))
+        for bad in (3, None, True, ["cloud3d"], "", "CLOUD3D"):
+            with self.subTest(volume=bad), self.assertRaises(ShowcaseError):
+                parse_case(woof_payload(variables=["tmpsfc", "cloud3d"], view={**self.VIEW, "volume": bad}))
+
+    def test_the_catalog_row_holds_the_volume_to_its_variables(self) -> None:
+        entry, _ = build_entry(view=self.VIEW)
+        entry["view"] = {**self.VIEW, "volume": "cloud3d"}
+        with self.assertRaises(ShowcaseError):
+            validate_catalog_entry(entry)
+        entry["variables"] = [*entry["variables"], "cloud3d"]
+        validate_catalog_entry(entry)
+
 
 class RefreshSidecarTest(TempRoot, unittest.TestCase):
     """A built case's row rewritten from its definition, bundles untouched."""

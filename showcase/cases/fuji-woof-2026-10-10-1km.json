@@ -1,0 +1,62 @@
+{
+  "id": "fuji-woof-2026-10-10-1km",
+  "title": {
+    "zh": "富士山 1 km 降尺度：山谷云的全景",
+    "en": "Mount Fuji at 1 km: the wider view of the valley cloud",
+    "zh-Hant": "富士山 1 km 降尺度：山谷雲的全景",
+    "ja": "富士山 1 km ダウンスケーリング：谷の雲を広く見る",
+    "ko": "후지산 1 km 다운스케일링: 골짜기 구름의 넓은 시야",
+    "de": "Der Fuji in 1 km Auflösung: die Talwolken im weiteren Blick",
+    "fr": "Le mont Fuji à 1 km : les nuages de vallée en plan large",
+    "es": "El monte Fuji a 1 km: las nubes de valle en plano amplio",
+    "pt": "O monte Fuji a 1 km: as nuvens de vale em plano aberto",
+    "tr": "1 km çözünürlükte Fuji Dağı: vadi bulutlarına geniş bakış",
+    "ru": "Фудзи с шагом 1 км: долинные облака в широком плане"
+  },
+  "summary": {
+    "zh": "500 m case 的上一层嵌套：同一次 Recast WOOF 上的 WRF-ARW run，取其第三层 1 km 域，富士山周围 60 × 54 km 的方框，逐小时从 07Z 到 18Z（日本时 16 时至次日 03 时），同一个傍晚的更宽视角。山顶格从 4 °C 降到 0 °C，平地从 22 °C 降到 16 °C；1.75–2 km 的薄云层到午夜前沉到 1 km 后消散；越过山脊的气流 10 m 高度最大 8–10 m/s，80 m 高度 10–12 m/s。近景看 500 m 的 case。",
+    "en": "The 1 km parent nest of the 500 m case: the same WRF-ARW run on Recast’s WOOF service, read on its third domain, a 60 × 54 km box around Mount Fuji, hourly from 07Z to 18Z (16:00 to 03:00 JST), the wider view of the same evening. The summit cell cools from 4 °C to 0 °C while the lowlands fall from 22 °C to 16 °C; a thin cloud layer at 1.75–2 km sinks to 1 km before midnight and thins away; the flow over the ridges peaks at 8–10 m/s at 10 m and 10–12 m/s at 80 m. The 500 m case is the close-up.",
+    "zh-Hant": "500 m case 的上一層嵌套：同一次 Recast WOOF 上的 WRF-ARW run，取其第三層 1 km 域，富士山周圍 60 × 54 km 的方框，逐小時從 07Z 到 18Z（日本時 16 時至次日 03 時），同一個傍晚的更寬視角。山頂格從 4 °C 降到 0 °C，平地從 22 °C 降到 16 °C；1.75–2 km 的薄雲層到午夜前沉到 1 km 後消散；越過山脊的氣流 10 m 高度最大 8–10 m/s，80 m 高度 10–12 m/s。近景看 500 m 的 case。",
+    "ja": "500 m のケースの親ネスト。Recast の WOOF 上の同じ WRF-ARW run を第三領域の 1 km で読み、富士山を囲む 60 × 54 km を 07Z から 18Z（日本時間 16 時から翌 03 時）まで毎時で見せる、同じ夕方の広い視野。山頂の格子は 4 °C から 0 °C へ、平地は 22 °C から 16 °C へ下がる。1.75–2 km の薄い雲層は真夜中前に 1 km まで沈んで消える。尾根を越える流れは 10 m で最大 8–10 m/s、80 m で 10–12 m/s。近景は 500 m のケースで。",
+    "ko": "500 m 사례의 모 네스트. Recast WOOF 위의 같은 WRF-ARW run을 세 번째 영역 1 km로 읽어, 후지산을 둘러싼 60 × 54 km를 07Z부터 18Z(일본 시간 16시부터 다음 날 03시)까지 매시로 보여 주는 같은 저녁의 넓은 시야다. 정상 격자는 4 °C에서 0 °C로, 평지는 22 °C에서 16 °C로 내려간다. 1.75–2 km의 얇은 구름층은 자정 전에 1 km까지 내려와 사라진다. 능선을 넘는 흐름은 10 m에서 최대 8–10 m/s, 80 m에서 10–12 m/s다. 근경은 500 m 사례에서.",
+    "de": "Das 1-km-Mutternest des 500-m-Falls: derselbe WRF-ARW-Lauf auf Recasts WOOF-Dienst, gelesen auf seinem dritten Gebiet, ein 60 × 54 km großes Fenster um den Fuji, stündlich von 07Z bis 18Z (16:00 bis 03:00 JST), der weitere Blick auf denselben Abend. Die Gipfelzelle kühlt von 4 °C auf 0 °C ab, während das Flachland von 22 °C auf 16 °C fällt; eine dünne Wolkenschicht in 1,75–2 km sinkt vor Mitternacht auf 1 km und löst sich auf; die Strömung über die Kämme erreicht 8–10 m/s in 10 m und 10–12 m/s in 80 m. Der 500-m-Fall ist die Nahaufnahme.",
+    "fr": "Le domaine parent à 1 km du cas à 500 m : la même simulation WRF-ARW sur le service WOOF de Recast, lue sur son troisième domaine, un cadre de 60 × 54 km autour du mont Fuji, toutes les heures de 07Z à 18Z (16 h à 03 h JST), le plan large de la même soirée. La maille du sommet passe de 4 °C à 0 °C tandis que la plaine descend de 22 °C à 16 °C ; une mince couche nuageuse à 1,75–2 km s’abaisse à 1 km avant minuit puis se dissipe ; le flux sur les crêtes atteint 8–10 m/s à 10 m et 10–12 m/s à 80 m. Le cas à 500 m est le gros plan.",
+    "es": "El dominio padre a 1 km del caso a 500 m: la misma simulación WRF-ARW en el servicio WOOF de Recast, leída en su tercer dominio, un recuadro de 60 × 54 km alrededor del monte Fuji, cada hora de 07Z a 18Z (16:00 a 03:00 JST), el plano amplio de la misma tarde. La celda de la cumbre baja de 4 °C a 0 °C mientras la llanura cae de 22 °C a 16 °C; una capa nubosa delgada a 1,75–2 km descende a 1 km antes de medianoche y se disipa; el flujo sobre las crestas alcanza 8–10 m/s a 10 m y 10–12 m/s a 80 m. El caso a 500 m es el primer plano.",
+    "pt": "O domínio-mãe a 1 km do caso a 500 m: a mesma simulação WRF-ARW no serviço WOOF da Recast, lida no seu terceiro domínio, uma janela de 60 × 54 km em torno do monte Fuji, de hora em hora das 07Z às 18Z (16:00 às 03:00 JST), o plano aberto da mesma noite. A célula do cume desce de 4 °C para 0 °C enquanto a planície cai de 22 °C para 16 °C; uma camada fina de nuvens a 1,75–2 km baixa para 1 km antes da meia-noite e dissipa-se; o escoamento sobre as cristas atinge 8–10 m/s a 10 m e 10–12 m/s a 80 m. O caso a 500 m é o grande plano.",
+    "tr": "500 m vakasının 1 km’lik ana alanı: Recast’ın WOOF hizmetindeki aynı WRF-ARW simülasyonu, üçüncü alanında okunarak Fuji Dağı çevresinde 60 × 54 km’lik bir pencere, 07Z’den 18Z’ye (JST 16:00–03:00) saat saat, aynı akşamın geniş görünümü. Zirve hücresi 4 °C’den 0 °C’ye soğurken ova 22 °C’den 16 °C’ye düşüyor; 1,75–2 km’deki ince bulut katmanı gece yarısından önce 1 km’ye inip dağılıyor; sırtları aşan akış 10 m’de 8–10 m/s, 80 m’de 10–12 m/s’ye ulaşıyor. 500 m vakası yakın plandır.",
+    "ru": "Родительская сетка 1 км для случая 500 м: тот же расчёт WRF-ARW на сервисе WOOF компании Recast, прочитанный на третьей области — окно 60 × 54 км вокруг Фудзи, ежечасно с 07Z до 18Z (16:00–03:00 JST), широкий план того же вечера. Ячейка вершины остывает с 4 °C до 0 °C, равнина — с 22 °C до 16 °C; тонкий слой облаков на 1,75–2 км до полуночи опускается до 1 км и рассеивается; поток через гребни достигает 8–10 м/с на 10 м и 10–12 м/с на 80 м. Случай 500 м — крупный план."
+  },
+  "model": "woof",
+  "dataset": "woof/fuji-2026-10-10-1km/",
+  "hours": 12,
+  "bbox": [138.41, 35.13, 139.06, 35.61],
+  "variables": [
+    "tmpsfc",
+    "tmp2m",
+    "dpt2m",
+    "wind10m",
+    "wind80m",
+    "lcdc",
+    "mcdc",
+    "hcdc",
+    "tcdc",
+    "hpbl",
+    "dswrf",
+    "prate",
+    "orog",
+    "prmsl",
+    "cloud3d"
+  ],
+  "defaultVariable": "tmpsfc",
+  "eventTime": "2026-10-10T12:00:00Z",
+  "tags": ["mountain", "downscaling", "fog", "asia"],
+  "credit": "Recast Systems WOOF (WRF-ARW via gpuwm 2.8.7), run commissioned by the author · initial and boundary conditions NOAA GFS 2026-10-10 06Z · model terrain Copernicus DEM GLO-30",
+  "view": {
+    "center": [138.73, 35.36],
+    "zoom": 10.4,
+    "pitch": 55,
+    "bearing": -35,
+    "terrain": 1.5,
+    "volume": "cloud3d"
+  }
+}
