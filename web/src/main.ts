@@ -145,6 +145,7 @@ import {
   parseResolutionFromSearch,
   parseSceneFromSearch,
   parseUseH264FromSearch,
+  searchNamesTerrain,
   searchWithScene,
   DEFAULT_TERRAIN_EXAGGERATION,
   type SceneState,
@@ -946,6 +947,9 @@ const MAX_ZOOM = TERRAIN_CAMERA_MAX_ZOOM;
  * The map holds it from here on (its own controls toggle both), and the
  * address bar reads it back off the map (`currentScene`). */
 const urlScene = parseSceneFromSearch(window.location.search);
+/** Whether the link fixed the ground (`?terrain=`, on or off): a case's own
+ * relief then yields to it, as its framing yields to `#map=`. */
+const urlNamesTerrain = searchNamesTerrain(window.location.search);
 
 registerTerrainProtocol();
 
@@ -1221,6 +1225,7 @@ const MODEL_EYEBROW: Record<ForecastModelId, string> = {
   cfs: "NOAA / CFSv2 SEASONAL (0.94°)",
   sflux: "NOAA / GFS SFLUX (13 KM)",
   hrrr: "NOAA / HRRR CONUS (3 KM)",
+  woof: "RECAST / WOOF WRF-ARW NEST FUJI (500 M)",
   gefsaero: "NOAA / GEFS-AEROSOLS (0.25°)",
   cma: "CMA / RADAR MOSAIC (0.044°)",
   mrms: "NOAA / MRMS CONUS (0.02°)",
@@ -5513,7 +5518,13 @@ function updateVariablePresentation(session: VariableSession): void {
  * zooming out past the point where it fills the viewport only adds empty map,
  * and panning off it leaves nothing to look at. Both limits depend on the
  * viewport, so a resize recomputes them — without moving the camera, because
- * mobile browsers fire resize every time their toolbar slides. */
+ * mobile browsers fire resize every time their toolbar slides.
+ *
+ * `recenter` is the first open without a `#map=` camera (the link's camera
+ * outranks the case's). The camera is then the case's own `view` when it
+ * names one — a mountain is looked at from a side, pitched, with the
+ * relief up — else the fitted framing; the region's limits hold either
+ * way, so the view's zoom cannot sit below the fit. */
 function applyCaseCamera(showcaseCase: ShowcaseCase, recenter: boolean): void {
   const canvas = map.getCanvas();
   // Drop the standing limits first: they would otherwise constrain the very
@@ -5530,9 +5541,36 @@ function applyCaseCamera(showcaseCase: ShowcaseCase, recenter: boolean): void {
     width: canvas.clientWidth,
     height: canvas.clientHeight,
   });
-  if (recenter) map.jumpTo({ center: limits.center, zoom: limits.minZoom });
+  if (recenter) {
+    const view = showcaseCase.view;
+    if (view) {
+      map.jumpTo({
+        center: view.center,
+        zoom: Math.min(Math.max(view.zoom, limits.minZoom), MAX_ZOOM),
+        pitch: view.pitch ?? 0,
+        bearing: view.bearing ?? 0,
+      });
+      applyCaseTerrain(view.terrain);
+    } else {
+      map.jumpTo({ center: limits.center, zoom: limits.minZoom });
+    }
+  }
   map.setMinZoom(limits.minZoom);
   map.setMaxBounds(limits.bounds);
+}
+
+/** Put the ground in the relief a case's view asks for — through the same
+ * `setTerrain` the view control's switch uses, so the `terrain` event keeps
+ * the address bar, the switch, the lapse row and the peak labels in step.
+ * A link that said how the ground is (`?terrain=`, on or off) wins, as
+ * does a case that says nothing. */
+function applyCaseTerrain(terrain: number | false | undefined): void {
+  if (terrain === undefined || urlNamesTerrain || !mapStyleReady) return;
+  if (terrain === false) {
+    if (map.getTerrain()) map.setTerrain(null);
+  } else {
+    map.setTerrain({ source: TERRAIN_MESH_SOURCE, exaggeration: terrain });
+  }
 }
 
 /** The share of the view a regional model's region must fill for the

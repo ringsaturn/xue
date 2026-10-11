@@ -86,7 +86,13 @@ Facts worth getting right:
   102 at the altitude in metres). It is not published live: it appears in
   showcase cases only (`/showcase.html`). The viewer draws it as a
   raymarched volume, on the plane and on the globe (`?vexag=` sets the
-  vertical exaggeration, 10 by default). `jma` is the seventh
+  vertical exaggeration, 10 by default). `woof` is cases only too, and
+  the one *forecast* that is: Recast's WOOF, a WRF-ARW nest at 500 m over
+  Mount Fuji (a regular 0.005° grid of 79 × 61 cells, 138.54°E–138.93°E
+  and 35.22°N–35.52°N, every cell inside the model domain), hourly frames
+  from F1 — no analysis frame, as CFSv2 starts at F6 — with no live
+  pointer and no place in the model switch; `/?case=fuji-woof-2026-10-10`
+  opens it, framed by the case's own camera. `jma` is the seventh
   live source and the third observation: the Japan Meteorological Agency's
   high-resolution precipitation nowcast analysis (高解像度降水ナウキャスト)
   over Japan, five-minute frames decoded from the agency's map tiles onto a
@@ -216,7 +222,11 @@ Facts worth getting right:
   hours ending at the frame. CMA:
   `cref`. MRMS: `cref` (observed composite reflectivity, dBZ) and `prate`
   (the MRMS precipitation rate, mm/h; a case may ship the reflectivity
-  alone). MRMS3D: `refl3d` (the 33-level volume above). JMA: `prate` (precipitation intensity class representative rate,
+  alone). MRMS3D: `refl3d` (the 33-level volume above). WOOF-WRF
+  (`woof`): `tmp2m`, `prate`, `tmpsfc`, `dpt2m`, `tcdc`, `lcdc`, `mcdc`,
+  `hcdc`, `hpbl`, `dswrf`, the static `orog` and the vector pair
+  `wind10m` — the same names and units as the GFS's, so a case ships a
+  subset of them. JMA: `prate` (precipitation intensity class representative rate,
   mm/h). HIMAWARI: `ir104` (10.4 µm brightness temperature, K) and
   `dustrgb` (the Dust RGB's red, green and blue guns, 0–1, a composite
   with no physical unit), `dustcf` (the DEBRA dust confidence, 0–1) and
@@ -293,7 +303,8 @@ fall back to defaults rather than fail, so a constructed link always opens.
   `aifs`, `hres` / `ifs9km` of `ifshres`, `cfsv2` of `cfs`, `hrpns` of `jma`, `radar` of `cma`, `himawari-9` / `ahi` of
   `himawari`, `goes-19` / `goes-18` of `goeseast` / `goeswest`, `mtg` /
   `meteosat-12` of `meteosat`, `mosaic` / `geostationary` of `geo`, the
-  mosaic of every geostationary disk).
+  mosaic of every geostationary disk). `woof` (`wrf`) is known but has no
+  live run, so alone it opens the default; a case pins its own dataset.
 - `?type=` — the filled layer: `temp` (2 m temperature), `precip`, `wind`
   (10 m), `solar` (sflux only), `pressure` (sea level pressure as isobars),
   `radar` (composite reflectivity: the radar cases, and the HRRR forecast), the GFS
@@ -403,7 +414,10 @@ fall back to defaults rather than fail, so a constructed link always opens.
 - `#map=<zoom>/<lat>/<lon>` — the view, in the fragment (MapLibre's named
   hash; the page keeps it current on every move). Without it the page opens
   on the dataset's own region: the world for a global model, the contiguous
-  United States for `hrrr`, the case's box for a case.
+  United States for `hrrr`, the case's box for a case — or, for a case
+  whose catalog row carries a `view`, that camera (center, zoom, pitch,
+  bearing, and the relief it asks for unless the link carries
+  `?terrain=`).
 
 Examples: `/?model=ecmwf&type=wind850`, `/?type=temp&lines=hgt500`,
 `/?case=pnw-heat-dome-2021`, `/?case=ida-2021&type=radar`,
@@ -473,7 +487,11 @@ https://dataset.ringsaturn.me/xue/. The contract is two layers:
   `generatedAt`, `cases[]`); each case carries `id`, `title` and `summary`
   keyed by language, `model`, `run`, `runTime`, `forecastHours`, `bbox`,
   `variables`, `defaultVariable`, `eventTime`, `tags`, `credit`, and its own
-  `manifestPath` + `manifestCrc32`, which resolve like a live run's.
+  `manifestPath` + `manifestCrc32`, which resolve like a live run's. An
+  optional `view` names the camera the case opens on: `{"center": [lon,
+  lat], "zoom": number, "pitch"?: degrees, "bearing"?: degrees,
+  "terrain"?: exaggeration | false}`; a row without one is framed on its
+  `bbox`, and a `view` the viewer cannot read is ignored, not fatal.
 - Tropical cyclones are a separate, hourly JSON product under the same
   root (schema 1, `docs/tc.md`): the mutable pointer `latest-tc.json`
   (`schemaVersion`, `product: "tc"`, `issued`, `path`, `byteLength`,

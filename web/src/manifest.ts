@@ -11,9 +11,9 @@ type ForecastVariableId = "tmp2m" | "prate";
  * immutable run directories and its own manifest identity, and — when it has
  * a live feed — its own mutable live pointer at the data root. GFS uses the
  * bare ``latest.json``; the other live models use ``latest-<model>.json``.
- * The CMA radar mosaic has no live feed: it is an observation archive that
- * reaches the app only as showcase cases. The MRMS mosaic and the JMA
- * nowcast are observations *and* live, each a rolling window. */
+ * The WOOF nest has no live feed: it is a forecast archive that reaches the
+ * app only as showcase cases. The radar mosaics, the JMA nowcast and the
+ * imagers are observations *and* live, each a rolling window. */
 export type ForecastModelId =
   | "gfs"
   | "ecmwf"
@@ -22,6 +22,7 @@ export type ForecastModelId =
   | "cfs"
   | "sflux"
   | "hrrr"
+  | "woof"
   | "gefsaero"
   | "cma"
   | "mrms"
@@ -41,7 +42,9 @@ interface ForecastModelInfo {
   /** The manifest/pointer ``product`` string. */
   product: string;
   /** Mutable live pointer filename at the data root, absent for a dataset
-   * with no live feed. On an observation dataset the pointer follows a
+   * with no live feed — a mosaic, or an archive reached only through its
+   * showcase cases, which the model switch and `?model=` never offer
+   * (`FORECAST_MODEL_IDS`). On an observation dataset the pointer follows a
    * rolling window: the run is the window's first hour and moves on every
    * hour, and the manifest it names is rebuilt every few minutes into a
    * round of its own (`<model>.<run>/<HHMM>/manifest.json`), so what says
@@ -148,6 +151,22 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
     latestFilename: "latest-hrrr.json",
     region: [-134.1, 21.12, -60.9, 52.62],
     domain: HRRR_DOMAIN,
+  },
+  // Recast WOOF: a WRF-ARW nest run at 500 m over Mount Fuji, hourly from
+  // the first forecast hour (no analysis frame, as CFSv2 starts at F6).
+  // Not a live feed: the run is a fixed archive published as showcase
+  // cases alone (`/?case=…`), so it has no pointer and no place in the
+  // model switch or behind `?model=`; a case loads its manifest by path.
+  // The whole 79 × 61 grid lies inside the model domain, so unlike HRRR
+  // nothing is clipped, and a case frames its own region, so no `region`.
+  // Opens on the skin temperature, where the mountain's own relief shows.
+  woof: {
+    id: "woof",
+    label: "WOOF-WRF",
+    product: "nest",
+    coreBundles: ["tmp2m"],
+    defaultVariable: "tmpsfc",
+    railCore: ["tmpsfc", "tmp2m", "wind10m", "lcdc"],
   },
   // NOAA GEFS-Aerosols, the global aerosol member of the GEFS: aerosol
   // optical depth at 550 nm for the whole column and by species, and the
@@ -371,12 +390,21 @@ export function isNowcastModel(model: ForecastModelId): boolean {
   return FORECAST_MODELS[model].leadsClock === true;
 }
 
-/** The datasets in the model switch's order: the eight forecasts, the nine
- * rolling observation windows (MRMS and its 3D volume, the JMA nowcast, the
- * CMA mosaic, the four geostationary imagers and the SWPC aurora
- * probability) and the geostationary mosaic, a view over the imagers with
- * no feed of its own. The switch offers the ones index.html has a button
- * for. */
+/** True when a dataset is reached through its showcase cases alone: no
+ * live pointer to poll and no members to open in its place. The switch
+ * and `?model=` never offer it; a case loads its manifest by path. */
+export function isCaseOnlyModel(model: ForecastModelId): boolean {
+  const info = FORECAST_MODELS[model];
+  return info.latestFilename === undefined && info.mosaic !== true;
+}
+
+/** The datasets in the model switch's order: the eight live forecasts, the
+ * nine rolling observation windows (MRMS and its 3D volume, the JMA
+ * nowcast, the CMA mosaic, the four geostationary imagers and the SWPC
+ * aurora probability) and the geostationary mosaic, a view over the imagers
+ * with no feed of its own. The switch offers the ones index.html has a
+ * button for. A dataset with no pointer that is not a mosaic (the WOOF
+ * nest) is absent: it is reached through its showcase cases alone. */
 export const FORECAST_MODEL_IDS: readonly ForecastModelId[] = [
   "gfs",
   "sflux",

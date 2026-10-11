@@ -14,6 +14,7 @@ import {
   hasBundle,
   hasWindBundle,
   isCoarseGrid,
+  isCaseOnlyModel,
   isNowcastModel,
   isObservationModel,
   overlayResolutionPreference,
@@ -746,6 +747,7 @@ describe("dataset kinds", () => {
     for (const model of FORECAST_MODEL_IDS) {
       if (FORECAST_MODELS[model].mosaic) expect(FORECAST_MODELS[model].latestFilename).toBeUndefined();
       else expect(FORECAST_MODELS[model].latestFilename).toBeDefined();
+      expect(isCaseOnlyModel(model)).toBe(false);
     }
     expect(FORECAST_MODELS.aifs).toMatchObject({ label: "AIFS", product: "aifs-single-0p25", latestFilename: "latest-aifs.json" });
     expect(FORECAST_MODELS.ifshres).toMatchObject({ label: "ECMWF-HRES", product: "ifs-hres-0p1", latestFilename: "latest-ifshres.json" });
@@ -898,6 +900,50 @@ describe("dataset kinds", () => {
     // The two mosaics are not interchangeable.
     expect(() => validateManifest(mrms, "cma")).toThrow();
     expect(FORECAST_MODELS.mrms.region).toEqual([-130, 20, -60, 55]);
+  });
+
+  it("knows the woof nest as a forecast reached through its cases alone", () => {
+    // Mirrors the `woof` entry of SOURCES: Recast's WRF-ARW nest over Mount
+    // Fuji is a forecast (a run cycle, lead times) with no live pointer —
+    // the first such dataset — so it is in the table (a case names it by
+    // its manifest strings) but not in the switch or behind `?model=`.
+    expect(FORECAST_MODELS.woof).toMatchObject({
+      id: "woof",
+      label: "WOOF-WRF",
+      product: "nest",
+      coreBundles: ["tmp2m"],
+      defaultVariable: "tmpsfc",
+      railCore: ["tmpsfc", "tmp2m", "wind10m", "lcdc"],
+    });
+    expect(FORECAST_MODELS.woof.latestFilename).toBeUndefined();
+    expect(FORECAST_MODELS.woof.observation).toBeUndefined();
+    expect(FORECAST_MODELS.woof.region).toBeUndefined();
+    expect(FORECAST_MODELS.woof.domain).toBeUndefined();
+    expect(isCaseOnlyModel("woof")).toBe(true);
+    expect(isCaseOnlyModel("geo")).toBe(false);
+    expect(isCaseOnlyModel("hrrr")).toBe(false);
+    expect(isObservationModel("woof")).toBe(false);
+    expect(FORECAST_MODEL_IDS).not.toContain("woof");
+    const nest = {
+      schemaVersion: 5,
+      model: "WOOF-WRF",
+      product: "nest",
+      runTime: "2026-10-10T00:00:00Z",
+      forecastHours: 36,
+      bundles: [
+        { variable: "tmp2m", path: "tmp2m.xue", byteLength: 1, crc32: "00000000" },
+        { variable: "tmpsfc", path: "tmpsfc.xue", byteLength: 1, crc32: "00000000" },
+      ],
+    };
+    expect(validateManifest(nest, "woof").bundles.map((bundle) => bundle.variable)).toEqual(["tmp2m", "tmpsfc"]);
+    // A case ships only the bundles its event is about: the core is a
+    // live-run rule, which a case manifest is admitted without.
+    const subset = { ...nest, bundles: [nest.bundles[1]!] };
+    expect(() => validateManifest(subset, "woof")).toThrow(/no bundle for variable tmp2m/);
+    expect(validateManifest(subset, "woof", { requireCoreVariables: false }).bundles).toHaveLength(1);
+    // Not interchangeable with the other WRF-based source.
+    expect(() => validateManifest(nest, "hrrr")).toThrow();
+    expect(() => validateManifest({ ...nest, model: "HRRR", product: "wrfsfc" }, "woof")).toThrow();
   });
 
   it("admits an mrms3d manifest with its 33-level reflectivity volume as the core", () => {
