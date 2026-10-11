@@ -1122,6 +1122,43 @@ def read_plane(zarr_dir: Path, variable_id: str, frame_index: int) -> np.ndarray
     return plane
 
 
+def read_frames(zarr_dir: Path, variable_id: str) -> list[np.ndarray]:
+    """Every frame of one array as ``(height, width)`` planes of codes, in
+    axis order, each inner chunk decoded once: what a companion derived
+    from a store's codes (the H.264 video) reads, where :func:`read_plane`
+    would decode a time chunk once per frame."""
+    geometry, delta, index_location, fill_value = _array_layout(zarr_dir, variable_id)
+    if geometry.shard_count != 1:
+        return [read_plane(zarr_dir, variable_id, frame) for frame in range(geometry.frame_count)]
+    shard = (zarr_dir / variable_id / "c" / "0" / "0" / "0").read_bytes()
+    entries = _shard_index(shard, geometry.chunks_per_shard, index_location)
+    inner_length = math.prod(geometry.inner_shape)
+    frames: list[np.ndarray] = []
+    for time_chunk in range(geometry.time_chunks):
+        span = geometry.frames(time_chunk)
+        stack = np.empty((len(span), geometry.height, geometry.width), dtype=np.uint8)
+        for tile in range(geometry.tile_count):
+            offset, length = entries[time_chunk * geometry.tile_count + tile]
+            block: np.ndarray | None = None
+            if not (offset == _EMPTY_ENTRY and length == _EMPTY_ENTRY):
+                if offset + length > len(shard):
+                    raise BundleError("shard index entry exceeds the shard")
+                payload = shard[offset : offset + length]
+                if not zstdcli.frame_has_checksum(payload):
+                    raise BundleError("an inner chunk must be a Zstandard frame with a content checksum")
+                stored = np.frombuffer(
+                    zstdcli.decompress(payload, expected_length=inner_length), dtype=np.uint8
+                ).reshape(geometry.inner_shape)
+                block = _delta_decode(stored) if delta else stored
+            row, column = geometry.tile_origin(tile)
+            height, width = geometry.tile_shape(tile)
+            stack[:, row : row + height, column : column + width] = _trim(
+                block, geometry, time_chunk, tile, fill_value
+            )
+        frames.extend(stack)
+    return frames
+
+
 def store_byte_length(zarr_dir: Path) -> int:
     """The sum of every object in a store, what the manifest's ``byteLength``
     reports."""

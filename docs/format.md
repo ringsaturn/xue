@@ -1411,18 +1411,20 @@ Normative for byte identity between the two encoders:
 
 ## File Naming
 
-These conventions sit outside the container but are what the reference
-pipeline produces: one file per variable per run (`tmp2m.xue`, `prate.xue`,
-`dswrf.xue`, `cref.xue`), the two-variable `wind10m.xue`, and
+These conventions sit outside the container but are what an encoder
+writes when a build asks for containers (runs are published as Zarr stores
+named the same way with `.zarr`, [`zarr-profile.md`](zarr-profile.md), with
+no container written): one file per variable per run (`tmp2m.xue`,
+`prate.xue`, `dswrf.xue`, `cref.xue`), the two-variable `wind10m.xue`, and
 reduced-resolution renditions named `<variable>.half.xue`,
 `<variable>.quarter.xue` and `<variable>.eighth.xue` (decimated by 2, 4 and
 8; which rungs a source ships is a registry value, every source at least the
 half), structurally identical bundles whose metadata declares the decimated
-grid. A run
-directory also carries a `manifest.json` describing every bundle (path, byte
-length, whole-file CRC-32, resolution variants, optional poster and H.264
-companion artifacts); the manifest and a small mutable `latest.json` pointer
-are delivery concerns defined by the reference implementations
+grid. A run directory also carries a `manifest.json` describing every
+bundle (its store, and its container's path, byte length and whole-file
+CRC-32 where one was written, resolution variants, optional poster and
+H.264 companion artifacts); the manifest and a small mutable `latest.json`
+pointer are delivery concerns defined by the reference implementations
 (`xuebuild/manifest.py`, `web/src/manifest.ts`), not by this container spec.
 
 ---

@@ -99,15 +99,20 @@ input. Its `Resolve the encoder` step asks `native.knows_source(model)`
 `python` with GDAL installed and a `::warning::` on the run, so the fall
 back is explicit rather than silent; a dispatch can still insist on either.
 
-The native encoder does not write two artifacts, and `xuebuild/native.py`
+The native encoder writes the Zarr stores itself, straight from its codes
+(`rust/xue/src/encode/zarrstore.rs`, the counterpart of
+`zarrstore.write_store` over a `CodesSource`), with the series stores for
+the bundles the caller names (`SourceSpec.series_bundle_ids`, passed in by
+`native.py`). It does not write two artifacts, and `xuebuild/native.py`
 supplies them:
 
-- The H.264 companions. The codes are read back out of the bundles the
-  native encoder wrote (with the decoder the same wheel carries) and handed
-  to the existing `xuebuild/videoconvert.py`. Nothing is re-extracted and
-  nothing is quantized twice; the planes fed to ffmpeg are the container's
-  own bytes. As in the reference, a missing ffmpeg drops the artifact and
-  leaves the `.xue` as the fallback.
+- The H.264 companions. The codes are read back out of the stores the
+  native encoder wrote (`zarrstore.read_frames`; out of the container with
+  the wheel's decoder where only that was written) and handed to the
+  existing `xuebuild/videoconvert.py`. Nothing is re-extracted and nothing
+  is quantized twice; the planes fed to ffmpeg are the delivery's own
+  codes. As in the reference, a missing ffmpeg drops the artifact and
+  leaves the store as the fallback.
 - The live pointer. It carries the manifest's CRC32, and folding the video
   descriptors in changes the manifest, so the native encoder is asked for
   the manifest alone and the pointer is written afterwards, from the
@@ -115,8 +120,10 @@ supplies them:
 
 `tests/test_native.py` holds the two together: one build through each
 encoder into identically shaped directories, then every artifact compared
-byte for byte (bundles, half-resolution variants, posters, H.264 streams and
-their indexes and playlists, `manifest.json`, and the live pointer).
+byte for byte (stores, containers where written, reduced-resolution
+variants, posters, H.264 streams and their indexes and playlists,
+`manifest.json`, and the live pointer). `tests/test_zarr.py` also holds the
+two store writers to the same bytes directly (`xue.write_store`).
 
 ## Python bindings
 
@@ -321,7 +328,7 @@ frame's GRIB after the primary file's records, on the source's own grid.
 
 Fetching (`xue fetch`), the showcase driver, `build-bin` and `verify-bin`
 stay in Python, as does the H.264 encode itself: the native side writes the
-bundles those companions are derived from, and `xuebuild/native.py` does
+stores those companions are derived from, and `xuebuild/native.py` does
 the rest.
 
 ## Verified against

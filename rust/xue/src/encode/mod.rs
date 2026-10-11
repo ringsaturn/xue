@@ -12,10 +12,12 @@
 //!   variable's band.
 //! * **zstd** is linked rather than piped through the CLI.
 //! * The decoder in this same crate is the read-back verifier, so every bundle
-//!   the encoder writes is decoded by the code the browser runs.
+//!   the encoder writes is decoded, and every store's documents and shard
+//!   indexes parsed, by the code the browser and the API run.
 //!
-//! Scope is `convert-bin`: gridded input to bundles, half-resolution variants,
-//! posters and the manifest. Fetching, the showcase driver and the optional
+//! Scope is `convert-bin`: gridded input to Zarr stores (`zarrstore`) and,
+//! when asked for, `.xue` bundles, reduced-resolution variants, posters and
+//! the manifest. Fetching, the showcase driver and the optional
 //! H.264 companion artifacts stay in Python.
 //!
 //! It is behind the off-by-default `encoder` feature: it links GDAL, which the

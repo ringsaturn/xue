@@ -43,6 +43,7 @@ use crate::encode::quantize::{codebook, Codebook};
 use crate::encode::reproject::{build_resampler, lambert_conformal_from_wkt, ProjectedGrid};
 use crate::encode::sources::{family_frame_path, source_spec, SourceSpec};
 use crate::encode::temporal::build_chunks;
+use crate::encode::zarrstore;
 
 /// Scalar variables ship one single-variable bundle each; the two wind
 /// components ship together in one two-variable bundle for the GPU particle
@@ -389,6 +390,16 @@ pub struct ConvertOptions {
     pub extract_workers: usize,
     pub compress_workers: usize,
     pub verbose: bool,
+    /// Write each bundle's Zarr store (`docs/zarr-profile.md`) from the
+    /// codes, and name it in the manifest.
+    pub zarr: bool,
+    /// Write each bundle's `.xue` container as well. A build needs at least
+    /// one of the two.
+    pub container: bool,
+    /// The full-resolution bundles that also ship a series store
+    /// (`SourceSpec.series_bundle_ids` in `xuebuild/sources.py`, handed in by
+    /// the caller); only read when `zarr` is on.
+    pub series_bundle_ids: Vec<String>,
 }
 
 impl Default for ConvertOptions {
@@ -412,6 +423,9 @@ impl Default for ConvertOptions {
             extract_workers: cpus.min(16),
             compress_workers: cpus,
             verbose: false,
+            zarr: false,
+            container: true,
+            series_bundle_ids: Vec::new(),
         }
     }
 }
@@ -1891,6 +1905,18 @@ fn crc32_hex(bytes: &[u8]) -> String {
 
 // -- bundle writing ----------------------------------------------------------
 
+/// Tiers written at once; the compression pool bounds the CPU, this bounds
+/// how many tiers' chunks are alive. Mirrors `_BUNDLE_WRITERS`.
+const BUNDLE_WRITERS: usize = 4;
+
+/// What a bundle or tier report weighs as delivered: its container where one
+/// was written, its store otherwise.
+fn delivered_byte_length(report: &Value) -> Option<u64> {
+    report["byteLength"]
+        .as_u64()
+        .or_else(|| report["zarr"]["byteLength"].as_u64())
+}
+
 fn write_variable_bundle(
     variable_id: &str,
     output: &Path,
@@ -1900,13 +1926,14 @@ fn write_variable_bundle(
     frame_count: u32,
     zstd_level: i32,
     options: &ConvertOptions,
+    pool: &rayon::ThreadPool,
 ) -> Result<Value> {
     log!(
         options,
         "compressing {} {variable_id} chunks at zstd level {zstd_level}",
         tables.chunks.len()
     );
-    let tables = compress_all(tables, zstd_level, options)?;
+    let tables = compress_all(tables, zstd_level, pool)?;
     let metadata_json = serde_json::to_string(metadata).expect("serializable metadata");
     let bundle_bytes =
         binformat::write_bundle_v2(output, &metadata_json, geometry, &tables, frame_count)?;
@@ -1938,14 +1965,10 @@ fn write_variable_bundle(
 fn compress_all(
     tables: ChunkTables,
     zstd_level: i32,
-    options: &ConvertOptions,
+    pool: &rayon::ThreadPool,
 ) -> Result<ChunkTables> {
     use rayon::prelude::*;
 
-    let pool = rayon::ThreadPoolBuilder::new()
-        .num_threads(options.compress_workers.max(1))
-        .build()
-        .map_err(|error| EncodeError::conversion(format!("cannot start zstd pool: {error}")))?;
     let ChunkTables { variables, groups, chunks } = tables;
     let chunks = pool.install(|| {
         chunks
@@ -2045,6 +2068,11 @@ pub fn convert_bin(
     options: &ConvertOptions,
 ) -> Result<Value> {
     let source = source_spec(&options.model)?;
+    if !options.container && !options.zarr {
+        return Err(EncodeError::conversion(
+            "a build without the container needs the store: pass zarr=True",
+        ));
+    }
     if !crate::encode::quantize::PROFILES.contains(&options.profile.as_str()) {
         return Err(EncodeError::conversion(format!(
             "unknown profile: {}",
@@ -2749,79 +2777,177 @@ pub fn convert_bin(
     report_order.extend_from_slice(&available_composite_ids);
     report_order.extend_from_slice(&available_volume_ids);
 
-    let mut full_reports: BTreeMap<&str, Value> = BTreeMap::new();
-    let mut variant_reports: BTreeMap<&str, Vec<Value>> = BTreeMap::new();
+    // Every tier of every bundle is one task: the full tier, then each rung
+    // of the ladder, in submit order. Up to `BUNDLE_WRITERS` run at once over
+    // one machine-sized compression pool, so one bundle's serial tail (its
+    // file writes, its shard index, its container read-back) overlaps the
+    // next one's compression — `_BUNDLE_WRITERS` in the reference. A tier's
+    // reports come back in task order, so a bundle's variants stay in the
+    // ladder's ascending factor order whatever finished first.
+    struct Tier<'a> {
+        bundle_id: &'a str,
+        suffix: &'a str,
+        factor: usize,
+        grid: &'a GridInfo,
+        codes: &'a BTreeMap<i64, Vec<(String, Vec<u8>)>>,
+    }
+    let mut tiers: Vec<Tier<'_>> = Vec::new();
     for bundle_id in &submit_order {
-        let bundle_variables: Vec<String> = bundle_variable_ids(bundle_id);
-        let variables: Vec<&str> = bundle_variables.iter().map(String::as_str).collect();
-        let bundle_offsets: Vec<i64> = variable_offsets[variables[0]].clone();
         // The bundle is written on its own family's grid, with that family's
         // tile: one grid for every source but CFSv2, whose pressure-level
         // bundles are 1° where its surface ones are the T126 Gaussian grid.
-        let family = family_of(variables[0]);
-        let (_, family_tile) = source.family_grid(family)?;
-        // The full tier first, then each rung of the ladder the way the
-        // half tier was submitted alone; a bundle's variant reports come
-        // out in the ladder's ascending factor order.
-        let tiers = std::iter::once(("", 1usize, grid_for(family), &codes_by_offset)).chain(
-            ladder.iter().map(|rung| {
-                (
-                    rung.suffix.as_str(),
-                    rung.factor,
-                    &rung
-                        .grids
-                        .iter()
-                        .find(|(held, _)| *held == family)
-                        .expect("every family in play has a rung")
-                        .1,
-                    &rung.codes_by_offset,
-                )
-            }),
-        );
-        for (suffix, factor, bundle_grid, codes) in tiers {
-            let metadata = build_metadata(
-                run_time,
-                &bundle_offsets,
-                bundle_grid,
-                &options.profile,
-                &variables,
-                source,
-                unit_seconds,
-                &producer_versions,
-            )?;
-            let tile = bundle_tile(family_tile, bundle_grid, factor);
+        let family = family_of(bundle_variable_ids(bundle_id)[0].as_str());
+        tiers.push(Tier {
+            bundle_id,
+            suffix: "",
+            factor: 1,
+            grid: grid_for(family),
+            codes: &codes_by_offset,
+        });
+        for rung in &ladder {
+            tiers.push(Tier {
+                bundle_id,
+                suffix: rung.suffix.as_str(),
+                factor: rung.factor,
+                grid: &rung
+                    .grids
+                    .iter()
+                    .find(|(held, _)| *held == family)
+                    .expect("every family in play has a rung")
+                    .1,
+                codes: &rung.codes_by_offset,
+            });
+        }
+    }
+    let pool = zarrstore::compression_pool(options.compress_workers)?;
+    let write_tier = |tier: &Tier<'_>| -> Result<Value> {
+        let bundle_variables: Vec<String> = bundle_variable_ids(tier.bundle_id);
+        let variables: Vec<&str> = bundle_variables.iter().map(String::as_str).collect();
+        let bundle_offsets: &[i64] = &variable_offsets[variables[0]];
+        let (_, family_tile) = source.family_grid(family_of(variables[0]))?;
+        let metadata = build_metadata(
+            run_time,
+            bundle_offsets,
+            tier.grid,
+            &options.profile,
+            &variables,
+            source,
+            unit_seconds,
+            &producer_versions,
+        )?;
+        let tile = bundle_tile(family_tile, tier.grid, tier.factor);
+        let mut report = if options.container {
             let geometry = TileGeometry::new(
-                bundle_grid.width as u32,
-                bundle_grid.height as u32,
+                tier.grid.width as u32,
+                tier.grid.height as u32,
                 tile.0 as u32,
                 tile.1 as u32,
             )
             .map_err(|error| EncodeError::conversion(error.0))?;
-            let tables = bundle_chunks(&variables, &bundle_offsets, codes, &geometry)?;
-            let output = output_dir.join(format!("{bundle_id}{suffix}.xue"));
-            let mut report = write_variable_bundle(
-                bundle_id,
-                &output,
+            let tables = bundle_chunks(&variables, bundle_offsets, tier.codes, &geometry)?;
+            write_variable_bundle(
+                tier.bundle_id,
+                &output_dir.join(format!("{}{}.xue", tier.bundle_id, tier.suffix)),
                 &metadata,
                 &geometry,
                 tables,
                 bundle_offsets.len() as u32,
                 options.zstd_level,
                 options,
-            )?;
-            if suffix.is_empty() {
-                full_reports.insert(bundle_id, report);
-            } else {
-                let byte_length = report["byteLength"].as_u64().unwrap_or(0) as usize;
-                let object = report.as_object_mut().expect("report object");
-                object.insert("width".into(), json!(bundle_grid.width));
-                object.insert("height".into(), json!(bundle_grid.height));
-                object.insert(
-                    "bandwidth".into(),
-                    json!(playback_bandwidth(byte_length, bundle_offsets.len())),
-                );
-                variant_reports.entry(bundle_id).or_default().push(report);
+                &pool,
+            )?
+        } else {
+            json!({"variable": tier.bundle_id, "container": false})
+        };
+        if options.zarr {
+            // Written from the codes in memory; a store is a function of
+            // the metadata, the codes, the tile and the predictors alone,
+            // so it never waits on a container.
+            let mut store_variables = Vec::with_capacity(variables.len());
+            for variable_id in &variables {
+                let planes = bundle_offsets
+                    .iter()
+                    .map(|offset| {
+                        tier.codes
+                            .get(offset)
+                            .and_then(|planes| planes.iter().find(|(id, _)| id == variable_id))
+                            .map(|(_, plane)| plane.as_slice())
+                            .ok_or_else(|| {
+                                EncodeError::conversion(format!(
+                                    "missing {variable_id} plane at offset {offset}"
+                                ))
+                            })
+                    })
+                    .collect::<Result<Vec<_>>>()?;
+                store_variables.push(zarrstore::StoreVariable {
+                    id: (*variable_id).to_owned(),
+                    previous: !is_raw_variable(variable_id),
+                    planes,
+                });
             }
+            let codes = zarrstore::StoreCodes {
+                metadata: &metadata,
+                variables: store_variables,
+                tile,
+            };
+            let store_path = output_dir.join(format!("{}{}.zarr", tier.bundle_id, tier.suffix));
+            let store = zarrstore::write_store(&codes, &store_path, false, None, &pool)?;
+            log!(
+                options,
+                "wrote {} ({:.2} MB)",
+                store_path.display(),
+                store.byte_length as f64 / 1e6
+            );
+            report["zarr"] = store.to_value();
+            if tier.factor == 1 && options.series_bundle_ids.iter().any(|id| id == tier.bundle_id) {
+                // The series companion is a full-resolution artifact: a
+                // pinned point reads the canonical bundle, never a tier. Its
+                // codec chain carries the bundle's own predictor.
+                let series_path = output_dir.join(format!("{}.series.zarr", tier.bundle_id));
+                let series = zarrstore::write_store(
+                    &codes,
+                    &series_path,
+                    true,
+                    Some(zarrstore::SERIES_BLOCK),
+                    &pool,
+                )?;
+                log!(
+                    options,
+                    "wrote {} ({:.2} MB)",
+                    series_path.display(),
+                    series.byte_length as f64 / 1e6
+                );
+                report["series"] = series.to_value();
+            }
+        }
+        if tier.factor > 1 {
+            // A tier's playback hint is the delivery it ships: the
+            // container where one is written, the store otherwise.
+            let byte_length = if options.container {
+                report["byteLength"].as_u64()
+            } else {
+                report["zarr"]["byteLength"].as_u64()
+            }
+            .unwrap_or(0) as usize;
+            let object = report.as_object_mut().expect("report object");
+            object.insert("width".into(), json!(tier.grid.width));
+            object.insert("height".into(), json!(tier.grid.height));
+            object.insert(
+                "bandwidth".into(),
+                json!(playback_bandwidth(byte_length, bundle_offsets.len())),
+            );
+        }
+        Ok(report)
+    };
+    let written = for_each_ordered(tiers.len(), BUNDLE_WRITERS, |index| write_tier(&tiers[index]))?;
+
+    let mut full_reports: BTreeMap<&str, Value> = BTreeMap::new();
+    let mut variant_reports: BTreeMap<&str, Vec<Value>> = BTreeMap::new();
+    for (tier, report) in tiers.iter().zip(written) {
+        if tier.factor == 1 {
+            full_reports.insert(tier.bundle_id, report);
+        } else {
+            variant_reports.entry(tier.bundle_id).or_default().push(report);
         }
     }
 
@@ -2866,7 +2992,7 @@ pub fn convert_bin(
         "byteLength".into(),
         json!(bundle_reports
             .iter()
-            .filter_map(|bundle| bundle["byteLength"].as_u64())
+            .filter_map(|bundle| delivered_byte_length(bundle))
             .sum::<u64>()),
     );
     report.insert("temperatureMaxAbsError".into(), json!(stat_max(&["tmp2m"])));
@@ -2999,31 +3125,57 @@ fn bundle_manifest_entry(
             .to_string_lossy()
             .replace('\\', "/"))
     };
+    // The `zarr` / `series` descriptor from a report's store block: the
+    // store's root relative to the manifest, its size and the CRC-32 of its
+    // root document. Mirrors `_zarr_descriptor`.
+    let descriptor = |store: &Value| -> Result<Value> {
+        Ok(json!({
+            "path": relative(store["path"].as_str().unwrap_or_default())?,
+            "byteLength": store["byteLength"],
+            "crc32": store["crc32"],
+        }))
+    };
+    // A report whose container was not written carries no `output`; its
+    // entry names the store alone (`_container_fields`).
+    let has_container = |report: &Value| report.get("output").is_some();
     let mut entry = Map::new();
     entry.insert("variable".into(), bundle["variable"].clone());
     // The bundle's full grid, the block a store's `attributes.xue.grid`
     // carries too, so the STAC Item states the authoritative grid.
     entry.insert("grid".into(), Value::Object(grid.metadata()));
-    entry.insert(
-        "path".into(),
-        json!(relative(bundle["output"].as_str().unwrap_or_default())?),
-    );
-    entry.insert("byteLength".into(), bundle["byteLength"].clone());
-    entry.insert("crc32".into(), bundle["crc32"].clone());
+    if has_container(bundle) {
+        entry.insert(
+            "path".into(),
+            json!(relative(bundle["output"].as_str().unwrap_or_default())?),
+        );
+        entry.insert("byteLength".into(), bundle["byteLength"].clone());
+        entry.insert("crc32".into(), bundle["crc32"].clone());
+    }
     if let Some(variants) = variants.filter(|variants| !variants.is_empty()) {
         // Resolution ladder: STREAM-INF style alternate renditions of the same
-        // variable; the top-level path stays the canonical full-res tier.
+        // variable; the top-level entry stays the canonical full-res tier.
+        // Keys in the order `_variant_manifest_entry` writes them.
         let tiers: Vec<Value> = variants
             .iter()
             .map(|variant| {
-                Ok(json!({
-                    "path": relative(variant["output"].as_str().unwrap_or_default())?,
-                    "width": variant["width"],
-                    "height": variant["height"],
-                    "byteLength": variant["byteLength"],
-                    "crc32": variant["crc32"],
-                    "bandwidth": variant["bandwidth"],
-                }))
+                let mut tier = Map::new();
+                if has_container(variant) {
+                    tier.insert(
+                        "path".into(),
+                        json!(relative(variant["output"].as_str().unwrap_or_default())?),
+                    );
+                }
+                tier.insert("width".into(), variant["width"].clone());
+                tier.insert("height".into(), variant["height"].clone());
+                if has_container(variant) {
+                    tier.insert("byteLength".into(), variant["byteLength"].clone());
+                    tier.insert("crc32".into(), variant["crc32"].clone());
+                }
+                tier.insert("bandwidth".into(), variant["bandwidth"].clone());
+                if variant.get("zarr").is_some() {
+                    tier.insert("zarr".into(), descriptor(&variant["zarr"])?);
+                }
+                Ok(Value::Object(tier))
             })
             .collect::<Result<_>>()?;
         entry.insert("variants".into(), Value::Array(tiers));
@@ -3040,6 +3192,12 @@ fn bundle_manifest_entry(
                 "metadataJson": poster["metadataJson"],
             }),
         );
+    }
+    if bundle.get("zarr").is_some() {
+        entry.insert("zarr".into(), descriptor(&bundle["zarr"])?);
+    }
+    if bundle.get("series").is_some() {
+        entry.insert("series".into(), descriptor(&bundle["series"])?);
     }
     Ok(Value::Object(entry))
 }
