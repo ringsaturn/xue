@@ -127,12 +127,17 @@ fn parse_iso(text: &str) -> Option<OffsetDateTime> {
         .map(|value| value.assume_utc())
 }
 
-/// The NetCDF variable one series is read from. Every tool this pipeline
-/// drives names the variable by its Xue id, except `om2nc`, which keeps
-/// Open-Meteo's own name inside the file while the file beside it is named by
-/// the Xue id (`VariableSpec::open_meteo`). The port of
-/// `series_variable_name` in `xuebuild/observation.py`.
-pub fn series_variable_name(variable_id: &str) -> Result<&str> {
+/// The NetCDF variable one series of `source` is read from. Every tool this
+/// pipeline drives names the variable by its Xue id, except `om2nc`, which
+/// keeps Open-Meteo's own name inside the file while the file beside it is
+/// named by the Xue id — so the Open-Meteo spelling (`VariableSpec::open_meteo`)
+/// applies only on the source read through Open-Meteo
+/// (`SourceSpec::open_meteo`). The port of `series_variable_name` in
+/// `xuebuild/observation.py`.
+pub fn series_variable_name<'a>(variable_id: &'a str, source: &SourceSpec) -> Result<&'a str> {
+    if source.open_meteo.is_none() {
+        return Ok(variable_id);
+    }
     let spec = variable_spec(variable_id)?;
     Ok(if spec.open_meteo.is_empty() {
         variable_id
@@ -369,7 +374,7 @@ pub fn inspect_observation(
                 file.display()
             )));
         }
-        let dataset_name = netcdf_dataset(file, series_variable_name(variable_id)?);
+        let dataset_name = netcdf_dataset(file, series_variable_name(variable_id, source)?);
         let dataset = Dataset::open(&dataset_name)?;
         let attributes_global = dataset.metadata("");
         let (epoch, scale) =

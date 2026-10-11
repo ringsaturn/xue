@@ -108,13 +108,17 @@ def _band_time(band: dict[str, Any], epoch: datetime, scale: int, source: Path) 
     return epoch + timedelta(seconds=offset * scale)
 
 
-def series_variable_name(variable_id: str) -> str:
-    """The NetCDF variable one series is read from. Every tool this pipeline
-    drives names the variable by its Xue id, except ``om2nc``, which keeps
-    Open-Meteo's own name inside the file while the file beside it is named
-    by the Xue id (:attr:`~xuebuild.variables.VariableSpec.open_meteo`).
+def series_variable_name(variable_id: str, source: SourceSpec) -> str:
+    """The NetCDF variable one series of ``source`` is read from. Every tool
+    this pipeline drives names the variable by its Xue id, except ``om2nc``,
+    which keeps Open-Meteo's own name inside the file while the file beside
+    it is named by the Xue id — so the Open-Meteo spelling
+    (:attr:`~xuebuild.variables.VariableSpec.open_meteo`) applies only on
+    the source read through Open-Meteo (:attr:`~xuebuild.sources.SourceSpec.open_meteo`).
     Mirrored by ``encode/observation.rs``."""
-    return variable_spec(variable_id).open_meteo or variable_id
+    if source.open_meteo is not None:
+        return variable_spec(variable_id).open_meteo or variable_id
+    return variable_id
 
 
 #: Units one file may spell another way than the registry does, by the
@@ -218,7 +222,7 @@ def inspect_observation(
         file = files[variable_id]
         if file.suffix.lower() not in NETCDF_EXTENSIONS:
             raise ConversionError(f"observation input must be a NetCDF file: {file}")
-        dataset = netcdf_dataset(file, series_variable_name(variable_id))
+        dataset = netcdf_dataset(file, series_variable_name(variable_id, source))
         info = dataset_info(dataset, description=f"inspect {dataset}")
 
         attributes_global = info.get("metadata", {}).get("", {})
