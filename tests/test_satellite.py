@@ -622,13 +622,23 @@ class FetchTests(TempRoot, unittest.TestCase):
         scratch file survives."""
         self.from_seed()
         kwargs = dict(channels=CHANNELS)
+
+        def content(path: Path) -> list:
+            # What a series holds — each band's checksum, values' metadata
+            # and the time axis — rather than its bytes: the HDF5 object
+            # headers carry the second the file was written.
+            info = json.loads(
+                subprocess.run(["gdalinfo", "-json", "-checksum", str(path)], check=True, capture_output=True, text=True).stdout
+            )
+            return [(band["checksum"], band.get("metadata", {})) for band in info["bands"]]
+
         serial = warp_window(self.root, self.ancillary, self.listing, self.download_counting, series_concurrency=1, **kwargs)
-        serial_bytes = {key: path.read_bytes() for key, path in serial.series.items()}
+        serial_content = {key: content(path) for key, path in serial.series.items()}
         parallel = warp_window(self.root, self.ancillary, self.listing, self.download_counting, series_concurrency=4, **kwargs)
         self.assertEqual(list(parallel.series), [channel.id for channel in CHANNELS])
         self.assertEqual(list(parallel.series), list(serial.series))
         for key, path in parallel.series.items():
-            self.assertEqual(path.read_bytes(), serial_bytes[key], key)
+            self.assertEqual(content(path), serial_content[key], key)
         self.assertEqual(sorted(p.name for p in path.parent.iterdir() if p.suffix != ".nc"), [])
 
     def test_a_failed_series_leaves_no_partial_file(self) -> None:
