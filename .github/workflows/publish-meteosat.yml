@@ -1,7 +1,7 @@
 name: publish meteosat
 
 # Meteosat-12's 10.5 µm infrared window (FCI channel IR 10.5), its Dust
-# RGB, its true colour and its night microphysics, from the EUMETSAT Data
+# RGB and its true colour (by day and by night), from the EUMETSAT Data
 # Store: the FCI Level 1c full-disk product, one repeat cycle every ten
 # minutes cut into forty netCDF chunk files that carry every channel as
 # radiances. The live feed is a rolling window of the last 24 hours — **the

@@ -65,8 +65,6 @@ from .variables import (
     DUST_RGB_COMPONENT_IDS,
     TRUE_COLOR_BUNDLE_ID,
     TRUE_COLOR_COMPONENT_IDS,
-    NIGHT_MICRO_BUNDLE_ID,
-    NIGHT_MICRO_COMPONENT_IDS,
     CAT_LEVELS_HPA,
     CLOUD_WATER_VARIABLE_IDS,
     ISOBARIC_LEVELS_HPA,
@@ -130,15 +128,13 @@ DERIVED_VECTORS: dict[str, tuple[str, ...]] = {
 # the observation series as more variables and written as one bundle in
 # this order — the converter never derives them. The Dust RGB's three guns,
 # then the DEBRA confidence and the ZHOUYE confidence, two produced bundles
-# of one variable each, then the true colour composite's three guns and
-# the night microphysics composite's.
+# of one variable each, then the true colour composite's three guns.
 # Mirrored in encode/convert.rs.
 COMPOSITE_BUNDLES: dict[str, tuple[str, ...]] = {
     DUST_RGB_BUNDLE_ID: DUST_RGB_COMPONENT_IDS,
     DUST_CF_BUNDLE_ID: DUST_CF_COMPONENT_IDS,
     ZHOUYE_BUNDLE_ID: ZHOUYE_COMPONENT_IDS,
     TRUE_COLOR_BUNDLE_ID: TRUE_COLOR_COMPONENT_IDS,
-    NIGHT_MICRO_BUNDLE_ID: NIGHT_MICRO_COMPONENT_IDS,
 }
 
 

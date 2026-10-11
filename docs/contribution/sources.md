@@ -339,7 +339,7 @@ the rest of the repo must keep in mind:
   required. It needs the `EUMETSAT_CONSUMER_KEY` / `EUMETSAT_CONSUMER_SECRET`
   secrets (the workflow warns and builds nothing without them) and
   `hdf5plugin` for FCI's JPEG-LS filter.
-- Composites (`dustrgb`, `dustcf`, `zhouye`, `truecolor`, `nightmicro`)
+- Composites (`dustrgb`, `dustcf`, `zhouye`, `truecolor`)
   are computed in the fetch stage by producers, not by the converter.
   `bundle_input_ids` asks `Producer.inputs_for(platform)`, and
   `convert.rs::composite_input_ids` must answer the same per source (the
@@ -351,14 +351,14 @@ the rest of the repo must keep in mind:
   `xue`): its version is `producers.TRUE_COLOR_VERSION`, bumped by hand
   when a recipe constant changes, because a cached slot is recomposed
   when the version differs and must not be on every package release. Its
-  inputs are the solar bands, which cost a round some 500–600 MB of
-  downloads over the windows' 140 (the 0.5 km red band alone is 200–430
-  MB a slot); reflectance frames are warped as block means
-  (`fetch.resampling_for`), brightness temperatures bilinearly.
-- `nightmicro` is Xue's own recipe too (`NightMicrophysicsProducer`,
-  `producers.NIGHT_MICRO_VERSION`), from `ir039`, `ir104` and `ir123`,
-  which the NOAA disks already fetch: no new download, a fourth producer
-  pass per slot and three more cached frames.
+  inputs are the solar bands for the day side, which cost a round some
+  500–600 MB of downloads over the windows' 140 (the 0.5 km red band alone
+  is 200–430 MB a slot), and `ir039` and `ir104` for the night side, which
+  every satellite source fetches already. Reflectance frames are warped as
+  block means (`fetch.resampling_for`), brightness temperatures
+  bilinearly. The night constants are one set for every imager, so the
+  `geo` mosaic's seams do not show after dark; only the day side's green
+  differs by imager.
 - `dustcf` ships on the three NOAA-redistributed disks only (Meteosat's
   hourly cycle is not published); its ancillaries need `ANCILLARY=true` in
   the rounds script. The CAMEL months are staged by `xuebuild/satellite/staging.py`

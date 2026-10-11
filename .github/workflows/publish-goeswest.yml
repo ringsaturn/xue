@@ -2,7 +2,7 @@ name: publish goeswest
 
 # GOES-18's 10.4 µm infrared window (ABI channel 13) and the composites
 # the encoder derives from the disk's channels — the Dust RGB, the DEBRA
-# and ZHOUYE dust confidences, the true colour and the night microphysics
+# and ZHOUYE dust confidences and the true colour (by day and by night)
 # — from NOAA's own open data bucket: the CMIPF full-disk product, each
 # channel of each ten-minute scan as one calibrated netCDF on the
 # geostationary projection, landing some ten minutes after the scan

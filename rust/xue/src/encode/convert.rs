@@ -19,8 +19,8 @@ use crate::format::{ChunkEntry, Predictor, TileGeometry, VariableEntry, NO_DEPEN
 use crate::encode::errors::{EncodeError, Result};
 use crate::encode::variables::{
     is_static, isobaric_variable, reflectivity_level, variable_spec, CAT_LEVELS_HPA, DUST_CF_BUNDLE_ID,
-    DUST_CF_COMPONENT_IDS, DUST_RGB_BUNDLE_ID, DUST_RGB_COMPONENT_IDS, ISOBARIC_LEVELS_HPA, NIGHT_MICRO_BUNDLE_ID,
-    NIGHT_MICRO_COMPONENT_IDS, TRUE_COLOR_BUNDLE_ID, TRUE_COLOR_COMPONENT_IDS, ZHOUYE_BUNDLE_ID, ZHOUYE_COMPONENT_IDS,
+    DUST_CF_COMPONENT_IDS, DUST_RGB_BUNDLE_ID, DUST_RGB_COMPONENT_IDS, ISOBARIC_LEVELS_HPA, TRUE_COLOR_BUNDLE_ID,
+    TRUE_COLOR_COMPONENT_IDS, ZHOUYE_BUNDLE_ID, ZHOUYE_COMPONENT_IDS,
     CLOUD_WATER_VARIABLE_IDS, REFLECTIVITY_VARIABLE_IDS, STANDARD_GRAVITY, WAVE_VECTOR_COMPONENT_IDS,
 };
 use crate::encode::gdalio::{needs_serial_access, netcdf_guard, Dataset};
@@ -102,7 +102,7 @@ pub fn vector_components(bundle_id: &str) -> Option<(String, String)> {
 /// in this order — the converter never derives them. The Dust RGB's three
 /// guns, then the DEBRA confidence and the ZHOUYE confidence, two produced
 /// bundles of one variable each, then the true colour composite's three
-/// guns and the night microphysics composite's. Mirrors
+/// guns. Mirrors
 /// `COMPOSITE_BUNDLES` in `xuebuild/binconvert.py`.
 pub fn composite_components(bundle_id: &str) -> Option<Vec<String>> {
     let components: &[&str] = match bundle_id {
@@ -110,7 +110,6 @@ pub fn composite_components(bundle_id: &str) -> Option<Vec<String>> {
         DUST_CF_BUNDLE_ID => &DUST_CF_COMPONENT_IDS,
         ZHOUYE_BUNDLE_ID => &ZHOUYE_COMPONENT_IDS,
         TRUE_COLOR_BUNDLE_ID => &TRUE_COLOR_COMPONENT_IDS,
-        NIGHT_MICRO_BUNDLE_ID => &NIGHT_MICRO_COMPONENT_IDS,
         _ => return None,
     };
     Some(components.iter().map(|id| (*id).to_string()).collect())
@@ -143,12 +142,10 @@ const DUST_RGB_INPUT_IDS: [&str; 4] = ["ir086", "ir104", "ir112", "ir123"];
 /// The ZHOUYE confidence is composed in the same pass from the same five.
 const DUST_CF_INPUT_IDS: [&str; 5] = ["ir039", "wv062", "ir086", "ir104", "ir123"];
 /// The true colour composite's inputs: the 0.47, 0.51, 0.64 and 0.86 µm
-/// reflectances; the ABI has no 0.51 µm band and its green is synthesized
+/// reflectances for the day side, then the 3.9 and 10.4 µm windows for the
+/// night side; the ABI has no 0.51 µm band and its green is synthesized
 /// from the other three.
-const TRUE_COLOR_INPUT_IDS: [&str; 4] = ["vis047", "vis051", "vis064", "nir086"];
-/// The night microphysics composite's inputs: the 3.9, 10.4 and 12.3 µm
-/// windows, all three required.
-const NIGHT_MICRO_INPUT_IDS: [&str; 3] = ["ir039", "ir104", "ir123"];
+const TRUE_COLOR_INPUT_IDS: [&str; 6] = ["vis047", "vis051", "vis064", "nir086", "ir039", "ir104"];
 
 /// The channels a composite's producer reads on the source's platform: what
 /// the fetch must download for the composite to be composed, since the
@@ -161,8 +158,8 @@ const NIGHT_MICRO_INPUT_IDS: [&str; 3] = ["ir039", "ir104", "ir123"];
 /// fetches fewer cannot publish them (`published_bundle_ids`); the true
 /// colour composite reads the four visible and near-infrared bands, or
 /// three on an imager without a 0.51 µm one (ABI), whose green is
-/// synthesized; the night microphysics composite reads its three windows
-/// with no stand-in. The platform's channel table lives on the Python side;
+/// synthesized, and the 3.9 and 10.4 µm windows on every imager. The
+/// platform's channel table lives on the Python side;
 /// here a source whose inputs lack `ir112` or `vis051` is one whose imager
 /// lacks it.
 fn composite_input_ids(source: &SourceSpec, bundle_id: &str) -> Option<Vec<String>> {
@@ -184,7 +181,6 @@ fn composite_input_ids(source: &SourceSpec, bundle_id: &str) -> Option<Vec<Strin
                 .map(|id| (*id).to_string())
                 .collect(),
         ),
-        NIGHT_MICRO_BUNDLE_ID => Some(NIGHT_MICRO_INPUT_IDS.iter().map(|id| (*id).to_string()).collect()),
         _ => None,
     }
 }
@@ -3669,7 +3665,7 @@ mod ladder_tests {
 
 #[cfg(test)]
 mod composite_tests {
-    use super::{bundle_input_ids, bundle_variable_ids, published_bundle_ids};
+    use super::{bundle_input_ids, bundle_variable_ids, composite_components, published_bundle_ids};
     use crate::encode::sources::source_spec;
 
     #[test]
@@ -3710,7 +3706,7 @@ mod composite_tests {
             }
             assert_eq!(
                 published_bundle_ids(source),
-                ["ir104", "dustrgb", "dustcf", "zhouye", "truecolor", "nightmicro"],
+                ["ir104", "dustrgb", "dustcf", "zhouye", "truecolor"],
                 "{model}"
             );
         }
@@ -3718,51 +3714,53 @@ mod composite_tests {
         for bundle_id in ["dustcf", "zhouye"] {
             assert_eq!(bundle_input_ids(meteosat, bundle_id), ["ir039", "wv062", "ir086", "ir104", "ir123"]);
         }
-        assert_eq!(published_bundle_ids(meteosat), ["ir104", "dustrgb", "truecolor", "nightmicro"]);
+        assert_eq!(published_bundle_ids(meteosat), ["ir104", "dustrgb", "truecolor"]);
     }
 
     #[test]
     fn the_true_colour_reads_four_bands_or_three_without_the_green_one() {
         // Mirrors `TrueColorProducer.inputs_for`: the AHI has a 0.51 µm
         // band, the ABI does not and its green is synthesized from the
-        // other three; the FCI has one, so Meteosat reads the four. Three
-        // guns everywhere.
+        // other three; the FCI has one, so Meteosat reads the four. The
+        // night side's 3.9 and 10.4 µm windows on every imager. Three guns
+        // everywhere.
         assert_eq!(bundle_variable_ids("truecolor"), ["truer", "trueg", "trueb"]);
         for model in ["himawari", "himawarijp"] {
             let source = source_spec(model).expect(model);
-            assert_eq!(bundle_input_ids(source, "truecolor"), ["vis047", "vis051", "vis064", "nir086"], "{model}");
+            assert_eq!(
+                bundle_input_ids(source, "truecolor"),
+                ["vis047", "vis051", "vis064", "nir086", "ir039", "ir104"],
+                "{model}"
+            );
         }
         // The Japan box publishes no confidence: the window, then the three
         // composites its nine channels feed.
         assert_eq!(
             published_bundle_ids(source_spec("himawarijp").expect("himawarijp")),
-            ["ir104", "dustrgb", "truecolor", "nightmicro"]
+            ["ir104", "dustrgb", "truecolor"]
         );
         for model in ["goeseast", "goeswest"] {
             let source = source_spec(model).expect(model);
-            assert_eq!(bundle_input_ids(source, "truecolor"), ["vis047", "vis064", "nir086"], "{model}");
+            assert_eq!(bundle_input_ids(source, "truecolor"), ["vis047", "vis064", "nir086", "ir039", "ir104"], "{model}");
         }
         for model in ["himawari", "goeseast", "goeswest"] {
             let source = source_spec(model).expect(model);
             assert!(published_bundle_ids(source).contains(&"truecolor"), "{model}");
         }
         let meteosat = source_spec("meteosat").expect("meteosat");
-        assert_eq!(bundle_input_ids(meteosat, "truecolor"), ["vis047", "vis051", "vis064", "nir086"]);
+        assert_eq!(bundle_input_ids(meteosat, "truecolor"), ["vis047", "vis051", "vis064", "nir086", "ir039", "ir104"]);
         assert!(published_bundle_ids(meteosat).contains(&"truecolor"));
+        // Every satellite source fetches what the true colour reads, and
+        // no source lists a night microphysics composite.
+        for source in crate::encode::sources::SOURCES.iter().filter(|source| source.bundle_composite_ids.contains(&"truecolor")) {
+            for input in bundle_input_ids(source, "truecolor") {
+                assert!(source.input_variable_ids.contains(&input.as_str()), "{} {input}", source.id);
+            }
+        }
+        assert!(crate::encode::sources::SOURCES.iter().all(|source| !source.bundle_composite_ids.contains(&"nightmicro")));
+        assert!(composite_components("nightmicro").is_none());
     }
 
-    #[test]
-    fn the_night_microphysics_reads_three_windows() {
-        // Mirrors `NightMicrophysicsProducer.inputs_for`: the 3.9, 10.4 and
-        // 12.3 µm windows on every imager (FCI's IR 3.8 and IR 10.5 among
-        // them), no stand-in.
-        assert_eq!(bundle_variable_ids("nightmicro"), ["nightr", "nightg", "nightb"]);
-        for model in ["himawari", "himawarijp", "goeseast", "goeswest", "meteosat"] {
-            let source = source_spec(model).expect(model);
-            assert_eq!(bundle_input_ids(source, "nightmicro"), ["ir039", "ir104", "ir123"], "{model}");
-            assert!(published_bundle_ids(source).ends_with(&["nightmicro"]), "{model}");
-        }
-    }
 }
 
 #[cfg(test)]

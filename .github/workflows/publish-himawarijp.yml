@@ -8,7 +8,7 @@ name: publish himawarijp
 # grid (2600 x 2200), the native ten-minute step — rebuilt every ten
 # minutes into a round subdirectory of its run (<model>.<run>/<HHMM>/) and
 # pointed at by latest-himawarijp.json. It publishes the 10.4 µm window,
-# the Dust RGB, the true colour and the night microphysics; no dust
+# the Dust RGB and the true colour (by day and by night); no dust
 # confidence, so no ANCILLARY.
 #
 # The shape is publish-himawari.yml's. A round lists the newest complete

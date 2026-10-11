@@ -1575,9 +1575,8 @@ SOURCES: dict[str, SourceSpec] = {
     # xuebuild/satellite/producers.py, and read off the series like any
     # channel). The visible and near-infrared bands 1–4 feed the true
     # colour composite (``truecolor``, this pipeline's own recipe in the
-    # same module) and are published by no source; the 3.9, 10.4 and
-    # 12.3 µm windows also feed the night microphysics composite
-    # (``nightmicro``, the same module's). The other channels are
+    # same module) and are published by no source; its night side reads
+    # the 3.9 and 10.4 µm windows. The other channels are
     # platform-registry rows a source-table line publishes. The tiles are generated about eight
     # minutes after a scan starts and listed some fifteen minutes after it,
     # so the live window ends fifteen to twenty minutes behind real time; a
@@ -1600,7 +1599,7 @@ SOURCES: dict[str, SourceSpec] = {
         accumulated_precipitation=False,
         bands=HIMAWARI.bands(("ir039", "wv062", "ir086", "ir104", "ir112", "ir123", "vis047", "vis051", "vis064", "nir086")),
         bundle_scalar_ids=("ir104",),
-        bundle_composite_ids=("dustrgb", "dustcf", "zhouye", "truecolor", "nightmicro"),
+        bundle_composite_ids=("dustrgb", "dustcf", "zhouye", "truecolor"),
         core_bundle_ids=("ir104",),
         # The platform's region at 0.04°: 120° x 120° is 3000 x 3000 cells,
         # 9 M a frame, 4.6 MB quantized and compressed (an infrared image
@@ -1639,25 +1638,25 @@ SOURCES: dict[str, SourceSpec] = {
     # degrees on a 0.01° step, so its cells nest the JMA nowcast's 0.005°
     # ones 2:1. A slot fetches only the six ISatSS tiles reaching into the
     # box (T009–T011, T018–T020) and its frames cache under
-    # ``himawarijp-frames``, apart from the disk's. Four bundles: the
-    # 10.4 µm window, the Dust RGB, the true colour and the night
-    # microphysics; the dust confidences are not published here, their
-    # ancillary fields being staged on the disk grids.
+    # ``himawarijp-frames``, apart from the disk's. Three bundles: the
+    # 10.4 µm window, the Dust RGB and the true colour; the dust
+    # confidences are not published here, their ancillary fields being
+    # staged on the disk grids.
     "himawarijp": SourceSpec(
         id="himawarijp",
         manifest_model="HIMAWARI-JP",
         product="ahi-japan-0p01",
         latest_filename="latest-himawarijp.json",
         steps=(),
-        # The 3.9 µm window the night microphysics adds (the first, as on
-        # the disk, is the one a listing walks), the Dust RGB's four
+        # The 3.9 µm window the true colour's night side reads (the first,
+        # as on the disk, is the one a listing walks), the Dust RGB's four
         # windows, then the true colour's four solar bands: a subset of
         # the disk's channels in the disk's order.
         input_variable_ids=("ir039", "ir086", "ir104", "ir112", "ir123", "vis047", "vis051", "vis064", "nir086"),
         accumulated_precipitation=False,
         bands=HIMAWARI.bands(("ir039", "ir086", "ir104", "ir112", "ir123", "vis047", "vis051", "vis064", "nir086")),
         bundle_scalar_ids=("ir104",),
-        bundle_composite_ids=("dustrgb", "truecolor", "nightmicro"),
+        bundle_composite_ids=("dustrgb", "truecolor"),
         core_bundle_ids=("ir104",),
         # 26° x 22° at 0.01°: 5.7 M cells a frame, under the disk's 9 M.
         production_grid=(2600, 2200),
@@ -1671,10 +1670,11 @@ SOURCES: dict[str, SourceSpec] = {
         grid_step=0.01,
         region=(122.0, 24.0, 148.0, 46.0),
         cycle_hours=1,
-        # Three hours: a sunlit hour of the four bundles and their ladder
-        # is some 220 MB of stores (seven frames: the true colour 90 MB,
-        # the Dust RGB 51, the night microphysics about as much, ir104 13),
-        # some 0.65 GB a round by day, so six would be some 1.3 GB.
+        # Three hours: a sunlit hour of the three bundles and their ladder
+        # is some 155 MB of stores (seven frames: the true colour 90 MB,
+        # the Dust RGB 51, ir104 13), some 0.45 GB a round by day, so six
+        # would be some 0.9 GB; the true colour's night side, white cloud
+        # over a flat dark ground, costs less than its day.
         window_hours=3,
         cadence_seconds=600,
         video=False,
@@ -1688,8 +1688,7 @@ SOURCES: dict[str, SourceSpec] = {
     # its own disk: the same six windows and the three ABI visible bands
     # fetched, ir104, the Dust RGB (with the GOES-R Quick Guide's ABI
     # stretches, which the producer picks by instrument), the confidences,
-    # the true colour and the night microphysics published, the same grid
-    # step and window. The
+    # and the true colour published, the same grid step and window. The
     # East disk sits on negative longitudes (−135.2 … −15.2); the West
     # disk crosses the antimeridian and is spelled 163 … 283, the shape
     # Himawari's grid already takes.
@@ -1706,7 +1705,7 @@ SOURCES: dict[str, SourceSpec] = {
         accumulated_precipitation=False,
         bands=GOES_EAST.bands(("ir039", "wv062", "ir086", "ir104", "ir112", "ir123", "vis047", "vis064", "nir086")),
         bundle_scalar_ids=("ir104",),
-        bundle_composite_ids=("dustrgb", "dustcf", "zhouye", "truecolor", "nightmicro"),
+        bundle_composite_ids=("dustrgb", "dustcf", "zhouye", "truecolor"),
         core_bundle_ids=("ir104",),
         production_grid=(3000, 3000),
         tile=(64, 64),
@@ -1733,7 +1732,7 @@ SOURCES: dict[str, SourceSpec] = {
         accumulated_precipitation=False,
         bands=GOES_WEST.bands(("ir039", "wv062", "ir086", "ir104", "ir112", "ir123", "vis047", "vis064", "nir086")),
         bundle_scalar_ids=("ir104",),
-        bundle_composite_ids=("dustrgb", "dustcf", "zhouye", "truecolor", "nightmicro"),
+        bundle_composite_ids=("dustrgb", "dustcf", "zhouye", "truecolor"),
         core_bundle_ids=("ir104",),
         production_grid=(3000, 3000),
         tile=(64, 64),
@@ -1756,8 +1755,8 @@ SOURCES: dict[str, SourceSpec] = {
     # georeferences the strips itself, since GDAL reads neither the file's
     # HDF5 filter nor its grid mapping unaided. FCI has no 11.2 µm window,
     # so three channels feed the Dust RGB and the green gun reads
-    # 10.5 − 8.7 µm, the original SEVIRI recipe; IR 3.8, IR 10.5 and
-    # IR 12.3 feed the night microphysics. The imager scans every ten
+    # 10.5 − 8.7 µm, the original SEVIRI recipe; IR 3.8 and IR 10.5 feed
+    # the true colour's night side. The imager scans every ten
     # minutes; this source publishes **the cycle on the hour alone**
     # (``cadence_seconds`` 3600 against the platform's 600), because the
     # EUMETSAT data policy releases the hourly Level 1 cycle as Core data
@@ -1770,7 +1769,7 @@ SOURCES: dict[str, SourceSpec] = {
         product="fci-fldk-0p04",
         latest_filename="latest-meteosat.json",
         steps=(),
-        # The 3.8 µm window the night microphysics reads (FCI ir_38 under
+        # The 3.8 µm window the true colour's night side reads (FCI ir_38 under
         # the family id ir039), the three windows the Dust RGB reads, then
         # the four solar channels the true colour composite reads,
         # converted by the reader from radiance to reflectance factor on
@@ -1781,7 +1780,7 @@ SOURCES: dict[str, SourceSpec] = {
         accumulated_precipitation=False,
         bands=METEOSAT.bands(("ir039", "ir086", "ir104", "ir123", "vis047", "vis051", "vis064", "nir086")),
         bundle_scalar_ids=("ir104",),
-        bundle_composite_ids=("dustrgb", "truecolor", "nightmicro"),
+        bundle_composite_ids=("dustrgb", "truecolor"),
         core_bundle_ids=("ir104",),
         production_grid=(3000, 3000),
         tile=(64, 64),

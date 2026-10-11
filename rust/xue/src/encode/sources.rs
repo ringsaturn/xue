@@ -1351,9 +1351,10 @@ pub const SOURCES: &[SourceSpec] = &[
         bundle_vector_ids: &[],
         // The Dust RGB, composed per slot in the fetch stage from four of
         // the windows, the DEBRA and ZHOUYE confidences from five, and the
-        // true colour from the four visible and near-infrared bands, each
-        // read off the series like any channel.
-        bundle_composite_ids: &["dustrgb", "dustcf", "zhouye", "truecolor", "nightmicro"],
+        // true colour from the four visible and near-infrared bands by day
+        // and the 3.9 and 10.4 µm windows by night, each read off the
+        // series like any channel.
+        bundle_composite_ids: &["dustrgb", "dustcf", "zhouye", "truecolor"],
         bundle_volume_ids: &[],
         // The platform's region at 0.04°: 120° x 120°.
         production_grid: (3000, 3000),
@@ -1376,8 +1377,7 @@ pub const SOURCES: &[SourceSpec] = &[
     // regional source like `hrrr` beside `gfs`. Nine channels fetched (the
     // 3.9 µm window, the Dust RGB's four windows, the true colour's four
     // solar bands, each with the himawari band block), the 10.4 µm window,
-    // the Dust RGB, the true colour and the night microphysics published;
-    // no dust confidences.
+    // the Dust RGB and the true colour published; no dust confidences.
     SourceSpec {
         id: "himawarijp",
         manifest_model: "HIMAWARI-JP",
@@ -1436,7 +1436,7 @@ pub const SOURCES: &[SourceSpec] = &[
         bundle_scalar_ids: &["ir104"],
         core_bundle_ids: &["ir104"],
         bundle_vector_ids: &[],
-        bundle_composite_ids: &["dustrgb", "truecolor", "nightmicro"],
+        bundle_composite_ids: &["dustrgb", "truecolor"],
         bundle_volume_ids: &[],
         // The box at 0.01°: 26° x 22°.
         production_grid: (2600, 2200),
@@ -1528,7 +1528,7 @@ pub const SOURCES: &[SourceSpec] = &[
         bundle_scalar_ids: &["ir104"],
         core_bundle_ids: &["ir104"],
         bundle_vector_ids: &[],
-        bundle_composite_ids: &["dustrgb", "dustcf", "zhouye", "truecolor", "nightmicro"],
+        bundle_composite_ids: &["dustrgb", "dustcf", "zhouye", "truecolor"],
         bundle_volume_ids: &[],
         production_grid: (3000, 3000),
         tile: (64, 64),
@@ -1607,7 +1607,7 @@ pub const SOURCES: &[SourceSpec] = &[
         bundle_scalar_ids: &["ir104"],
         core_bundle_ids: &["ir104"],
         bundle_vector_ids: &[],
-        bundle_composite_ids: &["dustrgb", "dustcf", "zhouye", "truecolor", "nightmicro"],
+        bundle_composite_ids: &["dustrgb", "dustcf", "zhouye", "truecolor"],
         bundle_volume_ids: &[],
         production_grid: (3000, 3000),
         tile: (64, 64),
@@ -1629,8 +1629,8 @@ pub const SOURCES: &[SourceSpec] = &[
     // itself). FCI has no 11.2 µm window, so three channels feed the Dust
     // RGB and the green gun reads 10.5 − 8.7 µm, the original SEVIRI recipe
     // (`composite_input_ids`); its four solar channels feed the true colour
-    // composite, the 0.51 µm one among them, and IR 3.8, IR 10.5 and IR 12.3
-    // the night microphysics.
+    // composite's day side, the 0.51 µm one among them, and IR 3.8 and
+    // IR 10.5 its night side.
     // The imager scans every ten minutes; this source publishes the cycle
     // on the hour alone (`cadence_seconds` 3600 against the platform's
     // 600), because the EUMETSAT data policy releases the hourly Level 1
@@ -1646,7 +1646,7 @@ pub const SOURCES: &[SourceSpec] = &[
         steps: &[],
         long_cycles: &[],
         long_cycle_steps: &[],
-        // The 3.8 µm window the night microphysics reads (FCI ir_38 under
+        // The 3.8 µm window the true colour's night side reads (FCI ir_38 under
         // the family id ir039), the three windows the Dust RGB reads, then
         // the four solar channels the true colour composite reads (FCI
         // vis_04, vis_05, vis_06, vis_08; vis_04 at 0.444 µm under the
@@ -1700,7 +1700,7 @@ pub const SOURCES: &[SourceSpec] = &[
         bundle_scalar_ids: &["ir104"],
         core_bundle_ids: &["ir104"],
         bundle_vector_ids: &[],
-        bundle_composite_ids: &["dustrgb", "truecolor", "nightmicro"],
+        bundle_composite_ids: &["dustrgb", "truecolor"],
         bundle_volume_ids: &[],
         production_grid: (3000, 3000),
         tile: (64, 64),
@@ -1841,7 +1841,7 @@ mod tests {
         assert!(japan.series_file && japan.fetched() && japan.live());
         assert_eq!((japan.cadence_seconds, japan.window_hours), (Some(600), Some(3)));
         assert_eq!(japan.bundle_scalar_ids, himawari.bundle_scalar_ids);
-        assert_eq!(japan.bundle_composite_ids, &["dustrgb", "truecolor", "nightmicro"]);
+        assert_eq!(japan.bundle_composite_ids, &["dustrgb", "truecolor"]);
         for (band_id, band) in japan.bands {
             assert!(himawari.bands.contains(&(*band_id, *band)), "{band_id}");
         }
@@ -1853,13 +1853,13 @@ mod tests {
         // has no 11.2 µm window: three windows, the Dust RGB still resolves
         // to its three components, and the DEBRA confidence — five inputs,
         // no stand-in — is not listed; the four solar channels feed the
-        // true colour composite and the 3.8 µm window the night
-        // microphysics.
+        // true colour composite's day side and the 3.8 and 10.5 µm windows
+        // its night side.
         let meteosat = source_spec("meteosat").expect("meteosat");
         assert!(meteosat.series_file && meteosat.fetched() && meteosat.live());
         assert_eq!(meteosat.input_variable_ids, &["ir039", "ir086", "ir104", "ir123", "vis047", "vis051", "vis064", "nir086"]);
         assert_eq!(meteosat.bundle_scalar_ids, himawari.bundle_scalar_ids);
-        assert_eq!(meteosat.bundle_composite_ids, &["dustrgb", "truecolor", "nightmicro"]);
+        assert_eq!(meteosat.bundle_composite_ids, &["dustrgb", "truecolor"]);
         assert_eq!(meteosat.cadence_seconds, Some(3600));
         assert_eq!(meteosat.window_hours, Some(24));
         assert_eq!(meteosat.bands.len(), 8);

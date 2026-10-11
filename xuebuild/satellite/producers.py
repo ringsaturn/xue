@@ -27,10 +27,10 @@ dust confidences — DEBRA's and ZHOUYE's, two bundles of one variable each
 from one pass over the same chain — which also read two ancillary fields
 (:mod:`ancillary`) the fetch stage puts on disk for the slot before the
 producer runs (:meth:`Producer.ancillary_for`). The third is this
-pipeline's own: the true colour composite from the slot's visible and
-near-infrared reflectances, with the sun's position and nothing else; the
-fourth is too, the night microphysics composite from three infrared
-windows. A producer's outputs are the components of one or more composite
+pipeline's own: the true colour composite, one picture by day and by
+night — the slot's visible and near-infrared reflectances where the sun
+is up, white cloud from two infrared windows where it is down, blended
+across the terminator by the sun's position. A producer's outputs are the components of one or more composite
 bundles (:attr:`Producer.bundle_ids`); the fetch stage runs it once for
 all of them and caches every output frame.
 """
@@ -440,11 +440,10 @@ class DebraProducer:
 #: frames and the converters carry into the ``producer`` block. A cached
 #: slot is recomposed when it changes, so it changes exactly when a
 #: constant below does, never with the package.
-TRUE_COLOR_VERSION = "1"
+TRUE_COLOR_VERSION = "2"
 #: The solar zenith past which the sun-angle normalisation stops growing:
-#: a reflectance is divided by ``max(cos θ, cos 85°)``, so the last five
-#: degrees of a day fade instead of blowing up, and a cell whose sun is
-#: below the horizon is no data.
+#: a reflectance is divided by ``max(cos θ, cos 85°)``, so the last
+#: degrees of a day fade instead of blowing up.
 TRUE_COLOR_ZENITH_LIMIT_DEG = 85.0
 #: The brightness curve every gun goes through, as reflectance in → gun
 #: out, interpolated linearly between the knots and clamped to [0, 1]:
@@ -461,26 +460,89 @@ TRUE_COLOR_HYBRID_GREEN: tuple[float, float] = (0.93, 0.07)
 #: blue, red and the 0.86 µm band, the fractions satpy's ``abi`` green
 #: uses.
 TRUE_COLOR_SYNTHETIC_GREEN: tuple[float, float, float] = (0.45, 0.45, 0.10)
+#: The terminator, as solar zenith in degrees: the day picture alone at or
+#: below the first, the night picture alone at or beyond the second (the
+#: sun at the horizon, nothing left to reflect), linear between — about
+#: the span GeoColor fades its day and night layers over.
+TRUE_COLOR_TERMINATOR_DEG: tuple[float, float] = (80.0, 90.0)
+#: The night side's ground, red, green and blue: near black with a faint
+#: cool cast, so a clear night reads as night and not as missing data
+#: (code 0) and cloud stands out on it. The same on every imager, so the
+#: disks meet without a seam.
+TRUE_COLOR_NIGHT_GROUND: tuple[float, float, float] = (0.03, 0.035, 0.05)
+#: The 10.4 µm brightness temperatures, in kelvin, at which a cloud's
+#: whiteness is 0 and 1: warmer than 280 K is the ground or the warmest low
+#: cloud, colder than 220 K a deep or high cloud top — about the range
+#: GeoColor's night-side infrared cloud layer spans.
+TRUE_COLOR_CLOUD_TEMPERATURE_K: tuple[float, float] = (280.0, 220.0)
+#: The exponent on the infrared ramp: below 1, so a mid-level cloud is
+#: already a light grey and high cloud reads white rather than a flat
+#: linear grey.
+TRUE_COLOR_CLOUD_EXPONENT = 0.75
+#: The 10.4 − 3.9 µm differences, in kelvin, at which low cloud's
+#: whiteness is 0 and 1: small water droplets emit poorly at 3.9 µm, so
+#: fog and stratus — as warm as the ground and invisible at 10.4 µm alone —
+#: read several kelvin colder there, while clear sea and vegetated land
+#: stay under 2 K (the fog products' threshold).
+TRUE_COLOR_LOW_CLOUD_DIFFERENCE_K: tuple[float, float] = (2.0, 7.0)
+#: How white low cloud gets at most: a softer grey than high cloud, so the
+#: two layers stay apart as they do on GeoColor's night side.
+TRUE_COLOR_LOW_CLOUD_WHITE = 0.7
+
+
+def true_color_day_weight(zenith_deg: np.ndarray) -> np.ndarray:
+    """The day picture's weight across the terminator: 1 at or below
+    ``TRUE_COLOR_TERMINATOR_DEG[0]``, 0 at or beyond the second, linear
+    between."""
+    start, end = TRUE_COLOR_TERMINATOR_DEG
+    return np.clip((end - np.asarray(zenith_deg, dtype=np.float64)) / (end - start), 0.0, 1.0)
+
+
+def true_color_night_whiteness(ir104: np.ndarray, ir039: np.ndarray) -> np.ndarray:
+    """The night side's cloud whiteness, 0–1: the brighter of the
+    infrared cloud (``TRUE_COLOR_CLOUD_TEMPERATURE_K``, raised to
+    ``TRUE_COLOR_CLOUD_EXPONENT``) and the low cloud the 10.4 − 3.9 µm
+    difference shows (``TRUE_COLOR_LOW_CLOUD_DIFFERENCE_K``, scaled to
+    ``TRUE_COLOR_LOW_CLOUD_WHITE``). A NaN input reads as no cloud."""
+    warm, cold = TRUE_COLOR_CLOUD_TEMPERATURE_K
+    ir104 = np.asarray(ir104, dtype=np.float64)
+    ir039 = np.asarray(ir039, dtype=np.float64)
+    high = np.clip((warm - np.nan_to_num(ir104, nan=warm)) / (warm - cold), 0.0, 1.0) ** TRUE_COLOR_CLOUD_EXPONENT
+    low_start, low_end = TRUE_COLOR_LOW_CLOUD_DIFFERENCE_K
+    difference = np.nan_to_num(ir104 - ir039, nan=low_start)
+    low = TRUE_COLOR_LOW_CLOUD_WHITE * np.clip((difference - low_start) / (low_end - low_start), 0.0, 1.0)
+    return np.maximum(high, low)
 
 
 @dataclass(frozen=True)
 class TrueColorProducer:
     """The true colour composite: the three guns of the ``truecolor``
-    bundle from a slot's 0.47, 0.51 (where the imager has it), 0.64 and
-    0.86 µm reflectances, this pipeline's own recipe in a fixed order:
+    bundle, one picture by day and by night — the visible picture from a
+    slot's 0.47, 0.51 (where the imager has it), 0.64 and 0.86 µm
+    reflectances where the sun is up, white cloud from its 10.4 and
+    3.9 µm brightness temperatures over a dark ground where it is down —
+    this pipeline's own recipe in a fixed order:
 
-    1. every input clipped to 0 from below (the products carry small
-       negative reflectances in the dark);
+    1. every reflectance clipped to 0 from below (the products carry
+       small negative reflectances in the dark);
     2. the cosine of the solar zenith on every cell at the slot's start
-       (pyorbital on the grid's own coordinates, periodic in longitude);
-       a cell with the sun below the horizon is no data;
+       (pyorbital on the grid's own coordinates, periodic in longitude),
+       and the zenith θ from it;
     3. each reflectance divided by ``max(cos θ, cos TRUE_COLOR_ZENITH_LIMIT_DEG)``;
     4. the green: ``0.93 × 0.51 µm + 0.07 × 0.86 µm`` on AHI and FCI, or
        ``0.45 × 0.47 µm + 0.45 × 0.64 µm + 0.10 × 0.86 µm`` on ABI;
-    5. red (0.64 µm), green and blue (0.47 µm) through the brightness
-       curve, clamped to [0, 1];
-    6. no data in all three guns wherever any input had none, or the sun
-       was below the horizon.
+    5. the day guns: red (0.64 µm), green and blue (0.47 µm) through the
+       brightness curve, clamped to [0, 1];
+    6. the night guns: ``ground + (1 − ground) × w`` on each, ``ground``
+       from ``TRUE_COLOR_NIGHT_GROUND`` and ``w`` the cloud whiteness
+       (:func:`true_color_night_whiteness`), the same on every imager;
+    7. ``a × day + (1 − a) × night`` with ``a`` the day weight
+       (:func:`true_color_day_weight`: 1 to 80°, 0 from 90°), clamped to
+       [0, 1];
+    8. no data in all three guns wherever a side that carries weight
+       lacked an input: a reflectance where ``a > 0``, the 10.4 or 3.9 µm
+       window where ``a < 1``. Full day keeps its picture without the
+       infrared, full night without the reflectances.
 
     No Rayleigh correction: the limb and the long slant paths keep their
     blue haze, which a correction with a lookup table per band could take
@@ -490,17 +552,21 @@ class TrueColorProducer:
     id: str = "xue"
     bundle_id: str = "truecolor"
     bundle_ids: tuple[str, ...] = ("truecolor",)
-    inputs: tuple[str, ...] = ("vis047", "vis051", "vis064", "nir086")
+    inputs: tuple[str, ...] = ("vis047", "vis051", "vis064", "nir086", "ir039", "ir104")
     outputs: tuple[str, ...] = ("truer", "trueg", "trueb")
     ancillaries: tuple[str, ...] = ()
+    night_inputs: tuple[str, ...] = ("ir039", "ir104")
+    """The inputs the night side reads; the rest are the day side's
+    reflectances (step 8's no-data rule)."""
 
     @property
     def version(self) -> str:
         return TRUE_COLOR_VERSION
 
     def inputs_for(self, platform: Platform) -> tuple[str, ...]:
-        """The four bands on an imager with a green one; three on the ABI,
-        whose green is synthesized from the other three."""
+        """The four solar bands and the two infrared windows on an imager
+        with a green band; three solar bands on the ABI, whose green is
+        synthesized from the other three."""
         channel_ids = {channel.id for channel in platform.channels}
         missing = [channel_id for channel_id in self.inputs if channel_id not in channel_ids]
         if missing == ["vis051"]:
@@ -532,15 +598,16 @@ class TrueColorProducer:
         shape = (grid.height, grid.width)
         if any(inputs[channel_id].shape != shape for channel_id in needed):
             raise ConversionError(f"the true colour producer's inputs are not on the {grid.width} x {grid.height} grid")
+        solar = [channel_id for channel_id in needed if channel_id not in self.night_inputs]
 
-        # 1. The inputs, negative reflectances clipped to 0; NaN kept.
-        planes = {channel_id: np.maximum(np.asarray(inputs[channel_id], dtype=np.float64), 0.0) for channel_id in needed}
+        # 1. The reflectances, negative values clipped to 0; NaN kept.
+        planes = {channel_id: np.maximum(np.asarray(inputs[channel_id], dtype=np.float64), 0.0) for channel_id in solar}
         # 2. The sun on the grid's own coordinates.
         lons = grid.first_longitude + np.arange(grid.width, dtype=np.float64) * grid.step
         lats = grid.first_latitude - np.arange(grid.height, dtype=np.float64) * grid.step
         lon2d, lat2d = np.meshgrid(lons, lats)
         cosine = np.asarray(cos_zen(_naive_utc(slot), lon2d, lat2d), dtype=np.float64)
-        lit = cosine > 0.0
+        zenith = np.degrees(np.arccos(np.clip(cosine, -1.0, 1.0)))
         # 3. Divided by the cosine, floored at the limit.
         floor = math.cos(math.radians(TRUE_COLOR_ZENITH_LIMIT_DEG))
         divisor = np.maximum(cosine, floor)
@@ -552,104 +619,34 @@ class TrueColorProducer:
         else:
             blue, red, nir = TRUE_COLOR_SYNTHETIC_GREEN
             green = blue * normalized["vis047"] + red * normalized["vis064"] + nir * normalized["nir086"]
-        # 5. The curve.
-        guns = (normalized["vis064"], green, normalized["vis047"])
-        # 6. No data where any input had none, or the sun was down.
-        defined = lit.copy()
-        for channel_id in needed:
-            defined &= np.isfinite(planes[channel_id])
+        # 5. The day guns through the curve.
+        day = [
+            np.clip(np.interp(np.nan_to_num(gun, nan=0.0), TRUE_COLOR_CURVE_IN, TRUE_COLOR_CURVE_OUT), 0.0, 1.0)
+            for gun in (normalized["vis064"], green, normalized["vis047"])
+        ]
+        # 6. The night guns: white cloud over the dark ground.
+        ir104 = np.asarray(inputs["ir104"], dtype=np.float64)
+        ir039 = np.asarray(inputs["ir039"], dtype=np.float64)
+        whiteness = true_color_night_whiteness(ir104, ir039)
+        night = [ground + (1.0 - ground) * whiteness for ground in TRUE_COLOR_NIGHT_GROUND]
+        # 7. Across the terminator.
+        weight = true_color_day_weight(zenith)
+        # 8. No data where a side that carries weight lacked an input.
+        day_defined = np.ones(shape, dtype=bool)
+        for channel_id in solar:
+            day_defined &= np.isfinite(planes[channel_id])
+        night_defined = np.isfinite(ir104) & np.isfinite(ir039)
+        defined = (day_defined | (weight <= 0.0)) & (night_defined | (weight >= 1.0))
         results: dict[str, np.ndarray] = {}
-        for output_id, gun in zip(self.outputs, guns):
-            stretched = np.interp(np.nan_to_num(gun, nan=0.0), TRUE_COLOR_CURVE_IN, TRUE_COLOR_CURVE_OUT)
-            results[output_id] = np.where(defined, np.clip(stretched, 0.0, 1.0), np.nan)
-        return results
-
-
-#: The night microphysics recipe's own version, under the same rule as
-#: :data:`TRUE_COLOR_VERSION`: it changes exactly when a constant below
-#: does.
-NIGHT_MICRO_VERSION = "1"
-#: Each gun's linear stretch, ``(low, high)`` in kelvin mapped to 0 and 1
-#: with gamma 1: EUMETSAT's Night Microphysics RGB, the same numbers on
-#: SEVIRI, AHI, ABI and FCI. Red the 12.3 − 10.4 µm split window, green
-#: 10.4 − 3.9 µm, blue the 10.4 µm window.
-NIGHT_MICRO_RED_RANGE: tuple[float, float] = (-4.0, 2.0)
-NIGHT_MICRO_GREEN_RANGE: tuple[float, float] = (0.0, 10.0)
-NIGHT_MICRO_BLUE_RANGE: tuple[float, float] = (243.0, 293.0)
-
-
-@dataclass(frozen=True)
-class NightMicrophysicsProducer:
-    """The night microphysics composite: the three guns of the
-    ``nightmicro`` bundle from a slot's 3.9, 10.4 and 12.3 µm brightness
-    temperatures, EUMETSAT's Night Microphysics RGB in a fixed order:
-
-    1. red ``IR12.3 − IR10.4``, green ``IR10.4 − IR3.9``, blue ``IR10.4``;
-    2. each stretched linearly over its range (``NIGHT_MICRO_*_RANGE``)
-       with gamma 1 and clamped to [0, 1];
-    3. no data in all three guns wherever any input had none.
-
-    Fog and low stratus read yellow-green, thick high cloud dark red, thin
-    cirrus black to dark blue, a clear warm surface pink. By day the
-    3.9 µm window carries reflected sunlight and the green gun saturates;
-    the guns are computed there all the same (the viewer's day-night
-    blend shows the true colour where it has one). No package: the id is
-    ``xue`` and the version the recipe's."""
-
-    id: str = "xue"
-    bundle_id: str = "nightmicro"
-    bundle_ids: tuple[str, ...] = ("nightmicro",)
-    inputs: tuple[str, ...] = ("ir039", "ir104", "ir123")
-    outputs: tuple[str, ...] = ("nightr", "nightg", "nightb")
-    ancillaries: tuple[str, ...] = ()
-
-    @property
-    def version(self) -> str:
-        return NIGHT_MICRO_VERSION
-
-    def inputs_for(self, platform: Platform) -> tuple[str, ...]:
-        channel_ids = {channel.id for channel in platform.channels}
-        missing = [channel_id for channel_id in self.inputs if channel_id not in channel_ids]
-        if missing:
-            raise ConversionError(f"{platform.spacecraft} {platform.instrument} has no {missing} for the night microphysics composite")
-        return self.inputs
-
-    def ancillary_for(self, platform: Platform, slot: datetime, root: Path | None) -> dict[str, Path]:
-        return {}
-
-    def run(
-        self,
-        platform: Platform,
-        inputs: dict[str, np.ndarray],
-        ancillary: dict[str, Path],
-        *,
-        slot: datetime,
-        grid: TargetGrid,
-    ) -> dict[str, np.ndarray]:
-        needed = self.inputs_for(platform)
-        missing = [channel_id for channel_id in needed if channel_id not in inputs]
-        if missing:
-            raise ConversionError(f"the night microphysics producer needs {list(needed)}; missing {missing}")
-        shape = (grid.height, grid.width)
-        if any(inputs[channel_id].shape != shape for channel_id in needed):
-            raise ConversionError(f"the night microphysics producer's inputs are not on the {grid.width} x {grid.height} grid")
-        ir039, ir104, ir123 = (np.asarray(inputs[channel_id], dtype=np.float64) for channel_id in needed)
-        # 1. The three quantities.
-        quantities = (ir123 - ir104, ir104 - ir039, ir104)
-        ranges = (NIGHT_MICRO_RED_RANGE, NIGHT_MICRO_GREEN_RANGE, NIGHT_MICRO_BLUE_RANGE)
-        # 3. No data where any input had none.
-        defined = np.isfinite(ir039) & np.isfinite(ir104) & np.isfinite(ir123)
-        results: dict[str, np.ndarray] = {}
-        for output_id, quantity, (low, high) in zip(self.outputs, quantities, ranges):
-            # 2. The stretch, gamma 1, clamped.
-            stretched = np.clip((np.nan_to_num(quantity, nan=low) - low) / (high - low), 0.0, 1.0)
-            results[output_id] = np.where(defined, stretched, np.nan)
+        for output_id, day_gun, night_gun in zip(self.outputs, day, night):
+            blended = np.clip(weight * day_gun + (1.0 - weight) * night_gun, 0.0, 1.0)
+            results[output_id] = np.where(defined, blended, np.nan)
         return results
 
 
 PRODUCERS: dict[str, Producer] = {
     bundle_id: producer
-    for producer in (DustRGBProducer(), DebraProducer(), TrueColorProducer(), NightMicrophysicsProducer())
+    for producer in (DustRGBProducer(), DebraProducer(), TrueColorProducer())
     for bundle_id in producer.bundle_ids
 }
 """By the composite bundle each produces; a producer of two bundles is
