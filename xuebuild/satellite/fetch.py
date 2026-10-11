@@ -22,8 +22,10 @@ agency's data policy releases openly.
 from __future__ import annotations
 
 import logging
+import os
 import shutil
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -40,6 +42,11 @@ LOG = logging.getLogger(__name__)
 #: Tiles fetched at once from the bucket; S3 answers bursts without
 #: throttling and a tile is a few hundred kilobytes.
 FETCH_CONCURRENCY = 8
+#: Series written at once. Each is a `gdal_translate` subprocess that
+#: deflates one variable's frames on a single thread, so the cores are the
+#: bound; a 3000 x 3000 x 34 Int16 series is ~0.6 GB of frames streamed
+#: band by band through GDAL's block cache, a few hundred MB resident.
+SERIES_CONCURRENCY = max(1, min(os.cpu_count() or 1, 4))
 #: How many of the newest listed slots `latest_slot` asks for their tiles
 #: before trusting the listing.
 RECENT_SLOTS = 3
@@ -332,6 +339,7 @@ def fetch_window(
     fetch: Callable[[str], str] | None = None,
     download: Callable[[str], bytes] | None = None,
     concurrency: int = FETCH_CONCURRENCY,
+    series_concurrency: int = SERIES_CONCURRENCY,
 ) -> FetchedWindow:
     """The window's frames of every channel, each from the cache or the
     bucket, the producers' outputs composed from them per slot, and every
@@ -402,8 +410,7 @@ def fetch_window(
             )
             for output_id in producer.outputs
         ]
-    series: dict[str, Path] = {}
-    for variable in variables:
+    def write(variable: assemble.SeriesVariable) -> Path:
         out = assemble.series_path(destination, series_stem, variable.id)
         assemble.write_series(
             [assemble.Frame(slot=item.slot, path=item.frames[variable.id]) for item in fetched],
@@ -413,5 +420,18 @@ def fetch_window(
             run_time=run_time,
             out=out,
         )
-        series[variable.id] = out
+        return out
+
+    # Each series is its own subprocess and its own files, so the order the
+    # writes finish in changes nothing; the mapping keeps the variables'
+    # order and the first failure in that order is the one raised.
+    with ThreadPoolExecutor(max_workers=max(1, series_concurrency)) as pool:
+        futures = [pool.submit(write, variable) for variable in variables]
+        try:
+            outs = [future.result() for future in futures]
+        except BaseException:
+            for future in futures:
+                future.cancel()
+            raise
+    series = {variable.id: out for variable, out in zip(variables, outs)}
     return FetchedWindow(series=series, slots=fetched, grid=grid)
