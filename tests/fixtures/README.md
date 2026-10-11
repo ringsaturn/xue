@@ -327,21 +327,30 @@ array and sliced to latitudes 50–89 and longitudes 0–59, the second and
 third frames scaled 0.8 and 0.6, written with the same encoding
 `xuebuild/aurora.py` uses.
 
-`himawari/` holds four ISatSS tiles of the Himawari-9 AHI 10.4 µm channel
-(band 13) exactly as NOAA's `noaa-himawari9` bucket serves them: tiles
-T020 and T021 of the 03:00 and 03:10 UTC full-disk scans of 2026-09-17
-(`AHI-L2-FLDK-ISatSS/2026/09/17/0300/` and `0310/`), the two 550 x 550
-tiles east of the sub-satellite point between 20.7N and 32.5N, 140.7E and
-162.9E — the western Pacific south of Japan, with cold cloud tops down to
-188 K and clear sea near 301 K. Untouched (1.3 MB) rather than cropped so
-that the reader (`xuebuild/satellite/readers.py`) sees the real file: the
-`Sectorized_CMI` variable packed as Int16 with `scale_factor`
-0.064208984375 and `add_offset` 69, the CF `geostationary` projection whose
-x/y are in microradians (GDAL warns about the unit and computes the
-geotransform correctly; a GDAL that stopped would fail `tests/test_satellite.py`
-here), and the file-name fields the listing filters on. The tests mosaic
-them, warp them onto the 0.04° grid, stack them into the window series and
-convert that through both encoders. `himawari/partial/` holds one more
+`himawari/` holds twenty-four ISatSS tiles of the Himawari-9 AHI infrared
+channels (bands 7, 8, 11, 13, 14 and 15) exactly as NOAA's
+`noaa-himawari9` bucket serves them: tiles T020 and T021 of the 03:00 and
+03:10 UTC full-disk scans of 2026-09-17 (`AHI-L2-FLDK-ISatSS/2026/09/17/0300/`
+and `0310/`), the two 550 x 550 tiles east of the sub-satellite point
+between 20.7N and 32.5N, 140.7E and 162.9E — the western Pacific south of
+Japan, with cold cloud tops down to 188 K and clear sea near 301 K.
+Untouched (220 KB each) rather than cropped so that the reader
+(`xuebuild/satellite/readers.py`) sees the real file: the `Sectorized_CMI`
+variable packed as Int16 with `scale_factor` 0.064208984375 and
+`add_offset` 69, the CF `geostationary` projection whose x/y are in
+microradians (GDAL warns about the unit and computes the geotransform
+correctly; a GDAL that stopped would fail `tests/test_satellite.py` here),
+and the file-name fields the listing filters on. Beside them are the same
+four slots' tiles in the solar bands 1–4 (0.47, 0.51, 0.64 and 0.86 µm,
+the true colour composite's inputs), which come at 1 km (1100 x 1100,
+1.3 MB) and 0.5 km (band 3: 2200 x 2200, 4.7 MB) and are cut to their
+north-west corner — a sixteenth of the area, 275 or 550 cells a side,
+the sea between 30N and 32.5N — by `tests/prepare_himawari_fixture.py`
+with `gdal_translate -of netCDF -srcwin`, deflated, the product's packing
+(reflectance at 1/2048, unit `1`, fill −32767) and names kept. The tests
+mosaic them, warp them onto the 0.04° grid (the solar bands as block
+means), stack them into the window series and convert that through both
+encoders. `himawari/partial/` holds one more
 tile, T036 of the 13:50 UTC scan, four fifths of which the instrument never
 delivered: ISatSS writes such a segment as 0 K rather than as its fill
 value, and the reader's lookup table is tested on it.
