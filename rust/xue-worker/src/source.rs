@@ -10,6 +10,7 @@ use serde_json::{json, Map, Value};
 
 use crate::bucket::Data;
 use crate::error::HttpError;
+use crate::products;
 
 pub async fn catalog(data: &Data) -> Result<Value, HttpError> {
     let root = data.value("catalog.json").await?;
@@ -65,6 +66,20 @@ pub async fn read_source(data: &Data, source: &str) -> Result<Value, HttpError> 
     summary.insert(
         "run".into(),
         collection.get("xue:live").cloned().unwrap_or(Value::Null),
+    );
+    // Which route reads the source: a grid through `/v1/point`, a point
+    // product through its own list route (none for one the API only names).
+    let product = products::product(source);
+    summary.insert(
+        "kind".into(),
+        json!(if product.is_some() { "point" } else { "grid" }),
+    );
+    summary.insert(
+        "endpoint".into(),
+        json!(match product {
+            Some(product) => product.endpoint,
+            None => Some("/v1/point"),
+        }),
     );
     // The flat variable table. The request vocabulary that `/v1/point?variables=`
     // accepts is the distinct `bundle` values in it, so there is no second list

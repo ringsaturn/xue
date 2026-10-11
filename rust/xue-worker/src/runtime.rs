@@ -7,7 +7,7 @@ use worker::{event, Cache, Context, Env, Method, Request, Response};
 
 use crate::bucket::Data;
 use crate::error::{self, HttpError};
-use crate::{docs, point, source};
+use crate::{airport, docs, point, products, sounding, source, synop, tc};
 
 #[event(fetch)]
 async fn fetch(request: Request, env: Env, _ctx: Context) -> worker::Result<Response> {
@@ -39,13 +39,12 @@ async fn route(request: Request, env: &Env) -> Result<Response, HttpError> {
     let url = request.url().map_err(HttpError::from)?;
     let path = url.path().trim_end_matches('/');
     let path = if path.is_empty() { "/" } else { path };
-    // The contract is generated and held per isolate; the Swagger UI under
-    // `public/` is served by the static-assets server, so it never reaches
-    // this route.
+    // Every data answer is edge-cached by URL. The contract is generated and
+    // held per isolate instead; the Swagger UI under `public/` is served by
+    // the static-assets server, so it never reaches this route.
     let cacheable = method == Method::Get
-        && (path == "/v1/catalog"
-            || path == "/v1/point"
-            || path.strip_prefix("/v1/sources/").is_some());
+        && path.starts_with("/v1/")
+        && path != "/v1/openapi.json";
     if cacheable {
         if let Some(hit) = edge_get(&request).await {
             return Ok(hit);
@@ -89,6 +88,10 @@ async fn dispatch(path: &str, url: &worker::Url, env: &Env) -> Result<Response, 
             };
             error::json(&body, 200, Some(cache), &[("x-xue-run", run.as_str())])
         }
+        "/v1/soundings" => product_json(sounding::list(&data, url).await?, url),
+        "/v1/airports" => product_json(airport::list(&data, url).await?, url),
+        "/v1/synop" => product_json(synop::list(&data, url).await?, url),
+        "/v1/storms" => product_json(tc::list(&data, url).await?, url),
         _ => {
             if let Some(source_id) = path.strip_prefix("/v1/sources/") {
                 if !source_id.is_empty() && !source_id.contains('/') {
@@ -100,6 +103,32 @@ async fn dispatch(path: &str, url: &worker::Url, env: &Env) -> Result<Response, 
                     );
                 }
             }
+            for (prefix, product) in [
+                ("/v1/soundings/", "sounding"),
+                ("/v1/airports/", "airport"),
+                ("/v1/synop/", "synop"),
+                ("/v1/storms/", "tc"),
+            ] {
+                if let Some(id) = path.strip_prefix(prefix) {
+                    if id.is_empty() || id.contains('/') {
+                        break;
+                    }
+                    // The path is percent-encoded; a station id may carry a
+                    // colon (`amedas:50066`) a client encoded.
+                    let id = percent_encoding::percent_decode_str(id)
+                        .decode_utf8()
+                        .map_err(|_| {
+                            HttpError::new(400, "invalid_parameter", "the id is not UTF-8")
+                        })?;
+                    let answer = match product {
+                        "sounding" => sounding::station(&data, &id, url).await?,
+                        "airport" => airport::station(&data, &id, url).await?,
+                        "synop" => synop::station(&data, &id, url).await?,
+                        _ => tc::storm(&data, &id, url).await?,
+                    };
+                    return product_json(answer, url);
+                }
+            }
             Err(HttpError::new(
                 404,
                 "not_found",
@@ -107,6 +136,22 @@ async fn dispatch(path: &str, url: &worker::Url, env: &Env) -> Result<Response, 
             ))
         }
     }
+}
+
+/// A point product's answer: a minute live (the fastest product rebuilds
+/// every ten), a day when `issue=` pins one, since an issue's objects never
+/// change under it.
+fn product_json(
+    (body, issue): (serde_json::Value, String),
+    url: &worker::Url,
+) -> Result<Response, HttpError> {
+    let pinned = products::Query::new(url).issue().is_some();
+    let cache = if pinned {
+        "public, max-age=86400"
+    } else {
+        "public, max-age=60"
+    };
+    error::json(&body, 200, Some(cache), &[("x-xue-issue", issue.as_str())])
 }
 
 /// The edge cache (`caches.default`), keyed by the request URL. A miss is a

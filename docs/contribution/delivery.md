@@ -86,6 +86,16 @@ nothing, and the shell does not depend on it. The endpoint contract
 
 - Resolves Collection → pointer → manifest, reads stores by R2 range
   (`DATA` binding) and decodes with the crate's `decode_chunk`.
+- The point products go through `products.rs` (pointer → index, the
+  `issue=` pin, the spatial selection, one cached range read per station)
+  and a module per product (`sounding.rs`, `airport.rs`, `synop.rs`,
+  `tc.rs`) that only reshapes the product's JSON: compact rows to objects,
+  fixed point to units, epoch seconds to ISO. The products' goldens under
+  `tests/fixtures/<product>/expected/` are their test bucket, so a change
+  to a product's schema that regenerates a golden also runs these tests.
+  Adding a product is a `PRODUCTS` row plus a module; the routes list is
+  in `runtime.rs`, the contract in `static/openapi.json` and `docs/api.md`
+  (a test holds the two to the same routes).
 - Read geometry lives IO-free in `rust/xue/src/zarr.rs`. The browser's
   `web/src/zarr/shard.ts` is a second implementation of it; both are held
   to [zarr-profile.md](../zarr-profile.md).
