@@ -304,25 +304,29 @@ def write_series(
     vrt = out.with_suffix(".vrt")
     vrt.write_text(_series_vrt(frames, offsets, packing, variable, platform, grid, run_time), encoding="utf-8")
     temporary = out.with_suffix(out.suffix + ".part.nc")
-    run_command(
-        [
-            "gdal_translate",
-            "-q",
-            "-of",
-            "netCDF",
-            "-co",
-            "FORMAT=NC4",
-            "-co",
-            "COMPRESS=DEFLATE",
-            "-co",
-            "ZLEVEL=4",
-            str(vrt),
-            str(temporary),
-        ],
-        description=f"gdal_translate {out.name}",
-    )
-    temporary.replace(out)
-    vrt.unlink(missing_ok=True)
+    try:
+        run_command(
+            [
+                "gdal_translate",
+                "-q",
+                "-of",
+                "netCDF",
+                "-co",
+                "FORMAT=NC4",
+                "-co",
+                "COMPRESS=DEFLATE",
+                "-co",
+                "ZLEVEL=4",
+                str(vrt),
+                str(temporary),
+            ],
+            description=f"gdal_translate {out.name}",
+        )
+        temporary.replace(out)
+    finally:
+        # A failed translate leaves no half-written `.part.nc` behind.
+        temporary.unlink(missing_ok=True)
+        vrt.unlink(missing_ok=True)
     LOG.info("%s %s: %d frames in %s", platform.spacecraft, variable.id, len(frames), out)
 
 
