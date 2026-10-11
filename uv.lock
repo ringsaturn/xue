@@ -1683,7 +1683,7 @@ zarr = [
 [package.metadata]
 requires-dist = [
     { name = "numpy", specifier = ">=2.0" },
-    { name = "xuepy", specifier = ">=0.36,<0.37" },
+    { name = "xuepy", specifier = ">=0.37,<0.38" },
 ]
 
 [package.metadata.requires-dev]
@@ -1724,15 +1724,15 @@ zarr = [
 
 [[package]]
 name = "xuepy"
-version = "0.36.0"
+version = "0.37.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "numpy" },
 ]
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/47/f7/395763dd07e4a514644000028187aa6e30f0cfa106f850ff3d653bbe9126/xuepy-0.36.0-cp314-abi3-macosx_11_0_arm64.whl", hash = "sha256:f42c8f2e65189b40f7da418354d301371cfc6f92a954bccf64e05f5e3341d16c", size = 12898517, upload-time = "2026-10-11T14:49:58.484Z" },
-    { url = "https://files.pythonhosted.org/packages/fb/f5/b5c0d5c6ba4bab8e3e2199b6a84aa4729328fd94a0f5399ae6feb3e49df9/xuepy-0.36.0-cp314-abi3-manylinux_2_39_aarch64.whl", hash = "sha256:2f7e29c8c58c2ff2d5506c5bf1a883eb974fd1fc0a49a402ed9eca76c051062e", size = 16616517, upload-time = "2026-10-11T14:50:01.85Z" },
-    { url = "https://files.pythonhosted.org/packages/cf/32/50a2aab909bf6cd1675135d306c12c83aa8ab9b0a67b4fadcc55b2254bd6/xuepy-0.36.0-cp314-abi3-manylinux_2_39_x86_64.whl", hash = "sha256:a21460c3a261b67d721f2c9225e28e7984140e66a56a2ee1d31b151ae7ef091e", size = 17667340, upload-time = "2026-10-11T14:50:04.396Z" },
+    { url = "https://files.pythonhosted.org/packages/4f/8c/5a3cfb994332cf2e49b1aea2922d1b308f1a74d91c03b5bdf1f49180e027/xuepy-0.37.0-cp314-abi3-macosx_11_0_arm64.whl", hash = "sha256:e4e0312f29b7bbeb2d9a980048bcafe4f037fb2de9a3c3179c4018b05e49013f", size = 13050599, upload-time = "2026-10-11T16:43:09.084Z" },
+    { url = "https://files.pythonhosted.org/packages/34/65/4cdc12ad8ab9a3c5072c8e639ec0fabcb75ec9c5ed06dadd600b40d9e873/xuepy-0.37.0-cp314-abi3-manylinux_2_39_aarch64.whl", hash = "sha256:3662076a01568c58c1bbfd4877be7f5f5491495e5768f257d0296f227c1e7b60", size = 16805782, upload-time = "2026-10-11T16:43:11.9Z" },
+    { url = "https://files.pythonhosted.org/packages/a1/68/69a131d69b876f1420bcda889bb52935a86e84d51855127b8a15e1f8f59e/xuepy-0.37.0-cp314-abi3-manylinux_2_39_x86_64.whl", hash = "sha256:1c2e0817f6313dbef95ea7cb431d0b366d22b15a605c3a89b6f46a6ac0b60f62", size = 17903594, upload-time = "2026-10-11T16:43:14.654Z" },
 ]
 
 [[package]]
