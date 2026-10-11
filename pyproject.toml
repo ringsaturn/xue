@@ -11,7 +11,7 @@ description = "Xue (雪) build pipeline: fetch weather runs and pack them into b
 # cannot be uploaded by accident. The Rust binding is what publishes, as xuepy.
 classifiers = ["Private :: Do Not Upload"]
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.14"
 license = "MIT OR Apache-2.0"
 license-files = ["LICENSE-MIT", "LICENSE-APACHE"]
 dependencies = [
