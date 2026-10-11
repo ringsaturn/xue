@@ -505,6 +505,7 @@ def warp_window(
     grid: TargetGrid = TILE_GRID,
     channels: tuple = (IR104,),
     producers: tuple = (),
+    series_concurrency: int = satellite_fetch.SERIES_CONCURRENCY,
 ):
     """The fixture's one-hour window fetched into ``root`` on two tiles."""
     return satellite_fetch.fetch_window(
@@ -522,6 +523,7 @@ def warp_window(
         force=force,
         fetch=listing,
         download=download,
+        series_concurrency=series_concurrency,
     )
 
 
@@ -581,6 +583,36 @@ class FetchTests(TempRoot, unittest.TestCase):
             channels=channels,
             producers=producers,
         )
+
+    def test_concurrent_series_equal_the_serial_ones(self) -> None:
+        """Series are stacked on a pool; what each file holds and the order
+        of the mapping do not depend on how many run at once, and no
+        scratch file survives."""
+        self.from_seed()
+        kwargs = dict(channels=CHANNELS)
+        serial = warp_window(self.root, self.ancillary, self.listing, self.download_counting, series_concurrency=1, **kwargs)
+        serial_bytes = {key: path.read_bytes() for key, path in serial.series.items()}
+        parallel = warp_window(self.root, self.ancillary, self.listing, self.download_counting, series_concurrency=4, **kwargs)
+        self.assertEqual(list(parallel.series), [channel.id for channel in CHANNELS])
+        self.assertEqual(list(parallel.series), list(serial.series))
+        for key, path in parallel.series.items():
+            self.assertEqual(path.read_bytes(), serial_bytes[key], key)
+        self.assertEqual(sorted(p.name for p in path.parent.iterdir() if p.suffix != ".nc"), [])
+
+    def test_a_failed_series_leaves_no_partial_file(self) -> None:
+        self.from_seed()
+        real = assemble.run_command
+
+        def failing(arguments, **kwargs):
+            if "ir104" in kwargs.get("description", ""):
+                raise ConversionError("boom")
+            return real(arguments, **kwargs)
+
+        with mock.patch.object(assemble, "run_command", failing):
+            with self.assertRaisesRegex(ConversionError, "boom"):
+                warp_window(self.root, self.ancillary, self.listing, self.download_counting, channels=CHANNELS)
+        directory = self.root / "himawari.2026091703"
+        self.assertEqual([p.name for p in directory.iterdir() if ".part" in p.name or p.suffix == ".vrt"], [])
 
     def test_a_slot_is_warped_once_and_read_from_the_cache_after(self) -> None:
         window = self.fetch_window()
