@@ -35,6 +35,7 @@ import {
   searchWithRadar,
   searchWithStations,
   searchWithTc,
+  searchNamesVolume,
   searchWithVolume,
   type RadarUrlState,
   type StationsUrlState,
@@ -107,6 +108,8 @@ interface ParsedView {
   fieldRequested: boolean;
   /** Whether `?particles=` made a choice. */
   particlesRequested: boolean;
+  /** Whether `?volume=` made a choice (`searchNamesVolume`). */
+  volumeRequested: boolean;
 }
 
 /** The composition whose primary is `primary`: a pressure surface is the
@@ -146,6 +149,7 @@ export function parseView(search: string, defaults: ViewDefaults): ParsedView {
     },
     fieldRequested: requestedField !== null,
     particlesRequested: requestedParticles !== null,
+    volumeRequested: searchNamesVolume(search),
   };
 }
 

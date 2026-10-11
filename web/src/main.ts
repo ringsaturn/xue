@@ -1240,7 +1240,7 @@ const MODEL_EYEBROW: Record<ForecastModelId, string> = {
   cfs: "NOAA / CFSv2 SEASONAL (0.94°)",
   sflux: "NOAA / GFS SFLUX (13 KM)",
   hrrr: "NOAA / HRRR CONUS (3 KM)",
-  woof: "RECAST / WOOF WRF-ARW NEST FUJI (500 M)",
+  woof: "RECAST / WOOF WRF-ARW NEST FUJI",
   gefsaero: "NOAA / GEFS-AEROSOLS (0.25°)",
   cma: "CMA / RADAR MOSAIC (0.044°)",
   mrms: "NOAA / MRMS CONUS (0.02°)",
@@ -5761,6 +5761,19 @@ function applyCaseTerrain(terrain: number | false | undefined): void {
   }
 }
 
+/** Open a case with the volume its view names drawn over the field: the
+ * same `ViewState.volume` that `?volume=` and the overlay tile set, so the
+ * tile, the address bar and the overlay follow from it once the manifest
+ * is open (`applyVolumeOverlay` drops a volume the run does not ship). A
+ * link that said anything about the volume (`?volume=`, `off` included)
+ * wins, as `?terrain=` wins over the view's relief. Called on the first
+ * entry into the case only: a retry or a new run of it never turns back on
+ * what the viewer switched off. */
+function applyCaseVolume(volume: ForecastBundleId | undefined): void {
+  if (volume === undefined || requestedView.volumeRequested) return;
+  view.volume = volume;
+}
+
 /** The share of the view a regional model's region must fill for the
  * viewer to count as already looking at it. Below this the region is a
  * patch on a wider map — the world view overlaps every region and shows
@@ -8934,6 +8947,9 @@ async function initialize({ frame = false }: { frame?: boolean } = {}): Promise<
       if (!caseDefaultApplied && !requestedView.fieldRequested) {
         setComposition(compositionForPrimary(found.defaultVariable, view.lines));
       }
+      // Likewise the volume its view names (a cloud over the mountain), on
+      // the first entry alone.
+      if (!caseDefaultApplied) applyCaseVolume(found.view?.volume);
       caseDefaultApplied = true;
       document.body.classList.add("is-showcase");
       updateCasePresentation(found);

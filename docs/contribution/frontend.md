@@ -189,12 +189,17 @@ and the window shrinks to fit it.
   the levels' parameter's (`volumeTransfer`). Reflectivity: the cref
   palette, opacity rising from 25 to 55 dBZ, per voxel, so the step count
   does not change the picture. Cloud water (0/1/22): Beer–Lambert
-  extinction, `1 − exp(−σ·q·stride)` with σ = 1.6 per g/kg per voxel (a
-  0.3 g/kg deck six voxels deep is opaque), coloured from the theme at draw
-  time (grey-blue on paper, warm white on dark), one shadow sample two
-  voxels towards a fixed south-west sun at 45° weighed as four voxels of
-  path, and a silver lining where that sample is clear and the view looks
-  into the sun. With terrain on (plane only), each sample is projected by
+  extinction, `1 − exp(−σ·q·stride)` with σ = 16 per g/kg per voxel — a
+  fifth of the physical extinction of a 500 m voxel of cloud, so a
+  0.2 g/kg layer one level thick is already a deck and a 0.05 g/kg wisp a
+  half-veil — coloured from the theme at draw time (a cool blue-white over
+  a slate shade on paper, where the fills under it are warm; warm white
+  over grey on dark), one shadow sample two voxels towards a fixed
+  south-west sun at 45° weighed as 0.75 voxels of path (σ·path ≈ 12:
+  0.05 g/kg up-sun halves the light, 0.1 g/kg leaves a third, 0.3 g/kg
+  almost none, so a cloud's interior grades from lit to shade rather than
+  turning flat shade past its first voxel), and a silver lining where that sample is clear and the
+  view looks into the sun. With terrain on (plane only), each sample is projected by
   the layer's matrix and the march stops once MapLibre's packed terrain
   depth (`projection.ts::terrainDepthTexture`, the same test the particles
   use) says the relief is in front: the cloud below a ridge is hidden by it.
@@ -284,7 +289,14 @@ and the window shrinks to fit it.
   coordinates so density is even per pixel, all reseeded when the camera
   settles, and respawned when they leave the screen. On terrain their
   height follows the terrain mesh's own triangles, so the depth test against
-  the terrain's packed depth is about ridges, not facets.
+  the terrain's packed depth is about ridges, not facets. The point pass
+  weighs each particle's clip w against the screen centre's (`u_depth_ref`,
+  the main matrix at the centre's ground; 0 on the globe): under a pitch
+  the foreground draws up to 1.6× wider and the far ground down to 0.6×
+  and half as bright, and a fast particle a quarter wider and brighter
+  than a slow one; flat, every w is the centre's and only the pace tells.
+  There is no density pass: the lattice seeding already spreads the
+  budget evenly per pixel.
 - Terrain shadows (`?shadow=on`; no switch on the view tile until the
   feature is finished): a worker
   (`shadow.worker.ts`) fetches the Terrarium tiles the hillshade uses and
@@ -427,7 +439,15 @@ hidden and pinned models are `localStorage`.
   follow from the `terrain` event; a link carrying `?terrain=` (on or off,
   `searchNamesTerrain`) outranks it, as `#map=` outranks the framing. A
   `view` the shell cannot read is dropped with one warning and the case
-  opens on the fit. A dataset reached only through cases (`woof`) has no
+  opens on the fit. The view's optional `volume` (a volume bundle among
+  the case's variables) is applied on the first entry into the case
+  (`applyCaseVolume`, beside the case's default field) by setting the one
+  `ViewState.volume` that `?volume=` and the overlay tile set, so the
+  tile, the address bar and `applyVolumeOverlay` follow from it once the
+  manifest is open; a link that said anything about the volume
+  (`?volume=`, `off` included: `ParsedView.volumeRequested`) outranks it,
+  the tile still turns it off, and a volume name the shell does not know
+  is dropped from the view without a warning. A dataset reached only through cases (`woof`) has no
   pointer: `isCaseOnlyModel`, absent from `FORECAST_MODEL_IDS` and the
   model sheet, and `?model=` naming it falls back to the default.
 

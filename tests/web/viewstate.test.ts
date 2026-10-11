@@ -127,6 +127,14 @@ describe("the volume overlay", () => {
     expect(parseView("?type=sst", DEFAULTS).view.volume).toBeNull();
   });
 
+  it("remembers whether the link spoke of the volume at all", () => {
+    // What lets `?volume=off` outrank a case that opens with its cloud.
+    expect(parseView("?type=sst&volume=cloud3d", DEFAULTS).volumeRequested).toBe(true);
+    expect(parseView("?type=sst&volume=off", DEFAULTS).volumeRequested).toBe(true);
+    expect(parseView("?type=sst&volume=", DEFAULTS).volumeRequested).toBe(true);
+    expect(parseView("?type=sst", DEFAULTS).volumeRequested).toBe(false);
+  });
+
   it("is drawn and written only over a 2D field", () => {
     expect(volumeOverField({ field: "tmpsfc", volume: "cloud3d" })).toBe("cloud3d");
     expect(volumeOverField({ field: null, volume: "cloud3d" })).toBeNull();
