@@ -1239,8 +1239,9 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         """The true colour bundle: the three guns as variables 1, 2 and 3,
         the producer's local numbers 7, 8 and 9 with the producer block
         `xue` at the recipe's version 2, the channel's axis and grid, the
-        three-rung ladder; code 0 wherever the 10.4 µm channel has none
-        (no picture by day or night without the disk), a value elsewhere."""
+        three-rung ladder; no data in all three guns together, a value
+        elsewhere. (A sunlit cell keeps its picture without the infrared,
+        so the 10.4 µm channel's gaps are not the composite's.)"""
         manifest = json.loads((self.root / "out" / "manifest.json").read_text(encoding="utf-8"))
         entry = next(bundle for bundle in manifest["bundles"] if bundle["variable"] == "truecolor")
         self.assertNotIn("poster", entry)
@@ -1254,12 +1255,16 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
             self.assertEqual((parameter["discipline"], parameter["parameterCategory"], parameter["parameterNumber"], parameter["typeOfFirstFixedSurface"]), (3, 192, number, 8))
             self.assertEqual(variable["producer"], {"id": "xue", "version": "2"})
             self.assertEqual(variable["quantization"], PROFILES["quality"]["dustr"].metadata())
-        ir104 = np.asarray(read_bundle(self.root / "out" / "ir104.xue").decode_plane(1, 0)).reshape(3000, 3000)
+        empty = None
         for number in (1, 2, 3):
             codes = np.asarray(bundle.decode_plane(number, 0)).reshape(3000, 3000)
-            self.assertTrue(np.all(codes[ir104 == 0] == 0))
             self.assertGreater(int((codes > 0).sum()), 0)
             self.assertLessEqual(int(codes.max()), 251)
+            if empty is None:
+                empty = codes == 0
+                self.assertTrue(empty.any())
+            else:
+                self.assertTrue(np.array_equal(codes == 0, empty), number)
 
     def test_the_confidence_is_one_variable_with_the_producer_beside_the_parameter(self) -> None:
         """The DEBRA bundle: one variable, a local-use parameter (the
