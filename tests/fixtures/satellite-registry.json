@@ -617,6 +617,99 @@
         "maximumCode": 251,
         "nodataCode": 255
       }
+    },
+    "nightr": {
+      "label": "Night microphysics, red gun",
+      "unit": "1",
+      "parameter": {
+        "discipline": 3,
+        "parameterCategory": 192,
+        "parameterNumber": 10,
+        "typeOfFirstFixedSurface": 8,
+        "scaleFactorOfFirstFixedSurface": null,
+        "scaledValueOfFirstFixedSurface": null
+      },
+      "producer": {
+        "id": "xue"
+      },
+      "quality": {
+        "type": "linear",
+        "offset": -0.004,
+        "scale": 0.004,
+        "minimumCode": 0,
+        "maximumCode": 251,
+        "nodataCode": 255
+      },
+      "compact": {
+        "type": "linear",
+        "offset": -0.004,
+        "scale": 0.004,
+        "minimumCode": 0,
+        "maximumCode": 251,
+        "nodataCode": 255
+      }
+    },
+    "nightg": {
+      "label": "Night microphysics, green gun",
+      "unit": "1",
+      "parameter": {
+        "discipline": 3,
+        "parameterCategory": 192,
+        "parameterNumber": 11,
+        "typeOfFirstFixedSurface": 8,
+        "scaleFactorOfFirstFixedSurface": null,
+        "scaledValueOfFirstFixedSurface": null
+      },
+      "producer": {
+        "id": "xue"
+      },
+      "quality": {
+        "type": "linear",
+        "offset": -0.004,
+        "scale": 0.004,
+        "minimumCode": 0,
+        "maximumCode": 251,
+        "nodataCode": 255
+      },
+      "compact": {
+        "type": "linear",
+        "offset": -0.004,
+        "scale": 0.004,
+        "minimumCode": 0,
+        "maximumCode": 251,
+        "nodataCode": 255
+      }
+    },
+    "nightb": {
+      "label": "Night microphysics, blue gun",
+      "unit": "1",
+      "parameter": {
+        "discipline": 3,
+        "parameterCategory": 192,
+        "parameterNumber": 12,
+        "typeOfFirstFixedSurface": 8,
+        "scaleFactorOfFirstFixedSurface": null,
+        "scaledValueOfFirstFixedSurface": null
+      },
+      "producer": {
+        "id": "xue"
+      },
+      "quality": {
+        "type": "linear",
+        "offset": -0.004,
+        "scale": 0.004,
+        "minimumCode": 0,
+        "maximumCode": 251,
+        "nodataCode": 255
+      },
+      "compact": {
+        "type": "linear",
+        "offset": -0.004,
+        "scale": 0.004,
+        "minimumCode": 0,
+        "maximumCode": 251,
+        "nodataCode": 255
+      }
     }
   },
   "bundles": {
@@ -635,6 +728,11 @@
       "truer",
       "trueg",
       "trueb"
+    ],
+    "nightmicro": [
+      "nightr",
+      "nightg",
+      "nightb"
     ]
   }
 }

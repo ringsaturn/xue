@@ -1366,6 +1366,51 @@ VARIABLES: dict[str, VariableSpec] = {
         grib2_level_type=8,
         producer_id="xue",
     ),
+    # The night microphysics composite, the three guns of the ``nightmicro``
+    # bundle: EUMETSAT's Night Microphysics RGB from three infrared windows
+    # every disk already fetches — red the 12.3 − 10.4 µm split window
+    # (cloud optical thickness), green 10.4 − 3.9 µm (the small droplets of
+    # fog and low stratus), blue the 10.4 µm window (temperature), each
+    # stretched linearly to 0–1 with gamma 1. The recipe is
+    # ``NightMicrophysicsProducer``'s, so the producer id is this
+    # pipeline's and the version the recipe's. The next three local-use
+    # numbers (10, 11, 12, after the true colour's 7–9), the guns' codebook
+    # and no-data rule: code 0 is a cell the disk does not cover or an
+    # input lacked. By day the 3.9 µm window carries reflected sunlight and
+    # the green gun saturates; the picture is still published there.
+    "nightr": VariableSpec(
+        id="nightr",
+        label="Night microphysics, red gun",
+        output_unit="1",
+        value_range=(-0.004, 1),
+        grib2_discipline=3,
+        grib2_category=192,
+        grib2_number=10,
+        grib2_level_type=8,
+        producer_id="xue",
+    ),
+    "nightg": VariableSpec(
+        id="nightg",
+        label="Night microphysics, green gun",
+        output_unit="1",
+        value_range=(-0.004, 1),
+        grib2_discipline=3,
+        grib2_category=192,
+        grib2_number=11,
+        grib2_level_type=8,
+        producer_id="xue",
+    ),
+    "nightb": VariableSpec(
+        id="nightb",
+        label="Night microphysics, blue gun",
+        output_unit="1",
+        value_range=(-0.004, 1),
+        grib2_discipline=3,
+        grib2_category=192,
+        grib2_number=12,
+        grib2_level_type=8,
+        producer_id="xue",
+    ),
     # The GEFS-Aerosols fields (NOAA's GEFS ``chem`` member, the
     # GOCART aerosol model coupled to the GFS), the first aerosol products
     # this pipeline reads: GRIB2 product definition template 4.48, whose
@@ -1566,8 +1611,17 @@ ZHOUYE_COMPONENT_IDS: tuple[str] = ("zhouye",)
 # the reflectance channels by this pipeline's own recipe, in bundle order.
 TRUE_COLOR_BUNDLE_ID = "truecolor"
 TRUE_COLOR_COMPONENT_IDS: tuple[str, str, str] = ("truer", "trueg", "trueb")
+# The night microphysics composite: three guns produced in the fetch stage
+# from three infrared windows by this pipeline's own recipe, in bundle order.
+NIGHT_MICRO_BUNDLE_ID = "nightmicro"
+NIGHT_MICRO_COMPONENT_IDS: tuple[str, str, str] = ("nightr", "nightg", "nightb")
 SATELLITE_VARIABLE_IDS: tuple[str, ...] = (
-    SATELLITE_CHANNEL_IDS + DUST_RGB_COMPONENT_IDS + DUST_CF_COMPONENT_IDS + ZHOUYE_COMPONENT_IDS + TRUE_COLOR_COMPONENT_IDS
+    SATELLITE_CHANNEL_IDS
+    + DUST_RGB_COMPONENT_IDS
+    + DUST_CF_COMPONENT_IDS
+    + ZHOUYE_COMPONENT_IDS
+    + TRUE_COLOR_COMPONENT_IDS
+    + NIGHT_MICRO_COMPONENT_IDS
 )
 # The aerosol set, in the order GEFS-Aerosols publishes it: the six optical
 # thicknesses, then the three surface concentrations. Held to the Rust
