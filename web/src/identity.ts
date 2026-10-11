@@ -81,6 +81,7 @@ export type ChartFamily =
   | "dustcf"
   | "zhouye"
   | "truecolor"
+  | "nightmicro"
   | "aod"
   | "aoddust"
   | "aodsalt"
@@ -112,9 +113,10 @@ function vector(family: ChartFamily, level: number | null): VariableIdentity {
 
 /** The composites: a family whose bundle is three colour guns rather than
  * one scalar or a u/v pair, drawn straight as red, green and blue — the
- * Dust RGB and the true colour picture. An identity's `vector` flag is
- * false for them; this is what says the third texture mode is theirs. */
-const COMPOSITE_FAMILIES: readonly ChartFamily[] = ["dustrgb", "truecolor"];
+ * Dust RGB, the true colour picture and the night microphysics picture.
+ * An identity's `vector` flag is false for them; this is what says the
+ * third texture mode is theirs. */
+const COMPOSITE_FAMILIES: readonly ChartFamily[] = ["dustrgb", "truecolor", "nightmicro"];
 
 /** True when an identity names a colour composite (three guns). */
 export function isCompositeIdentity(identity: VariableIdentity | null): boolean {
@@ -414,7 +416,8 @@ export function identityForParameterPair(u: BundleParameter, v: BundleParameter)
  * numbers of its guns together. The Dust RGB is shachen's local numbers
  * 1, 2 and 3 in the space-products discipline, at the top of the
  * atmosphere like the channels it is made of; the true colour picture is
- * the encoder's own recipe, producer `xue`, at numbers 7, 8 and 9 — the
+ * the encoder's own recipe, producer `xue`, at numbers 7, 8 and 9, and
+ * the night microphysics picture the same producer's 10, 11 and 12 — the
  * numbers are per producer, so shachen's 7 would be something else. */
 const COMPOSITE_TRIPLES: readonly {
   family: ChartFamily;
@@ -425,6 +428,7 @@ const COMPOSITE_TRIPLES: readonly {
 }[] = [
   { family: "dustrgb", producer: "shachen", discipline: 3, category: 192, guns: [1, 2, 3] },
   { family: "truecolor", producer: "xue", discipline: 3, category: 192, guns: [7, 8, 9] },
+  { family: "nightmicro", producer: "xue", discipline: 3, category: 192, guns: [10, 11, 12] },
 ];
 
 /** Whether a parameter is in a local-use category, where only a producer

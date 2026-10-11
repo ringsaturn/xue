@@ -168,6 +168,9 @@ describe("the fields' own ?type= spellings", () => {
     ["?type=rgb", "truecolor"],
     ["?type=color", "truecolor"],
     ["?type=colour", "truecolor"],
+    ["?type=nightmicro", "nightmicro"],
+    ["?type=night", "nightmicro"],
+    ["?type=nightrgb", "nightmicro"],
   ])("reads %s as %s", (search, id) => {
     expect(parseVariableFromSearch(search)).toBe(id);
   });
@@ -195,6 +198,7 @@ describe("the fields' own ?type= spellings", () => {
     ["dustcf", "debra"],
     ["zhouye", "zhouye"],
     ["truecolor", "truecolor"],
+    ["nightmicro", "nightmicro"],
   ])("writes %s as type=%s and reads it back", (id, spelling) => {
     expect(searchForVariable(id, "")).toBe(`?model=gfs&type=${spelling}`);
     expect(parseVariableFromSearch(searchForVariable(id, ""))).toBe(id);
