@@ -1174,6 +1174,61 @@ VARIABLES: dict[str, VariableSpec] = {
         grib2_number=4,
         grib2_level_type=8,
     ),
+    # The visible and near-infrared channels the true colour composite
+    # reads: top-of-atmosphere bidirectional reflectance as the products
+    # deliver it (ISatSS and CMIPF: a reflectance factor, not yet divided
+    # by the cosine of the solar zenith; the producer does that), a number
+    # in 0–1 that a sunlit cloud takes a little past 1. GRIB2 has no
+    # reflectance parameter for an arbitrary band, so every one takes the
+    # satellite-image "scaled albedo" (discipline 3, category 0, number 1)
+    # on the nominal top of the atmosphere, the ``band`` block beside it
+    # saying which channel, the way the infrared windows share the
+    # brightness temperature parameter. AHI bands 1–4 (0.47, 0.51, 0.64,
+    # 0.86 µm), ABI channels 1–3 (0.47, 0.64, 0.86 µm; the ABI has no
+    # 0.51 µm band), FCI VIS 0.4–0.8. Fetched for the composite, registered
+    # variables, published by no source; their codebook (not spent on any
+    # bundle) starts a hundredth below zero so code 0 is the fill and a
+    # night side at 0.0 stays a value on both profiles.
+    "vis047": VariableSpec(
+        id="vis047",
+        label="Reflectance, 0.47 µm",
+        output_unit="1",
+        value_range=(-0.01, 1.255),
+        grib2_discipline=3,
+        grib2_category=0,
+        grib2_number=1,
+        grib2_level_type=8,
+    ),
+    "vis051": VariableSpec(
+        id="vis051",
+        label="Reflectance, 0.51 µm",
+        output_unit="1",
+        value_range=(-0.01, 1.255),
+        grib2_discipline=3,
+        grib2_category=0,
+        grib2_number=1,
+        grib2_level_type=8,
+    ),
+    "vis064": VariableSpec(
+        id="vis064",
+        label="Reflectance, 0.64 µm",
+        output_unit="1",
+        value_range=(-0.01, 1.255),
+        grib2_discipline=3,
+        grib2_category=0,
+        grib2_number=1,
+        grib2_level_type=8,
+    ),
+    "nir086": VariableSpec(
+        id="nir086",
+        label="Reflectance, 0.86 µm",
+        output_unit="1",
+        value_range=(-0.01, 1.255),
+        grib2_discipline=3,
+        grib2_category=0,
+        grib2_number=1,
+        grib2_level_type=8,
+    ),
     # The classic Dust RGB (Lensky and Rosenfeld 2008; EUMeTrain's recipe
     # compilation; the GOES-R Quick Guide), the three guns of one composite
     # bundle, ``dustrgb``: red is the 12.3 − 10.4 µm split window, green
@@ -1265,6 +1320,51 @@ VARIABLES: dict[str, VariableSpec] = {
         grib2_number=6,
         grib2_level_type=8,
         producer_id="shachen",
+    ),
+    # The true colour composite, the three guns of the ``truecolor``
+    # bundle: the 0.64, 0.51 and 0.47 µm reflectances of a slot, each
+    # divided by the cosine of the solar zenith and put through one fixed
+    # brightness curve, the green on the ABI synthesized from the blue,
+    # the red and the 0.86 µm band it has instead — the recipe is
+    # ``xuebuild/satellite/producers.py``'s own (``TrueColorProducer``),
+    # so the producer id is this pipeline's and the version the recipe's,
+    # not the package's. The guns take the next three local-use numbers
+    # (7, 8, 9: 1–3 are the Dust RGB's, 4 and 6 the confidences', 5 the
+    # aurora's), the guns' codebook and no-data rule: code 0 is a cell the
+    # disk does not cover, an input lacked, or the night side, where there
+    # is no sunlit picture to draw.
+    "truer": VariableSpec(
+        id="truer",
+        label="True colour, red gun",
+        output_unit="1",
+        value_range=(-0.004, 1),
+        grib2_discipline=3,
+        grib2_category=192,
+        grib2_number=7,
+        grib2_level_type=8,
+        producer_id="xue",
+    ),
+    "trueg": VariableSpec(
+        id="trueg",
+        label="True colour, green gun",
+        output_unit="1",
+        value_range=(-0.004, 1),
+        grib2_discipline=3,
+        grib2_category=192,
+        grib2_number=8,
+        grib2_level_type=8,
+        producer_id="xue",
+    ),
+    "trueb": VariableSpec(
+        id="trueb",
+        label="True colour, blue gun",
+        output_unit="1",
+        value_range=(-0.004, 1),
+        grib2_discipline=3,
+        grib2_category=192,
+        grib2_number=9,
+        grib2_level_type=8,
+        producer_id="xue",
     ),
     # The GEFS-Aerosols fields (NOAA's GEFS ``chem`` member, the
     # GOCART aerosol model coupled to the GFS), the first aerosol products
@@ -1440,13 +1540,17 @@ VARIABLES: dict[str, VariableSpec] = {
 # also carries the two derived wave vector components.
 OCEAN_VARIABLE_IDS: tuple[str, ...] = ("tmpsfc", "icec", "icetk", "htsgw", "perpw", "dirpw")
 WAVE_VECTOR_COMPONENT_IDS: tuple[str, str] = ("uwave", "vwave")
-# The satellite channels, the composite guns and the confidence, held to the Rust encoder
-# and the frontend by tests/fixtures/satellite-registry.json the same way.
-# The channels are what a platform's imager measures (a ``band`` block
-# each when published); the guns are what the Dust RGB producer derives
-# from four of them, the three variables of the ``dustrgb`` bundle in
-# bundle order.
-SATELLITE_CHANNEL_IDS: tuple[str, ...] = ("ir039", "wv062", "ir086", "ir104", "ir112", "ir123")
+# The satellite channels, the composite guns and the confidences, held to
+# the Rust encoder and the frontend by tests/fixtures/satellite-registry.json
+# the same way. The channels are what a platform's imager measures (a
+# ``band`` block each when published): six infrared windows, which every
+# source fetches first (the first is the one a listing walks), then the
+# four visible and near-infrared bands the true colour composite reads;
+# the guns are what the Dust RGB producer derives from four of the windows,
+# the three variables of the ``dustrgb`` bundle in bundle order.
+SATELLITE_INFRARED_IDS: tuple[str, ...] = ("ir039", "wv062", "ir086", "ir104", "ir112", "ir123")
+SATELLITE_REFLECTANCE_IDS: tuple[str, ...] = ("vis047", "vis051", "vis064", "nir086")
+SATELLITE_CHANNEL_IDS: tuple[str, ...] = SATELLITE_INFRARED_IDS + SATELLITE_REFLECTANCE_IDS
 DUST_RGB_BUNDLE_ID = "dustrgb"
 DUST_RGB_COMPONENT_IDS: tuple[str, str, str] = ("dustr", "dustg", "dustb")
 # The DEBRA confidence is a composite bundle of one variable: produced in
@@ -1458,7 +1562,13 @@ DUST_CF_COMPONENT_IDS: tuple[str] = ("dustcf",)
 # bundle, composed in the same pass as the DEBRA one.
 ZHOUYE_BUNDLE_ID = "zhouye"
 ZHOUYE_COMPONENT_IDS: tuple[str] = ("zhouye",)
-SATELLITE_VARIABLE_IDS: tuple[str, ...] = SATELLITE_CHANNEL_IDS + DUST_RGB_COMPONENT_IDS + DUST_CF_COMPONENT_IDS + ZHOUYE_COMPONENT_IDS
+# The true colour composite: three guns produced in the fetch stage from
+# the reflectance channels by this pipeline's own recipe, in bundle order.
+TRUE_COLOR_BUNDLE_ID = "truecolor"
+TRUE_COLOR_COMPONENT_IDS: tuple[str, str, str] = ("truer", "trueg", "trueb")
+SATELLITE_VARIABLE_IDS: tuple[str, ...] = (
+    SATELLITE_CHANNEL_IDS + DUST_RGB_COMPONENT_IDS + DUST_CF_COMPONENT_IDS + ZHOUYE_COMPONENT_IDS + TRUE_COLOR_COMPONENT_IDS
+)
 # The aerosol set, in the order GEFS-Aerosols publishes it: the six optical
 # thicknesses, then the three surface concentrations. Held to the Rust
 # encoder and the frontend by tests/fixtures/aerosol-registry.json, which

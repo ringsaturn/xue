@@ -43,9 +43,20 @@ FETCH_CONCURRENCY = 8
 #: How many of the newest listed slots `latest_slot` asks for their tiles
 #: before trusting the listing.
 RECENT_SLOTS = 3
-#: Bilinear for a continuous quantity (brightness temperature,
-#: reflectance); a categorical product would take ``near``.
+#: Bilinear for a brightness temperature, a continuous quantity delivered
+#: at 2 km onto a grid of about 4 km; a categorical product would take
+#: ``near``.
 RESAMPLING = "bilinear"
+#: The block mean for a reflectance: the visible bands arrive at 0.5 and
+#: 1 km, eight and four times finer than the grid, and a bilinear sample
+#: of four source pixels out of sixty-four would speckle a cloud edge
+#: that an average draws as the eye sees it from orbit.
+REFLECTANCE_RESAMPLING = "average"
+
+
+def resampling_for(channel: Channel) -> str:
+    """How a channel's slot is put on the grid: by its kind."""
+    return REFLECTANCE_RESAMPLING if channel.kind == "reflectance" else RESAMPLING
 
 
 def target_grid(platform: Platform, step: float) -> TargetGrid:
@@ -173,7 +184,7 @@ def fetch_frame(
     # mosaic or a warp carries a band's scale, offset and unit through only
     # on some GDAL versions (3.13 does, Ubuntu 24.04's 3.8 loses the unit).
     packing = assemble.dataset_packing(reader.packing_source(files, channel=channel))
-    PROJECTORS[projector].to_grid(source, grid, nodata=assemble.NODATA, resampling=RESAMPLING, out=frame)
+    PROJECTORS[projector].to_grid(source, grid, nodata=assemble.NODATA, resampling=resampling_for(channel), out=frame)
     assemble.write_packing(
         frame,
         packing,
@@ -181,6 +192,7 @@ def fetch_frame(
         tiles=len(objects),
         keys=[item.key for item in objects],
         projector=projector,
+        resampling=resampling_for(channel),
     )
     if reader.files_per_channel:
         shutil.rmtree(slot_dir, ignore_errors=True)
