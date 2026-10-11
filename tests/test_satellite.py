@@ -354,7 +354,7 @@ class RegistryTests(unittest.TestCase):
         self.assertEqual(binconvert.published_bundle_ids(dust_only), ("ir104", "dustrgb"))
         windows_only = dataclasses.replace(SPEC, input_variable_ids=SATELLITE_INFRARED_IDS)
         self.assertEqual(binconvert.published_bundle_ids(windows_only), ("ir104", "dustrgb", "dustcf", "zhouye", "nightmicro"))
-        self.assertEqual([spec.id for spec in SOURCES.values() if spec.platform], ["himawari", "goeseast", "goeswest", "meteosat"])
+        self.assertEqual([spec.id for spec in SOURCES.values() if spec.platform], ["himawari", "himawarijp", "goeseast", "goeswest", "meteosat"])
 
     def test_the_source_band_is_the_platform_s(self) -> None:
         self.assertEqual([band_id for band_id, _ in SPEC.bands], list(SATELLITE_CHANNEL_IDS))
@@ -1302,6 +1302,216 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
     @requires_native_source("himawari", "the himawari source's bundle set")
     def test_the_native_encoder_writes_the_same_bytes(self) -> None:
         assert_native_matches(self, self.inputs, self.root / "out", self.report, self.root / "native", model="himawari", require_complete=True, expected_hours=3)
+
+
+#: The Japan box: the himawari platform on a region of its own at 0.01°.
+JAPAN = source_spec("himawarijp")
+JAPAN_REGION = (122.0, 24.0, 148.0, 46.0)
+#: Boxes inside the fixture's two tiles: one only T020 reaches into, one
+#: that also needs T019 (west of the sub-satellite longitude), which the
+#: fixture does not hold.
+T020_ONLY = (141.0, 25.0, 148.0, 32.0)
+NEEDS_T019 = (139.0, 25.0, 148.0, 32.0)
+
+
+class JapanSourceTests(unittest.TestCase):
+    def test_the_source_is_the_platform_on_a_box_of_its_own(self) -> None:
+        self.assertTrue(JAPAN.observation and JAPAN.series_file and JAPAN.fetched and JAPAN.live)
+        self.assertEqual((JAPAN.manifest_model, JAPAN.product, JAPAN.latest_filename), ("HIMAWARI-JP", "ahi-japan-0p01", "latest-himawarijp.json"))
+        self.assertEqual((JAPAN.platform, JAPAN.grid_step, JAPAN.region, JAPAN.cadence_seconds, JAPAN.window_hours), ("himawari", 0.01, JAPAN_REGION, 600, 3))
+        self.assertEqual((JAPAN.production_grid, JAPAN.tile, JAPAN.variant_factors), ((2600, 2200), (64, 64), (2, 4, 8)))
+        # The Dust RGB's windows and the true colour's bands, no confidence.
+        self.assertEqual(binconvert.published_bundle_ids(JAPAN), ("ir104", "dustrgb", "truecolor"))
+        self.assertEqual(binconvert.bundle_input_ids(JAPAN, "dustrgb"), ("ir086", "ir104", "ir112", "ir123"))
+        self.assertEqual(binconvert.bundle_input_ids(JAPAN, "truecolor"), ("vis047", "vis051", "vis064", "nir086"))
+        self.assertEqual(JAPAN.input_variable_ids, binconvert.bundle_input_ids(JAPAN, "dustrgb") + binconvert.bundle_input_ids(JAPAN, "truecolor"))
+        # Its bands are the disk's: same spacecraft, same channels.
+        self.assertTrue(set(JAPAN.bands) <= set(SPEC.bands))
+        # Every full-disk source takes its platform's region.
+        self.assertEqual([spec.id for spec in SOURCES.values() if spec.region is not None], ["himawarijp"])
+
+    def test_the_grid_is_the_box_at_the_step(self) -> None:
+        grid = satellite_grid(JAPAN)
+        self.assertEqual((grid.west, grid.south, grid.east, grid.north, grid.step), (*JAPAN_REGION, 0.01))
+        self.assertEqual((grid.width, grid.height), JAPAN.production_grid)
+        # Whole degrees on a 0.01° step: the JMA nowcast's 0.005° cells nest
+        # in these two to one.
+        self.assertEqual((grid.first_longitude, grid.first_latitude), (122.005, 45.995))
+        with self.assertRaisesRegex(DownloadError, "the source's region at 0.01° is 2600 x 2300"):
+            satellite_grid(dataclasses.replace(JAPAN, region=(122.0, 23.0, 148.0, 46.0)))
+        # A box that is not whole cells is no grid at all.
+        with self.assertRaisesRegex(ConversionError, "not a whole number"):
+            satellite_grid(dataclasses.replace(JAPAN, region=(122.0, 24.0, 148.005, 46.0)))
+
+    def test_the_catalog_prose_names_the_agency_and_the_box(self) -> None:
+        prose = _source_prose(JAPAN)
+        self.assertEqual(prose["providers"][0]["name"], "Japan Meteorological Agency")
+        self.assertEqual(prose["providers"][1]["roles"], ["host"])
+        self.assertIn("endorses", prose["description"])
+        self.assertIn("24–46°N, 122–148°E", prose["description"])
+
+
+class TileFootprintTests(unittest.TestCase):
+    @requires_gdal_warp
+    def test_the_footprint_is_the_tile_s_own_georeference(self) -> None:
+        """The layout table and the scan-angle arithmetic agree with what
+        the fixture tiles say about themselves: their row and column
+        offsets on the disk, and the corners GDAL reads off their
+        geostationary georeference."""
+        for path in sorted(TILES.glob("OR_HFD-020-B12-M1C13-*_s20262600300000_*.nc")):
+            parsed = parse_isatss_key(path.name)
+            assert parsed is not None
+            info = json.loads(
+                subprocess.run(["gdalinfo", "-json", f'NETCDF:"{path}":Sectorized_CMI'], check=True, capture_output=True, text=True).stdout
+            )
+            metadata = info["metadata"][""]
+            self.assertEqual(
+                readers.isatss_tile_position(parsed.tile),
+                (int(metadata["NC_GLOBAL#tile_row_offset"]) // 550, int(metadata["NC_GLOBAL#tile_column_offset"]) // 550),
+            )
+            corners = info["wgs84Extent"]["coordinates"][0]
+            longitudes = [point[0] for point in corners]
+            latitudes = [point[1] for point in corners]
+            footprint = readers.isatss_tile_footprint(HIMAWARI, parsed.tile)
+            assert footprint is not None
+            np.testing.assert_allclose(footprint, (min(longitudes), min(latitudes), max(longitudes), max(latitudes)), atol=0.01)
+
+    def test_the_layout_is_eighty_eight_tiles_without_the_corners(self) -> None:
+        self.assertEqual(sum(count for _, count in readers.ISATSS_TILE_ROWS), HIMAWARI.tile_count)
+        self.assertEqual(readers.isatss_tile_position(1), (0, 2))
+        self.assertEqual(readers.isatss_tile_position(20), (2, 5))
+        self.assertEqual(readers.isatss_tile_position(88), (9, 7))
+        with self.assertRaises(ValueError):
+            readers.isatss_tile_position(89)
+
+    def test_a_region_needs_only_the_tiles_reaching_into_it(self) -> None:
+        reader = ISatSSReader()
+        # Japan: six tiles of 88, two rows north of the sub-satellite point,
+        # three columns from 106°E to 156°E.
+        self.assertEqual(reader.tiles_covering(HIMAWARI, JAPAN_REGION), frozenset({9, 10, 11, 18, 19, 20}))
+        self.assertEqual(reader.tiles_covering(HIMAWARI, T020_ONLY), frozenset({20}))
+        self.assertEqual(reader.tiles_covering(HIMAWARI, NEEDS_T019), frozenset({19, 20}))
+        # The whole disk reaches every tile; a box spelled on negative
+        # longitudes finds the eastern limb past the antimeridian.
+        self.assertEqual(reader.tiles_covering(HIMAWARI, HIMAWARI.region), frozenset(range(1, 89)))
+        self.assertEqual(reader.tiles_covering(HIMAWARI, (-170.0, -10.0, -160.0, 0.0)), frozenset({44, 54}))
+        # A single-file product has nothing to narrow.
+        self.assertIsNone(readers.CMIPFReader().tiles_covering(GOES_EAST, (-100.0, 20.0, -80.0, 40.0)))
+
+    def test_a_slot_is_complete_when_the_region_s_tiles_are_there(self) -> None:
+        listing, _ = bucket(fixture_keys())
+        objects = ISatSSReader().list_slot(HIMAWARI, IR104, SLOT_0300, fetch=listing)
+        self.assertEqual([item.tile for item in objects], [20, 21])
+        # Two tiles of 88 are no disk, but all a box inside T020 needs.
+        self.assertFalse(satellite_fetch.slot_is_complete(HIMAWARI, objects))
+        self.assertTrue(satellite_fetch.slot_is_complete(HIMAWARI, objects, region=T020_ONLY))
+        self.assertFalse(satellite_fetch.slot_is_complete(HIMAWARI, objects, region=NEEDS_T019))
+        self.assertEqual([item.tile for item in satellite_fetch.covering_objects(HIMAWARI, objects, region=T020_ONLY)], [20])
+        self.assertEqual(satellite_fetch.covering_objects(HIMAWARI, objects), objects)
+
+
+class JapanFetchTests(TempRoot, unittest.TestCase):
+    root_prefix = "xue-himawarijp-"
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.listing, download = bucket(fixture_keys())
+        self.downloads: list[str] = []
+
+        def counting(url: str) -> bytes:
+            self.downloads.append(url)
+            return download(url)
+
+        self.download = counting
+
+    def fetch_window(self, region: tuple[float, float, float, float]):
+        return satellite_fetch.fetch_window(
+            HIMAWARI,
+            (IR104,),
+            SLOT_0300,
+            1,
+            grid=TargetGrid(*region, step=0.04),
+            raw_root=self.root,
+            destination=self.root / "himawarijp.2026091703",
+            series_stem="himawarijp.2026091703",
+            units={"ir104": "K"},
+            region=region,
+            source_id="himawarijp",
+            fetch=self.listing,
+            download=self.download,
+        )
+
+    @requires_gdal_warp
+    def test_a_regional_window_fetches_its_tiles_alone_and_caches_apart(self) -> None:
+        window = self.fetch_window(T020_ONLY)
+        self.assertEqual([(item.slot, item.tiles) for item in window.slots], [(SLOT_0300, 1), (SLOT_0310, 1)])
+        self.assertEqual(len(self.downloads), 2)
+        self.assertTrue(all("-T020_" in url for url in self.downloads))
+        # The frames are the source's, not the platform's: the disk caches
+        # the same slot on another grid under himawari-frames.
+        self.assertEqual(sorted(path.name for path in self.root.iterdir() if path.name.endswith("-frames")), ["himawarijp-frames"])
+        frame = window.slots[0].frames["ir104"]
+        self.assertEqual(frame.parent.parent, self.root / "himawarijp-frames")
+        self.assertEqual(json.loads(assemble.packing_path(frame).read_text(encoding="utf-8"))["tiles"], 1)
+        info = json.loads(subprocess.run(["gdalinfo", "-json", str(frame)], check=True, capture_output=True, text=True).stdout)
+        self.assertEqual(info["size"], [175, 175])
+        self.assertEqual(info["geoTransform"][:2], [141.0, 0.04])
+
+    def test_a_region_whose_tiles_have_not_all_landed_is_no_slot(self) -> None:
+        with self.assertRaisesRegex(DownloadError, "no complete ir104 slot"):
+            self.fetch_window(NEEDS_T019)
+        self.assertEqual(self.downloads, [])
+
+
+@requires_shachen
+class JapanConversionTests(ClassTempRoot, unittest.TestCase):
+    """The Japan source end to end on the fixture: of the six tiles its box
+    needs the fixture holds T020 alone, so the reader is told that is all
+    the box needs; the frames are warped onto the whole 0.01° grid, the
+    Dust RGB and the true colour composed per slot, and the window built
+    through both encoders."""
+
+    root_prefix = "xue-himawarijp-convert-"
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        listing, download = bucket(fixture_keys())
+        with mock.patch.object(ISatSSReader, "tiles_covering", lambda self, platform, region: frozenset({20})):
+            cls.written = _fetch_satellite_run(JAPAN, GfsRun(SLOT_0300), 3, cls.root, force=False, input_ids=None, fetch=listing, download=download)
+        cls.inputs = cls.root / "himawarijp.2026091703"
+        with mock.patch.dict(os.environ, {"XUE_ENCODER": "python"}):
+            cls.report = binconvert.convert_bin(
+                cls.inputs,
+                cls.root / "out",
+                model="himawarijp",
+                skip_video=True,
+                work_root=cls.root / "work",
+                manifest_path=cls.root / "out" / "manifest.json",
+                require_complete=True,
+                expected_hours=3,
+            )
+
+    def test_the_bundles_are_the_box_with_the_disk_s_band(self) -> None:
+        self.assertEqual([path.name.split(".")[-2] for path in self.written], [*JAPAN.input_variable_ids, *DUST_RGB_COMPONENT_IDS, *TRUE_COLOR_COMPONENT_IDS])
+        record = json.loads((self.inputs / "fetch.json").read_text(encoding="utf-8"))
+        self.assertEqual(record["grid"], {"step": 0.01, "width": 2600, "height": 2200, "firstLongitude": 122.005, "firstLatitude": 45.995})
+        self.assertEqual([frame["tilesFetched"] for frame in record["frames"]], [8, 8])
+        self.assertTrue((self.root / "himawarijp-frames" / "dustr").is_dir())
+        self.assertFalse((self.root / "himawari-frames").exists())
+        self.assertEqual([bundle["variable"] for bundle in self.report["bundles"]], ["ir104", "dustrgb", "truecolor"])
+        manifest = json.loads((self.root / "out" / "manifest.json").read_text(encoding="utf-8"))
+        validate_bin_manifest(manifest, expected_hours=1, require_core_variables=True)
+        self.assertEqual((manifest["model"], manifest["product"]), ("HIMAWARI-JP", "ahi-japan-0p01"))
+        bundle = read_bundle(self.root / "out" / "ir104.xue")
+        grid = bundle.metadata["grid"]
+        self.assertEqual((grid["width"], grid["height"], grid["firstLongitude"], grid["firstLatitude"]), (2600, 2200, 122.005, 45.995))
+        self.assertEqual(bundle.metadata["variables"][0]["band"], HIMAWARI.band("ir104").metadata())
+        self.assertEqual(bundle.tiles.count, 41 * 35)
+
+    @requires_native_source("himawarijp")
+    def test_the_native_encoder_writes_the_same_bytes(self) -> None:
+        assert_native_matches(self, self.inputs, self.root / "out", self.report, self.root / "native", model="himawarijp", require_complete=True, expected_hours=3)
 
 
 if __name__ == "__main__":

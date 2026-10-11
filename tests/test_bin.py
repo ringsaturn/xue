@@ -968,7 +968,7 @@ class SourceLadderTests(unittest.TestCase):
 
         ladders = {source_id: spec.variant_factors for source_id, spec in SOURCES.items()}
         satellites = {source_id for source_id, spec in SOURCES.items() if spec.platform is not None}
-        self.assertEqual(satellites, {"himawari", "goeseast", "goeswest", "meteosat"})
+        self.assertEqual(satellites, {"himawari", "himawarijp", "goeseast", "goeswest", "meteosat"})
         for source_id, factors in ladders.items():
             with self.subTest(source=source_id):
                 # The 0.1° IFS HRES plane is 6.5 M cells, past the shell's frame

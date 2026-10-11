@@ -20,6 +20,7 @@ so the tests never touch the network.
 
 from __future__ import annotations
 
+import functools
 import json
 import math
 import re
@@ -165,6 +166,14 @@ class Reader(Protocol):
         carries them through only on some GDAL versions."""
         ...
 
+    def tiles_covering(self, platform: Platform, region: tuple[float, float, float, float]) -> frozenset[int] | None:
+        """The tile numbers whose footprint reaches into ``region``
+        (``(west, south, east, north)``), for a source that publishes a
+        box smaller than the disk: only those are listed as needed,
+        fetched and mosaicked. None when the product cannot be narrowed
+        that way (one file a slot) or narrows itself."""
+        ...
+
 
 # OR_HFD-<res>-B<bits>-M1C<channel>-T<tile>_<spacecraft>_s<start>_c<created>.nc
 _ISATSS_KEY = re.compile(
@@ -207,6 +216,104 @@ def parse_isatss_key(key: str) -> ISatSSKey | None:
         )
     except ValueError:
         return None
+
+
+#: Where the 88 ISatSS tiles of a full disk sit on its 10 x 10 grid of
+#: tiles, row by row from the north: the first column and the count of each
+#: row, the twelve corner tiles that would hold no Earth being left out. The
+#: numbering runs row-major from 1, read off the tiles' own
+#: ``tile_row_offset`` / ``tile_column_offset`` (T020 is row 2, column 5:
+#: offsets 1100 and 2750 at 2 km); a tile covers the same scan angles in
+#: every band (550 px at 2 km, 1100 at 1 km, 2200 at 0.5 km).
+ISATSS_TILE_ROWS: tuple[tuple[int, int], ...] = ((2, 6), (1, 8), (0, 10), (0, 10), (0, 10), (0, 10), (0, 10), (0, 10), (1, 8), (2, 6))
+#: A tile is 550 x 550 pixels at 2 km of a 5500 x 5500 disk, whose west
+#: and north edges the tiles' geotransforms put 2751 pixels from nadir
+#: (T020's origin is one pixel west of the sub-satellite column, 1651
+#: pixels north).
+ISATSS_TILE_PIXELS = 550
+ISATSS_EDGE_PIXELS = 2751
+#: The products' ``fixedgrid_projection``: the perspective height and the
+#: ellipsoid every tile names, and the 2 km scan-angle step its
+#: geotransform spells in metres at that height (1999.998 m).
+ISATSS_HEIGHT = 35785831.0
+ISATSS_SEMI_MAJOR = 6378137.0
+ISATSS_SEMI_MINOR = 6356752.31414
+ISATSS_PIXEL_RADIANS = 1999.998175647847 / ISATSS_HEIGHT
+#: How far past a tile's sampled footprint a region still counts as
+#: reaching it: wider than a 2 km pixel anywhere a region is useful, so a
+#: bilinear sample at the region's edge finds its neighbours mosaicked, and
+#: wider than what the sampling misses along a limb.
+ISATSS_TILE_MARGIN_DEG = 0.1
+
+
+def isatss_tile_position(tile: int) -> tuple[int, int]:
+    """A tile number's ``(row, column)`` on the disk's grid of tiles."""
+    number = tile
+    for row, (first, count) in enumerate(ISATSS_TILE_ROWS):
+        if number <= count:
+            return row, first + number - 1
+        number -= count
+    raise ValueError(f"an ISatSS full disk has no tile {tile}")
+
+
+def geostationary_lonlat(
+    x: np.ndarray, y: np.ndarray, *, sub_longitude: float, height: float, semi_major: float, semi_minor: float
+) -> tuple[np.ndarray, np.ndarray]:
+    """Longitude and latitude in degrees of the scan angles ``x`` (east)
+    and ``y`` (north), in radians, of a geostationary imager sweeping
+    about its y axis (AHI): PROJ's ``geos`` ellipsoidal inverse. NaN where
+    the line of sight misses the Earth. Longitudes are the sub-satellite
+    longitude plus the offset, so a disk past the antimeridian reads past
+    180."""
+    radius_g_1 = height / semi_major
+    radius_g = 1.0 + radius_g_1
+    radius_p = semi_minor / semi_major
+    vy = np.tan(x)
+    vz = np.tan(y) * np.hypot(1.0, vy)
+    a = vy * vy + (vz / radius_p) ** 2 + 1.0
+    b = -2.0 * radius_g
+    determinant = b * b - 4.0 * a * (radius_g * radius_g - 1.0)
+    with np.errstate(invalid="ignore"):
+        k = (-b - np.sqrt(determinant)) / (2.0 * a)
+        vx = radius_g - k
+        longitude = np.arctan2(vy * k, vx)
+        # Geocentric to geodetic: tan φ = tan ψ / (b/a)².
+        latitude = np.arctan(vz * k * np.cos(longitude) / vx / (radius_p * radius_p))
+    lon = np.where(determinant < 0, np.nan, np.degrees(longitude) + sub_longitude)
+    lat = np.where(determinant < 0, np.nan, np.degrees(latitude))
+    return lon, lat
+
+
+@functools.cache
+def isatss_tile_footprint(platform: Platform, tile: int, *, samples: int = 56) -> tuple[float, float, float, float] | None:
+    """The ``(west, south, east, north)`` box of one tile's Earth-viewing
+    pixels, from a ``samples`` x ``samples`` lattice of scan angles over
+    the tile (edges included); None for a tile that sees no Earth."""
+    row, column = isatss_tile_position(tile)
+    columns = np.linspace(column * ISATSS_TILE_PIXELS, (column + 1) * ISATSS_TILE_PIXELS, samples)
+    rows = np.linspace(row * ISATSS_TILE_PIXELS, (row + 1) * ISATSS_TILE_PIXELS, samples)
+    grid_columns, grid_rows = np.meshgrid(columns, rows)
+    lon, lat = geostationary_lonlat(
+        (grid_columns - ISATSS_EDGE_PIXELS) * ISATSS_PIXEL_RADIANS,
+        (ISATSS_EDGE_PIXELS - grid_rows) * ISATSS_PIXEL_RADIANS,
+        sub_longitude=platform.sub_longitude,
+        height=ISATSS_HEIGHT,
+        semi_major=ISATSS_SEMI_MAJOR,
+        semi_minor=ISATSS_SEMI_MINOR,
+    )
+    if not np.isfinite(lon).any():
+        return None
+    return (float(np.nanmin(lon)), float(np.nanmin(lat)), float(np.nanmax(lon)), float(np.nanmax(lat)))
+
+
+def boxes_overlap(box: tuple[float, float, float, float], region: tuple[float, float, float, float], margin: float = 0.0) -> bool:
+    """Whether two ``(west, south, east, north)`` boxes overlap, either
+    spelled in any copy of the world (a disk's 80.7 … 200.7 and a box at
+    −170 … −160 do)."""
+    west, south, east, north = box
+    if south > region[3] + margin or north < region[1] - margin:
+        return False
+    return any(west + shift <= region[2] + margin and east + shift >= region[0] - margin for shift in (-360.0, 0.0, 360.0))
 
 
 class ISatSSReader:
@@ -345,6 +452,17 @@ class ISatSSReader:
 
     def packing_source(self, files: SlotFiles, *, channel: Channel | None = None) -> Path:
         return Path(f'NETCDF:"{files.paths[0]}":{self.VARIABLE}')
+
+    def tiles_covering(self, platform: Platform, region: tuple[float, float, float, float]) -> frozenset[int] | None:
+        """The tiles whose footprint (:func:`isatss_tile_footprint`), widened
+        by :data:`ISATSS_TILE_MARGIN_DEG`, overlaps the region: six of the
+        88 for Japan at 24–46°N, 122–148°E."""
+        covering: set[int] = set()
+        for tile in range(1, sum(count for _, count in ISATSS_TILE_ROWS) + 1):
+            footprint = isatss_tile_footprint(platform, tile)
+            if footprint is not None and boxes_overlap(footprint, region, ISATSS_TILE_MARGIN_DEG):
+                covering.add(tile)
+        return frozenset(covering)
 
 
 def _mask_below(vrt: str, floor: int, nodata: int) -> str:
@@ -553,6 +671,10 @@ class CMIPFReader:
 
     def packing_source(self, files: SlotFiles, *, channel: Channel | None = None) -> Path:
         return Path(f'NETCDF:"{files.paths[0]}":{self.VARIABLE}')
+
+    def tiles_covering(self, platform: Platform, region: tuple[float, float, float, float]) -> frozenset[int] | None:
+        """A slot is one file: nothing to narrow."""
+        return None
 
 
 # …FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_<created>_IDPFI_OPE_<start>_<end>_N__O_<cycle>_<chunk>.nc
@@ -893,6 +1015,11 @@ class FCIReader:
         if channel is None:
             raise ConversionError("an FCI slot's packing is one channel's")
         return self.strip_path(files, channel, files.paths[0])
+
+    def tiles_covering(self, platform: Platform, region: tuple[float, float, float, float]) -> frozenset[int] | None:
+        """The download narrows itself to the chunks the platform's region
+        needs (:meth:`needed_chunks`)."""
+        return None
 
     def subdataset(self, chunk_file: Path, channel: Channel) -> str:
         return f'NETCDF:"{chunk_file}":/data/{self.group(channel)}/measured/effective_radiance'

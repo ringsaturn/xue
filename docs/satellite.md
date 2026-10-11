@@ -1,8 +1,8 @@
 # Geostationary satellite imagery
 
 How a geostationary imager's channels become Xue bundles: the `himawari`,
-`goeseast`, `goeswest` and `meteosat` sources, their Dust RGB and true
-colour composites and dust confidences, and the seams a further satellite,
+`goeseast`, `goeswest` and `meteosat` sources, the `himawarijp` box over
+Japan, their Dust RGB and true colour composites and dust confidences, and the seams a further satellite,
 a second channel and another composite product go through. The bundle format is unchanged (`format.md`); what
 this document fixes is the fetch stage, `xuebuild/satellite/`, and the
 metadata a satellite variable carries.
@@ -466,6 +466,60 @@ no GDAL), and `tests/test_staging.py` holds the crop, the month
 resolution and a staged file's read-back through `ancillary.py` on a
 synthetic granule, never the network.
 
+## Regional boxes
+
+A disk at 0.04° (4.4 km at the equator) is limited by the grid, not the
+sensor: AHI samples 0.64 µm at 0.5 km, the other solar bands at 1 km and
+the infrared at 2 km at the sub-satellite point, some 0.7–1 km and 2.8 km
+effective over Japan at its 42° viewing angle. The whole disk at 0.01°
+would be 144 M cells a plane; a box is a few million. So a finer grid is a
+**source of its own** on the same platform — a regional source, the way
+`hrrr` sits beside `gfs` — and not a finer rung of the disk's ladder,
+since a variant is the same extent decimated.
+
+`SourceSpec.region` is the box as `(west, south, east, north)`, edges on
+whole cells of `grid_step`; the fetch warps onto it instead of
+`Platform.region`, and `production_grid` must be the box at the step.
+`himawarijp` is the one such source today:
+
+| | `himawarijp` |
+|---|---|
+| platform | `himawari` (the same files, band blocks and producers) |
+| box | 24–46°N, 122–148°E (whole degrees: the JMA nowcast's 0.005° cells nest 2:1) |
+| grid | 0.01°, 2600 × 2200, tile 64 × 64 (0.64°, 1435 a plane), ladder 0.02 / 0.04 / 0.08° |
+| fetched | `ir086`, `ir104`, `ir112`, `ir123`, `vis047`, `vis051`, `vis064`, `nir086` |
+| published | `ir104`, `dustrgb`, `truecolor` (no confidences: their CAMEL months are staged on the disk grids) |
+| window | 600 s, 3 h |
+
+The ISatSS reader narrows a slot to the box (`ISatSSReader.tiles_covering`).
+A tile's position on the disk's 10 × 10 grid of tiles is a fixed table
+(`ISATSS_TILE_ROWS`: rows of 6, 8, 10 × 6, 8, 6 tiles, the twelve corners
+that hold no Earth left out; T020 is row 2, column 5, as its own
+`tile_row_offset` / `tile_column_offset` say), and its footprint is the
+box around a 56 × 56 lattice of its scan angles put through PROJ's
+ellipsoidal `geos` inverse (`geostationary_lonlat`), with the tiles'
+own projection constants. Over a whole slot of real tiles the footprints
+match those computed from each tile's own geotransform to 1e-10°, and
+the fixture tiles' corners as GDAL reads them to 0.01°. A tile is needed when its footprint, widened by
+0.1° (more than a 2 km pixel wherever a box is useful, so a bilinear
+sample at the edge finds its neighbours), overlaps the box: for Japan,
+six of the 88 (T009–T011, T018–T020). Only those make a slot complete,
+are downloaded and are mosaicked — some 60 MB a slot over the eight
+channels by day and 35 MB by night (2026-10-11 03:00 and 2026-10-10
+15:00 UTC), against 870 and 500 MB for the disk's ten. A CMIPF slot is
+one file and an FCI download already crops its chunks to the disk's
+rows, so those readers do not narrow (`tiles_covering` is None).
+
+The frame cache is keyed by the **source**, `<source>-frames`, since the
+box and the disk warp the same slot onto two grids; a disk's source id is
+its platform's role, so the disks' caches kept their names. A slot of the
+box is fourteen frames of 3–7 MB (some 75 MB). Measured on one sunlit
+hour (2026-10-11 03:00–04:00 UTC, seven slots): the stores are 8.4 MB of
+`ir104`, 35 MB of `dustrgb` and 65 MB of `truecolor` at full resolution
+and a third more for the ladder, some 170 MB, which is why the window is
+three hours and not the disks' six; the true colour is code 0 on the
+night side and costs next to nothing there.
+
 ## Metadata
 
 A satellite variable's identity is its `parameter` block, brightness
@@ -516,7 +570,10 @@ with `scale_factor` 0.064208984375 and `add_offset` 69, kelvin) on the CF
 unit and computes the geotransform correctly. A day's slots are the
 directory listing (`delimiter=/`), a slot's tiles one listing under the
 channel's prefix, a reissued tile the later `c` stamp. The slot opens as a
-`gdalbuildvrt` mosaic of the tiles by georeference.
+`gdalbuildvrt` mosaic of the tiles by georeference. For a source with a
+region of its own the reader also says which tiles reach into it
+(`tiles_covering`, §"Regional boxes"); only those make the slot complete,
+are fetched and are mosaicked.
 
 `CMIPFReader` is NOAA's `ABI-L2-CMIPF` product, the GOES-R full disk:
 each channel of each scan as **one** netCDF-4 file under
@@ -653,7 +710,9 @@ projection produces.
 ### Frames and the cache
 
 A frame is one slot of one variable on the target grid, at
-`data/raw/<role>-frames/<variable>/<variable>_<YYYYMMDDHHMMSS>.tif`: a
+`data/raw/<source>-frames/<variable>/<variable>_<YYYYMMDDHHMMSS>.tif`
+(keyed by the source, since two sources of one platform warp the same
+slot onto two grids; a full-disk source's id is its platform's role): a
 channel's, warped by the projector, or a produced one, written by
 `assemble.write_frame` (Int16 at 1e-4 with the same fill, through an ENVI
 header and `gdal_translate`, no raster library). Beside every frame is a

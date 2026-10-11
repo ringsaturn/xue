@@ -121,7 +121,8 @@ class Downsample:
 class SourceSpec:
     id: str
     """CLI / URL / directory id: "gfs", "ecmwf", "aifs", "ifshres", "sflux", "hrrr", "gefsaero", "cfs",
-    "woof", "cma", "mrms", "mrms3d", "jma", "himawari", "goeseast", "goeswest", "meteosat" or "aurora"."""
+    "woof", "cma", "mrms", "mrms3d", "jma", "himawari", "himawarijp", "goeseast", "goeswest", "meteosat" or
+    "aurora"."""
     manifest_model: str
     """The manifest and bundle-metadata ``model`` string."""
     product: str
@@ -213,8 +214,16 @@ class SourceSpec:
     other source."""
     grid_step: float | None = None
     """For a satellite source, the step of the plate carrée grid the
-    frames are warped onto, in degrees; the extent is the platform's
-    region. ``production_grid`` must be that extent at this step."""
+    frames are warped onto, in degrees; the extent is :attr:`region`, or
+    the platform's region when that is None. ``production_grid`` must be
+    that extent at this step."""
+    region: tuple[float, float, float, float] | None = None
+    """For a satellite source that publishes a box smaller than its
+    platform's disk, the box as ``(west, south, east, north)`` in degrees,
+    edges on whole cells of :attr:`grid_step`: the frames are warped onto
+    it and a slot fetches only the tiles that reach into it. None — every
+    full-disk source — takes the platform's region and every tile. Mirrored
+    in the native encoder's source table."""
     bundle_scalar_ids: tuple[str, ...] = ("tmp2m", "prate")
     """Scalar variables published as single-variable bundles, in manifest
     order."""
@@ -1617,6 +1626,53 @@ SOURCES: dict[str, SourceSpec] = {
         # some 170 MB of stores a round at full resolution, which a runner
         # uploads in a minute.
         window_hours=6,
+        cadence_seconds=600,
+        video=False,
+    ),
+    # Himawari-9 over Japan at 0.01° (about 1.1 km): the same platform,
+    # reader and producers as the disk above on a box of its own,
+    # 24–46°N, 122–148°E, where the 0.64 µm band's 0.5 km and the other
+    # solar bands' 1 km sampling (some 0.7–1 km effective at Japan's 42°
+    # viewing angle) are worth a grid four times finer than the disk's.
+    # A regional source, like ``hrrr`` beside ``gfs``, not a finer rung of
+    # the disk: a variant is the same extent decimated. The box is whole
+    # degrees on a 0.01° step, so its cells nest the JMA nowcast's 0.005°
+    # ones 2:1. A slot fetches only the six ISatSS tiles reaching into the
+    # box (T009–T011, T018–T020) and its frames cache under
+    # ``himawarijp-frames``, apart from the disk's. Three bundles: the
+    # 10.4 µm window, the Dust RGB and the true colour; the dust
+    # confidences are not published here, their ancillary fields being
+    # staged on the disk grids.
+    "himawarijp": SourceSpec(
+        id="himawarijp",
+        manifest_model="HIMAWARI-JP",
+        product="ahi-japan-0p01",
+        latest_filename="latest-himawarijp.json",
+        steps=(),
+        # The Dust RGB's four windows (the first is the one a listing
+        # walks), then the true colour's four solar bands.
+        input_variable_ids=("ir086", "ir104", "ir112", "ir123", "vis047", "vis051", "vis064", "nir086"),
+        accumulated_precipitation=False,
+        bands=HIMAWARI.bands(("ir086", "ir104", "ir112", "ir123", "vis047", "vis051", "vis064", "nir086")),
+        bundle_scalar_ids=("ir104",),
+        bundle_composite_ids=("dustrgb", "truecolor"),
+        core_bundle_ids=("ir104",),
+        # 26° x 22° at 0.01°: 5.7 M cells a frame, under the disk's 9 M.
+        production_grid=(2600, 2200),
+        # 0.64° tiles, 41 x 35 = 1435 a plane.
+        tile=(64, 64),
+        # 0.02°, 0.04° (the disk's own step) and 0.08°.
+        variant_factors=(2, 4, 8),
+        observation=True,
+        series_file=True,
+        platform="himawari",
+        grid_step=0.01,
+        region=(122.0, 24.0, 148.0, 46.0),
+        cycle_hours=1,
+        # Three hours: a sunlit hour of the three bundles and their ladder is
+        # some 170 MB of stores (seven frames: the true colour 90 MB, the
+        # Dust RGB 51, ir104 13), so six would be some 0.9 GB a round by day.
+        window_hours=3,
         cadence_seconds=600,
         video=False,
     ),

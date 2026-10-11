@@ -1,0 +1,255 @@
+name: publish himawarijp
+
+# Himawari-9 over Japan at 0.01°: the same JMA imager NOAA redistributes on
+# its open data bucket as publish-himawari.yml reads (the ISatSS full-disk
+# product, 88 calibrated NetCDF tiles a channel a scan), cut to the box
+# 24–46°N, 122–148°E. The live feed is a rolling window — the last two
+# whole hours plus the hour in progress, warped onto a 0.01° plate carrée
+# grid (2600 x 2200), the native ten-minute step — rebuilt every ten
+# minutes into a round subdirectory of its run (<model>.<run>/<HHMM>/) and
+# pointed at by latest-himawarijp.json. It publishes the 10.4 µm window,
+# the Dust RGB and the true colour; no dust confidence, so no ANCILLARY.
+#
+# The shape is publish-himawari.yml's. A round lists the newest complete
+# scan and fetches only the six tiles per channel that reach the box
+# (T009–T011, T018–T020; some 60 MB a slot over eight channels by day, 35
+# by night, against the disk's 870 and 500), warps them once
+# (xuebuild/satellite/, through the system GDAL's gdalwarp — the xuepy
+# wheel's GDAL carries no GeoTIFF driver, so this workflow installs gdal-bin
+# whichever encoder converts), caches the frames on the bucket under
+# himawarijp-frames/, apart from the disk's (`make pull-r2-frames` /
+# `push-r2-frames`), and stacks the window's frames into the NetCDF series
+# the converter reads. A sunlit hour of stores is some 170 MB, so a round
+# uploads up to some 500 MB by day and half that at night, when the true
+# colour is empty.
+#
+# Machine time: six jobs an hour of a few minutes each, free on a public
+# repository's standard runners.
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+    inputs:
+      loop:
+        description: "Keep running rounds until twenty past the next hour instead of one round"
+        type: boolean
+        default: false
+      round_minutes:
+        description: "Minutes between rounds when looping"
+        type: string
+        default: "5"
+      hours:
+        description: "Window length in hours (the whole hours on screen plus the one in progress)"
+        type: string
+        default: "3"
+      encoder:
+        description: "auto (the xuepy wheel when its release knows the himawarijp source, else the reference pipeline), native (insist on the wheel) or python (insist on the reference pipeline)"
+        type: choice
+        options: [auto, native, python]
+        default: auto
+      profile:
+        description: "Quantization/compression profile"
+        type: choice
+        options: [balanced, quality, compact]
+        default: balanced
+      keep:
+        description: "Published runs to keep on R2 (2 = the live run and the one before it)"
+        type: string
+        default: "2"
+      force:
+        description: "Build a round even when the live one already ends at the bucket's newest frame"
+        type: boolean
+        default: false
+      dry_run:
+        description: "Build and report what the uploads and prunes would do, but write nothing to R2"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  # scripts/successor_queued.sh lists this workflow's waiting runs, for a
+  # looping dispatch to yield to the next scheduled job.
+  actions: read
+
+concurrency:
+  group: publish-himawarijp
+  # A late cron queues behind the job still running and then finds
+  # nothing new; a looping dispatch yields to it on its own.
+  cancel-in-progress: false
+
+env:
+  # Which encoder the rounds convert through. The other publish-* workflows
+  # pin XUE_ENCODER=native so a fall back to the reference pipeline fails
+  # instead of passing unnoticed; here the wheel on PyPI may predate the
+  # source (a scheduled run cannot pass an input, and a wheel is released
+  # on the crate's tags, not with every source), so `auto` resolves the
+  # choice in the job below — native when the installed wheel knows the
+  # model, else the reference pipeline with a ::warning:: on the run — and
+  # the dispatch can still insist on either.
+  ENCODER: ${{ inputs.encoder || 'auto' }}
+  # Every round is published as Zarr stores alone (plan 017 phase 7): the
+  # store is derived from the `.xue` the round wrote and the file retired
+  # before upload. A round's export is a fraction of its build.
+  XUE_ZARR: "1"
+  XUE_CONTAINER: "0"
+
+jobs:
+  publish:
+    # Scheduled runs on forks would publish into a bucket they cannot reach.
+    if: github.event_name != 'schedule' || github.repository == 'ringsaturn/xue'
+    runs-on: ubuntu-24.04
+    # One round is a few minutes; a round that has to decode a window's
+    # worth of frames after an outage takes up to half an hour. A looping
+    # dispatch stops at twenty past the next hour on its own (UNTIL_MINUTE
+    # below); this is the backstop for a round that hangs.
+    timeout-minutes: 90
+    env:
+      MODEL: himawarijp
+      FRAME_CACHE: "true"
+      # A slot is fourteen frames (eight channels, six guns) of 3-7 MB on
+      # the 0.01° box, some 75 MB, so an hour of the cache is 450 MB. The
+      # viewer plays a three-hour window and the agency archives the scans,
+      # so the mirror keeps that window and some slack: a round pulls
+      # HOURS + 1 hours, some 1.8 GB.
+      FRAMES_KEEP_HOURS: "5"
+      # No ANCILLARY: the box publishes no dust confidence, the one product
+      # that reads the staged CAMEL months.
+      ONCE: ${{ !inputs.loop }}
+      ROUND_MINUTES: ${{ inputs.round_minutes || '5' }}
+      # For a looping dispatch: run past the hour, and hand over to the next
+      # scheduled job as soon as it is waiting.
+      UNTIL_MINUTE: "80"
+      HANDOVER_CHECK: scripts/successor_queued.sh
+      # No edge-cache warm-up: a round's objects are replaced ten minutes
+      # later, and the shell's next poll fills the edge itself.
+      WARM: "false"
+      HOURS: ${{ inputs.hours || '3' }}
+      PROFILE: ${{ inputs.profile || 'balanced' }}
+      KEEP: ${{ inputs.keep || '2' }}
+      FORCE: ${{ inputs.force || false }}
+      DRY_RUN: ${{ inputs.dry_run && '--dryrun' || '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate inputs
+        run: |
+          set -euo pipefail
+          printf '%s' "$ROUND_MINUTES" | grep -Eq '^[1-9][0-9]?$' \
+            || { echo "::error::round_minutes must be a positive integer of minutes"; exit 1; }
+          printf '%s' "$HOURS" | grep -Eq '^[1-9][0-9]?$' \
+            || { echo "::error::hours must be a positive integer"; exit 1; }
+          printf '%s' "$KEEP" | grep -Eq '^[1-9][0-9]*$' \
+            || { echo "::error::keep must be a positive integer"; exit 1; }
+
+      # The AWS CLI is preinstalled on the runner; R2 is its S3 endpoint.
+      # The credentials are step-scoped rather than job env, so third-party
+      # actions never see them; the read proves they work before the
+      # first round rather than at its upload.
+      - name: Check R2 credentials
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+          AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+        run: |
+          for name in CLOUDFLARE_ACCOUNT_ID AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY; do
+            [ -n "${!name}" ] || { echo "::error::$name is empty; set the R2 repository secrets"; exit 1; }
+          done
+          aws --version
+          aws s3api head-object --bucket dataset --key xue/catalog.json --region auto \
+            --endpoint-url "https://${CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com" > /dev/null \
+            || { echo "::error::R2 credentials failed a test read of the dataset bucket"; exit 1; }
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          python-version: "3.14"
+
+      # No ffmpeg: the source ships no video. The `satellite` group is the
+      # shachen package, and what it brings, that the Dust RGB and true
+      # colour producers run in the fetch stage
+      # (xuebuild/satellite/producers.py), needed whichever encoder
+      # converts.
+      - name: Sync Python environment
+        run: uv sync --group satellite
+
+      # The fetch stage mosaics and warps the tiles with gdalbuildvrt,
+      # gdalwarp and gdal_translate, whichever encoder converts the series
+      # afterwards: the wheel's GDAL is a library with no GeoTIFF driver.
+      - name: Install GDAL for the fetch stage
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq gdal-bin
+          gdalinfo --version
+
+      # XUE_ENCODER is what xuebuild reads (auto | native | python); it is
+      # set here rather than at the workflow level so a wheel that predates
+      # the source resolves to the reference pipeline explicitly, once, and
+      # every later step (the GDAL install, the rounds) sees one answer.
+      # `auto` on the xuebuild side would take the wheel whenever it imports
+      # and only fail inside the round, as the scheduled runs did.
+      - name: Resolve the encoder
+        run: |
+          set -euo pipefail
+          case "$ENCODER" in
+            native|python) encoder="$ENCODER" ;;
+            auto)
+              if .venv/bin/python -c "import sys; from xuebuild import native; sys.exit(0 if native.knows_source('$MODEL') else 1)"; then
+                encoder=native
+              else
+                wheel=$(.venv/bin/python -c "from xuebuild import native; print(native.version() or 'unknown')")
+                echo "::warning::xuepy ${wheel} does not know the ${MODEL} source with every bundle it publishes; converting through the reference pipeline (slower). Release a wheel that carries it and bump the pin in pyproject.toml."
+                encoder=python
+              fi ;;
+            *) echo "::error::encoder must be auto, native or python, not '$ENCODER'"; exit 1 ;;
+          esac
+          echo "XUE_ENCODER=$encoder" >> "$GITHUB_ENV"
+          echo "encoder: $encoder" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Run the rounds
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: |
+          set -o pipefail
+          scripts/window_rounds.sh 2>&1 | tee rounds.log
+          status=$?
+          {
+            echo "### himawarijp rounds"
+            echo
+            echo '```'
+            grep -E '^round [0-9]{4}:|rounds this hour' rounds.log || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit $status
+
+      # The pointer is served with no-cache, so the edge revalidates it; a
+      # stale read here means the last flip has not propagated rather than
+      # failed, so it warns instead of failing an otherwise complete hour.
+      - name: Verify the live pointer
+        if: ${{ !inputs.dry_run }}
+        run: |
+          set -uo pipefail
+          [ -f web/public/data/latest-himawarijp.json ] || { echo "No round built this hour." >> "$GITHUB_STEP_SUMMARY"; exit 0; }
+          url="https://dataset.ringsaturn.me/xue/latest-himawarijp.json"
+          published=$(curl -fsSL "$url" | jq -r '.manifestPath' || true)
+          if [ -n "$published" ] && [ -f "web/public/data/$published" ]; then
+            echo "$url serves $published." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::$url serves '${published:-nothing}', not the round this job last built"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: publish-report-himawarijp
+          path: |
+            rounds.log
+            build-report.json
+            web/public/data/latest-himawarijp.json
+          retention-days: 14
+          if-no-files-found: ignore

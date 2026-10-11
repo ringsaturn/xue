@@ -3,7 +3,7 @@
 A **frame** is one slot of one variable on the target grid: an Int16
 GeoTIFF the projector wrote for a channel, or a producer's output written
 by :func:`write_frame`, cached under
-``data/raw/<role>-frames/<variable>/<variable>_<YYYYMMDDHHMMSS>.tif`` and
+``data/raw/<source>-frames/<variable>/<variable>_<YYYYMMDDHHMMSS>.tif`` and
 mirrored on the bucket by the rounds script (``make pull-r2-frames`` /
 ``push-r2-frames``), so a slot is warped — and composed — once and every
 round after reads the cache. A frame is immutable: its bytes depend on
@@ -53,10 +53,14 @@ PACKING_SUFFIX = ".json"
 NODATA = -32767
 
 
-def frames_dirname(platform: Platform) -> str:
-    """``<role>-frames``, beside the run directories under the raw root —
-    the name the Makefile's frame-cache targets take from ``MODEL``."""
-    return f"{platform.role}-frames"
+def frames_dirname(source_id: str) -> str:
+    """``<source>-frames``, beside the run directories under the raw root —
+    the name the Makefile's frame-cache targets take from ``MODEL``. Keyed
+    by the source, not the platform: two sources of one platform on two
+    grids (the disk and a regional box) cache the same slot as different
+    frames. A full-disk source's id is its platform's role, so its cache
+    keeps the name it had when the key was the platform."""
+    return f"{source_id}-frames"
 
 
 def _variable_id(variable: Channel | str) -> str:

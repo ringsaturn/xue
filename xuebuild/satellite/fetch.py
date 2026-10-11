@@ -6,7 +6,7 @@ that hour through ``hours`` past it, and a slot the bucket has not
 finished (fewer tiles than the platform's count) or never wrote is left
 out — the axis allows the gap, and the next round takes it if it lands.
 What is new is the frame cache: a slot is fetched and warped once, into
-``<raw_root>/<role>-frames/<channel>/``, and every round after that reads
+``<raw_root>/<source>-frames/<channel>/``, and every round after that reads
 the frame back, so a round costs one slot's tiles (26 MB for a Himawari
 channel) however long the window. A producer (:mod:`producers`) runs on a
 slot the same way: once, on the slot's warped channels, its outputs cached
@@ -59,9 +59,14 @@ def resampling_for(channel: Channel) -> str:
     return REFLECTANCE_RESAMPLING if channel.kind == "reflectance" else RESAMPLING
 
 
-def target_grid(platform: Platform, step: float) -> TargetGrid:
-    """The published grid: the platform's region at ``step``."""
-    west, south, east, north = platform.region
+Region = tuple[float, float, float, float]
+"""A box as ``(west, south, east, north)`` in degrees."""
+
+
+def target_grid(platform: Platform, step: float, region: Region | None = None) -> TargetGrid:
+    """The published grid: ``region`` at ``step``, the platform's whole
+    region when the source names none."""
+    west, south, east, north = region or platform.region
     return TargetGrid(west=west, south=south, east=east, north=north, step=step)
 
 
@@ -95,8 +100,29 @@ def on_cadence(slot: datetime, cadence_seconds: int) -> bool:
     return int(slot.timestamp()) % cadence_seconds == 0
 
 
-def slot_is_complete(platform: Platform, objects: list[SlotObject]) -> bool:
-    return len(objects) >= platform.tile_count
+def needed_tiles(platform: Platform, region: Region | None) -> frozenset[int] | None:
+    """The tiles a frame on ``region`` needs, when the source names a
+    region and the reader can narrow to it (:meth:`Reader.tiles_covering`);
+    None for every tile of the slot."""
+    if region is None:
+        return None
+    return reader_for(platform).tiles_covering(platform, region)
+
+
+def slot_is_complete(platform: Platform, objects: list[SlotObject], *, region: Region | None = None) -> bool:
+    """Whether the bucket holds every tile a frame needs: all of the
+    platform's, or every one reaching into the source's region."""
+    needed = needed_tiles(platform, region)
+    if needed is None:
+        return len(objects) >= platform.tile_count
+    return needed <= {item.tile for item in objects}
+
+
+def covering_objects(platform: Platform, objects: list[SlotObject], *, region: Region | None = None) -> list[SlotObject]:
+    """The slot's objects a frame on ``region`` reads: those of the
+    needed tiles, or all of them."""
+    needed = needed_tiles(platform, region)
+    return objects if needed is None else [item for item in objects if item.tile in needed]
 
 
 def latest_slot(
@@ -106,6 +132,7 @@ def latest_slot(
     now: datetime | None = None,
     fetch: Callable[[str], str] | None = None,
     cadence_seconds: int | None = None,
+    region: Region | None = None,
 ) -> datetime:
     """The newest slot whose tiles have all landed for the channel: the
     end of the live window. The reader lists the newest few slots in as
@@ -114,7 +141,8 @@ def latest_slot(
     yesterday's as well around midnight), and each is asked for its
     tiles, since a slot appears while its tiles are still being written.
     A source on a coarser cadence than the scans' asks for more and keeps
-    the slots on its cadence. Nothing in the last day is a feed that is
+    the slots on its cadence. A source on a region asks only for the
+    tiles reaching into it. Nothing in the last day is a feed that is
     down."""
     reader = reader_for(platform)
     current = (now or datetime.now(UTC)).astimezone(UTC)
@@ -125,7 +153,9 @@ def latest_slot(
     listed = reader.recent_slots(platform, current, limit=RECENT_SLOTS * (cadence // platform.cadence_seconds), fetch=fetch)
     slots = [slot for slot in listed if on_cadence(slot, cadence)][:RECENT_SLOTS]
     for index, slot in enumerate(slots):
-        if index + 1 >= RECENT_SLOTS or slot_is_complete(platform, reader.list_slot(platform, channel, slot, fetch=fetch)):
+        if index + 1 >= RECENT_SLOTS or slot_is_complete(
+            platform, reader.list_slot(platform, channel, slot, fetch=fetch), region=region
+        ):
             return slot
     raise DownloadError(f"{platform.spacecraft} lists no complete {channel.id} slot in the last two days")
 
@@ -151,28 +181,32 @@ def fetch_frame(
     download: Callable[[str], bytes] | None = None,
     concurrency: int = FETCH_CONCURRENCY,
     projector: str = "gdalwarp",
+    region: Region | None = None,
 ) -> FetchedFrame | None:
     """One slot of one channel as a frame on the target grid, from the
     cache when it is there, else from the bucket: listed, fetched when
     complete, opened by the reader, warped by the projector, and the tiles
-    deleted once the frame is written. None when the bucket does not hold
-    the whole slot yet."""
+    deleted once the frame is written. With ``region``, only the tiles
+    reaching into it are needed and fetched. None when the bucket does not
+    hold the whole slot (or the region's part of it) yet."""
     frame = assemble.frame_path(frames_dir, channel, slot)
     if frame.is_file() and not force:
         return FetchedFrame(slot=slot, path=frame, tiles=0)
     reader = reader_for(platform)
     objects = reader.list_slot(platform, channel, slot, fetch=fetch)
-    if not slot_is_complete(platform, objects):
+    if not slot_is_complete(platform, objects, region=region):
         if objects:
+            needed = needed_tiles(platform, region)
             LOG.info(
                 "%s %s %s: %d of %d tiles on the bucket, leaving the slot out",
                 platform.spacecraft,
                 channel.id,
                 slot.strftime("%Y-%m-%dT%H:%M:%SZ"),
-                len(objects),
-                platform.tile_count,
+                len(covering_objects(platform, objects, region=region)),
+                platform.tile_count if needed is None else len(needed),
             )
         return None
+    objects = covering_objects(platform, objects, region=region)
     # A slot's files are fetched under a directory per channel when each
     # channel is its own files, and shared when one file carries them all;
     # the directory is the window's to remove once the slot is done
@@ -292,6 +326,8 @@ def fetch_window(
     producers: tuple[Producer, ...] = (),
     ancillary_root: Path | None = None,
     cadence_seconds: int | None = None,
+    region: Region | None = None,
+    source_id: str | None = None,
     force: bool = False,
     fetch: Callable[[str], str] | None = None,
     download: Callable[[str], bytes] | None = None,
@@ -306,12 +342,15 @@ def fetch_window(
     output unit), which its frames must agree with; ``cadence_seconds`` the
     source's, when coarser than the platform's scans; ``ancillary_root``
     where a producer's ancillary fields are staged and cached
-    (``<raw root>/ancillary``)."""
+    (``<raw root>/ancillary``); ``region`` the source's box when it
+    publishes less than the disk, so a slot fetches only the tiles reaching
+    into it; ``source_id`` the source the frames are cached under (the
+    platform's role, which is the full-disk source's id, by default)."""
     for producer in producers:
         missing = [channel_id for channel_id in producer.inputs_for(platform) if channel_id not in {channel.id for channel in channels}]
         if missing:
             raise ConversionError(f"the {producer.bundle_id} producer reads {missing}, which the window does not fetch")
-    frames_dir = raw_root / assemble.frames_dirname(platform)
+    frames_dir = raw_root / assemble.frames_dirname(source_id or platform.role)
     tiles_dir = destination / "tiles"
     fetched: list[FetchedSlot] = []
     for slot in window_slots(platform, run_time, hours, cadence_seconds=cadence_seconds):
@@ -330,6 +369,7 @@ def fetch_window(
                     fetch=fetch,
                     download=download,
                     concurrency=concurrency,
+                    region=region,
                 )
                 if frame is None:
                     break
