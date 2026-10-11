@@ -860,10 +860,10 @@ class FCIReader:
     """
 
     files_per_channel: ClassVar[bool] = False
-    #: 2: strips are placed east to west by the file's own column packing
-    #: rather than GDAL's geotransform, which Ubuntu 24.04's GDAL 3.8 gets
-    #: wrong for these files (every frame landed tens of degrees west).
-    frame_version: ClassVar[int] = 2
+    #: 3: the file's x scan angle is positive towards the west, the reverse
+    #: of PROJ's geos x, so its columns already run west to east; every
+    #: frame before was the disk mirrored about the sub-satellite meridian.
+    frame_version: ClassVar[int] = 3
 
     def group(self, channel: Channel) -> str:
         try:
@@ -1224,13 +1224,17 @@ class FCIReader:
         value[invalid] = np.nan
         # The strip is written west to east and north to south whatever the
         # file's orientation, so the mosaic has one. East to west it is
-        # placed by the file's own column packing — column i (from 1) is
-        # the scan angle offset + step × i, the same on every chunk — not by
-        # GDAL's geotransform, which GDAL 3.8 gets wrong for these files;
-        # north to south GDAL's row origin is the chunk's.
-        columns = (column_offset + column_step, column_offset + column_step * width)
-        west = min(columns) - abs(column_step) / 2.0
-        if column_step < 0:
+        # placed by the file's own column packing: column i (from 1) is the
+        # scan angle offset + step × i, the same on every chunk, and that
+        # angle is positive towards the WEST — the product's x is the
+        # negative of PROJ's geos x (its offset is +0.156 rad and its step
+        # negative, yet column 1 is the disk's western limb: taken at face
+        # value, as GDAL takes it, the disk comes out mirrored about the
+        # sub-satellite meridian, Arabia over the Atlantic). North to south
+        # GDAL's row origin is the chunk's.
+        projected = [-(column_offset + column_step), -(column_offset + column_step * width)]
+        west = min(projected) - abs(column_step) / 2.0
+        if projected[0] > projected[1]:
             value = value[:, ::-1]
         north = transform[3]
         if transform[5] > 0:

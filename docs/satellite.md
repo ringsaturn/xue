@@ -647,16 +647,18 @@ files are opened, and the reader does them itself:
   connect to the variable, so the strip's VRT carries the geostationary
   SRS built from those fields and an extent in scan angles (radians, a
   column or row number packed with a scale and offset) times the height.
-  East to west the extent comes from the file's own column packing —
-  column i, from 1, is `offset + step × i`, east to west — and never from
-  GDAL's geotransform, which Ubuntu 24.04's GDAL 3.8 gets wrong for these
-  files (every frame landed tens of degrees west until the reader stopped
-  trusting it); north to south GDAL's row origin is the chunk's, its row
-  step checked against the grid. The strip is written west to east and
-  north to south whichever way the file runs. A frame's sidecar names
-  the reader version that placed it (`frameVersion`, 2 for FCI), and a
-  cached frame of another version is warped again, its slot's composites
-  recomposed. The
+  East to west the extent comes from the file's own column packing:
+  column i, from 1, is the scan angle `offset + step × i`, and the
+  product measures that angle positive towards the **west**, the negative
+  of PROJ's geos x (offset +0.156 rad, a negative step, column 1 the
+  western limb). Taken at face value, as GDAL's geotransform takes it,
+  the disk comes out mirrored about the sub-satellite meridian — every
+  Meteosat frame until reader version 3 did, Arabia over the Atlantic.
+  North to south GDAL's row origin is the chunk's, its row step checked
+  against the grid. The strip is written west to east and north to south
+  whichever way the file runs. A frame's sidecar names the reader version
+  that placed it (`frameVersion`, 3 for FCI), and a cached frame of
+  another version is warped again, its slot's composites recomposed. The
   infrared channels are on a 2 km grid (5568 columns, row step
   5.5887e-5 rad), the solar ones on a 1 km grid (11 136 columns, half the
   step, the same disk); a chunk is a fortieth of the rows of either. The
