@@ -76,7 +76,7 @@ class SourceIdentityTests(unittest.TestCase):
         self.assertEqual((woof.first_hour, woof.steps, woof.horizon_hours), (1, ((72, 1),), 72))
         self.assertEqual(
             published_bundle_ids(woof),
-            ("tmp2m", "prate", "tmpsfc", "dpt2m", "tcdc", "lcdc", "mcdc", "hcdc", "hpbl", "dswrf", "orog", "wind10m"),
+            ("tmp2m", "prate", "tmpsfc", "dpt2m", "tcdc", "lcdc", "mcdc", "hcdc", "hpbl", "dswrf", "orog", "wind10m", "cloud3d"),
         )
 
     def test_series_companions_mirror_published_bundles(self) -> None:

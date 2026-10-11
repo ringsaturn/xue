@@ -1027,9 +1027,14 @@ pub const SOURCES: &[SourceSpec] = &[
         steps: &[(72, 1)],
         long_cycles: &[],
         long_cycle_steps: &[],
+        // The 24 cloud water levels follow, bottom to top
+        // (`CLOUD_WATER_VARIABLE_IDS`): every one is an input of `cloud3d`.
         input_variable_ids: &[
             "tmp2m", "dpt2m", "tmpsfc", "ugrd10m", "vgrd10m", "apcp", "tcdc", "lcdc", "mcdc",
-            "hcdc", "hpbl", "dswrf", "orog",
+            "hcdc", "hpbl", "dswrf", "orog", "clw250", "clw500", "clw750", "clw1000", "clw1250",
+            "clw1500", "clw1750", "clw2000", "clw2250", "clw2500", "clw2750", "clw3000", "clw3500",
+            "clw4000", "clw4500", "clw5000", "clw5500", "clw6000", "clw7000", "clw8000", "clw9000",
+            "clw10000", "clw11000", "clw12000",
         ],
         companion_files: &[],
         accumulated_precipitation: false,
@@ -1047,7 +1052,7 @@ pub const SOURCES: &[SourceSpec] = &[
         core_bundle_ids: &["tmp2m"],
         bundle_vector_ids: &["wind10m"],
         bundle_composite_ids: &[],
-        bundle_volume_ids: &[],
+        bundle_volume_ids: &["cloud3d"],
         production_grid: (79, 61),
         // One tile covers the whole nest.
         tile: (64, 64),
@@ -1567,6 +1572,7 @@ pub fn source_spec(model: &str) -> Result<&'static SourceSpec> {
 #[cfg(test)]
 mod tests {
     use super::{family_frame_path, source_spec, Path, CFS_PGB_IDS, SOURCES};
+    use crate::encode::variables::CLOUD_WATER_VARIABLE_IDS;
 
     #[test]
     fn a_cap_must_land_on_the_published_axis() {
@@ -1686,7 +1692,9 @@ mod tests {
         assert_eq!(woof.forecast_hours(3, None).expect("axis"), vec![1, 2, 3]);
         assert_eq!(woof.forecast_hours(72, None).expect("axis").len(), 72);
         assert!(woof.forecast_hours(0, None).is_err() && woof.forecast_hours(73, None).is_err());
-        assert_eq!(woof.input_variable_ids.len(), 13);
+        assert_eq!(woof.input_variable_ids.len(), 37);
+        assert_eq!(&woof.input_variable_ids[13..], CLOUD_WATER_VARIABLE_IDS);
+        assert_eq!(woof.bundle_volume_ids, &["cloud3d"]);
         assert_eq!(woof.bundle_scalar_ids.len(), 11);
         assert!(woof.input_variable_ids.contains(&"apcp") && !woof.bundle_scalar_ids.contains(&"apcp"));
         assert_eq!(woof.bundle_vector_ids, &["wind10m"]);
@@ -1908,8 +1916,11 @@ mod tests {
         assert_eq!(source.tile, (50, 50));
         assert_eq!((1400 / 50) * (700 / 50), 28 * 14);
         assert_eq!(source.variant_factors, &[2]);
-        // Only the 3D mosaic ships a volume.
-        for other in SOURCES.iter().filter(|other| other.id != "mrms3d") {
+        // Only the 3D mosaic and the WOOF nest ship a volume.
+        for other in SOURCES
+            .iter()
+            .filter(|other| !["mrms3d", "woof"].contains(&other.id))
+        {
             assert!(other.bundle_volume_ids.is_empty(), "{}", other.id);
         }
     }

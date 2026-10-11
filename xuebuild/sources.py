@@ -16,7 +16,7 @@ from pathlib import Path
 from .errors import DownloadError
 from .satellite.platforms import GOES_EAST, GOES_WEST, HIMAWARI, METEOSAT, SatelliteBand
 from .reproject import Regrid
-from .variables import AEROSOL_VARIABLE_IDS, REFLECTIVITY_VARIABLE_IDS, VARIABLES
+from .variables import AEROSOL_VARIABLE_IDS, CLOUD_WATER_VARIABLE_IDS, REFLECTIVITY_VARIABLE_IDS, VARIABLES
 
 
 @dataclass(frozen=True)
@@ -247,7 +247,8 @@ class SourceSpec:
     bundle_volume_ids: tuple[str, ...] = ()
     """Volume bundles published after the composites, in manifest order: a
     bundle of many variables each read directly off the source's records —
-    ``refl3d``, the MRMS reflectivity mosaic's 33 constant-altitude levels
+    ``refl3d``, the MRMS reflectivity mosaic's 33 constant-altitude levels,
+    and ``cloud3d``, a model's cloud water on 24
     (:data:`xuebuild.binconvert.VOLUME_BUNDLES`), one bundle so a reader
     takes a column or a slab in one range. Listing one publishes it only
     when every member is in :attr:`input_variable_ids`; a member is not
@@ -1322,8 +1323,11 @@ SOURCES: dict[str, SourceSpec] = {
     # ``dataset`` directory — the first forecast that is not ``fetched``.
     # The ``xue wrf-series`` tool (xuebuild/wrf/) owns every WRF particular:
     # destaggering, rotating the grid-relative wind, the dewpoint, the layered
-    # cloud maxima, the precipitation differencing and the bilinear regrid
-    # from the Lambert conformal nest onto a regular 0.005° grid; it writes
+    # cloud maxima, the precipitation differencing, the cloud water
+    # interpolated from the model levels onto the ``cloud3d`` volume's 24
+    # altitudes (NaN under the terrain, which the converter fills as no
+    # cloud) and the bilinear regrid from the Lambert conformal nest onto a
+    # regular 0.005° grid; it writes
     # one CF NetCDF series per variable (``woof.<run>.<variable>.nc``), so
     # this is a ``series_file`` forecast like ``ifshres`` and neither encoder
     # learns any WRF arithmetic. The axis is hourly to 72 hours — WOOF's
@@ -1355,6 +1359,7 @@ SOURCES: dict[str, SourceSpec] = {
             "hpbl",
             "dswrf",
             "orog",
+            *CLOUD_WATER_VARIABLE_IDS,
         ),
         accumulated_precipitation=False,
         interval_precipitation=True,
@@ -1374,6 +1379,7 @@ SOURCES: dict[str, SourceSpec] = {
             "orog",
         ),
         bundle_vector_ids=("wind10m",),
+        bundle_volume_ids=("cloud3d",),
         core_bundle_ids=("tmp2m",),
         production_grid=(79, 61),
         # Two tiles across, one down; the eastern tile is 15 cells wide.

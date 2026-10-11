@@ -29,10 +29,14 @@ HOURS = slice(0, 2)
 #: 35.400°N) of the 0.005° grid.
 COLUMNS = slice(28, 48)
 ROWS = slice(21, 37)
+#: The copies are classic NetCDF: a 2 x 16 x 20 plane is 2.5 KB of floats,
+#: under the HDF5 bookkeeping a NETCDF4 file carries, and GDAL reads both
+#: the same (the tool itself writes NETCDF4 with zlib).
+FORMAT = "NETCDF3_CLASSIC"
 
 
-def cut(source: Path, target: Path) -> None:
-    with netCDF4.Dataset(source) as src, netCDF4.Dataset(target, "w", format="NETCDF4") as dst:
+def cut(source: Path, target: Path, *, file_format: str = FORMAT) -> None:
+    with netCDF4.Dataset(source) as src, netCDF4.Dataset(target, "w", format=file_format) as dst:
         attributes = {name: src.getncattr(name) for name in src.ncattrs()}
         attributes["history"] += f"; tests/prepare_woof_fixture.py: hours 1-2, columns {COLUMNS.start}-{COLUMNS.stop - 1}, rows {ROWS.start}-{ROWS.stop - 1}"
         dst.setncatts(attributes)
@@ -42,7 +46,8 @@ def cut(source: Path, target: Path) -> None:
             dst.createDimension(name, None if dimension.isunlimited() else size)
         for name, variable in src.variables.items():
             fill = variable.getncattr("_FillValue") if "_FillValue" in variable.ncattrs() else None
-            copy = dst.createVariable(name, variable.dtype, variable.dimensions, zlib=bool(variable.filters()["zlib"]), complevel=1, fill_value=fill)
+            zlib = file_format == "NETCDF4" and bool(variable.filters()["zlib"])
+            copy = dst.createVariable(name, variable.dtype, variable.dimensions, zlib=zlib, complevel=1, fill_value=fill)
             copy.setncatts({key: variable.getncattr(key) for key in variable.ncattrs() if key != "_FillValue"})
             index = tuple(windows.get(dimension, slice(None)) for dimension in variable.dimensions)
             copy[...] = variable[index] if variable.dimensions else variable[...]
