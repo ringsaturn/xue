@@ -21,6 +21,7 @@ agency's data policy releases openly.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import shutil
@@ -197,9 +198,11 @@ def fetch_frame(
     reaching into it are needed and fetched. None when the bucket does not
     hold the whole slot (or the region's part of it) yet."""
     frame = assemble.frame_path(frames_dir, channel, slot)
-    if frame.is_file() and not force:
-        return FetchedFrame(slot=slot, path=frame, tiles=0)
     reader = reader_for(platform)
+    if frame.is_file() and not force:
+        if cached_frame_version(frame) == reader.frame_version:
+            return FetchedFrame(slot=slot, path=frame, tiles=0)
+        LOG.info("%s %s: the cached %s was placed by another reader version, warping again", platform.spacecraft, channel.id, frame.name)
     objects = reader.list_slot(platform, channel, slot, fetch=fetch)
     if not slot_is_complete(platform, objects, region=region):
         if objects:
@@ -235,6 +238,7 @@ def fetch_frame(
         projector=projector,
         resampling=resampling_for(channel),
         kind=channel.kind,
+        frameVersion=reader.frame_version,
     )
     if reader.files_per_channel:
         shutil.rmtree(slot_dir, ignore_errors=True)
@@ -245,6 +249,15 @@ def fetch_frame(
 def slot_directory(tiles_dir: Path, slot: datetime) -> Path:
     """Where a slot's downloaded files live while it is being warped."""
     return tiles_dir / f"{slot:%Y%m%d%H%M}"
+
+
+def cached_frame_version(frame: Path) -> int:
+    """The reader version a cached frame's sidecar names; 1 for a frame
+    written before frames carried one."""
+    try:
+        return int(json.loads(assemble.packing_path(frame).read_text(encoding="utf-8")).get("frameVersion", 1))
+    except (OSError, ValueError, TypeError):
+        return 1
 
 
 def produce_frames(
@@ -390,9 +403,14 @@ def fetch_window(
             shutil.rmtree(slot_directory(tiles_dir, slot), ignore_errors=True)
         if len(frames) != len(channels):
             continue
+        # A slot whose channels were (re)warped in this round recomposes its
+        # producers too: a cached composite of the frames it replaced would
+        # outlive them.
         for producer in producers:
             frames.update(
-                produce_frames(platform, producer, slot, frames, grid=grid, frames_dir=frames_dir, ancillary_root=ancillary_root, force=force)
+                produce_frames(
+                    platform, producer, slot, frames, grid=grid, frames_dir=frames_dir, ancillary_root=ancillary_root, force=force or tiles > 0
+                )
             )
         fetched.append(FetchedSlot(slot=slot, frames=frames, tiles=tiles))
     shutil.rmtree(tiles_dir, ignore_errors=True)

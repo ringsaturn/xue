@@ -649,14 +649,22 @@ files are opened, and the reader does them itself:
 - the grid mapping (`/data/mtg_geos_projection`: sweep `y`, height
   35786400 m, WGS84, longitude 0) sits in a parent group GDAL does not
   connect to the variable, so the strip's VRT carries the geostationary
-  SRS built from those fields and an extent from GDAL's own reading of
-  the chunk's scan-angle coordinates (radians, a column or row number
-  packed with a scale and offset) times the height; the strip is written
-  west to east and north to south whichever way GDAL read the file. The
+  SRS built from those fields and an extent in scan angles (radians, a
+  column or row number packed with a scale and offset) times the height.
+  East to west the extent comes from the file's own column packing —
+  column i, from 1, is `offset + step × i`, east to west — and never from
+  GDAL's geotransform, which Ubuntu 24.04's GDAL 3.8 gets wrong for these
+  files (every frame landed tens of degrees west until the reader stopped
+  trusting it); north to south GDAL's row origin is the chunk's, its row
+  step checked against the grid. The strip is written west to east and
+  north to south whichever way the file runs. A frame's sidecar names
+  the reader version that placed it (`frameVersion`, 2 for FCI), and a
+  cached frame of another version is warped again, its slot's composites
+  recomposed. The
   infrared channels are on a 2 km grid (5568 columns, row step
   5.5887e-5 rad), the solar ones on a 1 km grid (11 136 columns, half the
   step, the same disk); a chunk is a fortieth of the rows of either. The
-  reader checks the packing of the rows and the grid's width against the
+  reader checks the packing of the rows and columns and the grid's width against the
   constants of the grid the channel's `resolution_km` names (`FCI_GRIDS`),
   and plans chunks with them, so a product change is an error.
 
