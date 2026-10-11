@@ -629,18 +629,24 @@ HDF5_PLUGIN_VARIABLE = "HDF5_PLUGIN_PATH"
 
 def hdf5_plugin_environment() -> dict[str, str]:
     """The environment that lets GDAL read an FCI chunk: ``hdf5plugin``'s
-    plugin directory, unless the environment already names one."""
+    plugin directory first, then whatever the environment already names.
+    The directory already there is not trusted to hold the filter: the
+    ``netCDF4`` wheel points the variable at its own plugins (deflate,
+    zstd, blosc, no JPEG-LS) the moment it is imported, which the WRF
+    series tool's tests do in the same process; HDF5 searches the paths in
+    order, so the one with the filter goes in front."""
     import os  # noqa: PLC0415
 
-    if os.environ.get(HDF5_PLUGIN_VARIABLE):
-        return {}
     try:
         import hdf5plugin  # noqa: PLC0415 - the satellite dependency group
     except ImportError as exc:
         raise ConversionError(
             "reading an FCI chunk needs the hdf5plugin package's JPEG-LS filter: uv sync --group satellite"
         ) from exc
-    return {HDF5_PLUGIN_VARIABLE: str(hdf5plugin.PLUGIN_PATH)}
+    paths = [str(hdf5plugin.PLUGIN_PATH)]
+    existing = os.environ.get(HDF5_PLUGIN_VARIABLE, "")
+    paths.extend(path for path in existing.split(os.pathsep) if path and path not in paths)
+    return {HDF5_PLUGIN_VARIABLE: os.pathsep.join(paths)}
 
 
 def elevation_angle(latitude: float, *, height: float, semi_major: float, semi_minor: float) -> float:
