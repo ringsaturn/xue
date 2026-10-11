@@ -7158,8 +7158,14 @@ function ensureRadarOverlay(): RadarOverlay | null {
 }
 
 function applyRadarView(): void {
+  // Live, the sites belong to the reflectivity alone: over a temperature or
+  // a wind a radome mark reads as data the field does not have. A case's
+  // radar is part of its story and stays on whatever field is up.
   const available =
-    radarFeed !== null && (activeCase === null ? radarFeed.live : activeCase.radar !== undefined && !radarFeed.live);
+    radarFeed !== null &&
+    (activeCase === null
+      ? radarFeed.live && selectedVariableId === "cref"
+      : activeCase.radar !== undefined && !radarFeed.live);
   if (radarTile.hidden === available) {
     radarTile.hidden = !available;
     syncRailDensity();
@@ -7843,6 +7849,7 @@ function applyVariable(session: VariableSession): void {
   applyVolumeOverlay();
   applyMosaicMembers();
   applyComposite();
+  applyRadarView();
   syncLapse();
   updateVariablePresentation(session);
   syncUrl();

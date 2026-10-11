@@ -186,7 +186,9 @@ pointer, round or store is published for it.
 - **Sites.** The marks are a static table in the shell,
   `web/src/radar/sites.json`: the window manifest's site rows (§4) for
   every station in NCEI's table that published N0B on the day before
-  `xue nexrad-sites` wrote it. Rerun it when the network changes.
+  `xue nexrad-sites` wrote it. Rerun it when the network changes. They
+  are offered only while the field on screen is the reflectivity `cref`;
+  a case's radar stays on whatever field is up.
 - **Timeline.** An open site lists `<SITE>_<PRODUCT>_<YYYY_MM_DD_HH>` for
   every UTC hour of the newest three hours — the current hour first, the
   rest together — then once a minute from its newest key on
