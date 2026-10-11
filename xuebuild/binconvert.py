@@ -1898,6 +1898,24 @@ def _playback_bandwidth(byte_length: int, frame_count: int, *, fps: float = 12.0
     return max(1, round(byte_length * 8 * fps / max(1, frame_count)))
 
 
+def _store_source(
+    variable_ids: tuple[str, ...],
+    offsets: list[int],
+    codes: dict[int, dict[str, np.ndarray]],
+    metadata: dict[str, Any],
+    tile: tuple[int, int],
+) -> zarrstore.CodesSource:
+    """One bundle's codes as the store writer reads them: each variable's
+    planes in axis order, and its predictor by the rule `_bundle_chunks`
+    applies to the container."""
+    return zarrstore.CodesSource(
+        metadata,
+        {variable_id: [codes[offset][variable_id] for offset in offsets] for variable_id in variable_ids},
+        {variable_id: "raw" if variable_id in RAW_VARIABLE_IDS else "previous" for variable_id in variable_ids},
+        tile,
+    )
+
+
 def _write_variable_bundle(
     variable_id: str,
     output: Path,
@@ -2095,9 +2113,9 @@ def convert_bin(
     a forecast run is already exactly the frames that were fetched.
     ``zarr`` derives a Zarr v3 store beside every bundle and variant written
     (`xuebuild.zarrstore`, docs/zarr-profile.md) and names it in the
-    manifest; the store is read back out of the finished ``.xue``, so it
-    carries the same codes by construction and the bundle's bytes do not
-    depend on whether it was asked for. ``container=False`` (with ``zarr``)
+    manifest; the store is written from the same codes the ``.xue`` is, so
+    the two carry the same codes by construction and the bundle's bytes do
+    not depend on whether it was asked for. ``container=False`` (with ``zarr``)
     retires the ``.xue`` once the store and the video companions have been
     read out of it: the manifest then names the store alone and the file
     is removed, so a run publishes one delivery.
@@ -2710,22 +2728,28 @@ def convert_bin(
                     report["height"] = bundle_grid.height
                     report["bandwidth"] = _playback_bandwidth(report["byteLength"], len(bundle_offsets))
                 if zarr:
-                    # Derived from the file just written, never from the
-                    # codes in memory: the store is a second packaging of
-                    # the bundle's bytes, and reading them back is what
-                    # makes the two agree by construction.
-                    bundle_path = Path(report["output"])
-                    export = zarrstore.export_bundle(
-                        bundle_path, zarrstore.store_path_for(bundle_path), executor=compressor
+                    # Written from the codes in memory — the very planes the
+                    # container was just compressed from — so the store
+                    # never waits on reading the file back: a store is a
+                    # function of the metadata, the codes, the tile and the
+                    # predictors alone (`zarrstore.write_store`).
+                    store_source = _store_source(bundle_variables, bundle_offsets, codes, metadata, tile)
+                    export = zarrstore.write_store(
+                        store_source, output_dir / f"{bundle_id}{suffix}.zarr", executor=compressor
                     )
                     LOG.info("wrote %s (%.2f MB)", export.path, export.byte_length / 1e6)
                     report["zarr"] = export.to_dict()
                     if series and factor == 1 and bundle_id in source.series_bundle_ids:
                         # The series companion is a full-resolution artifact:
                         # a pinned point reads the canonical bundle, never a
-                        # tier, so no variant ships one.
-                        companion = zarrstore.export_series(
-                            bundle_path, zarrstore.series_store_path_for(bundle_path), executor=compressor
+                        # tier, so no variant ships one. Its codec chain
+                        # carries the bundle's own predictor (`xue.delta`).
+                        companion = zarrstore.write_store(
+                            store_source,
+                            output_dir / f"{bundle_id}.series.zarr",
+                            delta=True,
+                            series=True,
+                            executor=compressor,
                         )
                         LOG.info("wrote %s (%.2f MB)", companion.path, companion.byte_length / 1e6)
                         report["series"] = companion.to_dict()
