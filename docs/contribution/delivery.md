@@ -20,14 +20,22 @@ is normative. Choices the spec does not explain:
 
 Writing:
 
-- `zarrstore.export_bundle` derives the store from the finished `.xue`
-  (NumPy only). Both encoder paths call it (`binconvert` per bundle job,
-  `native.py::_zarr_reports` after the wheel), so stores are identical;
-  `tests/test_native.py` compares them byte for byte.
+- A build writes each store straight from its codes: `binconvert` per
+  bundle job through `zarrstore.write_store` over a `CodesSource` (NumPy
+  only), the native encoder through `encode/zarrstore.rs`, both with up to
+  four tiers in flight over one compression pool. A store is a function of
+  the metadata, the codes, the tile and the predictors, so no container is
+  read; `tests/test_native.py` and `tests/test_zarr.py` hold the two
+  writers byte-identical. Every chunk is decompressed again and compared
+  after compression, and the native writer parses each document and index
+  back with the decoder's own validators.
+- A tier's manifest `bandwidth` hint is computed from the delivery it
+  ships: the container's size where one is written, the store's otherwise.
+- `zarrstore.export_bundle` derives the same store from a finished `.xue`
+  (`ContainerSource`), for `xue export-zarr` and the fixtures.
 - `build-bin --zarr` / `XUE_ZARR=1` turns it on. `--no-xue` /
-  `XUE_CONTAINER=0` (`container: false` in `publish.yml`) retires the `.xue`
-  after the store **and the video** have been derived from it
-  (`binconvert.retire_container`); the manifest then names the store alone.
+  `XUE_CONTAINER=0` (`container: false` in `publish.yml`) writes no `.xue`
+  at all; the manifest then names the store alone.
 - `xue export-zarr <bundle.xue> [--delta] [--index-location start|end]` by
   hand. The `zarr` dependency group is for tests and delta stores only.
 

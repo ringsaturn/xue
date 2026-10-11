@@ -2,9 +2,10 @@
 
 Xue packs weather runs and observation windows into per-variable Zarr v3
 stores and plays them back in a static browser page. The layout began as a
-single-file container, `.xue`: no longer published, but still the encoders'
-intermediate (every store is derived from one) and read by every decoder
-forever, since published runs and cases carry it and are never rebuilt.
+single-file container, `.xue`: no longer published (a live build writes
+none at all), and read by every decoder forever, since published runs and
+cases carry it and are never rebuilt. Both encoders write each store
+straight from the codes they quantized.
 
 Normative specs, which win over this page: [format.md](../format.md),
 [zarr-profile.md](../zarr-profile.md), [encoder.md](../encoder.md),
@@ -51,10 +52,11 @@ Encoder, Rust decoder and TypeScript frontend must stay in agreement.
   PyPI wheel asks `native.knows_source` (the whole published bundle set)
   and otherwise takes the reference pipeline with a `::warning::`
   ([publishing.md](publishing.md)).
-- The native encoder writes no video and no pointer. `native.py` reads the
-  codes back out of the wheel's bundles, encodes video, derives the stores,
-  folds the descriptors into the manifest, and only then writes the pointer,
-  whose CRC32 covers the finished manifest.
+- The native encoder writes the stores itself (`encode/zarrstore.rs`, held
+  to `zarrstore.write_store` byte for byte) but no video and no pointer.
+  `native.py` reads the codes back out of the stores it wrote, encodes
+  video, folds the descriptors into the manifest, and only then writes the
+  pointer, whose CRC32 covers the finished manifest.
 - The `encoder` feature is off by default because it links GDAL and the
   decoder must not. Profiles in `rust/Cargo.toml` (Cargo reads them only
   from the workspace root): `release` is tuned for the wasm decoder,
