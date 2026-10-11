@@ -91,7 +91,7 @@ BUNDLES = (
 def source_plane(variable_id: str, band: int) -> np.ndarray:
     """One band of one fixture series, in the file's own units — what the
     converter's own extraction reads, read independently."""
-    name = observation.series_variable_name(variable_id)
+    name = observation.series_variable_name(variable_id, SPEC)
     dataset = f'NETCDF:"{SERIES_DIR / f"ifshres.2026091800.{variable_id}.nc"}":{name}'
     with tempfile.TemporaryDirectory() as work:
         raw = Path(work) / "plane.bin"
@@ -196,8 +196,10 @@ class VariableRegistryTests(unittest.TestCase):
         )
         # The series is opened by that name; every other source names its
         # NetCDF variable by the Xue id.
-        self.assertEqual(observation.series_variable_name("tmp2m"), "temperature_2m")
-        self.assertEqual(observation.series_variable_name("cref"), "cref")
+        self.assertEqual(observation.series_variable_name("tmp2m", SPEC), "temperature_2m")
+        self.assertEqual(observation.series_variable_name("cref", SPEC), "cref")
+        # Only the Open-Meteo source spells a series variable its way.
+        self.assertEqual(observation.series_variable_name("tmp2m", source_spec("cma")), "tmp2m")
 
     def test_apcp_is_an_interval_accumulation_on_the_ground_surface(self) -> None:
         spec = variable_spec("apcp")
