@@ -31,9 +31,8 @@ every live run, round and case is published as stores alone
 (`build-bin --zarr --no-xue`). The `.xue` container
 ([`docs/format.md`](../format.md)) remains:
 
-- the intermediate both encoders write and derive the store from, so the
-  store's codes are the container's by construction and the two encoders
-  stay byte-identical through it;
+- an opt-in output both encoders can still write beside the store, from
+  the same codes, so the two carry identical codes by construction;
 - the format every decoder keeps reading, for runs and cases published
   before the switch and for local builds without `--no-xue`;
 - the format the golden fixtures and the size comparison above are stated

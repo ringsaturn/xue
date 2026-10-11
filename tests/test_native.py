@@ -143,9 +143,10 @@ class NativeParityTests(ClassTempRoot, unittest.TestCase):
 
 @requires_native
 class NativeZarrParityTests(ClassTempRoot, unittest.TestCase):
-    """`--zarr` on both paths: the stores are derived from the bundles by one
-    exporter, so they agree exactly when the bundles do — and the manifest
-    names every one of them the same way."""
+    """Store and container on both paths: each encoder writes its stores
+    from its own codes with its own writer (`zarrstore.write_store`, the
+    wheel's `encode/zarrstore.rs`), and every object of both deliveries
+    agrees — and the manifest names every one of them the same way."""
 
     root_prefix = "xue-native-zarr-"
 
@@ -188,9 +189,9 @@ class NativeZarrParityTests(ClassTempRoot, unittest.TestCase):
 
 @requires_native
 class NativeStoreOnlyParityTests(ClassTempRoot, unittest.TestCase):
-    """`--zarr --no-xue` on both paths: the container is retired behind its
-    store, so a run publishes the store alone — no `.xue` on disk, none in
-    the manifest — and the two encoders still agree object for object."""
+    """The store alone on both paths, the way every live run publishes: no
+    `.xue` is written at all — none on disk, none in the manifest — and the
+    two encoders still agree object for object."""
 
     root_prefix = "xue-native-store-only-"
 
@@ -232,7 +233,21 @@ class NativeStoreOnlyParityTests(ClassTempRoot, unittest.TestCase):
                     self.assertEqual(bundle["variants"][0]["zarr"]["path"], f"{bundle['variable']}.half.zarr")
                 self.assertTrue(all(artifact["container"] is False for artifact in [*report["bundles"], *report["variants"]]))
 
-    def test_the_container_cannot_be_retired_without_a_store(self) -> None:
+    def test_a_tier_hints_the_bandwidth_of_its_store(self) -> None:
+        """No container is written, so a tier's playback hint is its store's
+        size over its frames."""
+        run_directory = self.subject / "gfs.2026081406"
+        manifest = json.loads((run_directory / "manifest.json").read_text(encoding="utf-8"))
+        for bundle in manifest["bundles"]:
+            for variant in bundle["variants"]:
+                with self.subTest(store=variant["zarr"]["path"]):
+                    root = json.loads((run_directory / variant["zarr"]["path"] / "zarr.json").read_text(encoding="utf-8"))
+                    frames = root["attributes"]["xue"]["time"]["frameCount"]
+                    self.assertEqual(
+                        variant["bandwidth"], binconvert._playback_bandwidth(variant["zarr"]["byteLength"], frames)
+                    )
+
+    def test_a_build_needs_the_store_or_the_container(self) -> None:
         for implementation in (binconvert, native):
             with self.subTest(implementation=implementation.__name__), self.assertRaises(ConversionError):
                 implementation.convert_bin(

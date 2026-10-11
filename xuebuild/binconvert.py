@@ -2021,7 +2021,7 @@ def _variant_manifest_entry(variant: dict[str, Any], manifest_dir: Path) -> dict
     """One tier's manifest entry, in the key order the native encoder writes
     (the manifests are compared byte for byte): the container's `path` first
     and its `byteLength` / `crc32` after the grid, or none of the three on a
-    tier whose container was retired."""
+    tier built without a container."""
     container = _container_fields(variant, manifest_dir)
     return {
         **({"path": container["path"]} if container else {}),
@@ -2035,8 +2035,8 @@ def _variant_manifest_entry(variant: dict[str, Any], manifest_dir: Path) -> dict
 
 def _container_fields(report: dict[str, Any], manifest_dir: Path) -> dict[str, Any]:
     """The manifest's ``path`` / ``byteLength`` / ``crc32`` unit for a bundle
-    or variant report — or nothing, for a report whose container was
-    retired after its store was derived (``container: False``)."""
+    or variant report — or nothing, for a report built without a container
+    (``container: False``), whose store is the one delivery."""
     if not report.get("container", True):
         return {}
     return {
@@ -2046,15 +2046,12 @@ def _container_fields(report: dict[str, Any], manifest_dir: Path) -> dict[str, A
     }
 
 
-def retire_container(report: dict[str, Any]) -> None:
-    """Remove a bundle or variant's ``.xue`` once its store stands, and mark
-    the report so the manifest names the store alone. Both encoder paths
-    call this after the video companions and the store have been read out
-    of the file."""
-    if "zarr" not in report:
-        raise ConversionError(f"{report['variable']}: the container can only be retired behind a store")
-    Path(report["output"]).unlink()
-    report["container"] = False
+def _delivered_byte_length(report: dict[str, Any]) -> int:
+    """What a bundle or tier report weighs as delivered: its container where
+    one was written, its store otherwise."""
+    if report.get("container", True):
+        return int(report["byteLength"])
+    return int(report["zarr"]["byteLength"])
 
 
 def _zarr_descriptor(report: dict[str, Any], manifest_dir: Path) -> dict[str, Any]:
@@ -2111,14 +2108,14 @@ def convert_bin(
     for, so it is not required to hold the core tmp2m and prate pair.
     ``last_hour`` trims an observation source's series to a leading window;
     a forecast run is already exactly the frames that were fetched.
-    ``zarr`` derives a Zarr v3 store beside every bundle and variant written
-    (`xuebuild.zarrstore`, docs/zarr-profile.md) and names it in the
-    manifest; the store is written from the same codes the ``.xue`` is, so
-    the two carry the same codes by construction and the bundle's bytes do
-    not depend on whether it was asked for. ``container=False`` (with ``zarr``)
-    retires the ``.xue`` once the store and the video companions have been
-    read out of it: the manifest then names the store alone and the file
-    is removed, so a run publishes one delivery.
+    ``zarr`` writes a Zarr v3 store for every bundle and variant
+    (`xuebuild.zarrstore`, docs/zarr-profile.md) straight from the quantized
+    codes and names it in the manifest. ``container`` writes the ``.xue``
+    as well, from the same codes, so the two agree by construction and the
+    bundle's bytes do not depend on whether a store was asked for. Without
+    the container no ``.xue`` is written at all: the manifest names the
+    store alone, so a run publishes one delivery. A build needs one of the
+    two.
     """
     if profile not in PROFILES:
         raise ConversionError(f"unknown profile: {profile}")
@@ -2713,26 +2710,26 @@ def convert_bin(
             tiles = binformat.TileGeometry(bundle_grid.width, bundle_grid.height, *tile)
 
             def job() -> dict[str, Any]:
-                tables = _bundle_chunks(bundle_variables, bundle_offsets, codes, tiles)
-                report = _write_variable_bundle(
-                    bundle_id,
-                    output_dir / f"{bundle_id}{suffix}.xue",
-                    metadata,
-                    tile,
-                    tables,
-                    zstd_level,
-                    compressor,
-                )
-                if factor > 1:
-                    report["width"] = bundle_grid.width
-                    report["height"] = bundle_grid.height
-                    report["bandwidth"] = _playback_bandwidth(report["byteLength"], len(bundle_offsets))
+                if container:
+                    tables = _bundle_chunks(bundle_variables, bundle_offsets, codes, tiles)
+                    report = _write_variable_bundle(
+                        bundle_id,
+                        output_dir / f"{bundle_id}{suffix}.xue",
+                        metadata,
+                        tile,
+                        tables,
+                        zstd_level,
+                        compressor,
+                    )
+                    del tables
+                else:
+                    report = {"variable": bundle_id, "container": False}
                 if zarr:
-                    # Written from the codes in memory — the very planes the
-                    # container was just compressed from — so the store
-                    # never waits on reading the file back: a store is a
-                    # function of the metadata, the codes, the tile and the
-                    # predictors alone (`zarrstore.write_store`).
+                    # Written from the codes in memory: a store is a function
+                    # of the metadata, the codes, the tile and the predictors
+                    # alone (`zarrstore.write_store`), so it never waits on a
+                    # container, and where one is written too the two carry
+                    # the same codes by construction.
                     store_source = _store_source(bundle_variables, bundle_offsets, codes, metadata, tile)
                     export = zarrstore.write_store(
                         store_source, output_dir / f"{bundle_id}{suffix}.zarr", executor=compressor
@@ -2753,10 +2750,13 @@ def convert_bin(
                         )
                         LOG.info("wrote %s (%.2f MB)", companion.path, companion.byte_length / 1e6)
                         report["series"] = companion.to_dict()
-                    if not container:
-                        # The video companions were encoded from the codes
-                        # in memory, so nothing else reads the file.
-                        retire_container(report)
+                    del store_source
+                if factor > 1:
+                    report["width"] = bundle_grid.width
+                    report["height"] = bundle_grid.height
+                    # A tier's playback hint is the delivery it ships: the
+                    # container where one is written, the store otherwise.
+                    report["bandwidth"] = _playback_bandwidth(_delivered_byte_length(report), len(bundle_offsets))
                 return report
 
             return writers.submit(job)
@@ -2794,7 +2794,7 @@ def convert_bin(
         "variants": [variant for variants in variant_reports.values() for variant in variants],
         "posters": list(poster_reports.values()),
         "videos": list(video_reports.values()),
-        "byteLength": sum(bundle["byteLength"] for bundle in bundle_reports),
+        "byteLength": sum(_delivered_byte_length(bundle) for bundle in bundle_reports),
         "temperatureMaxAbsError": max((item.max_abs_error for item in stats if item.variable_id == "tmp2m"), default=0.0),
         "temperatureClampedPoints": sum(item.clamped_points for item in stats if item.variable_id == "tmp2m"),
         "precipitationOverflowPoints": sum(item.overflow_points for item in stats if item.variable_id == "prate"),

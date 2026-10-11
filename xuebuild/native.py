@@ -2,24 +2,20 @@
 
 `xuepy` is this repository's Rust encoder, published to PyPI and imported as
 `xue`. It does the same work `binconvert.convert_bin` does — GDAL extraction,
-quantization, temporal residuals, zstd, container, manifest — in one process
+quantization, Zarr stores, the optional container, manifest — in one process
 with GDAL, grib-rs and zstd linked in, and is held to the Python encoder by
 byte-for-byte identical output (`docs/encoder.md`). Installing it is what
 lets a build skip the per-plane `gdal_translate` and `zstd` subprocesses.
 
 Two things the native encoder does not do, and this module supplies:
 
-* the optional H.264 companions. It writes bundles, so the codes it wrote can
-  be read straight back out of them with the decoder the same wheel carries,
-  and handed to the existing ffmpeg encoder, without re-extracting anything.
-* the optional Zarr stores (`build-bin --zarr`). Like the video, they are
-  derived from the bundles just written, by the same `zarrstore.export_bundle`
-  the Python path calls on its own bundles, so both paths' stores are the
-  same bytes whenever their bundles are.
+* the optional H.264 companions. The codes the native encoder wrote are read
+  straight back out of the store (or the container, where only that was
+  written) and handed to the existing ffmpeg encoder, without re-extracting
+  anything.
 * the live pointer. The pointer carries the manifest's CRC32, so it can only
-  be written once the video and Zarr descriptors are in the manifest; the
-  native encoder is asked for the manifest alone and the pointer is written
-  here.
+  be written once the video descriptors are in the manifest; the native
+  encoder is asked for the manifest alone and the pointer is written here.
 
 `binconvert` stays the reference implementation. Nothing in this module
 reimplements a stage — it calls the native encoder, then the same manifest,
@@ -32,14 +28,13 @@ import json
 import logging
 import os
 from collections.abc import Sequence
-from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from . import zarrstore
+from . import binformat, zarrstore
 from .common import crc32_hex
-from .binconvert import published_bundle_ids, retire_container, video_variable_ids
+from .binconvert import published_bundle_ids, video_variable_ids
 from .errors import ConversionError
 from .manifest import (
     build_bin_manifest,
@@ -55,6 +50,12 @@ LOG = logging.getLogger("xue.native")
 # The wheel this module drives. Its major.minor tracks the crate, and the
 # encoder's output is only guaranteed byte-identical within a release.
 DISTRIBUTION = "xuepy"
+
+# A manifest bundle entry's keys in the order the reference writes them
+# (`binconvert._bundle_manifest_entry`); the manifests are compared byte for
+# byte, and the video descriptor is folded in here, after the wheel wrote
+# the rest.
+_ENTRY_ORDER = ("variable", "grid", "path", "byteLength", "crc32", "variants", "poster", "video", "zarr", "series")
 
 
 def require() -> Any:
@@ -119,6 +120,31 @@ def _run_time(manifest: dict[str, Any]) -> datetime:
     return datetime.fromisoformat(str(manifest["runTime"]).replace("Z", "+00:00"))
 
 
+def _bundle_codes(bundle: dict[str, Any], module: Any) -> tuple[dict[str, Any], str, list[int], list[Any]] | None:
+    """One single-variable bundle report's codes, read back out of the
+    delivery the build wrote: its metadata, that metadata as the manifest's
+    ``metadataJson`` string, its frame offsets and one flat plane per frame.
+    The store where there is one, the container otherwise; both carry the
+    codes the native encoder quantized, so the planes are the same bytes
+    either way. ``None`` for a multi-variable bundle."""
+    if "zarr" in bundle:
+        store = Path(bundle["zarr"]["path"])
+        metadata = zarrstore.read_json(store / "zarr.json")["attributes"]["xue"]
+        if len(metadata["variables"]) != 1:
+            return None
+        _unit_seconds, offsets = binformat.time_axis(metadata)
+        planes = [plane.ravel() for plane in zarrstore.read_frames(store, metadata["variables"][0]["id"])]
+        return metadata, json.dumps(metadata), offsets, planes
+    reader = module.Bundle.open(Path(bundle["output"]))
+    numeric_ids = reader.variable_ids
+    if len(numeric_ids) != 1:
+        return None
+    offsets = [int(offset) for offset in reader.frame_offsets]
+    planes = [reader.decode(numeric_ids[0], offset) for offset in offsets]
+    reader.clear_cache()
+    return reader.metadata, _canonical_metadata_json(reader.metadata_json), offsets, planes
+
+
 def _video_reports(
     source: SourceSpec,
     bundles: list[dict[str, Any]],
@@ -128,19 +154,13 @@ def _video_reports(
     """Encode one H.264 companion per single-variable bundle.
 
     Best-effort, exactly like the Python path: a missing ffmpeg or a failed
-    encode drops that variable's artifact and leaves the .xue as the universal
-    fallback. The codes come back out of the bundle that was just written, so
-    they are the same bytes the container holds by construction.
+    encode drops that variable's artifact and leaves the store as the
+    universal fallback. The codes come back out of the delivery that was
+    just written, so they are the same bytes it holds by construction.
     """
     reports: dict[str, dict[str, Any]] = {}
     for bundle in bundles:
         variable_id = bundle["variable"]
-        reader = module.Bundle.open(Path(bundle["output"]))
-        numeric_ids = reader.variable_ids
-        if len(numeric_ids) != 1:
-            # The wind pair ships as one two-variable bundle. The video path is
-            # per scalar plane, and the particle layer never takes it.
-            continue
         if variable_id not in video_variable_ids(source):
             # Only the surface fields get a companion, and only on a source
             # that has not switched the video path off. The pressure family
@@ -149,12 +169,15 @@ def _video_reports(
             # fills are not worth an ffmpeg pass per level for an opt-in
             # path.
             continue
-        grid = reader.metadata["grid"]
-        offsets = [int(offset) for offset in reader.frame_offsets]
-        codes_by_offset = {
-            offset: {variable_id: reader.decode(numeric_ids[0], offset)} for offset in offsets
-        }
-        reader.clear_cache()
+        codes = _bundle_codes(bundle, module)
+        if codes is None:
+            # The wind pair ships as one two-variable bundle. The video path is
+            # per scalar plane, and the particle layer never takes it.
+            continue
+        metadata, metadata_json, offsets, planes = codes
+        grid = metadata["grid"]
+        codes_by_offset = {offset: {variable_id: plane} for offset, plane in zip(offsets, planes)}
+        del codes, planes
         try:
             artifact = encode_variable_video(
                 codes_by_offset, offsets, variable_id, width=grid["width"], height=grid["height"]
@@ -189,11 +212,10 @@ def _video_reports(
             "frameCount": artifact.index["frameCount"],
             # A single-variable bundle's own metadata is exactly what the
             # Python path builds for its video: same run, same axis, same
-            # grid, same variable. Reading it back out of the bundle keeps the
-            # two descriptions of one plane from ever disagreeing — but the
-            # container stores it compact, and the manifest wants json.dumps
-            # at its defaults, so it is re-serialized rather than copied.
-            "metadataJson": _canonical_metadata_json(reader.metadata_json),
+            # grid, same variable. Reading it back out of the delivery keeps
+            # the two descriptions of one plane from ever disagreeing, in
+            # the spelling the manifest wants (`json.dumps` at its defaults).
+            "metadataJson": metadata_json,
             "playlistPath": str(playlist_path),
         }
         LOG.info("wrote %s (%.2f MB)", stream_path, len(artifact.stream_bytes) / 1e6)
@@ -213,83 +235,18 @@ def _canonical_metadata_json(text: str) -> str:
     return json.dumps(json.loads(text))
 
 
-def _zarr_reports(
-    bundles: list[dict[str, Any]],
-    variants: list[dict[str, Any]],
-    *,
-    series: bool = True,
-    series_bundle_ids: tuple[str, ...] = (),
-) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
-    """One map store per bundle and per variant, and one series store per full
-    bundle whose variable is in ``series_bundle_ids``
-    (:attr:`xuebuild.sources.SourceSpec.series_bundle_ids`); each keyed by the
-    bundle file's absolute path. Two dicts are returned because a series store
-    is only ever a full-resolution artifact (a pinned point never reads a
-    tier), so it has no variant counterpart to sit beside."""
-    stores: dict[str, dict[str, Any]] = {}
-    series_stores: dict[str, dict[str, Any]] = {}
-    with ThreadPoolExecutor(max_workers=os.cpu_count() or 4) as executor:
-        for artifact in [*bundles, *variants]:
-            bundle_path = Path(artifact["output"])
-            export = zarrstore.export_bundle(bundle_path, zarrstore.store_path_for(bundle_path), executor=executor)
-            LOG.info("wrote %s (%.2f MB)", export.path, export.byte_length / 1e6)
-            stores[str(bundle_path)] = export.to_dict()
-        for artifact in bundles:
-            if not series or artifact["variable"] not in series_bundle_ids:
-                continue
-            bundle_path = Path(artifact["output"])
-            export = zarrstore.export_series(
-                bundle_path, zarrstore.series_store_path_for(bundle_path), executor=executor
-            )
-            LOG.info("wrote %s (%.2f MB)", export.path, export.byte_length / 1e6)
-            series_stores[str(bundle_path)] = export.to_dict()
-    return stores, series_stores
-
-
-def _manifest_entry(
-    entry: dict[str, Any],
-    video: dict[str, Any] | None,
-    manifest_dir: Path,
-    zarr: dict[str, dict[str, Any]] | None = None,
-    series: dict[str, dict[str, Any]] | None = None,
-    retired: set[str] = frozenset(),
-) -> dict[str, Any]:
-    """One manifest bundle entry, with its video, Zarr and series descriptors
-    folded in. ``zarr`` and ``series`` are keyed by bundle path, absolute, as
-    `_zarr_reports` keys them; the entry's own paths are relative to the
-    manifest. ``retired`` is the set of those paths whose container was
-    removed behind its store: the entry then drops the container's ``path`` /
-    ``byteLength`` / ``crc32`` unit, on the bundle and on its tiers alike."""
+def _manifest_entry(entry: dict[str, Any], video: dict[str, Any] | None, manifest_dir: Path) -> dict[str, Any]:
+    """One manifest bundle entry as the wheel wrote it, with the video
+    descriptor folded in and every key in the reference's order. The wheel
+    already names the container (where one was written), the tiers and the
+    stores."""
     entry = dict(entry)
-
-    def without_container(node: dict[str, Any]) -> dict[str, Any]:
-        if str(manifest_dir / node["path"]) not in retired:
-            return node
-        return {key: value for key, value in node.items() if key not in ("path", "byteLength", "crc32")}
     poster = entry.get("poster")
     if poster is not None:
         entry["poster"] = {
             **poster,
             "metadataJson": _canonical_metadata_json(poster["metadataJson"]),
         }
-
-    def descriptor(reports: dict[str, dict[str, Any]] | None, path: str) -> dict[str, Any] | None:
-        report = (reports or {}).get(str(manifest_dir / path))
-        if report is None:
-            return None
-        return {
-            "path": Path(report["path"]).relative_to(manifest_dir).as_posix(),
-            "byteLength": report["byteLength"],
-            "crc32": report["crc32"],
-        }
-
-    if "variants" in entry:
-        entry["variants"] = [
-            without_container(
-                {**variant, **({"zarr": store} if (store := descriptor(zarr, variant["path"])) else {})}
-            )
-            for variant in entry["variants"]
-        ]
     if video is not None:
         entry["video"] = {
             "streamPath": Path(video["streamPath"]).relative_to(manifest_dir).as_posix(),
@@ -303,13 +260,9 @@ def _manifest_entry(
             "frameCount": video["frameCount"],
             "metadataJson": video["metadataJson"],
         }
-    store = descriptor(zarr, entry["path"])
-    if store is not None:
-        entry["zarr"] = store
-    series_store = descriptor(series, entry["path"])
-    if series_store is not None:
-        entry["series"] = series_store
-    return without_container(entry)
+    ordered = {key: entry[key] for key in _ENTRY_ORDER if key in entry}
+    ordered.update({key: value for key, value in entry.items() if key not in ordered})
+    return ordered
 
 
 def _rewrite_manifest(
@@ -317,12 +270,8 @@ def _rewrite_manifest(
     videos: dict[str, dict[str, Any]],
     *,
     require_core: bool,
-    zarr: dict[str, dict[str, Any]] | None = None,
-    series: dict[str, dict[str, Any]] | None = None,
-    retired: set[str] = frozenset(),
 ) -> dict[str, Any]:
-    """Fold the video, Zarr and series descriptors into the manifest the
-    native encoder wrote.
+    """Fold the video descriptors into the manifest the native encoder wrote.
 
     Rebuilt through `build_bin_manifest` rather than edited in place, so the
     result is validated and its keys land in the order the reference writes
@@ -334,7 +283,7 @@ def _rewrite_manifest(
     payload = build_bin_manifest(
         _run_time(existing),
         bundles=[
-            _manifest_entry(entry, videos.get(entry["variable"]), manifest_path.parent, zarr, series, retired)
+            _manifest_entry(entry, videos.get(entry["variable"]), manifest_path.parent)
             for entry in existing["bundles"]
         ],
         expected_hours=expected_hours,
@@ -410,6 +359,9 @@ def convert_bin(
         bundle_ids=list(bundle_ids) if bundle_ids is not None else None,
         last_hour=last_hour,
         verbose=LOG.isEnabledFor(logging.DEBUG),
+        zarr=zarr,
+        container=container,
+        series_bundle_ids=list(source.series_bundle_ids) if series else [],
     )
 
     # The wheel carries a source table of its own. One that predates this
@@ -438,37 +390,9 @@ def convert_bin(
         videos = _video_reports(source, report["bundles"], Path(output_dir), module)
     report["videos"] = list(videos.values())
 
-    stores: dict[str, dict[str, Any]] = {}
-    series_stores: dict[str, dict[str, Any]] = {}
-    retired: set[str] = set()
-    if zarr:
-        stores, series_stores = _zarr_reports(
-            report["bundles"],
-            report.get("variants", []),
-            series=series,
-            series_bundle_ids=tuple(source.series_bundle_ids),
-        )
-        # The Python path reports a store on the bundle it belongs to.
-        for artifact in [*report["bundles"], *report.get("variants", [])]:
-            artifact["zarr"] = stores[str(Path(artifact["output"]))]
-            if str(Path(artifact["output"])) in series_stores:
-                artifact["series"] = series_stores[str(Path(artifact["output"]))]
-            if not container:
-                # The videos above and the store were both read out of the
-                # file; nothing else will be.
-                retire_container(artifact)
-                retired.add(str(Path(artifact["output"])))
-
     if manifest_path is not None:
         require_core = bundle_ids is None
-        payload = _rewrite_manifest(
-            Path(manifest_path),
-            videos,
-            require_core=require_core,
-            zarr=stores,
-            series=series_stores,
-            retired=retired,
-        )
+        payload = _rewrite_manifest(Path(manifest_path), videos, require_core=require_core)
         LOG.info("wrote manifest %s", manifest_path)
         if latest_path is not None and run_id is not None:
             write_pointer_to_manifest(

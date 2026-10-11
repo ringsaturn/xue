@@ -2,28 +2,29 @@
 
 This document specifies how a Xue bundle is written as a Zarr v3 store: the
 same quantized codes as the `.xue` container, in a layout any Zarr client
-reads. It is normative for what the exporter (`xuebuild/zarrstore.py`, `xue
-export-zarr`, `build-bin --zarr`) writes and for what a store must look like
-to be one of these. The container itself is specified in
+reads. It is normative for what the store writers (`xuebuild/zarrstore.py`,
+the native encoder's `encode/zarrstore.rs`, `build-bin`, `xue export-zarr`)
+write and for what a store must look like to be one of these. The container itself is specified in
 [`format.md`](format.md); this profile adds nothing to it and changes
 nothing in it. A second branch, the [polar store](#polar-store), carries
 radar sweeps in beam-and-gate coordinates for products that have no grid
 and no container.
 
-The store is derived from a bundle, never the other way round. A build
-writes the `.xue` first, reads its codes back and writes the store from
-them, so the two carry identical codes by construction. The frontend plays
-a store by default wherever a bundle's manifest entry names one (see
-"Reading"; `?backend=xue` asks for the container instead), and a run whose
-entries name only their stores is accepted; a run published without stores
-plays from its containers, and a reader that does not know the manifest
-field ignores it. Since 2026-09-15 the store is the published artifact:
-every live run, rolling-window round and showcase case publishes the store
-alone (`build-bin --zarr --no-xue`: the `.xue` is written, the store derived
-from it, and the file retired before upload), a [STAC catalog](stac.md)
-lists them, and the container is a build intermediate and a legacy format
-that every decoder keeps reading, since runs, cases and rounds already
-published are never rebuilt.
+A store is a function of a bundle's metadata, its quantized codes, its tile
+and each variable's predictor, and of nothing else. A build writes it
+straight from the codes it quantized; where it writes a `.xue` as well, the
+container comes from the same codes, so the two carry identical codes by
+construction, and `xue export-zarr` derives the same store from a finished
+`.xue`. The frontend plays a store by default wherever a bundle's manifest
+entry names one (see "Reading"; `?backend=xue` asks for the container
+instead), and a run whose entries name only their stores is accepted; a run
+published without stores plays from its containers, and a reader that does
+not know the manifest field ignores it. The store is the published
+artifact: every live run, rolling-window round and showcase case publishes
+the store alone, with no `.xue` written at all, and a [STAC
+catalog](stac.md) lists them. The container is a legacy format that every
+decoder keeps reading, since runs, cases and rounds already published are
+never rebuilt.
 
 ## Why a profile
 
@@ -60,8 +61,8 @@ shard the size of the array is one object read by range, as the container
 was, and its index is the whole index, read once.
 
 A reduced-resolution rendition is its own store, `<bundle>.<tier>.zarr`,
-derived from `<bundle>.<tier>.xue` exactly as the full one is from
-`<bundle>.xue`. The ladder is per source (`SourceSpec.variant_factors`):
+written from the tier's decimated codes exactly as the full one is from the
+full codes. The ladder is per source (`SourceSpec.variant_factors`):
 every source has the half (`tmp2m.half.zarr`, the grid decimated by two),
 and the satellite disks add the quarter and the eighth (`ir104.quarter.zarr`,
 `ir104.eighth.zarr`; 3000 → 1500 → 750 → 375 cells a side, the tile 64 →
@@ -449,9 +450,11 @@ dimensions, the chunking and the attributes are its own.
 
 ## Equivalence with the container
 
-The codes are identical by construction: the exporter re-encodes every
-chunk from the codes the bundle decodes to, and `tests/test_zarr.py` holds a
-NumPy-only read-back of every frame to `decode_plane`. Compressed bytes are
+The codes are identical by construction: a build writes the store and the
+container from the same codes, `xue export-zarr` re-encodes every chunk
+from the codes a bundle decodes to, and `tests/test_zarr.py` holds a
+NumPy-only read-back of every frame to `decode_plane` and a store written
+from the codes to the one exported from their bundle, object for object. Compressed bytes are
 identical where the layouts coincide (a store chunk covering exactly one of
 the bundle's groups on a tile the grid does not clip) under the delta chain
 for a predicted variable and under either chain for a RAW one; the export

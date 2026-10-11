@@ -234,7 +234,10 @@ impl Bundle {
 /// Convert gridded input into per-variable Xue bundles.
 ///
 /// Mirrors `xuebuild.binconvert.convert_bin`, minus the video artifacts. Returns
-/// the build report as a dictionary.
+/// the build report as a dictionary. `zarr` writes each bundle's Zarr store
+/// straight from the codes, `container` its `.xue` (at least one of the two);
+/// `series_bundle_ids` names the full-resolution bundles that also ship a
+/// series store.
 #[pyfunction]
 #[pyo3(signature = (
     inputs,
@@ -256,6 +259,9 @@ impl Bundle {
     extract_workers = None,
     compress_workers = None,
     verbose = false,
+    zarr = false,
+    container = true,
+    series_bundle_ids = None,
 ))]
 #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
 fn convert_bin(
@@ -278,6 +284,9 @@ fn convert_bin(
     extract_workers: Option<usize>,
     compress_workers: Option<usize>,
     verbose: bool,
+    zarr: bool,
+    container: bool,
+    series_bundle_ids: Option<Vec<String>>,
 ) -> PyResult<Py<PyAny>> {
     let defaults = ConvertOptions::default();
     let options = ConvertOptions {
@@ -297,6 +306,9 @@ fn convert_bin(
         extract_workers: extract_workers.unwrap_or(defaults.extract_workers),
         compress_workers: compress_workers.unwrap_or(defaults.compress_workers),
         verbose,
+        zarr,
+        container,
+        series_bundle_ids: series_bundle_ids.unwrap_or_default(),
     };
     // The conversion is long and holds no Python objects; releasing the GIL
     // lets a caller keep using the interpreter while it runs.

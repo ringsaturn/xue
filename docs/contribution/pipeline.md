@@ -1,8 +1,10 @@
 # Encoder pipeline (`xuebuild/`)
 
 The reference encoder ([architecture.md](architecture.md)): fetch exact
-records → GDAL extract → crop, convert units → quantize → temporal
-residuals → zstd → `.xue` → Zarr store → manifest → pointer. Per-source
+records → GDAL extract → crop, convert units → quantize → Zarr store
+(zstd per inner chunk) → manifest → pointer. The `.xue` (temporal residuals
+→ zstd → container) is written beside the store only when asked for, from
+the same codes. Per-source
 behaviour is in [sources.md](sources.md).
 
 ## Registries
