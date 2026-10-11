@@ -191,6 +191,7 @@ export const es: Record<MessageKey, string> = {
   themeToggleAria: "Alternar claro / oscuro",
   viewGlobeAria: "Globo",
   viewTerrainAria: "Relieve 3D",
+  viewContoursAria: "Curvas de nivel",
   viewResetNorthAria: "Orientar al norte",
   viewResetPitchAria: "Restablecer inclinación",
   viewBoxAria: "Primer plano de la tormenta: arrastra un recuadro",

@@ -188,6 +188,7 @@ export const zhHant: Record<MessageKey, string> = {
   themeToggleAria: "切換淺色 / 深色",
   viewGlobeAria: "地球視圖",
   viewTerrainAria: "三維地形",
+  viewContoursAria: "地形等高線",
   viewResetNorthAria: "重設為正北",
   viewResetPitchAria: "重設俯仰",
   viewBoxAria: "風暴特寫：框選一塊區域",

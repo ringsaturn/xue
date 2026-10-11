@@ -4,8 +4,8 @@ import { onLocaleChange, t, type MessageKey } from "./i18n";
 import { globeProjection, isGlobeProjection } from "./projection";
 
 /**
- * The view tile under the zoom tile: the globe and the 3D relief as
- * switches, then a way back to north and a way back to a flat camera. The last two are there only while the camera has
+ * The view tile under the zoom tile: the globe, the 3D relief and the
+ * relief's contour lines as switches, then a way back to north and a way back to a flat camera. The last two are there only while the camera has
  * turned or tilted, so the column is as short as the view lets it be; the
  * north button's needle turns with the map so it says which way north is
  * before it is pressed.
@@ -29,6 +29,8 @@ export interface ViewControlOptions {
   /** One of the radar volume's tools was pressed (`main.ts` arms it, or
    * clears what it selected). */
   onVolumeTool?: (kind: "box" | "section") => void;
+  /** The contour-lines switch was pressed; `setContours` reports the state. */
+  onContours?: () => void;
 }
 
 /** What the volume tools show: whether they are offered at all (only over
@@ -49,6 +51,12 @@ const SECTION_ICON = `<svg viewBox="0 0 29 29" width="29" height="29" aria-hidde
   <path d="M10.5 18v-6.5M14.5 15v-7M18.5 12V6.5" fill="none" stroke="#333" stroke-width="1.3" stroke-linecap="round"/>
 </svg>`;
 
+const CONTOURS_ICON = `<svg viewBox="0 0 29 29" width="29" height="29" aria-hidden="true">
+  <path d="M6.5 21.5c3-6 6.5-9 10-9.5s6 2 7 5.5" fill="none" stroke="#333" stroke-width="1.3" stroke-linecap="round"/>
+  <path d="M9.5 20.5c2-4 4.5-6.5 7.5-7s4.5 1.5 5.5 4.5" fill="none" stroke="#333" stroke-width="1.3" stroke-linecap="round"/>
+  <path d="M12.5 19.5c1.2-2 2.8-3.5 4.5-3.8s3 .9 3.8 2.8" fill="none" stroke="#333" stroke-width="1.6" stroke-linecap="round"/>
+</svg>`;
+
 const PITCH_ICON = `<svg viewBox="0 0 29 29" width="29" height="29" aria-hidden="true">
   <path d="M7 19.5h15" fill="none" stroke="#333" stroke-width="1.6" stroke-linecap="round"/>
   <path d="M8.5 15.5 20.5 9.5" fill="none" stroke="#333" stroke-width="1.6" stroke-linecap="round" stroke-dasharray="2 2.2"/>
@@ -60,6 +68,7 @@ export class ViewControl implements IControl {
   private container: HTMLElement | null = null;
   private globe: HTMLButtonElement | null = null;
   private terrain: HTMLButtonElement | null = null;
+  private contours: HTMLButtonElement | null = null;
   private north: HTMLButtonElement | null = null;
   private needle: HTMLElement | null = null;
   private flat: HTMLButtonElement | null = null;
@@ -81,6 +90,8 @@ export class ViewControl implements IControl {
       if (map.getTerrain()) map.setTerrain(null);
       else map.setTerrain({ source: this.options.terrainSource, exaggeration: this.options.exaggeration() });
     });
+    this.contours = this.button(container, "view-control-contours", "viewContoursAria", () => this.options.onContours?.());
+    this.contours.querySelector(".maplibregl-ctrl-icon")!.innerHTML = CONTOURS_ICON;
     this.north = this.button(container, "maplibregl-ctrl-compass", "viewResetNorthAria", () => {
       map.easeTo({ bearing: 0 });
     });
@@ -140,13 +151,18 @@ export class ViewControl implements IControl {
   }
 
   private readonly label = (): void => {
-    for (const button of [this.globe, this.terrain, this.north, this.flat, this.box, this.section]) {
+    for (const button of [this.globe, this.terrain, this.contours, this.north, this.flat, this.box, this.section]) {
       if (!button) continue;
       const text = t(button.dataset.label as MessageKey);
       button.title = text;
       button.setAttribute("aria-label", text);
     }
   };
+
+  /** Show whether the contour lines are drawn. */
+  setContours(on: boolean): void {
+    this.contours?.setAttribute("aria-pressed", String(on));
+  }
 
   /** Offer the volume tools, or not, and show which is armed or active. */
   setVolumeTools(state: VolumeToolState): void {

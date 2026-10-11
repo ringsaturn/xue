@@ -191,6 +191,7 @@ export const de: Record<MessageKey, string> = {
   themeToggleAria: "Hell / dunkel umschalten",
   viewGlobeAria: "Globus",
   viewTerrainAria: "3D-Gelände",
+  viewContoursAria: "Höhenlinien",
   viewResetNorthAria: "Nach Norden ausrichten",
   viewResetPitchAria: "Neigung zurücksetzen",
   viewBoxAria: "Sturm-Nahansicht: Rechteck aufziehen",

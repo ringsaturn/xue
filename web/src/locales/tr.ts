@@ -194,6 +194,7 @@ export const tr: Record<MessageKey, string> = {
   themeToggleAria: "Açık / koyu görünümü değiştir",
   viewGlobeAria: "Küre",
   viewTerrainAria: "3B arazi",
+  viewContoursAria: "Eş yükselti eğrileri",
   viewResetNorthAria: "Kuzeye sıfırla",
   viewResetPitchAria: "Eğimi sıfırla",
   viewBoxAria: "Fırtına yakın planı: bir kutu sürükleyin",
