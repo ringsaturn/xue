@@ -1,7 +1,7 @@
 name: publish meteosat
 
-# Meteosat-12's 10.5 µm infrared window (FCI channel IR 10.5) and its Dust
-# RGB, from the EUMETSAT Data Store: the FCI Level 1c full-disk product,
+# Meteosat-12's 10.5 µm infrared window (FCI channel IR 10.5), its Dust
+# RGB and its true colour, from the EUMETSAT Data Store: the FCI Level 1c full-disk product,
 # one repeat cycle every ten minutes cut into forty netCDF chunk files that
 # carry every channel as radiances. The live feed is a rolling window of
 # the last 24 hours — **the cycle on each hour alone**, since the EUMETSAT
@@ -18,7 +18,9 @@ name: publish meteosat
 # (anonymous), downloads the cycle's 38 chunks that reach the ±60° grid
 # (~900 MB, with the account's token — the EUMETSAT_CONSUMER_KEY /
 # EUMETSAT_CONSUMER_SECRET secrets, without which the job warns and does
-# nothing), converts each chunk's radiances to brightness temperature and
+# nothing), converts each chunk's radiances to brightness temperature (the
+# three windows) or reflectance factor (the four solar channels, on the
+# 1 km grid; no extra download, a chunk carries every channel) and
 # georeferences the strips itself (xuebuild/satellite/readers.py, the
 # FCIReader: GDAL needs the hdf5plugin JPEG-LS filter for the files and
 # cannot place a chunk from its grouped grid mapping), warps them once
@@ -26,7 +28,7 @@ name: publish meteosat
 # window's frames into the NetCDF series the converter reads.
 #
 # Machine time: six jobs an hour, five of them a listing and an exit; the
-# one that builds is five to ten minutes. Roughly 40 hours a month.
+# one that builds is ten to fifteen minutes. Roughly 60 hours a month.
 
 on:
   schedule:
