@@ -337,6 +337,16 @@ const TRUE_COLOR_GUN: LinearCodebook = LinearCodebook {
     nodata_code: 255,
     name: "truecolor",
 };
+// A night microphysics gun is the same kind of number again, under the same
+// codebook and the same code 0. Mirrors `NIGHT_MICRO_GUN` in
+// `xuebuild/quantize.py`.
+const NIGHT_MICRO_GUN: LinearCodebook = LinearCodebook {
+    minimum: -0.004,
+    maximum: 1.0,
+    step: 0.004,
+    nodata_code: 255,
+    name: "nightmicro",
+};
 // A reflectance channel: the top-of-atmosphere reflectance factor in 0–1,
 // which a sunlit cloud takes a little past 1. The codebook starts one step
 // below zero so code 0 is the fill outside the disk and the night side's
@@ -955,6 +965,7 @@ pub fn codebook(profile: &str, variable_id: &str) -> Result<Codebook> {
         (_, "dustcf") => Codebook::Linear(DUST_CF),
         (_, "zhouye") => Codebook::Linear(ZHOUYE),
         (_, "truer" | "trueg" | "trueb") => Codebook::Linear(TRUE_COLOR_GUN),
+        (_, "nightr" | "nightg" | "nightb") => Codebook::Linear(NIGHT_MICRO_GUN),
         (_, "aod" | "aoddust" | "aodsalt" | "aodsulf" | "aodorg" | "aodbc" | "pm25" | "pm10" | "pm10dust") => {
             let variable_id = AEROSOL_VARIABLE_IDS
                 .iter()
