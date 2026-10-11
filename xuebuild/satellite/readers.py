@@ -116,6 +116,11 @@ class Reader(Protocol):
     file), fetched under a directory per channel, or carry every channel
     (an FCI chunk), fetched once per slot and shared."""
 
+    frame_version: ClassVar[int]
+    """How this reader places a frame, written into every frame's sidecar:
+    a cached frame of another version is warped again. Raised when a fix
+    moves pixels, so the frame cache does not keep serving the old ones."""
+
     def list_slots(self, platform: Platform, day: datetime, *, fetch: Callable[[str], str] | None = None) -> list[datetime]:
         """The scan slots the bucket has a directory for on one UTC day,
         in time order; a slot listed may still be incomplete."""
@@ -326,6 +331,7 @@ class ISatSSReader:
 
     VARIABLE = "Sectorized_CMI"
     files_per_channel: ClassVar[bool] = True
+    frame_version: ClassVar[int] = 1
 
     def slot_prefix(self, platform: Platform, channel: Channel, slot: datetime) -> str:
         """Every tile of the channel in the slot's directory shares this
@@ -539,6 +545,7 @@ class CMIPFReader:
 
     VARIABLE = "CMI"
     files_per_channel: ClassVar[bool] = True
+    frame_version: ClassVar[int] = 1
 
     def hour_prefix(self, platform: Platform, hour: datetime) -> str:
         return f"{platform.prefix}/{hour:%Y/%j/%H}/"
@@ -853,6 +860,10 @@ class FCIReader:
     """
 
     files_per_channel: ClassVar[bool] = False
+    #: 2: strips are placed east to west by the file's own column packing
+    #: rather than GDAL's geotransform, which Ubuntu 24.04's GDAL 3.8 gets
+    #: wrong for these files (every frame landed tens of degrees west).
+    frame_version: ClassVar[int] = 2
 
     def group(self, channel: Channel) -> str:
         try:
@@ -1123,12 +1134,20 @@ class FCIReader:
         try:
             step = float(metadata[packing + "scale_factor"])
             offset = float(metadata[packing + "add_offset"])
+            column_step = float(metadata[f"/data/{group}/measured/x#scale_factor"])
+            column_offset = float(metadata[f"/data/{group}/measured/x#add_offset"])
         except (KeyError, ValueError) as exc:
-            raise ConversionError(f"{chunk_file.name} does not say how its rows are packed") from exc
-        if not (math.isclose(step, grid.angle_step, rel_tol=1e-6) and math.isclose(offset, grid.angle_offset, rel_tol=1e-6)) or width != grid.size:
+            raise ConversionError(f"{chunk_file.name} does not say how its rows and columns are packed") from exc
+        if (
+            not (math.isclose(step, grid.angle_step, rel_tol=1e-6) and math.isclose(offset, grid.angle_offset, rel_tol=1e-6))
+            or not (math.isclose(column_step, -grid.angle_step, rel_tol=1e-6) and math.isclose(column_offset, -grid.angle_offset, rel_tol=1e-6))
+            or width != grid.size
+        ):
             raise ConversionError(
-                f"{chunk_file.name} {group} is not on the FCI {channel.resolution_km:g} km grid the reader knows ({width} columns, row step {step}, offset {offset})"
+                f"{chunk_file.name} {group} is not on the FCI {channel.resolution_km:g} km grid the reader knows ({width} columns, row step {step}, offset {offset}, column step {column_step}, offset {column_offset})"
             )
+        if not math.isclose(abs(transform[5]), grid.angle_step, rel_tol=1e-6):
+            raise ConversionError(f"{chunk_file.name} {group}: GDAL reads a row step of {transform[5]}, not the grid's {grid.angle_step}")
         projection = "/data/mtg_geos_projection#"
         try:
             height_m = float(metadata[projection + "perspective_point_height"])
@@ -1203,18 +1222,21 @@ class FCIReader:
             value = brightness_temperature(radiance, calibration)
             value_scale, value_offset, unit = FCI_BT_SCALE, fci_bt_offset(channel), "K"
         value[invalid] = np.nan
-        # GDAL reads the strip in the file's own orientation and says which
-        # way its axes run; the strip is written west to east and north to
-        # south whatever that was, so the mosaic has one orientation.
-        west = transform[0]
-        north = transform[3]
-        if transform[1] < 0:
+        # The strip is written west to east and north to south whatever the
+        # file's orientation, so the mosaic has one. East to west it is
+        # placed by the file's own column packing — column i (from 1) is
+        # the scan angle offset + step × i, the same on every chunk — not by
+        # GDAL's geotransform, which GDAL 3.8 gets wrong for these files;
+        # north to south GDAL's row origin is the chunk's.
+        columns = (column_offset + column_step, column_offset + column_step * width)
+        west = min(columns) - abs(column_step) / 2.0
+        if column_step < 0:
             value = value[:, ::-1]
-            west += transform[1] * width
+        north = transform[3]
         if transform[5] > 0:
             value = value[::-1, :]
             north += transform[5] * height
-        pixel = abs(transform[1]) * height_m
+        pixel = abs(column_step) * height_m
         line = abs(transform[5]) * height_m
         finite = np.isfinite(value)
         packed = np.floor(np.where(finite, value - value_offset, 0.0) / value_scale + 0.5)

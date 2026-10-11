@@ -22,6 +22,7 @@ import io
 import json
 import math
 import os
+import re
 import subprocess
 import tempfile
 import unittest
@@ -505,6 +506,31 @@ class ReflectanceStripTests(TempRoot, unittest.TestCase):
                 self.assertTrue(valid[row, column])
                 value = math.pi * float(radiance[row, column]) * constants["distance_au"] ** 2 / constants["irradiance"]
                 self.assertEqual(int(strip[row, column]), math.floor(value * 4096 + 0.5))
+
+    def test_a_strip_is_placed_by_the_file_s_own_column_packing(self) -> None:
+        """East to west a strip is placed by the file's column packing,
+        never by GDAL's geotransform (Ubuntu 24.04's GDAL 3.8, the one the
+        publishes run, puts these files tens of degrees west): column i
+        (from 1) is the scan angle ``offset + step × i``, the file runs east
+        to west, so the strip's west edge is the last column's angle less
+        half a step, the same on the 2 km and the 1 km grid."""
+        reader = FCIReader()
+        environment = hdf5_plugin_environment()
+        for channel in (IR104, VIS064):
+            with self.subTest(channel=channel.id):
+                grid = FCI_GRIDS[channel.resolution_km]
+                vrt = reader.write_strip(
+                    CHUNK, channel, reader.calibration(CHUNK, channel, environment), self.root / channel.id / "0020.vrt", environment
+                )
+                text = vrt.read_text(encoding="utf-8")
+                origin_x, pixel, _, _, _, line = (float(part) for part in re.search(r"<GeoTransform>([^<]+)</GeoTransform>", text).group(1).split(","))
+                height = float(re.search(r"\+h=([0-9.e+-]+)", text).group(1))
+                west = (-grid.angle_offset - grid.angle_step * grid.size) - grid.angle_step / 2.0
+                self.assertAlmostEqual(origin_x / height, west, places=9)
+                self.assertAlmostEqual(pixel / height, grid.angle_step, places=12)
+                self.assertAlmostEqual(-line / height, grid.angle_step, places=12)
+                # The disk is symmetric about nadir: the strip spans it.
+                self.assertAlmostEqual(origin_x / height + grid.size * grid.angle_step, -west, delta=2 * grid.angle_step)
 
     def test_an_infrared_conversion_of_a_solar_channel_is_refused(self) -> None:
         reader = FCIReader()
