@@ -332,9 +332,9 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
     members: ["meteosat", "himawari", "goeswest", "goeseast"],
   },
   // Meteosat-12 (MTG-I1) at 0°, EUMETSAT's FCI imager, read from the
-  // EUMETSAT Data Store: the same 10.4 µm window (FCI's 10.5 µm channel)
-  // and the same Dust RGB, warped onto a 0.04° grid over the disk's useful
-  // extent. The source publishes the hourly repeat cycle alone — the one
+  // EUMETSAT Data Store: the same 10.4 µm window (FCI's 10.5 µm channel),
+  // the same Dust RGB and true colour, warped onto a 0.04° grid over the
+  // disk's useful extent. The source publishes the hourly repeat cycle alone — the one
   // EUMETSAT's data policy releases under CC-BY-4.0 for redistribution —
   // so its window is a day of hourly frames rather than hours of
   // ten-minute ones. Named by the slot (0° is Meteosat-12 today), never
@@ -347,7 +347,7 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
     observation: true,
     coreBundles: ["ir104"],
     defaultVariable: "ir104",
-    railCore: ["ir104", "dustrgb"],
+    railCore: ["ir104", "dustrgb", "truecolor"],
     region: [-60, -60, 60, 60],
     subLongitude: 0,
     cadenceSeconds: 3600,

@@ -199,9 +199,9 @@ describe("the satellite registry", () => {
   it("gives the composites and the confidences core tiles beside the infrared on every satellite source", () => {
     // No family: the five are different pictures, and a source with five
     // fields has room for five tiles, so none hides behind another. The
-    // confidences and the true colour ship on the ten-minute disks and on
-    // the mosaic (a member whose run lacks a bundle empties for it,
-    // `applyMosaicMembers`), not on Meteosat's hourly cycle.
+    // confidences ship on the ten-minute disks and on the mosaic (a member
+    // whose run lacks a bundle empties for it, `applyMosaicMembers`), not
+    // on Meteosat's hourly cycle; the true colour ships on all four.
     expect(ISOBARIC_FAMILIES).not.toContain("satellite");
     expect(variableSpec("dustrgb")?.code).toBe("DUST RGB");
     expect(variableSpec("dustcf")?.code).toBe("DEBRA");
@@ -210,7 +210,7 @@ describe("the satellite registry", () => {
     for (const model of ["himawari", "goeseast", "goeswest", "geo"] as const) {
       expect(FORECAST_MODELS[model].railCore).toEqual(["ir104", "dustrgb", "dustcf", "zhouye", "truecolor"]);
     }
-    expect(FORECAST_MODELS.meteosat.railCore).toEqual(["ir104", "dustrgb"]);
+    expect(FORECAST_MODELS.meteosat.railCore).toEqual(["ir104", "dustrgb", "truecolor"]);
   });
 
   it("reads the channel off the band block, not the parameter alone", () => {

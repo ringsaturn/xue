@@ -795,7 +795,7 @@ describe("dataset kinds", () => {
       observation: true,
       coreBundles: ["ir104"],
       defaultVariable: "ir104",
-      railCore: ["ir104", "dustrgb"],
+      railCore: ["ir104", "dustrgb", "truecolor"],
       region: [-60, -60, 60, 60],
     });
     expect(isObservationModel("meteosat")).toBe(true);
