@@ -134,6 +134,42 @@ describe("the primary member", () => {
     expect(primaryMember([{ id: "meteosat", cadenceSeconds: 3600, runTime: 30 }])).toBe("meteosat");
     expect(primaryMember([])).toBeNull();
   });
+
+  it("is the disk under the camera before the newest window", () => {
+    const bands = mosaicBands([
+      { id: "meteosat", subLongitude: 0 },
+      { id: "himawari", subLongitude: 140.7 },
+      { id: "goeswest", subLongitude: 223 },
+      { id: "goeseast", subLongitude: -75.2 },
+    ]);
+    const members = [
+      { id: "meteosat", cadenceSeconds: 3600, runTime: 30, band: bands.get("meteosat") },
+      { id: "himawari", cadenceSeconds: 600, runTime: 10, band: bands.get("himawari") },
+      { id: "goeswest", cadenceSeconds: 600, runTime: 20, band: bands.get("goeswest") },
+      { id: "goeseast", cadenceSeconds: 600, runTime: 20, band: bands.get("goeseast") },
+    ];
+    expect(primaryMember(members, 120)).toBe("himawari");
+    // The same view one world over.
+    expect(primaryMember(members, 120 - 360)).toBe("himawari");
+    expect(primaryMember(members, -150)).toBe("goeswest");
+    expect(primaryMember(members, -80)).toBe("goeseast");
+    // Over Europe Meteosat keeps its band but not the timeline: it is hourly.
+    expect(bandContains(bands.get("meteosat")!, 10)).toBe(true);
+    expect(primaryMember(members, 10)).not.toBe("meteosat");
+    // No camera: the newest window, first come on a tie.
+    expect(primaryMember(members)).toBe("goeswest");
+    // Cadence still comes first: an hourly disk under the camera does not
+    // slow the timeline.
+    expect(
+      primaryMember(
+        [
+          { id: "meteosat", cadenceSeconds: 3600, runTime: 30, band: { start: 0, width: 360 } },
+          { id: "himawari", cadenceSeconds: 600, runTime: 10, band: { start: 100, width: 10 } },
+        ],
+        10,
+      ),
+    ).toBe("himawari");
+  });
 });
 
 describe("the geo entry", () => {

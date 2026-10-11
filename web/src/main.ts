@@ -8290,14 +8290,19 @@ async function openMosaicMembers(model: ForecastModelId): Promise<MosaicMember[]
 }
 
 /** Which member drives the timeline (`primaryMember`): the finest cadence,
- * then the newest window. */
+ * then the disk under the camera, then the newest window. */
 function mosaicPrimaryId(members: readonly MosaicMember[]): ForecastModelId | null {
+  const bands = mosaicBands(
+    members.map((member) => ({ id: member.id, subLongitude: FORECAST_MODELS[member.id].subLongitude ?? 0 })),
+  );
   return primaryMember(
     members.map((member) => ({
       id: member.id,
       cadenceSeconds: FORECAST_MODELS[member.id].cadenceSeconds ?? 600,
       runTime: Date.parse(member.manifest.runTime),
+      band: bands.get(member.id),
     })),
+    map.getCenter().lng,
   );
 }
 
@@ -9022,7 +9027,7 @@ async function initialize({ frame = false }: { frame?: boolean } = {}): Promise<
       currentRun = found.run;
     } else if (FORECAST_MODELS[selectedModelId].mosaic) {
       // A view over several datasets: whichever members answer are opened,
-      // the one with the finest cadence is the run below, and the rest
+      // the finest-cadence one under the camera is the run below, and the rest
       // follow it from slots of their own (applyMosaicMembers).
       if (frame) frameModelRegion();
       const members = await openMosaicMembers(selectedModelId);

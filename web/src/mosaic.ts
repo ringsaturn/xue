@@ -107,19 +107,33 @@ export function offsetNotLater(
 }
 
 /** Which present member drives the timeline: the one with the finest
- * cadence, then the newest window; returns its id or null when none. */
+ * cadence, then the one whose band holds the camera's longitude, then the
+ * newest window; returns its id or null when none. The primary loads first
+ * and its newest frame is the end of the timeline, while a member whose
+ * feed lags it by more than a step shows nothing there — so the disk being
+ * looked at must be the primary, or a slower feed (Himawari's lands about
+ * half an hour after the GOES ones) is blank at the live edge exactly
+ * where the viewer is. */
 export function primaryMember<Id extends string>(
-  members: readonly { id: Id; cadenceSeconds: number; runTime: number }[],
+  members: readonly { id: Id; cadenceSeconds: number; runTime: number; band?: LongitudeBand }[],
+  viewLongitude: number | null = null,
 ): Id | null {
-  let best: { id: Id; cadenceSeconds: number; runTime: number } | null = null;
+  const inView = (member: { band?: LongitudeBand }): boolean =>
+    viewLongitude !== null && member.band !== undefined && bandContains(member.band, viewLongitude);
+  let best: (typeof members)[number] | null = null;
   for (const member of members) {
-    if (
-      best === null ||
-      member.cadenceSeconds < best.cadenceSeconds ||
-      (member.cadenceSeconds === best.cadenceSeconds && member.runTime > best.runTime)
-    ) {
+    if (best === null || member.cadenceSeconds < best.cadenceSeconds) {
       best = member;
+      continue;
     }
+    if (member.cadenceSeconds > best.cadenceSeconds) continue;
+    const memberInView = inView(member);
+    const bestInView = inView(best);
+    if (memberInView !== bestInView) {
+      if (memberInView) best = member;
+      continue;
+    }
+    if (member.runTime > best.runTime) best = member;
   }
   return best?.id ?? null;
 }
