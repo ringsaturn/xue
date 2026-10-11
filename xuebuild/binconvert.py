@@ -64,6 +64,7 @@ from .variables import (
     ZHOUYE_COMPONENT_IDS,
     DUST_RGB_COMPONENT_IDS,
     CAT_LEVELS_HPA,
+    CLOUD_WATER_VARIABLE_IDS,
     ISOBARIC_LEVELS_HPA,
     REFLECTIVITY_VARIABLE_IDS,
     STANDARD_GRAVITY,
@@ -135,11 +136,13 @@ COMPOSITE_BUNDLES: dict[str, tuple[str, ...]] = {
 
 # Volume bundles: many variables each read directly off the source's
 # records and written as one bundle in this order — the MRMS reflectivity
-# mosaic's 33 constant-altitude levels, lowest first, so a cell's column is
-# one tile's adjacent chunks. Nothing is derived; the bundle is a packaging
-# of its members. Mirrored in encode/convert.rs.
+# mosaic's 33 constant-altitude levels and a model's cloud water on 24,
+# lowest first, so a cell's column is one tile's adjacent chunks. Nothing
+# is derived; the bundle is a packaging of its members. Mirrored in
+# encode/convert.rs.
 VOLUME_BUNDLES: dict[str, tuple[str, ...]] = {
     "refl3d": REFLECTIVITY_VARIABLE_IDS,
+    "cloud3d": CLOUD_WATER_VARIABLE_IDS,
 }
 
 

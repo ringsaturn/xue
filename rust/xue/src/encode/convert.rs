@@ -21,7 +21,7 @@ use crate::encode::variables::{
     is_static, isobaric_variable, reflectivity_level, variable_spec, CAT_LEVELS_HPA, DUST_CF_BUNDLE_ID,
     DUST_CF_COMPONENT_IDS, DUST_RGB_BUNDLE_ID, DUST_RGB_COMPONENT_IDS, ISOBARIC_LEVELS_HPA, ZHOUYE_BUNDLE_ID,
     ZHOUYE_COMPONENT_IDS,
-    REFLECTIVITY_VARIABLE_IDS, STANDARD_GRAVITY, WAVE_VECTOR_COMPONENT_IDS,
+    CLOUD_WATER_VARIABLE_IDS, REFLECTIVITY_VARIABLE_IDS, STANDARD_GRAVITY, WAVE_VECTOR_COMPONENT_IDS,
 };
 use crate::encode::gdalio::{needs_serial_access, netcdf_guard, Dataset};
 use crate::encode::gribpng::GribPngFile;
@@ -114,15 +114,19 @@ pub fn composite_components(bundle_id: &str) -> Option<Vec<String>> {
 
 /// The MRMS 3D reflectivity volume: one variable per constant-altitude level.
 pub const REFLECTIVITY_VOLUME_BUNDLE_ID: &str = "refl3d";
+/// The WOOF nest's cloud water volume: one variable per constant-altitude
+/// level.
+pub const CLOUD_WATER_VOLUME_BUNDLE_ID: &str = "cloud3d";
 
-/// Volume bundles: many variables, each read directly from its own record,
-/// written as one bundle in this order — the MRMS 3D mosaic's reflectivity
-/// on its 33 levels, bottom to top. Unlike a composite's, the members are
-/// the source's own inputs. Mirrors `VOLUME_BUNDLES` in
-/// `xuebuild/binconvert.py`.
+/// Volume bundles: many variables, each read directly from its own record
+/// or series, written as one bundle in this order — the MRMS 3D mosaic's
+/// reflectivity on its 33 levels and the WOOF nest's cloud water on its 24,
+/// each bottom to top. Unlike a composite's, the members are the source's
+/// own inputs. Mirrors `VOLUME_BUNDLES` in `xuebuild/binconvert.py`.
 pub fn volume_components(bundle_id: &str) -> Option<Vec<String>> {
     let members: &[&str] = match bundle_id {
         REFLECTIVITY_VOLUME_BUNDLE_ID => &REFLECTIVITY_VARIABLE_IDS,
+        CLOUD_WATER_VOLUME_BUNDLE_ID => &CLOUD_WATER_VARIABLE_IDS,
         _ => return None,
     };
     Some(members.iter().map(|id| (*id).to_string()).collect())
@@ -3536,7 +3540,7 @@ mod composite_tests {
 mod volume_tests {
     use super::{bundle_input_ids, bundle_variable_ids, is_raw_variable, published_bundle_ids};
     use crate::encode::sources::source_spec;
-    use crate::encode::variables::REFLECTIVITY_VARIABLE_IDS;
+    use crate::encode::variables::{CLOUD_WATER_VARIABLE_IDS, REFLECTIVITY_VARIABLE_IDS};
 
     /// The `refl3d` volume carries the 33 levels bottom to top, reads each
     /// from its own record, publishes after every other kind of bundle and
@@ -3558,9 +3562,41 @@ mod volume_tests {
             assert!(!is_raw_variable(variable_id), "{variable_id}");
         }
         // No other source publishes one.
-        for model in ["gfs", "ecmwf", "mrms", "himawari", "cma"] {
+        for model in ["gfs", "ecmwf", "mrms", "himawari", "cma", "woof"] {
             assert!(
                 !published_bundle_ids(source_spec(model).expect(model)).contains(&"refl3d"),
+                "{model}"
+            );
+        }
+    }
+
+    /// The `cloud3d` volume carries the 24 cloud water levels bottom to
+    /// top, reads each from its own series and publishes after the nest's
+    /// scalars and its wind. Unlike reflectivity, cloud water is smooth from
+    /// one hour to the next, so its levels chain like any linear field.
+    /// Mirrors `VOLUME_BUNDLES` in `xuebuild/binconvert.py`.
+    #[test]
+    fn the_cloud_water_volume_is_its_24_levels_in_order() {
+        let source = source_spec("woof").expect("woof");
+        assert_eq!(bundle_variable_ids("cloud3d"), CLOUD_WATER_VARIABLE_IDS);
+        assert_eq!(
+            bundle_input_ids(source, "cloud3d"),
+            CLOUD_WATER_VARIABLE_IDS
+        );
+        let published = published_bundle_ids(source);
+        assert_eq!(
+            published,
+            [
+                "tmp2m", "prate", "tmpsfc", "dpt2m", "tcdc", "lcdc", "mcdc", "hcdc", "hpbl",
+                "dswrf", "orog", "wind10m", "cloud3d",
+            ]
+        );
+        for variable_id in CLOUD_WATER_VARIABLE_IDS {
+            assert!(!is_raw_variable(variable_id), "{variable_id}");
+        }
+        for model in ["gfs", "ecmwf", "hrrr", "ifshres", "mrms3d", "himawari"] {
+            assert!(
+                !published_bundle_ids(source_spec(model).expect(model)).contains(&"cloud3d"),
                 "{model}"
             );
         }

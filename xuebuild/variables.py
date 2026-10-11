@@ -1804,6 +1804,60 @@ for _level in REFLECTIVITY_LEVELS_M:
     VARIABLES[reflectivity_variable_id(_level)] = _reflectivity_spec(_level)
 del _level
 
+
+# The cloud water volume: a model's liquid cloud water mixing ratio on 24
+# constant-altitude planes, 250 m to 12 km above mean sea level — every
+# 250 m to 3 km, every 500 m to 6 km, every kilometre to 12 km, densest
+# where valley fog and boundary-layer cloud live. Each level is the WMO
+# cloud mixing ratio (0/1/22, CLWMR) on the "specific altitude above mean
+# sea level" surface (102) at the level's height in metres, the surface the
+# reflectivity volume uses. The series a model writes for it are already in
+# g/kg, so there is no unit rule; a level under the model terrain is NaN in
+# the series, which the converter fills with the bottom of the codebook
+# (no cloud). The order is the bundle's variable order (``cloud3d``).
+CLOUD_WATER_LEVELS_M: tuple[int, ...] = (
+    250, 500, 750, 1000, 1250, 1500, 1750, 2000, 2250, 2500, 2750, 3000,
+    3500, 4000, 4500, 5000, 5500, 6000,
+    7000, 8000, 9000, 10000, 11000, 12000,
+)  # fmt: skip
+
+
+def cloud_water_variable_id(level_m: int) -> str:
+    return f"clw{level_m}"
+
+
+def cloud_water_level(variable_id: str) -> int | None:
+    """The altitude in metres of a ``clw<metres>`` variable, or None for
+    anything else — including a height that is not one of the volume's."""
+    if variable_id.startswith("clw") and variable_id[len("clw") :].isdigit():
+        level = int(variable_id[len("clw") :])
+        if level in CLOUD_WATER_LEVELS_M:
+            return level
+    return None
+
+
+CLOUD_WATER_VARIABLE_IDS: tuple[str, ...] = tuple(cloud_water_variable_id(level) for level in CLOUD_WATER_LEVELS_M)
+
+
+def _cloud_water_spec(level_m: int) -> VariableSpec:
+    return VariableSpec(
+        id=cloud_water_variable_id(level_m),
+        label=f"Cloud water at {level_m / 1000:g} km MSL",
+        output_unit="g/kg",
+        value_range=(0, 3),
+        grib2_discipline=0,
+        grib2_category=1,
+        grib2_number=22,
+        grib2_level_type=102,
+        grib2_level_value=float(level_m),
+        gdal_unit="g/kg",
+    )
+
+
+for _level in CLOUD_WATER_LEVELS_M:
+    VARIABLES[cloud_water_variable_id(_level)] = _cloud_water_spec(_level)
+del _level
+
 # Standard gravity, the g in q·V/g.
 STANDARD_GRAVITY = 9.80665
 

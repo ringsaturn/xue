@@ -1,0 +1,1598 @@
+{
+  "refl500": {
+    "label": "Radar reflectivity at 0.5 km MSL",
+    "unit": "dBZ",
+    "parameter": {
+      "discipline": 209,
+      "parameterCategory": 9,
+      "parameterNumber": 0,
+      "typeOfFirstFixedSurface": 102,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 500
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 160,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 80,
+      "nodataCode": 255
+    }
+  },
+  "refl750": {
+    "label": "Radar reflectivity at 0.75 km MSL",
+    "unit": "dBZ",
+    "parameter": {
+      "discipline": 209,
+      "parameterCategory": 9,
+      "parameterNumber": 0,
+      "typeOfFirstFixedSurface": 102,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 750
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 160,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 80,
+      "nodataCode": 255
+    }
+  },
+  "refl1000": {
+    "label": "Radar reflectivity at 1 km MSL",
+    "unit": "dBZ",
+    "parameter": {
+      "discipline": 209,
+      "parameterCategory": 9,
+      "parameterNumber": 0,
+      "typeOfFirstFixedSurface": 102,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 1000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 160,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 80,
+      "nodataCode": 255
+    }
+  },
+  "refl1250": {
+    "label": "Radar reflectivity at 1.25 km MSL",
+    "unit": "dBZ",
+    "parameter": {
+      "discipline": 209,
+      "parameterCategory": 9,
+      "parameterNumber": 0,
+      "typeOfFirstFixedSurface": 102,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 1250
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 160,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 80,
+      "nodataCode": 255
+    }
+  },
+  "refl1500": {
+    "label": "Radar reflectivity at 1.5 km MSL",
+    "unit": "dBZ",
+    "parameter": {
+      "discipline": 209,
+      "parameterCategory": 9,
+      "parameterNumber": 0,
+      "typeOfFirstFixedSurface": 102,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 1500
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 160,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 80,
+      "nodataCode": 255
+    }
+  },
+  "refl1750": {
+    "label": "Radar reflectivity at 1.75 km MSL",
+    "unit": "dBZ",
+    "parameter": {
+      "discipline": 209,
+      "parameterCategory": 9,
+      "parameterNumber": 0,
+      "typeOfFirstFixedSurface": 102,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 1750
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 160,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 80,
+      "nodataCode": 255
+    }
+  },
+  "refl2000": {
+    "label": "Radar reflectivity at 2 km MSL",
+    "unit": "dBZ",
+    "parameter": {
+      "discipline": 209,
+      "parameterCategory": 9,
+      "parameterNumber": 0,
+      "typeOfFirstFixedSurface": 102,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 2000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 160,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 80,
+      "nodataCode": 255
+    }
+  },
+  "refl2250": {
+    "label": "Radar reflectivity at 2.25 km MSL",
+    "unit": "dBZ",
+    "parameter": {
+      "discipline": 209,
+      "parameterCategory": 9,
+      "parameterNumber": 0,
+      "typeOfFirstFixedSurface": 102,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 2250
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 160,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 80,
+      "nodataCode": 255
+    }
+  },
+  "refl2500": {
+    "label": "Radar reflectivity at 2.5 km MSL",
+    "unit": "dBZ",
+    "parameter": {
+      "discipline": 209,
+      "parameterCategory": 9,
+      "parameterNumber": 0,
+      "typeOfFirstFixedSurface": 102,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 2500
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 160,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 80,
+      "nodataCode": 255
+    }
+  },
+  "refl2750": {
+    "label": "Radar reflectivity at 2.75 km MSL",
+    "unit": "dBZ",
+    "parameter": {
+      "discipline": 209,
+      "parameterCategory": 9,
+      "parameterNumber": 0,
+      "typeOfFirstFixedSurface": 102,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 2750
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 160,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 80,
+      "nodataCode": 255
+    }
+  },
+  "refl3000": {
+    "label": "Radar reflectivity at 3 km MSL",
+    "unit": "dBZ",
+    "parameter": {
+      "discipline": 209,
+      "parameterCategory": 9,
+      "parameterNumber": 0,
+      "typeOfFirstFixedSurface": 102,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 3000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 160,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 80,
+      "nodataCode": 255
+    }
+  },
+  "refl3500": {
+    "label": "Radar reflectivity at 3.5 km MSL",
+    "unit": "dBZ",
+    "parameter": {
+      "discipline": 209,
+      "parameterCategory": 9,
+      "parameterNumber": 0,
+      "typeOfFirstFixedSurface": 102,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 3500
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 160,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 80,
+      "nodataCode": 255
+    }
+  },
+  "refl4000": {
+    "label": "Radar reflectivity at 4 km MSL",
+    "unit": "dBZ",
+    "parameter": {
+      "discipline": 209,
+      "parameterCategory": 9,
+      "parameterNumber": 0,
+      "typeOfFirstFixedSurface": 102,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 4000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 160,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 80,
+      "nodataCode": 255
+    }
+  },
+  "refl4500": {
+    "label": "Radar reflectivity at 4.5 km MSL",
+    "unit": "dBZ",
+    "parameter": {
+      "discipline": 209,
+      "parameterCategory": 9,
+      "parameterNumber": 0,
+      "typeOfFirstFixedSurface": 102,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 4500
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 160,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 80,
+      "nodataCode": 255
+    }
+  },
+  "refl5000": {
+    "label": "Radar reflectivity at 5 km MSL",
+    "unit": "dBZ",
+    "parameter": {
+      "discipline": 209,
+      "parameterCategory": 9,
+      "parameterNumber": 0,
+      "typeOfFirstFixedSurface": 102,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 5000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 160,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 80,
+      "nodataCode": 255
+    }
+  },
+  "refl5500": {
+    "label": "Radar reflectivity at 5.5 km MSL",
+    "unit": "dBZ",
+    "parameter": {
+      "discipline": 209,
+      "parameterCategory": 9,
+      "parameterNumber": 0,
+      "typeOfFirstFixedSurface": 102,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 5500
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 160,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 80,
+      "nodataCode": 255
+    }
+  },
+  "refl6000": {
+    "label": "Radar reflectivity at 6 km MSL",
+    "unit": "dBZ",
+    "parameter": {
+      "discipline": 209,
+      "parameterCategory": 9,
+      "parameterNumber": 0,
+      "typeOfFirstFixedSurface": 102,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 6000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 160,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 80,
+      "nodataCode": 255
+    }
+  },
+  "refl6500": {
+    "label": "Radar reflectivity at 6.5 km MSL",
+    "unit": "dBZ",
+    "parameter": {
+      "discipline": 209,
+      "parameterCategory": 9,
+      "parameterNumber": 0,
+      "typeOfFirstFixedSurface": 102,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 6500
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 160,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 80,
+      "nodataCode": 255
+    }
+  },
+  "refl7000": {
+    "label": "Radar reflectivity at 7 km MSL",
+    "unit": "dBZ",
+    "parameter": {
+      "discipline": 209,
+      "parameterCategory": 9,
+      "parameterNumber": 0,
+      "typeOfFirstFixedSurface": 102,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 7000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 160,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 80,
+      "nodataCode": 255
+    }
+  },
+  "refl7500": {
+    "label": "Radar reflectivity at 7.5 km MSL",
+    "unit": "dBZ",
+    "parameter": {
+      "discipline": 209,
+      "parameterCategory": 9,
+      "parameterNumber": 0,
+      "typeOfFirstFixedSurface": 102,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 7500
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 160,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 80,
+      "nodataCode": 255
+    }
+  },
+  "refl8000": {
+    "label": "Radar reflectivity at 8 km MSL",
+    "unit": "dBZ",
+    "parameter": {
+      "discipline": 209,
+      "parameterCategory": 9,
+      "parameterNumber": 0,
+      "typeOfFirstFixedSurface": 102,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 8000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 160,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 80,
+      "nodataCode": 255
+    }
+  },
+  "refl8500": {
+    "label": "Radar reflectivity at 8.5 km MSL",
+    "unit": "dBZ",
+    "parameter": {
+      "discipline": 209,
+      "parameterCategory": 9,
+      "parameterNumber": 0,
+      "typeOfFirstFixedSurface": 102,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 8500
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 160,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 80,
+      "nodataCode": 255
+    }
+  },
+  "refl9000": {
+    "label": "Radar reflectivity at 9 km MSL",
+    "unit": "dBZ",
+    "parameter": {
+      "discipline": 209,
+      "parameterCategory": 9,
+      "parameterNumber": 0,
+      "typeOfFirstFixedSurface": 102,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 9000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 160,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 80,
+      "nodataCode": 255
+    }
+  },
+  "refl10000": {
+    "label": "Radar reflectivity at 10 km MSL",
+    "unit": "dBZ",
+    "parameter": {
+      "discipline": 209,
+      "parameterCategory": 9,
+      "parameterNumber": 0,
+      "typeOfFirstFixedSurface": 102,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 10000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 160,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 80,
+      "nodataCode": 255
+    }
+  },
+  "refl11000": {
+    "label": "Radar reflectivity at 11 km MSL",
+    "unit": "dBZ",
+    "parameter": {
+      "discipline": 209,
+      "parameterCategory": 9,
+      "parameterNumber": 0,
+      "typeOfFirstFixedSurface": 102,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 11000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 160,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 80,
+      "nodataCode": 255
+    }
+  },
+  "refl12000": {
+    "label": "Radar reflectivity at 12 km MSL",
+    "unit": "dBZ",
+    "parameter": {
+      "discipline": 209,
+      "parameterCategory": 9,
+      "parameterNumber": 0,
+      "typeOfFirstFixedSurface": 102,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 12000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 160,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 80,
+      "nodataCode": 255
+    }
+  },
+  "refl13000": {
+    "label": "Radar reflectivity at 13 km MSL",
+    "unit": "dBZ",
+    "parameter": {
+      "discipline": 209,
+      "parameterCategory": 9,
+      "parameterNumber": 0,
+      "typeOfFirstFixedSurface": 102,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 13000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 160,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 80,
+      "nodataCode": 255
+    }
+  },
+  "refl14000": {
+    "label": "Radar reflectivity at 14 km MSL",
+    "unit": "dBZ",
+    "parameter": {
+      "discipline": 209,
+      "parameterCategory": 9,
+      "parameterNumber": 0,
+      "typeOfFirstFixedSurface": 102,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 14000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 160,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 80,
+      "nodataCode": 255
+    }
+  },
+  "refl15000": {
+    "label": "Radar reflectivity at 15 km MSL",
+    "unit": "dBZ",
+    "parameter": {
+      "discipline": 209,
+      "parameterCategory": 9,
+      "parameterNumber": 0,
+      "typeOfFirstFixedSurface": 102,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 15000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 160,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 80,
+      "nodataCode": 255
+    }
+  },
+  "refl16000": {
+    "label": "Radar reflectivity at 16 km MSL",
+    "unit": "dBZ",
+    "parameter": {
+      "discipline": 209,
+      "parameterCategory": 9,
+      "parameterNumber": 0,
+      "typeOfFirstFixedSurface": 102,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 16000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 160,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 80,
+      "nodataCode": 255
+    }
+  },
+  "refl17000": {
+    "label": "Radar reflectivity at 17 km MSL",
+    "unit": "dBZ",
+    "parameter": {
+      "discipline": 209,
+      "parameterCategory": 9,
+      "parameterNumber": 0,
+      "typeOfFirstFixedSurface": 102,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 17000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 160,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 80,
+      "nodataCode": 255
+    }
+  },
+  "refl18000": {
+    "label": "Radar reflectivity at 18 km MSL",
+    "unit": "dBZ",
+    "parameter": {
+      "discipline": 209,
+      "parameterCategory": 9,
+      "parameterNumber": 0,
+      "typeOfFirstFixedSurface": 102,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 18000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 160,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 80,
+      "nodataCode": 255
+    }
+  },
+  "refl19000": {
+    "label": "Radar reflectivity at 19 km MSL",
+    "unit": "dBZ",
+    "parameter": {
+      "discipline": 209,
+      "parameterCategory": 9,
+      "parameterNumber": 0,
+      "typeOfFirstFixedSurface": 102,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 19000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 160,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 80,
+      "nodataCode": 255
+    }
+  },
+  "clw250": {
+    "label": "Cloud water at 0.25 km MSL",
+    "unit": "g/kg",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 1,
+      "parameterNumber": 22,
+      "typeOfFirstFixedSurface": 102,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 250
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.01,
+      "minimumCode": 0,
+      "maximumCode": 253,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.02,
+      "minimumCode": 0,
+      "maximumCode": 126,
+      "nodataCode": 255
+    }
+  },
+  "clw500": {
+    "label": "Cloud water at 0.5 km MSL",
+    "unit": "g/kg",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 1,
+      "parameterNumber": 22,
+      "typeOfFirstFixedSurface": 102,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 500
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.01,
+      "minimumCode": 0,
+      "maximumCode": 253,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.02,
+      "minimumCode": 0,
+      "maximumCode": 126,
+      "nodataCode": 255
+    }
+  },
+  "clw750": {
+    "label": "Cloud water at 0.75 km MSL",
+    "unit": "g/kg",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 1,
+      "parameterNumber": 22,
+      "typeOfFirstFixedSurface": 102,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 750
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.01,
+      "minimumCode": 0,
+      "maximumCode": 253,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.02,
+      "minimumCode": 0,
+      "maximumCode": 126,
+      "nodataCode": 255
+    }
+  },
+  "clw1000": {
+    "label": "Cloud water at 1 km MSL",
+    "unit": "g/kg",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 1,
+      "parameterNumber": 22,
+      "typeOfFirstFixedSurface": 102,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 1000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.01,
+      "minimumCode": 0,
+      "maximumCode": 253,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.02,
+      "minimumCode": 0,
+      "maximumCode": 126,
+      "nodataCode": 255
+    }
+  },
+  "clw1250": {
+    "label": "Cloud water at 1.25 km MSL",
+    "unit": "g/kg",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 1,
+      "parameterNumber": 22,
+      "typeOfFirstFixedSurface": 102,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 1250
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.01,
+      "minimumCode": 0,
+      "maximumCode": 253,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.02,
+      "minimumCode": 0,
+      "maximumCode": 126,
+      "nodataCode": 255
+    }
+  },
+  "clw1500": {
+    "label": "Cloud water at 1.5 km MSL",
+    "unit": "g/kg",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 1,
+      "parameterNumber": 22,
+      "typeOfFirstFixedSurface": 102,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 1500
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.01,
+      "minimumCode": 0,
+      "maximumCode": 253,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.02,
+      "minimumCode": 0,
+      "maximumCode": 126,
+      "nodataCode": 255
+    }
+  },
+  "clw1750": {
+    "label": "Cloud water at 1.75 km MSL",
+    "unit": "g/kg",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 1,
+      "parameterNumber": 22,
+      "typeOfFirstFixedSurface": 102,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 1750
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.01,
+      "minimumCode": 0,
+      "maximumCode": 253,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.02,
+      "minimumCode": 0,
+      "maximumCode": 126,
+      "nodataCode": 255
+    }
+  },
+  "clw2000": {
+    "label": "Cloud water at 2 km MSL",
+    "unit": "g/kg",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 1,
+      "parameterNumber": 22,
+      "typeOfFirstFixedSurface": 102,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 2000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.01,
+      "minimumCode": 0,
+      "maximumCode": 253,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.02,
+      "minimumCode": 0,
+      "maximumCode": 126,
+      "nodataCode": 255
+    }
+  },
+  "clw2250": {
+    "label": "Cloud water at 2.25 km MSL",
+    "unit": "g/kg",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 1,
+      "parameterNumber": 22,
+      "typeOfFirstFixedSurface": 102,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 2250
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.01,
+      "minimumCode": 0,
+      "maximumCode": 253,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.02,
+      "minimumCode": 0,
+      "maximumCode": 126,
+      "nodataCode": 255
+    }
+  },
+  "clw2500": {
+    "label": "Cloud water at 2.5 km MSL",
+    "unit": "g/kg",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 1,
+      "parameterNumber": 22,
+      "typeOfFirstFixedSurface": 102,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 2500
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.01,
+      "minimumCode": 0,
+      "maximumCode": 253,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.02,
+      "minimumCode": 0,
+      "maximumCode": 126,
+      "nodataCode": 255
+    }
+  },
+  "clw2750": {
+    "label": "Cloud water at 2.75 km MSL",
+    "unit": "g/kg",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 1,
+      "parameterNumber": 22,
+      "typeOfFirstFixedSurface": 102,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 2750
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.01,
+      "minimumCode": 0,
+      "maximumCode": 253,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.02,
+      "minimumCode": 0,
+      "maximumCode": 126,
+      "nodataCode": 255
+    }
+  },
+  "clw3000": {
+    "label": "Cloud water at 3 km MSL",
+    "unit": "g/kg",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 1,
+      "parameterNumber": 22,
+      "typeOfFirstFixedSurface": 102,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 3000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.01,
+      "minimumCode": 0,
+      "maximumCode": 253,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.02,
+      "minimumCode": 0,
+      "maximumCode": 126,
+      "nodataCode": 255
+    }
+  },
+  "clw3500": {
+    "label": "Cloud water at 3.5 km MSL",
+    "unit": "g/kg",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 1,
+      "parameterNumber": 22,
+      "typeOfFirstFixedSurface": 102,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 3500
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.01,
+      "minimumCode": 0,
+      "maximumCode": 253,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.02,
+      "minimumCode": 0,
+      "maximumCode": 126,
+      "nodataCode": 255
+    }
+  },
+  "clw4000": {
+    "label": "Cloud water at 4 km MSL",
+    "unit": "g/kg",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 1,
+      "parameterNumber": 22,
+      "typeOfFirstFixedSurface": 102,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 4000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.01,
+      "minimumCode": 0,
+      "maximumCode": 253,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.02,
+      "minimumCode": 0,
+      "maximumCode": 126,
+      "nodataCode": 255
+    }
+  },
+  "clw4500": {
+    "label": "Cloud water at 4.5 km MSL",
+    "unit": "g/kg",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 1,
+      "parameterNumber": 22,
+      "typeOfFirstFixedSurface": 102,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 4500
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.01,
+      "minimumCode": 0,
+      "maximumCode": 253,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.02,
+      "minimumCode": 0,
+      "maximumCode": 126,
+      "nodataCode": 255
+    }
+  },
+  "clw5000": {
+    "label": "Cloud water at 5 km MSL",
+    "unit": "g/kg",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 1,
+      "parameterNumber": 22,
+      "typeOfFirstFixedSurface": 102,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 5000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.01,
+      "minimumCode": 0,
+      "maximumCode": 253,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.02,
+      "minimumCode": 0,
+      "maximumCode": 126,
+      "nodataCode": 255
+    }
+  },
+  "clw5500": {
+    "label": "Cloud water at 5.5 km MSL",
+    "unit": "g/kg",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 1,
+      "parameterNumber": 22,
+      "typeOfFirstFixedSurface": 102,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 5500
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.01,
+      "minimumCode": 0,
+      "maximumCode": 253,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.02,
+      "minimumCode": 0,
+      "maximumCode": 126,
+      "nodataCode": 255
+    }
+  },
+  "clw6000": {
+    "label": "Cloud water at 6 km MSL",
+    "unit": "g/kg",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 1,
+      "parameterNumber": 22,
+      "typeOfFirstFixedSurface": 102,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 6000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.01,
+      "minimumCode": 0,
+      "maximumCode": 253,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.02,
+      "minimumCode": 0,
+      "maximumCode": 126,
+      "nodataCode": 255
+    }
+  },
+  "clw7000": {
+    "label": "Cloud water at 7 km MSL",
+    "unit": "g/kg",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 1,
+      "parameterNumber": 22,
+      "typeOfFirstFixedSurface": 102,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 7000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.01,
+      "minimumCode": 0,
+      "maximumCode": 253,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.02,
+      "minimumCode": 0,
+      "maximumCode": 126,
+      "nodataCode": 255
+    }
+  },
+  "clw8000": {
+    "label": "Cloud water at 8 km MSL",
+    "unit": "g/kg",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 1,
+      "parameterNumber": 22,
+      "typeOfFirstFixedSurface": 102,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 8000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.01,
+      "minimumCode": 0,
+      "maximumCode": 253,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.02,
+      "minimumCode": 0,
+      "maximumCode": 126,
+      "nodataCode": 255
+    }
+  },
+  "clw9000": {
+    "label": "Cloud water at 9 km MSL",
+    "unit": "g/kg",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 1,
+      "parameterNumber": 22,
+      "typeOfFirstFixedSurface": 102,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 9000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.01,
+      "minimumCode": 0,
+      "maximumCode": 253,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.02,
+      "minimumCode": 0,
+      "maximumCode": 126,
+      "nodataCode": 255
+    }
+  },
+  "clw10000": {
+    "label": "Cloud water at 10 km MSL",
+    "unit": "g/kg",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 1,
+      "parameterNumber": 22,
+      "typeOfFirstFixedSurface": 102,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 10000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.01,
+      "minimumCode": 0,
+      "maximumCode": 253,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.02,
+      "minimumCode": 0,
+      "maximumCode": 126,
+      "nodataCode": 255
+    }
+  },
+  "clw11000": {
+    "label": "Cloud water at 11 km MSL",
+    "unit": "g/kg",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 1,
+      "parameterNumber": 22,
+      "typeOfFirstFixedSurface": 102,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 11000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.01,
+      "minimumCode": 0,
+      "maximumCode": 253,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.02,
+      "minimumCode": 0,
+      "maximumCode": 126,
+      "nodataCode": 255
+    }
+  },
+  "clw12000": {
+    "label": "Cloud water at 12 km MSL",
+    "unit": "g/kg",
+    "parameter": {
+      "discipline": 0,
+      "parameterCategory": 1,
+      "parameterNumber": 22,
+      "typeOfFirstFixedSurface": 102,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 12000
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.01,
+      "minimumCode": 0,
+      "maximumCode": 253,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.02,
+      "minimumCode": 0,
+      "maximumCode": 126,
+      "nodataCode": 255
+    }
+  }
+}
