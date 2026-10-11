@@ -796,7 +796,7 @@ describe("dataset kinds", () => {
       observation: true,
       coreBundles: ["ir104"],
       defaultVariable: "ir104",
-      railCore: ["ir104", "dustrgb", "truecolor", "nightmicro"],
+      railCore: ["ir104", "dustrgb", "truecolor"],
       region: [-60, -60, 60, 60],
     });
     expect(isObservationModel("meteosat")).toBe(true);
@@ -815,7 +815,7 @@ describe("dataset kinds", () => {
       observation: true,
       coreBundles: ["ir104"],
       defaultVariable: "ir104",
-      railCore: ["ir104", "dustrgb", "truecolor", "nightmicro"],
+      railCore: ["ir104", "dustrgb", "truecolor"],
       region: [122, 24, 148, 46],
       subLongitude: FORECAST_MODELS.himawari.subLongitude,
       cadenceSeconds: 600,
@@ -854,7 +854,7 @@ describe("dataset kinds", () => {
         observation: true,
         coreBundles: ["ir104"],
         defaultVariable: "ir104",
-        railCore: ["ir104", "dustrgb", "dustcf", "zhouye", "truecolor", "nightmicro"],
+        railCore: ["ir104", "dustrgb", "dustcf", "zhouye", "truecolor"],
       });
       expect(isObservationModel(id)).toBe(true);
     }
@@ -873,7 +873,7 @@ describe("dataset kinds", () => {
       observation: true,
       coreBundles: ["ir104"],
       defaultVariable: "ir104",
-      railCore: ["ir104", "dustrgb", "dustcf", "zhouye", "truecolor", "nightmicro"],
+      railCore: ["ir104", "dustrgb", "dustcf", "zhouye", "truecolor"],
       region: [80.7, -60, 200.7, 60],
     });
     expect(isObservationModel("himawari")).toBe(true);

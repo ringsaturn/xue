@@ -440,29 +440,6 @@ export function searchWithVolume(search: string, volume: ForecastBundleId | null
   return `?${params.toString()}`;
 }
 
-/** How a field is completed where it has no data, from `?blend=`: `night`
- * is the day-night view, the true colour with the night microphysics
- * picture drawn under it (viewstate.ts::blendUnderField). The only mode
- * there is. */
-export type BlendMode = "night";
-
-/** The blend named by `?blend=`, case-insensitive; anything else — `off`,
- * a mode this build does not know — reads as none rather than an error.
- * Whether it applies (the field, the run) is the view's answer. */
-export function parseBlendFromSearch(search: string): BlendMode | null {
-  const value = new URLSearchParams(search).get("blend")?.trim().toLowerCase();
-  return value === "night" ? "night" : null;
-}
-
-/** The given query string carrying the blend, or none. Written only while
- * the blend applies to the field on screen. */
-export function searchWithBlend(search: string, blend: BlendMode | null): string {
-  const params = new URLSearchParams(search);
-  if (blend === null) params.delete("blend");
-  else params.set("blend", blend);
-  return `?${params.toString()}`;
-}
-
 /** The largest `?vexag=` honoured. */
 const MAX_VERTICAL_EXAGGERATION = 200;
 

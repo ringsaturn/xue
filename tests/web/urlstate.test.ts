@@ -15,14 +15,12 @@ import {
   parseVariableFromSearch,
   parseVerticalExaggerationFromSearch,
   parseVolumeFromSearch,
-  parseBlendFromSearch,
   searchForVariable,
   searchWithExperiment,
   searchWithLines,
   searchWithParticles,
   searchWithScene,
   searchWithVolume,
-  searchWithBlend,
 } from "../../web/src/urlstate";
 import type { KnownBundleId } from "../../web/src/manifest";
 
@@ -170,9 +168,6 @@ describe("the fields' own ?type= spellings", () => {
     ["?type=rgb", "truecolor"],
     ["?type=color", "truecolor"],
     ["?type=colour", "truecolor"],
-    ["?type=nightmicro", "nightmicro"],
-    ["?type=night", "nightmicro"],
-    ["?type=nightrgb", "nightmicro"],
   ])("reads %s as %s", (search, id) => {
     expect(parseVariableFromSearch(search)).toBe(id);
   });
@@ -200,7 +195,6 @@ describe("the fields' own ?type= spellings", () => {
     ["dustcf", "debra"],
     ["zhouye", "zhouye"],
     ["truecolor", "truecolor"],
-    ["nightmicro", "nightmicro"],
   ])("writes %s as type=%s and reads it back", (id, spelling) => {
     expect(searchForVariable(id, "")).toBe(`?model=gfs&type=${spelling}`);
     expect(parseVariableFromSearch(searchForVariable(id, ""))).toBe(id);
@@ -548,9 +542,6 @@ describe("the volume parameters", () => {
     expect(parseVolumeFromSearch("?volume=refl3d")).toBe("refl3d");
     expect(parseVolumeFromSearch("?volume=cloud")).toBeNull();
     expect(parseVolumeFromSearch("?volume=")).toBeNull();
-    expect(parseBlendFromSearch(searchWithBlend("?case=x", "night"))).toBe("night");
-    expect(searchWithBlend("?case=x&blend=night", null)).toBe("?case=x");
-    expect(parseBlendFromSearch("?blend=day")).toBeNull();
   });
 
   it("reads ?vexag= as a positive number up to 200, or the volume's default", () => {
