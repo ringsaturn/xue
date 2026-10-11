@@ -1758,13 +1758,12 @@ SOURCES: dict[str, SourceSpec] = {
     # so three channels feed the Dust RGB and the green gun reads
     # 10.5 − 8.7 µm, the original SEVIRI recipe; IR 3.8, IR 10.5 and
     # IR 12.3 feed the night microphysics. The imager scans every ten
-    # minutes; this source
-    # publishes **the cycle on the hour alone** (``cadence_seconds`` 3600
-    # against the platform's 600), because the EUMETSAT data policy
-    # releases the hourly Level 1 cycle as Core data under CC-BY-4.0 and
-    # keeps the sub-hourly cycles under a licence that forbids operational
-    # use within an hour of sensing and redistribution of the numbers
-    # after it. A 24-hour window at that cadence is 25 frames.
+    # minutes; this source publishes **the cycle on the hour alone**
+    # (``cadence_seconds`` 3600 against the platform's 600), because the
+    # EUMETSAT data policy releases the hourly Level 1 cycle as Core data
+    # under CC-BY-4.0 and keeps the sub-hourly cycles under a licence that
+    # forbids operational use within an hour of sensing and redistribution
+    # of the numbers after it. A 24-hour window at that cadence is 25 frames.
     "meteosat": SourceSpec(
         id="meteosat",
         manifest_model="METEOSAT",
