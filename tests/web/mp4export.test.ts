@@ -37,7 +37,9 @@ describe("mp4Bitrate", () => {
 
 describe("mp4Size", () => {
   it("scales a wide canvas down to the cap", () => {
-    expect(mp4Size(2880, 1800)).toEqual({ width: 1920, height: 1200 });
+    expect(mp4Size(2880, 1800)).toEqual({ width: 1728, height: 1080 });
+    expect(mp4Size(3248, 1986)).toEqual({ width: 1766, height: 1080 });
+    expect(mp4Size(1080, 2340)).toEqual({ width: 498, height: 1080 });
   });
 
   it("never scales up and keeps both sides even", () => {
@@ -98,8 +100,10 @@ describe("mp4CodecCandidates", () => {
       ["avc1.4d0028", "no-preference"],
       ["avc1.42e028", "prefer-hardware"],
       ["avc1.42e028", "no-preference"],
+      ["avc1.640033", "prefer-hardware"],
+      ["avc1.640033", "no-preference"],
     ]);
-    expect(MP4_CODECS).toHaveLength(3);
+    expect(MP4_CODECS).toHaveLength(4);
     expect(MP4_ACCELERATION).toEqual(["prefer-hardware", "no-preference"]);
   });
 

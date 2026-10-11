@@ -23,17 +23,21 @@ import {
 
 /** Frames of data in one file at most: a frame per hour for ten days. */
 export const MP4_MAX_FRAMES = 240;
-/** The output's width cap: a 1080p-class frame is what players and chats
- * take without a second transcode. */
+/** The output's size cap, 1080p: what players and chats take without a
+ * second transcode, and the most a level-4.0 H.264 encoder accepts — a
+ * retina canvas is taller than 1080 rows at 1920 across, so both sides
+ * are bounded. */
 export const MP4_MAX_WIDTH = 1920;
+export const MP4_MAX_HEIGHT = 1080;
 /** The file's frame rate; the data frames are sampled onto this clock. */
 export const MP4_FPS = 30;
 /** Encodes allowed in flight before capture waits for the encoder. */
 const ENCODE_QUEUE_LIMIT = 4;
 
 /** H.264 profiles in order of preference: High, Main, Constrained Baseline,
- * each at level 4.0 (1080p30), and each asked for with hardware first. */
-export const MP4_CODECS = ["avc1.640028", "avc1.4d0028", "avc1.42e028"] as const;
+ * each at level 4.0 (1080p30), then High at level 5.1 for an encoder that
+ * only advertises the larger level; each asked for with hardware first. */
+export const MP4_CODECS = ["avc1.640028", "avc1.4d0028", "avc1.42e028", "avc1.640033"] as const;
 export const MP4_ACCELERATION = ["prefer-hardware", "no-preference"] as const satisfies readonly HardwareAcceleration[];
 
 /** One sampled picture: which of the window's frames (by position) and how
@@ -43,10 +47,15 @@ export interface Mp4Step {
   weight: number;
 }
 
-/** The output size: the canvas's own pixels, scaled down to the cap, and
- * even on both sides, which H.264's 4:2:0 subsampling needs. */
-export function mp4Size(width: number, height: number, maxWidth = MP4_MAX_WIDTH): { width: number; height: number } {
-  const scale = Math.min(1, maxWidth / width);
+/** The output size: the canvas's own pixels, scaled down to fit the cap on
+ * both sides, and even on both sides, which H.264's 4:2:0 subsampling needs. */
+export function mp4Size(
+  width: number,
+  height: number,
+  maxWidth = MP4_MAX_WIDTH,
+  maxHeight = MP4_MAX_HEIGHT,
+): { width: number; height: number } {
+  const scale = Math.min(1, maxWidth / width, maxHeight / height);
   const even = (value: number) => Math.max(2, Math.round((value * scale) / 2) * 2);
   return { width: even(width), height: even(height) };
 }
