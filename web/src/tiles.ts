@@ -83,13 +83,21 @@ function rowRange(grid: GeoGrid, south: number, north: number): [number, number]
 }
 
 /** The inclusive cell columns a longitude band touches on a grid whose
- * columns do not wrap, or null when the band misses it entirely. The offset
- * is signed — a view west of a cropped window is at a negative cell, not most
- * of the way around the world. */
+ * columns do not wrap, or null when the band misses it entirely. The band
+ * is tried in every copy of the world that can reach the grid — a view west
+ * of a cropped window is at a negative cell, not most of the way around the
+ * world — and a view wider than the world (zoomed out on a wide screen) can
+ * reach it from two copies at once, which together may cover all of it. */
 function croppedColumnRange(grid: GeoGrid, west: number, span: number): [number, number] | null {
-  const offset = wrap(west - grid.firstLongitude + 180, 360) - 180;
-  const first = Math.floor(offset / grid.longitudeStep);
-  const last = Math.ceil((offset + span) / grid.longitudeStep);
+  const extent = grid.width * grid.longitudeStep;
+  const base = wrap(west - grid.firstLongitude, 360);
+  let first = Number.POSITIVE_INFINITY;
+  let last = Number.NEGATIVE_INFINITY;
+  for (let start = base - 360 * Math.ceil(span / 360 + 1); start <= extent; start += 360) {
+    if (start + span < 0) continue;
+    first = Math.min(first, Math.floor(start / grid.longitudeStep));
+    last = Math.max(last, Math.ceil((start + span) / grid.longitudeStep));
+  }
   if (last < 0 || first > grid.width - 1) return null;
   return [clamp(first, 0, grid.width - 1), clamp(last, 0, grid.width - 1)];
 }

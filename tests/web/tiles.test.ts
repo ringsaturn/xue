@@ -150,6 +150,29 @@ describe("viewportTileRects", () => {
     expect(viewportTileRects(disk, tiles, { west: 70, east: 90, south: 0, north: 10 }, 0)?.[0]?.firstColumn).toBe(0);
   });
 
+  it("covers a cropped grid from a view wider than the world", () => {
+    // Meteosat's eighth tier, -60 to 60 at 0.32°, tiled 8 wide, under a
+    // zoomed-out view centred on -60 that spans [-312, 192]: the grid is in
+    // view whole. Folding the west edge into one copy of the world put it
+    // inside the disk's east and kept only its last five columns of tiles.
+    const disk = globalGrid({
+      width: 375,
+      height: 375,
+      firstLongitude: -59.98,
+      firstLatitude: 59.98,
+      longitudeStep: 0.32,
+      latitudeStep: -0.32,
+      wrapLongitude: false,
+    });
+    const tiles: TileGeometry = { tileWidth: 8, tileHeight: 8, columns: 47, rows: 47 };
+    const rects = viewportTileRects(disk, tiles, { west: -312, east: 192, south: -60, north: 60 }, 0);
+    expect(rects === null || (rects[0]!.firstColumn === 0 && rects[0]!.lastColumn === 46)).toBe(true);
+    // A view reaching only the disk's west half, from the copy to its east.
+    const west = viewportTileRects(disk, tiles, { west: 250, east: 360, south: -10, north: 10 }, 0);
+    expect(west?.[0]?.firstColumn).toBe(0);
+    expect(west?.[0]?.lastColumn).toBe(Math.floor(Math.ceil((0 + 59.98) / 0.32) / 8));
+  });
+
   it("is null for a degenerate grid or an unusable span", () => {
     const noGrid = globalGrid({ width: 0 });
     expect(viewportTileRects(noGrid, GFS_TILES, { west: 0, east: 1, south: 0, north: 1 })).toBeNull();
