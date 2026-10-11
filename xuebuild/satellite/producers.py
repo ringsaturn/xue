@@ -28,10 +28,11 @@ from one pass over the same chain — which also read two ancillary fields
 (:mod:`ancillary`) the fetch stage puts on disk for the slot before the
 producer runs (:meth:`Producer.ancillary_for`). The third is this
 pipeline's own: the true colour composite from the slot's visible and
-near-infrared reflectances, with the sun's position and nothing else. A
-producer's outputs are the components of one or more composite bundles
-(:attr:`Producer.bundle_ids`); the fetch stage runs it once for all of
-them and caches every output frame.
+near-infrared reflectances, with the sun's position and nothing else; the
+fourth is too, the night microphysics composite from three infrared
+windows. A producer's outputs are the components of one or more composite
+bundles (:attr:`Producer.bundle_ids`); the fetch stage runs it once for
+all of them and caches every output frame.
 """
 
 from __future__ import annotations
@@ -564,9 +565,91 @@ class TrueColorProducer:
         return results
 
 
+#: The night microphysics recipe's own version, under the same rule as
+#: :data:`TRUE_COLOR_VERSION`: it changes exactly when a constant below
+#: does.
+NIGHT_MICRO_VERSION = "1"
+#: Each gun's linear stretch, ``(low, high)`` in kelvin mapped to 0 and 1
+#: with gamma 1: EUMETSAT's Night Microphysics RGB, the same numbers on
+#: SEVIRI, AHI, ABI and FCI. Red the 12.3 − 10.4 µm split window, green
+#: 10.4 − 3.9 µm, blue the 10.4 µm window.
+NIGHT_MICRO_RED_RANGE: tuple[float, float] = (-4.0, 2.0)
+NIGHT_MICRO_GREEN_RANGE: tuple[float, float] = (0.0, 10.0)
+NIGHT_MICRO_BLUE_RANGE: tuple[float, float] = (243.0, 293.0)
+
+
+@dataclass(frozen=True)
+class NightMicrophysicsProducer:
+    """The night microphysics composite: the three guns of the
+    ``nightmicro`` bundle from a slot's 3.9, 10.4 and 12.3 µm brightness
+    temperatures, EUMETSAT's Night Microphysics RGB in a fixed order:
+
+    1. red ``IR12.3 − IR10.4``, green ``IR10.4 − IR3.9``, blue ``IR10.4``;
+    2. each stretched linearly over its range (``NIGHT_MICRO_*_RANGE``)
+       with gamma 1 and clamped to [0, 1];
+    3. no data in all three guns wherever any input had none.
+
+    Fog and low stratus read yellow-green, thick high cloud dark red, thin
+    cirrus black to dark blue, a clear warm surface pink. By day the
+    3.9 µm window carries reflected sunlight and the green gun saturates;
+    the guns are computed there all the same (the viewer's day-night
+    blend shows the true colour where it has one). No package: the id is
+    ``xue`` and the version the recipe's."""
+
+    id: str = "xue"
+    bundle_id: str = "nightmicro"
+    bundle_ids: tuple[str, ...] = ("nightmicro",)
+    inputs: tuple[str, ...] = ("ir039", "ir104", "ir123")
+    outputs: tuple[str, ...] = ("nightr", "nightg", "nightb")
+    ancillaries: tuple[str, ...] = ()
+
+    @property
+    def version(self) -> str:
+        return NIGHT_MICRO_VERSION
+
+    def inputs_for(self, platform: Platform) -> tuple[str, ...]:
+        channel_ids = {channel.id for channel in platform.channels}
+        missing = [channel_id for channel_id in self.inputs if channel_id not in channel_ids]
+        if missing:
+            raise ConversionError(f"{platform.spacecraft} {platform.instrument} has no {missing} for the night microphysics composite")
+        return self.inputs
+
+    def ancillary_for(self, platform: Platform, slot: datetime, root: Path | None) -> dict[str, Path]:
+        return {}
+
+    def run(
+        self,
+        platform: Platform,
+        inputs: dict[str, np.ndarray],
+        ancillary: dict[str, Path],
+        *,
+        slot: datetime,
+        grid: TargetGrid,
+    ) -> dict[str, np.ndarray]:
+        needed = self.inputs_for(platform)
+        missing = [channel_id for channel_id in needed if channel_id not in inputs]
+        if missing:
+            raise ConversionError(f"the night microphysics producer needs {list(needed)}; missing {missing}")
+        shape = (grid.height, grid.width)
+        if any(inputs[channel_id].shape != shape for channel_id in needed):
+            raise ConversionError(f"the night microphysics producer's inputs are not on the {grid.width} x {grid.height} grid")
+        ir039, ir104, ir123 = (np.asarray(inputs[channel_id], dtype=np.float64) for channel_id in needed)
+        # 1. The three quantities.
+        quantities = (ir123 - ir104, ir104 - ir039, ir104)
+        ranges = (NIGHT_MICRO_RED_RANGE, NIGHT_MICRO_GREEN_RANGE, NIGHT_MICRO_BLUE_RANGE)
+        # 3. No data where any input had none.
+        defined = np.isfinite(ir039) & np.isfinite(ir104) & np.isfinite(ir123)
+        results: dict[str, np.ndarray] = {}
+        for output_id, quantity, (low, high) in zip(self.outputs, quantities, ranges):
+            # 2. The stretch, gamma 1, clamped.
+            stretched = np.clip((np.nan_to_num(quantity, nan=low) - low) / (high - low), 0.0, 1.0)
+            results[output_id] = np.where(defined, stretched, np.nan)
+        return results
+
+
 PRODUCERS: dict[str, Producer] = {
     bundle_id: producer
-    for producer in (DustRGBProducer(), DebraProducer(), TrueColorProducer())
+    for producer in (DustRGBProducer(), DebraProducer(), TrueColorProducer(), NightMicrophysicsProducer())
     for bundle_id in producer.bundle_ids
 }
 """By the composite bundle each produces; a producer of two bundles is
