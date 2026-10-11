@@ -1,7 +1,8 @@
 """A Xue bundle as a Zarr v3 store.
 
 One writer, :func:`write_store`, packs a bundle's quantized codes into a
-store from whatever holds them (a :class:`ChunkSource`): a finished ``.xue``
+store from whatever holds them (a :class:`ChunkSource`): the planes a build
+holds in memory (:class:`CodesSource`) or a finished ``.xue``
 (:func:`export_bundle`). The metadata, shard bytes, index and CRC-32C are
 assembled with NumPy alone, so the build gains no dependency.
 ``docs/zarr-profile.md`` is normative for the layout and gives the reasons for
@@ -702,6 +703,69 @@ class ContainerSource(ChunkSource):
             return None
         start, end = self.bundle.chunk_span(position)
         return self.bundle.data[start:end]
+
+
+class CodesSource(ChunkSource):
+    """The codes a build holds in memory, written without a container.
+
+    ``planes`` maps each variable id to its planes in frame order (one
+    ``height x width`` or flat ``uint8`` array per frame of the axis);
+    ``predictors`` maps it to ``previous`` or ``raw``; ``tile`` is the
+    ``(width, height)`` the bundle is cut with. The metadata is taken through
+    the bytes a container embeds (:func:`binformat.metadata_json_bytes`), so
+    the store's ``xue`` block is the document a bundle of the same codes
+    would carry, and a store written from here equals one exported from that
+    bundle byte for byte."""
+
+    def __init__(
+        self,
+        metadata: dict[str, Any],
+        planes: dict[str, Any],
+        predictors: dict[str, str],
+        tile: tuple[int, int],
+    ) -> None:
+        self.metadata = json.loads(binformat.metadata_json_bytes(metadata).decode("utf-8"))
+        grid = self.metadata["grid"]
+        self.width = int(grid["width"])
+        self.height = int(grid["height"])
+        self.unit_seconds, self.frame_offsets = binformat.time_axis(self.metadata)
+        self.frame_count = len(self.frame_offsets)
+        self.tile = (min(tile[0], self.width), min(tile[1], self.height))
+        self.array_names = [variable["id"] for variable in self.metadata["variables"]]
+        if sorted(planes) != sorted(self.array_names) or sorted(predictors) != sorted(self.array_names):
+            raise BundleError("the codes do not name the metadata's variables")
+        for name in self.array_names:
+            if len(planes[name]) != self.frame_count:
+                raise BundleError(f"{name}: {len(planes[name])} planes for an axis of {self.frame_count} frames")
+            if predictors[name] not in ("previous", "raw"):
+                raise BundleError(f"{name}: unknown predictor {predictors[name]!r}")
+        self._planes = planes
+        self._predictors = predictors
+
+    def _plane(self, name: str, frame: int) -> np.ndarray:
+        plane = np.asarray(self._planes[name][frame], dtype=np.uint8)
+        if plane.size != self.width * self.height:
+            raise BundleError(f"{name}: frame {frame} is not one plane of the grid")
+        return plane.reshape(self.height, self.width)
+
+    def predictor(self, name: str) -> str:
+        return self._predictors[name]
+
+    def _cut(self, stack: np.ndarray, geometry: ArrayGeometry) -> list[np.ndarray]:
+        blocks = []
+        for tile in range(geometry.tile_count):
+            row, column = geometry.tile_origin(tile)
+            height, width = geometry.tile_shape(tile)
+            blocks.append(stack[:, row : row + height, column : column + width])
+        return blocks
+
+    def tile_blocks(self, name: str, geometry: ArrayGeometry, frames: range) -> list[np.ndarray]:
+        return self._cut(np.stack([self._plane(name, frame) for frame in frames]), geometry)
+
+    def series_blocks(self, name: str, geometry: ArrayGeometry) -> list[np.ndarray]:
+        if geometry.time_chunks != 1:
+            raise AssertionError("a series geometry has one time chunk")
+        return self._cut(np.stack([self._plane(name, frame) for frame in range(self.frame_count)]), geometry)
 
 
 # -- the writer ----------------------------------------------------------------

@@ -437,6 +437,80 @@ class SeriesExportTests(ClassTempRoot, unittest.TestCase):
                 self.assertEqual(source_spec(model).series_bundle_ids, ())
 
 
+class CodesSourceTests(ClassTempRoot, unittest.TestCase):
+    """A store written straight from the codes a build holds equals the one
+    exported from a bundle of the same codes, object for object: map and
+    series stores, both codec chains, the index at either end, an axis that
+    changes step and a grid no tile divides."""
+
+    root_prefix = "xue-zarr-codes-"
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        cls.bundles = {
+            "pair": write_v2(cls.root / "pair.xue", ("tmp2m", "prate")),
+            "single": write_v2(cls.root / "single.xue", ("tmp2m",)),
+        }
+
+    def codes_source(self, bundle: binformat.Bundle) -> zarrstore.CodesSource:
+        names = [variable["id"] for variable in bundle.metadata["variables"]]
+        planes = {
+            name: [plane(hour, index) for hour in MIXED_HOURS] for index, name in enumerate(names, start=1)
+        }
+        predictors = {
+            name: "previous" if PREDICTORS[index] == binformat.PREDICTOR_PREVIOUS else "raw"
+            for index, name in enumerate(names, start=1)
+        }
+        metadata = build_metadata(
+            datetime(2026, 8, 14, 6, tzinfo=UTC), MIXED_HOURS, GRID, "quality", tuple(names)
+        )
+        return zarrstore.CodesSource(metadata, planes, predictors, TILE)
+
+    def test_a_store_from_the_codes_equals_the_exported_one(self) -> None:
+        from tests._support import assert_trees_identical
+
+        for name, bundle in self.bundles.items():
+            source = self.codes_source(bundle)
+            for series in (False, True):
+                for delta in (False, True):
+                    for location in zarrstore.INDEX_LOCATIONS:
+                        stem = f"{name}-{int(series)}-{int(delta)}-{location}"
+                        with self.subTest(store=stem):
+                            exported = zarrstore.export_bundle(
+                                self.root / f"{name}.xue",
+                                self.root / "exported" / f"{stem}.zarr",
+                                delta=delta,
+                                index_location=location,
+                                series=series,
+                            )
+                            written = zarrstore.write_store(
+                                source,
+                                self.root / "written" / f"{stem}.zarr",
+                                delta=delta,
+                                index_location=location,
+                                series=series,
+                            )
+                            assert_trees_identical(self, exported.path, written.path)
+                            self.assertEqual(
+                                (exported.byte_length, exported.crc32, exported.chunk_count),
+                                (written.byte_length, written.crc32, written.chunk_count),
+                            )
+                            self.assertEqual((written.comparable_chunks, written.identical_chunks), (0, 0))
+
+    def test_codes_that_do_not_match_the_metadata_are_refused(self) -> None:
+        source = self.codes_source(self.bundles["single"])
+        metadata = source.metadata
+        with self.assertRaises(BundleError):
+            zarrstore.CodesSource(metadata, {"prate": [plane(0, 1)] * len(MIXED_HOURS)}, {"prate": "raw"}, TILE)
+        with self.assertRaises(BundleError):
+            zarrstore.CodesSource(metadata, {"tmp2m": [plane(0, 1)]}, {"tmp2m": "previous"}, TILE)
+        with self.assertRaises(BundleError):
+            zarrstore.CodesSource(
+                metadata, {"tmp2m": [plane(0, 1)] * len(MIXED_HOURS)}, {"tmp2m": "anchor"}, TILE
+            )
+
+
 @unittest.skipUnless(zarrcodec.available(), "zarr-python is not installed (uv sync --group zarr)")
 class ZarrClientTests(ClassTempRoot, unittest.TestCase):
     """What a generic client sees. The standard chain needs nothing
