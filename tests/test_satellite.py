@@ -21,13 +21,16 @@ producer's id and version; an observation ingest that reads several
 variables with their own packing; a composite bundle of three variables
 whose ``producer`` block sits beside a local-use ``parameter``.
 
-``tests/fixtures/himawari/`` is twenty-four real tiles: T020 and T021 of
-the 03:00 and 03:10 UTC scans of 2026-09-17 in bands 7, 8, 11, 13, 14 and
-15 (3.9, 6.2, 8.6, 10.4, 11.2 and 12.3 µm), the western Pacific south of
-Japan. The bucket is stood in for by a listing and a download built from
-them. The DEBRA producer's ancillary fields are staged from
-``tests/fixtures/debra/`` (:func:`stage_ancillary`); its own tests are in
-``tests/test_debra.py``.
+``tests/fixtures/himawari/`` is forty real tiles: T020 and T021 of the
+03:00 and 03:10 UTC scans of 2026-09-17 in bands 7, 8, 11, 13, 14 and 15
+(3.9, 6.2, 8.6, 10.4, 11.2 and 12.3 µm), the western Pacific south of
+Japan, untouched; and the same tiles in bands 1–4 (0.47, 0.51, 0.64 and
+0.86 µm, the true colour composite's inputs) cut to their north-west
+corner (``tests/prepare_himawari_fixture.py``), so the composite is
+defined over a sixteenth of each tile. The bucket is stood in for by a
+listing and a download built from them. The DEBRA producer's ancillary
+fields are staged from ``tests/fixtures/debra/`` (:func:`stage_ancillary`);
+its own tests are in ``tests/test_debra.py``.
 """
 
 from __future__ import annotations
@@ -70,7 +73,16 @@ from xuebuild.satellite import assemble, readers
 from xuebuild.satellite import fetch as satellite_fetch
 from xuebuild.satellite.platforms import ABI_CHANNELS, AHI_CHANNELS, GOES_EAST
 from xuebuild.satellite import ancillary
-from xuebuild.satellite.producers import PRODUCERS, DustRGBProducer
+from xuebuild.satellite.producers import (
+    PRODUCERS,
+    TRUE_COLOR_CURVE_IN,
+    TRUE_COLOR_CURVE_OUT,
+    TRUE_COLOR_HYBRID_GREEN,
+    TRUE_COLOR_VERSION,
+    TRUE_COLOR_ZENITH_LIMIT_DEG,
+    DustRGBProducer,
+    TrueColorProducer,
+)
 from xuebuild.satellite.projector import GdalWarpProjector, TargetGrid
 from xuebuild.satellite.readers import ISatSSReader, parse_isatss_key
 from xuebuild.sources import SOURCES, SatelliteBand, source_spec
@@ -81,7 +93,12 @@ from xuebuild.variables import (
     DUST_RGB_BUNDLE_ID,
     DUST_RGB_COMPONENT_IDS,
     SATELLITE_CHANNEL_IDS,
+    SATELLITE_INFRARED_IDS,
+    SATELLITE_REFLECTANCE_IDS,
     SATELLITE_VARIABLE_IDS,
+    TRUE_COLOR_BUNDLE_ID,
+    TRUE_COLOR_COMPONENT_IDS,
+    VARIABLES,
     variable_spec,
 )
 
@@ -90,13 +107,18 @@ DEBRA_FIXTURES = FIXTURES / "debra"
 REGISTRY = FIXTURES / "satellite-registry.json"
 SPEC = source_spec("himawari")
 IR104 = HIMAWARI.channel("ir104")
-#: The six channels the source fetches, in source order.
+#: The ten channels the source fetches, in source order: six infrared
+#: windows, then the four solar bands.
 CHANNELS = tuple(HIMAWARI.channel(channel_id) for channel_id in SPEC.input_variable_ids)
+INFRARED = tuple(channel for channel in CHANNELS if channel.kind == "bt")
+SOLAR = tuple(channel for channel in CHANNELS if channel.kind == "reflectance")
 #: The channels and the variables every satellite source's fetch writes,
-#: in series order: the channels, the Dust RGB's guns, the confidence.
-SERIES_IDS = SPEC.input_variable_ids + DUST_RGB_COMPONENT_IDS + (DUST_CF_BUNDLE_ID, ZHOUYE_BUNDLE_ID)
+#: in series order: the channels, the Dust RGB's guns, the confidences,
+#: the true colour's guns.
+SERIES_IDS = SPEC.input_variable_ids + DUST_RGB_COMPONENT_IDS + (DUST_CF_BUNDLE_ID, ZHOUYE_BUNDLE_ID) + TRUE_COLOR_COMPONENT_IDS
 DUST = PRODUCERS[DUST_RGB_BUNDLE_ID]
 DEBRA = PRODUCERS[DUST_CF_BUNDLE_ID]
+TRUECOLOR = PRODUCERS[TRUE_COLOR_BUNDLE_ID]
 #: The fixture's two slots.
 SLOT_0300 = datetime(2026, 9, 17, 3, 0, tzinfo=UTC)
 SLOT_0310 = datetime(2026, 9, 17, 3, 10, tzinfo=UTC)
@@ -205,6 +227,7 @@ class RegistryTests(unittest.TestCase):
         self.assertIsNone(parameter["scaledValueOfFirstFixedSurface"])
 
     def test_the_code_space_is_spent_and_the_bottom_is_the_fill(self) -> None:
+        self.assertEqual(SATELLITE_CHANNEL_IDS, SATELLITE_INFRARED_IDS + SATELLITE_REFLECTANCE_IDS)
         for variable_id in SATELLITE_CHANNEL_IDS:
             quality = PROFILES["quality"][variable_id]
             compact = PROFILES["compact"][variable_id]
@@ -217,6 +240,18 @@ class RegistryTests(unittest.TestCase):
         # A cold overshooting top and a hot desert both stay inside.
         codes = PROFILES["quality"]["ir104"].quantize(np.array([180.0, 185.0, 330.0, 331.8]))
         self.assertEqual(codes.tolist(), [0, 8, 250, 253])
+        # A reflectance is a number in 0–1 that a sunlit cloud takes past 1:
+        # the satellite-image albedo parameter with the band beside it, and
+        # a codebook whose code 0 is the fill, a hundredth below zero, so
+        # the night side's 0.0 is a whole code on both profiles.
+        for variable_id in SATELLITE_REFLECTANCE_IDS:
+            spec = variable_spec(variable_id)
+            parameter = spec.parameter_metadata()
+            self.assertEqual((parameter["discipline"], parameter["parameterCategory"], parameter["parameterNumber"], parameter["typeOfFirstFixedSurface"]), (3, 0, 1, 8))
+            self.assertEqual((spec.output_unit, spec.value_range, spec.producer_id), ("1", (-0.01, 1.255), None))
+        codes = PROFILES["quality"]["vis064"].quantize(np.array([-0.01, 0.0, 0.5, 1.255, 1.4]))
+        self.assertEqual(codes.tolist(), [0, 2, 102, 253, 253])
+        self.assertEqual(PROFILES["compact"]["vis064"].quantize(np.array([-0.01, 0.0, 1.25])).tolist(), [0, 1, 126])
 
     def test_a_gun_is_a_local_use_parameter_with_the_producer_registered(self) -> None:
         """A composite has no GRIB2 parameter: each gun takes a local-use
@@ -242,7 +277,10 @@ class RegistryTests(unittest.TestCase):
         codes = PROFILES["quality"]["dustr"].quantize(np.array([-0.004, 0.0, 0.5, 1.0]))
         self.assertEqual(codes.tolist(), [0, 1, 126, 251])
         self.assertEqual(PROFILES["quality"]["dustr"].decode(np.array([1, 251], dtype=np.uint8)).tolist(), [0.0, 1.0])
-        self.assertEqual(binconvert.COMPOSITE_BUNDLES, {"dustrgb": ("dustr", "dustg", "dustb"), "dustcf": ("dustcf",), "zhouye": ("zhouye",)})
+        self.assertEqual(
+            binconvert.COMPOSITE_BUNDLES,
+            {"dustrgb": ("dustr", "dustg", "dustb"), "dustcf": ("dustcf",), "zhouye": ("zhouye",), "truecolor": ("truer", "trueg", "trueb")},
+        )
         self.assertEqual(binconvert.bundle_variable_ids("dustrgb"), DUST_RGB_COMPONENT_IDS)
         self.assertEqual(binconvert.bundle_variable_ids("dustcf"), ("dustcf",))
         self.assertEqual(binconvert.bundle_variable_ids("ir104"), ("ir104",))
@@ -254,29 +292,46 @@ class RegistryTests(unittest.TestCase):
         self.assertEqual((spec.producer_id, spec.output_unit, spec.value_range), ("shachen", "1", (-0.004, 1)))
         for profile in PROFILES:
             self.assertEqual(PROFILES[profile]["dustcf"].metadata(), PROFILES[profile]["dustr"].metadata())
+        # The true colour guns: this pipeline's own recipe, so the producer
+        # is `xue`, the next three local-use numbers, the guns' codebook.
+        for number, gun_id in zip((7, 8, 9), TRUE_COLOR_COMPONENT_IDS):
+            spec = variable_spec(gun_id)
+            parameter = spec.parameter_metadata()
+            self.assertEqual((parameter["discipline"], parameter["parameterCategory"], parameter["parameterNumber"], parameter["typeOfFirstFixedSurface"]), (3, 192, number, 8))
+            self.assertEqual((spec.producer_id, spec.output_unit, spec.value_range), ("xue", "1", (-0.004, 1)))
+            for profile in PROFILES:
+                self.assertEqual(PROFILES[profile][gun_id].metadata(), PROFILES[profile]["dustr"].metadata())
+        self.assertEqual(binconvert.bundle_variable_ids("truecolor"), TRUE_COLOR_COMPONENT_IDS)
+        self.assertEqual(SATELLITE_VARIABLE_IDS[-3:], TRUE_COLOR_COMPONENT_IDS)
 
     def test_the_source_is_a_satellite_series_file_observation(self) -> None:
         self.assertTrue(SPEC.observation and SPEC.series_file and SPEC.fetched and SPEC.live)
         self.assertEqual((SPEC.platform, SPEC.grid_step, SPEC.cadence_seconds, SPEC.window_hours), ("himawari", 0.04, 600, 6))
-        self.assertEqual(SPEC.input_variable_ids, ("ir039", "wv062", "ir086", "ir104", "ir112", "ir123"))
-        self.assertEqual((SPEC.bundle_scalar_ids, SPEC.bundle_composite_ids, SPEC.core_bundle_ids), (("ir104",), ("dustrgb", "dustcf", "zhouye"), ("ir104",)))
-        self.assertEqual(binconvert.published_bundle_ids(SPEC), ("ir104", "dustrgb", "dustcf", "zhouye"))
+        self.assertEqual(SPEC.input_variable_ids, ("ir039", "wv062", "ir086", "ir104", "ir112", "ir123", "vis047", "vis051", "vis064", "nir086"))
+        self.assertEqual(SPEC.input_variable_ids, SATELLITE_CHANNEL_IDS)
+        self.assertEqual((SPEC.bundle_scalar_ids, SPEC.bundle_composite_ids, SPEC.core_bundle_ids), (("ir104",), ("dustrgb", "dustcf", "zhouye", "truecolor"), ("ir104",)))
+        self.assertEqual(binconvert.published_bundle_ids(SPEC), ("ir104", "dustrgb", "dustcf", "zhouye", "truecolor"))
         # A composite's inputs, for the fetch, are the channels its
         # producer reads; a source that fetched fewer would not publish it.
         self.assertEqual(binconvert.bundle_input_ids(SPEC, "dustrgb"), ("ir086", "ir104", "ir112", "ir123"))
         self.assertEqual(binconvert.bundle_input_ids(SPEC, "dustcf"), ("ir039", "wv062", "ir086", "ir104", "ir123"))
+        self.assertEqual(binconvert.bundle_input_ids(SPEC, "truecolor"), ("vis047", "vis051", "vis064", "nir086"))
         fewer = dataclasses.replace(SPEC, input_variable_ids=("ir104",))
         self.assertEqual(binconvert.published_bundle_ids(fewer), ("ir104",))
         dust_only = dataclasses.replace(SPEC, input_variable_ids=("ir086", "ir104", "ir112", "ir123"))
         self.assertEqual(binconvert.published_bundle_ids(dust_only), ("ir104", "dustrgb"))
+        windows_only = dataclasses.replace(SPEC, input_variable_ids=SATELLITE_INFRARED_IDS)
+        self.assertEqual(binconvert.published_bundle_ids(windows_only), ("ir104", "dustrgb", "dustcf", "zhouye"))
         self.assertEqual([spec.id for spec in SOURCES.values() if spec.platform], ["himawari", "goeseast", "goeswest", "meteosat"])
 
     def test_the_source_band_is_the_platform_s(self) -> None:
-        self.assertEqual([band_id for band_id, _ in SPEC.bands], ["ir039", "wv062", "ir086", "ir104", "ir112", "ir123"])
+        self.assertEqual([band_id for band_id, _ in SPEC.bands], list(SATELLITE_CHANNEL_IDS))
         band = dict(SPEC.bands)["ir104"]
         self.assertEqual(band, SatelliteBand(satellite_series=0, satellite_number=174, instrument_type=297, central_wavenumber=96086))
         self.assertEqual(round(1e6 / band.central_wavenumber, 2), 10.41)
         self.assertEqual(dict(SPEC.bands)["ir123"].central_wavenumber, 80772)
+        # The solar bands by the AHI's own central wavelengths.
+        self.assertEqual([dict(SPEC.bands)[band_id].central_wavenumber for band_id in SATELLITE_REFLECTANCE_IDS], [2124811, 1960784, 1564602, 1167270])
 
     def test_the_production_grid_is_the_platform_region_at_the_step(self) -> None:
         grid = satellite_grid(SPEC)
@@ -393,8 +448,12 @@ class ListingTests(unittest.TestCase):
         objects = self.reader.list_slot(HIMAWARI, IR104, SLOT_0300, fetch=listing)
         self.assertEqual([item.tile for item in objects], [20, 21])
         self.assertEqual(objects[0].key, later)
-        # Another channel's tiles under the same directory are not this slot.
-        self.assertEqual(self.reader.list_slot(HIMAWARI, HIMAWARI.channel("vis064"), SLOT_0300, fetch=self.listing), [])
+        # Another channel's tiles under the same directory are its own slot:
+        # the 0.64 µm band's two, at their 0.5 km resolution in the name.
+        solar = self.reader.list_slot(HIMAWARI, HIMAWARI.channel("vis064"), SLOT_0300, fetch=self.listing)
+        self.assertEqual([item.tile for item in solar], [20, 21])
+        self.assertIn("OR_HFD-005-B11-M1C03-", solar[0].key)
+        self.assertEqual(self.reader.list_slot(HIMAWARI, HIMAWARI.channel("nir161"), SLOT_0300, fetch=self.listing), [])
 
     def test_the_newest_complete_slot_ends_the_live_window(self) -> None:
         now = datetime(2026, 9, 17, 3, 30, tzinfo=UTC)
@@ -457,7 +516,7 @@ def warp_window(
         raw_root=root,
         destination=root / "himawari.2026091703",
         series_stem="himawari.2026091703",
-        units={channel.id: "K" for channel in channels},
+        units={channel.id: VARIABLES[channel.id].output_unit for channel in channels},
         producers=producers,
         ancillary_root=ancillary,
         force=force,
@@ -472,7 +531,7 @@ class FetchTests(TempRoot, unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         super().setUpClass()
-        # The six channels warped once for the class: the first round most
+        # The ten channels warped once for the class: the first round most
         # of these tests start from, and the slow part of each. A test that
         # starts from it takes a copy (from_seed), since the tests change
         # what they read.
@@ -489,7 +548,7 @@ class FetchTests(TempRoot, unittest.TestCase):
         cls.seed_window = warp_window(cls.seed, ancillary, listing, download_counting, channels=CHANNELS)
 
     def from_seed(self) -> None:
-        """The class's warped six-channel window, as this test's raw root."""
+        """The class's warped ten-channel window, as this test's raw root."""
         shutil.copytree(self.seed, self.root, dirs_exist_ok=True)
 
     def setUp(self) -> None:
@@ -566,14 +625,16 @@ class FetchTests(TempRoot, unittest.TestCase):
         left out whole, and every series carries the same axis."""
         # The class's window is the first round: every tile of both slots
         # fetched once and warped. The producer then runs on what it cached.
-        self.assertEqual([(item.slot, item.tiles) for item in self.seed_window.slots], [(SLOT_0300, 12), (SLOT_0310, 12)])
-        self.assertEqual(len(self.seed_downloads), 24)
+        self.assertEqual([(item.slot, item.tiles) for item in self.seed_window.slots], [(SLOT_0300, 20), (SLOT_0310, 20)])
+        self.assertEqual(len(self.seed_downloads), 40)
         self.from_seed()
-        window = self.fetch_window(channels=CHANNELS, producers=(DUST,))
+        window = self.fetch_window(channels=INFRARED, producers=(DUST,))
         self.assertEqual(self.downloads, [])
         self.assertEqual(list(window.series), ["ir039", "wv062", "ir086", "ir104", "ir112", "ir123", "dustr", "dustg", "dustb"])
         self.assertEqual(list(window.slots[0].frames), list(window.series))
-        self.assertEqual(sorted(path.name for path in (self.root / "himawari-frames").iterdir()), sorted(window.series))
+        # The seed's frame cache holds the solar bands too; this window's
+        # variables are a subset of it.
+        self.assertTrue(set(window.series) <= {path.name for path in (self.root / "himawari-frames").iterdir()})
         gun = window.slots[0].frames["dustg"]
         self.assertEqual(gun, self.root / "himawari-frames" / "dustg" / "dustg_20260917030000.tif")
         packing = json.loads(assemble.packing_path(gun).read_text(encoding="utf-8"))
@@ -585,7 +646,7 @@ class FetchTests(TempRoot, unittest.TestCase):
         # The guns are shachen's, cell for cell: the frame holds them to four
         # decimals, and the cells the disk does not cover are no data in all
         # three.
-        planes = {channel.id: assemble.read_frame(window.slots[0].frames[channel.id], TILE_GRID) for channel in CHANNELS}
+        planes = {channel.id: assemble.read_frame(window.slots[0].frames[channel.id], TILE_GRID) for channel in INFRARED}
         expected = DUST.run(HIMAWARI, planes, {}, slot=SLOT_0300, grid=TILE_GRID)
         covered = np.isfinite(planes["ir104"])
         self.assertGreater(float(covered.mean()), 0.5)
@@ -597,7 +658,7 @@ class FetchTests(TempRoot, unittest.TestCase):
             self.assertLessEqual(float(actual[covered].max()), 1.0)
         # Composed once: the next round reads the cache and runs no producer.
         with mock.patch.object(DustRGBProducer, "run", side_effect=AssertionError("recomposed")):
-            again = self.fetch_window(channels=CHANNELS, producers=(DUST,))
+            again = self.fetch_window(channels=INFRARED, producers=(DUST,))
         self.assertEqual([item.tiles for item in again.slots], [0, 0])
         for variable_id, path in window.series.items():
             self.assertTrue(filecmp.cmp(path, again.series[variable_id], shallow=False), variable_id)
@@ -605,7 +666,7 @@ class FetchTests(TempRoot, unittest.TestCase):
         partial = {k: v for k, v in self.keys.items() if not ("0310/" in k and "-M1C15-T021_" in k)}
         listing, _ = bucket(partial)
         shutil.rmtree(self.root / "himawari-frames")
-        short = self.fetch_window(channels=CHANNELS, producers=(DUST,), listing=listing)
+        short = self.fetch_window(channels=INFRARED, producers=(DUST,), listing=listing)
         self.assertEqual([item.slot for item in short.slots], [SLOT_0300])
         series = observation.inspect_observation(self.root / "himawari.2026091703", SPEC, ("ir104", *DUST_RGB_COMPONENT_IDS))
         self.assertEqual(series.lead_seconds, [0])
@@ -613,6 +674,86 @@ class FetchTests(TempRoot, unittest.TestCase):
         # before anything is downloaded.
         with self.assertRaisesRegex(ConversionError, "does not fetch"):
             self.fetch_window(channels=(IR104,), producers=(DUST,))
+
+    def test_a_window_of_solar_bands_composes_the_true_colour_per_slot(self) -> None:
+        """The true colour producer: this pipeline's own recipe on the four
+        solar bands, in its fixed order — the reflectances clipped at 0,
+        divided by the cosine of the solar zenith floored at 85°, the
+        hybrid green, the brightness curve — held here to the same steps
+        written out, and defined exactly where every band has data and
+        the sun is up. The solar bands' frames are block means (the bands
+        are four and eight times finer than the grid), which the sidecar
+        records."""
+        self.from_seed()
+        window = self.fetch_window(channels=SOLAR, producers=(TRUECOLOR,))
+        self.assertEqual(self.downloads, [])
+        self.assertEqual(list(window.series), ["vis047", "vis051", "vis064", "nir086", "truer", "trueg", "trueb"])
+        for channel in SOLAR:
+            sidecar = json.loads(assemble.packing_path(window.slots[0].frames[channel.id]).read_text(encoding="utf-8"))
+            self.assertEqual((sidecar["scale"], sidecar["offset"], sidecar["unit"], sidecar["resampling"]), (0.00048828125, 0.0, "1", "average"))
+        infrared_frame = self.root / "himawari-frames" / "ir104" / "ir104_20260917030000.tif"
+        self.assertEqual(json.loads(assemble.packing_path(infrared_frame).read_text(encoding="utf-8"))["resampling"], "bilinear")
+        gun = window.slots[0].frames["trueg"]
+        packing = json.loads(assemble.packing_path(gun).read_text(encoding="utf-8"))
+        self.assertEqual(packing["producer"], {"id": "xue", "version": TRUE_COLOR_VERSION})
+        self.assertEqual(packing["inputs"], [f"{channel_id}_20260917030000.tif" for channel_id in TRUECOLOR.inputs])
+        self.assertNotIn("ancillary", packing)
+        # The recipe, step by step, against the producer's frames.
+        from pyorbital.astronomy import cos_zen  # noqa: PLC0415
+
+        planes = {channel.id: assemble.read_frame(window.slots[0].frames[channel.id], TILE_GRID) for channel in SOLAR}
+        # The solar tiles are a sixteenth of the infrared ones: a corner,
+        # which the 1 km and 0.5 km bands' block means edge within a cell
+        # of each other; the picture is defined where all four are.
+        covered = np.all([np.isfinite(plane) for plane in planes.values()], axis=0)
+        for channel_id, plane in planes.items():
+            self.assertLess(int(np.isfinite(plane).sum()) - int(covered.sum()), int(covered.sum()) // 50, channel_id)
+        self.assertGreater(int(covered.sum()), 2000)
+        self.assertLess(float(covered.mean()), 0.2)
+        lons = TILE_GRID.first_longitude + np.arange(TILE_GRID.width) * TILE_GRID.step
+        lats = TILE_GRID.first_latitude - np.arange(TILE_GRID.height) * TILE_GRID.step
+        lon2d, lat2d = np.meshgrid(lons, lats)
+        cosine = cos_zen(SLOT_0300.replace(tzinfo=None), lon2d, lat2d)
+        # Noon over the western Pacific: the sun is high everywhere here.
+        self.assertGreater(float(cosine[covered].min()), 0.75)
+        divisor = np.maximum(cosine, np.cos(np.radians(TRUE_COLOR_ZENITH_LIMIT_DEG)))
+        normalized = {channel_id: np.maximum(plane, 0.0) / divisor for channel_id, plane in planes.items()}
+        green = TRUE_COLOR_HYBRID_GREEN[0] * normalized["vis051"] + TRUE_COLOR_HYBRID_GREEN[1] * normalized["nir086"]
+        for gun_id, source in zip(TRUE_COLOR_COMPONENT_IDS, (normalized["vis064"], green, normalized["vis047"])):
+            actual = assemble.read_frame(window.slots[0].frames[gun_id], TILE_GRID)
+            self.assertEqual(np.isfinite(actual).tolist(), covered.tolist(), gun_id)
+            expected = np.clip(np.interp(source[covered], TRUE_COLOR_CURVE_IN, TRUE_COLOR_CURVE_OUT), 0.0, 1.0)
+            np.testing.assert_allclose(actual[covered], expected, atol=0.00005 + 1e-12)
+            self.assertGreaterEqual(float(actual[covered].min()), 0.0)
+            self.assertLessEqual(float(actual[covered].max()), 1.0)
+        # A picture, not a flat field: sea and cloud both in the corner.
+        red = assemble.read_frame(window.slots[0].frames["truer"], TILE_GRID)
+        self.assertGreater(float(np.nanstd(red)), 0.05)
+        # The green is the hybrid, not the band: it differs where the
+        # near-infrared does.
+        self.assertFalse(np.allclose(green[covered], normalized["vis051"][covered], atol=0.001))
+        # Composed once.
+        with mock.patch.object(TrueColorProducer, "run", side_effect=AssertionError("recomposed")):
+            again = self.fetch_window(channels=SOLAR, producers=(TRUECOLOR,))
+        self.assertEqual([item.tiles for item in again.slots], [0, 0])
+        # The night side is no data, not black: the same planes at 15:00 UTC
+        # (midnight over the corner) give an empty picture. The same
+        # reflectance read under a low sun is a brighter surface — that is
+        # what dividing by the cosine says — so the planes at dusk read
+        # brighter than at noon, never darker, and still inside the guns.
+        midnight = TRUECOLOR.run(HIMAWARI, planes, {}, slot=SLOT_0300 + timedelta(hours=12), grid=TILE_GRID)
+        self.assertTrue(all(np.all(np.isnan(plane)) for plane in midnight.values()))
+        noon = TRUECOLOR.run(HIMAWARI, planes, {}, slot=SLOT_0300, grid=TILE_GRID)
+        dusk = TRUECOLOR.run(HIMAWARI, planes, {}, slot=SLOT_0300 + timedelta(hours=5, minutes=30), grid=TILE_GRID)
+        lit = np.isfinite(dusk["truer"])
+        self.assertTrue(lit.any())
+        self.assertGreaterEqual(float(np.nanmean(dusk["truer"][lit])), float(np.nanmean(noon["truer"][lit])))
+        self.assertLessEqual(float(np.nanmax(dusk["truer"][lit])), 1.0)
+        # The ABI has no green band: its recipe reads three and blends one.
+        self.assertEqual(TRUECOLOR.inputs_for(GOES_EAST), ("vis047", "vis064", "nir086"))
+        self.assertEqual(TRUECOLOR.inputs_for(HIMAWARI), ("vis047", "vis051", "vis064", "nir086"))
+        with self.assertRaisesRegex(ConversionError, "needs"):
+            TRUECOLOR.run(GOES_EAST, {"vis047": planes["vis047"]}, {}, slot=SLOT_0300, grid=TILE_GRID)
 
     def test_a_frame_is_the_tiles_on_the_target_grid(self) -> None:
         self.from_seed()
@@ -657,7 +798,7 @@ class FetchTests(TempRoot, unittest.TestCase):
     @requires_shachen
     def test_the_series_is_what_the_observation_ingest_reads(self) -> None:
         self.from_seed()
-        window = self.fetch_window(channels=CHANNELS, producers=(DUST,))
+        window = self.fetch_window(channels=INFRARED, producers=(DUST,))
         wanted = ("ir104", *DUST_RGB_COMPONENT_IDS)
         # The run directory, one file per variable, resolved by id; or the
         # one file, for a source with one variable.
@@ -721,10 +862,11 @@ class FetchTests(TempRoot, unittest.TestCase):
             [
                 {"bundle": "dustrgb", "bundles": ["dustrgb"], "id": "shachen", "version": DUST.version, "inputs": ["ir086", "ir104", "ir112", "ir123"]},
                 {"bundle": "dustcf", "bundles": ["dustcf", "zhouye"], "id": "shachen", "version": DEBRA.version, "inputs": ["ir039", "wv062", "ir086", "ir104", "ir123"]},
+                {"bundle": "truecolor", "bundles": ["truecolor"], "id": "xue", "version": TRUE_COLOR_VERSION, "inputs": ["vis047", "vis051", "vis064", "nir086"]},
             ],
         )
         self.assertEqual([frame["slot"] for frame in record["frames"]], ["2026-09-17T03:00:00Z", "2026-09-17T03:10:00Z"])
-        self.assertEqual([frame["tilesFetched"] for frame in record["frames"]], [12, 12])
+        self.assertEqual([frame["tilesFetched"] for frame in record["frames"]], [20, 20])
         self.assertEqual(record["frames"][0]["frames"]["dustr"], "dustr_20260917030000.tif")
         self.assertEqual(record["frames"][0]["frames"]["dustcf"], "dustcf_20260917030000.tif")
         # The confidence's frames name the ancillary they were computed
@@ -738,7 +880,7 @@ class FetchTests(TempRoot, unittest.TestCase):
             _fetch_satellite_run(SPEC, GfsRun(SLOT_0300), 3, self.root, force=False, input_ids=("cref",), fetch=self.listing)
         # Asked for one channel, the fetch composes nothing and writes that
         # channel's series alone; asked for the Dust RGB's four, it composes
-        # that and not the confidence.
+        # that and neither the confidence nor the true colour.
         shutil.rmtree(run_dir)
         with mock.patch.dict(PLATFORMS, {"himawari": TWO_TILES}):
             alone = _fetch_satellite_run(
@@ -819,7 +961,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
             )
 
     def test_the_bundle_is_the_disk_grid_with_the_band_beside_the_parameter(self) -> None:
-        self.assertEqual([bundle["variable"] for bundle in self.report["bundles"]], ["ir104", "dustrgb", "dustcf", "zhouye"])
+        self.assertEqual([bundle["variable"] for bundle in self.report["bundles"]], ["ir104", "dustrgb", "dustcf", "zhouye", "truecolor"])
         manifest = json.loads((self.root / "out" / "manifest.json").read_text(encoding="utf-8"))
         self.assertEqual((manifest["model"], manifest["product"]), ("HIMAWARI", "ahi-fldk-0p04"))
         self.assertEqual(manifest["runTime"], "2026-09-17T03:00:00Z")
@@ -877,7 +1019,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         frames_dir = self.root / "himawari-frames"
         planes = {
             channel_id: assemble.read_frame(frames_dir / channel_id / f"{channel_id}_20260917030000.tif", satellite_grid(SPEC))
-            for channel_id in SPEC.input_variable_ids
+            for channel_id in DUST.inputs
         }
         expected = DUST.run(HIMAWARI, planes, {}, slot=SLOT_0300, grid=satellite_grid(SPEC))
         row, column = 800, 1800
@@ -895,7 +1037,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         channel has none and over land no emissivity is staged for, and a
         value in 1..251 elsewhere inside the disk."""
         manifest = json.loads((self.root / "out" / "manifest.json").read_text(encoding="utf-8"))
-        self.assertEqual([bundle["variable"] for bundle in manifest["bundles"]], ["ir104", "dustrgb", "dustcf", "zhouye"])
+        self.assertEqual([bundle["variable"] for bundle in manifest["bundles"]], ["ir104", "dustrgb", "dustcf", "zhouye", "truecolor"])
         entry = next(bundle for bundle in manifest["bundles"] if bundle["variable"] == "dustcf")
         self.assertNotIn("poster", entry)
         self.assertNotIn("video", entry)
@@ -979,9 +1121,9 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         # bundles' own order.
         self.assertEqual(
             [Path(variant["output"]).name for variant in self.report["variants"]],
-            [f"{bundle_id}.{tier}.xue" for bundle_id in ("ir104", "dustrgb", "dustcf", "zhouye") for tier, _, _, _ in rungs],
+            [f"{bundle_id}.{tier}.xue" for bundle_id in ("ir104", "dustrgb", "dustcf", "zhouye", "truecolor") for tier, _, _, _ in rungs],
         )
-        self.assertEqual(sorted(path.name for path in (self.root / "out").glob("*.xue")), sorted(f"{b}{s}.xue" for b in ("ir104", "dustrgb", "dustcf", "zhouye") for s in ("", ".half", ".quarter", ".eighth")))
+        self.assertEqual(sorted(path.name for path in (self.root / "out").glob("*.xue")), sorted(f"{b}{s}.xue" for b in ("ir104", "dustrgb", "dustcf", "zhouye", "truecolor") for s in ("", ".half", ".quarter", ".eighth")))
         self.assertEqual(source_spec("gfs").variant_factors, (2,))
 
     def test_a_crop_past_the_antimeridian_reads_the_disk_s_eastern_columns(self) -> None:
@@ -995,7 +1137,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                 work_root=self.root / "crop-work",
                 bbox=(-175.0, 0.0, -160.0, 10.0),
             )
-        self.assertEqual([bundle["variable"] for bundle in report["bundles"]], ["ir104", "dustrgb", "dustcf", "zhouye"])
+        self.assertEqual([bundle["variable"] for bundle in report["bundles"]], ["ir104", "dustrgb", "dustcf", "zhouye", "truecolor"])
         grid = read_bundle(self.root / "crop" / "ir104.xue").metadata["grid"]
         self.assertEqual((grid["width"], grid["height"]), (376, 252))
         self.assertEqual(grid["firstLongitude"], -175.0)
