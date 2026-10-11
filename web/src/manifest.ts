@@ -360,8 +360,8 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
   // 0.04° grid over the disk's useful extent. The source publishes the
   // hourly repeat cycle alone — the one EUMETSAT's data policy releases
   // under CC-BY-4.0 for redistribution — so its window is a day of hourly
-  // frames rather than hours of ten-minute ones. Named by the slot (0° is Meteosat-12 today), never
-  // the spacecraft, as the other disks are.
+  // frames rather than hours of ten-minute ones. Named by the slot (0° is
+  // Meteosat-12 today), never the spacecraft, as the other disks are.
   meteosat: {
     id: "meteosat",
     label: "METEOSAT",
@@ -426,10 +426,11 @@ export function isCaseOnlyModel(model: ForecastModelId): boolean {
 /** The datasets in the model switch's order: the eight live forecasts, the
  * ten rolling observation windows (MRMS and its 3D volume, the JMA
  * nowcast, the CMA mosaic, the four geostationary imagers and Himawari's
- * Japan box, and the SWPC aurora probability) and the geostationary mosaic, a view over the imagers
- * with no feed of its own. The switch offers the ones index.html has a
- * button for. A dataset with no pointer that is not a mosaic (the WOOF
- * nest) is absent: it is reached through its showcase cases alone. */
+ * Japan box, and the SWPC aurora probability) and the geostationary
+ * mosaic, a view over the imagers with no feed of its own. The switch
+ * offers the ones index.html has a button for. A dataset with no pointer
+ * that is not a mosaic (the WOOF nest) is absent: it is reached through
+ * its showcase cases alone. */
 export const FORECAST_MODEL_IDS: readonly ForecastModelId[] = [
   "gfs",
   "sflux",
@@ -759,8 +760,8 @@ export function vectorComponents(id: ForecastBundleId): readonly [VectorComponen
 }
 
 /** The three guns of every composite bundle, red, green, blue — the order
- * the encoders number them (1, 2, 3; 7, 8, 9; 10, 11, 12) and the renderer's RGB
- * texture takes them in. */
+ * the encoders number them (1, 2, 3; 7, 8, 9; 10, 11, 12) and the
+ * renderer's RGB texture takes them in. */
 export const COMPOSITE_BUNDLES: Record<CompositeBundleId, readonly [CompositeComponentId, CompositeComponentId, CompositeComponentId]> = {
   dustrgb: ["dustr", "dustg", "dustb"],
   truecolor: ["truer", "trueg", "trueb"],

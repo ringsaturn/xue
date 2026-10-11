@@ -313,10 +313,10 @@ re-fetched). Needs the `aurora` dependency group.
 ## Satellites
 
 `himawari`, `himawarijp`, `goeseast`, `goeswest` and `meteosat` are
-series-file observations whose fetch stage is `xuebuild/satellite/`; registry, readers,
-projector, frame cache, producers, the Dust RGB and the dust confidence are
-specified in [../satellite.md](../satellite.md). What the rest of the repo
-must keep in mind:
+series-file observations whose fetch stage is `xuebuild/satellite/`;
+registry, readers, projector, frame cache, producers, the Dust RGB and the
+dust confidence are specified in [../satellite.md](../satellite.md). What
+the rest of the repo must keep in mind:
 
 - The source id is the **role** (orbital slot); the spacecraft is the
   `band` block on each variable (`SourceSpec.bands` from `Platform.bands`).
@@ -339,9 +339,9 @@ must keep in mind:
   required. It needs the `EUMETSAT_CONSUMER_KEY` / `EUMETSAT_CONSUMER_SECRET`
   secrets (the workflow warns and builds nothing without them) and
   `hdf5plugin` for FCI's JPEG-LS filter.
-- Composites (`dustrgb`, `dustcf`, `zhouye`, `truecolor`, `nightmicro`) are computed in
-  the fetch stage by producers, not by the converter. `bundle_input_ids`
-  asks `Producer.inputs_for(platform)`, and
+- Composites (`dustrgb`, `dustcf`, `zhouye`, `truecolor`, `nightmicro`)
+  are computed in the fetch stage by producers, not by the converter.
+  `bundle_input_ids` asks `Producer.inputs_for(platform)`, and
   `convert.rs::composite_input_ids` must answer the same per source (the
   Dust RGB drops `ir112` on FCI, the true colour `vis051` on the ABI). The
   registry knows a producer's id (`VariableSpec.producer_id`), never its

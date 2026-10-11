@@ -290,8 +290,9 @@ Facts worth getting right:
   website (出典：気象庁ホームページ; the agency's terms of use, compatible
   with CC BY 4.0, ask that the source be named and the processing —
   regridding and reclassification by jma-radar — be noted); `himawari` and
-  `himawarijp` are JMA's Himawari-9 imagery distributed by NOAA (attribution required, the
-  reprojection noted, no endorsement implied by either agency); `goeseast`
+  `himawarijp` are JMA's Himawari-9 imagery distributed by NOAA
+  (attribution required, the reprojection noted, no endorsement implied by
+  either agency); `goeseast`
   and `goeswest` are NOAA GOES-R imagery (public domain, attribution
   requested, no endorsement implied); `meteosat` is EUMETSAT Meteosat
   data, the hourly Level 1 cycle, CC-BY-4.0 ("Contains modified EUMETSAT
@@ -483,12 +484,12 @@ https://dataset.ringsaturn.me/xue/. The contract is two layers:
 - One mutable live pointer per source (JSON, schema 1): `latest.json` (GFS),
   `latest-sflux.json`, `latest-ecmwf.json`, `latest-aifs.json`,
   `latest-ifshres.json`, `latest-hrrr.json`, `latest-gefsaero.json`, `latest-cfs.json`, `latest-mrms.json`, `latest-jma.json`, `latest-cma.json`,
-  `latest-himawari.json`, `latest-himawarijp.json`, `latest-goeseast.json`, `latest-goeswest.json`,
-  `latest-meteosat.json`. Fields: `schemaVersion`, `model`, `product`, `run`
-  (YYYYMMDDHH, UTC), `runTime` (ISO 8601), `manifestPath` (relative),
-  `manifestCrc32`. Fetch with cache disabled; it changes four times a day
-  (every hour for HRRR, every five minutes for MRMS — compare
-  `manifestCrc32`, not `run`, to see whether it moved).
+  `latest-himawari.json`, `latest-himawarijp.json`, `latest-goeseast.json`,
+  `latest-goeswest.json`, `latest-meteosat.json`. Fields: `schemaVersion`,
+  `model`, `product`, `run` (YYYYMMDDHH, UTC), `runTime` (ISO 8601),
+  `manifestPath` (relative), `manifestCrc32`. Fetch with cache disabled; it
+  changes four times a day (every hour for HRRR, every five minutes for
+  MRMS — compare `manifestCrc32`, not `run`, to see whether it moved).
 - Everything the pointer names is immutable and lives under `<model>.<run>/`:
   the run's `manifest.json` (schema 5: `model`, `product`, `runTime`,
   `forecastHours`, and `bundles[]`, each with `variable`, optional
@@ -508,9 +509,10 @@ https://dataset.ringsaturn.me/xue/. The contract is two layers:
   axis, the variables' GRIB2 parameter blocks and the quantization codebooks
   are inside each bundle — a UTF-8 JSON metadata block after the container's
   header, the store group's `attributes.xue` verbatim.
-- The MRMS, JMA and CMA radar windows and the satellite windows are one directory deeper: the `run` is the window's *first*
-  hour (three hours before the newest frame's, moving on every hour), and
-  each five-minute rebuild of that run is a round of its own,
+- The MRMS, JMA and CMA radar windows and the satellite windows are one
+  directory deeper: the `run` is the window's *first* hour (three hours
+  before the newest frame's, moving on every hour), and each five-minute
+  rebuild of that run is a round of its own,
   `mrms.<run>/<HHMM>/manifest.json` (HHMM the round's UTC start), so a
   round's artifacts are never rewritten under a `?v=` a reader may hold.
   A `window.json` beside the manifest (`frameCount`, `firstSlot`,

@@ -5,17 +5,17 @@
  * a time, with its own session and time axis — and the **lines** over it
  * make up the composition (`fill` / `lines`; either may be empty but not
  * both, and a pressure surface named as the field is the lines alone).
- * The **overlays** follow the playhead over the field: the particles, a
- * volume (the cloud water drawn in 3D over a 2D field) and, under the
- * experiment, the two derived layers. A **blend** completes the field
- * where it has no data: the day-night view draws the night microphysics
- * picture under the true colour, so the night side shows it. The **marks** — the storm
- * tracks and the two station products — take no session and have their
- * own pointers. `ViewState` holds all of it; the rail's pressed states,
- * the level row and the address bar are projections of it, and the two
- * functions here are the whole of the URL side: `parseView` reads a query
- * string into a view, `searchForView` writes a view back, and one is the
- * inverse of the other for every parameter the shell understands.
+ * The **overlays** follow the playhead over the field: the particles, a volume
+ * (the cloud water drawn in 3D over a 2D field) and, under the experiment, the
+ * two derived layers. A **blend** completes the field where it has no data:
+ * the day-night view draws the night microphysics picture under the true
+ * colour, so the night side shows it. The **marks** — the storm tracks and the
+ * two station products — take no session and have their own pointers.
+ * `ViewState` holds all of it; the rail's pressed states, the level row and
+ * the address bar are projections of it, and the two functions here are the
+ * whole of the URL side: `parseView` reads a query string into a view,
+ * `searchForView` writes a view back, and one is the inverse of the other for
+ * every parameter the shell understands.
  */
 
 import { VOLUME_BUNDLE_LEVELS, type ForecastBundleId, type ForecastModelId } from "./manifest";
