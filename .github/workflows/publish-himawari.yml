@@ -13,8 +13,11 @@ name: publish himawari
 # (the tiles of a scan land about eight minutes after it starts, and a
 # five-minute cron would find nothing new every other time), a dispatch
 # with `loop` on running rounds until the deadline. A round lists the
-# newest complete scan, fetches its 88 tiles (26 MB), mosaics and warps
-# them once (xuebuild/satellite/, through the system GDAL's gdalwarp —
+# newest complete scan, fetches its 88 tiles per channel (26 MB for an
+# infrared window; the four solar bands the true colour composite reads
+# are 100 MB each at 1 km and 390 MB for the 0.5 km red band by day, some
+# 700 MB a slot in all), mosaics and warps them once (xuebuild/satellite/,
+# through the system GDAL's gdalwarp —
 # the xuepy wheel's GDAL carries no GeoTIFF driver, so this workflow
 # installs gdal-bin whichever encoder converts), caches the frame on the
 # bucket beside the JMA frames (`make pull-r2-frames` / `push-r2-frames`),

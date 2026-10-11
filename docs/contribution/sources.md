@@ -291,12 +291,22 @@ must keep in mind:
   required. It needs the `EUMETSAT_CONSUMER_KEY` / `EUMETSAT_CONSUMER_SECRET`
   secrets (the workflow warns and builds nothing without them) and
   `hdf5plugin` for FCI's JPEG-LS filter.
-- Composites (`dustrgb`, `dustcf`) are computed in the fetch stage by
-  producers, not by the converter. `bundle_input_ids` asks
-  `Producer.inputs_for(platform)`, and `convert.rs::composite_input_ids`
-  must answer the same per source. The registry knows a producer's id
-  (`VariableSpec.producer_id`), never its version, which comes from the
-  series file's stamp. Code 0 is no data in every gun.
+- Composites (`dustrgb`, `dustcf`, `zhouye`, `truecolor`) are computed in
+  the fetch stage by producers, not by the converter. `bundle_input_ids`
+  asks `Producer.inputs_for(platform)`, and
+  `convert.rs::composite_input_ids` must answer the same per source (the
+  Dust RGB drops `ir112` on FCI, the true colour `vis051` on the ABI). The
+  registry knows a producer's id (`VariableSpec.producer_id`), never its
+  version, which comes from the series file's stamp. Code 0 is no data in
+  every gun.
+- `truecolor` is Xue's own recipe (`TrueColorProducer`, producer id
+  `xue`): its version is `producers.TRUE_COLOR_VERSION`, bumped by hand
+  when a recipe constant changes, because a cached slot is recomposed
+  when the version differs and must not be on every package release. Its
+  inputs are the solar bands, which cost a round some 500–600 MB of
+  downloads over the windows' 140 (the 0.5 km red band alone is 200–430
+  MB a slot); reflectance frames are warped as block means
+  (`fetch.resampling_for`), brightness temperatures bilinearly.
 - `dustcf` ships on the three NOAA-redistributed disks only (Meteosat's
   hourly cycle is not published); its ancillaries need `ANCILLARY=true` in
   the rounds script. The CAMEL months are staged by `xuebuild/satellite/staging.py`
@@ -309,8 +319,8 @@ must keep in mind:
   from one producer: `Producer.bundle_ids` lists both, `PRODUCERS` keys both
   to the same object, and the fetch runs it once. A source listing only one
   still gets both frames cached; the converter reads what is listed.
-- Frames are kept `FRAMES_KEEP_HOURS` (8; 26 on Meteosat): a day of seven
-  variables is ~4.5 GB.
+- Frames are kept `FRAMES_KEEP_HOURS` (8; 26 on Meteosat): a day of
+  seventeen variables on a NOAA disk is ~9 GB.
 - They ship three lower rungs (`variant_factors` `(2, 4, 8)`): a
   3000 × 3000 plane does not fit the shell's cell budget zoomed out.
 - `tests/fixtures/satellite-registry.json` pins variables and bundles across
