@@ -9,7 +9,7 @@ from pathlib import Path
 
 import numpy as np
 
-from ..variables import variable_spec
+from ..variables import CLOUD_WATER_LEVELS_M, CLOUD_WATER_VARIABLE_IDS, variable_spec
 from .derive import derive, rain_total
 from .reader import WrfError, WrfRun, _netcdf4, open_run, read_frame
 from .regrid import Sampler, build_sampler, place_grid
@@ -17,7 +17,10 @@ from .regrid import Sampler, build_sampler, place_grid
 LOG = logging.getLogger(__name__)
 
 #: The variables one run yields, in file order.
-VARIABLE_IDS = ("tmp2m", "dpt2m", "tmpsfc", "ugrd10m", "vgrd10m", "apcp", "tcdc", "lcdc", "mcdc", "hcdc", "hpbl", "dswrf", "orog")
+VARIABLE_IDS = (
+    "tmp2m", "dpt2m", "tmpsfc", "ugrd10m", "vgrd10m", "apcp", "tcdc", "lcdc", "mcdc", "hcdc", "hpbl", "dswrf", "orog",
+    *CLOUD_WATER_VARIABLE_IDS,
+)  # fmt: skip
 
 #: The unit each series declares: the registry's output unit in the
 #: udunits spelling ``observation.accepted_series_units`` admits.
@@ -41,6 +44,10 @@ LONG_NAMES = {
     "hpbl": "planetary boundary layer height",
     "dswrf": "downward shortwave radiation at the surface",
     "orog": "terrain height",
+    **{
+        variable_id: f"cloud water mixing ratio at {level / 1000:g} km MSL"
+        for variable_id, level in zip(CLOUD_WATER_VARIABLE_IDS, CLOUD_WATER_LEVELS_M)
+    },
 }
 
 
@@ -61,7 +68,7 @@ class SeriesSummary:
 
     def line(self) -> str:
         return (
-            f"{self.variable_id:8s} {self.frames} frames, {self.width}x{self.height} cells, "
+            f"{self.variable_id:9s} {self.frames} frames, {self.width}x{self.height} cells, "
             f"{self.minimum:.3f}..{self.maximum:.3f} {series_unit(self.variable_id)}"
         )
 
@@ -161,6 +168,6 @@ def convert_run(run_dir: Path, domain: str, out: Path, *, step: float = 0.005, f
         frames = np.stack(planes[variable_id])
         write_series(paths[variable_id], variable_id, run.grid.start, lead_hours, sampler, frames, attributes)
         summaries.append(
-            SeriesSummary(variable_id, paths[variable_id], len(lead_hours), sampler.width, sampler.height, float(frames.min()), float(frames.max()))
+            SeriesSummary(variable_id, paths[variable_id], len(lead_hours), sampler.width, sampler.height, float(np.nanmin(frames)), float(np.nanmax(frames)))
         )
     return summaries

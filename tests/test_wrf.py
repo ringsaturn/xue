@@ -40,6 +40,8 @@ CENTER = (139.0, 35.0)
 #: cloud layer.
 Z_W = np.array([0.0, 2000.0, 6000.0, 10000.0])
 CLDFRA_COLUMN = np.array([0.2, 0.5, 0.0])
+#: Cloud water on the mass levels, kg/kg: 1 g/kg at 1 km, half that at 4 km.
+QCLOUD_COLUMN = np.array([0.001, 0.0005, 0.0])
 
 
 def _coordinates() -> tuple[np.ndarray, np.ndarray]:
@@ -109,6 +111,7 @@ def write_wrfout(directory: Path, hours: range, *, latitude_shift: float = 0.0) 
             cldfra = np.broadcast_to(CLDFRA_COLUMN[:, None, None], (NZ, NY, NX)).copy()
             cldfra[2, 0, 0] = 0.4
             put("CLDFRA", cldfra, ("bottom_top", *surface))
+            put("QCLOUD", np.broadcast_to(QCLOUD_COLUMN[:, None, None], (NZ, NY, NX)), ("bottom_top", *surface))
             put("COSALPHA", np.cos(alpha), surface)
             put("SINALPHA", np.sin(alpha), surface)
             put("XLAT", xlat + latitude_shift, surface)
@@ -153,6 +156,36 @@ class DerivationTests(unittest.TestCase):
         self.assertAlmostEqual(float(covers["mcdc"][0, 0]), 50.0)
         self.assertAlmostEqual(float(covers["hcdc"][0, 0]), 0.0)
         self.assertAlmostEqual(float(covers["tcdc"][0, 0]), 100.0 * (1.0 - 0.8 * 0.5))
+
+    def test_altitude_levels_interpolate_in_the_layer_and_blank_the_ground(self) -> None:
+        from xuebuild.wrf.derive import altitude_levels
+
+        # Two columns on mass levels at 1, 4 and 8 km; the second stands on
+        # 1.2 km of terrain and carries cloud water up to the top level.
+        z = np.broadcast_to(np.array([1000.0, 4000.0, 8000.0])[:, None, None], (3, 1, 2))
+        values = np.array([[[1.0, 1.0]], [[0.5, 0.5]], [[0.0, 0.25]]])
+        terrain = np.array([[100.0, 1200.0]])
+        levels = (250, 1000, 1250, 2500, 8000, 9000)
+        out = altitude_levels(values, z, terrain, levels)
+        self.assertEqual(out.shape, (6, 1, 2))
+        # Between the ground and the lowest mass level: that level's value.
+        self.assertEqual(float(out[0, 0, 0]), 1.0)
+        # Under the terrain: NaN, and nothing else is.
+        self.assertTrue(np.isnan(out[0:2, 0, 1]).all())
+        self.assertFalse(np.isnan(out[2:, 0, 1]).any())
+        self.assertFalse(np.isnan(out[:, 0, 0]).any())
+        # Inside a layer: linear in height; on a level: that level.
+        self.assertAlmostEqual(float(out[1, 0, 0]), 1.0)
+        self.assertAlmostEqual(float(out[2, 0, 0]), 1.0 - 0.5 * 250.0 / 3000.0)
+        self.assertAlmostEqual(float(out[3, 0, 0]), 0.75)
+        self.assertAlmostEqual(float(out[4, 0, 1]), 0.25)
+        # Over the top mass level: zero, whatever the top level carries.
+        self.assertEqual(float(out[5, 0, 1]), 0.0)
+        # The same numbers np.interp gives each column.
+        for column in range(2):
+            expected = np.interp(levels, z[:, 0, column], values[:, 0, column], right=0.0)
+            expected[np.asarray(levels) < terrain[0, column]] = np.nan
+            np.testing.assert_array_equal(out[:, 0, column], expected)
 
 
 @unittest.skipUnless(NETCDF, "netCDF4 is not installed (uv sync --group wrf)")
@@ -239,6 +272,14 @@ class SyntheticRunTests(unittest.TestCase):
                 elif variable_id == "hcdc":
                     self.assertGreater(float(values.max()), 0.0)
                     self.assertEqual(float(values.min()), 0.0)
+                elif variable_id == "clw1000":
+                    # On the lowest mass level, kg/kg → g/kg.
+                    self.assertEqual(data.units, "g/kg")
+                    np.testing.assert_allclose(values, 1.0, atol=1e-6)
+                elif variable_id == "clw2500":
+                    np.testing.assert_allclose(values, 0.75, atol=1e-6)
+                elif variable_id == "clw12000":
+                    np.testing.assert_array_equal(values, 0.0)
         with netCDF4.Dataset(out / "woof.2026101006.ugrd10m.nc") as u, netCDF4.Dataset(out / "woof.2026101006.vgrd10m.nc") as v:
             np.testing.assert_allclose(np.hypot(u["ugrd10m"][:], v["vgrd10m"][:]), 3.0, atol=1e-5)
         with self.assertRaisesRegex(XueError, "--force"):
