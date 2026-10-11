@@ -19,7 +19,7 @@ use xue::{decode_chunk, DecodeError, Predictor};
 
 use crate::bucket::Data;
 use crate::error::HttpError;
-use crate::timezone;
+use crate::{products, timezone};
 
 #[derive(Debug, Deserialize)]
 struct Collection {
@@ -27,14 +27,18 @@ struct Collection {
     pointer: Option<String>,
 }
 
+/// A live pointer. A run's names its manifest; a point product's
+/// (`latest-sounding.json`, …) names an index instead and carries `product`,
+/// which is how `/v1/point` tells a client it asked the wrong route.
 #[derive(Debug, Deserialize)]
 struct Pointer {
+    product: Option<String>,
     #[serde(rename = "runTime")]
     run_time: Option<String>,
     #[serde(rename = "manifestPath")]
-    manifest_path: String,
+    manifest_path: Option<String>,
     #[serde(rename = "manifestCrc32")]
-    manifest_crc32: String,
+    manifest_crc32: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -120,13 +124,28 @@ pub(crate) async fn resolve_run(
         )
     })?;
     let pointer: Pointer = data.json(&pointer_name).await?;
+    let (manifest_path, manifest_crc32) = match (pointer.manifest_path, pointer.manifest_crc32) {
+        (Some(path), Some(crc32)) => (path, crc32),
+        _ => {
+            let product = pointer.product.as_deref().unwrap_or(source);
+            let endpoint = products::product(product).and_then(|product| product.endpoint);
+            return Err(HttpError::new(
+                400,
+                "not_a_grid",
+                match endpoint {
+                    Some(endpoint) => {
+                        format!("{source} is a point product, not a grid; use {endpoint}")
+                    }
+                    None => format!("{source} is a point product, not a grid"),
+                },
+            )
+            .with_detail(json!({ "product": product, "endpoint": endpoint })));
+        }
+    };
     // The live manifest is immutable for this pointer's crc, so an isolate
     // that already read it answers the next request without R2.
-    let manifest: Manifest = data
-        .json_cached(&pointer.manifest_path, &pointer.manifest_crc32)
-        .await?;
-    let dir = pointer
-        .manifest_path
+    let manifest: Manifest = data.json_cached(&manifest_path, &manifest_crc32).await?;
+    let dir = manifest_path
         .rsplit_once('/')
         .map(|(dir, _)| dir.to_owned())
         .unwrap_or_default();

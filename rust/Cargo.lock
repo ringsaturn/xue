@@ -1669,6 +1669,7 @@ dependencies = [
  "futures-executor",
  "futures-util",
  "js-sys",
+ "percent-encoding",
  "serde",
  "serde_json",
  "tzf-rs",

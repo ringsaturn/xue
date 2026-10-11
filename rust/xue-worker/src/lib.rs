@@ -3,10 +3,13 @@
 //! An additional read layer, not part of the pipeline: it resolves a run the
 //! way the STAC catalog does (Collection → live pointer → manifest), reads the
 //! bundle's Zarr store over ranges and decodes with the same `xue` crate the
-//! browser's wasm decoder uses. `docs/api.md` is the wire contract (routes,
-//! parameters, response shapes, errors, caching); `docs/zarr-profile.md` is
-//! the store layout these objects follow and `docs/stac.md` the catalog the
-//! resolution chain is part of.
+//! browser's wasm decoder uses. The point products (soundings, airports,
+//! surface stations, storms) are read the same way — pointer → index → one
+//! station's byte span — and answered as JSON a client need not decode
+//! further. `docs/api.md` is the wire contract (routes, parameters, response
+//! shapes, errors, caching); `docs/zarr-profile.md` is the store layout these
+//! objects follow and `docs/stac.md` the catalog the resolution chain is
+//! part of.
 //!
 //! The read paths are cached twice: immutable documents and shard indices in
 //! an isolate (module state, `cache.rs`), and whole 200 responses in
@@ -23,16 +26,23 @@
 // Natively only the tests call the handlers; on wasm32 `runtime` does.
 #![cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
 
+mod airport;
 mod bucket;
 mod cache;
 #[cfg(target_arch = "wasm32")]
 mod docs;
 mod error;
 mod point;
+mod products;
 #[cfg(target_arch = "wasm32")]
 mod runtime;
+mod sounding;
 mod source;
+mod synop;
+mod tc;
 mod timezone;
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_products;

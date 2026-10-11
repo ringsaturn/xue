@@ -4,7 +4,7 @@
     "title": "Xue data API",
     "version": "0.1.0",
     "summary": "Read-only JSON over the published Xue weather stores.",
-    "description": "**Experimental.** Routes, parameters and response shapes may change without notice, and there is no guarantee of availability or freshness. For anything that must keep working, read the static STAC catalog and Zarr stores directly.\n\nA stateless facade over the public Xue dataset on Cloudflare R2. It resolves a run the way the STAC catalog does (Collection -> live pointer -> manifest), reads the bundle's Zarr v3 store and decodes the quantized codes. It never writes data, and the viewer does not depend on it.\n\nTimes are UTC ISO 8601. `variables` is a flat map keyed by variable id, whatever bundle was requested: a vector bundle's components are separate entries carrying the `bundle` they belong to. Every field is present; `null` marks a missing code or an absent label/unit.",
+    "description": "**Experimental.** Routes, parameters and response shapes may change without notice, and there is no guarantee of availability or freshness. For anything that must keep working, read the static STAC catalog and Zarr stores directly.\n\nA stateless facade over the public Xue dataset on Cloudflare R2. It resolves a run the way the STAC catalog does (Collection -> live pointer -> manifest), reads the bundle's Zarr v3 store and decodes the quantized codes. The point products — radiosonde soundings, airport reports, surface stations, tropical cyclones — are read through their pointer and index, one station per ranged read, and answered in physical units. It never writes data, and the viewer does not depend on it.\n\nTimes are UTC ISO 8601. `variables` is a flat map keyed by variable id, whatever bundle was requested: a vector bundle's components are separate entries carrying the `bundle` they belong to. Every field is present; `null` marks a missing code or an absent label/unit.",
     "license": { "name": "MIT OR Apache-2.0" }
   },
   "servers": [
@@ -14,7 +14,9 @@
   "tags": [
     { "name": "meta", "description": "Liveness and the machine-readable contract." },
     { "name": "catalog", "description": "What the dataset publishes." },
-    { "name": "data", "description": "One cell's series." }
+    { "name": "data", "description": "One cell's series." },
+    { "name": "stations", "description": "The point products: radiosonde soundings, airport reports, surface stations. Each is a list of stations and one station's record." },
+    { "name": "storms", "description": "The tropical cyclone product: the live systems and one storm's tracks." }
   ],
   "paths": {
     "/health": {
@@ -121,9 +123,257 @@
           "502": { "$ref": "#/components/responses/ErrorResponse" }
         }
       }
+    },
+    "/v1/soundings": {
+      "get": {
+        "tags": ["stations"],
+        "operationId": "soundings",
+        "summary": "The radiosonde stations of the live issue, with each one's headline.",
+        "parameters": [
+          { "$ref": "#/components/parameters/nearLat" },
+          { "$ref": "#/components/parameters/nearLon" },
+          { "$ref": "#/components/parameters/radius" },
+          { "$ref": "#/components/parameters/bbox" },
+          { "$ref": "#/components/parameters/limit" },
+          { "$ref": "#/components/parameters/issue" }
+        ],
+        "responses": {
+          "200": {
+            "description": "The stations, nearest first when `lat`/`lon` are given.",
+            "headers": { "x-xue-issue": { "$ref": "#/components/headers/issue" } },
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SoundingList" } } }
+          },
+          "400": { "$ref": "#/components/responses/ErrorResponse" },
+          "404": { "$ref": "#/components/responses/ErrorResponse" },
+          "502": { "$ref": "#/components/responses/ErrorResponse" }
+        }
+      }
+    },
+    "/v1/soundings/{station}": {
+      "get": {
+        "tags": ["stations"],
+        "operationId": "sounding",
+        "summary": "One station's recent ascents, levels in physical units.",
+        "parameters": [
+          {
+            "name": "station",
+            "in": "path",
+            "required": true,
+            "description": "The WIGOS id the product keys on (`0-20000-0-47401`) or the five-digit WMO number (`47401`).",
+            "schema": { "type": "string" }
+          },
+          { "$ref": "#/components/parameters/timeNearest" },
+          { "$ref": "#/components/parameters/issue" }
+        ],
+        "responses": {
+          "200": {
+            "description": "The station and its ascents, newest first.",
+            "headers": { "x-xue-issue": { "$ref": "#/components/headers/issue" } },
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SoundingResponse" } } }
+          },
+          "400": { "$ref": "#/components/responses/ErrorResponse" },
+          "404": { "$ref": "#/components/responses/ErrorResponse" },
+          "502": { "$ref": "#/components/responses/ErrorResponse" }
+        }
+      }
+    },
+    "/v1/airports": {
+      "get": {
+        "tags": ["stations"],
+        "operationId": "airports",
+        "summary": "Every airport's newest observation.",
+        "parameters": [
+          { "$ref": "#/components/parameters/nearLat" },
+          { "$ref": "#/components/parameters/nearLon" },
+          { "$ref": "#/components/parameters/radius" },
+          { "$ref": "#/components/parameters/bbox" },
+          { "$ref": "#/components/parameters/limit" },
+          {
+            "name": "category",
+            "in": "query",
+            "required": false,
+            "description": "Keep one flight category: `VFR`, `MVFR`, `IFR`, `LIFR` (case-insensitive).",
+            "schema": { "type": "string" }
+          },
+          { "$ref": "#/components/parameters/issue" }
+        ],
+        "responses": {
+          "200": {
+            "description": "The stations, nearest first when `lat`/`lon` are given.",
+            "headers": { "x-xue-issue": { "$ref": "#/components/headers/issue" } },
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AirportList" } } }
+          },
+          "400": { "$ref": "#/components/responses/ErrorResponse" },
+          "404": { "$ref": "#/components/responses/ErrorResponse" },
+          "502": { "$ref": "#/components/responses/ErrorResponse" }
+        }
+      }
+    },
+    "/v1/airports/{icao}": {
+      "get": {
+        "tags": ["stations"],
+        "operationId": "airport",
+        "summary": "One airport's METARs of the last 24 hours and its current TAF.",
+        "parameters": [
+          {
+            "name": "icao",
+            "in": "path",
+            "required": true,
+            "description": "The ICAO id (`RJTT`), any case.",
+            "schema": { "type": "string" }
+          },
+          { "$ref": "#/components/parameters/timeNearest" },
+          { "$ref": "#/components/parameters/issue" }
+        ],
+        "responses": {
+          "200": {
+            "description": "The station, its METARs newest first, and its TAF (or null).",
+            "headers": { "x-xue-issue": { "$ref": "#/components/headers/issue" } },
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AirportResponse" } } }
+          },
+          "400": { "$ref": "#/components/responses/ErrorResponse" },
+          "404": { "$ref": "#/components/responses/ErrorResponse" },
+          "502": { "$ref": "#/components/responses/ErrorResponse" }
+        }
+      }
+    },
+    "/v1/synop": {
+      "get": {
+        "tags": ["stations"],
+        "operationId": "synop",
+        "summary": "Every surface station's current values.",
+        "parameters": [
+          {
+            "name": "network",
+            "in": "query",
+            "required": false,
+            "description": "Keep one network (`amedas`).",
+            "schema": { "type": "string" }
+          },
+          { "$ref": "#/components/parameters/nearLat" },
+          { "$ref": "#/components/parameters/nearLon" },
+          { "$ref": "#/components/parameters/radius" },
+          { "$ref": "#/components/parameters/bbox" },
+          { "$ref": "#/components/parameters/limit" },
+          { "$ref": "#/components/parameters/issue" }
+        ],
+        "responses": {
+          "200": {
+            "description": "The networks, the element table and the stations, nearest first when `lat`/`lon` are given.",
+            "headers": { "x-xue-issue": { "$ref": "#/components/headers/issue" } },
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SynopList" } } }
+          },
+          "400": { "$ref": "#/components/responses/ErrorResponse" },
+          "404": { "$ref": "#/components/responses/ErrorResponse" },
+          "502": { "$ref": "#/components/responses/ErrorResponse" }
+        }
+      }
+    },
+    "/v1/synop/{station}": {
+      "get": {
+        "tags": ["stations"],
+        "operationId": "synopStation",
+        "summary": "One station's 24-hour window, in the shape `/v1/point` answers.",
+        "parameters": [
+          {
+            "name": "station",
+            "in": "path",
+            "required": true,
+            "description": "The station id, `<network>:<number>` (`amedas:50066`).",
+            "schema": { "type": "string" }
+          },
+          { "$ref": "#/components/parameters/timeNearest" },
+          { "$ref": "#/components/parameters/issue" }
+        ],
+        "responses": {
+          "200": {
+            "description": "The station, its network, the time axis and one entry per element.",
+            "headers": { "x-xue-issue": { "$ref": "#/components/headers/issue" } },
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SynopResponse" } } }
+          },
+          "400": { "$ref": "#/components/responses/ErrorResponse" },
+          "404": { "$ref": "#/components/responses/ErrorResponse" },
+          "502": { "$ref": "#/components/responses/ErrorResponse" }
+        }
+      }
+    },
+    "/v1/storms": {
+      "get": {
+        "tags": ["storms"],
+        "operationId": "storms",
+        "summary": "The tropical systems of the live issue.",
+        "parameters": [
+          {
+            "name": "basin",
+            "in": "query",
+            "required": false,
+            "description": "Keep one ATCF basin: `AL`, `EP`, `CP`, `WP`, `IO`, `SH` (case-insensitive).",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "level",
+            "in": "query",
+            "required": false,
+            "description": "Keep one level: `A` (numbered storm), `B` (tracked disturbance), `C` (model-only).",
+            "schema": { "type": "string" }
+          },
+          { "$ref": "#/components/parameters/issue" }
+        ],
+        "responses": {
+          "200": {
+            "description": "The systems with their headline positions, and the id crosswalk.",
+            "headers": { "x-xue-issue": { "$ref": "#/components/headers/issue" } },
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/StormList" } } }
+          },
+          "400": { "$ref": "#/components/responses/ErrorResponse" },
+          "404": { "$ref": "#/components/responses/ErrorResponse" },
+          "502": { "$ref": "#/components/responses/ErrorResponse" }
+        }
+      }
+    },
+    "/v1/storms/{storm}": {
+      "get": {
+        "tags": ["storms"],
+        "operationId": "storm",
+        "summary": "One system's best tracks, agency forecasts and model tracks.",
+        "parameters": [
+          {
+            "name": "storm",
+            "in": "path",
+            "required": true,
+            "description": "The storm id (`EP142026`, `x-wp-2026091200-1`), an id the issue's crosswalk maps onto a current one, or an alias (`EP97`, `ecmwf:70W`).",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "include",
+            "in": "query",
+            "required": false,
+            "description": "Comma-separated sections to answer: `best`, `agencies`, `models`, `alert`, `impact`. All when absent.",
+            "schema": { "type": "string" },
+            "example": "best,agencies"
+          },
+          { "$ref": "#/components/parameters/issue" }
+        ],
+        "responses": {
+          "200": {
+            "description": "The storm document, ensembles unpacked into one track per member.",
+            "headers": { "x-xue-issue": { "$ref": "#/components/headers/issue" } },
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/StormResponse" } } }
+          },
+          "400": { "$ref": "#/components/responses/ErrorResponse" },
+          "404": { "$ref": "#/components/responses/ErrorResponse" },
+          "502": { "$ref": "#/components/responses/ErrorResponse" }
+        }
+      }
     }
   },
   "components": {
+    "headers": {
+      "issue": {
+        "description": "The issue the response resolved to, the STAC Item id (`sounding.2026091402`, `airport.202609161440`).",
+        "schema": { "type": "string" }
+      }
+    },
     "parameters": {
       "sourcePath": {
         "name": "source",
@@ -174,6 +424,56 @@
         "required": false,
         "description": "Pin the run instead of following the live pointer: a STAC Item id (`gfs.2026092506`, `mrms.2026092509.1455`), a run directory (`mrms.2026092509/1455`) or a plain run id. The answer is then stable and caches for a day.",
         "schema": { "type": "string" }
+      },
+      "issue": {
+        "name": "issue",
+        "in": "query",
+        "required": false,
+        "description": "Pin a product issue instead of following its live pointer: the STAC Item id, `<product>.<YYYYMMDDHH>` for the hourly products (`sounding.2026091402`, `tc.2026091301`) or `<product>.<YYYYMMDDHHMM>` for the ten-minute rounds (`airport.202609161440`, `synop.202610050010`). The answer is then stable and caches for a day; a pruned issue is `404 unknown_issue`.",
+        "schema": { "type": "string" }
+      },
+      "nearLat": {
+        "name": "lat",
+        "in": "query",
+        "required": false,
+        "description": "With `lon`: sort the stations by distance from this point and add `distanceKm` to each.",
+        "schema": { "type": "number", "minimum": -90, "maximum": 90 }
+      },
+      "nearLon": {
+        "name": "lon",
+        "in": "query",
+        "required": false,
+        "description": "With `lat`; -180 to 360.",
+        "schema": { "type": "number", "minimum": -180, "maximum": 360 }
+      },
+      "radius": {
+        "name": "radius",
+        "in": "query",
+        "required": false,
+        "description": "With `lat`/`lon`: keep only stations within this many kilometres.",
+        "schema": { "type": "number", "exclusiveMinimum": 0 }
+      },
+      "bbox": {
+        "name": "bbox",
+        "in": "query",
+        "required": false,
+        "description": "`west,south,east,north` in degrees; west > east spans the antimeridian.",
+        "schema": { "type": "string" },
+        "example": "129,30,146,46"
+      },
+      "limit": {
+        "name": "limit",
+        "in": "query",
+        "required": false,
+        "description": "At most this many stations (the nearest, with `lat`/`lon`; the first in index order otherwise).",
+        "schema": { "type": "integer", "minimum": 1 }
+      },
+      "timeNearest": {
+        "name": "time",
+        "in": "query",
+        "required": false,
+        "description": "An instant; only the record nearest to it is returned. Without it every record in the window is.",
+        "schema": { "type": "string", "format": "date-time" }
       }
     },
     "responses": {
@@ -227,6 +527,15 @@
           "title": { "type": ["string", "null"] },
           "description": { "type": ["string", "null"] },
           "license": { "type": ["string", "null"] },
+          "kind": {
+            "type": "string",
+            "enum": ["grid", "point"],
+            "description": "A grid is read through `/v1/point`; a point product through `endpoint`."
+          },
+          "endpoint": {
+            "type": ["string", "null"],
+            "description": "The route that reads this source (`/v1/point`, `/v1/soundings`, …); null for a point product the API only names."
+          },
           "run": {
             "type": ["string", "null"],
             "description": "The live run directory, e.g. `gfs.2026100206`."
@@ -323,6 +632,396 @@
           }
         }
       },
+      "Issue": {
+        "type": "object",
+        "description": "The fields every point-product answer opens with.",
+        "required": ["product", "issue", "issued", "generated"],
+        "properties": {
+          "product": { "type": "string", "enum": ["sounding", "airport", "synop", "tc"] },
+          "issue": { "type": "string", "description": "The issue's STAC Item id." },
+          "issued": { "type": ["string", "null"], "format": "date-time", "description": "The aggregation hour or ten-minute round." },
+          "generated": { "type": ["string", "null"], "format": "date-time", "description": "When the build ran." }
+        }
+      },
+      "SpatialRequest": {
+        "type": "object",
+        "description": "The spatial terms the request carried, echoed.",
+        "properties": {
+          "lat": { "type": ["number", "null"] },
+          "lon": { "type": ["number", "null"] },
+          "radiusKm": { "type": ["number", "null"] },
+          "bbox": { "type": ["array", "null"], "items": { "type": "number" } },
+          "limit": { "type": ["integer", "null"] }
+        },
+        "additionalProperties": true
+      },
+      "Unit": {
+        "type": "object",
+        "required": ["label", "unit"],
+        "properties": {
+          "label": { "type": ["string", "null"] },
+          "unit": { "type": ["string", "null"] }
+        }
+      },
+      "StationBase": {
+        "type": "object",
+        "required": ["lat", "lon", "elev"],
+        "properties": {
+          "lat": { "type": "number" },
+          "lon": { "type": "number" },
+          "elev": { "type": ["number", "null"], "description": "Metres above mean sea level." },
+          "distanceKm": { "type": "number", "description": "Present when the request named `lat`/`lon`: great-circle distance to a tenth of a kilometre." }
+        }
+      },
+      "SoundingStation": {
+        "allOf": [
+          { "$ref": "#/components/schemas/StationBase" },
+          {
+            "type": "object",
+            "required": ["id", "wmo", "name", "latest", "times", "headline"],
+            "properties": {
+              "id": { "type": "string", "description": "WIGOS identifier." },
+              "wmo": { "type": ["string", "null"], "description": "Five-digit WMO number." },
+              "name": { "type": ["string", "null"] },
+              "latest": { "type": "string", "format": "date-time", "description": "The newest nominal time." },
+              "times": { "type": "array", "items": { "type": "string", "format": "date-time" } },
+              "headline": {
+                "type": "object",
+                "description": "The newest ascent's summary: `t500` and `td500` in °C, `freezingLevel` in gpm, `pw` in mm, `levels` published.",
+                "additionalProperties": true
+              }
+            }
+          }
+        ]
+      },
+      "SoundingList": {
+        "allOf": [
+          { "$ref": "#/components/schemas/Issue" },
+          {
+            "type": "object",
+            "required": ["request", "count", "stations", "sources"],
+            "properties": {
+              "request": { "$ref": "#/components/schemas/SpatialRequest" },
+              "count": { "type": "integer" },
+              "stations": { "type": "array", "items": { "$ref": "#/components/schemas/SoundingStation" } },
+              "sources": { "description": "The build's account of its gateways (`docs/sounding.md` §6)." }
+            }
+          }
+        ]
+      },
+      "Sounding": {
+        "type": "object",
+        "required": ["time", "launched", "n", "reported", "levels", "derived"],
+        "properties": {
+          "time": { "type": "string", "format": "date-time", "description": "The nominal (synoptic) time." },
+          "launched": { "type": ["string", "null"], "format": "date-time" },
+          "sondeType": { "type": ["integer", "null"], "description": "BUFR code table 0 02 011." },
+          "bulletin": { "type": ["string", "null"] },
+          "gateway": { "type": ["string", "null"] },
+          "arrived": { "type": ["string", "null"], "format": "date-time" },
+          "n": { "type": "integer", "description": "Published levels." },
+          "reported": { "type": ["integer", "null"], "description": "Levels the bulletin held before thinning." },
+          "levels": {
+            "type": "object",
+            "description": "Seven parallel arrays of `n` values, `null` where not reported. `p` hPa (the vertical axis, strictly descending), `z` gpm, `t` and `td` °C, `wd` degrees the wind comes from, `ws` m/s, `sig` the BUFR 0 08 042 flag word.",
+            "required": ["p", "z", "t", "td", "wd", "ws", "sig"],
+            "additionalProperties": { "type": "array", "items": { "type": ["number", "null"] } }
+          },
+          "derived": {
+            "type": ["object", "null"],
+            "description": "`freezingLevel` gpm, `pw` mm, `lapse850_500` K/km, `tropopause` gpm; `null` where the ascent does not support one.",
+            "additionalProperties": true
+          }
+        }
+      },
+      "SoundingResponse": {
+        "allOf": [
+          { "$ref": "#/components/schemas/Issue" },
+          {
+            "type": "object",
+            "required": ["station", "units", "soundings"],
+            "properties": {
+              "station": {
+                "type": "object",
+                "required": ["id", "wmo", "name", "lat", "lon", "elev", "timezone"],
+                "properties": {
+                  "id": { "type": "string" },
+                  "wmo": { "type": ["string", "null"] },
+                  "name": { "type": ["string", "null"] },
+                  "lat": { "type": "number" },
+                  "lon": { "type": "number" },
+                  "elev": { "type": ["number", "null"] },
+                  "timezone": { "type": ["string", "null"], "description": "The station's IANA zone." }
+                }
+              },
+              "units": { "type": "object", "additionalProperties": { "$ref": "#/components/schemas/Unit" } },
+              "soundings": { "type": "array", "description": "Newest first, at most four nominal times.", "items": { "$ref": "#/components/schemas/Sounding" } }
+            }
+          }
+        ]
+      },
+      "AirportStation": {
+        "allOf": [
+          { "$ref": "#/components/schemas/StationBase" },
+          {
+            "type": "object",
+            "description": "The newest observation's headline values (`docs/airport.md` §4); the whole report is in `/v1/airports/{icao}`.",
+            "required": ["icao", "obsTime", "t", "td", "wd", "ws", "gust", "vis", "qnh", "category", "tafPresent"],
+            "properties": {
+              "icao": { "type": "string" },
+              "obsTime": { "type": "string", "format": "date-time" },
+              "t": { "type": ["number", "null"], "description": "°C" },
+              "td": { "type": ["number", "null"], "description": "°C" },
+              "wd": { "type": ["integer", "null"], "description": "Degrees true; null when variable." },
+              "ws": { "type": ["number", "null"], "description": "m/s" },
+              "gust": { "type": ["number", "null"], "description": "m/s" },
+              "vis": { "type": ["integer", "null"], "description": "Metres; 10000 means at least 10 km." },
+              "qnh": { "type": ["number", "null"], "description": "hPa" },
+              "category": { "type": ["string", "null"], "description": "`VFR`, `MVFR`, `IFR`, `LIFR`." },
+              "tafPresent": { "type": "boolean" }
+            }
+          }
+        ]
+      },
+      "AirportList": {
+        "allOf": [
+          { "$ref": "#/components/schemas/Issue" },
+          {
+            "type": "object",
+            "required": ["request", "count", "units", "stations", "sources"],
+            "properties": {
+              "request": { "$ref": "#/components/schemas/SpatialRequest" },
+              "count": { "type": "integer" },
+              "units": { "type": "object", "additionalProperties": { "$ref": "#/components/schemas/Unit" } },
+              "stations": { "type": "array", "items": { "$ref": "#/components/schemas/AirportStation" } },
+              "sources": { "description": "The build's account of its sources (`docs/airport.md` §6)." }
+            }
+          }
+        ]
+      },
+      "AirportResponse": {
+        "allOf": [
+          { "$ref": "#/components/schemas/Issue" },
+          {
+            "type": "object",
+            "required": ["station", "units", "metars", "taf"],
+            "properties": {
+              "station": {
+                "type": "object",
+                "required": ["icao", "name", "lat", "lon", "elev", "iata", "wmo", "timezone"],
+                "properties": {
+                  "icao": { "type": "string" },
+                  "name": { "type": ["string", "null"] },
+                  "lat": { "type": "number" },
+                  "lon": { "type": "number" },
+                  "elev": { "type": ["number", "null"] },
+                  "iata": { "type": ["string", "null"] },
+                  "wmo": { "type": ["string", "null"] },
+                  "timezone": { "type": ["string", "null"] }
+                }
+              },
+              "units": { "type": "object", "additionalProperties": { "$ref": "#/components/schemas/Unit" } },
+              "metars": {
+                "type": "array",
+                "description": "The last 24 hours, newest first; one report with `time=`. Each is a `Metar` of `docs/airport.md` §5: `time, raw, t, td, wd, ws, gust, vis, qnh, slp, wx, cloud, category, auto, type`.",
+                "items": { "type": "object", "additionalProperties": true }
+              },
+              "taf": {
+                "type": ["object", "null"],
+                "description": "The current forecast, a `Taf` of `docs/airport.md` §5: `issued, from, to, raw, amended, periods[]`.",
+                "additionalProperties": true
+              }
+            }
+          }
+        ]
+      },
+      "SynopNetwork": {
+        "type": "object",
+        "description": "A network's entry of the index (`docs/synop.md` §4) without its file descriptor.",
+        "required": ["id", "name", "cadence", "prPeriod", "attribution", "license", "url", "latest"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "cadence": { "type": "integer", "description": "Seconds between a station's reports." },
+          "prPeriod": { "type": ["integer", "null"], "description": "Seconds `pr` and `sun` accumulate over." },
+          "attribution": { "type": "string", "description": "The credit a display must show." },
+          "license": { "type": "string" },
+          "url": { "type": "string" },
+          "latest": { "type": "string", "format": "date-time" }
+        }
+      },
+      "SynopStation": {
+        "allOf": [
+          { "$ref": "#/components/schemas/StationBase" },
+          {
+            "type": "object",
+            "required": ["id", "network", "rank", "name", "obsTime", "values"],
+            "properties": {
+              "id": { "type": "string", "description": "`<network>:<number>`." },
+              "network": { "type": "string" },
+              "rank": { "type": "integer", "description": "0 principal, 1 automatic multi-element, 2 precipitation only." },
+              "name": { "type": ["string", "null"] },
+              "obsTime": { "type": "string", "format": "date-time" },
+              "values": {
+                "type": "object",
+                "description": "The station's current value per element of `elements`, `null` where not measured.",
+                "additionalProperties": { "type": ["number", "null"] }
+              }
+            }
+          }
+        ]
+      },
+      "SynopList": {
+        "allOf": [
+          { "$ref": "#/components/schemas/Issue" },
+          {
+            "type": "object",
+            "required": ["request", "networks", "elements", "count", "stations", "sources"],
+            "properties": {
+              "request": { "$ref": "#/components/schemas/SpatialRequest" },
+              "networks": { "type": "array", "items": { "$ref": "#/components/schemas/SynopNetwork" } },
+              "elements": { "type": "object", "description": "The element table, keyed by element.", "additionalProperties": { "$ref": "#/components/schemas/Unit" } },
+              "count": { "type": "integer" },
+              "stations": { "type": "array", "items": { "$ref": "#/components/schemas/SynopStation" } },
+              "sources": { "description": "The build's account of its sources (`docs/synop.md` §6)." }
+            }
+          }
+        ]
+      },
+      "SynopResponse": {
+        "allOf": [
+          { "$ref": "#/components/schemas/Issue" },
+          {
+            "type": "object",
+            "required": ["station", "network", "time", "variables"],
+            "properties": {
+              "station": {
+                "type": "object",
+                "required": ["id", "network", "name", "names", "lat", "lon", "elev", "wmo", "rank", "timezone"],
+                "properties": {
+                  "id": { "type": "string" },
+                  "network": { "type": "string" },
+                  "name": { "type": ["string", "null"] },
+                  "names": { "type": ["object", "null"], "description": "BCP 47 tag to the network's own spelling.", "additionalProperties": { "type": "string" } },
+                  "lat": { "type": "number" },
+                  "lon": { "type": "number" },
+                  "elev": { "type": ["number", "null"] },
+                  "wmo": { "type": ["string", "null"] },
+                  "rank": { "type": "integer" },
+                  "timezone": { "type": ["string", "null"] }
+                }
+              },
+              "network": { "$ref": "#/components/schemas/SynopNetwork" },
+              "time": {
+                "type": "object",
+                "required": ["unitSeconds", "times"],
+                "properties": {
+                  "unitSeconds": { "type": ["integer", "null"], "description": "The network's cadence." },
+                  "times": { "type": "array", "description": "The station's window, oldest first (one instant with `time=`).", "items": { "type": "string", "format": "date-time" } }
+                }
+              },
+              "variables": {
+                "type": "object",
+                "description": "One entry per element of the index, keyed by element, `values` following `time.times` one to one — the shape `/v1/point` answers, without `bundle`.",
+                "additionalProperties": {
+                  "type": "object",
+                  "required": ["label", "unit", "values"],
+                  "properties": {
+                    "label": { "type": ["string", "null"] },
+                    "unit": { "type": ["string", "null"] },
+                    "values": { "type": "array", "items": { "type": ["number", "null"] } }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "StormSummary": {
+        "type": "object",
+        "description": "An index row of `docs/tc.md` §4 without its file descriptor.",
+        "required": ["id", "level", "basin", "name", "aliases", "position", "vmax", "pmin", "class", "classAgency", "agencies", "models", "best"],
+        "properties": {
+          "id": { "type": "string" },
+          "level": { "type": "string", "enum": ["A", "B", "C"] },
+          "basin": { "type": "string" },
+          "name": { "type": ["string", "null"] },
+          "aliases": { "type": "object", "additionalProperties": true },
+          "position": { "type": ["object", "null"], "description": "`{time, lat, lon}`, the headline position.", "additionalProperties": true },
+          "vmax": { "type": ["number", "null"], "description": "m/s, on the agency's own averaging." },
+          "pmin": { "type": ["number", "null"], "description": "hPa" },
+          "class": { "type": ["string", "null"], "description": "The source's own intensity string." },
+          "classAgency": { "type": ["string", "null"] },
+          "agencies": { "type": "array", "items": { "type": "string" } },
+          "models": { "type": "array", "items": { "type": "string" } },
+          "best": { "type": "array", "items": { "type": "string" } }
+        }
+      },
+      "StormList": {
+        "allOf": [
+          { "$ref": "#/components/schemas/Issue" },
+          {
+            "type": "object",
+            "required": ["request", "count", "storms", "crosswalk", "sources"],
+            "properties": {
+              "request": { "type": "object", "properties": { "basin": { "type": ["string", "null"] }, "level": { "type": ["string", "null"] } } },
+              "count": { "type": "integer" },
+              "storms": { "type": "array", "items": { "$ref": "#/components/schemas/StormSummary" } },
+              "crosswalk": { "type": "object", "description": "Old id to current id.", "additionalProperties": { "type": "string" } },
+              "sources": { "description": "The build's account of its sources (`docs/tc.md` §6)." }
+            }
+          }
+        ]
+      },
+      "EnsembleMember": {
+        "type": "object",
+        "required": ["member", "points"],
+        "properties": {
+          "member": { "type": "integer" },
+          "points": {
+            "type": "array",
+            "description": "The leads at which the member has a position; `lat`/`lon` degrees, `vmax` m/s, `pmin` hPa, `time` = `base` + `lead`.",
+            "items": {
+              "type": "object",
+              "required": ["lead", "time", "lat", "lon", "vmax", "pmin"],
+              "properties": {
+                "lead": { "type": "integer", "description": "Seconds from `base`." },
+                "time": { "type": ["string", "null"], "format": "date-time" },
+                "lat": { "type": "number" },
+                "lon": { "type": "number" },
+                "vmax": { "type": ["number", "null"] },
+                "pmin": { "type": ["number", "null"] }
+              }
+            }
+          }
+        }
+      },
+      "StormResponse": {
+        "allOf": [
+          { "$ref": "#/components/schemas/Issue" },
+          {
+            "type": "object",
+            "description": "The storm document of `docs/tc.md` §5. `best`, `agencies`, `models`, `alert` and `impact` are present unless `include=` left them out; a model whose entry is an ensemble is answered as `{issued, base, run, leads, members: EnsembleMember[], mean}` instead of the flattened fixed-point arrays.",
+            "required": ["resolvedFrom", "id", "level", "basin", "name", "sid", "intl", "aliases", "sources"],
+            "properties": {
+              "resolvedFrom": { "type": ["string", "null"], "description": "The id the request named when it was an alias or a crosswalked id, else null." },
+              "id": { "type": "string" },
+              "level": { "type": "string" },
+              "basin": { "type": "string" },
+              "name": { "type": ["string", "null"] },
+              "sid": { "type": ["string", "null"], "description": "IBTrACS storm id." },
+              "intl": { "type": ["string", "null"] },
+              "aliases": { "type": "object", "additionalProperties": true },
+              "best": { "type": "object", "description": "Agency key to `Track`.", "additionalProperties": true },
+              "agencies": { "type": "object", "description": "Agency id to `Forecast`.", "additionalProperties": true },
+              "models": { "type": "object", "description": "Model id to `Forecast` or an unpacked ensemble.", "additionalProperties": true },
+              "alert": { "type": ["object", "null"], "additionalProperties": true },
+              "impact": { "type": ["object", "null"], "additionalProperties": true },
+              "sources": { "description": "The build's account of its sources." }
+            }
+          }
+        ]
+      },
       "Error": {
         "type": "object",
         "required": ["error"],
@@ -333,7 +1032,7 @@
             "properties": {
               "code": {
                 "type": "string",
-                "description": "One of `invalid_parameter`, `unknown_source`, `unknown_run`, `unknown_variable`, `no_live_run`, `method_not_allowed`, `point_off_grid`, `upstream_failed`, `not_found`."
+                "description": "One of `invalid_parameter`, `not_a_grid`, `unknown_source`, `unknown_run`, `unknown_variable`, `unknown_issue`, `unknown_station`, `unknown_network`, `unknown_storm`, `no_live_run`, `method_not_allowed`, `point_off_grid`, `upstream_failed`, `not_found`."
               },
               "message": { "type": "string" },
               "detail": { "description": "Extra context, e.g. the available bundle ids on `unknown_variable`." }

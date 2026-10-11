@@ -298,6 +298,24 @@ impl Data {
             .await
     }
 
+    /// A span of an immutable object (a station's line in a product file,
+    /// which is `?v=`-addressed), from the isolate cache when held.
+    pub async fn range_cached(
+        &self,
+        path: &str,
+        offset: u64,
+        length: u64,
+        version: &str,
+    ) -> Result<Vec<u8>, HttpError> {
+        let key = format!("r:{path}#{version}:{offset}+{length}");
+        if let Some(value) = cache::bytes(&key) {
+            return Ok(value);
+        }
+        let value = self.range(path, offset, length).await?;
+        cache::put_bytes(&key, value.clone());
+        Ok(value)
+    }
+
     /// The last `suffix` bytes, without knowing the object's length.
     pub async fn suffix(&self, path: &str, suffix: u64) -> Result<Vec<u8>, HttpError> {
         self.read(path, Some(ReadRange::Suffix { suffix })).await
