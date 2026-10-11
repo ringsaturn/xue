@@ -144,6 +144,18 @@ const TRUE_COLOR_KEY: readonly { color: string; labelKey: MessageKey }[] = [
   { color: "#6b7d3b", labelKey: "legendTruecolorLand" },
 ];
 
+/** How to read the night microphysics picture, the EUMETSAT key: fog and
+ * low stratus yellow-green, thick high cloud dark red, thin cirrus near
+ * black, a clear warm surface pink. By day the green gun saturates and
+ * the colours mean none of this, which the key does not try to say; the
+ * day-night blend is where the picture is meant to be read. */
+const NIGHT_MICRO_KEY: readonly { color: string; labelKey: MessageKey }[] = [
+  { color: "#c4e36a", labelKey: "legendNightFog" },
+  { color: "#8a1e24", labelKey: "legendNightThickHigh" },
+  { color: "#141a33", labelKey: "legendNightCirrus" },
+  { color: "#d690bf", labelKey: "legendNightClear" },
+];
+
 const DUST_RGB_KEY: readonly { color: string; labelKey: MessageKey }[] = [
   { color: "#e34fb8", labelKey: "legendDustDust" },
   { color: "#7a1a1a", labelKey: "legendDustThickHigh" },
@@ -1009,6 +1021,28 @@ function buildSpecs(): readonly VariableSpec[] {
     urlName: "truecolor",
     urlAliases: ["visible", "rgb", "color", "colour"],
     showcaseCode: "TRUE COLOR",
+  }),
+  // The night microphysics picture: EUMETSAT's Night Microphysics RGB from
+  // the 12.3 − 10.4 µm split window, 10.4 − 3.9 µm and the 10.4 µm window,
+  // stretched by the encoder's own recipe and drawn straight as colour —
+  // fog and low cloud after dark, which the infrared window alone cannot
+  // tell from the ground. Published day and night; by day reflected
+  // sunlight in the 3.9 µm band saturates the green gun, so the day side
+  // is not to be read, and the true colour tile's day-night switch shows
+  // this picture only where the true colour has none.
+  surface({
+    id: "nightmicro",
+    chart: "nightmicro",
+    group: "satellite",
+    code: "NIGHT MICRO",
+    title: ["Night", "Micro"],
+    bufferTitle: "Imagery buffer",
+    labelKey: "varLabelNightmicro",
+    legendKey: NIGHT_MICRO_KEY,
+    ground: "slate",
+    urlName: "nightmicro",
+    urlAliases: ["night", "nightrgb", "microphysics"],
+    showcaseCode: "NIGHT MICRO",
   }),
   // NOAA SWPC's OVATION aurora probability: the chance, in percent, that
   // aurora is visible overhead, on a 1° global grid. A space-weather field,

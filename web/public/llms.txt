@@ -130,7 +130,13 @@ Facts worth getting right:
   of the solar zenith, the green blended with a little near-infrared,
   one fixed brightness curve, no Rayleigh correction, the encoder's own
   recipe stamped as producer `xue`; the sunlit disk as seen from orbit,
-  no data on the night side), one
+  no data on the night side), and the night microphysics composite
+  (`nightmicro`: EUMETSAT's Night Microphysics RGB, three guns in 0–1
+  from 12.3 − 10.4 µm over −4…2 K, 10.4 − 3.9 µm over 0…10 K and the
+  10.4 µm window over 243…293 K, the encoder's own recipe stamped as
+  producer `xue`; fog and low stratus yellow-green, thick high cloud dark
+  red, thin cirrus near black, clear warm ground pink; published by day
+  too, where sunlight in the 3.9 µm band saturates the green gun), one
   full-disk scan every ten minutes,
   reprojected from the geostationary view onto a 0.04° latitude/longitude
   grid over the useful disk (3000 × 3000, 80.7°E–200.7°E — past the
@@ -245,8 +251,10 @@ Facts worth getting right:
   with no physical unit), `dustcf` (the DEBRA dust confidence, 0–1) and
   `zhouye` (the ZHOUYE dust confidence, 0–1, diurnally consistent) and
   `truecolor` (the true colour picture's red, green and blue guns, 0–1,
-  a composite with no physical unit, no data after dark; GOES-EAST and
-  GOES-WEST the same five, METEOSAT ir104, dustrgb and truecolor). AURORA:
+  a composite with no physical unit, no data after dark) and
+  `nightmicro` (the night microphysics picture's red, green and blue
+  guns, 0–1, a composite with no physical unit; GOES-EAST and GOES-WEST
+  the same six, METEOSAT ir104, dustrgb and truecolor). AURORA:
   `aurora` (aurora visibility probability, percent, on a 1° global grid).
   Names
   are `<family><level>`; the level is in hPa, `2m`/`10m` are heights above
@@ -331,8 +339,9 @@ fall back to defaults rather than fail, so a constructed link always opens.
   particles; `waveheight` for the scalar `htsgw`, `waveperiod` for
   `perpw`), the Himawari `infrared` (`ir104`; `ir`, `satellite` and `sat`
   are accepted spellings), `dustrgb` (`dust`), `debra` (`dustcf`,
-  `dustconfidence`), `zhouye` (`zhouyecf`) and `truecolor` (`visible`,
-  `rgb`, `color`, `colour`), the GEFS-Aerosols `aod` (`aod550`; `aoddust`,
+  `dustconfidence`), `zhouye` (`zhouyecf`), `truecolor` (`visible`,
+  `rgb`, `color`, `colour`) and `nightmicro` (`night`, `nightrgb`,
+  `microphysics`), the GEFS-Aerosols `aod` (`aod550`; `aoddust`,
   `aodsalt`, `aodsulf`, `aodorg`, `aodbc` by species), `pm25` (`pm2p5`),
   `pm10` and `pm10dust`, or a bundle name such as `tmp850`,
   `rh700`, `wind850`, `qflux850`, `hgt500`, `vvel700`, `thetae850`; `t850`,

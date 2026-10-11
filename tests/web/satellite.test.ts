@@ -104,6 +104,24 @@ function trueGunVariables(order: readonly number[] = [7, 8, 9], producer: Bundle
   }));
 }
 
+/** The night microphysics picture's contract: the same producer as the
+ * true colour (`xue`, the recipe's version), its next local numbers 10,
+ * 11, 12, the guns' codebook. */
+const NIGHT_GUN_IDS = ["nightr", "nightg", "nightb"] as const;
+const NIGHT_IDENTITY = { family: "nightmicro" as const, level: null, vector: false };
+
+function nightGunVariables(order: readonly number[] = [10, 11, 12], producer: BundleProducer = TRUE_PRODUCER): BundleVariable[] {
+  return order.map((number, at) => ({
+    numericId: at + 1,
+    id: NIGHT_GUN_IDS[number - 10]!,
+    label: `Night microphysics, ${["red", "green", "blue"][number - 10]} gun`,
+    unit: "1",
+    parameter: gunParameter(number),
+    producer,
+    quantization: GUN_QUANTIZATION,
+  }));
+}
+
 /** The confidences' contract: shachen's local number 4 (DEBRA) and 5
  * (ZHOUYE, the same chain held to the day's level through the night)
  * beside the guns, each one variable of its own bundle, the guns'
@@ -132,20 +150,24 @@ describe("the satellite registry", () => {
     // Every registry entry is a channel (a brightness temperature or a
     // reflectance, with a band per platform) or a produced field — a gun
     // of a composite (shachen's Dust RGB at 1–3, the encoder's own true
-    // colour at 7–9), or one of the dust confidences, the next local
-    // numbers under shachen; the shell's bundle ids are the published
-    // channel, the two composites and the two confidences.
+    // colour at 7–9 and night microphysics at 10–12), or one of the dust
+    // confidences, the next local numbers under shachen; the shell's
+    // bundle ids are the published channel, the three composites and the
+    // two confidences.
     for (const [id, entry] of Object.entries(registry)) {
       if (entry.producer) {
-        expect([...GUN_IDS, ...TRUE_GUN_IDS, ...Object.keys(CONFIDENCE_NUMBERS)]).toContain(id);
+        expect([...GUN_IDS, ...TRUE_GUN_IDS, ...NIGHT_GUN_IDS, ...Object.keys(CONFIDENCE_NUMBERS)]).toContain(id);
         const trueGun = TRUE_GUN_IDS.indexOf(id as (typeof TRUE_GUN_IDS)[number]);
-        expect(entry.producer).toEqual({ id: trueGun >= 0 ? "xue" : "shachen" });
+        const nightGun = NIGHT_GUN_IDS.indexOf(id as (typeof NIGHT_GUN_IDS)[number]);
+        expect(entry.producer).toEqual({ id: trueGun >= 0 || nightGun >= 0 ? "xue" : "shachen" });
         const number =
           id in CONFIDENCE_NUMBERS
             ? CONFIDENCE_NUMBERS[id as ConfidenceId]
             : trueGun >= 0
               ? trueGun + 7
-              : GUN_IDS.indexOf(id as (typeof GUN_IDS)[number]) + 1;
+              : nightGun >= 0
+                ? nightGun + 10
+                : GUN_IDS.indexOf(id as (typeof GUN_IDS)[number]) + 1;
         expect(entry.parameter).toEqual(gunParameter(number));
         expect(entry.unit).toBe("1");
         expect(entry.quality).toEqual(GUN_QUANTIZATION);
@@ -173,11 +195,11 @@ describe("the satellite registry", () => {
     expect(COMPOSITE_BUNDLES).toEqual(compositeBundles);
     expect(confidenceBundle).toEqual(["dustcf"]);
     expect(zhouyeBundle).toEqual(["zhouye"]);
-    expect(SATELLITE_IDS).toEqual(["ir104", "dustrgb", "dustcf", "zhouye", "truecolor"]);
+    expect(SATELLITE_IDS).toEqual(["ir104", "dustrgb", "dustcf", "zhouye", "truecolor", "nightmicro"]);
     for (const id of SATELLITE_IDS) {
       expect(KNOWN_BUNDLE_IDS).toContain(id);
       expect(isVectorBundle(id)).toBe(false);
-      // Five single fields, each with a tile of its own, in the sheet's
+      // Six single fields, each with a tile of its own, in the sheet's
       // satellite group.
       expect(familyOf(id)).toBeNull();
       expect(variableSpec(id)?.family).toBeNull();
@@ -185,6 +207,7 @@ describe("the satellite registry", () => {
     }
     expect(isCompositeBundle("dustrgb")).toBe(true);
     expect(isCompositeBundle("truecolor")).toBe(true);
+    expect(isCompositeBundle("nightmicro")).toBe(true);
     expect(isCompositeBundle("ir104")).toBe(false);
     expect(isCompositeBundle("dustcf")).toBe(false);
     expect(compositeComponents("dustcf")).toBeNull();
@@ -194,21 +217,25 @@ describe("the satellite registry", () => {
     expect(COMPOSITE_BUNDLES.dustrgb).toEqual(GUN_IDS);
     expect(compositeComponents("truecolor")).toEqual(TRUE_GUN_IDS);
     expect(COMPOSITE_BUNDLES.truecolor).toEqual(TRUE_GUN_IDS);
+    expect(compositeComponents("nightmicro")).toEqual(NIGHT_GUN_IDS);
+    expect(COMPOSITE_BUNDLES.nightmicro).toEqual(NIGHT_GUN_IDS);
   });
 
   it("gives the composites and the confidences core tiles beside the infrared on every satellite source", () => {
-    // No family: the five are different pictures, and a source with five
-    // fields has room for five tiles, so none hides behind another. The
-    // confidences ship on the ten-minute disks and on the mosaic (a member
-    // whose run lacks a bundle empties for it, `applyMosaicMembers`), not
-    // on Meteosat's hourly cycle; the true colour ships on all four.
+    // No family: the six are different pictures, and a source with six
+    // fields has room for six tiles, so none hides behind another. The
+    // confidences and the night microphysics ship on the ten-minute disks
+    // and on the mosaic (a member whose run lacks a bundle empties for it,
+    // `applyMosaicMembers`), not on Meteosat's hourly cycle; the true
+    // colour ships on all four.
     expect(ISOBARIC_FAMILIES).not.toContain("satellite");
     expect(variableSpec("dustrgb")?.code).toBe("DUST RGB");
     expect(variableSpec("dustcf")?.code).toBe("DEBRA");
     expect(variableSpec("zhouye")?.code).toBe("ZHOUYE");
     expect(variableSpec("truecolor")?.code).toBe("TRUE COLOR");
+    expect(variableSpec("nightmicro")?.code).toBe("NIGHT MICRO");
     for (const model of ["himawari", "goeseast", "goeswest", "geo"] as const) {
-      expect(FORECAST_MODELS[model].railCore).toEqual(["ir104", "dustrgb", "dustcf", "zhouye", "truecolor"]);
+      expect(FORECAST_MODELS[model].railCore).toEqual(["ir104", "dustrgb", "dustcf", "zhouye", "truecolor", "nightmicro"]);
     }
     expect(FORECAST_MODELS.meteosat.railCore).toEqual(["ir104", "dustrgb", "truecolor"]);
   });
@@ -424,6 +451,40 @@ describe("the true colour composite", () => {
     expect(spec.label()).toBe("True colour (visible composite)");
     expect(spec.ground).toBe("slate");
     expect(spec.urlAliases).toContain("visible");
+  });
+});
+
+describe("the night microphysics composite", () => {
+  it("is named by its producer and the guns' local numbers together", () => {
+    expect(identityForProducedTriple(nightGunVariables())).toEqual(NIGHT_IDENTITY);
+    expect(isCompositeIdentity(NIGHT_IDENTITY)).toBe(true);
+    // The file's order, the producer's numbers: 10, 11, 12 under xue and
+    // nothing under shachen, and xue's 7, 8, 9 are the true colour.
+    expect(identityForProducedTriple(nightGunVariables([12, 11, 10]))).toBeNull();
+    expect(identityForProducedTriple(nightGunVariables([10, 11, 12], PRODUCER))).toBeNull();
+    expect(identityForProducedTriple(trueGunVariables())).toEqual(TRUE_IDENTITY);
+    expect(identityForProducedTriple(nightGunVariables([10, 11, 12], { id: "xue", version: "2" }))).toEqual(NIGHT_IDENTITY);
+  });
+
+  it("is the whole bundle, parsed with its producer", () => {
+    const bundle = identifyBundle(nightGunVariables());
+    expect(bundle?.identity).toEqual(NIGHT_IDENTITY);
+    expect(bundle?.variables.map((variable) => variable.id)).toEqual([...NIGHT_GUN_IDS]);
+    expect(registeredBundleId(NIGHT_IDENTITY)).toBe("nightmicro");
+    expect(identityForBundleId("nightmicro")).toEqual(NIGHT_IDENTITY);
+    const parsed = parseBundleMetadata(metadataJson(HIMAWARI_ENVELOPE, nightGunVariables()));
+    expect(parsed.variables[0]!.producer).toEqual(TRUE_PRODUCER);
+    expect(identifyBundle(parsed.variables)?.identity).toEqual(NIGHT_IDENTITY);
+  });
+
+  it("carries the EUMETSAT key", () => {
+    const spec = variableSpec("nightmicro")!;
+    expect(spec.legend()).toEqual([]);
+    const key = spec.legendKey?.() ?? [];
+    expect(key.map((swatch) => swatch.label)).toEqual(["Fog and low cloud", "Thick high cloud", "Thin cirrus", "Clear warm surface"]);
+    for (const swatch of key) expect(swatch.color).toMatch(/^#[0-9a-f]{6}$/);
+    expect(spec.label()).toBe("Night microphysics (infrared composite)");
+    expect(spec.urlName).toBe("nightmicro");
   });
 });
 

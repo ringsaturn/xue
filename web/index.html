@@ -139,7 +139,7 @@
             "@type": "Dataset",
             "@id": "https://xue.ringsaturn.me/#data",
             "name": "Xue live forecast bundles",
-            "description": "The current NOAA GFS, GFS surface-flux, ECMWF IFS, ECMWF AIFS, ECMWF IFS HRES 0.1° and NOAA HRRR runs, the last three to four hours of the NOAA MRMS radar mosaic, the last two to three hours of the JMA precipitation nowcast over Japan and of the CMA radar mosaic over China, the last five to six hours of Himawari-9, GOES-19 and GOES-18 infrared imagery, Dust RGB and true colour composites over the three geostationary disks, and the last day of hourly Meteosat-12 imagery and Dust RGB over the 0° disk (which the viewer also shows as one geostationary mosaic, each disk clipped to the longitudes it sees least obliquely, at /?model=geo), the last twelve hours of the NOAA SWPC OVATION aurora visibility probability on a 1° global grid, each a rolling window rebuilt every few minutes, converted into the .xue container: 8-bit quantized planes on the native grid with temporal residual prediction and Zstandard compression, one file per variable, streamable by HTTP range request. Only the newest run per source is kept.",
+            "description": "The current NOAA GFS, GFS surface-flux, ECMWF IFS, ECMWF AIFS, ECMWF IFS HRES 0.1° and NOAA HRRR runs, the last three to four hours of the NOAA MRMS radar mosaic, the last two to three hours of the JMA precipitation nowcast over Japan and of the CMA radar mosaic over China, the last five to six hours of Himawari-9, GOES-19 and GOES-18 infrared imagery, Dust RGB, true colour and night microphysics composites over the three geostationary disks, and the last day of hourly Meteosat-12 imagery and Dust RGB over the 0° disk (which the viewer also shows as one geostationary mosaic, each disk clipped to the longitudes it sees least obliquely, at /?model=geo), the last twelve hours of the NOAA SWPC OVATION aurora visibility probability on a 1° global grid, each a rolling window rebuilt every few minutes, converted into the .xue container: 8-bit quantized planes on the native grid with temporal residual prediction and Zstandard compression, one file per variable, streamable by HTTP range request. Only the newest run per source is kept.",
             "url": "https://dataset.ringsaturn.me/xue/",
             "isAccessibleForFree": true,
             "creator": { "@id": "https://github.com/ringsaturn#person" },
@@ -176,6 +176,7 @@
               "10.4 µm infrared brightness temperature (Himawari-9 AHI band 13 over the western Pacific, GOES-19 and GOES-18 ABI channel 13 over the Americas and the Pacific, Meteosat-12 FCI IR 10.5 over Europe, Africa and the Atlantic; cloud-top temperature)",
               "Dust RGB composite (the 12.3−10.4 µm, 11.2−8.6 µm and 10.4 µm stretches of the classic EUMETSAT / GOES-R recipe, computed by shachen; lofted mineral dust in magenta)",
               "true colour composite (the 0.64, 0.51 and 0.47 µm reflectances of Himawari-9, GOES-19 and GOES-18, sun-angle corrected and stretched by the encoder's own recipe, the green synthesized on the ABI; the sunlit disk as seen from orbit, nothing drawn after dark)",
+              "night microphysics composite (EUMETSAT's Night Microphysics RGB from the 12.3−10.4 µm, 10.4−3.9 µm and 10.4 µm stretches of Himawari-9, GOES-19 and GOES-18; fog and low cloud after dark in yellow-green)",
               "aurora visibility probability (percent, on a 1° global grid, from the NOAA SWPC OVATION model)"
             ],
             "distribution": [
@@ -460,8 +461,9 @@
              its three guns, the DEBRA dust confidence the disk with dust
              lofting off its floor, the ZHOUYE confidence the same dust on a
              disk half in night, the true colour picture the disk lit by a
-             sun. All five are core on the ten-minute disks; Meteosat
-             publishes the first two. -->
+             sun, the night microphysics picture the disk under a crescent
+             moon with fog along its floor. All six are core on the
+             ten-minute disks; Meteosat publishes the first two. -->
         <button type="button" data-variable="ir104" data-i18n-tip="tipSatellite" aria-pressed="false" hidden>
           <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5" /><path d="M6.5 14.5h8a2.5 2.5 0 0 0 .3-5A3.8 3.8 0 0 0 7.6 9.4 2.6 2.6 0 0 0 6.5 14.5z" fill="currentColor" stroke="none" /><path d="M3.5 12h2M18.5 12h2" /></svg>
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphIr104">I</b>
@@ -486,6 +488,11 @@
           <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10" cy="13.5" r="7" /><path d="M6.5 16.5c1.2-1.2 2.6-1.2 4 0s2.8 1.2 4 0" /><circle cx="18" cy="6" r="2.2" fill="currentColor" stroke="none" /><path d="M18 1.8v1.4M18 8.8v1.4M13.8 6h1.4M20.8 6h1.4M15 3l1 1M20 8l1 1M15 9l1-1M20 4l1-1" /></svg>
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphTruecolor">T</b>
           <span class="rail-name"><span>TRUE</span> <small data-i18n="varTrueColor">COLOR</small></span>
+        </button>
+        <button type="button" data-variable="nightmicro" data-i18n-tip="varLabelNightmicro" aria-pressed="false" hidden>
+          <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10" cy="13.5" r="7" /><path d="M5 16h10M6.5 18.5h7" /><path d="M19.5 3.2a3.2 3.2 0 1 0 1.6 5.8 2.6 2.6 0 0 1-1.6-5.8z" fill="currentColor" stroke="none" /></svg>
+          <b class="rail-glyph" aria-hidden="true" data-i18n="glyphNightmicro">N</b>
+          <span class="rail-name"><span>NIGHT</span> <small data-i18n="varNightMicro">MICRO</small></span>
         </button>
         <!-- The SWPC aurora probability: an auroral arc over the pole. -->
         <button type="button" data-variable="aurora" data-i18n-tip="varLabelAurora" aria-pressed="false" hidden>

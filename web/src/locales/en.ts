@@ -48,6 +48,8 @@ export const en = {
   varZhouye: "ZHOUYE",
   // The true colour picture's gloss: the tile reads TRUE COLOR.
   varTrueColor: "COLOR",
+  // The night microphysics picture's gloss: the tile reads NIGHT MICRO.
+  varNightMicro: "MICRO",
   /** The surface diagnostics: gust and CAPE are surface fields (SFC,
    * the same detail the codes carry), cloud cover is the whole column. */
   varGust: "SFC",
@@ -122,6 +124,8 @@ export const en = {
   glyphZhouye: "Z",
   // T for the true colour picture.
   glyphTruecolor: "T",
+  // N for the night microphysics picture.
+  glyphNightmicro: "N",
   // The aurora probability: its initial.
   glyphAurora: "A",
   // N is the synoptic-code letter for total cloud amount; the gust and CAPE
@@ -413,6 +417,10 @@ export const en = {
   legendTruecolorCloud: "Cloud and snow",
   legendTruecolorSea: "Sea",
   legendTruecolorLand: "Land and vegetation",
+  legendNightFog: "Fog and low cloud",
+  legendNightThickHigh: "Thick high cloud",
+  legendNightCirrus: "Thin cirrus",
+  legendNightClear: "Clear warm surface",
   /** The precipitation type's key: one row per WMO code table 4.201 class
    * GFS reports, in place of the bar (the field is categorical). Short noun
    * phrases, one line at 10px mono; "no precipitation" has no swatch. */
@@ -444,6 +452,7 @@ export const en = {
   varLabelDustcf: "DEBRA dust confidence",
   varLabelZhouye: "ZHOUYE dust confidence",
   varLabelTruecolor: "True colour (visible composite)",
+  varLabelNightmicro: "Night microphysics (infrared composite)",
   varLabelGust: "Wind gust",
   varLabelTcdc: "Total cloud cover",
   varLabelCape: "Convective available potential energy",
