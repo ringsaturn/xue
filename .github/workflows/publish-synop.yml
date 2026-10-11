@@ -43,7 +43,9 @@ permissions:
 # One at a time: the pointer is the product's only mutable object, and the
 # previous round's network files are what this round is merged onto.
 concurrency:
-  group: publish-synop
+  # A dry run writes nothing to R2, so it takes a group of its own and
+  # never queues the live job or is queued behind it.
+  group: ${{ inputs.dry_run && format('publish-synop-dry-{0}', github.run_id) || 'publish-synop' }}
   cancel-in-progress: false
 
 jobs:
