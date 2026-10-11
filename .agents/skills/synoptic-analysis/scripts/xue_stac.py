@@ -27,7 +27,7 @@ import requests
 
 ROOT = "https://dataset.ringsaturn.me/xue/"
 FORECAST = ("gfs", "ecmwf", "aifs", "ifshres", "sflux", "hrrr")
-OBSERVATION = ("mrms", "jma", "cma", "himawari", "goeseast", "goeswest", "meteosat")
+OBSERVATION = ("mrms", "jma", "cma", "himawari", "himawarijp", "goeseast", "goeswest", "meteosat")
 POINT = ("sounding", "airport", "tc")
 
 _session = requests.Session()
