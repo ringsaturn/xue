@@ -89,7 +89,8 @@ export type ChartFamily =
   | "pm25"
   | "pm10"
   | "pm10dust"
-  | "aurora";
+  | "aurora"
+  | "clw";
 
 export interface VariableIdentity {
   family: ChartFamily;
@@ -183,7 +184,9 @@ function isTriple(parameter: BundleParameter, discipline: number, category: numb
  * `ir104`); (0,20,102) @10 aerosol optical thickness and (0,13,193) /
  * (0,13,192) @1 fine / coarse particulate matter (NCEP-local numbers), each
  * told apart by the `aerosol` block's species, size and wavelength
- * (`aerosolField`).
+ * (`aerosolField`), (0,1,22) @102 cloud water mixing ratio at an altitude
+ * above mean sea level — one level of a cloud volume, whose altitude is
+ * the volume's business (volume.ts), not the identity's.
  */
 export function identityForParameter(parameter: BundleParameter, band?: BundleBand, aerosol?: BundleAerosol): VariableIdentity | null {
   const surface = parameter.typeOfFirstFixedSurface;
@@ -238,6 +241,7 @@ export function identityForParameter(parameter: BundleParameter, band?: BundleBa
   if (isTriple(parameter, 0, 1, 3) && surface === 200) return scalar("pwat", null);
   if (isTriple(parameter, 0, 3, 196) && surface === 1) return scalar("hpbl", null);
   if (isTriple(parameter, 0, 1, 19) && surface === 1) return scalar("ptype", null);
+  if (isTriple(parameter, 0, 1, 22) && surface === 102) return scalar("clw", null);
   return null;
 }
 

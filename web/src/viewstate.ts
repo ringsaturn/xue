@@ -5,8 +5,9 @@
  * a time, with its own session and time axis — and the **lines** over it
  * make up the composition (`fill` / `lines`; either may be empty but not
  * both, and a pressure surface named as the field is the lines alone).
- * The **overlays** follow the playhead over the field: the particles and,
- * under the experiment, the two derived layers. The **marks** — the storm
+ * The **overlays** follow the playhead over the field: the particles, a
+ * volume (the cloud water drawn in 3D over a 2D field) and, under the
+ * experiment, the two derived layers. The **marks** — the storm
  * tracks and the two station products — take no session and have their
  * own pointers. `ViewState` holds all of it; the rail's pressed states,
  * the level row and the address bar are projections of it, and the two
@@ -15,7 +16,7 @@
  * inverse of the other for every parameter the shell understands.
  */
 
-import type { ForecastBundleId, ForecastModelId } from "./manifest";
+import { VOLUME_BUNDLE_LEVELS, type ForecastBundleId, type ForecastModelId } from "./manifest";
 import { isPressureBundle, type PressureBundleId } from "./pressure";
 import {
   parseExperimentFromSearch,
@@ -25,6 +26,7 @@ import {
   parseRadarFromSearch,
   parseTcFromSearch,
   parseVariableFromSearch,
+  parseVolumeFromSearch,
   searchForCaseVariable,
   searchForVariable,
   searchWithExperiment,
@@ -33,6 +35,7 @@ import {
   searchWithRadar,
   searchWithStations,
   searchWithTc,
+  searchWithVolume,
   type RadarUrlState,
   type StationsUrlState,
   type TcUrlState,
@@ -61,6 +64,9 @@ export interface ViewState {
   lines: PressureBundleId | null;
   /** Whether the particle overlay is drawn where there is a flow to draw. */
   particles: boolean;
+  /** The volume bundle drawn over the field (`?volume=`), or null. Only
+   * drawn over a 2D field: a volume chosen as the field is the field. */
+  volume: ForecastBundleId | null;
   /** The experiment's derived layers (`?x=`), meaningful only while it is on. */
   derived: DerivedShown;
   marks: {
@@ -130,6 +136,7 @@ export function parseView(search: string, defaults: ViewDefaults): ParsedView {
       field: composition.fill,
       lines: composition.lines,
       particles: requestedParticles ?? defaults.particles,
+      volume: parseVolumeFromSearch(search),
       derived: { inflow: experiment.inflow, front: experiment.front },
       marks: {
         tc: parseTcFromSearch(search),
@@ -140,6 +147,13 @@ export function parseView(search: string, defaults: ViewDefaults): ParsedView {
     fieldRequested: requestedField !== null,
     particlesRequested: requestedParticles !== null,
   };
+}
+
+/** The volume drawn over the view's field: its `volume`, while the field is
+ * a 2D one; null with no field, or with a volume as the field. */
+export function volumeOverField(view: Pick<ViewState, "field" | "volume">): ForecastBundleId | null {
+  if (view.field === null || VOLUME_BUNDLE_LEVELS.has(view.field)) return null;
+  return view.volume;
 }
 
 /** The query string carrying a view, with every unrelated parameter in
@@ -153,7 +167,8 @@ export function searchForView(view: ViewState, search: string, context: ViewCont
       ? searchForCaseVariable(primary, search, context.caseId)
       : searchForVariable(primary, search, context.model);
   const withLines = searchWithLines(base, view.field !== null ? view.lines : null);
-  const withParticles = searchWithParticles(withLines, view.particles || !context.particlesChosen);
+  const withVolume = searchWithVolume(withLines, volumeOverField(view));
+  const withParticles = searchWithParticles(withVolume, view.particles || !context.particlesChosen);
   const withExperiment = searchWithExperiment(withParticles, { enabled: context.experimentEnabled, ...view.derived });
   const withStations = searchWithStations(withExperiment, view.marks.stations);
   const withRadar = searchWithRadar(withStations, view.marks.radar);

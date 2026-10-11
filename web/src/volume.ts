@@ -1,29 +1,56 @@
-// A radar reflectivity volume drawn as a 3D texture and raymarched: the
-// `refl3d` bundle's constant-altitude levels stacked into one texture per
-// frame, the ray from the camera through each pixel of the box the volume
-// fills, front to back with a reflectivity transfer function.
+// A volume drawn as a 3D texture and raymarched: a volume bundle's
+// constant-altitude levels (the MRMS reflectivity `refl3d`, the WRF cloud
+// water `cloud3d`) stacked into one texture per frame, the ray from the
+// camera through each pixel of the box the volume fills, front to back
+// with a transfer function chosen by what the levels are: reflectivity
+// through its palette, cloud water as a lit Beer–Lambert medium.
 //
 // On the plane the box is a Mercator box whose height is the altitude
-// scaled by one exaggerated metres-to-Mercator factor; on the globe it is
-// a shell over the box in MapLibre's unit-sphere space, its own program,
-// the ray stopped by the planet. No terrain occlusion: the volume floats
-// over the relief from sea level up.
+// scaled by one exaggerated metres-to-Mercator factor, and with the map's
+// terrain on, the march stops where the terrain already drawn is in front
+// of it (MapLibre's packed terrain depth), so a mountain hides the cloud
+// behind it; on the globe it is a shell over the box in MapLibre's
+// unit-sphere space, its own program, the ray stopped by the planet and
+// not by the relief.
 
 import type { CustomLayerInterface, CustomRenderMethodInput, Map as MapLibreMap } from "maplibre-gl";
 import { MercatorCoordinate } from "maplibre-gl";
-import type { BundleVariable, LinearQuantization } from "./manifest";
-import { isGlobe } from "./projection";
+import type { BundleParameter, BundleVariable, LinearQuantization } from "./manifest";
+import { isGlobe, TERRAIN_DEPTH_GLSL, terrainDepthTexture } from "./projection";
+import { isDark } from "./theme";
 
-/** Bundles drawn as a volume, by manifest id, with their level count: the
- * encoders' volume kind (`VOLUME_BUNDLES` in xuebuild/binconvert.py). The
- * count is what a tier is weighed by before the bundle is opened; the
- * levels themselves are read off its variables. */
-export const VOLUME_BUNDLE_LEVELS: ReadonlyMap<string, number> = new Map([["refl3d", 33]]);
+export { VOLUME_BUNDLE_LEVELS } from "./manifest";
 
-/** The vertical exaggeration a volume is drawn at unless the URL asks for
- * another (`?vexag=`): CONUS is 7000 km wide and its echoes reach 19 km, so
- * at true scale the volume is a film on the map. */
+/** The vertical exaggeration a wide volume is drawn at unless the URL asks
+ * for another (`?vexag=`): CONUS is 7000 km wide and its echoes reach
+ * 19 km, so at true scale the volume is a film on the map. */
 export const DEFAULT_VERTICAL_EXAGGERATION = 10;
+
+/** The longitude span under which a volume is drawn at true scale: a box a
+ * few tens of kilometres across (a WRF nest) is as wide as its cloud is
+ * tall, and stretching it would stand the cloud off the mountain it sits
+ * on. */
+const TRUE_SCALE_SPAN_DEGREES = 2;
+
+/** The vertical exaggeration a volume is drawn at by default, by how wide
+ * its grid is: true scale under two degrees of longitude, the wide-area
+ * exaggeration otherwise. */
+export function defaultVerticalExaggeration(grid: { width: number; longitudeStep: number }): number {
+  return Math.abs(grid.width * grid.longitudeStep) < TRUE_SCALE_SPAN_DEGREES ? 1 : DEFAULT_VERTICAL_EXAGGERATION;
+}
+
+/** How a volume's codes become light: radar reflectivity through its
+ * palette, or cloud water as an extinguishing, sunlit medium. */
+export type VolumeTransfer = "reflectivity" | "cloud";
+
+/** The transfer function for a volume's levels, by their parameter: cloud
+ * water mixing ratio (0/1/22) is a cloud, anything else (the MRMS
+ * reflectivity, 209/9/0) draws through its palette. */
+export function volumeTransfer(parameter: BundleParameter | null | undefined): VolumeTransfer {
+  return parameter && parameter.discipline === 0 && parameter.parameterCategory === 1 && parameter.parameterNumber === 22
+    ? "cloud"
+    : "reflectivity";
+}
 
 /** Reflectivity below which the transfer function is clear and at which it
  * is fully dense, in dBZ: light stratiform echo stays a thin veil, so it
@@ -35,6 +62,49 @@ const DENSE_DBZ = 55;
  * stratiform shield hundreds of voxels deep reads as a veil and the cores
  * inside it still show. */
 const VOXEL_OPACITY = 0.6;
+
+/** Cloud water's extinction, per g/kg per voxel of path (one texel across):
+ * opacity is 1 − exp(−σ · q · path). At 1.6 a 0.3 g/kg deck six voxels
+ * deep reaches an optical depth of about 3 (95 % opaque) and reads as a
+ * solid layer, while a 0.05 g/kg wisp over the same path stays a veil. */
+const CLOUD_SIGMA = 1.6;
+
+/** Cloud water under which a sample is clear, in g/kg: below it the linear
+ * filter's ramp between a cloudy and a clear voxel would paint a halo of
+ * haze around every cloud. */
+const CLOUD_CLEAR_GPKG = 0.01;
+
+/** The sun the cloud is lit by, fixed: from the south-west at 45°
+ * elevation, the cartographer's light turned to the afternoon, so the
+ * side of a deck facing a tilted camera from the south reads lit. As a
+ * direction in the box's Mercator space: x east, y south, z up. */
+const SUN_DIRECTION: readonly [number, number, number] = [-0.5, 0.5, Math.SQRT1_2];
+
+/** How far towards the sun the one shadow sample is taken, in voxels, and
+ * how much path it stands for: a sample two voxels up-sun answers "is
+ * there cloud between this point and the light", and weighing it as four
+ * voxels of path makes a deck's sunward face lit and its far side dark
+ * without a second loop. */
+const SHADOW_OFFSET_VOXELS = 2;
+const SHADOW_PATH_VOXELS = 4;
+
+/** The silver lining: how much a thin, lit edge brightens when the camera
+ * looks towards the sun through it, and how tight that forward lobe is
+ * (the power of the cosine between the view ray and the sun). */
+const SILVER_STRENGTH = 0.6;
+const SILVER_POWER = 6;
+
+/** The cloud's lit and shaded colours per theme: on the paper basemap a
+ * white cloud would vanish, so it is a cool light grey-blue with a
+ * slate-blue shade; on the dark basemap it is a warm white over a grey. */
+type Rgb = readonly [number, number, number];
+const CLOUD_COLOURS: Record<"light" | "dark", { lit: Rgb; shade: Rgb }> = {
+  light: { lit: [0.86, 0.9, 0.96], shade: [0.48, 0.54, 0.64] },
+  dark: { lit: [1.0, 0.97, 0.92], shade: [0.46, 0.47, 0.5] },
+};
+
+/** Cloud water above which a section paints the palette, in g/kg. */
+const SECTION_CLOUD_GPKG = 0.01;
 
 /** Bins in the altitude-to-level lookup, over `[0, top]`. */
 const LEVEL_LOOKUP_SIZE = 1024;
@@ -390,6 +460,7 @@ export const VOLUME_FRAGMENT_SHADER = `#version 300 es
 precision highp float;
 precision highp sampler3D;
 in vec3 v_world;
+uniform mat4 u_matrix;
 uniform vec3 u_camera;
 uniform vec3 u_box_min;
 uniform vec3 u_box_max;
@@ -408,10 +479,37 @@ uniform vec3 u_dbz;
 uniform float u_voxel;
 // The whole march dimmed while a section stands in it.
 uniform float u_veil;
+// 0 reflectivity through the palette, 1 cloud water (Beer–Lambert, lit).
+uniform float u_cloud;
+// σ per g/kg per voxel, the clear threshold in g/kg, the shadow's offset
+// and path in voxels.
+uniform vec4 u_cloud_shape;
+uniform vec3 u_sun;
+uniform vec3 u_cloud_lit;
+uniform vec3 u_cloud_shade;
+// silver strength, lobe power
+uniform vec2 u_silver;
+// 1 while the terrain's depth is bound: the march stops behind it.
+uniform float u_occlude;
+${TERRAIN_DEPTH_GLSL}
 out vec4 out_color;
 
 const float PI = 3.141592653589793;
 const int MAX_STEPS = ${MAX_STEPS};
+
+// The texture coordinate of a point of the box, or a negative x outside it.
+vec3 volumeCoordinate(vec3 p) {
+  float lon = p.x * 360.0 - 180.0;
+  float lat = degrees(atan(sinh(PI * (1.0 - 2.0 * p.y))));
+  vec2 uv = vec2((lon - u_grid.x) / u_grid.z, (u_grid.y - lat) / u_grid.w);
+  if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 || p.z < 0.0 || p.z > u_box_max.z) return vec3(-1.0);
+  float w = texture(u_levels, vec2(p.z / u_z_scale / u_top, 0.5)).r;
+  return vec3(uv, w);
+}
+
+float volumeCode(vec3 coordinate) {
+  return mix(texture(u_volume_a, coordinate).r, texture(u_volume_b, coordinate).r, u_mix) * 255.0;
+}
 
 void main() {
   vec3 ray = v_world - u_camera;
@@ -425,8 +523,11 @@ void main() {
   float enter = max(max(near.x, near.y), near.z);
   float leave = min(min(far.x, far.y), far.z);
   // Only the face the ray leaves through draws: the one it enters through
-  // would composite the same column twice.
-  if (hit < leave * (1.0 - 1e-4)) discard;
+  // would composite the same column twice. The tolerance is a share of a
+  // voxel, not of the distance: close in (a 30 km box at zoom 12) the
+  // camera is a thousandth of a Mercator unit away, and a relative one
+  // falls under float precision and loses the exit face too.
+  if (hit < leave - 0.25 * u_voxel) discard;
   enter = max(enter, 0.0);
   float span = leave - enter;
   if (span <= 0.0) discard;
@@ -440,19 +541,39 @@ void main() {
   // volume shows them as wood-grain bands; a per-pixel offset (interleaved
   // gradient noise) turns the bands into a grain too fine to see.
   float phase = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
+  // The forward-scattering lobe: brightest looking into the sun.
+  float lobe = pow(max(dot(dir, u_sun), 0.0), u_silver.y);
   vec4 sum = vec4(0.0);
   for (int i = 0; i < MAX_STEPS; i += 1) {
     if (i >= steps) break;
     vec3 p = u_camera + dir * (enter + (float(i) + phase) * dt);
-    float lon = p.x * 360.0 - 180.0;
-    float lat = degrees(atan(sinh(PI * (1.0 - 2.0 * p.y))));
-    vec2 uv = vec2((lon - u_grid.x) / u_grid.z, (u_grid.y - lat) / u_grid.w);
-    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) continue;
-    float altitude = p.z / u_z_scale;
-    float w = texture(u_levels, vec2(altitude / u_top, 0.5)).r;
-    vec3 coordinate = vec3(uv, w);
-    float code = mix(texture(u_volume_a, coordinate).r, texture(u_volume_b, coordinate).r, u_mix) * 255.0;
+    // The terrain already drawn is in front of this sample, and of every
+    // one after it along the ray.
+    if (u_occlude > 0.5 && surfaceOccluded(u_matrix * vec4(p, 1.0))) break;
+    vec3 coordinate = volumeCoordinate(p);
+    if (coordinate.x < 0.0) continue;
+    float code = volumeCode(coordinate);
     if (code > u_codebook.z + 0.5) continue;
+    if (u_cloud > 0.5) {
+      float q = u_codebook.x + code * u_codebook.y;
+      if (q < u_cloud_shape.y) continue;
+      float alpha = 1.0 - exp(-u_cloud_shape.x * q * stride);
+      // One sample towards the sun: the cloud between this point and the
+      // light, weighed as a few voxels of path.
+      vec3 towards = volumeCoordinate(p + u_sun * (u_cloud_shape.z * u_voxel));
+      float shaded = 0.0;
+      if (towards.x >= 0.0) {
+        float code_s = volumeCode(towards);
+        if (code_s <= u_codebook.z + 0.5) shaded = max(0.0, u_codebook.x + code_s * u_codebook.y);
+      }
+      float light = exp(-u_cloud_shape.x * shaded * u_cloud_shape.w);
+      // A thin edge with clear sky up-sun glows when seen against the sun.
+      float edge = light * exp(-u_cloud_shape.x * q);
+      vec3 color = mix(u_cloud_shade, u_cloud_lit, light) + vec3(u_silver.x * lobe * edge);
+      sum += (1.0 - sum.a) * vec4(min(color, vec3(1.0)) * alpha, alpha);
+      if (sum.a > 0.97) break;
+      continue;
+    }
     float dbz = u_codebook.x + code * u_codebook.y;
     float density = smoothstep(u_dbz.x, u_dbz.y, dbz) * u_dbz.z;
     if (density <= 0.0) continue;
@@ -485,6 +606,7 @@ uniform float u_mix;
 uniform sampler2D u_palette;
 uniform sampler2D u_levels;
 uniform vec3 u_codebook;
+// The value from which the palette paints: dBZ, or g/kg of cloud water.
 uniform vec2 u_dbz;
 out vec4 out_color;
 
@@ -664,8 +786,8 @@ interface VolumeSlot {
   planes: readonly Uint8Array[] | null;
 }
 
-/** The radar volume as a MapLibre custom layer. Fed the level planes of
- * two frames and the weight between them, as the field layer is. */
+/** The volume as a MapLibre custom layer. Fed the level planes of two
+ * frames and the weight between them, as the field layer is. */
 export class VolumeLayer implements CustomLayerInterface {
   readonly id: string;
   readonly type = "custom" as const;
@@ -690,7 +812,12 @@ export class VolumeLayer implements CustomLayerInterface {
   private codebook: [number, number, number] = [0, 0, 255];
   private palette: Uint8Array | null = null;
   private box: VolumeBox | null = null;
-  private exaggeration: number;
+  /** `?vexag=`, or null for the grid's own default. */
+  private exaggerationOverride: number | null;
+  /** The map's terrain exaggeration the box was last built for (1 without
+   * terrain), so a volume over the relief is stretched as the relief is. */
+  private terrainExaggeration = 1;
+  private transfer: VolumeTransfer = "reflectivity";
   private mixWeight = 0;
   private visible = false;
   private boxDirty = true;
@@ -718,11 +845,33 @@ export class VolumeLayer implements CustomLayerInterface {
 
   constructor(
     private readonly onUnsupported: (message: string) => void,
-    exaggeration = DEFAULT_VERTICAL_EXAGGERATION,
+    exaggeration: number | null = null,
     id = "radar-volume",
   ) {
     this.id = id;
-    this.exaggeration = exaggeration;
+    this.exaggerationOverride = exaggeration;
+  }
+
+  /** The exaggeration the box is drawn at: the URL's or the grid's own
+   * default, times the terrain's while the map has terrain on. */
+  private get exaggeration(): number {
+    const own = this.exaggerationOverride ?? (this.grid ? defaultVerticalExaggeration(this.grid) : DEFAULT_VERTICAL_EXAGGERATION);
+    return own * this.terrainExaggeration;
+  }
+
+  private readonly onTerrain = (): void => {
+    this.syncTerrain();
+    this.map?.triggerRepaint();
+  };
+
+  /** Follow the map's terrain exaggeration; the box is rebuilt when it
+   * changes. */
+  private syncTerrain(): void {
+    const terrain = this.map?.getTerrain() ?? null;
+    const exaggeration = terrain ? (terrain.exaggeration ?? 1) : 1;
+    if (exaggeration === this.terrainExaggeration) return;
+    this.terrainExaggeration = exaggeration;
+    this.boxDirty = true;
   }
 
   /** The grid, levels and codebook of the session to draw. */
@@ -739,6 +888,7 @@ export class VolumeLayer implements CustomLayerInterface {
     // The field layer reads value = offset + (code / 255) * 255 * scale off
     // a normalized texel; the march works in whole codes, offset + code * scale.
     this.codebook = [quantization.offset, quantization.scale, quantization.maximumCode];
+    this.transfer = volumeTransfer(levels.variables[0]!.parameter);
     this.boxDirty = true;
     this.levelsDirty = true;
     if (!sameGrid) {
@@ -754,9 +904,10 @@ export class VolumeLayer implements CustomLayerInterface {
     this.map?.triggerRepaint();
   }
 
-  setExaggeration(exaggeration: number): void {
-    if (exaggeration === this.exaggeration) return;
-    this.exaggeration = exaggeration;
+  /** `?vexag=`, or null for the grid's own default. */
+  setExaggeration(exaggeration: number | null): void {
+    if (exaggeration === this.exaggerationOverride) return;
+    this.exaggerationOverride = exaggeration;
     this.boxDirty = true;
     this.map?.triggerRepaint();
   }
@@ -821,6 +972,8 @@ export class VolumeLayer implements CustomLayerInterface {
     const gl = context;
     this.map = map;
     this.gl = gl;
+    map.on("terrain", this.onTerrain);
+    this.syncTerrain();
     this.program = linkProgram(gl, VOLUME_VERTEX_SHADER, VOLUME_FRAGMENT_SHADER);
     if (!this.program) {
       this.onUnsupported("The radar volume shader failed to compile.");
@@ -829,6 +982,7 @@ export class VolumeLayer implements CustomLayerInterface {
     for (const name of [
       "u_matrix", "u_camera", "u_box_min", "u_box_max", "u_grid", "u_z_scale", "u_top",
       "u_volume_a", "u_volume_b", "u_mix", "u_palette", "u_levels", "u_codebook", "u_dbz", "u_voxel", "u_veil",
+      "u_cloud", "u_cloud_shape", "u_sun", "u_cloud_lit", "u_cloud_shade", "u_silver", "u_occlude", "u_depth",
     ]) {
       this.uniforms.set(name, gl.getUniformLocation(this.program, name));
     }
@@ -930,6 +1084,7 @@ export class VolumeLayer implements CustomLayerInterface {
       gl.deleteBuffer(this.sectionBuffer);
       gl.deleteVertexArray(this.sectionVao);
     }
+    this.map?.off("terrain", this.onTerrain);
     this.slots = [];
     this.gl = null;
     this.map = null;
@@ -945,9 +1100,12 @@ export class VolumeLayer implements CustomLayerInterface {
     const matrix = input.defaultProjectionData.mainMatrix as ArrayLike<number>;
     const camera = cameraFromMatrix(matrix);
     if (!camera) return;
+    this.syncTerrain();
     if (this.boxDirty) this.rebuildBox(gl);
     if (this.levelsDirty) this.uploadLevels(gl);
     const box = this.box!;
+    const cloud = this.transfer === "cloud";
+    const depth = this.map?.getTerrain() ? terrainDepthTexture(this.map) : null;
 
     gl.useProgram(this.program);
     gl.uniformMatrix4fv(this.uniforms.get("u_matrix")!, false, Float32Array.from(matrix));
@@ -963,6 +1121,15 @@ export class VolumeLayer implements CustomLayerInterface {
     // One texel of the texture as it is held, in Mercator units across.
     gl.uniform1f(this.uniforms.get("u_voxel")!, (box.max[0] - box.min[0]) / this.textureSize[0]);
     gl.uniform1f(this.uniforms.get("u_veil")!, this.section ? SECTION_VEIL : 1);
+    gl.uniform1f(this.uniforms.get("u_cloud")!, cloud ? 1 : 0);
+    gl.uniform4f(this.uniforms.get("u_cloud_shape")!, CLOUD_SIGMA, CLOUD_CLEAR_GPKG, SHADOW_OFFSET_VOXELS, SHADOW_PATH_VOXELS);
+    gl.uniform3fv(this.uniforms.get("u_sun")!, SUN_DIRECTION);
+    // Read at draw time: the theme switches in place.
+    const colours = isDark ? CLOUD_COLOURS.dark : CLOUD_COLOURS.light;
+    gl.uniform3fv(this.uniforms.get("u_cloud_lit")!, colours.lit);
+    gl.uniform3fv(this.uniforms.get("u_cloud_shade")!, colours.shade);
+    gl.uniform2f(this.uniforms.get("u_silver")!, SILVER_STRENGTH, SILVER_POWER);
+    gl.uniform1f(this.uniforms.get("u_occlude")!, depth ? 1 : 0);
 
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_3D, this.slots[0]!.texture);
@@ -976,6 +1143,12 @@ export class VolumeLayer implements CustomLayerInterface {
     gl.activeTexture(gl.TEXTURE3);
     gl.bindTexture(gl.TEXTURE_2D, this.levelTexture);
     gl.uniform1i(this.uniforms.get("u_levels")!, 3);
+    // The terrain's depth on its own unit; without terrain the unit still
+    // holds a 2D texture (the level lookup), since a sampler2D left on a
+    // unit holding the 3D volume would fail the draw.
+    gl.activeTexture(gl.TEXTURE4);
+    gl.bindTexture(gl.TEXTURE_2D, depth ?? this.levelTexture);
+    gl.uniform1i(this.uniforms.get("u_depth")!, 4);
 
     gl.disable(gl.DEPTH_TEST);
     gl.disable(gl.CULL_FACE);
@@ -1003,7 +1176,7 @@ export class VolumeLayer implements CustomLayerInterface {
     gl.uniform1f(uniform("u_top"), box.top);
     gl.uniform1f(uniform("u_mix"), this.slots[1]!.planes ? this.mixWeight : 0);
     gl.uniform3f(uniform("u_codebook"), ...this.codebook);
-    gl.uniform2f(uniform("u_dbz"), SECTION_ECHO_DBZ, DENSE_DBZ);
+    gl.uniform2f(uniform("u_dbz"), this.sectionThreshold(), DENSE_DBZ);
     gl.uniform1i(uniform("u_volume_a"), 0);
     gl.uniform1i(uniform("u_volume_b"), 1);
     gl.uniform1i(uniform("u_palette"), 2);
@@ -1077,7 +1250,7 @@ export class VolumeLayer implements CustomLayerInterface {
       gl.uniform1f(sectionUniform("u_top"), box.top);
       gl.uniform1f(sectionUniform("u_mix"), this.slots[1]!.planes ? this.mixWeight : 0);
       gl.uniform3f(sectionUniform("u_codebook"), ...this.codebook);
-      gl.uniform2f(sectionUniform("u_dbz"), SECTION_ECHO_DBZ, DENSE_DBZ);
+      gl.uniform2f(sectionUniform("u_dbz"), this.sectionThreshold(), DENSE_DBZ);
       this.bindVolumeTextures(gl, sectionUniform);
       gl.bindVertexArray(this.sectionGlobeVao);
       gl.bindBuffer(gl.ARRAY_BUFFER, this.sectionGlobeBuffer);
@@ -1086,6 +1259,12 @@ export class VolumeLayer implements CustomLayerInterface {
       gl.bindVertexArray(null);
     }
     gl.activeTexture(gl.TEXTURE0);
+  }
+
+  /** The value from which a section paints the palette rather than the
+   * panel: an echo in dBZ, or cloud in g/kg. */
+  private sectionThreshold(): number {
+    return this.transfer === "cloud" ? SECTION_CLOUD_GPKG : SECTION_ECHO_DBZ;
   }
 
   /** The two frames' volumes, the palette and the level lookup on units
@@ -1126,7 +1305,7 @@ export class VolumeLayer implements CustomLayerInterface {
     const table = levelLookup(this.altitudes, volumeTop(this.altitudes));
     gl.bindTexture(gl.TEXTURE_2D, this.levelTexture);
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.R16F, table.length, 1, 0, gl.RED, gl.FLOAT, table);
+    withPlainUnpack(gl, () => gl.texImage2D(gl.TEXTURE_2D, 0, gl.R16F, table.length, 1, 0, gl.RED, gl.FLOAT, table));
     setLinearClamp(gl, gl.TEXTURE_2D);
     this.levelsDirty = false;
   }
@@ -1134,7 +1313,7 @@ export class VolumeLayer implements CustomLayerInterface {
   private uploadPalette(gl: WebGL2RenderingContext): void {
     gl.bindTexture(gl.TEXTURE_2D, this.paletteTexture);
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
-    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 256, 1, gl.RGBA, gl.UNSIGNED_BYTE, this.palette);
+    withPlainUnpack(gl, () => gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 256, 1, gl.RGBA, gl.UNSIGNED_BYTE, this.palette));
   }
 
   /** (Re)allocate both 3D textures for the grid, halving a dimension the
@@ -1168,6 +1347,10 @@ export class VolumeLayer implements CustomLayerInterface {
 
   private upload(gl: WebGL2RenderingContext, slot: VolumeSlot, planes: readonly Uint8Array[]): void {
     if (slot.planes && samePlanes(slot.planes, planes)) return;
+    withPlainUnpack(gl, () => this.uploadPlanes(gl, slot, planes));
+  }
+
+  private uploadPlanes(gl: WebGL2RenderingContext, slot: VolumeSlot, planes: readonly Uint8Array[]): void {
     gl.bindTexture(gl.TEXTURE_3D, slot.texture);
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
     const [width, height] = this.textureSize;
@@ -1203,6 +1386,22 @@ export class VolumeLayer implements CustomLayerInterface {
     }
     slot.planes = planes;
   }
+}
+
+/** Run an upload from typed arrays with the unpack flags MapLibre leaves
+ * behind for its images turned off: a 3D upload from an array view with
+ * premultiplied alpha or a flipped Y is an error in WebGL2 (the volume came
+ * out empty once the basemap had uploaded its sprites and peak badges), and
+ * a 2D one would be premultiplied or flipped. MapLibre caches that state,
+ * so it is put back as it was. */
+function withPlainUnpack(gl: WebGL2RenderingContext, upload: () => void): void {
+  const flip = gl.getParameter(gl.UNPACK_FLIP_Y_WEBGL) as boolean;
+  const premultiply = gl.getParameter(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL) as boolean;
+  if (flip) gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+  if (premultiply) gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+  upload();
+  if (flip) gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+  if (premultiply) gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
 }
 
 function samePlanes(a: readonly Uint8Array[], b: readonly Uint8Array[]): boolean {

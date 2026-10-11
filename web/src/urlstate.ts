@@ -5,6 +5,7 @@ import {
   type ForecastBundleId,
   type ForecastModelId,
   type ResolutionPreference,
+  VOLUME_BUNDLE_LEVELS,
 } from "./manifest";
 import { isPressureBundle, type PressureBundleId } from "./pressure";
 import { variableIds, variableSpec } from "./variables";
@@ -399,6 +400,40 @@ export function searchWithLines(search: string, lines: PressureBundleId | null):
   if (lines === null) params.delete("lines");
   else params.set("lines", canonicalType(lines));
   return `?${params.toString()}`;
+}
+
+/** The volume drawn over a filled field, from `?volume=`: a volume bundle's
+ * id (`cloud3d`), case-insensitive. Anything else — a 2D field, `off`, a
+ * name this app does not know — reads as no volume rather than an error;
+ * whether the run ships it is the manifest's answer. */
+export function parseVolumeFromSearch(search: string): ForecastBundleId | null {
+  const value = new URLSearchParams(search).get("volume")?.trim().toLowerCase();
+  if (value === undefined) return null;
+  return VOLUME_BUNDLE_LEVELS.has(value) ? value : null;
+}
+
+/** The given query string carrying the volume overlay, or none. Written only
+ * when a volume is drawn over a filled field; a volume that is itself the
+ * field is named by `type`. */
+export function searchWithVolume(search: string, volume: ForecastBundleId | null): string {
+  const params = new URLSearchParams(search);
+  if (volume === null) params.delete("volume");
+  else params.set("volume", volume);
+  return `?${params.toString()}`;
+}
+
+/** The largest `?vexag=` honoured. */
+const MAX_VERTICAL_EXAGGERATION = 200;
+
+/** A volume's vertical exaggeration from `?vexag=` — a positive number up
+ * to 200, multiplied by the terrain's own while the relief is on — or null
+ * for the volume's default (true scale under two degrees of longitude,
+ * ten times over a wider one; volume.ts). */
+export function parseVerticalExaggerationFromSearch(search: string): number | null {
+  const value = new URLSearchParams(search).get("vexag");
+  if (value === null || value.trim() === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 && number <= MAX_VERTICAL_EXAGGERATION ? number : null;
 }
 
 /** Query string advertising the given model and variable, preserving any

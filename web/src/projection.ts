@@ -289,6 +289,18 @@ export function surfaceTiles(map: MaplibreMap, args: CustomRenderMethodInput): S
   return tiles;
 }
 
+/** The terrain's packed depth — one screen-sized texture, the same one
+ * every terrain tile's data names — or null when the map has no terrain
+ * on screen (or MapLibre no longer exposes it this way). For a layer that
+ * tests against the relief without drawing itself per tile. */
+export function terrainDepthTexture(map: MaplibreMap): WebGLTexture | null {
+  const terrain = (map as unknown as { terrain?: TerrainLike | null }).terrain;
+  const renderable = terrain?.tileManager?.getRenderableTiles?.();
+  const first = renderable?.[0];
+  if (!terrain?.getTerrainData || !first) return null;
+  return terrain.getTerrainData(first.tileID).depthTexture ?? null;
+}
+
 /** Bind one terrain tile's projection and DEM. The DEM goes on `demUnit`
  * (read through `linearSampler` when given, so the texture's own NEAREST —
  * which MapLibre relies on — is left alone), the terrain depth on

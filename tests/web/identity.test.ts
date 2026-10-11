@@ -296,3 +296,14 @@ describe("registeredBundleId", () => {
     expect(registeredBundleId({ family: "rh", level: 550, vector: false })).toBeNull();
   });
 });
+
+describe("cloud water", () => {
+  it("is the clw chart on an altitude above mean sea level, whatever the altitude", () => {
+    expect(identityForParameter(parameter(0, 1, 22, 102, 1250))).toEqual({ family: "clw", level: null, vector: false });
+    expect(identityForParameter(parameter(0, 1, 22, 102, 12000))).toEqual({ family: "clw", level: null, vector: false });
+    // On a pressure surface or the ground it is nothing this build charts.
+    expect(identityForParameter(parameter(0, 1, 22, 100, 85000))).toBeNull();
+    expect(identityForParameter(parameter(0, 1, 22, 1, null))).toBeNull();
+    expect(registeredBundleId({ family: "clw", level: null, vector: false })).toBe("cloud3d");
+  });
+});

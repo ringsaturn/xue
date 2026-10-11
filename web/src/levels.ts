@@ -249,9 +249,14 @@ export const FAMILIES: Record<IsobaricFamily, FamilyInfo> = {
 
 /** Bundles the shell has chart knowledge for but deliberately writes no rail
  * tile for: the scalar primary wave direction, which is not a fill (see the
- * wave family above) — the wave vector is how it is drawn. Reachable by URL
- * on a run that carries it, which gets no generic tile for it either. */
-export const UNTILED_BUNDLE_IDS: readonly ForecastBundleId[] = ["dirpw"];
+ * wave family above) — the wave vector is how it is drawn — and the cloud
+ * water volume, which draws over a field from the overlay section's volume
+ * switch. Reachable by URL on a run that carries them, which gets no
+ * generic tile for them either. */
+export const UNTILED_BUNDLE_IDS: readonly ForecastBundleId[] = ["dirpw", "cloud3d"];
+
+/** The cloud water volume's chart span, in g/kg: its codebook's. */
+export const CLOUD_WATER_CHART_MAX = 2.5;
 
 /** The family a bundle id *names*, or null for a single layer (precipitation,
  * radiation, reflectivity) and for any name the convention does not describe.
@@ -556,6 +561,7 @@ export function scalarLegendRange(identity: VariableIdentity): readonly [number,
   if (family === "aptmp2m") return APPARENT_CHART_RANGE;
   if (family === "pwat") return [0, PWAT_CHART_MAX];
   if (family === "hpbl") return [0, PBL_CHART_MAX];
+  if (family === "clw") return [0, CLOUD_WATER_CHART_MAX];
   // Precipitation type is categorical: its legend is a swatch key, not a
   // ramp, so it has no scalar span (`isobaricLegend` returns null too).
   // The skin temperature reads over the 2 m temperature's ramp; the
@@ -789,6 +795,7 @@ export function isobaricLegend(identity: VariableIdentity): string[] | null {
   if (family === "aptmp2m") return rangeLegend(APPARENT_CHART_RANGE, 10);
   if (family === "pwat") return rangeLegend([0, PWAT_CHART_MAX], 10);
   if (family === "hpbl") return rangeLegend([0, PBL_CHART_MAX], 500);
+  if (family === "clw") return rangeLegend([0, CLOUD_WATER_CHART_MAX], 0.5);
   if (family === "tmpsfc") return rangeLegend(temperaturePaletteDomain(null), 10);
   if (family === "icec") return rangeLegend([0, 100], 20);
   if (family === "icetk") return rangeLegend([0, ICE_THICKNESS_CHART_MAX], 1);

@@ -3,6 +3,7 @@ import {
   CAT_CLASSES,
   CAPE_CHART_MAX,
   CIN_CHART_RANGE,
+  CLOUD_WATER_CHART_MAX,
   DEW_POINT_CHART_RANGE,
   GUST_SPEED_MAX,
   ICE_THICKNESS_CHART_MAX,
@@ -301,6 +302,18 @@ const CLOUD_STOPS: Stop[] = [
   [75, 192, 198, 208, 205],
   [90, 200, 206, 215, 232],
   [100, 208, 213, 221, 245],
+];
+
+// Cloud water mixing ratio, g/kg: grey-white turning bright white, clear
+// at zero. The volume layer lights the cloud itself (volume.ts); this ramp
+// is the legend's and a vertical section's, where a faint wisp has to stay
+// visible against the section's pale panel, hence the grey low end.
+const CLOUD_WATER_STOPS: Stop[] = [
+  [0, 196, 202, 210, 0],
+  [0.05, 190, 197, 207, 150],
+  [0.3, 214, 219, 227, 215],
+  [1, 238, 241, 245, 245],
+  [CLOUD_WATER_CHART_MAX, 255, 255, 255, 255],
 ];
 
 // CAPE, in the classes a severe-weather chart draws: nothing under 100 J/kg
@@ -817,6 +830,7 @@ function stopsFor(variable: BundleVariable, identity: VariableIdentity | null): 
   if (family === "ir104") return BRIGHTNESS_TEMPERATURE_STOPS;
   if (family === "dustcf" || family === "zhouye") return DUST_CONFIDENCE_STOPS;
   if (family === "aurora") return AURORA_STOPS;
+  if (family === "clw") return CLOUD_WATER_STOPS;
   if (family === "hgt" && linear) return pressureStops(linear);
   if (family === "tmp") return remapStops(TEMPERATURE_STOPS, [-60, 50], temperaturePaletteDomain(level));
   if (family === "rh") return HUMIDITY_STOPS;

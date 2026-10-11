@@ -451,6 +451,26 @@ function buildSpecs(): readonly VariableSpec[] {
     meteogramCode: "HIGH",
     showcaseCode: "CLOUD HIGH",
   }),
+  // Cloud water in three dimensions: the WRF nest's cloud water mixing
+  // ratio on constant altitudes, drawn as a lit volume over the field
+  // (volume.ts) rather than as a field of its own, so it has no rail tile
+  // (`UNTILED_BUNDLE_IDS`): the overlay section's volume switch is its way
+  // onto the screen. The legend and the section read 0–2.5 g/kg, the
+  // codebook's span.
+  surface({
+    id: "cloud3d",
+    chart: "clw",
+    group: "moisture",
+    code: "CLW3D",
+    title: ["3D", "Cloud Water"],
+    bufferTitle: "Cloud water buffer",
+    labelKey: "varLabelCloud3d",
+    legend: ["2.5", "2", "1.5", "1", "0.5", "0"],
+    ground: "slate",
+    urlName: "cloud3d",
+    urlAliases: ["cloudwater", "clw"],
+    showcaseCode: "CLOUD 3D",
+  }),
   // Precipitable water: the column's vapour as a depth, a rising moisture
   // ramp over a dry map.
   surface({

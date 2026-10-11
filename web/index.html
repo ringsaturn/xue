@@ -625,6 +625,15 @@
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphParticles">≈</b>
           <span class="rail-name"><span>PARTICLES</span> <small data-i18n="varParticles">FLOW</small></span>
         </button>
+        <!-- The volume over the field (?volume=): the cloud water drawn in
+             3D over whatever 2D field is on screen. Shown on a run that
+             ships a volume bundle, while the field is not itself one
+             (main.ts::syncVolumeTile). -->
+        <button id="volume-tile" type="button" data-toggle aria-pressed="false" data-i18n-tip="varLabelCloud3d" hidden>
+          <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 15.5h9.5a3.5 3.5 0 0 0 .4-7A5 5 0 0 0 7.3 9.6 3 3 0 0 0 7 15.5z" /><path d="M5 19.5h12" /><path d="M8 12.5h7" /></svg>
+          <b class="rail-glyph" aria-hidden="true" data-i18n="glyphVolume">Q</b>
+          <span class="rail-name"><span>CLW3D</span> <small data-i18n="varVolume">3D CLOUD</small></span>
+        </button>
         <!-- The experimental composite's derived layers (?x=): switches
              like the two above — each draws over whatever the fill is. A
              curling stream for the warm moist inflow, a line with the

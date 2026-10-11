@@ -13,11 +13,14 @@ import {
   parseSceneFromSearch,
   parseUseH264FromSearch,
   parseVariableFromSearch,
+  parseVerticalExaggerationFromSearch,
+  parseVolumeFromSearch,
   searchForVariable,
   searchWithExperiment,
   searchWithLines,
   searchWithParticles,
   searchWithScene,
+  searchWithVolume,
 } from "../../web/src/urlstate";
 import type { KnownBundleId } from "../../web/src/manifest";
 
@@ -506,5 +509,25 @@ describe("terrain shadows in the scene", () => {
     expect(on).toBe("?model=gfs&shadow=on");
     expect(parseSceneFromSearch(on).shadow).toBe(true);
     expect(searchWithScene("?model=gfs&shadow=on", { globe: false, terrain: null, shadow: false })).toBe("?model=gfs");
+  });
+});
+
+describe("the volume parameters", () => {
+  it("round-trips ?volume= and drops what is not a volume bundle", () => {
+    expect(parseVolumeFromSearch(searchWithVolume("?case=x", "cloud3d"))).toBe("cloud3d");
+    expect(searchWithVolume("?case=x&volume=cloud3d", null)).toBe("?case=x");
+    expect(parseVolumeFromSearch("?volume=refl3d")).toBe("refl3d");
+    expect(parseVolumeFromSearch("?volume=cloud")).toBeNull();
+    expect(parseVolumeFromSearch("?volume=")).toBeNull();
+  });
+
+  it("reads ?vexag= as a positive number up to 200, or the volume's default", () => {
+    expect(parseVerticalExaggerationFromSearch("?vexag=3")).toBe(3);
+    expect(parseVerticalExaggerationFromSearch("?vexag=0.5")).toBe(0.5);
+    expect(parseVerticalExaggerationFromSearch("")).toBeNull();
+    expect(parseVerticalExaggerationFromSearch("?vexag=")).toBeNull();
+    expect(parseVerticalExaggerationFromSearch("?vexag=0")).toBeNull();
+    expect(parseVerticalExaggerationFromSearch("?vexag=500")).toBeNull();
+    expect(parseVerticalExaggerationFromSearch("?vexag=tall")).toBeNull();
   });
 });
