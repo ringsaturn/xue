@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FORECAST_MODELS } from "../../web/src/manifest";
+import { FORECAST_MODELS, isCaseOnlyModel, type ForecastModelId } from "../../web/src/manifest";
 
 import {
   EXPERIMENT_OFF,
@@ -194,8 +194,10 @@ describe("the fields' own ?type= spellings", () => {
 
 describe("parseModelFromSearch", () => {
   it("resolves every model the shell serves by its own id", () => {
-    for (const id of Object.keys(FORECAST_MODELS)) {
-      expect(parseModelFromSearch(`?model=${id}`)).toBe(id);
+    // A dataset with no live feed (the WOOF nest) has nothing to open
+    // outside a case, so its own id falls back like an unknown one.
+    for (const id of Object.keys(FORECAST_MODELS) as ForecastModelId[]) {
+      expect(parseModelFromSearch(`?model=${id}`)).toBe(isCaseOnlyModel(id) ? "gfs" : id);
     }
     expect(parseModelFromSearch("?model=OVATION")).toBe("aurora");
   });
@@ -216,6 +218,10 @@ describe("parseModelFromSearch", () => {
     expect(parseModelFromSearch("?model=hrrr")).toBe("hrrr");
     expect(parseModelFromSearch("?model=MRMS")).toBe("mrms");
     expect(parseModelFromSearch("?model=mrms3d")).toBe("mrms3d");
+    // The WOOF nest has no live feed: a bare link to it opens the default,
+    // and a case pins its own model regardless.
+    expect(parseModelFromSearch("?model=woof")).toBe("gfs");
+    expect(parseModelFromSearch("?model=WRF")).toBe("gfs");
     expect(parseModelFromSearch("?model=MRMS-3D")).toBe("mrms3d");
     expect(parseModelFromSearch("?model=jma")).toBe("jma");
     expect(parseModelFromSearch("?model=hrpns")).toBe("jma");

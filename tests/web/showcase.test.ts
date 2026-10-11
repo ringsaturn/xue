@@ -71,6 +71,76 @@ describe("showcase catalog", () => {
     expect(catalog.cases[0]!.variables).toEqual(["cref"]);
   });
 
+  it("accepts a forecast case on a dataset with no live feed", () => {
+    // The WOOF nest is reached through its cases alone: the catalog names
+    // it by its manifest strings like any other dataset.
+    const catalog = validateCatalog(
+      catalogFixture([
+        caseFixture({
+          id: "fuji-woof-2026-10-10",
+          modelId: "woof",
+          model: "WOOF-WRF",
+          product: "nest",
+          run: "2026101000",
+          runTime: "2026-10-10T00:00:00Z",
+          forecastHours: 36,
+          bbox: [138.54, 35.22, 138.93, 35.52],
+          dataBbox: [138.5375, 35.2175, 138.9325, 35.5225],
+          grid: { width: 79, height: 61 },
+          variables: ["tmpsfc", "tmp2m", "wind10m", "lcdc"],
+          defaultVariable: "tmpsfc",
+          manifestPath: "showcase/fuji-woof-2026-10-10/manifest.json",
+        }),
+      ]),
+    );
+    expect(catalog.cases[0]!.modelId).toBe("woof");
+    expect(catalog.cases[0]!.view).toBeUndefined();
+  });
+
+  it("reads a case's opening view", () => {
+    const full = { center: [138.73, 35.2], zoom: 11.5, pitch: 70, bearing: 20, terrain: 1.2 };
+    expect(validateCatalog(catalogFixture([caseFixture({ view: full })])).cases[0]!.view).toEqual(full);
+    // Center and zoom alone: the camera is flat and north up, the relief
+    // untouched.
+    const partial = validateCatalog(catalogFixture([caseFixture({ view: { center: [138.73, 35.2], zoom: 11 } })]));
+    expect(partial.cases[0]!.view).toEqual({ center: [138.73, 35.2], zoom: 11 });
+    expect(partial.cases[0]!.view).not.toHaveProperty("pitch");
+    expect(partial.cases[0]!.view).not.toHaveProperty("terrain");
+    // `terrain: false` opens with the ground flat.
+    const flat = validateCatalog(catalogFixture([caseFixture({ view: { center: [0, 0], zoom: 3, terrain: false } })]));
+    expect(flat.cases[0]!.view?.terrain).toBe(false);
+    // An exaggeration past `?terrain=`'s ceiling is clamped as the parameter is.
+    const steep = validateCatalog(catalogFixture([caseFixture({ view: { center: [0, 0], zoom: 3, terrain: 11 } })]));
+    expect(steep.cases[0]!.view?.terrain).toBe(10);
+  });
+
+  it("ignores a view block it cannot read, keeping the case", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      for (const view of [
+        null,
+        "11/35.2/138.7",
+        { zoom: 11 },
+        { center: [138.73], zoom: 11 },
+        { center: [200, 35.2], zoom: 11 },
+        { center: [138.73, 35.2], zoom: Number.NaN },
+        { center: [138.73, 35.2], zoom: 11, pitch: 90 },
+        { center: [138.73, 35.2], zoom: 11, terrain: "on" },
+        { center: [138.73, 35.2], zoom: 11, terrain: 0 },
+        { center: [138.73, 35.2], zoom: 11, terrain: -1 },
+      ]) {
+        warn.mockClear();
+        const catalog = validateCatalog(catalogFixture([caseFixture({ view })]));
+        expect(catalog.cases).toHaveLength(1);
+        expect(catalog.cases[0]!.view).toBeUndefined();
+        expect(catalog.cases[0]).not.toHaveProperty("view");
+        expect(warn).toHaveBeenCalledTimes(1);
+      }
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it("admits a case on the shape of its variable names, not on a registry", () => {
     // Same rule the run manifest is admitted by: a case built from a bundle
     // this build has never heard of is a layer it renders generically.

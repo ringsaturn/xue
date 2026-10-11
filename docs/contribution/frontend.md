@@ -388,6 +388,19 @@ hidden and pinned models are `localStorage`.
   touches the query. `parseCameraFromHash` only says whether a link fixed
   the view; the region is framed on a model switch or a first open without
   a camera, never on a retry or a new run.
+- A case is framed by `applyCaseCamera`: the camera is held to its `bbox`
+  (`caseCameraLimits`), and on the first open without `#map=` it jumps to
+  the fit — or to the row's optional `view` (`showcase-catalog.ts`
+  `ShowcaseView`: `center`, `zoom`, `pitch`, `bearing`, `terrain` as an
+  exaggeration or `false`), which a mountain case uses to look from a side
+  with the relief up. The view's terrain goes through the same `setTerrain`
+  the view control's switch uses, so URL, switch, lapse row and peak labels
+  follow from the `terrain` event; a link carrying `?terrain=` (on or off,
+  `searchNamesTerrain`) outranks it, as `#map=` outranks the framing. A
+  `view` the shell cannot read is dropped with one warning and the case
+  opens on the fit. A dataset reached only through cases (`woof`) has no
+  pointer: `isCaseOnlyModel`, absent from `FORECAST_MODEL_IDS` and the
+  model sheet, and `?model=` naming it falls back to the default.
 
 ## Discovery
 

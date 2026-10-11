@@ -1,6 +1,7 @@
 import {
   FORECAST_MODELS,
   isBundleVariableId,
+  isCaseOnlyModel,
   type ForecastBundleId,
   type ForecastModelId,
   type ResolutionPreference,
@@ -107,6 +108,10 @@ const MODEL_ALIASES: Record<string, ForecastModelId> = {
   sflux: "sflux",
   "gfs-sflux": "sflux",
   hrrr: "hrrr",
+  // The WOOF nest is cases only; its spellings are known so a link naming
+  // it beside `?case=` reads as the case, not as a bad model.
+  woof: "woof",
+  wrf: "woof",
   gefsaero: "gefsaero",
   "gefs-aerosols": "gefsaero",
   gefsaerosols: "gefsaero",
@@ -146,11 +151,15 @@ const MODEL_ALIASES: Record<string, ForecastModelId> = {
 };
 
 /** Model requested by the page URL, or the default when the URL names none
- * or names one this app does not serve. */
+ * or names one this app does not serve. A dataset with no live feed
+ * (`isCaseOnlyModel`) has nothing to open outside a case, so a bare
+ * `?model=` naming it falls back too; a case pins its own model. */
 export function parseModelFromSearch(search: string): ForecastModelId {
   const model = new URLSearchParams(search).get("model");
   if (model === null) return DEFAULT_MODEL;
-  return MODEL_ALIASES[model.toLowerCase()] ?? DEFAULT_MODEL;
+  const id = MODEL_ALIASES[model.toLowerCase()];
+  if (id === undefined || isCaseOnlyModel(id)) return DEFAULT_MODEL;
+  return id;
 }
 
 /** Showcase case requested by the page URL, or null for the live feed. A
@@ -287,6 +296,14 @@ export function parseSceneFromSearch(search: string): SceneState {
   }
   const shadow = SWITCH_ALIASES[params.get("shadow")?.trim().toLowerCase() ?? ""] === true;
   return { globe, terrain, shadow };
+}
+
+/** Whether the link said anything about the ground — `?terrain=` present
+ * with any value, `off` included. A link that spoke outranks what a
+ * showcase case would open with, as a `#map=` camera outranks its framing;
+ * `parseSceneFromSearch` cannot tell `off` from silence. */
+export function searchNamesTerrain(search: string): boolean {
+  return new URLSearchParams(search).has("terrain");
 }
 
 /** The given query string carrying the scene; the plane, a flat ground and

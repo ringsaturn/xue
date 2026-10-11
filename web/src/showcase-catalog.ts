@@ -57,6 +57,25 @@ export interface ShowcaseCase {
   /** The single-site radar overlay the case plays over its axis
    * (`docs/nexrad.md`), when it carries one. */
   radar?: ShowcaseRadar;
+  /** The camera the case opens on, when it names one: a mountain is looked
+   * at from a side, not fitted from above. Absent, the region is framed. */
+  view?: ShowcaseView;
+}
+
+/** A case's own opening camera (`showcase.json` `view`), applied in place of
+ * the fitted framing when nothing in the link fixed the camera. */
+export interface ShowcaseView {
+  /** [lng, lat]. */
+  center: [number, number];
+  zoom: number;
+  /** Degrees off nadir, up to the map's ceiling; absent means flat. */
+  pitch?: number;
+  /** Degrees clockwise from north; absent means north up. */
+  bearing?: number;
+  /** The relief's vertical exaggeration to open with, `false` to open with
+   * the ground flat whatever the viewer last had, absent to leave the
+   * relief as the link or the viewer had it. */
+  terrain?: number | false;
 }
 
 export interface ShowcaseRadar {
@@ -97,6 +116,47 @@ function radarBlock(input: unknown, id: string): ShowcaseRadar | undefined {
     defaultSite: value!.defaultSite as string,
     defaultProduct: value!.defaultProduct as "n0b" | "n0g",
   };
+}
+
+/** The pitch ceiling the map enforces (main.ts `maxPitch`): a view past it
+ * is a typo. The exaggeration ceiling is `?terrain=`'s, and a view past it
+ * is clamped as the parameter is: the catalog writer bounds it only below. */
+const VIEW_MAX_PITCH = 85;
+const VIEW_MAX_TERRAIN = 10;
+
+function finiteIn(value: unknown, low: number, high: number): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= low && value <= high;
+}
+
+/** A case's view block, or undefined when it has none or carries one this
+ * shell cannot read: the case then opens on its fitted region, as a case
+ * without a view does, rather than not at all. */
+function viewBlock(input: unknown, id: string): ShowcaseView | undefined {
+  if (input === undefined) return undefined;
+  const value = input as Record<string, unknown> | null;
+  const center = value?.center;
+  const ok =
+    value !== null &&
+    typeof value === "object" &&
+    Array.isArray(center) &&
+    center.length === 2 &&
+    finiteIn(center[0], -180, 180) &&
+    finiteIn(center[1], -90, 90) &&
+    finiteIn(value.zoom, 0, 24) &&
+    (value.pitch === undefined || finiteIn(value.pitch, 0, VIEW_MAX_PITCH)) &&
+    (value.bearing === undefined || finiteIn(value.bearing, -360, 360)) &&
+    (value.terrain === undefined || value.terrain === false || finiteIn(value.terrain, Number.MIN_VALUE, Infinity));
+  if (!ok) {
+    console.warn(`showcase: case ${id} carries a view block this shell cannot read; framing its region instead`);
+    return undefined;
+  }
+  const view: ShowcaseView = { center: [center[0] as number, center[1] as number], zoom: value.zoom as number };
+  if (value.pitch !== undefined) view.pitch = value.pitch as number;
+  if (value.bearing !== undefined) view.bearing = value.bearing as number;
+  if (value.terrain !== undefined) {
+    view.terrain = value.terrain === false ? false : Math.min(value.terrain as number, VIEW_MAX_TERRAIN);
+  }
+  return view;
 }
 
 interface ShowcaseCatalog {
@@ -198,6 +258,7 @@ function validateCase(input: unknown): ShowcaseCase {
     }
   }
   const radar = radarBlock(value.radar, id);
+  const view = viewBlock(value.view, id);
   const entry: ShowcaseCase = {
     ...(value as unknown as ShowcaseCase),
     title: localized(value.title, "title"),
@@ -207,6 +268,8 @@ function validateCase(input: unknown): ShowcaseCase {
   };
   if (radar) entry.radar = radar;
   else delete entry.radar;
+  if (view) entry.view = view;
+  else delete entry.view;
   return entry;
 }
 
